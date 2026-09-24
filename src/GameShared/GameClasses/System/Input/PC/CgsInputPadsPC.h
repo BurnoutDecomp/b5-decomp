@@ -39,6 +39,8 @@
 
 namespace CgsInput
 {
+    class InputPads;   // System/Input/CgsInputPads.h (UpdatePadDevices' target)
+
     class InputPadsPC
     {
     public:
@@ -46,5 +48,16 @@ namespace CgsInput
         // Must be called with lpOutput write-locked (it writes the pad record the way the
         // console module fill does). Edge state is kept across calls (file-static).
         static void UpdatePlayer0(InputIO::OutputBuffer* lpOutput);
+
+        // FLAG PC-platform leaf (FX-RUMBLE3 2026-09-24): the DEVICE half of the console's
+        // InputPads::Update @0x828F8690 for the one host pad this build reads (XInput user 0 ==
+        // console port 0). Called by InputModule::PreWorldUpdate @0x82903328 at the console's
+        // `mControllers.Update(lpOutputBuffer)` seat. Binds / unbinds port 0's DeviceX360Pad as the
+        // ManagerX360 scan would (0x828F86C8..0x828F8744: an unbound pad with a device present is
+        // bound, a bound pad whose device went away is unbound), and holds the PC's standing
+        // player-0-on-port-0 assignment in the pads' bind table (InputPads::BindPlayerToPort -- the
+        // console reaches it through the InputPostWorld bind chain, which this build does not run;
+        // BrnGameModule seeds the same assignment as miPlayer0ControllerPort = 0).
+        static void UpdatePadDevices(InputPads* lpPads);
     };
 }

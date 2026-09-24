@@ -36,6 +36,7 @@
 #include "rw/rwcore_structs.h"                                      // rw::IResourceAllocator (Prepare param)
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }
+namespace CgsModule { struct IOBufferStack; }   // PreWorldUpdate's two (unread) stack parameters
 
 namespace CgsInput
 {
@@ -45,6 +46,23 @@ namespace CgsInput
     class InputModule : public CgsModule::ModuleSingleBuffered
     {
     public:
+        // X360 0x828F83D0 (vtable slot 0; DWARF CgsInputModule.cpp:37). The base Construct, the
+        // new-module byte (`stb 1,4(this)` == mbIsNewModule), the pads, the two result queues
+        // (Construct then length 0), the stages (prepare START, release DONE) and a null allocator.
+        // FX-RUMBLE3 2026-09-24: added with the game module's switch from its empty ODR stub of this
+        // class to this one -- the stub's Construct was the base's alone.
+        virtual void Construct();
+
+        // X360 0x82903328 (vtable slot 17 -- the `+0x44` BrnGameModule::DoUpdate_InputPreWorld calls;
+        // DWARF CgsInputModule.cpp:212, export hole -> ppcdis). The output buffer's write lock is taken
+        // around the whole body and the pre-world buffer's read lock around ProcessRumbleRequests; with
+        // lbUpdatePads (the game passes !mbDiskError) the pads are updated; the module's bind / unbind
+        // results are appended into the output buffer and cleared. The two stacks are not read.
+        virtual void PreWorldUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
+                                    CgsModule::IOBufferStack* lpOutputBufferStack,
+                                    const InputIO::PreWorldInputBuffer* lpPreWorldInputBuffer,
+                                    InputIO::OutputBuffer* lpOutputBuffer,
+                                    bool lbUpdatePads);
         // Boot Construct/Prepare/Release/Destruct state stages (DWARF CgsInputModule.h:51/59).
         enum EPrepareStage : s32
         {
@@ -81,6 +99,12 @@ namespace CgsInput
         // copy its 112-byte action-mapping payload into the addressed pad's mapping storage (port == -1
         // broadcasts to all KU_NUMBER_OF_PADS pads).
         void ProcessMappingQueue(const InputIO::PostWorldInputBuffer* lpPostWorldBuffer);
+
+        // X360 0x828FFE50 (DWARF CgsInputModule.cpp:426, export hole -> ppcdis). Play every jolt, stop,
+        // rumble and volume change the game posted into the pre-world buffer on the pads, then run the
+        // pads' rumble envelopes one game-timer step with the buffer's pause (or'ed with !lbUpdatePads),
+        // enable and force-feedback state.
+        void ProcessRumbleRequests(const InputIO::PreWorldInputBuffer* lpPreWorldInputBuffer, bool lbUpdatePads);
 
         // ---- members (see the header banner for the X360 byte offsets) ----
         EPrepareStage mePrepareStage;   // this+0x228 (552)

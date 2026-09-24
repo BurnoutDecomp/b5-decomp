@@ -1484,6 +1484,14 @@ public:
     // then the +42275 byte is cleared (no committed name for it here -- reported, not modelled).
     void FinishStreaming(GameStateModuleIO::GameActionQueue* lpQueue);
 
+    // ⭐ [FX-RUMBLE3 2026-09-24, crash-parity G10-D4] X360 0x8236B570 (DWARF BrnGameStateModule.h:633):
+    //     addis r3,r3,1 ; addi r3,r3,-0x49A8 ; b RumbleManager::BridgeRumbleToInput
+    // a plain forward to mRumbleManager (gsm+0xB658) with the buffer and the timer interface left in
+    // r4 / r5. Sole caller BrnGameModule::DoUpdate_InputPreWorld @0x823C5650 (0x823C56F4), under the
+    // input pre-world buffer's write lock.
+    void BridgeRumbleToInput(CgsInput::InputIO::PreWorldInputBuffer* lpInputInputBuffer,
+                             const CgsSystem::TimerStatusInterface*  lpTimerStatusInterface);
+
     // ------------------------------------------------------------------------
     // ADDITIVE GROW (declare-only) for the BrnGameState::ResetPlayerDebugComponent TU. The
     // "Reset Player Car" debug menu reads the loaded vehicle/wheel resources, the active track's
@@ -1924,7 +1932,7 @@ private:
     //                                              -> RumbleManager::UpdatePauseState (0x823A5AC4)
     //     GameStateModule::ProcessGameEvents case 31 -> OnVehicleAggressorImpact x2 (0x823A27C8/EC)
     //     GameStateModule::BridgeRumbleToInput @0x8236B570 -> RumbleManager::BridgeRumbleToInput
-    //                                              [X] not on PC yet (G10-D4, see BrnRumbleManager.h)
+    //                                              (FX-RUMBLE3 G10-D4, from DoUpdate_InputPreWorld)
     // Unlike mpTrainingManager there is no include cycle, so it is embedded exactly as the console
     // embeds it. The module lives in static storage (BrnMain.cpp's gGameModule), and Construct()
     // seeds every flag and queue the console seeds before anything reads them.

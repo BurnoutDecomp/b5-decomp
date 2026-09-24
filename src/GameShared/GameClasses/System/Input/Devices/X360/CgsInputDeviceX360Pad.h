@@ -14,6 +14,7 @@
 //   d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\system\input\Devices/X360/CgsInputDeviceX360Pad.cpp
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/Input/CgsInputTypes.h"   // CgsInput::Device::EType
 
 namespace CgsInput
 {
@@ -26,17 +27,14 @@ namespace CgsInput
     static const u32 KU_NUMBER_OF_CONTROLS = 28;  // 0x1C, from Construct's control-float zero-fill loop
     static const u32 KU_NUMBER_OF_AXES     = 6;   // from GetAxisValue assert (<= 5) and the 6-dword axis loop
 
-    // The device type stored at +0x04 / passed to BindToPort & checked in Update.
-    // Only value attested by the asm is 2 (cmpwi r11, 2 -> "wheel" force-feedback path in
-    // Update @0x828E8138 and BindToPort @0x828DC...). The non-2 path is the plain gamepad
-    // path. The enum value 2 (E_DEVICETYPE_WHEEL) is asm-grounded; the 0/1 enumerators are
-    // a FLAGGED placeholder set (no other compare-immediates against +0x04 appear in this TU).
-    enum EDeviceType : s32
-    {
-        E_DEVICETYPE_GAMEPAD = 0,  // PLACEHOLDER: default; not asm-attested in this TU
-        E_DEVICETYPE_UNKNOWN = 1,  // PLACEHOLDER: not asm-attested in this TU
-        E_DEVICETYPE_WHEEL   = 2   // ASM-GROUNDED: cmpwi against +0x04 (meType) selects the FFB path
-    };
+    // The device type stored at +0x04 / passed to BindToPort & checked in Update / SetRumble /
+    // InputPads::UpdatePadRumble (`cmpwi r11, 2` -> the wheel force-feedback arm) is
+    // CgsInput::Device::EType (DWARF CgsInputDevice.h:12, homed in CgsInputTypes.h):
+    // E_NO_DEVICE_TYPE 0, E_PAD_DEVICE_TYPE 1, E_WHEEL_DEVICE_TYPE 2 -- the XInput SubType the
+    // ManagerX360 scan resolves (XINPUT_DEVSUBTYPE_GAMEPAD 1 / _WHEEL 2). FX-RUMBLE3 2026-09-24:
+    // replaces a placeholder EDeviceType whose 0/1 names ("GAMEPAD 0, UNKNOWN 1") were not the
+    // DWARF's -- a pad is 1.
+    typedef Device::EType EDeviceType;
 
     // ---- Minimal XDK FF/overlapped platform slices ----
     // These are pure Xbox 360 XDK types (real layouts in <xinput.h>/<xtl.h>); reconstructed
@@ -66,6 +64,17 @@ namespace CgsInput
         s32 miField3C;      // +0x3C (0x188)  = 255
         s32 miField40;      // +0x40 (0x18C)  = 0
         u8  maTail[0x74 - 0x44]; // +0x44..0x73 -- remainder zero-filled by the memset; not individually written
+    };
+
+    // XINPUT_VIBRATION-shaped motor record ({WORD wLeftMotorSpeed; WORD wRightMotorSpeed}), embedded at
+    // pad +0xF4. SetRumble @0x828E78D0 fills it (`sth` left -> +0xF4, right -> +0xF6) and hands ITS
+    // ADDRESS (`addi r28,r31,0xF4` -> r4) to XInputSetState / XInputFFSetRumble; Construct and
+    // ClearCachedRumble @0x828DCB90 zero both halves. (FX-RUMBLE3 2026-09-24: was two loose u16s,
+    // muCachedRumbleA/B -- the XDK takes the pair as one record, so it is one record here.)
+    struct DeviceX360PadVibration
+    {
+        u16 muLeftMotorSpeed;   // +0x00 (pad +0xF4)  low-frequency (heavy) motor, 0..65535
+        u16 muRightMotorSpeed;  // +0x02 (pad +0xF6)  high-frequency (light) motor, 0..65535
     };
 
     // XOVERLAPPED-like async handle block, embedded by value (three of them) in the pad
@@ -104,11 +113,13 @@ namespace CgsInput
         // name instead of raw-offset-reading the private control array.
         f32 GetControlValue(u32 luControl) const;
 
-        // X360 (external in this TU): push the two motor magnitudes [0,1] to the device. Called by
-        // InputPads::UpdatePadRumble as `pad.SetRumble(lfLeft, lfRight)`.
+        // X360 0x828E78D0 (export hole; ppcdis -- FX-RUMBLE3 2026-09-24). Push the two motor
+        // magnitudes [0,1] to the device: a pad through XInputSetState (left = pow(l, 1.5) * 65535,
+        // right = r * 65535), a wheel through XInputFFSetRumble (* 655350.0, clamped to 65535).
+        // Called by InputPads::UpdatePadRumble as `pad.SetRumble(lfLeft, lfRight)`.
         void SetRumble(f32 lfLeftMotor, f32 lfRightMotor);
 
-        // Device type (meType @ +0x04); == E_DEVICETYPE_WHEEL selects the wheel FF path.
+        // Device type (meType @ +0x04); == Device::E_WHEEL_DEVICE_TYPE selects the wheel FF path.
         EDeviceType GetDeviceType() const { return static_cast<EDeviceType>(meType); }
 
         // Publish the wheel force-feedback spring parameters (the +0x08 / +0x0C floats the device's
@@ -130,7 +141,14 @@ namespace CgsInput
         // previous button states, and (for a wheel) pushes the FF effect via XInputFFUpdateEffect.
         void Update(bool lbConnected, s32 lePort, s32 leType, const void* lpState);
 
-        bool IsConnected() const { return mbConnected != 0; }
+        // X360 0x828DC7E0 (the out-of-line copy; UpdatePadRumble @0x828EFEB8 and SetRumble @0x828E78F4
+        // inline it): `lbz byte_83085F80 ; beq -> lbz r3,0x10(this) ; else li r3,1`. byte_83085F80 is
+        // CgsSystem::HardwareInit::mbHasDetectedAutomaticTestingFile (InitializeHardware @0x828E05A0
+        // sets it at 0x828E089C / 0x828E0918 when an autotest script is found), so under automated
+        // testing every pad reads as connected. (FX-RUMBLE3 2026-09-24: this used to return
+        // mbConnected alone, and CgsInputPads.cpp carried the global as an invented
+        // "gbForceRumbleOnDisconnectedPad" of its own.)
+        bool IsConnected() const;
 
     private:
         // Never-called layout pin (defined in the header below) needs member-offset access.
@@ -139,6 +157,12 @@ namespace CgsInput
         // ManagerX360::UnbindFromPort inlines two writes into this pad (mbConnected = 0 @+0x10,
         // mePort = -1 @+0xF0); grant it access instead of forcing a raw-offset write.
         friend class ManagerX360;
+
+        // FLAG PC-platform leaf access: CgsInput::InputPadsPC::UpdatePadDevices (System/Input/PC/
+        // CgsInputPadsPC.cpp) is the PC stand-in for the ManagerX360 device scan inside
+        // InputPads::Update @0x828F8690; it makes the same two UnbindFromPort stores when the host
+        // pad goes away, so it gets the same grant ManagerX360 has.
+        friend class InputPadsPC;
 
         // ---- head ----
         u8  mau8Pad00[4];         // +0x00 .. 0x03  (bind/player head -- not touched by this TU's bodies)
@@ -169,8 +193,7 @@ namespace CgsInput
         f32 mfDeadzoneInner;      // +0xEC = 0.2          DeadzoneAxis inner (reads +0xEC)
 
         s32 mePort;               // +0xF0 = -1           bound physical port (BindToPort sets, Update checks)
-        u16 muCachedRumbleA;      // +0xF4 = 0            ClearCachedRumble target
-        u16 muCachedRumbleB;      // +0xF6 = 0            ClearCachedRumble target
+        DeviceX360PadVibration mCachedRumble; // +0xF4 = {0,0} the motor record SetRumble hands the XDK
 
         // ---- force-feedback overlapped blocks (Construct zero-fills + CreateEventA into each) ----
         DeviceX360PadOverlapped mFFOverlappedRumble; // +0xF8  (28 bytes; hEvent stored @+0x104)
@@ -192,6 +215,8 @@ namespace CgsInput
 {
     inline void _DeviceX360Pad_AssertLayout()
     {
+        static_assert(sizeof(DeviceX360PadVibration) == 4, "XINPUT_VIBRATION-shaped record must be 4 bytes");
+        static_assert(offsetof(DeviceX360Pad, mCachedRumble) == 0xF4, "mCachedRumble @ +0xF4");
         static_assert(sizeof(DeviceX360PadOverlapped) == 28, "overlapped block must be 28 bytes");
         static_assert(sizeof(DeviceX360PadFFEffect)   == 116, "FF effect must be 116 bytes (0x74)");
         static_assert(offsetof(DeviceX360Pad, meType)              == 0x04, "meType @ +0x04");

@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h"
+#include "GameShared/GameClasses/System/Input/CgsInputPads.h"   // CgsInput::InputPads / DeviceX360Pad (UpdatePadDevices)
 
 #include <cstring>   // std::memset
 #include <cstdlib>   // std::getenv (the harness focus-gate bypass)
@@ -66,12 +67,30 @@
 // keyboard and there is no table to recover for one. It is flagged as such at its own banner.
 // ============================================================================
 
+// FX-RUMBLE3 2026-09-24: UpdatePadDevices needs CgsInput::InputPads (CgsInputPads.h), whose
+// rw/rwcore_structs.h -> rw/core/debug/DebugCriticalSection.h includes <windows.h> LEAN_AND_MEAN with
+// NOGDI / NOUSER / NOMINMAX. It is included here explicitly under the same macro set, so the kernel32
+// entry points below whose prototypes differ from the local forms (LoadLibraryA's HMODULE,
+// GetProcAddress's HMODULE / FARPROC) are windows.h's own; NOUSER keeps winuser.h out, so the USER32
+// ones stay declared locally as before.
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOGDI
+#define NOGDI
+#endif
+#ifndef NOUSER
+#define NOUSER
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
 extern "C" __declspec(dllimport) short __stdcall GetAsyncKeyState(int vKey);
 extern "C" __declspec(dllimport) void* __stdcall GetForegroundWindow(void);
 extern "C" __declspec(dllimport) unsigned long __stdcall GetWindowThreadProcessId(void* hWnd, unsigned long* lpdwProcessId);
 extern "C" __declspec(dllimport) unsigned long __stdcall GetCurrentProcessId(void);
-extern "C" __declspec(dllimport) void* __stdcall LoadLibraryA(const char* lpLibFileName);
-extern "C" __declspec(dllimport) void* __stdcall GetProcAddress(void* hModule, const char* lpProcName);
 extern "C" __declspec(dllimport) void* __stdcall OpenEventA(unsigned long dwDesiredAccess,
                                                               int bInheritHandle,
                                                               const char* lpName);
@@ -123,13 +142,42 @@ namespace
             static const char* KAPC_DLLS[] = { "xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll" };
             for (unsigned i = 0; i < sizeof(KAPC_DLLS) / sizeof(KAPC_DLLS[0]) && !spfGetState; ++i)
             {
-                void* lpModule = LoadLibraryA(KAPC_DLLS[i]);
+                HMODULE lpModule = LoadLibraryA(KAPC_DLLS[i]);
                 if (lpModule)
                     spfGetState = reinterpret_cast<XInputGetStateFn>(GetProcAddress(lpModule, "XInputGetState"));
             }
         }
         return spfGetState;
     }
+
+    // ---- the MOTOR half (FX-RUMBLE3 2026-09-24): XInputSetState from the same system DLL ----
+    // XINPUT_VIBRATION is {WORD wLeftMotorSpeed; WORD wRightMotorSpeed} -- the record
+    // CgsInput::DeviceX360Pad::SetRumble @0x828E78D0 fills at pad +0xF4 and hands over by address.
+    typedef unsigned long(__stdcall* XInputSetStateFn)(unsigned long dwUserIndex, void* pVibration);
+
+    XInputSetStateFn ResolveXInputSetState()
+    {
+        static XInputSetStateFn spfSetState = 0;
+        static bool sbResolved = false;
+        if (!sbResolved)
+        {
+            sbResolved = true;
+            // The same DLL list, in the same order, as ResolveXInputGetState: the first generation that
+            // loads and exports it is the one the pad is read through.
+            static const char* KAPC_DLLS[] = { "xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll" };
+            for (unsigned i = 0; i < sizeof(KAPC_DLLS) / sizeof(KAPC_DLLS[0]) && !spfSetState; ++i)
+            {
+                HMODULE lpModule = LoadLibraryA(KAPC_DLLS[i]);
+                if (lpModule)
+                    spfSetState = reinterpret_cast<XInputSetStateFn>(GetProcAddress(lpModule, "XInputSetState"));
+            }
+        }
+        return spfSetState;
+    }
+
+    // Win32 codes the PC XDK leaves answer with (the same values the X360 XDK returns).
+    const unsigned long KU_XINPUT_ERROR_SUCCESS              = 0;     // ERROR_SUCCESS
+    const unsigned long KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED = 1167;  // 0x48F ERROR_DEVICE_NOT_CONNECTED
 
     // XINPUT_GAMEPAD wButtons bits, with the CgsInput::EPadButton control each one drives
     // on the console (DeviceX360Pad::Update @0x828E7AB0 store order, device float array base
@@ -1412,4 +1460,101 @@ namespace CgsInput
         lrPad.meControllerState = 1;   // a standard pad (2 == wheel: the bridges' wheel arms)
         lrPad.mbDisconnected    = 0;   // not idle
     }
+
+    // ============================================================================================
+    // FLAG PC-platform leaf (FX-RUMBLE3 2026-09-24, crash-parity G10-D4) -- the device half of
+    // InputPads::Update @0x828F8690 for the PC's one host pad. See the header for the contract.
+    //   * The console scan (0x828F86C8..0x828F8744, per pad i): r28 = pad.mePort, r27 = the ManagerX360
+    //     slot's device type; a bound pad whose slot type no longer matches is UnbindFromPort'ed
+    //     (@0x828E7808: pad mbConnected = 0, mePort = -1), then a slot with a device is BindToPort'ed
+    //     (@0x828E7718 -> DeviceX360Pad::BindToPort(port, type) @0x828DC8E8).
+    //   * The PC reads XInput user 0 only (UpdatePlayer0 above), so only port 0 is scanned: "a device"
+    //     is XInputGetState(0) == ERROR_SUCCESS, the same test ManagerX360::UpdateConnectedDevices
+    //     @0x828DC480 makes. Its type is always Device::E_PAD_DEVICE_TYPE: Windows has no XInputFF
+    //     wheel API (the XDK leaves below answer "not connected"), so binding a wheel here would only
+    //     walk DeviceX360Pad::BindToPort's 2 s force-feedback prime loop for nothing.
+    //   * Not focus-gated (unlike UpdatePlayer0's read): nothing is read into the game here -- this is
+    //     presence, and a pad is a device in someone's hands whichever window has the focus.
+    //   * Player 0 stays bound to port 0 (BindPlayerToPort is idempotent for the same pair -- it
+    //     answers E_BINDRESULTOK with no store). A pad that is unplugged keeps its player, as on the
+    //     console (UnBindPlayer is the bind chain's, not the scan's).
+    // DELETE-WHEN InputPads::Update and the InputPostWorld bind chain land.
+    // ============================================================================================
+    void InputPadsPC::UpdatePadDevices(InputPads* lpPads)
+    {
+        const u32 KU_PC_PAD_PORT = 0;   // XInput user 0 == console port 0 (UpdatePlayer0's slot)
+
+        bool lbDevicePresent = false;
+        if (XInputGetStateFn lpfGetState = ResolveXInputGetState())
+        {
+            XInputState lState;
+            lbDevicePresent = (lpfGetState(KU_PC_PAD_PORT, &lState) == KU_XINPUT_ERROR_SUCCESS);
+        }
+
+        DeviceX360Pad& lrPad = lpPads->maPads[KU_PC_PAD_PORT];
+        if (lrPad.mePort != -1 && !lbDevicePresent)
+        {
+            lrPad.mbConnected = 0;    // ManagerX360::UnbindFromPort's two pad stores
+            lrPad.mePort      = -1;
+        }
+        if (lrPad.mePort == -1 && lbDevicePresent)
+        {
+            lrPad.BindToPort(KU_PC_PAD_PORT, Device::E_PAD_DEVICE_TYPE);
+        }
+
+        lpPads->BindPlayerToPort(0, static_cast<s32>(KU_PC_PAD_PORT));
+    }
 }
+
+// ================================================================================================
+// FLAG PC-platform leaf (PC-ONLY, FX-RUMBLE3 2026-09-24) -- the Xbox 360 XDK pad-motor entry points
+// CgsInput::DeviceX360Pad (System/Input/Devices/X360/CgsInputDeviceX360Pad.cpp) calls, by their C
+// names (one definition serves every `extern "C"` declaration -- the CgsXboxLivePC.cpp precedent).
+// ================================================================================================
+
+// XInputSetState: DeviceX360Pad::SetRumble's pad arm (@0x828E7A88 `bl XInputSetState`). On Windows it is
+// the SAME API taking the SAME XINPUT_VIBRATION record, so this forwards to the system XInput DLL (the
+// exe links no XInput import library -- see ResolveXInputGetState). No DLL -> "not connected", which
+// SetRumble treats like any failed send (it restores its cached speeds).
+extern "C" u32 XInputSetState(u32 dwUserIndex, void* pVibration)
+{
+    const XInputSetStateFn lpfSetState = ResolveXInputSetState();
+    const u32 luResult = lpfSetState ? static_cast<u32>(lpfSetState(dwUserIndex, pVibration))
+                                     : static_cast<u32>(KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED);
+
+    // [DIAG] BRN_RUMBLE_DIAG -- NOT IN THE X360 BINARY. The motor witness: one line per CHANGE of the
+    // speeds sent to a pad (budgeted), with the XInput result -- the last hop of the rumble chain
+    // (RumbleManager -> BridgeRumbleToInput -> ProcessRumbleRequests -> UpdatePadRumble -> SetRumble).
+    static const bool sbMotorDiag = (std::getenv("BRN_RUMBLE_DIAG") != 0);
+    static u32        suLastSpeeds = 0xFFFFFFFFu;
+    static s32        siMotorDiagLines = 0;
+    const s32         KI_MOTOR_DIAG_MAX_LINES = 96;
+    if (sbMotorDiag && pVibration != 0 && siMotorDiagLines < KI_MOTOR_DIAG_MAX_LINES
+        && CgsDev::Log::gpDebugPrint != 0)
+    {
+        const unsigned short* lpu16Speeds = static_cast<const unsigned short*>(pVibration);
+        const u32 luSpeeds = (static_cast<u32>(lpu16Speeds[0]) << 16) | lpu16Speeds[1];
+        if (luSpeeds != suLastSpeeds)
+        {
+            suLastSpeeds = luSpeeds;
+            ++siMotorDiagLines;
+            *CgsDev::Log::gpDebugPrint
+                << "[rumble] motor port=" << static_cast<s32>(dwUserIndex)
+                << " left=" << static_cast<s32>(lpu16Speeds[0]) << " right=" << static_cast<s32>(lpu16Speeds[1])
+                << " result=" << static_cast<s32>(luResult) << "\n";
+        }
+    }
+    return luResult;
+}
+
+// The Xbox 360 wheel force-feedback API (DeviceX360Pad::BindToPort's prime loop, Update's spring effect,
+// SetRumble's wheel arm). Windows has no XInputFF API; each answers ERROR_DEVICE_NOT_CONNECTED -- "no FF
+// wheel on this port". Unreachable on the PC build: InputPadsPC::UpdatePadDevices binds pads only
+// (Device::E_PAD_DEVICE_TYPE), so no DeviceX360Pad ever takes a wheel arm.
+extern "C" u32 XInputFFSetRumble(u32, void*, void*)                          { return KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED; }
+extern "C" u32 XInputFFResetDevice(u32, void*)                               { return KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED; }
+extern "C" u32 XInputFFSetDeviceGain(u32, u32, void*)                        { return KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED; }
+extern "C" u32 XInputFFEnableMotors(u32, s32, void*)                         { return KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED; }
+extern "C" u32 XInputFFSetEffect(u32, const void*, u32, void*)               { return KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED; }
+extern "C" u32 XInputFFEffectOperation(u32, const void*, u32, u32, void*)    { return KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED; }
+extern "C" u32 XInputFFUpdateEffect(u32, const void*, u32, void*)            { return KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED; }

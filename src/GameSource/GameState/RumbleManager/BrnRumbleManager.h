@@ -39,18 +39,13 @@
 //   OnVehicleVictimImpact    ICF-folded onto 0x823795C8 on the X360 (G10-D3)
 //   UpdateImpacts            @0x82379370   (FX-RUMBLE / G10-D2)
 //   PlayJolt                 @0x8236E7F8   (FX-RUMBLE / G10-D7)
-// ⛔ NOT DECLARED, deliberately -- each is BLOCKED on a file this TU does not own, and a
-// declaration without a body is exactly the silent link-time drop this campaign keeps finding:
+//   BridgeRumbleToInput      @0x82364978   (FX-RUMBLE3 / G10-D4) -- the drain of all four queues
+// ⛔ NOT DECLARED, deliberately -- a declaration without a body is exactly the silent link-time
+// drop this campaign keeps finding:
 //   UpdateSurfaceRumble @0x82378AE0 (G10-D6) -- needs Attrib::Gen::rumblesurface's 0x3C-byte
 //       data layout + accessors and a surface::RumbleSurface() RefSpec accessor (surface layout
 //       +0x28) in GameSource/AttribSys/Generated/classes/, then mSurfaceList retyped to
 //       Attrib::Gen::surfacelist. See Update's FLAG.
-//   BridgeRumbleToInput @0x82364978 (G10-D4) -- needs CgsInput::InputIO::PreWorldInputBuffer's
-//       Post{PlayJolt,StopRumble,PlayRumble,ChangeVolumeRumble}EffectByPlayer (0x828EF370 /
-//       0x828EF758 / 0x828EF4B0 / 0x828EF608), SetRumblePaused / SetRumbleEnabled /
-//       SetWheelForceFeedbackEnabled and the ChangeVolume/Stop queues + three tail flags
-//       (CgsInputModuleIO.h), plus an input-side consumer (InputModule::ProcessRumbleRequests
-//       @0x828FFE50 and a PC pad motor leaf). Until it lands NOTHING drains the four queues.
 // A future TU MUST GROW this class ADDITIVELY rather than redefine it -- do NOT fork.
 // ============================================================================
 
@@ -104,6 +99,14 @@ namespace BrnGameState
         // separate body (ProcessGameEvents 0x823A27EC `bl`s 0x823795C8 for this leg: ICF fold);
         // the PS3 twin 0x2401D4 is a thunk onto OnVehicleAggressorImpact.
         void OnVehicleVictimImpact(BrnPhysics::Vehicle::EImpactType leImpactType);
+
+        // @ 0x82364978 -- DWARF BrnRumbleManager.h:97. Hand every queued jolt / stop / play / volume
+        // request to the input module's pre-world buffer (Post*ByPlayer), publish the timer snapshot
+        // and the pause / enable / force-feedback state, then empty the four queues. Sole caller
+        // GameStateModule::BridgeRumbleToInput @0x8236B570 (a forward), from
+        // BrnGameModule::DoUpdate_InputPreWorld @0x823C5650 under the buffer's write lock.
+        void BridgeRumbleToInput(CgsInput::InputIO::PreWorldInputBuffer* lpInputInputBuffer,
+                                 const CgsSystem::TimerStatusInterface*  lpTimerStatusInterface);
 
     private:
         // @ 0x82379370 -- DWARF BrnRumbleManager.h:137. The hardest contact on the player's run of

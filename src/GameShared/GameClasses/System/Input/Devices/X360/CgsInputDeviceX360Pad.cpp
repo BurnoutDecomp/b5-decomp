@@ -21,14 +21,30 @@
 
 #include "GameShared/GameClasses/System/Input/Devices/X360/CgsInputDeviceX360Pad.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (SetRumble's "WHEEL ERROR " assert text)
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"     // CgsSystem::HardwareInit::HasDetectedAutomaticTestingFile (IsConnected)
+#include "rw/math/fpu/scalar_operation.h"                      // rw::math::fpu::Clamp (SetRumble's wheel-arm fsel pair)
 #include "types.hpp"
+
+#include <cmath>     // pow (SetRumble's pad-arm left-motor curve, the CRT pow the X360 calls at 0x828E7A48)
 
 // ---- Xbox 360 XDK entry points (real prototypes live in <xinput.h>/<xtl.h>). Declared as
 // extern "C" free functions, mirroring the System/X360 precedent (CgsXOverlappedX360.cpp). The
-// effect / overlapped arguments are passed by the void* address of the embedded members. ----
+// effect / overlapped arguments are passed by the void* address of the embedded members.
+// On the PC build the XInput ones are defined by the pad backend (System/Input/PC/
+// CgsInputPadsPC.cpp): XInputSetState forwards to the system XInput DLL (the same API and the same
+// XINPUT_VIBRATION record on Windows), the XInputFF* wheel force-feedback calls answer "no such
+// device" -- Windows has no XInputFF API, and the PC binds pads only (see UpdatePadDevices).
+// GetTickCount / CreateEventA are the kernel's: on the PC build <Windows.h> declares them (it comes in
+// with CgsHardwareInit.h, under the same WIN32 && !CGS_PLATFORM_X360 test, for IsConnected's autotest
+// flag), so the extern "C" forms are only for a build without it. ----
+#if !(defined(WIN32) && !defined(CGS_PLATFORM_X360))
 extern "C" u32 GetTickCount();
 extern "C" void* CreateEventA(void* lpEventAttributes, s32 bManualReset, s32 bInitialState,
                               const char* lpName);
+#endif
+extern "C" u32 XInputSetState(u32 dwUserIndex, void* pVibration);
+extern "C" u32 XInputFFSetRumble(u32 dwUserIndex, void* pVibration, void* pOverlapped);
 extern "C" u32 XInputFFResetDevice(u32 dwUserIndex, void* pOverlapped);
 extern "C" u32 XInputFFSetDeviceGain(u32 dwUserIndex, u32 dwGain, void* pOverlapped);
 extern "C" u32 XInputFFEnableMotors(u32 dwUserIndex, s32 fEnable, void* pOverlapped);
@@ -48,12 +64,19 @@ namespace CgsInput
     static const f32 KF_AXIS_SCALE_POS = 0.000030518509f; // flt_820037C8 (= 1/32767, positive half)
     static const f32 KF_GAIN_SCALE  = 31.0f;          // BindToPort: mfGain * 31.0 -> XInputFFSetDeviceGain
     static const u32 KU_FF_TIMEOUT_MS = 0x7D0;         // 2000 ms wheel-prime timeout
-    static const u32 KU_ERROR_DEVICE_NOT_CONNECTED = 1460; // BindToPort SetEffect retry sentinel
+    static const u32 KU_ERROR_TIMEOUT = 1460;          // 0x5B4 (Win32 ERROR_TIMEOUT) -- BindToPort SetEffect retry sentinel
     static const u32 KU_ERROR_IO_PENDING = 997;        // Update spring-overlapped pending sentinel
     static const u32 KU_FF_UPDATE_MASK   = 0x704;      // XInputFFUpdateEffect dwUpdateMask
     static const u32 KU_VALID_BUTTON_MAX  = 0x1B;      // IsButtonPressed: lcControl <= 0x1B
     static const u32 KU_VALID_AXIS_MAX    = 5;         // GetAxisValue: lcAxis <= 5
     static const u32 KU_VALID_PORT_MAX    = 3;         // BindToPort: lcPort <= 3
+
+    // ---- SetRumble @0x828E78D0 constants (x360rd; findinit: readers only) -------------------------
+    static const f32 KF_WHEEL_RUMBLE_SCALE = 655350.0f;  // 0x82F3471C = 0x491FFF60 (wheel arm; one reader 0x828E7960)
+    static const f32 KF_MOTOR_SPEED_MAX    = 65535.0f;   // 0x820F78F0 = 0x477FFF00 (both arms)
+    static const double KD_PAD_LEFT_MOTOR_EXPONENT = 1.5; // 0x820FA3D0 = 0x3FF8000000000000 (pad arm pow)
+    static const u32 KU_ERROR_SUCCESS              = 0;
+    static const u32 KU_ERROR_DEVICE_NOT_CONNECTED = 1167; // 0x48F -- the wheel arm's quiet failure (with 997)
 
     // ---- FLAGGED unrecoverable rodata FF magnitude scales (see file header) -----------------
     static const f32 KF_FF_MOTOR_SCALE  = 1.0f; // flt_82F34740 -- PLACEHOLDER (rodata, not attested)
@@ -98,8 +121,8 @@ namespace CgsInput
             mafAxisValues[i] = KF_ZERO;
 
         meType          = 0;                           // stw r30, 4
-        muCachedRumbleA = 0;                           // sth r30, 0xF4
-        muCachedRumbleB = 0;                           // sth r30, 0xF6
+        mCachedRumble.muLeftMotorSpeed  = 0;           // sth r30, 0xF4
+        mCachedRumble.muRightMotorSpeed = 0;           // sth r30, 0xF6
         mePort          = -1;                          // stw -1, 0xF0
 
         // Deadzone / range params (flt_820F78xx pool @0x828DC608..).
@@ -183,6 +206,35 @@ namespace CgsInput
     }
 
     // ============================================================================
+    // GetControlValue -- no out-of-line copy on the X360; InputPads::FillRawData @0x828E7350 inlines
+    // it: `if (i <= 0x1B) v = pad.mafControls[i] (pad+0x4C) else { "lbValidControl" assert
+    // (CgsInputDeviceX360Pad.cpp:304); v = 0.0 }` -- the GetAxisValue shape, one table over.
+    // ============================================================================
+    f32 DeviceX360Pad::GetControlValue(u32 luControl) const
+    {
+        if (luControl > KU_VALID_BUTTON_MAX)
+        {
+            CGS_ASSERT(false, "lbValidControl");                            // line 304
+            return KF_ZERO;
+        }
+        return mafControls[luControl];
+    }
+
+    // ============================================================================
+    // IsConnected @0x828DC7E0 -- `lbz byte_83085F80 ; cmplwi ; beq +0xC ; li r3,1 ; blr ;
+    // lbz r3,0x10(r3) ; blr`: under automated testing (HardwareInit::mbHasDetectedAutomaticTestingFile)
+    // every pad reads as connected, otherwise the bound device's own flag.
+    // ============================================================================
+    bool DeviceX360Pad::IsConnected() const
+    {
+        if (CgsSystem::HardwareInit::HasDetectedAutomaticTestingFile())
+        {
+            return true;
+        }
+        return mbConnected != 0;
+    }
+
+    // ============================================================================
     // DeadzoneAxis @0x828DCB20. Symmetric inner/outer deadzone+range remap of one raw axis.
     // Reads mfDeadzoneOuter (+0xE8) and mfDeadzoneInner (+0xEC).
     // ============================================================================
@@ -216,8 +268,83 @@ namespace CgsInput
     // ============================================================================
     void DeviceX360Pad::ClearCachedRumble()
     {
-        muCachedRumbleA = 0;   // sth 0, 0xF4
-        muCachedRumbleB = 0;   // sth 0, 0xF6
+        mCachedRumble.muLeftMotorSpeed  = 0;   // sth 0, 0xF4
+        mCachedRumble.muRightMotorSpeed = 0;   // sth 0, 0xF6
+    }
+
+    // ============================================================================
+    // SetRumble @0x828E78D0 (export hole -- ppcdis; FX-RUMBLE3 2026-09-24, G10-D4). The device end of
+    // the rumble chain, called by InputPads::UpdatePadRumble with each motor already Clamp'd to [0,1]:
+    //   0x828E78F4..0x828E7934  IsConnected() inlined into the "IsConnected()" assert (:679)
+    //   0x828E7938..0x828E7940  `lbz 0x10 ; beq exit` -- the RAW flag gates the rest (no autotest OR)
+    //   0x828E794C              r26 = the cached LEFT speed, for the failure restore
+    //   wheel (meType == 2), 0x828E7958..0x828E7A38:
+    //       each motor * 655350.0 (0x82F3471C), fsel-Clamp'd to [0, 65535.0 (0x820F78F0)], fctidz ->
+    //       the low halfword stored right (+0xF6) then left (+0xF4); while the rumble overlapped is
+    //       pending (+0xF8 == 997) no call is made; else XInputFFSetRumble(mePort, &mCachedRumble,
+    //       &mFFOverlappedRumble) -- 0 returns, 997 / 1167 are quiet, anything else asserts
+    //       "WHEEL ERROR " << code (:699)
+    //   pad, 0x828E7A3C..0x828E7A8C:
+    //       left = (f32)pow(left, 1.5 (0x820FA3D0)) * 65535, right = right * 65535 (fctidz, low
+    //       halfword, right stored first), XInputSetState(mePort, &mCachedRumble)
+    //   0x828E7A90..0x828E7A9C  any non-zero result stores the PREVIOUS LEFT speed into BOTH halves
+    //                           (`sth r26,0(r28) ; sth r26,0xF6(r31)` -- a console quirk, kept).
+    // ============================================================================
+    void DeviceX360Pad::SetRumble(f32 lfLeftMotor, f32 lfRightMotor)
+    {
+        CGS_ASSERT(IsConnected(), "IsConnected()");                                // line 679
+        if (mbConnected == 0)
+        {
+            return;
+        }
+
+        const u16 luPreviousLeftMotorSpeed = mCachedRumble.muLeftMotorSpeed;
+        u32 luResult;
+        if (meType == Device::E_WHEEL_DEVICE_TYPE)
+        {
+            const f32 lfLeft  = rw::math::fpu::Clamp(KF_WHEEL_RUMBLE_SCALE * lfLeftMotor,  KF_ZERO, KF_MOTOR_SPEED_MAX);
+            const f32 lfRight = rw::math::fpu::Clamp(KF_WHEEL_RUMBLE_SCALE * lfRightMotor, KF_ZERO, KF_MOTOR_SPEED_MAX);
+            mCachedRumble.muRightMotorSpeed = static_cast<u16>(static_cast<s64>(lfRight));
+            mCachedRumble.muLeftMotorSpeed  = static_cast<u16>(static_cast<s64>(lfLeft));
+            if (mFFOverlappedRumble.muStatus == KU_ERROR_IO_PENDING)
+            {
+                mCachedRumble.muLeftMotorSpeed  = luPreviousLeftMotorSpeed;
+                mCachedRumble.muRightMotorSpeed = luPreviousLeftMotorSpeed;
+                return;
+            }
+            luResult = XInputFFSetRumble(static_cast<u32>(mePort), &mCachedRumble, &mFFOverlappedRumble);
+            if (luResult == KU_ERROR_SUCCESS)
+            {
+                return;
+            }
+            if (luResult != KU_ERROR_IO_PENDING && luResult != KU_ERROR_DEVICE_NOT_CONNECTED)
+            {
+                // The console streams into the shared gpcMessageBuffer; the tree's idiom is a stack
+                // buffer of the same size (CgsID.cpp).
+                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                lStrStream << "WHEEL ERROR " << static_cast<s32>(luResult);
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    lacMessage,
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\Devices/X360/CgsInputDeviceX360Pad.cpp",
+                    699);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        else
+        {
+            const f32 lfLeft = static_cast<f32>(pow(static_cast<double>(lfLeftMotor), KD_PAD_LEFT_MOTOR_EXPONENT));
+            mCachedRumble.muRightMotorSpeed = static_cast<u16>(static_cast<s64>(lfRightMotor * KF_MOTOR_SPEED_MAX));
+            mCachedRumble.muLeftMotorSpeed  = static_cast<u16>(static_cast<s64>(lfLeft * KF_MOTOR_SPEED_MAX));
+            luResult = XInputSetState(static_cast<u32>(mePort), &mCachedRumble);
+        }
+
+        if (luResult != KU_ERROR_SUCCESS)
+        {
+            mCachedRumble.muLeftMotorSpeed  = luPreviousLeftMotorSpeed;
+            mCachedRumble.muRightMotorSpeed = luPreviousLeftMotorSpeed;
+        }
     }
 
     // ============================================================================
@@ -234,7 +361,7 @@ namespace CgsInput
         meType      = leType;                      // stw a3, 0x04
         mbConnected = 1;                           // stw 1, 0x10
 
-        if (leType == E_DEVICETYPE_WHEEL)
+        if (leType == Device::E_WHEEL_DEVICE_TYPE)
         {
             const u32 luStart = GetTickCount();
             while (true)
@@ -260,7 +387,7 @@ namespace CgsInput
                         static_cast<u32>(mePort), &mFFEffect, 1u, nullptr);
                     if (GetTickCount() - luStart > KU_FF_TIMEOUT_MS)
                         return true;
-                    if (luSetEffect != KU_ERROR_DEVICE_NOT_CONNECTED)
+                    if (luSetEffect != KU_ERROR_TIMEOUT)
                     {
                         // dwOperation buffer { 1, 3 } (op start, loop count) per the asm v27[0]/v27[1].
                         const u32 lauOp[2] = { 1u, 3u };
@@ -306,7 +433,7 @@ namespace CgsInput
         const f32 lfRangeOuter = mfStickOuter;   // f12 @0xE0
         const f32 lfRangeInner = mfStickInner;   // f13 @0xE4
 
-        if (meType == E_DEVICETYPE_WHEEL)
+        if (meType == Device::E_WHEEL_DEVICE_TYPE)
         {
             // -- wheel triggers --> mafControls[25] (left) / [24] (right); combined into axis[5] --
             f32 lfLeft = static_cast<f32>(lrState.mbLeftTrigger) * KF_BYTE_SCALE;
@@ -432,7 +559,7 @@ namespace CgsInput
         }
 
         // -- wheel force-feedback: push the FF effect via XInputFFUpdateEffect --
-        if (meType == E_DEVICETYPE_WHEEL && mFFOverlappedSpring.muStatus != KU_ERROR_IO_PENDING)
+        if (meType == Device::E_WHEEL_DEVICE_TYPE && mFFOverlappedSpring.muStatus != KU_ERROR_IO_PENDING)
         {
             s32 liMagnitude;
             if (mbWheelStopped)

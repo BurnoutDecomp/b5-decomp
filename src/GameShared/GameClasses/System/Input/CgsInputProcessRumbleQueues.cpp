@@ -58,14 +58,18 @@ namespace InputIO
 //      <Begin/Fire("Not locked for reading\n", CgsInputModuleIO.h, 927)/End>;
 //      addi r3,this,0x100 (== this+256). Mirrors GetTimerStatusInt @0x828E69E0 (this+868,
 //      line 969). Caller: CgsInput::InputModule::ProcessRumbleRequests.
+// (FX-RUMBLE3 2026-09-24: the "+868 stride" static_assert that stood here pinned a PADDING GAP the
+// header held in place of the ChangeVolume / Stop queues and the three flags; the buffer now carries
+// all of them by name, in the DWARF order, so the PC offsets are simply the PC widths -- see the
+// header banner. The member ORDER is what matches the console, not the byte offset.)
 const PreWorldInputBuffer::PlayRumbleEffectEventQueue*
 PreWorldInputBuffer::GetPlayRumbleEffectEventQueue() const
 {
-    // Member scope grants access to pin the modelled PC offset of the queue immediately
-    // after the jolt queue (matches the X360 this+256 placement; the timer-snapshot member
-    // it precedes is held at the X360 +868 stride -- see the header note on pointer width).
-    static_assert(offsetof(PreWorldInputBuffer, mTimerStatusInterface) == 868,
-                  "mTimerStatusInterface kept at the X360 +868 stride");
+    static_assert(offsetof(PreWorldInputBuffer, mPlayJoltEffectEventQueue) < offsetof(PreWorldInputBuffer, mPlayRumbleEffectEventQueue)
+                  && offsetof(PreWorldInputBuffer, mPlayRumbleEffectEventQueue) < offsetof(PreWorldInputBuffer, mChangeVolumeRumbleEffectEventQueue)
+                  && offsetof(PreWorldInputBuffer, mChangeVolumeRumbleEffectEventQueue) < offsetof(PreWorldInputBuffer, mStopRumbleEffectEventQueue)
+                  && offsetof(PreWorldInputBuffer, mStopRumbleEffectEventQueue) < offsetof(PreWorldInputBuffer, mTimerStatusInterface),
+                  "PreWorldInputBuffer keeps the console member order (+0x4 / +0x100 / +0x21C / +0x328 / +0x364)");
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
     return &mPlayRumbleEffectEventQueue;
 }

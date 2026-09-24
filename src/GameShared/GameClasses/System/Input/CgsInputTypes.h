@@ -49,6 +49,18 @@ namespace CgsInput
 
     namespace Device
     {
+        // CgsInput::Device::EType -- DWARF CgsInputDevice.h:12 (verbatim). The type byte a device
+        // is bound with: the XInput SubType the X360 ManagerX360 scan reads (XINPUT_DEVSUBTYPE_GAMEPAD
+        // 1, _WHEEL 2) and the `cmpwi r11, 2` wheel test of DeviceX360Pad::Update / SetRumble and
+        // InputPads::UpdatePadRumble.
+        enum EType : s32
+        {
+            E_NO_DEVICE_TYPE    = 0,
+            E_PAD_DEVICE_TYPE   = 1,
+            E_WHEEL_DEVICE_TYPE = 2,
+            E_NUM_DEVICE_TYPES  = 3
+        };
+
         // CgsInput::Device::WheelFFSpring - the wheel force-feedback "spring" centring
         // parameters the post-world input pass copies out of the vehicle output interface
         // and republishes for the rumble/FFB driver.

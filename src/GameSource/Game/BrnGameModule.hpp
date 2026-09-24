@@ -66,7 +66,7 @@ using BrnWorld::WorldModule;   // DWARF: global-namespace WorldModule (BrnWorldM
 // leaving mResourceModule unconstructed = null vtable crash). Include the real definition so every TU
 // (BrnGameModule + the loading flow) sees ONE GameDataModule.
 #include "GameSource/Resource/BrnGameDataModule.h"
-// !!! ODR TRAP WARNING !!! The remaining empty stubs below (GameStateModule/DirectorModule/InputModule/
+// !!! ODR TRAP WARNING !!! The remaining empty stubs below (GameStateModule/DirectorModule/
 // EffectsModule/RootSoundModule/ReplayModule/BrnNetworkModule) are placeholders so this
 // module can embed them by value. When ANY of them is reconstructed for real in its own header, DELETE
 // the matching stub here and #include the real header instead -- do NOT leave both. Two different
@@ -137,7 +137,12 @@ namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue
 // buffer). It was an ODR stub here exactly like GameStateModule/WorldModule were; the real
 // header is included instead, per this header's own ODR-TRAP instruction above.
 #include "GameSource/Director/BrnDirectorModule.h"
-namespace CgsInput     { class InputModule     : public CgsModule::ModuleSingleBuffered {}; }
+// CgsInput::InputModule is now the REAL module (FX-RUMBLE3 2026-09-24, crash-parity G10-D4): the
+// pads, their jolt / rumble tables and PreWorldUpdate -> ProcessRumbleRequests. It was an empty ODR
+// stub here (`class InputModule : public ModuleSingleBuffered {}`) exactly like the GameState /
+// Director / Effects modules above were, so mInputModule had no PreWorldUpdate to call and the
+// game state's rumble requests had no consumer.
+#include "GameShared/GameClasses/Input/CgsInputModule.h"
 // BrnGui::GuiModule is now the REAL module (hosts the MovieManager) -- included above (BrnGuiModule.h),
 // no longer the opaque stub.
 // BrnEffects::EffectsModule is now the REAL module (the effects spine: the per-car
@@ -832,6 +837,17 @@ namespace BrnGame
         // BrnGui::GuiLiveRevengeUpdateEvent per record through the GUI module.
         void TranslateNetworkInterfaceToGuiEvents(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
                                                   const BrnNetwork::BrnNetworkModuleIO::NetworkToGuiInterface* lpNetworkToGuiInterface);
+
+        // ---- the input pre-world leg (FX-RUMBLE3 2026-09-24, crash-parity G10-D4) ---------------
+        // X360 0x823C5650 (DWARF BrnGameModule.h:550, BrnGameModuleUpdateFunctions.cpp:45; callers
+        // DoUpdate @0x823F0AF8 and LoadingScriptedState::Update @0x823F22D8). The FIRST leg of every
+        // update step: an IOHelper carves the "InputPreWorld" PreWorldInputBuffer off the INPUT stack,
+        // the game state's rumble requests are bridged into it under its write lock, and the input
+        // module's PreWorldUpdate (vtable slot 17) drains them onto the pads. Returns the port START
+        // was pressed on (4 == none), for DoUpdate_InputPostWorld's bind.
+        u32 DoUpdate_InputPreWorld(CgsModule::IOBufferStack* lpInputBufferStack,
+                                   CgsModule::IOBufferStack* lpOutputBufferStack,
+                                   CgsInput::InputIO::OutputBuffer* lpInputModuleOutput);
 
         // ---- the network legs of the per-frame cascade and their bridges ------------------------
         // DoUpdate_NetworkPreSim (called by DoUpdate): perf monitors; carve a
