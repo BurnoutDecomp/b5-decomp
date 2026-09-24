@@ -817,12 +817,22 @@ BaseCollisionGenerator::RunCollidePrimitiveListWithTriangleListStream(
 //               bl IntersectLinePolygonSoupNearestSingleSided(leaf.mpPolygonSoup (+0x20), tmp)
 //               with v1 = start, v2 = end ; `vcmpeqfp128. v0, v1, zero` -> skip on no hit ;
 //               `vcmpgtfp. best+0x50, tmp+0x50` -> copy 14 qwords tmp -> best when strictly nearer
-//   -- long arm (20 m and over) --
-//   0x82813444  bl sub_82843E98(map, &line) -- the line-slab leaf gather -- then per leaf a
-//               reciprocal-direction slab clip (the three "Line reciprocal X/Y/Z is 0" tripwires,
-//               CgsLineTests.cpp:441/442/443) before the same soup test. NOT RECONSTRUCTED: a
-//               loud trap below (no caller in the tree asks for a line that long -- the race car's
-//               above-ground ray is 10 m).
+//   -- long arm (20 m and over) -- (crash parity FX-GEOMETRIC, 2026-09-24; a named trap before)
+//   0x82813440  n = sub_82843E98(map, &line) == PolygonSoupListSpatialMap::RunQuery(const Line&),
+//               the segment's leaf gather ; n <= 0 -> the count store (0x82813918)
+//   per leaf (0x8281348C, count-down r17, byte cursor r19 over mpOutputQueryBuffer (+0x58)):
+//     leaf (r26) = mpLeafNodes (+0x48) + 48 * mpOutputQueryBuffer[i]
+//     0x8281348C..0x82813870  CgsGeometric::TestLineStartEndAxisAlignedBox(start, end, leaf box)
+//                 INLINED WHOLE, as in the all-hits twin: vrefp128 + three Newton-Raphson steps
+//                 (0x828134D8..0x8281350C), the "Line reciprocal X / Y / Z is 0\n" tripwires
+//                 (0x1B9 / 0x1BA / 0x1BB == CgsLineTests.cpp:441..443, strings 0x820DB18C /
+//                 0x820DB174 / 0x820DB15C), the endpoint-inside and six face terms
+//     0x82813874  `vcmpeqfp128. mask, 0` -> no hit -> next leaf
+//     0x8281389C  IntersectLinePolygonSoupNearestSingleSided(*leaf.mpPolygonSoup (+0x20), &tmp
+//                 (sp+0x120), v1 = start, v2 = end) ; `vcmpeqfp128. v1, 0` -> no hit -> next leaf
+//     0x828138C4  `vcmpgtfp. best+0x50, tmp+0x50` -> copy 14 qwords tmp -> best when strictly
+//                 nearer -- the short arm's leaf body exactly
+//   0x8281390C  reload this / the list offset / idx from the stack and join the count store
 //   0x82813930  `vcfsx 1.0 ; vcmpgefp. 1.0 >= best+0x50` ; `sth -> list+0x0C` (mu16NumResults)
 //               = 1 on a hit, 0 otherwise. This is the ONLY write of the count on this leg.
 //   return      the result-list index.
@@ -943,15 +953,46 @@ namespace CgsCollision
         }
         else
         {
-            // 0x82813440 sub_82843E98(map, &line) + the slab-clipped per-leaf test. A line of 20 m
-            // or more has no producer in the tree today; when one appears this fires, by name.
-            // (2026-09-24, FX-GEOMETRIC: both callees now exist -- PolygonSoupListSpatialMap::
-            // RunQuery(const Line&) and CgsGeometric::TestLineStartEndAxisAlignedBox, the all-hits twin's
-            // long arm below uses them; THIS arm's 0x82813440..0x82813930 driver is still undecoded.)
-            CGS_ASSERT(false, "BaseCollisionGenerator::CollideLineAgainstPolySoupListNearest @0x828131C0: the "
-                              "long-line arm (0x82813440..0x82813930: RunQuery(const Line&) leaf gather + the "
-                              "inlined TestLineStartEndAxisAlignedBox per leaf) is not reconstructed -- a line "
-                              "of 20 m or more was asked for");
+            // 0x82813440: the SEGMENT leaf gather, then per leaf the inlined slab test and the short
+            // arm's nearest test + strictly-nearer copy (see the decode above). Until 2026-09-24 this
+            // arm was a named trap. Besides the race car's 10 m above-ground ray, the queue it serves is
+            // fed by the director's camera probes -- BrnDirector::SceneQueryInterface::LineTestNearest
+            // 0x82233048 (VisibilityTest, GroundConstraint, FrustrumCollisionResolver, the collision
+            // policies, BehaviourRoadRunner, BehaviourRenderMetrics) -- whose lines the caller sizes.
+            const s32 liNumLeaves = lpPolySoupListSpacialMap->RunQuery(lrLine);   // 0x82813444
+
+            if (liNumLeaves > 0)
+            {
+                const Vector4 lLineStart = { lrStart.x, lrStart.y, lrStart.z, lrStart.w };   // v127
+                const Vector4 lLineEnd   = { lrEnd.x,   lrEnd.y,   lrEnd.z,   lrEnd.w };     // v123
+
+                const u16*                               lpau16Leaves = lpPolySoupListSpacialMap->GetOutputQueryBuffer();
+                const CgsGeometric::PolygonSoupLeafNode* lpaLeafNodes = lpPolySoupListSpacialMap->GetLeafNodes();
+
+                CgsGeometric::PolySoupLineNearestResult lTemp;   // sp+0x120, 112 bytes (the short arm's slot)
+
+                for (s32 liLeaf = 0; liLeaf < liNumLeaves; ++liLeaf)
+                {
+                    const CgsGeometric::PolygonSoupLeafNode& lrLeaf = lpaLeafNodes[lpau16Leaves[liLeaf]];
+
+                    if (!CgsGeometric::TestLineStartEndAxisAlignedBox(lLineStart, lLineEnd, lrLeaf.mBox))
+                    {
+                        continue;   // 0x82813884 `bne` on an all-zero mask
+                    }
+
+                    if (!CgsGeometric::IntersectLinePolygonSoupNearestSingleSided(*lrLeaf.mpPolygonSoup, &lTemp,
+                                                                                  lrStart, lrEnd))
+                    {
+                        continue;   // 0x828138B0 -- no hit in this soup
+                    }
+
+                    // 0x828138B4..0x828138D4: `vcmpgtfp. best+0x50, tmp+0x50` -- STRICTLY nearer replaces.
+                    if (lpBest->mLineParam.x > lTemp.mLineParam.x)
+                    {
+                        std::memcpy(lpBest, &lTemp, sizeof(CgsGeometric::PolySoupLineNearestResult));   // 14 qwords
+                    }
+                }
+            }
         }
 
         // 0x82813930..0x82813960: mu16NumResults = (1.0 >= best t). The one write of the count.
