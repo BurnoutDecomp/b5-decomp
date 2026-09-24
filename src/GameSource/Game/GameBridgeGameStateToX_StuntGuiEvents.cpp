@@ -203,6 +203,34 @@ namespace
         s32 GetEventType() const { return 373; }
     };
     static_assert(sizeof(ShutdownEventWire373) == 8, "GUI 373 size 8");
+
+    // [FX-FLOW 2026-09-24, G11-D1 remainder] the on-queue record of GUI event 421
+    // (BrnGui::GuiInEventNeckAndNeck, DWARF BrnGuiEventTypeDefs.h:5634: no members), TU-LOCAL for
+    // the same include reason (its home is BrnGuiDemangledEventTypes.h). Wire shape:
+    // AddGuiEvent<GuiInEventNeckAndNeck> @0x823D5688 posts ONE byte (`li r6, 1 ; li r5, 0x1A5`
+    // @0x823D5724..0x823D5728); the translator's case 246 hands it a stack byte it never writes.
+    struct NeckAndNeckEventWire421
+    {
+        u8 mu8Unwritten;                        // +0x00 (never written by the console's arm)
+        s32 GetEventType() const { return 421; }
+    };
+    static_assert(sizeof(NeckAndNeckEventWire421) == 1, "GUI 421 size 1");
+
+    // [DIAG] NOT IN THE X360 BINARY -- the race-mode HUD message rung (BRN_MODEMGR_DIAG, first 24
+    // lines): which HUDMessageLogic action became which GUI event, with its car slot and value
+    // (the split seconds for 245, the finish place for 247).
+    void RaceHudBridgeDiag(s32 liAction, s32 liGuiEvent, s32 liCarIndex, f32 lfValue)
+    {
+        static const bool sbDiag      = (getenv("BRN_MODEMGR_DIAG") != 0);
+        static s32        siLinesLeft = 24;
+        if (!sbDiag || CgsDev::Log::gpDebugPrint == 0 || siLinesLeft <= 0)
+        {
+            return;
+        }
+        --siLinesLeft;
+        *CgsDev::Log::gpDebugPrint << "[race-hud] action " << liAction << " -> gui " << liGuiEvent
+                                   << " (car slot " << liCarIndex << ", value " << lfValue << ")\n";
+    }
 }
 
     // =========================================================================
@@ -842,6 +870,94 @@ namespace
                 {
                     *CgsDev::Log::gpDebugPrint << "[td-gui] action 121 -> gui 374 (1 byte)\n";
                 }
+                break;
+            }
+
+            // ---- 242 / 245 / 246 / 247 / 248 / 250  THE RACE-MODE HUD MESSAGES -----------------
+            // [FX-FLOW 2026-09-24, G11-D1 remainder] HUDMessageLogic's race arm posts these into the
+            // game-action queue (242 GenerateFirstOrLastMessage, 245 GenerateLeaderMessages, 247
+            // GenerateFinisherMessage, 248 GenerateRivalCheckpointMessage, 250 DetectCrashes /
+            // DetectOnlineCrashes); 246 has no producer in the image. The console arms, jpt_823EA1F0:
+            //   242 @0x823ED9F4  assert "lpTookLeadAction" (GameBridgeGameStateToX.cpp:0xEAF) ;
+            //                    `lwz 8` -> +8, `ld 0` -> +0   AddGuiEvent<GuiTookLeadEvent>       484/16
+            //   245 @0x823EC034  `ld 0` / `lfs 8` / `lbz 0x10` / `lwz 0xC` to the same offsets
+            //                                                  AddGuiEvent<GuiInEventLeaderSplit>  420/24
+            //   246 @0x823EC068  an unwritten stack byte       AddGuiEvent<GuiInEventNeckAndNeck>  421/1
+            //   247 @0x823EC07C  `lwz 0` / `lwz 4`             AddGuiEvent<GuiInEventFinisher>     423/8
+            //   248 @0x823EC0A0  `ld 8` / `ld 0` / `lwz 0x10`  AddGuiEvent<GuiInEventRivalProgress> 422/24
+            //   250 @0x823EC0CC  `ld 0` / `lwz 8`              AddGuiEvent<GuiNetworkPlayerCrashingEvent> 482/16
+            // 243 (took last), 244 (distance to finish) and 249 (player checkpoint) are in the
+            // table's DEFAULT list: the console drops them here, so they post nothing on PC either.
+            // GUI consumers: HudMessageAnalyzer::Update -- 484 HandleTookLead ("AggDrTkLead"), 420
+            // HandleEventLeaderSplitTime ("EventCheckPt" offline), 421 "EventNeck", 423
+            // HandleEventFinisher (online only), 482 HandleNetworkPlayerCrashedEvent (online only);
+            // nothing reads 422.
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_TOOK_LEAD:   // 242
+            {
+                CGS_ASSERT(lpAction != 0, "lpTookLeadAction");   // GameBridgeGameStateToX.cpp:3759
+                const BrnGameState::GameStateModuleIO::HUDMessageTookLeadAction* lpTookLeadAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageTookLeadAction*>(lpAction);
+                BrnGui::GuiTookLeadEvent lEvent;
+                lEvent.meLeadActiveRaceCarIndex = lpTookLeadAction->meActiveRaceCarIndex;   // `lwz 8`
+                lEvent.mOfflineRivalCarID       = lpTookLeadAction->mCarId;                 // `ld 0`
+                PushGuiEvent(lEvent, lpGuiInput);
+                RaceHudBridgeDiag(242, 484, static_cast<s32>(lEvent.meLeadActiveRaceCarIndex), 0.0f);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_LEADING:   // 245
+            {
+                const BrnGameState::GameStateModuleIO::HUDMessageLeadingAction* lpLeadingAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageLeadingAction*>(lpAction);
+                BrnGui::GuiInEventLeaderSplit lEvent;
+                lEvent.mfLeadTime                 = lpLeadingAction->mfLeadTime;               // `lfs 8`
+                lEvent.mLeadersCarID              = lpLeadingAction->mLeadingCarID;            // `ld 0`
+                lEvent.mbLocalPlayerIsLeading     = lpLeadingAction->mbLocalPlayerIsLeading;   // `lbz 0x10`
+                lEvent.meLeaderActiveRaceCarIndex = lpLeadingAction->meLeadingCarIndex;        // `lwz 0xC`
+                PushGuiEvent(lEvent, lpGuiInput);
+                RaceHudBridgeDiag(245, 420, static_cast<s32>(lEvent.meLeaderActiveRaceCarIndex), lEvent.mfLeadTime);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_NECK_AND_NECK:   // 246
+            {
+                NeckAndNeckEventWire421 lEvent;
+                lEvent.mu8Unwritten = 0;
+                PushGuiEvent(lEvent, lpGuiInput);
+                RaceHudBridgeDiag(246, 421, -1, 0.0f);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_FINISHES:   // 247
+            {
+                const BrnGameState::GameStateModuleIO::HUDMessageXFinishesAction* lpFinishesAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageXFinishesAction*>(lpAction);
+                BrnGui::GuiInEventFinisher lEvent;
+                lEvent.meActiveRaceCarIndex = lpFinishesAction->meRivalRaceCarIndex;   // `lwz 0`
+                lEvent.miFinishPosition     = lpFinishesAction->miFinishPosition;      // `lwz 4`
+                PushGuiEvent(lEvent, lpGuiInput);
+                RaceHudBridgeDiag(247, 423, static_cast<s32>(lEvent.meActiveRaceCarIndex),
+                                  static_cast<f32>(lEvent.miFinishPosition));
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_REACHES_CHECKPOINT:   // 248
+            {
+                const BrnGameState::GameStateModuleIO::HUDMessageXReachesCheckpointAction* lpCheckpointAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageXReachesCheckpointAction*>(lpAction);
+                BrnGui::GuiInEventRivalProgress lEvent;
+                lEvent.mLandmarkID                = lpCheckpointAction->mLandmarkID;            // `ld 8`
+                lEvent.mRivalID                   = lpCheckpointAction->mRivalID;               // `ld 0`
+                lEvent.meRivalActiveRaceCarIndex  = lpCheckpointAction->meRivalRaceCarIndex;    // `lwz 0x10`
+                PushGuiEvent(lEvent, lpGuiInput);
+                RaceHudBridgeDiag(248, 422, static_cast<s32>(lEvent.meRivalActiveRaceCarIndex), 0.0f);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_CRASHES:   // 250
+            {
+                const BrnGameState::GameStateModuleIO::HUDMessageXCrashesAction* lpCrashesAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageXCrashesAction*>(lpAction);
+                BrnGui::GuiNetworkPlayerCrashingEvent lEvent;
+                lEvent.mRivalCarID                        = lpCrashesAction->mRivalID;               // `ld 0`
+                lEvent.meNetworkPlayerActiveRaceCarIndex  = lpCrashesAction->meRivalRaceCarIndex;    // `lwz 8`
+                PushGuiEvent(lEvent, lpGuiInput);
+                RaceHudBridgeDiag(250, 482, static_cast<s32>(lEvent.meNetworkPlayerActiveRaceCarIndex), 0.0f);
                 break;
             }
 
