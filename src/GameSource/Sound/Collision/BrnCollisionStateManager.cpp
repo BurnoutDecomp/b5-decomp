@@ -1194,7 +1194,12 @@ template <typename ListType, typename BinType>
 void CollisionStateManager::SelectCollisionBin(
     OutputCollision& lrOutput, const ListType& lrList)
 {
+    // 0x826A9808..0x826A9820 (propscrash 0x826A8848..0x826A8860): the sample id is cleared first,
+    // then a collision whose SECOND material is exactly 1 -- the value MapEntityIdToMaterial gives
+    // an unhandled owner -- selects no bin at all (`ld 0x10 ; cmpldi 1 ; beq -> out`).
     lrOutput.miSampleID = -1;
+    if (lrOutput.maMaterial[1] == 1)
+        return;
     const f32 lfDistanceSquared = lrOutput.maParameter[1].x;
     const f32 lfImpulse = lrOutput.maParameter[0].x;
 
@@ -1266,39 +1271,82 @@ void CollisionStateManager::SelectCollisionBin(
             lfDistanceSquared > lfDistanceMax * lfDistanceMax)
             continue;
         ++luDistanceBins;
+
+        // 0x826AA2B4 `stb r22, 0xD4(r29)`: the bin index is stored as soon as the distance test
+        // passes -- before the impulse test can still reject this bin.
+        lrOutput.miBinIndex = static_cast<s8>(luIndex);
         if (lfImpulse < lBin.PhysicsImpulseNormalization_MIN())
             continue;
         ++luImpulseBins;
 
-        const f32 lfDenominator =
-            lBin.PhysicsImpulseNormalization_MAX() -
-            lBin.PhysicsImpulseNormalization_MIN();
-        const f32 lfNormalized = lfDenominator > 0.0f
-            ? std::max(0.0f, std::min(1.0f,
-                (lfImpulse - lBin.PhysicsImpulseNormalization_MIN()) /
-                    lfDenominator))
-            : 0.0f;
+        // 0x826AA320 `std r25, 0x90(r29)`: the bin's collection key, stored before the size test.
+        lrOutput.mBinKey = lrList.GetCrashBinCollectionKey(luIndex);
+
+        // 0x826AA324..0x826AA34C: normalise over [MIN, MAX], then clamp with two fsel's --
+        //   fneg f13, x ; fsel f0, f13, 0.0, x      -> x <= 0 (incl. -0) gives 0; NaN stays NaN
+        //   fsubs f13, 1.0, x ; fsel f30, f13, x, 1.0 -> x > 1, +inf or NaN gives 1
+        // There is no guard for MAX == MIN: such a bin normalises to 1.0 (x/0 and 0/0 both end on
+        // the second fsel's 1.0). flt_82001CC0 = 0.0f, flt_82001C98 = 1.0f (0x826A9A00 / 0x826A9A08).
+        f32 lfNormalized =
+            (lfImpulse - lBin.PhysicsImpulseNormalization_MIN()) /
+            (lBin.PhysicsImpulseNormalization_MAX() - lBin.PhysicsImpulseNormalization_MIN());
+        lfNormalized = (-lfNormalized >= 0.0f) ? 0.0f : lfNormalized;
+        lfNormalized = (1.0f - lfNormalized >= 0.0f) ? lfNormalized : 1.0f;
+
+        // 0x826AA38C..0x826AA4F0: the normalised impulse picks ONE size against the bin's
+        // IntensityThreshold (lane 1 for large, lane 0 for medium). A bin with no sample of that
+        // size is abandoned for the NEXT bin (each of the three arms: `li r11, -1 ;
+        // stw r11, 0xD8(r29)`, then the loop's continue) -- there is no fallback to a smaller
+        // size inside the same bin.
+        ESize leSize;
+        s32 liNumSamples;
+        if (lfNormalized > lBin.IntensityThreshold().y)                  // vspltw 1 ; vcmpgtfp.
+        {
+            leSize = E_SIZE_LARGE;                                       // 0x826AA654
+            liNumSamples = lBin.mNumCollisionsLarge();                   // 0x826AA3D0 +0x168
+        }
+        else if (lfNormalized > lBin.IntensityThreshold().x)             // vspltw 0 ; vcmpgtfp.
+        {
+            leSize = E_SIZE_MEDIUM;                                      // 0x826AA65C
+            liNumSamples = lBin.mNumCollisionsMedium();                  // 0x826AA45C +0x164
+        }
+        else
+        {
+            leSize = E_SIZE_SMALL;                                       // 0x826AA664
+            liNumSamples = lBin.mNumCollisionsSmall();                   // 0x826AA4A8 +0x160
+        }
+        if (liNumSamples <= 0)
+        {
+            lrOutput.miSampleID = -1;
+            // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG); the console's own
+            // BinLogic debug text here is "No large / medium / small samples in this bin, next".
+            if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+            {
+                static u32 suSizeMissPrintCount = 0;
+                if (suSizeMissPrintCount++ < 32u)
+                {
+                    char lacLine[128];
+                    std::snprintf(lacLine, sizeof(lacLine),
+                                  "[collision-audio] size miss pipeline=%d entry=%u size=%d "
+                                  "normalized=%f -> next bin\n",
+                                  static_cast<int>(lrOutput.mePipeline), luIndex,
+                                  static_cast<int>(leSize), static_cast<double>(lfNormalized));
+                    *CgsDev::Log::gpDebugPrint << lacLine;
+                }
+            }
+            continue;
+        }
+        lrOutput.meSize = leSize;
+
+        // The accepted bin (0x826AA73C..0x826AA790): the splatted normalised impulse, sample id
+        // 0, the bin's content-spec bank, its priority added.
         lrOutput.mNormalizedImpulse =
             VecFloat{lfNormalized, lfNormalized, lfNormalized, lfNormalized};
-
-        if (lfNormalized > lBin.IntensityThreshold().y &&
-            lBin.mNumCollisionsLarge() > 0)
-            lrOutput.meSize = E_SIZE_LARGE;
-        else if (lfNormalized > lBin.IntensityThreshold().x &&
-                 lBin.mNumCollisionsMedium() > 0)
-            lrOutput.meSize = E_SIZE_MEDIUM;
-        else if (lBin.mNumCollisionsSmall() > 0)
-            lrOutput.meSize = E_SIZE_SMALL;
-        else
-            continue;
-
         lrOutput.miSampleID = 0;
-        lrOutput.mBinKey = lrList.GetCrashBinCollectionKey(luIndex);
         lrOutput.meBankType = SelectBin(0, lBin.mSpliceBankAsset(), 0, 0, 0);
         CGS_ASSERT(lrOutput.meBankType >= E_COLLISION_SPLICE_BANK_COLLISION &&
                    lrOutput.meBankType < E_COLLISION_SPLICE_BANK_MAX,
                    "leSpliceBankType < E_COLLISION_SPLICE_BANK_MAX");
-        lrOutput.miBinIndex = static_cast<s8>(luIndex);
         lrOutput.mfPriority += lBin.Priority();
 
         // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the selection resolved
