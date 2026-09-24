@@ -1221,9 +1221,20 @@ void ActiveRaceCar::RequestPlaceOnTrack( const Vector3& lPosition, const Vector3
 //      already reaches the resident spec through the handle stored two lines up. It retires the
 //      promote-seam stand-in SetCentreOfMassTransformBringUp (seat wave 2026-08-05), which fed the
 //      same +1552 matrix one step later, from RaceCarEntityModule::ResetActiveRaceCar.
-//   2. the four RenderParams::SetWheelScale(i, Def + 96 + 48*i) calls -- same dependency,
-//      and this build cannot draw wheels at all (Model::SetupShaderConstantsForInstancing
-//      is absent).
+//   2. ⭐ LANDED 2026-09-24 (crash parity, same review): the four RenderParams::SetWheelScale(i,
+//      Def + 96 + 48*i) calls, 0x822EB410..0x822EB470, after the detached-part queue Construct:
+//        r27 = this + 0x7E0 (mRenderParams) ; r30 = 0x60 ; r31 = 0
+//        loop: mr r3, r24 ; bl BrnPhysics::Def          -- again on EVERY pass (@0x822EB42C)
+//              cmpwi r31, 4 ; blt  else assert "liWheel < eNumWheels" (0x82014ED8,
+//                  BrnStreamedDeformationSpec.h line 0x101) -- the inlined GetWheelSpec
+//              lvx128 v1, r30, r29                    -- spec + 0x60 + 0x30*i == maWheelSpecs[i].mScale
+//              mr r4, r31 ; mr r3, r27 ; bl RenderParams::SetWheelScale (@0x822CD170)
+//              r30 += 0x30 ; r31 += 1 ; while r30 < 0x120
+//      DWARF: `mRenderParams.SetWheelScale( luWheel, mDeformationModelResourcePtr->
+//      GetWheelSpec( luWheel )->mScale )` (local u32 luWheel, :819). The old reasons were stale:
+//      the Def dependency is leg 1's (resolved the same way) and the wheels have drawn since the
+//      wheel-render wave. It retires the promote-seam stand-in loop in ResetActiveRaceCar
+//      (wheel-transform wave 2026-08-13).
 //   3. ⭐ LANDED 2026-09-24 (crash parity CHAIN-RECOLOUR / G61-D6 colour leg): the car's
 //      authored default colour, 0x822EB474..0x822EB4F0, after the wheel-scale loop:
 //        r3 = 0x52B81656F3ADF675 (burnoutcarasset's class key; the old "-206702987" here was
@@ -1278,6 +1289,22 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
     // inside mRenderParams and is the one member of the block this header names.
     mRenderParams.GetDetachedPartQueue().Construct();
 
+    // 0x822EB410..0x822EB470 (banner leg 2): the four render wheel scales, once per load. Def is
+    // called again on every pass (bl @0x822EB42C); the loop runs while r30 = 0x60 + 0x30*i is
+    // below 0x120, i.e. four wheels. Same PC-safety guard as leg 1.
+    for( u32 luWheel = 0u; luWheel < 4u; ++luWheel )
+    {
+        const BrnPhysics::Deformation::StreamedDeformationSpec* lpWheelDeformationSpec =
+            ResolveDeformationSpec( mDeformationModelHandle );
+        CGS_ASSERT( lpWheelDeformationSpec != 0,
+                    "Can not instance resource pointer - it has no main memory resource\n" );
+        if( lpWheelDeformationSpec != 0 )
+        {
+            mRenderParams.SetWheelScale(
+                luWheel, lpWheelDeformationSpec->GetWheelSpec( static_cast<s32>( luWheel ) )->mScale );
+        }
+    }
+
     // 0x822EB474..0x822EB4F0 -- the authored default colour (banner leg 3).
     Attrib::Gen::burnoutcarasset lCarAsset( luCarAssetAttribKey, 0 );
     Attrib::Gen::burnoutcargraphicsasset lGraphicsAsset(
@@ -1296,7 +1323,15 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
             << "[res-loaded] OnResourcesLoaded slot " << static_cast<s32>( meActiveRaceCarIndex )
             << " spec " << ( lpDeformationSpec != 0 ? 1 : 0 )
             << " mCentreOfMassTransform.w (" << mCentreOfMassTransform.wAxis.x << ", "
-            << mCentreOfMassTransform.wAxis.y << ", " << mCentreOfMassTransform.wAxis.z << ")\n";
+            << mCentreOfMassTransform.wAxis.y << ", " << mCentreOfMassTransform.wAxis.z << ")";
+        for( u32 luLogWheel = 0u; luLogWheel < 4u; ++luLogWheel )
+        {
+            const Matrix44Affine& lrScale = mRenderParams.GetWheelScaleMatrix( luLogWheel );
+            *CgsDev::Log::gpDebugPrint
+                << " wheel" << luLogWheel << " scale (" << lrScale.xAxis.x << ", "
+                << lrScale.yAxis.y << ", " << lrScale.zAxis.z << ")";
+        }
+        *CgsDev::Log::gpDebugPrint << "\n";
     }
 }
 

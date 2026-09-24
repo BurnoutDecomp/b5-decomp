@@ -1900,23 +1900,10 @@ void RaceCarEntityModule::ResetActiveRaceCar(
                 BrnPhysics::Vehicle::VehiclePhysics::SeatTransformFromCreateLegBringUp(
                     lpSeatSpec, lrTransform );
 
-            // [FLAG PC bring-up] OnResourcesLoaded @0x822EB2FC leg 2, landed at this promote
-            // seam exactly like the +1552 matrix above (wheel-transform wave 2026-08-13): the
-            // console sets the four render wheel SCALES once at resource load, from the same
-            // streamed spec (spec + 96 + 48*i == maWheelSpecs[i].mScale). Needed here because
-            // the per-frame wheel stand-in (which also published scale) no longer runs for
-            // physics-owned cars now that the real transform producer is landed -- without
-            // this the wheels draw unit-scale. DELETE-WHEN OnResourcesLoaded's alias leg lands.
-            for( s32 liScaleWheel = 0; liScaleWheel < 4; ++liScaleWheel )
-            {
-                const BrnPhysics::Deformation::WheelSpec* lpScaleWheelSpec =
-                    lpSeatSpec->GetWheelSpec( liScaleWheel );
-                if( lpScaleWheelSpec != 0 )
-                {
-                    lpActiveRaceCar->GetRenderParams()->SetWheelScale(
-                        static_cast<u32>( liScaleWheel ), lpScaleWheelSpec->mScale );
-                }
-            }
+            // (The four render wheel SCALES this seam used to set -- wheel-transform wave
+            // 2026-08-13 -- are set by ActiveRaceCar::OnResourcesLoaded itself now, at the
+            // console's own slot 0x822EB410..0x822EB470; that stand-in is retired, crash parity
+            // 2026-09-24.)
 
             lpActiveRaceCar->SeedPhysicsStateFromCreateEventBringUp( lSeatedTransform );
 

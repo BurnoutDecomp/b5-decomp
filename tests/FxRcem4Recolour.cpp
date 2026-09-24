@@ -83,12 +83,17 @@ struct burnoutcargraphicsasset {
 
 namespace CgsResource { struct ResourceHandle { u32 muId; }; }
 
+struct Matrix44Affine { Vector3 xAxis, yAxis, zAxis, wAxis; };
+
 struct DetachedPartQueue { int miConstructs = 0; void Construct() { ++miConstructs; } };
 struct RenderParams {
     Vector4 mPaintColour = { 1.0f, 1.0f, 1.0f, 1.0f };
     DetachedPartQueue mQueue;
+    Matrix44Affine maWheelScale[6] = {};
     DetachedPartQueue& GetDetachedPartQueue() { return mQueue; }
     const Vector4& GetPaintColour() const { return mPaintColour; }
+    void SetWheelScale(u32, const Vector3&) {}                          // OnResourcesLoaded leg 2's callee
+    Matrix44Affine& GetWheelScaleMatrix(u32 luWheel) { return maWheelScale[luWheel]; }
 };
 
 class RaceCar {
@@ -106,12 +111,16 @@ public:
 };
 #include "fxrcem4_increase.inc"
 
-// OnResourcesLoaded's Def() legs (0x822EB20C, reviewer B on 87d1ad23 / G62): stand-ins so the extracted
-// body builds; those legs are run_fxrcem4_on_resources_loaded.py's.
-struct Matrix44Affine { Vector3 xAxis, yAxis, zAxis, wAxis; };
+// OnResourcesLoaded's Def() legs (0x822EB20C / 0x822EB410, reviewer B on 87d1ad23 / G62): stand-ins so
+// the extracted body builds; those legs are run_fxrcem4_on_resources_loaded.py's.
 namespace rw { namespace math { namespace vpu { inline bool IsValid(const Matrix44Affine&) { return true; } } } }
 namespace BrnPhysics { namespace Deformation {
-struct StreamedDeformationSpec { Matrix44Affine mCarModelSpaceToHandlingBodySpaceTransform; };
+struct WheelSpec { Vector3 mPosition, mScale; s32 liTagPointIndex; };
+struct StreamedDeformationSpec {
+    Matrix44Affine mCarModelSpaceToHandlingBodySpaceTransform;
+    WheelSpec maWheelSpecs[4];
+    const WheelSpec* GetWheelSpec(s32 liWheel) const { return &maWheelSpecs[liWheel]; }
+};
 } }
 static const BrnPhysics::Deformation::StreamedDeformationSpec gResidentSpec = {};
 const BrnPhysics::Deformation::StreamedDeformationSpec* ResolveDeformationSpec(const CgsResource::ResourceHandle&) { return &gResidentSpec; }
