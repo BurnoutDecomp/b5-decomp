@@ -14,6 +14,8 @@
 #include "GameSource/Replays/BrnReplayRequestInterface.h" // BrnReplays::ReplayIO::RequestInterface (the replay request member; phase C1)
 #include "GameSource/Director/Camera/Camera.h"            // BrnDirector::Camera::Camera (mDirectorCamera)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficSoundInterfaces.h" // BrnTraffic::BrnTrafficIO::TrafficSoundOutputInterface (mTrafficOutputInterface)
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h" // BrnPhysics::Deformation::DeformationOutputInterface (mDeformationInterface)
 
 // =============================================================================
 // BrnSound::Module::Io buffer accessors
@@ -239,10 +241,26 @@ namespace Io
         // Constructed" assert the moment the C4 spine went live -- the queue was real,
         // the Construct was missing). Span 0x610 = 1536+16 inside the 0x6494..0x6AB0 gap.
         typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
-        struct TrafficSoundOutputInterface   { u8 mData[4]; };
+        // ⭐ TYPED 2026-09-24 (crash parity FX-CRASHSND2; was opaque `u8 mData[4]` + pad). The
+        // DWARF (BrnRootSoundModuleIo.h:50) makes it the traffic module's own output type,
+        // `typedef TrafficSoundOutputInterface TrafficSoundOutputInterface;`, and the console
+        // setter @0x823B8710 copies it with that type's operator= @0x823A7F18. Its span,
+        // 0x6AB0..0x74C0 == 0xA10 == 16 + 32 x 80, is exactly the real type's size (no
+        // pointers: the host size is the console size). The Game bridge already handed the
+        // real object's address in; the 4-byte copy dropped everything past the count, so
+        // MapEntityIdToMaterial / FindEntity / TrafficStateManager read no traffic.
+        typedef BrnTraffic::BrnTrafficIO::TrafficSoundOutputInterface TrafficSoundOutputInterface;
         typedef CgsModule::EventQueue<BrnPhysics::Vehicle::PhysicalTrafficState, 20>
                                                 PhysicalTrafficStateQueue;
-        struct DeformationInterface          { u8 mData[4]; };
+        // ⭐ TYPED 2026-09-24 (crash parity FX-CRASHSND2; was opaque `u8 mData[4]` + pad). DWARF
+        // BrnRootSoundModuleIo.h:64 `typedef DeformationOutputInterface DeformationInterface;` -- the
+        // deformation manager's per-frame output, which the setter @0x823C91F0 copies with
+        // DeformationOutputInterface::operator= @0x823C8900 (the Game bridge already passed the real
+        // object; the 4-byte copy kept none of it). The collision sound reads it every frame:
+        // +0x70 mpDeformationState (RaceCarCache::Update, 0x826F91EC), +0x74 the jointed-part queue
+        // (UpdateHingingBodyParts), +0x3A0 / +0x9F0 the detached-part / broken-joint notifications,
+        // +0x1AF0 the glass queue (UpdateGlass).
+        typedef BrnPhysics::Deformation::DeformationOutputInterface DeformationInterface;
         struct ScoringOutputInterface        { u8 mData[0xAB0]; };   // XMemCpy 0xAB0 (SetScoringInterface)
         struct OnlineScoringOutputInterface  { u8 mData[0xA4]; };    // memcpy 0xA4  (SetOnlineScoringInterface)
         typedef CgsModule::EventQueue<BrnSound::Module::Io::SoundWorldLoadEvent, 25>
@@ -329,6 +347,11 @@ namespace Io
         const ScoringOutputInterface* GetScoringInterface() const;
         // X360 0x82694E80 -- the deformation output interface @ +0xB490 (by reference, folded bare class).
         const DeformationInterface& GetDeformationInterface() const;
+        // X360 0x82694DD8 -- the traffic sound output interface @ +0x6AB0 (read-lock, the
+        // "Not locked for reading" tripwire at h:423; by reference, DWARF :163). Readers:
+        // MapEntityIdToMaterial, CollisionStateManager::FindEntity, TrafficStateManager::
+        // UpdateParams, AmbienceControl::SelectSpecialAmbience / DrawDebug.
+        const TrafficSoundOutputInterface& GetTrafficOutputInterface() const;
         const PhysicalTrafficStateQueue* GetPhysicalTrafficStates() const;
         const InputContactSpyQueueInterface& GetContactSpyQueueInterface() const;
         // X360 0x82694C88 (read) / 0x823B8668 (write) -- the game-action queue @ +0x3084 (by reference).
@@ -395,14 +418,17 @@ namespace Io
         GameEventQueue                mGameEventQueue;             // @ +0x06494
         u8 maPad5[0x6AB0 - (0x6494 + sizeof(GameEventQueue))];
         TrafficSoundOutputInterface   mTrafficOutputInterface;     // @ +0x06AB0
-        u8 maPad6[0x74C0 - (0x6AB0 + sizeof(TrafficSoundOutputInterface))];
+        // (no pad: TrafficSoundOutputInterface is 0xA10, filling 0x6AB0..0x74C0 exactly)
         PhysicalTrafficStateQueue     mPhysicalTrafficStates;      // @ +0x074C0
         // The console queue exactly fills 0x74C0..0xB490. On x64 its BaseEventQueue
         // pointer widens by four bytes and the base is padded to eight-byte alignment,
         // making the typed host queue eight bytes wider; there is therefore no host pad
         // before the next by-name member.
         DeformationInterface          mDeformationInterface;       // @ +0x0B490
-        u8 maPad8[0xDF80 - (0xB490 + sizeof(DeformationInterface))];
+        // The console type exactly fills 0xB490..0xDF80 (0x2A04 + 28 x 8 locators, 16-aligned ->
+        // 0x2AF0). On x64 its queue headers and pointers widen, so the typed host member is wider
+        // than that span; there is no host pad before the next by-name member (the
+        // mPhysicalTrafficStates precedent above).
         ScoringOutputInterface        mScoringInterface;           // @ +0x0DF80
         // (no pad: ScoringOutputInterface is 0xAB0, filling 0xDF80..0xEA30 exactly)
         OnlineScoringOutputInterface  mOnlineScoringInterface;     // @ +0x0EA30
@@ -464,7 +490,7 @@ namespace Io
     //     overwritten by SetContactSpyQueueInterface each bridged frame]
     //   VEQ<13312,16>::Construct @0x82211348 (this+0x3084)
     //   VEQ<1536,16>::Construct  @0x822C6F78 (this+0x6494)
-    //   DeformationOutputInterface::Construct @0x8228F1B0 (this+0xB490) [deferred: opaque]
+    //   DeformationOutputInterface::Construct @0x8228F1B0 (this+0xB490)
     //   SoundWorldLoadEvent,25::Construct @0x822E50D0 (this+0xEAD4)     [deferred: opaque]
     //   inline: this+0xEBA8 ptr := 0; this+0xEBAC..BB8 := -1 x4 words; this+0x4 := 0;
     //     six string-head clears at +0x108 stride 0x101 + {-1,-1,flt_82001CC0} at
@@ -489,12 +515,13 @@ namespace Io
         mContactSpyQueueInterface.Construct();       // ContactSpyInterface::Construct(this+0x3080)
         mGameActionQueue.Construct();               // VEQ Construct runs Clear() itself
         mGameEventQueue.Construct();                // the C4 fix: BridgeWorldToSound's append target
+        mDeformationInterface.Construct();          // DeformationOutputInterface::Construct @0x8228F1B0 (this+0xB490)
         mPhysicalTrafficStates.Construct();         // PhysicalTrafficState,20 @0x826C82CC
         mWorldLoadInterface.Construct();            // EventQueue<SoundWorldLoadEvent,25>
         mpGuiEventQueue = 0;
         std::memset(&mGameModeInterface, 0xFF, sizeof(mGameModeInterface));   // -1 x4 words
         std::memset(&mReplayStatusInterface, 0, sizeof(mReplayStatusInterface));
-        std::memset(&mTrafficOutputInterface, 0, 2);                          // sth 0 @+0x6AB0
+        mTrafficOutputInterface.mu16EntityCount = 0;                          // sth 0 @+0x6AB0
         mUpdateInfo.mData[0] = 0;                                             // stb 0 @+0xEBBC
         mAudioCarDataLoadedQueue.Construct();
         mPropBecamePhysicalEventQueue.Construct();

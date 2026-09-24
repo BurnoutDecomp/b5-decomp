@@ -5,6 +5,8 @@
 #include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"   // BrnSound::Logic::BrnStateManager (committed base)
 #include "GameSource/Sound/Collision/BrnCollisionDataStructures.h" // BrnSound::Logic::Collision::ScrapeInfo (committed; maScrapeHistory element)
 #include "GameSource/Sound/Collision/BrnBinLookupCache.h"          // BinLookupCache (maBinLoopupCache, DWARF h:787)
+#include "GameSource/Sound/Collision/BrnRaceCarCache.h"            // RaceCarCache (mRaceCarCache, DWARF h:790)
+#include "GameSource/AttribSys/Enums/eMaterialType.h"              // EeMaterialType (MapEntityIdToMaterial)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"       // CgsSound::Playback::Name::MakeHash (SelectBin helper)
 #include "GameShared/GameClasses/Sound/Logic/CgsContent.h"
 #include "GameSource/AttribSys/Generated/classes/crashbin.h"
@@ -148,6 +150,33 @@ struct PropToMaterialMapping
 // hit at entry 0, else 1 (fallback). See BrnCollisionStateManager.cpp.
 int SelectBin( int a1, const char* lkpacName, int a3, int a4, int a5 );
 
+// DWARF: BrnSound::Logic::Collision::EeMaterialType -- the 32-bit material flag every builder
+// widens into InputCollision::maMaterial with `extsw`.
+typedef AttribSys::Enums::eMaterialType::eMaterialType EeMaterialType;
+
+class CollisionStateManager;
+
+// DWARF BrnCollisionStateManager.cpp:3593, ARTIST @0x826A0CF8. The material an entity collides
+// as: the world, the player's car or another race car, a traffic car by its vehicle class, or
+// Nothing for any other owner. See BrnCollisionStateManager.cpp.
+EeMaterialType MapEntityIdToMaterial( EntityId lEntityId, s32 liPlayerIndex,
+                                      const LogicInputBuffer& lInput );
+
+// DWARF BrnCollisionStateManager.cpp:190, ARTIST @0x8269ED18. Which face of a car's deformed box
+// a contact point is nearest (Front / Rear / Side / Roof / Bottom). The fourth vector is passed
+// zero by its only caller and never read (0x8269ED64 overwrites v3 before any use).
+AttribSys::Enums::eOrientation::eOrientation MapPositionToOrientationUsingBox(
+    Vector3 lPosition, Vector3 lNormal, Matrix44Affine lTransform, Vector3 lUnused,
+    Vector3 lComOffset, Vector3 lMin, Vector3 lMax );
+
+// DWARF BrnCollisionStateManager.cpp:318, ARTIST @0x8269F418. The orientation of a contact on
+// race car A from the collision manager's race-car cache; false (and Front) when A is not an
+// active race car. The leading matrix is passed and never read.
+bool MapPositionToOrientation( Matrix44Affine lTransform, Vector3 lPosition, Vector3 lNormal,
+                               EntityId lVehicleIdA, EntityId lVehicleIdB,
+                               const CollisionStateManager& lMgr,
+                               AttribSys::Enums::eOrientation::eOrientation& leOrientation );
+
 class CollisionStateManager : public BrnSound::Logic::BrnStateManager
 {
 public:
@@ -182,6 +211,15 @@ public:
     // equal to rScrapeInfo, else nullptr.
     BrnSound::Logic::Collision::ScrapeInfo* FindInScrapeHistory( const BrnSound::Logic::Collision::ScrapeInfo& rScrapeInfo );
 
+    // DWARF h:635 / h:644 (header inlines). MapPositionToOrientation reads the race-car cache
+    // (mgr+0xCF0, 0x8269F484) and the builders read the frame copy (mgr+0x81A0 / +0x81E8).
+    const RaceCarCache& GetRaceCarCache() const { return mRaceCarCache; }
+    const BrnSound::Logic::FrameInformation& GetFrameInformation() const { return mFrameInformation; }
+
+    // DWARF cpp:3210 (public). The prop InputCollision maps its prop type through it
+    // (sub_826E8B20 0x826E8D0C).
+    bool MapPropTypeToMaterial(u16 luPropType, u64& lruMaterial) const;
+
     // PlayCollision @ 0x82704028. Non-virtual; called by UpdateParams.
     int PlayCollision( OutputCollision* lpCollision );
 
@@ -200,6 +238,18 @@ public:
     }
 
 private:
+    // The InputCollision constructors reach the manager's protected surface: the prop one adds
+    // its prop-vs-prop partner straight to the input list (AddInputCollision, sub_826E8B20
+    // 0x826E8DFC) and the regular one culls against the scrape history.
+    friend struct InputCollision;
+
+    // DWARF cpp:1509 (member template, one instantiation per queue type): build an
+    // InputCollision from every record in the queue and add it -- ARTIST 0x826DD090
+    // (RaceCarContact), 0x826DD128 (TrafficContact), 0x826EB490 (PropContact).
+    template <typename SpyQueue>
+    void ImportContactSpies(const SpyQueue& lSpyQueue, const LogicInputBuffer& lInputBuffer,
+                            f32 lfTimeStamp, f32 lfTimeStep);
+
     void SetCollisionBinList(u64 luCollisionBinListKey,
                              u64 luPropsCollisionBinListKey,
                              u64 luPropsMappingKey);
@@ -213,17 +263,6 @@ private:
     void CullAgainstPlaying();
     bool ProcessCollision(OutputCollision& lrOutput, const InputCollision& lrInput);
     void ProcessCollisions();
-    u64 MapEntityIdToMaterial(const EntityId& lrEntityId,
-                              const BrnSound::Module::Io::RootInputBuffer& lrInput) const;
-    bool MapPropTypeToMaterial(u16 luPropType, u64& lruMaterial) const;
-    void MakeBaseInputCollision(InputCollision& lrOut,
-                                const BrnPhysics::ContactSpy::BaseContact& lrContact,
-                                const BrnSound::Module::Io::RootInputBuffer& lrInput,
-                                f32 afDeltaTime) const;
-    void MakePropInputCollision(InputCollision& lrOut,
-                                const BrnPhysics::ContactSpy::PropContact& lrContact,
-                                const BrnSound::Module::Io::RootInputBuffer& lrInput,
-                                f32 afDeltaTime) const;
     void SetCameraInfo(const BrnDirector::Camera::Camera& lrCamera);
     u32 MapCameraStateToBinFlags(const BrnDirector::Camera::Camera& lrCamera) const;
     u32 MapGameModesToBinFlags(const void* lpGameMode) const;
@@ -243,6 +282,9 @@ private:
     BinLookupCache maBinLoopupCache[InputCollision::E_MAX_PIPELINES];
     CgsSound::Utils::SelectionHistory<512, u16, u16, 65536>
         maSelectionHistory[E_COLLISION_SPLICE_BANK_MAX];
+    // DWARF h:790. The eight race cars' cached transform and deformed box (X360 +0xCF0, 8 x 192;
+    // the ctor clears only each node's mbActive pair, 0x826FFB1C..0x826FFB58).
+    RaceCarCache mRaceCarCache;
     PropToMaterialMapping maPropToMaterialMappings[500];
     InputCollision maInputCollision[64];
     OutputCollision maOutputCollision[64];

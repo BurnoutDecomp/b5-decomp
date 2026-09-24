@@ -252,6 +252,15 @@ const RootInputBuffer::DeformationInterface& RootInputBuffer::GetDeformationInte
     return mDeformationInterface;
 }
 
+// X360 0x82694DD8 -- read-lock accessor for the traffic sound output interface @ +0x6AB0
+// (`lbz 0(this) ; extrwi 1,27` read-lock bit, the "Not locked for reading" tripwire at h:423,
+// then `addi r3, this, 0x6AB0`; by reference, DWARF :163).
+const RootInputBuffer::TrafficSoundOutputInterface& RootInputBuffer::GetTrafficOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return mTrafficOutputInterface;
+}
+
 // X360 0x82694C88 (folded bare BrnSound::Module::Io::RootInp) -- read-lock accessor for the
 // game-action queue @ +0x3084 (returns by reference, DWARF :90). Const overload.
 const RootInputBuffer::GameActionQueue& RootInputBuffer::GetGameActionQueue() const
@@ -291,11 +300,13 @@ void RootInputBuffer::SetContactSpyQueueInterface(const InputContactSpyQueueInte
     mContactSpyQueueInterface = *lpInterface;
 }
 
-// X360 0x823B8710 @ +0x6AB0.
+// X360 0x823B8710 @ +0x6AB0: the write-lock tripwire, then
+// BrnTraffic::BrnTrafficIO::TrafficSoundOutputInterface::operator= @0x823A7F18 (the count and all
+// 32 entity records). The member is the real type now, so the copy is the typed assignment.
 void RootInputBuffer::SetTrafficOutputInterface(const TrafficSoundOutputInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(&mTrafficOutputInterface, lpInterface, sizeof(TrafficSoundOutputInterface));
+    mTrafficOutputInterface = *lpInterface;
 }
 
 // X360 0x823C9088 @ +0x74C0: clear the destination queue then append the
@@ -308,11 +319,13 @@ void RootInputBuffer::SetPhysicalTrafficStates(const PhysicalTrafficStateQueue* 
     mPhysicalTrafficStates.Append(*lpStates);
 }
 
-// X360 0x823C91F0 @ +0xB490.
+// X360 0x823C91F0 @ +0xB490: the write-lock tripwire (h:431), then
+// BrnPhysics::Deformation::DeformationOutputInterface::operator= @0x823C8900 -- the id and locator
+// arrays, mpDeformationState, and the five event queues (Clear + Append each).
 void RootInputBuffer::SetDeformationInterface(const DeformationInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(&mDeformationInterface, lpInterface, sizeof(DeformationInterface));
+    mDeformationInterface = *lpInterface;
 }
 
 // X360 0x823B81A0 @ +0xDF80.
