@@ -9,8 +9,10 @@
 //   r23 = -1 ; for i < miCount: d = |mVehicle[i].mCentre - lCar2DPosition| ;
 //     fcmpu d,f31 ; ble skip ; r23 = i         -- f31 is never rewritten
 //   return r23
-// i.e. the LAST entry farther from the car than the candidate (not the farthest), else -1; an
-// unordered (NaN) distance takes the evict side because ble is not taken.
+// i.e. the LAST entry farther from the car than the candidate (not the farthest), else -1. ble
+// (0x8277D4CC, raw 0x40990008 = bc 4,cr6.gt) is TAKEN on unordered, so a NaN distance -- the
+// entry's or the candidate's -- is never nominated (FX-NANPOL 2026-09-24 corrected this; the
+// check below used to assert the opposite).
 // The one fixture is AICar::GetPosition (it returns the plain member it reads, +0x1430).
 #include "GameSource/World/AI/BrnAIDriver.h"
 #include "GameSource/World/AI/BrnAIDriver_Constants.h"
@@ -103,11 +105,22 @@ int main()
     Fill(lafZeroLast, 2);
     Check(gDriver.GetIndexOfFurthestVehicle(AtX(0.0f)) == 0, "candidate on the car: entry 1 (0 m) is not farther -> 0");
 
-    // An unordered distance takes the evict side (fcmpu ; ble not taken).
+    // An unordered distance is skipped: fcmpu ; ble (bc 4,gt) is TAKEN on unordered.
     Fill(lafFull, 2);
     gDriver.mNearbyVehicles.mVehicle[0].mCentre.x = std::numeric_limits<f32>::quiet_NaN();
     gDriver.mNearbyVehicles.mVehicle[1].mCentre = AtX(3.0f);
-    Check(gDriver.GetIndexOfFurthestVehicle(AtX(5.0f)) == 0, "NaN entry distance is nominated (ble not taken on unordered)");
+    Check(gDriver.GetIndexOfFurthestVehicle(AtX(5.0f)) == -1,
+          "NaN entry distance is not nominated (ble @0x8277D4CC taken on unordered); entry 1 (3 m) is nearer -> -1");
+    gDriver.mNearbyVehicles.mVehicle[1].mCentre = AtX(8.0f);
+    Check(gDriver.GetIndexOfFurthestVehicle(AtX(5.0f)) == 1,
+          "a NaN entry before a farther one: only the ordered entry 1 (8 m) is nominated");
+
+    // A NaN candidate makes every compare unordered (f31 never rewritten): nothing is nominated.
+    Fill(lafFull, 16);
+    Vector2 lNaNCandidate = AtX(5.0f);
+    lNaNCandidate.x = std::numeric_limits<f32>::quiet_NaN();
+    Check(gDriver.GetIndexOfFurthestVehicle(lNaNCandidate) == -1,
+          "NaN candidate distance: every compare unordered -> -1 (drop the candidate)");
 
     // An empty list never nominates.
     Fill(lafFull, 0);
