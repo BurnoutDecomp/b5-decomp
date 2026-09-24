@@ -13,12 +13,12 @@
 //   by it; mis-bounce timer += dt below 4.0 (flt_820BA8DC), else 0;
 //   t = SolveQuadratic(-4.905 (flt_820BD6C0), v.y, h): min root, else max root, negative -> 0
 //   and the ring stays at -1; else d = |vXZ| t, landing = pos + vXZ t, ring
-//   [Max(d - 20, 0)^2, (d + 20)^2] (20 = flt_820BA7E4);
+//   [fsel(d - 20 >= 0 ? d - 20 : 0)^2, (d + 20)^2] (20 = flt_820BA7E4; NaN d gives a 0 minimum);
 //   per live car: a Showtime slot (32 max), landing-time position pos + v t, XZ distances;
 //   stompee iff on screen (+0x28460) and the LANDING distance is inside the ring (both ends
-//   inclusive: blt / bgt); slot bit 0 iff in the ring and PHYSICAL & ALIVE; slot bit 1 (crash
+//   inclusive, and NaN is inside: blt / bgt skips); slot bit 0 iff in the ring and PHYSICAL & ALIVE; slot bit 1 (crash
 //   magnet) iff the crash slider FACTOR (+0x72378) > 1.5 (flt_820BA5DC) and the CURRENT
-//   distance^2 <= 2500 (flt_820BA858) and on screen; the slot is kept iff a bit is set;
+//   distance^2 is not > 2500 (flt_820BA858, `bgt` skip: NaN passes) and on screen; the slot is kept iff a bit is set;
 //   the debug view draws spheres of 20 and sqrt(2500) on the player (0x46006400 / 0x46006464);
 //   the SCORE leg (on screen and d^2 < 45^2): GetVehicleScoreData(class +3, asset CgsID) then
 //   AddPotentialScoree(pos with y + the class's height tweak, d^2, score, multiplier, (u16)vehicle).
@@ -43,6 +43,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -67,6 +68,7 @@ namespace Assert
     {
         ++gAsserts;
         gpcLastAssert = lpcMessage;
+        std::fprintf(stderr, "ASSERT: %s\n", lpcMessage);
         return 0;
     }
     void* EndAssert() { return nullptr; }
@@ -457,6 +459,53 @@ int main()
         Check(gSpheres.size() == 2 && NearVec(gSpheres[0].mCentre, 100.0f, 20.0f, 200.0f) && gSpheres[0].mfRadius == 20.0f
               && gSpheres[0].muColour == 0x46006400u && gSpheres[1].mfRadius == 50.0f && gSpheres[1].muColour == 0x46006464u,
               "debug spheres: player position, radius 20 (flt_820BA7E4) / sqrt(2500), colours 0x46006400 / 0x46006464");
+    }
+
+    // ================= NaN polarity: after fcmpu, blt/bgt are NOT taken on an unordered compare,
+    // ================= ble/bge ARE (ble == "not greater", bge == "not less") =================
+    {
+        const f32 lfNaN = std::numeric_limits<f32>::quiet_NaN();
+
+        // A car at a NaN position during a crash spike.
+        Fresh(true, true, 19.62f, 0.0f);
+        F().mfCrashSliderCrashScoreFactor = 10.0f;
+        Car(12, lfNaN, 200.0f, 0.0f, 0.0f, true, true);
+        Run();
+        Check(NumStompees() == 1
+              && Iface().mPotentialStompees[0].mStompeeEntityId.muValue == ((12u << 10) | 0x02000000u),
+              "NaN landing distance is INSIDE the ring: 0x8271F91C `blt` / 0x8271F924 `bgt` skips not taken");
+        Check(F().muShowtimeVehicleInfoCount == 1 && F().maShowtimeVehicleInfoList[0].muVehicleIndex == 12
+              && F().maShowtimeVehicleInfoList[0].muFlags == 3,
+              "... bit 0 (in the ring, physical, alive) and bit 1: the magnet distance's 0x8271F998 `bgt` skip is not taken on NaN");
+        Check(Out().mPotentialScorees.GetCount() == 0,
+              "... but no scoree: the score radius skip 0x8271F848 `bge` IS taken on NaN");
+
+        // A NaN travel distance (the player's x velocity is NaN; t = 2 from the height alone): the
+        // ring minimum is fsel's 0 (0x8271F574, NaN >= 0 is false), the maximum NaN, so any
+        // on-screen car at a finite distance is inside.
+        Fresh(true, true, 19.62f, 0.0f);
+        Player().mLinearVelocity.x = lfNaN;
+        Car(13, 100.0f, 210.0f, 0.0f, 0.0f, true, false);   // 10 m from the player: d^2 100
+        const unsigned luAssertsBeforeNaN = gAsserts;
+        Run();
+        Check(gAsserts == luAssertsBeforeNaN + 1 && std::strcmp(gpcLastAssert, "RwMath::IsValid( lVector )") == 0,
+              "NaN travel distance: Magnitude2D's IsValid tripwire fires once and the producer carries on (non-gating)");
+        gAsserts = luAssertsBeforeNaN;
+        Check(NumStompees() == 1 && StompeeIs(0, 13, 100.0f, 210.0f, 100.0f),
+              "NaN travel distance: ring [fsel 0, NaN] holds a car 10 m away (`blt` 100 < 0 no, `bgt` 100 > NaN no)");
+
+        // AddPotentialScoree, full: 0x8271D3B0 `ble found` is taken on NaN, so a NaN distance takes
+        // the FIRST slot.
+        Fresh(false, false, 0.0f, 0.0f);
+        const Vector3 lPos = { 1.0f, 2.0f, 3.0f, 0.0f };
+        for (u32 luIndex = 0; luIndex < 20; ++luIndex)
+        {
+            Out().AddPotentialScoree(lPos, 400.0f + 10.0f * static_cast<f32>(luIndex), 1000, 0, static_cast<u16>(luIndex));
+        }
+        Out().AddPotentialScoree(lPos, lfNaN, 1000, 0, 55);
+        Check(Out().mPotentialScorees.GetCount() == 20 && Out().mPotentialScorees.maElements[0].muVehicleIndex == 55
+              && Out().mPotentialScorees.maElements[1].muVehicleIndex == 1,
+              "AddPotentialScoree full: a NaN distance overwrites slot 0 (`ble` taken on an unordered compare)");
     }
 
     // ================= AddPotentialScoree @0x8271D2E8 =================

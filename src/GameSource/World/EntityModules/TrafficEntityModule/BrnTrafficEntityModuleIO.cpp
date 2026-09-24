@@ -735,7 +735,9 @@ namespace BrnTrafficIO
             const s32 liLength = static_cast<s32>(mPotentialScorees.GetLength());
             for (s32 liIndex = 0; liIndex < liLength; ++liIndex)
             {
-                if (lfDistanceSquared <= mPotentialScorees[static_cast<u32>(liIndex)].mfDistanceSquared)
+                // 0x8271D3AC `fcmpu f31, f0 ; ble found` -- ble is "not greater", taken on an
+                // unordered compare, so a NaN distance (new or stored) takes the slot.
+                if (!(lfDistanceSquared > mPotentialScorees[static_cast<u32>(liIndex)].mfDistanceSquared))
                 {
                     lpData = &mPotentialScorees[static_cast<u32>(liIndex)];
                     break;

@@ -103,7 +103,6 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"                 // OutCoarseQueryResult
 #include "GameShared/GameClasses/Numeric/CgsPolynomial.h"                          // CgsNumeric::SolveQuadratic (leap/stomp producer)
 #include "GameSource/Math/BrnMathUtils.h"                                          // BrnMath::Magnitude2D (leap/stomp producer)
-#include "rw/math/fpu/scalar_operation.h"                                          // rw::math::fpu::Max (leap/stomp producer)
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // CgsDev::DebugInterface (leap/stomp debug view)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"  // CgsDev::DebugRender::DrawSphere
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h" // CrashModeScoring::GetVehicleScoreData (leap/stomp score leg)
@@ -17730,9 +17729,11 @@ void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
                 mShowtimePlayerLandingPos2D = lpPlayerRaceCarState->mTransform.Pos()
                                             + lLinearVelocityXZ * lfTimeUntilLanding;
 
-                // 0x8271F54C `fsubs f12, f0, f13` ; 0x8271F574 `fsel f0, f12, f12, f31(0)` ==
-                // Max(d - 20, 0) ; 0x8271F578 `fmuls f28, f0, f0`.
-                const f32 lfMinDist = rw::math::fpu::Max(lfDistanceTravelledXZ - KF_TRAFFIC_STOMP_DISTANCE, 0.0f);
+                // 0x8271F54C `fsubs f12, f0, f13` ; 0x8271F574 `fsel f0, f12, f12, f31(0)` ;
+                // 0x8271F578 `fmuls f28, f0, f0`. fsel is `f12 >= 0 ? f12 : 0`, so a NaN distance
+                // gives 0 here; rw::math::fpu::Max ((a < b) ? b : a) would keep the NaN.
+                const f32 lfMinDistRaw = lfDistanceTravelledXZ - KF_TRAFFIC_STOMP_DISTANCE;
+                const f32 lfMinDist    = (lfMinDistRaw >= 0.0f) ? lfMinDistRaw : 0.0f;
                 lfMinDistSq = lfMinDist * lfMinDist;
                 // 0x8271F550 `fadds f0, f0, f13` ; 0x8271F56C `fmuls f26, f0, f0`.
                 const f32 lfMaxDist = lfDistanceTravelledXZ + KF_TRAFFIC_STOMP_DISTANCE;
@@ -17827,9 +17828,11 @@ void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
                                              static_cast<u16>(luVehicle));
             }
 
-            // 0x8271F914 `lfs f31, var_140` ; 0x8271F918 `fcmpu f31, f28 ; blt` ; 0x8271F920
-            // `fcmpu f31, f26 ; bgt` -- inside the landing ring.
-            if (lfDistanceStompSq >= lfMinDistSq && lfDistanceStompSq <= lfMaxDistSq)
+            // 0x8271F914 `lfs f31, var_140` ; 0x8271F918 `fcmpu f31, f28 ; blt skip` ; 0x8271F920
+            // `fcmpu f31, f26 ; bgt skip` -- inside the landing ring. Spelled as the two negated
+            // skips: blt / bgt are NOT taken on an unordered compare, so a NaN distance (or a NaN
+            // bound) counts as inside, exactly as on the console.
+            if (!(lfDistanceStompSq < lfMinDistSq) && !(lfDistanceStompSq > lfMaxDistSq))
             {
                 // 0x8271F928 `cmplwi r26 (on screen), 0 ; beq` ; 0x8271F930..0x8271F944
                 // GetTrafficToRaceCarInterface_PreScene() ; AddPotentialStompee(r4 = luVehicle,
@@ -17854,7 +17857,9 @@ void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
             // stores as the after-spike factor) ; 0x8271F984 `lfsx f13, +0x72378` ; `fcmpu f13, f0 ;
             // ble` ; 0x8271F990 `lfs f0, 0x274(r30)` ; `fcmpu f29, f0 ; bgt` -- a crash spike is
             // running and the car is within 50 m NOW.
-            if (mfCrashSliderCrashScoreFactor > 1.5f && lfDistanceSq <= KF_SHOWTIME_CRASHMAGNET_DISTANCESQ)
+            // NaN polarity: the factor's `ble` skip is taken on NaN (so `> 1.5f`), the distance's
+            // `bgt` skip is not (so `!(d > 2500)`: a NaN distance passes).
+            if (mfCrashSliderCrashScoreFactor > 1.5f && !(lfDistanceSq > KF_SHOWTIME_CRASHMAGNET_DISTANCESQ))
             {
                 // 0x8271F99C `cmplwi r21, 0 ; beq` (the console threads this straight to the loop
                 // step: with no slot the count test below cannot pass either) ; 0x8271F9A4
