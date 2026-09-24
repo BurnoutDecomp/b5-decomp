@@ -52,7 +52,7 @@ evidence.mkdir(parents=True)
 output = open(evidence / 'driver.console.log', 'w', encoding='utf-8')
 proc = subprocess.Popen(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
                          'tools/tests/run_case.ps1', '-Case', args.case,
-                         '-RunDir', str(evidence), '-LockTimeoutSec', '30', '-Label', 'rival-pad-pursuit'], cwd=root,
+                         '-RunDir', str(evidence), '-Label', 'rival-pad-pursuit'], cwd=root,
                         stdout=output, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
 position = 0
 carry = ''
