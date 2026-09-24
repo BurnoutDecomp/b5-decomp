@@ -128,6 +128,18 @@ public:
         return !IsFlagSet(luIndex) && HasChanged(luIndex);
     }
 
+    // DWARF BrnCameraState.h:144 `void CopyFlagsToPrevious(const CameraState &)`. The frame roll
+    // behind every HasChanged above: this state's PREVIOUS set becomes lrOther's CURRENT set. It
+    // has no out-of-line body in any export -- its one X360 site is inlined in
+    // MainDirector::Update @0x82274070 as a single qword move (BitArray<30> is one 64-bit field):
+    //   0x82275088  ldx r11, r30, r10    ; r10 = 0x33050 == mLastCamera(+0x32F10).mState.mFlags
+    //   0x8227508C  std r11, var_3C8     ; lCamera(var_510 == sp+0xC0).mState.mPreviousFlags
+    // The head (validity) set and this state's own current set are untouched.
+    void CopyFlagsToPrevious(const CameraState& lrOther)
+    {
+        mPreviousFlags = lrOther.mCurrentFlags;
+    }
+
     // ADDITIVE GROW (BrnDirector::MomentFailSafe::Update @0x8220A2B0): set one bit of
     // the head bookkeeping set (see mHeadFlags below).
     void SetHeadFlag(u32 luIndex) { mHeadFlags.SetBit(luIndex); }

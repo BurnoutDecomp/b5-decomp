@@ -2489,6 +2489,19 @@ namespace BrnDirector
             lCamera.GetEffects().mfSimTimeScale = 1.0f;
         }
 
+        // ⭐ X360 line 851 (@0x82275068..0x8227508C) -- THE CAMERA-STATE FRAME ROLL, and the only
+        // write of the published camera's PREVIOUS flag set:
+        //   0x82275074  ori r10, r10, 0x3050 ; this + 0x33050 == mLastCamera.mState.mFlags
+        //   0x82275088  ldx r11, r30, r10    ; read BEFORE the operator= below overwrites it
+        //   0x8227508C  std r11, var_3C8     ; lCamera.mState.mPreviousFlags (sp+0x208)
+        //   0x82275090  bl  Camera::operator=(this + 0x32F10, &lCamera)
+        // So the published camera's previous set is LAST FRAME'S published current set, and every
+        // HasChanged consumer of it (the sound CameraControl stings and mixer snapshots, HUDEffect,
+        // EffectsModule) sees one edge per real change. Without it the previous set was whatever the
+        // arbitrator state's camera carried: the reset-on-track sting re-posted on every gameplay-
+        // camera frame and kept all four FxEffect voices busy, dropping every other FX sting.
+        lCamera.GetState().CopyFlagsToPrevious(mLastCamera.GetState());
+
         // Carry the finalised camera into the next frame.
         mLastCamera = lCamera;
 
