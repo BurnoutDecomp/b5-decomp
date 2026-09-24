@@ -100,10 +100,23 @@ enum EGameActionType
     E_ACTION_RESET_CRASHING             = 9,  // ARTIST CrashModule::HandleGameActions
     E_ACTION_RESET_RACE_CAR_CRASHING     = 10,
     E_ACTION_PLAYER_CRASH_ENDING_SOON   = 17, // ARTIST ProcessGameEvents case42
-    E_ACTION_SOUND_TRIGGER              = 210,
-    E_ACTION_ONLINE_PLAYER_ADDED        = 211,   // DWARF BrnGameActions.h (was placeholder 220)
+    // [FX-FLOW 2026-09-24, crash-parity NEW-ACTION219] THREE RAW-DWARF VALUES, PRODUCER-PINNED TO
+    // THE X360 +8 BAND (DWARF 135..226 -> +8, the band table further down). They were the PS3
+    // DWARF's 210 / 211 / 212, which on the X360 are ALL_RIVALS_SHUTDOWN (below) and the payback
+    // pair PaybackManager posts (211 = KI_ACTION_PAYBACK_LOST, HandleAwardingPayback @0x82397AD8;
+    // 212, HandleHavingPayback @0x82397BE4) -- so each of the three collided with a live id:
+    //   218  TriggerQueryManager::PreWorldUpdate @0x8239F894 `li r5, 0xDA ; li r6, 0x20` (one per
+    //        maSoundActions entry, sizeof(SoundTriggerAction) 32); SoundLogicModule::
+    //        ProcessGameActionQueue's `case 218` consumes it (BrnSoundLogicModule.cpp).   DWARF 210
+    //   219  ProcessGameEvents case 127 @0x823A2390 `li r5, 0xDB ; li r6, 0x28` after
+    //        OnlinePlayerAddedAction::SetPlayerScoringIndex @0x823A2380; RaceCarEntityModule::
+    //        HandleGameActions' `case 219` is its network setup-car arm.                  DWARF 211
+    //   220  ProcessGameEvents case 129 @0x823A261C `li r5, 0xDC ; li r6, 8` after
+    //        OnlinePlayerRemovedAction::SetActiveRaceCarIndex @0x823A2610.                DWARF 212
+    E_ACTION_SOUND_TRIGGER              = 218,   // DWARF 210 (+8 X360); size 32  BAND
+    E_ACTION_ONLINE_PLAYER_ADDED        = 219,   // DWARF 211 (+8 X360); size 40  BAND
     E_ACTION_SETUP_NETWORK_CAR          = 5,     // DWARF BrnGameActions.h (was placeholder 221)
-    E_ACTION_ONLINE_PLAYER_REMOVED      = 212,   // DWARF BrnGameActions.h (was placeholder 222)
+    E_ACTION_ONLINE_PLAYER_REMOVED      = 220,   // DWARF 212 (+8 X360); size 8   BAND
     // [!!] VALUE CORRECTION 2026-08-26 (stuntrace waveB CLOSURE round) -- 221 -> 229, and this is
     // the FIFTH id of the same species as the four the closure round was chartered to settle. It
     // was found because THIS FILE ALREADY CONTRADICTED ITSELF: the band table further down (the
@@ -838,9 +851,8 @@ enum EGameActionType
     // `li r6, 1` @0x823A5250, posted once the 2 s all-rivals-beaten hold elapses; DWARF
     // BrnProgressionManager.cpp:374 names the local `AllRivalsShutDownAction`. Payload is ONE byte
     // the console never initialises (var_70 is only stored on the autosave arm).
-    // [!] The placeholder `E_ACTION_SOUND_TRIGGER = 210` in the first table above is the RAW PS3
-    // DWARF value (BrnGameActions.h:220); by this band it lands at 218 on the X360. Nothing in
-    // src posts it; it is left as found and named here so the collision is visible.
+    // (E_ACTION_SOUND_TRIGGER, which used to collide here at its raw PS3 DWARF 210, is 218 since
+    //  NEW-ACTION219 -- see the first table above.)
     E_ACTION_ALL_RIVALS_SHUTDOWN                         = 210,  // DWARF 202 (+8 X360); size 1  BAND
     // ---- [FX-GS 2026-09-23, crash-parity G11-D1] the race-mode HUD pair HUDMessageLogic posts --
     // BAND (+10). BrnGame::BrnGameModule::TranslateGameActionsToGuiEvents @0x823E9CE0 pins the band
