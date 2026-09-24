@@ -12,6 +12,8 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.h"          // Camera::BehaviourIceAnim + DirectorResourceManager slice
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"                        // Camera::BehaviourManager (complete)
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"                   // Attrib::Gen::shotgroup
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // [diag] CgsDev::Log::gpDebugPrint
+#include <cstdlib>                                                              // [diag] getenv (BRN_FINISHLINE_DIAG)
 
 // NOTE: the director-camera cone uses the minimal DirectorResourceManager SLICE declared in
 // BrnBehaviourIceAnim.h (GetEventCompletionShots / GetBurnoutLicense), NOT the heavier
@@ -225,6 +227,18 @@ namespace BrnDirector
                 lrSharedInfo.mpDirectorResourceManager->GetEventCompletionShots(
                     lrGameState.meEventType,
                     static_cast<s64>(lrGameState.mFinishLineID));
+
+            // [diag] BRN_FINISHLINE_DIAG -- NOT IN THE X360 BINARY. The lookup above keys on the
+            // id MainDirector::ProcessInputQueue case 24 stores; one line per post-event entry is
+            // the live witness that it ran (an "Unknown finish line" assert, when the id misses the
+            // race ladder, fires inside GetEventCompletionShots just before this line).
+            if (getenv("BRN_FINISHLINE_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[finish-line] post-event shots: mode " << lrGameState.meEventType
+                    << " finish line " << static_cast<u64>(lrGameState.mFinishLineID)
+                    << " -> " << lrEventCompleteShotGroup.Num_ShotList() << " shot(s)\n";
+            }
 
             CGS_ASSERT(lrEventCompleteShotGroup.Num_ShotList() > 0,
                        "lEventCompleteShotGroup.Num_ShotList()>0");

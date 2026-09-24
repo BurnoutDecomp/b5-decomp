@@ -11,6 +11,7 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"  // BrnGameState::GameModeParams (PrepareForModeAction payload)
 #include "GameShared/GameClasses/Containers/CgsArray.h"      // Array<T, N> (SetUpAllDriveThrusAction::maDriveThrus)
 #include "GameSource/GameState/Offences/BrnDriveThruManager.h"  // BrnTrigger::GenericRegion::Type (DriveThruInfo::meType)
+#include "SharedClasses/Trigger/BrnRegion.h"                  // BrnTrigger::BoxRegion (BroadcastModeFinishLinesAction::mBoxRegion)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"     // CgsSystem::Time (OnlineGameResults::mSecondsInEvent / maRoundTimes)
 #include "GameSource/GameState/BrnGameStateTypes.h"           // BrnGameState::StuntElementType (WorldStuntAction / OnStuntElementCompleteAction)
 #include "SharedClasses/World/BrnWorldRegion.h"               // [gateui] BrnWorld::ECounty (OnStuntElementCompleteForCountyAction)
@@ -700,8 +701,12 @@ enum EGameActionType
     // `li r6,0x30` @0x82342F5C): 36 bytes copied verbatim off a Landmark's TriggerRegion base
     // (the `li r9,9` dword loop @0x82342F3C..0x82342F54) then the landmark CgsID sign-extended
     // into +0x28. A per-landmark trigger box + id broadcast is what the DWARF name describes.
-    // (The record itself stays TU-local in BrnModeManager_Prepare.cpp as ModeLandmarkAction --
-    // it is a 9-dword copy of a type this header does not include.)
+    // [FX-FLOW 2026-09-24] NAME NOW CONSUMER-PINNED TOO: MainDirector::ProcessInputQueue case 24
+    // @0x82238738 stores record+0x28 into the director GameState's mFinishLineID and the record's
+    // BoxRegion direction into mFinishLineNorthmostDir -- exactly the DWARF
+    // BroadcastModeFinishLinesAction { BoxRegion mBoxRegion; CgsID mFinishLineID; } (:961), which
+    // is now homed below and used by both ends (it replaced the producer's TU-local
+    // ModeLandmarkAction).
     E_ACTION_BROADCAST_MODE_FINISH_LINES                 = 24,   // DWARF 20 (+4 X360); size 48 BAND
     // ---- the SendModeStopMessages exit fan-out (all from @0x8234BEC0) ------------------------
     // Five ids share the merged AddEvent call site @0x8234C698; each arm sets its own `li r5`
@@ -1562,6 +1567,26 @@ private:
     bool                        mbFinishedOnlineEvent;                         // X360 +0x08D1 (2257)
     bool                        mbStartingFreeburnDueToPlayerJoin;             // X360 +0x08D2 (2258)
 };
+
+// [FX-FLOW 2026-09-24, NEW-FINISHLINE] DWARF BrnGameActions.h:961 -- the event's finish-line broadcast.
+// Producer: ModeManager::PrepareForMode @0x82342930 posts it once per prepare (`li r6,0x30`
+// @0x82342F5C, `li r5,0x18` @0x82342F60): a 9-dword copy of the finish Landmark's BoxRegion into
+// +0x00..+0x23 (`li r9,9` loop @0x82342F3C..0x82342F54), then the landmark id sign-extended into
+// +0x28 (`lwz 0x24 / extsw / std var_988` @0x82342F58..0x82342F70; var_988 - var_9B0 == 0x28).
+// Consumer: MainDirector::ProcessInputQueue case 24 @0x82238738 -- `ld r11,0x28(r30)` into
+// GameState::mFinishLineID and BoxRegion::ComputeDirection(r4 = the record) into
+// GameState::mFinishLineNorthmostDir (the only retail writer of either).
+// BoxRegion is 9 x f32 (36 B, BrnRegion.h); the CgsID is a u64, so it aligns to +0x28 and the record
+// closes at 48 on both builds.
+struct BroadcastModeFinishLinesAction : public GameAction<E_ACTION_BROADCAST_MODE_FINISH_LINES>
+{
+    BrnTrigger::BoxRegion mBoxRegion;      // +0x00  DWARF :963
+    CgsID                 mFinishLineID;   // +0x28  DWARF :964
+};
+static_assert(sizeof(BroadcastModeFinishLinesAction) == 48,
+              "X360 PrepareForMode posts action 24 with size 48 (`li r6,0x30` @0x82342F5C)");
+static_assert(offsetof(BroadcastModeFinishLinesAction, mFinishLineID) == 0x28,
+              "X360 ProcessInputQueue case 24 reads the finish-line id with `ld r11,0x28(r30)` @0x8223873C");
 
 // X360 action: Array<DriveThruInfo,46>::Append @ 0x8235C8E8 / ::GetLength @ 0x823AC200. Minimal slice:
 // the nested DriveThruInfo element record + the fixed-capacity Array<> member that owns it
