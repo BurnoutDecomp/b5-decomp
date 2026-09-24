@@ -21,7 +21,8 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsLine.h"                      // CgsGeometric::Line
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap.h" // PolygonSoupListSpatialMap
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupSpacialNode.h" // PolygonSoupLeafNode
-#include "GameShared/GameClasses/Geometric/Intersection/CgsPolygonSoupTests.h"       // IntersectLinePolygonSoupNearestSingleSided
+#include "GameShared/GameClasses/Geometric/Intersection/CgsPolygonSoupTests.h"       // IntersectLinePolygonSoup{Nearest,}SingleSided
+#include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"              // TestLineStartEndAxisAlignedBox (the long arm's per-leaf slab test)
 #include <cstring>   // std::memcpy (the 14-qword result copy)
 
 // The contact-generator job entry every CollisionBatch is wired to
@@ -944,9 +945,13 @@ namespace CgsCollision
         {
             // 0x82813440 sub_82843E98(map, &line) + the slab-clipped per-leaf test. A line of 20 m
             // or more has no producer in the tree today; when one appears this fires, by name.
+            // (2026-09-24, FX-GEOMETRIC: both callees now exist -- PolygonSoupListSpatialMap::
+            // RunQuery(const Line&) and CgsGeometric::TestLineStartEndAxisAlignedBox, the all-hits twin's
+            // long arm below uses them; THIS arm's 0x82813440..0x82813930 driver is still undecoded.)
             CGS_ASSERT(false, "BaseCollisionGenerator::CollideLineAgainstPolySoupListNearest @0x828131C0: the "
-                              "long-line arm (sub_82843E98 line-slab leaf gather + CgsLineTests.cpp:441 slab "
-                              "clip) is not reconstructed -- a line of 20 m or more was asked for");
+                              "long-line arm (0x82813440..0x82813930: RunQuery(const Line&) leaf gather + the "
+                              "inlined TestLineStartEndAxisAlignedBox per leaf) is not reconstructed -- a line "
+                              "of 20 m or more was asked for");
         }
 
         // 0x82813930..0x82813960: mu16NumResults = (1.0 >= best t). The one write of the count.
@@ -978,28 +983,27 @@ namespace CgsCollision
     //               -- DecFIGS 0xB6C1AC `(const PolygonSoup&, Vector3, Vector3,
     //               IntersectLinePolygonSoupResult*, int)`, the ALL-HITS soup kernel @0x8283C598
     //   -- long arm (20 m and over) --
+    //   0x82812D04  r26 = &mapCollisionResultLists[idx] (kept for the tail) ; r15 = list->mpResults ;
+    //               r16 = (u16)lu16MaxNumResults
     //   0x82812D1C  n = sub_82843E98(map, &line) == PolygonSoupListSpatialMap::RunQuery(const Line&)
-    //               (DecFIGS 0xB64574, the line-slab leaf gather)
-    //   0x82812D64..0x82812DEC  1/d per lane: vrefp128 then two Newton-Raphson steps
-    //               (vnmsubfp128 / vmaddfp) against {1,1,1,1} (vcsxwfp128 of vspltisw 1)
-    //   0x82812DF0/0x82812E88/0x82812F20  "Line reciprocal X / Y / Z is 0\n" tripwires, lines
-    //               0x1B9 / 0x1BA / 0x1BB (441..443) of the file at aDP4B5MainBurno_17
-    //   0x82812F90..0x82813150  per leaf, the inline slab test of the leaf box against the segment:
-    //               t = (box.min - start) * 1/d and (box.max - start) * 1/d per lane, each face's
-    //               hit point (vmaddcfp128 start + t*d) inside the other two slabs with t in [0,1],
-    //               OR'd with start-inside / end-inside ; skip when none
-    //   0x8281317C  the same soup-kernel call as the short arm
+    //               (DecFIGS 0xB64574, the line-slab leaf gather) ; n <= 0 -> the count store
+    //   per leaf (0x82812D64, count-down r14, byte cursor r17 over mpOutputQueryBuffer):
+    //     leaf = mpLeafNodes (+0x48) + 48 * mpOutputQueryBuffer[i] (+0x58), then
+    //     CgsGeometric::TestLineStartEndAxisAlignedBox(start, end, leaf box) INLINED WHOLE -- its
+    //     vrefp128 + three Newton-Raphson steps (0x82812D64..0x82812DE4; the earlier note here said
+    //     two -- there are three, see CgsLineTests.cpp), its three "Line reciprocal X / Y / Z is 0\n"
+    //     tripwires (0x82812DF0 / 0x82812E88 / 0x82812F20, CgsLineTests.cpp:441..443) and the slab /
+    //     endpoint test 0x82812F90..0x82813150 ; no hit -> next leaf
+    //     0x8281317C  found += IntersectLinePolygonSoupSingleSided(*leaf.mpPolygonSoup (+0x20),
+    //                 v1 = start, v2 = end, results + 0x70 * found, max - found) -- as the short arm
     //   0x8281319C  lwz list ; sth found -> list+0x0C (mu16NumResults) ; return idx
     //
-    // ⛔ TWO CALLEES ARE ABSENT FROM THE TREE, and both belong to Geometric/** (not this lane's):
-    //   * CgsGeometric::IntersectLinePolygonSoupSingleSided @0x8283C598 (849 insns) -- BOTH arms;
-    //   * PolygonSoupListSpatialMap::RunQuery(const Line&) @0x82843E98 (505 insns) -- the long arm.
-    //     A MEMBER, so it needs the class header; it is also the Nearest twin's long-arm trap.
-    // So, exactly like the Nearest twin: the short arm walks its leaves faithfully and TRAPS at the
-    // soup-kernel call (once per overlapping leaf -- the call's own position), and the long arm is
-    // one trap. `found` stays 0, so the list goes out EMPTY after a loud assert, never as a silent
-    // "no hit". DELETE-WHEN the two Geometric bodies land: replace the two traps with the calls
-    // (the decode above is the whole of the missing driver logic).
+    // ⭐ BOTH CALLEES LANDED 2026-09-24 (crash parity FX-GEOMETRIC): IntersectLinePolygonSoupSingleSided
+    // @0x8283C598 (CgsPolygonSoupTests_LineNearest.cpp) and PolygonSoupListSpatialMap::RunQuery(const
+    // Line&) @0x82843E98 (CgsPolygonSoupListSpatialMap_Query.cpp). The two traps that stood at their
+    // call sites are replaced by the calls and the long arm's per-leaf slab test, as their DELETE-WHEN
+    // asked. Neither arm guards `found < max` before calling the kernel (the console passes max - found
+    // as it is); the kernel writes a record before it tests its own limit -- CONSOLE-QUIRK, reproduced.
     // =============================================================================================
     u16 BaseCollisionGenerator::CollideLineAgainstPolySoupList(
         const CgsGeometric::Line&                 lrLine,
@@ -1016,6 +1020,11 @@ namespace CgsCollision
 
         const Vector3& lrStart = reinterpret_cast<const Vector3&>(lrLine.mStart);
         const Vector3& lrEnd   = reinterpret_cast<const Vector3&>(lrLine.mEnd);
+
+        // r28 / r15: the list's 112-byte record array (the kernel writes IntersectLinePolygonSoupResult
+        // records; the tree names that record PolySoupLineNearestResult -- see CgsPolygonSoupTests.h).
+        CgsGeometric::PolySoupLineNearestResult* lpaResults =
+            reinterpret_cast<CgsGeometric::PolySoupLineNearestResult*>(lpList->mpResults);
 
         const f32 lfDx = lrEnd.x - lrStart.x;
         const f32 lfDy = lrEnd.y - lrStart.y;
@@ -1053,21 +1062,42 @@ namespace CgsCollision
                         continue;
                     }
 
-                    // 0x82812CE8: found += IntersectLinePolygonSoupSingleSided(*lrLeaf.mpPolygonSoup,
-                    // start, end, results + found, lu16MaxNumResults - found) -- absent (see above).
-                    CGS_ASSERT(false, "BaseCollisionGenerator::CollideLineAgainstPolySoupList @0x82812AE0: "
-                                      "CgsGeometric::IntersectLinePolygonSoupSingleSided @0x8283C598 (the all-hits "
-                                      "soup kernel) is not reconstructed -- a line overlapped a poly-soup leaf");
+                    // 0x82812CE8: v1 = start, v2 = end, r4 = results + 0x70 * found, r5 = max - found.
+                    liNumFound += CgsGeometric::IntersectLinePolygonSoupSingleSided(
+                        *lrLeaf.mpPolygonSoup, lrStart, lrEnd, lpaResults + liNumFound,
+                        static_cast<s32>(lu16MaxNumResults) - liNumFound);
                 }
             }
         }
         else
         {
-            // 0x82812D1C sub_82843E98(map, &line) + the reciprocal slab test + the soup kernel.
-            CGS_ASSERT(false, "BaseCollisionGenerator::CollideLineAgainstPolySoupList @0x82812AE0: the long-line "
-                              "arm (PolygonSoupListSpatialMap::RunQuery(const Line&) @0x82843E98 + "
-                              "IntersectLinePolygonSoupSingleSided @0x8283C598) is not reconstructed -- a line "
-                              "of 20 m or more was asked for");
+            // 0x82812D1C: the SEGMENT leaf gather, then per leaf the inlined slab test and the same
+            // soup kernel (see the decode above).
+            const s32 liNumLeaves = lpPolySoupListSpacialMap->RunQuery(lrLine);
+
+            if (liNumLeaves > 0)
+            {
+                const Vector4 lLineStart = { lrStart.x, lrStart.y, lrStart.z, lrStart.w };   // v127
+                const Vector4 lLineEnd   = { lrEnd.x,   lrEnd.y,   lrEnd.z,   lrEnd.w };     // v123
+
+                const u16*                               lpau16Leaves = lpPolySoupListSpacialMap->GetOutputQueryBuffer();
+                const CgsGeometric::PolygonSoupLeafNode* lpaLeafNodes = lpPolySoupListSpacialMap->GetLeafNodes();
+
+                for (s32 liLeaf = 0; liLeaf < liNumLeaves; ++liLeaf)
+                {
+                    const CgsGeometric::PolygonSoupLeafNode& lrLeaf = lpaLeafNodes[lpau16Leaves[liLeaf]];
+
+                    if (!CgsGeometric::TestLineStartEndAxisAlignedBox(lLineStart, lLineEnd, lrLeaf.mBox))
+                    {
+                        continue;   // 0x82813160 `bne` on an all-zero mask
+                    }
+
+                    // 0x8281317C: the same call as the short arm.
+                    liNumFound += CgsGeometric::IntersectLinePolygonSoupSingleSided(
+                        *lrLeaf.mpPolygonSoup, lrStart, lrEnd, lpaResults + liNumFound,
+                        static_cast<s32>(lu16MaxNumResults) - liNumFound);
+                }
+            }
         }
 
         // 0x8281319C..0x828131A4: the one write of the count.

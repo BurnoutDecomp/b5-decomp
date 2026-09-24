@@ -40,6 +40,8 @@
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Geometric/Primitives/CgsLine.h"              // Line (RunQuery(const Line&))
+#include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"      // TestLineStartEndAxisAlignedBox (inlined per node)
 
 namespace CgsGeometric
 {
@@ -258,5 +260,93 @@ namespace CgsGeometric
         miLastQueryResultCount = static_cast<s32>(lu16NumCandidates);
 
         return static_cast<s32>(lu16NumCandidates);
+    }
+
+    // ------------------------------------------------------------------------
+    // RunQuery(const Line&) @0x82843E98 (505) -- crash parity FX-GEOMETRIC, 2026-09-24. No body before;
+    // BaseCollisionGenerator::CollideLineAgainstPolySoupList trapped where it calls this (0x82812D1C),
+    // i.e. on every line of 20 m or more -- the place-on-track drop test is 100 m.
+    // X360 export name `sub_82843E98`; the PS3 mangle @0xB64574 names it and types the parameter
+    // (DWARF CgsPolygonSoupListSpatialMap.cpp:479, locals luNumSrcNodeIndices / luNumDestNodeIndices /
+    // lpuSrcNodeIndices / lpuDestNodeIndices / liLevel / lLineStart / lLineEnd / lpNodes /
+    // luNodeIndexEntry / lpNode / luNodeToAdd / lpTemp).
+    //
+    //   0x82843EB4  lwz miNumLevels (+0x5C) ; == 0 -> `li r3, 0` return, NOTHING written
+    //   0x82843EDC  dest = mapQueryBuffers[1] (+0x54), src = mapQueryBuffers[0] (+0x50),
+    //               v127 = line+0x00 (start), v123 = line+0x10 (end), `sth 0 -> src[0]`, count r9 = 1
+    //   0x82843F10  miNumLevels <= 0 -> straight to the tail (publishes src with count 1)
+    //   per level (0x82843FB0): lpNodes = mapParentNodes[level] (cursor this+8), dest count r27 = 0;
+    //     src count == 0 -> straight to the swap
+    //     per src entry (0x82843FE4): node = lpNodes + 48 * src[i] (`rotlwi 1 ; add ; slwi 4`) and
+    //       TestLineStartEndAxisAlignedBox(start, end, node box) INLINED WHOLE -- the vrefp128 +
+    //       three Newton-Raphson steps are recomputed per node, and so are its three "Line
+    //       reciprocal X/Y/Z is 0" tripwires (CgsLineTests.cpp:441..443, 0x82844070/0x82844108/0x828441A0);
+    //       no hit (`vcmpeqfp128. total, zero` all true) -> next entry
+    //     `lhz 0x24(node)` == 0 -> next entry (checked before any capacity test)
+    //     per index j (0x828443F4): `clrlwi r27,16 ; lwz 0x60 ; clrlwi 16 ; cmplw` -- the capacity test
+    //       is (u16)count < (u16)miQueryBufferSize; else "Too many results in level " << level << " of "
+    //       << miNumLevels << "\n LineStart: " << start << "\n LineEnd: " << end << "\n"
+    //       (CgsPolygonSoupListSpatialMap.cpp:523, 0x20B, non-gating) ; dest[count++] = node indices[j]
+    //   0x82844620  swap src/dest, ++level, loop while level < miNumLevels (`cmpw`, signed)
+    //   0x8284465C  mpOutputQueryBuffer (+0x58) = src (the buffer the last level wrote),
+    //               miLastQueryResultCount (+0x64) = (u16)count ; return (u16)count
+    // No ReadOnlyObjectCache here (unlike RunJobQuery): the node arrays are indexed directly.
+    // ------------------------------------------------------------------------
+    s32 PolygonSoupListSpatialMap::RunQuery(const Line& lrLine)
+    {
+        if (miNumLevels == 0)
+        {
+            return 0;   // `li r3, 0`; the output fields are untouched
+        }
+
+        u16* lpuSrcNodeIndices  = mapQueryBuffers[0];   // +0x50
+        u16* lpuDestNodeIndices = mapQueryBuffers[1];   // +0x54
+
+        // v127 / v123: the segment's two 16-byte lanes, w included.
+        const Vector4 lLineStart = { lrLine.mStart.x, lrLine.mStart.y, lrLine.mStart.z, lrLine.mStart.w };
+        const Vector4 lLineEnd   = { lrLine.mEnd.x,   lrLine.mEnd.y,   lrLine.mEnd.z,   lrLine.mEnd.w };
+
+        // Seed: the single root node of level 0.
+        lpuSrcNodeIndices[0] = 0;
+        u16 luNumSrcNodeIndices = 1;
+
+        for (s32 liLevel = 0; liLevel < miNumLevels; ++liLevel)
+        {
+            const PolygonSoupSpacialNode* lpNodes = mapParentNodes[liLevel];
+            u16 luNumDestNodeIndices = 0;
+
+            for (u16 luNodeIndexEntry = 0; luNodeIndexEntry < luNumSrcNodeIndices; ++luNodeIndexEntry)
+            {
+                const PolygonSoupSpacialNode& lrNode = lpNodes[lpuSrcNodeIndices[luNodeIndexEntry]];
+
+                if (!TestLineStartEndAxisAlignedBox(lLineStart, lLineEnd, lrNode.mBox))
+                {
+                    continue;
+                }
+
+                for (u16 luNodeToAdd = 0; luNodeToAdd < lrNode.mu16NumIndices; ++luNodeToAdd)
+                {
+                    // :523 -- the console streams "level N of M", the line's start and end into the
+                    // message; CGS_ASSERT takes a literal. Both sides are compared as u16.
+                    CGS_ASSERT(luNumDestNodeIndices < static_cast<u16>(miQueryBufferSize),
+                               "Too many results in level ");
+
+                    lpuDestNodeIndices[luNumDestNodeIndices] = lrNode.mpaIndices[luNodeToAdd];
+                    ++luNumDestNodeIndices;
+                }
+            }
+
+            // lpTemp: ping <-> pong, and the next level starts from what this one wrote.
+            u16* lpTemp         = lpuSrcNodeIndices;
+            lpuSrcNodeIndices   = lpuDestNodeIndices;
+            lpuDestNodeIndices  = lpTemp;
+            luNumSrcNodeIndices = luNumDestNodeIndices;
+        }
+
+        // The buffer the last level WROTE (the swap has already happened), and its count.
+        mpOutputQueryBuffer    = lpuSrcNodeIndices;
+        miLastQueryResultCount = static_cast<s32>(luNumSrcNodeIndices);
+
+        return static_cast<s32>(luNumSrcNodeIndices);
     }
 }

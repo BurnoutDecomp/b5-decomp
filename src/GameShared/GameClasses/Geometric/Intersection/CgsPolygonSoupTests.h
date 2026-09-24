@@ -57,6 +57,15 @@ namespace CgsGeometric
     // into the CollisionResultList's single CollisionResult, and what the SceneManagerModule's
     // type-2 poster reads back at +0x40 / +0x30 / +0x50 / +0x60. HOST NAME: the PS3 DWARF name
     // for this struct was not recovered this wave; the layout is the asm's.
+    // ⭐ DWARF NAME RECOVERED 2026-09-24 (FX-GEOMETRIC): CgsPolygonSoupTests.h:40
+    //   struct CgsGeometric::IntersectLinePolygonSoupResult { Vector3 mTriangleVertices[3]; Vector3
+    //   mTriangleNormal; Vector3 mPosition; VecFloat mParam; uint32_t muSurfaceTag; uint32_t
+    //   mu16BytePadding[3]; }  (member-for-member the layout below; the all-hits kernel
+    //   IntersectLinePolygonSoupSingleSided writes the tag splat over muSurfaceTag + the padding).
+    //   CollisionResultList::Prepare's PS3 mangle and AddTriangleCollisionLineTestResult's DWARF
+    //   (`const LineTestResult *`, a typedef of it) use that name. RENAME-WHEN the SceneManager
+    //   readers (CgsSceneManagerModule.cpp, CgsSceneManagerIO_SceneQueryResultsQueue.h -- not this
+    //   lane's files) move with it; the host member names are kept until then.
     struct alignas(16) PolySoupLineNearestResult
     {
         Vector3 mVertex0;        // +0x00  winning triangle, in the kernel's (V0,V1,V2) order
@@ -95,4 +104,24 @@ namespace CgsGeometric
                                                     PolySoupLineNearestResult*  lpOutResult,
                                                     const Vector3&              lStart,
                                                     const Vector3&              lEnd);
+
+    // IntersectLinePolygonSoupSingleSided @0x8283C598 (849) -- ADDED 2026-09-24 (crash parity
+    // FX-GEOMETRIC); no body before, BaseCollisionGenerator::CollideLineAgainstPolySoupList trapped
+    // at both of its call sites (0x82812CE8 / 0x8281317C).
+    //
+    // EVERY single-sided hit of one segment against one soup, in the soup's own order (quad pairs,
+    // the odd quad, triangle quartets, the odd triangles; per 4-wide batch lane 0..3), one 112-byte
+    // record each: the triangle's three vertices, normalize((V1-V0) x (V2-V1)), start + (end-start)*t,
+    // t splatted, the polygon's surface tag splatted. Returns the number of records written. A record
+    // is written BEFORE `found >= liMaxResults` is tested, so the call returns as soon as it has
+    // written liMaxResults records -- and writes one record even when liMaxResults <= 0 (the
+    // console's order, reproduced). The line arrives in v1 (start) / v2 (end) on the console.
+    // Signature and names from the PS3 DWARF (CgsPolygonSoupTests.cpp:2238, mangle @0xB6C1AC):
+    //   int32_t IntersectLinePolygonSoupSingleSided(PolygonSoupArg lPolygonSoup, Vector3 lLineStart,
+    //           Vector3 lLineEnd, IntersectLinePolygonSoupResult* lpResultBuffer, int32_t liMaxResults)
+    s32 IntersectLinePolygonSoupSingleSided(const PolygonSoup&         lPolygonSoup,
+                                            const Vector3&             lLineStart,
+                                            const Vector3&             lLineEnd,
+                                            PolySoupLineNearestResult* lpResultBuffer,
+                                            s32                        liMaxResults);
 }

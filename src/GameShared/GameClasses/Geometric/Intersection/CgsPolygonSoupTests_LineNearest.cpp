@@ -6,6 +6,10 @@
 //
 //   CgsGeometric::IntersectLinePolySoupTriangleSingleSided4   @ 0x8283B520  (152)
 //   CgsGeometric::IntersectLinePolygonSoupNearestSingleSided  @ 0x8283BC98  (575)
+// and, since 2026-09-24 (crash parity FX-GEOMETRIC), its ALL-HITS sibling over the same 4-wide kernel:
+//   CgsGeometric::IntersectLinePolygonSoupSingleSided         @ 0x8283C598  (849)
+// -- the kernel under BaseCollisionGenerator::CollideLineAgainstPolySoupList @0x82812AE0 (the scene's
+// fine line test: the place-on-track drop test and the triangle-collision line tests). See its banner.
 //
 // This is the kernel under BaseCollisionGenerator::CollideLineAgainstPolySoupListNearest
 // @0x828131C0, i.e. under every race car's 10 m above-ground ray (VehicleManager::
@@ -390,5 +394,254 @@ namespace CgsGeometric
 
         // `vcfsx v13, 1, 0 ; vcmpgefp128 v0, v13, v125 ; vspltw v1, v0, 0` -- 1.0 >= best t.
         return (1.0f >= lState.mfBestT);
+    }
+
+    // =============================================================================================
+    // IntersectLinePolygonSoupSingleSided @ 0x8283C598 (849) -- crash parity FX-GEOMETRIC, 2026-09-24.
+    // DWARF CgsPolygonSoupTests.cpp:2238 (PS3 @0xB6C1AC, a differently scheduled body with the same
+    // record/early-out contract). One caller: BaseCollisionGenerator::CollideLineAgainstPolySoupList.
+    //
+    //   r3 = soup, v1 = start (-> v127), v2 = end (-> v126), r4 = lpResultBuffer (r31), r5 = max (r27)
+    //   0x8283C5CC..0x8283C61C  counts, as in the Nearest sibling but with the TRIANGLE count a u8
+    //                           (`subf ; clrlwi 24`): pairs = quads >> 1, oddQuad = quads - 2*pairs,
+    //                           quartets = tris >> 2 (`extrwi 14,16`), oddTris = tris - 4*quartets
+    //   0x8283C620  UnpackPolygonSoupVertices(sp+0x160, soup) ; 0x8283C62C  GetPolygon(soup, 0)
+    //   batches, each one IntersectLinePolySoupTriangleSingleSided4 call (E on the stack at arg_E0):
+    //     quad pairs 0x8283C660  lanes (A0,A1,A2) (A3,A2,A1) (B0,B1,B2) (B3,B2,B1), tags A,A,B,B
+    //     odd quad   0x8283CA90  lanes (A0,A1,A2) (A3,A2,A1) + duplicates; lanes 0/1 read
+    //                            (lanes 1..3 all write their t to var_1220 -- r4=r5=r6 -- and the
+    //                            kernel stores r3,r4,r5,r6 in order, so var_1220 ends holding lane 3's
+    //                            t, the SAME triangle as lane 1)
+    //     quartets   0x8283CCC4  lane k = poly k's (i0,i1,i2), its own tag
+    //     odd tris   0x8283D160  one poly in all four lanes; lane 0 read
+    //   per lane, `vspltw v0, mask, k ; vcmpeqfp128. v0, zero` -> all equal == no hit; else (e.g.
+    //   0x8283C774..0x8283C818 for pair lane 0):
+    //     +0x00/+0x10/+0x20  stvx128 V0 / V1 / V2 (w lanes as unpacked)
+    //     +0x50              stvx128 the kernel's t slot (t splatted)
+    //     +0x40              vmaddfp128 (E - S) * t + S, all four lanes
+    //     +0x30              c = (V1-V0) x (V2-V1) (vpermwi 0x63 yzx pair + vnmsubfp), vmsum3fp128,
+    //                        vrsqrtefp + two Newton-Raphson steps (0.5 = `vcfsx 1,1`), c * that
+    //     +0x60              stvlx128 the poly's tag splat (muSurfaceTag + the padding words)
+    //     ++found ; `cmpw found, max ; bge` -> return found (tested AFTER the record)
+    //   0x8283D2C8  return found (r30)
+    //
+    // PC LOWERING (the Nearest sibling's, stated in the banner): vrsqrtefp + 2 NR is 1/sqrt, the
+    // fused multiply-adds are a multiply then an add. No accept/reject decision is made here -- the
+    // kernel made it -- so these touch only the last ulps of the record.
+    // =============================================================================================
+    namespace
+    {
+        // One hit record, the block the console repeats per lane.
+        void WriteSingleSidedHit(PolySoupLineNearestResult& lrResult,
+                                 const Vector3&             lrV0,
+                                 const Vector3&             lrV1,
+                                 const Vector3&             lrV2,
+                                 f32                        lfT,
+                                 const Vector3&             lrLineStart,
+                                 const Vector3&             lrLineEnd,
+                                 u32                        lu32SurfaceTag)
+        {
+            lrResult.mVertex0 = lrV0;                                   // stvx128 +0x00
+            lrResult.mVertex1 = lrV1;                                   // stvx128 +0x10
+            lrResult.mVertex2 = lrV2;                                   // stvx128 +0x20
+
+            lrResult.mLineParam.x = lfT;                                // stvx128 +0x50 (the t slot)
+            lrResult.mLineParam.y = lfT;
+            lrResult.mLineParam.z = lfT;
+            lrResult.mLineParam.w = lfT;
+
+            // `vmaddfp128 P, (E - S), t, S` -> +0x40.
+            lrResult.mPosition.x = (lrLineEnd.x - lrLineStart.x) * lfT + lrLineStart.x;
+            lrResult.mPosition.y = (lrLineEnd.y - lrLineStart.y) * lfT + lrLineStart.y;
+            lrResult.mPosition.z = (lrLineEnd.z - lrLineStart.z) * lfT + lrLineStart.z;
+            lrResult.mPosition.w = (lrLineEnd.w - lrLineStart.w) * lfT + lrLineStart.w;
+
+            // a = V1 - V0 (v12), b = V2 - V1 (v13); c = a x b. The console's w lane is
+            // a.w*b.w - a.w*b.w (the yzx permute keeps w in w) -- zero for a soup's vertices, whose w
+            // lanes all carry the same unpack junk.
+            const f32 lfAx = lrV1.x - lrV0.x, lfAy = lrV1.y - lrV0.y, lfAz = lrV1.z - lrV0.z, lfAw = lrV1.w - lrV0.w;
+            const f32 lfBx = lrV2.x - lrV1.x, lfBy = lrV2.y - lrV1.y, lfBz = lrV2.z - lrV1.z, lfBw = lrV2.w - lrV1.w;
+            const f32 lfCx = lfAy * lfBz - lfAz * lfBy;
+            const f32 lfCy = lfAz * lfBx - lfAx * lfBz;
+            const f32 lfCz = lfAx * lfBy - lfAy * lfBx;
+            const f32 lfCw = lfAw * lfBw - lfAw * lfBw;
+            const f32 lfInverseLength = 1.0f / std::sqrt(lfCx * lfCx + lfCy * lfCy + lfCz * lfCz);  // vmsum3fp128, vrsqrtefp + 2 NR
+            lrResult.mNormal.x = lfCx * lfInverseLength;                // stvx128 +0x30
+            lrResult.mNormal.y = lfCy * lfInverseLength;
+            lrResult.mNormal.z = lfCz * lfInverseLength;
+            lrResult.mNormal.w = lfCw * lfInverseLength;
+
+            lrResult.mau32Tag[0] = lu32SurfaceTag;                      // stvlx128 +0x60 (the splat)
+            lrResult.mau32Tag[1] = lu32SurfaceTag;
+            lrResult.mau32Tag[2] = lu32SurfaceTag;
+            lrResult.mau32Tag[3] = lu32SurfaceTag;
+        }
+    }
+
+    // @ 0x8283C598 (849)
+    s32 IntersectLinePolygonSoupSingleSided(const PolygonSoup&         lPolygonSoup,
+                                            const Vector3&             lLineStart,
+                                            const Vector3&             lLineEnd,
+                                            PolySoupLineNearestResult* lpResultBuffer,
+                                            s32                        liMaxResults)
+    {
+        // 0x8283C5CC..0x8283C61C: quads come first; the triangle count is the u8 difference.
+        const u8  lu8NumQuads         = lPolygonSoup.GetNumQuads();
+        const u8  lu8NumTriangles     = static_cast<u8>(lPolygonSoup.GetNumPolygons() - lu8NumQuads);
+        const u16 lu16NumQuadPairs    = static_cast<u16>(lu8NumQuads >> 1);
+        const u16 lu16NumOddQuads     = static_cast<u16>(lu8NumQuads - 2u * lu16NumQuadPairs);
+        const u16 lu16NumQuartets     = static_cast<u16>(lu8NumTriangles >> 2);
+        const u16 lu16NumOddTriangles = static_cast<u16>(lu8NumTriangles - 4u * lu16NumQuartets);
+
+        // 0x8283C620 UnpackPolygonSoupVertices(stack, soup). The soup's vertex count is a u8.
+        Vector3 laVertices[256];
+        UnpackPolygonSoupVertices(laVertices, lPolygonSoup);
+
+        // 0x8283C62C GetPolygon(0); every batch advances the byte cursor by 12 per poly.
+        const u8* lpPoly = lPolygonSoup.GetPolygon(0);
+
+        s32                        liNumResults = 0;                // r30
+        PolySoupLineNearestResult* lpResult     = lpResultBuffer;   // r31
+
+        Vector3 laV0[4], laV1[4], laV2[4];
+        f32     lafT[4];
+
+        // ---- quad pairs (0x8283C660..0x8283CA7C) ---------------------------------------------
+        for (u16 lu16Pair = 0; lu16Pair < lu16NumQuadPairs; ++lu16Pair)
+        {
+            const PolygonSoupPoly* lpA = reinterpret_cast<const PolygonSoupPoly*>(lpPoly);
+            const PolygonSoupPoly* lpB = reinterpret_cast<const PolygonSoupPoly*>(lpPoly + 12);
+            lpPoly += 24;
+
+            const Vector3& lrA0 = laVertices[lpA->mau8VertexIndex[0]];   // v121
+            const Vector3& lrA1 = laVertices[lpA->mau8VertexIndex[1]];   // v125
+            const Vector3& lrA2 = laVertices[lpA->mau8VertexIndex[2]];   // v124
+            const Vector3& lrA3 = laVertices[lpA->mau8VertexIndex[3]];   // v119
+            const Vector3& lrB0 = laVertices[lpB->mau8VertexIndex[0]];   // v118
+            const Vector3& lrB1 = laVertices[lpB->mau8VertexIndex[1]];   // v123
+            const Vector3& lrB2 = laVertices[lpB->mau8VertexIndex[2]];   // v122
+            const Vector3& lrB3 = laVertices[lpB->mau8VertexIndex[3]];   // v116
+
+            laV0[0] = lrA0; laV1[0] = lrA1; laV2[0] = lrA2;
+            laV0[1] = lrA3; laV1[1] = lrA2; laV2[1] = lrA1;
+            laV0[2] = lrB0; laV1[2] = lrB1; laV2[2] = lrB2;
+            laV0[3] = lrB3; laV1[3] = lrB2; laV2[3] = lrB1;
+
+            const u32 lu32Hits = IntersectLinePolySoupTriangleSingleSided4(laV0, laV1, laV2, lLineStart, lLineEnd, lafT);
+
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                if ((lu32Hits & (1u << liLane)) == 0)
+                {
+                    continue;
+                }
+                const u32 lu32Tag = (liLane < 2) ? lpA->muSurfaceTag : lpB->muSurfaceTag;   // v120 / v117
+                WriteSingleSidedHit(*lpResult, laV0[liLane], laV1[liLane], laV2[liLane], lafT[liLane],
+                                    lLineStart, lLineEnd, lu32Tag);
+                ++lpResult;
+                ++liNumResults;
+                if (liNumResults >= liMaxResults)
+                {
+                    return liNumResults;
+                }
+            }
+        }
+
+        // ---- the odd quad (0x8283CA80..0x8283CCAC) -- lanes 0/1 ------------------------------
+        if (lu16NumOddQuads != 0)
+        {
+            const PolygonSoupPoly* lpA = reinterpret_cast<const PolygonSoupPoly*>(lpPoly);
+            lpPoly += 12;
+
+            const Vector3& lrA0 = laVertices[lpA->mau8VertexIndex[0]];   // v123
+            const Vector3& lrA1 = laVertices[lpA->mau8VertexIndex[1]];   // v125
+            const Vector3& lrA2 = laVertices[lpA->mau8VertexIndex[2]];   // v124
+            const Vector3& lrA3 = laVertices[lpA->mau8VertexIndex[3]];   // v122
+
+            laV0[0] = lrA0; laV1[0] = lrA1; laV2[0] = lrA2;
+            laV0[1] = lrA3; laV1[1] = lrA2; laV2[1] = lrA1;
+            laV0[2] = lrA0; laV1[2] = lrA1; laV2[2] = lrA2;   // duplicates, results unread
+            laV0[3] = lrA3; laV1[3] = lrA2; laV2[3] = lrA1;
+
+            const u32 lu32Hits = IntersectLinePolySoupTriangleSingleSided4(laV0, laV1, laV2, lLineStart, lLineEnd, lafT);
+
+            for (s32 liLane = 0; liLane < 2; ++liLane)
+            {
+                if ((lu32Hits & (1u << liLane)) == 0)
+                {
+                    continue;
+                }
+                WriteSingleSidedHit(*lpResult, laV0[liLane], laV1[liLane], laV2[liLane], lafT[liLane],
+                                    lLineStart, lLineEnd, lpA->muSurfaceTag);            // v121
+                ++lpResult;
+                ++liNumResults;
+                if (liNumResults >= liMaxResults)
+                {
+                    return liNumResults;
+                }
+            }
+        }
+
+        // ---- triangle quartets (0x8283CCB0..0x8283D148) -- lane k = poly k -----------------
+        for (u16 lu16Quartet = 0; lu16Quartet < lu16NumQuartets; ++lu16Quartet)
+        {
+            const PolygonSoupPoly* lapPoly[4];
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                lapPoly[liLane] = reinterpret_cast<const PolygonSoupPoly*>(lpPoly + 12 * liLane);
+                laV0[liLane] = laVertices[lapPoly[liLane]->mau8VertexIndex[0]];
+                laV1[liLane] = laVertices[lapPoly[liLane]->mau8VertexIndex[1]];
+                laV2[liLane] = laVertices[lapPoly[liLane]->mau8VertexIndex[2]];
+            }
+            lpPoly += 48;
+
+            const u32 lu32Hits = IntersectLinePolySoupTriangleSingleSided4(laV0, laV1, laV2, lLineStart, lLineEnd, lafT);
+
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                if ((lu32Hits & (1u << liLane)) == 0)
+                {
+                    continue;
+                }
+                WriteSingleSidedHit(*lpResult, laV0[liLane], laV1[liLane], laV2[liLane], lafT[liLane],
+                                    lLineStart, lLineEnd, lapPoly[liLane]->muSurfaceTag);   // v117|v118, v111, v110, v109
+                ++lpResult;
+                ++liNumResults;
+                if (liNumResults >= liMaxResults)
+                {
+                    return liNumResults;
+                }
+            }
+        }
+
+        // ---- the odd triangles (0x8283D14C..0x8283D2C4) -- one per call, lane 0 -------------
+        for (u16 lu16Odd = 0; lu16Odd < lu16NumOddTriangles; ++lu16Odd)
+        {
+            const PolygonSoupPoly* lpP = reinterpret_cast<const PolygonSoupPoly*>(lpPoly);
+            lpPoly += 12;
+
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                laV0[liLane] = laVertices[lpP->mau8VertexIndex[0]];   // v124
+                laV1[liLane] = laVertices[lpP->mau8VertexIndex[1]];   // v125
+                laV2[liLane] = laVertices[lpP->mau8VertexIndex[2]];   // v123
+            }
+
+            const u32 lu32Hits = IntersectLinePolySoupTriangleSingleSided4(laV0, laV1, laV2, lLineStart, lLineEnd, lafT);
+
+            if ((lu32Hits & 1u) != 0)
+            {
+                WriteSingleSidedHit(*lpResult, laV0[0], laV1[0], laV2[0], lafT[0],
+                                    lLineStart, lLineEnd, lpP->muSurfaceTag);            // v122|v121
+                ++lpResult;
+                ++liNumResults;
+                if (liNumResults >= liMaxResults)
+                {
+                    return liNumResults;
+                }
+            }
+        }
+
+        return liNumResults;   // 0x8283D2C8 `mr r3, r30`
     }
 }
