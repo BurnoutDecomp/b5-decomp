@@ -132,7 +132,19 @@ namespace BrnDirector
         void RegisterStartingEffectWithName(const HookNameStringWrapper& lrName, f32 lfBlend);
         void RegisterStoppingEffectWithName(const HookNameStringWrapper& lrName);
         void RegisterStoppingBackgroundEffectWithName(const HookNameStringWrapper& lrName);
-        void RegisterStartingEffectWithId(u32 luEffectId);
+        // DWARF :119. NO standalone console symbol: its one site is INLINED in MainDirector::Update's
+        // post-FX id bookkeeping as three stores on the director's interface (this + 0x33C90) --
+        //   0x822750DC  stb r28(=0), 0xD37   mbHasCurrentEffectName = false
+        //   0x822750E0  stb r27(=1), 0xD39   mbHasCurrentEffectId   = true
+        //   0x822750E4  stw r10,     0xCE8   muRequestedPostFxId    = the id
+        // -- the id-form mirror of RegisterStartingEffectWithName (which drops the id form and
+        // raises the name form). BODIED 2026-09-24 (crash parity FX-DIRECTOR) with that site.
+        void RegisterStartingEffectWithId(u32 luEffectId)
+        {
+            mbHasCurrentEffectName = false;
+            mbHasCurrentEffectId   = true;
+            muRequestedPostFxId    = luEffectId;
+        }
 
         // BODIED 2026-08-01 in BrnDirectorEffectTrigger.cpp -- the console INLINES it at its
         // only caller, BackgroundEffectRequest::RegisterAndUpdateRequest, and that is where
