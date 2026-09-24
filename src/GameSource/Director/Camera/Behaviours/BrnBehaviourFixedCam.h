@@ -2,117 +2,109 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_BEHAVIOUR_FIXED_CAM_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the SetParameters type assert)
+#include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT (the SetParameters type assert)
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"     // THE canonical Camera::Behaviour base
+#include "GameSource/Director/Camera/BrnCollisionPolicy.h"       // VisibilityCollisionPolicy (mCollisionPolicy)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourFixedCam.h
 //
-// BrnDirector::Camera::BehaviourFixedCam -- the "fixed cam" camera behaviour: it holds the
-// camera at a fixed authored world position/orientation (used by scripted moments such as the
-// static-cam impact and the arbitrator testbed). HOME for the BehaviourFixedCam class slice
-// this TU bodies (the SetParameters inline). The full behaviour (Construct/Prepare/Update and
-// the rest of the rig) and its Behaviour base land with their own TUs; this header models only
-// the slice SetParameters needs, BY NAME.
+// BrnDirector::Camera::BehaviourFixedCam -- the "fixed cam" camera behaviour. On its first frame
+// it plants a camera a little way ahead of the player's car -- one second of its horizontal
+// velocity, clamped to at least 5 m and failing past 20 m -- looks back at the car, and rolls
+// the shot by a random dutch angle. After that it holds the camera where it was planted and
+// keeps the car in frame. MomentStaticCamImpact (the static impact shot) and the arbitrator
+// testbed pool it.
 //
-// ----------------------------------------------------------------------------
-// The ONLY function homed here is SetParameters @0x821F4518: it asserts the supplied
-// parameter block is a fixed-cam block (its type tag == eBehaviourFixedCam == 15) and stores
-// the pointer in mpParameters. Everything else below is the minimal named scaffolding that
-// inline needs to compile.
-// ----------------------------------------------------------------------------
+// ⭐ RE-BASED 2026-09-24 (FX-DIRECTOR). This used to be a HOLLOW SHELL: a class with no base and
+// no virtuals that modelled only SetParameters' two stores. NewBehaviour<BehaviourFixedCam>
+// therefore placed a vtable-less object in the behaviour pool, and BehaviourHelper::Prepare
+// @0x82255F48, whose first act is to dispatch the pooled object's vtable slot 0 (Construct),
+// read a null vptr. That is the access violation that stopped the moment tick
+// (scratch/bugtest/runs/fxvoicepool/20260924_163149, where the same fault came through the
+// bystander cam).
+//
+// LAYOUT AUTHORITY: the DecFIGS DWARF (BrnBehaviourFixedCam.h:52 `: public Behaviour`, members
+// :90..:97, Parameters :103..:110), pinned by the ARTIST asm:
+//   AllocateVoid<BehaviourFixedCam> @0x82253E10  stw off_8200A620 -> +0x000 (this vtable),
+//                                                stw off_8200A158 -> +0x020 (the policy's),
+//                                                slot size li r7, 0x2B0
+//   +0x020  mCollisionPolicy   GetCollisionPolicy @0x821FB588 is `addi r3, r3, 0x20`
+//   +0x260  mBaseTranform      Update copies it into the camera (0x8222A3BC..0x8222A3F0)
+//   +0x2A0  mpParameters       SetParameters `stw r4, 0x2A0(r3)`; Construct `stw 0`
+//   +0x2A4  mfDutch            Update `stfs f0, 0x2A4(r31)` (the random roll)
+//   +0x2A8  mbPositionSet      Prepare `stb 0`, Update `stb 1` once the shot is planted
+// (x64: the base's pointer and the policy widen, so absolute offsets are PROVENANCE -- every
+//  access below is BY NAME.)
+//
+// VTABLE off_8200A620 (eight slots, the canonical Behaviour order):
+//   0 Construct            0x82229D20        4 Release        0x8284CB38 (the base's empty body)
+//   1 Prepare              0x821FAD28        5 GetCollisionPolicy 0x821FB588
+//   2 Update               0x82229DE0        6 SetupTweaker   0x821FAD48
+//   3 PostCollisionUpdate  0x82C296C8 (`li r3, 1` -- the base's)   7 GetName  0x821FAE48
+// Slots 3 and 4 are the Behaviour base's own bodies (the DWARF declares no override for either).
+// ============================================================================
 
 namespace BrnDirector
 {
 namespace Camera
 {
 
-// FLAG: minimal slice of the camera-behaviour type tag. The behaviours each carry a type id
-//   in the leading word of their Parameters block; SetParameters asserts the block's id is
-//   the fixed-cam one. The console value for eBehaviourFixedCam is 15 (the asm at 0x821F4538
-//   compares the block's first word against 0xF). Replace with the real EBehaviourType enum
-//   when the Behaviour base TU lands; the fixed-cam enumerator's VALUE (15) is pinned from asm.
+// The fixed-cam behaviour-type tag. SetParameters @0x821F4518 compares the block's first word
+// against 0xF (`cmplwi r11, 0xF`); BehaviourParameterBank::Construct @0x8223DC90 stores 15 into the
+// bank's fixed-cam block (+9012).
 enum EBehaviourTypeFixedCam
 {
     eBehaviourFixedCam = 15
 };
 
-// FLAG: minimal slice of the camera-behaviour base. The full Behaviour base (vtable + shared
-//   flag/state block) lands with its own TU; SetParameters only needs the typed parameter
-//   pointer member to exist on the derived class, so the base is modelled as an opaque head
-//   here. The real base layout/method set replaces this when the Behaviour TU lands.
-class BehaviourFixedCam
+class BehaviourFixedCam : public Behaviour
 {
 public:
-
-    // The fixed-cam parameter block: a type tag in its leading word plus behaviour-specific
-    // data. GetType returns the tag SetParameters asserts on.
-    class Parameters
+    // DWARF BrnBehaviourFixedCam.h:103 -- the fixed-cam parameter block.
+    class Parameters : public Behaviour::Parameters
     {
     public:
-        // X360 visitor: `void Serialise<S>(S&)` -- walks this block's fields into the camera-tunings
-        // serialiser S (TextFile{Read,Write}Serialiser); the per-instance body is a separate TU.
-        // Declared so the serialiser's Serialise<Parameters> can drive it by name.
+        // X360 visitor: `void Serialise<S>(S&)` -- walks this block's two tunables into the
+        // camera-tunings serialiser S. Body + instantiations: BrnBehaviourFixedCamSerialise.cpp.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
-        EBehaviourTypeFixedCam GetType() const
-        {
-            return static_cast<EBehaviourTypeFixedCam>(meType);
-        }
+        // DWARF :110 (BrnBehaviourFixedCam.cpp:34). No out-of-line console symbol: the one caller,
+        // BehaviourParameterBank::Construct @0x8223DC90, inlines it over the bank's fixed-cam block
+        // (0x8223DE6C..: +9016 = 0, +9020 = 70.0, +9012 = 15, +9024 = 10.0). Body in the .cpp.
+        void Construct();
 
-        s32 meType;        // +0x00  the behaviour type tag (eBehaviour*)
-        s32 miParamWord1;  // +0x04  first behaviour-specific word
-        // --- fixed-cam tunable fields, pinned from the Serialise<S> field-walk asm ---
-        // Both Serialise instances (DebugMenu @0x82214BF0, TextFileWrite @0x822151C8) touch
-        // exactly these two f32 slots, in this order: the +0x08 slot (label at the unrecovered
-        // rodata @0x820051C0) then the +0x0C slot ("Max Dutch" -- the dutch/roll-angle clamp).
-        f32 mfField08;     // +0x08  <unk_820051C0 label> tunable (label rodata unrecovered)
-        f32 mfMaxDutch;    // +0x0C  "Max Dutch" -- max dutch (camera roll) angle
+        f32 mfFOV;        // :106  console +0x08  (the "FOV" tweak, label rodata 0x820051C0)
+        f32 mfMaxDutch;   // :107  console +0x0C  (the "Roll" tweak / "Max Dutch" menu entry)
     };
 
-    // Adopt a fixed-cam parameter block: assert it carries the fixed-cam type tag, then cache
-    // its first word and store the pointer. @0x821F4518.
-    void SetParameters(const Parameters* lpParameters);
+    // Adopt a fixed-cam parameter block. @0x821F4518 (h:122): assert the block's type tag, cache
+    // its debug name in the base's +0x10 slot, store the pointer. NOT a virtual override -- it
+    // takes the DERIVED Parameters type, so it HIDES the base's non-virtual pair.
+    void SetParameters(const Parameters* lpParameters)
+    {
+        CGS_ASSERT(lpParameters->GetType() == eBehaviourFixedCam,
+                   "lpParameters->GetType() == eBehaviourFixedCam");   // h:124
+        mpParameters = lpParameters;                                    // stw r4, 0x2A0(this)
+        SetDebugParametersName(lpParameters->GetDebugName());          // lwz 4(lp) ; stw 0x10(this)
+    }
 
-    // ADDITIVE GROW (MomentStaticCamImpact::Update @0x82266AB0 reads the returned
-    // behaviour's +0x009/+0x00B bytes -- the Behaviour-base flags, carved below):
-    // X360 header-inlines.
-    bool HasFailed() const         { return mbHasFailed; }
-    bool CanSwitchToMeNow() const  { return mbCanSwitchToMeNow; }
+    // ---- the virtual interface (vtable off_8200A620) ------------------------------------------
+    void Construct() override;                                                    // slot 0 (cpp:51)
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;        // slot 1 (cpp:69)
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;     // slot 2 (cpp:87)
+    CollisionPolicy* GetCollisionPolicy() override;                                // slot 5 (cpp:162)
+    void SetupTweaker(Utils::Tweaker& lrTweaker) override;                         // slot 6 (cpp:176)
+    const char* GetName() const override;                                          // slot 7 (cpp:198)
 
 private:
-
-    // FLAG: only the members SetParameters writes are modelled at their asm-attested offsets;
-    //   the rest of the fixed-cam rig lands with the full behaviour TU. The vtable/base head
-    //   occupies +0x00; the cached param word is at +0x10 (stw r11, 0x10(this)) and the param
-    //   pointer is at +0x2A0 (stw r31, 0x2A0(this)). Reserved byte spans place them exactly.
-    void*             mpVTable;                       // +0x00  behaviour vtable (opaque base head)
-    u8                maReserved04[0x09 - 0x04];      // +0x04 .. +0x08 (rig members not modelled here)
-    bool              mbHasFailed;                    // +0x09  Behaviour-base failed flag (MomentStaticCamImpact::Update reads it)
-    u8                maReserved0A;                   // +0x0A
-    bool              mbCanSwitchToMeNow;             // +0x0B  Behaviour-base switch-to gate (MomentStaticCamImpact::Update reads it)
-    u8                maReserved0C[0x10 - 0x0C];      // +0x0C .. +0x0F (rig members not modelled here)
-    s32               mParamWord1;                    // +0x10  cached lpParameters->miParamWord1
-    u8                maReserved14[0x2A0 - 0x14];     // +0x14 .. +0x29F (rig members not modelled here)
-    const Parameters* mpParameters;                   // +0x2A0  the adopted parameter block
+    // ---- layout (DWARF :90..:97) ----------------------------------------------------------------
+    VisibilityCollisionPolicy mCollisionPolicy;   // :90  console +0x020
+    Matrix44Affine            mBaseTranform;      // :92  console +0x260  (sic -- the DWARF's spelling)
+    const Parameters*         mpParameters;       // :94  console +0x2A0
+    f32                       mfDutch;            // :96  console +0x2A4
+    bool                      mbPositionSet;      // :97  console +0x2A8
 };
-
-// ----------------------------------------------------------------------------
-// BrnDirector::Camera::BehaviourFixedCam::SetParameters @0x821F4518
-//   lwz  r11, 0(r4)         ; lpParameters->meType
-//   cmplwi r11, 0xF         ; == eBehaviourFixedCam
-//   ... assert on mismatch ...
-//   lwz  r11, 4(r4)         ; lpParameters->miParamWord1
-//   stw  r4,  0x2A0(r3)     ; mpParameters = lpParameters
-//   stw  r11, 0x10(r3)      ; mParamWord1  = lpParameters->miParamWord1
-// ----------------------------------------------------------------------------
-inline void
-BehaviourFixedCam::SetParameters(const Parameters* lpParameters)
-{
-    CGS_ASSERT(lpParameters->GetType() == eBehaviourFixedCam,
-               "lpParameters->GetType() == eBehaviourFixedCam");
-    mpParameters = lpParameters;                  // stw r4,  0x2A0(this)
-    mParamWord1  = lpParameters->miParamWord1;     // lwz r11,4(lp); stw r11, 0x10(this)
-}
 
 } // namespace Camera
 } // namespace BrnDirector

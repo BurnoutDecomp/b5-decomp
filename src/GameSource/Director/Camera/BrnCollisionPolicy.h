@@ -443,9 +443,23 @@ public:
 
     void SetTarget(Matrix44Affine lTargetTransform, AABBox lTargetAABB,
                    CgsSceneManager::EntityId lTargetEntityId);
-    void SetTestLookingAt(bool lbTestLookingAt);
+
+    // ⭐ BODIED 2026-09-24 (FX-DIRECTOR, the fixed cam). Both are one-line forwarders onto the
+    // policy's embedded visibility test (the three bytes at policy +0x1A0..+0x1A2 -- see the
+    // MIS-ATTRIBUTED NAMES note below; they are mVisibilityTest's), and the console inlines both:
+    //   SetTestLookingAt  BehaviourFixedCam::Construct @0x82229D20 stores `stb 1` to policy +0x1A0 a
+    //                     SECOND time, after the inlined Construct block -- the DWARF call list of
+    //                     that function names VisibilityCollisionPolicy::SetTestLookingAt.
+    //   IsVisibilityInterrupted  BehaviourFixedCam::Update 0x8222A338..0x8222A368:
+    //                     `+0x1A1 || (+0x1A0 && !+0x1A2)` -- the DWARF names the inline
+    //                     VisibilityCollisionPolicy::IsVisibilityInterrupted. The same predicate as
+    //                     ShouldRaiseSeeThrough below, which the ICE-anim / gyro cams already use.
+    void SetTestLookingAt(bool lbTestLookingAt) { mbSeeThroughEnabled = lbTestLookingAt; }
     void SetVelocity(Vector3 lVelocity);
-    bool IsVisibilityInterrupted() const;
+    bool IsVisibilityInterrupted() const
+    {
+        return mbSeeThroughAlways || (mbSeeThroughEnabled && !mbSeeThroughSuppressed);
+    }
     float GetMinTimeToVisibilityFailure() const;
 
     // ---- class-TU surface (bodies in BrnVisibilityCollisionPolicy.cpp) ----

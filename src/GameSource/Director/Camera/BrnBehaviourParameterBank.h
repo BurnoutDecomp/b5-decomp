@@ -705,11 +705,18 @@ namespace BrnDirector
                 ZeroBlock(&mBystanderCloseParameters, sizeof(mBystanderCloseParameters));
                 ZeroBlock(&mBystanderFarParameters,   sizeof(mBystanderFarParameters));
                 ZeroBlock(&mPassengerDefault,         sizeof(mPassengerDefault));
-                ZeroBlock(&mFixedDefault,             sizeof(mFixedDefault));
 
                 mBystanderCloseParameters.meType = eBehaviourBystanderCam;
                 mBystanderFarParameters.meType   = eBehaviourBystanderCam;
-                mFixedDefault.meType             = eBehaviourFixedCam;
+
+                // ⭐ 2026-09-24 (FX-DIRECTOR): the fixed-cam block is no longer a zeroed stand-in. The
+                // console inlines BehaviourFixedCam::Parameters::Construct over it (0x8223DC90:
+                // +9016 = 0, +9020 = 70.0, +9012 = 15, +9024 = 10.0) and stores nothing else into it,
+                // so the class seed IS the block's content: FOV 70, max dutch 10. (The closing
+                // Serialise<BehaviourParameterNamingSerialiser> pass only names blocks for the debug
+                // menu; it is not reconstructed.) With a zeroed block the static-impact shot would
+                // assert "lfFOV > 0.0f" and render at FOV 0.
+                mFixedDefault.Construct();
 
                 // ⭐ 2026-09-12: the eleven player-jumping shot blocks, same posture.
                 // ⚠ THE NINE RIG BLOCKS' TYPE TAGS ARE NOT SEEDED and cannot be from here:
