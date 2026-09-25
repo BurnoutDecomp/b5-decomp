@@ -10,7 +10,9 @@
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // [DIAG] CgsDev::Log::gpDebugPrint
 
-#include <cmath>    // std::sin / std::cos (the XMVectorSinCos polynomial), std::fabs, std::sqrt
+#include "SDKs/XboxMath/XMVectorSinCos.h"  // XboxMath::XMVectorSinCos (GenerateFanVectors' inlined SinCos)
+
+#include <cmath>    // std::fmaf (the fmadds / vmaddfp sites), std::fabs, std::sqrt
 #include <cstdlib>  // [DIAG] getenv (the BRN_AI_NAN witness below)
 
 // BrnAI::SteeringFan -- partfile 2 of 2 for the weighting half (aiwave R6 lane). This TU owns the
@@ -229,25 +231,37 @@ void SteeringFan::GenerateFanVectors(AICar* lpCar)
     f32 lfT = 0.0f;
     for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
     {
+        // 0x82779474 fsubs, 0x82779480 fmuls 2.0, the cube as (x * x) * x (0x82779484 / 0x82779488), each rounded
+        // (ROUNDING_RULE 4); then 0x8277948C `fmadds f0, f0, f13, f28` = cube * mfFanAngle + base, ONE rounding
+        // (rule 3).
         const f32 lfInterp = (lfT - 0.5f) * 2.0f;
-        const f32 lfAngle  = (lfInterp * lfInterp * lfInterp) * mfFanAngle + lfBaseAngle;
+        const f32 lfAngle  = std::fmaf(lfInterp * lfInterp * lfInterp, mfFanAngle, lfBaseAngle);
 
         CGS_ASSERT(liStep < KI_FAN_STEPS, "Fan index out of range at ");
 
+        // 0x8277955C..0x827796BC: the XDK's XMVectorSinCos, inlined (tables 0x82000BD0..0x82000C6F; sine in v13,
+        // cosine in v0 at 0x827796C0). It is XboxMath::XMVectorSinCos bit for bit: the real words run on emu64
+        // agree with it on 1500 angles (FX-GATE, crash parity 2026-09-25). std::sin / std::cos stood in before.
+        f32 lfSin;
+        f32 lfCos;
+        XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngle);
+
         Vector2 lUnit;
-        lUnit.x =  std::sin(lfAngle);
-        lUnit.y =  std::cos(lfAngle);
+        lUnit.x =  lfSin;
+        lUnit.y =  lfCos;
         lUnit.z = 0.0f;
         lUnit.w = 0.0f;
         mUnitDirection[liStep] = lUnit;
 
-        mTarget[liStep].x = mFanOrigin2D.x + lUnit.x * mfLookAheadRadius;
-        mTarget[liStep].y = mFanOrigin2D.y + lUnit.y * mfLookAheadRadius;
+        // 0x827796F4 / 0x82779724 `vmaddfp` (raw D,A,B,C = v13, v0, v13, v12 / v0, v0, v13, v12) = unit * radius +
+        // origin, ONE rounding per lane (ROUNDING_RULE 3).
+        mTarget[liStep].x = std::fmaf(lUnit.x, mfLookAheadRadius, mFanOrigin2D.x);
+        mTarget[liStep].y = std::fmaf(lUnit.y, mfLookAheadRadius, mFanOrigin2D.y);
         mTarget[liStep].z = 0.0f;
         mTarget[liStep].w = 0.0f;
 
-        mHNGTarget[liStep].x = mFanOrigin2D.x + lUnit.x * mfLookAheadHNGRadius;
-        mHNGTarget[liStep].y = mFanOrigin2D.y + lUnit.y * mfLookAheadHNGRadius;
+        mHNGTarget[liStep].x = std::fmaf(lUnit.x, mfLookAheadHNGRadius, mFanOrigin2D.x);
+        mHNGTarget[liStep].y = std::fmaf(lUnit.y, mfLookAheadHNGRadius, mFanOrigin2D.y);
         mHNGTarget[liStep].z = 0.0f;
         mHNGTarget[liStep].w = 0.0f;
 
