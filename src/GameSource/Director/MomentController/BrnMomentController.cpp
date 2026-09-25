@@ -35,7 +35,7 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentTakedownLookback.h"   // case 3 (AllocateVoid)
 #include "GameSource/Director/MomentController/Moments/BrnMomentPassengerSeesAction.h"// case 4
 #include "GameSource/Director/MomentController/Moments/BrnMomentFailsafe.h"           // case 6
-#include "GameSource/Director/MomentController/Moments/BrnMomentPlayerJumping.h"      // case 7 (sizeof only)
+#include "GameSource/Director/MomentController/Moments/BrnMomentPlayerJumping.h"      // case 7 (AllocateVoid)
 #include "GameSource/Director/MomentController/Moments/BrnMomentPlayerStunt.h"        // case 8
 #include "GameSource/Director/MomentController/Moments/BrnMomentStaticCamImpact.h"    // case 9
 #include "GameSource/Director/MomentController/Moments/BrnMomentNewCarJoined.h"       // case 10
@@ -221,17 +221,13 @@ bool MomentController::MomentHandle::Prepare(AbstractPoolVoidHandle lVoidHandle,
 //   5. lpParameters = mMomentParameterBank.GetParameters(leMomentParamID).
 //   6. assert mbIsAllocated, then GetMoment()->SetParameters(lpParameters) (vtable +0xC).
 //
-// ⚠️ GATE (case 7 only): AllocateVoid<MomentPlayerJumping> places that class, which emits its vftable, which
-//   needs its whole closure at link: the four BehaviourCollection<> instantiations PlayerJumping holds (six
-//   template methods, unnamed ARTIST subs), BehaviourInterpolate and MomentPlayerJumping::UpdateCamera
-//   @0x8223AB78. That arm returns TRUE with the handle released and unallocated -- which MomentSelector
-//   treats as "no moment" (its classification loop skips an unallocated handle). CONSEQUENCE: ArbStateRoaming
-//   (the one selector that registers type 7, @0x82259C00) never gets its jump cutaway; the other eleven types
-//   allocate for real. (Retail seeds mbAllowJumpMoment false, so the jump cutaway's shot is off on the console
-//   as well -- but the moment itself is allocated and ticked there.)
-//   DELETE-WHEN: the BehaviourCollection bodies, BehaviourInterpolate and MomentPlayerJumping::UpdateCamera are
-//   in the link.
-// [FX-DIRECTOR2 2026-09-25] case 3 is UN-GATED: MomentTakedownLookback's closure (BehaviourRig, CameraRig::
+// [FX-DIRECTOR2 2026-09-25] case 7 is UN-GATED. MomentPlayerJumping is allocated as ArbStateRoaming::Construct
+//   @0x82259C00 registers it ({7, 0}) and ticked every roaming frame, like the console's. Until now the arm
+//   returned TRUE with the handle unallocated, so Roaming's selector held two moments where the console holds
+//   three. It is INERT ON RETAIL: the moment's SEARCHING arm is gated on mbAllowJumpMoment, which
+//   MainDirector::Construct seeds false (0x8225B97C) and nothing in the image writes again. Its retail path is
+//   bodied; the camera side behind that gate is a LOUD trap (BrnMomentPlayerJumping.cpp).
+// [FX-DIRECTOR2 2026-09-25] case 3 is UN-GATED too: MomentTakedownLookback's closure (BehaviourRig, CameraRig::
 //   Construct, the presets, the look-back's own Update) is bodied and mounted. NOTE no retail selector ever asks
 //   for type 3: MomentSelector::AddMoment @0x82209F80 has three callers -- ArbStateRoaming::Construct {7, 8, 10},
 //   ArbStateCrashing::Construct {2, 2, 0, 5}, ArbStateTakedown::Construct {5, 2, 2} -- so this arm, like the
@@ -268,8 +264,8 @@ bool MomentController::NewMoment(Moment::EType leMomentType,
             lVoidHandle = mMomentPool.AllocateVoid<MomentFailSafe>();
             break;
         case Moment::E_MOMENT_PLAYER_JUMPING:
-            // ⚠️ GATE -- AllocateVoid<MomentPlayerJumping> (see the banner above).
-            return true;
+            lVoidHandle = mMomentPool.AllocateVoid<MomentPlayerJumping>();
+            break;
         case Moment::E_MOMENT_PLAYER_STUNT:
             lVoidHandle = mMomentPool.AllocateVoid<MomentPlayerStunt>();
             break;

@@ -11,13 +11,11 @@
 // the player is airborne off a jump, cut to one of several authored shot
 // sequences (ICE rig / dropped rig / bystander / attached rig). Class shape /
 // member names / method set / enums verbatim from the declarations
-// (BrnMomentPlayerJumping.h plus the BehaviourCollection template);
-// gated in the console build ledger. This TU bodies the eight exported
-// functions; SetParameters/Destruct/UpdateCamera and every BehaviourCollection
-// method are their own ledger functions (declaration-only here -- the declaration
-// places the template bodies in this TU's .cpp, but they are separate exported
-// instantiations, e.g. AddShot<Rig,6>, reconstructed with the
-// collection's own claim).
+// (BrnMomentPlayerJumping.h plus the BehaviourCollection template).
+// [FX-DIRECTOR2 2026-09-25] Allocated (NewMoment case 7) and INERT ON RETAIL: the
+// SEARCHING arm's third gate, MainDirector::mbAllowJumpMoment, is seeded false and
+// never written. The .cpp bodies the retail path and LOUD-traps the camera side
+// retail never reaches (see its banner).
 //
 namespace Attrib { struct RefSpec; }   // the ice collection's TParameters (Camera.h fwd-declares it too)
 
@@ -29,12 +27,13 @@ namespace BrnDirector
     // authored "shots" (a typed behaviour handle + its parameter block each) an
     // owning moment/arbitrator-state allocates and drives as one unit. the declaration
     // home:  (members, methods).
-    // ALL methods are DECLARATION-ONLY here: the declaration places the bodies in
-    // BrnMomentPlayerJumping.cpp as template definitions, and their per-type
-    // instantiations are their own console ledger functions (AddShot, Prepare, Release,
-    // HasFailed, CanSwitchToMeNow, the shot-table Append -- three copies each, one per
-    // instantiated collection) -- reconstructed with
-    // the collection's own claim, not this moment TU.
+    // The method bodies are template definitions in BrnMomentPlayerJumping.cpp (the
+    // console's asserts carry that path; each per-type instantiation is its own
+    // console function). Construct / AddShot / Release are bodied there; Prepare /
+    // HasFailed / CanSwitchToMeNow are [PC TRAP, NOT X360] -- only the jump moment's
+    // filming path calls them, and retail never takes it. GetCamera is the header
+    // inline below; GetNumShots / CanSwitchFromMeNow / GetBehaviourHandle /
+    // GetBehaviour have no caller in this build.
     template <typename TBehaviour, typename TParameters, u32 N>
     class BehaviourCollection
     {
@@ -147,7 +146,7 @@ namespace BrnDirector
         // searching head bit, park at SEARCHING.
         virtual bool Release();
 
-        //  Declaration-only (own ledger functions).
+        //  The vtable one-liners (bodied at the end of the .cpp).
         virtual void Destruct();
         virtual void SetParameters(const Moment::Parameters* lpParameters);
 
@@ -166,9 +165,9 @@ namespace BrnDirector
         // FAILED when it failed, else READY once it can be switched to.
         EStatus GetCameraStatus();
 
-        //  Fill the frame's camera from the active collection.
-        // Declaration-only (its own ledger function; the ICF dump misattributes
-        // the folded body to CgsArray.h).
+        //  Fill the frame's camera from the active collection. @0x8223AB78 (the ICF
+        // dump misattributes the folded body to CgsArray.h). [PC TRAP, NOT X360] in the
+        // .cpp: only the VALID body calls it, and retail never gets there.
         bool UpdateCamera(Camera::Camera& lrCamera);
 
         // Member layout (console offsets in comments; access BY NAME).

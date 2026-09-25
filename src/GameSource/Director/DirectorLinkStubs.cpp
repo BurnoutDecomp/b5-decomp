@@ -109,7 +109,6 @@ namespace vpu
 // every MomentSelector counted 0 valid moments -- is GONE. The real NewMoment (and the corrected
 // MomentHandle::Prepare) live in MomentController/BrnMomentController.cpp, their DWARF home, which is
 // mounted; MainDirector ticks the moments (UpdateMoments @0x82250268, called from Update 0x82274348).
-// Two of the twelve types -- TakedownLookback and PlayerJumping -- stay gated INSIDE NewMoment until
-// their closure (BehaviourRig + CameraRig::Construct, the BehaviourCollection<> bodies,
-// MomentPlayerJumping::UpdateCamera, the look-back's reach shims) is in the link.
+// [FX-DIRECTOR2 2026-09-25] All twelve types allocate now: TakedownLookback (case 3) and PlayerJumping
+// (case 7) were gated INSIDE NewMoment until their closure was in the link (see NewMoment's banner).
 
