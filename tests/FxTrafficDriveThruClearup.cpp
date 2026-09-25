@@ -24,6 +24,7 @@
 #include "GameSource/GameState/BrnGameActions.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -48,14 +49,47 @@ namespace Log { DebugPrint* gpDebugPrint = nullptr; }             // the witness
 namespace Message { unsigned long long gxMessageFilterFlags = 0; }
 }
 
+// HandleExternalRequests' action-236 arm carries a [nettraf] witness since b5 ca4ac341. The real
+// declaration is included above, so this silent definition must keep its signature. The drive-thru
+// actions under test never reach that arm.
+namespace BrnNetHarnessPC
+{
+    void WitnessTag(const char*, const char*, const char*, ...) {}
+}
+
 namespace BrnTraffic
 {
     const char* gpcTrafficRemoveReason = "unknown";
     inline void LogMissingLeg_T6(bool&, const char*) {}
+namespace
+{
+    // The network arms' capped [netcrash] witness (crash parity FX-NETCRASH), off here.
+    CgsDev::Log::DebugPrint* NetCrashDiagStream() { return nullptr; }
+    const s32 KI_NETCRASH_HULL_DIAG_MAX_LINES = 48;
+}
 
     struct DriveThruFixture
     {
         typedef TrafficEntityModule M;
+
+        // What HandleExternalRequests' network arms read (actions 47 SET_COUNTDOWN, 143
+        // SHOWTIME_MODE_SWITCH, 225/226 local player gone, 236 RESTART_TRAFFIC; b5 b43b5c2b). The
+        // drive-thru actions under test never reach them, so IsPaused / RestartTraffic are inert
+        // stand-ins that count their calls.
+        typedef M::EState        EState;
+        typedef M::ERunningState ERunningState;
+        static const EState        E_STATE_STARTING_UP   = M::E_STATE_STARTING_UP;
+        static const EState        E_STATE_RUNNING       = M::E_STATE_RUNNING;
+        static const ERunningState E_RUNNINGSTATE_NORMAL = M::E_RUNNINGSTATE_NORMAL;
+        decltype(M::meState)                         meState;
+        decltype(M::meRunningState)                  meRunningState;
+        decltype(M::meRunningStateToUseAfterStartup) meRunningStateToUseAfterStartup;
+        decltype(M::mbActivateOnlineHullsAfterReset) mbActivateOnlineHullsAfterReset;
+        decltype(M::mau16HullsToActivateAfterReset)  mau16HullsToActivateAfterReset;
+        decltype(M::muCurrentlyPredictedHull)        muCurrentlyPredictedHull;
+        unsigned muNetworkArmCalls;
+        bool IsPaused()       { ++muNetworkArmCalls; return false; }
+        void RestartTraffic() { ++muNetworkArmCalls; }
 
         decltype(M::mbIsOnlineGameMode)             mbIsOnlineGameMode;
         decltype(M::mbAllowDivergentBehaviour)      mbAllowDivergentBehaviour;
