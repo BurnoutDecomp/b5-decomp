@@ -601,7 +601,10 @@ namespace BrnAI
     {
         const f32 lfDrift = vpu::Magnitude(mLastRoutePosition - mPosition);                 // lvx 0x1480 - lvx 0x1430
         const f32 lfLimit = mbIsPlayer ? KF_ROUTE_OLD_DISTANCE_PLAYER : KF_ROUTE_OLD_DISTANCE_AI;
-        if (lfDrift > lfLimit)                                                              // 0x8276FDFC
+        // `fcmpu f13, f0 ; ble 0x8276FE0C` @0x8276FDFC: only an ORDERED drift at or under the limit
+        // goes on to the route tests; a NaN drift falls through to `li r3, 1` -- "old", so the
+        // route is re-requested. (`lfDrift > lfLimit` read a NaN drift as "not old".)
+        if (!(lfDrift <= lfLimit))
             return true;
 
         const Route* lpThisRoute = GetRoute();
