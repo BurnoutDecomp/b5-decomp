@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>   // getenv: the region's [vlq] DIAG gate (BRN_VLQ_DIAG, off here)
 #include <cstring>
 #include <limits>
 #include <map>

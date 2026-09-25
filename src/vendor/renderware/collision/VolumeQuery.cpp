@@ -8,8 +8,8 @@
 #include "vendor/renderware/collision/VolumeQueryHostLayout.hpp"   // NOT X360: the host carve sizes
 
 #include <cstring>  // memset
-#include <cstdio>   // snprintf ([vvq] DIAG only)
-#include <cstdlib>  // getenv   ([vvq] DIAG only)
+#include <cstdio>   // snprintf ([vvq] / [vlq] DIAG, the [vlq] traps)
+#include <cstdlib>  // getenv   ([vvq] / [vlq] DIAG only)
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([vvq] DIAG only); WriteToLog (the [vlq] traps)
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT (the [vlq] traps, NOT X360)
@@ -762,6 +762,72 @@ namespace
         }
         CGS_ASSERT(false, lpcAssert);
     }
+
+    // [DIAG] NOT IN THE X360 BINARY (2026-09-25, crash parity FX-FOLLOWUPS stage (b)). Opt-in BRN_VLQ_DIAG=1: the
+    // live witness that the test loop below DISPATCHES the descriptor's lineSegIntersect slot, and what the kernel
+    // answers. Per volume type, one `[vlq] kernel` line at its 1st, 10th, 100th, ... call and at its first hit: the
+    // running call and hit counts, and for a hit the segment, the fatness, lineParam, volParam, position, normal
+    // and |normal|^2. Capped at 64 lines; written with WriteToLog, as the traps are. Reads only; with the variable
+    // unset the cost is one static bool test.
+    bool VolumeLineQueryDiagEnabled()
+    {
+        static const bool sbEnabled = []() {
+            const char* lpcValue = std::getenv("BRN_VLQ_DIAG");
+            return lpcValue != 0 && lpcValue[0] == '1';
+        }();
+        return sbEnabled;
+    }
+
+    void NoteLineSegIntersect(const Volume* lpPrimitive, RwBool lbHit, const Vec4& arPt1, const Vec4& arPt2,
+                              f32 afFatness, const VolumeLineSegIntersectResult& arResult)
+    {
+        static u32 suLines = 0;
+        static u32 sauCalls[E_VOLUMETYPE_NUMINTERNALTYPES]  = {};
+        static u32 sauHits[E_VOLUMETYPE_NUMINTERNALTYPES]   = {};
+        static u32 sauDecade[E_VOLUMETYPE_NUMINTERNALTYPES] = {};   // the next power-of-ten call to report
+        const u32 luType = lpPrimitive->muVTableSlot < static_cast<u32>(E_VOLUMETYPE_NUMINTERNALTYPES)
+                         ? lpPrimitive->muVTableSlot : 0u;
+        const u32 luCall = ++sauCalls[luType];
+        if (lbHit != 0)
+        {
+            ++sauHits[luType];
+        }
+        if (sauDecade[luType] == 0u)
+        {
+            sauDecade[luType] = 1u;
+        }
+        bool lbReport = lbHit != 0 && sauHits[luType] == 1u;
+        if (luCall == sauDecade[luType])
+        {
+            lbReport = true;
+            sauDecade[luType] = sauDecade[luType] <= 100000000u ? sauDecade[luType] * 10u : 0xFFFFFFFFu;
+        }
+        if (!lbReport || suLines >= 64u)
+        {
+            return;
+        }
+        ++suLines;
+        char lacLine[512];
+        if (lbHit == 0)
+        {
+            std::snprintf(lacLine, sizeof(lacLine), "[vlq] kernel type %u: call %u, hits %u -- this call missed\n",
+                          luType, luCall, sauHits[luType]);
+        }
+        else
+        {
+            const Vec4& lrNormal = arResult.normal;
+            std::snprintf(lacLine, sizeof(lacLine),
+                          "[vlq] kernel type %u: call %u, hits %u -- this call HIT: segment (%.3f, %.3f, %.3f) -> "
+                          "(%.3f, %.3f, %.3f) fatness %.4f lineParam %.6f volParam (%.4f, %.4f, %.4f, %.4f) "
+                          "position (%.3f, %.3f, %.3f) normal (%.5f, %.5f, %.5f) |normal|^2 %.6f\n",
+                          luType, luCall, sauHits[luType], arPt1.x, arPt1.y, arPt1.z, arPt2.x, arPt2.y, arPt2.z,
+                          afFatness, arResult.lineParam, arResult.volParam.x, arResult.volParam.y, arResult.volParam.z,
+                          arResult.volParam.w, arResult.position.x, arResult.position.y, arResult.position.z,
+                          lrNormal.x, lrNormal.y, lrNormal.z,
+                          lrNormal.x * lrNormal.x + lrNormal.y * lrNormal.y + lrNormal.z * lrNormal.z);
+        }
+        CgsDev::Log::WriteToLog(lacLine);
+    }
 }
 
 // @ 0x82BB3230 -- stage one primitive. `cmplw m_primNext (+0xDC), m_primBufferSize (+0xE0) ; blt` -- a full
@@ -946,8 +1012,9 @@ u32 VolumeLineQuery::GetIntersections()
                 GetVolumeDescriptor(lpPrimitive)->mpfnLineSegIntersect;
             if (lpfnLineSegIntersect == 0)
             {
-                // [PC TRAP, NOT X360] the descriptor's lineSegIntersect slot has no host body: SPHERE @0x82BA82C8,
-                // CAPSULE @0x82BAFCF8, BOX @0x82BA9478 and CYLINDER @0x82BAF688 are parked in VolumeVTables.cpp.
+                // [PC TRAP, NOT X360] the descriptor's lineSegIntersect slot has no host body: CYLINDER @0x82BAF688
+                // is parked in VolumeVTables.cpp (SPHERE @0x82BA82C8, CAPSULE @0x82BAFCF8 and BOX @0x82BA9478 are
+                // bound since 2026-09-25, stage (b)).
                 // (AGGREGATE's slot is genuinely 0 in the image; AddVolumeRef never stages an aggregate.)
                 // Announced once per type and asserted; the primitive is then passed over, NOT tested.
                 static bool sabSlotAnnounced[E_VOLUMETYPE_NUMINTERNALTYPES] = {};
@@ -957,16 +1024,22 @@ u32 VolumeLineQuery::GetIntersections()
                 std::snprintf(lacAnnouncement, sizeof(lacAnnouncement),
                               "[vlq] TRAP (PC, NOT X360): rw::collision::VolumeLineQuery::GetIntersections "
                               "@0x82BB3470 staged a volume of type %u whose descriptor's lineSegIntersect slot has "
-                              "no host body (VolumeVTables.cpp: SPHERE 0x82BA82C8, CAPSULE 0x82BAFCF8, BOX "
-                              "0x82BA9478, CYLINDER 0x82BAF688): the volume is NOT tested.\n", luType);
+                              "no host body (VolumeVTables.cpp: CYLINDER 0x82BAF688 is parked): the volume is NOT "
+                              "tested.\n", luType);
                 LineWalkTrap(sabSlotAnnounced[luType], lacAnnouncement,
                              "VolumeLineQuery::GetIntersections @0x82BB3470: a staged primitive's lineSegIntersect "
                              "slot has no host body");
                 continue;
             }
-            if (lpfnLineSegIntersect(lpPrimitive, reinterpret_cast<const Vec4&>(m_pt1),
-                                     reinterpret_cast<const Vec4&>(m_pt2),
-                                     reinterpret_cast<const Vec4*>(lpTransform), lrResult, m_fatness) == 0)
+            const RwBool lbHit = lpfnLineSegIntersect(lpPrimitive, reinterpret_cast<const Vec4&>(m_pt1),
+                                                      reinterpret_cast<const Vec4&>(m_pt2),
+                                                      reinterpret_cast<const Vec4*>(lpTransform), lrResult, m_fatness);
+            if (VolumeLineQueryDiagEnabled())                    // [DIAG] NOT IN THE X360 BINARY
+            {
+                NoteLineSegIntersect(lpPrimitive, lbHit, reinterpret_cast<const Vec4&>(m_pt1),
+                                     reinterpret_cast<const Vec4&>(m_pt2), m_fatness, lrResult);
+            }
+            if (lbHit == 0)
             {
                 continue;
             }
