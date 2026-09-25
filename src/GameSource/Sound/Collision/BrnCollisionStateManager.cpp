@@ -721,6 +721,21 @@ EeMaterialType MapEntityIdToMaterial(EntityId lEntityId, s32 liPlayerIndex,
 // ---------------------------------------------------------------------------
 Vector3 KV_DIRECTION_BIAS = { 1.0f, 1.0f, 1.0f, 0.0f };
 
+namespace
+{
+    // One lane of `vminfp vD, vA, vB` (AltiVec PEM): a NaN in EITHER operand comes back (vA's when
+    // both are), and -0 is the smaller zero. std::min(a, b) instead keeps `a` when only `b` is NaN.
+    // The side distance below is `vminfp v10, v7, v8` at 0x8269EF10 (crash parity FX-GATE).
+    // Not modelled: the VMX non-Java mode's flush of denormal operands to zero.
+    f32 VminfpLane(f32 lfA, f32 lfB)
+    {
+        if (lfA != lfA) return lfA;
+        if (lfB != lfB) return lfB;
+        if (lfA == lfB) return std::signbit(lfA) ? lfA : lfB;
+        return (lfA < lfB) ? lfA : lfB;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // MapPositionToOrientationUsingBox  @ 0x8269ED18  (DWARF cpp:190)
 //
@@ -777,8 +792,10 @@ AttribSys::Enums::eOrientation::eOrientation MapPositionToOrientationUsingBox(
     }
     if (lfNearest > lfLeftDist || lfNearest > lfRightDist)
     {
+        // 0x8269EF0C li r25, 2 ; 0x8269EF10 vminfp v10, v7, v8: a NaN side distance makes the nearest
+        // distance NaN, so the Roof (0x8269EF18) and Bottom (0x8269EF38) vcmpgtfp. tests fail after it.
         leOrientation = Side;
-        lfNearest = std::min(lfLeftDist, lfRightDist);
+        lfNearest = VminfpLane(lfLeftDist, lfRightDist);
     }
     if (lfNearest > lfTopDist)
     {
