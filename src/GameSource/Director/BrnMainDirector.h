@@ -14,6 +14,7 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h" // BrnDirector::GameState (maGameState)
 #include "GameSource/Director/MomentController/BrnMomentController.h" // BrnDirector::MomentController (mMomentController)
 #include "GameSource/Director/Utils/BrnShotSelector.h"         // BrnDirector::ShotSelector (mShotSelector)
+#include "GameSource/Director/Shots/ShotControllers/BrnCameraInterpolationController.h" // mCameraInterpolationController
 #include "GameSource/Director/BrnCrashAnalyser.h"              // BrnDirector::CrashAnalyser (mCrashAnalyser)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h" // BrnDirector::DebugLog (mDebugLog)
 
@@ -350,7 +351,15 @@ namespace BrnDirector
         Matrix44Affine mICESceneSpace;                                  // +0x12170
         // +0x121B0 .. +0x12480, CARVED 2026-09-24 at the three console sub-object bases the moment
         // tick publishes (MainDirector::UpdateMoments @0x82250268 hands +0x121F0 and +0x1245C to every
-        // moment). The camera-interpolation controller stays an un-homed span.
+        // moment).
+        // ⭐ HOMED 2026-09-25 (FX-DIRECTOR2, CC-14): +0x121B0 is the director's own
+        //   CameraInterpolationController -- the two 0x20-byte Utils::Interpolaters. The console's only
+        //   touches of it are by name now:
+        //     the reset (both stvx128 0 + stb 0)          Construct  0x8225B810..0x8225B840
+        //     CameraInterpolationController::Update       Update     0x822749EC..0x822749FC
+        //     the reset again when no blend is keyed      Update     0x82274A08..0x82274A24
+        //   (a whole-image immediate scan for 0x21B0 / 0x21C0 / 0x21D0 / 0x21E0 with a MainDirector base
+        //   finds nothing else).
         // ⭐ HOMED 2026-09-24 (FX-DIRECTOR2): the shot selector and the crash analyser are real members.
         //   The console's only touches of either, all now reproduced by name:
         //     ShotSelector::Construct(+0x121F0, lpResourceManager)   Construct       0x8225B7F8
@@ -360,7 +369,7 @@ namespace BrnDirector
         //     &mShotSelector / &mCrashAnalyser.GetAnalysis()          UpdateMoments   0x8225037C..
         //   (a whole-image displacement scan for +0x245x..+0x247x / +0x21F0 finds nothing else). The
         //   analyser has no Construct on the console either: it starts from the module allocation's zero.
-        u8             maCameraInterpolationController[0x121F0 - 0x121B0];  // +0x121B0
+        CameraInterpolationController mCameraInterpolationController;       // +0x121B0 .. +0x121F0
         ShotSelector   mShotSelector;                                       // +0x121F0 .. +0x1245C (0x26C)
         CrashAnalyser  mCrashAnalyser;                                      // +0x1245C .. +0x12474
 

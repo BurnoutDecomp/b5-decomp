@@ -154,6 +154,17 @@ namespace BrnDirector
         // literal that is in .rdata, printed at double precision, not a decompiler guess.
         const f32 KF_MINIMUM_SIM_TIME_SCALE = 0.005f;   // flt_8200CE04
 
+        // The game-camera blend's gate (Update @0x822749D8: `fcmpu f0, f29` with f29 = flt_82001CC0 ==
+        // 0x00000000, loaded @0x822743B4): a blend above it runs the interpolation controller.
+        const f32 KF_GAME_CAMERA_BLEND_OFF = 0.0f;
+
+        // The event-win screen effect (Update @0x82274524..0x82274554): a frame camera whose requested
+        // post-FX id is 578869 (`lis r11, 8 ; ori r11, r11, 0xD535 ; cmplw`) asks for this GUI hook
+        // ("Event_Win(50)", the image string at 0x8200401C) at this blend (flt_82004018 == 0x3F400000).
+        const u32   KU_EVENT_WIN_POSTFX_ID  = 0x8D535u;
+        const char* const KPC_EVENT_WIN_HOOK = "Event_Win(50)";
+        const f32   KF_EVENT_WIN_HOOK_BLEND = 0.75f;
+
         // The crash window ProcessInputQueue reloads GameState::mfCrashTimeRemaining to on
         // every frame the player's car is NOT crashing (X360 @0x822372F8, the `else` of the
         // mbCrashActive leg). ArbStateCrashing::Update compares what is left of it against 1.0
@@ -217,6 +228,80 @@ namespace BrnDirector
         // steady 1.0 costs one line for the whole session. It exists because the published time
         // scale is a value that arrives from a camera several copies away, and a wrong one is
         // indistinguishable from a right one in every other log this build writes.
+        // [DIAG] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The game-camera blend's live witness (CC-14,
+        // MainDirector::Update 0x822749D4). Before the blend statement it notes the keyed blend, its two shape
+        // selectors and the frame camera's position; after it, on the first frame of a keyed stretch, it prints
+        // the frame camera's distance to the chase camera before and after the controller, and when the stretch
+        // ends, its length and peak. Reads only.
+        struct GameCameraBlendDiag
+        {
+            f32     mfBlend;
+            u32     muCurve;
+            u32     muMethod;
+            Vector3 mPrePosition;
+            s32     miFrames;
+            f32     mfPeak;
+            f32     mfLast;
+        };
+        GameCameraBlendDiag gGameCameraBlendDiag = { 0.0f, 0u, 0u, Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, 0, 0.0f, 0.0f };
+
+        bool GameCameraBlendDiagOn()
+        {
+            static const bool sbOn = (getenv("BRN_CRASHCAM_DIAG") != 0);
+            return sbOn && CgsDev::Log::gpDebugPrint != 0;
+        }
+
+        f32 GameCameraBlendDiagDistance(const Vector3& lrA, const Vector3& lrB)
+        {
+            const f32 lfX = lrA.x - lrB.x;
+            const f32 lfY = lrA.y - lrB.y;
+            const f32 lfZ = lrA.z - lrB.z;
+            return sqrtf(lfX * lfX + lfY * lfY + lfZ * lfZ);
+        }
+
+        void BrnDiag_GameCameraBlendBefore(const Camera::Camera& lrCamera)
+        {
+            if (!GameCameraBlendDiagOn())
+                return;
+            gGameCameraBlendDiag.mfBlend      = lrCamera.GetEffects().mfGameCameraBlend;
+            gGameCameraBlendDiag.muCurve      = lrCamera.GetEffects().mu8BlendCurve;
+            gGameCameraBlendDiag.muMethod     = lrCamera.GetEffects().mu8InterpolateType;
+            gGameCameraBlendDiag.mPrePosition = lrCamera.mTransform.wAxis;
+        }
+
+        void BrnDiag_GameCameraBlendAfter(const Camera::Camera& lrCamera,
+                                          const Camera::BehaviourHandle<Camera::BehaviourGameplayExternal>& lrChase,
+                                          bool lbResetThisFrame)
+        {
+            if (!GameCameraBlendDiagOn())
+                return;
+            GameCameraBlendDiag& lrDiag = gGameCameraBlendDiag;
+            if (!lbResetThisFrame)
+            {
+                if (lrDiag.miFrames == 0 && lrChase.IsAllocated())
+                {
+                    const Vector3& lrChasePosition = lrChase.GetProducedCamera().mTransform.wAxis;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[gcblend] ON blend=" << lrDiag.mfBlend
+                        << " curve=" << lrDiag.muCurve << " method=" << lrDiag.muMethod
+                        << " camera->chase " << GameCameraBlendDiagDistance(lrDiag.mPrePosition, lrChasePosition)
+                        << " m -> " << GameCameraBlendDiagDistance(lrCamera.mTransform.wAxis, lrChasePosition)
+                        << " m, blend left " << lrCamera.GetEffects().mfGameCameraBlend << "\n";
+                }
+                ++lrDiag.miFrames;
+                lrDiag.mfPeak = (lrDiag.mfBlend > lrDiag.mfPeak) ? lrDiag.mfBlend : lrDiag.mfPeak;
+                lrDiag.mfLast = lrDiag.mfBlend;
+            }
+            else if (lrDiag.miFrames > 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[gcblend] OFF after " << lrDiag.miFrames << " blended frame(s), peak " << lrDiag.mfPeak
+                    << " last " << lrDiag.mfLast << "\n";
+                lrDiag.miFrames = 0;
+                lrDiag.mfPeak   = 0.0f;
+            }
+        }
+
         void BrnDiag_ReportSimTimeScale(const char* lpcWhere, f32 lfScale);
 
         void BrnDiag_ReportSimTimeScale(const char* lpcWhere, f32 lfScale)
@@ -476,6 +561,12 @@ namespace BrnDirector
         // including the junkyard sub-state the car-select ladder tests -- started as whatever
         // the allocator's memory happened to hold.
         maGameState.Clear();
+
+        // ⭐ REAL (2026-09-25, FX-DIRECTOR2 CC-14): the camera-interpolation controller's two
+        // interpolaters zeroed (0x8225B810..0x8225B840: `stvx128 v127(=0)` + `stb r31(=0), 0x10` at
+        // +0x121B0 and again at +0x121D0) -- the inlined CameraInterpolationController::Construct,
+        // interleaved on the console with the DebugLog stores below.
+        mCameraInterpolationController.Construct();
 
         // ⭐ REAL (2026-09-24, FX-DIRECTOR2): the inlined DebugLog::Construct over +0x33108
         // (0x8225B824..0x8225B87C), straight after GameState::Clear as on the console. The moments
@@ -3163,8 +3254,8 @@ namespace BrnDirector
     //         if ( !<ICE-owns-frame latch> ) UpdateICE( ... );     // lines 268-269
     //         ⭐ UpdateArbitrator( lpIO, lCamera, playerIdx );      // line 270
     //         <~550 lines of VMX AllVehicleData debug-render, the camera-interpolation
-    //          controller, the effect-hook registration and the world-map safe-position
-    //          work>                                              // lines 271-823
+    //          controller (LIVE since 2026-09-25, CC-14), the effect-hook registration
+    //          (live) and the world-map safe-position work>       // lines 271-823
     //     }
     //     <two small bookkeeping stores>                          // lines 824-834
     //     CameraFinaliser::Update( &mCameraFinaliser, input, maGameState, resourceMgr,
@@ -3197,9 +3288,11 @@ namespace BrnDirector
     //     ⚠️ ORDERING NOTE: the console runs those BEFORE UpdateArbitrator, so the
     //     arbitrator sees last frame's behaviour output rather than this frame's. That is a
     //     one-frame staleness in the behaviour-driven camera, not a wrong camera.
-    //   * lines 271-823 -- ~550 lines of VMX AllVehicleData debug-render work, the camera
-    //     interpolation controller, the effect-hook registration cascade and the world-map
-    //     safe-position search. All reach un-homed aggregates and/or VMX pipelines.
+    //   * lines 271-823 -- ~550 lines of VMX AllVehicleData debug-render work, the ICE-editor preview
+    //     and the world-map safe-position search. All reach un-homed aggregates and/or VMX pipelines, and
+    //     are dev-only. Live since 2026-09-25: the Event_Win(50) request (CC-16) and the camera
+    //     interpolation controller (CC-14); the effect-hook registration cascade has been live since
+    //     2026-09-17.
     //   * the tail after the publish (lines 871-924): ONLY the debug-info/overlay passes
     //     (UpdateDebugInfo, DebugDisplayCurrentCamera, the camera-state flag printer). The
     //     time-step multiplier, PrepareBehaviours, UpdateAttribSys, the event-end push and the two
@@ -3251,6 +3344,48 @@ namespace BrnDirector
 
             // [diag] BRN_SLOMO_DIAG -- where the published time scale comes from.
             BrnDiag_ReportSimTimeScale("post-arbitrator", lCamera.GetEffects().mfSimTimeScale);
+
+            // ⭐ (2026-09-25, FX-DIRECTOR2 CC-16) @0x82274524..0x82274554 -- THE EVENT-WIN SCREEN EFFECT. The
+            // console runs it on every live frame: it is the join point after the ICE-editor preview block
+            // (gated on +0x12160, dev-only, not reconstructed), before DirectorDevTools::Update. An ICE take
+            // keys POSTFX_HOOK into the frame camera (KeyAnimController::UpdateCameraFromICE ->
+            // CameraEffects::muRequestedPostFxId, camera +0xE4). 578869 is authored in 26 retail takes:
+            // Event_Win2..5, the 21 World_Win_*, Online_End_Win, and Takedown_ICE_Shut's fourth interval.
+            // For those the director asks the EffectInterface (+0x33C90) for the "Event_Win(50)" GUI hook
+            // at 0.75 through the shared helper. That helper drops the camera's own requests (the post-FX id
+            // among them) and re-requests the hook unless it is already live at that blend.
+            if (lCamera.GetEffects().muRequestedPostFxId == KU_EVENT_WIN_POSTFX_ID)
+            {
+                Camera::EnsureEffectIsPlaying(lCamera, *reinterpret_cast<const EffectInterface*>(maEffectInterface),
+                                              KPC_EVENT_WIN_HOOK, KF_EVENT_WIN_HOOK_BLEND);
+            }
+
+            // ⭐ (2026-09-25, FX-DIRECTOR2 CC-14) @0x822749D4..0x82274A24 -- THE GAME-CAMERA BLEND.
+            // An ICE take keys CAMERA_BLEND_AMOUNT into the frame camera (KeyAnimController::
+            // UpdateCameraFromICE stores it * 0.01 as CameraEffects::mfGameCameraBlend, +0xA0 == camera
+            // +0x108). When it is keyed the director eases the frame camera toward the shared chase
+            // camera -- the gameplay-EXTERNAL behaviour's produced camera (sub_82212288(this + 0x166A4),
+            // mArbitrator's SharedCameraContainer +0x04, whichever gameplay camera is selected) -- about
+            // the player car's transform (GetRaceCarInfo() [the frame's car] + 0x1F0, r24 @0x82274640),
+            // through the director's own controller (+0x121B0), which also consumes the blend. That is
+            // how a take such as "Takendown" eases out of and back into the chase camera instead of
+            // cutting. `fcmpu f0, f29(=0.0, flt_82001CC0) ; ble` -- anything not above zero, a NaN
+            // included, takes the reset arm: both interpolaters zeroed (0x82274A08..0x82274A24).
+            BrnDiag_GameCameraBlendBefore(lCamera);                         // [DIAG] NOT X360
+            const bool lbGameCameraBlendReset = !(lCamera.GetEffects().mfGameCameraBlend > KF_GAME_CAMERA_BLEND_OFF);   // [DIAG]
+            if (lCamera.GetEffects().mfGameCameraBlend > KF_GAME_CAMERA_BLEND_OFF)
+            {
+                mCameraInterpolationController.Update(
+                    lCamera,
+                    mArbitrator.GetSharedCameras().mGameplayExternal.GetProducedCamera(),
+                    lpIO->mpInputBuffer->GetRaceCarInfo()[liPlayerCarIndex].mRaceCarState.mTransform);
+            }
+            else
+            {
+                mCameraInterpolationController.Construct();
+            }
+            BrnDiag_GameCameraBlendAfter(lCamera, mArbitrator.GetSharedCameras().mGameplayExternal,
+                                         lbGameCameraBlendReset);        // [DIAG] NOT X360
 
             // ⭐ X360 @0x82274070 pseudocode 602..653 -- THE HOOK-REQUEST HAND-OVER. The camera
             // the arbitrator just produced carries this frame's post-FX requests (its
