@@ -15,6 +15,7 @@
 #include "SharedClasses/DataLists/WheelList.h"                               // mWheelList   (X360 a1+458696)
 #include "SharedClasses/DataLists/ChallengeList.h"                           // mChallengeList (X360 a1+462800)
 #include "SharedClasses/DataLists/BrnHudMessageController.h"                 // [gateui r3] mHudMessageController (X360 a1+416080 == 0x65950)
+#include "SharedClasses/DataLists/BrnPopupController.h"                      // mPopupController (console +0x65974)
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
 namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
@@ -65,9 +66,9 @@ namespace BrnResource
             E_PREPARE_DONE = 7,
             // The X360 numbers its data-table stages 9..14 (PrepareVehicleList 9,
             // PrepareFreeburnChallengeList 10, PrepareICEList 11, PrepareWheelList 12,
-            // PrepareHudMessages 13, PreparePopups 14). The four that are live here keep the
-            // console's numbers; the DLC 16-18 / GameTalk 7 stages and 14 are still
-            // skipped between ATTRIBSYS and DONE. (Order of execution comes from the switch's
+            // PrepareHudMessages 13, PreparePopups 14). The ones that are live here keep the
+            // console's numbers; the DLC 16-18 / GameTalk 7 stages are still skipped
+            // between ATTRIBSYS and DONE. (Order of execution comes from the switch's
             // fall-through order below, not from the numeric value.)
             E_PREPARE_VEHICLE_LIST = 9,
             // [challenge-list wave 2026-08-27] X360 stage 10, PrepareFreeburnChallengeList
@@ -76,9 +77,11 @@ namespace BrnResource
             E_PREPARE_ICE_LIST     = 11,
             E_PREPARE_WHEEL_LIST   = 12,
             // [gateui r3] X360 stage 13, PrepareHudMessages @0x8266C8E0 -- the HUD-message
-            // table ("HudMessages.hm"). Live as of the gateui wave; stage 14 (PreparePopups
-            // @0x8266CBA0, "Popups.pup") is still skipped.
-            E_PREPARE_HUD_MESSAGES = 13
+            // table ("HudMessages.hm"). Live as of the gateui wave.
+            E_PREPARE_HUD_MESSAGES = 13,
+            // Stage 14, PreparePopups -- the overlay popup table ("Popups.pup") the overlays
+            // director resolves every overlay request against.
+            E_PREPARE_POPUPS       = 14
         };
 
         // X360 @0x82671B90 Construct: event-slot pool capacity (96 slots wired inline:
@@ -213,9 +216,12 @@ namespace BrnResource
         // that comment). MEASURED against the shipped bundle:
         // HashString("HudMessages.hm") == 0x1953150C, which is exactly the single resource
         // id in build/game/HUDMESSAGES.HM -- so the two pointers really are one string.
-        // (Its sibling PreparePopups @0x8266CBA0 has the identical shape over "Popups.pup",
-        // hash 0x2718168B == POPUPS.PUP's only resource id. Same proof, still deferred.)
+        // (Its sibling PreparePopups has the identical shape over "Popups.pup",
+        // hash 0x2718168B == POPUPS.PUP's only resource id.)
         bool PrepareHudMessages();   // 0x8266C8E0  "HudMessages.hm"              / "HudMessages.hm"
+        // Prepare stage 14: "Popups.pup" into pool 11 (mbAllowFailiure 0), terminal step hands
+        // the acquire response to PopupController::AddPopupResource.
+        bool PreparePopups();
 
         // The shared body of the two above (the X360 emits them as two near-identical
         // functions; the only differences are the bundle path, the resource name, the
@@ -404,6 +410,15 @@ namespace BrnResource
             return &mHudMessageController;
         }
 
+        // ADDITIVE accessor, the popup twin of the one above: the owner hands
+        // `&gameDataModule.mPopupController` to BrnGui::GuiModule::Construct as its third
+        // argument ("lpPopupController"), which stores it into the GuiCache. Only
+        // PreparePopups writes it.
+        const BrnResource::PopupController* GetPopupController() const
+        {
+            return &mPopupController;
+        }
+
         // ADDITIVE accessor (the console reaches the sub-module by member offset). Lets the
         // game module resolve an already-resident resource through the same
         // PoolModule::GetPool -> Pool::FindResource pair the pool module's own
@@ -510,6 +525,11 @@ namespace BrnResource
         BrnResource::HudMessageController mHudMessageController;
         // X360 a1[145] (offset 0x244) -- PrepareHudMessages' own six-state stage word.
         s32                            miHudMessagesPrepareStage;
+        // Console +0x65974 -- the resident popup table (PreparePopups hands this object to
+        // AddPopupResource; the module constructor builds its ResourcePtr).
+        BrnResource::PopupController   mPopupController;
+        // Console +0x65998 -- PreparePopups' own six-state stage word (Construct zeroes it).
+        s32                            miPopupsPrepareStage;
         // (the 9 GeneralAllocators, DLCManager, per-type IndexedLinkLists, HUD
         //  message / popup controllers and the game-data tables are added with their own passes.)
     };

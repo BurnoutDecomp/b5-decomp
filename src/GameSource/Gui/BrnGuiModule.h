@@ -28,6 +28,7 @@
 #include "GameSource/Gui/BrnGuiBurnoutSkillsManager.h"         // BrnGui::BurnoutSkillsManager (module-owned; GuiCache::mpSkillsManager)
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"                    // BrnGui::HudMessageDirector (module-owned; X360 +639264)
 #include "GameSource/Gui/BrnGuiHudMessageAnalyzer.h"                    // BrnGui::HudMessageAnalyzer (module-owned; X360 +660992)
+#include "GameSource/Gui/BrnGuiOverlaysDirector.h"                      // BrnGui::GuiOverlaysDirector (module-owned; console +0xA1B10)
 #include "GameSource/Gui/BrnGuiWorldDataController.h"                   // BrnGui::WorldDataController (module-owned; X360 +307836)
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"     // module-owned permanent FLApt components
 #include "GameSource/Gui/BrnCustomRendererManager.h"                    // BrnGui::CustomRendererManager (module-owned; X360 +311952)
@@ -77,11 +78,13 @@ namespace BrnGui
         // the GUI resource module with it (the GuiApt\ vs GuiAptSD\ bundle path). Until
         // 2026-09-07 it was not passed and the byte was never written -- issue #11.
         //
-        // The console's other arguments are NOT reconstructed here: `lpPopupController`
-        // (gm+0x65A1F4, assert BrnGuiModule.cpp:230 -> `*(gm + 1021880)`) has no
-        // reconstructed type in this tree, and the aspect ratio is already sourced inside
-        // the body. Named, not fabricated.
+        // The console's third argument is `lpPopupController` (the owner's
+        // &mGameDataModule.mPopupController, asserted non-null), stored into the
+        // cache through the inlined GuiCache::SetPopupController right after the director
+        // store; GuiModule::Update hands it on to GuiOverlaysDirector::SetController. The
+        // aspect-ratio argument is not reconstructed (it is sourced inside the body).
         void Construct(const BrnResource::HudMessageController* lpHudMessageController,
+                       const BrnResource::PopupController* lpPopupController,
                        bool lbHighDef);
 
         bool Prepare() override;
@@ -415,6 +418,7 @@ namespace BrnGui
         // GameState/bridge lanes did (round-1 verify WRONG-2).
         HudMessageDirector mHudMessageDirector;  // X360 +639264
         HudMessageAnalyzer mHudMessageAnalyzer;  // X360 +660992
+        GuiOverlaysDirector mOverlaysDirector;   // console +0xA1B10 (662288)
 
         ProfileManager    mProfileManager;  // X360 +681696 (the REAL save/load manager)
         // ---- [profile-save 2026-08-27] the module's AUTOSAVE latch + throttle ------------
@@ -482,6 +486,13 @@ namespace BrnGui
         CgsModule::VariableEventQueue<18432, 16> mHudInQueue;
         CgsModule::VariableEventQueue<18432, 16> mOverlayInQueue;
         CgsModule::VariableEventQueue<18432, 16> mGuiOutQueue;
+        // [FLAG PC seam] the console's GUI out-event loop-back (CgsGui::GuiModule +111644):
+        // CgsGui::GuiModule::Update appends the frame's out-events there and the next
+        // BrnGui::GuiModule::Update appends them into the GUI input queue, where the overlays
+        // director reads the flows' 184/186/188/189/190. This build fans flow output to the
+        // flows at the drain instead (RouteEventToFlow), so only the director's ids are kept
+        // here and handed to it. DELETE-WHEN the input-queue loop-back is modelled whole.
+        CgsModule::VariableEventQueue<18432, 16> mOverlayLoopBackQueue;
         // The always-available components manager's in-queue: the subscription filter
         // (RouteEventToObserver) delivers the events the manager registered for (its real
         // 19-id table: save-icon 355, connect 64, showtime, ...) into it, then the module

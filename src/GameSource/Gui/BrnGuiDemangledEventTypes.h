@@ -257,7 +257,16 @@ namespace BrnGui
         s32 GetEventType() const { return 247; }
     };
     struct GuiEventNetworkPostGameProcessingFinished { u8 maData[1]; s32 GetEventType() const { return 274; } };  // id 274 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiEventNetworkShowFreeBurnIntro { u8 maData[2]; s32 GetEventType() const { return 279; } };  // id 279 size 2 (raw; size not GuiEvent-shaped)
+    // id 279 size 2 (raw; size not GuiEvent-shaped). The two bytes GuiOverlaysDirector::
+    // HandleShowFreeBurnIntroRequest reads: +0x00 the finished-online-event byte (return vs
+    // enter wording), +0x01 the show byte (show an overlay vs wave the four online
+    // transition overlays through their wait-finish).
+    struct GuiEventNetworkShowFreeBurnIntro
+    {
+        bool mbFinishedOnlineEvent;   // +0x00
+        bool mbShow;                  // +0x01
+        s32 GetEventType() const { return 279; }
+    };
     // The online splash screen's state. The network state manager acts on FINISHED (2).
     struct GuiEventNetworkSplashEvent
     {
