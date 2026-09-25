@@ -15,7 +15,12 @@ The fix is std::fma lane by lane at those four sites.
 Item 3c (2026-09-25): the 0.94 steering gate's dot at 0x8273D310 is `vmsum3fp128 v11, v12, v0` -- modelled
 as ONE rounding of the exact three-term sum (the campaign's Dot3 convention, FLAG (model)), where
 rw::math::vpu::Dot rounds each product and each partial sum. The gate cases are dots whose two roundings
-fall on opposite sides of 0.94f (0x3F70A3D7): the console takes the other arm (snap vs blend). The remaining vnmsubfp / vmaddfp of the
+fall on opposite sides of 0.94f (0x3F70A3D7): the console takes the other arm (snap vs blend).
+
+The pipeline's other vmsum3fp128 dots (2026-09-25): Avoidance_CalculatePassingScore's |dP|^2 (0x82719A54) and
+|dV|^2 (0x82719A7C), and Avoidance_GetBestVehicleDirection's feeler dots (0x8272C344 / 0x8272C43C / 0x8272C448 /
+0x8272C458 / 0x8272C51C). Their production statements are compiled as three small functions (dot_bodies.inc)
+and fed vectors whose one-rounding and sequential dots differ; the expected value is the exact sum rounded once. The remaining vnmsubfp / vmaddfp of the
 pipeline are Newton steps on a vrefp / vrsqrtefp estimate (0x82719AC4/AC8, 0x82708E30/E34,
 0x82708E50/E54, 0x82708E60/E64, 0x8272C73C/740); they stay inside the tree's exact-reciprocal
 convention and are not exercised here.
@@ -41,7 +46,7 @@ import struct
 import sys
 
 sys.dont_write_bytecode = True
-from fxgs_common import Tree, definition, compile_and_run, report, STRSTREAM_CPP
+from fxgs_common import Tree, definition, code_only, compile_and_run, report, STRSTREAM_CPP
 
 MODULE_CPP = "src/GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.cpp"
 FIXTURE = "AvoidFixture"
@@ -236,6 +241,35 @@ def gate_cases(rng, step):
     return snaps + blends
 
 
+def dot_single(a, b):     # vmsum3fp128: the exact three-term sum, rounded once
+    return rn(sum(F(a[i]) * F(b[i]) for i in range(3)))
+
+
+def dot_sequential(a, b):  # rw::math::vpu::Dot: (x*x' + y*y') + z*z', every step rounded
+    return add(add(mul(a[0], b[0]), mul(a[1], b[1])), mul(a[2], b[2]))
+
+
+def dot_cases(rng, lo, hi, count):
+    cases = []
+    while len(cases) < count:
+        a = [rand_f32(rng, lo, hi) for _ in range(3)]
+        b = [rand_f32(rng, lo, hi) for _ in range(3)]
+        single = dot_single(a, b)
+        if single != dot_sequential(a, b) and f32(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) == single:
+            cases.append((a, b, single))
+    return cases
+
+
+def square_cases(rng, lo, hi, count):
+    cases = []
+    while len(cases) < count:
+        a = [rand_f32(rng, lo, hi) for _ in range(3)]
+        single = dot_single(a, a)
+        if single != dot_sequential(a, a) and f32(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) == single:
+            cases.append((a, single))
+    return cases
+
+
 def u32s(values):
     return ", ".join(f"0x{bits(v):08X}u" for v in values)
 
@@ -268,6 +302,21 @@ def cases_inc():
     for avoid, target, fused in blends:
         lines.append("    { { " + u32s(avoid) + " }, { " + u32s(target) + " }, { " + u32s(fused) + " } },")
     lines.append("};")
+    drng = random.Random(0xD07)
+    lines.append("struct SquareCase { u32 v[3]; u32 single; };")
+    lines.append("static const SquareCase KA_POSITION_SQUARES[] = {")
+    for v, single in square_cases(drng, -30.0, 30.0, 3):
+        lines.append("    { { " + u32s(v) + " }, " + u32s([single]) + " },")
+    lines.append("};")
+    lines.append("static const SquareCase KA_VELOCITY_SQUARES[] = {")
+    for v, single in square_cases(drng, -25.0, 25.0, 3):
+        lines.append("    { { " + u32s(v) + " }, " + u32s([single]) + " },")
+    lines.append("};")
+    lines.append("struct DotCase { u32 a[3]; u32 b[3]; u32 single; };")
+    lines.append("static const DotCase KA_FEELER_DOTS[] = {")
+    for a, b, single in dot_cases(drng, -1.0, 1.0, 3):
+        lines.append("    { { " + u32s(a) + " }, { " + u32s(b) + " }, " + u32s([single]) + " },")
+    lines.append("};")
     gates = gate_cases(random.Random(0x94), step)
     lines.append("struct GateCase { u32 avoid[3]; u32 target[3]; u32 expected[3]; u32 single; u32 sequential; };")
     lines.append("static const GateCase KA_GATE_CASES[] = {")
@@ -285,7 +334,33 @@ def constant_line(source, name):
     return match.group(0).strip()
 
 
-NUMERIC_CHECKS = 3 + 3 + 3 + 1 + 4 + 1   # feeler, passing, blend cases, the blend witness, gate cases + witness
+NUMERIC_CHECKS = 3 + 3 + 3 + 1 + 4 + 1 + 3 + 3 + 3   # ... + the |dP|^2, |dV|^2 and feeler-dot cases
+
+SCORE_SIG = "VecFloat TrafficEntityModule::Avoidance_CalculatePassingScore("
+BEST_SIG = "void TrafficEntityModule::Avoidance_GetBestVehicleDirection("
+
+
+def statement_through(body, start_marker, name):
+    """The text from start_marker up to the ';' that ends the statement declaring `name`."""
+    start = body.index(start_marker)
+    decl = body.index(name + " ", start)
+    return body[start:body.index(";", body.index("=", decl)) + 1]
+
+
+def dot_bodies(module):
+    score = definition(module, SCORE_SIG)
+    best = definition(module, BEST_SIG)
+    position = statement_through(score, "const Vector3 lRelativePosition", "lfRelativePositionSizeSq")
+    velocity = statement_through(score, "const Vector3 lRelativeVelocity", "lfRelativeVelocitySizeSq")
+    begin = best.index("lafFeelerScore[liFeelerIndex]   = 0.0f;") + len("lafFeelerScore[liFeelerIndex]   = 0.0f;")
+    feeler = best[begin:best.index("const f32 lfDotFeelerDirPositive", begin)]
+    return ("namespace BrnTraffic {\n"
+            "f32 DotPassingPosition(Vector3 lPositionA, Vector3 lPositionB)\n{\n" + position
+            + "\n    return lfRelativePositionSizeSq;\n}\n"
+            "f32 DotPassingVelocity(Vector3 lVelocityA, Vector3 lVelocityB)\n{\n" + velocity
+            + "\n    return lfRelativeVelocitySizeSq;\n}\n"
+            "f32 DotFeeler(const Vector3 lTargetDir, const Vector3* laFeelers, s32 liFeelerIndex)\n{\n" + feeler
+            + "\n    return lfDotFeelerDir;\n}\n}\n")
 
 
 def numeric(tree):
@@ -301,10 +376,15 @@ def numeric(tree):
     except ValueError as error:
         print("NUMERIC: cannot build -- production body absent: " + str(error))
         return None
+    try:
+        dots = dot_bodies(module)
+    except ValueError as error:
+        print("NUMERIC: cannot build -- a dot statement is absent: " + str(error))
+        return None
     cases = cases_inc()
     return compile_and_run(Path(__file__).with_name("FxNetcrashAvoidanceFma.cpp"), "fma_bodies.inc",
                            "\n".join(parts), "FxNetcrashAvoidanceFma", extra_sources=[STRSTREAM_CPP],
-                           extra_files={"fma_cases.inc": cases})
+                           extra_files={"fma_cases.inc": cases, "dot_bodies.inc": dots})
 
 
 def wiring(tree):
@@ -321,6 +401,10 @@ def wiring(tree):
         ("passing score: one std::fma (vmaddfp 0x82719B5C)", "std::fma(" in score),
         ("steering blend: std::fma per lane (vmaddfp 0x8273D33C)",
          len(re.findall(r"std::fma\(\s*lDelta\.[xyzw]\s*,\s*mfSimTimeStep\s*,", blend)) == 4),
+        ("the passing score's |dP|^2 / |dV|^2 and the feeler dots no longer go through rw::math::vpu::Dot "
+         "(vmsum3fp128 0x82719A54 / 0x82719A7C / 0x8272C344..0x8272C51C)",
+         "rw::math::vpu::Dot(" not in code_only(score)
+         and "rw::math::vpu::Dot(" not in code_only(definition(module, BEST_SIG) if BEST_SIG in module else "")),
         ("the 0.94 gate's dot is one rounding of the exact f64 sum (vmsum3fp128 0x8273D310), not vpu::Dot",
          "lfAvoidDotTargetDir = rw::math::vpu::Dot(" not in blend
          and re.search(r"lfAvoidDotTargetDir\s*=\s*static_cast<f32>\(\s*static_cast<f64>\(lAvoidDirection\.x\)", blend)
