@@ -12,6 +12,7 @@
 #include "GameSource/Director/BrnMainDirector.h"                          // BrnDirector::MainDirector (mMainDirector)
 #include "GameSource/Director/Camera/Camera.h"                            // BrnDirector::Camera::Camera (mCamera)
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"                // BrnDirector::WorldMap (mWorldMap)
+#include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"         // the six scene-query post offices
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"                   // BrnReplays::BaseSerialiser (mDirectorSerialiser)
 
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // DirectorModule::Prepare's 2nd arg (boot audit F-P6-16)
@@ -265,32 +266,24 @@ private:
     // field order, exactly).
     WorldMap mWorldMap;
 
-    // this+0x9A4 .. +0xAFF: the SIX scene-query "post office" hand-off objects, one per
-    // query kind. Each mints the SceneQueryId for its query kind and receives the matching
-    // result back. Their ELEMENT TYPES are not recovered (the X360 delivery helpers are
-    // IDA-truncated to e.g. `OutEventLineTestNearestResult_40_::`), so each is modelled as
-    // correctly-SIZED opaque storage carrying its recovered role -- HONEST PLACEHOLDER, in
-    // the BrnDirectorModuleIO.h house style. Their addresses (and only their addresses) are
-    // what the module publishes into the per-frame BrnDirector::SceneQueryInterface.
-    //
-    // Sizes are next-minus-this. Every one of them is triple-attested:
-    //   * the slot ORDER + clear-field offsets in SceneQueryInterface::Clear @0x8221CD38,
-    //   * the per-result routing in ProcessSceneQueryResults @0x82239278,
-    //   * and the ctor/Construct sentinel stores, each of which lands on the LAST word of
-    //     its post office (+0x28 for the 44-byte ones, +0xA0 for the 164-byte one, +0x04
-    //     for the 8-byte one) -- i.e. the "current query id" field. That the six sentinels
-    //     (0x9CC / 0xA70 / 0xA9C / 0xAC8 / 0xAD0 / 0xAFC) fall exactly on those six words
-    //     is what pins the whole partition.
-    u8 mSceneQueryPostBoxA[0x9D0 - 0x9A4];   // +0x9A4 ( 44) result type 1; Clear -> sub_8221CC98
-    u8 mPostBoxLineTestNearest[0xA74 - 0x9D0];   // +0x9D0 (164) result type 2; Clear zeroes +0xA0
-    u8 mPostBoxLineTestFastDoubleSided[0xAA0 - 0xA74]; // +0xA74 ( 44) result type 3; Clear zeroes +0x28
-    u8 mPostBoxSphereTestFast[0xACC - 0xAA0];    // +0xAA0 ( 44) result type 4; Clear zeroes +0x28
-    u8 mPostBoxVolumeTestFine[0xAD4 - 0xACC];    // +0xACC (  8) result type 6; Clear zeroes +0x04
-    u8 mPostBoxVolumeTestDeepest[0xB00 - 0xAD4]; // +0xAD4 ( 44) result type 5; Clear zeroes +0x28
-    // ⚠️ NOTE the type-5/type-6 CROSSOVER: SceneQueryInterface::Clear walks the post offices
-    // in DECLARATION order (…, VolumeTestFine @0xACC, VolumeTestDeepest @0xAD4) but
-    // ProcessSceneQueryResults routes result type 5 to 0xAD4 and type 6 to 0xACC -- i.e. the
-    // two are swapped relative to slot order. Reproduced verbatim; do not "fix" it.
+    // this+0x9A4 .. +0xAFF: the SIX scene-query POST OFFICES (DWARF BrnDirectorModule.h:119..:134),
+    // one per query kind. A camera's test mints its id in one of these (SceneQueryInterface::
+    // LineTestNearest & co. -> PostOffice::AddPostBox) and ProcessSceneQueryResults @0x82239278
+    // routes every result back through the same office (PostOffice::Deliver).
+    // ⭐ TYPED 2026-09-25 (FX-DIRECTOR2). They were correctly-SIZED opaque spans because the delivery
+    // helpers were IDA-truncated; the element types are the DWARF's (BrnDirectorPostOfficeTypes.h)
+    // and every delivery instantiation is now read (0x82210A08 / 0x8222D3B8 / 0x8222D488 /
+    // 0x8222D558 / 0x8222D758 / 0x8222D828). Console extents, provenance only (host pointers are
+    // 8 bytes): 44 / 164 / 44 / 44 / 8 / 44 -- 10 / 40 / 10 / 10 / 1 / 10 pointer slots plus the
+    // length word Construct zeroes (+0x9CC / +0xA70 / +0xA9C / +0xAC8 / +0xAD0 / +0xAFC).
+    // Result types 5 and 6 are VolumeTestDeepest and VolumeTestFine respectively, so they land on
+    // the LAST and the second-to-last office -- the numbering, not a crossover.
+    LineTestFinePostOffice            mLineTestFinePostOffice;             // +0x9A4 (:119) result type 1
+    LineTestNearestPostOffice         mLineTestNearestPostOffice;          // +0x9D0 (:122) result type 2
+    LineTestFastDoubleSidedPostOffice mLineTestFastDoubleSidedPostOffice;  // +0xA74 (:125) result type 3
+    SphereTestFastPostOffice          mSphereTestFastPostOffice;           // +0xAA0 (:128) result type 4
+    VolumeTestFinePostOffice          mVolumeTestFinePostOffice;           // +0xACC (:131) result type 6
+    VolumeTestDeepestPostOffice       mVolumeTestDeepestPostOffice;        // +0xAD4 (:134) result type 5
 
     // this+0xB00 (2816). BrnDirector::MainDirector::Construct(&mDirectorResourceManager,
     // lfTime) / ::Destruct() / ::Release() -- the top-level cinematic camera director.

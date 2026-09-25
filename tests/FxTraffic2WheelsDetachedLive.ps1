@@ -27,8 +27,11 @@ $case.Name = 'fxtraffic2_wheels_detached'
 $case.Area = 'traffic'
 $case.Bug = 'A traffic car with a detached wheel must keep every world contact (it rests on its body), not have its road contacts filtered as if its wheels held it up (G32-D1).'
 $case.DiagEnv += ',BRN_TRAFFIC_DIAG=1,BRN_WHEEL_PROBE=1,BRN_CRASHPLAY_TRACE=1'
-$case.Run.Boost = '41'
-$case.Run.MaxSeconds = 170
+# FX-DIRECTOR2 2026-09-25: 50 / 179 (were 41 / 170). The boost still starts 1 s after ShowtimeContacts' gesture,
+# which moved 40 -> 49 to clear the crash analyser's 401-update hold on the drive's first wall crash
+# (see ShowtimeContacts.ps1).
+$case.Run.Boost = '50'
+$case.Run.MaxSeconds = 179
 $case.Checks += @(
     @{ Kind = 'Script'; Name = 'INFO -- what the Showtime offered the arm: traffic hits and car contacts (never fails)'; Script = {
         param($ctx)

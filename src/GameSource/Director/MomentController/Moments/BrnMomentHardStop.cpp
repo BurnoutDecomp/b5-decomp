@@ -7,6 +7,10 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                 // CgsNumeric::Random
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h"   // DebugLog
 #include "GameSource/Director/Utils/BrnShotSelector.h"                // ShotSelector::GetCrashShot
+#include "GameSource/AttribSys/Enums/CrashEvents.h"                  // AttribSys::Enums::CrashEvents (the analysis bits)
+#include <cmath>                                                      // std::cos (KF_MAX_DOT_PRODUCT_FOR_HARD_STOP's dyn-init)
+#include <cstdlib>                                                    // [diag] / [harness pin] getenv, atof
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"            // [diag] gpDebugPrint
 
 // BrnDirector::MomentHardStop -- reconstructed from the console executable
 // (home file BrnMomentHardStop.cpp; member/parameter names verbatim
@@ -46,12 +50,42 @@ namespace
     const u32 KU_LOG_COLOUR_RED    = 0xFFFF0000u;   // candidate-failed lines
     const u32 KU_LOG_COLOUR_ORANGE = 0xFF80FF00u;   // selection lines
 
-    // The speed-diff eligibility threshold the console build reads from its data segment
-    // (initialised 0.0f in the image). FLAG: plausibly the parameter bank's loaded
-    // MomentHardStop::Parameters::mfSpeedDiffThreshold instance (the compiler
-    // folding the global bank member's address); modelled as the file-scope global
-    // the console code reads until the bank's data flow is attested.
-    f32 gfHardStopSpeedDiffThreshold = 0.0f;   // console data segment
+    // ⭐ CORRECTED 2026-09-25 (FX-DIRECTOR2): KF_MAX_DOT_PRODUCT_FOR_HARD_STOP (the PS3 build names it,
+    // Update @0x7EF80) -- the "still upright" gate SEARCHING tests the player car's up vector against
+    // (`vcmpgtfp.` of transform yAxis.y vs this, splatted, @0x82271918..0x82271938: the car's up axis
+    // within 55 degrees of world up). It lives in .bss (0x82FAA848, which reads 0 in the image BY
+    // DEFINITION) and is written by a CRT dyn-init thunk, 0x82C484E0:
+    //     lfd  f1, 0x8200D520      0x3FEEB7C163000000 == 0.959931081160903 == 55 * (f64)0.017453292f
+    //     bl   0x82C096A0          cos (the CRT double cos -- CrashAnalyser::Update's call target too)
+    //     frsp ; stfs 0x82FAA848   -> 0x3F12D5E8 (0.57357645f; the f32 rounding margin is ~2e-8, far
+    //                                 beyond any last-ulp difference between the two CRTs)
+    // This body used to model it as a 0.0f "speed-diff threshold" read out of the image -- the .bss
+    // zero -- which let a car tilted anywhere short of 90 degrees pass. The accessor it is compared
+    // with (MomentSharedInfo_GetCrashSpeedDiff) does read the up vector's y; only its name is off.
+    const f32 KF_MAX_DOT_PRODUCT_FOR_HARD_STOP = static_cast<f32>(std::cos(0.959931081160903));
+
+    // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The hard-stop moment's own trace: the frame it
+    // allocates its two shots (band, analysis, the ultra slo-mo roll), every change of the two candidates'
+    // gates while it waits in FOUND_PREPARING (frames since the allocation), the frame it goes VALID, and
+    // how long it stays and why it lets go. Default off, hard-capped at KI_HARDSTOP_DIAG_LINES lines.
+    const s32 KI_HARDSTOP_DIAG_LINES = 200;
+    bool HardStopDiagLine()
+    {
+        static const bool sbOn = (getenv("BRN_CRASHCAM_DIAG") != 0);
+        static s32 siLinesLeft = KI_HARDSTOP_DIAG_LINES;
+        if (!sbOn || CgsDev::Log::gpDebugPrint == 0 || siLinesLeft <= 0)
+            return false;
+        --siLinesLeft;
+        return true;
+    }
+    s32 siHardStopDiagFrames = 0;     // [diag] frames since the shots were allocated / since VALID
+    s32 siHardStopDiagLastKey = -1;   // [diag] the last printed candidate-gate tuple
+
+    s32 HardStopDiagKey(Camera::Behaviour* lpA, Camera::Behaviour* lpB)
+    {
+        return (lpA->CanSwitchFromMeNow() ? 1 : 0) | (lpA->HasFailed() ? 2 : 0) | (lpA->CanSwitchToMeNow() ? 4 : 0)
+             | (lpB->CanSwitchFromMeNow() ? 8 : 0) | (lpB->HasFailed() ? 16 : 0) | (lpB->CanSwitchToMeNow() ? 32 : 0);
+    }
 }
 
 namespace detail
@@ -209,13 +243,13 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
         // ---- eligibility (every gate must hold, unless the force flag is up) ----
         const CrashAnalysis* lpLiveAnalysis = MomentSharedInfo_GetCrashAnalysis(lSharedInfo);
         bool lbEligible = false;
-        if ((lpLiveAnalysis->mxFlags & 0x20) != 0
+        if ((lpLiveAnalysis->mxEventFlags & AttribSys::Enums::CrashEvents::CrashStart) != 0
             && !MomentSharedInfo_IsCrashCameraBlocked(lSharedInfo)
             && MomentSharedInfo_IsCrashCameraActive(lSharedInfo)
             && MomentSharedInfo_GetFlag1318(lSharedInfo)
             && (MomentSharedInfo_GetCrashFlag36(lSharedInfo)
                 || MomentSharedInfo_GetCrashFlag37(lSharedInfo))
-            && MomentSharedInfo_GetCrashSpeedDiff(lSharedInfo) > gfHardStopSpeedDiffThreshold
+            && MomentSharedInfo_GetCrashSpeedDiff(lSharedInfo) > KF_MAX_DOT_PRODUCT_FOR_HARD_STOP
             && MomentSharedInfo_HasCrashDynamics(lSharedInfo)
             && MomentSharedInfo_GetCrashElapsed(lSharedInfo) < 4.0f
             && !MomentSharedInfo_IsCrashReplayDisabled(lSharedInfo))
@@ -272,12 +306,12 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
         }
         else
         {
-            luPreferredA = mCrashAnalysisUsedAtSelection.mbUseLeftSide ? 1u : 2u;
+            luPreferredA = mCrashAnalysisUsedAtSelection.mbSuggestLeftOfLineOfAction ? 1u : 2u;
             luRequiredA  = 0;
         }
 
         ShotSelector* lpShotSelector = MomentSharedInfo_GetShotSelector(lSharedInfo);
-        const u32 luCrashEventFlags = mCrashAnalysisUsedAtSelection.mxFlags;
+        const u32 luCrashEventFlags = mCrashAnalysisUsedAtSelection.mxEventFlags;
         Camera::Camera::ShotReference* lpShotA = lpShotSelector->GetCrashShot(
             luCrashEventFlags, &mShotASelectionInfo, luPreferredA, 0, luRequiredA, leShotGroup);
         Camera::Camera::ShotReference* lpShotB = lpShotSelector->GetCrashShot(
@@ -304,7 +338,7 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
         mbForceUltraSloMo = false;
         if (meCrashType == 3
             && MomentSharedInfo_GetCrashModeWord(lSharedInfo) == -1
-            && (mCrashAnalysisUsedAtSelection.mxFlags & 8) != 0)
+            && (mCrashAnalysisUsedAtSelection.mxEventFlags & AttribSys::Enums::CrashEvents::WorldImpact) != 0)
         {
             if (muHighEnergyWorldCrashCount % KU_CRASHES_BEFORE_FORCE_ULTRA_SLOMO == 0)
             {
@@ -313,20 +347,45 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
                 // committed RandomFloat(min, max).
                 mfUltraSloMoTimestepScale = MomentSharedInfo_GetRandom(lSharedInfo)->RandomFloat(
                     KF_ULTRA_SLOMO_TIMESTEP_MIN_SCALE, KF_ULTRA_SLOMO_TIMESTEP_MAX_SCALE);
+                // [HARNESS PIN -- NOT X360] BRN_ULTRA_SLOMO_SCALE=<scale> replaces the drawn scale so that
+                // same-exe crash sweep cells compare (the director Random's cursor at the crash depends on
+                // host timing, so the console-faithful draw varies boot to boot). The draw above still
+                // happens, so the random stream stays the console's. Unset (the default): the draw stands.
+                {
+                    static const char* const spcPinnedScale = getenv("BRN_ULTRA_SLOMO_SCALE");
+                    if (spcPinnedScale != 0)
+                        mfUltraSloMoTimestepScale = static_cast<f32>(atof(spcPinnedScale));
+                }
                 mbForceUltraSloMo = true;
             }
             ++muHighEnergyWorldCrashCount;
         }
 
+        if (HardStopDiagLine())
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[crashcam] hardstop ALLOCATED crashType " << meCrashType
+                << " flags " << static_cast<s32>(mCrashAnalysisUsedAtSelection.mxEventFlags)
+                << " eventType " << MomentSharedInfo_GetCrashModeWord(lSharedInfo)
+                << " forceTopDown " << (MomentSharedInfo_GetFlag1319(lSharedInfo) ? 1 : 0)
+                << " ultra " << (mbForceUltraSloMo ? 1 : 0)
+                << " scale " << mfUltraSloMoTimestepScale
+                << " count " << static_cast<s32>(muHighEnergyWorldCrashCount)
+                << " shotA " << mShotASelectionInfo.miType << "/" << mShotASelectionInfo.miId
+                << " shotB " << mShotBSelectionInfo.miType << "/" << mShotBSelectionInfo.miId << "\n";
+        }
+        siHardStopDiagFrames  = 0;
+        siHardStopDiagLastKey = -1;
+
         // ---- the selection log line: "Hardstop: Front Rear Left Right  Use A/B side" ----
         {
-            const u32 luFlags = mCrashAnalysisUsedAtSelection.mxFlags;
+            const u32 luFlags = mCrashAnalysisUsedAtSelection.mxEventFlags;
             CgsCore::SPrintf(lacLine, 64, "Hardstop: %s%s%s%s %s",
-                             (luFlags & 0x40) ? "Front " : "",
-                             (luFlags & 0x80) ? "Rear "  : "",
-                             (luFlags & 0x02) ? "Left "  : "",
-                             (luFlags & 0x04) ? "Right " : "",
-                             mCrashAnalysisUsedAtSelection.mbUseLeftSide ? "Use L" : "Use R");
+                             (luFlags & AttribSys::Enums::CrashEvents::FrontImpact) ? "Front " : "",
+                             (luFlags & AttribSys::Enums::CrashEvents::RearImpact)  ? "Rear "  : "",
+                             (luFlags & AttribSys::Enums::CrashEvents::LeftImpact)  ? "Left "  : "",
+                             (luFlags & AttribSys::Enums::CrashEvents::RightImpact) ? "Right " : "",
+                             mCrashAnalysisUsedAtSelection.mbSuggestLeftOfLineOfAction ? "Use L" : "Use R");
             lpDebugLog->Append(lacLine, KU_LOG_COLOUR_ORANGE);
         }
         break;
@@ -334,6 +393,19 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
 
     case E_STATE_INVALID_FOUND_PREPARING:
     {
+        ++siHardStopDiagFrames;
+        {
+            const s32 liKey = HardStopDiagKey(mRigCameraHandleA.GetBehaviour(), mRigCameraHandleB.GetBehaviour());
+            if (liKey != siHardStopDiagLastKey && HardStopDiagLine())
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[crashcam] hardstop PREPARING frame " << siHardStopDiagFrames
+                    << " A{canFrom " << (liKey & 1) << " failed " << ((liKey >> 1) & 1)
+                    << " canTo " << ((liKey >> 2) & 1) << "} B{canFrom " << ((liKey >> 3) & 1)
+                    << " failed " << ((liKey >> 4) & 1) << " canTo " << ((liKey >> 5) & 1) << "}\n";
+            }
+            siHardStopDiagLastKey = liKey;
+        }
         // ---- per-candidate failure logging (name + validity dump) ----
         if (mRigCameraHandleA.GetBehaviour()->HasFailed())
         {
@@ -389,6 +461,13 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
             break;
         }
     }
+        if (HardStopDiagLine())
+        {
+            *CgsDev::Log::gpDebugPrint << "[crashcam] hardstop VALID after " << siHardStopDiagFrames
+                                       << " preparing frames, using " << (mbUsingA ? "A" : "B")
+                                       << (mbForceUltraSloMo ? " (ultra slo-mo)" : "") << "\n";
+        }
+        siHardStopDiagFrames = 0;
         // fall through -- the console build runs the VALID body the same frame it picks a winner
 
     case E_STATE_VALID:
@@ -429,11 +508,21 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
             && MomentSharedInfo_GetCurrentCrashType(lSharedInfo) == 0
             && meCrashType == 1;
 
+        ++siHardStopDiagFrames;
         if (!GetNonConstCamera().mState.IsFlagSet(KU_STATE_FLAG_KEEP_GATE)
             || !MomentSharedInfo_IsCrashCameraActive(lSharedInfo)
             || (lbActiveCanSwitchFrom && meCrashType != 1)
             || lbCleanEarlyOut)
         {
+            if (HardStopDiagLine())
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[crashcam] hardstop RELEASED after " << siHardStopDiagFrames << " valid frames:"
+                    << " keepGate " << (GetNonConstCamera().mState.IsFlagSet(KU_STATE_FLAG_KEEP_GATE) ? 1 : 0)
+                    << " crashCamActive " << (MomentSharedInfo_IsCrashCameraActive(lSharedInfo) ? 1 : 0)
+                    << " canSwitchFrom " << (lbActiveCanSwitchFrom ? 1 : 0)
+                    << " cleanEarlyOut " << (lbCleanEarlyOut ? 1 : 0) << "\n";
+            }
             Release();   // the live-vtable call (slot 4)
             SetState(E_STATE_INVALID_SEARCHING);
         }

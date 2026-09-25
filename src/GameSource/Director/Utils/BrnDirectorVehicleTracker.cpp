@@ -32,9 +32,7 @@ namespace BrnDirector
 // declared here as the named tunables the body reads, with neutral placeholders; the body's
 // STRUCTURE (which threshold gates which band, the ramp blend) is faithful to the asm.
 // FLAG: placeholder values -- the .data floats are not reproduced.
-// (The two CRASH-BAND thresholds that used to sit alongside them are gone with the classifier
-//  they fed -- see the GATE inside Update for why running it on 0.0f would have switched the
-//  crash slow motion OFF while looking like the console.)
+// (The two CRASH-BAND thresholds are VehicleTracker's own statics -- defined below from the image.)
 // ----------------------------------------------------------------------------
 namespace
 {
@@ -46,6 +44,17 @@ namespace
     // Per-frame blend factor the effect amount lerps toward its target by. flt_82CDA558.
     f32 KF_RACE_END_EFFECT_BLEND_FACTOR = 0.0f;            // FLAG: .data value not recovered
 }
+
+// ----------------------------------------------------------------------------
+// DWARF BrnDirectorVehicleTracker.h:65 / :68 -- the crash-energy bands, read out of the image with
+// tools/re/x360rd.py (the "writable .data has nothing to read" note that gated the classifier was
+// wrong: the bytes are in the image, only Hex-Rays declines to print them):
+//     0x82CDA548 = 0x42480000 = 50.0   (the `fsubs f11, maxMPH, [548]` operand @0x8223B3E8)
+//     0x82CDA54C = 0x41A00000 = 20.0   (the `fsubs f13, maxMPH, [54C]` operand @0x8223B3F0)
+// A crash under (top speed - 50 mph) is LOW energy, under (top speed - 20 mph) NORMAL, else HIGH.
+// ----------------------------------------------------------------------------
+f32 VehicleTracker::sfMinSpeedBelowMaxMPHForNormalCrash    = 50.0f;
+f32 VehicleTracker::sfMinSpeedBelowMaxMPHForHighSpeedCrash = 20.0f;
 
 // ----------------------------------------------------------------------------
 // BrnDirector::VehicleTracker::Construct
@@ -113,33 +122,35 @@ void VehicleTracker::Update(
             // The crash just started this frame.
             mbIsFirstFrameOfCrash = true;
 
-            // GATE: THE CRASH-ENERGY BAND. The console picks LOW / NORMAL / HIGH here; this build
-            // leaves meCrashType at E_CRASH_NOT_CRASHING. Running the classifier anyway would be
-            // WORSE THAN NOT RUNNING IT, for three stacked reasons:
-            //
-            //   (a) its two thresholds are .data floats (flt_82CDA548 / flt_82CDA54C) whose
-            //       VALUES are in no export -- Hex-Rays leaves them as bare symbols because the
-            //       region is writable, so there is nothing to read. The placeholders at the top
-            //       of this file are 0.0f;
-            //   (b) with 0.0f the first test degenerates to `speed < maxSpeed`, true for
-            //       essentially every crash, so the answer would be E_CRASH_LOW_ENERGY every
-            //       time -- and E_CRASH_LOW_ENERGY IS THE ONE VALUE THAT SUPPRESSES THE CRASH
-            //       SLOW MOTION (ArbStateCrashing::ApplySlomoAndShake @0x8224F8D8 tests exactly
-            //       that enumerator). Classifying on invented constants would switch the feature
-            //       off while looking like the console;
-            //   (c) the two inputs it needs -- InputBuffer +0x7900 (the player speed in MPH) and
-            //       +0x7904 (the "force the next world crash to be a fast top-down" arm) -- have
-            //       no accessor on the real InputBuffer. The slice this file used to carry named
-            //       them; nothing ever defined them.
-            //
-            // THE DIVERGENCE, STATED PLAINLY: NOT_CRASHING is the console value only while the car
-            // is NOT crashing, and it is the PERMISSIVE value downstream -- the crash camera will
-            // slow down crashes the console might have classified LOW_ENERGY and left at real
-            // time. That is a visible behavioural difference, not a no-op.
-            // DELETE-WHEN: the two .data floats are read out of the image AND the two InputBuffer
-            // accessors are homed. The block goes back verbatim then; its shape is in the asm at
-            // 0x8223B1A8 and in this file's history.
-            (void)lbForceNextWorldCrashToBeFastTopDown;
+            // ⭐ THE CRASH-ENERGY BAND (2026-09-24, FX-DIRECTOR2; was GATED). @0x8223B3B8..0x8223B414:
+            //     if (lbForce && crash info +0x24 mbHardstopVsWall)           -> HIGH   (0x8223B3C8 -> 0x8223B410)
+            //     else if (+0x20 mfSpeedMPH <  maxMPH - sfMin..NormalCrash)   -> LOW    (fcmpu/bge @0x8223B3F4)
+            //     else if (mfSpeedMPH       <  maxMPH - sfMin..HighSpeedCrash) -> NORMAL (fcmpu/blt @0x8223B404)
+            //     else                                                         -> HIGH
+            // The console reads the crash record straight out of the input buffer (+0x7900 / +0x7904 ==
+            // the PlayerCrashInfo at +0x78E0, +0x20 / +0x24) and the car's top speed out of this frame's
+            // VehicleInfo copy (+0x3D0, RaceCarState::mfMaxSpeedMPH). Every reason the gate gave is gone:
+            // the two bands are read out of the image (above), and GetPlayerCrashInfo() is typed (FX-BRIDGES
+            // CC-6). A NaN speed fails both `<` tests and lands HIGH, as the console's bge / blt do.
+            // Consumers: ArbStateCrashing::ApplySlomoAndShake (LOW suppresses the crash slow motion) and
+            // MomentHardStop's shot-group pick (it asserts "Unhandled crash type" on NOT_CRASHING).
+            const Camera::PlayerCrashInfo* lpPlayerCrashInfo = lpInput->GetPlayerCrashInfo();
+            if (lbForceNextWorldCrashToBeFastTopDown && lpPlayerCrashInfo->mbHardstopVsWall)
+            {
+                meCrashType = E_CRASH_HIGH_ENERGY;
+            }
+            else
+            {
+                const f32 lfSpeedMPH        = lpPlayerCrashInfo->mfSpeedMPH;                                           // cpp:90
+                const f32 lfNormalThreshold = lVehicle.mRaceCarState.mfMaxSpeedMPH - sfMinSpeedBelowMaxMPHForNormalCrash;    // cpp:91
+                const f32 lfHighThreshold   = lVehicle.mRaceCarState.mfMaxSpeedMPH - sfMinSpeedBelowMaxMPHForHighSpeedCrash; // cpp:92
+                if (lfSpeedMPH < lfNormalThreshold)
+                    meCrashType = E_CRASH_LOW_ENERGY;
+                else if (lfSpeedMPH < lfHighThreshold)
+                    meCrashType = E_CRASH_NORMAL;
+                else
+                    meCrashType = E_CRASH_HIGH_ENERGY;
+            }
         }
 
         // GATE: `mScoreData = lpInput->GetPlayerScoreData();`. The real InputBuffer models the

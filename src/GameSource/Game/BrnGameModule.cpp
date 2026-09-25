@@ -37,6 +37,9 @@
 #include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h"   // AudioEffectsMessageQueue (the empty-queue construct in DoUpdate_Effects)      // EffectsIO::InputBuffer (DoUpdate_Effects / BridgeEntityToEffects)
 #include "GameSource/GameState/BrnGameStateModuleIO.h" // GameStateModuleIO::OutputBuffer (BridgeGameStateToDirector)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // DirectorIO::SceneQuery{Input,Output}Buffer
+#include "GameSource/Director/BrnDirectorHarness.h"                  // [FX-DIRECTOR2 opt-in] Harness::SceneQueryClosureEnabled
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"   // SceneManagerIO::InputBuffer_Query / OutputBuffer (the external query leg)
+#include "GameShared/GameClasses/Module/CgsModuleUtils.h"            // CgsModule::LockBuffersForIO / UnlockBuffersForIO
 #include "GameSource/Effects/Particles/ParticleModuleBringUp.h"               // BrnParticle::PCBringUpProduceParticleRenderData (DoDispatch's particle-render-data seam)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface + BrnPhysics::Vehicle::RaceCarState (DoDispatch's TempRaceCarStateCache seam)
 #include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h" // BrnNetHarnessPC::InjectGuiEvents (the LAN test harness hook)
@@ -2462,7 +2465,87 @@ namespace BrnGame
             }
         }
 
-        if (!lbPostGui)
+        if (!lbPostGui && BrnDirector::Harness::SceneQueryClosureEnabled())
+        {
+            // ⭐ [FX-DIRECTOR2 2026-09-25 -- OPT-IN BRN_FXD2_SCENEQUERY, default OFF until one live run
+            // with it ON is clean] THE CONSOLE'S SCENE-QUERY LEG (DoUpdate_Director @0x823E8DE0). The
+            // director's cameras ASK during PreSceneQueryUpdate and READ THE ANSWERS in Update; the
+            // world runs their queries in between, synchronously, in this order:
+            //   1. IOHelper<SceneManagerIO::InputBuffer_Query>(input stack, "SceneQuery")   0x823C1A28
+            //      IOHelper<DirectorIO::SceneQueryInputBuffer>(input stack, "DirectorSQ")   0x823C1A90
+            //      (the console makes both at the head of the function; on this build the director
+            //       input is made first, so they sit above it on the same LIFO stack)
+            //      IOHelper<DirectorIO::SceneQueryOutputBuffer>(output stack, "DirectorSQ") 0x823C1AF8
+            //   2. DirectorModule::PreSceneQueryUpdate                                        0x8225C768
+            //   3. under the lock pair sub_823B6FE0 / sub_823B7060 (dest write, source read):
+            //      external->GetSceneQueryInterface()->Append(*sqOutput->GetSceneQueryInterface())
+            //                                         (SceneQueryInterface::Append @0x823C4FF8)
+            //      then the SQ output buffer is destroyed
+            //   4. IOHelper<SceneManagerIO::OutputBuffer>(output stack, "DirectorESQ")       0x823C1B60
+            //      WorldModule::ExternalSceneQueriesUpdate(in stack, out stack, external, results,
+            //                                              update set)                     0x827B06C8
+            //   5. under the same lock pair: sqInput->GetResultsQueue()->Append(*results->GetResultsQueue())
+            //      (VariableEventQueue<4032,16>::Append<32768,16> @0x823DA090), then the results
+            //      buffer is destroyed
+            //   6. a FRESH SceneQueryOutputBuffer ("DirectorSQ"), DirectorModule::Update 0x82275300 on it
+            //      and the SQ input, then that buffer destroyed
+            //   7. the SQ input and the external query buffer destroyed
+            // lbIsReplaying == false and the unread framework arguments are as on the OFF path below.
+            CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpExternalQuery   = 0;
+            BrnDirector::DirectorIO::SceneQueryInputBuffer*     lpSceneQueryInput = 0;
+            mpUpdateInputBufferStack->CreateIOBuffer(&lpExternalQuery, "SceneQuery");
+            mpUpdateInputBufferStack->CreateIOBuffer(&lpSceneQueryInput, "DirectorSQ");
+
+            BrnDirector::DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutput = 0;
+            mpUpdateOutputBufferStack->CreateIOBuffer(&lpSceneQueryOutput, "DirectorSQ");
+
+            if (lpExternalQuery != 0 && lpSceneQueryInput != 0 && lpSceneQueryOutput != 0)
+            {
+                mDirectorModule.PreSceneQueryUpdate(0, 0, lpDirectorInput, mpDirectorOutputBuffer,
+                                                    lpSceneQueryOutput, false);
+
+                CgsModule::LockBuffersForIO(lpExternalQuery, lpSceneQueryOutput);
+                lpExternalQuery->GetSceneQueryInterface()->Append(
+                    *static_cast<const BrnDirector::DirectorIO::SceneQueryOutputBuffer*>(lpSceneQueryOutput)
+                         ->GetSceneQueryInterface());                              // the read-locked getter 0x823B25F0
+                CgsModule::UnlockBuffersForIO(lpExternalQuery, lpSceneQueryOutput);
+                mpUpdateOutputBufferStack->DestroyIOBuffer(&lpSceneQueryOutput);
+
+                CgsSceneManager::SceneManagerIO::OutputBuffer* lpExternalResults = 0;
+                mpUpdateOutputBufferStack->CreateIOBuffer(&lpExternalResults, "DirectorESQ");
+                if (lpExternalResults != 0)
+                {
+                    mWorldModule.ExternalSceneQueriesUpdate(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                                                            lpExternalQuery, lpExternalResults,
+                                                            ConstructUpdateSetFromFsm());
+
+                    CgsModule::LockBuffersForIO(lpSceneQueryInput, lpExternalResults);
+                    lpSceneQueryInput->GetResultsQueue()->Append(
+                        *static_cast<const CgsSceneManager::SceneManagerIO::OutputBuffer*>(lpExternalResults)
+                            ->GetResultsQueue());
+                    CgsModule::UnlockBuffersForIO(lpSceneQueryInput, lpExternalResults);
+                    mpUpdateOutputBufferStack->DestroyIOBuffer(&lpExternalResults);
+                }
+
+                mpUpdateOutputBufferStack->CreateIOBuffer(&lpSceneQueryOutput, "DirectorSQ");
+                if (lpSceneQueryOutput != 0)
+                {
+                    mDirectorModule.Update(0, 0, lpDirectorInput, mpDirectorOutputBuffer,
+                                           lpSceneQueryInput, lpSceneQueryOutput);
+                    mpUpdateOutputBufferStack->DestroyIOBuffer(&lpSceneQueryOutput);
+                }
+            }
+            else if (lpSceneQueryOutput != 0)
+            {
+                mpUpdateOutputBufferStack->DestroyIOBuffer(&lpSceneQueryOutput);
+            }
+
+            if (lpSceneQueryInput != 0)
+                mpUpdateInputBufferStack->DestroyIOBuffer(&lpSceneQueryInput);
+            if (lpExternalQuery != 0)
+                mpUpdateInputBufferStack->DestroyIOBuffer(&lpExternalQuery);
+        }
+        else if (!lbPostGui)
         {
             BrnDirector::DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutput = 0;
             BrnDirector::DirectorIO::SceneQueryInputBuffer*  lpSceneQueryInput  = 0;

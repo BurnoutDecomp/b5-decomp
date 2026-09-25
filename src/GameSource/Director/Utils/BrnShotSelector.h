@@ -49,8 +49,12 @@ public:
     // is the same stw r4, 0x268.)
     void Construct(const DirectorResourceManager* lpResourceManager);
 
-    // DWARF cpp:73 / cpp:89 -- their own ledger functions (declaration-only here).
+    // DWARF cpp:73. PS3 @0x15000 (`li 0 ; stw 0x264 ; li r3, 1`); inlined on the X360 by
+    // MainDirector::Prepare stage 1 @0x8224FBDC..0x8224FBE4 (`stwx 0` -> director + 0x12454, i.e.
+    // this + 0x264). Body in BrnShotSelector.cpp.
     bool Prepare();
+    // DWARF cpp:89. PS3 @0x2E4AC; inlined on the X360 by MainDirector::Update @0x82274FB0..0x82274FE4.
+    // Body in BrnShotSelector.cpp.
     void Update(const Camera::Camera& lrSelectedCamera);
 
     // @0x822396F8 (this TU, DWARF cpp:121) -- score the group's ShotList and return
@@ -64,8 +68,10 @@ public:
                                                 EGroup leShotGroup) const;
 
 private:
-    // DWARF cpp:313 / cpp:322 -- their own ledger functions (declaration-only here).
+    // DWARF cpp:313. PS3 @0x2E1D8, called only by GetCrashShot (whose X360 copy reads the list
+    // directly). NOT-CALLED here: declaration-only.
     s32 GetLastUsedIndex(const Camera::Camera::ShotSelectionInfo& lrShotSelectionInfo) const;
+    // DWARF cpp:322. PS3 @0x2E33C; tail-called by Update. Body in BrnShotSelector.cpp.
     void SetLastUsedToNow(const Camera::Camera::ShotSelectionInfo& lrShotSelectionInfo);
 
     // DWARF: Array<int32_t,50u>[3] maaShotTimes -- per-group per-shot "time last

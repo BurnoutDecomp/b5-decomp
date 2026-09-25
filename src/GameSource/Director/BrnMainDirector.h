@@ -13,6 +13,9 @@
 #include "GameSource/Director/Camera/Camera.h"                  // BrnDirector::Camera::Camera (mLastCamera)
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h" // BrnDirector::GameState (maGameState)
 #include "GameSource/Director/MomentController/BrnMomentController.h" // BrnDirector::MomentController (mMomentController)
+#include "GameSource/Director/Utils/BrnShotSelector.h"         // BrnDirector::ShotSelector (mShotSelector)
+#include "GameSource/Director/BrnCrashAnalyser.h"              // BrnDirector::CrashAnalyser (mCrashAnalyser)
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h" // BrnDirector::DebugLog (mDebugLog)
 
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // DirectorModule::Prepare's 2nd arg (boot audit F-P6-16)
 
@@ -198,6 +201,13 @@ namespace BrnDirector
                                       Camera::BehaviourSharedInfo& lSharedInfo,
                                       ICE::CameraSpaceHandler& lCameraSpaces);
 
+        // NOT an X360 function -- the shared prologue of the console's two CollisionPolicySharedInfo
+        // builds (PreScene 0x822557B4..0x82255830, PostScene 0x8224FE18..0x8224FF28). Added
+        // 2026-09-25 (FX-DIRECTOR2, the camera scene-query closure).
+        void BuildCollisionPolicySharedInfo(const DirectorInputOutput* lpIO, s32 liPlayerCarIndex,
+                                            const Camera::BehaviourSharedInfo& lrBehaviourInfo,
+                                            Camera::CollisionPolicySharedInfo& lrPolicyInfo);
+
         // ⭐ X360 0x822372F8. Drain the input buffer's GAME-ACTION QUEUE and apply each action
         // to the GameState snapshot. BODIED (junkyard/car-select arms; see the .cpp banner).
         //
@@ -340,12 +350,19 @@ namespace BrnDirector
         Matrix44Affine mICESceneSpace;                                  // +0x12170
         // +0x121B0 .. +0x12480, CARVED 2026-09-24 at the three console sub-object bases the moment
         // tick publishes (MainDirector::UpdateMoments @0x82250268 hands +0x121F0 and +0x1245C to every
-        // moment). All three types stay un-homed here: ShotSelector::Construct (0x8225B7F8) and
-        // CrashAnalyser::Update (PreSceneQueryUpdate 0x8225BCDC) are gated, so the spans hold the
-        // static zero the game module starts from.
+        // moment). The camera-interpolation controller stays an un-homed span.
+        // ⭐ HOMED 2026-09-24 (FX-DIRECTOR2): the shot selector and the crash analyser are real members.
+        //   The console's only touches of either, all now reproduced by name:
+        //     ShotSelector::Construct(+0x121F0, lpResourceManager)   Construct       0x8225B7F8
+        //     ShotSelector::Prepare  (stw 0 -> +0x12454)              Prepare stage 1 0x8224FBE4
+        //     CrashAnalyser::Update  (+0x1245C, input, state, idx)    PreSceneQueryUpdate 0x8225BCDC
+        //     SetShotChanged + ShotSelector::Update                   Update          0x82274F90..0x82274FE4
+        //     &mShotSelector / &mCrashAnalyser.GetAnalysis()          UpdateMoments   0x8225037C..
+        //   (a whole-image displacement scan for +0x245x..+0x247x / +0x21F0 finds nothing else). The
+        //   analyser has no Construct on the console either: it starts from the module allocation's zero.
         u8             maCameraInterpolationController[0x121F0 - 0x121B0];  // +0x121B0
-        u8             maShotSelector[0x1245C - 0x121F0];                   // +0x121F0
-        alignas(4) u8  maCrashAnalyser[0x12480 - 0x1245C];                  // +0x1245C (head: its CrashAnalysis)
+        ShotSelector   mShotSelector;                                       // +0x121F0 .. +0x1245C (0x26C)
+        CrashAnalyser  mCrashAnalyser;                                      // +0x1245C .. +0x12474
 
         // +0x12480  the camera finaliser (inertia + key-anim shake). Console span to +0x124F0;
         //           the KeyAnimShakeController Construct builds at +0x124D0 is its own member.
@@ -415,9 +432,10 @@ namespace BrnDirector
         //           +0x33105 = 0) -- roles not recovered. FLAG: named opaque span.
         u8 maCameraCarFlags[0x33108 - 0x33104];
 
-        // +0x33108 .. +0x33768  BrnDirector::DebugLog (ArbStateSharedInfo +0x08; Construct
-        //           seeds its +0 float to 10.0). FLAG: un-homed; named opaque span.
-        u8 maDebugLog[0x33768 - 0x33108];
+        // +0x33108 .. +0x33768  BrnDirector::DebugLog (ArbStateSharedInfo +0x08). HOMED 2026-09-24
+        //           (FX-DIRECTOR2): the type has lived in BrnDirectorModuleDebugPrinter.h all along;
+        //           Construct runs its inlined DebugLog::Construct (0x8225B824..0x8225B87C).
+        DebugLog mDebugLog;
 
         // +0x33768 / +0x3378C / +0x337B0  the three BrnDirector::DebugPrinters Construct
         //           builds. The THIRD (+0x337B0) is the one ArbStateSharedInfo carries as
@@ -538,8 +556,9 @@ namespace BrnDirector
             E_FLAG_TAIL_DISABLE_DOF                = 0x08,   // mbDisableDOF
             E_FLAG_TAIL_SHOW_CAMERA_STATE_FLAGS    = 0x0B,   // mbShowCameraStateFlags
             E_FLAG_TAIL_DEBUG_SINGLE_TIMESTEP      = 0x0D,   // mbDebugSingleTimestep
-            // +0x35437. DWARF mbForceNextWorldCrashToBeFastTopDown (:313). Construct seeds it 1
-            // (0x8225B924); UpdateMoments hands it to every moment.
+            // +0x35437. DWARF mbForceNextWorldCrashToBeFastTopDown (:313). A ONE-SHOT: Construct seeds
+            // it 1 (0x8225B924), Update's tail clears it on a crash's first frame (0x822752B4..
+            // 0x822752D0); VehicleTracker::Update (4th argument) and UpdateMoments (every moment) read it.
             E_FLAG_TAIL_FORCE_NEXT_WORLD_CRASH_FAST_TOP_DOWN = 0x07,
             // +0x35431. DWARF MainDirector::mbForceSloMoNotAllowed: while set, ProcessInputQueue's
             // tail drops GameState::mbCanUseSlomo every drain (0x8223886C..0x82238888). Construct
@@ -565,7 +584,8 @@ namespace BrnDirector
             // these ends the event state"; the first is additionally gated on the director
             // output interface's own byte, the second is unconditional.
             // +0x3543C. DWARF DirectorModule::mbDebugZeroTimestep (:321): while set, UpdateMoments
-            // hands the moments a zero game timestep (0x822502AC..0x822502BC). Construct seeds 0.
+            // hands the moments a zero game timestep (0x822502AC..0x822502BC). Construct seeds 0;
+            // Update's tail raises it when it consumes mbDebugSingleTimestep (0x82275290..0x822752B0).
             E_FLAG_TAIL_DEBUG_ZERO_TIMESTEP  = 0x0C,
             E_FLAG_TAIL_EVENT_END_REQUEST    = 0x0E,       // DWARF mbDebugTestFinishLines
             E_FLAG_TAIL_EVENT_END_FORCED     = 0x0F,       // DWARF mbDebugForceEventStateToActive

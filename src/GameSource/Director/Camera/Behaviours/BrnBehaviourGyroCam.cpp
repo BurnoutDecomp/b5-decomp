@@ -178,7 +178,7 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
         if (mpParameters->mbUseTruck && Utils::PointWillLeaveFrustrum(lrCamera.mTransform, vehicle.mRaceCarState.mTransform.Pos(),
                 vehicle.mRaceCarState.mLinearVelocity - mAttachmentTruck.GetVelocity(), lrCamera.mfFOV, lrCamera.mfFOV, &time) && time < 1.0f)
             { lrCamera.mState.mHeadFlags.SetBit(15); mbCanSwitchToMeNow = false; }
-        if (mVisibilityCollisionPolicy.ShouldRaiseSeeThrough()) { lrCamera.mState.mHeadFlags.SetBit(16); mbCanSwitchToMeNow = false; }
+        if (mVisibilityCollisionPolicy.IsVisibilityInterrupted()) { lrCamera.mState.mHeadFlags.SetBit(16); mbCanSwitchToMeNow = false; }
     }
     SetPrepared();
     // FLAG PC diagnostic: measure produced poses, not just arbitrator state changes.

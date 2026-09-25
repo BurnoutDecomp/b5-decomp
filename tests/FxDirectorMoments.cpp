@@ -27,6 +27,8 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorInputOutput.h"
 #include "GameSource/Director/Camera/BrnBehaviourParameterBank.h"
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"
+#include "GameSource/Director/Utils/BrnShotSelector.h"             // [FX-DIRECTOR2] MainDirector::mShotSelector
+#include "GameSource/Director/BrnCrashAnalyser.h"                  // [FX-DIRECTOR2] MainDirector::mCrashAnalyser
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"
@@ -249,15 +251,15 @@ public:
     void UpdateMoments(const DirectorInputOutput* lpIO, s32 liPlayerCarIndex);
 
     u8                       maRandom[0x40] = {};
-    u8                       maDebugLog[0x40] = {};
+    DebugLog                 mDebugLog;             // [FX-DIRECTOR2] homed: UpdateMoments publishes &mDebugLog
     u8                       maDebugPrinterB[0x40] = {};
     GameState&               maGameState;
     AllVehicleData&          mAllVehicleData;
     VehicleTracker&          mVehicleTracker;
     BehaviourManagerStandIn  mBehaviourManager;
     MomentControllerRecorder mMomentController;
-    u8                       maShotSelector[0x40] = {};
-    alignas(4) u8            maCrashAnalyser[0x24] = {};
+    ShotSelector             mShotSelector = {};    // [FX-DIRECTOR2] homed: UpdateMoments publishes &mShotSelector
+    CrashAnalyser            mCrashAnalyser = {};   // [FX-DIRECTOR2] homed: ... and &mCrashAnalyser.GetAnalysis()
     u8                       maEffectInterface[0x40] = {};
     u8                       maStateFlagTail[0x35450 - 0x35430] = {};
     bool                     mbAllowJumpMoment = false;
@@ -472,7 +474,7 @@ int main()
         Check(lrRec.mePlayerIndex == E_ACTIVE_RACE_CAR_INDEX_2 && lrRec.mfPlayerHardestImpact == 12.5f &&
               lrRec.mbUsedCar2 && !lrRec.mbUsedCar3,
               "UpdateMoments: the player's index, a copy of ITS VehicleInfo (mulli 0x4F0), and the used-car bits");
-        Check(lrRec.mapPointers[0] == lDirector.maRandom && lrRec.mapPointers[1] == lDirector.maDebugLog &&
+        Check(lrRec.mapPointers[0] == lDirector.maRandom && lrRec.mapPointers[1] == &lDirector.mDebugLog &&
               lrRec.mapPointers[2] == lDirector.maDebugPrinterB && lrRec.mapPointers[3] == &lDirector.maGameState &&
               lrRec.mapPointers[4] == &lDirector.mAllVehicleData,
               "UpdateMoments: random / debug log / the MOMENT printer (+0x3378C) / game state / all-vehicle data");
@@ -485,7 +487,7 @@ int main()
         Check(lrRec.mapPointers[10] == &lDirector.mVehicleTracker && lrRec.mapPointers[11] == lInput.maContacts &&
               lrRec.mapPointers[12] == lpResource,
               "UpdateMoments: the player tracker (+0x339E0), the contacts, the resource manager (lwz 8(r30))");
-        Check(lrRec.mapPointers[13] == lDirector.maShotSelector && lrRec.mapPointers[14] == lDirector.maCrashAnalyser &&
+        Check(lrRec.mapPointers[13] == &lDirector.mShotSelector && lrRec.mapPointers[14] == &lDirector.mCrashAnalyser.GetAnalysis() &&
               lrRec.mapPointers[15] == lDirector.maEffectInterface && lrRec.mapPointers[16] == &lInput.mPlayerCrashInfo,
               "UpdateMoments: the shot selector (+0x121F0), the crash analysis (+0x1245C), the effect interface, the crash info");
 

@@ -69,14 +69,15 @@ namespace BrnDirector
 {
 namespace Camera
 {
-    // The console Construct's see-through bytes are 1/0/1; this stand-in leaves the first at 0, so
-    // only the behaviour's own SetTestLookingAt(true) can raise it.
+    // The console Construct's visibility-test bytes are 1/0/1 (policy +0x1A0..+0x1A2 = the embedded
+    // VisibilityTest's mbTestLookingAt / mbOccluded / mbIsOnScreen); this stand-in leaves the first at 0,
+    // so only the behaviour's own SetTestLookingAt(true) can raise it.
     void VisibilityCollisionPolicy::Construct()
     {
         ++giPolicyConstructs;
-        mbSeeThroughEnabled = false;
-        mbSeeThroughAlways = false;
-        mbSeeThroughSuppressed = true;
+        mVisibilityTest.mbTestLookingAt = false;
+        mVisibilityTest.mbOccluded      = false;
+        mVisibilityTest.mbIsOnScreen    = true;
     }
     void VisibilityCollisionPolicy::SetTarget(Matrix44Affine lTargetTransform, AABBox lTargetAABB,
                                               CgsSceneManager::EntityId lTargetEntityId)
@@ -86,6 +87,11 @@ namespace Camera
         gLastTargetAABB = lTargetAABB;
         guLastTargetEntity = static_cast<u32>(lTargetEntityId);
     }
+    // The policy's two per-frame scene-query virtuals (vtable slots 0/1, @0x822402F8 / @0x82224530; bodies in
+    // BrnVisibilityCollisionPolicy.cpp, not compiled here). The behaviour under test never calls them --
+    // BehaviourManager's collision pass does -- so they are defined only for the policy's vtable to link.
+    void VisibilityCollisionPolicy::GenerateSceneQueries(const CollisionPolicySharedInfo&, Camera&) {}
+    void VisibilityCollisionPolicy::ProcessSceneQueryResults(const CollisionPolicySharedInfo&, Camera&) {}
     void ValidityAccount::SetFlag(s32 leFlag) { ++giSetFlagCalls; giFailFlag = leFlag; }
     void ValidityAccount::SetNoCutFromFlag(s32) {}
     void ValidityAccount::SetNoCutToFlag(s32 leFlag) { giNoCutToFlag = leFlag; }
@@ -191,7 +197,7 @@ int main()
     Behaviour* lpBehaviour = lpFixed;
     lpBehaviour->Construct();
     Check(giPolicyConstructs == 1, "Construct (slot 0, dispatched through Behaviour*): VisibilityCollisionPolicy::Construct");
-    Check(lpFixed->mCollisionPolicy.mbSeeThroughEnabled,
+    Check(lpFixed->mCollisionPolicy.mVisibilityTest.mbTestLookingAt,
           "Construct: SetTestLookingAt(true) after the policy's Construct (the second stb 1 to policy +0x1A0)");
     Check(lpFixed->mpParameters == nullptr && !lpFixed->mbIsPrepared && !lpFixed->mbHasFailed,
           "Construct: mpParameters = 0 and the base's Construct (not prepared, not failed)");
@@ -268,21 +274,21 @@ int main()
     lpFixed->SetParameters(&lParams);
     lpBehaviour->Prepare(lPrepareInfo);
     lpFixed->mbCanSwitchToMeNow = true;
-    lpFixed->mCollisionPolicy.mbSeeThroughAlways = true;
+    lpFixed->mCollisionPolicy.mVisibilityTest.mbOccluded = true;
     giNoCutToFlag = -1;
     lrPlayer.mLinearVelocity = Vector3{ 10.0f, 0.0f, 0.0f, 0.0f };
     lpBehaviour->Update(lCamera, lInfo);
     Check(giNoCutToFlag == 16 && !lpFixed->mbCanSwitchToMeNow,
           "Update: visibility interrupted (policy +0x1A1) -> NoCutTo 16 'Subject left frame', mbCanSwitchToMeNow = 0");
-    lpFixed->mCollisionPolicy.mbSeeThroughAlways = false;
-    lpFixed->mCollisionPolicy.mbSeeThroughEnabled = true;
-    lpFixed->mCollisionPolicy.mbSeeThroughSuppressed = false;
+    lpFixed->mCollisionPolicy.mVisibilityTest.mbOccluded = false;
+    lpFixed->mCollisionPolicy.mVisibilityTest.mbTestLookingAt = true;
+    lpFixed->mCollisionPolicy.mVisibilityTest.mbIsOnScreen = false;
     lpFixed->mbCanSwitchToMeNow = true;
     giNoCutToFlag = -1;
     lpBehaviour->Update(lCamera, lInfo);
     Check(giNoCutToFlag == 16 && !lpFixed->mbCanSwitchToMeNow,
           "Update: visibility interrupted (+0x1A0 && !+0x1A2) -> NoCutTo 16");
-    lpFixed->mCollisionPolicy.mbSeeThroughSuppressed = true;
+    lpFixed->mCollisionPolicy.mVisibilityTest.mbIsOnScreen = true;
     lpFixed->mbCanSwitchToMeNow = true;
     giNoCutToFlag = -1;
     lpBehaviour->Update(lCamera, lInfo);

@@ -15,8 +15,7 @@
 // When a real TU lands for any symbol below, DELETE its stub here (a duplicate definition
 // is a link error, so the removal is enforced by the build).
 //
-// GROUP C -- sub-systems with no landed TU (the director DebugComponent, the
-//   scene-query post-office free functions).
+// GROUP C -- sub-systems with no landed TU (the director DebugComponent).
 // GROUP D -- the vendor rw SLerp leaf.
 // GROUP F -- RETIRED 2026-09-24 (the moment sub-system; see the foot of this file).
 // ============================================================================
@@ -70,28 +69,10 @@ namespace BrnDirector
 
     void DebugComponent::OnActivate() {}
 
-    // -- The two scene-query post-office free functions BrnSceneQueryInterface.h declares.
-    //    OutEventVolumeTestDeepest mints the 16-bit query id for a staged volume test; 0 is
-    //    the console's "no id" value and SceneQueryInterface treats it as a failed post.
-    //    sub_8221CC98 resets slot 1's post office and returns a pointer into it.
-    //    DELETE-WHEN: the two post-office TUs land.
-    u32* sub_8221CC98(void* lpSlot)
-    {
-        return static_cast<u32*>(lpSlot);
-    }
-}
-
-namespace CgsSceneManager
-{
-namespace SceneManagerIO
-{
-    u32 OutEventVolumeTestDeepest(void* lpPostOffice, void* lpQueryParams)
-    {
-        (void)lpPostOffice;
-        (void)lpQueryParams;
-        return 0u;
-    }
-}
+    // -- RETIRED 2026-09-25 (FX-DIRECTOR2): the two scene-query post-office stand-ins
+    //    (sub_8221CC98, OutEventVolumeTestDeepest) are gone. They are PostOffice<T,N>::Clear (the
+    //    fine office's specialisation) and PostOffice<T,N>::AddPostBox, typed in
+    //    Utils/BrnPostOffice.h and called by name from Utils/BrnSceneQueryInterface.cpp.
 }
 
 // ----------------------------------------------------------------------------

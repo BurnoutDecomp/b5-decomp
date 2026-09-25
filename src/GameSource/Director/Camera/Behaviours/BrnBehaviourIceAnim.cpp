@@ -339,12 +339,17 @@ void BehaviourIceAnim::Construct()
     mbForceHeadingSpaceToBeLooseHeadingSpace = false;
     mbForceMotionBlurEverything = false;
 
-    // --- the free visibility policy's three see-through state bytes (defaults) ---
-    // (through the policy's named setters since the de-fork -- the bytes are private in the
-    //  canonical BrnCollisionPolicy.h home; the console stores are unchanged.)
-    mCollisionPolicy.SetSeeThroughEnabled(true);
-    mCollisionPolicy.SetSeeThroughAlways(false);
-    mCollisionPolicy.SetSeeThroughSuppressed(true);
+    // --- the free visibility policy: its WHOLE Construct, inlined by the console ---
+    // ⭐ CORRECTED 2026-09-25 (FX-DIRECTOR2). The three "see-through" stores that stood here
+    // (policy +0x1A0/+0x1A1/+0x1A2) are only the visibility-test tail of an inlined
+    // VisibilityCollisionPolicy::Construct: 0x822561F0..0x8225625C writes the base latch (+0x04),
+    // the geometry predictor (+0x80/+0x90/+0xE4), the vehicle predictor (+0x70), the visibility
+    // test (+0xF0..+0x1A2), the volume box (+0x1B0), the ground constraint (+0x1C0/+0x210), the two
+    // timeouts (+0x234 = 1.5 / +0x238 = 0.5), mbCanFail = 1 (+0x08), the velocity (+0x220),
+    // mbFirstFrame = 1 (+0x09), mbTargetSet = 0 (+0x0A) and mbUseGroundConstraint = 0 (+0x23C) --
+    // store for store the same set BehaviourGyroCam::Construct inlines. Without it mbCanFail /
+    // mbFirstFrame / the timeouts held whatever the behaviour pool slot held.
+    mCollisionPolicy.Construct();
 
     // ------------------------------------------------------------------------
     // ⭐⭐ THE THREE ANCHOR VEHICLE REFERENCES. RESTORED 2026-08-01 -- THEY WERE MISSING,
@@ -608,11 +613,17 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     // SetFlag pair so no offset is poked (see the FLAG on the flag id in Behaviour.cpp).
     lrCamera.GetState().SetFlag(1u, true);
 
-    // ⚠️ CORRECTED 2026-07-31: the store here is a byte at +0x0A relative to behaviour +0x20 --
-    // behaviour +0x2A, i.e. the free VISIBILITY COLLISION POLICY's +0x0A, NOT the base's
-    // mbTweakerAttached at behaviour +0x0A. (That resolves the open FLAG this header carried
-    // about "why does an ICE take raise mbTweakerAttached every frame": it never did.)
-    mCollisionPolicy.SetSeeThroughEnabled(true);
+    // ⭐ CORRECTED 2026-09-25 (FX-DIRECTOR2) -- THE POLICY IS RE-TARGETED AT THE PLAYER EVERY FRAME.
+    // The byte at behaviour +0x2A (the free visibility policy's +0x0A) is mbTargetSet, and it is
+    // only the first store of an inlined VisibilityCollisionPolicy::SetTarget (0x82247204..
+    // 0x82247258): the player's transform (shared info +0x250) into policy +0x10, the player's
+    // bounds (+0x500) into policy +0x50, and the player's entity id (+0x428) into policy +0x230.
+    // The old spelling, SetSeeThroughEnabled(true), wrote the visibility test's mbTestLookingAt
+    // instead and left the policy without a target -- its GenerateSceneQueries / ProcessScene-
+    // QueryResults open with the "mbTargetSet" tripwire (BrnCollisionPolicy.cpp:807 / :867).
+    mCollisionPolicy.SetTarget(lrSharedInfo.mPlayerInfo.mRaceCarState.mTransform,
+                               lrSharedInfo.mPlayerInfo.mAABB,
+                               CgsSceneManager::EntityId(lrSharedInfo.mPlayerInfo.mRaceCarState.mEntityId.muValue));
 
     // Heading-space look-at: build it for the secondary (look-at) vehicle, then SLerp the
     // behaviour's own heading-space frame towards it. (⚠️ CORRECTED 2026-07-31: the console
@@ -741,9 +752,10 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     // --- "Can't cut TO me" gate ---
     if (mbUseCollisionPolicy)
     {
-        // Inner guard: only raise it when the free visibility policy's three state bytes say
-        // so: mbSeeThroughAlways || (mbSeeThroughEnabled && !mbSeeThroughSuppressed).
-        if (mCollisionPolicy.ShouldRaiseSeeThrough())
+        // Inner guard: only raise it when the free visibility policy's visibility test says the
+        // target is not visible: mbOccluded || (mbTestLookingAt && !mbIsOnScreen) -- the DWARF's
+        // VisibilityCollisionPolicy::IsVisibilityInterrupted (BrnCollisionPolicy.h:404).
+        if (mCollisionPolicy.IsVisibilityInterrupted())
         {
             // The console's two stores here -- validity-account bit 16 at camera +0x138, then
             // `mbCanSwitchToMeNow = false` -- ARE Behaviour::SetCantSwitchToMeNow's body. This

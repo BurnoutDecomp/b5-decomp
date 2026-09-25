@@ -115,14 +115,15 @@ namespace BrnDirector
     }
 namespace Camera
 {
-    // The console Construct's see-through bytes are 1/0/1 (+0x1A0..+0x1A2); the stand-in does the same,
-    // so only the behaviour's own SetTestLookingAt(false) can lower the first.
+    // The console Construct's visibility-test bytes are 1/0/1 (policy +0x1A0..+0x1A2 = the embedded
+    // VisibilityTest's mbTestLookingAt / mbOccluded / mbIsOnScreen); the stand-in does the same, so only
+    // the behaviour's own SetTestLookingAt(false) can lower the first.
     void VisibilityCollisionPolicy::Construct()
     {
         ++giPolicyConstructs;
-        mbSeeThroughEnabled = true;
-        mbSeeThroughAlways = false;
-        mbSeeThroughSuppressed = true;
+        mVisibilityTest.mbTestLookingAt = true;
+        mVisibilityTest.mbOccluded      = false;
+        mVisibilityTest.mbIsOnScreen    = true;
     }
     void VisibilityCollisionPolicy::SetTarget(Matrix44Affine lTargetTransform, AABBox lTargetAABB,
                                               CgsSceneManager::EntityId lTargetEntityId)
@@ -132,6 +133,11 @@ namespace Camera
         gLastPolicyAABB = lTargetAABB;
         guLastPolicyEntity = static_cast<u32>(lTargetEntityId);
     }
+    // The policy's two per-frame scene-query virtuals (vtable slots 0/1, @0x822402F8 / @0x82224530; bodies in
+    // BrnVisibilityCollisionPolicy.cpp, not compiled here). The behaviour under test never calls them --
+    // BehaviourManager's collision pass does -- so they are defined only for the policy's vtable to link.
+    void VisibilityCollisionPolicy::GenerateSceneQueries(const CollisionPolicySharedInfo&, Camera&) {}
+    void VisibilityCollisionPolicy::ProcessSceneQueryResults(const CollisionPolicySharedInfo&, Camera&) {}
     void ValidityAccount::SetFlag(s32 leFlag) { gFailFlags.push_back(leFlag); }
     void ValidityAccount::SetNoCutFromFlag(s32) {}
     void ValidityAccount::SetNoCutToFlag(s32 leFlag) { gNoCutToFlags.push_back(leFlag); }
@@ -371,7 +377,7 @@ int main()
     CgsNumeric::Random lReferenceRandom;
     std::memset(static_cast<void*>(&lReferenceRandom), 0, sizeof(lReferenceRandom));
     lReferenceRandom.Construct();
-    Check(giPolicyConstructs == 1 && !lpCam->mCollisionPolicy.mbSeeThroughEnabled,
+    Check(giPolicyConstructs == 1 && !lpCam->mCollisionPolicy.mVisibilityTest.mbTestLookingAt,
           "Construct: VisibilityCollisionPolicy::Construct, then SetTestLookingAt(false) (stb 0, 0x270 after the policy's stb 1)");
     Check(!lpCam->mbIsPrepared && !lpCam->mbHasFailed && !lpCam->mbTweakerAttached && !lpCam->mbCanSwitchToMeNow &&
           !lpCam->mbCanSwitchFromMeNow && lpCam->mpcDebugParametersName == nullptr &&
@@ -460,11 +466,11 @@ int main()
     Frame(lpCam);
     Check(Has(gNoCutToFlags, 15) && !lpCam->mbCanSwitchToMeNow && !lpCam->mbHasFailed,
           "Update: will be out of range in 0.5 s (flt_82001DA0) -> NoCutTo 15 'Subject about to leave frame'");
-    lpCam->mCollisionPolicy.mbSeeThroughAlways = true;
+    lpCam->mCollisionPolicy.mVisibilityTest.mbOccluded = true;
     Frame(lpCam);
     Check(Has(gNoCutToFlags, 17) && !Has(gNoCutToFlags, 15) && !lpCam->mbCanSwitchToMeNow,
           "Update: visibility interrupted -> NoCutTo 17 'Subject occluded' (and not 15: else-if)");
-    lpCam->mCollisionPolicy.mbSeeThroughAlways = false;
+    lpCam->mCollisionPolicy.mVisibilityTest.mbOccluded = false;
     PlaceCar(2, Vector3{ 200.0f, 5.0f, 200.0f, 1.0f }, Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
     Frame(lpCam);
     Check(Has(gFailFlags, 7) && lpCam->mbHasFailed && lpCam->mbCanSwitchFromMeNow && !lpCam->mbCanSwitchToMeNow &&

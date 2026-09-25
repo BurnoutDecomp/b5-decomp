@@ -9,6 +9,10 @@
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"                   // Camera::AABBox (SetTarget)
 #include "GameSource/Director/Camera/Utils/BrnVehicleCollisionPredictor.h"  // Utils::VehicleCollisionPredictor (embedded)
 #include "GameSource/Director/Utils/BrnVehicleRef.h"                        // BrnDirector::VehicleRef (SetVehicleRef)
+#include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"          // the post boxes the policies wait on
+#include "GameSource/Director/Utils/BrnDirectorTimestep.h"                 // BrnDirector::Timestep (CollisionPolicySharedInfo)
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"                 // CgsContainers::BitArray<8> (mUsedRaceCars)
+#include "GameSource/BurnoutConstants.h"                                   // EActiveRaceCarIndex
 
 // ============================================================================
 // GameSource/Director/Camera/BrnCollisionPolicy.h
@@ -60,8 +64,17 @@
 // absolute offsets shift and nothing indexes these by offset.
 // ----------------------------------------------------------------------------
 
+namespace CgsNumeric { class Random; }
+
 namespace BrnDirector
 {
+// Pointer-only members of CollisionPolicySharedInfo. The class keys are the homes' (MSVC mangles
+// the key: BrnSceneQueryInterface.h / BrnDirectorAllVehicleData.h / BrnDirectorModuleDebugPrinter.h
+// all say `struct`).
+struct SceneQueryInterface;
+struct AllVehicleData;
+struct DebugPrinter;
+
 namespace Camera
 {
 
@@ -70,35 +83,101 @@ namespace Camera
 // including either would create a cycle -- Behaviour.h's behaviours embed policies).
 struct Camera;
 struct BehaviourSharedInfo;
+struct VehicleInfo;
+
+// DWARF Camera.h:30 -- `extern bool IsLookingAtTarget(const Camera&, Matrix44Affine, const AABBox&)`
+// @0x822331F0. The body lives in Behaviours/BrnBehaviourIceAnim.cpp (its first consumer), which
+// declares it with this same signature; declared here too for VisibilityTest::GenerateSceneQueries.
+bool IsLookingAtTarget(const Camera& lrCamera,
+                       const rw::math::vpu::Matrix44Affine& lrTargetTransform,
+                       const AABBox& lrTargetBounds);
+
+// ============================================================================
+// BrnDirector::Camera::CollisionPolicySharedInfo (DWARF BrnCollisionPolicy.h:54) -- the per-frame
+// block every collision policy's GenerateSceneQueries / ProcessSceneQueryResults receives. Added
+// 2026-09-25 (FX-DIRECTOR2). The director builds it on its own stack, twice a frame:
+//   MainDirector::UpdateCameraBehavioursPreScene  0x822557B4..0x82255834 (then GenerateSceneQueries)
+//   MainDirector::UpdateCameraBehavioursPostScene 0x8224FE18..0x8224FF30 (then ProcessSceneQueryResults)
+// Console offsets, pinned by those two builds (provenance only; access is by name):
+//   +0x00 mUsedRaceCars          `std` of the input's used-race-car word
+//   +0x08 mpRequestInterface     DirectorInputOutput::mpSceneQueryInterface (lpIO + 0x10)
+//   +0x0C mpRaceCars             DirectorIO::InputBuffer::GetRaceCarInfo
+//   +0x10 mpPlayerCar            mpRaceCars + 0x4F0 * player index
+//   +0x14 mpPlayerCarTransform   mpPlayerCar + 0x1F0 (mRaceCarState.mTransform)
+//   +0x18 mePlayerCarIndex
+//   +0x1C mpAllVehicleData       MainDirector + 0x12C80
+//   +0x20 mpDebugPrinter         MainDirector + 0x337B0
+//   +0x24 mpRandom               MainDirector + 0x32EE0 (the director's camera Random)
+//   +0x30 mTimestep              the same three timesteps the BehaviourSharedInfo carries
+// The policies read mTimestep.Get(E_WORLD) (+0x60) for the ground constraint and
+// Get(E_WORLD_NO_SLOMO) (+0x64) for the visibility and prediction timers.
+// ============================================================================
+struct CollisionPolicySharedInfo
+{
+    CgsContainers::BitArray<8u>            mUsedRaceCars;          // :57
+    const SceneQueryInterface*             mpRequestInterface;     // :59
+    const VehicleInfo*                     mpRaceCars;             // :60
+    const VehicleInfo*                     mpPlayerCar;            // :61
+    const rw::math::vpu::Matrix44Affine*   mpPlayerCarTransform;   // :62
+    EActiveRaceCarIndex                    mePlayerCarIndex;       // :63
+    const AllVehicleData*                  mpAllVehicleData;       // :65
+    BrnDirector::DebugPrinter*             mpDebugPrinter;         // :67
+    CgsNumeric::Random*                    mpRandom;               // :69
+    BrnDirector::Timestep                  mTimestep;              // :70
+};
 
 // ----------------------------------------------------------------------------
-// BrnDirector::Camera::GeometryCollisionPredictor
+// BrnDirector::Camera::GeometryCollisionPredictor (DWARF BrnCollisionPolicy.h:133)
 //
-// Predicts whether the camera ray is about to hit geometry and, if so, when. The visibility
-// collision policy queries GetTimeUntilCollision after a scene query, guarded by the
-// mbWillCollide flag.
+// Predicts whether the camera, moving at its current velocity, is about to hit the WORLD within
+// KF_LOOKAHEAD_TIME, and if so how soon: one world-only nearest line test from the camera to
+// camera + velocity * lookahead, answered through mLineTest.
+// ⭐ FULL LAYOUT 2026-09-25 (FX-DIRECTOR2): the old `maReserved00[0x60]` span is the DWARF's
+// mVelocity (+0x00) and mLineTest (+0x10, an 80-byte nearest-result post box) -- which is what
+// puts the two scalars at +0x60 / +0x64.
 // ----------------------------------------------------------------------------
 class GeometryCollisionPredictor
 {
 public:
-    // Return the predicted time (seconds) until the camera collides with geometry. @0x821F36C0:
-    // asserts a collision was actually predicted (mbWillCollide), then returns mfTimeUntilCollision.
+    // DWARF :185. Inlined in every VisibilityCollisionPolicy::Construct copy (e.g.
+    // BehaviourGyroCam::Construct 0x82244B90..0x82244B9C): the velocity lane zeroed (`stvx`), the
+    // post box emptied (`stw 0, 0x10`), mbWillCollide cleared (`stb 0, 0x64`).
+    void Construct()
+    {
+        mVelocity.SetZero();
+        mLineTest.Construct();
+        mbWillCollide = false;
+    }
+
+    // DWARF :192. No out-of-line X360 copy: VisibilityCollisionPolicy::GenerateSceneQueries
+    // inlines it (0x82240468..0x822404AC). The timestep and the Random are part of the DWARF
+    // signature and unused by the body. Body: BrnGeometryCollisionPredictor.cpp.
+    void GenerateSceneQueries(const Camera& lrCamera, f32 lfTimestep, CgsNumeric::Random& lrRandom,
+                              const SceneQueryInterface* lpRequestInterface);
+
+    // DWARF :196 -- @0x8220E1B8. Body: BrnGeometryCollisionPredictor.cpp.
+    void ProcessSceneQueryResults(f32 lfTimestep);
+
+    // DWARF :200 -- inlined (VisibilityCollisionPolicy::GenerateSceneQueries 0x8224047C/0x82240484
+    // copies the policy's velocity lane into +0x00 before the test).
+    void SetVelocity(Vector3 lVelocity) { mVelocity = lVelocity; }
+
+    // DWARF :203.
+    bool WillCollide() const { return mbWillCollide; }
+
+    // DWARF :206 -- @0x821F36C0: asserts a collision was predicted, returns the time.
     f32 GetTimeUntilCollision() const;
 
-    // GROWN for VisibilityCollisionPolicy::TimeUntilCollisionWithGeometry @0x821F37C8
-    // (its h:425 wrapper assert reads this flag through the embedded predictor).
-    bool WillCollide() const { return mbWillCollide != 0; }
-    void Construct() { mbWillCollide = false; }
+    // KF_LOOKAHEAD_TIME_FLOAT (DWARF :208). Its VecFloat twin KF_LOOKAHEAD_TIME_VECFLOAT (:209)
+    // lives at 0x82FAA9A0 and is written by the dyn-init at 0x82C49170 as the splat of the float
+    // at 0x82001B6C == 0x3F800000 == 1.0f.
+    static const f32 KF_LOOKAHEAD_TIME_FLOAT;
 
 private:
-    // FLAG: only the two members GetTimeUntilCollision reads are modelled at their asm-attested
-    //   offsets; the rest of the predictor rig lands with its full TU.
-    //     +0x00 .. +0x5F  predictor rig (ray / hit data) not modelled here
-    //     +0x60           mfTimeUntilCollision (lfs f1, 0x60)
-    //     +0x64           mbWillCollide        (lbz 0x64; asserted set)
-    u8  maReserved00[0x60];   // +0x00 .. +0x5F  rig members not modelled here
-    f32 mfTimeUntilCollision; // +0x60           predicted time-until-collision (returned)
-    u8  mbWillCollide;        // +0x64           a collision was predicted (asserted set)
+    Vector3                mVelocity;               // :213  +0x00
+    LineTestNearestPostBox mLineTest;               // :214  +0x10 (80 bytes: state + pad + the 64-byte result)
+    f32                    mfTimeUntilCollision;    // :215  +0x60
+    bool                   mbWillCollide;           // :216  +0x64
 };
 
 // ============================================================================
@@ -113,13 +192,33 @@ class CollisionPolicy
 {
 public:
     virtual ~CollisionPolicy() {}
-    virtual void GenerateSceneQueries(const void*, Camera&) {}
-    virtual void ProcessSceneQueryResults(const void*, Camera&) {}
 
-    // @0x82206450 (class TU; body in BrnCameraCollisionPolicy.cpp) -- give up:
-    // record the failure reason in the shared info's validity account (+0x138),
-    // drop the info's follow-request bit (the +0x140 u64, bit 1), raise mbFailed.
-    void Fail(BehaviourSharedInfo* lpInfo, s32 liReason);
+    // DWARF :333 / :338 -- the two per-frame virtuals, in the console's slot order. The base
+    // bodies do nothing: a policy that does not override them (CollisionPolicyAttachedToVehicle and
+    // FrustrumCollisionResolver on this build) issues and consumes no queries.
+    // ⭐ SIGNATURES CORRECTED 2026-09-25 (FX-DIRECTOR2): `(const void*, Camera&)` was a stand-in for
+    // the DWARF's `(const CollisionPolicySharedInfo&, Camera&)`.
+    virtual void GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera)
+    {
+        (void)lrSharedInfo;
+        (void)lrCamera;
+    }
+    virtual void ProcessSceneQueryResults(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera)
+    {
+        (void)lrSharedInfo;
+        (void)lrCamera;
+    }
+
+    // DWARF :504. BehaviourManager::ProcessSceneQueryResults @0x8221F70C reads it (`lbz 4(policy)`)
+    // straight after the policy's ProcessSceneQueryResults and fails the behaviour when it is set.
+    bool HasFailed() const { return mbFailed; }
+
+    // DWARF :523 -- @0x82206450: record the failure reason in the CAMERA's validity account
+    // (camera +0x138), drop the camera's follow request (the +0x140 flag word's bit 1) and raise
+    // mbHasFailed. ⭐ SIGNATURE CORRECTED 2026-09-25: the first argument is the Camera (both
+    // callers pass the camera they were handed), not a BehaviourSharedInfo*. The body lives in
+    // BrnVisibilityCollisionPolicy.cpp (see the note there on why not its DWARF home).
+    void Fail(Camera& lrCamera, s32 leFailedFlag);
 
 protected:
     // The counterpart store: every derived policy's Construct opens with `stb 0, 4(this)`
@@ -128,7 +227,7 @@ protected:
     void ClearFailed() { mbFailed = false; }
 
 private:
-    // ADDITIVE GROW (Fail @0x82206450 `stb 1,4(this)`): the policy's failed latch.
+    // DWARF :371 mbHasFailed. Fail @0x82206450 `stb 1,4(this)`.
     bool mbFailed;   // +0x04 (X360; right after the vptr)
 };
 
@@ -372,191 +471,199 @@ inline void CollisionPolicyAttachedToVehicle::SetVehicleRef(const BrnDirector::V
 }
 
 // ----------------------------------------------------------------------------
-// BrnDirector::Camera::VisibilityTest
+// BrnDirector::Camera::VisibilityTest (DWARF BrnCollisionPolicy.h:175)
 //
-// The per-frame visibility result the visibility collision policy produces from a scene query:
-// whether the tracked subject is currently on screen and, if not, for how long it has been
-// off screen. Both reads are guarded by mbTestLookingAt (the policy only publishes these when
-// it was actually asked to test line-of-sight); VisibilityCollisionPolicy::ProcessSceneQueryResults
-// reads them after the query completes.
+// Can the camera SEE its target? Two nearest line tests between the camera and the target
+// (camera->target and target->camera, both excluding the target entity and all its parts) decide
+// OCCLUDED; the target's 0.75-scaled bounds against the camera frustum, plus a zoom-scaled distance
+// cap, decide ON SCREEN. The two timers count how long each bad state has lasted.
+// ⭐ FULL LAYOUT 2026-09-25 (FX-DIRECTOR2): the DWARF members at the console offsets both committed
+// accessors already read (+0xA4 / +0xB0 / +0xB2), and the whole method set.
 // ----------------------------------------------------------------------------
 class VisibilityTest
 {
 public:
-    // Return how long (seconds) the subject has been off screen. @0x821F3718: asserts the
-    // looking-at test was enabled (mbTestLookingAt), then returns mfOffscreenTime.
-    f32 GetOffscreenTime() const;
+    // DWARF :226. Inlined in every VisibilityCollisionPolicy::Construct copy (policy +0xF0..+0x1A2,
+    // e.g. BehaviourGyroCam::Construct 0x82244BA4..0x82244BC4): both boxes emptied, the three
+    // timers zeroed, mfMaxTimeBetweenTests = 0.5 (flt_82001DA0), mbTestLookingAt = true,
+    // mbOccluded = false, mbIsOnScreen = true.
+    void Construct()
+    {
+        mLineTestA.Construct();
+        mLineTestB.Construct();
+        mfOccludedTime        = 0.0f;
+        mfOffscreenTime       = 0.0f;
+        mfTimeSinceLastTest   = 0.0f;
+        mfMaxTimeBetweenTests = 0.5f;     // flt_82001DA0 == 0x3F000000
+        mbTestLookingAt       = true;
+        mbOccluded            = false;
+        mbIsOnScreen          = true;
+    }
 
-    // Return whether the subject is currently on screen. @0x821F3770: asserts the looking-at
-    // test was enabled (mbTestLookingAt), then returns mbOnScreen.
-    bool IsOnScreen() const;
+    // DWARF :237 -- @0x822400B0. Body: BrnVisibilityTest.cpp.
+    void GenerateSceneQueries(const Camera& lrCamera, f32 lfTimestep, CgsNumeric::Random& lrRandom,
+                              const SceneQueryInterface* lpRequestInterface,
+                              const rw::math::vpu::Matrix44Affine& lrTargetTransform,
+                              const AABBox& lrTargetAABB, bool lbDoTest,
+                              CgsSceneManager::EntityId lTargetEntityId);
+
+    // DWARF :241 -- @0x8220E290. Body: BrnVisibilityTest.cpp.
+    void ProcessSceneQueryResults(f32 lfTimestep);
+
+    f32  GetOccludedTime() const        { return mfOccludedTime; }          // :244
+    f32  GetOffscreenTime() const;                                          // :247  @0x821F3718
+    f32  GetOffscreenTimeUnsafe() const { return mfOffscreenTime; }         // :251
+    void SetTestLookingAt(bool lbTestLookingAt) { mbTestLookingAt = lbTestLookingAt; }   // :256
+    bool WillTestLookingAt() const      { return mbTestLookingAt; }         // :259
+    // :262 -- `+0xB1 || (+0xB0 && !+0xB2)`, inlined by every consumer (BehaviourFixedCam::Update
+    // 0x8222A338..0x8222A368, BehaviourIceAnim::Update, VisibilityCollisionPolicy::
+    // ProcessSceneQueryResults 0x82224734..0x8222474C).
+    bool IsVisibilityInterrupted() const { return mbOccluded || (mbTestLookingAt && !mbIsOnScreen); }
+    bool IsOccluded() const             { return mbOccluded; }              // :266
+    bool IsOnScreen() const;                                                // :269  @0x821F3770
 
 private:
-    // FLAG: only the members the two getters touch are modelled at their asm-attested offsets;
-    //   the rest of the visibility-test rig lands with its full TU.
-    //     +0x000 .. +0x0A3  rig members not modelled here
-    //     +0x0A4            mfOffscreenTime  (lfs f1, 0xA4 in GetOffscreenTime)
-    //     +0x0A5 .. +0x0AF  rig members not modelled here
-    //     +0x0B0            mbTestLookingAt  (lbz 0xB0; asserted set by both getters)
-    //     +0x0B1            rig member not modelled here
-    //     +0x0B2            mbOnScreen       (lbz 0xB2 in IsOnScreen)
-    u8  maReserved000[0xA4];                 // +0x000 .. +0x0A3  rig members not modelled here
-    f32 mfOffscreenTime;                     // +0x0A4            time spent off screen (returned)
-    u8  maReserved0A8[0xB0 - 0xA8];          // +0x0A8 .. +0x0AF  rig members not modelled here
-    u8  mbTestLookingAt;                     // +0x0B0            line-of-sight test enabled (asserted)
-    u8  maReserved0B1;                       // +0x0B1            rig member not modelled here
-    u8  mbOnScreen;                          // +0x0B2            subject currently on screen (returned)
+    LineTestNearestPostBox mLineTestA;              // :277  +0x00 (camera -> target)
+    LineTestNearestPostBox mLineTestB;              // :278  +0x50 (target -> camera)
+    f32                    mfOccludedTime;          // :279  +0xA0
+    f32                    mfOffscreenTime;         // :280  +0xA4
+    f32                    mfTimeSinceLastTest;     // :281  +0xA8
+    f32                    mfMaxTimeBetweenTests;   // :282  +0xAC
+    bool                   mbTestLookingAt;         // :283  +0xB0
+    bool                   mbOccluded;              // :284  +0xB1
+    bool                   mbIsOnScreen;            // :285  +0xB2
+};
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::GroundConstraint (DWARF BrnCollisionPolicy.h:241)
+//
+// Keeps the camera at mfDesiredHeight above the ground: one world-only nearest line test straight
+// down through the camera; when it hits, the camera's height is set to hit + desired height.
+// Embedded by both VisibilityCollisionPolicy (+0x1C0) and CollisionPolicyAttachedToVehicle
+// (+0x1C0 -- still a reserved span there; its ResolveCollisions @0x82224948 is not in this closure).
+// ----------------------------------------------------------------------------
+class GroundConstraint
+{
+public:
+    // DWARF :298. Inlined (policy +0x1C0 `stw 0` and +0x210 `stfs -1.0f`, flt_820037C8).
+    void Construct()
+    {
+        mLineTest.Construct();
+        mfDesiredHeight = -1.0f;          // flt_820037C8 == 0xBF800000
+    }
+
+    // DWARF :304 -- @0x82240200. Body: BrnVisibilityCollisionPolicy.cpp.
+    void GenerateSceneQueries(const Camera& lrCamera, f32 lfTimestep,
+                              const SceneQueryInterface* lpRequestInterface);
+
+    // DWARF :309 -- @0x8220E3A0; false when the ground was not found. Body:
+    // BrnVisibilityCollisionPolicy.cpp.
+    bool ProcessSceneQueryResults(f32 lfTimestep, Camera& lrCamera);
+
+    void SetDesiredHeight(f32 lfDesiredHeight) { mfDesiredHeight = lfDesiredHeight; }   // :313
+    f32  GetDesiredHeight() const              { return mfDesiredHeight; }             // :316
+
+    // DWARF :294 / :295 -- the line runs from KF_MIN_TEST_ABOVE_LENGTH above the camera down to
+    // max(KF_MIN_TEST_BELOW_LENGTH, mfDesiredHeight) below that start (the two float literals the
+    // body loads: flt_82001C98 == 1.0f and flt_8200426C == 5.0f).
+    static const f32 KF_MIN_TEST_BELOW_LENGTH;
+    static const f32 KF_MIN_TEST_ABOVE_LENGTH;
+
+private:
+    LineTestNearestPostBox mLineTest;               // :320  +0x00
+    f32                    mfDesiredHeight;         // :321  +0x50
 };
 
 // ============================================================================
-// BrnDirector::Camera::VisibilityCollisionPolicy -- the "free" (not car-attached) camera
-// collision policy: it runs the scene queries, keeps the geometry/vehicle collision
-// predictors, and owns the see-through state the behaviours' Update gates read.
+// BrnDirector::Camera::VisibilityCollisionPolicy (DWARF BrnCollisionPolicy.h:377) -- the "free"
+// (not car-attached) camera collision policy: it runs the visibility test, the ground constraint and
+// the two collision predictors, and fails the camera (CollisionPolicy::Fail) when the target is
+// occluded or off screen, the ground is missing, or a collision is imminent.
 //
-// MOVED HERE (2026-07-30) from Behaviours/BehaviourRig.h. The opaque blob is CARVED around
-// the members the class-TU bodies touch (X360 offsets in comments; ORDER preserved, PC offsets
-// differ -- all access is BY NAME). The remaining reserved spans still need the unrecovered
-// types (LineTestNearestPostBox, VolumeTestDeepestPostBox, GroundConstraint etc.).
-// Nominal X360 size 0x240 bytes -- which the retired BrnBehaviourIceAnim.h slice independently
-// agreed on (its own reserved tail also ended at 0x240).
-//
-// FLAG: minimal slice -- the full policy layout/method set lands with its own TU.
+// ⭐ DWARF LAYOUT 2026-09-25 (FX-DIRECTOR2, the camera scene-query closure). Every member is now the
+// DWARF's, in the DWARF's order. Two corrections fall out:
+//   * the three "see-through" bytes at policy +0x1A0..+0x1A2 were never policy members -- they are
+//     mVisibilityTest's mbTestLookingAt / mbOccluded / mbIsOnScreen (mVisibilityTest sits at +0xF0;
+//     ProcessSceneQueryResults @0x822246C0 calls VisibilityTest::ProcessSceneQueryResults on
+//     this + 0xF0 and then reads +0xB0/+0xB1/+0xB2 off that pointer). The SetSeeThrough* accessors
+//     are retired; their callers use Construct() / SetTestLookingAt / IsVisibilityInterrupted;
+//   * the scalars the old slice named mfDesiredHeight / mfMinHeight / mfCollisionRadius /
+//     mbHaveDesiredHeight are mGroundConstraint's mfDesiredHeight (+0x210) and the policy's
+//     mfOcclusionTimeout (+0x234) / mfOffscreenTimeout (+0x238) / mbUseGroundConstraint (+0x23C) --
+//     the offsets and the Construct seeds (1.5 / 0.5) are unchanged.
+// Nominal console size 0x240.
 // ============================================================================
 class VisibilityCollisionPolicy : public CollisionPolicy
 {
 public:
+    // DWARF BrnCollisionPolicy.cpp:763. No out-of-line X360 copy; inlined in every owner's
+    // Construct (BehaviourGyroCam 0x82244B88..0x82244BEC, BehaviourIceAnim 0x822561F0..
+    // 0x8225625C, BehaviourFixedCam, BehaviourBystanderCam ...). Body: BrnVisibilityCollisionPolicy.cpp.
     void Construct();
 
-    // ⭐ SetCanFail (DWARF BrnCollisionPolicy.h:534) -- BODIED 2026-08-01. Was
-    // declaration-only. mbCanFail is the master gate on EVERY CollisionPolicy::Fail() call
-    // this policy makes: VisibilityCollisionPolicy::ProcessSceneQueryResults @0x82224530
-    // re-reads it (`lbz 8(this)`) before each of its six failure arms, so clearing it means
-    // "this camera may not fail out for occlusion / collision / off-screen".
-    //
-    // ⛔ THIS IS THE FUNCTION `BehaviourIceAnim::ClearBaseFirstFrameGate` WAS GUESSING AT.
-    // The seven ICE-anim arbitrator states emit `stb 0, 0x28(behaviour)` right after
-    // NewBehaviour<BehaviourIceAnim> (e.g. ArbStateCarSelect::Prepare @0x8226F0C4 and
-    // @0x8226F1A8, ArbStateRaceIntro::Update @0x8226E730). Behaviour +0x28 is
-    // mCollisionPolicy (+0x20) + 0x08 -- i.e. mbCanFail, NOT a base-Behaviour "first frame"
-    // field. See the member comments below.
+    // DWARF BrnCollisionPolicy.cpp:805 / :865 -- @0x822402F8 / @0x82224530. Bodies:
+    // BrnVisibilityCollisionPolicy.cpp.
+    void GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) override;
+    void ProcessSceneQueryResults(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) override;
+
+    // DWARF :534. mbCanFail is the master gate on every Fail() the policy makes. The seven ICE-anim
+    // arbitrator states emit `stb 0, 0x28(behaviour)` right after NewBehaviour<BehaviourIceAnim>
+    // (behaviour +0x20 + 0x08), i.e. SetCanFail(false).
     void SetCanFail(bool lbCanFail) { mbCanFail = lbCanFail; }
 
+    // DWARF :545 -- inlined (BehaviourIceAnim::Update 0x82247204..0x82247258 re-targets the policy
+    // at the player every frame: mbTargetSet, the transform, the bounds, the entity id).
     void SetTarget(Matrix44Affine lTargetTransform, AABBox lTargetAABB,
                    CgsSceneManager::EntityId lTargetEntityId);
 
-    // ⭐ BODIED 2026-09-24 (FX-DIRECTOR, the fixed cam). Both are one-line forwarders onto the
-    // policy's embedded visibility test (the three bytes at policy +0x1A0..+0x1A2 -- see the
-    // MIS-ATTRIBUTED NAMES note below; they are mVisibilityTest's), and the console inlines both:
-    //   SetTestLookingAt  BehaviourFixedCam::Construct @0x82229D20 stores `stb 1` to policy +0x1A0 a
-    //                     SECOND time, after the inlined Construct block -- the DWARF call list of
-    //                     that function names VisibilityCollisionPolicy::SetTestLookingAt.
-    //   IsVisibilityInterrupted  BehaviourFixedCam::Update 0x8222A338..0x8222A368:
-    //                     `+0x1A1 || (+0x1A0 && !+0x1A2)` -- the DWARF names the inline
-    //                     VisibilityCollisionPolicy::IsVisibilityInterrupted. The same predicate as
-    //                     ShouldRaiseSeeThrough below, which the ICE-anim / gyro cams already use.
-    void SetTestLookingAt(bool lbTestLookingAt) { mbSeeThroughEnabled = lbTestLookingAt; }
-    void SetVelocity(Vector3 lVelocity);
-    bool IsVisibilityInterrupted() const
+    // DWARF :404. The owners' "can't cut to me" gate (BehaviourFixedCam / BehaviourGyroCam /
+    // BehaviourIceAnim / BehaviourBystanderCam).
+    bool IsVisibilityInterrupted() const { return mVisibilityTest.IsVisibilityInterrupted(); }
+
+    // DWARF :556 -- inlined into ProcessSceneQueryResults (0x822247D4..0x82224804): the time left
+    // before either visibility timeout, floored at 0 -- the two `fsel`s are exactly min then max-0.
+    f32 GetMinTimeToVisibilityFailure() const
     {
-        return mbSeeThroughAlways || (mbSeeThroughEnabled && !mbSeeThroughSuppressed);
+        const f32 lfOcclusionLeft = mfOcclusionTimeout - mVisibilityTest.GetOccludedTime();
+        const f32 lfOffscreenLeft = mfOffscreenTimeout - mVisibilityTest.GetOffscreenTimeUnsafe();
+        const f32 lfMin = ((lfOcclusionLeft - lfOffscreenLeft) >= 0.0f) ? lfOffscreenLeft : lfOcclusionLeft;
+        return (-lfMin >= 0.0f) ? 0.0f : lfMin;
     }
-    float GetMinTimeToVisibilityFailure() const;
 
-    // ---- class-TU surface (bodies in BrnVisibilityCollisionPolicy.cpp) ----
+    // DWARF :570 -- a forwarder onto the embedded visibility test (BehaviourFixedCam::Construct
+    // @0x82229D20 re-stores `stb 1` to policy +0x1A0 after the inlined Construct).
+    void SetTestLookingAt(bool lbTestLookingAt) { mVisibilityTest.SetTestLookingAt(lbTestLookingAt); }
 
-    // The guards the two time queries assert on (the X360 inlines the embedded
-    // predictors' flag reads into the wrappers).
-    bool WillCollideWithGeometry() const { return mGeometryCollisionPredictor.WillCollide(); }
-    bool WillCollideWithVehicle() const  { return mVehicleCollisionPredictor.HasPredictedCollision(); }
-
-    // @0x821F38E0 (BrnCollisionPolicy.h:489) -- raise the desired-height override
-    // latch, assert the height positive, store it.
+    // DWARF :579 -- @0x821F38E0. Body: BrnVisibilityCollisionPolicy.cpp.
     void SetDesiredHeight(f32 lfDesiredHeight);
 
-    // @0x821F37C8 (BrnCollisionPolicy.h:425 wrapper + the embedded geometry
-    // predictor's own :206 tripwire) -- predicted time until the camera hits
-    // geometry.
-    f32 TimeUntilCollisionWithGeometry() const;
+    // DWARF :419.
+    void SetVelocity(Vector3 lVelocity);
 
-    // @0x821F3858 (BrnCollisionPolicy.h:431 wrapper + the embedded vehicle
-    // predictor's own BrnVehicleCollisionPredictor.h:69 tripwire) -- predicted
-    // time until the camera hits the tracked vehicle.
-    f32 TimeUntilCollisionWithVehicle() const;
-
-    // ---- the see-through state block -------------------------------------------------
-    // ADDITIVE GROW (de-fork 2026-07-30, carried forward from the retired
-    // BrnBehaviourIceAnim.h slice). BehaviourIceAnim::Construct @0x82246048 seeds all three
-    // bytes (`stb 1 / stb 0 / stb 1` at policy +0x1A0/+0x1A1/+0x1A2) and its Update
-    // @0x82247108 consults exactly this predicate before raising the camera's see-through
-    // request. Exposed as named accessors so no caller pokes the (private) bytes.
-    //
-    // ⚠️⚠️ MIS-ATTRIBUTED MEMBER NAMES (found 2026-08-01, NOT fixed here -- it would rename
-    // public accessors BrnBehaviourIceAnim.cpp:352/353/354/559/689 uses, which this wave does
-    // not own). These three bytes are NOT policy members: they live inside mVisibilityTest.
-    // ProcessSceneQueryResults @0x822246C0 calls VisibilityTest::ProcessSceneQueryResults on
-    // `this + 0xF0` and then reads +0xB0/+0xB1/+0xB2 OFF THAT SAME POINTER (@0x82224734..
-    // @0x8222474C) -- 0xF0 + 0xB0 == 0x1A0. Cross-checked against VisibilityTest's own
-    // committed slice, whose IsOnScreen @0x821F3770 asserts on +0xB0 (mbTestLookingAt) and
-    // returns +0xB2 (mbOnScreen). So:
-    //     mbSeeThroughEnabled    (+0x1A0) is really mVisibilityTest.mbTestLookingAt
-    //     mbSeeThroughSuppressed (+0x1A2) is really mVisibilityTest.mbOnScreen
-    //     mbSeeThroughAlways     (+0x1A1) is the unnamed VisibilityTest byte between them
-    // The PREDICATE below is still byte-correct (the console computes the identical
-    // `+0xB1 || (+0xB0 && !+0xB2)`), and so is the layout -- only the three member NAMES and
-    // the three Set* accessors are wrong, and BehaviourIceAnim::Construct's seeding is
-    // genuinely a VisibilityTest::Construct inline. Behaviour is unaffected.
-    // DELETE-WHEN: VisibilityTest is embedded by name at +0xF0 and the three Set* accessors
-    // are re-pointed at it.
-    bool ShouldRaiseSeeThrough() const
-    {
-        return mbSeeThroughAlways || (mbSeeThroughEnabled && !mbSeeThroughSuppressed);
-    }
-
-    void SetSeeThroughEnabled(bool lbEnabled)       { mbSeeThroughEnabled    = lbEnabled; }   // +0x1A0
-    void SetSeeThroughAlways(bool lbAlways)         { mbSeeThroughAlways     = lbAlways; }    // +0x1A1
-    void SetSeeThroughSuppressed(bool lbSuppressed) { mbSeeThroughSuppressed = lbSuppressed; }// +0x1A2
+    // DWARF :422 / :425 / :428 / :431.
+    bool WillCollideWithGeometry() const { return mGeometryCollisionPredictor.WillCollide(); }
+    f32  TimeUntilCollisionWithGeometry() const;     // @0x821F37C8
+    bool WillCollideWithVehicle() const  { return mVehicleCollisionPredictor.HasPredictedCollision(); }
+    f32  TimeUntilCollisionWithVehicle() const;      // @0x821F3858
 
 private:
-    // FLAG: reserved spans = rig members not yet recovered (LineTestNearestPostBox,
-    //   VolumeTestDeepestPostBox, GroundConstraint etc.); the named members are the
-    //   asm-attested carves from the class-TU bodies + the ICE-anim behaviour.
-    // ⭐ CARVED 2026-08-01 out of the head of the old maReservedToVehiclePredictor span.
-    // The DWARF (BrnCollisionPolicy.h:436/:437/:438) lists these three bools as the FIRST
-    // members after the CollisionPolicy base, and BehaviourIceAnim::Construct @0x82256100
-    // seeds exactly three consecutive bytes at policy +0x08/+0x09/+0x0A (1 / 1 / 0) --
-    // r11 = this+0x20 there, so @0x8225624C/@0x82256254/@0x82256258. Each is then
-    // independently attested by VisibilityCollisionPolicy::ProcessSceneQueryResults
-    // @0x82224530:
-    //   +0x08 mbCanFail     `lbz 8(this)` guards all six Fail() arms.
-    //   +0x09 mbFirstFrame  `lbz 9(this)` picks the first-frame arms, and the function's LAST
-    //                       store is `stb 0, 9(this)` -- a latch cleared after the first
-    //                       processed frame. (GenerateSceneQueries @0x822402F8 also ORs it
-    //                       into the "do the test this time" dice roll.)
-    //   +0x0A mbTargetSet   ASSERT-ATTESTED BY NAME: both virtuals open with
-    //                       FireAssert("mbTargetSet", BrnCollisionPolicy.cpp, 0x327/0x363).
-    bool mbCanFail;                                            // X360 +0x08 (default true)
-    bool mbFirstFrame;                                         // X360 +0x09 (default true)
-    bool mbTargetSet;                                          // X360 +0x0A (default false)
-    Matrix44Affine mTargetTransform;                         // X360 +0x10
-    AABBox mTargetAABB;                                     // X360 +0x50
-                                                               //   mTargetTransform @+0x10,
-                                                               //   mTargetAABB      @+0x50
-    Utils::VehicleCollisionPredictor mVehicleCollisionPredictor;   // X360 +0x70 (flag/time @+0x70/+0x74)
-    u8 maReserved78[0x80 - 0x78];                              // X360 [+0x78, +0x80)
-    GeometryCollisionPredictor mGeometryCollisionPredictor;    // X360 +0x80 (its +0x60/+0x64 pair == policy +0xE0/+0xE4)
-    u8 maReservedE8[0x1A0 - 0xE8];                             // X360 [+0xE8, +0x1A0)
-    bool mbSeeThroughEnabled;                                  // X360 +0x1A0 (default true)
-    bool mbSeeThroughAlways;                                   // X360 +0x1A1 (default false)
-    bool mbSeeThroughSuppressed;                               // X360 +0x1A2 (default true)
-    u8 maReserved1A3[0x210 - 0x1A3];                           // X360 [+0x1A3, +0x210)
-    f32 mfDesiredHeight;                                       // X360 +0x210 (SetDesiredHeight stores)
-    u8 maReserved214[0x220 - 0x214];
-    Vector3 mVelocity;                                      // X360 +0x220
-    CgsSceneManager::EntityId mTargetEntityId;                // X360 +0x230
-    f32 mfMinHeight;                                        // X360 +0x234
-    f32 mfCollisionRadius;                                  // X360 +0x238
-    u8 mbHaveDesiredHeight;                                    // X360 +0x23C (SetDesiredHeight raises)
-    u8 maReservedTail[0x240 - 0x23D];                          // X360 [+0x23D, +0x240)
+    bool                             mbCanFail;                           // :436  +0x08
+    bool                             mbFirstFrame;                        // :437  +0x09
+    bool                             mbTargetSet;                         // :438  +0x0A
+    Matrix44Affine                   mTargetTransform;                    // :440  +0x10
+    AABBox                           mTargetAABB;                         // :441  +0x50
+    Utils::VehicleCollisionPredictor mVehicleCollisionPredictor;          // :443  +0x70
+    GeometryCollisionPredictor       mGeometryCollisionPredictor;         // :444  +0x80
+    VisibilityTest                   mVisibilityTest;                     // :445  +0xF0
+    VolumeTestDeepestPostBox         mVolumeTest;                         // :451  +0x1B0
+    GroundConstraint                 mGroundConstraint;                   // :453  +0x1C0
+    Vector3                          mVelocity;                           // :455  +0x220
+    CgsSceneManager::EntityId        mTargetEntityId;                     // :456  +0x230
+    f32                              mfOcclusionTimeout;                  // :458  +0x234
+    f32                              mfOffscreenTimeout;                  // :459  +0x238
+    bool                             mbUseGroundConstraint;               // :461  +0x23C
+    bool                             mbDoingVisibilityTestThisTime;       // :462  +0x23D
+    bool                             mbDoingCollisionPredictionThisTime;  // :463  +0x23E
 };
 
 } // namespace Camera

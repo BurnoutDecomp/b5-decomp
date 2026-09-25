@@ -8,6 +8,7 @@
 #include "GameSource/BurnoutConstants.h"                      // EActiveRaceCarIndex
 #include "GameSource/Director/Utils/BrnDirectorDataJournal.h" // DataJournal<T,N>
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h" // BrnDirector::GameState (real home; de-forked)
+#include "GameSource/Director/BrnCrashAnalyser.h"                   // BrnDirector::CrashAnalysis (its DWARF home; the slice here is retired)
 
 // ============================================================================
 // GameSource/Director/Utils/BrnDirectorVehicleTracker.h
@@ -43,25 +44,12 @@ namespace BrnDirector
 {
 
 // ----------------------------------------------------------------------------
-// BrnDirector::CrashAnalysis -- the 8-byte per-crash analysis record the tracker
-// publishes and the hard-stop moment snapshots (Camera.h forward-declares it;
-// Camera::mpCrashAnalysis points at a moment's snapshot). MINIMAL SLICE grown by
-// the MomentHardStop TU (@0x82271438's reads): the flag word's attested bits and
-// the byte-5 side pick; the remaining bytes are named neutrally. GROW in place.
+// RETIRED 2026-09-24 (FX-DIRECTOR2): the minimal CrashAnalysis slice that lived here
+// (mxFlags / mau4 / mbUseLeftSide / mau6 / mau7, named from MomentHardStop's reads) is gone.
+// The struct has its DWARF home now -- GameSource/Director/BrnCrashAnalyser.h, included at the
+// top of this file so every TU that reached CrashAnalysis through here still sees it -- with the
+// DWARF names mxEventFlags / mbIsPlayerCrashing / mbSuggestLeftOfLineOfAction.
 // ----------------------------------------------------------------------------
-struct CrashAnalysis
-{
-    // +0x00 -- crash direction/type bits (the shot-selector's event-flag word):
-    //   bit 1 Left, bit 2 Right, bit 6 Front, bit 7 Rear (the "Hardstop:" log
-    //   line), bit 3 <the ultra-slo-mo eligibility>, bit 5 <the hard-stop
-    //   eligibility gate>. Roles of the rest not yet recovered.
-    u32 mxFlags;
-
-    u8  mau4;            // +0x04 (not consumed by the reconstructed bodies)
-    u8  mbUseLeftSide;   // +0x05 (the "Use L"/"Use R" preferred-side pick)
-    u8  mau6;            // +0x06
-    u8  mau7;            // +0x07
-};
 
 
 // ----------------------------------------------------------------------------
@@ -199,6 +187,12 @@ private:
     s32            miVehicleIndex;          // +0x2A0
     bool           mbFirstFrame;            // +0x2A4
     bool           mbIsFirstFrameOfCrash;   // +0x2A5
+
+    // DWARF BrnDirectorVehicleTracker.h:65 / :68 -- the crash-energy band edges Update classifies
+    // against (mph BELOW the car's top speed). .data 0x82CDA548 / 0x82CDA54C; the values are read out
+    // of the image in the .cpp.
+    static f32 sfMinSpeedBelowMaxMPHForNormalCrash;
+    static f32 sfMinSpeedBelowMaxMPHForHighSpeedCrash;
 };
 
 

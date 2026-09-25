@@ -1,17 +1,15 @@
 #include "GameSource/Director/Utils/BrnSceneQueryInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
-#include <cstddef>   // offsetof
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTestNearest.h"   // ENearestExclusionMode
 
 // =============================================================================
-// BrnDirector::SceneQueryInterface -- the Director-side wrapper over the SceneManager
-// scene-query producer. Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity,
-// not byte match).
+// BrnDirector::SceneQueryInterface -- the director's per-frame scene-query handle.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match).
 //   Clear             @ 0x8221CD38
+//   LineTestFine      @ 0x82232F68
+//   LineTestNearest   @ 0x82233048  (the producer TU CgsSceneManagerIO_SceneQueryInterface_LineTestNearest.cpp is mounted)
 //   VolumeTestDeepest @ 0x82233128
-// The interface holds the producer at slot 0 and a table of "post office" hand-off
-// pointers (slots 1..6). Post-office element types are not recovered; slots are modelled
-// as raw void* (see BrnSceneQueryInterface.h).
+// ⭐ TYPED 2026-09-25 (FX-DIRECTOR2): see the header banner.
 // =============================================================================
 
 namespace BrnDirector
@@ -19,74 +17,102 @@ namespace BrnDirector
     // -------------------------------------------------------------------------
     // Clear @ 0x8221CD38
     //
-    // Resets each held post office that is non-null:
-    //   slot 1: hand off to sub_8221CC98 (the slot's own Reset/Clear) and forward its
-    //           result as the return value (null otherwise).
-    //   slots 2..6: zero one owned field at the noted byte offset.
-    // sub_8221CC98 is not yet reconstructed (no recovered name); resolved at link time.
+    // Each post office that is present forgets the boxes it handed ids to last frame. The fine
+    // office's Clear is the specialised one (the X360 calls it out of line, sub_8221CC98 -- it
+    // empties every box that already GOT its pointer package first); the other five are inlined as
+    // a single `stw 0` to the office's length word (+0xA0 / +0x28 / +0x28 / +0x04 / +0x28). The
+    // producer (slot 0) is not touched.
     // -------------------------------------------------------------------------
-    u32* SceneQueryInterface::Clear()
+    void SceneQueryInterface::Clear()
     {
-        void** lppSlots = reinterpret_cast<void**>(this);
+        if (mpLineTestFinePostOffice)            mpLineTestFinePostOffice->Clear();
+        if (mpLineTestNearestPostOffice)         mpLineTestNearestPostOffice->Clear();
+        if (mpLineTestFastDoubleSidedPostOffice) mpLineTestFastDoubleSidedPostOffice->Clear();
+        if (mpSphereTestFastPostOffice)          mpSphereTestFastPostOffice->Clear();
+        if (mpVolumeTestFinePostOffice)          mpVolumeTestFinePostOffice->Clear();
+        if (mpVolumeTestDeepestPostOffice)       mpVolumeTestDeepestPostOffice->Clear();
+    }
 
-        u32* lpResult = nullptr;
-        if (lppSlots[1])
-            lpResult = sub_8221CC98(lppSlots[1]);
+    // -------------------------------------------------------------------------
+    // LineTestFine @ 0x82232F68
+    //   assert mpSceneQueryInterface != NULL          (h:188, 0xBC)
+    //   assert mpLineTestFinePostOffice != NULL       (h:189, 0xBD)
+    //   id = mpLineTestFinePostOffice->AddPostBox(lrPostBox)   (0x8222D158)
+    //   producer->LineTestFine((id & 0xFFFF) | 0x10000, flags, vflags, exclude, mode; v1 start, v2 end)
+    // The asserts are non-gating tripwires (CGS_ASSERT); the forward always runs.
+    // -------------------------------------------------------------------------
+    void SceneQueryInterface::LineTestFine(LineTestFinePostBox&                             lrPostBox,
+                                           u32                                              lx32EntityTypeFlags,
+                                           u8                                               lxVolumeTypeFlags,
+                                           const Vector3&                                   lLineStart,
+                                           const Vector3&                                   lLineEnd,
+                                           CgsSceneManager::EntityId                        lExcludeEntityId,
+                                           CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
+    {
+        CGS_ASSERT(mpSceneQueryInterface != 0,    "mpSceneQueryInterface != NULL");      // h:188
+        CGS_ASSERT(mpLineTestFinePostOffice != 0, "mpLineTestFinePostOffice != NULL");   // h:189
 
-        if (lppSlots[2]) *reinterpret_cast<u32*>(static_cast<u8*>(lppSlots[2]) + 160) = 0;
-        if (lppSlots[3]) *reinterpret_cast<u32*>(static_cast<u8*>(lppSlots[3]) +  40) = 0;
-        if (lppSlots[4]) *reinterpret_cast<u32*>(static_cast<u8*>(lppSlots[4]) +  40) = 0;
-        if (lppSlots[5]) *reinterpret_cast<u32*>(static_cast<u8*>(lppSlots[5]) +   4) = 0;
-        if (lppSlots[6]) *reinterpret_cast<u32*>(static_cast<u8*>(lppSlots[6]) +  40) = 0;
+        CgsSceneManager::SceneQueryId lQueryId;
+        lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpLineTestFinePostOffice->AddPostBox(lrPostBox));
 
-        return lpResult;
+        mpSceneQueryInterface->LineTestFine(lLineStart, lLineEnd, lQueryId, lx32EntityTypeFlags,
+                                            lxVolumeTypeFlags, lExcludeEntityId, leExclusionMode);
+    }
+
+    // -------------------------------------------------------------------------
+    // LineTestNearest @ 0x82233048
+    //   assert mpSceneQueryInterface != NULL          (h:216, 0xD8)
+    //   assert mpLineTestNearestPostOffice != NULL    (h:217, 0xD9)
+    //   id = mpLineTestNearestPostOffice->AddPostBox(lrPostBox)   (0x8222D288)
+    //   producer->LineTestNearest((id & 0xFFFF) | 0x10000, ...)   (0x82216FD0)
+    // The producer's exclusion-mode parameter is spelled ENearestExclusionMode on this host (the
+    // tree keeps the nearest event's enum distinct to avoid a redefinition); its two values are the
+    // EExclusionMode values (E_EXCLUDE_ENTITY_ONLY 0, E_EXCLUDE_ALL_CHILD_PARTS 1), so the console's
+    // single register is passed through unchanged.
+    // -------------------------------------------------------------------------
+    void SceneQueryInterface::LineTestNearest(LineTestNearestPostBox&                          lrPostBox,
+                                              u32                                              lx32EntityTypeFlags,
+                                              u8                                               lxVolumeTypeFlags,
+                                              const Vector3&                                   lLineStart,
+                                              const Vector3&                                   lLineEnd,
+                                              CgsSceneManager::EntityId                        lExcludeEntityId,
+                                              CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
+    {
+        CGS_ASSERT(mpSceneQueryInterface != 0,       "mpSceneQueryInterface != NULL");        // h:216
+        CGS_ASSERT(mpLineTestNearestPostOffice != 0, "mpLineTestNearestPostOffice != NULL");  // h:217
+
+        CgsSceneManager::SceneQueryId lQueryId;
+        lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpLineTestNearestPostOffice->AddPostBox(lrPostBox));
+
+        mpSceneQueryInterface->LineTestNearest(
+            lLineStart, lLineEnd, lQueryId, lx32EntityTypeFlags, lxVolumeTypeFlags, lExcludeEntityId,
+            static_cast<CgsSceneManager::SceneManagerIO::ENearestExclusionMode>(leExclusionMode));
     }
 
     // -------------------------------------------------------------------------
     // VolumeTestDeepest @ 0x82233128
-    //
-    // Mints a 16-bit deepest-volume-test SceneQueryId from mpVolumeTestDeepestPostOffice
-    // (OutEventVolumeTestDeepest), ORs in the 0x10000 "fine" bit, then forwards the query to
-    // the producer. Both slot pointers are asserted non-null (non-gating tripwires;
-    // CGS_ASSERT collapses Begin/Fire/EndAssert -- the forward always runs).
-    // (asm: clrlwi r11,r11,16 -> `& 0xFFFF`; oris r4,r11,1 -> `| 0x10000`.)
+    //   assert mpSceneQueryInterface != NULL          (h:316, 0x13C)
+    //   assert mpVolumeTestDeepestPostOffice != NULL  (h:317, 0x13D)
+    //   id = mpVolumeTestDeepestPostOffice->AddPostBox(lrPostBox)   (0x8222D628)
+    //   producer->VolumeTestDeepest((id & 0xFFFF) | 0x10000, flags, vflags, volume, transform,
+    //                               exclude, mode)                    (0x822170B0)
     // -------------------------------------------------------------------------
-    int SceneQueryInterface::VolumeTestDeepest(
-            void*                                           lpQueryParams,
-            u32                                             lx32EntityTypeFlags,
-            u8                                              lxVolumeTypeFlags,
-            const void*                                     lpVolumeData,
-            const void*                                     lpTransform,
-            u32                                             lExcludeEntityId,
-            CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode)
+    void SceneQueryInterface::VolumeTestDeepest(VolumeTestDeepestPostBox&                        lrPostBox,
+                                                u32                                              lx32EntityTypeFlags,
+                                                u8                                               lxVolumeTypeFlags,
+                                                const void*                                      lpVolume,
+                                                const Matrix44Affine&                            lrTransform,
+                                                CgsSceneManager::EntityId                        lExcludeEntityId,
+                                                CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
     {
-        CGS_ASSERT(mpSceneQueryInterface != nullptr, "mpSceneQueryInterface != NULL");
-        CGS_ASSERT(mpVolumeTestDeepestPostOffice != nullptr, "mpVolumeTestDeepestPostOffice != NULL");
+        CGS_ASSERT(mpSceneQueryInterface != 0,         "mpSceneQueryInterface != NULL");          // h:316
+        CGS_ASSERT(mpVolumeTestDeepestPostOffice != 0, "mpVolumeTestDeepestPostOffice != NULL");  // h:317
 
-        u32 lx32RawQueryId = CgsSceneManager::SceneManagerIO::OutEventVolumeTestDeepest(
-                                 mpVolumeTestDeepestPostOffice, lpQueryParams);
-        u32 lx32QueryId = (lx32RawQueryId & 0xFFFFu) | 0x10000u;
+        CgsSceneManager::SceneQueryId lQueryId;
+        lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpVolumeTestDeepestPostOffice->AddPostBox(lrPostBox));
 
-        return mpSceneQueryInterface->VolumeTestDeepest(
-                   lx32QueryId,
-                   lx32EntityTypeFlags,
-                   lxVolumeTypeFlags,
-                   lpVolumeData,
-                   lpTransform,
-                   lExcludeEntityId,
-                   leExclusionMode);
-    }
-
-    // Pointer-invariant layout facts only (LLP64 gate): the two assert-named members sit at
-    // their X360-attested word offsets, and the deepest-volume-test post office is Clear's
-    // slot 6.
-    void SceneQueryInterface::_AssertLayout()
-    {
-        // Slot indices are the pointer-invariant fact (X360 word slots == void* slots here);
-        // raw byte offsets scale with pointer width across the LLP64 gate.
-        static_assert(offsetof(SceneQueryInterface, mpSceneQueryInterface) == 0 * sizeof(void*),
-                      "mpSceneQueryInterface = slot 0 (X360 +0x00)");
-        static_assert(offsetof(SceneQueryInterface, mpVolumeTestDeepestPostOffice) == 6 * sizeof(void*),
-                      "mpVolumeTestDeepestPostOffice = Clear slot 6 (X360 +0x18)");
+        mpSceneQueryInterface->VolumeTestDeepest(lQueryId.mId, lx32EntityTypeFlags, lxVolumeTypeFlags,
+                                                 lpVolume, &lrTransform,
+                                                 static_cast<u32>(lExcludeEntityId), leExclusionMode);
     }
 }

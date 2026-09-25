@@ -2,61 +2,85 @@
 #define GAMESOURCE_DIRECTOR_DIRECTORMODULE_BRN_DIRECTOR_MODULE_IO_SCENEQUERY_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer base
+#include "GameShared/GameClasses/Module/CgsIOBuffer.h"                                     // CgsModule::IOBuffer base
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"                                   // CgsModule::EventQueue<T,N>
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneQueryInterface.h"     // the producer + the six In-event types
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneQueryResultsQueue.h"  // OutSceneQueryResultsQueue<N>
 
 // ============================================================================
 // GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h
 //
-// The Director module's two SCENE-QUERY IO buffers. These were previously declared
-// LOCALLY inside BrnDirectorModuleIOSceneQuery.cpp (which owns their accessor bodies);
-// promoted to a header here, unchanged, because DirectorModule::Update /
-// ::PreSceneQueryUpdate / ::ProcessSceneQueryResults now name them in their signatures.
+// The Director module's two SCENE-QUERY IO buffers (DWARF BrnDirectorModuleIO.h:465 / :503).
 //
-//   SceneQueryOutputBuffer -- the director's OUTGOING queries. Its single published member
-//     is the SceneManager producer interface @+4; the module stages it into the per-frame
-//     BrnDirector::SceneQueryInterface post office each PreSceneQueryUpdate / Update.
-//       GetSceneQueryInterface() const @ 0x823B25F0 (read-lock,  DWARF :510/479)
-//       GetSceneQueryInterface()       @ 0x82206B00 (write-lock, DWARF :511/480)
+//   SceneQueryOutputBuffer -- the director's OUTGOING queries: a SceneManager producer interface
+//     (mSceneQueryInterface @+4) wired to six small query queues of its own. The director's
+//     cameras stage their tests into it during PreSceneQueryUpdate (through
+//     BrnDirector::SceneQueryInterface), and BrnGameModule::DoUpdate_Director appends its queues
+//     to the external query buffer the world runs (SceneQueryInterface::Append @0x823C4FF8).
+//       Construct                      @ 0x82239578
+//       Destruct                       @ 0x8221B3F8
+//       GetSceneQueryInterface() const @ 0x823B25F0 (read-lock,  DWARF :479)
+//       GetSceneQueryInterface()       @ 0x82206B00 (write-lock, DWARF :480)
 //
-//   SceneQueryInputBuffer -- the results the SceneManager published back. Its single
-//     published member is the results queue @+4, drained by
-//     DirectorModule::ProcessSceneQueryResults @0x82239278.
-//       GetResultsQueue()              @ 0x823B2698 (write-lock, DWARF :558/527)
-//       GetResultsQueue() const        @ 0x82206BA8 (read-lock,  DWARF :557/526)
+//   SceneQueryInputBuffer -- the ANSWERS: one OutSceneQueryResultsQueue<4032> (@+4) that
+//     DoUpdate_Director fills from the world's results (VariableEventQueue<4032,16>::
+//     Append<32768,16> @0x823DA090) and DirectorModule::ProcessSceneQueryResults @0x82239278 drains.
+//       Construct                      @ 0x8221B310
+//       Destruct                       @ 0x8221B380
+//       GetResultsQueue()              @ 0x823B2698 (write-lock, DWARF :527)
+//       GetResultsQueue() const        @ 0x82206BA8 (read-lock,  DWARF :526)
 //
-// Both are the recurring CgsModule::IOBuffer lock-guarded getter shape: test a lock bit on
-// the status byte at this+0, CGS_ASSERT on violation, then return the address of the first
-// published member @+4 (immediately after the 1-byte IOBuffer/FlagSet8 base).
-//
-// The two member TYPES stay FORWARD-DECLARED here exactly as the .cpp had them: the bodies
-// are address-returns, so an opaque type suffices and the heavy SceneManager includes are
-// kept out of every consumer. Both have committed homes under CgsSceneManager::SceneManagerIO
-// (CgsSceneManagerIO_SceneQueryInterface.h / CgsSceneManagerIO_SceneQueryResultsQueue.h) --
-// a consumer that needs the interior includes them itself and reinterpret-casts the returned
-// address (this is what DirectorModule::Update does for the HasData tripwire).
+// ⭐ REAL LAYOUTS 2026-09-25 (FX-DIRECTOR2, the camera scene-query closure). Both used to be
+// member-less shells whose getters returned `this + 4` typed as forward-declared opaque types --
+// i.e. an address PAST the end of the 1-byte object CreateIOBuffer allocated. Nothing read through
+// it while no director query was issued; the closure needs the real storage. Members and their
+// console offsets are the DWARF's order pinned by the two Construct bodies (below); on this host
+// the offsets differ and every access is by name.
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
 {
 namespace DirectorIO
 {
-    // DWARF member types; forward-declared -- only their address (@+4) is used by the
-    // accessors below.
-    struct SceneQueryInterface;                            // CgsSceneManager::SceneManagerIO type
-    template <int N> struct OutSceneQueryResultsQueue;     // committed home; N == 4032
-
     struct SceneQueryOutputBuffer : public CgsModule::IOBuffer
     {
-        // DWARF: mSceneQueryInterface (type SceneQueryInterface) @+4.
-        const SceneQueryInterface* GetSceneQueryInterface() const;  // this+4, read-lock
-        SceneQueryInterface*       GetSceneQueryInterface();        // this+4, write-lock
+        // The six query queues (DWARF :486..:491) -- capacities are the post offices' (10 / 40 / 10
+        // / 10 / 10 / 1), and each element type is the SceneManager's In-event record.
+        typedef CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::InEventLineTestFine, 10>            FineLineTestQueue;
+        typedef CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::InEventLineTestNearest, 40>         FineLineTestNearestQueue;
+        typedef CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::InEventLineTestFastDoubleSided, 10> FineLineTestFastDoubleSidedQueue;
+        typedef CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::InEventSphereTestFast, 10>          SphereTestFastQueue;
+        typedef CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::InEventVolumeTestDeepest, 10>       FineVolumeTestDeepestQueue;
+        typedef CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::InEventVolumeTestFine, 1>           FineVolumeTestQueue;
+
+        void Construct();                                                           // :473  @0x82239578
+        void Destruct();                                                            // :477  @0x8221B3F8
+
+        const CgsSceneManager::SceneManagerIO::SceneQueryInterface* GetSceneQueryInterface() const;   // :479
+        CgsSceneManager::SceneManagerIO::SceneQueryInterface*       GetSceneQueryInterface();         // :480
+
+    private:
+        CgsSceneManager::SceneManagerIO::SceneQueryInterface mSceneQueryInterface;             // :484  console +0x0004
+        FineLineTestQueue                                    mFineLineTestQueue;               // :486  console +0x0030
+        FineLineTestNearestQueue                             mFineLineTestNearestQueue;        // :487  console +0x02C0
+        FineLineTestFastDoubleSidedQueue                     mFineLineTestFastDoubleSidedQueue;// :488  console +0x0CD0
+        SphereTestFastQueue                                  mSphereTestFastQueue;             // :489  console +0x0F60
+        FineVolumeTestDeepestQueue                           mFineVolumeTestDeepestQueue;      // :490  console +0x1150
+        FineVolumeTestQueue                                  mFineVolumeTestQueue;             // :491  console +0x1A20
     };
 
     struct SceneQueryInputBuffer : public CgsModule::IOBuffer
     {
-        // DWARF: mResultsQueue (type OutSceneQueryResultsQueue<4032>) @+4.
-        OutSceneQueryResultsQueue<4032>*       GetResultsQueue();        // this+4, write-lock
-        const OutSceneQueryResultsQueue<4032>* GetResultsQueue() const;  // this+4, read-lock
+        typedef CgsSceneManager::SceneManagerIO::OutSceneQueryResultsQueue<4032> ResultsQueue;
+
+        void Construct();                                                           // :508  @0x8221B310
+        void Destruct();                                                            // :512  @0x8221B380
+
+        const ResultsQueue* GetResultsQueue() const;                                // :526  read-lock
+        ResultsQueue*       GetResultsQueue();                                      // :527  write-lock
+
+    private:
+        ResultsQueue mResultsQueue;                                                 // :531  console +0x04
     };
 }
 }

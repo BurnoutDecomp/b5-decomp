@@ -367,6 +367,14 @@ namespace BrnDirector
     // stores are exactly mfTimeSinceLastSlomo = FLT_MAX / mfTimeInSlomo = 0 /
     // mbFirstFrameOfSlomo = false, and the shake arm's five zeroed floats are exactly a
     // CameraImpactEffect (one impact factor + a four-float CameraShake).
+    //
+    // ⭐ THE BAND IS THE TRACKER'S LIVE ONE (corrected 2026-09-25, FX-DIRECTOR2). All four tests
+    // load it fresh off the shared info's player tracker -- `lwz r11, 0x3C(r30)` (mpPlayerTracker)
+    // then `lwz r11, 0x298(r11)` (meCrashType) at 0x8224F914/18, 0x8224F950/54, 0x8224F98C/90 and
+    // 0x8224F9BC/C0 -- NOT this state's Prepare latch (+0x3AC, which only
+    // ProcessPossibleStateChanges reads, `lwz 0x3AC(r31)` @0x8224F76C). The two differ once the
+    // crash is over while the state is still live (the tracker drops to NOT_CRASHING) and on a
+    // second crash inside one crashing state; this body used the latch at all four.
     // ------------------------------------------------------------------------
     void ArbStateCrashing::ApplySlomoAndShake(ArbStateSharedInfo& lrSharedInfo)
     {
@@ -377,17 +385,20 @@ namespace BrnDirector
             mMomentSelector.GetSelectedMoment()->GetType() == Moment::E_MOMENT_HARD_STOP;
 
         const bool lbDontSetRealTime =
-            lbHardStopMoment && meCrashType == VehicleTracker::E_CRASH_NORMAL;
+            lbHardStopMoment &&
+            lrSharedInfo.mpPlayerTracker->GetCrashType() == VehicleTracker::E_CRASH_NORMAL;       // 0x8224F918
         const bool lbSuppressSlomo =
-            lbHardStopMoment && meCrashType != VehicleTracker::E_CRASH_NORMAL;
+            lbHardStopMoment &&
+            lrSharedInfo.mpPlayerTracker->GetCrashType() != VehicleTracker::E_CRASH_NORMAL;       // 0x8224F954
         const bool lbSuppressShake =
-            lbHardStopMoment && meCrashType == VehicleTracker::E_CRASH_HIGH_ENERGY;
+            lbHardStopMoment &&
+            lrSharedInfo.mpPlayerTracker->GetCrashType() == VehicleTracker::E_CRASH_HIGH_ENERGY;  // 0x8224F990
 
         // A low-energy crash never slows down; neither does one during an event mode that owns
         // its own timing (meEventType 0 or 3), nor while the impact-time effect already holds
         // the sim clock.
         if (lbSuppressSlomo ||
-            meCrashType == VehicleTracker::E_CRASH_LOW_ENERGY ||
+            lrSharedInfo.mpPlayerTracker->GetCrashType() == VehicleTracker::E_CRASH_LOW_ENERGY ||  // 0x8224F9C0
             lrGameState.meEventType == 3 ||
             lrGameState.meEventType == 0 ||
             lrGameState.mbImpactTimeActive)
