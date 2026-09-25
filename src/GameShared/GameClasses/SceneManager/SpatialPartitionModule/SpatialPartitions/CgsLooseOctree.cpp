@@ -1650,32 +1650,65 @@ namespace CgsSceneManager
         // refined 1/eps as its reciprocal instead of 1/d.
         const f32 KF_LINE_RECIPROCAL_EPSILON = 1.0e-7f;
 
-        // `vrsqrtefp` + two Newton-Raphson steps y' = y + 0.5 * y * (1 - x * y * y)
-        // (0x828CA678..0x828CA69C: vmulfp128 y*y, vmulfp128 0.5*y, vnmsubfp 1 - x*yy, vmaddfp).
-        // PC LOWERING, as CgsLineTests.cpp's NewtonRaphsonReciprocal3: the estimate is the exact
-        // quotient and the console's refinement then runs as written (a zero x refines to NaN, which
-        // the caller's select replaces).
+        // ROUNDING (ROUNDING_RULE.md, 2026-09-25 -- REVIEW-J on 335639ce): every operation below rounds as the
+        // console's instruction at that site does, not as the plain C expression would.
+        //   rule 1  `vmsum3fp128`          ONE rounding of the f64 sum of the exact f32 products (LineDot3).
+        //   rule 3  `vmaddfp` / `vnmsubfp` ONE rounding each: std::fma, and LineVnmsub's -(a*c - b) negated
+        //                                  after the rounding (an exact cancellation is -0, a NaN keeps its sign).
+        //   rule 4  `vmulfp` / `vsubfp`    rounded separately, as written.
+        //   rule 5  `vrsqrtefp` / `vrefp`  FLAG (model): the estimate is its correctly rounded value; the two
+        //                                  refinement steps that follow then run as the console runs them.
+        // Until this change the two chains below were written unfused (a*b + c, 1 - a*b) and the dot summed in
+        // f32 left to right -- one rounding per operation, where the console rounds once per fused instruction.
+
+        // `vmsum3fp128` (0x828CA674) -- rule 1. FLAG (model): vmsum = one rounding of the f64 sum (xenia
+        // DOT_PRODUCT_3/4). xenia also turns an f64 sum that overflows f32 into a QNaN; not modelled here --
+        // a segment would have to be ~1.8e19 long.
+        inline f32 LineDot3(f32 lfX, f32 lfY, f32 lfZ)
+        {
+            return static_cast<f32>(static_cast<f64>(lfX) * lfX + static_cast<f64>(lfY) * lfY
+                                  + static_cast<f64>(lfZ) * lfZ);
+        }
+
+        // `vnmsubfp vD, vA, vB, vC` (IDA's raw field order) -- rule 3: -(vA*vC - vB), rounded once, then negated
+        // (EffectsModule.cpp's Vnmsub).
+        inline f32 LineVnmsub(f32 lfA, f32 lfC, f32 lfB)
+        {
+            const f32 lfDifference = std::fma(lfA, lfC, -lfB);
+            return (lfDifference != lfDifference) ? lfDifference : -lfDifference;
+        }
+
+        // `vrsqrtefp` + two Newton-Raphson steps y' = y + 0.5 * y * (1 - x * y * y) (0x828CA678..0x828CA69C):
+        //   0x828CA680 / 0x828CA690  vmulfp128 y*y            rule 4
+        //   0x828CA684 / 0x828CA694  vmulfp128 y*0.5          rule 4 (0.5 = vcfsx {1}, 1)
+        //   0x828CA688 / 0x828CA698  vnmsubfp  1 - x*(y*y)    rule 3 (LineVnmsub(x, yy, 1))
+        //   0x828CA68C / 0x828CA69C  vmaddfp   (0.5y)*e + y   rule 3 (std::fma)
+        // The estimate: rule 5. A zero x refines to NaN, which the caller's vsel replaces.
         inline f32 NewtonRaphsonReciprocalSqrt2(f32 lfValue)
         {
-            f32 lfEstimate = 1.0f / std::sqrt(lfValue);                           // vrsqrtefp
+            f32 lfEstimate = static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfValue)));   // vrsqrtefp
             for (s32 liStep = 0; liStep < 2; ++liStep)
             {
                 const f32 lfSquare = lfEstimate * lfEstimate;                     // vmulfp128
                 const f32 lfHalf   = lfEstimate * 0.5f;                           // vmulfp128 (vcfsx 1, 1)
-                const f32 lfError  = 1.0f - lfValue * lfSquare;                   // vnmsubfp
-                lfEstimate         = lfHalf * lfError + lfEstimate;               // vmaddfp
+                const f32 lfError  = LineVnmsub(lfValue, lfSquare, 1.0f);         // vnmsubfp
+                lfEstimate         = std::fma(lfHalf, lfError, lfEstimate);       // vmaddfp
             }
             return lfEstimate;
         }
 
-        // `vrefp` + two Newton-Raphson steps x' = x * (1 - d * x) + x (0x828CA6CC..0x828CA754).
+        // `vrefp` + two Newton-Raphson steps x' = x * (1 - d * x) + x (0x828CA6CC..0x828CA754), the same chain for
+        // the length (0x828CA714 / 0x828CA720, 0x828CA730 / 0x828CA738), the epsilon (0x828CA71C / 0x828CA72C,
+        // 0x828CA734 / 0x828CA73C) and the direction lanes (0x828CA70C / 0x828CA724, 0x828CA744 / 0x828CA754):
+        // `vnmsubfp` 1 - x*d, rule 3 (LineVnmsub(x, d, 1)); `vmaddfp` x*e + x, rule 3 (std::fma).
+        // The estimate: rule 5.
         inline f32 NewtonRaphsonReciprocal2(f32 lfValue)
         {
-            f32 lfEstimate = 1.0f / lfValue;                                      // vrefp
+            f32 lfEstimate = static_cast<f32>(1.0 / static_cast<f64>(lfValue));  // vrefp
             for (s32 liStep = 0; liStep < 2; ++liStep)
             {
-                const f32 lfError = 1.0f - lfEstimate * lfValue;                  // vnmsubfp
-                lfEstimate        = lfEstimate * lfError + lfEstimate;            // vmaddfp
+                const f32 lfError = LineVnmsub(lfEstimate, lfValue, 1.0f);        // vnmsubfp
+                lfEstimate        = std::fma(lfEstimate, lfError, lfEstimate);    // vmaddfp
             }
             return lfEstimate;
         }
@@ -1748,8 +1781,7 @@ namespace CgsSceneManager
         const f32 lafDelta[4] = { lLineEnd.x - lLineStart.x, lLineEnd.y - lLineStart.y,
                                   lLineEnd.z - lLineStart.z, lLineEnd.w - lLineStart.w };
 
-        const f32 lfLength2 = (lafDelta[0] * lafDelta[0] + lafDelta[1] * lafDelta[1])
-                            + lafDelta[2] * lafDelta[2];                              // vmsum3fp128
+        const f32 lfLength2 = LineDot3(lafDelta[0], lafDelta[1], lafDelta[2]);       // vmsum3fp128 (rule 1)
         const f32 lfLength  = (lfLength2 == 0.0f)
                             ? 0.0f                                                    // vsel on len2 == 0
                             : lfLength2 * NewtonRaphsonReciprocalSqrt2(lfLength2);

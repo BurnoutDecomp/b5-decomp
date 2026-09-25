@@ -218,6 +218,80 @@ static void PrintList(const char* lpcLabel, const std::vector<u16>& la)
     std::printf("\n");
 }
 
+// ---- G. the rounding models (scratch/CRASHPARITY_0922/ROUNDING_RULE.md) --------------------------------
+// "Rule" is what the console's instruction does at each site; "Old" is what the pre-2026-09-25-evening host
+// wrote (f32 left-to-right dot, a*b + c, 1 - a*b, f32 estimates). Written here independently of production.
+namespace RoundingModel
+{
+    // Per-site models: every flag true is the console's instruction at that site (the rule); a false flag reverts
+    // THAT site alone to what the old host wrote, so a check can show each converted site on its own.
+    static f32 Dot3Rule(f32 x, f32 y, f32 z)   // rule 1: vmsum3fp128, one rounding of the f64 sum
+    {
+        return static_cast<f32>(static_cast<double>(x) * x + static_cast<double>(y) * y + static_cast<double>(z) * z);
+    }
+    static f32 Dot3Old(f32 x, f32 y, f32 z) { const f32 xx = x * x, yy = y * y, zz = z * z; const f32 s = xx + yy; return s + zz; }
+    static f32 Vnmsub(f32 a, f32 c, f32 b) { const f32 d = std::fma(a, c, -b); return (d != d) ? d : -d; }
+    static f32 Unfused(f32 a, f32 c, f32 b) { const f32 p = a * c; return p + b; }
+    static f32 OneMinus(f32 a, f32 c) { const f32 p = a * c; return 1.0f - p; }
+
+    struct Sites { bool mbEstimate, mbNmsub, mbMadd; };
+    static const Sites KRule = { true, true, true };
+
+    // vrsqrtefp + 2 NR (0x828CA678..0x828CA69C)
+    static f32 Rsqrt(f32 x, Sites s)
+    {
+        f32 y;
+        if (s.mbEstimate) y = static_cast<f32>(1.0 / std::sqrt(static_cast<double>(x)));
+        else { volatile f32 lfRoot = std::sqrt(x); y = 1.0f / lfRoot; }
+        for (int i = 0; i < 2; ++i)
+        {
+            const f32 sq = y * y, h = y * 0.5f;
+            const f32 e = s.mbNmsub ? Vnmsub(x, sq, 1.0f) : OneMinus(x, sq);
+            y = s.mbMadd ? std::fma(h, e, y) : Unfused(h, e, y);
+        }
+        return y;
+    }
+    // vrefp + 2 NR (0x828CA6CC..0x828CA754)
+    static f32 Recip(f32 x, Sites s)
+    {
+        f32 r = s.mbEstimate ? static_cast<f32>(1.0 / static_cast<double>(x)) : 1.0f / x;
+        for (int i = 0; i < 2; ++i)
+        {
+            const f32 e = s.mbNmsub ? Vnmsub(r, x, 1.0f) : OneMinus(r, x);
+            r = s.mbMadd ? std::fma(r, e, r) : Unfused(r, e, r);
+        }
+        return r;
+    }
+    static f32 Length(f32 len2, Sites s) { return (len2 == 0.0f) ? 0.0f : len2 * Rsqrt(len2, s); }
+
+    // One TestLineSphere4 lane; each site fused (the console) or unfused (the old host).
+    struct SphereSites { bool mbE, mbT, mbP, mbS, mbN; };   // e = L*d+s, t, |p|^2, |C-s|^2, |C-e|^2
+    static const SphereSites KSphereRule = { true, true, true, true, true };
+    static f32 MA(bool lbFused, f32 a, f32 c, f32 b) { return lbFused ? std::fma(a, c, b) : Unfused(a, c, b); }
+    struct LaneTerms { f32 t, p2, s2, e2, r2; };
+    static LaneTerms Terms(SphereSites f, const Vector4& C, const Vector3& s, const Vector3& d, f32 L)
+    {
+        LaneTerms T;
+        T.r2 = C.w * C.w;
+        const f32 ex = MA(f.mbE, L, d.x, s.x), ey = MA(f.mbE, L, d.y, s.y), ez = MA(f.mbE, L, d.z, s.z);
+        const f32 Dx = C.x - s.x, Dy = C.y - s.y, Dz = C.z - s.z;
+        T.t = MA(f.mbT, d.z, Dz, MA(f.mbT, d.x, Dx, d.y * Dy));
+        const f32 tx = T.t * d.x, ty = T.t * d.y, tz = T.t * d.z;
+        const f32 px = Dx - tx, py = Dy - ty, pz = Dz - tz;
+        T.p2 = MA(f.mbP, pz, pz, MA(f.mbP, px, px, py * py));
+        T.s2 = MA(f.mbS, Dz, Dz, MA(f.mbS, Dx, Dx, Dy * Dy));
+        const f32 Ex = C.x - ex, Ey = C.y - ey, Ez = C.z - ez;
+        T.e2 = MA(f.mbN, Ez, Ez, MA(f.mbN, Ex, Ex, Ey * Ey));
+        return T;
+    }
+    static bool Lane(SphereSites f, const Vector4& C, const Vector3& s, const Vector3& d, f32 L)
+    {
+        const LaneTerms T = Terms(f, C, s, d, L);
+        const bool lbOn = (T.t >= 0.0f) && !(T.t > L);
+        return (lbOn && !(T.p2 > T.r2)) || !(T.s2 > T.r2) || !(T.e2 > T.r2);
+    }
+}
+
 int main()
 {
     // ================================================================================================
@@ -499,6 +573,219 @@ int main()
         Check(!lbGated && Pushed(lpBuffer4).empty(),
               "F6 LineTestRecursive: a node whose own mask misses the query tests none of its entities");
         delete lpBuffer; delete lpBuffer2; delete lpBuffer3; delete lpBuffer4;
+    }
+
+    // ================================================================================================
+    // G. ROUNDING (ROUNDING_RULE.md; REVIEW-J on 335639ce). For each converted site ON ITS OWN, a segment / sphere
+    //    on which the console's rounding and the old host's rounding AT THAT SITE ONLY give different bits or a
+    //    different hit, found by a deterministic search; production must give the console's.
+    // ================================================================================================
+    {
+        using namespace RoundingModel;
+        LooseOctree* lpTree = MakeTree();
+        SetNode(0, 0, 0, 0, 100, 50, 0, 0xFFFFFFFFu);
+        CoarseQueryResultBuffer<16384>* lpBuffer = NewBuffer();
+        u32 luSeed = 0x2468ACE1u;
+        auto Rand = [&luSeed]() { luSeed = luSeed * 1664525u + 1013904223u; return static_cast<f32>((luSeed >> 8) & 0xFFFFFF) / 16777215.0f; };
+        auto RandDelta = [&Rand](f32* lafD) { lafD[0] = Rand() * 180.0f - 90.0f; lafD[1] = Rand() * 80.0f - 40.0f; lafD[2] = Rand() * 180.0f - 90.0f; };
+        auto RunOptimized = [&](const f32* lafD) {
+            giCapturedWalks = 0;
+            lpTree->LineTestOptimized(0x1E, V3(0, 0, 0), V3(lafD[0], lafD[1], lafD[2]), lpBuffer);
+            return giCapturedWalks == 1;
+        };
+
+        // G1 rule 1, vmsum3fp128 @0x828CA674: the length differs when ONLY the dot is summed the old way.
+        {
+            bool lbFound = false; f32 lafD[3] = { 0, 0, 0 }; f32 lfRule = 0;
+            for (int i = 0; i < 200000 && !lbFound; ++i)
+            {
+                RandDelta(lafD);
+                lfRule  = Length(Dot3Rule(lafD[0], lafD[1], lafD[2]), KRule);
+                lbFound = Bits(lfRule) != Bits(Length(Dot3Old(lafD[0], lafD[1], lafD[2]), KRule));
+            }
+            const bool lbWalked = RunOptimized(lafD);
+            std::printf("      G1: d (%.9g %.9g %.9g) len 0x%08X, dot-only-old 0x%08X, production 0x%08X\n", lafD[0], lafD[1], lafD[2],
+                        Bits(lfRule), Bits(Length(Dot3Old(lafD[0], lafD[1], lafD[2]), KRule)), Bits(gCapturedParams.mfLineLength.x));
+            Check(lbFound && lbWalked && Bits(gCapturedParams.mfLineLength.x) == Bits(lfRule),
+                  "G1 rule 1: the squared length is vmsum3fp128 (0x828CA674), ONE rounding of the f64 sum -- a segment "
+                  "whose length has other bits with the f32 left-to-right sum");
+        }
+
+        // G2 the rsqrt chain 0x828CA678..0x828CA69C, one site at a time: its two vnmsubfp (0x828CA688 / 0x828CA698,
+        // rule 3), its two vmaddfp (0x828CA68C / 0x828CA69C, rule 3) and the vrsqrtefp estimate (0x828CA678, rule 5).
+        {
+            const Sites laReverted[3] = { { true, false, true }, { true, true, false }, { false, true, true } };
+            const char* lapcName[3] = { "vnmsubfp", "vmaddfp", "estimate" };
+            bool labFound[3] = { false, false, false }, labMatch[3] = { false, false, false };
+            for (int liSite = 0; liSite < 3; ++liSite)
+            {
+                f32 lafD[3] = { 0, 0, 0 }; f32 lfRule = 0;
+                for (int i = 0; i < 400000 && !labFound[liSite]; ++i)
+                {
+                    RandDelta(lafD);
+                    const f32 lfLen2 = Dot3Rule(lafD[0], lafD[1], lafD[2]);
+                    lfRule = Length(lfLen2, KRule);
+                    // the site alone changes the bits, AND so does the whole old chain (the pre-change host)
+                    const Sites lOld = { false, false, false };
+                    labFound[liSite] = Bits(lfRule) != Bits(Length(lfLen2, laReverted[liSite]))
+                                    && Bits(lfRule) != Bits(Length(Dot3Old(lafD[0], lafD[1], lafD[2]), lOld));
+                }
+                if (labFound[liSite])
+                {
+                    labMatch[liSite] = RunOptimized(lafD) && Bits(gCapturedParams.mfLineLength.x) == Bits(lfRule);
+                }
+                std::printf("      G2 %s: %s\n", lapcName[liSite], labFound[liSite] ? (labMatch[liSite] ? "a discriminating length, production = rule" : "a discriminating length, production DIFFERS") : "no discriminating length in 400000 draws (not observable after the two NR steps)");
+            }
+            Check(labFound[0] && labMatch[0],
+                  "G2a rule 3: the rsqrt chain's vnmsubfp 1 - x*(y*y) (0x828CA688 / 0x828CA698) rounds ONCE, negated after "
+                  "the rounding -- a length that differs with 1 - x*yy written unfused");
+            // The vmaddfp site cannot change the chain's OUTPUT: the last step's correction h*e is ~1e-14 of y, far
+            // below half an ulp, so fused or not it rounds back to y1; a first-step difference is erased by the second
+            // step. So the helper itself is held to the rule model bit for bit over a wide sample instead (the old
+            // chain fails this through its other sites), and the vmaddfp site's own count is printed.
+            {
+                int liMismatch = 0, liSiteOnly = 0;
+                for (int i = 0; i < 200000; ++i)
+                {
+                    const f32 lfX = std::ldexp(1.0f + Rand(), static_cast<int>(Rand() * 40.0f) - 20);
+                    if (Bits(CgsSceneManager::NewtonRaphsonReciprocalSqrt2(lfX)) != Bits(Rsqrt(lfX, KRule))) ++liMismatch;
+                    if (Bits(Rsqrt(lfX, KRule)) != Bits(Rsqrt(lfX, laReverted[1]))) ++liSiteOnly;
+                }
+                std::printf("      G2b: 200000 x in [2^-20, 2^21): production != rule on %d; the vmaddfp site alone changes %d\n",
+                            liMismatch, liSiteOnly);
+                Check(liMismatch == 0,
+                      "G2b rules 3 + 5: NewtonRaphsonReciprocalSqrt2 is the console's chain bit for bit on 200000 inputs "
+                      "(its vmaddfp 0x828CA68C / 0x828CA69C is fused too; alone it changes no output -- see the count)");
+            }
+            Check(labFound[2] && labMatch[2],
+                  "G2c rule 5 (FLAG model): the vrsqrtefp estimate taken correctly rounded -- a length that differs with "
+                  "the f32 1.0f / sqrtf estimate");
+        }
+
+        // G3 the vrefp chains 0x828CA6CC..0x828CA754 (1/len for the direction, 1/d for the reciprocal lanes), one site
+        // at a time: vnmsubfp 1 - r*x (0x828CA70C / 0x828CA714 / 0x828CA71C / 0x828CA730 / 0x828CA734 / 0x828CA744)
+        // and vmaddfp r*e + r (0x828CA720 / 0x828CA724 / 0x828CA72C / 0x828CA738 / 0x828CA73C / 0x828CA754), rule 3.
+        // (The vrefp estimate taken correctly rounded is 1.0f / x itself -- f32 division rounds correctly -- so it
+        // changes nothing to show.)
+        {
+            const Sites laReverted[2] = { { true, false, true }, { true, true, false } };
+            bool labRecip[2] = { false, false }, labDir[2] = { false, false };
+            for (int liSite = 0; liSite < 2; ++liSite)
+            {
+                // the reciprocal lane x: NR2(1/d) * 1.0
+                bool lbFound = false; f32 lfDelta = 0;
+                for (int i = 0; i < 400000 && !lbFound; ++i)
+                {
+                    lfDelta = Rand() * 180.0f - 90.0f;
+                    lbFound = std::fabs(lfDelta) > 1.0f
+                           && Bits(Recip(lfDelta, KRule) * 1.0f) != Bits(Recip(lfDelta, laReverted[liSite]) * 1.0f);
+                }
+                const f32 lafD[3] = { lfDelta, 3.0f, 60.0f };
+                labRecip[liSite] = lbFound && RunOptimized(lafD)
+                                && Bits(gCapturedParams.mLineReciprocal.x) == Bits(Recip(lfDelta, KRule) * 1.0f);
+                // the direction lanes: d * NR2(1/len)
+                bool lbFoundDir = false; f32 lafE[3] = { 0, 0, 0 }; int liLane = 0;
+                for (int i = 0; i < 400000 && !lbFoundDir; ++i)
+                {
+                    RandDelta(lafE);
+                    const f32 lfLen = Length(Dot3Rule(lafE[0], lafE[1], lafE[2]), KRule);
+                    for (int k = 0; k < 3 && !lbFoundDir; ++k)
+                    {
+                        if (Bits(Recip(lfLen, KRule) * lafE[k]) != Bits(Recip(lfLen, laReverted[liSite]) * lafE[k])) { lbFoundDir = true; liLane = k; }
+                    }
+                }
+                const f32 lfLen = Length(Dot3Rule(lafE[0], lafE[1], lafE[2]), KRule);
+                labDir[liSite] = lbFoundDir && RunOptimized(lafE)
+                              && Bits((&gCapturedParams.mLineDirection.x)[liLane]) == Bits(Recip(lfLen, KRule) * lafE[liLane]);
+            }
+            Check(labRecip[0] && labDir[0],
+                  "G3a rule 3: the vrefp chains' vnmsubfp 1 - r*x rounds ONCE -- a reciprocal lane (1/d) and a direction lane "
+                  "(d/len) that differ with it written unfused");
+            // As G2b: the vmaddfp site alone cannot move the chain's output, so the helper is held to the rule model.
+            {
+                int liMismatch = 0, liSiteOnly = 0;
+                for (int i = 0; i < 200000; ++i)
+                {
+                    f32 lfX = std::ldexp(1.0f + Rand(), static_cast<int>(Rand() * 40.0f) - 20);
+                    if (i & 1) lfX = -lfX;
+                    if (Bits(CgsSceneManager::NewtonRaphsonReciprocal2(lfX)) != Bits(Recip(lfX, KRule))) ++liMismatch;
+                    if (Bits(Recip(lfX, KRule)) != Bits(Recip(lfX, laReverted[1]))) ++liSiteOnly;
+                }
+                std::printf("      G3b: 200000 x, +/-[2^-20, 2^21): production != rule on %d; the vmaddfp site alone changes %d\n",
+                            liMismatch, liSiteOnly);
+                (void)labRecip[1]; (void)labDir[1];
+                Check(liMismatch == 0,
+                      "G3b rule 3: NewtonRaphsonReciprocal2 is the console's chain bit for bit on 200000 inputs (its vmaddfp "
+                      "r*e + r is fused too; alone it changes no output -- see the count)");
+            }
+        }
+
+        // G4 rule 3, TestLineSphere4's eleven vmaddfp (0x828BD1A8..0x828BD214), one site at a time: spheres on the
+        // decision boundary of the distance term the site feeds, where the console's lane and the lane with ONLY that
+        // site unfused disagree. Production must answer the console's lane on every one.
+        {
+            struct SiteSpec { const char* mpcName; SphereSites mReverted; int miTerm; };   // term 0 perp, 1 start, 2 end
+            const SiteSpec laSites[5] = {
+                { "e = L*d + s (0x828BD1A8 / 1AC / 1B0)",   { false, true, true, true, true }, 2 },
+                { "t (0x828BD1C4 / 1CC)",                   { true, false, true, true, true }, 0 },
+                { "|p|^2 (0x828BD200 / 214)",               { true, true, false, true, true }, 0 },
+                { "|C-s|^2 (0x828BD1F8 / 208)",             { true, true, true, false, true }, 1 },
+                { "|C-e|^2 (0x828BD1FC / 20C)",             { true, true, true, true, false }, 2 },
+            };
+            bool lbAll = true;
+            for (int liSite = 0; liSite < 5; ++liSite)
+            {
+                const SiteSpec& lrSite = laSites[liSite];
+                int liCases = 0, liAgree = 0;
+                for (int i = 0; i < 600000 && liCases < 3; ++i)
+                {
+                    const Vector3 s = V3(Rand() * 100 - 50, Rand() * 40 - 20, Rand() * 100 - 50);
+                    f32 dx = Rand() * 2 - 1, dy = Rand() * 2 - 1, dz = Rand() * 2 - 1;
+                    const f32 lfNorm = std::sqrt(dx * dx + dy * dy + dz * dz);
+                    if (lfNorm < 0.2f) continue;
+                    dx /= lfNorm; dy /= lfNorm; dz /= lfNorm;
+                    const Vector3 d = V3(dx, dy, dz);
+                    const f32 L = 5.0f + Rand() * 95.0f;
+                    f32 nx = -dz, nz = dx; const f32 lfN = std::sqrt(nx * nx + nz * nz);
+                    if (lfN < 0.1f) continue;
+                    nx /= lfN; nz /= lfN;
+                    const f32 h = 0.5f + Rand() * 4.0f;
+                    const f32 lfAlong = (lrSite.miTerm == 0) ? L * (0.3f + 0.4f * Rand())
+                                      : (lrSite.miTerm == 1) ? -(0.2f + Rand())
+                                                             : L + 0.2f + Rand();
+                    const f32 lfSide = (lrSite.miTerm == 0) ? h : 0.3f * h;
+                    Vector4 C;
+                    C.x = s.x + d.x * lfAlong + nx * lfSide; C.y = s.y + d.y * lfAlong; C.z = s.z + d.z * lfAlong + nz * lfSide; C.w = 0.0f;
+                    const LaneTerms Tr = Terms(KSphereRule, C, s, d, L), Tv = Terms(lrSite.mReverted, C, s, d, L);
+                    const f32 lfQr = (lrSite.miTerm == 0) ? Tr.p2 : (lrSite.miTerm == 1) ? Tr.s2 : Tr.e2;
+                    const f32 lfQv = (lrSite.miTerm == 0) ? Tv.p2 : (lrSite.miTerm == 1) ? Tv.s2 : Tv.e2;
+                    if (Bits(lfQr) == Bits(lfQv)) continue;
+                    const f32 lfLo = std::min(lfQr, lfQv), lfHi = std::max(lfQr, lfQv);
+                    f32 R = std::sqrt(lfLo);
+                    bool lbR = false;
+                    for (int k = 0; k < 8 && !lbR; ++k)
+                    {
+                        const f32 lfR2 = R * R;
+                        if (lfR2 >= lfLo && lfR2 < lfHi) lbR = true; else R = (lfR2 < lfLo) ? std::nextafter(R, 1e30f) : std::nextafter(R, -1e30f);
+                    }
+                    if (!lbR) continue;
+                    C.w = R;
+                    const bool lbRule = Lane(KSphereRule, C, s, d, L), lbReverted = Lane(lrSite.mReverted, C, s, d, L);
+                    if (lbRule == lbReverted) continue;
+                    const CgsGeometric::Sphere lSphere = MakeSphere(C.x, C.y, C.z, C.w);
+                    const Vector4 lHits = CgsGeometric::TestLineSphere4(lSphere, lSphere, lSphere, lSphere, s, d, V4(L, L, L, L));
+                    ++liCases;
+                    if ((LaneBits(lHits, 0) == 0xFFFFFFFFu) == lbRule) ++liAgree;
+                }
+                std::printf("      G4 %s: %d boundary spheres, production = console on %d\n", lrSite.mpcName, liCases, liAgree);
+                lbAll = lbAll && liCases == 3 && liAgree == liCases;
+            }
+            Check(lbAll,
+                  "G4 rule 3: each of TestLineSphere4's fused sites -- e, t, |p|^2, |C-s|^2, |C-e|^2 (all eleven vmaddfp) -- "
+                  "rounds ONCE: on 3 boundary spheres per site where that site alone unfused flips the lane, production "
+                  "answers the console's lane");
+        }
+        delete lpBuffer;
     }
 
     std::printf("FxFollowupsOctreeLine: %d checks, %d failures\n", giChecks, giFailures);
