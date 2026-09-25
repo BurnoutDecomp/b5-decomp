@@ -1586,19 +1586,22 @@ namespace BrnGame
     //     UpdateTimers(GameStateModuleIO::OutputBuffer*, DirectorIO::OutputBuffer*) and its
     //     caller passes exactly the two objects reached below as members. Reaching them
     //     directly keeps the one call site (DoUpdate's sub-step loop) unchanged.
-    //  2. THE WHOLE REQUEST CYCLE IS GATED ON THE DIRECTOR MODULE BEING PREPARED. The reset
-    //     half of this cycle lives in BridgeTimers (the console clears the accumulator there),
-    //     and on this build BridgeTimers runs inside DoUpdate_Director, which returns early
-    //     until the module reports prepared. Draining requests without the matching reset
-    //     would latch KU_FLAG_MULTIPLIER in the accumulator for ever -- the last multiplier
-    //     would stick and TimerRequests::Append's "only 1 slowmo request per frame" assert
-    //     would fire every frame after. Accumulate-and-reset is ONE cycle; it runs whole or
-    //     not at all. Nothing posts a request before the director is prepared (all four
-    //     producers are in-game). DELETE-WHEN BridgeTimers runs unconditionally.
-    //     ⚠️ ORDER: within a sub-step this runs BEFORE DoUpdate_Director, so the DIRECTOR's
-    //     request is read one sub-step after it is published (the game-state producer, which
-    //     runs earlier in the same sub-step, is same-frame). That is the same one-leg
-    //     staleness the position note above already documents, not a dropped request.
+    //  2. THE DRAIN IS GATED ON THE DIRECTOR MODULE BEING PREPARED (and on both buffers
+    //     existing). The reset half of the cycle, BridgeTimers, now runs at the start of EVERY
+    //     sub-step (the console's 0x823F0DE4, see GameMain), so the accumulator starts each step
+    //     cleared whether or not this drain runs -- nothing can latch. Nothing posts a request
+    //     before the director is prepared (all four producers are in-game).
+    //
+    // ⭐⭐ ORDER -- CORRECTED 2026-09-25 (FX-DIRECTOR2): this now runs where the console runs it,
+    // at the END of the step (DoUpdate @0x823F0AF8 calls it at 0x823F1CFC, after
+    // DoUpdate_NetworkPostSim), so it drains the request MainDirector::Update published in THIS
+    // step's DoUpdate_Director (0x82275148) and the next step's BridgeTimers snapshot carries it
+    // to the world. It used to run mid-step, between the world leg and the director (boot audit
+    // F-P3-13 had flagged the position and deferred the move): every director time-scale request
+    // was drained one step late and integrated one step after that. Measured on the h225 s80
+    // crash cell: the hard stop's 0.000125 reached the world on the crash's FOURTH frame instead
+    // of its third, so the impact frame that takes the car from 197 to 102 mph ran at full dt.
+    // The game-state requests were never affected (their legs run before this one either way).
     // ------------------------------------------------------------------------------------
     void BrnGameModule::UpdateTimers()
     {
@@ -1750,6 +1753,15 @@ namespace BrnGame
     // without them the director input's timer status stays at DoUpdate_Director's zero-fill,
     // every TimerStatus::GetCurrentTimeStep() reads 0, and the whole camera-behaviour middle
     // advances by `speed * 0` per frame.
+    //
+    // ⭐ POSITION (2026-09-25, FX-DIRECTOR2): the console calls this FIRST in DoUpdate @0x823F0AF8
+    // (0x823F0DE4, before DoUpdate_InputPreWorld), so the snapshot every leg of the step reads --
+    // the world's included (DoUpdate_World hands gm+0x9A0B0C to the world input at 0x823E8C78..
+    // 0x823E8C84) -- is the timers as the PREVIOUS step's UpdateTimers left them. GameMain now calls
+    // it there, with a NULL director input.
+    // [FLAG PC split] the director input buffer does not exist yet at the start of a sub-step on
+    // this build (DoUpdate_Director creates it), so the copy half runs only when a buffer is
+    // passed; DoUpdate_Director copies the same snapshot in itself.
     // ------------------------------------------------------------------------------------
     void BrnGameModule::BridgeTimers(BrnDirector::DirectorIO::InputBuffer* lpDirectorInput)
     {
@@ -1757,9 +1769,12 @@ namespace BrnGame
 
         mTimerStatusInterface.StoreTimers(&mGameTimer, &mSimTimer);
 
-        lpDirectorInput->LockForWrite();
-        *lpDirectorInput->GetTimerStatusInterface() = mTimerStatusInterface;
-        lpDirectorInput->UnlockForWrite();
+        if (lpDirectorInput != 0)
+        {
+            lpDirectorInput->LockForWrite();
+            *lpDirectorInput->GetTimerStatusInterface() = mTimerStatusInterface;
+            lpDirectorInput->UnlockForWrite();
+        }
     }
 
     // ------------------------------------------------------------------------------------
@@ -2226,14 +2241,22 @@ namespace BrnGame
         // not before it.
         lpDirectorInput->Construct();
 
-        // ⭐ THE FRAME TIMESTEP. The console's module scheduler runs BridgeTimers @0x823BD150
-        // over this exact pair (game module -> director input) before the director's passes;
-        // it is the ONLY producer of the director input's timer status, and every camera
-        // behaviour's per-frame advance is `<speed> * GetCurrentTimeStep()`. Staged on the
-        // pre-GUI call, matching the console's bridge order (the post-GUI pass consumes the
-        // same buffer contents).
+        // ⭐ THE FRAME TIMESTEP -- the copy half of BridgeTimers @0x823BD150 (0x823BD1AC..
+        // 0x823BD22C). It is the ONLY producer of the director input's timer status, and every
+        // camera behaviour's per-frame advance is `<speed> * GetCurrentTimeStep()`.
+        // CORRECTED 2026-09-25 (FX-DIRECTOR2): the snapshot is the one GameMain took at the START
+        // of this sub-step (BridgeTimers there -- the console's 0x823F0DE4); this used to call
+        // BridgeTimers itself, i.e. snapshot and reset the accumulator HERE, after the mid-step
+        // UpdateTimers. Copied, not re-taken: the pause consumer (CheckGameActions) may have
+        // started or stopped the sim timer since, and the console's director sees the status as
+        // the step began. Staged on the pre-GUI call (the post-GUI pass consumes the same buffer
+        // contents).
         if (!lbPostGui)
-            BridgeTimers(lpDirectorInput);
+        {
+            lpDirectorInput->LockForWrite();
+            *lpDirectorInput->GetTimerStatusInterface() = mTimerStatusInterface;
+            lpDirectorInput->UnlockForWrite();
+        }
 
         // ⭐ [FLAG PC lifecycle, 2026-08-28 crash-slomo transport wave] RETIRE LAST SUB-STEP'S
         // DIRECTOR TIMER REQUEST, immediately before MainDirector::Update publishes this one.
@@ -2242,10 +2265,9 @@ namespace BrnGame
         // SetTimestepMultiplier is always the FIRST write of the frame -- which is what that
         // function's `!IsMultiplierRequested()` assert ("Attempt to change slowmo multiple
         // times") is asserting. On PC the buffer is the persistent mpDirectorOutputBuffer, so
-        // the clear is explicit. It is here rather than at the sub-step's retire block because
-        // UpdateTimers() reads this slot EARLIER in the sub-step than the director writes it
-        // (see UpdateTimers' order note): clearing at the retire point would wipe the request
-        // before its consumer ever saw it.
+        // the clear is explicit, immediately before the publish. (UpdateTimers() drains this slot
+        // at the END of the sub-step, after the director wrote it -- the console's order since
+        // 2026-09-25 -- so the request lives from its publish to its one consumer.)
         if (!lbPostGui)
         {
             mpDirectorOutputBuffer->LockForWrite();
@@ -4386,6 +4408,20 @@ namespace BrnGame
 
                 PerfMonCpu::StartMonitor(mCpuMonitors.miUT_EachUpdate);
 
+                // ⭐ THE FRAME TIMESTEP SNAPSHOT -- FIRST, before any leg reads a timestep. The
+                // console's DoUpdate @0x823F0AF8 calls BridgeTimers @0x823BD150 at 0x823F0DE4, as
+                // soon as its IO buffers exist and before DoUpdate_InputPreWorld (0x823F0F58): the
+                // request accumulator is reset and TimerStatusInterface::StoreTimers @0x828D7518
+                // snapshots both timers into mTimerStatusInterface -- the snapshot the world leg
+                // integrates with (DoUpdate_World 0x823E8C78..0x823E8C84) and the director reads.
+                // The timers were last moved by UpdateTimers at the END of the previous sub-step
+                // (below), so a time-scale request the director made last step reaches the world
+                // this step, as on the console. NULL: the director input does not exist yet on
+                // this build; DoUpdate_Director copies this snapshot into it (see BridgeTimers).
+                // CORRECTED 2026-09-25 (FX-DIRECTOR2) -- this ran inside DoUpdate_Director, after
+                // a mid-step UpdateTimers, which put every director request one step late.
+                BridgeTimers(0);
+
                 BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
 
                 // ⭐ [FX-RUMBLE3 2026-09-24, crash-parity G10-D4] THE INPUT PRE-WORLD LEG -- the first
@@ -4731,13 +4767,11 @@ namespace BrnGame
                     // site is the right home for it: ModeManager::PreWorldUpdate needs a
                     // CgsSystem::TimerStatusInterface and the console fills its copy from the
                     // PreWorldInputBuffer, which nothing on PC fills. mTimerStatusInterface IS
-                    // filled every sub-step by TimerStatusInterface::StoreTimers(&mGameTimer,
-                    // &mSimTimer) (this file, the UpdateTimers leg) -- the same data by the same
-                    // route, one copy earlier. Full note at the callee's declaration.
-                    // ⚠️ ORDER: UpdateTimers() runs LATER in this sub-step (see its own banner), so
-                    // the snapshot handed over here is the one StoreTimers wrote at the end of the
-                    // PREVIOUS sub-step. Same one-leg staleness the pad record two calls up already
-                    // carries and the same DELETE-WHEN (the DoUpdate cascade, F-P3-1).
+                    // filled at the start of every sub-step by TimerStatusInterface::StoreTimers
+                    // (BridgeTimers, the console's 0x823F0DE4) -- the same data by the same route,
+                    // one copy earlier. Full note at the callee's declaration.
+                    // (ORDER, 2026-09-25: that snapshot is THIS sub-step's, taken before this leg, as
+                    // on the console; the old note's one-leg staleness went with the timer-order fix.)
                     mGameStateModule.PreWorldUpdateStuntBringUp(
                         mGameTimer.GetRate() * mGameTimer.GetScaleCurrent(),
                         mGameStateModule.GetModeManager()->GetCurrentGameMode() != 0,
@@ -4948,18 +4982,9 @@ namespace BrnGame
                 // outside GamePrepare, and any module Prepare that waits on a resource reply
                 // (DirectorModule stage 3 = WorldMap::LoadData) wedges the loading flow.
                 ResourceUpdateThread(0);
-                // ---- the TIMER tick (X360 BrnGameModule::UpdateTimers @0x823BCFD0) --------
-                // Once per sim sub-step, before anything that reads a timestep.
-                //
-                // ⭐ POSITION STATED 2026-08-17 (boot audit F-P3-13). The old note said only
-                // that "the console runs it from the same per-sub-step spine", which elided
-                // WHERE: the console calls it from inside DoUpdate near the END of the leg
-                // (@0x823F1CFC), not early-mid as here. Every consumer downstream of this
-                // point in our order therefore reads a timestep one leg fresher than its
-                // console counterpart does. Harmless while the legs between are inert, and a
-                // real off-by-a-leg in timestep provenance once DoUpdate's cascade is
-                // restored -- so the position moves with F-P3-1, not before it.
-                UpdateTimers();
+                // (The TIMER tick, UpdateTimers @0x823BCFD0, is NOT here any more: it runs at the
+                //  end of the sub-step, after DoUpdate_NetworkPostSim -- the console's 0x823F1CFC.
+                //  Boot audit F-P3-13's position note is retired there, with the measurement.)
                 // ---- the DIRECTOR's pre-GUI passes (X360 module-scheduler order) ----------
                 // PreSceneQueryUpdate + Update. The module publishes its finalised camera into
                 // mpDirectorOutputBuffer, which stays alive through this frame's Render.
@@ -5151,16 +5176,16 @@ namespace BrnGame
                     //
                     // This is the GAME timer (not the sim timer): the console reads the
                     // game-timer half of the published TimerStatus pair. Read here off the
-                    // LIVE mGameTimer rather than off mTimerStatusInterface, because on this
-                    // build the status pair is only published by BridgeTimers, which runs
-                    // inside DoUpdate_Director and returns early until the director module
-                    // reports prepared -- so the published half reads 0 for the whole boot
-                    // and every GUI dwell would stay frozen. The two are the SAME VALUE by
+                    // LIVE mGameTimer rather than off mTimerStatusInterface (a choice made when
+                    // the status pair was only published inside DoUpdate_Director, gated on the
+                    // director module being prepared). The two are the SAME VALUE by
                     // construction: TimerStatusInterface::StoreTimers @0x828D7518 copies
                     // mfBaseTimeStep <- Timer::mfRate and mfTimeStepMultiplier <-
                     // Timer::mfScaleCurrent, and TimerStatus::GetCurrentTimeStep() is their
                     // product; mTime is likewise Timer::miAccumTicks + Timer::mfAccumulator.
-                    // UpdateTimers() has already ticked both timers earlier in this sub-step.
+                    // Since 2026-09-25 UpdateTimers() runs at the END of the sub-step, so the live
+                    // timers here still hold the start-of-step values BridgeTimers snapshotted --
+                    // the console's published pair exactly.
                     //
                     // ⚠️ NOT through CgsGui::GuiModule::AddGuiEvent<T>: that template assumes
                     // T derives from CgsGui::GuiEvent<N> and pushes (&event + 12) with size
@@ -5451,11 +5476,9 @@ namespace BrnGame
                 // LatchDispatchCamera.
                 // THE NETWORK POST-SIMULATION LEG. Console DoUpdate order: ... DoUpdate_Effects,
                 // DoUpdate_Sound, DoUpdate_ReplaysPostSim, DoUpdate_GameStatePostWorld, then this,
-                // then UpdateTimers. [FLAG PC placement] the PC runs UpdateTimers earlier in the
-                // sub-step (see its banner), so this is the last module leg of the sub-step. The
-                // GUI output buffer carries the GUI out-events retained from the previous sub-step
-                // (the same one-sub-step hand-off the sound leg uses), so each reaches the network
-                // exactly once.
+                // then UpdateTimers (right below, as on the console). The GUI output buffer carries
+                // the GUI out-events retained from the previous sub-step (the same one-sub-step
+                // hand-off the sound leg uses), so each reaches the network exactly once.
                 if (mpNetworkOutputBuffer != 0)
                 {
                     DoUpdate_NetworkPostSim(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
@@ -5464,6 +5487,27 @@ namespace BrnGame
                                             mpGuiOutputBuffer,
                                             ConstructUpdateSetFromFsm());
                 }
+
+                // ---- the TIMER tick (X360 BrnGameModule::UpdateTimers @0x823BCFD0) ------------
+                // ⭐⭐ MOVED HERE 2026-09-25 (FX-DIRECTOR2) -- the console's position. DoUpdate
+                // @0x823F0AF8 calls it at 0x823F1CFC, the last module leg of the step, straight after
+                // DoUpdate_NetworkPostSim (0x823F1C44). It folds in this step's game-state requests
+                // and the director request MainDirector::Update published in THIS step's
+                // DoUpdate_Director (SetTimestepMultiplier 0x82275148), applies them
+                // (TimerRequestInterface::ApplyToTimers @0x828D7468) and ticks both timers --
+                // Timer::Update @0x828D7320 makes the scale target current at once (0x828D7340, no
+                // ramp). The NEXT sub-step's BridgeTimers snapshots the result, so a request made in
+                // step N is integrated by the world in step N+1.
+                // ⛔ WHAT THE OLD POSITION COST (boot audit F-P3-13 had flagged it, 2026-08-17, and
+                // deferred the move): it ran mid-step, between the world leg and the director, so a
+                // director request was drained one step late and integrated one step after that.
+                // On the h225 s80 crash cell (fxd2on3) the hard stop's 0.000125 reached the world on
+                // the crash's FOURTH frame (f778) instead of its third (f777) -- the frame that takes
+                // the car from 197 to 102 mph ran at 0.016667 -- and every ImpactSlomoController
+                // burst started a frame late the same way. Game-state requests were not affected.
+                // It runs BEFORE the game-action retire below, which clears the game-state output's
+                // request slot this drains.
+                UpdateTimers();
 
                 // THE GAME-ACTION RETIRE (FLAG PC lifecycle, see the note above DoUpdate_Director's
                 // GUI block). On the console the game-state output buffer is re-Constructed every
