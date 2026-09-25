@@ -35,6 +35,9 @@
 //   +0x446A0  mpRootNode   +0x446A4 mpNodes
 //   +0x446A8  mFreeNodeGroupPool (elements / free-indices / used / free / capacity)
 //   +0x446B8  mpNodesEntityInfo (one u32 sub-tree type mask per node)
+//   +0x446C0  macVolumeVolumeQueryBuffer[299008]   +0x8D6C0 macBoxVolumeBuffer[256]
+//   +0x8D7C0  macSphereVolumeBuffer[256]  +0x8D8C0 mpEntityVolume  +0x8D8C4 mpNodeVolume
+//   +0x8D8C8  mpVolumeVolumeQuery   +0x8D8D0 mNodeTransform   +0x8D910 mEntityTransform
 //   +0x8D950  muAdaptiveNodeSplitThreshold   +0x8D954 muAdaptiveMaxDepth
 //   +0x8D958  mpEntityListNodes (== &maEntityLinks[0])
 //   +0x8D960  maFrustumTestJobs[4]     (EA::Jobs::Job, stride 0x350)
@@ -46,6 +49,7 @@
 // ============================================================================
 
 namespace rw { struct IResourceAllocator; }
+namespace rw { namespace collision { struct BoxVolume; struct SphereVolume; } }   // CollisionVolume.hpp
 
 namespace CgsSceneManager
 {
@@ -233,6 +237,12 @@ namespace CgsSceneManager
         // registered by Construct @0x828CA18C). Bodied in CgsLooseOctree.cpp (folded from _wSQ1).
         virtual bool LineTest(u32 lx32EntityTypeFlags, Vector3 lLineStart, Vector3 lLineEnd,
                               CoarseQueryResultBuffer<16384>* lpResultBufferOut);
+        // @ 0x828CA910 -- slot 8. Builds the VolumeTestRecursiveFuncParams block, brackets
+        // VolumeTestRecursive from the root with the "Octree Volume Test" CPU monitor
+        // (_miVolumeTestPerfMon, X360 dword_82F33F40) and reports whether the query attempted any result.
+        virtual bool VolumeTest(u32 lx32EntityTypeFlags, const VolRef::Volume* lpVolume,
+                                const Matrix44Affine* lpTransform,
+                                CoarseQueryResultBuffer<16384>* lpResultBufferOut);
         virtual void Update();                                         // @ 0x828D0180
         virtual void SetEntityPosition(u16 lu16Id, Vector3 lPosition); // @ 0x828C9820
         virtual void SetEntityRadius(u16 lu16Id, f32 lfRadius);        // @ 0x828BC740
@@ -292,6 +302,16 @@ namespace CgsSceneManager
         // twin of _miVPLineTestPerfMon above and unregistered for the same reason, so it
         // stays -1 and both PerfMonCpu calls are inert. Defined in CgsLooseOctree.cpp.
         static s32 _miSphereTestPerfMon;
+
+        // @ 0x828BDE28 (DWARF CgsLooseOctree.cpp:2123) -- one node of the volume walk: the caller's volume
+        // against the node's loose box (the octree's BoxVolume at the node centre), then against each
+        // type-matching entity's bounding sphere (the octree's SphereVolume), then the children whose
+        // sub-tree mask meets the query.
+        void VolumeTestRecursive(u16 lu16NodeIndex, SpatialPartition::VolumeTestRecursiveFuncParams* lpParams);
+
+        // DWARF CgsLooseOctree.cpp:126 -- the "Octree Volume Test" CPU monitor (X360 dword_82F33F40).
+        // Unregistered like its siblings, so it stays -1 and both PerfMonCpu calls are inert.
+        static s32 _miVolumeTestPerfMon;
     private:
         // The per-query sphere-traversal parameter block, built once by SphereTest and
         // handed to every SphereTestRecursive level by pointer:
@@ -395,7 +415,18 @@ namespace CgsSceneManager
         // The entity arm's volume query (DWARF CgsLooseOctree.h:586 / :592; X360 +0x446C0 / +0x8D8C8): the buffer
         // Construct builds it in, and the handle Initialize returns. See KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE.
         alignas(16) u8                     macVolumeVolumeQueryBuffer[KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE];
+
+        // DWARF CgsLooseOctree.h:587-595 (X360 +0x8D6C0 / +0x8D7C0 / +0x8D8C0 / +0x8D8C4 / +0x8D8D0 / +0x8D910):
+        // the two query volumes Construct builds in place (a unit BoxVolume, a unit SphereVolume) and the two
+        // frames VolumeTestRecursive moves them with -- identity rotations whose translation row it rewrites
+        // per node / per entity. (The volumes are 0x60 bytes on both sides; the buffers keep the console 256.)
+        alignas(16) u8                     macBoxVolumeBuffer[256];
+        alignas(16) u8                     macSphereVolumeBuffer[256];
+        rw::collision::SphereVolume*       mpEntityVolume;
+        rw::collision::BoxVolume*          mpNodeVolume;
         rw::collision::VolumeVolumeQuery*  mpVolumeVolumeQuery;
+        Matrix44Affine                     mNodeTransform;
+        Matrix44Affine                     mEntityTransform;
 
         // The per-entity owning-node back pointer (X360 SpatialPartition::maEntityInfo
         // @ +0x3AA00, one u32 per entity holding a raw LooseOctreeNode*). Modelled as the
