@@ -7,7 +7,7 @@
 //
 //   OnDetermineNextState @ 0x8229B9F8   OnChangeState  @ 0x82299510
 //   SetVapourBlend       @ 0x82288A58   OnTick         -- no export (empty base slot)
-//   FireWheelSparks (still PARKED -- see its banner below)   FireWheelDebris
+//   FireWheelSparks      @ 0x82299670   FireWheelDebris
 //
 // The machine is ticked once per active car per frame: EffectsModule.cpp:1835 ->
 // ActiveRaceCarData::Tick -> EffectsStateMachine::Tick (EffectsStateMachine.cpp:49),
@@ -47,6 +47,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // BrnPhysics::Vehicle::RaceCarState / WheelLite
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // the [jump] diag witness
+#include "SDKs/EATech/include/rw/math/vpu/vec_float.h"    // rw::math::vpu::VecFloat (RandomVecFloat's splat)
 #include <cmath>
 #include <cstdio>    // snprintf
 #include <cstdlib>   // getenv
@@ -148,28 +149,11 @@ namespace
         return true;
     }
 
-    // The parked arms fire every frame while the machine sits in FiringSparks, so they
-    // get their own ONE-SHOT latches rather than eating the transition budget above.
-    bool JumpDiagTakeOnce(bool& lrbAlreadySaid)
-    {
-        if (!JumpDiagEnabled() || lrbAlreadySaid)
-        {
-            return false;
-        }
-        lrbAlreadySaid = true;
-        return true;
-    }
-
     void JumpDiagLine(const char* lpcFormat, s32 liA, u32 luB)
     {
         char lacMsg[224];
         std::snprintf(lacMsg, sizeof(lacMsg), lpcFormat, liA, luB);
         CgsDev::Log::WriteToLog(lacMsg);
-    }
-
-    void JumpDiagText(const char* lpcText)
-    {
-        CgsDev::Log::WriteToLog(lpcText);
     }
 }
 
@@ -237,32 +221,70 @@ void JumpStateMachine::SetVapourBlend(f32 lfFadeTime,
 
 
 // =============================================================================
-// FireWheelSparks @ 0x82299670  -- PARKED, and announced rather than faked.
-//
-// The X360 body gates on the two REAR wheels being on the ground
-// (maWheels[2].mRoadContact.mbIsOnGround && maWheels[3].mRoadContact.mbIsOnGround),
-// draws two randomised parameters out of the effects module's random pool
-// (EffectsModule + 0x2C400, the 0x4C957F2D LCG), lerps between the two rear wheels'
-// contact points/normals by those parameters, and calls
-// BrnEffects::EffectsModule::FireJumpSparks TWICE -- once per lerped contact.
-//
-// BLOCKER: EffectsModule::FireJumpSparks has NO declaration and NO definition anywhere
-// in the tree (`tools/re/hasbody.py EffectsModule::FireJumpSparks` -> NO DEFINITION IN
-// THE TREE, and EffectsModule.h does not declare it). Transcribing this body would mean
-// either inventing that callee or adding a declaration to EffectsModule.h, which this
-// wave does not own. The ladder therefore keeps its calls to this function -- the
-// control flow is faithful -- and only the spark emission is missing.
-// UNPARK WHEN EffectsModule::FireJumpSparks has a body.
+// FireWheelSparks @ 0x82299670 (DWARF JumpStateMachine.cpp:308) -- THE LANDING SPARKS.
+// FX-CRASHVFX 2026-09-25 (C2): parked until now on EffectsModule::FireJumpSparks, which had
+// no body; both are bodied. In the asm's order:
+//   gate     both REAR wheels on the ground -- CarState +0x40 -> maWheels[2] (+0xE0) and
+//            maWheels[3] (+0x150), mRoadContact.mbIsOnGround (+0x28), `beq` out on either
+//            (0x82299690..0x822996B0)
+//   ground   the ActiveRaceCarData's ground height (helper +4, `lfs f31, 0x138(r10)`)
+//   lerps    TWO RandomVecFloat() draws on the effects ring (helper +8 -> +0x2C3C0), each the
+//            vector slot ((cursor + 3) & 4) and one LCG step: A = t1 * 0.5 (`vmulfp128`),
+//            B = 0.5 * t2 + 0.5 (`vmaddcfp128 v125 = v0 * v125 + v0`) -- one point on each
+//            half of the rear axle
+//   points   posA = A * (p3 - p2) + p2 and normalA likewise (`vsubfp`, then ONE `vmaddcfp128`
+//            per lane, 0x822997F4 / 0x822997F8); posB = (p3 - p2) * B + p2 and normalB
+//            likewise (0x82299820 / 0x82299824) -- all four lanes
+//   calls    EffectsModule::FireJumpSparks(dt, time, posA, normalA, the helper's race-car
+//            state, ground, wheel 2's tag), then (..., posB, normalB, ..., wheel 3's tag)
 // =============================================================================
-void JumpStateMachine::FireWheelSparks(CarState& /*lCarState*/,
-                                       RaceCarParticleEffectHelper& /*lHelper*/) const
+void JumpStateMachine::FireWheelSparks(CarState& lCarState,
+                                       RaceCarParticleEffectHelper& lHelper) const
 {
-    static bool sbSaid = false;
-    if (JumpDiagTakeOnce(sbSaid))
+    const BrnPhysics::Vehicle::RaceCarState* const lpCarState = lCarState.mpCarState;
+    const BrnPhysics::Vehicle::WheelLite& lRearLeftWheel  = lpCarState->maWheels[2];
+    const BrnPhysics::Vehicle::WheelLite& lRearRightWheel = lpCarState->maWheels[3];
+    if (!lRearLeftWheel.mRoadContact.mbIsOnGround || !lRearRightWheel.mRoadContact.mbIsOnGround)
     {
-        JumpDiagText("[jump] FireWheelSparks @0x82299670 PARKED "
-                     "(EffectsModule::FireJumpSparks has no body)\n");
+        return;
     }
+
+    const ActiveRaceCarData& lRaceCarData = *lHelper.ActiveRaceCar();
+    const f32 lfGroundHeight = lRaceCarData.GetGroundPositionY();
+    CgsNumeric::Random& lRandom = lHelper.GetEffectsModule()->RandomNumberGenerator();
+
+    const f32 lfSparksLerpA = lRandom.RandomVecFloat().GetFloat() * 0.5f;
+    const f32 lfSparksLerpB = std::fma(0.5f, lRandom.RandomVecFloat().GetFloat(), 0.5f);
+
+    const f32 lafLeftPos[4]     = { lRearLeftWheel.mRoadContact.mPosition.x,  lRearLeftWheel.mRoadContact.mPosition.y,
+                                    lRearLeftWheel.mRoadContact.mPosition.z,  lRearLeftWheel.mRoadContact.mPosition.w };
+    const f32 lafRightPos[4]    = { lRearRightWheel.mRoadContact.mPosition.x, lRearRightWheel.mRoadContact.mPosition.y,
+                                    lRearRightWheel.mRoadContact.mPosition.z, lRearRightWheel.mRoadContact.mPosition.w };
+    const f32 lafLeftNormal[4]  = { lRearLeftWheel.mRoadContact.mNormal.x,  lRearLeftWheel.mRoadContact.mNormal.y,
+                                    lRearLeftWheel.mRoadContact.mNormal.z,  lRearLeftWheel.mRoadContact.mNormal.w };
+    const f32 lafRightNormal[4] = { lRearRightWheel.mRoadContact.mNormal.x, lRearRightWheel.mRoadContact.mNormal.y,
+                                    lRearRightWheel.mRoadContact.mNormal.z, lRearRightWheel.mRoadContact.mNormal.w };
+    f32 lafPosA[4], lafPosB[4], lafNormalA[4], lafNormalB[4];
+    for (u32 luLane = 0; luLane < 4u; ++luLane)
+    {
+        const f32 lfPosSpan    = lafRightPos[luLane] - lafLeftPos[luLane];
+        const f32 lfNormalSpan = lafRightNormal[luLane] - lafLeftNormal[luLane];
+        lafPosA[luLane]    = std::fma(lfSparksLerpA, lfPosSpan, lafLeftPos[luLane]);
+        lafNormalA[luLane] = std::fma(lfSparksLerpA, lfNormalSpan, lafLeftNormal[luLane]);
+        lafPosB[luLane]    = std::fma(lfPosSpan, lfSparksLerpB, lafLeftPos[luLane]);
+        lafNormalB[luLane] = std::fma(lfNormalSpan, lfSparksLerpB, lafLeftNormal[luLane]);
+    }
+    const Vector3 lSparksSpawnPosA    = { lafPosA[0], lafPosA[1], lafPosA[2], lafPosA[3] };
+    const Vector3 lSparksSpawnPosB    = { lafPosB[0], lafPosB[1], lafPosB[2], lafPosB[3] };
+    const Vector3 lSparksSpawnNormalA = { lafNormalA[0], lafNormalA[1], lafNormalA[2], lafNormalA[3] };
+    const Vector3 lSparksSpawnNormalB = { lafNormalB[0], lafNormalB[1], lafNormalB[2], lafNormalB[3] };
+
+    lHelper.GetEffectsModule()->FireJumpSparks(lCarState.GetDt(), lCarState.GetTime(), lSparksSpawnPosA,
+                                               lSparksSpawnNormalA, lHelper.RaceCarState(), lfGroundHeight,
+                                               lRearLeftWheel.mRoadContact.mCollisionTag);
+    lHelper.GetEffectsModule()->FireJumpSparks(lCarState.GetDt(), lCarState.GetTime(), lSparksSpawnPosB,
+                                               lSparksSpawnNormalB, lHelper.RaceCarState(), lfGroundHeight,
+                                               lRearRightWheel.mRoadContact.mCollisionTag);
 }
 
 // =============================================================================

@@ -65,9 +65,12 @@
 // trail system READY and PostWorldPreparePrepare that gives every surface its skid colours.
 //
 // ⚠ NOT RECONSTRUCTED ON THIS BUILD, EACH ONE LOUD (logs once when first reached, then
-// returns) -- the junkyard editor / QA tests, the post-fx effects frames
+// returns) -- the junkyard editor / QA tests and the post-fx effects frames
 // (GenerateRenderRequests -- the renderer's base-frame bring-up producer still stands in
-// for it) and the prop-locator VFX.
+// for it).
+// ✅ UPDATED 2026-09-25 (FX-CRASHVFX): "and the prop-locator VFX" left this list with item 6b
+// (bd16ec8d: Update runs PropCollisions::UpdateLocatorVfx), and the jump-landing sparks
+// (FireJumpSparks, under DoSparkShower) are bodied with C2.
 // ✅ UPDATED 2026-09-25 (FX-CRASHVFX): this list used to open "the crash sparks / debris / glass /
 // crashing trail" and end with "the native simple-particle parameter push". All of those are
 // bodied now, each under its own banner below: the contact sparks and showers
@@ -326,7 +329,7 @@ namespace
     const u32 KU_DEBRIS_SCALE_AT_MAX_SPEED   = 0xC8;   // f32
     const u32 KU_DEBRIS_MAX_SPEED            = 0xCC;   // f32  (speeds above clamp to it)
 
-    // The shower controllers (DWARF :209..:289). Jump-sparks lands with its own caller (the jump pass).
+    // The shower controllers (DWARF :209..:289).
     // gSparkShowerControllerShowtimeBounce (:209) -- unk_82CDB020 <- thunk 0x82C4A260.
     const SparkShowerController gSparkShowerControllerShowtimeBounce =
     {
@@ -355,6 +358,21 @@ namespace
         { { 2.0f, 15.0f, -180.0f, 180.0f }, { 8.0f, 20.0f, 0.600000024f, 1.20000005f }, { 0.75f, 1.75f, 0.0f, 0.200000003f } },
         2.0f, 44.6944427f, BrnParticle::Native::eSparkArray_Crashing
     };
+    // gSparkShowerControllerJumpSparks (:289) -- unk_82CDB1E0 <- thunk 0x82C4A790 (FireJumpSparks' `addi r4, r10,
+    // -0x4E20` at 0x82296BAC). The thunk leaves the array id at +0x68 zero: the world-grinding sparks.
+    const SparkShowerController gSparkShowerControllerJumpSparks =
+    {
+        { { 2.0f, 10.0f, 150.0f, 210.0f }, { 5.0f, 12.0f, 0.800000012f, 1.20000005f }, { 0.5f,  1.25f, 0.0f, 0.200000003f } },
+        { { 2.0f, 15.0f, 140.0f, 220.0f }, { 8.0f, 20.0f, 0.800000012f, 1.20000005f }, { 0.75f, 1.75f, 0.0f, 0.300000012f } },
+        2.0f, 44.6944427f, BrnParticle::Native::eSparkArray_GrindingWorld
+    };
+
+    // FireJumpSparks @0x822969E0: faster than flt_82013720 (10 mph, the literal KF_GRINDING_MIN_SPEED also reads)
+    // along the ground (`fcmpu ; ble` 0x82296B70), then fma(Random(), flt_82004D0C, flt_82013724) sparks per metre
+    // (`fmadds f0, f0, f13, f12` 0x82296C18).
+    const f32 KF_JUMP_SPARKS_MIN_SPEED       = 4.46944427f;   // flt_82013720
+    const f32 KF_JUMP_SPARKS_PER_METRE_RANGE = 40.0f;         // flt_82004D0C
+    const f32 KF_JUMP_SPARKS_PER_METRE_MIN   = 50.5f;         // flt_82013724
 
     // DWARF EffectsModule.cpp:66 -- CB4SparkSpawnParams, and its one instance
     // _gSparkSpawnParamsRaceCarVehicle (:104): IMAGE-initialised .data at 0x82CDB3E4 (no CRT
@@ -3689,6 +3707,118 @@ void EffectsModule::ProcessRaceCarContacts(
                                         lrParams.mTime, KF_CRASH_DUST_ALPHA);
         }
     }
+}
+
+// ------------------------------------------------------------------------------------------------
+// FireJumpSparks @0x822969E0 (167 instr, DWARF EffectsModule.cpp:1616; FX-CRASHVFX 2026-09-25, C2).
+// The jump-landing spark shower off one point of the rear axle. ABI: f1 the step (eats r4), f2 the time
+// (r5), v1 the contact point, v2 its normal, r6 the race-car state, f3 the ground height (r7), r8 -> the
+// collision tag. In the asm's order:
+//   surface  (tag >> 4) & 0x3F of the tag's low halfword (`lhz r11, 2(r8)`), a u8, looked up in the
+//            surfacelist with the DefaultDataArea(24) fallback; its visualfxsurface's spark scale (+0x54,
+//            the DWARF's lfGrindingRate) below flt_82002138 (0.01) fires nothing: `fcmpu ; blt`
+//            0x82296AA0 -- a NaN scale goes on
+//   frame    x = the normal; y = the car's velocity with its normal part taken out (`vmsum3fp128`,
+//            `vmulfp128`, `vsubfp` 0x82296ABC..0x82296ACC) times the refined `vrefp` of its guarded length
+//            (`vmsum3fp128` / `vrsqrtefp` + two steps / `vcmpeqfp` + `vsel`); z = x cross y (the permute
+//            idiom); w = the contact point -- the crash shower's frame, built the same way
+//   gate     the guarded length (lfSpeedAlongGround) must be above flt_82013720 (4.4694443 m/s): `fcmpu ;
+//            ble` 0x82296B70 -- a NaN speed returns, before the draw
+//   shower   ONE RandomFloat() t (0x82296BB0..0x82296C04): the controller lerp t * t (`fmuls`, splatted
+//            by `lvlx` + `vspltw`), the rate fma(t, 40, 50.5) per metre, times the speed, times the step
+//            (two `fmuls`), the count the fctidz low word; then DoSparkShower(gSparkShowerControllerJumpSparks,
+//            lerp, frame, the along-ground velocity (v2), the time, the ground height, count) -- called even
+//            for a count of 0 (DoSparkShower's own `beq` drops it).
+// ------------------------------------------------------------------------------------------------
+void EffectsModule::FireJumpSparks(f32 lfCurrentTimeStep,
+                                   f32 lfCurrentTime,
+                                   Vector3 lWSContactPoint,
+                                   Vector3 lWSContactNormal,
+                                   const RaceCarState* lpRaceCarState,
+                                   f32 lfGroundPositionY,
+                                   const CollisionTag& lCollisionTag)
+{
+    // [DIAG] BRN_JUMP_DIAG=1 -- NOT IN THE X360 BINARY, 32 lines. DELETE-WHEN-STABLE. The live witness of the
+    // jump-landing sparks (FX-CRASHVFX C2): each call's verdict -- the surface gate, the speed gate or the shower.
+    static const bool sbDiag = (std::getenv("BRN_JUMP_DIAG") != 0);
+    static u32 suDiagLines = 0;
+    const bool lbDiag = sbDiag && suDiagLines < 32u;
+
+    const u8 lSurfaceID = static_cast<u8>(
+        (static_cast<u16>(lCollisionTag.muValue) >> KU_SURFACE_ID_SHIFT) & KU_SURFACE_ID_MASK);
+    void* lpSurfaceRef = mSurfaceList.Surfaces(lSurfaceID);
+    if (!lpSurfaceRef)
+        lpSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_SIZE);
+    const Attrib::Gen::surface lSurface(*static_cast<const Attrib::RefSpec*>(lpSurfaceRef), 0);
+    const Attrib::Gen::visualfxsurface lVFXSurface(VfxSurfaceRef(lSurface.GetAttributeData()), 0);
+    const f32 lfGrindingRate =
+        LayoutFloat(static_cast<const u8*>(lVFXSurface.GetAttributeData()), KU_VFX_SPARK_SCALE);
+    if (lfGrindingRate < KF_MIN_EFFECT_SCALE)
+    {
+        if (lbDiag)
+        {
+            ++suDiagLines;
+            char lacMsg[160];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[jump-sparks] t=%.3f surface %u spark scale %.4f below 0.01: no shower\n",
+                          static_cast<double>(lfCurrentTime), static_cast<unsigned>(lSurfaceID),
+                          static_cast<double>(lfGrindingRate));
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+        return;
+    }
+
+    const Vector3  lXAxis           = lWSContactNormal;
+    const Vector3& lRaceCarVelocity = lpRaceCarState->mLinearVelocity;                  // +0x330
+    const Vector3  lvNormalPart     = Scale4(lXAxis, Dot3(lXAxis, lRaceCarVelocity));
+    Vector3 lVelocityProjectedOntoPlane;
+    lVelocityProjectedOntoPlane.x = lRaceCarVelocity.x - lvNormalPart.x;
+    lVelocityProjectedOntoPlane.y = lRaceCarVelocity.y - lvNormalPart.y;
+    lVelocityProjectedOntoPlane.z = lRaceCarVelocity.z - lvNormalPart.z;
+    lVelocityProjectedOntoPlane.w = lRaceCarVelocity.w - lvNormalPart.w;
+    const f32 lfSpeedAlongGround = GuardedLength3(lVelocityProjectedOntoPlane);         // lVelocityMagnitude, lane 0
+    const Vector3 lYAxis = Scale4(lVelocityProjectedOntoPlane, RefinedRecip(lfSpeedAlongGround));
+
+    Matrix44Affine lEmitterTransform;
+    lEmitterTransform.xAxis = lXAxis;
+    lEmitterTransform.yAxis = lYAxis;
+    lEmitterTransform.zAxis = CrossPermuted(lXAxis, lYAxis);
+    lEmitterTransform.wAxis = lWSContactPoint;
+
+    if (!(lfSpeedAlongGround > KF_JUMP_SPARKS_MIN_SPEED))
+    {
+        if (lbDiag)
+        {
+            ++suDiagLines;
+            char lacMsg[160];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[jump-sparks] t=%.3f surface %u speed along the ground %.3f not above 4.4694: no shower\n",
+                          static_cast<double>(lfCurrentTime), static_cast<unsigned>(lSurfaceID),
+                          static_cast<double>(lfSpeedAlongGround));
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+        return;
+    }
+
+    const f32 lfRandom      = mRandom.RandomFloat();
+    const f32 lfNumPerMetre = std::fma(lfRandom, KF_JUMP_SPARKS_PER_METRE_RANGE, KF_JUMP_SPARKS_PER_METRE_MIN);
+    const f32 lfNumToSpawn  = (lfNumPerMetre * lfSpeedAlongGround) * lfCurrentTimeStep;
+    const u32 luNumToSpawn  = FctidzLowWord(lfNumToSpawn);
+    if (lbDiag)
+    {
+        ++suDiagLines;
+        char lacMsg[224];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[jump-sparks] t=%.3f surface %u scale %.3f speed %.2f -> DoSparkShower count %u lerp %.3f "
+                      "at (%.2f, %.2f, %.2f)\n",
+                      static_cast<double>(lfCurrentTime), static_cast<unsigned>(lSurfaceID),
+                      static_cast<double>(lfGrindingRate), static_cast<double>(lfSpeedAlongGround), luNumToSpawn,
+                      static_cast<double>(lfRandom * lfRandom), static_cast<double>(lWSContactPoint.x),
+                      static_cast<double>(lWSContactPoint.y), static_cast<double>(lWSContactPoint.z));
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+    DoSparkShower(gSparkShowerControllerJumpSparks, Splat(lfRandom * lfRandom), lEmitterTransform,
+                  lVelocityProjectedOntoPlane, lfCurrentTime, lfGroundPositionY, luNumToSpawn);
 }
 
 // ------------------------------------------------------------------------------------------------
