@@ -349,15 +349,11 @@ namespace rw { namespace core { namespace filesys {
 }}}
 
 // ---- rw::collision -----------------------------------------------------------------
-// FLAG: collision, not on the Apt render path. No shared header declares
-// rw::collision::VolumeLineQuery (it lives inside volumelinequery.cpp); a minimal
-// matching declaration is provided so the GetIntersections() mangling is exact.
-namespace rw { namespace collision {
-
-    class VolumeLineQuery { public: int GetIntersections(); };   // FLAG link-stub (minimal decl for mangling)
-    int VolumeLineQuery::GetIntersections() { return 0; }        // FLAG link-stub
-
-}}
+// RETIRED 2026-09-25 (crash parity FX-FOLLOWUPS stage a): the `int VolumeLineQuery::GetIntersections()
+// { return 0; }` link stub and its one-member class stood here for the June SDK placeholder
+// SDKs/EATech/rwcollision/volumelinequery.cpp, which the fine-module mount retired (it has no callers).
+// The real walk is rw::collision::VolumeLineQuery::GetIntersections @0x82BB3470 in
+// vendor/renderware/collision/VolumeQuery.cpp; a second class of that name here would be an ODR fork.
 
 // ---- EA::Thread --------------------------------------------------------------------
 // FLAG: single-threaded PC bring-up. Locks/thread-ids/TLS/runnable are no-ops. Declared

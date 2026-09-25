@@ -11,7 +11,8 @@
 #include <cstdio>   // snprintf ([vvq] DIAG only)
 #include <cstdlib>  // getenv   ([vvq] DIAG only)
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([vvq] DIAG only)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([vvq] DIAG only); WriteToLog (the [vlq] traps)
+#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT (the [vlq] traps, NOT X360)
 
 namespace rw
 {
@@ -691,6 +692,318 @@ void* VolumeLineQuery::Initialize(void** lppBuffer, int liVolumes, int liResults
     lpQuery->m_spatialMapQueryMem = lpQuery->m_resBuffer + liResults;
     return lpQuery;
 }
+
+// ---- BEGIN VolumeLineQuery line walk (run_fxfollowups_line_test_nearest compiles this region) ----
+// ===========================================================================
+// rw::collision::VolumeLineQuery -- THE LINE WALK (2026-09-25, crash parity FX-FOLLOWUPS stage a).
+//   AddPrimitiveRef      @ 0x82BB3230
+//   AddVolumeRef         @ 0x82BB3300
+//   GetIntersections     @ 0x82BB3470   (an export hole: `tools/re/ppcdis.py 0x82BB3470 235`)
+//   GetAllIntersections  @ 0x82BB3820
+// Their caller is FineIntersectionTestModule::ComputeLineTestNearest @0x828C8CC8 (InitQuery, then
+// GetAllIntersections until Finished). The query stages the primitives to test in m_primVRefBuffer, keeps
+// the aggregates still to open on the stack m_stackVRefBuffer, and writes one 0xD0-byte
+// VolumeLineSegIntersectResult per hit into m_resBuffer.
+// ===========================================================================
+namespace
+{
+    // The descriptor type id of an aggregate volume: `cmpwi cr6, r10, 6` (0x82BB330C) and `cmpwi cr6, r11, 6`
+    // (0x82BB35EC) against the descriptor's leading word.
+    const u32 KU_LINE_WALK_VOLUMETYPE_AGGREGATE = 6u;
+
+    // One lvx128 / stvx128 pair: a 16-byte transform row copied into a VolRef's inline rows.
+    void CopyLineWalkRow(VolRef::Vec4& arDst, const VolRef::Vec4& arSrc)
+    {
+        arDst.x = arSrc.x;
+        arDst.y = arSrc.y;
+        arDst.z = arSrc.z;
+        arDst.w = arSrc.w;
+    }
+
+    // The four rows at a transform pointer (a Matrix44Affine is four 16-byte rows).
+    const VolRef::Vec4* LineWalkRows(const void* lpTransform)
+    {
+        return static_cast<const VolRef::Vec4*>(lpTransform);
+    }
+
+    // AddPrimitiveRef's and AddVolumeRef's shared fill -- the two bodies are the same code over two buffers
+    // (0x82BB324C..0x82BB32F8 and 0x82BB3330..0x82BB33DC): the volume word (stwx r4); with a transform, its
+    // four rows copied into the entry (+0x10..+0x4F) and the transform word aimed at that copy (entry + 0x10),
+    // without one a zero transform word; then the tag word (+0x70) and the tag-bit byte (+0x74).
+    void FillLineWalkVolRef(VolRef& arEntry, const Volume* lpVolume, const math::vpu::Matrix44Affine* lpTransform,
+                            u32 luTag, u8 luNumTagBits)
+    {
+        arEntry.muVolumePtr = reinterpret_cast<uintptr_t>(lpVolume);
+        if (lpTransform != 0)
+        {
+            const VolRef::Vec4* lpRows = LineWalkRows(lpTransform);
+            CopyLineWalkRow(arEntry.mRow0, lpRows[0]);
+            CopyLineWalkRow(arEntry.mRow1, lpRows[1]);
+            CopyLineWalkRow(arEntry.mRow2, lpRows[2]);
+            CopyLineWalkRow(arEntry.mRow3, lpRows[3]);
+            arEntry.muTransformPtr = reinterpret_cast<uintptr_t>(&arEntry.mRow0);
+        }
+        else
+        {
+            arEntry.muTransformPtr = 0;
+        }
+        arEntry.muTag        = luTag;
+        arEntry.muNumTagBits = luNumTagBits;
+    }
+
+    // [PC TRAP, NOT X360] a walk step this host has no body for: announced in the game log the first time
+    // (unconditionally -- no knob), then CGS_ASSERT(false) every time. Never a silent "no hit".
+    void LineWalkTrap(bool& arbAnnounced, const char* lpcAnnouncement, const char* lpcAssert)
+    {
+        if (!arbAnnounced)
+        {
+            arbAnnounced = true;
+            CgsDev::Log::WriteToLog(lpcAnnouncement);
+        }
+        CGS_ASSERT(false, lpcAssert);
+    }
+}
+
+// @ 0x82BB3230 -- stage one primitive. `cmplw m_primNext (+0xDC), m_primBufferSize (+0xE0) ; blt` -- a full
+// buffer returns 0 and writes nothing; otherwise the entry m_primVRefBuffer[m_primNext] (+0xD8, `slwi 7`) is
+// filled and m_primNext incremented, returning 1.
+s32 VolumeLineQuery::AddPrimitiveRef(const Volume* lpVolume, const math::vpu::Matrix44Affine* lpTransform, u32 luTag,
+                                     u8 luNumTagBits)
+{
+    if (!(m_primNext < m_primBufferSize))
+    {
+        return 0;
+    }
+    FillLineWalkVolRef(m_primVRefBuffer[m_primNext], lpVolume, lpTransform, luTag, luNumTagBits);
+    ++m_primNext;
+    return 1;
+}
+
+// @ 0x82BB3300 -- `lwz r10, 0x40(r4) ; lwz r10, 0(r10) ; cmpwi cr6, r10, 6`: anything but an aggregate is the
+// tail call `b AddPrimitiveRef`. An aggregate is pushed on the traversal stack the same way:
+// `cmplw m_stackNext (+0xD0), m_stackMax (+0xD4) ; blt`, full -> 0; else m_stackVRefBuffer[m_stackNext] (+0x44)
+// filled, m_stackNext incremented, 1.
+// (The host reads the descriptor as gVolumeVTable[+0x40 enum], CollisionVolume.hpp's GetVolumeDescriptor.)
+s32 VolumeLineQuery::AddVolumeRef(const Volume* lpVolume, const math::vpu::Matrix44Affine* lpTransform, u32 luTag,
+                                  u8 luNumTagBits)
+{
+    if (GetVolumeDescriptor(lpVolume)->muTypeID != KU_LINE_WALK_VOLUMETYPE_AGGREGATE)
+    {
+        return AddPrimitiveRef(lpVolume, lpTransform, luTag, luNumTagBits);
+    }
+    if (!(m_stackNext < m_stackMax))
+    {
+        return 0;
+    }
+    FillLineWalkVolRef(m_stackVRefBuffer[m_stackNext], lpVolume, lpTransform, luTag, luNumTagBits);
+    ++m_stackNext;
+    return 1;
+}
+
+// @ 0x82BB3470 (an export hole; 235 words to the `b __restgprlr_23` at 0x82BB3818). r31 = this, r23 = 0.
+//   0x82BB3490  m_resCount (+0x14) = 0, m_instVolCount (+0xE8) = 0, m_tag (+0x104) = 0, m_numTagBits (+0x108) = 0.
+//   0x82BB34A0  THE OUTER LOOP. Nothing left -- m_currInput >= m_numInputs (cmplw), no current volume (+0x50) and
+//               m_primNext + m_stackNext == 0 (`add.`) -- or no room (m_resCount >= m_resMax, cmplw) -> return
+//               m_resCount (0x82BB3810).
+//   0x82BB34DC  r29 (full) = 0. THE FILL LOOP (0x82BB34E0), left for the test loop when nothing is left to
+//               stage (inputs consumed, no current volume, empty stack) or r29 is set:
+//     0x82BB3510  with no current volume, an empty stack and an input left: the input m_inputVols[m_currInput]
+//                 -- a disabled one (Volume::m_flags +0x5C bit 0 clear, `clrlwi. 31`) only advances
+//                 m_currInput; otherwise AddVolumeRef(input, m_inputMats ? m_inputMats[i] : 0, 0, 0), its result
+//                 NOT read (the `cmplwi r3, 0` at 0x82BB3584 is overwritten before any branch), and m_currInput++.
+//     0x82BB3590  no current volume: an empty stack goes round again; else pop it, m_currVRef =
+//                 m_stackVRefBuffer[--m_stackNext] (VolRef::operator= @0x82BB33E8).
+//     0x82BB35D0  m_tag / m_numTagBits = the current reference's tag (+0xC0) / tag-bit byte (+0xC4).
+//                 Not an aggregate: AddPrimitiveRef(volume, its transform word +0x54, tag, bits) -- 1 spends the
+//                 reference (+0x50 = 0, 0x82BB36F0), 0 sets r29 (0x82BB3608).
+//     0x82BB3610  an aggregate: its LineIntersectionQuery -- see the trap below.
+//   0x82BB3800  THE TEST LOOP, while m_primNext > 0 (cmplwi ; bgt), last staged first:
+//     0x82BB36F8  no room (m_resCount >= m_resMax) -> the outer loop. Else --m_primNext; the result record is
+//                 m_resBuffer[m_resCount] (`mulli 0xD0`); r28 / r29 = the entry's volume / transform words.
+//     0x82BB3738  a disabled volume is passed over (m_primNext already decremented).
+//     0x82BB3744  the descriptor's lineSegIntersect (+0x18): (r3 = volume, r4 = &m_pt1 +0x20, r5 = &m_pt2 +0x30,
+//                 r6 = the transform word, r7 = the result, f1 = m_fatness +0x40). 0 -> passed over.
+//     0x82BB3770  a hit: with m_resultsSet (+0x100) != 0, m_endClipVal (+0xFC) = lineParam (+0x40) when lineParam
+//                 is below it (`fcmpu ; bge` skips -- a NaN never clips); then result +0x50 (vRef volume) = r28,
+//                 +0x00 (v) = m_inputVols[m_currInput - 1]; with a transform word its rows are copied to +0x60..
+//                 and +0x54 aimed at them, else +0x54 = 0; +0xC0 (vRef tag) = the entry's tag (+0x70) -- the
+//                 tag-bit byte (+0xC4) is NOT written; m_resCount++.
+u32 VolumeLineQuery::GetIntersections()
+{
+    m_resCount     = 0;
+    m_instVolCount = 0;
+    m_tag          = 0;
+    m_numTagBits   = 0;
+
+    for (;;)
+    {
+        if (m_currInput >= m_numInputs && m_currVRef.muVolumePtr == 0 && (m_primNext + m_stackNext) == 0)
+        {
+            break;
+        }
+        if (m_resCount >= m_resMax)
+        {
+            break;
+        }
+
+        // ---- the fill loop (0x82BB34DC..0x82BB36F4) ----------------------------------------------------------
+        s32 liFull = 0;   // r29
+        for (;;)
+        {
+            const u32 luCurrInput = m_currInput;   // r10
+            const u32 luNumInputs = m_numInputs;   // r11
+            if (luCurrInput >= luNumInputs && m_currVRef.muVolumePtr == 0 && m_stackNext == 0)
+            {
+                break;
+            }
+            if (liFull != 0)
+            {
+                break;
+            }
+
+            if (m_currVRef.muVolumePtr == 0 && m_stackNext == 0 && luCurrInput < luNumInputs)
+            {
+                const Volume* lpInput = m_inputVols[luCurrInput];
+                if ((lpInput->muFlags & KU_VOLUMEFLAG_ISENABLED) == 0)
+                {
+                    m_currInput = luCurrInput + 1;
+                    continue;
+                }
+                const math::vpu::Matrix44Affine* lpInputMat = (m_inputMats != 0) ? m_inputMats[luCurrInput] : 0;
+                AddVolumeRef(lpInput, lpInputMat, 0, 0);   // the result is not read on the console either
+                ++m_currInput;
+            }
+
+            if (m_currVRef.muVolumePtr == 0)
+            {
+                if (m_stackNext == 0)
+                {
+                    continue;
+                }
+                --m_stackNext;
+                m_currVRef = m_stackVRefBuffer[m_stackNext];
+            }
+
+            const Volume* lpVolume = reinterpret_cast<const Volume*>(m_currVRef.muVolumePtr);
+            m_tag        = m_currVRef.muTag;
+            m_numTagBits = m_currVRef.muNumTagBits;
+            if (GetVolumeDescriptor(lpVolume)->muTypeID != KU_LINE_WALK_VOLUMETYPE_AGGREGATE)
+            {
+                if (AddPrimitiveRef(lpVolume,
+                                    reinterpret_cast<const math::vpu::Matrix44Affine*>(m_currVRef.muTransformPtr),
+                                    m_currVRef.muTag, m_currVRef.muNumTagBits) == 0)
+                {
+                    liFull = 1;
+                    continue;
+                }
+                m_currVRef.muVolumePtr = 0;
+                continue;
+            }
+
+            // 0x82BB3610 -- AN AGGREGATE. The console composes the volume's own transform with the reference's
+            // (the vmulfp128 / vmaddfp block 0x82BB361C..0x82BB36BC into sp+0x50; the volume itself when the
+            // reference has no transform), then asks the aggregate (Volume +0x44) through ITS vtable (+0x20,
+            // slot +0x14 m_LineIntersectionQuery, DWARF aggregate.h:308) to stage its children:
+            // (r3 = aggregate, r4 = this, r5 = the transform). 0 means "full" (r29 = 1; the next call resumes
+            // it, its state in m_curSpatialMapQuery / m_aggIndex); otherwise m_curSpatialMapQuery (+0xF8) = 0,
+            // m_aggIndex (+0xF0) = 0 and the reference is spent (+0x50 = 0).
+            // [PC TRAP, NOT X360] no aggregate on this host has a LineIntersectionQuery body --
+            // ClusteredMesh::LineIntersectionQueryThis @0x82BB2388 and TriangleKDTreeProcedural::
+            // LineIntersectionQueryThis @0x82BB0700 are not reconstructed, and no aggregate vtable is built
+            // (ClusteredMesh::Fixup is a __debugbreak link stub, CgsClusteredMeshResourceType.cpp). Announced and
+            // asserted; the aggregate is then spent as on a completed query, so the walk ends -- it is never
+            // re-dispatched (a "full" answer would loop) and never a silent miss.
+            static bool sbAggregateAnnounced = false;
+            LineWalkTrap(sbAggregateAnnounced,
+                         "[vlq] TRAP (PC, NOT X360): rw::collision::VolumeLineQuery::GetIntersections @0x82BB3470 "
+                         "met an AGGREGATE volume. Its LineIntersectionQuery (ClusteredMesh @0x82BB2388 / "
+                         "TriangleKDTreeProcedural @0x82BB0700) has no host body: the aggregate is NOT tested.\n",
+                         "VolumeLineQuery::GetIntersections @0x82BB3470: an aggregate's LineIntersectionQuery "
+                         "has no host body");
+            m_curSpatialMapQuery   = 0;
+            m_aggIndex             = 0;
+            m_currVRef.muVolumePtr = 0;
+        }
+
+        // ---- the test loop (0x82BB36F8..0x82BB380C) ----------------------------------------------------------
+        while (m_primNext > 0)
+        {
+            if (m_resCount >= m_resMax)
+            {
+                break;
+            }
+            --m_primNext;
+            VolumeLineSegIntersectResult& lrResult = m_resBuffer[m_resCount];
+            const VolRef&       lrEntry     = m_primVRefBuffer[m_primNext];
+            const Volume*       lpPrimitive = reinterpret_cast<const Volume*>(lrEntry.muVolumePtr);   // r28
+            const VolRef::Vec4* lpTransform = LineWalkRows(reinterpret_cast<const void*>(lrEntry.muTransformPtr));
+            if ((lpPrimitive->muFlags & KU_VOLUMEFLAG_ISENABLED) == 0)
+            {
+                continue;
+            }
+
+            const VolumeLineSegIntersectFn lpfnLineSegIntersect =
+                GetVolumeDescriptor(lpPrimitive)->mpfnLineSegIntersect;
+            if (lpfnLineSegIntersect == 0)
+            {
+                // [PC TRAP, NOT X360] the descriptor's lineSegIntersect slot has no host body: SPHERE @0x82BA82C8,
+                // CAPSULE @0x82BAFCF8, BOX @0x82BA9478 and CYLINDER @0x82BAF688 are parked in VolumeVTables.cpp.
+                // (AGGREGATE's slot is genuinely 0 in the image; AddVolumeRef never stages an aggregate.)
+                // Announced once per type and asserted; the primitive is then passed over, NOT tested.
+                static bool sabSlotAnnounced[E_VOLUMETYPE_NUMINTERNALTYPES] = {};
+                const u32 luType = lpPrimitive->muVTableSlot < static_cast<u32>(E_VOLUMETYPE_NUMINTERNALTYPES)
+                                 ? lpPrimitive->muVTableSlot : 0u;
+                char lacAnnouncement[320];
+                std::snprintf(lacAnnouncement, sizeof(lacAnnouncement),
+                              "[vlq] TRAP (PC, NOT X360): rw::collision::VolumeLineQuery::GetIntersections "
+                              "@0x82BB3470 staged a volume of type %u whose descriptor's lineSegIntersect slot has "
+                              "no host body (VolumeVTables.cpp: SPHERE 0x82BA82C8, CAPSULE 0x82BAFCF8, BOX "
+                              "0x82BA9478, CYLINDER 0x82BAF688): the volume is NOT tested.\n", luType);
+                LineWalkTrap(sabSlotAnnounced[luType], lacAnnouncement,
+                             "VolumeLineQuery::GetIntersections @0x82BB3470: a staged primitive's lineSegIntersect "
+                             "slot has no host body");
+                continue;
+            }
+            if (lpfnLineSegIntersect(lpPrimitive, reinterpret_cast<const Vec4&>(m_pt1),
+                                     reinterpret_cast<const Vec4&>(m_pt2),
+                                     reinterpret_cast<const Vec4*>(lpTransform), lrResult, m_fatness) == 0)
+            {
+                continue;
+            }
+
+            if (m_resultsSet != ALLLINEINTERSECTIONS && lrResult.lineParam < m_endClipVal)
+            {
+                m_endClipVal = lrResult.lineParam;
+            }
+            lrResult.vRef.muVolumePtr = lrEntry.muVolumePtr;
+            lrResult.v                = reinterpret_cast<uintptr_t>(m_inputVols[m_currInput - 1]);
+            if (lpTransform != 0)
+            {
+                CopyLineWalkRow(lrResult.vRef.mRow0, lpTransform[0]);
+                CopyLineWalkRow(lrResult.vRef.mRow1, lpTransform[1]);
+                CopyLineWalkRow(lrResult.vRef.mRow2, lpTransform[2]);
+                CopyLineWalkRow(lrResult.vRef.mRow3, lpTransform[3]);
+                lrResult.vRef.muTransformPtr = reinterpret_cast<uintptr_t>(&lrResult.vRef.mRow0);
+            }
+            else
+            {
+                lrResult.vRef.muTransformPtr = 0;
+            }
+            lrResult.vRef.muTag = m_primVRefBuffer[m_primNext].muTag;
+            ++m_resCount;
+        }
+    }
+    return m_resCount;
+}
+
+// @ 0x82BB3820 -- `lwz r11, 0x1C(r3) ; stw 0, 0x100(r3) ; stw r11, 0x18(r3) ; b GetIntersections`.
+u32 VolumeLineQuery::GetAllIntersections()
+{
+    m_resultsSet = ALLLINEINTERSECTIONS;
+    m_resMax     = m_resBufferSize;
+    return GetIntersections();
+}
+// ---- END VolumeLineQuery line walk ----
 
 int VolumeVolumeQuery::GetPrimitiveIntersections()
 {
