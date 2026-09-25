@@ -51,7 +51,13 @@ def main():
     except ValueError:
         body = EMPTY
         print("MISSING CrashModule::GenerateOwnedTrafficUpdates (replayed empty)")
-    methods = [body,
+    # crash parity FX-NETCRASH: the body carries a capped [netcrash] PC witness (BRN_NETCRASH_DIAG,
+    # silent here -- gpDebugPrint is null); its file-local switch comes with it.
+    helpers = []
+    if "NetCrashDiagEnabled(" in body:
+        helpers = [definition(race, "    bool NetCrashDiagEnabled()"),
+                   re.search(r"^\s*const s32 KI_NETCRASH_DIAG_MAX_LINES\s*=[^;]+;", race, re.M)[0].strip()]
+    methods = helpers + [body,
                definition(module, "    bool CrashModule::WillTrafficVehicleBeRecycledNextFrame(").replace("CrashModule::", "CrashFixture::"),
                "namespace BrnWorld {",
                definition(traffic, "    void TrafficCrash::Construct("),
