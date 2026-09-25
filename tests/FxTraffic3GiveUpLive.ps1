@@ -1,20 +1,26 @@
 # FX-TRAFFIC3 item 1c (crash parity wave 5, 2026-09-24) -- live witness for the GIVE_UP manoeuvre:
 # TrafficEntityModule::UpdateGiveUpManoeuvre @0x8273EB60, GenerateDriverInputs' GIVE_UP arm (0x82749528).
-# The organic Road Rage pursuit of RivalOrganic.ps1 shoves traffic about; a physical car that has not
-# driven for 10 s (the latch at 0x8274979C) or is stuck at both ends past 3.2 s
-# (CheckIfPhysicalVehicleIsStuck) gives up at phase 1, a slammed car still rolling may give up at
-# phase 0. On the console the car brakes to a stop, waits 4 s (flt_820BA8DC), waits again while
+# A physical traffic car that has not driven for 10 s (the latch at 0x8274979C) or is stuck at both
+# ends past 3.2 s (CheckIfPhysicalVehicleIsStuck) gives up at phase 1, a slammed car still rolling may
+# give up at phase 0. On the console the car brakes to a stop, waits 4 s (flt_820BA8DC), waits again while
 # touching at both ends (> 0.5 s), and then -- unless the stuck test keeps it in GIVE_UP -- becomes a
 # NORMAL physical car (reason 5), indicators off. Witnesses (BRN_TRAFFIC_DIAG, capped):
 #   [T-stuck-check] vehicle=V ... -> GIVE_UP phase=1                    (item 1b, a start)
 #   [T-give-up] vehicle=V phase=0->1 stopped speed=S                    (phase 0 finished braking)
 #   [T-give-up] vehicle=V phase=1 waited=T front=F back=B manoeuvre=M -> NORMAL ... (the hand-back)
-#   python b5-decomp/tests/run_rival_organic.py --case b5-decomp/tests/FxTraffic3GiveUpLive.ps1 --run-name fxtraffic3_give_up
-# (FxTraffic3StuckReverseLive.ps1's wrong-way drive also starts give-ups, through the both-ends arm.)
-$case = & (Join-Path $PSScriptRoot 'RivalOrganic.ps1')
+#
+# FX-SCENARIOS (2026-09-25): THE DRIVE IS NOW THE ROADBLOCK of FxScenariosTrafficProbe.ps1 (free roam; the
+# deterministic crash sweep puts the car back at RivalOrganic's road, against the lane's flow, every 900 sim
+# frames; the pad holds the handbrake from 3 s). The organic Road Rage pursuit reached a hand-back in 2 of 12
+# runs (fxtraffic3_give_up/20260924_153519, 164431; 0 in 20260925_065906): it crashes most of what it touches,
+# and a crashing car never reaches DriveTowardsTarget. A stationary car in the lane is met at the traffic's own
+# speed -- a SLAM -- so the slammed cars have to drive on against it, and the ones that cannot drive for 10 s
+# (the latch at 0x8274979C) give up. The probe run fxscenarios_traffic_probe/20260925_110304 re-scored with
+# these checks: 5 hand-backs, off-rule 0. The checks are unchanged.
+#   powershell -ExecutionPolicy Bypass -File tools/tests/run_case.ps1 -Case b5-decomp/tests/FxTraffic3GiveUpLive.ps1 -Label FX-SCENARIOS
+$case = & (Join-Path $PSScriptRoot 'FxScenariosTrafficProbe.ps1')
 $case.Name = 'fxtraffic3_give_up'
 $case.Area = 'traffic'
-$case.Run.MaxSeconds = 160
 $case.Bug = 'A given-up traffic car must run UpdateGiveUpManoeuvre: brake to a stop, wait 4 s, and hand itself back as a NORMAL physical car unless still stuck at both ends (item 1c).'
 $case.Checks = @(
     @{ Kind = 'NewAsserts'; Name = 'no new assertions' }
