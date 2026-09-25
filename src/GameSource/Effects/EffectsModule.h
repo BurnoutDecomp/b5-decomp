@@ -346,14 +346,14 @@ namespace BrnEffects
         void HandleConvoySlipStream(f32 lfBlend, u32 luUnused,
                                     const rw::math::vpu::Matrix44Affine& lrTransform);
 
-        // ---- NOT RECONSTRUCTED on this build (each logs ONCE when reached, then returns) ----
-        // See the banner in EffectsModule.cpp: these are the spark / debris / glass /
-        // crash-trail / junkyard-editor / QA arms off the tyre-mark path. They are neither
-        // trap-stubs (a CGS_ASSERT there would kill every crash / junkyard run on the shared
-        // box) nor silent: every one announces itself in BrnGame.log the first time.
+        // @0x82290D30 (DWARF :1831). A crashing car sheds its debris trail (five debris arrays and impact smoke)
+        // along the path it moved this step. The DWARF signature: the car colour (RwRGBAReal, r9) and the
+        // trail's debrisparams (r10) -- mCrashingDebrisParams for the player, mAIRaceCarCrashingTrailDebris else.
         void HandleCrashingTrail(ActiveRaceCarData& lrActiveRaceCar, f32 lfDt, f32 lfTime,
                                  const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState,
-                                 EActiveRaceCarIndex leIndex);
+                                 EActiveRaceCarIndex leIndex,
+                                 const RwRGBAReal& lrCarColour,
+                                 const Attrib::Gen::debrisparams& lrDebrisParameters);
         // ⭐⭐ THE CONTACT DRAINS. Moved out of the "NOT RECONSTRUCTED" block 2026-09-06; all four
         // are real bodies (ProcessRaceCarContacts and its callee wall landed 2026-09-24,
         // FX-CRASHVFX).
@@ -449,6 +449,8 @@ namespace BrnEffects
         void HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffer* lpInputBuffer,
                                               const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
                                               f32 lfDt, f32 lfTime);
+        // ---- still NOT RECONSTRUCTED on this build (each logs ONCE when reached, then returns; see the
+        // .cpp banner): the QA test spawns, the showtime bounce, the junkyard VFX editor session ----
         void HandleQADebugTests(f32 lfDt, f32 lfTime, const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState);
         void HandleShowtimeTrafficBounce(const void* lpJustBouncedAction, const EffectsIO::InputBuffer* lpInputBuffer);
         void JunkyardVfxStart(Vector3 lvCameraPosition);

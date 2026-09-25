@@ -64,18 +64,22 @@
 // trail system READY and PostWorldPreparePrepare that gives every surface its skid colours.
 //
 // ⚠ NOT RECONSTRUCTED ON THIS BUILD, EACH ONE LOUD (logs once when first reached, then
-// returns) -- the arms OFF the tyre-mark path: the crash sparks / debris / glass / crashing
-// trail / showtime bounce / junkyard editor / QA tests, the post-fx effects frames
+// returns) -- the showtime bounce / junkyard editor / QA tests, the post-fx effects frames
 // (GenerateRenderRequests -- the renderer's base-frame bring-up producer still stands in
-// for it), the native simple-particle parameter push (LoadNativeParticleParams' consumer
-// BrnSimpleParticleArray::UpdateParams has no body) and the prop-locator VFX.
+// for it) and the prop-locator VFX.
+// ✅ UPDATED 2026-09-25 (FX-CRASHVFX): this list used to open "the crash sparks / debris / glass /
+// crashing trail" and end with "the native simple-particle parameter push". All of those are
+// bodied now, each under its own banner below: the contact sparks and showers
+// (ProcessRaceCarContacts and its callees), the debris burst (HandleBurstDebris ->
+// ParticleModule::HandleFireDebrisBurstEvent), the glass smash (HandleGlassSmashEventsForAllCars),
+// the crashing trail (HandleCrashingTrail) and BrnSimpleParticleArray::UpdateParams @0x8228C6E0.
 // ⚠️ CORRECTED 2026-09-06: this list used to end "...and the spark parameter copies into the
 // particle module's (placeholder) spark arrays". Both halves went stale in this wave --
 // maSparks[4] is no longer a placeholder (ParticleModule.h:668) and PushSparkParams below is
-// bodied, calling maSparks[i].UpdateParams for all four banks. None of them is
-// a trap: a CGS_ASSERT in HandleCrashingTrail or JunkyardVfxStart would kill every crash
-// and every junkyard boot on the shared box; none is silent either -- each writes ONE
-// `[effects] NOT RECONSTRUCTED: ...` line to BrnGame.log so a run that needed the arm says so.
+// bodied, calling maSparks[i].UpdateParams for all four banks. None of the arms still
+// announcing is a trap: a CGS_ASSERT in JunkyardVfxStart would kill every junkyard boot on the
+// shared box; none is silent either -- each writes ONE `[effects] NOT RECONSTRUCTED: ...` line
+// to BrnGame.log so a run that needed the arm says so.
 // ============================================================================
 
 namespace BrnEffects
@@ -1993,8 +1997,13 @@ void EffectsModule::UpdateActiveRaceCars(EActiveRaceCarIndex lePlayerIndex,
         const RaceCarState* lpStateAgain = lpActiveRaceCars->GetRaceCarState(leIndex);
         if (lpState->mbCrashing)
         {
-            (void)lpActiveRaceCars->GetRaceCarColour(leIndex);
-            HandleCrashingTrail(lrData, lrParams.mDt, lrParams.mTime, lpStateAgain, leIndex);
+            // The trail's debrisparams: the player's crash debris for the player's car, the AI trail debris for the
+            // others (`cmpw r30(player), r26(car)` -> this + 0x2D388 / this + 0x2D3A8, 0x8229E2E4..0x8229E300), and
+            // the car colour GetRaceCarColour returns (r9).
+            const Attrib::Gen::debrisparams& lrTrailDebris =
+                (leIndex == lePlayerIndex) ? mCrashingDebrisParams : mAIRaceCarCrashingTrailDebris;
+            HandleCrashingTrail(lrData, lrParams.mDt, lrParams.mTime, lpStateAgain, leIndex,
+                                lpActiveRaceCars->GetRaceCarColour(leIndex), lrTrailDebris);
         }
         maRaceCarPreviousTransforms[luCar] = lpStateAgain->mTransform;
     }
@@ -2705,15 +2714,8 @@ void EffectsModule::GenerateRenderRequests(const EffectsIO::DispatchInputBuffer*
         "base-frame bring-up producer stands in)");
 }
 
-// =============================================================================
-// The arms OFF the tyre-mark path -- each announces itself once, then returns.
-// =============================================================================
-void EffectsModule::HandleCrashingTrail(ActiveRaceCarData& /*lrActiveRaceCar*/, f32 /*lfDt*/, f32 /*lfTime*/,
-                                        const RaceCarState* /*lpRaceCarState*/, EActiveRaceCarIndex /*leIndex*/)
-{
-    static bool sbLogged = false;
-    LogNotReconstructed(sbLogged, "EffectsModule::HandleCrashingTrail @0x82290D30 (the crash debris trail)");
-}
+// HandleCrashingTrail @0x82290D30 lives in THE CRASHING TRAIL region below (after HandleQADebugTests): it uses the
+// glass region's four-lane helpers.
 
 // =================================================================================================
 // ⭐⭐⭐ THE CONTACT SPARK DRAINS -- @0x8229B7F8 / @0x82293470 / @0x822906A8.
@@ -4243,6 +4245,250 @@ void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceC
     }
     static bool sbLogged = false;
     LogNotReconstructed(sbLogged, "EffectsModule::HandleQADebugTests @0x82291700 (the QA test-effect spawns)");
+}
+
+// =================================================================================================
+// ⭐⭐⭐ THE CRASHING TRAIL -- FX-CRASHVFX 2026-09-25 (item 4).
+//
+// EffectsModule::HandleCrashingTrail @0x82290D30 (DWARF EffectsModule.cpp:1831), run by UpdateActiveRaceCars for
+// every CRASHING race car on every sim step: the wreck sheds debris all along the path it slid this step. Per
+// piece type -- the five debris arrays Coloured (the car's paint), Shiny, Dark, HighDetail, Glass, then impact
+// SMOKE -- the car's accumulator (mafCrashingTrailAccumulators[car][type], +0x2D078) gains
+//     distance travelled x the type's Trail_MasterEmissionRate x the speed factor          (one fused fmadds)
+// and once it reaches the type's Trail_EmissionThreshold (0.0 for the smoke) its whole part is emitted
+// (`fctidz`, the int64 truncation's low word) and the fraction carried. The pieces are spread evenly from LAST
+// step's position to this one: the centre steps by (displacement / n) and the time by (dt / n). Each piece:
+//   * a random spot of the car's box -- RandomSignedVector3 x RaceCarState::mHalfExtent -- turned by LAST step's
+//     transform around the stepped centre (three fused vmaddfp, x then y then z);
+//   * velocity (spot - centre) x RandomFloat(Trail_VelocityMin, Trail_VelocityMax) + the car's linear velocity x
+//     RandomFloat(0.1, 0.4) (flt_82004014 / flt_82004740), ONE fused vmaddfp;
+//   * a RandomUnitVector spin axis and a RandomFloat(size min, size max) size;
+//   * ParticleModule::SpawnDebris into the type's array -- or, for the smoke, SpawnSimple eParticleArray_ImpactSmoke
+//     with alpha 1.0 (the smoke's axis is drawn and dropped, as on the console: its draws stay, its math is gone).
+// The speed factor is clamp((|v| - Trail_EmissionStartSpeed) / (Trail_EmissionMaxSpeed - StartSpeed), 0, 1) --
+// two fsel, so a NaN ratio becomes 1.0. The caller picks the debrisparams: mCrashingDebrisParams for the player's
+// car, mAIRaceCarCrashingTrailDebris for the others (0x8229E2E4..0x8229E300).
+// =================================================================================================
+namespace
+{
+    // ---- HandleCrashingTrail's literals ----
+    const f32 KF_CRASH_TRAIL_INHERIT_MIN     = 0.1f;   // flt_82004014 (f18 of `fmadds f0, f0, f19, f18`)
+    const f32 KF_CRASH_TRAIL_INHERIT_RANGE   = 0.3f;   // flt_82004740 (f19)
+    const f32 KF_CRASH_TRAIL_SMOKE_THRESHOLD = 0.0f;   // flt_82001CC0 (f22: `fcmpu f0, f22 ; blt` at 0x822913F8)
+    const f32 KF_CRASH_TRAIL_SMOKE_ALPHA     = 1.0f;   // flt_82001C98 (f3 = f31 at 0x82291688)
+
+    // The debrisparams words (debrisparams exposes no accessor -- DebrisParamsLayout). The names are the DWARF's
+    // attribute list in the layout's reverse-alphabetical order, Smoke / Shiny / HighDetail / GlassChunk / Dark /
+    // Coloured within each attribute; the offsets are the loads (0x82290DC8 / 0x82290DD8, the switch arms
+    // 0x82290F78..0x82291024, 0x822913C0..0x822913CC, the assert pair 0x82290DD0 / 0x82290DD4).
+    const u32 KU_TRAIL_VELOCITY_MIN   = 0x10;   // Trail_VelocityMin (f21)
+    const u32 KU_TRAIL_VELOCITY_MAX   = 0x14;   // Trail_VelocityMax (f17)
+    const u32 KU_TRAIL_SMOKE_SIZE_MIN = 0x18;   // Trail_ParticleSizeMin_Smoke
+    const u32 KU_TRAIL_SMOKE_SIZE_MAX = 0x30;   // Trail_ParticleSizeMax_Smoke
+    const u32 KU_TRAIL_SMOKE_RATE     = 0x48;   // Trail_MasterEmissionRate_Smoke
+    const u32 KU_TRAIL_START_SPEED    = 0x74;   // Trail_EmissionStartSpeed
+    const u32 KU_TRAIL_MAX_SPEED      = 0x78;   // Trail_EmissionMaxSpeed
+    struct CrashTrailTypeFields { u32 muRate, muSizeMin, muSizeMax, muThreshold; };
+    const CrashTrailTypeFields KA_CRASH_TRAIL_TYPE_FIELDS[5] =
+    {
+        { 0x5C, 0x2C, 0x44, 0x70 },   // eDebrisArray_Coloured    Trail_MasterEmissionRate / ParticleSizeMin / Max / EmissionThreshold _Coloured
+        { 0x4C, 0x1C, 0x34, 0x60 },   // eDebrisArray_Shiny       ..._Shiny
+        { 0x58, 0x28, 0x40, 0x6C },   // eDebrisArray_Dark        ..._Dark
+        { 0x50, 0x20, 0x38, 0x64 },   // eDebrisArray_HighDetail  ..._HighDetail
+        { 0x54, 0x24, 0x3C, 0x68 },   // eDebrisArray_Glass       ..._GlassChunk
+    };
+    const u32 KU_CRASH_TRAIL_SMOKE_ACCUMULATOR = 5u;   // mafCrashingTrailAccumulators[car][5] (+0x14: 0x822913DC..0x822913E4)
+
+    // `fctidz` + `stfiwx`: the u32 conversion the console compiles -- the saturating int64 truncation, low word
+    // (a NaN gives 0x8000000000000000, low word 0).
+    u32 CrashTrailToU32(f32 lfValue)
+    {
+        const f64 lfWide = static_cast<f64>(lfValue);
+        s64 li64;
+        if (lfWide != lfWide)
+            li64 = static_cast<s64>(0x8000000000000000ull);
+        else if (lfWide >= 9223372036854775808.0)
+            li64 = 0x7FFFFFFFFFFFFFFFll;
+        else if (lfWide <= -9223372036854775808.0)
+            li64 = static_cast<s64>(0x8000000000000000ull);
+        else
+            li64 = static_cast<s64>(lfWide);
+        return static_cast<u32>(static_cast<u64>(li64));
+    }
+
+    // One piece's spot and velocity (0x822910DC..0x82291258 for the debris, 0x82291458..0x822915D4 for the smoke).
+    // RandomSignedVector3 is the vector-slot draw 2 (q - 1) - 1 per lane (`vsubfp ; vaddfp ; vsubfp`): 2 (q - 1) is
+    // exact, so it is bit for bit Random::RandomVector(-1, 1)'s fma(2, q - 1, -1), whose ring refill is the same
+    // two-LCG-step, three-lane pack (0x82291130..0x82291180).
+    void CrashTrailPiece(CgsNumeric::Random& lrRandom, const Matrix44Affine& lrLastTransform, const Vector3& lrCentre,
+                         const Vector3& lrHalfExtent, const Vector3& lrInheritedVelocity, f32 lfVelocityMin,
+                         f32 lfVelocityMax, Vector3& lrPosition, Vector3& lrVelocity)
+    {
+        const Vector3 lvOffset = Mul4(lrRandom.RandomVector(MakeVector3(-1.0f, -1.0f, -1.0f, -1.0f),
+                                                            MakeVector3(1.0f, 1.0f, 1.0f, 1.0f)),
+                                      lrHalfExtent);
+        Vector3 lvPosition = MaddSplat4(lrLastTransform.xAxis, lvOffset.x, lrCentre);
+        lvPosition = MaddSplat4(lrLastTransform.yAxis, lvOffset.y, lvPosition);
+        lvPosition = MaddSplat4(lrLastTransform.zAxis, lvOffset.z, lvPosition);
+        const f32 lfVelocityScale = lrRandom.RandomFloat(lfVelocityMin, lfVelocityMax);
+        const f32 lfInherit       = std::fma(lrRandom.RandomFloat(), KF_CRASH_TRAIL_INHERIT_RANGE, KF_CRASH_TRAIL_INHERIT_MIN);
+        lrVelocity = MaddSplat4(Sub4(lvPosition, lrCentre), lfVelocityScale, Scale4(lrInheritedVelocity, lfInherit));
+        lrPosition = lvPosition;
+    }
+
+    // [DIAG] BRN_CRASH_TRAIL_DIAG=1 -- NOT IN THE X360 BINARY, capped at KU_EFFECTS_DIAG_MAX_LINES. One line per call
+    // that emitted anything: the car, the distance it slid this step, the speed factor, the pieces per type
+    // (Coloured / Shiny / Dark / HighDetail / Glass / smoke) and the first piece's spot.
+    void CrashTrailWitness(u32 luCar, f32 lfDistance, f32 lfFactor, const u32 (&lauPieces)[6], const Vector3& lrFirst)
+    {
+        static const bool sbArmed = []() {
+            const char* const lpcValue = std::getenv("BRN_CRASH_TRAIL_DIAG");
+            return lpcValue != 0 && lpcValue[0] == '1';
+        }();
+        static u32 suLines = 0;
+        if (!sbArmed || suLines >= KU_EFFECTS_DIAG_MAX_LINES)
+            return;
+        if ((lauPieces[0] | lauPieces[1] | lauPieces[2] | lauPieces[3] | lauPieces[4] | lauPieces[5]) == 0u)
+            return;
+        ++suLines;
+        char lacMsg[256];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[crash-trail] car=%u dist=%.3f factor=%.3f pieces=%u/%u/%u/%u/%u smoke=%u first=(%.3f,%.3f,%.3f)\n",
+                      luCar, static_cast<double>(lfDistance), static_cast<double>(lfFactor), lauPieces[0], lauPieces[1],
+                      lauPieces[2], lauPieces[3], lauPieces[4], lauPieces[5], static_cast<double>(lrFirst.x),
+                      static_cast<double>(lrFirst.y), static_cast<double>(lrFirst.z));
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+}
+
+void EffectsModule::HandleCrashingTrail(ActiveRaceCarData& /*lrActiveRaceCar*/, f32 lfCurrentTimeStep, f32 lfCurrentTime,
+                                        const RaceCarState* lpRaceCarState, EActiveRaceCarIndex leActiveRaceCarIndex,
+                                        const RwRGBAReal& lrCarColour,
+                                        const Attrib::Gen::debrisparams& lrDebrisParameters)
+{
+    const u32 luCar = static_cast<u32>(leActiveRaceCarIndex);
+    const u8* const lpLayout = DebrisParamsLayout(lrDebrisParameters);
+
+    // lRaceCarsPreviousTransform (this + 0x2D140 + car * 64) and the step it moved since (v119 = w - previous w).
+    const Matrix44Affine& lrPreviousTransform = maRaceCarPreviousTransforms[luCar];
+    const Vector3 lvInheritedVelocity = lpRaceCarState->mLinearVelocity;          // +0x330
+    const Vector3 lvVolumeHalfExtent  = lpRaceCarState->mHalfExtent;              // +0x350
+    const Vector3 lvStep              = Sub4(lpRaceCarState->mTransform.wAxis, lrPreviousTransform.wAxis);
+    const f32 lfDistanceTravelled     = GuardedLength3(lvStep);
+
+    // `fcmpu ; ble` (0x82290DDC / 0x82290E2C): it fires only for start > max; a NaN passes.
+    CGS_ASSERT(!(LayoutFloat(lpLayout, KU_TRAIL_START_SPEED) > LayoutFloat(lpLayout, KU_TRAIL_MAX_SPEED)),
+               "lDebrisParameters.Trail_EmissionStartSpeed() <= lDebrisParameters.Trail_EmissionMaxSpeed()");
+
+    // The speed factor: clamp(ratio, 0, 1) as the console's two fsel (0x82290F28..0x82290F38).
+    const f32 lfStartSpeed = LayoutFloat(lpLayout, KU_TRAIL_START_SPEED);
+    const f32 lfSpeedRange = LayoutFloat(lpLayout, KU_TRAIL_MAX_SPEED) - lfStartSpeed;
+    const f32 lfRatio      = (GuardedLength3(lvInheritedVelocity) - lfStartSpeed) / lfSpeedRange;
+    const f32 lfAtLeastZero        = (-lfRatio >= 0.0f) ? 0.0f : lfRatio;
+    const f32 lfEmissionRateFactor = ((1.0f - lfAtLeastZero) >= 0.0f) ? lfAtLeastZero : 1.0f;
+
+    u32     lauDiagPieces[6] = { 0u, 0u, 0u, 0u, 0u, 0u };   // [DIAG]
+    Vector3 lvDiagFirst = MakeVector3(0.0f, 0.0f, 0.0f, 0.0f); // [DIAG]
+    bool    lbDiagFirst = false;                              // [DIAG]
+
+    // ---- the five debris types (the jump table 0x82290F64) ----
+    for (s32 lnDebrisTypeLoop = 0; lnDebrisTypeLoop <= 4; ++lnDebrisTypeLoop)
+    {
+        Vector4 lParticleColour;   // Vector4::One (v127), the car's colour for Coloured
+        lParticleColour.x = 1.0f; lParticleColour.y = 1.0f; lParticleColour.z = 1.0f; lParticleColour.w = 1.0f;
+        f32 lfParticleSizeMin, lfParticleSizeMax, lfEmissionRate, lfEmissionThreshold;
+        if (lnDebrisTypeLoop >= 0 && lnDebrisTypeLoop <= 4)
+        {
+            const CrashTrailTypeFields& lrFields = KA_CRASH_TRAIL_TYPE_FIELDS[lnDebrisTypeLoop];
+            if (lnDebrisTypeLoop == BrnParticle::Native::eDebrisArray_Coloured)
+            {
+                lParticleColour.x = lrCarColour.red;
+                lParticleColour.y = lrCarColour.green;
+                lParticleColour.z = lrCarColour.blue;
+                lParticleColour.w = lrCarColour.alpha;
+            }
+            lfParticleSizeMin   = LayoutFloat(lpLayout, lrFields.muSizeMin);
+            lfParticleSizeMax   = LayoutFloat(lpLayout, lrFields.muSizeMax);
+            lfEmissionRate      = LayoutFloat(lpLayout, lrFields.muRate) * lfEmissionRateFactor;   // fmuls
+            lfEmissionThreshold = LayoutFloat(lpLayout, lrFields.muThreshold);
+        }
+        else
+        {
+            lfParticleSizeMin = lfParticleSizeMax = lfEmissionRate = lfEmissionThreshold = 0.0f;
+            CGS_ASSERT(false, "Unknown Debris Type in HandleCrashingTrail !");
+        }
+
+        f32& lrAccumulator = mafCrashingTrailAccumulators[luCar][lnDebrisTypeLoop];
+        const f32 lfNumParticlesToEmit = std::fma(lfDistanceTravelled, lfEmissionRate, lrAccumulator);
+        const f32 lfReciprocal         = 1.0f / lfNumParticlesToEmit;                           // fdivs
+        const Vector3 lPosStep         = Scale4(lvStep, lfReciprocal);
+        u32 luNumberOfParticlesToEmit  = 0u;
+        if (!(lfNumParticlesToEmit < lfEmissionThreshold))                                     // `fcmpu ; blt`
+            luNumberOfParticlesToEmit = CrashTrailToU32(lfNumParticlesToEmit);
+        const f32 lfTimeDelta = lfReciprocal * lfCurrentTimeStep;
+        lrAccumulator = lfNumParticlesToEmit - static_cast<f32>(static_cast<f64>(luNumberOfParticlesToEmit));
+        if (luNumberOfParticlesToEmit == 0u)
+            continue;
+
+        // lLastTransform: last step's transform, its w stepped piece by piece.
+        Vector3 lvCentre = lrPreviousTransform.wAxis;
+        f32 lfLastEmissionTime = lfCurrentTime;
+        const f32 lfVelocityMin = LayoutFloat(lpLayout, KU_TRAIL_VELOCITY_MIN);
+        const f32 lfVelocityMax = LayoutFloat(lpLayout, KU_TRAIL_VELOCITY_MAX);
+        for (u32 luDebrisParticle = luNumberOfParticlesToEmit; luDebrisParticle != 0u; --luDebrisParticle)
+        {
+            Vector3 lvPosition, lvVelocity;
+            CrashTrailPiece(mRandom, lrPreviousTransform, lvCentre, lvVolumeHalfExtent, lvInheritedVelocity,
+                            lfVelocityMin, lfVelocityMax, lvPosition, lvVelocity);
+            const Vector3 lvRotationAxis = RandomUnitVector(mRandom);
+            const f32 lfRandomSize = mRandom.RandomFloat(lfParticleSizeMin, lfParticleSizeMax);
+            mParticleModule.SpawnDebris(static_cast<BrnParticle::Native::EDebrisArrayID>(lnDebrisTypeLoop), lvPosition,
+                                        lvVelocity, lvRotationAxis, lParticleColour, lfRandomSize, lfLastEmissionTime);
+            if (!lbDiagFirst) { lbDiagFirst = true; lvDiagFirst = lvPosition; }   // [DIAG]
+            ++lauDiagPieces[lnDebrisTypeLoop];                                     // [DIAG]
+            lfLastEmissionTime = lfTimeDelta + lfLastEmissionTime;
+            lvCentre = Add4(lvCentre, lPosStep);
+        }
+    }
+
+    // ---- the impact smoke (0x822913A8..0x822916E0) ----
+    {
+        f32& lrAccumulator = mafCrashingTrailAccumulators[luCar][KU_CRASH_TRAIL_SMOKE_ACCUMULATOR];
+        const f32 lfEmissionRate       = LayoutFloat(lpLayout, KU_TRAIL_SMOKE_RATE) * lfEmissionRateFactor;
+        const f32 lfNumParticlesToEmit = std::fma(lfEmissionRate, lfDistanceTravelled, lrAccumulator);
+        const f32 lfReciprocal         = 1.0f / lfNumParticlesToEmit;
+        const Vector3 lPosStep         = Scale4(lvStep, lfReciprocal);
+        u32 luNumberOfParticlesToEmit  = 0u;
+        if (!(lfNumParticlesToEmit < KF_CRASH_TRAIL_SMOKE_THRESHOLD))
+            luNumberOfParticlesToEmit = CrashTrailToU32(lfNumParticlesToEmit);
+        const f32 lfTimeDelta = lfReciprocal * lfCurrentTimeStep;
+        lrAccumulator = lfNumParticlesToEmit - static_cast<f32>(static_cast<f64>(luNumberOfParticlesToEmit));
+        if (luNumberOfParticlesToEmit != 0u)
+        {
+            Vector3 lvCentre = lrPreviousTransform.wAxis;
+            f32 lfLastEmissionTime = lfCurrentTime;
+            const f32 lfVelocityMin = LayoutFloat(lpLayout, KU_TRAIL_VELOCITY_MIN);
+            const f32 lfVelocityMax = LayoutFloat(lpLayout, KU_TRAIL_VELOCITY_MAX);
+            const f32 lfSizeMin     = LayoutFloat(lpLayout, KU_TRAIL_SMOKE_SIZE_MIN);
+            const f32 lfSizeMax     = LayoutFloat(lpLayout, KU_TRAIL_SMOKE_SIZE_MAX);
+            for (u32 luDebrisParticle = luNumberOfParticlesToEmit; luDebrisParticle != 0u; --luDebrisParticle)
+            {
+                Vector3 lvPosition, lvVelocity;
+                CrashTrailPiece(mRandom, lrPreviousTransform, lvCentre, lvVolumeHalfExtent, lvInheritedVelocity,
+                                lfVelocityMin, lfVelocityMax, lvPosition, lvVelocity);
+                (void)RandomUnitVector(mRandom);   // lvRotationAxis: drawn, unused by SpawnSimple (0x822915D8..0x82291670)
+                const f32 lfRandomSize = mRandom.RandomFloat(lfSizeMin, lfSizeMax);
+                mParticleModule.SpawnSimple(lvPosition, lvVelocity, BrnParticle::Native::eParticleArray_ImpactSmoke,
+                                            lfRandomSize, lfLastEmissionTime, KF_CRASH_TRAIL_SMOKE_ALPHA);
+                if (!lbDiagFirst) { lbDiagFirst = true; lvDiagFirst = lvPosition; }   // [DIAG]
+                ++lauDiagPieces[5];                                                   // [DIAG]
+                lfLastEmissionTime = lfTimeDelta + lfLastEmissionTime;
+                lvCentre = Add4(lvCentre, lPosStep);
+            }
+        }
+    }
+
+    CrashTrailWitness(luCar, lfDistanceTravelled, lfEmissionRateFactor, lauDiagPieces, lvDiagFirst);   // [DIAG]
 }
 
 void EffectsModule::HandleShowtimeTrafficBounce(const void* /*lpJustBouncedAction*/,
