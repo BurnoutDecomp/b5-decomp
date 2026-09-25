@@ -649,7 +649,10 @@ void CrashPlayManager::UpdateMomentum( f32 lfSimTimerTimeStep,
     {
         mfLoseBoostGracePeriod -= lfSimTimerTimeStep;
 
-        if( mfLoseBoostGracePeriod <= 0.0f )
+        // 0x823022A0 `fcmpu cr6, grace, f31(0.0)` ; 0x823022A4 `bgt 0x823022D0` skips ONLY an ordered
+        // grace > 0 -- an unordered (NaN) grace falls through to the lose-boost arm at 0x823022A8, so the
+        // test is !(grace > 0). (`grace <= 0.0f` skipped a NaN grace and left the penalty armed.)
+        if( !( mfLoseBoostGracePeriod > 0.0f ) )
         {
             mbAboutToLoseBoost = false;
             mfBoostPercentage -= ( miConsecutiveBouncesOnGround == 1 )
