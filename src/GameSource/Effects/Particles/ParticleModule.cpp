@@ -725,6 +725,144 @@ namespace BrnParticle
     }
 
     // =========================================================================
+    // [DIAG] BRN_DEBRIS_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+    // The debris simulation's live witness: does a spawned piece MOVE? One piece is tracked from
+    // the first frame it is seen (the newest-born live piece with bounces left) until it is gone
+    // (its bucket left the array's live list, its slot was reborn, or it aged out): its age,
+    // position, velocity, spin angle and bounces left -- on the pick, every 5th frame after it,
+    // and on every frame a bounce resolves -- with that frame's integrate / collide / bounce counts
+    // (BrnDebrisArrayLite.cpp's gauDebrisSim*, read and zeroed here). Capped at 600 lines.
+    // =========================================================================
+    namespace
+    {
+        void DebrisSimWitness(const Native::BrnDebrisArray* lpArrays, u32 luNumArrays,
+                              const BrnGame::DispatchThreadInputBuffer* lpInput, s32 liJobs)
+        {
+            static const bool sbArmed = []() {
+                const char* const lpcValue = std::getenv("BRN_DEBRIS_DIAG");
+                return lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0';
+            }();
+            if (!sbArmed)
+                return;
+
+            typedef Native::BrnDebrisArray::DebrisBucket DebrisBucket;
+            struct Track
+            {
+                const DebrisBucket* mpBucket;
+                u32                 muArray;
+                u32                 muIndex;
+                f32                 mfBirth;
+            };
+            static Track sTrack = { 0, 0, 0, 0.0f };
+            static u32   suLines = 0;
+            static u32   suFrame = 0;
+            static bool  sbAnnounced = false;
+
+            ++suFrame;
+            const u32 luIntegrated = Native::gauDebrisSimIntegrated;
+            const u32 luCollides   = Native::gauDebrisSimCollideCalls;
+            const u32 luBounces    = Native::gauDebrisSimBounces;
+            Native::gauDebrisSimIntegrated   = 0;
+            Native::gauDebrisSimCollideCalls = 0;
+            Native::gauDebrisSimBounces      = 0;
+            if (!sbAnnounced)
+            {
+                sbAnnounced = true;
+                CgsDev::Log::WriteToLog("[debris-sim] probe ARMED (BRN_DEBRIS_DIAG)\n");
+            }
+            if (suLines >= 600u)
+                return;
+
+            const f32  lfTime  = lpInput->GetParticleData()->mfCurrentTime;
+            const f32  lfStep  = lpInput->GetParticleData()->mfCurrentTimeStep;
+            const bool lbCrash = ((lpInput->GetParticleRenderData()->muFlags >> 6) & 1u) != 0u;
+
+            // The mode EDGES, debris or not: the render data's eRenderDataFlagReducedFrameRate (0x40),
+            // which BeginSimulateDebris turns into each job's collision flag and FreeExpiredBuckets
+            // into the 10 s / 2 s window. (BrnGameModule::DoDispatch writes the frame-rate flag it
+            // comes from; before that fix it was never set on this build.)
+            static s32 siLastCrash = -1;
+            if ((lbCrash ? 1 : 0) != siLastCrash)
+            {
+                siLastCrash = lbCrash ? 1 : 0;
+                ++suLines;
+                char lacMode[200];
+                std::snprintf(lacMode, sizeof(lacMode),
+                    "[debris-sim] mode %s f=%u t=%.3f flags=0x%04X\n",
+                    lbCrash ? "REDUCED-FRAME-RATE (crash: debris collides, 10 s buckets)" : "FULL-FRAME-RATE (normal)",
+                    suFrame, static_cast<double>(lfTime),
+                    static_cast<unsigned>(lpInput->GetParticleRenderData()->muFlags));
+                CgsDev::Log::WriteToLog(lacMode);
+            }
+
+            // Is the tracked piece still there, in the same slot life?
+            bool lbAlive = false;
+            if (sTrack.mpBucket != 0)
+            {
+                for (const DebrisBucket* lpBucket = lpArrays[sTrack.muArray].Buckets(); lpBucket != 0;
+                     lpBucket = static_cast<const DebrisBucket*>(lpBucket->mpNextBucket))
+                {
+                    if (lpBucket == sTrack.mpBucket)
+                    {
+                        lbAlive = sTrack.muIndex < lpBucket->mu16NumberOfParticlesInBucket
+                               && lpBucket->maParticleBirthTimes[sTrack.muIndex] == sTrack.mfBirth
+                               && (lfTime - sTrack.mfBirth) <= 10.0f;
+                        break;
+                    }
+                }
+            }
+            bool lbNew = false;
+            if (!lbAlive)
+            {
+                sTrack.mpBucket = 0;
+                f32 lfNewest = -1.0e30f;
+                for (u32 luArray = 0; luArray < luNumArrays; ++luArray)
+                {
+                    for (const DebrisBucket* lpBucket = lpArrays[luArray].Buckets(); lpBucket != 0;
+                         lpBucket = static_cast<const DebrisBucket*>(lpBucket->mpNextBucket))
+                    {
+                        for (u32 luIndex = 0; luIndex < lpBucket->mu16NumberOfParticlesInBucket; ++luIndex)
+                        {
+                            const f32 lfBirth = lpBucket->maParticleBirthTimes[luIndex];
+                            const f32 lfAge   = lfTime - lfBirth;
+                            if (lfAge > 0.0f && lfAge < 1.0f && lfBirth > lfNewest
+                                && lpBucket->maParticleData[luIndex].muBounceCount != 0)
+                            {
+                                lfNewest        = lfBirth;
+                                sTrack.mpBucket = lpBucket;
+                                sTrack.muArray  = luArray;
+                                sTrack.muIndex  = luIndex;
+                                sTrack.mfBirth  = lfBirth;
+                            }
+                        }
+                    }
+                }
+                lbNew = sTrack.mpBucket != 0;
+            }
+            if (sTrack.mpBucket == 0)
+                return;
+            if (!lbNew && luBounces == 0u && (suFrame % 5u) != 0u)
+                return;
+
+            const Native::BrnDebris& lrDebris = sTrack.mpBucket->maParticleData[sTrack.muIndex];
+            ++suLines;
+            char lacMsg[400];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[debris-sim] f=%u t=%.3f dt=%.4f crash=%d jobs=%d integrated=%u collide=%u bounces=%u | "
+                "array=%u #%u age=%.3f pos=(%.3f,%.3f,%.3f) vel=(%.3f,%.3f,%.3f) angle=%.3f left=%u%s\n",
+                suFrame, static_cast<double>(lfTime), static_cast<double>(lfStep), lbCrash ? 1 : 0, liJobs,
+                luIntegrated, luCollides, luBounces, sTrack.muArray, sTrack.muIndex,
+                static_cast<double>(lfTime - sTrack.mfBirth),
+                static_cast<double>(lrDebris.mPositionPlusRotVel.x), static_cast<double>(lrDebris.mPositionPlusRotVel.y),
+                static_cast<double>(lrDebris.mPositionPlusRotVel.z), static_cast<double>(lrDebris.mVelocityPlusScale.x),
+                static_cast<double>(lrDebris.mVelocityPlusScale.y), static_cast<double>(lrDebris.mVelocityPlusScale.z),
+                static_cast<double>(lrDebris.mAxisPlusAngle.w), static_cast<unsigned>(lrDebris.muBounceCount),
+                lbNew ? " (NEW)" : "");
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
+
+    // =========================================================================
     // DispatchThreadUpdate  @0x8229C5F0 -- THE CONSUMER, and the second half.
     //
     // Under the dispatch buffer's READ lock, for every record PreRenderUpdate published:
@@ -757,9 +895,9 @@ namespace BrnParticle
     // pointer is null and its description non-null and then does the create regardless, which
     // is why a double-create shows up as an assert rather than as a leak.
     //
-    // NOT REPRODUCED HERE, announced: BeginSimulateDebris @0x82289A98 (the debris jobs are
-    // asm-sized placeholders). It is ahead of the effect loop on the console and does not
-    // feed it.
+    // BeginSimulateDebris @0x82289A98 runs at its console position, right after ProcessEventQueue
+    // (FX-CRASHVFX 2026-09-25; it was announced NOT REPRODUCED while the debris jobs were
+    // placeholders). It is ahead of the effect loop on the console and does not feed it.
     // ⚠️ CORRECTED 2026-09-06: this list used to also name ProcessEventQueue @0x8229C418
     // "(the module's inter-thread event drain -- its queue is a placeholder)". Both halves of
     // that are now false -- the queue is the real VariableEventQueue<16384,16> and the drain
@@ -770,14 +908,6 @@ namespace BrnParticle
     {
         if (lpDispatchThreadInput == 0)
             return;
-
-        {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "ParticleModule::DispatchThreadUpdate's BeginSimulateDebris @0x82289A98 (the "
-                "debris jobs are asm-sized placeholders). THE LION EFFECT CREATE/UPDATE LOOP AND "
-                "THE INTER-THREAD EVENT DRAIN ARE REAL AND RUN");
-        }
 
         // ⭐ ProcessEventQueue @0x8229C418, at the console's own position -- 0x8229C644..0x8229C658
         // is `GetParticleRenderData(); GetParticleInterThreadEventQueue(); ProcessEventQueue(...)`
@@ -794,6 +924,12 @@ namespace BrnParticle
                 lpDispatchThreadInput->GetParticleInterThreadEventQueue();
             ProcessEventQueue(lpQueue, *lpRenderData);
         }
+
+        // ⭐ BeginSimulateDebris @0x82289A98 -- `bl` at 0x8229C664, straight after the drain: the
+        // debris the queue just spawned is integrated in the same frame.
+        BeginSimulateDebris(lpDispatchThreadInput);
+        DebrisSimWitness(maDebris, KU_NUM_DEBRIS_ARRAYS, lpDispatchThreadInput,
+                         miNumDebrisUpdateJobsToWaitOn);   // [DIAG] BRN_DEBRIS_DIAG, default off
 
         const DispatchThreadUpdateData* const lpIn = lpDispatchThreadInput->GetParticleData();
 
@@ -1535,10 +1671,9 @@ namespace BrnParticle
     //     if (this[143670]) { cLionFX::Dispatch(...) }
     //     StopMonitor(v4[8])
     //
-    //   Only EndSimulateDebris is still carved out: its simulation jobs are asm-sized
-    //   placeholders, so there is nothing to end. The trail branch, the Lion dispatch, the
-    //   spark dispatch and -- since the debris renderer's BeginRender / RenderDebrisArray
-    //   landed -- the debris branch are all reproduced.
+    //   Every branch is reproduced: the trail branch, EndSimulateDebris (since the debris
+    //   simulation landed, FX-CRASHVFX 2026-09-25), the debris branch, the spark dispatch and
+    //   the Lion dispatch.
     //
     //   THE PERFMON BRACKET IS NOT REPRODUCED, for this file's standing reason: nothing on
     //   this build calls PerfMonCpu::AddMonitor for the render-thread sets, so every id in
@@ -1557,6 +1692,9 @@ namespace BrnParticle
         {
             mTrailSystem.Render(lfWhiteLevel);   // this + 38672 == +0x9710
         }
+
+        // ---- EndSimulateDebris @0x8227A1F0 -- unconditional, ahead of the debris pass -----
+        EndSimulateDebris(*lpRenderData);
 
         // ---- (flags & 4) -- eRenderDataFlagRenderDebris ---------------------------------
         // THE DEBRIS PASS. BeginRender opens it with the frame's four lighting/camera
@@ -1695,16 +1833,80 @@ namespace BrnParticle
                                     lpSparkVertexBuffer, gSparkBatchArray);
         }
 
-        // ---- the branch this build still cannot run -------------------------------------
-        // EndSimulateDebris is UNCONDITIONAL on the console and closes the debris
-        // simulation jobs before the debris renderer reads their output; the jobs are
-        // asm-sized placeholders here, so there is nothing to end.
+    }
+
+    // =========================================================================
+    // THE DEBRIS SIMULATION (FX-CRASHVFX, crash parity 2026-09-25)
+    //
+    // BeginSimulateDebris  @0x82289A98 (245 instr, dispatch thread)
+    //   1. every array's FreeExpiredBuckets(time, reduced-frame-rate bit) -- the recycle window is
+    //      10 s in crash mode, 2 s otherwise;
+    //   2. the wait count to 0; and ONLY IF the step is positive (`fcmpu f13, 0.0 ; ble`, so a NaN
+    //      step builds no job either):
+    //   3. per array, BrnDebrisArrayLite::Initialize into the next free DebrisUpdateJobData
+    //      (list head, preset bounciness / drag, collision = the reduced-frame-rate bit -- debris
+    //      collides with the crash triangle cache only in crash mode); an array with no live bucket
+    //      is skipped, its slot reused by the next;
+    //   4. a used slot gets one array, the dispatch buffer's crash triangle cache, the time, the
+    //      step and a Random of its own: SetSeed(mRandom.RandomUInt()) (0x82289C24..0x82289DF0 --
+    //      the high word of the module's seed, one LCG step, then the eight-slot priming);
+    //   5. AddJobs(gJobScheduler @0x830EA650, maDebrisUpdateJob, count) after the count <= 5 check.
+    //      ⭐ HERE each job runs to completion in place instead -- the one scheduling difference
+    //      (BrnDebrisArrayLite.h). The debris is integrated before the render reads it, as on the
+    //      console.
+    // =========================================================================
+    void ParticleModule::BeginSimulateDebris(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInput)
+    {
+        const DispatchThreadUpdateData* const lpData = lpDispatchThreadInput->GetParticleData();
+        const BrnEffects::BrnCrashTriangleCache* const lpTriCache =
+            lpDispatchThreadInput->GetBufferCrashTriangleCache();
+        const ParticleRenderData* const lpRenderData = lpDispatchThreadInput->GetParticleRenderData();
+
+        // `lhz 0x200 ; srwi 6 ; clrlwi 31` -- eRenderDataFlagReducedFrameRate (0x40): crash mode.
+        const bool lbReducedFrameRate =
+            ((lpRenderData->muFlags >> 6) & 1u) != 0u;
+
+        for (u32 luArray = 0; luArray < KU_NUM_DEBRIS_ARRAYS; ++luArray)
+            maDebris[luArray].FreeExpiredBuckets(lpData->mfCurrentTime, lbReducedFrameRate);
+
+        miNumDebrisUpdateJobsToWaitOn = 0;
+        if (!(lpData->mfCurrentTimeStep > 0.0f))
+            return;
+
+        for (u32 luArray = 0; luArray < KU_NUM_DEBRIS_ARRAYS; ++luArray)
         {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "ParticleModule::RenderFullResParticles' EndSimulateDebris -- its job members "
-                "are asm-sized placeholders. THE TRAIL, DEBRIS, SPARK AND LION BRANCHES RUN");
+            Native::DebrisUpdateJobData& lrJob = maDebrisUpdateJobData[miNumDebrisUpdateJobsToWaitOn];
+            if (!lrJob.maDebrisArrays[0].Initialize(&maDebris[luArray], lbReducedFrameRate))
+                continue;
+            lrJob.muNumDebrisArrays = 1;
+            lrJob.mpTriCache        = lpTriCache;
+            lrJob.mfCurrentTime     = lpData->mfCurrentTime;
+            lrJob.mfTimeStep        = lpData->mfCurrentTimeStep;
+            lrJob.mRandom.SetSeed(mRandom.RandomUInt());
+            ++miNumDebrisUpdateJobsToWaitOn;
         }
+
+        if (miNumDebrisUpdateJobsToWaitOn == 0)
+            return;
+        CGS_ASSERT(static_cast<u32>(miNumDebrisUpdateJobsToWaitOn) <= static_cast<u32>(KI_NUM_DEBRIS_UPDATE_JOBS),
+                   "muNumDebrisUpdateJobsToWaitOn <= KU_DEBRISUPDATE_NUMJOBS");
+        // EA::Jobs::JobScheduler::AddJobs(gJobScheduler, maDebrisUpdateJob, count) -- run in place.
+        for (s32 liJob = 0; liJob < miNumDebrisUpdateJobsToWaitOn; ++liJob)
+            Native::DebrisUpdateJob::Execute(&maDebrisUpdateJobData[liJob]);
+    }
+
+    // =========================================================================
+    // EndSimulateDebris  @0x8227A1F0 (50 instr, render thread) -- the count check (UNSIGNED: an
+    // unpaired -1 fails it, as on the console), EA::Jobs::Job::WaitOn per started job -- nothing to
+    // wait on here, the jobs finished inside BeginSimulateDebris -- and the count back to -1.
+    // The perf-monitor bracket (the crash / race set by the 0x40 bit) is not reproduced, for this
+    // file's standing reason (RenderFullResParticles' banner).
+    // =========================================================================
+    void ParticleModule::EndSimulateDebris(const ParticleRenderData& /*lrRenderData*/)
+    {
+        CGS_ASSERT(static_cast<u32>(miNumDebrisUpdateJobsToWaitOn) <= static_cast<u32>(KI_NUM_DEBRIS_UPDATE_JOBS),
+                   "muNumDebrisUpdateJobsToWaitOn <= KU_DEBRISUPDATE_NUMJOBS");
+        miNumDebrisUpdateJobsToWaitOn = -1;
     }
 
     // =========================================================================
@@ -1879,6 +2081,7 @@ namespace BrnParticle
         static_assert(PM_TAIL_DELTA(miSentinel25D08)                == 0x25D08 - 0x249C4, "-1 sentinel @ +0x25D08");
         static_assert(PM_TAIL_DELTA(mSparkFrameDataSetRender)        == 0x25D30 - 0x249C4, "spark set 1 @ +0x25D30");
         static_assert(PM_TAIL_DELTA(maFrameJobsPlaceholder)         == 0x26400 - 0x249C4, "frame jobs @ +0x26400");
+        static_assert(PM_TAIL_DELTA(maDebrisUpdateJobData)          == 0x27490 - 0x249C4, "debris job data right after the jobs (x64; console +0x27500)");
         static_assert(PM_TAIL_DELTA(miNumDebrisUpdateJobsToWaitOn)   == 0x27780 - 0x249C4, "debris job wait count @ +0x27780");
         static_assert(PM_TAIL_DELTA(mInterThreadEventQueue)         == 0x27784 - 0x249C4, "inter-thread event queue @ +0x27784");
         // The queue is now a REAL VariableEventQueue<16384,16>, so its own size is part of the

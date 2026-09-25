@@ -4,66 +4,110 @@
 // ============================================================================
 // GameSource/Effects/Particles/Native/BrnDebrisArrayLite.h
 //
-// BrnParticle::Native::BrnDebrisArrayLite -- the lightweight ("Lite") platform debris
-// array. Its live debris buckets hang off an intrusive singly-linked list. Update walks
-// every live bucket and integrates it for one frame via UpdateBucket (caller:
-// DebrisUpdateJob::Execute).
+// THE DEBRIS SIMULATION (FX-CRASHVFX, crash parity 2026-09-25). Every live debris particle --
+// the jump wheel debris, the glass chunks a smashed pane sprays, the crash debris bursts -- is
+// integrated here once a frame: gravity and drag on the velocity, the position stepped, the
+// spin angle advanced by the distance travelled, and (in crash mode) the step tested against
+// the crash triangle cache so a chunk that would pass through the world bounces off it.
 //
-// LAYOUT AUTHORITY (X360 ARTIST asm, Update @0x82C08B58):
-//   this[0]    @ +0x00 -- mpBucketHead : head of the live-bucket singly-linked list
-//                         (the walk follows bucket[1] @ +0x04 == mpNext).
-//   this+0x10  @ +0x10 -- a 4-float vector loaded into the per-bucket update (the
-//                         physics/gravity step vector).
-//   this+0x20  @ +0x20 -- a float splatted across all lanes for the per-bucket update.
-//   this[9]    @ +0x24 -- a byte read into r6 and forwarded to UpdateBucket (a flag).
-//   Each bucket node: bucket[1] @ +0x04 == mpNext.
+//   ParticleModule::BeginSimulateDebris   @0x82289A98  (ParticleModule.cpp) -- builds one job
+//       per live array: BrnDebrisArrayLite::Initialize + DebrisUpdateJobData, the job's Random
+//       seeded from the module's.
+//   DebrisUpdateJob::Execute              @0x82C08298  -- the job body.
+//   BrnDebrisArrayLite::Update            @0x82C08B58  -- walks the array's live buckets.
+//   the per-bucket integrator             sub_82C08410 (no symbol; an IDA export HOLE, read from
+//       the raw image -- its assert strings name BrnDebrisRenderer.cpp and the locals lpBucket,
+//       lpTriCache, lfTimeStep and lDebrisToUpdate). Here: UpdateDebrisBucket, file-local.
+//   ParticleModule::EndSimulateDebris     @0x8227A1F0  -- waits for the jobs.
 //
-// HONEST STUB -- VMX KEYSTONE (Update NOT reconstructed in this pass):
-//   Update @0x82C08B58 is the per-bucket integration shim. Although its outer control
-//   flow is a scalar singly-linked-list walk, every iteration marshals HAND-VECTORISED
-//   VMX/AltiVec register state into BrnDebrisArrayLite::UpdateBucket @0x82C08410:
-//     - lvlx + vspltw128 splat the frame-time float (a9) into v127 (-> v1),
-//     - lvlx + vspltw128 splat this+0x20 into v126 (-> v3),
-//     - lvx128 loads the this+0x10 vector into v2,
-//   and UpdateBucket is then invoked with those three vectors passed BY VMX REGISTER.
-//   UpdateBucket itself (0x82C08410) is NOT present in the X360 export set, so its
-//   signature/body are unrecovered. There is no faithful scalar lowering of a
-//   vector-register call ABI into an undecompiled VMX callee without inventing the
-//   parameter layout. Per project policy this is FLAGGED as a VMX keystone and given an
-//   honest non-fabricated stub rather than a paraphrase. Reconstructing it requires
-//   recovering UpdateBucket's body + register contract (a dedicated VMX pass).
+// ⭐ THE ONLY SCHEDULING DIFFERENCE: the console hands the jobs to EA::Jobs::JobScheduler::AddJobs
+//   (0x82BCB498, on gJobScheduler @0x830EA650) from the dispatch thread and EndSimulateDebris waits
+//   on them (EA::Jobs::Job::WaitOn) from the render thread before the debris renderer reads them.
+//   This single-threaded host runs each job to completion right where AddJobs is called. The
+//   render still reads the integrated particles, as on the console; nothing else observes them
+//   between the two points.
 //
-// Members are pinned BY NAME and order. GROW additively. X360 pointers are 32-bit, so
-// the absolute byte offsets above do NOT hold on the 64-bit host.
+// LAYOUT AUTHORITY: DecFIGS DWARF -- BrnDebrisArrayLite is BrnDebrisRenderer.h:211..259,
+// DebrisUpdateJobData is GameSource/Jobs/DebrisUpdate/DebrisUpdate.h:38..55 (homed HERE, next to
+// the array it carries, because the console's Jobs/DebrisUpdate directory has no other PC
+// content; DebrisUpdateJob.cpp's one function lives in BrnDebrisArrayLite.cpp). The X360 byte
+// offsets are the console's (32-bit pointers); the x64 host widens mpBucketList and mpTriCache,
+// so DebrisUpdateJobData is 0x90 bytes here instead of 0x80 -- every access is BY NAME.
 // ============================================================================
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                           // Vector3
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"                 // CgsNumeric::Random (the job's, BY VALUE)
+#include "GameSource/Effects/Particles/Native/BrnDebrisArray.h"       // BrnDebrisArray / DebrisBucket
+
+namespace BrnEffects { struct BrnCrashTriangleCache; }
 
 namespace BrnParticle
 {
 namespace Native
 {
-    // One debris bucket node in the live-bucket list. Only the next link the walk
-    // touches is modelled; the bucket payload that follows is opaque here.
-    struct DebrisArrayLiteBucket
-    {
-        void*                  mpReserved0;   // bucket[0] @ +0x00 -- opaque, not touched by the walk
-        DebrisArrayLiteBucket* mpNext;        // bucket[1] @ +0x04
-    };
-
+    // BrnParticle::Native::BrnDebrisArrayLite (DWARF BrnDebrisRenderer.h:211) -- the per-job copy
+    // of one debris array's live-bucket list and its simulation parameters.
     class BrnDebrisArrayLite
     {
     public:
-        // BrnParticle::Native::BrnDebrisArrayLite::Update @0x82C08B58.
-        // Integrate every live debris bucket for one frame. lfFrameTime is the splatted
-        // time step; the remaining job parameters are forwarded to UpdateBucket.
-        // HONEST STUB: not implemented -- see file header (VMX keystone).
-        void Update(int liJobParam2, int liJobParam3, int liJobParam5, int liJobParam6,
-                    int liJobParam7, float lfFrameTime);
+        // BrnDebrisRenderer.h:219. Inlined into BeginSimulateDebris on the console
+        // (0x82289B80..0x82289BC0): copy the array's live-bucket list head, its preset's
+        // bounciness vector and drag resistance, latch the collision flag, and report whether the
+        // array has anything to simulate.
+        bool Initialize(BrnDebrisArray* lpDebrisArray, bool lbCollisionEnabled)
+        {
+            mpBucketList       = lpDebrisArray->mpBuckets;                    // `lwz r8, 4(r22)`
+            mBounciness        = lpDebrisArray->mpParams->mvBounciness;       // lvx128 params + 0x30
+            mfDragResistance   = lpDebrisArray->mpParams->mfDragResistance;   // lfs params + 0x44
+            mbCollisionEnabled = lbCollisionEnabled;                          // stb +0x24
+            return mpBucketList != 0;                                         // `cmplwi r7, 0`
+        }
+
+        // BrnParticle::Native::BrnDebrisArrayLite::Update @0x82C08B58 -- integrate every live
+        // bucket for one step. The console's register contract: r4 the cache, f1 (r5's slot) the
+        // time step, f2 (r6's slot) the current time, r7 the job's Random.
+        void Update(const BrnEffects::BrnCrashTriangleCache* lpTriCache, f32 lfTimeStep, f32 lfCurrentTime,
+                    CgsNumeric::Random* lpRandom);
 
     private:
-        DebrisArrayLiteBucket* mpBucketHead;   // this[0] @ +0x00
+        BrnDebrisArray::DebrisBucket* mpBucketList;        // :256  +0x00
+        Vector3                       mBounciness;         // :257  +0x10
+        f32                           mfDragResistance;    // :258  +0x20
+        bool                          mbCollisionEnabled;  // :259  +0x24
     };
+
+    // DebrisUpdateJobData (DWARF GameSource/Jobs/DebrisUpdate/DebrisUpdate.h:38) -- one debris
+    // update job's whole input. ParticleModule owns five of them (maDebrisUpdateJobData,
+    // ParticleModule.h:397); Construct zeroes each and BeginSimulateDebris fills one per live array.
+    struct DebrisUpdateJobData
+    {
+        static const u32 KU_NUM_DEBRIS_ARRAYS_PER_JOB = 1;                          // :43
+
+        BrnDebrisArrayLite                       maDebrisArrays[KU_NUM_DEBRIS_ARRAYS_PER_JOB];   // :49  +0x00
+        u32                                      muNumDebrisArrays;                 // :50  +0x30
+        const BrnEffects::BrnCrashTriangleCache* mpTriCache;                        // :51  +0x34
+        f32                                      mfCurrentTime;                     // :52  +0x38
+        f32                                      mfTimeStep;                        // :53  +0x3C
+        CgsNumeric::Random                       mRandom;                           // :54  +0x40
+        bool                                     mbCollisionEnabled;                // :55  +0x70 (never written)
+    };
+
+    // DebrisUpdateJob::Execute @0x82C08298 (GameSource/Jobs/DebrisUpdate/DebrisUpdateJob.cpp). The
+    // console's DebrisUpdateEntry @0x82C08168 (the EA::Jobs entry point Construct binds) derives a
+    // per-hardware-thread context from EA::Thread::GetThreadId, asserts it, and passes it in r3
+    // (0x832BACE8 + index); Execute never reads it. The job data arrives in r4.
+    struct DebrisUpdateJob
+    {
+        static void Execute(DebrisUpdateJobData* lpJobData);
+    };
+
+    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Per-frame counts the integrator bumps and
+    // ParticleModule's [debris-sim] witness (BRN_DEBRIS_DIAG) reads and zeroes: pieces integrated,
+    // CollideWithTriangleCache calls, and bounces resolved.
+    extern u32 gauDebrisSimIntegrated;
+    extern u32 gauDebrisSimCollideCalls;
+    extern u32 gauDebrisSimBounces;
 }
 }
 

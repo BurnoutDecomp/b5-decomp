@@ -44,6 +44,8 @@ namespace BrnParticle
 
 namespace Native
 {
+    class BrnDebrisArrayLite;   // BrnDebrisArrayLite.h -- Initialize reads mpBuckets / mpParams
+
     // BrnDebrisRenderer.h:67 (DWARF) -- selects one of the five debris parameter presets.
     enum EDebrisArrayID
     {
@@ -149,6 +151,12 @@ namespace Native
         const DebrisBucket*        Buckets() const        { return mpBuckets; }
 
     private:
+        // BrnDebrisArrayLite::Initialize (DWARF BrnDebrisRenderer.h:219, inlined into
+        // ParticleModule::BeginSimulateDebris @0x82289B84..0x82289BB4) copies this array's live-bucket
+        // list head and its preset's bounciness / drag straight out of it -- the same header on the
+        // console, so the same access.
+        friend class BrnDebrisArrayLite;
+
         // BrnParticle::Native::BrnDebrisArray::GetNewDebris (BrnDebrisRenderer.cpp:250). Claim the
         // next free debris slot from the tail bucket, threading in a fresh bucket from the pool
         // when the array is still under its particle budget and recycling the oldest bucket

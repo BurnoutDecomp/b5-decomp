@@ -129,6 +129,9 @@ namespace BrnEffects
         }
         // DWARF h:123. lnNum4Triangles counts Triangle4 BATCHES (four triangles each).
         void AddTriangles(const CgsGeometric::Triangle4* lpInTriangles, u32 lnNum4Triangles);
+        // DWARF h:127 -- inline on the console: the debris integrator sub_82C08410 reads the count
+        // word straight (`lwz r11, 0x1E00(r18) ; cmplwi r11, 0` @0x82C0886C) before it collides.
+        bool IsEmpty() const { return mnNumberOfPackedTriangles == 0; }
         // DWARF h:135 (const: PS3 _ZNK...24CollideWithTriangleCache... @0xE0ADC).
         void CollideWithTriangleCache(BrnCrashLineTriangleCacheFormat* lpLinesToTest, u32 luNumberLines) const;
         // DWARF h:155. lpbAddTriangleBool[i] == true means "do NOT add triangle i" (the console
