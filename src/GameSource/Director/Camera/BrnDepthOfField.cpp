@@ -2,7 +2,8 @@
 // GameSource/Director/Camera/BrnDepthOfField.cpp
 //
 // Compilation home for the BrnDirector::Camera::DepthOfField slice this TU owns:
-//   - DepthOfField::SetParams @0x821F1AC8
+//   - DepthOfField::SetParams @0x821F1AC8                      (the five-distance form)
+//   - DepthOfField::SetParams @0x821F1C20                      (the near/far/blur-depth form)
 //
 // Called by BrnDirector::KeyAnimController::UpdateFocus, BehaviourIceAnim::Update and
 // ICE::ICECameraMover::UpdateFocus to drive the camera's focus band each frame.
@@ -55,6 +56,46 @@ void DepthOfField::SetParams(f32 lfFocusStartDistanceMeters,
     mfPerfectFocusStartDistanceMeters = lfPerfectFocusStartDistanceMeters; // stfs f28, 0x04
     mfPerfectFocusEndDistanceMeters   = lfPerfectFocusEndDistanceMeters;   // stfs f27, 0x08
     mfFocusEndDistanceMeters          = lfFocusEndDistanceMeters;          // stfs f26, 0x0C
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::DepthOfField::SetParams(near, far, blurDepth, blurriness) @0x821F1C20
+// [FX-DIRECTOR2 2026-09-25]
+//
+// The plane form. The console body, with the NaN polarity of each guard (an unordered compare
+// clears LT, GT and EQ, so `bge` / `ble` are TAKEN for a NaN and `bgt` / `blt` are not):
+//   fcmpu f30(blurDepth), 0.0 (flt_82001CC0) ; bge skip       -> fires only for < 0     (h:146)
+//   fcmpu f27(blurriness), 0.0 ; blt fire
+//   fcmpu f27, 1.0 (flt_82001C98) ; ble skip                 -> fires for < 0 or > 1  (h:147)
+//   fcmpu f31(near), 0.0 ; bge skip                           -> fires only for < 0     (h:148)
+//   fcmpu f28(far), f31(near) ; bgt skip                      -> fires unless far > near,
+//                                                               so a NaN on either side FIRES (h:149)
+// then the stores, in this order:
+//   stfs f27, 0x10   mfBlurriness                      = blurriness
+//   stfs f31, 0x00   mfFocusStartDistanceMeters        = near
+//   stfs f28, 0x0C   mfFocusEndDistanceMeters          = far
+//   stfs .., 0x04    mfPerfectFocusStartDistanceMeters = (near + blurDepth) + 0.01
+//   stfs .., 0x08    mfPerfectFocusEndDistanceMeters   = (far - blurDepth) - 0.01
+// 0.01 is flt_82002138 (0x3C23D70A). Each sum is two separate fadds/fsubs, rounded in turn.
+// ----------------------------------------------------------------------------
+void DepthOfField::SetParams(f32 lfNearPlane, f32 lfFarPlane, f32 lfBlurDepth, f32 lfBlurriness)
+{
+    const f32 KF_PERFECT_FOCUS_INSET = 0.01f;   // flt_82002138
+
+    CGS_ASSERT(!(lfBlurDepth < 0.0f), "lfBlurDepth >= 0.0f");
+    CGS_ASSERT(!(lfBlurriness < 0.0f) && !(lfBlurriness > 1.0f),
+               "lfBlurriness >= 0.0f && lfBlurriness <= 1.0f");
+    CGS_ASSERT(!(lfNearPlane < 0.0f), "lfNearPlane >= 0.0f");
+    CGS_ASSERT(lfFarPlane > lfNearPlane, "lfFarPlane > lfNearPlane");
+
+    const f32 lfPerfectStart = lfNearPlane + lfBlurDepth;   // fadds f13, f31, f30
+    const f32 lfPerfectEnd   = lfFarPlane - lfBlurDepth;    // fsubs f12, f28, f30
+
+    mfBlurriness                      = lfBlurriness;                            // +0x10
+    mfFocusStartDistanceMeters        = lfNearPlane;                             // +0x00
+    mfFocusEndDistanceMeters          = lfFarPlane;                              // +0x0C
+    mfPerfectFocusStartDistanceMeters = lfPerfectStart + KF_PERFECT_FOCUS_INSET; // +0x04
+    mfPerfectFocusEndDistanceMeters   = lfPerfectEnd - KF_PERFECT_FOCUS_INSET;   // +0x08
 }
 
 // ----------------------------------------------------------------------------

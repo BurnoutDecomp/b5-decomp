@@ -46,10 +46,19 @@ namespace BrnPhysics
         // dampening, then clamps the current length into [mfMinStretch, mfMaxStretch].
         void Update(f32 lfTimeStep);
 
+        // The spring's current length. No out-of-line console symbol: BehaviourRig::Update
+        // @0x822427C0 inlines it as the single `lfs f0, 0x3C4(r30)` (0x82242C10) on the rig's
+        // mAccelSpring at +0x3C0, i.e. result[1] == mfCurrentLength.
+        f32  GetLength() const { return mfCurrentLength; }
+
+        // Retarget the spring. No out-of-line console symbol: BehaviourRig::Update inlines it as
+        // the single `stfs f0, 0x3C0(r30)` (0x82242B94) on mAccelSpring, i.e. result[0] ==
+        // mfDesiredLength, just before Spring1D::Update.
+        void SetDesiredLength(f32 lfDesiredLength) { mfDesiredLength = lfDesiredLength; }
+
         // --- declared-only (owned by a future Spring1D TU) ---
         void Release();
         void Destruct();
-        f32  GetLength() const;
         f32  GetOffset() const;
         f32  GetVelocity() const;
         f32  GetOffsetRatio() const;
@@ -57,7 +66,6 @@ namespace BrnPhysics
         void SetStiffness(f32);
         void SetDampening(f32);
         void SetVelocity(f32);
-        void SetDesiredLength(f32);
         void SetMaxStretch(f32);
         void SetMinStretch(f32);
         void AddForce(f32);

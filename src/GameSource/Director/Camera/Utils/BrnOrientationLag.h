@@ -7,9 +7,9 @@
 // BrnDirector::Camera::Utils::OrientationLag - a per-frame orientation smoother: it
 // holds the last output transform and, when the slerp spring is enabled, spherically
 // blends it toward each new input transform (translation always snaps). DWARF home
-// BrnOrientationLag.h:47. Update is bodied in BrnOrientationLag.cpp (this TU);
-// Construct/SetParameters/GetTransform and Parameters::Construct are their own ledger
-// functions (declaration-only here).
+// BrnOrientationLag.h:47. Update, Construct, SetParameters, GetTransform and
+// Parameters::Construct are all bodied in BrnOrientationLag.cpp (the X360 inlines the last four;
+// see the notes there).
 namespace BrnDirector
 {
 namespace Camera
@@ -33,11 +33,11 @@ namespace Utils
             // Per-instance body is a separate TU (BrnOrientationLagSerialise.cpp).
             template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
-            // DWARF h:90 / cpp:28 -- declaration-only (its own ledger function).
+            // DWARF h:90 / cpp:28 -- body in BrnOrientationLag.cpp.
             void Construct();
         };
 
-        // DWARF h:53 / h:57 / h:65 -- declaration-only (their own ledger functions).
+        // DWARF h:53 / h:57 / h:65 -- bodies in BrnOrientationLag.cpp.
         void Construct();
         void SetParameters(const Parameters* lpParameters);
         const rw::math::vpu::Matrix44Affine& GetTransform() const;

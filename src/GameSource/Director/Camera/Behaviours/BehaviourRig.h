@@ -113,8 +113,37 @@ public:
         bool       mbWidescreenOnly;             // +0x30
     };
 
-    // Build the rig transform from Params + target AABBox + mbReverse flag.
-    void Construct(const Params& lrParams, const AABBox& lrBounds, bool lbReverse);
+    // The twenty authored rig presets, declared in the DWARF's header order (BrnCameraRig.h:63..
+    // :82). BrnCameraRigParams.cpp DEFINES them in a slightly different order -- ParamsRearQFwd
+    // sits between SideLookingForwards and RigFrontQBwd there (BrnCameraRigParams.cpp:175), which
+    // is also its .data slot (console 0x82CDA810.., a 0x40 stride; see that file).
+    // BehaviourRig::Parameters::Construct copies ParamsFrontQuarterClose; the takedown look-back
+    // copies ParamsBonnetLow; the camera parameter bank copies nine more.
+    static Params ParamsRearLongFlat;
+    static Params ParamsFrontQuarterLong;
+    static Params ParamsFrontQuarterClose;
+    static Params ParamsFrontQuarterCloseDeep;
+    static Params ParamsHighSideFlat;
+    static Params ParamsSideFlat;
+    static Params ParamsBonnetHigh;
+    static Params ParamsBootHigh;
+    static Params ParamsBonnetLow;
+    static Params ParamsFrontQCuFwd;
+    static Params ParamsSideLookingForwards;
+    static Params ParamsRigFrontQBwd;
+    static Params ParamsFrontRearview;
+    static Params ParamsBootViewFwd;
+    static Params ParamsFrontQLowBwd;
+    static Params ParamsRoofFwd;
+    static Params ParamsBootFwd;
+    static Params ParamsRearQFwd;
+    static Params ParamsFrontQCuFwd2;
+    static Params ParamsUnderbelly;
+
+    // DWARF BrnCameraRig.h:88 / BrnCameraRig.cpp:31 -- @0x8220B0E8. Build the rig transform
+    // (camera relative to the target car) from an authored preset, the car's bounds and the
+    // mirror flag. Body: Camera/Utils/BrnCameraRigConstruct.cpp.
+    void Construct(const Params& lrData, const AABBox& lrAABB, bool lbReverse);
 
     // Advance the rig per frame.
     void Update(Camera& lrCamera, Matrix44Affine lTarget);
@@ -174,9 +203,18 @@ private:
 // nested VehicleRef and Behaviour::Parameters moved with it.
 // ============================================================================
 
+// The rig-cam behaviour-type tag. Parameters::Construct @0x821F9680 stores 2 in the block's first
+// word (`li r9, 2 ; stw r9, 0(r3)`), and SetParameters @0x821F3B10 compares against it
+// (`cmplwi r11, 2`, "lpParameters->GetType() == eBehaviourRig", BehaviourRig.h:255).
+enum EBehaviourTypeRig
+{
+    eBehaviourRig = 2
+};
+
 // ============================================================================
 // BehaviourRig -- the "rig" camera behaviour.
 //   Inherits Behaviour; all private members are by name (DWARF BehaviourRig.h:185-205).
+//   Console vtable 0x8200A5A0, object 0x470 bytes (NewBehaviour<BehaviourRig> @0x82260A18).
 // ============================================================================
 class BehaviourRig : public Behaviour
 {
@@ -229,23 +267,41 @@ public:
     virtual void          SetupTweaker(Utils::Tweaker& lrTweaker)                 override;
     virtual const char*   GetName() const                                          override;
 
-    void  StartLookingAtRaceCar(EActiveRaceCarIndex leIndex, bool lbLooking);
+    // DWARF BehaviourRig.h:304 -- header inline, no console symbol. Its one X360 site,
+    // MomentTakedownLookback::Update @0x822662F0 (0x822666FC..0x82266714), stores
+    //     mLookingAtRef {+0x450 meType = 1 (E_RACE_CAR), +0x454 index, +0x458 = 0, +0x45C set = 1}
+    //     mbLooking (+0x46A) = 1 ; mbSnap (+0x46B) = 1
+    // -- the inlined VehicleRef::SetToRaceCar (its index tripwire folds away for the constant
+    // index), then the two latches. The PS3 inline at 0x89F44 stores the same six words.
+    // FLAG: that one site passes true, so it cannot show which latch the bool feeds. It is
+    // taken as mbSnap, because mbLooking is what "start looking" means.
+    void StartLookingAtRaceCar(EActiveRaceCarIndex leIndex, bool lbSnap)
+    {
+        mLookingAtRef.SetToRaceCar(leIndex);
+        mbLooking = true;
+        mbSnap    = lbSnap;
+    }
+
+    // DWARF BehaviourRig.cpp:415 / :429. Bodies in BehaviourRig.cpp.
     void  AttachToRaceCar(EActiveRaceCarIndex leIndex);
     void  SetDetached(bool lbDetached);
+
+    // DWARF BehaviourRig.h:314 -- declaration-only; no caller in the tree.
     f32   GetAccelSpringOffsetRatio() const;
 
 private:
-    // Members in DWARF order (BehaviourRig.h:185-205). By name; sizes differ on PC.
-    VisibilityCollisionPolicy      mCollisionPolicy;         // +0x14 (after Behaviour base)
-    Utils::CameraRig               mRig;                    // after mCollisionPolicy
-    Utils::CameraShake             mShake;
-    Utils::OrientationLag          mOrientationLag;
-    Utils::PositionLag             mPositionLag;
-    Matrix44Affine                 mLastAttachedToTransform;
-    Matrix44Affine                 mLastRigTransform;
+    // Members in DWARF order (BehaviourRig.h:185-205). By name; sizes differ on PC. The console
+    // offsets are the ones Construct @0x82242488 and Update @0x822427C0 address.
+    VisibilityCollisionPolicy      mCollisionPolicy;         // X360 +0x020
+    Utils::CameraRig               mRig;                    // X360 +0x260 (mfFOV at +0x2A0)
+    Utils::CameraShake             mShake;                  // X360 +0x2B0
+    Utils::OrientationLag          mOrientationLag;         // X360 +0x2C0
+    Utils::PositionLag             mPositionLag;            // X360 +0x310
+    Matrix44Affine                 mLastAttachedToTransform; // X360 +0x340
+    Matrix44Affine                 mLastRigTransform;       // X360 +0x380
     BrnPhysics::Spring1D           mAccelSpring;            // X360 +0x3C0
-    Utils::Looker                  mLooker;                 // X360 +0x410
-    Utils::Random                  mRandom;                 // (typedef CgsNumeric::Random)
+    Utils::Looker                  mLooker;                 // X360 +0x3E4
+    Utils::Random                  mRandom;                 // X360 +0x410 (typedef CgsNumeric::Random)
     Behaviour::VehicleRef          mAttachedToRef;          // X360 +0x440
     Behaviour::VehicleRef          mLookingAtRef;           // X360 +0x450
     const Parameters*              mpParameters;            // X360 +0x460
@@ -257,14 +313,20 @@ private:
 };
 
 // ============================================================================
-// BehaviourRig::SetParameters inline @0x821F3B10
-//   Asserts type tag == 2 (eBehaviourRig), stores block pointer + cached word + clears flag.
+// BehaviourRig::SetParameters @0x821F3B10 (DWARF BehaviourRig.h:253; the assert cites :255)
+//     lwz r11, 0(p) ; cmplwi r11, 2 ; beq -> assert "lpParameters->GetType() == eBehaviourRig"
+//     lwz r11, 4(p)            the block's debug name
+//     stw p, 0x460(this)       mpParameters
+//     stw r11, 0x10(this)      the base's mpcDebugParametersName
+//     stb 0, 8(this)           mbIsPrepared = false
+// [FX-DIRECTOR2 2026-09-25] the debug-name store was missing.
 // ============================================================================
 inline void
 BehaviourRig::SetParameters(const Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == 2u, "lpParameters->GetType() == eBehaviourRig");
+    CGS_ASSERT(lpParameters->GetType() == eBehaviourRig, "lpParameters->GetType() == eBehaviourRig");
     mpParameters = lpParameters;
+    SetDebugParametersName(lpParameters->GetDebugName());
     SetNotPrepared();
 }
 
