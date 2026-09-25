@@ -1738,6 +1738,26 @@ namespace
     }
     const s32 KI_NETCRASH_HULL_DIAG_MAX_LINES = 48;
 
+    // FLAG PC witness (crash parity FX-NETCRASH, online traffic lockstep; NOT console code). The
+    // per-decision-frame digest UpdateDecisionFrame prints online: FNV-1a over the state every
+    // machine must agree on, so the two halves of a LAN pair can be joined on upd= and compared.
+    const s32 KI_NETCRASH_LOCKSTEP_MAX_LINES = 420;
+    const u32 KU_NETCRASH_FNV_BASIS = 2166136261u;
+    const u32 KU_NETCRASH_FNV_PRIME = 16777619u;
+    // CgsNumeric::Random's live state: the eight-word ring (+0x00), muSeed (+0x20) and
+    // muOldestBufferIndex (+0x28); the tail up to the 16-byte alignment is padding.
+    const u32 KU_NETCRASH_RANDOM_STATE_BYTES = 0x2C;
+
+    u32 NetCrashFnv(u32 luHash, const void* lpData, u32 luBytes)
+    {
+        const u8* const lpBytes = static_cast<const u8*>(lpData);
+        for (u32 luIndex = 0; luIndex < luBytes; ++luIndex)
+        {
+            luHash = (luHash ^ lpBytes[luIndex]) * KU_NETCRASH_FNV_PRIME;
+        }
+        return luHash;
+    }
+
     // The X360 immediates this file needs that are not rodata reads. Each is an instruction
     // operand, recovered rather than guessed.
 
@@ -6387,6 +6407,162 @@ void TrafficEntityModule::UpdateDecisionFrame(
             CGS_ASSERT(muUpdateCount == KU_START_PROTECT_UPDATE_FRAME_ONLINE,
                        "KU_START_PROTECT_UPDATE_FRAME_ONLINE == muUpdateCount");   // .cpp 7209
             mbAtStartLineSoProtectRaceCarsFromTraffic = false;
+        }
+    }
+
+    // FLAG PC witness (crash parity FX-NETCRASH, online traffic lockstep; NOT console code). Online,
+    // every machine must run the same traffic sim decision frame for decision frame. With
+    // BRN_NETCRASH_DIAG set, this prints a capped digest of that state on every decision frame of
+    // the first 400 after a reset, and a full per-param dump on frames 90..140. The halves of a LAN
+    // pair can then be joined on upd= and compared. It reads only; nothing the sim uses is touched.
+    if (!mbAllowDivergentBehaviour)
+    {
+        static s32 siLockstepLines = 0;
+        static s32 siParamDumpLines = 0;
+        CgsDev::Log::DebugPrint* const lpNetDiag = NetCrashDiagStream();
+        if (lpNetDiag != 0 && siLockstepLines < KI_NETCRASH_LOCKSTEP_MAX_LINES && muUpdateCount <= 400u)
+        {
+            ++siLockstepLines;
+
+            const u32 luHulls = mActiveHulls.GetLength();
+            u16 lauSortedHulls[KU_MAX_ACTIVE_HULLS];
+            u32 luHullOrder = KU_NETCRASH_FNV_BASIS;
+            for (u32 luIndex = 0; luIndex < luHulls; ++luIndex)
+            {
+                lauSortedHulls[luIndex] = mActiveHulls.GetItem(luIndex);
+                luHullOrder = NetCrashFnv(luHullOrder, &lauSortedHulls[luIndex], sizeof(u16));
+            }
+            std::sort(lauSortedHulls, lauSortedHulls + luHulls);
+            const u32 luHullSet = NetCrashFnv(KU_NETCRASH_FNV_BASIS, lauSortedHulls, luHulls * sizeof(u16));
+
+            const u32 luRand = NetCrashFnv(KU_NETCRASH_FNV_BASIS, &mRand, KU_NETCRASH_RANDOM_STATE_BYTES);
+
+            u32 luParams = 0;
+            u32 luParamHash = KU_NETCRASH_FNV_BASIS;
+            u32 luLerpHash = KU_NETCRASH_FNV_BASIS;
+            u32 luSlowHash = KU_NETCRASH_FNV_BASIS;
+            u32 luStateHash = KU_NETCRASH_FNV_BASIS;
+            for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
+            {
+                if (mParamSoaData.mAliveParams.IsBitSet(luParam))
+                {
+                    const Vector3 lPos = maParamTransforms[luParam].GetDeterministicPos();
+                    const f32 lafPos[3] = { lPos.x, lPos.y, lPos.z };
+                    const Vector3 lLerp = maParamTransforms[luParam].GetLerpedPos();
+                    const f32 lafLerp[4] = { lLerp.x, lLerp.y, lLerp.z, maParamTransforms[luParam].GetSpeed().x };
+                    const ParamNeedToSlowData& lrSlow = maParamNeedToSlowData[luParam];
+                    const f32 lafSlow[3] = { lrSlow.mfNextParamDist, lrSlow.mfTargetSpeed, lrSlow.mfStopDist };
+                    const Param& lrParam = maParams[luParam];
+                    const f32 lafState[5] = { lrParam.mfParamAlong, lrParam.mfSpeed, lrParam.mfTargetSpeed,
+                                              lrParam.mfStopDist, lrParam.mfAcceleration };
+                    ++luParams;
+                    luParamHash = NetCrashFnv(luParamHash, &luParam, sizeof(luParam));
+                    luParamHash = NetCrashFnv(luParamHash, lafPos, sizeof(lafPos));
+                    luLerpHash = NetCrashFnv(luLerpHash, lafLerp, sizeof(lafLerp));
+                    luSlowHash = NetCrashFnv(luSlowHash, &lrSlow.muParamInFront, sizeof(lrSlow.muParamInFront));
+                    luSlowHash = NetCrashFnv(luSlowHash, &lrSlow.miBehaviour, sizeof(lrSlow.miBehaviour));
+                    luSlowHash = NetCrashFnv(luSlowHash, lafSlow, sizeof(lafSlow));
+                    luStateHash = NetCrashFnv(luStateHash, lafState, sizeof(lafState));
+                    luStateHash = NetCrashFnv(luStateHash, &lrParam.miBehaviour, sizeof(lrParam.miBehaviour));
+                }
+            }
+
+            u32 luVehicles = 0;
+            u32 luVehicleHash = KU_NETCRASH_FNV_BASIS;
+            u32 luVehiclePosHash = KU_NETCRASH_FNV_BASIS;
+            s32 liFirstStandard = -1;
+            for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
+            {
+                if (maVehicles[luVehicle].IsAlive())
+                {
+                    const u8 lu8Type = maVehicles[luVehicle].GetVehicleType();
+                    const u8 lu8Flags = maVehicles[luVehicle].GetFlags();
+                    const Vector3 lVehiclePos = maVehicleTransforms[luVehicle].Pos();
+                    const f32 lafVehiclePos[3] = { lVehiclePos.x, lVehiclePos.y, lVehiclePos.z };
+                    ++luVehicles;
+                    luVehicleHash = NetCrashFnv(luVehicleHash, &luVehicle, sizeof(luVehicle));
+                    luVehicleHash = NetCrashFnv(luVehicleHash, &lu8Type, sizeof(lu8Type));
+                    luVehicleHash = NetCrashFnv(luVehicleHash, &lu8Flags, sizeof(lu8Flags));
+                    luVehiclePosHash = NetCrashFnv(luVehiclePosHash, lafVehiclePos, sizeof(lafVehiclePos));
+                    if (liFirstStandard < 0 && luVehicle < KU_MAX_PARAMS
+                        && mParamSoaData.mAliveParams.IsBitSet(luVehicle))
+                    {
+                        liFirstStandard = static_cast<s32>(luVehicle);
+                    }
+                }
+            }
+
+            u32 luFreeHash = KU_NETCRASH_FNV_BASIS;
+            for (s32 liIndex = 0; liIndex < mFreeParams.GetLength(); ++liIndex)
+            {
+                const u16 luFreeParam = mFreeParams[liIndex];
+                luFreeHash = NetCrashFnv(luFreeHash, &luFreeParam, sizeof(luFreeParam));
+            }
+
+            *lpNetDiag << "[netcrash] lockstep upd=" << static_cast<u32>(muUpdateCount)
+                       << " state=" << static_cast<s32>(meState) << "/" << static_cast<s32>(meRunningState)
+                       << " hulls=" << luHulls << " order=" << luHullOrder << " set=" << luHullSet
+                       << " rand=" << luRand << " params=" << luParams << " ppos=" << luParamHash
+                       << " pstate=" << luStateHash << " lerp=" << luLerpHash << " slow=" << luSlowHash
+                       << " vehicles=" << luVehicles << " vtype=" << luVehicleHash << " vpos=" << luVehiclePosHash
+                       << " free=" << mFreeParams.GetLength() << "/" << luFreeHash;
+            if (liFirstStandard >= 0)
+            {
+                const Vector3 lFirstPos = maParamTransforms[liFirstStandard].GetDeterministicPos();
+                *lpNetDiag << " first=" << liFirstStandard << "@(" << lFirstPos.x << ", " << lFirstPos.z << ")";
+            }
+            *lpNetDiag << " [FLAG PC witness]\n";
+
+            // The per-vehicle dump: every alive vehicle's transform position as raw f32 bits.
+            if (muUpdateCount == 19u || muUpdateCount == 20u || muUpdateCount == 100u || muUpdateCount == 300u)
+            {
+                *lpNetDiag << "[netcrash] lockstep-vehicles upd=" << static_cast<u32>(muUpdateCount);
+                for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
+                {
+                    if (!maVehicles[luVehicle].IsAlive())
+                    {
+                        continue;
+                    }
+                    const Vector3 lVehiclePos = maVehicleTransforms[luVehicle].Pos();
+                    u32 lauPosBits[3];
+                    std::memcpy(&lauPosBits[0], &lVehiclePos.x, sizeof(u32));
+                    std::memcpy(&lauPosBits[1], &lVehiclePos.y, sizeof(u32));
+                    std::memcpy(&lauPosBits[2], &lVehiclePos.z, sizeof(u32));
+                    *lpNetDiag << " " << luVehicle << ":" << static_cast<u32>(maVehicles[luVehicle].GetFlags())
+                               << ":" << lauPosBits[0] << ":" << lauPosBits[1] << ":" << lauPosBits[2];
+                }
+                *lpNetDiag << " [FLAG PC witness]\n";
+            }
+
+            // The per-param dump: every alive param's state as raw f32 bits, one line per frame.
+            if (muUpdateCount >= 90u && muUpdateCount <= 140u && siParamDumpLines < 60)
+            {
+                ++siParamDumpLines;
+                *lpNetDiag << "[netcrash] lockstep-params upd=" << static_cast<u32>(muUpdateCount);
+                for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
+                {
+                    if (!mParamSoaData.mAliveParams.IsBitSet(luParam))
+                    {
+                        continue;
+                    }
+                    const Param& lrParam = maParams[luParam];
+                    const ParamNeedToSlowData& lrSlow = maParamNeedToSlowData[luParam];
+                    u32 lauBits[6];
+                    std::memcpy(&lauBits[0], &lrParam.mfParamAlong, sizeof(u32));
+                    std::memcpy(&lauBits[1], &lrParam.mfSpeed, sizeof(u32));
+                    std::memcpy(&lauBits[2], &lrParam.mfAcceleration, sizeof(u32));
+                    std::memcpy(&lauBits[3], &lrSlow.mfTargetSpeed, sizeof(u32));
+                    std::memcpy(&lauBits[4], &lrSlow.mfStopDist, sizeof(u32));
+                    const f32 lfLerpSpeed = maParamTransforms[luParam].GetSpeed().x;
+                    std::memcpy(&lauBits[5], &lfLerpSpeed, sizeof(u32));
+                    *lpNetDiag << " " << luParam << ":" << static_cast<u32>(lrParam.muHullIndex) << "."
+                               << static_cast<u32>(lrParam.muSectionIndex) << ":" << lauBits[0] << ":" << lauBits[1]
+                               << ":" << lauBits[2] << ":" << static_cast<s32>(lrParam.miBehaviour) << "/"
+                               << static_cast<s32>(lrSlow.miBehaviour) << "/" << static_cast<u32>(lrSlow.muParamInFront)
+                               << ":" << lauBits[3] << ":" << lauBits[4] << ":" << lauBits[5];
+                }
+                *lpNetDiag << " [FLAG PC witness]\n";
+            }
         }
     }
 }
