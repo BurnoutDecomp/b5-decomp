@@ -800,6 +800,13 @@ namespace BrnParticle
             };
             static Track sTrack = { 0, 0, 0, 0.0f };
             static u32   suLines = 0;
+            // BRN_DEBRIS_DIAG_ARRAY=<0..4> tracks only that array's pieces. The glass case asks for 4: the crash
+            // debris burst (HandleFireDebrisBurstEvent) spawns into arrays 0..3 in the same frame as the glass, and
+            // the pick below takes the lowest array on a tie.
+            static const s32 siOnlyArray = []() {
+                const char* const lpcValue = std::getenv("BRN_DEBRIS_DIAG_ARRAY");
+                return (lpcValue != 0 && lpcValue[0] >= '0' && lpcValue[0] <= '4') ? (lpcValue[0] - '0') : -1;
+            }();
             static u32   suFrame = 0;
             static bool  sbAnnounced = false;
 
@@ -863,6 +870,8 @@ namespace BrnParticle
                 f32 lfNewest = -1.0e30f;
                 for (u32 luArray = 0; luArray < luNumArrays; ++luArray)
                 {
+                    if (siOnlyArray >= 0 && static_cast<s32>(luArray) != siOnlyArray)
+                        continue;
                     for (const DebrisBucket* lpBucket = lpArrays[luArray].Buckets(); lpBucket != 0;
                          lpBucket = static_cast<const DebrisBucket*>(lpBucket->mpNextBucket))
                     {

@@ -43,7 +43,9 @@ $GetDebrisTracks = {
     CrashSweepShots = '225:70'
     CrashSweepArm   = 4
   }
-  DiagEnv = 'BRN_GLASS_DIAG=1,BRN_DEBRIS_DIAG=1'
+  # BRN_DEBRIS_DIAG_ARRAY=4 pins the [debris-sim] track to the GLASS array: the crash debris burst (item 3) spawns
+  # into arrays 0..3 in the same frame and would otherwise win the pick.
+  DiagEnv = 'BRN_GLASS_DIAG=1,BRN_DEBRIS_DIAG=1,BRN_DEBRIS_DIAG_ARRAY=4'
   Checks  = @(
     @{ Kind = 'Mark';     Name = 'reached DRIVING'; Phase = 'DRIVING' }
     @{ Kind = 'LogCount'; Name = 'the sweep fired (the car was placed and launched)'; Pattern = '\[sweep\] shot 0/'; Min = 1 }
