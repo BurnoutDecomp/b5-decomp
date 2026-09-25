@@ -59,7 +59,21 @@ def wiring(tree):
         ("CgsLineTests.h declares both TestLineSphere4 forms and TestLineBoundingBoxAgainstAxisAlignedBox4",
          len(re.findall(r"TestLineSphere4\s*\(", lt_h)) == 2
          and re.search(r"const\s+Vector4\s+TestLineBoundingBoxAgainstAxisAlignedBox4\s*\(", lt_h) is not None),
+        # REVIEW-J item 2 (2026-09-25): the console trusts the chain count -- its next-link step at 0x828BD300..
+        # 0x828BD31C makes an end-of-chain 0xFFFF a null link and the next pass dereferences it. The invented
+        # NOT-X360 stop-and-assert guard is gone (measured never taken on the camera closure's line walk).
+        ("LooseOctree::LineTestRecursive walks the node chain muNumElements times with no invented null-link guard "
+         "(no 0xFFFF test, no 'chain shorter' assert; the console dereferences at 0x828BD31C)",
+         (lambda body: body != "" and "KU_INVALID_ENTITY_LINK" not in body and "shorter than muNumElements" not in body)
+         (_line_test_recursive(tree))),
     ]
+
+
+def _line_test_recursive(tree):
+    try:
+        return code_only(definition(tree.read(OCT_CPP), "void LooseOctree::LineTestRecursive("))
+    except ValueError:
+        return ""
 
 
 def constant(source, name):
