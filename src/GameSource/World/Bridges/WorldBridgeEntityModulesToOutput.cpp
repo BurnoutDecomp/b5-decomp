@@ -236,6 +236,8 @@ void BridgePropToOutput_PreScene(
 //     (Leg 3, the resource-request flush, has landed -- see the body. Leg 13's network
 //     transfer has landed too; the sound transfer feeds a live sound-module consumer, so it
 //     lands with its own offline check, and the director transfer with it.)
+//     LANDED 2026-09-25 (crash parity FX-NETCRASH): leg 13's sound and director siblings -- see
+//     the body; the offline check is tests/run_fxnetcrash_traffic_bridges.py.
 //   (⭐ LEG 7, the traffic-type RESPONSE transfer, is LANDED 2026-09-14 (traffic-type wave) --
 //    see the block in the body. It was never "un-homed": BOTH ends were already bodied
 //    (OutputBuffer_PostPhysics::GetTrafficTypeResponseQueue() const @0x827A0CC8 and
@@ -604,9 +606,101 @@ void BridgeEntityModulesToOutput_PostPhysics(
     // the network side read a table nobody filled (the host's mbActiveHullsValid asserts). The
     // console's PerfMon bracket takes this file's standing disposition. The same console leg
     // also carries SetTrafficSoundOutputInterface (0x827AF0F8..0x827AF108) and
-    // SetTrafficDirectorOutputInterface (0x827AF11C..0x827AF12C); both stay a logged follow-up.
+    // SetTrafficDirectorOutputInterface (0x827AF11C..0x827AF12C); both follow below.
     // ================================================================================
     lpOutputBuffer->SetTrafficNetworkOutputInterface(lpTrafficOutput_PostPhysics->GetNetworkInterface());
+
+    // ================================================================================
+    // LEG 13, the traffic -> SOUND and traffic -> DIRECTOR records (crash parity FX-NETCRASH,
+    // 2026-09-25), each in its own PerfMon bracket on the console (this file's disposition):
+    //   0x827AF0F8  mr r3, r29 ; bl 0x827A0980   trafficOut->GetTrafficSoundOutputInterface() const
+    //                                            (read-locked, trafficOut + 0xE30)
+    //   0x827AF100  mr r4, r3 ; mr r3, r31 ; bl 0x827A4A78   out->SetTrafficSoundOutputInterface(...)
+    //                                            (write-locked; TrafficSoundOutputInterface::operator=
+    //                                            @0x823A7F18 into out + 0x255D0)
+    //   0x827AF11C  mr r3, r29 ; bl 0x827A0A28   trafficOut->GetTrafficDirectorOutputInterface() const
+    //                                            (read-locked, trafficOut + 0x1840)
+    //   0x827AF124  mr r4, r3 ; mr r3, r31 ; bl 0x827A8AB0   out->SetTrafficDirectorOutputInterface(...)
+    //                                            (write-locked; the u16 head, then the
+    //                                            Array<TrafficDirectorEntity,32> copy 0x823B2368,
+    //                                            into out + 0x22EC0)
+    // Every frame, straight after the network snapshot. The records are THIS frame's nearby traffic:
+    // TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults (PostPhysicsUpdate, after the pause
+    // test) writes one TrafficSoundEntity (transform, speed, class, engine / horn / alarm, mbIsCrashed,
+    // mbIsPhysical) and one TrafficDirectorEntity (box-centre transform, velocity, half extents,
+    // vehicle id) per live traffic car the player's sphere query swept up. The traffic IO buffer is
+    // Constructed afresh every frame (0x82761938 / 0x8276193C zero both counts).
+    // Who reads the world copies:
+    //   SOUND    BrnGameModule::BridgeWorldToSound @0x823CD580 (0x823CD5D0..0x823CD5E0) copies it into
+    //            the sound root input (+0x6AB0). CollisionStateManager::FindEntity @0x826A0398 and
+    //            MapEntityIdToMaterial @0x826A0CF8 look traffic cars up in it by entity index: a car
+    //            that is not there gets no scrape / glass / hinge sound and the small-car impact
+    //            material. TrafficStateManager::UpdateParams @0x82702ED8 (the traffic engine / horn /
+    //            skid voices) reads it too; it has no body on this build.
+    //   DIRECTOR BrnGameModule::BridgeWorldToDirector 0x823E3F5C..0x823E3F78 copies it into the
+    //            director input (+0x6AC0 head, +0x6AD0 array), and MainDirector::PreSceneQueryUpdate
+    //            hands +0x6AD0 to AllVehicleData::Update @0x8221D938 (0x8225BC30..0x8225BC70) as the
+    //            traffic the director's cameras track. That hop and its readers are not on this
+    //            build yet (the director input keeps the span opaque), so this copy has no reader.
+    // ================================================================================
+    lpOutputBuffer->SetTrafficSoundOutputInterface(lpTrafficOutput_PostPhysics->GetTrafficSoundOutputInterface());
+    lpOutputBuffer->SetTrafficDirectorOutputInterface(lpTrafficOutput_PostPhysics->GetTrafficDirectorOutputInterface());
+
+    // [FLAG PC witness] (crash parity FX-NETCRASH; NOT console code). BRN_TRAFFIC_BRIDGE_DIAG, capped,
+    // reads only: one line the first time leg 13 carries any record, then one line per frame on which
+    // a CRASHED traffic car rides the sound records -- the record CollisionStateManager::FindEntity
+    // finds for that car's scrapes, glass and hinges.
+    {
+        static const bool sbTrafficBridgeDiag = ( getenv( "BRN_TRAFFIC_BRIDGE_DIAG" ) != 0 );
+        static bool       sbFirstRecordsLogged = false;
+        static s32        siCrashedLinesLeft   = 24;
+
+        if ( sbTrafficBridgeDiag && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            const BrnTraffic::BrnTrafficIO::TrafficSoundOutputInterface* lpSound =
+                lpTrafficOutput_PostPhysics->GetTrafficSoundOutputInterface();
+            const u32 luSound    = lpSound->GetTrafficEntityCount();
+            const u32 luDirector = lpTrafficOutput_PostPhysics->GetTrafficDirectorOutputInterface()
+                                       ->GetTrafficDirectorEntityArray().GetLength();
+            u32 luCrashed      = 0;
+            s32 liFirstCrashed = -1;
+            for ( u32 luEntity = 0; luEntity < luSound; ++luEntity )
+            {
+                if ( lpSound->maActiveEntityList[luEntity].mbIsCrashed )
+                {
+                    if ( liFirstCrashed < 0 )
+                    {
+                        liFirstCrashed = static_cast<s32>( luEntity );
+                    }
+                    ++luCrashed;
+                }
+            }
+
+            const bool lbFirstRecords = !sbFirstRecordsLogged && ( luSound != 0 || luDirector != 0 );
+            const bool lbCrashedLine  = luCrashed != 0 && siCrashedLinesLeft > 0;
+            if ( lbFirstRecords || lbCrashedLine )
+            {
+                sbFirstRecordsLogged = true;
+                if ( lbCrashedLine )
+                {
+                    --siCrashedLinesLeft;
+                }
+                *CgsDev::Log::gpDebugPrint << "[traffic-bridge] leg13 sound=" << luSound
+                                           << " crashed=" << luCrashed;
+                if ( liFirstCrashed >= 0 )
+                {
+                    const BrnTraffic::BrnTrafficIO::TrafficSoundEntity& lrCrashed =
+                        lpSound->maActiveEntityList[liFirstCrashed];
+                    *CgsDev::Log::gpDebugPrint
+                        << " first-crashed=" << static_cast<u32>( lrCrashed.mu16EntityIndex )
+                        << " class=" << static_cast<u32>( lrCrashed.muVehicleClass )
+                        << " physical=" << ( lrCrashed.mbIsPhysical ? 1 : 0 )
+                        << " speed=" << lrCrashed.mfSpeed;
+                }
+                *CgsDev::Log::gpDebugPrint << " director=" << luDirector << " [FLAG PC witness]\n";
+            }
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
