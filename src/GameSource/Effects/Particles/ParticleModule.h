@@ -21,6 +21,7 @@
 #include "GameSource/Effects/Particles/Native/BrnTrailSystem.h"        // BrnParticle::Native::TrailSystem (mTrailSystem, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnDebrisRenderer.h"     // BrnParticle::Native::BrnDebrisRenderer (mDebrisRenderer, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnDebrisArray.h"        // BrnParticle::Native::BrnDebrisArray (maDebris[5], BY VALUE)
+#include "GameSource/Effects/Particles/Native/BrnDebrisArrayLite.h"    // Native::DebrisUpdateJobData (maDebrisUpdateJobData[5], BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleRenderer.h" // BrnParticle::Native::BrnSimpleParticleRenderer (BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleArray.h"    // BrnParticle::Native::BrnSimpleParticleArray (maSimpleParticles[13], BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnSparkRenderer.h"          // SparkRenderer / SparkArray / SparkFrameDataSet (BY VALUE)
@@ -476,6 +477,16 @@ namespace BrnParticle
                                    KI_PARTICLE_MODULE_INTERTHREAD_COMMAND_QUEUE_MEMSIZE, 16>* lpQueue,
                                const ParticleRenderData& lrRenderData);
 
+        // ---- THE DEBRIS SIMULATION (DWARF :579 / :582) -----------------------------------------
+        // X360 0x82289A98 (dispatch thread, straight after ProcessEventQueue): expire each array's
+        // old buckets, then build one DebrisUpdateJobData per array with live buckets and run it.
+        // The console hands the jobs to EA::Jobs::JobScheduler::AddJobs; this host runs them to
+        // completion in place (see BrnDebrisArrayLite.h -- the ONLY scheduling difference).
+        void BeginSimulateDebris(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInput);
+        // X360 0x8227A1F0 (render thread, ahead of the debris pass): wait on the jobs Begin started
+        // and reset the wait count to -1.
+        void EndSimulateDebris(const ParticleRenderData& lrRenderData);
+
         // X360 0x8229A138 -- THE GRINDING-SPARK CONSUMER. Walk the contact's start->end segment
         // and launch mfNumSparks + 1 sparks off it (SpawnSparksAlongLine is inlined here).
         void HandleSpawnSparksAlongLineEvent(const SpawnSparksAlongLineEvent* lpEvent,
@@ -854,8 +865,17 @@ namespace BrnParticle
         static const s32 KI_NUM_FRAME_JOBS = 5;
         u8  maFrameJobsPlaceholder[KI_NUM_FRAME_JOBS * 0x350]; // +0x26400
 
+        // DWARF :397 DebrisUpdateJobData maDebrisUpdateJobData[5] -- the five debris jobs' input,
+        // console +0x27500 at a 0x80 stride (Construct zeroes each 0x80 bytes, 0x822946C4..0x822946DC;
+        // BeginSimulateDebris fills `this + 0x27500 + n * 0x80`). The x64 host widens the two
+        // pointers inside it to 0x90 bytes, so the array starts right at the jobs' end (+0x27490, the
+        // console's own 0x70-byte gap) and still ends before +0x27780 -- the tail stays pinned.
+        static const s32 KI_NUM_DEBRIS_UPDATE_JOBS = 5;   // KU_DEBRISUPDATE_NUMJOBS
+        Native::DebrisUpdateJobData maDebrisUpdateJobData[KI_NUM_DEBRIS_UPDATE_JOBS];    // +0x27490 (x64)
+
         // Gap to the trailing members at +0x27780.
-        u8  maPad26400EndTo27780[0x27780 - (0x26400 + KI_NUM_FRAME_JOBS * 0x350)]; // -> +0x27780
+        u8  maPad26400EndTo27780[0x27780 - (0x26400 + KI_NUM_FRAME_JOBS * 0x350)
+                                 - KI_NUM_DEBRIS_UPDATE_JOBS * sizeof(Native::DebrisUpdateJobData)]; // -> +0x27780
 
         // +0x27780 (161664): DWARF :160 muNumDebrisUpdateJobsToWaitOn (Construct: -1).
         // NOTE: the earlier model called the byte at +0x27784 "a bool the ctor zeroes last";
