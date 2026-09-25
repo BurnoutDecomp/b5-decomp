@@ -1751,7 +1751,10 @@ namespace Vehicle
                 if (static_cast<s32>(MS.maTargetIds[liT].muValue) == MS.miCurrentTargetId)
                     lfWeight *= KF_TARGET_STICKINESS;     // x 0.5 (flt_82F2A32C)
 
-                if (lfWeight <= lfBestWeight)
+                // 0x82620104 fcmpu weight, best ; 0x82620108 bgt 0x82620114 (skip), else 0x8262010C
+                // takes it: bgt is not taken on an unordered compare, so a NaN weight (or a NaN best)
+                // is ACCEPTED -- `!(w > best)`, not `w <= best` (crash parity FX-GATE, REVIEW-J).
+                if (!(lfWeight > lfBestWeight))
                 {
                     lfBestWeight = lfWeight;
                     liBest = liT;
