@@ -1857,16 +1857,16 @@ namespace CgsSceneManager
                 s32 liBatchCount = 0;
 
                 u16 lu16Link = lrNode.muHeadIndex;
+                // The count is trusted, as on the console: the chain is walked muNumElements times, and its
+                // next-link step (0x828BD300..0x828BD31C) turns an end-of-chain 0xFFFF into a null link that the
+                // next pass would dereference. REMOVED 2026-09-25 (REVIEW-J on 335639ce): an invented NOT-X360
+                // guard stood here (stop + assert on a 0xFFFF link). MEASURED never taken with a default-off
+                // counter (BRN_OCTREE_CHAIN_DIAG, not kept) on the camera closure's line walk: sweep cell
+                // fxfu_chainguard_h225_s60_r1 (>= 100 chains, 336000 links) and organic run fxfu_chainguard_organic
+                // 20260925_195356 (>= 100 chains, 170152 links), both exe 340af252 with BRN_FXD2_SCENEQUERY=1 --
+                // 0 guard hits.
                 for (u32 luRemaining = static_cast<u32>(liNumElements); luRemaining != 0; --luRemaining)
                 {
-                    // NOT X360: the console trusts the count; a chain that ends early leaves it a null
-                    // link (0x828BD31C) to dereference. The host stops instead of reading past the pool.
-                    if (lu16Link == KU_INVALID_ENTITY_LINK)
-                    {
-                        CGS_ASSERT(false, "LooseOctree::LineTestRecursive: node entity chain shorter than muNumElements");
-                        break;
-                    }
-
                     const SpatialPartitionEntityLink& lrLink = GetEntityLink(lu16Link);
                     if ((lpParams->mx32EntityTypeFlags & lrLink.mx32TypeFlags) != 0)
                     {
