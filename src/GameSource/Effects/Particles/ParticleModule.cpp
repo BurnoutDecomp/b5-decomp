@@ -487,6 +487,7 @@ namespace BrnParticle
     u32 gauSparkContactRejected   = 0;
     u32 gauSparkEventsDrained     = 0;
     u32 gauSparkLineSpawned       = 0;
+    u32 gauSparkShowerSpawned     = 0;
 
     // [lionhandoff] FLAG PC bring-up counters -- see the witness in DispatchThreadUpdate.
     // Not console state; ours, and deleted with that witness.
@@ -1290,7 +1291,7 @@ namespace BrnParticle
                     const Native::SparkBucket* const lpHead0 = lrArray0.mRegularBank.mpBuckets;
                     char lacMsg[720];
                     std::snprintf(lacMsg, sizeof(lacMsg),
-                        "[spark] prod{q=%u hinged=%u/%u/%u call=%u post=%u rej=%u drain=%u line=%u} "
+                        "[spark] prod{q=%u hinged=%u/%u/%u call=%u post=%u rej=%u drain=%u line=%u shower=%u} "
                         "calls=%u prep=%u mod=%08X entry{head=%u nb=%u free=%u ring=%.3f} spawnCalls=%u arms=%u/%u/%u/%u live=%u batches=%d verts=%u ringNow=%.3f ring1=%.3f "
                         "flags=0x%04X dt=%.4f rdt=%.5f drew=%u/%u | bank0 head=%d nb=%u np=%u nc=%u cap=%u "
                         "mgrFree=%u/%u | a0 blur=%.4f rad=%.4f grav=%.3f bounce=%.3f "
@@ -1298,6 +1299,7 @@ namespace BrnParticle
                         gauSparkContactQueueCalls, gauSparkHingedSeen, gauSparkHingedTyped,
                         gauSparkHingedStress, gauSparkContactCalls, gauSparkContactPosted,
                         gauSparkContactRejected, gauSparkEventsDrained, gauSparkLineSpawned,
+                        gauSparkShowerSpawned,
                         suCalls, gauSparkPrepareCount,
                         static_cast<u32>(reinterpret_cast<uintptr_t>(this) & 0xFFFFFFFFu),
                         luEntryHead, luEntryNumBuckets, luEntryMgrFree, lfEntryRing,
