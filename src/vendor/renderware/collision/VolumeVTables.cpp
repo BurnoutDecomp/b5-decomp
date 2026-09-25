@@ -107,6 +107,8 @@
 //  release             82AD5078 ✅ 82AD5078 ✅  82AD5078 ✅   82AD5078 ✅ 82AD5078 ✅   82AD5078 ✅
 //
 //  ✅ = bound to a real body (36 of the 40 slots the image binds).
+//  UPDATED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)): the lineSegIntersect slots of SPHERE (82BA82C8),
+//       CAPSULE (82BAFCF8) and BOX (82BA9478) are bound too -- 39 of the 40; CYLINDER (82BAF688) stays parked.
 //  ⭐ = bound 2026-08-19 by wave Q6 cluster C4, from bodies landed the same day in
 //       TriangleVolume.cpp / CylinderVolume.cpp. Both were wave-Q5 parks; the counts moved
 //       34 -> 36 bound and 6 -> 4 parked. The per-type slot masks the run-time descriptor
@@ -245,6 +247,13 @@ namespace
         return static_cast<const SphereVolume*>(lpV)->CreateGPInstance(arInstance, lpTransform);
     }
 
+    // @ 0x82BA82C8 SphereVolume::LineSegIntersect -- bound 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)); the body is in LineSegIntersect.cpp.
+    RwBool SphereLineSegIntersect(const Volume* lpV, const Vec4& arPt1, const Vec4& arPt2,
+                                 const Vec4* lpTransform, VolumeLineSegIntersectResult& arResult, f32 afFatness)
+    {
+        return static_cast<const SphereVolume*>(lpV)->LineSegIntersect(arPt1, arPt2, lpTransform, arResult, afFatness);
+    }
+
     // -----------------------------------------------------------------------------------
     // [2] CAPSULE -- unk_82F918C0. Bodies in CapsuleVolume.cpp (read-only for this cluster).
     // -----------------------------------------------------------------------------------
@@ -273,6 +282,13 @@ namespace
     RwBool CapsuleCreateGPInstance(const Volume* lpV, GPInstance& arInstance, const Vec4* lpTransform)
     {
         return AsCapsule(lpV)->CreateGPInstance(arInstance, lpTransform);
+    }
+
+    // @ 0x82BAFCF8 CapsuleVolume::LineSegIntersect -- bound 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)); the body is in LineSegIntersect.cpp.
+    RwBool CapsuleLineSegIntersect(const Volume* lpV, const Vec4& arPt1, const Vec4& arPt2,
+                                  const Vec4* lpTransform, VolumeLineSegIntersectResult& arResult, f32 afFatness)
+    {
+        return AsCapsule(lpV)->LineSegIntersect(arPt1, arPt2, lpTransform, arResult, afFatness);
     }
 
     // -----------------------------------------------------------------------------------
@@ -345,6 +361,13 @@ namespace
         return static_cast<const BoxVolume*>(lpV)->CreateGPInstance(arInstance, lpTransform);
     }
 
+    // @ 0x82BA9478 BoxVolume::LineSegIntersect -- bound 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)); the body is in LineSegIntersect.cpp.
+    RwBool BoxLineSegIntersect(const Volume* lpV, const Vec4& arPt1, const Vec4& arPt2,
+                              const Vec4* lpTransform, VolumeLineSegIntersectResult& arResult, f32 afFatness)
+    {
+        return static_cast<const BoxVolume*>(lpV)->LineSegIntersect(arPt1, arPt2, lpTransform, arResult, afFatness);
+    }
+
     // -----------------------------------------------------------------------------------
     // [5] CYLINDER -- unk_82F91894. Bodies in CylinderVolume.cpp (read-only for this cluster).
     // -----------------------------------------------------------------------------------
@@ -398,14 +421,11 @@ const Volume::VTable gVolumeHandler_82F91740 =                  // type 1 SPHERE
     FoldedGetIntervalReturnsTrue,           // 82BAC980  ICF-folded `li r3,1 ; blr`
     SphereGetMaximumFeature,                // 82BA81B0  SphereVolume::GetMaximumFeature
     SphereCreateGPInstance,                 // 82BA8100  SphereVolume::CreateGPInstance
-    // ⛔ PARKED -- SphereVolume::LineSegIntersect @0x82BA82C8, 136 insns. A ray/sphere kernel
-    // around rwcSphereLineSegIntersect @0x82BA81D8 (bodied, LineSegIntersect.cpp:700) plus two
-    // hand-written Newton-Raphson chains (vrefp + 2 rounds for the 1/t reciprocal, vrsqrtefp +
-    // 2 rounds for the normal) and a vcmpgtfp./mfocrf CR-bit predicate. Not on the car-vs-prop
-    // contact path -- the only consumer of this slot is rw::collision::VolumeLineQuery, itself
-    // still a link stub (SDKs/EATech/AptRenderLinkStubs.cpp:601). Raw asm dumped to
-    // scratchpad/waveQ5/vtbind/asm/0x82BA82C8.txt so the next owner does not re-export it.
-    0,
+    // ✅ UNPARKED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)). The wave-Q5 park read: a ray/sphere kernel
+    // around rwcSphereLineSegIntersect with two Newton-Raphson chains and a CR-bit predicate, whose only
+    // consumer, rw::collision::VolumeLineQuery, was a link stub. That consumer has a body since d6040b9f and
+    // the director camera's line tests reach it; the kernel is in LineSegIntersect.cpp.
+    SphereLineSegIntersect,                 // 82BA82C8  SphereVolume::LineSegIntersect
     FoldedReleaseEmptyBody,                  // 82AD5078  ICF-folded empty `blr`
     "SphereVolume",
     0
@@ -419,12 +439,10 @@ const Volume::VTable gVolumeHandler_82F918C0 =                  // type 2 CAPSUL
     FoldedGetIntervalReturnsTrue,           // 82BAC980
     CapsuleGetMaximumFeature,               // 82BAF808  CapsuleVolume::GetMaximumFeature
     CapsuleCreateGPInstance,                // 82BAF6F0  CapsuleVolume::CreateGPInstance
-    // ⛔ PARKED -- CapsuleVolume::LineSegIntersect @0x82BAFCF8, 428 insns. Already parked with
-    // a full reason by its own TU's owner (CapsuleVolume.hpp:29-45, "BLOCKED"): a
-    // register-allocated VMX line/segment kernel (__savevmx_120, CR-bit predicate extraction)
-    // calling rwcSphereLineSegIntersect + rwcCylinderLineSegIntersect. No declaration exists
-    // to bind, and the header is read-only for this cluster.
-    0,
+    // ✅ UNPARKED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)). The park read: a register-allocated VMX
+    // kernel over rwcSphereLineSegIntersect + rwcCylinderLineSegIntersect with no declaration to bind. Both are
+    // there now: CapsuleVolume.hpp declares it and LineSegIntersect.cpp holds the body.
+    CapsuleLineSegIntersect,                // 82BAFCF8  CapsuleVolume::LineSegIntersect
     FoldedReleaseEmptyBody,                  // 82AD5078
     "CapsuleVolume",
     0
@@ -459,13 +477,11 @@ const Volume::VTable gVolumeHandler_82F9176C =                  // type 4 BOX
     FoldedGetIntervalReturnsTrue,           // 82BAC980
     BoxGetMaximumFeature,                   // 82BA87F0  BoxVolume::GetMaximumFeature
     BoxCreateGPInstance,                    // 82BA92E8  BoxVolume::CreateGPInstance
-    // ⛔ PARKED -- BoxVolume::LineSegIntersect @0x82BA9478, 723 insns, the largest body left in
-    // this directory after the cylinder SAT helper: six slab/cap arms over
-    // rwcSphereLineSegIntersect, rwcPlaneLineSegIntersect @0x82BA8818 (which has NO body in the
-    // tree either -- a second hole behind this one) and rwcCylinderLineSegIntersect, with
-    // __savevmx_122 hand register allocation. Same "no consumer on this path" argument as the
-    // sphere's. Raw asm: scratchpad/waveQ5/vtbind/asm/0x82BA9478.txt.
-    0,
+    // ✅ UNPARKED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)). The park read: six slab/cap arms over the
+    // sphere / plane / cylinder kernels, rwcPlaneLineSegIntersect @0x82BA8818 itself bodyless, and no consumer
+    // on the path. The plane kernel and the walk are in LineSegIntersect.cpp, and the consumer
+    // (VolumeLineQuery::GetIntersections, d6040b9f) is live.
+    BoxLineSegIntersect,                    // 82BA9478  BoxVolume::LineSegIntersect
     FoldedReleaseEmptyBody,                  // 82AD5078
     "BoxVolume",
     0

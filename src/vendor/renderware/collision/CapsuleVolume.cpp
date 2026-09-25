@@ -21,6 +21,8 @@
 //   narrow-phase kernel. Left BLOCKED per the project's no-fabrication rule;
 //   note its three .rdata scalars ARE recovered (0.0f / 1.0f / -1.0f) and are
 //   not the blocker -- the register-allocated per-lane geometry is.
+// LANDED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)): LineSegIntersect @ 0x82BAFCF8 is decoded and bodied in
+// LineSegIntersect.cpp, beside the rwc* kernels it calls (so this TU keeps no link dependency on them).
 // ===========================================================================
 
 namespace rw

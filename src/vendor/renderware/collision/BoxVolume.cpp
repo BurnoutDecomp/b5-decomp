@@ -76,6 +76,14 @@
 //       __savevmx_122 hand register allocation. Same "no caller on this path" argument.
 // Both descriptor slots are therefore left NULL in VolumeVTables.cpp with their X360
 // addresses named, which is an honest hole -- not a stub that returns a wrong answer.
+//
+// LANDED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)) -- the two parks above are closed: their consumer,
+// rw::collision::VolumeLineQuery::GetIntersections, has a body since d6040b9f, and the director camera's line
+// tests reach it. The two bodies (and rwcPlaneLineSegIntersect @0x82BA8818) are in LineSegIntersect.cpp, beside the
+// rwc* kernels they call, NOT here: this TU is compiled on its own by other tests (run_fxdirector2_scene_query links it
+// for SphereVolume::Initialize) and must not gain a link dependency on the line-test TU.
+//   rw::collision::SphereVolume::LineSegIntersect  @ 0x82BA82C8
+//   rw::collision::BoxVolume::LineSegIntersect     @ 0x82BA9478
 // ===========================================================================
 
 namespace rw

@@ -1,5 +1,8 @@
 #include "vendor/renderware/collision/LineSegIntersect.hpp"
 #include "vendor/renderware/collision/GPInstance.hpp"   // TriangleNearestPointRegion (7-param, GPTriangle.cpp)
+#include "vendor/renderware/collision/CollisionVolume.hpp"    // SphereVolume / BoxVolume (stage (b) kernels)
+#include "vendor/renderware/collision/CapsuleVolume.hpp"      // CapsuleVolume (stage (b) kernel)
+#include "vendor/renderware/collision/LineSegKernelMath.hpp"  // the kernels' console rounding (stage (b))
 
 #include <cmath>     // sqrt, fabs, powf
 #include <cstring>   // memcpy (bit-exact float constant)
@@ -15,6 +18,12 @@
 //   rw::collision::rwcTorusLineSegIntersect      @ 0x82BADAB0   (wave 2)
 //   rw::collision::ThinTriangleLineSegIntersect  @ 0x82BB9EB8   (wave 2)
 //   rw::collision::TriangleLineSegIntersect      @ 0x82BBB7B8   (wave 2)
+//   rw::collision::rwcPlaneLineSegIntersect      @ 0x82BA8818   (2026-09-25, FX-FOLLOWUPS stage (b))
+//   rw::collision::SphereVolume::LineSegIntersect  @ 0x82BA82C8 (2026-09-25, stage (b) -- at the foot)
+//   rw::collision::BoxVolume::LineSegIntersect     @ 0x82BA9478 (2026-09-25, stage (b) -- at the foot)
+//   rw::collision::CapsuleVolume::LineSegIntersect @ 0x82BAFCF8 (2026-09-25, stage (b) -- at the foot)
+// The stage (b) bodies do NOT follow the lowering note below: they round per instruction (LineSegKernelMath.hpp,
+// scratch ROUNDING_RULE.md) and keep all four lanes.
 //
 // Every hand-vectorised body is lowered to portable scalar maths per the
 // committed Feature / FeatureEdge / AALineClipper precedent; branch polarity,
@@ -755,6 +764,44 @@ s32 rwcSphereLineSegIntersect(Fraction* lpDist,           // r3
 }
 
 // ===========================================================================
+// rw::collision::rwcPlaneLineSegIntersect @ 0x82BA8818 (29 insns) -- canonical rwccore.h:3716 (Feb-2007)
+//     `int32_t rwcPlaneLineSegIntersect(Fraction *dist, float32_t orig_i, float32_t seg_i, float32_t sign,
+//                                       float32_t disp)`
+// LANDED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)): BoxVolume::LineSegIntersect's slab / face test. The PS3
+// DecFIGS twin (0xDD49E4) is the same test.
+//   0x82BA8818  num = orig*sign - disp (fmsubs f0, f1, f3, f4: ONE rounding)
+//   0x82BA8824  NOT > 0.0 (flt_82001CC0; a NaN included): on or past the plane -> {0.0, 1.0 (flt_82001C98)}, 1
+//   0x82BA8844  den = -(seg*sign) (fmuls ; fneg); num and den stored
+//   0x82BA885C  den < flt_821801B0 (0x00200000, 2^-128) -> -1
+//   0x82BA8868  den < num * 2^-128 (fmuls) -> -1
+//   0x82BA8870  num < den -> 1 (`bltlr`), else 0
+// ===========================================================================
+static const f32 KF_PLANE_LINE_EPSILON = 0x1p-128f;   // flt_821801B0 == 0x00200000 (subnormal, exact)
+
+s32 rwcPlaneLineSegIntersect(Fraction* lpDist, f32 afOrig, f32 afSeg, f32 afSign, f32 afDisp)
+{
+    const f32 lfNum = std::fma(afOrig, afSign, -afDisp);     // fmsubs f0, f1, f3, f4
+    if (!(lfNum > 0.0f))                                      // fcmpu f0, 0.0 ; bgt @0x82BA8828
+    {
+        lpDist->num = 0.0f;                                   // stfs f13 (flt_82001CC0)
+        lpDist->den = 1.0f;                                   // stfs f0  (flt_82001C98)
+        return 1;
+    }
+    const f32 lfDen = -(afSeg * afSign);                      // fmuls f13, f2, f3 ; fneg f13
+    lpDist->num = lfNum;                                      // stfs f0, 0(r3)
+    lpDist->den = lfDen;                                      // stfs f13, 4(r3)
+    if (lfDen < KF_PLANE_LINE_EPSILON)                        // blt @0x82BA8860
+    {
+        return -1;
+    }
+    if (lfDen < lfNum * KF_PLANE_LINE_EPSILON)                // fmuls ; blt @0x82BA886C
+    {
+        return -1;
+    }
+    return (lfNum < lfDen) ? 1 : 0;                           // bltlr @0x82BA8878
+}
+
+// ===========================================================================
 // rw::collision::rwcCylinderLineSegIntersect @ 0x82BAF8A0
 //
 // X360 register map (__fastcall; the vector InParams ride in VMX v1..v4, the
@@ -1179,6 +1226,613 @@ s32 TriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,   // r3 (r3
     }
 
     return liHit;                                       // r3 pass-through
+}
+
+
+// ===========================================================================
+// SphereVolume::LineSegIntersect @ 0x82BA82C8 (136 insns) -- DWARF sphere.h:90
+//     `RwBool LineSegIntersect(const Vector3&, const Vector3&, const Matrix44Affine*,
+//                              VolumeLineSegIntersectResult&, float32_t) const`
+// LANDED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)); the descriptor slot was parked NULL. Homed here, beside
+// the rwc* kernels it calls, rather than in BoxVolume.cpp (see that file's LANDED note).
+// r3 = this, r4 = &pt1, r5 = &pt2, r6 = tm, r7 = &result, f1 = fatness. Rounding: LineSegKernelMath.hpp.
+//   0x82BA82EC  the centre is the frame's translation row, put through tm when there is one (three fused
+//               vmaddfp: row0*c.x + row3, then row1*c.y, row2*c.z) -- else the row as it is (0x82BA8324)
+//   0x82BA8328  result.v = this, BEFORE the test (a miss leaves it written and nothing else)
+//   0x82BA8338  seg = pt2 - pt1 (vsubfp); R = radius + fatness (fadds 0x82BA8344)
+//   0x82BA8360  rwcSphereLineSegIntersect(&dist, &pt1, &seg, &centre, R); not > 0 -> return 0
+//   0x82BA8384  lineParam = num / den (fdivs); position = seg*t + pt1 (vmaddfp 0x82BA83AC);
+//               normal = position - centre (vsubfp 0x82BA83B0)
+//   0x82BA83BC  `fcmpu num, flt_82001CC0 (0.0) ; ble`: a num that is NOT <= 0 (a NaN included) scales the
+//               normal by the refined 1/R (vrefp + 2 steps, 0x82BA83E0..0x82BA83F4);
+//               else (the start was inside) the guarded length |n| (vmsum3fp128, rsqrt + 2 steps, the vcmpeqfp /
+//               vsel that maps |n|^2 == 0 to 0) is compared `vcmpgtfp.` against unk_821800C0 (0x00800000,
+//               FLT_MIN): all-true normalises n by the refined 1/sqrt(|n|^2) -- the console recomputes the same
+//               value (0x82BA8468..0x82BA8498); otherwise n stays as it is
+//   0x82BA84CC  position = position - normal * fatness (vmulfp128, vsubfp); return 1. volParam is not written.
+// ===========================================================================
+RwBool SphereVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+                                      VolumeLineSegIntersectResult& arResult, f32 afFatness) const
+{
+    using namespace linemath;
+    using linemath::Dot3; using linemath::MakeVec4; using linemath::Sub;   // this TU has helpers of these names
+
+    const Vec4 lvCentre = (lpTransform != 0) ? FramePoint(lpTransform, maTransform[3]) : maTransform[3];
+    arResult.v = reinterpret_cast<uintptr_t>(this);                              // stw r11, 0(r7) @0x82BA8328
+
+    const Vec4 lvSeg    = Sub(arPt2, arPt1);                                    // vsubfp @0x82BA8338
+    const f32  lfRadius = mfRadius + afFatness;                                 // fadds  @0x82BA8344
+    Fraction lDist;
+    if (!(rwcSphereLineSegIntersect(&lDist, &arPt1, &lvSeg, &lvCentre, lfRadius) > 0))   // cmpwi ; bgt
+    {
+        return 0;
+    }
+
+    arResult.lineParam = lDist.num / lDist.den;                                 // fdivs @0x82BA8384
+    arResult.position  = MaddSplat(lvSeg, arResult.lineParam, arPt1);           // vmaddfp @0x82BA83AC
+    Vec4 lvNormal = Sub(arResult.position, lvCentre);                           // vsubfp  @0x82BA83B0
+
+    if (!(lDist.num <= KF_LINE_ZERO))                                           // fcmpu ; ble @0x82BA83BC
+    {
+        lvNormal = MulSplat(lvNormal, RefinedRecip(lfRadius));                  // 0x82BA83E0..0x82BA83F4
+    }
+    else
+    {
+        const f32 lfLengthSq = Dot3(lvNormal, lvNormal);                        // vmsum3fp128 @0x82BA8424
+        const f32 lfLength   = (lfLengthSq == 0.0f) ? 0.0f : lfLengthSq * RefinedRsqrt(lfLengthSq);   // vsel
+        if (lfLength > KF_LINE_FLT_MIN)                                         // vcmpgtfp. @0x82BA8458
+        {
+            lvNormal = MulSplat(lvNormal, RefinedRsqrt(lfLengthSq));            // 0x82BA8468..0x82BA8498
+        }
+    }
+    arResult.normal   = lvNormal;
+    arResult.position = Sub(arResult.position, MulSplat(lvNormal, afFatness)); // vmulfp128 ; vsubfp @0x82BA84D0
+    return 1;
+}
+
+// ===========================================================================
+// BoxVolume::LineSegIntersect @ 0x82BA9478 (723 insns) -- DWARF box.h:176, same signature as the sphere's.
+// LANDED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)); the descriptor slot was parked NULL. Homed here, beside
+// the rwc* kernels it calls, rather than in BoxVolume.cpp (see that file's LANDED note).
+// r3 = this (r29), r4 = &pt1, r5 = &pt2, r6 = tm (r26), r7 = &result (r27), f1 = fatness (f20).
+// The line is walked through the box's Voronoi regions in the box's frame (the PS3 DecFIGS twin
+// 0xDD4FA4 has the same structure). R = radius + fatness (fadds 0x82BA94D4) is the rounding of every edge,
+// corner and face.
+//   0x82BA9508  the frame: this->transform composed with tm (LineSegKernelMath ComposeFrame), or as it is
+//   0x82BA95FC  pt1 / pt2 into the frame (InvertFrame / ToLocal); delta = end - start
+//   0x82BA9694  per axis i: dir[i] = fsel(delta[i]) (+1 / -1); the separations -h - p and p - h keep the
+//               largest (`ble` -- a NaN takes it; starting value flt_82035570 == -FLT_MAX) with its axis and sign;
+//               region[i] = -1 below the slab (`bge`), +1 above (`ble`), else 0 and counted -- the first inside
+//               axis is remembered, the second turns it into the third axis (`subf r31, r31, 3 - i`)
+//   0x82BA9750  lineParam = 0, result.v = this
+//   loop, at most six steps (li r19, 6 ; addic. -1 @0x82BA9C70):
+//     3 inside axes (0x82BA9E98): the start is inside -> normal = the largest separation's axis * its sign
+//     2 (a face, 0x82BA9B28): the fattened face plane (h + R, fadds) -- a receding line (-1) misses; a start on
+//       it hits at once; else the two in-face axes' exits (sign -dir, disp -h) may come first (the earlier or
+//       equal wins): the face plane first is the hit, an exit makes that axis +/-dir and the region an edge
+//     0 or 1 (0x82BA9774): the feature point is region * h per axis (w 0)
+//     0 (a corner, 0x82BA97C0): the corner sphere (radius R; not R > 0 counts as no hit) -- a receding line
+//       misses, a start inside hits at once; else the faces the line moves toward (dir * region < 0) may be
+//       crossed first (the earlier or equal wins): the sphere first is the hit, a face makes that axis inside
+//       (an edge)
+//     1 (an edge, 0x82BA98C4): the infinite cylinder along the edge axis e (|axis|^2 1, radius R, no invert, no
+//       ignore-inside) -- a receding line misses, a start inside hits at once; else the end cap along e
+//       (h - p*sign(delta) fused, over delta*sign, the den set to 1 when not >= FLT_MIN flt_8218017C, valid
+//       while num <= den) and the other axes' faces compete (the earlier or equal wins): the cylinder earlier
+//       or equal is the hit; the cap makes e +/-dir (a corner), a face makes that axis inside (a face region)
+//     each step: t = num / den, start = delta*t + start (fused), lineParam += t, delta = end - start
+//   the hits: position (in the frame) and normal --
+//     corner  immediate: the start, (start - corner) * rsqrt|.|^2 (no zero guard)
+//             sphere:    delta*t + start, (hit - corner) * refined 1/R, lineParam += t
+//     edge    immediate: the start, the radial part (axis e zeroed) * rsqrt|.|^2
+//             cylinder:  delta*t + start, the radial part * refined 1/R, lineParam += t
+//     face    immediate: the start;  plane: delta*t + start, lineParam += t -- normal = axis * region
+//   0x82BA9EB4  position / normal back out of the frame (FramePoint / FrameDirection), volParam = (region, 0),
+//               position -= normal * fatness; return 1.
+// lineParam SUMS the step fractions, each taken over the remaining segment -- the console's accumulation
+// (the fat triangle walk accumulates the same way).
+// ===========================================================================
+RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+                                   VolumeLineSegIntersectResult& arResult, f32 afFatness) const
+{
+    using namespace linemath;
+    using linemath::Dot3; using linemath::MakeVec4; using linemath::Sub;   // this TU has helpers of these names
+
+    const f32 lafHalf[3] = { mBoxData.mfHx, mBoxData.mfHy, mBoxData.mfHz };   // lfs 0x44 / 0x48 / 0x4C
+    const f32 lfRadius   = mfRadius + afFatness;                                // fadds @0x82BA94D4
+
+    Vec4 lavFrame[4];
+    if (lpTransform != 0)
+    {
+        ComposeFrame(maTransform, lpTransform, lavFrame);                       // 0x82BA9508..0x82BA95A4
+    }
+    else
+    {
+        lavFrame[0] = maTransform[0];
+        lavFrame[1] = maTransform[1];
+        lavFrame[2] = maTransform[2];
+        lavFrame[3] = maTransform[3];
+    }
+    const LocalFrame lLocal = InvertFrame(lavFrame);
+    const Vec4 lvEnd  = ToLocal(lLocal, arPt2);                                 // v126
+    Vec4 lvPoint      = ToLocal(lLocal, arPt1);                                 // var_270
+    Vec4 lvDelta      = Sub(lvEnd, lvPoint);                                    // var_300
+
+    // ---- classify the start (0x82BA9694..0x82BA974C) -----------------------------------------------------
+    f32 lafRegion[3];                       // var_2F0
+    f32 lafDir[3];                          // var_2A0
+    f32 lfMaxSeparation = KF_LINE_NEG_FLT_MAX;
+    u32 luMaxAxis       = 0;                // r20
+    f32 lfMaxSign       = 1.0f;             // f25
+    u32 luInside        = 0;                // r6
+    u32 luAxis          = 0;                // r31
+    for (u32 luI = 0; luI < 3u; ++luI)
+    {
+        const f32 lfHalf    = lafHalf[luI];
+        const f32 lfNegHalf = -lfHalf;
+        const f32 lfPoint   = Lane(lvPoint, luI);
+        lafDir[luI] = (Lane(lvDelta, luI) >= 0.0f) ? 1.0f : -1.0f;              // fsel @0x82BA96B4
+
+        f32 lfSeparation = lfNegHalf - lfPoint;                                 // fsubs @0x82BA96BC
+        if (!(lfSeparation <= lfMaxSeparation))
+        {
+            lfMaxSeparation = lfSeparation; luMaxAxis = luI; lfMaxSign = -1.0f;
+        }
+        lfSeparation = lfPoint - lfHalf;                                        // fsubs @0x82BA96D4
+        if (!(lfSeparation <= lfMaxSeparation))
+        {
+            lfMaxSeparation = lfSeparation; luMaxAxis = luI; lfMaxSign = 1.0f;
+        }
+
+        if (!(lfPoint >= lfNegHalf))
+        {
+            lafRegion[luI] = -1.0f;
+        }
+        else if (!(lfPoint <= lfHalf))
+        {
+            lafRegion[luI] = 1.0f;
+        }
+        else
+        {
+            ++luInside;
+            if (luInside == 1u)
+            {
+                luAxis = luI;
+            }
+            else if (luInside == 2u)
+            {
+                luAxis = (3u - luI) - luAxis;                                   // subf r31, r31, r7
+            }
+            lafRegion[luI] = 0.0f;
+        }
+    }
+    arResult.lineParam = KF_LINE_ZERO;                                          // stfs @0x82BA9750
+    arResult.v         = reinterpret_cast<uintptr_t>(this);                    // stw  @0x82BA9754
+
+    Fraction lDist = { 0.0f, 0.0f };        // var_310
+    Vec4 lvFeature = MakeVec4(0.0f, 0.0f, 0.0f, 0.0f);   // var_260: the corner / edge point
+    Vec4 lvPosition;
+    Vec4 lvNormal;
+    for (u32 luSteps = KU_BOX_LINE_STEPS; ; )
+    {
+        if ((luInside & 2u) != 0)
+        {
+            if (luInside != 2u)
+            {
+                // ---- 3: the start is inside the box (0x82BA9E98) ----
+                lvNormal = MakeVec4(0.0f, 0.0f, 0.0f, 0.0f);
+                Lane(lvNormal, luMaxAxis) = lfMaxSign;
+                lvPosition = lvPoint;
+                break;
+            }
+
+            // ---- 2: a face region, luAxis the outside axis (0x82BA9B28) ----
+            const u32 luFace = luAxis;
+            s32 liHit = rwcPlaneLineSegIntersect(&lDist, Lane(lvPoint, luFace), Lane(lvDelta, luFace),
+                                                 lafRegion[luFace], lafHalf[luFace] + lfRadius);
+            if (liHit < 0)
+            {
+                return 0;
+            }
+            if (liHit > 0 && lDist.num == 0.0f)                                 // 0x82BA9B84
+            {
+                lvNormal = MakeVec4(0.0f, 0.0f, 0.0f, 0.0f);
+                Lane(lvNormal, luFace) = lafRegion[luFace];
+                lvPosition = lvPoint;
+                break;
+            }
+            u32 luExit = luFace;                                                // r9
+            for (u32 luJ = NextAxis(luFace); luJ != luFace; luJ = NextAxis(luJ))
+            {
+                if (lafDir[luJ] == 0.0f)                                        // fcmpu ; beq @0x82BA9BA0
+                {
+                    continue;
+                }
+                Fraction lPlane;
+                const s32 liPlane = rwcPlaneLineSegIntersect(&lPlane, Lane(lvPoint, luJ), Lane(lvDelta, luJ),
+                                                             -lafDir[luJ], -lafHalf[luJ]);
+                if (liPlane <= 0)
+                {
+                    continue;
+                }
+                if (liHit > 0 && lPlane.den * lDist.num < lPlane.num * lDist.den)   // blt @0x82BA9C04
+                {
+                    continue;
+                }
+                lDist = lPlane; luExit = luJ; liHit = liPlane;
+            }
+            if (liHit <= 0)
+            {
+                return 0;
+            }
+            if (luExit == luFace)                                               // beq @0x82BA9C38
+            {
+                const f32 lfT = lDist.num / lDist.den;                          // fdivs @0x82BA9E58
+                lvPosition = MaddSplat(lvDelta, lfT, lvPoint);                  // vmaddfp @0x82BA9E80
+                arResult.lineParam = arResult.lineParam + lfT;                  // fadds @0x82BA9E84
+                lvNormal = MakeVec4(0.0f, 0.0f, 0.0f, 0.0f);
+                Lane(lvNormal, luFace) = lafRegion[luFace];
+                break;
+            }
+            lafRegion[luExit] = lafDir[luExit];
+            luAxis   = (3u - luExit) - luAxis;
+            luInside = 1u;
+        }
+        else
+        {
+            lvFeature = MakeVec4(lafRegion[0] * lafHalf[0], lafRegion[1] * lafHalf[1],
+                                 lafRegion[2] * lafHalf[2], 0.0f);              // fmuls @0x82BA9778..0x82BA9788
+
+            if (luInside == 0u)
+            {
+                // ---- 0: a corner region (0x82BA97B0) ----
+                s32 liHit = rwcSphereLineSegIntersect(&lDist, &lvPoint, &lvDelta, &lvFeature, lfRadius);
+                if (liHit < 0)
+                {
+                    return 0;
+                }
+                if (!(lfRadius > KF_LINE_ZERO))                                 // fcmpu ; bgt @0x82BA97D0
+                {
+                    liHit = 0;
+                }
+                if (liHit > 0 && lDist.num == 0.0f)                             // 0x82BA97E8
+                {
+                    const Vec4 lvOut = Sub(lvPoint, lvFeature);                 // vsubfp @0x82BA9CC4
+                    lvNormal   = MulSplat(lvOut, RefinedRsqrt(Dot3(lvOut, lvOut)));
+                    lvPosition = lvPoint;
+                    break;
+                }
+                s32 liCross = -1;                                               // r31
+                for (u32 luI = 0; luI < 3u; ++luI)
+                {
+                    if (!(lafDir[luI] * lafRegion[luI] < 0.0f))                 // fmuls ; bge @0x82BA9820
+                    {
+                        continue;
+                    }
+                    Fraction lPlane;
+                    const s32 liPlane = rwcPlaneLineSegIntersect(&lPlane, Lane(lvPoint, luI), Lane(lvDelta, luI),
+                                                                 lafRegion[luI], lafHalf[luI]);
+                    if (liPlane <= 0)
+                    {
+                        continue;
+                    }
+                    if (liHit > 0 && lPlane.den * lDist.num < lPlane.num * lDist.den)   // blt @0x82BA987C
+                    {
+                        continue;
+                    }
+                    lDist = lPlane; liCross = static_cast<s32>(luI); liHit = liPlane;
+                }
+                if (liHit <= 0)
+                {
+                    return 0;
+                }
+                if (liCross < 0)                                                // the sphere came first
+                {
+                    const f32 lfT = lDist.num / lDist.den;                      // fdivs @0x82BA9D08
+                    lvPosition = MaddSplat(lvDelta, lfT, lvPoint);              // vmaddfp @0x82BA9D30
+                    const Vec4 lvOut = Sub(lvPosition, lvFeature);              // vsubfp  @0x82BA9D34
+                    arResult.lineParam = arResult.lineParam + lfT;              // fadds   @0x82BA9D40
+                    lvNormal = MulSplat(lvOut, RefinedRecip(lfRadius));         // 0x82BA9D50..0x82BA9D64
+                    break;
+                }
+                lafRegion[liCross] = 0.0f;                                      // stfsx @0x82BA98BC
+                luAxis   = static_cast<u32>(liCross);
+                luInside = 1u;                                                  // mr r6, r28 @0x82BA9C58
+            }
+            else
+            {
+                // ---- 1: an edge region along luAxis (0x82BA98C4) ----
+                const u32 luEdge = luAxis;
+                const Vec4 lvAxis = MakeVec4((luEdge == 0u) ? 1.0f : 0.0f, (luEdge == 1u) ? 1.0f : 0.0f,
+                                             (luEdge == 2u) ? 1.0f : 0.0f, 0.0f);   // cntlzw ; fcfid @0x82BA98CC
+                s32 liHit = rwcCylinderLineSegIntersect(&lDist, KF_LINE_ONE, lfRadius, 0, 0,
+                                                        lvPoint, lvDelta, lvFeature, lvAxis);
+                if (liHit < 0)
+                {
+                    return 0;
+                }
+                if (!(lfRadius > KF_LINE_ZERO))                                 // fcmpu ; bgt @0x82BA9954
+                {
+                    liHit = 0;
+                }
+                if (liHit > 0 && lDist.num == 0.0f)                             // 0x82BA996C
+                {
+                    Vec4 lvRadial = Sub(lvPoint, lvFeature);                    // vsubfp @0x82BA9D90
+                    Lane(lvRadial, luEdge) = 0.0f;                              // stfsx @0x82BA9D9C
+                    lvNormal   = MulSplat(lvRadial, RefinedRsqrt(Dot3(lvRadial, lvRadial)));
+                    lvPosition = lvPoint;
+                    break;
+                }
+
+                // The end cap along the edge, then the faces the line moves toward (0x82BA9970..0x82BA9AA8).
+                const f32 lfCapSign = (Lane(lvDelta, luEdge) > 0.0f) ? 1.0f : -1.0f;   // fcmpu ; ble @0x82BA9990
+                Fraction lEvent;
+                lEvent.den = Lane(lvDelta, luEdge) * lfCapSign;                  // fmuls   @0x82BA99C0
+                lEvent.num = Nmsub(Lane(lvPoint, luEdge), lfCapSign, lafHalf[luEdge]);   // fnmsubs @0x82BA99DC
+                if (!(lEvent.den >= KF_LINE_FLT_MIN))                           // bge @0x82BA99E8
+                {
+                    lEvent.den = 1.0f;
+                }
+                s32 liEvent = (lEvent.num <= lEvent.den) ? 1 : 0;               // ble @0x82BA99FC
+                u32 luEventAxis = luEdge;                                       // r30
+                for (u32 luJ = NextAxis(luEdge); luJ != luEdge; luJ = NextAxis(luJ))
+                {
+                    if (!(lafDir[luJ] * lafRegion[luJ] < 0.0f))                 // fmuls ; bge @0x82BA9A28
+                    {
+                        continue;
+                    }
+                    Fraction lPlane;
+                    const s32 liPlane = rwcPlaneLineSegIntersect(&lPlane, Lane(lvPoint, luJ), Lane(lvDelta, luJ),
+                                                                 lafRegion[luJ], lafHalf[luJ]);
+                    if (liPlane <= 0)
+                    {
+                        continue;
+                    }
+                    if (liEvent > 0 && lPlane.den * lEvent.num < lPlane.num * lEvent.den)   // blt @0x82BA9A80
+                    {
+                        continue;
+                    }
+                    lEvent = lPlane; luEventAxis = luJ; liEvent = liPlane;
+                }
+
+                if (liHit > 0
+                    && (!(liEvent > 0) || lEvent.num * lDist.den >= lEvent.den * lDist.num))   // 0x82BA9AB8..0x82BA9ACC
+                {
+                    const f32 lfT = lDist.num / lDist.den;                      // fdivs @0x82BA9DE0
+                    lvPosition = MaddSplat(lvDelta, lfT, lvPoint);              // vmaddfp @0x82BA9E14
+                    Vec4 lvRadial = Sub(lvPosition, lvFeature);                 // vsubfp  @0x82BA9E18
+                    Lane(lvRadial, luEdge) = 0.0f;                              // stfsx   @0x82BA9E20
+                    arResult.lineParam = arResult.lineParam + lfT;              // fadds (the shared tail)
+                    lvNormal = MulSplat(lvRadial, RefinedRecip(lfRadius));
+                    break;
+                }
+                if (liEvent <= 0)
+                {
+                    return 0;
+                }
+                if (luEventAxis == luEdge)                                      // bne @0x82BA9AE0
+                {
+                    lafRegion[luEdge] = lafDir[luEdge];                         // off the end: a corner
+                    luInside = 0u;
+                }
+                else
+                {
+                    luInside = 2u;                                              // onto a face
+                    luAxis   = (3u - luEventAxis) - luEdge;
+                    lafRegion[luEventAxis] = 0.0f;
+                }
+                lDist = lEvent;
+            }
+        }
+
+        // ---- the step (0x82BA9C5C..0x82BA9C9C) ----
+        const f32 lfT = lDist.num / lDist.den;                                  // fdivs @0x82BA9C64
+        lvPoint = MaddSplat(lvDelta, lfT, lvPoint);                             // vmaddfp @0x82BA9C80
+        arResult.lineParam = arResult.lineParam + lfT;                          // fadds @0x82BA9C84
+        lvDelta = Sub(lvEnd, lvPoint);                                          // vsubfp128 @0x82BA9C8C
+        if (--luSteps == 0u)                                                    // addic. ; bne @0x82BA9C9C
+        {
+            return 0;
+        }
+    }
+
+    // ---- the hit, back out of the frame (0x82BA9EB4..0x82BA9FA8) ----
+    const Vec4 lvWorldPosition = FramePoint(lavFrame, lvPosition);
+    const Vec4 lvWorldNormal   = FrameDirection(lavFrame, lvNormal);
+    arResult.normal   = lvWorldNormal;
+    arResult.volParam = MakeVec4(lafRegion[0], lafRegion[1], lafRegion[2], 0.0f);
+    arResult.position = Sub(lvWorldPosition, MulSplat(lvWorldNormal, afFatness));
+    return 1;
+}
+
+// ===========================================================================
+// CapsuleVolume::LineSegIntersect @ 0x82BAFCF8 (428 insns) -- DWARF capsule.h:144
+//     `RwBool LineSegIntersect(const Vector3&, const Vector3&, const Matrix44Affine*,
+//                              VolumeLineSegIntersectResult&, float32_t) const`
+// LANDED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)); the BLOCKED note in CapsuleVolume.hpp predates it.
+// Homed here, beside the rwc* kernels it calls, rather than in CapsuleVolume.cpp.
+// r3 = this (r30), r4 = &pt1, r5 = &pt2, r6 = tm (r28), r7 = &result (r29), f1 = fatness (f21). Rounding:
+// LineSegKernelMath.hpp. The PS3 DecFIGS twin 0xDD79BC has the same structure.
+// The capsule is the segment z in [-hh, +hh] of its frame (hh = +0x44), rounded by R = radius + fatness
+// (fadds 0x82BAFE74); the barrel is the infinite cylinder of radius R around the frame's z axis.
+//   0x82BAFD60  result.v = this, first
+//   0x82BAFD90  the frame: this->maFrame composed with tm, or as it is; pt1 / pt2 into it; delta = end - start
+//   0x82BAFEE0  the cap the start is beyond: +1 when start.z is NOT <= hh (a NaN included), -1 when it is
+//               NOT >= -hh, else 0 (the barrel)
+//   0x82BAFF18  lineParam = 0; the walk keeps its current point IN result.position (0x82BAFF28)
+//   loop, at most three steps (li r24, 3 ; addic. -1 @0x82BB0088), delta.z reloaded each time:
+//     a cap c (0x82BAFF48): the sphere at (0, 0, c*hh) -- a start inside it hits at once; if the line moves back
+//       toward the barrel (delta.z*c NOT >= 0) the cap plane is an event {c*z - hh (fnmsubs), -(delta.z*c)},
+//       valid while num <= den; the sphere strictly earlier (or no event) is the hit, the plane first steps into
+//       the barrel, neither misses. A sphere that recedes (-1) is just no hit here.
+//     the barrel (0x82BB0008): the cylinder test (|axis|^2 1, radius R, no invert, no ignore-inside) -- not > 0
+//       misses, a start inside hits at once; else the cap it moves toward, c = fsel(delta.z) (+1 / -1), is an
+//       event {hh - z*c (fmadds), delta.z*c}: an event past the segment (num > den), or no earlier than the
+//       cylinder (cyl.den*num >= cyl.num*den), leaves the cylinder the hit; else the line steps into that cap
+//     each step: t = num / den, lineParam += t, start = delta*t + start (fused), delta = end - start
+//   the hits (position and normal in the frame):
+//     cap     immediate: position = the ORIGINAL local start (the console stores v127, the frame-local pt1,
+//                        not the current point -- reproduced), normal = (start - cap centre) * rsqrt|.|^2
+//             sphere:    delta*t + start, (hit - cap centre) * refined 1/R, lineParam += t
+//     barrel  immediate: the current point, its radial part (p - axis*(p.axis), fused) * rsqrt|.|^2
+//             cylinder:  delta*t + start, the radial part * refined 1/R, lineParam += t, c = 0
+//   0x82BB02AC  position / normal back out of the frame; volParam = (c, delta.z of the last step, the local
+//               start's z, 0) -- the three words the console stores (0x82BB0364..0x82BB0380);
+//               position -= normal * fatness; return 1.
+// A miss leaves result.position holding the last point and lineParam the steps taken, as on the console.
+// ===========================================================================
+RwBool CapsuleVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+                                       VolumeLineSegIntersectResult& arResult, f32 afFatness) const
+{
+    using namespace linemath;
+    using linemath::Dot3; using linemath::MakeVec4; using linemath::Sub;   // this TU has helpers of these names
+
+    const Vec4 lvBarrelBase = MakeVec4(0.0f, 0.0f, 0.0f, 0.0f);   // var_1A0 (v124)
+    const Vec4 lvBarrelAxis = MakeVec4(0.0f, 0.0f, 1.0f, 0.0f);   // var_1B0 (v126): flt_82001CC0 x2, flt_82001C98
+    arResult.v = reinterpret_cast<uintptr_t>(this);                // stw r30, 0(r29) @0x82BAFD60
+
+    Vec4 lavFrame[4];
+    if (lpTransform != 0)
+    {
+        ComposeFrame(maFrame, lpTransform, lavFrame);              // 0x82BAFD90..0x82BAFE18
+    }
+    else
+    {
+        lavFrame[0] = maFrame[0];
+        lavFrame[1] = maFrame[1];
+        lavFrame[2] = maFrame[2];
+        lavFrame[3] = maFrame[3];
+    }
+    const LocalFrame lLocal = InvertFrame(lavFrame);
+    const Vec4 lvStart = ToLocal(lLocal, arPt1);                   // v127
+    const Vec4 lvEnd   = ToLocal(lLocal, arPt2);                   // v125
+    const f32  lfRadius     = mfRadius + afFatness;                // fadds @0x82BAFE74 (var_1DC)
+    const f32  lfHalfHeight = mfHalfHeight;                        // f27 (+0x44)
+    Vec4 lvDelta = Sub(lvEnd, lvStart);                            // vsubfp128 @0x82BAFED8 (var_190)
+    const f32  lfStartZ = lvStart.z;                               // f22
+
+    f32 lfCap;                                                     // f31
+    if (!(lfStartZ <= lfHalfHeight))                               // fcmpu ; ble @0x82BAFEF0
+    {
+        lfCap = 1.0f;
+    }
+    else if (!(lfStartZ >= -lfHalfHeight))                         // fcmpu ; bge @0x82BAFF04
+    {
+        lfCap = -1.0f;                                             // flt_820037C8
+    }
+    else
+    {
+        lfCap = 0.0f;
+    }
+    arResult.lineParam = KF_LINE_ZERO;                             // stfs @0x82BAFF18
+    arResult.position  = lvStart;                                  // stvx128 v127 @0x82BAFF28
+
+    f32 lfDeltaZ = 0.0f;                                           // f26
+    Vec4 lvPosition;
+    Vec4 lvNormal;
+    for (u32 luSteps = KU_CAPSULE_LINE_STEPS; ; )
+    {
+        lfDeltaZ = lvDelta.z;                                      // lfs var_188 @0x82BAFF30
+        Fraction lEvent = { 0.0f, 0.0f };                          // f29 / f30 (fmr f28 @0x82BAFF34)
+        if (lfCap != 0.0f)                                         // fcmpu ; beq @0x82BAFF44
+        {
+            // ---- a cap (0x82BAFF48) ----
+            const Vec4 lvCapCentre = MakeVec4(0.0f, 0.0f, lfCap * lfHalfHeight, 0.0f);   // fmuls @0x82BAFF4C
+            Fraction lDist;
+            const s32 liHit = rwcSphereLineSegIntersect(&lDist, &arResult.position, &lvDelta, &lvCapCentre,
+                                                        lfRadius);
+            if (liHit > 0 && lDist.num == 0.0f)                    // 0x82BAFF98
+            {
+                arResult.position = lvStart;                       // stvx128 v127 @0x82BB00E0
+                const Vec4 lvOut = Sub(lvStart, lvCapCentre);      // vsubfp128 @0x82BB00F0
+                lvNormal   = MulSplat(lvOut, RefinedRsqrt(Dot3(lvOut, lvOut)));
+                lvPosition = lvStart;
+                break;
+            }
+            s32 liEvent = 0;
+            const f32 lfToward = lfDeltaZ * lfCap;                 // fmuls @0x82BAFF9C
+            if (!(lfToward >= 0.0f))                               // bge @0x82BAFFA4
+            {
+                liEvent    = 1;
+                lEvent.den = -lfToward;                            // fneg @0x82BAFFB8
+                lEvent.num = Nmsub(-arResult.position.z, lfCap, -lfHalfHeight);   // fnmsubs @0x82BAFFBC
+                if (!(lEvent.num <= lEvent.den))                   // ble @0x82BAFFC4
+                {
+                    liEvent = 0;
+                }
+            }
+            if (liHit > 0
+                && (!(liEvent > 0) || lDist.num * lEvent.den < lDist.den * lEvent.num))   // 0x82BAFFD8..0x82BAFFEC
+            {
+                const f32 lfT = lDist.num / lDist.den;             // fdivs @0x82BB0130
+                arResult.lineParam = arResult.lineParam + lfT;     // fadds @0x82BB016C
+                lvPosition = MaddSplat(lvDelta, lfT, arResult.position);   // vmaddfp @0x82BB0178
+                arResult.position = lvPosition;
+                lvNormal = MulSplat(Sub(lvPosition, lvCapCentre), RefinedRecip(lfRadius));   // 0x82BB0190..0x82BB01A8
+                break;
+            }
+            if (liEvent <= 0)                                      // ble @0x82BAFFF4
+            {
+                return 0;
+            }
+            lfCap = 0.0f;                                          // fmr f31, f28 @0x82BAFFFC -- into the barrel
+        }
+        else
+        {
+            // ---- the barrel (0x82BB0008) ----
+            Fraction lDist;
+            const s32 liHit = rwcCylinderLineSegIntersect(&lDist, KF_LINE_ONE, lfRadius, 0, 0, arResult.position,
+                                                          lvDelta, lvBarrelBase, lvBarrelAxis);
+            if (liHit <= 0)                                        // ble @0x82BB0030
+            {
+                return 0;
+            }
+            if (lDist.num == 0.0f)                                 // beq @0x82BB003C
+            {
+                const Vec4 lvOffset = Sub(arResult.position, lvBarrelBase);                     // vsubfp128 @0x82BB01B8
+                const Vec4 lvRadial = MaddSplat(lvBarrelAxis, -Dot3(lvOffset, lvBarrelAxis), lvOffset);   // vxor ; vmaddfp128
+                lvNormal   = MulSplat(lvRadial, RefinedRsqrt(Dot3(lvRadial, lvRadial)));
+                lvPosition = arResult.position;
+                break;
+            }
+            const f32 lfAlong = Dot3(arResult.position, lvBarrelAxis);   // vmsum3fp128 @0x82BB0040
+            lfCap      = (lfDeltaZ >= 0.0f) ? 1.0f : -1.0f;              // fsel @0x82BB0048
+            lEvent.den = lfDeltaZ * lfCap;                               // fmuls @0x82BB004C
+            lEvent.num = std::fma(-lfAlong, lfCap, lfHalfHeight);        // fneg ; fmadds @0x82BB005C
+            if (lEvent.num > lEvent.den                                  // bgt @0x82BB0068
+                || lDist.den * lEvent.num >= lDist.num * lEvent.den)     // bge @0x82BB0078
+            {
+                const f32 lfT = lDist.num / lDist.den;                   // fdivs @0x82BB0218
+                lfCap = 0.0f;                                            // fmr f31, f28 @0x82BB0238
+                arResult.lineParam = arResult.lineParam + lfT;           // fadds @0x82BB0254
+                lvPosition = MaddSplat(lvDelta, lfT, arResult.position); // vmaddfp @0x82BB0260
+                arResult.position = lvPosition;
+                const Vec4 lvOffset = Sub(lvPosition, lvBarrelBase);     // vsubfp128 @0x82BB0270
+                const Vec4 lvRadial = MaddSplat(lvBarrelAxis, -Dot3(lvOffset, lvBarrelAxis), lvOffset);   // 0x82BB0290
+                lvNormal = MulSplat(lvRadial, RefinedRecip(lfRadius));   // vmulfp128 @0x82BB02A4
+                break;
+            }
+            // the cap plane comes first: step into cap lfCap
+        }
+
+        // ---- the step (0x82BB007C..0x82BB00B8) ----
+        const f32 lfT = lEvent.num / lEvent.den;                   // fdivs @0x82BB007C
+        arResult.lineParam = arResult.lineParam + lfT;             // fadds @0x82BB009C
+        arResult.position  = MaddSplat(lvDelta, lfT, arResult.position);   // vmaddfp @0x82BB00A8
+        lvDelta = Sub(lvEnd, arResult.position);                   // vsubfp128 @0x82BB00AC
+        if (--luSteps == 0u)                                       // addic. ; bne @0x82BB00B8
+        {
+            return 0;
+        }
+    }
+
+    // ---- the hit, back out of the frame (0x82BB02A8..0x82BB03A0) ----
+    const Vec4 lvWorldPosition = FramePoint(lavFrame, lvPosition);
+    const Vec4 lvWorldNormal   = FrameDirection(lavFrame, lvNormal);
+    arResult.normal   = lvWorldNormal;
+    arResult.volParam = MakeVec4(lfCap, lfDeltaZ, lfStartZ, 0.0f);   // stfs f31 / f26 / f22 @0x82BB0364..0x82BB0370
+    arResult.position = Sub(lvWorldPosition, MulSplat(lvWorldNormal, afFatness));
+    return 1;
 }
 
 } // namespace collision

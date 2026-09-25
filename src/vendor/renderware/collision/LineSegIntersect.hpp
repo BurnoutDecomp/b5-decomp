@@ -19,6 +19,11 @@
 //     rw::collision::rwcTorusLineSegIntersect      @ 0x82BADAB0   (wave 2)
 //     rw::collision::ThinTriangleLineSegIntersect  @ 0x82BB9EB8   (wave 2)
 //     rw::collision::TriangleLineSegIntersect      @ 0x82BBB7B8   (wave 2)
+//     rw::collision::rwcPlaneLineSegIntersect      @ 0x82BA8818   (2026-09-25, FX-FOLLOWUPS stage (b))
+// and, declared with their classes (CollisionVolume.hpp / CapsuleVolume.hpp), the three volume line kernels
+//     rw::collision::SphereVolume::LineSegIntersect  @ 0x82BA82C8   (2026-09-25, stage (b))
+//     rw::collision::BoxVolume::LineSegIntersect     @ 0x82BA9478   (2026-09-25, stage (b))
+//     rw::collision::CapsuleVolume::LineSegIntersect @ 0x82BAFCF8   (2026-09-25, stage (b))
 // One helper remains a PENDING declaration (see below).
 // ===========================================================================
 
@@ -113,6 +118,13 @@ s32 rwcSphereLineSegIntersect(Fraction* lpDist,
                               const Vec4* lpLineDelta,
                               const Vec4* lpCentre,
                               f32 afRadius);
+
+// @ 0x82BA8818 -- one slab plane vs line segment (canonical rwccore.h:3716, Feb-2007): the crossing of
+// orig + t*seg with the plane at `disp` along an axis whose outward sign is `sign`, as a Fraction. Returns 1 =
+// crossing inside the segment (or a start already on / past the plane: {0, 1}), 0 = at or beyond the segment end,
+// -1 = moving away / parallel. X360: r3 = lpDist, f1..f4 = orig_i, seg_i, sign, disp. BoxVolume::LineSegIntersect's
+// face / slab test. (Added 2026-09-25, crash parity FX-FOLLOWUPS stage (b).)
+s32 rwcPlaneLineSegIntersect(Fraction* lpDist, f32 afOrig, f32 afSeg, f32 afSign, f32 afDisp);
 
 // @ 0x82BAF8A0 -- INFINITE cylinder vs line segment (canonical
 // rwccore.h:2536, parameter names `invert`/`ignoreInside`). abIgnoreInside

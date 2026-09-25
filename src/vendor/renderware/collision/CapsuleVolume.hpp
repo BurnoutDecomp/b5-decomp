@@ -39,6 +39,11 @@
 //           @0x82BB0088) and the sphere-cap-then-cylinder-barrel call order
 //           all survive into the export's pseudocode.
 //
+// LANDED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)): LineSegIntersect @0x82BAFCF8 is declared below; its body
+// is in LineSegIntersect.cpp, beside the rwc* kernels it calls (the BLOCKED note above predates it). Its signature is
+// the DWARF's -- DecFIGS dwarfdump .../rw/collision/capsule.h:144 -- so DWARF does exist for this class, whatever the
+// next line says.
+//
 // NO DWARF / Feb-2007 source exists for this TU. The LAYOUT below is entirely
 // X360-asm-attested (member OFFSETS are ground truth, pinned by the
 // static_asserts; the member NAMES are inferred and documented). The 16-byte
@@ -52,6 +57,7 @@ namespace collision
 {
 
 struct GPInstance;   // vendor/renderware/collision/GPInstance.hpp
+struct VolumeLineSegIntersectResult;   // vendor/renderware/collision/LineSegIntersect.hpp
 
 class CapsuleVolume
 {
@@ -89,6 +95,14 @@ public:
     // extent, max = centre + extent. abTight (r5) is accepted but DEAD in the
     // asm (unlike CylinderVolume::GetBBox, the capsule has no tight/loose split).
     RwBool GetBBox(const Vec4* lpTransform, RwBool abTight, AABBox& arResult) const;
+
+    // @ 0x82BAFCF8 (428 insns) -- DWARF capsule.h:144 `RwBool LineSegIntersect(const Vector3&, const Vector3&,
+    // const Matrix44Affine*, VolumeLineSegIntersectResult&, float32_t) const`. The segment arPt1 -> arPt2 against
+    // the capsule (the frame's z segment +/- mfHalfHeight, rounded by mfRadius + afFatness), in its frame
+    // (composed with lpTransform when given); fills arResult on a hit (1). LANDED 2026-09-25 (FX-FOLLOWUPS
+    // stage (b)); body in LineSegIntersect.cpp, bound to the descriptor's lineSegIntersect slot in VolumeVTables.cpp.
+    RwBool LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+                            VolumeLineSegIntersectResult& arResult, f32 afFatness) const;
 
     // --- members (X360-asm-attested offsets; inferred names) ----------------
     // The local frame: three basis rows + a centre row. GetBBox / GetBBoxDiag /

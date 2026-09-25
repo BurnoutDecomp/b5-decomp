@@ -370,6 +370,14 @@ namespace collision
         // optionally-rotated transform rows), mPos = the transformed centre row,
         // mDimensions = (hx, hy, hz, hx) and the BOX row of g_aGPVolumeMethods.
         RwBool CreateGPInstance(GPInstance& arInstance, const Vec4* lpTransform) const;
+
+        // @ 0x82BA9478 (723 insns) -- DWARF box.h:176 `RwBool LineSegIntersect(const Vector3&, const Vector3&,
+        // const Matrix44Affine*, VolumeLineSegIntersectResult&, float32_t) const`. The segment arPt1 -> arPt2 against
+        // the box (half extents +0x44..+0x4C) rounded by mfRadius + afFatness, in its frame (composed with lpTransform when given); fills
+        // arResult on a hit (1). LANDED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)); body in LineSegIntersect.cpp,
+        // bound to the descriptor's lineSegIntersect slot in VolumeVTables.cpp.
+        RwBool LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+                                VolumeLineSegIntersectResult& arResult, f32 afFatness) const;
     };
 
     // ---------------------------------------------------------------------------
@@ -405,6 +413,14 @@ namespace collision
         // narrow-phase image: mPos = the transformed centre, no face normals, no edge
         // directions, mFatness = radius, and the SPHERE row of g_aGPVolumeMethods.
         RwBool CreateGPInstance(GPInstance& arInstance, const Vec4* lpTransform) const;
+
+        // @ 0x82BA82C8 (136 insns) -- DWARF sphere.h:90 `RwBool LineSegIntersect(const Vector3&, const Vector3&,
+        // const Matrix44Affine*, VolumeLineSegIntersectResult&, float32_t) const`. The segment arPt1 -> arPt2 against
+        // the sphere (its centre is the frame's translation) rounded by mfRadius + afFatness, in its frame (composed with lpTransform when given); fills
+        // arResult on a hit (1). LANDED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)); body in LineSegIntersect.cpp,
+        // bound to the descriptor's lineSegIntersect slot in VolumeVTables.cpp.
+        RwBool LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+                                VolumeLineSegIntersectResult& arResult, f32 afFatness) const;
     };
 
     // The shared per-type descriptor table -- X360 dword_8327EEE0..dword_8327EEF8, seven
