@@ -360,4 +360,26 @@ const VolRef::Volume* VolumeManager::GetRwVolume(s32 liVolumeIndex) const
     return mVolumeStore.GetVolume(lrVMVolume.miVolumeStoreIndex);
 }
 
+// ---------------------------------------------------------------------------
+// GetVolumeTypeFlags -- DWARF CgsVolumeManager.h:138, header-inline on the console (no out-of-line body).
+// ADDED 2026-09-25 (crash parity FX-FOLLOWUPS, item 2), from its inline copy in FineIntersectionTestModule::
+// ComputeVolumeTestDeepest @0x828C90D0:
+//   0x828C9250  pool = this + 0x94A50 (mVolumePool)
+//   0x828C9254  `cmpwi idx, 0 ; blt | cmpwi idx, 0x13B8 ; blt ok` -> "liVolumeIndex >=0 && liVolumeIndex <
+//               KI_MAX_NUM_VOLUMES" (0x820F51CC; li r5, 0xCB = CgsVolumeManager.h:203)
+//   0x828C9288  ObjectPool<VolumeManagerVolume,5048,int>::IsObjectAllocated (0x828B7A70) == 0 ->
+//               "mVolumePool.IsObjectAllocated( liVolumeIndex )" (0x820F519C; li r5, 0xCC = h:204)
+//   0x828C92B8  `lbz 8(operator[] (0x828B77B0))` -- the record's mxFlags (console +0x08)
+// The same two asserts, with the same texts, open GetRwVolume above (h:182 / h:183).
+// ---------------------------------------------------------------------------
+VolumeManagerVolume::VolumeTypeFlags VolumeManager::GetVolumeTypeFlags(s32 liVolumeIndex) const
+{
+    CGS_ASSERT(liVolumeIndex >= 0 && liVolumeIndex < KI_MAX_NUM_VOLUMES,
+               "liVolumeIndex >=0 && liVolumeIndex < KI_MAX_NUM_VOLUMES");
+    CGS_ASSERT(mVolumePool.IsObjectAllocated(liVolumeIndex),
+               "mVolumePool.IsObjectAllocated( liVolumeIndex )");
+
+    return mVolumePool[liVolumeIndex].mxFlags;
+}
+
 }

@@ -142,6 +142,8 @@ namespace CgsSceneManager
 
         // h:138 -- declaration-only (header-inline on the console, no export; no
         // reconstructed caller yet, and its assert set is not attested).
+        // BODIED 2026-09-25 (crash parity FX-FOLLOWUPS): its inline copy in FineIntersectionTestModule::
+        // ComputeVolumeTestDeepest @0x828C9250..0x828C92C4 attests the body and the asserts (h:203 / h:204).
         VolumeManagerVolume::VolumeTypeFlags GetVolumeTypeFlags(s32 liVolumeIndex) const;
 
     private:

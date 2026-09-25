@@ -41,6 +41,13 @@
 #include "GameShared/GameClasses/SceneManager/FineIntersectionTestModule/CgsFineIntersectionTestModule.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"        // EntityId, K_INVALID_ENTITY_ID
+#include "GameShared/GameClasses/SceneManager/CgsEntityManager.h"   // GetEntityIdByIndex / GetFirstEntityVolumeInstance / GetVolumeInstance
+#include "GameShared/GameClasses/SceneManager/CgsVolumeInstance.h"  // VolumeInstance
+#include "GameShared/GameClasses/SceneManager/CgsVolumeManager.h"   // GetVolumeTypeFlags / GetRwVolume
+#include "vendor/renderware/collision/CollisionVolume.hpp"          // rw::collision::Volume
+#include "vendor/renderware/collision/GPInstance.hpp"               // PrimitivePairIntersectResult
+#include "vendor/renderware/collision/VolumeQuery.hpp"              // rw::collision::VolumeVolumeQuery
 
 namespace CgsSceneManager
 {
@@ -69,11 +76,120 @@ namespace CgsSceneManager
         lpOutResult->mbIntersection = false;
     }
 
-    void FineIntersectionTestModule::ComputeVolumeTestDeepest(const InEventVolumeTestDeepest* /*lpQuery*/,
-                                                              OutEventVolumeTestDeepestResult* /*lpOutResult*/)
+    // =========================================================================================
+    // ComputeVolumeTestDeepest @ 0x828C90D0 -- RECONSTRUCTED 2026-09-25 (crash parity FX-FOLLOWUPS, item 2); it was a
+    // LOUD trap here. How deep does the query volume sink into the candidate entities' collision volumes? One
+    // VolumeVolumeQuery per volume instance whose volume-type flags meet the query's; the deepest penetration over
+    // every contact result of every instance wins.
+    //   r3 = this, r4 = lpQuery (r27), r5 = lpOutResult (r24, spilled to sp+0x134).
+    //   0x828C90F8  f30 = f31 = flt_82001CC0 (0.0f) -- the deepest so far; it is NOT reset per instance or entity.
+    //   0x828C9100  query+0xCA (exclude index) != 0xFFFF:
+    //                 mask = query+0xCD (mbExcludeParts) ? 0xFFFFFC00 : 0xFFFFFFFF (`subfic 0 ; subfe ;
+    //                 rlwinm 0,31,21 ; addi -1` -- the part-comparison mask or all ones), and
+    //                 r14 = mask & the excluded entity's id (the inlined GetEntityIdByIndex, :301 assert)
+    //               == 0xFFFF: r14 = dword_82F33F64 (0xFFFFFFFF, K_INVALID_ENTITY_ID)
+    //   0x828C9194  out+8 (mbIntersection) = 0, out+0 (mQueryId) = query+0xC0. out+4 (mfDepth) is NOT written here.
+    //   0x828C91E0  per candidate i < query+0xC8, entity index query+0xC4[i]:
+    //                 id = GetEntityIdByIndex; (r14 & id) == r14 -> next candidate (0x828C9220: a bit-SUPERSET test
+    //                 against the masked exclude id, as compiled -- not an equality)
+    //   0x828C9238    GetFirstEntityVolumeInstance(index, &first) (0x828C5DC0), then GetVolumeInstance(+0x60)
+    //                 (0x828B9F28) until null; per instance:
+    //   0x828C924C      GetVolumeTypeFlags(+0x5C volume index) & query+0xCC == 0 -> next instance (the inlined
+    //                   h:203 / h:204 body)
+    //   0x828C92D8      prime the VolumeVolumeQuery (this+0x59818): +0x14 m_padding = f30 (0.0f), +0x00 m_inputVols
+    //                   = {GetRwVolume}, +0x04 m_inputMats = {the instance's transform (+0x00)}, +0x08 m_numInputs =
+    //                   1, +0x0C m_currInput = 0, +0x1C m_volRefPairCount = 0, +0x38 m_queryVol = query+0x40,
+    //                   +0x3C m_queryMtx = query+0x00, +0x10 m_cullTable = 0; GetPrimitiveIntersections (0x82BB3FF0)
+    //   0x828C9340      over the results (m_intersectionBuffer, stride 0x750, count compared unsigned):
+    //                   -distance (+0x4F0) > deepest (`fneg ; fcmpu ; ble` -- a NaN never wins) and numPoints
+    //                   (+0x740) != 0 (`cmplwi ; ble`) -> deepest = -distance, best = i
+    //   0x828C9374      best >= 0 -> out+4 = deepest, out+8 = 1
+    // =========================================================================================
+    void FineIntersectionTestModule::ComputeVolumeTestDeepest(const InEventVolumeTestDeepest* lpQuery,
+                                                              OutEventVolumeTestDeepestResult* lpOutResult)
     {
-        CGS_ASSERT(false, "FineIntersectionTestModule::ComputeVolumeTestDeepest @0x828C90D0 is not reconstructed "
-                          "(rw::collision::VolumeVolumeQuery is unproven on this host)");
+        // flt_82001CC0 (0.0f): the starting "deepest" (only a penetration, -distance > 0, can beat it) and the
+        // query padding -- one register, f30, feeds both.
+        static const f32 KF_VOLUME_TEST_DEEPEST_ZERO = 0.0f;
+        // The exclude-index sentinel query+0xCA is compared with (`cmplwi r11, 0xFFFF` @0x828C9120).
+        static const u16 KU16_NO_EXCLUDE_ENTITY_INDEX = 0xFFFF;
+
+        f32 lfDeepest = KF_VOLUME_TEST_DEEPEST_ZERO;   // f31
+
+        u32 lx32Exclude;                               // r14
+        if (lpQuery->mu16ExcludeEntityIndex != KU16_NO_EXCLUDE_ENTITY_INDEX)
+        {
+            const EntityId lExcludeEntityId = mpEntityManager->GetEntityIdByIndex(lpQuery->mu16ExcludeEntityIndex);
+            const u32      lx32Mask         = lpQuery->mbExcludeParts ? lExcludeEntityId.GetPartComparisonMask()
+                                                                      : ~0u;
+            lx32Exclude = lx32Mask & static_cast<u32>(lExcludeEntityId);
+        }
+        else
+        {
+            lx32Exclude = static_cast<u32>(K_INVALID_ENTITY_ID);   // dword_82F33F64
+        }
+
+        lpOutResult->mbIntersection = false;              // stb 0, 8(r24)
+        lpOutResult->mQueryId       = lpQuery->mQueryId;  // lwz 0xC0(r27) ; stw 0(r24)
+
+        for (u16 lu16Candidate = 0; lu16Candidate < lpQuery->mu16NumEntities; ++lu16Candidate)
+        {
+            const u16 lu16EntityIndex = lpQuery->mpau16EntityIndices[lu16Candidate];
+            const u32 lx32EntityId    = static_cast<u32>(mpEntityManager->GetEntityIdByIndex(lu16EntityIndex));
+            if ((lx32Exclude & lx32EntityId) == lx32Exclude)
+            {
+                continue;
+            }
+
+            s32 liFirstVolumeInstance = 0;   // var_B0: written by the call, never read
+            const VolumeInstance* lpVolumeInstance =
+                mpEntityManager->GetFirstEntityVolumeInstance(lu16EntityIndex, &liFirstVolumeInstance);
+            while (lpVolumeInstance != 0)
+            {
+                const s32 liVolumeIndex = lpVolumeInstance->miVolumeIndex;
+                if ((mpVolumeManager->GetVolumeTypeFlags(liVolumeIndex) & lpQuery->mxVolumeTypeFlags) != 0)
+                {
+                    const rw::collision::Volume* lapInputVolumes[1] =                          // var_BC
+                        { reinterpret_cast<const rw::collision::Volume*>(mpVolumeManager->GetRwVolume(liVolumeIndex)) };
+                    const Matrix44Affine* lapInputMatrices[1] =                                // var_B8
+                        { &lpVolumeInstance->mWorldSpaceTransform };
+
+                    rw::collision::VolumeVolumeQuery* lpQueryObject = mpVolumeVolumeQuery;
+                    lpQueryObject->m_padding         = KF_VOLUME_TEST_DEEPEST_ZERO;          // +0x14
+                    lpQueryObject->m_inputVols       = lapInputVolumes;                      // +0x00
+                    lpQueryObject->m_inputMats       = lapInputMatrices;                     // +0x04
+                    lpQueryObject->m_numInputs       = 1;                                    // +0x08
+                    lpQueryObject->m_currInput       = 0;                                    // +0x0C
+                    lpQueryObject->m_volRefPairCount = 0;                                    // +0x1C
+                    lpQueryObject->m_queryVol        =                                       // +0x38
+                        reinterpret_cast<const rw::collision::Volume*>(&lpQuery->mVolumeBuffer);
+                    lpQueryObject->m_queryMtx        = &lpQuery->mTransform;                 // +0x3C
+                    lpQueryObject->m_cullTable       = 0;                                    // +0x10
+
+                    const u32 luNumResults = static_cast<u32>(mpVolumeVolumeQuery->GetPrimitiveIntersections());
+                    const rw::collision::PrimitivePairIntersectResult* lpaResults =
+                        mpVolumeVolumeQuery->m_intersectionBuffer;                           // lwz 0x30 once
+                    s32 liBest = -1;                                                         // r30
+                    for (u32 luResult = 0; luResult < luNumResults; ++luResult)
+                    {
+                        const f32 lfDepth = -lpaResults[luResult].distance;                  // fneg
+                        if (lfDepth > lfDeepest && lpaResults[luResult].numPoints != 0)
+                        {
+                            liBest    = static_cast<s32>(luResult);
+                            lfDeepest = lfDepth;
+                        }
+                    }
+                    if (liBest >= 0)
+                    {
+                        lpOutResult->mfDepth        = lfDeepest;   // stfs f31, 4
+                        lpOutResult->mbIntersection = true;        // stb 1, 8
+                    }
+                }
+                // 0x828C9390: the CONST overload (0x828B9F28), as GetFirstEntityVolumeInstance itself uses.
+                lpVolumeInstance = static_cast<const EntityManager*>(mpEntityManager)
+                                       ->GetVolumeInstance(lpVolumeInstance->miNextEntityVolumeInstance);
+            }
+        }
     }
 
     void FineIntersectionTestModule::ComputeVolumeTestFine(const InEventVolumeTestFine* /*lpQuery*/,
