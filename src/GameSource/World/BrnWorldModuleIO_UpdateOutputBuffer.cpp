@@ -82,6 +82,12 @@ void UpdateOutputBuffer::Construct()
     mResourceRequestInterface.mRequestQueue.Clear();
     mAttribSysVaultRequestInterface.mRequestQueue.Construct(); // X360 VEQ<2048,16> +150832 (Construct+Clear)
     mAttribSysVaultRequestInterface.mRequestQueue.Clear();
+    // X360 0x827CA278..0x827CA280 `addis r3,r31,2 ; addi r3,r3,0x5540 ; bl 0x82592830` ==
+    // TrafficNetworkOutputInterface::Construct(this + 152896): binds the ActivateHull queue to its
+    // inline storage and seeds the active-hull table invalid. Without it the leg-13 copy
+    // (SetTrafficNetworkOutputInterface, whose operator= Clears + Appends that queue) would
+    // write a traffic hull broadcast through an unbound mpEvents (crash parity FX-NETCRASH).
+    mTrafficNetworkOutputInterface.Construct();             // X360 +152896 (0x827CA280)
     mTrafficTypeResponseQueue.Construct();                  // X360 TrafficTypeResponse<32> +155616
     mCrashNetworkOutputInterface.Construct();               // CrashingTrafficUpdateEvent<24> +156144
     // X360 0x827CA2B8..0x827CA2C4 `addis r3,r31,2 ; addi r3,r3,0x6980 ; bl 0x8228F1B0` ==

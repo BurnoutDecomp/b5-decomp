@@ -125,6 +125,17 @@ namespace BrnTrafficIO
         return &mNetworkInterface;
     }
 
+    // X360 0x82711AF0 (baked 395): write-lock (`rlwinm r11,r11,0x1d,0x1f,0x1f`, status bit 3);
+    // return &mNetworkInterface (`addi r3,r28,0xda0`, this + 3488). The producer is
+    // TrafficEntityModule::GenerateNetworkUpdateEvents @0x827287A8, which takes it four times: once
+    // per race car for the active-hull table, once for the divergence byte, once for the hull
+    // broadcast and once for the data hash.
+    TrafficNetworkOutputInterface* OutputBuffer_PostPhysics::GetNetworkInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mNetworkInterface;
+    }
+
     // X360 0x827A0A28 (baked 400): read-lock; return &mTrafficDirectorOutputInterface (this+6208).
     // Not mGameEventQueue: its epilogue is `addi r3,r28,0x1840` == +6208, the director interface's
     // seat (Construct's `stw 0,0x2650` lands inside that span), while the game-event queue's read
@@ -329,6 +340,39 @@ namespace BrnTrafficIO
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         mGlobalRaceCarOutputInterface = *lpInterface;
+    }
+
+    // X360 0x82761538, store for store -- run by CreateIOBuffer<InputBuffer_PreScene> @0x827B8800
+    // (the PC had no Construct here, so CreateIOBuffer ran the bare IOBuffer::Construct and left the
+    // network hull queue unbound: SetTrafficNetworkInputInterface below would Append a peer's hull
+    // activations through whatever mpEvents the IO stack's previous tenant left).
+    //   stb 1, 0(this)                                  IOBuffer::Construct
+    //   bl ActivateHullEvent,8>::Construct(this+0x32A0) ; stb 0, 0x6C(+0x32A0)   the network interface
+    //   bl TimerStatusInterface::Clear(this+4)
+    //   bl RCEntityActiveRaceCarOutputInterface::Clear(this+0x40)
+    //   bl RCEntityGlobalRaceCarOutputInterface::Clear(this+0x2930)
+    //   bl ActivateHullEvent,8>::Construct(this+0x32A0) ; stb 0, 0x6C(+0x32A0)   ... and again
+    // The network interface is constructed TWICE, first and last; both are reproduced. Its Construct
+    // is the queue's Construct plus mbDiverged = false, exactly the pair each stanza stores.
+    // mfTimeOfDay_Seconds is not touched (the world stores it every frame).
+    void InputBuffer_PreScene::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mTrafficNetworkInputInterface.Construct();
+        mTimerStatusInterface.Clear();
+        mActiveRaceCarOutputInterface.Clear();
+        mGlobalRaceCarOutputInterface.Clear();
+        mTrafficNetworkInputInterface.Construct();
+    }
+
+    // X360 0x82710C80 (IDA `BrnTraffic::BrnTrafficIO::InputBuf`, DWARF :159): read-lock
+    // (`rlwinm r11,r11,0x1c,0x1f,0x1f`, status bit 4; baked line 163); return
+    // &mTrafficNetworkInputInterface (`addi r3,r28,0x32a0`). Its only caller is
+    // TrafficEntityModule::HandleIncomingNetworkData @0x82741AF8.
+    const TrafficNetworkInputInterface* InputBuffer_PreScene::GetTrafficNetworkInputInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mTrafficNetworkInputInterface;
     }
 
     // X360 0x827ACD28: SetTrafficNetworkInputInterface. Write-lock (status bit 3). r31 = this+0x32A0

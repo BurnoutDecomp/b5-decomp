@@ -147,6 +147,10 @@ namespace BrnTrafficIO
         typedef BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface GlobalRaceCarOutputInterface;   // DWARF :86
 
         // X360 0x82710B30 -- read-lock; returns &mTimerStatusInterface (this + 4).
+        // X360 0x82761538 -- run by CreateIOBuffer<InputBuffer_PreScene> @0x827B8800. Binds the
+        // network hull queue to its inline storage and clears the other three interfaces.
+        void Construct();                                                                                              // DWARF :147
+
         const CgsSystem::TimerStatusInterface* GetTimerStatusInterface() const;                                       // DWARF :150
         // X360 0x8279FAD8 -- write-lock; field-copies the source timer status into +4 (operator=).
         void SetTimerStatusInterface(const CgsSystem::TimerStatusInterface* lpTimerStatusInterface);                  // DWARF :151
@@ -164,6 +168,9 @@ namespace BrnTrafficIO
         void SetGlobalRaceCarOutputInterface(const GlobalRaceCarOutputInterface* lpInterface);                        // DWARF :157
         // X360 0x827ACD28 -- write-lock; clear+append the hull queue, copy mbDiverged into +12960.
         void SetTrafficNetworkInputInterface(const TrafficNetworkInputInterface* lpTrafficNetworkInputInterface);     // DWARF :160
+        // X360 0x82710C80 (IDA `BrnTraffic::BrnTrafficIO::InputBuf`) -- read-lock (baked 163); returns
+        // &mTrafficNetworkInputInterface (+0x32A0). Caller: TrafficEntityModule::HandleIncomingNetworkData.
+        const TrafficNetworkInputInterface* GetTrafficNetworkInputInterface() const;                                  // DWARF :159
 
         // WorldModule::EntityModulePreSceneUpdate @0x827BD1F0 stores time of day into +13072
         // under the write lock (source: EnvironmentManager::mfCurrTimeOfDay).
@@ -521,6 +528,9 @@ namespace BrnTrafficIO
         CrashTrafficInputInterface*       GetCrashTrafficInputInterface();        // 0x82711A48 (baked 392)
         // +3488 read mNetworkInterface.
         const TrafficNetworkOutputInterface* GetNetworkInterface() const;         // 0x827A08D8 (baked 394)
+        // The write half, X360 sub_82711AF0 (baked 395): write-lock, this + 0xDA0. Its only caller is
+        // TrafficEntityModule::GenerateNetworkUpdateEvents @0x827287A8 (four calls).
+        TrafficNetworkOutputInterface*       GetNetworkInterface();               // 0x82711AF0 (baked 395)
         // +3632 read/write mTrafficSoundOutputInterface (real SharedIO type).
         const TrafficSoundOutputInterface* GetTrafficSoundOutputInterface() const; // 0x827A0980 (baked 397)
         TrafficSoundOutputInterface*       GetTrafficSoundOutputInterface();       // 0x82711B98 (baked 398)

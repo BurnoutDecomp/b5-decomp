@@ -1222,6 +1222,15 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
             const CgsModule::EventQueue<u16, 32>* lpRequestQueue,
             CgsModule::EventQueue<BrnTrafficIO::TrafficTypeResponse, 32>* lpResponseQueue);
 
+        // @0x827287A8. DWARF `void GenerateNetworkUpdateEvents(const InputBuffer_PostPhysics*,
+        // OutputBuffer_PostPhysics*)` (BrnTrafficEntityModule.cpp:14792). PostPhysicsUpdate's tail
+        // calls it every frame at 0x8274EEA0, between UpdateEventStarts and
+        // ProcessTrafficTypeRequests. It fills the network OUTPUT interface: the active hull per race
+        // car, the hull-sync divergence byte and, online, the pending hull broadcast and the data
+        // hash. That table is what TrafficManager::HandleSendingRestartTrafficMessages reads.
+        void GenerateNetworkUpdateEvents(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+                                         BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput);
+
         // ---- THE TWO DRAINS OF maNewCrashedVehicles. Bodies in _wT3_01.cpp beside its one
         //      producer, RecordTrafficVehicleIsPhysical.
         // @0x82720030 (428 insns). DWARF `void GenerateCrashedVehicleEvents(

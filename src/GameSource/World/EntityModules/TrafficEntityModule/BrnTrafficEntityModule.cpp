@@ -1720,6 +1720,20 @@ namespace
         return CgsDev::Log::gpDebugPrint;
     }
 
+    // FLAG PC witness (crash parity FX-NETCRASH; NOT in the X360 binary). BRN_NETCRASH_DIAG, default
+    // off -- the same switch as the crash module's and the physical traffic manager's [netcrash]
+    // lines: the online traffic hull set's own lines, each hard-capped.
+    CgsDev::Log::DebugPrint* NetCrashDiagStream()
+    {
+        static const bool sbEnabled = (getenv("BRN_NETCRASH_DIAG") != 0);
+        if (!sbEnabled || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return 0;
+        }
+        return CgsDev::Log::gpDebugPrint;
+    }
+    const s32 KI_NETCRASH_HULL_DIAG_MAX_LINES = 48;
+
     // The X360 immediates this file needs that are not rodata reads. Each is an instruction
     // operand, recovered rather than guessed.
 
@@ -3816,6 +3830,12 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         }
     }
 
+    // 0x8274EE94..0x8274EEA0 `mr r5, r25 ; mr r4, r24 ; mr r3, r31 ; bl 0x827287A8` -- LIVE
+    // (crash parity FX-NETCRASH, 2026-09-25): every frame, right before the traffic-type answer.
+    // It publishes the active hull per race car and the hull-sync state to the network output
+    // interface. Body below this function.
+    GenerateNetworkUpdateEvents(lpInput, lpOutput);
+
     // ⭐ [traffic-type wave 2026-09-14] THE TRAFFIC-TYPE QUERY IS ANSWERED HERE, at exactly the
     // console's position: after UpdateEventStarts / GenerateNetworkUpdateEvents and before the
     // replay-serialiser registration, INSIDE the LockForRead/LockForWrite bracket
@@ -3842,12 +3862,161 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         static bool sbLogged = false;
         LogMissingLeg_T1(sbLogged,
             "PostPhysicsUpdate remaining tail legs -- the perfmon bracket, UpdateEventStarts "
-            "@0x82743B80, GenerateNetworkUpdateEvents and the replay-serialiser "
-            "registration/write");
+            "@0x82743B80 and the replay-serialiser registration/write");
     }
 
     lpInput->UnlockForRead();
     lpOutput->UnlockForWrite();
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::GenerateNetworkUpdateEvents  @ 0x827287A8   (.cpp 14792; crash parity
+// FX-NETCRASH, online hull set piece 1, 2026-09-25)
+//
+// Caller: PostPhysicsUpdate @0x8274E6D0, EVERY frame (0x8274EEA0, between UpdateEventStarts and
+// ProcessTrafficTypeRequests). It fills the traffic network OUTPUT interface, which
+// BridgeEntityModulesToOutput_PostPhysics leg 13 (0x827AF0D4) hands to the world output and
+// BrnGameModule on to the network module. There, TrafficManager::HandleSendingRestartTrafficMessages
+// reads the active-hull table (GetActiveHulls asserts mbActiveHullsValid) and UpdateHullSync
+// relays the ActivateHull queue.
+//
+//   0x827287C8..0x82728818  CGS_ASSERT lpInput (:14979) / lpOutput (:14980), both non-gating
+//   0x8272887C..0x82728A14  for every active-race-car slot (BurnoutConstants.h:39 enum walk):
+//       hull = 0xFFFF                                             `li r27, -1`
+//       if (lpInput->GetActiveRaceCarOutputInterface()->IsRaceCarActive(i))   inlined: RC output
+//                                                                 h:854/:855, `lhzx +0x2780+2i & 1`
+//           p  = GetRaceCarState(i)->mTransform.wAxis             0x8227D690 ; lvx128 v13, r3, 0x220
+//           d  = p with y := 0, minus unk_8300CCB0                vrlimi128 v10, v11(0), 4, 0 ; vsubfp
+//           dd = dot3(d, d)                                       vmsum3fp128 (splat)
+//           if (dd > unk_8300CCC0)                                vcmpgtfp. ; CR6 all-true
+//               if (p.y > unk_8300C990 || dd > unk_8300CA10)      vspltw v11, v13, 1 ; vcmpgtfp. x2
+//                   hull = (u16)mpData->mpPvs->GetHullIndexForPoint(p)     0x82208090 ; clrlwi 16
+//       lpOutput->GetNetworkInterface()->SetActiveHull(i, hull)  0x82711AF0 ; inlined h:350/:351,
+//                                                                 sthx +0x6C+2i ; stb 1, +0x7D
+//   0x82728A18..0x82728A34  ...->SetDetectedHullSyncDivergence(mbHullSyncDivergence)  stb +0x7E
+//   0x82728A38..0x82728A50  if (!mbAllowDivergentBehaviour && meState == E_STATE_RUNNING):
+//   0x82728A54..0x82728AA4      if (mbNeedToBroadcastHullChange)
+//                                   ...->ActivateHull(arc, hull, frame) of mHullChangeToBroadcast
+//                                   (0x8271D238; lwzx +0x558E0, lhzx +0x558E4, lhzx +0x558E6),
+//                                   mbNeedToBroadcastHullChange = false
+//   0x82728AA8..0x82728AF4      if (IsDecisionFrame())
+//                                   ...->SetDataHash(muUpdateCount, Logger::HashState(mpLogger, this))
+//                                   inlined: sth +0x80, stw +0x84, stb 1 +0x7C -- GATED below
+//
+// The four vector constants are CRT dyn-init splats, read with tools/re/findinit.py + x360rd.py:
+//   unk_8300CCB0 = vspltisw 0                              (thunk 0x82C66784) -- the world origin
+//   unk_8300CCC0 = splat(flt_820BA5C8 == 0x42C80000, 100.0)   (thunk 0x82C667B0)
+//   unk_8300C990 = splat(flt_820BA62C == 0x3F000000, 0.5)     (thunk 0x82C667D8)
+//   unk_8300CA10 = splat(flt_8201C220 == 0x471C4000, 40000.0) (thunk 0x82C66800)
+// Every compare reads CR6's all-lanes bit over splatted operands, so each is a scalar predicate, and
+// NaN fails all three (no hull published). A car still sitting within 10 m of the origin (not yet
+// placed) publishes the invalid hull, which is what makes the network side "try again next frame".
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::GenerateNetworkUpdateEvents(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+                                                      BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput)
+{
+    CGS_ASSERT(lpInput != 0, "lpInput");     // baked .cpp 14979
+    CGS_ASSERT(lpOutput != 0, "lpOutput");   // baked .cpp 14980
+
+    const f32 KF_MIN_GROUND_DIST_SQ_FROM_ORIGIN = 100.0f;     // flt_820BA5C8 -> unk_8300CCC0
+    const f32 KF_MIN_HEIGHT_ABOVE_ORIGIN        = 0.5f;       // flt_820BA62C -> unk_8300C990
+    const f32 KF_FAR_GROUND_DIST_SQ_FROM_ORIGIN = 40000.0f;   // flt_8201C220 -> unk_8300CA10
+
+    for (EActiveRaceCarIndex leRaceCar = E_ACTIVE_RACE_CAR_INDEX_0;
+         leRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leRaceCar++)
+    {
+        u16 luHull = KU_INVALID_HULL;
+
+        if (lpInput->GetActiveRaceCarOutputInterface()->IsRaceCarActive(leRaceCar))
+        {
+            const Vector3 lPosition =
+                lpInput->GetActiveRaceCarOutputInterface()->GetRaceCarState(leRaceCar)->mTransform.wAxis;
+
+            // y := 0 (vrlimi128), minus the zero vector (vsubfp, an identity), then vmsum3fp128:
+            // the squared ground-plane distance from the world origin. Plain f32 products and sums
+            // in lane order, the tree's standing vmsum3fp128 convention (KillAllTrafficInCylinder).
+            Vector3 lGroundOffset = lPosition;
+            lGroundOffset.y = 0.0f;
+            const f32 lfGroundDistSq = lGroundOffset.x * lGroundOffset.x
+                                     + lGroundOffset.y * lGroundOffset.y
+                                     + lGroundOffset.z * lGroundOffset.z;
+
+            if (lfGroundDistSq > KF_MIN_GROUND_DIST_SQ_FROM_ORIGIN)
+            {
+                if (lPosition.y > KF_MIN_HEIGHT_ABOVE_ORIGIN
+                    || lfGroundDistSq > KF_FAR_GROUND_DIST_SQ_FROM_ORIGIN)
+                {
+                    luHull = static_cast<u16>(mpData->mpPvs->GetHullIndexForPoint(lPosition));
+                }
+            }
+        }
+
+        lpOutput->GetNetworkInterface()->SetActiveHull(leRaceCar, luHull);
+
+        // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped: one line each time a
+        // slot's published hull changes, i.e. the table TrafficManager::GetActiveHulls hands the
+        // restart-traffic message.
+        if (CgsDev::Log::DebugPrint* lpNetDiag = NetCrashDiagStream())
+        {
+            static u16 sauLastPublished[E_ACTIVE_RACE_CAR_INDEX_COUNT] = {
+                KU_INVALID_HULL, KU_INVALID_HULL, KU_INVALID_HULL, KU_INVALID_HULL,
+                KU_INVALID_HULL, KU_INVALID_HULL, KU_INVALID_HULL, KU_INVALID_HULL };
+            static s32 siLines = 0;
+            if (luHull != sauLastPublished[leRaceCar] && siLines < KI_NETCRASH_HULL_DIAG_MAX_LINES)
+            {
+                ++siLines;
+                *lpNetDiag << "[netcrash] GenerateNetworkUpdateEvents slot=" << static_cast<s32>(leRaceCar)
+                           << " hull=" << static_cast<s32>(luHull)
+                           << " was=" << static_cast<s32>(sauLastPublished[leRaceCar])
+                           << " online=" << (mbAllowDivergentBehaviour ? 0 : 1)
+                           << " state=" << static_cast<s32>(meState) << "\n";
+            }
+            sauLastPublished[leRaceCar] = luHull;
+        }
+    }
+
+    lpOutput->GetNetworkInterface()->SetDetectedHullSyncDivergence(mbHullSyncDivergence);
+
+    if (!mbAllowDivergentBehaviour && meState == E_STATE_RUNNING)
+    {
+        if (mbNeedToBroadcastHullChange)
+        {
+            lpOutput->GetNetworkInterface()->ActivateHull(mHullChangeToBroadcast.meActiveRaceCarIndex,
+                                                          mHullChangeToBroadcast.muNewActiveHull,
+                                                          mHullChangeToBroadcast.muUpdateFrame);
+            mbNeedToBroadcastHullChange = false;
+
+            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped.
+            if (CgsDev::Log::DebugPrint* lpNetDiag = NetCrashDiagStream())
+            {
+                static s32 siLines = 0;
+                if (siLines < KI_NETCRASH_HULL_DIAG_MAX_LINES)
+                {
+                    ++siLines;
+                    *lpNetDiag << "[netcrash] GenerateNetworkUpdateEvents broadcast arc="
+                               << static_cast<s32>(mHullChangeToBroadcast.meActiveRaceCarIndex)
+                               << " hull=" << static_cast<s32>(mHullChangeToBroadcast.muNewActiveHull)
+                               << " frame=" << static_cast<s32>(mHullChangeToBroadcast.muUpdateFrame) << "\n";
+                }
+            }
+        }
+
+        if (IsDecisionFrame())
+        {
+            // GATE: `lwzx r3, this, 0x727B4 ; bl Logger::HashState @0x8275DFB8`, then the inlined
+            // SetDataHash(muUpdateCount, hash) -- the hash leg the peers compare
+            // (TrafficManager::UpdateTrafficHashing reads HasHashBeenSet / GetDataHash). mpLogger's
+            // type lives in BrnTrafficLogger.cpp, which is unmounted and does not compile (see
+            // EnterStartingUpState's mpLogger gate). Without it mbHashValid stays false, so the
+            // network side stores no local hash and compares nothing -- no false divergence.
+            static bool sbLogged = false;
+            LogMissingLeg_T1(sbLogged,
+                "GenerateNetworkUpdateEvents hash leg (IsDecisionFrame -> Logger::HashState "
+                "@0x8275DFB8 -> SetDataHash, 0x82728AA8..0x82728AF4) -- BrnTrafficLogger.cpp is "
+                "unmounted and does not compile. ONLINE-only; mbHashValid stays false");
+        }
+    }
 }
 
 // ============================================================================

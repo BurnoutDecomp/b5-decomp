@@ -63,6 +63,35 @@ namespace BrnTrafficIO
         mActivateHullQueue.AddEvent(lEvent);
     }
 
+    // ---- ADDITIVE (crash parity FX-NETCRASH, 2026-09-25): two setters the header declared with no
+    // body. No out-of-line console copy of either: their one caller,
+    // TrafficEntityModule::GenerateNetworkUpdateEvents @0x827287A8, inlines both, and the bodies
+    // below are read off those inlined sites.
+
+    // Inlined at 0x827289A0..0x827289F0, once per active race car:
+    //   cmpwi idx, -1 ; bne       -> else FireAssert("leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", h:350)
+    //   cmpwi idx, 8  ; blt       -> else FireAssert("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", h:351)
+    //   sthx  hull, iface, (idx + 0x36) * 2      mau16ActiveHulls[idx] (0x6C + 2*idx)
+    //   stb   1, 0x7D(iface)                     mbActiveHullsValid
+    // (the assert file string is 0x820BAC88, ...\SharedIO/BrnTrafficNetworkInterfaces.h). Both asserts
+    // are non-gating tripwires, as everywhere else in this file.
+    void TrafficNetworkOutputInterface::SetActiveHull(EActiveRaceCarIndex leActiveRaceCarIndex, u16 luHull)
+    {
+        CGS_ASSERT(leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                   "leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID");   // BrnTrafficNetworkInterfaces.h:350
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");      // BrnTrafficNetworkInterfaces.h:351
+        mau16ActiveHulls[leActiveRaceCarIndex] = luHull;
+        mbActiveHullsValid = true;
+    }
+
+    // Inlined at 0x82728A2C..0x82728A34: `bl sub_82711AF0 ; stb r31, 0x7E(r3)` -- a bare byte store
+    // of the module's mbHullSyncDivergence, no assert.
+    void TrafficNetworkOutputInterface::SetDetectedHullSyncDivergence(bool lbDivergence)
+    {
+        mbHullSyncDivergence = lbDivergence;
+    }
+
     // X360 0x82542438. Asserts the hash has been published this frame (mbHashValid, non-gating)
     // then returns it. The X360 reads muHash with a halfword load (lhz), matching the u16 type.
     u16 TrafficNetworkOutputInterface::GetDataHash() const
