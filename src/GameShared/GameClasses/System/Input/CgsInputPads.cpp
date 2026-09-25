@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // [DIAG] CgsDev::Log::gpDebugPrint (UpdatePadRumble witness)
 #include "rw/math/fpu/scalar_operation.h"                      // rw::math::fpu::Clamp (UpdatePadRumble / FillRawData)
 
+#include <cmath>     // std::fmaf (UpdateJoltEnvelope's two fmadds)
 #include <cstdlib>   // [DIAG] std::getenv (BRN_RUMBLE_DIAG)
 #include <cstring>   // std::memset (Construct clears the action-down bitmap)
 
@@ -210,9 +211,16 @@ namespace CgsInput
     //   t >= attack+decay+sustain+release   -> 0
     //   otherwise (release)                 -> lerp sustain->0 over the release window
     // ------------------------------------------------------------------------------------------------
+    // The two `>=` tests are each ONE condition bit on the console, `fcmpu ; bge` (bc 4,lt), which is
+    // TAKEN on an unordered compare, so they are spelled `!(t < x)`: a NaN time skips the assert
+    // (0x828E7640 fcmpu t, 0.0 (flt_82001CC0) ; 0x828E7644 bge -> 0x828E7668) and leaves through the
+    // last test to 0.0 (0x828E76D4 fcmpu t, end ; 0x828E76D8 bge -> 0x828E76F4 fmr f1, f30 (0.0)).
+    // The three `<` tests branch past their arm with a bge too (0x828E7670, 0x828E7688, 0x828E76B8):
+    // a NaN skips each arm, as the PC `<` does. Both lerps are ONE fmadds (0x828E76A0, 0x828E76EC),
+    // so they round once (std::fmaf) (crash parity FX-GATE).
     f32 InputPads::UpdateJoltEnvelope(const InputIO::JoltEnvelope& lEnvelope, f32 lfTime)
     {
-        CGS_ASSERT(lfTime >= 0.0f, "lfTime >= 0.0f");                         // cpp :843 (0x34B)
+        CGS_ASSERT(!(lfTime < 0.0f), "lfTime >= 0.0f");                       // cpp :843 (0x34B)
 
         const f32 lfAttack  = lEnvelope.mfAttackTime;
         const f32 lfDecay   = lEnvelope.mfDecayTime;
@@ -227,17 +235,22 @@ namespace CgsInput
         }
         if (lfTime < lfDecay + lfAttack)
         {
-            return ((lfTime - lfAttack) / lfDecay) * (lfLevel - lfPeak) + lfPeak;
+            // 0x828E768C fsubs t-attack ; 0x828E7698 fdivs /decay ; 0x828E769C fsubs level-peak ;
+            // 0x828E76A0 fmadds f1 = ratio * (level - peak) + peak.
+            return std::fmaf((lfTime - lfAttack) / lfDecay, lfLevel - lfPeak, lfPeak);
         }
-        if (lfTime < (lfSustain + lfDecay) + lfAttack)
+        const f32 lfSustainEnd = (lfSustain + lfDecay) + lfAttack;
+        if (lfTime < lfSustainEnd)
         {
             return lfLevel;
         }
-        if (lfTime >= ((lfRelease + lfSustain) + lfDecay) + lfAttack)
+        if (!(lfTime < ((lfRelease + lfSustain) + lfDecay) + lfAttack))
         {
             return 0.0f;
         }
-        return ((lfTime - ((lfSustain + lfDecay) + lfAttack)) / lfRelease) * (-lfLevel) + lfLevel;
+        // 0x828E76DC fsubs t-sustainEnd ; 0x828E76E4 fneg level ; 0x828E76E8 fdivs /release ;
+        // 0x828E76EC fmadds f1 = ratio * -level + level.
+        return std::fmaf((lfTime - lfSustainEnd) / lfRelease, -lfLevel, lfLevel);
     }
 
     // ------------------------------------------------------------------------------------------------
