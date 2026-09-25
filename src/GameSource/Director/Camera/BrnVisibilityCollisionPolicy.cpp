@@ -274,12 +274,13 @@ void VisibilityCollisionPolicy::ProcessSceneQueryResults(const CollisionPolicySh
     //         lrSharedInfo.mpAllVehicleData, splat(E_WORLD_NO_SLOMO dt), camera position, mVelocity)
     //                                                                          (0x822245F8, @0x822230D8)
     // which clears the prediction and then walks AllVehicleData's TRAFFIC array, testing the
-    // camera's motion line against each traffic car's ellipsoid. The PC director input does not
-    // carry that array (AllVehicleData::mpTrafficVehicleArray stays null -- see
-    // BrnDirectorAllVehicleData.h), and the console asserts it non-null, so the call is not made.
-    // The prediction keeps its Construct value (none) -- the console's own answer with no traffic
-    // car in range -- so reason 10 cannot fire.
-    // DELETE-WHEN: the director input carries the traffic array (logged by the conductor).
+    // camera's motion line against each traffic car's ellipsoid. The array arrives since
+    // 2026-09-25 (BridgeWorldToDirector step 4 -> AllVehicleData::Update's lpTrafficVehicleArray,
+    // FX-DIRECTOR2 item 3), so the gate's first reason expired; what remains is the callee itself:
+    // VehicleCollisionPredictor::Update has no PC body yet, so the call is still not made. The
+    // prediction keeps its Construct value (none) -- the console's own answer with no traffic car
+    // in range -- so reason 10 cannot fire.
+    // DELETE-WHEN: VehicleCollisionPredictor::Update @0x822230D8 is bodied (logged by the conductor).
 
     if (mbDoingCollisionPredictionThisTime && mGeometryCollisionPredictor.WillCollide()
         && mGeometryCollisionPredictor.GetTimeUntilCollision() < 1.0f && mbFirstFrame && mbCanFail)
@@ -353,7 +354,11 @@ void GroundConstraint::GenerateSceneQueries(const Camera& lrCamera, f32 lfTimest
                                             const SceneQueryInterface* lpRequestInterface)
 {
     (void)lfTimestep;
-    CGS_ASSERT(mfDesiredHeight >= 0.0f, "mfDesiredHeight >= 0.0f");                 // :719
+    // `lfs f13, 0x50 ; fcmpu cr6, f13, flt_82001CC0 (0.0f) ; bge 0x8224024C` (0x8224021C..0x82240228):
+    // bge is "not less than", which an unordered compare satisfies, so a NaN height SKIPS the assert
+    // on the console -- only a height below 0 fires it. (FX-GATE's NaN sweep, 2026-09-25: this read
+    // `h >= 0.0f`, which fires on NaN.)
+    CGS_ASSERT(!(mfDesiredHeight < 0.0f), "mfDesiredHeight >= 0.0f");               // :719
 
     const rw::math::vpu::Vector3& lrCameraPosition = lrCamera.mTransform.wAxis;
 
@@ -383,7 +388,9 @@ void GroundConstraint::GenerateSceneQueries(const Camera& lrCamera, f32 lfTimest
 bool GroundConstraint::ProcessSceneQueryResults(f32 lfTimestep, Camera& lrCamera)
 {
     (void)lfTimestep;
-    CGS_ASSERT(mfDesiredHeight >= 0.0f, "mfDesiredHeight >= 0.0f");                 // :738
+    // `fcmpu cr6, f13(+0x50), flt_82001CC0 (0.0f) ; bge 0x8220E3EC` (0x8220E3C4..0x8220E3CC): the
+    // same NaN-skipping polarity as GenerateSceneQueries above.
+    CGS_ASSERT(!(mfDesiredHeight < 0.0f), "mfDesiredHeight >= 0.0f");               // :738
     CGS_ASSERT(mLineTest.HasPackage(), "mLineTest.HasPackage()");                   // :739
 
     const bool lbFoundGround = mLineTest.GetPackage().mbIntersection;

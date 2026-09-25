@@ -34,12 +34,14 @@ namespace
     const f32 KF_ONE  = 1.0f;
     const f32 KF_ZERO = 0.0f;
 
-    // rw::math::fpu::IsZero(x) -- the console's `x > EPS ? false : (x >= -EPS)`.
+    // rw::math::fpu::IsZero(x), as PostCollisionUpdate inlines it (0x82252B84..0x82252BB0):
+    //   fcmpu x, flt_82001770 (+EPS) ; bgt -> 0 ; li 1 ; fcmpu x, flt_82002514 (-EPS) ; bge -> keep 1 ; 0
+    // Both branches are "not"-tests of an ordered compare, so an unordered one (NaN) falls through the
+    // first and TAKES the second: IsZero(NaN) is TRUE on the console. (FX-GATE's NaN sweep, 2026-09-25:
+    // this read `x > EPS ? false : x >= -EPS`, which answers false for NaN.)
     bool IsZero(f32 lfValue)
     {
-        if (lfValue > KF_IS_ZERO_EPSILON)
-            return false;
-        return lfValue >= -KF_IS_ZERO_EPSILON;
+        return !(lfValue > KF_IS_ZERO_EPSILON) && !(lfValue < -KF_IS_ZERO_EPSILON);
     }
 }
 

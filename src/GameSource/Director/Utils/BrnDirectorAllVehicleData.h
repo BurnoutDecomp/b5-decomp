@@ -100,59 +100,56 @@ namespace BrnDirector
             mbShouldUpdateNearestRaceCars    = true;
         }
 
-        // ⭐ THE EXTRACTED HEAD OF Update @0x8221D938 (0x8221D95C..0x8221D9E8), 2026-08-01.
+        // ====================================================================================
+        // ⭐⭐ AllVehicleData::Update @0x8221D938 -- THE CONSOLE'S WHOLE BODY since 2026-09-25 (crash
+        // parity FX-DIRECTOR2). It replaces UpdateRaceCarsBringUp, the extracted leg that had to run
+        // without the last two arguments because the director input carried neither.
         //
-        // The console's four field stores, in the console's own order:
-        //     stw r5, 0xC0   mpRaceCars           = lpRaceCars
-        //     stw r6, 0xC4   mePlayerRaceCarIndex = lePlayerIndex
-        //     std r4, 0xC8   mUsedRaceCars        = lUsedRaceCars   (a 64-bit store)
-        //     stw r30,0xD0   mpTrafficVehicleArray= lpTraffic
-        // followed by its two surviving guards (mpRaceCars != NULL @:69, index < 8 @:70).
+        // SIGNATURE. MainDirector::PreSceneQueryUpdate passes FIVE arguments (0x8225BC54..0x8225BC70:
+        // r4..r8), one more than the PS3 DWARF's :68 declaration. The fifth is the per-car team array:
+        // the body stores r8 to a stack slot at entry (0x8221D948) and reloads it for the nearest-car
+        // rows under its own tripwire "lpaVehicleTeams" (:134, 0x8221DE80..0x8221DE9C).
         //
-        // [FLAG PC bring-up] TWO deviations, both stated rather than hidden:
-        //  1. THE TRAFFIC ARGUMENT IS ABSENT. The console's third guard is
-        //     `lpTrafficVehicleArray != NULL` @:66 and its only producer is the traffic
-        //     module's TrafficDirectorEntity array, which the PC director input buffer does
-        //     not carry. Passing null through the real Update would fire that assert every
-        //     frame, so this leg does not take the argument at all and mpTrafficVehicleArray
-        //     is left as Construct left it (null). Nothing on the junkyard path reads it.
-        //  2. ⭐ THE NEAREST-CAR REBUILD NOW RUNS (2026-08-01, ICE-anim transform wave). It had
-        //     to: BehaviourIceAnim::Construct anchors mSecondaryVehicleRef to
-        //     E_RACE_CAR_NEAREST_PLAYER rank 1, and BOTH VehicleRef::IsValid and VehicleRef::Get
-        //     route that through GetNearestRaceCarIndexToPlayer -- which, on an EMPTY table,
-        //     asserts and then computes `luRank = GetLength() - 1u == 0xFFFFFFFF` and indexes
-        //     with it. An out-of-bounds read, not a soft failure.
-        //     The walk below is Update @0x8221D938's own (pseudocode 344-400): clear the table,
-        //     then for every SET bit of mUsedRaceCars append {index, squared distance from the
-        //     player, team}. ⚠️ THE PLAYER IS NOT SKIPPED -- the console's bit scan has no such
-        //     test, and GetSqDistanceOfNearestCarToPlayer reads row 1 precisely because row 0
-        //     is the player itself at distance zero.
-        //     [FLAG PC bring-up] miTeam: the console's 5th Update argument is a per-car team
-        //     array (`lpaVehicleTeams`, its own :134 assert; Hex-Rays drops it), and the PC
-        //     director input carries no such array. The field is filled with 0 rather than
-        //     invented. CONSEQUENCE: SqDistanceOfNearestOpposingTeamMember would see every car
-        //     on team 0. Nothing on the junkyard / intro path calls it.
-        // DELETE-WHEN: the director input carries the traffic array and the team array (then
-        // this becomes the real Update).
-        void UpdateRaceCarsBringUp(CgsContainers::BitArray<8u> lUsedRaceCars,
-                                   const Camera::VehicleInfo*  lpRaceCars,
-                                   EActiveRaceCarIndex         lePlayerIndex)
+        // THE BODY, in the console's order:
+        //   0x8221D95C  stw r5, 0xC0   mpRaceCars           = lpRaceCars
+        //   0x8221D960  stw r6, 0xC4   mePlayerRaceCarIndex = lePlayerIndex
+        //   0x8221D96C  std r4, 0xC8   mUsedRaceCars        = lUsedRaceCars   (a 64-bit store)
+        //   0x8221D974  assert "lpTrafficVehicleArray != NULL" (:66)
+        //   0x8221D998  stw r30, 0xD0  mpTrafficVehicleArray = lpTrafficVehicleArray
+        //   0x8221D994..0x8221D9E4  asserts "mpRaceCars != NULL" (:69), index < KI_MAX_VEHICLES (:70)
+        //   0x8221D9E8..0x8221DDD0  the three player reference spaces (UpdatePlayerSpaces below)
+        //   0x8221DDB0/0x8221DDD4  `li r10, 1 ; stb r10, 0x139` mbShouldUpdateNearestRaceCars = true
+        //   0x8221DDD8  `stw 0, 0x134`  the nearest-car table emptied
+        //   0x8221DDE0..0x8221E0DC  for every SET bit of mUsedRaceCars, ascending (a cntlzd scan):
+        //               GetRaceCar(car) and GetPlayer() (both with their asserts), the squared
+        //               distance (`vsubfp player - car ; vmsum3fp128`), the team
+        //               `lwzx r10, 4 * car, lpaVehicleTeams` (0x8221DECC / 0x8221DEE4), and
+        //               NearestCarInfo<8>::Append @0x821FBA48 of {car, distance, team}.
+        //               THE PLAYER IS NOT SKIPPED: row 0 after the sort is the player at distance 0,
+        //               which is why GetSqDistanceOfNearestCarToPlayer reads row 1.
+        //   0x8221E0E0  `stb 0, 0x138`  mbSorteddNearestRaceCarsToPlayer = false
+        // ====================================================================================
+        void Update(CgsContainers::BitArray<8u> lUsedRaceCars,
+                    const Camera::VehicleInfo*  lpRaceCars,
+                    EActiveRaceCarIndex         lePlayerIndex,
+                    const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* lpTrafficVehicleArray,
+                    const u32*                  lpaVehicleTeams)
         {
             mpRaceCars           = lpRaceCars;
             mePlayerRaceCarIndex = lePlayerIndex;
             mUsedRaceCars        = lUsedRaceCars;
 
+            CGS_ASSERT(lpTrafficVehicleArray != 0, "lpTrafficVehicleArray != NULL");              // h:66
+            mpTrafficVehicleArray = lpTrafficVehicleArray;
+
             CGS_ASSERT(mpRaceCars != 0, "mpRaceCars != NULL");                                  // h:69
             CGS_ASSERT(static_cast<s32>(mePlayerRaceCarIndex) < 8,
                        "mePlayerRaceCarIndex < BrnPhysics::Vehicle::KI_MAX_VEHICLES");          // h:70
 
-            mbShouldUpdateNearestRaceCars    = true;
-            maNearestRaceCarsToPlayer.Clear();                       // console `stw 0, +0x134`
+            UpdatePlayerSpaces();
 
-            // The player's world position, read once (the console reloads GetPlayer()+0x1F0's
-            // wAxis lane inside the loop; same value, one read here).
-            const Vector3& lrPlayerPos =
-                mpRaceCars[static_cast<s32>(mePlayerRaceCarIndex)].mRaceCarState.mTransform.wAxis;
+            mbShouldUpdateNearestRaceCars = true;
+            maNearestRaceCarsToPlayer.Clear();                       // console `stw 0, +0x134`
 
             for (u32 luCar = 0; luCar < 8u; ++luCar)
             {
@@ -161,10 +158,13 @@ namespace BrnDirector
                     continue;
                 }
 
-                const Vector3& lrCarPos =
-                    mpRaceCars[luCar].mRaceCarState.mTransform.wAxis;
+                CGS_ASSERT(lpaVehicleTeams != 0, "lpaVehicleTeams");                         // h:134
 
-                // `vsubfp` then `vmsum3fp128` -- the SQUARED distance over the x/y/z lanes.
+                const Vector3& lrCarPos =
+                    GetRaceCar(static_cast<EActiveRaceCarIndex>(luCar)).mRaceCarState.mTransform.wAxis;
+                const Vector3& lrPlayerPos = GetPlayer().mRaceCarState.mTransform.wAxis;
+
+                // `vsubfp` (player - car) then `vmsum3fp128` -- the SQUARED distance over x/y/z.
                 const f32 lfDx = lrPlayerPos.x - lrCarPos.x;
                 const f32 lfDy = lrPlayerPos.y - lrCarPos.y;
                 const f32 lfDz = lrPlayerPos.z - lrCarPos.z;
@@ -172,22 +172,19 @@ namespace BrnDirector
                 NearestCarInfo lRow;
                 lRow.meRaceCarIndex = static_cast<EActiveRaceCarIndex>(luCar);
                 lRow.mfDistance     = (lfDx * lfDx) + (lfDy * lfDy) + (lfDz * lfDz);
-                lRow.miTeam         = 0;   // [FLAG PC bring-up] -- see the banner.
+                lRow.miTeam         = static_cast<s32>(lpaVehicleTeams[luCar]);   // lwzx @0x8221DEE4
 
                 maNearestRaceCarsToPlayer.Append(lRow);
             }
 
             mbSorteddNearestRaceCarsToPlayer = false;
-
-            // The three player reference spaces. On the console this is the SAME function's
-            // first stage and it runs BEFORE the nearest-car rebuild; see the banner below.
-            UpdatePlayerSpaces();
         }
 
         // ====================================================================================
         // ⭐⭐ UpdatePlayerSpaces -- THE FIRST STAGE of AllVehicleData::Update @0x8221D938
-        // (0x8221D9E8..0x8221DDD8), which the UpdateRaceCarsBringUp extraction above had never
-        // taken. Added 2026-09-06, bug-test wave, lane `drivethru`.
+        // (0x8221D9E8..0x8221DDD8), which the old UpdateRaceCarsBringUp extraction had never
+        // taken. Added 2026-09-06, bug-test wave, lane `drivethru`. Update above calls it in the
+        // console's position (2026-09-25), before the nearest-car rebuild.
         //
         // ⛔⛔ WHAT WAS WRONG, AND IT IS MEASURED, NOT ARGUED. Construct() seeds
         // mPlayerImpactSpace / mPlayerHeadingSpace / mPlayerLooseHeadingSpace to IDENTITY and
@@ -249,11 +246,9 @@ namespace BrnDirector
         // Located with a lis/@l pair sweep of the image; every OTHER site whose low half is
         // 0xA6D0/0xA950 resolves to a different symbol (checked, not assumed).
         //
-        // ⚠️ ORDER DEVIATION, stated: the console runs this stage BEFORE the nearest-car rebuild
-        // and this call sits AFTER it. Nothing in either stage reads the other's output (the
-        // rebuild reads mpRaceCars/mUsedRaceCars, this reads GetPlayer()), so the frame's result
-        // is identical; it is called last only because the extraction above already owns the
-        // member seeding this needs.
+        // ORDER: the console runs this stage BEFORE the nearest-car rebuild, and Update above now
+        // does too (the old extraction called it last -- harmless, since neither stage reads the
+        // other's output, but no longer needed).
         // ====================================================================================
         void UpdatePlayerSpaces()
         {
@@ -343,9 +338,7 @@ namespace BrnDirector
             return mpRaceCars[static_cast<s32>(leIndex)];
         }
 
-        void Update(CgsContainers::BitArray<8u> lUsedRaceCars, const Camera::VehicleInfo* lpRaceCars,
-                    EActiveRaceCarIndex lePlayerIndex,
-                    const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* lpTraffic); // :68
+        // Update (:68) is bodied inline above, with the console's fifth argument.
         const Camera::VehicleInfo& GetNearestRaceCarToPlayer(u32 luRank) const;   // :75
 
         // ⭐ @0x82233380 -- BODIED INLINE HERE for the same reason: its own assert cites
@@ -384,7 +377,20 @@ namespace BrnDirector
         Matrix44Affine GetPlayerImpactSpace() const       { return mPlayerImpactSpace; }       // :85
         Matrix44Affine GetPlayerHeadingSpace() const      { return mPlayerHeadingSpace; }      // :88
         Matrix44Affine GetPlayerLooseHeadingSpace() const { return mPlayerLooseHeadingSpace; } // :91
-        const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* GetTraffic() const; // :94
+        // :94 -- the traffic records Update stored. No standalone X360 export: its two readers,
+        // VehicleCollisionPredictor::Update @0x822230D8 and FrustrumCollisionResolver::
+        // ResolveVehicleCollisions @0x82223890, each load `lwz 0xD0` off the AllVehicleData
+        // pointer themselves (0x822230FC / 0x822238C0) and assert it non-null.
+        const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* GetTraffic() const  // :94
+        {
+            return mpTrafficVehicleArray;
+        }
+        // [PC diag accessor, NOT in the DWARF] the nearest-car rows as Update built them (car,
+        // squared distance, team) -- read only by MainDirector's BRN_DIRECTOR_TRAFFIC_DIAG witness.
+        const NearestCarInfoArray& GetNearestRaceCarRowsForDiag() const
+        {
+            return maNearestRaceCarsToPlayer;
+        }
         // BODIED INLINE 2026-08-01, same one-line member read as the two accessors below it
         // (no standalone X360 export; the console inlines every reach of mpRaceCars).
         const Camera::VehicleInfo* GetRaceCars() const { return mpRaceCars; }     // :97

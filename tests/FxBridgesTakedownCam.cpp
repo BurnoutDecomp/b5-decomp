@@ -17,6 +17,11 @@
 // player's end-of-event pair after the Append (0x823CD4A0..0x823CD510), reading the scoring snapshot as the
 // REAL ScoringOutputInterface and calling the input's inline SetPlayerEliminated / SetModeTimeExpired. The
 // scoring fixture is therefore backed by that real type, and the input fixture forwards the two setters.
+// FIXTURE NOTE (2026-09-25, FX-DIRECTOR2, no check changed): the body also publishes the team words now -- the
+// player's @0x7AB0 after the Append (0x823CD428..0x823CD454) and the SetVehicleTeam loop at the end
+// (0x823CD514..0x823CD56C), both out of the REAL OnlineScoringOutputInterface. The output fixture carries that
+// type in raw storage; the input fixture records the two setters (they are out of line in the InputBuffer TU,
+// which this test does not link). Their numbers are tests/run_fxdirector2_traffic_hop.py's.
 #include "types.hpp"
 #include "BrnCommonTypes.h"
 #include "GameSource/BurnoutConstants.h"
@@ -74,12 +79,17 @@ struct DirectorActionQueueFixture
 struct GameStateOutputFixture
 {
     alignas(16) unsigned char maScoringStorage[sizeof(ScoringOutputInterface)];
+    alignas(16) unsigned char maOnlineScoringStorage[sizeof(BrnGameState::GameStateModuleIO::OnlineScoringOutputInterface)];
     TakedownQueue          mTakedowns;
     GameActionQueueFixture mActions;
     ScoringOutputInterface&       Scoring() { return *reinterpret_cast<ScoringOutputInterface*>(maScoringStorage); }
     const ScoringOutputInterface* GetScoringOutputInterface() const
     {
         return reinterpret_cast<const ScoringOutputInterface*>(maScoringStorage);
+    }
+    const BrnGameState::GameStateModuleIO::OnlineScoringOutputInterface* GetOnlineScoringOutputInterface() const
+    {
+        return reinterpret_cast<const BrnGameState::GameStateModuleIO::OnlineScoringOutputInterface*>(maOnlineScoringStorage);
     }
     const TakedownQueue*          GetTakedownEventOutputQueue() const { return &mTakedowns; }
     const GameActionQueueFixture* GetGameActionQueue() const { return &mActions; }
@@ -113,6 +123,11 @@ struct DirectorInputFixture
     {
         static_cast<T*>(mpReal)->SetModeTimeExpired(lbModeTimeExpired);
     }
+    // The team words (FX-DIRECTOR2): recorded, not forwarded (out of line in the unlinked InputBuffer TU).
+    s32 miPlayerTeam;
+    s32 maiVehicleTeams[8];
+    void SetPlayerTeam(s32 liPlayerTeam) { miPlayerTeam = liPlayerTeam; }
+    void SetVehicleTeam(EActiveRaceCarIndex leIndex, s32 liTeam) { maiVehicleTeams[static_cast<s32>(leIndex) & 7] = liTeam; }
     DirectorActionQueueFixture* GetGameActionQueue() { return &mQueue; }
 };
 
@@ -156,6 +171,7 @@ static void Reset(EActiveRaceCarIndex lePlayer)
     giSequence                   = 0;
     gAsserts                     = 0;
     std::memset(gOutput.maScoringStorage, 0, sizeof(gOutput.maScoringStorage));
+    std::memset(gOutput.maOnlineScoringStorage, 0, sizeof(gOutput.maOnlineScoringStorage));
     gOutput.Scoring().mePlayerRaceCarIndex = lePlayer;
     gOutput.mTakedowns.Construct();
     gOutput.mActions.miTag = 0x5EED;

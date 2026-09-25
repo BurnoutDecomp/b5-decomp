@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
+#include <limits>
 #include <new>
 #include "types.hpp"
 #include "BrnCommonTypes.h"
@@ -51,6 +52,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 static int  giAsserts = 0;
+static int  giGroundHeightAsserts = 0;   // GroundConstraint's own "mfDesiredHeight >= 0.0f" (:719 / :738)
 static char gacLastAssert[256] = { 0 };
 
 namespace CgsDev
@@ -62,6 +64,8 @@ namespace Assert
     {
         ++giAsserts;
         std::snprintf(gacLastAssert, sizeof(gacLastAssert), "%s", lpcText != 0 ? lpcText : "");
+        if (lpcText != 0 && std::strcmp(lpcText, "mfDesiredHeight >= 0.0f") == 0)
+            ++giGroundHeightAsserts;
         return 0;
     }
     void* EndAssert() { return nullptr; }
@@ -883,6 +887,32 @@ int main()
         Check(liExpected > 0 && liActual == liExpected
                   && FailBits() == ((1u << 1) | (lbExpect12 ? (1u << 12) : 0u)),
               "C17 off screen for 0.5 s: SUBJECT_LEFT_FRAME (12) + VISIBILITY (1) on the first rolled frame after");
+    }
+    // ---- the ground constraint's own height tripwires, by polarity (FX-GATE NaN sweep, 2026-09-25) ----
+    // GenerateSceneQueries 0x82240224 / ProcessSceneQueryResults 0x8220E3C4: `fcmpu cr6, height, 0.0f
+    // (flt_82001CC0) ; bge <past the assert>`. bge ("not less than") is taken for an unordered compare, so only
+    // a height BELOW 0 fires "mfDesiredHeight >= 0.0f" -- NaN and -0.0 skip it. (The policy setter's :489 and
+    // the sphere-test :845 are `bgt`-skips and do fire on NaN; they are not counted here.)
+    {
+        const f32 KF_NAN = std::numeric_limits<f32>::quiet_NaN();
+        VisibilityCollisionPolicy& lrPolicy = FreshPolicy();
+        lrPolicy.SetDesiredHeight(KF_NAN);
+        giGroundHeightAsserts = 0;
+        Frame(lrPolicy, KW_CLEAR);
+        Check(giGroundHeightAsserts == 0 && giNearest >= 1 && Classify(gaNearest[0]) == E_ASK_GROUND,
+              "C18 a NaN ground height asks its ground line and fires neither :719 nor :738 (bge is taken on unordered)");
+
+        VisibilityCollisionPolicy& lrNegative = FreshPolicy();
+        lrNegative.SetDesiredHeight(-1.0f);
+        giGroundHeightAsserts = 0;
+        Frame(lrNegative, KW_CLEAR);
+        Check(giGroundHeightAsserts == 2, "C19 a height of -1 fires both :719 (Generate) and :738 (Process)");
+
+        VisibilityCollisionPolicy& lrNegativeZero = FreshPolicy();
+        lrNegativeZero.SetDesiredHeight(-0.0f);
+        giGroundHeightAsserts = 0;
+        Frame(lrNegativeZero, KW_CLEAR);
+        Check(giGroundHeightAsserts == 0, "C20 a height of -0.0 compares equal to 0.0: neither tripwire fires");
     }
 
     std::printf("fxdirector2_scene_query: %d checks, %d failures\n", giChecks, giFailures);

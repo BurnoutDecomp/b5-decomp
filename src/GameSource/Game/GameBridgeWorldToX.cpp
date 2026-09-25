@@ -43,17 +43,20 @@
 //   14. input->mbWorldWantsDebugControllerFocus = world-entity-status byte
 //   15. mDirectorBridgeSerialiser.Unlock()
 //
-// REPRODUCED HERE: 2, 3, 6, 7, 8, 9, 10, 11, 12, 13.   (6 restored 2026-08-02; 13 and 8 on 2026-09-24.)
+// REPRODUCED HERE: 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13.   (6 restored 2026-08-02; 13 and 8 on 2026-09-24;
+//                   4 on 2026-09-25.)
 //
 // [FLAG PC bring-up] dropped rather than paraphrased, each for a NAMED reason:
 //   1/15 + the whole state-4..6 replay arm -- BrnGameModule has no mDirectorBridgeSerialiser
 //        member (the console's is at gm+0x9A1070, inside this layout's omitted range) and
 //        DirectorBridgeSerialiser::GetStaticLayout is declaration-only. The PC has no replay
 //        path at all, so the live arm is the only one that can run.
-//   4/5 -- their DESTINATIONS (mMidInterfaceBlock, the tail of
-//        mVehicleDriverInputInterface) are honest-opaque byte spans
-//        in BrnDirectorModuleIO.h. Writing into them by console byte offset is exactly the
-//        offset-poke this project forbids; they land when those interface homes do.
+//   5 -- its DESTINATION (the world StatusInterface span before mContacts) is honest-opaque
+//        in BrnDirectorModuleIO.h. Writing into it by console byte offset is exactly the
+//        offset-poke this project forbids; it lands when that interface home does.
+//   (4 IS NO LONGER DROPPED -- restored 2026-09-25, crash parity FX-DIRECTOR2. Its destination
+//        is typed now: InputBuffer::mTrafficOutputInterface @0x6AC0, the TrafficDirectorOutputInterface
+//        the world output already carries; the x64 sizeof is the console's 0xE20.)
 //   (8 IS NO LONGER DROPPED -- restored 2026-09-24, crash parity FX-DIRECTOR. Its destination is
 //        typed now: InputBuffer::mGlobalRaceCarInterface at +16, exactly as the finding that stood
 //        here said -- 16 + 2416 == 2432 == mUsedRaceCars, and the x64 sizeof is 2416 too.)
@@ -220,6 +223,22 @@ namespace BrnGame
         // ---- step 9 (the console orders it after 4..8, all of which are gated) ------------
         CGS_ASSERT(lpActiveRaceCars->IsPlayerCarActive(), "Player race car index not active"); // :66
         const EActiveRaceCarIndex lePlayerIndex = lpWorldOutput->GetPlayerActiveRaceCarIndex();
+
+        // ---- step 4: the traffic module's director records ----------------------------------
+        // ⭐ RESTORED 2026-09-25 (crash parity FX-DIRECTOR2). 0x823E3F5C..0x823E3F78, straight after
+        // the assert above:
+        //     r3 = world->GetTrafficDirectorOutputInterface() const        (0x823B6158, read-locked)
+        //     lhz r10, 0(r3) ; sth r10, 0x6AC0(input)                     (mu16EntityCount)
+        //     sub_823B2368(input + 0x6AD0, r3 + 0x10)                      (the 32-slot entity array:
+        //                                                                   32 x 0x70 records, then its
+        //                                                                   count word +0xE00)
+        // -- the inlined DWARF InputBuffer::SetTrafficOutputInterface (:291), i.e. the interface's
+        // member-wise copy. Its one reader is MainDirector::PreSceneQueryUpdate, which hands the
+        // array to AllVehicleData::Update as lpTrafficVehicleArray (0x8225BC30..0x8225BC70); the
+        // producer is TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults via the world
+        // bridge's SetTrafficDirectorOutputInterface (186e27bb). The "dropped" note in the banner
+        // above had one reason, an opaque destination, and it expired with the typed member.
+        lpDirectorInput->SetTrafficOutputInterface(lpWorldOutput->GetTrafficDirectorOutputInterface());
 
         // ---- step 6: the NEW-VEHICLE queue merge ------------------------------------------
         // ⭐ RESTORED 2026-08-02 (camera parameter-chain wave). The console's own step, in the

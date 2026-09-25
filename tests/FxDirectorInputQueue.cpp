@@ -108,7 +108,7 @@ namespace DirectorIO
         ControllerInfo                  mControllerInfo;
         EActiveRaceCarIndex             mePlayerCarIndex;
         EActiveRaceCarIndex             mePlayerKillerCarIndex;
-        s32                             miRankUpRivalInfo;
+        s32                             miPlayerTeam;         // @0x7AB0 (renamed 2026-09-25 from miRankUpRivalInfo)
         bool                            mbPlayerTakenDown;
         bool                            mbSimPaused;
         bool                            mbPlayerEliminated;   // @0x7AD5
@@ -118,7 +118,10 @@ namespace DirectorIO
         const CgsModule::VariableEventQueue<13312, 16>* GetGameActionQueue() const { return &mGameActionQueue; }
         bool GetPlayerTakenDown() const { return mbPlayerTakenDown; }
         EActiveRaceCarIndex GetPlayerKillerCarIndex() const { return mePlayerKillerCarIndex; }
-        s32 GetRankUpRivalInfo() const { return miRankUpRivalInfo; }
+        s32 GetPlayerTeam() const { return miPlayerTeam; }
+        // The pre-rename spelling (revisions before FX-DIRECTOR2's 2026-09-25 team-leg commit), kept so an
+        // older revision still compiles here and fails on behaviour, not on a missing getter.
+        s32 GetRankUpRivalInfo() const { return miPlayerTeam; }
         const Camera::VehicleInfo* GetRaceCarInfo() const { return maRaceCarInfo; }
         EActiveRaceCarIndex GetPlayerCarIndex() const { return mePlayerCarIndex; }
         const CgsSystem::TimerStatusInterface* GetTimerStatusInterface() const { return &mTimerStatus; }
