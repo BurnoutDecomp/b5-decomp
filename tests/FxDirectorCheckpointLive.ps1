@@ -19,7 +19,11 @@
 # reached the finish).
 # Witness (BRN_DIRECTOR_ACTION_DIAG, NOT X360):
 #   [director-action] 113 RACE_CAR_REACHED_CHECKPOINT global G -> active A (player P) -> mbPlayerHitCheckpointThisFrame F
-#   python b5-decomp/tests/run_rival_organic.py --case b5-decomp/tests/FxDirectorCheckpointLive.ps1 --run-name fxdirector_checkpoint
+# FX-AIPAD (2026-09-25): with the game's own AI on the pad (--ai-pad race, BRN_AI_PAD_PLAYER=race) the player
+# finished 2nd at 49 s in mode, 1 s behind the winner (fxaipad_race/20260925_102436); the pad pursuit's banked runs
+# finished 6th at 156 s (fxdirector_checkpoint/20260924_202224) or not at all (195817, 20260925_072059, 074632).
+#   python b5-decomp/tests/run_rival_organic.py --case b5-decomp/tests/FxDirectorCheckpointLive.ps1 --ai-pad race --run-name fxdirector_checkpoint
+#   python b5-decomp/tests/run_rival_organic.py --case b5-decomp/tests/FxDirectorCheckpointLive.ps1 --run-name fxdirector_checkpoint   (the pad pursuit)
 $case = & (Join-Path $PSScriptRoot 'RivalOrganic.ps1')
 $case.Name = 'fxdirector_checkpoint'
 $case.Area = 'director'
