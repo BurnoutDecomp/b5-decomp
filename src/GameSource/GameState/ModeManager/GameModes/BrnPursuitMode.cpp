@@ -9,6 +9,12 @@ const char* PursuitMode::GetName() const
     return "Pursuit";
 }
 
+// X360: slot 8 of PursuitMode's vtable 0x820D0650 = 0x827E24E8 (ICF-shared body): 1.0f.
+f32 PursuitMode::GetIntroDurationSeconds() const
+{
+    return KF_PURSUIT_INTRO_TIME;
+}
+
 // X360: BrnGameState::PursuitMode::Start (0x823220A0).
 //
 // Sets up the mutable GameModeParams for the offline Pursuit (road-rage-style) mode from the
