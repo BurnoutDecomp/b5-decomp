@@ -15,11 +15,12 @@
 #include "rw/math/vpu/matrix44affine_operation.h"     // rw::math::vpu::{InverseOfMatrixWithOrthonormal3x3, operator*}
 #include "rw/math/fpu/scalar_operation.h"            // rw::math::fpu::IsZero (SetWheelVelocities' per-axle power gates)
 #include "SDKs/XboxMath/XMVectorACos.h"              // XboxMath::XMVectorACos (X360 0x821F0980), the drift angles
+#include "SDKs/XboxMath/XMVectorSinCos.h"            // XboxMath::XMVectorSinCos (the steering angle's inlined SinCos)
 
 #include <cstdlib>    // getenv ([tyre] bring-up probe only)
 #include <algorithm>  // std::min / std::max (the driving spine's vmaxfp/vminfp lowerings)
 #include <cstring>    // std::memcpy (controls/engine state copies)
-#include <cmath>      // std::sqrt / std::sin (boost-kick wheelie-angle limit + speed magnitudes)
+#include <cmath>      // std::sqrt / std::sin (boost-kick wheelie-angle limit: XMVectorSin gives the same bits at 11 deg) + speed magnitudes
 
 // [DIAG] the host-side present counter ([air] rows only; FX-WITNESS).
 namespace renderengine { extern u32 guPresentCount; }
@@ -1366,16 +1367,12 @@ namespace Vehicle
     // gates the REAR pair and lane .y == PowerToFront gates the FRONT pair -- the DWARF's own lane
     // names confirm the front/rear wheel-index assignment independently of the offsets.
     //
-    // FLAG (PC-platform, numeric): the console's SinCos is a shared minimax polynomial over a
-    //   2*pi-reduced argument; std::sin / std::cos are the exact forms. Tighter than the console,
-    //   never looser -- the same de-optimisation CameraUtils.cpp:561 already applies to this table.
-    //   ⭐ BOUNDED 2026-09-03 (drive-spine 1:1 audit), so the flag stops reading open-ended: the
-    //   argument here is mvSteeringAngle...x, a STEERING ANGLE in radians whose own attribute
-    //   ceiling (SteeringAttribs mvMaxAngle, +0x10.x) keeps it well inside one quadrant. The 2*pi
-    //   range reduction therefore never engages on this call, and what is left is XNAMath's
-    //   degree-11 odd minimax on a |x| < pi/2 argument -- relative error ~1e-7, i.e. below the
-    //   single-precision spacing of the steering angle itself. There is no reachable input on
-    //   which this leaf and the console can differ by more than a float ulp.
+    // THE SINCOS IS THE CONSOLE'S (FX-GATE, crash parity 2026-09-25). The inlined XMVectorSinCos is the
+    //   XDK's degree-23 / degree-22 series over a 2*pi-reduced argument, now XboxMath::XMVectorSinCos
+    //   (SDKs/XboxMath/XMVectorSinCos.h), proven on emu64 against these very words. The 2026-09-03 note
+    //   that std::sin / std::cos could differ "by no more than a float ulp" was true, but they differ by
+    //   that ulp on about two in three steering angles (267 of the 400 test rows), and it lands in the
+    //   wheel spin re-seed. The Rodrigues rows after it are still unfused (FLAG at the site).
     //
     // NOT REPRODUCED, deliberately: the console prologue lazily initialises two function-scope
     //   statics -- unk_82FBA210 = splat(100.0f) and unk_82FBA200 = splat(1000.0f), guarded by bits
@@ -1403,11 +1400,16 @@ namespace Vehicle
 
         // ---- 0x825FD2F4: the steered wheel direction = R(Up, steeringAngle) * At ----------------
         // Rodrigues about the (unit) body up axis. The console evaluates sin/cos with one inlined
-        // XMVectorSinCos of the +0xFE0 .x lane; std::sin/std::cos are the exact forms.
+        // XMVectorSinCos of the +0xFE0 .x lane (0x825FD2F4..0x825FD4B0: sine in v10, cosine in v11),
+        // which is XboxMath::XMVectorSinCos bit for bit -- the real words run on emu64 agree with it on
+        // 1500 angles (FX-GATE, crash parity 2026-09-25; std::sin / std::cos stood in before).
+        // FLAG (rule 3, open): the Rodrigues rows and the product with At below are still spelt
+        // unfused; the console's are vmaddfp / vmulfp128 / vsubfp at 0x825FD4B4..0x825FD534.
         const f32 lfSteerAngle =
             mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x;
-        const f32 lfSin = std::sin(lfSteerAngle);
-        const f32 lfCos = std::cos(lfSteerAngle);
+        f32 lfSin;
+        f32 lfCos;
+        XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfSteerAngle);
         const f32 lfOneMinusCos = 1.0f - lfCos;                     // vsubfp128 v10, v127(1.0), v11
 
         // Columns of the rotation, exactly as the asm packs them (vperm of lanes x/y then a
@@ -2720,6 +2722,9 @@ namespace Vehicle
         // and tests its on-ground byte at +0x28) is grounded.
         if (maWheels[eRearLeftWheel].GetRoadContact().mbIsOnGround)
         {
+            // 0x825D3360 `bl XMVectorSin` @0x821F05E0 (out of line; NOT the SinCos inline: the two differ on
+            // about 7% of angles). kfMaxWheelieAngle is a code static (0x41300000 = 11.0; only the dev debug
+            // slider writes it), and at 11 deg XMVectorSin and std::sin give the same bits, 0x3E43636F.
             const f32 lfWheelieSin = std::sin(KF_MAX_WHEELIE_ANGLE * KF_DEG_TO_RAD);   // XMVectorSin
 
             // Pitch = dot(forward axis, the copied contact normal).
@@ -7398,9 +7403,9 @@ namespace Vehicle
     //
     //   0x8261E518  UpdateBurnout(controls) ; UpdateWheelInertia()
     //   0x8261E524  mSteeringDirection (+0x10E0) = R(Up, mvSteeringAngle .x) * At -- one inlined
-    //               XMVectorSinCos over unk_82000BD0..C60 (the table three waves decoded;
-    //               std::sin/std::cos are the exact forms, same de-optimisation as
-    //               SetWheelVelocities') + the Rodrigues rows, applied to mTransform.At()
+    //               XMVectorSinCos over unk_82000BD0..C60 (the table three waves decoded; now
+    //               XboxMath::XMVectorSinCos, as in SetWheelVelocities) + the Rodrigues rows, applied
+    //               to mTransform.At()
     //   0x8261E7A4  lbInReverse   = (0 > mfSpeedMPH) || mEngine.mu8CurrentGear == 0  (r22)
     //   0x8261E7CC  lbGasReleased = controls->mfGas < 0.1 [flt_82004014]             (r23)
     //   0x8261E7E8  CalculateBodyVelocityAtWheelContact x4, order 2,3,0,1 -- v1 carries the
@@ -7476,16 +7481,20 @@ namespace Vehicle
 
         // ---- 0x8261E524: mSteeringDirection = R(Up, steeringAngle) * At ----------------------
         // The same inlined XMVectorSinCos + Rodrigues block SetWheelVelocities carries; the store
-        // target here is the member (+0x10E0). std::sin/std::cos are the exact forms of the
-        // console's shared minimax polynomial (tighter, never looser).
+        // target here is the member (+0x10E0). The SinCos (0x8261E524..0x8261E710: sine in v10, cosine
+        // in v11) is XboxMath::XMVectorSinCos bit for bit -- the real words run on emu64 agree with it on
+        // 1500 angles (FX-GATE, crash parity 2026-09-25; std::sin / std::cos stood in before).
+        // FLAG (rule 3, open): the Rodrigues rows and the product with At are still spelt unfused; the
+        // console's are vmaddfp / vmulfp128 / vsubfp at 0x8261E714..0x8261E7A0.
         {
             const Vector3& lvUp = mTransform.Up();
             const Vector3& lvAt = mTransform.At();
 
             const f32 lfSteerAngle =
                 mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x;
-            const f32 lfSin = std::sin(lfSteerAngle);
-            const f32 lfCos = std::cos(lfSteerAngle);
+            f32 lfSin;
+            f32 lfCos;
+            XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfSteerAngle);
             const f32 lfOneMinusCos = 1.0f - lfCos;
 
             const Vector3 lvCol0{ lfCos + lfOneMinusCos * lvUp.x * lvUp.x,
