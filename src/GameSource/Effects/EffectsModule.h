@@ -82,6 +82,7 @@ namespace BrnDirector { namespace Camera { class Camera; } }
 namespace BrnPhysics  { namespace Vehicle { struct RaceCarState; } }
 namespace BrnPhysics  { namespace Deformation { struct DeformationOutputInterface; } }
 namespace BrnPhysics  { namespace ContactSpy { struct ContactSpyInterface; } }
+namespace BrnGameState { namespace GameStateModuleIO { struct JustBouncedAction; } }
 namespace BrnSound    { namespace Module { namespace Io { struct AudioEffectsMessageQueue; } } }
 
 namespace BrnEffects
@@ -449,10 +450,13 @@ namespace BrnEffects
         void HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffer* lpInputBuffer,
                                               const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
                                               f32 lfDt, f32 lfTime);
+        // @0x82292808 (DWARF :2672). A Showtime bounce on a car bursts the player's wreck where it hit -- debris,
+        // glass, a spark shower and the 'ExploShort' LION effect (the .cpp region). A null record is replay playback.
+        void HandleShowtimeTrafficBounce(const BrnGameState::GameStateModuleIO::JustBouncedAction* lpJustBouncedAction,
+                                         const EffectsIO::InputBuffer* lpEffectsInputBuffer);
         // ---- still NOT RECONSTRUCTED on this build (each logs ONCE when reached, then returns; see the
-        // .cpp banner): the QA test spawns, the showtime bounce, the junkyard VFX editor session ----
+        // .cpp banner): the QA test spawns, the junkyard VFX editor session ----
         void HandleQADebugTests(f32 lfDt, f32 lfTime, const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState);
-        void HandleShowtimeTrafficBounce(const void* lpJustBouncedAction, const EffectsIO::InputBuffer* lpInputBuffer);
         void JunkyardVfxStart(Vector3 lvCameraPosition);
         void JunkyardVfxStop();
 
