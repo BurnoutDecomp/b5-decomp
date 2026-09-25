@@ -34,6 +34,7 @@
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"                   // [diag] BRN_FRAME_DUMP_ARM=skid
 #include "GameShared/GameClasses/Development/BrnDiagTrailHeight.h"                 // [diag] BRN_TRAIL_HEIGHT_DIAG (issue #21)
 #include "rw/math/vpu/vector3_operation.h"                                         // rw::math::vpu::{operator-, Dot}
+#include "SDKs/EATech/include/rw/math/vpu/vec_float.h"                             // rw::math::vpu::VecFloat (Random::RandomVecFloat)
 
 #include <cmath>    // std::fabs
 #include <cstring>  // std::memcpy / memset (the replayed contact, the recorded table)
@@ -64,7 +65,7 @@
 // trail system READY and PostWorldPreparePrepare that gives every surface its skid colours.
 //
 // ⚠ NOT RECONSTRUCTED ON THIS BUILD, EACH ONE LOUD (logs once when first reached, then
-// returns) -- the showtime bounce / junkyard editor / QA tests, the post-fx effects frames
+// returns) -- the junkyard editor / QA tests, the post-fx effects frames
 // (GenerateRenderRequests -- the renderer's base-frame bring-up producer still stands in
 // for it) and the prop-locator VFX.
 // ✅ UPDATED 2026-09-25 (FX-CRASHVFX): this list used to open "the crash sparks / debris / glass /
@@ -72,7 +73,8 @@
 // bodied now, each under its own banner below: the contact sparks and showers
 // (ProcessRaceCarContacts and its callees), the debris burst (HandleBurstDebris ->
 // ParticleModule::HandleFireDebrisBurstEvent), the glass smash (HandleGlassSmashEventsForAllCars),
-// the crashing trail (HandleCrashingTrail) and BrnSimpleParticleArray::UpdateParams @0x8228C6E0.
+// the crashing trail (HandleCrashingTrail), BrnSimpleParticleArray::UpdateParams @0x8228C6E0 and the
+// showtime bounce (HandleShowtimeTrafficBounce).
 // ⚠️ CORRECTED 2026-09-06: this list used to end "...and the spark parameter copies into the
 // particle module's (placeholder) spark arrays". Both halves went stale in this wave --
 // maSparks[4] is no longer a placeholder (ParticleModule.h:668) and PushSparkParams below is
@@ -324,8 +326,14 @@ namespace
     const u32 KU_DEBRIS_SCALE_AT_MAX_SPEED   = 0xC8;   // f32
     const u32 KU_DEBRIS_MAX_SPEED            = 0xCC;   // f32  (speeds above clamp to it)
 
-    // The shower controllers (DWARF :209..:289). Showtime-bounce and jump-sparks land with their
-    // own callers (items 5 and the jump pass).
+    // The shower controllers (DWARF :209..:289). Jump-sparks lands with its own caller (the jump pass).
+    // gSparkShowerControllerShowtimeBounce (:209) -- unk_82CDB020 <- thunk 0x82C4A260.
+    const SparkShowerController gSparkShowerControllerShowtimeBounce =
+    {
+        { { -45.0f, 45.0f, -45.0f, 45.0f }, { 8.0f, 16.0f, 0.800000012f, 1.20000005f }, { 0.5f,  1.25f, 0.100000001f, 0.100000001f } },
+        { { -80.0f, 80.0f, -80.0f, 80.0f }, { 8.0f, 32.0f, 0.800000012f, 1.20000005f }, { 0.75f, 1.75f, 0.5f,         0.5f } },
+        0.0f, 44.6944427f, BrnParticle::Native::eSparkArray_Crashing
+    };
     // gSparkShowerControllerWorldGrinding (:229) -- unk_82CDB090 <- thunk 0x82C4A398.
     const SparkShowerController gSparkShowerControllerWorldGrinding =
     {
@@ -2457,8 +2465,8 @@ void EffectsModule::HandleGameActions(const CgsModule::VariableEventQueue<13312,
             meCurrentGameMode = E_MODE_NONE;
             mCrashTriangleCache.ResetCounters();
             break;
-        case E_ACTION_JUST_BOUNCED:      // 144
-            HandleShowtimeTrafficBounce(lpEvent, lpInputBuffer);
+        case E_ACTION_JUST_BOUNCED:      // 144 (`mr r4, r28` -- the record itself, 0x822972E4)
+            HandleShowtimeTrafficBounce(reinterpret_cast<const JustBouncedAction*>(lpEvent), lpInputBuffer);
             break;
         default:
             break;
@@ -4491,11 +4499,242 @@ void EffectsModule::HandleCrashingTrail(ActiveRaceCarData& /*lrActiveRaceCar*/, 
     CrashTrailWitness(luCar, lfDistanceTravelled, lfEmissionRateFactor, lauDiagPieces, lvDiagFirst);   // [DIAG]
 }
 
-void EffectsModule::HandleShowtimeTrafficBounce(const void* /*lpJustBouncedAction*/,
-                                                const EffectsIO::InputBuffer* /*lpInputBuffer*/)
+// =================================================================================================
+// ⭐⭐⭐ THE SHOWTIME BOUNCE -- FX-CRASHVFX 2026-09-25 (item 5).
+//
+// EffectsModule::HandleShowtimeTrafficBounce @0x82292808 (DWARF EffectsModule.cpp:2672..:2771). HandleGameActions
+// runs it for every E_ACTION_JUST_BOUNCED (144) record -- a Showtime bounce -- and Update runs it with no record in
+// replay playback when the recorded frame carries one (the static layout's +0x07 byte). It fires when the bounce
+// landed ON A CAR with a good impact (the record's mbOnCar +0x21 and mbGoodImpact +0x23), or always in playback, and
+// only if the last one was at least 0.5 s ago (flt_82001DA0; `fcmpu ; blt`, so a NaN gap fires). Then the player's
+// wreck bursts where it hit:
+//   * THE CONTACT FRAME: y up (unk_82181510), x and z turned about it by a random angle RandomVecFloat() x
+//     K_VECFLOAT_TWOPI (unk_82FAB8D0 = 6.2831855, CRT thunk 0x82C4A8F8), through the TrigBaseFunctions5 sin / cos:
+//     x = X sin + Z cos (one fused vmaddfp128), z = Z sin - X cos, w = the contact point. Playback reads the point
+//     and the angle from the static layout (+0x10 / +0x20); recording writes both there and raises +0x07.
+//   * ParticleModule::FireDebrisBurst at the point, scale 1.0 (flt_82001C98): the player's crash debrisparams
+//     (mCrashingDebrisParams +0x2D388, its emitter half extents at layout +0x00), the camera position, the car's
+//     velocity and its colour.
+//   * BurstAreaEmitParticles over the 2 x 2 pane w -+ x -+ z, facing up: GLASS debris (`li r5, 4`), sizes
+//     1.25 .. 2.75 (flt_820092CC / flt_82013104), 100 per unit of area (flt_820049E0), the car's velocity inherited.
+//   * DoSparkShower gSparkShowerControllerShowtimeBounce (unk_82CDB020) on the contact frame: RandomUInt(150, 300)
+//     sparks, drawn FIRST, then a RandomVecFloat() size lerp; ground height -1000 (flt_8200D4F8).
+//   * The 'ExploShort' LION effect in the next of three round-robin slots. The slot's old effect is stopped first.
+//     The new one is placed on the contact frame with the car's velocity and a RandomFloat() state blend, and only
+//     then does the slot advance. The time is stored whether or not the effect resolved.
+// =================================================================================================
+namespace
 {
-    static bool sbLogged = false;
-    LogNotReconstructed(sbLogged, "EffectsModule::HandleShowtimeTrafficBounce @0x82292808 (the showtime bounce VFX)");
+    // ---- HandleShowtimeTrafficBounce's literals ----
+    const f32 KF_SHOWTIME_BOUNCE_MIN_INTERVAL   = 0.5f;          // flt_82001DA0 (`fcmpu ; blt` at 0x82292990)
+    const f32 KF_SHOWTIME_BOUNCE_DEBRIS_SCALE   = 1.0f;          // flt_82001C98 (f2 = f30 at 0x82292CB0)
+    const f32 KF_SHOWTIME_BOUNCE_GLASS_SIZE_MIN = 1.25f;         // flt_820092CC (f2 at 0x82292D3C)
+    const f32 KF_SHOWTIME_BOUNCE_GLASS_SIZE_MAX = 2.75f;         // flt_82013104 (f3 at 0x82292D28)
+    const f32 KF_SHOWTIME_BOUNCE_GLASS_DENSITY  = 100.0f;        // flt_820049E0 (f4 at 0x82292D20)
+    const f32 KF_SHOWTIME_BOUNCE_GROUND_Y       = -1000.0f;      // flt_8200D4F8 (f2 at 0x82292D80)
+    const f32 KF_VECFLOAT_TWOPI                 = 6.28318548f;   // unk_82FAB8D0 splat 0x40C90FDB (DWARF :308, thunk 0x82C4A8F8)
+    // luSmallBurstSize / luLargeBurstSize (:2746 / :2747): the reduction is `% 151` (the magic 0x36406C81 and
+    // `mulli r11, r11, 0x97` at 0x82292D84 / 0x82292DF4) plus 150 (`addi r8, r11, 0x96` at 0x82292E10).
+    const s32 KI_SHOWTIME_BOUNCE_SMALL_BURST    = 150;
+    const s32 KI_SHOWTIME_BOUNCE_LARGE_BURST    = 300;
+    // :2769 KAC_SHOWTIME_BOUNCE_EFFECT -- the string at 0x820130B0.
+    const char* const KAC_SHOWTIME_BOUNCE_EFFECT =
+        "gamedb://burnout5/Burnout/Effects/ExploShort.lef.BurnoutFXLionEffectFile?ID=592011";
+    // The static layout's showtime words. Playback reads them at 0x82292AD4 / 0x82292AD8; recording writes them at
+    // 0x82292B8C / 0x82292B90 and then the +0x07 byte at 0x82292B94. The layout class publishes only +0x07.
+    const u32 KU_SHOWTIME_BOUNCE_LAYOUT_POSITION = 0x10;
+    const u32 KU_SHOWTIME_BOUNCE_LAYOUT_ANGLE    = 0x20;
+
+    // [DIAG] BRN_BOUNCE_VFX_DIAG=1 -- NOT IN THE X360 BINARY, capped at KU_EFFECTS_DIAG_MAX_LINES. One line per call:
+    // the time and the last one, the record's mbOnCar / mbGoodImpact (-1 without a record), the replay mode, and the
+    // verdict -- `too-soon`, `no-vehicle-impact`, or `fired` with the contact point, the angle, the spark count and
+    // the LION slot, its handle and whether it resolved.
+    bool BounceVfxDiagArmed()
+    {
+        static const bool sbArmed = []() {
+            const char* const lpcValue = std::getenv("BRN_BOUNCE_VFX_DIAG");
+            return lpcValue != 0 && lpcValue[0] == '1';
+        }();
+        return sbArmed;
+    }
+
+    void BounceVfxDiagLine(const char* lpcLine)
+    {
+        static u32 suLines = 0;
+        if (!BounceVfxDiagArmed() || suLines >= KU_EFFECTS_DIAG_MAX_LINES)
+            return;
+        ++suLines;
+        CgsDev::Log::WriteToLog(lpcLine);
+    }
+}
+
+void EffectsModule::HandleShowtimeTrafficBounce(
+         const BrnGameState::GameStateModuleIO::JustBouncedAction* lpJustBouncedAction,
+         const EffectsIO::InputBuffer* lpEffectsInputBuffer)
+{
+    // :2859 -- tested only without a record (`cmplwi r24, 0 ; bne` 0x8229283C), through the inlined IsPlaying.
+    CGS_ASSERT((lpJustBouncedAction != 0)
+               || (lpJustBouncedAction == 0 && IsReplayPlayback(mEffectsSerialiser.GetMode())),
+               "( NULL != lpJustBouncedAction ) || ( NULL == lpJustBouncedAction && mReplayEffectsSerialiser.IsPlaying() )");
+    CGS_ASSERT(lpEffectsInputBuffer != 0, "NULL != lpEffectsInputBuffer");                   // :2860
+
+    const CgsSystem::TimerStatus* const lpTimerStatus =
+        lpEffectsInputBuffer->GetTimerStatusInterface()->GetSimTimerStatus();                  // `addi r31, r11, 0x18`
+    const BrnDirector::Camera::Camera* const lpCamera = lpEffectsInputBuffer->GetCameraInput();
+    const RCEntityActiveRaceCarOutputInterface* const lpActiveRaceCarInterface =
+        lpEffectsInputBuffer->GetActiveRaceCarInterface();
+    CGS_ASSERT(lpTimerStatus != 0, "NULL != lpTimerStatus");                                    // :2867
+    CGS_ASSERT(lpCamera != 0, "NULL != lpCamera");                                              // :2868
+    CGS_ASSERT(lpActiveRaceCarInterface != 0, "NULL != lpActiveRaceCarInterface");              // :2869
+
+    // (f32)seconds + fraction (`fcfid ; frsp ; fadds` 0x8229296C..0x8229297C).
+    const f32 lfCurrentTime = lpTimerStatus->GetTime().GetFloatVal();
+    const bool lbPlaying    = IsReplayPlayback(mEffectsSerialiser.GetMode());
+    const s32 liDiagOnCar   = (lpJustBouncedAction != 0) ? (lpJustBouncedAction->mbOnCar ? 1 : 0) : -1;    // [DIAG]
+    const s32 liDiagGood    = (lpJustBouncedAction != 0) ? static_cast<s32>(lpJustBouncedAction->mu8EventByte7) : -1;   // [DIAG]
+
+    // `fabs ; fcmpu ; blt` to the exit (0x82292984..0x82292990): only a gap BELOW 0.5 s skips, so a NaN gap goes on.
+    if (std::fabs(lfCurrentTime - mfLastShowtimeBounceEffectTime) < KF_SHOWTIME_BOUNCE_MIN_INTERVAL)
+    {
+        if (BounceVfxDiagArmed())   // [DIAG]
+        {
+            char lacLine[200];
+            std::snprintf(lacLine, sizeof(lacLine), "[bounce-vfx] t=%.3f last=%.3f onCar=%d good=%d playing=%d -> too-soon\n",
+                          static_cast<double>(lfCurrentTime), static_cast<double>(mfLastShowtimeBounceEffectTime),
+                          liDiagOnCar, liDiagGood, lbPlaying ? 1 : 0);
+            BounceVfxDiagLine(lacLine);
+        }
+        return;
+    }
+
+    // :2690 -- 0x82292994..0x822929FC: playback, or a bounce on a car with a good impact.
+    const bool lbVehicleImpact = lbPlaying
+                              || (lpJustBouncedAction->mbOnCar && lpJustBouncedAction->mu8EventByte7 != 0);
+    if (!lbVehicleImpact)
+    {
+        if (BounceVfxDiagArmed())   // [DIAG]
+        {
+            char lacLine[200];
+            std::snprintf(lacLine, sizeof(lacLine),
+                          "[bounce-vfx] t=%.3f last=%.3f onCar=%d good=%d playing=%d -> no-vehicle-impact\n",
+                          static_cast<double>(lfCurrentTime), static_cast<double>(mfLastShowtimeBounceEffectTime),
+                          liDiagOnCar, liDiagGood, lbPlaying ? 1 : 0);
+            BounceVfxDiagLine(lacLine);
+        }
+        return;
+    }
+
+    CGS_ASSERT(lpActiveRaceCarInterface->IsPlayerCarActive() && lpActiveRaceCarInterface->IsPlayerCarCrashing(),
+               "lpActiveRaceCarInterface->IsPlayerCarActive() && lpActiveRaceCarInterface->IsPlayerCarCrashing()");   // :2896
+    const EActiveRaceCarIndex lePlayerCarIndex = lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();       // :2696
+    const RaceCarState* const lpRaceCarState   = lpActiveRaceCarInterface->GetRaceCarState(lePlayerCarIndex);   // :2697
+    const Vector3& lrVelocity = lpRaceCarState->mLinearVelocity;                                                // +0x330
+
+    // :2700 / :2701 -- the contact point and the angle: recorded (playback) or the record's and a fresh draw.
+    u8* const lpLayout = reinterpret_cast<u8*>(mEffectsSerialiser.GetStaticLayout());
+    Vector3 lContactPosition;
+    Vector3 lAngle;
+    if (lbPlaying)
+    {
+        std::memcpy(&lContactPosition, lpLayout + KU_SHOWTIME_BOUNCE_LAYOUT_POSITION, sizeof(lContactPosition));
+        std::memcpy(&lAngle, lpLayout + KU_SHOWTIME_BOUNCE_LAYOUT_ANGLE, sizeof(lAngle));
+    }
+    else
+    {
+        lContactPosition = lpJustBouncedAction->mContactPoint;                                  // record +0x00
+        // RandomVecFloat() (0x82292AE0..0x82292B48) is a splat: one ring lane in all four lanes of the product.
+        const f32 lfAngle = mRandom.RandomVecFloat().GetFloat() * KF_VECFLOAT_TWOPI;             // vmulfp128
+        lAngle = MakeVector3(lfAngle, lfAngle, lfAngle, lfAngle);
+        if (IsReplayRecording(mEffectsSerialiser.GetMode()))
+        {
+            std::memcpy(lpLayout + KU_SHOWTIME_BOUNCE_LAYOUT_POSITION, &lContactPosition, sizeof(lContactPosition));
+            std::memcpy(lpLayout + KU_SHOWTIME_BOUNCE_LAYOUT_ANGLE, &lAngle, sizeof(lAngle));
+            lpLayout[BrnReplays::EffectsSerialiserStaticLayout::KI_OFF_SHOWTIME_BOUNCE] = 1;
+        }
+    }
+
+    // :2702 lSinCos = TrigFunctions<TrigBaseFunctions5>::SinCos(lAngle). The phase vector (-0.25, 0, -0.25, 0)
+    // (unk_8307A590) makes lanes 0 / 2 the sine and 1 / 3 the cosine; the frame takes lane 0 (`vspltw v0, v0, 0`) and
+    // lane 1 (`vspltw v11, v0, 1`), so the sine is of the angle's x and the cosine of its y.
+    f32 lfSin = 0.0f, lfCos = 0.0f, lfUnusedLane = 0.0f;
+    Utils::SinCosCycles(lAngle.x, lfSin, lfUnusedLane);
+    Utils::SinCosCycles(lAngle.y, lfUnusedLane, lfCos);
+
+    // :2703 lContactTransform (0x82292C64..0x82292C74): x = X sin + Z cos (`vmulfp128 v125, Z, cos` then ONE
+    // `vmaddfp128 v125, X, sin, v125`), y = unk_82181510, z = Z sin - X cos, w = the contact point.
+    const Vector3 lvAxisX = AxisX();                                    // gIVector 0x82181500
+    const Vector3 lvAxisZ = MakeVector3(0.0f, 0.0f, 1.0f, 0.0f);        // unk_82181520
+    Matrix44Affine lContactTransform;
+    lContactTransform.xAxis = MaddSplat4(lvAxisX, lfSin, Scale4(lvAxisZ, lfCos));
+    lContactTransform.yAxis = AxisY();                                  // unk_82181510
+    lContactTransform.zAxis = Sub4(Scale4(lvAxisZ, lfSin), Scale4(lvAxisX, lfCos));
+    lContactTransform.wAxis = lContactPosition;
+
+    // :2711 / :2712 -- the burst of the car's debris, in the player's paint.
+    const RwRGBAReal& lCarColourRGBA = lpActiveRaceCarInterface->GetRaceCarColour(lePlayerCarIndex);
+    Vector4 lCarColour;
+    lCarColour.x = lCarColourRGBA.red;
+    lCarColour.y = lCarColourRGBA.green;
+    lCarColour.z = lCarColourRGBA.blue;
+    lCarColour.w = lCarColourRGBA.alpha;
+    Vector3 lvEmitterHalfExtents;
+    std::memcpy(&lvEmitterHalfExtents, DebrisParamsLayout(mCrashingDebrisParams) + KU_DEBRIS_EMITTER_HALF_EXTENTS,
+                sizeof(lvEmitterHalfExtents));                          // `lwzx r10 (this + 0x2D38C) ; lvx128 v3`
+    mParticleModule.FireDebrisBurst(lContactPosition, lpCamera->GetTransform().wAxis, lvEmitterHalfExtents, lrVelocity,
+                                    lfCurrentTime, KF_SHOWTIME_BOUNCE_DEBRIS_SCALE, mCrashingDebrisParams, lCarColour);
+
+    // :2727 laGlassPaneVerts (0x82292D00..0x82292D60): (w - x) - z, (w + x) - z, (w + x) + z, (w - x) + z.
+    const Vector3 lvWMinusX = Sub4(lContactTransform.wAxis, lContactTransform.xAxis);
+    const Vector3 lvWPlusX  = Add4(lContactTransform.wAxis, lContactTransform.xAxis);
+    Vector3 laGlassPaneVerts[4];
+    laGlassPaneVerts[0] = Sub4(lvWMinusX, lContactTransform.zAxis);
+    laGlassPaneVerts[1] = Sub4(lvWPlusX, lContactTransform.zAxis);
+    laGlassPaneVerts[2] = Add4(lvWPlusX, lContactTransform.zAxis);
+    laGlassPaneVerts[3] = Add4(lvWMinusX, lContactTransform.zAxis);
+    BurstAreaEmitParticles(laGlassPaneVerts, lContactTransform.yAxis, lrVelocity, BrnParticle::Native::eDebrisArray_Glass,
+                           lfCurrentTime, KF_SHOWTIME_BOUNCE_GLASS_SIZE_MIN, KF_SHOWTIME_BOUNCE_GLASS_SIZE_MAX,
+                           KF_SHOWTIME_BOUNCE_GLASS_DENSITY);
+
+    // :2746..:2750 -- the spark shower. The count takes the OLD seed's high word (0x82292D94..0x82292DAC) and the size
+    // lerp the NEXT one (its ring refill, 0x82292DF0), so the count is drawn first. The DWARF names
+    // RandomUInt(luMin, luMax) (CgsRandom.h:302 luMod = max - min + 1); on this tree that reduction is RandomInt's --
+    // CgsRandom.cpp's RandomUInt(min, max) reduces by max - min, one short (a FLAG there, not this lane's file).
+    const u32 luNumToSpawn = static_cast<u32>(mRandom.RandomInt(KI_SHOWTIME_BOUNCE_SMALL_BURST, KI_SHOWTIME_BOUNCE_LARGE_BURST));
+    const VecFloat lfSparkShowerControllerLerp = Splat(mRandom.RandomVecFloat().GetFloat());
+    DoSparkShower(gSparkShowerControllerShowtimeBounce, lfSparkShowerControllerLerp, lContactTransform, lrVelocity,
+                  lfCurrentTime, KF_SHOWTIME_BOUNCE_GROUND_Y, luNumToSpawn);
+
+    // :2763..:2771 -- the ExploShort LION effect in the next slot, the slot's old effect stopped first.
+    const u32 luSlot = muNextShowtimeBounceEffect;                                        // `lwz r11, 0(r26)` (+0x2F51C)
+    BrnParticle::LionEffect* const lpOldLionEffect = mParticleModule.GetLionEffect(maShowtimeBounceEffectHandles[luSlot]);
+    if (lpOldLionEffect != 0)
+        mParticleModule.StopLionEffect(lpOldLionEffect);
+    maShowtimeBounceEffectHandles[luSlot] = mParticleModule.StartLionEffect(
+        BrnParticle::ParticleDescription::HashString(KAC_SHOWTIME_BOUNCE_EFFECT), KAC_SHOWTIME_BOUNCE_EFFECT, 0u);
+    BrnParticle::LionEffect* const lpNewLionEffect = mParticleModule.GetLionEffect(maShowtimeBounceEffectHandles[luSlot]);
+    if (lpNewLionEffect != 0)
+    {
+        lpNewLionEffect->SetTransform(lContactTransform);             // +0x10..+0x4F, then muFlags |= 4
+        lpNewLionEffect->SetVelocity(lrVelocity);                     // +0x50 / +0x54 / +0x58, then muFlags |= 0x24
+        lpNewLionEffect->SetStateBlendFactor(mRandom.RandomFloat());  // +0x0C, then muFlags |= 4
+        muNextShowtimeBounceEffect = (muNextShowtimeBounceEffect + 1u) % KU_MAX_SHOWTIME_BOUNCE_EFFECTS;   // `% 3`
+    }
+
+    if (BounceVfxDiagArmed())   // [DIAG]
+    {
+        char lacLine[320];
+        std::snprintf(lacLine, sizeof(lacLine),
+                      "[bounce-vfx] t=%.3f last=%.3f onCar=%d good=%d playing=%d -> fired contact=(%.3f,%.3f,%.3f) "
+                      "angle=%.4f sparks=%u lion slot=%u handle=0x%08X %s\n",
+                      static_cast<double>(lfCurrentTime), static_cast<double>(mfLastShowtimeBounceEffectTime),
+                      liDiagOnCar, liDiagGood, lbPlaying ? 1 : 0, static_cast<double>(lContactPosition.x),
+                      static_cast<double>(lContactPosition.y), static_cast<double>(lContactPosition.z),
+                      static_cast<double>(lAngle.x), luNumToSpawn, luSlot, maShowtimeBounceEffectHandles[luSlot],
+                      (lpNewLionEffect != 0) ? "resolved" : "unresolved");
+        BounceVfxDiagLine(lacLine);
+    }
+
+    mfLastShowtimeBounceEffectTime = lfCurrentTime;                   // `stfs f31, 0(r20)` 0x82292F80
 }
 
 void EffectsModule::JunkyardVfxStart(Vector3 /*lvCameraPosition*/)

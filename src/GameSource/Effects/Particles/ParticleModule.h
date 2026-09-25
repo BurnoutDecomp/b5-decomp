@@ -156,6 +156,25 @@ namespace BrnParticle
             muFlags   |= EPPE_FLAG_CHANGED;   // 4
         }
 
+        // DWARF ParticleModule.h:141 SetVelocity(Vector3), as EffectsModule::HandleShowtimeTrafficBounce inlines it
+        // (0x82292EE0..0x82292F0C): the three lanes into the packed mVelocity (+0x50 / +0x54 / +0x58), then
+        // `ori r11, r11, 0x24` -- CHANGED | OVERRIDE_VELOCITY.
+        void SetVelocity(const rw::math::vpu::Vector3& lrVelocity)
+        {
+            mfVelocityX = lrVelocity.x;
+            mfVelocityY = lrVelocity.y;
+            mfVelocityZ = lrVelocity.z;
+            muFlags    |= static_cast<u16>(EPPE_FLAG_CHANGED | EPPE_FLAG_OVERRIDE_VELOCITY);
+        }
+
+        // DWARF ParticleModule.h:148 SetStateBlendFactor(float32_t), inlined at 0x82292F50..0x82292F5C: +0x0C, then
+        // muFlags |= CHANGED.
+        void SetStateBlendFactor(f32 lfStateBlendFactor)
+        {
+            mfStateBlend = lfStateBlendFactor;
+            muFlags     |= EPPE_FLAG_CHANGED;
+        }
+
         u32 muHandle;                              // +0x00 - the handle this slot holds
         // +0x04 / +0x08 -- NAMED 2026-09-02 (tyre-mark wave) from StartLionEffect @0x82289F50:
         //   `*(v19 + 21492) = a2`  == slot+0x04, the ParticleDescription name hash
