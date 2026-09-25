@@ -16,7 +16,7 @@
 // is a link error, so the removal is enforced by the build).
 //
 // GROUP C -- sub-systems with no landed TU (the director DebugComponent).
-// GROUP D -- the vendor rw SLerp leaf.
+// GROUP D -- RETIRED 2026-09-26 (the pointer-amount rw SLerp; see its note below).
 // GROUP F -- RETIRED 2026-09-24 (the moment sub-system; see the foot of this file).
 // ============================================================================
 
@@ -76,33 +76,13 @@ namespace BrnDirector
 }
 
 // ----------------------------------------------------------------------------
-// GROUP D -- the vendor leaf with no reconstructed body.
+// GROUP D -- RETIRED 2026-09-26 (crash parity FX-LASTFIX). The stub that stood here -- a pointer-amount
+// `rw::math::vpu::SLerp(const Matrix44Affine&, const Matrix44Affine&, const float*)` that returned `lrTo` -- is GONE.
+// No such overload exists on the console. Its banner named InertiaController::Update, but that site was reconciled to
+// the four-argument form on 2026-07-29; the stub's last caller was BehaviourIceAnim::Update, whose `bl 0x82247354` goes
+// to rw::math::vpu::SLerp @0x82216858 (rw/math/vpu/matrix44affine_operation.h) with the 0.2 splat of flt_82004744.
+// Through the stub the ICE-anim heading space snapped to its look-at every frame; the console eases it 20% a frame.
 // ----------------------------------------------------------------------------
-namespace rw
-{
-namespace math
-{
-namespace vpu
-{
-    // The vendor affine-matrix SLerp (declared in rw/math/vpu/matrix44affine_operation.h,
-    // body owned by the SDK and not reconstructed). ONE caller reaches it:
-    // InertiaController::Update, and only on the branch where the camera has
-    // requested LAG (`1 - CameraEffects::mfCameraLag < 1`, i.e. lag > 0). With no lag the
-    // console returns before the call, which is the state on every frame of this build.
-    // The stub therefore returns lrTo unchanged -- exactly the t == 1 endpoint, i.e. "adopt
-    // the freshly-finalised transform", which is what the no-lag path already does. It is the
-    // inert answer, not an approximation of the interpolation.
-    // DELETE-WHEN: the vendor op is reconstructed (then camera lag starts working).
-    Matrix44Affine SLerp(const Matrix44Affine& lrFrom, const Matrix44Affine& lrTo,
-                         const float* lpafBlend)
-    {
-        (void)lrFrom;
-        (void)lpafBlend;
-        return lrTo;
-    }
-}
-}
-}
 
 // GROUP F -- RETIRED 2026-09-24 (FX-DIRECTOR, the moment tick + factory). The stub that stood here -- a
 // MomentController::NewMoment that allocated nothing, so every MomentHandle stayed !IsAllocated() and
