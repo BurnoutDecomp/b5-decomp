@@ -33,6 +33,7 @@
 //   - (the per-array BrnSimpleParticleArray::Construct + spawn-time seeding and the
 //     BrnSimpleParticleRenderer::Construct run now -- 2026-09-24, FX-CRASHVFX)
 //   - the EA::Jobs::Job blocks in Construct (asm-sized placeholders)
+//   - (LoadFXBundle's PropCollisions stages 14 / 17 / 18 run now -- 2026-09-25, FX-CRASHVFX item 6b)
 // ============================================================================
 
 #include "GameSource/Effects/Particles/ParticleModule.h"
@@ -46,6 +47,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // the NOT-RECONSTRUCTED announcements
 #include "GameShared/GameClasses/System/Resource/CgsResourceId.h"       // CgsResource::ID::HashString
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // AcquireResourceResponse
+#include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"     // BrnResource::GameDataIO::LoadGameDataEvent (stage 18's reply)
 #include "SharedClasses/Graphics/TextureNameMapResourceType.h"  // BrnParticle::TextureNameMap
 #include "GameSource/Director/Camera/Camera.h"                  // BrnDirector::Camera::Camera
 #include "SharedClasses/Graphics/ParticleDescriptionResourceType.h"  // ParticleDescriptionCollection
@@ -96,6 +98,11 @@ namespace
     const char* KAC_DESCRIPTION_COLLECTION = "particle_description_collection";
     // The trail (tyre-mark) texture. `off_82CDAE74` -> 0x8200D600 -> "fxskid".
     const char* KAC_TRAIL_TEXTURE_NAME     = "fxskid";
+    // Stage 14 keeps only the AcquireResourceResponse events (`cmpwi r3, 4 ; bne`, 0x8229CBBC).
+    const s32   KI_EVENT_ACQUIRE_RESOURCE_RESPONSE = 4;
+    // Stage 17's LoadGameDataEvent: `li r11, 1 ; stw r11, 0x78(r1)` (0x8229D5C0 / 0x8229D5C8) -- the pool,
+    // BrnResource::E_POOL_PHYSICS -- the same pool PropEntityModule::Prepare asks for.
+    const s32   KI_PROP_PHYSICS_POOL       = 1;
 
     // ---- Update's float constants (read out of the image, not chosen) ----------------
     const f32 KF_LION_TIME_TICKS_PER_SECOND = 3000.0f;    // flt_8200DCD4
@@ -653,19 +660,34 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
         mReceiverQueue.Clear();
         // fall through
     case E_LOADSTAGE_WAIT_VFX_PROPS:
+    {
         meInitialLoadStage = E_LOADSTAGE_WAIT_VFX_PROPS;
         if (mReceiverQueue.GetCount() < miResourceCount)
             break;
-        // `CgsResource::BaseResourcePtr::CreateFromHandle(this + 17008, &reply.handle)` --
-        // module +0x4270 is mPropCollisions, whose VFX-prop resource pointer this is.
-        // PropCollisions has no committed layout, so the bind is announced.
+        // 0x8229CB80..0x8229CC1C: every queued AcquireResourceResponse must answer stage 13's event id 0
+        // (`lwz r11, 4(event) ; cmpwi ; beq`, else "Invalid event id\n", ParticleModule.cpp:2897, and no bind),
+        // and binds mPropCollisions' VFX prop collection from its handle -- `ld r11, 0x18(event)`,
+        // BaseResourcePtr::CreateFromHandle(this + 0x4270, &handle).
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        for (s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize); lpEvent != 0;
+             liType = mReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "LoadFXBundle stage 14's PropCollisions VFX-prop ResourcePtr bind "
-                "(BrnEffects::PropCollisions has no committed layout)");
+            if (liType != KI_EVENT_ACQUIRE_RESOURCE_RESPONSE)
+                continue;
+            const AcquireResponse* const lpReply = reinterpret_cast<const AcquireResponse*>(lpEvent);
+            if (lpReply->miEventId != 0)
+            {
+                CGS_ASSERT(false, "Invalid event id\n");
+                continue;
+            }
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpReply->mpResourceMemory;
+            lHandle.mpSourceEntry    = lpReply->mpSourceEntry;
+            mPropCollisions.SetPropCollection(lHandle);
         }
         // fall through
+    }
     case E_LOADSTAGE_ACQUIRE_TEXTURE_NAME_MAP:
         meInitialLoadStage = E_LOADSTAGE_ACQUIRE_TEXTURE_NAME_MAP;
         miResourceCount = 1;
@@ -882,22 +904,36 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
         // fall through
     }
     case E_LOADSTAGE_LOAD_PROP_COLLISIONS:
+        // 0x8229D51C..0x8229D5CC: the prop physics data, asked for on the game-data queue stage 1 used.
+        // RequestInterface<4096>::LoadPropPhysics, inlined: a LoadGameDataEvent {event id 17 (`li r8, 0x11`,
+        // the stage's own number), &mReceiverQueue, pool 1, id 0xA773D7113DF454BF (`lis/ori` 0x3DF454BF |
+        // 0xA773D711 << 32 at 0x8229D5A8..0x8229D5B8), meType PHYSICS, fail false}, event type 26 -- byte for
+        // byte what PropEntityModule::Prepare posts for itself.
         meInitialLoadStage = E_LOADSTAGE_LOAD_PROP_COLLISIONS;
         miResourceCount = 0;
         mReceiverQueue.Clear();
-        // `PropCollisions::Initialise(this + 0x4270, ...)` plus its own bundle request.
-        // PropCollisions has no committed layout; announced, and the ladder walks on so the
-        // trail texture (already bound above) is not held hostage to it.
-        {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "LoadFXBundle stages 17/18 -- BrnEffects::PropCollisions::Initialise and its "
-                "prop-collision bundle wait (PropCollisions has no committed layout)");
-        }
+        lpOutput->GetResourceRequestInterface()->LoadPropPhysics(
+            &mReceiverQueue, static_cast<s32>(E_LOADSTAGE_LOAD_PROP_COLLISIONS), KI_PROP_PHYSICS_POOL);
         // fall through
     case E_LOADSTAGE_WAIT_PROP_COLLISIONS:
+    {
         meInitialLoadStage = E_LOADSTAGE_WAIT_PROP_COLLISIONS;
+        // ONE reply, not miResourceCount (`cmpwi r10, 1 ; blt`, 0x8229D5D8).
+        if (mReceiverQueue.GetCount() < 1)
+            break;
+        // 0x8229D5E4..0x8229D618: the first event's GameDataAssetEvent::mHandle (`ld r11, 0x20(event)`) into
+        // PropCollisions +0x20 (`std r11, 0x4290(r31)`), then PropCollisions::Initialise @0x822937A8, then the
+        // queue cleared (0x8229D61C..0x8229D678) and the ladder done (the case-19 code at 0x8229D67C).
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+        const BrnResource::GameDataIO::LoadGameDataEvent* const lpLoaded =
+            static_cast<const BrnResource::GameDataIO::LoadGameDataEvent*>(lpEvent);
+        mPropCollisions.SetPropDataResource(lpLoaded->mHandle);
+        mPropCollisions.Initialise();
+        mReceiverQueue.Clear();
         // fall through
+    }
     case E_LOADSTAGE_DONE:
     {
         static bool sbLogged = false;

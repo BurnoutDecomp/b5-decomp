@@ -26,9 +26,13 @@
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h"               // BrnPhysics::Props::PropPhysicsDataHeader
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                           // CgsNumeric::Random
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // [DIAG] CgsDev::Log::WriteToLog
 
 #include <cmath>     // std::fma / std::sqrt
+#include <cstdarg>   // [DIAG] va_list
 #include <cstdint>   // uintptr_t
+#include <cstdio>    // [DIAG] vsnprintf
+#include <cstdlib>   // [DIAG] getenv
 
 // Static storage for the effect ring (one definition per TU).
 namespace BrnEffects
@@ -142,6 +146,53 @@ namespace
         lv.x = lrA.x - lrB.x; lv.y = lrA.y - lrB.y; lv.z = lrA.z - lrB.z; lv.w = lrA.w - lrB.w;
         return lv;
     }
+
+    // [DIAG] BRN_PROP_VFX_DIAG=1 -- NOT IN THE X360 BINARY, default off, DELETE-WHEN-STABLE; capped at
+    // KU_PROP_VFX_DIAG_MAX_LINES lines. Initialise: what the table was built from. UpdateLocatorVfx: one line per
+    // locator event (type, the car's speed, the verdict). TriggerLocators: one line per locator (its name and
+    // hash, the LION slot's handle and whether its description resolved, where it was placed). It only reads.
+    const u32 KU_PROP_VFX_DIAG_MAX_LINES = 64;
+
+    bool PropVfxDiagArmed()
+    {
+        static const bool sbArmed = []() {
+            const char* const lpcValue = std::getenv("BRN_PROP_VFX_DIAG");
+            return lpcValue != 0 && lpcValue[0] == '1';
+        }();
+        return sbArmed;
+    }
+
+    void PropVfxDiagLine(const char* lpcFormat, ...)
+    {
+        static u32 suLines = 0;
+        if (!PropVfxDiagArmed() || suLines >= KU_PROP_VFX_DIAG_MAX_LINES)
+            return;
+        ++suLines;
+        char lacLine[320];
+        va_list lArgs;
+        va_start(lArgs, lpcFormat);
+        std::vsnprintf(lacLine, sizeof(lacLine), lpcFormat, lArgs);
+        va_end(lArgs);
+        CgsDev::Log::WriteToLog(lacLine);
+    }
+
+    // [DIAG] one UpdateLocatorVfx verdict for a visible event: its own type, the type the speed test left (the
+    // material it picks), the car's speed, where it was, what happened.
+    void PropVfxEventLine(f32 lfTime, u32 luEvent, u32 luCount,
+                          const BrnWorld::PropEntityIO::PropVFXLocatorEvent& lrEvent,
+                          BrnWorld::PropEntityIO::PropVFXLocatorEvent::EEventType leChosenType,
+                          const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState, u32 luLocators,
+                          const char* lpcVerdict)
+    {
+        typedef BrnWorld::PropEntityIO::PropVFXLocatorEvent PropVFXLocatorEvent;
+        const Vector3& lrPosition = lrEvent.GetTransform().wAxis;
+        PropVfxDiagLine("[prop-vfx] t=%.3f event %u/%u type=%u %s speed=%.1f mph at (%.3f,%.3f,%.3f) -> %s material: "
+                        "%s (%u locator(s))\n", lfTime, luEvent, luCount, lrEvent.GetPropType(),
+                        (lrEvent.GetEventType() == PropVFXLocatorEvent::E_EVENTTYPE_PROPSMASH) ? "SMASH" : "HIT",
+                        lpRaceCarState->mfSpeedMPH, lrPosition.x, lrPosition.y, lrPosition.z,
+                        (leChosenType == PropVFXLocatorEvent::E_EVENTTYPE_PROPSMASH) ? "smashing" : "unbroken",
+                        lpcVerdict, luLocators);
+    }
 }
 
     // -----------------------------------------------------------------------
@@ -207,7 +258,7 @@ namespace
     void VFXRuntimeMaterialLef::TriggerLocators(
         BrnParticle::ParticleModule&                lParticleModule,
         f32                                         /*lfCurrentTimeStep*/,
-        f32                                         /*lfCurrentTime*/,
+        f32                                         lfCurrentTime,   // read by the [DIAG] line only
         const rw::math::vpu::Matrix44Affine&        lPropTransform,
         const BrnParticle::VFXLocator*              lpLocatorArray,
         u32                                         lNumLocators,
@@ -223,7 +274,11 @@ namespace
             const BrnParticle::VFXLocator& lLocator = lpLocatorArray[luLocator];
             BrnParticle::LionEffect* const lpEffect = CreateEffect(lParticleModule, lLocator.GetHash());   // `lwz r4, 0x10(r26)`
             if (lpEffect == NULL)
+            {
+                PropVfxDiagLine("[prop-vfx]   t=%.3f locator %u/%u \"%.40s\" hash=%08X -> no LION effect (unresolved)\n",
+                                lfCurrentTime, luLocator, lNumLocators, lLocator.macName, lLocator.GetHash());   // [DIAG]
                 continue;
+            }
 
             const Vector3& lVelocity = lpRaceCarState->mLinearVelocity;
             const Vector3 lForward   = Scale4(lVelocity, RefinedRsqrt(Dot3(lVelocity, lVelocity)));
@@ -243,6 +298,11 @@ namespace
             lpEffect->SetTransform(lTransform);
             lpEffect->SetVelocity(lVelocity);
             lpEffect->SetStateBlendFactor(lRandom.RandomFloat());
+            PropVfxDiagLine("[prop-vfx]   t=%.3f locator %u/%u \"%.40s\" hash=%08X -> LION handle=0x%08X "
+                            "description=%s at (%.3f,%.3f,%.3f) blend=%.4f\n",
+                            lfCurrentTime, luLocator, lNumLocators, lLocator.macName, lLocator.GetHash(),
+                            lpEffect->muHandle, (lpEffect->mpDescription != 0) ? "resolved" : "null",
+                            lPosition.x, lPosition.y, lPosition.z, lpEffect->mfStateBlend);   // [DIAG]
         }
     }
 
@@ -257,6 +317,21 @@ namespace
         BuildPropToMaterialTable();
         VFXRuntimeMaterialLef::Initialise();
         mRandom.Construct();
+
+        if (PropVfxDiagArmed())   // [DIAG] what the table was built from
+        {
+            u32 luUnbroken = 0, luSmashing = 0;
+            for (u32 luType = 0; luType < KU_MAX_PROP_TYPE_MAPPINGS; ++luType)
+            {
+                luUnbroken += (maPropToMaterialMappings[luType].mpUnBrokenVFXMaterial != 0) ? 1u : 0u;
+                luSmashing += (maPropToMaterialMappings[luType].mpSmashingVFXMaterial != 0) ? 1u : 0u;
+            }
+            const BrnParticle::VFXPropCollection* const lpCollection = mVFXPropCollection.GetMemoryResource();
+            PropVfxDiagLine("[prop-vfx] Initialise: collection %p (%u props, version %u), physics data %p; "
+                            "%u prop types with an unbroken material, %u with a smashing one\n",
+                            static_cast<const void*>(lpCollection), lpCollection->GetTableSize(),
+                            lpCollection->muVersion, mPropDataResourceHandle.mpResourceMemory, luUnbroken, luSmashing);
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -370,7 +445,13 @@ namespace
             const Matrix44Affine& lPropTransform = lEvent.GetTransform();                // :219
             const Vector3 lPropPosition = lPropTransform.wAxis;                          // :220 event +0x30
             if (!ContactVisible(lPropPosition, lpCamera))
+            {
+                PropVfxDiagLine("[prop-vfx] t=%.3f event %u/%u type=%u %s at (%.3f,%.3f,%.3f) -> not visible "
+                                "(50 m from the camera)\n", lfCurrentTime, lu32I, lCount, lEvent.GetPropType(),
+                                (lEvent.GetEventType() == PropVFXLocatorEvent::E_EVENTTYPE_PROPSMASH) ? "SMASH" : "HIT",
+                                lPropPosition.x, lPropPosition.y, lPropPosition.z);   // [DIAG]
                 continue;
+            }
 
             const u32 luPropType = lEvent.GetPropType();                                 // :224 +0x40
             PropVFXLocatorEvent::EEventType leEventType = lEvent.GetEventType();          // :226 +0x44
@@ -384,15 +465,29 @@ namespace
 
             const PropToVFXMaterialMapping* const lpMaterialMapping = MapPropTypeToMaterial(luPropType);   // :239
             if (lpMaterialMapping == 0)
+            {
+                PropVfxEventLine(lfCurrentTime, lu32I, lCount, lEvent, leEventType, lpRaceCarState, 0,
+                                 "type >= 500: no mapping");   // [DIAG]
                 continue;
+            }
             const BrnParticle::VFXMaterial* const lpMaterial =                           // :242
                 (leEventType == PropVFXLocatorEvent::E_EVENTTYPE_PROPSMASH) ? lpMaterialMapping->mpSmashingVFXMaterial
                                                                             : lpMaterialMapping->mpUnBrokenVFXMaterial;
             if (lpMaterial == 0)
+            {
+                PropVfxEventLine(lfCurrentTime, lu32I, lCount, lEvent, leEventType, lpRaceCarState, 0,
+                                 "no material");   // [DIAG]
                 continue;
+            }
             const u32 lNumLocators = lpMaterial->mNumLocators;                            // :248 +0x04
             if (lNumLocators == 0)
+            {
+                PropVfxEventLine(lfCurrentTime, lu32I, lCount, lEvent, leEventType, lpRaceCarState, 0,
+                                 "no locators");   // [DIAG]
                 continue;
+            }
+            PropVfxEventLine(lfCurrentTime, lu32I, lCount, lEvent, leEventType, lpRaceCarState, lNumLocators,
+                             "TriggerLocators");   // [DIAG]
             VFXRuntimeMaterialLef::TriggerLocators(lParticleModule, lfCurrentTimeStep, lfCurrentTime, lPropTransform,
                                                    lpMaterial->GetLocators(), lNumLocators, lpRaceCarState, mRandom);
         }

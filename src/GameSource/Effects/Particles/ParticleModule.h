@@ -26,6 +26,7 @@
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleArray.h"    // BrnParticle::Native::BrnSimpleParticleArray (maSimpleParticles[13], BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnSparkRenderer.h"          // SparkRenderer / SparkArray / SparkFrameDataSet (BY VALUE)
 #include "GameSource/Effects/Particles/BrnParticleModuleIO_EventTypes.h"   // the inter-thread event records + InterThreadEventQueue<16384> (BY VALUE)
+#include "GameSource/Effects/Props/PropCollisions.h"                     // BrnEffects::PropCollisions (mPropCollisions, BY VALUE)
 
 namespace CgsMemory { class HeapMalloc; }   // GameShared/GameClasses/Memory/CgsHeapMalloc.h (fwd; avoids a cross-module include cycle)
 namespace renderengine { class Texture; }   // ParticleRenderData::mpEnvironmentMap (pointer-only)
@@ -653,32 +654,17 @@ namespace BrnParticle
         CgsResource::SafeResourceHandle<TextureNameMap>        mTextureNameMap;        // +0x425C (16988)
         u8                                                     maPadHeadTo4270[0x4270 - 0x4264]; // -> +0x4270 (decorative on the host)
 
-        // +0x4270: DWARF :28 BrnEffects::PropCollisions mPropCollisions. FLAG: PropCollisions
-        // has no reconstructed type (GameSource/Effects/Props/PropCollisions.h declares only
-        // VFXRuntimeMaterialLef); what the ctor stamps here is its intrusive list head (three
-        // ints, then next/prev/iter -> self, then a count) and a 500-entry pair table, kept
-        // as the named sub-objects the ctor writes.
-        struct ContainedListInterface
-        {
-            s32   miListHead0;   // +0x00 (+0x4270)
-            s32   miListHead1;   // +0x04 (+0x4274)
-            s32   miListHead2;   // +0x08 (+0x4278)
-            void* mpListNext;    // +0x0C (+0x427C): &miListHead0 (self)
-            void* mpListPrev;    // +0x10 (+0x4280): &miListHead0 (self)
-            void* mpListIter;    // +0x14 (+0x4284): &miListHead0 (self)
-            s32   miListCount;   // +0x18 (+0x4288): 0
-        };
-        ContainedListInterface mList;                 // +0x4270 (PropCollisions head)
-
-        // +0x4298: a 500-entry table the ctor zeroes pair-by-pair (v3 = +0x4298,
-        // 500 iterations writing two zero dwords each: the asm's `li r9,0x1F3`
-        // counter == 499 with a `>= 0` do/while == 500 entries x 8 bytes).
-        struct EffectPair { u32 mu0; u32 mu1; };      // +0x00 / +0x04 (both zeroed)
-        static const u32 KU_NUM_EFFECT_PAIRS = 500;
-        EffectPair maEffectPairs[KU_NUM_EFFECT_PAIRS]; // +0x4298 .. +0x5258 (PropCollisions body)
-
-        // Gap to the embedded LionParticleRender at +0x5270.
-        u8 maPad5258To5270[0x5270 - (0x4298 + KU_NUM_EFFECT_PAIRS * sizeof(EffectPair))]; // -> +0x5270
+        // +0x4270: DWARF :28 BrnEffects::PropCollisions mPropCollisions -- the prop-strike VFX
+        // (GameSource/Effects/Props/PropCollisions.h), 0x1000 bytes on the console: the VFX prop
+        // collection's ResourcePtr +0x00, the prop physics data's handle +0x20, the 500 material
+        // mappings +0x28, mRandom +0xFD0. What the ctor stamps here is its construction -- the
+        // ResourcePtr's cleared identity and self-linked alias ring (+0x4270..+0x4288) and the 500
+        // null mappings (the `li r9,0x1F3` pair loop over +0x4298..+0x5258). LoadFXBundle stage 14
+        // binds the collection and stage 18 the physics data before Initialise; EffectsModule::
+        // Update runs UpdateLocatorVfx on it every step (+0x4CF0 from the effects module).
+        // (FX-CRASHVFX 2026-09-25, item 6b: this was a ContainedListInterface + EffectPair[500]
+        // placeholder.)
+        BrnEffects::PropCollisions mPropCollisions;   // +0x4270 .. +0x5270
 
         // +0x5270 (21104): DWARF :31 the embedded LION renderer -- the real committed type
         // (LionParticleRender.h; its X360 ctor is chained by this module's ctor, Prepare

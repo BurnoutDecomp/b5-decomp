@@ -2,7 +2,7 @@
 #define GAMESOURCE_EFFECTS_PROPS_PROPCOLLISIONS_H
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"                                             // Vector3, Matrix44Affine (rw::math::vpu)
+#include "rw/math/vpu/types.h"                                          // rw::math::vpu::Vector3 / Matrix44Affine
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                   // CgsNumeric::Random (PropCollisions::mRandom, BY VALUE)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"      // CgsResource::ResourcePtr / ResourceHandle (BY VALUE)
 
@@ -34,7 +34,7 @@ namespace BrnParticle
     // string. 0x50-byte stride (X360 TriggerLocators steps lpLocatorArray by 0x50).
     struct VFXLocator
     {
-        Vector3 mPosition;      // +0x00  local-space anchor                    (:114)
+        rw::math::vpu::Vector3 mPosition;   // +0x00  local-space anchor        (:114)
         u32     mHashedName;    // +0x10  precomputed effect-name hash           (:115)
         char    macName[60];    // +0x14  macDebugLefName, the raw locator name  (:118)
 
@@ -200,7 +200,7 @@ namespace BrnEffects
         void BuildPropToMaterialTable();
 
         // :91 -- inlined by UpdateLocatorVfx (0x82299414..0x82299448).
-        bool ContactVisible(Vector3 lPoint, const BrnDirector::Camera::Camera* lpCamera);
+        bool ContactVisible(rw::math::vpu::Vector3 lPoint, const BrnDirector::Camera::Camera* lpCamera);
 
         CgsResource::ResourcePtr<BrnParticle::VFXPropCollection> mVFXPropCollection;   // :80  console +0x00
         CgsResource::ResourceHandle                              mPropDataResourceHandle; // :81  console +0x20

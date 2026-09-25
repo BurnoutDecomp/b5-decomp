@@ -1740,15 +1740,19 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
     ProcessCarContactQueues(lParams, lpActiveRaceCars, lpInputBuffer->GetContactSpyInterface(), lpCamera);
     HandleGlassSmashEventsForAllCars(lpInputBuffer, lpActiveRaceCars, lfDt, lfTime);
 
-    // GetPlayerRaceCarState + the prop-VFX locator queue -> PropCollisions::UpdateLocatorVfx
-    // (&mParticleModule.mPropCollisions, dt, time, ...). NOT RECONSTRUCTED: PropCollisions
-    // has no committed body; announced once.
-    (void)GetPlayerRaceCarState(lpActiveRaceCars);
-    {
-        static bool sbLogged = false;
-        LogNotReconstructed(sbLogged,
-            "BrnEffects::PropCollisions::UpdateLocatorVfx (the prop-strike VFX; ParticleModule::mPropCollisions is a placeholder)");
-    }
+    // The prop-strike VFX (0x8229F3D8..0x8229F438; FX-CRASHVFX 2026-09-25, item 6b):
+    //   r8  the debug component's material override -- EffectsDebugProps +0x78 mbEnable ? +0x7C mMaterialIndex : -1
+    //       (EffectsModule +0x2C3A8 / +0x2C3AC). The ctor @0x827E35E0 stores 0 into both (0x827E3680 / 0x827E3684),
+    //       so a retail build passes -1 -- and UpdateLocatorVfx never reads r8 (its first write of r8 is at
+    //       0x822994C4), so the override selects nothing either way;
+    //   r9  the player's race-car state; r7 the prop VFX locator queue; r10 the camera;
+    //   r3  &mParticleModule.mPropCollisions (+0x4CF0 == +0xA80 + 0x4270), r6 the particle module.
+    const EffectsDebugProps& lrPropParams = mDebugComponent.PropParams();
+    const s32 liMaterialOverride = lrPropParams.mbEnable ? static_cast<s32>(lrPropParams.mMaterialIndex) : -1;
+    const RaceCarState* const lpPlayerRaceCarState = GetPlayerRaceCarState(lpActiveRaceCars);
+    mParticleModule.mPropCollisions.UpdateLocatorVfx(lfDt, lfTime, mParticleModule,
+                                                     *lpInputBuffer->GetPropVFXLocatorQueue(), liMaterialOverride,
+                                                     lpPlayerRaceCarState, lpCamera);
 
     if (lpActiveRaceCars->IsPlayerCarActive())
     {
