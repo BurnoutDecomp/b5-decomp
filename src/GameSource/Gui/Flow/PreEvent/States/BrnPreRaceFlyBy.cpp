@@ -61,7 +61,8 @@
 #include <cstring>   // strcmp (the X360 inlines it into HandleAptEvents)
 #include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
 #include <stdlib.h>                                                       // getenv (the [flyby] diag gate only)
-#include <cmath>                                            // std::acos / std::sqrt / std::floor
+#include <cmath>                                            // std::sqrt / std::floor
+#include "SDKs/XboxMath/XMVectorACos.h"                      // XboxMath::XMVectorACos (X360 0x821F0980)
 #include "GameSource/GameState/BrnGameStateTypes.h"          // BrnGameState::LandmarkIndex (complete: passed by value)
 #include "SharedClasses/Progression/BrnRaceEventData.h"      // BrnProgression::RaceEventData (+ CheckpointData)
 #include "GameSource/Gui/BrnGuiWorldDataController.h"        // GetEventInfoFromEventId
@@ -1748,7 +1749,7 @@ namespace
         lfCosAngle = (lfCosAngle > -1.0f) ? lfCosAngle : -1.0f;   // vmaxfp
         lfCosAngle = (lfCosAngle <  1.0f) ? lfCosAngle :  1.0f;   // vminfp
 
-        f32 lfAngle = std::acos(lfCosAngle);                      // bl XMVectorACos
+        f32 lfAngle = XboxMath::XMVectorACos(lfCosAngle);         // bl XMVectorACos @0x824B5024 (FX-GATE)
 
         // acos only ever returns [0, pi], so the half-turn the bearing actually lies in is
         // recovered from the sign of the cross product's Y component -- the console dots

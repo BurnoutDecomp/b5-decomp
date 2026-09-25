@@ -66,7 +66,8 @@
 #include "SharedClasses/Trigger/BrnRegion.h"                 // BrnTrigger::BoxRegion (the challenge trigger box)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData (network-rival arm)
 
-#include <cmath>     // [H3c] sinf/cosf/acosf/sqrtf (the rival FOV cone / CalculateAlpha)
+#include <cmath>     // [H3c] sinf/cosf/sqrtf (the rival FOV cone / CalculateAlpha)
+#include "SDKs/XboxMath/XMVectorACos.h"   // XboxMath::XMVectorACos (X360 0x821F0980), the FOV cone's arc-cosine
 #include <cstdlib>   // [H3c] qsort (the IconDisplaySort pass)
 
 namespace BrnGui
@@ -956,7 +957,9 @@ s32 MapIconManager::GetSatNavIconStateForRival(const GuiEventUpdateSatNav::SatNa
             const f32 lfDot = lfDirX * (lfDx * lfInvLen) + lfDirZ * (lfDz * lfInvLen);
             if (lfDot < 0.0f)
                 return 0;
-            if (acosf(lfDot) > KF_RIVAL_FOV * 0.5f)
+            // bl XMVectorACos @0x824FA79C, then `fcmpu ; ble` keep @0x824FA7B8 / 0x824FA7BC
+            // (crash parity FX-GATE: the console's own arc-cosine, not acosf).
+            if (XboxMath::XMVectorACos(lfDot) > KF_RIVAL_FOV * 0.5f)
                 return 0;
         }
     }

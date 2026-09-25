@@ -25,7 +25,8 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/HUD/Components/BrnCompassComponent.h"
 
-#include <cmath>                                            // acosf / fabsf (the bearing derivation)
+#include <cmath>                                            // fabsf (the bearing derivation)
+#include "SDKs/XboxMath/XMVectorACos.h"                      // XboxMath::XMVectorACos (X360 0x821F0980)
 
 #include "rw/math/vpu/vector3_operation.h"                  // Dot / Cross / Normalize over Vector3
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
@@ -258,7 +259,9 @@ namespace BrnGui
         if (lfDot > 1.0f)
             lfDot = 1.0f;
 
-        f32 lfAngle = acosf(lfDot);
+        // bl XMVectorACos @0x8241FCE4, after the vmaxfp / vminfp clamp at 0x8241FCDC / 0x8241FCE0
+        // (crash parity FX-GATE: the console's own arc-cosine, not acosf).
+        f32 lfAngle = XboxMath::XMVectorACos(lfDot);
         if (Dot(Cross(lv3North, lv3ToDestination), KV3_COMPASS_UP) < 0.0f)
             lfAngle = KF_TWO_PI - lfAngle;
 

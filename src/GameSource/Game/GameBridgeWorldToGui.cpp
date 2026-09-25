@@ -42,7 +42,8 @@
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"  // ModeManager::IsInProgress / GetScoringSystem
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"                // ScoringSystem::GetCrashScorer
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"  // CrashModeScoring::DealWithRemovedTraffic
-#include <cmath>                                             // sqrtf/acosf (the icon heading derivation)
+#include <cmath>                                             // sqrtf (the icon heading derivation)
+#include "SDKs/XboxMath/XMVectorACos.h"                       // XboxMath::XMVectorACos (X360 0x821F0980)
 #include <cstdlib>                                           // [DIAG] getenv (BRN_TRAFFICGUI_DIAG)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [DIAG] gFilmLatch.mfLiveBoostFraction
@@ -566,7 +567,9 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
                             f32 lfDot = lAt.z * lfInvLen;
                             if (lfDot > 1.0f)  lfDot = 1.0f;
                             if (lfDot < -1.0f) lfDot = -1.0f;
-                            lfRotation = acosf(lfDot);
+                            // bl XMVectorACos @0x823E60E0, after the vmaxfp / vminfp clamp at
+                            // 0x823E60D8 / 0x823E60DC (crash parity FX-GATE: not acosf).
+                            lfRotation = XboxMath::XMVectorACos(lfDot);
                             // cross(north, dHat) . up == +dHat.x ; below the plane flips
                             // (vcmpgtfp 0 > dot -> 2pi - angle).
                             const f32 lfSide = lAt.x * lfInvLen;

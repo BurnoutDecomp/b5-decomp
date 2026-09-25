@@ -22,7 +22,8 @@
 // include/rw/; it never touches rw/math/vpu/, so this hand-maintained header (like
 // its siblings types.h / vector3_operation.h) is immune to regeneration.
 
-#include <cmath>                           // std::acos / std::sin (SLerp's arc)
+#include <cmath>                           // std::sin (SLerp's arc)
+#include "SDKs/XboxMath/XMVectorACos.h"    // XboxMath::XMVectorACos (X360 0x821F0980), SLerp's angle
 #include "rw/math/vpu/types.h"             // rw::math::vpu::Matrix44Affine / Vector3
 #include "rw/math/vpu/vector3_operation.h" // Vector3 operator+/-, Mult, Lerp
 
@@ -534,15 +535,14 @@ namespace vpu
     //   XMVectorACos( clamp( Dot3( Normalize(from.zAxis), Normalize(to.zAxis) ), -1, +1 ) )
     // and flt_82001764 == 0.03490658476948738 == 2 degrees (dumped from the shipped image).
     //
-    // FLAG (VMX->portable, the standing convention of this vendor home): the console evaluates
-    // the arc with the XNA minimax pipeline -- vrsqrtefp + two Newton-Raphson steps for the
-    // normalises, XMVectorACos, and an XMVectorSinCos whose Taylor coefficient block is the
-    // shipped rodata at 0x82000BD0..0x82000C6F. Exactly as Normalize/Magnitude/SqrtFast in the
-    // sibling header already do, that estimate pipeline is reconstructed as the exact
-    // closed-form scalar math (std::acos / std::sin): numerically tighter than the console's
-    // approximation, never a placeholder. The BRANCH STRUCTURE, the 2-degree threshold, the
-    // "which rows get re-normalised" choice and the angle written back through lpvAngleOut are
-    // all transcribed, not invented.
+    // The angle is the console's own XMVectorACos (0x82216910 bl 0x821F0980), the shared
+    // XboxMath::XMVectorACos (crash parity FX-GATE; std::acos stood in for it before).
+    // FLAG (VMX->portable, the standing convention of this vendor home): the rest of the arc still
+    // uses exact closed forms -- the console normalises with vrsqrtefp + two Newton-Raphson steps
+    // and evaluates an XMVectorSinCos whose Taylor coefficient block is the shipped rodata at
+    // 0x82000BD0..0x82000C2F, where this reconstruction uses Normalize and std::sin. The BRANCH
+    // STRUCTURE, the 2-degree threshold, the "which rows get re-normalised" choice and the angle
+    // written back through lpvAngleOut are all transcribed, not invented.
     inline Matrix44Affine SLerp(const Matrix44Affine& lrFrom, const Matrix44Affine& lrTo,
                                 float lfAmount, Vector3* lpvAngleOut)
     {
@@ -554,7 +554,7 @@ namespace vpu
         float lfCos = Dot(lvFromAt, lvToAt);
         if (lfCos < -1.0f) lfCos = -1.0f;      // vmaxfp against vcfsx(-1)
         if (lfCos >  1.0f) lfCos =  1.0f;      // vminfp against vcfsx(+1)
-        const float lfAngle = std::acos(lfCos);
+        const float lfAngle = XboxMath::XMVectorACos(lfCos);   // 0x82216910 bl XMVectorACos
 
         // 0x8221688C -- amount <= 0: hand back `from` untouched, report the whole angle.
         if (lfAmount <= 0.0f)

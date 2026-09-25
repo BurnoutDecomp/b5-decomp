@@ -33,6 +33,16 @@ SITES = [
      "Cgs3dEffectControl::GetPanningAngle 0x826DC068", "XboxMath::XMVectorACos(lfDot)"),
     ("src/GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.cpp",
      "PhysicsControl::UpdateParams 0x826CBC44", "XboxMath::XMVectorACos(lfDot)"),
+    ("src/GameSource/Gui/Flow/HUD/Components/BrnCompassComponent.cpp",
+     "CompassComponent::ShowPositionOnCompass 0x8241FCE4", "XboxMath::XMVectorACos(lfDot)"),
+    ("src/GameSource/Gui/Flow/PreEvent/States/BrnPreRaceFlyBy.cpp",
+     "PreRaceFlyByState::FindEventDirection 0x824B5024", "XboxMath::XMVectorACos(lfCosAngle)"),
+    ("src/GameSource/Gui/SatNav/BrnMapIconManager.cpp",
+     "MapIconManager::GetSatNavIconStateForRival 0x824FA79C", "XboxMath::XMVectorACos(lfDot)"),
+    ("src/GameSource/Game/GameBridgeWorldToGui.cpp",
+     "BrnGameModule::BridgeWorldVehicleDataToGui 0x823E60E0", "XboxMath::XMVectorACos(lfDot)"),
+    ("vendor/renderware/include/rw/math/vpu/matrix44affine_operation.h",
+     "rw::math::vpu::SLerp 0x82216910", "XboxMath::XMVectorACos(lfCos)"),
 ]
 
 
