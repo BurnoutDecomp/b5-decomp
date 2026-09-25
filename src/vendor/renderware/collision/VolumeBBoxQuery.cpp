@@ -387,12 +387,39 @@ RwBool VolumeBBoxQuery::AddPrimitiveRef(const Volume*                    lpVol,
 // The final store builds the (size,16) pair as one 8-byte stack word
 // (stw/stw/ld/std) -- equivalent to the two u32 stores below.
 // ===========================================================================
+// ===========================================================================
+// NOT X360: host layout, the console carves at +0x100.  (2026-09-25, crash parity FX-FOLLOWUPS)
+//
+// The query object sits at the base of its backing store and its stack VolRef records are carved
+// right behind it. That offset is the object's SIZE, not a field offset:
+//   * the DWARF member block (volumebboxquery.h) ends with the u8 m_numTagBits at +0xF0, so the
+//     console object is 0xF1 bytes, padded to its 16-byte alignment (it embeds an AABBox and a
+//     VolRef) -- 0x100;
+//   * Initialize @0x82BBBD90: 0x82BBBD9C `addi r10, r11, 0x100` -> `stw r10, 0x30(r11)`
+//     m_stackVRefBuffer;
+//   * GetResourceDescriptor @0x82BBBD38: 0x82BBBD40 `addi r11, r11, 2` + 0x82BBBD4C `slwi r11, 7`
+//     -- the "+2" of ((stackMax + res + 2) << 7) is that 0x100 header.
+// On x64 the pointer members widen and the object is 0x110 bytes (MEASURED: m_curSpatialMapQuery
+// @0x100, m_tag @0x108, m_numTagBits @0x10C), so the first stack VolRef an aggregate pushes
+// (AddVolumeRef) overwrote the resumable spatial-map query pointer and the tag context. The host
+// carve starts at the host size rounded to 16 and the descriptor grows by the same delta; both
+// sites use this ONE constant.
+// ===========================================================================
+namespace
+{
+    const u32 KU_VOLUME_BBOX_QUERY_HEADER_SIZE =
+        static_cast<u32>((sizeof(VolumeBBoxQuery) + 15u) & ~static_cast<size_t>(15u));
+}
+
 void* VolumeBBoxQuery::GetResourceDescriptor(void* lpOut, int liStackMax, int liResBufferSize)
 {
     // add/addi/slwi/mulli/addi: total backing size for the query object, its
     // stack + result VolRef buffers, the instanced-volume pool, and the
-    // spatial-map query workspace (breakdown in the banner).
-    u32 luTotalSize = (static_cast<u32>(liStackMax + liResBufferSize + 2) << 7)
+    // spatial-map query workspace (breakdown in the banner). The console's header is the
+    // "+2" of `(stackMax + res + 2) << 7`; NOT X360: host layout -- the header is
+    // KU_VOLUME_BBOX_QUERY_HEADER_SIZE, the size Initialize carves behind.
+    u32 luTotalSize = KU_VOLUME_BBOX_QUERY_HEADER_SIZE
+                    + (static_cast<u32>(liStackMax + liResBufferSize) << 7)
                     + 96u * static_cast<u32>(liResBufferSize)
                     + 10208u;                                       // 0x27E0
 
@@ -458,8 +485,9 @@ void* VolumeBBoxQuery::Initialize(void** lppBuffer, int liStackMax, int liResBuf
     lpQuery->m_instVolMax     = luResults;                // stw r5 -> +0xDC
 
     // addi r10, r11, 0x100: the stack VolRef records start one 0x100 query
-    // header past the base.
-    u8* lpStackBuffer = reinterpret_cast<u8*>(lpQuery) + 0x100;
+    // header past the base. NOT X360: host layout -- KU_VOLUME_BBOX_QUERY_HEADER_SIZE (above
+    // GetResourceDescriptor), the host object's own size rounded to 16.
+    u8* lpStackBuffer = reinterpret_cast<u8*>(lpQuery) + KU_VOLUME_BBOX_QUERY_HEADER_SIZE;
     lpQuery->m_stackVRefBuffer = reinterpret_cast<VolRef*>(lpStackBuffer); // stw -> +0x30
 
     // slwi r9, r4, 7: 0x80-stride stack records, then the instanced-volume
