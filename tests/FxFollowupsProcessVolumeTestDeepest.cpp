@@ -25,7 +25,9 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"
-#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventVolumeTestDeepest.h"   // the 224-byte event
+#include "GameShared/GameClasses/SceneManager/CgsSceneQueryId.h"   // SceneQueryId (real; the event's mQueryId since REVIEW-K)
+#include "GameShared/GameClasses/SceneManager/CgsVolumeStore.h"    // VolumeSlot (real; the event's mVolumeBuffer since REVIEW-K)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventVolumeTestDeepest.h"   // the 224-byte event (the revision's)
 
 static std::vector<std::string> gaAsserts;
 namespace CgsDev { namespace Assert {
@@ -87,8 +89,7 @@ namespace CgsCollision {
 namespace CgsSceneManager
 {
     namespace VolRef { struct Volume; }
-    struct SceneQueryId { u32 mId; };
-    struct VolumeSlot { alignas(16) u8 maBytes[128]; };
+    // SceneQueryId and VolumeSlot are the real ones (included above): since REVIEW-K the event names its members with them.
 
     template <s32 N>
     struct CoarseQueryResultBuffer
