@@ -1572,7 +1572,11 @@ namespace Vehicle
         EntityId lVictimId;
         EntityId lAggressorId;
         bool     lbPlayerWon;
-        if (lfSpeedA <= lfSpeedB)
+        // 0x8263DA04 `fcmpu cr6, speedA, speedB` ; 0x8263DA0C `ble cr6, 0x8263DA40` (40990034 = bc 4,25):
+        // the A-is-the-victim arm (0x8263DA40) is the TAKEN target, so an unordered (NaN) speed takes
+        // it too; only an ordered speedA ABOVE speedB falls through to the B-is-the-victim arm.
+        // (`speedA <= speedB` sent a NaN speed to the B arm.)
+        if (!(lfSpeedA > lfSpeedB))
         {
             // A is the slower (stationary) VICTIM; B is the faster aggressor. (asm: speedA<=speedB)
             // asm: stamps victim(+63)=v16=indexA, aggressor(+62)=v15=indexB; InstantTakedown victim=idA.
@@ -1685,7 +1689,11 @@ namespace Vehicle
         const f32 lfSteerA = (lfSideA > 0.0f ? 1.0f : lfSideA >= 0.0f ? 0.0f : -1.0f) * lpInfo->mpRaceCarA->GetSlamSteering();
         const f32 lfSteerB = -(lfSideB > 0.0f ? 1.0f : lfSideB >= 0.0f ? 0.0f : -1.0f) * lpInfo->mpRaceCarB->GetSlamSteering();
         const bool lbPlayerInvolved = lpInfo->mbRaceCarAIsPlayer || lpInfo->mbRaceCarBIsPlayer;
-        if (lpInfo->mfClosingSpeed <= mfMinTradingPaintSpeed * KF_SPEED_UNIT_SCALE)
+        // 0x8261A0F8 `fcmpu cr6, closing, min` ; 0x8261A0FC `ble cr6, 0x8261A37C` (40990280 = bc 4,25):
+        // the branch to `li r3, 0` is TAKEN whenever GT is clear -- an ordered closing at or under the
+        // minimum AND an unordered (NaN) one -- so only an ordered closing ABOVE it falls through to the
+        // fatal test. (`closing <= min` let a NaN closing through to the arms.)
+        if (!(lpInfo->mfClosingSpeed > mfMinTradingPaintSpeed * KF_SPEED_UNIT_SCALE))
             return false;
         if (lpInfo->mfClosingSpeed > mfFatalSlamSpeed * KF_SPEED_UNIT_SCALE)
         {
@@ -1697,7 +1705,11 @@ namespace Vehicle
         static const f32 KAF_SLAM_STEERING_THRESHOLD[4] = { 0.1f, 0.3f, 0.1f, 0.1f };
         const s32 liA = lpInfo->meActiveRaceCarIndexA;
         const s32 liB = lpInfo->meActiveRaceCarIndexB;
-        if (lfSteerA >= lfSteerB && lfSteerA > 0.0f
+        // The A arm is left for the B test (0x8261A248) only by 0x8261A154 `blt cr6, steerA, steerB`
+        // (419800F4 = bc 12,24 -- NOT taken on unordered) or 0x8261A15C `ble cr6, steerA, 0.0` (taken
+        // on unordered). So a NaN steerB with steerA > 0 STAYS in the A arm (`steerA >= steerB` sent it
+        // to the B test), while a NaN steerA still leaves it.
+        if (!(lfSteerA < lfSteerB) && lfSteerA > 0.0f
             && !lpInfo->mpRaceCarA->IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liB)))
         {
             if (lbPlayerInvolved && lfSteerA < 0.5f)
