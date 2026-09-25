@@ -46,7 +46,8 @@ def squash(text):
 
 def wiring(tree):
     body = squash(body_or_empty(tree.read(GUI_CPP), "void GameStateModule::PreWorldUpdateStuntBringUp("))
-    road = body.find("UpdateRoadRulesManagerImpactTimeBringUp(lpActionQueue);")
+    # ea67c555 renamed the road-rules leg to the console's GameStateModule::UpdateRoadRulesManager (0x8238F1B0).
+    road = body.find("UpdateRoadRulesManager(mpOutputBuffer,lpcPreWorldInputBuffer->GetControllerInput());")
     tail = body.find("EmmPreWorldUpdateTailBringUp(lrTimerStatusInterface);")
     publish = body.find("CopyScoringDataToOutput(mpOutputBuffer,lrTimerStatusInterface);")
     # The tail must sit outside the `if (!IsSimPaused(true, false)) { ... }` road-rules block: the

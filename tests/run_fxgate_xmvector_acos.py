@@ -9,6 +9,8 @@ header src/SDKs/XboxMath/XMVectorACos.h writes it operation for operation, with 
      longer std::acos / acosf (the SITES table below: file, the call's console function and `bl` address).
   2. NUMERIC -- tests/FxGateXMVectorACos.cpp checks the header against the console's own words run on emu64
      (FxGateXMVectorACosData.h, 3324 rows), the landmarks, NaN for |x| > 1, and that std::acos is not the console.
+     It also runs PreRaceFlyByState::FindEventDirection's clamp, extracted from the production source: vmaxfp
+     0x824B501C / vminfp 0x824B5020 keep a NaN (the ternaries 60c6c301 wrote turned it into -1.0).
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxgate_xmvector_acos.py [--rev <b5 rev>]
 """
@@ -18,10 +20,15 @@ import re
 import sys
 
 sys.dont_write_bytecode = True
-from fxgs_common import Tree, code_only, compile_and_run, report
+from fxgs_common import Tree, code_only, compile_and_run, definition, report
 
 HEADER = "src/SDKs/XboxMath/XMVectorACos.h"
-NUMERIC_CHECKS = 3340
+NUMERIC_CHECKS = 3357
+FLYBY = "src/GameSource/Gui/Flow/PreEvent/States/BrnPreRaceFlyBy.cpp"
+FLYBY_START = "f32 lfCosAngle = Dot3(lv3ReferenceDirection, lv3LandmarkDirection);"
+FLYBY_END = "f32 lfAngle = XboxMath::XMVectorACos(lfCosAngle);"
+FLYBY_INDEX = "inline u32 ConsoleWordIndex(s32 liIndex)"
+FLYBY_TABLE = "const char* const KAPC_COMPASS_POINT_STRINGIDS[E_COMPASS_POINTS_COUNT] ="
 
 # (file, the console function and its `bl XMVectorACos`, the PC expression that must be the call)
 SITES = [
@@ -61,8 +68,33 @@ def numeric(tree):
     if not header:
         print("NUMERIC: cannot build -- " + HEADER + " is missing at this revision")
         return None
-    return compile_and_run(Path(__file__).with_name("FxGateXMVectorACos.cpp"), "unused.inc", "\n",
-                           "FxGateXMVectorACos", shadow={HEADER: header})
+    return compile_and_run(Path(__file__).with_name("FxGateXMVectorACos.cpp"), "fxgate_acos_flyby.inc",
+                           flyby_clamp(tree), "FxGateXMVectorACos", shadow={HEADER: header})
+
+
+def flyby_clamp(tree):
+    """The statements between FindEventDirection's Dot3 and its XMVectorACos call, as a function of lfCosAngle (a
+    revision without them gets a clamp that returns 0, which fails the checks), then the description setters'
+    ConsoleWordIndex (a revision without it indexes with the raw direction) and the KAPC_COMPASS_POINT_STRINGIDS
+    table."""
+    source = tree.read(FLYBY)
+    start, end = source.find(FLYBY_START), source.find(FLYBY_END)
+    body = source[start + len(FLYBY_START):end] if 0 <= start < end else "lfCosAngle = 0.0f;"
+    try:
+        index = definition(source, FLYBY_INDEX)
+    except ValueError:
+        index = FLYBY_INDEX + "\n{\n    return static_cast<u32>(liIndex);\n}"
+    table_start = source.find(FLYBY_TABLE)
+    table = source[table_start:source.index("};", table_start) + 2] if table_start >= 0 else ""
+    return ("inline float FxGateFlyByClamp(float lfCosAngle)\n{\n" + body + "\n    return lfCosAngle;\n}\n"
+            + index + "\n" + table + "\n")
+
+
+def wiring_flyby(tree):
+    code = re.sub(r"\s+", "", code_only(tree.read(FLYBY)))
+    yield ("BrnPreRaceFlyBy.cpp: the three description setters index KAPC_COMPASS_POINT_STRINGIDS through "
+           "ConsoleWordIndex (slwi r10, rDir, 2 @0x824C6EE8 / 0x824C74C8 / 0x824C7738)",
+           code.count("KAPC_COMPASS_POINT_STRINGIDS[ConsoleWordIndex(leEventDirection)]") == 3)
 
 
 def main():
@@ -70,7 +102,8 @@ def main():
     parser.add_argument("--rev", help="read the b5 sources from this git revision")
     args = parser.parse_args()
     tree = Tree(args.rev)
-    return report("run_fxgate_xmvector_acos", list(wiring(tree)), numeric(tree), NUMERIC_CHECKS)
+    return report("run_fxgate_xmvector_acos", list(wiring(tree)) + list(wiring_flyby(tree)), numeric(tree),
+                  NUMERIC_CHECKS)
 
 
 if __name__ == "__main__":

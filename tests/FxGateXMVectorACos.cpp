@@ -13,6 +13,15 @@
 #include <cstdio>
 #include <cstring>
 
+// FxGateFlyByClamp: PreRaceFlyByState::FindEventDirection's clamp before its bl XMVectorACos, extracted from the
+// production source by run_fxgate_xmvector_acos.py (vmaxfp 0x824B501C against -1, vminfp 0x824B5020 against +1);
+// ConsoleWordIndex and KAPC_COMPASS_POINT_STRINGIDS, the three description setters' index and table, likewise.
+typedef float f32;
+typedef int s32;
+typedef unsigned int u32;
+const int E_COMPASS_POINTS_COUNT = 8;   // BrnGuiShared.h ECompassPoints (the `cmpwi cr6, r31, 8` assert)
+#include "fxgate_acos_flyby.inc"
+
 namespace
 {
     unsigned gChecks = 0, gFailures = 0;
@@ -73,6 +82,42 @@ int main()
     {
         const float lfOut = XboxMath::XMVectorACos(Float(luIn));
         Check(std::isnan(lfOut), "|x| > 1, +-inf and NaN give NaN", luIn, Bits(lfOut), 0x7FC00000u);
+    }
+
+    // 3b. The flyby's clamp is the console's vmaxfp / vminfp pair: a NaN stays NaN (a VMX max / min propagates it),
+    //     so XMVectorACos then gives NaN; out-of-range values clamp; in-range values and -0 pass through.
+    {
+        const float lfNaN = Float(0x7FC00000u);
+        const float lfOut = FxGateFlyByClamp(lfNaN);
+        Check(std::isnan(lfOut), "flyby clamp keeps a NaN (vmaxfp 0x824B501C / vminfp 0x824B5020)", 0x7FC00000u,
+              Bits(lfOut), 0x7FC00000u);
+        const unsigned int kauIn[]   = { 0xC0000000u, 0x40000000u, 0x3F000000u, 0x80000000u, 0xBF800000u };
+        const unsigned int kauWant[] = { 0xBF800000u, 0x3F800000u, 0x3F000000u, 0x80000000u, 0xBF800000u };
+        for (unsigned int i = 0; i < 5; ++i)
+        {
+            const float lfClamped = FxGateFlyByClamp(Float(kauIn[i]));
+            Check(Bits(lfClamped) == kauWant[i], "flyby clamp", kauIn[i], Bits(lfClamped), kauWant[i]);
+        }
+
+        // 3c. A NaN bearing: XMVectorACos(NaN) is NaN, the degrees NaN, and FindEventDirection's truncation
+        //     static_cast<s32>(std::floor(degrees * KF_ONE_OVER_SECTOR_DEG)) is 0x80000000 (cvttss2si; the console's
+        //     fctiwz gives the same). The description setters read the table with `slwi r10, rDir, 2` + `lwzx`
+        //     (0x824C7738 / 0x824C774C): 0x80000000 << 2 keeps 32 bits, 0, so the console shows DIRECTION_N.
+        const float lfAngle = XboxMath::XMVectorACos(lfOut);
+        const float lfDegrees = lfAngle * 57.29578f;                                        // flt_820652A8
+        const s32 liDirection = static_cast<s32>(std::floor(lfDegrees * 0.022222223f));      // flt_8206748C
+        Check(static_cast<u32>(liDirection) == 0x80000000u, "a NaN bearing's direction is 0x80000000", Bits(lfDegrees),
+              static_cast<u32>(liDirection), 0x80000000u);
+        const u32 luIndex = ConsoleWordIndex(liDirection);
+        Check(luIndex == 0u, "ConsoleWordIndex(0x80000000) is element 0 (slwi-by-2 32-bit wrap)", 0x80000000u, luIndex,
+              0u);
+        Check(luIndex < 8u && std::strcmp(KAPC_COMPASS_POINT_STRINGIDS[luIndex], "DIRECTION_N") == 0,
+              "a NaN bearing shows DIRECTION_N", 0x80000000u, luIndex, 0u);
+        for (s32 liPoint = 0; liPoint < 8; ++liPoint)
+        {
+            Check(ConsoleWordIndex(liPoint) == static_cast<u32>(liPoint), "ConsoleWordIndex is identity on 0..7",
+                  static_cast<u32>(liPoint), ConsoleWordIndex(liPoint), static_cast<u32>(liPoint));
+        }
     }
 
     // 4. std::acos is not the console: it misses on a good share of the finite rows.
