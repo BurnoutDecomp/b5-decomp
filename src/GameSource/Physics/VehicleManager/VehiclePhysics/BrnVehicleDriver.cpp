@@ -228,8 +228,13 @@ namespace Vehicle
     //   0x825FF068  mCatchupTargetTransform (this+0x50) = the four rows, then its translation is
     //               moved from the graphics origin onto the centre of mass:
     //                   wAxis += xAxis*com.x + yAxis*com.y + zAxis*com.z
-    //               com = vehicle +0x670 == mSimpleAttribs.mCOMOffset (the vmulfp/vmaddfp cascade
-    //               0x825FF0C0..0x825FF0F0, all four lanes)
+    //               com = vehicle +0x670 == mSimpleAttribs.mCOMOffset, all four lanes, as
+    //                   t = yAxis * com.y                (vmulfp128 v13, v13, v12  0x825FF0C0)
+    //                   t = xAxis * com.x + t            (vmaddfp v13, v12, v13, v11 0x825FF0E4)
+    //                   t = zAxis * com.z + t            (vmaddfp v0, v10, v13, v0   0x825FF0E8)
+    //                   wAxis = wAxis + t                (vaddfp v0, v9, v0          0x825FF0EC)
+    //               -- the two vmaddfp are FUSED (one rounding each): std::fma lane by lane
+    //               (crash parity FX-NETCRASH, 2026-09-25; it was three rounded products).
     //   0x825FF0F4  |target.wAxis - vehicle.wAxis|^2 > KVF_MAX_VEHICLE_INTERP_DIST_SQ ->
     //               lbSnapToPosition = true (vmsum3fp128 + `vcmpgtfp.` against the splat at
     //               0x82FB9F50, which the CRT thunk 0x82C5CE20 loads from flt_820049E0 == 100.0f)
@@ -293,10 +298,15 @@ namespace Vehicle
         // operator*<VectorAxisX/Y/Z> products, two operator+ and the WAxis() operator+=).
         const Vector3 lComOffset = lpVehicle->GetSimpleAttribs()->mCOMOffset;                // lvx +0x670
         mCatchupTargetTransform = lCatchupTransformGraphicsSpace;
-        mCatchupTargetTransform.wAxis = mCatchupTargetTransform.wAxis
-                                      + (vpu::Mult(mCatchupTargetTransform.xAxis, lComOffset.x)
-                                         + vpu::Mult(mCatchupTargetTransform.yAxis, lComOffset.y)
-                                         + vpu::Mult(mCatchupTargetTransform.zAxis, lComOffset.z));
+        const Vector3& lrX = mCatchupTargetTransform.xAxis;
+        const Vector3& lrZ = mCatchupTargetTransform.zAxis;
+        const Vector3 lYCom = vpu::Mult(mCatchupTargetTransform.yAxis, lComOffset.y);       // vmulfp128 0x825FF0C0
+        Vector3 lComMove;                                                                     // vmaddfp x2, fused
+        lComMove.x = std::fma(lrZ.x, lComOffset.z, std::fma(lrX.x, lComOffset.x, lYCom.x));
+        lComMove.y = std::fma(lrZ.y, lComOffset.z, std::fma(lrX.y, lComOffset.x, lYCom.y));
+        lComMove.z = std::fma(lrZ.z, lComOffset.z, std::fma(lrX.z, lComOffset.x, lYCom.z));
+        lComMove.w = std::fma(lrZ.w, lComOffset.z, std::fma(lrX.w, lComOffset.x, lYCom.w));
+        mCatchupTargetTransform.wAxis = mCatchupTargetTransform.wAxis + lComMove;              // vaddfp 0x825FF0EC
 
         // Too far to interpolate: snap instead. (DWARF lvfSquaredInterpDist, a VecFloat on the
         // console; the host MagnitudeSquared is scalar.)
