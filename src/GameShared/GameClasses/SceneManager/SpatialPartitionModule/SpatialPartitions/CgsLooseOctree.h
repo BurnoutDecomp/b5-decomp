@@ -207,7 +207,7 @@ namespace CgsSceneManager
 
         // @ 0x828D01F0 -- slot 6. Brackets LineTestOptimized with the "Octree VP LineTest"
         // monitor (_miVPLineTestPerfMon, DWARF CgsLooseOctree.h:120 == X360 dword_82F33F20,
-        // registered by Construct @0x828CA18C). Bodied in CgsLooseOctree_wSQ1.cpp.
+        // registered by Construct @0x828CA18C). Bodied in CgsLooseOctree.cpp (folded from _wSQ1).
         virtual bool LineTest(u32 lx32EntityTypeFlags, Vector3 lLineStart, Vector3 lLineEnd,
                               CoarseQueryResultBuffer<16384>* lpResultBufferOut);
         virtual void Update();                                         // @ 0x828D0180
@@ -246,11 +246,17 @@ namespace CgsSceneManager
                                    CoarseQueryResultBuffer<16384>* lpResultBuffer);
 
 
-        // @ 0x828CA5F8 (128 insns) -- the VMX line walk LineTest wraps (DWARF :328); its
-        // recursion is LineTestRecursive @0x828BCF50 (731 insns). NOT reconstructed: a LOUD
-        // trap in CgsLooseOctree_wSQ1.cpp (see the note there).
+        // @ 0x828CA5F8 (128 insns) -- the VMX line walk LineTest wraps (DWARF :328): builds the
+        // SpatialPartition::LineTestRecursiveFuncParams block, answers a segment no longer than 1e-4
+        // with SphereTest, otherwise gates the root box and walks LineTestRecursive from node 0.
         bool LineTestOptimized(u32 lx32EntityTypeFlags, Vector3 lLineStart, Vector3 lLineEnd,
                                CoarseQueryResultBuffer<16384>* lpResultBufferOut);
+
+        // @ 0x828BCF50 (731 insns, DWARF CgsLooseOctree.cpp:1654) -- one node of the line walk: the
+        // node's own entities four spheres at a time, then the four children through one
+        // four-box slab test.
+        void LineTestRecursive(u16 lu16NodeIndex,
+                               const SpatialPartition::LineTestRecursiveFuncParams* lpParams) const;
 
         // DWARF CgsLooseOctree.h:120 -- the "Octree VP LineTest" CPU monitor (X360
         // dword_82F33F20). The X360 Construct @0x828C99D8 registers the octree's twelve

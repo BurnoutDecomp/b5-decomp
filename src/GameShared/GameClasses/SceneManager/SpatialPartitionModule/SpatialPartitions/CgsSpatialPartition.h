@@ -4,6 +4,8 @@
 #include "BrnCommonTypes.h"                                          // Vector3
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"  // CgsGeometric::Sphere
 
+#include <cstddef>   // offsetof (the LineTestRecursiveFuncParams layout asserts below)
+
 // ============================================================================
 // GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/
 //   CgsSpatialPartition.{h,cpp}
@@ -75,12 +77,22 @@ namespace CgsSceneManager
         // still resolve; the record IS the 8-byte link above.
         typedef SpatialPartitionEntityLink SpatialPartitionEntityNode;
 
-        // The recursive line-test traversal's per-call parameter block. Consumers
-        // (LooseOctree::TestLineAgainstNodeBoundingBox @0x828B0FC8) read it by raw vector
-        // offset -- line origin at +0x00, inverse line direction at +0x30.
+        // The recursive line walk's per-query parameter block -- DWARF CgsSpatialPartition.h:131-139.
+        // LooseOctree::LineTestOptimized @0x828CA5F8 builds it on its stack (sp+0x70) and hands it
+        // by pointer to TestLineAgainstNodeBoundingBox @0x828B0FC8 and to every level of
+        // LineTestRecursive @0x828BCF50, which read it back at these offsets (static_asserted after
+        // the class). (Until 2026-09-25 this was an opaque `unsigned char maBytes[0x40]` placeholder,
+        // 779b479f; the console block is 0x58 bytes and the DWARF names every field.)
         struct alignas(16) LineTestRecursiveFuncParams
         {
-            unsigned char maBytes[0x40];   // +0x00 origin (vec), +0x30 inverse direction (vec)
+            Vector3  mLineStart;            // +0x00
+            Vector3  mLineEnd;              // +0x10
+            Vector3  mLineDirection;        // +0x20  (end - start) / |end - start|
+            Vector3  mLineReciprocal;       // +0x30  per lane 1 / (end - start); 1 / eps where |d| < eps
+            VecFloat mfLineLength;          // +0x40  |end - start| in every lane
+            u32      mx32EntityTypeFlags;   // +0x50
+            // NOT X360: host pointer width; console +0x54. The 8-byte pointer aligns to +0x58 here.
+            CoarseQueryResultBuffer<16384>* mpResultBufferOut;
         };
 
         virtual ~SpatialPartition() {}
@@ -168,4 +180,25 @@ namespace CgsSceneManager
         SpatialPartitionEntityLink maEntityLinks[KI_MAX_NUM_ENTITIES];             // X360 +0x00080
         CgsGeometric::Sphere       maEntityBoundingSpheres[KI_MAX_NUM_ENTITIES];   // X360 +0x13900
     };
+
+    // The line walk's parameter block keeps the console offsets its readers use (LineTestOptimized
+    // @0x828CA5F8 stores sp+0x70 + offset; LineTestRecursive @0x828BCF50 loads +0x00 / +0x20 / +0x30
+    // / +0x40 / +0x50 / +0x54; TestLineAgainstNodeBoundingBox @0x828B0FC8 loads +0x00 / +0x30). Only
+    // the result-buffer pointer moves on x64.
+    static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mLineStart) == 0x00,
+                  "LineTestRecursiveFuncParams::mLineStart is at console +0x00");
+    static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mLineEnd) == 0x10,
+                  "LineTestRecursiveFuncParams::mLineEnd is at console +0x10");
+    static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mLineDirection) == 0x20,
+                  "LineTestRecursiveFuncParams::mLineDirection is at console +0x20");
+    static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mLineReciprocal) == 0x30,
+                  "LineTestRecursiveFuncParams::mLineReciprocal is at console +0x30");
+    static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mfLineLength) == 0x40,
+                  "LineTestRecursiveFuncParams::mfLineLength is at console +0x40");
+    static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mx32EntityTypeFlags) == 0x50,
+                  "LineTestRecursiveFuncParams::mx32EntityTypeFlags is at console +0x50");
+    static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mpResultBufferOut) == 0x58,
+                  "NOT X360: the 8-byte host pointer aligns to +0x58 (console +0x54)");
+    static_assert(sizeof(SpatialPartition::LineTestRecursiveFuncParams) == 0x60,
+                  "0x58 of console fields rounded to the 16-byte alignment; the widened pointer still fits");
 }
