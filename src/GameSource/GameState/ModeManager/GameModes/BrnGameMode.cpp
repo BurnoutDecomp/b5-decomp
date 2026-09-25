@@ -388,8 +388,8 @@ void GameMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
 //
 // So: every OFFLINE mode that inherits this gets 6.0 (the value the retired stub returned for all
 // of them); an online FreeBurnLobby gets 2.0; every other online mode gets (flyby cars + 1) * 4.0.
-// ModeManager::GetNumberOfCarsInFlyby @0x82311E38 is PARKED on this build (it returns 0 with a
-// one-shot log: FlybyManager has no owning header), so the online modes get 4.0 here until it lands.
+// ModeManager::GetNumberOfCarsInFlyby @0x82311E38 is live (crash parity FX-GATE): 0 offline, and
+// clamp(players still connected - 1, 0, 3) online, so an online intro runs 4.0 to 16.0 s.
 // ===========================================================================
 f32 GameMode::GetIntroDurationSeconds() const
 {

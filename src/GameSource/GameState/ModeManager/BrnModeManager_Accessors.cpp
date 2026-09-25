@@ -94,7 +94,7 @@
 #include "SharedClasses/Progression/BrnProgressionData.h"                    // ProgressionData::{GetProgressionRankData, GetProgressionRankCount}
 #include "SharedClasses/Progression/BrnProgressionRankData.h"                // ProgressionRankData::GetRoadRageTakedownTarget
 #include "GameShared/GameClasses/Core/CgsAssert.h"                           // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                   // GetRoadRageTakedownTarget's gated debug prints + the parked one-shot log
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                   // GetRoadRageTakedownTarget's gated debug prints
 #include <cmath>                                                             // std::floor (the de-inlined fsel/magic-constant floor, same precedent as BrnChallengeManager_wC_06.cpp)
 
 // GameSource/GameState/BrnGameStateModuleIO.h is not included: nothing here needs it -- every enum
@@ -425,7 +425,7 @@ s32 ModeManager::GetOnlineCurrentRound() const
 }
 
 // ============================================================================================
-// 7. THE TWO X360 SYMBOLS THAT WERE PARKED -- one now LIVE, one still blocked
+// 7. THE TWO X360 SYMBOLS THAT WERE PARKED -- both LIVE now
 // ============================================================================================
 // Both were FULLY RECONSTRUCTED here as ARMED-BODY blocks to be pasted the moment their missing
 // declarations landed. Neither is guessed and neither was half-written into the live body: an
@@ -661,51 +661,55 @@ u32 ModeManager::GetRoadRageTakedownTarget()
 }
 
 // --------------------------------------------------------------------------------------------
-// GetNumberOfCarsInFlyby -- X360 0x82311E38.  [X] PARKED: FlybyManager HAS NO OWNING HEADER.
+// GetNumberOfCarsInFlyby -- X360 0x82311E38.  [LIVE 2026-09-25, crash parity FX-GATE] UN-PARKED.
 // --------------------------------------------------------------------------------------------
-// The console body is four lines and fully recovered:
+// The console body is the flyby manager's virtual, reached through GameStateModule::GetFlybyManager
+// (DWARF BrnGameStateModule.h:561), which is inlined here:
+//   0x82311E48 lwz r31, 0x6D58(r3)       mpGameStateModule
+//   0x82311E50 bl IsOnlineGameMode       (@0x823116D0, with its own "module is updating" assert)
+//   0x82311E58..0x82311E6C               online ? gsm + 0x2D8E0 (mOnlineFlybyManager)
+//                                               : gsm + 0x2D630 (mOfflineFlybyManager)
+//   0x82311E70..0x82311E7C               lwz vtable ; lwz slot 1 (+4) ; bctrl
+// The two slot-1 targets, read from the vtables in the image:
+//   OfflineFlybyManager vtable 0x820CE774: slot 1 = 0x827E2F38 `li r3, 0 ; blr`            -> 0.
+//   OnlineFlybyManager  vtable 0x820CFF94: slot 1 = OnlineFlybyManager::CalculateNumberOfCarsInFlyby
+//     @0x82357F08: three asserts that mpScoringSystem (+0x294) is set ("mpScoringSystem" /
+//     "GetScoringSystem()"), then 0x82357FA0 bl ScoringSystem::GetNumberOfNetworkPlayersStillConnected
+//     (@0x823560B8) ; 0x82357FA4 addi -1 ; 0x82357FA8 cmpwi 0 ; bgt -> else 0 ;
+//     0x82357FBC cmpwi 3 ; blt keep ; li 3.  So clamp(connected - 1, 0, 3): the rivals, not the player.
+// Whose scoring system: GameStateModule::Construct builds BOTH managers with the same one,
+//   0x82380614 addi r23, r31, 0x1DD0 ; 0x82380628 / 0x82380644 bl FlybyManager::Construct (r5 = r23),
+// and FlybyManager::Construct @0x823774C8 stores it at +0x294 (0x82377538, the only store to +0x294 in
+// any FlybyManager method). gsm + 0x1DD0 = &mModeManager (gsm + 0x1020) + 0xDB0 = this manager's own
+// mScoringSystem (BrnModeManager.h, +3504). So the online leaf counts THIS ModeManager's scoring slots.
 //
-//   s32 ModeManager::GetNumberOfCarsInFlyby()
-//   {
-//       FlybyManager* lpFlybyManager = mpGameStateModule->GetFlybyManager();
-//       return lpFlybyManager->CalculateNumberOfCarsInFlyby();   // vtable slot 1, (*(*v2 + 4))(v2)
-//   }
-//
-// where GetFlybyManager() (DWARF BrnGameStateModule.h:561) is itself inlined at both console call
-// sites as
-//       `GameStateModule::IsOnlineGameMode(gsm) ? gsm + 186592 : gsm + 185904`
-// -- gsm+185904 (0x2D630) mOfflineFlybyManager, gsm+186592 (0x2D8E0) mOnlineFlybyManager, adjacent
-// and 688 bytes apart, in the DWARF's own declaration order (BrnGameStateModule.h:248/:251). The
-// SECOND console call site is ModeManager::StartModeIntro @0x82343018, which uses the identical
-// selector and then memcpy's 592 bytes out of vtable slot 0 (GetFlybyData) -- so agent 5 hits this
-// exact wall, and the fix below unblocks both.
-//
-// [X] THE BLOCKER IS STRUCTURAL, NOT A MISSING ACCESSOR. BrnGameState::FlybyManager has no owning
-// header anywhere in the tree: the base class is DEFINED LOCALLY inside
-// GameSource/GameState/FlybyManager/BrnGameStateFlybyManager.cpp:45 (together with local
-// re-definitions of OnlineFlybyManager and OfflineFlybyManager), and
-// BrnGameStateOnlineFlybyManager.h:139 carries a SECOND, byte-exact re-declaration of the same base
-// for the derived TU. Neither copy declares any virtual at all (the vtable is modelled as a plain
-// `u32 mVTable` word), and CalculateNumberOfCarsInFlyby is declared only on the ONLINE leaf. So
-// GameStateModule cannot embed the two managers by value, cannot hand back a usable FlybyManager*,
-// and slot 1 cannot be dispatched. Filed as a header_request (the four-part recipe is in agent 9's
-// report). Parked here behind a one-shot log; it returns 0 == "no cars in the flyby", which is the
-// state the flyby data is in on this build anyway (nothing populates it).
+// [FLAG] STRUCTURAL: the PC GameStateModule does not embed the two flyby managers (BrnGameState::
+// FlybyManager has no owning header: the base is defined inside BrnGameStateFlybyManager.cpp and
+// re-declared, without virtuals, in BrnGameStateOnlineFlybyManager.h; neither TU is mounted). So the
+// virtual cannot be dispatched and the two slot-1 leaves are written out here, on the scoring system
+// the online manager would have been handed. Same values as the console for every input; the leaf's
+// three non-null asserts are on &mScoringSystem, which cannot be null, and are not repeated.
+// RE-WIRE WHEN GameStateModule embeds mOfflineFlybyManager / mOnlineFlybyManager with their vtables:
+// then this is `return mpGameStateModule->GetFlybyManager()->CalculateNumberOfCarsInFlyby();`.
+// StartModeIntro @0x82343018's flyby leg (GetFlybyData, slot 0) is still blocked on that.
+// Consumer: GameMode::GetIntroDurationSeconds @0x82315A88 ((cars + 1) * 4.0 s for online modes other
+// than 15 / 16). Test: tests/run_fxgate_flyby_car_count.py.
 s32 ModeManager::GetNumberOfCarsInFlyby()
 {
-    CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
-
-    static bool sbLoggedFlybyCarCountParked = false;
-    if (!sbLoggedFlybyCarCountParked && (CgsDev::Message::gxMessageFilterFlags & 1))
+    if (!mpGameStateModule->IsOnlineGameMode())
     {
-        sbLoggedFlybyCarCountParked = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[stuntrace] ModeManager::GetNumberOfCarsInFlyby PARKED -> 0."
-               " BrnGameState::FlybyManager has no owning header (base defined inside"
-               " BrnGameStateFlybyManager.cpp, re-declared in BrnGameStateOnlineFlybyManager.h),"
-               " so GameStateModule cannot embed mOfflineFlybyManager/mOnlineFlybyManager nor"
-               " dispatch CalculateNumberOfCarsInFlyby. Same blocker as StartModeIntro's flyby"
-               " leg.\n";
+        return 0;   // OfflineFlybyManager slot 1, 0x827E2F38
+    }
+
+    // OnlineFlybyManager::CalculateNumberOfCarsInFlyby @0x82357F08.
+    s32 liNumRivals = GetScoringSystem()->GetNumberOfNetworkPlayersStillConnected() - 1;
+    if (liNumRivals > 0)
+    {
+        if (liNumRivals >= 3)
+        {
+            liNumRivals = 3;
+        }
+        return liNumRivals;
     }
     return 0;
 }
