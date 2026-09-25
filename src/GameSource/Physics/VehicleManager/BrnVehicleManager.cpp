@@ -12,6 +12,7 @@
 
 #include <cstdlib>  // getenv: opt-in PC contact diagnostics
 #include <cmath>    // std::fabs, std::acos
+#include <cstring>  // std::memcpy: the [td-replay] witness prints raw IEEE bits
 #include <cstddef>  // offsetof (layout asserts)
 
 // includes folded in from the BrnVehicleManager_w*.cpp partfiles (2026-09-15)
@@ -167,6 +168,16 @@ namespace Vehicle
     static bool TakedownDiagEnabled()
     {
         static const bool sbOn = (std::getenv("BRN_TD_DIAG") != 0);
+        return sbOn;
+    }
+
+    // [PC HARNESS, NOT X360] BRN_TD_REPLAY=1 (with BRN_TD_DIAG=1) adds the [td-replay] line: every
+    // input the impact ladder reads for a player-involved evaluation, as raw IEEE bits, so
+    // tests/FxLadderReplay.cpp can feed a recorded contact through the extracted production ladder
+    // bit for bit. DELETE-WHEN the FX-LADDER replay fixture no longer needs fresh recordings.
+    static bool TakedownReplayEnabled()
+    {
+        static const bool sbOn = (std::getenv("BRN_TD_REPLAY") != 0);
         return sbOn;
     }
 
@@ -447,6 +458,23 @@ namespace Vehicle
                 }
             }
             GenerateContactSituation(&lInfo);
+
+            // [td-react] PC witness, BRN_TD_DIAG only [FLAG PC witness]: the inputs
+            // CalculateSlamData / CalculateShuntData read that ApplySlam / ApplyShunt overwrite
+            // (the victim's slam steering is cleared by ApplySlam), snapshotted before the commit.
+            const bool lbWReact = lbPlayerInvolved && TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0
+                && static_cast<s32>(lInfo.meVictimActiveRaceCarIndex) >= 0 && static_cast<s32>(lInfo.meVictimActiveRaceCarIndex) < 8
+                && static_cast<s32>(lInfo.meAggressorActiveRaceCarIndex) >= 0 && static_cast<s32>(lInfo.meAggressorActiveRaceCarIndex) < 8;
+            f32 lfWPreSlamVictim = 0.0f;
+            f32 lfWPreSlamAggressor = 0.0f;
+            s32 liWPreSlamNumber = 0;
+            if (lbWReact)
+            {
+                lfWPreSlamVictim    = maRaceCarVehicles[lInfo.meVictimActiveRaceCarIndex].mfSlamSteering;
+                lfWPreSlamAggressor = maRaceCarVehicles[lInfo.meAggressorActiveRaceCarIndex].mfSlamSteering;
+                liWPreSlamNumber    = maRaceCarVehicles[lInfo.meVictimActiveRaceCarIndex].mSlamEffect.mi8SlamNumber;
+            }
+
             if (mbAllowSlamsAndShuntsEffectsForRivals)
             {
                 switch (lInfo.meImpactType)
@@ -457,6 +485,63 @@ namespace Vehicle
                     ApplyShunt(&lInfo); break;
                 default: break;
                 }
+            }
+
+            // [td-react] COMMIT -- what ApplySlam / ApplyShunt just committed to the two cars, with
+            // every input their Calculate*Data read, then the per-step trace of both cars
+            // (RaceCarPhysics::TdReactWatch / TdReactStep). Pure reads. [FLAG PC witness]
+            if (lbWReact)
+            {
+                static s32 siWReactId = 0;
+                ++siWReactId;
+                const s32 liWV  = static_cast<s32>(lInfo.meVictimActiveRaceCarIndex);
+                const s32 liWAg = static_cast<s32>(lInfo.meAggressorActiveRaceCarIndex);
+                const RaceCarPhysics& lrWV  = maRaceCarVehicles[liWV];
+                const RaceCarPhysics& lrWAg = maRaceCarVehicles[liWAg];
+                CgsDev::Log::DebugPrint& lrWOut = *CgsDev::Log::gpDebugPrint;
+                auto lWV3 = [&](const char* lpcName, const Vector3& lrV)
+                {
+                    lrWOut << lpcName << "=(" << lrV.x << "," << lrV.y << "," << lrV.z << ")";
+                };
+                lrWOut << "[td-react] COMMIT id=" << siWReactId
+                       << " type=" << WitnessImpactTypeName(static_cast<s32>(lInfo.meImpactType))
+                       << "(" << static_cast<s32>(lInfo.meImpactType) << ")"
+                       << " aggr=" << liWAg << " victim=" << liWV
+                       << " sit=" << static_cast<s32>(lInfo.meImpactSitutation)
+                       << " closing=" << lInfo.mfClosingSpeed
+                       << " mode=" << meCurrentGameModeType << " online=" << (mbIsOnlineGameMode ? 1 : 0)
+                       << " typeA=" << static_cast<s32>(maeRaceCarTypes[liWAg]) << " typeV=" << static_cast<s32>(maeRaceCarTypes[liWV])
+                       << " netA=" << (lInfo.mbRaceCarAIsNetworkCar ? 1 : 0) << " netB=" << (lInfo.mbRaceCarBIsNetworkCar ? 1 : 0)
+                       << " | in: slamAg=" << lfWPreSlamAggressor << " slamV=" << lfWPreSlamVictim
+                       << " slamNumV=" << liWPreSlamNumber
+                       << " massAg=" << lrWAg.GetMass().x << " massV=" << lrWV.GetMass().x << " ";
+                lWV3("n", lInfo.mpContact->mNormal); lrWOut << " ";
+                lWV3("posAg", lrWAg.mTransform.wAxis); lrWOut << " ";
+                lWV3("posV", lrWV.mTransform.wAxis); lrWOut << " ";
+                lWV3("rightV", lrWV.mTransform.xAxis); lrWOut << " ";
+                lWV3("upV", lrWV.mTransform.yAxis); lrWOut << " ";
+                lWV3("velAg", lrWAg.mLinearVelocity); lrWOut << " ";
+                lWV3("velV", lrWV.mLinearVelocity);
+                lrWOut << " | victim slam life=" << lrWV.mSlamEffect.mfSlamLife
+                       << " total=" << lrWV.mSlamEffect.mfTotalSlamTime
+                       << " orig=" << lrWV.mSlamEffect.mfOriginalSteering
+                       << " rec=" << lrWV.mSlamEffect.mfRecoveryTime
+                       << " num=" << static_cast<s32>(lrWV.mSlamEffect.mi8SlamNumber)
+                       << " attacker=" << static_cast<s32>(lrWV.mi8LastAttackersRaceCarIndex)
+                       << " shunt dir=(" << lrWV.mShuntEffect.mDirectionPlusDesiredSpeed.x
+                       << "," << lrWV.mShuntEffect.mDirectionPlusDesiredSpeed.y
+                       << "," << lrWV.mShuntEffect.mDirectionPlusDesiredSpeed.z << ")"
+                       << " desired=" << lrWV.mShuntEffect.mDirectionPlusDesiredSpeed.w
+                       << " life=" << lrWV.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x
+                       << " sitq=" << lrWV.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y
+                       << " vuln=" << mafVulnerableTimeSeconds[liWV]
+                       << " | aggressor slam life=" << lrWAg.mSlamEffect.mfSlamLife
+                       << " total=" << lrWAg.mSlamEffect.mfTotalSlamTime
+                       << " orig=" << lrWAg.mSlamEffect.mfOriginalSteering
+                       << " rec=" << lrWAg.mSlamEffect.mfRecoveryTime
+                       << " [FLAG PC witness]\n";
+                RaceCarPhysics::TdReactWatch(&lrWV, siWReactId, 0);
+                RaceCarPhysics::TdReactWatch(&lrWAg, siWReactId, 1);
             }
             if (lbPlayerInvolved)
             {
@@ -506,23 +591,170 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     void VehicleManager::CheckForAllTypesOfImpacts(RaceCarResponseInfo* lpInfo)
     {
+        const bool lbWitness = TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0;
+
+        // [td-ladder] EPISODE + SLAM-GATE witness -- PC only, BRN_TD_DIAG only [FLAG PC witness].
+        // `gap` counts car A's physics steps since this pair was last evaluated: 0 = another spy
+        // of the same step (ProcessContactSpy stores every contact twice, A/B and B/A), 1 = the
+        // contact continues from the previous step, >1 or -1 (never) = the FIRST step of a new
+        // contact episode. `gateA/gateB` are what RaceCarPhysics::Update's slam-steering gate
+        // (0x82641814) read this step -- see RaceCarPhysics::TdSlamGateSample: n = miNumCollisions
+        // (+0x1354, every contact impulse since the previous step's reset at 0x826415A0), w = the
+        // world share (+0x1353), ctl = the control steer, pre = mfSlamSteering before the gate.
+        // `now` is this step's count so far (the impulses this step's DeformationManager::Update
+        // banked, i.e. what zeroes NEXT step's slam steering). Pure reads.
+        const RaceCarPhysics::TdSlamGateSample* lpWGateA = nullptr;
+        const RaceCarPhysics::TdSlamGateSample* lpWGateB = nullptr;
+        s32 liWGap = -1;
+        if (lbWitness)
+        {
+            static u32 suaWPairLastEval[8][8] = {};   // the car's own update count + 1 at the last evaluation
+            const s32 liWPairA = static_cast<s32>(lpInfo->meActiveRaceCarIndexA);
+            const s32 liWPairB = static_cast<s32>(lpInfo->meActiveRaceCarIndexB);
+            lpWGateA = RaceCarPhysics::FindTdSlamGateSample(lpInfo->mpRaceCarA);
+            lpWGateB = RaceCarPhysics::FindTdSlamGateSample(lpInfo->mpRaceCarB);
+            if (lpWGateA != nullptr && lpWGateB != nullptr
+                && liWPairA >= 0 && liWPairA < 8 && liWPairB >= 0 && liWPairB < 8)
+            {
+                const u32 luWLast = suaWPairLastEval[liWPairA][liWPairB];
+                liWGap = (luWLast == 0u) ? -1 : static_cast<s32>(lpWGateA->muUpdates + 1u - luWLast);
+                suaWPairLastEval[liWPairA][liWPairB] = lpWGateA->muUpdates + 1u;
+                suaWPairLastEval[liWPairB][liWPairA] = lpWGateB->muUpdates + 1u;
+            }
+        }
+        auto lWitnessEpisode = [&]()
+        {
+            *CgsDev::Log::gpDebugPrint << " gap=" << liWGap;
+            const RaceCarPhysics::TdSlamGateSample* const lapWGate[2] = { lpWGateA, lpWGateB };
+            const RaceCarPhysics* const lapWCar[2] = { lpInfo->mpRaceCarA, lpInfo->mpRaceCarB };
+            for (s32 liWSide = 0; liWSide < 2; ++liWSide)
+            {
+                *CgsDev::Log::gpDebugPrint << (liWSide == 0 ? " gateA=" : " gateB=");
+                if (lapWGate[liWSide] == nullptr)
+                {
+                    *CgsDev::Log::gpDebugPrint << "?";
+                    continue;
+                }
+                *CgsDev::Log::gpDebugPrint << "(n=" << lapWGate[liWSide]->miNumCollisions
+                                           << ",w=" << lapWGate[liWSide]->miNumWorldCollisions
+                                           << ",ctl=" << lapWGate[liWSide]->mfControlSteer
+                                           << ",pre=" << lapWGate[liWSide]->mfSlamBeforeGate
+                                           << (lapWGate[liWSide]->mbCrashingBranch ? ",crashing" : "")
+                                           << ",now=" << lapWCar[liWSide]->miNumCollisions
+                                           << ",nowW=" << static_cast<s32>(lapWCar[liWSide]->mi8NumWorldCollisions)
+                                           << ")";
+            }
+        };
+
+        // [td-replay] -- PC only, BRN_TD_DIAG + BRN_TD_REPLAY [FLAG PC witness]. Every input the
+        // ladder below reads, BEFORE any rung writes the response info, as raw IEEE bits (hex).
+        // Layout "v1" (tests/run_fxladder_replay.py parses it; keep the two in step):
+        //   idxA idxB | flags(crashA,crashB,playerA,playerB,netA,netB,otherAI = bits 0..6)
+        //   entityA entityB closing speedA speedB stressSq angle closingVel(4) transformA(16)
+        //   transformB(16) | contact entityA entityB normal(4) pointOnA(4) pointOnB(4)
+        //   | playerIndex online | per car A then B: type noImpact vulnerability pgo ogp boost
+        //   | per car A then B: crashing slamSteering lastAttacker slamLife shuntW shuntLife
+        //     lastContacted timeSinceContact airTime timeCrashing mass crashSpeedMPS
+        //     lastLinearVelocity(4) deformableMin(4) deformableMax(4) transform(16)
+        // The next [td-ladder] line of the same evaluation (REJECT energy / -> rung) is its result.
+        if (lbWitness && TakedownReplayEnabled()
+            && (lpInfo->mbRaceCarAIsPlayer || lpInfo->mbRaceCarBIsPlayer))
+        {
+            CgsDev::Log::DebugPrint& lrWOut = *CgsDev::Log::gpDebugPrint;
+            auto lWWord = [&](u32 luValue) { lrWOut.AppendFormat(" %08X", luValue); };
+            auto lWBits = [&](f32 lfValue)
+            {
+                u32 luBits = 0;
+                std::memcpy(&luBits, &lfValue, sizeof(luBits));
+                lWWord(luBits);
+            };
+            auto lWVec = [&](f32 lfX, f32 lfY, f32 lfZ, f32 lfW) { lWBits(lfX); lWBits(lfY); lWBits(lfZ); lWBits(lfW); };
+            auto lWMat = [&](const Matrix44Affine& lrM)
+            {
+                lWVec(lrM.xAxis.x, lrM.xAxis.y, lrM.xAxis.z, lrM.xAxis.w);
+                lWVec(lrM.yAxis.x, lrM.yAxis.y, lrM.yAxis.z, lrM.yAxis.w);
+                lWVec(lrM.zAxis.x, lrM.zAxis.y, lrM.zAxis.z, lrM.zAxis.w);
+                lWVec(lrM.wAxis.x, lrM.wAxis.y, lrM.wAxis.z, lrM.wAxis.w);
+            };
+            const s32 laWIdx[2] = { static_cast<s32>(lpInfo->meActiveRaceCarIndexA),
+                                    static_cast<s32>(lpInfo->meActiveRaceCarIndexB) };
+            lrWOut << "[td-replay] v1 " << laWIdx[0] << " " << laWIdx[1];
+            lWWord((lpInfo->mbRaceCarAIsCrashing ? 1u : 0u) | (lpInfo->mbRaceCarBIsCrashing ? 2u : 0u)
+                   | (lpInfo->mbRaceCarAIsPlayer ? 4u : 0u) | (lpInfo->mbRaceCarBIsPlayer ? 8u : 0u)
+                   | (lpInfo->mbRaceCarAIsNetworkCar ? 16u : 0u) | (lpInfo->mbRaceCarBIsNetworkCar ? 32u : 0u)
+                   | (lpInfo->mbOtherCarIsAI ? 64u : 0u));
+            lWWord(lpInfo->mRaceCarAEntityID.muValue);
+            lWWord(lpInfo->mRaceCarBEntityID.muValue);
+            lWBits(lpInfo->mfClosingSpeed);
+            lWBits(lpInfo->mfRaceCarASpeed);
+            lWBits(lpInfo->mfRaceCarBSpeed);
+            lWBits(lpInfo->mfNormalStressSq);
+            lWBits(lpInfo->mfAngleBetweenCars);
+            lWVec(lpInfo->mClosingVelocityAtoB.x, lpInfo->mClosingVelocityAtoB.y,
+                  lpInfo->mClosingVelocityAtoB.z, lpInfo->mClosingVelocityAtoB.w);
+            lWMat(lpInfo->mRaceCarATransform);
+            lWMat(lpInfo->mRaceCarBTransform);
+            const BrnPhysics::ContactSpy::RaceCarContact& lrWContact = *lpInfo->mpContact;
+            lWWord(lrWContact.mEntityIdA.muValue);
+            lWWord(lrWContact.mEntityIdB.muValue);
+            lWVec(lrWContact.mNormal.x, lrWContact.mNormal.y, lrWContact.mNormal.z, lrWContact.mNormal.w);
+            lWVec(lrWContact.mPointOnA.x, lrWContact.mPointOnA.y, lrWContact.mPointOnA.z, lrWContact.mPointOnA.w);
+            lWVec(lrWContact.mPointOnB.x, lrWContact.mPointOnB.y, lrWContact.mPointOnB.z, lrWContact.mPointOnB.w);
+            lWWord(static_cast<u32>(mePlayerActiveRaceCarIndex));
+            lWWord(mbIsOnlineGameMode ? 1u : 0u);
+            for (s32 liWSide = 0; liWSide < 2; ++liWSide)
+            {
+                const s32 liWCar = laWIdx[liWSide];
+                lWWord(static_cast<u32>(maeRaceCarTypes[liWCar]));
+                lWBits(mafNoImpactTimeSeconds[liWCar]);
+                lWBits(mafVulnerabilityFactor[liWCar]);
+                lWWord(static_cast<u32>(mau8FramesSincePlayerGrindingOther[liWCar]));
+                lWWord(static_cast<u32>(mau8FramesSinceOtherGrindingPlayer[liWCar]));
+                lWWord(maRaceCarDrivers[liWCar].mControls.mbBoost ? 1u : 0u);
+            }
+            for (s32 liWSide = 0; liWSide < 2; ++liWSide)
+            {
+                const RaceCarPhysics& lrWCar = maRaceCarVehicles[laWIdx[liWSide]];
+                lWWord(lrWCar.mbCrashing ? 1u : 0u);
+                lWBits(lrWCar.mfSlamSteering);
+                lWWord(static_cast<u32>(static_cast<s32>(lrWCar.mi8LastAttackersRaceCarIndex)));
+                lWBits(lrWCar.mSlamEffect.mfSlamLife);
+                lWBits(lrWCar.mShuntEffect.mDirectionPlusDesiredSpeed.w);
+                lWBits(lrWCar.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x);
+                lWWord(static_cast<u32>(static_cast<s32>(lrWCar.mi8LastContactedRaceCar)));
+                lWBits(lrWCar.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z);
+                lWBits(lrWCar.mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z);
+                lWBits(lrWCar.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y);
+                lWBits(lrWCar.GetMass().x);
+                lWBits(lrWCar.GetAttribs()->mCollisionAttribs.GetCrashSpeedMPS().x);
+                lWVec(lrWCar.mLastLinearVelocity.x, lrWCar.mLastLinearVelocity.y,
+                      lrWCar.mLastLinearVelocity.z, lrWCar.mLastLinearVelocity.w);
+                const CgsGeometric::AxisAlignedBox& lrWBox = lrWCar.GetDeformableAABB();
+                lWVec(lrWBox.mMin.x, lrWBox.mMin.y, lrWBox.mMin.z, lrWBox.mMin.w);
+                lWVec(lrWBox.mMax.x, lrWBox.mMax.y, lrWBox.mMax.z, lrWBox.mMax.w);
+                lWMat(lrWCar.mTransform);
+            }
+            lrWOut << " [FLAG PC witness]\n";
+        }
+
         // Energy gate: ignore contacts whose combined closing speed is below the threshold.
         const f32 lfWitnessSpeedSum =
             std::fabs(lpInfo->mfRaceCarBSpeed) + std::fabs(lpInfo->mfRaceCarASpeed);
         if (lfWitnessSpeedSum < KF_MIN_IMPACT_SPEED_SUM)
         {
             // [td-ladder] PC witness, BRN_TD_DIAG only [FLAG PC witness]
-            if (TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+            if (lbWitness)
             {
                 *CgsDev::Log::gpDebugPrint << "[td-ladder] " << static_cast<s32>(lpInfo->meActiveRaceCarIndexA)
                                            << " vs " << static_cast<s32>(lpInfo->meActiveRaceCarIndexB)
                                            << " REJECT energy speedSum=" << lfWitnessSpeedSum
-                                           << " need=" << KF_MIN_IMPACT_SPEED_SUM << " [FLAG PC witness]\n";
+                                           << " need=" << KF_MIN_IMPACT_SPEED_SUM;
+                lWitnessEpisode();
+                *CgsDev::Log::gpDebugPrint << " [FLAG PC witness]\n";
             }
             return;
         }
 
-        const bool lbWitness = TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0;
         if (lbWitness)
         {
             *CgsDev::Log::gpDebugPrint << "[td-ladder] " << static_cast<s32>(lpInfo->meActiveRaceCarIndexA)
@@ -533,18 +765,71 @@ namespace Vehicle
                                        << " playerA=" << (lpInfo->mbRaceCarAIsPlayer ? 1 : 0)
                                        << " playerB=" << (lpInfo->mbRaceCarBIsPlayer ? 1 : 0)
                                        << " angle=" << lpInfo->mfAngleBetweenCars << " [FLAG PC witness]\n";
+
+            // [td-ladder] GATES -- the INPUTS of the two force rungs (ShuntAndNudge @0x8261A3A0,
+            // SlamAndTradingPaint @0x82619F30), read BEFORE the ladder runs, with the same
+            // operands those bodies read, so a rejection can be named gate by gate. Pure reads:
+            // every call below is a const query. [FLAG PC witness, BRN_TD_DIAG only]
+            const s32 liWA = static_cast<s32>(lpInfo->meActiveRaceCarIndexA);
+            const s32 liWB = static_cast<s32>(lpInfo->meActiveRaceCarIndexB);
+            const Vector3& lvWN = lpInfo->mpContact->mNormal;
+            const f32 lfWAlign = std::fabs(Dot3_VM(lvWN, lpInfo->mRaceCarATransform.At()))
+                               + std::fabs(Dot3_VM(lvWN, lpInfo->mRaceCarBTransform.At()));
+            const bool lbWABehind = Dot3_VM(vpu::Subtract(lpInfo->mRaceCarBTransform.Pos(),
+                                                          lpInfo->mRaceCarATransform.Pos()),
+                                            lpInfo->mRaceCarATransform.At()) >= 0.0f;
+            const s32 liWShuntAggr = lbWABehind ? liWA : liWB;
+            const s32 liWShuntVict = lbWABehind ? liWB : liWA;
+            const Vector3 lvWBToA = vpu::Subtract(lpInfo->mRaceCarATransform.Pos(), lpInfo->mRaceCarBTransform.Pos());
+            const f32 lfWSideA = Dot3_VM(lvWBToA, lpInfo->mRaceCarATransform.Right());
+            const f32 lfWSideB = Dot3_VM(lvWBToA, lpInfo->mRaceCarBTransform.Right());
+            const f32 lfWRawA = lpInfo->mpRaceCarA->GetSlamSteering();
+            const f32 lfWRawB = lpInfo->mpRaceCarB->GetSlamSteering();
+            *CgsDev::Log::gpDebugPrint
+                << "[td-ladder] GATES closing=" << lpInfo->mfClosingSpeed
+                << " sA=" << lpInfo->mfRaceCarASpeed << " sB=" << lpInfo->mfRaceCarBSpeed
+                << " recentA=" << (HasRaceCarHadRecentImpact(liWA) ? 1 : 0) << "(" << mafNoImpactTimeSeconds[liWA] << ")"
+                << " recentB=" << (HasRaceCarHadRecentImpact(liWB) ? 1 : 0) << "(" << mafNoImpactTimeSeconds[liWB] << ")"
+                << " | shunt align=" << lfWAlign << "/1.9 aggr=" << liWShuntAggr
+                << " aggrBeingByVict=" << (maRaceCarVehicles[liWShuntAggr].IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liWShuntVict)) ? 1 : 0)
+                << " | slam dotAt=" << Dot3_VM(lpInfo->mRaceCarATransform.At(), lpInfo->mRaceCarBTransform.At())
+                << " sideA=" << lfWSideA << " sideB=" << lfWSideB
+                << " rawSteerA=" << lfWRawA << " rawSteerB=" << lfWRawB
+                << " steerA=" << ((lfWSideA > 0.0f ? 1.0f : lfWSideA >= 0.0f ? 0.0f : -1.0f) * lfWRawA)
+                << " steerB=" << (-(lfWSideB > 0.0f ? 1.0f : lfWSideB >= 0.0f ? 0.0f : -1.0f) * lfWRawB)
+                << " beingAbyB=" << (lpInfo->mpRaceCarA->IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liWB)) ? 1 : 0)
+                << " beingBbyA=" << (lpInfo->mpRaceCarB->IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liWA)) ? 1 : 0)
+                << " pgoB=" << static_cast<s32>(mau8FramesSincePlayerGrindingOther[liWB])
+                << " ogpA=" << static_cast<s32>(mau8FramesSinceOtherGrindingPlayer[liWA])
+                << " pgoA=" << static_cast<s32>(mau8FramesSincePlayerGrindingOther[liWA])
+                << " ogpB=" << static_cast<s32>(mau8FramesSinceOtherGrindingPlayer[liWB]);
+            lWitnessEpisode();
+            *CgsDev::Log::gpDebugPrint << " [FLAG PC witness]\n";
         }
+        // The rung that ended the ladder and the classification it left in the response info.
+        // [FLAG PC witness, BRN_TD_DIAG only]
+        auto lWitnessResult = [&](const char* lpcRung)
+        {
+            *CgsDev::Log::gpDebugPrint << "[td-ladder] -> " << lpcRung
+                                       << " impact=" << WitnessImpactTypeName(static_cast<s32>(lpInfo->meImpactType))
+                                       << "(" << static_cast<s32>(lpInfo->meImpactType) << ")"
+                                       << " aggr=" << static_cast<s32>(lpInfo->meAggressorActiveRaceCarIndex)
+                                       << " victim=" << static_cast<s32>(lpInfo->meVictimActiveRaceCarIndex)
+                                       << " crashFlagA=" << (lpInfo->mbCrashRaceCarA ? 1 : 0)
+                                       << " crashFlagB=" << (lpInfo->mbCrashRaceCarB ? 1 : 0)
+                                       << " closing=" << lpInfo->mfClosingSpeed << " [FLAG PC witness]\n";
+        };
 
         // Highest priority: a player shunting an AI into a third AI, and re-hits on a car that is
         // already crashing -- these run even if a car is mid-crash.
         if (CheckForPlayerSlammingAIIntoAI(lpInfo))
         {
-            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> SlammingAIIntoAI [FLAG PC witness]\n";
+            if (lbWitness) lWitnessResult("SlammingAIIntoAI");
             return;
         }
         if (CheckForHittingAlreadyCrashingCar(lpInfo))
         {
-            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> HittingAlreadyCrashingCar [FLAG PC witness]\n";
+            if (lbWitness) lWitnessResult("HittingAlreadyCrashingCar");
             return;
         }
 
@@ -552,41 +837,38 @@ namespace Vehicle
         // freshly taken down.
         if (lpInfo->mbRaceCarAIsCrashing || lpInfo->mbRaceCarBIsCrashing)
         {
-            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> REJECT already-crashing [FLAG PC witness]\n";
+            if (lbWitness) lWitnessResult("REJECT already-crashing");
             return;
         }
 
         if (CheckForVerticalTakedown(lpInfo))
         {
-            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> VERTICAL [FLAG PC witness]\n";
+            if (lbWitness) lWitnessResult("VERTICAL");
             return;
         }
         if (CheckForTBoneTakedown(lpInfo))
         {
-            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> T_BONE [FLAG PC witness]\n";
+            if (lbWitness) lWitnessResult("T_BONE");
             return;
         }
         if (CheckForHeadToHead(lpInfo))
         {
-            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> HEAD_ON [FLAG PC witness]\n";
+            if (lbWitness) lWitnessResult("HEAD_ON");
             return;
         }
         if (CheckForShuntAndNudge(lpInfo))
         {
-            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> shunt/nudge [FLAG PC witness]\n";
+            if (lbWitness) lWitnessResult("shunt/nudge");
             return;
         }
         if (CheckForSlamAndTradingPaint(lpInfo))
         {
-            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> slam/paint [FLAG PC witness]\n";
+            if (lbWitness) lWitnessResult("slam/paint");
             return;
         }
         const bool lbStationary = CheckForStationaryTargetTakedown(lpInfo);
         if (lbWitness)
-        {
-            *CgsDev::Log::gpDebugPrint << "[td-ladder] -> stationary=" << (lbStationary ? 1 : 0)
-                                       << " (ladder exhausted) [FLAG PC witness]\n";
-        }
+            lWitnessResult(lbStationary ? "stationary=1" : "stationary=0 (ladder exhausted)");
     }
 
     // -------------------------------------------------------------------------------------------

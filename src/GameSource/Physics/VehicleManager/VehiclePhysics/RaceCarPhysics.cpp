@@ -445,6 +445,130 @@ namespace Vehicle
         mAssistStrength = Vector3{ 0.01f, 0.01f, 0.01f, 0.01f };   // +0x100 splat(flt_82002138)
     }
 
+    // [td-slamgate] PC WITNESS, NOT X360 -- see RaceCarPhysics::TdSlamGateSample. BRN_TD_DIAG only.
+    // Eight slots, one per race-car object (VehicleManager::maRaceCarVehicles[8] never moves).
+    // [FLAG PC witness] DELETE-WHEN the FX-LADDER miNumCollisions timing question is closed.
+    namespace
+    {
+        bool TdSlamGateArmed()
+        {
+            static const bool sbOn = (std::getenv("BRN_TD_DIAG") != 0);
+            return sbOn;
+        }
+
+        RaceCarPhysics::TdSlamGateSample gaTdSlamGate[8] = {};
+
+        void TdSlamGateRecord(const RaceCarPhysics* lpCar, bool lbCrashingBranch, s32 liNumCollisions,
+                              s32 liNumWorldCollisions, f32 lfControlSteer, f32 lfSlamBeforeGate)
+        {
+            for (RaceCarPhysics::TdSlamGateSample& lrSample : gaTdSlamGate)
+            {
+                if (lrSample.mpCar != lpCar && lrSample.mpCar != nullptr)
+                    continue;
+                lrSample.mpCar                = lpCar;
+                ++lrSample.muUpdates;
+                lrSample.mbCrashingBranch     = lbCrashingBranch;
+                lrSample.miNumCollisions      = liNumCollisions;
+                lrSample.miNumWorldCollisions = liNumWorldCollisions;
+                lrSample.mfControlSteer       = lfControlSteer;
+                lrSample.mfSlamBeforeGate     = lfSlamBeforeGate;
+                return;
+            }
+        }
+    }
+
+    const RaceCarPhysics::TdSlamGateSample* RaceCarPhysics::FindTdSlamGateSample(const RaceCarPhysics* lpCar)
+    {
+        for (const TdSlamGateSample& lrSample : gaTdSlamGate)
+        {
+            if (lrSample.mpCar == lpCar)
+                return &lrSample;
+        }
+        return nullptr;
+    }
+
+    // [td-react] PC WITNESS, NOT X360 -- see RaceCarPhysics::TdReactWatch. BRN_TD_DIAG only.
+    // [FLAG PC witness] DELETE-WHEN the FX-LADDER hit-reaction question is closed.
+    namespace
+    {
+        struct TdReactWatchSlot
+        {
+            const RaceCarPhysics* mpCar;
+            s32 miImpactId;
+            s32 miRole;        // 0 = victim, 1 = aggressor
+            s32 miStep;        // steps printed so far
+        };
+        TdReactWatchSlot gaTdReactWatch[8] = {};
+        const s32 KI_TD_REACT_STEPS = 120;
+    }
+
+    void RaceCarPhysics::TdReactWatch(const RaceCarPhysics* lpCar, s32 liImpactId, s32 liRole)
+    {
+        TdReactWatchSlot* lpFree = nullptr;
+        for (TdReactWatchSlot& lrSlot : gaTdReactWatch)
+        {
+            if (lrSlot.mpCar == lpCar)
+            {
+                lpFree = &lrSlot;   // re-arm the car's own slot
+                break;
+            }
+            if (lpFree == nullptr && lrSlot.mpCar == nullptr)
+                lpFree = &lrSlot;
+        }
+        if (lpFree == nullptr)
+            return;
+        lpFree->mpCar      = lpCar;
+        lpFree->miImpactId = liImpactId;
+        lpFree->miRole     = liRole;
+        lpFree->miStep     = 0;
+    }
+
+    void RaceCarPhysics::TdReactStep(const BrnPlayerDriverControls* lpControls) const
+    {
+        for (TdReactWatchSlot& lrSlot : gaTdReactWatch)
+        {
+            if (lrSlot.mpCar != this)
+                continue;
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                const Vector3& lvV = mLinearVelocity;
+                const Vector3& lvUp = mTransform.yAxis;
+                const f32 lfUpDot = vpu::Dot(lvUp, lvV);
+                const Vector3 lvPlanar{ lvV.x - lvUp.x * lfUpDot, lvV.y - lvUp.y * lfUpDot,
+                                        lvV.z - lvUp.z * lfUpDot, 0.0f };
+                const Vector3Plus& lvShunt = mShuntEffect.mDirectionPlusDesiredSpeed;
+                const f32 lfAlong = lvShunt.x * lvPlanar.x + lvShunt.y * lvPlanar.y + lvShunt.z * lvPlanar.z;
+                *CgsDev::Log::gpDebugPrint
+                    << "[td-react-step] id=" << lrSlot.miImpactId
+                    << (lrSlot.miRole == 0 ? " victim" : " aggressor")
+                    << " k=" << lrSlot.miStep
+                    << " crashing=" << (mbCrashing ? 1 : 0)
+                    << " fwd=" << vpu::Dot(lvV, mTransform.zAxis)
+                    << " lat=" << vpu::Dot(lvV, mTransform.xAxis)
+                    << " up=" << lfUpDot
+                    << " yaw=" << vpu::Dot(mAngularVelocity, lvUp)
+                    << " | slam life=" << mSlamEffect.mfSlamLife
+                    << " total=" << mSlamEffect.mfTotalSlamTime
+                    << " orig=" << mSlamEffect.mfOriginalSteering
+                    << " steer=" << mSlamEffect.mfSteering
+                    << " rec=" << mSlamEffect.mfRecoveryTime
+                    << " num=" << static_cast<s32>(mSlamEffect.mi8SlamNumber)
+                    << " | shunt desired=" << lvShunt.w
+                    << " life=" << mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x
+                    << " sitq=" << mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y
+                    << " along=" << lfAlong
+                    << " | ctl steer=" << lpControls->GetSteer()
+                    << " gas=" << lpControls->mfGas
+                    << " type=" << static_cast<s32>(lpControls->GetType())
+                    << " nColl=" << miNumCollisions
+                    << " [FLAG PC witness]\n";
+            }
+            if (++lrSlot.miStep >= KI_TD_REACT_STEPS)
+                lrSlot.mpCar = nullptr;
+            return;
+        }
+    }
+
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::Update  @0x826415E8
     //   Run the AI-crash slow-motion timer OR maintain mfSlamSteering, flush prop impulses, chain to
@@ -607,6 +731,9 @@ namespace Vehicle
             }
         }
 
+        if (TdSlamGateArmed())   // [td-react] PC witness, not X360: the hit-reaction step trace
+            TdReactStep(lpControls);
+
         // ---- [at-gate] CALLER-SIDE CENSUS. See the banner on AtGateCensus. This is the
         // DENOMINATOR half: it fires on every frame this car is crashing, whether or not
         // UpdateCrashing dispatches the +0x28 vcall, so "the aftertouch never ran" can be told
@@ -677,6 +804,10 @@ namespace Vehicle
             }
 
             mfSlamSteering = 0.0f;          // this->float1404 = 0.0 (flt_82001CC0)
+
+            if (TdSlamGateArmed())          // [td-slamgate] PC witness, not X360
+                TdSlamGateRecord(this, true, miNumCollisions, static_cast<s32>(mi8NumWorldCollisions),
+                                 lpControls->GetSteer(), 0.0f);
         }
         else
         {
@@ -707,6 +838,10 @@ namespace Vehicle
                 mfSlamSteering += lfSteer * lvfSimTimeStep.x;
             else
                 mfSlamSteering = mfSlamSteering * 0.94999999f;   // inside -> decay 0.95/frame
+
+            if (TdSlamGateArmed())     // [td-slamgate] PC witness, not X360: what the gate below reads
+                TdSlamGateRecord(this, false, miNumCollisions, static_cast<s32>(mi8NumWorldCollisions),
+                                 lfSteer, mfSlamSteering);
 
             if (miNumCollisions > 0)   // asm @0x82641814: `lwz r11,0x1354(r31)` -- a WORD at +0x1354, i.e.
                                        // miNumCollisions. The committed source named mi8SlammingRaceCarId

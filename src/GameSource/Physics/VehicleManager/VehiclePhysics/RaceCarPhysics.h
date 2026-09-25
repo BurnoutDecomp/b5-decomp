@@ -315,6 +315,36 @@ namespace Vehicle
         bool GetWrittenIntoRWInSlowMo() { return mbWroteIntoRWInSlowMo; }
         f32 GetSlamSteering() const { return mfSlamSteering; }
         void ClearSlamSteering() { mfSlamSteering = 0.0f; }
+        // [td-slamgate] PC WITNESS, NOT X360 (BRN_TD_DIAG only) [FLAG PC witness]. What the
+        // slam-steering gate in Update read on this car's latest step. `lwz r11,0x1354(r31)` at
+        // 0x82641814 zeroes mfSlamSteering whenever miNumCollisions > 0, and that count is every
+        // contact impulse banked since VehiclePhysics::Update's reset at 0x826415A0 one step
+        // earlier (ApplyCar/Crashed/Showtime/WallContactImpulse add one each; their callers run
+        // inside that step's DeformationManager::Update). So the sample tells whether a zero slam
+        // steering at a ladder evaluation came from an EARLIER step's contact, and from what.
+        // Printed by the [td-ladder] GATES line in VehicleManager::CheckForAllTypesOfImpacts.
+        // Statics only: no object layout moves. DELETE-WHEN the FX-LADDER miNumCollisions timing
+        // question is closed.
+        struct TdSlamGateSample
+        {
+            const RaceCarPhysics* mpCar;
+            u32  muUpdates;              // this car's Update count (both branches)
+            bool mbCrashingBranch;       // the crashing branch ran: no gate, slam steering zeroed
+            s32  miNumCollisions;        // +0x1354 as the gate read it
+            s32  miNumWorldCollisions;   // +0x1353 at the same moment (the world-contact share)
+            f32  mfControlSteer;         // lpControls->GetSteer()
+            f32  mfSlamBeforeGate;       // mfSlamSteering after the steer terms, before the gate
+        };
+        static const TdSlamGateSample* FindTdSlamGateSample(const RaceCarPhysics* lpCar);
+        // [td-react] PC WITNESS, NOT X360 (BRN_TD_DIAG only) [FLAG PC witness]. The hit-reaction
+        // trace. VehicleManager::HandleRaceCarRaceCarContact marks both cars of a classified,
+        // player-involved impact right after ApplySlam / ApplyShunt commits (TdReactWatch), and
+        // Update then prints one [td-react-step] line per physics step for the next 120 steps
+        // (TdReactStep): the velocity in the car's own frame, the yaw rate, and the slam envelope
+        // and shunt state that step starts with. Statics and a const member only: no object layout
+        // moves. DELETE-WHEN the FX-LADDER hit-reaction question is closed.
+        static void TdReactWatch(const RaceCarPhysics* lpCar, s32 liImpactId, s32 liRole);
+        void TdReactStep(const BrnPlayerDriverControls* lpControls) const;
 
         void SetCrashEntityIdAndNormal(EntityId lGlobalEntityId, Vector3 lNormal)
         {
