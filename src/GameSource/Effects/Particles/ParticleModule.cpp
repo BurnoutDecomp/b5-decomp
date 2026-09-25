@@ -32,8 +32,10 @@
 //   RWMutex(this+0x10,  0, 1)               // base mInputBuffer.mMutex
 //   RWMutex(this+0x118, 0, 1)               // base mOutputBuffer.mMutex
 //   *this           = &off_820D0400         // derived ParticleModule vtable
-//   -- intrusive list @+0x4270 emptied (heads 0, next/prev/iter -> self, count 0)
-//   -- 500-entry pair table @+0x4298 zeroed (li r9,0x1F3; do/while >=0 == 500)
+//   -- mPropCollisions @+0x4270 (BrnEffects::PropCollisions) constructed: its ResourcePtr's identity
+//      zeroed and alias ring self-linked (0, 0, 0, next/prev/this -> self, thread id 0 -- the
+//      BaseResourcePtr ctor @0x82204E20), then its 500 PropToVFXMaterialMappings nulled
+//      (li r9,0x1F3; do/while >=0 == 500)
 //   LionParticleRender::ctor(this+0x5270)   // embedded mLionParticleRender
 //   -- 5 contained-interface stamps (@+0x9010/+0x91A0/+0x9210/+0x9274/+0x92E0):
 //      each stamps its vtable then two zero words
@@ -80,24 +82,11 @@ namespace BrnParticle
         // Base (ModuleSingleBuffered: both vtables + mInputBuffer/mOutputBuffer's
         // RWMutexes) is constructed automatically before this body runs.
 
-        // --- intrusive list @+0x4270 (the PropCollisions head) -> empty / self-referencing --
-        mList.miListHead0 = 0;
-        mList.miListHead1 = 0;
-        mList.miListHead2 = 0;
-        mList.miListHead0 = 0;   // (asm re-stores head0; reproduced)
-
-        void* lpListSelf  = &mList.miListHead0;
-        mList.mpListNext  = lpListSelf;
-        mList.mpListPrev  = lpListSelf;
-        mList.mpListIter  = lpListSelf;
-        mList.miListCount = 0;
-
-        // --- 500-entry pair table @+0x4298 -> all zero --------------------------
-        for (u32 luEntry = 0; luEntry < KU_NUM_EFFECT_PAIRS; ++luEntry)
-        {
-            maEffectPairs[luEntry].mu0 = 0;
-            maEffectPairs[luEntry].mu1 = 0;
-        }
+        // --- mPropCollisions @+0x4270 constructs itself as a member (FX-CRASHVFX 2026-09-25, item 6b):
+        //     the ResourcePtr ctor makes the asm's stores at +0x4270..+0x4288 (the three zero words, the
+        //     redundant re-store of the first, next/prev/this -> self, thread id 0) and the 500
+        //     PropToVFXMaterialMapping ctors make its pair loop over +0x4298..+0x5258. Nothing is stamped
+        //     here by hand any more.
 
         // mLionRenderer (@+0x5270): its own constructor runs as a member (the X360 chains
         // BrnParticle::LionParticleRender::LionParticleRender here).
