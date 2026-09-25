@@ -248,9 +248,9 @@ public:
     void DebugRender(DebugPrinter& lrDebugPrinter) const { ActualDebugRender(lrDebugPrinter); }
 
 private:
-    // DECLARATION-ONLY (same note as above). SelectBestMoment / SelectNewBestMoment above are
-    // the only referrers, and they are header inlines -- so this only becomes an unresolved
-    // external in a TU that actually calls one of those two.
+    // Bodied in BrnMomentSelector.cpp: the three selection workers (SelectBestMoment / SelectNewBestMoment
+    // above are their header-inline referrers) and, since 2026-09-25 (FX-DIRECTOR2 CC-12), the two pickers
+    // Update's max-active rebalance calls.
     bool SelectBestMomentWithExclusion(CgsNumeric::Random& lRandom, s32 liExclusion);
     bool SelectBestLRUMomentWithExclusion(s32 liExclusion);
     bool SelectBestRandomMomentWithExclusion(CgsNumeric::Random& lRandom, s32 liExclusion);
