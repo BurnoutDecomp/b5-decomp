@@ -84,6 +84,15 @@ namespace
         FakeData* operator->() { return mp; }
     };
 
+    // Arm 47's first statement (0x8274BD98..0x8274BDA0): TrafficLightManager::SetCountdownValue(this +
+    // 0x53790, record[0]). The stand-in records every value it is handed.
+    struct FakeLightManager
+    {
+        unsigned muCalls;
+        s32      miLastDisplay;
+        void SetCountdownValue(s32 liCountdownDisplay) { ++muCalls; miLastDisplay = liCountdownDisplay; }
+    };
+
     struct ExtFixture
     {
         typedef TrafficEntityModule M;
@@ -116,6 +125,7 @@ namespace
         decltype(M::meLocalPlayerIndex)                       meLocalPlayerIndex;
         decltype(M::maaRaceCarHulls)                          maaRaceCarHulls;
         FakeDataPtr                                           mpData;
+        FakeLightManager                                      mTrafficLightManager;
 
         unsigned muPrepareCalls = 0, muStopCalls = 0, muClearupCalls = 0, muCylinderCalls = 0, muTearDowns = 0;
 
@@ -235,18 +245,24 @@ int main()
         Fresh(lM, lIn, true, ExtFixture::E_STATE_STARTING_UP, ExtFixture::E_RUNNINGSTATE_INVALID, ExtFixture::E_RUNNINGSTATE_PAUSED);
         SetCountdownAction lCountdown; lCountdown.miCountdownDisplay = 3;
         Post(lIn, lCountdown, E_ACTION_SET_COUNTDOWN);
+        lM.mTrafficLightManager.muCalls = 0;
         lM.HandleExternalRequests(&lIn, &lOutput);
         Check(lM.meRunningStateToUseAfterStartup == ExtFixture::E_RUNNINGSTATE_NORMAL,
               "47 online STARTING_UP: the start-up will come back NORMAL, not PAUSED (stw 0, 0x30C)");
+        Check(lM.mTrafficLightManager.muCalls == 1 && lM.mTrafficLightManager.miLastDisplay == 3,
+              "47 online: TrafficLightManager::SetCountdownValue(record[0] = 3) once (0x8274BD98..0x8274BDA0)");
     }
     {
         ExtFixture lM; FakeInput lIn;
         Fresh(lM, lIn, true, ExtFixture::E_STATE_RUNNING, ExtFixture::E_RUNNINGSTATE_PAUSED, ExtFixture::E_RUNNINGSTATE_NORMAL);
         SetCountdownAction lCountdown; lCountdown.miCountdownDisplay = 0;
         Post(lIn, lCountdown, E_ACTION_SET_COUNTDOWN);
+        lM.mTrafficLightManager.muCalls = 0;
         lM.HandleExternalRequests(&lIn, &lOutput);
         Check(lM.meRunningState == ExtFixture::E_RUNNINGSTATE_NORMAL,
               "47 online RUNNING+PAUSED: the traffic un-pauses (stw 0, 0x308)");
+        Check(lM.mTrafficLightManager.muCalls == 1 && lM.mTrafficLightManager.miLastDisplay == 0,
+              "47 online, the GO: SetCountdownValue(0) once, whatever the pause state");
     }
     {
         ExtFixture lM; FakeInput lIn;
@@ -254,11 +270,15 @@ int main()
         SetCountdownAction lCountdown; lCountdown.miCountdownDisplay = 1;
         Post(lIn, lCountdown, E_ACTION_SET_COUNTDOWN);
         const unsigned luArm47Gates = gArm47Gates;
+        lM.mTrafficLightManager.muCalls = 0;
         lM.HandleExternalRequests(&lIn, &lOutput);
         Check(lM.meRunningState == ExtFixture::E_RUNNINGSTATE_PAUSED
               && lM.meRunningStateToUseAfterStartup == ExtFixture::E_RUNNINGSTATE_PAUSED,
               "47 offline: the pause bookkeeping is untouched");
-        Check(gArm47Gates == luArm47Gates + 1, "47: the light-manager leg is reached (and named-gated), offline too");
+        Check(lM.mTrafficLightManager.muCalls == 1 && lM.mTrafficLightManager.miLastDisplay == 1
+              && gArm47Gates == luArm47Gates,
+              "47 OFFLINE too: SetCountdownValue(record[0] = 1) once and no named gate -- the console call is "
+              "unconditional (REVIEW-I, b43b5c2b)");
     }
 
     // ---- 143 SHOWTIME_MODE_SWITCH ---------------------------------------------------------------

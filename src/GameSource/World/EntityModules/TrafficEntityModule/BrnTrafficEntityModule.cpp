@@ -3761,16 +3761,10 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             // The per-frame scene MOVER; body @0x8273B568 belongs to cluster C3.
             GenerateSceneUpdateEvents(lpOutput);
 
-            {
-                // GATE: TrafficLightManager::Update, declared at BrnTrafficLightManager.h:93
-                // and bodied nowhere. Traffic-light phase state, not parked cars.
-                static bool sbLogged = false;
-                LogMissingLeg_T1(sbLogged,
-                    "PostPhysicsUpdate RUNNING leg TrafficLightManager::Update(mfSimTimeStep) "
-                    "-- DECLARED at BrnTrafficLightManager.h:93 and bodied nowhere in this "
-                    "tree (ledger-done-but-bodyless). Light phases stay frozen; no parked-car "
-                    "consumer");
-            }
+            // 0x8274EAF0..0x8274EB04 -- `addis r3, r31, 5 ; addi r3, r3, 0x3790` (mTrafficLightManager),
+            // `lfsx f1, r31, 0x713FC` (mfSimTimeStep), `bl TrafficLightManager::Update` @0x827517A8: the
+            // event countdown's GREEN phase runs down here (crash parity FX-NETCRASH, 2026-09-25).
+            mTrafficLightManager.Update(mfSimTimeStep);
         }
 
         // LIVE 2026-09-11, at the console's own slot: both paths of the pause test above
@@ -4544,13 +4538,10 @@ void TrafficEntityModule::Reset()
     }
     mUsedHullRuntimeData.Prepare();
 
-    {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "Reset leg TrafficLightManager::Construct(mTrafficLightManager) @0x8272D0F4 -- "
-            "BrnTrafficLightManager.h declares no Construct (the mounted light-manager slice "
-            "landed its Update/knock-down surface only)");
-    }
+    // 0x8272D384..0x8272D39C -- right after mUsedHullRuntimeData's two `std 0` (the Prepare above):
+    // `addis r3, r30, 5 ; addi r3, r3, 0x3790 ; bl TrafficLightManager::Construct` @0x82751708 -- every
+    // light GREEN, the event countdown off (crash parity FX-NETCRASH, 2026-09-25).
+    mTrafficLightManager.Construct();
 
     // ---- per-race-car scratch -------------------------------------------------------------
     for (u32 luRaceCar = 0; luRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luRaceCar)
@@ -18952,19 +18943,13 @@ void TrafficEntityModule::HandleExternalRequests(
         // --------------------------------------------------------------------------------
         case BrnGameState::GameStateModuleIO::E_ACTION_SET_COUNTDOWN:
         {
-            {
-                // GATE: TrafficLightManager::SetCountdownValue @0x82751750 (record->miCountdownDisplay).
-                // BLOCKER: the manager's three countdown members (DWARF BrnTrafficLightManager.h
-                // :178..:180, console +0x12C0 / +0x12C4 / +0x12C8) are absent from
-                // BrnTrafficLightManager.h, whose record type is still the 8-byte placeholder, and
-                // the two other writers (Construct @0x82751708, Update @0x827517A8) are unbodied.
-                // Only the lights' countdown reads them. The traffic un-pause below does not.
-                static bool sbLogged = false;
-                LogMissingLeg_T6(sbLogged,
-                    "HandleExternalRequests action 47 leg TrafficLightManager::SetCountdownValue "
-                    "@0x82751750 -- the manager's countdown members (+0x12C0..+0x12C8) and its "
-                    "Construct/Update are not reconstructed; the arm's un-pause is live");
-            }
+            // 0x8274BD98..0x8274BDA0 -- `add r3, r31, r10 (0x53790)` (mTrafficLightManager), `lwz r4,
+            // 0(r28)` (the record's miCountdownDisplay), `bl TrafficLightManager::SetCountdownValue`
+            // @0x82751750. Unconditional: every countdown change, offline races included, before the
+            // online test below (crash parity FX-NETCRASH, 2026-09-25; REVIEW-I's concern on b43b5c2b).
+            mTrafficLightManager.SetCountdownValue(
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::SetCountdownAction*>(lpEvent)
+                    ->miCountdownDisplay);
 
             if (mbIsOnlineGameMode)
             {
