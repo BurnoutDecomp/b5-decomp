@@ -2,7 +2,9 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
-#include <cmath>   // std::acos (XMVectorACos), std::fabs
+#include "SDKs/XboxMath/XMVectorACos.h"         // XboxMath::XMVectorACos (X360 0x821F0980)
+
+#include <cmath>   // std::fabs
                    // (RwMath::IsValid is a NaN SELF-COMPARE on the console, not isfinite -- see below)
 
 // BrnAIUtils partfile -- the two planar-angle helpers the AIDriver steering chain calls
@@ -14,8 +16,9 @@
 //        0x827716A8..0x827717FC, disassembled with capstone; it is the only caller-attested
 //        symbol at that address: CalculateSteeringAngle bl 0x827716A8.)
 //
-// Both take their Vector2 args in v1/v2 and return in f1. XMVectorACos is the XNA-math vector
-// arccos polynomial; the host uses std::acos (same function, ulp-level differences only).
+// Both take their Vector2 args in v1/v2 and return in f1. XMVectorACos is the XDK math library's
+// arccos polynomial (not a correctly rounded acos: XMVectorACos(1) = 4.8e-7), written out in the
+// shared XboxMath::XMVectorACos (crash parity FX-GATE; std::acos stood in for it before).
 
 namespace BrnAI
 {
@@ -47,7 +50,7 @@ namespace BrnAI
         // Written the way the asm branches so the unordered case cannot be re-inverted by rewriting
         // the condition: acos is reached ONLY on an ordered `|dot| < 1.0`.
         if (std::fabs(lfDot) < 1.0f)
-            return std::acos(lfDot);   // XMVectorACos @0x82766B84, lane 0 out
+            return XboxMath::XMVectorACos(lfDot);   // bl XMVectorACos @0x82766B84, lane 0 out
 
         return 0.0f;                   // @0x82766B60..B74 (flt_82001CC0 == 0.0) -- and the NaN arm
     }

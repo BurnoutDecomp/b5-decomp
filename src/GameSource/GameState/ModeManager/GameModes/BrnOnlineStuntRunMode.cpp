@@ -1,6 +1,8 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.h"
 
-#include <cmath>   // std::acos (the de-optimised XMVectorACos)
+#include <cmath>   // std::fabs (the |angle| vandc128)
+
+#include "SDKs/XboxMath/XMVectorACos.h"                                        // XboxMath::XMVectorACos (X360 0x821F0980)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"     // StartGameModeParams / GameModeParams / EGameModeStartMechanism
@@ -376,7 +378,10 @@ LightTriggerId OnlineStuntRunMode::GetBestStartGridID(LightTriggerId luTriggerId
     // Pick the gathered light whose start direction best aligns with the reference: the X360 SIMD
     // block normalises the start direction and the (reference - start position) delta and takes the
     // arc-cosine of their dot, keeping the minimum angle. De-optimised to clean Vector3 math (the
-    // rsqrt-refinement steps collapse to exact Normalize/Dot; XMVectorACos -> std::acos).
+    // rsqrt-refinement steps collapse to exact Normalize/Dot). The arc-cosine is the console's own
+    // XMVectorACos (0x823319AC bl, after the vmaxfp128 / vminfp128 clamp at 0x823319A4 / 0x823319A8),
+    // and its result's sign bit is cleared (0x823319B4 vandc128) before the 0x823319C0 compare
+    // (crash parity FX-GATE; std::acos stood in for it before).
     s32 liBestLightIndex = -1;
     f32 lfBestAngle      = KF_FLT_MAX;   // flt_82020AFC == FLT_MAX
 
@@ -389,7 +394,7 @@ LightTriggerId OnlineStuntRunMode::GetBestStartGridID(LightTriggerId luTriggerId
         if (lfCosAngle < -1.0f) { lfCosAngle = -1.0f; }   // vmaxfp128 v0, v0, -1
         if (lfCosAngle >  1.0f) { lfCosAngle =  1.0f; }   // vminfp128 v1, v0,  1
 
-        const f32 lfAngle = std::acos(lfCosAngle);
+        const f32 lfAngle = std::fabs(XboxMath::XMVectorACos(lfCosAngle));
         if (lfAngle < lfBestAngle)
         {
             lfBestAngle      = lfAngle;
