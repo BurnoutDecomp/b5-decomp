@@ -3969,6 +3969,10 @@ namespace
     // its own): a point drawn uniformly in the unit disc by rejection, two RandomFloat() each try (x first),
     // each mapped by `fmsubs r, 2.0, 1.0`; the length is one fused `fmadds y*y + x*x`; then Marsaglia's lift
     // onto the sphere, (2 sqrt(1 - s) x, 2 sqrt(1 - s) y, 2s - 1), w 0.
+    // The rejection test is `fcmpu s, 1.0 ; bge <draw again>` in every inline copy (BurstAreaEmitParticles
+    // 0x82292640 / 0x82292644, HandleCrashingTrail's debris 0x822912F0 / 0x822912F4 and smoke 0x8229166C /
+    // 0x82291670): `bge` is TAKEN on an unordered compare, so a NaN length DRAWS AGAIN. CORRECTED 2026-09-25
+    // (FX-CRASHVFX, the FX-GATE NaN sweep): `while (s >= 1.0f)` left the loop on a NaN and lifted it.
     Vector3 RandomUnitVector(CgsNumeric::Random& lrRandom)
     {
         f32 lfX, lfY, lfLengthSquared;
@@ -3978,7 +3982,7 @@ namespace
             const f32 lfXSquared = lfX * lfX;
             lfY = std::fma(lrRandom.RandomFloat(), 2.0f, -1.0f);
             lfLengthSquared = std::fma(lfY, lfY, lfXSquared);
-        } while (lfLengthSquared >= 1.0f);
+        } while (!(lfLengthSquared < 1.0f));   // `fcmpu ; bge`: a NaN retries
         const f32 lfScale = std::sqrt(1.0f - lfLengthSquared) * 2.0f;
         return MakeVector3(lfScale * lfX, lfScale * lfY, std::fma(lfLengthSquared, 2.0f, -1.0f), 0.0f);
     }

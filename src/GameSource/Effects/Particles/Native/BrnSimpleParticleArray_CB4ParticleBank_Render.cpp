@@ -403,8 +403,11 @@ namespace Native
     // SimpleParticleVertexBufferBuilder::BuildDispatchData @0x8291F870.
     //
     // One batch per listed type. A bank is walked only while it can still hold a live particle:
-    // `time - mrLastSpawnTime < lifetime` (fcmpu + bge, so an unordered compare WALKS it), where
-    // mrLastSpawnTime is the newest spawn time SpawnParticle has written into the bank. The crash
+    // `time - mrLastSpawnTime < lifetime` -- `fcmpu (time - last), lifetime ; bge <skip Render>` at
+    // 0x8291F940 / 0x8291F944 (regular) and 0x8291F970 / 0x8291F974 (crash): `bge` is TAKEN on an unordered
+    // compare, so a NaN SKIPS the bank. CORRECTED 2026-09-25 (FX-CRASHVFX, the FX-GATE NaN sweep): the test
+    // read `!(time - last >= lifetime)`, which walked a NaN bank. mrLastSpawnTime is the newest spawn time
+    // SpawnParticle has written into the bank. The crash
     // bank renders into the SAME batch when asked, so a crash particle and an ordinary one of the
     // same type share one draw, one texture and one blend.
     // =============================================================================================
@@ -433,10 +436,10 @@ namespace Native
             SimpleParticleBatch                  lBatch;
             lpLockedBuffer->BeginBatch(lIterator, lBatch, NativeParticleVertex::GetStride());
 
-            if (!((lfCurrentTime - lrArray.mBankRegular.mrLastSpawnTime) >= lrArray.mParticleData.mrLifeTime))
+            if ((lfCurrentTime - lrArray.mBankRegular.mrLastSpawnTime) < lrArray.mParticleData.mrLifeTime)   // bge skips
                 lrArray.mBankRegular.Render(lIterator, lrArray, lState);
             if (lbRenderCrashBanks
-                && !((lfCurrentTime - lrArray.mBankCrash.mrLastSpawnTime) >= lrArray.mParticleData.mrLifeTime))
+                && (lfCurrentTime - lrArray.mBankCrash.mrLastSpawnTime) < lrArray.mParticleData.mrLifeTime)   // bge skips
             {
                 lrArray.mBankCrash.Render(lIterator, lrArray, lState);
             }

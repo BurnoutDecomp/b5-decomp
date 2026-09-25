@@ -24,6 +24,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <malloc.h>
 
 static unsigned gChecks = 0, gFailures = 0, gAsserts = 0;
@@ -311,6 +312,32 @@ namespace
         lBatches.Clear();
         Check(lBatches.GetLength() == 0u && lBatches.GetPreLionCount() == 0u,
               "SimpleParticleBatchArray::Clear zeroes the count AND the pre-Lion split");
+
+        // A NaN (time - last) SKIPS the bank: `fcmpu (time - last), lifetime ; bge <skip Render>` at 0x8291F944
+        // (regular) / 0x8291F974 (crash) -- `bge` is taken on an unordered compare. (FX-GATE NaN sweep: the
+        // PC's `!(time - last >= lifetime)` walked a NaN bank.)
+        const f32 lfNaN = std::numeric_limits<f32>::quiet_NaN();
+        lBuffer.UnLock();
+        EffectsVertexBufferLocked& lLocked3 = lBuffer.Lock();
+        laArrays[3].mBankRegular.mrLastSpawnTime = lfNaN;
+        SimpleParticleVertexBufferBuilder::BuildDispatchData(&lLocked3, lBatches, laArrays, lauTypes, 2u,
+                                                            c0.mfTime, laFixtures[0].mState.mCamera,
+                                                            c0.mfWhite, false);
+        Check(lBatches.GetLength() == 1u && lBatches[0].meParticleType == 1u,
+              "BuildDispatchData: a NaN last-spawn time SKIPS the regular bank (`bge` 0x8291F944) -- type 3 "
+              "draws nothing, type 1's batch is the only one");
+        lBuffer.UnLock();
+        EffectsVertexBufferLocked& lLocked4 = lBuffer.Lock();
+        lBatches.Clear();
+        laArrays[3].mBankRegular.mrLastSpawnTime = c0.mfTime;
+        laArrays[3].mBankCrash.mrLastSpawnTime = lfNaN;
+        SimpleParticleVertexBufferBuilder::BuildDispatchData(&lLocked4, lBatches, laArrays, lauTypes, 2u,
+                                                            c0.mfTime, laFixtures[0].mState.mCamera,
+                                                            c0.mfWhite, true);
+        Check(lBatches.GetLength() == 2u && lBatches[0].meParticleType == 3u
+              && lBatches[0].muVertexCount == c0.muNumVertices,
+              "BuildDispatchData: a NaN last-spawn time SKIPS the crash bank (`bge` 0x8291F974) -- type 3's "
+              "batch holds its regular bank alone");
         lBuffer.UnLock();
         _aligned_free(lpBuffer);
     }
