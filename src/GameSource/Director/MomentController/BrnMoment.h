@@ -25,6 +25,7 @@
 #include "GameSource/Director/Camera/Camera.h"               // BrnDirector::Camera::Camera (by value)
 #include "GameSource/Director/Utils/BrnVehicleRef.h"          // BrnDirector::VehicleRef (Moment::VehicleRef base)
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"   // Camera::BehaviourHandle<T> (MomentBystanderSeesAction's mBystander)
+#include "GameSource/Director/MomentController/BrnMomentSharedInfo.h"   // MomentSharedInfo (VehicleRef::GetVehicle)
 
 namespace BrnDirector
 {
@@ -42,7 +43,18 @@ namespace BrnDirector
         // The moment-side vehicle-reference wrapper (MomentPassengerSeesAction
         // holds two by value). Extends the committed BrnDirector::VehicleRef with no
         // data; the resolve/set calls land on the base's committed surface.
-        class VehicleRef : public BrnDirector::VehicleRef {};
+        class VehicleRef : public BrnDirector::VehicleRef
+        {
+        public:
+            // DWARF BrnMoment.h:268. No out-of-line console symbol: inlined at every site as the bare
+            // VehicleRef::Get against the record's all-vehicle block -- MomentTakedownLookback::Update
+            // 0x82266388..0x82266398 is `lwz r4, 0x508(info)` (mpAllVehicleData) ; `bl 0x822335A0`.
+            // [FX-DIRECTOR2 2026-09-25]
+            const Camera::VehicleInfo& GetVehicle(const MomentSharedInfo& lrSharedInfo) const
+            {
+                return *Get(lrSharedInfo.mpAllVehicleData);
+            }
+        };
 
         enum EState
         {

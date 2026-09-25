@@ -23,10 +23,12 @@
 // second check and are listed in the header banner; the member each one reads is named in
 // its comment here.
 //
-// The shims still WITHOUT a body are the resolved-vehicle lanes the takedown look-back reads
-// through VehicleRef::Get. The two the census called uncarved are bodied here: the crash-type
-// word is a named VehicleTracker member with its own published accessor, and the profile-data
-// flag is read through the same byte blob two mounted arbitrator arms already read it through.
+// The two the census called uncarved are bodied here: the crash-type word is a named VehicleTracker
+// member with its own published accessor, and the profile-data flag is read through the same byte
+// blob two mounted arbitrator arms already read it through.
+// [FX-DIRECTOR2 2026-09-25] The takedown look-back's six shims (GetForward, GetPosition,
+// GetSegmentReference, HasTakedownVictim, GetVictimRaceCarIndex, GetWorld) are retired: its Update
+// reads the record by name now, and nothing else called them.
 //
 // ⛔ DO NOT give these a quiet fallback for a null record. They are reached only from a
 // moment's Update, which the director calls with its own record by reference; a null here
@@ -121,26 +123,6 @@ namespace detail
         return Record(lpSharedInfo).mPlayerInfo.mRaceCarState.mAngularVelocity;
     }
 
-    // The takedown look-back's three player-frame lanes, all off the SAME leading snapshot.
-    // Its own names for the first two hold up; the third does not (see the header banner).
-    const rw::math::vpu::Vector3& MomentSharedInfo_GetForward(const void* lpSharedInfo)
-    {
-        return Record(lpSharedInfo).mPlayerInfo.mRaceCarState.mTransform.zAxis;
-    }
-
-    const rw::math::vpu::Vector3& MomentSharedInfo_GetPosition(const void* lpSharedInfo)
-    {
-        return Record(lpSharedInfo).mPlayerInfo.mRaceCarState.mTransform.wAxis;
-    }
-
-    // NOT a second position: the same linear-velocity lane GetPlayerVelocity returns. The
-    // look-back's "projection" is therefore -dot(fwd, dPos) / dot(fwd, dVel) -- a time to
-    // alignment in seconds, which is what its [0,1] band tests.
-    const rw::math::vpu::Vector3& MomentSharedInfo_GetSegmentReference(const void* lpSharedInfo)
-    {
-        return Record(lpSharedInfo).mPlayerInfo.mRaceCarState.mLinearVelocity;
-    }
-
     // The hit-traffic moment's trigger byte: the player's crash flag, read off the leading
     // snapshot rather than through mpPlayerCar (which is where GetDynamicsAbort1098 below
     // reads the identical member).
@@ -150,19 +132,6 @@ namespace detail
     }
 
     // ---- further reads through mpGameState -------------------------------------------------
-
-    // The takedown look-back's search gate. Same flag as WasTakedown above -- it says a
-    // takedown happened, not that a victim slot is filled.
-    bool MomentSharedInfo_HasTakedownVictim(const void* lpSharedInfo)
-    {
-        return Record(lpSharedInfo).mpGameState->mbTakedownActive;
-    }
-
-    // Same slot as GetTakedownVictimIndex; the look-back binds its VehicleRef to it.
-    s32 MomentSharedInfo_GetVictimRaceCarIndex(const void* lpSharedInfo)
-    {
-        return Record(lpSharedInfo).mpGameState->meTakedownVictimID;
-    }
 
     // This frame's action-flag word, which the stunt moment reads bitwise.
     u32 MomentSharedInfo_GetStuntFlags(const void* lpSharedInfo)
@@ -229,12 +198,6 @@ namespace detail
     DebugLog* MomentSharedInfo_GetDebugLog(const void* lpSharedInfo)
     {
         return Record(lpSharedInfo).mpDebugLog;
-    }
-
-    // The "world" the look-back's VehicleRef resolves against IS the all-vehicle block.
-    const void* MomentSharedInfo_GetWorld(const void* lpSharedInfo)
-    {
-        return Record(lpSharedInfo).mpAllVehicleData;
     }
 
     // The two timesteps are distinct members and the family reads both: the frame step and
