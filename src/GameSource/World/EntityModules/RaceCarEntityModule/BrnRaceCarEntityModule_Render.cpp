@@ -658,8 +658,23 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
             if ( siUploadOn == 1 && CgsDev::Log::gpDebugPrint != 0 )
             {
                 static u32 sluUploadCalls = 0;
-                static f32 sfLastMax      = -1.0f;   // holds the SUM (see below)
                 ++sluUploadCalls;
+
+                // FX-WITNESS 2026-09-24: WHICH car. RenderRaceCar is handed only the params block, so
+                // match it against the live cars' own blocks (the call site passes
+                // maActiveRaceCars[liCar].GetRenderParams()); -1 == a block no live car owns (the
+                // replay path). The deformation entity is 0x01000000 | (car << 10). The change test
+                // is now PER CAR: one shared last-sum made cars that render in turn re-print each other.
+                s32 liUploadCar = -1;
+                for ( s32 liC = 0; liC < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liC )
+                {
+                    if ( maActiveRaceCars[liC].GetRenderParams() == lpRenderParams ) { liUploadCar = liC; }
+                }
+                static_assert( E_ACTIVE_RACE_CAR_INDEX_COUNT == 8,
+                               "safLastSum's initialiser lists one slot per race car plus the -1 slot" );
+                static f32 safLastSum[E_ACTIVE_RACE_CAR_INDEX_COUNT + 1] = { -1.0f, -1.0f, -1.0f, -1.0f,
+                                                                             -1.0f, -1.0f, -1.0f, -1.0f, -1.0f };
+                f32& sfLastMax = safLastSum[liUploadCar + 1];   // holds the SUM (see below)
 
                 // ⛔ SUM, not max -- see the statistic note in ActiveRaceCar::UpdateDeformationState.
                 // The preset pins one row high enough to mask every other row's movement.
@@ -687,6 +702,7 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                         << " sumVerlet " << lfSum
                         << " nnzVerlet " << liNnz
                         << " maxVerlet " << lfMax
+                        << " car " << liUploadCar
                         << "\n";
                 }
             }
