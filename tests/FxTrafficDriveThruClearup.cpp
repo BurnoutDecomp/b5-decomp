@@ -92,6 +92,9 @@ namespace
         void RestartTraffic() { ++muNetworkArmCalls; }
         // Arm 47's callee (TrafficLightManager::SetCountdownValue, 0x8274BD98): inert here too.
         struct { void SetCountdownValue(s32) {} } mTrafficLightManager;
+        // Arm 34's tripwire reads (E_ACTION_START_PLAYING_MODE, 0x8274BE04 / 0x8274BE10): never posted here.
+        decltype(M::mbNeedToSetUpLightsForEventStart) mbNeedToSetUpLightsForEventStart;
+        decltype(M::mbDEBUGTurnTrafficOff)            mbDEBUGTurnTrafficOff;
 
         decltype(M::mbIsOnlineGameMode)             mbIsOnlineGameMode;
         decltype(M::mbAllowDivergentBehaviour)      mbAllowDivergentBehaviour;

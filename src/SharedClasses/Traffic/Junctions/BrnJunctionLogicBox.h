@@ -38,6 +38,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3 (rw::math::vpu::Vector3)
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // GetLight's bound assert (ADDITIVE, FX-NETCRASH)
 
 #include <cstddef>            // offsetof (the layout pins below)
 
@@ -157,5 +158,21 @@ private:
                                                           //         16-byte aligned
     Vector3 mPosition;                                    // +0x110  (:141)
 };                                                        //  sizeof == 0x120
+
+// ADDITIVE (crash parity FX-NETCRASH, 2026-09-25) -- the two declared-only accessors (:86 / :87, DWARF :68 /
+// :71), bodied as the console inlines them in TrafficEntityModule::UpdateEventStarts @0x82743B80: the light
+// count is `lbz r11, 0x35(junction)` (0x82743E00 / 0x82743FA4), and each GetLight is the :181 bound tripwire
+// "luLight < muNumLights" (li r5, 0xB5 @0x82743E24; the message at 0x820036DC, this file's path at
+// 0x820036F8) then junction + 0x44 + 0x18 * luLight (0x82743E10 / 0x82743E38 -- maTrafficLightControllers).
+inline u8 JunctionLogicBox::GetNumLights() const
+{
+    return muNumLights;
+}
+
+inline const TrafficLightController* JunctionLogicBox::GetLight(u32 luLight) const
+{
+    CGS_ASSERT(luLight < muNumLights, "luLight < muNumLights");   // BrnJunctionLogicBox.h:181
+    return &maTrafficLightControllers[luLight];
+}
 
 }

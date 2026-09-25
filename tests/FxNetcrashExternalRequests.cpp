@@ -1,5 +1,5 @@
 // crash parity FX-NETCRASH (2026-09-25), online hull set piece 2: the traffic un-pause / restart arms of
-// TrafficEntityModule::HandleExternalRequests @0x8274B660 (actions 47, 143, 225, 226, 236) and Reset's
+// TrafficEntityModule::HandleExternalRequests @0x8274B660 (actions 34, 47, 143, 225, 226, 236) and Reset's
 // mbActivateOnlineHullsAfterReset replay block (0x8272D470..0x8272D6D8).
 //
 // run_fxnetcrash_external_requests.py extracts the PRODUCTION bodies of HandleExternalRequests,
@@ -23,6 +23,8 @@
 #include <cstring>
 
 static unsigned gAsserts = 0, gChecks = 0, gFailures = 0, gGateLogs = 0, gArm47Gates = 0;
+static unsigned    gExpectedAsserts = 0;       // the arm-34 tripwire scenario fires one on purpose
+static const char* gpcLastAssert    = nullptr; // the message of the last assert that fired
 
 namespace CgsDev
 {
@@ -33,6 +35,7 @@ namespace Assert
     int   FireAssert(const char* lpcMessage, const char*, int)
     {
         ++gAsserts;
+        gpcLastAssert = lpcMessage;
         std::printf("ASSERT: %s\n", lpcMessage);
         return 0;
     }
@@ -126,6 +129,9 @@ namespace
         decltype(M::maaRaceCarHulls)                          maaRaceCarHulls;
         FakeDataPtr                                           mpData;
         FakeLightManager                                      mTrafficLightManager;
+        // Arm 34's tripwire reads (0x8274BE04 lbzx +0x717E4, 0x8274BE10 lbzx +0x7287E).
+        decltype(M::mbNeedToSetUpLightsForEventStart)         mbNeedToSetUpLightsForEventStart;
+        decltype(M::mbDEBUGTurnTrafficOff)                    mbDEBUGTurnTrafficOff;
 
         unsigned muPrepareCalls = 0, muStopCalls = 0, muClearupCalls = 0, muCylinderCalls = 0, muTearDowns = 0;
 
@@ -237,6 +243,53 @@ int main()
         Check(lM.meState == ExtFixture::E_STATE_RUNNING && !lM.mbActivateOnlineHullsAfterReset
               && lM.mau16HullsToActivateAfterReset[0] == KU_INVALID_HULL,
               "236 offline: no restart, no hull set (lbzx +0x717DC gate)");
+    }
+
+    // ---- 34 START_PLAYING_MODE: the GO without a countdown record (0x8274BDF0..0x8274BE34) -----
+    {
+        // The lights were set up (UpdateEventStarts consumed the flag): SetCountdownValue(0), no tripwire.
+        ExtFixture lM; FakeInput lIn;
+        Fresh(lM, lIn, false, ExtFixture::E_STATE_RUNNING, ExtFixture::E_RUNNINGSTATE_NORMAL, ExtFixture::E_RUNNINGSTATE_NORMAL);
+        lM.mTrafficLightManager.miLastDisplay = 7;
+        StartPlayingModeAction lStart; std::memset(&lStart, 0, sizeof(lStart));
+        Post(lIn, lStart, E_ACTION_START_PLAYING_MODE);
+        const unsigned luAsserts = gAsserts;
+        lM.HandleExternalRequests(&lIn, &lOutput);
+        Check(lM.mTrafficLightManager.muCalls == 1 && lM.mTrafficLightManager.miLastDisplay == 0,
+              "34: TrafficLightManager::SetCountdownValue(0) once (li r4,0 ; bl 0x82751750)");
+        Check(gAsserts == luAsserts, "34, the lights set up (flag clear): no tripwire (lbzx +0x717E4 ; beq)");
+        Check(lM.meState == ExtFixture::E_STATE_RUNNING && lM.meRunningState == ExtFixture::E_RUNNINGSTATE_NORMAL,
+              "34: nothing else changes (the arm ends at b 0x8274C0B0)");
+    }
+    {
+        // The flag still up when the mode starts playing, the traffic on: the .cpp 5995 tripwire.
+        ExtFixture lM; FakeInput lIn;
+        Fresh(lM, lIn, true, ExtFixture::E_STATE_RUNNING, ExtFixture::E_RUNNINGSTATE_NORMAL, ExtFixture::E_RUNNINGSTATE_NORMAL);
+        lM.mbNeedToSetUpLightsForEventStart = true;
+        StartPlayingModeAction lStart; std::memset(&lStart, 0, sizeof(lStart));
+        Post(lIn, lStart, E_ACTION_START_PLAYING_MODE);
+        const unsigned luAsserts = gAsserts;
+        gpcLastAssert = nullptr;
+        lM.HandleExternalRequests(&lIn, &lOutput);
+        gExpectedAsserts += gAsserts - luAsserts;
+        Check(gAsserts == luAsserts + 1 && gpcLastAssert != nullptr
+              && std::strcmp(gpcLastAssert, "!mbNeedToSetUpLightsForEventStart || mbDEBUGTurnTrafficOff") == 0,
+              "34, the lights never set up: the .cpp 5995 tripwire fires once (0x8274BE1C..0x8274BE30)");
+        Check(lM.mTrafficLightManager.muCalls == 1 && lM.mTrafficLightManager.miLastDisplay == 0,
+              "34: SetCountdownValue(0) comes first, whatever the flag");
+        Check(lM.mbNeedToSetUpLightsForEventStart, "34: the arm only reads the flag (UpdateEventStarts consumes it)");
+
+        // The debug switch that turns the traffic off silences it (lbzx +0x7287E ; bne).
+        ExtFixture lOff; FakeInput lInOff;
+        Fresh(lOff, lInOff, true, ExtFixture::E_STATE_RUNNING, ExtFixture::E_RUNNINGSTATE_NORMAL, ExtFixture::E_RUNNINGSTATE_NORMAL);
+        lOff.mbNeedToSetUpLightsForEventStart = true;
+        lOff.mbDEBUGTurnTrafficOff = true;
+        Post(lInOff, lStart, E_ACTION_START_PLAYING_MODE);
+        const unsigned luAssertsOff = gAsserts;
+        lOff.HandleExternalRequests(&lInOff, &lOutput);
+        Check(gAsserts == luAssertsOff && lOff.mTrafficLightManager.muCalls == 1
+              && lOff.mTrafficLightManager.miLastDisplay == 0,
+              "34 with mbDEBUGTurnTrafficOff: no tripwire, SetCountdownValue(0) still once");
     }
 
     // ---- 47 SET_COUNTDOWN ----------------------------------------------------------------------
@@ -375,7 +428,7 @@ int main()
               "replay: nothing happens without the flag (the offline boot)");
     }
 
-    Check(gAsserts == 0, "no assert fired");
+    Check(gAsserts == gExpectedAsserts, "no assert fired but the arm-34 tripwire scenario's own");
     std::printf("FxNetcrashExternalRequests: %u checks, %u failures (%u asserts)\n", gChecks, gFailures, gAsserts);
     return gFailures ? 1 : 0;
 }

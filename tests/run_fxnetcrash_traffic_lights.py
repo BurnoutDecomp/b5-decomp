@@ -42,7 +42,9 @@ def trio(source):
 def numeric(tree):
     source = tree.read(LIGHTS_CPP).replace("\r\n", "\n")
     try:
-        block = trio(source)
+        # The block also carries ChangeLightState @0x827518E0 (bodied between SetCountdownValue and Update,
+        # FX-NETCRASH UpdateEventStarts), which reaches the records through GetLightState @0x8274F9A0.
+        block = trio(source) + "\n" + definition(source, "TrafficLightState* TrafficLightManager::GetLightState(u32 luInstance)")
     except ValueError as error:
         print("NUMERIC: cannot build -- the countdown trio is absent: " + str(error))
         return None

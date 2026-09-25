@@ -69,6 +69,7 @@
 #include "rw/math/vpu/vector4_operation.h"                    // Splat
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficTweakConstants.h"
 #include "SharedClasses/Traffic/Junctions/BrnTrafficStopLine.h"  // StopLine
+#include "SharedClasses/Traffic/Junctions/BrnJunctionLogicBox.h" // JunctionLogicBox / TrafficLightController (UpdateEventStarts)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficMathsUtils.h" // IsPointWithinSquishedCone
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPhysicalVehicleInfo.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficRaceCarCache.h"
@@ -1737,6 +1738,20 @@ namespace
         return CgsDev::Log::gpDebugPrint;
     }
     const s32 KI_NETCRASH_HULL_DIAG_MAX_LINES = 48;
+
+    // FLAG PC witness (crash parity FX-NETCRASH; NOT in the X360 binary). BRN_TRAFFIC_LIGHT_DIAG, default
+    // off -- the same switch as the light manager's [traffic-lights] countdown lines: an event start's
+    // lights around PostPhysicsUpdate's UpdateEventStarts call, capped, reads only.
+    CgsDev::Log::DebugPrint* EventStartLightsDiagStream()
+    {
+        static const bool sbEnabled = (getenv("BRN_TRAFFIC_LIGHT_DIAG") != 0);
+        if (!sbEnabled || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return 0;
+        }
+        return CgsDev::Log::gpDebugPrint;
+    }
+    s32 giEventStartLightsDiagLinesLeft = 16;
 
     // FLAG PC witness (crash parity FX-NETCRASH, online traffic lockstep; NOT console code). The
     // per-decision-frame digest UpdateDecisionFrame prints online: FNV-1a over the state every
@@ -4102,11 +4117,96 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         }
     }
 
+    // [FLAG PC witness] (crash parity FX-NETCRASH; NOT console code): whether an event start's lights were
+    // still to be set up before the call. Reported after GenerateNetworkUpdateEvents, below.
+    const bool lbEventStartLightsPending_PC = mbNeedToSetUpLightsForEventStart;
+
+    // 0x8274EE8C..0x8274EE90 `mr r3, r31 ; bl 0x82743B80` -- every frame (crash parity FX-NETCRASH,
+    // 2026-09-25): an event start's lights. Body at UpdateEventStarts.
+    UpdateEventStarts();
+
     // 0x8274EE94..0x8274EEA0 `mr r5, r25 ; mr r4, r24 ; mr r3, r31 ; bl 0x827287A8` -- LIVE
     // (crash parity FX-NETCRASH, 2026-09-25): every frame, right before the traffic-type answer.
     // It publishes the active hull per race car and the hull-sync state to the network output
     // interface. Body below this function.
     GenerateNetworkUpdateEvents(lpInput, lpOutput);
+
+    // [FLAG PC witness] (crash parity FX-NETCRASH; NOT console code). BRN_TRAFFIC_LIGHT_DIAG, capped, reads
+    // only -- an event start's lights, reported here so that the console's two calls above stay adjacent
+    // (GenerateNetworkUpdateEvents touches neither the lights nor the stop lines):
+    //   the first frame a trigger is seen pending (once per trigger id) -> the trigger, its hull, whether
+    //     that hull is active (UpdateEventStarts waits for it) and mbGameModeClearsTraffic;
+    //   the frame the call consumed the flag -> the start line as UpdateEventStarts left it: the online grid
+    //     clears, the trigger hull's junctions / lights, how many of their stop lines are red (HullRuntime::
+    //     IsStoplineRed) and the light instances' states (RED 0 / AMBER 1 / GREEN 2, ChangeLightState).
+    // Both can print on the same frame: a trigger whose hull is already active is set up at once.
+    {
+        CgsDev::Log::DebugPrint* const lpEventStartDiag_PC = EventStartLightsDiagStream();
+        static u32 suPendingTriggerLogged_PC = 0xFFFFFFFFu;
+        if (lbEventStartLightsPending_PC && lpEventStartDiag_PC != 0)
+        {
+            const u32 luTriggerId_PC   = mTrafficLightTriggerId;
+            const u32 luTriggerHull_PC = (luTriggerId_PC >> 8) & 0xFFFFu;
+            if (suPendingTriggerLogged_PC != luTriggerId_PC && giEventStartLightsDiagLinesLeft > 0)
+            {
+                suPendingTriggerLogged_PC = luTriggerId_PC;
+                --giEventStartLightsDiagLinesLeft;
+                *lpEventStartDiag_PC
+                    << "[traffic-lights] event start pending: trigger=" << luTriggerId_PC
+                    << " hull=" << luTriggerHull_PC
+                    << " hullActive=" << (mActiveHulls.Contains(static_cast<u16>(luTriggerHull_PC)) ? 1 : 0)
+                    << " clearsTraffic=" << (mbGameModeClearsTraffic ? 1 : 0)
+                    << " [FLAG PC witness]\n";
+            }
+            if (!mbNeedToSetUpLightsForEventStart && giEventStartLightsDiagLinesLeft > 0)
+            {
+                suPendingTriggerLogged_PC = 0xFFFFFFFFu;
+                u32 luLights_PC = 0, luStopLines_PC = 0, luStopLinesRed_PC = 0;
+                u32 luInstances_PC = 0, luRed_PC = 0, luAmber_PC = 0, luGreen_PC = 0;
+                const Hull* const lpHull_PC = GetHull(luTriggerHull_PC);
+                for (u32 luJunction = 0; luJunction < lpHull_PC->muNumJunctions; ++luJunction)
+                {
+                    const JunctionLogicBox* const lpJunction = &lpHull_PC->mpaJunctions[luJunction];
+                    for (u32 luLight = 0; luLight < lpJunction->GetNumLights(); ++luLight)
+                    {
+                        const TrafficLightController* const lpLight = lpJunction->GetLight(luLight);
+                        ++luLights_PC;
+                        for (u32 luStopLine = 0; luStopLine < lpLight->muNumStopLines; ++luStopLine)
+                        {
+                            ++luStopLines_PC;
+                            const HullRuntime* const lpRuntime =
+                                GetHullRuntimeSafe(lpLight->mauStopLineHulls[luStopLine]);
+                            if (lpRuntime != NULL && lpRuntime->IsStoplineRed(lpLight->mauStopLineIds[luStopLine]))
+                            {
+                                ++luStopLinesRed_PC;
+                            }
+                        }
+                        for (u32 luTrafficLight = 0; luTrafficLight < lpLight->muNumTrafficLights; ++luTrafficLight)
+                        {
+                            const TrafficLightRuntimeState* const lpState =
+                                reinterpret_cast<const TrafficLightRuntimeState*>(
+                                    mTrafficLightManager.GetLightState(lpLight->mauTrafficLightIds[luTrafficLight]));
+                            ++luInstances_PC;
+                            luRed_PC   += (lpState->muState == 0) ? 1u : 0u;
+                            luAmber_PC += (lpState->muState == 1) ? 1u : 0u;
+                            luGreen_PC += (lpState->muState == 2) ? 1u : 0u;
+                        }
+                    }
+                }
+                --giEventStartLightsDiagLinesLeft;
+                *lpEventStartDiag_PC
+                    << "[traffic-lights] UpdateEventStarts set up the event start: trigger=" << luTriggerId_PC
+                    << " hull=" << luTriggerHull_PC
+                    << " gridClears=" << (mbAllowDivergentBehaviour ? 0u : static_cast<u32>(muNumberOfParticipantsInCurrentEvent))
+                    << " junctions=" << static_cast<u32>(lpHull_PC->muNumJunctions)
+                    << " lights=" << luLights_PC
+                    << " stoplinesRed=" << luStopLinesRed_PC << "/" << luStopLines_PC
+                    << " lightInstances=" << luInstances_PC
+                    << " amber=" << luAmber_PC << " red=" << luRed_PC << " green=" << luGreen_PC
+                    << " [FLAG PC witness]\n";
+            }
+        }
+    }
 
     // ⭐ [traffic-type wave 2026-09-14] THE TRAFFIC-TYPE QUERY IS ANSWERED HERE, at exactly the
     // console's position: after UpdateEventStarts / GenerateNetworkUpdateEvents and before the
@@ -4133,12 +4233,123 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     {
         static bool sbLogged = false;
         LogMissingLeg_T1(sbLogged,
-            "PostPhysicsUpdate remaining tail legs -- the perfmon bracket, UpdateEventStarts "
-            "@0x82743B80 and the replay-serialiser registration/write");
+            "PostPhysicsUpdate remaining tail legs -- the perfmon bracket and the replay-serialiser "
+            "registration/write");
     }
 
     lpInput->UnlockForRead();
     lpOutput->UnlockForWrite();
+}
+
+namespace
+{
+    // UpdateEventStarts' online grid clear (0x82743D40 / 0x82743D44): KillAllTrafficInCylinder's radius
+    // f1 = flt_820BA5E8 == 30.0f (0x41F00000) and height f2 = flt_820BA5E4 == 10.0f (0x41200000), x360rd.
+    const f32 KF_EVENT_START_GRID_CLEAR_RADIUS = 30.0f;
+    const f32 KF_EVENT_START_GRID_CLEAR_HEIGHT = 10.0f;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateEventStarts  @ 0x82743B80  (DWARF h:1620, .cpp 9477..9534; crash parity
+// FX-NETCRASH, 2026-09-25)
+//
+// Called by PostPhysicsUpdate every frame (0x8274EE8C..0x8274EE90), right before
+// GenerateNetworkUpdateEvents. An event whose game mode clears the traffic
+// (HandlePrepareForModeAction stores mbNeedToSetUpLightsForEventStart = mbGameModeClearsTraffic and the
+// mode's mTrafficLightTriggerId) sets up the lights at its start line ONCE, as soon as the trigger's hull is
+// active: every stop line of the junction's lights goes red and every light of it is changed to red. Online,
+// the traffic on each participant's grid slot is cleared first.
+//
+//   0x82743B90..0x82743BA0  lbz +0x717E4 (mbNeedToSetUpLightsForEventStart) ; beq -> return
+//   0x82743BA4..0x82743BDC  lbzx +0x717E3 (mbGameModeClearsTraffic) ; bne -> else the .cpp 9600 (0x2580)
+//                           tripwire "mbGameModeClearsTraffic"
+//   0x82743BE0..0x82743C3C  LightTriggerId::IsValid, inlined: (id & 0x00FFFF00) != 0x00FFFF00 &&
+//                           (id & 0xFF) != 0xFF (+0x717D4) ; else the .cpp 9601 tripwire
+//                           "mTrafficLightTriggerId.IsValid()"
+//   0x82743C40..0x82743C64  luHull = LightTriggerId::GetHull == (id >> 8) & 0xFFFF (rlwinm 24,16,31) ;
+//                           IsHullActive == mActiveHulls.Contains (bl 0x8271A888 on +0x3EA08) ;
+//                           not active -> return (and keep trying next frame)
+//   0x82743C68..0x82743C6C  stb 0 -> +0x717E4: the set-up happens once
+//   0x82743C70..0x82743D5C  !mbAllowDivergentBehaviour (lbzx +0x717E7 ; bne skips it) -- online only:
+//                           per participant (+0x717D0 muNumberOfParticipantsInCurrentEvent) the .cpp 9617
+//                           tripwire "IsValid( maEventGridStartPositions[luParticipant] )" (vcmpeqfp.
+//                           self-compare of x, y, z) and KillAllTrafficInCylinder(
+//                           maEventGridStartPositions[luParticipant] (+0x71750, stride 0x10),
+//                           flt_820BA5E8 = 30.0f, flt_820BA5E4 = 10.0f, true)
+//   0x82743D60..0x82743FD8  lpHull = GetHull(luHull) ; for every junction (lbz +2 muNumJunctions, lwz +0x2C
+//                           mpaJunctions, stride 0x120) and every light of it (lbz +0x35 muNumLights ;
+//                           GetLight's BrnJunctionLogicBox.h:181 bound assert, +0x44 + 0x18 * luLight ;
+//                           the .cpp 9641 (0x25A9) tripwire "lpLight != NULL"):
+//                             every stop line (+0x16 muNumStopLines): GetHullRuntimeSafe(
+//                             mauStopLineHulls[luStopLine]) inlined (the mpData instance assert and the
+//                             .h 2288 "luHull < (mpData->muNumHulls)" bound, mauHullRuntimeDataIndices
+//                             +0x3EB30, 0xFF == none) -> SetStoplineRed(mauStopLineIds[luStopLine], true)
+//                             (bl 0x82706630) when the hull has a runtime;
+//                             every light (+0x17 muNumTrafficLights): mTrafficLightManager.ChangeLightState(
+//                             mauTrafficLightIds[luTrafficLight], true) (bl 0x827518E0, r5 = 1)
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateEventStarts()
+{
+    if (!mbNeedToSetUpLightsForEventStart)
+    {
+        return;
+    }
+
+    CGS_ASSERT(mbGameModeClearsTraffic, "mbGameModeClearsTraffic");                         // .cpp 9600
+
+    // LightTriggerId::IsValid / ::GetHull, inlined: the hull is the id's middle 16 bits and the id is
+    // invalid when those are all ones or its low byte is (HandlePrepareForModeAction's test, 0x82748550).
+    const u32 luTriggerId = mTrafficLightTriggerId;
+    CGS_ASSERT(((luTriggerId & 0x00FFFF00u) != 0x00FFFF00u) && ((luTriggerId & 0x000000FFu) != 0x000000FFu),
+               "mTrafficLightTriggerId.IsValid()");                                        // .cpp 9601
+    const u32 luHull = (luTriggerId >> 8) & 0xFFFFu;
+
+    if (!mActiveHulls.Contains(static_cast<u16>(luHull)))
+    {
+        return;
+    }
+
+    mbNeedToSetUpLightsForEventStart = false;
+
+    if (!mbAllowDivergentBehaviour)
+    {
+        for (u32 luParticipant = 0; luParticipant < muNumberOfParticipantsInCurrentEvent; ++luParticipant)
+        {
+            CGS_ASSERT(rw::math::vpu::IsValid(maEventGridStartPositions[luParticipant]),
+                       "IsValid( maEventGridStartPositions[luParticipant] )");               // .cpp 9617
+            KillAllTrafficInCylinder(maEventGridStartPositions[luParticipant], KF_EVENT_START_GRID_CLEAR_RADIUS,
+                                     KF_EVENT_START_GRID_CLEAR_HEIGHT, true);
+        }
+    }
+
+    const Hull* const lpHull = GetHull(luHull);
+    for (u32 luJunction = 0; luJunction < lpHull->muNumJunctions; ++luJunction)
+    {
+        const JunctionLogicBox* const lpJunction = &lpHull->mpaJunctions[luJunction];
+        const bool lbChangeToRed = true;
+        for (u32 luLight = 0; luLight < lpJunction->GetNumLights(); ++luLight)
+        {
+            const TrafficLightController* const lpLight = lpJunction->GetLight(luLight);
+            CGS_ASSERT(lpLight != NULL, "lpLight != NULL");                                   // .cpp 9641
+
+            for (u32 luStopLine = 0; luStopLine < lpLight->muNumStopLines; ++luStopLine)
+            {
+                const u32 luStopLineHull = lpLight->mauStopLineHulls[luStopLine];
+                HullRuntime* const lpStopLineHullRuntime = GetHullRuntimeSafe(luStopLineHull);
+                if (lpStopLineHullRuntime != NULL)
+                {
+                    const u32 luStopLineIndex = lpLight->mauStopLineIds[luStopLine];
+                    lpStopLineHullRuntime->SetStoplineRed(luStopLineIndex, true);
+                }
+            }
+
+            for (u32 luTrafficLight = 0; luTrafficLight < lpLight->muNumTrafficLights; ++luTrafficLight)
+            {
+                const u32 luTrafficLightInstance = lpLight->mauTrafficLightIds[luTrafficLight];
+                mTrafficLightManager.ChangeLightState(luTrafficLightInstance, lbChangeToRed);
+            }
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -19000,6 +19211,22 @@ void TrafficEntityModule::HandleExternalRequests(
             break;
 
         // --------------------------------------------------------------------------------
+        // 0x8274BDF0..0x8274BE34 -- E_ACTION_START_PLAYING_MODE (34, jump-table slot 21 at 0x8274B844). The
+        // GO without a countdown record (crash parity FX-NETCRASH, 2026-09-25):
+        //   li r4, 0 ; add r3, this, 0x53790 ; bl TrafficLightManager::SetCountdownValue
+        //   lbzx +0x717E4 (mbNeedToSetUpLightsForEventStart) ; beq -> done
+        //   lbzx +0x7287E (mbDEBUGTurnTrafficOff, r29) ; bne -> done
+        //   else the .cpp 5995 (0x176B) tripwire (message 0x820C0560 via var_6C, 0x8274B72C)
+        // UpdateEventStarts (PostPhysicsUpdate, every frame) clears the flag once the event's trigger hull
+        // is active; the tripwire says the lights were never set up by the time the mode starts playing.
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_START_PLAYING_MODE:
+            mTrafficLightManager.SetCountdownValue(0);
+            CGS_ASSERT(!mbNeedToSetUpLightsForEventStart || mbDEBUGTurnTrafficOff,
+                       "!mbNeedToSetUpLightsForEventStart || mbDEBUGTurnTrafficOff");   // .cpp 5995
+            break;
+
+        // --------------------------------------------------------------------------------
         // 0x8274BD98..0x8274BDEC -- E_ACTION_SET_COUNTDOWN (47), SetCountdownAction (one s32).
         //   add r3, this, 0x53790 ; lwz r4, 0(record) ; bl TrafficLightManager::SetCountdownValue
         //   lbzx +0x717DC (mbIsOnlineGameMode) ; beq -> done
@@ -19189,10 +19416,8 @@ void TrafficEntityModule::HandleExternalRequests(
         //       reconstructable today, left out only to keep this file to its one claim)
         //   28  SetTrafficScaleBasedOnRank -- LIVE above (2026-09-10)
         //   30  start-line sweep over every active race car  -> KillAllTrafficInCylinder
-        //   34  StartPlayingMode (0x8274BDF0..0x8274BE34)    -> TrafficLightManager::SetCountdownValue(0),
-        //       then the .cpp 5995 tripwire "!mbNeedToSetUpLightsForEventStart || mbDEBUGTurnTrafficOff".
-        //       Left out: the flag's consumer UpdateEventStarts @0x82743B80 is unbodied, so a race
-        //       that clears traffic (HandlePrepareForModeAction stores the flag) would trip it
+        //   34  StartPlayingMode                             -- LIVE above (2026-09-25, FX-NETCRASH, with
+        //       UpdateEventStarts, the consumer of the flag its tripwire reads)
         //   39  StopMode                                     -- LIVE above (2026-09-10)
         //   47  countdown + online un-pause                  -- LIVE above (2026-09-25, FX-NETCRASH;
         //       its TrafficLightManager::SetCountdownValue leg since 30d481f4)
@@ -19212,11 +19437,11 @@ void TrafficEntityModule::HandleExternalRequests(
         static bool sbLogged = false;
         LogMissingLeg_T6(sbLogged,
             "HandleExternalRequests -- actions 23 (PREPARE_FOR_MODE), 28 (SET_TRAFFIC_SCALE), "
-            "39 (STOP_MODE), 47 (SET_COUNTDOWN), 97..100 (drive-thru clean-up), 143 "
-            "(SHOWTIME_MODE_SWITCH), 225/226 (local player gone) and 236 (RESTART_TRAFFIC) are "
-            "reconstructed. Arms 13, 30, 34, 73, 75, 77, 110, 192, 244 and the post-loop proximity "
-            "tail are not wired (Hide/UnhideAllTraffic and FireKillZone have no body; arm 34's "
-            "tripwire needs UpdateEventStarts; KillAllTrafficInCylinder is bodied)");
+            "34 (START_PLAYING_MODE), 39 (STOP_MODE), 47 (SET_COUNTDOWN), 97..100 (drive-thru "
+            "clean-up), 143 (SHOWTIME_MODE_SWITCH), 225/226 (local player gone) and 236 "
+            "(RESTART_TRAFFIC) are reconstructed. Arms 13, 30, 73, 75, 77, 110, 192, 244 and the "
+            "post-loop proximity tail are not wired (Hide/UnhideAllTraffic and FireKillZone have no "
+            "body; KillAllTrafficInCylinder is bodied)");
     }
 }
 
