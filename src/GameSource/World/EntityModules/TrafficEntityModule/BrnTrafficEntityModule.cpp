@@ -4320,15 +4320,66 @@ void TrafficEntityModule::Reset()
     mbHullSyncDivergence        = false;
     mbNetworkHasDetectedDivergence = false;
 
+    // 0x8272D470..0x8272D6D8 -- the online hull set's replay (crash parity FX-NETCRASH, 2026-09-25).
+    // HandlePrepareForModeAction's online reset and HandleExternalRequests' RESTART_TRAFFIC arm park
+    // one hull per race-car slot in mau16HullsToActivateAfterReset and raise the flag; this turns
+    // each parked hull and its PVS back on, so every client restarts with the same hull set.
+    //   per slot (BurnoutConstants.h:39 enum walk):
+    //     maaRaceCarHulls[slot].Clear()                            stw 0, 0x14(r26)
+    //     if (hull != 0xFFFF)                                      cmplwi r28, 0xFFFF
+    //         maaRaceCarHulls[slot].Append(hull)                   short_9_::Append
+    //         if (slot == meLocalPlayerIndex) muCurrentlyPredictedHull = hull   (lwzx +0x713F0)
+    //         append every hull of mpData->mpPvs->GetHullPvs(hull) (inlined: CgsResourcePtr.h:544,
+    //             BrnTrafficPvs.h:204, then the CgsSet.h :227/:257/:258 walk)
+    //   mbActivateOnlineHullsAfterReset = false                    stb 0, +0x558DF
+    //   mau16HullsToActivateAfterReset[0..7] = 0xFFFF              8 x sth -1, +0x558CC
+    if (mbActivateOnlineHullsAfterReset)
     {
-        // The `mau16HullsToActivateAfterReset` replay of the online hull set (guarded by
-        // mbActivateOnlineHullsAfterReset) walks mpData->mpPvs cell sets. It is online-only
-        // and is exactly the code path UpdateRaceCarHulls' online arm mirrors.
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "Reset mbActivateOnlineHullsAfterReset replay block (maaRaceCarHulls seeded from "
-            "mau16HullsToActivateAfterReset + Pvs::GetHullPvs) -- ONLINE only; the flag is "
-            "false on every offline boot, so the block does not execute");
+        for (EActiveRaceCarIndex leRaceCar = E_ACTIVE_RACE_CAR_INDEX_0;
+             leRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+             leRaceCar++)
+        {
+            const u16 luHull = mau16HullsToActivateAfterReset[leRaceCar];
+            maaRaceCarHulls[leRaceCar].Clear();
+            if (luHull != KU_INVALID_HULL)
+            {
+                maaRaceCarHulls[leRaceCar].Append(luHull);
+                if (leRaceCar == meLocalPlayerIndex)
+                {
+                    muCurrentlyPredictedHull = luHull;
+                }
+
+                const Set<u16, 8>& lrHullPvs = mpData->mpPvs->GetHullPvs(luHull);
+                for (u32 luPvsHull = 0; luPvsHull < lrHullPvs.GetLength(); ++luPvsHull)
+                {
+                    maaRaceCarHulls[leRaceCar].Append(lrHullPvs[luPvsHull]);
+                }
+            }
+        }
+
+        mbActivateOnlineHullsAfterReset = false;
+        for (u32 luSlot = 0; luSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luSlot)
+        {
+            mau16HullsToActivateAfterReset[luSlot] = KU_INVALID_HULL;
+        }
+
+        // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped.
+        if (CgsDev::Log::DebugPrint* lpNetDiag = NetCrashDiagStream())
+        {
+            static s32 siLines = 0;
+            if (siLines < KI_NETCRASH_HULL_DIAG_MAX_LINES)
+            {
+                ++siLines;
+                *lpNetDiag << "[netcrash] Reset replayed the online hull set: local="
+                           << static_cast<s32>(meLocalPlayerIndex)
+                           << " predicted=" << static_cast<s32>(muCurrentlyPredictedHull) << " counts=";
+                for (u32 luSlot = 0; luSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luSlot)
+                {
+                    *lpNetDiag << (luSlot ? "," : "") << maaRaceCarHulls[luSlot].GetLength();
+                }
+                *lpNetDiag << "\n";
+            }
+        }
     }
 
     // ---- collidable cache / avoidance -----------------------------------------------------
@@ -4637,6 +4688,17 @@ void TrafficEntityModule::Construct()
     mbShowtimePlayerOnGround                  = false; // 0x717E6
     mbWaitingForStreaming                     = false; // 0x7180E
     mbNeedToKillAllZombies                    = false; // 0x7180F
+
+    // 0x827408B4..0x827408E4 -- the online hull replay starts DISARMED: `stbx r30(0), +0x558DF` and
+    // eight `sth 0xFFFF` from +0x558CC. Without these the first online PREPARE_FOR_MODE (which parks
+    // only the local player's hull when the event has no start grid) replayed hull 0 and its PVS for
+    // the seven other slots out of zeroed memory (crash parity FX-NETCRASH, 2026-09-25; pair run
+    // 20260925_101502: "counts=9,4,4,4,4,4,4,4").
+    mbActivateOnlineHullsAfterReset = false;                              // 0x558DF
+    for (u32 luSlot = 0; luSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luSlot)
+    {
+        mau16HullsToActivateAfterReset[luSlot] = KU_INVALID_HULL;         // 0x558CC + 2 * slot
+    }
     mfShowtimeTrafficDensityScale             = 1.0f;  // 0x71824 stfsx flt_82001C98
     muLastParamCalculated                     = 0;     // 0x71830
 
@@ -18391,6 +18453,48 @@ void TrafficEntityModule::HandleExternalRequests(
             break;
 
         // --------------------------------------------------------------------------------
+        // 0x8274BD98..0x8274BDEC -- E_ACTION_SET_COUNTDOWN (47), SetCountdownAction (one s32).
+        //   add r3, this, 0x53790 ; lwz r4, 0(record) ; bl TrafficLightManager::SetCountdownValue
+        //   lbzx +0x717DC (mbIsOnlineGameMode) ; beq -> done
+        //   meState == E_STATE_RUNNING (lwz 0x300 ; cmpwi 1) && IsPaused() (bl 0x82707560)
+        //       -> meRunningState = E_RUNNINGSTATE_NORMAL                        (stw 0, 0x308)
+        //   else meState == E_STATE_STARTING_UP (lwz 0x300 ; cmpwi 0)
+        //       -> meRunningStateToUseAfterStartup = E_RUNNINGSTATE_NORMAL       (stw 0, 0x30C)
+        // The online un-pause (crash parity FX-NETCRASH, 2026-09-25): an online event whose
+        // PREPARE_FOR_MODE reset its traffic comes out of start-up PAUSED
+        // (HandlePrepareForModeAction's `stw 1 -> +0x30C`), and the event's countdown resumes it.
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_SET_COUNTDOWN:
+        {
+            {
+                // GATE: TrafficLightManager::SetCountdownValue @0x82751750 (record->miCountdownDisplay).
+                // BLOCKER: the manager's three countdown members (DWARF BrnTrafficLightManager.h
+                // :178..:180, console +0x12C0 / +0x12C4 / +0x12C8) are absent from
+                // BrnTrafficLightManager.h, whose record type is still the 8-byte placeholder, and
+                // the two other writers (Construct @0x82751708, Update @0x827517A8) are unbodied.
+                // Only the lights' countdown reads them. The traffic un-pause below does not.
+                static bool sbLogged = false;
+                LogMissingLeg_T6(sbLogged,
+                    "HandleExternalRequests action 47 leg TrafficLightManager::SetCountdownValue "
+                    "@0x82751750 -- the manager's countdown members (+0x12C0..+0x12C8) and its "
+                    "Construct/Update are not reconstructed; the arm's un-pause is live");
+            }
+
+            if (mbIsOnlineGameMode)
+            {
+                if (meState == E_STATE_RUNNING && IsPaused())
+                {
+                    meRunningState = E_RUNNINGSTATE_NORMAL;
+                }
+                else if (meState == E_STATE_STARTING_UP)
+                {
+                    meRunningStateToUseAfterStartup = E_RUNNINGSTATE_NORMAL;
+                }
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------------------
         // 0x8274BFA8..0x8274BFDC -- the four DRIVE-THRU actions (jump-table cases 84..87 ==
         // ids 97..100 after the -13 bias): BODY_SHOP / PAINT_SHOP / DRIVE_THRU_JUNK_YARD /
         // GAS_STATION. Offline only (`lbzx r11, r31, r22`, r22 == 0x717DC == mbIsOnlineGameMode):
@@ -18433,6 +18537,94 @@ void TrafficEntityModule::HandleExternalRequests(
             break;
         }
 
+        // --------------------------------------------------------------------------------
+        // 0x8274BFE0..0x8274BFFC -- E_ACTION_SHOWTIME_MODE_SWITCH (143), ShowtimeModeSwitchAction:
+        //   lbz r11, 0xC(record) ; bne -> done       (mbEnteringShowtime)
+        //   sthx -1, this, 0x558DC                   (muCurrentlyPredictedHull = 0xFFFF)
+        // Leaving showtime forgets the predicted hull, so the next PredictHullChanges re-announces
+        // the player's hull. No online test: the store is harmless offline.
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_SHOWTIME_MODE_SWITCH:
+        {
+            const BrnGameState::GameStateModuleIO::ShowtimeModeSwitchAction* lpSwitchAction =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::ShowtimeModeSwitchAction*>(lpEvent);
+            if (!lpSwitchAction->mbEnteringShowtime)
+            {
+                muCurrentlyPredictedHull = KU_INVALID_HULL;
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------------------
+        // 0x8274BE4C..0x8274BE60 -- E_ACTION_LOCAL_PLAYER_DISCONNECTED (225) and
+        // E_ACTION_LOCAL_PLAYER_LEFT_GAME (226), both empty records (jump-table cases 212 / 213):
+        //   lbzx +0x717DC (mbIsOnlineGameMode) ; beq -> done ; bl RestartTraffic (0x82708F98)
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_LOCAL_PLAYER_DISCONNECTED:
+        case BrnGameState::GameStateModuleIO::E_ACTION_LOCAL_PLAYER_LEFT_GAME:
+            if (mbIsOnlineGameMode)
+            {
+                RestartTraffic();
+            }
+            break;
+
+        // --------------------------------------------------------------------------------
+        // 0x8274BEE0..0x8274BF6C -- E_ACTION_RESTART_TRAFFIC (236), RestartTrafficAction (the eight
+        // hulls to restart with). The network's traffic restart: TrafficManager::
+        // ProcessBufferedRestartTrafficMessages posts tag 43 on the agreed frame, and
+        // BrnGameModule_wN1_02.cpp turns it into this action on every machine at once.
+        //   lbzx +0x717DC (mbIsOnlineGameMode) ; beq -> done
+        //   assert(record)                                        "lpRestartTrafficAction" (:6055)
+        //   bl RestartTraffic                                     (tear down, come back NORMAL)
+        //   if (mbActivateOnlineHullsAfterReset && (gxMessageFilterFlags & 1))
+        //       *gpDebugPrint << "TRAF WARNING: Given a new set of hulls to reset after resetting\n"
+        //   mbActivateOnlineHullsAfterReset = true                (stb 1, +0x558DF)
+        //   mau16HullsToActivateAfterReset[0..7] = record[0..7]   (8 x lhz/sth -> +0x558CC)
+        // Reset's replay block turns those hulls back on when the restart reaches it.
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_RESTART_TRAFFIC:
+        {
+            if (mbIsOnlineGameMode)
+            {
+                const BrnGameState::GameStateModuleIO::RestartTrafficAction* lpRestartTrafficAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::RestartTrafficAction*>(lpEvent);
+                CGS_ASSERT(lpRestartTrafficAction != 0, "lpRestartTrafficAction");   // baked .cpp 6055
+
+                RestartTraffic();
+
+                if (mbActivateOnlineHullsAfterReset
+                    && (CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "TRAF WARNING: Given a new set of hulls to reset after resetting\n";
+                }
+                mbActivateOnlineHullsAfterReset = true;
+                for (u32 luSlot = 0; luSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luSlot)
+                {
+                    mau16HullsToActivateAfterReset[luSlot] = lpRestartTrafficAction->mau16ActveHulls[luSlot];
+                }
+
+                // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped.
+                if (CgsDev::Log::DebugPrint* lpNetDiag = NetCrashDiagStream())
+                {
+                    static s32 siLines = 0;
+                    if (siLines < KI_NETCRASH_HULL_DIAG_MAX_LINES)
+                    {
+                        ++siLines;
+                        *lpNetDiag << "[netcrash] HandleExternalRequests RESTART_TRAFFIC state="
+                                   << static_cast<s32>(meState) << " hulls=";
+                        for (u32 luSlot = 0; luSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luSlot)
+                        {
+                            *lpNetDiag << (luSlot ? "," : "")
+                                       << static_cast<s32>(mau16HullsToActivateAfterReset[luSlot]);
+                        }
+                        *lpNetDiag << "\n";
+                    }
+                }
+            }
+            break;
+        }
+
         default:
             break;
         }
@@ -18443,23 +18635,24 @@ void TrafficEntityModule::HandleExternalRequests(
     }
 
     {
-        // The fifteen arms this partial does not run, each blocked on a callee with no body in
-        // this tree. Listed by action id so the next wave can pick them off individually:
+        // The arms this partial does not run yet. Listed by action id so the next wave can pick
+        // them off individually:
         //   13  empty-pool state advance (meEmptyTrafficPoolState IDLE->EMPTY, no callee --
         //       reconstructable today, left out only to keep this file to its one claim)
         //   28  SetTrafficScaleBasedOnRank -- LIVE above (2026-09-10)
         //   30  start-line sweep over every active race car  -> KillAllTrafficInCylinder
         //   34  StartPlayingMode                             -> TrafficLightManager::SetCountdownValue
         //   39  StopMode                                     -- LIVE above (2026-09-10)
-        //   47  traffic-light countdown + pause bookkeeping   -> SetCountdownValue / IsPaused
+        //   47  countdown + online un-pause                  -- LIVE above (2026-09-25, FX-NETCRASH;
+        //       its TrafficLightManager::SetCountdownValue leg stays a named gate)
         //   73  crash-camera proximity kill                   -> (inline, needs the +0x7143x block)
         //   75  HideAllTraffic                                -> HideAllTraffic
         //   77  UnhideAllTraffic / cylinder kill              -> UnhideAllTraffic, KillAllTrafficInCylinder
         //   97..100  drive-thru crash clean-up                -- LIVE above (2026-09-23, G59-D1)
         //   110 kill-zone list                                -> FireKillZone
-        //   143 predicted-hull reset
+        //   143 predicted-hull reset                          -- LIVE above (2026-09-25, FX-NETCRASH)
         //   192 streaming request / wait latch
-        //   225,226,236  RestartTraffic (+ the hull re-activation copy)
+        //   225,226,236  RestartTraffic (+ the hull copy)     -- LIVE above (2026-09-25, FX-NETCRASH)
         //   244 low-speed density halving
         // and the post-loop tail at 0x8274C0D0 (the +0x72910 bit-14 edge that fires a 90 m
         // KillAllTrafficInCylinder). KillAllTrafficInCylinder is BODIED since G59-D1
@@ -18468,10 +18661,11 @@ void TrafficEntityModule::HandleExternalRequests(
         static bool sbLogged = false;
         LogMissingLeg_T6(sbLogged,
             "HandleExternalRequests -- actions 23 (PREPARE_FOR_MODE), 28 (SET_TRAFFIC_SCALE), "
-            "39 (STOP_MODE) and 97..100 (drive-thru clean-up) are reconstructed. The other arms "
-            "and the post-loop proximity tail are not wired (RestartTraffic, Hide/UnhideAllTraffic, "
-            "FireKillZone, TrafficLightManager::SetCountdownValue and IsPaused have no body; "
-            "KillAllTrafficInCylinder does)");
+            "39 (STOP_MODE), 47 (SET_COUNTDOWN, minus its light-manager leg), 97..100 (drive-thru "
+            "clean-up), 143 (SHOWTIME_MODE_SWITCH), 225/226 (local player gone) and 236 "
+            "(RESTART_TRAFFIC) are reconstructed. Arms 13, 30, 34, 73, 75, 77, 110, 192, 244 and "
+            "the post-loop proximity tail are not wired (Hide/UnhideAllTraffic, FireKillZone and "
+            "TrafficLightManager::SetCountdownValue have no body; KillAllTrafficInCylinder does)");
     }
 }
 
