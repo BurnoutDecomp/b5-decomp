@@ -14,6 +14,7 @@
 #include "rw/math/vpu/vector4_operation.h"            // VecFloat broadcast arithmetic used by UpdateInAirBehaviour
 #include "rw/math/vpu/matrix44affine_operation.h"     // rw::math::vpu::{InverseOfMatrixWithOrthonormal3x3, operator*}
 #include "rw/math/fpu/scalar_operation.h"            // rw::math::fpu::IsZero (SetWheelVelocities' per-axle power gates)
+#include "SDKs/XboxMath/XMVectorACos.h"              // XboxMath::XMVectorACos (X360 0x821F0980), the drift angles
 
 #include <cstdlib>    // getenv ([tyre] bring-up probe only)
 #include <algorithm>  // std::min / std::max (the driving spine's vmaxfp/vminfp lowerings)
@@ -2934,7 +2935,8 @@ namespace Vehicle
         if (lfDot < -1.0f) lfDot = -1.0f;
         if (lfDot > 1.0f) lfDot = 1.0f;
 
-        f32 lfAngle = std::acos(lfDot);                            // XMVectorACos
+        // 0x825D4104 bl XMVectorACos (crash parity FX-GATE: the console's own arc-cosine, not std::acos).
+        f32 lfAngle = XboxMath::XMVectorACos(lfDot);
 
         // sign by dot(unitVel, right axis @+0x10).
         if (vpu::Dot(lUnitVel, mTransform.xAxis) < 0.0f)
@@ -2972,9 +2974,13 @@ namespace Vehicle
         // 0x825D35F8..0x825D3634: acos(clamp(dot(unitVel, forward), -1, 1)). The lower
         // clamp is -1, not zero, so reverse travel can produce the full pi-angle response.
         f32 lfForwardDot = vpu::Dot(lvUnitVelocity, mTransform.zAxis);
-        if (lfForwardDot < -1.0f) lfForwardDot = -1.0f;
-        if (lfForwardDot >  1.0f) lfForwardDot =  1.0f;
-        const f32 lfVelocityAngle = std::acos(lfForwardDot);   // XMVectorACos
+        // The clamp here is the SCALAR fsel pair, not vmaxfp / vminfp: 0x825D3614 fsubs -1 - dot ;
+        // 0x825D3618 fsel -> Max(-1, dot) (flt_820037C8 = -1.0) ; 0x825D3620 fsubs 1 - v ; 0x825D3624
+        // fsel -> Min(1, v) (flt_82001C98 = 1.0) -- rw::math::fpu::Clamp, which takes a NaN dot to
+        // 1.0. Then 0x825D3634 bl XMVectorACos (crash parity FX-GATE: the if-clamp kept a NaN, and
+        // std::acos stood in for the console's arc-cosine).
+        lfForwardDot = rw::math::fpu::Clamp(lfForwardDot, -1.0f, 1.0f);
+        const f32 lfVelocityAngle = XboxMath::XMVectorACos(lfForwardDot);
 
         // 0x825D3644..0x825D36D4: scale by |Steering| and 1.5, cap at the attrib max
         // angle converted to radians, then take the sign from dot(unitVel, transform X).
@@ -3726,9 +3732,13 @@ namespace Vehicle
         const Vector3 lLinearVelocityDir = vpu::Normalize(mLinearVelocity);
         const Vector3 lForwardDir = vpu::Normalize(mTransform.zAxis);
         f32 lfCosAngle = vpu::Dot(lForwardDir, lLinearVelocityDir);
-        lfCosAngle = std::min(1.0f, std::max(-1.0f, lfCosAngle));
+        // 0x825FA8A0 vmaxfp against -1.0, 0x825FA8A4 vminfp against +1.0: a NaN dot stays NaN (vmaxfp /
+        // vminfp hand back a NaN operand), where std::max(-1, NaN) returned -1 and the angle came
+        // out as pi. Then 0x825FA8A8 bl XMVectorACos (crash parity FX-GATE).
+        if (lfCosAngle < -1.0f) lfCosAngle = -1.0f;
+        if (lfCosAngle >  1.0f) lfCosAngle =  1.0f;
 
-        f32 lfDriftAngle = std::acos(lfCosAngle);
+        f32 lfDriftAngle = XboxMath::XMVectorACos(lfCosAngle);
         if (vpu::Dot(vpu::Cross(lForwardDir, lLinearVelocityDir), mTransform.yAxis) < 0.0f)
             lfDriftAngle = KF_TWO_PI - lfDriftAngle;
 
@@ -3833,9 +3843,13 @@ namespace Vehicle
         const Vector3 lLinearVelocityDir = vpu::Normalize(mLinearVelocity);
         const Vector3 lForwardDir = vpu::Normalize(mTransform.zAxis);
         f32 lfCosAngle = vpu::Dot(lForwardDir, lLinearVelocityDir);
-        lfCosAngle = std::min(1.0f, std::max(-1.0f, lfCosAngle));
+        // 0x825D2678 vmaxfp against -1.0, 0x825D267C vminfp against +1.0: a NaN dot stays NaN (vmaxfp /
+        // vminfp hand back a NaN operand), where std::max(-1, NaN) returned -1 and the angle came
+        // out as pi. Then 0x825D2680 bl XMVectorACos (crash parity FX-GATE).
+        if (lfCosAngle < -1.0f) lfCosAngle = -1.0f;
+        if (lfCosAngle >  1.0f) lfCosAngle =  1.0f;
 
-        f32 lfDriftAngle = std::acos(lfCosAngle);
+        f32 lfDriftAngle = XboxMath::XMVectorACos(lfCosAngle);
         if (vpu::Dot(vpu::Cross(lForwardDir, lLinearVelocityDir), mTransform.yAxis) < 0.0f)
             lfDriftAngle = KF_TWO_PI - lfDriftAngle;
 
@@ -3944,8 +3958,11 @@ namespace Vehicle
         const VehicleAttribs::DriftAttribs& lrDriftAttribs = mpAttribs->mDriftAttribs;
         const Vector3 lUnitVel = vpu::Normalize(mLinearVelocity);
         f32 lfCosAngle = vpu::Dot(lUnitVel, mTransform.zAxis);
-        lfCosAngle = std::min(1.0f, std::max(-1.0f, lfCosAngle));
-        const f32 lfAngle = std::acos(lfCosAngle) * KF_RAD_TO_DEG;
+        // 0x825D2BDC vmaxfp against -1.0, 0x825D2BE0 vminfp against +1.0: a NaN dot stays NaN (the
+        // old std::max(-1, NaN) returned -1). Then 0x825D2BE4 bl XMVectorACos (crash parity FX-GATE).
+        if (lfCosAngle < -1.0f) lfCosAngle = -1.0f;
+        if (lfCosAngle >  1.0f) lfCosAngle =  1.0f;
+        const f32 lfAngle = XboxMath::XMVectorACos(lfCosAngle) * KF_RAD_TO_DEG;
         mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.w = lfAngle;
 
         f32 lfSideForceFactor = 0.0f;
