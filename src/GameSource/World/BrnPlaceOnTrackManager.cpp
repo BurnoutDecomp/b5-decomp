@@ -1,4 +1,5 @@
 #include "GameSource/World/BrnPlaceOnTrackManager.h"
+#include "GameSource/Director/BrnDirectorHarness.h"   // [harness] the sweep's BRN_SWEEP_WAIT_ROAMING gate
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
@@ -1132,6 +1133,41 @@ void PlaceOnTrackManager::ArmCrashSweepBringUp()
         if( ( lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ ) < ( sfArmDistance * sfArmDistance ) )
         {
             return;   // still parked where it spawned -- the drive has not started
+        }
+
+        // [HARNESS, opt-in BRN_SWEEP_WAIT_ROAMING=1 -- NOT X360] (FX-DIRECTOR2 2026-09-25). Hold shot 0
+        // until the director's arbitrator is back in ArbStateRoaming. The drive that arms the sweep
+        // is the junkyard exit, and on that exit ArbStateCarSelect plays its OUTRO take
+        // (JY_MC_Outro_TEST2, 3.016 s) and owns the camera until it ends -- the console does the same
+        // (ArbStateCarSelect::Update @0x8226F5D0 case 6 leaves only on HasFinishedOrFailed). A shot
+        // fired at the arm crashes INSIDE that outro, so the crash camera -- and the hard stop's time
+        // scale -- can only start when the outro ends (measured, fxd2trace_h225_s80_r1: crash f604,
+        // camera f687). Not a crash any normal drive produces. Unset: shot 0 fires at the arm, as it
+        // always has.
+        {
+            static s32 siWaitRoaming = -1;
+            if( siWaitRoaming < 0 )
+            {
+                const char* lpcWait = std::getenv( "BRN_SWEEP_WAIT_ROAMING" );
+                siWaitRoaming = ( lpcWait != 0 && lpcWait[0] != '\0' && lpcWait[0] != '0' ) ? 1 : 0;
+            }
+            static s32 siWaitedFrames = 0;
+            if( siWaitRoaming == 1 && !BrnDirector::Harness::gbArbitratorInRoaming )
+            {
+                if( siWaitedFrames++ == 0 && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[sweep] armed; holding shot 0 until the director is back in ArbStateRoaming "
+                           "(BRN_SWEEP_WAIT_ROAMING)\n";
+                }
+                return;
+            }
+            if( siWaitRoaming == 1 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[sweep] director in ArbStateRoaming after " << siWaitedFrames
+                    << " held frames -- firing shot 0\n";
+            }
         }
 
         seStage           = E_SWEEP_RUNNING;

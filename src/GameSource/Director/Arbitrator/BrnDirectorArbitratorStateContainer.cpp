@@ -1,4 +1,5 @@
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h"
+#include "GameSource/Director/BrnDirectorHarness.h"        // [harness] gbArbitratorInRoaming
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] gpDebugPrint
 #include <cstdlib>                                          // [diag] getenv
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -18,6 +19,12 @@
 
 namespace BrnDirector
 {
+    // [HARNESS -- NOT X360] see BrnDirectorHarness.h. Written only by SetCurrentState below.
+    namespace Harness
+    {
+        bool gbArbitratorInRoaming = false;
+    }
+
     // X360 0x827E2D18. The source build's synthesized constructor: it default-constructs
     // every embedded subobject -- writing each ArbitratorState subobject's vtable pointer
     // (the off_820C... loads) and initialising its interior members to the -1 sentinel
@@ -70,6 +77,9 @@ namespace BrnDirector
         }
 
         mpCurrentState = GetState(leState);
+
+        // [HARNESS -- NOT X360] the crash sweep's opt-in BRN_SWEEP_WAIT_ROAMING gate reads this.
+        Harness::gbArbitratorInRoaming = (leState == E_STATE_ROAMING);
     }
 
     void ArbitratorStateContainer::ConstructAll()
