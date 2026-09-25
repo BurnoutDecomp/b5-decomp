@@ -55,7 +55,7 @@ namespace CgsSceneManager
         bool       PushResult(u16 lu16Result);                               // :268  X360 0x828ADAC0
         bool       PushResults(const u16* lpResults, u32 luNumResults);      // :298  X360 0x828ADB98
         s32        GetNumResultsWritten() const;                             // :326  X360 0x828ADC60
-        s32        GetNumResultsAttempted() const;                           // :346 (declare-only)
+        s32        GetNumResultsAttempted() const;                           // :346  X360 0x828ADCD8
         u32        GetNumBatches() const;                                    // :381 (declare-only)
         const u16* GetBatchByOffset(u32 luOffset, u32* lpNextBatchOffsetOut, // :407  X360 0x828ADD40
                                     u32* lpNumResultsOut) const;
@@ -107,9 +107,14 @@ namespace CgsSceneManager
         return static_cast<s32>(KU_MaxResults) - miTotalBufferSize;
     }
 
+    // X360 0x828ADCD8 (an export hole; LooseOctree::LineTestOptimized calls it at 0x828CA794 and
+    // VolumeTest @0x828CA910 inlines it). The batch assert (:348, `lbzx +0x8094`), then +0x808C --
+    // the GetNumResultsWritten twin. (Until 2026-09-25 the body skipped the assert.)
     template <u32 KU_MaxResults>
     s32 CoarseQueryResultBuffer<KU_MaxResults>::GetNumResultsAttempted() const
     {
+        CGS_ASSERT(mbInABatch,
+                   "GetNumResultsAttempted called outside of a BeginResultsBatch/EndResultsBatch pair");
         return miNumResultsAttemptedThisBatch;
     }
 

@@ -30,6 +30,8 @@
 //   LooseOctree::SphereTest / SphereTestRecursive   (the coarse sphere query, 2026-09-11)
 //   LooseOctree::LineTestOptimized              @ 0x828CA5F8  (2026-09-25, FX-FOLLOWUPS)
 //   LooseOctree::LineTestRecursive              @ 0x828BCF50  (2026-09-25, FX-FOLLOWUPS)
+//   LooseOctree::VolumeTest                     @ 0x828CA910  (2026-09-25, FX-FOLLOWUPS)
+//   LooseOctree::VolumeTestRecursive            @ 0x828BDE28  (2026-09-25, FX-FOLLOWUPS)
 //
 // Behaviour-faithful (semantic parity): the X360 hand-vectorises the geometry over
 // VMX; these bodies reproduce the same math on the named Vector3/Vector4 lanes.
@@ -78,6 +80,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG culling wave]
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"      // TestLineSphere4 / TestLineBoundingBoxAgainstAxisAlignedBox4
+#include "vendor/renderware/collision/CollisionVolume.hpp"                    // rw::collision::Volume / BoxVolume / SphereVolume
 
 #include <cmath>     // std::fabs
 #include <cstdio>    // std::snprintf ([DIAG] BRN_OCTREE_LINE_DIAG)
@@ -125,6 +128,8 @@ namespace CgsSceneManager
         , muNumNodeGroups(0)
         , muAdaptiveNodeSplitThreshold(0)
         , muAdaptiveMaxDepth(0)
+        , mpEntityVolume(0)
+        , mpNodeVolume(0)
         , mpVolumeVolumeQuery(0)
     {
         mCentrePos.x = mCentrePos.y = mCentrePos.z = mCentrePos.w = 0.0f;
@@ -240,6 +245,13 @@ namespace CgsSceneManager
 
         AllocRecursive(0, 0, KU_INVALID_NODE);
 
+        // 0x828C9E34..0x828C9F7C -- the volume walk's two frames start as identity rotations with an all-zero
+        // translation row, w included (1.0 is flt_82001C98, 0.0 flt_82001CC0; the rows are staged on the stack
+        // and stored with stvx128 at +0x00 / +0x10 / +0x20 / +0x30 of mNodeTransform (+0x8D8D0) and
+        // mEntityTransform (+0x8D910)) -- exactly Matrix44Affine::SetIdentity's four rows.
+        mNodeTransform.SetIdentity();
+        mEntityTransform.SetIdentity();
+
         // 0x828C9F50..0x828C9FE4 -- the entity arm's VolumeVolumeQuery, built in place in
         // macVolumeVolumeQueryBuffer (+0x446C0) for 100 volumes / 100 results: the descriptor, its size
         // assert (:208, `li r5, 0xD0`), then Initialize with the buffer table {buffer, 0, 0, 0, 0}
@@ -257,6 +269,21 @@ namespace CgsSceneManager
             mpVolumeVolumeQuery = static_cast<rw::collision::VolumeVolumeQuery*>(
                 rw::collision::VolumeVolumeQuery::Initialize(lapBuffer, KI_OCTREE_VOLUME_QUERY_NUM_VOLUMES,
                                                              KI_OCTREE_VOLUME_QUERY_NUM_RESULTS));
+        }
+
+        // 0x828C9FE8..0x828CA09C -- the walk's two query volumes, built in place in their buffers with a
+        // resource table {buffer, 0, 0, 0, 0}: a BoxVolume of half extents {1, 1, 1} (v1 = {flt_82001C98 x3,
+        // 0}, table var_1C0 -> +0x8D6C0) stored at +0x8D8C4, then a SphereVolume of radius 1 (f1 =
+        // flt_82001C98, table var_1A0 -> +0x8D7C0) stored at +0x8D8C0. VolumeTestRecursive rewrites the box's
+        // half extents per node and the sphere's radius per entity.
+        {
+            rw::Resource lBoxResource = {};
+            lBoxResource.m_baseResources[0] = macBoxVolumeBuffer;
+            mpNodeVolume = rw::collision::BoxVolume::Initialize(lBoxResource, 1.0f, 1.0f, 1.0f);
+
+            rw::Resource lSphereResource = {};
+            lSphereResource.m_baseResources[0] = macSphereVolumeBuffer;
+            mpEntityVolume = rw::collision::SphereVolume::Initialize(lSphereResource, 1.0f);
         }
 
         for (u32 luJob = 0; luJob < KU_NUM_FRUSTUM_TEST_JOBS; ++luJob)
@@ -1893,6 +1920,149 @@ namespace CgsSceneManager
             if (labEnabled[luChild] && Mask4LaneSet(lCrossed, luChild))
             {
                 LineTestRecursive(static_cast<u16>(lu16FirstChild + luChild), lpParams);
+            }
+        }
+    }
+
+    // =============================================================================================================
+    // THE VOLUME WALK (2026-09-25, crash parity FX-FOLLOWUPS item 2) -- the entity arm of the scene manager's
+    // volume tests: which entities' bounding spheres does a caller's rwcollision volume intersect? The narrow
+    // test is the octree's own VolumeVolumeQuery (built by Construct in macVolumeVolumeQueryBuffer) run with the
+    // caller's volume as its single input and the octree's moving BoxVolume / SphereVolume as its query volume.
+    // =============================================================================================================
+
+    // DWARF CgsLooseOctree.cpp:126 / X360 dword_82F33F40 ("Octree Volume Test") -- not registered by the tree's
+    // Construct yet (the header note), so -1 == invalid handle and both PerfMonCpu calls are inert.
+    s32 LooseOctree::_miVolumeTestPerfMon = -1;
+
+    // @ 0x828CA910 -- VolumeTest (slot 8, DWARF CgsLooseOctree.h:284).
+    //   0x828CA928..0x828CA938  the parameter block on the stack (sp+0x50): volume r5 -> +0x00, flags r4 ->
+    //                           +0x04, buffer r7 -> +0x08, transform r6 -> +0x0C
+    //   0x828CA93C / 0x828CA954 PerfMonCpu::StartMonitor / StopMonitor(dword_82F33F40, re-read) around
+    //   0x828CA950              VolumeTestRecursive(0, &params)
+    //   0x828CA95C..0x828CA9B0  the inlined GetNumResultsAttempted (its :348 batch assert, then +0x808C) > 0
+    bool LooseOctree::VolumeTest(u32 lx32EntityTypeFlags, const VolRef::Volume* lpVolume,
+                                 const Matrix44Affine* lpTransform,
+                                 CoarseQueryResultBuffer<16384>* lpResultBufferOut)
+    {
+        SpatialPartition::VolumeTestRecursiveFuncParams lParams;
+        lParams.mpVolume            = lpVolume;
+        lParams.mx32EntityTypeFlags = lx32EntityTypeFlags;
+        lParams.mpResultBufferOut   = lpResultBufferOut;
+        lParams.mpTransform         = lpTransform;
+
+        CgsDev::PerfMonCpu::StartMonitor(_miVolumeTestPerfMon);   // lwz r3, dword_82F33F40
+        VolumeTestRecursive(0, &lParams);
+        CgsDev::PerfMonCpu::StopMonitor(_miVolumeTestPerfMon);    // lwz r3, dword_82F33F40 (re-read)
+
+        return lpResultBufferOut->GetNumResultsAttempted() > 0;
+    }
+
+    namespace
+    {
+        // The nine stores VolumeTestRecursive primes the octree's volume query with before each test (the node:
+        // 0x828BDF00..0x828BDF20; each entity: 0x828BE030..0x828BE050, the same nine): the caller's volume is
+        // the single INPUT -- the parameter block's own address is the one-entry input-volume array and
+        // &mpTransform the one-entry matrix array -- and the octree's moving box / sphere is the QUERY volume.
+        // The VolRef::Volume -> rw::collision::Volume step is the one DWARF volume.h:39 makes (the same cast
+        // OverlapCullingModule::DoPairQuery and CgsVolumeManager.cpp:212 make).
+        void PrimeOctreeVolumeQuery(rw::collision::VolumeVolumeQuery* lpQuery,
+                                    SpatialPartition::VolumeTestRecursiveFuncParams* lpParams,
+                                    const rw::collision::Volume* lpQueryVolume,
+                                    const Matrix44Affine* lpQueryTransform)
+        {
+            lpQuery->m_padding         = 0.0f;                                        // +0x14 (flt_82001CC0)
+            lpQuery->m_inputVols       =
+                reinterpret_cast<const rw::collision::Volume**>(&lpParams->mpVolume);  // +0x00
+            lpQuery->m_inputMats       = &lpParams->mpTransform;                      // +0x04
+            lpQuery->m_numInputs       = 1;                                           // +0x08
+            lpQuery->m_currInput       = 0;                                           // +0x0C
+            lpQuery->m_volRefPairCount = 0;                                           // +0x1C
+            lpQuery->m_queryVol        = lpQueryVolume;                               // +0x38
+            lpQuery->m_queryMtx        = lpQueryTransform;                            // +0x3C
+            lpQuery->m_cullTable       = 0;                                           // +0x10
+        }
+    }
+
+    // @ 0x828BDE28 -- VolumeTestRecursive (DWARF CgsLooseOctree.cpp:2123).
+    //
+    // THE NODE (0x828BDE7C..0x828BDF30): the node's loose box becomes the query BoxVolume -- half extents
+    //   {HalfSize, HalfHeight, HalfSize} (mParams0.w and mParams1.z, merged by vperm unk_82CDA350 + vrlimi128
+    //   and stored at +0x44 / +0x48 / +0x4C) at the node centre (mPosition, all four lanes, stvx128 into
+    //   mNodeTransform's translation row +0x8D900). If the caller's volume intersects none of it
+    //   (GetPrimitiveIntersections == 0) the whole sub-tree is pruned. There is NO node type-mask gate here,
+    //   unlike the line walk.
+    // THE ENTITIES (0x828BDF34..0x828BE08C), when muNumElements > 0: the node's link list is walked from
+    //   muHeadIndex through mu16NextEntity until the 0xFFFF sentinel (the count only gates the entry; the
+    //   console also tests each link POINTER for null, `cmplwi r20, 0`, which a host array element never is).
+    //   A link whose type mask meets the query's recovers its entity index (CalcEntityIndex, :417) and bounding
+    //   sphere (GetEntityBoundingSphere, :392), which becomes the query SphereVolume -- the radius (w) into
+    //   +0x50, the whole sphere vector into mEntityTransform's translation row +0x8D940 (so its w carries the
+    //   radius) -- and the entity is pushed when the caller's volume intersects it.
+    // THE CHILDREN (0x828BE090..0x828BE0F0): each of the four children whose sub-tree mask meets the query is
+    //   recursed into, in child order; the child's own box test is its first step.
+    void LooseOctree::VolumeTestRecursive(u16 lu16NodeIndex, SpatialPartition::VolumeTestRecursiveFuncParams* lpParams)
+    {
+        const LooseOctreeNode&          lrNode         = mpNodes[lu16NodeIndex];
+        CoarseQueryResultBuffer<16384>* lpResultBuffer = lpParams->mpResultBufferOut;   // lwz r15, 8(r28)
+
+        mpNodeVolume->mBoxData.mfHx = lrNode.GetHalfSize();                               // stfs +0x44
+        mpNodeVolume->mBoxData.mfHy = lrNode.GetHalfHeight();                             // stfs +0x48
+        mpNodeVolume->mBoxData.mfHz = lrNode.GetHalfSize();                               // stfs +0x4C
+        mNodeTransform.wAxis.x = lrNode.mPosition.x;                                      // stvx128 +0x8D900
+        mNodeTransform.wAxis.y = lrNode.mPosition.y;
+        mNodeTransform.wAxis.z = lrNode.mPosition.z;
+        mNodeTransform.wAxis.w = lrNode.mPosition.w;
+
+        PrimeOctreeVolumeQuery(mpVolumeVolumeQuery, lpParams, mpNodeVolume, &mNodeTransform);
+        if (mpVolumeVolumeQuery->GetPrimitiveIntersections() == 0)                        // cmplwi r3, 0 ; beq
+        {
+            return;
+        }
+
+        if (static_cast<s32>(lrNode.muNumElements) > 0)                                   // cmpwi / ble
+        {
+            u16 lu16Link = lrNode.muHeadIndex;                                            // lhz 0x4C(r26)
+            for (;;)
+            {
+                const SpatialPartitionEntityLink& lrLink = GetEntityLink(lu16Link);
+                if ((lpParams->mx32EntityTypeFlags & lrLink.mx32TypeFlags) != 0)
+                {
+                    const u16 lu16Entity = CalcEntityIndex(lrLink);
+                    const CgsGeometric::Sphere& lrSphere = GetEntityBoundingSphere(lu16Entity);
+
+                    mpEntityVolume->mfRadius = lrSphere.mPositionRadius.w;                // stfs +0x50
+                    mEntityTransform.wAxis.x = lrSphere.mPositionRadius.x;                // stvx128 +0x8D940
+                    mEntityTransform.wAxis.y = lrSphere.mPositionRadius.y;
+                    mEntityTransform.wAxis.z = lrSphere.mPositionRadius.z;
+                    mEntityTransform.wAxis.w = lrSphere.mPositionRadius.w;
+
+                    PrimeOctreeVolumeQuery(mpVolumeVolumeQuery, lpParams, mpEntityVolume, &mEntityTransform);
+                    if (mpVolumeVolumeQuery->GetPrimitiveIntersections() != 0)
+                    {
+                        lpResultBuffer->PushResult(lu16Entity);
+                    }
+                }
+
+                lu16Link = lrLink.mu16NextEntity;                                         // lhz 4(r20)
+                if (lu16Link == KU_INVALID_ENTITY_LINK)                                   // cmplwi 0xFFFF ; beq
+                {
+                    break;
+                }
+            }
+        }
+
+        const u16 lu16FirstChild = lrNode.muFirstChildIndex;                              // lhz 0x42(r26)
+        if (lu16FirstChild == KU_INVALID_NODE)
+        {
+            return;
+        }
+        for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)                       // li r27, 4
+        {
+            const u16 lu16Child = static_cast<u16>(lu16FirstChild + luChild);
+            if ((lpParams->mx32EntityTypeFlags & mpNodesEntityInfo[lu16Child].mxSubTreeEntityFlags) != 0)
+            {
+                VolumeTestRecursive(lu16Child, lpParams);
             }
         }
     }

@@ -110,6 +110,9 @@ namespace CgsSceneManager
                                           CoarseQueryResultBuffer<16384>*) {}
     void LooseOctree::AddEntityToGraph(u16) {}
     void LooseOctree::RemoveEntityFromGraph(u16) {}
+    // Virtuals a later revision's header adds (the runner writes a stub for each one that revision declares,
+    // e.g. VolumeTest from item 2 step C; empty for the revisions before it).
+#include "fxfu_oct_stubs.inc"
 }
 
 using namespace CgsSceneManager;

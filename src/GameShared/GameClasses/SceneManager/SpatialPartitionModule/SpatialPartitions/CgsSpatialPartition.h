@@ -44,6 +44,10 @@ namespace CgsSceneManager
     struct SpatialPartitionConstructParams;
     template <u32 KU_MaxResults> struct CoarseQueryResultBuffer;
     namespace SceneManagerIO { struct Frustum; }
+
+    // The serialised rwcollision volume record (the same incomplete entity CgsVolumeStore.h:82 and
+    // CgsOverlapCullingModule.h:62 declare; DWARF volume.h:39 typedefs it to rw::collision::Volume).
+    namespace VolRef { struct Volume; }
 }
 
 namespace CgsGeometric { struct Frustum; }
@@ -95,6 +99,19 @@ namespace CgsSceneManager
             CoarseQueryResultBuffer<16384>* mpResultBufferOut;
         };
 
+        // The recursive volume walk's per-query parameter block -- DWARF CgsSpatialPartition.h:171-176.
+        // LooseOctree::VolumeTest @0x828CA910 builds it on its stack (volume +0x00, flags +0x04, buffer
+        // +0x08, transform +0x0C) and VolumeTestRecursive @0x828BDE28 hands the octree's volume query the
+        // block's own address as its one-entry input-volume array (`stw r28, 0(r11)`) and &mpTransform as
+        // its one-entry matrix array (`addi r25, r28, 0xC`). Read by name only (pointers widen on the host).
+        struct VolumeTestRecursiveFuncParams
+        {
+            const VolRef::Volume*           mpVolume;              // +0x00
+            u32                             mx32EntityTypeFlags;   // +0x04
+            CoarseQueryResultBuffer<16384>* mpResultBufferOut;     // +0x08
+            const Matrix44Affine*           mpTransform;           // +0x0C
+        };
+
         virtual ~SpatialPartition() {}
 
         // ---- the X360 vtable, by slot (SpatialPartitionManager's asm dispatches) ----
@@ -123,9 +140,9 @@ namespace CgsSceneManager
         //   r4 = mx32EntityTypeFlags, r5 = the coarse result buffer, v1/v2 = start/end). DWARF
         //   CgsSpatialPartition.h:221: `virtual bool LineTest(EntityTypeFlags, Vector3, Vector3,
         //   CoarseQueryResultBufferDefault*)`. DebugRender (slot 4) sits before it and
-        //   FrustumTest / VolumeTest (slots 7/8) after it; those three are still undeclared
-        //   here (no mounted caller yet) -- add them IN THAT ORDER when one lands. Host vtable
-        //   order is not load-bearing (named virtual calls).
+        //   FrustumTest / VolumeTest (slots 7/8) after it; DebugRender and FrustumTest are still
+        //   undeclared here (no mounted caller yet) -- add them IN THAT ORDER when one lands. Host
+        //   vtable order is not load-bearing (named virtual calls).
         //
         // slot  5  SphereTest(entityTypeFlags, centre, radius, resultBufferOut)
         //   ADDED 2026-09-11, dispatched by SceneManagerModule::ProcessCoarseSphereTest. The
@@ -135,6 +152,14 @@ namespace CgsSceneManager
                                 CoarseQueryResultBuffer<16384>* lpResultBufferOut) = 0;
         virtual bool LineTest(u32 lx32EntityTypeFlags, Vector3 lLineStart, Vector3 lLineEnd,
                               CoarseQueryResultBuffer<16384>* lpResultBufferOut) = 0;
+        // slot  8  VolumeTest(entityTypeFlags, volume, transform, resultBufferOut)
+        //   ADDED 2026-09-25 (crash parity FX-FOLLOWUPS). X360 vtbl+0x20; DWARF CgsLooseOctree.h:284
+        //   `virtual bool VolumeTest(EntityTypeFlags, const VolRef::Volume*, const Matrix44Affine*,
+        //   CoarseQueryResultBufferDefault*)`; LooseOctree::VolumeTest @0x828CA910 is the one
+        //   implementation. Its caller is SceneManagerModule's volume-test dispatch.
+        virtual bool VolumeTest(u32 lx32EntityTypeFlags, const VolRef::Volume* lpVolume,
+                                const Matrix44Affine* lpTransform,
+                                CoarseQueryResultBuffer<16384>* lpResultBufferOut) = 0;
         // slot  9  FrustumTestVp(entityTypeFlags, frustum, viewProjection, resultBufferOut)
         //   ADDED 2026-09-11, dispatched by SceneManagerModule::ProcessCoarseFrustumTestVp with
         //   the query's entity-type flags, its eight swizzled frustum planes, its view-projection

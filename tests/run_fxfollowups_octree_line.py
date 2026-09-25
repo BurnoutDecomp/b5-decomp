@@ -98,6 +98,11 @@ def numeric(tree):
               "raw-offset body" % OLD_REV)
         return None
     shadow = {path: tree.read(path) for path in (OCT_H, SP_H, LT_H)}
+    # Stubs for the virtuals this test does not exercise that only later revisions declare.
+    stubs = ""
+    if re.search(r"virtual\s+bool\s+VolumeTest\s*\(", code_only(tree.read(OCT_H))):
+        stubs += ("bool LooseOctree::VolumeTest(u32, const VolRef::Volume*, const Matrix44Affine*, "
+                  "CoarseQueryResultBuffer<16384>*) { return false; }\n")
     with tempfile.TemporaryDirectory(prefix="brn_fxfu_octline_") as directory:
         sources = Path(directory)
         (sources / "CgsLineTests.cpp").write_text(tree.read(LT_CPP), encoding="utf-8")
@@ -105,7 +110,8 @@ def numeric(tree):
         return compile_and_run(Path(__file__).with_name("FxFollowupsOctreeLine.cpp"), "fxfu_oct.inc", oct_inc,
                                "FxFollowupsOctreeLine", shadow=shadow,
                                extra_sources=(sources / "CgsLineTests.cpp", sources / "CgsSpatialPartition.cpp"),
-                               extra_files={"fxfu_oct_opt.inc": opt_inc, "fxfu_oct_old.inc": old_inc})
+                               extra_files={"fxfu_oct_opt.inc": opt_inc, "fxfu_oct_old.inc": old_inc,
+                                            "fxfu_oct_stubs.inc": stubs})
 
 
 def main():
