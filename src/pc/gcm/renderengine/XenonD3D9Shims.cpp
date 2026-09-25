@@ -49,6 +49,7 @@
 #include <unordered_map>
 #include <map>
 #include <vector>
+#include <intrin.h>  // [diag] _ReturnAddress (the [stride0] binder witness, BRN_STRIDE0_DIAG)
 extern "C++" { namespace renderengine { extern u32 guDiagWorldDraws; } }   // [DIAG] issue #30 per-present counters (device.cpp); declared up here because the world draw sites precede the later extern block
 
 // The renderengine D3D device singleton alias the fast-path callers name
@@ -189,6 +190,10 @@ namespace
     //           MeshHelper. That geometry is rewritten every frame, so it stays on the
     //           DrawIndexedPrimitiveUP path, which is what UP is for.
     bool                         sbVertexSourceFastSet = false;
+    // The fast-set publisher bound stream 0 with stride 0: on the console that leaves the stride baked into
+    // the vertex shader's vfetch in force, so the draw takes the bound declaration's stream-0 extent
+    // (ResolveFastSetStrideFromShader). Set by WorldDraw_SetVertexSourceRaw only.
+    bool                         sbFastSetStrideFromShader = false;
 
     // Some D3D9 drivers (notably current NVIDIA drivers) do not expose
     // D3DDTCAPS_DEC3N. DrawIndexedPrimitiveUP already copies the submitted vertex
@@ -2526,6 +2531,7 @@ namespace renderengine
     {
         spVertexSource = static_cast<const VertexBufferHeader32*>(lpVertexBufferHeader);
         sbVertexSourceFastSet = false;                 // -> the RETAINED draw path
+        sbFastSetStrideFromShader = false;
         suVertexStride = luStride;
         suVertexSourceStride = suLastDeclSourceStride;
         suVertexDec3nCount   = suLastDeclDec3nCount;
@@ -2556,8 +2562,14 @@ namespace renderengine
     //     end. That is the stretched-ribbon geometry.
     //
     // The fast-set path needs a plan that describes ITS OWN buffer: the stride the caller gave,
-    // no expansion. A stride of 0 (the console's "clear the previous binding" call) stays 0 and
-    // the draw path's own early-out catches it.
+    // no expansion. A stride of 0 is NOT a cleared binding: the console's D3DDevice_SetStreamSource
+    // @0x8293D688 stores stride >> 2 for the stream and raises the vfetch-patch dirty bit only when
+    // that is nonzero, so a 0 leaves the stride baked into the vertex shader's own vfetch in force.
+    // renderengine::MeshHelper::Dispatch @0x8227B530 binds every mesh that way (`li r7, 0`) -- the
+    // debris meshes. The stash keeps the 0 and remembers it (sbFastSetStrideFromShader); the draw
+    // then takes the bound declaration's stream-0 extent, the PC's form of that baked stride
+    // (ResolveFastSetStrideFromShader, FLAG PC platform leaf). Every other fast-set binder that
+    // binds a 0 re-binds a real stride before it draws (the [stride0] witness, 2026-09-25).
     //
     // ⚠ KNOWN RESIDUAL, deliberately not papered over: because this path performs no expansion,
     // a fast-set declaration that really does carry a DEC3N element cannot be created on a driver
@@ -2569,6 +2581,7 @@ namespace renderengine
     {
         spVertexSource        = static_cast<const VertexBufferHeader32*>(lpVertexBufferHeader);
         sbVertexSourceFastSet = true;                  // -> the DrawIndexedPrimitiveUP path
+        sbFastSetStrideFromShader = (luStride == 0);
         suVertexStride        = luStride;
         suVertexSourceStride  = luStride;
         suVertexDec3nCount   = 0;
@@ -2580,6 +2593,263 @@ namespace renderengine
     {
         spResetEnabled = lbEnabled;
         suResetIndex   = luResetIndex;
+    }
+
+    // =====================================================================================
+    // [FLAG PC platform leaf -- DIAG, default OFF: BRN_STRIDE0_DIAG=1] NOT IN THE X360 BINARY.
+    // WHO REACHES A FAST-SET DRAW WITH A STRIDE-0 STREAM 0? DELETE-WHEN-STABLE.
+    //
+    // A stream-0 bind with stride 0 does not mean the same thing on the two sides. The console's
+    // D3DDevice_SetStreamSource @0x8293D688 stores stride >> 2 for the stream and raises the
+    // vfetch-patch dirty bit only when that is nonzero, so a stride of 0 leaves the stride baked
+    // into the vertex shader's own vfetch in force. Here WorldDraw_SetVertexSourceRaw keeps the 0
+    // and both fast-set draw paths skip on it. This counts, per BINDER -- the return address of
+    // the stream-0 D3DDevice_SetStreamSource that published the stash, printed as an RVA to look
+    // up in Burnout_PC.map --
+    //   binds       every stream-0 bind it made,
+    //   zero-binds  the ones of a live buffer with stride 0,
+    //   zero-draws  the fast-set draws that ARRIVED at WorldDraw_IndexedUP / NonIndexedUP with the
+    //               stash's stride still 0 -- the only draws whose meaning depends on stride 0.
+    // One line the first time a binder does either of the last two, and a tally every 30 s of every
+    // binder with a nonzero zero-bind or zero-draw count. Capped.
+    // =====================================================================================
+    namespace
+    {
+        const u32 KU_STRIDE0_DIAG_BINDERS  = 32u;
+        const u32 KU_STRIDE0_DIAG_LINES    = 400u;
+        const u64 KU_STRIDE0_DIAG_TALLY_MS = 30000u;
+
+        struct Stride0DiagBinder
+        {
+            u64 muRva;
+            u32 muBinds;
+            u32 muZeroBinds;
+            u32 muZeroDraws;
+        };
+
+        Stride0DiagBinder saStride0DiagBinders[KU_STRIDE0_DIAG_BINDERS];
+        u32 suStride0DiagBinderCount = 0;
+        u32 suStride0DiagOverflow    = 0;
+        s32 siStride0DiagCurrent     = -1;   // the binder of the current fast-set stash
+        u32 suStride0DiagUnknown     = 0;    // stride-0 draws whose binder did not fit the table
+        u32 suStride0DiagLines       = 0;
+        u64 suStride0DiagLastTally   = 0;
+        s32 siStride0DiagArmed       = -1;
+
+        bool Stride0DiagArmed()
+        {
+            if (siStride0DiagArmed < 0)
+            {
+                const char* const lpcValue = std::getenv("BRN_STRIDE0_DIAG");
+                siStride0DiagArmed = (lpcValue != nullptr && lpcValue[0] == '1') ? 1 : 0;
+            }
+            return siStride0DiagArmed == 1;
+        }
+
+        void Stride0DiagLine(const char* lpcMessage)
+        {
+            if (suStride0DiagLines >= KU_STRIDE0_DIAG_LINES)
+                return;
+            ++suStride0DiagLines;
+            CgsDev::Log::WriteToLog(lpcMessage);
+            if (suStride0DiagLines == KU_STRIDE0_DIAG_LINES)
+                CgsDev::Log::WriteToLog("[stride0] line budget spent -- no more [stride0] lines\n");
+        }
+
+        void Stride0DiagTally()
+        {
+            const u64 luNow = GetTickCount64();
+            if (suStride0DiagLastTally == 0)
+                suStride0DiagLastTally = luNow;
+            if (luNow - suStride0DiagLastTally < KU_STRIDE0_DIAG_TALLY_MS)
+                return;
+            suStride0DiagLastTally = luNow;
+            char lacMsg[256];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[stride0] tally: %u binder(s) seen, %u past the table, %u stride-0 draw(s) of an "
+                          "unknown binder\n",
+                          suStride0DiagBinderCount, suStride0DiagOverflow, suStride0DiagUnknown);
+            Stride0DiagLine(lacMsg);
+            for (u32 luIndex = 0; luIndex < suStride0DiagBinderCount; ++luIndex)
+            {
+                const Stride0DiagBinder& lrBinder = saStride0DiagBinders[luIndex];
+                if (lrBinder.muZeroBinds == 0 && lrBinder.muZeroDraws == 0)
+                    continue;
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[stride0] tally: binder rva=0x%llX binds=%u zero-binds=%u zero-draws=%u\n",
+                              static_cast<unsigned long long>(lrBinder.muRva), lrBinder.muBinds,
+                              lrBinder.muZeroBinds, lrBinder.muZeroDraws);
+                Stride0DiagLine(lacMsg);
+            }
+        }
+    }
+
+    // Called by D3DDevice_SetStreamSource for every stream-0 bind, with ITS return address.
+    void Stride0Diag_NoteBind(const void* lpStreamData, u32 luStride, const void* lpReturnAddress)
+    {
+        if (!Stride0DiagArmed())
+            return;
+        const u64 luRva = static_cast<u64>(reinterpret_cast<uintptr_t>(lpReturnAddress)
+                                           - reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)));
+        s32 liIndex = -1;
+        for (u32 luIndex = 0; luIndex < suStride0DiagBinderCount; ++luIndex)
+        {
+            if (saStride0DiagBinders[luIndex].muRva == luRva)
+            {
+                liIndex = static_cast<s32>(luIndex);
+                break;
+            }
+        }
+        if (liIndex < 0)
+        {
+            if (suStride0DiagBinderCount < KU_STRIDE0_DIAG_BINDERS)
+            {
+                liIndex = static_cast<s32>(suStride0DiagBinderCount++);
+                saStride0DiagBinders[liIndex].muRva       = luRva;
+                saStride0DiagBinders[liIndex].muBinds     = 0;
+                saStride0DiagBinders[liIndex].muZeroBinds = 0;
+                saStride0DiagBinders[liIndex].muZeroDraws = 0;
+            }
+            else
+            {
+                ++suStride0DiagOverflow;
+            }
+        }
+        siStride0DiagCurrent = liIndex;
+        if (liIndex >= 0)
+        {
+            Stride0DiagBinder& lrBinder = saStride0DiagBinders[liIndex];
+            ++lrBinder.muBinds;
+            if (lpStreamData != nullptr && luStride == 0 && lrBinder.muZeroBinds++ == 0)
+            {
+                char lacMsg[192];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[stride0] binder rva=0x%llX: first stride-0 bind of a live stream 0 (vb=%p)\n",
+                              static_cast<unsigned long long>(luRva), lpStreamData);
+                Stride0DiagLine(lacMsg);
+            }
+        }
+        Stride0DiagTally();
+    }
+
+    // Called on entry to both fast-set draw paths, BEFORE their early-outs.
+    void Stride0Diag_AtDraw(const char* lpcPath, u32 luCount)
+    {
+        if (!Stride0DiagArmed())
+            return;
+        if (sbVertexSourceFastSet && spVertexSource != nullptr && suVertexStride == 0)
+        {
+            if (siStride0DiagCurrent >= 0)
+            {
+                Stride0DiagBinder& lrBinder = saStride0DiagBinders[siStride0DiagCurrent];
+                if (lrBinder.muZeroDraws++ == 0)
+                {
+                    char lacMsg[224];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                                  "[stride0] DRAW reached %s with a stride-0 fast-set stream 0: binder rva=0x%llX "
+                                  "count=%u vb bytes=%u\n",
+                                  lpcPath, static_cast<unsigned long long>(lrBinder.muRva), luCount,
+                                  spVertexSource->muSize);
+                    Stride0DiagLine(lacMsg);
+                }
+            }
+            else if (suStride0DiagUnknown++ == 0)
+            {
+                Stride0DiagLine("[stride0] DRAW with a stride-0 fast-set stream 0 whose binder did not fit the table\n");
+            }
+        }
+        Stride0DiagTally();
+    }
+
+    // [FLAG PC DIAG] BRN_STRIDE0_DIAG: the first stride a binder's stride-0 stream is drawn at.
+    void Stride0Diag_Resolved(u32 luStride, u32 luElements)
+    {
+        if (!Stride0DiagArmed() || siStride0DiagCurrent < 0)
+            return;
+        static u32 suResolvedMask = 0;
+        const u32 luBit = 1u << (static_cast<u32>(siStride0DiagCurrent) & 31u);
+        if ((suResolvedMask & luBit) != 0)
+            return;
+        suResolvedMask |= luBit;
+        char lacMsg[192];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[stride0] binder rva=0x%llX: stride-0 stream drawn at the bound declaration's stream-0 extent "
+                      "%u (%u elements)\n",
+                      static_cast<unsigned long long>(saStride0DiagBinders[siStride0DiagCurrent].muRva), luStride,
+                      luElements);
+        Stride0DiagLine(lacMsg);
+    }
+
+    // =====================================================================================
+    // FLAG PC platform leaf: THE STRIDE A STRIDE-0 FAST-SET STREAM IS DRAWN AT.
+    //
+    // A fast-set stream bound with stride 0 is drawn, on the console, at the stride baked into the
+    // vertex shader's vfetch (see WorldDraw_SetVertexSourceRaw). D3D9 has no such thing: a stream's
+    // stride is the application's to give. The PC's form of the baked stride is the declaration the
+    // shader was built for -- its stream-0 extent, the end of the furthest stream-0 element (the
+    // WorldTexturedVertex the debris meshes carry: FLOAT4 @0, FLOAT3 @16, FLOAT2 @28 -> 36). Read from
+    // the declaration bound AT THE DRAW (the renderer binds it in FlushVertexProgramState, after the
+    // mesh's stream), on every draw of such a stream, so a later declaration cannot leave a stale
+    // stride behind. A stream with no stream-0 element keeps 0, and the draw's own early-out skips it.
+    // =====================================================================================
+    u32 DeclTypeBytes(u32 luType)
+    {
+        switch (luType)
+        {
+        case D3DDECLTYPE_FLOAT1:    return 4u;
+        case D3DDECLTYPE_FLOAT2:    return 8u;
+        case D3DDECLTYPE_FLOAT3:    return 12u;
+        case D3DDECLTYPE_FLOAT4:    return 16u;
+        case D3DDECLTYPE_D3DCOLOR:  return 4u;
+        case D3DDECLTYPE_UBYTE4:    return 4u;
+        case D3DDECLTYPE_SHORT2:    return 4u;
+        case D3DDECLTYPE_SHORT4:    return 8u;
+        case D3DDECLTYPE_UBYTE4N:   return 4u;
+        case D3DDECLTYPE_SHORT2N:   return 4u;
+        case D3DDECLTYPE_SHORT4N:   return 8u;
+        case D3DDECLTYPE_USHORT2N:  return 4u;
+        case D3DDECLTYPE_USHORT4N:  return 8u;
+        case D3DDECLTYPE_UDEC3:     return 4u;
+        case D3DDECLTYPE_DEC3N:     return 4u;
+        case D3DDECLTYPE_FLOAT16_2: return 4u;
+        case D3DDECLTYPE_FLOAT16_4: return 8u;
+        default:                    return 0u;   // D3DDECLTYPE_UNUSED
+        }
+    }
+
+    u32 DeclarationStream0Extent(const D3DVERTEXELEMENT9* lpaElements, u32 luCount)
+    {
+        u32 luExtent = 0;
+        for (u32 luIndex = 0; luIndex < luCount && lpaElements[luIndex].Stream != 0xFF; ++luIndex)
+        {
+            if (lpaElements[luIndex].Stream != 0)
+                continue;
+            const u32 luEnd = static_cast<u32>(lpaElements[luIndex].Offset) + DeclTypeBytes(lpaElements[luIndex].Type);
+            if (luEnd > luExtent)
+                luExtent = luEnd;
+        }
+        return luExtent;
+    }
+
+    void ResolveFastSetStrideFromShader(IDirect3DDevice9* lpDevice)
+    {
+        if (!sbVertexSourceFastSet || !sbFastSetStrideFromShader || spVertexSource == nullptr || lpDevice == nullptr)
+            return;
+        u32 luStride = 0;
+        UINT luCount = 0;
+        IDirect3DVertexDeclaration9* lpDeclaration = nullptr;
+        if (SUCCEEDED(lpDevice->GetVertexDeclaration(&lpDeclaration)) && lpDeclaration != nullptr)
+        {
+            D3DVERTEXELEMENT9 laElements[MAXD3DDECLLENGTH + 1];
+            luCount = MAXD3DDECLLENGTH + 1;
+            if (SUCCEEDED(lpDeclaration->GetDeclaration(laElements, &luCount)))
+                luStride = DeclarationStream0Extent(laElements, luCount);
+            lpDeclaration->Release();
+        }
+        suVertexStride       = luStride;
+        suVertexSourceStride = luStride;
+        if (luStride != 0)
+            Stride0Diag_Resolved(luStride, luCount);   // [FLAG PC DIAG] BRN_STRIDE0_DIAG, default off
     }
 
     // =====================================================================================
@@ -3876,7 +4146,9 @@ namespace renderengine
     void WorldDraw_IndexedUP(u32 luPrimTypeXenon, u32 luBaseVertexIndex,
                              u32 luStartIndex, u32 luIndexCount)
     {
+        Stride0Diag_AtDraw("WorldDraw_IndexedUP", luIndexCount);   // [FLAG PC DIAG] BRN_STRIDE0_DIAG, default off
         IDirect3DDevice9* lpDevice = Dev();
+        ResolveFastSetStrideFromShader(lpDevice);   // FLAG PC platform leaf: a stride-0 stream's stride (above)
         if (lpDevice == nullptr || spIndexSource == nullptr || spVertexSource == nullptr
             || suVertexStride == 0 || suVertexSourceStride == 0
             || !sbWorldDeclarationValid)
@@ -4827,7 +5099,9 @@ namespace renderengine
 
     void WorldDraw_NonIndexedUP(u32 luPrimTypeXenon, u32 luStartVertex, u32 luVertexCount)
     {
+        Stride0Diag_AtDraw("WorldDraw_NonIndexedUP", luVertexCount);   // [FLAG PC DIAG] BRN_STRIDE0_DIAG, default off
         IDirect3DDevice9* lpDevice = Dev();
+        ResolveFastSetStrideFromShader(lpDevice);   // FLAG PC platform leaf: a stride-0 stream's stride (above)
         if (lpDevice == nullptr || spVertexSource == nullptr || suVertexStride == 0
             || !sbWorldDeclarationValid)
         {
@@ -5489,7 +5763,11 @@ void D3DDevice_SetStreamSource(IDirect3DDevice9* /*lpDeviceArg*/, u32 luStreamNu
                                u32 luStride, u32 /*luFlags*/)
 {
     if (luStreamNumber == 0)
+    {
         renderengine::WorldDraw_SetVertexSourceRaw(lpStreamData, luStride);
+        // [FLAG PC DIAG] BRN_STRIDE0_DIAG, default off: which caller published this stash.
+        renderengine::Stride0Diag_NoteBind(lpStreamData, luStride, _ReturnAddress());
+    }
 }
 
 // =============================================================================

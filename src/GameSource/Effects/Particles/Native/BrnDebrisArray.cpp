@@ -283,5 +283,25 @@ namespace Native
         lpNewDebris->muBounceCount =
             static_cast<u8>( static_cast<s32>( std::floor( lfBounceCount ) ) );
     }
+
+    // ------------------------------------------------------------------------
+    // BrnDebrisArray::GetTextureName (DWARF BrnDebrisRenderer.h:157) -- inline on the console, in
+    // ParticleModule::LoadFXBundle stage 7 (0x8229D054..0x8229D060): mMeshCollection's const operator->
+    // (SafeResourceHandle<BrnVFXMeshCollection> @0x822864A0, the CgsResourceHandle.h:419 "Can not instance
+    // resource pointer" assert), then the collection's mMaterial.mpTextureName at +0x90 (`lwz r3, 0x90(r3)`).
+    //
+    // BrnVFXMeshCollection has no host layout: the serialised header is read by dword offset, the documented
+    // external-serialised-data exception BrnVFXMeshCollectionResourceType::FixUp and
+    // BrnDebrisRenderer::RenderDebrisArray already use. Dword 36 is the name pointer FixUp rebased in place as
+    // a u32 word (the low-4 GB convention).
+    // ------------------------------------------------------------------------
+    const char* BrnDebrisArray::GetTextureName() const
+    {
+        const u32 KU_MESHCOLLECTION_TEXTURE_NAME_DWORD = 36;   // +0x90 mMaterial.mpTextureName
+
+        const u32* const lpauCollection = reinterpret_cast<const u32*>(mMeshCollection.operator->());
+        return reinterpret_cast<const char*>(
+            static_cast<uintptr_t>(lpauCollection[KU_MESHCOLLECTION_TEXTURE_NAME_DWORD]));
+    }
 }
 }

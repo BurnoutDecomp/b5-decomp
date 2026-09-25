@@ -150,6 +150,23 @@ namespace Native
         BrnVFXMeshCollection*      MeshCollection() const { return mMeshCollection.Get(); }
         const DebrisBucket*        Buckets() const        { return mpBuckets; }
 
+        // The render-resource half of ParticleModule::LoadFXBundle (stages 5..8), the DWARF's own members
+        // (BrnDebrisRenderer.h:144 / :151 / :157). The console inlines all three:
+        //   AcquireTexture        stage 8 stores the reply's 8-byte handle (`ld r10, 0x18(event)`) at
+        //                         maDebris[event id] + 0x10, i.e. mTexture (0x8229D164..0x8229D188);
+        //   AcquireMeshCollection stage 6, the same store at + 0x18, mMeshCollection (0x8229CFE4..0x8229D008);
+        //   GetTextureName        stage 7: mMeshCollection's const operator-> then the collection's +0x90
+        //                         (0x8229D054..0x8229D060) -- bodied in BrnDebrisArray.cpp.
+        void AcquireTexture(CgsResource::SafeResourceHandle<renderengine::Texture> lTexture)
+        {
+            mTexture = lTexture;
+        }
+        void AcquireMeshCollection(CgsResource::SafeResourceHandle<BrnVFXMeshCollection> lMeshCollection)
+        {
+            mMeshCollection = lMeshCollection;
+        }
+        const char* GetTextureName() const;
+
     private:
         // BrnDebrisArrayLite::Initialize (DWARF BrnDebrisRenderer.h:219, inlined into
         // ParticleModule::BeginSimulateDebris @0x82289B84..0x82289BB4) copies this array's live-bucket

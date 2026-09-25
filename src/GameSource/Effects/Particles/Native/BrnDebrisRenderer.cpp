@@ -13,6 +13,8 @@
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                   // LionParticleSampler_ApplyState
 
 #include <cstdio>   // [diag] snprintf (the first-draw witness)
+#include <cstdlib>  // [diag] getenv (the per-array draw witness, BRN_DEBRIS_DIAG)
+#include <chrono>   // [diag] steady_clock (the per-array draw witness's us=)
 
 // The two shared render states the debris pass binds (ImmediateModePCLeaf.cpp), declared
 // `extern void*` exactly as BrnSparkRenderer_Render.cpp / BrnTrailRender.cpp declare theirs.
@@ -298,16 +300,31 @@ namespace Native
         // BrnVFXMeshCollectionResourceType.cpp's FixUp uses.
         enum EVFXMeshCollectionDword
         {
-            E_MESHCOLLECTION_MESHHELPER  = 33,   // 0x84 -- MeshHelper* (rebased at FixUp)
-            E_MESHCOLLECTION_NUM_INDICES = 34    // 0x88 -- muNumIndices
+            E_MESHCOLLECTION_MESHHELPER   = 33,  // 0x84 -- MeshHelper* (rebased at FixUp)
+            E_MESHCOLLECTION_NUM_INDICES  = 34,  // 0x88 -- muNumIndices
+            E_MESHCOLLECTION_NUM_VERTICES = 35   // 0x8C -- muNumVertices ([diag] the draw witness only)
         };
 
         inline f32 MinF(f32 lfA, f32 lfB) { return (lfA < lfB) ? lfA : lfB; }
+
+        // [DIAG] BRN_DEBRIS_DIAG=1 -- NOT IN THE X360 BINARY. The per-array draw witness's arm and budget.
+        const u32 KU_DEBRIS_DRAW_WITNESS_LINES = 60u;
+        u32 suDebrisDrawWitnessLines = 0;
+        bool DebrisDrawWitnessArmed()
+        {
+            static int siArmed = -1;
+            if (siArmed < 0)
+            {
+                const char* const lpcValue = std::getenv("BRN_DEBRIS_DIAG");
+                siArmed = (lpcValue != 0 && lpcValue[0] == '1') ? 1 : 0;
+            }
+            return siArmed == 1;
+        }
     }
 
     void BrnDebrisRenderer::RenderDebrisArray(f32                   lfCurrentTime,
                                               const BrnDebrisArray* lpArray,
-                                              EDebrisArrayID        /*leArrayId*/,
+                                              EDebrisArrayID        leArrayId,        // [diag] the draw witness only
                                               bool                  lbFullLifetime)
     {
         CGS_ASSERT(lpArray != 0, "lpArray != NULL");
@@ -391,6 +408,10 @@ namespace Native
 
         u32 luDrawnBatches   = 0;
         u32 luDrawnInstances = 0;
+        const u64 luD3DDrawsBefore = renderengine::WorldDrawCallCount();   // [diag] the draw witness below
+        const bool lbDrawWitness = DebrisDrawWitnessArmed();                // [diag] ... and its clock
+        const std::chrono::steady_clock::time_point lDrawWitnessStart =
+            lbDrawWitness ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 
         for (const BrnDebrisArray::DebrisBucket* lpBucket = lpArray->Buckets();
              lpBucket != 0;
@@ -515,6 +536,29 @@ namespace Native
                 luParticle += BrnGraphics::Im3dTexPlusLighting::KU_NUM_TRANSFORMS;
             }
             while (luParticle < luNumParticles);
+        }
+
+        // [DIAG] BRN_DEBRIS_DIAG=1 -- NOT IN THE X360 BINARY. THE PER-ARRAY DRAW WITNESS, capped. d3d= is
+        // renderengine::WorldDrawCallCount()'s delta across this array's batches: it counts the submissions D3D
+        // ACCEPTED (SUCCEEDED only), so a batch the fast-set draw path skipped leaves it unchanged -- the line that
+        // tells "the pass issued a draw" apart from "the draw reached the device". us= is the CPU time of this
+        // array's pass (the transforms and the submissions), the debris draw's frame cost where it is spent.
+        // DELETE-WHEN-STABLE.
+        if (luDrawnBatches != 0 && lbDrawWitness && suDebrisDrawWitnessLines < KU_DEBRIS_DRAW_WITNESS_LINES)
+        {
+            ++suDebrisDrawWitnessLines;
+            const long long llMicroseconds = static_cast<long long>(
+                std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()
+                                                                      - lDrawWitnessStart).count());
+            char lacMsg[224];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[debrispass] draw array=%d batches=%u instances=%u indices=%u vertices=%u d3d=%llu us=%lld\n",
+                          static_cast<int>(leArrayId), static_cast<unsigned>(luDrawnBatches),
+                          static_cast<unsigned>(luDrawnInstances), static_cast<unsigned>(luNumIndices),
+                          static_cast<unsigned>(lpauCollection[E_MESHCOLLECTION_NUM_VERTICES]),
+                          static_cast<unsigned long long>(renderengine::WorldDrawCallCount() - luD3DDrawsBefore),
+                          llMicroseconds);
+            CgsDev::Log::WriteToLog(lacMsg);
         }
 
         // [DIAG] NOT IN THE ORIGINAL. THE FIRST-DRAW WITNESS, once per run.

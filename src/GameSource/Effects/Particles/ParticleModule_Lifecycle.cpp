@@ -49,6 +49,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // AcquireResourceResponse
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"     // BrnResource::GameDataIO::LoadGameDataEvent (stage 18's reply)
 #include "SharedClasses/Graphics/TextureNameMapResourceType.h"  // BrnParticle::TextureNameMap
+#include "SharedClasses/Graphics/BrnVFXMeshCollectionResourceType.h"  // IsUnconvertedPC (stage 6's PC leaf)
 #include "GameSource/Director/Camera/Camera.h"                  // BrnDirector::Camera::Camera
 #include "SharedClasses/Graphics/ParticleDescriptionResourceType.h"  // ParticleDescriptionCollection
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionEffect.h"          // cLionEffectDefinition
@@ -57,6 +58,7 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionFX.h"                // cLionFX::Init (Prepare builds the Lion runtime)
 
 #include <cstdio>    // snprintf (the announcements)
+#include <cstdlib>   // [diag] getenv (the [fxbundle] witness, BRN_DEBRIS_DIAG)
 #include <cstring>   // memset
 
 namespace BrnParticle
@@ -616,9 +618,12 @@ bool ParticleModule::PostPreparePrepare(ParticleIO::PrepareOutputBuffer* lpOutpu
 // Every stage number below is the console's own `*(this+560)` store, in the console's
 // order: 1 LOAD_BUNDLE, 2 WAIT_BUNDLE, 13 ACQUIRE_VFX_PROPS, 14 WAIT_VFX_PROPS,
 // 3 ACQUIRE_TEXTURE_NAME_MAP, 4 WAIT_TEXTURE_NAME_MAP, 9 ACQUIRE_DESCRIPTIONS,
-// 10 WAIT_DESCRIPTIONS, 11 ACQUIRE_TEXTURES, 12 WAIT_TEXTURES, 17 LOAD_PROP_COLLISIONS,
-// 18 WAIT_PROP_COLLISIONS, 19 DONE. (The enum's 5..8 mesh stages are NOT visited by this
-// build's ladder -- the asm jumps 4 -> 9.)
+// 10 WAIT_DESCRIPTIONS, 5 ACQUIRE_MESH_COLLECTIONS, 6 WAIT_MESH_COLLECTIONS,
+// 7 ACQUIRE_MESH_TEXTURES, 8 WAIT_MESH_TEXTURES, 11 ACQUIRE_TEXTURES, 12 WAIT_TEXTURES,
+// 17 LOAD_PROP_COLLISIONS, 18 WAIT_PROP_COLLISIONS, 19 DONE. Stage 10 falls into stage 5 --
+// both of its drain's exits (0x8229CE1C / 0x8229CE44) and its end land on 0x8229CEB4 -- and
+// stage 8 into stage 11 (0x8229D1A8); the cases below sit in that order. Stages 5..8 are the
+// DEBRIS MESHES: one mesh collection and one texture per debris array (see there).
 //
 // ⭐ THE TYRE MARK'S GATE IS IN STAGE 12. For each texture reply the console
 //    (a) hands the descriptor to LionParticleRender::AcquireTexture,
@@ -733,7 +738,120 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
             mDescriptionCollection.mpResourceMemory = lpReply->mpResourceMemory;
             mDescriptionCollection.mpSourceEntry    = lpReply->mpSourceEntry;
         }
+        // fall through (into stage 5, 0x8229CEB4)
+    }
+    // ---- THE DEBRIS MESHES: stages 5..8 (0x8229CEB4..0x8229D1A4) --------------------------------------------
+    case E_LOADSTAGE_ACQUIRE_MESH_COLLECTIONS:
+    {
+        // 0x8229CEB4..0x8229CF88: one acquire per debris array (`li r29, 5`), pool 13 (`li r25, 0xD`), for the
+        // mesh collection its own preset names -- maDebris[i] at +0x22818 + 0x20 i, `lwz r11, 0(r28)` mpParams,
+        // `lwz r3, 0(r11)` mpMeshCollectionName -- its event id the running miResourceCount; then the queue is
+        // cleared (the inlined BaseEventReceiverQueue::Clear, 0x8229CF30..0x8229CF88).
+        meInitialLoadStage = E_LOADSTAGE_ACQUIRE_MESH_COLLECTIONS;
+        miResourceCount = 0;
+        for (u32 luArray = 0; luArray < KU_NUM_DEBRIS_ARRAYS; ++luArray)
+        {
+            lpOutput->GetResourceRequestInterface()->AcquireResource(
+                &mReceiverQueue, miResourceCount++, KI_FX_BUNDLE_POOL,
+                maDebris[luArray].Params()->mpMeshCollectionName);
+        }
+        mReceiverQueue.Clear();
         // fall through
+    }
+    case E_LOADSTAGE_WAIT_MESH_COLLECTIONS:
+    {
+        meInitialLoadStage = E_LOADSTAGE_WAIT_MESH_COLLECTIONS;
+        if (mReceiverQueue.GetCount() < miResourceCount)
+            break;
+        // 0x8229CFA4..0x8229D024: every AcquireResourceResponse (`cmpwi r3, 4 ; bne`) hands its handle
+        // (`ld r10, 0x18(event)`) to the array its event id names -- `slwi r11, id, 5` + this + 0x22830 is
+        // maDebris[id].mMeshCollection, i.e. BrnDebrisArray::AcquireMeshCollection. NO event-id check: stages 14,
+        // 4 and 10 assert "Invalid event id", this one indexes with it.
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        for (s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize); lpEvent != 0;
+             liType = mReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            if (liType != KI_EVENT_ACQUIRE_RESOURCE_RESPONSE)
+                continue;
+            const AcquireResponse* const lpReply = reinterpret_cast<const AcquireResponse*>(lpEvent);
+            CgsResource::SafeResourceHandle<BrnVFXMeshCollection> lMeshCollection;
+            lMeshCollection.mpResourceMemory = lpReply->mpResourceMemory;
+            lMeshCollection.mpSourceEntry    = lpReply->mpSourceEntry;
+            // FLAG PC platform leaf -- STALE-ASSET TOLERANCE, not game logic. A PARTICLES.BUNDLE converted before
+            // the debris-mesh port still carries the collection big-endian; its handler's FixUp refused it (and
+            // said so, once). Leave the array unbound: stage 7 then asks nothing for it and RenderDebrisArray skips
+            // it, exactly as before the port. A ported collection always binds, as on the console.
+            if (BrnVFXMeshCollectionResourceType::IsUnconvertedPC(lMeshCollection.Get()))
+                continue;
+            maDebris[lpReply->miEventId].AcquireMeshCollection(lMeshCollection);
+        }
+        // fall through
+    }
+    case E_LOADSTAGE_ACQUIRE_MESH_TEXTURES:
+    {
+        // 0x8229D028..0x8229D100: one acquire per debris array, pool 13, for the texture its collection names --
+        // BrnDebrisArray::GetTextureName (the collection's const operator-> @0x822864A0, then +0x90) -- its event
+        // id the running miResourceCount; then the queue cleared (inlined, 0x8229D0A8..0x8229D100).
+        meInitialLoadStage = E_LOADSTAGE_ACQUIRE_MESH_TEXTURES;
+        miResourceCount = 0;
+        for (u32 luArray = 0; luArray < KU_NUM_DEBRIS_ARRAYS; ++luArray)
+        {
+            // FLAG PC platform leaf (stage 6's refusal): an array left unbound there is passed over. On the
+            // console all five are bound here. The converter ports all three collections or none, so the pass
+            // never shifts a later array's event id.
+            if (maDebris[luArray].MeshCollection() == 0)
+                continue;
+            lpOutput->GetResourceRequestInterface()->AcquireResource(
+                &mReceiverQueue, miResourceCount++, KI_FX_BUNDLE_POOL, maDebris[luArray].GetTextureName());
+        }
+        mReceiverQueue.Clear();
+        // fall through
+    }
+    case E_LOADSTAGE_WAIT_MESH_TEXTURES:
+    {
+        meInitialLoadStage = E_LOADSTAGE_WAIT_MESH_TEXTURES;
+        if (mReceiverQueue.GetCount() < miResourceCount)
+            break;
+        // 0x8229D11C..0x8229D1A4: every AcquireResourceResponse's handle into maDebris[event id].mTexture
+        // (`slwi r11, id, 5` + this + 0x22828) -- BrnDebrisArray::AcquireTexture; again no event-id check.
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        for (s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize); lpEvent != 0;
+             liType = mReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            if (liType != KI_EVENT_ACQUIRE_RESOURCE_RESPONSE)
+                continue;
+            const AcquireResponse* const lpReply = reinterpret_cast<const AcquireResponse*>(lpEvent);
+            CgsResource::SafeResourceHandle<renderengine::Texture> lTexture;
+            lTexture.mpResourceMemory = lpReply->mpResourceMemory;
+            lTexture.mpSourceEntry    = lpReply->mpSourceEntry;
+            maDebris[lpReply->miEventId].AcquireTexture(lTexture);
+        }
+        // [DIAG] BRN_DEBRIS_DIAG=1 -- NOT IN THE X360 BINARY. What the five debris arrays hold once the mesh
+        // stages are through, one line each, once per run. DELETE-WHEN-STABLE.
+        {
+            static bool sbLogged = false;
+            const char* const lpcDiag = std::getenv("BRN_DEBRIS_DIAG");
+            if (!sbLogged && lpcDiag != 0 && lpcDiag[0] == '1')
+            {
+                sbLogged = true;
+                for (u32 luArray = 0; luArray < KU_NUM_DEBRIS_ARRAYS; ++luArray)
+                {
+                    const Native::BrnDebrisArray& lrArray = maDebris[luArray];
+                    const bool lbBound = lrArray.MeshCollection() != 0;
+                    char lacMsg[256];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                                  "[fxbundle] stages 5-8 done: debris array %u '%s' mesh=%p texture '%s' -> %p\n",
+                                  luArray, lrArray.Params()->mpMeshCollectionName,
+                                  static_cast<void*>(lrArray.MeshCollection()),
+                                  lbBound ? lrArray.GetTextureName() : "(unbound)",
+                                  static_cast<void*>(lrArray.Texture()));
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+            }
+        }
+        // fall through (into stage 11, 0x8229D1A8)
     }
     case E_LOADSTAGE_ACQUIRE_TEXTURES:
     {

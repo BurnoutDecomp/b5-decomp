@@ -32,6 +32,7 @@
 #include "SharedClasses/Graphics/TextureNameMapResourceType.h"        // BrnParticle::TextureNameMapResourceType (0x1000B)
 #include "SharedClasses/Graphics/VFXPropsResourceType.h"              // BrnParticle::VFXPropCollectionResourceType (0x1001B)
 #include "SharedClasses/Graphics/ParticleDescriptionResourceType.h"   // BrnParticle::ParticleDescriptionCollectionResourceType (0x10008)
+#include "SharedClasses/Graphics/BrnVFXMeshCollectionResourceType.h"  // BrnParticle::BrnVFXMeshCollectionResourceType (0x10019)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiHudMessageType.h"  // CgsResource::HudMessageResourceType (0x2C == 44)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiPopupResourceType.h" // CgsResource::GuiPopupResourceType (0x1F == 31)
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"   // CgsResource::LuaCodeResourceType (0x22)
@@ -382,12 +383,17 @@ namespace CgsResource
         // because a .lef is console-layout serialised data read verbatim and every member
         // after the first widened link sat at the wrong offset.
         //
-        // NOT registered, on purpose:
-        //   * BrnVFXMeshCollection (0x10019): its FixUp needs x64-ported VB/IB pairs the porter
-        //     does not produce yet (passthrough), and only the absent debris renderer reads it.
-        //     FLAG PC: DELETE-WHEN the debris renderer lands -- register it and port its meshes.
+        // ⭐ BrnVFXMeshCollection (0x10019, the debris meshes) IS REGISTERED as of 2026-09-25
+        // (FX-CRASHVFX C3). tools/assets/bundles/particles_transcode.py ports its three collections
+        // (an endian swap that keeps the console's 32-bit slots), LoadFXBundle stages 5..8 bind them to
+        // the five debris arrays, and BrnDebrisRenderer::RenderDebrisArray draws them.
+        // GameDataModule::RegisterResourceTypes @0x82667EA8 registers "BrnVFXMeshCollectionResourceType"
+        // between TextureNameMap and VFXPropCollection, the order kept here. A PARTICLES.BUNDLE converted
+        // before that port is refused by the handler's PC leaf (IsUnconvertedPC), not crashed on.
         static BrnParticle::TextureNameMapResourceType                sTextureNameMap;      // 0x1000B
         TypeRegistry::Register(&sTextureNameMap, "TextureNameMap");
+        static BrnParticle::BrnVFXMeshCollectionResourceType          sVFXMeshCollection;   // 0x10019
+        TypeRegistry::Register(&sVFXMeshCollection, "BrnVFXMeshCollection");
         static BrnParticle::VFXPropCollectionResourceType             sVFXPropCollection;   // 0x1001B
         TypeRegistry::Register(&sVFXPropCollection, "VFXPropCollection");
         static BrnParticle::ParticleDescriptionCollectionResourceType sParticleDescriptionCollection; // 0x10008
