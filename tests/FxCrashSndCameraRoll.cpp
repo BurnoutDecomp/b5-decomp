@@ -25,7 +25,16 @@
 // when no player car is live), the extracted tail, then the consumers on the published camera.
 // The owning state's camera carries a deliberately STALE previous set -- the console never
 // publishes it, because the tail overwrites it.
+//
+// Since b5 16941c02 (MainDirector's post-FX id edge) the extracted tail opens with
+//   const u32 luLastRequestedPostFxId = mLastCamera.GetEffects().muRequestedPostFxId;
+// -- the console's `lwzx r31, this+0x32FF4` (mLastCamera +0x32F10, mEffects +0x68,
+// muRequestedPostFxId +0x7C), read BEFORE the flag roll and the operator= (ppcdis
+// 0x82275084..). So the camera fixture carries the real CameraEffects block with Camera.h's
+// two GetEffects() accessors; the id edge that consumes the read sits AFTER
+// `mLastCamera = lCamera;`, outside the extraction.
 #include "GameSource/Director/Camera/BrnCameraState.h"
+#include "GameSource/Director/Camera/BrnCameraEffects.h"
 
 #include <cstdio>
 #include <vector>
@@ -45,13 +54,18 @@ namespace BrnDirector { namespace Camera {
 using BrnDirector::Camera::CameraState;
 
 // ---- fixtures ---------------------------------------------------------------------------
-// The camera: only the state sub-object matters here. Camera::operator= @0x82233A80 copies all
+// The camera: the state sub-object and the effects block the tail reads. Camera::operator=
+// @0x82233A80 copies the effects block (CameraEffects::operator= on +0x68, 0x82233B0C) and all
 // three CameraState qwords (0x82233B48..0x82233B5C), which the defaulted copy reproduces.
 struct CameraFixture
 {
+    BrnDirector::Camera::CameraEffects mEffects{};
     CameraState mState;
     CameraState&       GetState()       { return mState; }
     const CameraState& GetState() const { return mState; }
+    // Camera.h:251-252.
+    const BrnDirector::Camera::CameraEffects& GetEffects() const { return mEffects; }
+    BrnDirector::Camera::CameraEffects&       GetEffects()       { return mEffects; }
 };
 
 struct DirectorFixture
