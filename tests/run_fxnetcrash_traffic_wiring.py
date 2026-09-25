@@ -7,6 +7,10 @@ numeric fixture could see:
      (the two index asserts, then `maxRaceCarFlags[idx] >> 1 & 1`), whose bool picks the 0.5 / 1.0
      importance (0x827441C4 / 0x827441CC). The PC stood in `GetPlayerActiveRaceCarIndex() == idx` until
      FX-AIBUZZ bodied the accessor (b5 10caff25); relayed by the conductor, re-derived here.
+  2. UpdateRecoveringFromSlam @0x8273E778 (item 4, FX-TRAFFIC5 follow-up): 0x8273E87C `bl
+     GetTrafficPhysicsInfoForVehicl` is followed at once by `lfs f0, 0xFE0(r3)` -- the console has no
+     `lpPhysInfo` tripwire and no null test there, and no behaviour switch anywhere in the 85 words. The
+     PC carried both, plus the BRN_TRAFFIC_NO_SLAM_DRIVE env A/B that could skip the pedal stores.
 
 Run from the workflow checkout:
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxnetcrash_traffic_wiring.py [--rev <b5 rev>]
@@ -41,6 +45,19 @@ def checks(module):
                            body) is not None))
     rows.append(("UpdateParams_DoTimeSlicedLogic: the GetPlayerActiveRaceCarIndex() == idx stand-in is gone",
                  "GetPlayerActiveRaceCarIndex" not in body))
+
+    slam_text = definition(module, "void TrafficEntityModule::UpdateRecoveringFromSlam(")
+    slam = code_only(slam_text)
+    rows.append(("UpdateRecoveringFromSlam: no BRN_TRAFFIC_NO_SLAM_DRIVE behaviour switch (none in 0x8273E778..0x8273E8C8)",
+                 "BRN_TRAFFIC_NO_SLAM_DRIVE" not in slam_text))
+    rows.append(("UpdateRecoveringFromSlam: no null test on the physics info (0x8273E87C bl -> 0x8273E884 lfs 0xFE0(r3))",
+                 re.search(r"if\s*\(\s*lpInfo\s*==\s*0\s*\)", slam) is None))
+    rows.append(("UpdateRecoveringFromSlam: no invented `lpPhysInfo` tripwire (the console asserts only :16732/:16735/:16736)",
+                 '"lpPhysInfo"' not in slam_text))
+    rows.append(("UpdateRecoveringFromSlam: pedals still stored from +0xFE0 / +0xFDC (fsel 0x8273E88C / 0x8273E898)",
+                 re.search(r"lpControls\s*->\s*mfGas\s*=", slam) is not None
+                 and re.search(r"lpControls\s*->\s*mfBrake\s*=", slam) is not None
+                 and re.search(r"lpControls\s*->\s*mfSteering\s*=\s*lpInfo\s*->\s*mfSteeringDirection", slam) is not None))
     return rows
 
 

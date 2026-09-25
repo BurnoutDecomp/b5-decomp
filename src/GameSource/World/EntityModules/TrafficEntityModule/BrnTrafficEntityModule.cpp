@@ -14477,6 +14477,10 @@ void TrafficEntityModule::UpdateNormalPhysical(u32 luVehicle,
 // The two fsel operands were decoded from the raw instruction words rather than from IDA's
 // printed order (AGENTS.md: "fsel prints D,A,C,B"), so the sign convention is the image's own:
 // mfBrake receives the NEGATIVE driving direction, exactly as the console stores it.
+// 0x8273E87C..0x8273E884: GetTrafficPhysicsInfoForVehicl's result is read at +0xFE0 straight away
+// -- no tripwire and no null test on it. The PC's `lpPhysInfo` assert + early return and the
+// BRN_TRAFFIC_NO_SLAM_DRIVE behaviour switch (a pre-2026-09-07 A/B knob) are gone (crash parity
+// FX-NETCRASH item 4, FX-TRAFFIC5 follow-up): PC-only behaviour knobs are not 1:1.
 // --------------------------------------------------------------------------------------------
 void TrafficEntityModule::UpdateRecoveringFromSlam(
         u32 luVehicle,
@@ -14493,9 +14497,7 @@ void TrafficEntityModule::UpdateRecoveringFromSlam(
                "lpVehicle->IsOfStandardSpecies()");                                 // .cpp 16736
 
     // ---- [T5-slam] witness. NOT IN THE X360 BINARY, off unless BRN_TRAFFIC_DIAG.
-    // Printed BEFORE the control below so BOTH arms of the A/B produce rows: `wrote=0` is the
-    // pre-fix state (the arm reached, no pedal written), `wrote=1` is this landing. The row
-    // carries mfTimeNotDriving, which is the number the junction-FUP valve kills on.
+    // The row carries mfTimeNotDriving, which is the number the junction-FUP valve kills on.
     // Budgeted; DELETE-WHEN the issue-#14 evidence is banked.
     {
         static s32 siSlamWitnessLines = 0;
@@ -14507,34 +14509,14 @@ void TrafficEntityModule::UpdateRecoveringFromSlam(
                 ++siSlamWitnessLines;
                 const TrafficPhysicsInfo* const lpWInfo =
                     GetTrafficPhysicsInfoForVehicl(luVehicle);
-                const char* lpcEnvW = getenv("BRN_TRAFFIC_NO_SLAM_DRIVE");
-                const bool lbSuppressed = (lpcEnvW != 0 && lpcEnvW[0] != '0');
                 *lpDiag << "[T5-slam] veh=" << static_cast<s32>(luVehicle)
                         << " physTime=" << lpVehicle->GetPhysicalTime()
                         << " drv=" << (lpWInfo != 0 ? lpWInfo->mfDrivingDirection : 0.0f)
                         << " steer=" << (lpWInfo != 0 ? lpWInfo->mfSteeringDirection : 0.0f)
                         << " notDriving=" << (lpWInfo != 0 ? lpWInfo->mfTimeNotDriving : -1.0f)
-                        << " wrote=" << (lbSuppressed ? 0 : 1)
                         << "\n";
             }
         }
-    }
-
-    // ---- [FLAG PC control] NOT IN THE X360 BINARY. BRN_TRAFFIC_NO_SLAM_DRIVE=1 restores the
-    // pre-2026-09-07 gate: the arm is still reached and still costs its asserts, but no pedal
-    // is written -- exactly the state issue #14 was measured in. It exists because the shared
-    // checkout is fast-forwarded by other lanes mid-session, so a "before" build and an "after"
-    // build are NOT comparable; this makes the A/B one binary and one recipe, differing in one
-    // store. DELETE-WHEN the issue-#14 evidence is banked.
-    static s32 siNoSlamDrive = -1;
-    if (siNoSlamDrive < 0)
-    {
-        const char* lpcEnv = getenv("BRN_TRAFFIC_NO_SLAM_DRIVE");
-        siNoSlamDrive = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
-    }
-    if (siNoSlamDrive == 1)
-    {
-        return;
     }
 
     // 0x8273E850 -- the console calls the predicate a SECOND time here rather than reusing the
@@ -14542,13 +14524,7 @@ void TrafficEntityModule::UpdateRecoveringFromSlam(
     if (lpVehicle->IsRecoveringFromSlam() &&
         lpVehicle->GetPhysicalTime() < KF_SLAM_RECOVERY_DRIVE_TIME)
     {
-        const TrafficPhysicsInfo* const lpInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
-        CGS_ASSERT(lpInfo != 0, "lpPhysInfo");
-        if (lpInfo == 0)
-        {
-            return;   // PC-safety guard, as in the sibling arms in this file
-        }
-
+        const TrafficPhysicsInfo* const lpInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);   // 0x8273E87C
         const f32 lfDrivingDirection = lpInfo->mfDrivingDirection;   // +0xFE0
 
         lpControls->mfGas   = (lfDrivingDirection >= 0.0f) ? lfDrivingDirection : 0.0f;
