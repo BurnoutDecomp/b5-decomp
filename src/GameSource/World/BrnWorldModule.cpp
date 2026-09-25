@@ -92,6 +92,11 @@
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"                       // BrnWorld::CrashIO::OutputBuffer_PostPhysics
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficGuiInterface.h" // ScoringVehicleArray
 #include "GameShared/GameClasses/Containers/CgsArray.h"                                   // Array<short,25> (the GUI record's byte image)
+#include "GameSource/World/AI/BrnAIHarnessPad.h"                                          // [PC HARNESS] BRN_AI_PAD_PLAYER (gHarnessAIPad)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"     // [PC HARNESS] the AI record queue (HarnessStashAIPadControls)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"           // [PC HARNESS] BrnAIDriverControls
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h" // [PC HARNESS] BrnWorld::PlayerVehicleControls
+#include <cstring>                                                                        // [PC HARNESS] std::strcmp (BRN_AI_PAD_PLAYER)
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable;
 // same extern as the world-entity TU -- the defining home lands with the shader TU).
@@ -2579,6 +2584,10 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
         this, lpTriggerInput_PreScene, lpTriggerInput_PostScene, lpTrafficInput_PreScene,
         lpRaceCarInput_PreScene, lpRaceCarInput_PrePhysics, lpWorldEntityInput_PreScene,
         lpPropInput_PreScene, lpUpdateInputBuffer );
+    // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER -- the AI's player-seat decision of the previous frame
+    // replaces the real pad's driving channels in the race-car pre-scene input the bridge above just
+    // filled (still write-locked). Inert without the variable; see HarnessApplyAIPad (end of file).
+    HarnessApplyAIPad( lpRaceCarInput_PreScene, lpUpdateInputBuffer );
     lpPropInput_PreScene->UnlockForWrite();
     lpWorldEntityInput_PreScene->UnlockForWrite();
     lpTriggerInput_PostScene->UnlockForWrite();
@@ -2805,6 +2814,9 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     // [PC HARNESS, NOT X360] BRN_AI_DRIVES_PLAYER -- see HarnessArmAIDrivesPlayer (end of file).
     // Placed BEFORE the refresh below so the frame that arms it already runs the AI-owned path.
     HarnessArmAIDrivesPlayer();
+    // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER -- the AI PAD seat's standing policy for THIS frame's AI
+    // update (gHarnessAIPad); the control word is never touched. See HarnessArmAIPadPlayer (end of file).
+    HarnessArmAIPadPlayer();
 
     // ARTIST 0x827D74FC..0x827D753C refreshes ownership before StoreDrivenCarData.
     // The management event resets the route/PID once; this latch keeps subsequent
@@ -2823,6 +2835,10 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     mAIModule.Update( lpInputBufferStack, lpOutputBufferStack, lpAIInput, lpAIOutput,
                       lUpdateSet );
     PerfMonCpu::StopMonitor( miAIModuleUpdatePM );
+
+    // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER -- copy the AI's player-slot record out of this frame's
+    // AI output for next frame's pad (HarnessApplyAIPad). Inert without the variable.
+    HarnessStashAIPadControls( lpAIOutput );
 
     lpInputBufferStack->DestroyIOBuffer( &lpAIInput );
 
@@ -8100,6 +8116,286 @@ void WorldModule::HarnessArmAIDrivesPlayer()
                 << static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) << "]=" << liPreviousControl
                 << "; back to 2 (AI) via the same @0x827B1FC0 callback\n";
         }
+    }
+}
+
+// =================================================================================================
+// [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=cruise|race|pursuit -- the "AI PAD" seat, world half.
+//
+// The console seat above (BRN_AI_DRIVES_PLAYER) hands the car to the AI by flipping the control word
+// to 2, and with it every reader of AICar::mbIsDrivenByPlayer -- including AIAggression::FindTarget
+// @0x82793C60, which then refuses the player as a rival target (0x82793CA0..0x82793CB4). This seat keeps
+// the control word at 1 (E_CAR_CONTROL_ENTITY_MODULE): to the rest of the game the car is PAD-driven,
+// rivals target it, takedowns are player-credited, race logic treats it as the player. Only the SOURCE
+// of the pad changes:
+//   * AI side (GameSource/World/AI/BrnAIHarnessPad.h): the player's own AICar::Update / AIDriver::Update
+//     run with the console seat's mbIsDrivenByPlayer (0) -- with it set, AIDriver::GetTargetPosition
+//     @0x8277CBF8 aims one metre straight ahead (0x8277CC20..0x8277CC28) and the record the AI already
+//     emits for the player's slot every frame (ProcessAIVehicleInputs @0x82795E10) carries no decision.
+//   * Stash (after AIModule::Update): that record -- the one WorldModule::BridgeAIModuleToPhysicsModule
+//     @0x827AAAA8 would forward in the console seat (0x827AAC08..0x827AAC2C) -- is copied out of the AI
+//     output. Here the bridge drops it, as the console does for control word 1.
+//   * Apply (next frame, right after WorldModule::BridgeInputToEntityModules copied the real pad into
+//     the race-car pre-scene input): the record's gas / brake / handbrake / steering / boost overwrite
+//     the pad's mfAcceleration / mfBraking / mfHandBrake / mfSteering / mbBoost, and mbIsWheel is set --
+//     the AI record's +0x41 mbIsSteeringWheel is 1 (0x82796020), and ProcessPlayerVehicleInput
+//     @0x822FFE30 copies mbIsWheel into exactly that byte (0x82300264..0x82300270). From there it is
+//     the console's own chain: PreSceneUpdate's 60-byte latch, ProcessPlayerVehicleInput's PLAYER
+//     record (boost through the boost strategy and the bar, the start-line / wreck / invulnerability
+//     gates), BridgeEntityModulesToPhysicsModule_PrePhysics' `== 1` forward (0x827AAFE8..0x827AB008),
+//     VehicleManager::UpdatePlayerDriver @0x825E9F38. One frame of latency: the pad is latched at
+//     pre-scene, before the AI update.
+//   * The real pad's BRAKE is a manual override (harness glue for the organic runner's logged UNSTICK
+//     fallback): while it is held, the real pad passes through untouched.
+//   * pursuit: inside the console's slam window (BrnAIModule_Drive.cpp) the pad also holds the
+//     throttle and the boost button -- a pad's ram; the AI's own Slam fan steers.
+// Standing policy, the same shape as HarnessArmAIDrivesPlayer: armed whenever the player's slot is
+// attached, its AI driver slot is active and the control word is 1 (the console's own seat keeps the
+// car while it holds it: junkyard exit, drive-thrus, rolling starts); `race` also needs the player's
+// AICar in a game mode. The first arm prints a banner, every later one `[ai-pad] re-armed #n`.
+// Opt-in; a run without the variable never writes gHarnessAIPad and never touches the pad.
+// DELETE-WHEN a real pad can drive the harness. Trace: scratch/CRASHPARITY_0922/fixes/FX-AIPAD.md.
+// =================================================================================================
+namespace
+{
+    // One frame's player-seat decision: copied out of the AI output after AIModule::Update, written
+    // into the pad on the next frame.
+    struct HarnessAIPadStash
+    {
+        bool mbValid;
+        f32  mfGas;
+        f32  mfBrake;
+        f32  mfHandBrake;
+        f32  mfSteering;
+        bool mbBoost;
+        bool mbRamming;
+    };
+    HarnessAIPadStash sHarnessAIPadStash = { false, 0.0f, 0.0f, 0.0f, 0.0f, false, false };
+
+    // [FLAG PC witness] the pad trace: one line per KI_HARNESS_AI_PAD_TRACE_PERIOD applied frames (60 ==
+    // one second of the fixed 1/60 sim step), at most KI_HARNESS_AI_PAD_TRACE_LINES lines.
+    const s32 KI_HARNESS_AI_PAD_TRACE_PERIOD = 60;
+    const s32 KI_HARNESS_AI_PAD_TRACE_LINES  = 1200;
+    s32       siHarnessAIPadApplied          = 0;
+    s32       siHarnessAIPadTraceLines       = 0;
+    bool      sbHarnessAIPadManual           = false;
+
+    const char* HarnessAIPadModeName( BrnAI::EHarnessAIPadMode leMode )
+    {
+        switch ( leMode )
+        {
+            case BrnAI::E_HARNESS_AI_PAD_CRUISE:  return "cruise";
+            case BrnAI::E_HARNESS_AI_PAD_RACE:    return "race";
+            case BrnAI::E_HARNESS_AI_PAD_PURSUIT: return "pursuit";
+            default:                              return "off";
+        }
+    }
+
+    // BRN_AI_PAD_PLAYER's value: cruise | race | pursuit ("1", what -DiagEnv passes for a bare name, is
+    // cruise). Anything else is REFUSED loudly and the seat stays off.
+    BrnAI::EHarnessAIPadMode HarnessAIPadModeFromEnvironment()
+    {
+        const char* lpcSpec = std::getenv( "BRN_AI_PAD_PLAYER" );
+        if ( lpcSpec == 0 || lpcSpec[ 0 ] == '\0' )
+        {
+            return BrnAI::E_HARNESS_AI_PAD_OFF;
+        }
+        if ( std::strcmp( lpcSpec, "cruise" ) == 0 || std::strcmp( lpcSpec, "1" ) == 0 )
+        {
+            return BrnAI::E_HARNESS_AI_PAD_CRUISE;
+        }
+        if ( std::strcmp( lpcSpec, "race" ) == 0 )
+        {
+            return BrnAI::E_HARNESS_AI_PAD_RACE;
+        }
+        if ( std::strcmp( lpcSpec, "pursuit" ) == 0 )
+        {
+            return BrnAI::E_HARNESS_AI_PAD_PURSUIT;
+        }
+        if ( CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint << "[ai-pad] REFUSED: BRN_AI_PAD_PLAYER='" << lpcSpec
+                                       << "' is not cruise | race | pursuit -- the seat stays OFF [PC HARNESS]\n";
+        }
+        return BrnAI::E_HARNESS_AI_PAD_OFF;
+    }
+}
+
+void WorldModule::HarnessArmAIPadPlayer()
+{
+    static const BrnAI::EHarnessAIPadMode seMode = HarnessAIPadModeFromEnvironment();
+    static s32         siArmCount    = 0;
+    static s32         siNoteLines   = 0;
+    static const char* spcLastReason = 0;
+    if ( seMode == BrnAI::E_HARNESS_AI_PAD_OFF )
+    {
+        return;
+    }
+
+    BrnAI::HarnessAIPad& lrPad = BrnAI::gHarnessAIPad;
+    lrPad.meMode = seMode;
+
+    const char* lpcBlocked = 0;
+    s32         liControl  = -1;
+    if ( meLocalPlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )
+    {
+        lpcBlocked = "no local player race car yet";
+    }
+    else
+    {
+        liControl = maeCarControls[ meLocalPlayerActiveRaceCarIndex ];
+        const BrnAI::AIDriver* lpDriver = mAIModule.GetAIDriver( meLocalPlayerActiveRaceCarIndex );
+        if ( liControl != E_CAR_CONTROL_ENTITY_MODULE )
+        {
+            lpcBlocked = "the console's own seat has the car (control word is not 1)";
+        }
+        else if ( lpDriver == 0 || !lpDriver->IsActive() || lpDriver->GetCar() == 0 )
+        {
+            lpcBlocked = "the player's AI driver slot is not active";
+        }
+        else if ( seMode == BrnAI::E_HARNESS_AI_PAD_RACE && !lpDriver->GetCar()->mbIsInGameMode )
+        {
+            lpcBlocked = "race: no event is running";
+        }
+    }
+
+    const bool lbArm = ( lpcBlocked == 0 );
+    if ( CgsDev::Log::gpDebugPrint != 0 )
+    {
+        if ( lbArm && !lrPad.mbArmed )
+        {
+            ++siArmCount;
+            if ( siArmCount == 1 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[ai-pad] ***** HARNESS-ONLY (BRN_AI_PAD_PLAYER=" << HarnessAIPadModeName( seMode )
+                    << "): armed -- the game's own AI computes the player car's controls and they reach "
+                    << "physics through the PAD path; maeCarControls["
+                    << static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) << "] stays 1, so rivals target "
+                    << "the player and takedowns are player-credited. Standing: re-armed whenever the game "
+                    << "hands the car back. *****\n";
+            }
+            else
+            {
+                *CgsDev::Log::gpDebugPrint << "[ai-pad] re-armed #" << siArmCount << " ("
+                                           << HarnessAIPadModeName( seMode ) << ")\n";
+            }
+            spcLastReason = 0;
+        }
+        else if ( !lbArm && ( lrPad.mbArmed || lpcBlocked != spcLastReason ) && siNoteLines < 200 )
+        {
+            ++siNoteLines;
+            *CgsDev::Log::gpDebugPrint << "[ai-pad] " << ( lrPad.mbArmed ? "stood down" : "waiting" ) << ": "
+                                       << lpcBlocked << " (control word " << liControl << ")\n";
+            spcLastReason = lpcBlocked;
+        }
+    }
+    lrPad.mbArmed = lbArm;
+}
+
+void WorldModule::HarnessStashAIPadControls( BrnAI::AIModuleIO::OutputBuffer* lpAIOutput )
+{
+    HarnessAIPadStash& lrStash = sHarnessAIPadStash;
+    lrStash.mbValid = false;
+    const BrnAI::HarnessAIPad& lrPad = BrnAI::gHarnessAIPad;
+    if ( !lrPad.mbArmed || lpAIOutput == 0 )
+    {
+        return;
+    }
+
+    lpAIOutput->LockForRead();
+    // Through a const view: the non-const GetVehicleDriverInterface is the WRITE seat (0x8276D9C8,
+    // asserts "Not locked for writing"); the read twin is 0x8279CA00, the one the AI bridge uses.
+    const BrnAI::AIModuleIO::OutputBuffer* lpAIOutputRead = lpAIOutput;
+    const BrnPhysics::Vehicle::VehicleDriverInputInterface::UpdateDriverEventQueue* lpQueue =
+        lpAIOutputRead->GetVehicleDriverInterface()->GetUpdateDriverQueue();
+    const CgsModule::Event* lpEvent = 0;
+    s32 liSize = 0;
+    for ( s32 liType = lpQueue->GetFirstEvent( &lpEvent, &liSize );
+          liType >= 0;
+          liType = lpQueue->GetNextEvent( lpEvent, &lpEvent, &liSize ) )
+    {
+        if ( liType != BrnPhysics::Vehicle::E_DRIVER_TYPE_AI )
+        {
+            continue;
+        }
+        const BrnPhysics::Vehicle::BrnAIDriverControls* lpControls =
+            static_cast<const BrnPhysics::Vehicle::BrnAIDriverControls*>( lpEvent );
+        if ( lpControls->miVehicleID != static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) )
+        {
+            continue;
+        }
+        lrStash.mbValid     = true;
+        lrStash.mfGas       = lpControls->mfGas;
+        lrStash.mfBrake     = lpControls->mfBrake;
+        lrStash.mfHandBrake = lpControls->mfHandBrake;
+        lrStash.mfSteering  = lpControls->mfSteering;
+        lrStash.mbBoost     = lpControls->mbBoost;
+        lrStash.mbRamming   = lrPad.mbRamming;
+        break;
+    }
+    lpAIOutput->UnlockForRead();
+}
+
+void WorldModule::HarnessApplyAIPad( RaceCarEntityModuleIO::InputBuffer_PreScene* lpRaceCarInput_PreScene,
+                                     const BrnWorldIO::UpdateInputBuffer* lpUpdateInputBuffer )
+{
+    const HarnessAIPadStash& lrStash = sHarnessAIPadStash;
+    if ( !lrStash.mbValid )
+    {
+        return;
+    }
+    const BrnWorldIO::PlayerVehicleControls* lpRealPad = lpUpdateInputBuffer->GetPlayerVehicleControls();
+    if ( lpRealPad == 0 )
+    {
+        return;
+    }
+
+    // FLAG cross-home cast -- the one WorldBridgeInputToEntityModules makes for the same 60-byte copy.
+    BrnWorld::PlayerVehicleControls lPad = *reinterpret_cast<const BrnWorld::PlayerVehicleControls*>( lpRealPad );
+
+    const bool lbManual = ( lPad.mfBraking > 0.0f );
+    if ( lbManual != sbHarnessAIPadManual && CgsDev::Log::gpDebugPrint != 0
+         && siHarnessAIPadTraceLines < KI_HARNESS_AI_PAD_TRACE_LINES )
+    {
+        ++siHarnessAIPadTraceLines;
+        *CgsDev::Log::gpDebugPrint << ( lbManual ? "[ai-pad] manual override: the real pad holds brake -- it drives"
+                                                 : "[ai-pad] manual override released: the AI drives again" )
+                                   << " [PC HARNESS]\n";
+    }
+    sbHarnessAIPadManual = lbManual;
+    if ( lbManual )
+    {
+        return;   // the real pad already sits in the buffer (the bridge just copied it)
+    }
+
+    lPad.mfAcceleration = lrStash.mfGas;
+    lPad.mfBraking      = lrStash.mfBrake;
+    lPad.mfHandBrake    = lrStash.mfHandBrake;
+    lPad.mfSteering     = lrStash.mfSteering;
+    lPad.mbBoost        = lrStash.mbBoost;
+    lPad.mbIsWheel      = true;
+    if ( lrStash.mbRamming )
+    {
+        lPad.mfAcceleration = 1.0f;
+        lPad.mfBraking      = 0.0f;
+        lPad.mbBoost        = true;
+    }
+    lpRaceCarInput_PreScene->SetPlayerVehicleControls( &lPad );
+
+    ++siHarnessAIPadApplied;
+    if ( ( siHarnessAIPadApplied % KI_HARNESS_AI_PAD_TRACE_PERIOD ) == 1 && CgsDev::Log::gpDebugPrint != 0
+         && siHarnessAIPadTraceLines < KI_HARNESS_AI_PAD_TRACE_LINES )
+    {
+        ++siHarnessAIPadTraceLines;
+        const BrnAI::HarnessAIPad& lrPad = BrnAI::gHarnessAIPad;
+        *CgsDev::Log::gpDebugPrint << "[ai-pad] pad #" << siHarnessAIPadApplied << " "
+                                   << HarnessAIPadModeName( lrPad.meMode ) << " gas " << lPad.mfAcceleration
+                                   << " brake " << lPad.mfBraking << " hb " << lPad.mfHandBrake << " steer "
+                                   << lPad.mfSteering << " boost " << ( lPad.mbBoost ? 1 : 0 ) << " ram "
+                                   << ( lrStash.mbRamming ? 1 : 0 ) << " target " << lrPad.miTarget << " sep "
+                                   << lrPad.mfTargetSeparation << " ahead " << lrPad.mfTargetAheadness
+                                   << " routes " << lrPad.miPlans << " rams " << lrPad.miRamEntries << "\n";
     }
 }
 }

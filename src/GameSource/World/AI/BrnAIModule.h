@@ -316,6 +316,13 @@ private:
     void UpdateCarRoutes( AIModuleIO::OutputBuffer* lpOutputBuffer,
                           const RouteMapModuleIO::OutputBuffer* lpRouteOutputBuffer );
 
+    // ---- [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=pursuit (BrnAIHarnessPad.h). Bodies at the end of
+    //      BrnAIModule_Drive.cpp; UpdateDrivers calls HarnessAIPadPursuit once per frame, and it
+    //      returns at once unless WorldModule armed the pad with the pursuit objective. No console
+    //      function has either name. ----
+    void HarnessAIPadPursuit( AICar* lpPlayerCar );
+    void HarnessAIPadReleaseRoute( AICar* lpPlayerCar, const char* lpcReason );
+
     struct RouteRequestSlot
     {
         s32 miRouteId;

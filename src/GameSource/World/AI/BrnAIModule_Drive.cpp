@@ -185,6 +185,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "SharedClasses/AI/AISectionsResourceType.h"                    // BrnAI::AISectionsData
+#include "GameSource/World/AI/BrnAIHarnessPad.h"                        // [PC HARNESS] BRN_AI_PAD_PLAYER (gHarnessAIPad)
+#include "GameSource/Math/BrnMathUtils.h"                               // [PC HARNESS] BrnMath::Flatten (the pursuit geometry)
 
 #if BRNAI_AIWAVE_A3_LANDED
 #include "GameSource/World/AI/BrnAIAggression.h"                        // AIAggression::SetSuitabilityForAggression
@@ -324,12 +326,16 @@ void AIModule::UpdateCars(f32 lfTimeStep,
             if (lpAICar->IsActive())
             {
                 AISectionsData* lpAISectionsData = GetAISectionsData();
+                // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER -- the player's own AICar::Update runs with the
+                // console AI seat's mbIsDrivenByPlayer (0); the byte is back to 1 before the next car.
+                const bool lbHarnessSeat = HarnessAIPadBeginPlayerSeat(lpAICar);
                 lpAICar->Update(&mRaceBalancingManager,
                                 lfTimeStep,
                                 lpPlayerCar,
                                 lpAISectionsData,
                                 &mMasterRoute,
                                 mbIsInOnlineGameMode);
+                HarnessAIPadEndPlayerSeat(lpAICar, lbHarnessSeat);
                 ++liUpdated;
             }
         }
@@ -654,6 +660,10 @@ void AIModule::UpdateDrivers(const AIModuleIO::InputBuffer* lpInputBuffer,
         }
     }
 
+    // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=pursuit -- target, route, slam window (BrnAIHarnessPad.h).
+    // Returns at once unless the pad is armed with the pursuit objective.
+    HarnessAIPadPursuit(lpPlayerCar);
+
     DoRoundRobins();
 
     EActiveRaceCarIndex leFirst;
@@ -695,13 +705,27 @@ void AIModule::UpdateDrivers(const AIModuleIO::InputBuffer* lpInputBuffer,
             lpDriver->SetAggressionVictim(lpPlayerCar->GetRaceCarIndex());  // stw 0x1CF0
         }
 
+        // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=pursuit: inside the slam window the player's OWN driver's
+        // aggression victim is the target -- the index the fan's Slam contributor hands FindVictimInTraffic
+        // (IncludeSmashIntoPlayer @0x82791230). mbRamming is only ever set by HarnessAIPadPursuit.
+        if (gHarnessAIPad.mbRamming && leSlot == mePlayerActiveRaceCarIndex)
+        {
+            lpDriver->SetAggressionVictimCar(GetAICar(static_cast<u32>(gHarnessAIPad.miTarget)));
+            lpDriver->SetAggressionVictim(gHarnessAIPad.miTarget);
+        }
+
         const bool lbLineUpdateToken = (leSlot == static_cast<EActiveRaceCarIndex>(miLineUpdateTokenCounter));
+        // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER -- the player's own AIDriver::Update runs with the console
+        // AI seat's mbIsDrivenByPlayer (0); the byte is back to 1 before the next driver.
+        AICar* lpHarnessSeatCar = lpDriver->GetCar();
+        const bool lbHarnessSeat = HarnessAIPadBeginPlayerSeat(lpHarnessSeatCar);
         lpDriver->Update(lfTimeStep,
                          lbLineUpdateToken,
                          lPlayerCarPosition,
                          lpPlayerCar,
                          mbDoInRangeCatchup,
                          &mRandom);
+        HarnessAIPadEndPlayerSeat(lpHarnessSeatCar, lbHarnessSeat);
         if (lpDriver->mbIsActive)
         {
             ++liActiveDrivers;
@@ -1375,6 +1399,412 @@ void AIModule::ExportCarData(AIModuleIO::OutputBuffer* lpOutputBuffer)
         AIModuleIO::AIRaceCarInterface* lpAIRaceCarInterface =
             reinterpret_cast<AIModuleIO::AIRaceCarInterface*>(lpOutputBuffer->GetAIRaceCarInterface());
         lpAIRaceCarInterface->SetPlayerRouteNodePositions(lpPlayerCar);
+    }
+}
+
+// =================================================================================================
+// [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER -- the AI side of the "AI PAD" seat. Read the banner of
+// BrnAIHarnessPad.h first; nothing below exists on the console and nothing below runs unless
+// WorldModule::HarnessArmAIPadPlayer armed the pad this frame (it never does without the variable).
+// =================================================================================================
+
+// OFF / unarmed / no target / no route held -- the whole state of a default run.
+HarnessAIPad gHarnessAIPad =
+{
+    E_HARNESS_AI_PAD_OFF,                   // meMode
+    false,                                  // mbArmed
+    -1,                                     // miTarget
+    false,                                  // mbRamming
+    false,                                  // mbTargetReset
+    0.0f,                                   // mfTargetSeparation
+    0.0f,                                   // mfTargetAheadness
+    false,                                  // mbRouteOwned
+    0,                                      // miSavedRouteFindingStyle
+    AICar::KI_INVALID_SECTION_INDEX,        // muSavedDestinationSection
+    AICar::KI_INVALID_SECTION_INDEX,        // muOwnedDestinationSection
+    0,                                      // miPlans
+    0,                                      // miTargetChanges
+    0,                                      // miRamEntries
+};
+
+// Effect 1 (BrnAIHarnessPad.h). The byte the console seat's StoreDrivenCarData @0x827957F0 writes for
+// the player's slot is 0 (0x82795CA4..0x82795CD4: isPlayer && !mbAIDrivesPlayer, with
+// mbAIDrivesPlayer set); the pad seat keeps the control word at 1, so StoreDrivenCarData wrote 1. The
+// player's own update gets the seat's 0, and End puts the frame's 1 back before any other car runs.
+bool HarnessAIPadBeginPlayerSeat(AICar* lpCar)
+{
+    if (!gHarnessAIPad.mbArmed || lpCar == 0 || !lpCar->mbIsPlayer || !lpCar->mbIsDrivenByPlayer)
+    {
+        return false;
+    }
+    lpCar->mbIsDrivenByPlayer = false;
+    return true;
+}
+
+void HarnessAIPadEndPlayerSeat(AICar* lpCar, bool lbTaken)
+{
+    if (lbTaken)
+    {
+        lpCar->mbIsDrivenByPlayer = true;
+    }
+}
+
+// pursuit: the ResetOnTrack result loop reported this car placed back on track. Only the current
+// target is remembered; HarnessAIPadPursuit consumes the mark on its next frame.
+void HarnessAIPadNoteReset(s32 liGlobalRaceCarIndex)
+{
+    if (gHarnessAIPad.mbArmed && gHarnessAIPad.miTarget != -1 && liGlobalRaceCarIndex == gHarnessAIPad.miTarget)
+    {
+        gHarnessAIPad.mbTargetReset = true;
+    }
+}
+
+namespace
+{
+    // The console's own slam window. SteeringFan::IncludeSmashIntoPlayer @0x82791230 hands
+    // SteeringFan::IncludeSmashIntoTarget @0x82787968 the aheadness window [f1, f2] =
+    // [flt_820C8074, flt_820C4890] (0x8279130C..0x82791324); IncludeSmashIntoTarget zeroes the row when
+    // the aheadness (metres along the car's flattened unit facing) leaves that window, or when the
+    // separation reaches 20 m (lfProximity = 1 - clamp(separation * flt_820047C8, 0, 1) == 0). The
+    // pursuit rams exactly where the console's own fan contributor can act.
+    const f32 KF_HARNESS_SLAM_MIN_AHEADNESS    = -4.5f;   // flt_820C8074
+    const f32 KF_HARNESS_SLAM_MAX_AHEADNESS    = 20.0f;   // flt_820C4890
+    const f32 KF_HARNESS_SLAM_SEPARATION_SCALE = 0.05f;   // flt_820047C8
+
+    // [FLAG PC witness] budget of the pursuit's transition lines (target / ram window / route).
+    const s32 KI_HARNESS_PURSUIT_LOG_LINES = 400;
+    s32       siHarnessPursuitLogLines     = 0;
+
+    bool HarnessPursuitLog()
+    {
+        if (CgsDev::Log::gpDebugPrint == 0 || siHarnessPursuitLogLines >= KI_HARNESS_PURSUIT_LOG_LINES)
+        {
+            return false;
+        }
+        ++siHarnessPursuitLogLines;
+        return true;
+    }
+}
+
+// =================================================================================================
+// [PC HARNESS, NOT X360] AIModule::HarnessAIPadPursuit -- BRN_AI_PAD_PLAYER=pursuit, once per frame from
+// UpdateDrivers (after StoreDrivenCarData / SortTrafficIntoAICars / UpdateCars / the route requests have
+// run this frame, before the round robins and the drivers).
+//
+//   TARGET  the nearest ATTACHED rival: any car of the roster UpdateCars walks (8 in a game mode, 35
+//           otherwise -- 0x8279A580) that is attached to AI control (AICar::IsActive(): IN_RANGE with a
+//           driver, or OUT_OF_RANGE without one; ATTACH_AI_CONTROL / ACTIVATE_RACE_CAR in
+//           BrnAIModule_Events.cpp) and is not the player's. A rival inside the slam window is taken
+//           first; otherwise the target is KEPT until it crashes, is reset on track (the ResetOnTrack
+//           result loop, HarnessAIPadNoteReset) or leaves (detached from AI control), and only then is
+//           the nearest picked again.
+//   ROUTE   the console's own A* request for the player's car: RACE route-finding style (the style
+//           ADD_CAR_TO_MODE gives the player in a race) and muDestinationSectionIndex = the target's
+//           best section. RouteRequestManager::GenerateRoute @0x827948B0 then issues
+//           GenerateStandardRouteRequest @0x82791490 (no U-turns) exactly as for a racing player.
+//           A NEW target is aimed the way AICar::OnReachedCheckpoint @0x8278A658 re-aims a racer
+//           (InvalidateRoute, then the destination: the old route leads elsewhere). A target that has
+//           MOVED to another section is re-aimed only when the console's own route-age test for the
+//           player, AICar::IsExtrapolatedRouteGettingOld @0x8276FD50 (the player has drifted 50 m --
+//           flt_820C4244 -- from where the route was built, or the route is spent), says so, and then
+//           with UpdateRouteFinding's own "ask again" (mbRouteRequested; the car keeps its route until
+//           AICar::UpdateRoute replaces it). Handed back (the console's own style and destination
+//           restored, the route invalidated so the console asks again) when there is no target, when
+//           the target is in the player's own section, or when the pad stands down.
+//   RAM     mbRamming = the target is inside the slam window above, measured from the SAME record the
+//           console's fan reads: the player driver's NearbyVehicles entry for that car
+//           (FindVictimInTraffic @0x82769580 finds the victim by meGlobalRaceCarIndex, and
+//           IncludeSmashIntoTarget measures from its mCentre). UpdateDrivers then stores the target as
+//           the player driver's aggression victim and AIDriver::SetDrivingFanBiases gives it the Slam
+//           bias; WorldModule::HarnessApplyAIPad holds throttle and the boost button.
+// =================================================================================================
+void AIModule::HarnessAIPadPursuit(AICar* lpPlayerCar)
+{
+    HarnessAIPad& lrPad = gHarnessAIPad;
+
+    const AIDriver* lpPlayerDriver = GetAIDriver(mePlayerActiveRaceCarIndex);
+    const bool lbPursuing = lrPad.mbArmed
+                         && lrPad.meMode == E_HARNESS_AI_PAD_PURSUIT
+                         && lpPlayerCar != 0
+                         && lpPlayerDriver != 0
+                         && lpPlayerDriver->GetCar() == lpPlayerCar;
+    if (!lbPursuing)
+    {
+        if (lrPad.miTarget != -1 && HarnessPursuitLog())
+        {
+            *CgsDev::Log::gpDebugPrint << "[ai-pad] pursuit: target " << lrPad.miTarget
+                                       << " dropped -- the pad stood down [PC HARNESS]\n";
+        }
+        lrPad.miTarget      = -1;
+        lrPad.mbRamming     = false;
+        lrPad.mbTargetReset = false;
+        HarnessAIPadReleaseRoute(lpPlayerCar, "the pad stood down");
+        return;
+    }
+
+    const Vector2 lPlayerPosition = BrnMath::Flatten(lpPlayerCar->GetPosition());
+    // IncludeSmashIntoTarget's aheadness axis: the car's FACING, flattened, normalised (0x827879B8).
+    const Vector2 lFacing        = BrnMath::Flatten(lpPlayerCar->GetDirection());
+    const f32     lfFacingLength = std::sqrt(lFacing.x * lFacing.x + lFacing.y * lFacing.y);
+    const f32     lfFacingX      = (lfFacingLength > 0.0f) ? lFacing.x / lfFacingLength : 0.0f;
+    const f32     lfFacingZ      = (lfFacingLength > 0.0f) ? lFacing.y / lfFacingLength : 0.0f;
+
+    // ---- the candidates: every ATTACHED rival -----------------------------------------------
+    struct Candidate
+    {
+        s32  miGlobal;
+        f32  mfSeparation;   // ground-plane metres between the two AICar positions
+        f32  mfAheadness;    // metres along the player's facing
+        bool mbInWindow;     // inside the console's slam window (see the constants above)
+    };
+    Candidate   laCandidates[KI_MAX_OUT_OF_RANGE_RACE_CARS];
+    s32         liCandidates     = 0;
+    const s32   liPreviousTarget = lrPad.miTarget;
+    const bool  lbTargetReset    = lrPad.mbTargetReset;
+    const char* lpcLostReason    = "it left the roster";
+    lrPad.mbTargetReset = false;
+
+    const NearbyVehicles* lpNearby   = lpPlayerDriver->GetNearbyVehicles();
+    const s32             liCarCount = mbIsInGameMode ? KI_MAX_ACTIVE_RACE_CARS : KI_MAX_OUT_OF_RANGE_RACE_CARS;
+
+    for (s32 liGlobal = 0; liGlobal < liCarCount; ++liGlobal)
+    {
+        AICar* lpCar = GetAICar(static_cast<u32>(liGlobal));
+        if (lpCar == 0 || lpCar == lpPlayerCar || lpCar->IsPlayerCar())
+        {
+            continue;
+        }
+        if (!lpCar->IsActive())
+        {
+            if (liGlobal == liPreviousTarget) lpcLostReason = "it was detached from AI control (it left)";
+            continue;
+        }
+        if (lpCar->IsCrashing())
+        {
+            if (liGlobal == liPreviousTarget) lpcLostReason = "it is crashing";
+            continue;
+        }
+        if (liGlobal == liPreviousTarget && lbTargetReset)
+        {
+            lpcLostReason = "it was reset on track";
+            continue;
+        }
+
+        Candidate& lrCandidate = laCandidates[liCandidates++];
+        lrCandidate.miGlobal = liGlobal;
+
+        const Vector2 lCarPosition = BrnMath::Flatten(lpCar->GetPosition());
+        const f32 lfDx = lCarPosition.x - lPlayerPosition.x;
+        const f32 lfDz = lCarPosition.y - lPlayerPosition.y;
+        lrCandidate.mfSeparation = std::sqrt(lfDx * lfDx + lfDz * lfDz);
+        lrCandidate.mfAheadness  = lfDx * lfFacingX + lfDz * lfFacingZ;
+        lrCandidate.mbInWindow   = false;
+
+        // The slam window, from the player driver's own avoidance record of this car: a rival the
+        // avoidance feed did not list (an OUT_OF_RANGE car never is) is out of the fan's reach.
+        const s32 liNearbyCount = lpNearby->GetCount();
+        for (s32 liEntry = 0; liEntry < liNearbyCount; ++liEntry)
+        {
+            const NearbyVehicle& lrEntry = lpNearby->mVehicle[liEntry];
+            if (static_cast<s32>(lrEntry.meGlobalRaceCarIndex) != liGlobal)
+            {
+                continue;
+            }
+            const f32 lfRelX = lrEntry.mCentre.x - lPlayerPosition.x;
+            const f32 lfRelZ = lrEntry.mCentre.y - lPlayerPosition.y;
+            const f32 lfSep  = std::sqrt(lfRelX * lfRelX + lfRelZ * lfRelZ);
+            lrCandidate.mfAheadness = lfRelX * lfFacingX + lfRelZ * lfFacingZ;
+            lrCandidate.mbInWindow  = (lfSep * KF_HARNESS_SLAM_SEPARATION_SCALE < 1.0f)
+                                   && !(lrCandidate.mfAheadness < KF_HARNESS_SLAM_MIN_AHEADNESS)
+                                   && !(lrCandidate.mfAheadness > KF_HARNESS_SLAM_MAX_AHEADNESS);
+            break;
+        }
+    }
+
+    const Candidate* lpNearest = 0;
+    const Candidate* lpSlam    = 0;
+    const Candidate* lpCurrent = 0;
+    for (s32 liCandidate = 0; liCandidate < liCandidates; ++liCandidate)
+    {
+        const Candidate* lpCandidate = &laCandidates[liCandidate];
+        if (lpNearest == 0 || lpCandidate->mfSeparation < lpNearest->mfSeparation)
+        {
+            lpNearest = lpCandidate;
+        }
+        if (lpCandidate->mbInWindow && (lpSlam == 0 || lpCandidate->mfSeparation < lpSlam->mfSeparation))
+        {
+            lpSlam = lpCandidate;
+        }
+        if (lpCandidate->miGlobal == liPreviousTarget)
+        {
+            lpCurrent = lpCandidate;
+        }
+    }
+
+    // ---- the target --------------------------------------------------------------------------
+    if (liPreviousTarget != -1 && lpCurrent == 0)
+    {
+        if (HarnessPursuitLog())
+        {
+            *CgsDev::Log::gpDebugPrint << "[ai-pad] pursuit: target " << liPreviousTarget << " lost -- "
+                                       << lpcLostReason << " [PC HARNESS]\n";
+        }
+    }
+
+    const Candidate* lpTargetCandidate = lpCurrent;
+    const char*      lpcWhy            = "";
+    if (lpSlam != 0 && !(lpCurrent != 0 && lpCurrent->mbInWindow))
+    {
+        lpTargetCandidate = lpSlam;      // a rival inside the slam window is rammed first
+        lpcWhy            = "inside the slam window";
+    }
+    else if (lpCurrent == 0)
+    {
+        lpTargetCandidate = lpNearest;   // 0 when no rival is attached
+        lpcWhy            = "the nearest attached rival";
+    }
+
+    lrPad.miTarget           = (lpTargetCandidate != 0) ? lpTargetCandidate->miGlobal : -1;
+    lrPad.mfTargetSeparation = (lpTargetCandidate != 0) ? lpTargetCandidate->mfSeparation : 0.0f;
+    lrPad.mfTargetAheadness  = (lpTargetCandidate != 0) ? lpTargetCandidate->mfAheadness : 0.0f;
+
+    const bool lbTargetChanged = (lrPad.miTarget != liPreviousTarget);
+    if (lbTargetChanged && lrPad.miTarget != -1)
+    {
+        ++lrPad.miTargetChanges;
+        if (HarnessPursuitLog())
+        {
+            *CgsDev::Log::gpDebugPrint << "[ai-pad] pursuit: target -> global " << lrPad.miTarget << " ("
+                                       << lpcWhy << ", " << lrPad.mfTargetSeparation << " m, ahead "
+                                       << lrPad.mfTargetAheadness << " m, "
+                                       << (GetAICar(static_cast<u32>(lrPad.miTarget))->GetState() == E_AI_CAR_STATE_IN_RANGE
+                                               ? "IN_RANGE" : "OUT_OF_RANGE")
+                                       << "; " << liCandidates << " attached rival(s)) [PC HARNESS]\n";
+        }
+    }
+
+    // ---- the ram window ---------------------------------------------------------------------
+    const bool lbRamming = (lpTargetCandidate != 0) && lpTargetCandidate->mbInWindow;
+    if (lbRamming != lrPad.mbRamming)
+    {
+        if (lbRamming)
+        {
+            ++lrPad.miRamEntries;
+        }
+        if (HarnessPursuitLog())
+        {
+            *CgsDev::Log::gpDebugPrint << "[ai-pad] pursuit: " << (lbRamming ? "RAM window entered" : "RAM window left")
+                                       << " -- target " << lrPad.miTarget << " sep " << lrPad.mfTargetSeparation
+                                       << " ahead " << lrPad.mfTargetAheadness << " (entries "
+                                       << lrPad.miRamEntries << ") [PC HARNESS]\n";
+        }
+    }
+    lrPad.mbRamming = lbRamming;
+
+    // ---- the route ---------------------------------------------------------------------------
+    if (lrPad.miTarget == -1)
+    {
+        HarnessAIPadReleaseRoute(lpPlayerCar, "no attached rival");
+        return;
+    }
+
+    const AICar* lpTarget        = GetAICar(static_cast<u32>(lrPad.miTarget));
+    const u16    luTargetSection = lpTarget->GetBestSectionIndex();
+    const u16    luOwnSection    = lpPlayerCar->GetBestSectionIndex();
+    if (luTargetSection == AICar::KI_INVALID_SECTION_INDEX || luOwnSection == AICar::KI_INVALID_SECTION_INDEX
+        || luTargetSection == luOwnSection)
+    {
+        HarnessAIPadReleaseRoute(lpPlayerCar, "the target is in the player's own section (or off the road network)");
+        return;
+    }
+
+    // The console re-aimed the player's route under us (a mode start / end, a drive-thru): its values
+    // are the ones to hand back later, so they are saved again when the route is re-taken below.
+    if (lrPad.mbRouteOwned
+        && (lpPlayerCar->meRouteFindingStyle != E_ROUTE_FINDING_RACE
+            || lpPlayerCar->muDestinationSectionIndex != lrPad.muOwnedDestinationSection))
+    {
+        if (HarnessPursuitLog())
+        {
+            *CgsDev::Log::gpDebugPrint << "[ai-pad] pursuit: the console re-aimed the player's route (style "
+                                       << static_cast<s32>(lpPlayerCar->meRouteFindingStyle) << " dest "
+                                       << static_cast<s32>(lpPlayerCar->muDestinationSectionIndex)
+                                       << ") -- taken again [PC HARNESS]\n";
+        }
+        lrPad.mbRouteOwned = false;
+    }
+
+    const bool lbFreshPlan = !lrPad.mbRouteOwned || lbTargetChanged;
+    const bool lbMovedPlan = !lbFreshPlan
+                          && luTargetSection != lrPad.muOwnedDestinationSection
+                          && lpPlayerCar->IsExtrapolatedRouteGettingOld();
+    if (!lbFreshPlan && !lbMovedPlan)
+    {
+        return;
+    }
+
+    if (!lrPad.mbRouteOwned)
+    {
+        lrPad.miSavedRouteFindingStyle  = static_cast<s32>(lpPlayerCar->meRouteFindingStyle);
+        lrPad.muSavedDestinationSection = lpPlayerCar->muDestinationSectionIndex;
+        lpPlayerCar->meRouteFindingStyle = E_ROUTE_FINDING_RACE;
+        ++lpPlayerCar->miRouteTimeStamp;   // a style swap bumps it (HandleGameActions case 7 @0x82792598)
+        lrPad.mbRouteOwned = true;
+    }
+    if (lbFreshPlan)
+    {
+        lpPlayerCar->InvalidateRoute();                          // AICar::OnReachedCheckpoint's re-aim:
+    }                                                            // the route, then the destination
+    else
+    {
+        lpPlayerCar->mbRouteRequested = true;                    // UpdateRouteFinding's "ask again"
+    }
+    lpPlayerCar->muDestinationSectionIndex = luTargetSection;
+    lrPad.muOwnedDestinationSection = luTargetSection;
+    ++lrPad.miPlans;
+
+    if (HarnessPursuitLog())
+    {
+        *CgsDev::Log::gpDebugPrint << "[ai-pad] pursuit: route #" << lrPad.miPlans << " section "
+                                   << static_cast<s32>(luOwnSection) << " -> " << static_cast<s32>(luTargetSection)
+                                   << " (target " << lrPad.miTarget << ", " << lrPad.mfTargetSeparation << " m, "
+                                   << (lbFreshPlan ? "fresh" : "the target moved; the route is old")
+                                   << "; saved style " << lrPad.miSavedRouteFindingStyle << " dest "
+                                   << static_cast<s32>(lrPad.muSavedDestinationSection) << ") [PC HARNESS]\n";
+    }
+}
+
+// [PC HARNESS, NOT X360] Give the player's route back to the console: its own style and destination,
+// and an invalidated route so its own route finding asks again. Left alone when the console has already
+// re-aimed the car itself (the car no longer holds the harness's RACE style + destination).
+void AIModule::HarnessAIPadReleaseRoute(AICar* lpPlayerCar, const char* lpcReason)
+{
+    HarnessAIPad& lrPad = gHarnessAIPad;
+    if (!lrPad.mbRouteOwned)
+    {
+        return;
+    }
+    lrPad.mbRouteOwned = false;
+
+    const bool lbStillOurs = lpPlayerCar != 0
+                          && lpPlayerCar->meRouteFindingStyle == E_ROUTE_FINDING_RACE
+                          && lpPlayerCar->muDestinationSectionIndex == lrPad.muOwnedDestinationSection;
+    if (lbStillOurs)
+    {
+        lpPlayerCar->meRouteFindingStyle       = static_cast<ERouteFindingStyle>(lrPad.miSavedRouteFindingStyle);
+        lpPlayerCar->muDestinationSectionIndex = lrPad.muSavedDestinationSection;
+        lpPlayerCar->InvalidateRoute();
+        ++lpPlayerCar->miRouteTimeStamp;
+    }
+    lrPad.muOwnedDestinationSection = AICar::KI_INVALID_SECTION_INDEX;
+
+    if (HarnessPursuitLog())
+    {
+        *CgsDev::Log::gpDebugPrint << "[ai-pad] pursuit: route handed back "
+                                   << (lbStillOurs ? "(style " : "(the console had re-aimed it already; style ")
+                                   << lrPad.miSavedRouteFindingStyle << " dest "
+                                   << static_cast<s32>(lrPad.muSavedDestinationSection) << ") -- " << lpcReason
+                                   << " [PC HARNESS]\n";
     }
 }
 

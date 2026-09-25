@@ -9,6 +9,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // [FLAG PC witness] the [drv] behaviour-transition trace
+#include "GameSource/World/AI/BrnAIHarnessPad.h"           // [PC HARNESS] BRN_AI_PAD_PLAYER (SetDrivingFanBiases' ram hook)
 
 #include <cmath>   // std::sqrt (de-SIMD'd 2D normalise), std::isfinite (RwMath::IsValid)
 
@@ -1208,6 +1209,17 @@ namespace BrnAI
         const bool lbDrivenByPlayer = lpCar->mbIsDrivenByPlayer;      // lbz 0x154A(car)
         const bool lbForceStandard  = lpCar->ForceStandardRoute();    // lbz 0x1548(car)
         const s32  liBehaviour      = static_cast<s32>(lpCar->meBehaviour);   // lwz 0x14B4(car)
+
+        // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=pursuit (BrnAIHarnessPad.h): while the target is inside
+        // the console's slam window, the player's own driver takes the bias this function gives a rival in
+        // ATTACK_SLAM (0x827704EC..0x8277052C: Slam, 2) -- AIAggression::Update never runs for the player's
+        // car (0x82799AC0..0x82799AC8) and IsPlayerProtected refuses every AI victim (0x827660F8..0x82766104),
+        // so the harness makes that one decision; UpdateDrivers stored the target as the victim.
+        if (lbPlayer && gHarnessAIPad.mbArmed && gHarnessAIPad.mbRamming)
+        {
+            mSteeringFan.SetBiasMode(eBiasMode_Slam);
+            return;
+        }
 
         if (lbPlayer && !lbDrivenByPlayer && (lbForceStandard || liBehaviour == 2))
         {
