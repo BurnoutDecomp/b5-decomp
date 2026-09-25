@@ -1,5 +1,11 @@
-# Full-game regression case driven by tests/run_rival_organic.py.
-# The driver uses normal pad input to pursue a rival. No injected takedown or AI override.
+# Full-game regression case driven by tests/run_rival_organic.py. No injected takedown, nothing forced.
+# Two drivers, both through the PAD path (the control word stays 1, so the rivals target the player and
+# takedowns are player-credited):
+#   default           the runner steers toward the nearest rival's straight-line bearing (0 / +-0.25 / +-0.5
+#                     at ~12 Hz) while flow_run holds Accelerate; it knows nothing of roads, walls or traffic.
+#   --ai-pad <mode>   the game's OWN AI computes the pad (BRN_AI_PAD_PLAYER, FX-AIPAD 2026-09-25): cruise,
+#                     race (the event route), pursuit (route to the nearest attached rival, ram it inside the
+#                     console's slam window). See tests/run_rival_organic.py and tests/run_fxaipad_seat.py.
 @{
     Name = 'rival_organic'
     Area = 'takedown'
