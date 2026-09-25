@@ -91,7 +91,10 @@ enum EGameAction
     KI_ACTION_CAR_SELECTION_DROPIN      = 65,   // size 16         -- CarSelectionChangedDropInAction
     KI_ACTION_CAR_SELECTION_DROPIN_DONE = 66,   // size 16         -- CarSelectionDropInCompleteAction
     KI_ACTION_JUNKYARD_DRIVE_THRU       = 7,    // size 48 (0x30)  -- JunkYardDriveThruAction
-    KI_ACTION_ALLOW_BOOST_EARNING       = 77,   // size 32 (0x20)  -- AllowBoostEarningAction
+    // 77 is NOT an "AllowBoostEarningAction": it is GameStateModuleIO::CarSelectExitAction
+    // (E_ACTION_CAR_SELECT_FINISHED, DWARF CAR_SELECT_EXIT 72 +5), and UpdateExitState now posts it through that
+    // type. The id stays listed here so this table still covers every id the manager posts.
+    KI_ACTION_ALLOW_BOOST_EARNING       = 77,   // size 32 (0x20)  -- CarSelectExitAction (see above)
     KI_ACTION_RESET_PLAYER_DRIVER       = 70,   // size 1          -- SetPlayerCarDriverAction (exit)
     KI_ACTION_SET_INPUT_ENABLED         = 71,   // size 1          -- (enter junkyard input enable)
     KI_ACTION_JUNKYARD_ENTERED          = 99,   // size 1          -- (junkyard entered flag)
@@ -1196,11 +1199,25 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
         CgsDev::Assert::EndAssert();
     }
 
-    // AllowBoostEarningAction (32B): seeded from the spawn-location transform (opaque). FLAG.
+    // Action 77, GameStateModuleIO::CarSelectExitAction (32 bytes): the junkyard exit, carrying where the car will
+    // come out. Fixed 2026-09-25 (crash parity FX-TRAFFICLIGHTS). This used to post 32 ZERO bytes as an "opaque
+    // AllowBoostEarningAction"; the record's readers need the real payload. The traffic's HandleExternalRequests
+    // arm 77 (0x8274C068) clears the traffic within 150 m of mExitSpawnLocation and hands back the car-select sim
+    // box; the director reads mbOnlineCarSelect. Attested:
+    //   0x82398D40  lwz r29, 0x38(r30)            ; maSpawnLocations[4] (the "lpSpawnLocation" tripwire above)
+    //   0x82398D6C  lvx128 v0, r0, r29            ; its first 16 bytes, SpawnLocation::mPosition
+    //   0x82398D80  stvx128 v0 -> var_A0 +0x00    ; -> mExitSpawnLocation
+    //   0x82398D84  stb r31 (== 0) -> var_90      ; +0x10 -> mbOnlineCarSelect = false (the offline car select)
+    //   0x82398D70 / 0x82398D74 / 0x82398D88      ; li r6, 0x20 ; li r5, 0x4D ; AddEvent: id 77, 32 bytes
+    // The console leaves +0x11..+0x1F as stack bytes nobody reads; the PC record is value-initialised (FLAG PC:
+    // zero). The online manager posts the same record with mbOnlineCarSelect = true.
     {
-        u8 lacAllowBoost[32];
-        std::memset(lacAllowBoost, 0, sizeof(lacAllowBoost));
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacAllowBoost), KI_ACTION_ALLOW_BOOST_EARNING, 32);
+        GameStateModuleIO::CarSelectExitAction lExitAction = {};
+        lExitAction.mExitSpawnLocation = lpExitSpawnLocation->mPosition;
+        lExitAction.mbOnlineCarSelect  = false;
+        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lExitAction),
+                          GameStateModuleIO::E_ACTION_CAR_SELECT_FINISHED,
+                          sizeof(lExitAction));
     }
 
     {
