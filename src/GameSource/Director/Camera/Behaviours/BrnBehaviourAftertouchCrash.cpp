@@ -33,6 +33,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // CgsDev::Log::gpDebugPrint (the
                                                                 //   BRN_CAMRIG_DIAG witness only)
 
+#include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"       // Utils::ConsoleVpu::Mult / TransformVector (fused)
 #include "SDKs/XboxMath/XMVectorSinCos.h"                        // XboxMath::XMVectorSinCos (the three inlined SinCos)
 #include "SDKs/XboxMath/XMScalarSinCos.h"                        // XboxMath::XMScalarSinCos (XMMatrixRotationY's)
 
@@ -318,12 +319,13 @@ bool BehaviourAftertouchCrash::Prepare(const BehaviourSharedPrepareReleaseInfo& 
 //
 // VMX->portable, the standing convention of this tree's rw::math::vpu home: the console's
 // vrsqrtefp + two Newton steps (Normalize / Magnitude) are the exact std::sqrt forms, via the vendor
-// Normalize / Magnitude / Mult. Every branch, compare polarity, operand order, constant and store is
-// transcribed; fused multiply-adds become separate operations (FLAGged at the Mult / TransformVector
-// sites). Its three inlined XMVectorSinCos (range register unk_82000C60 == {pi, 2pi, 1/pi, 1/2pi},
-// coefficient blocks unk_82000BD0..0x82000C2F) and XMMatrixRotationY's XMScalarSinCos ARE the console's
-// since FX-GATE (crash parity 2026-09-25): the file-local RotationYAxisZ / RotationX / RotationZ /
-// XMMatrixRotationY above; std::sin / std::cos stood in for them before.
+// Normalize / Magnitude. Every branch, compare polarity, operand order, constant and store is
+// transcribed. Its three inlined XMVectorSinCos (range register unk_82000C60 == {pi, 2pi, 1/pi, 1/2pi},
+// coefficient blocks unk_82000BD0..0x82000C2F), XMMatrixRotationY's XMScalarSinCos and the three products
+// they feed (the orbit TransformVector, the pitch and roll Mults) ARE the console's since FX-GATE (crash
+// parity 2026-09-25): the file-local RotationYAxisZ / RotationX / RotationZ / XMMatrixRotationY above and
+// Utils::ConsoleVpu's fused TransformVector / Mult; std::sin / std::cos and the unfused vendor products stood
+// in for them before. The other multiply-adds of this body are still separate operations.
 // ============================================================================
 bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo)
 {
@@ -453,10 +455,10 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
         // .cpp:248..:249 -- orbit: yaw the manual direction by stick x * KF_CAMERA_X_ROTATION_SPEED
         // (`bl XMMatrixRotationY` @0x82228724 -- the xenon SDK's Y-rotation builder, whose sine and cosine
         // are XMScalarSinCos's (XMMatrixRotationY above) -- then the three-row vmulfp128/vmaddfp/vmaddfp
-        // @0x8222875C..0x82228764 == TransformVector).
-        // FLAG (rule 3, open, FX-DIRECTOR2's file): that TransformVector is fused on the console
-        // (row2 * z + (row1 * y + row0 * x)); the vendor TransformVector here is not.
-        mManualCameraDirection = rw::math::vpu::TransformVector(
+        // @0x8222875C..0x82228764 == TransformVector: row0 * x, then + row1 * y, then + row2 * z, each
+        // multiply-add ONE rounding (ROUNDING_RULE 3) -- Utils::ConsoleVpu::TransformVector, which the real
+        // words run on emu64 match on 1000 random matrices / directions, FX-GATE 2026-09-25).
+        mManualCameraDirection = Utils::ConsoleVpu::TransformVector(
             XMMatrixRotationY(lOrbitStick.x * KF_CAMERA_X_ROTATION_SPEED),
             mManualCameraDirection);
 
@@ -604,11 +606,12 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     // X rotation by mfPitch * 0.017453292 (the SDK's MakeRotationX, :239/:240 -- rows
     // (1,0,0) / (0,c,s) / (0,-s,c) / (0,0,0) packed @0x82229050..0x822290BC) pre-multiplied in
     // (Mult(rotation, frame): the rotation's zero translation row leaves the lifted origin).
-    // The rotation's sine and cosine are the console's XMVectorSinCos (RotationX above). FLAG (rule 3, open,
-    // FX-DIRECTOR2's file): the Mult's vmaddfp cascade (0x822290C0..0x82229128) is fused on the console; the
-    // vendor Mult is not.
+    // The rotation's sine and cosine are the console's XMVectorSinCos (RotationX above), and the product is the
+    // fused vmaddfp cascade 0x822290C0..0x82229144 (ROUNDING_RULE 3), Utils::ConsoleVpu::Mult: the whole block
+    // 0x82228EA4..0x82229154 (the height lift, the SinCos, the rows and the product) run on emu64 matches it on
+    // 1000 random frames (FX-GATE 2026-09-25).
     lCameraTransform.wAxis.y += mfHeight;
-    lCameraTransform = rw::math::vpu::Mult(
+    lCameraTransform = Utils::ConsoleVpu::Mult(
         RotationX(lrParameters.mfPitch * KF_DEGS_TO_RADS), lCameraTransform);
 
     // .cpp:394..:400 -- smooth small camera moves: within KF_SMOOTHING_STOP_DISTANCE_SQ of last
@@ -658,10 +661,11 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     // Roll the published camera by the crash-mode tilt (the SDK's MakeRotationZ, :269 -- rows
     // (c,s,0) / (-s,c,0) / (0,0,1) / (0,0,0) @0x8222942C..0x82229448 -- pre-multiplied into the
     // camera's four rows @0x8222944C..0x822294BC). The sine and cosine are the console's XMVectorSinCos
-    // (RotationZ above); FLAG (rule 3, open, FX-DIRECTOR2's file): that Mult is fused on the console, the
-    // vendor Mult is not.
-    lrCamera.SetTransform(rw::math::vpu::Mult(RotationZ(mfRollAngleRads),
-                                              lrCamera.GetTransform()));
+    // (RotationZ above), and the product is the fused cascade -- each row x first, then y and z by vmaddfp, the
+    // translation seeded with the camera's (ROUNDING_RULE 3) -- Utils::ConsoleVpu::Mult, which the real words
+    // 0x8222944C..0x822294BC run on emu64 match on 1000 random rows (FX-GATE 2026-09-25).
+    lrCamera.SetTransform(Utils::ConsoleVpu::Mult(RotationZ(mfRollAngleRads),
+                                                  lrCamera.GetTransform()));
 
     // .cpp:435 -- the slow-mo close-up frames the car from beside it: aim half a metre below the
     // lagged origin (gJVector * 0.5, v122 == vcsxwfp128 1,1), from four metres out along the
