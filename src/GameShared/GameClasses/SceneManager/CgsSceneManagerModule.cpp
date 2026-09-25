@@ -3800,11 +3800,10 @@ namespace CgsSceneManager
     // CgsSceneManagerBridgeFunctions.cpp (0x820F41B8).
     //   r3 = this (r20), r4 = lpCollisionGenerator (r27), r5 = the TriCacheQueryBuffer (NOT read), r6 = the event
     //   (r31), r7 = lpSpatialPartitionOutputBuffer (r30), r8 = lpSceneOutputBuffer (r18).
-    // The event element is an OPAQUE 224-byte record on this host (no field DWARF -- see
-    // CgsSceneManagerIO_EventVolumeTestDeepest.h), so it is read at the byte offsets its producer
-    // SceneQueryInterface::VolumeTestDeepest @0x822170B0 stages and this body loads: +0x00 the transform (4 rows),
-    // +0x40 the query id, +0x44 the entity-type flags, +0x48 the exclude entity id, +0x4C the exclusion mode, +0x50 the
-    // 128-byte rw collision volume image, +0xD0 the volume-type flags.
+    // The event is read BY NAME (REVIEW-K, 2026-09-25; the DWARF members of CgsSceneManagerIO_FineQuery.h:101-109, beside
+    // the opaque payload in CgsSceneManagerIO_EventVolumeTestDeepest.h, pinned there to its producer's stores
+    // @0x822170B0): mTransform +0x00 (4 rows), mQueryId +0x40, mx32EntityTypeFlags +0x44, mExcludeEntityId +0x48,
+    // meExclusionMode +0x4C, mVolumeBuffer +0x50 (the 128-byte rw collision volume image), mxVolumeTypeFlags +0xD0.
     //
     // 1. THE WORLD, when the flags carry the world bit (0x828D4480 `lwz 0x44 ; rlwinm 0,30,30`):
     //    0x828D44A8  the volume must be a sphere (`lwz 0x90(ev) ; lwz 0(r11) ; cmpwi 1` -- its descriptor's typeID),
@@ -3837,15 +3836,8 @@ namespace CgsSceneManager
                                                       SpatialPartitionIO::OutputBuffer*               lpSpatialPartitionOutputBuffer,
                                                       SceneManagerIO::OutputBuffer*                   lpSceneOutputBuffer)
     {
-        // The event record's byte offsets (the producer's stores @0x822170B0 and this body's loads).
-        static const u32 KU_EVENT_TRANSFORM         = 0x00;
-        static const u32 KU_EVENT_QUERY_ID          = 0x40;
-        static const u32 KU_EVENT_ENTITY_TYPE_FLAGS = 0x44;
-        static const u32 KU_EVENT_EXCLUDE_ENTITY_ID = 0x48;
-        static const u32 KU_EVENT_EXCLUSION_MODE    = 0x4C;
-        static const u32 KU_EVENT_VOLUME            = 0x50;
-        static const u32 KU_EVENT_VOLUME_SIZE       = 0x80;   // `li r5, 0x80 ; bl memcpy` @0x828D47B0
-        static const u32 KU_EVENT_VOLUME_TYPE_FLAGS = 0xD0;
+        // The volume image the fine query copies: `li r5, 0x80 ; bl memcpy` @0x828D47B0, the event's whole mVolumeBuffer.
+        static const u32 KU_EVENT_VOLUME_SIZE       = 0x80;
         // The world bit of the entity-type flags (`rlwinm r11, r11, 0,30,30` @0x828D448C).
         static const u32 KU_ENTITY_TYPE_FLAG_WORLD  = 2u;
         // flt_82001CC0: the depth a world hit and a no-candidate miss publish.
@@ -3854,14 +3846,18 @@ namespace CgsSceneManager
         static const s32 KI_VOLUME_TEST_DEEPEST_RESULT_EVENT = 5;
         static_assert(sizeof(FineIntersectionTestIO::InEventVolumeTestDeepest().mVolumeBuffer) == KU_EVENT_VOLUME_SIZE,
                       "the fine query's volume slot is the event's 0x80-byte volume image");
+        static_assert(sizeof(lpQuery->mVolumeBuffer) == KU_EVENT_VOLUME_SIZE, "the event's volume image is 0x80 bytes");
+        static_assert(sizeof(lpQuery->mTransform) == sizeof(Matrix44Affine), "the event's transform is a Matrix44Affine");
 
-        const u8* const lpEvent = lpQuery->macOpaquePayload;
-        const Matrix44Affine& lrTransform = *reinterpret_cast<const Matrix44Affine*>(lpEvent + KU_EVENT_TRANSFORM);
-        const u32 lx32EntityTypeFlags     = *reinterpret_cast<const u32*>(lpEvent + KU_EVENT_ENTITY_TYPE_FLAGS);
-        const rw::collision::Volume* lpVolume = reinterpret_cast<const rw::collision::Volume*>(lpEvent + KU_EVENT_VOLUME);
+        // mTransform holds the DWARF Matrix44Affine's four rows (see the header), so it is viewed as one, in place: the
+        // console hands the event's own transform (r31 + 0) to VolumeTest.
+        const Matrix44Affine& lrTransform = *reinterpret_cast<const Matrix44Affine*>(lpQuery->mTransform);   // +0x00
+        const u32 lx32EntityTypeFlags     = lpQuery->mx32EntityTypeFlags;                                     // +0x44
+        const rw::collision::Volume* lpVolume =
+            reinterpret_cast<const rw::collision::Volume*>(&lpQuery->mVolumeBuffer);                          // +0x50
 
         SceneQueryId lQueryId;
-        lQueryId.mId = *reinterpret_cast<const u32*>(lpEvent + KU_EVENT_QUERY_ID);
+        lQueryId.mId = lpQuery->mQueryId.mId;                                                                 // +0x40
 
         SceneManagerIO::OutSceneQueryResultsQueue<32768>* lpResultsQueue = lpSceneOutputBuffer->GetResultsQueue();
 
@@ -3909,15 +3905,15 @@ namespace CgsSceneManager
                                                                    &lrTransform,
                                                                    lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer());
         SceneQueryId lCoarseQueryId;                                                                  // `lwz r21, 0x40(r31)` after the call
-        lCoarseQueryId.mId = *reinterpret_cast<const u32*>(lpEvent + KU_EVENT_QUERY_ID);
+        lCoarseQueryId.mId = lpQuery->mQueryId.mId;
         const s32  liNumResultsWritten   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsWritten();
         const s32  liNumResultsAttempted = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsAttempted();
         const u16* lpau16ResultsBatch    = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetResultsBatch();
         lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->EndResultsBatch();
 
         // ---- 3. the exclude entity ------------------------------------------------------------------------------
-        const EntityId lExcludeEntityId = EntityId(*reinterpret_cast<const u32*>(lpEvent + KU_EVENT_EXCLUDE_ENTITY_ID));
-        const bool     lbExcludeParts   = (*reinterpret_cast<const u32*>(lpEvent + KU_EVENT_EXCLUSION_MODE)
+        const EntityId lExcludeEntityId = EntityId(lpQuery->mExcludeEntityId);                                // +0x48
+        const bool     lbExcludeParts   = (lpQuery->meExclusionMode                                           // +0x4C
                                            == static_cast<u32>(SceneManagerIO::E_EXCLUDE_ALL_CHILD_PARTS));
         u16 lu16ExcludeEntityIndex = 0xFFFF;
         if (lExcludeEntityId != InvalidEntityId())
@@ -3942,12 +3938,12 @@ namespace CgsSceneManager
         {
             FineIntersectionTestIO::InEventVolumeTestDeepest lFineQuery;                             // var_160
             lFineQuery.mTransform = lrTransform;                                                     // +0x00, four rows
-            std::memcpy(&lFineQuery.mVolumeBuffer, lpEvent + KU_EVENT_VOLUME, KU_EVENT_VOLUME_SIZE); // +0x40
+            std::memcpy(&lFineQuery.mVolumeBuffer, &lpQuery->mVolumeBuffer, KU_EVENT_VOLUME_SIZE);  // +0x40
             lFineQuery.mQueryId                = lQueryId;                                            // +0xC0
             lFineQuery.mpau16EntityIndices     = lpau16ResultsBatch;                                  // +0xC4
             lFineQuery.mu16NumEntities         = static_cast<u16>(liNumResultsWritten);               // +0xC8
             lFineQuery.mu16ExcludeEntityIndex  = lu16ExcludeEntityIndex;                              // +0xCA
-            lFineQuery.mxVolumeTypeFlags       = lpEvent[KU_EVENT_VOLUME_TYPE_FLAGS];                 // +0xCC
+            lFineQuery.mxVolumeTypeFlags       = lpQuery->mxVolumeTypeFlags;                          // +0xCC
             lFineQuery.mbExcludeParts          = lbExcludeParts;                                      // +0xCD
 
             // NOT X360: the console's result record (var_190) starts as stack garbage, and ComputeVolumeTestDeepest

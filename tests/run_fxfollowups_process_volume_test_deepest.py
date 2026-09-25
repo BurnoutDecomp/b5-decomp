@@ -17,6 +17,8 @@ sys.dont_write_bytecode = True
 from fxgs_common import Tree, definition, compile_and_run, report
 
 MODULE = "src/GameShared/GameClasses/SceneManager/CgsSceneManagerModule.cpp"
+# The event header is shadowed from the same revision (REVIEW-K, 2026-09-25: it names its members since then).
+EVENT_H = "src/GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventVolumeTestDeepest.h"
 NUMERIC_CHECKS = 11
 
 
@@ -31,7 +33,7 @@ def main():
         print("NUMERIC: cannot build -- " + str(error))
         return report("run_fxfollowups_process_volume_test_deepest", [], None, NUMERIC_CHECKS)
     numeric = compile_and_run(Path(__file__).with_name("FxFollowupsProcessVolumeTestDeepest.cpp"), "fxfu_pvtd_body.inc",
-                              body, "FxFollowupsProcessVolumeTestDeepest")
+                              body, "FxFollowupsProcessVolumeTestDeepest", shadow={EVENT_H: tree.read(EVENT_H)})
     return report("run_fxfollowups_process_volume_test_deepest", [], numeric, NUMERIC_CHECKS)
 
 
