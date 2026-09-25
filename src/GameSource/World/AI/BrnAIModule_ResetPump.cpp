@@ -57,6 +57,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // the game-event queue (event 113)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameSource/World/AI/BrnAIHarnessPad.h"                      // [PC HARNESS] BRN_AI_PAD_PLAYER (HarnessAIPadNoteReset)
 
 namespace BrnAI
 {
@@ -243,6 +244,8 @@ void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lp
         {
             lpCar->mPosition = lrResult.GetResetPosition();
             lpCar->SetDirection(lrResult.GetResetDirection());
+            // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=pursuit re-targets a reset target (BrnAIHarnessPad.h).
+            HarnessAIPadNoteReset(static_cast<s32>(lrResult.GetGlobalRaceCarIndex()));
         }
     }
     const auto* lpPlacements = lpResults->GetPlaceOnTrackRequestQueue();
@@ -252,6 +255,8 @@ void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lp
         AICar* lpCar = GetAICar(static_cast<u32>(lrPlacement.GetGlobalRaceCarIndex()));
         lpCar->mPosition = lrPlacement.GetResetPosition();
         lpCar->SetDirection(lrPlacement.GetResetDirection());
+        // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=pursuit re-targets a re-seated target (BrnAIHarnessPad.h).
+        HarnessAIPadNoteReset(static_cast<s32>(lrPlacement.GetGlobalRaceCarIndex()));
     }
 }
 

@@ -567,6 +567,18 @@ namespace BrnWorld
         // variable. Defined at the end of BrnWorldModule.cpp; called once per Update.
         void HarnessArmAIDrivesPlayer();
 
+        // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=cruise|race|pursuit -- the "AI PAD" seat: the game's
+        // own AI computes the player car's controls and they reach physics through the PAD path (the
+        // control word stays 1, so to the rest of the game the car is human-driven). Arm = the standing
+        // policy + GameSource/World/AI/BrnAIHarnessPad.h's gHarnessAIPad; Stash = the AI's player-slot
+        // record copied out of the AI output after AIModule::Update; Apply = next frame, that record's
+        // driving channels written into the race-car pre-scene PlayerVehicleControls. Bodies at the end
+        // of BrnWorldModule.cpp; all three return at once without the variable.
+        void HarnessArmAIPadPlayer();
+        void HarnessStashAIPadControls( BrnAI::AIModuleIO::OutputBuffer* lpAIOutput );
+        void HarnessApplyAIPad( RaceCarEntityModuleIO::InputBuffer_PreScene* lpRaceCarInput_PreScene,
+                                const BrnWorldIO::UpdateInputBuffer* lpUpdateInputBuffer );
+
         // @0x827A52B0 (DWARF BrnWorldModule.h:473 -- `void BridgeRaceCarModuleToWorldModule_
         // PreScene(InputBuffer_PreScene*, const OutputBuffer_PreScene*)`, i.e. a WorldModule
         // METHOD with `this` implicit). Latch the race-car module's pre-scene active-race-car
