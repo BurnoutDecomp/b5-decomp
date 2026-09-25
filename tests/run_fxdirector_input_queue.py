@@ -149,7 +149,9 @@ def wiring(tree):
            0 <= arb.find("lrSharedInfo.mpSharedCameraContainer=&mSharedCameraContainer;") < read
            < arb.find("mSharedCameraContainer.mbLookbackOverride=false;"))
     # [2026-09-24] the end-of-event pair: +0x1CC, then @0x7AD6 -> +0x1D1, then @0x7AD5 -> +0x1D0, then the drain.
-    team = flat.find("maGameState.miPlayerTeam=lpInput->GetRankUpRivalInfo();")
+    # [2026-09-25] the input word @0x7AB0 is the player's team (BridgeGameStateToDirector 0x823CD454), renamed
+    # from GetRankUpRivalInfo (FX-DIRECTOR2).
+    team = flat.find("maGameState.miPlayerTeam=lpInput->GetPlayerTeam();")
     expired = flat.find("maGameState.mbModeTimeExpired=lpInput->GetModeTimeExpired();")
     eliminated = flat.find("maGameState.mbPlayerEliminated=lpInput->GetPlayerEliminated();")
     first_event = flat.find("GetFirstEvent(")

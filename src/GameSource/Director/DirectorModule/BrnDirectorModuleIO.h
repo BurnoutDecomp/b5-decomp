@@ -12,6 +12,7 @@
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface (mTimerInterface @0x6750, exactly 48B)
 #include "GameSource/Director/SharedIO/BrnDirectorVehicleInputInterface.h" // BrnDirector::BrnDirectorVehicleInputInterface (mVehicleDriverInputInterface @0x6780)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityGlobalRaceCarOutputInterface (mGlobalRaceCarInterface @0x0010)
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficDirectorInterfaces.h" // TrafficDirectorOutputInterface (mTrafficOutputInterface @0x6AC0)
 
 // BrnDirector::DirectorIO::InputBuffer -- the Director module's per-frame INPUT payload buffer.
 // Like every CgsModule IO buffer it derives the shared CgsModule::IOBuffer (status-flag-guarded
@@ -30,11 +31,13 @@
 //     mUsedRaceCars              @0x0980 (2432)    GetUsedRaceCars / SetRaceCarInfo bit-set
 //     mRaceCarInfo[8]            @0x0990 (2448)    SetRaceCarInfo:  VehicleInfo stride 0x4F0 (1264),
 //                                                  SetCrashingCentreOfMass: 1264*idx + 0xDF0/0xE75
-//     maVehicleInfoArray[8]      @0x3238 (12856)   GetVehicleInfoArray / SetVehicleTeam (4*idx)
+//     maVehicleInfoArray[8]      @0x3238 (12856)   GetVehicleInfoArray / SetVehicleTeam (4*idx) -- the per-car TEAMS
 //     mControllerInfo            @0x3260 (12896)   SetControllerInfo memcpy 224 bytes
 //     mTimerInterface            @0x6750 (26448)   GetTimerStatusInterface
 //     mVehicleDriverInputIface   @0x6780 (26496)   GetVehicleInputInterface
 //     mContacts                  @0x6AB8 (27320)   GetContacts / AppendContacts (stores word [6830])
+//     mTrafficOutputInterface    @0x6AC0 (27328)   BridgeWorldToDirector `sth` +0x6AC0 / Array copy +0x6AD0;
+//                                                  PreSceneQueryUpdate `addi +0x6AC0 ; addi +0x10`
 //     mHookEnumeration           @0x7910 (30992)   GetHookEnumeration / SetHookEnumeration memcpy 404
 //     mePlayerCarIndex           @0x7AA8 (31400)   GetPlayerCarIndex (lwz, s32)
 //     mbHasGotHookEnumeration    @0x7AC1 (31425)   SetHookEnumeration sets =1; HasGotHookEnumeration
@@ -86,10 +89,11 @@
 // HONEST PLACEHOLDERS. Several embedded members are large interface aggregates whose full byte
 // layouts are not yet reconstructed (ControllerInfo,
 // TimerStatusInterface, BrnDirectorVehicleInputInterface, the world StatusInterface, the
-// ContactSpyInterface, TrafficDirectorOutputInterface, GuiPFXHookEnumeration,
+// ContactSpyInterface, GuiPFXHookEnumeration,
 // CarScoreData, DirectorProfileData, and the GameActionQueue). (PlayerCrashInfo left this list
 // 2026-09-24: it is the typed Camera::PlayerCrashInfo member @0x78E0 now. So did
-// RCEntityGlobalRaceCarOutputInterface, the same day: the typed mGlobalRaceCarInterface @0x0010.) Rather than fork those homes
+// RCEntityGlobalRaceCarOutputInterface, the same day: the typed mGlobalRaceCarInterface @0x0010.
+// TrafficDirectorOutputInterface left it 2026-09-25: the typed mTrafficOutputInterface @0x6AC0.) Rather than fork those homes
 // with guessed members, they are modelled here as correctly-SIZED, byte-addressable opaque
 // storage members carrying their DWARF names and offsets. This preserves the exact object
 // layout the accessors index into (every recovered offset is asserted below) while being honest
@@ -122,7 +126,8 @@ namespace DirectorIO
         //  reconstructed. GetVehicleInputInterface is TYPED as of 2026-08-02 -- see the member.)
         const void*                                        GetContacts() const;
         const CgsContainers::BitArray<8u>*                 GetUsedRaceCars() const;
-        // Address of the X360 VehicleInfo* pointer table (stored as pointer-width u32 slots).
+        // @0x82206EF0: the eight per-car team words @0x3238 (see maVehicleInfoArray) --
+        // AllVehicleData::Update's lpaVehicleTeams.
         const u32*                                         GetVehicleInfoArray() const;
         const void*                                        GetControllerInfo() const;
         const CgsSystem::TimerStatusInterface*             GetTimerStatusInterface() const;
@@ -217,10 +222,36 @@ namespace DirectorIO
             mGlobalRaceCarInterface = *lpGlobalRaceCarInterface;
         }
 
-        // @0x7AB0 -- copied verbatim into GameState +0x1CC (mRankUpInfo's 4-byte head) by
-        // ProcessInputQueue's prologue (`lwz r11, 0x7AB0(r30); stwx r11, r31, 0x339AC`).
-        // InputBuffer::Construct seeds it to 0 (`stw r30, 0x7AB0`).
-        s32                                                GetRankUpRivalInfo() const;
+        // DWARF :290 / :291 -- the traffic module's per-frame director records (see
+        // mTrafficOutputInterface). The console INLINES both, with no lock-bit test:
+        //   * the setter is BridgeWorldToDirector step 4 (0x823E3F5C..0x823E3F78): the world
+        //     output's GetTrafficDirectorOutputInterface() const (0x823B6158), then `lhz 0 ; sth
+        //     0x6AC0` (mu16EntityCount) and the Array<TrafficDirectorEntity,32> copy helper
+        //     sub_823B2368 from +0x10 to +0x6AD0 -- the struct's member-wise copy-assignment, which
+        //     is what `=` below compiles to (32 x 0x70-byte records, then the count word +0xE00);
+        //   * the getter is MainDirector::PreSceneQueryUpdate's `addi r30, r31, 0x6AC0`
+        //     (0x8225BC30), whose `addi r30, r30, 0x10` (0x8225BC4C) then takes the array for
+        //     AllVehicleData::Update's lpTrafficVehicleArray.
+        const BrnTraffic::BrnTrafficIO::TrafficDirectorOutputInterface* GetTrafficOutputInterface() const
+        {
+            return &mTrafficOutputInterface;
+        }
+        void SetTrafficOutputInterface(
+                const BrnTraffic::BrnTrafficIO::TrafficDirectorOutputInterface* lpTrafficOutputInterface)
+        {
+            mTrafficOutputInterface = *lpTrafficOutputInterface;
+        }
+
+        // @0x7AB0 -- THE PLAYER'S TEAM (RENAMED 2026-09-25, FX-DIRECTOR2, from miRankUpRivalInfo /
+        // GetRankUpRivalInfo, a name read off a wrong guess at its role). Its producer is
+        // BridgeGameStateToDirector's team leg: `lwzx gameStateOut + 0x2AFC8 + 4*player ; stw
+        // 0x7AB0(input)` (0x823CD428..0x823CD454) -- OnlineScoringOutputInterface (+0x2AF68)
+        // ::maePlayerTeam (+0x60) [the scoring snapshot's mePlayerRaceCarIndex]. Its one consumer,
+        // ProcessInputQueue's prologue, copies it into GameState +0x1CC (`lwz r11, 0x7AB0(r30);
+        // stwx r11, r31, 0x339AC`), which is miPlayerTeam there. InputBuffer::Construct seeds it
+        // to 0 (`stw r30, 0x7AB0`), E_PLAYER_TEAM_NONE.
+        s32                                                GetPlayerTeam() const;
+        void                                               SetPlayerTeam(s32 liPlayerTeam);
 
         bool HasGotHookEnumeration() const;
         bool HasGotShortcutMenuEvent() const;
@@ -337,11 +368,17 @@ namespace DirectorIO
         // mfPlayerBoostPercentage, ending at the vehicle-info pointer array @0x3238. HONEST opaque.
         u8  mScoreAndBoostBlock[0x3238 - (0x0990 + 8 * 1264)]; // CarScoreData + combo flag + boost f32
 
-        // @0x3238 (12856): the parallel array of VehicleInfo pointers GetVehicleInfoArray() returns;
-        // SetVehicleTeam writes the team id (a VehicleInfo*-typed slot, stored as s32) per index.
-        // NOTE: the X360 is a 32-bit target (4-byte pointers), but the compile gate builds for the
-        // 64-bit host. To preserve the exact 32-byte X360 layout (4 bytes/slot) the pointer table is
-        // stored as 8 X360-pointer-width u32 slots; the accessors reinterpret them as needed.
+        // @0x3238 (12856): the per-car TEAMS. The PS3 DWARF's accessor GetVehicleInfoArray (:146)
+        // types it as eight VehicleInfo pointers, but on the X360 the eight words are team ids:
+        //   * the ONE writer is SetVehicleTeam @0x823B2938 (`stw team, 0x3238 + 4 * index`), called
+        //     8 times by BridgeGameStateToDirector 0x823CD514..0x823CD56C with
+        //     OnlineScoringOutputInterface::maePlayerTeam[i] (gameStateOut + 0x2AFC8 + 4i);
+        //   * InputBuffer::Construct zeroes all eight (0x82239530..0x82239560, `stw 0` per slot
+        //     behind the leEnumIndex tripwire) -- E_PLAYER_TEAM_NONE;
+        //   * the getter 0x82206EF0 (read-locked, `addi r3, r28, 0x3238`) feeds AllVehicleData::Update
+        //     its fifth argument, which the body asserts under the name "lpaVehicleTeams" (:134) and
+        //     reads per nearest-car row (`lwzx r10, 4 * car, lpaVehicleTeams` @0x8221DEE4).
+        // Stored as eight 4-byte words either way; the name is kept for the DWARF accessor.
         u32 maVehicleInfoArray[8];                       // @0x3238 (32 bytes -> 0x3258)
         u8  maVehicleInfoArrayPad[0x325C - (0x3238 + 8 * sizeof(u32))]; // 4-byte gap
         // @0x325C (12892): the player's boost fill fraction. The producer is
@@ -411,7 +448,14 @@ namespace DirectorIO
         // crash record starts, and 0x78E0 + 48 == 0x7910 is the hook enumeration. The spans
         // around the typed record stay opaque (no reader on this build).
         u8  mContacts[0x6AC0 - 0x6AB8];                  // @0x6AB8 ContactSpyInterface (DWARF :337)
-        u8  mTrafficOutputInterface[0x78E0 - 0x6AC0];    // @0x6AC0 TrafficDirectorOutputInterface (DWARF :338)
+        // @0x6AC0 (27328): the traffic module's director records (DWARF :338). ⭐ TYPED 2026-09-25
+        // (crash parity FX-DIRECTOR2) from opaque bytes: BridgeWorldToDirector step 4 copies the
+        // world output's interface in (mu16EntityCount @+0 == 0x6AC0, the 32-slot entity array
+        // @+0x10 == 0x6AD0, its count word @+0xE10 == 0x78D0), InputBuffer::Construct empties the
+        // array (`stw 0, 0x78D0` @0x82239444), and PreSceneQueryUpdate hands the array to
+        // AllVehicleData::Update. The x64 sizeof is the console's 0xE20 (a 112-byte 16-aligned
+        // record, CgsID is a u64), pinned in _AssertLayout() with mPlayerCrashInfo @0x78E0.
+        BrnTraffic::BrnTrafficIO::TrafficDirectorOutputInterface mTrafficOutputInterface;   // @0x6AC0 (DWARF :338)
         BrnDirector::Camera::PlayerCrashInfo mPlayerCrashInfo;   // @0x78E0 (DWARF :339)
 
         // @0x7910 (30992): the GUI PFX hook enumeration, 404 (0x194) bytes (SetHookEnumeration
@@ -434,16 +478,16 @@ namespace DirectorIO
         // 4-byte enum width. Written by SetPlayerKiller (BridgeGameStateToDirector
         // `stw killer, 0x7AAC` @0x823CD3BC), read back by MainDirector::ProcessInputQueue.
         EActiveRaceCarIndex mePlayerKillerCarIndex;      // @0x7AAC
-        // @0x7AB0 (31408): NAMED 2026-08-01 (it was `mUnknownScalar7AB0`, "no recovered body
-        // touches it" -- that was a NAME search failing, not an absent writer).
-        // MainDirector::ProcessInputQueue's prologue copies this word straight into
-        // GameState +0x1CC, the 4-byte head of GameState::mRankUpInfo
+        // @0x7AB0 (31408): THE PLAYER'S TEAM. RENAMED 2026-09-25 (crash parity FX-DIRECTOR2) from
+        // miRankUpRivalInfo, whose role had been inferred from its destination ("the 4-byte head of
+        // GameState::mRankUpInfo") -- the GameState side already names that word miPlayerTeam.
+        // The PRODUCER settles it: BridgeGameStateToDirector 0x823CD428..0x823CD454 loads
+        // gameStateOut + 0x2AFC8 + 4 * player (OnlineScoringOutputInterface @+0x2AF68 ::maePlayerTeam
+        // @+0x60, indexed by the scoring snapshot's mePlayerRaceCarIndex) and `stw r11, 0x7AB0(r23)`.
+        // MainDirector::ProcessInputQueue's prologue copies it into GameState +0x1CC
         // (`0x8223740C lwz r11, 0x7AB0(r30)` -> `0x82237428 stwx r11, r31, 0x339AC`), and
-        // InputBuffer::Construct @0x82239520 seeds it to 0 (`stw r30, 0x7AB0`).
-        // FLAG: the ROLE (a rank-up / rival-team selector) is inferred from its destination,
-        //   whose own DWARF layout the GameState header records as unreliable; the offset,
-        //   the width and the copy are asm.
-        s32 miRankUpRivalInfo;                           // @0x7AB0
+        // InputBuffer::Construct seeds it to 0 (`stw r30, 0x7AB0` @0x82239520).
+        s32 miPlayerTeam;                                // @0x7AB0
 
         // @0x7AB4 (31412): the new rank BridgeGuiToDirector's command-303 arm publishes
         // alongside mbRankUpThisFrame (X360 `stw r11, 0x7AB4(r31)`), read straight back by

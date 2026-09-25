@@ -1810,15 +1810,17 @@ namespace BrnGame
     //     the world and GUI bridges, and MainDirector::ProcessInputQueue / ArbStateCrashing are its
     //     consumers);
     //   * the player's vehicle TEAM into the director input (+31408) and all 8 teams through
-    //     DirectorIO::InputBuffer::SetVehicleTeam;
+    //     DirectorIO::InputBuffer::SetVehicleTeam -- ⭐ RECONSTRUCTED 2026-09-25 (crash parity
+    //     FX-DIRECTOR2), see the body: the input's +0x7AB0 word is miPlayerTeam now and the
+    //     +0x3238 team words feed AllVehicleData::Update;
     //   * a CarScoreData::operator= of the player's score record (gameStateOut+173240 + 296*i)
     //     into the director input at +12560, plus +12888;
     //   * the player's end-of-event pair at +31445 / +31446 (@0x7AD5 / @0x7AD6) -- ⭐
     //     RECONSTRUCTED 2026-09-24 (crash parity FX-DIRECTOR), see the body.
-    // The team / score legs are still not reconstructed: their director-input destinations are
-    // opaque storage in this model and none of them is on the crash path. Writing them against
-    // opaque zeroes would be the "data arrives wrong-but-plausible" failure mode, so they are
-    // documented, not faked. DELETE-WHEN: the score / team spans of the input buffer are typed.
+    // The score leg is still not reconstructed: its director-input destination is opaque storage
+    // in this model and it is not on the crash path. Writing it against opaque zeroes would be the
+    // "data arrives wrong-but-plausible" failure mode, so it is documented, not faked.
+    // DELETE-WHEN: the score span of the input buffer is typed.
     // ------------------------------------------------------------------------------------
     void BrnGameModule::BridgeGameStateToDirector(
         BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
@@ -1874,6 +1876,29 @@ namespace BrnGame
 
         lpDirectorInput->GetGameActionQueue()->Append(*lpGameStateOutput->GetGameActionQueue());
 
+        // ---- the player's TEAM word (X360 live arm 0x823CD428..0x823CD454) -------------------
+        // ⭐ 2026-09-25 (crash parity FX-DIRECTOR2). With the player slot r25 of the takedown leg
+        // (the scoring snapshot's mePlayerRaceCarIndex):
+        //   0x823CD440  `addis r11, r25, 1 ; addi r11, r11, -0x540E ; slwi 2` == 4 * r25 + 0x2AFC8
+        //   0x823CD450  `lwzx r11, r11, r31` -- gameStateOut + 0x2AFC8 + 4 * player ==
+        //               OnlineScoringOutputInterface (+0x2AF68) ::maePlayerTeam (+0x60) [player]
+        //   0x823CD454  `stw r11, 0x7AB0(r23)` -- the director input's player team, which
+        //               ProcessInputQueue copies into GameState::miPlayerTeam (+0x1CC).
+        // No bounds test: a -1 slot reads the word before the array, maiOnlineAwardVariables[7]
+        // (gameStateOut + 0x2AFC4); that read is reproduced by name rather than by a negative index.
+        // (The score record copy into +0x3110 and the +0x3258 byte that follow it, 0x823CD458..
+        //  0x823CD46C, stay open: the input's score span is still opaque.)
+        {
+            const BrnGameState::GameStateModuleIO::OnlineScoringOutputInterface* const lpOnlineScoring =
+                lpGameStateOutput->GetOnlineScoringOutputInterface();
+            const s32 liPlayerSlot =
+                static_cast<s32>(lpGameStateOutput->GetScoringOutputInterface()->mePlayerRaceCarIndex);
+            const s32 liPlayerTeam = (liPlayerSlot == -1)
+                ? lpOnlineScoring->maiOnlineAwardVariables[7]
+                : static_cast<s32>(lpOnlineScoring->maePlayerTeam[liPlayerSlot]);
+            lpDirectorInput->SetPlayerTeam(liPlayerTeam);                                        // @0x7AB0
+        }
+
         // ---- the player's end-of-event pair (X360 live arm 0x823CD4A0..0x823CD510) -----------
         // ⭐ 2026-09-24 (crash parity FX-DIRECTOR). The console reads both out of the scoring
         // snapshot (gameStateOut + 0x2A4B8, the inlined GetScoringOutputInterface()) with the
@@ -1887,8 +1912,8 @@ namespace BrnGame
         //               `bgt` -> 0; else `lbzx +0x2AF60` == mbTimerActive (+0xAA8) != 0 -> r19 (1,
         //               `li r19, 1` @0x823CD1A8) else 0 -> `stb 0x7AD6`. An unordered compare (NaN)
         //               is not `gt`, so NaN takes the mbTimerActive arm; `!(x > 0.0f)` keeps that.
-        // (The console's team word @0x7AB0, the score record and the +0x3258 byte sit between the
-        //  Append and this arm, 0x823CD428..0x823CD49C; they are the legs still open above.)
+        // (The console's team word @0x7AB0 -- landed above -- the score record and the +0x3258 byte
+        //  sit between the Append and this arm, 0x823CD428..0x823CD49C; the last two are still open.)
         // MainDirector::ProcessInputQueue copies the pair into GameState +0x1D0 / +0x1D1. Its one
         // reader, ArbStateRoaming::ProcessPossibleFX, plays "Damage_Crit" / "Wrecked" on it in the
         // online modes 12 / 14 / 17 only; offline, @0x7AD6 rises when a Road Rage or Stunt Run
@@ -1904,6 +1929,25 @@ namespace BrnGame
             lpDirectorInput->SetModeTimeExpired(
                 !(lpScoringOutputInterface->mfModeTimeRemaining > 0.0f) &&                       // flt_82001CC0
                 lpScoringOutputInterface->mbTimerActive);                                         // @0x7AD6
+        }
+
+        // ---- the per-car TEAMS (X360 live arm 0x823CD514..0x823CD56C, the bridge's last leg) ----
+        // ⭐ 2026-09-25 (crash parity FX-DIRECTOR2). r31 = gameStateOut + 0x2AFC8 (`addis 3 ; addi
+        // -0x5038` @0x823CD518 / 0x823CD528) == OnlineScoringOutputInterface::maePlayerTeam, then for
+        // each active race-car slot i = 0..7 (the EActiveRaceCarIndex iteration, its
+        // "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" tripwire BurnoutConstants.h:39 at 0x823CD550):
+        //   `lwz r5, 0(r31)` then DirectorIO::InputBuffer::SetVehicleTeam @0x823B2938 (input, i, team)
+        //   -- `stw team, 0x3238 + 4 * i`, behind its own two index asserts and the write-lock test.
+        // Their one reader is AllVehicleData::Update's fifth argument (lpaVehicleTeams): the team on
+        // each nearest-car row, which SqDistanceOfNearestOpposingTeamMember compares.
+        {
+            const BrnGameState::GameStateModuleIO::OnlineScoringOutputInterface* const lpOnlineScoring =
+                lpGameStateOutput->GetOnlineScoringOutputInterface();
+            for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
+            {
+                lpDirectorInput->SetVehicleTeam(static_cast<EActiveRaceCarIndex>(liCar),
+                                                static_cast<s32>(lpOnlineScoring->maePlayerTeam[liCar]));
+            }
         }
     }
 

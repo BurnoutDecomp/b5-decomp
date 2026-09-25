@@ -16,7 +16,8 @@ extracted DirectorModule::ProcessSceneQueryResults, SceneQueryInputBuffer::Const
 SceneQueryInterface::Append, ValidityAccount::SetFlag and CameraState::ClearFlag, and runs them against a
 fixture scene manager that answers through a real results queue: the post offices, the id minting, the
 router, Append, the visibility test, the prediction, the ground constraint and every failure reason --
-the later-frame timeouts against the console's own roll sequence. A revision without the bodies does
+the later-frame timeouts against the console's own roll sequence, and the ground constraint's two height
+tripwires by polarity (C18-C20: `bge` skips on NaN, 0x82240228 / 0x8220E3CC). A revision without the bodies does
 not build (every numeric check counts as failed, the missing pieces named).
 Wiring: the module / manager / director / game-module call sites and their order, the ICE-anim Construct
 and SetTarget, the mounts, one CollisionPolicy::Fail, the forward-declaration class key.
@@ -54,7 +55,7 @@ HEADERS = (POLICY_H, DIR + "Utils/BrnPostBox.h", DIR + "Utils/BrnPostOffice.h", 
 EXTRA_SOURCES = (STRSTREAM_CPP, REPO / "src/GameShared/GameClasses/Module/CgsIOBuffer.cpp",
                  REPO / "src/GameShared/GameClasses/Numeric/CgsRandom.cpp")
 BUILD_BAT = WORKFLOW / "tools/build/build_game_exe.bat"
-NUMERIC_CHECKS = 6 + 5 + 3 + 2 + 10 + 3 + 17
+NUMERIC_CHECKS = 6 + 5 + 3 + 2 + 10 + 3 + 20
 
 WHOLE_TUS = (SQI_CPP, VISTEST_CPP, PREDICTOR_CPP, POLICY_CPP)
 EXTRACTS = (

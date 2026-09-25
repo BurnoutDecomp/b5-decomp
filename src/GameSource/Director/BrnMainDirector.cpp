@@ -93,6 +93,58 @@ namespace BrnDirector
 {
     namespace
     {
+        // [diag, NOT X360] BRN_DIRECTOR_TRAFFIC_DIAG -- the witness of the world -> director traffic
+        // hop and the team words (FX-DIRECTOR2, 2026-09-25). What AllVehicleData::Update stored: the
+        // traffic record count behind mpTrafficVehicleArray, its first record (entity index, id,
+        // world position, speed), every record's traffic entity index (to match the crash module's
+        // `[traffic-crash] added vehicle=V`), and every nearest-car row with its team. Printed when
+        // the traffic count changes and on every 300th frame; at most 600 lines. Silent without the
+        // variable.
+        void DirectorTrafficDiag(const AllVehicleData& lrAllVehicleData)
+        {
+            static const bool sbOn = (getenv("BRN_DIRECTOR_TRAFFIC_DIAG") != 0);
+            static s32 siLinesLeft = 600;
+            static s32 siLastCount = -1;
+            static u32 suFrame = 0;
+            if (!sbOn || CgsDev::Log::gpDebugPrint == 0 || siLinesLeft <= 0)
+                return;
+            ++suFrame;
+            const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* lpTraffic = lrAllVehicleData.GetTraffic();
+            const s32 liCount = (lpTraffic != 0) ? static_cast<s32>(lpTraffic->GetLength()) : -1;
+            if (liCount == siLastCount && (suFrame % 300u) != 0u)
+                return;
+            siLastCount = liCount;
+            --siLinesLeft;
+            CgsDev::Log::DebugPrint& lrOut = *CgsDev::Log::gpDebugPrint;
+            lrOut << "[director-traffic] frame " << static_cast<s32>(suFrame) << " AllVehicleData traffic "
+                  << liCount;
+            if (liCount > 0)
+            {
+                const BrnTraffic::BrnTrafficIO::TrafficDirectorEntity& lrFirst = (*lpTraffic)[0u];
+                const Vector3& lrPos = lrFirst.mLocalTransform.wAxis;
+                const f32 lfSpeedSq = lrFirst.mVelocity.x * lrFirst.mVelocity.x
+                                    + lrFirst.mVelocity.y * lrFirst.mVelocity.y
+                                    + lrFirst.mVelocity.z * lrFirst.mVelocity.z;
+                lrOut << " first{entity " << static_cast<s32>(lrFirst.mu16EntityIndex)
+                      << " id " << static_cast<u32>(lrFirst.mVehicleId & 0xFFFFFFFFu)
+                      << " pos " << lrPos.x << "," << lrPos.y << "," << lrPos.z
+                      << " |v|^2 " << lfSpeedSq << "} entities";
+                for (u32 luRecord = 0; luRecord < static_cast<u32>(liCount); ++luRecord)
+                {
+                    lrOut << (luRecord == 0u ? " " : ",")
+                          << static_cast<s32>((*lpTraffic)[luRecord].mu16EntityIndex);
+                }
+            }
+            const AllVehicleData::NearestCarInfoArray& lrRows = lrAllVehicleData.GetNearestRaceCarRowsForDiag();
+            lrOut << " rows";
+            for (u32 luRow = 0; luRow < lrRows.GetLength(); ++luRow)
+            {
+                const AllVehicleData::NearestCarInfo& lrRow = lrRows[luRow];
+                lrOut << " car" << static_cast<s32>(lrRow.meRaceCarIndex) << ":team" << lrRow.miTeam;
+            }
+            lrOut << "\n";
+        }
+
         // ⭐ The FLOOR MainDirector::Update clamps the camera's requested sim time scale to
         // before publishing it as the sim timer's multiplier (`fsel f1, f13, f31, f0` with
         // f0 == flt_8200CE04, @0x8227513C..0x82275144). A camera may not slow the simulation
@@ -895,10 +947,11 @@ namespace BrnDirector
     //
     // ⭐ EVERY STEP OF THE GUARDED BODY NOW RUNS (2026-09-24, FX-DIRECTOR2 landed the last one,
     // CrashAnalyser::Update). What is still deferred lives INSIDE the callees and is flagged there:
-    // AllVehicleData's traffic array / nearest-car rebuild (UpdateRaceCarsBringUp) and
-    // VehicleTracker's score copy. The one step NOT reproduced is the debug-tweakable latch clear
-    // at the top (mbDebugSingleTimestep -> mbDebugZeroTimestep, both seeded 0 by Construct at
-    // 0x8225B9DC / 0x8225B9C8, `li r31, 0` @0x8225B484, and inert on retail).
+    // VehicleTracker's score copy. (AllVehicleData::Update is the console's whole body since
+    // 2026-09-25 -- the traffic array and the team words now arrive.) The one step NOT reproduced
+    // is the debug-tweakable latch clear at the top (mbDebugSingleTimestep -> mbDebugZeroTimestep,
+    // both seeded 0 by Construct at 0x8225B9DC / 0x8225B9C8, `li r31, 0` @0x8225B484, and inert on
+    // retail).
     //
     // ⚠️ THE CONSOLE'S SECOND TEST is reproduced: `usedRaceCars.IsBitSet(playerCarIndex)`.
     // GetLivePlayerCarIndex already folds it in (see the header), so the guard below IS both
@@ -916,21 +969,28 @@ namespace BrnDirector
         if (liPlayerCarIndex == -1)
             return;
 
-        // ⭐⭐ X360 line 1 of the guarded body: AllVehicleData::Update @0x8221D938. This is the
-        // ONLY producer of the snapshot every camera behaviour resolves its VehicleRefs against,
-        // and it had never run on PC -- see the extracted-leg FLAG on UpdateRaceCarsBringUp for
-        // exactly which two parts of the console's Update are deferred (the traffic array and
-        // the nearest-car rebuild) and why.
+        // ⭐⭐ X360 line 1 of the guarded body: AllVehicleData::Update @0x8221D938 -- the ONLY
+        // producer of the snapshot every camera behaviour resolves its VehicleRefs against.
+        // ⭐ THE CONSOLE'S FULL CALL since 2026-09-25 (crash parity FX-DIRECTOR2), 0x8225BC28..
+        // 0x8225BC70, every argument out of the input buffer:
+        //   r4  `ld 0(GetUsedRaceCars())`            the used-race-car bits (0x8225BC34 / BC5C)
+        //   r5  sub_82207040(input)                  the VehicleInfo[8] @+0x990 (0x8225BC50)
+        //   r6  r18                                  the live player index
+        //   r7  input + 0x6AC0 + 0x10                GetTrafficOutputInterface()'s entity array
+        //                                            (0x8225BC30 / 0x8225BC4C) -- lpTrafficVehicleArray
+        //   r8  GetVehicleInfoArray() 0x82206EF0     the eight team words @+0x3238 -- lpaVehicleTeams
+        // The PC used to run an extracted leg (UpdateRaceCarsBringUp) with neither of the last two:
+        // the traffic array had no home in the input and every nearest-car row carried team 0.
         {
             const DirectorIO::InputBuffer* lpInput = lpIO->mpInputBuffer;
             const CgsContainers::BitArray<8u>* lpUsedRaceCars = lpInput->GetUsedRaceCars();
+            const u32* lpaVehicleTeams = lpInput->GetVehicleInfoArray();
             const BrnDirector::Camera::VehicleInfo* lpRaceCars = lpInput->GetRaceCarInfo();
-            if (lpUsedRaceCars != 0 && lpRaceCars != 0)
-            {
-                mAllVehicleData.UpdateRaceCarsBringUp(
-                    *lpUsedRaceCars, lpRaceCars,
-                    static_cast<EActiveRaceCarIndex>(liPlayerCarIndex));
-            }
+            mAllVehicleData.Update(*lpUsedRaceCars, lpRaceCars,
+                                   static_cast<EActiveRaceCarIndex>(liPlayerCarIndex),
+                                   &lpInput->GetTrafficOutputInterface()->GetTrafficDirectorEntityArray(),
+                                   lpaVehicleTeams);
+            DirectorTrafficDiag(mAllVehicleData);   // [diag, NOT X360] BRN_DIRECTOR_TRAFFIC_DIAG
         }
 
         // ⭐ X360 line 2 of the guarded body.
@@ -1452,7 +1512,7 @@ namespace BrnDirector
         // 0x82237408..0x82237440 -- three straight copies out of the input buffer into the
         // GameState's three X360-only members (+0x1CC / +0x1D1 / +0x1D0 -- see the GameState
         // header: they sit BEFORE RankUpInfo, which is at +0x1D4).
-        maGameState.miPlayerTeam = lpInput->GetRankUpRivalInfo();                     // +0x1CC
+        maGameState.miPlayerTeam = lpInput->GetPlayerTeam();                          // +0x1CC
         // ⭐ UN-GATED 2026-09-24 (crash parity FX-DIRECTOR) with its producer: the player's
         // end-of-event pair, which BridgeGameStateToDirector now publishes (0x823CD4DC /
         // 0x823CD510). `lbz 0x7AD6(r30)` -> `stbx 0x339B1` first, then `lbz 0x7AD5(r30)` ->

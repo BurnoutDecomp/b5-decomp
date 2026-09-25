@@ -47,6 +47,10 @@ namespace DirectorIO
         static_assert(offsetof(InputBuffer, mVehicleDriverInputInterface) == 0x6780, "mVehicleDriverInputInterface @0x6780");
         static_assert(offsetof(InputBuffer, mContacts)            == 0x6AB8, "mContacts @0x6AB8");
         static_assert(offsetof(InputBuffer, mTrafficOutputInterface) == 0x6AC0, "mTrafficOutputInterface @0x6AC0");
+        static_assert(sizeof(BrnTraffic::BrnTrafficIO::TrafficDirectorOutputInterface) == 0x78E0 - 0x6AC0,
+                      "TrafficDirectorOutputInterface spans the console's 0xE20 (u16 head, the array @+0x10, its count @+0xE10)");
+        static_assert(sizeof(BrnTraffic::BrnTrafficIO::TrafficDirectorEntity) == 0x70,
+                      "TrafficDirectorEntity is the console's 0x70-byte record (sub_823B2368's stride)");
         static_assert(offsetof(InputBuffer, mPlayerCrashInfo)     == 0x78E0, "mPlayerCrashInfo @0x78E0 (lpInputBuffer + 30944)");
         static_assert(offsetof(InputBuffer, mHookEnumeration)     == 0x7910, "mHookEnumeration @0x7910");
         static_assert(offsetof(InputBuffer, miDirectorProfileData) == 0x7AA4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "miDirectorProfileData @0x7AA4");
@@ -136,7 +140,22 @@ namespace DirectorIO
         mbPlayerEliminated               = false;   // 31445 (0x7AD5) -- 0x82239514
         mbModeTimeExpired                = false;   // 31446 (0x7AD6) -- 0x82239518
 
-        miRankUpRivalInfo                = 0;       // 31408 (0x7AB0) -- `stw r30, 0x7AB0`
+        miPlayerTeam                     = 0;       // 31408 (0x7AB0) -- `stw r30, 0x7AB0` (E_PLAYER_TEAM_NONE)
+
+        // ⭐ 2026-09-25 (crash parity FX-DIRECTOR2): the two stores of the console body that seed the
+        // traffic hop's destinations.
+        //   0x82239444  `stw r30(0), 0x78D0(r31)` -- the inlined TrafficDirectorOutputInterface
+        //               ::Construct: its entity array's count word (+0x6AD0 + 0xE00) only; the
+        //               u16 head at +0x6AC0 is not touched here (BridgeWorldToDirector step 4
+        //               overwrites the whole interface on every live frame).
+        //   0x82239530..0x82239560  eight `stw 0, 0(r27)`, r27 = this + 0x3238 advancing by 4, each
+        //               behind the leEnumIndex tripwire (BurnoutConstants.h:39) -- the per-car team
+        //               words AllVehicleData::Update reads, cleared to E_PLAYER_TEAM_NONE.
+        mTrafficOutputInterface.GetTrafficDirectorEntityArray().Construct();
+        for (u32 luCar = 0; luCar < 8u; ++luCar)
+        {
+            maVehicleInfoArray[luCar] = 0u;
+        }
 
         // ⭐ 2026-09-24 (FX-BRIDGES CC-6): the crash record's own Construct, inlined by the
         // console at 0x82239470..0x822394B4 (`addi r11, r31, 0x78E0` then stfs 0.0 +0x20, stb 0
@@ -169,7 +188,8 @@ namespace DirectorIO
     const u32* InputBuffer::GetVehicleInfoArray() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        // Returns the address of the X360 VehicleInfo* pointer table (pointer-width u32 slots).
+        // @0x82206EF0 (`addi r3, this, 0x3238`): the eight per-car TEAM words SetVehicleTeam writes
+        // (see the header) -- AllVehicleData::Update's fifth argument, lpaVehicleTeams.
         return maVehicleInfoArray;
     }
 
@@ -250,11 +270,21 @@ namespace DirectorIO
         return mePlayerKillerCarIndex;
     }
 
-    // @0x7AB0 -- see the header: copied verbatim into GameState +0x1CC by ProcessInputQueue.
-    s32 InputBuffer::GetRankUpRivalInfo() const
+    // @0x7AB0 -- the player's team (see the header): copied verbatim into GameState +0x1CC by
+    // ProcessInputQueue.
+    s32 InputBuffer::GetPlayerTeam() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return miRankUpRivalInfo;
+        return miPlayerTeam;
+    }
+
+    // @0x7AB0 -- BridgeGameStateToDirector's `stw r11, 0x7AB0(r23)` (0x823CD454). The console
+    // stores it inline with no lock-bit test; the tripwire here is this TU's convention for every
+    // mutator and never fires on the bridge's write-locked buffer.
+    void InputBuffer::SetPlayerTeam(s32 liPlayerTeam)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        miPlayerTeam = liPlayerTeam;
     }
 
     const CgsSystem::TimerStatusInterface* InputBuffer::GetTimerStatusInterface() const
@@ -496,8 +526,8 @@ namespace DirectorIO
         CGS_ASSERT(leIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID");
         CGS_ASSERT(leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,    "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        // X360: *(s32*)&this[4*idx + 12856] = team; the team id is stored into the idx'th slot of
-        // the VehicleInfo pointer table (a pointer-width slot reused as the team id).
+        // X360 @0x823B2938: `stw team, 0x3238 + 4 * index` -- the index'th per-car team word
+        // (BridgeGameStateToDirector's last leg passes OnlineScoringOutputInterface::maePlayerTeam[i]).
         maVehicleInfoArray[leIndex] = static_cast<u32>(liTeam);
     }
 
