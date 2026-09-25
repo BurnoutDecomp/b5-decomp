@@ -193,14 +193,28 @@ int main()
         Check(RowExact(gVehicle.mTransform.wAxis, 100, 5, -50, 0) && RowExact(gVehicle.mTransform.yAxis, 0, 0.921061f, 0.38941833f, 0),
               "D: the vehicle transform is untouched");
         Check(!gVehicle.mbFrozen, "D: thawed");
-        // Closed form of SLerp(identity, M, 0.1) + OrthoNormalize3x3 for M = RotZ(0.3) + (1, 0.5, -2).
-        const float lfPhi = std::atan2(0.1f * std::sin(0.3f), 0.9f + 0.1f * std::cos(0.3f));
-        const float lfC = std::cos(lfPhi), lfS = std::sin(lfPhi);
-        char lacName[200];
-        std::snprintf(lacName, sizeof(lacName), "D: mSlerpTransform rotation == RotZ(%.6f) -- target * inverse(current), not inverse(current) * target", lfPhi);
+        // SLerp(identity, M, 0.1) + OrthoNormalize3x3 for M = RotZ(0.3) + (1, 0.5, -2), as the CONSOLE runs it
+        // (FX-GATE, crash parity 2026-09-25, b5 8c12ed5a). SLerp @0x82216858 picks its arm from the RELATIVE rotation's
+        // angle -- its axis / angle query sub_82216510 on transpose(from) * to -- not from the angle between the two z
+        // axes: here rel = M, 0.3 rad > 2 degrees, so it takes the arc, the rotation by 0.1 * 0.3 about z. (This check
+        // used to expect the old vendor SLerp's per-row lerp arm, RotZ(atan2(0.1 sin 0.3, 0.9 + 0.1 cos 0.3)) =
+        // RotZ(0.029676), because that body tested the z axes.) The console's words run on emu64 for this SLerp give
+        // rows (0.99955004, 0.0299955, 0, w 0.99955004) / (-0.0299955, 0.99955004, 0, w -0.0299955) / (0, 0, 1, 0),
+        // translation (0.1, 0.05, -0.2, 0) and angle out 0.27. OrthoNormalize3x3 then pivots on z for this input (the
+        // relative transform the body computes is M to ~7e-6, so |x.y| is not exactly 0) and rebuilds x and y by cross
+        // product: every w lane 0.
+        const float lfC = 0.99955004f, lfS = 0.0299955f;   // cos / sin of 0.1 * 0.3
         Check(RowNear(gDriver.mSlerpTransform.xAxis, lfC, lfS, 0, 0, 2e-5f)
               && RowNear(gDriver.mSlerpTransform.yAxis, -lfS, lfC, 0, 0, 2e-5f)
-              && RowNear(gDriver.mSlerpTransform.zAxis, 0, 0, 1, 0, 2e-5f), lacName);
+              && RowNear(gDriver.mSlerpTransform.zAxis, 0, 0, 1, 0, 2e-5f),
+              "D: mSlerpTransform rotation == RotZ(0.03) (the console's arc arm) -- target * inverse(current), not inverse(current) * target");
+        if (giFailures != 0)
+        {
+            const Vector3* lapRows[3] = { &gDriver.mSlerpTransform.xAxis, &gDriver.mSlerpTransform.yAxis, &gDriver.mSlerpTransform.zAxis };
+            for (int liRow = 0; liRow < 3; ++liRow)
+                std::printf("      D: mSlerpTransform row %d = (%.8f, %.8f, %.8f, w %.8f)\n", liRow, lapRows[liRow]->x,
+                            lapRows[liRow]->y, lapRows[liRow]->z, lapRows[liRow]->w);
+        }
         Check(RowNear(gDriver.mSlerpTransform.wAxis, 0.1f, 0.05f, -0.2f, 0, 2e-5f),
               "D: mSlerpTransform translation == 0.1 * M.w = (0.1, 0.05, -0.2)");
     }
