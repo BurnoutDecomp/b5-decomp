@@ -1,4 +1,5 @@
 #include "vendor/renderware/collision/VolumeBBoxQuery.hpp"
+#include "vendor/renderware/collision/VolumeQueryHostLayout.hpp"   // NOT X360: the host carve sizes
 
 #include "vendor/renderware/collision/Aggregate.hpp"
 #include "vendor/renderware/collision/CollisionVolume.hpp"
@@ -403,13 +404,8 @@ RwBool VolumeBBoxQuery::AddPrimitiveRef(const Volume*                    lpVol,
 // @0x100, m_tag @0x108, m_numTagBits @0x10C), so the first stack VolRef an aggregate pushes
 // (AddVolumeRef) overwrote the resumable spatial-map query pointer and the tag context. The host
 // carve starts at the host size rounded to 16 and the descriptor grows by the same delta; both
-// sites use this ONE constant.
+// sites use this ONE constant (KU_VOLUME_BBOX_QUERY_HEADER_SIZE, VolumeQueryHostLayout.hpp).
 // ===========================================================================
-namespace
-{
-    const u32 KU_VOLUME_BBOX_QUERY_HEADER_SIZE =
-        static_cast<u32>((sizeof(VolumeBBoxQuery) + 15u) & ~static_cast<size_t>(15u));
-}
 
 void* VolumeBBoxQuery::GetResourceDescriptor(void* lpOut, int liStackMax, int liResBufferSize)
 {
@@ -418,10 +414,8 @@ void* VolumeBBoxQuery::GetResourceDescriptor(void* lpOut, int liStackMax, int li
     // spatial-map query workspace (breakdown in the banner). The console's header is the
     // "+2" of `(stackMax + res + 2) << 7`; NOT X360: host layout -- the header is
     // KU_VOLUME_BBOX_QUERY_HEADER_SIZE, the size Initialize carves behind.
-    u32 luTotalSize = KU_VOLUME_BBOX_QUERY_HEADER_SIZE
-                    + (static_cast<u32>(liStackMax + liResBufferSize) << 7)
-                    + 96u * static_cast<u32>(liResBufferSize)
-                    + 10208u;                                       // 0x27E0
+    u32 luTotalSize = VolumeBBoxQueryResourceSize(static_cast<u32>(liStackMax),
+                                                  static_cast<u32>(liResBufferSize));
 
     // Initialise all five resource-descriptor entries to (size=0, align=1)
     // (li r8,4; addic./bge loop -- five iterations).

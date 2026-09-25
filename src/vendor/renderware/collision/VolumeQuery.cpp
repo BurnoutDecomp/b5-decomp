@@ -5,6 +5,7 @@
 #include "vendor/renderware/collision/GPInstance.hpp"        // VolRef1xN / PPIR / PrimitiveBatchIntersect
 #include "vendor/renderware/collision/VolRef.hpp"
 #include "vendor/renderware/collision/VolumeBBoxQuery.hpp"   // the embedded sub-queries
+#include "vendor/renderware/collision/VolumeQueryHostLayout.hpp"   // NOT X360: the host carve sizes
 
 #include <cstring>  // memset
 #include <cstdio>   // snprintf ([vvq] DIAG only)
@@ -39,13 +40,11 @@ namespace collision
 // starts at the host size rounded to the same 16-byte alignment, and the descriptor total grows by
 // the same delta; every site that derives a sub-query address or the descriptor total from the
 // header uses this ONE constant (Construct, GetResourceDescriptor; Initialize reads the carved
-// handles back and derives nothing).
+// handles back and derives nothing). The constant, and the two report-region sizes that widen the
+// same way (the 1xN staging, the instancing scratch), live in VolumeQueryHostLayout.hpp.
 // ===========================================================================
-namespace
-{
-    const u32 KU_VOLUME_VOLUME_QUERY_HEADER_SIZE =
-        static_cast<u32>((sizeof(VolumeVolumeQuery) + 15u) & ~static_cast<size_t>(15u));
-}
+static_assert(VolumeVolumeQueryResourceSize(100u) == KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100,
+              "VolumeQuery.hpp's compile-time host size for 100/100 is the total GetResourceDescriptor returns");
 
 // ===========================================================================
 // rw::collision::VolumeVolumeQuery::Construct  @ 0x82BB38F0
@@ -88,18 +87,22 @@ VolumeVolumeQuery* VolumeVolumeQuery::Construct(int /*liVolumes*/, int liResults
     m_bBoxQueryBtoA = reinterpret_cast<VolumeBBoxQuery*>(lpSubQueryRegion + luDescSize); // +0x44
 
     // Report buffer starts two descriptors past side A. The staged VolRef1xN
-    // groups occupy the leading 8*results bytes (console words; see the
-    // capacity FLAG at GetPrimitiveBBoxOverlaps); the 0x750-stride
-    // PrimitivePairIntersectResult array sits behind them, and the GPInstance
-    // instancing scratch behind that.
+    // groups lead it; the 0x750-stride PrimitivePairIntersectResult array sits
+    // behind them, and the GPInstance instancing scratch behind that. The console
+    // stages into 8*results bytes (`8*a3`), the budget GetPrimitiveBBoxOverlaps
+    // meters in console words.
+    // NOT X360: host GPInstance / VolRef widths -- the host 1xN groups are 16 + 8n
+    // bytes against the console's 12 + 4n, so the region is
+    // VolumeVolumeQueryStagingSize(results) == 16*results (VolumeQueryHostLayout.hpp).
     u8* lpReportBase = lpSubQueryRegion + (2u * luDescSize);
     m_volRefPairBuffer = reinterpret_cast<VolRef1xN*>(lpReportBase);        // +0x18
 
+    const u32 luStagingSize = VolumeVolumeQueryStagingSize(static_cast<u32>(liResults));
     m_intersectionBuffer = reinterpret_cast<PrimitivePairIntersectResult*>(
-        lpReportBase + (8u * static_cast<u32>(liResults)));                 // +0x30
+        lpReportBase + luStagingSize);                                      // +0x30
     m_instancingSPR = reinterpret_cast<GPInstance*>(
-        lpReportBase + (1872u * static_cast<u32>(liResults))
-                     + (8u * static_cast<u32>(liResults)));                 // +0x2C
+        lpReportBase + (KU_PRIMITIVE_PAIR_INTERSECT_RESULT_STRIDE * static_cast<u32>(liResults))
+                     + luStagingSize);                                      // +0x2C
 
     return this;
 }
@@ -157,13 +160,17 @@ void* VolumeVolumeQuery::GetResourceDescriptor(void* lpOut, int /*liVolumes*/, i
     u32 luBBoxDescSize = laBBoxDesc[0];
 
     // Total backing size for the object, the two sub-queries and the report buffer. The console
-    // folds its 0x50 header into `2 * (bboxDesc + 0x28)` (0x82BB3A4C / 0x82BB3A58).
+    // folds its 0x50 header into `2 * (bboxDesc + 0x28)` (0x82BB3A4C / 0x82BB3A58) and its report
+    // buffer into `2072 * a3 + 192` == 8*a3 staging + 1872*a3 results + 192*(a3 + 1) instancing.
     // NOT X360: host layout -- the header is KU_VOLUME_VOLUME_QUERY_HEADER_SIZE, the size Construct
-    // carves behind.
-    u32 luTotalSize = KU_VOLUME_VOLUME_QUERY_HEADER_SIZE
-                    + 2u * luBBoxDescSize
-                    + 2072u * static_cast<u32>(liResults)
-                    + 192u;
+    // carves behind; the staging and instancing regions are the host GPInstance / VolRef widths
+    // (VolumeQueryHostLayout.hpp). The results stride is native.
+    const u32 luResults   = static_cast<u32>(liResults);
+    u32       luTotalSize = KU_VOLUME_VOLUME_QUERY_HEADER_SIZE
+                          + 2u * luBBoxDescSize
+                          + VolumeVolumeQueryStagingSize(luResults)
+                          + KU_PRIMITIVE_PAIR_INTERSECT_RESULT_STRIDE * luResults
+                          + VolumeVolumeQueryInstancingSize(luResults);
 
     // Initialise all five resource-descriptor entries to (size=0, align=1).
     u32* lpEntry = reinterpret_cast<u32*>(lpOut);
@@ -328,15 +335,13 @@ namespace
 //
 // Returns the total staged pair count (m_volRefPairCount).
 //
-// FLAG (x64 capacity width): the staging budget keeps the console BYTE
-// arithmetic exactly (budget = 8*m_volRefPairBufferSize; 12 bytes per group
-// header, 4 per staged pair -- console words). On x64 the VolRef1xN groups
-// are pointer-widened (16-byte header + 8 bytes/pair), so the same metering
-// admits more staged bytes than the console constants imply; the backing
-// store carved by Construct uses the same console units, so the whole
-// query-object sizing chain (GetResourceDescriptor -> Construct -> this
-// metering) needs one coordinated widening pass. Kept console-exact per the
-// translation contract (identical staging DECISIONS), not silently improved.
+// x64 capacity width: the staging budget keeps the console BYTE arithmetic
+// exactly (budget = 8*m_volRefPairBufferSize; 12 bytes per group header, 4 per
+// staged pair -- console words), so the staging DECISIONS are the console's.
+// The host VolRef1xN groups are pointer-widened (16-byte header + 8 bytes/pair)
+// and write up to 2 * budget - 8 host bytes; Construct / GetResourceDescriptor
+// carve the region at that host size (VolumeVolumeQueryStagingSize,
+// VolumeQueryHostLayout.hpp -- resolved 2026-09-25, FX-FOLLOWUPS).
 //
 // The X360 body also parks a zero in a dead stack slot next to the fattened
 // second-side box (stw r30, var_C0, the Hex-Rays "v87[4] = 0.0") that nothing
@@ -580,7 +585,8 @@ namespace
     // per-call high-water mark rises (capped at 32). It proves which callers dispatch the query and measures
     // how close a live batch comes to the staging / result capacity: the staged pairs and 1xN groups
     // against the pair budget (console units 12 per group + 4 per pair out of 8 * m_volRefPairBufferSize;
-    // host bytes 16 per group + 8 per pair), and the intersections against m_intersectionBufferMaxSize.
+    // host bytes 16 per group + 8 per pair out of the host region, 16 * m_volRefPairBufferSize), and the
+    // intersections against m_intersectionBufferMaxSize.
     // Reads only; with the variable unset the cost is one static bool test.
     bool VolumeVolumeQueryDiagEnabled()
     {
@@ -608,14 +614,15 @@ namespace
         {
             ++suLines;
             std::snprintf(lacLine, sizeof(lacLine),
-                          "[vvq] call %u inputs %u queryType %u input0Type %u staged pairs %u groups %u (console bytes %u, "
-                          "host bytes %u of budget %u) intersections %d of %d\n",
+                          "[vvq] call %u inputs %u queryType %u input0Type %u staged pairs %u groups %u (console bytes %u "
+                          "of budget %u, host bytes %u of region %u) intersections %d of %d\n",
                           suCalls, lrQuery.m_numInputs,
                           lrQuery.m_queryVol ? lrQuery.m_queryVol->muVTableSlot : 0xFFFFFFFFu,
                           (lrQuery.m_numInputs && lrQuery.m_inputVols && lrQuery.m_inputVols[0])
                               ? lrQuery.m_inputVols[0]->muVTableSlot : 0xFFFFFFFFu,
-                          luPairs, luGroups, 12u * luGroups + 4u * luPairs, 16u * luGroups + 8u * luPairs,
-                          8u * lrQuery.m_volRefPairBufferSize, liIntersections, lrQuery.m_intersectionBufferMaxSize);
+                          luPairs, luGroups, 12u * luGroups + 4u * luPairs, 8u * lrQuery.m_volRefPairBufferSize,
+                          16u * luGroups + 8u * luPairs, VolumeVolumeQueryStagingSize(lrQuery.m_volRefPairBufferSize),
+                          liIntersections, lrQuery.m_intersectionBufferMaxSize);
             *CgsDev::Log::gpDebugPrint << lacLine;
         }
         if ((luPairs > suMaxPairs || luGroups > suMaxGroups || liIntersections > siMaxIntersections) && suMaxLines < 32)

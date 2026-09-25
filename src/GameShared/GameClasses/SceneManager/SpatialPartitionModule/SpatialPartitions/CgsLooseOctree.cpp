@@ -125,6 +125,7 @@ namespace CgsSceneManager
         , muNumNodeGroups(0)
         , muAdaptiveNodeSplitThreshold(0)
         , muAdaptiveMaxDepth(0)
+        , mpVolumeVolumeQuery(0)
     {
         mCentrePos.x = mCentrePos.y = mCentrePos.z = mCentrePos.w = 0.0f;
 
@@ -238,6 +239,25 @@ namespace CgsSceneManager
         mpRootNode->muFirstChildIndex = KU_INVALID_NODE;
 
         AllocRecursive(0, 0, KU_INVALID_NODE);
+
+        // 0x828C9F50..0x828C9FE4 -- the entity arm's VolumeVolumeQuery, built in place in
+        // macVolumeVolumeQueryBuffer (+0x446C0) for 100 volumes / 100 results: the descriptor, its size
+        // assert (:208, `li r5, 0xD0`), then Initialize with the buffer table {buffer, 0, 0, 0, 0}
+        // (var_1E0); the returned handle is stored at +0x8D8C8 (`stwx r8, r30, r7`).
+        // NOT X360: host GPInstance / VolRef widths -- the console compares against 0x49000
+        // (0x828C9F8C); the host buffer is KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE (0x49600).
+        {
+            u32 lauDescriptor[10];
+            rw::collision::VolumeVolumeQuery::GetResourceDescriptor(lauDescriptor, KI_OCTREE_VOLUME_QUERY_NUM_VOLUMES,
+                                                                    KI_OCTREE_VOLUME_QUERY_NUM_RESULTS);
+            CGS_ASSERT(lauDescriptor[0] <= KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE,
+                       "VolumeVolumeQueryMem is too small");
+
+            void* lapBuffer[5] = { macVolumeVolumeQueryBuffer, 0, 0, 0, 0 };
+            mpVolumeVolumeQuery = static_cast<rw::collision::VolumeVolumeQuery*>(
+                rw::collision::VolumeVolumeQuery::Initialize(lapBuffer, KI_OCTREE_VOLUME_QUERY_NUM_VOLUMES,
+                                                             KI_OCTREE_VOLUME_QUERY_NUM_RESULTS));
+        }
 
         for (u32 luJob = 0; luJob < KU_NUM_FRUSTUM_TEST_JOBS; ++luJob)
         {

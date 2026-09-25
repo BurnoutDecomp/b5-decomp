@@ -886,6 +886,10 @@ void OverlapCullingModule::_AssertLayout()
     static_assert(sizeof(u8) == 1, "u8 must be one byte");
     static_assert(OverlapCullingModule::KU_VOL_QUERY_MEM_SIZE == 401408,
                   "VolumeVolumeQueryMem budget is 0x62000");
+    // The host VolumeVolumeQuery(100, 100) -- staging and instancing at the host widths
+    // (VolumeQueryHostLayout.hpp) -- still fits the console budget (0x495D8 <= 0x62000).
+    static_assert(rw::collision::KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100 <= OverlapCullingModule::KU_VOL_QUERY_MEM_SIZE,
+                  "the host VolumeVolumeQuery for 100/100 fits the 0x62000 VolumeVolumeQueryMem budget");
     static_assert(OverlapCullingModule::KU_MAX_NUM_VOLUME_INSTANCES == 5048,
                   "KI_MAX_NUM_VOLUME_INSTANCES == 0x13B8");
     static_assert(offsetof(OverlapCullingModule, mePrepareStage) <
