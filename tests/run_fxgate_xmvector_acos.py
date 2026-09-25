@@ -29,6 +29,10 @@ SITES = [
      "FindUnsignedAngleBetween2DVectors 0x82766B84", "XboxMath::XMVectorACos(lfDot)"),
     ("src/GameSource/GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.cpp",
      "OnlineStuntRunMode::GetBestStartGridID 0x823319AC", "XboxMath::XMVectorACos(lfCosAngle)"),
+    ("src/GameShared/GameClasses/Sound/Logic/Cgs3dEffectControl.cpp",
+     "Cgs3dEffectControl::GetPanningAngle 0x826DC068", "XboxMath::XMVectorACos(lfDot)"),
+    ("src/GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.cpp",
+     "PhysicsControl::UpdateParams 0x826CBC44", "XboxMath::XMVectorACos(lfDot)"),
 ]
 
 

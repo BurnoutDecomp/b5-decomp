@@ -23,6 +23,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
+#include "SDKs/XboxMath/XMVectorACos.h"   // XboxMath::XMVectorACos (X360 0x821F0980)
 
 #include <algorithm>
 #include <cmath>
@@ -139,7 +140,18 @@ s32 Cgs3dEffectControl::GetPanningAngle(
         return 0;
     const f32 lfDot = std::max(-1.0f, std::min(1.0f,
         (lfDx * lfFx + lfDz * lfFz) / (lfLength * lfForwardLength)));
-    f32 lfDegrees = std::acos(lfDot) * 57.2957795f;
+    // The arc-cosine is the console's XMVectorACos (0x826DC068 bl 0x821F0980, the shared
+    // XboxMath::XMVectorACos; crash parity FX-GATE -- std::acos stood in for it before).
+    // FLAG (PC-only domain guard, kept by conductor decision 2026-09-25): the clamp above. The
+    // console passes the raw dot (0x826DC064 vaddfp -> 0x826DC068); a dot > 1 gives NaN there.
+    // REMOVE WHEN the dot feeding it is console-exact AND the PC audio backend is shown to handle a
+    // NaN pan the way the console's platform layer does (sound-pass follow-up).
+    // FLAG: the rest of this body is not the console's shape yet (sound-pass follow-up). 0x826DBEA0
+    // returns 0 unless the planar distance SQUARED passes `vcmpgefp` against the vector at
+    // 0x830084E0 (0x826DBF20..0x826DBF38, a runtime-initialised .bss constant) and normalises the
+    // two planar vectors with vrsqrtefp + Newton (0x826DC02C..0x826DC054); the 0.0001 length
+    // guards above are the PC's.
+    f32 lfDegrees = XboxMath::XMVectorACos(lfDot) * 57.2957795f;
     if (lfFx * lfDz - lfFz * lfDx < 0.0f)
         lfDegrees = 360.0f - lfDegrees;
     return static_cast<s32>(lfDegrees);
