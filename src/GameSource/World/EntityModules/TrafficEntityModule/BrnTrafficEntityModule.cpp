@@ -13082,7 +13082,11 @@ void TrafficEntityModule::CalculateAndSetSteering(u32 luVehicle, Vector3 lTarget
 // CalculateAndSetSteering then scales the record by 1.3 from risk 0.6.
 //
 // VMX->portable, this file's convention: vrefp / vrsqrtefp + Newton steps are an exact 1/x or
-// 1/sqrt, vmaddfp is an unfused a * b + c, XMVectorSin / XMVectorCos are std::sin / std::cos.
+// 1/sqrt, XMVectorSin / XMVectorCos are std::sin / std::cos. A vmaddfp / vmaddfp128 whose operands
+// are all plain values is FUSED -- one rounding, std::fma lane by lane (crash parity FX-NETCRASH,
+// REVIEW_G item 4, 2026-09-24: 0x8272C40C / 0x8272C424 the + feelers, 0x82719B5C the passing
+// score, 0x8273D33C the steering blend). The Newton steps' vnmsubfp / vmaddfp stay inside the
+// exact-reciprocal convention: from an exact estimate their fused result IS the rounded 1/x.
 // vmaxfp / vminfp keep a NaN operand (AvoidVmxMax / AvoidVmxMin), and every compare keeps the
 // console's NaN polarity (a NaN fails a vcmp*fp. all-lanes test).
 // ============================================================================================
@@ -13275,7 +13279,9 @@ VecFloat TrafficEntityModule::Avoidance_CalculateDistancePosVelToOrigin(Vector2 
 //                           lfPassingSpace = Avoidance_CalculateDistancePosVelToOrigin(pos2D, vel2D)
 //   0x82719B00..0x82719B5C  lfPassingScore = MaxDistance - vminfp(|lfPassingSpace|, MaxDistance) ;
 //                           lfTotalScore = (ImpactTimeMax - lfTimeToImpact) * ScoreFactor
-//                           + lfPassingScore (vmaddfp)
+//                           + lfPassingScore -- ONE `vmaddfp v0, v12, v0, v11` (raw fields:
+//                           v12 * v11 + v0) at 0x82719B5C, so fused: std::fma (crash parity
+//                           FX-NETCRASH, REVIEW_G item 4)
 // The two half-extent arguments arrive in v5 / v6 and are never read. lfTimeToImpact is the
 // SQUARED time (a ratio of squared lengths) tested against 4.
 // --------------------------------------------------------------------------------------------
@@ -13318,10 +13324,10 @@ VecFloat TrafficEntityModule::Avoidance_CalculatePassingScore(Vector3 lPositionA
 
     const f32 lfMaxDistance       = GetAvoidPassMaxDistance().x;
     const f32 lfPassingScore      = lfMaxDistance - AvoidVmxMin(std::fabs(lfPassingSpace), lfMaxDistance);
-    const f32 lfTimeToImpactScore =
-        (GetAvoidPassImpactTimeMax().x - lfTimeToImpact) * GetAvoidPassImpactTimeScoreFactor().x;
+    const f32 lfTotalScore        = std::fma(GetAvoidPassImpactTimeMax().x - lfTimeToImpact,
+                                             GetAvoidPassImpactTimeScoreFactor().x, lfPassingScore);
 
-    return SplatDrive(lfTimeToImpactScore + lfPassingScore);
+    return SplatDrive(lfTotalScore);
 }
 
 // --------------------------------------------------------------------------------------------
@@ -13333,6 +13339,10 @@ VecFloat TrafficEntityModule::Avoidance_CalculatePassingScore(Vector3 lPositionA
 //   [2] lDirection * sin60 - lRight * cos60  (cosSin[1])   0x8272C41C vsubfp, stored 0x8272C450
 //   [3] lDirection * sin75 + lRight * cos75                0x8272C424 vmaddfp128, stored 0x8272C460
 //   [4] lDirection * sin60 + lRight * cos60                0x8272C40C vmaddfp128, stored 0x8272C468
+// The + side is ONE fused op: `vmaddfp128 v9, v127, v7, v9` / `vmaddfp128 v4, v127, v3, v4` ==
+// lDirection * sin + (lRight * cos), whose addend was rounded by its own vmulfp128 (0x8272C3FC /
+// 0x8272C3C8) and whose product is not -- std::fma lane by lane (crash parity FX-NETCRASH,
+// REVIEW_G item 4). The - side is two vmulfp128 products and a vsubfp: rounded three times.
 // --------------------------------------------------------------------------------------------
 void TrafficEntityModule::Avoidance_CalculateFeelers(Vector3 lDirection, Vector3 lRight, Vector3* laFeelers)
 {
@@ -13343,8 +13353,13 @@ void TrafficEntityModule::Avoidance_CalculateFeelers(Vector3 lDirection, Vector3
         const f32 lfSin = maFeelerCosSin[liFeelCosSin].y;
 
         laFeelers[1 + liFeelCosSin] = lDirection * lfSin - lRight * lfCos;
-        laFeelers[1 + KI_TRAFFIC_AVOIDANCE_FEELERS_CALC_COUNT + liFeelCosSin] =
-            lDirection * lfSin + lRight * lfCos;
+
+        const Vector3 lRightCos = lRight * lfCos;
+        Vector3& lrPlus = laFeelers[1 + KI_TRAFFIC_AVOIDANCE_FEELERS_CALC_COUNT + liFeelCosSin];
+        lrPlus.x = std::fma(lDirection.x, lfSin, lRightCos.x);
+        lrPlus.y = std::fma(lDirection.y, lfSin, lRightCos.y);
+        lrPlus.z = std::fma(lDirection.z, lfSin, lRightCos.z);
+        lrPlus.w = std::fma(lDirection.w, lfSin, lRightCos.w);
     }
 }
 
@@ -13476,7 +13491,9 @@ void TrafficEntityModule::Avoidance_GetBestVehicleDirection(u32 luVehicle, Vecto
 //                           li r27,1 @0x82740988 at 0x82740C58, so ON)
 //   0x8273D310..0x8273D344  lfAvoidDotTargetDir = Dot(lAvoidDirection, lNewDirection) ;
 //                           0.94 > it (lane 2, vcmpgtfp.) -> lNewDirection += (lAvoidDirection -
-//                           lNewDirection) * mfSimTimeStep (+0x713FC, lvlx / vspltw / vmaddfp),
+//                           lNewDirection) * mfSimTimeStep (+0x713FC, lvlx / vspltw ; `vmaddfp v0,
+//                           v12, v0, v13` == v12 * v13 + v0, ONE rounding: std::fma lane by lane,
+//                           crash parity FX-NETCRASH, REVIEW_G item 4),
 //                           else lNewDirection = lAvoidDirection (0x8273D348)
 //   0x8273D34C..0x8273D360  CalculateAndSetSteering(luVehicle, lNewDirection, lpOutControls,
 //                           lfOverallRisk) -- the risk is its lvfScale
@@ -13501,7 +13518,11 @@ void TrafficEntityModule::CalculateAndSetSteeringUsingAvoidance(
         lfDiagDotTarget = lfAvoidDotTargetDir;
         if (KF_AVOIDANCE_SNAP_DOT > lfAvoidDotTargetDir)
         {
-            lNewDirection = (lAvoidDirection - lNewDirection) * mfSimTimeStep + lNewDirection;
+            const Vector3 lDelta = lAvoidDirection - lNewDirection;   // vsubfp 0x8273D32C
+            lNewDirection.x = std::fma(lDelta.x, mfSimTimeStep, lNewDirection.x);
+            lNewDirection.y = std::fma(lDelta.y, mfSimTimeStep, lNewDirection.y);
+            lNewDirection.z = std::fma(lDelta.z, mfSimTimeStep, lNewDirection.z);
+            lNewDirection.w = std::fma(lDelta.w, mfSimTimeStep, lNewDirection.w);
             lpcDiagMode   = "blend";
         }
         else
