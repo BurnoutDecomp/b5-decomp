@@ -112,6 +112,126 @@ namespace CgsSceneManager
 
     }
 
+    namespace
+    {
+        // [DIAG] NOT IN THE X360 BINARY (crash parity FX-OCTREE, 2026-09-25). Opt-in BRN_OCTREE_HIST_DIAG=1: on the
+        // first LooseOctree::Update and every KI_OCTREE_HIST_PERIOD-th one after it, the shape of the tree reachable
+        // from the root -- per depth, how many nodes, how many entities sit on their own chains, the fullest chain
+        // and how many chains hold more than the adaptive split threshold -- and one line that buckets every
+        // reachable node's own chain length. It measures how many entities each octree query must test per node
+        // (the adaptive-depth refinement is what keeps that at the threshold or below on the console). Capped at
+        // KI_OCTREE_HIST_MAX_REPORTS reports; with the variable unset the cost is one static bool test per Update.
+        const s32 KI_OCTREE_HIST_PERIOD      = 300;
+        const s32 KI_OCTREE_HIST_MAX_REPORTS = 40;
+        const u32 KU_OCTREE_HIST_MAX_DEPTH   = 16;
+        const u32 KU_OCTREE_HIST_NUM_BUCKETS = 11;
+        // Own-chain length buckets: 0, 1-8, 9-16, 17-32, 33-64, 65-128, 129-256, 257-512, 513-1024, 1025-2048, 2049+.
+        const u32 KAU_OCTREE_HIST_BUCKET_TOP[KU_OCTREE_HIST_NUM_BUCKETS - 1] = { 0, 8, 16, 32, 64, 128, 256, 512,
+                                                                                 1024, 2048 };
+        const char* const KAPC_OCTREE_HIST_BUCKET_NAME[KU_OCTREE_HIST_NUM_BUCKETS] = {
+            "0", "1-8", "9-16", "17-32", "33-64", "65-128", "129-256", "257-512", "513-1024", "1025-2048", "2049+" };
+
+        struct OctreeHistogram
+        {
+            u32 mauNodes[KU_OCTREE_HIST_MAX_DEPTH];
+            u32 mauEntities[KU_OCTREE_HIST_MAX_DEPTH];
+            u32 mauFullest[KU_OCTREE_HIST_MAX_DEPTH];
+            u32 mauOverThreshold[KU_OCTREE_HIST_MAX_DEPTH];
+            u32 mauBuckets[KU_OCTREE_HIST_NUM_BUCKETS];
+            u32 muDeepest;
+        };
+
+        void CollectOctreeHistogram(const LooseOctreeNode* lpNodes, u16 lu16NodeIndex, u32 luDepth,
+                                    u32 luSplitThreshold, OctreeHistogram& lrHistogram)
+        {
+            const LooseOctreeNode& lrNode = lpNodes[lu16NodeIndex];
+            const u32 luSlot  = (luDepth < KU_OCTREE_HIST_MAX_DEPTH) ? luDepth : KU_OCTREE_HIST_MAX_DEPTH - 1;
+            const u32 luCount = lrNode.muNumElements;
+
+            ++lrHistogram.mauNodes[luSlot];
+            lrHistogram.mauEntities[luSlot] += luCount;
+            if (luCount > lrHistogram.mauFullest[luSlot])  { lrHistogram.mauFullest[luSlot] = luCount; }
+            if (luCount > luSplitThreshold)                 { ++lrHistogram.mauOverThreshold[luSlot]; }
+            if (luDepth > lrHistogram.muDeepest)            { lrHistogram.muDeepest = luDepth; }
+
+            u32 luBucket = 0;
+            while (luBucket < KU_OCTREE_HIST_NUM_BUCKETS - 1 && luCount > KAU_OCTREE_HIST_BUCKET_TOP[luBucket])
+            {
+                ++luBucket;
+            }
+            ++lrHistogram.mauBuckets[luBucket];
+
+            if (lrNode.muFirstChildIndex != KU_INVALID_NODE)
+            {
+                for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
+                {
+                    CollectOctreeHistogram(lpNodes, static_cast<u16>(lrNode.muFirstChildIndex + luChild), luDepth + 1,
+                                           luSplitThreshold, lrHistogram);
+                }
+            }
+        }
+
+        void NoteOctreeHistogram(const LooseOctreeNode* lpNodes, u32 luSplitThreshold)
+        {
+            static const bool sbEnabled = []() {
+                const char* lpcValue = std::getenv("BRN_OCTREE_HIST_DIAG");
+                return lpcValue != 0 && lpcValue[0] == '1';
+            }();
+            static s32 siUpdates = 0;
+            static s32 siReports = 0;
+            if (!sbEnabled || lpNodes == 0 || CgsDev::Log::gpDebugPrint == 0)
+            {
+                return;
+            }
+            const s32 liUpdate = siUpdates++;
+            if ((liUpdate % KI_OCTREE_HIST_PERIOD) != 0 || siReports >= KI_OCTREE_HIST_MAX_REPORTS)
+            {
+                return;
+            }
+            ++siReports;
+
+            OctreeHistogram lHistogram;
+            std::memset(&lHistogram, 0, sizeof(lHistogram));
+            CollectOctreeHistogram(lpNodes, 0, 0, luSplitThreshold, lHistogram);
+
+            u32 luNodes = 0, luEntities = 0, luFullest = 0, luFullestDepth = 0, luOver = 0;
+            for (u32 luDepth = 0; luDepth <= lHistogram.muDeepest && luDepth < KU_OCTREE_HIST_MAX_DEPTH; ++luDepth)
+            {
+                luNodes    += lHistogram.mauNodes[luDepth];
+                luEntities += lHistogram.mauEntities[luDepth];
+                luOver     += lHistogram.mauOverThreshold[luDepth];
+                if (lHistogram.mauFullest[luDepth] > luFullest)
+                {
+                    luFullest      = lHistogram.mauFullest[luDepth];
+                    luFullestDepth = luDepth;
+                }
+            }
+
+            char lacLine[512];
+            s32 liLength = std::snprintf(lacLine, sizeof(lacLine),
+                "[octree-hist] #%d update %d: %u nodes, deepest %u, root subtree %u, %u entities on chains, fullest "
+                "chain %u (depth %u), %u chain(s) > %u; own-chain buckets",
+                siReports, liUpdate, luNodes, lHistogram.muDeepest, lpNodes[0].muSubTreeEntityCount, luEntities,
+                luFullest, luFullestDepth, luOver, luSplitThreshold);
+            for (u32 luBucket = 0; luBucket < KU_OCTREE_HIST_NUM_BUCKETS && liLength > 0 &&
+                                   liLength < static_cast<s32>(sizeof(lacLine)); ++luBucket)
+            {
+                liLength += std::snprintf(lacLine + liLength, sizeof(lacLine) - static_cast<size_t>(liLength), " %s:%u",
+                                          KAPC_OCTREE_HIST_BUCKET_NAME[luBucket], lHistogram.mauBuckets[luBucket]);
+            }
+            *CgsDev::Log::gpDebugPrint << lacLine << "\n";
+
+            for (u32 luDepth = 0; luDepth <= lHistogram.muDeepest && luDepth < KU_OCTREE_HIST_MAX_DEPTH; ++luDepth)
+            {
+                std::snprintf(lacLine, sizeof(lacLine),
+                              "[octree-hist] #%d   depth %u: %u nodes, %u entities, fullest %u, %u > %u\n",
+                              siReports, luDepth, lHistogram.mauNodes[luDepth], lHistogram.mauEntities[luDepth],
+                              lHistogram.mauFullest[luDepth], lHistogram.mauOverThreshold[luDepth], luSplitThreshold);
+                *CgsDev::Log::gpDebugPrint << lacLine;
+            }
+        }
+    }
+
     // 0x828C9718 -- LooseOctree constructor. The base SpatialPartition sub-object is
     // constructed first (compiler-emitted), then this body default-constructs the four
     // embedded frustum-test jobs. On this host the EA::Jobs objects are not held (see
@@ -1008,6 +1128,8 @@ namespace CgsSceneManager
                     << " staticGroups=" << miNumStaticNodes << "\n";
             }
         }
+
+        NoteOctreeHistogram(mpNodes, muAdaptiveNodeSplitThreshold);   // [DIAG] BRN_OCTREE_HIST_DIAG
     }
 
     // ===========================================================================
