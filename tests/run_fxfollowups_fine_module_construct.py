@@ -10,6 +10,10 @@ PrimitiveBatchIntersect pasted in so VolumeQuery.cpp links. It checks the VLQ de
 module's Construct and checks its stages, its two in-place queries, that each query's carve lies inside its buffer,
 and the buffer contiguity. A revision without the VLQ bodies cannot link: every numeric check then counts as failed.
 
+Commit 2 (the mount) adds Prepare @0x828AA630 / Release @0x828AA730 from every stage (P1-P4, R1-R4, C1). Release
+from START must run START -> MANAGER -> DONE in one call (the console's fall-through into the MANAGER arm at
+0x828AA79C); the body before the mount stopped at MANAGER, so R1 and C1 fail on b5 26802ef3.
+
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxfollowups_fine_module_construct.py [--rev <b5 rev>]
 """
 from pathlib import Path
@@ -31,7 +35,7 @@ HEADERS = (COLLISION + "VolumeQuery.hpp", COLLISION + "VolumeBBoxQuery.hpp", COL
 VOLREF_CPP = REPO / (COLLISION + "VolRef.cpp")
 # The rwcollision side of the fixture (its own TU: the vendor vpu vocabulary must not meet the scene manager one).
 VENDOR_FIXTURE = REPO / "tests" / "FxFollowupsFineModuleConstructVendor.cpp"
-NUMERIC_CHECKS = 12
+NUMERIC_CHECKS = 21
 
 
 def main():

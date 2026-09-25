@@ -373,29 +373,11 @@ int CgsDev::PerfMonCpu::AddMonitor(char const * lpcName, int liColour, int liMin
 }
 
 // -------------------------------------------------------------------------
-// CgsSceneManager::FineIntersectionTestModule
+// CgsSceneManager::FineIntersectionTestModule -- RETIRED 2026-09-25 (crash parity FX-FOLLOWUPS, item 2): the
+// Construct / Prepare boot gates that stood here are gone; the real bodies in
+// GameShared/.../FineIntersectionTestModule/CgsFineIntersectionTestModule.cpp are mounted (their
+// VolumeLineQuery closure landed in b5 26802ef3).
 // -------------------------------------------------------------------------
-// Both real bodies are in GameShared/.../FineIntersectionTestModule/CgsFineIntersectionTestModule.cpp,
-// which is not on the build list (it drags the rw::collision query closure). Construct is
-// reached at boot by SceneManagerModule::Construct's sub-manager cascade: quiet no-op.
-// FLAG PC-platform leaf: boot-gate no-op.
-void CgsSceneManager::FineIntersectionTestModule::Construct()
-{
-}
-
-// Prepare is reached by the world Prepare chain; reports success so the scripted load
-// advances, and the sub-manager stays inert (zero-initialised storage).
-bool CgsSceneManager::FineIntersectionTestModule::Prepare(class CgsSceneManager::EntityManager *,class CgsSceneManager::VolumeManager *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "FineIntersectionTestModule::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::OverlapGenerationModule

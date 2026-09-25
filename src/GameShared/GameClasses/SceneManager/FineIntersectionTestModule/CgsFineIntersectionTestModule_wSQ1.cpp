@@ -13,6 +13,13 @@
 // objects are never brought up on this host), while the scene-query dispatchers in
 // CgsSceneManagerModule_wSQ1.cpp DO reference these four symbols. This TU is mounted on its own.
 //
+// UPDATE 2026-09-25 (crash parity FX-FOLLOWUPS, item 2): CgsFineIntersectionTestModule.cpp IS mounted now, so the
+// module's Construct / Prepare are the console's -- both query objects are built in the module's buffers and the
+// two manager pointers are set. Reason (b) below is gone. Reason (a) stands for the LINE queries: the vendor
+// VolumeLineQuery has its construction entry points (b5 26802ef3) but no line walk (GetIntersections,
+// GetAllIntersections @0x82BB3820, AddVolumeRef, AddPrimitiveRef, InitQuery), so ComputeLineTestFine /
+// ComputeLineTestNearest stay LOUD traps.
+//
 // ⛔ ALL FOUR ARE LOUD TRAPS, NOT BODIES -- and NOT the empty `{}` silent-drop stubs that stood
 // in the unmounted TU until this wave (an untouched OutEventLineTestNearestResult read as "no
 // hit"). The reason an honest body is impossible today even with the asm in hand: every one of

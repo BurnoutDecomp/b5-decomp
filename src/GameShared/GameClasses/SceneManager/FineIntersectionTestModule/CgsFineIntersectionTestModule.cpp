@@ -9,6 +9,11 @@
 // VolumeLineQuery and asserts the budgeted buffer sizes are large enough. Prepare/Release
 // drive a two-step START -> MANAGER -> DONE handshake over the stage enums (post-increment
 // asserts the stage never overruns DONE).
+//
+// MOUNTED 2026-09-25 (crash parity FX-FOLLOWUPS, item 2): this TU's Construct / Prepare replace the WorldLinkStubs
+// boot gates. Re-verified against ARTIST the same day: Construct @0x828B0BF0 MATCH (with b5 26802ef3's host
+// sizing), Prepare @0x828AA630 MATCH, Release @0x828AA730 DEFECT, fixed below (its START arm falls through into the
+// MANAGER arm). The four Compute* entry points are in CgsFineIntersectionTestModule_wSQ1.cpp.
 
 #include "GameShared/GameClasses/SceneManager/FineIntersectionTestModule/CgsFineIntersectionTestModule.h"
 
@@ -104,6 +109,11 @@ void FineIntersectionTestModule::Destruct()
 // START and run the full advance. Any other value asserts. On completion the release stage
 // is reset to START and the function returns true. Each post-increment asserts the stage
 // never exceeds E_FINE_INTERSECTION_PREPARE_DONE.
+//
+// VERIFIED 2026-09-25 against ARTIST: MATCH. 0x828AA660 `cmplwi stage, 1 ; blt START ; beq MANAGER`, 0x828AA66C
+// `cmplwi stage, 3 ; blt 0x828AA6A0` (DONE: stage = START, then the START arm), else "Unrecognised release state"
+// (li r5, 0x7A = :122) and 0. START: +0x59814 (mpEntityManager) = r4, +0x59810 (mpVolumeManager) = r5, then the
+// two inlined increments (:137 asserts); 0x828AA714 meReleaseStage (+0x59804) = START, return 1.
 // ---------------------------------------------------------------------------
 bool FineIntersectionTestModule::Prepare(EntityManager* lpEntityManager, VolumeManager* lpVolumeManager)
 {
@@ -148,13 +158,27 @@ bool FineIntersectionTestModule::Prepare(EntityManager* lpEntityManager, VolumeM
 // external, not-yet-reconstructed teardown that operates on the release stage word. Its
 // behavior is not grounded, so it is intentionally NOT modelled here beyond the stage
 // transition the surrounding asm makes observable. (Flagged in stubs_needed.)
+//
+// CORRECTED 2026-09-25 (crash parity FX-FOLLOWUPS, re-derived from ARTIST): sub_828AA338 is NOT a teardown. It is
+// the out-of-line operator++(EFineIntersectionTestReleaseStage&, int) of CgsFineIntersectionTestModule.h:138:
+// `lwz old, 0(r3) ; addi new, old, 1 ; cmpwi new, 2 ; stw new ; ble` -> "leEnumIndex <= FineIntersectionTestModule::
+// E_FINE_INTERSECTION_RELEASE_DONE" (0x820F2DD8, li r5, 0x8A = :138), return old; the second argument is unused.
+// And the START arm (0x828AA790..0x828AA798) FALLS THROUGH into the MANAGER arm (0x828AA79C..0x828AA7CC, the same
+// increment inlined), so one Release from START runs START -> MANAGER -> DONE, as Prepare does. DONE goes straight
+// to 0x828AA7D0 (mePrepareStage = START, return 1); >= 3 unsigned asserts "Unrecognised release state" (:162) and
+// returns 0. The body stopped at MANAGER from START: the two added lines in the START arm are the fall-through.
 // ---------------------------------------------------------------------------
 bool FineIntersectionTestModule::Release()
 {
     if (meReleaseStage == E_FINE_INTERSECTION_RELEASE_START)
     {
         // sub_828AA338(&meReleaseStage, 0): unreconstructed manager-release teardown.
+        // (CORRECTED 2026-09-25: sub_828AA338 IS this increment and its :138 assert -- see the note above.)
         meReleaseStage++;  // START -> MANAGER
+        CGS_ASSERT(meReleaseStage <= E_FINE_INTERSECTION_RELEASE_DONE,
+                   "leEnumIndex <= FineIntersectionTestModule::E_FINE_INTERSECTION_RELEASE_DONE");
+        // ADDED 2026-09-25: the fall-through into the MANAGER arm (0x828AA79C), START -> MANAGER -> DONE.
+        meReleaseStage++;  // MANAGER -> DONE
         CGS_ASSERT(meReleaseStage <= E_FINE_INTERSECTION_RELEASE_DONE,
                    "leEnumIndex <= FineIntersectionTestModule::E_FINE_INTERSECTION_RELEASE_DONE");
     }
@@ -179,7 +203,7 @@ bool FineIntersectionTestModule::Release()
 // @0x828C8CC8, ComputeVolumeTestDeepest @0x828C90D0, ComputeVolumeTestFine @0x828C93C8.
 //
 // MOVED 2026-09-02 (scene-query wave 1) to CgsFineIntersectionTestModule_wSQ1.cpp, which is
-// MOUNTED (this TU is not: its Construct/Prepare are still WorldLinkStubs boot gates). They
+// MOUNTED (this TU is too since 2026-09-25; until then its Construct/Prepare were WorldLinkStubs boot gates). They
 // were EMPTY bodies here -- silent-drop stubs whose callers read an untouched result record as
 // "no hit" -- and are LOUD traps there until the rw::collision query objects they drive are
 // real on this host (VolumeLineQuery::GetIntersections is a link-stub). See that TU's banner.
