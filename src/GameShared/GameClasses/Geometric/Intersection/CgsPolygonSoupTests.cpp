@@ -10,6 +10,8 @@
 //   CgsGeometric::UnpackPolygonSoupVertices              @ 0x8283B480   (40)
 //   CgsGeometric::TestSphereTriangle4SOA                 @ 0x8283FD50  (144)
 //   CgsGeometric::ExtractTriangle4ListIntersectingSphere @ 0x82844C80  (602)
+//   CgsGeometric::TestSpherePolygonSoup                  @ 0x828455E8 (~350, an export hole;
+//                                                          added 2026-09-25, FX-FOLLOWUPS)
 //
 // ⭐⭐ 2026-08-11 (the extractor wave). The file-tail note this banner used to
 // carry -- "BLOCKED: un-recovered .rdata VMX permute/mask tables ... un-homed
@@ -784,5 +786,191 @@ namespace CgsGeometric
         }
 
         return liWriteIndex;
+    }
+
+    // ------------------------------------------------------------------------
+    // TestSpherePolygonSoup @0x828455E8 (~350) -- ADDED 2026-09-25 (crash parity FX-FOLLOWUPS item
+    // 2). An export HOLE (no 0x828455E8.json); read with tools/re/ppcdis.py. Named by its one
+    // caller, BaseCollisionGenerator::TestSphereAgainstPolySoupList @0x82812950 (`bl 0x828455E8`
+    // at 0x82812A60), and by the PS3 DWARF: CgsPolygonSoupTests.cpp:629
+    //     extern MaskScalar TestSpherePolygonSoup(PolygonSoupArg, SphereArg)
+    // (r3 = the soup, r4 = the sphere, the answer in v1).
+    //
+    // "Does the sphere touch ANY triangle of this soup?" -- the extractor above with its output
+    // stage replaced by an early out. The same header decode, the same unpack, the same four
+    // blocks, the same transposes, the same 4-wide kernel:
+    //   0x82845624..0x82845668  numQuads = +0x1B ; numTris = (u8)(+0x1A - numQuads) (`clrlwi 24`) ;
+    //                           quad PAIRS = numQuads >> 1, the odd quad = numQuads & 1 (`mullw
+    //                           0xFFFE ; add ; clrlwi 16`), triangle QUARTETS = numTris >> 2, the
+    //                           odd triangles = numTris & 3 (`mullw 0xFFFC`) -- all u16 counters
+    //   0x8284566C              UnpackPolygonSoupVertices(sp+0xC0, soup) ; GetPolygon(0)
+    //   0x82845690..0x828457E8  per quad PAIR (A, B): lanes (A0,A1,A2) (A3,A2,A1) (B0,B1,B2)
+    //                           (B3,B2,B1) -- the vmrghw/vmrglw cascade decoded lane by lane into
+    //                           TestSphereTriangle4SOA's v1..v9 (lVertex0X..lVertex2Z)
+    //   0x828457EC..0x828458BC  the odd quad Q: lanes (Q0,Q1,Q2) (Q3,Q2,Q1), lanes 2/3 the
+    //                           self-merge duplicates of 0/1 (never read)
+    //   0x828458C0..0x82845A7C  per triangle QUARTET: lane k = (Tk.0, Tk.1, Tk.2)
+    //   0x82845A80..0x82845B3C  per odd triangle: (T.0, T.1, T.2) splatted to all four lanes
+    // After every kernel call the READ lanes are tested in lane order, `vspltw v0, mask, k ;
+    // vcmpeqfp128. v0, v0, zero` -- 4 per pair / quartet, 2 for the odd quad, 1 per odd triangle --
+    // and the first non-zero lane leaves at once through 0x82845B5C, `vmr v1, v126` with v126 =
+    // `vnot(vspltisw 0)`: ALL FOUR LANES ALL-ONES. A soup with no hit falls out at 0x82845B40,
+    // `vmr v1, v127` (vspltisw 0): all four lanes zero. (The `stw r9 (0), 0xB0(r1)` before every
+    // lane test is a dead stack store; it carries nothing.)
+    //
+    // ⭐ THE LANE / VERTEX ORDER IS LOAD-BEARING, NOT COSMETIC: TestSphereTriangle4SOA carries the
+    // console's own minimum-cascade bug (see its banner -- the fourth arm names vertex B where D is
+    // the closest), so which vertex a triangle presents as P1 and which as P2 changes the answer for
+    // a sphere that misses near a vertex. The orders above are the decode's, and
+    // run_fxfollowups_sphere_soup pins them.
+    // ------------------------------------------------------------------------
+    namespace
+    {
+        // One lane of a TestSphereTriangle4SOA call: the triangle's three unpacked vertices, in the
+        // order the console transposes them into lVertex0 / lVertex1 / lVertex2.
+        struct SphereSoupLane
+        {
+            const Vector3* mpVertex0;
+            const Vector3* mpVertex1;
+            const Vector3* mpVertex2;
+        };
+
+        // The `vmrghw/vmrglw` transpose of four AoS triangles into the kernel's nine SoA
+        // arguments, and the kernel. Only x/y/z are gathered (the unpacked w lane is junk).
+        Triangle4::Mask4 TestSphereLanes(const Sphere& lSphere, const SphereSoupLane laLanes[4])
+        {
+            Vector4 lP0X, lP0Y, lP0Z, lP1X, lP1Y, lP1Z, lP2X, lP2Y, lP2Z;
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                const SphereSoupLane& lrLane = laLanes[liLane];
+                (&lP0X.x)[liLane] = lrLane.mpVertex0->x;
+                (&lP0Y.x)[liLane] = lrLane.mpVertex0->y;
+                (&lP0Z.x)[liLane] = lrLane.mpVertex0->z;
+                (&lP1X.x)[liLane] = lrLane.mpVertex1->x;
+                (&lP1Y.x)[liLane] = lrLane.mpVertex1->y;
+                (&lP1Z.x)[liLane] = lrLane.mpVertex1->z;
+                (&lP2X.x)[liLane] = lrLane.mpVertex2->x;
+                (&lP2Y.x)[liLane] = lrLane.mpVertex2->y;
+                (&lP2Z.x)[liLane] = lrLane.mpVertex2->z;
+            }
+
+            return TestSphereTriangle4SOA(lSphere, lP0X, lP0Y, lP0Z,
+                                                   lP1X, lP1Y, lP1Z,
+                                                   lP2X, lP2Y, lP2Z);
+        }
+
+        // `vspltw v0, mask, k ; vcmpeqfp128. v0, v0, zero` -- lane k is a hit unless it compares
+        // equal to zero (a hit lane is 0xFFFFFFFF, which reads as NaN and is != 0.0).
+        inline bool SphereSoupLaneHit(const Triangle4::Mask4& lrMask, s32 liLane)
+        {
+            return (&lrMask.x)[liLane] != 0.0f;
+        }
+
+        // The two answers: v126 (`vnot` of zero, every lane all-ones) and v127 (every lane zero).
+        inline rw::math::vpu::MaskScalar SphereSoupAnswer(bool lbHit)
+        {
+            rw::math::vpu::MaskScalar lAnswer;
+            const u32 luLane = lbHit ? 0xFFFFFFFFu : 0u;
+            std::memcpy(&lAnswer.x, &luLane, sizeof(u32));
+            std::memcpy(&lAnswer.y, &luLane, sizeof(u32));
+            std::memcpy(&lAnswer.z, &luLane, sizeof(u32));
+            std::memcpy(&lAnswer.w, &luLane, sizeof(u32));
+            return lAnswer;
+        }
+    }
+
+    rw::math::vpu::MaskScalar TestSpherePolygonSoup(const PolygonSoup& lPolygonSoup,
+                                                    const Sphere&      lSphere)
+    {
+        // --- the header decode (0x82845624..0x82845668) ------------------------
+        const u16 lu16NumQuads            = lPolygonSoup.mu8NumQuads;                     // +0x1B
+        const u8  lu8NumTriangles         = static_cast<u8>(lPolygonSoup.mu8NumPolygons   // +0x1A
+                                                            - lPolygonSoup.mu8NumQuads);  // `clrlwi 24`
+        const u16 lu16NumQuadPairs        = static_cast<u16>(lu16NumQuads >> 1);
+        const u16 lu16NumOddQuads         = static_cast<u16>(lu16NumQuads & 1);
+        const u16 lu16NumTriangleQuartets = static_cast<u16>(lu8NumTriangles >> 2);
+        const u16 lu16NumOddTriangles     = static_cast<u16>(lu8NumTriangles & 3);
+
+        alignas(16) Vector3 laVertices[KI_MAX_POLYGON_SOUP_VERTICES];   // sp+0xC0
+        UnpackPolygonSoupVertices(laVertices, lPolygonSoup);
+
+        const PolygonSoupPoly* lpPoly =
+            reinterpret_cast<const PolygonSoupPoly*>(lPolygonSoup.GetPolygon(0));
+
+        // --- the quad PAIRS (0x82845690..0x828457E8) ---------------------------
+        for (u16 lu16Pair = 0; lu16Pair < lu16NumQuadPairs; ++lu16Pair, lpPoly += 2)
+        {
+            const u8* lpau8A = lpPoly[0].mau8VertexIndex;
+            const u8* lpau8B = lpPoly[1].mau8VertexIndex;
+            const SphereSoupLane laLanes[4] =
+            {
+                { &laVertices[lpau8A[0]], &laVertices[lpau8A[1]], &laVertices[lpau8A[2]] },   // (A0,A1,A2)
+                { &laVertices[lpau8A[3]], &laVertices[lpau8A[2]], &laVertices[lpau8A[1]] },   // (A3,A2,A1)
+                { &laVertices[lpau8B[0]], &laVertices[lpau8B[1]], &laVertices[lpau8B[2]] },   // (B0,B1,B2)
+                { &laVertices[lpau8B[3]], &laVertices[lpau8B[2]], &laVertices[lpau8B[1]] },   // (B3,B2,B1)
+            };
+            const Triangle4::Mask4 lMask = TestSphereLanes(lSphere, laLanes);
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                if (SphereSoupLaneHit(lMask, liLane))
+                {
+                    return SphereSoupAnswer(true);   // 0x82845B5C
+                }
+            }
+        }
+
+        // --- the odd quad (0x828457EC..0x828458BC) ------------------------------
+        if (lu16NumOddQuads != 0)
+        {
+            const u8* lpau8Q = lpPoly->mau8VertexIndex;
+            const SphereSoupLane lLane0 = { &laVertices[lpau8Q[0]], &laVertices[lpau8Q[1]], &laVertices[lpau8Q[2]] };
+            const SphereSoupLane lLane1 = { &laVertices[lpau8Q[3]], &laVertices[lpau8Q[2]], &laVertices[lpau8Q[1]] };
+            const SphereSoupLane laLanes[4] = { lLane0, lLane1, lLane0, lLane1 };   // lanes 2/3: self-merge duplicates
+            const Triangle4::Mask4 lMask = TestSphereLanes(lSphere, laLanes);
+            for (s32 liLane = 0; liLane < 2; ++liLane)
+            {
+                if (SphereSoupLaneHit(lMask, liLane))
+                {
+                    return SphereSoupAnswer(true);
+                }
+            }
+            ++lpPoly;
+        }
+
+        // --- the triangle QUARTETS (0x828458C0..0x82845A7C) ---------------------
+        for (u16 lu16Quartet = 0; lu16Quartet < lu16NumTriangleQuartets; ++lu16Quartet, lpPoly += 4)
+        {
+            SphereSoupLane laLanes[4];
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                const u8* lpau8T = lpPoly[liLane].mau8VertexIndex;
+                laLanes[liLane].mpVertex0 = &laVertices[lpau8T[0]];
+                laLanes[liLane].mpVertex1 = &laVertices[lpau8T[1]];
+                laLanes[liLane].mpVertex2 = &laVertices[lpau8T[2]];
+            }
+            const Triangle4::Mask4 lMask = TestSphereLanes(lSphere, laLanes);
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                if (SphereSoupLaneHit(lMask, liLane))
+                {
+                    return SphereSoupAnswer(true);
+                }
+            }
+        }
+
+        // --- the odd triangles, one kernel call each (0x82845A80..0x82845B3C) ---
+        for (u16 lu16Triangle = 0; lu16Triangle < lu16NumOddTriangles; ++lu16Triangle, ++lpPoly)
+        {
+            const u8* lpau8T = lpPoly->mau8VertexIndex;
+            const SphereSoupLane lLane = { &laVertices[lpau8T[0]], &laVertices[lpau8T[1]], &laVertices[lpau8T[2]] };
+            const SphereSoupLane laLanes[4] = { lLane, lLane, lLane, lLane };   // the triangle splatted
+            const Triangle4::Mask4 lMask = TestSphereLanes(lSphere, laLanes);
+            if (SphereSoupLaneHit(lMask, 0))
+            {
+                return SphereSoupAnswer(true);
+            }
+        }
+
+        return SphereSoupAnswer(false);   // 0x82845B40
     }
 }

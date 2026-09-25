@@ -37,6 +37,17 @@ namespace CgsGeometric
                                                s32                liBufferSize,
                                                s32*               lpiOutOverun);
 
+    // TestSpherePolygonSoup @0x828455E8 (~350; an export hole) -- ADDED 2026-09-25 (crash parity
+    // FX-FOLLOWUPS item 2), the kernel under BaseCollisionGenerator::TestSphereAgainstPolySoupList.
+    //
+    // Does lSphere touch ANY triangle of one soup? The extractor's walk (quad pairs, the odd quad,
+    // triangle quartets, the odd triangles; TestSphereTriangle4SOA per 4-wide batch) with an early
+    // out on the first hit lane. Returns every lane all-ones on a hit, every lane zero otherwise
+    // (the console's v126 / v127). DWARF CgsPolygonSoupTests.cpp:629:
+    //     extern MaskScalar TestSpherePolygonSoup(PolygonSoupArg, SphereArg)
+    rw::math::vpu::MaskScalar TestSpherePolygonSoup(const PolygonSoup& lPolygonSoup,
+                                                    const Sphere&      lSphere);
+
     // UnpackPolygonSoupVertices @0x8283B480 (40)
     //
     // Expand the soup's packed 6-byte vertices into 16-byte Vector3s:

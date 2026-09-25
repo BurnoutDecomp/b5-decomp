@@ -23,6 +23,8 @@
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupSpacialNode.h" // PolygonSoupLeafNode
 #include "GameShared/GameClasses/Geometric/Intersection/CgsPolygonSoupTests.h"       // IntersectLinePolygonSoup{Nearest,}SingleSided
 #include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"              // TestLineStartEndAxisAlignedBox (the long arm's per-leaf slab test)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"                    // CgsGeometric::Sphere (TestSphereAgainstPolySoupList)
+#include "rw/math/vpu/vector4_operation.h"                                            // vpu::operator+ / operator- (the sphere's box)
 #include <cstring>   // std::memcpy (the 14-qword result copy)
 
 // The contact-generator job entry every CollisionBatch is wired to
@@ -1176,6 +1178,70 @@ namespace CgsCollision
         NoteLineSoupListOverrun(liNumFound, lu16MaxNumResults);   // [DIAG] NOT IN THE X360 BINARY (see its banner)
 
         return static_cast<u16>(liResultListIndex);
+    }
+
+    // =============================================================================================
+    // BaseCollisionGenerator::TestSphereAgainstPolySoupList @ 0x82812950 (~100) -- ADDED 2026-09-25
+    // (crash parity FX-FOLLOWUPS item 2). An export HOLE, read with tools/re/ppcdis.py (and the
+    // classic-VX / vpermwi128 words decoded by hand). DWARF CgsCollisionGenerator.cpp:814 names the
+    // locals lu16ResultListIndex (:817), lSphere (:822), lSphereBoundingBox (:823), liSoup (:834),
+    // liNumSoups (:837) and lpSpacialNode (:843), and the calls: vpu::operator+, Sphere::GetRadius,
+    // vpu::operator-, CollisionResultList::SetNumResults, GetPolygonSoupNodeForResult, three
+    // VecAnd, VecSplat_Word<0>, MaskScalar::GetBool (x2), SetNumResults.
+    //
+    //   r3 = this, r4 = lpSphere, r5 = lpSpatialData, r6 = tagA, r7 = tagB
+    //   0x8281297C  idx = PrepareNewPrimitiveTestResultsList(1, tagA, tagB)   (r4 = 1, r5 <- r6, r6 <- r7)
+    //   0x82812980  lSphere = *lpSphere (two ld/std to sp+0x60; the kernel gets the COPY)
+    //   0x828129AC  v13 = vspltw(sphere, 3) = GetRadius()
+    //   0x828129B0  min = sphere - v13 (vsubfp), 0x828129B4 max = sphere + v13 (vaddfp), ALL FOUR lanes
+    //   0x828129C4  n = lpSpatialData->RunQuery(lSphereBoundingBox)
+    //   per i < n   leaf = GetLeafNodes()[GetOutputQueryBuffer()[i]] (+0x48 / +0x58, re-read per pass):
+    //     0x82812A18..0x82812A40  leaf.max >= box.min & box.max >= leaf.min (two vcmpgefp, a vand,
+    //                 vpermwi128 0x4B / 0x87, two vand, vspltw 0) -- x/y/z, LeafOverlapsBoxXYZ above;
+    //                 all-zero -> next leaf
+    //     0x82812A60  TestSpherePolygonSoup(leaf.mpPolygonSoup (+0x20), &lSphere); `vcmpeqfp128. v1,
+    //                 zero` all-equal -> next leaf, else 0x82812AB0: the list's count = 1 and RETURN
+    //   0x82812A88  none: the list's count = 0 (`sth r29 (0), 0xC`)
+    //   return      idx (`mr r3, r24`)
+    // No result RECORD is ever written: the answer is the count alone, which is all its one caller
+    // (ProcessVolumeTestDeepest, `lhz 0xC` of GetResultList's copy) reads.
+    // =============================================================================================
+    u16 BaseCollisionGenerator::TestSphereAgainstPolySoupList(const CgsGeometric::Sphere*              lpSphere,
+                                                              CgsGeometric::PolygonSoupListSpatialMap* lpSpatialData,
+                                                              u32                                      luUserTagA,
+                                                              u16                                      lu16UserTagB)
+    {
+        const u16 lu16ResultListIndex = static_cast<u16>(
+            PrepareNewPrimitiveTestResultsList(1, luUserTagA, lu16UserTagB));   // :817
+        CollisionResultList* lpList = mapCollisionResultLists[lu16ResultListIndex];
+
+        const CgsGeometric::Sphere lSphere = *lpSphere;                          // :822
+
+        CgsGeometric::AxisAlignedBox lSphereBoundingBox;                         // :823
+        lSphereBoundingBox.mMin = lSphere.GetPosition() - lSphere.GetRadius();
+        lSphereBoundingBox.mMax = lSphere.GetPosition() + lSphere.GetRadius();
+
+        const s32 liNumSoups = lpSpatialData->RunQuery(lSphereBoundingBox);      // :837
+
+        for (s32 liSoup = 0; liSoup < liNumSoups; ++liSoup)                      // :834
+        {
+            const CgsGeometric::PolygonSoupLeafNode* lpSpacialNode =             // :843
+                &lpSpatialData->GetLeafNodes()[lpSpatialData->GetOutputQueryBuffer()[liSoup]];
+
+            if (!LeafOverlapsBoxXYZ(lpSpacialNode->mBox, lSphereBoundingBox))
+            {
+                continue;
+            }
+
+            if (CgsGeometric::TestSpherePolygonSoup(*lpSpacialNode->mpPolygonSoup, lSphere).GetBool())
+            {
+                lpList->SetNumResults(1);                                        // 0x82812AB0
+                return lu16ResultListIndex;
+            }
+        }
+
+        lpList->SetNumResults(0);                                                // 0x82812A88
+        return lu16ResultListIndex;
     }
 }
 }
