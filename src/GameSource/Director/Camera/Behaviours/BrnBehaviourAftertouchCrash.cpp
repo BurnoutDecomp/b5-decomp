@@ -33,6 +33,9 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // CgsDev::Log::gpDebugPrint (the
                                                                 //   BRN_CAMRIG_DIAG witness only)
 
+#include "SDKs/XboxMath/XMVectorSinCos.h"                        // XboxMath::XMVectorSinCos (the three inlined SinCos)
+#include "SDKs/XboxMath/XMScalarSinCos.h"                        // XboxMath::XMScalarSinCos (XMMatrixRotationY's)
+
 #include <cmath>                                                // std::sqrt / std::fabs / std::signbit
 #include <cstdlib>                                              // getenv (BRN_CAMRIG_DIAG)
 
@@ -88,6 +91,69 @@ namespace
 
     // flt_82001744 (0x3C8EFA35) -- degrees to radians, the rig's pitch conversion.
     const f32 KF_DEGS_TO_RADS = 0.017453292f;
+
+    // The rotations Update builds, with the console's sine and cosine (FX-GATE, crash parity 2026-09-25). The
+    // shared vendor rw::math::vpu::MakeRotationX/Y/Z (std::sin / std::cos) stay as they are for their other
+    // callers. Three of them are the XDK's XMVectorSinCos inlined into Update, each run on emu64 against
+    // XboxMath::XMVectorSinCos (1500 angles, 0 mismatches): the random start 0x822283A0..0x822284D8, the pitch
+    // 0x82228EF8..0x82229090, the roll 0x822292DC..0x82229428. The fourth is `bl XMMatrixRotationY` @0x82203560,
+    // which takes its pair from XMScalarSinCos @0x821F0C08 (SDKs/XboxMath/XMScalarSinCos.h). The rows are the SDK's,
+    // as the vendor builders have them (the console's pitch / roll packing read on emu64 at 0x822290C0 / 0x8222944C,
+    // and XMMatrixRotationY's four stores). The console's w lanes carry copies (x for the rows, sin for the random
+    // start); Mult and TransformVector read only x, y and z, so they stay 0.
+
+    // The random start's direction, MakeRotationY(angle).zAxis == (sin, 0, cos): the vperm unk_82CDA350 +
+    // vrlimi128 at 0x822284DC / 0x822284E0.
+    Vector3 RotationYAxisZ(f32 lfAngleRads)
+    {
+        f32 lfSin;
+        f32 lfCos;
+        XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
+        return Vector3{ lfSin, 0.0f, lfCos, 0.0f };
+    }
+
+    // The pitch: rows (1,0,0) / (0,c,s) / (0,-s,c) / (0,0,0).
+    Matrix44Affine RotationX(f32 lfAngleRads)
+    {
+        f32 lfSin;
+        f32 lfCos;
+        XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
+        Matrix44Affine lResult;
+        lResult.xAxis = Vector3{ 1.0f,   0.0f,  0.0f, 0.0f };
+        lResult.yAxis = Vector3{ 0.0f,  lfCos, lfSin, 0.0f };
+        lResult.zAxis = Vector3{ 0.0f, -lfSin, lfCos, 0.0f };
+        lResult.wAxis = Vector3{ 0.0f,   0.0f,  0.0f, 0.0f };
+        return lResult;
+    }
+
+    // The roll: rows (c,s,0) / (-s,c,0) / (0,0,1) / (0,0,0).
+    Matrix44Affine RotationZ(f32 lfAngleRads)
+    {
+        f32 lfSin;
+        f32 lfCos;
+        XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
+        Matrix44Affine lResult;
+        lResult.xAxis = Vector3{  lfCos, lfSin, 0.0f, 0.0f };
+        lResult.yAxis = Vector3{ -lfSin, lfCos, 0.0f, 0.0f };
+        lResult.zAxis = Vector3{   0.0f,  0.0f, 1.0f, 0.0f };
+        lResult.wAxis = Vector3{   0.0f,  0.0f, 0.0f, 0.0f };
+        return lResult;
+    }
+
+    // XMMatrixRotationY @0x82203560: XMScalarSinCos (0x8220357C), then rows (c,0,-s,0) / (0,1,0,0) / (s,0,c,0) /
+    // (0,0,0,1) (the -s is the fneg at 0x822035B4).
+    Matrix44Affine XMMatrixRotationY(f32 lfAngleRads)
+    {
+        f32 lfSin;
+        f32 lfCos;
+        XboxMath::XMScalarSinCos(&lfSin, &lfCos, lfAngleRads);
+        Matrix44Affine lResult;
+        lResult.xAxis = Vector3{ lfCos, 0.0f, -lfSin, 0.0f };
+        lResult.yAxis = Vector3{  0.0f, 1.0f,   0.0f, 0.0f };
+        lResult.zAxis = Vector3{ lfSin, 0.0f,  lfCos, 0.0f };
+        lResult.wAxis = Vector3{  0.0f, 0.0f,   0.0f, 1.0f };
+        return lResult;
+    }
 }
 
 namespace BrnDirector
@@ -251,11 +317,13 @@ bool BehaviourAftertouchCrash::Prepare(const BehaviourSharedPrepareReleaseInfo& 
 //   +0x5D4  mpRandom
 //
 // VMX->portable, the standing convention of this tree's rw::math::vpu home: the console's
-// vrsqrtefp + two Newton steps (Normalize / Magnitude) and its three inlined XMVectorSinCos
-// minimax polynomials (range register unk_82000C60 == {pi, 2pi, 1/pi, 1/2pi}, coefficient blocks
-// unk_82000BD0..0x82000C2F) are the exact std::sqrt / std::sin / std::cos forms, via the vendor
-// Normalize / Magnitude / MakeRotation{X,Z} / Mult. Every branch, compare polarity, operand order,
-// constant and store is transcribed; fused multiply-adds become separate operations.
+// vrsqrtefp + two Newton steps (Normalize / Magnitude) are the exact std::sqrt forms, via the vendor
+// Normalize / Magnitude / Mult. Every branch, compare polarity, operand order, constant and store is
+// transcribed; fused multiply-adds become separate operations (FLAGged at the Mult / TransformVector
+// sites). Its three inlined XMVectorSinCos (range register unk_82000C60 == {pi, 2pi, 1/pi, 1/2pi},
+// coefficient blocks unk_82000BD0..0x82000C2F) and XMMatrixRotationY's XMScalarSinCos ARE the console's
+// since FX-GATE (crash parity 2026-09-25): the file-local RotationYAxisZ / RotationX / RotationZ /
+// XMMatrixRotationY above; std::sin / std::cos stood in for them before.
 // ============================================================================
 bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo)
 {
@@ -304,9 +372,8 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
                 // by 0x5851F42D4C957F2D, bump the index & 7); the SinCos of the draw lands as
                 // (sin, 0, cos) through the perm unk_82CDA350 + vrlimi128 (0x822284DC/E0), i.e.
                 // the SDK's MakeRotationY (DecFIGS matrix44affine_operation_platform_inline.h
-                // :255) row z.
-                mManualCameraDirection =
-                    rw::math::vpu::MakeRotationY(lrSharedInfo.mpRandom->RandomFloat()).zAxis;
+                // :255) row z, with the console's XMVectorSinCos (RotationYAxisZ above).
+                mManualCameraDirection = RotationYAxisZ(lrSharedInfo.mpRandom->RandomFloat());
             }
         }
 
@@ -384,10 +451,13 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
         const Vector2 lOrbitStick = lrSharedInfo.mSphericalRotationController.GetRawStickVector();
 
         // .cpp:248..:249 -- orbit: yaw the manual direction by stick x * KF_CAMERA_X_ROTATION_SPEED
-        // (`bl XMMatrixRotationY` @0x82228724 -- the xenon SDK's Y-rotation builder -- then the
-        // three-row vmulfp128/vmaddfp/vmaddfp @0x8222875C..0x82228764 == TransformVector).
+        // (`bl XMMatrixRotationY` @0x82228724 -- the xenon SDK's Y-rotation builder, whose sine and cosine
+        // are XMScalarSinCos's (XMMatrixRotationY above) -- then the three-row vmulfp128/vmaddfp/vmaddfp
+        // @0x8222875C..0x82228764 == TransformVector).
+        // FLAG (rule 3, open, FX-DIRECTOR2's file): that TransformVector is fused on the console
+        // (row2 * z + (row1 * y + row0 * x)); the vendor TransformVector here is not.
         mManualCameraDirection = rw::math::vpu::TransformVector(
-            rw::math::vpu::MakeRotationY(lOrbitStick.x * KF_CAMERA_X_ROTATION_SPEED),
+            XMMatrixRotationY(lOrbitStick.x * KF_CAMERA_X_ROTATION_SPEED),
             mManualCameraDirection);
 
         // .cpp:254 -- raise / lower by stick y * KF_CAMERA_Y_ROTATION_SPEED, clamped to
@@ -534,9 +604,12 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     // X rotation by mfPitch * 0.017453292 (the SDK's MakeRotationX, :239/:240 -- rows
     // (1,0,0) / (0,c,s) / (0,-s,c) / (0,0,0) packed @0x82229050..0x822290BC) pre-multiplied in
     // (Mult(rotation, frame): the rotation's zero translation row leaves the lifted origin).
+    // The rotation's sine and cosine are the console's XMVectorSinCos (RotationX above). FLAG (rule 3, open,
+    // FX-DIRECTOR2's file): the Mult's vmaddfp cascade (0x822290C0..0x82229128) is fused on the console; the
+    // vendor Mult is not.
     lCameraTransform.wAxis.y += mfHeight;
     lCameraTransform = rw::math::vpu::Mult(
-        rw::math::vpu::MakeRotationX(lrParameters.mfPitch * KF_DEGS_TO_RADS), lCameraTransform);
+        RotationX(lrParameters.mfPitch * KF_DEGS_TO_RADS), lCameraTransform);
 
     // .cpp:394..:400 -- smooth small camera moves: within KF_SMOOTHING_STOP_DISTANCE_SQ of last
     // frame's position the camera goes KF_SMOOTHING_FACTOR of the way (`vcmpgtfp. v11, KF, |d|^2`
@@ -584,8 +657,10 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
 
     // Roll the published camera by the crash-mode tilt (the SDK's MakeRotationZ, :269 -- rows
     // (c,s,0) / (-s,c,0) / (0,0,1) / (0,0,0) @0x8222942C..0x82229448 -- pre-multiplied into the
-    // camera's four rows @0x8222944C..0x822294BC).
-    lrCamera.SetTransform(rw::math::vpu::Mult(rw::math::vpu::MakeRotationZ(mfRollAngleRads),
+    // camera's four rows @0x8222944C..0x822294BC). The sine and cosine are the console's XMVectorSinCos
+    // (RotationZ above); FLAG (rule 3, open, FX-DIRECTOR2's file): that Mult is fused on the console, the
+    // vendor Mult is not.
+    lrCamera.SetTransform(rw::math::vpu::Mult(RotationZ(mfRollAngleRads),
                                               lrCamera.GetTransform()));
 
     // .cpp:435 -- the slow-mo close-up frames the car from beside it: aim half a metre below the

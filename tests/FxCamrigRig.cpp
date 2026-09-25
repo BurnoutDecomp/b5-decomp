@@ -22,6 +22,8 @@
 #include "rw/math/vpu/vector4_operation.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "SDKs/XboxMath/XMVectorSinCos.h"   // the rig's file-local rotation builders (FX-GATE 2026-09-25)
+#include "SDKs/XboxMath/XMScalarSinCos.h"   // XMMatrixRotationY's sine / cosine (FX-GATE 2026-09-25)
 
 #include <cmath>
 #include <cstdint>
