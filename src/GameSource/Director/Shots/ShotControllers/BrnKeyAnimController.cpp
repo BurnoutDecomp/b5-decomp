@@ -98,6 +98,42 @@ static const f32 KF_LETTERBOX_EFFECT_AMOUNT = 0.15f;
 static const u32 KU_CAMERA_FLAG_CUT         = 6;    // camera +0x140 bit 0x40
 static const u32 KU_CAMERA_FLAG_SCENE_SPACE = 13;   // camera +0x140 bit 0x2000
 
+// [DIAG] NOT IN THE X360 BINARY. BRN_CRASHCAM_DIAG: a take authored in the ICE scene space. On the first frame of each
+// scene-space stretch (and whenever the take changes), one line with the take's guid, both spaces, the scene space's
+// origin in the world and the camera's world eye. It is the witness that the director's scene space
+// (MainDirector::Update 0x82274A28, which follows the published camera) is live rather than the zero matrix. Reads only.
+static void BrnDiag_IceSceneSpace(const ICE::ICETake& lrTake, const ICE::CameraSpaceHandler& lrSpaces,
+                                  ICE::eICESpace leEyeSpace, ICE::eICESpace leLookSpace,
+                                  const rw::math::vpu::Vector3& lrWorldEye)
+{
+    static const bool sbOn = (getenv("BRN_CRASHCAM_DIAG") != 0);
+    static bool sbWasScene = false;
+    static s32  siLastGuid = -1;
+    static s32  siLines    = 0;
+    if (!sbOn || CgsDev::Log::gpDebugPrint == 0)
+        return;
+    const bool lbScene = (leEyeSpace == ICE::eICE_SCENE_SPACE) || (leLookSpace == ICE::eICE_SCENE_SPACE);
+    const s32  liGuid  = (lrTake.GetData() != 0) ? lrTake.GetData()->miGuid : -1;
+    if (lbScene && (!sbWasScene || liGuid != siLastGuid) && siLines < 40)
+    {
+        ++siLines;
+        rw::math::vpu::Vector3 lOrigin;
+        lOrigin.x = 0.0f;
+        lOrigin.y = 0.0f;
+        lOrigin.z = 0.0f;
+        lOrigin.w = 0.0f;
+        const rw::math::vpu::Vector3 lSceneOrigin = lrSpaces.TransformToWorld(lOrigin, ICE::eICE_SCENE_SPACE);
+        *CgsDev::Log::gpDebugPrint
+            << "[ice-scene] take guid " << liGuid
+            << " '" << ((lrTake.GetData() != 0) ? lrTake.GetData()->macTakeName : "?") << "'"
+            << " eye space " << static_cast<s32>(leEyeSpace) << " look space " << static_cast<s32>(leLookSpace)
+            << ": scene origin (" << lSceneOrigin.x << ", " << lSceneOrigin.y << ", " << lSceneOrigin.z
+            << ") world eye (" << lrWorldEye.x << ", " << lrWorldEye.y << ", " << lrWorldEye.z << ")\n";
+    }
+    sbWasScene = lbScene;
+    siLastGuid = liGuid;
+}
+
 // ----------------------------------------------------------------------------
 // The ICE element indices this controller samples. Indices into the engine's
 // ICE::ICEElementDescriptions[48] table (SDKs/Packages/ICE/ICEData.cpp); the names are that
@@ -397,6 +433,8 @@ void KeyAnimController::UpdateTransformationMatrix(const ICE::ICETake& lrTake,
         static_cast<ICE::eICESpace>(lrTake.GetValueInt(E_ICE_SPACE_LOOK));
     const rw::math::vpu::Vector3 lWorldLookPosition =
         lrSpaces.TransformToWorld(lLookPosition, leLookSpace);
+
+    BrnDiag_IceSceneSpace(lrTake, lrSpaces, leEyeSpace, leLookSpace, lWorldEyePosition);   // [DIAG] NOT X360
 
     // A shot authored against the SCENE space is a world-anchored shot.
     lpCamera->GetState().SetFlag(KU_CAMERA_FLAG_SCENE_SPACE,

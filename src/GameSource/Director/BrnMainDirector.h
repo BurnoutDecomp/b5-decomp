@@ -339,14 +339,15 @@ namespace BrnDirector
         // @0x8224FD30 hands ICE::CameraSpaceHandler::Construct (`r7 = this + 0x12170`, landing
         // on the handler's mSceneToWorld @+0x0C0). A whole-image scan for that displacement
         // returns exactly TWO consumers, both in MainDirector: this staging read, and
-        // MainDirector::Update @0x82274A64, which WRITES the ICE editor's preview camera
-        // transform into it with four lvx128/stvx128 pairs. It is 64 bytes with a 16-byte
-        // alignment and it feeds a Matrix44Affine parameter -- hence the type.
+        // MainDirector::Update @0x82274A64, which WRITES the published frame camera's transform
+        // into it with four lvx128/stvx128 pairs on every live frame whose camera is not in a
+        // scene-space shot (camera state flag 13, E_FLAG_DONT_UPDATE_SCENESPACE). It is 64 bytes
+        // with a 16-byte alignment and it feeds a Matrix44Affine parameter -- hence the type.
         //
-        // ⚠️ NOTHING SEEDS IT ON THE CONSOLE. Construct/Prepare never touch it, so on retail it
-        // holds whatever the module allocation left (zero) until the in-game ICE editor runs.
-        // A scene-space authored take therefore projects through a ZERO matrix on a retail
-        // console too -- worth knowing before treating a collapsed scene-space shot as a PC bug.
+        // [CORRECTED 2026-09-25, FX-DIRECTOR2] This note used to say nothing seeds it on retail and
+        // that a scene-space take projects through a ZERO matrix on the console too. Both were wrong.
+        // The 0x82274A64 write is NOT the ICE editor's: it is the unconditional-but-for-flag-13
+        // follow, so the space is the last camera before a scene-space take (see Update).
         u8             maAllVehicleDataReadyLatch[0x12170 - 0x12160];   // +0x12160
         Matrix44Affine mICESceneSpace;                                  // +0x12170
         // +0x121B0 .. +0x12480, CARVED 2026-09-24 at the three console sub-object bases the moment
