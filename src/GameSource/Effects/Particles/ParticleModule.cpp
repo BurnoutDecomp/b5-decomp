@@ -210,6 +210,39 @@ namespace BrnParticle
     }
 
     // =========================================================================
+    // SpawnWheelSmoke  @0x82281AF0  (DWARF ParticleModule.h:497) -- 56 instructions; the tyre smoke
+    // (FX-CRASHVFX 2026-09-25, C1). SpawnSimple's body with two differences, in the asm's order:
+    //     the same RandomFloat(mrRotationSpeedMin +0x54, mrRotationSpeedMax +0x58) over mRandom (+0x23100)
+    //       -- `fmadds f0, f12, f13, f0` (0x82281B9C), the fused range map
+    //     `fmuls f3, f0, f3` (0x82281BA4): times the layer's angular-velocity scale
+    //     `clrlwi r10, r8, 24 ; cmplwi ; beq` + `fneg f3, f3` (0x82281B24 / 0x82281BAC): negated when the
+    //       bool (r8, after three f32 arguments that each consume a GPR) is set
+    //     f1 <- the caller's f2 (spawn time), f2 <- the caller's f1 (size scale), r7 = 0 (the regular bank)
+    //     alpha 1.0: SpawnParticle's f4 is never written here -- it still holds flt_82001C98 (1.0), the
+    //       constant the inlined RandomFloat subtracted (`lfs f4, 0x1C98(r10)` at 0x82281B80)
+    //     bl BrnSimpleParticleArray::SpawnParticle(&maSimpleParticles[type], ...)
+    // =========================================================================
+    void ParticleModule::SpawnWheelSmoke(Vector3 lvPosition,
+                                         Vector3 lvVelocity,
+                                         Native::ENativeParticleType leParticleType,
+                                         f32 lfSizeScale,
+                                         f32 lfSpawnTime,
+                                         f32 lfAngularVelocityScale,
+                                         bool lbReverseRotation)
+    {
+        Native::BrnSimpleParticleArray& lrArray = maSimpleParticles[leParticleType];
+        const Native::CB4ParticleArrayStandardParams* const lpParams = lrArray.mpStandardParams;
+
+        f32 lfRotationalVelocity =
+            mRandom.RandomFloat(lpParams->mrRotationSpeedMin, lpParams->mrRotationSpeedMax) * lfAngularVelocityScale;
+        if (lbReverseRotation)
+            lfRotationalVelocity = -lfRotationalVelocity;
+
+        lrArray.SpawnParticle(lvPosition, lvVelocity, lfSpawnTime, lfSizeScale,
+                              lfRotationalVelocity, false, 1.0f);
+    }
+
+    // =========================================================================
     // SpawnSparkShowerFromPoint  @0x8228AFC0  (DWARF ParticleModule.h:563) -- 45 instructions.
     //   Straight-line: the transform's four rows (`lvx128` off r4 at +0/+0x10/+0x20/+0x30), v1..v4
     //   and f1..f4, r9 and r10 are stored into a stack SpawnSparkShowerFromPointEvent in field order

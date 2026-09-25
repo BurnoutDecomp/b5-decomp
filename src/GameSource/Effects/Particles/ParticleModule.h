@@ -554,6 +554,18 @@ namespace BrnParticle
                          f32 lfSpawnTime,
                          f32 lfAlpha);
 
+        // X360 0x82281AF0 (DWARF ParticleModule.h:497) -- THE TYRE-SMOKE PRODUCER. SpawnSimple's twin: one ring draw
+        // over the array's authored rotation-speed range, scaled by the smoke layer's angular-velocity scale and
+        // negated for the left-hand wheels, then one record into maSimpleParticles[leType]'s REGULAR bank at full
+        // alpha. Its one caller is WheelStateMachine::FireNativeParticle @0x82288C30.
+        void SpawnWheelSmoke(Vector3 lvPosition,
+                             Vector3 lvVelocity,
+                             Native::ENativeParticleType leParticleType,
+                             f32 lfSizeScale,
+                             f32 lfSpawnTime,
+                             f32 lfAngularVelocityScale,
+                             bool lbReverseRotation);
+
         // X360 0x8228AFC0 (DWARF ParticleModule.h:563) -- THE SPARK-SHOWER PRODUCER (update thread).
         // Packs its arguments into a type-2 SpawnSparkShowerFromPointEvent (0xA0 bytes) on the
         // inter-thread queue. Its one caller is EffectsModule::DoSparkShower @0x822920C0.

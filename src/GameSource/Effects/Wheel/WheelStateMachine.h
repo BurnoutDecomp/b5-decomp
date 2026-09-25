@@ -76,7 +76,9 @@ namespace BrnEffects
         // Update @ 0x82293EB8. Per-frame: derive this wheel's road speed / skid
         // factors / reverse-thrust velocity, resolve the contact surface's visual-FX
         // attributes, and drive the (up to two) skid-smoke particle layers.
-        void Update(const CarState& lCarState, const RaceCarParticleEffectHelper& lEffectHelper);
+        // DWARF WheelStateMachine.h:48 takes both by non-const reference (FireNativeParticle spawns through the
+        // helper's particle module).
+        void Update(CarState& lCarState, RaceCarParticleEffectHelper& lEffectHelper);
 
         // The previous-frame contact position. EffectsModule::HandleWheels @0x82296C80 reads
         // it (lvx128 at ActiveRaceCarData +0x10 + 0x20*i) for the "moved along the contact
@@ -86,22 +88,21 @@ namespace BrnEffects
         void           SetPreviousPosition(Vector3 lPosition) { mvPreviousPosition = lPosition; }
 
     private:
-        // FireNativeParticle (DWARF WheelStateMachine.h:87). Spawns one native
-        // skid-smoke particle. Body lives in its own WheelStateMachine TU -- declared
-        // only here (HandleSmokeLayer calls it in its spawn loop). leParticleType is
-        // the SimpleParticleBatch::ENativeParticleType enum word (u32).
+        // FireNativeParticle @ 0x82288C30 (DWARF WheelStateMachine.h:87). Spawns one tyre-smoke particle through
+        // ParticleModule::SpawnWheelSmoke (HandleSmokeLayer calls it in its spawn loop). leParticleType is the
+        // SimpleParticleBatch::ENativeParticleType enum word (u32).
         void FireNativeParticle(Vector3 lWheelPosition, Vector3 lWheelVelocity,
                                 u32 leParticleType, Vector3 lSpawnPos,
-                                const RaceCarParticleEffectHelper& lEffectHelper,
-                                const CarState& lCarState,
+                                RaceCarParticleEffectHelper& lEffectHelper,
+                                CarState& lCarState,
                                 f32 lfSpawnTime, f32 lfKickUpSpeed,
                                 Vector3 lvBackwardEmissionBias, f32 lfAngularVelocityScale);
 
         // HandleSmokeLayer @ 0x82288E38. Accumulate skid-smoke "particles owed" for one
         // layer and, once >= 1, spawn the whole-number count back-dating each particle
         // across the frame's timestep.
-        void HandleSmokeLayer(u32 luLayer, const CarState& lCarState,
-                              const RaceCarParticleEffectHelper& lEffectHelper,
+        void HandleSmokeLayer(u32 luLayer, CarState& lCarState,
+                              RaceCarParticleEffectHelper& lEffectHelper,
                               Vector3 lWheelPos, Vector3 lWheelVel,
                               Vector3 lWheelReverseThrustVel,
                               f32 lfSkidFactor, f32 lfMaxWheelTravel,
@@ -117,8 +118,8 @@ namespace BrnEffects
     };
 
     // DWARF WheelStateMachine.h:65/66. The per-particle velocity spread / inherited-
-    // velocity constants FireNativeParticle draws on. Declared here for the shared
-    // vocabulary; defined with FireNativeParticle's TU.
+    // velocity constants FireNativeParticle draws on; defined in WheelStateMachine.cpp (the CRT-initialised
+    // unk_82FAB7E0 / unk_82FAB810).
     extern const rw::math::vpu::Vector3 K_VELOCITY_SPREAD;
     extern const rw::math::vpu::Vector3 K_VELOCITY_INHERITANCE;
 }
