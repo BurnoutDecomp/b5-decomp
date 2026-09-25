@@ -14050,15 +14050,25 @@ VecFloat TrafficEntityModule::Avoidance_CalculatePassingScore(Vector3 lPositionA
         return SplatDrive(0.0f);
     }
 
+    // 0x82719A54 `vmsum3fp128 v9, v12, v12` and 0x82719A7C `vmsum3fp128 v0, v13, v13`: ONE rounding of the
+    // exact three-term sum each -- FLAG (model), the campaign's Dot3 convention (EffectsModule.cpp's Dot3,
+    // the vmxemu emulator; the f64 sum of two-float products rounds far below an f32 ulp), as at the
+    // 0.94 steering gate (0x8273D310). rw::math::vpu::Dot rounded every product and partial sum.
     const Vector3 lRelativePosition        = lPositionB - lPositionA;
-    const f32     lfRelativePositionSizeSq = rw::math::vpu::Dot(lRelativePosition, lRelativePosition);
+    const f32     lfRelativePositionSizeSq =
+        static_cast<f32>(static_cast<f64>(lRelativePosition.x) * lRelativePosition.x
+                         + static_cast<f64>(lRelativePosition.y) * lRelativePosition.y
+                         + static_cast<f64>(lRelativePosition.z) * lRelativePosition.z);
     if (lfRelativePositionSizeSq == 0.0f)
     {
         return SplatDrive(0.0f);
     }
 
     const Vector3 lRelativeVelocity        = lVelocityB - lVelocityA;
-    const f32     lfRelativeVelocitySizeSq = rw::math::vpu::Dot(lRelativeVelocity, lRelativeVelocity);
+    const f32     lfRelativeVelocitySizeSq =
+        static_cast<f32>(static_cast<f64>(lRelativeVelocity.x) * lRelativeVelocity.x
+                         + static_cast<f64>(lRelativeVelocity.y) * lRelativeVelocity.y
+                         + static_cast<f64>(lRelativeVelocity.z) * lRelativeVelocity.z);
     if (lfRelativeVelocitySizeSq == 0.0f)
     {
         return SplatDrive(0.0f);
@@ -14170,7 +14180,12 @@ void TrafficEntityModule::Avoidance_GetBestVehicleDirection(u32 luVehicle, Vecto
         laFeelerVelocity[liFeelerIndex] = laFeelers[liFeelerIndex] * lfVehicleSpeed;
         lafFeelerScore[liFeelerIndex]   = 0.0f;
 
-        const f32 lfDotFeelerDir         = rw::math::vpu::Dot(lTargetDir, laFeelers[liFeelerIndex]);
+        // `vmsum3fp128` per feeler (0x8272C344 [0], 0x8272C43C / 0x8272C448 / 0x8272C458 / 0x8272C51C
+        // [1..4]): ONE rounding of the exact sum -- FLAG (model), the Dot3 convention (see the 0.94 gate).
+        const Vector3& lrFeeler          = laFeelers[liFeelerIndex];
+        const f32 lfDotFeelerDir         =
+            static_cast<f32>(static_cast<f64>(lTargetDir.x) * lrFeeler.x + static_cast<f64>(lTargetDir.y) * lrFeeler.y
+                             + static_cast<f64>(lTargetDir.z) * lrFeeler.z);
         const f32 lfDotFeelerDirPositive = AvoidVmxMin(1.0f, AvoidVmxMax(0.0f, lfDotFeelerDir));
         lafOffcourseScore[liFeelerIndex] =
             (1.0f - lfDotFeelerDirPositive) * GetAvoidOffcourseScoreFactor().x;

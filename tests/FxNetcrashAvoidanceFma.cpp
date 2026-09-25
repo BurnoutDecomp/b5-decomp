@@ -100,6 +100,7 @@ namespace BrnTraffic
 // The production bodies under test, then the generated cases.
 #include "fma_bodies.inc"
 #include "fma_cases.inc"
+#include "dot_bodies.inc"   // the production dot statements, as three small functions
 
 using namespace BrnTraffic;
 
@@ -224,6 +225,32 @@ int main()
         ++liCase;
     }
     Check(gSteerCalls == 7u && gAsserts == 0u, "the gate cases steered once each (7 calls in all), no tripwire", 0);
+
+    // ==== the pipeline's other vmsum3fp128 dots: ONE rounding of the exact sum (FLAG (model), the Dot3
+    //      convention) -- |dP|^2 0x82719A54, |dV|^2 0x82719A7C, the feeler dots 0x8272C344..0x8272C51C ====
+    liCase = 0;
+    for (const SquareCase& lrCase : KA_POSITION_SQUARES)
+    {
+        const f32 lf = DotPassingPosition(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, V3Bits(lrCase.v));
+        if (Bits(lf) != lrCase.single) { std::fprintf(stderr, "  |dP|^2 %08X want %08X\n", Bits(lf), lrCase.single); }
+        Check(Bits(lf) == lrCase.single, "PASSING |dP|^2 is one rounding of the exact sum (vmsum3fp128 0x82719A54)", liCase++);
+    }
+    liCase = 0;
+    for (const SquareCase& lrCase : KA_VELOCITY_SQUARES)
+    {
+        const f32 lf = DotPassingVelocity(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, V3Bits(lrCase.v));
+        if (Bits(lf) != lrCase.single) { std::fprintf(stderr, "  |dV|^2 %08X want %08X\n", Bits(lf), lrCase.single); }
+        Check(Bits(lf) == lrCase.single, "PASSING |dV|^2 is one rounding of the exact sum (vmsum3fp128 0x82719A7C)", liCase++);
+    }
+    liCase = 0;
+    for (const DotCase& lrCase : KA_FEELER_DOTS)
+    {
+        Vector3 laFeelers[KI_TRAFFIC_AVOIDANCE_FEELERS] = {};
+        laFeelers[2] = V3Bits(lrCase.b);
+        const f32 lf = DotFeeler(V3Bits(lrCase.a), laFeelers, 2);
+        if (Bits(lf) != lrCase.single) { std::fprintf(stderr, "  feeler dot %08X want %08X\n", Bits(lf), lrCase.single); }
+        Check(Bits(lf) == lrCase.single, "FEELER Dot(target, feeler) is one rounding of the exact sum (vmsum3fp128)", liCase++);
+    }
 
     std::printf("FxNetcrashAvoidanceFma: %u checks, %u failures\n", gChecks, gFailures);
     return gFailures ? 1 : 0;
