@@ -28,7 +28,7 @@ import sys
 sys.dont_write_bytecode = True
 from fxgs_common import Tree, definition, code_only, compile_and_run, report, STRSTREAM_CPP
 
-SECTIONS = ["crash", "base", "pursuit"]
+SECTIONS = ["crash", "base", "pursuit", "faceoff"]
 NUMERIC_PER_SECTION = {"crash": 6, "base": 12, "pursuit": 3, "faceoff": 3}
 
 MODES = "src/GameSource/GameState/ModeManager/GameModes/"
