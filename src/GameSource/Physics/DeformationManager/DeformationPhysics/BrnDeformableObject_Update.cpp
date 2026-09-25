@@ -17,6 +17,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"  // CgsGeometric::Sphere (walls leg 9: the sensor radius the limit rows pad by)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"  // VehicleAttribs::mCollisionAttribs (the P4 car-car impulse scale, 2026-08-24)
 #include <cmath>                                                              // std::sqrt (the P4 tangential magnitude)
+#include <cstring>                                                            // std::memcpy -- the [carcar-dv] witness prints raw IEEE bits
 #include "GameSource/World/BrnEntityTypes.h"                                  // BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE (the ApplySensorImpulse owner test)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.h"   // DetachedWheelManager::DetachWheel (UpdateWheels' detach arm)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.h"    // guDiagDeformationStep ([ik-cadence] / [absorb] step stamp, DIAG only)
@@ -2071,6 +2072,65 @@ namespace Deformation
     // input left in the chain m / I^-1 / r / n / v_rel that has never been checked against an
     // external oracle.
     // =============================================================================================
+    // =============================================================================================
+    // [carcar-dv] -- PC WITNESS, NOT X360 (2026-09-25, crash parity FX-LADDER, the contact-impulse
+    // chain). Opt-in BRN_CARCAR_DV=1: one line per APPLIED car-car contact between two RACE CARS
+    // (owner byte 1 on both objects), at most KU_CARCAR_DV_MAX_LINES. It changes nothing. It reads
+    // both bodies before ApplyCarCarImpulse and after the two CalculateNewVelocity drains that follow
+    // it, plus what the deformation chain delivered to each rigid body in between
+    // (gCarCarDvArrivalTap, BrnVehicleRigidBody.h). Every float is printed as raw IEEE bits, so an
+    // offline model of the console bodies -- ApplyCarCarImpulse @0x82624C08,
+    // CalculateCollisionImpulseWithBody @0x8259CAE8, ApplySensorImpulse @0x826078B0, the sensor's
+    // ApplyLocalImpulse (sub_825E1320), PassOnImpulse (0x825BA400), VehicleRigidBody
+    // @0x8260DFA0, ApplyCarContactImpulse @0x825D4C10 / ApplyCrashedContactImpulse @0x825D4D50,
+    // GetImpulsesFromLocalImpulse @0x825A1A80 and CalculateNewVelocity @0x825A1B10 -- can recompute
+    // each car's delta-v from the same inputs and be compared with what this build did.
+    // Layout "v1" (all words hex): step present gidA gidB sensorA sensorB kbAllowDriveTimeDeformation
+    //   | dt | pointOnA(3) pointOnB(3) normal(3) impactTime
+    //   | per body, A (this object) then B (the other): flags (crashing 1, IsPlayerVehicleInShowtime 2,
+    //     IsUsingAftertouch 4, IsPlayerVehicleActuallyInShowtime 8, HasBouncedThisFrame 16,
+    //     owner << 8, absorption set << 16, head-sensor absorption level << 24), transform rows
+    //     x y z w (12), v(3), w(3), mass, world inverse inertia rows (9), accumulators J L F T (12),
+    //     carCarResponse (+0x1070.z), CarAngularImpulseScale (+0x280.y), absorption, proportion,
+    //     speedForMax per direction (6), arrivals, routes, arrival body-space sum (3), v'(3), w'(3)
+    // [FLAG PC witness] DELETE-WHEN the car-car contact-impulse chain is signed off live.
+    namespace
+    {
+        const u32 KU_CARCAR_DV_MAX_LINES = 3000u;
+
+        struct CarCarDvBody
+        {
+            u32            muFlags;
+            Matrix44Affine mTransform;
+            Vector3        mV;
+            Vector3        mW;
+            f32            mfMass;
+            Vector3        maInverseInertia[3];
+            Vector3        mJ;
+            Vector3        mL;
+            Vector3        mF;
+            Vector3        mT;
+            f32            mfCarCarResponse;
+            f32            mfAngularScale;
+            f32            mfAbsorption;
+            f32            mfProportion;
+            f32            mafSpeedForMax[6];
+            Vector3        mVAfter;
+            Vector3        mWAfter;
+        };
+
+        bool CarCarDvEnabled()
+        {
+            static s32 siCarCarDv = -1;
+            if ( siCarCarDv < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_CARCAR_DV" );
+                siCarCarDv = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+            }
+            return siCarCarDv == 1;
+        }
+    }
+
     void DeformableObject::UpdateContacts(VecFloat lvfTimeStep, CgsNumeric::Random& lrRandom)
     {
         // ---- [chain] PC bring-up instrument -- DELETE WHEN the wall test is banked -------------
@@ -2350,6 +2410,49 @@ namespace Deformation
                                 && CgsDev::Log::gpDebugPrint != 0;
         s32 liWedgeWorld = 0, liWedgeCarCar = 0, liWedgeSeparating = 0, liWedgeNoImpulse = 0;
 
+        // [carcar-dv] PC witness (see the banner above UpdateContacts): reads one body, changes nothing.
+        static u32 suCarCarDvLines = 0u;
+        auto lCarCarDvRead = [&]( DeformableObject& lrObject, const DeformationSensor* lpHeadSensor,
+                                  CarCarDvBody& lrOut )
+        {
+            const BrnPhysics::Vehicle::VehiclePhysics* lpDvVehicle = lrObject.mVehicleBody.GetVehiclePhysics();
+            const ExternalPhysicsBody& lrDvBody = lrObject.GetVehicleBody();
+            const u8 lu8Level = ( lpHeadSensor != 0 && lpHeadSensor->mpSpec != 0 )
+                              ? lpHeadSensor->mpSpec->GetAbsorptionLevel() : 0u;
+            const EAbsorptionSets leDvSet = lrObject.meAbsorptionSet;
+            lrOut.muFlags = ( lpDvVehicle->IsCrashing() ? 1u : 0u )
+                          | ( lpDvVehicle->IsPlayerVehicleInShowtime() ? 2u : 0u )
+                          | ( lpDvVehicle->IsUsingAftertouch() ? 4u : 0u )
+                          | ( lpDvVehicle->IsPlayerVehicleActuallyInShowtime() ? 8u : 0u )
+                          | ( lrObject.HasBouncedThisFrame() ? 16u : 0u )
+                          | ( static_cast<u32>( lrObject.GetHandlingBodyIdHighByte() ) << 8 )
+                          | ( ( static_cast<u32>( leDvSet ) & 0xFFu ) << 16 )
+                          | ( static_cast<u32>( lu8Level ) << 24 );
+            lrOut.mTransform = lrDvBody.GetTransform();
+            lrOut.mV = lrDvBody.GetLinearVelocity();
+            lrOut.mW = lrDvBody.GetAngularVelocity();
+            lrOut.mfMass = lrDvBody.GetMass().x;
+            lrOut.maInverseInertia[0] = lrDvBody.DiagWorldInverseInertia().xAxis;
+            lrOut.maInverseInertia[1] = lrDvBody.DiagWorldInverseInertia().yAxis;
+            lrOut.maInverseInertia[2] = lrDvBody.DiagWorldInverseInertia().zAxis;
+            lrOut.mJ = lrDvBody.DiagTotalLinearImpulse();
+            lrOut.mL = lrDvBody.DiagTotalAngularImpulse();
+            lrOut.mF = lrDvBody.DiagTotalLinearForce();
+            lrOut.mT = lrDvBody.DiagTotalTorque();
+            lrOut.mfCarCarResponse =
+                lpDvVehicle->mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.z;
+            lrOut.mfAngularScale = ( lpDvVehicle->GetAttribs() != 0 )
+                ? lpDvVehicle->GetAttribs()->mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.y
+                : 0.0f;
+            lrOut.mfAbsorption = AbsorptionTable::GetAbsorption( leDvSet, lu8Level ).x;
+            lrOut.mfProportion = AbsorptionTable::GetProportionToSpeed( leDvSet, lu8Level ).x;
+            for ( s32 liDvDir = 0; liDvDir < 6; ++liDvDir )
+            {
+                lrOut.mafSpeedForMax[liDvDir] =
+                    AbsorptionTable::GetSpeedForMaxAbsorbtion( leDvSet, lu8Level, liDvDir ).x;
+            }
+        };
+
         for ( s32 li = 0; li < _mContactOrder.miNumContacts; ++li )
         {
             CGS_ASSERT(li < _mContactOrder.miNumContacts, "liIndex < miNumContacts");   // h:132
@@ -2361,6 +2464,22 @@ namespace Deformation
             {
                 ++liWedgeNoImpulse;
                 continue;
+            }
+
+            // [carcar-dv] PC witness: capture both race cars before the apply and arm the tap.
+            CarCarDvBody laCarCarDv[2] = {};
+            const bool lbCarCarDv = ( lContact.mpOtherSensor != nullptr ) && CarCarDvEnabled()
+                && CgsDev::Log::gpDebugPrint != 0 && suCarCarDvLines < KU_CARCAR_DV_MAX_LINES
+                && GetHandlingBodyIdHighByte() == 1u
+                && lContact.mpOtherVehicle->GetHandlingBodyIdHighByte() == 1u;
+            if ( lbCarCarDv )
+            {
+                lCarCarDvRead( *this, &maDeformationSensors[liSensor], laCarCarDv[0] );
+                lCarCarDvRead( *lContact.mpOtherVehicle, lContact.mpOtherSensor, laCarCarDv[1] );
+                gCarCarDvArrivalTap = CarCarDvArrivalTap{};
+                gCarCarDvArrivalTap.mapVehicle[0] = mVehicleBody.GetVehiclePhysics();
+                gCarCarDvArrivalTap.mapVehicle[1] = lContact.mpOtherVehicle->mVehicleBody.GetVehiclePhysics();
+                gCarCarDvArrivalTap.mbArmed = true;
             }
 
             bool lbApplied;
@@ -2391,6 +2510,78 @@ namespace Deformation
                     lContact.mpOtherVehicle->GetVehicleBody().CalculateNewVelocity(lvfTimeStep);
                 }
                 gpcDvDrainTag = "";
+            }
+
+            // [carcar-dv] PC witness: disarm the tap and print the applied contact (see the banner).
+            if ( lbCarCarDv )
+            {
+                gCarCarDvArrivalTap.mbArmed = false;
+                if ( lbApplied )
+                {
+                    ++suCarCarDvLines;
+                    laCarCarDv[0].mVAfter = GetVehicleBody().GetLinearVelocity();
+                    laCarCarDv[0].mWAfter = GetVehicleBody().GetAngularVelocity();
+                    laCarCarDv[1].mVAfter = lContact.mpOtherVehicle->GetVehicleBody().GetLinearVelocity();
+                    laCarCarDv[1].mWAfter = lContact.mpOtherVehicle->GetVehicleBody().GetAngularVelocity();
+
+                    CgsDev::Log::DebugPrint& lrDvOut = *CgsDev::Log::gpDebugPrint;
+                    auto lDvWord = [&]( u32 luValue ) { lrDvOut.AppendFormat( " %08X", luValue ); };
+                    auto lDvBits = [&]( f32 lfValue )
+                    {
+                        u32 luBits = 0u;
+                        std::memcpy( &luBits, &lfValue, sizeof( luBits ) );
+                        lDvWord( luBits );
+                    };
+                    auto lDvVec3 = [&]( const Vector3& lrV ) { lDvBits( lrV.x ); lDvBits( lrV.y ); lDvBits( lrV.z ); };
+
+                    lrDvOut << "[carcar-dv] v1";
+                    lDvWord( guDiagDeformationStep );
+                    lDvWord( renderengine::guPresentCount );
+                    lDvWord( GetGlobalEntityId().muValue );
+                    lDvWord( lContact.mpOtherVehicle->GetGlobalEntityId().muValue );
+                    lDvWord( static_cast<u32>( liSensor ) );
+                    lDvWord( static_cast<u32>( lContact.mpOtherSensor
+                                               - &lContact.mpOtherVehicle->maDeformationSensors[0] ) );
+                    lDvWord( kbAllowDriveTimeDeformation ? 1u : 0u );
+                    lDvBits( lvfTimeStep.x );
+                    lDvVec3( lContact.mPointOnA );
+                    lDvVec3( lContact.mPointOnB );
+                    lDvVec3( lContact.mNormal );
+                    lDvBits( lContact.mfImpactTimeInFrame );
+                    for ( s32 liDvSide = 0; liDvSide < 2; ++liDvSide )
+                    {
+                        const CarCarDvBody& lrB = laCarCarDv[liDvSide];
+                        lDvWord( lrB.muFlags );
+                        lDvVec3( lrB.mTransform.xAxis );
+                        lDvVec3( lrB.mTransform.yAxis );
+                        lDvVec3( lrB.mTransform.zAxis );
+                        lDvVec3( lrB.mTransform.wAxis );
+                        lDvVec3( lrB.mV );
+                        lDvVec3( lrB.mW );
+                        lDvBits( lrB.mfMass );
+                        lDvVec3( lrB.maInverseInertia[0] );
+                        lDvVec3( lrB.maInverseInertia[1] );
+                        lDvVec3( lrB.maInverseInertia[2] );
+                        lDvVec3( lrB.mJ );
+                        lDvVec3( lrB.mL );
+                        lDvVec3( lrB.mF );
+                        lDvVec3( lrB.mT );
+                        lDvBits( lrB.mfCarCarResponse );
+                        lDvBits( lrB.mfAngularScale );
+                        lDvBits( lrB.mfAbsorption );
+                        lDvBits( lrB.mfProportion );
+                        for ( s32 liDvDir = 0; liDvDir < 6; ++liDvDir )
+                        {
+                            lDvBits( lrB.mafSpeedForMax[liDvDir] );
+                        }
+                        lDvWord( static_cast<u32>( gCarCarDvArrivalTap.maiArrivals[liDvSide] ) );
+                        lDvWord( gCarCarDvArrivalTap.mauRoutes[liDvSide] );
+                        lDvVec3( gCarCarDvArrivalTap.maSumBody[liDvSide] );
+                        lDvVec3( lrB.mVAfter );
+                        lDvVec3( lrB.mWAfter );
+                    }
+                    lrDvOut << "\n";
+                }
             }
         }
 
