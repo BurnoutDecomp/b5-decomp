@@ -601,6 +601,20 @@ namespace BrnDirector
         return true;
     }
 
+    // [crashcam] BRN_CRASHCAM_DIAG witness (NOT in the console): the ICE takedown player's take going ACTIVE and
+    // ending (FINISHED / FAILED), with the take the bound shot names and the player's active time. Reads only.
+    static void BrnDiag_IceTakedownState(const char* lpcState, const Camera::Camera::ShotReference* lpShot,
+                                         f32 lfActiveTime)
+    {
+        if (getenv("BRN_CRASHCAM_DIAG") == 0 || CgsDev::Log::gpDebugPrint == 0 || lpShot == 0)
+        {
+            return;
+        }
+        const Attrib::Gen::iceanim lDiagShot(*lpShot, 0);
+        *CgsDev::Log::gpDebugPrint << "[crashcam] ice takedown " << lpcState << " take guid " << lDiagShot.GetAnimGuid()
+                                   << " at " << lfActiveTime << " s [FLAG PC witness]\n";
+    }
+
     // ------------------------------------------------------------------------
     // SimpleIceTakedownPlayer::Update @0x8225A1E8 -- drive the output camera from the ICE-anim
     // behaviour's produced camera; once PREPARING succeeds advance to ACTIVE, and once the anim
@@ -623,6 +637,7 @@ namespace BrnDirector
             {
                 mfActiveTime = 0.0f;
                 meState = E_STATE_ACTIVE;
+                BrnDiag_IceTakedownState("ACTIVE", mpIceAnim, mfActiveTime);   // [DIAG] NOT X360
             }
             else
             {
@@ -634,6 +649,8 @@ namespace BrnDirector
             if (mIceCam.GetBehaviour()->HasFinishedOrFailed())
             {
                 meState = E_STATE_FINISHED;
+                BrnDiag_IceTakedownState(mIceCam.GetBehaviour()->HasFailed() ? "FAILED" : "FINISHED",   // [DIAG] NOT X360
+                                         mpIceAnim, mfActiveTime);
             }
             break;
 
