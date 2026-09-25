@@ -50,6 +50,7 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "vendor/renderware/collision/CollisionVolume.hpp"   // rw::collision::Volume -- C22 reads the camera's sphere back
 
 static int  giAsserts = 0;
 static int  giGroundHeightAsserts = 0;   // GroundConstraint's own "mfDesiredHeight >= 0.0f" (:719 / :738)
@@ -110,6 +111,10 @@ namespace
         const void* mpTransform;
         u32         muExclude;
         s32         meMode;
+        // The producer (@0x822170B0) copies the volume's 0x80-byte block and the 64-byte transform into
+        // its event, so the images are kept here the same way: the caller's volume block is a stack local.
+        alignas(16) unsigned char macVolume[0x80];
+        alignas(16) unsigned char macTransform[0x40];
     };
     DeepestAsk gDeepest;
     int        giDeepest = 0;
@@ -167,6 +172,8 @@ int CgsSceneManager::SceneManagerIO::SceneQueryInterface::VolumeTestDeepest(
     gDeepest.mpTransform   = lpTransform;
     gDeepest.muExclude     = lExcludeEntityId;
     gDeepest.meMode        = static_cast<s32>(leExclusionMode);
+    std::memcpy(gDeepest.macVolume, lpVolumeData, sizeof(gDeepest.macVolume));
+    std::memcpy(gDeepest.macTransform, lpTransform, sizeof(gDeepest.macTransform));
     ++giDeepest;
     return 1;
 }
@@ -209,6 +216,14 @@ namespace Camera
 
 // The production bodies under test.
 #include "fxdirector2_scene_query.inc"
+
+// FIXTURE: the runner links the production BoxVolume.cpp for SphereVolume::Initialize @0x82BA84E8 (the camera's
+// sphere). Its two CreateGPInstance bodies, which nothing here calls, reference the GP method table whose home,
+// GPRegistration.cpp, drags the whole GP closure in; an empty table satisfies the link.
+#include "vendor/renderware/collision/GPInstance.hpp"
+namespace rw { namespace collision {
+    const GPInstance::VolumeMethods g_aGPVolumeMethods[GPInstance::NUMINTERNALTYPES] = {};
+} }
 
 using namespace BrnDirector;
 typedef CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult         NearestResult;
@@ -293,8 +308,9 @@ struct World
     bool mbGroundHit;  f32 mfGroundY;
     bool mbPredictHit; f32 mfPredictParam;
     bool mbHitA;       bool mbHitB;
+    bool mbInsideGeometry;   // the camera's 0.1 m sphere penetrates something (the deepest query's answer)
 };
-static const World KW_CLEAR = { true, 0.5f, false, 0.0f, false, false };
+static const World KW_CLEAR = { true, 0.5f, false, 0.0f, false, false, false };
 
 enum EAsk { E_ASK_GROUND, E_ASK_PREDICT, E_ASK_VIS_A, E_ASK_VIS_B, E_ASK_OTHER };
 
@@ -335,6 +351,16 @@ static void Answer(const World& lrWorld)
         gInput.mResultsQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResult), 2,
                                       static_cast<s32>(sizeof(lResult)));
     }
+    if (giDeepest > 0)                                             // the camera's sphere test (results type 5)
+    {
+        DeepestResult lResult;
+        std::memset(static_cast<void*>(&lResult), 0, sizeof(lResult));
+        lResult.mQueryId.mId    = gDeepest.muQueryId;
+        lResult.mfDepth         = lrWorld.mbInsideGeometry ? 0.25f : 0.0f;
+        lResult.mbIntersection  = lrWorld.mbInsideGeometry;
+        gInput.mResultsQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResult), 5,
+                                      static_cast<s32>(sizeof(lResult)));
+    }
     gInput.LockForRead();
     gModule.ProcessSceneQueryResults(&gInput);
     gInput.UnlockForRead();
@@ -344,6 +370,7 @@ static void Frame(BrnDirector::Camera::VisibilityCollisionPolicy& lrPolicy, cons
 {
     gSqi.Clear();                                                   // PreSceneQueryUpdate's per-frame Clear
     giNearest = 0;
+    giDeepest = 0;
     lrPolicy.GenerateSceneQueries(gInfo, gCamera);
     Answer(lrWorld);
     lrPolicy.ProcessSceneQueryResults(gInfo, gCamera);
@@ -477,7 +504,7 @@ int main()
         VolumeTestDeepestPostBox lDeepBox;
         lDeepBox.Construct();
         giDeepest = 0;
-        const u32 lauVolume[4] = { 1, 2, 3, 4 };
+        const u32 lauVolume[32] = { 1, 2, 3, 4 };
         gSqi.VolumeTestDeepest(lDeepBox, 30u, 0xFFu, lauVolume, gCamera.mTransform,
                                CgsSceneManager::EntityId(0xFFFFFFFFu), CgsSceneManager::SceneManagerIO::E_EXCLUDE_ENTITY_ONLY);
         Check(giDeepest == 1 && gDeepest.muQueryId == 0x10000u && gDeepest.mxFlags == 30u && gDeepest.mpVolume == lauVolume
@@ -913,6 +940,42 @@ int main()
         giGroundHeightAsserts = 0;
         Frame(lrNegativeZero, KW_CLEAR);
         Check(giGroundHeightAsserts == 0, "C20 a height of -0.0 compares equal to 0.0: neither tripwire fires");
+    }
+    // ---- the camera-in-geometry sphere test (0x82240528..0x82240574; the G3 gate retired 2026-09-25) ----
+    {
+        VisibilityCollisionPolicy& lrPolicy = FreshPolicy();
+        Frame(lrPolicy, KW_CLEAR);
+        const rw::collision::Volume& lrSphere = *reinterpret_cast<const rw::collision::Volume*>(gDeepest.macVolume);
+        const rw::math::vpu::Matrix44Affine& lrAsked =
+            *reinterpret_cast<const rw::math::vpu::Matrix44Affine*>(gDeepest.macTransform);
+        Check(giDeepest == 1 && gDeepest.muQueryId == 0x10000u && gDeepest.mxFlags == 0x1Eu
+                  && gDeepest.mxVolumeFlags == 0xFFu && gDeepest.mpTransform == &gCamera.mTransform
+                  && SameXYZ(lrAsked.wAxis, gCamera.mTransform.wAxis)
+                  && gDeepest.muExclude == 0xFFFFFFFFu && gDeepest.meMode == 0,
+              "C21 every mbCanFail frame asks ONE VolumeTestDeepest: flags 30, volume flags 0xFF, the camera's own "
+              "transform, no excluded entity (0xFFFFFFFF @0x82CDA790), E_EXCLUDE_ENTITY_ONLY (0x82240574)");
+        Check(lrSphere.muVTableSlot == static_cast<u32>(rw::collision::E_VOLUMETYPE_SPHERE)
+                  && lrSphere.mfRadius == 0.1f
+                  && lrSphere.maTransform[0].x == 1.0f && lrSphere.maTransform[1].y == 1.0f
+                  && lrSphere.maTransform[2].z == 1.0f && lrSphere.maTransform[3].x == 0.0f
+                  && lrSphere.maTransform[3].y == 0.0f && lrSphere.maTransform[3].z == 0.0f,
+              "C22 the volume is a sphere of radius 0.1 (flt_82004014) at the origin of the camera's frame "
+              "(SphereVolume::Initialize @0x82BA84E8)");
+        Check(FailBits() == 0 && lrPolicy.mVolumeTest.GetState() == VolumeTestDeepestPostBox::E_STATE_EMPTY,
+              "C23 a sphere in open air fails nothing, and the box is emptied at the end (stw 0, 0x1B0)");
+
+        VisibilityCollisionPolicy& lrInside = FreshPolicy();
+        World lInside = KW_CLEAR; lInside.mbInsideGeometry = true;
+        Frame(lrInside, lInside);
+        Check(lrInside.HasFailed() && FailBits() == (1u << 0)
+                  && lrInside.mVolumeTest.GetState() == VolumeTestDeepestPostBox::E_STATE_EMPTY,
+              "C24 the sphere inside geometry: COLLISION (0) (0x822246FC), the box emptied");
+
+        VisibilityCollisionPolicy& lrNoFail = FreshPolicy();
+        lrNoFail.SetCanFail(false);
+        Frame(lrNoFail, lInside);
+        Check(giDeepest == 0 && FailBits() == 0,
+              "C25 mbCanFail off: the sphere is never asked for (`lbz 8 ; beq` @0x822404B8)");
     }
 
     std::printf("fxdirector2_scene_query: %d checks, %d failures\n", giChecks, giFailures);
