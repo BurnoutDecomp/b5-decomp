@@ -18,10 +18,11 @@
 // THIS FILE IS THE CameraSpaceHandler HOME (the type layout + the copy ctor and
 // copy-assignment owned by this TU). The substantial method bodies --
 // Construct, the two TransformToWorld overloads, GetSpaceTransformationMatrix,
-// GetWorldOrientationMatrix, the Get/Set accessors, GetTransformToWorld, and the
+// GetWorldOrientationMatrix, GetCarToWorld, GetTransformToWorld, and the
 // private GetTakedownToWorld / GetReverseTakedownToWorld -- live in OTHER TUs
 // (ICECameraSpaceHandler.cpp and siblings) and are DECLARATION-ONLY here. They
-// EXTEND this home; do not re-home them.
+// EXTEND this home; do not re-home them. The four Set*ToWorld setters are the
+// exception: the DWARF defines them in this header, so they are inline below.
 //
 // Layout authority: references/DecFIGS/dwarfdump/SDKs/Packages/ICE/
 // ICECameraSpaceHandler.hpp -- eight rw::math::vpu::Matrix44Affine members in
@@ -149,10 +150,15 @@ public:
 
     const Matrix44Affine& GetCarToWorld() const;
 
-    void SetCarToWorld(Matrix44Affine lMatrix);
-    void SetCar2ToWorld(Matrix44Affine lMatrix);
-    void SetHeadingToWorld(Matrix44Affine lMatrix);
-    void SetHeading2ToWorld(Matrix44Affine lMatrix);
+    // ⭐ BODIED 2026-09-26 (crash parity FX-LASTFIX item 1b) -- INLINE, because that is where the DWARF puts them:
+    // the four setters are declared at ICECameraSpaceHandler.hpp:82 / :86 / :90 / :95 and ICECameraSpaceHandler.cpp
+    // defines none of them. The X360 inlines each into BehaviourIceAnim::Update as a four-row lvx128 / stvx128 copy
+    // into its stack handler: CarToWorld +0x00 (0x822473A4..0x822473CC), Car2ToWorld +0x40 (0x822473F0..0x82247418),
+    // Heading2ToWorld +0x1C0 (0x82247428..0x8224744C), HeadingToWorld +0x140 (0x82247454..0x82247488).
+    void SetCarToWorld(Matrix44Affine lMatrix)      { mCarToWorld = lMatrix; }
+    void SetCar2ToWorld(Matrix44Affine lMatrix)     { mCar2ToWorld = lMatrix; }
+    void SetHeadingToWorld(Matrix44Affine lMatrix)  { mHeadingToWorld = lMatrix; }
+    void SetHeading2ToWorld(Matrix44Affine lMatrix) { mHeading2ToWorld = lMatrix; }
 
     const Matrix44Affine GetTransformToWorld(eICESpace leSpace) const;
 
