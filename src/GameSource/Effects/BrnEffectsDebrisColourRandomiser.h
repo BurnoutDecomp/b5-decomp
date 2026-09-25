@@ -47,9 +47,10 @@ private:
     Vector4 mVecBase;   // +0x00
     Vector4 mVecRange;  // +0x10
 
-    // One LCG draw from the Random ring (reused BY NAME via the friend grant in
-    // CgsRandom.h). A member so the friendship reaches muSeed / the ring / index.
-    static Vector4 DrawNextRingVector(CgsNumeric::Random& lrRandom);
+    // One VECTOR-SLOT draw from the Random ring -- word 0 of the slot's quad, splatted
+    // (reused BY NAME via the friend grant in CgsRandom.h). A member so the friendship
+    // reaches muSeed / the ring / index.
+    static f32 DrawNextRingSplat(CgsNumeric::Random& lrRandom);
 };
 
 } // namespace Utils
