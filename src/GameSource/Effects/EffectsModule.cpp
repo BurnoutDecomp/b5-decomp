@@ -4037,7 +4037,10 @@ void EffectsModule::BurstAreaEmitParticles(Vector3* lpCorners,
                                            f32 lfSizeMax,
                                            f32 lfParticleDensity)
 {
-    CGS_ASSERT(lfSizeMax >= lfSizeMin, "lfSizeMax >= lfSizeMin");            // fcmpu / bge (a NaN fires it)
+    // `fcmpu f30, f31 ; bge` (0x822921AC / 0x822921B0): `bge` is TAKEN on an unordered compare, so a NaN size SKIPS
+    // this assert. CORRECTED 2026-09-25 (FX-CRASHVFX, REVIEW-I on 2f19433e): it read `lfSizeMax >= lfSizeMin`, which
+    // a NaN fires. The three below are `bgt`, not taken on a NaN, so a NaN fires them, as written.
+    CGS_ASSERT(!(lfSizeMax < lfSizeMin), "lfSizeMax >= lfSizeMin");
     CGS_ASSERT(lfSizeMin > 0.0f, "lfSizeMin > 0.0f");
     CGS_ASSERT(lfSizeMax > 0.0f, "lfSizeMax > 0.0f");
     CGS_ASSERT(lfParticleDensity > 0.0f, "lfParticleDensity > 0.0f");

@@ -11,7 +11,8 @@ BrnDebrisArrayLite.cpp.
 NUMERIC (two programs, both against the console's own words on emu64 -- tests/FxCrashVfxDebrisSimData.h, written by
 scratch/CRASHPARITY_0922/fxcrashvfx_vmxemu/gen_debris_sim_data.py):
   tests/FxCrashVfxDebrisSim.cpp      -- the revision's whole BrnDebrisArrayLite.cpp: every particle, every collide
-                                        call's segments, the job Random (6 cases x 3 checks).
+                                        call's segments, the job Random (7 cases x 3 checks; the seventh: NaN / infinite birth times --
+                                        a NaN age is SKIPPED, `ble` at 0x82C0875C takes the unordered compare).
   tests/FxCrashVfxDebrisSimBegin.cpp -- the production BeginSimulateDebris body: the expiry calls, the five job
                                         slots (the step read VERBATIM off DispatchThreadUpdateData+4, the update
                                         frame's sum of sub-steps), the jobs started, the module Random
@@ -38,7 +39,7 @@ DISPATCH_SIGNATURE = "void ParticleModule::DispatchThreadUpdate("
 RENDER_SIGNATURE = "void ParticleModule::RenderFullResParticles("
 MOUNT = WORKFLOW / "tools/build/build_game_exe.bat"
 
-EXEC_CHECKS = 6 * 3
+EXEC_CHECKS = 7 * 3
 BEGIN_CHECKS = 5 * 4
 
 

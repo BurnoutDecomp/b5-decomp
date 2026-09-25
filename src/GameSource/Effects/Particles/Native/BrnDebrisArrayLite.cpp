@@ -141,8 +141,12 @@ namespace Native
                 const f32 lfAge      = lfCurrentTime - lpBucket->maParticleBirthTimes[luIndex];
                 BrnDebris& lDebrisToUpdate = DebrisToUpdate(lpBucket, luIndex);
 
-                // `fcmpu f31, 0 ; ble` then `fcmpu f31, lifetime ; bgt`: an unordered age passes both.
-                if (lfAge <= 0.0f || lfAge > lfLifetime || lDebrisToUpdate.muBounceCount == 0)
+                // `fcmpu f31, f29(0.0) ; ble` (0x82C08758 / 0x82C0875C) then `fcmpu f31, lifetime ; bgt`
+                // (0x82C08760 / 0x82C08764). `ble` is TAKEN on an unordered compare, so a NaN age is SKIPPED by the
+                // first test; `bgt` is not taken, so the lifetime test alone would let it through.
+                // CORRECTED 2026-09-25 (FX-CRASHVFX, REVIEW-I on 858d86d7): this read `lfAge <= 0.0f`, which is
+                // false for a NaN, so a NaN-aged piece was integrated.
+                if (!(lfAge > 0.0f) || lfAge > lfLifetime || lDebrisToUpdate.muBounceCount == 0)
                     continue;
 
                 lau8LiveIndex[luNumLive] = static_cast<u8>(luIndex);

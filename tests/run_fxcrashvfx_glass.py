@@ -11,7 +11,8 @@ none of it existed.
      TrigBaseFunctions5 sin/cos is fused (vmaddfp) as on the console.
   2. NUMERIC -- tests/FxCrashVfxGlass.cpp compiles the PRODUCTION bodies onto a fixture and compares them, bit for
      bit, with the console's own outputs in tests/FxCrashVfxGlassData.h: 0x82297420 / 0x82292160 and their callees
-     run on emu64 by scratch/CRASHPARITY_0922/fxcrashvfx_vmxemu/gen_glass_data.py (18 cases x 7 checks).
+     run on emu64 by scratch/CRASHPARITY_0922/fxcrashvfx_vmxemu/gen_glass_data.py (19 cases x 7 checks; the nineteenth: a NaN size max, which the
+     console's first assert SKIPS -- `fcmpu ; bge` at 0x822921B0 takes the unordered compare).
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxcrashvfx_glass.py [--rev <b5 rev>]
                                                                         [--root <shadow tree root>]
@@ -50,8 +51,8 @@ void EffectsModule::BurstAreaEmitParticles(Vector3*, Vector3, Vector3, BrnPartic
 }
 """
 
-# 18 cases x 7 checks (see FxCrashVfxGlass.cpp)
-NUMERIC_CHECKS = 18 * 7
+# 19 cases x 7 checks (see FxCrashVfxGlass.cpp)
+NUMERIC_CHECKS = 19 * 7
 
 
 class RootTree(Tree):
