@@ -1746,8 +1746,12 @@ namespace
         const Vector3 lv3LandmarkDirection  = Normalise3(lv3ToLandmark);
 
         f32 lfCosAngle = Dot3(lv3ReferenceDirection, lv3LandmarkDirection);
-        lfCosAngle = (lfCosAngle > -1.0f) ? lfCosAngle : -1.0f;   // vmaxfp
-        lfCosAngle = (lfCosAngle <  1.0f) ? lfCosAngle :  1.0f;   // vminfp
+        // vmaxfp 0x824B501C / vminfp 0x824B5020 keep a NaN (XMVectorACos then returns NaN); the old ternaries
+        // `(x > -1) ? x : -1` turned it into -1.0.
+        if (lfCosAngle < -1.0f)
+            lfCosAngle = -1.0f;                                    // vmaxfp
+        if (lfCosAngle > 1.0f)
+            lfCosAngle = 1.0f;                                     // vminfp
 
         f32 lfAngle = XboxMath::XMVectorACos(lfCosAngle);         // bl XMVectorACos @0x824B5024 (FX-GATE)
 
@@ -1952,6 +1956,16 @@ namespace
         "DIRECTION_S",  "DIRECTION_SE", "DIRECTION_E",  "DIRECTION_NE",
     };
 
+    // FLAG PC platform leaf: the console's 32-bit slwi-by-2 address wrap (0x824C7738 / 0x824C774C in
+    // SetBurningRouteDescription; 0x824C74C8 / 0x824C74DC in SetMarkedManDescription; 0x824C6EE8 / 0x824C6EFC in
+    // SetRaceDescription). Each reads KAPC_COMPASS_POINT_STRINGIDS with `slwi r10, rDir, 2` + `lwzx`, and the shift
+    // keeps 32 bits: a NaN bearing's direction 0x80000000 (FindEventDirection's truncation) addresses element 0,
+    // "DIRECTION_N". The x64 index would be -2^31 elements. Identity for 0..7.
+    inline u32 ConsoleWordIndex(s32 liIndex)
+    {
+        return static_cast<u32>(liIndex) & 0x3FFFFFFFu;
+    }
+
 // (fold: an identical definition of KI_GUI_OUT_EVENT_CHANNEL was dropped here -- this TU defines it once, above)
     const u32 KU_DESCRIPTION_BUFFER_LEN = 128;
 
@@ -1997,7 +2011,7 @@ void PreRaceFlyByState::SetBurningRouteDescription()
 
     const ECompassPoints leEventDirection = FindEventDirection();
     maEventDescriptionText[0].SetLocalisedText("PRE_BURNINGROUTE_PART1", LM::E_FORMAT_ID_LOOKUP, 1,
-                                               KAPC_COMPASS_POINT_STRINGIDS[leEventDirection],
+                                               KAPC_COMPASS_POINT_STRINGIDS[ConsoleWordIndex(leEventDirection)],
                                                LM::E_FORMAT_ID_LOOKUP);
 
     GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
@@ -2118,7 +2132,7 @@ void PreRaceFlyByState::SetMarkedManDescription()
 
     const ECompassPoints leEventDirection = FindEventDirection();
     maEventDescriptionText[0].SetLocalisedText("PRE_SURVIVAL_PART1", LM::E_FORMAT_ID_LOOKUP, 1,
-                                               KAPC_COMPASS_POINT_STRINGIDS[leEventDirection],
+                                               KAPC_COMPASS_POINT_STRINGIDS[ConsoleWordIndex(leEventDirection)],
                                                LM::E_FORMAT_ID_LOOKUP);
 
     GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
@@ -2196,7 +2210,7 @@ void PreRaceFlyByState::SetRaceDescription()
 
     const ECompassPoints leEventDirection = FindEventDirection();
     maEventDescriptionText[0].SetLocalisedText("PRE_RACE_PART1", LM::E_FORMAT_ID_LOOKUP, 1,
-                                               KAPC_COMPASS_POINT_STRINGIDS[leEventDirection],
+                                               KAPC_COMPASS_POINT_STRINGIDS[ConsoleWordIndex(leEventDirection)],
                                                LM::E_FORMAT_ID_LOOKUP);
 
     GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;

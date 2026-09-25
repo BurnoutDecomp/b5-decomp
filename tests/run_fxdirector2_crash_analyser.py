@@ -202,8 +202,11 @@ def wiring(tree):
            all(re.search(rf"\b{name}\s*=\s*{value}\b", events) for name, value in (
                ("None", 0), ("HardStop", 1), ("LeftImpact", 2), ("RightImpact", 4), ("WorldImpact", 8),
                ("CarImpact", 16), ("CrashStart", 32), ("FrontImpact", 64), ("RearImpact", 128))))
-    yield ("Construct: the inlined DebugLog::Construct straight after GameState::Clear (0x8225B810..0x8225B87C)",
-           "maGameState.Clear();mDebugLog.Construct();" in construct)
+    # 9d39aea1 put the inlined CameraInterpolationController::Construct between the two, in the console's
+    # interleaved order (0x8225B810..0x8225B840).
+    yield ("Construct: the inlined DebugLog::Construct straight after GameState::Clear and the inlined "
+           "CameraInterpolationController::Construct (0x8225B810..0x8225B87C)",
+           "maGameState.Clear();mCameraInterpolationController.Construct();mDebugLog.Construct();" in construct)
     yield ("the director's DebugLog is a real member published by address at all three shared-info sites",
            "DebugLogmDebugLog;" in main_h and "maDebugLog[" not in main_h
            and squash(main_cpp).count("const_cast<DebugLog*>(&mDebugLog)") == 3)
