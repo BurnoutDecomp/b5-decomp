@@ -80,11 +80,20 @@ namespace fpu
     inline float Sin(float lfRadians) { return std::sin(lfRadians); }
     inline float Tan(float lfRadians) { return std::tan(lfRadians); }
 
-    // True when |value| is within FLT_EPSILON of zero (scalar.h:390, `(value <= tolerance) &&
-    // (value >= -tolerance)`; false for NaN).
+    // True when |value| is within FLT_EPSILON of zero. scalar.h:390 spells it `(value <= tolerance) &&
+    // (value >= -tolerance)`, and the X360 compiler turns each `<=` / `>=` into ONE condition bit of an
+    // fcmpu. TrafficLaneTruck::Update, for one:
+    //   0x82247C18 fcmpu x, flt_82001770 (+2^-23) ; 0x82247C1C bgt 0x82247C34 -> r11 = 0 (not zero)
+    //   0x82247C28 li r11, 1 ; 0x82247C2C fcmpu x, flt_82002514 (-2^-23) ; 0x82247C30 bge -> keep 1 (zero)
+    // bgt is taken only on an ORDERED greater and bge is taken unless the compare is an ORDERED less, so
+    // an unordered (NaN) value falls through the one and takes the other: on the console IsZero(NaN) is
+    // TRUE. The same shape at CrashPlayManager::UpdateMomentum 0x82302300/0x8230230C, BrnLooker
+    // 0x82222D0C/0x82222D20, VehiclePhysics 0x825FDC38/0x825FDC44, BehaviourGameplayExternal
+    // 0x82241BEC/0x82241C00. The literal `<=` / `>=` spelling answered FALSE for a NaN on x64, so it is
+    // spelled as the two branch tests (crash parity FX-GATE).
     inline bool IsZero(float lfValue)
     {
-        return lfValue <= KF_IS_ZERO_TOLERANCE && lfValue >= -KF_IS_ZERO_TOLERANCE;
+        return !(lfValue > KF_IS_ZERO_TOLERANCE) && !(lfValue < -KF_IS_ZERO_TOLERANCE);
     }
 
     // ADDITIVE GROW (SmoothMover::UpdateWithLimits* @0x8220D608/@0x8220D820, the
