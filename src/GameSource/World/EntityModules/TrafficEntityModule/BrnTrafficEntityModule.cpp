@@ -2791,16 +2791,432 @@ void TrafficEntityModule::SpawnNewTraffic(const ActiveHullSet& lrNewActiveHulls)
 // ============================================================================
 
 // ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateRaceCarHulls  @ 0x82721460   (.cpp 7471)
+//
+// OUTLINED 2026-09-25 (crash parity FX-NETCRASH, online hull set piece 3). This was expanded inside
+// its single caller RecalculateActiveHulls, which calls it at 0x8274C99C, right after
+// PredictHullChanges. The offline arm below moved over verbatim, and the online arm is new. It is
+// the only producer of maaRaceCarHulls outside Reset, and mActiveHulls is rebuilt from that array,
+// so without it the new-hull set is always empty and FillNewHull never runs.
+//
+// WHAT THE CONSOLE DOES (offline arm) (0x82721484..0x827217FC):
+//   assert(IsDecisionFrame());                                     ; baked .cpp 7575
+//   lpActive = lpInput->GetActiveRaceCarOutputInterface();         ; sub_82711850
+//   if (mbAllowDivergentBehaviour)              ; lbzx +0x717E7
+//   {
+//       if (lpActive->IsPlayerCarActive() == 1)
+//       {
+//           lePlay = lpActive->GetPlayerActiveRaceCarIndex();      ; 0x82277BF8
+//           for (i = 0; i < 8; ++i) maaRaceCarHulls[i].Clear();    ; stw 0, +0x55820 stride 0x18
+//           lCentre = <player car position | two DEBUG overrides>
+//           lHalf   = Vector3(mfTrafficSimRadius)                  ; lvx +0x713B0, vperm/vrlimi
+//           minCell = Pvs::GetHullIndexForPoint(lCentre - lHalf, &minX, &minZ);
+//           maxCell = Pvs::GetHullIndexForPoint(lCentre + lHalf, &maxX, &maxZ);
+//           for (x = minX; x <= maxX; ++x)
+//               for (z = minZ; z <= maxZ; ++z)
+//                   maaRaceCarHulls[lePlay].Append(Pvs::GetHullIndexForIndices(x, z));
+//           if (!mbInOfflineCarSelect)                             ; lbzx +0x713C8
+//               assert(maaRaceCarHulls[lePlay].GetLength() <= 4);  ; "We ended up with too many hulls turned on: "
+//       }
+//   }
+//   else { ...the ONLINE predicted-hull-change replay, GATED below... }
+//
+// The return value of the two corner calls is discarded: the console keeps only the four
+// grid coordinates and overwrites the linear cell index. The calls still happen, because
+// their bounds assert is a real side effect.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateRaceCarHulls(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
+{
+    CGS_ASSERT(IsDecisionFrame(), "IsDecisionFrame()");   // baked .cpp 7575
+
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars =
+        lpInput->GetActiveRaceCarOutputInterface();
+
+    if (mbAllowDivergentBehaviour)
+    {
+        if (lpActiveRaceCars->IsPlayerCarActive())
+        {
+            const EActiveRaceCarIndex lePlayerCar = lpActiveRaceCars->GetPlayerActiveRaceCarIndex();
+
+            // 0x82721508..0x82721550: eight Clear()s, one per active-race-car slot, with
+            // the enum-walk assert the console bakes from BurnoutConstants.h:39. The
+            // stride is 0x18 == sizeof(Array<u16,9>) and the base is the count word.
+            for (s32 liRaceCar = 0; liRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liRaceCar)
+            {
+                maaRaceCarHulls[liRaceCar].Clear();
+                CGS_ASSERT(liRaceCar + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                           "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            }
+
+            // The sim-box centre, console default (0x82721590): the player car's world
+            // position, `GetRaceCarState(lePlay)->mTransform.wAxis` (asm `addi r11, state,
+            // 0x1F0 ; lvx128 v126, r11, 0x30`, where 0x1F0 is RaceCarState::mTransform and
+            // +0x30 its translation row). IDA names the call GetRaceCarStateMutable
+            // @0x8227D690 because the const twin was ICF-folded onto it; a const interface
+            // pointer needs the const form.
+            //
+            // ASSERT DELTA, deliberate: 0x8227D690 carries three asserts (index >= 0,
+            // index < COUNT, IsRaceCarActive(index)); the committed const :220 body carries
+            // only the two bounds ones. The third is unreachable here, since
+            // IsPlayerCarActive() already returned true. Same applies at
+            // PostPhysicsUpdate's tail, which reaches the same accessor.
+            const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState*
+                lpPlayerState = lpActiveRaceCars->GetRaceCarState(lePlayerCar);
+            const Vector3 lSimCentre = lpPlayerState->mTransform.wAxis;
+
+            {
+                // GATE: the two DEBUG sim-centre overrides @0x82721554 / 0x827215A8, both
+                // substituting mCameraLastFrame.GetPosition() for lSimCentre.
+                // BLOCKER: the selector word at X360 +0x729D4 is mCameraLastFrame+0x144,
+                // an unnamed Camera field, and DebugComponent::+0x34 has no name either.
+                // DELETE-WHEN both are named. DEBUG-ONLY; the live default is taken.
+                static bool sbLogged = false;
+                LogMissingLeg_T1(sbLogged,
+                    "UpdateRaceCarHulls DEBUG sim-centre overrides @0x82721554 / "
+                    "0x827215A8 -- selector words mCameraLastFrame+0x144 and "
+                    "DebugComponent+0x34 are unnamed. DEBUG-ONLY, no live effect");
+            }
+
+            // The box half-extent, 0x827215CC..0x82721604: mfTrafficSimRadius through the
+            // SDK's VecFloat -> Vector3 lane shuffle (w zeroed, y restored). Construct
+            // seeds the member as a splat of 195.0f, so every lane the shuffle can select
+            // is 195.0f, and only lanes 0 and 2 reach the Pvs. Written as the Vector3 it
+            // produces rather than transcribed as VMX.
+            Vector3 lHalfExtent;
+            lHalfExtent.x = mfTrafficSimRadius.x;
+            lHalfExtent.y = mfTrafficSimRadius.y;
+            lHalfExtent.z = mfTrafficSimRadius.z;
+            lHalfExtent.w = 0.0f;
+
+            Vector3 lBoxMin;                        // vsubfp128 v125, v126, v127
+            lBoxMin.x = lSimCentre.x - lHalfExtent.x;
+            lBoxMin.y = lSimCentre.y - lHalfExtent.y;
+            lBoxMin.z = lSimCentre.z - lHalfExtent.z;
+            lBoxMin.w = 0.0f;
+
+            Vector3 lBoxMax;                        // vaddfp128 v127, v126, v127
+            lBoxMax.x = lSimCentre.x + lHalfExtent.x;
+            lBoxMax.y = lSimCentre.y + lHalfExtent.y;
+            lBoxMax.z = lSimCentre.z + lHalfExtent.z;
+            lBoxMax.w = 0.0f;
+
+            // ---- corner -> grid coordinates -------------------------------------------
+            // Each corner goes through TrafficData::operator-> then `lwz r3, 8(r3)`, i.e.
+            // mpData->mpPvs (TrafficData +0x08, static_asserted in
+            // BrnTrafficDataResourceType.h).
+            const Pvs* lpPvs = mpData->mpPvs;
+
+            s32 liMinX = 0;
+            s32 liMinZ = 0;
+            lpPvs->GetHullIndexForPoint(lBoxMin, liMinX, liMinZ);
+
+            s32 liMaxX = 0;
+            s32 liMaxZ = 0;
+            lpPvs->GetHullIndexForPoint(lBoxMax, liMaxX, liMaxZ);
+
+            // ---- walk the rectangle ---------------------------------------------------
+            // Outer loop X (r29, 0x827216F4), inner loop Z (r31, 0x827216E8) -- that
+            // order is the asm's, and it decides the order FillNewHull later visits hulls
+            // in. Both bounds are INCLUSIVE (`ble`), and both loops are entered only when
+            // min <= max (`bgt` skips), which is why an empty box produces no hulls
+            // rather than wrapping.
+            for (s32 liCellX = liMinX; liCellX <= liMaxX; ++liCellX)
+            {
+                for (s32 liCellZ = liMinZ; liCellZ <= liMaxZ; ++liCellZ)
+                {
+                    const u16 luHull =
+                        static_cast<u16>(lpPvs->GetHullIndexForIndices(liCellX, liCellZ));
+                    maaRaceCarHulls[lePlayerCar].Append(luHull);
+                }
+            }
+
+            if (!mbInOfflineCarSelect)
+            {
+                // 0x82721700..0x827217FC. The console builds the message with the count
+                // appended ("We ended up with too many hulls turned on: %u"); the budget
+                // literal is `cmplwi r11, 4 ; ble ->`, i.e. the assert fires above FOUR
+                // even though the array holds KU_MAX_ACTIVE_HULLS_PER_RACECAR (9).
+                CGS_ASSERT(maaRaceCarHulls[lePlayerCar].GetLength() <= 4u,
+                           "We ended up with too many hulls turned on");
+            }
+        }
+    }
+    else
+    {
+        // 0x82721870..0x82721B00 -- the ONLINE arm (crash parity FX-NETCRASH, 2026-09-25). Online the
+        // box is NOT computed locally: every client replays the same hull changes on the same
+        // decision frame (PredictHullChanges' own prediction, HandleIncomingNetworkData's remote
+        // ones), so all of them turn the same hulls on at once.
+        //   for each maPredictedHullChanges[i] (GetLength re-read every pass, CgsArray.h:336):
+        //     (u16)(frame - muUpdateCount) < 0x7FFF   `subf ; clrlwi 16 ; subfc 0x7FFF ; subfe`
+        //       frame == muUpdateCount -> maaRaceCarHulls[arc].Clear() (stwx 0), Append(hull),
+        //                                 Append each hull of mpData->mpPvs->GetHullPvs(hull),
+        //                                 EraseFast(i), examine slot i again (`addi -1 ; addi +1`)
+        //       else                    -> ++i (not due yet)
+        //     else (a HISTORICAL change: its frame has passed)
+        //       assert(frame != muUpdateCount) (.cpp 7650, unreachable here), then when
+        //       gxMessageFilterFlags & 1 print "HULL SYNC DIVERGENCE: hit historical prediction\n",
+        //       DEBUGDumpHullPredictions(), mbHullSyncDivergence = true (stbx +0x725EC),
+        //       EraseFast(i), examine slot i again
+        for (u32 luInfoIndex = 0; luInfoIndex < maPredictedHullChanges.GetLength();)
+        {
+            if (static_cast<u16>(maPredictedHullChanges[luInfoIndex].muUpdateFrame - muUpdateCount) < 0x7FFFu)
+            {
+                if (maPredictedHullChanges[luInfoIndex].muUpdateFrame == muUpdateCount)
+                {
+                    const EActiveRaceCarIndex leRaceCar = maPredictedHullChanges[luInfoIndex].meActiveRaceCarIndex;
+                    const u16 luNewHull = maPredictedHullChanges[luInfoIndex].muNewActiveHull;
+
+                    maaRaceCarHulls[leRaceCar].Clear();
+                    maaRaceCarHulls[leRaceCar].Append(luNewHull);
+
+                    const Set<u16, 8>& lrHullPvs = mpData->mpPvs->GetHullPvs(luNewHull);
+                    for (u32 luPvsHull = 0; luPvsHull < lrHullPvs.GetLength(); ++luPvsHull)
+                    {
+                        maaRaceCarHulls[leRaceCar].Append(lrHullPvs[luPvsHull]);
+                    }
+
+                    // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped.
+                    if (CgsDev::Log::DebugPrint* lpNetDiag = NetCrashDiagStream())
+                    {
+                        static s32 siLines = 0;
+                        if (siLines < KI_NETCRASH_HULL_DIAG_MAX_LINES)
+                        {
+                            ++siLines;
+                            *lpNetDiag << "[netcrash] UpdateRaceCarHulls applied arc=" << static_cast<s32>(leRaceCar)
+                                       << " hull=" << static_cast<s32>(luNewHull)
+                                       << " frame=" << static_cast<s32>(muUpdateCount)
+                                       << " hulls=" << maaRaceCarHulls[leRaceCar].GetLength() << "\n";
+                        }
+                    }
+
+                    maPredictedHullChanges.EraseFast(luInfoIndex);
+                }
+                else
+                {
+                    ++luInfoIndex;
+                }
+            }
+            else
+            {
+                CGS_ASSERT(maPredictedHullChanges[luInfoIndex].muUpdateFrame != muUpdateCount,
+                           "maPredictedHullChanges[luInfoIndex].muUpdateFrame != muUpdateCount");   // .cpp 7650
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint << "HULL SYNC DIVERGENCE: hit historical prediction\n";
+                }
+                DEBUGDumpHullPredictions();
+                mbHullSyncDivergence = true;
+                maPredictedHullChanges.EraseFast(luInfoIndex);
+            }
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::DEBUGDumpHullPredictions  @ 0x827211B0   (.cpp 7392; ARTIST export hole,
+// read with tools/re/ppcdis.py)
+//
+// The console's divergence dump. Every line is filtered on gxMessageFilterFlags & 1, re-read per
+// line (0x827211C8, 0x827211F4, 0x827212D0, 0x82721428). The strings are .rdata:
+//   0x820BD9A0 "\n\nDUMPING HULL PREDICTIONS....\n"   0x820BD988 "Current update frame = "
+//   0x82009804 "\n\n"   0x820BD97C "info: arc="   0x82081718 ", fr="   0x82081730 ", hull="
+//   0x82001CC4 "\n"   0x820BD970 "\n\nDUMPED!\n\n"
+// Each number goes through the stream's integer insert (sub_821F0E50 / the inlined AppendFormat).
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::DEBUGDumpHullPredictions()
+{
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "\n\nDUMPING HULL PREDICTIONS....\n";
+    }
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "Current update frame = " << static_cast<u32>(muUpdateCount) << "\n\n";
+    }
+
+    for (u32 luInfoIndex = 0; luInfoIndex < maPredictedHullChanges.GetLength(); ++luInfoIndex)
+    {
+        const HullChangeInfo& lrInfo = maPredictedHullChanges[luInfoIndex];
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "info: arc=" << static_cast<s32>(lrInfo.meActiveRaceCarIndex)
+                                       << ", fr=" << static_cast<u32>(lrInfo.muUpdateFrame)
+                                       << ", hull=" << static_cast<u32>(lrInfo.muNewActiveHull) << "\n";
+        }
+    }
+
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "\n\nDUMPED!\n\n";
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::AddPredictedHullChange  @ 0x82734680   (.cpp 7337)
+//
+// Callers: PredictHullChanges (the local player's prediction) and HandleIncomingNetworkData (a
+// peer's). The body, 0x827346A4..0x827348DC:
+//   (u16)(lrInfo.muUpdateFrame - muUpdateCount) >= 0x7FFF        a HISTORICAL change:
+//       print "HULL SYNC DIVERGENCE: received historical prediction, our update is " << count << "\n"
+//       print "info: arc=" << arc << ", fr=" << frame << ", hull=" << hull << "\n"
+//       (each filtered on gxMessageFilterFlags & 1) and mbHullSyncDivergence = true (stbx +0x725EC)
+//   maPredictedHullChanges full (count == 400, `cmplwi 0x190`):
+//       if (!mbHullSyncDivergence) print "HULL SYNC DIVERGENCE: Ran out of room in the predicted
+//           hull change buffer\n", DEBUGDumpHullPredictions(), mbHullSyncDivergence = true
+//       luOldestIndex = the first entry already in the past (frame < muUpdateCount, a plain
+//           `cmplw`), else the smallest frame, first one winning ties (`bge` keeps the earlier)
+//       assert(luOldestIndex != ~0u) (.cpp 7477) ; EraseFast(luOldestIndex)
+//   Append(lrInfo)
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::AddPredictedHullChange(const HullChangeInfo& lrInfo)
+{
+    if (static_cast<u16>(lrInfo.muUpdateFrame - muUpdateCount) >= 0x7FFFu)
+    {
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "HULL SYNC DIVERGENCE: received historical prediction, our update is "
+                                       << static_cast<u32>(muUpdateCount) << "\n";
+        }
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "info: arc=" << static_cast<s32>(lrInfo.meActiveRaceCarIndex)
+                                       << ", fr=" << static_cast<u32>(lrInfo.muUpdateFrame)
+                                       << ", hull=" << static_cast<u32>(lrInfo.muNewActiveHull) << "\n";
+        }
+        mbHullSyncDivergence = true;
+    }
+
+    if (maPredictedHullChanges.GetLength() == KU_MAX_HULL_CHANGES)
+    {
+        if (!mbHullSyncDivergence)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "HULL SYNC DIVERGENCE: Ran out of room in the predicted hull change buffer\n";
+            }
+            DEBUGDumpHullPredictions();
+            mbHullSyncDivergence = true;
+        }
+
+        u32 luOldestIndex = ~0u;
+        for (u32 luInfoIndex = 0; luInfoIndex < maPredictedHullChanges.GetLength(); ++luInfoIndex)
+        {
+            if (maPredictedHullChanges[luInfoIndex].muUpdateFrame < muUpdateCount)
+            {
+                luOldestIndex = luInfoIndex;
+                break;
+            }
+            if (luOldestIndex == ~0u
+                || maPredictedHullChanges[luInfoIndex].muUpdateFrame
+                       < maPredictedHullChanges[luOldestIndex].muUpdateFrame)
+            {
+                luOldestIndex = luInfoIndex;
+            }
+        }
+        CGS_ASSERT(luOldestIndex != ~0u, "luOldestIndex != ~0u");   // .cpp 7477
+        maPredictedHullChanges.EraseFast(luOldestIndex);
+    }
+
+    maPredictedHullChanges.Append(lrInfo);
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::PredictHullChanges  @ 0x827348E8   (.cpp 7421; ARTIST export hole, read
+// with tools/re/ppcdis.py)
+//
+// Caller: RecalculateActiveHulls at 0x8274C990, online and RUNNING only, just before
+// UpdateRaceCarHulls. It predicts which hull the local player will be in five seconds from now
+// and, when that changes, schedules the change 50 decision frames ahead for everyone:
+//   assert(IsPlayingOnlineGameMode())      (lbzx +0x717DC, .cpp 7525, string 0x820BC62C)
+//   assert(!mbNeedToBroadcastHullChange)   (lbz +0x558DE, .cpp 7526, string 0x820BF018)
+//   if (lpActive->IsPlayerCarActive())      (inlined: RC output h:967, `lwz 0x2858`, `lbz 0x2860`)
+//     arc = GetPlayerActiveRaceCarIndex()   (inlined, h:980 "Player car index hasn't been set")
+//     p   = GetRaceCarState(arc)            (0x8227D690)
+//     predicted = p->mLinearVelocity * 5 + p->mTransform.wAxis
+//                   `lvx128 v0, +0x330 ; lvx128 v127, +0x220 ; vspltw splat(flt_82F2FDF8 == 0x40A00000)
+//                    ; vmaddfp128 v127, v0, v13` -- ONE rounding per lane (vD = vA*vB + vD): std::fma
+//     hull = mpData->mpPvs->GetHullIndexForPoint(predicted); assert(hull < 400) (.cpp 7541)
+//     if (hull != muCurrentlyPredictedHull)
+//       AddPredictedHullChange({ arc, hull, muUpdateCount + 50 })   (sth 0x56 = lhzx +0x71B30 + 0x32)
+//       muCurrentlyPredictedHull = hull ; mbNeedToBroadcastHullChange = true ;
+//       mHullChangeToBroadcast = that same record   (stdx +0x558E0)
+// GenerateNetworkUpdateEvents sends the broadcast later in the same PostPhysicsUpdate.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::PredictHullChanges(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+                                             BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput)
+{
+    (void)lpOutput;   // the console never reads r5
+
+    const f32 KF_HULL_PREDICTION_SECONDS = 5.0f;           // flt_82F2FDF8 == 0x40A00000
+    const u16 KU_HULL_CHANGE_UPDATE_FRAMES_AHEAD = 50;     // `addi r11, r11, 0x32` @0x82734AC8
+
+    CGS_ASSERT(IsPlayingOnlineGameMode(), "IsPlayingOnlineGameMode()");         // .cpp 7525
+    CGS_ASSERT(!mbNeedToBroadcastHullChange, "!mbNeedToBroadcastHullChange");   // .cpp 7526
+
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars =
+        lpInput->GetActiveRaceCarOutputInterface();
+    if (!lpActiveRaceCars->IsPlayerCarActive())
+    {
+        return;
+    }
+
+    const EActiveRaceCarIndex lePlayerCar = lpInput->GetActiveRaceCarOutputInterface()->GetPlayerActiveRaceCarIndex();
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState* lpPlayerState =
+        lpInput->GetActiveRaceCarOutputInterface()->GetRaceCarState(lePlayerCar);
+
+    const Vector3& lrPosition = lpPlayerState->mTransform.wAxis;
+    const Vector3& lrVelocity = lpPlayerState->mLinearVelocity;
+    Vector3 lPredicted;
+    lPredicted.x = std::fma(lrVelocity.x, KF_HULL_PREDICTION_SECONDS, lrPosition.x);
+    lPredicted.y = std::fma(lrVelocity.y, KF_HULL_PREDICTION_SECONDS, lrPosition.y);
+    lPredicted.z = std::fma(lrVelocity.z, KF_HULL_PREDICTION_SECONDS, lrPosition.z);
+    lPredicted.w = std::fma(lrVelocity.w, KF_HULL_PREDICTION_SECONDS, lrPosition.w);
+
+    const u32 luPredictedHull = mpData->mpPvs->GetHullIndexForPoint(lPredicted);
+    CGS_ASSERT(luPredictedHull < KU_MAX_HULLS, "luPredictedHull < KU_MAX_HULLS");   // .cpp 7541
+
+    if (luPredictedHull != muCurrentlyPredictedHull)
+    {
+        HullChangeInfo lInfo;
+        lInfo.meActiveRaceCarIndex = lePlayerCar;
+        lInfo.muNewActiveHull      = static_cast<u16>(luPredictedHull);
+        lInfo.muUpdateFrame        = static_cast<u16>(muUpdateCount + KU_HULL_CHANGE_UPDATE_FRAMES_AHEAD);
+        AddPredictedHullChange(lInfo);
+
+        muCurrentlyPredictedHull    = static_cast<u16>(luPredictedHull);
+        mbNeedToBroadcastHullChange = true;
+        mHullChangeToBroadcast      = lInfo;
+
+        // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped.
+        if (CgsDev::Log::DebugPrint* lpNetDiag = NetCrashDiagStream())
+        {
+            static s32 siLines = 0;
+            if (siLines < KI_NETCRASH_HULL_DIAG_MAX_LINES)
+            {
+                ++siLines;
+                *lpNetDiag << "[netcrash] PredictHullChanges arc=" << static_cast<s32>(lePlayerCar)
+                           << " hull=" << static_cast<s32>(luPredictedHull)
+                           << " frame=" << static_cast<s32>(lInfo.muUpdateFrame)
+                           << " now=" << static_cast<s32>(muUpdateCount)
+                           << " pos=(" << lrPosition.x << ", " << lrPosition.z
+                           << ") predicted=(" << lPredicted.x << ", " << lPredicted.z << ")\n";
+            }
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
 // TrafficEntityModule::RecalculateActiveHulls  @ 0x8274C870   PARTIAL   (.cpp 7275..7367)
 //
 // Real here: the five entry asserts, the previous-set snapshot, the rebuild of mActiveHulls
 // from maaRaceCarHulls, the two SetDifferences that produce the caller's new/old sets, the
-// miDEBUGOverBudgetness reset, the same rebuild for mActiveHullsForLocalPlayer, and
-// UpdateRaceCarHulls @0x82721460's offline arm expanded at its single call site below.
+// miDEBUGOverBudgetness reset, the same rebuild for mActiveHullsForLocalPlayer, and the calls
+// to PredictHullChanges @0x827348E8 (online, RUNNING) and UpdateRaceCarHulls @0x82721460 (both
+// arms; outlined above, crash parity FX-NETCRASH 2026-09-25).
 //
 // Gated, each with its own reason:
-//   * PredictHullChanges @0x827348E8 -- an export hole (no per-function JSON), and online-only
-//     (`!mbAllowDivergentBehaviour && meState == E_STATE_RUNNING`).
 //   * the baked debug hull-override list (the bool at X360 +0x729F0 selecting the 15-entry
 //     table at unk_820BA81C) -- that byte sits in the un-emitted DWARF :892..:895 window
 //     between mfDEBUGAvoidance_PassScore and miPerfMon_PreSceneUpdate, so it has no name.
@@ -2826,184 +3242,14 @@ void TrafficEntityModule::RecalculateActiveHulls(
     CGS_ASSERT(lpOutNewHulls != 0, "lpOutNewHulls != NULL");
     CGS_ASSERT(lpOutOldHulls != 0, "lpOutOldHulls != NULL");
 
+    // 0x8274C964..0x8274C99C: `lbzx +0x717E7 ; bne ; lwz 0x300 ; cmpwi 1 ; bne ; bl PredictHullChanges`,
+    // then `bl UpdateRaceCarHulls` unconditionally (both LIVE, crash parity FX-NETCRASH 2026-09-25).
     if (!mbAllowDivergentBehaviour && meState == E_STATE_RUNNING)
     {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "RecalculateActiveHulls leg PredictHullChanges @0x827348E8 -- EXPORT HOLE (no "
-            "per-function JSON in .ida-exports); ONLINE-only arm, dead offline");
+        PredictHullChanges(lpInput, lpOutput);
     }
 
-    // ====================================================================================
-    // THE BODY OF TrafficEntityModule::UpdateRaceCarHulls @0x82721460, expanded at its single
-    // call site. It is the only producer of maaRaceCarHulls, which mActiveHulls is rebuilt
-    // from, so without it the new-hull set is always empty and FillNewHull never runs.
-    //
-    // FLAG: OUTLINE-ME. The console has this as a member function with exactly one caller, but
-    // it is not declared in BrnTrafficEntityModule.h and a member cannot be defined without a
-    // declaration. A free function taking `TrafficEntityModule&` would be the shim
-    // anti-pattern the faithfulness gate catches, so it is expanded here instead. To outline
-    // it, add this line to BrnTrafficEntityModule.h beside RecalculateActiveHulls (private,
-    // like its caller) and move the block below into a partfile verbatim; it reads only
-    // lpInput and members, so nothing else changes:
-    //
-    //        void UpdateRaceCarHulls( const BrnTrafficIO::InputBuffer_PostPhysics* lpInput );
-    //
-    // WHAT THE CONSOLE DOES (0x82721484..0x827217FC):
-    //   assert(IsDecisionFrame());                                     ; baked .cpp 7575
-    //   lpActive = lpInput->GetActiveRaceCarOutputInterface();         ; sub_82711850
-    //   if (mbAllowDivergentBehaviour)              ; lbzx +0x717E7
-    //   {
-    //       if (lpActive->IsPlayerCarActive() == 1)
-    //       {
-    //           lePlay = lpActive->GetPlayerActiveRaceCarIndex();      ; 0x82277BF8
-    //           for (i = 0; i < 8; ++i) maaRaceCarHulls[i].Clear();    ; stw 0, +0x55820 stride 0x18
-    //           lCentre = <player car position | two DEBUG overrides>
-    //           lHalf   = Vector3(mfTrafficSimRadius)                  ; lvx +0x713B0, vperm/vrlimi
-    //           minCell = Pvs::GetHullIndexForPoint(lCentre - lHalf, &minX, &minZ);
-    //           maxCell = Pvs::GetHullIndexForPoint(lCentre + lHalf, &maxX, &maxZ);
-    //           for (x = minX; x <= maxX; ++x)
-    //               for (z = minZ; z <= maxZ; ++z)
-    //                   maaRaceCarHulls[lePlay].Append(Pvs::GetHullIndexForIndices(x, z));
-    //           if (!mbInOfflineCarSelect)                             ; lbzx +0x713C8
-    //               assert(maaRaceCarHulls[lePlay].GetLength() <= 4);  ; "We ended up with too many hulls turned on: "
-    //       }
-    //   }
-    //   else { ...the ONLINE predicted-hull-change replay, GATED below... }
-    //
-    // The return value of the two corner calls is discarded: the console keeps only the four
-    // grid coordinates and overwrites the linear cell index. The calls still happen, because
-    // their bounds assert is a real side effect.
-    // ====================================================================================
-    {
-        CGS_ASSERT(IsDecisionFrame(), "IsDecisionFrame()");   // baked .cpp 7575
-
-        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars =
-            lpInput->GetActiveRaceCarOutputInterface();
-
-        if (mbAllowDivergentBehaviour)
-        {
-            if (lpActiveRaceCars->IsPlayerCarActive())
-            {
-                const EActiveRaceCarIndex lePlayerCar = lpActiveRaceCars->GetPlayerActiveRaceCarIndex();
-
-                // 0x82721508..0x82721550: eight Clear()s, one per active-race-car slot, with
-                // the enum-walk assert the console bakes from BurnoutConstants.h:39. The
-                // stride is 0x18 == sizeof(Array<u16,9>) and the base is the count word.
-                for (s32 liRaceCar = 0; liRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liRaceCar)
-                {
-                    maaRaceCarHulls[liRaceCar].Clear();
-                    CGS_ASSERT(liRaceCar + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                               "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
-                }
-
-                // The sim-box centre, console default (0x82721590): the player car's world
-                // position, `GetRaceCarState(lePlay)->mTransform.wAxis` (asm `addi r11, state,
-                // 0x1F0 ; lvx128 v126, r11, 0x30`, where 0x1F0 is RaceCarState::mTransform and
-                // +0x30 its translation row). IDA names the call GetRaceCarStateMutable
-                // @0x8227D690 because the const twin was ICF-folded onto it; a const interface
-                // pointer needs the const form.
-                //
-                // ASSERT DELTA, deliberate: 0x8227D690 carries three asserts (index >= 0,
-                // index < COUNT, IsRaceCarActive(index)); the committed const :220 body carries
-                // only the two bounds ones. The third is unreachable here, since
-                // IsPlayerCarActive() already returned true. Same applies at
-                // PostPhysicsUpdate's tail, which reaches the same accessor.
-                const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState*
-                    lpPlayerState = lpActiveRaceCars->GetRaceCarState(lePlayerCar);
-                const Vector3 lSimCentre = lpPlayerState->mTransform.wAxis;
-
-                {
-                    // GATE: the two DEBUG sim-centre overrides @0x82721554 / 0x827215A8, both
-                    // substituting mCameraLastFrame.GetPosition() for lSimCentre.
-                    // BLOCKER: the selector word at X360 +0x729D4 is mCameraLastFrame+0x144,
-                    // an unnamed Camera field, and DebugComponent::+0x34 has no name either.
-                    // DELETE-WHEN both are named. DEBUG-ONLY; the live default is taken.
-                    static bool sbLogged = false;
-                    LogMissingLeg_T1(sbLogged,
-                        "UpdateRaceCarHulls DEBUG sim-centre overrides @0x82721554 / "
-                        "0x827215A8 -- selector words mCameraLastFrame+0x144 and "
-                        "DebugComponent+0x34 are unnamed. DEBUG-ONLY, no live effect");
-                }
-
-                // The box half-extent, 0x827215CC..0x82721604: mfTrafficSimRadius through the
-                // SDK's VecFloat -> Vector3 lane shuffle (w zeroed, y restored). Construct
-                // seeds the member as a splat of 195.0f, so every lane the shuffle can select
-                // is 195.0f, and only lanes 0 and 2 reach the Pvs. Written as the Vector3 it
-                // produces rather than transcribed as VMX.
-                Vector3 lHalfExtent;
-                lHalfExtent.x = mfTrafficSimRadius.x;
-                lHalfExtent.y = mfTrafficSimRadius.y;
-                lHalfExtent.z = mfTrafficSimRadius.z;
-                lHalfExtent.w = 0.0f;
-
-                Vector3 lBoxMin;                        // vsubfp128 v125, v126, v127
-                lBoxMin.x = lSimCentre.x - lHalfExtent.x;
-                lBoxMin.y = lSimCentre.y - lHalfExtent.y;
-                lBoxMin.z = lSimCentre.z - lHalfExtent.z;
-                lBoxMin.w = 0.0f;
-
-                Vector3 lBoxMax;                        // vaddfp128 v127, v126, v127
-                lBoxMax.x = lSimCentre.x + lHalfExtent.x;
-                lBoxMax.y = lSimCentre.y + lHalfExtent.y;
-                lBoxMax.z = lSimCentre.z + lHalfExtent.z;
-                lBoxMax.w = 0.0f;
-
-                // ---- corner -> grid coordinates -------------------------------------------
-                // Each corner goes through TrafficData::operator-> then `lwz r3, 8(r3)`, i.e.
-                // mpData->mpPvs (TrafficData +0x08, static_asserted in
-                // BrnTrafficDataResourceType.h).
-                const Pvs* lpPvs = mpData->mpPvs;
-
-                s32 liMinX = 0;
-                s32 liMinZ = 0;
-                lpPvs->GetHullIndexForPoint(lBoxMin, liMinX, liMinZ);
-
-                s32 liMaxX = 0;
-                s32 liMaxZ = 0;
-                lpPvs->GetHullIndexForPoint(lBoxMax, liMaxX, liMaxZ);
-
-                // ---- walk the rectangle ---------------------------------------------------
-                // Outer loop X (r29, 0x827216F4), inner loop Z (r31, 0x827216E8) -- that
-                // order is the asm's, and it decides the order FillNewHull later visits hulls
-                // in. Both bounds are INCLUSIVE (`ble`), and both loops are entered only when
-                // min <= max (`bgt` skips), which is why an empty box produces no hulls
-                // rather than wrapping.
-                for (s32 liCellX = liMinX; liCellX <= liMaxX; ++liCellX)
-                {
-                    for (s32 liCellZ = liMinZ; liCellZ <= liMaxZ; ++liCellZ)
-                    {
-                        const u16 luHull =
-                            static_cast<u16>(lpPvs->GetHullIndexForIndices(liCellX, liCellZ));
-                        maaRaceCarHulls[lePlayerCar].Append(luHull);
-                    }
-                }
-
-                if (!mbInOfflineCarSelect)
-                {
-                    // 0x82721700..0x827217FC. The console builds the message with the count
-                    // appended ("We ended up with too many hulls turned on: %u"); the budget
-                    // literal is `cmplwi r11, 4 ; ble ->`, i.e. the assert fires above FOUR
-                    // even though the array holds KU_MAX_ACTIVE_HULLS_PER_RACECAR (9).
-                    CGS_ASSERT(maaRaceCarHulls[lePlayerCar].GetLength() <= 4u,
-                               "We ended up with too many hulls turned on");
-                }
-            }
-        }
-        else
-        {
-            // GATE: the online arm from 0x82721870, which replays maPredictedHullChanges
-            // instead of computing the box locally so every client turns the same hulls on in
-            // the same frame, and on a miss latches mbHullSyncDivergence. Its producer
-            // PredictHullChanges @0x827348E8 is an ARTIST export hole, so the array is never
-            // filled here and replaying it would only assert. Dead offline anyway.
-            static bool sbLogged = false;
-            LogMissingLeg_T1(sbLogged,
-                "UpdateRaceCarHulls ONLINE arm (!mbAllowDivergentBehaviour) -- replays "
-                "maPredictedHullChanges, whose producer PredictHullChanges @0x827348E8 is an "
-                "ARTIST EXPORT HOLE. Dead offline");
-        }
-    }
+    UpdateRaceCarHulls(lpInput);
 
     // Snapshot the previous set, then rebuild it. The console memcpy's 148 bytes (Set<u16,72>:
     // 144 element bytes plus the 4-byte length) into a stack temp before clearing.
@@ -5070,13 +5316,10 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     // GenerateCrashedVehicleEvents @0x82720030, which stay gated with the tail legs.)
     case E_STATE_RUNNING:
     {
-        {
-            // GATE: HandleIncomingNetworkData @0x82741AF8, no body; online-only.
-            static bool sbLogged = false;
-            LogMissingLeg_T1(sbLogged,
-                "PreSceneUpdate E_STATE_RUNNING leg HandleIncomingNetworkData @0x82741AF8 -- "
-                "no body in this tree; ONLINE-only (it drains the network hull-sync ring)");
-        }
+        // 0x8274ABB4..0x8274ABBC `mr r4, r25 ; mr r3, r31 ; bl 0x82741AF8` -- LIVE (crash parity
+        // FX-NETCRASH, 2026-09-25): every RUNNING frame, BEFORE the IsPaused() test. Online it copies
+        // the network's divergence verdict and queues every peer's hull change. Body below.
+        HandleIncomingNetworkData(lpInput);
 
         if (!IsPaused() && !lbSimPaused)
         {
@@ -5222,6 +5465,69 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
 
     lpOutput->UnlockForWrite();
     lpInput->UnlockForRead();
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::HandleIncomingNetworkData  @ 0x82741AF8   (.cpp 3905; crash parity
+// FX-NETCRASH, online hull set piece 3, 2026-09-25)
+//
+// Caller: PreSceneUpdate's E_STATE_RUNNING arm (0x8274ABBC), before its IsPaused() test.
+//   assert(lpInput != NULL)                                     (.cpp 4011)
+//   if (!mbAllowDivergentBehaviour)                              (lbzx +0x717E7)
+//     mbNetworkHasDetectedDivergence = network input ->mbDiverged   (lbz 0x6C -> stbx +0x72B54)
+//     for each ActivateHullEvent e of its queue (0x82709B50 GetEvent, `lwz 8` the length):
+//       assert(e.arc >= 0) (.cpp 4031) ; assert(e.arc < 8) (.cpp 4032) ;
+//       assert(e.arc != meLocalPlayerIndex) (.cpp 4033)
+//       AddPredictedHullChange({ e.arc, (u16)e.hull, (u16)e.frame })
+// The queue is what TrafficManager::_HullSyncMessageArrivedCallback fills (ActivateHull) with a
+// peer's broadcasts, carried over by BridgeInputToEntityModules / SetTrafficNetworkInputInterface.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::HandleIncomingNetworkData(const BrnTrafficIO::InputBuffer_PreScene* lpInput)
+{
+    CGS_ASSERT(lpInput != 0, "lpInput != NULL");   // baked .cpp 4011
+
+    if (mbAllowDivergentBehaviour)
+    {
+        return;
+    }
+
+    mbNetworkHasDetectedDivergence = lpInput->GetTrafficNetworkInputInterface()->HasDiverged();
+
+    const BrnTrafficIO::TrafficNetworkInputInterface::ActivateHullQueue& lrQueue =
+        lpInput->GetTrafficNetworkInputInterface()->GetActivateHullQueue();
+    for (s32 liEvent = 0; liEvent < lrQueue.GetLength(); ++liEvent)
+    {
+        const BrnTrafficIO::ActivateHullEvent& lrEvent = lrQueue.GetEvent(liEvent);
+        const EActiveRaceCarIndex leRaceCar = lrEvent.meActiveRaceCarIndex;
+
+        CGS_ASSERT(leRaceCar >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "lEvent.meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");       // .cpp 4031
+        CGS_ASSERT(leRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "lEvent.meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");    // .cpp 4032
+        CGS_ASSERT(leRaceCar != meLocalPlayerIndex,
+                   "lEvent.meActiveRaceCarIndex != meLocalPlayerIndex");             // .cpp 4033
+
+        HullChangeInfo lInfo;
+        lInfo.meActiveRaceCarIndex = leRaceCar;
+        lInfo.muNewActiveHull      = lrEvent.muNewActiveHull;
+        lInfo.muUpdateFrame        = static_cast<u16>(lrEvent.muUpdateFrame);
+        AddPredictedHullChange(lInfo);
+
+        // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped.
+        if (CgsDev::Log::DebugPrint* lpNetDiag = NetCrashDiagStream())
+        {
+            static s32 siLines = 0;
+            if (siLines < KI_NETCRASH_HULL_DIAG_MAX_LINES)
+            {
+                ++siLines;
+                *lpNetDiag << "[netcrash] HandleIncomingNetworkData arc=" << static_cast<s32>(leRaceCar)
+                           << " hull=" << static_cast<s32>(lInfo.muNewActiveHull)
+                           << " frame=" << static_cast<s32>(lInfo.muUpdateFrame)
+                           << " now=" << static_cast<s32>(muUpdateCount)
+                           << " diverged=" << (mbNetworkHasDetectedDivergence ? 1 : 0) << "\n";
+            }
+        }
+    }
 }
 
 }

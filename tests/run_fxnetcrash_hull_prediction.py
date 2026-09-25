@@ -1,0 +1,192 @@
+"""crash parity FX-NETCRASH (2026-09-25), online hull set piece 3: the traffic hulls follow the players
+online.
+
+Online (!mbAllowDivergentBehaviour), UpdateRaceCarHulls @0x82721460 does not compute the sim box
+locally. It replays maPredictedHullChanges so that every client turns the same hulls on in the same
+decision frame. On PC the arm was a named gate, and its two producers had no body, so after the online
+traffic restart the active hulls never moved again. The console chain:
+  PredictHullChanges @0x827348E8 (an export hole, read with tools/re/ppcdis.py). Online and RUNNING,
+      from RecalculateActiveHulls at 0x8274C990. It predicts the local car 5 s ahead with
+      `vmaddfp128 v127, v0, v13`, one rounding per lane: predicted = vel * splat(flt_82F2FDF8 == 5.0)
+      + pos. When the predicted hull changes, it queues {arc, hull, muUpdateCount + 50} and flags the
+      broadcast that GenerateNetworkUpdateEvents sends.
+  AddPredictedHullChange @0x82734680. It latches divergence when the change is historical. When the
+      buffer is full (400), it evicts the first entry already in the past, else the smallest frame.
+  HandleIncomingNetworkData @0x82741AF8 (PreSceneUpdate 0x8274ABBC). It copies the network's
+      divergence verdict and queues every peer change.
+  UpdateRaceCarHulls' online arm (0x82721870..0x82721B00). It applies the changes that are due
+      ({hull} + its PVS), drops the historical ones (latching divergence), and keeps the future ones.
+  DEBUGDumpHullPredictions @0x827211B0 (an export hole). This is the divergence dump.
+UpdateRaceCarHulls is OUTLINED here as the console has it. Its offline arm moved verbatim out of
+RecalculateActiveHulls, and a check pins that it is unchanged.
+
+NUMERIC: the production bodies are compiled against FxNetcrashHullPrediction.cpp, linked with the real
+Pvs and network input interface. The fused-prediction case is searched here with exact rational
+arithmetic: vel*5 + pos rounded ONCE lands in a different grid cell than RN(RN(vel*5) + pos). So a
+twice-rounded prediction picks the wrong hull.
+
+    env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxnetcrash_hull_prediction.py [--rev <b5 rev>]
+"""
+from fractions import Fraction
+from pathlib import Path
+import argparse
+import random
+import re
+import struct
+import sys
+
+sys.dont_write_bytecode = True
+from fxgs_common import REPO, Tree, definition, code_only, compile_and_run, report, STRSTREAM_CPP
+
+MODULE_CPP = "src/GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.cpp"
+PVS_CPP = "src/SharedClasses/Traffic/BrnTrafficPvs.cpp"
+NETIN_CPP = "src/GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficNetworkInputInterface.cpp"
+FIXTURE = "PredFixture"
+BODIES = [
+    "void TrafficEntityModule::UpdateRaceCarHulls(",
+    "void TrafficEntityModule::DEBUGDumpHullPredictions()",
+    "void TrafficEntityModule::AddPredictedHullChange(",
+    "void TrafficEntityModule::PredictHullChanges(",
+    "void TrafficEntityModule::HandleIncomingNetworkData(",
+]
+NUMERIC_CHECKS = 21
+
+GRID, CELL, GRID_MIN = 32, 256.0, -1024.0
+
+
+def f32(x):
+    return struct.unpack("<f", struct.pack("<f", x))[0]
+
+
+def bits(x):
+    return struct.unpack("<I", struct.pack("<f", x))[0]
+
+
+def rn(value):
+    if value == 0:
+        return 0.0
+    sign = -1 if value < 0 else 1
+    a = abs(value)
+    e = a.numerator.bit_length() - a.denominator.bit_length()
+    if Fraction(2) ** e > a:
+        e -= 1
+    quantum = Fraction(2) ** (e - 23)
+    m = a / quantum
+    n = m.numerator // m.denominator
+    rest = m - n
+    if rest > Fraction(1, 2) or (rest == Fraction(1, 2) and n & 1):
+        n += 1
+    return sign * float(n * quantum)
+
+
+def cell(x):
+    """Pvs::GetHullIndexForPoint's lane: (x - min) * (1/256) in f32, truncated, clamped."""
+    scaled = rn(Fraction(rn(Fraction(x) - Fraction(GRID_MIN))) * Fraction(1, 256))
+    return min(max(int(scaled), 0), GRID - 1)
+
+
+def prediction_case():
+    rng = random.Random(0x827348E8)
+    five = Fraction(5)
+    while True:
+        vel = f32(rng.uniform(5.0, 45.0))
+        boundary = GRID_MIN + CELL * rng.randint(9, 24)
+        pos = f32(boundary - vel * 5.0)
+        for step in range(-8, 9):
+            p = struct.unpack("<f", struct.pack("<I", bits(pos) + step))[0]
+            fused = rn(Fraction(vel) * five + Fraction(p))
+            twice = rn(Fraction(rn(Fraction(vel) * five)) + Fraction(p))
+            if cell(fused) != cell(twice):
+                return vel, p, cell(fused), cell(twice)
+
+
+def cases_inc():
+    vel, pos, fused_cell, twice_cell = prediction_case()
+    z_cell = cell(0.0)
+    box = []
+    lo_x, hi_x = cell(0.0 - 195.0), cell(0.0 + 195.0)
+    lo_z, hi_z = cell(0.0 - 195.0), cell(0.0 + 195.0)
+    for x in range(lo_x, hi_x + 1):
+        for z in range(lo_z, hi_z + 1):
+            box.append(GRID * z + x)
+    assert len(box) <= 4, box
+    lines = ["// generated by run_fxnetcrash_hull_prediction.py",
+             f"static const u32 KU_GRID = {GRID}u;",
+             f"static const f32 KF_CELL = {CELL}f;",
+             f"static const f32 KF_GRID_MIN = {GRID_MIN}f;",
+             f"static const u32 KU_PRED_POS_X = 0x{bits(pos):08X}u;   // {pos!r}",
+             f"static const u32 KU_PRED_VEL_X = 0x{bits(vel):08X}u;   // {vel!r}",
+             "static const u32 KU_PRED_POS_Z = 0x00000000u;",
+             "static const u32 KU_PRED_VEL_Z = 0x00000000u;",
+             f"static const u16 KU_PRED_HULL_FUSED = {GRID * z_cell + fused_cell};   "
+             f"// cell x {fused_cell} (twice-rounded: {twice_cell})",
+             "static const f32 KF_BOX_X = 0.0f;",
+             "static const f32 KF_BOX_Z = 0.0f;",
+             f"static const u32 KU_BOX_COUNT = {len(box)}u;",
+             "static const u16 KA_BOX_HULLS[] = { " + ", ".join(str(h) for h in box) + " };"]
+    return "\n".join(lines) + "\n"
+
+
+def numeric(tree):
+    module = tree.read(MODULE_CPP).replace("\r\n", "\n")
+    parts = []
+    try:
+        for signature in BODIES:
+            parts.append(definition(module, signature).replace("TrafficEntityModule::", FIXTURE + "::", 1))
+    except ValueError as error:
+        print("NUMERIC: cannot build -- production body absent: " + str(error))
+        return None
+    text = "\n".join(parts)
+    text = re.sub(r"const\s+BrnTrafficIO::InputBuffer_PostPhysics\*\s*lpInput", "const FakePostPhysicsInput* lpInput", text)
+    text = re.sub(r"BrnTrafficIO::OutputBuffer_PostPhysics\*\s*lpOutput", "FakeOutput* lpOutput", text)
+    text = re.sub(r"const\s+BrnTrafficIO::InputBuffer_PreScene\*\s*lpInput", "const FakePreSceneInput* lpInput", text)
+    text = text.replace("const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState*",
+                        "const FakeRaceCarState*")
+    text = text.replace("const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*",
+                        "const FakeActiveRaceCars*")
+    return compile_and_run(Path(__file__).with_name("FxNetcrashHullPrediction.cpp"), "prediction_bodies.inc", text,
+                           "FxNetcrashHullPrediction",
+                           extra_sources=[STRSTREAM_CPP, REPO / PVS_CPP, REPO / NETIN_CPP],
+                           extra_files={"prediction_cases.inc": cases_inc()})
+
+
+def body(module, signature):
+    try:
+        return code_only(definition(module, signature))
+    except ValueError:
+        return ""
+
+
+def wiring(tree):
+    module = tree.read(MODULE_CPP).replace("\r\n", "\n")
+    recalc = body(module, "void TrafficEntityModule::RecalculateActiveHulls(")
+    predict_at = recalc.find("PredictHullChanges(lpInput, lpOutput);")
+    update_at = recalc.find("UpdateRaceCarHulls(lpInput);")
+    snapshot_at = recalc.find("const ActiveHullSet lPreviousActiveHulls = mActiveHulls;")
+    presene = body(module, "void TrafficEntityModule::PreSceneUpdate(")
+    incoming_at = presene.find("HandleIncomingNetworkData(lpInput);")
+    paused_at = presene.find("if (!IsPaused() && !lbSimPaused)")
+    predict = body(module, "void TrafficEntityModule::PredictHullChanges(")
+    return [
+        ("RecalculateActiveHulls calls PredictHullChanges (online RUNNING, 0x8274C990), then UpdateRaceCarHulls "
+         "(0x8274C99C), before the rebuild", 0 <= predict_at < update_at < snapshot_at),
+        ("PreSceneUpdate's RUNNING arm calls HandleIncomingNetworkData(lpInput) before its IsPaused() test (0x8274ABBC)",
+         0 <= incoming_at < paused_at),
+        ("PredictHullChanges' 5 s prediction is fused per lane (vmaddfp128 0x82734A58)",
+         len(re.findall(r"std::fma\(\s*lrVelocity\.[xyzw]\s*,\s*KF_HULL_PREDICTION_SECONDS\s*,\s*lrPosition\.[xyzw]\s*\)",
+                        predict)) == 4),
+        ("UpdateRaceCarHulls is a real member again, and RecalculateActiveHulls no longer expands it",
+         bool(body(module, "void TrafficEntityModule::UpdateRaceCarHulls(")) and "maaRaceCarHulls[lePlayerCar].Append" not in recalc),
+    ]
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--rev", help="read the b5 sources from this git revision")
+    args = parser.parse_args()
+    tree = Tree(args.rev)
+    return report("run_fxnetcrash_hull_prediction", wiring(tree), numeric(tree), NUMERIC_CHECKS)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

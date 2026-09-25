@@ -1100,6 +1100,19 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
                                     BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput,
                                     ActiveHullSet* lpOutNewHulls,
                                     ActiveHullSet* lpOutOldHulls);        // @ 0x8274C870
+        // ---- the online hull set (crash parity FX-NETCRASH, 2026-09-25), DWARF shapes ----
+        // DWARF .cpp:7471. @0x82721460, RecalculateActiveHulls' last leg before the rebuild
+        // (0x8274C99C). Both arms: the local sim box offline, the replayed hull changes online.
+        void UpdateRaceCarHulls(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput);
+        // DWARF .cpp:7421. @0x827348E8 (export hole), online RUNNING only, from RecalculateActiveHulls.
+        void PredictHullChanges(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+                                BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput);
+        // DWARF .cpp:7337. @0x82734680. Callers PredictHullChanges / HandleIncomingNetworkData.
+        void AddPredictedHullChange(const HullChangeInfo& lrInfo);
+        // DWARF .cpp:7392. @0x827211B0 (export hole). The divergence dump.
+        void DEBUGDumpHullPredictions();
+        // DWARF .cpp:3905. @0x82741AF8, PreSceneUpdate's RUNNING arm (0x8274ABBC).
+        void HandleIncomingNetworkData(const BrnTrafficIO::InputBuffer_PreScene* lpInput);
         void SpawnNewTraffic(const ActiveHullSet& lrNewActiveHulls);      // @ 0x82748A40
         void FillNewHull(u16 luHull);                                     // @ 0x82743600
         u8   PickVehicleToSpawn(u32 luFlowTypeId);                        // @ 0x827235F8
