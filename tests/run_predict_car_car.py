@@ -63,9 +63,17 @@ def main():
             '#include "SDKs/EATech/rwcollision/volume_debug_access.h"\n'
             'int TestInitializeVolumeVTable() { return rw::collision::Volume::InitializeVTable(); }\n',
             encoding="utf-8")
+        # The mounted collision TUs log through the REAL CgsDev::Log::gpDebugPrint (VolumeQuery.cpp's
+        # [vvq] witness, b5 935db3cd), a different symbol from the harness's own NullPrint sink; a
+        # null one keeps them silent.
+        (out / "log_shim.cpp").write_text(
+            '#include "GameShared/GameClasses/Development/Log/CgsLog.h"\n'
+            'namespace CgsDev { namespace Log { DebugPrint* gpDebugPrint = nullptr; } }\n',
+            encoding="utf-8")
         includes = " ".join(f'/I"{WORKFLOW / p}"' for p in settings("msvc_includes.txt"))
         sources = ([Path(__file__).with_name("PredictCarCarIntersection.cpp"), out / "vtable_shim.cpp",
-                    REPO / "src/SDKs/EATech/rwcollision/volume.cpp"] + collision_sources())
+                    out / "log_shim.cpp", REPO / "src/SDKs/EATech/rwcollision/volume.cpp"]
+                   + collision_sources())
         cmd = ("cl " + " ".join(settings("msvc_flags.txt")) + " " + includes + f' /I"{out}" '
                + " ".join(f'"{s}"' for s in sources) + " /Fe:regression.exe /link /OPT:REF")
         script = out / "run.cmd"
