@@ -25,6 +25,10 @@
                                                               //   function, which is a different mangled
                                                               //   symbol from the real non-static 2-arg
                                                               //   member. See the RETIRED note below.
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] CgsDev::Log::WriteToLog (the BYSTANDER look witness)
+#include <cstdio>                                             // [DIAG] snprintf
+#include <cstdlib>                                            // [DIAG] getenv (BRN_CRASHCAM_DIAG)
+#include <math.h>                                             // [DIAG] sqrtf / acosf (the witness's aim angle)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.cpp
@@ -297,6 +301,93 @@ namespace Camera
 // ----------------------------------------------------------------------------
 // The heading-space-to-look SLerp blend amount.
 static const f32 KF_HEADING_SPACE_2_SLERP_AMOUNT = 1.0f;
+
+// The BYSTANDER look space's Looker block (Update 0x82247714..0x82247760): the tracking / distance-from-target
+// tolerance and the screen-offset scale (f31 = flt_82004014 == 0x3DCCCCCD), the FOV velocity band
+// (flt_820054CC == 20.0, flt_8200544C == 130.0), the distance-from-ideal tolerance (flt_8200426C == 5.0) and the
+// subject size (flt_82001DA0 == 0.5).
+static const f32 KF_BYSTANDER_LOOKER_TOLERANCE           = 0.1f;
+static const f32 KF_BYSTANDER_LOOKER_MIN_FOV_VELOCITY    = 20.0f;
+static const f32 KF_BYSTANDER_LOOKER_MAX_FOV_VELOCITY    = 130.0f;
+static const f32 KF_BYSTANDER_LOOKER_DISTANCE_FROM_IDEAL = 5.0f;
+static const f32 KF_BYSTANDER_LOOKER_SUBJECT_SIZE        = 0.5f;
+
+// [DIAG] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The BYSTANDER look space's live witness (CC-13): how many degrees
+// the camera's forward (its z row) is off the bystander's position before and after the looker, and the FOV the looker
+// left, with the take's guid and name. One line on each of a take's first four frames, then every 30th. Reads only.
+struct BystanderLookDiag
+{
+    bool        mbOn;
+    const void* mpBehaviour;
+    s32         miGuid;
+    u32         muFrame;
+    f32         mfAimBefore;
+    f32         mfFovBefore;
+};
+
+static BystanderLookDiag& BrnDiag_BystanderLookState()
+{
+    static BystanderLookDiag sDiag = { getenv("BRN_CRASHCAM_DIAG") != 0, 0, -1, 0u, 0.0f, 0.0f };
+    return sDiag;
+}
+
+static f32 BrnDiag_BystanderDistance(const Camera& lrCamera, const rw::math::vpu::Matrix44Affine& lrTarget)
+{
+    const f32 lfX = lrTarget.wAxis.x - lrCamera.mTransform.wAxis.x;
+    const f32 lfY = lrTarget.wAxis.y - lrCamera.mTransform.wAxis.y;
+    const f32 lfZ = lrTarget.wAxis.z - lrCamera.mTransform.wAxis.z;
+    return sqrtf(lfX * lfX + lfY * lfY + lfZ * lfZ);
+}
+
+static f32 BrnDiag_BystanderAimDegrees(const Camera& lrCamera, const rw::math::vpu::Matrix44Affine& lrTarget)
+{
+    const rw::math::vpu::Vector3& lrForward = lrCamera.mTransform.zAxis;
+    const f32 lfForward = sqrtf(lrForward.x * lrForward.x + lrForward.y * lrForward.y + lrForward.z * lrForward.z);
+    const f32 lfDistance = BrnDiag_BystanderDistance(lrCamera, lrTarget);
+    if (!(lfForward > 0.0f) || !(lfDistance > 0.0f))
+        return -1.0f;
+    f32 lfCos = ((lrTarget.wAxis.x - lrCamera.mTransform.wAxis.x) * lrForward.x
+                 + (lrTarget.wAxis.y - lrCamera.mTransform.wAxis.y) * lrForward.y
+                 + (lrTarget.wAxis.z - lrCamera.mTransform.wAxis.z) * lrForward.z) / (lfForward * lfDistance);
+    lfCos = (lfCos > 1.0f) ? 1.0f : ((lfCos < -1.0f) ? -1.0f : lfCos);
+    return acosf(lfCos) * 57.2957795f;
+}
+
+static void BrnDiag_BystanderLookBefore(const Camera& lrCamera, const rw::math::vpu::Matrix44Affine& lrTarget)
+{
+    BystanderLookDiag& lrDiag = BrnDiag_BystanderLookState();
+    if (!lrDiag.mbOn)
+        return;
+    lrDiag.mfAimBefore = BrnDiag_BystanderAimDegrees(lrCamera, lrTarget);
+    lrDiag.mfFovBefore = lrCamera.GetFOV();
+}
+
+static void BrnDiag_BystanderLookAfter(const void* lpBehaviour, const KeyAnimController& lrController,
+                                       const Camera& lrCamera, const rw::math::vpu::Matrix44Affine& lrTarget)
+{
+    BystanderLookDiag& lrDiag = BrnDiag_BystanderLookState();
+    if (!lrDiag.mbOn)
+        return;
+    const ICE::ICETakeData* lpTake = lrController.GetTake().GetData();
+    const s32 liGuid = (lpTake != 0) ? lpTake->miGuid : -1;
+    if (lpBehaviour != lrDiag.mpBehaviour || liGuid != lrDiag.miGuid)
+    {
+        lrDiag.mpBehaviour = lpBehaviour;
+        lrDiag.miGuid      = liGuid;
+        lrDiag.muFrame     = 0u;
+    }
+    const u32 luFrame = lrDiag.muFrame++;
+    if (luFrame >= 4u && (luFrame % 30u) != 0u)
+        return;
+    char lacLine[320];
+    snprintf(lacLine, sizeof(lacLine),
+             "[iceanim] bystander look take %d '%s' frame %u: aim %.2f -> %.2f deg, fov %.4f -> %.4f, "
+             "bystander (%.1f, %.1f, %.1f) at %.1f m\n",
+             liGuid, (lpTake != 0) ? lpTake->macTakeName : "?", luFrame, lrDiag.mfAimBefore,
+             BrnDiag_BystanderAimDegrees(lrCamera, lrTarget), lrDiag.mfFovBefore, lrCamera.GetFOV(),
+             lrTarget.wAxis.x, lrTarget.wAxis.y, lrTarget.wAxis.z, BrnDiag_BystanderDistance(lrCamera, lrTarget));
+    CgsDev::Log::WriteToLog(lacLine);
+}
 
 // The source path string the asserts report.
 static const char* const KPC_SOURCE_FILE =
@@ -713,20 +804,47 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
                                              mLastCamera.GetDepthOfField().GetBlurriness());
         lrCamera.SetFOV(mLastCamera.GetFOV());
 
-        // Then let the looker track the bystander. FLAG (not yet re-expressed): the console
-        // builds a Looker::Parameters on the stack (Parameters::Construct, then
-        // eleven named overrides -- the two subject sizes 0.5, the two screen offsets
-        // GetLookPos().x/.y * 0.1, tracking tolerance 0.1, FOV velocity band 20..130, the two
-        // distance tolerances 5.0 / 0.1, mbUseZoom, meZoomType = E_ZOOM_SCREEN_REGION) and
-        // calls Utils::Looker::Update with the bystander's transform (+0x1F0),
-        // velocity (+0x330) and AABB (+0x4A0). Left as the named call with the parameter block
-        // still to be filled: the offsets into the bystander vehicle are attested but the
-        // vehicle type they index has no reconstructed accessor set yet, and inventing three
-        // more offset reads would be exactly the kind of guess this wave is retiring.
-        // DELETE-WHEN: the race-car/vehicle accessors those three reads need have names.
-        const f32 lfTimeStep = lrSharedInfo.GetTimestep().Get(Timestep::E_WORLD);
-        (void)lfTimeStep;
-        mBystanderRef.Get(lpWorld);
+        // ⭐ (2026-09-25, FX-DIRECTOR2 CHAINCHECK2 CC-13) THE LOOKER TRACKS THE BYSTANDER (0x82247710..0x82247888).
+        // It was a FLAG and did not run: the camera kept the take's orientation and never aimed, framed or zoomed
+        // onto the bystander vehicle. 36 retail takes look in space 11: Takedown_ICE_1 (the shutdown takedown,
+        // whose Prepare binds mBystanderRef to the victim), the 21 World_Win_* and 13 World_Signature_*.
+        //   Looker::Parameters::Construct over a stack block, then eleven overrides (block +offset):
+        //     +0x20 mfTrackingTolerance 0.1 and +0x40 mfToleranceForDistanceFromTarget 0.1 (f31, flt_82004014);
+        //     +0x5F mbUseZoom 1 (r21); +0x2C / +0x30 the FOV velocity band 20 / 130 (flt_820054CC / flt_8200544C);
+        //     +0x60 meZoomType 2 E_ZOOM_SCREEN_REGION; +0x3C mfToleranceForDistanceFromIdeal 5 (flt_8200426C);
+        //     +0x10 / +0x14 the subject X / Y size 0.5 (flt_82001DA0);
+        //     +0x18 / +0x1C the subject X / Y screen offset = GetLookPos().x / .y * 0.1 (one vmulfp128 each,
+        //     0x8224779C / 0x822477E4: one f32 rounding, ROUNDING_RULE rule 4).
+        //   The timestep is the behaviour's own (Timestep::Get(shared +0x550, meTimestepType at +0x04)), splatted.
+        //   The bystander is resolved three times (VehicleRef::Get 0x82247808 / 0x82247818 / 0x82247828): its AABB
+        //   (+0x4A0, the 0x20-byte memcpy), its linear velocity (+0x330) and its transform (+0x1F0).
+        //   Looker::Update(this + 0x660, the timestep, the shared Random BY VALUE (six qwords from shared +0x5D4),
+        //   the block, the camera, the transform, the velocity, the AABB).
+        Utils::Looker::Parameters lLookerParams;
+        lLookerParams.Construct();
+        lLookerParams.mfTrackingTolerance              = KF_BYSTANDER_LOOKER_TOLERANCE;
+        lLookerParams.mfToleranceForDistanceFromTarget = KF_BYSTANDER_LOOKER_TOLERANCE;
+        lLookerParams.mbUseZoom                        = true;
+        lLookerParams.mfMinFOVVelocity                 = KF_BYSTANDER_LOOKER_MIN_FOV_VELOCITY;
+        lLookerParams.mfMaxFOVVelocity                 = KF_BYSTANDER_LOOKER_MAX_FOV_VELOCITY;
+        lLookerParams.meZoomType                       = Utils::Looker::Parameters::E_ZOOM_SCREEN_REGION;
+        lLookerParams.mfToleranceForDistanceFromIdeal  = KF_BYSTANDER_LOOKER_DISTANCE_FROM_IDEAL;
+        lLookerParams.mfTargetSubjectXSize             = KF_BYSTANDER_LOOKER_SUBJECT_SIZE;
+        lLookerParams.mfTargetSubjectYSize             = KF_BYSTANDER_LOOKER_SUBJECT_SIZE;
+        lLookerParams.mfTargetSubjectXScreenOffset     = mKeyAnimController.GetLookPos().x * KF_BYSTANDER_LOOKER_TOLERANCE;
+        lLookerParams.mfTargetSubjectYScreenOffset     = mKeyAnimController.GetLookPos().y * KF_BYSTANDER_LOOKER_TOLERANCE;
+
+        const f32 lfLookerTimeStep = lrSharedInfo.GetTimestep().Get(GetTimestepType());
+        const VehicleInfo& lrBystanderBox      = mBystanderRef.GetVehicle(lrSharedInfo);
+        const VehicleInfo& lrBystanderVelocity = mBystanderRef.GetVehicle(lrSharedInfo);
+        const VehicleInfo& lrBystanderPlace    = mBystanderRef.GetVehicle(lrSharedInfo);
+        BrnDiag_BystanderLookBefore(lrCamera, lrBystanderPlace.mRaceCarState.mTransform);   // [DIAG] NOT X360
+        mLooker.Update(VecFloat(lfLookerTimeStep), *lrSharedInfo.GetRandom(), lLookerParams, lrCamera,
+                       lrBystanderPlace.mRaceCarState.mTransform, lrBystanderVelocity.mRaceCarState.mLinearVelocity,
+                       lrBystanderBox.mAABB);
+        BrnDiag_BystanderLookAfter(this, mKeyAnimController, lrCamera,                      // [DIAG] NOT X360
+                                   lrBystanderPlace.mRaceCarState.mTransform);
+        (void)lpWorld;
     }
 
     // Copy the shared camera back into the behaviour's stored camera (Camera::operator=).
@@ -743,7 +861,9 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
         lShakeParams.mfXYWobbleMagnitudeDegs = 1.0f;
         lShakeParams.mfWobbleCenteringFactor = 0.25f;
 
-        const f32 lfShakeTimeStep = lrSharedInfo.GetTimestep().Get(Timestep::E_WORLD);
+        // [CORRECTED 2026-09-25, FX-DIRECTOR2] The behaviour's own timestep (`lwz r4, 4(r31)`, meTimestepType
+        // at 0x822478AC), as for the looker above -- not a fixed E_WORLD.
+        const f32 lfShakeTimeStep = lrSharedInfo.GetTimestep().Get(GetTimestepType());
 
         mShake.Update(lrCamera.mTransform, lShakeParams, *lrSharedInfo.GetRandom(),
                       lfShakeTimeStep, 1.0f);
