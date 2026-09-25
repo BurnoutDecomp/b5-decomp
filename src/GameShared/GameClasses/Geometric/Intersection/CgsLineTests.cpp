@@ -18,7 +18,7 @@
 #include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
-#include <cmath>     // std::signbit (the vmaxfp / vminfp zero ordering)
+#include <cmath>     // std::signbit (the vmaxfp / vminfp zero ordering); std::fma (TestLineSphere4's vmaddfp)
 #include <cstdint>   // uintptr_t (TestLineSphere4's :308 alignment assert)
 #include <cstring>   // std::memcpy (the Mask4 lanes)
 
@@ -210,28 +210,39 @@ namespace CgsGeometric
             const Vector4& lrCentre  = lrSphere.mPositionRadius;
             const f32      lfRadius2 = lrCentre.w * lrCentre.w;                          // vmulfp128 v6, v6, v6
 
+            // ROUNDING (ROUNDING_RULE.md rule 3, 2026-09-25 -- REVIEW-J on 335639ce): every `vmaddfp` here rounds
+            // ONCE (std::fma); the vmulfp128 / vsubfp steps round separately (rule 4). All eleven fused sites
+            // of the :172 copy are below (the :305 copy at 0x828BD3AC.. is the same sequence); until this
+            // change each was written a*b + c, rounding the product first.
+
             // The far end of the segment, e = L * d + s.
-            const f32 lfEndX = lfLength * lrDirection.x + lrStart.x;                     // vmaddfp v1
-            const f32 lfEndY = lfLength * lrDirection.y + lrStart.y;                     // vmaddfp v31
-            const f32 lfEndZ = lfLength * lrDirection.z + lrStart.z;                     // vmaddfp v2
+            const f32 lfEndX = std::fma(lfLength, lrDirection.x, lrStart.x);             // vmaddfp v1  0x828BD1B0
+            const f32 lfEndY = std::fma(lfLength, lrDirection.y, lrStart.y);             // vmaddfp v31 0x828BD1AC
+            const f32 lfEndZ = std::fma(lfLength, lrDirection.z, lrStart.z);             // vmaddfp v2  0x828BD1A8
 
             // The centre relative to the start, and its projection on the unit direction.
             const f32 lfDx = lrCentre.x - lrStart.x;                                     // vsubfp v11
             const f32 lfDy = lrCentre.y - lrStart.y;                                     // vsubfp v12
             const f32 lfDz = lrCentre.z - lrStart.z;                                     // vsubfp v10
-            const f32 lfT  = (lrDirection.y * lfDy + lrDirection.x * lfDx)               // vmulfp128 + vmaddfp
-                           + lrDirection.z * lfDz;                                       // vmaddfp
+            const f32 lfT  = std::fma(lrDirection.z, lfDz,                               // vmaddfp 0x828BD1CC
+                             std::fma(lrDirection.x, lfDx,                               // vmaddfp 0x828BD1C4
+                                      lrDirection.y * lfDy));                            // vmulfp128 0x828BD1B4
 
-            // The perpendicular offset (C - s) - t * d, and the three squared distances.
-            const f32 lfPx = lfDx - lfT * lrDirection.x;
-            const f32 lfPy = lfDy - lfT * lrDirection.y;
-            const f32 lfPz = lfDz - lfT * lrDirection.z;
-            const f32 lfPerpendicular2 = (lfPy * lfPy + lfPx * lfPx) + lfPz * lfPz;
-            const f32 lfStart2         = (lfDy * lfDy + lfDx * lfDx) + lfDz * lfDz;
-            const f32 lfEx = lrCentre.x - lfEndX;
-            const f32 lfEy = lrCentre.y - lfEndY;
-            const f32 lfEz = lrCentre.z - lfEndZ;
-            const f32 lfEnd2           = (lfEy * lfEy + lfEx * lfEx) + lfEz * lfEz;
+            // The perpendicular offset (C - s) - t * d (vmulfp128 0x828BD1D0..0x828BD1D8, then vsubfp
+            // 0x828BD1E4 / 0x828BD1EC / 0x828BD1F0 -- NOT fused), and the three squared distances, each
+            // y*y (vmulfp128) then x*x + that, then z*z + that (two vmaddfp).
+            const f32 lfTx = lfT * lrDirection.x;
+            const f32 lfTy = lfT * lrDirection.y;
+            const f32 lfTz = lfT * lrDirection.z;
+            const f32 lfPx = lfDx - lfTx;
+            const f32 lfPy = lfDy - lfTy;
+            const f32 lfPz = lfDz - lfTz;
+            const f32 lfPerpendicular2 = std::fma(lfPz, lfPz, std::fma(lfPx, lfPx, lfPy * lfPy));   // 0x828BD214 / 0x828BD200
+            const f32 lfStart2         = std::fma(lfDz, lfDz, std::fma(lfDx, lfDx, lfDy * lfDy));   // 0x828BD208 / 0x828BD1F8
+            const f32 lfEx = lrCentre.x - lfEndX;                                        // vsubfp 0x828BD1C0
+            const f32 lfEy = lrCentre.y - lfEndY;                                        // vsubfp 0x828BD1BC
+            const f32 lfEz = lrCentre.z - lfEndZ;                                        // vsubfp 0x828BD1B8
+            const f32 lfEnd2           = std::fma(lfEz, lfEz, std::fma(lfEx, lfEx, lfEy * lfEy));   // 0x828BD20C / 0x828BD1FC
 
             // vcmpgefp128 (t >= 0) AND vnot(vcmpgtfp t > L): the foot of the perpendicular lies on the
             // segment. Each distance term is vnot(vcmpgtfp d2 > R2), so a NaN distance reads as inside.

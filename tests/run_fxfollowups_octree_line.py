@@ -37,7 +37,7 @@ LT_CPP = "src/GameShared/GameClasses/Geometric/Intersection/CgsLineTests.cpp"
 LT_H = "src/GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"
 # The last revision whose TestLineAgainstNodeBoundingBox read the opaque block by raw float offsets.
 OLD_REV = "c451f0f0"
-NUMERIC_CHECKS = 27
+NUMERIC_CHECKS = 34
 
 
 def wiring(tree):
@@ -72,11 +72,17 @@ def constant(source, name):
 def numeric(tree):
     octree = tree.read(OCT_CPP)
     old = Tree(OLD_REV).read(OCT_CPP)
+    # The rounding helpers LineTestOptimized's chains use since REVIEW-J (2026-09-25); older revisions have none.
+    rounding = []
+    for signature in ("inline f32 LineDot3(", "inline f32 LineVnmsub("):
+        if signature in octree:
+            rounding.append(definition(octree, signature))
     try:
         oct_inc = "\n".join([
             "namespace {",
             constant(octree, "KF_LINE_TEST_MIN_LENGTH"),
             constant(octree, "KF_LINE_RECIPROCAL_EPSILON"),
+        ] + rounding + [
             definition(octree, "inline f32 NewtonRaphsonReciprocalSqrt2("),
             definition(octree, "inline f32 NewtonRaphsonReciprocal2("),
             definition(octree, "inline void NoteOctreeLineTest("),
