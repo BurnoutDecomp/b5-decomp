@@ -156,6 +156,17 @@ namespace BrnTrafficIO
         return &mTrafficDirectorOutputInterface;
     }
 
+    // DWARF BrnTrafficDirectorInterfaces.h:98 -- TrafficDirectorOutputInterface's const read of its
+    // entity array, declared in the interface's header and bodied nowhere until the world bridge's
+    // leg-13 witness read it (crash parity FX-NETCRASH, 2026-09-25). The console has no out-of-line
+    // copy: every reader inlines it as the interface + 0x10 (the array's seat after the u16 head),
+    // e.g. MainDirector::PreSceneQueryUpdate 0x8225BC4C `addi r30, r30, 0x10` and
+    // UpdateOutputBuffer::SetTrafficDirectorOutputInterface 0x827A8B54 `addi r4, r28, 0x10`.
+    const Array<TrafficDirectorEntity, 32u>& TrafficDirectorOutputInterface::GetTrafficDirectorEntityArray() const
+    {
+        return maActiveEntityArray;
+    }
+
     // X360 0x827A0AD0 (baked 403): read-lock; return &mGameEventQueue (this + 9824).
     const OutputBuffer_PostPhysics::GameEventQueue* OutputBuffer_PostPhysics::GetGameEventQueue() const
     {
