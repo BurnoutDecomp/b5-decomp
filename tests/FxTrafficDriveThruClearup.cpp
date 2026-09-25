@@ -25,6 +25,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"
+// crash parity FX-TRAFFICLIGHTS (2026-09-25), additive: the types the arms 30 / 110 / 192 name.
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+#include "GameSource/GameState/BrnGameEvents.h"
+#include "GameSource/GameState/TriggerQueryManager/BrnKillzoneAction.h"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -57,6 +61,25 @@ namespace BrnNetHarnessPC
     void WitnessTag(const char*, const char*, const char*, ...) {}
 }
 
+// crash parity FX-TRAFFICLIGHTS (2026-09-25), additive: arm 30 (STOP_MODE_INTRO) calls these two interface accessors.
+// Their production bodies (BrnRCEntityActiveRaceCarOutputInterface.cpp) are not linked here; these are the same two
+// lines. This runner never posts action 30.
+namespace BrnWorld
+{
+namespace RaceCarEntityModuleIO
+{
+    bool RCEntityActiveRaceCarOutputInterface::IsRaceCarActive(EActiveRaceCarIndex leIndex) const
+    {
+        return (maxRaceCarFlags[leIndex] & 1) != 0;
+    }
+    const RCEntityActiveRaceCarOutputInterface::RaceCarState*
+    RCEntityActiveRaceCarOutputInterface::GetRaceCarState(EActiveRaceCarIndex leIndex) const
+    {
+        return &maRaceCarStates[leIndex];
+    }
+}
+}
+
 namespace BrnTraffic
 {
     const char* gpcTrafficRemoveReason = "unknown";
@@ -79,6 +102,7 @@ namespace
         typedef M::EState        EState;
         typedef M::ERunningState ERunningState;
         static const EState        E_STATE_STARTING_UP   = M::E_STATE_STARTING_UP;
+        static const EState        E_STATE_TEARING_DOWN  = M::E_STATE_TEARING_DOWN;   // arm 192 (FX-TRAFFICLIGHTS)
         static const EState        E_STATE_RUNNING       = M::E_STATE_RUNNING;
         static const ERunningState E_RUNNINGSTATE_NORMAL = M::E_RUNNINGSTATE_NORMAL;
         decltype(M::meState)                         meState;
@@ -95,6 +119,32 @@ namespace
         // Arm 34's tripwire reads (E_ACTION_START_PLAYING_MODE, 0x8274BE04 / 0x8274BE10): never posted here.
         decltype(M::mbNeedToSetUpLightsForEventStart) mbNeedToSetUpLightsForEventStart;
         decltype(M::mbDEBUGTurnTrafficOff)            mbDEBUGTurnTrafficOff;
+        // crash parity FX-TRAFFICLIGHTS (2026-09-25), additive: what the arms 13 / 30 / 73 / 75 / 77 / 110 / 192 / 244
+        // and the post-loop Picture Paradise tail read. The drive-thru actions under test never reach those arms;
+        // their test is run_fxtrafficlights_requests.py. The tail runs after every queue here and only reads
+        // mCameraLastFrame's flags and mbInPictureParadise, both zeroed by Fresh, so it does nothing.
+        typedef M::EEmptyTrafficPoolState EEmptyTrafficPoolState;
+        static const EEmptyTrafficPoolState E_EMPTYTRAFFICPOOLSTATE_IDLE     = M::E_EMPTYTRAFFICPOOLSTATE_IDLE;
+        static const EEmptyTrafficPoolState E_EMPTYTRAFFICPOOLSTATE_EMPTYING = M::E_EMPTYTRAFFICPOOLSTATE_EMPTYING;
+        static const EEmptyTrafficPoolState E_EMPTYTRAFFICPOOLSTATE_EMPTY    = M::E_EMPTYTRAFFICPOOLSTATE_EMPTY;
+        static const EEmptyTrafficPoolState E_EMPTYTRAFFICPOOLSTATE_FILLING  = M::E_EMPTYTRAFFICPOOLSTATE_FILLING;
+        decltype(M::meEmptyTrafficPoolState)                   meEmptyTrafficPoolState;
+        decltype(M::mbGameModeClearsTraffic)                   mbGameModeClearsTraffic;
+        decltype(M::mbAtStartLineSoProtectRaceCarsFromTraffic) mbAtStartLineSoProtectRaceCarsFromTraffic;
+        decltype(M::mbGameModeAllowsKillzones)                 mbGameModeAllowsKillzones;
+        decltype(M::mbDEBUGEnableKillzones)                    mbDEBUGEnableKillzones;
+        decltype(M::mbWaitingForStreaming)                     mbWaitingForStreaming;
+        decltype(M::mbTrafficIsHidden)                         mbTrafficIsHidden;
+        decltype(M::mbInPictureParadise)                       mbInPictureParadise;
+        decltype(M::mfTrafficSimRadius)                        mfTrafficSimRadius;
+        decltype(M::muMaxVehiclesToRender)                     muMaxVehiclesToRender;
+        decltype(M::mfRenderCullDistanceSq)                    mfRenderCullDistanceSq;
+        decltype(M::mbInOfflineCarSelect)                      mbInOfflineCarSelect;
+        decltype(M::mCameraLastFrame)                          mCameraLastFrame;
+        unsigned muRequestArmCalls;   // the three callees below: inert stand-ins that count their calls
+        void HideAllTraffic() { ++muRequestArmCalls; }
+        void UnhideAllTraffic() { ++muRequestArmCalls; }
+        void FireKillZone(u64) { ++muRequestArmCalls; }
 
         decltype(M::mbIsOnlineGameMode)             mbIsOnlineGameMode;
         decltype(M::mbAllowDivergentBehaviour)      mbAllowDivergentBehaviour;
@@ -147,6 +197,16 @@ namespace BrnTrafficIO
     const InputBuffer_PostPhysics::GameActionQueueStorage* InputBuffer_PostPhysics::GetGameActionQueue() const
     {
         return &mGameActionQueue;
+    }
+    // crash parity FX-TRAFFICLIGHTS (2026-09-25), additive: arm 30's read accessor (0x82711850) and arm 192's write
+    // accessor (0x82711CE8), the same way. The drive-thru actions under test reach neither.
+    const InputBuffer_PostPhysics::ActiveRaceCarOutputInterface* InputBuffer_PostPhysics::GetActiveRaceCarOutputInterface() const
+    {
+        return &mActiveRaceCarOutputInterface;
+    }
+    OutputBuffer_PostPhysics::GameEventQueue* OutputBuffer_PostPhysics::GetGameEventQueue()
+    {
+        return &mGameEventQueue;
     }
 }
 }

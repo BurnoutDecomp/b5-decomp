@@ -39,6 +39,10 @@ from fxgs_common import REPO, Tree, definition, code_only, compile_and_run, repo
 
 MODULE_CPP = "src/GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.cpp"
 PVS_CPP = "src/SharedClasses/Traffic/BrnTrafficPvs.cpp"
+# crash parity FX-TRAFFICLIGHTS (2026-09-25): the extracted handler compiles against ITS revision's headers (arm
+# 192 names BrnGameEvents.h's E_MODULE_TRAFFIC_ENTITY; the fixture takes the module header's member types).
+MODULE_H = "src/GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
+EVENTS_H = "src/GameSource/GameState/BrnGameEvents.h"
 FIXTURE = "ExtFixture"
 
 BODIES = [
@@ -85,7 +89,8 @@ def numeric(tree):
         print("NUMERIC: Reset has no mbActivateOnlineHullsAfterReset replay block in this revision")
     text += "\nvoid " + FIXTURE + "::ReplayOnlineHullSet()\n{\n" + block + "\n}\n"
     return compile_and_run(Path(__file__).with_name("FxNetcrashExternalRequests.cpp"), "external_requests_bodies.inc",
-                           text, "FxNetcrashExternalRequests", extra_sources=[STRSTREAM_CPP, REPO / PVS_CPP])
+                           text, "FxNetcrashExternalRequests", extra_sources=[STRSTREAM_CPP, REPO / PVS_CPP],
+                           shadow={MODULE_H: tree.read(MODULE_H), EVENTS_H: tree.read(EVENTS_H)})
 
 
 def wiring(tree):

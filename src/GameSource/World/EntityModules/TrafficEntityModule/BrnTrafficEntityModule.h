@@ -783,8 +783,17 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // Returns &maTrafficPhysicsInfoList[ GetVehicle(luVehicle)->GetPhysicalPartsIndex() ].
         TrafficPhysicsInfo*       GetTrafficPhysicsInfoForVehicl(u32 luVehicle);
         const TrafficPhysicsInfo* GetTrafficPhysicsInfoForVehicl(u32 luVehicle) const;
-        void  HideAllTraffic();                                      // @ 0x8273F418 (FLAG)
-        void  UnhideAllTraffic();                                    // @ 0x8274A500 (FLAG)
+        // DWARF :1905 / :1908. BODIED (crash parity FX-TRAFFICLIGHTS, 2026-09-25) beside their one caller,
+        // HandleExternalRequests: action 75 (the ONLINE car select starts) hides the traffic, action 77 (the
+        // online car select ends) brings it back.
+        void  HideAllTraffic();                                      // @ 0x8273F418
+        void  UnhideAllTraffic();                                    // @ 0x8274A500
+        // DWARF :1473 `void FireKillZone(TrafficData::KillZoneId)`. ADDITIVE (crash parity FX-TRAFFICLIGHTS,
+        // 2026-09-25), bodied beside HandleExternalRequests, whose KILLZONE arm (110) calls it once per kill-zone
+        // id the player's trigger region names: every alive, non-physical car on the zone's lane spans in the
+        // active hulls is removed. TrafficData::KillZoneId is u64 (BrnTrafficDataResourceType.h); this header
+        // only forward-declares TrafficData, so the parameter is spelled u64 (as FiredKillZoneInfo's is).
+        void  FireKillZone(u64 lKillZoneId);                         // @ 0x827343B8
         // Body in BrnTrafficEntityModule_wT1_05.cpp, beside its caller CreateNewVehicleEntities.
         // FLAG: DWARF :1323 spells it `bool IsVehiclesParamAZombie(uint32_t) const`. The
         // trailing const is dropped because the three accessors it calls (GetParam / GetVehicle
