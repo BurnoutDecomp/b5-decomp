@@ -42,6 +42,9 @@ namespace EA { namespace Jobs { struct Job; } }
 // RunFillTriangleCacheStream's query structure (pointer use only). Full home:
 // GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap.h.
 namespace CgsGeometric { struct PolygonSoupListSpatialMap; struct Line; }
+// TestSphereAgainstPolySoupList's sphere (pointer use only; home Geometric/Primitives/CgsSphere.h,
+// class key struct). Added 2026-09-25 (FX-FOLLOWUPS item 2).
+namespace CgsGeometric { struct Sphere; }
 
 // ⭐ ADDED 2026-08-06 (big-five #2): the collide-stream family's collaborators, pointer use
 // only. Class keys match their homes (CgsDebugRenderStreamReader.h:23 -- class, in CgsDev).
@@ -116,6 +119,21 @@ namespace CgsCollision
                                            u16 lu16MaxNumResults,
                                            u32 lu32UserTagA,
                                            u16 lu16UserTagB);
+
+        // @ 0x82812950 (~100 insns; an export hole) -- the SPHERE-vs-static-world test (crash parity
+        // FX-FOLLOWUPS item 2, 2026-09-25). DWARF CgsCollisionGenerator.h:72:
+        //     uint16_t TestSphereAgainstPolySoupList(const Sphere *, const CgsGeometric::
+        //                                            PolygonSoupListSpatialMap *, uint32_t, uint16_t);
+        // Claims a ONE-result list (PrepareNewPrimitiveTestResultsList(1, tagA, tagB)), gathers the
+        // poly-soup leaves the sphere's box touches (RunQuery), and sets the list's count to 1 at the
+        // first soup TestSpherePolygonSoup says it touches, 0 if none; no result RECORD is written.
+        // Returns the list index. The map is NON-const for the reason the line twins give (RunQuery
+        // publishes into it). Caller: SceneManagerModule::ProcessVolumeTestDeepest @0x828D4560 (the
+        // world arm; tags 0, 0). Body in CgsCollisionGenerator.cpp.
+        u16 TestSphereAgainstPolySoupList(const CgsGeometric::Sphere*              lpSphere,
+                                          CgsGeometric::PolygonSoupListSpatialMap* lpSpatialData,
+                                          u32                                      luUserTagA,
+                                          u16                                      lu16UserTagB);
 
         // Copy of the luIndex'th result list (by value, bounds-checked against
         // mu16NumUsedResultLists). X360 0x825B2AE0. (Incomplete return type is fine
