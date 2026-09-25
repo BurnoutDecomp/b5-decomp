@@ -54,10 +54,16 @@ static const DrawCase kaScalarCases[] = {
     { 0x3F800000u, 0x3F933333u, 0x3FC8D180u, 0x3F8AEC39u },  // (1, 1.15) t 0.568893433: one 0x3F8AEC39, two 0x3F8AEC3A
     { 0x40000000u, 0x40E9999Au, 0x3FDB05B3u, 0x40B89AC1u },  // (2, 7.3) t 0.711111426: one 0x40B89AC1, two 0x40B89AC0
     { 0xC1490FDBu, 0x41C90FDBu, 0x3FED3A0Au, 0x419CD413u },  // (-4pi, 8pi) t 0.853333712: one 0x419CD413, two 0x419CD412
+    // The one bounded draw whose value reaches sim time: MomentHardStop's ultra slo-mo timestep scale,
+    // RandomFloat(KF_ULTRA_SLOMO_TIMESTEP_MIN_SCALE 0.005, _MAX_SCALE 0.01) (BrnMomentHardStop.cpp:315 -> the
+    // camera effects' mfSimTimeScale, :416). 1,363,583 of the 2^23 ring values round differently there. These two
+    // sit at the dtSim ratios FX-WITNESS measured on a forced ultra slo-mo crash (0.0058, 0.0079).
+    { 0x3BA3D70Au, 0x3C23D70Au, 0x3F947AE1u, 0x3BBE0DEDu },  // HardStop t 0.159999967 -> 0.0058: one 0x3BBE0DED, two 0x3BBE0DEC
+    { 0x3BA3D70Au, 0x3C23D70Au, 0x3FCA3D7Cu, 0x3C016F07u },  // HardStop t 0.580001354 -> 0.0079: one 0x3C016F07, two 0x3C016F08
     { 0xBF800000u, 0x3F800000u, 0x3FA468ACu, 0xBEDCBAA0u },  // control (-1, 1) t 0.284444332: both 0xBEDCBAA0
     { 0x00000000u, 0x3DCCCCCDu, 0x3FC8D158u, 0x3D69044Du },  // control (0, 0.1) t 0.568888664: both 0x3D69044D
 };
-static const u32 KU_SCALAR_COUNTEREXAMPLES = 6;
+static const u32 KU_SCALAR_COUNTEREXAMPLES = 8;
 
 static const DrawCase kaVectorCases[3][4] = {
     { { 0xC0400000u, 0x40400000u, 0x3FD55557u, 0x3F80000Au },    // x (-3, 3): one 0x3F80000A, two 0x3F800008

@@ -11,8 +11,10 @@ The PC wrote `(max - min) * t + min`, which rounds the product first.
   1. WIRING -- RandomFloat returns std::fmaf(lfMax - lfMin, lfUnitValue, lfMin); RandomVector builds each of its four
      lanes with std::fmaf(lMax.c - lMin.c, lUnitValue.c, lMin.c) and no unfused lane remains.
   2. NUMERIC -- tests/FxAiBuzzRandomDraws.cpp runs the two extracted production bodies on the real Random layout:
-     6 scalar and 12 vector-lane double-rounding counterexamples plus 2 scalar controls, each against the exactly
-     rounded result, and the ring / seed / cursor every draw leaves behind.
+     8 scalar and 12 vector-lane double-rounding counterexamples plus 2 scalar controls, each against the exactly
+     rounded result, and the ring / seed / cursor every draw leaves behind. Two of the scalar cases use
+     MomentHardStop's ultra slo-mo timestep-scale range (0.005, 0.01). That is the only bounded draw whose value
+     reaches sim time (BrnMomentHardStop.cpp:315 -> mfSimTimeScale :416).
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxaibuzz_random_draws.py [--rev <b5 rev>]
 """
@@ -28,7 +30,7 @@ RANDOM_CPP = "src/GameShared/GameClasses/Numeric/CgsRandom.cpp"
 RANDOM_H = "src/GameShared/GameClasses/Numeric/CgsRandom.h"
 SCALAR = "f32 Random::RandomFloat(f32 lfMin, f32 lfMax)"
 VECTOR = "rw::math::vpu::Vector3 Random::RandomVector(rw::math::vpu::Vector3 lMin,"
-NUMERIC_CHECKS = 31
+NUMERIC_CHECKS = 35
 
 
 def squash(text):
