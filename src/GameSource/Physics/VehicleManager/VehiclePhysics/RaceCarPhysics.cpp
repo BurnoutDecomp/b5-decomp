@@ -1570,6 +1570,104 @@ namespace Vehicle
         CapShowtimeVelocities();
     }
 
+    // [tassist] PC WITNESS, NOT X360 -- BRN_TASSIST_DIAG only, capped at 64 lines (2026-09-25, crash
+    // parity FX-FOLLOWUPS item 3). It reads UpdateTargetAssist's own decision and changes none of it:
+    // one line per call that arrives with targets (the stompees RaceCarEntityModule handed to
+    // AddTargetAssist, adopted by Append and published by UpdateDrivers) and either passes the airtime
+    // gate, or is the first call with targets, or flips the gate. Fields: the target count, the
+    // time-without-traction (+0x1060.z) against the 0.5 s gate, the stick aim, the best dot any
+    // candidate reached, the chosen index / id / dot / distance / weight, and whether the > 2 m assist
+    // force fired and its magnitude.
+    // [FLAG PC witness] DELETE-WHEN the stomp -> target-assist chain is signed off live.
+    namespace
+    {
+        struct TargetAssistWitness
+        {
+            s32 miNumTargets;
+            f32 mfAirTime;
+            bool mbAirGate;
+            Vector3 mvAim;
+            f32 mfMaxDot;
+            s32 miBest;
+            s32 miBestId;
+            f32 mfBestDot;
+            f32 mfBestDist;
+            f32 mfBestWeight;
+            bool mbForceFired;
+            f32 mfForce;
+            f32 mfEnvelopeY;
+            s32 miCurrentTargetId;
+            s32 miPrevTargetId;
+        };
+
+        // The witness's own read-back of the candidate scores, so the decision block stays as committed
+        // (run_showtime_ground_plane extracts the candidate loop verbatim). Same expressions as the loop:
+        // (target - car) in the ground plane, unit, dot with the aim, weight (2 - dot) * dist, x 0.5 for
+        // last frame's target.
+        void ScoreTargetAssistCandidates(TargetAssistWitness& lrW, const Vector3& lvPosition,
+                                         const Vector3* lpaPositions, const s32* lpaIds,
+                                         f32 lfStickiness)
+        {
+            lrW.mfMaxDot = -2.0f;
+            for (s32 liT = 0; liT < lrW.miNumTargets && liT < 8; ++liT)   // the lists hold 8
+            {
+                Vector3 lvToTarget = vpu::Subtract(lpaPositions[liT], lvPosition);
+                lvToTarget.y = 0.0f;
+                const f32 lfDistSq = vpu::MagnitudeSquared(lvToTarget);
+                const f32 lfDist   = (lfDistSq > 0.0f) ? std::sqrt(lfDistSq) : 0.0f;
+                const Vector3 lvUnit = (lfDist > 0.0f) ? vpu::Mult(lvToTarget, 1.0f / lfDist)
+                                                       : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+                const f32 lfDot = vpu::Dot(lrW.mvAim, lvUnit);
+                if (lfDot > lrW.mfMaxDot)
+                    lrW.mfMaxDot = lfDot;
+                if (liT == lrW.miBest)
+                {
+                    lrW.mfBestDot    = lfDot;
+                    lrW.mfBestDist   = lfDist;
+                    lrW.mfBestWeight = (2.0f - lfDot) * lfDist
+                                     * ((lpaIds[liT] == lrW.miPrevTargetId) ? lfStickiness : 1.0f);
+                }
+            }
+        }
+
+        bool TargetAssistWitnessArmed()
+        {
+            static const bool sbOn = (std::getenv("BRN_TASSIST_DIAG") != 0);
+            return sbOn;
+        }
+
+        void NoteTargetAssist(const TargetAssistWitness& lrW)
+        {
+            static const s32 KI_TASSIST_WITNESS_CAP = 64;
+            static s32  siLines   = 0;
+            static u32  suCalls   = 0;
+            static bool sbLastGate = false;
+
+            ++suCalls;
+            const bool lbFirst = (suCalls == 1);
+            const bool lbFlip  = (lrW.mbAirGate != sbLastGate);
+            sbLastGate = lrW.mbAirGate;
+            if (!(lrW.mbAirGate || lbFirst || lbFlip) || CgsDev::Log::gpDebugPrint == 0)
+                return;
+            if (siLines > KI_TASSIST_WITNESS_CAP)
+                return;
+            if (siLines++ == KI_TASSIST_WITNESS_CAP)
+            {
+                *CgsDev::Log::gpDebugPrint << "[tassist] cap of " << KI_TASSIST_WITNESS_CAP
+                                           << " lines reached; later calls are not printed\n";
+                return;
+            }
+            *CgsDev::Log::gpDebugPrint
+                << "[tassist] call=" << suCalls << " targets=" << lrW.miNumTargets
+                << " air=" << lrW.mfAirTime << " gate=" << (lrW.mbAirGate ? 1 : 0)
+                << " aim=(" << lrW.mvAim.x << ", " << lrW.mvAim.y << ", " << lrW.mvAim.z << ")"
+                << " maxDot=" << lrW.mfMaxDot << " best=" << lrW.miBest << " id=" << lrW.miBestId
+                << " dot=" << lrW.mfBestDot << " dist=" << lrW.mfBestDist << " weight=" << lrW.mfBestWeight
+                << " fired=" << (lrW.mbForceFired ? 1 : 0) << " force=" << lrW.mfForce
+                << " envY=" << lrW.mfEnvelopeY << " cur=" << lrW.miCurrentTargetId << "\n";
+        }
+    }
+
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::UpdateTargetAssist  @0x8261FF50
     // REWRITTEN 2026-08-24 (showtime wave) from the full raw asm (audit F4 confirmed, and the
@@ -1608,9 +1706,30 @@ namespace Vehicle
         if (MS.miNumTargets <= 0)   // dword_82FB8570
             return;
 
+        // [tassist] witness record (NOT X360; filled as the decision is made, printed at the exits).
+        TargetAssistWitness lWitness = {};
+        const bool lbWitness = TargetAssistWitnessArmed();
+        if (lbWitness)
+        {
+            lWitness.miNumTargets = MS.miNumTargets;
+            lWitness.mfAirTime    = mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z;
+            lWitness.mvAim        = lvAimDirection;
+            lWitness.miPrevTargetId = MS.miCurrentTargetId;
+            lWitness.miBest       = -1;
+        }
+
         // gate: really airborne -- time-without-traction (+0x1060.z) above 0.5 s.
         if (!(mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z > KF_AIRTIME_GATE))
+        {
+            if (lbWitness)
+            {
+                lWitness.miCurrentTargetId = MS.miCurrentTargetId;
+                lWitness.mfEnvelopeY       = MS.mAssistStrength.y;
+                NoteTargetAssist(lWitness);
+            }
             return;
+        }
+        lWitness.mbAirGate = true;
 
         const Vector3 lvPosition = mTransform.Pos();   // lvx128 [this+0x40]
 
@@ -1691,7 +1810,27 @@ namespace Vehicle
                 AddWorldSpaceForce(vpu::Mult(lvUnit, lfForce));
 
                 mUsedAirRams.UnSetAll();   // std r31(0), 0x1158(r28) -- drop the queued air rams
+
+                if (lbWitness)
+                {
+                    lWitness.mbForceFired = true;   // [tassist] witness only
+                    lWitness.mfForce      = lfForce;
+                }
             }
+        }
+
+        if (lbWitness)
+        {
+            lWitness.miBest            = liBest;
+            lWitness.miBestId          = (liBest >= 0) ? static_cast<s32>(MS.maTargetIds[liBest].muValue) : 0;
+            lWitness.miCurrentTargetId = MS.miCurrentTargetId;
+            lWitness.mfEnvelopeY       = MS.mAssistStrength.y;
+            s32 laiIds[8] = {};
+            for (s32 liT = 0; liT < lWitness.miNumTargets && liT < 8; ++liT)
+                laiIds[liT] = static_cast<s32>(MS.maTargetIds[liT].muValue);
+            ScoreTargetAssistCandidates(lWitness, lvPosition, MS.maTargetPositions, laiIds,
+                                        KF_TARGET_STICKINESS);
+            NoteTargetAssist(lWitness);
         }
     }
 
