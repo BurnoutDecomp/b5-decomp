@@ -11,6 +11,7 @@
 // distance band (start / perfect-start / perfect-end / end, all in metres) plus a blurriness
 // scalar. HOME for the class slice owned by this TU:
 //   - DepthOfField::SetParams @0x821F1AC8  (validate + store the five DOF parameters)
+//   - DepthOfField::SetParams @0x821F1C20  (the near/far/blur-depth plane form)
 //
 // The key-anim / ICE camera movers call SetParams each frame to drive the focus band.
 // ----------------------------------------------------------------------------
@@ -45,6 +46,14 @@ public:
                    f32 lfPerfectFocusEndDistanceMeters,
                    f32 lfFocusEndDistanceMeters,
                    f32 lfBlurriness);
+
+    // The plane form: a near / far focus band plus a blur depth that eats into it from both
+    // ends, and the blurriness. @0x821F1C20 -- IDA calls it `BrnDepthOfField`. Its four asserts
+    // cite BrnDepthOfField.h:146..:149, so the console keeps the body in this header. Its only
+    // caller is BehaviourRig::Update @0x822427C0 (0x822435A8), which passes the rig parameters'
+    // mfDOFNear / mfDOFFar / mfDOFBlurDepth / mfDOFIntensity in f1..f4. Body: BrnDepthOfField.cpp.
+    // [FX-DIRECTOR2 2026-09-25] added; the overload was missing.
+    void SetParams(f32 lfNearPlane, f32 lfFarPlane, f32 lfBlurDepth, f32 lfBlurriness);
 
     // The four remaining band read accessors (DWARF BrnDepthOfField.h:72/:75/:78/:81). None of
     // them is a standalone X360 function -- every reader loads the lane inline -- so they are the
