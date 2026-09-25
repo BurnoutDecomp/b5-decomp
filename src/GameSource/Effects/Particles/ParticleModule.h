@@ -513,6 +513,35 @@ namespace BrnParticle
                          f32 lfSpawnTime,
                          f32 lfAlpha);
 
+        // X360 0x8228AFC0 (DWARF ParticleModule.h:563) -- THE SPARK-SHOWER PRODUCER (update thread).
+        // Packs its arguments into a type-2 SpawnSparkShowerFromPointEvent (0xA0 bytes) on the
+        // inter-thread queue. Its one caller is EffectsModule::DoSparkShower @0x822920C0.
+        // ABI: the transform by pointer (r4), the four vectors in v1..v4, the four floats in f1..f4
+        // (eating r5..r8), the count in r9 and the spark array in r10.
+        void SpawnSparkShowerFromPoint(Matrix44Affine lTransform,
+                                       Vector4 lvLateralAngleMinMaxForwardAngleMinMax,
+                                       Vector4 lvVelocityMinMaxInheritanceMinMax,
+                                       Vector3 lvVelocityToInherit,
+                                       Vector4 lvSparkSizeMinMaxSpawnRadiusXSpawnRadiusYZ,
+                                       f32 lfCurrentTime,
+                                       f32 lfGroundPositionY,
+                                       f32 lfVelocityScaleSpeedThreshold,
+                                       f32 lfReflectionAmount,
+                                       u32 luNumToSpawn,
+                                       Native::ESparkArrayID leSparkType);
+
+        // X360 0x82289E70 (DWARF ParticleModule.h:569) -- THE DEBRIS-BURST PRODUCER (update thread).
+        // A type-5 FireDebrisBurstEvent carrying a copy of the burst's debrisparams instance.
+        // Callers: EffectsModule::{HandleBurstDebris, HandleShowtimeTrafficBounce}.
+        void FireDebrisBurst(Vector3 lvSpawnPosition,
+                             Vector3 lvCameraPosition,
+                             Vector3 lvEmitterHalfExtents,
+                             Vector3 lvVelocityToInherit,
+                             f32 lfCurrentTime,
+                             f32 lfScaleFactor,
+                             const Attrib::Gen::debrisparams& lrDebrisParams,
+                             Vector4 lvCarColour);
+
         // X360 0x82278380. Resolve a handle to its playing-effect slot, or NULL when the
         // slot has been recycled (its stored handle no longer equals luHandle).
         LionEffect* GetLionEffect(u32 luHandle);

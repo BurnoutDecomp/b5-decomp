@@ -17,6 +17,7 @@
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleRenderer.h"
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleArray.h"   // GetTexture, the diag counters
 #include "GameSource/Effects/Particles/Native/BrnIm3dSmokeRenderer.h"
+#include "GameSource/Effects/Particles/Native/BrnSimpleFxDiag.h"   // [diag] BRN_SIMPLEFX_DIAG
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -225,7 +226,7 @@ namespace Native
         if (mpRenderer == 0)
         {
             static bool sbLogged = false;
-            if (!sbLogged)
+            if (!sbLogged && SimpleFxDiagArmed())      // [diag] default OFF (BRN_SIMPLEFX_DIAG)
             {
                 sbLogged = true;
                 CgsDev::Log::WriteToLog("[simplefx] Dispatch SKIPPED: mpRenderer is null "
@@ -260,7 +261,7 @@ namespace Native
         if (lbZFade)
         {
             static bool sbLogged = false;
-            if (!sbLogged)
+            if (!sbLogged && SimpleFxDiagArmed())      // [diag] default OFF (BRN_SIMPLEFX_DIAG)
             {
                 sbLogged = true;
                 CgsDev::Log::WriteToLog("[simplefx] Dispatch: z-fade requested; this build has no depth "
@@ -292,12 +293,13 @@ namespace Native
                 BrnSimpleParticleArray::GetTexture(static_cast<ENativeParticleType>(lrBatch.meParticleType));
             shadow::Device::SetResource(static_cast<void*>(lpTexture), 0);
 
-            // [DIAG] NOT IN THE X360 BINARY. The texture witness, once per type: a null texture keeps
-            // every count perfect and draws nothing. DELETE-WHEN-STABLE.
+            // [DIAG] NOT IN THE X360 BINARY. The texture witness, once per type, BRN_SIMPLEFX_DIAG=1
+            // only (default OFF): a null texture keeps every count perfect and draws nothing.
+            // DELETE-WHEN-STABLE.
             {
                 static u32 suLoggedTypes = 0;
                 const u32 luBit = 1u << (lrBatch.meParticleType & 31u);
-                if ((suLoggedTypes & luBit) == 0)
+                if ((suLoggedTypes & luBit) == 0 && SimpleFxDiagArmed())
                 {
                     suLoggedTypes |= luBit;
                     char lacMsg[192];

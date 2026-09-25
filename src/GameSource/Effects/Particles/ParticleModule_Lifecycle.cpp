@@ -36,6 +36,7 @@
 // ============================================================================
 
 #include "GameSource/Effects/Particles/ParticleModule.h"
+#include "GameSource/Effects/Particles/Native/BrnSimpleFxDiag.h"   // [diag] BRN_SIMPLEFX_DIAG
 #include "GameSource/Effects/Particles/ParticleModuleIO.h"      // ParticleIO::PrepareOutputBuffer
 #include "GameSource/Effects/Particles/ParticleCpuMonitors.h"   // the Race / Crash monitor sets
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h" // AllocatorList::Get*Allocator
@@ -852,12 +853,13 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
             CGS_ASSERT(maSimpleParticles[luSimpleArray].IsReady(),
                        "Missing Native Particle Texture. Did you forget to include it in the Native Lion Effect ?");
         }
-        // [FLAG PC witness] NOT CONSOLE BEHAVIOUR: ours, log-only, once. Which of the 13 arrays
-        // took a texture -- a bit per array (the ready byte) -- so a run shows the simple-particle
-        // chain's texture half resolved before anything is drawn with it. DELETE-WHEN-STABLE.
+        // [FLAG PC witness] NOT CONSOLE BEHAVIOUR: ours, log-only, once, BRN_SIMPLEFX_DIAG=1 only
+        // (default OFF). Which of the 13 arrays took a texture -- a bit per array (the ready
+        // byte) -- so a run shows the simple-particle chain's texture half resolved before
+        // anything is drawn with it. DELETE-WHEN-STABLE.
         {
             static bool sbLogged = false;
-            if (!sbLogged)
+            if (!sbLogged && Native::SimpleFxDiagArmed())
             {
                 sbLogged = true;
                 u32 luReadyMask = 0;

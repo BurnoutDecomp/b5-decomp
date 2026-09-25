@@ -26,6 +26,9 @@
 #include "GameSource/Effects/Particles/Native/BrnSparkRenderer.h"
 #include "GameSource/AttribSys/Generated/classes/surface.h"
 #include "GameSource/AttribSys/Generated/classes/visualfxsurface.h"
+#if __has_include("GameSource/Effects/Particles/Native/BrnSimpleFxDiag.h")
+#include "GameSource/Effects/Particles/Native/BrnSimpleFxDiag.h"   // the dust witnesses' BRN_SIMPLEFX_DIAG gate
+#endif
 
 #include <cmath>
 #include <cstdio>

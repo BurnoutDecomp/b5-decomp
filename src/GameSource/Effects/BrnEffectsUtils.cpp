@@ -155,6 +155,21 @@ Vector3 Vector3Randomiser::RandomInterpolate(CgsNumeric::Random &lrRandom)
     return lvResult;
 }
 
+// Vector4Randomiser::Prepare (DWARF BrnEffectsUtils.h:142) -- FX-CRASHVFX 2026-09-24. Header-inline
+// on the console like Vector3Randomiser::Prepare above, and the same base + range contract: the
+// crash-dust velocity randomiser ProcessRaceCarContacts builds on its stack is
+//     stvx128 v13 -> var_220 (== mVecA = the low bound (-6, 1, -6, 0.05))
+//     vsubfp  v13, v11, v13 ; stvx128 v13 -> var_210 (== mVecB = high - low)
+// (0x822989F4..0x82298A0C).
+void Vector4Randomiser::Prepare(Vector4 lvA, Vector4 lvB)
+{
+    mVecA = lvA;
+    mVecB.x = lvB.x - lvA.x;
+    mVecB.y = lvB.y - lvA.y;
+    mVecB.z = lvB.z - lvA.z;
+    mVecB.w = lvB.w - lvA.w;
+}
+
 // @ 0x82277FB8
 Vector4 Vector4Randomiser::RandomiseXYZW(CgsNumeric::Random &lrRandom)
 {

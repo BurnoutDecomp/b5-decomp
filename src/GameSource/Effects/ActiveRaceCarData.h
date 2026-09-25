@@ -96,6 +96,21 @@ namespace BrnEffects
         // two floats eat in the f32 ABI; the console's third argument IS r6.)
         u32 Update(f32 lfBurstSize, f32 lfTime, CgsNumeric::Random& lrRandom);
 
+        // DWARF ActiveRaceCarData.h:111 -- a burst's size as a [0, 1] interpolant over this
+        // accumulator's [min, max]. No symbol of its own: both callers inline it, identically --
+        // HandleVehicleVehicleSparks @0x822968A0..0x82296968 and ProcessRaceCarContacts
+        // @0x822984C4..0x82298550 -- and both then cube it:
+        //     fcfid ; frsp ; fadds +0.5 (flt_82001DA0) ; fsubs min ; fdivs (max - min)
+        //     fsel(-t, 0.0, t)  -- at or below zero -> 0; a NaN stays NaN ...
+        //     fsel(1 - t, t, 1.0) -- ... and then becomes 1.0, as does anything above 1.
+        f32 GetBurstSizeAsInterpolatorBetweenMinAndMax(u32 luBurstSize)
+        {
+            const f32 lfT = ((static_cast<f32>(luBurstSize) + 0.5f) - mfMinBurstSize)
+                          / (mfMaxBurstSize - mfMinBurstSize);
+            const f32 lfFloored = (-lfT >= 0.0f) ? 0.0f : lfT;
+            return (1.0f - lfFloored >= 0.0f) ? lfFloored : 1.0f;
+        }
+
     private:
         // DWARF ActiveRaceCarData.h:5-20 names.
         f32 mfMinBurstSize;          // +0x00
