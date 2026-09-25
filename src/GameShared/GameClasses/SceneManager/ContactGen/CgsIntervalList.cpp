@@ -518,9 +518,10 @@ namespace CgsSceneManager
     // approximation of it, and it is spelled the same way as the sibling overload's three
     // asserts (CgsIntervalList.cpp:90-96) which bake the identical message strings.
     // (Sub-note on polarity: the console's single `vcmpgtfp` reports FALSE for a NaN extent
-    // and would therefore fire, while `!IsZero(NaN)` is TRUE and does not. That case is
-    // unreachable here -- the two IsValid asserts immediately above reject NaN corners first,
-    // and both are non-gating tripwires either way.)
+    // and would therefore fire -- and so does `!IsZero(NaN)` since b5 d61a63f4, because
+    // rw::math::fpu::IsZero now answers TRUE for a NaN, as its console inlines do. The case is
+    // unreachable here anyway -- the two IsValid asserts immediately above reject NaN corners
+    // first, and both are non-gating tripwires either way.)
     //
     // Assert lines/messages, all recovered in full from the private .i64 (IDA's inline
     // listing truncates at 39 chars):
