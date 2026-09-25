@@ -1,13 +1,14 @@
-"""FX-LADDER item 5: AICar::IsExtrapolatedRouteGettingOld @0x8276FD50 reads a NaN drift as "old".
+"""FX-LADDER item 5: AICar::IsExtrapolatedRouteGettingOld @0x8276FD50 and the NaN polarity of its drift test.
 
 Extracts the production AICar::IsExtrapolatedRouteGettingOld and AICar::HasValidRoute plus the
 two route-age constants from BrnAICar_Update.cpp and runs FxLadderRouteAge.cpp's numeric checks
-(the ARTIST trace is in the fixture's banner). The console's `fcmpu ; ble` at 0x8276FDFC only
-continues for an ORDERED drift at or under the limit, so a NaN drift returns 1.
+(the ARTIST trace is in the fixture's banner). The console's `fcmpu ; ble` at 0x8276FDFC is taken
+whenever GT is clear -- an ordered drift at or under the limit AND an unordered (NaN) drift -- so a NaN
+drift goes on to the route tests; only an ordered drift above the limit returns 1 there.
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxladder_route_age.py [--rev <rev>]
 
-`--rev <b5 rev>` reads BrnAICar_Update.cpp from that revision (the RED side of the fix).
+`--rev <b5 rev>` reads BrnAICar_Update.cpp from that revision (cccfeed8 is RED on the NaN checks).
 """
 import sys
 sys.dont_write_bytecode = True
