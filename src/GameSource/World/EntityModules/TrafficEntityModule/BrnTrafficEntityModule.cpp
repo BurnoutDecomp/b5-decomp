@@ -1748,6 +1748,16 @@ namespace
     // muOldestBufferIndex (+0x28); the tail up to the 16-byte alignment is padding.
     const u32 KU_NETCRASH_RANDOM_STATE_BYTES = 0x2C;
 
+    // FLAG PC witness (crash parity FX-NETCRASH, the LAN pair case's calibration; NOT console code):
+    // [netcrash] traffic-near, every KU_NETCRASH_NEAR_PERIOD-th decision frame (1 s) from
+    // KU_NETCRASH_NEAR_FIRST to KU_NETCRASH_NEAR_LAST (30 s .. 120 s after the online restart), the
+    // alive traffic within KF_NETCRASH_NEAR_RADIUS of this machine's camera, positions in decimetres.
+    const u32 KU_NETCRASH_NEAR_FIRST  = 300u;
+    const u32 KU_NETCRASH_NEAR_LAST   = 1200u;
+    const u32 KU_NETCRASH_NEAR_PERIOD = 10u;
+    const s32 KI_NETCRASH_NEAR_MAX_LINES = 91;
+    const f32 KF_NETCRASH_NEAR_RADIUS = 300.0f;
+
     u32 NetCrashFnv(u32 luHash, const void* lpData, u32 luBytes)
     {
         const u8* const lpBytes = static_cast<const u8*>(lpData);
@@ -6559,6 +6569,38 @@ void TrafficEntityModule::UpdateDecisionFrame(
                 }
                 *lpNetDiag << " [FLAG PC witness]\n";
             }
+        }
+
+        // The pair case's calibration witness (see KU_NETCRASH_NEAR_FIRST): which traffic is near
+        // this machine's camera (mCameraLastFrame, TryClearupOffscreenTraffic's reference) each second,
+        // so a layout can be timed against the lockstep traffic. Reads only.
+        static s32 siNearLines = 0;
+        if (lpNetDiag != 0 && siNearLines < KI_NETCRASH_NEAR_MAX_LINES && muUpdateCount >= KU_NETCRASH_NEAR_FIRST
+            && muUpdateCount <= KU_NETCRASH_NEAR_LAST && (muUpdateCount % KU_NETCRASH_NEAR_PERIOD) == 0u)
+        {
+            ++siNearLines;
+            const Vector3 lCamera = mCameraLastFrame.GetPosition();
+            *lpNetDiag << "[netcrash] traffic-near upd=" << static_cast<u32>(muUpdateCount) << " cam="
+                       << static_cast<s32>(lCamera.x * 10.0f) << ":" << static_cast<s32>(lCamera.z * 10.0f)
+                       << " player=" << static_cast<s32>(mLocalPlayerPosition.x * 10.0f) << ":"
+                       << static_cast<s32>(mLocalPlayerPosition.z * 10.0f) << " dm";
+            for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
+            {
+                if (!maVehicles[luVehicle].IsAlive())
+                {
+                    continue;
+                }
+                const Vector3 lVehiclePos = maVehicleTransforms[luVehicle].Pos();
+                const f32 lfDx = lVehiclePos.x - lCamera.x;
+                const f32 lfDz = lVehiclePos.z - lCamera.z;
+                if (lfDx * lfDx + lfDz * lfDz > KF_NETCRASH_NEAR_RADIUS * KF_NETCRASH_NEAR_RADIUS)
+                {
+                    continue;
+                }
+                *lpNetDiag << " " << luVehicle << ":" << static_cast<s32>(lVehiclePos.x * 10.0f) << ":"
+                           << static_cast<s32>(lVehiclePos.z * 10.0f);
+            }
+            *lpNetDiag << " [FLAG PC witness]\n";
         }
     }
 }
@@ -19132,10 +19174,13 @@ void TrafficEntityModule::HandleExternalRequests(
         //       reconstructable today, left out only to keep this file to its one claim)
         //   28  SetTrafficScaleBasedOnRank -- LIVE above (2026-09-10)
         //   30  start-line sweep over every active race car  -> KillAllTrafficInCylinder
-        //   34  StartPlayingMode                             -> TrafficLightManager::SetCountdownValue
+        //   34  StartPlayingMode (0x8274BDF0..0x8274BE34)    -> TrafficLightManager::SetCountdownValue(0),
+        //       then the .cpp 5995 tripwire "!mbNeedToSetUpLightsForEventStart || mbDEBUGTurnTrafficOff".
+        //       Left out: the flag's consumer UpdateEventStarts @0x82743B80 is unbodied, so a race
+        //       that clears traffic (HandlePrepareForModeAction stores the flag) would trip it
         //   39  StopMode                                     -- LIVE above (2026-09-10)
         //   47  countdown + online un-pause                  -- LIVE above (2026-09-25, FX-NETCRASH;
-        //       its TrafficLightManager::SetCountdownValue leg stays a named gate)
+        //       its TrafficLightManager::SetCountdownValue leg since 30d481f4)
         //   73  crash-camera proximity kill                   -> (inline, needs the +0x7143x block)
         //   75  HideAllTraffic                                -> HideAllTraffic
         //   77  UnhideAllTraffic / cylinder kill              -> UnhideAllTraffic, KillAllTrafficInCylinder
@@ -19152,11 +19197,11 @@ void TrafficEntityModule::HandleExternalRequests(
         static bool sbLogged = false;
         LogMissingLeg_T6(sbLogged,
             "HandleExternalRequests -- actions 23 (PREPARE_FOR_MODE), 28 (SET_TRAFFIC_SCALE), "
-            "39 (STOP_MODE), 47 (SET_COUNTDOWN, minus its light-manager leg), 97..100 (drive-thru "
-            "clean-up), 143 (SHOWTIME_MODE_SWITCH), 225/226 (local player gone) and 236 "
-            "(RESTART_TRAFFIC) are reconstructed. Arms 13, 30, 34, 73, 75, 77, 110, 192, 244 and "
-            "the post-loop proximity tail are not wired (Hide/UnhideAllTraffic, FireKillZone and "
-            "TrafficLightManager::SetCountdownValue have no body; KillAllTrafficInCylinder does)");
+            "39 (STOP_MODE), 47 (SET_COUNTDOWN), 97..100 (drive-thru clean-up), 143 "
+            "(SHOWTIME_MODE_SWITCH), 225/226 (local player gone) and 236 (RESTART_TRAFFIC) are "
+            "reconstructed. Arms 13, 30, 34, 73, 75, 77, 110, 192, 244 and the post-loop proximity "
+            "tail are not wired (Hide/UnhideAllTraffic and FireKillZone have no body; arm 34's "
+            "tripwire needs UpdateEventStarts; KillAllTrafficInCylinder is bodied)");
     }
 }
 
