@@ -34,7 +34,10 @@ def main():
         "Construct seeds it": re.search(r"mNonDeterministicRandom\.Construct\(\)", construct),
         "PreSceneUpdate steps it right after the locks":
             re.search(r"lpOutput->LockForWrite\(\);\s*\(void\)mNonDeterministicRandom\.RandomUInt\(\);", prescene),
-        "UpdateActiveCars passes it to Update": re.search(r"&mNonDeterministicRandom\s*\)", active),
+        # The RNG fills Update's lpRandom slot, the parameter after lpGameEvents (b5 ca4ac341 appended
+        # lpVehicleOutput after it, so the RNG is no longer the call's last argument).
+        "UpdateActiveCars passes it to Update":
+            re.search(r"\.Update\s*\([^;]*?\blpGameEvents\s*,\s*&mNonDeterministicRandom\s*[,)]", active),
     }
     for name, hit in legs.items():
         print(("ok      " if hit else "MISSING ") + name)

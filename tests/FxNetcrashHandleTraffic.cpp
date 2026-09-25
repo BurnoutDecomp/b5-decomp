@@ -37,6 +37,7 @@
 #undef protected
 #undef private
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -52,6 +53,13 @@ DebugPrint* gpDebugPrint = nullptr;   // the [netcrash] witness stays silent
 StrStreamBase& DebugPrint::operator<<(const char*) { return *this; }
 void WriteToLog(const char*) {} }
 namespace Message { u64 gxMessageFilterFlags = 0; } }
+
+// The [nettraf] crash-in witness (b5 ca4ac341, a PC harness line, not console code). The real
+// declaration is included above, so this silent definition must keep its signature.
+namespace BrnNetHarnessPC
+{
+    void WitnessTag(const char*, const char*, const char*, ...) {}
+}
 
 using namespace BrnWorld;
 
