@@ -34,6 +34,8 @@
                                  //   type (the header itself deliberately only forward-declares
                                  //   it, to stay standalone)
 
+#include <cmath>   // std::fmaf -- the two bounded draws' fused range maps (fmadds / vmaddfp)
+
 namespace CgsNumeric
 {
     // The shared LCG multiplier (every inlined site: hi 0x5851F42D, lo 0x4C957F2D).
@@ -207,9 +209,18 @@ namespace CgsNumeric
     //   step the LCG                                       mulld / addi 1 / std 0x20
     //   bump the index                                     addi 1 ; clrlwi 29 ; stw 0x28
     //   return (lfMax - lfMin) * t + lfMin                 fsubs, then ONE fmadds
-    // ⚠️ The console evaluates `lfMax - lfMin` before the ring read completes and folds the
-    //   range map into a single fmadds; the order does not change the result and is why there
-    //   is no separate multiply in the asm.
+    // ⚠️ The console evaluates `lfMax - lfMin` before the ring read completes. The order does not
+    //   change the result.
+    // ⭐ THE RANGE MAP IS FUSED (FX-AIBUZZ, crash parity 2026-09-25). fmadds rounds ONCE, so the
+    //   PC's `(lfMax - lfMin) * t + lfMin`, which rounds the product first, missed by an ulp on
+    //   some inputs. Five console expansions were read, and every one is `fsubs` (max - min), then
+    //   `fmadds D, range, t, min` (D = range * t + min):
+    //     CameraShake::Update             fsubs @0x82221360, fmadds f0, f0, f11, f12  @0x822213BC
+    //     BehaviourFixedCam (dutch)       fsubs @0x8222A0C8, fmadds f0, f0, f12, f13  @0x8222A0F8
+    //     ParticleModule (rotation speed) fsubs @0x82281A90, fmadds f3, f12, f13, f0  @0x82281AD0
+    //     ClutchControl                   fsubs @0x826CDFBC, fmadds f12, f10, f11, f12 @0x826CDFC0
+    //                                     fsubs @0x826CE078, fmadds f12, f11, f0, f12  @0x826CE07C
+    //   So the range map is std::fmaf, not a multiply followed by an add.
     f32 Random::RandomFloat(f32 lfMin, f32 lfMax)
     {
         const f32 lfUnitValue = mafFloatBuffer[muOldestBufferIndex] - 1.0f;
@@ -219,7 +230,7 @@ namespace CgsNumeric
         muSeed              = muSeed * KU_RANDOM_MULTIPLIER + 1;
         muOldestBufferIndex = (muOldestBufferIndex + 1) & (KU_FLOAT_BUFFER_SIZE - 1);
 
-        return (lfMax - lfMin) * lfUnitValue + lfMin;
+        return std::fmaf(lfMax - lfMin, lfUnitValue, lfMin);
     }
 
     // RandomVecFloat -- DWARF CgsRandom.h:94. Pinned by its expansion in
@@ -248,6 +259,20 @@ namespace CgsNumeric
     //   TWO LCG steps, their two high words packed across THREE slots
     //   muOldestBufferIndex = slot + 3
     //   return (lMax - lMin) * t + lMin            vsubfp v6, v10, v12 ; vmaddfp v12,v8,v12,v6
+    // ⭐ THE COMBINE IS FUSED, lane by lane (FX-AIBUZZ, crash parity 2026-09-25). IDA prints the
+    //   classic vmaddfp in raw field order D, A, B, C, and it means D = A * C + B. So
+    //   `vmaddfp v12, v8, v12, v6` @0x822215CC (word 0x118861AE: vD 12, vA 8, vB 12, vC 6) is
+    //   v12 = t * (max - min) + min. Here v6 = v10 - v12 (vsubfp @0x82221570), v12 = min
+    //   (= -max, vxor sign flip @0x8222155C), and v8 = ring quad - 1.0 (vsubfp @0x82221590).
+    //   vmaddfp rounds each lane ONCE. The PC's `(max - min) * t + min` rounded the product
+    //   first and missed by an ulp on some inputs, w included (the console computes all four
+    //   lanes). The same range * t + min combine, in ONE vmaddfp, closes both randomisers that
+    //   pack the ring identically: Vector3Randomiser::RandomiseXYZ @0x82277FA8 and
+    //   Vector4Randomiser::RandomiseXYZW @0x822780BC. Both are `vmaddfp v0, v13, v12, v0` with
+    //   v13 = +0x10 (range) and v12 = +0 (min), and BrnEffectsUtils.cpp already spells them
+    //   std::fma. JumpStateMachine::FireWheelDebris does the same on a RandomVecFloat splat
+    //   (`vmaddfp v13, v5, v13, v11` @0x82293C20, v5 = max - min @0x82293C08). Hence std::fmaf
+    //   per lane.
     // ⚠️ THE FOURTH LANE OF THE RING SLOT IS NEVER REFILLED -- only slot+0/+1/+2 are written,
     //   so lane w carries whatever the previous vector draw left there. Read, and returned,
     //   exactly as the console does; every consumer uses xyz only.
@@ -283,10 +308,10 @@ namespace CgsNumeric
         muOldestBufferIndex = luSlot + 3;
 
         rw::math::vpu::Vector3 lResult;
-        lResult.x = (lMax.x - lMin.x) * lUnitValue.x + lMin.x;
-        lResult.y = (lMax.y - lMin.y) * lUnitValue.y + lMin.y;
-        lResult.z = (lMax.z - lMin.z) * lUnitValue.z + lMin.z;
-        lResult.w = (lMax.w - lMin.w) * lUnitValue.w + lMin.w;
+        lResult.x = std::fmaf(lMax.x - lMin.x, lUnitValue.x, lMin.x);
+        lResult.y = std::fmaf(lMax.y - lMin.y, lUnitValue.y, lMin.y);
+        lResult.z = std::fmaf(lMax.z - lMin.z, lUnitValue.z, lMin.z);
+        lResult.w = std::fmaf(lMax.w - lMin.w, lUnitValue.w, lMin.w);
         return lResult;
     }
 }
