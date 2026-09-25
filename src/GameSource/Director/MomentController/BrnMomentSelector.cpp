@@ -14,6 +14,7 @@
 //   MomentSelector::Release
 //   MomentSelector::AddMoment(MomentDescription)
 //   MomentSelector::AddMoment(EType,EMomentParamID,f32,bool)
+//   MomentSelector::PickBestInhibitedMoment / PickWorstUninhibitedMoment (FX-DIRECTOR2 2026-09-25, CC-12)
 //
 // Signature authority is the declarations for this exact file, cross-checked against the
 // argument slots the console build actually uses at every call site (the automatic C
@@ -33,9 +34,36 @@
 #include "GameSource/Director/MomentController/BrnMoment.h"                    // Moment (state/flags + GetName)
 #include "GameSource/Director/MomentController/BrnMomentController.h"          // MomentController::MomentHandle
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h"  // DebugPrinter
+#include <cstdlib>                                                             // [DIAG] getenv (BRN_CRASHCAM_DIAG)
 
 namespace BrnDirector
 {
+
+namespace
+{
+    // The two pickers' constants: the seed / starting score (flt_82001CC0 == 0) and the 1.0 the recency is taken
+    // from (flt_82001C98 == 0x3F800000), read at 0x8221C15C / 0x8221C178 and 0x8221C48C / 0x8221C4A8.
+    const f32 KF_PICK_ZERO = 0.0f;
+    const f32 KF_PICK_ONE  = 1.0f;
+
+    // [DIAG] NOT IN THE X360 BINARY. BRN_CRASHCAM_DIAG: each move of the max-active rebalance (CC-12) -- which slot
+    // was un-inhibited or inhibited, with its description's moment type and parameter id (the crash state's two
+    // tumbling moments share type 2 and differ by parameter: 8 LEAD, 4 TRUCKING_SIDE). Reads only.
+    void BrnDiag_Rebalance(const char* lpcMove, u32 luSlot,
+                           const Array<MomentDescription, MomentSelector::KU_MAX_MOMENTS>& lrDescriptions)
+    {
+        static const bool sbOn = (getenv("BRN_CRASHCAM_DIAG") != 0);
+        if (!sbOn || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return;
+        }
+        const MomentDescription& lrDescription = lrDescriptions[luSlot];
+        *CgsDev::Log::gpDebugPrint
+            << "[selector] rebalance " << lpcMove << " slot " << static_cast<s32>(luSlot)
+            << " (moment type " << static_cast<s32>(lrDescription.meMomentType)
+            << " param " << static_cast<s32>(lrDescription.meMomentParamID) << ")\n";
+    }
+}
 
 // Construct --
 //
@@ -311,25 +339,195 @@ void MomentSelector::Update(f32 lfTimestep)
         }
     }
 
-    // [GATED -- the max-active-moments REBALANCE]
-    //   if (mbHasMaxLimit && luInhibitedCandidate != 0)
-    //   {
-    //       // walk luUninhibited toward muMaxActiveMomentLimit: un-inhibit the best inhibited
-    //       // candidate while under budget (PickBestInhibitedMoment), and when over
-    //       // budget swap -- PickWorstUninhibitedMoment picks the victim, the
-    //       // moment's vtable slot 4 Release() runs and meState goes to E_STATE_INVALID_INACTIVE.
-    //   }
-    // WHY GATED: PickBestInhibitedMoment (202 instructions) and PickWorstUninhibitedMoment (222)
-    // have no body anywhere in this tree, and writing them is a wave of its own. The gate itself
-    // is FALSE for every consumer that exists today: mbHasMaxLimit is raised only by
-    // SetMaxActiveMoments and NOTHING in the tree calls it -- grep is
-    // clean, and the three arbitrator states that embed a MomentSelector all go straight from
-    // Construct to AddMoment. So this block cannot execute even if it were written, and the
-    // three counters it consumes are computed above regardless.
-    // DELETE-WHEN: PickBestInhibitedMoment + PickWorstUninhibitedMoment land.
-    (void)luConditionsNotMet;
-    (void)luInhibitedCandidate;
-    (void)luUninhibited;
+    // ---- THE MAX-ACTIVE-MOMENTS REBALANCE (0x8223A41C..0x8223A660) ----------------------------
+    // [FX-DIRECTOR2 2026-09-25, CHAINCHECK2 CC-12] It was gated on the premise that nothing calls
+    // SetMaxActiveMoments. That premise was stale: ArbStateCrashing::Construct @0x82259EA0 sets a limit of ONE
+    // (`li r4, 1` 0x82259FBC, bl 0x82259FC8; BrnArbStateCrashing.cpp:231), so every crash runs this. Prepare
+    // starts the second tumbling moment (TUMBLING_TRUCKING_SIDE) inhibited, and without this tail it could never
+    // swap in, nor could a moment that arm (E) above inhibited ever come back during that crash.
+    //   `lbz 0x1E2 ; beq` / `cmplwi r22, 0 ; beq`: only with a limit and a ready-but-held-back moment.
+    //   Under budget (`cmplw r28, 0x1D4`, unsigned): un-inhibit the best FUSSY candidates -- each one a direct
+    //   `stb 0, 0x17B` (no Prepare, no state change) -- returning at once when the held-back count runs out;
+    //   then, if any are left, the best ANY candidates while still under budget.
+    //   Then the swap, `do { if (!conditions-not-met) break; ... } while (held-back)`: the best FUSSY held-back
+    //   moment is un-inhibited and the worst FUSSY idle one is inhibited (Moment::Inhibit's body: +0x17B = 1,
+    //   Release through vtable +0x10, meState = SEARCHING -- the store lands after the two decrements).
+    if (mbHasMaxLimit && luInhibitedCandidate != 0)
+    {
+        if (luUninhibited < muMaxActiveMomentLimit)
+        {
+            u32 luMomentToUninhibit = 0;
+            while (luUninhibited < muMaxActiveMomentLimit)
+            {
+                if (!PickBestInhibitedMoment(&luMomentToUninhibit, E_PICK_BEST_FUSSY))
+                {
+                    break;
+                }
+                mMomentHandleArray[luMomentToUninhibit].GetMoment()->SetInhibited(false);
+                BrnDiag_Rebalance("un-inhibit (under budget)", luMomentToUninhibit, mMomentDescriptionArray);   // [DIAG]
+                --luInhibitedCandidate;
+                ++luUninhibited;
+                if (luInhibitedCandidate == 0)
+                {
+                    return;
+                }
+            }
+            if (luInhibitedCandidate == 0)
+            {
+                return;
+            }
+            while (luUninhibited < muMaxActiveMomentLimit)
+            {
+                if (!PickBestInhibitedMoment(&luMomentToUninhibit, E_PICK_BEST_ANY))
+                {
+                    break;
+                }
+                mMomentHandleArray[luMomentToUninhibit].GetMoment()->SetInhibited(false);
+                BrnDiag_Rebalance("un-inhibit (any)", luMomentToUninhibit, mMomentDescriptionArray);   // [DIAG]
+                ++luUninhibited;
+            }
+        }
+
+        do
+        {
+            if (luConditionsNotMet == 0)
+            {
+                break;
+            }
+            u32 luMomentToUninhibit = 0;
+            const bool lbPickedBest = PickBestInhibitedMoment(&luMomentToUninhibit, E_PICK_BEST_FUSSY);
+            CGS_ASSERT(lbPickedBest, "PickBestInhibitedMoment(&luMomentToUninhibit)");   // cpp:207
+            mMomentHandleArray[luMomentToUninhibit].GetMoment()->SetInhibited(false);
+
+            u32 luMomentInhibit = 0;
+            const bool lbPickedWorst = PickWorstUninhibitedMoment(&luMomentInhibit, E_PICK_WORST_FUSSY);
+            CGS_ASSERT(lbPickedWorst, "PickWorstUninhibitedMoment(&luMomentInhibit)");   // cpp:210
+            mMomentHandleArray[luMomentInhibit].GetMoment()->Inhibit();
+            BrnDiag_Rebalance("swap in", luMomentToUninhibit, mMomentDescriptionArray);   // [DIAG]
+            BrnDiag_Rebalance("swap out", luMomentInhibit, mMomentDescriptionArray);      // [DIAG]
+
+            --luInhibitedCandidate;
+            --luConditionsNotMet;
+        } while (luInhibitedCandidate != 0);
+    }
+}
+
+// ---- PickBestInhibitedMoment @0x8221C028 (DWARF BrnMomentSelector.h:164) ------------------------------
+// The best moment to UN-inhibit. The score is (1 - recency) * the description's weighting (fsubs f30 = 1.0,
+// flt_82001C98, then fmuls -- two roundings). The walk is over the HANDLE array's length (+0x194, asserted); an
+// unallocated handle is skipped.
+//   E_PICK_BEST_FUSSY: among the moments that are inhibited AND whose conditions are met, the highest score. The
+//     first one seeds; a later one wins only when strictly higher (`fcmpu ; ble`, so a NaN never wins).
+//   E_PICK_BEST_ANY: every allocated moment takes the seed arm, so the LAST allocated one wins whatever its
+//     state (the console's own branch table, transcribed as-is).
+//   Any other option streams "Unknown option: " << option (cpp:476) and runs as FUSSY.
+// *lpuIndex is written even when nothing is found (the seed's 0). Returns whether anything was found.
+bool MomentSelector::PickBestInhibitedMoment(u32* lpuIndex, EPickBestInhibitedOptions leOptions)
+{
+    CGS_ASSERT(mbPrepared, "mbPrepared");   // cpp:456
+
+    bool lbTakeAny = false;   // r22
+    if (static_cast<u32>(leOptions) == E_PICK_BEST_ANY)
+    {
+        lbTakeAny = true;
+    }
+    else if (static_cast<u32>(leOptions) != E_PICK_BEST_FUSSY)
+    {
+        CGS_ASSERT(false, "Unknown option: ");   // cpp:476 (the console streams the option after it)
+    }
+
+    bool lbFound = false;           // r24
+    u32  luBest  = 0;               // r25
+    f32  lfBest  = KF_PICK_ZERO;    // f31, flt_82001CC0
+    const u32 luCount = mMomentHandleArray.GetLength();
+    for (u32 luLoop = 0; luLoop < luCount; ++luLoop)
+    {
+        if (!mMomentHandleArray[luLoop].IsAllocated())
+        {
+            continue;
+        }
+        const Moment* lpMoment = mMomentHandleArray[luLoop].GetMoment();
+        if ((!lbFound && lpMoment->IsInhibited() && lpMoment->ConditionsAreMet()) || lbTakeAny)
+        {
+            luBest  = luLoop;
+            lbFound = true;
+            lfBest  = (KF_PICK_ONE - mRecencyArray.GetItem(luLoop)) * mMomentDescriptionArray[luLoop].mfWeighting;
+            continue;
+        }
+        if (!lpMoment->IsInhibited() || !lpMoment->ConditionsAreMet())
+        {
+            continue;
+        }
+        const f32 lfScore = (KF_PICK_ONE - mRecencyArray.GetItem(luLoop)) * mMomentDescriptionArray[luLoop].mfWeighting;
+        if (lfScore > lfBest)
+        {
+            luBest = luLoop;
+            lfBest = lfScore;
+        }
+    }
+    *lpuIndex = luBest;
+    return lbFound;
+}
+
+// ---- PickWorstUninhibitedMoment @0x8221C358 (DWARF BrnMomentSelector.h:167) -------------------------
+// The moment to inhibit in its place: the LOWEST (1 - recency) * weighting.
+//   E_PICK_WORST_FUSSY: among the moments that are neither inhibited nor ready (conditions not met). The first
+//     one seeds; a later one wins only when strictly lower (`fcmpu ; bge`, so a NaN never wins).
+//   E_PICK_WORST_ANY: an inhibitable moment (description +0x0C) takes the seed arm, so the last such one wins.
+//     Otherwise an inhibited or ready moment would compete only when its bare weighting is already below the
+//     worst score (0x8221C63C..0x8221C670). That branch is unreachable: ANY seeds every inhibitable moment
+//     first. It is transcribed as the console has it.
+//   Any other option streams "Unknown option: " << option (cpp:545) and runs as FUSSY.
+bool MomentSelector::PickWorstUninhibitedMoment(u32* lpuIndex, EPickWorstUninhibitedOptions leOptions)
+{
+    CGS_ASSERT(mbPrepared, "mbPrepared");   // cpp:526
+
+    bool lbTakeAny = false;   // r21
+    if (static_cast<u32>(leOptions) == E_PICK_WORST_ANY)
+    {
+        lbTakeAny = true;
+    }
+    else if (static_cast<u32>(leOptions) != E_PICK_WORST_FUSSY)
+    {
+        CGS_ASSERT(false, "Unknown option: ");   // cpp:545 (the console streams the option after it)
+    }
+
+    bool lbFound = false;           // r23
+    u32  luWorst = 0;               // r24
+    f32  lfWorst = KF_PICK_ZERO;    // f31, flt_82001CC0
+    const u32 luCount = mMomentHandleArray.GetLength();
+    for (u32 luLoop = 0; luLoop < luCount; ++luLoop)
+    {
+        if (!mMomentHandleArray[luLoop].IsAllocated())
+        {
+            continue;
+        }
+        const Moment* lpMoment = mMomentHandleArray[luLoop].GetMoment();
+        const bool lbIdle = !lpMoment->IsInhibited() && !lpMoment->ConditionsAreMet();
+        if ((!lbFound && lbIdle) || (lbTakeAny && mMomentDescriptionArray[luLoop].mbCanBeInhibited))
+        {
+            luWorst = luLoop;
+            lbFound = true;
+            lfWorst = (KF_PICK_ONE - mRecencyArray.GetItem(luLoop)) * mMomentDescriptionArray[luLoop].mfWeighting;
+            continue;
+        }
+        if (!lbIdle)
+        {
+            if (!lbTakeAny || !mMomentDescriptionArray[luLoop].mbCanBeInhibited
+                || !(mMomentDescriptionArray[luLoop].mfWeighting < lfWorst))
+            {
+                continue;
+            }
+        }
+        const f32 lfScore = (KF_PICK_ONE - mRecencyArray.GetItem(luLoop)) * mMomentDescriptionArray[luLoop].mfWeighting;
+        if (lfScore < lfWorst)
+        {
+            luWorst = luLoop;
+            lfWorst = lfScore;
+        }
+    }
+    *lpuIndex = luWorst;
+    return lbFound;
 }
 
 // Release --
