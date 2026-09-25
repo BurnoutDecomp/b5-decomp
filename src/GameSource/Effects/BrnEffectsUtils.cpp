@@ -387,6 +387,10 @@ namespace
     const f32 KF_POLY_C5         = -71.17897033691406f;    // unk_8307A670
 
     // CgsNumeric::TrigBaseFunctions5::Cos4_UnitCycles, one lane. lfCycles is in TURNS.
+    // ⚠ CORRECTED 2026-09-25 (FX-CRASHVFX, glass): the two polynomial steps are `vmaddfp` -- FUSED,
+    // rounded once (0x8227E850..0x8227E85C here, 0x82282870/74 in the draw half, 0x82297B68/6C in
+    // HandleGlassSmashEventsForAllCars) -- so they are std::fma; the old `a * b + c` rounded the product
+    // first. The fold's `vminfp` keeps a NaN fraction a NaN (the comparison below is false for it).
     inline f32 Cos4_UnitCycles(f32 lfCycles)
     {
         const f32 lfFraction = lfCycles - floorf(lfCycles);                       // vrfim/vsubfp
@@ -398,7 +402,7 @@ namespace
         }
         const f32 lfT  = lfFolded + KF_FOLD_BIAS;                                 // vaddfp
         const f32 lfT2 = lfT * lfT;                                               // vmulfp128
-        return lfT * (lfT2 * (lfT2 * KF_POLY_C5 + KF_POLY_C3) + KF_POLY_C1);      // 2x vmaddfp
+        return std::fma(lfT2, std::fma(lfT2, KF_POLY_C5, KF_POLY_C3), KF_POLY_C1) * lfT;   // 2x vmaddfp, vmulfp128
     }
 
 }
@@ -409,9 +413,9 @@ namespace
 // recovered coefficients must have exactly one home.
 void SinCosCycles(f32 lfRadians, f32& arSin, f32& arCos)
 {
-    const f32 lfCycles = lfRadians * KF_ONE_OVER_TWO_PI;                      // vmaddfp
-    arSin = Cos4_UnitCycles(lfCycles + KF_SIN_PHASE);
-    arCos = Cos4_UnitCycles(lfCycles + KF_COS_PHASE);
+    // ONE `vmaddfp` per lane: angle * (1/2pi) + the lane's phase, rounded once (see Cos4_UnitCycles).
+    arSin = Cos4_UnitCycles(std::fma(lfRadians, KF_ONE_OVER_TWO_PI, KF_SIN_PHASE));
+    arCos = Cos4_UnitCycles(std::fma(lfRadians, KF_ONE_OVER_TWO_PI, KF_COS_PHASE));
 }
 
 Matrix33 FastMatrix33FromEulerXYZ(Vector3 lv3EulerAngles)

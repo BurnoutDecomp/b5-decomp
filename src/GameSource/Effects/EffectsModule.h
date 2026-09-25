@@ -429,6 +429,18 @@ namespace BrnEffects
                                const BrnDirector::Camera::Camera* lpCamera,
                                const Attrib::Gen::debrisparams& lrDebrisParams,
                                const RwRGBAReal& lrColour);
+        // @0x82292160 (DWARF :2559). A debris burst over a four-cornered pane: area * density pieces,
+        // each thrown from a random spot on the pane (outwards along the normal, away from the centre,
+        // with a share of the inherited velocity). Callers: HandleGlassSmashEventsForAllCars (the glass
+        // debris) and HandleShowtimeTrafficBounce.
+        void BurstAreaEmitParticles(Vector3* lpCorners,
+                                    Vector3 lvNormal,
+                                    Vector3 lvInheritedVelocity,
+                                    BrnParticle::Native::EDebrisArrayID leDebrisType,
+                                    f32 lfCurrentTime,
+                                    f32 lfSizeMin,
+                                    f32 lfSizeMax,
+                                    f32 lfParticleDensity);
         void HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffer* lpInputBuffer,
                                               const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
                                               f32 lfDt, f32 lfTime);
