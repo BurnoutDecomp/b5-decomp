@@ -5,6 +5,7 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"   // ScoringSystem::GetPlayerNoInputTime / GetPlayerStationaryTime (slot 13)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [stunt] the mode-state ladder rung (see SetCurrentState)
+#include "GameSource/GameState/ModeManager/BrnModeManager.h"   // GetIntroDurationSeconds: the current mode / type / flyby count
 // PreWorldUpdate's rival-visibility scan: the complete active-race-car output interface
 // (IsPlayerCarActive / GetPlayerActiveRaceCarIndex / IsRaceCarActive / GetPlayerRaceCarState /
 // GetRaceCarState) and BrnPhysics::Vehicle::RaceCarState, which it reaches by value.
@@ -362,43 +363,56 @@ void GameMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
 }
 
 // ===========================================================================
-// X360: BrnGameState::GameMode::GetIntroDurationSeconds (0x82315A88).
+// X360: BrnGameState::GameMode::GetIntroDurationSeconds (0x82315A88, vtable slot 8).
 //
-// How long the pre-race intro flyby runs, in seconds. The X360 body asks the owning
-// ModeManager which game-mode is active and (for non-stunt modes) how many cars take
-// part in the flyby:
-//   - When the active mode is the stunt-run / showtime family (mode ids 15 and 16),
-//     or the mode has no flyby intro, it returns a fixed duration:
-//       * flyby present but stunt/showtime  -> 2.0  (KF_STUNT_INTRO_TIME_SECONDS)
-//       * no flyby                           -> 6.0  (KF_INTRO_TIME_SECONDS)
-//   - Otherwise the duration scales with the flyby car count:
-//       (ModeManager::GetNumberOfCarsInFlyby() + 1) * 4.0
+// How long a mode's intro lasts, in seconds. Ten of the fifteen console vtables inherit this body
+// (Race, RoadRage, BurningRoute, Survivor and the six online modes other than OnlineShowtime);
+// CrashMode / OnlineShowtime (0x827E2600, 0.0002), StuntAttack (0x827E2538, 6.0), Pursuit
+// (0x827E24E8) and FaceOff (0x827EAB30) carry their own. The console body, instruction for
+// instruction:
+//   lwz r3,0xA0(r3)                 mpModeManager
+//   lwz r11,0xD98(r3) ; beq         mpCurrentGameMode == NULL -> the fixed arm
+//   lbz r11,0xAC(r11) ; beq         the current mode's mbIsOnline (GameMode +172; OfflineGameMode::
+//                                   Construct stores 0 there @0x8232FE78, OnlineGameMode::Construct 1
+//                                   @0x8232FEB4) false -> the fixed arm
+//   lwz r11,0xD94(r3) ; cmpwi 0xF / 0x10 ; bne -> the fixed arm when meCurrentGameModeType is 15 or 16
+//   bl GetNumberOfCarsInFlyby ; extsw ; fcfid ; frsp ; fadds +flt_82001C98 (1.0) ; fmuls flt_820211D4 (4.0)
+//   fixed arm: type 15 / 16 -> flt_820211CC (2.0), else flt_820211C8 (6.0)
+// Every float re-read from the image with x360rd: 0x40C00000 / 0x40000000 / 0x40800000 / 0x3F800000.
+// Names from the DWARF (BrnGameMode.h:291..:295): KF_INTRO_TIME_SECONDS,
+// KF_ONLINE_FREEBURN_INTRO_TIME_SECONDS (types 15 / 16 are E_MODE_ONLINE_FREE_BURN_LOBBY /
+// E_MODE_ONLINE_SHOWTIME), KF_ONLINE_INTRO_TIME_SECONDS_FOR_PLAYER / _PER_CAR. The PS3 twin
+// (DecFIGS 0x1D9F0C) spells the online arm `cars * PER_CAR + FOR_PLAYER` as one fmadds with both
+// constants 4.0; the X360 build computes (cars + 1.0) * 4.0 -- the X360 order is reproduced (the
+// two agree exactly for any flyby count a mode can have).
 //
-// In the pseudocode the active mode id is *(mpModeManager+3476) and the flyby flag is
-// the byte at *(*(mpModeManager+3480)+172); both live on the ModeManager.
-//
-// SHAPE NOTE (kept class shape): GetNumberOfCarsInFlyby() and the active-mode/flyby
-// fields live on ModeManager, whose committed header is the minimal one-method slice.
-// Threading those reads here would fork several accessors onto that bounded header,
-// which is out of scope for this TU. The branch structure (stunt/showtime + no-flyby
-// fixed paths vs. car-count-scaled path) is reproduced faithfully; the ModeManager
-// reads are left as a documented placeholder returning the standard fixed intro until
-// ModeManager is reconstructed far enough to expose them.
+// So: every OFFLINE mode that inherits this gets 6.0 (the value the retired stub returned for all
+// of them); an online FreeBurnLobby gets 2.0; every other online mode gets (flyby cars + 1) * 4.0.
+// ModeManager::GetNumberOfCarsInFlyby @0x82311E38 is PARKED on this build (it returns 0 with a
+// one-shot log: FlybyManager has no owning header), so the online modes get 4.0 here until it lands.
 // ===========================================================================
 f32 GameMode::GetIntroDurationSeconds() const
 {
-    const f32 KF_INTRO_TIME_SECONDS       = 6.0f;
-    const f32 KF_STUNT_INTRO_TIME_SECONDS = 2.0f;
+    const f32 KF_INTRO_TIME_SECONDS                 = 6.0f;   // flt_820211C8
+    const f32 KF_ONLINE_FREEBURN_INTRO_TIME_SECONDS = 2.0f;   // flt_820211CC
+    const f32 KF_ONLINE_INTRO_TIME_SECONDS_PER_CAR  = 4.0f;   // flt_820211D4
 
-    // STUB (ModeManager reads not yet exposed): the X360 body branches on the active
-    // mode id (stunt-run/showtime == 15/16) and the flyby flag, both read from
-    // mpModeManager, and otherwise returns (GetNumberOfCarsInFlyby()+1)*4.0. Those
-    // ModeManager accessors are out of scope for this TU (see SHAPE NOTE); the
-    // standard fixed intro is returned until they are wired in. The stunt-mode short
-    // path (2.0) and the car-count-scaled path are documented above for the
-    // integrator to restore once ModeManager exposes the fields.
-    (void)KF_STUNT_INTRO_TIME_SECONDS;
-    return KF_INTRO_TIME_SECONDS;
+    const GameMode* const lpCurrentGameMode = mpModeManager->GetCurrentGameMode();
+    const bool lbOnlineModeRunning = (lpCurrentGameMode != nullptr) && lpCurrentGameMode->IsOnline();
+
+    const GameStateModuleIO::EGameModeType leGameModeType = mpModeManager->GetCurrentGameModeType();
+    const bool lbFreeBurnLobbyOrShowtime =
+        (leGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY) ||
+        (leGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
+
+    if (lbOnlineModeRunning && !lbFreeBurnLobbyOrShowtime)
+    {
+        // The player's own slot plus one per flyby car (FOR_PLAYER == PER_CAR == 4.0).
+        const f32 lfNumberOfCarsInFlyby = static_cast<f32>(mpModeManager->GetNumberOfCarsInFlyby());
+        return (lfNumberOfCarsInFlyby + 1.0f) * KF_ONLINE_INTRO_TIME_SECONDS_PER_CAR;
+    }
+
+    return lbFreeBurnLobbyOrShowtime ? KF_ONLINE_FREEBURN_INTRO_TIME_SECONDS : KF_INTRO_TIME_SECONDS;
 }
 
 // ===========================================================================
