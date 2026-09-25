@@ -12,6 +12,12 @@
 // The expected values are the CONSOLE'S OWN OUTPUTS (FxCrashVfxDebrisSimData.h, gen_debris_sim_data.py, the
 // function's real instruction words on emu64): the five FreeExpiredBuckets calls, all five job-data slots (the
 // console writes a skipped array's lite data too), the jobs started, the module Random, the wait count.
+//
+// THE STEP: the console integrates the per-frame step it reads off DispatchThreadUpdateData+4; the PC publishes
+// the ParticleModule::Update ACCUMULATOR there and takes its first difference (BeginSimulateDebris' banner). So the
+// console is handed the case's step and the production body the accumulator 4.0 + step, with its last consumed
+// value (sfLastDebrisTimeStepSum) at 4.0 -- binary-fraction steps, so the difference is exact -- and the fifth check
+// is that the body consumed the accumulator.
 #include "types.hpp"
 #include "BrnCommonTypes.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -152,6 +158,12 @@ namespace Native
     }
 }
 
+    namespace
+    {
+        // The production file-scope value BeginSimulateDebris differences against (see the banner above).
+        f32 sfLastDebrisTimeStepSum = 0.0f;
+    }
+
 #include "fxcrashvfx_debris_sim_begin.inc"
 }
 
@@ -191,7 +203,9 @@ int main()
 
         BrnParticle::ParticleModule::DispatchThreadUpdateData lData;
         lData.mfCurrentTime     = Float(lrCase.muTime);
-        lData.mfCurrentTimeStep = Float(lrCase.muDt);
+        const f32 lfLastSum = 4.0f;
+        BrnParticle::sfLastDebrisTimeStepSum = lfLastSum;
+        lData.mfCurrentTimeStep = lfLastSum + Float(lrCase.muDt);     // exact: the steps are binary fractions
         BrnParticle::ParticleModule::ParticleRenderData lRender;
         lRender.muFlags = static_cast<u16>(lrCase.muFlags);
         BrnGame::DispatchThreadInputBuffer lInput;
@@ -269,6 +283,12 @@ int main()
         std::snprintf(lacLabel, sizeof(lacLabel),
                       "case %u: the module Random (one step per job) and the assert count are the console's", luCase);
         Check(lbRing, lacLabel);
+
+        // 5. the published accumulator was consumed (its first difference is the step the jobs got)
+        std::snprintf(lacLabel, sizeof(lacLabel),
+                      "case %u: BeginSimulateDebris consumed the published accumulator (last sum %.6f -> %.6f)",
+                      luCase, static_cast<double>(lfLastSum), static_cast<double>(BrnParticle::sfLastDebrisTimeStepSum));
+        Check(Bits(BrnParticle::sfLastDebrisTimeStepSum) == Bits(lData.mfCurrentTimeStep), lacLabel);
 
         _aligned_free(lpStorage);
     }
