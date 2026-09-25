@@ -94,6 +94,21 @@ static const TStepFrameOut kaTStepOut9[] = {
     { 0x00000000u, 0x39AEC33Eu, 0x449A5000u, 0x3CA3D70Au, 0x008Au, 1u, 0x003882CCu },
     { 0x00000000u, 0x39AEC33Eu, 0x449A5008u, 0x3CA3D70Au, 0x008Au, 1u, 0x003882CFu }
 };
+static const u32 kaTStepCounts10[] = { 1u };
+static const TStepSubStep kaTStepSubs10[] = { { 0x3B9C09C1u, 0x449A5000u, 0x3E924925u } };
+static const TStepFrameOut kaTStepOut10[] = {
+    { 0x00000000u, 0x3B9C09C1u, 0x449A5000u, 0x3E924925u, 0x00BEu, 1u, 0x003882CCu }
+};
+static const u32 kaTStepCounts11[] = { 1u };
+static const TStepSubStep kaTStepSubs11[] = { { 0x3A11A2B4u, 0x449A5000u, 0x3D088889u } };
+static const TStepFrameOut kaTStepOut11[] = {
+    { 0x00000000u, 0x3A11A2B4u, 0x449A5000u, 0x3D088889u, 0x00BEu, 1u, 0x003882CCu }
+};
+static const u32 kaTStepCounts12[] = { 1u };
+static const TStepSubStep kaTStepSubs12[] = { { 0x3C888889u, 0x449A5000u, 0x3F800000u } };
+static const TStepFrameOut kaTStepOut12[] = {
+    { 0x00000000u, 0x3C888889u, 0x449A5000u, 0x3F800000u, 0x00BEu, 1u, 0x003882CCu }
+};
 
 static const TStepCase kaTStepCases[] = {
     { "60 Hz, one sub-step a frame", 0x3F800000u, 0x00000000u, {1u, 1u, 1u, 1u, 1u}, 1u, {0x3F800000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3F800000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3F800000u, 0x00000000u, 0x42F10000u, 0xC0500000u, 0xC4FF1800u, 0x3F800000u}, 0x3F800000u, 0x0000000000000000ULL, 6u, kaTStepCounts0, kaTStepSubs0, kaTStepOut0 },
@@ -106,4 +121,7 @@ static const TStepCase kaTStepCases[] = {
     { "a NaN sub-step", 0x3F800000u, 0x00000000u, {1u, 1u, 1u, 1u, 1u}, 1u, {0x3F800000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3F800000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3F800000u, 0x00000000u, 0x42F10000u, 0xC0500000u, 0xC4FF1800u, 0x3F800000u}, 0x3F800000u, 0x0000000000000000ULL, 3u, kaTStepCounts7, kaTStepSubs7, kaTStepOut7 },
     { "a large leftover in the record", 0x3F800000u, 0x4395FEB8u, {1u, 1u, 1u, 1u, 1u}, 1u, {0x3F800000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3F800000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3F800000u, 0x00000000u, 0x42F10000u, 0xC0500000u, 0xC4FF1800u, 0x3F800000u}, 0x3F800000u, 0x0000000000000000ULL, 2u, kaTStepCounts8, kaTStepSubs8, kaTStepOut8 },
     { "flags: trails off, camera new this frame, ultra slow motion", 0x3F800000u, 0x00000000u, {1u, 1u, 0u, 1u, 0u}, 0u, {0x3F800000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3F800000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3F800000u, 0x00000000u, 0x42F10000u, 0xC0500000u, 0xC4FF1800u, 0x3F800000u}, 0x3CA3D70Au, 0x0000000000000044ULL, 2u, kaTStepCounts9, kaTStepSubs9, kaTStepOut9 },
+    { "camera time scale exactly 2/7 (flt_8200DBA0)", 0x3F800000u, 0x00000000u, {1u, 1u, 1u, 1u, 1u}, 1u, {0x3F800000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3F800000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3F800000u, 0x00000000u, 0x42F10000u, 0xC0500000u, 0xC4FF1800u, 0x3F800000u}, 0x3E924925u, 0x0000000000000000ULL, 1u, kaTStepCounts10, kaTStepSubs10, kaTStepOut10 },
+    { "camera time scale exactly 1/30 (flt_8200DB9C)", 0x3F800000u, 0x00000000u, {1u, 1u, 1u, 1u, 1u}, 1u, {0x3F800000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3F800000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3F800000u, 0x00000000u, 0x42F10000u, 0xC0500000u, 0xC4FF1800u, 0x3F800000u}, 0x3D088889u, 0x0000000000000000ULL, 1u, kaTStepCounts11, kaTStepSubs11, kaTStepOut11 },
+    { "a NaN camera time scale", 0x3F800000u, 0x00000000u, {1u, 1u, 1u, 1u, 1u}, 1u, {0x3F800000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3F800000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3F800000u, 0x00000000u, 0x42F10000u, 0xC0500000u, 0xC4FF1800u, 0x3F800000u}, 0x7FC00000u, 0x0000000000000000ULL, 1u, kaTStepCounts12, kaTStepSubs12, kaTStepOut12 },
 };

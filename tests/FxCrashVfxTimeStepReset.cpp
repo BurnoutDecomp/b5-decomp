@@ -13,9 +13,9 @@
 // StartOfFrame and ParticleModule::StartOfFrame (the headers' inline definitions), and ParticleModule::Update with
 // its constants. Each update frame is OnStartOfUpdateFrame then k Updates, and the expected values are the CONSOLE'S
 // OWN (FxCrashVfxTimeStepResetData.h, gen_tstep_data.py: 0x823A8BB0 and 0x822817D8 interpreted on emu64 frame by
-// frame). Six checks per case, each over all of the case's frames: the clear, the renderer's StartOfFrame after it,
-// and the frame's step, time, multiplier and Lion clock. A console NaN is matched by any NaN (the x86 default NaN
-// carries the other sign).
+// frame). Eight checks per case, each over all of the case's frames: the clear, the renderer's StartOfFrame after it,
+// the frame's step, time, multiplier and Lion clock, the rebuilt muFlags word (IN_SLOW_MOTION included) and the
+// camera-switched latch. A console NaN is matched by any NaN (the x86 default NaN carries the other sign).
 #include "types.hpp"
 
 #include <cmath>
@@ -187,6 +187,8 @@ int main()
         lCamera.mEffects.mfSimTimeScale = Float(lrCase.muTimeScale);
 
         bool lbReset = true, lbOrder = true, lbStep = true, lbTime = true, lbMult = true, lbLion = true;
+        bool lbFlags = true, lbSwitched = true;
+        char lacFlags[160] = "";
         s32 liFirstBad = -1;
         u32 luSub = 0;
         char lacDetail[160] = "";
@@ -212,6 +214,13 @@ int main()
             const bool lbFrameTime = SameF32(lrOut.muTime, lrModule.mRenderData.mfCurrentTime);
             const bool lbFrameMult = SameF32(lrOut.muMult, lrModule.mRenderData.mfTimeStepMultiplier);
             const bool lbFrameLion = (static_cast<u32>(gLionClock) == lrOut.muLion);
+            const bool lbFrameFlags = (lrModule.mRenderData.muFlags == lrOut.mu16Flags);
+            const bool lbFrameSwitched = ((lrModule.mbHasCameraSwitched ? 1u : 0u) == lrOut.mu8Switched);
+            if (!lbFrameFlags && lbFlags)
+                std::snprintf(lacFlags, sizeof(lacFlags), " -- frame %u: 0x%04X (console 0x%04X)", luFrame,
+                              static_cast<unsigned>(lrModule.mRenderData.muFlags), static_cast<unsigned>(lrOut.mu16Flags));
+            lbFlags    = lbFlags && lbFrameFlags;
+            lbSwitched = lbSwitched && lbFrameSwitched;
             if (!(lbFrameReset && lbFrameOrder && lbFrameStep) && liFirstBad < 0)
             {
                 liFirstBad = static_cast<s32>(luFrame);
@@ -246,6 +255,12 @@ int main()
         Check(lbMult, lacLabel);
         std::snprintf(lacLabel, sizeof(lacLabel), "[%s] the Lion clock word is the console's", lrCase.mpcName);
         Check(lbLion, lacLabel);
+        std::snprintf(lacLabel, sizeof(lacLabel),
+                      "[%s] the rebuilt muFlags word is the console's (IN_SLOW_MOTION 0x80 for a scale <= 2/7 or NaN)%s",
+                      lrCase.mpcName, lbFlags ? "" : lacFlags);
+        Check(lbFlags, lacLabel);
+        std::snprintf(lacLabel, sizeof(lacLabel), "[%s] the camera-switched latch is the console's", lrCase.mpcName);
+        Check(lbSwitched, lacLabel);
     }
 
     std::printf("FxCrashVfxTimeStepReset: %u checks, %u failures\n", gChecks, gFailures);

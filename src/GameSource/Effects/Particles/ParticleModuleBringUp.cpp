@@ -324,7 +324,9 @@ namespace
         const bool lbInSlowMotion =
             (lfSimTimeScale > KF_ULTRA_SLOW_MOTION_TIME_SCALE)
             && (lfSimTimeScale <= KF_SLOW_MOTION_TIME_SCALE);
-        const bool lbInUltraSlowMotion = (lfSimTimeScale <= KF_ULTRA_SLOW_MOTION_TIME_SCALE);
+        // `li r11, 1 ; fcmpu ; ble` -- `ble` is TAKEN on an unordered compare, so a NaN scale lands in p2
+        // (CORRECTED 2026-09-25, FX-CRASHVFX: this read `scale <= KF_ULTRA`, false for a NaN).
+        const bool lbInUltraSlowMotion = !(lfSimTimeScale > KF_ULTRA_SLOW_MOTION_TIME_SCALE);
         if (lbInSlowMotion || lbInUltraSlowMotion)
             luFlags |= RenderData::eRenderDataFlagInSlowMotion;  // |= 0x80
 

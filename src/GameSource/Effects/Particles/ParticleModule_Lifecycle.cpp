@@ -984,11 +984,20 @@ void ParticleModule::Update(f32 lfTimeStep, f32 lfTime, f32 lfTimeStepMultiplier
     if (lpCamera->GetState().IsFlagSet(KU_CAMERA_FLAG_NEW_FRAME))
         mbHasCameraSwitched = true;
 
-    // Slow motion: the camera's +0x104 sim time scale outside (0.0333, 0.2857] raises the
-    // IN_SLOW_MOTION bit (the two fcmpu/fsel pairs collapse to this).
+    // Slow motion: the camera's +0x104 sim time scale, through TWO predicates ORed together
+    // (0x822819A0..0x822819F8, the scale re-loaded for the second at 0x822819D0):
+    //   p1 = (scale > 1/30) && (scale <= 2/7)   `fcmpu ; ble` to r11 = 0, then `fcmpu ; ble` keeping r11 = 1 --
+    //                                           the takedown slow-motion band; a NaN fails its first test
+    //   p2 = !(scale > 1/30)                    `li r11, 1 ; fcmpu ; ble` -- the ultra slow-motion arm; `ble` is
+    //                                           TAKEN on an unordered compare, so a NaN scale raises it
+    // p1 || p2 raises IN_SLOW_MOTION: for any real scale that is scale <= 2/7, and a NaN raises it too.
+    // CORRECTED 2026-09-25 (FX-CRASHVFX): this read `!(p1) || scale <= 1/30` -- the band INVERTED, so the bit was set
+    // at every scale above 2/7 (normal driving: every [spark] ladder line showed flags 0xBE) and cleared in takedown
+    // slow motion (flags 0x3E at rdt 0.00476, scratch/bugtest/runs/fxcrashvfx_showers_noframes/20260925_065746).
     const f32 lfCameraTimeScale = lpCamera->GetEffects().GetSimTimeScale();   // camera +0x104
-    if (!(lfCameraTimeScale > KF_SLOWMO_LOWER && lfCameraTimeScale <= KF_SLOWMO_UPPER)
-        || lfCameraTimeScale <= KF_SLOWMO_LOWER)
+    const bool lbInSlowMotion      = (lfCameraTimeScale > KF_SLOWMO_LOWER) && (lfCameraTimeScale <= KF_SLOWMO_UPPER);
+    const bool lbInUltraSlowMotion = !(lfCameraTimeScale > KF_SLOWMO_LOWER);
+    if (lbInSlowMotion || lbInUltraSlowMotion)
     {
         mRenderData.muFlags |= ParticleRenderData::eRenderDataFlagInSlowMotion;   // 0x80
     }

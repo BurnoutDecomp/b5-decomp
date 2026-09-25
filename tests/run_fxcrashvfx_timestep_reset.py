@@ -17,7 +17,11 @@ the debris each carried a first-difference workaround while the motion blur read
   2. NUMERIC -- tests/FxCrashVfxTimeStepReset.cpp compiles the PRODUCTION OnStartOfUpdateFrame, both StartOfFrame
      bodies and ParticleModule::Update onto a fixture and runs update frames of k sub-steps; the expected values are
      the console's own (0x823A8BB0 and 0x822817D8 interpreted on emu64 by
-     scratch/CRASHPARITY_0922/fxcrashvfx_vmxemu/gen_tstep_data.py; 10 cases x 6 checks).
+     scratch/CRASHPARITY_0922/fxcrashvfx_vmxemu/gen_tstep_data.py; 13 cases x 8 checks -- the step, time,
+     multiplier, Lion clock, the rebuilt muFlags word and the camera-switched latch).
+  3. IN_SLOW_MOTION (0x80) -- Update raises it on the console's two predicates (0x822819A0..0x822819F8):
+     (scale > 1/30 && scale <= 2/7) || !(scale > 1/30), i.e. for any scale <= 2/7 and for a NaN; the PC had it
+     inverted (set for scale > 2/7, normal driving included). The bring-up stand-in keeps the same NaN polarity.
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxcrashvfx_timestep_reset.py [--rev <b5 rev>]
                                                                                [--root <shadow tree root>]
@@ -43,8 +47,8 @@ UPDATE_CONSTANTS = ("KF_LION_TIME_TICKS_PER_SECOND", "KF_SLOWMO_LOWER", "KF_SLOW
 NO_START_OF_FRAME = ("// [fixture] this revision has no StartOfFrame here: an empty stand-in so the fixture compiles.\n"
                      "void StartOfFrame() {}\n")
 
-# 10 cases x 6 checks (see FxCrashVfxTimeStepReset.cpp)
-NUMERIC_CHECKS = 10 * 6
+# 13 cases x 8 checks (see FxCrashVfxTimeStepReset.cpp)
+NUMERIC_CHECKS = 13 * 8
 
 
 class RootTree(Tree):
@@ -133,6 +137,16 @@ def wiring(tree):
     update = bringup.find("ParticleModuleUpdateBringUp(gRenderData")
     yield ("the PC bring-up stand-in clears its own record's step before its one Update of the frame",
            0 <= clear < update)
+    lifecycle = code_only(optional_definition(tree.read(LIFECYCLE_CPP), "void ParticleModule::Update("))
+    yield ("ParticleModule::Update raises IN_SLOW_MOTION on the console's predicates: (scale > 1/30 && scale <= 2/7) "
+           "|| !(scale > 1/30) (0x822819A0..0x822819F8; a NaN scale raises it)",
+           re.search(r"\(\s*lfCameraTimeScale\s*>\s*KF_SLOWMO_LOWER\s*\)\s*&&\s*\(\s*lfCameraTimeScale\s*<=\s*KF_SLOWMO_UPPER\s*\)",
+                     lifecycle) is not None
+           and re.search(r"!\s*\(\s*lfCameraTimeScale\s*>\s*KF_SLOWMO_LOWER\s*\)", lifecycle) is not None)
+    flags = code_only(tree.read(BRINGUP_CPP))
+    yield ("the bring-up stand-in's ultra-slow-motion predicate keeps the PPC NaN polarity: !(scale > 1/30)",
+           re.search(r"lbInUltraSlowMotion\s*=\s*!\s*\(\s*lfSimTimeScale\s*>\s*KF_ULTRA_SLOW_MOTION_TIME_SCALE\s*\)",
+                     flags) is not None)
 
 
 def numeric(tree):
