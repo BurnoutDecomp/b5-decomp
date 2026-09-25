@@ -28,7 +28,7 @@ import sys
 sys.dont_write_bytecode = True
 from fxgs_common import Tree, definition, code_only, compile_and_run, report, STRSTREAM_CPP
 
-SECTIONS = ["crash"]
+SECTIONS = ["crash", "base"]
 NUMERIC_PER_SECTION = {"crash": 6, "base": 12, "pursuit": 3, "faceoff": 3}
 
 MODES = "src/GameSource/GameState/ModeManager/GameModes/"
@@ -115,6 +115,11 @@ def numeric(tree):
             line = constant_line(source, name)
             if line is not None:
                 parts.append(line)
+        # The [mode-intro] witness OnEnter calls (a revision may not have it): the REAL helper, which
+        # prints nothing here (gpDebugPrint is null and BRN_INTRO_TIMER_DIAG unset).
+        witness = optional(intro_cpp, "void LogModeIntro(")
+        if witness is not None:
+            parts.append(witness)
         parts.append("}")
         parts.append(definition(game_mode, BASE_SIG))
         parts += [definition(intro_cpp, body) for body in INTRO_BODIES]

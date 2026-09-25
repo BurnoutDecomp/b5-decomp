@@ -2,6 +2,8 @@
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the [mode-intro] witness below
+#include <cstdlib>                                             // getenv (the [mode-intro] gate)
 
 namespace BrnGameState
 {
@@ -14,6 +16,28 @@ namespace
 // rather than literally 0, so the single Update tick that follows still drives the state
 // machine forward through the normal countdown-elapsed path.
 const f32 KF_INSTANT_INTRO_SECONDS = 1.9999999e-05f;
+
+// [DIAG] BRN_INTRO_TIMER_DIAG -- NOT IN THE X360 BINARY (added 2026-09-25, crash parity FX-SCENARIOS).
+// One line per mode intro, printed at the end of OnEnter: the mode's type and name, the countdown
+// OnEnter seeded (the mode's vtable slot 8 GetIntroDurationSeconds, or the instant-intro value for
+// an online lobby / showtime started without one) and whether IntroState times it. The live witness
+// of the intro lengths (Showtime 0.0002, the offline base 6.0, Pursuit 1.0, Face Off 0.0). Reuses the
+// race-car module's [intro-timer] gate; capped so a restarting mode cannot flood the log.
+void LogModeIntro(const GameMode* lpGameMode, EGameModeType leGameModeType, f32 lfCountdownSeconds,
+                  bool lbUseCountdown)
+{
+    static const bool sbOn = (getenv("BRN_INTRO_TIMER_DIAG") != 0);
+    static s32 siLines = 0;
+    const s32 KI_MODE_INTRO_DIAG_CAP = 32;
+    if (!sbOn || CgsDev::Log::gpDebugPrint == 0 || siLines >= KI_MODE_INTRO_DIAG_CAP)
+    {
+        return;
+    }
+    ++siLines;
+    *CgsDev::Log::gpDebugPrint << "[mode-intro] IntroState::OnEnter mode type " << static_cast<s32>(leGameModeType)
+                               << " '" << lpGameMode->GetName() << "' countdown " << lfCountdownSeconds
+                               << " s timed " << (lbUseCountdown ? 1 : 0) << " [FLAG PC witness]\n";
+}
 }
 
 // X360: BrnGameState::IntroState::OnEnter (0x823163C8). Sets up the intro countdown when
@@ -40,6 +64,8 @@ void IntroState::OnEnter()
                      || (leModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME);
 
     mpGameMode->SetFinished(false);
+
+    LogModeIntro(mpGameMode, leModeType, mfCountdownSeconds, mbUseCountdown);   // [DIAG] NOT X360
 }
 
 // X360: BrnGameState::IntroState::Update (0x823164A0). While the intro is timed, decrement
