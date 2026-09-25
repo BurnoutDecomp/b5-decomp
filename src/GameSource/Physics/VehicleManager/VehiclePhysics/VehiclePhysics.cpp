@@ -20,6 +20,9 @@
 #include <cstring>    // std::memcpy (controls/engine state copies)
 #include <cmath>      // std::sqrt / std::sin (boost-kick wheelie-angle limit + speed magnitudes)
 
+// [DIAG] the host-side present counter ([air] rows only; FX-WITNESS).
+namespace renderengine { extern u32 guPresentCount; }
+
 // BrnPhysics::Vehicle::VehiclePhysics -- the out-of-line ledger funcs owned by the Vehicle-physics
 // group (class TU). The header-homed leaf methods (GetShowtimeDeformationScale,
 // IsCounterSteeringAtLowSpeed) and the nested SlamEffect/ShuntEffect bodies live elsewhere; this
@@ -9207,6 +9210,200 @@ namespace Vehicle
         }
     }
 
+    // ============================================================================================
+    // [air] NOT IN THE X360 BINARY -- FX-WITNESS, 2026-09-24. Opt-in: BRN_AIR_DIAG=1.
+    //
+    // WHY. "Rivals fly more" has been argued from a height proxy (seconds more than 0.25 m above the
+    // takedown height); nothing printed whether the car was actually off its wheels. This line prints,
+    // per race car, every span of steps on which ALL FOUR wheels were out of contact, read from the
+    // flag the physics already keeps: RoadContact::mbIsOnGround. It is FINAL for the step here --
+    // VehicleManager::UpdateVehiclePhysics clears it (ResetAboveGroundTestResult) and re-sets it from
+    // the traction-line reads (ReadRaceCarTractionLineTestResults -> AddTractionPoint) BEFORE it calls
+    // this Update, and traction lines run for every used race car, crashing or not.
+    // ⚠ "All wheels out of contact" is not "airborne": a car on its roof has no wheel contact either.
+    // So each span also carries the lowest up.y it reached (below 0 = inverted) and the peak height
+    // above the take-off point (the pose on the first all-off step); read them together.
+    // IDENTITY: the per-car state is keyed by the VehiclePhysics object itself (the race cars live in
+    // a fixed array, so the address is stable), NOT by lpControls->miVehicleID: an INACTIVE AI record
+    // carries miVehicleID = -1 (AIModule's per-slot record, BrnAIModule_Drive.cpp), and a crashed
+    // victim is exactly when that can happen. `car` is the last miVehicleID >= 0 this object was
+    // driven with (the race-car slot; -1 if never seen), `obj` the table index.
+    // Fields: car, obj, span (per car), start/end present,
+    // steps, dur (sum of dt, s), peak (m), upyMin, crash (mbCrashing at start -> end), vyTakeoff and
+    // hspdTakeoff (m/s), dist (horizontal start-to-end, m), end (ground | jump: a one-step move over
+    // 10 m, i.e. a reset/teleport, which ends the span), shortSkipped (spans of 1-2 steps since the
+    // last printed line, counted not printed). Reads only; hard cap 5000 lines.
+    // DELETE-WHEN the airtime table (HINGE_FINAL.md) is banked.
+    // ============================================================================================
+    namespace
+    {
+        const s32 KI_AIR_CARS             = 16;
+        const u32 KU_AIR_MAX_LINES        = 5000u;
+        const u32 KU_AIR_MIN_PRINT_STEPS  = 3u;
+        const f32 KF_AIR_JUMP_METRES      = 10.0f;   // no car moves 10 m in one 1/60 s step
+
+        struct AirTrack
+        {
+            const void* mpOwner;      // the VehiclePhysics this slot tracks (nullptr == free)
+            s32  miCarId;             // the last lpControls->miVehicleID >= 0 seen (-1 == none yet)
+            bool mbInAir;
+            bool mbCrashAtStart;
+            u32  muSpan;
+            u32  muStartPresent;
+            u32  muSteps;
+            u32  muShortSkipped;
+            f32  mfSeconds;
+            f32  mfTakeoffY;
+            f32  mfPeakY;
+            f32  mfMinUpY;
+            f32  mfVyTakeoff;
+            f32  mfHSpeedTakeoff;
+            f32  mfStartX;
+            f32  mfStartZ;
+            f32  mfLastX;
+            f32  mfLastY;
+            f32  mfLastZ;
+        };
+        AirTrack gaAirTrack[KI_AIR_CARS] = {};
+        u32 guAirLines = 0u;
+
+        bool AirWitnessOn()
+        {
+            static s32 siOn = -1;
+            if ( siOn < 0 )
+            {
+                const char* lpcEnv = getenv("BRN_AIR_DIAG");
+                siOn = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
+            }
+            return ( siOn == 1 ) && ( CgsDev::Log::gpDebugPrint != 0 );
+        }
+
+        void AirWitnessEnd(s32 liCar, AirTrack& lrTrack, const char* lpcEnd, bool lbCrashingNow)
+        {
+            if ( lrTrack.muSteps >= KU_AIR_MIN_PRINT_STEPS )
+            {
+                if ( guAirLines < KU_AIR_MAX_LINES )
+                {
+                    ++guAirLines;
+                    const f32 lfDx = lrTrack.mfLastX - lrTrack.mfStartX;
+                    const f32 lfDz = lrTrack.mfLastZ - lrTrack.mfStartZ;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[air] car " << lrTrack.miCarId
+                        << " obj " << liCar
+                        << " span " << lrTrack.muSpan
+                        << " startPresent " << lrTrack.muStartPresent
+                        << " endPresent " << renderengine::guPresentCount
+                        << " steps " << lrTrack.muSteps
+                        << " dur " << lrTrack.mfSeconds
+                        << " peak " << ( lrTrack.mfPeakY - lrTrack.mfTakeoffY )
+                        << " upyMin " << lrTrack.mfMinUpY
+                        << " crash " << ( lrTrack.mbCrashAtStart ? 1 : 0 ) << "->" << ( lbCrashingNow ? 1 : 0 )
+                        << " vyTakeoff " << lrTrack.mfVyTakeoff
+                        << " hspdTakeoff " << lrTrack.mfHSpeedTakeoff
+                        << " dist " << std::sqrt(lfDx * lfDx + lfDz * lfDz)
+                        << " startPos (" << lrTrack.mfStartX << ", " << lrTrack.mfTakeoffY << ", "
+                        << lrTrack.mfStartZ << ")"
+                        << " end " << lpcEnd
+                        << " shortSkipped " << lrTrack.muShortSkipped
+                        << "\n";
+                }
+                lrTrack.muShortSkipped = 0u;
+            }
+            else
+            {
+                ++lrTrack.muShortSkipped;
+            }
+            lrTrack.mbInAir = false;
+        }
+
+        void AirWitnessStep(const void* lpOwner, s32 liVehicleId, const Wheel* lpaWheels,
+                            const Matrix44Affine& lrTransform, const Vector3& lrLinearVelocity,
+                            bool lbCrashing, f32 lfDT)
+        {
+            s32 liCar = -1;
+            for ( s32 li = 0; li < KI_AIR_CARS && liCar < 0; ++li )
+            {
+                if ( gaAirTrack[li].mpOwner == lpOwner )
+                {
+                    liCar = li;
+                }
+            }
+            for ( s32 li = 0; li < KI_AIR_CARS && liCar < 0; ++li )
+            {
+                if ( gaAirTrack[li].mpOwner == nullptr )
+                {
+                    liCar = li;
+                    gaAirTrack[li].mpOwner = lpOwner;
+                    gaAirTrack[li].miCarId = -1;
+                }
+            }
+            if ( liCar < 0 )
+            {
+                return;   // more than KI_AIR_CARS bodies: not tracked
+            }
+            AirTrack& lrTrack = gaAirTrack[liCar];
+            if ( liVehicleId >= 0 )
+            {
+                lrTrack.miCarId = liVehicleId;
+            }
+            bool lbAllWheelsOff = true;
+            for ( s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel )
+            {
+                if ( lpaWheels[liWheel].GetRoadContact().mbIsOnGround )
+                {
+                    lbAllWheelsOff = false;
+                }
+            }
+            const f32 lfX = lrTransform.wAxis.x;
+            const f32 lfY = lrTransform.wAxis.y;
+            const f32 lfZ = lrTransform.wAxis.z;
+            if ( lrTrack.mbInAir )
+            {
+                const f32 lfDx = lfX - lrTrack.mfLastX;
+                const f32 lfDy = lfY - lrTrack.mfLastY;
+                const f32 lfDz = lfZ - lrTrack.mfLastZ;
+                if ( lfDx * lfDx + lfDy * lfDy + lfDz * lfDz > KF_AIR_JUMP_METRES * KF_AIR_JUMP_METRES )
+                {
+                    AirWitnessEnd(liCar, lrTrack, "jump", lbCrashing);
+                }
+                else if ( !lbAllWheelsOff )
+                {
+                    AirWitnessEnd(liCar, lrTrack, "ground", lbCrashing);
+                }
+                else
+                {
+                    ++lrTrack.muSteps;
+                    lrTrack.mfSeconds += lfDT;
+                    if ( lfY > lrTrack.mfPeakY )                          { lrTrack.mfPeakY = lfY; }
+                    if ( lrTransform.yAxis.y < lrTrack.mfMinUpY )         { lrTrack.mfMinUpY = lrTransform.yAxis.y; }
+                    lrTrack.mfLastX = lfX;
+                    lrTrack.mfLastY = lfY;
+                    lrTrack.mfLastZ = lfZ;
+                }
+            }
+            if ( !lrTrack.mbInAir && lbAllWheelsOff )
+            {
+                lrTrack.mbInAir = true;
+                lrTrack.mbCrashAtStart = lbCrashing;
+                ++lrTrack.muSpan;
+                lrTrack.muStartPresent = renderengine::guPresentCount;
+                lrTrack.muSteps = 1u;
+                lrTrack.mfSeconds = lfDT;
+                lrTrack.mfTakeoffY = lfY;
+                lrTrack.mfPeakY = lfY;
+                lrTrack.mfMinUpY = lrTransform.yAxis.y;
+                lrTrack.mfVyTakeoff = lrLinearVelocity.y;
+                lrTrack.mfHSpeedTakeoff = std::sqrt(lrLinearVelocity.x * lrLinearVelocity.x
+                                                    + lrLinearVelocity.z * lrLinearVelocity.z);
+                lrTrack.mfStartX = lfX;
+                lrTrack.mfStartZ = lfZ;
+                lrTrack.mfLastX = lfX;
+                lrTrack.mfLastY = lfY;
+                lrTrack.mfLastZ = lfZ;
+            }
+        }
+    }
+
 // [clean] Update  @0x826412C0
     // @0x826412C0  BrnPhysics::Vehicle::VehiclePhysics::Update  (200 insns)
     // THE PER-CAR CONDUCTOR. The DWARF declares it virtual at vtable slot +0xC -- the slot
@@ -9291,6 +9488,11 @@ namespace Vehicle
         const f32 lfDT = lvfTimeStep.x;
         (void)lvfRealTimeStep;
 
+        // [air] (DIAG, BRN_AIR_DIAG) -- the step's final wheel contact flags + pose; reads only.
+        if ( AirWitnessOn() )
+        {
+            AirWitnessStep(this, lpControls->miVehicleID, maWheels, mTransform, mLinearVelocity, mbCrashing, lfDT);
+        }
 
         CgsDev::PerfMonCpu::StartMonitor(gs_iVPhysUpdatePM);
 

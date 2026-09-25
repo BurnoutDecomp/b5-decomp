@@ -16,6 +16,9 @@
 #include <cmath>    // std::exp / std::log -- the vexptefp / vlogefp angular-decay refinement converges here
 #include <cstdlib>  // getenv ([detach-probe] latch)
 
+// [DIAG] the host-side present counter ([jb-exit] lastExhaust rows only).
+namespace renderengine { extern u32 guPresentCount; }
+
 // ============================================================================
 // GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject_Detach.cpp
 //
@@ -252,6 +255,22 @@ namespace Deformation
             }
             return (siProbe == 1) && (CgsDev::Log::gpDebugPrint != 0);
         }
+
+        // [jb-exit] NOT X360 -- FX-WITNESS 2026-09-24, BRN_JB_EXIT_DIAG=1. The ONE per-hinge refusal
+        // the forwarder's [jb-exit] row cannot see, because TestJointForBreaking is never called: a
+        // hinged exhaust (type 84/85) while it is the last attached one (miNumAttachedExhausts <= 1,
+        // 0x8263ACC8). Printed at the skip with `exit lastExhaust`, capped at 2000 lines.
+        inline bool JbExitDetachOn()
+        {
+            static s32 siOn = -1;
+            if ( siOn < 0 )
+            {
+                const char* lpcEnv = getenv("BRN_JB_EXIT_DIAG");
+                siOn = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
+            }
+            return ( siOn == 1 ) && ( CgsDev::Log::gpDebugPrint != 0 );
+        }
+        u32 guJbExitExhaustLines = 0u;
     }
 
     // =============================================================================================
@@ -407,6 +426,20 @@ namespace Deformation
                             if ( lbStructural )                           // if ( v16 )
                                 --miNumAttachedExhausts;                  // --*(_R31 + 26400) (lhz/sth)
                         }
+                    }
+                    else if ( JbExitDetachOn() && guJbExitExhaustLines < 2000u )
+                    {
+                        // [jb-exit] (DIAG) -- the last-exhaust skip; reads only.
+                        ++guJbExitExhaustLines;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[jb-exit] step " << guDiagDeformationStep
+                            << " present " << renderengine::guPresentCount
+                            << " ent " << mGlobalEntityId.muValue
+                            << " ik " << li
+                            << " pool " << static_cast<s32>(maIKParts[li].GetPartPoolIndex())
+                            << " type " << liType
+                            << " exit lastExhaust exhausts " << static_cast<s32>(miNumAttachedExhausts)
+                            << "\n";
                     }
                 }
             }
