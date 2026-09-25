@@ -545,7 +545,7 @@ namespace vpu
             {
                 return std::numeric_limits<float>::quiet_NaN();
             }
-            if (lfSum != 0.0f && std::fabs(lfSum) < std::numeric_limits<float>::min())
+            if (lfSum != 0.0f && std::fabs(lfSum) < (std::numeric_limits<float>::min)())   // (min): windows.h
             {
                 return std::copysign(0.0f, lfSum);
             }
