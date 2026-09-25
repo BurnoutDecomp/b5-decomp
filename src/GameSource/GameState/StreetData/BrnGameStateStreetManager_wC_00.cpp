@@ -4,6 +4,8 @@
 //
 // Faithful de-optimisation of BURNOUT_X360_ARTIST.XEX:
 //   BrnGameState::StreetManager::ProcessNewRoadScore  @ 0x823496C8
+//   BrnGameState::StreetManager::UpdateBufferedHighScores (road-rules wave; the
+//     second producer of the new-high-score record, so it shares this file)
 //
 // Every asm store / branch / early-out / assert has a counterpart here, and all
 // state is reached through the frozen-header named members
@@ -40,6 +42,7 @@
 
 #include "GameSource/GameState/BrnGameStateModule.h"                                    // GetDeveloperChallengeManager / GetActivePlayerCarId
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                                  // OutputBuffer::GetGameActionQueue / GetGuiOutputQueue
+#include "GameSource/GameState/BrnGameActions.h"                                        // RoadRulesNewHighScoreAction (281) / RoadRulesNewRulersAction (285)
 #include "GameSource/GameState/DeveloperChallengeManager/BrnDeveloperChallengeManager.h"// DeveloperChallengeManager::OnSetRoadRule
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"                     // ProgressionManager accessors
 #include "GameSource/GameState/Progression/BrnProfile.h"                                // Profile::Get/SetNewHighShowtimeScore
@@ -51,6 +54,8 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                              // CgsContainers::BitArray<64u>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                        // CgsModule::Event / VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                      // CGS_ASSERT
+
+#include <cstddef>   // offsetof
 
 namespace
 {
@@ -67,26 +72,6 @@ namespace
         u8                                       mu8Flag;               // +0x2C
     };
     static_assert( sizeof(NewRoadScoreRecord) == 48, "new-road-score record is 0x30" );
-
-    // The 48-byte notification the X360 builds at var_200 and posts with
-    // AddEvent(&notification, 281, 48) once the score is a new high score or has
-    // beaten the friend's score.
-    // FLAG: the field identifiers are ours (no DWARF name for this GUI payload);
-    // every offset/size below is byte-exact from the image.
-    struct RoadRuleWonNotification
-    {
-        ::CgsID                mRoadId;                            // +0x00
-        u32                    meScoreType;                        // +0x08
-        s32                    miReserved;                         // +0x0C (stw 0)
-        s32                    miNumberOfRoadsRuled;               // +0x10
-        CgsNetwork::PlayerName mPlayerName;                        // +0x14 (16B)
-        u8                     mu8One;                             // +0x24 (stb 1)
-        u8                     mbWholeChallengeOwnedBySamePlayer;  // +0x25
-        u8                     mu8Zero0;                           // +0x26 (stb 0)
-        u8                     mu8Zero1;                           // +0x27 (stb 0)
-        u8                     mbBeatFriendScore;                  // +0x28
-    };
-    static_assert( sizeof(RoadRuleWonNotification) == 48, "road-rule-won notification is 0x30" );
 }
 
 namespace BrnGameState
@@ -108,7 +93,7 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
                                          BrnStreetData::ChallengeIndex liChallengeIndex,
                                          bool lbCheckFriendScore )
 {
-    bool lbBeatFriendScore = false;
+    bool lbOnlineLossButOfflineWin = false;
 
     const BrnStreetData::Road* lpRoad = mpStreetData->GetRoad( liChallengeIndex );
 
@@ -150,14 +135,11 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
             CGS_ASSERT( mpGameStateModule->GetDeveloperChallengeManager(),
                         "mpGameStateModule->GetDeveloperChallengeManager()" );
 
-            // The X360 hands the FULL 64-bit road CgsID in r6; the committed
-            // DeveloperChallengeManager::OnSetRoadRule models the 32-bit low half its
-            // body compares against a road-id literal, so the narrowing cast IS the
-            // faithful spelling of this call, not a convenience.
+            // The full 64-bit road id, as the console passes it.
             mpGameStateModule->GetDeveloperChallengeManager()->OnSetRoadRule(
                 leScoreType,
                 liNewScore,
-                static_cast<s32>( mpStreetData->GetRoad( liChallengeIndex )->GetId() ) );
+                mpStreetData->GetRoad( liChallengeIndex )->GetId() );
 
             if ( leScoreType == BrnStreetData::E_SCORE_TYPE_CRASH )
             {
@@ -214,7 +196,7 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
                         }
                         else
                         {
-                            lbBeatFriendScore = !lbUserScoreBeatsPar;
+                            lbOnlineLossButOfflineWin = !lbUserScoreBeatsPar;
                         }
                     }
                     else
@@ -242,35 +224,37 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
                 reinterpret_cast<const CgsModule::Event*>( &lRecord ), 233, 48 );
         }
 
-        if ( lbNewHighScore || lbBeatFriendScore )
+        if ( lbNewHighScore || lbOnlineLossButOfflineWin )
         {
             BrnStreetData::ChallengeHighScoreEntry lHighScore;
             lHighScore.Construct();
             GetHighScoreEntry( liChallengeIndex, &lHighScore, true );
 
-            RoadRuleWonNotification lNotification;
+            GameStateModuleIO::RoadRulesNewHighScoreAction lNotification;
             lNotification.mPlayerName.Construct( "" );
-            lNotification.mRoadId     = mpStreetData->GetRoad( liChallengeIndex )->GetId();
-            lNotification.mu8One      = 1;
-            lNotification.meScoreType = static_cast<u32>( leScoreType );
-            lNotification.mbWholeChallengeOwnedBySamePlayer = lHighScore.IsWholeChallengeOwnedBySamePlayer();
-            lNotification.mu8Zero0    = 0;
-            lNotification.mu8Zero1    = 0;
-            lNotification.miReserved  = 0;
-            lNotification.miNumberOfRoadsRuled = GetNumberOfRoadsRulesByLocalPlayer();
-            lNotification.mbBeatFriendScore    = lbBeatFriendScore;
+            lNotification.mRoadId                   = mpStreetData->GetRoad( liChallengeIndex )->GetId();
+            lNotification.mbIsLocalPlayer           = true;
+            lNotification.meScoreType               = leScoreType;
+            lNotification.mbIsWholeRoadOwned        = lHighScore.IsWholeChallengeOwnedBySamePlayer();
+            lNotification.mbWasRulePlayersBefore    = false;
+            lNotification.mbMultipleScores          = false;
+            lNotification.miNumScoresLost           = 0;
+            lNotification.miNumRoadsNowRuled        = GetNumberOfRoadsRulesByLocalPlayer();
+            lNotification.mbOnlineLossButOfflineWin = lbOnlineLossButOfflineWin;
 
             lpOutput->GetGuiOutputQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>( &lNotification ), 281, 48 );
+                reinterpret_cast<const CgsModule::Event*>( &lNotification ),
+                GameStateModuleIO::E_ACTION_ROAD_RULES_NEW_HIGH_SCORE, sizeof( lNotification ) );
 
             if ( leScoreType == meActiveRoadRuleType )
             {
-                CgsContainers::BitArray<64u> lChangedRoads;
-                lChangedRoads.UnSetAll();
-                lChangedRoads.SetBit( liSaveGameSlotIndex );
+                GameStateModuleIO::RoadRulesNewRulersAction lChangedRoads;
+                lChangedRoads.mRoadRulesChangedBitArray.UnSetAll();
+                lChangedRoads.mRoadRulesChangedBitArray.SetBit( liSaveGameSlotIndex );
 
                 lpOutput->GetGuiOutputQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>( &lChangedRoads ), 285, 8 );
+                    reinterpret_cast<const CgsModule::Event*>( &lChangedRoads ),
+                    GameStateModuleIO::E_ACTION_ROAD_RULES_NEW_RULERS, sizeof( lChangedRoads ) );
 
                 maRoadRulesChangedBitArrays[meActiveRoadRuleType].UnSetBit( liSaveGameSlotIndex );
             }
@@ -309,6 +293,91 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
 
             mpProgressionManager->CheckForSpecialCarUnlocks();
             mpProgressionManager->SendGameCompletionResults( lpOutput->GetGuiOutputQueue() );
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Drains the new-high-score buffer one entry per KF_TIME_BETWEEN_HIGH_SCORE_UNBUFFERS
+// seconds while nothing is paused and a road rule is active. When more scores arrived
+// than the buffer holds, one summary record (with the lost-score count) goes out instead
+// and the whole buffer is dropped. Either way the roads whose rulers changed for the
+// active score type are then published (game action 285) and their bits cleared.
+// ----------------------------------------------------------------------------
+void StreetManager::UpdateBufferedHighScores( f32 lfSimTimeStep,
+                                              bool lbIsAnythingPaused,
+                                              GameStateModuleIO::OutputBuffer* lpOutput )
+{
+    CGS_ASSERT( lpOutput, "lpOutput" );
+
+    if ( lbIsAnythingPaused )
+    {
+        return;
+    }
+
+    if ( mNewHighScoreBuffer.GetLength() > 0 && meActiveRoadRuleType != BrnStreetData::E_SCORE_TYPE_COUNT )
+    {
+        mfUnbufferTimer += lfSimTimeStep;
+
+        // The console tests `timer < limit` and carries on for NaN.
+        if ( !( mfUnbufferTimer < KF_TIME_BETWEEN_HIGH_SCORE_UNBUFFERS ) )
+        {
+            // [FLAG PC init] zero-initialised: the summary arm below writes only three
+            // members and the console posts whatever its stack held in the rest.
+            GameStateModuleIO::RoadRulesNewHighScoreAction lNewHighScore = {};
+
+            if ( mbTooManyHighScoresToBuffer )
+            {
+                lNewHighScore.miNumScoresLost    = miNumScoresLost;
+                lNewHighScore.miNumRoadsNowRuled = GetNumberOfRoadsRulesByLocalPlayer();
+                lNewHighScore.mbMultipleScores   = true;
+
+                lpOutput->GetGuiOutputQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>( &lNewHighScore ),
+                    GameStateModuleIO::E_ACTION_ROAD_RULES_NEW_HIGH_SCORE, sizeof( lNewHighScore ) );
+
+                mfUnbufferTimer = 0.0f;
+                mNewHighScoreBuffer.Clear();
+                mbTooManyHighScoresToBuffer = false;
+                miNumScoresLost             = 0;
+            }
+            else
+            {
+                mfUnbufferTimer = 0.0f;
+
+                lNewHighScore.mPlayerName             = mNewHighScoreBuffer[0].mPlayerName;
+                lNewHighScore.mRoadId                 = mNewHighScoreBuffer[0].mRoadID;
+                lNewHighScore.meScoreType             = mNewHighScoreBuffer[0].meScoreType;
+                lNewHighScore.mbIsWholeRoadOwned      = mNewHighScoreBuffer[0].mbIsRoadWhollyOwnedByOnePlayer;
+                lNewHighScore.mbIsLocalPlayer         = false;
+                lNewHighScore.mbMultipleScores        = false;
+                lNewHighScore.miNumScoresLost         = 0;
+                lNewHighScore.mbWasRulePlayersBefore  = mNewHighScoreBuffer[0].mbWasRoadRuledByPlayerBefore;
+                lNewHighScore.miNumRoadsNowRuled      = GetNumberOfRoadsRulesByLocalPlayer();
+                lNewHighScore.mbOnlineLossButOfflineWin = false;
+
+                mNewHighScoreBuffer.Erase( 0 );
+
+                CGS_ASSERT( lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()" );
+                lpOutput->GetGuiOutputQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>( &lNewHighScore ),
+                    GameStateModuleIO::E_ACTION_ROAD_RULES_NEW_HIGH_SCORE, sizeof( lNewHighScore ) );
+            }
+
+            if ( !maRoadRulesChangedBitArrays[meActiveRoadRuleType].IsZero() )
+            {
+                GameStateModuleIO::RoadRulesNewRulersAction lNewRulers;
+                lNewRulers.mRoadRulesChangedBitArray.UnSetAll();
+                lNewRulers.mRoadRulesChangedBitArray.ORArrays( &lNewRulers.mRoadRulesChangedBitArray,
+                                                               &maRoadRulesChangedBitArrays[meActiveRoadRuleType] );
+
+                CGS_ASSERT( lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()" );
+                lpOutput->GetGuiOutputQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>( &lNewRulers ),
+                    GameStateModuleIO::E_ACTION_ROAD_RULES_NEW_RULERS, sizeof( lNewRulers ) );
+
+                maRoadRulesChangedBitArrays[meActiveRoadRuleType].UnSetAll();
+            }
         }
     }
 }

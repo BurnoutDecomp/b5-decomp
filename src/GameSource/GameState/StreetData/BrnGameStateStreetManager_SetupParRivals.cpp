@@ -25,13 +25,13 @@
 // ⭐ MEMBER AUDIT -- EVERY `this->` READ ON THIS LEG AND ITS WRITER (2026-08-11).
 //
 // Written after the first boot AV'd on the one member nobody had checked. StreetManager is not
-// Construct()ed on PC (see WireOwnerPointers in the header), so "the member exists" does not
+// Construct()ed on PC at the time (Construct runs now), so "the member exists" does not
 // imply "something wrote it". Anyone extending this leg must extend this table.
 //
 //   member                       read by            writer on the PC path                status
 //   ---------------------------  -----------------  -----------------------------------  ------
 //   mpProgressionManager         this, _FindRivals  GameStateModule::Construct ->         ⭐ WIRED
-//                                                   StreetManager::WireOwnerPointers      this wave
+//                                                   StreetManager::Construct
 //   mpStreetData (ResourcePtr)   this               StreetManager::LoadStreetData         ✅ gated:
 //                                                   @0x8234F630 (wB_01, mounted)          Prepare2
 //                                                   -- the ONLY writer in the image       returns
@@ -105,28 +105,6 @@ namespace BrnGameState
 void StreetManager::SetupParRivals( const TriggerQueryManager* lpTriggerQueryManager )
 {
     const BrnTrigger::TriggerData* lpTriggerData = lpTriggerQueryManager->GetTriggerData();
-
-    // ⚠️ PC HARDENING #1 (2026-08-11) -- documented deviation, NOT a placeholder, and it is
-    // THE FIX'S TRIPWIRE, not the fix. THIS IS THE LINE THAT CRASHED on the first boot after the
-    // un-park: EXCEPTION_ACCESS_VIOLATION reading 0x1D9E8 inside GetProgressionData, because
-    // mpProgressionManager was NULL (0x1D9E8 == 121320 == the host
-    // offsetof(ProgressionManager, mpProgressionData), i.e. a member read off a null base).
-    // The console cannot hit this: StreetManager::Construct @0x82335978 stores the back-pointer
-    // at +0x1D10 and asserts it non-null (BrnGameStateStreetManager.cpp:151) long before any
-    // Prepare2 runs. On PC that Construct is still parked, so the pointer is wired by the named
-    // subset helper StreetManager::WireOwnerPointers, called from GameStateModule::Construct at
-    // the console's own call position -- THAT is the fix. This guard exists so that if the wiring
-    // ever regresses (or the helper is deleted before the real Construct lands) the failure is a
-    // named assert instead of an AV in a callee.
-    // DELETE-WHEN GameStateModule::Construct calls the real StreetManager::Construct, whose own
-    // assert then covers it.
-    CGS_ASSERT( mpProgressionManager != 0,
-                "[PC] SetupParRivals: mpProgressionManager was never wired "
-                "(StreetManager::Construct is parked -- see WireOwnerPointers)" );
-    if ( mpProgressionManager == 0 )
-    {
-        return;
-    }
 
     // The committed accessor IS the asm's null-checked ResourcePtr read
     // (mpProgressionManager + 133348).

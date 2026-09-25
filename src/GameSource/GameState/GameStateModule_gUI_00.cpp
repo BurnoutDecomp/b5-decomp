@@ -1773,6 +1773,12 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");   // BrnGameStateModule.cpp:1149
     mbIsUpdating = true;
 
+    // The console's sim-step latch, near the top of PreWorldUpdate: mfSimTimeStep = 0, then the
+    // pre-world input buffer's sim timer step (base * multiplier). [FLAG PC bring-up] read from
+    // the frame's timer interface, the same named deviation leg 1b carries (nothing on PC fills
+    // the input buffer's timer block). Readers: UpdateRoadRulesManager, StreetManager::Update.
+    mfSimTimeStep = lrTimerStatusInterface.GetSimTimerStatus()->GetCurrentTimeStep();
+
     // ---- -1) THE ONLINE CRASH APPEND (console 0x823A5544..0x823A55A0) -------------------------
     // ⭐ [FX-GS2 2026-09-23, crash-parity G11-D5] Straight after the setup-player-car one-shot
     // (0x823A5510..0x823A5540, PreWorldUpdateSetupPlayerCarBringUp here) and before the drive-thru
@@ -2007,6 +2013,9 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     ProcessGameEventsOnlinePlayerBringUp(&lGameEventQueue, lpActionQueue, mpOutputBuffer);
     ProcessGameEventsFreeburnChallengeBringUp(&lGameEventQueue, lpActionQueue, lrTimerStatusInterface,
                                               lfGameTimestep);
+    // The road-rules and street-manager arms (cases 96..100, 103, 130..133, 150), same walk
+    // (GameStateModule_RoadRules.cpp).
+    ProcessGameEventsRoadRulesBringUp(&lGameEventQueue, lpActionQueue, mpOutputBuffer);
 
     // ---- 1a) THE TAKEDOWN FEED (console: the `if (!IsSimPaused)` block between #68 and #86) --
     // ⭐⭐⭐ [road-rage wave, agent C] GameStateModule::ProcessTakedownEvents @0x8238FC50. X360
@@ -2125,21 +2134,19 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // â­ WHY THIS LEG EXISTS AT ALL: its action-42 post is the ONLY producer of impact time in
     // the entire image, and without it VehiclePhysics::UpdateCrashing's aftertouch gate never
     // opens, so RaceCarPhysics::UpdateShowtimePhysics -- the whole P6 bounce chain -- never runs.
-    // The full derivation, the four arms deliberately NOT landed, and the method that found the
-    // post are all in GameStateModule_RoadRules.cpp.
+    // It is also the per-frame tick of the road rules (RoadRulesManager::Update). Body in
+    // GameStateModule_RoadRules.cpp.
     //
-    // â›” NOT staged inside the 1b block above: 1b additionally requires mpPreWorldInputBuffer to
-    // be non-null (it passes the buffer to ModeManager), and this leg does not touch that buffer
-    // at all. Nesting it there would add a condition the console does not have -- and on a build
-    // where nothing constructs a PreWorldInputBuffer that condition is exactly the kind of
-    // invented gate that would silently keep the chain dead [[invented-arms-and-the-c4715-ratchet]].
+    // The console's arguments: the output buffer and the pre-world input buffer's
+    // ControllerInput (PreWorldInputBuffer::GetControllerInput, a read-lock accessor; the console
+    // holds the read lock across the whole of PreWorldUpdate, here it is taken around the call as
+    // leg 1b does). Construct allocates the buffer, so it is never null here.
     if (!IsSimPaused(true, false))
     {
-        UpdateRoadRulesManagerImpactTimeBringUp(lpActionQueue);
-        if (mLastActiveRaceCarInterface.GetPlayerActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
-            mLastActiveRaceCarInterface.IsPlayerCarActive())
-            mRoadRulesManager.UpdateRoadDisplay(mStreetManager.GetCurrentPlayerRoadIndex(),
-                lrTimerStatusInterface.GetSimTimerStatus()->GetCurrentTimeStep(), lpActionQueue);
+        mpPreWorldInputBuffer->LockForRead();
+        const GameStateModuleIO::PreWorldInputBuffer* lpcPreWorldInputBuffer = mpPreWorldInputBuffer;
+        UpdateRoadRulesManager(mpOutputBuffer, lpcPreWorldInputBuffer->GetControllerInput());
+        mpPreWorldInputBuffer->UnlockForRead();
     }
 
     // ---- 1c') THE REST OF THE SAME HOP: EmmPreWorldUpdate's TAIL (0x8238F1BC..0x8238F33C) ------
@@ -2464,8 +2471,35 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
         }
     }
 
-    if (!IsSimPaused(true, false))
-        UpdateStreetDisplay(lrTimerStatusInterface.GetSimTimerStatus()->GetCurrentTimeStep());
+    // ---- 4) StreetManager::Update ------------------------------------------------------------
+    // The console calls it after StuntManager::Update (and the rich-presence, achievement and
+    // developer-challenge ticks, which are not staged here), in the same update-set leg, with:
+    //   lbPaused          = the raw pause word != 0 (not IsSimPaused's online-masked answer)
+    //   lfSimTimeStep     = mfSimTimeStep
+    //   the pre-world input buffer, the output buffer, the cached active-race-car snapshot and
+    //   the cached AI car snapshot
+    //   7th  (bool)       = a mode is running and its params carry KU_FLAG_USES_NAVIGATION
+    //   8th  (bool)       = a mode is running and its params carry KU_FLAG_DISABLE_UPCOMING_ROAD_SIGNS
+    //                       (true skips the upcoming-street walk)
+    //   lfWrongWayTime    = ScoringSystem::GetPlayerWrongWayTime()
+    // It runs the upcoming-street walk and the wrong-way timer, the friend / server score
+    // updates, the buffered high scores and the profile score copy. It reads the input buffer's
+    // network interface through the read-lock accessor; the console holds that lock across the
+    // whole of PreWorldUpdate, here it is taken around the call.
+    {
+        const bool lbModeRunning = (mModeManager.GetCurrentGameMode() != 0);
+        const GameModeParams* lpModeParams = mModeManager.GetCurrentGameModeParams();
+        const bool lbUsesNavigation =
+            lbModeRunning && lpModeParams->GetFlag(GameModeParams::KU_FLAG_USES_NAVIGATION);
+        const bool lbDisableUpcomingRoadSigns =
+            lbModeRunning && lpModeParams->GetFlag(GameModeParams::KU_FLAG_DISABLE_UPCOMING_ROAD_SIGNS);
+        mpPreWorldInputBuffer->LockForRead();
+        mStreetManager.Update(miSimPauseFlags != 0, mfSimTimeStep, mpPreWorldInputBuffer, mpOutputBuffer,
+                              &mLastActiveRaceCarInterface, &mLastAICarOutputInterface,
+                              lbUsesNavigation, lbDisableUpcomingRoadSigns,
+                              mModeManager.GetScoringSystem()->GetPlayerWrongWayTime());
+        mpPreWorldInputBuffer->UnlockForRead();
+    }
 
     mbIsUpdating = false;
     mpOutputBuffer->UnlockForWrite();
@@ -2687,13 +2721,12 @@ void GameStateModule::ProcessGameEventsStartGameModeBringUp(
 // wait for the pre-event GUI to finish its presentation and send GUI 163, which
 // BridgeGuiToGameState relays as game event 25.
 //
-// [!][!] AND WHAT HAPPENS NEXT IS NOT THIS FUNCTION'S FAULT: FinishOfflineModeIntro advances the
-// mode to E_GMS_COUNTDOWN, and CountdownState::Update advances only when
-// (mfCountdownSeconds <= 0 && mpGameMode->ShouldCountdownEnd()). StuntAttackMode::ShouldCountdownEnd
-// returns mbPlayerPointingInStartDirection, whose ONLY writer is StuntAttackMode::PreWorldUpdate
-// (@0x82344EE0, BrnStuntAttackMode.cpp:467) -- so the countdown DELIBERATELY HOLDS until the car
-// faces the junction's start direction. A "stuck countdown" is very probably a car pointing the
-// wrong way, not a missing clock. The diag rung below says so in the log.
+// [!][!] AND WHAT HAPPENS NEXT: FinishOfflineModeIntro advances the mode to E_GMS_COUNTDOWN, and
+// CountdownState::Update advances only when (mfCountdownSeconds <= 0 &&
+// mpGameMode->ShouldCountdownEnd()). Only StuntAttackMode overrides ShouldCountdownEnd: it returns
+// mbPlayerPointingInStartDirection, written only by StuntAttackMode::PreWorldUpdate, so a stunt
+// run's countdown holds until the car faces the junction's start direction. Every other offline
+// mode ends its countdown when the CountdownState timer reaches 0. The diag rung below says so.
 // ============================================================================
 void GameStateModule::ProcessGameEventsModeIntroBringUp(
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue)
@@ -2730,9 +2763,9 @@ void GameStateModule::ProcessGameEventsModeIntroBringUp(
                     *CgsDev::Log::gpDebugPrint
                         << "[start] event 25 -> FinishOfflineModeIntro (mode state "
                         << mModeManager.GetCurrentGameMode()->GetCurrentState()
-                        << " -> countdown; the countdown then HOLDS until "
-                        << "StuntAttackMode::mbPlayerPointingInStartDirection is true, i.e. until "
-                        << "the car faces the junction start direction)\n";
+                        << " -> countdown; it ends when the countdown timer reaches 0, and a stunt "
+                        << "run also waits for StuntAttackMode::mbPlayerPointingInStartDirection, "
+                        << "i.e. the car facing the junction start direction)\n";
                 }
                 mModeManager.FinishOfflineModeIntro();
             }

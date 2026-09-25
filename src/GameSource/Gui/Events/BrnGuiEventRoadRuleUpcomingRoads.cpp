@@ -279,3 +279,52 @@ void GuiEventRoadRuleData::Construct(const BrnGameState::GameStateModuleIO::Road
     }
 }
 }
+
+namespace BrnGui {
+// The target panel's leader and best for one score type: AI (the running best starts at the
+// worst possible time, or zero crash), then the friend best if it beats that (its name goes
+// straight into the leader slot), then the local player's best if it beats the result.
+void GuiEventRoadRuleUpdateTargetScores::SetupRoadRule(const RoadRulesUpdateTargetScoreAction* lpAction,
+                                                       BrnStreetData::ScoreType leType)
+{
+    using BrnStreetData::ChallengeData;
+    maeRoadRuleLeaderType[leType] = E_ROADRULELEADERTYPE_AI;
+    if (leType == BrnStreetData::E_SCORE_TYPE_TIME)
+    {
+        maiBestValues[leType] = 0x7FFFFFFF;
+    }
+    else
+    {
+        maiBestValues[leType] = 0;
+    }
+
+    if (lpAction->mFriendScores.ContainsData(leType))
+    {
+        s32 liFriendScore;
+        lpAction->mFriendScores.GetScore(leType, &liFriendScore, &maFriendLeader[leType]);
+        if (ChallengeData::CompareScores(leType, liFriendScore, maiBestValues[leType]) < 0)
+        {
+            maiBestValues[leType]         = liFriendScore;
+            maeRoadRuleLeaderType[leType] = E_ROADRULELEADERTYPE_FRIEND;
+        }
+    }
+
+    if (lpAction->mUserScores.ContainsData(leType))
+    {
+        const s32 liUserScore = lpAction->mUserScores.GetScore(leType);
+        if (ChallengeData::CompareScores(leType, liUserScore, maiBestValues[leType]) < 0)
+        {
+            maiBestValues[leType]         = liUserScore;
+            maeRoadRuleLeaderType[leType] = E_ROADRULELEADERTYPE_PLAYER;
+        }
+    }
+}
+
+// Crash first, then time, then the road id.
+void GuiEventRoadRuleUpdateTargetScores::Construct(const RoadRulesUpdateTargetScoreAction* lpAction)
+{
+    SetupRoadRule(lpAction, BrnStreetData::E_SCORE_TYPE_CRASH);
+    SetupRoadRule(lpAction, BrnStreetData::E_SCORE_TYPE_TIME);
+    mRoadId = lpAction->mRoadId;
+}
+}

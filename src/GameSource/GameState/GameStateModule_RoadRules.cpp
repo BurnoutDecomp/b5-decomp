@@ -36,15 +36,18 @@
 // [[a-state-leaves-itself]] cut the other way here -- the lead was INFERRED, and it was wrong.
 #include "GameSource/GameState/BrnGameStateModule.h"
 
-#include <stdlib.h>                                                     // getenv (the witness gate)
-#include <string.h>                                                     // memset (the record)
+#include <string.h>                                                     // memset (the records)
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // CgsDev::Log::gpDebugPrint
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // GameActionQueue::AddEvent
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // GameActionQueue::AddEvent, the game-event walk
 
-#include "GameSource/GameState/BrnGameActions.h"                        // E_ACTION_IMPACT_TIME_START
-#include "GameSource/GameState/BrnGameStateModuleIO.h"                  // GameActionQueue
+#include "GameSource/GameState/BrnGameActions.h"                        // actions 42 / 142 / 275
+#include "GameSource/GameState/BrnGameEvents.h"                         // the road-rules event records
+#include "GameSource/GameState/BrnGameStateModuleIO.h"                  // OutputBuffer / ControllerInput
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                  // E_MODE_OFFLINE_SHOWTIME / E_MODE_ONLINE_SHOWTIME
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"  // GetCrashScorer / GetPlayerNoInputTime
+#include "SharedClasses/StreetData/BrnStreetData.h"                     // StreetData::GetRoadCount
 
 namespace BrnGameState
 {
@@ -82,150 +85,310 @@ struct ImpactTimeStartActionRecord
 static_assert(sizeof(ImpactTimeStartActionRecord) == 8,
               "X360 UpdateRoadRulesManager posts action 42 with size 8");
 
-// ============================================================================================
-// ONE ARM of X360 BrnGameState::GameStateModule::UpdateRoadRulesManager @0x82381258 (283 insns).
-//
-// ⚠️ THIS IS A PARTIAL AND THE BOUNDARY IS STATED. The console function has five arms inside its
-// one guard. This file lands the guard and arm (c). The others are DEFERRED BY NAME, each one
-// written out below rather than omitted, and each is deferred because its callee does not exist
-// in this tree:
-//
-//   (a) the StreetData range assert (`StreetData_::oper(this+291888)` +0x20 vs this+291972).
-//       DEFERRED: BrnStreetData::StreetData_::oper is not in the tree. It is an assert only --
-//       nothing downstream of it changes state.
-//   (b) the action-142 post, 12 bytes, gated on the SAME showtime mode test as (c) but with no
-//       edge latch, so it fires EVERY frame of showtime. DEFERRED: its payload is assembled from
-//       four unnamed module offsets (+8440, +8404, +8396, +232296) plus
-//       RCEntityActiveRaceCarOutputInterface::GetPlay, and this tree has named members for none
-//       of them. ⛔ Guessing them would post plausible garbage onto a live wire queue --
-//       [[silent-drop-stubs]] in its most expensive form. Not attempted.
-//   (c) ⭐ THE ACTION-42 POST -- LANDED BELOW. Self-contained: two module scalars and a literal.
-//   (d) `this+208312 = ChallengeManager::GetChalle(this+32288)`. DEFERRED: the export's name is
-//       truncated in the IDA set and the destination offset is un-homed here.
-//   (e) the tail call RoadRulesManager::Update(this+183592, ...10 arguments...). DEFERRED:
-//       BrnGameState::RoadRulesManager DOES NOT EXIST IN THIS TREE AT ALL (the only RoadRules
-//       class present is BrnNetwork::NetworkRoadRulesManager, a different class). This is the
-//       function's namesake arm and it is the whole reason the function is not landed entire.
-//
-// ⇒ What this file claims is exactly this: the console's action-42 post, at the console's own
-// position in the frame, under the console's own guard and the console's own edge condition.
-// It does not claim to be UpdateRoadRulesManager.
-//
-// THE GUARD (asm 0x823812A8..0x823812C4). ⚠️ NOTE THE INVERSION -- the `beq` on index == -1
-// SKIPS the byte load, so an invalid index leaves the register at the `li r11, 0` that preceded
-// the compare:
-//     lwz r11, 0x2858(r23)   ; iface+10328 == mePlayerActiveRaceCarIndex
-//     cmpwi cr6, r11, -1
-//     li   r11, 0
-//     beq  cr6, loc_823812BC ; <- jumps PAST the lbz
-//     lbz  r11, 0x2860(r23)  ; iface+10336 == IsPlayerCarActive
-//     ...  beq cr6, <function tail>
-// r23 == this + 235488 == mLastActiveRaceCarInterface. ⭐ Both offsets were named by an earlier
-// and unrelated wave (BrnStuntModeScoring.h:378-379 spells out "*(a2+10328) ==
-// GetPlayerActiveRaceCarIndex ... *(a2+10336) == IsPlayerCarActive"), which is the calibration
-// control for this decode: two offsets recovered here matched two names recovered there.
-// ============================================================================================
-void GameStateModule::UpdateRoadRulesManagerImpactTimeBringUp(
-        GameStateModuleIO::GameActionQueue* lpActionQueue)
+namespace
 {
-    if (lpActionQueue == 0)
-    {
-        return;
-    }
+    // Metres to yards, the showtime score's distance unit. The same image word ModeManager's
+    // results arm reads (0x3F8BFB85), dumped there.
+    const f32 KF_METRES_TO_YARDS = 1.0936132669448853f;
+}
 
-    // ---- the guard, by name ------------------------------------------------------------------
-    if (mLastActiveRaceCarInterface.GetPlayerActiveRaceCarIndex() == E_ACTIVE_RACE_CAR_INDEX_INVALID)
-    {
-        return;
-    }
+// ============================================================================================
+// GameStateModule::UpdateRoadRulesManager -- the whole function (283 instructions).
+//
+// Caller: EmmPreWorldUpdate, on its not-sim-paused arm, straight after the ModeManager tick
+// (GameStateModule_gUI_00.cpp leg 1c). Arguments: the output buffer, and the pre-world input
+// buffer's ControllerInput (read under the buffer's read lock).
+//
+// Everything runs under one guard, the inlined IsPlayerCarActive() of the module's cached
+// active-race-car snapshot. Inside it, in the console's order:
+//   (a) the StreetData range assert on the player's current road index;
+//   (b) every frame of a showtime mode: the showtime score into the road-rules manager and
+//       action 142 (the showtime score update);
+//   (c) on the frame showtime starts: action 42 (impact time);
+//   (d) meFreeburnChallengeStyle from the ChallengeManager;
+//   (e) RoadRulesManager::Update with its twelve arguments.
+//
+// Module members the arms read, by console offset:
+//   +0x1DB4          the current game mode type (GetCurrentGameModeType)
+//   +0x20CC/+0x20D4/+0x20F8  the offline CrashModeScoring's miBaseScore / miScoreMultiplier /
+//                    mfDistanceTravelled (ModeManager +0xDB0 -> ScoringSystem +0x20)
+//   +0x7AC4          ScoringSystem::mfPlayerTimeWithoutInput
+//   +0x2CDC0         mCarSelectManager.mJunkyardId (IsInJunkyard)
+//   +0x2CE34         mOnlineCarSelectManager.mbIsInOnlineCarSelect
+//   +0x32DB8         meFreeburnChallengeStyle
+//   +0x32DC5         mbFreeburnChallengeSelectorVisible
+//   +0x38B64         meControllerState (IsControllerActive)
+//   +0x38B68         mLocalPlayerNetworkID
+//   +0x45761         mbWasInShowtimeGameMode
+//   +0x47430/+0x47484  mStreetManager's StreetData and current player road index
+//   +0x475BC         mfSimTimeStep
+// ============================================================================================
+void GameStateModule::UpdateRoadRulesManager(GameStateModuleIO::OutputBuffer*          lpOutputBuffer,
+                                             const GameStateModuleIO::ControllerInput* lpControllerInput)
+{
     if (!mLastActiveRaceCarInterface.IsPlayerCarActive())
     {
         return;
     }
 
-    // ---- arm (c): the showtime RISING EDGE ---------------------------------------------------
-    // asm 0x8238145C..0x823814C0. `lwz r8, 0x1DB4(r31)` is this+7604, the module's cached
-    // current-game-mode-type scalar -- the same read BrnGameStateModule.h:866 already documents
-    // behind GetCurrentGameModeType(). It is compared against 2 and 0x10, and this tree already
-    // carries both of those values BY NAME (BrnGameStateSharedIO.h:64/80): E_MODE_OFFLINE_SHOWTIME
-    // and E_MODE_ONLINE_SHOWTIME. Two independent recoveries, one meaning.
+    // ---- (a) ------------------------------------------------------------------------------
+    // The console streams "<index> < <count>" into the assert buffer; the literal part is " < ".
+    const BrnStreetData::RoadIndex liCurrentRoadIndex = mStreetManager.GetCurrentPlayerRoadIndex();
+    CGS_ASSERT(liCurrentRoadIndex < mStreetManager.GetStreetData()->GetRoadCount(), " < ");
+
+    // ---- (b) ------------------------------------------------------------------------------
+    // Every frame of a showtime mode, no edge latch. The score is computed the way ModeManager's
+    // results arm computes it: metres to whole yards, a hundred points a yard, plus the damage
+    // score, all times the crash multiplier. The console evaluates the expression twice (once for
+    // the store, once for the record) from the same three members; it is evaluated once here.
+    {
+        const GameStateModuleIO::EGameModeType leGameModeType = GetCurrentGameModeType();
+        if (leGameModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
+            leGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+        {
+            const CrashModeScoring* lpCrashScorer = mModeManager.GetScoringSystem()->GetCrashScorer();
+            const s32 liYards = static_cast<s32>(lpCrashScorer->GetDistanceTravelled() * KF_METRES_TO_YARDS);
+            const s32 liShowtimeScore =
+                (liYards * 100 + lpCrashScorer->miBaseScore) * lpCrashScorer->GetScoreMultiplier();
+
+            mRoadRulesManager.SetShowtimeScore(liShowtimeScore);
+
+            GameStateModuleIO::ShowtimeUpdateAction lShowtimeUpdate;
+            lShowtimeUpdate.meActiveRaceCarIndex = mLastActiveRaceCarInterface.GetPlayerActiveRaceCarIndex();
+            lShowtimeUpdate.mNetworkPlayerID     = mLocalPlayerNetworkID;
+            lShowtimeUpdate.miShowtimeScore      = liShowtimeScore;
+            // Console size 12 (pointer-free record, host size equal).
+            lpOutputBuffer->GetGameActionQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lShowtimeUpdate),
+                GameStateModuleIO::E_ACTION_SHOWTIME_UPDATE,
+                static_cast<s32>(sizeof(lShowtimeUpdate)));
+        }
+    }
+
+    // ---- (c) ------------------------------------------------------------------------------
+    // The showtime rising edge. The latch is re-stored with the current truth on every frame the
+    // guard passes, before the edge is tested.
+    {
+        const GameStateModuleIO::EGameModeType leGameModeType = GetCurrentGameModeType();
+        const bool lbInShowtime =
+            (leGameModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME
+          || leGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
+        const bool lbRisingEdge = (lbInShowtime && !mbWasInShowtimeGameMode);
+        mbWasInShowtimeGameMode = lbInShowtime;
+
+        if (lbRisingEdge)
+        {
+            ImpactTimeStartActionRecord lRecord;
+            std::memset(&lRecord, 0, sizeof(lRecord));   // +0x06..+0x07: the console posts stack residue
+
+            // Both arms load the same 1.0f literal; the online branch is the console's.
+            lRecord.mfImpactTimeDuration = 1.0f;
+            if (IsOnlineGameMode())
+            {
+                lRecord.mfImpactTimeDuration = 1.0f;
+            }
+            lRecord.mu8ForceAdditiveAftertouch = 1;
+            lRecord.mu8Field05                 = 1;
+
+            lpOutputBuffer->GetGameActionQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRecord),
+                GameStateModuleIO::E_ACTION_IMPACT_TIME_START,
+                static_cast<s32>(sizeof(ImpactTimeStartActionRecord)));
+
+            // [DIAG] NOT IN THE CONSOLE BINARY. One line per showtime entry (the post is edge-gated).
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[bounce] POSTED game action 42 IMPACT_TIME_START: modeType "
+                    << static_cast<s32>(leGameModeType)
+                    << " online "        << static_cast<s32>(IsOnlineGameMode() ? 1 : 0)
+                    << " duration "      << lRecord.mfImpactTimeDuration
+                    << " additive "      << static_cast<s32>(lRecord.mu8ForceAdditiveAftertouch)
+                    << " field05 "       << static_cast<s32>(lRecord.mu8Field05)
+                    << " size "          << static_cast<s32>(sizeof(ImpactTimeStartActionRecord))
+                    << "\n";
+            }
+        }
+    }
+
+    // ---- (d) ------------------------------------------------------------------------------
+    // The embedded ChallengeManager (gsm +0x7E20) style, handed to Update below.
+    meFreeburnChallengeStyle = mModeManager.GetChallengeStyle();
+
+    // ---- (e) ------------------------------------------------------------------------------
+    // lbShowtimeActive: a showtime mode that is not in one of its post-event states (the inlined
+    // ModeManager::IsInPostEvent, states 3 / 5 / 4).
     const GameStateModuleIO::EGameModeType leGameModeType = GetCurrentGameModeType();
-    const bool lbInShowtime =
+    const bool lbShowtimeActive =
         (leGameModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME
-      || leGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
+      || leGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+        && !mModeManager.IsInPostEvent();
 
-    // `lbzx r11, r31, r9` @0x82381484 reads the latch, `stbx r11, r31, r9` @0x823814B8 re-stores
-    // the CURRENT truth into it -- unconditionally, on every frame the guard passes, whether or
-    // not the post fires. The console stores the new value BEFORE testing the edge; the order
-    // does not matter to the result but it is kept here so the read matches the asm.
-    const bool lbRisingEdge = (lbInShowtime && !mbWasInShowtimeGameMode);
-    mbWasInShowtimeGameMode = lbInShowtime;
+    // lbDisableSwitchingOnline: the freeburn challenge selector is up, or the controller is not
+    // active (the inlined IsControllerActive, states 3 / 0).
+    const bool lbDisableSwitchingOnline = mbFreeburnChallengeSelectorVisible || !IsControllerActive();
 
-    if (!lbRisingEdge)
+    // lbCarSelectActive: in a junkyard, or in the online car select.
+    const bool lbCarSelectActive =
+        mCarSelectManager.IsInJunkyard() || mOnlineCarSelectManager.IsInOnlineCarSelect();
+
+    // The player's RaceCarState, fetched twice by the console (once per read).
+    const bool lbInAir =
+        mLastActiveRaceCarInterface.GetRaceCarStateMutable(GetPlayerActiveRaceCarIndex())->mfTimeInAir > 0.0f;
+    const f32  lfPlayerNoInputTime = mModeManager.GetScoringSystem()->GetPlayerNoInputTime();
+    const bool lbPlayerIsCrashing =
+        mLastActiveRaceCarInterface.GetRaceCarStateMutable(GetPlayerActiveRaceCarIndex())->mbCrashing;
+
+    mRoadRulesManager.Update(lpControllerInput,
+                             liCurrentRoadIndex,
+                             mfSimTimeStep,
+                             lbInAir,
+                             lbPlayerIsCrashing,
+                             lpOutputBuffer,
+                             lbShowtimeActive,
+                             leGameModeType,
+                             lfPlayerNoInputTime,
+                             lbCarSelectActive,
+                             lbDisableSwitchingOnline,
+                             meFreeburnChallengeStyle);
+}
+
+// ============================================================================================
+// ProcessGameEventsRoadRulesBringUp -- the road-rules and street-manager arms of
+// GameStateModule::ProcessGameEvents, as one walk over the merged game-event queue (the tree's
+// per-family split of the console's single switch; see PreWorldUpdateStuntBringUp).
+//
+//   case  96  road-rules data request (CgsID)      -> RoadRulesManager::OnRoadRulesDataRequest
+//   case  97  road score request                   -> StreetManager::ProcessScoreRequestEvent
+//   case  98  batch road-rules query               -> StreetManager::FillInRoadRulesQuery, action 275
+//   case  99  road-rule interaction change (u8)    -> RoadRulesManager::SetSwitchingActive
+//   case 100  road-rule mode switch (u8)           -> RoadRulesManager::SetRoadRulesMode
+//   case 103  GUI switches the road-rule state (u32) -> RoadRulesManager::SetActiveRoadRule
+//   case 130  online personal best received        -> StreetManager::ProcessNetworkHighScoreEvent
+//   case 131  road-rules scores uploaded           -> StreetManager::ProcessUploadEvent
+//   case 132  road-rules scores downloaded         -> StreetManager::ProcessDownloadEvent
+//   case 133  road-rules server connect info       -> StreetManager::ProcessConnectedOnlineEvent
+//   case 150  buddy removed                        -> StreetManager::ProcessBuddyRemoved
+//
+// Event ids 96..103 are written as literals: BrnGameEvents.h has no enumerators for them (their
+// names are the reference enum's, one higher there), and its road-score-request enumerator
+// carries a placeholder value.
+// ============================================================================================
+void GameStateModule::ProcessGameEventsRoadRulesBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue*            lpActionQueue,
+        GameStateModuleIO::OutputBuffer*               lpOutputBuffer)
+{
+    if (lpGameEventQueue == 0 || lpActionQueue == 0 || lpOutputBuffer == 0)
     {
         return;
     }
 
-    ImpactTimeStartActionRecord lRecord;
-    std::memset(&lRecord, 0, sizeof(lRecord));   // +0x06..+0x07: the console posts stack residue
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
 
-    // ⚠️⚠️ BOTH ARMS LOAD THE SAME LITERAL, AND THAT IS THE BINARY'S DOING, NOT HEX-RAYS'.
-    // 0x823814CC and 0x823814E4 are both `lfs f0, flt_82001C98@l(r30)` with the SAME r30 --
-    // literally the same address, not two constants that happen to print alike. Read out of the
-    // image with x360rd: flt_82001C98 == 0x3F800000 == 1.0f. IMAGE-CITED, not guessed
-    // [[reconstruction-gotchas]]. The online branch is kept as a branch because the console has
-    // it -- collapsing it would erase the evidence that the two arms were once different.
-    lRecord.mfImpactTimeDuration = 1.0f;                 // flt_82001C98
-    if (IsOnlineGameMode())
+    while (lpEvent != 0)
     {
-        lRecord.mfImpactTimeDuration = 1.0f;             // flt_82001C98 -- the same address
-    }
+        switch (liType)
+        {
+        case GameStateModuleIO::E_EVENT_ROAD_RULE_DATA_REQUEST:   // the road's CgsID (0 == the current road)
+            mRoadRulesManager.OnRoadRulesDataRequest(*reinterpret_cast<const CgsID*>(lpEvent), lpActionQueue);
+            break;
 
-    // `stb r29, var_9C` / `stb r29, var_9B`; r29 is the function's constant 1.
-    lRecord.mu8ForceAdditiveAftertouch = 1;
-    lRecord.mu8Field05                 = 1;
+        case GameStateModuleIO::E_EVENT_ROAD_RULE_ROAD_SCORE_REQUEST:
+            mStreetManager.ProcessScoreRequestEvent(
+                lpOutputBuffer, reinterpret_cast<const GameStateModuleIO::RoadRulesScoreRequestEvent*>(lpEvent));
+            break;
 
-    lpActionQueue->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lRecord),
-        GameStateModuleIO::E_ACTION_IMPACT_TIME_START,
-        static_cast<s32>(sizeof(ImpactTimeStartActionRecord)));
+        case GameStateModuleIO::E_EVENT_ROAD_RULE_BATCH_DATA_REQUEST:
+        {
+            GameStateModuleIO::RoadRulesBatchQueryAction lQuery;
+            std::memset(&lQuery, 0, sizeof(lQuery));   // the console posts the stack record as filled
+            mStreetManager.FillInRoadRulesQuery(&lQuery);
+            // Console size 776 (pointer-free record, host size equal).
+            lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lQuery),
+                                    GameStateModuleIO::E_ACTION_ROAD_RULES_BATCH_QUERY,
+                                    static_cast<s32>(sizeof(lQuery)));
+            break;
+        }
 
-    // ---- [DIAG] NOT IN THE X360 BINARY -------------------------------------------------------
-    // ⭐ PRINT A VALUE, NOT A FACT. The S3 wave's case-23 read was 404 bytes out of bounds and
-    // returned a clean 0x00000000 -- the most plausible-looking wrong answer available -- and the
-    // ONLY reason it was caught is that its witness printed the number instead of announcing that
-    // the arm had run. So this one prints the mode type it actually saw, the duration it actually
-    // wrote and the byte it actually set. The post is edge-gated, so it is naturally one-shot per
-    // showtime entry; no first-N cap is needed.
-    if (CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[bounce] POSTED game action 42 IMPACT_TIME_START: modeType "
-            << static_cast<s32>(leGameModeType)
-            << " online "        << static_cast<s32>(IsOnlineGameMode() ? 1 : 0)
-            << " duration "      << lRecord.mfImpactTimeDuration
-            << " additive "      << static_cast<s32>(lRecord.mu8ForceAdditiveAftertouch)
-            << " field05 "       << static_cast<s32>(lRecord.mu8Field05)
-            << " size "          << static_cast<s32>(sizeof(ImpactTimeStartActionRecord))
-            << "\n";
+        case GameStateModuleIO::E_EVENT_ROAD_RULE_INTERACTION_CHANGE:   // one byte
+            mRoadRulesManager.SetSwitchingActive(*reinterpret_cast<const bool*>(lpEvent));
+            break;
+
+        case GameStateModuleIO::E_EVENT_ROAD_RULE_MODE_SWITCH:   // one byte, true == online
+            mRoadRulesManager.SetRoadRulesMode(lpOutputBuffer, *reinterpret_cast<const bool*>(lpEvent));
+            break;
+
+        case GameStateModuleIO::E_EVENT_GUI_SWITCHES_ROAD_RULE_STATE:   // 0 none, 1 time, 2 crash
+        {
+            const u32 luRoadRuleState = *reinterpret_cast<const u32*>(lpEvent);
+            if (luRoadRuleState == 0)
+            {
+                mRoadRulesManager.SetActiveRoadRule(lpActionQueue, E_ACTIVE_ROAD_RULE_NONE);
+            }
+            else if (luRoadRuleState == 1)
+            {
+                mRoadRulesManager.SetActiveRoadRule(lpActionQueue,
+                    mModeManager.IsOnlineGameMode() ? E_ACTIVE_ROAD_RULE_ONLINE_TIME
+                                                    : E_ACTIVE_ROAD_RULE_OFFLINE_TIME);
+            }
+            else if (luRoadRuleState == 2)
+            {
+                mRoadRulesManager.SetActiveRoadRule(lpActionQueue,
+                    mModeManager.IsOnlineGameMode() ? E_ACTIVE_ROAD_RULE_ONLINE_CRASH
+                                                    : E_ACTIVE_ROAD_RULE_OFFLINE_CRASH);
+            }
+            else
+            {
+                CGS_ASSERT(false, "Unknown road rule");
+            }
+            break;
+        }
+
+        case GameStateModuleIO::E_EVENT_ONLINE_ROAD_RULES_PB_RECV:   // 130
+            mStreetManager.ProcessNetworkHighScoreEvent(
+                lpOutputBuffer,
+                reinterpret_cast<const GameStateModuleIO::OnlineRoadRulesPersonalBestRecvEvent*>(lpEvent));
+            break;
+
+        case GameStateModuleIO::E_EVENT_ONLINE_ROAD_RULES_UPLOADED:   // 131
+            mStreetManager.ProcessUploadEvent(
+                reinterpret_cast<const GameStateModuleIO::OnlineRoadRulesUploadedEvent*>(lpEvent));
+            break;
+
+        case GameStateModuleIO::E_EVENT_ONLINE_ROAD_RULES_DOWNLOADED:   // 132
+            mStreetManager.ProcessDownloadEvent(
+                reinterpret_cast<const GameStateModuleIO::OnlineRoadRulesDownloadedEvent*>(lpEvent));
+            break;
+
+        case GameStateModuleIO::E_EVENT_ONLINE_ROAD_RULES_CONNECT_INFO:   // 133
+        {
+            const GameStateModuleIO::OnlineRoadRulesConnectInfoEvent* lpRRConnectedOnlineEvent =
+                reinterpret_cast<const GameStateModuleIO::OnlineRoadRulesConnectInfoEvent*>(lpEvent);
+            CGS_ASSERT(lpRRConnectedOnlineEvent, "lpRRConnectedOnlineEvent");
+            mStreetManager.ProcessConnectedOnlineEvent(lpOutputBuffer, lpRRConnectedOnlineEvent);
+            break;
+        }
+
+        case GameStateModuleIO::E_EVENT_BUDDY_REMOVED:   // 150
+        {
+            const GameStateModuleIO::BuddyRemovedEvent* lpBuddyRemovedEvent =
+                reinterpret_cast<const GameStateModuleIO::BuddyRemovedEvent*>(lpEvent);
+            CGS_ASSERT(lpBuddyRemovedEvent, "lpBuddyRemovedEvent");
+            mStreetManager.ProcessBuddyRemoved(lpOutputBuffer, lpBuddyRemovedEvent);
+            break;
+        }
+
+        default:
+            break;
+        }
+
+        const CgsModule::Event* lpNext = 0;
+        liType  = lpGameEventQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
+        lpEvent = lpNext;
     }
 }
 
 }  // namespace BrnGameState
-
-namespace BrnGameState {
-// Display arm of StreetManager::Update 0x82352E90, called at the street-update
-// position in PreWorldUpdate 0x823A5D6C. Network score synchronization stays in
-// StreetManager::Update; this restores its road tracking and upcoming-sign feed.
-void GameStateModule::UpdateStreetDisplay(f32 delta)
-{
-    if (mLastActiveRaceCarInterface.GetPlayerActiveRaceCarIndex() == E_ACTIVE_RACE_CAR_INDEX_INVALID ||
-        !mLastActiveRaceCarInterface.IsPlayerCarActive()) return;
-    const bool hasMode = mModeManager.GetCurrentGameMode() != 0;
-    const auto* params = mModeManager.GetCurrentGameModeParams();
-    if (hasMode && params->GetFlag(GameModeParams::KU_FLAG_DISABLE_UPCOMING_ROAD_SIGNS)) return;
-    const f32 wrongWayTime = mModeManager.GetScoringSystem()->GetPlayerWrongWayTime();
-    mStreetManager.UpdateRoadDisplay(&mLastActiveRaceCarInterface, &mLastAICarOutputInterface,
-        mpOutputBuffer, delta, wrongWayTime, hasMode && params->GetFlag(GameModeParams::KU_FLAG_USES_NAVIGATION));
-}
-}

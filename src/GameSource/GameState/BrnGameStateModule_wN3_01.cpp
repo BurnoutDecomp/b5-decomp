@@ -84,12 +84,6 @@ namespace
 //     reader of it (the note on the case-26 arm in GameStateModule_gUI_00.cpp covers the same
 //     run of write-only bytes).
 //         <gsm+0x2C4A1> = 1;
-// PARKED CALL (the callee cannot be bodied yet):
-//   * case 124 `RoadRulesManager::SetRoadRulesMode(gsm+0x2CD28, lpOutputBuffer, false)`. Its
-//     body needs RoadRulesManager::OnEndRule and SendActiveRuleState, and OnEndRule needs
-//     OnScoreCompleted; none of the three is reconstructed and this tree's RoadRulesManager is
-//     the road-display slice (no active-rule state members). Written out:
-//         mRoadRulesManager.SetRoadRulesMode(lpOutputBuffer, false);
 // ============================================================================
 void GameStateModule::ProcessGameEventsOnlinePlayerBringUp(
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
@@ -274,8 +268,8 @@ void GameStateModule::ProcessGameEventsOnlinePlayerBringUp(
             {
                 mModeManager.UserCancelCurrentMode();
             }
-            // <gsm+0x2C4A1> = 1 and RoadRulesManager::SetRoadRulesMode(out, false) -- PARKED,
-            // see the banner.
+            // <gsm+0x2C4A1> = 1 -- PARKED, see the banner. Then the road rules leave online mode.
+            mRoadRulesManager.SetRoadRulesMode(lpOutputBuffer, false);
             mModeManager.CancelFreeburnChallenge(lpActionQueue);
             OnPlayerCarChange(mActivePlayerCarId, mActivePlayerWheelId, lpActionQueue, true);
             mModeManager.GetScoringSystem()->ClearAllBurnoutSkillzData();

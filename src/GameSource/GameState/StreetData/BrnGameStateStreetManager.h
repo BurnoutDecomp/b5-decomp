@@ -40,6 +40,7 @@
 #include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h"    // BrnStreetData::ChallengeHighScoreEntry (56B)
 #include "GameSource/GameState/StreetData/BrnStreetManagerDebugComponent.h"// BrnGameState::StreetManagerDebugComponent (embedded by value)
 #include "GameSource/GameState/BrnCgsPlayerName.h"                         // CgsNetwork::PlayerName (16B)
+#include "GameSource/GameState/BrnGameStateTypes.h"                        // BrnGameState::EActiveRoadRule
 #include "GameShared/GameClasses/Containers/CgsArray.h"                    // CgsContainers::Array<T,N> (elements then count)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                 // CgsContainers::BitArray<64u> (u64)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"         // CgsResource::ResourcePtr<T> / ResourceHandle
@@ -72,6 +73,7 @@ namespace BrnGameState
     namespace GameStateModuleIO
     {
         struct OutputBuffer;
+        struct PreWorldInputBuffer;   // Update() param, by pointer only (BrnGameStateModuleIO.h)
         // Road-rules game events (full layouts: GameSource/GameState/BrnGameEvents.h)
         struct OnlineRoadRulesPersonalBestRecvEvent;
         struct OnlineRoadRulesUploadedEvent;
@@ -162,7 +164,8 @@ namespace BrnGameState
     // + the visible float immediates in the pseudocode). const at namespace scope has
     // internal linkage, so partfiles share these definitions safely.
     const char  KAC_LOCAL_PLAYER_NAME_TEXT[12]         = "LCL_PLAY_NM";  // :39 (string @ 0x82021404)
-    const f32   KF_TIME_BETWEEN_HIGH_SCORE_UNBUFFERS   = 4.0f;           // :40 (flt_820211D4)
+    // Its one reader, UpdateBufferedHighScores, compares the unbuffer timer against 20.0f.
+    const f32   KF_TIME_BETWEEN_HIGH_SCORE_UNBUFFERS   = 20.0f;
     const s32   KI_MAX_SECTION_WALK_DEPTH              = 11;             // :43
     const s32   KI_MAX_PORTAL_WALK_DIRECTION_PERSISTANCE = 5;            // :44 (sic -- DWARF spelling)
     const f32   KF_UPCOMING_ROAD_SIDEWAYS_ANGLE        = 0.12217305f;    // :45 (flt_82CDB88C == 7 degrees in radians)
@@ -282,53 +285,6 @@ namespace BrnGameState
                        CgsModule::EventReceiverQueue<3072,16>* lpReceiverQueue,
                        const TriggerQueryManager* lpTriggerQueryManager );
 
-        // ====================================================================================
-        // ⚠️ [FLAG PC bring-up] WireOwnerPointers -- A DELIBERATE, NAMED SUBSET OF Construct.
-        //
-        // NOT a console function. It exists because GameStateModule::Construct cannot yet call
-        // StreetManager::Construct @0x82335978 (that function's FIRST statement is
-        // mStreetManagerDebugComponent.Construct(this), which emits the debug component's vtable
-        // and hard-references ~15 still-unhomed symbols -- see the DELETE-WHEN in
-        // BrnGameStateModule.cpp), while Prepare2's SetupParRivals leg DOES dereference the
-        // owner pointers that Construct is the only writer of.
-        //
-        // ⛔ IT IS NAMED FOR WHAT IT IS SO IT CANNOT BE MISTAKEN FOR THE REAL THING. The house
-        // rule (BrnVehicleManager.h) is "do not ship a PARTIAL Construct" -- a body that runs
-        // part of Construct under Construct's own name and looks complete. This is the opposite:
-        // a differently-named two-store helper whose whole contract is in its name, callable
-        // exactly once, from the console's own call position, with the console's own values.
-        //
-        // WHAT IT REPRODUCES, store for store (X360 Construct @0x82335978, whose caller is
-        // GameStateModule::Construct @0x82380388 at 0x82380768 --
-        // `StreetManager::Construct(a1 + 284520, a1, a1 + 47920, a1 + 183592)`):
-        //     if (!lpProgression)      assert("lpProgression",      ...:151);
-        //     *(this + 7440) = a3;   // +0x1D10 mpProgressionManager
-        //     if (!lpGameStateModule)  assert("lpGameStateModule",  ...:153);
-        //     *(this + 7444) = a2;   // +0x1D14 mpGameStateModule
-        // -- the console's own two asserts and two stores, in the console's order.
-        //
-        // WHAT IT DOES *NOT* DO, said plainly:
-        //   * the THIRD owner pointer. The console's a4 is `a1 + 183592` == GameStateModule's
-        //     RoadRulesManager member, and THAT MEMBER DOES NOT EXIST ON PC YET (DWARF
-        //     BrnGameStateModule.h:229 declares it; the recon header does not). There is nothing
-        //     to take the address of, so mpRoadRulesManager stays at its `= 0` initialiser below
-        //     rather than being handed a fabricated value, and the console's third assert
-        //     (...:155) is deliberately NOT reproduced here -- firing it every boot for a member
-        //     that does not exist would be noise, not a finding. AUDITED: no TU on the wired PC
-        //     path reads mpRoadRulesManager (the four readers -- _wB_06, _wB_07 and the two
-        //     debug components -- are all unmounted), and every one of them already carries its
-        //     own `CGS_ASSERT(mpRoadRulesManager, ...)` from the console, so whichever mounts
-        //     first gets a named failure rather than an AV.
-        //   * the ~120 other stores Construct makes (the score-table memsets, the walk state,
-        //     the five perf monitors, the debug component). Those are covered by the in-class
-        //     initialisers below and are NOT silently zeroed by this helper.
-        //
-        // DELETE-WHEN GameStateModule::Construct calls the real StreetManager::Construct: delete
-        // this method, delete its call site, and delete the `= 0` initialisers it backs up.
-        // ====================================================================================
-        void WireOwnerPointers( GameStateModule* lpGameStateModule,
-                                BrnProgression::ProgressionManager* lpProgression );
-
         // DWARF :226 (not in this wave's ledger; body elsewhere).
         bool Release();
 
@@ -336,15 +292,19 @@ namespace BrnGameState
         // destructs the embedded debug component.
         void Destruct();
 
-        // DWARF :244. Per-frame pump (owns UpdateUpcomingStreets / UpdateFriendHighScores /
-        // UpdateUserScoresFromServerRecords / UpdateBufferedHighScores). Not in this
-        // wave's ledger; declared for the freeze.
-        void Update( bool lbPaused, f32 lfSimTimeStep,
-                     const void* lpPreWorldInput,               // GameStateModuleIO::PreWorldInputBuffer (not yet committed)
+        // Per-frame pump: debug component, wrong-way timer + upcoming streets (skipped
+        // when the mode disables the upcoming signs), friend / server score merges, the
+        // new-high-score unbuffer and the profile score copy. Parameter names and order
+        // are the debug information's; the console passes lfSimTimeStep and
+        // lfTimeGoingTheWrongWay in float registers. Body in _wR_01.
+        void Update( bool lbIsAnythingPaused, f32 lfSimTimeStep,
+                     const GameStateModuleIO::PreWorldInputBuffer* lpInput,
                      GameStateModuleIO::OutputBuffer* lpOutput,
                      BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
                      BrnAI::AIModuleIO::AICarOutputInterface* lpLastAICarOutputInterface,
-                     bool lbA, bool lbB, f32 lfC );             // FLAG: trailing arg shapes owned by the Update TU
+                     bool lbCurrentGameModeHasRoute,
+                     bool lbCurrentGameModeDisablesUpcoming,
+                     f32 lfTimeGoingTheWrongWay );
 
         // ---- event / score handlers (this wave) --------------------------------
         // @ 0x823496C8. Applies a freshly-scored local challenge entry to the road's
@@ -388,8 +348,13 @@ namespace BrnGameState
         // changed-bit arrays and the lost-score count.
         void ProcessOnlineGameLaunchedEvent();
 
-        // DWARF :297 (not in this wave's ledger).
-        void ProcessActiveRoadRuleChange( s32 leNewActiveRoadRuleType );   // BrnGameState::EActiveRoadRule
+        // No out-of-line body in the console image: RoadRulesManager::
+        // SendActiveRuleState carries it inlined (the rule -> score type switch, then
+        // the store to +0x1CC0). The parameter is an EActiveRoadRule value.
+        void ProcessActiveRoadRuleChange( s32 leNewActiveRoadRuleType )
+        {
+            meActiveRoadRuleType = GetActiveRoadRuleType( leNewActiveRoadRuleType );
+        }
 
         // @ 0x8234A5A8. Buddy removed: scrub their scores; if that changed the
         // current road's records, re-post them (action 280) and always post the
@@ -466,10 +431,6 @@ namespace BrnGameState
         ::CgsID GetParRivalId( s32 liChallengeIndex, BrnStreetData::ScoreType leScoreType );
 
         void UnlockUpcomingRoadSigns() { mbLockRightSign = false; mbLockLeftSign = false; }
-        // Road-display arm of ARTIST Update 0x82352E90.
-        void UpdateRoadDisplay(BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* active,
-            BrnAI::AIModuleIO::AICarOutputInterface* ai, GameStateModuleIO::OutputBuffer* output,
-            f32 delta, f32 wrongWayTime, bool useRoute);
         BrnStreetData::RoadIndex GetCurrentPlayerRoadIndex();            // :456
         ::CgsID GetForwardPlayerRoadId();                                // :459
         ::CgsID GetLeftPlayerRoadId();                                   // :462
@@ -543,12 +504,12 @@ namespace BrnGameState
         // @ 0x82350A88. Per-frame: resolve the player's AI section -> road index,
         // junction-timeout bookkeeping, shortcut-flag GUI action (type 287), then
         // FindUpcomingStreetsByRecursiveWalking (+ FromRoute when lbUseRoute).
-        // NOTE the X360 arity: liReserved is carried but unreferenced by the body.
+        // Five parameters (debug-information shape). The float step travels in a float register,
+        // so the console call site leaves its integer slot unset.
         void UpdateUpcomingStreets( BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
                                     BrnAI::AIModuleIO::AICarOutputInterface* lpLastAICarOutputInterface,
                                     GameStateModuleIO::OutputBuffer* lpOutput,
                                     f32 lfSimTimeStep,
-                                    s32 liReserved,
                                     bool lbUseRoute );
 
         // DWARF :636 (not in this wave's ledger).
@@ -613,8 +574,9 @@ namespace BrnGameState
         void UpdateUserScoresFromServerRecords( const void* lpLocalDownloadedQueue,
                                                 GameStateModuleIO::OutputBuffer* lpOutput );
 
-        // DWARF :730/:734 (not in this wave's ledger).
-        void UpdateBufferedHighScores( f32 lfSimTimeStep, bool lbOnline, GameStateModuleIO::OutputBuffer* lpOutput );
+        // Bodies: UpdateBufferedHighScores in _wC_00 (it shares the
+        // new-high-score record with ProcessNewRoadScore), UpdateRoadRulesProfileScores in _wR_01.
+        void UpdateBufferedHighScores( f32 lfSimTimeStep, bool lbIsAnythingPaused, GameStateModuleIO::OutputBuffer* lpOutput );
         void UpdateRoadRulesProfileScores();
 
         // DWARF :740/:746/:751 (not in this wave's ledger; the RoadRulesMessageData
@@ -625,7 +587,27 @@ namespace BrnGameState
 
         s32  GetNumberOfRoadsRulesByLocalPlayer();                       // :755
         bool CheckForNewHighScore( s32 liChallengeIndex, BrnStreetData::ChallengeHighScoreEntry* lpEntry );   // :761
-        BrnStreetData::ScoreType GetActiveRoadRuleType( s32 leNewActiveRoadRuleType );   // :766 (EActiveRoadRule)
+        // Inlined into ProcessActiveRoadRuleChange on the console: time rules
+        // map to the time score, crash rules to the crash score, NONE/COUNT to
+        // E_SCORE_TYPE_COUNT.
+        BrnStreetData::ScoreType GetActiveRoadRuleType( s32 leNewActiveRoadRuleType )
+        {
+            BrnStreetData::ScoreType leScoreType = BrnStreetData::E_SCORE_TYPE_COUNT;
+            switch ( leNewActiveRoadRuleType )
+            {
+                case E_ACTIVE_ROAD_RULE_OFFLINE_TIME:
+                case E_ACTIVE_ROAD_RULE_ONLINE_TIME:
+                    leScoreType = BrnStreetData::E_SCORE_TYPE_TIME;
+                    break;
+                case E_ACTIVE_ROAD_RULE_OFFLINE_CRASH:
+                case E_ACTIVE_ROAD_RULE_ONLINE_CRASH:
+                    leScoreType = BrnStreetData::E_SCORE_TYPE_CRASH;
+                    break;
+                default:
+                    break;
+            }
+            return leScoreType;
+        }
         void GetHighScoreEntry( BrnStreetData::ChallengeIndex liIndex, BrnStreetData::ChallengeHighScoreEntry* lpEntry, bool lbByRoadIndex );   // :773
         void SetChallengeFriendHighScore( BrnStreetData::ChallengeIndex liIndex, const BrnStreetData::ChallengeHighScoreEntry* lpEntry );        // :786
         void SetChallengeFriendDownloadTimestamp( u32 luTimestamp );     // :791
@@ -673,24 +655,11 @@ namespace BrnGameState
         CgsResource::ResourcePtr<BrnAI::AISectionsData>     mpAISectionData;                   // +0x1CE8
         CgsResource::ResourceHandle              mDistrictMapResourceHandle;                   // +0x1D08
 
-        // ⚠️ [FLAG PC bring-up] the three owner back-pointers carry `= 0` in-class initialisers.
-        // StreetManager::Construct @0x82335978 is their only writer and GameStateModule::Construct
-        // cannot call it yet (see WireOwnerPointers above and the DELETE-WHEN in
-        // BrnGameStateModule.cpp), so without these they are INDETERMINATE -- and on 2026-08-11
-        // that was not theoretical: the first boot after the SetupParRivals un-park took an
-        // EXCEPTION_ACCESS_VIOLATION reading 0x1D9E8 inside ProgressionManager::GetProgressionData
-        // called from StreetManager::SetupParRivals. 0x1D9E8 == 121320 is EXACTLY the host
-        // offsetof(ProgressionManager, mpProgressionData) (measured with a compile-time probe
-        // against this build's headers), i.e. a member read off a NULL base -- mpProgressionManager.
-        // These initialisers do not change the layout (the _AssertLayout pins below still hold) and
-        // they are not invented values -- zero is what Destruct @0x82335D40 writes back into all
-        // three. Same doctrine as BrnGameStateModule.h's `mpOutputBuffer = 0` and the achievement
-        // manager's four back-pointers (BrnGameStateAchievementManagerBase.h:232-235).
-        // ⚠️ THEY ARE A BACKSTOP, NOT THE WIRING: mpProgressionManager and mpGameStateModule are
-        // given their real console values by WireOwnerPointers, called from GameStateModule::
-        // Construct at the console's own call position. Zero here only guarantees that a member
-        // nothing wired is DETERMINATE, so the guards that test it can actually fire.
-        // DELETE-WHEN GameStateModule::Construct calls StreetManager::Construct for real.
+        // [FLAG PC bring-up] the three owner back-pointers carry `= 0` in-class initialisers.
+        // StreetManager::Construct is their only writer; it runs from GameStateModule::Construct
+        // and stores all three, so the zeros only cover a read that would come before that call.
+        // They do not change the layout (the _AssertLayout pins below still hold), and zero is
+        // what Destruct writes back into all three.
         BrnProgression::ProgressionManager*      mpProgressionManager = 0;                     // +0x1D10
         GameStateModule*                         mpGameStateModule    = 0;                     // +0x1D14
         RoadRulesManager*                        mpRoadRulesManager   = 0;                     // +0x1D18

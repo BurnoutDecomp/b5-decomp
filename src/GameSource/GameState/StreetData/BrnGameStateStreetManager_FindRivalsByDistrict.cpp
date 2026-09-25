@@ -50,8 +50,7 @@ namespace BrnGameState
 // ⚠️ NO NULL GUARD HERE, ON EITHER POINTER -- kept faithful, DELIBERATELY, and this is not an
 // oversight left over from the 2026-08-11 null-back-pointer crash. Two reads could fault:
 //   * mpProgressionManager -- the member the first post-un-park boot AV'd on. Its writer is now
-//     GameStateModule::Construct -> StreetManager::WireOwnerPointers, and its tripwire assert
-//     lives in the ONE caller, SetupParRivals, which early-outs before reaching this function.
+//     GameStateModule::Construct -> StreetManager::Construct, which asserts it non-null.
 //   * lpProgressionData -- the X360 itself loads GetRivalCount off a possibly-NULL pointer
 //     (0x823363AC reads 0x2C(r28) with r28 == 0 on the null path). SetupParRivals guards that
 //     one too, upstream.

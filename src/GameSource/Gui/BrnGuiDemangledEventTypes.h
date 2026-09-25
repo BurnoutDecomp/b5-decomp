@@ -348,17 +348,18 @@ namespace BrnGui
     struct GuiEventRivalryFullInfoResponse : public CgsGui::GuiEvent<442> { u8 maPayload[676]; };  // id 442 size 688 (12B GuiEvent header + opaque payload)
     struct GuiEventRoadRagePlayerDamage { u8 maData[8]; s32 GetEventType() const { return 348; } };  // id 348 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventRoadRageTimeExtended { u8 maData[4]; s32 GetEventType() const { return 427; } };  // id 427 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiEventRoadRuleBatchDataResponse : public CgsGui::GuiEvent<344> { u8 maPayload[764]; };  // id 344 size 776 (12B GuiEvent header + opaque payload)
-    struct GuiEventRoadRuleBegin { u8 maData[4]; s32 GetEventType() const { return 335; } };  // id 335 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiEventRoadRuleChangeMode { u8 maData[4]; s32 GetEventType() const { return 343; } };  // id 343 size 4 (raw; size not GuiEvent-shaped)
+    // [road-rules GUI wave 2026-09-25] GuiEventRoadRuleBatchDataResponse (344),
+    // GuiEventRoadRuleBegin (335), GuiEventRoadRuleChangeMode (343), GuiEventRoadRuleNewRulers
+    // (346), GuiEventRoadRuleTickerScoreResponse (345), GuiEventRoadRuleUpdate (338) and
+    // GuiEventSetRoadRuleScoreMode (330) have been RECOVERED and now live, flat and with their
+    // debug-information member names, in BrnGuiEventTypeDefs.h beside the rest of the road-rule
+    // family (GuiCache::RecEvent consumes three of them and cannot include this header). The
+    // opaque placeholders that stood here were DELETED rather than left to shadow them.
 
     // GuiEventRoadRuleEnd (id 336): NO placeholder here -- UPGRADED to the real
     // hand-reconstructed home in BrnGuiEventTypeDefs.h (HUD H2 2026-08-25; named
     // fields, X360-attested). A placeholder must never shadow a real home (C2011).
     struct GuiEventRoadRuleLeave : public CgsGui::GuiEvent<340> { u8 maPayload[4]; };  // id 340 size 16 (12B GuiEvent header + opaque payload)
-    struct GuiEventRoadRuleNewRulers { u8 maData[8]; s32 GetEventType() const { return 346; } };  // id 346 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiEventRoadRuleTickerScoreResponse : public CgsGui::GuiEvent<345> { u8 maPayload[36]; };  // id 345 size 48 (12B GuiEvent header + opaque payload)
-    struct GuiEventRoadRuleUpdate : public CgsGui::GuiEvent<338> { u8 maPayload[8]; };  // id 338 size 20 (12B GuiEvent header + opaque payload)
     // GuiEventRoadRuleUpdateTargetScores (id 339): NO placeholder here -- UPGRADED to
     // the real hand-reconstructed home in BrnGuiEventTypeDefs.h (HUD H2 2026-08-25).
     // GuiEventRunFsm: NO placeholder here -- the real hand-reconstructed home is
@@ -380,7 +381,6 @@ namespace BrnGui
     struct GuiEventScoreboardResponseVariationEvent : public CgsGui::GuiEvent<118> { u8 maPayload[2040]; };  // id 118 size 2052 (12B GuiEvent header + opaque payload)
     struct GuiEventSetAvailablePresetRaces : public CgsGui::GuiEvent<170> { u8 maPayload[716]; };  // id 170 size 728 (12B GuiEvent header + opaque payload)
     struct GuiEventSetBlackBars { u8 maData[4]; s32 GetEventType() const { return 221; } };  // id 221 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiEventSetRoadRuleScoreMode { u8 maData[4]; s32 GetEventType() const { return 330; } };  // id 330 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventShowFreeburnChallenge { u8 maData[8]; s32 GetEventType() const { return 582; } };  // id 582 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventShowHideHud { u8 maData[1]; s32 GetEventType() const { return 148; } };  // id 148 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventSpecificPresetRaces : public CgsGui::GuiEvent<194> { u8 maPayload[7692]; };  // id 194 size 7704 (12B GuiEvent header + opaque payload)

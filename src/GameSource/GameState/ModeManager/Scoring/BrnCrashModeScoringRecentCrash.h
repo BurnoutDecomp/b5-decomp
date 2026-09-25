@@ -101,7 +101,7 @@ struct CrashModeScoring
     void DealWithHitOverheadSign();         // BrnCrashModeScoring.h:125
     void DealWithDetachedWheel();           // BrnCrashModeScoring.h:141
     bool HasCrashModeEnded(f32 lfTime) const; // BrnCrashModeScoring.h:161
-    s32  GetRawScore() const;               // BrnCrashModeScoring.h:165
+    s32  GetRawScore() const { return miBaseScore; }   // BrnCrashModeScoring.h:165 (inlined on the console: one load of +0x2DC)
     s32  GetOverallScore() const;           // BrnCrashModeScoring.h:168
     s32  GetNumCarsCrashed() const;         // BrnCrashModeScoring.h:177
 

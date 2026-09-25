@@ -36,6 +36,7 @@
 #include "BrnCommonTypes.h"                             // Vector3, CgsID
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"  // CgsContainers::FastBitArray
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"      // CgsContainers::BitArray<64u> (GuiEventRoadRuleNewRulers)
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N> (OfflinePostEventData's DerivedCarArray)
 #include "GameSource/BurnoutConstants.h"                // EActiveRaceCarIndex
 #include "SharedClasses/World/BrnWorldRegion.h"         // BrnWorld::ECounty / EDistrict
@@ -1189,14 +1190,13 @@ enum RoadRuleLeaderType
 // stride into the enter event's maFriendLeader block, then SPrintf'd as "%s") and
 // HandleRoadRuleTargetUpdate @0x82435668 (a 16-byte memcpy per score type). The old
 // {CgsID} stand-in FLAG is retired.
-struct PlayerName
-{
-    char macName[16];   // X360: 16-byte fixed name string (SPrintf'd as "%s")
-};
+// It is the one CgsNetwork::PlayerName: GuiEventRoadRuleUpdateTargetScores::SetupRoadRule
+// hands &maFriendLeader[type] straight to ChallengeHighScoreEntry::GetScore.
+using PlayerName = CgsNetwork::PlayerName;
 
 // The world/game actions the road-rules event Constructs consume (pointer-only).
 using RoadRulesEnterRoadAction = BrnGameState::GameStateModuleIO::RoadRulesEnterRoadAction;
-struct RoadRulesUpdateTargetScoreAction;
+using RoadRulesUpdateTargetScoreAction = BrnGameState::GameStateModuleIO::RoadRulesUpdateTargetScoreAction;
 using UpcomingRoadChangeAction = BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction;
 
 // DWARF :1071 -- "entered a road-ruled road" (the road-rules panel refresh
@@ -1312,8 +1312,9 @@ struct GuiEventRoadRuleUpdateTargetScores : public CgsGui::GuiEvent<339>
     RoadRuleLeaderType maeRoadRuleLeaderType[BrnStreetData::E_SCORE_TYPE_COUNT];      // :1115 (X360 +0x28)
     s32                maiBestValues[BrnStreetData::E_SCORE_TYPE_COUNT];              // :1116 (X360 +0x30)
 
-    // DWARF :1122 -- its own ledger function (declaration-only).
+    // Both bodied in Events/BrnGuiEventRoadRuleUpcomingRoads.cpp (the road-rule event family).
     void Construct(const RoadRulesUpdateTargetScoreAction* lpAction);
+    void SetupRoadRule(const RoadRulesUpdateTargetScoreAction* lpAction, BrnStreetData::ScoreType leType);
 };
 
 // DWARF :1168 (PS3 GuiEvent<332>; X360 id 336). H2 (2026-08-25): full record; here
@@ -1326,6 +1327,108 @@ struct GuiEventRoadRuleEnd : public CgsGui::GuiEvent<336>
     f32                      mfScore;         // :1172 (X360 +0x0C; seconds for the time rule)
     bool                     mbScoreAttempt;  // :1173 (X360 +0x10)
 };
+
+// ---- the flat road-rule records ------------------------------------------------------------
+// Each is posted by TranslateGameActionsToGuiEvents as a FLAT record (no event header): the
+// console's AddGuiEvent<T> bakes the (id, size) pairs asserted below, and every reader (the
+// two main HUD states, GuiCache::RecEvent, InGameMessageRenderer::RecvEvent) loads the fields
+// from +0x00. Member names are the debug information's; offsets are the console's.
+
+// id 330, 4 bytes -- which road-rule scoreboard (offline / online) the panels show.
+// GuiCache::RecEvent stores it; the progression-profile arm resolves COUNT from the profile.
+struct GuiEventSetRoadRuleScoreMode
+{
+    enum ERoadPanelModes
+    {
+        E_ROAD_PANEL_MODE_OFFLINE = 0,
+        E_ROAD_PANEL_MODE_ONLINE  = 1,
+        E_ROAD_PANEL_MODE_COUNT   = 2,
+    };
+    ERoadPanelModes meNewRoadRuleScoreMode;   // +0x00
+    s32 GetEventType() const { return 330; }
+};
+static_assert(sizeof(GuiEventSetRoadRuleScoreMode) == 4, "AddGuiEvent<GuiEventSetRoadRuleScoreMode> size 4 (id 330)");
+
+// id 335, 4 bytes -- a road rule started (the rule's score type).
+struct GuiEventRoadRuleBegin
+{
+    BrnStreetData::ScoreType meRuleType;   // +0x00
+    s32 GetEventType() const { return 335; }
+};
+static_assert(sizeof(GuiEventRoadRuleBegin) == 4, "AddGuiEvent<GuiEventRoadRuleBegin> size 4 (id 335)");
+
+// id 338, 20 bytes -- the running rule's live scores, posted every frame a rule runs. The HUD
+// reads the time at +0x00, the crash score at +0x0C and the multiplier at +0x10; the smash and
+// stunt words are never written by the producer. The two statics are the debug worst-case-HUD
+// switch and its time (both zero in the image; only GuiDebugComponent::UpdateWorstCaseHUD
+// writes them).
+struct GuiEventRoadRuleUpdate
+{
+    f32 mfCurrentTimeElapsed;   // +0x00
+    f32 mfCurrentSmash;         // +0x04
+    f32 mfCurrentStunt;         // +0x08
+    f32 mfCurrentCrash;         // +0x0C
+    s32 miCrashMultiplier;      // +0x10
+
+    static inline bool msbWorstCaseHudActive   = false;
+    static inline f32  msfWorstCaseTimeElapsed = 0.0f;
+
+    s32 GetEventType() const { return 338; }
+};
+static_assert(sizeof(GuiEventRoadRuleUpdate) == 20, "AddGuiEvent<GuiEventRoadRuleUpdate> size 20 (id 338)");
+
+// id 343, 4 bytes -- the active road rule changed (BrnGameState::EActiveRoadRule, named
+// meScoreType in the debug information).
+struct GuiEventRoadRuleChangeMode
+{
+    BrnGameState::EActiveRoadRule meScoreType;   // +0x00
+    s32 GetEventType() const { return 343; }
+};
+static_assert(sizeof(GuiEventRoadRuleChangeMode) == 4, "AddGuiEvent<GuiEventRoadRuleChangeMode> size 4 (id 343)");
+
+// id 344, 776 bytes -- the per-road "beaten" table. The console record keeps the game action's
+// order (the count at +0x200, ahead of the four flag arrays), not the debug-information order.
+struct GuiEventRoadRuleBatchDataResponse
+{
+    CgsID maRoadIds[64];                    // +0x000
+    s32   miRoadCount;                      // +0x200
+    bool  mabPlayerBeatenOfflineTime[64];   // +0x204
+    bool  mabPlayerBeatenOfflineCrash[64];  // +0x244
+    bool  mabPlayerBeatenOnlineTime[64];    // +0x284
+    bool  mabPlayerBeatenOnlineCrash[64];   // +0x2C4
+    s32 GetEventType() const { return 344; }
+};
+static_assert(sizeof(GuiEventRoadRuleBatchDataResponse) == 776, "AddGuiEvent<GuiEventRoadRuleBatchDataResponse> size 776 (id 344)");
+static_assert(__builtin_offsetof(GuiEventRoadRuleBatchDataResponse, miRoadCount) == 0x200, "id 344 +0x200");
+static_assert(__builtin_offsetof(GuiEventRoadRuleBatchDataResponse, mabPlayerBeatenOnlineCrash) == 0x2C4, "id 344 +0x2C4");
+
+// id 345, 48 bytes -- one road's ticker line (the answer to the ticker's score request).
+// InGameMessageRenderer::RecvEvent reads the road id +0x00, the index +0x08, the name +0x0C,
+// the rule +0x1C, the online score +0x24 and the ruler bytes +0x28 / +0x2A.
+struct GuiEventRoadRuleTickerScoreResponse
+{
+    CgsID                         mRoadID;                  // +0x00
+    BrnStreetData::ChallengeIndex mRoadChallengeIndex;      // +0x08
+    PlayerName                    mPlayerName;              // +0x0C (16)
+    BrnGameState::EActiveRoadRule meActiveRoadRule;         // +0x1C
+    s32                           miOfflineScore;           // +0x20
+    s32                           miOnlineScore;            // +0x24
+    bool                          mbLocalPlayerRulesRoad;   // +0x28
+    bool                          mbAIRulesRoadOffline;     // +0x29
+    bool                          mbAIRulesRoadOnline;      // +0x2A
+    s32 GetEventType() const { return 345; }
+};
+static_assert(sizeof(GuiEventRoadRuleTickerScoreResponse) == 48, "AddGuiEvent<GuiEventRoadRuleTickerScoreResponse> size 48 (id 345)");
+static_assert(__builtin_offsetof(GuiEventRoadRuleTickerScoreResponse, meActiveRoadRule) == 0x1C, "id 345 +0x1C");
+static_assert(__builtin_offsetof(GuiEventRoadRuleTickerScoreResponse, mbLocalPlayerRulesRoad) == 0x28, "id 345 +0x28");
+
+// id 346, 8 bytes -- the roads whose ruler changed (the ticker's breaking-news mask).
+struct GuiEventRoadRuleNewRulers
+{
+    CgsContainers::BitArray<64u> mRoadRulesChangedBitArray;   // +0x00
+    s32 GetEventType() const { return 346; }
+};
+static_assert(sizeof(GuiEventRoadRuleNewRulers) == 8, "AddGuiEvent<GuiEventRoadRuleNewRulers> size 8 (id 346)");
 
 // DWARF home BrnGuiEventTypeDefs.h:4727 -- the pending junction/event-start info pushed to
 // the JunctionInfo HUD panel (BrnGui::JunctionInfoComponent). GuiEvent<309> is EBO-empty (a

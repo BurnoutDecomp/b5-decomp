@@ -26,14 +26,6 @@
 //          ProgressionManager::CheckForSpecialCarUnlocks().
 // OnSetAllRoadRules targets mpProgressionManager->GetAchievementManager() (X360
 // *(pm+133432)).
-//
-// The three ruled-road tallies this function calls
-// (GetNumberOfParShowTimeRoadsRuledByLocalPlayer @ 0x8233F230 /
-//  GetNumberOfParTimeTrialRoadsRuledByLocalPlayer @ 0x8233F2C0 /
-//  GetNumberOfCompleteRoadsRuledByLocalPlayer @ 0x8233F350) are declared on the
-// frozen StreetManager header; their bodies are deferred (see funcs_blocked) -- they
-// store into ProgressionManager counters that are private with no accessor -- so
-// this function only calls them by name.
 // ---------------------------------------------------------------------------
 
 namespace BrnGameState

@@ -250,7 +250,13 @@ enum EGameEventType
     // 130 / 131 / 132 / 133 call StreetManager::ProcessBuddyRemoved / ProcessNetworkHighScoreEvent
     // / ProcessUploadEvent / ProcessDownloadEvent / ProcessConnectedOnlineEvent.
     E_EVENT_BUDDY_REMOVED                    = 150,
-    E_EVENT_ROAD_RULE_ROAD_SCORE_REQUEST     = 191,  // value unconfirmed (template tag only)
+    // The road-rule request band, read off ProcessGameEvents' jump table (reference value - 1).
+    E_EVENT_ROAD_RULE_DATA_REQUEST           = 96,
+    E_EVENT_ROAD_RULE_ROAD_SCORE_REQUEST     = 97,
+    E_EVENT_ROAD_RULE_BATCH_DATA_REQUEST     = 98,
+    E_EVENT_ROAD_RULE_INTERACTION_CHANGE     = 99,
+    E_EVENT_ROAD_RULE_MODE_SWITCH            = 100,
+    E_EVENT_GUI_SWITCHES_ROAD_RULE_STATE     = 103,
     E_EVENT_ONLINE_ROAD_RULES_PB_RECV        = 130,
     E_EVENT_ONLINE_ROAD_RULES_UPLOADED       = 131,
     E_EVENT_ONLINE_ROAD_RULES_DOWNLOADED     = 132,

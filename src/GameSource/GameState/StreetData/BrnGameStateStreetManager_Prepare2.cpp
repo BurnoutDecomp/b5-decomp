@@ -28,26 +28,6 @@
 namespace BrnGameState
 {
 
-// ---------------------------------------------------------------------------
-// ⚠️ [FLAG PC bring-up] NOT A CONSOLE FUNCTION -- the named two-store subset of
-// StreetManager::Construct @0x82335978 that this leg cannot run without. The full contract,
-// the console attestation, and what it deliberately omits are documented at its declaration
-// (BrnGameStateStreetManager.h). It lives in THIS TU because Prepare2 is the only leg that
-// needs it; it goes away with the same DELETE-WHEN.
-//
-// The two asserts are the console's own (BrnGameStateStreetManager.cpp:151 and :153), in the
-// console's order -- assert, then store, per pointer.
-// ---------------------------------------------------------------------------
-void StreetManager::WireOwnerPointers( GameStateModule* lpGameStateModule,
-                                       BrnProgression::ProgressionManager* lpProgression )
-{
-    CGS_ASSERT( lpProgression, "lpProgression" );
-    mpProgressionManager = lpProgression;
-
-    CGS_ASSERT( lpGameStateModule, "lpGameStateModule" );
-    mpGameStateModule = lpGameStateModule;
-}
-
 // @ 0x823509D8. Pure forwarder: the two entry asserts (BrnGameStateStreetManager.cpp:281/:282
 // in the console's baked literals), the gated LoadStreetData pump, and -- only once it reports
 // complete -- the one-shot SetupParRivals pass. Returns false while the street data is still

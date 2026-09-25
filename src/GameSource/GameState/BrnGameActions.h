@@ -10,6 +10,8 @@
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"  // BrnNetwork::NetworkPlayerID
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"  // BrnGameState::GameModeParams (PrepareForModeAction payload)
 #include "GameShared/GameClasses/Containers/CgsArray.h"      // Array<T, N> (SetUpAllDriveThrusAction::maDriveThrus)
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"   // BitArray<64u> (RoadRulesNewRulersAction)
+#include "GameSource/GameState/BrnCgsPlayerName.h"          // CgsNetwork::PlayerName (the road-rule score records)
 #include "GameSource/GameState/Offences/BrnDriveThruManager.h"  // BrnTrigger::GenericRegion::Type (DriveThruInfo::meType)
 #include "SharedClasses/Trigger/BrnRegion.h"                  // BrnTrigger::BoxRegion (BroadcastModeFinishLinesAction::mBoxRegion)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"     // CgsSystem::Time (OnlineGameResults::mSecondsInEvent / maRoundTimes)
@@ -563,6 +565,21 @@ enum EGameActionType
     // No consumer dispatches on this enumerator today (the filler takes the record by pointer),
     // so the move is a pure value correction.
     E_ACTION_ROAD_RULES_BATCH_QUERY                      = 275,  // DWARF 262 (+13 X360); size 776
+    // The rest of the road-rules band, same +13 shift, each pinned by its producer's own
+    // id / size immediates at the AddEvent site (RoadRulesManager unless noted):
+    E_ACTION_ROAD_RULES_ENTER_ROAD                       = 273,  // OnEnterRoad; size 168
+    E_ACTION_ROAD_RULES_LEAVE_ROAD                       = 274,  // OnLeaveRoad; size 8
+    E_ACTION_UPCOMING_ROAD_CHANGE                        = 276,  // StreetManager::SendUpcomingRoadMessage; size 368
+    E_ACTION_ROAD_RULES_START_RULE                       = 277,  // OnStartRule; size 16
+    E_ACTION_ROAD_RULES_END_RULE                         = 278,  // OnEndRule; size 24
+    E_ACTION_ROAD_RULES_UPDATE                           = 279,  // OnUpdateActiveRoadScores; size 12
+    E_ACTION_ROAD_RULES_UPDATE_TARGET_ROAD_SCORE         = 280,  // StreetManager::UpdateFriendHighScores / ProcessNetworkHighScoreEvent / ProcessBuddyRemoved; size 104
+    E_ACTION_ROAD_RULES_NEW_HIGH_SCORE                   = 281,  // StreetManager::ProcessNewRoadScore / UpdateBufferedHighScores; size 48
+    E_ACTION_ROAD_RULES_ACTIVE_RULE_CHANGE               = 282,  // SendActiveRuleState; size 4
+    E_ACTION_ROAD_RULES_TIME_WARNING                     = 283,  // UpdateTimeRule; size 4
+    E_ACTION_ROAD_RULES_ROAD_SCORE                       = 284,  // StreetManager::ProcessScoreRequestEvent; size 48
+    E_ACTION_ROAD_RULES_NEW_RULERS                       = 285,  // StreetManager::ProcessNewRoadScore / UpdateBufferedHighScores; size 8
+    E_ACTION_ROAD_RULES_MODE_SWITCH                      = 286,  // SendActiveRuleState; size 1
     // ⭐ [stuntrace wave D, D3] "you are in the wrong car for this challenge". Producer
     // GameStateModule::StartModeAtLights @0x82396CF8: when the junction's RaceEventData carries a
     // mSpecialEventCarId (+0x10) that does not match GetOriginalCarId(mActivePlayerCarId), it posts
@@ -1284,6 +1301,155 @@ struct UpcomingRoadChangeAction
 };
 static_assert(sizeof(RoadRulesEnterRoadAction) == 168, "ARTIST road-enter action");
 static_assert(sizeof(UpcomingRoadChangeAction) == 368, "ARTIST upcoming-road action");
+
+// ---- the RoadRulesManager road-rule records -------------------------------------------------
+// Field names from the debug information; offsets and sizes from the stack stores that build
+// each record in its producer (all in BrnRoadRulesManager.cpp). None holds a pointer and every
+// CgsID is first, so the host layout equals the console layout and the posted size is asserted.
+
+// Action 274, 8 bytes. OnLeaveRoad: `std` of Road::mId at +0x00.
+struct RoadRulesLeaveRoadAction : public GameAction<E_ACTION_ROAD_RULES_LEAVE_ROAD>
+{
+    CgsID mRoadId;                               // +0x00
+};
+static_assert(sizeof(RoadRulesLeaveRoadAction) == 8, "action 274 wire size (posted size 8)");
+
+// Action 277, 16 bytes. OnStartRule: road id `std` +0x00, the ScoreType `stw` +0x08, the
+// "no online best to beat, par/default target used" byte `stb` +0x0C.
+struct RoadRulesStartRuleAction : public GameAction<E_ACTION_ROAD_RULES_START_RULE>
+{
+    CgsID                    mRoadId;                      // +0x00
+    BrnStreetData::ScoreType meScoreType;                  // +0x08
+    bool                     mbIdUsingDefaultOnlineScore;  // +0x0C
+};
+static_assert(sizeof(RoadRulesStartRuleAction) == 16, "action 277 wire size (posted size 0x10)");
+static_assert(offsetof(RoadRulesStartRuleAction, meScoreType) == 0x08, "action 277 +0x08");
+static_assert(offsetof(RoadRulesStartRuleAction, mbIdUsingDefaultOnlineScore) == 0x0C, "action 277 +0x0C");
+
+// Action 278, 24 bytes. OnEndRule: road id `std` +0x00, ScoreType `stw` +0x08, the score as
+// f32 `stfs` +0x0C (mfTime, or (f32)miCrashScore), lbAllowScoring `stb` +0x10.
+struct RoadRulesEndRuleAction : public GameAction<E_ACTION_ROAD_RULES_END_RULE>
+{
+    CgsID                    mRoadId;          // +0x00
+    BrnStreetData::ScoreType meScoreType;      // +0x08
+    f32                      mfScore;          // +0x0C
+    bool                     mbValidAttempt;   // +0x10
+};
+static_assert(sizeof(RoadRulesEndRuleAction) == 24, "action 278 wire size (posted size 0x18)");
+static_assert(offsetof(RoadRulesEndRuleAction, meScoreType) == 0x08, "action 278 +0x08");
+static_assert(offsetof(RoadRulesEndRuleAction, mfScore) == 0x0C, "action 278 +0x0C");
+static_assert(offsetof(RoadRulesEndRuleAction, mbValidAttempt) == 0x10, "action 278 +0x10");
+
+// Action 279, 12 bytes. OnUpdateActiveRoadScores builds it through the inlined Construct (both
+// scores 0.0f, both flags false) and SetScore (flag byte first, then the score), per ScoreType.
+struct RoadRulesUpdateAction : public GameAction<E_ACTION_ROAD_RULES_UPDATE>
+{
+    void Construct()
+    {
+        for (s32 liIndex = 0; liIndex < BrnStreetData::E_SCORE_TYPE_COUNT; ++liIndex)
+        {
+            mafScores[liIndex]        = 0.0f;
+            mabScoreIsActive[liIndex] = false;
+        }
+    }
+    void SetScore(BrnStreetData::ScoreType leScoreType, f32 lfScore)
+    {
+        mabScoreIsActive[leScoreType] = true;
+        mafScores[leScoreType]        = lfScore;
+    }
+    // Consumer-side reads (the GUI translation of action 279).
+    bool IsScoreActive(BrnStreetData::ScoreType leScoreType) const { return mabScoreIsActive[leScoreType]; }
+    f32  GetScore(BrnStreetData::ScoreType leScoreType) const      { return mafScores[leScoreType]; }
+
+private:
+    f32  mafScores[BrnStreetData::E_SCORE_TYPE_COUNT];          // +0x00
+    bool mabScoreIsActive[BrnStreetData::E_SCORE_TYPE_COUNT];   // +0x08
+};
+static_assert(sizeof(RoadRulesUpdateAction) == 12, "action 279 wire size (posted size 0xC)");
+
+// Action 282, 4 bytes. SendActiveRuleState: `stw` of meActiveRoadRule.
+struct RoadRulesActiveRuleChangeAction : public GameAction<E_ACTION_ROAD_RULES_ACTIVE_RULE_CHANGE>
+{
+    EActiveRoadRule meActiveRoadRule;   // +0x00
+};
+static_assert(sizeof(RoadRulesActiveRuleChangeAction) == 4, "action 282 wire size (posted size 4)");
+
+// Action 283, 4 bytes. UpdateTimeRule: mfTimeTarget - mfTime `stfs` +0x00.
+struct RoadRulesTimeWarningAction : public GameAction<E_ACTION_ROAD_RULES_TIME_WARNING>
+{
+    f32 mfTimeRemaining;   // +0x00
+};
+static_assert(sizeof(RoadRulesTimeWarningAction) == 4, "action 283 wire size (posted size 4)");
+
+// Action 286, 1 byte. SendActiveRuleState: `stb` of (rule is online).
+struct RoadRulesModeSwitchAction : public GameAction<E_ACTION_ROAD_RULES_MODE_SWITCH>
+{
+    bool mbIsOnline;   // +0x00
+};
+static_assert(sizeof(RoadRulesModeSwitchAction) == 1, "action 286 wire size (posted size 1)");
+
+// ---- the StreetManager road-rule records ----------------------------------------------------
+// Field names from the debug information. Offsets from the producers' stack stores (the
+// StreetManager partfiles) and from the GUI translation that copies each field to the same
+// offset of its GUI record. Every CgsID leads its record or sits 8-aligned and no record holds
+// a pointer, so the host layout equals the console layout and the posted size is asserted.
+
+// Action 280, 104 bytes: the friend best, the local player's best and the road they belong
+// to, posted when either changes for the road the player is on.
+struct RoadRulesUpdateTargetScoreAction : public GameAction<E_ACTION_ROAD_RULES_UPDATE_TARGET_ROAD_SCORE>
+{
+    BrnStreetData::ChallengeHighScoreEntry   mFriendScores;   // +0x00 (56)
+    BrnStreetData::ChallengePlayerScoreEntry mUserScores;     // +0x38 (40)
+    CgsID                                    mRoadId;         // +0x60
+};
+static_assert(sizeof(RoadRulesUpdateTargetScoreAction) == 104, "action 280 wire size (posted size 0x68)");
+static_assert(offsetof(RoadRulesUpdateTargetScoreAction, mUserScores) == 0x38, "action 280 +0x38");
+static_assert(offsetof(RoadRulesUpdateTargetScoreAction, mRoadId) == 0x60, "action 280 +0x60");
+
+// Action 281, 48 bytes. The console record leads with the road id (the debug information lists
+// the name first); both producers store it at +0x00 and the name at +0x14.
+struct RoadRulesNewHighScoreAction : public GameAction<E_ACTION_ROAD_RULES_NEW_HIGH_SCORE>
+{
+    CgsID                    mRoadId;                     // +0x00
+    BrnStreetData::ScoreType meScoreType;                 // +0x08
+    s32                      miNumScoresLost;             // +0x0C
+    s32                      miNumRoadsNowRuled;          // +0x10
+    CgsNetwork::PlayerName   mPlayerName;                 // +0x14 (16)
+    bool                     mbIsLocalPlayer;             // +0x24
+    bool                     mbIsWholeRoadOwned;          // +0x25
+    bool                     mbWasRulePlayersBefore;      // +0x26
+    bool                     mbMultipleScores;            // +0x27
+    bool                     mbOnlineLossButOfflineWin;   // +0x28
+};
+static_assert(sizeof(RoadRulesNewHighScoreAction) == 48, "action 281 wire size (posted size 0x30)");
+static_assert(offsetof(RoadRulesNewHighScoreAction, mPlayerName) == 0x14, "action 281 +0x14");
+static_assert(offsetof(RoadRulesNewHighScoreAction, mbOnlineLossButOfflineWin) == 0x28, "action 281 +0x28");
+
+// Action 284, 48 bytes: one road's ticker line. The offline score is the local player's best
+// (or par when par still stands), the online score the road's best (or par); the two AI bytes
+// say which of the two is par.
+struct RoadRulesRoadScoreAction : public GameAction<E_ACTION_ROAD_RULES_ROAD_SCORE>
+{
+    CgsID                         mRoadID;                  // +0x00
+    BrnStreetData::ChallengeIndex mChallengeIndex;          // +0x08
+    CgsNetwork::PlayerName        mPlayerName;              // +0x0C (16)
+    EActiveRoadRule               meActiveRoadRule;         // +0x1C
+    s32                           miOfflineScore;           // +0x20
+    s32                           miOnlineScore;            // +0x24
+    bool                          mbLocalPlayerRulesRoad;   // +0x28
+    bool                          mbAIRulesRoadOffline;     // +0x29
+    bool                          mbAIRulesRoadOnline;      // +0x2A
+};
+static_assert(sizeof(RoadRulesRoadScoreAction) == 48, "action 284 wire size (posted size 0x30)");
+static_assert(offsetof(RoadRulesRoadScoreAction, meActiveRoadRule) == 0x1C, "action 284 +0x1C");
+static_assert(offsetof(RoadRulesRoadScoreAction, mbLocalPlayerRulesRoad) == 0x28, "action 284 +0x28");
+
+// Action 285, 8 bytes: the roads whose ruler changed for the active score type.
+struct RoadRulesNewRulersAction : public GameAction<E_ACTION_ROAD_RULES_NEW_RULERS>
+{
+    CgsContainers::BitArray<64u> mRoadRulesChangedBitArray;   // +0x00
+};
+static_assert(sizeof(RoadRulesNewRulersAction) == 8, "action 285 wire size (posted size 8)");
 
 // Consumer: CrashPlayManager::OnEnterJunction @0x822A7E30 -- `lwz r11, 0(r30)`, three times,
 // and nothing else. Its assert string is "lpJAction->muJunctionID != 0", so again the member

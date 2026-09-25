@@ -692,6 +692,15 @@ public:
         const CgsSystem::TimerStatusInterface&         lrTimerStatusInterface,
         f32                                            lfDelta);
 
+    // ProcessGameEvents, THE ROAD-RULES AND STREET-MANAGER ARMS: cases 96..100 and 103 (the GUI's
+    // road-rules requests into RoadRulesManager / StreetManager) and 130..133 / 150 (the online
+    // road-rules score traffic into StreetManager). Same walk shape as the arms above; body in
+    // GameStateModule_RoadRules.cpp.
+    void ProcessGameEventsRoadRulesBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue*            lpActionQueue,
+        GameStateModuleIO::OutputBuffer*               lpOutputBuffer);
+
     // ================================================================================
     // (i) [D4 PUMP SEAM] CheckIfPlayerIsAtJunctionWithAnEvent (X360 0x82390418) and
     // DetectModeStarts (X360 0x8239A428) are the two functions THIS lane stages, at console
@@ -1742,6 +1751,13 @@ private:
     // ProcessGameEvents case 162 when the challenge selector is shown (action 2) and cleared when
     // it is hidden (action 3); UpdateRoadRulesManager reads it.
     bool mbFreeburnChallengeSelectorVisible = false;
+    // Console +0x32DB8. The console's UpdateRoadRulesManager stores the ChallengeManager's
+    // GetChallengeStyle() here every frame and passes it to RoadRulesManager::Update.
+    BrnResource::ChallengeListEntry::EFreeburnChallengeStyle meFreeburnChallengeStyle =
+        BrnResource::ChallengeListEntry::E_FREEBURN_STYLE_NONE;
+    // Console +0x475BC, reference header mfSimTimeStep. PreWorldUpdate latches the sim timer's
+    // step here at its top; UpdateRoadRulesManager and StreetManager::Update read it.
+    f32 mfSimTimeStep = 0.0f;
 
     // ⭐ X360 +0x38B72 (232306) -- THE SECOND HALF OF THE START-OF-GAME JUNKYARD HANDSHAKE.
     // SendSetupPlayerCarEvent @0x8239A918 sets it; ProcessGameEvents @0x823A0A18 case 78 tests it
@@ -2258,13 +2274,13 @@ private:
     u16 muShowtimeRequestedTrafficIndex = 0xFFFFu;
 
 public:
-    // ⭐⭐⭐ [bounce wave] ONE ARM of X360 GameStateModule::UpdateRoadRulesManager @0x82381258,
-    // staged at the console's own PreWorldUpdate position. See the body for the full arm
-    // inventory and for which arms are deferred and why. Takes the action queue the caller
-    // already holds the output buffer's write lock for, the same way every other ...BringUp leg
-    // in GameStateModule_gUI_00.cpp does.
-    void UpdateStreetDisplay(f32 delta);
-    void UpdateRoadRulesManagerImpactTimeBringUp(GameStateModuleIO::GameActionQueue* lpActionQueue);
+    // Called by EmmPreWorldUpdate's not-sim-paused arm
+    // (GameStateModule_gUI_00.cpp leg 1c) with the output buffer and the pre-world input buffer's
+    // ControllerInput; the caller holds the output buffer's write lock and the input buffer's read
+    // lock. Body in GameStateModule_RoadRules.cpp: the showtime score and impact-time posts, then
+    // RoadRulesManager::Update.
+    void UpdateRoadRulesManager(GameStateModuleIO::OutputBuffer*          lpOutputBuffer,
+                                const GameStateModuleIO::ControllerInput* lpControllerInput);
 
     // [FX-FLOW 2026-09-24, NEW-EMMTAIL] the TAIL of X360 GameStateModule::EmmPreWorldUpdate
     // @0x8238EF50 after UpdateRoadRulesManager (0x8238F1BC..0x8238F33C, run on both the paused and

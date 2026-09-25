@@ -13,13 +13,6 @@
 //   ProcessUploadEvent            @ 0x8233F3E8  -- mark the uploaded index range clean
 //   ProcessDownloadEvent          @ 0x82324B40  -- null-assert only (retail body empty)
 //   ProcessOnlineGameLaunchedEvent@ 0x82324B88  -- clear buffer / bits / lost-score count
-//
-// ProcessConnectedOnlineEvent (@ 0x8234A148) is BLOCKED and left for a follow-up:
-// its body reads/writes four BrnProgression::Profile road-rules members
-// (muLastRoadRulesResetTime, muRoadRulesIDLowBits, muRoadRulesIDHighBits,
-// muTimeStampOfLastRoadRulesDownload) that are private in BrnProfile.h with no
-// public accessor, and StreetManager is not a friend of Profile -- unreachable
-// without editing the frozen header.
 // ============================================================================
 
 #include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"

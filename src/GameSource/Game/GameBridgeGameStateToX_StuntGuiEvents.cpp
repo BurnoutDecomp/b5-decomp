@@ -41,6 +41,9 @@
 #include "GameSource/Gui/Events/BrnGuiChallengeEvents.h"           // GUI 574 / 576 / 577 (free-burn challenge arms)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"           // CgsSystem::Time (the action-152 record)
 #include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"      // bounded [netui] witness lines
+#include "GameSource/GameState/ModeManager/BrnModeManager.h"                          // ModeManager::GetScoringSystem (case 279)
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"                // ScoringSystem::GetCrashScorer (case 279)
+#include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"  // CrashModeScoring (case 279)
 #include <stdlib.h>                                               // getenv (the [UI-gate] diag guard)
 #include <cstring>                                                 // memset/strncpy (the 537 ticker record)
 
@@ -321,7 +324,8 @@ namespace
     // family, [drive-thru] 2026-08-29), 45 (the drive-thru ICON TABLE -> the pending sat-nav
     // record posted at the tail, [minimap blips, issue #9] 2026-09-07), and 6 (the TAKEDOWN
     // CRASH-BAR edge -> GUI 377 payloads 2/3, [takedown HUD] 2026-09-13), and 152..155/157/160
-    // (the free-burn challenge family -> GUI 108/574..584); the event-flow arms live in the sibling
+    // (the free-burn challenge family -> GUI 108/574..584), and 279 (the per-frame road-rule
+    // score -> GUI 338; the rest of the road-rule band is in the sibling below); the event-flow arms live in the sibling
     // GameBridgeGameStateToX_EventFlowGuiEvents.cpp, reached through the `default:` below.
     // Every other action falls through with NO event posted. A future owner adding, say, the
     // road-rules arms must add them HERE rather than in a parallel function.
@@ -1603,6 +1607,55 @@ namespace
                     reinterpret_cast<const BrnGameState::GameStateModuleIO::FburnChallengeShowSelectorAction*>(
                         lpAction)->mChallengeID;
                 PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // [RR-GUI] 279 -> GUI 338, the per-frame road-rule score. The only road-rule arm that
+            // reads past the action: the crash half comes off the game module's own crash scorer
+            // (the embedded ModeManager's ScoringSystem CrashModeScoring raw score and
+            // multiplier), not off the action's crash score, which this arm never reads. The time
+            // half is the action's, unless the debug worst-case-HUD switch is up, when its time
+            // stands in. The record is a frame local on the console: the fields a cleared flag
+            // skips carry stack residue there, zero here.
+            case BrnGameState::GameStateModuleIO::E_ACTION_ROAD_RULES_UPDATE:
+            {
+                const BrnGameState::GameStateModuleIO::RoadRulesUpdateAction* lpUpdate =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::RoadRulesUpdateAction*>(lpAction);
+
+                BrnGui::GuiEventRoadRuleUpdate lEvent;
+                memset(&lEvent, 0, sizeof(lEvent));
+                if (BrnGui::GuiEventRoadRuleUpdate::msbWorstCaseHudActive)
+                {
+                    lEvent.mfCurrentTimeElapsed = BrnGui::GuiEventRoadRuleUpdate::msfWorstCaseTimeElapsed;
+                }
+                else if (lpUpdate->IsScoreActive(BrnStreetData::E_SCORE_TYPE_TIME))
+                {
+                    lEvent.mfCurrentTimeElapsed = lpUpdate->GetScore(BrnStreetData::E_SCORE_TYPE_TIME);
+                }
+                if (lpUpdate->IsScoreActive(BrnStreetData::E_SCORE_TYPE_CRASH))
+                {
+                    const BrnGameState::CrashModeScoring* lpCrashScorer =
+                        mGameStateModule.GetModeManager()->GetScoringSystem()->GetCrashScorer();
+                    lEvent.miCrashMultiplier = lpCrashScorer->GetScoreMultiplier();
+                    lEvent.mfCurrentCrash    = static_cast<f32>(lpCrashScorer->GetRawScore());
+                }
+                PushGuiEvent(lEvent, lpGuiInput);
+
+                // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_ROADRULES_DIAG): the first 8
+                // frames, then every 60th, 48 lines in all -- this action posts every frame.
+                static const bool sbRoadRulesDiag      = (getenv("BRN_ROADRULES_DIAG") != 0);
+                static s32        siRoadRulesDiagLeft  = 48;
+                static s32        siRoadRulesDiagFrame = 0;
+                ++siRoadRulesDiagFrame;
+                if (sbRoadRulesDiag && siRoadRulesDiagLeft > 0 && CgsDev::Log::gpDebugPrint != 0 &&
+                    (siRoadRulesDiagFrame <= 8 || (siRoadRulesDiagFrame % 60) == 0))
+                {
+                    --siRoadRulesDiagLeft;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[roadrules] action 279 -> gui 338 (time " << lEvent.mfCurrentTimeElapsed
+                        << " crash " << lEvent.mfCurrentCrash
+                        << " x" << lEvent.miCrashMultiplier << ")\n";
+                }
                 break;
             }
 
