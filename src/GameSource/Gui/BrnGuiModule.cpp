@@ -1110,13 +1110,11 @@ namespace BrnGui
         // UNCONDITIONAL GetFreeburnChallengeManager per controller-input event) fire
         // "mpChallengeManager" once per input frame for the whole of a live stunt race.
         //
-        // The console's BurnoutSkillsManager pair that sits between the mask matrix and this
-        // one (BurnoutSkillsManager::Construct(gm + 309032) + the "lpSkillsManager" assert at
-        // BrnGuiCache.h:2341 -> `*(gm + 1021864)`) is NOT landed here: GuiCache::mpSkillsManager
-        // is still writer-less. It costs no assert -- GetBurnoutSkillsManager
-        // (BrnGuiCache.h:799) is a plain inline read with no guard -- and its readers
-        // (PlayerPositionSingleComponent::RenderValue's today's-best arm) are game-mode 15/16
-        // only, so no offline event reaches them. Named as the known gap, not fabricated.
+        // The console's BurnoutSkillsManager pair sits between the mask matrix and this one:
+        // the module's skills manager is constructed against the cache and bound as
+        // GuiCache::mpSkillsManager (the "lpSkillsManager" assert is the setter's).
+        mBurnoutSkillsManager.Construct(&mGuiCache);
+        mGuiCache.SetSkillsManager(&mBurnoutSkillsManager);
         mFreeburnChallengeManager.Construct(&mGuiCache);
         mGuiCache.SetChallengeManager(&mFreeburnChallengeManager);
 
@@ -1999,6 +1997,17 @@ void GuiModule::Destruct()
                 case 556:   // [event-state 2026-09-10] GuiEventEventStateResponse -- the DISCOVERED-event array
                 case 373:   // [FX-FLOW 2026-09-24, G13-X5] GuiShutdownEvent -- mShutdownCarID (RecEvent 0x8250FFA8)
                 case 374:   // [FX-FLOW 2026-09-24, G13-X5] GuiShutdownFinishedEvent -- mbCarUnlockPending (0x8250FFC4)
+                case 44:    // [net] GuiEventNetworkDisconnected -- the local player marked disconnected
+                case 58:    // [net] the game launched -- disconnected / eliminated tables cleared
+                case 108:   // [net] GuiEventOnlineTimeout -- the online timeout pending byte
+                case 239:   // [net] GuiEventRaceDistanceRemaining -- the eliminated bytes
+                case 240:   // [net] GuiEventRaceDistanceToCheckpoint -- the checkpoint distance
+                case 243:   // [net] GuiEventNetworkPlayerList -- the pre-game roster
+                case 244:   // [net] GuiEventNetworkLobbyPlayerList -- the lobby roster
+                case 245:   // [net] GuiEventNetworkPlayerStatus -- the in-game roster + host byte
+                case 257:   // [net] GuiEventNetworkGameParams -- the params mirror (online game mode)
+                case 273:   // [net] GuiEventNetworkLeftGame -- the params security reset
+                case 320:   // [net] online showtime completed
                     // [H1 wave 2026-08-25] On the console EVERY module-input event reaches
                     // GuiCache::RecEvent (its ~180-case switch consumes what it wants);
                     // this build's pump routes selectively, so the two cache-consumed ids
@@ -2048,6 +2057,42 @@ void GuiModule::Destruct()
                     // it -- so this forward delivers it exactly once. It is the SOLE writer of
                     // GuiCache::maEventStarts, the table GetProfileEventDisplayInfo walks.
                     mGuiCache.RecEvent(lpEvent, liId);
+                    break;
+
+                // The free-burn challenge tracker's event arms, in the console's case order.
+                // Only the online free-burn lobby produces these records (the action->GUI
+                // translator's 153/154/155/157 arms and the network bridge's 583).
+                case 544:
+                    mFreeburnChallengeManager.SelectNext();
+                    break;
+                case 574:
+                    mFreeburnChallengeManager.StartChallenge(
+                        reinterpret_cast<const GuiChallengeStartEvent*>(lpEvent));
+                    break;
+                case 576:
+                    mFreeburnChallengeManager.TriggerChallenge(
+                        reinterpret_cast<const GuiChallengeTriggerResponse*>(lpEvent));
+                    break;
+                case 577:
+                    mFreeburnChallengeManager.HandleNewData(
+                        reinterpret_cast<const GuiChallengeUpdateEvent*>(lpEvent));
+                    break;
+                case 578:
+                    mFreeburnChallengeManager.StartResults();
+                    break;
+                case 579:
+                    mFreeburnChallengeManager.FinishChallenge();
+                    break;
+                case 581:
+                    mFreeburnChallengeManager.HandleCompletionStatus(
+                        reinterpret_cast<const GuiEventFburnChallengeEveryPlayerStatus*>(lpEvent));
+                    break;
+                case 583:
+                    mFreeburnChallengeManager.StartNotActiveChallenge(
+                        reinterpret_cast<const GuiChallengeNotActiveStartEvent*>(lpEvent));
+                    break;
+                case 584:
+                    mFreeburnChallengeManager.EndNotActiveChallenge();
                     break;
 
                 case 356:   // [profile-save] GuiAutosaveRequestEvent -- THE AUTOSAVE LATCH
@@ -3403,19 +3448,11 @@ void GuiModule::Destruct()
         //     CgsGui::GuiModule::Update(gm, ...);      // == the flow ticks below
         // The body is the AUTO_ROTATE page timer and is entirely behind
         // `meInternalState != E_INTERNAL_STATE_OFF`, so on an offline event it costs one
-        // compare per frame. (The skills-manager twin above it is not landed -- see the gap
-        // note at the Construct hand-off.)
-        //
-        // The manager's OTHER console drives are its GuiModule::Update EVENT arms, which are
-        // NOT landed: 544 -> SelectNext, 574 -> StartChallenge, 576 -> TriggerChallenge,
-        // 577 -> HandleNewData, 578 -> meInternalState = RESULTS, 579 -> FinishChallenge,
-        // 581 -> memcpy(manager + 184 /*mCompletedData*/, event, 2104), 583 ->
-        // StartNotActiveChallenge, 584 -> meInternalState = OFF. Every one of them is a
-        // FREEBURN-challenge record; none is produced on this build and none can reach an
-        // offline event, so the manager correctly rests in E_INTERNAL_STATE_OFF for the whole
-        // of a stunt race and every consumer's IsActive/IsNotActive/IsRunning/
-        // IsShowingResults gate reads false. Landing them is the follow-up that turns the
-        // challenge ticker on, and it needs the freeburn producers first.
+        // compare per frame. The skills-manager tick above it rotates the Burnout Skillz page
+        // only in game mode 15.
+        // The manager's event arms (544/574/576..579/581/583/584) are in
+        // DispatchInboundGuiEvents; only free-burn challenge records reach them.
+        mBurnoutSkillsManager.Update();
         mFreeburnChallengeManager.Update();
 
         // ---- 4. the flow ticks (each current state's PreUpdate/Update/PostUpdate) -----

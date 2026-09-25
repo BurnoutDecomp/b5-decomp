@@ -112,13 +112,25 @@ namespace BrnGui
             E_OPTION_SOUND_VOLUMES_COUNT = 12,
         };
 
-        // DWARF :145-:170 -- declared-only (their own ledger functions). The camera
-        // option enum's home is the network module IO (opaque-declared below the
-        // namespace); the DWARF signature order is kept.
+        // Construct is header-inline (the online game room's OnEnter stores the nine
+        // fields in place); the rest are their own ledger functions. The camera option
+        // enum's home is the network module IO (opaque-declared below the namespace);
+        // the declared signature order is kept.
         void Construct(s32 leCameraUserOption, EOptionsVoipVolumes leVoipVolume,
                        EOptionsSoundVolumes leMusicVolume, EOptionsSoundVolumes leSFXVolume,
                        bool lbSixAxisShowtime, bool lbSixAxisSteering, bool lbForceFeedback,
-                       bool lbTips, bool lbDefaultGameCamera);
+                       bool lbTips, bool lbDefaultGameCamera)
+        {
+            meCameraUserOption  = leCameraUserOption;
+            meVoipVolume        = leVoipVolume;
+            meMusicVolume       = leMusicVolume;
+            meSFXVolume         = leSFXVolume;
+            mbSixAxisShowtime   = lbSixAxisShowtime;
+            mbSixAxisSteering   = lbSixAxisSteering;
+            mbForceFeedback     = lbForceFeedback;
+            mbTips              = lbTips;
+            mbDefaultGameCamera = lbDefaultGameCamera;
+        }
         void SetFromProfile(OptionsDataProfile* lpProfile);
         void SetToProfile(OptionsDataProfile* lpProfile);
         void OutputEvents(OptionsDataProfile* lpProfile, CgsGui::StateInterface* lpStateInterface);

@@ -20,6 +20,28 @@
 
 namespace CgsNetwork
 {
+    // The console's float-to-integer conversions (fctiwz / fctidz) saturate: a value past the
+    // integer range becomes the nearest bound and NaN becomes the minimum. A plain C++ cast of
+    // an out-of-range value is undefined (x64 yields the minimum for both). The resolution-form
+    // quantiser counts the steps of an unbounded range (max FLT_MAX) through them.
+    inline s32 SaturateToS32(double ldValue)
+    {
+        if (!(ldValue >= -2147483648.0))
+            return -2147483647 - 1;
+        if (ldValue >= 2147483647.0)
+            return 0x7FFFFFFF;
+        return static_cast<s32>(ldValue);
+    }
+
+    inline s64 SaturateToS64(double ldValue)
+    {
+        if (!(ldValue >= -9223372036854775808.0))
+            return -9223372036854775807ll - 1;
+        if (ldValue >= 9223372036854775807.0)
+            return 0x7FFFFFFFFFFFFFFFll;
+        return static_cast<s64>(ldValue);
+    }
+
     struct FloatQuantiser
     {
         static void Pack(float lfValue, float lfMin, float lfMax, s32 liNumBits,

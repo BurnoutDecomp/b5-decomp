@@ -87,7 +87,7 @@ namespace BrnGui
     // -- not-yet-reconstructed screen states (placeholders in States/BrnScreenStatesLinkStubs.h)
     struct NullState;
     struct CrashNavMapMain;
-    struct OnlineGameRoomPlayerInfoState;   // placeholder name; see the stub header's FLAG note
+    struct OnlineGameRoomPlayerInfo;        // States/BrnOnlineGameRoomPlayerInfo.h
     struct OnlineTeamSelection;
     struct ReplayClips;
     struct ReplayClipsOnline;
@@ -157,7 +157,7 @@ namespace BrnGui
         Video*                         mpStateVideo;                       // FMV_VIDEO     (64)
         ImageGalleryState*             mpStateImageGallery;                // ON_IMG_GAL    (12072)
         OnlinePlay*                    mpStateOnlinePlay;                  // ON_PLAY       (9256)
-        OnlineGameRoomPlayerInfoState* mpStateOnlineGameRoom;              // ON_GAME_ROOM  (87968)
+        OnlineGameRoomPlayerInfo*      mpStateOnlineGameRoom;              // ON_GAME_ROOM  (87968)
         OnlineCustomMatch*             mpStateOnlineCustomMatch;           // ON_CUST_MAT   (57952)
         OnlineCreateFreeburn*          mpStateOnlineCreateFreeburn;        // ON_CREATE_FB  (64)
         OnlineSelectRoute*             mpStateOnlineSelectRoute;           // ON_SEL_ROUTE  (23056)

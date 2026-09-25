@@ -117,7 +117,8 @@ namespace BrnTraffic
     // BrnResource::VehicleList::GetVehicleIndex / ::GetVehicleData on it, and no
     // BrnTraffic::VehicleList exists in the image.
     class DebugComponent;
-    class Logger;
+    // `struct`, the class-key of its real home BrnTrafficLogger.h.
+    struct Logger;
 
 namespace BrnTrafficIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_Dispatch; class InputBuffer_PreDispatch; class OutputBuffer_PreDispatch; }
 
@@ -1554,6 +1555,10 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
                                         TotalTrafficBitArray* lpCreatedBodies);
 
         static void _AssertLayout();
+
+        // Logger::HashState snapshots the module's pools, free lists and active hulls by
+        // direct member read (every read in its body is an inlined member load).
+        friend struct Logger;
 
     private:
         // MEMBERS in DWARF/ship order. Every `:NNN` is the DWARF's source line.

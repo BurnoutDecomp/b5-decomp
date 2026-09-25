@@ -158,7 +158,7 @@ namespace CgsNetwork
 
     // ---- AddPlayer @0x82892E18 ------------------------------------------------------
     // A player joined: re-prepare the sync managers against the current host and, if the
-    // joining player is one of ours, register its sync-time messages.
+    // joining player has a network player (a remote one), register its sync-time messages.
     void
     TimeManager::AddPlayer(NetworkPlayerID lPlayerID, bool lbIAmHost)
     {
@@ -167,9 +167,10 @@ namespace CgsNetwork
 
         CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
-        if (mpPlayerManager->IsLocalPlayer(lPlayerID))
+        NetworkPlayer* lpPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
+        if (lpPlayer != 0)
         {
-            mSyncTimeMessageManager.RegisterMessages(mpPlayerManager->GetPlayerByID(lPlayerID));
+            mSyncTimeMessageManager.RegisterMessages(lpPlayer);
         }
 
         ++miPlayersAdded;
@@ -178,7 +179,7 @@ namespace CgsNetwork
 
     // ---- RemovePlayer @0x82892F10 ---------------------------------------------------
     // A player left: re-prepare the sync managers against the (possibly new) host, and if
-    // the leaving player was one of ours, unregister its sync-time messages.
+    // the leaving player has a network player, unregister its sync-time messages.
     void
     TimeManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
@@ -195,9 +196,10 @@ namespace CgsNetwork
             PrepareSyncTimeManagers(lbIAmHost, lHostID);
         }
 
-        if (mpPlayerManager->IsLocalPlayer(lPlayerID))
+        NetworkPlayer* lpPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
+        if (lpPlayer != 0)
         {
-            mSyncTimeMessageManager.UnregisterMessages(mpPlayerManager->GetPlayerByID(lPlayerID));
+            mSyncTimeMessageManager.UnregisterMessages(lpPlayer);
         }
     }
 

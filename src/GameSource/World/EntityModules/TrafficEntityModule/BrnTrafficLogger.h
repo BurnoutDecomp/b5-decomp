@@ -1,7 +1,7 @@
 #pragma once
 
 // =============================================================================
-// BrnTrafficLogger.h  (NEW OWNING HEADER)
+// BrnTrafficLogger.h  (OWNING HEADER)
 //
 // DWARF home (references/DecFIGS/dwarfdump/GameSource/World/EntityModules/
 // TrafficEntityModule/BrnTrafficLogger.h) of the traffic-system deterministic
@@ -31,28 +31,23 @@
 //   * ActiveHullData  == 0x220 (544) -- dest cursor strides 0x220 per active hull; the
 //                                       mauSectionSpanVehicleCount[256] u16 tail @ +0x20
 //                                       (after the +0x18 u64 stopline mask) ends at 0x220.
-//
-// Only the two functions this TU owns are bodied (in BrnTrafficLogger.cpp):
-//   Construct @ 0x82751AE0 and HashState @ 0x8275DFB8.
-// Reset / AllowDivergentBehaviour / SetAllowDivergentBehaviour / Dump / HACKDump and
-// HashBuffer::Dump / FrameLogData are other (not-yet-reconstructed) slices of the same
-// header; declared here for shape, their bodies land later. GROW this header additively
-// when they do; never redefine these types.
+// The three static-param arrays are sized by the ship pool (KU_MAX_STATIC_TRAFFIC, 199),
+// not the 200 the older declaration prints: HashState's stores put muNumFreeParams at
+// +0x81DC (right after 199 six-byte records), muNumStaticParamsInPurgatory at +0x8C10 and muNumActiveHulls at
+// +0x8F30 (199 four-byte records after +0x8C14). Only with those extents does the record
+// end at 0x12838, which the 16-byte alignment of mRand rounds to the 0x12840 HashState
+// clears and hashes. _AssertLayout pins all of it.
 // =============================================================================
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                                   // Vector4, Vector3Plus
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                         // CgsNumeric::Random (HashBuffer::mRand)
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"   // KU_MAX_PARAMS, KU_MAX_STATIC_TRAFFIC, KU_MAX_ACTIVE_HULLS
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"        // BrnTraffic::ParamPlan (HashBuffer::ParamData::maPlans)
-#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h" // BrnTraffic::PurgatoryInfo (HashBuffer purgatory lists)
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h" // BrnTraffic::TrafficEntityModule, PurgatoryInfo
 
 namespace BrnTraffic
 {
-    // Forward declaration: the entity module whose live state HashState snapshots. Its
-    // full layout/home is a separate (not-yet-reconstructed) slice; this TU only calls
-    // its accessors (see BrnTrafficLogger.cpp).
-    class TrafficEntityModule;
-
     // -------------------------------------------------------------------------
     // HashBuffer -- the deterministic state snapshot HashState fills then CRCs.
     // sizeof == 0x12840 (X360-authoritative, see file header).
@@ -104,44 +99,59 @@ namespace BrnTraffic
             u16 mauSectionSpanVehicleCount[256]; // :104 +0x20 (ends +0x220)
         };
 
-        CgsNumeric::Random mRand;                       // :108 +0x00
-        ParamData          maParamData[400];            // :109
-        StaticParamData    maStaticParamData[200];      // :110
-        u32                muNumFreeParams;             // :112
-        u16                mauFreeParams[400];          // :113
-        u32                muNumFreeStaticParams;       // :115
-        u8                 mauFreeStaticParams[200];    // :116
-        u32                muNumParamsInPurgatory;      // :118
-        PurgatoryInfo      maParamPurgatory[400];       // :119
-        u32                muNumStaticParamsInPurgatory;// :121
-        PurgatoryInfo      maStaticParamPurgatory[200]; // :122
-        u32                muNumActiveHulls;            // :124
-        ActiveHullData     maActiveHullData[72];        // :125
+        CgsNumeric::Random mRand;                                             // :108 +0x00
+        ParamData          maParamData[KU_MAX_PARAMS];                        // :109 +0x30
+        StaticParamData    maStaticParamData[KU_MAX_STATIC_TRAFFIC];          // :110 +0x7D30
+        u32                muNumFreeParams;                                   // :112 +0x81DC
+        u16                mauFreeParams[KU_MAX_PARAMS];                      // :113 +0x81E0
+        u32                muNumFreeStaticParams;                             // :115 +0x8500
+        u8                 mauFreeStaticParams[KU_MAX_STATIC_TRAFFIC];        // :116 +0x8504
+        u32                muNumParamsInPurgatory;                            // :118 +0x85CC
+        PurgatoryInfo      maParamPurgatory[KU_MAX_PARAMS];                   // :119 +0x85D0
+        u32                muNumStaticParamsInPurgatory;                      // :121 +0x8C10
+        PurgatoryInfo      maStaticParamPurgatory[KU_MAX_STATIC_TRAFFIC];     // :122 +0x8C14
+        u32                muNumActiveHulls;                                  // :124 +0x8F30
+        ActiveHullData     maActiveHullData[KU_MAX_ACTIVE_HULLS];             // :125 +0x8F38
+
+        static void _AssertLayout();
     };
 
     // -------------------------------------------------------------------------
-    // Logger -- the deterministic-state debug logger singleton (gpLogger).
+    // Logger -- the deterministic-state debug logger singleton (gpLogger). One byte:
+    // TrafficEntityModule::Construct allocates it (size 1, alignment 16) from the debug
+    // allocator and owns it through mpLogger.
     // -------------------------------------------------------------------------
     struct Logger
     {
+    public:
         // @ 0x82751AE0 -- enable divergent behaviour and install the singleton.
-        void Construct();
+        void Construct();                                  // :173
+
+        // :178. TrafficEntityModule::Reset calls it through mpLogger; the callee is an empty
+        // function (the console's call lands on a lone `blr`).
+        void Reset();
+
+        bool AllowDivergentBehaviour();                    // :182 (declared; no reader here)
+
+        // :188. Header inline: TrafficEntityModule::EnterStartingUpState and ResetEventData
+        // both expand it as one byte store through mpLogger.
+        void SetAllowDivergentBehaviour(bool lbAllowDivergentBehaviour)
+        {
+            mbAllowDivergentBehaviour = lbAllowDivergentBehaviour;
+        }
 
         // @ 0x8275DFB8 -- snapshot lpModule's live traffic state into a HashBuffer and
         // return its folded 16-bit CRC. Pure read-only fingerprint (the network layer
         // compares it across machines to spot traffic-sim divergence).
-        u16  HashState(const TrafficEntityModule* lpModule);
+        u16  HashState(const TrafficEntityModule* lpModule);   // :196
 
-        // ---- declared-only DWARF surface (bodies land with their own slices) ----
-        void Reset();                             // :178
-        bool AllowDivergentBehaviour();           // :182
-        void SetAllowDivergentBehaviour(bool lbAllow); // :188
-        void Dump(const char* lpLogName);         // :201
-        void HACKDump(const char* lpLogName);     // :208
+        void Dump(const char* lpcLogName);                 // :201 (declared; debug dump)
+        void HACKDump(const char* lpcLogName);             // :208 (declared; debug dump)
 
-        bool mbAllowDivergentBehaviour;           // :216
+    private:
+        // :214 -- the Logger singleton (Construct stores `this` here).
+        static Logger* gpLogger;
+
+        bool mbAllowDivergentBehaviour;                    // :216
     };
-
-    // BrnTrafficLogger.h:214 -- the Logger singleton (Construct stores `this` here).
-    extern Logger* gpLogger;
 }

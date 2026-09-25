@@ -87,6 +87,8 @@ enum EGameActionType
     E_ACTION_PLAYER_INVULNERABLE        = 111,   // DWARF 106 (+5 X360); size 4
     E_ACTION_SHUTDOWN_FINISHED          = 121,   // DWARF 116 (+5 X360); size 4
     E_ACTION_REMOTE_PLAYER_DISCONNECTED = 11,
+    // ProcessGameEvents' local-player-disconnected arm posts id 12 with size 1 (an empty record).
+    E_ACTION_NOTIFY_DIRECTOR_LOCAL_PLAYER_DISCONNECTED = 12, // reference :12 (+0); size 1
     E_ACTION_RESET_CRASHING             = 9,  // ARTIST CrashModule::HandleGameActions
     E_ACTION_RESET_RACE_CAR_CRASHING     = 10,
     E_ACTION_PLAYER_CRASH_ENDING_SOON   = 17, // ARTIST ProcessGameEvents case42
@@ -520,6 +522,9 @@ enum EGameActionType
     //          CarSelectManager::UpdateExitState (payload 0 == LEAVES_JUNKYARD),
     //          ModeManager::UpdateCurrentMode/StartModeIntro, ScoringSystem, StreetManager et al.
     E_ACTION_CAR_SELECT_FINISHED        = 77,    // size 32 -- payload unread by the consumer
+    // The car-select band's +5 neighbour: OnlineCarSelectManager::ExitOnlineCarSelect posts it
+    // (size 8), the world and the director read its entering byte at +4.
+    E_ACTION_CAR_SELECT_MODIFICATION_SCREEN = 76, // reference 71 (+5 on the console); size 8
     E_ACTION_REQUEST_GAME_TRAINING      = 149,   // size 4  -- the ETrainingType
 
     // Freeburn-challenge action block (ChallengeManager keystone). X360-ATTESTED values:
@@ -1441,6 +1446,27 @@ struct RemotePlayerDisconnectedAction : public GameAction<E_ACTION_REMOTE_PLAYER
     void SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex);
     void SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lPlayerID);
 };
+
+// Empty record, posted by ProcessGameEvents when the local player is disconnected.
+struct NotifyDirectorLocalPlayerDisconnectedAction : public GameAction<E_ACTION_NOTIFY_DIRECTOR_LOCAL_PLAYER_DISCONNECTED> {};
+
+// Action 76: the car-select type word at +0 and the entering byte at +4 (8 bytes).
+struct CarSelectModificationScreen : public GameAction<E_ACTION_CAR_SELECT_MODIFICATION_SCREEN>
+{
+    ECarSelectType meCarSelectType;   // +0x00
+    bool           mbEntering;        // +0x04
+};
+static_assert(sizeof(CarSelectModificationScreen) == 8, "posted as 8 bytes");
+
+// Action 77, the car-select exit record (32 bytes). The console build keeps the spawn vector
+// first and the online-car-select byte at +0x10, which is the byte the director reads.
+struct alignas(16) CarSelectExitAction : public GameAction<E_ACTION_CAR_SELECT_FINISHED>
+{
+    Vector3 mExitSpawnLocation;   // +0x00
+    bool    mbOnlineCarSelect;    // +0x10
+};
+static_assert(offsetof(CarSelectExitAction, mbOnlineCarSelect) == 0x10 &&
+              sizeof(CarSelectExitAction) == 32, "posted as 32 bytes, online byte at +0x10");
 
 // DecFIGS BrnGameActions.h:2243/2246; ARTIST action 9 has no payload reads,
 // action 10 reads the active race-car index at record+0 (0x827D0E90).

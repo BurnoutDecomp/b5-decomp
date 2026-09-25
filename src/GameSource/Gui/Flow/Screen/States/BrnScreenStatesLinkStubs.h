@@ -49,20 +49,6 @@ namespace BrnGui
     //  is MOUNTED, so the placeholder and its escape-hatch lifecycle in the matching .cpp
     //  are gone. BrnScreenFlow includes the real header directly.
 
-    // FLAG PC-platform leaf: placeholder -- real BrnGui::OnlineGameRoomPlayerInfo (X360
-    // 87968B, the largest screen state) not yet reconstructed. Script id "ON_GAME_ROOM".
-    // DELIBERATE RENAME (+State suffix): a committed non-State partial slice of the real
-    // class (ShowSettingsOptions only) already lives in BrnCrashNavOptions.h under the
-    // real name, and the flow container includes that header -- defining a second
-    // BrnGui::OnlineGameRoomPlayerInfo here would be an ODR fork. The real class keeps
-    // its name when it is reconstructed; this placeholder then dies.
-    struct OnlineGameRoomPlayerInfoState : public CgsGui::State
-    {
-        virtual void OnEnter();
-        virtual void OnLeave();
-        virtual void Update();
-    };
-
     // FLAG PC-platform leaf: placeholder -- real BrnGui::OnlineTeamSelection (X360 4792B;
     // out-of-line ctor; absent from the Dec-2007 DWARF, X360-only) not yet reconstructed.
     // Script id "ON_TEAMS".

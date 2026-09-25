@@ -140,8 +140,8 @@ namespace BrnGui
         virtual void OnEnter();                                           // @0x824A36E0 cpp:353
         virtual void OnLeave();                                           // @0x824A3C18 cpp:855
         virtual void Update();                                            // @0x824B0770 cpp:464
-        // DWARF h:104 -- hands out the LOBBY tuple table (the base-class override slot).
-        // Not in this TU's ledger (folded/foreign); declared for the vtable shape.
+        // The console slot is the shared folded body that reports no
+        // resources (null table, count 0); the screen loads its groups itself.
         virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
                                         u32* lpuNumberOfResources) const;
 
@@ -306,9 +306,9 @@ namespace BrnGui
         static const char* const KPC_LAUNCH_FAILED_STRINGIDS[7];            // @0x82F26758
         static const char* const KAPC_KICKED_POPUP[5];                      // @0x82F26774
 
-        // DWARF cpp:274 KPAC_MODE_STRINGS[17] / h:227 KPAC_HOST_STATUS_STRING_IDS:
-        // consumed only by the foreign-owned inlines (ShowChallengesOptions et al), not
-        // by this TU's 50 -- left undeclared until those bodies land with their values.
+        // Game-mode string ids for the launch overlay (eighteen slots, indexed by the game
+        // mode; values in the .cpp). KPAC_HOST_STATUS_STRING_IDS has no reader here.
+        static const char* const KPAC_MODE_STRINGS[18];
 
         // Tab-title / message string ids (DWARF cpp:212..232; literals in the asm).
         static const char KAC_PLAYER_INFO_STRING_ID[34];      // "$ONLINE_GAME_ROOM_TAB_PLAYER_INFO"

@@ -37,6 +37,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"   // BrnNetworkDriverControls, E_DRIVER_TYPE_NETWORK
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h" // BrnTraffic::MakeTrafficVolumeInstanceId
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"                      // [nettraf] crash-own witness
 
 namespace BrnWorld
 {
@@ -616,6 +617,10 @@ void CrashModule::GenerateOwnedTrafficUpdates( const CrashIO::InputBuffer_PostPh
         if( lInitialisedTransforms.IsBitSet( luVehicle ) )
         {
             lpNetworkInterface->AddOwnedTrafficUpdate( luVehicle, laTrafficTransforms[luVehicle] );
+            BrnNetHarnessPC::WitnessTag( "nettraf", "crash-own", "veh=%u pos=(%.1f, %.1f, %.1f)", luVehicle,
+                                         laTrafficTransforms[luVehicle].wAxis.x,
+                                         laTrafficTransforms[luVehicle].wAxis.y,
+                                         laTrafficTransforms[luVehicle].wAxis.z );
         }
     }
 
@@ -759,6 +764,12 @@ void CrashModule::HandleNetworkCrashingTraffic( const CrashIO::InputBuffer_PreSc
                     BrnTraffic::MakeTrafficVolumeInstanceId( luVehicle );
                 lpOutput->GetVehicleInputInterface()->UpdateNetworkTraffic( lVolumeInstanceId, lEvent.mTransform );
                 lCrashingTrafficForPlayer.Insert( luVehicle );
+
+                BrnNetHarnessPC::WitnessTag( "nettraf", "crash-in", "veh=%u owner=%d pos=(%.1f, %.1f, %.1f)",
+                                             static_cast<u32>( luVehicle ),
+                                             static_cast<s32>( leActiveRaceCarIndex ),
+                                             lEvent.mTransform.wAxis.x, lEvent.mTransform.wAxis.y,
+                                             lEvent.mTransform.wAxis.z );
             }
         }
 

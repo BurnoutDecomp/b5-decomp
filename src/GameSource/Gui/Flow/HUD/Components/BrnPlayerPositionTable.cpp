@@ -12,6 +12,15 @@
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"                    // MovieClipRef::FindChildMovieClipOnFrame / FindChildTextField
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"                    // TextFieldRef::SetText
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf (the row names)
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // Start/StopMonitor (UpdatePositionDetails)
+#include "GameSource/Gui/BrnGuiPerfmons.h"                                // GuiPerfmons::miPlayerPosTableUpdate
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // GuiEventRaceDistanceRemaining (GUI 239)
+#include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h"                // FreeburnChallengeManager (state / targets / contributions)
+#include "GameSource/Gui/BrnGuiBurnoutSkillsManager.h"                    // BurnoutSkillsManager (the skill page)
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData (the cached records)
+#include "SharedClasses/DataLists/ChallengeListEntry.h"                    // ChallengeListEntryAction (the coop type)
+#include <cstdlib>   // qsort
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"  // BrnNetHarnessPC::WitnessTag (the [netui] table line)
 
 // BrnGui::PlayerPositionTableComponent -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 // Six asm-attested functions land here so far (ClearStoredData / AddInvisibleTeamLine /
@@ -332,5 +341,609 @@ namespace BrnGui
         mPageIconMCR = *mAptRef.FindChildMovieClip(&lPageIcon, "pageIcon_mc");
         BrnFlapt::MovieClipRef lTitleBar;
         mTitleBarMCR = *mAptRef.FindChildMovieClip(&lTitleBar, "TitleBar_mc");
+    }
+}
+
+// ============================================================================
+// The online position-table chain: RaceMainHudState's GUI 239 arm hands the per-frame
+// race-distance record to UpdatePositionDetails, which (in the free-burn lobby modes) first
+// re-titles the table for the challenge / Burnout Skillz page it is showing, then rebuilds
+// one row per active race car, sorts the rows for the game mode, adds the challenge total row
+// and pushes the rows into the nine bar components.
+// ============================================================================
+namespace BrnGui
+{
+    namespace
+    {
+        // The challenge target-type captions, indexed by the challenge data type (24 entries).
+        const char* const KAPC_FREEBURN_CHALLENGE_TYPE_STRINGS[24] =
+        {
+            "$BURNOUT_SKILLS_CRASHES",         "$BURNOUT_SKILLS_NEAR_MISSES",
+            "$BURNOUT_SKILLS_ONCOMING",        "$BURNOUT_SKILLS_DRIFT",
+            "$BURNOUT_SKILLS_TIME_IN_AIR",     "$BURNOUT_SKILLS_AIR_DISTANCE",
+            "$BURNOUT_SKILLS_BARREL_ROLLS",    "$BURNOUT_SKILLS_SPINS",
+            "$BURNOUT_SKILLS_CARS_LEAPT",      "$BURNOUT_SKILLS_ROAD_RULE_TIME",
+            "$BURNOUT_SKILLS_ROAD_RULE_CRASH", "$BURNOUT_SKILLS_LANDINGS",
+            "$BURNOUT_SKILLS_BOOST_CHAIN",     "$BURNOUT_SKILLS_POWER_PARKING",
+            "$BURNOUT_SKILLS_PERCENT",         "$BURNOUT_SKILLS_MEETUP",
+            "$BURNOUT_SKILLS_BILLBOARDS",      "$BURNOUT_SKILLS_BOOST_TIME",
+            "$BURNOUT_SKILLS_CONVOY_POS",      "$BURNOUT_SKILLS_DISTANCE",
+            "$BURNOUT_SKILLS_CHAIN",           "$BURNOUT_SKILLS_MULTIPLIER",
+            "$BURNOUT_SKILLS_STUNT_SCORE",     "$BURNOUT_SKILLS_CORKSCREWS",
+        };
+        const s32 KI_NUM_FREEBURN_CHALLENGE_TYPE_STRINGS =
+            static_cast<s32>(sizeof(KAPC_FREEBURN_CHALLENGE_TYPE_STRINGS) /
+                             sizeof(KAPC_FREEBURN_CHALLENGE_TYPE_STRINGS[0]));
+
+        // The Burnout Skillz page captions, indexed by the skill being shown (12 entries).
+        const char* const KAPC_BURNOUT_SKILLS_TITLE_STRINGS[12] =
+        {
+            "$BURNOUT_SKILLS_TIME_IN_AIR",   "$BURNOUT_SKILLS_BARREL_ROLLS",
+            "$BURNOUT_SKILLS_BOOST_CHAIN",   "$BURNOUT_SKILLS_DRIFT",
+            "$BURNOUT_SKILLS_SPINS",         "$BURNOUT_SKILLS_AIR_DISTANCE",
+            "$BURNOUT_SKILLS_NEAR_MISSES",   "$BURNOUT_SKILLS_ONCOMING",
+            "$BURNOUT_SKILLS_POWER_PARKING", "$BURNOUT_SKILLS_TAKEDOWNS",
+            "$BURNOUT_SKILLS_STUNT_SCORE",   "$BURNOUT_SKILLS_TOTAL",
+        };
+
+        // E_GUI_PLAYER_COLOURS_DISCONNECTED / _ELIMINATED (the colour word is a raw s32 in
+        // the committed row record).
+        const s32 KI_PLAYER_COLOUR_DISCONNECTED = 11;
+        const s32 KI_PLAYER_COLOUR_ELIMINATED   = 10;
+
+        // The free-burn lobby modes (15 / 16).
+        bool IsOnlineFreeBurnLobby(s32 liGameMode)
+        {
+            return liGameMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
+                   liGameMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME;
+        }
+
+        // The challenge manager page state the lobby table compares against (`cmpwi 3`; one
+        // past the reference enumerators, which end at E_PAGE_STATE_SELECT == 2).
+        const s32 KI_CHALLENGE_PAGE_STATE_3 = 3;
+    }
+
+    // ------------------------------------------------ UpdatePositionDetails
+    void PlayerPositionTableComponent::UpdatePositionDetails(const GuiEventRaceDistanceRemaining* lpDistanceEvent)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miPlayerPosTableUpdate);
+
+        CGS_ASSERT(lpDistanceEvent != NULL, "lpDistanceEvent");
+        CGS_ASSERT(mpCache != NULL, "mpCache != NULL");
+
+        if (IsOnlineFreeBurnLobby(mpCache->GetGameMode()))
+            ProcessOnlineFreeburnTable();
+
+        ClearStoredData();
+        FillOutInActiveRaceCarOrder(lpDistanceEvent);
+        SortData();
+        CountLinesAndAddTotal();
+        DisplayData();
+
+        // [netui] witness (PC harness, LAN gated): one line per change of the row count or
+        // the game mode. Not console code.
+        {
+            static s32 siLastBarsUsed = -1;
+            static s32 siLastGameMode = -2;
+            if (miCurrentBarsUsed != siLastBarsUsed || static_cast<s32>(meGameMode) != siLastGameMode)
+            {
+                siLastBarsUsed = miCurrentBarsUsed;
+                siLastGameMode = static_cast<s32>(meGameMode);
+                BrnNetHarnessPC::WitnessTag("netui", "position-table", "rows=%d mode=%d first=%.16s",
+                                            miCurrentBarsUsed, siLastGameMode,
+                                            maPlayerSingleData[0].mPlayerName.macName);
+            }
+        }
+
+        CgsDev::PerfMonCpu::StopMonitor(GuiPerfmons::miPlayerPosTableUpdate);
+    }
+
+    // ------------------------------------------------ ProcessOnlineFreeburnTable
+    // The lobby table shows either the running free-burn challenge (no road rule active and
+    // the challenge manager RUNNING or RESULTS) or the Burnout Skillz page the skills manager
+    // is rotating through. Titles, captions and the page icon change only on a change of page.
+    // The challenge arm never latches meCurrentChallengeDataType: the console re-sets the
+    // caption on every frame the target type differs from the stored one.
+    void PlayerPositionTableComponent::ProcessOnlineFreeburnTable()
+    {
+        CGS_ASSERT(IsOnlineFreeBurnLobby(mpCache->GetGameMode()) == true,
+                   "GsmIO::IsOnlineFreeBurnLobby( mpCache->GetGameMode() ) == true");
+
+        if (mpCache->GetActiveRoadRule() == 0 && mpChallengeManager->IsStarted())
+        {
+            if (!mbFreeburnChallengeRunning)
+            {
+                mbFreeburnChallengeRunning = true;
+                const bool lbTwoTargetTitle =
+                    (mpChallengeManager->GetTargetsCount() > 1) &&
+                    (static_cast<s32>(mpChallengeManager->mePageState) != KI_CHALLENGE_PAGE_STATE_3);
+                mTitleBarMCR.GotoAndPlayLabel(lbTwoTargetTitle ? "skills" : "basic");
+                SetTitleText("$FREEBURN_CHALLENGE");
+                mPageIconMCR.GotoAndPlayLabel("invisible");
+                miFreeburnChallengeCurrentData = -1;
+                if (!(mpChallengeManager->GetTargetsCount() > 0))
+                    SetSkillsText(" - ");
+                SetValuesDirty();
+            }
+
+            if (mpChallengeManager->GetTargetsCount() > 0 &&
+                meCurrentChallengeDataType != static_cast<s32>(mpChallengeManager->GetCurrentTargetType()))
+            {
+                CGS_ASSERT(static_cast<s32>(mpChallengeManager->GetCurrentTargetType()) < KI_NUM_FREEBURN_CHALLENGE_TYPE_STRINGS,
+                           "mpChallengeManager->GetCurrentTargetType() < BrnResource::ChallengeListEntryAction::E_CHALLENGE_DATA_TYPE_COUNT");
+                CGS_ASSERT(static_cast<s32>(mpChallengeManager->GetCurrentTargetType()) >= 0,
+                           "mpChallengeManager->GetCurrentTargetType() >= 0");
+                SetSkillsText(KAPC_FREEBURN_CHALLENGE_TYPE_STRINGS[mpChallengeManager->GetCurrentTargetType()]);
+                SetValuesDirty();
+            }
+            return;
+        }
+
+        const s32 liSkill = static_cast<s32>(mpCache->GetBurnoutSkillsManager()->GetCurrentSkill());
+        if (mbFreeburnChallengeRunning)
+        {
+            meCurrentChallengeDataType = KI_NUM_FREEBURN_CHALLENGE_TYPE_STRINGS;
+            mbFreeburnChallengeRunning = false;
+        }
+        else if (meLastFrameSkillState == liSkill)
+        {
+            return;
+        }
+
+        if (liSkill == BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_COUNT)
+        {
+            mTitleBarMCR.GotoAndPlayLabel("invisible");
+            mPageIconMCR.GotoAndPlayLabel("invisible");
+            SetTitleText("");
+            SetSkillsText("");
+            SetValuesDirty();
+            meLastFrameSkillState = BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_COUNT;
+        }
+        else if (liSkill == BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_EXTRA_12 ||
+                 liSkill == BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_EXTRA_13)
+        {
+            mTitleBarMCR.GotoAndPlayLabel("skillsRR");
+            mPageIconMCR.GotoAndPlayLabel("invisible");
+            SetTitleText("$BURNOUT_SKILLS_TITLE_ON_ROAD");
+            SetSkillsText("");
+            SetValuesDirty();
+            meLastFrameSkillState = liSkill;
+        }
+        else
+        {
+            char lacPageIcon[16];
+            CgsCore::SnPrintf(lacPageIcon, sizeof(lacPageIcon), "Skill_%d",
+                              (liSkill > BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_POWER_PARKING)
+                                  ? static_cast<s32>(BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_POWER_PARKING)
+                                  : liSkill);
+            mTitleBarMCR.GotoAndPlayLabel("skills");
+            mPageIconMCR.GotoAndPlayLabel(lacPageIcon);
+            SetTitleText("$BURNOUT_SKILLS_TITLE");
+            SetSkillsText(KAPC_BURNOUT_SKILLS_TITLE_STRINGS[liSkill]);
+            SetValuesDirty();
+            meLastFrameSkillState = liSkill;
+        }
+    }
+
+    // ------------------------------------------------ FillOutInActiveRaceCarOrder
+    // Online only (the cache's online byte): one row per active race-car lane, in lane order.
+    void PlayerPositionTableComponent::FillOutInActiveRaceCarOrder(const GuiEventRaceDistanceRemaining* lpDistanceEvent)
+    {
+        if (!mpCache->IsOnline())
+            return;
+
+        for (EActiveRaceCarIndex leCar = E_ACTIVE_RACE_CAR_INDEX_0;
+             leCar < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+             leCar++)
+        {
+            FillOutOnlineData(leCar);
+            FillOutOnlineValueData(leCar, lpDistanceEvent);
+        }
+    }
+
+    // ------------------------------------------------ FillOutOnlineData
+    // Fill row leCurrentActiveRaceCar from the cached in-game record of the player driving that
+    // car (nothing when no player drives it): headset, name, live-revenge arrow, team,
+    // challenge progress, and the row colour. The record lookup is the inlined by-race-car
+    // scan of the cache's eight player records.
+    void PlayerPositionTableComponent::FillOutOnlineData(EActiveRaceCarIndex leCurrentActiveRaceCar)
+    {
+        CGS_ASSERT(mpCache != NULL, "mpCache");
+
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo = NULL;
+        for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
+        {
+            const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpCandidate =
+                mpCache->GetOnlinePlayerInfo(liPlayer);
+            if (lpCandidate->meActiveRaceCarIndex == leCurrentActiveRaceCar)
+            {
+                lpPlayerInfo = lpCandidate;
+                break;
+            }
+        }
+        if (lpPlayerInfo == NULL)
+            return;
+
+        PlayerPositionSingleData& lrData = maPlayerSingleData[leCurrentActiveRaceCar];
+
+        switch (static_cast<u32>(lpPlayerInfo->meVOIPStatus))
+        {
+        case 0:  lrData.meHeadsetStatus = E_HEADSETSTATUS_OFF;       break;
+        case 1:  lrData.meHeadsetStatus = E_HEADSETSTATUS_ON;        break;
+        case 2:  lrData.meHeadsetStatus = E_HEADSETSTATUS_ACTIVE;    break;
+        default: lrData.meHeadsetStatus = E_HEADSETSTATUS_INVISIBLE; break;
+        }
+        lrData.meAwardState = E_AWARDSTATUS_NONE;
+        lrData.mPlayerName.Construct(lpPlayerInfo->mPlayerName.macName);
+        lrData.meNameType = 0;
+
+        if (lpPlayerInfo->mbMarkedMan)
+            lrData.meRevengeStatus = E_REVENGESTATUS_MARKEDMAN;
+        else if (lpPlayerInfo->mLiveRevengeRelationship.IsPlayerAheadInCurrentRelationship())
+            lrData.meRevengeStatus = E_REVENGESTATUS_UP;
+        else if (lpPlayerInfo->mLiveRevengeRelationship.IsRivalAheadInCurrentRelationship())
+            lrData.meRevengeStatus = E_REVENGESTATUS_DOWN;
+        else
+            lrData.meRevengeStatus = E_REVENGESTATUS_INVISIBLE;
+
+        lrData.meTeam = static_cast<BrnGameState::GameStateModuleIO::EPlayerTeam>(
+            mpCache->GetCurrentOnlinePlayerTeam(leCurrentActiveRaceCar));
+
+        if (mpChallengeManager->IsStarted())
+        {
+            lrData.meRevengeStatus = E_REVENGESTATUS_INVISIBLE;
+            switch (mpChallengeManager->GetCurrentSuccessForARCI(leCurrentActiveRaceCar))
+            {
+            case FreeburnChallengeManager::E_FREEBURN_CHALLENGE_SUCCESS_NONE:
+                lrData.mePlayerType = E_PLAYERTYPES_FREEBURN_CHALLENGE_OFF;
+                break;
+            case FreeburnChallengeManager::E_FREEBURN_CHALLENGE_SUCCESS_NOT_IN_CHALLENGE:
+                lrData.mePlayerType = E_PLAYERTYPES_FREEBURN_CHALLENGE_NOT_ACTIVE;
+                break;
+            case FreeburnChallengeManager::E_FREEBURN_CHALLENGE_SUCCESS_CONTRIBUTING:
+                lrData.mePlayerType = E_PLAYERTYPES_FREEBURN_CHALLENGE_IN_PROGRESS;
+                break;
+            case FreeburnChallengeManager::E_FREEBURN_CHALLENGE_SUCCESS_DONE:
+                lrData.mePlayerType = E_PLAYERTYPES_FREEBURN_CHALLENGE_COMPLETE;
+                break;
+            default:
+                CGS_ASSERT(false, "Invalid type of challenge success : ");
+                lrData.mePlayerType = E_PLAYERTYPES_BASIC;
+                break;
+            }
+        }
+        else
+        {
+            lrData.mePlayerType = E_PLAYERTYPES_BASIC;
+        }
+
+        lrData.meActiveRaceCarIndex = leCurrentActiveRaceCar;
+
+        // The race and the two free-burn lobby modes always take the lobby colour; every other
+        // mode first shows disconnected / eliminated players in their own colours.
+        const s32 liGameMode = mpCache->GetGameMode();
+        const bool lbLobbyColour =
+            (liGameMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_RACE) ||
+            IsOnlineFreeBurnLobby(liGameMode);
+        if (!lbLobbyColour)
+        {
+            if (mpCache->GetOnlinePlayerDisconnected(leCurrentActiveRaceCar))
+            {
+                lrData.mePlayerColour = KI_PLAYER_COLOUR_DISCONNECTED;
+                return;
+            }
+            if (mpCache->IsOnlinePlayerEliminated(leCurrentActiveRaceCar) || lpPlayerInfo->mbIsEliminated)
+            {
+                lrData.mePlayerColour = KI_PLAYER_COLOUR_ELIMINATED;
+                return;
+            }
+        }
+        lrData.mePlayerColour = mpCache->GetOnlinePlayerColourFromARCI(leCurrentActiveRaceCar);
+    }
+
+    // ------------------------------------------------ FillOutOnlineValueData
+    // The number a row sorts and shows, per game mode.
+    void PlayerPositionTableComponent::FillOutOnlineValueData(EActiveRaceCarIndex leCurrentActiveRaceCar,
+                                                              const GuiEventRaceDistanceRemaining* lpDistanceEvent)
+    {
+        f32& lrfValue = maPlayerSingleData[leCurrentActiveRaceCar].mfTableValue;
+
+        switch (meGameMode)
+        {
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_RACE:
+            lrfValue = lpDistanceEvent->mafDistanceToFinish[leCurrentActiveRaceCar];
+            break;
+
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE:
+            if (mpCache->GetCurrentOnlinePlayerTeam(leCurrentActiveRaceCar) ==
+                BrnGameState::GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM)
+                lrfValue = lpDistanceEvent->mafDistanceToFinish[leCurrentActiveRaceCar];
+            else
+                lrfValue = 0.0f;
+            break;
+
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FUGITIVE:
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN:
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_MODE_END:
+            lrfValue = static_cast<f32>(lpDistanceEvent->maiOnlineStuntScore[leCurrentActiveRaceCar]);
+            break;
+
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN:
+            lrfValue = static_cast<f32>(static_cast<s32>(mpCache->GetNumActiveLandmarks()) -
+                                        mpCache->GetNumRemainingCheckpoints());
+            break;
+
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY:
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME:
+            if (mpCache->GetActiveRoadRule() == 0 && mpChallengeManager->IsStarted())
+            {
+                lrfValue = mpChallengeManager->GetCurrentContributionForARCI(leCurrentActiveRaceCar);
+            }
+            else
+            {
+                const BurnoutSkillsManager* lpSkillsManager = mpCache->GetBurnoutSkillsManager();
+                if (lpSkillsManager->GetCurrentSkill() == BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_COUNT)
+                    lrfValue = lpDistanceEvent->mafDistanceToFinish[leCurrentActiveRaceCar];
+                else
+                    lrfValue = lpSkillsManager->GetBurnoutSkillForARC(lpSkillsManager->GetCurrentSkill(),
+                                                                      leCurrentActiveRaceCar);
+            }
+            break;
+
+        default:
+            CGS_ASSERT(false, "Unhandled game mode : ");
+            lrfValue = 0.0f;
+            break;
+        }
+    }
+
+    // ------------------------------------------------ SortData
+    // Sort the eight car rows (the total row is added after the sort) with the game mode's
+    // comparator.
+    void PlayerPositionTableComponent::SortData()
+    {
+        s32 (*lpfnCompare)(const void*, const void*) = FunctionSortHighToLow;
+
+        switch (meGameMode)
+        {
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_RACE:
+            lpfnCompare = FunctionSortLowToHigh;
+            break;
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE:
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN:
+            lpfnCompare = FunctionSortTeamLowToHigh;
+            break;
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FUGITIVE:
+            AddInvisibleTeamLine();
+            lpfnCompare = FunctionSortTeamHighToLow;
+            break;
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN:
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_MODE_END:
+            lpfnCompare = FunctionSortHighToLow;
+            break;
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY:
+        case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME:
+            CGS_ASSERT(mpCache != NULL, "mpCache");
+            if (mpCache->GetActiveRoadRule() == 0 && mpChallengeManager->IsStarted())
+                lpfnCompare = FunctionSortAlphabetical;
+            else if (mpCache->GetBurnoutSkillsManager()->GetCurrentSkill() ==
+                     BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_EXTRA_12)
+                lpfnCompare = FunctionSortLowToHighZeroInvalid;
+            else
+                lpfnCompare = FunctionSortHighToLow;
+            break;
+        default:
+            CGS_ASSERT(false, "Unhandled game mode : ");
+            lpfnCompare = FunctionSortHighToLow;
+            break;
+        }
+
+        qsort(maPlayerSingleData, 8, sizeof(PlayerPositionSingleData), lpfnCompare);
+    }
+
+    // ------------------------------------------------ CountLinesAndAddTotal
+    // Count the rows that carry a race car, then (free-burn lobby, no road rule, challenge
+    // RUNNING or RESULTS, and a cumulative action) append the "FBC_TOTAL" row with the overall
+    // contribution.
+    void PlayerPositionTableComponent::CountLinesAndAddTotal()
+    {
+        for (s32 liRow = 0; liRow < KI_MAX_BARS_NEEDED; ++liRow)
+        {
+            if (maPlayerSingleData[liRow].meActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+                ++miCurrentBarsUsed;
+        }
+
+        if (meGameMode != BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
+            return;
+        if (mpCache->GetActiveRoadRule() != 0 || !mpChallengeManager->IsStarted())
+            return;
+        if (mpChallengeManager->GetCurrentAction()->GetCoopType() !=
+            BrnResource::ChallengeListEntryAction::E_CHALLENGE_COOP_TYPE_CUMULATIVE)
+            return;
+
+        PlayerPositionSingleData& lrTotal = maPlayerSingleData[miCurrentBarsUsed];
+        lrTotal.mPlayerName.Construct("FBC_TOTAL");
+        lrTotal.meNameType           = 9;
+        lrTotal.mfTableValue         = mpChallengeManager->GetCurrentContributionOverall();
+        lrTotal.meHeadsetStatus      = E_HEADSETSTATUS_INVISIBLE;
+        lrTotal.meAwardState         = E_AWARDSTATUS_NONE;
+        lrTotal.meTeam               = BrnGameState::GameStateModuleIO::E_PLAYER_TEAM_NONE;
+        lrTotal.mePlayerColour       = 9;
+        lrTotal.mePlayerType         = E_PLAYERTYPES_FREEBURN_CHALLENGE_TOTAL;
+        lrTotal.meActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_COUNT;
+        lrTotal.meRevengeStatus      = E_REVENGESTATUS_INVISIBLE;
+        ++miCurrentBarsUsed;
+    }
+
+    // ------------------------------------------------ DisplayData
+    // Push the used rows into the bar components (update, then re-render the value); the
+    // unused bars get an invisible row.
+    void PlayerPositionTableComponent::DisplayData()
+    {
+        s32 liBar = 0;
+        for (; liBar < miCurrentBarsUsed; ++liBar)
+        {
+            maPlayerComponents[liBar].Update(&maPlayerSingleData[liBar]);
+            maPlayerComponents[liBar].RenderValue();
+        }
+        for (; liBar < KI_MAX_BARS_NEEDED; ++liBar)
+        {
+            PlayerPositionSingleData lInvisible;
+            lInvisible.mPlayerName.macName[0] = 0;
+            lInvisible.meNameType             = 0;
+            lInvisible.mfTableValue           = 0.0f;
+            lInvisible.mePlayerType           = E_PLAYERTYPES_INVISIBLE;
+            lInvisible.meActiveRaceCarIndex   = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+            lInvisible.meHeadsetStatus        = E_HEADSETSTATUS_INVISIBLE;
+            lInvisible.meRevengeStatus        = E_REVENGESTATUS_INVISIBLE;
+            lInvisible.meAwardState           = E_AWARDSTATUS_NONE;
+            lInvisible.meTeam                 = BrnGameState::GameStateModuleIO::E_PLAYER_TEAM_NONE;
+            lInvisible.mePlayerColour         = 0;
+            lInvisible.miHoldingSlot          = -1;
+            maPlayerComponents[liBar].Update(&lInvisible);
+        }
+    }
+
+    // ------------------------------------------------ the qsort comparators
+    // Shared lead-in: empty rows sink; two disconnected rows compare by name; a disconnected
+    // row sinks below a connected one.
+    s32 PlayerPositionTableComponent::FunctionSortHighToLow(const void* lp1, const void* lp2)
+    {
+        const PlayerPositionSingleData* lpPlayer1 = static_cast<const PlayerPositionSingleData*>(lp1);
+        const PlayerPositionSingleData* lpPlayer2 = static_cast<const PlayerPositionSingleData*>(lp2);
+
+        if (lpPlayer1->mPlayerName.macName[0] == 0)
+            return lpPlayer2->mPlayerName.macName[0] != 0;
+        if (lpPlayer2->mPlayerName.macName[0] == 0)
+            return -1;
+        if (lpPlayer1->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+        {
+            if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+                return CgsNetwork::UsernameCompare(lpPlayer1->mPlayerName.macName,
+                                                   lpPlayer2->mPlayerName.macName);
+            return 1;
+        }
+        if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+            return -1;
+
+        if (lpPlayer1->mfTableValue < lpPlayer2->mfTableValue)
+            return 1;
+        if (lpPlayer1->mfTableValue > lpPlayer2->mfTableValue)
+            return -1;
+        return 0;
+    }
+
+    s32 PlayerPositionTableComponent::FunctionSortLowToHigh(const void* lp1, const void* lp2)
+    {
+        const PlayerPositionSingleData* lpPlayer1 = static_cast<const PlayerPositionSingleData*>(lp1);
+        const PlayerPositionSingleData* lpPlayer2 = static_cast<const PlayerPositionSingleData*>(lp2);
+
+        if (lpPlayer1->mPlayerName.macName[0] == 0)
+            return lpPlayer2->mPlayerName.macName[0] != 0;
+        if (lpPlayer2->mPlayerName.macName[0] == 0)
+            return -1;
+        if (lpPlayer1->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+        {
+            if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+                return CgsNetwork::UsernameCompare(lpPlayer1->mPlayerName.macName,
+                                                   lpPlayer2->mPlayerName.macName);
+            return 1;
+        }
+        if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+            return -1;
+
+        if (lpPlayer1->mfTableValue > lpPlayer2->mfTableValue)
+            return 1;
+        if (lpPlayer1->mfTableValue < lpPlayer2->mfTableValue)
+            return -1;
+        return 0;
+    }
+
+    // Low-to-high, but a zero value (no score yet) sinks below every scored row.
+    s32 PlayerPositionTableComponent::FunctionSortLowToHighZeroInvalid(const void* lp1, const void* lp2)
+    {
+        const PlayerPositionSingleData* lpPlayer1 = static_cast<const PlayerPositionSingleData*>(lp1);
+        const PlayerPositionSingleData* lpPlayer2 = static_cast<const PlayerPositionSingleData*>(lp2);
+
+        if (lpPlayer1->mPlayerName.macName[0] == 0)
+            return lpPlayer2->mPlayerName.macName[0] != 0;
+        if (lpPlayer2->mPlayerName.macName[0] == 0)
+            return -1;
+        if (lpPlayer1->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+        {
+            if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+                return CgsNetwork::UsernameCompare(lpPlayer1->mPlayerName.macName,
+                                                   lpPlayer2->mPlayerName.macName);
+            return 1;
+        }
+        if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+            return -1;
+
+        if (lpPlayer1->mfTableValue == 0.0f)
+            return 1;
+        if (lpPlayer2->mfTableValue == 0.0f)
+            return -1;
+        if (lpPlayer1->mfTableValue > lpPlayer2->mfTableValue)
+            return 1;
+        if (lpPlayer1->mfTableValue < lpPlayer2->mfTableValue)
+            return -1;
+        return 0;
+    }
+
+    // Blue team first, then low-to-high within a team.
+    s32 PlayerPositionTableComponent::FunctionSortTeamLowToHigh(const void* lp1, const void* lp2)
+    {
+        const PlayerPositionSingleData* lpPlayer1 = static_cast<const PlayerPositionSingleData*>(lp1);
+        const PlayerPositionSingleData* lpPlayer2 = static_cast<const PlayerPositionSingleData*>(lp2);
+
+        if (lpPlayer1->mPlayerName.macName[0] == 0)
+            return lpPlayer2->mPlayerName.macName[0] != 0;
+        if (lpPlayer2->mPlayerName.macName[0] == 0)
+            return -1;
+        if (lpPlayer1->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+        {
+            if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+                return CgsNetwork::UsernameCompare(lpPlayer1->mPlayerName.macName,
+                                                   lpPlayer2->mPlayerName.macName);
+            return 1;
+        }
+        if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+            return -1;
+
+        if (lpPlayer1->meTeam != lpPlayer2->meTeam)
+        {
+            if (lpPlayer1->meTeam == BrnGameState::GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM)
+                return -1;
+            return 1;
+        }
+        if (lpPlayer1->mfTableValue > lpPlayer2->mfTableValue)
+            return 1;
+        if (lpPlayer1->mfTableValue < lpPlayer2->mfTableValue)
+            return -1;
+        return 0;
+    }
+
+    // By name (the challenge page lists players alphabetically).
+    s32 PlayerPositionTableComponent::FunctionSortAlphabetical(const void* lp1, const void* lp2)
+    {
+        const PlayerPositionSingleData* lpPlayer1 = static_cast<const PlayerPositionSingleData*>(lp1);
+        const PlayerPositionSingleData* lpPlayer2 = static_cast<const PlayerPositionSingleData*>(lp2);
+
+        if (lpPlayer1->mPlayerName.macName[0] == 0)
+            return lpPlayer2->mPlayerName.macName[0] != 0;
+        if (lpPlayer2->mPlayerName.macName[0] == 0)
+            return -1;
+        if (lpPlayer1->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+        {
+            if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+                return CgsNetwork::UsernameCompare(lpPlayer1->mPlayerName.macName,
+                                                   lpPlayer2->mPlayerName.macName);
+            return 1;
+        }
+        if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
+            return -1;
+
+        return CgsNetwork::UsernameCompare(lpPlayer1->mPlayerName.macName,
+                                           lpPlayer2->mPlayerName.macName);
     }
 }

@@ -22,6 +22,7 @@
 #include "SharedClasses/Progression/BrnOpponentData.h"                  // BrnProgression::CarOpponentSet (opponent walk)
 #include "GameShared/GameClasses/Containers/CgsArray.h"                 // CgsContainers::Array<s64,7> (opponent payload)
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"       // RequestInterface<3072>::GetVehicleList/GetWheelList
+#include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"     // AllocatorList::GetHeapAllocator (Prepare stage 13)
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"             // GameDataAssetEvent (the list replies)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // [FX-FLOW] AcquireResourceResponse (Prepare stage 12's reply)
 #include "SharedClasses/Graphics/BrnGlobalColourPalette.h"              // [FX-FLOW] BrnWorld::GlobalColourPalette (mpPlayerCarColours)
@@ -527,10 +528,14 @@ void GameStateModule::Destruct()
 // ----------------------------------------------------------------------------
 // The GameData reply ids the two live list stages match (BrnGameDataModule's dispatch stages
 // them at the slot: ProcessGetVehicleListRequest -> 52, ProcessGetWheelListRequest -> 59).
-// ⚠️ The FreeburnChallengeList reply (53) is NOT here on purpose: its GameData handler is a
-// DeferredGameDataRequest, so a stage waiting on it would never advance.
+// The FreeburnChallengeList reply (53) is live too now: GameDataModule answers it from
+// ProcessGetFreeburnChallengeListRequest once its own Prepare stage 10 has built the list.
 static const s32 KI_REPLY_VEHICLE_LIST = 52;
 static const s32 KI_REPLY_WHEEL_LIST   = 59;
+static const s32 KI_REPLY_FREEBURN_CHALLENGE_LIST = 53;
+// Stage 13's heap: the allocator list's bank 0x1B, the network heap (BrnNetworkModule's
+// KI_NETWORK_HEAP_BANK is the same bank).
+static const s32 KI_MODE_MANAGER_HEAP_BANK = 0x1B;
 
 // ✅ [gateui] Stage 4's district-map bundle literals moved OUT of this file (2026-08-20): the
 // LoadBundle they served now happens where the console has it, inside StuntManager::LoadDistrictMap
@@ -616,8 +621,8 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         CGS_ASSERT(false, "lpOutputBuffer");
         return false;
     }
-    (void)lpUpdateOutputBufferStack;   // stages 13/24 (heap allocator) + the manager prepares
-    (void)lpAllocatorList;             //   are the deferrals listed above
+    (void)lpUpdateOutputBufferStack;   // stage 24 (heap allocator) + the manager prepares
+                                       //   are the deferrals listed above
 
     // X360: `*(this + 292289) = 1` at entry, cleared at the single exit.
     mbIsUpdating = true;
@@ -698,8 +703,24 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         mePrepareStage = E_PREPARESTAGE_REQUEST_CHALLENGE_LIST;
         // fall through
     case E_PREPARESTAGE_REQUEST_CHALLENGE_LIST:
+        // Console case 5: `stage = 6; GetFreeburnChallengeList(requests, &mReceiverQueue,
+        // 0); mReceiverQueue.Clear();` then fall into the receive -- the vehicle-list shape.
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST;
+        lpOutputBuffer->GetResourceRequestInterface()->GetFreeburnChallengeList(&mReceiverQueue, 0);
+        mReceiverQueue.Clear();
+        // fall through
+
     case E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST:
-        LogPrepareStageOnce(5, "GetFreeburnChallengeList + receive (reply 53) [deferred]");
+        // Console case 6: wait for the reply, assert id 53 (line 516) and event id 0
+        // (line 521), then `stwx reply+0x20, this, 0x45710` -- mpFreeburnChallengeList.
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST;
+        {
+            void* lpChallengeList = 0;
+            if (!ReceiveListResource(KI_REPLY_FREEBURN_CHALLENGE_LIST, 516, 521, &lpChallengeList))
+                break;
+            mpFreeburnChallengeList = static_cast<const BrnResource::ChallengeList*>(lpChallengeList);
+        }
+        mePrepareStage = E_PREPARESTAGE_REQUEST_VEHICLE_LIST;
         // fall through
     case E_PREPARESTAGE_REQUEST_VEHICLE_LIST:
         // ⭐ REAL. X360 LABEL_16: `stage = 8; GetVehicleList(requests, &mReceiverQueue, 0);
@@ -797,13 +818,25 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     }
         // fall through
     case E_PREPARESTAGE_MODEMANAGER:
+        // Console case 13: `stage = 13; if (!ModeManager::Prepare(this + 4128,
+        // mpFreeburnChallengeList, lpAllocatorList->GetHeapAllocator(0x1B))) break;` --
+        // ChallengeManager::Prepare (the challenge list) and ScoringSystem::Prepare (each per-car
+        // record's road-rule table from the network heap).
+        mePrepareStage = E_PREPARESTAGE_MODEMANAGER;
+        if (!mModeManager.Prepare(mpFreeburnChallengeList,
+                                  lpAllocatorList->GetHeapAllocator(KI_MODE_MANAGER_HEAP_BANK)))
+        {
+            break;
+        }
+        mePrepareStage = E_PREPARESTAGE_TAKEDOWNMANAGER;
+        // fall through
     case E_PREPARESTAGE_TAKEDOWNMANAGER:
     case E_PREPARESTAGE_MUGSHOTMANAGER:
     case E_PREPARESTAGE_PAYBACKMANAGER:
     case E_PREPARESTAGE_INVITEMANAGER:
     case E_PREPARESTAGE_FLYBYMANAGER:
     case E_PREPARESTAGE_NETWORKROUNDMANAGER:
-        LogPrepareStageOnce(13, "the manager prepares Mode..NetworkRound [deferred]");
+        LogPrepareStageOnce(14, "the manager prepares Mugshot..NetworkRound [deferred]");
         // [takedown wave 2026-09-02] stage 14 of the console ladder, `if (TakedownManager::Prepare(gsm+568))`
         // -- REAL now (the others in this group stay deferred as the line above says).
         if (!PrepareTakedownBringUp())
@@ -922,8 +955,8 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
                                   CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette>(
                                       mpPlayerCarColours.GetResourceHandle()));
 
-        // [deferred] the OnlineCarSelectManager leg (its TU is unmounted).
         mCarSelectManager.Prepare(mpVehicleList, mpWheelList);
+        mOnlineCarSelectManager.Prepare(mpVehicleList, mpWheelList);
 
         // ⭐ AND THE PROGRESSION LAYER'S COPY (X360 ProgressionManager +133448). MEASURED:
         // the first live ResetPlayerCarAction chain fired the console's own "lpVehicleListEntry"

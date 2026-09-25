@@ -38,7 +38,10 @@
 #include "GameSource/GameState/BrnGameStateModuleIO.h"             // OutputBuffer / GameActionQueue
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"             // InputBuffer::GetGuiEvents()
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // CgsDev::Log::gpDebugPrint
-#include <stdlib.h>                                                // getenv (the [UI-gate] diag guard)
+#include "GameSource/Gui/Events/BrnGuiChallengeEvents.h"           // GUI 574 / 576 / 577 (free-burn challenge arms)
+#include "GameShared/GameClasses/System/Timer/CgsTime.h"           // CgsSystem::Time (the action-152 record)
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"      // bounded [netui] witness lines
+#include <stdlib.h>                                               // getenv (the [UI-gate] diag guard)
 #include <cstring>                                                 // memset/strncpy (the 537 ticker record)
 
 namespace BrnGame
@@ -231,6 +234,39 @@ namespace
         *CgsDev::Log::gpDebugPrint << "[race-hud] action " << liAction << " -> gui " << liGuiEvent
                                    << " (car slot " << liCarIndex << ", value " << lfValue << ")\n";
     }
+
+    // The free-burn challenge GUI records the 152..160 arms post, TU-local for the same
+    // include reason (their canonical opaque homes are in BrnGuiDemangledEventTypes.h). Member
+    // names are the original ones. Sizes are the console AddGuiEvent<T> sizes.
+    struct OnlineTimeoutWire108
+    {
+        f32 mfTimeLeft;                         // +0x00
+        s32 GetEventType() const { return 108; }
+    };
+    static_assert(sizeof(OnlineTimeoutWire108) == 4, "GUI 108 size 4");
+
+    struct ShowFreeburnChallengeWire582
+    {
+        CgsID mChallengeID;                     // +0x00
+        s32 GetEventType() const { return 582; }
+    };
+    static_assert(sizeof(ShowFreeburnChallengeWire582) == 8, "GUI 582 size 8");
+
+    struct FburnChallengeEveryPlayerStatusWire581
+    {
+        BrnGameState::GameStateModuleIO::FburnChallengeEveryPlayerStatusData mStatus;   // +0x00
+        s32 GetEventType() const { return 581; }
+    };
+    static_assert(sizeof(FburnChallengeEveryPlayerStatusWire581) == 2104, "GUI 581 size 2104");
+
+    // GUI 104, 579 and 584 are tag-only GuiEvent<N> records: the console queues one
+    // unwritten byte for each.
+    void PushGuiTag(s32 liEventId, CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput)
+    {
+        const u8 lu8Tag = 0;
+        lpGuiInput->GetGuiEvents()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lu8Tag), liEventId, 1);
+    }
 }
 
     // =========================================================================
@@ -284,7 +320,8 @@ namespace
     // training ticker, [tut-ticker] 2026-08-24), 181, 97 / 98 / 100 / 101 (the drive-thru
     // family, [drive-thru] 2026-08-29), 45 (the drive-thru ICON TABLE -> the pending sat-nav
     // record posted at the tail, [minimap blips, issue #9] 2026-09-07), and 6 (the TAKEDOWN
-    // CRASH-BAR edge -> GUI 377 payloads 2/3, [takedown HUD] 2026-09-13); the event-flow arms live in the sibling
+    // CRASH-BAR edge -> GUI 377 payloads 2/3, [takedown HUD] 2026-09-13), and 152..155/157/160
+    // (the free-burn challenge family -> GUI 108/574..584); the event-flow arms live in the sibling
     // GameBridgeGameStateToX_EventFlowGuiEvents.cpp, reached through the `default:` below.
     // Every other action falls through with NO event posted. A future owner adding, say, the
     // road-rules arms must add them HERE rather than in a parallel function.
@@ -1441,6 +1478,131 @@ namespace
                 {
                     TranslateShowtimeActionToGuiEvent(liActionType, lpAction, lpGuiInput);
                 }
+                break;
+            }
+
+            // ---- 152..160  the free-burn challenge family (online free-burn lobby) ------------
+            // The online time-out clock: the {seconds, fraction} record becomes GUI 108.
+            case BrnGameState::GameStateModuleIO::E_ACTION_MODE_TIME_REMAINING:
+            {
+                CGS_ASSERT(lpAction != 0, "lpTimeOutTimer != NULL");
+                OnlineTimeoutWire108 lEvent;
+                lEvent.mfTimeLeft =
+                    reinterpret_cast<const CgsSystem::Time*>(lpAction)->GetFloatVal();
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // The challenge lifecycle: begin -> 574, trigger -> 576, ended -> 108 (-1.0) + 578 +
+            // 104, results finished -> 579 + 104. The other event types post nothing.
+            case BrnGameState::GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE:
+            {
+                CGS_ASSERT(lpAction != 0, "lpChallengeAction");
+                const BrnGameState::GameStateModuleIO::FreeburnChallengeAction* lpChallengeAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::FreeburnChallengeAction*>(lpAction);
+
+                BrnNetHarnessPC::WitnessTag("netui", "fburn-gui", "action 153 type=%d id=%016llx host=%d",
+                                            lpChallengeAction->meEventType,
+                                            static_cast<unsigned long long>(lpChallengeAction->mChallengeID),
+                                            lpChallengeAction->mbIsHost ? 1 : 0);
+
+                switch (lpChallengeAction->meEventType)
+                {
+                case 0:
+                {
+                    BrnGui::GuiChallengeStartEvent lEvent;
+                    lEvent.mChallengeID  = lpChallengeAction->mChallengeID;
+                    lEvent.mbIsLocalHost = lpChallengeAction->mbIsHost;
+                    PushGuiEvent(lEvent, lpGuiInput);
+                    break;
+                }
+                case 1:
+                {
+                    BrnGui::GuiChallengeTriggerResponse lEvent;
+                    lEvent.mChallengeID  = lpChallengeAction->mChallengeID;
+                    lEvent.mbIsLocalHost = lpChallengeAction->mbIsHost;
+                    PushGuiEvent(lEvent, lpGuiInput);
+                    break;
+                }
+                case 5:
+                {
+                    OnlineTimeoutWire108 lTimeout;
+                    lTimeout.mfTimeLeft = -1.0f;
+                    PushGuiEvent(lTimeout, lpGuiInput);
+
+                    BrnGui::GuiChallengeEndEvent lEvent;
+                    lEvent.mChallengeID                  = lpChallengeAction->mChallengeID;
+                    lEvent.meChallengeStatus             = lpChallengeAction->meChallengeStatus;
+                    lEvent.miNumChallengesComplete       = lpChallengeAction->miNumChallengesComplete;
+                    lEvent.miTotalNumChallenges          = lpChallengeAction->miTotalNumChallenges;
+                    lEvent.mbAbortingToStartNewChallenge = lpChallengeAction->mbAbortingToStartNewChallenge;
+                    PushGuiEvent(lEvent, lpGuiInput);
+
+                    PushGuiTag(104, lpGuiInput);
+                    break;
+                }
+                case 6:
+                    PushGuiTag(579, lpGuiInput);
+                    PushGuiTag(104, lpGuiInput);
+                    break;
+                default:
+                    break;
+                }
+                break;
+            }
+
+            case BrnGameState::GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE_END_NOT_ACTIVE:
+                PushGuiTag(584, lpGuiInput);
+                break;
+
+            // The per-frame progress block becomes GUI 577 (one target slot per used target),
+            // then the time left goes out as GUI 108.
+            case BrnGameState::GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE_UPDATE:
+            {
+                const BrnGameState::GameStateModuleIO::FreeburnChallengeUpdateAction* lpUpdateAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::FreeburnChallengeUpdateAction*>(lpAction);
+                static_assert(sizeof(BrnGui::GuiChallengeUpdateEvent) == 144, "GUI 577 size 144");
+
+                BrnGui::GuiChallengeUpdateEvent lUpdateEvent = {};
+                lUpdateEvent.miCurrentAction = lpUpdateAction->miCurrentActionIndex;
+                CGS_ASSERT(lUpdateEvent.miCurrentAction < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
+                           "lUpdateEvent.miCurrentActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE");
+                lUpdateEvent.miNumTargetsUsed = lpUpdateAction->miNumTargetsUsed;
+                for (s32 liTarget = 0; liTarget < lpUpdateAction->miNumTargetsUsed; ++liTarget)
+                {
+                    lUpdateEvent.maiOverallTargetRemaining[liTarget] =
+                        lpUpdateAction->maiOverallTargetRemaining[liTarget];
+                    std::memcpy(lUpdateEvent.maafIndividualTargetContributions[liTarget],
+                                lpUpdateAction->maafIndividualTargetContributions[liTarget],
+                                sizeof(lUpdateEvent.maafIndividualTargetContributions[liTarget]));
+                    std::memcpy(lUpdateEvent.maaeComplete[liTarget],
+                                lpUpdateAction->maaeCompleted[liTarget],
+                                sizeof(lUpdateEvent.maaeComplete[liTarget]));
+                }
+                PushGuiEvent(lUpdateEvent, lpGuiInput);
+
+                OnlineTimeoutWire108 lTimeout;
+                lTimeout.mfTimeLeft = lpUpdateAction->mfTimeLeftInChallenge;
+                PushGuiEvent(lTimeout, lpGuiInput);
+                break;
+            }
+
+            case BrnGameState::GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE_EVERY_PLAYER_COMPLETION_STATUS:
+            {
+                FburnChallengeEveryPlayerStatusWire581 lEvent;
+                std::memcpy(&lEvent.mStatus, lpAction, sizeof(lEvent.mStatus));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            case BrnGameState::GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE_SHOW_SELECTOR:
+            {
+                CGS_ASSERT(lpAction != 0, "lpShowSelectorAction");
+                ShowFreeburnChallengeWire582 lEvent;
+                lEvent.mChallengeID =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::FburnChallengeShowSelectorAction*>(
+                        lpAction)->mChallengeID;
+                PushGuiEvent(lEvent, lpGuiInput);
                 break;
             }
 

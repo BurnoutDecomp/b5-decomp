@@ -392,7 +392,8 @@ public:
                 const Vector2& lrCurrentRouteNode,
                 const Vector2& lrNextRouteNode,
                 RaceCarEntityModuleIO::GameEventQueue* lpGameEvents,
-                CgsNumeric::Random* lpRandom);
+                CgsNumeric::Random* lpRandom,
+                BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleOutput);
 
     // X360 0x822B8610: for an AI car ramp a braking hysteresis counter
     // (miBrakeChangeCounter, +1 toward +KI_MAX_BRAKE_COUNTER when braking / -2 toward
@@ -769,9 +770,8 @@ public:
                           BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface );
 
     // X360 0x822BF668. Take the body out of the scene collision set and arm the
-    // "collision state changed" flag. PARTIAL -- the E_RACE_CAR_TYPE_NETWORK re-add arm is
-    // [FLAG BLOCKED] on mAddRemoveNetworkCarForCollisionQueue still being maPad0000; see the
-    // .cpp banner.
+    // "collision state changed" flag; a NETWORK car also posts {id, removed} onto its own
+    // mAddRemoveNetworkCarForCollisionQueue.
     void RemoveFromCollision( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
                               BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface );
 
@@ -821,9 +821,8 @@ public:
                      f32 lfTimeStep );
 
     // X360 0x822D41F0 (138 insns). Put the car's volume instance into the scene collision set
-    // under its current culling group and arm the "collision state changed" flag. PARTIAL --
-    // the E_RACE_CAR_TYPE_NETWORK re-add post is [FLAG BLOCKED] on the same
-    // mAddRemoveNetworkCarForCollisionQueue that blocks RemoveFromCollision's.
+    // under its current culling group and arm the "collision state changed" flag; a NETWORK
+    // car also posts {id, added} onto its own mAddRemoveNetworkCarForCollisionQueue.
     void AddToCollision( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
                          BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface );
 
@@ -1049,6 +1048,14 @@ public:
     // HandleGameActions case 11 inlines it as `stb r23(1), 0x21F9` on maActiveRaceCars[idx]
     // (0x8230CD3C; 0x21F9 - 0x1A60 == +0x799).
     void SetDisconnectedFromNetwork()                { mbIsDisconnectedFromNetwork = true; }
+    // The declared SetNotSendingNetworkUpdates(bool); UpdateDisconnectedPlayers inlines it as a
+    // bare byte store (1 / 0 into +0x798).
+    void SetNotSendingNetworkUpdates(bool lbNotSending) { mbNotSendingNetworkUpdates = lbNotSending; } // +0x798
+
+    // The declared `void SendAddedRemovedNetworkCarForCollisionEvents(VehicleInputInterface*)`. Drains
+    // mAddRemoveNetworkCarForCollisionQueue into the vehicle input interface's
+    // network-cars-added/removed queue and empties it. Called from Update.
+    void SendAddedRemovedNetworkCarForCollisionEvents(BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput);
     const Vector3& GetCurrentInAirRotations() const  { return mCurrentInAirRotations; }        // +0x750
     u16  GetCurrentAISection() const                 { return muCurrAISection; }               // +0x73E
     bool HasCrashedIntoWater() const                 { return mbCrashedIntoWater; }            // +0x783
@@ -1206,9 +1213,15 @@ private:
     // member (see the banner), the console offsets are documentation.
     // ========================================================================
 
-    // DWARF mAddRemoveNetworkCarForCollisionQueue --
-    // CgsModule::EventQueue<BrnPhysics::Vehicle::VehicleAddedForCollisionEvent, 8>.
-    u8 maPad0000[144];                                   // +0x000 (0)    .. +0x090 (144)
+    // The declared AddRemoveNetworkCarForCollisionQueue / mAddRemoveNetworkCarForCollisionQueue.
+    // Construct builds it (EventQueue<VehicleAddedForCollisionEvent,8>::Construct on `this`),
+    // AddToCollision / RemoveFromCollision post into it for a NETWORK car (their tripwire reads
+    // of +0x8 / +0x4 are miLength / miMaxLength), and
+    // SendAddedRemovedNetworkCarForCollisionEvents drains it every Update. Host size is the
+    // console's 144 as well (16-byte queue head + 8 x 16-byte events).
+    typedef CgsModule::EventQueue<BrnPhysics::Vehicle::VehicleAddedForCollisionEvent, 8>
+        AddRemoveNetworkCarForCollisionQueue;
+    AddRemoveNetworkCarForCollisionQueue mAddRemoveNetworkCarForCollisionQueue;   // +0x000 .. +0x090
 
     // X360 +0x90 (144). Prepare and Attach both store the IDENTITY here;
     // OnResourcesLoaded overwrites it from the vehicle's physics def (`BrnPhysics::Def(

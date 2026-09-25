@@ -316,6 +316,13 @@ namespace Vehicle
         {
             return &mNetworkCarsAddedRemovedForCollisionQueue;
         }
+        // The declared `void RecordNetworkCarAddedOrRemovedForCollision(const VehicleAddedForCollisionEvent&)`.
+        // No out-of-line console copy: ActiveRaceCar::SendAddedRemovedNetworkCarForCollisionEvents
+        // inlines it as BaseEventQueue<VehicleAddedForCollisionEvent>::AddEvent on this member.
+        void RecordNetworkCarAddedOrRemovedForCollision(const VehicleAddedForCollisionEvent& lrEvent)
+        {
+            mNetworkCarsAddedRemovedForCollisionQueue.AddEvent(lrEvent);
+        }
         // THE REMOVE QUEUE'S SEAT WAS DERIVED TWICE, 2026-08-11, by two independent waves reading
         // the same three instructions -- and the cross-check caught an arithmetic slip. The second
         // wave quoted the same `addis r3,r4,2 ; addi r3,r3,-0x6D0 ; lwz r11,8(r3)` prologue but

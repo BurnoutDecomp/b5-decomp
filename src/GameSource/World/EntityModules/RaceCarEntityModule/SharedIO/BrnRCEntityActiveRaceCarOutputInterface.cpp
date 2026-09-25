@@ -607,6 +607,17 @@ RCEntityActiveRaceCarOutputInterface::GetRaceCarState(EActiveRaceCarIndex leActi
     return &maRaceCarStates[leActiveRaceCarIndex];
 }
 
+// The non-const twin (its own out-of-line body on the console): the same two range asserts
+// plus the IsRaceCarActive gate, then &maRaceCarStates[idx].
+RCEntityActiveRaceCarOutputInterface::RaceCarState*
+RCEntityActiveRaceCarOutputInterface::GetRaceCarStateMutable(EActiveRaceCarIndex leActiveRaceCarIndex)
+{
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,    "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(IsRaceCarActive(leActiveRaceCarIndex),               "IsRaceCarActive( leActiveRaceCarIndex )");
+    return &maRaceCarStates[leActiveRaceCarIndex];
+}
+
 // ============================================================================
 // ---- ADDITIVE 2026-08-12 (prop-spawn wave, agent B6) -----------------------
 // The last two declaration-only members of this interface that a MOUNTED caller needs.

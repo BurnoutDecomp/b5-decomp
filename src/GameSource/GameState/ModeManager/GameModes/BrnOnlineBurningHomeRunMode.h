@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineGameMode.h"
+#include "GameSource/GameState/BrnGameStateSharedIO.h"   // GameStateModuleIO::GameActionQueue (PickNewBurningHomeRunRunner)
 
 namespace BrnGameState
 {
@@ -21,6 +22,11 @@ public:
     // GameMode base's 0x827E2F38 (`li r3,0`). DWARF BrnOnlineBurningHomeRunMode.h:33 declares this
     // override; ADDED 2026-08-26 with the 26-slot base.
     virtual bool HasLoadingScreen() const;
+
+    // The runner (blue team) left or lost the host: the nearest connected red-team car
+    // becomes the runner (action 167). Called by ModeManager::SetPlayerDisconnected / HandleNewHostEvent.
+    void PickNewBurningHomeRunRunner(const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface,
+                                     GameStateModuleIO::GameActionQueue* lpActionQueue);
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------

@@ -676,6 +676,14 @@ namespace BrnGui
         // that reached the freeburn-challenge arms of RaceMainHudState.
         void SetChallengeManager(FreeburnChallengeManager* lpChallengeManager);
 
+        // The writer of mpSkillsManager (GuiModule::Construct binds its own skills manager),
+        // with the console's "lpSkillsManager" assert.
+        void SetSkillsManager(const BurnoutSkillsManager* lpSkillsManager)
+        {
+            CGS_ASSERT(lpSkillsManager != 0, "lpSkillsManager");
+            mpSkillsManager = lpSkillsManager;
+        }
+
         // ADDITIVE GROW (OnlineGameRoomPlayerInfo keystone, wave H): the sat-nav GUI
         // tracker pointer @X360 +0x4054. The screen's HandleGuiCacheEvent asserts
         // "mpGuiCache->GetGuiTracker()" then ClearTracker()s it (@0x824A3F60 region);
@@ -833,6 +841,21 @@ namespace BrnGui
         void SetOnlineMatchUnranked(bool lbUnranked) { mbOnlineMatchUnranked = lbUnranked; } // +0x4B52
         void SetOnlineStartPending(bool lbPending)   { mbOnlineStartPending = lbPending; }   // +0x4B53
         bool IsOnlineStartPending() const     { return mbOnlineStartPending; }      // +0x4B53 (19283) CrashNavEnterOnlineBase Handle{Disconnected,OverlayComplete}Event lbz
+        // The reference-named accessors of the same +0x4B4C..+0x4B52 bytes (the reference member run is
+        // mbIsOnline, mbIsPreparingForInvite, mbIsStartingGameDueToPlayerJoin,
+        // mbIsPerformInviteReceived, mbIsConnectedToNetwork, mbDoJoinOnlineRankedGame,
+        // mbDoJoinOnlineFreeburnGame). InGame reads and writes the bytes through these names.
+        bool IsOnline() const                 { return mbOnlineStartInProgress; }  // +0x4B4C
+        bool IsPreparingForInvite() const     { return mbInviteInProgress; }       // +0x4B4D
+        bool IsPerformInviteReceived() const  { return mbPerformingInvite; }       // +0x4B4F
+        void SetDoJoinOnlineRankedGame(bool lbRanked)     { mbOnlineMatchRanked = lbRanked; }      // +0x4B51
+        void SetDoJoinOnlineFreeburnGame(bool lbFreeburn) { mbOnlineMatchUnranked = lbFreeburn; }  // +0x4B52
+        const bool GetDoJoinOnlineRankedGame() const      { return mbOnlineMatchRanked; }          // +0x4B51
+        const bool GetDoJoinOnlineFreeburnGame() const    { return mbOnlineMatchUnranked; }        // +0x4B52
+        // GetDoDisconnectPopupError: the error word SetDoDisconnectPopup latched (+0x4B40).
+        s32 GetDoDisconnectPopupError() const { return meLastDisconnectedError; }
+        // SetResetOnlineGameOptions: the byte after the params mirror (+0xA9E0).
+        void SetResetOnlineGameOptions(bool lbReset) { mbOnlineGameOptionsChanged = lbReset; }
         s32 GetPlayerActiveRaceCarIndex() const                  { return mePlayerActiveRaceCarIndex; }  // DWARF h:924
 
         // [hud reveal gate 2026-08-25] The console spells this accessor out by name in its own
@@ -967,6 +990,11 @@ namespace BrnGui
         // load the X360 emits.
         s32 GetOnlineGameMode() const { return meOnlineGameMode; }
 
+        // IsLocalPlayerHost / GetOnlineGameName: header-inline reads of the two members
+        // RecEvent's id-245 arm writes (the far-member `lbzx +0xB864` idiom at every reader).
+        const bool IsLocalPlayerHost() const { return mbIsOnlineHost; }
+        const char* GetOnlineGameName() const { return macOnlineGameName; }
+
         // ADDITIVE GROW (the GUI per-frame time pump). The cache LEADS with the embedded
         // GuiEventTimeInfo pair (mfTimeStep @+0x00, mfTimeNow @+0x04) and every GUI-side timer
         // in the game reads it -- Intro::HandleStateTransitions @0x824DAA48 does
@@ -1074,6 +1102,23 @@ namespace BrnGui
         // committed 312-byte InGamePlayerStatusData record). Body links from the GuiCache TU.
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
              GetOnlinePlayerInfoFromPlayerId(s32 liPlayerId) const;
+
+        // The active race car of a network player: the in-game record whose network id
+        // matches, or E_ACTIVE_RACE_CAR_INDEX_INVALID. Inlined at every console reader
+        // (GetOnlinePlayerColourFromARCI's lobby-row scan).
+        EActiveRaceCarIndex GetActiveRaceCarFromNetworkId(s32 lNetworkPlayerID) const;
+
+        // The player colour an online car is drawn in (the EGuiPlayerColours values, raw s32
+        // per this header's enum convention): 11 disconnected, 10 eliminated, else the
+        // lobby row of that car -- its team colour in the team modes (12 / 14), its colour
+        // index otherwise -- and 0 when no lobby row maps to the car. Non-const, as declared
+        // in the reference. Readers: the position table, the above-car renderer and the
+        // map icon manager.
+        s32 GetOnlinePlayerColourFromARCI(EActiveRaceCarIndex leActiveRaceCarIndex);
+
+        // The id-492 remaining-checkpoint count (+0x4F9C). FLAG: named after the member; the
+        // position table's burning-home-run value reads it inline.
+        s32 GetNumRemainingCheckpoints() const { return miNumRemainingCheckpoints; }
 
         // ====================================================================
         //  Remaining GuiCache accessors recovered in this wave (dossier: 60
@@ -1533,8 +1578,8 @@ namespace BrnGui
         // member run that lands this cluster); X360-attested by CarSelectMain::
         // ProcesssIncomingEvents' event-44 inline @0x824D769C (stw mpGuiCache+0x4B40 --
         // the DWARF SetDoDisconnectPopup(const CgsModule::Event*) body) and read by
-        // InGame::Update's cache latch (BrnInGame.cpp CacheTakeLastDisconnectedError
-        // boundary, which this member replaces when that TU is next touched). Raw s32 per
+        // InGame::Update's cache latch (GetDoDisconnectPopupError, then cleared through
+        // SetDoDisconnectPopup(0)). Raw s32 per
         // this boundary header's enum convention (see GetCurrentGameModeType).
         s32  meLastDisconnectedError;                     // +0x4B40 (19264) 0 == none
         u8   mPad_4B44[5];                                // +0x4B44..+0x4B48
@@ -1563,8 +1608,7 @@ namespace BrnGui
         // ADDITIVE CARVE (BrnCarSelectMain wave G): "this game start was driven by a
         // drop-in player join" gate. DWARF h:1666 mbIsStartingGameDueToPlayerJoin (the
         // bool run mbIsPreparingForInvite(h:1665)/THIS/mbIsPerformInviteReceived(h:1667)
-        // brackets this byte; BrnInGame.cpp's CacheIsStartingGameDueToPlayerJoin boundary
-        // comment records the same X360 +0x4B4E identification). X360-attested by
+        // brackets this byte; InGame::Update reads it at +0x4B4E too). Attested by
         // CarSelectMain::ProcesssIncomingEvents' event-93 gate @0x824D7784 (lbz
         // mpGuiCache+0x4B4E: blocks the ENTER_GAME state event while set).
         bool mbIsStartingGameDueToPlayerJoin;            // +0x4B4E (19278)
@@ -1905,14 +1949,15 @@ namespace BrnGui
         // ⚠️ THE SEEDS ARE -1 / -1 / -1.0f, NOT ZERO, and they are load-bearing: UpdateCrash and
         // ShowtimeInstantResultsState both only act on a CHANGE, so a 0 seed would silently
         // swallow the first legitimate "0 cars crashed" frame.
-        // ⚠️ +0xA010 stays padding on purpose. GuiCrashScoreUpdate's fourth word
-        // (miScoreMultiplier, payload +0x08) is POSTED by the producer and has no store in
-        // RecEvent's arm and no member here -- there is nothing to carve for it.
+        // GuiCrashScoreUpdate's fourth word (miScoreMultiplier, payload +0x08) is POSTED by
+        // the producer and has no store in RecEvent's arm and no member here.
+        // +0xA010 is the reference's next member, mfDistanceToCheckpoint: RecEvent's id-240 arm
+        // (GuiEventRaceDistanceToCheckpoint) stores the event's float there with `stfsx`.
         // No member is shifted (4 + 4 + 4 + 4 == 16).
         s32 miShowTimeCarsCrashed;                       // +0xA004 (40964) DWARF :554  GetShowTimeCarsCrashed
         s32 miShowTimeComboMultiplier;                   // +0xA008 (40968) DWARF :557  GetShowTimeComboMultiplier
         f32 mfShowTimeDistanceTravelled;                 // +0xA00C (40972) DWARF :560  GetShowTimeDistanceTravelled
-        u8  mPad_A010[4];                                // +0xA010..+0xA013
+        f32 mfDistanceToCheckpoint;                      // +0xA010 (40976) RecEvent 240
         // ADDITIVE CARVE (A9 mode-type arm, 2026-08-27) from the tail of the former
         // mPad_A004[17]. A single byte, and every recovered access is a byte access:
         //   WRITTEN 0 by GuiCache::Construct @0x82505D6C (`stbx r30, r31, r9`, r9 == 0xA014)
@@ -2056,9 +2101,17 @@ namespace BrnGui
         // @row+20, mePlayerTeam @row+24, meGameConnectionType @row+28,
         // meVoipConnectionType @row+32, mbLocalPlayer @row+48.
         u8  maLobbyPlayerInfo[8][56];                    // +0xB640 (46656) LobbyPlayerStatusData maLobbyPlayerInfo[8] (stride 56)
-        u8  mPad_B800[8];                                // +0xB800..+0xB807 (unclaimed; the live count the screen loops with is muNumActivePlayers @+0xAC74)
+        // The rest of the 456-byte GuiEventNetworkLobbyPlayerList record that RecEvent's id-244
+        // arm copies over +0xB640 in one memcpy: the record's player count (the bridge writes it
+        // at record +0x1C0) and its 4-byte tail. FLAG: named after that producer. The live
+        // count the game-room screen loops with is still muNumActivePlayers (+0xAC74).
+        s32 miLobbyNumPlayers;                           // +0xB800 (47104) RecEvent 244
+        u8  mPad_B804[4];                                // +0xB804..+0xB807 (RecEvent 244 record tail)
         s32 maCurrentPlayerTeam[8];                      // +0xB808 (47112) GetCurrentOnlinePlayerTeam @0x8240F910 (4*(idx+11778)+this; GsmIO::EPlayerTeam)
-        u8  mPad_B828[36];                               // +0xB828..+0xB84B
+        // macOnlineGameName[36] (after maeCurrentPlayerTeam in the reference). RecEvent's id-245 arm
+        // copies the status record's game name here (the inlined StrCpy: "String too long: "
+        // then a 36-byte strncpy).
+        char macOnlineGameName[36];                      // +0xB828 (47144) RecEvent 245
         bool maOnlinePlayerDisconnected[8];              // +0xB84C (47180) GetOnlinePlayerDisconnected @0x8240F988
         bool maOnlinePlayerInCarSelect[8];               // +0xB854 (47188) GetOnlinePlayerInCarSelect @0x824436D0
         bool maOnlinePlayerEliminated[8];                // +0xB85C (47196) IsOnlinePlayerEliminated @0x8240FA08

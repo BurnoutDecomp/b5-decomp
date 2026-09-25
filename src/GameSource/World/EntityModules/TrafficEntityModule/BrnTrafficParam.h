@@ -277,6 +277,10 @@ public:
     void     Update(Vector3 lPos, Vector3 lDir, Vector3 lRight, VecFloat lfSpeed,
                     VecFloat lfAcceleration);
 
+    // Logger::HashState copies the deterministic position and the direction/acceleration
+    // quad by direct member load.
+    friend struct Logger;
+
 private:
     Vector3     mPos;                // 0x00
     Vector3Plus mDirAndAccel;        // 0x10 (dir.xyz + accel in .w)

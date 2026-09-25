@@ -69,7 +69,16 @@ public:
 
     // BrnChallengeListComponent.h:155/169/179/185 -- declared-only (out of this slice).
     bool IsChallengeSelectable();
-    void ShowButton(bool lbShow);
+    // Inlined at its one caller (the online game room's cache-event handler): a changed
+    // button state is stored and the view marked for a rebuild.
+    void ShowButton(bool lbShow)
+    {
+        if (mbShowButton != lbShow)
+        {
+            mbShowButton = lbShow;
+            mbDirty      = true;
+        }
+    }
     bool IsAtTopOfList() const { return miStartChallengeIndex + miHighlightedIndex == 0; }
     bool IsAtBottomOfList() const { return miStartChallengeIndex + miHighlightedIndex == miNumChallenges - 1; }
 
@@ -85,6 +94,9 @@ public:
         const BrnGameState::GameStateModuleIO::FburnChallengeEveryPlayerStatusData* lpStatus);
 
 private:
+    // The online game room's challenge sub-state reads mbShowButton directly.
+    friend struct OnlineGameRoomPlayerInfo;
+
     // @0x8242DA38 -- return the liWantedIndex-th challenge (of those matching miNumPlayers)
     // whose content is bought, optionally reporting its raw list index. 0 if none.
     const BrnResource::ChallengeListEntry* GetFilteredChallenge(s32 liWantedIndex,

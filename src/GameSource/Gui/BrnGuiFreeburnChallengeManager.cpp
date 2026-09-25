@@ -370,4 +370,56 @@ void FreeburnChallengeManager::HandleNewData( const GuiChallengeUpdateEvent* lpE
                  static_cast<unsigned int>( miTargetsCount ) * KI_MAX_ARCI * sizeof( EFreeburnChallengeSuccess ) );
 }
 
+// StartNotActiveChallenge (GUI 583): a challenge is running that this player is not in.
+// Latch NOT_ACTIVE and resolve the record's challenge id against the cache's list; a miss
+// leaves no current challenge. The id is the record's first 8 bytes (the network bridge
+// writes it there; the demangled 583 type is opaque, so it is read from the record base).
+void FreeburnChallengeManager::StartNotActiveChallenge( const GuiChallengeNotActiveStartEvent* lpEvent )
+{
+    meInternalState = E_INTERNAL_STATE_NOT_ACTIVE;
+    const CgsID lChallengeID = *reinterpret_cast<const CgsID*>( lpEvent );
+
+    const BrnResource::ChallengeList* lpList = mpGuiCache->GetFreeburnChallengeList();
+    const s32 liChallengeIndex = lpList->GetChallengeIndex( lChallengeID );
+    mpCurrentChallenge = ( liChallengeIndex < 0 )
+                       ? nullptr
+                       : lpList->GetChallengeData( liChallengeIndex );
+}
+
+// FinishChallenge (GUI 579): the challenge is over; the tracker goes back to OFF. The assert
+// is non-gating, the store always happens.
+void FreeburnChallengeManager::FinishChallenge()
+{
+    CGS_ASSERT( meInternalState != E_INTERNAL_STATE_OFF,
+                "meInternalState != E_INTERNAL_STATE_OFF" );
+    meInternalState = E_INTERNAL_STATE_OFF;
+}
+
+// SelectNext (GUI 544): step to the next target page by hand. Ignored while OFF and on the
+// meet-up page (state 3); otherwise the page state becomes SELECT, the target index wraps at
+// miTargetsCount and the auto-rotate clock is zeroed.
+void FreeburnChallengeManager::SelectNext()
+{
+    if ( meInternalState == E_INTERNAL_STATE_OFF || mePageState == E_PAGE_STATE_COUNT )
+        return;
+
+    const s32 liTargetsCount = miTargetsCount;
+    const s32 liNextTarget   = miCurrentTargetIndex + 1;
+    mePageState          = E_PAGE_STATE_SELECT;
+    miCurrentTargetIndex = liNextTarget;
+    if ( liNextTarget >= liTargetsCount )
+        miCurrentTargetIndex = 0;
+    mfTimeToNextChange = 0.0f;
+}
+
+// HandleCompletionStatus (GUI 581): the every-player completion block is copied whole into
+// mCompletedData. GuiModule::Update inlines this as a 2104-byte memcpy of the record.
+void FreeburnChallengeManager::HandleCompletionStatus(
+    const GuiEventFburnChallengeEveryPlayerStatus* lpCompletionEvent )
+{
+    static_assert( sizeof( BrnGameState::GameStateModuleIO::FburnChallengeEveryPlayerStatusData ) == 2104,
+                   "GUI 581 carries the 2104-byte every-player status block" );
+    std::memcpy( &mCompletedData, lpCompletionEvent, sizeof( mCompletedData ) );
+}
+
 } // namespace BrnGui

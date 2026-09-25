@@ -18,6 +18,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
 
 #include <cstddef>   // offsetof / size_t
+#include <algorithm> // std::sort (RecalculateActiveHulls' std::_Sort of the active hulls)
 
 // includes folded in from the BrnTrafficEntityModule_w*.cpp partfiles (2026-09-15)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
@@ -88,6 +89,9 @@
 #include "GameSource/World/Traffic/BrnVehicleSoaData.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
 #include "GameSource/GameState/BrnGameActions.h"                       // PrepareForModeAction
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficLogger.h" // Logger (mpLogger)
+#include "GameSource/Resource/BrnResourceAllocator.h"                  // BrnResource::GetDebugAllocator (the Logger allocation)
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"          // WitnessTag ([nettraf] lines)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                 // EGameModeType
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"
 #include "BrnTrafficEntityModule.h"
@@ -1833,23 +1837,8 @@ void TrafficEntityModule::EnterStartingUpState()
 
     mbAllowDivergentBehaviour = (!mbIsOnlineGameMode) || mbPlayingShowtimeMode;
 
-    {
-        // GATE: the console's last store is a byte written through mpLogger (+0x727B4).
-        // BrnTrafficLogger.cpp is unmounted and does not compile, so the Logger type has no
-        // usable declaration. It locally redeclares KU_MAX_PARAMS (:32), HullRuntime (:58),
-        // ParamTransform (:81) and TrafficEntityModule (:90), all of which have real headers,
-        // so it fails C2374/C2086/C2011 first and the C2027s are the cascade.
-        // DELETE WHEN: those four local forks are replaced by the real includes and the file
-        // is mounted. That also un-gates the other two mpLogger legs here.
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "EnterStartingUpState mpLogger-><leading byte> = mbAllowDivergentBehaviour "
-            "(X360 0x827080CC) -- BrnTrafficLogger.cpp is unmounted and does not compile. "
-            "CAUSE: it LOCALLY REDECLARES KU_MAX_PARAMS, HullRuntime, "
-            "ParamTransform and TrafficEntityModule, all of which have real headers, so it "
-            "fails C2374/C2086/C2011 first and the C2027s are the cascade. Fix = delete the "
-            "four local forks and include the real headers");
-    }
+    // The Logger mirrors the lockstep switch (one byte store through mpLogger).
+    mpLogger->SetAllowDivergentBehaviour(mbAllowDivergentBehaviour);
 }
 
 // ----------------------------------------------------------------------------
@@ -2020,25 +2009,31 @@ void TrafficEntityModule::SetVehicleTransform(u32 luIndex, const Matrix44Affine&
 //       mfTrafficAmountScale =
 //           lerp(flt_82F2FDE0, flt_82F2FDDC, (mActiveHulls.GetLength() - 9) * 0.015873017);
 //
-// The first line is what the parked chain depends on. The online arm is gated: its two
-// endpoints are un-dumped .data floats at 0x82F2FDDC / 0x82F2FDE0 with no writer in the export
-// set, so writing the arm would mean inventing the density curve. It is dead offline anyway,
-// since mbAllowDivergentBehaviour is true whenever !mbIsOnlineGameMode. The 0.015873017f
-// (== 1/63) is an instruction immediate, so only the two floats are missing.
+// The first line is what the parked chain depends on. The online arm thins the traffic as
+// more hulls are switched on: 0.7 at 9 active hulls (one race car's full set) down to 0.3 at
+// 72 (the whole pool), linear in between. The two endpoints are plain initialised data (no
+// startup writer), the 9 and the 1/63 slope are constants. The `> 0` test is NaN-false, as
+// the console's `ble` skip is.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateDensity()
 {
+    const f32 KF_ONLINE_DENSITY_AT_MAX_HULLS       = 0.30000001f;
+    const f32 KF_ONLINE_DENSITY_AT_MIN_HULLS       = 0.69999999f;
+    const f32 KF_ONLINE_DENSITY_MIN_HULLS          = 9.0f;
+    const f32 KF_ONLINE_DENSITY_RECIP_HULL_RANGE   = 0.015873017f;   // 1 / (72 - 9)
+
     const f32 lfGameModeDensityScale = mfGameModeDensityScale;
     mfTrafficAmountScale = lfGameModeDensityScale;
 
     if (!mbAllowDivergentBehaviour && lfGameModeDensityScale > 0.0f)
     {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "UpdateDensity ONLINE arm -- mfTrafficAmountScale = lerp(flt_82F2FDE0, "
-            "flt_82F2FDDC, (mActiveHulls.GetLength() - 9) * (1/63)) : both endpoints are "
-            "un-dumped X360 .data floats (0x82F2FDDC / 0x82F2FDE0); unreachable offline "
-            "because mbAllowDivergentBehaviour is true whenever !mbIsOnlineGameMode");
+        const f32 lfHullFraction =
+            (static_cast<f32>(mActiveHulls.GetLength()) - KF_ONLINE_DENSITY_MIN_HULLS)
+            * KF_ONLINE_DENSITY_RECIP_HULL_RANGE;
+
+        mfTrafficAmountScale =
+            KF_ONLINE_DENSITY_AT_MIN_HULLS
+            + (KF_ONLINE_DENSITY_AT_MAX_HULLS - KF_ONLINE_DENSITY_AT_MIN_HULLS) * lfHullFraction;
     }
 }
 
@@ -3189,6 +3184,11 @@ void TrafficEntityModule::PredictHullChanges(const BrnTrafficIO::InputBuffer_Pos
         mbNeedToBroadcastHullChange = true;
         mHullChangeToBroadcast      = lInfo;
 
+        BrnNetHarnessPC::WitnessTag("nettraf", "hull-predict", "arc=%d hull=%u upd=%u",
+                                    static_cast<s32>(lInfo.meActiveRaceCarIndex),
+                                    static_cast<u32>(lInfo.muNewActiveHull),
+                                    static_cast<u32>(lInfo.muUpdateFrame));
+
         // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped.
         if (CgsDev::Log::DebugPrint* lpNetDiag = NetCrashDiagStream())
         {
@@ -3279,13 +3279,15 @@ void TrafficEntityModule::RecalculateActiveHulls(
         }
     }
 
+    // std::_Sort<u16*,int>(first, first + length, length) over the set's own buffer, ascending.
+    // The order is load-bearing online: the race-car hull tables are indexed by the LOCAL
+    // active race-car index, so every machine inserts the same hulls in a different order;
+    // the sort makes the set (hashed, and walked by FillNewHull and the generator rebuild)
+    // identical on all of them.
     if (mActiveHulls.GetLength() != 0)
     {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "RecalculateActiveHulls std::_Sort(mActiveHulls) -- ::Set<T,N> (CgsSet.h, not "
-            "this cluster's file) has no Sort. ORDER ONLY: SetDifference is order-independent "
-            "so the new/old sets are identical; only FillNewHull's visit order changes");
+        u16* lpuFirst = &mActiveHulls[0];
+        std::sort(lpuFirst, lpuFirst + mActiveHulls.GetLength());
     }
 
     lpOutNewHulls->SetDifference(mActiveHulls, lPreviousActiveHulls);
@@ -4147,7 +4149,7 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
 //                                   mbNeedToBroadcastHullChange = false
 //   0x82728AA8..0x82728AF4      if (IsDecisionFrame())
 //                                   ...->SetDataHash(muUpdateCount, Logger::HashState(mpLogger, this))
-//                                   inlined: sth +0x80, stw +0x84, stb 1 +0x7C -- GATED below
+//                                   inlined: sth +0x80, stw +0x84, stb 1 +0x7C
 //
 // The four vector constants are CRT dyn-init splats, read with tools/re/findinit.py + x360rd.py:
 //   unk_8300CCB0 = vspltisw 0                              (thunk 0x82C66784) -- the world origin
@@ -4250,17 +4252,10 @@ void TrafficEntityModule::GenerateNetworkUpdateEvents(const BrnTrafficIO::InputB
 
         if (IsDecisionFrame())
         {
-            // GATE: `lwzx r3, this, 0x727B4 ; bl Logger::HashState @0x8275DFB8`, then the inlined
-            // SetDataHash(muUpdateCount, hash) -- the hash leg the peers compare
-            // (TrafficManager::UpdateTrafficHashing reads HasHashBeenSet / GetDataHash). mpLogger's
-            // type lives in BrnTrafficLogger.cpp, which is unmounted and does not compile (see
-            // EnterStartingUpState's mpLogger gate). Without it mbHashValid stays false, so the
-            // network side stores no local hash and compares nothing -- no false divergence.
-            static bool sbLogged = false;
-            LogMissingLeg_T1(sbLogged,
-                "GenerateNetworkUpdateEvents hash leg (IsDecisionFrame -> Logger::HashState "
-                "@0x8275DFB8 -> SetDataHash, 0x82728AA8..0x82728AF4) -- BrnTrafficLogger.cpp is "
-                "unmounted and does not compile. ONLINE-only; mbHashValid stays false");
+            // The traffic state hash the peers compare (TrafficManager::UpdateTrafficHashing
+            // reads HasHashBeenSet / GetDataHash), stamped with the update it was taken on.
+            const u16 luHash = mpLogger->HashState(this);
+            lpOutput->GetNetworkInterface()->SetDataHash(muUpdateCount, luHash);
         }
     }
 }
@@ -4316,15 +4311,7 @@ void TrafficEntityModule::ResetEventData()
 
     mbNeedToBroadcastHullChange = false;
 
-    {
-        // GATE: `*mpLogger = 1`, the same unnamed leading Logger byte EnterStartingUpState
-        // writes, blocked the same way.
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "ResetEventData mpLogger-><leading byte> = 1 -- Logger has no usable declaration "
-            "(BrnTrafficLogger.cpp is unmounted and does not compile; see the breakdown at "
-            "EnterStartingUpState)");
-    }
+    mpLogger->SetAllowDivergentBehaviour(true);
 
     const f32 lfBaseDensityScale = mfBaseDensityScale;
     mfGameModeDensityScale = lfBaseDensityScale;
@@ -4368,23 +4355,21 @@ void TrafficEntityModule::ResetEventData()
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::Reset()
 {
-    // FLAG -- a known divergence, not an oversight. The console does not call the canonical
-    // Random::Construct here. At 0x8272CDB8..0x8272CE88 it seeds both generators with the
-    // traffic-specific literal 0x8FE06DC2, then primes all eight ring slots writing the CURRENT
-    // slot before advancing. Random::Construct() instead installs KU_RANDOM_DEFAULT_SEED,
-    // forces slot 0 to 1.0f, and primes slots 1..7 by advancing first. Both leave the ring
-    // valid, so what differs is WHICH pseudo-random stream the traffic module runs on, and
-    // therefore which parked record wins its mExistsAtAllChance roll and which vehicle type
-    // PickVehicleToSpawn draws. Construct() is called anyway, because an unprimed ring makes
-    // RandomFloat() return uninitialised storage.
-    // FIX: add `void ConstructWithSeed(u64)` to CgsRandom.h doing the block above, and call it
-    // here with 0x8FE06DC2ull.
+    // Both generators get the inlined Random::Construct: seed 2413850050 (the default seed),
+    // cursor 0, then eight ring slots each written from the current seed's high word before the
+    // seed steps. Random::Construct() is exactly that stream -- its stored seed
+    // 0xC87CD8C91AD0891B is the default seed stepped once and its first slot is 1.0f, the draw
+    // the default seed gives -- so the traffic module runs on the console's stream, which the
+    // lockstep online simulation needs on every machine.
     mRand.Construct();
     mEffectRand.Construct();
 
-    muFramesSinceDecision = 100;
-    mbDecisionFrame       = false;
-    mfSimTimeStep         = 0.0f;
+    // +0x713F4 / +0x713F5 / +0x713F8. The float cleared is the decision accumulator, not the
+    // step (+0x713FC, untouched): POPULATING's SpawnNewTraffic ticks the generators by it
+    // before UpdateTimers has run once, so a stale value would re-phase every generator.
+    muFramesSinceDecision      = 100;
+    mbDecisionFrame            = false;
+    mfSimTimeSinceLastDecision = 0.0f;
 
     meState            = E_STATE_INVALID;
     meStartingUpState  = E_STARTINGUPSTATE_INVALID;
@@ -4410,16 +4395,9 @@ void TrafficEntityModule::Reset()
     mbNeedToKillAllZombies             = false;
     miDEBUGOverBudgetness              = 0;
 
-    {
-        // GATE: the pseudocode's `BaseCollisionGenerator::Destruct(mpLogger)` is an ICF fold;
-        // the real callee is a Logger reset, and the Logger type is unusable here.
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "Reset leg <ICF-folded>(mpLogger) @0x8272CE9C -- IDA attributes the callee to "
-            "CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct, which is an "
-            "identical-code-folding artefact; the real callee is a Logger reset and "
-            "BrnTrafficLogger.cpp does not compile (see EnterStartingUpState)");
-    }
+    // The callee carries another class's name in the symbol table (identical-code folding
+    // onto an empty function); it is the Logger's own reset.
+    mpLogger->Reset();
 
     // ---- container resets ---------------------------------------------------------------
     mFreeParams.Clear();
@@ -4695,7 +4673,7 @@ void TrafficEntityModule::Reset()
 //
 // Gated: the ~25 vectorised tuning members (:799..:821), the four TrafficJobStub constructs
 // ([MEMBER HOLE 5]), the replay serialiser, the 102,800-byte
-// maTrafficPhysicsInfoList memset, the debug component and logger allocations, and the debug-render stream reader. Each is a named one-shot below.
+// maTrafficPhysicsInfoList memset, the debug component allocation, and the debug-render stream reader. Each is a named one-shot below.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::Construct()
 {
@@ -4783,7 +4761,7 @@ void TrafficEntityModule::Construct()
             "Construct sub-object legs TrafficEntitySerialiser::Construct, "
             "CgsResource::BaseResourcePtr::CreateFromHandle(mpData-adjacent slot), "
             "the 32-slot showtime "
-            "list seed, the DebugComponent and Logger allocations and DebugRenderStreamReader::"
+            "list seed, the DebugComponent allocation and DebugRenderStreamReader::"
             "Construct -- none of those callees has a body or a usable declaration in this tree");
     }
 
@@ -4880,6 +4858,26 @@ void TrafficEntityModule::Construct()
     muMaxVehiclesToRender  = 32;
     mfRenderCullDistanceSq = 62500.0f;   // == 250.0f * 250.0f
     mbInOfflineCarSelect   = false;
+
+    // The Logger, straight after the debug component: one single-lane request to the debug
+    // allocator for sizeof(Logger) (1) bytes at 16-byte alignment, every other lane empty
+    // (size 0, alignment 1), no name. The result is not null-checked. Logger::Construct turns
+    // divergent behaviour on and publishes the singleton. ResetEventData and Reset below both
+    // write through mpLogger, so it has to exist before them.
+    {
+        rw::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(sizeof(Logger));
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        for (u32 luLane = 1; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
+        {
+            lDescriptor.m_baseResourceDescriptors[luLane].m_size      = 0;
+            lDescriptor.m_baseResourceDescriptors[luLane].m_alignment = 1;
+        }
+
+        const rw::Resource lResource = BrnResource::GetDebugAllocator()->Allocate(lDescriptor, 0);
+        mpLogger = static_cast<Logger*>(lResource.m_baseResources[0]);
+        mpLogger->Construct();
+    }
 
     // ---- the debug flag defaults, measured (0x82740C58..0x82740D2C) ---------------------
     mbDEBUGEnablePressureSystem = true;    // 0x72868 stbx r27 (r27 == 1)
@@ -5511,6 +5509,12 @@ void TrafficEntityModule::HandleIncomingNetworkData(const BrnTrafficIO::InputBuf
         lInfo.meActiveRaceCarIndex = leRaceCar;
         lInfo.muNewActiveHull      = lrEvent.muNewActiveHull;
         lInfo.muUpdateFrame        = static_cast<u16>(lrEvent.muUpdateFrame);
+
+        BrnNetHarnessPC::WitnessTag("nettraf", "hull-in", "arc=%d hull=%u upd=%u",
+                                    static_cast<s32>(lInfo.meActiveRaceCarIndex),
+                                    static_cast<u32>(lInfo.muNewActiveHull),
+                                    static_cast<u32>(lInfo.muUpdateFrame));
+
         AddPredictedHullChange(lInfo);
 
         // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped.
@@ -18927,6 +18931,13 @@ void TrafficEntityModule::HandleExternalRequests(
                         *lpNetDiag << "\n";
                     }
                 }
+
+                BrnNetHarnessPC::WitnessTag("nettraf", "action236",
+                    "hulls=%04x %04x %04x %04x %04x %04x %04x %04x",
+                    mau16HullsToActivateAfterReset[0], mau16HullsToActivateAfterReset[1],
+                    mau16HullsToActivateAfterReset[2], mau16HullsToActivateAfterReset[3],
+                    mau16HullsToActivateAfterReset[4], mau16HullsToActivateAfterReset[5],
+                    mau16HullsToActivateAfterReset[6], mau16HullsToActivateAfterReset[7]);
             }
             break;
         }

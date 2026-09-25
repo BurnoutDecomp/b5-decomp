@@ -22,7 +22,7 @@ namespace BrnGui
     // string CONTENTS are runtime rodata pointers NOT recovered by the
     // GetSplashScreenIDForGameMode TU (values TBD -- see the .cpp TODO); the SHAPE
     // (element-type/count) IS DWARF-attested.
-    extern const char* const KAC_SPLASH_SCREEN_IDS[17];
+    extern const char* const KAC_SPLASH_SCREEN_IDS[18];   // eighteen slots in the image
 
     // @ 0x824845E8 (DWARF h:77) -- look up the splash-screen id string for a game mode
     // (asserts a non-null entry, then returns it).

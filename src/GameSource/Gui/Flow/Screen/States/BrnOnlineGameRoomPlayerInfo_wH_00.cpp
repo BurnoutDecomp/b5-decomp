@@ -436,7 +436,8 @@ namespace BrnGui
         else if (mfTimeUntilNextEATrack > KF_ZERO_TIME)
         {
             mfTimeUntilNextEATrack -= mpGuiCache->mfTimeStep;
-            if (mfTimeUntilNextEATrack <= KF_ZERO_TIME)
+            // `bgt` skips the post, so an unordered compare posts too.
+            if (!(mfTimeUntilNextEATrack > KF_ZERO_TIME))
             {
                 GuiCommandWire16<461> lNextTrackCommand;
                 mpStateInterface->GetOutputEventQueue()->AddEvent(

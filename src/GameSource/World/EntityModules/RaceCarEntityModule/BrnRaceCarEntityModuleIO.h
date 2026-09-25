@@ -334,7 +334,14 @@ namespace RaceCarEntityModuleIO
             CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
             mabLostContactThisFrame[leActiveRaceCarIndex] = true;
         }
-        bool                           GetLostContact(EActiveRaceCarIndex) const;          // :219
+        // :219 -- header inline like its setter: the two range asserts, then the byte at +58+idx
+        // (UpdateDisconnectedPlayers inlines it).
+        bool GetLostContact(EActiveRaceCarIndex leActiveRaceCarIndex) const
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            return mabLostContactThisFrame[leActiveRaceCarIndex];
+        }
         // :223 -- X360 h:826/:827; `a5[idx + 66] = 1`.
         void SetRegainedContact(EActiveRaceCarIndex leActiveRaceCarIndex)
         {
@@ -342,7 +349,14 @@ namespace RaceCarEntityModuleIO
             CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
             mabRegainedContactThisFrame[leActiveRaceCarIndex] = true;
         }
-        bool                           GetRegainedContact(EActiveRaceCarIndex) const;      // :227
+        // :227 -- header inline: the two range asserts, then the byte at +66+idx
+        // (UpdateDisconnectedPlayers inlines it).
+        bool GetRegainedContact(EActiveRaceCarIndex leActiveRaceCarIndex) const
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            return mabRegainedContactThisFrame[leActiveRaceCarIndex];
+        }
         // :232 -- X360 h:845/:846; `a5[idx + 74] = status` then `a5[idx + 82] = 1`.
         void SetCarSelectStatus(EActiveRaceCarIndex leActiveRaceCarIndex, bool lbStatus)
         {

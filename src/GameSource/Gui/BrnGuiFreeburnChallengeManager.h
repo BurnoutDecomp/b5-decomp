@@ -36,12 +36,15 @@ namespace BrnGui
 {
 
 class GuiCache; // forward (mpGuiCache; full type in GameSource/Gui/BrnGuiCache.h)
+struct PlayerPositionTableComponent; // friend below (reads mePageState inline)
 
 // Freeburn-challenge GUI event payloads (pointer-only parameters of the handlers
 // reconstructed below). Full layouts in GameSource/Gui/Events/BrnGuiChallengeEvents.h.
 struct GuiChallengeStartEvent;
 struct GuiChallengeTriggerResponse;
 struct GuiChallengeUpdateEvent;
+struct GuiChallengeNotActiveStartEvent;          // GUI 583 (BrnGuiDemangledEventTypes.h)
+struct GuiEventFburnChallengeEveryPlayerStatus;  // GUI 581 (BrnGuiDemangledEventTypes.h)
 
 struct FreeburnChallengeManager
 {
@@ -99,6 +102,17 @@ struct FreeburnChallengeManager
     void TriggerChallenge(const GuiChallengeTriggerResponse* lpEvent);   // @0x8250A160
     void HandleNewData(const GuiChallengeUpdateEvent* lpEvent);          // @0x824F3FC8
 
+    // The remaining GuiModule::Update event arms (GUI 544/578/579/581/583/584).
+    void StartNotActiveChallenge(const GuiChallengeNotActiveStartEvent* lpEvent);
+    void FinishChallenge();
+    void SelectNext();
+    void HandleCompletionStatus(const GuiEventFburnChallengeEveryPlayerStatus* lpCompletionEvent);
+
+    // GUI 578 and GUI 584: GuiModule::Update stores the state word directly (no call, no
+    // assert), so these two methods are header inlines.
+    void StartResults()           { meInternalState = E_INTERNAL_STATE_RESULTS; }
+    void EndNotActiveChallenge()  { meInternalState = E_INTERNAL_STATE_OFF; }
+
     const BrnGameState::GameStateModuleIO::FburnChallengeEveryPlayerStatusData* GetCompletedChallengesData() const
     { return &mCompletedData; }
 
@@ -115,6 +129,8 @@ struct FreeburnChallengeManager
     // display states the HUD value renderer draws for.
     bool IsRunning() const        { return meInternalState == E_INTERNAL_STATE_RUNNING; }
     bool IsShowingResults() const { return meInternalState == E_INTERNAL_STATE_RESULTS; }
+    // RUNNING or RESULTS (inlined by HandleNewData's assert and the map-icon pass).
+    bool IsStarted() const        { return IsRunning() || IsShowingResults(); }
 
     // ADDITIVE GROW (CompassComponent::ShowChallengeOnCompass @0x82428CC0, which inlines
     // this as the `meInternalState in {INITIALISED, RUNNING, RESULTS}` branch set -- the
@@ -147,6 +163,7 @@ struct FreeburnChallengeManager
 
 
 private:
+    friend struct PlayerPositionTableComponent;   // the position table's inline mePageState read
     // ---- layout (DWARF order; word offsets X360-verified through miCurrentAction) ----
     GuiCache*                  mpGuiCache;             // :198  @0x00  a1[0]
     EInternalState             meInternalState;        // :199  @0x04  a1[1]

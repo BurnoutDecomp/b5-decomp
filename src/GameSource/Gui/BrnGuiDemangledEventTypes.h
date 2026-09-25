@@ -312,8 +312,27 @@ namespace BrnGui
     // the auto-derived shell here read the attested record size 12 as "GuiEvent<350>
     // header, no payload", but the X360 producer (GameBridgeGameStateToX case 193
     // @0x823EBBA4) fills all 12 bytes with payload. Do not re-add it here.
-    struct GuiEventRaceDistanceRemaining : public CgsGui::GuiEvent<239> { u8 maPayload[132]; };  // id 239 size 144 (12B GuiEvent header + opaque payload)
-    struct GuiEventRaceDistanceToCheckpoint { u8 maData[4]; s32 GetEventType() const { return 240; } };  // id 240 size 4 (raw; size not GuiEvent-shaped)
+    // The per-car race-distance record BrnGameModule::BridgeGameStateToGui posts every frame
+    // (id 239, 144 bytes; the stores are record-relative, so the record carries no GuiEvent
+    // header). The reference members, in their order, plus the console's per-car word at +0x60
+    // that the reference row does not list. FLAG: that word is named after its producer's source,
+    // CarScoreData::GetOnlineStuntScore.
+    struct GuiEventRaceDistanceRemaining
+    {
+        CgsID maCarId[8];                 // +0x00
+        f32   mafDistanceToFinish[8];     // +0x40
+        s32   maiOnlineStuntScore[8];     // +0x60
+        bool  mabPlayerEliminated[8];     // +0x80
+        bool  mabValid[8];                // +0x88
+        s32 GetEventType() const { return 239; }
+    };
+    static_assert(sizeof(GuiEventRaceDistanceRemaining) == 144, "id 239 is posted with 144 bytes");
+    // The player's distance to the next checkpoint (id 240, 4 bytes).
+    struct GuiEventRaceDistanceToCheckpoint
+    {
+        f32 mfDistanceToCheckpoint;       // +0x00
+        s32 GetEventType() const { return 240; }
+    };
     struct GuiEventRequestCollisionWorldEvent { u8 maData[4]; s32 GetEventType() const { return 493; } };  // id 493 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventReturnDistrict { u8 maData[8]; s32 GetEventType() const { return 196; } };  // id 196 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventRivalInfoResponse : public CgsGui::GuiEvent<444> { u8 maPayload[20]; };  // id 444 size 32 (12B GuiEvent header + opaque payload)

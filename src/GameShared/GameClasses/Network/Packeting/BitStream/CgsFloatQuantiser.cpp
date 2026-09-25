@@ -63,7 +63,7 @@ namespace CgsNetwork
 
         const float fNormalised = (lfClamped - lfMin) / (lfMax - lfMin);
         const float fScaled     = fNormalised * static_cast<float>(liDivisor) + 0.5f;
-        const u32   luPacked    = static_cast<u32>(static_cast<s64>(fScaled));
+        const u32   luPacked    = static_cast<u32>(SaturateToS64(fScaled));
 
         *lpuPackedValue = luPacked;
 
@@ -124,9 +124,12 @@ namespace CgsNetwork
         const float  lfSteps    = (lfClamped - lfMin) / lfIncrement + 0.5f;
         const double ldMaxSteps = static_cast<double>((lfMax - lfMin) / lfIncrement) + 0.5;
 
-        *lpuPackedValue = static_cast<u32>(static_cast<s64>(lfSteps));
+        // fctidz + stfiwx: the low word of the saturated 64-bit step count.
+        *lpuPackedValue = static_cast<u32>(SaturateToS64(lfSteps));
 
-        const u32 luNumValues = static_cast<u32>(static_cast<s32>(ldMaxSteps)) + 1u;
+        // fctiwz saturates, so an unbounded range (max FLT_MAX) counts 0x7FFFFFFF steps and
+        // the bit loop below ends at 31 bits.
+        const u32 luNumValues = static_cast<u32>(SaturateToS32(ldMaxSteps)) + 1u;
         s32 liNumBits = 0;
         if (luNumValues != 0)
         {

@@ -349,18 +349,9 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
     //         <- FinishCurrentMode + 0x3FC <- ModeManager::PreWorldUpdate
     // -- assert-is-not-a-guard again.
     //
-    // [FLAG PC bring-up] THE ONLINE/OFFLINE FORK IS NOT REPRODUCED -- ON PURPOSE, and the
-    // reason is already on the record. The console picks between the network grid loop
-    // (AddRaceCarToStartingGridOrFreeburnLobby, 0x823097E4/0x8230985C) and this offline
-    // SetupOpponents arm on `lbz r11, 0x94(r25)` @0x82309670 -- the SAME unnamed
-    // GameModeParams+0x94 byte BrnModeManager_Prepare.cpp's "THE SECOND-PHASE CACHE" banner
-    // refuses to name (laying the DWARF member run between the two asm-pinned anchors comes up
-    // 24 bytes short, so +0x94 lands inside a float under every consistent reading). That
-    // banner's finding applies unchanged here: GameModeParams::Construct zeroes the block, so
-    // on the whole offline campaign path the byte is zero and the offline arm is the one the
-    // console takes. Taking it unconditionally therefore diverges only on the online paths,
-    // which are parked wholesale.
-    // DELETE-WHEN GameModeParams+0x94 is a named member: restore the fork.
+    // The online/offline fork is reproduced below: the params' mbIsOnline byte (+0x94) picks
+    // the network roster (RemoveAllRaceCars + AddRaceCarToStartingGridOrFreeburnLobby per grid
+    // slot) over the offline SetupOpponents arm. On the offline campaign path the byte is zero.
     //
     // The mode-type half of the console's outer gate (`lwz r11, 0x148(r25)` @0x8230962C, the
     // 15/16 pair, `bne -> loc_8230988C` skips the whole grid/opponents block) IS reproduced --
@@ -732,9 +723,10 @@ void RaceCarEntityModule::SetupOpponents(
 //   OFFLINE (0x82305BB4..0x82305C2C): read the car's CURRENT transform, then
 //           RequestPlaceOnTrack(gridPos, gridDir, 0.0f) and copy the module's mbIsInGameMode
 //           into the slot (`stb r11, 0x777(r26)`).
-// The online arm is landed rather than parked -- every callee exists -- but it is DEAD on this
-// build: nothing sets mbIsInOnlineGameMode (there is no online session), exactly as the
-// ghost-car wave recorded for HandleResetPlayerCarAction's twin gate.
+// The online arm is landed rather than parked -- every callee exists -- but the flow does not
+// reach it: HandlePrepareForModeAction latches mbIsInOnlineGameMode from the params' mbIsOnline
+// byte, and only a params block with that byte clear takes the SetupOpponents arm that calls
+// this function (an online mode takes the network roster instead).
 //
 // THE v125/v126 PAIR. Both arms load two vectors (transform +0x20 == zAxis/At and +0x30 ==
 // wAxis/Pos) into v126/v125, but the ONLY consumer is the online SetUpOutOfRangeRaceCar call at

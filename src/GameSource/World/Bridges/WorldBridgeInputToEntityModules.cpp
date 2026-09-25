@@ -102,14 +102,13 @@ void BridgeInputToEntityModules(
     // FLAG cross-home cast: BrnWorldIO models the timer-status payload as a local 48-byte POD
     // (BrnWorldIO::TimerStatusInterface), while the traffic pre-scene buffer's member is the real
     // CgsSystem::TimerStatusInterface (two CgsSystem::TimerStatus, 48B). Same X360 payload, distinct
-    // reconstructed homes; reinterpret across them (mirrors the network-interface cast below).
+    // reconstructed homes; reinterpret across them.
     lpTrafficInputBuffer_PreScene->SetTimerStatusInterface(
         reinterpret_cast<const CgsSystem::TimerStatusInterface*>(
             lpWorldInput->GetTimerStatusInterface()));
-    // FLAG cross-home cast: BrnWorldIO models the traffic-network payload locally.
+    // Both ends are BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface.
     lpTrafficInputBuffer_PreScene->SetTrafficNetworkInputInterface(
-        reinterpret_cast<const BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface*>(
-            lpWorldInput->GetTrafficNetworkInterface()));
+        lpWorldInput->GetTrafficNetworkInterface());
 
     // ---- race car (pre-scene scalars/interfaces) ---------------------------------
     // FLAG cross-home cast: RaceCarEntityModuleIO's TimerStatusInterface is a

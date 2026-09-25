@@ -215,7 +215,13 @@ namespace BrnGui
         {
             return mv4WorldRect;
         }
-        Vector4    GetViewRect() const;                       // DWARF h:330
+        // The member is attested by OnlineGameRoomPlayerInfo::CheckForComponents, whose
+        // debug report prints "mMainMapComponent.GetViewRect():" over the load of the
+        // component's +0x620 -- mv4ViewRect, the member right after mv4WorldRect.
+        Vector4    GetViewRect() const
+        {
+            return mv4ViewRect;
+        }
         // DWARF spells this return type fully qualified (`const rw::math::vpu::Vector4&`);
         // `Vector4` is the file-wide typedef of exactly that type (BrnCommonTypes.h:14).
         const Vector4& GetDisplayRect() const;                // DWARF h:346

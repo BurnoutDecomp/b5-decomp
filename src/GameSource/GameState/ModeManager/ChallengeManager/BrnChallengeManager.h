@@ -54,6 +54,7 @@ namespace BrnResource
     class  VehicleList;        // mpVehicleList (CheckCurrentCar)
 }
 namespace BrnProgression { class ProgressionManager; }
+namespace BrnGui { struct OnlineGameRoomPlayerInfo; }   // friend: reads the two static debug toggles
 namespace CgsSystem       { class TimerStatusInterface; }
 namespace CgsModule
 {
@@ -283,8 +284,8 @@ namespace BrnGameState
         void CancelFreeburnChallenge(TGameActionQueue* lpActionQueue);
         // X360 0x8234DE30.
         void EndChallenge(EChallengeStatus leChallengeStatus, TGameActionQueue* lpActionQueue, bool lbIsOnline);
-        // X360: RemoteBeginChallenge / RemoteTriggerFreeburnChallenge are NOT in this TU's
-        // X360 ledger (other bucket / inlined); declared per DWARF :174/:179.
+        // Inlined into ModeManager's remote start / trigger handlers on the
+        // console; bodied out of line in the .cpp from those inlined copies.
         void RemoteBeginChallenge(CgsID lChallengeID);
         void RemoteTriggerFreeburnChallenge(CgsID lChallengeID);
         // X360 0x82347090 (DWARF :185).
@@ -304,7 +305,7 @@ namespace BrnGameState
         // X360 0x82355FA8 (DWARF :196). Style of the active challenge, or NONE unless RUNNING.
         BrnResource::ChallengeListEntry::EFreeburnChallengeStyle GetChallengeStyle() const;
         void GetChallengeDescription(CgsID lChallengeID, char* lpcBuffer, s32 liBufferLength) const; // DWARF :203 (not in this TU's X360 ledger)
-        CgsID GetCurrentFreeburnChallengeID();                                                       // DWARF :206 (not in this TU's X360 ledger)
+        CgsID GetCurrentFreeburnChallengeID();                                                       // inlined into ModeManager's forwarder; bodied from it
 
         // ---------------- event handlers (DWARF :212-:270) ----------------
         // X360 0x8233CDE0.
@@ -341,9 +342,11 @@ namespace BrnGameState
 
     private:
         friend class ChallengeManagerDebugComponent;
+        // The game-room screen's ShouldShowButton reads mbChallengesAreAllOnePlayer / TwoPlayer directly.
+        friend struct BrnGui::OnlineGameRoomPlayerInfo;
 
         // ---------------- private helpers (DWARF :459-:727) ----------------
-        // X360 0x82333238 (DWARF :464 -- GetChallengeFromID :459 is not in this TU's ledger).
+        // Both bodied in the .cpp (GetChallengeFromID beside GetChallengeIndex).
         const BrnResource::ChallengeListEntry* GetChallengeFromID(CgsID lChallengeID) const;
         s32 GetChallengeIndex(CgsID lChallengeID) const;
         ChallengeCompletionData* GetChallengeCompletionData(BrnNetwork::NetworkPlayerID lPlayerID); // DWARF :469 (not in this TU's X360 ledger)

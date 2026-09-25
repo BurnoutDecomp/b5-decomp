@@ -56,6 +56,7 @@ namespace BrnGui
     struct CrashNavMapMain;          // friend (main-menu wave 2026-08-29; BrnCrashNavMapMain.h declares it as a struct)
     struct PreRaceFlyByState;        // friend (wave J; BrnPreRaceFlyBy.h declares it as a struct)
     struct SatNavComponent;          // friend (H3a; the owner-change pokes + the Construct icon-count reset)
+    struct GuiNetworkRouteInfo;      // friend (the online route map; see the friend note below)
 
     class MapIconManager
     {
@@ -305,6 +306,7 @@ namespace BrnGui
         // (stbx 1, mgr, 0xAA21), miSelectedCheckpoint (stwx 0, mgr, 0xAA14) and
         // muSelectedJunctionID (stwx junction, mgr, 0xAA10) @0x824DE004..0x824DE014.
         friend struct CrashNavMapMain;
+        friend struct GuiNetworkRouteInfo;  // the online route map: icon-set owner pokes (UpdateIconManager / SetupMap)
         friend struct PreRaceFlyByState;
         friend struct SatNavComponent;   // H3a: Update's owner-change pokes (mbIsDisplayingEventInfo /
                                          // mbRotateSatNav / meIconSizeMode) + Construct's miNumUsedIcons reset

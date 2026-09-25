@@ -18,6 +18,9 @@
 #include "GameSource/Gui/BrnGuiCache.h"                            // BrnGui::GuiCache (+ StuntToDisplayInfo)
 #include "GameSource/GameState/BrnGameStateTypes.h"                // BrnGameState::EStuntType
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData
+#include "GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h"   // GuiEventNetworkGameParams (the free-burn lobby panel)
+#include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h"          // FreeburnChallengeManager (the free-burn lobby panel)
+#include "SharedClasses/DataLists/ChallengeListEntry.h"             // ChallengeListEntry::GetChallengeID
 
 // ============================================================================
 // BrnGui::EventInfoComponent -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -1207,11 +1210,8 @@ void EventInfoComponent::UpdateStuntAttack(GuiCache* lpCache, bool lbOnline)
             // the console never trips it. Guarded rather than reproduced.
             // DELETE-WHEN the record table is proven to be populated before this runs.
             //
-            // Record +0x130 == 304 is the byte the console tests. The committed
-            // InGamePlayerStatusData spells +304 as maReservedPadTo312[0] ("inert
-            // padding") -- it is NOT inert; it is a real per-player flag with an
-            // X360 reader. See conductor notes.
-            lbEliminated = (lpPlayerInfo != 0) && (lpPlayerInfo->maReservedPadTo312[0] != 0);
+            // Record +0x130 == 304 is the byte the console tests: mbIsEliminated.
+            lbEliminated = (lpPlayerInfo != 0) && lpPlayerInfo->mbIsEliminated;
         }
 
         if (lbEliminated)
@@ -1642,7 +1642,182 @@ namespace
 
 
 void EventInfoComponent::UpdateOnlineRace(GuiCache*)   { LogDeferredModeArm("UpdateOnlineRace"); }
-void EventInfoComponent::UpdateFreeBurnLobby(GuiCache*){ LogDeferredModeArm("UpdateFreeBurnLobby"); }
+// ---- the free-burn lobby panel (mode 15) ------------------------------------------
+namespace
+{
+    // The next online event's mode caption, indexed by the params' game mode (the online
+    // modes only; the other slots are empty).
+    const char* const KAPC_ONLINE_GAME_MODE_STRINGS[18] =
+    {
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        "$ONLINE_GAME_OPTION_MODE_RACE",
+        "$ONLINE_GAME_OPTION_MODE_ROAD_RAGE",
+        "$ONLINE_GAME_OPTION_MODE_STUNT",
+        "$ONLINE_GAME_OPTION_MODE_BURNING_HOME_RUN",
+        "$ONLINE_GAME_OPTION_MODE_STUNT_FREE_FOR_ALL",
+        0, 0,
+        "$ONLINE_GAME_OPTION_MODE_STUNT_COOP",
+    };
+
+    // The game-security suffix of the lobby title, indexed by the params' security
+    // (public / friends only / invite only).
+    const char* const KAPC_ONLINE_GAME_SECURITY_STRINGS[3] =
+    {
+        "ONLINE_EASY_DRIVE_SHORTCUTS_AL",
+        "ONLINE_EASY_DRIVE_SHORTCUTS_FO",
+        "ONLINE_EASY_DRIVE_SHORTCUTS_IO",
+    };
+
+    // CgsLanguage::LanguageManager::ParameterFormatType values (raw, per the TextFieldRef
+    // house style): 0 plain string, 9 string id (11 integer is the file's KI_FORMAT_INTEGER).
+    const s32 KI_FORMAT_STRING    = 0;
+    const s32 KI_FORMAT_STRING_ID = 9;
+}
+
+// The panel: the running challenge while the challenge manager is RUNNING or RESULTS; else
+// the plain lobby page (params mode 15) or the next online event's page.
+void EventInfoComponent::UpdateFreeBurnLobby(GuiCache* lpCache)
+{
+    const FreeburnChallengeManager* lpChallengeManager = lpCache->GetFreeburnChallengeManager();
+    if (lpChallengeManager->IsStarted())
+    {
+        UpdateFreeBurnLobbyChallenge(lpCache);
+        mbFreeBurnInfoShowing      = false;
+        mbFreeBurnBasicInfoShowing = false;
+        return;
+    }
+
+    if (mFreeburnChallengeID != 0)
+    {
+        mFreeburnChallengeID = 0;
+        MoveAnimation("prewait");
+        ClearEventSpecificData();
+    }
+
+    const GuiEventNetworkGameParams* lpParams =
+        reinterpret_cast<const GuiEventNetworkGameParams*>(lpCache->maOnlineGameModeOptionsStorage);
+    CGS_ASSERT(lpParams != 0, "lpParams");
+
+    if (lpParams->meGameMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
+    {
+        if (mbFreeBurnInfoShowing == true)
+        {
+            mbFreeBurnInfoShowing = false;
+            MoveAnimation("prewait");
+            ClearEventSpecificData();
+        }
+        UpdateFreeBurnLobbyBasic(lpCache);
+    }
+    else
+    {
+        UpdateFreeBurnLobbyEvent(lpCache, lpParams);
+    }
+}
+
+// The challenge page: a new challenge animates the panel in; otherwise only a change of
+// game security re-titles it.
+void EventInfoComponent::UpdateFreeBurnLobbyChallenge(GuiCache* lpCache)
+{
+    const BrnResource::ChallengeListEntry* lpChallengeEntry =
+        lpCache->GetFreeburnChallengeManager()->GetCurrentChallenge();
+    CGS_ASSERT(lpChallengeEntry != 0, "lpChallengeEntry");
+
+    if (mFreeburnChallengeID != lpChallengeEntry->GetChallengeID())
+    {
+        mFreeburnChallengeID = lpChallengeEntry->GetChallengeID();
+        MoveAnimation("transin");
+        ShowFreeburnWithTitleText(lpCache);
+    }
+    else if (lpCache->meOnlineSecurity != meSecurity)
+    {
+        meSecurity = lpCache->meOnlineSecurity;
+        ShowFreeburnWithTitleText(lpCache);
+    }
+}
+
+// The next-event page: on first show, the title and the ranked / unranked line (and the
+// mode / security / rounds caches reset); then the security, mode and round count lines as
+// they change.
+void EventInfoComponent::UpdateFreeBurnLobbyEvent(GuiCache* lpCache, const GuiEventNetworkGameParams* lpParams)
+{
+    if (!mbFreeBurnInfoShowing)
+    {
+        mbFreeBurnInfoShowing = true;
+        MoveAnimation("transin");
+        ShowFreeburnWithTitleText(lpCache);
+        miNumRounds    = 0;
+        meNextGameMode = BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY;
+        meSecurity     = 3;
+        maTextField[1].SetText(lpParams->mbRanked ? "$ONLINE_GAME_OPTION_TYPE_RANKED"
+                                                  : "$ONLINE_GAME_OPTION_TYPE_UNRANKED",
+                               false);
+    }
+
+    if (lpParams->meSecurity != meSecurity)
+    {
+        meSecurity = lpParams->meSecurity;
+        ShowFreeburnWithTitleText(lpCache);
+    }
+
+    if (lpParams->meGameMode != meNextGameMode)
+    {
+        meNextGameMode = static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(lpParams->meGameMode);
+        CGS_ASSERT(KAPC_ONLINE_GAME_MODE_STRINGS[meNextGameMode] != 0, "Unhandled online game mode : ");
+        maTextField[2].SetText(KAPC_ONLINE_GAME_MODE_STRINGS[meNextGameMode], false);
+    }
+
+    if (lpParams->miNumRounds != miNumRounds)
+    {
+        miNumRounds = lpParams->miNumRounds;
+        maTextField[3].SetLocalisedText(miNumRounds, KI_FORMAT_INTEGER);
+    }
+}
+
+// The plain lobby page: animate in on first show, then re-title on a change of security.
+void EventInfoComponent::UpdateFreeBurnLobbyBasic(GuiCache* lpCache)
+{
+    if (!mbFreeBurnBasicInfoShowing)
+    {
+        mbFreeBurnBasicInfoShowing = true;
+        MoveAnimation("transin");
+    }
+    else if (lpCache->meOnlineSecurity != meSecurity)
+    {
+        meSecurity = lpCache->meOnlineSecurity;
+    }
+    else
+    {
+        return;
+    }
+    ShowFreeburnWithTitleText(lpCache);
+}
+
+// The title line "HUD_INFO_ONLINE_HOST_TITLE" with the host's name and the game security,
+// written only once a host is in the cached roster.
+void EventInfoComponent::ShowFreeburnWithTitleText(GuiCache* lpCache)
+{
+    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpHost = 0;
+    for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
+    {
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpCandidate =
+            lpCache->GetOnlinePlayerInfo(liPlayer);
+        if (lpCandidate != 0 && lpCandidate->mbIsHost)
+        {
+            lpHost = lpCandidate;
+            break;
+        }
+    }
+    if (lpHost == 0)
+        return;
+
+    char lacHostName[128];
+    CgsCore::SPrintf(lacHostName, sizeof(lacHostName), "%s", lpHost->mPlayerName.macName);
+    lacHostName[127] = 0;
+    maTextField[0].SetLocalisedText("HUD_INFO_ONLINE_HOST_TITLE", KI_FORMAT_STRING_ID, 2,
+                                    lacHostName, KI_FORMAT_STRING,
+                                    KAPC_ONLINE_GAME_SECURITY_STRINGS[lpCache->meOnlineSecurity],
+                                    KI_FORMAT_STRING_ID);
+}
 
 
 

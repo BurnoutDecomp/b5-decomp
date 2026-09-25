@@ -2881,8 +2881,8 @@ void RaceCarEntityModule::DetachActiveRaceCar(
 //
 // THE OTHER SEVEN CONSOLE CALLERS (xrefs_to) and whether they are live on PC
 // (re-checked with tools/re/hasbody.py 2026-09-22):
-//   0x82304580 RemoveAllRaceCars              not reconstructed -- DEAD
-//   0x82305688 HandleSetupNetworkCarAction    not reconstructed -- DEAD (game action 5)
+//   RemoveAllRaceCars                         bodied (BrnRaceCarEntityModule_ModeArming.cpp)
+//   HandleSetupNetworkCarAction               bodied (this file, game action 5)
 //   0x823058F8 SetUpPlayerCarForMode          bodied (BrnRaceCarEntityModule_ModeArming.cpp)
 //   0x82305E00 RemoveRivals                   bodied (BrnRaceCarEntityModule_Rivals.cpp)
 //   0x82305F28 RemoveAllRivalsFromWorld       bodied (BrnRaceCarEntityModule_Rivals.cpp)
@@ -3447,12 +3447,11 @@ void RaceCarEntityModule::HandleSetBoost(
 // [FLAG PC bring-up] every other case is DROPPED, not paraphrased. The named handlers the
 // console dispatches to and that are still un-reconstructed:
 //                                           4   HandleSetPlayerOpponentsAction
-//   5   HandleSetupNetworkCarAction (header request H-GS1: SetupNetworkCarAction's +0x38 f32)
-//   [11 / 27 / 41 / 220 LANDED 2026-09-24, crash parity G68-D10 -- see "THE ONLINE ARMS"]
 //   73/74/76        the car-select / drive-thru arms
 //   126 SwitchCarColourAction (an AI car's colour; asserts :7393/:7397/:7398)
-//   219 the network setup-car arm, which also writes the colour pair (:7212/:7215)
 //   98/99           the paint-shop / junk-yard drive-thrus     + ~70 more.
+// (The network-car arms 5, 11, 27/41, 219 and 220 are reproduced; 11 is inline code on the
+// console, not a named handler.)
 // Because the walk itself is real, adding any one of them later is a case label, not a
 // re-derivation. DELETE-WHEN the handlers land.
 // ============================================================================
@@ -3829,6 +3828,14 @@ void RaceCarEntityModule::HandleGameActions(
                                      static_cast<s32>(leGlobalRaceCarIndex));
             break;
         }
+
+        // Action 5 (SetupNetworkCarAction; low jump table, entry 5): a remote player changed car.
+        // The console forwards this / record / output with no reshaping.
+        case BrnGameState::GameStateModuleIO::E_ACTION_SETUP_NETWORK_CAR: // 5
+            HandleSetupNetworkCarAction(
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::SetupNetworkCarAction*>(lpEvent),
+                lpOutput);
+            break;
 
         // ARTIST 0x8230C75C..0x8230C76C forwards this/action/output with no
         // reshaping. The handler's non-Showtime boost spine is reconstructed
@@ -4828,9 +4835,8 @@ void RaceCarEntityModule::HandleGameActions(
         // THE ONLINE ARMS (crash parity G68-D10, 2026-09-24). Their producers are live on PC now
         // that the LAN free-burn starts: 11 from ModeManager's online intro
         // (BrnModeManager_IntroPlay.cpp), 27 / 41 from its online stop arms (BrnModeManager_Start.cpp).
-        // Still missing here: 5 (HandleSetupNetworkCarAction @0x82305688 -- it stores the record's
-        // +0x38 base deformation, a member SetupNetworkCarAction does not have yet: header request
-        // H-GS1 in fixes/FX-RCEM4.md) and 222 (no producer anywhere in ARTIST).
+        // Action 5 (HandleSetupNetworkCarAction) sits with the other network-car arms above.
+        // Still missing here: 222 (no producer anywhere in ARTIST).
         // ====================================================================================
 
         // Low jump table case 11 -> 0x8230CCA8..0x8230CD40. A remote player dropped out: the three
@@ -4850,6 +4856,9 @@ void RaceCarEntityModule::HandleGameActions(
                        "(lpPlayerDisconnectedAction->GetActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_COUNT ) && "
                        "(lpPlayerDisconnectedAction->GetActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID)");
             maActiveRaceCars[lpPlayerDisconnectedAction->meActiveRaceCarIndex].SetDisconnectedFromNetwork();
+
+            BrnNetHarnessPC::Witness("world", "network car disconnected active=%d",
+                                     static_cast<s32>(lpPlayerDisconnectedAction->meActiveRaceCarIndex));
             break;
         }
 
@@ -4885,6 +4894,10 @@ void RaceCarEntityModule::HandleGameActions(
                 ClearActiveRaceCarToPlayerScoringMapping(lpPlayerRemovedAction->meActiveRaceCarIndex);
                 lpRaceCar->SetInCurrentGameMode(false, false);
                 lpActiveRaceCar->SetInGameMode(false);
+
+                BrnNetHarnessPC::Witness("world", "network car removed active=%d global=%d",
+                                         static_cast<s32>(lpPlayerRemovedAction->meActiveRaceCarIndex),
+                                         static_cast<s32>(lpRaceCar->GetGlobalRaceCarIndex()));
                 RemoveRaceCar(lpRaceCar->GetGlobalRaceCarIndex(), lpOutput);
             }
             break;
@@ -4937,6 +4950,108 @@ void RaceCarEntityModule::HandleGameActions(
         }
 
         liType = lpQueue->GetNextEvent( lpEvent, &lpEvent, &liSize );
+    }
+}
+
+// ============================================================================
+// HandleSetupNetworkCarAction (155 insns) -- game action 5, a remote player changed car.
+//
+// In console order:
+//   1. lpOutput->GetRaceCarAIInterface() (the write-lock getter, fetched first), then the
+//      record's slot -> GetActiveRaceCar -> GetGlobalRaceCar (its IsAttached assert), and that
+//      car's own active index (RaceCar +0xAC, a signed byte) -- the slot the new car goes back into.
+//   2. model and wheel ids both unchanged -> nothing to do.
+//   3. the spawn transform, built inline with VMX: Z = Normalize(record mAt) (reciprocal-sqrt
+//      estimate + two Newton steps), Y = the constant {0,1,0,0}, X = Cross(Y, Z) (the
+//      permute form yzx(a*yzx(b) - yzx(a)*b), not re-normalised), W = record
+//      mWorldSpacePosition. Unlike CreateLookAt, Y is not recomputed from Z and X.
+//   4. RemoveRaceCar(old global index, output); SpawnRaceCar(ai, transform, NETWORK, model,
+//      false, wheel, no rival, -1); AttachActiveRaceCar(new car, the old slot).
+//   5. the new slot index, asserted in range (two separate asserts).
+//   6. record +0x38 -> the slot's mfBaseDeformAmount, with meBaseDeformationType -1 for an exact
+//      zero and 1 otherwise (an unordered compare takes the 1 branch, as `==` does here).
+//   7. RaceCar::SetInCurrentGameMode(mbIsInGameMode, mbCarSelectAllowedInGameMode) and the
+//      scoring map for the record's scoring slot.
+// Vector note: rw::math::vpu::Normalize is the exact 1/sqrt and Cross clears the w lane; the
+// console's rows only carry xyz (the same convention as CameraUtils' CreateLookAt).
+// ============================================================================
+void RaceCarEntityModule::HandleSetupNetworkCarAction(
+        const BrnGameState::GameStateModuleIO::SetupNetworkCarAction* lpSNCAction,
+        RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput )
+{
+    BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface = lpOutput->GetRaceCarAIInterface();
+
+    RaceCar* lpNetworkRaceCar = GetActiveRaceCar( lpSNCAction->meActiveRaceCarIndex )->GetGlobalRaceCar();
+    const EActiveRaceCarIndex leOldActiveRaceCarIndex = lpNetworkRaceCar->GetActiveRaceCarIndex();
+
+    if( lpNetworkRaceCar->GetModelId() == lpSNCAction->mModelId &&
+        lpNetworkRaceCar->GetWheelModelId() == lpSNCAction->mWheelModelId )
+    {
+        return;
+    }
+
+    Matrix44Affine lTransform;
+    lTransform.zAxis = rw::math::vpu::Normalize( lpSNCAction->mAt );
+    lTransform.yAxis = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+    lTransform.xAxis = rw::math::vpu::Cross( lTransform.yAxis, lTransform.zAxis );
+    lTransform.wAxis = lpSNCAction->mWorldSpacePosition;
+
+    RemoveRaceCar( lpNetworkRaceCar->GetGlobalRaceCarIndex(), lpOutput );
+
+    const EGlobalRaceCarIndex leNetworkGlobalRaceCarIndex =
+        SpawnRaceCar( lpRaceCarAIInterface, lTransform, E_RACE_CAR_TYPE_NETWORK,
+                      lpSNCAction->mModelId, false, lpSNCAction->mWheelModelId,
+                      0 /* lpRivalId: none */, -1 /* liOpponentIndex */ );
+    lpNetworkRaceCar = GetGlobalRaceCar( leNetworkGlobalRaceCarIndex );
+    AttachActiveRaceCar( lpNetworkRaceCar, leOldActiveRaceCarIndex );
+
+    const EActiveRaceCarIndex leNewNetworkActiveRaceCarIndex =
+        lpNetworkRaceCar->GetActiveRaceCar()->GetActiveRaceCarIndex();
+    CGS_ASSERT( leNewNetworkActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                "leNewNetworkActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0" );
+    CGS_ASSERT( leNewNetworkActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                "leNewNetworkActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+
+    const f32 lfDeformAmount = lpSNCAction->mfBaseDeformationAmount;
+    lpNetworkRaceCar->GetActiveRaceCar()->mfBaseDeformAmount = lfDeformAmount;
+    lpNetworkRaceCar->GetActiveRaceCar()->meBaseDeformationType =
+        static_cast<BrnPhysics::Deformation::DeformationResetType>( ( lfDeformAmount == 0.0f ) ? -1 : 1 );
+
+    lpNetworkRaceCar->SetInCurrentGameMode( mbIsInGameMode, mbCarSelectAllowedInGameMode );
+    SetActiveRaceCarForPlayerScoringIndex( lpSNCAction->mePlayerScoringIndex,
+                                           leNewNetworkActiveRaceCarIndex );
+
+    BrnNetHarnessPC::Witness( "world", "network car changed active=%d global=%d",
+                              static_cast<s32>( leNewNetworkActiveRaceCarIndex ),
+                              static_cast<s32>( leNetworkGlobalRaceCarIndex ) );
+}
+
+// ============================================================================
+// UpdateDisconnectedPlayers (78 insns) -- the last leg of PreSceneUpdate, handed the pre-scene
+// input buffer.
+//
+//   for every active slot:
+//       GetLostContact(slot)      (inline, two range asserts; byte +58+slot) -> slot's
+//                                  mbNotSendingNetworkUpdates (+0x798) = true
+//       GetRegainedContact(slot)  (inline, two range asserts; byte +66+slot) -> ... = false
+// Both flags are the world bridge's per-frame latches (WorldModule's lost / regained contact);
+// a regain in the same frame wins because it is tested second.
+// ============================================================================
+void RaceCarEntityModule::UpdateDisconnectedPlayers(
+        const RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput )
+{
+    for( EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leActiveRaceCarIndex++ )
+    {
+        if( lpInput->GetLostContact( leActiveRaceCarIndex ) )
+        {
+            GetActiveRaceCar( leActiveRaceCarIndex )->SetNotSendingNetworkUpdates( true );
+        }
+        if( lpInput->GetRegainedContact( leActiveRaceCarIndex ) )
+        {
+            GetActiveRaceCar( leActiveRaceCarIndex )->SetNotSendingNetworkUpdates( false );
+        }
     }
 }
 
@@ -6123,6 +6238,10 @@ void RaceCarEntityModule::PreSceneUpdate(
                             lpOutput->GetGlobalRaceCarOutputInterface(),
                             lpOutput->GetReplayActiveRaceCarOutputInterface(),
                             lpOutput->GetReplayGlobalRaceCarOutputInterface() );
+
+    // The console's last call before the two unlocks (after UpdateActiveToAICarLookup, which is
+    // not reproduced): the per-slot lost / regained contact latches -> mbNotSendingNetworkUpdates.
+    UpdateDisconnectedPlayers( lpInput );
 
     lpOutput->UnlockForWrite();
     lpInput->UnlockForRead();
@@ -8176,7 +8295,8 @@ void RaceCarEntityModule::PrePhysicsUpdate(
 // ---- [FLAG PC bring-up] DROPPED HERE ------------------------------------------------------
 //  (The stack argument the console calls lpVehicleOutput is the pre-physics output buffer's
 //  VehicleInputInterface -- PrePhysicsUpdate's `GetVehicleInputInterface()` write getter --
-//  asserted non-null on entry and handed to the tail call below.)
+//  asserted non-null on entry, handed to every car's Update (which drains its network-car
+//  collision queue into it) and to the tail call below.)
 // ============================================================================
 void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultiplier,
                                            f32 lfAcceleration, f32 lfBraking,
@@ -8195,7 +8315,8 @@ void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultip
             lrCar.Update( lfTimeStep, lfTimeStepMultiplier, lfAcceleration, lfBraking,
                           mbIsInOnlineGameMode, mbInCarSelectScreen, static_cast<s32>(meGameModeType),
                           mPlayersCurrentRouteNodePosition, mPlayersNextRouteNodePosition, lpGameEvents,
-                          &mNonDeterministicRandom );   // the console's stack slot (0x822FF300 / 0x822FF330)
+                          &mNonDeterministicRandom,     // the RNG's stack slot (+0x60), then lpVehicleOutput's (+0x68)
+                          lpVehicleInput );
         }
     }
 

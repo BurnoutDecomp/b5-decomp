@@ -560,12 +560,9 @@ namespace BrnGui
         mRoadRuleShotComponent.Construct(KPC_ROAD_RULE_SHOT_COMPONENT_NAME, mpStateInterface, 0);
         mRoadRuleShotComponent.Prepare(KPC_ROAD_RULE_SHOT_COMPONENT_NAME, lFile);
 
-        // [FLAG deferred] OnlineTimeoutComponent::Construct @0x82424760 / ::Prepare
-        // @0x824248E0 -- BrnOnlineTimeoutTimerComponent.h models only the recovered
-        // Show/Transin/Transout slice and declares neither, and its base hierarchy is not
-        // reconstructed, so there is no honest call to make. Unconditional on console.
-        // DELETE-WHEN: BrnOnlineTimeoutTimerComponent.{h,cpp} grow the two bodies.
-        LogDeferredComponent("OnlineTimeoutComponent::Construct/Prepare");
+        // Unconditional on the console: Construct, then the virtual Prepare (no parent).
+        mOnlineTimeoutTimer.Construct(KAC_ONLINE_TIMEOUT_TIMER_NAME, mpStateInterface, 0);
+        mOnlineTimeoutTimer.Prepare(KAC_ONLINE_TIMEOUT_TIMER_NAME, lFile, 0);
 
         // The 4th argument is -1 -- the compass's parent apt layer.
         mCompass.Construct(KAC_COMPASS_COMPONENT_NAME, mpStateInterface, 0, -1);
@@ -1919,19 +1916,7 @@ namespace BrnGui
         // IsEventPreparedForModeStart() @+0xA014,
         // GetPlayerRacePosition() @+0x4B24, IsPlayerRacePositionOverridden() @+0x4B25,
         // IsFriendsListOpen() @+0xB86C and GetSatNavZoomLevel() @+0x803C, so this file reads
-        // them by name and only the two below still need a stand-in.
-
-        // ⚠ FLAG accessor leaf: the "local player is the online host" byte. The member IS
-        // named (GuiCache::mbIsOnlineHost @+0xB864, BrnGuiCache.h:1665) but is private and
-        // this class is not one of the cache's friends, so the read is stood in for here
-        // rather than forking a second copy of the member.
-        // DELETE-WHEN: BrnGuiCache.h publishes `bool IsOnlineHost() const` (or grants
-        // `friend struct RaceMainHudState;` beside the friends at :992); the body then
-        // becomes `return lpGuiCache->mbIsOnlineHost;`.
-        bool GuiCache_IsOnlineHost(const GuiCache* /*lpGuiCache*/)
-        {
-            return false;
-        }
+        // them by name and only the one below still needs a stand-in.
 
         // ⚠ FLAG accessor leaf: the sat-nav zoom-level WRITE. GuiCache publishes the
         // read (GetSatNavZoomLevel() @+0x803C, BrnGuiCache.h:529) and the "zoom out" step
@@ -2053,7 +2038,7 @@ namespace BrnGui
                 break;
             case 104:
                 if (mbFriendsList && mpCache->IsOnlineStartInProgress() &&
-                    GuiCache_IsOnlineHost(mpCache))
+                    mpCache->IsLocalPlayerHost())
                 {
                     mFriendsList.ReshowShortcuts();
                 }
@@ -2064,11 +2049,7 @@ namespace BrnGui
                 break;
             case 108:
                 if (mbOnlineTimeoutTimer)
-                {
-                    // FLAG deferred: OnlineTimeoutComponent::SetTime @0x824157B0 is neither
-                    // declared in BrnOnlineTimeoutTimerComponent.h nor on the build.
-                    LogDeferredComponent("OnlineTimeoutComponent::SetTime");
-                }
+                    mOnlineTimeoutTimer.SetTime(*reinterpret_cast<const f32*>(lpEvent));
                 break;
             case 154:
                 if (mbHudMessages)
@@ -2200,11 +2181,8 @@ namespace BrnGui
                 break;
             case 239:
                 if (mbPlayerPositionTable)
-                {
-                    // FLAG deferred: BrnPlayerPositionTable.cpp is not on the build
-                    // (UpdatePositionDetails @0x82441260).
-                    LogDeferredComponent("PlayerPositionTableComponent::UpdatePositionDetails");
-                }
+                    mPlayerPositionTable.UpdatePositionDetails(
+                        reinterpret_cast<const GuiEventRaceDistanceRemaining*>(lpEvent));
                 break;
             case 325:
                 if (mbMugShotComponent)
@@ -2499,11 +2477,7 @@ namespace BrnGui
             mEventInfoComponent.Update(mpCache);
 
         if (mbOnlineTimeoutTimer)
-        {
-            // FLAG deferred: OnlineTimeoutComponent::Update @0x8242C1E0 is neither declared
-            // in BrnOnlineTimeoutTimerComponent.h nor on the build.
-            LogDeferredComponent("OnlineTimeoutComponent::Update");
-        }
+            mOnlineTimeoutTimer.Update();
         if (mbSatNav)
             mSatNavComponent.Update();
         if (mbBoostMessages)
@@ -2548,21 +2522,24 @@ namespace BrnGui
         }
         if (mbFreeburnChallengeOnComponent)
         {
-            // FLAG deferred: the challenge-on arm. X360 @0x824800F8..0x824801E4:
-            //   assert(cache->mpChallengeManager, "mpChallengeManager", BrnGuiCache.h:2390)
-            //   if (manager->IsRunning() || manager->IsShowingResults())
-            //       lbShow = (manager->GetCurrentAction()->GetTimeLimit() <= 0.0f);
-            //   else lbShow = false;
-            //   if (mbChallengeOnShowing != lbShow) {
-            //       mbChallengeOnShowing = lbShow;
-            //       mChallengeOnComponent.SetState(lbShow ? "transin" : "invisible");
-            //   }
-            // Deferred because the +0x40 read is ChallengeListEntryAction::GetTimeLimit,
-            // which is declared-only in SharedClasses/DataLists/ChallengeListEntry.h (no
-            // body anywhere), and GuiCache::mpChallengeManager is private to this class.
-            // mbFreeburnChallengeOnComponent is 0 for every offline mode including
-            // E_MODE_STUNT_ATTACK, so this arm is dead on the bring-up path.
-            LogDeferredComponent("RaceMainHudState::(freeburn challenge-on arm)");
+            // The challenge-on marker: while a challenge is running or showing results it is
+            // shown exactly when the current action has no time limit; otherwise it is hidden.
+            // SetState only runs on a change of mbChallengeOnShowing.
+            const FreeburnChallengeManager* lpChallengeManager = mpCache->GetFreeburnChallengeManager();
+            if (lpChallengeManager->IsStarted())
+            {
+                const bool lbShow = !lpChallengeManager->GetCurrentAction()->HasTimeLimit();
+                if (mbChallengeOnShowing != lbShow)
+                {
+                    mbChallengeOnShowing = lbShow;
+                    mChallengeOnComponent.SetState(lbShow ? "transin" : "invisible");
+                }
+            }
+            else if (mbChallengeOnShowing)
+            {
+                mbChallengeOnShowing = false;
+                mChallengeOnComponent.SetState("invisible");
+            }
         }
 
         ConcludeEventCountdown();

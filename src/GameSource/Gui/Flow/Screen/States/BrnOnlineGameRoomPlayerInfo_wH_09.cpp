@@ -55,6 +55,24 @@ namespace BrnGui
         // The GuiAudioTriggerEvent action the back press fires (X360 `li r4, 7`).
         const s32 KI_AUDIO_ACTION_BACK = 7;
 
+        // The record OutputGuiEvent<GuiAudioTriggerEvent> builds: { 100, 457, 12, the
+        // 100-byte payload } on channel 40, 112 bytes. The committed GuiAudioTriggerEvent
+        // carries that 12-byte header itself but seeds it with size 0 and id 201; this
+        // view restores the wire words (same view as partfiles 08 and 13). The in-tree
+        // StateInterface::OutputGuiEvent posts the event on a channel equal to its id,
+        // which is not the console record.
+        struct GuiAudioTriggerWire : public GuiAudioTriggerEvent
+        {
+            GuiAudioTriggerWire()
+            {
+                muHeader0   = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
+                                               sizeof(CgsGui::GuiEvent<201>));
+                muEventType = 457;
+            }
+        };
+        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
+        const s32 KI_CHANNEL_AUDIO_GUI_OUT = 40;
+
         // ---- in-queue payload view (the queue delivers the HEADER-STRIPPED payload,
         //      so the typed event pointer the DWARF names would mislead by 12 --
         //      BrnInGame.cpp idiom) ---------------------------------------------------
@@ -157,9 +175,11 @@ namespace BrnGui
 
         case KI_ACTION_BACK:
         {
-            GuiAudioTriggerEvent lAudioEvent;
+            GuiAudioTriggerWire lAudioEvent;
             lAudioEvent.Construct(KI_AUDIO_ACTION_BACK, "", "GO_BACK", "");
-            mpStateInterface->OutputGuiEvent(lAudioEvent);
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lAudioEvent), KI_CHANNEL_AUDIO_GUI_OUT,
+                static_cast<s32>(sizeof(lAudioEvent)));
             lbHidePage = true;
             break;
         }

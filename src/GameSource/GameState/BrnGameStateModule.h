@@ -17,6 +17,7 @@
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // BrnGameState::TriggerQueryManager (mTriggerQueryManager, by value)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"         // CgsModule::EventReceiverQueue<3072,16> (mReceiverQueue)
 #include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"      // BrnGameState::CarSelectManager (mCarSelectManager, by value)
+#include "GameSource/GameState/CarSelect/BrnOnlineCarSelectManager.h" // BrnGameState::OnlineCarSelectManager (mOnlineCarSelectManager, by value)
 #include "GameSource/GameState/BrnResetPlayerDebugComponent.h"
 #include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"
 #include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h"
@@ -329,6 +330,9 @@ public:
     // console's, held BY VALUE exactly as the console holds it.
     CarSelectManager*       GetCarSelectManager()       { return &mCarSelectManager; }
     const CarSelectManager* GetCarSelectManager() const { return &mCarSelectManager; }
+    // ModeManager::Construct's street / mugshot manager arguments (the ModeManager bring-up seam).
+    StreetManager*          GetStreetManager()          { return &mStreetManager; }
+    MugshotManager*         GetMugshotManager() const   { return mpMugshotManager; }
 
     // ⭐ [gateui] The COLLECTIBLE bookkeeper (X360 this+183952 == 0x2CE50, 1568 bytes). Held BY
     // VALUE exactly as the console holds it -- attested five ways: Construct @0x82380388
@@ -618,6 +622,8 @@ public:
     //     case 26: ModeManager::ResultsAccept(gsm + 4128); *(gsm + 181413) = 1
     //     case 27: ModeManager::UserCancelCurrentMode(gsm + 4128);
     //              TakedownManager::ClearRaceCarData(gsm + 568)
+    // Case 27's UserCancelCurrentMode is armed now (ModeManager declares and bodies it); case
+    // 24's FinishedMapPan is still the one parked call.
     // The event ids match the DWARF EGameEventType exactly in this range (24 FINISHED_MAP_PAN,
     // 25 GUI_FINISHED_OFFLINE_PRE_EVENT, 26 RESULTS_FINISHED, 27 POST_EVENT_LEAVE) -- verified by
     // the callee on each arm, not assumed.
@@ -665,6 +671,26 @@ public:
     void SendRouteRequestAction(const GameStateModuleIO::LandmarkRouteRequestEvent* lpRouteRequestEvent,
                                 GameStateModuleIO::GameActionQueue*                  lpOutputActionQueue,
                                 BrnAI::RouteMapModuleIO::RequestOwner                leRequestOwner);
+    // ProcessGameEvents, THE ONLINE PLAYER ARMS: case 7 (a remote player changed car -> action 5),
+    // 121 (remote player disconnected -> action 11), 122 (local player connected), 123 (local
+    // player disconnected -> action 12), 124 (local player left the lobby), 125 (lobby game
+    // parameters), 129 (online player removed -> action 220), 139 (remote burnout skillz) and 140
+    // (new host). Same walk shape as the arms above; bodies in BrnGameStateModule_wN3_01.cpp.
+    void ProcessGameEventsOnlinePlayerBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue*            lpActionQueue,
+        GameStateModuleIO::OutputBuffer*               lpOutputBuffer);
+
+    // ProcessGameEvents, THE FREEBURN-CHALLENGE ARMS (cases 162..164, 168..173) AND THE
+    // ModeManager::ProcessEvent FEED of cases 54 / 55 / 65 / 66 / 71 / 119 / 165..167 / 173. The feed's
+    // third argument is the module's cached game timestep (the console reads it from gsm+0x475BC;
+    // here the caller's lfDelta, the same value DetectModeStarts takes). lrTimerStatusInterface is
+    // the frame's timer snapshot case 171 hands ModeManager::HandleSuccessUpdateEvent.
+    void ProcessGameEventsFreeburnChallengeBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue*            lpActionQueue,
+        const CgsSystem::TimerStatusInterface&         lrTimerStatusInterface,
+        f32                                            lfDelta);
 
     // ================================================================================
     // (i) [D4 PUMP SEAM] CheckIfPlayerIsAtJunctionWithAnEvent (X360 0x82390418) and
@@ -840,9 +866,12 @@ public:
     // GUI events they become; nothing carried them across the game-state boundary. The body
     // carries the full per-arm attestation, the two Profile maxima the console keeps inside
     // cases 69/70, and the two console side effects this extraction deliberately leaves out.
+    // Cases 67 / 69 / 70 also end with ModeManager::ProcessEvent(type, event, lfDelta); the call
+    // stays inside this walk so its actions keep their place after the ticker action.
     void ProcessGameEventsBoostTickerBringUp(
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
-        GameStateModuleIO::GameActionQueue* lpActionQueue);
+        GameStateModuleIO::GameActionQueue* lpActionQueue,
+        f32 lfDelta);
 
     // ⭐⭐⭐ [boost-wave2 2026-09-14] X360 0x82381A00. The ONLY producer of game actions 53
     // (E_ACTION_PLAYER_HIT_RIVAL) and 54 (E_ACTION_RIVAL_HIT_PLAYER) in the image, plus the
@@ -1689,6 +1718,9 @@ private:
     // X360 +0x456EC (284396). The loaded wheel list -- Prepare's stage 9/10, same shape,
     // reply id 59. GetWheelList() hands it back.
     BrnResource::WheelList*   mpWheelList = 0;
+    // Console +0x45710 (284432), reference header :847. The freeburn challenge list, bound by
+    // Prepare's stage 6 (reply 53) and handed to ModeManager::Prepare by stage 13.
+    const BrnResource::ChallengeList* mpFreeburnChallengeList = 0;
     // ⭐ [FX-FLOW 2026-09-24] X360 +0x456F0 (284400), DWARF BrnGameStateModule.h:845
     // `ResourcePtr<BrnWorld::GlobalColourPalette> mpPlayerCarColours`. The player-car colour
     // palettes ("CarColours", pool 5): bound by Prepare's stage 11/12 (AcquireResource +
@@ -1706,6 +1738,10 @@ private:
     // scan finds no other writer. [FX-AIBUZZ 2026-09-24: the old note said an event handler arms it and
     // the PC armed it at the end of Prepare -- both corrected; see Construct]
     bool mbSendSetupPlayerCarPending = false;
+    // Console +0x32DC5, the byte after the latch above; reference header :798. Set by
+    // ProcessGameEvents case 162 when the challenge selector is shown (action 2) and cleared when
+    // it is hidden (action 3); UpdateRoadRulesManager reads it.
+    bool mbFreeburnChallengeSelectorVisible = false;
 
     // ⭐ X360 +0x38B72 (232306) -- THE SECOND HALF OF THE START-OF-GAME JUNKYARD HANDSHAKE.
     // SendSetupPlayerCarEvent @0x8239A918 sets it; ProcessGameEvents @0x823A0A18 case 78 tests it
@@ -1903,6 +1939,14 @@ private:
     // terminal stage. GameStateModule::Construct is the console's ONLY caller of
     // CarSelectManager::Construct.
     CarSelectManager                        mCarSelectManager;
+
+    // Reference header :783 (console +0x2CE20), by value, right after the junkyard
+    // manager. ProcessGameEvents' case 123 reads IsInOnlineCarSelect() and calls
+    // ExitOnlineCarSelect on it, case 119 tests it; Prepare's terminal stage hands it the two lists.
+    // [FLAG PC] not Construct()ed: OnlineCarSelectManager::Construct sits in an unmounted TU.
+    // The module lives in static storage, so the manager starts zeroed (not in online car select),
+    // the state the console's Construct also leaves it in.
+    OnlineCarSelectManager                  mOnlineCarSelectManager;
 
     // Console gsm +0xB9F8. The online round bookkeeper, by value.
     // See GetNetworkRoundManager(). The module lives in static storage, so the zero-fill is the

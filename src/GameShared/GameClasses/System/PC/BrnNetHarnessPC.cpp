@@ -28,6 +28,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 
 namespace
 {
@@ -46,6 +47,9 @@ namespace
     const bool KB_QUICK_MATCH_RANKED   = false;
     const bool KB_QUICK_MATCH_FREEBURN = true;
 
+    // GUI event 52: leave the online game (the game room's leave overlay posts it on Accept).
+    const s32 KI_GUI_EVENT_NETWORK_LEAVE_GAME = 52;
+
     // Pacing (seconds) and retry budgets.
     const f64 KF_DEFAULT_DELAY_S     = 30.0;
     const f64 KF_LOGIN_RETRY_S       = 15.0;
@@ -55,11 +59,20 @@ namespace
     const s32 KI_MAX_CREATE_POSTS    = 3;
     const f64 KF_QUICK_MATCH_RETRY_S = 5.0;
     const s32 KI_MAX_QUICK_MATCH_POSTS = 40;
+    const f64 KF_LEAVE_RETRY_S       = 10.0;
+    const s32 KI_MAX_LEAVE_POSTS     = 3;
+    const f64 KF_GUI_HOOK_GRACE_S    = 5.0;
+
+    // Scheduled GUI records (BRN_NET_SCRIPT).
+    const s32 KI_MAX_SCRIPT_ENTRIES  = 16;
+    const s32 KI_MAX_SCRIPT_WORDS    = 16;
+    const s32 KI_RECORD_HEADER_BYTES = 12;
+    const s32 KI_RECORD_ALIGNED_OFFSET = 16;
 
     // Witness bookkeeping.
-    const s32 KI_MAX_WITNESS_SITES   = 32;
-    const s32 KI_WITNESS_SITE_NAME   = 24;
-    const s32 KI_WITNESS_TOTAL_LINES = 600;
+    const s32 KI_MAX_WITNESS_SITES   = 64;
+    const s32 KI_WITNESS_SITE_NAME   = 40;
+    const s32 KI_WITNESS_TOTAL_LINES = 1200;
     const s32 KI_PLAYER_LIST_ENTRIES = 8;
 
     enum ERole
@@ -76,7 +89,25 @@ namespace
         E_STAGE_READY,           // signed in; create / quick match next
         E_STAGE_WAIT_GAME,       // 256 or 251 posted
         E_STAGE_IN_GAME,
+        E_STAGE_LEFT,            // was in a game and is not any more: never create / join again
         E_STAGE_GAVE_UP,
+    };
+
+    enum EScriptTarget
+    {
+        E_SCRIPT_TARGET_GUI = 0,   // the GUI out queue (InjectGuiEvents)
+        E_SCRIPT_TARGET_NET,       // the network post-simulation GUI queue (Update)
+    };
+
+    struct ScriptEntry
+    {
+        f64           mfAt;
+        EScriptTarget meTarget;
+        s32           miEventId;
+        s32           miPayloadBytes;
+        bool          mbAligned8;
+        bool          mbPosted;
+        u8            mau8Payload[KI_MAX_SCRIPT_WORDS * 8];
     };
 
     struct HarnessState
@@ -101,6 +132,23 @@ namespace
         bool   mbInGame;
         bool   mbHost;
         s32    miPlayersInGame;
+
+        // The in-game clock (BRN_NET_LEAVE_AT / BRN_NET_SCRIPT time base).
+        bool   mbEverInGame;
+        f64    mfInGameAt;
+        s32    miLastStateKey;
+
+        // BRN_NET_LEAVE_AT.
+        bool   mbLeaveArmed;
+        f64    mfLeaveAt;
+        s32    miLeavePosts;
+        f64    mfLastLeavePost;
+
+        // BRN_NET_SCRIPT.
+        s32         miScriptEntries;
+        ScriptEntry maScript[KI_MAX_SCRIPT_ENTRIES];
+        bool        mbGuiHookSeen;
+        bool        mbGuiHookWarned;
     };
 
     HarnessState gHarness = {};
@@ -129,6 +177,168 @@ namespace
         return lpcValue != nullptr && lpcValue[0] != '\0' && !(lpcValue[0] == '0' && lpcValue[1] == '\0');
     }
 
+    // Seconds since the first harness call (every hook shares this clock).
+    f64 Now()
+    {
+        const std::chrono::steady_clock::time_point lNow = std::chrono::steady_clock::now();
+        if (!gHarness.mbStarted)
+        {
+            gHarness.mbStarted = true;
+            gHarness.mStart    = lNow;
+        }
+        return std::chrono::duration<f64>(lNow - gHarness.mStart).count();
+    }
+
+    // The local wall-clock time of day, "HH:MM:SS.mmm": the stamp a case uses to line a log line up
+    // with the frame files the renderer dumps (their modification times).
+    const char* WallClock()
+    {
+        static char sacWall[16];
+        const std::chrono::system_clock::time_point lNow = std::chrono::system_clock::now();
+        const std::time_t lTime = std::chrono::system_clock::to_time_t(lNow);
+        const s32 liMs = static_cast<s32>(std::chrono::duration_cast<std::chrono::milliseconds>(lNow.time_since_epoch()).count() % 1000);
+        std::tm lTm = {};
+        localtime_s(&lTm, &lTime);
+        std::snprintf(sacWall, sizeof(sacWall), "%02d:%02d:%02d.%03d", lTm.tm_hour, lTm.tm_min, lTm.tm_sec, liMs);
+        return sacWall;
+    }
+
+    bool ParseSeconds(const char* lpcText, f64* lpfOut)
+    {
+        char* lpcEnd = nullptr;
+        const f64 lfValue = std::strtod(lpcText, &lpcEnd);
+        if (lpcEnd == lpcText || lfValue < 0.0 || lfValue > 3600.0)
+        {
+            return false;
+        }
+        *lpfOut = lfValue;
+        return true;
+    }
+
+    // One BRN_NET_SCRIPT entry: "<seconds>:<gui|net>:<id>[:<word>/<word>/...]".
+    bool ParseScriptEntry(const char* lpcEntry, ScriptEntry* lpEntry)
+    {
+        std::memset(lpEntry, 0, sizeof(*lpEntry));
+        char lacText[512];
+        std::strncpy(lacText, lpcEntry, sizeof(lacText) - 1);
+        lacText[sizeof(lacText) - 1] = '\0';
+
+        char* lapcField[4] = { lacText, nullptr, nullptr, nullptr };
+        s32   liFields     = 1;
+        for (char* lpc = lacText; *lpc != '\0' && liFields < 4; ++lpc)
+        {
+            if (*lpc == ':')
+            {
+                *lpc = '\0';
+                lapcField[liFields++] = lpc + 1;
+            }
+        }
+        if (liFields < 3 || !ParseSeconds(lapcField[0], &lpEntry->mfAt))
+        {
+            return false;
+        }
+        if (std::strcmp(lapcField[1], "gui") == 0)
+        {
+            lpEntry->meTarget = E_SCRIPT_TARGET_GUI;
+        }
+        else if (std::strcmp(lapcField[1], "net") == 0)
+        {
+            lpEntry->meTarget = E_SCRIPT_TARGET_NET;
+        }
+        else
+        {
+            return false;
+        }
+        char* lpcEnd = nullptr;
+        const long llId = std::strtol(lapcField[2], &lpcEnd, 0);
+        if (lpcEnd == lapcField[2] || *lpcEnd != '\0' || llId <= 0 || llId > 0xFFFF)
+        {
+            return false;
+        }
+        lpEntry->miEventId = static_cast<s32>(llId);
+
+        if (liFields == 4 && lapcField[3][0] != '\0')
+        {
+            char* lpcWord = lapcField[3];
+            s32   liWords = 0;
+            while (lpcWord != nullptr && *lpcWord != '\0')
+            {
+                char* lpcNext = std::strchr(lpcWord, '/');
+                if (lpcNext != nullptr)
+                {
+                    *lpcNext++ = '\0';
+                }
+                if (liWords >= KI_MAX_SCRIPT_WORDS)
+                {
+                    return false;
+                }
+                const bool lbWide = (lpcWord[0] == 'q' || lpcWord[0] == 'Q');
+                const char* lpcNumber = lbWide ? lpcWord + 1 : lpcWord;
+                char* lpcNumberEnd = nullptr;
+                const unsigned long long lu64Value = std::strtoull(lpcNumber, &lpcNumberEnd, 0);
+                if (lpcNumberEnd == lpcNumber || *lpcNumberEnd != '\0')
+                {
+                    return false;
+                }
+                if (lbWide)
+                {
+                    // An 8-byte field sits on an 8-byte boundary of the payload.
+                    lpEntry->miPayloadBytes = (lpEntry->miPayloadBytes + 7) & ~7;
+                    const u64 lu64Field = static_cast<u64>(lu64Value);
+                    std::memcpy(lpEntry->mau8Payload + lpEntry->miPayloadBytes, &lu64Field, sizeof(lu64Field));
+                    lpEntry->miPayloadBytes += 8;
+                    lpEntry->mbAligned8 = true;
+                }
+                else
+                {
+                    const u32 luField = static_cast<u32>(lu64Value);
+                    std::memcpy(lpEntry->mau8Payload + lpEntry->miPayloadBytes, &luField, sizeof(luField));
+                    lpEntry->miPayloadBytes += 4;
+                }
+                liWords += 1;
+                lpcWord = lpcNext;
+            }
+        }
+        return true;
+    }
+
+    void ParseScript(const char* lpcScript)
+    {
+        char lacScript[2048];
+        std::strncpy(lacScript, lpcScript, sizeof(lacScript) - 1);
+        lacScript[sizeof(lacScript) - 1] = '\0';
+        char* lpcEntry = lacScript;
+        while (lpcEntry != nullptr && *lpcEntry != '\0')
+        {
+            char* lpcNext = std::strchr(lpcEntry, ';');
+            if (lpcNext != nullptr)
+            {
+                *lpcNext++ = '\0';
+            }
+            if (*lpcEntry != '\0')
+            {
+                if (gHarness.miScriptEntries >= KI_MAX_SCRIPT_ENTRIES)
+                {
+                    BrnNetHarnessPC::Witness("harness", "script: more than %d entries, '%s' dropped", KI_MAX_SCRIPT_ENTRIES, lpcEntry);
+                }
+                else if (!ParseScriptEntry(lpcEntry, &gHarness.maScript[gHarness.miScriptEntries]))
+                {
+                    BrnNetHarnessPC::Witness("harness", "script: BAD ENTRY '%s' (want <s>:<gui|net>:<id>[:<w>/<w>...])", lpcEntry);
+                }
+                else
+                {
+                    const ScriptEntry& lrEntry = gHarness.maScript[gHarness.miScriptEntries];
+                    BrnNetHarnessPC::Witness("harness", "script: armed #%d at in-game+%.1fs %s GUI %d payload=%d bytes%s",
+                                             gHarness.miScriptEntries, lrEntry.mfAt,
+                                             lrEntry.meTarget == E_SCRIPT_TARGET_GUI ? "gui" : "net", lrEntry.miEventId,
+                                             lrEntry.miPayloadBytes, lrEntry.mbAligned8 ? " (8-aligned)" : "");
+                    gHarness.miScriptEntries += 1;
+                }
+            }
+            lpcEntry = lpcNext;
+        }
+    }
+
     void Resolve()
     {
         if (gHarness.mbResolved)
@@ -136,6 +346,7 @@ namespace
             return;
         }
         gHarness.mbResolved = true;
+        gHarness.miLastStateKey = -1;
         const bool lbHost = EnvFlag("BRN_NET_HOST");
         const bool lbJoin = EnvFlag("BRN_NET_JOIN");
         gHarness.meRole  = lbHost ? E_ROLE_HOST : (lbJoin ? E_ROLE_JOIN : E_ROLE_NONE);
@@ -156,6 +367,31 @@ namespace
                                      lbHost ? "host" : "join", (lbHost && lbJoin) ? " (BRN_NET_JOIN ignored)" : "",
                                      CgsPcNetIdentityName(), CgsPcNetIdentityLobbyIdent(), gHarness.mfDelay);
         }
+
+        const char* lpcLeaveAt = std::getenv("BRN_NET_LEAVE_AT");
+        if (lpcLeaveAt != nullptr && lpcLeaveAt[0] != '\0')
+        {
+            if (ParseSeconds(lpcLeaveAt, &gHarness.mfLeaveAt))
+            {
+                gHarness.mbLeaveArmed = true;
+                BrnNetHarnessPC::Witness("harness", "leave armed: post 52 at in-game+%.1fs", gHarness.mfLeaveAt);
+            }
+            else
+            {
+                BrnNetHarnessPC::Witness("harness", "BRN_NET_LEAVE_AT='%s' is not a number of seconds; ignored", lpcLeaveAt);
+            }
+        }
+
+        const char* lpcScript = std::getenv("BRN_NET_SCRIPT");
+        if (lpcScript != nullptr && lpcScript[0] != '\0')
+        {
+            ParseScript(lpcScript);
+        }
+    }
+
+    bool IsActive()
+    {
+        return gHarness.meRole != E_ROLE_NONE || gHarness.mbLeaveArmed || gHarness.miScriptEntries > 0;
     }
 
     void SetStage(EStage leStage, f64 lfNow)
@@ -194,6 +430,57 @@ namespace
                                  static_cast<s32>(sizeof(lRecord)));
     }
 
+    bool PostLeaveGame(CgsModule::VariableEventQueue<18432, 16>* lpQueue)
+    {
+        CgsGui::GuiEvent<KI_GUI_EVENT_NETWORK_LEAVE_GAME> lLeaveEvent;
+        CgsGui::GuiEventWrapper<CgsGui::GuiEvent<KI_GUI_EVENT_NETWORK_LEAVE_GAME>, KI_GUI_CHANNEL_OUT> lRecord(lLeaveEvent);
+        return lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_GUI_CHANNEL_OUT,
+                                 static_cast<s32>(sizeof(lRecord)));
+    }
+
+    // A scheduled record in the GuiEventWrapper form: {size, id, offset} then the payload.
+    bool PostScriptRecord(CgsModule::VariableEventQueue<18432, 16>* lpQueue, const ScriptEntry& lrEntry)
+    {
+        alignas(16) u8 lau8Record[KI_RECORD_ALIGNED_OFFSET + KI_MAX_SCRIPT_WORDS * 8];
+        std::memset(lau8Record, 0, sizeof(lau8Record));
+        const s32 liOffset = lrEntry.mbAligned8 ? KI_RECORD_ALIGNED_OFFSET : KI_RECORD_HEADER_BYTES;
+        const s32 laiHeader[3] = { lrEntry.miPayloadBytes, lrEntry.miEventId, liOffset };
+        std::memcpy(lau8Record, laiHeader, sizeof(laiHeader));
+        std::memcpy(lau8Record + liOffset, lrEntry.mau8Payload, static_cast<size_t>(lrEntry.miPayloadBytes));
+        s32 liSize = liOffset + lrEntry.miPayloadBytes;
+        if (liSize < KI_RECORD_ALIGNED_OFFSET)
+        {
+            liSize = KI_RECORD_ALIGNED_OFFSET;
+        }
+        return lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lau8Record), KI_GUI_CHANNEL_OUT, liSize);
+    }
+
+    // Post every due script entry for one target.
+    void PostDueScript(CgsModule::VariableEventQueue<18432, 16>* lpQueue, EScriptTarget leTarget, f64 lfNow)
+    {
+        if (!gHarness.mbEverInGame)
+        {
+            return;
+        }
+        const f64 lfInGame = lfNow - gHarness.mfInGameAt;
+        for (s32 li = 0; li < gHarness.miScriptEntries; ++li)
+        {
+            ScriptEntry& lrEntry = gHarness.maScript[li];
+            if (lrEntry.mbPosted || lrEntry.meTarget != leTarget || lfInGame < lrEntry.mfAt)
+            {
+                continue;
+            }
+            lrEntry.mbPosted = true;
+            const bool lbQueued = PostScriptRecord(lpQueue, lrEntry);
+            u32 lauWords[4] = { 0, 0, 0, 0 };
+            std::memcpy(lauWords, lrEntry.mau8Payload, sizeof(lauWords));
+            BrnNetHarnessPC::Witness("harness", "t=%.1fs script #%d post %s GUI %d payload=%d [%08X %08X %08X %08X]%s",
+                                     lfNow, li, leTarget == E_SCRIPT_TARGET_GUI ? "gui" : "net", lrEntry.miEventId,
+                                     lrEntry.miPayloadBytes, lauWords[0], lauWords[1], lauWords[2], lauWords[3],
+                                     lbQueued ? "" : " QUEUE FULL");
+        }
+    }
+
     void PostGameRequest(CgsModule::VariableEventQueue<18432, 16>* lpQueue, f64 lfNow)
     {
         gHarness.miGamePosts += 1;
@@ -222,6 +509,89 @@ namespace
                                  gHarness.miLoginPosts, lbQueued ? "" : " QUEUE FULL");
         SetStage(E_STAGE_WAIT_LOGIN, lfNow);
     }
+
+    // BRN_NET_LEAVE_AT: post 52 once due, again while still in the game.
+    void UpdateLeave(CgsModule::VariableEventQueue<18432, 16>* lpQueue, f64 lfNow)
+    {
+        if (!gHarness.mbLeaveArmed || !gHarness.mbEverInGame || !gHarness.mbInGame)
+        {
+            return;
+        }
+        const f64 lfInGame = lfNow - gHarness.mfInGameAt;
+        if (lfInGame < gHarness.mfLeaveAt || gHarness.miLeavePosts >= KI_MAX_LEAVE_POSTS || !gHarness.mbIdle)
+        {
+            return;
+        }
+        if (gHarness.miLeavePosts > 0 && (lfNow - gHarness.mfLastLeavePost) < KF_LEAVE_RETRY_S)
+        {
+            return;
+        }
+        gHarness.miLeavePosts += 1;
+        gHarness.mfLastLeavePost = lfNow;
+        const bool lbQueued = PostLeaveGame(lpQueue);
+        BrnNetHarnessPC::Witness("harness", "t=%.1fs wall=%s post 52 leave game at in-game+%.1fs players=%d host=%d (#%d)%s",
+                                 lfNow, WallClock(), lfInGame, gHarness.miPlayersInGame, gHarness.mbHost ? 1 : 0,
+                                 gHarness.miLeavePosts, lbQueued ? "" : " QUEUE FULL");
+    }
+
+    // Bounded "state" line whenever sign-in / in-game / host / player count changes (LAN runs),
+    // and the in-game clock.
+    void TrackState(f64 lfNow)
+    {
+        const s32 liKey = (gHarness.mbLoggedIn ? 1 : 0) | (gHarness.mbInGame ? 2 : 0) | (gHarness.mbHost ? 4 : 0) |
+                          ((gHarness.miPlayersInGame & 0xFF) << 3);
+        if (liKey != gHarness.miLastStateKey)
+        {
+            gHarness.miLastStateKey = liKey;
+            BrnNetHarnessPC::Witness("state", "t=%.1fs wall=%s loggedIn=%d inGame=%d host=%d players=%d", lfNow, WallClock(),
+                                     gHarness.mbLoggedIn ? 1 : 0, gHarness.mbInGame ? 1 : 0, gHarness.mbHost ? 1 : 0,
+                                     gHarness.miPlayersInGame);
+        }
+        if (gHarness.mbInGame && !gHarness.mbEverInGame)
+        {
+            gHarness.mbEverInGame = true;
+            gHarness.mfInGameAt   = lfNow;
+        }
+    }
+
+    bool WitnessToSite(const char* lpcKey, s32 liSiteLines, const char* lpcPrefix, const char* lpcFormat, va_list lArgs)
+    {
+        WitnessSite* lpSite = nullptr;
+        for (s32 li = 0; li < KI_MAX_WITNESS_SITES; ++li)
+        {
+            if (gaWitnessSites[li].mac[0] == '\0')
+            {
+                std::strncpy(gaWitnessSites[li].mac, lpcKey, KI_WITNESS_SITE_NAME - 1);
+                lpSite = &gaWitnessSites[li];
+                break;
+            }
+            if (std::strncmp(gaWitnessSites[li].mac, lpcKey, KI_WITNESS_SITE_NAME - 1) == 0)
+            {
+                lpSite = &gaWitnessSites[li];
+                break;
+            }
+        }
+        if (lpSite == nullptr || lpSite->miLines >= liSiteLines)
+        {
+            return false;
+        }
+        lpSite->miLines += 1;
+        giWitnessLinesLeft -= 1;
+
+        char lacText[512];
+        s32 liPrefix = std::snprintf(lacText, sizeof(lacText), "%s ", lpcPrefix);
+        if (liPrefix < 0 || liPrefix >= static_cast<s32>(sizeof(lacText)))
+        {
+            return false;
+        }
+        std::vsnprintf(lacText + liPrefix, sizeof(lacText) - static_cast<size_t>(liPrefix), lpcFormat, lArgs);
+
+        const size_t luLength = std::strlen(lacText);
+        const char*  lpcTail  = (lpSite->miLines == liSiteLines) ? " (site budget spent)\n" : "\n";
+        std::strncat(lacText, lpcTail, sizeof(lacText) - luLength - 1);
+        CgsDev::Log::WriteToLog(lacText);
+        return true;
+    }
 }
 
 namespace BrnNetHarnessPC
@@ -238,44 +608,28 @@ namespace BrnNetHarnessPC
         {
             return;
         }
-
-        WitnessSite* lpSite = nullptr;
-        for (s32 li = 0; li < KI_MAX_WITNESS_SITES; ++li)
-        {
-            if (gaWitnessSites[li].mac[0] == '\0')
-            {
-                std::strncpy(gaWitnessSites[li].mac, lpcSite, KI_WITNESS_SITE_NAME - 1);
-                lpSite = &gaWitnessSites[li];
-                break;
-            }
-            if (std::strncmp(gaWitnessSites[li].mac, lpcSite, KI_WITNESS_SITE_NAME - 1) == 0)
-            {
-                lpSite = &gaWitnessSites[li];
-                break;
-            }
-        }
-        if (lpSite == nullptr || lpSite->miLines >= KI_WITNESS_LINES_PER_SITE)
-        {
-            return;
-        }
-        lpSite->miLines += 1;
-        giWitnessLinesLeft -= 1;
-
-        char lacText[512];
-        s32 liPrefix = std::snprintf(lacText, sizeof(lacText), "[net] %s ", lpcSite);
-        if (liPrefix < 0 || liPrefix >= static_cast<s32>(sizeof(lacText)))
-        {
-            return;
-        }
+        char lacPrefix[64];
+        std::snprintf(lacPrefix, sizeof(lacPrefix), "[net] %s", lpcSite);
         va_list lArgs;
         va_start(lArgs, lpcFormat);
-        std::vsnprintf(lacText + liPrefix, sizeof(lacText) - static_cast<size_t>(liPrefix), lpcFormat, lArgs);
+        WitnessToSite(lpcSite, KI_WITNESS_LINES_PER_SITE, lacPrefix, lpcFormat, lArgs);
         va_end(lArgs);
+    }
 
-        const size_t luLength = std::strlen(lacText);
-        const char*  lpcTail  = (lpSite->miLines == KI_WITNESS_LINES_PER_SITE) ? " (site budget spent)\n" : "\n";
-        std::strncat(lacText, lpcTail, sizeof(lacText) - luLength - 1);
-        CgsDev::Log::WriteToLog(lacText);
+    void WitnessTag(const char* lpcTag, const char* lpcSite, const char* lpcFormat, ...)
+    {
+        if (!WitnessEnabled() || giWitnessLinesLeft <= 0 || lpcTag == nullptr || lpcSite == nullptr)
+        {
+            return;
+        }
+        char lacKey[KI_WITNESS_SITE_NAME];
+        std::snprintf(lacKey, sizeof(lacKey), "%s:%s", lpcTag, lpcSite);
+        char lacPrefix[96];
+        std::snprintf(lacPrefix, sizeof(lacPrefix), "[%s] %s", lpcTag, lpcSite);
+        va_list lArgs;
+        va_start(lArgs, lpcFormat);
+        WitnessToSite(lacKey, KI_WITNESS_TAG_LINES_PER_SITE, lacPrefix, lpcFormat, lArgs);
+        va_end(lArgs);
     }
 
     void WitnessPlayerList(const void* lpRecord, s32 liNumPlayers, s32 liTotalPlayers)
@@ -305,7 +659,7 @@ namespace BrnNetHarnessPC
     void Observe(BrnNetwork::BrnNetworkManager* lpNetworkManager)
     {
         Resolve();
-        if (gHarness.meRole == E_ROLE_NONE || lpNetworkManager == nullptr)
+        if (!WitnessEnabled() || lpNetworkManager == nullptr)
         {
             return;
         }
@@ -317,26 +671,53 @@ namespace BrnNetHarnessPC
         gHarness.mbHost      = gHarness.mbInGame && lpServerInterface->GetGameComponent()->IsLocalPlayerHost();
         gHarness.miPlayersInGame = gHarness.mbInGame ? lpServerInterface->GetGameComponent()->GetNumberPlayersInGame() : 0;
         gHarness.mbObserved  = true;
+        TrackState(Now());
+    }
+
+    void InjectGuiEvents(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue)
+    {
+        Resolve();
+        if (gHarness.miScriptEntries == 0 || lpGuiOutQueue == nullptr)
+        {
+            return;
+        }
+        gHarness.mbGuiHookSeen = true;
+        PostDueScript(lpGuiOutQueue, E_SCRIPT_TARGET_GUI, Now());
     }
 
     void Update(CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue)
     {
         Resolve();
-        if (gHarness.meRole == E_ROLE_NONE || lpGuiEventQueue == nullptr)
+        if (!IsActive() || lpGuiEventQueue == nullptr)
         {
             return;
         }
 
-        const std::chrono::steady_clock::time_point lNow = std::chrono::steady_clock::now();
-        if (!gHarness.mbStarted)
-        {
-            gHarness.mbStarted = true;
-            gHarness.mStart    = lNow;
-        }
-        const f64 lfNow = std::chrono::duration<f64>(lNow - gHarness.mStart).count();
+        const f64 lfNow = Now();
         if (!gHarness.mbObserved)
         {
             return;   // the network manager has not run yet
+        }
+
+        UpdateLeave(lpGuiEventQueue, lfNow);
+        PostDueScript(lpGuiEventQueue, E_SCRIPT_TARGET_NET, lfNow);
+        if (gHarness.mbEverInGame && !gHarness.mbGuiHookSeen && !gHarness.mbGuiHookWarned &&
+            (lfNow - gHarness.mfInGameAt) >= KF_GUI_HOOK_GRACE_S)
+        {
+            for (s32 li = 0; li < gHarness.miScriptEntries; ++li)
+            {
+                if (gHarness.maScript[li].meTarget == E_SCRIPT_TARGET_GUI)
+                {
+                    Witness("harness", "t=%.1fs script: 'gui' entries armed but the GUI-out hook has never run", lfNow);
+                    gHarness.mbGuiHookWarned = true;
+                    break;
+                }
+            }
+        }
+
+        if (gHarness.meRole == E_ROLE_NONE)
+        {
+            return;
         }
 
         const bool lbLoggedIn  = gHarness.mbLoggedIn;
@@ -433,8 +814,9 @@ namespace BrnNetHarnessPC
         {
             if (!lbInGame)
             {
-                Witness("harness", "t=%.1fs left the game", lfNow);
-                SetStage(E_STAGE_READY, lfNow);
+                Witness("harness", "t=%.1fs left the game (%s; no rejoin)", lfNow,
+                        gHarness.miLeavePosts > 0 ? "after the harness leave" : "not asked by the harness");
+                SetStage(E_STAGE_LEFT, lfNow);
                 break;
             }
             const s32 liPlayers = gHarness.miPlayersInGame;
@@ -446,6 +828,7 @@ namespace BrnNetHarnessPC
             break;
         }
 
+        case E_STAGE_LEFT:
         case E_STAGE_GAVE_UP:
         default:
             break;

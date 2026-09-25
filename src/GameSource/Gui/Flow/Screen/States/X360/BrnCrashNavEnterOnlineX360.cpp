@@ -1,4 +1,6 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavEnterOnlineMod.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameSource/Gui/BrnGuiCache.h"             // GuiCache::GetActiveControllerIndex
 
 // BrnGui::CrashNavEnterOnlineX360 -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -13,12 +15,8 @@
 //   CrashNavEnterOnlineX360::OnLeave       @ 0x82487EA0
 //   CrashNavEnterOnlineX360::ShowSignInUI  @ 0x82488010
 //
-// CrashNavEnterOnlineX360::Update @0x82487EE8 is a separate ledger function left to the
-// class:BrnGui::CrashNavEnterOnlineX360 owner: it reaches un-homed flow-state
-// collaborators -- the base sign-in-phase member (this+0xC8), the base
-// CrashNavEnterOnlineBase::AnswerLoginQuestion, and a local-user-index accessor at
-// GuiCache+0x4B38 on the deliberately-opaque GuiCache boundary object (which the corpus
-// touches only through methods, not by offset).
+// The platform Update is bodied here too: after the base pump it answers the
+// "sign in now?" question from the system sign-in notification.
 //
 // The XNotify* / XShowSigninUI / CloseHandle entry points are the Xbox 360 XDK C-API;
 // declared extern "C" at file scope with plain types, mirroring the committed
@@ -29,6 +27,9 @@ extern "C"
     void*         XNotifyCreateListener(unsigned long long luqwAreas);
     int           CloseHandle(void* lhObject);
     unsigned long XShowSigninUI(unsigned long lcPanes, unsigned long ludwFlags);
+    int           XNotifyGetNext(void* lhListener, unsigned long ludwMsgFilter,
+                                 unsigned long* lpdwId, unsigned long* lpParam);
+    u32           XUserGetSigninState(u32 luUserIndex);
 }
 
 namespace BrnGui
@@ -50,6 +51,54 @@ namespace BrnGui
         {
             CloseHandle(mhNotificationListener);             // bl CloseHandle
             mhNotificationListener = nullptr;                // li r11, 0 ; stw r11, 0x37F0(this)
+        }
+    }
+
+    namespace
+    {
+        // The two system notifications the sign-in page listens for.
+        const unsigned long KUL_NOTIFY_SIGNIN_CHANGED  = 9;           // sign-in state changed
+        const unsigned long KUL_NOTIFY_INVITE_ACCEPTED = 0x2000002;   // a game invite was accepted
+
+        // XUserGetSigninState's "signed in to the online service" answer.
+        const u32 KU_SIGNIN_STATE_SIGNED_IN_TO_LIVE = 2;
+    }
+
+    // While the "sign in now?" page is up, a sign-in change (notification parameter 0)
+    // answers the question with whether the active controller is now signed in to the
+    // service. An accepted invite must not arrive here: this screen is not the one that
+    // handles it.
+    void CrashNavEnterOnlineX360::Update()
+    {
+        CrashNavEnterOnlineBase::Update();
+
+        if (meCurrentLoginQuestion != CgsGui::E_LOGIN_QUESTION_SHOW_SIGN_IN)
+        {
+            return;
+        }
+
+        unsigned long luId    = 0;
+        unsigned long luParam = 0;
+        if (XNotifyGetNext(mhNotificationListener, 0, &luId, &luParam) == 0)
+        {
+            return;
+        }
+
+        if (luId == KUL_NOTIFY_SIGNIN_CHANGED)
+        {
+            if (luParam == 0)
+            {
+                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                const bool lbSignedIn =
+                    XUserGetSigninState(static_cast<u32>(mpGuiCache->GetActiveControllerIndex()))
+                    == KU_SIGNIN_STATE_SIGNED_IN_TO_LIVE;
+                AnswerLoginQuestion(lbSignedIn, false);
+            }
+        }
+        else if (luId == KUL_NOTIFY_INVITE_ACCEPTED)
+        {
+            CGS_ASSERT(false,
+                       "Invite notification processed by EnterOnline screen. This could break cross game invites\n");
         }
     }
 

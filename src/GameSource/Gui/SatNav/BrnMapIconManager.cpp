@@ -40,8 +40,8 @@
 // NAMED GATES remaining (each one-shot logged at its site): the crash-nav pool BIND half
 // (CrashNavMapIcon::Construct @0x824481A8 unreconstructed, so the pool's components have
 // no apt clip yet), the landmark/checkpoint passes + the case-4 landmark state machine in
-// BOTH icon passes, the online-route start/finish-point lookups, the online colour
-// lookups, the LARGE-map rival naming arm, and UpdateCrashNavIcons' trailing GUI event
+// BOTH icon passes, the online-route start/finish-point lookups, the LARGE-map rival
+// naming arm, and UpdateCrashNavIcons' trailing GUI event
 // 561 (the crash-nav icon-set handoff; the payload type is not modelled in the tree).
 //
 // All branch conditions and the compared constants come from the X360 asm/pseudocode; the
@@ -61,6 +61,10 @@
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"            // [H3c] BrnFlapt::FileRef
 #include "GameSource/Gui/SatNav/BrnSatNavComponent.h"        // [H3c] the GuiPlayerInfo view (marked-man / rival heading)
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"            // MapTransform::GetZoomedWorldRect (the icon bounds test)
+#include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h"   // FreeburnChallengeManager (the challenge-icon pass)
+#include "SharedClasses/DataLists/ChallengeListEntry.h"      // ChallengeListEntryAction locations
+#include "SharedClasses/Trigger/BrnRegion.h"                 // BrnTrigger::BoxRegion (the challenge trigger box)
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData (network-rival arm)
 
 #include <cmath>     // [H3c] sinf/cosf/acosf/sqrtf (the rival FOV cone / CalculateAlpha)
 #include <cstdlib>   // [H3c] qsort (the IconDisplaySort pass)
@@ -820,8 +824,8 @@ namespace
     // X360 .rdata @0x8206F838 / @0x8206F808 (read off the image, h3c_dump.txt) -- the
     // DWARF-named lobby-colour -> icon-state tables (BrnMapIconManager.h:318/319).
     const s32 KAE_LOBBY_COLOUR_TO_PLAYER_ICON[12] = { 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 };
-    // (Its rival twin @0x8206F808 = {14..25} belongs to the parked network-rival colour
-    // arm -- recorded here, defined when that arm lands, so no unused-table warning.)
+    // Its rival twin, read off the image: the network-rival arm.
+    const s32 KAE_LOBBY_COLOUR_TO_RIVAL_ICON[12] = { 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25 };
 
     // The inactive-set icon alpha: the X360 computes 128 * (1/255) * 100 per call.
     const f32 KF_INACTIVE_ALPHA = (128.0f * 0.0039215689f) * 100.0f;
@@ -879,19 +883,33 @@ s32 MapIconManager::GetSatNavIconStateForRival(const GuiEventUpdateSatNav::SatNa
         CGS_ASSERT(liRaceCarIndex >= 0, "leRivalActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");   // :2256
         CGS_ASSERT(liRaceCarIndex < 8,  "leRivalActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT"); // :2257
 
-        // [UI-gate] the network-rival arm: the game-room player-info table walk (cache
-        // +0xAD94, stride 0x138) + KAE_LOBBY_COLOUR_TO_RIVAL_ICON via
-        // GetOnlinePlayerColourFromARCI -- ONLINE-only surface, unreconstructed. The
-        // no-entry fall-through (state 0, invisible) is the X360's own miss path.
-        static bool sbLoggedNetworkRivalPark = false;
-        if (!sbLoggedNetworkRivalPark && CgsDev::Log::gpDebugPrint != 0)
+        // The network-rival arm: find the in-game player record driving this car. No record,
+        // or a player not in the local game world, is invisible (state 0); the marked man is
+        // the plain rival state; otherwise the lobby colour picks the rival icon in the
+        // colour modes (10/12/14/15/17), the plain rival state elsewhere.
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo = 0;
+        for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
         {
-            sbLoggedNetworkRivalPark = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] PARK: GetSatNavIconStateForRival network-rival colour arm "
-                   "(online game-room tables unreconstructed) -> invisible\n";
+            const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpCandidate =
+                mpGuiCache->GetOnlinePlayerInfo(liPlayer);
+            if (static_cast<s32>(lpCandidate->meActiveRaceCarIndex) == liRaceCarIndex)
+            {
+                lpPlayerInfo = lpCandidate;
+                break;
+            }
         }
-        return 0;
+        if (lpPlayerInfo == 0 || !lpPlayerInfo->mbIsInLocalGameWorld)
+            return 0;
+        if (lpPlayerInfo->mbMarkedMan)
+            return MapIconBrnBase::E_ICONSTATE_RIVAL;   // 14
+        switch (mpGuiCache->GetGameMode())
+        {
+        case 10: case 12: case 14: case 15: case 17:
+            return KAE_LOBBY_COLOUR_TO_RIVAL_ICON[mpGuiCache->GetOnlinePlayerColourFromARCI(
+                static_cast<EActiveRaceCarIndex>(liRaceCarIndex))];
+        default:
+            return MapIconBrnBase::E_ICONSTATE_RIVAL;   // 14
+        }
     }
 
     // ---- the plain-rival arm ----
@@ -946,23 +964,45 @@ s32 MapIconManager::GetSatNavIconStateForRival(const GuiEventUpdateSatNav::SatNa
 }
 
 // @ 0x82502738 -- append the current freeburn-challenge target icon. ONLINE free-burn
-// lobby only (the entry assert); the body walks the challenge manager's current action
-// (cache +0x406C) -> trigger id -> WorldDataController::GetTriggerVolumeRegion, then
-// appends a type-6 record at the region position. [UI-gate] the challenge-manager /
-// trigger-region surface is unreconstructed -- parked loudly; unreachable offline.
+// lobby only (the entry assert). While a challenge is active and this player is its host
+// or it has started, the current action's first location, when it is a trigger, is
+// resolved to its box region and a FREEBURN_CHALLENGE record is appended at the box
+// centre (the record's other bytes keep what the slot last held, as on the console).
 void MapIconManager::UpdateFreeburnChallengeIcons()
 {
     CGS_ASSERT(mpGuiCache->GetGameMode() == E_MODE_ONLINE_FREE_BURN_LOBBY,
                "mpGuiCache->GetGameMode() == GsmIO::E_MODE_ONLINE_FREE_BURN_LOBBY");   // :683 (non-gating)
 
-    static bool sbLogged = false;
-    if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
-    {
-        sbLogged = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[UI-gate] PARK: MapIconManager::UpdateFreeburnChallengeIcons @0x82502738 "
-               "(challenge-manager surface unreconstructed; online-lobby only)\n";
-    }
+    const FreeburnChallengeManager* lpChallengeManager = mpGuiCache->GetFreeburnChallengeManager();
+    if (!lpChallengeManager->IsActive())
+        return;
+    if (!lpChallengeManager->IsLocalHost() && !lpChallengeManager->IsStarted())
+        return;
+
+    const BrnResource::ChallengeListEntryAction* lpAction = lpChallengeManager->GetCurrentAction();
+    if (lpAction->GetNumLocations() == 0)
+        return;
+    if (lpAction->GetLocationType(0) != BrnResource::ChallengeListEntryAction::E_LOCATION_TYPE_TRIGGER)
+        return;
+
+    const CgsID lTriggerID = lpAction->GetTriggerID(0);
+    BrnTrigger::BoxRegion lBox;
+    mpGuiCache->GetWorldDataController()->GetTriggerVolumeRegion(lTriggerID, &lBox);
+    const Vector3 lv3BoxPosition = lBox.GetPosition();
+    Vector4 lv4Position;
+    lv4Position.x = lv3BoxPosition.x;
+    lv4Position.y = lv3BoxPosition.y;
+    lv4Position.z = lv3BoxPosition.z;
+    lv4Position.w = 0.0f;
+
+    SatNavIconInfo& lrIcon = mSatNavIconInfo[miNumUsedIcons];
+    lrIcon.SetIconType(SatNavIconInfo::E_SATNAVICON_FREEBURN_CHALLENGE);
+    lrIcon.SetPositionLane(lv4Position);
+    lrIcon.SetCgsId(0);
+    lrIcon.SetDesignIndex(0);
+    lrIcon.SetRotation(0.0f);
+    lrIcon.SetSpeedMph(0.0f);
+    ++miNumUsedIcons;
 }
 
 
@@ -1354,18 +1394,9 @@ void MapIconManager::UpdateSatNavIcons()
             {
             case 10: case 12: case 14: case 15: case 17:
             {
-                // [UI-gate] the online lobby-colour lookup (GetOnlinePlayerColourFromARCI
-                // + KAE_LOBBY_COLOUR_TO_PLAYER_ICON) is unreconstructed -- online modes
-                // only. Colour 0's mapping is the arm's fallback, logged once.
-                static bool sbLoggedColourPark = false;
-                if (!sbLoggedColourPark && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    sbLoggedColourPark = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[UI-gate] PARK: UpdateSatNavIcons online player-colour arm "
-                           "(GetOnlinePlayerColourFromARCI unreconstructed) -> colour 0\n";
-                }
-                liState = KAE_LOBBY_COLOUR_TO_PLAYER_ICON[0];
+                // The online modes draw the player in its lobby colour.
+                liState = KAE_LOBBY_COLOUR_TO_PLAYER_ICON[mpGuiCache->GetOnlinePlayerColourFromARCI(
+                    static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex()))];
                 break;
             }
             case 11: case 13: case 16:
@@ -1711,7 +1742,7 @@ void MapIconManager::UpdateSatNavIcons()
 //     base -- parked, see below.
 //
 // NAMED GATES (each one-shot logged, none silent): the two route start-point lookups,
-// the online player-colour arm, the LARGE-map rival arm (GetCrashNavIconStateForRival
+// the LARGE-map rival arm (GetCrashNavIconStateForRival
 // @0x824F4680 has no body), the whole case-4 landmark state machine (IsStartIcon /
 // IsFinishIcon / IsTrackedIcon / IsPendingRaceLandmark / GuiTracker::GetTrackerInformation
 // and the checkpoint tables are all unreconstructed), and the trailing 561 post.
@@ -1808,17 +1839,9 @@ void MapIconManager::UpdateCrashNavIcons()
             {
             case 10: case 12: case 14: case 15: case 17:
             {
-                // [UI-gate] GuiCache::GetOnlinePlayerColourFromARCI is unreconstructed --
-                // online modes only. Colour 0's mapping is the arm's fallback.
-                static bool sbLoggedColourPark = false;
-                if (!sbLoggedColourPark && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    sbLoggedColourPark = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[UI-gate] PARK: UpdateCrashNavIcons online player-colour arm "
-                           "(GetOnlinePlayerColourFromARCI unreconstructed) -> colour 0\n";
-                }
-                liState = KAE_LOBBY_COLOUR_TO_PLAYER_ICON[0];
+                // The online modes draw the player in its lobby colour.
+                liState = KAE_LOBBY_COLOUR_TO_PLAYER_ICON[mpGuiCache->GetOnlinePlayerColourFromARCI(
+                    static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex()))];
                 break;
             }
             case 11: case 13: case 16:

@@ -74,6 +74,10 @@ namespace BrnGui
         void UpdateRunning();
         void SetExpectedAptComponentList();
 
+        // Post the running free-burn challenge to the ticker. UpdatePermenant's
+        // 573/574/576/581 arms call it.
+        void StartFreeburnChallengeTicker();
+
         // The 21 GUI event ids OnEnter registers. The table is .rdata @0x8205B070; the IDA
         // export set carries no data symbols, so the address was decoded from OnEnter's own
         // `lis r11, ...@ha` / `addi r4, r11, ...@l` pair at 0x82475E6C/0x82475E78 and the 21

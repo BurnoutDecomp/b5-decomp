@@ -92,11 +92,6 @@ namespace BrnGui
         { { 143, CgsGui::E_GUI_RESOURCETYPE_APT }, { 34, CgsGui::E_GUI_RESOURCETYPE_APT } };
     const u32 CrashNavColourCalibrate::muNumResourcesToLoad = 2;
 
-    // .rdata @0x82066114 / count @0x8206611C
-    const CgsGui::sResourceTuple CrashNavEnterOnlineBase::maResourceTuplesToLoad[] =
-        { { 165, CgsGui::E_GUI_RESOURCETYPE_APT } };
-    const s32 CrashNavEnterOnlineBase::miNumResourcesToLoad = 1;
-
     // .rdata @0x82F26F50 / count @0x82F26F58
     const CgsGui::sResourceTuple CrashNavOptions::maResourcesToLoad[1] =
         { { 141, CgsGui::E_GUI_RESOURCETYPE_APT } };
@@ -139,11 +134,6 @@ namespace BrnGui
     const CgsGui::sResourceTuple OnlineInstantResultsState::maResourceTuplesToLoad[] =
         { { 226, CgsGui::E_GUI_RESOURCETYPE_APT } };
     const s32 OnlineInstantResultsState::miNumResourcesToLoad = 1;
-
-    // .rdata @0x8205F880 / count @0x8205F890
-    const CgsGui::sResourceTuple OnlineCreateFreeburn::maResourceTuplesToLoad[] =
-        { { 176, CgsGui::E_GUI_RESOURCETYPE_APT }, { 191, CgsGui::E_GUI_RESOURCETYPE_APT } };
-    const s32 OnlineCreateFreeburn::miNumResourcesToLoad = 2;
 
     // .rdata @0x8205E77C / count @0x8205E784
     const CgsGui::sResourceTuple OnlineCustomMatch::maResourceTuplesToLoad[] =
@@ -190,11 +180,6 @@ namespace BrnGui
     const CgsGui::sResourceTuple OnlineQuickCustomCreate::maResourcesToLoad[] =
         { { 173, CgsGui::E_GUI_RESOURCETYPE_APT }, { 190, CgsGui::E_GUI_RESOURCETYPE_APT } };
     const u32 OnlineQuickCustomCreate::muNumResourcesToLoad = 2;
-
-    // .rdata @0x8205F71C / count @0x8205F724
-    const CgsGui::sResourceTuple OnlineQuickMatch::maResourceTuplesToLoad[] =
-        { { 174, CgsGui::E_GUI_RESOURCETYPE_APT } };
-    const s32 OnlineQuickMatch::miNumResourcesToLoad = 1;
 
     // .rdata @0x8205F854 / count @0x8205F85C
     const CgsGui::sResourceTuple OnlineRivals::maResourceTuplesToLoad[] =
@@ -258,20 +243,6 @@ namespace BrnGui
 
     // ---- CrashNavEnterOnline variants (Mod TU landed NoTitle only) --------------------
     // CrashNavEnterOnlineFull::OnEnter -> BrnCrashNavEnterOnlineMod.cpp (@0x824CB0A8).
-    //
-    // ⛔ CrashNavEnterOnlineX360::OnEnter STAYS STUBBED, AND NOT FOR WANT OF A BODY.
-    // X360/BrnCrashNavEnterOnlineX360.cpp has carried OnEnter @0x82487E68, OnLeave
-    // @0x82487EA0 and ShowSignInUI @0x82488010 for some time. Mounting it was tried
-    // on 2026-09-16 and the link fails with
-    //     LNK2019: unresolved external symbol XShowSigninUI
-    // because that TU calls the Xbox 360 XDK sign-in UI directly (XShowSigninUI /
-    // XNotifyCreateListener). Those entry points do not exist on Windows, so the TU
-    // cannot join this build until someone decides what the PC stand-in for a console
-    // sign-in IS -- a product decision, not a decompilation one. Inventing one here
-    // would be inventing an arm. (Mounting it also collides with the OnLeave /
-    // ShowSignInUI stubs in BrnScreenStatesLinkStubs.cpp, which would go at the same
-    // time.) This stub is the one link still in front of CN_ACCT_MAN.
-    void CrashNavEnterOnlineX360::OnEnter() { LogUnreconstructedState("CrashNavEnterOnlineX360", "OnEnter"); }
 
     // ---- OnlineGameOptionsSummary ------------------------------------------------------
     void OnlineGameOptionsSummary::OnEnter() { LogUnreconstructedState("OnlineGameOptionsSummary", "OnEnter"); }

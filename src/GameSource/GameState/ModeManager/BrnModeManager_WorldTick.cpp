@@ -538,60 +538,24 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
         }
     }
 
-    // ==========================================================================================
-    // [X][X] THE ONE CALL OF THE FIVE THAT IS STILL PARKED -- and the LAST thing standing between
-    // this build and freeburn challenges actually running. Everything else landed 2026-09-07: the
-    // member IS embedded (BrnModeManager.h at +28160), the 27 ChallengeManager TUs are mounted,
-    // all twelve link-closure symbols are bodied, and Construct / Prepare / ProcessEvent /
-    // PostWorldUpdate are all made.
-    //
-    // The console call, made UNCONDITIONALLY here (after the stunt-scorer fork, before the three
-    // transmitters). Since the network wave every argument has a named accessor:
-    //   mChallengeManager.PreWorldUpdate(
-    //       &mTimerStatusInterface,
-    //       lpPreWorldInputBuffer->GetNetworkToGameStateInterface()->GetFramesSinceStart(),         // +0x2434
-    //       lpPreWorldInputBuffer->GetNetworkToGameStateInterface()->GetCompletedChallengesQueue(), // +0x1B20
-    //       lpActiveRaceCarOutput,
-    //       lpPreWorldInputBuffer->GetPlayerStatusInterface()->GetLocalPlayerIsHost(),              // +0x9EC
-    //       lpOutputBuffer);
-    // The +0x9EC byte is InGamePlayerStatusInterface::mbLocalPlayerIsHost, handed to the callee's
-    // parameter that the header spells lbIsOnline. Its only writer is
-    // BrnNetworkManager::OutputPlayerStatusInfo, and only while the local player is in a server
-    // game (ServerInterfaceGames::IsLocalPlayerHost), so offline it keeps its cleared value.
-    //
-    // WHAT THE CALL DOES OFFLINE ON THE CONSOLE: nothing observable. The callee is not gated on
-    // player count or on the host flag, but every arm it reaches is: the completed-challenges
-    // queue is empty; the three remote Start/Trigger/End latches are set only on the remote-
-    // player paths (RemoteEndChallenge and its siblings); UpdateRunning / UpdateResults act only in
-    // the RUNNING / RESULTS states, which only a challenge begun through ProcessEvent reaches
-    // (freeburn challenges are started from the online lobby); WriteDataToOutput posts the
-    // GUI update action only in those states and otherwise just republishes the eight per-car
-    // "in a freeburn challenge" flags (all false); UpdateFreeburnSkillsThisFrame clears per-frame
-    // skill scratch. (Plus the two debug "make every challenge N-player" toggles.)
-    //
-    // THE REMAINING BLOCKER -- ORDER. ModeManager::PreWorldUpdate IS LIVE: GameStateModule::
-    // PreWorldUpdateStuntBringUp calls it every unpaused frame. ChallengeManager::Construct is
-    // reached only from ModeManager::Construct, which still has NO caller (GameStateModule::
-    // Construct runs the ConstructInterModeStateBringUp subset instead; the DELETE-WHEN on
-    // ModeManager::Construct in BrnModeManager_Lifecycle.cpp lists what it still needs). Arming
-    // this call today would tick a manager Construct never ran on -- no back-pointers, no
-    // completion-record init, no debug-component registration.
-    //   => UN-PARK IN THE SAME CHANGE THAT ARMS ModeManager::Construct, and not before.
-    //
-    // PC buffer state, for whoever does that: GameStateModule's stand-in PreWorldInputBuffer is
-    // `new T()` zero-filled and only its GameEventQueue is Constructed.
-    // GameStateModuleIO::PreWorldInputBuffer::Construct (which on the console Constructs the five
-    // network queues) has no body in this tree, and nothing writes the network interface or the
-    // player-status interface (BrnGameModule::BridgeNetworkToGameState has no caller). So the
-    // completed-challenges queue is never Constructed: its buffer pointer is NULL and its length 0.
-    // The callee only reads the length and never reaches GetEvent, so that read is safe; the frame
-    // counter reads 0 and the host flag false. Construct those queues before anything appends.
-    //
-    // Behaviour lost meanwhile: freeburn challenges do not tick -- no timer, no per-action scoring,
-    // no arbitration, and WriteDataToOutput never posts the GUI update action, so a challenge that
-    // ProcessEvent starts would hang. (ProcessEvent is inert today for the same reason as the other
-    // three: ModeManager::ProcessEvent has no caller either.)
-    // ==========================================================================================
+    // The embedded ChallengeManager's tick, unconditionally, after the stunt-scorer fork and
+    // before the transmitters: the member timer interface, the network frame counter, the
+    // completed-challenges queue, the active-car output, the local player's host flag (handed to
+    // the callee's parameter the header spells lbIsOnline) and the output buffer. Offline it has
+    // nothing observable to do: the queue is empty, the remote latches are only set by the online
+    // arms, UpdateRunning / UpdateResults need a challenge begun, and WriteDataToOutput only
+    // republishes the eight per-car "in a freeburn challenge" flags (all false).
+    {
+        const GameStateModuleIO::NetworkToGameStateInterface* lpNetworkInput =
+            lpPreWorldInputBuffer->GetNetworkToGameStateInterface();
+        mChallengeManager.PreWorldUpdate(
+            &mTimerStatusInterface,
+            lpNetworkInput->GetFramesSinceStart(),
+            lpNetworkInput->GetCompletedChallengesQueue(),
+            lpActiveRaceCarOutput,
+            lpPreWorldInputBuffer->GetPlayerStatusInterface()->GetLocalPlayerIsHost(),
+            lpOutputBuffer);
+    }
 
     // ------------------------------------------------------------------------------------------
     // The three checkpoint/finish transmitters (agent 7b's bodies -- CALLED here).
@@ -1105,51 +1069,28 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
 
         if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
         {
-            // [!] ONLINE ARM PARKED -- the lobby BurnoutSkillz tick. The console arm, in full
-            // (its two verbatim asserts are "lpFreeburnLobbyMode" and "mpGameStateModule"):
-            //   OnlineFreeBurnLobbyMode* lpFreeburnLobbyMode = <mpCurrentGameMode>;  // asserted
-            //   CGS_ASSERT(mpGameStateModule);
-            //   const EActiveRaceCarIndex leIndex = mpGameStateModule->GetPlayerActiveRaceCarIndex();
-            //   BurnoutSkillzManager& lrSkillz = <the manager the lobby mode embeds at mode +0xB8>;
-            //   BurnoutSkillzData* lpData = <lrSkillz's cached ScoringSystem, +0x70>
-            //                                  ->GetBurnoutSkillzData(leIndex);   // BY-INDEX entry
-            //   if (lpData != 0)
-            //       lrSkillz.SetNewSkillIfGreater(BurnoutSkillzData::E_BURNOUT_SKILL_ROAD_RULE_TIME,
-            //                                     lpData, leIndex,
-            //                                     static_cast<f32>(static_cast<s32>(lStuntScoreInfo.muWord05)));
-            // Skill id is the immediate 10; the console sign-extends the stunt-score word before
-            // the integer-to-float, so the conversion is SIGNED, and the float travels in f1 with
-            // its GPR slot skipped -- which is why the argument list ends in the four-arg shape
-            // BrnBurnoutSkillzManager.h already declares.
-            //
-            // [!] THE LOOKUP IS TWO-STAGE -- do not flatten it when this is un-parked. The callee
-            // is the BY-INDEX overload ScoringSystem::GetBurnoutSkillzData(EActiveRaceCarIndex)
-            // (BrnScoringSystem.h): it walks the per-car scoring table at scoring +0x5044
-            // (stride +0x158) for the entry whose first word equals leIndex, reads that entry's
-            // key at +0x5048, and only then forwards to the by-key twin -- the one-loop compare
-            // against maBurnoutSkillzPlayerIDs reconstructed at BrnScoringSystem_Lookup.cpp.
-            // The committed by-index body (BrnScoringSystem_Lookup.cpp) is today a copy of
-            // that by-key loop and performs no index->key translation at all, so it does not yet
-            // mean what the console call means; see prerequisite 4.
-            //
-            // REAL BLOCKERS (re-measured this wave -- the GameActionQueue typedef clash that used
-            // to be cited here is FIXED: BrnBurnoutSkillzManager.h repeats the two IO aliases
-            // verbatim, and it and BrnOnlineFreeBurnLobbyMode.h both include into this TU
-            // cleanly). Four prerequisites remain, every one of them in a file this lane does not
-            // own:
-            //   1. OnlineFreeBurnLobbyMode declares no data members at all, so the manager it
-            //      embeds at mode +0xB8 has NO NAME to write (BrnOnlineFreeBurnLobbyMode.h).
-            //   2. BurnoutSkillzManager::mpScoringSystem (+0x70) is private with no accessor.
-            //   3. BurnoutSkillzManager::SetNewSkillIfGreater is private as well -- the header
-            //      carries one public: section and one private: section, and the declaration sits
-            //      below the private: line, so this call site cannot reach it either.
-            //   4. ScoringSystem::GetBurnoutSkillzData(EActiveRaceCarIndex) must grow the
-            //      index->key table walk described above before it means what the console means.
-            // Nothing here may reach any of those regions by an offset cast, so the arm stays
-            // parked rather than faked.
-            //
-            // It is online-only: this build never enters the lobby mode, so the mode-type gate
-            // above keeps it inert offline exactly as the console gates it.
+            // The lobby's BurnoutSkillz road-rule-time tick: the current mode IS the lobby here,
+            // and the manager it embeds offers the frame's road-rule time (the stunt-score word,
+            // sign-extended before the conversion) as the local player's ROAD_RULE_TIME skill.
+            // The by-index skillz lookup walks the scoring table index -> network id first.
+            OnlineFreeBurnLobbyMode* lpFreeburnLobbyMode =
+                static_cast<OnlineFreeBurnLobbyMode*>(mpCurrentGameMode);
+            CGS_ASSERT(lpFreeburnLobbyMode != NULL, "lpFreeburnLobbyMode");
+            CGS_ASSERT(mpGameStateModule != NULL, "mpGameStateModule");
+
+            const ::EActiveRaceCarIndex leLocalPlayerIndex =
+                mpGameStateModule->GetPlayerActiveRaceCarIndex();
+            BurnoutSkillzManager& lrSkillzManager = lpFreeburnLobbyMode->mBurnoutSkillzManager;
+            BurnoutSkillzData* lpSkillzData =
+                lrSkillzManager.mpScoringSystem->GetBurnoutSkillzData(leLocalPlayerIndex);
+            if (lpSkillzData != NULL)
+            {
+                lrSkillzManager.SetNewSkillIfGreater(
+                    BurnoutSkillzData::E_BURNOUT_SKILL_ROAD_RULE_TIME,
+                    lpSkillzData,
+                    leLocalPlayerIndex,
+                    static_cast<f32>(static_cast<s32>(lStuntScoreInfo.muWord05)));
+            }
         }
 
         (void)lStuntScoreInfo;

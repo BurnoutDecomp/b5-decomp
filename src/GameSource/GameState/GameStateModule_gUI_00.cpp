@@ -918,20 +918,21 @@ void GameStateModule::ProcessGameEventsPropHitBringUp(
 //   * case 70 keeps the profile's oncoming best  (`if (e[0] > profile+604) ...`)
 // both spelled through the DWARF's own Profile::SetNewAirMaximum / SetNewOncomingMaximum.
 //
-// ⚠️ WHAT IS *NOT* HERE, AND IS NAMED AS ABSENT RATHER THAN QUIETLY DROPPED. The console's
-// cases 67/69/70 each ALSO call BrnGameState::ModeManager::ProcessEvent(<the same event>)
-// -- the freeburn-challenge / skill scorer feed. That is a DIFFERENT consumer of the same
-// events with its own committed home (ChallengeManager::ProcessEvent, reached through
-// ModeManager), and wiring it is not this wave's charter; it changes no ticker behaviour.
-// Likewise case 73's `*(this + 47605) = 1` byte (a module latch with no reader anywhere in
-// the reconstructed tree) is left out rather than given an invented member.
+// The console's cases 67/69/70 each END with ModeManager::ProcessEvent(<the same event>,
+// gsm+0x475BC) -- the freeburn-challenge / skill scorer feed. It runs here, as each arm's last
+// statement, so the actions it posts follow the ticker action as they do on the console; the
+// float is the frame's game timestep (lfDelta). The other ProcessEvent-feeding cases run in
+// ProcessGameEventsFreeburnChallengeBringUp (BrnGameStateModule_wN3_01.cpp).
+// Case 73's `*(this + 47605) = 1` byte (a module latch with no reader anywhere in the
+// reconstructed tree) is left out rather than given an invented member.
 //
 // ⚠️ IT DOES NOT Clear() THE QUEUE -- PreWorldUpdateStuntBringUp owns the console's Clear,
 // later in the same sub-step, exactly as for every sibling arm.
 // ============================================================================
 void GameStateModule::ProcessGameEventsBoostTickerBringUp(
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
-        GameStateModuleIO::GameActionQueue* lpActionQueue)
+        GameStateModuleIO::GameActionQueue* lpActionQueue,
+        f32 lfDelta)
 {
     if (lpGameEventQueue == 0 || lpActionQueue == 0)
     {
@@ -966,6 +967,7 @@ void GameStateModule::ProcessGameEventsBoostTickerBringUp(
                 lAction.mfDistance = lpDrift->mfDistance;
                 AddBoostTickerAction(lpActionQueue, &lAction,
                                      GameStateModuleIO::E_ACTION_DRIFTING, sizeof(lAction));
+                mModeManager.ProcessEvent(GameStateModuleIO::E_EVENT_DRIFTING, lpEvent, lfDelta);
                 break;
             }
 
@@ -999,6 +1001,7 @@ void GameStateModule::ProcessGameEventsBoostTickerBringUp(
                 {
                     lpProfile->SetNewAirMaximum(lpInAir->mfCurrentJumpAirTime);
                 }
+                mModeManager.ProcessEvent(GameStateModuleIO::E_EVENT_IN_AIR, lpEvent, lfDelta);
                 break;
             }
 
@@ -1017,6 +1020,7 @@ void GameStateModule::ProcessGameEventsBoostTickerBringUp(
                 {
                     lpProfile->SetNewOncomingMaximum(lpOncoming->mfDistance);
                 }
+                mModeManager.ProcessEvent(GameStateModuleIO::E_EVENT_ONCOMING, lpEvent, lfDelta);
                 break;
             }
 
@@ -1948,7 +1952,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // write lock for, and TranslateGameActionsToGuiEvents turns six of them into GUI events
     // 383..389 in the SAME sub-step -- which is why the hint strip beside the boost bar
     // updates on the frame the trick happens, not a frame later.
-    ProcessGameEventsBoostTickerBringUp(&lGameEventQueue, lpActionQueue);
+    ProcessGameEventsBoostTickerBringUp(&lGameEventQueue, lpActionQueue, lfGameTimestep);
     // ⭐⭐⭐ [boost-wave2 2026-09-14] the dispatcher's CASE-31 arm (the rival-impact family),
     // same walk, same must-run-before-the-Clear constraint. It also relays crash-ending event42
     // to action17. The impact arm posts actions53/54 +48 onto the
@@ -1998,6 +2002,11 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // pair answered this frame is not asked again by UpdateCheckpointDistanceRequests -- the
     // console's order (ProcessGameEvents precedes ModeManager::PreWorldUpdate in PreWorldUpdate).
     ProcessGameEventsModeManagerRouteInfoBringUp(&lGameEventQueue);
+    // The online player arms (7, 121..125, 129, 139, 140) and the freeburn-challenge arms with
+    // the rest of the ModeManager::ProcessEvent feed, same walk (BrnGameStateModule_wN3_01.cpp).
+    ProcessGameEventsOnlinePlayerBringUp(&lGameEventQueue, lpActionQueue, mpOutputBuffer);
+    ProcessGameEventsFreeburnChallengeBringUp(&lGameEventQueue, lpActionQueue, lrTimerStatusInterface,
+                                              lfGameTimestep);
 
     // ---- 1a) THE TAKEDOWN FEED (console: the `if (!IsSimPaused)` block between #68 and #86) --
     // ⭐⭐⭐ [road-rage wave, agent C] GameStateModule::ProcessTakedownEvents @0x8238FC50. X360
@@ -2670,11 +2679,9 @@ void GameStateModule::ProcessGameEventsStartGameModeBringUp(
 // loop's game side: it is the ONLY caller-visible path from "the results screen went away" to
 // ExitCurrentMode clearing mpCurrentGameMode. TakedownManager::ClearRaceCarData is bodied too
 // (BrnTakedownManager.cpp), reached through GameStateModule::ClearTakedownRaceCarData.
-// [X] STILL PARKED, re-measured 2026-09-13 with a tree-wide `tools/re/hasbody.py` rather than
-// assumed: ModeManager::FinishedMapPan and ModeManager::UserCancelCurrentMode
-// have NO declaration and NO definition anywhere in the tree, so case 24 and case 27's
-// FIRST call stay written out and unarmed. Nothing faked. DELETE-WHEN those two land: un-park each
-// arm exactly as quoted above.
+// Case 27's first call, ModeManager::UserCancelCurrentMode, is armed too (ModeManager bodies it).
+// [X] STILL PARKED: ModeManager::FinishedMapPan has no declaration and no definition anywhere in
+// the tree, so case 24 stays written out and unarmed. Nothing faked. DELETE-WHEN it lands.
 //
 // IntroState uses a countdown for online modes and offline Showtime. Other offline modes
 // wait for the pre-event GUI to finish its presentation and send GUI 163, which
@@ -2785,11 +2792,9 @@ void GameStateModule::ProcessGameEventsModeIntroBringUp(
             break;
 
         case 27:   // E_EVENT_POST_EVENT_LEAVE
-            // [X] PARKED: ModeManager::UserCancelCurrentMode has no declaration and no
-            // body on this tree (re-measured 2026-09-13).
-            //     mModeManager.UserCancelCurrentMode();
-            // The arm's SECOND console call is real: TakedownManager::ClearRaceCarData(gsm+568),
-            // bodied at BrnTakedownManager.cpp and reached through the module's own hook.
+            // ModeManager::UserCancelCurrentMode, then TakedownManager::ClearRaceCarData(gsm+568)
+            // (bodied at BrnTakedownManager.cpp, reached through the module's own hook).
+            mModeManager.UserCancelCurrentMode();
             ClearTakedownRaceCarData();
             break;
 

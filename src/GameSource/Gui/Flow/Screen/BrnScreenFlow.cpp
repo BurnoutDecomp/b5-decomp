@@ -40,6 +40,7 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineScoreboards.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineStats.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineQuickMatch.h"
+#include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineNews.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineRivals.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineQuickCustomCreate.h"
@@ -178,7 +179,7 @@ bool BrnScreenFlow::Prepare(CgsGui::GuiAccessPointers* lpAccessPointers,
     mpStateVideo                      = NewPoolState<Video>(lpLinearMalloc);
     mpStateImageGallery               = NewPoolState<ImageGalleryState>(lpLinearMalloc);
     mpStateOnlinePlay                 = NewPoolState<OnlinePlay>(lpLinearMalloc);
-    mpStateOnlineGameRoom             = NewPoolState<OnlineGameRoomPlayerInfoState>(lpLinearMalloc);
+    mpStateOnlineGameRoom             = NewPoolState<OnlineGameRoomPlayerInfo>(lpLinearMalloc);
     mpStateOnlineCustomMatch          = NewPoolState<OnlineCustomMatch>(lpLinearMalloc);
     mpStateOnlineCreateFreeburn       = NewPoolState<OnlineCreateFreeburn>(lpLinearMalloc);
     mpStateOnlineSelectRoute          = NewPoolState<OnlineSelectRoute>(lpLinearMalloc);

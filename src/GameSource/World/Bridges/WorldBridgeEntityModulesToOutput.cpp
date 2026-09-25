@@ -232,8 +232,10 @@ void BridgePropToOutput_PreScene(
 // (BrnWorldModuleIO_UpdateOutputBuffer.cpp :: Construct, `mGameEventQueue.Construct()`).
 //
 // STILL DROPPED, DELIBERATELY (each now exactly specified above, so landing one is mechanical):
-//   * legs 4/6/13 -- the remaining traffic transfers. Source getters un-homed on this
-//     build. (Leg 3, the resource-request flush, has landed -- see the body.)
+//   * legs 4/6 and leg 13's sound/director siblings -- the remaining traffic transfers.
+//     (Leg 3, the resource-request flush, has landed -- see the body. Leg 13's network
+//     transfer has landed too; the sound transfer feeds a live sound-module consumer, so it
+//     lands with its own offline check, and the director transfer with it.)
 //   (⭐ LEG 7, the traffic-type RESPONSE transfer, is LANDED 2026-09-14 (traffic-type wave) --
 //    see the block in the body. It was never "un-homed": BOTH ends were already bodied
 //    (OutputBuffer_PostPhysics::GetTrafficTypeResponseQueue() const @0x827A0CC8 and

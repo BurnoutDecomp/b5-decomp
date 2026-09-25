@@ -55,6 +55,7 @@
 #include "GameSource/World/AI/BrnAISharedConstants.h"                     // BrnAI::E_RESET_TYPE_STANDARD
 #include "rw/math/vpu/vector3_operation.h"                                // rw::math::vpu::Add (the spawn look-at target)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint (the console's own Deactivate line)
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"   // [net] network car removed witness
 
 namespace BrnWorld
 {
@@ -295,6 +296,10 @@ void RaceCarEntityModule::RemoveAllNetworkCarsFromWorld(RaceCarEntityModuleIO::O
         if (lpNetworkCar->IsInWorld() && lpNetworkCar->IsNetworkDriven())      // :547 / :590
         {
             lpNetworkCar->SetInCurrentGameMode(false, false);
+
+            BrnNetHarnessPC::Witness("world", "network car removed active=%d global=%d",
+                                     static_cast<s32>(lpNetworkCar->GetActiveRaceCarIndex()),
+                                     static_cast<s32>(leGlobalRaceCarIndex));
             RemoveRaceCar(leGlobalRaceCarIndex, lpOutput);
         }
     }

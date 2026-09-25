@@ -85,6 +85,15 @@ namespace BrnTrafficIO
         mbActiveHullsValid = true;
     }
 
+    // :135. Inlined by GenerateNetworkUpdateEvents on a decision frame: the hash (+0x80,
+    // halfword), the traffic update it was taken on (+0x84, word), then mbHashValid (+0x7C).
+    void TrafficNetworkOutputInterface::SetDataHash(u32 luUpdateFrame, u16 luHash)
+    {
+        muHash            = luHash;
+        muHashUpdateFrame = luUpdateFrame;
+        mbHashValid       = true;
+    }
+
     // Inlined at 0x82728A2C..0x82728A34: `bl sub_82711AF0 ; stb r31, 0x7E(r3)` -- a bare byte store
     // of the module's mbHullSyncDivergence, no assert.
     void TrafficNetworkOutputInterface::SetDetectedHullSyncDivergence(bool lbDivergence)

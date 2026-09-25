@@ -89,15 +89,6 @@ namespace BrnGui
         }
     }
 
-    // ---- ON_GAME_ROOM -------------------------------------------------------------------
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed
-    // OnlineGameRoomPlayerInfo (renamed +State here; see the header's ODR note).
-    void OnlineGameRoomPlayerInfoState::OnEnter() { LogUnreconstructedState("OnlineGameRoomPlayerInfoState", "OnEnter"); }
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed OnlineGameRoomPlayerInfo.
-    void OnlineGameRoomPlayerInfoState::OnLeave() {}
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed OnlineGameRoomPlayerInfo.
-    void OnlineGameRoomPlayerInfoState::Update()  {}
-
     // ---- ON_TEAMS -----------------------------------------------------------------------
     // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed OnlineTeamSelection.
     void OnlineTeamSelection::OnEnter() { LogUnreconstructedState("OnlineTeamSelection", "OnEnter"); }
@@ -148,37 +139,19 @@ namespace BrnGui
 
     // =====================================================================================
     // Link scaffold for the online screens BrnScreenFlow.cpp instantiates through
-    // NewPoolState<T> (CrashNavEnterOnline, OnlineGameOptions, OnlineScoreboards): their
+    // NewPoolState<T> (OnlineGameOptions, OnlineScoreboards): their
     // headers declare ctors and virtuals whose bodies are unmounted or absent. Defining a
     // ctor forces the class vtable, which references every virtual, hence the full lifecycle
     // set per class. All online-only, unreachable on this build.
     //
     // DELETE-WHEN, per symbol: mounting any of these TUs requires deleting the matching
     // stub here (LNK2005 otherwise):
-    //     CrashNavEnterOnlineX360::OnLeave / ::ShowSignInUI
-    //         -> src/GameSource/Gui/Flow/Screen/States/X360/BrnCrashNavEnterOnlineX360.cpp
     //     GuiNetworkRouteInfo::GuiNetworkRouteInfo
     //         -> src/GameSource/Gui/Flow/Screen/Components/BrnGuiNetworkRouteInfo.cpp
     //     OnlineGameOptions::OnEnter
     //         -> src/GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions_wI_05.cpp:218
     // The rest have no definition anywhere in src/.
     // =====================================================================================
-
-    // ---- CN_ENTER_ONLINE ----------------------------------------------------------------
-    // FLAG link scaffold: no definition anywhere in src/ (ctor and Update).
-    CrashNavEnterOnlineBase::CrashNavEnterOnlineBase() {}
-    // FLAG link scaffold: no definition anywhere in src/.
-    void CrashNavEnterOnlineBase::Update() {}
-    // FLAG link scaffold: REAL BODY EXISTS, unmounted -- BrnCrashNavEnterOnline_wI_06.cpp:178.
-    void CrashNavEnterOnlineBase::OnEnter()
-    { LogUnreconstructedState("CrashNavEnterOnlineBase", "OnEnter"); }
-    // FLAG link scaffold: no definition anywhere in src/ (@0x824CAB88, foreign ledger TU).
-    void CrashNavEnterOnlineBase::OnLeave() {}
-    // FLAG link scaffold: REAL BODY EXISTS, unmounted -- X360/BrnCrashNavEnterOnlineX360.cpp.
-    void CrashNavEnterOnlineX360::OnLeave() {}
-    // FLAG link scaffold: REAL BODY EXISTS, unmounted -- X360/BrnCrashNavEnterOnlineX360.cpp.
-    // The console returns the sign-in UI's result code; 0 is its "no UI was shown" value.
-    u32 CrashNavEnterOnlineX360::ShowSignInUI() { return 0; }
 
     // ---- ONLINE_GAME_OPTIONS ------------------------------------------------------------
     // (No ctor stub: OnlineGameOptions declares none; its by-value GuiNetworkRouteInfo and
@@ -211,8 +184,6 @@ namespace BrnGui
     void LeaderboardTableComponent::Construct(const char*, CgsGui::StateInterface*, const char*) {}
 
     // ---- shared components pulled in by the three screens above --------------------------
-    // FLAG link scaffold: REAL BODY EXISTS, unmounted -- Screen/Components/BrnGuiNetworkRouteInfo.cpp.
-    GuiNetworkRouteInfo::GuiNetworkRouteInfo() {}
     // FLAG link scaffold: no definition anywhere in src/ -- BrnHelpBar.cpp:46 declares
     // HelpBar::HelpBar @0x82515328 BLOCKED and deliberately leaves it undefined.
     HelpBar::HelpBar() {}

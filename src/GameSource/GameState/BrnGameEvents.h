@@ -9,6 +9,7 @@
 #include "GameSource/GameState/BrnCgsPlayerName.h"           // CgsNetwork::PlayerName (BuddyRemovedEvent)
 #include "SharedClasses/StreetData/BrnStreetData.h"          // BrnStreetData::ChallengeIndex (road-rules events)
 #include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h" // BrnStreetData::ChallengeHighScoreEntry (PB-recv event)
+#include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h" // BrnGameState::BurnoutSkillzData (NewRemoteBurnoutSkillzEvent)
 
 // Owning header for the BrnGameState::GameStateModuleIO GameEvent<> family slices reconstructed
 // by the GameMode/ModeManager leaf batch. Minimal slices: only members the reconstructed bodies
@@ -51,6 +52,14 @@ enum EGameEventType
     // Posted as 121 by TranslateNetworkEventsToGameEvents; ProcessGameEvents' case 121 is the
     // arm that turns it into the remote-player-disconnected action.
     E_EVENT_REMOTE_PLAYER_DISCONNECTED = 121,
+    // The online lobby / host family, unshifted against the reference enum. Each is a
+    // GameStateModule::ProcessGameEvents case; the producers are the network bridge (124 from
+    // network event 24, 139 from 62, 140 from 45) and the network state manager (122, 125).
+    E_EVENT_LOCAL_PLAYER_CONNECTED     = 122,
+    E_EVENT_LOCAL_PLAYER_LEFT_LOBBY    = 124,   // 1 byte, no payload
+    E_EVENT_ONLINE_GAME_PARAMS_CHANGED = 125,
+    E_EVENT_ONLINE_NEW_BURNOUT_SKILLZ  = 139,   // 64 bytes
+    E_EVENT_ONLINE_NEW_HOST            = 140,   // 2 bytes
     E_EVENT_RECORD_PROP_HIT         = 111,   // DWARF BrnGameEvents.h:121
     E_EVENT_CHANGE_WORLD_REGION     = 115,   // X360-attested: RaceCarEntityModule::
                                              // UpdateCurrentWorldRegion @0x822F5824 posts it
@@ -228,6 +237,14 @@ enum EGameEventType
     // BridgeWorldToGameState posts (`li r5, 0xAE` @0x823E5538) -- same +6 as ACTIVE_FREEBURN above.
     E_EVENT_LANDMARK_ROUTE_REQUEST            = 84,  // X360 (PS3 85; ProcessGameEvents case 84)
     E_EVENT_MODE_MANAGER_ROUTE_INFO           = 174, // X360 (PS3 168; "lpRouteInfoEvent")
+    // The rest of the freeburn-challenge block, at the same +5 shift (the ENDED..REQUEST run
+    // sits one further on, past the extra 167). Values are the ProcessGameEvents case labels.
+    E_EVENT_FREEBURN_CHALLENGE_SELECTED            = 162, // reference 157; 16 bytes, GUI 573 bridge
+    E_EVENT_FREEBURN_CHALLENGE_SELECTED_REMOTELY   = 163, // reference 158; 8 bytes
+    E_EVENT_FREEBURN_CHALLENGE_TRIGGERED_REMOTELY  = 164, // reference 159; 8 bytes
+    E_EVENT_FREEBURN_CHALLENGE_ENDED               = 168, // reference 162; 16 bytes
+    E_EVENT_TRIGGER_FREEBURN_CHALLENGE             = 169, // reference 163
+    E_EVENT_REQUEST_EVERY_PLAYER_COMPLETION_STATUS = 170, // reference 164; 1 byte, GUI 580 bridge
     // Road-rules events (StreetManager keystone, wave B). The network bridge posts the buddy and
     // the four online road-rules events under these ids, and ProcessGameEvents' cases 150 /
     // 130 / 131 / 132 / 133 call StreetManager::ProcessBuddyRemoved / ProcessNetworkHighScoreEvent
@@ -438,6 +455,89 @@ struct RemotePlayerDisconnectedEvent : public GameEvent<E_EVENT_REMOTE_PLAYER_DI
 
     void SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID);
 };
+
+// ===== Online lobby events (ProcessGameEvents cases 122 / 124 / 125 / 139 / 140) =====
+// Member sets and order are the reference build's; the offsets are the ones the case arms read.
+
+// Case 122: the local player's network id at +0 (stored as the module's local id).
+struct LocalPlayerConnectedEvent : public GameEvent<E_EVENT_LOCAL_PLAYER_CONNECTED>
+{
+    BrnNetwork::NetworkPlayerID mNetworkPlayerID;   // +0x00
+};
+
+// Case 124: the local player left the lobby. Empty signal (posted with size 1).
+struct LocalPlayerLeftLobby : public GameEvent<E_EVENT_LOCAL_PLAYER_LEFT_LOBBY> {};
+static_assert(sizeof(LocalPlayerLeftLobby) == 1, "posted with size 1");
+
+// Case 125: the lobby's game parameters changed (mode word at +0, ranked byte at +4).
+struct OnlineGameParamsChanged : public GameEvent<E_EVENT_ONLINE_GAME_PARAMS_CHANGED>
+{
+    EGameModeType meGameMode;   // +0x00
+    bool          mbIsRanked;   // +0x04
+};
+
+// Case 139: a remote player's burnout-skillz record. The network bridge posts it as 64 bytes:
+// player id +0, the 56-byte skillz table +4, the initial-data byte +0x3C.
+struct NewRemoteBurnoutSkillzEvent : public GameEvent<E_EVENT_ONLINE_NEW_BURNOUT_SKILLZ>
+{
+    BrnNetwork::NetworkPlayerID mPlayerID;       // +0x00
+    BurnoutSkillzData           mNewSkillzData;  // +0x04
+    bool                        mbInitialData;   // +0x3C
+};
+static_assert(offsetof(NewRemoteBurnoutSkillzEvent, mNewSkillzData) == 0x04, "skillz table at +0x04");
+static_assert(offsetof(NewRemoteBurnoutSkillzEvent, mbInitialData)  == 0x3C, "initial-data byte at +0x3C");
+static_assert(sizeof(NewRemoteBurnoutSkillzEvent) == 64, "posted as 64 bytes");
+
+// Case 140: host change. Two bytes (the network bridge's {isLocalNowHost, isFirstHost}).
+struct OnlineNewHostEvent : public GameEvent<E_EVENT_ONLINE_NEW_HOST>
+{
+    bool mbIsLocalPlayerNowHost;   // +0x00
+    bool mbIsFirstHost;            // +0x01
+};
+static_assert(sizeof(OnlineNewHostEvent) == 2, "posted as 2 bytes");
+
+// ===== Freeburn-challenge selection / remote events (cases 162..164, 168..170) =====
+
+// Case 162, built by BridgeGuiToGameState from GUI 573: the challenge id at +0, the selector
+// action at +8 (the arm's switch), the challenge style at +0xC.
+struct FreeburnChallengeSelectedEvent : public GameEvent<E_EVENT_FREEBURN_CHALLENGE_SELECTED>
+{
+    enum EFreeburnChallengeAction
+    {
+        E_ACTION_CHOSEN   = 0,
+        E_ACTION_CANCELED = 1,
+        E_ACTION_SHOWN    = 2,
+        E_ACTION_HIDDEN   = 3,
+    };
+
+    CgsID                    mChallengeID;               // +0x00
+    EFreeburnChallengeAction meAction;                   // +0x08
+    s32                      meFreeburnChallengeStyle;   // +0x0C (ChallengeListEntry::EFreeburnChallengeStyle)
+};
+static_assert(offsetof(FreeburnChallengeSelectedEvent, meAction) == 0x08, "selector action at +0x08");
+static_assert(sizeof(FreeburnChallengeSelectedEvent) == 16, "posted as 16 bytes");
+
+// Cases 163 / 164: the challenge id at +0 (8 bytes each).
+struct FreeburnChallengeSelectedRemotelyEvent : public GameEvent<E_EVENT_FREEBURN_CHALLENGE_SELECTED_REMOTELY>
+{
+    CgsID mChallengeID;   // +0x00
+};
+struct FreeburnChallengeTriggeredRemotelyEvent : public GameEvent<E_EVENT_FREEBURN_CHALLENGE_TRIGGERED_REMOTELY>
+{
+    CgsID mChallengeID;   // +0x00
+};
+
+// Case 168: the challenge id at +0 and the end status at +8 (16 bytes).
+struct FreeburnChallengeEndedEvent : public GameEvent<E_EVENT_FREEBURN_CHALLENGE_ENDED>
+{
+    CgsID            mChallengeID;        // +0x00
+    EChallengeStatus meChallengeStatus;   // +0x08
+};
+static_assert(offsetof(FreeburnChallengeEndedEvent, meChallengeStatus) == 0x08, "status at +0x08");
+static_assert(sizeof(FreeburnChallengeEndedEvent) == 16, "posted as 16 bytes");
+
+// Case 170: empty signal (GUI 580 bridge, size 1).
+struct FreeburnChallengeRequestEveryPlayerStatusEvent : public GameEvent<E_EVENT_REQUEST_EVERY_PLAYER_COMPLETION_STATUS> {};
 
 // X360 0x82542068 (Clear) / 0x825420C8 (SetPlayerData). Full 256-byte X360 layout (grown from the
 // former minimal slice): the three X360 facts that NetworkRoundManager::NetworkGameStarted bakes --
@@ -812,10 +912,13 @@ struct CompletedStuntEvent : public GameEvent<E_EVENT_COMPLETED_STUNT>
     bool mabStuntRunScored[12];        // 0x44..0x4F FLAG: X360-only ("slot K scored" gate)
     s32  miCompletedBarrelRolls;       // 0x50 (:511; lwz+fcfid, feeds BARREL_ROLL(9)/(10))
     s32  miCompletedSkill37Count;      // 0x54 FLAG: X360-only count (lwz+fcfid, feeds drifted skill 37)
-    u8   maReserved0x58[4];            // 0x58..0x5B
+    f32  mfCompletedBarrelRollAngle;   // 0x58 (reference order; ProcessGameEvents case 119 copies it to
+                                       //       CompletedStuntAction +0x04)
     f32  mfCompletedAirSpinAngle;      // 0x5C (:502; radians -- consumer scales by 57.29578,
                                        //       feeds FLATSPIN(1)/FLATSPIN_REVERSE(2))
-    u8   maReserved0x60[8];            // 0x60..0x67
+    f32  mfCompletedHandbreakTurnAngle; // 0x60 (reference order; case 119 -> action +0x0C, and the
+                                        //       profile's best handbrake-turn stat)
+    f32  mfCompletedDriftTime;         // 0x64 (reference order; case 119 -> action +0x10)
     f32  mfCompletedDriftDistance;     // 0x68 (feeds DRIFT(3); drift skill is distance-valued per
                                        //       DriftingEvent -- DWARF also lists a DriftTime, FLAG)
     f32  mfCompletedAirTime;           // 0x6C (:506; feeds AIR(15))
