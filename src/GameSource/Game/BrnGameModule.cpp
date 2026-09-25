@@ -2793,6 +2793,32 @@ namespace BrnGame
             BrnGame::DispatchThreadInputBuffer* const lpDispatchWriteBuffer =
                 mDispatchThreadInputBufferManager.GetWriteBuffer();
 
+            // ---- mbIsRenderingAtFullFrameRate (FX-CRASHVFX, crash parity 2026-09-25) ------------
+            // The console: DoDispatch @0x823DC458, 0x823DC5C8..0x823DC630, under the dispatch
+            // buffer's write lock -- the director camera output's current flag set (`ld r11,
+            // 0x140(r3)`: CameraState +0x08, the 64-bit BitArray<30>) tested for bit 3 (`rlwinm
+            // r11,r11,0,0x1c,0x1c`, 0x8) and bit 27 (`rlwinm r11,r11,0,4,4`, 0x08000000), and the
+            // result stored at +0x99B0 (`stbx r11, r24, r10`, r10 = 0x99B0):
+            //     full rate = E_FLAG_RACING_GAMEPLAY_CAMERA (3) || E_FLAG_ROAD_FOLLOWING_CAM (27).
+            // Every other camera -- the crash, takedown and jump cameras among them -- renders at the
+            // REDUCED rate, and ParticleModule::GenerateRenderRequests turns that into
+            // eRenderDataFlagReducedFrameRate (0x40): debris then collides with the crash triangle
+            // cache and keeps its full lifetimes, buckets live 10 s, the crash CPU monitors run.
+            // The PC never wrote the flag (DispatchThreadInputBuffer::Construct's `true` stood for
+            // ever), so the particle module never left its normal-driving arm, even in a crash.
+            // Written here, BEFORE the stand-in and the real producer below (both read it), from
+            // this frame's camera, whose flag word is the current tick's (GetInterpolatedDispatchCamera
+            // blends only the pose) -- i.e. the director output the console reads.
+            {
+                const BrnDirector::Camera::CameraState& lrCameraState = lpDispatchCamera->GetState();
+                const bool lbFullFrameRate =
+                    lrCameraState.IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_RACING_GAMEPLAY_CAMERA)
+                    || lrCameraState.IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_ROAD_FOLLOWING_CAM);
+                lpDispatchWriteBuffer->LockForWrite();
+                lpDispatchWriteBuffer->SetIsRenderingAtFullFrameRate(lbFullFrameRate);
+                lpDispatchWriteBuffer->UnlockForWrite();
+            }
+
             // The real pair's own gate, hoisted so the stand-in can ask whether it is about to run.
             // mpUpdateInputBufferStack is set in Construct (:207) and never cleared, so in practice
             // this is the effects module's prepare stage alone; it is spelt out because
