@@ -213,13 +213,25 @@ namespace CgsGraphics
                 if (x < lfMinX) lfMinX = x; if (x > lfMaxX) lfMaxX = x;
                 if (y < lfMinY) lfMinY = y; if (y > lfMaxY) lfMaxY = y;
             }
-            char lacMsg[192];
+            // shift= : the colour-transform shift texture stage 1 adds after the texel (see
+            // BeginIm2dColourShift), or '-' when the stage is off -- the witness that a FLAPT
+            // flat colour reached the device as the console's post-texture add.
+            DWORD luShiftOp = D3DTOP_DISABLE;
+            DWORD luShiftFactor = 0u;
+            lpDevice->GetTextureStageState(1, D3DTSS_COLOROP, &luShiftOp);
+            lpDevice->GetRenderState(D3DRS_TEXTUREFACTOR, &luShiftFactor);
+            char lacShift[16];
+            if (luShiftOp == D3DTOP_ADD)
+                std::snprintf(lacShift, sizeof(lacShift), "%06X", static_cast<u32>(luShiftFactor & 0xFFFFFFu));
+            else
+                std::snprintf(lacShift, sizeof(lacShift), "-");
+            char lacMsg[224];
             std::snprintf(lacMsg, sizeof(lacMsg),
-                        "[Im2dTrace] f=%u n=%u xy=(%.0f,%.0f)-(%.0f,%.0f) rgba=%02X%02X%02X%02X tex=%p\n",
+                        "[Im2dTrace] f=%u n=%u xy=(%.0f,%.0f)-(%.0f,%.0f) rgba=%02X%02X%02X%02X tex=%p shift=%s\n",
                         renderengine::guPresentCount, luCount, lfMinX, lfMinY, lfMaxX, lfMaxY,
                         lpVertices[0].mv4Colour.r, lpVertices[0].mv4Colour.g,
                         lpVertices[0].mv4Colour.b, lpVertices[0].mv4Colour.a,
-                        gpIm2dTraceLastTexture);
+                        gpIm2dTraceLastTexture, lacShift);
             CgsDev::Log::WriteToLog(lacMsg);
         }
 
@@ -354,26 +366,76 @@ namespace CgsGraphics
     // before it ever reaches an Im2dTransform. Do NOT route this through
     // ImRenderBuffer's DispatchColourChannel, which is a 0..255 helper.
     //
-    // FIDELITY NOTE: the console does not fold colour on the CPU at all --
-    // Im2dRenderBuffer::Dispatch @0x827F9BA0 case 0x16 calls SetTransform @0x823AC048,
-    // which uploads the four rows verbatim as GPU shader constants, and the shader adds
-    // the shift AFTER the texture modulate:   texel * (vertexColour * scale) + shift.
-    // Folding into the vertex colour here instead yields
-    //                                          texel * (vertexColour * scale + shift),
-    // which is EXACT for alpha (shift.w == 0.0 in all 5158 shipped records) and EXACT
-    // for untextured meshes (texId < 0 -> the 4x4 white GetFlaptNoTexture() singleton),
-    // hence exact for the alpha-0 meshes and for every fade. It is an APPROXIMATION only
-    // for textured RGB carrying a non-zero shift (1611/5158 records). The PC 2D sites are
-    // D3D9 fixed-function, so there is no shader constant to upload; a programmable 2D
-    // path should move this fold back onto the GPU and recover exactness.
-    // FLAG PC-platform leaf: CPU fold standing in for the console's GPU constant upload.
+    // ⭐ THE SHIFT IS ADDED AFTER THE TEXTURE MODULATE (FX-POPUP 2026-09-25). The console
+    // does not fold colour on the CPU at all -- Im2dRenderBuffer::Dispatch @0x827F9BA0 case
+    // 0x16 calls SetTransform @0x823AC048, which uploads the four rows as the program-0
+    // constants Im2d::Construct @0x827FBDB8 binds by name (gOffsetXYZ, gRightUp,
+    // gColourShift, gColourScale), and Criterion's source for that program pair
+    // (tools/nushaders/Source/Executable/0.fx + 1.fx) is
+    //     VS: oColourScale = iColour * gColourScale;   oColourShift = gColourShift;
+    //     PS: oColour = tex2D(DiffuseSampler, uv) * iColourScale + iColourShift;
+    // i.e.  final = texel * (vertexColour * scale) + shift.
+    // This used to fold the shift into the vertex colour as well, which computes
+    //     final = texel * (vertexColour * scale + shift)
+    // -- exact only where the texel is white. The FLAPT HUD authors FLAT colours as scale 0
+    // + shift (MovieClipRef::SetColour @0x8241E0D0 does exactly that at runtime; 1060 of the
+    // 1311 textured-mesh cxf records carrying a shift do it in the data), over DARK atlases:
+    // the DwnldTitleUp popup's banner stripe (flat (0.400,0.016,0.016) on FLAPT atlas 17)
+    // drew (59,1,1) instead of (102,4,4), and its BlackDirt / RedDirt pieces (flat 0.200 grey
+    // / (0.216,0.078,0.078) on atlas 7, mean texel RGB 15/255) drew black.
+    // FLAG PC-platform leaf: fixed-function D3D9 has no shader constant to upload, so the SCALE
+    // stays folded into the vertex colour (it multiplies before the texture on the console too)
+    // and the SHIFT rides D3DRS_TEXTUREFACTOR into texture stage 1 as ADD(CURRENT, TFACTOR) with
+    // alpha passed through -- the realisation the Apt dispatcher already uses for the same
+    // formula (CgsImRenderBufferTemplate.cpp, lbNeedShift). Exact for the shipped data: every
+    // one of the 1611 FLAPTHUD (1614 FLAPTHUDSD) cxf records with an RGB shift lies in [0,1],
+    // the alpha shift is 0.0 in all 5158 (5162), SetColour writes the RGB lanes only, every
+    // other Im2dTransform producer on this path zeroes the shift, ComposeDrawTransform only
+    // ever ADDS shifts, and stage 1 saturates at 1 like the console's 8-bit colour output.
     // ------------------------------------------------------------------------------
-    static inline u8 FoldIm2dColourChannel(u8 lu8In, f32 lfScale, f32 lfShift)
+    static inline u8 FoldIm2dColourScale(u8 lu8In, f32 lfScale)
     {
-        f32 lfOut = (static_cast<f32>(lu8In) / 255.0f) * lfScale + lfShift;
+        f32 lfOut = (static_cast<f32>(lu8In) / 255.0f) * lfScale;
         if (lfOut < 0.0f) lfOut = 0.0f;
         if (lfOut > 1.0f) lfOut = 1.0f;
         return static_cast<u8>(lfOut * 255.0f + 0.5f);
+    }
+
+    // Open texture stage 1 as ADD(CURRENT, TFACTOR) with TFACTOR = the transform's RGB shift,
+    // for one draw; returns false (and touches nothing) when the shift is zero. The caller
+    // closes the stage after the draw so the next batch finds the cascade as it expects.
+    static bool BeginIm2dColourShift(IDirect3DDevice9* lpDevice, const Im2dTransform& lrTransform)
+    {
+        const f32 lafShift[3] = { lrTransform.mColourShift.x, lrTransform.mColourShift.y,
+                                  lrTransform.mColourShift.z };
+        if (lpDevice == nullptr ||
+            (lafShift[0] <= 0.0f && lafShift[1] <= 0.0f && lafShift[2] <= 0.0f))
+        {
+            return false;
+        }
+        u32 luFactor = 0u;   // D3DCOLOR 0x00RRGGBB: alpha 0, stage 1 passes alpha through
+        for (int liLane = 0; liLane < 3; ++liLane)
+        {
+            f32 lfValue = lafShift[liLane];
+            if (lfValue < 0.0f) lfValue = 0.0f;
+            if (lfValue > 1.0f) lfValue = 1.0f;
+            luFactor = (luFactor << 8) | static_cast<u32>(lfValue * 255.0f + 0.5f);
+        }
+        lpDevice->SetRenderState(D3DRS_TEXTUREFACTOR, luFactor);
+        lpDevice->SetTextureStageState(1, D3DTSS_COLOROP,   D3DTOP_ADD);
+        lpDevice->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_CURRENT);
+        lpDevice->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_TFACTOR);
+        lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP,   D3DTOP_SELECTARG1);
+        lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG1, D3DTA_CURRENT);
+        lpDevice->SetTextureStageState(2, D3DTSS_COLOROP,   D3DTOP_DISABLE);
+        lpDevice->SetTextureStageState(2, D3DTSS_ALPHAOP,   D3DTOP_DISABLE);
+        return true;
+    }
+
+    static void EndIm2dColourShift(IDirect3DDevice9* lpDevice)
+    {
+        lpDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+        lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
     }
 
     // ==================================================================================
@@ -393,7 +455,7 @@ namespace CgsGraphics
     // drew at its authored box origin read as raw screen pixels.
     //
     // FLAG PC-platform leaf: CPU fold standing in for the console's GPU constant upload
-    // (the same divergence FoldIm2dColourChannel above already documents).
+    // (the same stand-in the colour-transform banner above FoldIm2dColourScale documents).
     // ==================================================================================
 
     // The canonical screen-space transform: 1280x720 logical -> NDC. Byte-for-byte the
@@ -501,19 +563,22 @@ namespace CgsGraphics
 
             // The colour transform rides the same shader constants on the console, so a
             // faded/tinted clip fades its text with it (this is what makes the HUD-message
-            // strings fade in with their banner instead of popping at full opacity).
+            // strings fade in with their banner instead of popping at full opacity). The
+            // SCALE folds into the vertex colour here; the SHIFT is added after the glyph
+            // texel by stage 1 (see FoldIm2dColourScale / BeginIm2dColourShift).
             const RGBA8 lSrcColour = lpVertices[luVertex].mv4Colour;
-            saFolded[luVertex].mv4Colour.r = FoldIm2dColourChannel(
-                lSrcColour.r, mCurrentTransform.mColourScale.x, mCurrentTransform.mColourShift.x);
-            saFolded[luVertex].mv4Colour.g = FoldIm2dColourChannel(
-                lSrcColour.g, mCurrentTransform.mColourScale.y, mCurrentTransform.mColourShift.y);
-            saFolded[luVertex].mv4Colour.b = FoldIm2dColourChannel(
-                lSrcColour.b, mCurrentTransform.mColourScale.z, mCurrentTransform.mColourShift.z);
-            saFolded[luVertex].mv4Colour.a = FoldIm2dColourChannel(
-                lSrcColour.a, mCurrentTransform.mColourScale.w, mCurrentTransform.mColourShift.w);
+            saFolded[luVertex].mv4Colour.r = FoldIm2dColourScale(lSrcColour.r, mCurrentTransform.mColourScale.x);
+            saFolded[luVertex].mv4Colour.g = FoldIm2dColourScale(lSrcColour.g, mCurrentTransform.mColourScale.y);
+            saFolded[luVertex].mv4Colour.b = FoldIm2dColourScale(lSrcColour.b, mCurrentTransform.mColourScale.z);
+            saFolded[luVertex].mv4Colour.a = FoldIm2dColourScale(lSrcColour.a, mCurrentTransform.mColourScale.w);
         }
 
+        const bool lbShift = BeginIm2dColourShift(renderengine::gDevice, mCurrentTransform);
         ImRenderer<V>::RenderEnd(lePrimitiveType, saFolded, luVertexCount);
+        if (lbShift)
+        {
+            EndIm2dColourShift(renderengine::gDevice);
+        }
     }
 
     template <typename V>
@@ -570,23 +635,25 @@ namespace CgsGraphics
             laTransformed[luVertex].mv2Pos.x = (lfNdcX + 1.0f) * 640.0f;
             laTransformed[luVertex].mv2Pos.y = (1.0f - lfNdcY) * 360.0f;
 
-            // The colour transform (see FoldIm2dColourChannel above for the lane order
-            // and unit derivation). Without this the batch drew at its authored vertex
-            // colour regardless of the transform, so every mesh authored alpha-0 --
-            // notably the Showtime button prompt's two untextured backing quads -- drew
-            // fully opaque, and every FLAPT fade was inert.
+            // The colour transform (see the banner above FoldIm2dColourScale for the lane
+            // order, the units and the console formula). Without it the batch drew at its
+            // authored vertex colour regardless of the transform, so every mesh authored
+            // alpha-0 -- notably the Showtime button prompt's two untextured backing quads --
+            // drew fully opaque, and every FLAPT fade was inert. Only the SCALE is folded into
+            // the vertex colour: the SHIFT is added after the texture modulate by stage 1.
             const RGBA8 lSrcColour = lpVertices[luVertex].mv4Colour;
-            laTransformed[luVertex].mv4Colour.r =
-                FoldIm2dColourChannel(lSrcColour.r, lrTransform.mColourScale.x, lrTransform.mColourShift.x);
-            laTransformed[luVertex].mv4Colour.g =
-                FoldIm2dColourChannel(lSrcColour.g, lrTransform.mColourScale.y, lrTransform.mColourShift.y);
-            laTransformed[luVertex].mv4Colour.b =
-                FoldIm2dColourChannel(lSrcColour.b, lrTransform.mColourScale.z, lrTransform.mColourShift.z);
-            laTransformed[luVertex].mv4Colour.a =
-                FoldIm2dColourChannel(lSrcColour.a, lrTransform.mColourScale.w, lrTransform.mColourShift.w);
+            laTransformed[luVertex].mv4Colour.r = FoldIm2dColourScale(lSrcColour.r, lrTransform.mColourScale.x);
+            laTransformed[luVertex].mv4Colour.g = FoldIm2dColourScale(lSrcColour.g, lrTransform.mColourScale.y);
+            laTransformed[luVertex].mv4Colour.b = FoldIm2dColourScale(lSrcColour.b, lrTransform.mColourScale.z);
+            laTransformed[luVertex].mv4Colour.a = FoldIm2dColourScale(lSrcColour.a, lrTransform.mColourScale.w);
         }
 
+        const bool lbShift = BeginIm2dColourShift(renderengine::gDevice, lrTransform);
         this->Render(lePrimitiveType, laTransformed, luNumVertices);
+        if (lbShift)
+        {
+            EndIm2dColourShift(renderengine::gDevice);
+        }
     }
 
     template <typename V>
