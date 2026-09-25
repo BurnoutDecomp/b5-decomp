@@ -576,14 +576,14 @@ namespace BrnDirector
 
         // ⚠️ GATE: the three DebugPrinter::Constructs.
 
-        // [FLAG PC bring-up] The ICE scene-space transform (+0x12170). The console does NOT
-        // seed it -- nothing in the whole image writes it except the in-game ICE editor's
-        // preview leg in Update -- so on a console it starts at the module allocation's zero.
-        // The PC allocation carries no such guarantee, and this matrix is staged into every
-        // frame's ICE::CameraSpaceHandler, so it is zeroed explicitly rather than left to luck.
-        // A scene-space authored take projects through a zero matrix either way; that is the
-        // console's behaviour, not a deviation.
-        // DELETE-WHEN: the ICE editor's scene-space producer is reconstructed.
+        // [FLAG PC bring-up] The ICE scene-space transform (+0x12170). Construct does not seed it on the
+        // console: it starts at the module allocation's zero, and the PC allocation carries no such
+        // guarantee, so it is zeroed here explicitly. [CORRECTED 2026-09-25, FX-DIRECTOR2] This comment
+        // used to say nothing in the image writes it but the ICE editor. That was wrong: Update writes the
+        // published camera's transform into it on EVERY live frame whose camera is not in a scene-space
+        // shot (0x82274A28..0x82274A80, four lvx128 / stvx128 pairs through r18 = 0x12170). The indexed
+        // `stvx128 v0, r0, r11` (r11 = this + r18) is invisible to a literal displacement scan, so the
+        // zero only lasts until the first live frame.
         mICESceneSpace.xAxis.SetZero();
         mICESceneSpace.yAxis.SetZero();
         mICESceneSpace.zAxis.SetZero();
@@ -3386,6 +3386,22 @@ namespace BrnDirector
             }
             BrnDiag_GameCameraBlendAfter(lCamera, mArbitrator.GetSharedCameras().mGameplayExternal,
                                          lbGameCameraBlendReset);        // [DIAG] NOT X360
+
+            // ⭐ (2026-09-25, FX-DIRECTOR2) @0x82274A28..0x82274A80 -- THE ICE SCENE SPACE FOLLOWS THE
+            // PUBLISHED CAMERA. Unless the frame camera is in a scene-space shot, its transform becomes the
+            // scene space: `ld` camera +0x140, `rlwinm 0,18,18` (flag 13) ; `bne` skip ; four lvx128 /
+            // stvx128 into this + 0x12170. KeyAnimController::UpdateTransformationMatrix raises flag 13 for
+            // a take whose eye or look is authored in eICE_SCENE_SPACE. So such a take is anchored to the
+            // last camera before it (UpdateCameraBehavioursPostScene stages this matrix into the frame's
+            // ICE::CameraSpaceHandler as mSceneToWorld), and the space holds still while the take runs.
+            // 43 of the 549 retail takes author scene space (Race_StartFX, Race_Event_Start, the RaceIntros,
+            // Road_Rage_Start, Stunt_Intro / Loop, the World_Signature_* jump outros, CrashBreaker_lvl1_v3/4,
+            // End_State, Burning_Finish, the CarUnlock_* ...). Without this they all projected through the
+            // zero matrix.
+            if (!lCamera.mState.IsFlagSet(Camera::CameraState::E_FLAG_DONT_UPDATE_SCENESPACE))
+            {
+                mICESceneSpace = lCamera.mTransform;
+            }
 
             // ⭐ X360 @0x82274070 pseudocode 602..653 -- THE HOOK-REQUEST HAND-OVER. The camera
             // the arbitrator just produced carries this frame's post-FX requests (its
