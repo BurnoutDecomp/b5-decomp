@@ -966,7 +966,10 @@ void CrashPlayManager::HandlePlayerToVehicleImpact(
 
     OnCarCrash( lHitVehicleID, true );
 
-    if( mfTimeSinceLastTrafficStomp >= KF_MIN_TIME_BETWEEN_TRAFFIC_STOMPS
+    // 0x822D5A18 `fcmpu cr6, mfTimeSinceLastTrafficStomp, 1.0` ; 0x822D5A1C `blt cr6, 0x822D5AA4`
+    // (41980088 = bc 12,24 -- NOT taken on unordered): only an ordered timer UNDER the minimum leaves,
+    // so a NaN timer goes on to the owner / species / normal tests. (`>=` stopped a NaN timer here.)
+    if( !( mfTimeSinceLastTrafficStomp < KF_MIN_TIME_BETWEEN_TRAFFIC_STOMPS )
         && lHitVehicleID.GetOwner() == 2
         && BrnTraffic::GetVehicleSpecies( lHitVehicleID.GetEntityIndex() ) != 1 )
     {

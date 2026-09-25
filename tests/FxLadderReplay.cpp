@@ -20,6 +20,15 @@
 //   * geometry exhaustion (|n.At_A| + |n.At_B| < 1.9 at 0x8261A454 and dot(At_A, At_B) < 0.75 at
 //     0x82619FDC).
 // A change to any gate, threshold, the rung order or the aggressor pick turns a record RED.
+//
+// NaN VARIANTS (kaNanVariants): recorded contacts with ONE input made unordered, one per float branch
+// whose TAKEN side is the unordered side. After fcmpu an unordered result sets only UN, so ble / bge
+// are TAKEN and blt / bgt are NOT:
+//   * SlamAndTradingPaint 0x8261A0FC `ble -> li r3,0`: a NaN closing leaves the rung (none);
+//   * SlamAndTradingPaint 0x8261A154 `blt steerA,steerB`: a NaN steerB with steerA > 0 keeps the A arm;
+//   * StationaryTargetTakedown 0x8263DA0C `ble -> 0x8263DA40`: a NaN speed takes the A-is-victim arm
+//     (online only, +0x2A11B).
+// The pre-fix body (`<=`, `>=`, `<=`) reads each one the other way.
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -775,6 +784,44 @@ namespace
     };
 }
 
+namespace
+{
+    // One recorded contact with up to three words overridden, and the console's decision for it.
+    struct NanVariant
+    {
+        const char* mpcLabel;
+        const char* mpcGate;
+        s32 miBase;           // index into kaRecords
+        s32 maiWord[3];       // word to override (-1: none)
+        u32 mauValue[3];
+        s32 miImpact, miAggressor, miVictim, miCrashA, miCrashB, miTakedowns, miShunts,
+            miTakedownVictim, miTakedownAggressor, miTakedownType;
+    };
+    const u32 KU_QNAN = 0x7FC00000u;
+    const u32 KU_ONLINE = 1u;
+    // Words: 5 closing speed, 6 speed A, 7 speed B, 61 online, 115 car B's slam steering (+0x1404).
+    const NanVariant kaNanVariants[] =
+    {
+        { "NaN closing, #0 trading paint (A arm)",
+          "0x8261A0F8 fcmpu closing, min ; 0x8261A0FC ble -> 0x8261A37C li r3,0: TAKEN on unordered -> the rung "
+          "returns FALSE; Stationary offline -> none (the pre-fix `closing <= min` passed it on to the A arm)",
+          8, { 5, -1, -1 }, { KU_QNAN, 0u, 0u }, 0, -1, -1, 0, 0, 0, 0, -1, -1, -1 },
+        { "NaN closing, #258 trading paint (B arm)",
+          "0x8261A0FC ble TAKEN on unordered -> FALSE before either arm -> none",
+          10, { 5, -1, -1 }, { KU_QNAN, 0u, 0u }, 0, -1, -1, 0, 0, 0, 0, -1, -1, -1 },
+        { "NaN steerB, #374 boost-slam (A arm)",
+          "0x8261A154 blt steerA, steerB NOT taken on unordered, 0x8261A15C ble steerA, 0 not taken (steerA > 0) "
+          "-> the A arm -> boost-slam, aggressor 0 (the pre-fix `steerA >= steerB` went to the B test -> TRUE, none)",
+          4, { 115, -1, -1 }, { KU_QNAN, 0u, 0u }, 5, 0, 1, 0, 0, 0, 0, -1, -1, -1 },
+        { "NaN speed A online, #1 cooldown (Stationary)",
+          "online (+0x2A11B = 1); Shunt / Slam cooldown -> Stationary: 0x8263D9FC blt |sA-sB| < 40 mph NOT taken on "
+          "unordered, 0x8263DA0C ble sA, sB TAKEN -> 0x8263DA40 A is the victim: sA > 20 mph bgt not taken, sB "
+          "31.5 >= 60 mph -> InstantTakedown(victim 3, aggressor 0, STANDARD) (the pre-fix `sA <= sB` took the B "
+          "arm, where sB > 20 mph returns FALSE)",
+          13, { 61, 6, -1 }, { KU_ONLINE, KU_QNAN, 0u }, 0, 0, 3, 0, 0, 1, 0, 3, 0, 0 },
+    };
+}
+
 int main()
 {
     Tune();
@@ -803,6 +850,41 @@ int main()
                     static_cast<s32>(lInfo.meImpactType), static_cast<s32>(lInfo.meAggressorActiveRaceCarIndex),
                     static_cast<s32>(lInfo.meVictimActiveRaceCarIndex), lInfo.mbCrashRaceCarA ? 1 : 0,
                     lInfo.mbCrashRaceCarB ? 1 : 0, giTakedowns, giShunts, lrRecord.mpcGate);
+    }
+    for (const NanVariant& lrVariant : kaNanVariants)
+    {
+        Record lRecord = kaRecords[lrVariant.miBase];
+        for (s32 liOverride = 0; liOverride < 3; ++liOverride)
+        {
+            if (lrVariant.maiWord[liOverride] >= 0)
+            {
+                lRecord.mauWord[lrVariant.maiWord[liOverride]] = lrVariant.mauValue[liOverride];
+            }
+        }
+        giTakedowns = 0; giShunts = 0; giLastTakedownType = -2;
+        gLastVictim = EntityId{ 0xFFFFFFFFu }; gLastAggressor = EntityId{ 0xFFFFFFFFu };
+        VehicleManager::RaceCarResponseInfo lInfo = Load(lRecord);
+        gManager.CheckForAllTypesOfImpacts(&lInfo);
+        const char* lpcLabel = lrVariant.mpcLabel;
+        Check(static_cast<s32>(lInfo.meImpactType) == lrVariant.miImpact, lpcLabel, "impact type");
+        Check(static_cast<s32>(lInfo.meAggressorActiveRaceCarIndex) == lrVariant.miAggressor, lpcLabel, "aggressor");
+        Check(static_cast<s32>(lInfo.meVictimActiveRaceCarIndex) == lrVariant.miVictim, lpcLabel, "victim");
+        Check((lInfo.mbCrashRaceCarA ? 1 : 0) == lrVariant.miCrashA, lpcLabel, "crash flag A");
+        Check((lInfo.mbCrashRaceCarB ? 1 : 0) == lrVariant.miCrashB, lpcLabel, "crash flag B");
+        Check(giTakedowns == lrVariant.miTakedowns, lpcLabel, "InstantTakedown calls");
+        Check(giShunts == lrVariant.miShunts, lpcLabel, "ApplyShunt calls");
+        if (lrVariant.miTakedowns > 0)
+        {
+            Check(static_cast<s32>((gLastVictim.muValue >> 10) & 0x3FFFu) == lrVariant.miTakedownVictim,
+                  lpcLabel, "takedown victim");
+            Check(static_cast<s32>((gLastAggressor.muValue >> 10) & 0x3FFFu) == lrVariant.miTakedownAggressor,
+                  lpcLabel, "takedown aggressor");
+            Check(giLastTakedownType == lrVariant.miTakedownType, lpcLabel, "takedown type");
+        }
+        std::printf("%-44s impact=%d aggr=%d victim=%d crash=%d%d takedowns=%d shunts=%d | %s\n", lpcLabel,
+                    static_cast<s32>(lInfo.meImpactType), static_cast<s32>(lInfo.meAggressorActiveRaceCarIndex),
+                    static_cast<s32>(lInfo.meVictimActiveRaceCarIndex), lInfo.mbCrashRaceCarA ? 1 : 0,
+                    lInfo.mbCrashRaceCarB ? 1 : 0, giTakedowns, giShunts, lrVariant.mpcGate);
     }
     std::printf("%s: %u/%u checks passed\n", guFailures ? "FAIL" : "PASS", guChecks - guFailures, guChecks);
     return guFailures ? 1 : 0;
