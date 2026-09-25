@@ -97,6 +97,10 @@ public:
     u8      GetNumLights() const;                      // :86
     const TrafficLightController* GetLight(u32 luLight) const;      // :87
     bool    IsLightRed(u32 luState, u32 luLight) const;             // :88
+    // ADDITIVE (crash parity FX-TRAFFICLIGHTS, 2026-09-25) [FLAG PC: no console symbol] -- the authored u16
+    // behind GetTimeInState, with the same h:165 tripwire. TrafficEntityModule::UpdateJunctions needs the
+    // tenths themselves: see the bodies below the class.
+    u16     GetStateTiming(u32 luState) const;
     u32     GetEventJunctionID() const    { return muEventJunctionID; }    // :90 (see GetID above)
 
     // ⭐ [event-starts producer wave 2026-08-27] BODIED (was declare-only), on the same terms as
@@ -173,6 +177,41 @@ inline const TrafficLightController* JunctionLogicBox::GetLight(u32 luLight) con
 {
     CGS_ASSERT(luLight < muNumLights, "luLight < muNumLights");   // BrnJunctionLogicBox.h:181
     return &maTrafficLightControllers[luLight];
+}
+
+// ADDITIVE (crash parity FX-TRAFFICLIGHTS, 2026-09-25) -- the two remaining declared-only accessors the junction
+// update inlines (TrafficEntityModule::UpdateJunctions @0x82723EA0; DWARF :85 / :88, bodies at this header's
+// lines 165 and 193..194 on both X360 and PS3), and the PC accessor behind the first:
+//   GetTimeInState  the h:165 bound tripwire "luState < muNumStates" (li r5, 0xA5 @0x82724208), then the phase's
+//                   authored length (lhzx at +0x4 + 2 * luState, 0x8272422C) in tenths of a second, times
+//                   flt_82004014 == 0.1f (0x3DCCCCCD, x360rd).
+//   GetStateTiming  [FLAG PC] those tenths. The console compiler FUSED GetTimeInState's product into the
+//                   caller's accumulate -- `fmadds f0, f13, f29, f0` @0x82724244, one rounding of
+//                   tenths * 0.1f + time (ROUNDING_RULE 3) -- which a call returning the rounded product cannot
+//                   reproduce; UpdateJunctions reads the tenths and calls std::fma.
+//   IsLightRed      the h:193 / h:194 tripwires (li r5, 0xC1 / 0xC2 @0x82724294 / 0x827242B8), then whether the
+//                   light's bit is set in the phase's stopped-light mask: lbzx +0x24 + luState, the bit
+//                   (u8)(1 << luLight) (li 1 ; slw ; clrlwi 24), and/subf/cntlzw/extrwi == ((mask & bit) == bit)
+//                   (0x827242D4..0x827242F4).
+static const f32 KF_JUNCTION_STATE_TIMING_UNIT = 0.1f;   // flt_82004014: a phase is authored in tenths of a second
+
+inline u16 JunctionLogicBox::GetStateTiming(u32 luState) const
+{
+    CGS_ASSERT(luState < muNumStates, "luState < muNumStates");   // BrnJunctionLogicBox.h:165
+    return mauStateTimings[luState];
+}
+
+inline f32 JunctionLogicBox::GetTimeInState(u32 luState) const
+{
+    return static_cast<f32>(GetStateTiming(luState)) * KF_JUNCTION_STATE_TIMING_UNIT;
+}
+
+inline bool JunctionLogicBox::IsLightRed(u32 luState, u32 luLight) const
+{
+    CGS_ASSERT(luState < muNumStates, "luState < muNumStates");   // BrnJunctionLogicBox.h:193
+    CGS_ASSERT(luLight < muNumLights, "luLight < muNumLights");   // BrnJunctionLogicBox.h:194
+    const u8 lu8LightBit = static_cast<u8>(1u << luLight);
+    return (mauStoppedLightStates[luState] & lu8LightBit) == lu8LightBit;
 }
 
 }

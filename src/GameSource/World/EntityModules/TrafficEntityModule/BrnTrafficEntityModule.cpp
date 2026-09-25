@@ -1753,6 +1753,35 @@ namespace
     }
     s32 giEventStartLightsDiagLinesLeft = 16;
 
+    // FLAG PC witness (crash parity FX-TRAFFICLIGHTS; NOT in the X360 binary). The light cycle's two witnesses,
+    // behind the same BRN_TRAFFIC_LIGHT_DIAG switch (EventStartLightsDiagStream), capped, reads only:
+    // UpdateDecisionFrame watches a few junctions around its UpdateJunctions call, and
+    // UpdateParams_DoTimeSlicedLogic follows the params that stop at a red stop line. The clock is the summed
+    // decision time (mfSimTimeSinceLastDecision), advanced by the first.
+    const u32 KU_TRAFFIC_LIGHT_DIAG_WATCHED = 4;
+    struct TrafficLightDiagWatch_PC
+    {
+        bool mbUsed;
+        u16  muHull;
+        u8   muJunction;
+        u8   muState;
+        u32  muAmber;
+        f32  mfPhaseClock;
+    };
+    TrafficLightDiagWatch_PC gaTrafficLightDiagWatch_PC[KU_TRAFFIC_LIGHT_DIAG_WATCHED] = {};
+    f32 gfTrafficLightDiagClock_PC = 0.0f;
+    s32 giTrafficLightCycleDiagLinesLeft = 160;
+
+    struct TrafficLightStopWitness_PC
+    {
+        u8  muPhase;      // 0 none, 1 waiting at a red stop line, 2 released
+        u8  muStopLine;   // the param's cached next stop line when it stopped (0xFE / 0xFF: none on its section)
+        u16 muHull;       // the param's hull when it stopped
+        f32 mfClock;      // when it stopped / was released
+    };
+    TrafficLightStopWitness_PC gaTrafficLightStopWitness_PC[KU_MAX_PARAMS] = {};
+    s32 giTrafficLightStopDiagLinesLeft = 90;
+
     // FLAG PC witness (crash parity FX-NETCRASH, online traffic lockstep; NOT console code). The
     // per-decision-frame digest UpdateDecisionFrame prints online: FNV-1a over the state every
     // machine must agree on, so the two halves of a LAN pair can be joined on upd= and compared.
@@ -3269,11 +3298,13 @@ void TrafficEntityModule::PredictHullChanges(const BrnTrafficIO::InputBuffer_Pos
 //     order-independent, so only the order FillNewHull visits hulls in changes.
 //   * mHullsToAddTriggersFor / mHullsToRemoveTriggersFor -- they need ::Array<T,N>::AppendSet,
 //     which CgsArray.h does not declare (it has AppendArray only).
-//   * the light-manager events either side of the HullRuntime loops, and the stopline walk
-//     ending in HullRuntime::SetStoplineRed @0x8274D82C -- TrafficLightManager has no body.
 //
-// The per-old-hull HullRuntime::Release + free, the per-new-hull allocate + HullRuntime::Prepare
-// and the tail call to RebuildGeneratorList @0x8274D8F4 are LIVE.
+// The per-old-hull HullRuntime::Release + free, the per-new-hull allocate + HullRuntime::Prepare,
+// the stop-line release walk after them (0x8274D4B0..0x8274D88C, crash parity FX-TRAFFICLIGHTS
+// 2026-09-25) and the tail call to RebuildGeneratorList @0x8274D8F4 are LIVE. (A retired gate here also
+// named "light-manager events either side of the HullRuntime loops": there are none. The release loop
+// 0x8274CDC0..0x8274D044 and the allocate loop 0x8274D0AC..0x8274D4AC touch only mUsedHullRuntimeData
+// (+0x53780), mauHullRuntimeDataIndices and HullRuntime::Release / Prepare.)
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::RecalculateActiveHulls(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
@@ -3503,16 +3534,36 @@ void TrafficEntityModule::RecalculateActiveHulls(
         mauHullRuntimeDataIndices[luHull] = static_cast<u8>(liHullRuntime);
     }
 
+    // ---- the stop-line release walk, 0x8274D4B0..0x8274D88C (crash parity FX-TRAFFICLIGHTS, 2026-09-25) --------
+    // For every hull that just LEFT the set, every stop line its junctions' lights control in a hull that is STILL
+    // active goes back to not-red: the departed junction's phase timer stopped with its runtime, and a stop line it
+    // had set red in a neighbour would otherwise hold that neighbour's traffic for ever.
+    //   every old hull (lpOutOldHulls: GetLength's :227, operator[]'s :274 / :275, 0x8274D4D8..0x8274D558)
+    //   lpHull = GetHull(luHull), inlined (the mpData instance tripwire, the .h 2229 bound, mpapHulls[luHull])
+    //   every junction (lbz +2 ; lwz +0x2C, stride 0x120) -> every light (lbz +0x35 ; GetLight's h:181 tripwire)
+    //   -> every stop line (lbz +0x16 ; lhz mauStopLineHulls[s] @+0xA):
+    //        mActiveHulls.Contains(luStopLineHull) (the :332 tripwire + bl 0x8270C598 Find, -1 == absent)
+    //        -> GetHullRuntime(luStopLineHull), inlined (the .h 2246 bound, the .h 2249 tripwire)
+    //        -> SetStoplineRed(mauStopLineIds[s], false) (li r5, 0 ; bl 0x82706630 @0x8274D82C)
+    for (u32 luOld = 0; luOld < lpOutOldHulls->GetLength(); ++luOld)
     {
-        // GATE: the light-manager events either side of the two loops above, and the trailing
-        // per-hull stopline walk that ends in HullRuntime::SetStoplineRed.
-        // BLOCKER: TrafficLightManager has no Construct/Update body in this tree (see the
-        // Reset and PostPhysicsUpdate gates). DELETE-WHEN the light manager lands.
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "RecalculateActiveHulls light-manager legs -- the per-hull add/remove events and "
-            "the stopline walk ending in HullRuntime::SetStoplineRed. TrafficLightManager has "
-            "no Construct/Update body in this tree; lights stay in their default phase");
+        const Hull* const lpHull = GetHull(lpOutOldHulls->GetItem(luOld));
+        for (u32 luJunction = 0; luJunction < lpHull->muNumJunctions; ++luJunction)
+        {
+            const JunctionLogicBox* const lpJunction = &lpHull->mpaJunctions[luJunction];
+            for (u32 luLight = 0; luLight < lpJunction->GetNumLights(); ++luLight)
+            {
+                const TrafficLightController* const lpLight = lpJunction->GetLight(luLight);
+                for (u32 luStopLine = 0; luStopLine < lpLight->muNumStopLines; ++luStopLine)
+                {
+                    const u16 luStopLineHull = lpLight->mauStopLineHulls[luStopLine];
+                    if (mActiveHulls.Contains(luStopLineHull))
+                    {
+                        GetHullRuntime(luStopLineHull)->SetStoplineRed(lpLight->mauStopLineIds[luStopLine], false);
+                    }
+                }
+            }
+        }
     }
 
     // @0x8274D890..0x8274D8F4. The generator list is rebuilt only when the active-hull set
@@ -4349,6 +4400,118 @@ void TrafficEntityModule::UpdateEventStarts()
                 mTrafficLightManager.ChangeLightState(luTrafficLightInstance, lbChangeToRed);
             }
         }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateJunctions  @ 0x82723EA0  (DWARF h:1617; locals .cpp 9358..9376 / 9399..9400;
+// crash parity FX-TRAFFICLIGHTS, 2026-09-25)
+//
+// THE TRAFFIC-LIGHT CYCLE. UpdateDecisionFrame calls it on every decision frame (0x8274E5EC: every 5 or 6 sim
+// frames, 0.1 s), after the spawn legs and before UpdateParams. Every junction of every active hull runs its
+// phase timer down; when it runs out the junction moves to its next phase, which sets each of its lights' stop
+// lines red or not (the traffic reads them in DoesParamNeedToStopForStopline @0x827249F8) and changes the lights
+// themselves (AMBER on the way to red, GREEN at once). Then the hull's lights run their AMBER down
+// (TrafficLightManager::UpdateHull). Before this body the PC called nothing here: no phase ever changed, so no
+// stop line was ever red outside an event start, and free-roam traffic never stopped at a junction.
+//
+//   0x82723ED4..0x82723F10  lfTimeSinceLastDecision = mfDEBUGTrafficLightTimeMultiplier (+0x727D0, Construct's
+//                           1.0f) * mfSimTimeSinceLastDecision (+0x713F8)            fmuls f30, f0, f13 (rule 4)
+//   0x82723FD4..0x82724060  every active hull (mActiveHulls +0x3EA08: GetLength's :227, operator[]'s :274 / :275)
+//   0x8272406C..0x827240B0  lpHull = GetHull(luHull), inlined (the .h 2229 bound, mpData->mpapHulls[luHull])
+//   0x827240B8              lpHullRuntime = GetHullRuntime(luHull)                   bl 0x8271D930
+//   0x827240C0..0x82724104  GetJunctionStateChangeTimes (h:170) / GetJunctionCurrentStates (h:178), inlined
+//   0x82724108..0x8272412C  the .cpp 9519 tripwire "lpauJunctionStates". The PS3 build also asserts
+//                           "lpafChangeTimes" the line before; the X360 compiler dropped that test, the pointer
+//                           having been dereferenced by the mbPrepared read at +0x492. Kept: it cannot fire.
+//   every junction (lbz +2 muNumJunctions; its change time is lpHullRuntime + 4 * luJunction):
+//     0x82724154..0x82724194  the event-start hold: while mbEnsureTrafficLightDelay (+0x717E2, set by
+//                             HandlePrepareForModeAction for an event that clears the traffic) the event's
+//                             trigger junction -- hull == (mTrafficLightTriggerId >> 8) & 0xFFFF (extrwi 16,8),
+//                             junction == lpHull->mpaLightTriggerJunctionLookup[mTrafficLightTriggerId & 0xFF]
+//                             -- is skipped: its timer does not run, the lights UpdateEventStarts set stay put.
+//                             (The flag test is `cmplwi 1 ; bne`: the same as the bool for the 0 / 1 it holds.)
+//     0x8272419C..0x827241B0  lpafChangeTimes[j] -= lfTimeSinceLastDecision (fsubs, rule 4) ; fcmpu vs 0.0f ;
+//                             bgt -> the next junction. A NaN falls through and changes the phase; the
+//                             `> 0.0f -> continue` below keeps that polarity.
+//     0x827241B4..0x827241F4  luNewState = (lpauJunctionStates[j] + 1) % GetNumStates() (divw / mullw / subf,
+//                             clrlwi 24) ; stbx
+//     0x827241F8..0x82724248  GetTimeInState(luNewState), inlined (the h:165 tripwire), FUSED into the
+//                             accumulate: fmadds f0, f13 (tenths), f29 (0.1f flt_82004014), f0 (time) (rule 3)
+//     0x8272424C..0x82724444  every light (GetLight's h:181, IsLightRed's h:193 / h:194 == lbLightIsRed):
+//                               every stop line: GetHullRuntimeSafe(mauStopLineHulls[s]), inlined (the .h 2288
+//                               bound) ; not NULL -> SetStoplineRed(mauStopLineIds[s], lbLightIsRed)
+//                               (bl 0x82706630)
+//                               every light instance: mTrafficLightManager.ChangeLightState(
+//                               mauTrafficLightIds[l], lbLightIsRed) (bl 0x827518E0)
+//   0x827244A0..0x827244B0  mTrafficLightManager.UpdateHull(lpHull, mfSimTimeSinceLastDecision) (bl 0x827517F8):
+//                           the light instances run on the UNSCALED decision time (lfs f1, 0(r16))
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateJunctions()
+{
+    const f32 lfTimeSinceLastDecision = mfDEBUGTrafficLightTimeMultiplier * mfSimTimeSinceLastDecision;
+
+    for (u32 luActiveHullIndex = 0; luActiveHullIndex < mActiveHulls.GetLength(); ++luActiveHullIndex)
+    {
+        const u32 luHull = mActiveHulls[luActiveHullIndex];
+        const Hull* const lpHull = GetHull(luHull);
+        HullRuntime* const lpHullRuntime = GetHullRuntime(luHull);
+
+        f32* const lpafChangeTimes    = lpHullRuntime->GetJunctionStateChangeTimes();
+        u8* const  lpauJunctionStates = lpHullRuntime->GetJunctionCurrentStates();
+        CGS_ASSERT(lpafChangeTimes != NULL, "lpafChangeTimes");                   // PS3 .cpp 9392 (see above)
+        CGS_ASSERT(lpauJunctionStates != NULL, "lpauJunctionStates");             // .cpp 9519
+
+        for (u32 luJunction = 0; luJunction < lpHull->muNumJunctions; ++luJunction)
+        {
+            if (mbEnsureTrafficLightDelay && luHull == ((mTrafficLightTriggerId >> 8) & 0xFFFFu))
+            {
+                const u32 luLightTrigger   = mTrafficLightTriggerId & 0xFFu;
+                const u8  lu8JunctionIndex = lpHull->mpaLightTriggerJunctionLookup[luLightTrigger];
+                if (luJunction == lu8JunctionIndex)
+                {
+                    continue;
+                }
+            }
+
+            lpafChangeTimes[luJunction] -= lfTimeSinceLastDecision;
+            if (lpafChangeTimes[luJunction] > 0.0f)
+            {
+                continue;
+            }
+
+            const JunctionLogicBox* const lpJunction = &lpHull->mpaJunctions[luJunction];
+            const u8 luNewState =
+                static_cast<u8>((lpauJunctionStates[luJunction] + 1) % lpJunction->GetNumStates());
+            lpauJunctionStates[luJunction] = luNewState;
+            lpafChangeTimes[luJunction] = std::fma(static_cast<f32>(lpJunction->GetStateTiming(luNewState)),
+                                                   KF_JUNCTION_STATE_TIMING_UNIT, lpafChangeTimes[luJunction]);
+
+            for (u32 luLight = 0; luLight < lpJunction->GetNumLights(); ++luLight)
+            {
+                const TrafficLightController* const lpLight = lpJunction->GetLight(luLight);
+                const bool lbLightIsRed = lpJunction->IsLightRed(luNewState, luLight);
+
+                for (u32 luStopLine = 0; luStopLine < lpLight->muNumStopLines; ++luStopLine)
+                {
+                    const u32 luStopLineHull  = lpLight->mauStopLineHulls[luStopLine];
+                    const u32 luStopLineIndex = lpLight->mauStopLineIds[luStopLine];
+                    HullRuntime* const lpStopLineHullRuntime = GetHullRuntimeSafe(luStopLineHull);
+                    if (lpStopLineHullRuntime != NULL)
+                    {
+                        lpStopLineHullRuntime->SetStoplineRed(luStopLineIndex, lbLightIsRed);
+                    }
+                }
+
+                for (u32 luTrafficLight = 0; luTrafficLight < lpLight->muNumTrafficLights; ++luTrafficLight)
+                {
+                    const u32 luTrafficLightInstance = lpLight->mauTrafficLightIds[luTrafficLight];
+                    mTrafficLightManager.ChangeLightState(luTrafficLightInstance, lbLightIsRed);
+                }
+            }
+        }
+
+        mTrafficLightManager.UpdateHull(lpHull, mfSimTimeSinceLastDecision);
     }
 }
 
@@ -6378,8 +6541,8 @@ void TrafficEntityModule::CreateNewVehicleEntities(BrnTrafficIO::OutputBuffer_Pr
 // _wT1_02.cpp un-gates the UpdateTimers call in the same change.
 //
 // Live legs: KillOutOfAreaTraffic, SpawnNewTraffic, SpawnShowtimeTraffic (_wT1_07.cpp),
-// UpdateParams, UpdateVehicles, UpdateLerpedParamTransforms and
-// UpdateParams_DoTimeSlicedLogic. Still gated: UpdateJunctions, UpdateTrailers,
+// UpdateJunctions (crash parity FX-TRAFFICLIGHTS, 2026-09-25), UpdateParams, UpdateVehicles,
+// UpdateLerpedParamTransforms and UpdateParams_DoTimeSlicedLogic. Still gated: UpdateTrailers,
 // KillTrafficOnStartGridWholeSale, NukeTrafficJams; each gate names its own blocker and cost.
 // ============================================================================
 
@@ -6576,11 +6739,173 @@ void TrafficEntityModule::UpdateDecisionFrame(
         SpawnShowtimeTraffic();
     }
 
+    // 0x8274E5E8..0x8274E5EC `mr r3, r31 ; bl 0x82723EA0` -- LIVE (crash parity FX-TRAFFICLIGHTS, 2026-09-25):
+    // the traffic lights, on every decision frame, after the spawn legs and before UpdateParams. Body at
+    // UpdateJunctions. (The gate that stood here called it the junction "give-way/priority logic"; it is the
+    // light cycle -- phase timers, stop lines, lights.)
+    UpdateJunctions();
+
+    // [FLAG PC witness] (crash parity FX-TRAFFICLIGHTS; NOT console code). BRN_TRAFFIC_LIGHT_DIAG, capped, reads
+    // only; UpdateJunctions itself carries no witness. Up to KU_TRAFFIC_LIGHT_DIAG_WATCHED junctions -- the first
+    // found in the active hulls with more than one phase and at least one light -- are watched from here:
+    //   "watching"  a junction adopted: its phase count, its lights, its phase and the time it still holds;
+    //   "phase"     UpdateJunctions moved it on: the phase, the time it now holds, its lights red / total
+    //               (IsLightRed), each stop line (hull:index R / G, - for a hull without a runtime), its light
+    //               instances by state, the witness clock and the time since its last change (the phase the
+    //               console ran; the first after adoption is partial);
+    //   "amber"     its AMBER instances have all run down to RED (UpdateHull -> TrafficLightRuntimeState::Update);
+    //   "left"      its hull left the active set; the slot is reused.
+    if (CgsDev::Log::DebugPrint* const lpLightsDiag_PC = EventStartLightsDiagStream())
     {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "UpdateDecisionFrame leg UpdateJunctions (DWARF :1617) -- no body; junction "
-            "give-way/priority logic for DRIVING traffic (wave 2)");
+        gfTrafficLightDiagClock_PC += mfSimTimeSinceLastDecision;
+
+        u32 luFreeSlots_PC = 0;
+        for (u32 luSlot = 0; luSlot < KU_TRAFFIC_LIGHT_DIAG_WATCHED; ++luSlot)
+        {
+            TrafficLightDiagWatch_PC& lrWatch = gaTrafficLightDiagWatch_PC[luSlot];
+            if (lrWatch.mbUsed && !mActiveHulls.Contains(lrWatch.muHull))
+            {
+                lrWatch.mbUsed = false;
+                if (giTrafficLightCycleDiagLinesLeft > 0)
+                {
+                    --giTrafficLightCycleDiagLinesLeft;
+                    *lpLightsDiag_PC << "[traffic-lights] left hull=" << static_cast<u32>(lrWatch.muHull)
+                                     << " junction=" << static_cast<u32>(lrWatch.muJunction)
+                                     << " t=" << gfTrafficLightDiagClock_PC << " [FLAG PC witness]\n";
+                }
+            }
+            luFreeSlots_PC += lrWatch.mbUsed ? 0u : 1u;
+        }
+
+        for (u32 luActive = 0; luFreeSlots_PC != 0 && luActive < mActiveHulls.GetLength(); ++luActive)
+        {
+            const u16 luHull_PC = mActiveHulls[luActive];
+            const Hull* const lpHull_PC = GetHull(luHull_PC);
+            HullRuntime* const lpRuntime_PC = GetHullRuntimeSafe(luHull_PC);
+            for (u32 luJunction = 0; lpRuntime_PC != NULL && luFreeSlots_PC != 0
+                                     && luJunction < lpHull_PC->muNumJunctions; ++luJunction)
+            {
+                const JunctionLogicBox* const lpJunction_PC = &lpHull_PC->mpaJunctions[luJunction];
+                if (lpJunction_PC->GetNumStates() < 2 || lpJunction_PC->GetNumLights() == 0)
+                {
+                    continue;
+                }
+                u32 luFree_PC = KU_TRAFFIC_LIGHT_DIAG_WATCHED;
+                bool lbWatched_PC = false;
+                for (u32 luSlot = 0; luSlot < KU_TRAFFIC_LIGHT_DIAG_WATCHED; ++luSlot)
+                {
+                    const TrafficLightDiagWatch_PC& lrWatch = gaTrafficLightDiagWatch_PC[luSlot];
+                    if (lrWatch.mbUsed)
+                    {
+                        lbWatched_PC = lbWatched_PC || (lrWatch.muHull == luHull_PC && lrWatch.muJunction == luJunction);
+                    }
+                    else if (luFree_PC == KU_TRAFFIC_LIGHT_DIAG_WATCHED)
+                    {
+                        luFree_PC = luSlot;
+                    }
+                }
+                if (lbWatched_PC || luFree_PC == KU_TRAFFIC_LIGHT_DIAG_WATCHED)
+                {
+                    continue;
+                }
+                TrafficLightDiagWatch_PC& lrWatch = gaTrafficLightDiagWatch_PC[luFree_PC];
+                lrWatch.mbUsed       = true;
+                lrWatch.muHull       = luHull_PC;
+                lrWatch.muJunction   = static_cast<u8>(luJunction);
+                lrWatch.muState      = lpRuntime_PC->GetJunctionCurrentStates()[luJunction];
+                lrWatch.muAmber      = 0;
+                lrWatch.mfPhaseClock = gfTrafficLightDiagClock_PC;
+                --luFreeSlots_PC;
+                if (giTrafficLightCycleDiagLinesLeft > 0)
+                {
+                    --giTrafficLightCycleDiagLinesLeft;
+                    *lpLightsDiag_PC << "[traffic-lights] watching hull=" << static_cast<u32>(luHull_PC)
+                                     << " junction=" << luJunction
+                                     << " states=" << static_cast<u32>(lpJunction_PC->GetNumStates())
+                                     << " lights=" << static_cast<u32>(lpJunction_PC->GetNumLights())
+                                     << " state=" << static_cast<u32>(lrWatch.muState)
+                                     << " holds=" << lpRuntime_PC->GetJunctionStateChangeTimes()[luJunction]
+                                     << " t=" << gfTrafficLightDiagClock_PC << " [FLAG PC witness]\n";
+                }
+            }
+        }
+
+        for (u32 luSlot = 0; luSlot < KU_TRAFFIC_LIGHT_DIAG_WATCHED; ++luSlot)
+        {
+            TrafficLightDiagWatch_PC& lrWatch = gaTrafficLightDiagWatch_PC[luSlot];
+            HullRuntime* const lpRuntime_PC = lrWatch.mbUsed ? GetHullRuntimeSafe(lrWatch.muHull) : NULL;
+            if (lpRuntime_PC == NULL)
+            {
+                continue;
+            }
+            const JunctionLogicBox* const lpJunction_PC = &GetHull(lrWatch.muHull)->mpaJunctions[lrWatch.muJunction];
+            const u8  luState_PC = lpRuntime_PC->GetJunctionCurrentStates()[lrWatch.muJunction];
+            const f32 lfHolds_PC = lpRuntime_PC->GetJunctionStateChangeTimes()[lrWatch.muJunction];
+            u32 lauInstances_PC[3] = { 0, 0, 0 };   // RED 0, AMBER 1, GREEN 2
+            u32 luRedLights_PC = 0;
+            for (u32 luLight = 0; luLight < lpJunction_PC->GetNumLights(); ++luLight)
+            {
+                const TrafficLightController* const lpLight_PC = lpJunction_PC->GetLight(luLight);
+                luRedLights_PC += lpJunction_PC->IsLightRed(luState_PC, luLight) ? 1u : 0u;
+                for (u32 luTrafficLight = 0; luTrafficLight < lpLight_PC->muNumTrafficLights; ++luTrafficLight)
+                {
+                    const u8 luLightState_PC = reinterpret_cast<const TrafficLightRuntimeState*>(
+                        mTrafficLightManager.GetLightState(lpLight_PC->mauTrafficLightIds[luTrafficLight]))->muState;
+                    if (luLightState_PC < 3)
+                    {
+                        ++lauInstances_PC[luLightState_PC];
+                    }
+                }
+            }
+
+            if (luState_PC != lrWatch.muState)
+            {
+                if (giTrafficLightCycleDiagLinesLeft > 0)
+                {
+                    --giTrafficLightCycleDiagLinesLeft;
+                    *lpLightsDiag_PC << "[traffic-lights] phase hull=" << static_cast<u32>(lrWatch.muHull)
+                                     << " junction=" << static_cast<u32>(lrWatch.muJunction)
+                                     << " state=" << static_cast<u32>(luState_PC) << "/"
+                                     << static_cast<u32>(lpJunction_PC->GetNumStates())
+                                     << " holds=" << lfHolds_PC
+                                     << " redLights=" << luRedLights_PC << "/"
+                                     << static_cast<u32>(lpJunction_PC->GetNumLights()) << " stoplines";
+                    u32 luListed_PC = 0;
+                    for (u32 luLight = 0; luLight < lpJunction_PC->GetNumLights(); ++luLight)
+                    {
+                        const TrafficLightController* const lpLight_PC = lpJunction_PC->GetLight(luLight);
+                        for (u32 luStopLine = 0; luStopLine < lpLight_PC->muNumStopLines && luListed_PC < 12;
+                             ++luStopLine, ++luListed_PC)
+                        {
+                            const u32 luStopLineHull_PC = lpLight_PC->mauStopLineHulls[luStopLine];
+                            const u32 luStopLineIndex_PC = lpLight_PC->mauStopLineIds[luStopLine];
+                            const HullRuntime* const lpStopRuntime_PC = GetHullRuntimeSafe(luStopLineHull_PC);
+                            *lpLightsDiag_PC << " " << luStopLineHull_PC << ":" << luStopLineIndex_PC << "="
+                                             << (lpStopRuntime_PC == NULL ? "-"
+                                                 : (lpStopRuntime_PC->IsStoplineRed(luStopLineIndex_PC) ? "R" : "G"));
+                        }
+                    }
+                    *lpLightsDiag_PC << " instances red=" << lauInstances_PC[0] << " amber=" << lauInstances_PC[1]
+                                     << " green=" << lauInstances_PC[2] << " t=" << gfTrafficLightDiagClock_PC
+                                     << " sinceLast=" << (gfTrafficLightDiagClock_PC - lrWatch.mfPhaseClock)
+                                     << " [FLAG PC witness]\n";
+                }
+                lrWatch.muState      = luState_PC;
+                lrWatch.mfPhaseClock = gfTrafficLightDiagClock_PC;
+            }
+
+            if (lrWatch.muAmber != 0 && lauInstances_PC[1] == 0 && giTrafficLightCycleDiagLinesLeft > 0)
+            {
+                --giTrafficLightCycleDiagLinesLeft;
+                *lpLightsDiag_PC << "[traffic-lights] amber hull=" << static_cast<u32>(lrWatch.muHull)
+                                 << " junction=" << static_cast<u32>(lrWatch.muJunction)
+                                 << " ran down to red: instances red=" << lauInstances_PC[0]
+                                 << " green=" << lauInstances_PC[2]
+                                 << " afterPhase=" << (gfTrafficLightDiagClock_PC - lrWatch.mfPhaseClock)
+                                 << " t=" << gfTrafficLightDiagClock_PC << " [FLAG PC witness]\n";
+            }
+            lrWatch.muAmber = lauInstances_PC[1];
+        }
     }
 
     // The whole lane-param simulation for DRIVING traffic (DWARF :1626, @0x82744A80). It
@@ -11544,6 +11869,84 @@ void TrafficEntityModule::UpdateParams_DoTimeSlicedLogic(
             *lpDiag << " physSlots="
                     << static_cast<s32>(maTrafficPhysicsInfoListBits.CountSetBits())
                     << "\n";
+        }
+    }
+
+    // [FLAG PC witness] (crash parity FX-TRAFFICLIGHTS; NOT console code). BRN_TRAFFIC_LIGHT_DIAG, capped, reads
+    // only: the stop-line CONSUMER. For every param of this slice, the decision UpdateParam_CheckIfNeedToSlow
+    // just made -- maParamNeedToSlowData[p].miBehaviour 4 is STOP AT THE STOPLINE (UpdateParams_PrecalcBehaviour
+    // Params' case 3 @0x82718494, fed by DoesParamNeedToStopForStopline @0x827249F8) -- against its speed:
+    //   "waiting"    behaviour 4 and slower than 0.5 m/s: stopped at a red stop line; its cached next stop line
+    //                (muNextStopLineIndex, in its own hull) and that stop line's IsStoplineRed when it has one;
+    //   "released"   a waiting param whose decision is no longer 4: that stop line's IsStoplineRed now;
+    //   "moved off"  a released param faster than 3 m/s again.
+    // The 0.5 / 3.0 m/s marks are the witness's own; nothing reads them. The clock is UpdateDecisionFrame's.
+    if (CgsDev::Log::DebugPrint* const lpStopDiag_PC = EventStartLightsDiagStream())
+    {
+        for (u32 luParam = luBeginParam; luParam < luEndParam && luParam < KU_MAX_PARAMS; ++luParam)
+        {
+            TrafficLightStopWitness_PC& lrStop = gaTrafficLightStopWitness_PC[luParam];
+            const Param& lrParam = maParams[luParam];
+            if (!lrParam.IsAlive())
+            {
+                lrStop.muPhase = 0;
+                continue;
+            }
+            const bool lbStopping_PC = (maParamNeedToSlowData[luParam].miBehaviour == 4);
+            const u32  luPhaseBefore_PC = lrStop.muPhase;
+            if (luPhaseBefore_PC == 0 && lbStopping_PC && lrParam.mfSpeed < 0.5f)
+            {
+                lrStop.muPhase    = 1;
+                lrStop.muHull     = lrParam.muHullIndex;
+                lrStop.muStopLine = lrParam.muNextStopLineIndex;
+                lrStop.mfClock    = gfTrafficLightDiagClock_PC;
+            }
+            else if (luPhaseBefore_PC == 1 && !lbStopping_PC)
+            {
+                lrStop.muPhase = 2;
+            }
+            else if (luPhaseBefore_PC == 2 && lbStopping_PC && lrParam.mfSpeed < 0.5f)
+            {
+                lrStop.muPhase = 1;   // stopped again before moving off: still waiting, no line
+                continue;
+            }
+            else if (luPhaseBefore_PC == 2 && lrParam.mfSpeed > 3.0f)
+            {
+                lrStop.muPhase = 0;
+            }
+            else
+            {
+                continue;
+            }
+            if (giTrafficLightStopDiagLinesLeft <= 0)
+            {
+                continue;
+            }
+            --giTrafficLightStopDiagLinesLeft;
+
+            // The recorded stop line's state now: 'R' / 'G', or '-' when there is none to read (none cached on
+            // the param's section, or its hull has no runtime any more).
+            const char* lpcStopLine_PC = "-";
+            const HullRuntime* const lpStopRuntime_PC = GetHullRuntimeSafe(lrStop.muHull);
+            if (lrStop.muStopLine < KU_UNKNOWN_STOPLINE && lpStopRuntime_PC != NULL
+                && lrStop.muStopLine < GetHull(lrStop.muHull)->muNumStoplines)
+            {
+                lpcStopLine_PC = lpStopRuntime_PC->IsStoplineRed(lrStop.muStopLine) ? "R" : "G";
+            }
+            const char* const lpcWhat_PC = (lrStop.muPhase == 1) ? "waiting at a red stop line"
+                                         : (lrStop.muPhase == 2) ? "released" : "moved off";
+            *lpStopDiag_PC << "[traffic-lights] param " << luParam << " " << lpcWhat_PC
+                           << ": stopline=" << static_cast<u32>(lrStop.muHull) << ":"
+                           << static_cast<u32>(lrStop.muStopLine) << "=" << lpcStopLine_PC
+                           << " behaviour=" << static_cast<s32>(maParamNeedToSlowData[luParam].miBehaviour)
+                           << " stopDist=" << maParamNeedToSlowData[luParam].mfStopDist
+                           << " speed=" << lrParam.mfSpeed
+                           << " t=" << gfTrafficLightDiagClock_PC
+                           << " since=" << (gfTrafficLightDiagClock_PC - lrStop.mfClock) << " [FLAG PC witness]\n";
+            if (lrStop.muPhase == 2)
+            {
+                lrStop.mfClock = gfTrafficLightDiagClock_PC;
+            }
         }
     }
 }

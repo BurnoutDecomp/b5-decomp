@@ -1245,6 +1245,12 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         void GenerateNetworkUpdateEvents(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
                                          BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput);
 
+        // @0x82723EA0. DWARF `void UpdateJunctions()` (h:1617, locals at BrnTrafficEntityModule.cpp:9358..9376).
+        // ADDITIVE (crash parity FX-TRAFFICLIGHTS, 2026-09-25). UpdateDecisionFrame calls it on every decision
+        // frame at 0x8274E5EC: every active hull's junctions run their phase timers down and, on a phase change,
+        // set their stop lines red / green and change their lights; then TrafficLightManager::UpdateHull.
+        void UpdateJunctions();
+
         // @0x82743B80. DWARF `void UpdateEventStarts()` (h:1620, BrnTrafficEntityModule.cpp:9477). ADDITIVE
         // (crash parity FX-NETCRASH, 2026-09-25). PostPhysicsUpdate calls it every frame at 0x8274EE90, right
         // before GenerateNetworkUpdateEvents: an event start that clears the traffic sets up its start line's
