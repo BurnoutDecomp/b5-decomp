@@ -21,6 +21,7 @@
 #include "GameSource/Effects/Particles/Native/BrnIm3dSmokeRenderer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::WriteToLog
+#include "GameSource/Effects/Particles/Native/BrnSimpleFxDiag.h"   // [diag] BRN_SIMPLEFX_DIAG
 
 #include <cstdio>    // [diag] snprintf (the constant-resolve line)
 
@@ -125,7 +126,9 @@ namespace BrnGraphics
 
         // [DIAG] NOT IN THE X360 BINARY. DID THE FOUR CONSTANTS RESOLVE, AND ARE BOTH PAIRS UP?
         // A zero register count is GetVariableHandleByName's "not found", and an unresolved handle
-        // routes its row to the discard bin -- invisible until something draws. DELETE-WHEN-STABLE.
+        // routes its row to the discard bin -- invisible until something draws. BRN_SIMPLEFX_DIAG=1
+        // only (default OFF). DELETE-WHEN-STABLE.
+        if (BrnParticle::Native::SimpleFxDiagArmed())
         {
             char lacMsg[256];
             std::snprintf(lacMsg, sizeof(lacMsg),

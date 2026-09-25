@@ -1,4 +1,5 @@
 #include "GameSource/Effects/Particles/ParticleModule.h"
+#include "GameSource/Effects/Particles/Native/BrnSimpleFxDiag.h"   // [diag] BRN_SIMPLEFX_DIAG
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include <cstddef>                                   // offsetof
 #include <cstdio>                                    // snprintf (the announcement)
@@ -217,6 +218,76 @@ namespace BrnParticle
 
         lrArray.SpawnParticle(lvPosition, lvVelocity, lfSpawnTime, lfSizeScale,
                               lfRotationalVelocity, false, lfAlpha);
+    }
+
+    // =========================================================================
+    // SpawnSparkShowerFromPoint  @0x8228AFC0  (DWARF ParticleModule.h:563) -- 45 instructions.
+    //   Straight-line: the transform's four rows (`lvx128` off r4 at +0/+0x10/+0x20/+0x30), v1..v4
+    //   and f1..f4, r9 and r10 are stored into a stack SpawnSparkShowerFromPointEvent in field order
+    //   (+0x00..+0x94) and posted: AddEventSafe(this + 0x27784, &event, `li r5, 2`, `li r6, 0xA0`).
+    //   The console ignores the post's result (a full queue drops the shower).
+    // =========================================================================
+    void ParticleModule::SpawnSparkShowerFromPoint(Matrix44Affine lTransform,
+                                                   Vector4 lvLateralAngleMinMaxForwardAngleMinMax,
+                                                   Vector4 lvVelocityMinMaxInheritanceMinMax,
+                                                   Vector3 lvVelocityToInherit,
+                                                   Vector4 lvSparkSizeMinMaxSpawnRadiusXSpawnRadiusYZ,
+                                                   f32 lfCurrentTime,
+                                                   f32 lfGroundPositionY,
+                                                   f32 lfVelocityScaleSpeedThreshold,
+                                                   f32 lfReflectionAmount,
+                                                   u32 luNumToSpawn,
+                                                   Native::ESparkArrayID leSparkType)
+    {
+        SpawnSparkShowerFromPointEvent lEvent;
+        lEvent.mTransform                                = lTransform;
+        lEvent.mLateralAngleMinMaxForwardAngleMinMax     = lvLateralAngleMinMaxForwardAngleMinMax;
+        lEvent.mVelocityMinMaxInheritanceMinMax          = lvVelocityMinMaxInheritanceMinMax;
+        lEvent.mVelocityToInherit                        = lvVelocityToInherit;
+        lEvent.mSparkSizeMinMaxSpawnRadiusXSpawnRadiusYZ = lvSparkSizeMinMaxSpawnRadiusXSpawnRadiusYZ;
+        lEvent.mfCurrentTime                             = lfCurrentTime;
+        lEvent.mfGroundPositionY                         = lfGroundPositionY;
+        lEvent.mfVelocityScaleSpeedThreshold             = lfVelocityScaleSpeedThreshold;
+        lEvent.mfReflectionAmount                        = lfReflectionAmount;
+        lEvent.muNumToSpawn                              = luNumToSpawn;
+        lEvent.meSparkType                               = leSparkType;
+
+        mInterThreadEventQueue.AddEventSafe(&lEvent, eParticleEvent_SpawnSparkShowerFromPoint,
+                                            static_cast<s32>(sizeof(lEvent)));
+    }
+
+    // =========================================================================
+    // FireDebrisBurst  @0x82289E70  (DWARF ParticleModule.h:569) -- 55 instructions.
+    //   The event's debrisparams is default-constructed (`debrisparams::debrisparams(r1+0xA0, 0, 0)`
+    //   @0x8227E9A0 -- the null-collection form, which takes the 0xE0-byte default data area) and
+    //   then assigned from the caller's (Attrib::Instance::operator= @0x8280DE08). The five vectors
+    //   land at +0x00 spawn position (v1), +0x10 emitter half extents (v3), +0x20 velocity to
+    //   inherit (v4), +0x30 camera position (v2), +0x40 car colour (v5); the two floats at +0x60 /
+    //   +0x64. Posted as type 5 (`li r5, 5`); the local's ~Instance runs after the post.
+    //   (Console size 0x70; the host event is wider -- the Instance carries host pointers -- and is
+    //   posted at its own sizeof, which is what the drain's type-5 arm reads it back as.)
+    // =========================================================================
+    void ParticleModule::FireDebrisBurst(Vector3 lvSpawnPosition,
+                                         Vector3 lvCameraPosition,
+                                         Vector3 lvEmitterHalfExtents,
+                                         Vector3 lvVelocityToInherit,
+                                         f32 lfCurrentTime,
+                                         f32 lfScaleFactor,
+                                         const Attrib::Gen::debrisparams& lrDebrisParams,
+                                         Vector4 lvCarColour)
+    {
+        FireDebrisBurstEvent lEvent;
+        lEvent.mDebrisParams        = lrDebrisParams;
+        lEvent.mSpawnPosition       = lvSpawnPosition;
+        lEvent.mvCarColour          = lvCarColour;
+        lEvent.mvEmitterHalfExtents = lvEmitterHalfExtents;
+        lEvent.mvVelocityToInherit  = lvVelocityToInherit;
+        lEvent.mCameraPosition      = lvCameraPosition;
+        lEvent.mfCurrentTime        = lfCurrentTime;
+        lEvent.mfScaleFactor        = lfScaleFactor;
+
+        mInterThreadEventQueue.AddEventSafe(&lEvent, eParticleEvent_FireDebrisBurst,
+                                            static_cast<s32>(sizeof(lEvent)));
     }
 
     // =========================================================================
@@ -1734,8 +1805,7 @@ namespace BrnParticle
             if (!sbProbed)
             {
                 sbProbed = true;
-                const char* const lpcEnv = std::getenv("BRN_SIMPLEFX_DIAG");
-                sbArmed = (lpcEnv != 0 && lpcEnv[0] != '0');
+                sbArmed = Native::SimpleFxDiagArmed();
                 if (sbArmed)
                     CgsDev::Log::WriteToLog("[simplefx] probe ARMED (BRN_SIMPLEFX_DIAG)\n");
             }

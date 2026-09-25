@@ -93,6 +93,10 @@ namespace BrnEffects
         struct DispatchInputBuffer;
     }
     class  RaceCarParticleEffectHelper;
+    // DWARF EffectsModule.cpp:137 -- the spark-shower parameter pair (small / large arguments, the
+    // reflection amount, the speed threshold and the spark array). Defined in EffectsModule.cpp,
+    // where the five const instances live (gSparkShowerController*).
+    struct SparkShowerController;
 
     // ------------------------------------------------------------------------
     // BrnEffects::EffectsModuleParams (DWARF EffectsModule.h:59) -- the per-update
@@ -345,9 +349,9 @@ namespace BrnEffects
         void HandleCrashingTrail(ActiveRaceCarData& lrActiveRaceCar, f32 lfDt, f32 lfTime,
                                  const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState,
                                  EActiveRaceCarIndex leIndex);
-        // ⭐⭐ THE CONTACT DRAINS. Moved out of the "NOT RECONSTRUCTED" block 2026-09-06 -- the
-        // first three are real bodies now; ProcessRaceCarContacts still announces itself (see
-        // the .cpp for its own callee wall).
+        // ⭐⭐ THE CONTACT DRAINS. Moved out of the "NOT RECONSTRUCTED" block 2026-09-06; all four
+        // are real bodies (ProcessRaceCarContacts and its callee wall landed 2026-09-24,
+        // FX-CRASHVFX).
         //
         // @0x8229B7F8 (DWARF EffectsModule.cpp:3012). ⚠ ITS SIGNATURE IS THE ASM'S: r4 the
         // params, r5 the active-race-car interface, r6 the contact spy, r7 the camera -- the
@@ -387,6 +391,44 @@ namespace BrnEffects
                                  f32 lfMinFrictionStress,
                                  f32 lfSurfaceSparkScale,
                                  bool lbIsCrashing);
+
+        // ---- ProcessRaceCarContacts' callees (FX-CRASHVFX 2026-09-24), DWARF shapes ----------
+        // @0x822920C0 (DWARF :2521). Lerp the controller's small/large shower arguments by the
+        // splatted size and post one SpawnSparkShowerFromPoint.
+        void DoSparkShower(const SparkShowerController& lrController,
+                           VecFloat lvSize,
+                           Matrix44Affine lTransform,
+                           Vector3 lvVelocityToInherit,
+                           f32 lfCurrentTime,
+                           f32 lfGroundPositionY,
+                           u32 luNumToSpawn);
+        // @0x82290A48 (DWARF :1577). Sparks off a race car scraping another vehicle: one
+        // SpawnSparksFromPoint record, its count from _gSparkSpawnParamsRaceCarVehicle.
+        void HandleRaceCarRaceCarSparks(f32 lfDt,
+                                        f32 lfTime,
+                                        Vector3 lvPosition,
+                                        Vector3 lvNormal,
+                                        const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState,
+                                        f32 lfGroundPositionY);
+        // @0x82296790 (DWARF :1512). The vehicle-grinding spark shower (BurstAccumulator-paced).
+        void HandleVehicleVehicleSparks(Vector3 lvPosition,
+                                        Vector3 lvOtherVelocity,
+                                        ActiveRaceCarData& lrActiveRaceCar,
+                                        const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState,
+                                        f32 lfDt,
+                                        f32 lfTime);
+        // @0x82290BC8 (DWARF :1680). A debris burst scaled by the car's speed through the
+        // debrisparams' speed ramp.
+        void HandleBurstDebris(const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
+                               EActiveRaceCarIndex leIndex,
+                               f32 lfDt,
+                               f32 lfTime,
+                               Vector3 lvPosition,
+                               Vector3 lvNormal,
+                               const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState,
+                               const BrnDirector::Camera::Camera* lpCamera,
+                               const Attrib::Gen::debrisparams& lrDebrisParams,
+                               const RwRGBAReal& lrColour);
         void HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffer* lpInputBuffer,
                                               const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
                                               f32 lfDt, f32 lfTime);
