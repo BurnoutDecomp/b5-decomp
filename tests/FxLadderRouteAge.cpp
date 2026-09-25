@@ -7,14 +7,18 @@
 //   0x8276FD90..0x8276FDDC  drift = |mLastRoutePosition (+0x1480) - mPosition (+0x1430)|
 //                           (rsqrt + 2 Newton steps, vsel 0 when the square is exactly 0)
 //   0x8276FD8C/0x8276FDE4   limit = mbIsPlayer (+0x1549) ? flt_820C4244 (50.0) : flt_820C4318 (200.0)
-//   0x8276FDFC  fcmpu f13, f0 ; ble 0x8276FE0C   -- ONLY an ordered drift <= limit goes on;
-//               the fall-through is `li r3, 1`: a drift ABOVE the limit or a NaN drift is "old".
+//   0x8276FDFC  fcmpu f13, f0 ; ble 0x8276FE0C   -- ble is `bc 4,gt`, TAKEN whenever GT is clear,
+//               i.e. for an ordered drift <= limit AND for an unordered (NaN) drift: both go on to the
+//               route tests. Only an ordered drift ABOVE the limit falls through to `li r3, 1` ("old").
 //   0x8276FE0C..0x8276FE64  status (+0x1408) != 0 && count (+0x1400) > 0 && count > 1, else old
 //   0x8276FE74  count - next (+0x1524) < 1 -> old
 //   0x8276FE7C..0x8276FE88  node = min(next + 1, count - 1)
 //   0x8276FF14  vcmpgtfp. 0 > dot(direction, (node.x, 0, node.y) - position) -> old
 //               (a NaN dot is not "all greater": NOT old)
-// The pre-fix body tested `lfDrift > lfLimit`, which reads a NaN drift as "not old".
+// cccfeed8 wrote `!(lfDrift <= lfLimit)`, which returns "old" for a NaN drift before the route tests
+// run -- the ble misreading REVIEW_A.md logged for five other commits. The console (and `lfDrift >
+// lfLimit`) sends a NaN drift on to the route tests; with the fixture's valid route ahead they say
+// "not old". The four NaN-drift checks below are RED on cccfeed8.
 #include "GameSource/World/AI/BrnAICar.h"
 #include "GameSource/World/AI/BrnAICar_Constants.h"
 #include "GameSource/World/AI/Route/BrnRoute.h"
@@ -87,15 +91,22 @@ int main()
     Reset(true); Drift(60.0f, 0.0f);
     Check(gCar.IsExtrapolatedRouteGettingOld(), "player, drift 60 > 50 -> old");
 
-    // A NaN drift: the ble is NOT taken on unordered, so the console returns 1.
+    // A NaN drift: the ble IS taken on unordered, so the console goes on to the route tests. With a
+    // valid route ahead they answer "not old": for a NaN position the facing dot is NaN and
+    // `vcmpgtfp. 0 > dot` is not all-true (0x8276FF14); for a NaN route snapshot the dot is +20.
     Reset(false); gCar.mPosition = V(KF_NAN, 0.0f, 0.0f);
-    Check(gCar.IsExtrapolatedRouteGettingOld(), "AI, NaN position -> NaN drift -> old");
+    Check(!gCar.IsExtrapolatedRouteGettingOld(), "AI, NaN position -> NaN drift -> route tests -> not old");
     Reset(true); gCar.mPosition = V(0.0f, KF_NAN, 0.0f);
-    Check(gCar.IsExtrapolatedRouteGettingOld(), "player, NaN position -> NaN drift -> old");
+    Check(!gCar.IsExtrapolatedRouteGettingOld(), "player, NaN position -> NaN drift -> route tests -> not old");
     Reset(false); gCar.mLastRoutePosition = V(0.0f, 0.0f, KF_NAN);
-    Check(gCar.IsExtrapolatedRouteGettingOld(), "AI, NaN route snapshot -> NaN drift -> old");
+    Check(!gCar.IsExtrapolatedRouteGettingOld(), "AI, NaN route snapshot -> NaN drift -> route ahead -> not old");
     Reset(true); gCar.mLastRoutePosition = V(KF_NAN, KF_NAN, KF_NAN);
-    Check(gCar.IsExtrapolatedRouteGettingOld(), "player, NaN route snapshot -> old");
+    Check(!gCar.IsExtrapolatedRouteGettingOld(), "player, NaN route snapshot -> route ahead -> not old");
+    // ... and the route tests still decide for a NaN drift: no valid route -> old, facing away -> old.
+    Reset(false); gCar.mPosition = V(KF_NAN, 0.0f, 0.0f); gCar.GetRoute()->meStatus = Route::E_STATUS_UNINITIALISED;
+    Check(gCar.IsExtrapolatedRouteGettingOld(), "AI, NaN drift, no valid route -> old (route test)");
+    Reset(true); gCar.mLastRoutePosition = V(KF_NAN, 0.0f, 0.0f); gCar.mDirection = V(0.0f, 0.0f, -1.0f);
+    Check(gCar.IsExtrapolatedRouteGettingOld(), "player, NaN drift, facing away -> old (route test)");
 
     // ---- the route tests @0x8276FE0C..0x8276FF14 (ordered controls, both bodies agree) ----
     Reset(false); gCar.GetRoute()->meStatus = Route::E_STATUS_UNINITIALISED;
