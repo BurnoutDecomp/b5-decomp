@@ -9,6 +9,7 @@
 #include "GameSource/Sound/Passby/BrnPassbyStateManager.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
 #include "GameSource/Sound/Vehicles/BrnEngineAudioDiag.h"   // [DIAG] NOT IN THE X360 BINARY
+#include "SDKs/XboxMath/XMVectorACos.h"                     // XboxMath::XMVectorACos (X360 0x821F0980)
 
 #include <cmath>
 #include <cstdio>
@@ -530,11 +531,14 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
     //     mYaw.Update(angle)
     // Its consumer is BrnSkidEffect.cpp:163, which had been reading a constant 0
     // because nothing in this tree ever wrote mYaw.
-    // FLAG: the console reaches acos through XMVectorACos @0x821F0980, whose contract
-    // is "each component should be between -1.0 and 1.0"; std::acos is UNDEFINED
-    // outside that, so the dot is clamped to the domain before the call. That clamp
-    // is the host libm's domain requirement, not a behavioural arm -- for a
-    // normalized vector the dot only leaves [-1,1] by float rounding.
+    // The arc-cosine is the console's own XMVectorACos (0x826CBC44 bl 0x821F0980, the shared
+    // XboxMath::XMVectorACos; crash parity FX-GATE -- std::acos stood in for it before).
+    // FLAG (PC-only domain guard, kept by conductor decision 2026-09-25): the console passes the
+    // raw dot (0x826CBC2C vmsum3fp128 -> 0x826CBC44); a dot > 1 gives NaN there (XMVectorACos of
+    // 1.00000012 is NaN). The clamp below was added for the host libm's domain; for a normalized
+    // vector the dot only leaves [-1,1] by float rounding. REMOVE WHEN the dot feeding it is
+    // console-exact AND the PC audio backend is shown to handle a NaN yaw the way the console's
+    // platform layer does (sound-pass follow-up).
     {
         f32 lfYawDegrees = 0.0f;
         if (std::fabs(lrData.mVelocityMagnitude.GetCurrent()) > 0.15f)
@@ -550,7 +554,7 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
                        + lrForward.y * lrVelocity.y
                        + lrForward.z * lrVelocity.z) * lfInverseLength;
             lfDot = (std::max)(-1.0f, (std::min)(1.0f, lfDot));
-            lfYawDegrees = std::acos(lfDot) * 57.29578f;
+            lfYawDegrees = XboxMath::XMVectorACos(lfDot) * 57.29578f;
             if (lfYawDegrees > 90.0f)
                 lfYawDegrees = 180.0f - lfYawDegrees;
         }
