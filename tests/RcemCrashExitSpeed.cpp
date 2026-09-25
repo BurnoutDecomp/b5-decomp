@@ -132,6 +132,9 @@ struct RaceCarEntityModule {
 // FX-RCEM4 (reviewer A on 65eadffe, 2026-09-24): the [crash-exit] / [persist-damage] witnesses'
 // env latch (BRN_CRASH_EXIT_DIAG) -- off in this harness.
 inline bool CrashExitDiagEnabled() { return false; }
+// FX-FOLLOWUPS item 4 (2026-09-25): the re-colour scenario's harness hook (BRN_PERSIST_DAMAGE_PRELOAD and the
+// repaint witness, both default-off) -- a no-op in this harness.
+inline void RecolourScenarioHarness(RaceCarEntityModule&) {}
 #include "rcem_crash_exit_speed.inc"
 }
 
