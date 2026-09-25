@@ -22,8 +22,11 @@
 // include/rw/; it never touches rw/math/vpu/, so this hand-maintained header (like
 // its siblings types.h / vector3_operation.h) is immune to regeneration.
 
-#include <cmath>                           // std::sin (SLerp's arc)
-#include "SDKs/XboxMath/XMVectorACos.h"    // XboxMath::XMVectorACos (X360 0x821F0980), SLerp's angle
+#include <cmath>                           // std::fmaf / std::sqrt (SLerp's console arithmetic)
+#include <limits>                          // SLerpDetail::Dot3's QNaN (ROUNDING_RULE 1 overflow)
+#include "SDKs/XboxMath/XMVectorACos.h"    // XboxMath::XMVectorACos (X360 0x821F0980), SLerp's endpoint angle
+#include "SDKs/XboxMath/XMVectorATan.h"    // XboxMath::XMVectorATan (X360 0x821F0A70), SLerp's rotation angle
+#include "SDKs/XboxMath/XMVectorSinCos.h"  // XboxMath::XMVectorSinCos (inlined in SLerp @0x82216BB8), the arc
 #include "rw/math/vpu/types.h"             // rw::math::vpu::Matrix44Affine / Vector3
 #include "rw/math/vpu/vector3_operation.h" // Vector3 operator+/-, Mult, Lerp
 
@@ -518,86 +521,288 @@ namespace vpu
             && IsValid(lrMatrix.wAxis);
     }
 
-    // SLerp(from, to, amount, &angleOut) -- X360 0x82216858. Spherical-linear blend between
-    // two affine transforms. SIGNATURE CORRECTED (the previous `const float* lpfAmount` was a
-    // mis-read): the asm takes r3 = the sret, r4 = lrFrom, r5 = lrTo, v1 = the blend amount as
-    // a broadcast VecFloat, and r6 = a POINTER the function WRITES -- the remaining rotation
-    // angle after the blend. BrnDirector::Camera::TrafficLaneTruck::Update @0x82247AC0 passes a
-    // stack slot for it that it never reads (DWARF names that local `lUnusedAngle`).
-    //
-    // The console's four arms, read off the branch structure:
-    //   0x8221688C  amount <= 0            -> out = from, *angleOut = the angle (below)
-    //   0x8221694C  amount >= 1            -> out = to,   *angleOut = 0
-    //   0x82216A94  angle < flt_82001764   -> out = per-row LERP, the three axis rows
-    //                                         re-normalised; *angleOut = angle*(1 - amount)
-    //   0x82216BB4  otherwise              -> the true slerp; *angleOut = angle*(1 - amount)
-    // where `angle` is computed at 0x822168BC..0x82216910 as
-    //   XMVectorACos( clamp( Dot3( Normalize(from.zAxis), Normalize(to.zAxis) ), -1, +1 ) )
-    // and flt_82001764 == 0.03490658476948738 == 2 degrees (dumped from the shipped image).
-    //
-    // The angle is the console's own XMVectorACos (0x82216910 bl 0x821F0980), the shared
-    // XboxMath::XMVectorACos (crash parity FX-GATE; std::acos stood in for it before).
-    // FLAG (VMX->portable, the standing convention of this vendor home): the rest of the arc still
-    // uses exact closed forms -- the console normalises with vrsqrtefp + two Newton-Raphson steps
-    // and evaluates an XMVectorSinCos whose Taylor coefficient block is the shipped rodata at
-    // 0x82000BD0..0x82000C2F, where this reconstruction uses Normalize and std::sin. The BRANCH
-    // STRUCTURE, the 2-degree threshold, the "which rows get re-normalised" choice and the angle
-    // written back through lpvAngleOut are all transcribed, not invented.
+    // -- SLerp's console arithmetic (FX-GATE, crash parity 2026-09-25) -------------------------------------------------
+    // The helpers below are SLerp's own: the ROUNDING of the words at 0x82216858 (SLerp), 0x82216510 (its axis / angle
+    // query) and 0x82203768 (QueryRotateDegenerateUnitAxis), per the campaign rule (ROUNDING_RULE.md). IDA prints the
+    // classic vmaddfp operands in the raw field order D, A, B, C, which computes D = A * C + B; vnmsubfp D = -(A * C - B);
+    // vmaddcfp128 D = A * D + B.
+    namespace SLerpDetail
+    {
+        // Rule 1 -- vmsum3fp128: the f32 products exact in f64, summed left to right in f64, cast ONCE; a finite sum
+        // that overflows f32 is a QNaN. FLAG (model): vmsum = one rounding of the f64 sum (xenia DOT_PRODUCT_3).
+        inline float Dot3(const Vector3& lrA, const Vector3& lrB)
+        {
+            const double ldSum = static_cast<double>(lrA.x) * lrB.x + static_cast<double>(lrA.y) * lrB.y
+                               + static_cast<double>(lrA.z) * lrB.z;
+            const float lfSum = static_cast<float>(ldSum);
+            if (std::isinf(lfSum) && std::isfinite(ldSum))
+            {
+                return std::numeric_limits<float>::quiet_NaN();
+            }
+            return lfSum;
+        }
+
+        // vnmsubfp lane (rule 3): -(a * c - b) rounded ONCE; a NaN comes back un-negated.
+        inline float NegativeMultiplySubtract(float lfA, float lfC, float lfB)
+        {
+            const float lfDifference = std::fmaf(lfA, lfC, -lfB);
+            return (lfDifference != lfDifference) ? lfDifference : -lfDifference;
+        }
+
+        // Rule 5 -- vrsqrtefp refined by liSteps Newton-Raphson steps, each e2 = e * e (vmulfp128), h = e * 0.5
+        // (vmulfp128), r = -(x * e2 - 1) (vnmsubfp), e = h * r + e (vmaddfp). FLAG (model): the estimate is the
+        // correctly rounded 1 / sqrt(x) (+-0 -> +-inf, +inf -> +0, < 0 -> NaN, as vrsqrtefp gives).
+        inline float RefinedReciprocalSqrt(float lfValue, int liSteps)
+        {
+            float lfEstimate = static_cast<float>(1.0 / std::sqrt(static_cast<double>(lfValue)));
+            for (int liStep = 0; liStep < liSteps; ++liStep)
+            {
+                const float lfEstimateSquared = lfEstimate * lfEstimate;
+                const float lfHalfEstimate    = lfEstimate * 0.5f;
+                lfEstimate = std::fmaf(lfHalfEstimate, NegativeMultiplySubtract(lfValue, lfEstimateSquared, 1.0f),
+                                       lfEstimate);
+            }
+            return lfEstimate;
+        }
+
+        // Rule 5 -- vrefp refined by liSteps steps, each e = e * -(e * x - 1) + e (vnmsubfp, vmaddfp). FLAG (model):
+        // the estimate is the correctly rounded 1 / x (+-0 -> +-inf, +-inf -> +-0).
+        inline float RefinedReciprocal(float lfValue, int liSteps)
+        {
+            float lfEstimate = static_cast<float>(1.0 / static_cast<double>(lfValue));
+            for (int liStep = 0; liStep < liSteps; ++liStep)
+            {
+                lfEstimate = std::fmaf(lfEstimate, NegativeMultiplySubtract(lfEstimate, lfValue, 1.0f), lfEstimate);
+            }
+            return lfEstimate;
+        }
+
+        inline Vector3 Scale(const Vector3& lrVector, float lfScale)   // vmulfp128 against a splat, four lanes
+        {
+            return Vector3{ lrVector.x * lfScale, lrVector.y * lfScale, lrVector.z * lfScale, lrVector.w * lfScale };
+        }
+
+        // vmaxfp / vminfp: a NaN in either operand gives a NaN (vA's when both are), and -0 < +0.
+        inline float VectorMax(float lfA, float lfB)
+        {
+            if (lfA != lfA) return lfA;
+            if (lfB != lfB) return lfB;
+            if (lfA == lfB) return std::signbit(lfA) ? lfB : lfA;
+            return (lfA > lfB) ? lfA : lfB;
+        }
+        inline float VectorMin(float lfA, float lfB)
+        {
+            if (lfA != lfA) return lfA;
+            if (lfB != lfB) return lfB;
+            if (lfA == lfB) return std::signbit(lfA) ? lfA : lfB;
+            return (lfA < lfB) ? lfA : lfB;
+        }
+
+        // The SDK's row transform as a vmaddfp cascade, four lanes: v.x * m.x, then + v.y * m.y, then + v.z * m.z.
+        inline Vector3 CascadeTransformVector(const Matrix44Affine& lrMatrix, const Vector3& lrVector)
+        {
+            const Vector3& x = lrMatrix.xAxis;
+            const Vector3& y = lrMatrix.yAxis;
+            const Vector3& z = lrMatrix.zAxis;
+            return Vector3{
+                std::fmaf(lrVector.z, z.x, std::fmaf(lrVector.y, y.x, lrVector.x * x.x)),
+                std::fmaf(lrVector.z, z.y, std::fmaf(lrVector.y, y.y, lrVector.x * x.y)),
+                std::fmaf(lrVector.z, z.z, std::fmaf(lrVector.y, y.z, lrVector.x * x.z)),
+                std::fmaf(lrVector.z, z.w, std::fmaf(lrVector.y, y.w, lrVector.x * x.w)) };
+        }
+
+        // rw::math::vpu::QueryRotateDegenerateUnitAxis @0x82203768 as SLerp's axis query calls it (the vendor
+        // QueryRotateDegenerateUnitAxis below keeps its exact Normalize for its own callers). The branch structure and
+        // the squared dominant term are the vendor's; the console's rounding is: the three sums and 1 + m_ii single
+        // (vaddfp), (1 + m_ii)^2 one vmulfp128, packed by vperm unk_82CDA350 / vrlimi128 -- the w lane is the x lane
+        // (0x822037FC / 0x82203864 / 0x822038AC) -- then |v|^2 by vmsum3fp128 0x822038B8 and the refined estimate
+        // with TWO steps, NO zero guard (0x822038C4..0x822038E8).
+        inline Vector3 DegenerateUnitAxis(const Matrix44Affine& lrMatrix)
+        {
+            const float lfM00 = lrMatrix.xAxis.x;
+            const float lfM11 = lrMatrix.yAxis.y;
+            const float lfM22 = lrMatrix.zAxis.z;
+            Vector3 lAxis;
+            if (lfM00 > lfM11 && lfM00 > lfM22)
+            {
+                const float lfDominant = 1.0f + lfM00;
+                lAxis.x = lfDominant * lfDominant;
+                lAxis.y = lrMatrix.xAxis.y + lrMatrix.yAxis.x;
+                lAxis.z = lrMatrix.xAxis.z + lrMatrix.zAxis.x;
+            }
+            else if (lfM11 > lfM22)
+            {
+                const float lfDominant = 1.0f + lfM11;
+                lAxis.x = lrMatrix.yAxis.x + lrMatrix.xAxis.y;
+                lAxis.y = lfDominant * lfDominant;
+                lAxis.z = lrMatrix.yAxis.z + lrMatrix.zAxis.y;
+            }
+            else
+            {
+                const float lfDominant = 1.0f + lfM22;
+                lAxis.x = lrMatrix.zAxis.x + lrMatrix.xAxis.z;
+                lAxis.y = lrMatrix.zAxis.y + lrMatrix.yAxis.z;
+                lAxis.z = lfDominant * lfDominant;
+            }
+            lAxis.w = lAxis.x;
+            return Scale(lAxis, RefinedReciprocalSqrt(Dot3(lAxis, lAxis), 2));
+        }
+
+        // SLerp's axis / angle query, sub_82216510 (the SDK's QueryRotate inlined into its own body; it also writes a
+        // third output SLerp never reads, 0x82216788..0x82216844, not reproduced). For the relative rotation m:
+        //   a     = (m12 - m21, m20 - m02, m01 - m10)            vsubfp, packed by vrlimi128 (0x8221657C..0x822165BC)
+        //   t     = (m00 + m11) + m22 - 1                        vaddfp, vaddfp, vsubfp128 (0x822165B0..0x822165D0)
+        //   s     = |a|^2 * refined 1/sqrt(|a|^2) (two steps), 0 where |a|^2 == 0   (0x822165CC..0x82216608)
+        //   axis  = s > 0 ? a * refined 1/s (vrefp, two steps, no guard, then * 1.0) : 0   (0x8221660C..0x8221667C)
+        //   angle = XMVectorATan(s * refined 1/t (vrefp, ONE step) + 0)                   (0x82216680..0x822166DC)
+        //           t < 0 -> +-pi + that (the sign of s, vand / vor), t == 0 -> +-pi/2     (0x822166E4..0x82216720)
+        //   s <= 0 and t <= 0 (a half turn) -> axis = QueryRotateDegenerateUnitAxis(m)     (0x82216724..0x82216784)
+        // The half-turn test compares s against the constant at 0x8200176C, 0x00200000: a denormal that the VMX
+        // flushes to zero, so it is spelled against 0 here (ROUNDING_RULE 6).
+        inline void QueryRotation(const Matrix44Affine& lrMatrix, Vector3& lrAxisOut, float& lrfAngleOut)
+        {
+            const Vector3 lAntisymmetric = { lrMatrix.yAxis.z - lrMatrix.zAxis.y, lrMatrix.zAxis.x - lrMatrix.xAxis.z,
+                                             lrMatrix.xAxis.y - lrMatrix.yAxis.x, 0.0f };
+            const float lfTraceMinusOne = ((lrMatrix.xAxis.x + lrMatrix.yAxis.y) + lrMatrix.zAxis.z) - 1.0f;
+
+            const float lfLengthSquared = Dot3(lAntisymmetric, lAntisymmetric);
+            const float lfRoot = lfLengthSquared * RefinedReciprocalSqrt(lfLengthSquared, 2);
+            const float lfSin = (lfLengthSquared == 0.0f) ? 0.0f : lfRoot;          // vcmpeqfp128 / vsel128
+
+            if (lfSin > 0.0f)
+            {
+                lrAxisOut = Scale(lAntisymmetric, RefinedReciprocal(lfSin, 2) * 1.0f);
+            }
+            else
+            {
+                lrAxisOut = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            }
+
+            const float lfRatio = std::fmaf(lfSin, RefinedReciprocal(lfTraceMinusOne, 1), 0.0f);   // vmaddcfp128
+            const float lfArcTan = XboxMath::XMVectorATan(lfRatio);
+            const float lfSignedPi     = std::copysign(3.14159274f, lfSin);    // 0x8200174C | sign(s)
+            const float lfSignedHalfPi = std::copysign(1.57079637f, lfSin);    // 0x82001754 | sign(s)
+            float lfAngle = (0.0f > lfTraceMinusOne) ? lfSignedPi + lfArcTan : lfArcTan;
+            if (0.0f == lfTraceMinusOne)
+            {
+                lfAngle = lfSignedHalfPi;
+            }
+            lrfAngleOut = lfAngle;
+
+            if (0.0f >= lfSin && 0.0f >= lfTraceMinusOne)
+            {
+                lrAxisOut = DegenerateUnitAxis(lrMatrix);
+            }
+        }
+    }
+
+    // SLerp(from, to, amount, &angleOut) -- X360 0x82216858, the SDK's spherical-linear blend between two affine
+    // transforms, ported arm by arm from the console's words (FX-GATE, crash parity 2026-09-25). r3 = the sret,
+    // r4 = lrFrom, r5 = lrTo, v1 = the amount (a splat), r6 = the angle out (every console caller passes a slot;
+    // the PC-only frame interpolation passes null, so the store is guarded).
+    //   0x8221688C  0 >= amount (vcmpgefp128.; a NaN falls through): out = from, and *angleOut = the angle between
+    //               the two z rows -- each normalised with ONE Newton step (0x822168BC..0x82216900), Dot3, clamped
+    //               vmaxfp -1 / vminfp +1, XMVectorACos (bl 0x821F0980).
+    //   0x8221694C  amount >= 1: out = to, *angleOut = 0.
+    //   otherwise   rel = transpose(from) * to (0x822169B8..0x82216A70: vmrghw / vmrglw columns, each row a vmaddfp
+    //               cascade of to's rows; its translation fma(0, .., to.w)), then the axis / angle query
+    //               (bl 0x82216510, SLerpDetail::QueryRotation), and
+    //     0x82216A94  angle < flt_82001764 (2 degrees; NaN takes the arc): every row lerped from + (to - from) * t
+    //                 (vsubfp, vmulfp128, vaddfp), the three axis rows re-normalised (Dot3, TWO steps, no guard);
+    //     0x82216BB4  else the arc: R = the rotation by angle * t about the axis -- the inlined XMVectorSinCos, then
+    //                 Rodrigues rows { tx ax + c, tx ay + sz, tx az - sy } ... with every "+" one vmaddfp and every
+    //                 "-" a vmulfp128 + vsubfp (w lane = x, vperm unk_82CDA350 / vrlimi128) -- each from row through
+    //                 R's vmaddfp cascade, and the translation fma(t, to.w - from.w, from.w) (vmaddcfp128 0x82216DFC).
+    //   0x82216E20  *angleOut = angle - angle * t (vmulfp128, vsubfp).
+    // The whole function, run on emu64 from its first word to its return (every callee interpreted), matches this
+    // bit for bit on every lane of the result and of the angle on 246 frame pairs covering every arm and all three
+    // degenerate-axis branches (run_fxgate_slerp.py); the previous body missed 239 of them. It evaluated the angle
+    // with an exact Normalize for every arm, weighted the rows by std::sin((1 - t) a) / std::sin(a) and
+    // std::sin(t a) / std::sin(a), and re-normalised the arc's rows -- not what the console runs.
+    // FLAG (ROUNDING_RULE 6): a denormal amount is flushed to 0 by the VMX (the from endpoint); here it takes the arc.
     inline Matrix44Affine SLerp(const Matrix44Affine& lrFrom, const Matrix44Affine& lrTo,
                                 float lfAmount, Vector3* lpvAngleOut)
     {
-        Matrix44Affine lResult;
-
-        // 0x822168BC..0x82216910 -- the angle between the two forward axes.
-        const Vector3 lvFromAt = Normalize(lrFrom.zAxis);
-        const Vector3 lvToAt   = Normalize(lrTo.zAxis);
-        float lfCos = Dot(lvFromAt, lvToAt);
-        if (lfCos < -1.0f) lfCos = -1.0f;      // vmaxfp against vcfsx(-1)
-        if (lfCos >  1.0f) lfCos =  1.0f;      // vminfp against vcfsx(+1)
-        const float lfAngle = XboxMath::XMVectorACos(lfCos);   // 0x82216910 bl XMVectorACos
-
-        // 0x8221688C -- amount <= 0: hand back `from` untouched, report the whole angle.
-        if (lfAmount <= 0.0f)
+        if (0.0f >= lfAmount)
         {
+            const Vector3 lToAt   = SLerpDetail::Scale(lrTo.zAxis, SLerpDetail::RefinedReciprocalSqrt(SLerpDetail::Dot3(lrTo.zAxis, lrTo.zAxis), 1));
+            const Vector3 lFromAt = SLerpDetail::Scale(lrFrom.zAxis, SLerpDetail::RefinedReciprocalSqrt(SLerpDetail::Dot3(lrFrom.zAxis, lrFrom.zAxis), 1));
+            const float lfCos = SLerpDetail::VectorMin(SLerpDetail::VectorMax(SLerpDetail::Dot3(lFromAt, lToAt), -1.0f), 1.0f);
+            const float lfAngle = XboxMath::XMVectorACos(lfCos);
             if (lpvAngleOut != 0) *lpvAngleOut = Vector3{ lfAngle, lfAngle, lfAngle, lfAngle };
             return lrFrom;
         }
 
-        // 0x8221694C -- amount >= 1: hand back `to`, report no remaining angle.
         if (lfAmount >= 1.0f)
         {
             if (lpvAngleOut != 0) *lpvAngleOut = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
             return lrTo;
         }
 
-        const float lfRemaining = lfAngle - lfAngle * lfAmount;   // 0x82216E20 / 0x82216E3C
-        if (lpvAngleOut != 0)
-            *lpvAngleOut = Vector3{ lfRemaining, lfRemaining, lfRemaining, lfRemaining };
+        // rel = transpose(from) * to: row i is to's rows weighted by from's column i.
+        const Vector3 lColumnX = { lrFrom.xAxis.x, lrFrom.yAxis.x, lrFrom.zAxis.x, lrFrom.wAxis.x };
+        const Vector3 lColumnY = { lrFrom.xAxis.y, lrFrom.yAxis.y, lrFrom.zAxis.y, lrFrom.wAxis.y };
+        const Vector3 lColumnZ = { lrFrom.xAxis.z, lrFrom.yAxis.z, lrFrom.zAxis.z, lrFrom.wAxis.z };
+        Matrix44Affine lRelative;
+        lRelative.xAxis = SLerpDetail::CascadeTransformVector(lrTo, lColumnX);
+        lRelative.yAxis = SLerpDetail::CascadeTransformVector(lrTo, lColumnY);
+        lRelative.zAxis = SLerpDetail::CascadeTransformVector(lrTo, lColumnZ);
+        lRelative.wAxis = Vector3{ std::fmaf(0.0f, lrTo.zAxis.x, std::fmaf(0.0f, lrTo.yAxis.x, std::fmaf(0.0f, lrTo.xAxis.x, lrTo.wAxis.x))),
+                                   std::fmaf(0.0f, lrTo.zAxis.y, std::fmaf(0.0f, lrTo.yAxis.y, std::fmaf(0.0f, lrTo.xAxis.y, lrTo.wAxis.y))),
+                                   std::fmaf(0.0f, lrTo.zAxis.z, std::fmaf(0.0f, lrTo.yAxis.z, std::fmaf(0.0f, lrTo.xAxis.z, lrTo.wAxis.z))),
+                                   std::fmaf(0.0f, lrTo.zAxis.w, std::fmaf(0.0f, lrTo.yAxis.w, std::fmaf(0.0f, lrTo.xAxis.w, lrTo.wAxis.w))) };
 
-        // 0x82216AA8 (angle < 2 degrees) -- a straight per-row lerp with the three axis rows
-        // re-normalised. 0x82216BB4 (the wider arc) -- the same endpoints distributed along the
-        // arc by sin((1-t)*angle)/sin(angle) and sin(t*angle)/sin(angle); at the threshold the
-        // two agree to within the console's own estimate error, and for a degenerate (sin ~ 0)
-        // arc the slerp weights collapse back to the lerp ones.
-        float lfWeightFrom = 1.0f - lfAmount;
-        float lfWeightTo   = lfAmount;
-        if (lfAngle >= 0.03490658476948738f)
+        Vector3 lAxis;
+        float lfAngle;
+        SLerpDetail::QueryRotation(lRelative, lAxis, lfAngle);
+
+        Matrix44Affine lResult;
+        if (0.03490658476948738f > lfAngle)   // flt_82001764 (0x3D0EFA35), vcmpgtfp.
         {
-            const float lfSin = std::sin(lfAngle);
-            if (lfSin != 0.0f)
-            {
-                lfWeightFrom = std::sin((1.0f - lfAmount) * lfAngle) / lfSin;
-                lfWeightTo   = std::sin(lfAmount * lfAngle) / lfSin;
-            }
+            const Vector3 lX = lrFrom.xAxis + SLerpDetail::Scale(lrTo.xAxis - lrFrom.xAxis, lfAmount);
+            const Vector3 lY = lrFrom.yAxis + SLerpDetail::Scale(lrTo.yAxis - lrFrom.yAxis, lfAmount);
+            const Vector3 lZ = lrFrom.zAxis + SLerpDetail::Scale(lrTo.zAxis - lrFrom.zAxis, lfAmount);
+            lResult.xAxis = SLerpDetail::Scale(lX, SLerpDetail::RefinedReciprocalSqrt(SLerpDetail::Dot3(lX, lX), 2));
+            lResult.yAxis = SLerpDetail::Scale(lY, SLerpDetail::RefinedReciprocalSqrt(SLerpDetail::Dot3(lY, lY), 2));
+            lResult.zAxis = SLerpDetail::Scale(lZ, SLerpDetail::RefinedReciprocalSqrt(SLerpDetail::Dot3(lZ, lZ), 2));
+            lResult.wAxis = lrFrom.wAxis + SLerpDetail::Scale(lrTo.wAxis - lrFrom.wAxis, lfAmount);
+        }
+        else
+        {
+            float lfSin;
+            float lfCos;
+            XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngle * lfAmount);
+            const float lfT  = 1.0f - lfCos;
+            const float lfTX = lfT * lAxis.x;
+            const float lfTY = lfT * lAxis.y;
+            const float lfTZ = lfT * lAxis.z;
+            const float lfSX = lfSin * lAxis.x;
+            const float lfSY = lfSin * lAxis.y;
+            const float lfSZ = lfSin * lAxis.z;
+            Matrix44Affine lRotation;
+            lRotation.xAxis.x = std::fmaf(lfTX, lAxis.x, lfCos);
+            lRotation.xAxis.y = std::fmaf(lfTX, lAxis.y, lfSZ);
+            lRotation.xAxis.z = lfTX * lAxis.z - lfSY;
+            lRotation.yAxis.x = lfTY * lAxis.x - lfSZ;
+            lRotation.yAxis.y = std::fmaf(lfTY, lAxis.y, lfCos);
+            lRotation.yAxis.z = std::fmaf(lfTY, lAxis.z, lfSX);
+            lRotation.zAxis.x = std::fmaf(lfTZ, lAxis.x, lfSY);
+            lRotation.zAxis.y = lfTZ * lAxis.y - lfSX;
+            lRotation.zAxis.z = std::fmaf(lfTZ, lAxis.z, lfCos);
+            lRotation.xAxis.w = lRotation.xAxis.x;   // the packing copies lane x into w
+            lRotation.yAxis.w = lRotation.yAxis.x;
+            lRotation.zAxis.w = lRotation.zAxis.x;
+            lRotation.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            lResult.xAxis = SLerpDetail::CascadeTransformVector(lRotation, lrFrom.xAxis);
+            lResult.yAxis = SLerpDetail::CascadeTransformVector(lRotation, lrFrom.yAxis);
+            lResult.zAxis = SLerpDetail::CascadeTransformVector(lRotation, lrFrom.zAxis);
+            const Vector3 lDelta = lrTo.wAxis - lrFrom.wAxis;
+            lResult.wAxis = Vector3{ std::fmaf(lfAmount, lDelta.x, lrFrom.wAxis.x), std::fmaf(lfAmount, lDelta.y, lrFrom.wAxis.y),
+                                     std::fmaf(lfAmount, lDelta.z, lrFrom.wAxis.z), std::fmaf(lfAmount, lDelta.w, lrFrom.wAxis.w) };
         }
 
-        lResult.xAxis = Normalize(Mult(lrFrom.xAxis, lfWeightFrom) + Mult(lrTo.xAxis, lfWeightTo));
-        lResult.yAxis = Normalize(Mult(lrFrom.yAxis, lfWeightFrom) + Mult(lrTo.yAxis, lfWeightTo));
-        lResult.zAxis = Normalize(Mult(lrFrom.zAxis, lfWeightFrom) + Mult(lrTo.zAxis, lfWeightTo));
-
-        // The translation row is ALWAYS a plain lerp (0x82216AE0..0x82216B00 / 0x82216DFC's
-        // vmaddcfp128 `from.w + (to.w - from.w)*amount`), never normalised.
-        lResult.wAxis = Lerp(lrFrom.wAxis, lrTo.wAxis, lfAmount);
+        const float lfRemaining = lfAngle - lfAngle * lfAmount;
+        if (lpvAngleOut != 0) *lpvAngleOut = Vector3{ lfRemaining, lfRemaining, lfRemaining, lfRemaining };
         return lResult;
     }
 
