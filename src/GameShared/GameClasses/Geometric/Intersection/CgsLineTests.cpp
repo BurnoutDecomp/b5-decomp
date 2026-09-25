@@ -10,10 +10,16 @@
 //   TestAxisAlignedBoxAxisAlignedBox @ 0x82812460  (store-for-store)
 //   TestLineStartEndAxisAlignedBox   @ 0x82812498  (per-lane VMX lowering; re-read and
 //                                                   corrected 2026-09-24, FX-GEOMETRIC)
+// and the loose octree's three four-lane line tests, inlined on the X360 into
+// LooseOctree::LineTestRecursive @0x828BCF50 (2026-09-25, FX-FOLLOWUPS):
+//   TestLineSphere4 (:172 Mask4 / :305 int32_t results), TestLineBoundingBoxAgainstAxisAlignedBox4 (:766)
 // ============================================================================
 
 #include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+
+#include <cstdint>   // uintptr_t (TestLineSphere4's :308 alignment assert)
+#include <cstring>   // std::memcpy (the Mask4 lanes)
 
 namespace CgsGeometric
 {
@@ -180,5 +186,174 @@ namespace CgsGeometric
         }
 
         return lbStartInside || lbEndInside || lbFaceHit;
+    }
+
+    // ============================================================================================
+    // THE LOOSE OCTREE'S FOUR-LANE LINE TESTS (2026-09-25, crash parity FX-FOLLOWUPS).
+    // Inlined on the X360 into LooseOctree::LineTestRecursive @0x828BCF50; the addresses below are
+    // the inlined copies there. Per-lane lowering of the VMX, in the console's operation order.
+    // ============================================================================================
+    namespace
+    {
+        // A VMX compare-result lane: all ones where the predicate holds, zero where it does not.
+        inline void SetMask4Lane(Vector4& lrMask, s32 liLane, bool lbPassed)
+        {
+            const u32 luBits = lbPassed ? 0xFFFFFFFFu : 0u;
+            std::memcpy(&(&lrMask.x)[liLane], &luBits, sizeof(u32));
+        }
+
+        // One lane of TestLineSphere4 (the banner below has the addresses).
+        inline bool LineSphereLaneHit(const Sphere& lrSphere, const Vector3& lrStart,
+                                      const Vector3& lrDirection, f32 lfLength)
+        {
+            const Vector4& lrCentre  = lrSphere.mPositionRadius;
+            const f32      lfRadius2 = lrCentre.w * lrCentre.w;                          // vmulfp128 v6, v6, v6
+
+            // The far end of the segment, e = L * d + s.
+            const f32 lfEndX = lfLength * lrDirection.x + lrStart.x;                     // vmaddfp v1
+            const f32 lfEndY = lfLength * lrDirection.y + lrStart.y;                     // vmaddfp v31
+            const f32 lfEndZ = lfLength * lrDirection.z + lrStart.z;                     // vmaddfp v2
+
+            // The centre relative to the start, and its projection on the unit direction.
+            const f32 lfDx = lrCentre.x - lrStart.x;                                     // vsubfp v11
+            const f32 lfDy = lrCentre.y - lrStart.y;                                     // vsubfp v12
+            const f32 lfDz = lrCentre.z - lrStart.z;                                     // vsubfp v10
+            const f32 lfT  = (lrDirection.y * lfDy + lrDirection.x * lfDx)               // vmulfp128 + vmaddfp
+                           + lrDirection.z * lfDz;                                       // vmaddfp
+
+            // The perpendicular offset (C - s) - t * d, and the three squared distances.
+            const f32 lfPx = lfDx - lfT * lrDirection.x;
+            const f32 lfPy = lfDy - lfT * lrDirection.y;
+            const f32 lfPz = lfDz - lfT * lrDirection.z;
+            const f32 lfPerpendicular2 = (lfPy * lfPy + lfPx * lfPx) + lfPz * lfPz;
+            const f32 lfStart2         = (lfDy * lfDy + lfDx * lfDx) + lfDz * lfDz;
+            const f32 lfEx = lrCentre.x - lfEndX;
+            const f32 lfEy = lrCentre.y - lfEndY;
+            const f32 lfEz = lrCentre.z - lfEndZ;
+            const f32 lfEnd2           = (lfEy * lfEy + lfEx * lfEx) + lfEz * lfEz;
+
+            // vcmpgefp128 (t >= 0) AND vnot(vcmpgtfp t > L): the foot of the perpendicular lies on the
+            // segment. Each distance term is vnot(vcmpgtfp d2 > R2), so a NaN distance reads as inside.
+            const bool lbOnSegment = (lfT >= 0.0f) && !(lfT > lfLength);
+            return (lbOnSegment && !(lfPerpendicular2 > lfRadius2))
+                || !(lfStart2 > lfRadius2)
+                || !(lfEnd2 > lfRadius2);
+        }
+
+        // `vmaxfp` / `vminfp` of the two slab parameters of one axis.
+        inline f32 SlabFar(f32 lfA, f32 lfB)  { return lfA > lfB ? lfA : lfB; }
+        inline f32 SlabNear(f32 lfA, f32 lfB) { return lfA < lfB ? lfA : lfB; }
+    }
+
+    // ------------------------------------------------------------------------
+    // TestLineSphere4 -- DWARF CgsLineTests.cpp:172 (`const Mask4`), inlined in LooseOctree::
+    // LineTestRecursive's full-batch arm at 0x828BD114..0x828BD238.
+    //
+    // The four spheres are transposed to structure-of-arrays (vmrghw128 / vmrglw128 pairs), the start
+    // and direction splatted per axis, and the length lane rebuilt by vperm128 (unk_82CDA3C0 /
+    // unk_82CDA400) + vsldoi 8 into {L.x, L.y, L.z, L.w} -- lane k tests with lane k of the length.
+    // Per lane, with C the centre, R the radius, s the start, d the unit direction, L the length:
+    //   e     = L * d + s                                        0x828BD1A8..0x828BD1B0  vmaddfp
+    //   t     = (d.y * (C.y - s.y) + d.x * (C.x - s.x)) + d.z * (C.z - s.z)   0x828BD1B4..0x828BD1CC
+    //   p     = (C - s) - t * d                                  0x828BD1D0..0x828BD1F0
+    //   hit   = ((t >= 0) & !(t > L) & !(|p|^2 > R^2))            0x828BD1DC / 0x828BD1E0 / 0x828BD220
+    //         | !(|C - s|^2 > R^2)                               0x828BD218 (the start inside)
+    //         | !(|C - e|^2 > R^2)                               0x828BD21C (the end inside)
+    // i.e. the segment's closest point to the centre lies within R, taken at the foot of the
+    // perpendicular when that falls on the segment and otherwise at whichever end point is inside.
+    // Every squared length is summed y + x first, then z, as the fused multiply-adds do.
+    // ------------------------------------------------------------------------
+    const Vector4 TestLineSphere4(const Sphere& lrSphere0, const Sphere& lrSphere1,
+                                  const Sphere& lrSphere2, const Sphere& lrSphere3,
+                                  Vector3 lLineStart, Vector3 lLineDirection, VecFloat lLineLength)
+    {
+        const Sphere* const lapSpheres[4] = { &lrSphere0, &lrSphere1, &lrSphere2, &lrSphere3 };
+
+        Vector4 lResult;
+        for (s32 liLane = 0; liLane < 4; ++liLane)
+        {
+            SetMask4Lane(lResult, liLane,
+                         LineSphereLaneHit(*lapSpheres[liLane], lLineStart, lLineDirection,
+                                           (&lLineLength.x)[liLane]));
+        }
+        return lResult;
+    }
+
+    // ------------------------------------------------------------------------
+    // TestLineSphere4 -- DWARF CgsLineTests.cpp:305 (`void`, int32_t* results), inlined in
+    // LineTestRecursive's remainder arm at 0x828BD334..0x828BD4B8. The alignment assert comes first
+    // (0x828BD334..0x828BD3A8: `srawi 4 ; addze ; slwi 4 ; subf.` is the address modulo 16,
+    // "Results must be 16 byte aligned\n", :308 == 0x134); the lane math at 0x828BD3AC..0x828BD4B4 is
+    // the :172 form's instruction for instruction (other registers), and `stvx128 v0` at 0x828BD4B8
+    // stores the four masks.
+    // ------------------------------------------------------------------------
+    void TestLineSphere4(const Sphere& lrSphere0, const Sphere& lrSphere1,
+                         const Sphere& lrSphere2, const Sphere& lrSphere3,
+                         Vector3 lLineStart, Vector3 lLineDirection, VecFloat lLineLength,
+                         s32* lpiResults)
+    {
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpiResults) & 15u) == 0,
+                   "Results must be 16 byte aligned\n");                                   // :308
+
+        const Vector4 lMask = TestLineSphere4(lrSphere0, lrSphere1, lrSphere2, lrSphere3,
+                                              lLineStart, lLineDirection, lLineLength);
+        std::memcpy(lpiResults, &lMask, 4 * sizeof(s32));                                 // stvx128 v0
+    }
+
+    // ------------------------------------------------------------------------
+    // TestLineBoundingBoxAgainstAxisAlignedBox4 -- DWARF CgsLineTests.cpp:766 (`const Mask4`), inlined
+    // in LineTestRecursive's child walk at 0x828BD700..0x828BD9E8.
+    //
+    //   0x828BD700..0x828BD904  per axis, the reciprocal lane splatted and compared (`vcmpeqfp.`) with
+    //                           0.0 (flt_82001CC0): "Line reciprocal X is 0\n" :769 (0x301), Y :770
+    //                           (0x302), Z :771 (0x303). Non-gating.
+    //   0x828BD908..0x828BD998  the four boxes transposed to SoA; per box and axis
+    //                           t_max = r * (max - s), t_min = r * (min - s)       (vmulfp128)
+    //   0x828BD99C..0x828BD9BC  far = vmaxfp(t_max, t_min), near = vminfp(t_max, t_min)
+    //   0x828BD9AC..0x828BD9E8  axis ok = vnot(vcmpgtfp128 0 > far) AND vcmpgefp128 (1 >= near);
+    //                           lane = X ok AND Y ok AND Z ok
+    // The axes are tested INDEPENDENTLY -- there is no max(near) <= min(far) -- so a lane passes when
+    // the segment's bounding box meets the box, whether or not the segment itself does (the same
+    // per-axis form as TestLineAgainstNodeBoundingBox @0x828B0FC8). A segment that merely touches a
+    // face (far == 0 or near == 1) counts. Only the start (the
+    // caller's `lvx128 v127, r0, r20`, params +0x00) and the reciprocal (`lvx128 v12, r20, 0x30`)
+    // reach the body; the middle vector is part of the signature and is not read.
+    // (vmaxfp / vminfp answer NaN for a NaN operand where the selects below answer the other operand;
+    // the octree's operands are finite -- node bounds, the start, and a reciprocal clamped to 1/eps.)
+    // ------------------------------------------------------------------------
+    const Vector4 TestLineBoundingBoxAgainstAxisAlignedBox4(const AxisAlignedBox& lrBox0,
+                                                            const AxisAlignedBox& lrBox1,
+                                                            const AxisAlignedBox& lrBox2,
+                                                            const AxisAlignedBox& lrBox3,
+                                                            Vector3 lLineStart, Vector3 /*lLineEnd*/,
+                                                            Vector3 lLineReciprocal)
+    {
+        CGS_ASSERT(!(lLineReciprocal.x == 0.0f), "Line reciprocal X is 0\n");   // :769
+        CGS_ASSERT(!(lLineReciprocal.y == 0.0f), "Line reciprocal Y is 0\n");   // :770
+        CGS_ASSERT(!(lLineReciprocal.z == 0.0f), "Line reciprocal Z is 0\n");   // :771
+
+        const AxisAlignedBox* const lapBoxes[4] = { &lrBox0, &lrBox1, &lrBox2, &lrBox3 };
+        const f32 lafStart[3]      = { lLineStart.x, lLineStart.y, lLineStart.z };
+        const f32 lafReciprocal[3] = { lLineReciprocal.x, lLineReciprocal.y, lLineReciprocal.z };
+
+        Vector4 lResult;
+        for (s32 liLane = 0; liLane < 4; ++liLane)
+        {
+            const AxisAlignedBox& lrBox = *lapBoxes[liLane];
+            const f32 lafMin[3] = { lrBox.mMin.x, lrBox.mMin.y, lrBox.mMin.z };
+            const f32 lafMax[3] = { lrBox.mMax.x, lrBox.mMax.y, lrBox.mMax.z };
+
+            bool lbCrosses = true;
+            for (s32 liAxis = 0; liAxis < 3; ++liAxis)
+            {
+                const f32 lfTMax = lafReciprocal[liAxis] * (lafMax[liAxis] - lafStart[liAxis]);
+                const f32 lfTMin = lafReciprocal[liAxis] * (lafMin[liAxis] - lafStart[liAxis]);
+                const f32 lfFar  = SlabFar(lfTMax, lfTMin);
+                const f32 lfNear = SlabNear(lfTMax, lfTMin);
+                lbCrosses = lbCrosses && !(0.0f > lfFar) && (1.0f >= lfNear);
+            }
+            SetMask4Lane(lResult, liLane, lbCrosses);
+        }
+        return lResult;
     }
 }

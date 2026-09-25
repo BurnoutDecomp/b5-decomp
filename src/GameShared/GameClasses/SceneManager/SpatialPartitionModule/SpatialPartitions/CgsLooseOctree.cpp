@@ -28,6 +28,8 @@
 //   LooseOctree::FrustumTestEntities            @ 0x828B1CA0
 //   LooseOctree::NodeInsideFrustum              @ 0x828BDAC0
 //   LooseOctree::SphereTest / SphereTestRecursive   (the coarse sphere query, 2026-09-11)
+//   LooseOctree::LineTestOptimized              @ 0x828CA5F8  (2026-09-25, FX-FOLLOWUPS)
+//   LooseOctree::LineTestRecursive              @ 0x828BCF50  (2026-09-25, FX-FOLLOWUPS)
 //
 // Behaviour-faithful (semantic parity): the X360 hand-vectorises the geometry over
 // VMX; these bodies reproduce the same math on the named Vector3/Vector4 lanes.
@@ -75,9 +77,11 @@
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG culling wave]
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // PerfMonCpu::Start/StopMonitor
+#include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"      // TestLineSphere4 / TestLineBoundingBoxAgainstAxisAlignedBox4
 
 #include <cmath>     // std::fabs
-#include <cstdlib>   // std::getenv ([DIAG] BRN_CULL_OFF)
+#include <cstdio>    // std::snprintf ([DIAG] BRN_OCTREE_LINE_DIAG)
+#include <cstdlib>   // std::getenv ([DIAG] BRN_CULL_OFF / BRN_OCTREE_LINE_DIAG)
 #include <cstring>   // std::memcpy
 
 // includes folded in from the CgsLooseOctree_w*.cpp partfiles (2026-09-15)
@@ -479,17 +483,16 @@ namespace CgsSceneManager
 
     // 0x828B0FC8 -- TestLineAgainstNodeBoundingBox: slab test of the recursive line
     // test's segment against the node's AABB. The node box (centre +/- (halfSize,
-    // halfHeight, halfSize)) is expressed relative to the line origin (params +0x00);
-    // the per-axis entry/exit params are invDir * bbMin and invDir * bbMax (invDir at
-    // params +0x30). The segment [0,1] overlaps iff, on every axis, max(t0,t1) >= 0 and
-    // min(t0,t1) <= 1.
+    // halfHeight, halfSize)) is expressed relative to the line origin (params +0x00,
+    // mLineStart); the per-axis entry/exit params are invDir * bbMin and invDir * bbMax
+    // (invDir at params +0x30, mLineReciprocal). The segment [0,1] overlaps iff, on every
+    // axis, max(t0,t1) >= 0 and min(t0,t1) <= 1 -- each axis on its own.
     bool LooseOctree::TestLineAgainstNodeBoundingBox(
         const LooseOctreeNode* lpNode,
         const SpatialPartition::LineTestRecursiveFuncParams* lpParams) const
     {
-        const f32* lpParamsF = reinterpret_cast<const f32*>(lpParams);
-        const Vector3 lLineOrigin = { lpParamsF[0], lpParamsF[1], lpParamsF[2], 0.0f };
-        const Vector3 lInvDir     = { lpParamsF[12], lpParamsF[13], lpParamsF[14], 0.0f };
+        const Vector3& lLineOrigin = lpParams->mLineStart;       // lvx128 v13, r0, r5    (+0x00)
+        const Vector3& lInvDir     = lpParams->mLineReciprocal;  // lvx128 v11, r5, 0x30  (+0x30)
 
         const Vector3 lNodePos = lpNode->GetPosition();
         const f32     lfHS = lpNode->GetHalfSize();
@@ -1552,7 +1555,8 @@ namespace CgsSceneManager
 // BURNOUT_X360_ARTIST.XEX:
 //
 //   LooseOctree::LineTest          @ 0x828D01F0   (32 insns)   -- REAL
-//   LooseOctree::LineTestOptimized @ 0x828CA5F8   (128 insns)  -- LOUD TRAP (see below)
+//   LooseOctree::LineTestOptimized @ 0x828CA5F8   (128 insns)  -- REAL since 2026-09-25 (FX-FOLLOWUPS;
+//                                                               it was a LOUD TRAP until then)
 //
 // Split out of CgsLooseOctree.cpp (the mounted frustum/update body) so the new slot lands as
 // its own mount and the shared TU is not rewritten.
@@ -1589,21 +1593,287 @@ namespace CgsSceneManager
         return lbResult;
     }
 
-    // @ 0x828CA5F8 (128 insns) + LineTestRecursive @0x828BCF50 (731 insns).
-    //
-    // ⛔ NOT RECONSTRUCTED -- a LOUD trap, never a quiet "no entities". The walk fills the
-    // coarse result buffer with every octree entity whose bounding sphere the segment crosses;
-    // a stub that BeginResultsBatch/EndResultsBatch'd an empty batch would make every octree
-    // line query report "nothing in the way" -- the silent-drop class. The scene-query wave 1
-    // consumer (SceneManagerModule::ProcessLineTestNearest @0x828D38C0) reaches this slot only
-    // for queries whose entity-type flags are NOT exactly the WORLD bit (2); the race car's
-    // above-ground rays are world-only and never come here.
-    bool LooseOctree::LineTestOptimized(u32 /*lx32EntityTypeFlags*/, Vector3 /*lLineStart*/,
-                                        Vector3 /*lLineEnd*/,
-                                        CoarseQueryResultBuffer<16384>* /*lpResultBufferOut*/)
+    namespace
     {
-        CGS_ASSERT(false, "LooseOctree::LineTestOptimized @0x828CA5F8 (+ LineTestRecursive @0x828BCF50) "
-                          "is not reconstructed -- octree line queries have no answer yet");
-        return false;
+        // X360 flt_82002540 (read from the image: 0x38D1B717 == 1.0e-4f). LineTestOptimized's shortest
+        // walked segment, and the radius of the sphere query that answers anything shorter.
+        const f32 KF_LINE_TEST_MIN_LENGTH = 1.0e-4f;
+
+        // X360 flt_820F5E68 (0x33D6BF95 == 1.0e-7f). A direction lane whose |d| is below this takes the
+        // refined 1/eps as its reciprocal instead of 1/d.
+        const f32 KF_LINE_RECIPROCAL_EPSILON = 1.0e-7f;
+
+        // `vrsqrtefp` + two Newton-Raphson steps y' = y + 0.5 * y * (1 - x * y * y)
+        // (0x828CA678..0x828CA69C: vmulfp128 y*y, vmulfp128 0.5*y, vnmsubfp 1 - x*yy, vmaddfp).
+        // PC LOWERING, as CgsLineTests.cpp's NewtonRaphsonReciprocal3: the estimate is the exact
+        // quotient and the console's refinement then runs as written (a zero x refines to NaN, which
+        // the caller's select replaces).
+        inline f32 NewtonRaphsonReciprocalSqrt2(f32 lfValue)
+        {
+            f32 lfEstimate = 1.0f / std::sqrt(lfValue);                           // vrsqrtefp
+            for (s32 liStep = 0; liStep < 2; ++liStep)
+            {
+                const f32 lfSquare = lfEstimate * lfEstimate;                     // vmulfp128
+                const f32 lfHalf   = lfEstimate * 0.5f;                           // vmulfp128 (vcfsx 1, 1)
+                const f32 lfError  = 1.0f - lfValue * lfSquare;                   // vnmsubfp
+                lfEstimate         = lfHalf * lfError + lfEstimate;               // vmaddfp
+            }
+            return lfEstimate;
+        }
+
+        // `vrefp` + two Newton-Raphson steps x' = x * (1 - d * x) + x (0x828CA6CC..0x828CA754).
+        inline f32 NewtonRaphsonReciprocal2(f32 lfValue)
+        {
+            f32 lfEstimate = 1.0f / lfValue;                                      // vrefp
+            for (s32 liStep = 0; liStep < 2; ++liStep)
+            {
+                const f32 lfError = 1.0f - lfEstimate * lfValue;                  // vnmsubfp
+                lfEstimate        = lfEstimate * lfError + lfEstimate;            // vmaddfp
+            }
+            return lfEstimate;
+        }
+
+        // [DIAG] NOT IN THE X360 BINARY (2026-09-25, crash parity FX-FOLLOWUPS). Opt-in
+        // BRN_OCTREE_LINE_DIAG=1: one `[octree-line]` line per LineTestOptimized query, capped at 64 --
+        // the flags, the segment, its length, the arm taken (sphere / gated / walked) and the results
+        // attempted. It proves the walk is dispatched; with the variable unset the cost is one static
+        // bool test.
+        inline void NoteOctreeLineTest(u32 lx32EntityTypeFlags, const Vector3& lrStart, const Vector3& lrEnd,
+                                       f32 lfLength, const char* lpcArm, s32 liAttempted)
+        {
+            static const bool sbEnabled = []() {
+                const char* lpcValue = std::getenv("BRN_OCTREE_LINE_DIAG");
+                return lpcValue != 0 && lpcValue[0] == '1';
+            }();
+            static u32 suLines = 0;
+            if (!sbEnabled || suLines >= 64 || CgsDev::Log::gpDebugPrint == 0)
+            {
+                return;
+            }
+            ++suLines;
+            char lacLine[256];
+            std::snprintf(lacLine, sizeof(lacLine),
+                          "[octree-line] #%u flags 0x%X (%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) len %.4f arm %s attempted %d\n",
+                          suLines, lx32EntityTypeFlags, lrStart.x, lrStart.y, lrStart.z, lrEnd.x, lrEnd.y, lrEnd.z,
+                          lfLength, lpcArm, liAttempted);
+            *CgsDev::Log::gpDebugPrint << lacLine;
+        }
+
+        // A VMX compare-result lane reads as set when it is not +0.0 -- the console's
+        // `vspltw ; vcmpeqfp128. lane, 0.0` skip, which for an all-ones / zero mask is the bit test.
+        inline bool Mask4LaneSet(const Vector4& lrMask, u32 luLane)
+        {
+            u32 luBits;
+            std::memcpy(&luBits, &(&lrMask.x)[luLane], sizeof(u32));
+            return luBits != 0u;
+        }
+    }
+
+    // @ 0x828CA5F8 -- LineTestOptimized (DWARF CgsLooseOctree.h:328, 128 insns).
+    //
+    // Builds the walk's parameter block on the stack (sp+0x70, SpatialPartition::
+    // LineTestRecursiveFuncParams) and runs the root:
+    //   0x828CA640  +0x00 mLineStart = v1                0x828CA658  +0x10 mLineEnd = v2
+    //   0x828CA65C  +0x50 flags = r4                     0x828CA660  +0x54 result buffer = r5
+    //   0x828CA60C  d = end - start (vsubfp)
+    //   0x828CA674  len2 = vmsum3fp128(d, d)             0x828CA678..0x828CA6A0  len = len2 * rsqrt(len2)
+    //   0x828CA67C / 0x828CA6A4  len = 0 where len2 == 0 (vcmpeqfp 0 ; vsel)
+    //   0x828CA6A8  +0x40 mfLineLength = len (every lane)
+    //   0x828CA6AC  `vcmpgtfp. len, 1e-4` -- NOT all lanes greater: answer as SphereTest(flags, start,
+    //               1e-4, buffer) through the vtable (+0x14, slot 5; f1 = flt_82002540 still) and return
+    //               its answer (0x828CA7D0).
+    //   0x828CA6CC..0x828CA74C  +0x20 mLineDirection = d * NR2(1/len)
+    //   0x828CA6F0..0x828CA768  +0x30 mLineReciprocal, per lane: (d > -eps) & !(d >= eps) ? NR2(1/eps)
+    //               : NR2(1/d) (vcmpgtfp against eps ^ 0x80000000, vnot(vcmpgefp), vsel), both x 1.0
+    //   0x828CA75C  r4 = mpRootNode (+0x446A0); TestLineAgainstNodeBoundingBox(root, &params)
+    //   0x828CA78C  on a hit, LineTestRecursive(0, &params)
+    //   0x828CA794  return GetNumResultsAttempted() > 0
+    // Every lane is computed, as the console does; the walk reads x/y/z (and the length splat).
+    bool LooseOctree::LineTestOptimized(u32 lx32EntityTypeFlags, Vector3 lLineStart, Vector3 lLineEnd,
+                                        CoarseQueryResultBuffer<16384>* lpResultBufferOut)
+    {
+        SpatialPartition::LineTestRecursiveFuncParams lParams;
+        lParams.mLineStart          = lLineStart;
+        lParams.mLineEnd            = lLineEnd;
+        lParams.mx32EntityTypeFlags = lx32EntityTypeFlags;
+        lParams.mpResultBufferOut   = lpResultBufferOut;
+
+        const f32 lafDelta[4] = { lLineEnd.x - lLineStart.x, lLineEnd.y - lLineStart.y,
+                                  lLineEnd.z - lLineStart.z, lLineEnd.w - lLineStart.w };
+
+        const f32 lfLength2 = (lafDelta[0] * lafDelta[0] + lafDelta[1] * lafDelta[1])
+                            + lafDelta[2] * lafDelta[2];                              // vmsum3fp128
+        const f32 lfLength  = (lfLength2 == 0.0f)
+                            ? 0.0f                                                    // vsel on len2 == 0
+                            : lfLength2 * NewtonRaphsonReciprocalSqrt2(lfLength2);
+        lParams.mfLineLength.x = lfLength;
+        lParams.mfLineLength.y = lfLength;
+        lParams.mfLineLength.z = lfLength;
+        lParams.mfLineLength.w = lfLength;
+
+        if (!(lfLength > KF_LINE_TEST_MIN_LENGTH))
+        {
+            const bool lbSphereAnswer =
+                SphereTest(lx32EntityTypeFlags, lLineStart, KF_LINE_TEST_MIN_LENGTH, lpResultBufferOut);
+            NoteOctreeLineTest(lx32EntityTypeFlags, lLineStart, lLineEnd, lfLength, "sphere",
+                               lpResultBufferOut->GetNumResultsAttempted());               // [DIAG]
+            return lbSphereAnswer;
+        }
+
+        const f32 lfInverseLength     = NewtonRaphsonReciprocal2(lfLength);
+        const f32 lfEpsilonReciprocal = NewtonRaphsonReciprocal2(KF_LINE_RECIPROCAL_EPSILON) * 1.0f;
+
+        f32* const lpfDirection  = &lParams.mLineDirection.x;
+        f32* const lpfReciprocal = &lParams.mLineReciprocal.x;
+        for (s32 liLane = 0; liLane < 4; ++liLane)
+        {
+            const f32  lfDelta = lafDelta[liLane];
+            const bool lbTiny  = (lfDelta > -KF_LINE_RECIPROCAL_EPSILON) && !(lfDelta >= KF_LINE_RECIPROCAL_EPSILON);
+            lpfDirection[liLane]  = lfInverseLength * lfDelta;
+            lpfReciprocal[liLane] = lbTiny ? lfEpsilonReciprocal : NewtonRaphsonReciprocal2(lfDelta) * 1.0f;
+        }
+
+        const bool lbRootCrossed = TestLineAgainstNodeBoundingBox(mpRootNode, &lParams);
+        if (lbRootCrossed)
+        {
+            LineTestRecursive(0, &lParams);
+        }
+        NoteOctreeLineTest(lx32EntityTypeFlags, lLineStart, lLineEnd, lfLength,
+                           lbRootCrossed ? "walked" : "gated",
+                           lpResultBufferOut->GetNumResultsAttempted());                   // [DIAG]
+        return lpResultBufferOut->GetNumResultsAttempted() > 0;
+    }
+
+    // @ 0x828BCF50 -- LineTestRecursive (DWARF CgsLooseOctree.cpp:1654, const, 731 insns).
+    //
+    // ONE NODE'S OWN ENTITIES (0x828BCF7C..0x828BD4F0), when the node's type mask meets the query's:
+    //   the chain is walked muNumElements times from muHeadIndex (0x828BCFEC..0x828BD328); an entity
+    //   whose link mask meets the query's is filed into a four-slot batch -- its index recovered from
+    //   the link address (CalcEntityIndex, "luIndex < (uint32_t)KI_MAX_NUM_ENTITIES",
+    //   CgsSpatialPartition.h:417) and its bounding sphere copied in (GetEntityBoundingSphere,
+    //   "lu16Index < KI_MAX_NUM_ENTITIES", :400);
+    //   a FULL batch runs TestLineSphere4 (:172) at once and pushes the hit lanes 0..3 in order
+    //   (0x828BD23C..0x828BD2D4), then starts a new batch;
+    //   a partial batch left at the end runs the :305 twin into a 16-byte-aligned stack array and
+    //   pushes its first `count` hit lanes in order (0x828BD4C0..0x828BD4F0).
+    // THE FOUR CHILDREN (0x828BD4F4..0x828BDAA4), when the node has any: a child whose sub-tree type
+    //   mask meets the query's gets its box, centre -/+ {HalfSize, HalfHeight, HalfSize, HalfSize}
+    //   (mParams0.w / mParams1.z, merged by vperm unk_82CDA350 + vrlimi128), and its enable lane
+    //   (vrlimi128 into v124); the others keep the parking box {0 .. 1} (0x828BD54C) and a zero lane.
+    //   One TestLineBoundingBoxAgainstAxisAlignedBox4 against the start and reciprocal, ANDed with the
+    //   enable lanes (vand128 v127, v0, v124), then a recursion into each set lane in child order.
+    void LooseOctree::LineTestRecursive(u16 lu16NodeIndex,
+                                        const SpatialPartition::LineTestRecursiveFuncParams* lpParams) const
+    {
+        const LooseOctreeNode&          lrNode         = mpNodes[lu16NodeIndex];
+        CoarseQueryResultBuffer<16384>* lpResultBuffer = lpParams->mpResultBufferOut;
+
+        if ((lrNode.mxNodeEntityFlags & lpParams->mx32EntityTypeFlags) != 0)
+        {
+            const s32 liNumElements = static_cast<s32>(lrNode.muNumElements);           // cmpwi (signed)
+            if (liNumElements > 0)
+            {
+                alignas(16) CgsGeometric::Sphere laBatch[4] = {};                           // sp+0xD0
+                u16 lau16BatchEntities[4] = { 0, 0, 0, 0 };                                // sp+0x60
+                s32 liBatchCount = 0;
+
+                u16 lu16Link = lrNode.muHeadIndex;
+                for (u32 luRemaining = static_cast<u32>(liNumElements); luRemaining != 0; --luRemaining)
+                {
+                    // NOT X360: the console trusts the count; a chain that ends early leaves it a null
+                    // link (0x828BD31C) to dereference. The host stops instead of reading past the pool.
+                    if (lu16Link == KU_INVALID_ENTITY_LINK)
+                    {
+                        CGS_ASSERT(false, "LooseOctree::LineTestRecursive: node entity chain shorter than muNumElements");
+                        break;
+                    }
+
+                    const SpatialPartitionEntityLink& lrLink = GetEntityLink(lu16Link);
+                    if ((lpParams->mx32EntityTypeFlags & lrLink.mx32TypeFlags) != 0)
+                    {
+                        const u16 lu16Entity = CalcEntityIndex(lrLink);
+                        lau16BatchEntities[liBatchCount] = lu16Entity;
+                        laBatch[liBatchCount]            = GetEntityBoundingSphereConst(lu16Entity);
+                        ++liBatchCount;
+
+                        if (liBatchCount == 4)
+                        {
+                            const Vector4 lHits = CgsGeometric::TestLineSphere4(
+                                laBatch[0], laBatch[1], laBatch[2], laBatch[3],
+                                lpParams->mLineStart, lpParams->mLineDirection, lpParams->mfLineLength);
+                            for (u32 luLane = 0; luLane < 4; ++luLane)
+                            {
+                                if (Mask4LaneSet(lHits, luLane))
+                                {
+                                    lpResultBuffer->PushResult(lau16BatchEntities[luLane]);
+                                }
+                            }
+                            liBatchCount = 0;
+                        }
+                    }
+                    lu16Link = lrLink.mu16NextEntity;
+                }
+
+                if (liBatchCount > 0)
+                {
+                    alignas(16) s32 laiResults[4];
+                    CgsGeometric::TestLineSphere4(laBatch[0], laBatch[1], laBatch[2], laBatch[3],
+                                                  lpParams->mLineStart, lpParams->mLineDirection,
+                                                  lpParams->mfLineLength, laiResults);
+                    for (s32 liLane = 0; liLane < liBatchCount; ++liLane)
+                    {
+                        if (laiResults[liLane] != 0)
+                        {
+                            lpResultBuffer->PushResult(lau16BatchEntities[liLane]);
+                        }
+                    }
+                }
+            }
+        }
+
+        const u16 lu16FirstChild = lrNode.muFirstChildIndex;
+        if (lu16FirstChild == KU_INVALID_NODE)
+        {
+            return;
+        }
+
+        CgsGeometric::AxisAlignedBox laChildBoxes[KU_NUM_SUBNODES];
+        bool                         labEnabled[KU_NUM_SUBNODES];
+        for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
+        {
+            CgsGeometric::AxisAlignedBox& lrBox = laChildBoxes[luChild];
+            lrBox.mMin.x = lrBox.mMin.y = lrBox.mMin.z = lrBox.mMin.w = 0.0f;           // v126
+            lrBox.mMax.x = lrBox.mMax.y = lrBox.mMax.z = lrBox.mMax.w = 1.0f;           // v125
+            labEnabled[luChild] = false;
+
+            const u16 lu16Child = static_cast<u16>(lu16FirstChild + luChild);
+            if ((mpNodesEntityInfo[lu16Child].mxSubTreeEntityFlags & lpParams->mx32EntityTypeFlags) != 0)
+            {
+                const LooseOctreeNode& lrChild = mpNodes[lu16Child];
+                const f32 lfHalfSize   = lrChild.GetHalfSize();
+                const f32 lfHalfHeight = lrChild.GetHalfHeight();
+                lrBox.mMin.x = lrChild.mPosition.x - lfHalfSize;
+                lrBox.mMin.y = lrChild.mPosition.y - lfHalfHeight;
+                lrBox.mMin.z = lrChild.mPosition.z - lfHalfSize;
+                lrBox.mMin.w = lrChild.mPosition.w - lfHalfSize;
+                lrBox.mMax.x = lrChild.mPosition.x + lfHalfSize;
+                lrBox.mMax.y = lrChild.mPosition.y + lfHalfHeight;
+                lrBox.mMax.z = lrChild.mPosition.z + lfHalfSize;
+                lrBox.mMax.w = lrChild.mPosition.w + lfHalfSize;
+                labEnabled[luChild] = true;
+            }
+        }
+
+        const Vector4 lCrossed = CgsGeometric::TestLineBoundingBoxAgainstAxisAlignedBox4(
+            laChildBoxes[0], laChildBoxes[1], laChildBoxes[2], laChildBoxes[3],
+            lpParams->mLineStart, lpParams->mLineEnd, lpParams->mLineReciprocal);
+
+        for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
+        {
+            if (labEnabled[luChild] && Mask4LaneSet(lCrossed, luChild))
+            {
+                LineTestRecursive(static_cast<u16>(lu16FirstChild + luChild), lpParams);
+            }
+        }
     }
 }
