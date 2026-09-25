@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                             // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"                                     // vpu::{Dot, Subtract, Normalize, Mult}
 #include "rw/math/vpu/vector4_operation.h"                                     // vpu::Splat
+#include "rw/math/fpu/scalar_operation.h"                                      // rw::math::fpu::Clamp (CalculateSlamData's fsel clamps)
 
 #include <cmath>   // std::fabs
 
@@ -407,16 +408,18 @@ namespace Vehicle
         const f32 lfVictimSteer    = lpVictimCar->mfSlamSteering;
 
         // Mass ratio, clamped [0.9, 1.1] (vrefp + Newton on the splat mfMass registers).
-        f32 lfMassRatio = lpAggressorCar->GetMass().x / lpVictimCar->GetMass().x;       // +0xE0
-        if (lfMassRatio < 0.9f) lfMassRatio = 0.9f;
-        if (lfMassRatio > 1.1f) lfMassRatio = 1.1f;
+        // The clamp is two fsel (0x825C7764 max 0.9 flt_82005450, 0x825C7770 min 1.1 flt_82004A1C):
+        // rwmath's Clamp, whose fsel takes its ELSE operand on a NaN -- a NaN ratio comes back as 1.1.
+        const f32 lfMassRatio = rw::math::fpu::Clamp(lpAggressorCar->GetMass().x / lpVictimCar->GetMass().x,
+                                                     0.9f, 1.1f);                          // +0xE0
 
         // The steering-derived ease: cap |steer| at 1.2, then 1 - (1 - cap)^4 (the console
         // squares the (1-cap) term twice: fmuls then the fnmsubs re-multiply).
         f32 lfCap = lfAbsSteer;
         if (lfCap > 1.2f) lfCap = 1.2f;                        // flt_82009B84
-        const f32 lfOneMinusSq = (1.0f - lfCap) * (1.0f - lfCap);
-        const f32 lfEase       = 1.0f - lfOneMinusSq * lfOneMinusSq;
+        const f32 lfOneMinusSq = (1.0f - lfCap) * (1.0f - lfCap);                 // fsubs ; fmuls
+        // 0x825C7740 `fnmsubs f10, sq, sq, 1.0` == -(sq*sq - 1.0) with ONE rounding (the console fuses it).
+        const f32 lfEase       = -std::fmaf(lfOneMinusSq, lfOneMinusSq, -1.0f);
 
         f32 lfDuration = lfEase * lfMassRatio * KAF_SLAM_SITUATION_SCALE[liSituation];
 
@@ -428,10 +431,11 @@ namespace Vehicle
         f32 lfCounterDuration = 0.0f;
         if (lfVictimSteer * lfSign < -0.1f)                    // flt_8200D530
         {
-            f32 lfCounter = std::fabs(lfVictimSteer * 0.5f);   // flt_82F2A4F8
-            if (lfCounter < 0.1f) lfCounter = 0.1f;            // flt_82F2A4F4
-            if (lfCounter > 1.0f) lfCounter = 1.0f;            // flt_82F2A4F0
-            lfCounterDuration = lfCounter;
+            // fabs then the fsel pair 0x825C77A0 / 0x825C77AC (rwmath's Clamp). The gate above only
+            // admits an ordered steer, so the NaN arm of this clamp is unreachable; the form is the
+            // console's either way.
+            lfCounterDuration = rw::math::fpu::Clamp(std::fabs(lfVictimSteer * 0.5f),   // flt_82F2A4F8
+                                                     0.1f, 1.0f);                        // flt_82F2A4F4 / F0
         }
 
         // Offline, no network cars, player aggressor: soften both durations x0.7.
