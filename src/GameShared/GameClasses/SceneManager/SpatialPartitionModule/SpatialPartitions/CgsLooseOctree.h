@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"                    // CgsGeometric::Frustum (the 0x80 SoA plane block)
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/CgsSpatialPartition.h" // SpatialPartition
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsJobCoarseResultBuffer.h"              // JobCoarseResultBuffer
+#include "vendor/renderware/collision/VolumeQuery.hpp"   // rw::collision::VolumeVolumeQuery + its host size for 100/100
 
 // ============================================================================
 // GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/
@@ -45,6 +46,28 @@
 // ============================================================================
 
 namespace rw { struct IResourceAllocator; }
+
+namespace CgsSceneManager
+{
+    // The entity arm's VolumeVolumeQuery backing store (DWARF CgsLooseOctree.h:586
+    // `uint8_t macVolumeVolumeQueryBuffer[299008]`, X360 +0x446C0). LooseOctree::Construct @0x828C99D8 builds a
+    // 100-volume / 100-result query in it and asserts the descriptor fits (0x828C9F8C `ori r11, r11, 0x9000`,
+    // "VolumeVolumeQueryMem is too small").
+    // NOT X360: host GPInstance / VolRef widths; the console buffer is macVolumeVolumeQueryBuffer[299008] = 0x49000.
+    // The host query needs rw::collision::KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100 (0x495D8: the 1xN staging at
+    // 16 bytes per result and the GPInstance scratch at 0xC8 per instance -- VolumeQueryHostLayout.hpp), rounded
+    // up to 0x100 here.
+    static const u32 KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE = 0x49600;
+    static_assert(KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE >= rw::collision::KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100,
+                  "the octree's VolumeVolumeQuery buffer holds the host descriptor for 100 volumes / 100 results");
+    static_assert(KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE - rw::collision::KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100 < 0x100,
+                  "the buffer is the host descriptor rounded up to 0x100, not a tuned margin");
+
+    // LooseOctree::Construct's two counts for that query (0x828C9FBC `li r5, 0x64` / 0x828C9FC4 `li r4, 0x64`,
+    // and the same pair into GetResourceDescriptor at 0x828C9F38 / 0x828C9F48).
+    static const s32 KI_OCTREE_VOLUME_QUERY_NUM_VOLUMES = 100;
+    static const s32 KI_OCTREE_VOLUME_QUERY_NUM_RESULTS = 100;
+}
 
 namespace CgsSceneManager
 {
@@ -368,6 +391,11 @@ namespace CgsSceneManager
         u32              muNumNodeGroups;               // mFreeNodeGroupPool.muCapacity
         u32              muAdaptiveNodeSplitThreshold;  // +0x8D950
         u32              muAdaptiveMaxDepth;            // +0x8D954
+
+        // The entity arm's volume query (DWARF CgsLooseOctree.h:586 / :592; X360 +0x446C0 / +0x8D8C8): the buffer
+        // Construct builds it in, and the handle Initialize returns. See KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE.
+        alignas(16) u8                     macVolumeVolumeQueryBuffer[KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE];
+        rw::collision::VolumeVolumeQuery*  mpVolumeVolumeQuery;
 
         // The per-entity owning-node back pointer (X360 SpatialPartition::maEntityInfo
         // @ +0x3AA00, one u32 per entity holding a raw LooseOctreeNode*). Modelled as the

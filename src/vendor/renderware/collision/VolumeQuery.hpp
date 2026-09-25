@@ -150,6 +150,15 @@ namespace collision
         // via m_bBoxQueryAtoB/BtoA and m_volRefPairBuffer above).
     };
 
+    // NOT X360: host GPInstance / VolRef widths (2026-09-25, crash parity FX-FOLLOWUPS). The HOST
+    // backing-store size of a VolumeVolumeQuery built for 100 volumes / 100 results -- the octree's
+    // (LooseOctree::Construct @0x828C99D8: 0x828C9FBC `li r5, 0x64` / 0x828C9FC4 `li r4, 0x64`) and the
+    // culling module's -- for the CgsSceneManager consumers that size a buffer at compile time and must
+    // not include VolumeQueryHostLayout.hpp. The console total is 0x48F30 (in the octree's 0x49000
+    // buffer); VolumeQuery.cpp static_asserts this value against VolumeVolumeQueryResourceSize(100), the
+    // formula GetResourceDescriptor evaluates.
+    static const u32 KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100 = 0x495D8;
+
     class VolumeLineQuery
     {
     public:
