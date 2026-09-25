@@ -2668,7 +2668,19 @@ void EffectsModule::GenerateDispatchLists(CgsModule::IOBufferStack* lpInputBuffe
     // DELETE-WHEN the module framework's PreRenderUpdate / DispatchThreadUpdate leg lands:
     // these become EffectsModule::PreRenderUpdate @0x8227FE10 / ::DispatchThreadUpdate
     // @0x8227FE88 overrides and the framework calls them.
+    //
+    // ⭐ FX-CRASHVFX 2026-09-25: EffectsModule::PreRenderUpdate's OWN statement, which this stand-in
+    // used to drop (the banner above names it; nothing did it): LockForWrite, then
+    // memcpy(GetBufferCrashTriangleCache(), &mCrashTriangleCache, 0x1E80) -- `addis r4, r30, 3 ;
+    // addi r4, r4, -0x2C00` (this + 0x2D400) and `li r5, 0x1E80`, 0x8227FE30..0x8227FE50 -- then
+    // UnlockForWrite, and only then the particle module's slot 72. That buffer copy is the cache
+    // ParticleModule::BeginSimulateDebris hands every debris job; without it the jobs saw an EMPTY
+    // cache (the glass live run 20260925_115837: crash=1 on every frame, collide=0 on every frame)
+    // and no piece ever collided with the ground the crashing car's triangles describe.
     // =====================================================================================
+    lpDispatchThreadInputBuffer->LockForWrite();
+    *lpDispatchThreadInputBuffer->GetBufferCrashTriangleCache() = mCrashTriangleCache;
+    lpDispatchThreadInputBuffer->UnlockForWrite();
     mParticleModule.PreRenderUpdate(lpDispatchThreadInputBuffer);
 
     lpDispatchThreadInputBuffer->LockForRead();
@@ -3855,12 +3867,363 @@ void EffectsModule::ProcessCarDetatchedPartContacts(
     }
 }
 
-void EffectsModule::HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffer* /*lpInputBuffer*/,
-                                                     const RCEntityActiveRaceCarOutputInterface* /*lpActiveRaceCars*/,
-                                                     f32 /*lfDt*/, f32 /*lfTime*/)
+// =================================================================================================
+// ⭐⭐⭐ THE GLASS SMASH -- FX-CRASHVFX 2026-09-25.
+//
+// EffectsModule::HandleGlassSmashEventsForAllCars @0x82297420 (DWARF EffectsModule.cpp:2792) drains the
+// deformation system's glass queue -- DeformationOutputInterface::mGlassSmashOrCrackQueue (+0x1AF0), or the
+// replay's recorded copy while a replay plays. Every pane that went SMASHED (meNewState 2 and
+// mbDontPlaySmashEffect clear) gets:
+//   1. a GLASS DEBRIS burst over the pane, BurstAreaEmitParticles @0x82292160 (DWARF :2559) into
+//      eDebrisArray_Glass: 320 pieces per unit of pane area (flt_820137D4), sizes 1.0..1.75 (flt_82001C98 /
+//      flt_82004F68). Only for a TRAFFIC car's pane (entity type 2), or a RACE car's (type 1) while that car
+//      is crashing (its ActiveRaceCarData eARDFlagIsCrashing: `lhzx` this+0x2C520 + index*0x180, bit 1);
+//   2. up to three 'Glass_shattering' LION effects (mGlassSmashManager.FireGlassEffect), the count
+//      floor(min(area * 3, 3) + 0.5) (flt_8200DD24, both), spaced along the pane's longer midline, each
+//      turned about the pane normal by a random angle in [-3.14, 3.14) (flt_820137D8 / flt_820137DC through
+//      the TrigBaseFunctions5 sin/cos, Utils::SinCosCycles);
+// and after the queue mGlassSmashManager.UpdateVehicleEffectPositions re-seats the live shatter effects on
+// their cars. While RECORDING, each handled pane is appended to the replay layout (SetGlassEventData
+// @0x8227ED88); while PLAYING, the layout's panes replace the queue (GetGlassEventData @0x82287A48).
+//
+// ⚠ THE REPLAY ACCESSORS ARE CALLED AS DECLARED (the Replays tree is not this lane's). The console passes
+// SetGlassEventData the four corners AND the pane normal and velocity (it packs the normal into the corners'
+// w lanes, 0x8227EE70..0x8227EEB8, and the velocity into +0x260, 0x8227EECC); the declaration takes four
+// opaque corner pointers, so a recorded pane loses both, and GetGlassEventData hands back the first corner's
+// record as the normal instead of rebuilding it (vperm unk_82CDB450). Live play never reads the layout; a
+// played-back smash has the wrong normal and velocity on PC until those two accessors are fixed
+// (scratch/CRASHPARITY_0922/FOLLOWUPS.md).
+// =================================================================================================
+namespace
 {
-    static bool sbLogged = false;
-    LogNotReconstructed(sbLogged, "EffectsModule::HandleGlassSmashEventsForAllCars @0x82297420 (the glass smash VFX)");
+    // ---- BurstAreaEmitParticles' literals ----
+    const f32 KF_BURST_AREA_INHERIT_SPEED_CLAMP = 40.0f;   // flt_82004D0C (the fsel clamp at 0x82292450)
+    const f32 KF_BURST_AREA_SPEED_MIN_BASE      = 2.0f;    // flt_82001D9C \  the outward speed range, raised by the
+    const f32 KF_BURST_AREA_SPEED_MIN_PER_MPS   = 0.01f;   // flt_82002138  | clamped inherited speed (two fmadds,
+    const f32 KF_BURST_AREA_SPEED_MAX_BASE      = 10.0f;   // flt_82004A20  | 0x8229246C / 0x82292458)
+    const f32 KF_BURST_AREA_SPEED_MAX_PER_MPS   = 0.15f;   // flt_82004E58 /
+    const f32 KF_BURST_AREA_INHERIT_MIN         = 0.4f;    // flt_82011C18 -- the share of the inherited velocity
+    const f32 KF_BURST_AREA_INHERIT_MAX         = 0.6f;    // flt_82004D00
+    const f32 KF_BURST_AREA_RADIAL_MIN          = 3.0f;    // flt_8200DD24 -- the speed away from the pane's centre
+    const f32 KF_BURST_AREA_RADIAL_MAX          = 8.0f;    // flt_82004C88
+
+    // ---- HandleGlassSmashEventsForAllCars' literals ----
+    const f32 KF_GLASS_DEBRIS_SIZE_MIN      = 1.0f;     // flt_82001C98 (f2 at 0x82297888)
+    const f32 KF_GLASS_DEBRIS_SIZE_MAX      = 1.75f;    // flt_82004F68 (f3 at 0x82297884)
+    const f32 KF_GLASS_DEBRIS_DENSITY       = 320.0f;   // flt_820137D4 (f4 at 0x82297880)
+    const f32 KF_GLASS_SHATTER_PER_AREA     = 3.0f;     // flt_8200DD24 (`stfs f25, 0x90(r1)`)
+    const f32 KF_GLASS_SHATTER_MAX          = 3.0f;     // flt_8200DD24 (`stfs f25, 0x94(r1)`)
+    const f32 KF_GLASS_SHATTER_ANGLE_RANGE  = 6.28f;    // flt_820137D8
+    const f32 KF_GLASS_SHATTER_ANGLE_OFFSET = 3.14f;    // flt_820137DC
+
+    // Four-lane VMX arithmetic, w included (vaddfp / vsubfp / vmulfp, and the fused vmaddfp by a splat).
+    Vector3 Add4(const Vector3& lrA, const Vector3& lrB)
+    {
+        Vector3 lv;
+        lv.x = lrA.x + lrB.x; lv.y = lrA.y + lrB.y; lv.z = lrA.z + lrB.z; lv.w = lrA.w + lrB.w;
+        return lv;
+    }
+
+    Vector3 Sub4(const Vector3& lrA, const Vector3& lrB)
+    {
+        Vector3 lv;
+        lv.x = lrA.x - lrB.x; lv.y = lrA.y - lrB.y; lv.z = lrA.z - lrB.z; lv.w = lrA.w - lrB.w;
+        return lv;
+    }
+
+    Vector3 Mul4(const Vector3& lrA, const Vector3& lrB)
+    {
+        Vector3 lv;
+        lv.x = lrA.x * lrB.x; lv.y = lrA.y * lrB.y; lv.z = lrA.z * lrB.z; lv.w = lrA.w * lrB.w;
+        return lv;
+    }
+
+    Vector3 MaddSplat4(const Vector3& lrA, f32 lfB, const Vector3& lrC)   // a * splat(b) + c, rounded ONCE
+    {
+        Vector3 lv;
+        lv.x = std::fma(lrA.x, lfB, lrC.x);
+        lv.y = std::fma(lrA.y, lfB, lrC.y);
+        lv.z = std::fma(lrA.z, lfB, lrC.z);
+        lv.w = std::fma(lrA.w, lfB, lrC.w);
+        return lv;
+    }
+
+    Vector3 MakeVector3(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
+    {
+        Vector3 lv;
+        lv.x = lfX; lv.y = lfY; lv.z = lfZ; lv.w = lfW;
+        return lv;
+    }
+
+    // CgsNumeric::Random::RandomUnitVector, which the console inlines at 0x822925AC..0x82292688 (no symbol of
+    // its own): a point drawn uniformly in the unit disc by rejection, two RandomFloat() each try (x first),
+    // each mapped by `fmsubs r, 2.0, 1.0`; the length is one fused `fmadds y*y + x*x`; then Marsaglia's lift
+    // onto the sphere, (2 sqrt(1 - s) x, 2 sqrt(1 - s) y, 2s - 1), w 0.
+    Vector3 RandomUnitVector(CgsNumeric::Random& lrRandom)
+    {
+        f32 lfX, lfY, lfLengthSquared;
+        do
+        {
+            lfX = std::fma(lrRandom.RandomFloat(), 2.0f, -1.0f);
+            const f32 lfXSquared = lfX * lfX;
+            lfY = std::fma(lrRandom.RandomFloat(), 2.0f, -1.0f);
+            lfLengthSquared = std::fma(lfY, lfY, lfXSquared);
+        } while (lfLengthSquared >= 1.0f);
+        const f32 lfScale = std::sqrt(1.0f - lfLengthSquared) * 2.0f;
+        return MakeVector3(lfScale * lfX, lfScale * lfY, std::fma(lfLengthSquared, 2.0f, -1.0f), 0.0f);
+    }
+
+    // The replay layout's glass-event count (+0x30), which the drain reads INLINE while playing back
+    // (`lwz r15, 0x30(r3)` at 0x822974B0) -- the layout class publishes the offset and has no accessor.
+    s32 NumRecordedGlassEvents(const EffectsStaticLayout* lpLayout)
+    {
+        return *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpLayout)
+                                             + EffectsStaticLayout::KI_OFF_NUM_GLASS_EVENTS);
+    }
+
+    // [DIAG] BRN_GLASS_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One capped line per glass event
+    // the drain reads (cracked panes included), naming the pane's car, its state and what the drain did with
+    // it: the debris burst (emit) and the number of shatter effects.
+    void GlassSmashWitness(s32 liEvent, s32 liNumEvents, const BrnPhysics::Deformation::GlassSmashOrCrackEvent& lrEvent,
+                           bool lbPlayback, bool lbHandled, bool lbEmit, f32 lfNumEffects, f32 lfTime)
+    {
+        static const bool sbArmed = []() {
+            const char* const lpcValue = std::getenv("BRN_GLASS_DIAG");
+            return lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0';
+        }();
+        static u32 suLines = 0;
+        if (!sbArmed || suLines >= 200u)
+            return;
+        ++suLines;
+        char lacMsg[320];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+            "[glass] event %d/%d%s id=0x%08X owner=%u state=%d dont=%d handled=%d emit=%d shatters=%.0f "
+            "normal=(%.3f,%.3f,%.3f) vel=(%.2f,%.2f,%.2f) t=%.3f\n",
+            liEvent, liNumEvents, lbPlayback ? " (replay)" : "", static_cast<unsigned>(lrEvent.mVehicleEntityId.muValue),
+            static_cast<unsigned>(lrEvent.mVehicleEntityId.muValue >> 24),
+            lbPlayback ? -1 : static_cast<int>(lrEvent.meNewState), lbPlayback ? -1 : (lrEvent.mbDontPlaySmashEffect ? 1 : 0),
+            lbHandled ? 1 : 0, lbEmit ? 1 : 0, static_cast<double>(lfNumEffects),
+            static_cast<double>(lrEvent.mNormal.x), static_cast<double>(lrEvent.mNormal.y),
+            static_cast<double>(lrEvent.mNormal.z), static_cast<double>(lrEvent.mLinearVelocity.x),
+            static_cast<double>(lrEvent.mLinearVelocity.y), static_cast<double>(lrEvent.mLinearVelocity.z),
+            static_cast<double>(lfTime));
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// BurstAreaEmitParticles @0x82292160 (346 instr). The pane is the bilinear patch over its four corners,
+// P(u, v) = A + u (B - A) + v (D - A) + u v (A - B + C - D). lfArea * lfParticleDensity pieces (the loop runs
+// while its VecFloat count is below that, so a fractional count rounds up), each:
+//   lParamsA = RandomiseXYZ over (2 + 0.01 c, 0.4, 3) .. (10 + 0.15 c, 0.6, 8), c = |inherited velocity|
+//              clamped to 40 -- the outward speed, the share of the inherited velocity, the radial speed;
+//   lParamsB = RandomiseXYZ over (0, 0, sqrt(min size)) .. (1, 1, sqrt(max size)) -- the spot (u, v) and the
+//              root of the size (so the size is its square);
+//   position   P(u, v);
+//   velocity   normal * (4u(1-u) * 4v(1-v) * outward speed) + inherited * share + (P - centre) * radial speed
+//              -- fastest from the middle of the pane, as glass bows out;
+//   spin axis  CgsNumeric::Random::RandomUnitVector; colour white (the array's own colour wins for every
+//              type but eDebrisArray_Coloured).
+// Every multiply-add the console fuses is fused here (vmaddfp / vmaddcfp128 / fmadds: std::fma), every
+// other operation rounds where it does; the vector idioms are the ones ProcessRaceCarContacts uses (Dot3,
+// CrossPermuted, GuardedLength3 -- see their banner).
+// -------------------------------------------------------------------------------------------------
+void EffectsModule::BurstAreaEmitParticles(Vector3* lpCorners,
+                                           Vector3 lvNormal,
+                                           Vector3 lvInheritedVelocity,
+                                           BrnParticle::Native::EDebrisArrayID leDebrisType,
+                                           f32 lfCurrentTime,
+                                           f32 lfSizeMin,
+                                           f32 lfSizeMax,
+                                           f32 lfParticleDensity)
+{
+    CGS_ASSERT(lfSizeMax >= lfSizeMin, "lfSizeMax >= lfSizeMin");            // fcmpu / bge (a NaN fires it)
+    CGS_ASSERT(lfSizeMin > 0.0f, "lfSizeMin > 0.0f");
+    CGS_ASSERT(lfSizeMax > 0.0f, "lfSizeMax > 0.0f");
+    CGS_ASSERT(lfParticleDensity > 0.0f, "lfParticleDensity > 0.0f");
+
+    const Vector3 lCornerA = lpCorners[0];
+    const Vector3 lCornerB = lpCorners[1];
+    const Vector3 lCornerC = lpCorners[2];
+    const Vector3 lCornerD = lpCorners[3];
+
+    const Vector3 lBminusA = Sub4(lCornerB, lCornerA);
+    const Vector3 lCminusA = Sub4(lCornerC, lCornerA);
+    const Vector3 lDminusA = Sub4(lCornerD, lCornerA);
+    // The DWARF names this local lDminusB (:2583); the console subtracts corner 1 from corner 2 (`vsubfp v11,
+    // v12, v11` at 0x82292284), and the patch's cross term is built from it: (C - B) - (D - A) = A - B + C - D
+    // (`vsubfp128 v121, v11, v125` at 0x822922B8).
+    const Vector3 lDminusB = Sub4(lCornerC, lCornerB);
+    const Vector3 lAminusBplusCminusB = Sub4(lDminusB, lDminusA);
+    // ((A + B) + C) + D, then one vmulfp128 by 0.5 * 0.5.
+    const Vector3 lCentrePos = Scale4(Add4(Add4(Add4(lCornerA, lCornerB), lCornerC), lCornerD), 0.25f);
+
+    // The two triangles' parallelograms, halved: (|ABC| + |ACD|) * 0.5 (vaddfp v11, v11, v9 at 0x82292388).
+    const Vector3 lCrossABC = CrossPermuted(lBminusA, lCminusA);
+    const Vector3 lCrossACD = CrossPermuted(lCminusA, lDminusA);
+    const f32 lfArea = (GuardedLength3(lCrossABC) + GuardedLength3(lCrossACD)) * 0.5f;
+    const f32 lfSpawnCount = lfArea * lfParticleDensity;
+
+    const f32 lfInheritedVelocityMagnitude = GuardedLength3(lvInheritedVelocity);
+    // `fsubs f10, |v|, 40 ; fsel f0, f10, 40, |v|` -- a NaN magnitude passes through.
+    const f32 lfInheritedVelocityMagnitudeClamped =
+        ((lfInheritedVelocityMagnitude - KF_BURST_AREA_INHERIT_SPEED_CLAMP) >= 0.0f)
+            ? KF_BURST_AREA_INHERIT_SPEED_CLAMP : lfInheritedVelocityMagnitude;
+
+    Utils::Vector3Randomiser lRandomiserA;
+    lRandomiserA.Prepare(
+        MakeVector3(std::fma(lfInheritedVelocityMagnitudeClamped, KF_BURST_AREA_SPEED_MIN_PER_MPS, KF_BURST_AREA_SPEED_MIN_BASE),
+                    KF_BURST_AREA_INHERIT_MIN, KF_BURST_AREA_RADIAL_MIN, 0.0f),
+        MakeVector3(std::fma(lfInheritedVelocityMagnitudeClamped, KF_BURST_AREA_SPEED_MAX_PER_MPS, KF_BURST_AREA_SPEED_MAX_BASE),
+                    KF_BURST_AREA_INHERIT_MAX, KF_BURST_AREA_RADIAL_MAX, 0.0f));
+    // Vector3(x, y, z) is built with the vperm mask unk_82CDA350 {x, y', x, x} and a vrlimi of z, so its w lane
+    // is its x: (0, 0, sqrt min, 0) and (1, 1, sqrt max, 1).
+    Utils::Vector3Randomiser lRandomiserB;
+    lRandomiserB.Prepare(MakeVector3(0.0f, 0.0f, std::sqrt(lfSizeMin), 0.0f),
+                         MakeVector3(1.0f, 1.0f, std::sqrt(lfSizeMax), 1.0f));
+
+    for (f32 lfCount = 0.0f; lfCount < lfSpawnCount; lfCount += 1.0f)       // vcmpgtfp128. / vaddfp128
+    {
+        const Vector3 lParamsA = lRandomiserA.RandomiseXYZ(mRandom);
+        const Vector3 lParamsB = lRandomiserB.RandomiseXYZ(mRandom);
+        const f32 lfU = lParamsB.x;
+        const f32 lfV = lParamsB.y;
+
+        // P(u, v) as three vmaddfp: (A + (D - A) v) + ((B - A) + (A - B + C - D) v) u.
+        const Vector3 lSpawnPos = MaddSplat4(MaddSplat4(lAminusBplusCminusB, lfV, lBminusA), lfU,
+                                             MaddSplat4(lDminusA, lfV, lCornerA));
+
+        // (lParamsB - lParamsB^2) * 4 per lane: x and y are 4u(1-u) and 4v(1-v).
+        const Vector3 lOutVelScale = Scale4(Sub4(lParamsB, Mul4(lParamsB, lParamsB)), 4.0f);
+        const f32 lfOutwardsSpeed = (lOutVelScale.x * lOutVelScale.y) * lParamsA.x;
+
+        const Vector3 lInheritedVelocity = Scale4(lvInheritedVelocity, lParamsA.y);
+        // normal * outward speed + inherited (one vmaddfp128), + (P - centre) * radial (one vmaddfp).
+        const Vector3 lSpawnVelocity = MaddSplat4(Sub4(lSpawnPos, lCentrePos), lParamsA.z,
+                                                  MaddSplat4(lvNormal, lfOutwardsSpeed, lInheritedVelocity));
+        const f32 lfSizeScale = lParamsB.z * lParamsB.z;
+
+        const Vector3 lRotationAxis = RandomUnitVector(mRandom);
+        Vector4 lvWhite;
+        lvWhite.x = 1.0f; lvWhite.y = 1.0f; lvWhite.z = 1.0f; lvWhite.w = 1.0f;   // v4 = v127, the 1.0 splat
+        mParticleModule.SpawnDebris(leDebrisType, lSpawnPos, lSpawnVelocity, lRotationAxis, lvWhite,
+                                    lfSizeScale, lfCurrentTime);
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// HandleGlassSmashEventsForAllCars @0x82297420 (491 instr) -- see the region banner above.
+// -------------------------------------------------------------------------------------------------
+void EffectsModule::HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffer* lpInputBuffer,
+                                                     const RCEntityActiveRaceCarOutputInterface* /*lpActiveRaceCars*/,
+                                                     f32 /*lfDt*/, f32 lfTime)
+{
+    typedef BrnPhysics::Deformation::GlassSmashOrCrackEvent GlassEvent;
+    const DeformationOutputInterface::GlassSmashOrCrackQueue& lrQueue =
+        lpInputBuffer->GetDeformationInterface()->mGlassSmashOrCrackQueue;
+
+    s32 liNumEvents = lrQueue.GetLength();                                     // `lwz r15, 8(r16)`
+    if (IsReplayPlayback(mEffectsSerialiser.GetMode()))
+        liNumEvents = NumRecordedGlassEvents(mEffectsSerialiser.GetStaticLayout());
+
+    for (s32 liEvent = 0; liEvent < liNumEvents; ++liEvent)
+    {
+        GlassEvent lEvent;
+        const bool lbPlayback = IsReplayPlayback(mEffectsSerialiser.GetMode());   // re-read per event
+        if (lbPlayback)
+        {
+            // The recorded pane (index as a byte, `clrlwi r4, r18, 0x18`): id, transform, corners, normal,
+            // velocity -- called as declared, see the banner.
+            mEffectsSerialiser.GetStaticLayout()->GetGlassEventData(
+                static_cast<u8>(liEvent), &lEvent.mVehicleEntityId.muValue, &lEvent.mTransform,
+                &lEvent.maCorners[0], &lEvent.maCorners[1], &lEvent.maCorners[2], &lEvent.maCorners[3],
+                &lEvent.mNormal, &lEvent.mLinearVelocity);
+        }
+        else
+        {
+            lEvent = lrQueue.GetEvent(liEvent);
+            if (lEvent.meNewState != BrnPhysics::Deformation::E_GLASS_STATE_SMASHED || lEvent.mbDontPlaySmashEffect)
+            {
+                GlassSmashWitness(liEvent, liNumEvents, lEvent, false, false, false, 0.0f, lfTime);   // [DIAG]
+                continue;
+            }
+            if (IsReplayRecording(mEffectsSerialiser.GetMode()))
+            {
+                // Called as declared: the normal and the velocity have no slot (see the banner).
+                mEffectsSerialiser.GetStaticLayout()->SetGlassEventData(
+                    static_cast<int>(lEvent.mVehicleEntityId.muValue), &lEvent.mTransform,
+                    &lEvent.maCorners[0], &lEvent.maCorners[1], &lEvent.maCorners[2], &lEvent.maCorners[3]);
+            }
+        }
+
+        // ---- the debris: a traffic car's pane, or a crashing race car's ----
+        const u32 luOwner = lEvent.mVehicleEntityId.muValue >> 24;
+        bool lbRaceCarIsCrashing = false;
+        if (luOwner == 1u)
+            lbRaceCarIsCrashing = maActiveRaceCarData[(lEvent.mVehicleEntityId.muValue >> 10) & 0x3FFFu].IsCrashing();
+        const bool lbEmit = (luOwner == 2u) || (luOwner == 1u && lbRaceCarIsCrashing);
+        if (lbEmit)
+        {
+            BurstAreaEmitParticles(lEvent.maCorners, lEvent.mNormal, lEvent.mLinearVelocity,
+                                   BrnParticle::Native::eDebrisArray_Glass, lfTime,
+                                   KF_GLASS_DEBRIS_SIZE_MIN, KF_GLASS_DEBRIS_SIZE_MAX, KF_GLASS_DEBRIS_DENSITY);
+        }
+
+        // ---- the shatter effects: floor(min(area * 3, 3) + 0.5) ----
+        const Vector3& lCornerA = lEvent.maCorners[0];
+        const Vector3 lCminusA = Sub4(lEvent.maCorners[2], lCornerA);
+        const Vector3 lDminusA = Sub4(lEvent.maCorners[3], lCornerA);
+        const Vector3 lDminusB = Sub4(lEvent.maCorners[3], lEvent.maCorners[1]);
+        const Vector3 lBminusA = Sub4(lEvent.maCorners[1], lCornerA);
+        // |ABC| + |ACD| in that order (`vaddfp v12, v11, v12` at 0x822979A4), halved, then scaled and capped
+        // (`vminfp` keeps a NaN: the comparison is false for it), + 0.5, floor.
+        const f32 lfArea = (GuardedLength3(CrossPermuted(lBminusA, lCminusA))
+                          + GuardedLength3(CrossPermuted(lCminusA, lDminusA))) * 0.5f;
+        const f32 lfScaled = lfArea * KF_GLASS_SHATTER_PER_AREA;
+        const f32 lfCapped = (lfScaled > KF_GLASS_SHATTER_MAX) ? KF_GLASS_SHATTER_MAX : lfScaled;
+        f32 lfNumEffects = std::floor(lfCapped + 0.5f);                           // vrfim128
+        GlassSmashWitness(liEvent, liNumEvents, lEvent, lbPlayback, true, lbEmit, lfNumEffects, lfTime);   // [DIAG]
+        if (!(lfNumEffects >= 1.0f))                                              // vcmpgefp128.
+            continue;
+
+        // The pane's two midlines, (C - A) -/+ (D - B), halved; the effects walk the longer one from the
+        // middle of the edge it starts on, half a step in, one step apart.
+        const Vector3 lvMidlineA = Scale4(Sub4(lCminusA, lDminusB), 0.5f);
+        const Vector3 lvMidlineB = Scale4(Add4(lCminusA, lDminusB), 0.5f);
+        const bool lbAIsLonger = Dot3(lvMidlineA, lvMidlineA) > Dot3(lvMidlineB, lvMidlineB);   // vcmpgtfp / vsel
+        const Vector3& lvLonger    = lbAIsLonger ? lvMidlineA : lvMidlineB;
+        const Vector3& lvStartEdge = lbAIsLonger ? lDminusA : lBminusA;
+        const Vector3 lvStep = Scale4(lvLonger, RefinedRecip(lfNumEffects));
+        // `vmaddcfp128 v124, v0, v124, v125`: 0.5 * (edge + step) + A, rounded once per lane.
+        Vector3 lvPosition = MaddSplat4(Add4(lvStartEdge, lvStep), 0.5f, lCornerA);
+
+        // The effect frame: x = unit(up x normal) (no zero guard -- a pane facing straight up gives the
+        // console's NaNs), z-row the normal, and x / (normal x x) turned by the random angle.
+        const Vector3& lvNormal = lEvent.mNormal;
+        const Vector3 lvCross = CrossPermuted(AxisY(), lvNormal);
+        const Vector3 lvAxisX = Scale4(lvCross, RefinedRsqrt(Dot3(lvCross, lvCross)));
+        const Vector3 lvAxisZ = CrossPermuted(lvNormal, lvAxisX);
+
+        do
+        {
+            const f32 lfAngle = std::fma(mRandom.RandomFloat(), KF_GLASS_SHATTER_ANGLE_RANGE,
+                                         -KF_GLASS_SHATTER_ANGLE_OFFSET);          // fmsubs
+            f32 lfSin, lfCos;
+            Utils::SinCosCycles(lfAngle, lfSin, lfCos);
+
+            Matrix44Affine lEffectTransform;
+            lEffectTransform.xAxis = MaddSplat4(lvAxisX, lfCos, Scale4(lvAxisZ, lfSin));   // x cos + z sin
+            lEffectTransform.yAxis = Sub4(Scale4(lvAxisZ, lfCos), Scale4(lvAxisX, lfSin)); // z cos - x sin
+            lEffectTransform.zAxis = lvNormal;
+            lEffectTransform.wAxis = lvPosition;
+            mGlassSmashManager.FireGlassEffect(lEffectTransform, lEvent.mTransform, lEvent.mVehicleEntityId, lfTime);
+
+            lfNumEffects -= 1.0f;                                                  // vsubfp128
+            lvPosition = Add4(lvPosition, lvStep);                                 // vaddfp128
+        } while (lfNumEffects >= 1.0f);
+    }
+
+    mGlassSmashManager.UpdateVehicleEffectPositions(lpInputBuffer, lfTime);
 }
 
 // HandleQADebugTests @0x82291700: the ONE non-debug effect it has -- consuming the
