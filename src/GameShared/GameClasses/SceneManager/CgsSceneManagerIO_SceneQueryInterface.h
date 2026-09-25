@@ -100,6 +100,16 @@ namespace SceneManagerIO
         // @ 0x82204E48 -- true iff any tested query queue is non-null and non-empty. Body in
         // CgsSceneManagerModuleIO.cpp.
         bool HasData();
+
+        // @ 0x823C4FF8 (DWARF CgsSceneManagerModuleIO.h:405) -- merge lOther's six FINE query queues
+        // onto this interface's, in the console's order: LineTestFine, VolumeTestFine,
+        // LineTestFastDoubleSided, SphereTestFast, LineTestNearest, VolumeTestDeepest. Each merge first
+        // asserts that this interface HAS the queue whenever lOther does (non-gating tripwires,
+        // CgsSceneManagerModuleIO.h:1138/:1144/:1150/:1156/:1162/:1168), then BaseEventQueue<T>::Append's
+        // it. The three triangle-collision slots are not merged. Its one caller is
+        // BrnGame::BrnGameModule::DoUpdate_Director (the director's queries -> the external query
+        // buffer WorldModule::ExternalSceneQueriesUpdate runs). Added 2026-09-25 (FX-DIRECTOR2).
+        void Append(const SceneQueryInterface& lOther);
     };
 }
 }
