@@ -47,7 +47,7 @@ BODIES = [
 RESET = "void TrafficEntityModule::Reset()"
 REPLAY_IF = "    if (mbActivateOnlineHullsAfterReset)\n"
 
-NUMERIC_CHECKS = 25
+NUMERIC_CHECKS = 27
 
 
 def replay_block(module):

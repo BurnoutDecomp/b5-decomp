@@ -90,6 +90,8 @@ namespace
         unsigned muNetworkArmCalls;
         bool IsPaused()       { ++muNetworkArmCalls; return false; }
         void RestartTraffic() { ++muNetworkArmCalls; }
+        // Arm 47's callee (TrafficLightManager::SetCountdownValue, 0x8274BD98): inert here too.
+        struct { void SetCountdownValue(s32) {} } mTrafficLightManager;
 
         decltype(M::mbIsOnlineGameMode)             mbIsOnlineGameMode;
         decltype(M::mbAllowDivergentBehaviour)      mbAllowDivergentBehaviour;

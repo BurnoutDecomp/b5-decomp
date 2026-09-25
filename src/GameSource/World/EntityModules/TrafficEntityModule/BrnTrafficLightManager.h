@@ -123,9 +123,30 @@ namespace BrnTraffic
         void TrafficLightGotRestored(const TrafficLightCollection* lpTrafficLightData,
                                      u32 luInstanceID);
 
+        // ADDITIVE (crash parity FX-NETCRASH, 2026-09-25) -- the event-countdown trio, DWARF
+        // BrnTrafficLightManager.h :117 / :123 / :128, bodied in BrnTrafficLightManager.cpp:
+        //   Construct         @ 0x82751708  every record GREEN with no time left; the countdown off
+        //   SetCountdownValue @ 0x82751750  the event's countdown display drives every light
+        //   Update            @ 0x827517A8  runs the countdown's GREEN phase down, then ends it
+        void Construct();
+        void SetCountdownValue(s32 liCountdownDisplay);
+        void Update(f32 lfTimeDelta);
+
     private:
         // The state array begins at offset 0 of the manager (record base == this).
         TrafficLightState maLightStates[KU_MAX_TRAFFIC_LIGHT_INSTANCES];
+
+        // ADDITIVE (crash parity FX-NETCRASH, 2026-09-25) -- DWARF :178..:180, the event-countdown
+        // override. X360 +0x12C0 / +0x12C4 / +0x12C8: the three stores Construct makes after the
+        // 600 records (0x82751740..0x82751748). TrafficLightManager::RenderLightsForHull @0x8275DBF0
+        // reads the first two (lbz 0x12C0 / lwz 0x12C4) to draw every light of a hull in the
+        // countdown's state.
+        bool mbCountdownLights;          // :178  +0x12C0
+        s32  meCountdownState;           // :179  +0x12C4  ETrafficLightState (RED 0 / AMBER 1 /
+                                         //                GREEN 2 / COUNT 3), held as its 4-byte
+                                         //                storage: the enum has two homes in this
+                                         //                tree that cannot meet in one TU (BL-1)
+        f32  mfCountdownRemainingTime;   // :180  +0x12C8
     };
 
     // ------------------------------------------------------------------------

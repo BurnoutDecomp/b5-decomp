@@ -15,7 +15,10 @@ namespace
     // proves both the 8-byte stride and the array-at-offset-0 base (no header before it).
     static_assert(sizeof(TrafficLightState) == 8, "8-byte record (instance << 3 stride)");
     static_assert(KU_MAX_TRAFFIC_LIGHT_INSTANCES == 0x258, "bound 0x258 (cmplwi)");
-    static_assert(sizeof(TrafficLightManager) == 8 * 0x258, "manager == array of 600 records");
+    // CORRECTED 2026-09-25 (crash parity FX-NETCRASH): the manager is the 600 records PLUS the three
+    // countdown members Construct @0x82751708 stores at +0x12C0 / +0x12C4 / +0x12C8 (DWARF :178..:180);
+    // the old pin, 8 * 0x258, encoded their absence.
+    static_assert(sizeof(TrafficLightManager) == 8 * 0x258 + 12, "manager == 600 records + the countdown");
 
     int ExerciseTrafficLightManager(TrafficLightManager* lpManager, u32 luInstance)
     {
