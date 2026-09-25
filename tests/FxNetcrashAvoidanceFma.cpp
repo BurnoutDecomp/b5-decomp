@@ -199,6 +199,32 @@ int main()
     }
     Check(gSteerCalls == 3u && gAsserts == 0u, "the blend arm ran once per case (3 CalculateAndSetSteering calls), no tripwire", 0);
 
+    // ==== the 0.94 gate (item 3c): `vmsum3fp128 v11, v12, v0` at 0x8273D310, ONE rounding of the exact
+    //      dot. Cases 0/1: single >= 0.94f > sequential -> the console SNAPS (lNewDirection = avoid);
+    //      cases 2/3: single < 0.94f <= sequential -> it BLENDS (fma per lane, 0x8273D33C) ================
+    liCase = 0;
+    for (const GateCase& lrCase : KA_GATE_CASES)
+    {
+        gScriptAvoid = V3Bits(lrCase.avoid);
+        gScriptRisk  = 0.5f;
+        Vector3 lTarget = V3Bits(lrCase.target);
+        VecFloat lRisk  = VecFloat{ -7.0f, -7.0f, -7.0f, -7.0f };
+        Controls lControls;
+        std::memset(&lControls, 0, sizeof(lControls));
+        A().CalculateAndSetSteeringUsingAvoidance(7u, lTarget, VecFloat{ 5.0f, 5.0f, 5.0f, 5.0f }, &lControls, lRisk);
+        if (!SameBits(gSteerDir, lrCase.expected))
+        {
+            std::fprintf(stderr, "  gate dot: console (one rounding) %08X, sequential %08X, 0.94f 3F70A3D7\n",
+                         lrCase.single, lrCase.sequential);
+        }
+        Check(SameBits(lTarget, lrCase.expected) && SameBits(gSteerDir, lrCase.expected),
+              liCase < 2 ? "GATE the one-rounding dot reaches 0.94f: the console SNAPS to the avoid direction -- bitwise"
+                         : "GATE the one-rounding dot stays below 0.94f: the console BLENDS -- bitwise",
+              liCase);
+        ++liCase;
+    }
+    Check(gSteerCalls == 7u && gAsserts == 0u, "the gate cases steered once each (7 calls in all), no tripwire", 0);
+
     std::printf("FxNetcrashAvoidanceFma: %u checks, %u failures\n", gChecks, gFailures);
     return gFailures ? 1 : 0;
 }

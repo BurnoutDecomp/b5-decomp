@@ -6263,9 +6263,14 @@ void TrafficEntityModule::UpdateTimers(const BrnTrafficIO::InputBuffer_PreScene*
         muFramesSinceDecision = 0;
     }
 
-    // `fmadds f0, f0, f13, f12` -- the accumulate uses the timer's current step again, not
-    // the member just stored. Same value; transcribed as the console spells it.
-    mfSimTimeSinceLastDecision += lpSimTimer->GetCurrentTimeStep();
+    // 0x827159CC..0x827159E4 -- `lfs f0, 0x20(r3)` (the sim block's mfTimeStepMultiplier), `lfs f13,
+    // 0x1C(r3)` (its mfBaseTimeStep), `lfs f12` (this member), `fmadds f0, f0, f13, f12`: the timer's
+    // step is recomputed from the timer, not read from mfSimTimeStep, and FUSED into the accumulate --
+    // one rounding of multiplier * base + time. `+= GetCurrentTimeStep()` rounded the product first:
+    // 1 ulp off whenever the product is inexact (a 0.75 multiplier at 1/60 s: 0x3D4CCCCE after four
+    // steps where the console has 0x3D4CCCCD). Crash parity FX-NETCRASH, 2026-09-25.
+    mfSimTimeSinceLastDecision = std::fma(lpSimTimer->GetTimeStepMultiplier(), lpSimTimer->GetBaseTimeStep(),
+                                          mfSimTimeSinceLastDecision);
 
     if (!mbAllowDivergentBehaviour)
     {
@@ -14197,7 +14202,8 @@ void TrafficEntityModule::Avoidance_GetBestVehicleDirection(u32 luVehicle, Vecto
 //   0x8273D2D4              lfDistFromTarget >= 1.0 (lane 1, vcmpgefp128.)             on the
 //   0x8273D2F0              mbDEBUGEnableAvoidance (lbzx +0x72869; Construct stores    target
 //                           li r27,1 @0x82740988 at 0x82740C58, so ON)
-//   0x8273D310..0x8273D344  lfAvoidDotTargetDir = Dot(lAvoidDirection, lNewDirection) ;
+//   0x8273D310..0x8273D344  lfAvoidDotTargetDir = Dot(lAvoidDirection, lNewDirection) --
+//                           `vmsum3fp128 v11, v12, v0`, ONE rounding of the exact sum ;
 //                           0.94 > it (lane 2, vcmpgtfp.) -> lNewDirection += (lAvoidDirection -
 //                           lNewDirection) * mfSimTimeStep (+0x713FC, lvlx / vspltw ; `vmaddfp v0,
 //                           v12, v0, v13` == v12 * v13 + v0, ONE rounding: std::fma lane by lane,
@@ -14222,7 +14228,14 @@ void TrafficEntityModule::CalculateAndSetSteeringUsingAvoidance(
         lfDistFromTarget.x >= KF_AVOIDANCE_MIN_TARGET_DIST &&
         mbDEBUGEnableAvoidance)
     {
-        const f32 lfAvoidDotTargetDir = rw::math::vpu::Dot(lAvoidDirection, lNewDirection);
+        // 0x8273D310 `vmsum3fp128 v11, v12, v0`: ONE rounding of the exact three-term sum. FLAG (model):
+        // the campaign's Dot3 convention (EffectsModule.cpp's Dot3, the vmxemu emulator) -- two f32
+        // products are exact in f64 and their f64 sum rounds far below an f32 ulp. rw::math::vpu::Dot
+        // rounds every product and partial sum and can land an ulp away -- on this gate, the other arm.
+        const f32 lfAvoidDotTargetDir =
+            static_cast<f32>(static_cast<f64>(lAvoidDirection.x) * lNewDirection.x
+                             + static_cast<f64>(lAvoidDirection.y) * lNewDirection.y
+                             + static_cast<f64>(lAvoidDirection.z) * lNewDirection.z);
         lfDiagDotTarget = lfAvoidDotTargetDir;
         if (KF_AVOIDANCE_SNAP_DOT > lfAvoidDotTargetDir)
         {

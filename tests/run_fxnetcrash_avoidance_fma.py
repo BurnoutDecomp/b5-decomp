@@ -10,7 +10,12 @@ be6c3ead lowered every vmaddfp / vmaddfp128 of the avoidance pipeline as `a * b 
   0x82719B5C  `vmaddfp v0, v12, v0, v11` (raw fields: vD = vA * vC + vB) passing score =
               (ImpactTimeMax - t) * ScoreFactor + (MaxDistance - vminfp(|space|, MaxDistance))
   0x8273D33C  `vmaddfp v0, v12, v0, v13` steering blend = (avoid - target) * mfSimTimeStep + target
-The fix is std::fma lane by lane at those four sites. The remaining vnmsubfp / vmaddfp of the
+The fix is std::fma lane by lane at those four sites.
+
+Item 3c (2026-09-25): the 0.94 steering gate's dot at 0x8273D310 is `vmsum3fp128 v11, v12, v0` -- modelled
+as ONE rounding of the exact three-term sum (the campaign's Dot3 convention, FLAG (model)), where
+rw::math::vpu::Dot rounds each product and each partial sum. The gate cases are dots whose two roundings
+fall on opposite sides of 0.94f (0x3F70A3D7): the console takes the other arm (snap vs blend). The remaining vnmsubfp / vmaddfp of the
 pipeline are Newton steps on a vrefp / vrsqrtefp estimate (0x82719AC4/AC8, 0x82708E30/E34,
 0x82708E50/E54, 0x82708E60/E64, 0x8272C73C/740); they stay inside the tree's exact-reciprocal
 convention and are not exercised here.
@@ -193,6 +198,44 @@ def blend_cases(rng, step):
     return cases
 
 
+def add(a, b):            # vaddfp, and one step of the sequential dot
+    return rn(F(a) + F(b))
+
+
+GATE = f32(0.94)          # flt_8200D58C == 0x3F70A3D7, unk_8300CBE0 lane 2
+
+
+def gate_cases(rng, step):
+    """avoid / target pairs whose vmsum3fp128 dot (one rounding of the exact sum) and whose sequential
+    dot ((x*x + y*y) + z*z, every step rounded) fall on opposite sides of 0.94f: two where the console
+    SNAPS (single >= 0.94f > sequential), two where it BLENDS (single < 0.94f <= sequential)."""
+    snaps, blends = [], []
+    while len(snaps) < 2 or len(blends) < 2:
+        t = [rng.uniform(-1, 1) for _ in range(3)]
+        n = math.sqrt(sum(c * c for c in t))
+        t = [c / n for c in t]
+        p = [rng.uniform(-1, 1) for _ in range(3)]
+        d = sum(p[i] * t[i] for i in range(3))
+        p = [p[i] - d * t[i] for i in range(3)]
+        n = math.sqrt(sum(c * c for c in p))
+        p = [c / n for c in p]
+        c = 0.94 + rng.uniform(-3e-7, 3e-7)
+        s = math.sqrt(1 - c * c)
+        avoid = [f32(c * t[i] + s * p[i]) for i in range(3)]
+        target = [f32(x) for x in t]
+        single = rn(sum(F(avoid[i]) * F(target[i]) for i in range(3)))
+        if f32(avoid[0] * target[0] + avoid[1] * target[1] + avoid[2] * target[2]) != single:
+            continue   # keep to inputs where the f64 lowering IS the single rounding
+        sequential = add(add(mul(avoid[0], target[0]), mul(avoid[1], target[1])), mul(avoid[2], target[2]))
+        if single >= GATE > sequential and len(snaps) < 2:
+            snaps.append((avoid, target, avoid, single, sequential))
+        elif sequential >= GATE > single and len(blends) < 2:
+            delta = [sub(avoid[i], target[i]) for i in range(3)]
+            blends.append((avoid, target, [madd(delta[i], step, target[i]) for i in range(3)], single,
+                           sequential))
+    return snaps + blends
+
+
 def u32s(values):
     return ", ".join(f"0x{bits(v):08X}u" for v in values)
 
@@ -225,6 +268,13 @@ def cases_inc():
     for avoid, target, fused in blends:
         lines.append("    { { " + u32s(avoid) + " }, { " + u32s(target) + " }, { " + u32s(fused) + " } },")
     lines.append("};")
+    gates = gate_cases(random.Random(0x94), step)
+    lines.append("struct GateCase { u32 avoid[3]; u32 target[3]; u32 expected[3]; u32 single; u32 sequential; };")
+    lines.append("static const GateCase KA_GATE_CASES[] = {")
+    for avoid, target, expected, single, sequential in gates:
+        lines.append("    { { " + u32s(avoid) + " }, { " + u32s(target) + " }, { " + u32s(expected) + " }, "
+                     + u32s([single, sequential]) + " },")
+    lines.append("};")
     return "\n".join(lines) + "\n"
 
 
@@ -235,7 +285,7 @@ def constant_line(source, name):
     return match.group(0).strip()
 
 
-NUMERIC_CHECKS = 3 + 3 + 3 + 1   # feeler cases, passing cases, blend cases, the blend gate witness
+NUMERIC_CHECKS = 3 + 3 + 3 + 1 + 4 + 1   # feeler, passing, blend cases, the blend witness, gate cases + witness
 
 
 def numeric(tree):
@@ -271,6 +321,10 @@ def wiring(tree):
         ("passing score: one std::fma (vmaddfp 0x82719B5C)", "std::fma(" in score),
         ("steering blend: std::fma per lane (vmaddfp 0x8273D33C)",
          len(re.findall(r"std::fma\(\s*lDelta\.[xyzw]\s*,\s*mfSimTimeStep\s*,", blend)) == 4),
+        ("the 0.94 gate's dot is one rounding of the exact f64 sum (vmsum3fp128 0x8273D310), not vpu::Dot",
+         "lfAvoidDotTargetDir = rw::math::vpu::Dot(" not in blend
+         and re.search(r"lfAvoidDotTargetDir\s*=\s*static_cast<f32>\(\s*static_cast<f64>\(lAvoidDirection\.x\)", blend)
+         is not None),
     ]
 
 
