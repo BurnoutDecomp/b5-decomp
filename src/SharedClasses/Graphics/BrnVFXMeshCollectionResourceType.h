@@ -24,6 +24,11 @@ public:
     void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
     void     FixDown(void* lpResource, const rw::Resource& lrResource) const override;
     virtual void* Serialise(const void* lpResource, const rw::Resource& lrDest) const;
+
+    // FLAG PC platform leaf -- stale-asset tolerance, NOT IN THE X360 BINARY: true for a collection a
+    // pre-port PARTICLES.BUNDLE still carries big-endian (its version word reads byte-reversed). FixUp
+    // refuses such a collection and ParticleModule::LoadFXBundle stage 6 does not bind it. See the .cpp.
+    static bool IsUnconvertedPC(const void* lpResource);
 };
 }
 

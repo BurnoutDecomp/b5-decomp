@@ -1,6 +1,7 @@
 #include "SharedClasses/Graphics/BrnVFXMeshCollectionResourceType.h"
 #include "rw/rwcore_structs.h"                            // rw::Resource / BaseResourceDescriptors complete
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // the stale-asset line (IsUnconvertedPC)
 #include "pc/gcm/renderengine/VertexBuffer.h"             // renderengine::VertexBuffer::Xbox2CheckPhysicalMemoryFlags
 #include "pc/gcm/renderengine/IndexBuffer.h"              // renderengine::IndexBuffer::Xbox2CheckPhysicalMemoryFlags
 #include "types.hpp"
@@ -32,6 +33,8 @@ namespace BrnParticle
 {
     static const uint32_t KU_VFX_MESH_COLLECTION_RESOURCE_TYPE_ID = 65561;  // 0x10019
     static const uint32_t KU_VFX_MESH_COLLECTION_VERSION_CURRENT  = 2;      // E_VERSION_CURRENT
+    // E_VERSION_CURRENT as a big-endian (unconverted) collection's version word reads on this host.
+    static const uint32_t KU_VFX_MESH_COLLECTION_VERSION_UNCONVERTED = 0x02000000u;
 
     enum EVFXMeshCollectionDword
     {
@@ -77,20 +80,62 @@ namespace BrnParticle
         return lDescriptor;
     }
 
+    // =====================================================================================
+    // FLAG PC platform leaf -- STALE-ASSET TOLERANCE, not game logic, NOT IN THE X360 BINARY.
+    //
+    // Players convert their own game data with the project's tools. A PARTICLES.BUNDLE converted
+    // before the debris-mesh port (tools/assets/bundles/particles_transcode.py, FX-CRASHVFX C3)
+    // carries its three collections BIG-ENDIAN, and the console's walk below would assert on the
+    // version and then follow a byte-reversed MeshHelper offset into nothing. Such a collection is
+    // recognised by its version word -- E_VERSION_CURRENT byte-reversed -- and REFUSED: FixUp leaves
+    // it untouched, ParticleModule::LoadFXBundle stage 6 does not bind it, and the debris meshes stay
+    // undrawn exactly as they were before the port. One always-on line says so, once per run, with
+    // the command that re-converts the bundle.
+    // =====================================================================================
+    bool BrnVFXMeshCollectionResourceType::IsUnconvertedPC(const void* lpResource)
+    {
+        return lpResource != 0
+            && reinterpret_cast<const u32*>(lpResource)[E_MESHCOLLECTION_VERSION] == KU_VFX_MESH_COLLECTION_VERSION_UNCONVERTED;
+    }
+
+    static void ReportUnconvertedPC()
+    {
+        static bool sbReported = false;
+        if (sbReported)
+            return;
+        sbReported = true;
+        CgsDev::Log::WriteToLog(
+            "[particles] PARTICLES.BUNDLE holds an UNCONVERTED (big-endian) debris mesh collection: it was "
+            "converted before the debris-mesh port, so the debris meshes stay unbound and undrawn. Re-convert "
+            "it with: py tools/assets/build_game_data.py \"<your X360 game folder>\" --only PARTICLES.BUNDLE\n");
+    }
+
     void BrnVFXMeshCollectionResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        // The rw::Resource arg supplies the rebase bases. On the X360 (32-bit) its
-        // first two base-resource words are *a3 / a3[2]:
-        //   m_baseResources[0] -> the file-relative pointer delta (applied to every
-        //                         stored pointer in the header / mesh helper),
-        //   m_baseResources[1] -> the buffer-address delta (added to each GPU buffer's
-        //                         base-address dword).
-        // All rebase arithmetic is done in u32 space (matching the X360 32-bit address
-        // model and the VFXProps precedent), the pointer being formed only to
-        // dereference a sub-field.
-        u32  luDelta        = static_cast<u32>(reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]));
-        u32  luAddressDelta = static_cast<u32>(reinterpret_cast<uintptr_t>(lrResource.m_baseResources[1]));
-        u32* lpHeader       = reinterpret_cast<u32*>(lpResource);
+        u32* lpHeader = reinterpret_cast<u32*>(lpResource);
+
+        // FLAG PC platform leaf (see IsUnconvertedPC): checked before anything is dereferenced.
+        if (IsUnconvertedPC(lpHeader))
+        {
+            ReportUnconvertedPC();
+            return;
+        }
+
+        // The rw::Resource arg supplies the rebase bases. The X360 rw::Resource lanes are 4-byte
+        // words, and FixUp reads two of them: `lwz r29, 0(r30)` (0x826784A8) and `lwz r9, 8(r30)` /
+        // `lwz r10, 8(r30)` (0x82678544 / 0x82678568) -- lanes 0 and 2:
+        //   m_baseResources[0] -> the main memory the header was loaded into: the delta added to
+        //                         every stored offset in the header and the mesh helper;
+        //   m_baseResources[2] -> the graphics memory the body (the index and vertex data) was
+        //                         loaded into: added to each GPU buffer's base-address dword.
+        // Pool::FixUpEntry's ConvertToRWResource puts the loaded graphics block in lane 2
+        // (CgsSmallResource.cpp: rw[2] = small[1]) and leaves lane 1 empty -- RwRasterResourceType and
+        // RwRenderableResourceType read lane 2 for the same reason. (This used to read lane 1: every
+        // buffer kept its body OFFSET for an address.)
+        // All rebase arithmetic is done in u32 space (matching the X360 32-bit address model and the
+        // VFXProps precedent), the pointer being formed only to dereference a sub-field.
+        u32 luDelta        = static_cast<u32>(reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]));
+        u32 luAddressDelta = static_cast<u32>(reinterpret_cast<uintptr_t>(lrResource.m_baseResources[2]));
 
         CGS_ASSERT(lpHeader[E_MESHCOLLECTION_VERSION] == KU_VFX_MESH_COLLECTION_VERSION_CURRENT,
                    "lpBrnVFXMeshCollection->muVersion == BrnVFXMeshCollection::E_VERSION_CURRENT");
@@ -110,7 +155,7 @@ namespace BrnParticle
 
         // Vertex buffer first (the X360 order). Rebase the buffer pointer, then patch
         // its base-address dword at +0x18: preserve the low 2 flag bits, add the
-        // resource arg's third word to the address, then re-apply the bits.
+        // graphics lane (rw lane 2, the X360's third word) to the address, then re-apply the bits.
         lpMeshHelper[E_MESHHELPER_VERTEX_BUFFER] += luDelta;
         u32* lpVertexBuffer = reinterpret_cast<u32*>(static_cast<uintptr_t>(lpMeshHelper[E_MESHHELPER_VERTEX_BUFFER]));
 
