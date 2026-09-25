@@ -18,6 +18,7 @@
 #include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
+#include <cmath>     // std::signbit (the vmaxfp / vminfp zero ordering)
 #include <cstdint>   // uintptr_t (TestLineSphere4's :308 alignment assert)
 #include <cstring>   // std::memcpy (the Mask4 lanes)
 
@@ -240,9 +241,25 @@ namespace CgsGeometric
                 || !(lfEnd2 > lfRadius2);
         }
 
-        // `vmaxfp` / `vminfp` of the two slab parameters of one axis.
-        inline f32 SlabFar(f32 lfA, f32 lfB)  { return lfA > lfB ? lfA : lfB; }
-        inline f32 SlabNear(f32 lfA, f32 lfB) { return lfA < lfB ? lfA : lfB; }
+        // `vmaxfp` / `vminfp` of the two slab parameters of one axis (0x828BD99C / 0x828BD9A4 / 0x828BD9B8 and
+        // 0x828BD9A0 / 0x828BD9A8 / 0x828BD9BC) -- the VMX result, not a C select's: a NaN operand gives a NaN
+        // (vA's when both are), and +0 orders above -0. A NaN slab parameter therefore makes far AND near NaN,
+        // and the axis's `1 >= near` lane (vcmpgefp128 0x828BD9B0) fails, as on the console. (Until 2026-09-25
+        // these were `a > b ? a : b` / `a < b ? a : b`, which answer the OTHER operand for a NaN vA.)
+        inline f32 SlabFar(f32 lfA, f32 lfB)
+        {
+            if (lfA != lfA) return lfA;
+            if (lfB != lfB) return lfB;
+            if (lfA == lfB) return std::signbit(lfA) ? lfB : lfA;   // +0 is the larger zero
+            return (lfA > lfB) ? lfA : lfB;
+        }
+        inline f32 SlabNear(f32 lfA, f32 lfB)
+        {
+            if (lfA != lfA) return lfA;
+            if (lfB != lfB) return lfB;
+            if (lfA == lfB) return std::signbit(lfA) ? lfA : lfB;   // -0 is the smaller zero
+            return (lfA < lfB) ? lfA : lfB;
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -318,8 +335,7 @@ namespace CgsGeometric
     // face (far == 0 or near == 1) counts. Only the start (the
     // caller's `lvx128 v127, r0, r20`, params +0x00) and the reciprocal (`lvx128 v12, r20, 0x30`)
     // reach the body; the middle vector is part of the signature and is not read.
-    // (vmaxfp / vminfp answer NaN for a NaN operand where the selects below answer the other operand;
-    // the octree's operands are finite -- node bounds, the start, and a reciprocal clamped to 1/eps.)
+    // (vmaxfp / vminfp answer NaN for a NaN operand; SlabFar / SlabNear keep that, so a NaN t fails its axis.)
     // ------------------------------------------------------------------------
     const Vector4 TestLineBoundingBoxAgainstAxisAlignedBox4(const AxisAlignedBox& lrBox0,
                                                             const AxisAlignedBox& lrBox1,

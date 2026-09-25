@@ -37,7 +37,7 @@ LT_CPP = "src/GameShared/GameClasses/Geometric/Intersection/CgsLineTests.cpp"
 LT_H = "src/GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"
 # The last revision whose TestLineAgainstNodeBoundingBox read the opaque block by raw float offsets.
 OLD_REV = "c451f0f0"
-NUMERIC_CHECKS = 26
+NUMERIC_CHECKS = 27
 
 
 def wiring(tree):

@@ -11,7 +11,7 @@ import re
 import sys
 
 sys.dont_write_bytecode = True
-from fxrcem3_common import REPO, build_and_run, code_mask, definition, pre_fix_rev, read
+from fxrcem3_common import REPO, build_and_run, code_mask, definition, optional_definition, pre_fix_rev, read
 
 GENERATOR = "src/GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.cpp"
 LINE_CPP = REPO / "src/GameShared/GameClasses/Geometric/Primitives/CgsLine.cpp"
@@ -29,8 +29,11 @@ def main():
     rev = pre_fix_rev(sys.argv)
     source = read(GENERATOR, rev)
     body = definition(source, "u16 BaseCollisionGenerator::CollideLineAgainstPolySoupListNearest(")
+    # The line box's VMX max / min (2026-09-25, FX-FOLLOWUPS) -- present from that revision on.
+    vmx = [text for text in (optional_definition(source, "inline f32 VmxMaxFp("),
+                             optional_definition(source, "inline f32 VmxMinFp(")) if text]
     helpers = "\n".join([constant(source, "KF_SHORT_LINE_LENGTH_SQ"), constant(source, "KF_LINE_PARAM_NO_HIT"),
-                         definition(source, "inline bool LeafOverlapsBoxXYZ(")])
+                         definition(source, "inline bool LeafOverlapsBoxXYZ(")] + vmx)
     pieces = {"fxg_nla_helpers.inc": helpers, "fxg_nla_body.inc": body}
     rc = build_and_run(REPO / "tests" / "FxGeometricNearestLongArm.cpp", pieces, "fxg_nla",
                        extra_sources=(LINE_CPP, LINE_TESTS_CPP))

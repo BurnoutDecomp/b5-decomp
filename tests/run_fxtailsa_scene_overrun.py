@@ -30,6 +30,9 @@ def main():
               definition(source, "inline bool LeafOverlapsBoxXYZ("),
               body_or_stub(source, "void NoteLineSoupListOverrun(",
                            "void NoteLineSoupListOverrun(s32, u16) {}   // absent in this revision"),
+              # The line box's VMX max / min (2026-09-25, FX-FOLLOWUPS); a revision before them has none to call.
+              body_or_stub(source, "inline f32 VmxMaxFp(", ""),
+              body_or_stub(source, "inline f32 VmxMinFp(", ""),
               "}",
               definition(source, "u16 BaseCollisionGenerator::CollideLineAgainstPolySoupList("),
               "} }"]

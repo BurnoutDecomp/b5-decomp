@@ -26,6 +26,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"                    // CgsGeometric::Sphere (TestSphereAgainstPolySoupList)
 #include "rw/math/vpu/vector4_operation.h"                                            // vpu::operator+ / operator- (the sphere's box)
 #include <cstring>   // std::memcpy (the 14-qword result copy)
+#include <cmath>     // std::signbit (the line box's vmaxfp128 / vminfp128 zero ordering)
 
 // The contact-generator job entry every CollisionBatch is wired to
 // (GameShared/Jobs/ContactGenerator/ContactGenerator.cpp; X360 0x82920F10). GLOBAL scope, exactly
@@ -861,6 +862,26 @@ namespace CgsCollision
         // 0x82813268: the "no hit yet" line parameter seed.
         const f32 KF_LINE_PARAM_NO_HIT = 2.0f;
 
+        // vmaxfp128 / vminfp128 per lane, for the two line boxes (CollideLineAgainstPolySoupListNearest
+        // 0x82813318 / 0x82813320, CollideLineAgainstPolySoupList 0x82812C20 / 0x82812C2C; both `vA = v127 = the
+        // start, vB = v123 = the end`). The VMX result, not a C select's: a NaN operand gives a NaN (vA's when both
+        // are), and +0 orders above -0. (Until 2026-09-25 the boxes were built with `a < b ? a : b` selects, which
+        // answer the end for a NaN start lane.)
+        inline f32 VmxMaxFp(f32 lfA, f32 lfB)
+        {
+            if (lfA != lfA) return lfA;
+            if (lfB != lfB) return lfB;
+            if (lfA == lfB) return std::signbit(lfA) ? lfB : lfA;   // +0 is the larger zero
+            return (lfA > lfB) ? lfA : lfB;
+        }
+        inline f32 VmxMinFp(f32 lfA, f32 lfB)
+        {
+            if (lfA != lfA) return lfA;
+            if (lfB != lfB) return lfB;
+            if (lfA == lfB) return std::signbit(lfA) ? lfA : lfB;   // -0 is the smaller zero
+            return (lfA < lfB) ? lfA : lfB;
+        }
+
         // The six-lane box overlap the loop does inline (leaf.max >= box.min && box.max >= leaf.min,
         // xyz only -- `vpermwi128 0x4B / 0x87 ; vspltw 0` drop the w lane).
         inline bool LeafOverlapsBoxXYZ(const CgsGeometric::AxisAlignedBox& lrLeaf,
@@ -938,16 +959,16 @@ namespace CgsCollision
 
         if (KF_SHORT_LINE_LENGTH_SQ > lfLengthSq)
         {
-            // 0x828132B4..0x828132C4: the line's box, all four lanes min/max'd.
+            // 0x82813318 / 0x82813320: the line's box, all four lanes -- vmaxfp128 / vminfp128 (v127 start, v123 end).
             CgsGeometric::AxisAlignedBox lBox;
-            lBox.mMin.x = (lrStart.x < lrEnd.x) ? lrStart.x : lrEnd.x;
-            lBox.mMin.y = (lrStart.y < lrEnd.y) ? lrStart.y : lrEnd.y;
-            lBox.mMin.z = (lrStart.z < lrEnd.z) ? lrStart.z : lrEnd.z;
-            lBox.mMin.w = (lrStart.w < lrEnd.w) ? lrStart.w : lrEnd.w;
-            lBox.mMax.x = (lrStart.x > lrEnd.x) ? lrStart.x : lrEnd.x;
-            lBox.mMax.y = (lrStart.y > lrEnd.y) ? lrStart.y : lrEnd.y;
-            lBox.mMax.z = (lrStart.z > lrEnd.z) ? lrStart.z : lrEnd.z;
-            lBox.mMax.w = (lrStart.w > lrEnd.w) ? lrStart.w : lrEnd.w;
+            lBox.mMin.x = VmxMinFp(lrStart.x, lrEnd.x);
+            lBox.mMin.y = VmxMinFp(lrStart.y, lrEnd.y);
+            lBox.mMin.z = VmxMinFp(lrStart.z, lrEnd.z);
+            lBox.mMin.w = VmxMinFp(lrStart.w, lrEnd.w);
+            lBox.mMax.x = VmxMaxFp(lrStart.x, lrEnd.x);
+            lBox.mMax.y = VmxMaxFp(lrStart.y, lrEnd.y);
+            lBox.mMax.z = VmxMaxFp(lrStart.z, lrEnd.z);
+            lBox.mMax.w = VmxMaxFp(lrStart.w, lrEnd.w);
 
             const s32 liNumLeaves = lpPolySoupListSpacialMap->RunQuery(lBox);   // 0x828132C8
 
@@ -1107,16 +1128,16 @@ namespace CgsCollision
 
         if (KF_SHORT_LINE_LENGTH_SQ > lfLengthSq)
         {
-            // 0x82812C20..0x82812C40: the line's box, all four lanes min/max'd.
+            // 0x82812C20..0x82812C40: the line's box, all four lanes -- vmaxfp128 / vminfp128 (v127 start, v123 end).
             CgsGeometric::AxisAlignedBox lBox;
-            lBox.mMin.x = (lrStart.x < lrEnd.x) ? lrStart.x : lrEnd.x;
-            lBox.mMin.y = (lrStart.y < lrEnd.y) ? lrStart.y : lrEnd.y;
-            lBox.mMin.z = (lrStart.z < lrEnd.z) ? lrStart.z : lrEnd.z;
-            lBox.mMin.w = (lrStart.w < lrEnd.w) ? lrStart.w : lrEnd.w;
-            lBox.mMax.x = (lrStart.x > lrEnd.x) ? lrStart.x : lrEnd.x;
-            lBox.mMax.y = (lrStart.y > lrEnd.y) ? lrStart.y : lrEnd.y;
-            lBox.mMax.z = (lrStart.z > lrEnd.z) ? lrStart.z : lrEnd.z;
-            lBox.mMax.w = (lrStart.w > lrEnd.w) ? lrStart.w : lrEnd.w;
+            lBox.mMin.x = VmxMinFp(lrStart.x, lrEnd.x);
+            lBox.mMin.y = VmxMinFp(lrStart.y, lrEnd.y);
+            lBox.mMin.z = VmxMinFp(lrStart.z, lrEnd.z);
+            lBox.mMin.w = VmxMinFp(lrStart.w, lrEnd.w);
+            lBox.mMax.x = VmxMaxFp(lrStart.x, lrEnd.x);
+            lBox.mMax.y = VmxMaxFp(lrStart.y, lrEnd.y);
+            lBox.mMax.z = VmxMaxFp(lrStart.z, lrEnd.z);
+            lBox.mMax.w = VmxMaxFp(lrStart.w, lrEnd.w);
 
             const s32 liNumLeaves = lpPolySoupListSpacialMap->RunQuery(lBox);   // 0x82812C4C
 
