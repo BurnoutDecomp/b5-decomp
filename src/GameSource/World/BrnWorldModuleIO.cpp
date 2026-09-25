@@ -224,13 +224,16 @@ const VehicleDriverInputInterface* UpdateInputBuffer::GetVehicleDriverInputInter
 }
 
 // X360 0x823DB6C0 (:263 W) -- merge the source vehicle-driver-input interface (+142272).
-// The X360 forwards `this` (the interface's leading mDriverUpdateQueue member) straight into
-// BrnPhysics::Vehicle::VehicleDriverInputInterface::Append, a thin queue-merge; modelled via the
-// committed type's own GetUpdateDriverQueue()->Append(...) (VariableEventQueue<5040,16>::Append).
+// After the write-lock assert the X360 makes ONE call, VehicleDriverInputInterface::Append @0x823DB640
+// on the member (0x823DB75C..0x823DB768 `addis r3,r28,2 ; addi r3,r3,0x2BC0 ; bl 0x823DB640`): the
+// update-driver queue merge, the :164 "miTargetAssistCount==0 || ...GetTargetAssistCount()==0" assert,
+// and the adoption of the source's target-assist list when the member holds none.
+// FIXED 2026-09-25 (crash parity FX-FOLLOWUPS): the body merged the queue only, so the target-assist
+// half of the call never ran. Test: run_fxfollowups_world_driver_append.py.
 void UpdateInputBuffer::AppendVehicleDriverInputInterface(const VehicleDriverInputInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-    mVehicleDriverInputInterface.GetUpdateDriverQueue()->Append(*lpInterface->GetUpdateDriverQueue());
+    mVehicleDriverInputInterface.Append(lpInterface);
 }
 
 // ---- game-action queue ------------------------------------------------------
