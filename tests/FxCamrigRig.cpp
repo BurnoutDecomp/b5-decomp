@@ -24,6 +24,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "SDKs/XboxMath/XMVectorSinCos.h"   // the rig's file-local rotation builders (FX-GATE 2026-09-25)
 #include "SDKs/XboxMath/XMScalarSinCos.h"   // XMMatrixRotationY's sine / cosine (FX-GATE 2026-09-25)
+#include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"   // the rig's fused TransformVector / Mult (FX-GATE 2026-09-25)
 
 #include <cmath>
 #include <cstdint>
