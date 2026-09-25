@@ -589,6 +589,22 @@ void BridgeEntityModulesToOutput_PostPhysics(
                 static_cast<s32>(sizeof(lRequest)));
         }
     }
+
+    // ================================================================================
+    // LEG 13, the traffic -> network snapshot -- @0x827AF0D4..0x827AF0E4 (crash parity
+    // FX-NETCRASH, 2026-09-25):
+    //   mr r3, r29 ; bl 0x827A08D8   trafficOut->GetNetworkInterface() const   (read-locked)
+    //   mr r4, r3 ; mr r3, r31 ; bl 0x827AD258   out->SetTrafficNetworkOutputInterface(...)
+    // Every frame. GenerateNetworkUpdateEvents fills the source (the active hull per race car,
+    // the hull-sync divergence byte, the online hull broadcast); BrnGameModule_wN1_01.cpp hands
+    // this copy to the network module, whose TrafficManager reads GetActiveHulls to send the
+    // restart-traffic message and relays the ActivateHull queue as hull syncs. Without this leg
+    // the network side read a table nobody filled (the host's mbActiveHullsValid asserts). The
+    // console's PerfMon bracket takes this file's standing disposition. The same console leg
+    // also carries SetTrafficSoundOutputInterface (0x827AF0F8..0x827AF108) and
+    // SetTrafficDirectorOutputInterface (0x827AF11C..0x827AF12C); both stay a logged follow-up.
+    // ================================================================================
+    lpOutputBuffer->SetTrafficNetworkOutputInterface(lpTrafficOutput_PostPhysics->GetNetworkInterface());
 }
 
 // ----------------------------------------------------------------------------
