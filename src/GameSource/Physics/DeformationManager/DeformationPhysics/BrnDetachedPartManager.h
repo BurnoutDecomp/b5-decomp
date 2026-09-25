@@ -82,6 +82,17 @@ namespace Deformation
     class DeformableObject;          // MakePartPhysical owning-model arg. Owned by BrnDeformableObject.h.
     struct IKBodyPart;                // MakePartPhysical IK-spec arg. Owned by BrnIKBodyPart.h.
 
+    // [DIAG] NOT IN THE X360 BINARY (FX-WITNESS, 2026-09-24). The deformation STEP counter the hinge
+    // witnesses ([jb-exit], [ik-cadence], [joint-int]) stamp their lines with. It ticks once per
+    // DeformationManager::Update, at the top of DetachedPartManager::Update (that call's step 5), so
+    // inside manager update k the models' Update and the IK pass (CheckForDetachment ->
+    // TestJointForBreaking) run while it reads k-1, and the hinge integrator (UpdateRWBodies ->
+    // UpdateJoint) runs while it reads k. A break test stamped S therefore reads exactly the joint state
+    // the integrator printed under the same stamp S. WHY IT EXISTS: organic runs take 2-3 physics steps
+    // per present, so the present counter cannot pair a test with the state it tested. Incremented
+    // unconditionally (a counter no game code reads); printed only by the env-gated witnesses.
+    extern u32 guDiagDeformationStep;
+
     // ========================================================================
     // BrnPhysics::Deformation::DetachedPartManager
     // ========================================================================

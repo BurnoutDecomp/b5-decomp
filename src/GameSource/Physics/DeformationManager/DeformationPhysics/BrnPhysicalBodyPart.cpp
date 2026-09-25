@@ -21,6 +21,7 @@
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"                    // DetachedPartNotificationEvent
 #include "GameSource/Physics/ContactSpies/BrnContactSpyData.h"                                  // ContactSpy::ContactSpyData::AddContact (AddContactSpy's sink)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"                                // ContactSpy::HingedPartContact (the record AddContactSpy builds)
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.h"   // guDiagDeformationStep ([joint-int] step stamp, DIAG only)
 
 #include <cstring>   // memset (matching the X360 memset of the BBox scratch tail)
 #include <cmath>     // std::sqrt / std::fabs (the vrsqrtefp magnitude refinements + the skin self-check)
@@ -412,8 +413,19 @@ namespace Deformation
         // @0x825BA548/0x825BA560) and XORs it into the max-angle splat before storing the w lane of
         // mLocalInitialComPositionPlusMaxJointAngle. So the proportion is
         // -rotation/maxAngle and its SIGN is the whole discriminator. [[diagnostics-that-lie]]
+        //
+        // [DIAG] FX-WITNESS 2026-09-24: JbDecade also RECORDS every ratio it is handed, in call order,
+        // into a 4-slot ring. TestJointForBreaking hands it pen/maxStress (after g2), then
+        // rotationProportion/0.3 (at g3a), then force/maxStress (only when arm A runs), so the
+        // [jb-exit] witness in the forwarder reads the exact ratios the body computed without a new
+        // statement inside that body. A store to a file-local diag array; no game code reads it.
+        u32 guJbRatioCount = 0;
+        f32 gafJbRatios[JointBreakCensusDiag::KU_NUM_RATIO_SLOTS] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
         inline u32 JbDecade(f32 lfRatio)
         {
+            gafJbRatios[guJbRatioCount % JointBreakCensusDiag::KU_NUM_RATIO_SLOTS] = lfRatio;   // [DIAG]
+            ++guJbRatioCount;                                                                  // [DIAG]
             if ( lfRatio < 0.0f )    { return 0u; }
             if ( lfRatio >= 1.0f )   { return 6u; }
             if ( lfRatio >= 0.1f )   { return 5u; }
@@ -439,6 +451,24 @@ namespace Deformation
     // TO RE-MERGE: close the other 15, mount this TU, move the body back.
     // ==========================================================================================
 
+    // [DIAG] NOT IN THE X360 BINARY (FX-WITNESS, 2026-09-24). The read side of the gate census for
+    // the [jb-exit] witness -- see JointBreakCensusDiag in the header. Copies counters; writes nothing.
+    void ReadJointBreakCensusDiag(JointBreakCensusDiag& lrOut)
+    {
+        lrOut.muCalls      = gxJbCalls;
+        lrOut.muNeverBreak = gxJbNeverBreak;
+        lrOut.muRotGate    = gxJbRotGate;
+        lrOut.muType3      = gxJbType3;
+        lrOut.muSensorGate = gxJbSensorGate;
+        lrOut.muAxisIdle   = gxJbAxisIdle;
+        lrOut.muArmA       = gxJbArmA;
+        lrOut.muBreak      = gxJbBreak;
+        lrOut.muNumRatios  = guJbRatioCount;
+        for ( u32 lu = 0u; lu < JointBreakCensusDiag::KU_NUM_RATIO_SLOTS; ++lu )
+        {
+            lrOut.mafRatios[lu] = gafJbRatios[lu];
+        }
+    }
 
     // =========================================================================================
     // Prepare @ 0x82626700
@@ -1832,10 +1862,20 @@ namespace Deformation
         // pair the model is built on. A hinged panel that "does not move" and one that moves in the
         // wrong plane are indistinguishable from a pose dump, and these are the numbers that tell them
         // apart. Rate-limited; DELETE-WHEN the swing is banked.
+        // ⭐ FX-WITNESS 2026-09-24: the line ends with ` step S` (guDiagDeformationStep, the stamp the
+        // [jb-exit] line carries for the break test that reads THIS state), and under
+        // BRN_JB_EXIT_DIAG=1 the cap rises from 40000 to 250000 so a whole organic run is covered (at
+        // 40000 the live_final runs lost everything after their first 2100-3900 presents).
         if ( DetachProbeOn() )
         {
             static s32 siJointLines = 0;
-            if ( siJointLines < 40000 )
+            static s32 siJointLineCap = -1;
+            if ( siJointLineCap < 0 )
+            {
+                const char* lpcJbExit = getenv("BRN_JB_EXIT_DIAG");
+                siJointLineCap = ( lpcJbExit != 0 && atoi(lpcJbExit) > 0 ) ? 250000 : 40000;
+            }
+            if ( siJointLines < siJointLineCap )
             {
                 ++siJointLines;
                 *CgsDev::Log::gpDebugPrint
@@ -1858,7 +1898,8 @@ namespace Deformation
                     << lLocalPanelDirection.z << ")"
                     << " dirW (" << lWorldPanelDirection.x << ", " << lWorldPanelDirection.y << ", "
                     << lWorldPanelDirection.z << ")"
-                    << " dt " << lfTimeStep << "\n";
+                    << " dt " << lfTimeStep
+                    << " step " << guDiagDeformationStep << "\n";
             }
         }
     }

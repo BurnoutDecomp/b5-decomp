@@ -9,8 +9,13 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint -- [part-rest] DIAG only
 #include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"   // CgsGeometric::Box -- [part-rest] resting-orientation read
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"   // IKBodyPart::GetPartType -- [part-rest] type join, DIAG only
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"   // GetSensorDebug / GetIKPartDebug -- [jb-exit] indices, DIAG only
+#include "SharedClasses/Physics/Deformation/BrnDeformationJointSpec.h"                     // DeformationJointSpec::GetMaxStress -- [jb-exit], DIAG only
 
 #include <cstdlib>   // getenv/atoi -- [part-rest] DIAG only, host-side
+
+// [DIAG] the host-side present counter ([jb-exit] rows), the same extern BrnPhysicalBodyPart.cpp uses.
+namespace renderengine { extern u32 guPresentCount; }
 
 // ============================================================================
 // GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.cpp
@@ -197,6 +202,268 @@ namespace Deformation
                                     lInitialLinearVelocity, lInitialAngularVelocity);
     }
 
+    // [DIAG] NOT IN THE X360 BINARY (FX-WITNESS). Definition of the step stamp (see the header).
+    u32 guDiagDeformationStep = 0u;
+
+    // ==========================================================================================
+    // [jb-exit] NOT IN THE X360 BINARY -- FX-WITNESS, 2026-09-24. Opt-in: BRN_JB_EXIT_DIAG=1.
+    //
+    // WHY. LIVE_FINAL section 6 found hinges whose integrator state satisfied g2, g3a, g3b and the
+    // penetration arm on some frame and still did not break, and only two things can explain such a
+    // row: the g3c sensor band (IKBodyPart::CheckSensorForcesForJointDetachment @0x825C17F8) or the
+    // cadence (TestJointForBreaking is reached only on IK frames). The one witness, [jb-census], is an
+    // aggregate. This line names, PER EVALUATION, the exit the console's body took and the numbers it
+    // took it on.
+    //
+    // HOW, AND WHY HERE AND NOT IN THE BODY. run_joint_break.py compiles the extracted body of
+    // PhysicalBodyPart::TestJointForBreaking against its own stand-ins, so that body stays
+    // byte-identical. The body already bumps one census counter at every exit and hands every ratio it
+    // computes to JbDecade, which records it (BrnPhysicalBodyPart.cpp). So this forwarder -- the
+    // console's only caller of the body -- snapshots the census before and after its one call: the
+    // counter that moved IS the exit, and the recorded ratios ARE the body's own numbers. The other
+    // fields are member reads taken BEFORE the call (a break clears mbJoinedToVehicle): the joint's
+    // max stress, the limit stress (+400 w), GetJointRotationProportion (the same const function g3a
+    // calls, only while joined, so it cannot add an assert), and for g3c the sensor fold the gate makes
+    // (a max over the same two w lanes per tag point, exact) with the band the gate selects.
+    // Nothing here writes game state or changes a branch; the console's call and return are unchanged.
+    //
+    // WHICH ROWS PRINT ("interesting"): a BREAK, or penRatio >= 0.5, or armA ratio >= 0.5 (the ratios
+    // are value*multiplier / maxStress). A g2 exit (maxStress <= -0.9, never breaks by data) has no
+    // meaningful ratio, so it prints ONCE per hinge activation (per pool slot and rigid-body id).
+    // Hard cap 60000 lines. Fields: step (guDiagDeformationStep -- the same stamp as the [joint-int]
+    // row whose state this call tested), present, ent (the vehicle id [joint-int] prints), id (the
+    // part's base rigid-body id, hex, as [joint-int]), ik (IK part index), pool (slot), type, maxStress,
+    // stress (limit stress), rotProp, penRatio, armA (ratio | idle | na), exit (g2 | g3a | g3b | g3c |
+    // short | BREAK), and for every row past g3b: peak, band [lo,hi], tough, traffic (the gate's
+    // lbIsToughCheck argument), why (g3c rows: above | below | type14_15), the tag sensors as
+    // t<i>=s<A>:<wA>,s<B>:<wB> (sensor indices into maDeformationSensors), and `decode ok|BAD` (the
+    // census moved by exactly one call with the expected number of ratios).
+    // DELETE-WHEN the hinge verdict (scratch/CRASHPARITY_0922/HINGE_FINAL.md) is banked.
+    // ==========================================================================================
+    namespace
+    {
+        const u32 KU_JB_EXIT_MAX_LINES = 60000u;
+        const s32 KI_JB_EXIT_POOL_SLOTS = 50;   // the pool's capacity (maParts[50])
+
+        u32  guJbExitLines = 0u;
+        u64  gauJbExitG2LastId[KI_JB_EXIT_POOL_SLOTS] = {};
+        bool gabJbExitG2Seen[KI_JB_EXIT_POOL_SLOTS] = {};
+
+        bool JbExitOn()
+        {
+            static s32 siOn = -1;
+            if ( siOn < 0 )
+            {
+                const char* lpcEnv = getenv("BRN_JB_EXIT_DIAG");
+                siOn = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
+            }
+            return ( siOn == 1 ) && ( CgsDev::Log::gpDebugPrint != 0 );
+        }
+
+        struct JbExitCapture
+        {
+            JointBreakCensusDiag mCensus;
+            bool mbHasJoint;       // an active joint is set (the body's first tripwire)
+            f32  mfMaxStress;
+            f32  mfLimitStress;
+            bool mbJoined;
+            f32  mfRotProp;
+            f32  mfPeak;           // the g3c fold, exact
+            f32  mfBandLo;
+            f32  mfBandHi;
+            bool mbTough;
+            bool mbTraffic;        // CheckSensorForcesForJointDetachment's argument (owner == 7)
+        };
+
+        // The g3c peak exactly as IKBodyPart::CheckSensorForcesForJointDetachment folds it: start at 0,
+        // max-fold sensor A's then sensor B's .w of mPointDisplacement_BiggestImpulseThisFrame per tag.
+        f32 JbExitSensorPeak(const IKBodyPart& lrIK)
+        {
+            f32 lfPeak = 0.0f;
+            const s32 liNumTags = lrIK.GetNumberOfTagPoints();
+            for ( s32 li = 0; li < liNumTags; ++li )
+            {
+                const TagPoint* lpTag = lrIK.GetTagPoint(li);
+                const f32 lfA = lpTag->GetDeformationSensorA()->GetMaxSensorImpulse().w;
+                const f32 lfB = lpTag->GetDeformationSensorB()->GetMaxSensorImpulse().w;
+                const f32 lfStep = lfPeak > lfA ? lfPeak : lfA;
+                lfPeak = lfStep > lfB ? lfStep : lfB;
+            }
+            return lfPeak;
+        }
+
+        void JbExitCapturePre(const PhysicalBodyPart& lrPart, JbExitCapture& lrOut)
+        {
+            ReadJointBreakCensusDiag(lrOut.mCensus);
+            const IKBodyPart* lpIK = lrPart.GetIKPart();
+            lrOut.mbHasJoint = ( lpIK != 0 )
+                && ( lpIK->GetActiveJointIndex() != IKBodyPart::KU8_NO_ACTIVE_JOINT );
+            lrOut.mfMaxStress = lrOut.mbHasJoint ? lpIK->GetActiveJointSpec()->GetMaxStress() : 0.0f;
+            lrOut.mfLimitStress = lrPart.GetLimitStressDebug();
+            lrOut.mbJoined = lrPart.IsJoinedToVehicle();
+            lrOut.mfRotProp = lrOut.mbJoined ? lrPart.GetJointRotationProportion().x : 0.0f;
+            lrOut.mfPeak = ( lpIK != 0 ) ? JbExitSensorPeak(*lpIK) : 0.0f;
+            lrOut.mbTough = ( lpIK != 0 ) && lpIK->IsToughenedPart();
+            lrOut.mfBandLo = lrOut.mbTough ? KVF_MIN_IMPULSE_FOR_DETACHMENT.w : 0.0f;
+            lrOut.mfBandHi = lrOut.mbTough ? KVF_MAX_IMPULSE_FOR_DETACHMENT_TOUGH.w
+                                           : KVF_MAX_IMPULSE_FOR_DETACHMENT.w;
+            lrOut.mbTraffic = ( lrPart.GetRigidBodyId().GetOwner()
+                                == BurnoutBodyPartID::KU_OWNER_TRAFFIC_BODY_PART );
+        }
+
+        // The decode, pure: which exit the body took and the ratios it computed, from two census
+        // snapshots taken around exactly one call (tests/run_fxwitness_jb_exit.py drives it with the
+        // real body and the real census).
+        struct JbExitDecoded
+        {
+            const char* mpcExit;     // g2 | g3a | g3b | g3c | short | BREAK
+            bool mbG2;
+            bool mbPastG3b;          // g3c was evaluated (exit g3c, short or BREAK)
+            bool mbSensorExit;       // exit g3c
+            bool mbArmsRan;          // every gate passed
+            bool mbArmARan;          // arm A's axis gate was engaged
+            u32  muRatios;           // ratios JbDecade recorded during the call
+            f32  mfPenRatio;         // pen*1.5/maxStress (recorded first, after g2)
+            f32  mfForceRatio;       // |v.axis|*0.4/maxStress (recorded third, arm A only)
+            bool mbOk;               // one call, the expected ratio count, the break flag agrees
+        };
+
+        JbExitDecoded JbExitDecode(const JointBreakCensusDiag& lrBefore, const JointBreakCensusDiag& lrAfter,
+                                   bool lbBroke)
+        {
+            JbExitDecoded lOut;
+            const u32 KU_SLOTS = JointBreakCensusDiag::KU_NUM_RATIO_SLOTS;
+            lOut.muRatios = lrAfter.muNumRatios - lrBefore.muNumRatios;
+            lOut.mfPenRatio = ( lOut.muRatios >= 1u )
+                ? lrAfter.mafRatios[(lrBefore.muNumRatios + 0u) % KU_SLOTS] : 0.0f;
+            lOut.mfForceRatio = ( lOut.muRatios >= 3u )
+                ? lrAfter.mafRatios[(lrBefore.muNumRatios + 2u) % KU_SLOTS] : 0.0f;
+
+            // The exit the body took == the census counter that moved.
+            u32 luExpectedRatios = 0u;
+            lOut.mbArmsRan = false;
+            if ( lrAfter.muNeverBreak != lrBefore.muNeverBreak )      { lOut.mpcExit = "g2";  luExpectedRatios = 0u; }
+            else if ( lrAfter.muRotGate != lrBefore.muRotGate )       { lOut.mpcExit = "g3a"; luExpectedRatios = 2u; }
+            else if ( lrAfter.muType3 != lrBefore.muType3 )           { lOut.mpcExit = "g3b"; luExpectedRatios = 2u; }
+            else if ( lrAfter.muSensorGate != lrBefore.muSensorGate ) { lOut.mpcExit = "g3c"; luExpectedRatios = 2u; }
+            else
+            {
+                lOut.mbArmsRan = true;
+                lOut.mpcExit = ( lrAfter.muBreak != lrBefore.muBreak ) ? "BREAK" : "short";
+                luExpectedRatios = ( lrAfter.muArmA != lrBefore.muArmA ) ? 3u : 2u;
+            }
+            lOut.mbG2 = ( lrAfter.muNeverBreak != lrBefore.muNeverBreak );
+            lOut.mbSensorExit = ( lrAfter.muSensorGate != lrBefore.muSensorGate );
+            lOut.mbPastG3b = !lOut.mbG2 && ( lrAfter.muRotGate == lrBefore.muRotGate )
+                          && ( lrAfter.muType3 == lrBefore.muType3 );
+            lOut.mbArmARan = ( lrAfter.muArmA != lrBefore.muArmA );
+            lOut.mbOk = ( lrAfter.muCalls - lrBefore.muCalls == 1u )
+                     && ( lOut.muRatios == luExpectedRatios )
+                     && ( lbBroke == ( lrAfter.muBreak != lrBefore.muBreak ) );
+            return lOut;
+        }
+
+        void JbExitReport(const PhysicalBodyPart& lrPart, s32 liPoolIndex, const JbExitCapture& lrPre,
+                          bool lbBroke)
+        {
+            if ( guJbExitLines >= KU_JB_EXIT_MAX_LINES )
+            {
+                return;
+            }
+            JointBreakCensusDiag lPost;
+            ReadJointBreakCensusDiag(lPost);
+            const JbExitDecoded lDecoded = JbExitDecode(lrPre.mCensus, lPost, lbBroke);
+            const u32  luRatios     = lDecoded.muRatios;
+            const f32  lfPenRatio   = lDecoded.mfPenRatio;
+            const f32  lfForceRatio = lDecoded.mfForceRatio;
+            const bool lbArmsRan    = lDecoded.mbArmsRan;
+            const bool lbArmARan    = lDecoded.mbArmARan;
+            const bool lbDecodeOk   = lDecoded.mbOk;
+            const char* lpcExit     = lDecoded.mpcExit;
+
+            // Which rows print.
+            const bool lbG2 = lDecoded.mbG2;
+            const u64 luBaseId = lrPart.GetRigidBodyId().GetBaseRigidBodyID();
+            bool lbPrint = false;
+            if ( lbG2 )
+            {
+                const s32 liSlot = liPoolIndex;
+                if ( liSlot >= 0 && liSlot < KI_JB_EXIT_POOL_SLOTS )
+                {
+                    lbPrint = !gabJbExitG2Seen[liSlot] || gauJbExitG2LastId[liSlot] != luBaseId;
+                    gabJbExitG2Seen[liSlot] = true;
+                    gauJbExitG2LastId[liSlot] = luBaseId;
+                }
+            }
+            else
+            {
+                const bool lbTrivialPen = ( lrPre.mfMaxStress <= 0.0f );   // (-0.9, 0]: the pen arm always says break
+                lbPrint = lbBroke || lbTrivialPen || ( lfPenRatio >= 0.5f )
+                       || ( lbArmARan && lfForceRatio >= 0.5f );
+            }
+            if ( !lbPrint )
+            {
+                return;
+            }
+            ++guJbExitLines;
+
+            const IKBodyPart* lpIK = lrPart.GetIKPart();
+            const DeformableObject* lpObject = lrPart.GetDeformableObjectDebug();
+            const s32 liType = ( lpIK != 0 ) ? static_cast<s32>(lpIK->GetPartType()) : -1;
+
+            CgsDev::StrStreamBase& lrLog = *CgsDev::Log::gpDebugPrint;
+            lrLog << "[jb-exit] step " << guDiagDeformationStep
+                  << " present " << renderengine::guPresentCount
+                  << " ent " << lrPart.GetGlobalVehicleIdDebug().muValue
+                  << " id " << CgsDev::E_PRINTMODE_HEXONCE << luBaseId
+                  << " ik " << lrPart.GetIKPartIndex()
+                  << " pool " << liPoolIndex
+                  << " poolMap " << ( ( lpIK != 0 && lpIK->GetPartPoolIndex() == liPoolIndex ) ? "ok" : "BAD" )
+                  << " type " << liType
+                  << " maxStress " << lrPre.mfMaxStress
+                  << " stress " << lrPre.mfLimitStress
+                  << " rotProp ";
+            if ( lrPre.mbJoined ) { lrLog << lrPre.mfRotProp; } else { lrLog << "na"; }
+            lrLog << " penRatio ";
+            if ( luRatios >= 1u ) { lrLog << lfPenRatio; } else { lrLog << "na"; }
+            lrLog << " armA ";
+            if ( !lbArmsRan )      { lrLog << "na"; }
+            else if ( !lbArmARan ) { lrLog << "idle"; }
+            else                   { lrLog << lfForceRatio; }
+            lrLog << " exit " << lpcExit;
+
+            if ( lDecoded.mbPastG3b && lpIK != 0 && lpObject != 0 )
+            {
+                const bool lbEarly1415 = lrPre.mbTraffic && ( liType == 14 || liType == 15 );
+                const bool lbAbove = ( lrPre.mfPeak > lrPre.mfBandHi );
+                const bool lbBelow = ( lrPre.mfBandLo > lrPre.mfPeak );
+                const bool lbGatePass = !lbEarly1415 && !lbAbove && !lbBelow;
+                const bool lbGateTookExit = lDecoded.mbSensorExit;
+                lrLog << " peak " << lrPre.mfPeak
+                      << " band [" << lrPre.mfBandLo << "," << lrPre.mfBandHi << "]"
+                      << " tough " << ( lrPre.mbTough ? 1 : 0 )
+                      << " traffic " << ( lrPre.mbTraffic ? 1 : 0 );
+                if ( lbGateTookExit )
+                {
+                    lrLog << " why " << ( lbEarly1415 ? "type14_15" : ( lbAbove ? "above" : ( lbBelow ? "below" : "INBAND" ) ) );
+                }
+                lrLog << " g3cConsistent " << ( ( lbGatePass != lbGateTookExit ) ? 1 : 0 );
+                const s32 liNumTags = lpIK->GetNumberOfTagPoints();
+                const DeformationSensor* lpSensorBase = &lpObject->GetSensorDebug(0);
+                lrLog << " tags " << liNumTags;
+                for ( s32 li = 0; li < liNumTags; ++li )
+                {
+                    const TagPoint* lpTag = lpIK->GetTagPoint(li);
+                    lrLog << " t" << li << "=s" << static_cast<s32>(lpTag->GetDeformationSensorA() - lpSensorBase)
+                          << ":" << lpTag->GetDeformationSensorA()->GetMaxSensorImpulse().w
+                          << ",s" << static_cast<s32>(lpTag->GetDeformationSensorB() - lpSensorBase)
+                          << ":" << lpTag->GetDeformationSensorB()->GetMaxSensorImpulse().w;
+                }
+            }
+            lrLog << " decode " << ( lbDecodeOk ? "ok" : "BAD" ) << "\n";
+        }
+    }
+
     // ------------------------------------------------------------------------------------------
     // TestJointForBreaking @ 0x8260E3C0  -- 27 instructions, LANDED 2026-08-27 (detach wave)
     //
@@ -232,7 +499,21 @@ namespace Deformation
 
         PhysicalBodyPart* lpPart = mPartPool.GetPart(static_cast<s16>(liPartIndex));
 
-        return lpPart->TestJointForBreaking(lpSimInput, lpOutput);
+        // [jb-exit] (DIAG, BRN_JB_EXIT_DIAG) -- pure reads either side of the console's one call.
+        const bool lbJbExit = JbExitOn();
+        JbExitCapture lJbExitPre;
+        if ( lbJbExit )
+        {
+            JbExitCapturePre(*lpPart, lJbExitPre);
+        }
+
+        const bool lbBroke = lpPart->TestJointForBreaking(lpSimInput, lpOutput);
+
+        if ( lbJbExit )
+        {
+            JbExitReport(*lpPart, liPartIndex, lJbExitPre, lbBroke);
+        }
+        return lbBroke;
     }
 
     // ------------------------------------------------------------------------------------------
@@ -542,6 +823,7 @@ namespace Deformation
     void DetachedPartManager::Update(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
                                      VecFloat lvfTimeStep)
     {
+        ++guDiagDeformationStep;   // [DIAG] NOT X360 -- the witnesses' step stamp; see the header.
         mPartPool.UpdateRWBodies(lpSimInput, lvfTimeStep);
     }
 

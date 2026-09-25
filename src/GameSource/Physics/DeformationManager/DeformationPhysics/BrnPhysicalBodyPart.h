@@ -326,6 +326,18 @@ namespace Deformation
         // mpIKPart (console +476) directly.
         const IKBodyPart* GetIKPart() const { return mpIKPart; }
 
+        // [DIAG] NOT IN THE X360 BINARY (FX-WITNESS, 2026-09-24). Read-only views the [jb-exit]
+        // witness in DetachedPartManager::TestJointForBreaking needs and the class does not otherwise
+        // publish: the owning model (for sensor / IK-part indices), the owning vehicle's id (the same
+        // `ent` the [joint-int] line prints) and the limit stress the penetration arm reads (the w lane
+        // of +400). Pure member reads; nothing in the game calls them.
+        const DeformableObject* GetDeformableObjectDebug() const { return mpDeformableObject; }
+        EntityId                GetGlobalVehicleIdDebug() const  { return mGlobalVehicleId; }
+        f32                     GetLimitStressDebug() const
+        {
+            return mLocalInitialJointPositionPlusLimitStress.GetPlus();
+        }
+
         // BrnPhysicalBodyPart.h:222. Whether the part is frozen (sim disabled, settled).
         // ⭐ INLINE 2026-08-06 (big-five #2): no out-of-line X360 emission -- the one console
         // consumer (BridgeContactsToSimulation via PhysicalBodyPartPool::GetPart) reads the
@@ -525,5 +537,29 @@ namespace Deformation
 
         s8   mi8ActiveJointsTagPointIndex;                        // BrnPhysicalBodyPart.h:346 -- tag-point of the active joint
     };
+
+    // [DIAG] NOT IN THE X360 BINARY (FX-WITNESS, 2026-09-24). The READ side of TestJointForBreaking's
+    // gate census (BrnPhysicalBodyPart.cpp), for the [jb-exit] witness in the forwarder
+    // DetachedPartManager::TestJointForBreaking. The census counters are bumped at every exit of the
+    // extracted body, and JbDecade records every ratio it is handed (pen/maxStress after g2,
+    // rotationProportion/0.3 at g3a, force/maxStress when arm A runs) -- so a snapshot before and after
+    // one call names the exit the body took and the exact ratios it computed, without a single new
+    // statement inside that body (run_joint_break.py compiles it against its own stand-ins).
+    struct JointBreakCensusDiag
+    {
+        static const u32 KU_NUM_RATIO_SLOTS = 4;   // a ring; one call records at most three
+
+        u32 muCalls;
+        u32 muNeverBreak;   // g2
+        u32 muRotGate;      // g3a
+        u32 muType3;        // g3b
+        u32 muSensorGate;   // g3c
+        u32 muAxisIdle;     // arm A's axis gate idle
+        u32 muArmA;         // arm A ran
+        u32 muBreak;        // broke
+        u32 muNumRatios;    // JbDecade calls so far (the ring's write count)
+        f32 mafRatios[KU_NUM_RATIO_SLOTS];   // ring, slot = call index % KU_NUM_RATIO_SLOTS
+    };
+    void ReadJointBreakCensusDiag(JointBreakCensusDiag& lrOut);
 }
 }

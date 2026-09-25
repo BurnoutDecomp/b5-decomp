@@ -19,6 +19,7 @@
 #include <cmath>                                                              // std::sqrt (the P4 tangential magnitude)
 #include "GameSource/World/BrnEntityTypes.h"                                  // BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE (the ApplySensorImpulse owner test)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.h"   // DetachedWheelManager::DetachWheel (UpdateWheels' detach arm)
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.h"    // guDiagDeformationStep ([ik-cadence] / [absorb] step stamp, DIAG only)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                           // CgsNumeric::Random::RandomVecFloat (UpdateWheels' twist-limit draw)
 
 // The present counter, so an [st-mag] line names the dumped frame it belongs to (the dump writes
@@ -2225,9 +2226,49 @@ namespace Deformation
             // seen exactly, and it changes at most a handful of times per crash, so it costs
             // nothing to print every frame it is 4. (The 900-line cap still bounds the whole probe.)
             const bool lbInvincibleNow = ( meAbsorptionSet == E_ABSORPTIONSET_INVINCIBLE );
-            if ( siAbsorbProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && lbCrashingNow
-                 && suAbsorbLines < 900u
-                 && ( lbInvincibleNow || suAbsorbLines < 12u || ( suAbsorbFrames % 10u ) == 0u ) )
+
+            // ⭐ PER-ENTITY DECIMATION -- FX-WITNESS 2026-09-24, opt-in BRN_ABSORB_PER_ENTITY=1 (which
+            // also arms the line on its own). THE DEFECT IN THE WITNESS: `suAbsorbFrames` above is ONE
+            // counter shared by every DeformableObject, so `% 10` picks 1 call in 10 across ALL cars
+            // and the 900-line cap is shared too. With N cars updating in a fixed order the phase can
+            // land on the same car every time, and LIVE_FINAL's credited victim (live_final_3 slot 5)
+            // was never sampled in-event. Here each model keeps its own frame count, its own first-12
+            // lines and its own 900-line cap (a 20000-line hard cap over all), and the line gains
+            // ` model M step S present P` AFTER the old fields (every parser anchors on the leading
+            // `owner N ent N set N`). Unset, the legacy path below is byte-for-byte what it was.
+            static s32 siAbsorbPerEntity = -1;
+            if ( siAbsorbPerEntity < 0 )
+            {
+                const char* lpcPerEntity = getenv( "BRN_ABSORB_PER_ENTITY" );
+                siAbsorbPerEntity = ( lpcPerEntity != 0 && atoi( lpcPerEntity ) > 0 ) ? 1 : 0;
+            }
+            bool lbAbsorbSample = false;
+            if ( siAbsorbPerEntity == 1 )
+            {
+                const s32 KI_ABSORB_MODELS = 28;                 // BitArray<28> mModelsAdded
+                static u32 sauAbsorbModelFrames[KI_ABSORB_MODELS] = {};
+                static u32 sauAbsorbModelLines[KI_ABSORB_MODELS]  = {};
+                const s32 liModel = static_cast<s32>( mu16DeformableObjectIndex );
+                if ( liModel >= 0 && liModel < KI_ABSORB_MODELS )
+                {
+                    ++sauAbsorbModelFrames[liModel];
+                    lbAbsorbSample = CgsDev::Log::gpDebugPrint != 0 && lbCrashingNow
+                        && suAbsorbLines < 20000u && sauAbsorbModelLines[liModel] < 900u
+                        && ( lbInvincibleNow || sauAbsorbModelLines[liModel] < 12u
+                             || ( sauAbsorbModelFrames[liModel] % 10u ) == 0u );
+                    if ( lbAbsorbSample )
+                    {
+                        ++sauAbsorbModelLines[liModel];
+                    }
+                }
+            }
+            else
+            {
+                lbAbsorbSample = siAbsorbProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && lbCrashingNow
+                    && suAbsorbLines < 900u
+                    && ( lbInvincibleNow || suAbsorbLines < 12u || ( suAbsorbFrames % 10u ) == 0u );
+            }
+            if ( lbAbsorbSample )
             {
                 ++suAbsorbLines;
                 // accumulated damage: the per-sensor scratch ladder ApplySensorImpulse maintains
@@ -2255,8 +2296,15 @@ namespace Deformation
                     << " contacts " << static_cast<s32>(_mContactOrder.miNumContacts)
                     << " scratchSum " << lfScratchSum
                     << " scratchMax " << lfScratchMax
-                    << " brokenWheels " << static_cast<s32>(miNumBrokenWheels)
-                    << "\n";
+                    << " brokenWheels " << static_cast<s32>(miNumBrokenWheels);
+                if ( siAbsorbPerEntity == 1 )
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << " model " << static_cast<s32>(mu16DeformableObjectIndex)
+                        << " step " << guDiagDeformationStep
+                        << " present " << renderengine::guPresentCount;
+                }
+                *CgsDev::Log::gpDebugPrint << "\n";
             }
         }
         // ---- end [absorb] -----------------------------------------------------------------------
@@ -2728,6 +2776,145 @@ namespace Deformation
     }
 
     // =============================================================================================
+    // [ik-cadence] NOT IN THE X360 BINARY -- FX-WITNESS, 2026-09-24. Opt-in: BRN_IK_CADENCE_DIAG=1.
+    //
+    // WHY. A hinged part's joint is only ever TESTED for breaking from CheckForDetachment, which only
+    // UpdateIKAndLocators calls, and DeformationManager::Update @0x82649B40 only calls that for a model
+    // whose Update returned mbIKUpdateRequired -- the player every such step, the others round-robin
+    // under KI_MAX_NUM_OF_IK_AND_LOCATOR_UPDATES. A hinge whose state says "break" on a step its car
+    // was not IK'd is simply not asked. Nothing printed that per step, per car.
+    //
+    // WHAT. One mark per model per deformation step (guDiagDeformationStep, the stamp [jb-exit] and
+    // [joint-int] carry), 60 marks to a line:
+    //   I  UpdateIKAndLocators ran and CheckForDetachment's outer gate was OPEN (hinges were tested)
+    //   G  UpdateIKAndLocators ran but the outer gate was CLOSED (nPhys >= 20, absorption set
+    //      INVINCIBLE, or no IK parts -- the three reads at 0x8263ABE4..0x8263AC08), so nothing tested
+    //   w  Update returned mbIKUpdateRequired but the IK budget skipped the model this step
+    //   .  Update returned false (nothing deformed, nothing pending): no IK, no test
+    //   f  the vehicle was frozen: Update's early-out
+    // plus the counts of each and the most hinged parts seen in the window. A line prints only for a
+    // window in which the car had at least one hinged part. Every read is a member value the
+    // functions already hold; the gate's three members are re-read, not recomputed. Hard cap 30000.
+    // DELETE-WHEN the hinge verdict (HINGE_FINAL.md) is banked.
+    // =============================================================================================
+    namespace
+    {
+        const s32 KI_IK_CADENCE_MODELS = 28;         // BitArray<28> mModelsAdded
+        const s32 KI_IK_CADENCE_WINDOW = 60;         // marks per line
+        const u32 KU_IK_CADENCE_MAX_LINES = 30000u;
+
+        struct IkCadenceTrack
+        {
+            bool mbActive;
+            u32  muStartStep;
+            u32  muStartPresent;
+            u32  muLastStep;
+            u32  muEntity;
+            s32  miNumMarks;
+            s32  miMaxHinged;
+            char macMarks[KI_IK_CADENCE_WINDOW + 1];
+        };
+        IkCadenceTrack gaIkCadence[KI_IK_CADENCE_MODELS] = {};
+        u32 guIkCadenceLines = 0u;
+
+        bool IkCadenceOn()
+        {
+            static s32 siOn = -1;
+            if ( siOn < 0 )
+            {
+                const char* lpcEnv = getenv("BRN_IK_CADENCE_DIAG");
+                siOn = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
+            }
+            return ( siOn == 1 ) && ( CgsDev::Log::gpDebugPrint != 0 );
+        }
+
+        void IkCadenceFlush(s32 liModel, IkCadenceTrack& lrTrack)
+        {
+            if ( lrTrack.mbActive && lrTrack.miNumMarks > 0 && lrTrack.miMaxHinged > 0
+                 && guIkCadenceLines < KU_IK_CADENCE_MAX_LINES )
+            {
+                ++guIkCadenceLines;
+                s32 liIK = 0, liGate = 0, liWanted = 0, liIdle = 0, liFrozen = 0;
+                for ( s32 li = 0; li < lrTrack.miNumMarks; ++li )
+                {
+                    switch ( lrTrack.macMarks[li] )
+                    {
+                        case 'I': ++liIK;     break;
+                        case 'G': ++liGate;   break;
+                        case 'w': ++liWanted; break;
+                        case 'f': ++liFrozen; break;
+                        default:  ++liIdle;   break;
+                    }
+                }
+                lrTrack.macMarks[lrTrack.miNumMarks] = '\0';
+                *CgsDev::Log::gpDebugPrint
+                    << "[ik-cadence] ent " << lrTrack.muEntity
+                    << " model " << liModel
+                    << " step " << lrTrack.muStartStep
+                    << " present " << lrTrack.muStartPresent
+                    << " n " << lrTrack.miNumMarks
+                    << " maxHinged " << lrTrack.miMaxHinged
+                    << " ik " << liIK
+                    << " gateClosed " << liGate
+                    << " budgetSkip " << liWanted
+                    << " notWanted " << liIdle
+                    << " frozen " << liFrozen
+                    << " marks " << static_cast<const char*>(lrTrack.macMarks)
+                    << "\n";
+            }
+            lrTrack.mbActive = false;
+            lrTrack.miNumMarks = 0;
+            lrTrack.miMaxHinged = 0;
+        }
+
+        // Called at the end of DeformableObject::Update (both return paths) with the step's verdict.
+        void IkCadenceMarkUpdate(s32 liModel, u32 luEntity, char lcMark, s32 liNumHinged)
+        {
+            if ( liModel < 0 || liModel >= KI_IK_CADENCE_MODELS )
+            {
+                return;
+            }
+            IkCadenceTrack& lrTrack = gaIkCadence[liModel];
+            const u32 luStep = guDiagDeformationStep;
+            if ( lrTrack.mbActive
+                 && ( lrTrack.miNumMarks >= KI_IK_CADENCE_WINDOW || luStep != lrTrack.muLastStep + 1u
+                      || lrTrack.muEntity != luEntity ) )
+            {
+                IkCadenceFlush(liModel, lrTrack);
+            }
+            if ( !lrTrack.mbActive )
+            {
+                lrTrack.mbActive = true;
+                lrTrack.muStartStep = luStep;
+                lrTrack.muStartPresent = renderengine::guPresentCount;
+                lrTrack.muEntity = luEntity;
+                lrTrack.miNumMarks = 0;
+                lrTrack.miMaxHinged = 0;
+            }
+            lrTrack.macMarks[lrTrack.miNumMarks++] = lcMark;
+            lrTrack.muLastStep = luStep;
+            if ( liNumHinged > lrTrack.miMaxHinged )
+            {
+                lrTrack.miMaxHinged = liNumHinged;
+            }
+        }
+
+        // Called at the top of DeformableObject::UpdateIKAndLocators: upgrade this step's mark.
+        void IkCadenceMarkIK(s32 liModel, bool lbGateOpen)
+        {
+            if ( liModel < 0 || liModel >= KI_IK_CADENCE_MODELS )
+            {
+                return;
+            }
+            IkCadenceTrack& lrTrack = gaIkCadence[liModel];
+            if ( lrTrack.mbActive && lrTrack.miNumMarks > 0 && lrTrack.muLastStep == guDiagDeformationStep )
+            {
+                lrTrack.macMarks[lrTrack.miNumMarks - 1] = lbGateOpen ? 'I' : 'G';
+            }
+        }
+    }
+
+    // =============================================================================================
     // UpdateIKAndLocators @0x82642230 (117; PS3 0x765220, 740) -- the IK/locator/wheel/glass pass
     // the manager budgets per frame. X360 flow, call for call:
     //   assert mbActive (:1801); assert mbIKUpdateRequired || gboEnableDeformationDebug (:1806);
@@ -2757,6 +2944,16 @@ namespace Deformation
         // ARTIST 0x82642298..0x826422B0 also permits the selected debug rig.
         CGS_ASSERT(mbIKUpdateRequired || kbAllowDeformationDebug,
                    "mbIKUpdateRequired || gboEnableDeformationDebug");   // :1806
+
+        // [ik-cadence] (DIAG, BRN_IK_CADENCE_DIAG): this step's model was IK'd. The outer-gate reads
+        // are the three members CheckForDetachment tests at 0x8263ABE4..0x8263AC08 (cmpwi 20 / 4 / 0).
+        if ( IkCadenceOn() )
+        {
+            IkCadenceMarkIK(static_cast<s32>(mu16DeformableObjectIndex),
+                            mi16NumPhysicalParts < 20
+                            && meAbsorptionSet != E_ABSORPTIONSET_INVINCIBLE
+                            && miNumIKBodyParts > 0);
+        }
 
         CheckForDetachment(lpInput, lpOutput, lpPartMgr, lvfTimeStep.x);
 
@@ -2864,6 +3061,11 @@ namespace Deformation
         BrnPhysics::Vehicle::VehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
         if ( lpVehicle->IsFrozen() )        // *(vp+112) early-out
         {
+            if ( IkCadenceOn() )   // [ik-cadence] (DIAG) -- a frozen step: no update, no IK.
+            {
+                IkCadenceMarkUpdate(static_cast<s32>(mu16DeformableObjectIndex), mGlobalEntityId.muValue,
+                                    'f', static_cast<s32>(mi16NumHingedParts));
+            }
             return mbIKUpdateRequired;
         }
 
@@ -2991,6 +3193,12 @@ namespace Deformation
         }
 
         (void)lpModuleInput;
+
+        if ( IkCadenceOn() )   // [ik-cadence] (DIAG) -- the value this function is about to return.
+        {
+            IkCadenceMarkUpdate(static_cast<s32>(mu16DeformableObjectIndex), mGlobalEntityId.muValue,
+                                mbIKUpdateRequired ? 'w' : '.', static_cast<s32>(mi16NumHingedParts));
+        }
         return mbIKUpdateRequired;
     }
 
