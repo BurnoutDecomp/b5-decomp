@@ -22,8 +22,11 @@ $case.DiagEnv += ',BRN_TD_DIAG=1,BRN_DIRECTOR_ACTION_DIAG=1,BRN_CRASHCAM_DIAG=1,
 # RaceCarEntityModule -> CrashPlayManager::OnBounce (the [crashplay] `charge` counter). Bouncing also carries
 # the car further along the road than the bare launch, i.e. past more traffic. The extra time is for the
 # longer Showtime the bounces buy.
-$case.Run.Boost = '41'
-$case.Run.MaxSeconds = 170
+# FX-DIRECTOR2 2026-09-25: 50 / 179 (were 41 / 170). The boost still starts 1 s after ShowtimeContacts' gesture,
+# which moved 40 -> 49 to clear the crash analyser's 401-update hold on the drive's first wall crash
+# (see ShowtimeContacts.ps1).
+$case.Run.Boost = '50'
+$case.Run.MaxSeconds = 179
 # Before (b5 cbe64697 and earlier, e.g. scratch/flow_run/cp3/BrnGame.log 2026-08-29): `[crashplay] ... press=64
 # arm=64 charge=0` -- 64 accepted bounce presses and not one reached OnBounce, because no arm relayed event 52.
 $case.Checks += @(

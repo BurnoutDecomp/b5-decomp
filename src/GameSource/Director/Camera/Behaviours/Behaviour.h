@@ -89,7 +89,7 @@ namespace BrnDirector
     class AllVehicleData;
     class WorldMap;
     class VehicleTracker;
-    class SceneQueryInterface;
+    struct SceneQueryInterface;   // the definition's key (BrnSceneQueryInterface.h; DWARF `struct`)
     struct DebugLog;
     struct DebugPrinter;
 

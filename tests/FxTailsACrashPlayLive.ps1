@@ -14,8 +14,11 @@ $case = & (Join-Path $PSScriptRoot 'ShowtimeContacts.ps1')
 $case.Name = 'fxtailsa_crash_play'
 $case.Bug = 'CrashPlayManager::OnBounce and OnVehicleHitConfirmed must run in a live Showtime with the console''s arithmetic: every bounce charge and every scored traffic hit reaches the manager, and each unchained hit pays 20 + 15 * (clamp(base, 1000, 5000) - 1000) / 4000 (0x82CDB508 / 0x82CDB50C / 0x82CDB55C / 0x82CDB560), with no assertions.'
 $case.DiagEnv += ',BRN_CRASHPLAY_TRACE=1'
-$case.Run.Boost = '41'
-$case.Run.MaxSeconds = 170
+# FX-DIRECTOR2 2026-09-25: 50 / 179 (were 41 / 170). The boost still starts 1 s after ShowtimeContacts' gesture,
+# which moved 40 -> 49 to clear the crash analyser's 401-update hold on the drive's first wall crash
+# (see ShowtimeContacts.ps1).
+$case.Run.Boost = '50'
+$case.Run.MaxSeconds = 179
 $case.Checks += @(
     @{ Kind = 'Script'; Name = 'OnBounce''s charged arm ran (the fused bounce cost was spent)'; Script = {
         param($ctx)

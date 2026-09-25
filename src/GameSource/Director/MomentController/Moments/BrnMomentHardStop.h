@@ -4,7 +4,7 @@
 #include "GameSource/Director/MomentController/BrnMoment.h"     // BrnDirector::Moment (base)
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"     // Camera::BehaviourHandle<T> / BehaviourManager
 #include "GameSource/Director/Camera/Camera.h"                  // Camera::Camera::ShotSelectionInfo
-#include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h" // CrashAnalysis (the 8-byte snapshot)
+#include "GameSource/Director/BrnCrashAnalyser.h"                 // CrashAnalysis (the 8-byte snapshot; its DWARF home)
 
 // BrnDirector::MomentHardStop - the "hard stop" crash camera moment: on an
 // eligible crash it selects TWO candidate crash shots (a preferred-side A and a

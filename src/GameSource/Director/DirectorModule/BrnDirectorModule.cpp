@@ -31,6 +31,7 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp" // DirectorIO::OutputBuffer
 #include "GameSource/Director/Utils/BrnSceneQueryInterface.h"      // BrnDirector::SceneQueryInterface (the per-frame post office)
+#include "GameSource/Director/BrnDirectorHarness.h"               // [FX-DIRECTOR2 opt-in] Harness::SceneQueryClosureEnabled
 
 namespace BrnDirector
 {
@@ -104,6 +105,17 @@ void DirectorModule::Construct(f32 lfTime)
     // BaseEventReceiverQueue::AddEvent takes `(liSize + 8) % miAlignment` -- an
     // unconstructed queue has miAlignment == 0 and the first reply divides by zero.
     mWorldMap.Construct();
+
+    // The six scene-query post offices (0x8225C638..0x8225C660): PostOffice::Construct inlined --
+    // the fine office gets its Array's length word (`stw 0, 0x28`) and then its specialised Clear
+    // out of line (`bl sub_8221CC98`); the other five fold Construct + Clear into the single
+    // length-word store (+0xA70 / +0xA9C / +0xAC8 / +0xAD0 / +0xAFC).
+    mLineTestFinePostOffice.Construct();
+    mLineTestNearestPostOffice.Construct();
+    mLineTestFastDoubleSidedPostOffice.Construct();
+    mSphereTestFastPostOffice.Construct();
+    mVolumeTestFinePostOffice.Construct();
+    mVolumeTestDeepestPostOffice.Construct();
 
     mCamera.Construct();
 
@@ -271,47 +283,94 @@ bool DirectorModule::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
 }
 
 // ----------------------------------------------------------------------------
-// ProcessSceneQueryResults  @ 0x82239278   -- ⚠️ DOCUMENTED QUIET GATE
+// ProcessSceneQueryResults  @ 0x82239278
 //
-// Drain the scene-query RESULTS queue the SceneManager published back into the director's
-// scene-query INPUT buffer, and hand each result to the post office that minted its query
-// id. The X360 body is a plain VariableEventQueue<4032,16> walk
-// (GetFirstEvent / GetNextEvent) with a 6-way switch on the RESULT TYPE:
+// ⭐ BODIED 2026-09-25 (FX-DIRECTOR2, the camera scene-query closure). It was a quiet gate because
+// the six delivery helpers were IDA-truncated; they are PostOffice<T,N>::Deliver (BrnPostOffice.h),
+// one instantiation per result record, and all six are read.
 //
-//   type 1 -> post office @this+2468 (+0x9A4)   (delivery helper IDA-truncated to `__`)
-//   type 2 -> post office @this+2512 (+0x9D0)   OutEventLineTestNearestResult<40>
-//   type 3 -> post office @this+2676 (+0xA74)   OutEventLineTestFastDoubleSidedResult<..>
-//   type 4 -> post office @this+2720 (+0xAA0)   OutEventSphereTestFastResult<10>
-//   type 5 -> post office @this+2772 (+0xAD4)   OutEventVolumeTestDeepestResult<10>
-//   type 6 -> post office @this+2764 (+0xACC)   OutEventVolumeTestFineResult<1>
-//   default -> assert "Unhandled result type" (BrnDirectorModule.cpp:537)
-// (note types 5 and 6 land on the post offices in the OPPOSITE order to their declaration
-//  -- see the header; that crossover is the binary's, not a transcription slip.)
+// Drain the results the SceneManager answered this frame -- DoUpdate_Director appended them into
+// the scene-query INPUT buffer's queue (VariableEventQueue<4032,16>::Append<32768,16> @0x823DA090)
+// -- and hand each to the post office that minted its id. The walk is GetFirstEvent /
+// GetNextEvent, stopping on a null event (`lwz r31, var_40 ; cmplwi r31, 0`); the switch is on the
+// RESULT TYPE (`addi r11, r3, -1 ; cmplwi r11, 5`), and the id is always the low half of the
+// record's query id (`clrlwi r4, r11, 16` -- SceneQueryId::GetIndex()):
+//   type 1  +0x9A4  LineTestFine       id at +0x00; the package is the RECORD'S ADDRESS
+//                                      (`stw r31, var_3C ; addi r5, r1, var_3C`)
+//   type 2  +0x9D0  LineTestNearest    id at +0x28 (the nearest record's mQueryId)
+//   type 3  +0xA74  FastDoubleSided    id at +0x00
+//   type 4  +0xAA0  SphereTestFast     id at +0x00
+//   type 5  +0xAD4  VolumeTestDeepest  id at +0x00
+//   type 6  +0xACC  VolumeTestFine     id at +0x00
+//   default         assert "Unhandled result type" (BrnDirectorModule.cpp:537, non-gating)
+// Its one caller is Update @0x82275300. The records are the queue's byte images (the sanctioned
+// external-byte-stream case), read through their SceneManagerIO types.
 //
-// WHY GATED: every one of the six delivery calls is an IDA-TRUNCATED symbol
-// (`CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult_40_::` and siblings) --
-// the member NAME is cut off mid-token, so neither the function nor its signature is
-// recovered, and type 1's helper has no recovered name at all. Guessing six cross-module
-// entry points would be fabrication. The post offices themselves are correctly sized and
-// staged (see the header), and BrnDirector::SceneQueryInterface::Clear -- which resets them
-// each frame -- is already real, so nothing goes stale while this is gated.
-//
-// CONSEQUENCE WHILE GATED: results the SceneManager returns are not delivered, so any
-// director query (camera collision line tests, the visibility/geometry predictors) reports
-// "no result" rather than a wrong one. The director's camera path does not depend on a
-// query answer to produce a camera -- it degrades, it does not break -- and no query is
-// issued at all until the MainDirector middle is un-gated.
-//
-// DELETE-WHEN: delete this gate and transcribe the 6-way switch once the six
-// SceneManagerIO OutEvent*Result post-office delivery functions have recovered names +
-// signatures (headless IDA 9.3 on artist_copy.i64 will de-truncate them; they are members
-// of the OutEvent*Result queue templates already homed under
-// GameShared/GameClasses/SceneManager/).
+// ⚠️ [FX-DIRECTOR2 opt-in, NOT X360] The CALL is behind BRN_FXD2_SCENEQUERY in Update until one
+// live run with the whole query path ON is clean -- see Harness::SceneQueryClosureEnabled().
 // ----------------------------------------------------------------------------
 void DirectorModule::ProcessSceneQueryResults(
         const DirectorIO::SceneQueryInputBuffer* lpSceneQueryInputBuffer)
 {
-    (void)lpSceneQueryInputBuffer;
+    typedef CgsSceneManager::SceneManagerIO::OutEventLineTestFineResult            FineResult;
+    typedef CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult         NearestResult;
+    typedef CgsSceneManager::SceneManagerIO::OutEventLineTestFastDoubleSidedResult FastDoubleSidedResult;
+    typedef CgsSceneManager::SceneManagerIO::OutEventSphereTestFastResult          SphereResult;
+    typedef CgsSceneManager::SceneManagerIO::OutEventVolumeTestDeepestResult       DeepestResult;
+    typedef CgsSceneManager::SceneManagerIO::OutEventVolumeTestFineResult          VolumeFineResult;
+
+    const CgsSceneManager::SceneManagerIO::OutSceneQueryResultsQueue<4032>* lpResults =
+        lpSceneQueryInputBuffer->GetResultsQueue();                                // 0x82206BA8
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    for (s32 liType = lpResults->GetFirstEvent(&lpEvent, &liSize);
+         lpEvent != 0;
+         liType = lpResults->GetNextEvent(lpEvent, &lpEvent, &liSize))
+    {
+        switch (liType)
+        {
+        case 1:
+        {
+            const FineResult* lpResult = reinterpret_cast<const FineResult*>(lpEvent);
+            mLineTestFinePostOffice.Deliver(lpResult->mQueryId.GetIndex(), lpResult);
+            break;
+        }
+        case 2:
+        {
+            const NearestResult* lpResult = reinterpret_cast<const NearestResult*>(lpEvent);
+            mLineTestNearestPostOffice.Deliver(lpResult->mQueryId.GetIndex(), *lpResult);
+            break;
+        }
+        case 3:
+        {
+            const FastDoubleSidedResult* lpResult = reinterpret_cast<const FastDoubleSidedResult*>(lpEvent);
+            mLineTestFastDoubleSidedPostOffice.Deliver(lpResult->mQueryId.GetIndex(), *lpResult);
+            break;
+        }
+        case 4:
+        {
+            const SphereResult* lpResult = reinterpret_cast<const SphereResult*>(lpEvent);
+            mSphereTestFastPostOffice.Deliver(lpResult->mQueryId.GetIndex(), *lpResult);
+            break;
+        }
+        case 5:
+        {
+            const DeepestResult* lpResult = reinterpret_cast<const DeepestResult*>(lpEvent);
+            mVolumeTestDeepestPostOffice.Deliver(lpResult->mQueryId.GetIndex(), *lpResult);
+            break;
+        }
+        case 6:
+        {
+            const VolumeFineResult* lpResult = reinterpret_cast<const VolumeFineResult*>(lpEvent);
+            mVolumeTestFinePostOffice.Deliver(lpResult->mQueryId.GetIndex(), *lpResult);
+            break;
+        }
+        default:
+            CGS_ASSERT(false, "Unhandled result type");                           // .cpp:537
+            break;
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -393,13 +452,13 @@ s32 DirectorModule::PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
     // ---- 3. the per-frame scene-query post office ----------------------------------
     // This pass populates ALL SIX post offices: it is the one that may MINT query ids.
     SceneQueryInterface lSceneQuery;
-    lSceneQuery.mpSceneQueryInterface          = lpProducerOf(lpSceneQueryOutputBuffer);
-    lSceneQuery.mpPostOffice04                 = mSceneQueryPostBoxA;                 // +0x9A4
-    lSceneQuery.mpPostOffice08                 = mPostBoxLineTestNearest;             // +0x9D0
-    lSceneQuery.mpPostOffice0C                 = mPostBoxLineTestFastDoubleSided;     // +0xA74
-    lSceneQuery.mpPostOffice10                 = mPostBoxSphereTestFast;              // +0xAA0
-    lSceneQuery.mpPostOffice14                 = mPostBoxVolumeTestFine;              // +0xACC
-    lSceneQuery.mpVolumeTestDeepestPostOffice  = mPostBoxVolumeTestDeepest;           // +0xAD4
+    lSceneQuery.Construct(lpProducerOf(lpSceneQueryOutputBuffer),
+                          &mLineTestFinePostOffice,               // +0x9A4
+                          &mLineTestNearestPostOffice,            // +0x9D0
+                          &mLineTestFastDoubleSidedPostOffice,    // +0xA74
+                          &mSphereTestFastPostOffice,             // +0xAA0
+                          &mVolumeTestFinePostOffice,             // +0xACC
+                          &mVolumeTestDeepestPostOffice);         // +0xAD4
     lSceneQuery.Clear();
 
     // ---- 4. hand off to whichever director is driving ------------------------------
@@ -483,8 +542,12 @@ s32 DirectorModule::Update(s32 liUnusedA, s32 liUnusedB,
     lpOutputBuffer->LockForWrite();
     lpSceneQueryOutputBuffer->LockForWrite();
 
-    // ---- 1. deliver last frame's scene-query answers -------------------------------
-    ProcessSceneQueryResults(lpSceneQueryInputBuffer);
+    // ---- 1. deliver this frame's scene-query answers ------------------------------------
+    // (DoUpdate_Director ran the queries PreSceneQueryUpdate issued between the two passes.)
+    // ⚠️ [FX-DIRECTOR2 opt-in, NOT X360] behind BRN_FXD2_SCENEQUERY with the rest of the query
+    // path until one live run with it ON is clean; the console calls it unconditionally.
+    if (Harness::SceneQueryClosureEnabled())
+        ProcessSceneQueryResults(lpSceneQueryInputBuffer);
 
     // ---- 2. the post office, PRODUCER SLOT ONLY ------------------------------------
     // asm: v29[0] = SceneQueryOutputB(a7); memset(&v29[1], 0, 24);  -- the six post-office
@@ -492,13 +555,7 @@ s32 DirectorModule::Update(s32 liUnusedA, s32 liUnusedB,
     // subsequent Clear() is a no-op. Reproduced verbatim: this pass consumes answers, it
     // does not issue queries.
     SceneQueryInterface lSceneQuery;
-    lSceneQuery.mpSceneQueryInterface         = lpProducerOf(lpSceneQueryOutputBuffer);
-    lSceneQuery.mpPostOffice04                = 0;
-    lSceneQuery.mpPostOffice08                = 0;
-    lSceneQuery.mpPostOffice0C                = 0;
-    lSceneQuery.mpPostOffice10                = 0;
-    lSceneQuery.mpPostOffice14                = 0;
-    lSceneQuery.mpVolumeTestDeepestPostOffice = 0;
+    lSceneQuery.Construct(lpProducerOf(lpSceneQueryOutputBuffer), 0, 0, 0, 0, 0, 0);
     lSceneQuery.Clear();
 
     DirectorInputOutput lIO;
@@ -604,13 +661,7 @@ s32 DirectorModule::PostGuiUpdate(s32 liUnusedA, s32 liUnusedB,
     if (!mbIsReplaying)
     {
         SceneQueryInterface lSceneQuery;
-        lSceneQuery.mpSceneQueryInterface         = 0;   // even slot 0 -- see the note above
-        lSceneQuery.mpPostOffice04                = 0;
-        lSceneQuery.mpPostOffice08                = 0;
-        lSceneQuery.mpPostOffice0C                = 0;
-        lSceneQuery.mpPostOffice10                = 0;
-        lSceneQuery.mpPostOffice14                = 0;
-        lSceneQuery.mpVolumeTestDeepestPostOffice = 0;
+        lSceneQuery.Construct(0, 0, 0, 0, 0, 0, 0);   // even slot 0 -- see the note above
         lSceneQuery.Clear();
 
         DirectorInputOutput lIO;

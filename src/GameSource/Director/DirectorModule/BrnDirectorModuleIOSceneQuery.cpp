@@ -31,51 +31,112 @@ namespace BrnDirector
 {
 namespace DirectorIO
 {
-    // (The two buffer declarations that used to live here now sit in the sibling header
-    // BrnDirectorModuleIOSceneQuery.h -- promoted verbatim so DirectorModule's per-frame
-    // entry points can name them in their signatures. Nothing else changed.)
+    // ---- SceneQueryOutputBuffer --------------------------------------------------------------
 
-    // ---- SceneQueryOutputBuffer::GetSceneQueryInterface (read/write) -------------------------
+    // X360 0x82239578 (the CreateIOBuffer<SceneQueryOutputBuffer> instantiation @0x823AF4C0 calls it).
+    //   stb 1, 0(this)                         -- IOBuffer::Construct (the status byte)
+    //   six EventQueue<T,N>::Construct         -- +0x30 / +0x2C0 / +0xCD0 / +0xF60 / +0x1150 / +0x1A20
+    //                                             (0x8222DA08 / DA78 / DAE8 / DB58 / DBC8 / DC38)
+    //   six `stw 0` to each queue's length     -- +0x38 / +0x2C8 / +0xCD8 / +0xF68 / +0x1158 / +0x1A28
+    //                                             (the inlined Clear)
+    //   the interface's nine slots             -- the six queues in the producer's slot order
+    //                                             (fine, nearest, fast-DS, sphere, deepest, volume-fine)
+    //                                             then three NULL triangle-collision slots
+    //                                             (+0x1C / +0x20 / +0x24; the director never asks one)
+    void SceneQueryOutputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
 
-    // X360 0x823B25F0 (BrnDirectorModuleIO.h:510): read-lock; return &mSceneQueryInterface (this+4).
-    // DWARF (BrnDirectorModuleIO.h:468/479): SceneQueryInterface mSceneQueryInterface @+4;
-    // GetSceneQueryInterface() const returns const SceneQueryInterface*.
-    const SceneQueryInterface* SceneQueryOutputBuffer::GetSceneQueryInterface() const
+        mFineLineTestQueue.Construct();
+        mFineLineTestNearestQueue.Construct();
+        mFineLineTestFastDoubleSidedQueue.Construct();
+        mSphereTestFastQueue.Construct();
+        mFineVolumeTestDeepestQueue.Construct();
+        mFineVolumeTestQueue.Construct();
+
+        mFineLineTestQueue.Clear();
+        mFineLineTestNearestQueue.Clear();
+        mFineLineTestFastDoubleSidedQueue.Clear();
+        mSphereTestFastQueue.Clear();
+        mFineVolumeTestDeepestQueue.Clear();
+        mFineVolumeTestQueue.Clear();
+
+        mSceneQueryInterface.mpFineLineTestQueue                      = &mFineLineTestQueue;
+        mSceneQueryInterface.mpFineLineTestNearestQueue               = &mFineLineTestNearestQueue;
+        mSceneQueryInterface.mpFineLineTestFastDoubleSidedQueue       = &mFineLineTestFastDoubleSidedQueue;
+        mSceneQueryInterface.mpFineSphereTestFastQueue                = &mSphereTestFastQueue;
+        mSceneQueryInterface.mpFineVolumeTestDeepestQueue             = &mFineVolumeTestDeepestQueue;
+        mSceneQueryInterface.mpFineVolumeTestQueue                    = &mFineVolumeTestQueue;
+        mSceneQueryInterface.mpTriangleCollisionLineTestQueue         = 0;
+        mSceneQueryInterface.mpTriangleCollisionLineTestNearestQueue  = 0;
+        mSceneQueryInterface.mpTriangleCollisionSphereTestQueue       = 0;
+    }
+
+    // X360 0x8221B3F8 (DestroyIOBuffer<SceneQueryOutputBuffer> @0x823AF590 calls it): four `stw 0`
+    // -- the lengths of the fine (+0x38), nearest (+0x2C8), deepest (+0x1158) and volume-fine
+    // (+0x1A28) queues -- then a tail jump to IOBuffer::Destruct. The fast-DS and sphere queues'
+    // lengths are NOT cleared (the console's own four stores; reproduced).
+    // (Retired: the local fork of this body in BrnDirectorModuleIO.cpp, which was never mounted.)
+    void SceneQueryOutputBuffer::Destruct()
+    {
+        mFineLineTestQueue.Clear();
+        mFineLineTestNearestQueue.Clear();
+        mFineVolumeTestDeepestQueue.Clear();
+        mFineVolumeTestQueue.Clear();
+        CgsModule::IOBuffer::Destruct();
+    }
+
+    // X360 0x823B25F0 (BrnDirectorModuleIO.h:510): read-lock; return &mSceneQueryInterface.
+    const CgsSceneManager::SceneManagerIO::SceneQueryInterface* SceneQueryOutputBuffer::GetSceneQueryInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return reinterpret_cast<const SceneQueryInterface*>(reinterpret_cast<const u8*>(this) + 4);
+        return &mSceneQueryInterface;
     }
 
-    // X360 0x82206B00 (BrnDirectorModuleIO.h:511): write-lock; return &mSceneQueryInterface (this+4).
-    // Non-const (write-side) overload; tests bit 3 (write-lock). DWARF line 480.
-    SceneQueryInterface* SceneQueryOutputBuffer::GetSceneQueryInterface()
+    // X360 0x82206B00 (BrnDirectorModuleIO.h:511): write-lock; return &mSceneQueryInterface.
+    CgsSceneManager::SceneManagerIO::SceneQueryInterface* SceneQueryOutputBuffer::GetSceneQueryInterface()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return reinterpret_cast<SceneQueryInterface*>(reinterpret_cast<u8*>(this) + 4);
+        return &mSceneQueryInterface;
     }
 
-    // ---- SceneQueryInputBuffer::GetResultsQueue (write) -------------------------------------
+    // ---- SceneQueryInputBuffer ---------------------------------------------------------------
 
-    // X360 0x823B2698 (BrnDirectorModuleIO.h:558): write-lock; return &mResultsQueue (this+4).
-    // Non-const (write-side) overload; tests bit 3 (write-lock). DWARF (BrnDirectorModuleIO.h:503/527)
-    // types the member OutSceneQueryResultsQueue<4032> mResultsQueue @+4 (first member after the
-    // 1-byte IOBuffer base). Address-return only -> the queue interior is not needed here. (The
-    // const read-lock GetResultsQueue() overload is NOT one of the 7 funcs in this batch.)
-    OutSceneQueryResultsQueue<4032>* SceneQueryInputBuffer::GetResultsQueue()
+    // X360 0x8221B310 (CreateIOBuffer<SceneQueryInputBuffer> @0x823AF318 calls it):
+    //   stb 1, 0(this); mResultsQueue.Construct(); if (!mResultsQueue.Prepare()) assert (:192).
+    void SceneQueryInputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mResultsQueue.Construct();
+        const bool lbPrepared = mResultsQueue.Prepare();
+        CGS_ASSERT(lbPrepared, "mResultsQueue.Prepare()");                        // BrnDirectorModuleIO.cpp:192
+        (void)lbPrepared;
+    }
+
+    // X360 0x8221B380 (DestroyIOBuffer<SceneQueryInputBuffer> @0x823AF3E8 calls it):
+    //   if (!mResultsQueue.Release()) assert (:207); mResultsQueue.Destruct(); IOBuffer::Destruct().
+    void SceneQueryInputBuffer::Destruct()
+    {
+        const bool lbReleased = mResultsQueue.Release();
+        CGS_ASSERT(lbReleased, "mResultsQueue.Release()");                        // BrnDirectorModuleIO.cpp:207
+        (void)lbReleased;
+        mResultsQueue.Destruct();
+        CgsModule::IOBuffer::Destruct();
+    }
+
+    // X360 0x823B2698 (BrnDirectorModuleIO.h:558): write-lock; return &mResultsQueue.
+    SceneQueryInputBuffer::ResultsQueue* SceneQueryInputBuffer::GetResultsQueue()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return reinterpret_cast<OutSceneQueryResultsQueue<4032>*>(reinterpret_cast<u8*>(this) + 4);
+        return &mResultsQueue;
     }
 
-    // X360 0x82206BA8 (BrnDirectorModuleIO.h:557 assert; DWARF decl line 526): read-lock;
-    // return &mResultsQueue (this+4). const (read-side) complement of the write-lock
-    // GetResultsQueue() @0x823B2698 (DWARF line 527). Asm tests bit 4 (read-lock: extrwi r11,r11,1,27)
-    // then addi r3,r28,4. Caller DirectorModule::ProcessSceneQueryResults consumes the queue read-only.
-    // Rodata carries the trailing newline (aNotLockedForRe) -- kept verbatim.
-    const OutSceneQueryResultsQueue<4032>* SceneQueryInputBuffer::GetResultsQueue() const
+    // X360 0x82206BA8 (BrnDirectorModuleIO.h:557): read-lock; return &mResultsQueue. The rodata
+    // carries the trailing newline (aNotLockedForRe) -- kept verbatim.
+    const SceneQueryInputBuffer::ResultsQueue* SceneQueryInputBuffer::GetResultsQueue() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-        return reinterpret_cast<const OutSceneQueryResultsQueue<4032>*>(reinterpret_cast<const u8*>(this) + 4);
+        return &mResultsQueue;
     }
 }
 }

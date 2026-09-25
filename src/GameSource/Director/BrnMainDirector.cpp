@@ -38,6 +38,8 @@
 // ============================================================================
 
 #include "GameSource/Director/BrnMainDirector.h"
+#include "GameSource/Director/Camera/BrnCollisionPolicy.h"          // Camera::CollisionPolicySharedInfo (the scene-query pair)
+#include "GameSource/Director/BrnDirectorHarness.h"                 // [FX-DIRECTOR2 opt-in] Harness::SceneQueryClosureEnabled
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                  // BrnGui::GuiPFXHookEnumeration (the 501 record PostGuiUpdate consumes)
 
 #include "GameSource/Director/DirectorModule/BrnDirectorInputOutput.h" // BrnDirector::DirectorInputOutput
@@ -407,7 +409,10 @@ namespace BrnDirector
         // shot clock would all start as allocator garbage the first time a shake is requested.
         mCameraFinaliser.Construct(lpResourceManager);
 
-        // ⚠️ GATE: ShotSelector::Construct.
+        // ⭐ REAL (2026-09-24, FX-DIRECTOR2): ShotSelector::Construct(this + 0x121F0, lpResourceManager)
+        // @0x8225B7F8, between the finaliser's KeyAnimShakeController::Construct and the ICE wrapper,
+        // as on the console. The selector keeps the resource manager for GetCrashShot's shot banks.
+        mShotSelector.Construct(lpResourceManager);
 
         // ⭐ REAL (was held back for host size): the ICE wrapper.
         mICEWrapper.Construct();
@@ -419,6 +424,12 @@ namespace BrnDirector
         // including the junkyard sub-state the car-select ladder tests -- started as whatever
         // the allocator's memory happened to hold.
         maGameState.Clear();
+
+        // ⭐ REAL (2026-09-24, FX-DIRECTOR2): the inlined DebugLog::Construct over +0x33108
+        // (0x8225B824..0x8225B87C), straight after GameState::Clear as on the console. The moments
+        // and the crashing arbitrator state append to this log; unconstructed, its first Append
+        // wrote through pool index -1.
+        mDebugLog.Construct();
 
         // ⚠️ GATE: the three DebugPrinter::Constructs.
 
@@ -516,7 +527,10 @@ namespace BrnDirector
             // fall through
         case 1:
             miPrepareStage = 1;
-            // ⚠️ GATE: the frame counter inside maShotAndAnalysisBlock (console +0x121A0).
+            // The inlined ShotSelector::Prepare (PS3 @0x15000): `stwx r28(=0), r31, 0x12454`
+            // @0x8224FBE4 -- the selector's use clock miCurrentTimeID, NOT a frame counter at +0x121A0
+            // as this line used to say. The console ignores its `return true`.
+            mShotSelector.Prepare();
             // fall through
         case 2:
             miPrepareStage = 2;
@@ -775,8 +789,7 @@ namespace BrnDirector
         lrSharedInfo.mpSharedCameraContainer = 0;                                   // +0x00 (callee-filled)
         lrSharedInfo.mpDebugPrinter          = reinterpret_cast<DebugPrinter*>(
                                                   const_cast<u8*>(maDebugPrinterMain));         // +0x04
-        lrSharedInfo.mpDebugLog              = reinterpret_cast<DebugLog*>(
-                                                  const_cast<u8*>(maDebugLog));                 // +0x08
+        lrSharedInfo.mpDebugLog              = const_cast<DebugLog*>(&mDebugLog);               // +0x08
         lrSharedInfo.mpICEWrapper            = const_cast<ICEWrapper*>(&mICEWrapper);           // +0x0C
         lrSharedInfo.mpOutputInterface       = reinterpret_cast<DirectorOutputInterface*>(
                                                   lpOutput->GetDirectorOutputIn());             // +0x10
@@ -866,11 +879,13 @@ namespace BrnDirector
     //         miForcedCameraCarIndex = playerIndex;
     //         VehicleTracker::Update( maVehicleTracker, maGameState, input, playerIndex, ... )
     //     }
-    //     CrashAnalyser::Update( maShotAndAnalysisBlock+..., input, maGameState, playerIndex )
+    //     CrashAnalyser::Update( &mCrashAnalyser /*+0x1245C*/, input, &maGameState, playerIndex )
     //     Camera::BehaviourManager::ReleaseBehaviours( &mBehaviourManager )
-    //     if ( <flag> )  <clear a GameState latch>
+    //     if ( mbDisableAftertouchCamera )  maGameState.mbImpactTimeActive = false
     //     MainDirector::UpdateCameraBehavioursPreScene( this, lpIO, playerIndex )
-    // and it also clears the "ICE just finished" latch at the very top.
+    // and at the very top, before the guard, a debug-tweakable latch clear:
+    //     if ( mbDebugSingleTimestep /*+0x3543D*/ )  mbDebugZeroTimestep /*+0x3543C*/ = 0
+    //                                                    (0x8225BA1C..0x8225BA40)
     //
     // ⭐ STEP 2 IS NOW REAL. ProcessInputQueue is the ONLY consumer of the input buffer's
     // GAME-ACTION QUEUE and therefore the only writer of GameState::meJunkyardState in the
@@ -878,23 +893,24 @@ namespace BrnDirector
     // ArbStateRoaming could never hand the arbitrator to E_STATE_CAR_SELECT -- i.e. neither
     // the junkyard nor the retail intro camera was reachable, at ANY link-closure count.
     //
-    // ⚠️ THE REST OF THE GUARDED BODY IS STILL A DOCUMENTED QUIET GATE. AllVehicleData /
-    // VehicleTracker / CrashAnalyser are named opaque regions with no interiors, and
-    // UpdateCameraBehavioursPreScene / BehaviourManager::ReleaseBehaviours are themselves
-    // declaration-only (the last because its per-slot work drives the un-homed Behaviour
-    // vtable).
+    // ⭐ EVERY STEP OF THE GUARDED BODY NOW RUNS (2026-09-24, FX-DIRECTOR2 landed the last one,
+    // CrashAnalyser::Update). What is still deferred lives INSIDE the callees and is flagged there:
+    // AllVehicleData's traffic array / nearest-car rebuild (UpdateRaceCarsBringUp) and
+    // VehicleTracker's score copy. The one step NOT reproduced is the debug-tweakable latch clear
+    // at the top (mbDebugSingleTimestep -> mbDebugZeroTimestep, both seeded 0 by Construct at
+    // 0x8225B9DC / 0x8225B9C8, `li r31, 0` @0x8225B484, and inert on retail).
     //
     // ⚠️ THE CONSOLE'S SECOND TEST is reproduced: `usedRaceCars.IsBitSet(playerCarIndex)`.
     // GetLivePlayerCarIndex already folds it in (see the header), so the guard below IS both
     // halves -- the X360 re-tests the bit because it inlines the index fetch, not because
     // there is a second condition.
     //
-    // DELETE-WHEN: AllVehicleData / VehicleTracker / CrashAnalyser are homed and
-    // UpdateCameraBehavioursPreScene is bodied.
     // ------------------------------------------------------------------------
     void MainDirector::PreSceneQueryUpdate(const DirectorInputOutput* lpIO)
     {
-        // ⚠️ GATE: the "ICE sequence just finished" latch clear (maStateFlagTail).
+        // ⚠️ GATE (debug only): `if (+0x3543D) stbx 0 -> +0x3543C` @0x8225BA24..0x8225BA40 --
+        // maStateFlagTail[E_FLAG_TAIL_DEBUG_SINGLE_TIMESTEP] clearing
+        // maStateFlagTail[E_FLAG_TAIL_DEBUG_ZERO_TIMESTEP]. Not reproduced here.
 
         const s32 liPlayerCarIndex = GetLivePlayerCarIndex(lpIO);
         if (liPlayerCarIndex == -1)
@@ -942,20 +958,51 @@ namespace BrnDirector
         // DirectorIO::InputBuffer whose accessors nothing defined. That fork is retired and the
         // body is re-fitted to the real InputBuffer, so this call is now honest.
         //
-        // ⚠️ STILL GATED INSIDE Update: the crash-ENERGY classifier and the score copy. See the
-        // two GATE notes in BrnDirectorVehicleTracker.cpp -- the classifier's thresholds are
-        // unrecovered .data floats, and running it on the 0.0f placeholders would answer
-        // E_CRASH_LOW_ENERGY every time, which is the one value that SUPPRESSES the slow motion.
+        // ⚠️ STILL GATED INSIDE Update: the score copy (see the GATE note in
+        // BrnDirectorVehicleTracker.cpp). The crash-ENERGY classifier is live since 2026-09-24
+        // (FX-DIRECTOR2: its two bands read out of the image), and the fourth argument is the
+        // console's: `lbzx r7, r28, 0x35437` @0x8225BCBC -- mbForceNextWorldCrashToBeFastTopDown,
+        // a ONE-SHOT: Construct seeds it 1 (0x8225B924) and Update's tail clears it on the first frame
+        // of a crash (0x822752B4..0x822752D0), so only the first wall crash after boot is forced HIGH.
+        // It used to be a literal false here, so that crash could never classify HIGH the console's way.
         if (!lpIO->mpInputBuffer->IsSimPaused())
         {
             miForcedCameraCarIndex = liPlayerCarIndex;
             mVehicleTracker.SetVehicleIndex(liPlayerCarIndex);
             mVehicleTracker.Update(&maGameState, lpIO->mpInputBuffer,
                                    static_cast<EActiveRaceCarIndex>(liPlayerCarIndex),
-                                   /*lbForceNextWorldCrashToBeFastTopDown*/ false);
+                                   maStateFlagTail[E_FLAG_TAIL_FORCE_NEXT_WORLD_CRASH_FAST_TOP_DOWN] != 0);
         }
 
-        // ⚠️ GATE -- CrashAnalyser::Update and the GameState latch clear (see the banner).
+        // ⭐ REAL (2026-09-24, FX-DIRECTOR2): CrashAnalyser::Update(this + 0x1245C, input, &maGameState,
+        // playerIndex) @0x8225BCDC -- unconditional, AFTER the sim-paused tracker block, exactly as the
+        // console orders it. It is the only producer of the crash analysis UpdateMoments publishes, so
+        // until it ran every moment read a static zero and MomentHardStop's CrashStart gate never held.
+        // UN-GATED 2026-09-25: the chain it feeds is proven against the ARTIST export frame for frame --
+        // the HardStop moment allocates on the crash frame N (ArbStateCrashing::Prepare 0x822655E8 ->
+        // NewMoment 0x82255850), goes VALID on N+1, MainDirector::Update publishes its 0.005..0.01 scale
+        // (0x82275148) and, with the step's timer order corrected the same day, the world integrates
+        // step N+2 at it (2 full-dt crash frames, the console's count). Until the camera scene-query
+        // closure is live (BRN_FXD2_SCENEQUERY, waiting on FineIntersectionTestModule::
+        // ComputeLineTestNearest @0x828C8CC8, the octree line walk's next hop) the console's
+        // visibility failure of the shot cannot happen here: the HardStop's cameras are always valid.
+        mCrashAnalyser.Update(lpIO->mpInputBuffer, &maGameState,
+                              static_cast<EActiveRaceCarIndex>(liPlayerCarIndex));
+        // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The analysis on the frames it raises
+        // an event (a crash's first frame only), next to the [crashcam] line that names the moment
+        // the crash is then filmed through.
+        if (mCrashAnalyser.GetAnalysis().mxEventFlags != 0)
+        {
+            static const bool sbCrashCamDiag = (getenv("BRN_CRASHCAM_DIAG") != 0);
+            if (sbCrashCamDiag && CgsDev::Log::gpDebugPrint != 0)
+            {
+                const CrashAnalysis& lrAnalysis = mCrashAnalyser.GetAnalysis();
+                *CgsDev::Log::gpDebugPrint << "[crashcam] crash analysis: flags "
+                    << static_cast<s32>(lrAnalysis.mxEventFlags)
+                    << " crashing " << (lrAnalysis.mbIsPlayerCrashing ? 1 : 0)
+                    << " suggestLeft " << (lrAnalysis.mbSuggestLeftOfLineOfAction ? 1 : 0) << "\n";
+            }
+        }
 
         // ⭐⭐ X360 LINE 6 (@0x8225BCF0). BODIED SINCE THE BANNER ABOVE WAS WRITTEN AND STILL
         // NOT CALLED -- BehaviourManager::ReleaseBehaviours has a full body in
@@ -971,6 +1018,13 @@ namespace BrnDirector
         // It has to run BEFORE the pre-scene behaviour pass below, which is exactly where the
         // console puts it.
         mBehaviourManager.ReleaseBehaviours();
+
+        // The GameState latch clear, @0x8225BCEC..0x8225BD08:
+        //     if (lbzx +0x35430 /*mbDisableAftertouchCamera*/) stbx r16(=0) -> +0x338E5
+        // i.e. maGameState + 0x105 == GameState::mbImpactTimeActive. A tweakable the console seeds 0
+        // (0x8225B914) and never sets, so this is inert on retail -- reproduced for order.
+        if (maStateFlagTail[E_FLAG_TAIL_DISABLE_AFTERTOUCH_CAMERA])
+            maGameState.mbImpactTimeActive = false;
 
         // ⭐⭐ X360 LINE 7, THE LAST STEP OF THE GUARDED BODY (@0x8225BD18). This is where the
         // console runs Behaviour::Update for every live behaviour -- NOT inside MainDirector::
@@ -2743,7 +2797,7 @@ namespace BrnDirector
         lSharedInfo.mpPlayerTracker           = &mVehicleTracker;
         lSharedInfo.mpEffectInterface         = reinterpret_cast<const EffectInterface*>(
                                                     maEffectInterface);
-        lSharedInfo.mpDebugLog                = reinterpret_cast<DebugLog*>(maDebugLog);
+        lSharedInfo.mpDebugLog                = const_cast<DebugLog*>(&mDebugLog);
         lSharedInfo.mpDebugPrinter            = reinterpret_cast<DebugPrinter*>(maDebugPrinterMain);
 
         // The player's own vehicle record, BY VALUE (console: VehicleInfo::operator= @0x821F49C8
@@ -2807,6 +2861,44 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
+    // BuildCollisionPolicySharedInfo -- NOT an X360 function (see the header). The console's two
+    // builds store, in this order (PreScene 0x822557B4..0x82255830):
+    //   mpRequestInterface  = lpIO->mpSceneQueryInterface          (lwz 0x10(lpIO))
+    //   mpAllVehicleData    = this + 0x12C80
+    //   mUsedRaceCars       = *input->GetUsedRaceCars()            (ld / std)
+    //   mpRaceCars          = input->GetRaceCarInfo()              (sub_82207040)
+    //   mePlayerCarIndex    = the player index
+    //   mpRandom            = this + 0x32EE0                       (the camera Random -- maRandom)
+    //   mpPlayerCar         = mpRaceCars + 0x4F0 * index           (mulli 0x4F0 = sizeof VehicleInfo)
+    //   mpPlayerCarTransform= mpPlayerCar + 0x1F0                  (mRaceCarState.mTransform)
+    //   mTimestep           = the 64-byte timestep block the BehaviourSharedInfo was built from
+    //   mpDebugPrinter      = this + 0x337B0
+    // ⚠️ GUARD (not console code): the console computes mpPlayerCar unconditionally; its callers sit
+    // inside the live-player-car guard. This build can reach the passes with no race-car snapshot
+    // (the same guard BuildBehaviourSharedInfo documents), so the two player pointers stay null then.
+    // ------------------------------------------------------------------------
+    void MainDirector::BuildCollisionPolicySharedInfo(const DirectorInputOutput* lpIO,
+                                                      s32 liPlayerCarIndex,
+                                                      const Camera::BehaviourSharedInfo& lrBehaviourInfo,
+                                                      Camera::CollisionPolicySharedInfo& lrPolicyInfo)
+    {
+        const DirectorIO::InputBuffer* lpInput = lpIO->mpInputBuffer;
+
+        lrPolicyInfo.mpRequestInterface   = lpIO->mpSceneQueryInterface;
+        lrPolicyInfo.mpAllVehicleData     = &mAllVehicleData;
+        lrPolicyInfo.mUsedRaceCars        = *lpInput->GetUsedRaceCars();
+        lrPolicyInfo.mpRaceCars           = lpInput->GetRaceCarInfo();
+        lrPolicyInfo.mePlayerCarIndex     = static_cast<EActiveRaceCarIndex>(liPlayerCarIndex);
+        lrPolicyInfo.mpRandom             = reinterpret_cast<CgsNumeric::Random*>(const_cast<u8*>(maRandom));
+        lrPolicyInfo.mpPlayerCar          = (lrPolicyInfo.mpRaceCars != 0 && liPlayerCarIndex >= 0)
+                                                ? &lrPolicyInfo.mpRaceCars[liPlayerCarIndex] : 0;
+        lrPolicyInfo.mpPlayerCarTransform = (lrPolicyInfo.mpPlayerCar != 0)
+                                                ? &lrPolicyInfo.mpPlayerCar->mRaceCarState.mTransform : 0;
+        lrPolicyInfo.mTimestep            = lrBehaviourInfo.mTimestep;
+        lrPolicyInfo.mpDebugPrinter       = reinterpret_cast<DebugPrinter*>(maDebugPrinterMain);
+    }
+
+    // ------------------------------------------------------------------------
     // UpdateCameraBehavioursPreScene  @ 0x82255318
     //
     // ⭐⭐ ADDED 2026-08-01 (car-select hand-off wave). THE CONSOLE HAS TWO PASSES OVER THE
@@ -2854,6 +2946,20 @@ namespace BrnDirector
             *lpIO->mpInputBuffer->GetControll(),
             true,                                                         // the console's `1`
             *reinterpret_cast<DebugPrinter*>(saOpaqueDebugPrinter));
+
+        // ⭐ @0x82255834 -- the cameras ASK: every live behaviour's collision policy issues its scene
+        // queries for this frame (BehaviourManager::GenerateSceneQueries @0x8221F1C0), answered
+        // between the two director passes by DoUpdate_Director's external leg.
+        // ⚠️ [FX-DIRECTOR2 opt-in, NOT X360] behind BRN_FXD2_SCENEQUERY with the rest of the query
+        // path until one live run with it ON is clean (see BrnDirectorHarness.h); the console calls
+        // it unconditionally. The debug printer is the manager's unread fourth argument, as above.
+        if (Harness::SceneQueryClosureEnabled())
+        {
+            Camera::CollisionPolicySharedInfo lPolicyInfo;
+            BuildCollisionPolicySharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lPolicyInfo);
+            mBehaviourManager.GenerateSceneQueries(lpIO->mpInputBuffer->IsSimPaused(), lPolicyInfo,
+                                                   *reinterpret_cast<DebugPrinter*>(saOpaqueDebugPrinter));
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -2884,6 +2990,20 @@ namespace BrnDirector
         BuildBehaviourSharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lCameraSpaces);
 
         static u8 saOpaqueDebugPrinter[64]   = { 0 };
+
+        // ⭐ @0x8224FF30 -- the cameras READ THEIR ANSWERS: every live behaviour's collision policy
+        // consumes this frame's scene-query results and may fail its camera
+        // (BehaviourManager::ProcessSceneQueryResults @0x8221F438). The console calls it right after
+        // building the CollisionPolicySharedInfo, before the ICE camera-space handler and the
+        // collision-pass behaviour update below.
+        // ⚠️ [FX-DIRECTOR2 opt-in, NOT X360] behind BRN_FXD2_SCENEQUERY (see the PreScene twin).
+        if (Harness::SceneQueryClosureEnabled())
+        {
+            Camera::CollisionPolicySharedInfo lPolicyInfo;
+            BuildCollisionPolicySharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lPolicyInfo);
+            mBehaviourManager.ProcessSceneQueryResults(lpIO->mpInputBuffer->IsSimPaused(), lPolicyInfo,
+                                                       *reinterpret_cast<DebugPrinter*>(saOpaqueDebugPrinter));
+        }
 
         // ⭐ @0x8225024C -- the console's own call here, and the one this build was missing.
         mBehaviourManager.PostCollisionUpdateAllBehaviours(
@@ -2931,7 +3051,7 @@ namespace BrnDirector
         lSharedInfo.mPlayerInfo              = lrPlayerCar;                     // VehicleInfo::operator=
         lSharedInfo.mUsedRaceCars            = *lpInput->GetUsedRaceCars();     // ld / std var_90
         lSharedInfo.mpRandom                 = reinterpret_cast<CgsNumeric::Random*>(maRandom);          // +0x32EE0
-        lSharedInfo.mpDebugLog               = reinterpret_cast<DebugLog*>(maDebugLog);                  // +0x33108
+        lSharedInfo.mpDebugLog               = const_cast<DebugLog*>(&mDebugLog);                        // +0x33108
         lSharedInfo.mpDebugPrinter           = reinterpret_cast<DebugPrinter*>(maDebugPrinterB);         // +0x3378C
         lSharedInfo.mpGameState              = &maGameState;                                             // +0x337E0
         lSharedInfo.mpAllVehicleData         = &mAllVehicleData;                                         // +0x12C80
@@ -2954,17 +3074,13 @@ namespace BrnDirector
         lSharedInfo.mpContacts               =
             reinterpret_cast<const MomentSharedInfo::ContactSpyInterface*>(lpInput->GetContacts());     // GetCont
         lSharedInfo.mpDirectorResourceManager = lpIO->mpResourceManager;                                 // lwz 8(r30)
-        lSharedInfo.mpShotSelector           = reinterpret_cast<const ShotSelector*>(maShotSelector);    // +0x121F0
-        lSharedInfo.mpCrashAnalysis          = reinterpret_cast<const CrashAnalysis*>(maCrashAnalyser);  // +0x1245C
+        lSharedInfo.mpShotSelector           = &mShotSelector;                                           // +0x121F0
+        lSharedInfo.mpCrashAnalysis          = &mCrashAnalyser.GetAnalysis();                            // +0x1245C
         lSharedInfo.mpEffectInterface        = reinterpret_cast<const EffectInterface*>(maEffectInterface); // +0x33C90
         lSharedInfo.mpPlayerCrashInfo        = lpInput->GetPlayerCrashInfo();                            // input +0x78E0
 
-        // ⚠️ GATE (inherited, not this function's): the shot selector and the crash analyser are
-        //   un-homed spans here (ShotSelector::Construct and CrashAnalyser::Update are gated), so
-        //   the crash analysis every moment reads is the static zero. CONSEQUENCE: MomentHardStop's
-        //   eligibility (CrashAnalysis::mxFlags bit 5) never holds and it never selects a shot.
-        //   DELETE-WHEN: ShotSelector + CrashAnalyser are members and PreSceneQueryUpdate runs
-        //   CrashAnalyser::Update.
+        // (2026-09-24, FX-DIRECTOR2) The shot selector and the crash analyser are real members now and
+        //   PreSceneQueryUpdate runs CrashAnalyser::Update, so MomentHardStop's CrashStart gate can hold.
 
         mMomentController.UpdateAllMoments(mBehaviourManager, lSharedInfo);
     }
@@ -3024,9 +3140,11 @@ namespace BrnDirector
     //   * lines 271-823 -- ~550 lines of VMX AllVehicleData debug-render work, the camera
     //     interpolation controller, the effect-hook registration cascade and the world-map
     //     safe-position search. All reach un-homed aggregates and/or VMX pipelines.
-    //   * the tail after the publish (lines 871-924): the requested time-step multiplier, the
-    //     debug-info/overlay passes, BehaviourManager::PrepareBehaviours and UpdateAttribSys.
-    //     None of them alters the published camera -- the two publish calls are already done.
+    //   * the tail after the publish (lines 871-924): ONLY the debug-info/overlay passes
+    //     (UpdateDebugInfo, DebugDisplayCurrentCamera, the camera-state flag printer). The
+    //     time-step multiplier, PrepareBehaviours, UpdateAttribSys, the event-end push and the two
+    //     closing latches (0x82275290..0x822752D0, incl. the one-shot clear of
+    //     mbForceNextWorldCrashToBeFastTopDown) all run -- see each call site.
     //
     // DELETE-WHEN: per item above, as each aggregate is homed.
     // ------------------------------------------------------------------------
@@ -3135,6 +3253,15 @@ namespace BrnDirector
             // ⚠️ GATE: the rest of the ~550-line VMX / world-map remainder (lines 271-823; the
             //   effect-hook hand-over above is live since 2026-09-17).
         }
+
+        // ⭐ (2026-09-24, FX-DIRECTOR2) @0x82274F6C..0x82274FE4, right before the finaliser: when the
+        // published camera is a new shot (E_FLAG_NEW_THIS_FRAME, `rlwinm 0,25,25` on camera +0x140) the
+        // crash analyser latches the analysis that shot was chosen against (the inlined SetShotChanged),
+        // then the inlined ShotSelector::Update ticks the use clock and stamps the shot the camera came
+        // from.
+        if (lCamera.mState.IsFlagSet(Camera::CameraState::E_FLAG_NEW_THIS_FRAME))
+            mCrashAnalyser.SetShotChanged();
+        mShotSelector.Update(lCamera);
 
         // Finalise: camera inertia + shake (the CameraFinaliser owns the InertiaController).
         mCameraFinaliser.Update(lpIO->mpInputBuffer, &maGameState, lpIO->mpResourceManager,
@@ -3382,7 +3509,37 @@ namespace BrnDirector
             maGameState.meEventType = BrnGameState::GameStateModuleIO::E_MODE_NONE;
         }
 
-        // ⚠️ GATE: the rest of the post-publish tail -- see the banner.
+        // ⚠️ GATE (debug display only): 0x8227520C..0x8227528C -- while mbShowCameraStateFlags
+        // (+0x3543B) is set, print the thirty CameraState flag names through the main DebugPrinter.
+        // Not reproduced (the printer is an opaque region here); it writes nothing but text.
+
+        // ⭐ THE TAIL'S TWO LATCHES (2026-09-25, FX-DIRECTOR2), the console's last statements
+        // (r28 == 0 from `li r28, 0` @0x82274F64, r27 == 1 from `li r27, 1` @0x82274F68, neither
+        // written again before them):
+        //
+        //   0x82275290..0x822752B0  if (mbDebugSingleTimestep /*+0x3543D*/)
+        //                           { mbDebugSingleTimestep = 0; mbDebugZeroTimestep /*+0x3543C*/ = 1; }
+        //       a debug tweakable pair, both seeded 0 by Construct: inert on retail, landed for order.
+        //
+        //   0x822752B4..0x822752D0  if (mVehicleTracker.mbIsFirstFrameOfCrash /*+0x33C85 = tracker +0x2A5*/)
+        //                               mbForceNextWorldCrashToBeFastTopDown /*+0x35437*/ = 0;
+        //       ⭐⭐ THIS MAKES THE FLAG A ONE-SHOT -- "force the NEXT world crash": Construct seeds it 1
+        //       (0x8225B924) and the first crash after boot consumes it here. It is read in exactly two
+        //       places (a scan of every ARTIST export for +0x35437): VehicleTracker::Update's 4th
+        //       argument (0x8225BCBC -- a wall hard stop classifies HIGH) and UpdateMoments' shared-info
+        //       copy (+0x527 -- MomentHardStop's "fast top-down" A shot). HIGH is what arms
+        //       MomentHardStop's ultra slo-mo (every KU_CRASHES_BEFORE_FORCE_ULTRA_SLOMO-th high-energy
+        //       world crash, dt x 0.005..0.01). Without this clear the PC forced EVERY wall crash HIGH;
+        //       the console forces only the first one after boot.
+        if (maStateFlagTail[E_FLAG_TAIL_DEBUG_SINGLE_TIMESTEP])
+        {
+            maStateFlagTail[E_FLAG_TAIL_DEBUG_SINGLE_TIMESTEP] = 0;   // stb r28 @0x822752A8
+            maStateFlagTail[E_FLAG_TAIL_DEBUG_ZERO_TIMESTEP]   = 1;   // stbx r27 @0x822752B0
+        }
+        if (mVehicleTracker.IsFirstFrameOfCrash())                   // lbzx +0x33C85 @0x822752BC
+        {
+            maStateFlagTail[E_FLAG_TAIL_FORCE_NEXT_WORLD_CRASH_FAST_TOP_DOWN] = 0;   // stbx r28 @0x822752D0
+        }
     }
 
     // ------------------------------------------------------------------------

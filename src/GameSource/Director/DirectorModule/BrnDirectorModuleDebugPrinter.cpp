@@ -77,6 +77,33 @@ namespace BrnDirector
         ActualPrint(lrMoment.GetName(), luColour);
     }
 
+    // ⭐ BODIED 2026-09-24 (FX-DIRECTOR2). PS3 @0x22158 (DWARF BrnDirectorModuleDebugPrinter.h); the X360
+    // has no standalone symbol -- MainDirector::Construct inlines it over its log at +0x33108
+    // (0x8225B824..0x8225B87C, right after GameState::Clear):
+    //     std 0, +0x600          mStringPool.Construct()   (the occupancy BitArray<20>; PS3 `bl BitArray<20>::Construct`)
+    //     stw 0, +0x658          mStringIndices.Construct() (count 0)
+    //     stfs f0, +0            mfStringDuration = 10.0   (flt_82004A20)
+    //     ... Clear()            (PS3 tail call; inlined on the X360, see Clear below)
+    // Until it ran, the director's log was a never-constructed zero span: a zero free count, so
+    // the first Append took AllocateObject's -1 arm, freed slot mStringIndices[0] of an empty
+    // array and wrote through index -1 ("Array index out of bounds", "The object isn't
+    // allocated", "Trying to erase an unused element" -- run fxdirector2_h225_s7080_r1).
+    void DebugLog::Construct()
+    {
+        mStringPool.Construct();
+        mStringIndices.Construct();
+        mfStringDuration = 10.0f;   // flt_82004A20 (0x41200000)
+        Clear();
+    }
+
+    // PS3 @0x21F48; inlined by the X360 Construct above (0x8225B850..0x8225B87C): the pool's
+    // all-free seed (occupancy 0, free queue 19..0, free count 20) and an empty live-order array.
+    void DebugLog::Clear()
+    {
+        mStringPool.Clear();
+        mStringIndices.Clear();
+    }
+
     // X360 0x8221BB78. Take a pool slot for one new log line -- recycling the OLDEST live line
     // when the pool is full -- copy the text in, stamp it with the log's on-screen lifetime and
     // colour, and push its slot index onto the live-order array.

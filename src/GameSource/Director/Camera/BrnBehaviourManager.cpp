@@ -9,6 +9,7 @@
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"   // ArbitratorState (owner identity + GetName)
 #include "GameSource/Director/MomentController/BrnMoment.h"       // Moment (owner identity + GetName)
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"      // Behaviour::GetDebugParametersName / GetName
+#include "GameSource/Director/Camera/BrnCollisionPolicy.h"        // CollisionPolicy / CollisionPolicySharedInfo (the scene-query pair)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"           // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"        // gpDebugPrint / gxMessageFilterFlags
 #include <cstdlib>   // getenv (BRN_CAM_INPUT_DIAG)
@@ -68,6 +69,21 @@ namespace BrnDirector
 {
 namespace Camera
 {
+    namespace
+    {
+        // [diag, NOT X360] BRN_CRASHCAM_DIAG (the crash-camera diag family): name the behaviour a
+        // collision-policy failure takes down. Capped; silent without the variable.
+        bool SceneQueryFailDiag()
+        {
+            static const bool sbOn = (std::getenv("BRN_CRASHCAM_DIAG") != 0);
+            static s32 siLinesLeft = 400;
+            if (!sbOn || CgsDev::Log::gpDebugPrint == 0 || siLinesLeft <= 0)
+                return false;
+            --siLinesLeft;
+            return true;
+        }
+    }
+
     // ========================================================================
     // BehaviourManager::Construct  @0x82251778
     //
@@ -932,6 +948,92 @@ namespace Camera
         }
 
         // ⚠️ GATE (4): the attached tweaker's Update/Render tail (see the banner).
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourHelper::GenerateSceneQueries (DWARF BrnBehaviourManager.h:278) -- no out-of-line
+    // X360 copy; BehaviourManager::GenerateSceneQueries @0x8221F3D0..0x8221F41C inlines it:
+    //     lpPolicy = behaviour->GetCollisionPolicy();       (vtable slot 5, `lwz 0x14(vtbl)`)
+    //     if (lpPolicy && !behaviour->mbHasFailed)          (`lbz 9(behaviour)`)
+    //         lpPolicy->GenerateSceneQueries(info, mCamera) (policy vtable slot 0; helper + 0x10)
+    // Added 2026-09-25 (FX-DIRECTOR2, the camera scene-query closure).
+    // ------------------------------------------------------------------------
+    void BehaviourManager::BehaviourHelper::GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo)
+    {
+        Behaviour* const lpBehaviour = GetBehaviour();
+        CollisionPolicy* const lpPolicy = lpBehaviour->GetCollisionPolicy();
+        if (lpPolicy != 0 && !lpBehaviour->HasFailed())
+            lpPolicy->GenerateSceneQueries(lrSharedInfo, mCamera);
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourHelper::ProcessSceneQueryResults (DWARF BrnBehaviourManager.h:282) -- inlined by
+    // BehaviourManager::ProcessSceneQueryResults @0x8221F6B8..0x8221F744: the same guard, the
+    // policy's slot 1, and when the policy has now failed (`lbz 4(policy)`) the BEHAVIOUR fails
+    // with E_FAILED_COLLISION_POLICY -- an inlined Behaviour::Fail: the camera account's bit 5
+    // (`ori 0x20` on camera +0x138), mbCanSwitchFromMeNow = 1 (+0xC), mbHasFailed = 1 (+0x9),
+    // mbCanSwitchToMeNow = 0 (+0xB), and the camera's follow request dropped (`and ~2` on +0x140).
+    // ------------------------------------------------------------------------
+    void BehaviourManager::BehaviourHelper::ProcessSceneQueryResults(const CollisionPolicySharedInfo& lrSharedInfo)
+    {
+        Behaviour* const lpBehaviour = GetBehaviour();
+        CollisionPolicy* const lpPolicy = lpBehaviour->GetCollisionPolicy();
+        if (lpPolicy != 0 && !lpBehaviour->HasFailed())
+        {
+            lpPolicy->ProcessSceneQueryResults(lrSharedInfo, mCamera);
+            if (lpPolicy->HasFailed())
+            {
+                lpBehaviour->Fail(mCamera, 5);   // ValidityAccount::E_FAILED_COLLISION_POLICY
+
+                if (SceneQueryFailDiag())       // [diag, NOT X360]
+                {
+                    char lacFullName[64];
+                    GetDebugFullName(lacFullName);
+                    *CgsDev::Log::gpDebugPrint << "[scenequery] behaviour " << lacFullName
+                                               << " failed (collision policy)\n";
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourManager::GenerateSceneQueries @0x8221F1C0 (DWARF BrnBehaviourManager.h:126) and
+    // ProcessSceneQueryResults @0x8221F438 (:132). The same walk as UpdateAllBehaviours: every live
+    // helper, in helper-index-array order (the count is read ONCE, `lwz 0x70` before the loop); while
+    // paused only the helpers flagged to update during pause (mBehaviourUpdateDuringPauseFlags,
+    // `ldx` off manager +0x14AC0 with the CgsBitArray.h:203 index tripwire).
+    // Their one caller each: MainDirector::UpdateCameraBehavioursPreScene (0x82255834, straight
+    // after UpdateAllBehaviours) and ::UpdateCameraBehavioursPostScene (0x8224FF30, before the
+    // collision-pass behaviour update).
+    // ⚠️ GATE (debug): ProcessSceneQueryResults' per-helper debug readout (the helper's full name
+    //   + DrawAxis/DrawText under manager +0x163C4, 0x8221F748..0x8221F840) is not reproduced -- the
+    //   same debug-display gate UpdateAllBehaviours carries.
+    // Added 2026-09-25 (FX-DIRECTOR2).
+    // ------------------------------------------------------------------------
+    void BehaviourManager::GenerateSceneQueries(bool lbPaused, const CollisionPolicySharedInfo& lrSharedInfo,
+                                                DebugPrinter& lrDebugPrinter)
+    {
+        (void)lrDebugPrinter;
+        const u32 luNumBehaviours = mBehaviourHelperIndexArray.GetLength();
+        for (u32 luEntry = 0; luEntry < luNumBehaviours; ++luEntry)
+        {
+            const BehaviourHelperIndex lHelper = mBehaviourHelperIndexArray[luEntry];
+            if (!lbPaused || mBehaviourUpdateDuringPauseFlags.IsBitSet(static_cast<u32>(static_cast<s32>(lHelper))))
+                mBehaviourHelperPool[lHelper].GenerateSceneQueries(lrSharedInfo);
+        }
+    }
+
+    void BehaviourManager::ProcessSceneQueryResults(bool lbPaused, const CollisionPolicySharedInfo& lrSharedInfo,
+                                                    DebugPrinter& lrDebugPrinter)
+    {
+        (void)lrDebugPrinter;
+        const u32 luNumBehaviours = mBehaviourHelperIndexArray.GetLength();
+        for (u32 luEntry = 0; luEntry < luNumBehaviours; ++luEntry)
+        {
+            const BehaviourHelperIndex lHelper = mBehaviourHelperIndexArray[luEntry];
+            if (!lbPaused || mBehaviourUpdateDuringPauseFlags.IsBitSet(static_cast<u32>(static_cast<s32>(lHelper))))
+                mBehaviourHelperPool[lHelper].ProcessSceneQueryResults(lrSharedInfo);
+        }
     }
 
     // ARTIST 8221F870: publish the current controller state without advancing it.

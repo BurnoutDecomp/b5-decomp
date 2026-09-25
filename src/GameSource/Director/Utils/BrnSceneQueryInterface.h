@@ -1,66 +1,116 @@
 #pragma once
 
-// BrnDirector::SceneQueryInterface  (X360 asserts ..\GameSource\Director/Utils/
-// BrnSceneQueryInterface.h:316/317) -- the Director-side thin wrapper/adaptor over the
-// SceneManager producer CgsSceneManager::SceneManagerIO::SceneQueryInterface. It holds the
-// producer plus a small table of "post office" hand-off objects (one per query kind). Each
-// public test first mints a SceneQueryId via the matching post office's OutEvent* and then
-// forwards the staged query to the producer.
+// ============================================================================
+// GameSource/Director/Utils/BrnSceneQueryInterface.h
 //
-// MEMBER OFFSETS (X360-attested):
-//   +0x00 mpSceneQueryInterface            producer (assert @ .h:316; *this in VolumeTestDeepest;
-//                                          Clear leaves slot 0 untouched)
-//   +0x04..+0x14  five post-office slots    Clear resets each non-null slot (interior field
-//                                          offsets attested; slot element TYPES not recovered)
-//   +0x18 mpVolumeTestDeepestPostOffice     deepest-volume-test post office (assert @ .h:317;
-//                                          a1[6] in VolumeTestDeepest; Clear slot 6)
-// The post-office element TYPES are NOT attested by name, so slots +0x04..+0x18 are modelled as
-// raw void* hand-off pointers (HARD RULE 3: names/types not fabricated). Only the two
-// assert-named members carry a recovered type.
+// BrnDirector::SceneQueryInterface (DWARF BrnSceneQueryInterface.h:54) -- the director's per-frame
+// scene-query handle. It pairs the SceneManager PRODUCER (the director's own
+// CgsSceneManager::SceneManagerIO::SceneQueryInterface, published by DirectorIO::
+// SceneQueryOutputBuffer) with the module's six POST OFFICES. A camera asks for a test through one
+// of the three test methods below: the matching post office mints a 16-bit id for the caller's post
+// box (AddPostBox, which also raises the box to WAITING_FOR_PACKAGE), the id is tagged with the
+// director's owner byte, and the test is forwarded to the producer. DirectorModule::
+// ProcessSceneQueryResults @0x82239278 later hands each result back through the same office.
+//
+// ⭐ TYPED 2026-09-25 (FX-DIRECTOR2, the camera scene-query closure). The raw-void* slots
+// (mpPostOffice04..14) and the two free-function stand-ins (OutEventVolumeTestDeepest /
+// sub_8221CC98, stubbed in DirectorLinkStubs.cpp) are retired: the slots are the DWARF's typed
+// post-office pointers and the id minting is PostOffice<T,N>::AddPostBox.
+//
+// MEMBER ORDER (DWARF :162..:169, console offsets pinned by Clear @0x8221CD38 and the three tests):
+//   +0x00 mpSceneQueryInterface              the producer              (asserts h:188/:216/:316)
+//   +0x04 mpLineTestFinePostOffice           Clear: the specialised Clear (0x8221CC98)
+//   +0x08 mpLineTestNearestPostOffice        Clear: `stw 0, 0xA0`      (asserts h:217)
+//   +0x0C mpLineTestFastDoubleSidedPostOffice Clear: `stw 0, 0x28`
+//   +0x10 mpSphereTestFastPostOffice         Clear: `stw 0, 0x28`
+//   +0x14 mpVolumeTestFinePostOffice         Clear: `stw 0, 0x04`
+//   +0x18 mpVolumeTestDeepestPostOffice      Clear: `stw 0, 0x28`      (asserts h:317)
+// The console offsets are provenance; on this host the pointers are 8 bytes and every access is
+// by name.
+// ============================================================================
 
 #include "types.hpp"
-#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneQueryInterface.h" // producer + EExclusionMode
-
-namespace CgsSceneManager
-{
-namespace SceneManagerIO
-{
-    // Post-office OutEvent for the deepest volume test -- mints a 16-bit SceneQueryId for the
-    // staged query record. Body not yet recovered (own ledger TU); declared here, resolved at
-    // link time. (X360 free function; Hex-Rays: int(int a1, _DWORD* a2). Low 16 bits are the id.)
-    u32 OutEventVolumeTestDeepest(void* lpPostOffice, void* lpQueryParams);
-}
-}
+#include "BrnCommonTypes.h"                                                                // Vector3, Matrix44Affine
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneQueryInterface.h"   // the producer + EExclusionMode
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                              // CgsSceneManager::EntityId
+#include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"                         // the six post-office / post-box types
 
 namespace BrnDirector
 {
-    // Slot-1 post-office reset helper (address-only name sub_8221CC98 in the X360 build).
-    u32* sub_8221CC98(void* lpSlot);
-
     struct SceneQueryInterface
     {
-        CgsSceneManager::SceneManagerIO::SceneQueryInterface* mpSceneQueryInterface;  // +0x00
-        void*                                                 mpPostOffice04;         // +0x04
-        void*                                                 mpPostOffice08;         // +0x08
-        void*                                                 mpPostOffice0C;         // +0x0C
-        void*                                                 mpPostOffice10;         // +0x10
-        void*                                                 mpPostOffice14;         // +0x14
-        void*                                                 mpVolumeTestDeepestPostOffice; // +0x18
+        typedef CgsSceneManager::SceneManagerIO::SceneQueryInterface ProducerInterface;
 
-        // @ 0x8221CD38 -- resets each held post office (slot 0 producer untouched).
-        u32* Clear();
+        // The owner byte the director stamps into every query id it mints (`oris rX, rY, 1` --
+        // bits [16..23] == 1 -- in LineTestFine 0x8223301C, LineTestNearest 0x822330FC and
+        // VolumeTestDeepest 0x822331CC; SceneQueryId::Set packs exactly that).
+        enum { KU_DIRECTOR_QUERY_OWNER = 1 };
 
-        // @ 0x82233128 -- mints a deepest-volume-test SceneQueryId via
-        // mpVolumeTestDeepestPostOffice's OutEvent, sets the 0x10000 "fine" bit, then forwards
-        // the query to the producer. Returns int (producer's bool widened back to r3).
-        int VolumeTestDeepest(void*                                           lpQueryParams,
-                              u32                                             lx32EntityTypeFlags,
-                              u8                                              lxVolumeTypeFlags,
-                              const void*                                     lpVolumeData,
-                              const void*                                     lpTransform,
-                              u32                                             lExcludeEntityId,
-                              CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode);
+        // DWARF :79. No out-of-line X360 copy: DirectorModule::PreSceneQueryUpdate @0x8225C768 and
+        // ::Update @0x82275300 store the seven words inline (Update stores the producer and six
+        // NULLs -- it answers, it does not ask). Clear() is NOT part of Construct; both callers
+        // call it straight after.
+        void Construct(ProducerInterface*                 lpSceneQueryInterface,
+                       LineTestFinePostOffice*            lpLineTestFinePostOffice,
+                       LineTestNearestPostOffice*         lpLineTestNearestPostOffice,
+                       LineTestFastDoubleSidedPostOffice* lpLineTestFastDoubleSidedPostOffice,
+                       SphereTestFastPostOffice*          lpSphereTestFastPostOffice,
+                       VolumeTestFinePostOffice*          lpVolumeTestFinePostOffice,
+                       VolumeTestDeepestPostOffice*       lpVolumeTestDeepestPostOffice)
+        {
+            mpSceneQueryInterface               = lpSceneQueryInterface;
+            mpLineTestFinePostOffice            = lpLineTestFinePostOffice;
+            mpLineTestNearestPostOffice         = lpLineTestNearestPostOffice;
+            mpLineTestFastDoubleSidedPostOffice = lpLineTestFastDoubleSidedPostOffice;
+            mpSphereTestFastPostOffice          = lpSphereTestFastPostOffice;
+            mpVolumeTestFinePostOffice          = lpVolumeTestFinePostOffice;
+            mpVolumeTestDeepestPostOffice       = lpVolumeTestDeepestPostOffice;
+        }
 
-        static void _AssertLayout();
+        // @ 0x8221CD38 (DWARF :88) -- forget every id handed out last frame: each held post office
+        // is Cleared (the producer, slot 0, is untouched).
+        void Clear();
+
+        // @ 0x82232F68 (DWARF :102) -- a FINE line test (every intersection along the line).
+        void LineTestFine(LineTestFinePostBox&                              lrPostBox,
+                          u32                                               lx32EntityTypeFlags,
+                          u8                                                lxVolumeTypeFlags,
+                          const Vector3&                                    lLineStart,
+                          const Vector3&                                    lLineEnd,
+                          CgsSceneManager::EntityId                         lExcludeEntityId,
+                          CgsSceneManager::SceneManagerIO::EExclusionMode  leExclusionMode) const;
+
+        // @ 0x82233048 (DWARF :114) -- the NEAREST hit along the line.
+        void LineTestNearest(LineTestNearestPostBox&                           lrPostBox,
+                             u32                                               lx32EntityTypeFlags,
+                             u8                                                lxVolumeTypeFlags,
+                             const Vector3&                                    lLineStart,
+                             const Vector3&                                    lLineEnd,
+                             CgsSceneManager::EntityId                         lExcludeEntityId,
+                             CgsSceneManager::SceneManagerIO::EExclusionMode  leExclusionMode) const;
+
+        // @ 0x82233128 (DWARF :147) -- the DEEPEST penetration of a volume. The volume and its
+        // transform are the producer's opaque 128-byte / 64-byte images (see
+        // CgsSceneManagerIO_SceneQueryInterface.cpp).
+        void VolumeTestDeepest(VolumeTestDeepestPostBox&                         lrPostBox,
+                               u32                                               lx32EntityTypeFlags,
+                               u8                                                lxVolumeTypeFlags,
+                               const void*                                       lpVolume,
+                               const Matrix44Affine&                             lrTransform,
+                               CgsSceneManager::EntityId                         lExcludeEntityId,
+                               CgsSceneManager::SceneManagerIO::EExclusionMode  leExclusionMode) const;
+
+        // The producer this interface forwards to (the DoUpdate_Director leg appends its queues to
+        // the external query buffer).
+        ProducerInterface* GetProducer() const { return mpSceneQueryInterface; }
+
+    private:
+        ProducerInterface*                 mpSceneQueryInterface;                // :162  +0x00
+        LineTestFinePostOffice*            mpLineTestFinePostOffice;             // :164  +0x04
+        LineTestNearestPostOffice*         mpLineTestNearestPostOffice;          // :165  +0x08
+        LineTestFastDoubleSidedPostOffice* mpLineTestFastDoubleSidedPostOffice;  // :166  +0x0C
+        SphereTestFastPostOffice*          mpSphereTestFastPostOffice;           // :167  +0x10
+        VolumeTestFinePostOffice*          mpVolumeTestFinePostOffice;           // :168  +0x14
+        VolumeTestDeepestPostOffice*       mpVolumeTestDeepestPostOffice;        // :169  +0x18
     };
 }

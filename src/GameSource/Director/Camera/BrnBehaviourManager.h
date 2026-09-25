@@ -78,10 +78,15 @@ struct DebugPrinter;                   // Update/SceneQuery debug printer arg
 //  BrnDirector, so the old BrnDirector-scope forward declaration here was a DIFFERENT
 //  type that could never have bound to the real one.)
 // ControllerInfo is shared with DirectorIO.                 // UpdateAllBehaviours arg
-struct CollisionPolicySharedInfo;      // GenerateSceneQueries / ProcessSceneQueryResults arg
+// (CollisionPolicySharedInfo is BrnDirector::CAMERA::CollisionPolicySharedInfo -- DWARF
+//  BrnCollisionPolicy.h:54 -- and is forward-declared in that namespace below. The BrnDirector-scope
+//  declaration that stood here named a different, never-defined type; retired 2026-09-25.)
 
 namespace Camera
 {
+    // The per-frame block the scene-query pair takes (BrnCollisionPolicy.h is its home).
+    struct CollisionPolicySharedInfo;
+
     // Forward declarations of the manager + its lock interface, named in method signatures
     // (by ptr/ref) of the helper types declared just below.
     class BehaviourManager;

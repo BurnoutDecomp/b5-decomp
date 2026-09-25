@@ -36,7 +36,7 @@ def body(source, signature):
 def wiring(tree):
     harness = squash(tree.read(HARNESS_H))
     yield ("BrnDirectorHarness.h declares BrnDirector::Harness::gbArbitratorInRoaming",
-           "namespaceBrnDirector{namespaceHarness{externboolgbArbitratorInRoaming;}}" in harness)
+           "namespaceBrnDirector{namespaceHarness{externboolgbArbitratorInRoaming;" in harness)
 
     container = tree.read(CONTAINER_CPP)
     setter = body(container, "void ArbitratorStateContainer::SetCurrentState(")

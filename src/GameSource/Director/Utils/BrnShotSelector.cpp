@@ -113,6 +113,49 @@ ShotSelector::Construct(const DirectorResourceManager* lpResourceManager)
     }
 }
 
+// ----------------------------------------------------------------------------
+// BrnDirector::ShotSelector::Prepare (DWARF cpp:73)
+//   PS3 @0x15000:  li r0, 0 ; stw r0, 0x264(this) ; li r3, 1 ; blr
+//   X360: inlined by MainDirector::Prepare stage 1 -- `stwx r28(=0), r31, 0x12454` @0x8224FBE4.
+// Restart the use clock; the per-shot stamps Construct zeroed are kept.
+// ----------------------------------------------------------------------------
+bool
+ShotSelector::Prepare()
+{
+    miCurrentTimeID = 0;
+    return true;
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::ShotSelector::Update (DWARF cpp:89)
+//   PS3 @0x2E4AC: ++miCurrentTimeID; if (camera.mShotSelectionInfo.miType != -1)
+//                 tail-call SetLastUsedToNow(camera.mShotSelectionInfo)
+//   X360: inlined by MainDirector::Update @0x82274FB0..0x82274FE4 (lwz/addi/stw 0x264, then the
+//   `cmpwi var_3BC, -1` test and Array<int,50>::GetItem(type * 0xCC + this, id) = miCurrentTimeID).
+// Once per published frame: tick the clock and stamp the shot the published camera came from, so
+// GetCrashShot's least-recently-used tie-break prefers the others.
+// ----------------------------------------------------------------------------
+void
+ShotSelector::Update(const Camera::Camera& lrSelectedCamera)
+{
+    ++miCurrentTimeID;
+    if (lrSelectedCamera.mShotSelectionInfo.miType != -1)
+    {
+        SetLastUsedToNow(lrSelectedCamera.mShotSelectionInfo);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::ShotSelector::SetLastUsedToNow (DWARF cpp:322)
+//   PS3 @0x2E33C: maaShotTimes[info.miType].GetItem(info.miId) = miCurrentTimeID (the two
+//   CgsArray.h:548/:549 GetItem tripwires are the Array's own).
+// ----------------------------------------------------------------------------
+void
+ShotSelector::SetLastUsedToNow(const Camera::Camera::ShotSelectionInfo& lrShotSelectionInfo)
+{
+    maaShotTimes[lrShotSelectionInfo.miType].GetItem(static_cast<u32>(lrShotSelectionInfo.miId)) = miCurrentTimeID;
+}
+
 // @ 0x822396F8 -- score the chosen group's attrib ShotList and return the best shot.
 //
 // Ranking (asm @0x82239A04..0x82239AA4): a candidate that passes the exclusion /
