@@ -45,6 +45,7 @@
 
 #include "types.hpp"
 #include "vendor/renderware/collision/BitTable.hpp"   // rw::BitTable::Storage (m_cullTable)
+#include "vendor/renderware/collision/VolRef.hpp"     // VolRef (VolumeLineQuery embeds m_currVRef by value; no vpu types)
 
 namespace rw
 {
@@ -66,6 +67,7 @@ namespace collision
     struct VolRef1xN;                     // GPInstance.hpp
     struct GPInstance;                    // GPInstance.hpp
     struct PrimitivePairIntersectResult;  // GPInstance.hpp
+    struct VolumeLineSegIntersectResult;  // LineSegIntersect.hpp
 
     // Full class (canonical DWARF member block, embeds AABBox/VolRef by
     // value): vendor/renderware/collision/VolumeBBoxQuery.hpp.
@@ -159,11 +161,72 @@ namespace collision
     // formula GetResourceDescriptor evaluates.
     static const u32 KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100 = 0x495D8;
 
+    // -----------------------------------------------------------------------
+    // VolumeLineQuery -- the rwcollision line query (DWARF volumelinequery.h:67, members :380-424).
+    //
+    // 2026-09-25 (crash parity FX-FOLLOWUPS): the member block, at HOST widths (the pointers widen; read by
+    // name), for the two construction entry points FineIntersectionTestModule::Construct @0x828B0BF0 calls --
+    // GetResourceDescriptor @0x82BB3838 and Initialize @0x82BB3888, bodied in VolumeQuery.cpp. Console offsets
+    // in the comments; console sizeof 0x110 (Initialize carves its first VolRef array at +0x110).
+    // ⛔ THE LINE WALK IS NOT RECONSTRUCTED: GetIntersections / GetAllIntersections @0x82BB3820 / AddVolumeRef /
+    // AddPrimitiveRef / InitQuery have no body on this class, so nothing may call them yet -- the fine module's
+    // ComputeLineTestNearest @0x828C8CC8 stays a LOUD trap. (The June SDK placeholder
+    // SDKs/EATech/rwcollision/volumelinequery.cpp is a different, 32-bit-pointer class of the same name with no
+    // callers; the fine-module mount retires it.)
+    // -----------------------------------------------------------------------
     class VolumeLineQuery
     {
     public:
+        // DWARF volumelinequery.h:76.
+        enum QueryResultsSet
+        {
+            ALLLINEINTERSECTIONS    = 0,
+            ANYLINEINTERSECTION     = 1,
+            NEARESTLINEINTERSECTION = 2
+        };
+
+        // @ 0x82BB3838 -- fills the 5-entry descriptor block at lpOut for liVolumes / liResults (see
+        // VolumeQuery.cpp and VolumeQueryHostLayout.hpp for the host total).
         static void* GetResourceDescriptor(void* lpOut, int liVolumes, int liResults);
+        // @ 0x82BB3888 -- partitions the backing buffer (*lppBuffer at [0]) and returns the query, or null.
         static void* Initialize(void** lppBuffer, int liVolumes, int liResults);
+
+        const Volume**                    m_inputVols;           // +0x00
+        const math::vpu::Matrix44Affine** m_inputMats;           // +0x04
+        u32                               m_numInputs;           // +0x08
+        u32                               m_currInput;           // +0x0C
+        VolumeLineSegIntersectResult*     m_resBuffer;           // +0x10
+        u32                               m_resCount;            // +0x14
+        u32                               m_resMax;              // +0x18
+        u32                               m_resBufferSize;       // +0x1C
+        alignas(16) VolRef::Vec4          m_pt1;                 // +0x20  (DWARF Vector3)
+        alignas(16) VolRef::Vec4          m_pt2;                 // +0x30  (DWARF Vector3)
+        f32                               m_fatness;             // +0x40
+        VolRef*                           m_stackVRefBuffer;     // +0x44
+        VolRef                            m_currVRef;            // +0x50  (0x80)
+        u32                               m_stackNext;           // +0xD0
+        u32                               m_stackMax;            // +0xD4
+        VolRef*                           m_primVRefBuffer;      // +0xD8
+        u32                               m_primNext;            // +0xDC
+        u32                               m_primBufferSize;      // +0xE0
+        Volume*                           m_instVolPool;         // +0xE4
+        u32                               m_instVolCount;        // +0xE8
+        u32                               m_instVolMax;          // +0xEC
+        u32                               m_aggIndex;            // +0xF0
+        void*                             m_spatialMapQueryMem;  // +0xF4
+        void*                             m_curSpatialMapQuery;  // +0xF8
+        f32                               m_endClipVal;          // +0xFC
+        QueryResultsSet                   m_resultsSet;          // +0x100
+        u32                               m_tag;                 // +0x104
+        u8                                m_numTagBits;          // +0x108
     };
+
+    // NOT X360: host VolumeLineQuery width (2026-09-25, crash parity FX-FOLLOWUPS). The HOST backing-store size
+    // of a VolumeLineQuery built for 100 volumes / 100 results -- FineIntersectionTestModule::Construct's
+    // (0x828B0CB8 `li r5, 0x64` / 0x828B0CBC `li r4, 0x64`) -- for the CgsSceneManager consumer that sizes its
+    // buffer at compile time and must not include VolumeQueryHostLayout.hpp. The console total is 0x10450 (in
+    // the module's 67584-byte buffer); only the header differs (host 0x130, console 0x110). VolumeQuery.cpp
+    // static_asserts this value against VolumeLineQueryResourceSize(100, 100).
+    static const u32 KU_VOLUME_LINE_QUERY_HOST_SIZE_R100 = 0x10470;
 }
 }

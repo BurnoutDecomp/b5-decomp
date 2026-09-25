@@ -15,7 +15,23 @@
 #include <cstddef>  // offsetof
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "vendor/renderware/collision/VolumeQuery.hpp"  // rw::collision::VolumeVolumeQuery / VolumeLineQuery
+#include "vendor/renderware/collision/VolumeQuery.hpp"  // rw::collision::VolumeVolumeQuery / VolumeLineQuery + their host sizes
+
+namespace CgsSceneManager
+{
+    // The two buffers hold the HOST descriptors Construct asks for (100 volumes / 100 results each):
+    // the VolumeVolumeQuery one at the host size (NOT X360), the VolumeLineQuery one at the console's 67584,
+    // which the host descriptor (0x10470) still fits.
+    static_assert(FineIntersectionTestModule::KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE >=
+                      rw::collision::KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100,
+                  "the fine module's VolumeVolumeQuery buffer holds the host descriptor for 100 / 100");
+    static_assert(FineIntersectionTestModule::KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE -
+                      rw::collision::KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100 < 0x100,
+                  "the buffer is the host descriptor rounded up to 0x100, not a tuned margin");
+    static_assert(rw::collision::KU_VOLUME_LINE_QUERY_HOST_SIZE_R100 <=
+                      FineIntersectionTestModule::KU_VOLUME_LINE_QUERY_MEM_SIZE,
+                  "the host VolumeLineQuery for 100 / 100 fits the console's 67584-byte VolumeLineQueryMem");
+}
 
 namespace CgsSceneManager
 {
@@ -36,11 +52,13 @@ void FineIntersectionTestModule::Construct()
     mpEntityManager = nullptr;                                      // word 91653 <- 0
 
     // --- volume-volume query ---
-    // The X360 descriptor is a 5-entry rw::ResourceDescriptor block; only entry[0].size
+    // The X360 descriptor is a 5-entry rw::ResourceDescriptor block (var_80); only entry[0].size
     // is consulted here, so a small u32[12] scratch covers it exactly as the asm does.
+    // NOT X360: host GPInstance / VolRef widths -- the :63 assert keeps the console text but compares
+    // against the host buffer (the console's 0x828B0C4C `ori r29, r11, 0x9000`).
     u32 laVolumeVolumeDesc[12];
     rw::collision::VolumeVolumeQuery::GetResourceDescriptor(laVolumeVolumeDesc, 100, 100);
-    CGS_ASSERT(laVolumeVolumeDesc[0] <= KU_VOLUME_VOLUME_QUERY_MEM_SIZE,
+    CGS_ASSERT(laVolumeVolumeDesc[0] <= KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE,
                "VolumeVolumeQueryMem is too small");
 
     void* lpVolumeVolumeBuffer[5];
@@ -53,13 +71,15 @@ void FineIntersectionTestModule::Construct()
         rw::collision::VolumeVolumeQuery::Initialize(lpVolumeVolumeBuffer, 100, 100));  // word 91654
 
     // --- volume-line query ---
-    u32 luVolumeLineDescSize;
-    rw::collision::VolumeLineQuery::GetResourceDescriptor(&luVolumeLineDescSize, 100, 100);
-    CGS_ASSERT(luVolumeLineDescSize <= KU_VOLUME_LINE_QUERY_MEM_SIZE,
+    // The whole 5-entry descriptor block (var_50, 0x828B0CC0). Until 2026-09-25 this was ONE u32, which the
+    // descriptor's ten words overran on the stack; the module was not mounted, so it never ran.
+    u32 laVolumeLineDesc[12];
+    rw::collision::VolumeLineQuery::GetResourceDescriptor(laVolumeLineDesc, 100, 100);
+    CGS_ASSERT(laVolumeLineDesc[0] <= KU_VOLUME_LINE_QUERY_MEM_SIZE,
                "VolumeLineQueryMem is too small");
 
     void* lpVolumeLineBuffer[5];
-    lpVolumeLineBuffer[0] = macVolumeLineQueryBuffer;  // backing-store base (= this + 299008)
+    lpVolumeLineBuffer[0] = macVolumeLineQueryBuffer;  // backing-store base (console this + 299008; host + 0x49600)
     lpVolumeLineBuffer[1] = nullptr;
     lpVolumeLineBuffer[2] = nullptr;
     lpVolumeLineBuffer[3] = nullptr;
@@ -171,14 +191,20 @@ void FineIntersectionTestModule::_AssertLayout()
     static_assert(sizeof(u8) == 1, "u8 must be one byte");
     static_assert(offsetof(FineIntersectionTestModule, macVolumeVolumeQueryBuffer) == 0x00000,
                   "macVolumeVolumeQueryBuffer @ +0x00000");
-    static_assert(offsetof(FineIntersectionTestModule, macVolumeLineQueryBuffer) == 0x49000,
-                  "macVolumeLineQueryBuffer @ +0x49000");
-    static_assert(offsetof(FineIntersectionTestModule, mePrepareStage) == 0x59800,
-                  "mePrepareStage @ +0x59800");
-    static_assert(offsetof(FineIntersectionTestModule, meReleaseStage) == 0x59804,
-                  "meReleaseStage @ +0x59804");
-    static_assert(offsetof(FineIntersectionTestModule, miTextX) == 0x59808, "miTextX @ +0x59808");
-    static_assert(offsetof(FineIntersectionTestModule, miTextY) == 0x5980C, "miTextY @ +0x5980C");
+    // NOT X360: the host VolumeVolumeQuery buffer is KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE (0x49600), so everything
+    // after it sits 0x600 later than the console's +0x49000 / +0x59800 / +0x59804 / +0x59808 / +0x5980C; the
+    // contiguity the console offsets encode is what stays pinned.
+    static_assert(offsetof(FineIntersectionTestModule, macVolumeLineQueryBuffer) == KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE,
+                  "macVolumeLineQueryBuffer follows the VolumeVolumeQuery buffer (console +0x49000)");
+    static_assert(offsetof(FineIntersectionTestModule, mePrepareStage) ==
+                      KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE + KU_VOLUME_LINE_QUERY_MEM_SIZE,
+                  "mePrepareStage follows the VolumeLineQuery buffer (console +0x59800)");
+    static_assert(offsetof(FineIntersectionTestModule, meReleaseStage) == offsetof(FineIntersectionTestModule, mePrepareStage) + 4,
+                  "meReleaseStage (console +0x59804)");
+    static_assert(offsetof(FineIntersectionTestModule, miTextX) == offsetof(FineIntersectionTestModule, mePrepareStage) + 8,
+                  "miTextX (console +0x59808)");
+    static_assert(offsetof(FineIntersectionTestModule, miTextY) == offsetof(FineIntersectionTestModule, mePrepareStage) + 12,
+                  "miTextY (console +0x5980C)");
     // The trailing pointer members (mpVolumeManager/mpEntityManager/mpVolumeVolumeQuery/
     // mpVolumeLineQuery) sit at X360 byte offsets +0x59810/+0x59814/+0x59818/+0x5981C with
     // 32-bit pointer widths. On the x64 PC build pointers are 8 bytes, so their absolute

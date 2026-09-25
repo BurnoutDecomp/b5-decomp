@@ -639,6 +639,59 @@ namespace
     }
 }
 
+// ===========================================================================
+// rw::collision::VolumeLineQuery -- the two construction entry points (2026-09-25, crash parity FX-FOLLOWUPS).
+// Their one caller is FineIntersectionTestModule::Construct @0x828B0BF0 (0x828B0CC8 / 0x828B0D28).
+// ===========================================================================
+
+static_assert(VolumeLineQueryResourceSize(100u, 100u) == KU_VOLUME_LINE_QUERY_HOST_SIZE_R100,
+              "KU_VOLUME_LINE_QUERY_HOST_SIZE_R100 is GetResourceDescriptor's host total for 100 volumes / 100 results");
+
+// @ 0x82BB3838 -- the five descriptor entries {0, 1} (the `addic. r8, r8, -1 ; bge` loop), then entry 0 =
+// {0x1B0 * results + 0x80 * volumes + 0x110 + 0x2880, 16} (the `std` of the staged pair).
+// NOT X360: host VolumeLineQuery width -- the header term is KU_VOLUME_LINE_QUERY_HEADER_SIZE (VolumeQueryHostLayout.hpp).
+void* VolumeLineQuery::GetResourceDescriptor(void* lpOut, int liVolumes, int liResults)
+{
+    u32* lpau = static_cast<u32*>(lpOut);
+    for (int liEntry = 0; liEntry < 5; ++liEntry)
+    {
+        lpau[2 * liEntry + 0] = 0;   // m_size
+        lpau[2 * liEntry + 1] = 1;   // m_alignment
+    }
+    lpau[0] = VolumeLineQueryResourceSize(static_cast<u32>(liVolumes), static_cast<u32>(liResults));
+    lpau[1] = 16;
+    return lpOut;
+}
+
+// @ 0x82BB3888 -- `lwz r11, 0(r3)`: null block -> null. Otherwise the four capacities and the five carves,
+// in the console's store order: m_stackMax (+0xD4) = volumes, m_primBufferSize (+0xE0) = results,
+// m_resBufferSize (+0x1C) = results, m_instVolMax (+0xEC) = results; m_stackVRefBuffer (+0x44) = base + header,
+// m_primVRefBuffer (+0xD8) = that + 0x80 * volumes, m_instVolPool (+0xE4) = that + 0x80 * results,
+// m_resBuffer (+0x10) = that + 0x60 * results, m_spatialMapQueryMem (+0xF4) = that + 0xD0 * results. Nothing
+// else is written (the query is primed per test by InitQuery).
+// NOT X360: host VolumeLineQuery width -- the first carve is at KU_VOLUME_LINE_QUERY_HEADER_SIZE, console 0x110.
+void* VolumeLineQuery::Initialize(void** lppBuffer, int liVolumes, int liResults)
+{
+    VolumeLineQuery* lpQuery = static_cast<VolumeLineQuery*>(lppBuffer[0]);
+    if (lpQuery == nullptr)
+    {
+        return nullptr;
+    }
+
+    lpQuery->m_stackMax       = static_cast<u32>(liVolumes);
+    lpQuery->m_primBufferSize = static_cast<u32>(liResults);
+    lpQuery->m_resBufferSize  = static_cast<u32>(liResults);
+    lpQuery->m_instVolMax     = static_cast<u32>(liResults);
+
+    u8* const lpBase = reinterpret_cast<u8*>(lpQuery);
+    lpQuery->m_stackVRefBuffer    = reinterpret_cast<VolRef*>(lpBase + KU_VOLUME_LINE_QUERY_HEADER_SIZE);
+    lpQuery->m_primVRefBuffer     = lpQuery->m_stackVRefBuffer + liVolumes;
+    lpQuery->m_instVolPool        = reinterpret_cast<Volume*>(lpQuery->m_primVRefBuffer + liResults);
+    lpQuery->m_resBuffer          = reinterpret_cast<VolumeLineSegIntersectResult*>(lpQuery->m_instVolPool + liResults);
+    lpQuery->m_spatialMapQueryMem = lpQuery->m_resBuffer + liResults;
+    return lpQuery;
+}
+
 int VolumeVolumeQuery::GetPrimitiveIntersections()
 {
     GetPrimitiveBBoxOverlaps();                                 // bl 0x82BB3AB0 (result unused)

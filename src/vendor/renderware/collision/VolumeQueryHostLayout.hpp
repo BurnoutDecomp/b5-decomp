@@ -40,6 +40,8 @@
 #include "vendor/renderware/collision/VolumeQuery.hpp"       // VolumeVolumeQuery
 #include "vendor/renderware/collision/VolumeBBoxQuery.hpp"   // VolumeBBoxQuery
 #include "vendor/renderware/collision/GPInstance.hpp"        // GPInstance / VolRef1xN / PrimitivePairIntersectResult
+#include "vendor/renderware/collision/CollisionVolume.hpp"   // Volume (VolumeLineQuery's instanced-volume pool)
+#include "vendor/renderware/collision/LineSegIntersect.hpp"  // VolumeLineSegIntersectResult (its result buffer)
 
 #include <cstddef>   // size_t
 
@@ -91,5 +93,30 @@ namespace collision
              + KU_PRIMITIVE_PAIR_INTERSECT_RESULT_STRIDE * luResults
              + VolumeVolumeQueryInstancingSize(luResults);
     }
+
+    // ---- VolumeLineQuery (2026-09-25) ----------------------------------------------------------------------
+    // GetResourceDescriptor @0x82BB3838: `mulli r11, r5, 0x1B0 ; slwi r10, r4, 7 ; add ; addi 0x110 ; addi 0x2880`
+    // == 0x1B0 * results + 0x80 * volumes + 0x110 + 0x2880, and Initialize @0x82BB3888 carves, from base + 0x110:
+    // the stack VolRefs (0x80 * volumes), the primitive VolRefs (0x80 * results), the instanced Volumes
+    // (0x60 * results), the VolumeLineSegIntersectResults (0xD0 * results), then the spatial-map query memory.
+    // On the host the three record strides are native (VolRef 0x80, Volume 0x60 and VolumeLineSegIntersectResult
+    // 0xD0 are static_asserted in their headers); only the header differs.
+    // NOT X360: host VolumeLineQuery width -- console header 0x110.
+    constexpr u32 KU_VOLUME_LINE_QUERY_HEADER_SIZE =
+        static_cast<u32>((sizeof(VolumeLineQuery) + 15u) & ~static_cast<size_t>(15u));
+    // The spatial-map query memory (the console's 0x2880). FLAG: the CONSOLE size, kept because nothing on
+    // the host writes it -- the line walk that places the spatial-map line queries there (GetIntersections) is
+    // not reconstructed. Re-derive it at host widths when that lands (the VolumeBBoxQuery 0x27E0 precedent).
+    constexpr u32 KU_VOLUME_LINE_QUERY_SPATIAL_MAP_QUERY_MEM = 0x2880u;
+
+    constexpr u32 VolumeLineQueryResourceSize(u32 luVolumes, u32 luResults)
+    {
+        return KU_VOLUME_LINE_QUERY_HEADER_SIZE
+             + static_cast<u32>(sizeof(VolRef)) * luVolumes
+             + static_cast<u32>(sizeof(VolRef) + sizeof(Volume) + sizeof(VolumeLineSegIntersectResult)) * luResults
+             + KU_VOLUME_LINE_QUERY_SPATIAL_MAP_QUERY_MEM;
+    }
+    static_assert(sizeof(VolRef) + sizeof(Volume) + sizeof(VolumeLineSegIntersectResult) == 0x1B0u,
+                  "VolumeLineQuery's per-result records are the console's 0x1B0 on the host too");
 }
 }
