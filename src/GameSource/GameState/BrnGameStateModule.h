@@ -1699,11 +1699,12 @@ private:
     // resource pointer" (CgsResourcePtr.h) and then faulted reading +0x20 of null.
     CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette> mpPlayerCarColours;
 
-    // X360 +0x32DC4 (208324). The one-shot latch PreWorldUpdate @0x823A5510 tests before running
-    // SendSetupPlayerCarEvent + SendSetUpAllEventStartsMessage, and clears immediately after
-    // (`stb r17, 0(r28)` with r17 == 0). The console ARMS it from an event handler this slice does
-    // not reconstruct; on PC it is armed at the end of Prepare's terminal stage, which is the first
-    // moment its three data preconditions (vehicle list, wheel list, TriggerData) are all satisfied.
+    // X360 +0x32DC4 (208324) -- DWARF BrnGameStateModule.h:272 mbIsFirstUpdate. The one-shot latch
+    // PreWorldUpdate @0x823A5510 tests before running SendSetupPlayerCarEvent +
+    // SendSetUpAllEventStartsMessage, and clears immediately after (`stb r17, 0(r28)` with r17 == 0).
+    // The console arms it ONCE, in Construct (`stbx r24(=1), r31, 0x32DC4` @0x823807A4); an image-wide
+    // scan finds no other writer. [FX-AIBUZZ 2026-09-24: the old note said an event handler arms it and
+    // the PC armed it at the end of Prepare -- both corrected; see Construct]
     bool mbSendSetupPlayerCarPending = false;
 
     // ⭐ X360 +0x38B72 (232306) -- THE SECOND HALF OF THE START-OF-GAME JUNKYARD HANDSHAKE.
