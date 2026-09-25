@@ -842,12 +842,19 @@ void CrashModule::HandleNetworkCrashingTraffic( const CrashIO::InputBuffer_PreSc
 
         // FLAG PC witness (BRN_NETCRASH_DIAG, capped; NOT console code): proves this body ran on a
         // frame that carried the other player's crashing traffic, and what it did with it.
+        // Two budgets of KI_NETCRASH_DIAG_MAX_LINES each: frames that posted at least one update, and
+        // frames whose updates were ALL contentious (posted=0 -- e.g. each machine's own lockstep
+        // swerve crash, which both halves own locally). With one shared budget the contentious
+        // frames used up every line before the first posted one (fxnetcrash_pair/20260925_131154:
+        // 40 posted=0 lines, the cap).
         if( NetCrashDiagEnabled() && CgsDev::Log::gpDebugPrint && lpCrashingTrafficQueue->GetLength() > 0 )
         {
-            static s32 siLines = 0;
-            if( siLines < KI_NETCRASH_DIAG_MAX_LINES )
+            static s32 siPostedLines = 0;
+            static s32 siContentiousLines = 0;
+            s32& lriLines = ( lCrashingTrafficForPlayer.GetLength() > 0 ) ? siPostedLines : siContentiousLines;
+            if( lriLines < KI_NETCRASH_DIAG_MAX_LINES )
             {
-                ++siLines;
+                ++lriLines;
                 const CrashIO::CrashingTrafficUpdateEvent& lrFirst = lpCrashingTrafficQueue->GetEvent( 0 );
                 *CgsDev::Log::gpDebugPrint
                     << "[netcrash] HandleNetworkCrashingTraffic player=" << static_cast<s32>( leActiveRaceCarIndex )
