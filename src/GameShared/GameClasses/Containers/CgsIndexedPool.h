@@ -117,6 +117,19 @@ public:
         msNumFree      = msCapacity;
     }
 
+    // ADDITIVE (crash parity FX-OCTREE, 2026-09-25): the three count accessors, DWARF CgsIndexedPool.h:171 /
+    // :187 / :203 (`uint16_t GetPoolSize()` / `GetNumFree()` / `GetNumUsed()` on
+    // IndexedPool<CgsSceneManager::LooseOctree::LooseOctreeNodeAllocation, std::uint16_t>; not const in the
+    // DWARF). Inlined at every console reader of the loose octree's mFreeNodeGroupPool (X360 +0x446A8):
+    //   GetPoolSize  StartFrustumTestJobs @0x828B24BC (`lhzx +0x446B4` -> the job's node count)
+    //   GetNumFree   AdaptiveDepthUpdateAddNodesRecursive @0x828CA394 and SplitAndPropogateRecursive
+    //                @0x828BC304 (`lhz +0x446B2`; assert text "mFreeNodeGroupPool.GetNumFree() > 0", :815)
+    //   GetNumUsed   AdaptiveDepthUpdateRemoveNodesRecursive @0x828CA520 and Construct's miNumStaticNodes
+    //                latch (`lhzx +0x446B0` @0x828C9E90 -> `stwx +0x44684` @0x828C9EF8)
+    IndexType GetPoolSize() { return msCapacity; }
+    IndexType GetNumFree()  { return msNumFree; }
+    IndexType GetNumUsed()  { return msNumAllocated; }
+
     // Get @ 0x828DFD38 (CgsResource::ResourceModule::ProcessPendingFileSystemResponses, char-pool):
     // gather pointers to every CURRENTLY-ALLOCATED element into the caller's buffer and return how
     // many were written. X360: assert the supplied buffer holds at least msCapacity entries

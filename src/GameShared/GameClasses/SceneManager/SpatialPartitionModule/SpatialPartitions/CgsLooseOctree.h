@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"                    // CgsGeometric::Frustum (the 0x80 SoA plane block)
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/CgsSpatialPartition.h" // SpatialPartition
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsJobCoarseResultBuffer.h"              // JobCoarseResultBuffer
+#include "GameShared/GameClasses/Containers/CgsIndexedPool.h"                          // CgsContainers::IndexedPool (mFreeNodeGroupPool)
 #include "vendor/renderware/collision/VolumeQuery.hpp"   // rw::collision::VolumeVolumeQuery + its host size for 100/100
 
 // ============================================================================
@@ -160,7 +161,20 @@ namespace CgsSceneManager
         bool HasParent()          const { return muParentIndex != KU_INVALID_NODE; }
         bool IsLeaf()             const { return muFirstChildIndex == KU_INVALID_NODE; }
         u32  CountElements()      const { return muNumElements; }
+
+        // DWARF CgsLooseOctreeNode.h:103 / :106 / :109 / :112 -- the topology accessors the adaptive-depth
+        // split / merge and the static AllocRecursive use (`sth +0x40`, `lhz` / `sth +0x42`).
+        void SetParentIndex(u16 lu16Index)     { muParentIndex = lu16Index; }
+        u16  GetFirstChildIndex() const        { return muFirstChildIndex; }
+        void SetFirstChildIndex(u16 lu16Index) { muFirstChildIndex = lu16Index; }
+        bool HasChildren()        const        { return muFirstChildIndex != KU_INVALID_NODE; }
     };
+
+    // The node is 0x60 bytes on the host too: every console reader indexes the node array as
+    // `mpNodes + 96 * index` (e.g. SplitAndPropogateRecursive @0x828BBD84 `rotlwi 1 ; add ; slwi 5`), and
+    // Construct @0x828C99D8 sizes the array as 96 * (nodes). The one console pointer in it (the entity
+    // list's mpElements at +0x48) is modelled as a 32-bit pad, so no member widens.
+    static_assert(sizeof(LooseOctreeNode) == 0x60, "LooseOctreeNode keeps the console's 96-byte stride on the host");
 
     // CgsLooseOctreeNode.h:158 (DWARF) -- the per-node sub-tree type mask
     // (mpNodesEntityInfo @ X360 +0x446B8); FrustumTestRecursive gates each child
@@ -169,6 +183,7 @@ namespace CgsSceneManager
     {
         u32 mxSubTreeEntityFlags;   // +0x00
     };
+    static_assert(sizeof(LooseOctreeNodeEntityInfo) == 4, "Construct sizes the sub-tree mask array as 4 * (nodes)");
 
     // ------------------------------------------------------------------
     // FrustumJobQueryInfo -- the staged query set inside one job's 0x800 data block
@@ -213,6 +228,22 @@ namespace CgsSceneManager
     struct LooseOctree : public SpatialPartition
     {
         LooseOctree();
+
+        // DWARF CgsLooseOctree.h:163-165 -- one entry of the free-node-group pool: the index of the first of the
+        // four consecutive nodes it hands out (Construct @0x828C9DD8..0x828C9DFC seeds entry g with 1 + 4*g, `sth`).
+        struct LooseOctreeNodeAllocation
+        {
+            u16 muFirstChildIndex;
+        };
+        static_assert(sizeof(LooseOctreeNodeAllocation) == 2, "Construct sizes the entry array as 2 * (groups)");
+
+        // DWARF CgsLooseOctree.h:581 -- IndexedPool<LooseOctreeNodeAllocation, std::uint16_t> mFreeNodeGroupPool
+        // (X360 +0x446A8: +0 entries, +4 free indices, +8 used, +0xA free, +0xC capacity -- the tree's generic
+        // CgsContainers::IndexedPool with IndexType u16; its Pop / PushIndex are the console's sub_828B8DC0 /
+        // sub_828AE988 word for word). The generic's second argument is an unread placeholder: the capacity is the
+        // group count Construct computes at run time (the static tree's groups + KU_LOOSE_OCTREE_ADAPTIVE_NODEARRAY_
+        // POOL_SIZE spares), held in the pool's own capacity field.
+        typedef CgsContainers::IndexedPool<LooseOctreeNodeAllocation, 0, u16> NodeGroupPool;
 
         // @ 0x828BADD8 -- placement-new: carve a LooseOctree out of the scene resource
         // allocator (a 16-byte-aligned main-memory block).
@@ -387,7 +418,11 @@ namespace CgsSceneManager
                                const CgsGeometric::Frustum& lrFrustum) const;          // @0x828BDAC0
         void PushCoarseResult(FrustumTestParams* lpParams, u16 lu16EntityIndex);
 
-        void AllocRecursive(u32 luDepth, u16 lu16NodeIndex, u16 lu16ParentIndex);      // @0x828BB4A0
+        // @0x828BB4A0 (an export hole; DWARF CgsLooseOctree.cpp:386) -- the static tree: link the node to its
+        // parent and, above the deepest static level, Pop a four-node group for its children and recurse.
+        // The allocator is only threaded through (the console passes r4 down and never reads it).
+        void AllocRecursive(rw::IResourceAllocator* lpAllocator, u32 luDepth, u16 lu16NodeIndex,
+                            u16 lu16ParentIndex);
         void PrepareRecursive(u16 lu16NodeIndex, Vector3 lPosition, f32 lfSize);       // @0x828BB1E8
         void AddEntityInternal(u16 lu16EntityIndex);                                   // @0x828BB648
         void RemoveEntityInternal(u16 lu16EntityIndex);                                // @0x828BB948
@@ -395,20 +430,34 @@ namespace CgsSceneManager
         void LinkEntityToNode(LooseOctreeNode* lpNode, u16 lu16EntityIndex);
         void UnlinkEntityFromNode(LooseOctreeNode* lpNode, u16 lu16EntityIndex);
 
+        // ---- the ADAPTIVE DEPTH refinement Update runs before UpdateRecursive (DWARF CgsLooseOctree.cpp) ----
+        // @0x828CA360 (:781) -- walk the flagged branches whose sub-tree holds more than
+        // muAdaptiveNodeSplitThreshold entities and split every such leaf, while free groups remain and the
+        // depth is below muAdaptiveMaxDepth - 1.
+        void AdaptiveDepthUpdateAddNodesRecursive(u16 lu16NodeIndex, u32 luDepth);
+        // @0x828CA4F8 (:929) -- walk the flagged branches and merge back every node at or below the deepest
+        // static level whose sub-tree has fallen to muAdaptiveNodeSplitThreshold entities or fewer.
+        void AdaptiveDepthUpdateRemoveNodesRecursive(u16 lu16NodeIndex, u32 luDepth);
+        // @0x828BBBD0 (:836) -- give a leaf four children from the pool, push down every entity small enough for
+        // a child, and split on down through any child still over the threshold.
+        void SplitAndPropogateRecursive(u16 lu16NodeIndex, u32 luDepth);
+        // @0x828BC340 (:971) -- move every entity of a sub-tree onto lpTargetNode and hand the sub-tree's groups
+        // back to the pool.
+        void MergeSubTreeRecursive(u16 lu16NodeIndex, LooseOctreeNode* lpTargetNode, u32 luDepth);
+
         u16 GetNodeIndex(const LooseOctreeNode* lpNode) const
         { return static_cast<u16>(lpNode - mpNodes); }
 
         // ---- members (X360 offsets above) ----
         u32              muDepth;                       // +0x44680
-        s32              miNumStaticNodes;              // +0x44684
+        s32              miNumStaticNodes;              // +0x44684 (the pool's used count after the static tree)
         f32              mfBaseSize;                    // +0x44688 (the ROOT's FULL size)
         f32              mfLooseness;                   // +0x4468C
         Vector3          mCentrePos;                    // +0x44690
         LooseOctreeNode* mpRootNode;                    // +0x446A0
         LooseOctreeNode* mpNodes;                       // +0x446A4
+        NodeGroupPool    mFreeNodeGroupPool;            // +0x446A8 (DWARF CgsLooseOctree.h:581)
         LooseOctreeNodeEntityInfo* mpNodesEntityInfo;   // +0x446B8
-        u32              muNumNodes;                    // (capacity << 2) + 1
-        u32              muNumNodeGroups;               // mFreeNodeGroupPool.muCapacity
         u32              muAdaptiveNodeSplitThreshold;  // +0x8D950
         u32              muAdaptiveMaxDepth;            // +0x8D954
 

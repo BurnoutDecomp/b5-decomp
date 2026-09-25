@@ -19,6 +19,10 @@
 //   LooseOctree::SetEntityPosition              @ 0x828C9820
 //   LooseOctree::SetEntityRadius                @ 0x828BC740
 //   LooseOctree::Update                         @ 0x828D0180
+//   LooseOctree::AdaptiveDepthUpdateRemoveNodesRecursive @ 0x828CA4F8  (2026-09-25, FX-OCTREE)
+//   LooseOctree::AdaptiveDepthUpdateAddNodesRecursive    @ 0x828CA360  (2026-09-25, FX-OCTREE)
+//   LooseOctree::SplitAndPropogateRecursive     @ 0x828BBBD0  (2026-09-25, FX-OCTREE)
+//   LooseOctree::MergeSubTreeRecursive          @ 0x828BC340  (2026-09-25, FX-OCTREE)
 //   LooseOctree::AddJobFrustumTest              @ 0x828AA958
 //   LooseOctree::StartFrustumTestJobs           @ 0x828B23E0
 //   LooseOctree::WaitForFrustumTestJobResults   @ 0x828B2558
@@ -53,17 +57,17 @@
 //   * the traversal itself and the per-entity accept test.
 // The RESULTS and their ORDER are therefore identical to the console's.
 //
-// FLAG (deferred, not a divergence in the results): the ADAPTIVE-DEPTH refinement
-// (SplitAndPropogateRecursive @0x828BBBD0 / MergeSubTreeRecursive @0x828BC340, driven
-// from Update's AdaptiveDepthUpdate*Recursive passes) is not reconstructed here. It
-// subdivides a static leaf that has accumulated more than muAdaptiveNodeSplitThreshold
-// entities, down to muAdaptiveMaxDepth, by handing out four-node groups from
-// mFreeNodeGroupPool. It changes only how DEEP the walk can prune -- a query's result
-// set is the same either way, because a node is only pruned when its loose bounds miss
-// the frustum entirely and only trivially accepted when they are fully inside, and
-// both properties are inherited by a node's children. The static tree Construct builds
-// (muDepth levels) is the tree used; the pool is allocated with the console's sizing so
-// the refinement can be dropped in without touching the memory profile.
+// THE ADAPTIVE DEPTH (2026-09-25, crash parity FX-OCTREE). Update @0x828D0180 runs two passes before the
+// bounds update: AdaptiveDepthUpdateRemoveNodesRecursive merges back any refined sub-tree whose entity count
+// has fallen to muAdaptiveNodeSplitThreshold (32) or fewer, and AdaptiveDepthUpdateAddNodesRecursive splits
+// any leaf holding more than that, down to depth muAdaptiveMaxDepth (10), with four-node groups taken from
+// mFreeNodeGroupPool (the static tree's groups + KU_LOOSE_OCTREE_ADAPTIVE_NODEARRAY_POOL_SIZE spares).
+// Until this date the PC ran neither, under a FLAG that called the refinement "not a divergence in the
+// results". The result SET of a query is indeed the same either way (loose bounds contain their spheres),
+// but the ORDER is not -- a split re-files a leaf's chain into its children, and the walks visit a node's
+// own chain before its children -- and neither is the cost: measured on exe 340af252 one static leaf held
+// 3360 entities (89% of the world), so every frustum / sphere / line / volume query tested thousands of
+// spheres per leaf where the console tests at most about 32 per node.
 // ===========================================================================
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/CgsLooseOctree.h"
 #include "rw/rwcore_structs.h"   // rw::IResourceAllocator / rw::Resource / rw::ResourceDescriptor (operator new)
@@ -99,17 +103,35 @@ namespace CgsSceneManager
 
     namespace
     {
-        // X360 unk_83085A70 (CgsLooseOctree.cpp:62, .data) --
-        // Vector3 KA_LOOSE_OCTREE_CHILD_OFFSETS[4], scaled by the parent's FULL size
-        // when PrepareRecursive places the four children, so each component is a
-        // quarter of the parent extent in X/Z and zero in Y (the tree does not split
-        // in Y -- it tracks a loose [minY, maxY] band per node). The four sign pairs
-        // are the four XZ quadrants; the intra-group ORDER is unobservable (every
-        // reader either visits all four children or resolves a child through
-        // CalcNextSubNode, which is defined below against this same order).
-        const f32 KAF_CHILD_OFFSET_X[4] = { -0.25f,  0.25f, -0.25f,  0.25f };
-        const f32 KAF_CHILD_OFFSET_Z[4] = { -0.25f, -0.25f,  0.25f,  0.25f };
+        // X360 unk_83085A70 (CgsLooseOctree.cpp:62, `Vector3 KA_LOOSE_OCTREE_CHILD_OFFSETS[4]`) -- a CRT-initialised
+        // .data table: the thunk at 0x82C6F7B8 stores {-0.25, 0, -0.25, 0}, {0.25, 0, -0.25, 0}, {-0.25, 0, 0.25, 0},
+        // {0.25, 0, 0.25, 0} (flt_8200D56C = -0.25, flt_82003F40 = 0.25, flt_82001CC0 = 0.0, w a zero word).
+        // Scaled by the parent's FULL size, each child sits a quarter of the parent extent off centre in X / Z and
+        // not at all in Y (the tree does not split in Y -- it tracks a loose [minY, maxY] band per node). The
+        // order is the one CalcNextSubNode resolves: child 1 is +X, child 2 is +Z. It is observable: every walk
+        // visits the four children in this order.
+        const f32 KAF_LOOSE_OCTREE_CHILD_OFFSETS[KU_NUM_SUBNODES][4] =
+        {
+            { -0.25f, 0.0f, -0.25f, 0.0f },
+            {  0.25f, 0.0f, -0.25f, 0.0f },
+            { -0.25f, 0.0f,  0.25f, 0.0f },
+            {  0.25f, 0.0f,  0.25f, 0.0f },
+        };
 
+        // A child's centre: offset * the parent's FULL size + the parent's centre, in every lane, rounded ONCE --
+        // both console sites are fused multiply-adds (PrepareRecursive `vmaddcfp128 v1, v0, v1, v127` @0x828BB468,
+        // vD = vA * vD + vB; SplitAndPropogateRecursive `vmaddfp v1, v12, v11, v0` @0x828BBE04, IDA field order
+        // D,A,B,C => A * C + B). ROUNDING_RULE rule 3. (offset * size is exact for +-0.25 and 0 away from the f32
+        // denormal range, so x and z carry the same bits as the two-step form; a -0.0 y or w comes out +0.0.)
+        inline Vector3 LooseOctreeChildPosition(const Vector3& lrCentre, u32 luChild, f32 lfSize)
+        {
+            Vector3 lPosition;
+            lPosition.x = std::fma(KAF_LOOSE_OCTREE_CHILD_OFFSETS[luChild][0], lfSize, lrCentre.x);
+            lPosition.y = std::fma(KAF_LOOSE_OCTREE_CHILD_OFFSETS[luChild][1], lfSize, lrCentre.y);
+            lPosition.z = std::fma(KAF_LOOSE_OCTREE_CHILD_OFFSETS[luChild][2], lfSize, lrCentre.z);
+            lPosition.w = std::fma(KAF_LOOSE_OCTREE_CHILD_OFFSETS[luChild][3], lfSize, lrCentre.w);
+            return lPosition;
+        }
     }
 
     namespace
@@ -171,7 +193,8 @@ namespace CgsSceneManager
             }
         }
 
-        void NoteOctreeHistogram(const LooseOctreeNode* lpNodes, u32 luSplitThreshold)
+        void NoteOctreeHistogram(const LooseOctreeNode* lpNodes, u32 luSplitThreshold, u32 luUsedGroups,
+                                 u32 luFreeGroups, s32 liStaticGroups)
         {
             static const bool sbEnabled = []() {
                 const char* lpcValue = std::getenv("BRN_OCTREE_HIST_DIAG");
@@ -207,12 +230,12 @@ namespace CgsSceneManager
                 }
             }
 
-            char lacLine[512];
+            char lacLine[640];
             s32 liLength = std::snprintf(lacLine, sizeof(lacLine),
                 "[octree-hist] #%d update %d: %u nodes, deepest %u, root subtree %u, %u entities on chains, fullest "
-                "chain %u (depth %u), %u chain(s) > %u; own-chain buckets",
+                "chain %u (depth %u), %u chain(s) > %u; pool groups used %u (static %d) free %u; own-chain buckets",
                 siReports, liUpdate, luNodes, lHistogram.muDeepest, lpNodes[0].muSubTreeEntityCount, luEntities,
-                luFullest, luFullestDepth, luOver, luSplitThreshold);
+                luFullest, luFullestDepth, luOver, luSplitThreshold, luUsedGroups, liStaticGroups, luFreeGroups);
             for (u32 luBucket = 0; luBucket < KU_OCTREE_HIST_NUM_BUCKETS && liLength > 0 &&
                                    liLength < static_cast<s32>(sizeof(lacLine)); ++luBucket)
             {
@@ -244,8 +267,6 @@ namespace CgsSceneManager
         , mpRootNode(0)
         , mpNodes(0)
         , mpNodesEntityInfo(0)
-        , muNumNodes(0)
-        , muNumNodeGroups(0)
         , muAdaptiveNodeSplitThreshold(0)
         , muAdaptiveMaxDepth(0)
         , mpEntityVolume(0)
@@ -305,9 +326,9 @@ namespace CgsSceneManager
     // Construct @ 0x828C99D8
     //
     // Copy the construct params out, size the node array from the level count, carve
-    // the node array + the per-node sub-tree-mask array + the free-node-group pool out
-    // of the scene resource allocator, build the STATIC tree topology (AllocRecursive)
-    // and reset the job state.
+    // the node array, the per-node sub-tree-mask array and the free-node-group pool's two
+    // arrays out of the scene resource allocator, build the STATIC tree topology
+    // (AllocRecursive, which takes its groups from the pool) and reset the job state.
     //
     // The node count (asm @0x828C9A40..0x828C9AB0):
     //   uiNumSubNodes = sum(k = 1 .. muDepth-1) 4^k
@@ -316,6 +337,10 @@ namespace CgsSceneManager
     // KU_LOOSE_OCTREE_ADAPTIVE_NODEARRAY_POOL_SIZE spare groups for the adaptive-depth
     // refinement, plus node 0 (the root). Reproduced exactly so the memory profile
     // matches the console's.
+    //
+    // The host carve is the console's byte for byte: a node is 0x60 on both, a sub-tree mask
+    // 4, a pool entry and a free index 2 (static_asserts in the header). For the world tree
+    // (depth 3: 2053 groups, 8213 nodes) that is 788448 + 32852 + 4106 + 4106 bytes.
     // ===========================================================================
     void LooseOctree::Construct(SpatialPartitionConstructParams* lpParams,
                                 rw::IResourceAllocator* lpAllocator)
@@ -330,40 +355,60 @@ namespace CgsSceneManager
         muAdaptiveNodeSplitThreshold = static_cast<u32>(lpParams->muAdaptiveNodeSplitThreshold);
         muAdaptiveMaxDepth           = static_cast<u32>(lpParams->muAdaptiveMaxDepth);
 
-        u32 luNumSubNodes = 0;
+        u32 luNumStaticSubNodes = 0;
         if (muDepth > 1)
         {
             u32 luShift = 2;
             for (u32 luLevel = muDepth - 1; luLevel != 0; --luLevel)
             {
-                luNumSubNodes += (1u << luShift);
+                luNumStaticSubNodes += (1u << luShift);
                 luShift += 2;
             }
         }
 
-        const u32 luRounded  = (luNumSubNodes + (KU_LOOSE_OCTREE_ADAPTIVE_NODEARRAY_POOL_SIZE * 4) + 3) & ~3u;
-        muNumNodeGroups      = luRounded >> 2;
-        muNumNodes           = luRounded + 1;
+        // 0x828C9AA0 `addi 0x2003` / 0x828C9AA8 `clrrwi 2` / 0x828C9AB0 `srwi 2`.
+        const u32 luNumSubNodes   = (luNumStaticSubNodes + (KU_LOOSE_OCTREE_ADAPTIVE_NODEARRAY_POOL_SIZE * KU_NUM_SUBNODES)
+                                     + (KU_NUM_SUBNODES - 1)) & ~(KU_NUM_SUBNODES - 1);
+        const u32 luNumNodeGroups = luNumSubNodes / KU_NUM_SUBNODES;
+        const u32 luNumNodes      = luNumSubNodes + 1;
 
+        // The four carves, in the console's order (the allocator's vtable +0x10 at 0x828C9B08 / 0x828C9B74 /
+        // 0x828C9BD8 / 0x828C9C2C): nodes (16-aligned), sub-tree masks (128-aligned), the pool's entries
+        // ("lpNodeAllocations", 16-aligned) and its free indices ("lpFreeIndices", 16-aligned). The three
+        // asserts follow the four carves; nothing tests the mask array.
         mpNodes = static_cast<LooseOctreeNode*>(
-            AllocFromResourceAllocator(lpAllocator, muNumNodes * sizeof(LooseOctreeNode), 16));
-        CGS_ASSERT(mpNodes != 0, "Failed to allocate mpNodes\n");
-
+            AllocFromResourceAllocator(lpAllocator, luNumNodes * sizeof(LooseOctreeNode), 16));
         mpNodesEntityInfo = static_cast<LooseOctreeNodeEntityInfo*>(
-            AllocFromResourceAllocator(lpAllocator, muNumNodes * sizeof(LooseOctreeNodeEntityInfo), 128));
+            AllocFromResourceAllocator(lpAllocator, luNumNodes * sizeof(LooseOctreeNodeEntityInfo), 128));
+        LooseOctreeNodeAllocation* lpNodeAllocations = static_cast<LooseOctreeNodeAllocation*>(
+            AllocFromResourceAllocator(lpAllocator, luNumNodeGroups * sizeof(LooseOctreeNodeAllocation), 16));
+        u16* lpFreeIndices = static_cast<u16*>(
+            AllocFromResourceAllocator(lpAllocator, luNumNodeGroups * sizeof(u16), 16));
 
-        if (mpNodes == 0 || mpNodesEntityInfo == 0)
+        CGS_ASSERT(mpNodes != 0, "Failed to allocate mpNodes\n");                           // :181 (0x828C9C5C)
+        CGS_ASSERT(lpNodeAllocations != 0, "Failed to allocate lpNodeAllocations\n");       // :182 (0x828C9CBC)
+        CGS_ASSERT(lpFreeIndices != 0, "Failed to allocate lpFreeIndices\n");               // :183 (0x828C9D1C)
+
+        // 0x828C9D78..0x828C9DD0 -- IndexedPool::Construct inlined: entries (+0x446A8), free indices (+0x446AC),
+        // capacity (`sth +0x446B4`), then Clear (free index i = i, used = 0, free = capacity).
+        mFreeNodeGroupPool.Construct(lpNodeAllocations, lpFreeIndices, static_cast<u16>(luNumNodeGroups));
+        // 0x828C9DD4..0x828C9DFC -- entry g hands out the four nodes 1 + 4g .. 4 + 4g.
+        for (u32 luGroup = 0; luGroup < luNumNodeGroups; ++luGroup)
         {
-            mpRootNode = 0;
-            muNumNodes = 0;
-            return;
+            lpNodeAllocations[luGroup].muFirstChildIndex = static_cast<u16>(1 + KU_NUM_SUBNODES * luGroup);
         }
 
-        // Root: node index 0, no children until AllocRecursive links them.
+        // 0x828C9E00..0x828C9E30 -- the root is node 0 (+0x446A0 = mpNodes), a leaf until AllocRecursive gives it
+        // children; its parent is KU_INVALID_NODE (`r7 = 0xFFFF`).
         mpRootNode = mpNodes;
-        mpRootNode->muFirstChildIndex = KU_INVALID_NODE;
+        mpRootNode->SetFirstChildIndex(KU_INVALID_NODE);
 
-        AllocRecursive(0, 0, KU_INVALID_NODE);
+        AllocRecursive(lpAllocator, 0, 0, KU_INVALID_NODE);
+
+        // 0x828C9E90 `lhzx +0x446B0` -> 0x828C9EF8 `stwx +0x44684`: the static tree's group count is the pool's
+        // used count once AllocRecursive returns (5 for the world tree). AdaptiveDepthUpdateRemoveNodesRecursive
+        // compares the used count against it to tell whether any adaptive group is out.
+        miNumStaticNodes = static_cast<s32>(mFreeNodeGroupPool.GetNumUsed());
 
         // 0x828C9E34..0x828C9F7C -- the volume walk's two frames start as identity rotations with an all-zero
         // translation row, w included (1.0 is flt_82001C98, 0.0 flt_82001CC0; the rows are staged on the stack
@@ -428,43 +473,44 @@ namespace CgsSceneManager
     }
 
     // ===========================================================================
-    // AllocRecursive @ 0x828BB4A0
+    // AllocRecursive @ 0x828BB4A0 (an export hole -- read with ppcdis; DWARF CgsLooseOctree.cpp:386)
     //
-    // Build the STATIC tree topology: link node lu16NodeIndex to its parent, and while
-    // the level budget lasts hand it a four-node group out of the free pool and recurse
-    // into the four children. The console's pool hands out a group's precomputed first
-    // child index (Construct seeds mpElements[i].muFirstChildIndex = 1 + 4*i), so group
-    // g owns nodes 1+4g .. 4+4g -- reproduced here by taking the groups in order.
-    // miNumStaticNodes is the number of GROUPS the static tree consumed (Construct
-    // latches the pool's used count after this returns).
+    // Build the STATIC tree topology: link node lu16NodeIndex to its parent, and above the
+    // deepest static level Pop a four-node group from mFreeNodeGroupPool (bl sub_828B8DC0 @
+    // 0x828BB598, IndexedPool::Pop: the FIRST free index, the last one moved into its slot)
+    // and recurse into the four children. From the fresh pool Construct builds, the world
+    // tree (depth 3) therefore takes group 0 for the root (nodes 1..4) and groups 2052,
+    // 2051, 2050, 2049 for nodes 1..4 (nodes 8209.., 8205.., 8201.., 8197..): the static
+    // leaves live at the END of the node array, not at 5..20. Until 2026-09-25 the PC handed
+    // the groups out in order (5..20) from a private counter; the pool is now the console's.
+    //   0x828BB4DC  "Can't allocate invalid node\n" (:388) when the index is KU_INVALID_NODE
+    //   0x828BB56C  sth parent -> +0x40
+    //   0x828BB578  `cmplw depth, muDepth - 1 ; bne` -- the deepest static level is a leaf
+    //   0x828BB5A4  "Failed to allocate node children\n" (:406) on a null Pop; the child
+    //               index is then read through it all the same (0x828BB5F4 `lhz 0(r22)`)
+    // The allocator is only passed down (r18); the body never reads it.
     // ===========================================================================
-    void LooseOctree::AllocRecursive(u32 luDepth, u16 lu16NodeIndex, u16 lu16ParentIndex)
+    void LooseOctree::AllocRecursive(rw::IResourceAllocator* lpAllocator, u32 luDepth, u16 lu16NodeIndex,
+                                     u16 lu16ParentIndex)
     {
-        LooseOctreeNode& lrNode = mpNodes[lu16NodeIndex];
-        lrNode.muParentIndex     = lu16ParentIndex;
-        lrNode.muFirstChildIndex = KU_INVALID_NODE;
+        CGS_ASSERT(lu16NodeIndex != KU_INVALID_NODE, "Can't allocate invalid node\n");
 
-        if (luDepth + 1 >= muDepth)
-        {
-            return;   // deepest static level -- a leaf until the adaptive pass splits it
-        }
+        LooseOctreeNode* lpNode = &mpNodes[lu16NodeIndex];
+        lpNode->SetParentIndex(lu16ParentIndex);
 
-        // Take the next four-node group (index 1 + 4 * groupIndex).
-        const u32 luGroup = static_cast<u32>(miNumStaticNodes);
-        if (luGroup >= muNumNodeGroups)
+        if (luDepth == muDepth - 1)
         {
-            CGS_ASSERT(false, "Failed to allocate child nodes\n");
+            lpNode->SetFirstChildIndex(KU_INVALID_NODE);   // the deepest static level: a leaf
             return;
         }
-        ++miNumStaticNodes;
 
-        const u16 lu16FirstChild = static_cast<u16>(1 + 4 * luGroup);
-        lrNode.muFirstChildIndex = lu16FirstChild;
+        LooseOctreeNodeAllocation* lpAllocation = mFreeNodeGroupPool.Pop();
+        CGS_ASSERT(lpAllocation != 0, "Failed to allocate node children\n");
+        lpNode->SetFirstChildIndex(lpAllocation->muFirstChildIndex);
 
         for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
         {
-            AllocRecursive(luDepth + 1,
-                           static_cast<u16>(lu16FirstChild + luChild),
+            AllocRecursive(lpAllocator, luDepth + 1, static_cast<u16>(lpNode->GetFirstChildIndex() + luChild),
                            lu16NodeIndex);
         }
     }
@@ -530,14 +576,9 @@ namespace CgsSceneManager
 
         for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
         {
-            Vector3 lChildPosition;
-            lChildPosition.x = lPosition.x + KAF_CHILD_OFFSET_X[luChild] * lfSize;
-            lChildPosition.y = lPosition.y;
-            lChildPosition.z = lPosition.z + KAF_CHILD_OFFSET_Z[luChild] * lfSize;
-            lChildPosition.w = 0.0f;
-
+            // vmaddcfp128 @0x828BB468: offset * lfSize + lPosition, every lane, one rounding.
             PrepareRecursive(static_cast<u16>(lrNode.muFirstChildIndex + luChild),
-                             lChildPosition, lfHalfSize);
+                             LooseOctreeChildPosition(lPosition, luChild, lfSize), lfHalfSize);
         }
     }
 
@@ -584,7 +625,7 @@ namespace CgsSceneManager
     // ===========================================================================
     // CalcNextSubNode @ 0x828B11A0 -- which of the four sub-nodes a position falls in.
     // The split is in the world XZ plane about the node centre; the child order is the
-    // one KAF_CHILD_OFFSET_* above lays the children out in ((x > cx) | (z > cz) << 1).
+    // one KAF_LOOSE_OCTREE_CHILD_OFFSETS above lays the children out in ((x > cx) | (z > cz) << 1).
     // ===========================================================================
     u32 LooseOctree::CalcNextSubNode(const LooseOctreeNode* lpNode, const Vector4& lrPosition) const
     {
@@ -1093,19 +1134,20 @@ namespace CgsSceneManager
     }
 
     // ===========================================================================
-    // Update @ 0x828D0180 -- per-frame maintenance: only when the root wants an update,
-    // re-derive the loose bounds from the root down. (The X360 runs the two
-    // adaptive-depth passes first; see the TU banner for why their absence cannot change
-    // a query's result set.)
+    // Update @ 0x828D0180 (DWARF CgsLooseOctree.cpp:612) -- per-frame maintenance, only when the
+    // root wants an update (`lwzx +0x446A0 ; lwz 0x50 ; clrlwi 31 ; beq` 0x828D0190..0x828D01AC):
+    //   0x828D01B8  AdaptiveDepthUpdateRemoveNodesRecursive(0, 0)  merge back what emptied
+    //   0x828D01C8  AdaptiveDepthUpdateAddNodesRecursive(0, 0)     split what filled up
+    //   0x828D01D4  UpdateRecursive(0)                             re-derive the loose bounds
+    // in that order, and nothing else. (The console has no null test on the root; neither
+    // does this body since 2026-09-25 -- Construct always sets it.)
     // ===========================================================================
     void LooseOctree::Update()
     {
-        if (mpRootNode == 0)
-        {
-            return;
-        }
         if ((mpRootNode->muFlags & KU_OCTREE_NODE_FLAG_NEEDS_UPDATE) != 0)
         {
+            AdaptiveDepthUpdateRemoveNodesRecursive(0, 0);
+            AdaptiveDepthUpdateAddNodesRecursive(0, 0);
             UpdateRecursive(0);
         }
 
@@ -1124,12 +1166,233 @@ namespace CgsSceneManager
                     << " child0mask=" << static_cast<s32>(
                            mpRootNode->muFirstChildIndex == KU_INVALID_NODE
                                ? 0u : mpNodesEntityInfo[mpRootNode->muFirstChildIndex].mxSubTreeEntityFlags)
-                    << " nodes=" << static_cast<s32>(muNumNodes)
+                    << " nodes=" << ((static_cast<s32>(mFreeNodeGroupPool.GetPoolSize()) << 2) + 1)
                     << " staticGroups=" << miNumStaticNodes << "\n";
             }
         }
 
-        NoteOctreeHistogram(mpNodes, muAdaptiveNodeSplitThreshold);   // [DIAG] BRN_OCTREE_HIST_DIAG
+        NoteOctreeHistogram(mpNodes, muAdaptiveNodeSplitThreshold, mFreeNodeGroupPool.GetNumUsed(),
+                            mFreeNodeGroupPool.GetNumFree(), miNumStaticNodes);   // [DIAG] BRN_OCTREE_HIST_DIAG
+    }
+
+    // ===========================================================================
+    // AdaptiveDepthUpdateRemoveNodesRecursive @ 0x828CA4F8 (63 insns; DWARF CgsLooseOctree.cpp:929)
+    //
+    // The MERGE pass. Nothing to do while every group out of the pool belongs to the static
+    // tree (`lhzx +0x446B0 ; lwzx +0x44684 ; cmpw ; beq` 0x828CA52C / 0x828CA544) or at a leaf
+    // (0x828CA54C). Above the deepest static level (depth + 1 < muDepth, `cmplw ; blt`
+    // 0x828CA568) -- or wherever the sub-tree still holds more than the split threshold
+    // (`cmplw ; bgt` 0x828CA580) -- descend into each FLAGGED child (+0x50 bit 0,
+    // 0x828CA5BC) in child order. Otherwise the whole sub-tree merges back into this node
+    // (0x828CA58C: MergeSubTreeRecursive(node index, node, depth + 1)).
+    // ===========================================================================
+    void LooseOctree::AdaptiveDepthUpdateRemoveNodesRecursive(u16 lu16NodeIndex, u32 luDepth)
+    {
+        LooseOctreeNode* lpNode = &mpNodes[lu16NodeIndex];
+
+        if (static_cast<s32>(mFreeNodeGroupPool.GetNumUsed()) == miNumStaticNodes || !lpNode->HasChildren())
+        {
+            return;
+        }
+
+        const u32 luChildDepth = luDepth + 1;
+        if (luChildDepth < muDepth || lpNode->muSubTreeEntityCount > muAdaptiveNodeSplitThreshold)
+        {
+            for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
+            {
+                const u16 lu16ChildIndex = static_cast<u16>(lpNode->GetFirstChildIndex() + luChild);
+                if ((mpNodes[lu16ChildIndex].muFlags & KU_OCTREE_NODE_FLAG_NEEDS_UPDATE) != 0)
+                {
+                    AdaptiveDepthUpdateRemoveNodesRecursive(lu16ChildIndex, luChildDepth);
+                }
+            }
+            return;
+        }
+
+        MergeSubTreeRecursive(lu16NodeIndex, lpNode, luChildDepth);
+    }
+
+    // ===========================================================================
+    // AdaptiveDepthUpdateAddNodesRecursive @ 0x828CA360 (101 insns; DWARF CgsLooseOctree.cpp:781)
+    //
+    // The SPLIT pass. Nothing to do once the pool is empty (`lhz +0x446B2 ; beq` 0x828CA3A8)
+    // or at depth muAdaptiveMaxDepth - 1 and below (`cmplw ; bge` 0x828CA3C0). A node with
+    // children descends into each child whose sub-tree holds MORE than the threshold (`cmplw
+    // ; ble` 0x828CA404) and is flagged (0x828CA414), in child order. A leaf reached here is
+    // split, behind three asserts (0x828CA460 / 0x828CA488 / 0x828CA4BC; :814 / :815 / :816).
+    // ===========================================================================
+    void LooseOctree::AdaptiveDepthUpdateAddNodesRecursive(u16 lu16NodeIndex, u32 luDepth)
+    {
+        LooseOctreeNode* lpNode = &mpNodes[lu16NodeIndex];
+
+        if (mFreeNodeGroupPool.GetNumFree() == 0 || luDepth >= muAdaptiveMaxDepth - 1)
+        {
+            return;
+        }
+
+        if (lpNode->HasChildren())
+        {
+            for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
+            {
+                const u16 lu16ChildIndex = static_cast<u16>(lpNode->GetFirstChildIndex() + luChild);
+                const LooseOctreeNode& lrChild = mpNodes[lu16ChildIndex];
+                if (lrChild.muSubTreeEntityCount > muAdaptiveNodeSplitThreshold &&
+                    (lrChild.muFlags & KU_OCTREE_NODE_FLAG_NEEDS_UPDATE) != 0)
+                {
+                    AdaptiveDepthUpdateAddNodesRecursive(lu16ChildIndex, luDepth + 1);
+                }
+            }
+            return;
+        }
+
+        CGS_ASSERT(lpNode->CountElements() > muAdaptiveNodeSplitThreshold,
+                   "(uint32_t)lpNode->mEntityList.CountElements() > muAdaptiveNodeSplitThreshold");
+        CGS_ASSERT(mFreeNodeGroupPool.GetNumFree() > 0, "mFreeNodeGroupPool.GetNumFree() > 0");
+        CGS_ASSERT(luDepth >= muDepth - 1, "luDepth >= muDepth-1");
+
+        SplitAndPropogateRecursive(lu16NodeIndex, luDepth);
+    }
+
+    // ===========================================================================
+    // SplitAndPropogateRecursive @ 0x828BBBD0 (476 insns; DWARF CgsLooseOctree.cpp:836)
+    //
+    //   0x828BBC08..0x828BBCB8  IndexedPool::Pop inlined (the first free index, the last one
+    //                           moved into its slot); "Failed to allocate child nodes\n" (:844)
+    //                           on a null entry, whose child index is then read all the same
+    //   0x828BBD34              the node's first child = the entry's
+    //   0x828BBD98..0x828BBE28  the four children, in order: first child KU_INVALID_NODE
+    //                           (0x828BBDD0), parent = this node (`divw` by 96, 0x828BBDE0),
+    //                           centre = offset * (HalfBaseSize * 2.0) + the node's centre
+    //                           (vmulfp128 flt_82001D9C 0x828BBD70, vmaddfp 0x828BBE04), then
+    //                           PrepareRecursive(child, centre, the node's HalfBaseSize)
+    //   0x828BBE2C..0x828BC2A8  push the node's chain down, head first, the next link read
+    //                           BEFORE each move (0x828BBEE8): an entity whose radius fits the
+    //                           child band -- `vcmpgefp.` MaxRadiusThreshold * 0.5
+    //                           (flt_820F2708) >= radius (0x828BBFE0; a NaN radius stays) --
+    //                           goes to the child CalcNextSubNode picks (0x828BBFFC): removed
+    //                           from this node's list, appended to the child's, its owning node
+    //                           rewritten (0x828BC240), the child's sub-tree count + 1
+    //                           (0x828BC24C) and the child's branch flagged up to the root
+    //                           (0x828BC254..0x828BC29C, FlagBranchForUpdate inlined)
+    //   0x828BC2B8..0x828BC330  below muAdaptiveMaxDepth - 1 (`cmplw ; bge` 0x828BC2CC), each
+    //                           child still over the threshold (`bgt` 0x828BC300) splits in
+    //                           turn while the pool has a free group (0x828BC30C)
+    // This node's own sub-tree count does not change: its entities only move down its sub-tree.
+    // ===========================================================================
+    void LooseOctree::SplitAndPropogateRecursive(u16 lu16NodeIndex, u32 luDepth)
+    {
+        LooseOctreeNode* lpNode = &mpNodes[lu16NodeIndex];
+
+        LooseOctreeNodeAllocation* lpAllocation = mFreeNodeGroupPool.Pop();
+        CGS_ASSERT(lpAllocation != 0, "Failed to allocate child nodes\n");
+        lpNode->SetFirstChildIndex(lpAllocation->muFirstChildIndex);
+
+        const u16 lu16FirstChild = lpAllocation->muFirstChildIndex;
+        const f32 lfSize         = lpNode->GetHalfBaseSize() * 2.0f;
+        for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
+        {
+            LooseOctreeNode* lpChild = &mpNodes[lu16FirstChild + luChild];
+            lpChild->SetFirstChildIndex(KU_INVALID_NODE);
+            lpChild->SetParentIndex(GetNodeIndex(lpNode));
+            PrepareRecursive(static_cast<u16>(lpNode->GetFirstChildIndex() + luChild),
+                             LooseOctreeChildPosition(lpNode->mPosition, luChild, lfSize), lpNode->GetHalfBaseSize());
+        }
+
+        const f32 lfChildMaxRadius = lpNode->GetMaxRadiusThreshold() * 0.5f;
+        if (static_cast<s32>(lpNode->CountElements()) > 0)
+        {
+            u16 lu16Entity = lpNode->muHeadIndex;
+            for (;;)
+            {
+                const SpatialPartitionEntityLink& lrLink = GetEntityLink(lu16Entity);
+                const u16 lu16Next = lrLink.mu16NextEntity;
+
+                const u16 lu16EntityIndex = CalcEntityIndex(lrLink);
+                const CgsGeometric::Sphere& lrSphere = GetEntityBoundingSphere(lu16EntityIndex);
+                if (lfChildMaxRadius >= lrSphere.mPositionRadius.w)
+                {
+                    LooseOctreeNode* lpChild = &mpNodes[lpNode->GetFirstChildIndex() +
+                                                        CalcNextSubNode(lpNode, lrSphere.mPositionRadius)];
+                    UnlinkEntityFromNode(lpNode, lu16EntityIndex);
+                    LinkEntityToNode(lpChild, lu16EntityIndex);
+                    CGS_ASSERT(lpChild != 0, "lpNode");
+                    maEntityNodeIndex[lu16EntityIndex] = GetNodeIndex(lpChild);
+                    ++lpChild->muSubTreeEntityCount;
+                    FlagBranchForUpdate(lpChild);
+                }
+
+                if (lu16Next == KU_INVALID_ENTITY_LINK)
+                {
+                    break;
+                }
+                lu16Entity = lu16Next;
+            }
+        }
+
+        if (luDepth < muAdaptiveMaxDepth - 1)
+        {
+            for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
+            {
+                if (mpNodes[lu16FirstChild + luChild].muSubTreeEntityCount > muAdaptiveNodeSplitThreshold &&
+                    mFreeNodeGroupPool.GetNumFree() != 0)
+                {
+                    SplitAndPropogateRecursive(static_cast<u16>(lu16FirstChild + luChild), luDepth + 1);
+                }
+            }
+        }
+    }
+
+    // ===========================================================================
+    // MergeSubTreeRecursive @ 0x828BC340 (255 insns; DWARF CgsLooseOctree.cpp:971)
+    //
+    //   0x828BC37C..0x828BC6CC  unless this node IS the target: its chain, head first (the next
+    //                           link read before each move, 0x828BC41C), moves onto the TARGET's
+    //                           tail -- the owning node rewritten first (0x828BC4B8; "lpNode"
+    //                           h:721 when the target is null), then removed from this list and
+    //                           appended to the target's
+    //   0x828BC6D0..0x828BC730  with children: merge each child's sub-tree into the same target
+    //                           (depth + 1), then hand this node's group back to the pool --
+    //                           sub_828AE988 == IndexedPool::PushIndex((first child - 1) / 4),
+    //                           `srawi 2 ; addze` a signed divide -- and make this node a leaf
+    // The target's sub-tree count does not change: the entities never leave its sub-tree.
+    // ===========================================================================
+    void LooseOctree::MergeSubTreeRecursive(u16 lu16NodeIndex, LooseOctreeNode* lpTargetNode, u32 luDepth)
+    {
+        LooseOctreeNode* lpNode = &mpNodes[lu16NodeIndex];
+
+        if (lpNode != lpTargetNode && static_cast<s32>(lpNode->CountElements()) > 0)
+        {
+            u16 lu16Entity = lpNode->muHeadIndex;
+            for (;;)
+            {
+                const SpatialPartitionEntityLink& lrLink = GetEntityLink(lu16Entity);
+                const u16 lu16Next = lrLink.mu16NextEntity;
+
+                const u16 lu16EntityIndex = CalcEntityIndex(lrLink);
+                CGS_ASSERT(lpTargetNode != 0, "lpNode");
+                maEntityNodeIndex[lu16EntityIndex] = GetNodeIndex(lpTargetNode);
+                UnlinkEntityFromNode(lpNode, lu16EntityIndex);
+                LinkEntityToNode(lpTargetNode, lu16EntityIndex);
+
+                if (lu16Next == KU_INVALID_ENTITY_LINK)
+                {
+                    break;
+                }
+                lu16Entity = lu16Next;
+            }
+        }
+
+        if (lpNode->HasChildren())
+        {
+            for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
+            {
+                MergeSubTreeRecursive(static_cast<u16>(lpNode->GetFirstChildIndex() + luChild), lpTargetNode,
+                                      luDepth + 1);
+            }
+            mFreeNodeGroupPool.PushIndex(
+                static_cast<u16>((static_cast<s32>(lpNode->GetFirstChildIndex()) - 1) / static_cast<s32>(KU_NUM_SUBNODES)));
+            lpNode->SetFirstChildIndex(KU_INVALID_NODE);
+        }
     }
 
     // ===========================================================================
@@ -1205,7 +1468,7 @@ namespace CgsSceneManager
             lrJobData.mpNodeTypeMasks = mpNodesEntityInfo;
             lrJobData.mpEntityLinks   = &GetEntityLink(0);
             lrJobData.mpEntitySpheres = &GetEntityBoundingSphere(0);
-            lrJobData.muNumNodes      = muNumNodeGroups << 2;
+            lrJobData.muNumNodes      = static_cast<u32>(mFreeNodeGroupPool.GetPoolSize()) << 2;   // lhzx +0x446B4 ; rotlwi 2 (0x828B24BC)
             lrJobData.muMaxEntities   = static_cast<u32>(KI_MAX_NUM_ENTITIES);
             lrJobData.mpResultBuffer  = &lrBuffer;
             lrJobData.muMaxResults    = KU_JOB_RESULT_BUFFER_SIZE;
