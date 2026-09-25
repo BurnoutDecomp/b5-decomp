@@ -478,6 +478,73 @@ static void BrnDiag_HeadingEaseReport(const void* lpBehaviour, const KeyAnimCont
     CgsDev::Log::WriteToLog(lacLine);
 }
 
+// [DIAG] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The take's reference spaces (FX-LASTFIX item 1b): on a take's frames
+// 0..5, where the handler the take evaluator reads puts CAR and CAR2 -- metres off the behaviour's primary / secondary
+// vehicle, for the take's copy and for the MainDirector's shared handler (the player / the race car nearest the player)
+// -- and the yaw of HEADING2 in the copy (the eased heading space), in the shared handler (the nearest car's raw
+// transform) and of the secondary vehicle itself. 96 lines a run at most. Reads only.
+struct SpacesDiag
+{
+    bool        mbOn;
+    const void* mpBehaviour;
+    s32         miGuid;
+    u32         muFrame;
+    u32         muLines;
+};
+
+static f32 BrnDiag_Metres(const rw::math::vpu::Vector3& lrA, const rw::math::vpu::Vector3& lrB)
+{
+    const f32 lfX = lrA.x - lrB.x;
+    const f32 lfY = lrA.y - lrB.y;
+    const f32 lfZ = lrA.z - lrB.z;
+    return sqrtf(lfX * lfX + lfY * lfY + lfZ * lfZ);
+}
+
+static f32 BrnDiag_YawDegrees(const rw::math::vpu::Matrix44Affine& lrM)
+{
+    return atan2f(lrM.zAxis.x, lrM.zAxis.z) * 57.2957795f;
+}
+
+static void BrnDiag_SpacesReport(const void* lpBehaviour, const KeyAnimController& lrController,
+                                 ICE::eICESpace leEyeSpace, ICE::eICESpace leLookSpace,
+                                 const ICE::CameraSpaceHandler& lrShared, const ICE::CameraSpaceHandler& lrTake,
+                                 const VehicleInfo& lrPrimary, const VehicleInfo& lrSecondary, bool lbForcedLoose)
+{
+    static SpacesDiag sDiag = { getenv("BRN_CRASHCAM_DIAG") != 0, 0, -1, 0u, 0u };
+    if (!sDiag.mbOn)
+        return;
+    const ICE::ICETakeData* lpTake = lrController.GetTake().GetData();
+    const s32 liGuid = (lpTake != 0) ? lpTake->miGuid : -1;
+    if (lpBehaviour != sDiag.mpBehaviour || liGuid != sDiag.miGuid)
+    {
+        sDiag.mpBehaviour = lpBehaviour;
+        sDiag.miGuid      = liGuid;
+        sDiag.muFrame     = 0u;
+    }
+    const u32 luFrame = sDiag.muFrame++;
+    if (luFrame >= 6u || sDiag.muLines >= 96u)
+        return;
+    ++sDiag.muLines;
+    const rw::math::vpu::Vector3& lrPrimaryAt   = lrPrimary.mRaceCarState.mTransform.wAxis;
+    const rw::math::vpu::Vector3& lrSecondaryAt = lrSecondary.mRaceCarState.mTransform.wAxis;
+    char lacLine[400];
+    snprintf(lacLine, sizeof(lacLine),
+             "[iceanim] spaces take %d '%s' frame %u: eye %d look %d | CAR primary id %u: take %.2f m, shared %.2f m"
+             " | CAR2 secondary id %u: take %.2f m, shared %.2f m | HEADING2 yaw take %.2f, shared %.2f, secondary"
+             " %.2f deg | forced loose %d\n",
+             liGuid, (lpTake != 0) ? lpTake->macTakeName : "?", luFrame, static_cast<s32>(leEyeSpace),
+             static_cast<s32>(leLookSpace), lrPrimary.mRaceCarState.mEntityId.muValue,
+             BrnDiag_Metres(lrTake.GetTransformToWorld(ICE::eICE_CAR_SPACE).wAxis, lrPrimaryAt),
+             BrnDiag_Metres(lrShared.GetTransformToWorld(ICE::eICE_CAR_SPACE).wAxis, lrPrimaryAt),
+             lrSecondary.mRaceCarState.mEntityId.muValue,
+             BrnDiag_Metres(lrTake.GetTransformToWorld(ICE::eICE_CAR2_SPACE).wAxis, lrSecondaryAt),
+             BrnDiag_Metres(lrShared.GetTransformToWorld(ICE::eICE_CAR2_SPACE).wAxis, lrSecondaryAt),
+             BrnDiag_YawDegrees(lrTake.GetTransformToWorld(ICE::eICE_HEADING2_SPACE)),
+             BrnDiag_YawDegrees(lrShared.GetTransformToWorld(ICE::eICE_HEADING2_SPACE)),
+             BrnDiag_YawDegrees(lrSecondary.mRaceCarState.mTransform), lbForcedLoose ? 1 : 0);
+    CgsDev::Log::WriteToLog(lacLine);
+}
+
 // The source path string the asserts report.
 static const char* const KPC_SOURCE_FILE =
     "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourIceAnim.cpp";
@@ -832,10 +899,33 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     BrnDiag_HeadingEaseAfter(mHeadingSpaceTransform, lLookAt, lUnusedAngle);               // [DIAG] NOT X360
 
     // The take evaluator resolves its reference spaces through its own copy of the shared
-    // per-frame handler (through its copy constructor).
+    // per-frame handler (through its copy constructor, 0x82247384 into var_2B0).
+    //
+    // ⭐ (2026-09-26, crash parity FX-LASTFIX item 1b) THE TAKE'S OWN SPACES. The console overrides four of the COPY's
+    // spaces before the take evaluator reads it -- the MainDirector's shared handler is untouched, and nothing reads
+    // the copy before the controller's Update (0x822474A8):
+    //   0x82247388..0x822473CC  mCarToWorld (+0x00)      <- mPrimaryVehicleRef.Get (r20, this+0xDF0) +0x1F0, the
+    //                                                       vehicle's mRaceCarState.mTransform
+    //   0x822473D0..0x82247418  mCar2ToWorld (+0x40)     <- mSecondaryVehicleRef.Get (r23, this+0xE00) +0x1F0
+    //   0x822473DC..0x8224744C  mHeading2ToWorld (+0x1C0) <- mHeadingSpaceTransform (r29, this+0x610), the space the
+    //                                                       SLerp above just eased
+    //   0x822473D4 lbz +0xE2A (mbForceHeadingSpaceToBeLooseHeadingSpace), 0x822473E4 cmplwi 0, 0x82247450 beq:
+    //     clear -> T = 0x8224748C, no write;
+    //     set   -> F = 0x82247454..0x82247488, mHeadingToWorld (+0x140) <- world +0x80, the player's loose heading
+    //              space (AllVehicleData::mPlayerLooseHeadingSpace).
+    // Neither Get result is tested: VehicleRef::Get @0x822335A0 returns a record on every arm, and the only guard is
+    // the IsValid pair at the top of Update (0x82247148 / 0x82247164 -> the Fail exit 0x822479BC). The PC used to
+    // discard both Get results and write nothing, so every take read the shared handler's spaces: CAR = the player,
+    // CAR2 = the race car nearest the player, HEADING2 = that car's raw transform (MainDirector's Construct), and the
+    // TAKEDOWN / REVERSE_TAKEDOWN / BYSTANDER spaces derived from them.
     ICE::CameraSpaceHandler lSpaces(*lrSharedInfo.GetCameraSpaceHandler());
-    mPrimaryVehicleRef.Get(lpWorld);
-    mSecondaryVehicleRef.Get(lpWorld);
+    const VehicleInfo* lpPrimaryVehicle = mPrimaryVehicleRef.Get(lpWorld);
+    lSpaces.SetCarToWorld(lpPrimaryVehicle->mRaceCarState.mTransform);
+    const VehicleInfo* lpSecondaryVehicle = mSecondaryVehicleRef.Get(lpWorld);
+    lSpaces.SetCar2ToWorld(lpSecondaryVehicle->mRaceCarState.mTransform);
+    lSpaces.SetHeading2ToWorld(mHeadingSpaceTransform);
+    if (mbForceHeadingSpaceToBeLooseHeadingSpace)
+        lSpaces.SetHeadingToWorld(lpWorld->GetPlayerLooseHeadingSpace());
 
     // Run the take evaluator: it advances the ICE take and writes the whole camera out of it
     // (transform, FOV, depth of field, the effects block). Dispatched through the
@@ -879,6 +969,9 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     const ICE::eICESpace leLookSpace = mKeyAnimController.GetLookSpace();
     const bool lbHasLookSpace = IsLooseHeadingSpace(leLookSpace) || IsLookAtVehicleSpace(leLookSpace);
     BrnDiag_HeadingEaseReport(this, mKeyAnimController, leEyeSpace, leLookSpace);         // [DIAG] NOT X360
+    BrnDiag_SpacesReport(this, mKeyAnimController, leEyeSpace, leLookSpace,                // [DIAG] NOT X360
+                         *lrSharedInfo.GetCameraSpaceHandler(), lSpaces, *lpPrimaryVehicle, *lpSecondaryVehicle,
+                         mbForceHeadingSpaceToBeLooseHeadingSpace);
 
     // A take anchored to a car gets NO extra motion blur; a free/world take gets it all. The
     // two amounts and both enable flags are one operation on the camera's effects block.
