@@ -16,7 +16,11 @@ dereference them (the removals are only justified while these hold):
       (->Construct(this)).
   I2  GameStateModule::Construct calls ConstructTakedownBringUp and allocates the pre-world stand-in.
   I3  Nothing else writes the three pointers: mpMugshotManager only by that `new`; mpPaybackManager and
-      mpPreWorldInputBuffer by their `new` and by GameStateModule::Destruct's reset.
+      mpPreWorldInputBuffer by their `new` and by GameStateModule::Destruct's reset. They are PRIVATE
+      GameStateModule members, so an unqualified write counts when it sits in GameStateModule's class
+      body or in one of its member functions (any file); a write through a GameStateModule receiver
+      counts anywhere. (Before 2026-09-25 every same-named write counted, so b5 ca4ac341's
+      BurnoutSkillzManager::SetMugshotManager -- its own mpMugshotManager -- read as a writer.)
   I4  OnModeEnd's only caller is ModeManager::SendModeStopMessages; CopyInputDataToPaybackManager's
       only caller is the pre-world leg in GameStateModule_gUI_00.cpp.
   I5  GameStateModule::Destruct (the only reset of the two) calls into no ModeManager, so no mode can
@@ -41,6 +45,30 @@ MODULE = GS + "BrnGameStateModule.cpp"
 START = GS + "ModeManager/BrnModeManager_Start.cpp"
 
 
+_REV_TEXTS = {}   # (rev, relative) -> text; shared by every Tree (--selftest builds one per mutation)
+
+
+def _prefetch(rev, paths):
+    """Read `paths` of revision `rev` with ONE `git cat-file --batch` (the per-file `git show` of the
+    first version took ~45 min for a --rev --selftest). Same text as `git show` in text mode: UTF-8,
+    universal newlines."""
+    wanted = [p for p in paths if (rev, p) not in _REV_TEXTS]
+    if not wanted:
+        return
+    result = subprocess.run(["git", "-C", str(REPO), "cat-file", "--batch"], check=True, capture_output=True,
+                            input="".join(f"{rev}:{p}\n" for p in wanted).encode("utf-8"))
+    data, at = result.stdout, 0
+    for path in wanted:
+        end = data.index(b"\n", at)
+        header = data[at:end].split()
+        at = end + 1
+        if len(header) < 3 or header[1] != b"blob":
+            continue   # missing at this revision: read() falls back to `git show` (and its error)
+        size = int(header[2])
+        _REV_TEXTS[(rev, path)] = data[at:at + size].decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        at += size + 1
+
+
 class Tree:
     def __init__(self, rev, overlay=None):
         self.rev = rev
@@ -53,6 +81,8 @@ class Tree:
         if relative not in self._cache:
             if self.rev is None:
                 self._cache[relative] = (REPO / relative).read_text(encoding="utf-8-sig")
+            elif (self.rev, relative) in _REV_TEXTS:
+                self._cache[relative] = _REV_TEXTS[(self.rev, relative)]
             else:
                 self._cache[relative] = subprocess.run(
                     ["git", "-C", str(REPO), "show", f"{self.rev}:{relative}"], check=True,
@@ -67,7 +97,9 @@ class Tree:
         listing = subprocess.run(["git", "-C", str(REPO), "ls-tree", "-r", "--name-only", self.rev,
                                   "src/GameSource"], check=True, capture_output=True, text=True,
                                  encoding="utf-8").stdout
-        return [p for p in listing.splitlines() if p.endswith((".cpp", ".h"))]
+        paths = [p for p in listing.splitlines() if p.endswith((".cpp", ".h"))]
+        _prefetch(self.rev, paths)
+        return paths
 
 
 def code_only(text):
@@ -100,6 +132,47 @@ def body(source, signature):
 
 def squash(text):
     return re.sub(r"\s+", "", code_only(text))
+
+
+def blanked(match):
+    """A regex match replaced by spaces (newlines kept), so positions survive."""
+    return re.sub(r"[^\n]", " ", match.group(0))
+
+
+CONTROL_HEADER = re.compile(r"(?:else\b|if\b|for\b|while\b|switch\b|do\b|try\b|catch\b|case\b|default\b|return\b"
+                            r"|namespace\b|enum\b|extern\b)")
+CLASS_HEADER = re.compile(r"(?:template\s*<.*>\s*)?(?:class|struct|union)\b(?P<rest>.*)$")
+FUNCTION_NAME = re.compile(r"((?:\w+\s*::\s*)*)(?:~?\w+|operator\s*[^\s(]+)\s*\(")
+
+
+def enclosing_class(text, position):
+    """The class whose member an unqualified name at `position` of `text` (comments, strings and
+    preprocessor lines already removed) would be: the class of the innermost enclosing member-function
+    definition (`Class::Method(...) {`), or of the innermost enclosing class body. Control-flow blocks,
+    lambdas and plain braces are transparent. None at namespace scope or in a free function."""
+    stack = []
+    for brace in re.finditer(r"[{}]", text[:position]):
+        if brace.group(0) == "{":
+            stack.append(brace.start())
+        elif stack:
+            stack.pop()
+    for opened in reversed(stack):
+        start = max(text.rfind(";", 0, opened), text.rfind("}", 0, opened), text.rfind("{", 0, opened)) + 1
+        header = " ".join(text[start:opened].split())
+        header = re.sub(r"^(?:(?:public|private|protected)\s*:\s*)+", "", header)
+        if not header or CONTROL_HEADER.match(header):
+            continue
+        if "(" in header and re.search(r"\)\s*(?:const\s*)?(?:noexcept\s*)?(?:override\s*)?(?::.*)?$", header):
+            function = FUNCTION_NAME.search(header)
+            if function and function.group(1):
+                return re.sub(r"\s+", "", function.group(1)).rstrip(":").split("::")[-1]
+            continue   # an in-class inline method or a lambda: the class is further out
+        declared = CLASS_HEADER.match(header)
+        if declared:
+            names = [word for word in re.findall(r"\w+", re.split(r"(?<!:):(?!:)", declared.group("rest"), maxsplit=1)[0])
+                     if word != "final"]
+            return names[-1] if names else None
+    return None
 
 
 def checks(tree):
@@ -148,8 +221,22 @@ def checks(tree):
                 r"\s*(?:->|\.)\s*")
     for path in tree.game_sources():
         text = strings_blanked(code_only(tree.read(path)))
+        scoped = None
         for name in writers:
+            # The three pointers are PRIVATE GameStateModule members (BrnGameStateModule.h), so an
+            # unqualified write reaches them only from GameStateModule's own class body or member
+            # functions; another class's same-named member (ca4ac341: BurnoutSkillzManager::
+            # SetMugshotManager's `mpMugshotManager = lpMugshotManager`) is not a writer of them.
             for match in re.finditer(r"(?<![\w.>])" + name + r"\s*=(?!=)([^;]*);", text):
+                if scoped is None:
+                    # Same length as `text`: char literals and preprocessor lines (with their
+                    # continuations) blanked, so their braces cannot unbalance the scope walk.
+                    scoped = re.sub(r"'(?:\\.|[^'\\\n])'", blanked, text)
+                    scoped = re.sub(r"(?m)^[ \t]*#(?:[^\n]*\\\n)*[^\n]*", blanked, scoped)
+                if enclosing_class(scoped, match.start()) == "GameStateModule":
+                    writers[name].append((path, re.sub(r"\s+", "", match.group(1))))
+            # A write through a GameStateModule receiver counts wherever it is (a friend could write one).
+            for match in re.finditer(receiver + name + r"\s*=(?!=)([^;]*);", text):
                 writers[name].append((path, re.sub(r"\s+", "", match.group(1))))
         own_tu = re.search(r"/(?:Brn)?GameStateModule[^/]*\.cpp$", path) is not None
         for name in callers:
@@ -205,6 +292,13 @@ MUTATIONS = [
     ("I2", MODULE, "    ConstructTakedownBringUp();", "    // ConstructTakedownBringUp moved"),
     ("I3", TD, "    mpMugshotManager->OnRoundEnd(lbResetState);",
      "    mpMugshotManager->OnRoundEnd(lbResetState);\n    mpMugshotManager = 0;"),
+    # ...a GameStateModule member in another TU (Destruct) resetting the mugshot manager too,
+    ("I3", MODULE, "        mpPaybackManager->Destruct();",
+     "        mpPaybackManager->Destruct();\n        mpMugshotManager = 0;"),
+    # ...and a write through a GameStateModule receiver from another class (ModeManager). The anchor
+    # is the code line (a comment above it quotes the same call).
+    ("I3", START, "\n    mpGameStateModule->OnModeEnd(",
+     "\n    mpGameStateModule->mpPaybackManager = 0;\n    mpGameStateModule->OnModeEnd("),
     ("I4", TD, "    mpPaybackManager->SetDirtyTrickButtonState(",
      "    OnModeEnd(false);\n    mpPaybackManager->SetDirtyTrickButtonState("),
     ("I5", MODULE, "        mpPaybackManager->Destruct();",

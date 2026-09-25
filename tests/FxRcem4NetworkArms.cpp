@@ -14,6 +14,7 @@
 #include "GameSource/GameState/BrnGameActions.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -31,6 +32,14 @@ namespace Log { DebugPrint* gpDebugPrint = nullptr; void WriteToLog(const char*)
 namespace Message { u64 gxMessageFilterFlags = 0; }
 }
 
+// The [net] "network car disconnected / removed" witnesses in arms 11 / 220 and in
+// RemoveAllNetworkCarsFromWorld (b5 ca4ac341, PC harness lines, not console code). The real
+// declaration is included above, so this silent definition must keep its signature.
+namespace BrnNetHarnessPC
+{
+    void Witness(const char*, const char*, ...) {}
+}
+
 namespace Fixture {
 static std::vector<std::string> gaCalls;
 static void Call(const std::string& lrCall) { gaCalls.push_back(lrCall); }
@@ -44,10 +53,13 @@ enum ERaceCarType : u8 { E_RACE_CAR_TYPE_PLAYER = 0, E_RACE_CAR_TYPE_AI = 1, E_R
 struct RaceCar {
     ERaceCarType muType = E_RACE_CAR_TYPE_INACTIVE;
     EGlobalRaceCarIndex meIndex = E_GLOBAL_RACE_CAR_INDEX_0;
+    s32 miActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     bool mbInGameMode = true, mbCarSelectAllowed = true;
     bool IsInWorld() const { return muType != E_RACE_CAR_TYPE_INACTIVE; }
     bool IsNetworkDriven() const { return muType == E_RACE_CAR_TYPE_NETWORK; }
     EGlobalRaceCarIndex GetGlobalRaceCarIndex() const { return meIndex; }
+    // BrnRaceCar.h's inline getter (no side effect); only ca4ac341's witness reads it here.
+    EActiveRaceCarIndex GetActiveRaceCarIndex() const { return static_cast<EActiveRaceCarIndex>(miActiveRaceCarIndex); }
     void SetInCurrentGameMode(bool lbInGameMode, bool lbCarSelectAllowed) {
         mbInGameMode = lbInGameMode; mbCarSelectAllowed = lbCarSelectAllowed;
         Call("mode " + std::to_string(static_cast<s32>(meIndex)) + " " + (lbInGameMode ? "1" : "0") + (lbCarSelectAllowed ? "1" : "0"));
