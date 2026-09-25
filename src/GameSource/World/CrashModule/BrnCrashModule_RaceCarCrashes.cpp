@@ -52,6 +52,16 @@ namespace
     // Refreshed by RaceCarCrash / TrafficCrash::ResetNetworkTimeout below.
     const f32 KF_NETWORK_CRASH_TIMEOUT = 20.0f;
 
+    // FLAG PC witness (BRN_NETCRASH_DIAG, default off; NOT console code). Hard-capped so an online
+    // session cannot flood the log. Read by GenerateOwnedTrafficUpdates (the owner publishing)
+    // and HandleNetworkCrashingTraffic (the other machine consuming).
+    bool NetCrashDiagEnabled()
+    {
+        static const bool sbEnabled = ( std::getenv( "BRN_NETCRASH_DIAG" ) != 0 );
+        return sbEnabled;
+    }
+    const s32 KI_NETCRASH_DIAG_MAX_LINES = 40;
+
 }
 
 // =================================================================================================
@@ -608,6 +618,28 @@ void CrashModule::GenerateOwnedTrafficUpdates( const CrashIO::InputBuffer_PostPh
             lpNetworkInterface->AddOwnedTrafficUpdate( luVehicle, laTrafficTransforms[luVehicle] );
         }
     }
+
+    // FLAG PC witness (BRN_NETCRASH_DIAG, capped; NOT console code): the owner side of the online
+    // crashing-traffic chain -- what this frame queued for the network TrafficManager to send.
+    // Reads the queue the loop above filled; changes nothing.
+    if( NetCrashDiagEnabled() && CgsDev::Log::gpDebugPrint )
+    {
+        const CrashIO::NetworkOutputInterface::CrashingTrafficUpdateQueue* lpPublished =
+            lpNetworkInterface->GetCrashingTrafficUpdateQueue();
+        static s32 siLines = 0;
+        if( lpPublished->GetLength() > 0 && siLines < KI_NETCRASH_DIAG_MAX_LINES )
+        {
+            ++siLines;
+            const CrashIO::CrashingTrafficUpdateEvent& lrFirst = lpPublished->GetEvent( 0 );
+            *CgsDev::Log::gpDebugPrint
+                << "[netcrash] GenerateOwnedTrafficUpdates owner=" << static_cast<s32>( meLocalActiveRaceCarIndex )
+                << " published=" << lpPublished->GetLength()
+                << " crashes=" << mTrafficCrashes.GetLength()
+                << " first=" << static_cast<s32>( lrFirst.muVehicleId )
+                << " pos=(" << lrFirst.mTransform.wAxis.x << ", " << lrFirst.mTransform.wAxis.y
+                << ", " << lrFirst.mTransform.wAxis.z << ") [FLAG PC witness]\n";
+        }
+    }
 }
 
 // =================================================================================================
@@ -658,18 +690,6 @@ void CrashModule::GenerateOwnedTrafficUpdates( const CrashIO::InputBuffer_PostPh
 //     player's set here.
 //   0x827CCAF8  OnContactFromNetworkPlayer(car) -- every marked car, whatever its queue held.
 // =================================================================================================
-namespace
-{
-    // FLAG PC witness (BRN_NETCRASH_DIAG, default off; NOT console code). Hard-capped so an online
-    // session cannot flood the log.
-    bool NetCrashDiagEnabled()
-    {
-        static const bool sbEnabled = ( std::getenv( "BRN_NETCRASH_DIAG" ) != 0 );
-        return sbEnabled;
-    }
-    const s32 KI_NETCRASH_DIAG_MAX_LINES = 40;
-}
-
 void CrashModule::HandleNetworkCrashingTraffic( const CrashIO::InputBuffer_PreScene* lpInput,
                                                 CrashIO::OutputBuffer_PreScene* lpOutput )
 {
