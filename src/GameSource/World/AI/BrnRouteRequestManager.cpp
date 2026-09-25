@@ -426,10 +426,16 @@ void RouteRequestManager::GenerateFreeRoamingDestination(
 
     const u32 luNumSections = lpAISectionData->muNumSections;
 
-    // mRandom.RandomUInt(0, muNumSections - 1). The X360 inlines RandomUInt's LCG + modulo together
-    // with RandomUInt's own dev-asserts (liMax >= liMin / luMod > 0); those asserts live inside the
-    // named RandomUInt body and are NOT duplicated at this call site.
-    u16 luSectionIndex = static_cast<u16>(mRandom.RandomUInt(0, luNumSections - 1));
+    // The draw is RandomInt(0, n - 1), the SIGNED bounded draw (crash parity FX-GATE, read by address):
+    //   0x82769608 lwz muNumSections (+0x30) ; 0x8276960C clrlwi 16 -> the section count as a u16
+    //   0x82769610 addi -1 -> liMax ; 0x82769618 cmpwi liMax, 0 ; bge past "liMax >= liMin" (0x82014D68,
+    //              li r5 0x140 = CgsRandom.h:320 -- RandomInt's assert, not RandomUInt's)
+    //   0x82769640 addi 1 -> luMod ; 0x82769644 cmplwi ; bne past "luMod > 0" (li r5 0x143 = :323)
+    //   0x8276968C the OLD seed's high word ; 0x8276969C std the step ; 0x827696A0 divwu / mullw / subf
+    //              -> draw % n ; 0x827696AC clrlwi 16
+    // The old RandomUInt(0, n - 1) spelling reduced by n - 1 while RandomUInt(min, max) was one short,
+    // so the last section was never drawn (and with one section the seed did not step).
+    u16 luSectionIndex = static_cast<u16>(mRandom.RandomInt(0, static_cast<s32>(static_cast<u16>(luNumSections)) - 1));
 
     if (luSectionIndex == AICar::KI_INVALID_SECTION_INDEX)
         return;

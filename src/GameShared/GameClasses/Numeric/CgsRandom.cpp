@@ -17,12 +17,9 @@
 // methods were declared-only). This TU is their canonical home when the full
 // CgsRandom ledger work lands; the bodies below are the attested LCG.
 //
-// FLAG (bounded draw): RandomUInt(min,max) has no exported out-of-line X360
-// body (always inlined + strength-reduced, e.g. the %3 mulhwu idiom in
-// SetFlashingHeadlights). The canonical modulo reduction over the raw draw is
-// reconstructed by that idiom's intent: min + draw % (max - min). Its one
-// caller today (Randomize's Fisher-Yates, itself CONFIDENCE-low) passes
-// (0, 512).
+// The bounded draw RandomUInt(min,max) has no exported out-of-line X360 body either
+// (always inlined, often strength-reduced); its expansions pin min + draw % (max - min + 1),
+// an INCLUSIVE range -- see the body.
 // ===========================================================================
 
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
@@ -89,14 +86,34 @@ namespace CgsNumeric
         return luDraw;
     }
 
-    // FLAG: reconstructed by the inline sites' reduction intent (see the header
-    // note) -- min + draw % span; a zero span returns min.
+    // ========================================================================
+    // THE BOUNDED UNSIGNED DRAW -- CORRECTED 2026-09-25 (crash parity FX-GATE).
+    //
+    // ⚠️ NO STANDALONE X360 SYMBOL: inlined at every call site, each carrying the one baked assert
+    // "luMod > 0" (0x82001F88, CgsRandom.h:303 = `li r5, 0x12F`). The expansions read:
+    //   * EffectsModule::HandleShowtimeTrafficBounce @0x82292808, RandomUInt(150, 300) with both
+    //     bounds constant: 0x82292DA4 draw = hi32(OLD seed) ; 0x82292DD8 mulhwu 0x36406C81 ;
+    //     0x82292DEC srwi 5 ; 0x82292DF4 mulli 0x97 ; 0x82292E04 subf ; 0x82292E10 addi 0x96
+    //     -> 150 + draw % 151, so 300 is reachable (luMod = 300 - 150 + 1).
+    //   * SelectionHistory::FindRandomOldest @0x82702840, RandomUInt(0, n >> 1): 0x8270294C srwi 1 ;
+    //     0x82702950 addi 1 (luMod) ; 0x82702954 cmplwi ; bne past the :303 assert ; 0x82702990 draw ;
+    //     0x827029B0 divwu / mullw / subf -> draw % luMod.
+    //   * FaceOffMode::Start 0x82330598 (assert) / 0x82330608 divwu, DeformableObject::
+    //     UpdateSpinningDetachment 0x8263AAC0 / 0x8263AB28, CheckForForcedDetachment 0x8263AE54 /
+    //     0x8263AEBC -- RandomUInt(0, n - 1) with the -1 / +1 folded: draw % n.
+    //   * SelectionHistory::Randomize @0x826C5900, RandomUInt(0, 511): 0x826C5B1C draw ;
+    //     0x826C5B2C clrlwi 23 -> draw & 0x1FF (luMod = 512, constant, no assert).
+    // Like RandomInt below: the draw is the seed BEFORE the step, the reduction is unsigned and the
+    // ring is untouched. There is no range guard: luMin == luMax still steps the seed (luMod = 1),
+    // and luMod == 0 traps on the console (`twi 6, luMod, 0` after the assert, e.g. 0x827029A8).
+    // ⚠️ THE OLD BODY reduced by (max - min), one short, so luMax was never drawn, and returned luMin
+    // WITHOUT stepping the seed when the two were equal.
     u32 Random::RandomUInt(u32 luMin, u32 luMax)
     {
-        const u32 luSpan = luMax - luMin;
-        if (luSpan == 0u)
-            return luMin;
-        return luMin + (RandomUInt() % luSpan);
+        const u32 luMod = luMax - luMin + 1u;
+        CGS_ASSERT(luMod > 0u, "luMod > 0");
+
+        return luMin + (RandomUInt() % luMod);
     }
 
     // ========================================================================
