@@ -83,6 +83,57 @@ namespace SceneManagerIO
     }
 
     // ------------------------------------------------------------------------
+    // The three remaining fine-query RESULT records (DWARF CgsSceneManagerModuleIO.h:258 / :265 /
+    // :273; added 2026-09-25, FX-DIRECTOR2). They are the element types of three of the director's
+    // six post offices (BrnDirectorPostOfficeTypes.h), and DirectorModule::ProcessSceneQueryResults
+    // @0x82239278 delivers result types 4 / 5 / 6 into them. Their SIZES are the console's own: each
+    // typed PostBox<T>::TakePackage copies exactly sizeof(T) into the box's +4 package slot:
+    //   OutEventSphereTestFastResult     TakePackage 0x821FF238 -- 2 words (+0 / +4)       -> 8
+    //   OutEventVolumeTestDeepestResult  TakePackage 0x821FF3D8 -- 3 words (+0 / +4 / +8)  -> 12
+    //   OutEventVolumeTestFineResult     TakePackage 0x821FF460 -- 2 words (+0 / +4)       -> 8
+    // and VisibilityCollisionPolicy::ProcessSceneQueryResults @0x822246F0 reads the deepest
+    // result's mbIntersection at package +8 (`lbz r11, 8(r3)` on the GetPackage() return).
+    // No Vector3 member -> default 4-byte alignment (unlike OutEventLineTestNearestResult).
+    // The FineIntersectionTestIO records of the same names are a DIFFERENT namespace and layout
+    // (the fine module's own per-pass output) and are not these.
+    // ------------------------------------------------------------------------
+    struct OutEventSphereTestFastResult : public Event
+    {
+        SceneQueryId mQueryId;        // :260  +0x00
+        bool         mbIntersection;  // :261  +0x04
+    };
+
+    struct OutEventVolumeTestDeepestResult : public Event
+    {
+        SceneQueryId mQueryId;        // :267  +0x00
+        f32          mfDepth;         // :268  +0x04
+        bool         mbIntersection;  // :269  +0x08
+    };
+
+    struct OutEventVolumeTestFineResult : public Event
+    {
+        SceneQueryId mQueryId;        // :275  +0x00
+        s32          miNumEntities;   // :276  +0x04
+
+        // DWARF :281. The miNumEntities EntityIds follow the record in the results queue.
+        EntityId* GetEntityIds() const
+        {
+            return reinterpret_cast<EntityId*>(const_cast<OutEventVolumeTestFineResult*>(this) + 1);
+        }
+    };
+
+    inline void OutEventFineResults_AssertLayout()
+    {
+        static_assert(offsetof(OutEventSphereTestFastResult, mbIntersection)    == 0x04, "mbIntersection @ +0x04");
+        static_assert(sizeof(OutEventSphereTestFastResult)                      == 8,    "sizeof == 8 (TakePackage 0x821FF238)");
+        static_assert(offsetof(OutEventVolumeTestDeepestResult, mfDepth)        == 0x04, "mfDepth @ +0x04");
+        static_assert(offsetof(OutEventVolumeTestDeepestResult, mbIntersection) == 0x08, "mbIntersection @ +0x08");
+        static_assert(sizeof(OutEventVolumeTestDeepestResult)                   == 12,   "sizeof == 12 (TakePackage 0x821FF3D8)");
+        static_assert(offsetof(OutEventVolumeTestFineResult, miNumEntities)     == 0x04, "miNumEntities @ +0x04");
+        static_assert(sizeof(OutEventVolumeTestFineResult)                      == 8,    "sizeof == 8 (TakePackage 0x821FF460)");
+    }
+
+    // ------------------------------------------------------------------------
     // OutErrorQueue<N> -- DWARF CgsSceneManagerModuleIO.h:141. The DWARF prints it as
     //   struct OutErrorQueue<128> : public EventQueue<CgsSceneManager::ErrorEvent,128> {}
     // i.e. a named EventQueue specialisation with NO members and NO methods of its own.

@@ -107,3 +107,53 @@ int CgsSceneManager::SceneManagerIO::SceneQueryInterface::VolumeTestDeepest(
 
     return mpFineVolumeTestDeepestQueue->AddEvent(lEvent) ? 1 : 0;
 }
+
+// -----------------------------------------------------------------------------
+// CgsSceneManager::SceneManagerIO::SceneQueryInterface::Append  @ 0x823C4FF8
+// (DWARF CgsSceneManagerModuleIO.h:405; added 2026-09-25, FX-DIRECTOR2)
+//
+// r3 = this (-> r30, the DESTINATION table), r4 = &lOther (-> r29, the SOURCE table). Six blocks,
+// one per fine query queue, in exactly this order (0x823C500C / 505C / 50A4 / 50EC / 5134 / 517C):
+//     if (!dest[i] && src[i]) assert("mpX || !lOther.mpX", CgsSceneManagerModuleIO.h:<line>);
+//     if (src[i])             BaseEventQueue<T>::Append(dest[i], *src[i]);
+// where i walks the slots +0x00 (LineTestFine, :1138 = 0x472), +0x14 (VolumeTestFine, :1144),
+// +0x08 (LineTestFastDoubleSided, :1150), +0x0C (SphereTestFast, :1156), +0x04 (LineTestNearest,
+// :1162) and +0x10 (VolumeTestDeepest, :1168). The asserts are non-gating tripwires: when a source
+// queue exists and the destination does not, the console still calls Append on the null
+// destination, and so does this body. The triangle-collision slots (+0x18..+0x20) are not touched.
+// Each Append is the inline generic BaseEventQueue<T>::Append (CgsBaseEventQueue.h); the six
+// X360 instantiations are 0x823C1FA0 / 0x823C2410 / 0x823C2160 / 0x823C2240 / 0x823C2080 /
+// 0x823C2330.
+// -----------------------------------------------------------------------------
+void CgsSceneManager::SceneManagerIO::SceneQueryInterface::Append(const SceneQueryInterface& lOther)
+{
+    CGS_ASSERT(mpFineLineTestQueue || !lOther.mpFineLineTestQueue,
+               "mpFineLineTestQueue || !lOther.mpFineLineTestQueue");                              // :1138
+    if (lOther.mpFineLineTestQueue)
+        mpFineLineTestQueue->Append(*lOther.mpFineLineTestQueue);
+
+    CGS_ASSERT(mpFineVolumeTestQueue || !lOther.mpFineVolumeTestQueue,
+               "mpFineVolumeTestQueue || !lOther.mpFineVolumeTestQueue");                          // :1144
+    if (lOther.mpFineVolumeTestQueue)
+        mpFineVolumeTestQueue->Append(*lOther.mpFineVolumeTestQueue);
+
+    CGS_ASSERT(mpFineLineTestFastDoubleSidedQueue || !lOther.mpFineLineTestFastDoubleSidedQueue,
+               "mpFineLineTestFastDoubleSidedQueue || !lOther.mpFineLineTestFastDoubleSidedQueue"); // :1150
+    if (lOther.mpFineLineTestFastDoubleSidedQueue)
+        mpFineLineTestFastDoubleSidedQueue->Append(*lOther.mpFineLineTestFastDoubleSidedQueue);
+
+    CGS_ASSERT(mpFineSphereTestFastQueue || !lOther.mpFineSphereTestFastQueue,
+               "mpFineSphereTestFastQueue || !lOther.mpFineSphereTestFastQueue");                  // :1156
+    if (lOther.mpFineSphereTestFastQueue)
+        mpFineSphereTestFastQueue->Append(*lOther.mpFineSphereTestFastQueue);
+
+    CGS_ASSERT(mpFineLineTestNearestQueue || !lOther.mpFineLineTestNearestQueue,
+               "mpFineLineTestNearestQueue || !lOther.mpFineLineTestNearestQueue");                // :1162
+    if (lOther.mpFineLineTestNearestQueue)
+        mpFineLineTestNearestQueue->Append(*lOther.mpFineLineTestNearestQueue);
+
+    CGS_ASSERT(mpFineVolumeTestDeepestQueue || !lOther.mpFineVolumeTestDeepestQueue,
+               "mpFineVolumeTestDeepestQueue || !lOther.mpFineVolumeTestDeepestQueue");            // :1168
+    if (lOther.mpFineVolumeTestDeepestQueue)
+        mpFineVolumeTestDeepestQueue->Append(*lOther.mpFineVolumeTestDeepestQueue);
+}
