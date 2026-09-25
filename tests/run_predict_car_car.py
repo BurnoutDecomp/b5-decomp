@@ -66,9 +66,20 @@ def main():
         # The mounted collision TUs log through the REAL CgsDev::Log::gpDebugPrint (VolumeQuery.cpp's
         # [vvq] witness, b5 935db3cd), a different symbol from the harness's own NullPrint sink; a
         # null one keeps them silent.
+        # Since FX-FOLLOWUPS stage a (2026-09-25) VolumeQuery.cpp's line walk also carries two [PC TRAP]s that
+        # announce through CgsDev::Log::WriteToLog and assert through CgsDev::Assert; nothing here reaches them,
+        # so the shim prints any that fire instead of hiding them.
         (out / "log_shim.cpp").write_text(
             '#include "GameShared/GameClasses/Development/Log/CgsLog.h"\n'
-            'namespace CgsDev { namespace Log { DebugPrint* gpDebugPrint = nullptr; } }\n',
+            '#include "GameShared/GameClasses/Core/CgsAssert.h"\n'
+            '#include <cstdio>\n'
+            'namespace CgsDev { namespace Log { DebugPrint* gpDebugPrint = nullptr;\n'
+            '    void WriteToLog(const char* lpcText) { std::printf("LOG (collision TU): %s", lpcText); } } }\n'
+            'namespace CgsDev { namespace Assert {\n'
+            '    int BeginAssert() { return 0; }\n'
+            '    int FireAssert(const char* lpcMessage, const char*, int) {\n'
+            '        std::printf("ASSERT (collision TU): %s\\n", lpcMessage); return 0; }\n'
+            '    void* EndAssert() { return nullptr; } } }\n',
             encoding="utf-8")
         includes = " ".join(f'/I"{WORKFLOW / p}"' for p in settings("msvc_includes.txt"))
         sources = ([Path(__file__).with_name("PredictCarCarIntersection.cpp"), out / "vtable_shim.cpp",

@@ -168,11 +168,14 @@ namespace collision
     // name), for the two construction entry points FineIntersectionTestModule::Construct @0x828B0BF0 calls --
     // GetResourceDescriptor @0x82BB3838 and Initialize @0x82BB3888, bodied in VolumeQuery.cpp. Console offsets
     // in the comments; console sizeof 0x110 (Initialize carves its first VolRef array at +0x110).
-    // ⛔ THE LINE WALK IS NOT RECONSTRUCTED: GetIntersections / GetAllIntersections @0x82BB3820 / AddVolumeRef /
-    // AddPrimitiveRef / InitQuery have no body on this class, so nothing may call them yet -- the fine module's
-    // ComputeLineTestNearest @0x828C8CC8 stays a LOUD trap. (The June SDK placeholder
-    // SDKs/EATech/rwcollision/volumelinequery.cpp is a different, 32-bit-pointer class of the same name with no
-    // callers; the fine-module mount retires it.)
+    // THE LINE WALK (2026-09-25, crash parity FX-FOLLOWUPS stage a): AddPrimitiveRef @0x82BB3230, AddVolumeRef
+    // @0x82BB3300, GetIntersections @0x82BB3470 and GetAllIntersections @0x82BB3820 are bodied in VolumeQuery.cpp,
+    // and the two header inlines InitQuery (:297) / Finished (:363) are below; the fine module's
+    // ComputeLineTestNearest @0x828C8CC8 drives them. The walk dispatches each staged primitive through its
+    // descriptor's lineSegIntersect slot and each aggregate through its own LineIntersectionQuery; the slots and
+    // aggregates this host has no body for yet are LOUD traps in the walk (see VolumeQuery.cpp), never a silent
+    // "no hit". (The June SDK placeholder SDKs/EATech/rwcollision/volumelinequery.cpp is a different,
+    // 32-bit-pointer class of the same name with no callers; the fine-module mount retired it.)
     // -----------------------------------------------------------------------
     class VolumeLineQuery
     {
@@ -190,6 +193,58 @@ namespace collision
         static void* GetResourceDescriptor(void* lpOut, int liVolumes, int liResults);
         // @ 0x82BB3888 -- partitions the backing buffer (*lppBuffer at [0]) and returns the query, or null.
         static void* Initialize(void** lppBuffer, int liVolumes, int liResults);
+
+        // --- the line walk (DWARF volumelinequery.h:117-213; RwBool is s32 in this directory) --------------------
+        // @ 0x82BB3230 -- DWARF :117. Stage one primitive for the line test: the volume, a copy of lpTransform's
+        // four rows with the reference's transform pointer aimed at that copy (or no transform), the tag and its
+        // bit count. 0 when the primitive buffer is full (m_primNext >= m_primBufferSize), else 1.
+        s32 AddPrimitiveRef(const Volume* lpVolume, const math::vpu::Matrix44Affine* lpTransform, u32 luTag,
+                            u8 luNumTagBits);
+        // @ 0x82BB3300 -- DWARF :165. An AGGREGATE (descriptor type 6) goes on the traversal stack the same way
+        // (0 when m_stackNext >= m_stackMax); anything else is a tail call to AddPrimitiveRef.
+        s32 AddVolumeRef(const Volume* lpVolume, const math::vpu::Matrix44Affine* lpTransform, u32 luTag,
+                         u8 luNumTagBits);
+        // @ 0x82BB3470 -- DWARF :200 (protected there). An EXPORT HOLE: no per-address JSON, read with
+        // tools/re/ppcdis.py. Fills the result buffer from the inputs, the stack and the staged primitives; returns
+        // the result count. Resumable: a full buffer returns with the walk state kept (see Finished).
+        u32 GetIntersections();
+        // @ 0x82BB3820 -- DWARF :205. m_resultsSet = ALLLINEINTERSECTIONS, m_resMax = m_resBufferSize, then the walk.
+        u32 GetAllIntersections();
+
+        // DWARF :297 -- a header inline, no symbol: ComputeLineTestNearest @0x828C8CC8 inlines it
+        // (0x828C8F34..0x828C8F8C). Primes one query -- the inputs, the segment, the fatness -- and resets the walk.
+        // HOST SPELLING: the DWARF's two `const Vector3&` points are the 16-byte rows the members are.
+        void InitQuery(const Volume** lppInputVols, const math::vpu::Matrix44Affine** lppInputMats, u32 luNumInputs,
+                       const VolRef::Vec4& arPt1, const VolRef::Vec4& arPt2, f32 afFatness)
+        {
+            m_inputVols              = lppInputVols;           // +0x00
+            m_inputMats              = lppInputMats;           // +0x04
+            m_numInputs              = luNumInputs;            // +0x08
+            m_currInput              = 0;                      // +0x0C
+            m_stackNext              = 0;                      // +0xD0
+            m_primNext               = 0;                      // +0xDC
+            m_currVRef.muVolumePtr   = 0;                      // +0x50
+            m_aggIndex               = 0;                      // +0xF0
+            m_curSpatialMapQuery     = 0;                      // +0xF8
+            m_resCount               = 0;                      // +0x14
+            m_instVolCount           = 0;                      // +0xE8
+            m_pt1                    = arPt1;                  // +0x20
+            m_resultsSet             = ALLLINEINTERSECTIONS;   // +0x100
+            m_endClipVal             = 1.0f;                   // +0xFC  f30 = flt_82001C98 (1.0f)
+            m_resMax                 = m_resBufferSize;        // +0x18  (lwz +0x1C)
+            m_fatness                = afFatness;              // +0x40
+            m_tag                    = 0;                      // +0x104
+            m_pt2                    = arPt2;                  // +0x30
+            m_numTagBits             = 0;                      // +0x108
+        }
+
+        // DWARF :363 -- a header inline, no symbol: ComputeLineTestNearest's loop test (0x828C8F94..0x828C8FC4).
+        // Every input consumed, no current volume, nothing stacked, nothing staged.
+        s32 Finished()
+        {
+            return (m_currInput == m_numInputs && m_currVRef.muVolumePtr == 0 && m_stackNext == 0 &&
+                    m_primNext == 0) ? 1 : 0;
+        }
 
         const Volume**                    m_inputVols;           // +0x00
         const math::vpu::Matrix44Affine** m_inputMats;           // +0x04

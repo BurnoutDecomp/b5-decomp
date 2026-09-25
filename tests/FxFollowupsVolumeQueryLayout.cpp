@@ -34,6 +34,14 @@ using namespace rw::collision;
 // The [vvq] DIAG in GetPrimitiveIntersections (not called here) logs through gpDebugPrint; no log in this harness.
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 namespace CgsDev { namespace Log { DebugPrint* gpDebugPrint = nullptr; } }
+// VolumeQuery.cpp's line walk announces its two [PC TRAP]s through WriteToLog and asserts through CgsDev::Assert
+// (FX-FOLLOWUPS stage a); nothing here reaches them, so any that fires is printed.
+namespace CgsDev { namespace Log { void WriteToLog(const char* lpcText) { std::printf("LOG (collision TU): %s", lpcText); } } }
+namespace CgsDev { namespace Assert {
+int BeginAssert() { return 0; }
+int FireAssert(const char* lpcMessage, const char*, int) { std::printf("ASSERT (collision TU): %s\n", lpcMessage); return 0; }
+void* EndAssert() { return nullptr; }
+} }
 
 namespace rw { namespace collision {
     // Not reached: the test stops at GetPrimitiveBBoxOverlaps (the narrow phase is not under test).

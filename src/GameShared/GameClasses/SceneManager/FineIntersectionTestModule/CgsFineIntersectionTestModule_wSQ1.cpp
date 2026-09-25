@@ -19,6 +19,10 @@
 // VolumeLineQuery has its construction entry points (b5 26802ef3) but no line walk (GetIntersections,
 // GetAllIntersections @0x82BB3820, AddVolumeRef, AddPrimitiveRef, InitQuery), so ComputeLineTestFine /
 // ComputeLineTestNearest stay LOUD traps.
+// UPDATE 2026-09-25 (crash parity FX-FOLLOWUPS stage a): the line walk is bodied (VolumeQuery.cpp, InitQuery /
+// Finished in VolumeQuery.hpp) and ComputeLineTestNearest is RECONSTRUCTED below. The walk's own gaps -- the
+// primitive lineSegIntersect slots and aggregate LineIntersectionQuery bodies this host lacks -- are LOUD traps
+// inside the walk. ComputeLineTestFine and ComputeVolumeTestFine stay traps.
 //
 // ⛔ ALL FOUR ARE LOUD TRAPS, NOT BODIES -- and NOT the empty `{}` silent-drop stubs that stood
 // in the unmounted TU until this wave (an untouched OutEventLineTestNearestResult read as "no
@@ -47,7 +51,8 @@
 #include "GameShared/GameClasses/SceneManager/CgsVolumeManager.h"   // GetVolumeTypeFlags / GetRwVolume
 #include "vendor/renderware/collision/CollisionVolume.hpp"          // rw::collision::Volume
 #include "vendor/renderware/collision/GPInstance.hpp"               // PrimitivePairIntersectResult
-#include "vendor/renderware/collision/VolumeQuery.hpp"              // rw::collision::VolumeVolumeQuery
+#include "vendor/renderware/collision/LineSegIntersect.hpp"         // VolumeLineSegIntersectResult (the line walk's results)
+#include "vendor/renderware/collision/VolumeQuery.hpp"              // rw::collision::VolumeVolumeQuery / VolumeLineQuery
 
 namespace CgsSceneManager
 {
@@ -66,14 +71,149 @@ namespace CgsSceneManager
         lpOutResult->mpaResults   = 0;
     }
 
-    void FineIntersectionTestModule::ComputeLineTestNearest(const InEventLineTestNearest* /*lpQuery*/,
+    // =========================================================================================
+    // ComputeLineTestNearest @ 0x828C8CC8 -- RECONSTRUCTED 2026-09-25 (crash parity FX-FOLLOWUPS stage a); it was a
+    // LOUD trap here. Where does the segment first meet the candidate entities' collision volumes? One
+    // VolumeLineQuery walk per volume instance whose volume-type flags meet the query's; the smallest line
+    // parameter over every result of every batch, instance and entity wins.
+    //   r3 = this (r17), r4 = lpQuery (r21), r5 = lpOutResult (r30).
+    //   0x828C8CF4  f31 = flt_820F259C (0x7F7FFFFF, FLT_MAX) -- the nearest so far; it is NEVER reset.
+    //   0x828C8D10  query+0x2A (exclude index) != 0xFFFF: mask = query+0x2D (mbExcludeParts) ? 0xFFFFFC00 :
+    //               0xFFFFFFFF (`subfic 0 ; subfe ; rlwinm 0,31,21 ; addi -1`), exclude = mask & the excluded
+    //               entity's id (the inlined GetEntityIdByIndex, the :301 assert, `lwz 0(r3)`);
+    //               == 0xFFFF: exclude = dword_82F33F64 (0xFFFFFFFF, K_INVALID_ENTITY_ID), mask = -1.
+    //   0x828C8D9C  out+0x3A (mbIntersection) = 0, out+0x36 / +0x38 (the two tags) = 0, out+0x00 = query+0x20
+    //               (mQueryId). Nothing else is written unless a result wins.
+    //   0x828C8E10  per candidate i < query+0x28 (u16), entity index query+0x24[i]: (mask & id) == exclude -> next
+    //               candidate (0x828C8E60 `cmplw ; beq` -- an EQUALITY, unlike ComputeVolumeTestDeepest's superset
+    //               test at 0x828C9220).
+    //   0x828C8E74    GetFirstEntityVolumeInstance(index, &instance) (0x828C5DC0; the instance index is var_5C,
+    //                 r22), then per instance GetVolumeInstance(+0x60) (0x828B9F28, the CONST overload; r22 = that
+    //                 index) until null:
+    //   0x828C8E90      GetVolumeTypeFlags(+0x5C volume index) & query+0x2C == 0 -> next instance (the inlined
+    //                   h:203 / h:204 body)
+    //   0x828C8F14      the VolumeLineQuery (this+0x5981C) primed as InitQuery does -- the one input volume
+    //                   {GetRwVolume} (0x828C5E68, var_6C), the one input matrix {the instance's transform, +0x00}
+    //                   (var_70), numInputs 1, the segment query+0x00 / query+0x10 (four lanes each), fatness
+    //                   f29 = flt_82001CC0 (0.0f); m_endClipVal = f30 = flt_82001C98 (1.0f)
+    //   0x828C8F90      until Finished(): r29 = -1; n = GetAllIntersections (0x82BB3820); over its n results
+    //                   (m_resBuffer re-read, stride 0xD0, compared unsigned) lineParam (+0x40) < nearest (`fcmpu ;
+    //                   bge` -- a NaN never wins) -> nearest = lineParam, best = k; best >= 0 ->
+    //   0x828C9014        out+0x3A = 1, +0x34 = the entity index, +0x30 = lineParam, +0x10 = position (+0x10),
+    //                     +0x04 = the instance index, +0x20 = normal (+0x20); the hit volume (vRef +0x50) non-null:
+    //                     +0x36 = its surfaceID (+0x58), +0x38 = its groupID (+0x54) (sth, the low halves); else
+    //                     both 0.
+    // =========================================================================================
+    void FineIntersectionTestModule::ComputeLineTestNearest(const InEventLineTestNearest* lpQuery,
                                                             OutEventLineTestNearestResult* lpOutResult)
     {
-        CGS_ASSERT(false, "FineIntersectionTestModule::ComputeLineTestNearest @0x828C8CC8 is not reconstructed "
-                          "(rw::collision::VolumeLineQuery::GetIntersections is a link-stub on this host)");
-        // Never a silent "hit" if execution continues past the trap: say so explicitly rather
-        // than leaving the caller's stack record as it was.
-        lpOutResult->mbIntersection = false;
+        // flt_82001CC0 (0.0f): the fatness InitQuery is handed (f29).
+        static const f32 KF_LINE_TEST_NEAREST_FATNESS = 0.0f;
+        // The exclude-index sentinel query+0x2A is compared with (`cmplwi cr6, r11, 0xFFFF` @0x828C8D10).
+        static const u16 KU16_NO_EXCLUDE_ENTITY_INDEX = 0xFFFF;
+        // flt_820F259C: 0x7F7FFFFF, the largest finite f32 -- the starting "nearest" (f31).
+        static const f32 KF_LINE_TEST_NEAREST_START = 3.40282346638528859812e+38f;
+
+        f32 lfNearest = KF_LINE_TEST_NEAREST_START;   // f31
+
+        u32 lx32Mask;      // var_54
+        u32 lx32Exclude;   // var_58
+        if (lpQuery->mu16ExcludeEntityIndex != KU16_NO_EXCLUDE_ENTITY_INDEX)
+        {
+            const EntityId lExcludeEntityId = mpEntityManager->GetEntityIdByIndex(lpQuery->mu16ExcludeEntityIndex);
+            lx32Mask    = lpQuery->mbExcludeParts ? lExcludeEntityId.GetPartComparisonMask() : ~0u;
+            lx32Exclude = lx32Mask & static_cast<u32>(lExcludeEntityId);
+        }
+        else
+        {
+            lx32Exclude = static_cast<u32>(K_INVALID_ENTITY_ID);   // dword_82F33F64
+            lx32Mask    = ~0u;                                     // li r11, -1
+        }
+
+        lpOutResult->mbIntersection  = false;              // stb 0, 0x3A(r30)
+        lpOutResult->mu16MaterialTag = 0;                  // sth 0, 0x36(r30)
+        lpOutResult->mu16GroupTag    = 0;                  // sth 0, 0x38(r30)
+        lpOutResult->mQueryId        = lpQuery->mQueryId;  // lwz 0x20(r21) ; stw 0(r30)
+
+        for (u16 lu16Candidate = 0; lu16Candidate < lpQuery->mu16NumEntities; ++lu16Candidate)
+        {
+            const u16 lu16EntityIndex = lpQuery->mpau16EntityIndices[lu16Candidate];
+            const u32 lx32EntityId    = static_cast<u32>(mpEntityManager->GetEntityIdByIndex(lu16EntityIndex));
+            if ((lx32EntityId & lx32Mask) == lx32Exclude)
+            {
+                continue;
+            }
+
+            s32 liVolumeInstance = 0;   // var_5C, then r22
+            const VolumeInstance* lpVolumeInstance =
+                mpEntityManager->GetFirstEntityVolumeInstance(lu16EntityIndex, &liVolumeInstance);
+            while (lpVolumeInstance != 0)
+            {
+                const s32 liVolumeIndex = lpVolumeInstance->miVolumeIndex;
+                if ((mpVolumeManager->GetVolumeTypeFlags(liVolumeIndex) & lpQuery->mxVolumeTypeFlags) != 0)
+                {
+                    const rw::collision::Volume* lapInputVolumes[1] =                          // var_6C
+                        { reinterpret_cast<const rw::collision::Volume*>(mpVolumeManager->GetRwVolume(liVolumeIndex)) };
+                    const Matrix44Affine* lapInputMatrices[1] =                                // var_70
+                        { &lpVolumeInstance->mWorldSpaceTransform };
+                    const rw::collision::VolRef::Vec4 lLineStart =
+                        { lpQuery->mLineStart.x, lpQuery->mLineStart.y, lpQuery->mLineStart.z, lpQuery->mLineStart.w };
+                    const rw::collision::VolRef::Vec4 lLineEnd =
+                        { lpQuery->mLineEnd.x, lpQuery->mLineEnd.y, lpQuery->mLineEnd.z, lpQuery->mLineEnd.w };
+
+                    mpVolumeLineQuery->InitQuery(lapInputVolumes, lapInputMatrices, 1, lLineStart, lLineEnd,
+                                                 KF_LINE_TEST_NEAREST_FATNESS);
+                    while (!mpVolumeLineQuery->Finished())
+                    {
+                        s32 liBest = -1;                                                         // r29
+                        const u32 luNumResults = mpVolumeLineQuery->GetAllIntersections();
+                        const rw::collision::VolumeLineSegIntersectResult* lpaResults =
+                            mpVolumeLineQuery->m_resBuffer;                                      // lwz 0x10 once
+                        for (u32 luResult = 0; luResult < luNumResults; ++luResult)
+                        {
+                            if (lpaResults[luResult].lineParam < lfNearest)
+                            {
+                                liBest    = static_cast<s32>(luResult);
+                                lfNearest = lpaResults[luResult].lineParam;
+                            }
+                        }
+                        if (liBest < 0)
+                        {
+                            continue;
+                        }
+
+                        const rw::collision::VolumeLineSegIntersectResult& lrBest = lpaResults[liBest];
+                        lpOutResult->mbIntersection        = true;               // stb 1, 0x3A
+                        lpOutResult->mu16EntityIndex       = lu16EntityIndex;    // sth r20, 0x34
+                        lpOutResult->mfLineParam           = lrBest.lineParam;   // lfs 0x40 ; stfs 0x30
+                        lpOutResult->mPosition.x           = lrBest.position.x;  // lvx128 +0x10 ; stvx128 +0x10
+                        lpOutResult->mPosition.y           = lrBest.position.y;
+                        lpOutResult->mPosition.z           = lrBest.position.z;
+                        lpOutResult->mPosition.w           = lrBest.position.w;
+                        lpOutResult->muVolumeInstanceIndex = static_cast<u32>(liVolumeInstance);   // stw r22, 4
+                        lpOutResult->mNormal.x             = lrBest.normal.x;    // lvx128 +0x20 ; stvx128 +0x20
+                        lpOutResult->mNormal.y             = lrBest.normal.y;
+                        lpOutResult->mNormal.z             = lrBest.normal.z;
+                        lpOutResult->mNormal.w             = lrBest.normal.w;
+                        const rw::collision::Volume* lpHitVolume =
+                            reinterpret_cast<const rw::collision::Volume*>(lrBest.vRef.muVolumePtr);
+                        if (lpHitVolume != 0)
+                        {
+                            lpOutResult->mu16MaterialTag = static_cast<u16>(lpHitVolume->muSurfaceID);   // +0x58
+                            lpOutResult->mu16GroupTag    = static_cast<u16>(lpHitVolume->muGroupID);     // +0x54
+                        }
+                        else
+                        {
+                            lpOutResult->mu16MaterialTag = 0;
+                            lpOutResult->mu16GroupTag    = 0;
+                        }
+                    }
+                }
+                // 0x828C9074: the next instance through the CONST overload (0x828B9F28), its index kept (r22).
+                liVolumeInstance = lpVolumeInstance->miNextEntityVolumeInstance;
+                lpVolumeInstance = static_cast<const EntityManager*>(mpEntityManager)->GetVolumeInstance(liVolumeInstance);
+            }
+        }
     }
 
     // =========================================================================================

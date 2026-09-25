@@ -16,7 +16,11 @@
 using namespace rw::collision;
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstdio>
 namespace CgsDev { namespace Log { DebugPrint* gpDebugPrint = nullptr; } }
+// VolumeQuery.cpp's line walk announces its two [PC TRAP]s through WriteToLog (FX-FOLLOWUPS stage a); nothing here
+// reaches them, so any that fires is printed.
+namespace CgsDev { namespace Log { void WriteToLog(const char* lpcText) { std::printf("LOG (collision TU): %s", lpcText); } } }
 
 namespace rw { namespace collision {
     Volume::VTable* gVolumeVTable[E_VOLUMETYPE_NUMINTERNALTYPES] = {};
