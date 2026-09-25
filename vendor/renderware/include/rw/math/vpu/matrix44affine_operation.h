@@ -530,6 +530,12 @@ namespace vpu
     {
         // Rule 1 -- vmsum3fp128: the f32 products exact in f64, summed left to right in f64, cast ONCE; a finite sum
         // that overflows f32 is a QNaN. FLAG (model): vmsum = one rounding of the f64 sum (xenia DOT_PRODUCT_3).
+        // ROUNDING_RULE 6 IS MODELLED HERE, and only here: the VMX flushes a denormal vmsum3fp128 result to a zero of
+        // its sign. Unflushed, QueryRotation's |a|^2 in (0, 2.9e-39) survives as a denormal, the two-step estimate's
+        // e * e overflows (1 / |a|^2 > FLT_MAX) and the Newton step turns it into a NaN -- the whole blend is NaN where
+        // the console sees |a|^2 == 0 and takes the lerp arm. A yaw frame converging on an axis-aligned target at 0.20
+        // per frame (AllVehicleData's heading space, whose look-at is exactly axis-aligned once the flattened forward
+        // rounds away against the car position) crosses that window after about 163 frames; the NaN is then sticky.
         inline float Dot3(const Vector3& lrA, const Vector3& lrB)
         {
             const double ldSum = static_cast<double>(lrA.x) * lrB.x + static_cast<double>(lrA.y) * lrB.y
@@ -538,6 +544,10 @@ namespace vpu
             if (std::isinf(lfSum) && std::isfinite(ldSum))
             {
                 return std::numeric_limits<float>::quiet_NaN();
+            }
+            if (lfSum != 0.0f && std::fabs(lfSum) < std::numeric_limits<float>::min())
+            {
+                return std::copysign(0.0f, lfSum);
             }
             return lfSum;
         }
@@ -720,6 +730,8 @@ namespace vpu
     // with an exact Normalize for every arm, weighted the rows by std::sin((1 - t) a) / std::sin(a) and
     // std::sin(t a) / std::sin(a), and re-normalised the arc's rows -- not what the console runs.
     // FLAG (ROUNDING_RULE 6): a denormal amount is flushed to 0 by the VMX (the from endpoint); here it takes the arc.
+    // Other denormal lanes are not flushed either, except vmsum3fp128's result (SLerpDetail::Dot3), where the missing
+    // flush made a NaN out of a converging blend.
     inline Matrix44Affine SLerp(const Matrix44Affine& lrFrom, const Matrix44Affine& lrTo,
                                 float lfAmount, Vector3* lpvAngleOut)
     {
