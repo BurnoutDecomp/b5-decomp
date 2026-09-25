@@ -10,9 +10,10 @@
 # gate read the console's byte offset +0x130, which on x64 is the low half of mID (mFlags sits at +0x138).
 #
 # The drive: full throttle from a standstill for 4 s (the driven rear wheels spin up: launch smoke), a handbrake turn
-# at half left lock for 1.5 s, then the brake. The Teleport is props_hit_speed's straight at (2995, 1.5, -1750); on
-# the 2026-09-25 builds the harness re-seats the car on the junkyard-exit road instead ([teleport] ... RE-RESET), and
-# the smoke is laid there -- where the drive happens does not matter to this case. GREEN on exe 19:14:48 (b5 C1):
+# at half left lock for 1.5 s, then the brake. The Teleport is props_hit_speed's straight at (2995, 1.5, -1750); the
+# game's own place-on-track rejects that point ("Failed to find valid place on track location - reverting to ring
+# buffer", then [teleport] ... RE-RESET), so the car stays on the junkyard-exit road and the smoke is laid there --
+# where the drive happens does not matter to this case. GREEN on exe 19:14:48 (b5 C1):
 # run 20260925_191508, 67 particles off wheels 2 / 3 (type 3, 1.2 per metre), 0 NaN lines; RED on the pre-C1 exe:
 # run 20260925_185820 (the FireNativeParticle announcement, no smoke).
 # The witnesses (NOT IN THE X360 BINARY, default off, capped):

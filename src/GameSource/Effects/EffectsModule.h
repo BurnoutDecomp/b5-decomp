@@ -283,6 +283,18 @@ namespace BrnEffects
         BrnParticle::ParticleModule& ParticleModule()        { return mParticleModule; }
         Attrib::Gen::surfacelist&    SurfaceList()           { return mSurfaceList; }
 
+        // @0x822969E0 (DWARF EffectsModule.cpp:1616; public, the DWARF's last public member). The jump-landing spark
+        // shower off one point of the rear axle: gated on the surface's spark scale (visualfxsurface +0x54) and on
+        // the car's speed along the ground, framed on the contact normal and that velocity, sized by one ring draw.
+        // Its one caller is JumpStateMachine::FireWheelSparks @0x82299670 (twice).
+        void FireJumpSparks(f32 lfCurrentTimeStep,
+                            f32 lfCurrentTime,
+                            Vector3 lWSContactPoint,
+                            Vector3 lWSContactNormal,
+                            const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState,
+                            f32 lfGroundPositionY,
+                            const CollisionTag& lCollisionTag);
+
         // One of the KU_MAX_JUNKYARD_VFX junkyard effect handles (maJunkyardEffectHandles[]).
         u32 GetJunkyardEffectHandle(u32 luIndex) const;
         // True while a junkyard VFX edit session is live (the particle module's

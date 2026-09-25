@@ -18,10 +18,10 @@
 // SetVapourBlend behaviour verified against the ARTIST asm @ 0x82288A58. The full
 // transition ladder is reconstructed as of 2026-09-07: OnDetermineNextState
 // (0x8229B9F8) and OnChangeState (0x82299510) are bodied store-for-store against the
-// ARTIST asm, and OnTick is the empty base slot the console ICF-folded. Only
-// FireWheelSparks (0x82299670) and FireWheelDebris (0x822939D8) remain parked --
-// their spawn callees (EffectsModule::FireJumpSparks / ParticleModule::SpawnDebris)
-// have no declaration or body in the tree; see the banners in the .cpp.
+// ARTIST asm, and OnTick is the empty base slot the console ICF-folded. FireWheelDebris
+// (0x822939D8) is bodied, and FireWheelSparks (0x82299670) with its callee
+// EffectsModule::FireJumpSparks (0x822969E0) since FX-CRASHVFX C2 (2026-09-25); see the
+// banners in the .cpp.
 // GROW this header additively, do NOT fork.
 //
 // LAYOUT (base EffectsStateMachine occupies +0x00..+0x0B = vptr + mState + mTime):
@@ -64,8 +64,9 @@ namespace BrnEffects
         virtual void OnTick(CarState& lCarState, RaceCarParticleEffectHelper& lHelper);
 
     private:
-        // FireWheelSparks @ 0x82299670 (DWARF JumpStateMachine.cpp:308). Fires the
-        // landing wheel-spark effect from the front-wheel contact points.
+        // FireWheelSparks @ 0x82299670 (DWARF JumpStateMachine.cpp:308). The landing sparks:
+        // two EffectsModule::FireJumpSparks showers, one off each half of the REAR axle
+        // (maWheels[2] / [3]), while both rear wheels are on the ground.
         void FireWheelSparks(CarState& lCarState, RaceCarParticleEffectHelper& lHelper) const;
 
         // FireWheelDebris @ 0x822939D8 (DWARF JumpStateMachine.cpp:354). Spawns the
