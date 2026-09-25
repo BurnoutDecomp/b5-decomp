@@ -294,6 +294,11 @@ namespace BrnEffects
         // particle module's FX-bundle ladder position; it is the half that can stall.
         BrnParticle::ParticleModule& ParticleModuleRef() { return mParticleModule; }
 
+        // DWARF EffectsModule.h:277 `void StartOfFrame();` -- inline: the particle module's start of the update
+        // frame. BrnGameModule::OnStartOfUpdateFrame @0x823A8BB0 inlines the pair as ONE store (see
+        // ParticleModule::StartOfFrame).
+        void StartOfFrame() { mParticleModule.StartOfFrame(); }
+
     private:
         // ---- the private lifecycle helpers (DWARF :632 / :653 / :1197 / :588 / :2946) ----
         // @0x8229D8A8. The post-fx vault + colour-cube dictionary acquire ladder.

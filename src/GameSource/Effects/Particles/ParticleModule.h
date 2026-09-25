@@ -415,6 +415,14 @@ namespace BrnParticle
         void Update(f32 lfTimeStep, f32 lfTime, f32 lfTimeStepMultiplier, const BrnDirector::Camera::Camera* lpCamera);
         // X360 0x82294C30 -- the frame's end: latch mbStalled, then the trail system's buffer flip.
         void EndOfFrame(bool lbStalled);
+        // DWARF ParticleModule.h:309 `void StartOfFrame();` -- INLINE, with no body of its own in the image:
+        // BrnGameModule::OnStartOfUpdateFrame @0x823A8BB0 inlines it through EffectsModule::StartOfFrame as ONE
+        // store, `lfs f0, flt_82001CC0 (0.0) ; stfsx f0, r11, r9` with r9 = 0x88194C = the particle module's
+        // offset in the game module (0x878B40, OnEndOfUpdateFrame at 0x823DC378) + 0x8E0C. THE CLEAR OF THE TIME
+        // STEP: Update adds every sim sub-step's scaled step to mRenderData.mfCurrentTimeStep (0x8228185C..
+        // 0x82281870), and this zeroes it at the start of every UPDATE frame, so the record GenerateRenderRequests /
+        // PreRenderUpdate publish carries the frame's SUM of sub-steps (0.0 on a frame that ran none).
+        void StartOfFrame() { mRenderData.mfCurrentTimeStep = 0.0f; }
         // X360 0x8228A7C0 -- render thread, immediately BEFORE BuildLionVertexBuffers
         // (BrnRendererModule::Render @0x8240BFA8 :453-454 calls the pair under one gate).
         // Advances the spark motion-blur ring, retires the banks' expired buckets, flips and
@@ -681,7 +689,7 @@ namespace BrnParticle
         // +0x8E00 (36352): DWARF :52 the module-side render-data record Update refreshes and
         // GenerateRenderRequests copies into the dispatch-thread input buffer (528 bytes on
         // the console). Construct: mpParticleModule = this, muCurrentFrame = 0,
-        // mfCurrentTimeStep = 0.0.
+        // mfCurrentTimeStep = 0.0; StartOfFrame: mfCurrentTimeStep = 0.0 every update frame.
         ParticleRenderData mRenderData;               // +0x8E00 .. +0x9010
 
         // The five contained Im3d renderers the ctor stamps (each: its vtable then two zero

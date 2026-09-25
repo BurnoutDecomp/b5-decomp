@@ -377,6 +377,50 @@ namespace BrnParticle
     }
 
     // =========================================================================
+    // [DIAG] BRN_TSTEP_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+    // The published per-frame step (FX-CRASHVFX 2026-09-25): mRenderData.mfCurrentTimeStep as
+    // GenerateRenderRequests hands it to every reader -- the spark ring, the trails, the debris jobs
+    // (through PreRenderUpdate) and BrnRendererUpdatePostFxMotionBlur -> MotionBlurState::Update, which
+    // takes its "reconstruct the previous view" arm when the step is 0.0 and its history-shift arm
+    // otherwise (`fcmpu f31, 0.0 ; bne` at 0x823F84E4..0x823F8504). One line at the first publish and at
+    // the first publish past sim time 10 / 60 / 300 s: the value, how many 0.0 publishes there have been
+    // (the motion blur's reconstruct frames), and the running sum of every published value -- what the
+    // field would read without ParticleModule::StartOfFrame's clear (the PC before 2026-09-25).
+    // =========================================================================
+    namespace
+    {
+        void TimeStepWitness(const ParticleModule::ParticleRenderData& lrRecord)
+        {
+            static const bool sbArmed = []() {
+                const char* const lpcValue = std::getenv("BRN_TSTEP_DIAG");
+                return lpcValue != 0 && lpcValue[0] == '1';
+            }();
+            if (!sbArmed)
+                return;
+            static const f32 KAF_MARKS[4] = { 0.0f, 10.0f, 60.0f, 300.0f };
+            static u32 suPublished = 0;
+            static u32 suZero      = 0;
+            static u32 suNextMark  = 0;
+            static f64 sdSum       = 0.0;
+            ++suPublished;
+            if (lrRecord.mfCurrentTimeStep == 0.0f)
+                ++suZero;
+            sdSum += static_cast<f64>(lrRecord.mfCurrentTimeStep);
+            if (suNextMark >= 4u || !(lrRecord.mfCurrentTime >= KAF_MARKS[suNextMark]))
+                return;
+            const f32 lfMark = KAF_MARKS[suNextMark++];
+            char lacMsg[256];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[tstep] mark=%.0f t=%.3f frame=%u published=%.5f zeroPublishes=%u/%u blurArm=%s "
+                "sumOfPublished=%.3f\n",
+                static_cast<double>(lfMark), static_cast<double>(lrRecord.mfCurrentTime),
+                static_cast<unsigned>(lrRecord.muCurrentFrame), static_cast<double>(lrRecord.mfCurrentTimeStep),
+                suZero, suPublished, (lrRecord.mfCurrentTimeStep == 0.0f) ? "reconstruct" : "shift", sdSum);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
+
+    // =========================================================================
     // GenerateRenderRequests  @0x82281BD8
     //   Fold this frame's dispatch input (the three light lanes + the environment map +
     //   the white level) into mRenderData, consume the camera-switched latch, stamp the
@@ -414,6 +458,7 @@ namespace BrnParticle
 
         ++mRenderData.muCurrentFrame;
 
+        TimeStepWitness(mRenderData);   // [DIAG] BRN_TSTEP_DIAG, default off
         *lpDispatchThreadInput->GetParticleRenderData() = mRenderData;
     }
 
@@ -701,17 +746,16 @@ namespace BrnParticle
     //     AGAIN for the rest of the session.
     //   * the only way a wheel's strip can END. The other two new-emitter reasons in
     //     TrailSystem::AddTrailSegment either continue the strip (a full 16-segment emitter is
-    //     re-seeded with its predecessor's last segment) or never fire: the "too much time
-    //     passed" test compares against ParticleRenderData::mfCurrentTimeStep * 1.5, and that
-    //     field is a MONOTONICALLY GROWING ACCUMULATOR in the shipped X360 image too
-    //     (`lfs/fadds/stfs` on module+0x8E0C at 0x8228185C..0x82281870, no reset anywhere --
-    //     PreRenderUpdate @0x822947B8 only READS it), so the gate is ~1.5x the elapsed time and
-    //     can never be crossed. So without the release, a wheel keeps ONE emitter for ever and
-    //     the renderer draws a single quad straight across every stretch the wheel travelled
-    //     without skidding: measured 69.7 m laid across a 48.3 s pause in a run of this recipe.
+    //     re-seeded with its predecessor's last segment) or fire on the "too much time passed"
+    //     test (`now > mfCurrentTimeStep * 1.5 + lastTrailTime`, AddTrailSegment 0x8228C3B8..
+    //     0x8228C3EC), which ends a strip after 1.5 update frames without a mark -- on the console,
+    //     where mfCurrentTimeStep is the frame's step (ParticleModule::StartOfFrame, inlined into
+    //     BrnGameModule::OnStartOfUpdateFrame @0x823A8BB0, clears it every update frame). Measured
+    //     here BEFORE the PC had that clear (the field then grew from boot and the gate never
+    //     fired): without the release a wheel kept ONE emitter for ever and the renderer drew a
+    //     single quad straight across every stretch the wheel travelled without skidding --
+    //     69.7 m laid across a 48.3 s pause in a run of this recipe.
     //   * the segment double buffer's swap + copy.
-    // ⚠ It does NOT make the trail perfect: bridges shorter than the 10 s life are the console's
-    //   own behaviour (see the dead-gate note above) and are deliberately left alone.
     //
     // lbStalled is the game module's own `thisFrameFlag || lastFrameFlag` pair
     // (OnEndOfUpdateFrame @0x823DBBA0: `v5 = *(gm+10092520) || *(gm+10092519)`), the same value
@@ -735,11 +779,6 @@ namespace BrnParticle
     // =========================================================================
     namespace
     {
-        // [PC] The published mfCurrentTimeStep accumulator's value at the last BeginSimulateDebris -- see that
-        // function's banner (the spark ring's sfLastConsumedTimeStepSum / the trails' sfLastTrailTimeStepSum,
-        // for the debris). DELETE-WHEN the console's clear of the accumulator is found.
-        f32 sfLastDebrisTimeStepSum = 0.0f;
-
         void DebrisSimWitness(const Native::BrnDebrisArray* lpArrays, u32 luNumArrays,
                               const BrnGame::DispatchThreadInputBuffer* lpInput, s32 liJobs,
                               const Native::DebrisUpdateJobData* lpJobs)
@@ -1129,45 +1168,22 @@ namespace BrnParticle
             const rw::math::vpu::Matrix44Affine& lrView = lView;
             const rw::math::vpu::Matrix44&       lrProj = lpRenderData->mCgsCamera.mProjection;
 
-            // ⚠⚠ THE RING DELTA. The console writes `lfs f1, 0xC(r30)` at 0x8228A82C, i.e. it
-            // hands SparkFrameDataSet::Update the render data's mfCurrentTimeStep VERBATIM --
-            // and that field is an ACCUMULATOR. Three of the callee's own facts prove the
-            // callee wants a PER-RENDER-FRAME DELTA and not a clock:
-            //   * 0x822842D8-E0  `lfs f0, 0x80(r3); fadds f0, f0, f1`, stored back to 0x80(r3)
-            //     and 0x84(r3) at 0x82284438 -- the ring head is ADVANCED BY f1, not set to it.
-            //   * 0x822842F4-FC  the shift is gated on `head - *(r3+0x150) >= flt_8200DD54`,
-            //     and flt_8200DD54 == 0x3C800000 == 0.015625 == 1/64 s. A minimum-interval
-            //     gate is meaningless unless f1 is a small per-frame quantity.
-            //   * 0x82283C20-28  `f1 == flt_82001CC0 (0.0)` selects the OTHER arm -- the
-            //     "no time has passed" rebuild. A monotonic clock is 0.0 only on frame one.
-            // Against that, an EXHAUSTIVE scan of every function in the ARTIST export set for
-            // the four spellings of module+0x8E0C (`ori ...,0x8E0C`, `addi ...,-0x71F4`, and
-            // the same two for the record base +0x8E00) finds exactly four bodies:
-            //     0x822817D8 Update           -- `+= mfSimulationRate * arg1`
-            //     0x82294220 Construct        -- `= 0.0f` (the seed)
-            //     0x82294760 PreRenderUpdate  -- reads it into DispatchThreadUpdateData+4
-            //     0x82296C80 HandleWheels     -- touches +0x8E08 only, never +0x8E0C
-            // NOTHING CLEARS IT. Those two readings cannot both be right, and this evidence
-            // CANNOT DISTINGUISH "the export set has a hole where the console's clear lives"
-            // (the set is known to have them) from "the accumulate is scaled by something not
-            // yet found". So nothing here invents a clear, and mfCurrentTimeStep keeps the
-            // console's exact value for BrnRendererUpdatePostFxMotionBlur, its other consumer.
-            //
-            // What is taken instead is the FIRST DIFFERENCE of the console's own published
-            // field across render frames. That quantity is right under BOTH hypotheses: if the
-            // console clears after publishing, the field IS the frame's sum of sim steps and
-            // the difference equals it; if it does not clear, the difference is still exactly
-            // the sim time that elapsed between this render frame and the last. No number here
-            // is invented -- it is the console's accumulator, differenced.
-            // DELETE-WHEN the missing clear is found, or the module scheduler drives the real
-            // per-sub-step Update/GenerateRenderRequests cadence (ParticleModuleBringUp.cpp's
-            // own "CADENCE DEVIATION, FLAGGED" banner).
-            static f32 sfLastConsumedTimeStepSum = 0.0f;
-            const f32  lfAccumulated = lpRenderData->mfCurrentTimeStep;
-            f32        lfRingDelta   = lfAccumulated - sfLastConsumedTimeStepSum;
-            sfLastConsumedTimeStepSum = lfAccumulated;
-            if (lfRingDelta < 0.0f)      // the accumulator was re-seeded (a module rebuild)
-                lfRingDelta = 0.0f;
+            // ⭐ THE RING STEP IS THE FIELD, VERBATIM: the console writes `lfs f1, 0xC(r30)` at
+            // 0x8228A82C, handing SparkFrameDataSet::Update the render data's mfCurrentTimeStep --
+            // the update frame's SUM of scaled sim sub-steps. ParticleModule::Update adds each one
+            // (0x8228185C..0x82281870) and ParticleModule::StartOfFrame, inlined into
+            // BrnGameModule::OnStartOfUpdateFrame @0x823A8BB0, clears it at the start of every update
+            // frame (`stfsx f0(0.0), r11, r9`, r9 = 0x88194C = the particle module's +0x8E0C in the
+            // game module). The callee's own arithmetic wants exactly that per-frame quantity:
+            //   * 0x822842D8-E0  `lfs f0, 0x80(r3); fadds f0, f0, f1` -- the ring head is ADVANCED BY f1;
+            //   * 0x822842F4-FC  the shift is gated on `head - *(r3+0x150) >= flt_8200DD54` (1/64 s);
+            //   * 0x82283C20-28  `f1 == flt_82001CC0 (0.0)` selects the "no time has passed" rebuild --
+            //     a frame that ran no sub-step.
+            // CORRECTED 2026-09-25 (FX-CRASHVFX): the PC dropped that clear (the earlier +0x8E0C scans
+            // looked module-relative; the store is game-module-relative), so the field grew from boot and
+            // this took its FIRST DIFFERENCE (sfLastConsumedTimeStepSum). With the clear restored the
+            // difference would be wrong, and it is gone.
+            const f32 lfRingDelta = lpRenderData->mfCurrentTimeStep;
             sfDiagRingDelta = lfRingDelta;
 
             mSparkFrameDataSetUpdate.Update(lrView, lrProj, lfRingDelta);
@@ -1526,60 +1542,29 @@ namespace BrnParticle
             // TrailSystem::Update, INLINED at the console's head of this arm (the two stores
             // at module +141312/+141316 and the four-row matrix copy at +141248).
             //
-            // ⭐⭐⭐ THE TIME STEP IS DIFFERENCED, EXACTLY AS THE SPARK RING'S IS (issue #21).
-            // The console's `lfs f13, 0xC(r31) ; stfsx f13, r11, 0x190F4` at 0x8228AD10/
-            // 0x8228AD2C hands TrailSystem::mfCurrentTimeStep the render data's
-            // mfCurrentTimeStep VERBATIM -- and that field is the MONOTONIC ACCUMULATOR
-            // ParticleModule::Update builds (`lfs/fadds/stfs` on module+0x8E0C at
-            // 0x8228185C..0x82281870; the exhaustive four-spelling scan of the ARTIST export
-            // set finds no clear anywhere -- see the spark ring's banner above, which hit the
-            // same contradiction on the same field and resolved it the same way).
-            //
-            // ITS ONE CONSUMER PROVES IT WANTS A PER-FRAME DELTA, from the console's own
-            // arithmetic. TrailSystem::AddTrailSegment @0x8228C310 computes
+            // ⭐ THE TRAIL STEP IS THE FIELD, VERBATIM: `lfs f13, 0xC(r31) ; stfsx f13, r11, 0x190F4` at
+            // 0x8228AD10 / 0x8228AD2C hands TrailSystem::mfCurrentTimeStep the render data's
+            // mfCurrentTimeStep -- the update frame's sum of scaled sim sub-steps (ParticleModule::Update
+            // adds each, 0x8228185C..0x82281870; ParticleModule::StartOfFrame, inlined into
+            // BrnGameModule::OnStartOfUpdateFrame @0x823A8BB0, clears it every update frame). Its one
+            // consumer is TrailSystem::AddTrailSegment @0x8228C310's "too much time passed" gate:
             //     0x8228C3B8  lfs   f13, 0x14(r27)          emitterData->mrLastTrailTime
             //     0x8228C3D4  lfsx  f12, r31, 0x190F4       mfCurrentTimeStep
             //     0x8228C3DC  fmadds f0, f12, f0, f13       f0 = step * 1.5 + lastTrailTime
             //     0x8228C3EC  fcmpu cr6, f31, f0 ; bgt      tooMuchTimePassed = now > f0
-            // i.e. "more than 1.5 TIME STEPS since this wheel's last mark -> drop the emitter
-            // and start an unseeded strip". The sentinel that feeds it is written by
-            // EffectsModule::HandleWheels @0x82296D1C (`stfs f31(-1.0), 0(r30)` on
-            // TrailEmitterData+0x14) on mbResetCarTransform and on every frame the wheel lays
-            // nothing -- so -1.0 MEANS "this strip has ended". Both constructs are inert the
-            // moment the field carries elapsed time instead of a step: with the accumulator at
-            // 18.55 s the gate is `now > lastTrailTime + 27.8 s`, which no sentinel and no gap
-            // can cross, so a wheel keeps ONE emitter across ANY interruption and the next
-            // segment BRIDGES it.
-            // MEASURED, this build, scratch/flow_run/i21_A (the stunt-run start of b5 issue #21):
-            //     [trailseg] c=1 e=..B9B9C0 APPEND n=0 dist=0.0000  t=21.000 pos=2642.066,..,-1722.159
-            //     [trailseg] c=3 e=..B9B9C0 APPEND n=1 dist=18.3256 t=21.017 pos=2624.737,..,-1728.119
-            // -- ONE emitter, two consecutive segments 18.33 m apart one frame apart, because
-            // the event-start grid placement moved the car and nothing could end the strip:
-            // an 18 m tyre mark drawn straight across the junction. The same construct draws
-            // the take-off-point-to-landing-point strip the reporter calls "marks in midair".
-            //
-            // THE FIRST DIFFERENCE IS RIGHT UNDER BOTH READINGS OF THE CONSOLE, which is why
-            // it is taken here rather than a clear being invented (AGENTS.md rule 2): if the
-            // console clears the accumulator after publishing (the export set is known to have
-            // holes), the field IS that frame's sum of sim steps and the difference equals it;
-            // if it does not clear, the difference is still exactly the sim time that elapsed
-            // between this render frame and the last. Either way the number handed over is the
-            // console's own published quantity, differenced -- nothing is fabricated. This arm
-            // runs behind the once-per-frame muCurrentFrame guard above, so the difference is
-            // one render frame's worth of sim time and no more.
-            // ⚠ mfCurrentTime is NOT differenced: it is an ASSIGNMENT on the console
-            // (`stfsx f31, r31, 0x8E08`) and is already the trail clock HandleWheels stamps
-            // segments with.
-            // DELETE-WHEN the missing clear is found, or the module scheduler drives the real
-            // per-sub-step Update cadence -- the same DELETE-WHEN the spark ring carries.
-            static f32 sfLastTrailTimeStepSum = 0.0f;
-            const f32  lfTrailAccumulated = lpRenderData->mfCurrentTimeStep;
-            f32        lfTrailTimeStep    = lfTrailAccumulated - sfLastTrailTimeStepSum;
-            sfLastTrailTimeStepSum = lfTrailAccumulated;
-            if (lfTrailTimeStep < 0.0f)   // the accumulator was re-seeded (a module rebuild)
-                lfTrailTimeStep = 0.0f;
-
-            mTrailSystem.Update(lfTrailTimeStep,
+            // -- more than 1.5 frames since this wheel's last mark (or the -1.0 sentinel
+            // EffectsModule::HandleWheels @0x82296D1C writes on mbResetCarTransform and on every frame
+            // the wheel lays nothing) drops the emitter and starts an unseeded strip.
+            // ⛔ CORRECTED 2026-09-25 (FX-CRASHVFX): the PC dropped the clear, so the field grew from
+            // boot, the gate read `now > lastTrailTime + 1.5 * (sim seconds so far)` and never fired, and a
+            // wheel kept ONE emitter across any interruption -- measured in scratch/flow_run/i21_A (b5
+            // issue #21): one emitter, two consecutive segments 18.33 m apart one frame apart, an 18 m
+            // tyre mark across the junction, the reporter's "marks in midair". This arm then took the
+            // first difference of the field (sfLastTrailTimeStepSum); with the clear restored that would
+            // be wrong, and it is gone.
+            // ⚠ mfCurrentTime is an ASSIGNMENT on the console (`stfsx f31, r31, 0x8E08`): the trail clock
+            // HandleWheels stamps segments with.
+            mTrailSystem.Update(lpRenderData->mfCurrentTimeStep,   // `lfs f13, 0xC(r31)` at 0x8228AD10
                                 lpRenderData->mfCurrentTime,
                                 lrViewProjection);
 
@@ -1863,19 +1848,15 @@ namespace BrnParticle
     //      (BrnDebrisArrayLite.h). The debris is integrated before the render reads it, as on the
     //      console.
     //
-    // ⚠⚠ THE STEP IS THE FIRST DIFFERENCE OF THE PUBLISHED ACCUMULATOR (FX-CRASHVFX, glass live run
-    // scratch/bugtest/runs/fxcrashvfx_glass/20260925_113502). The console reads the step off
-    // DispatchThreadUpdateData+4 (`lfs f13, 4(r29)` at 0x82289B18), which PreRenderUpdate copies from the render data's
-    // mfCurrentTimeStep -- the field ParticleModule::Update ACCUMULATES (`+= rate * step` at
-    // 0x8228185C..0x82281870) and nothing found in the export set clears (RenderSparks' ring-delta banner
-    // has the whole search). Read verbatim, the step is the seconds since the module was built: the
-    // glass run integrated its pieces with dt = 21.8 s at t = 24.3 and every one blew up to inf / NaN
-    // within 30 frames. The console's own debris does not, so on the console the field is a per-frame
-    // step; the spark ring and the trail system, its two other consumers, take the FIRST DIFFERENCE for
-    // the same reason, and so does this -- right under both readings (if the console clears after
-    // publishing, the field is the frame's sum of sim steps and the difference equals it; if not, the
-    // difference is the sim time that passed since the last dispatch frame). DELETE-WHEN the missing
-    // clear is found (then read lpData->mfCurrentTimeStep verbatim, as the console does).
+    // THE STEP is DispatchThreadUpdateData+4, read VERBATIM (`lfs f13, 4(r29)` at 0x82289B18): PreRenderUpdate
+    // copies it from the render data's mfCurrentTimeStep, the update frame's sum of scaled sim sub-steps
+    // (ParticleModule::Update adds each, 0x8228185C..0x82281870; ParticleModule::StartOfFrame, inlined into
+    // BrnGameModule::OnStartOfUpdateFrame @0x823A8BB0, clears it every update frame).
+    // CORRECTED 2026-09-25 (FX-CRASHVFX): while the PC lacked that clear the field was the seconds since boot --
+    // the glass live run scratch/bugtest/runs/fxcrashvfx_glass/20260925_113502 integrated its pieces with
+    // dt = 21.8 s at t = 24.3 and every one blew up to inf / NaN within 30 frames -- and 10adbe10 took the first
+    // difference of it here (sfLastDebrisTimeStepSum), as the spark ring and the trails did. With the clear
+    // restored the difference would be wrong, and it is gone.
     // =========================================================================
     void ParticleModule::BeginSimulateDebris(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInput)
     {
@@ -1892,10 +1873,7 @@ namespace BrnParticle
             maDebris[luArray].FreeExpiredBuckets(lpData->mfCurrentTime, lbReducedFrameRate);
 
         miNumDebrisUpdateJobsToWaitOn = 0;
-        const f32 lfAccumulated = lpData->mfCurrentTimeStep;             // see the banner: differenced
-        const f32 lfTimeStep    = lfAccumulated - sfLastDebrisTimeStepSum;
-        sfLastDebrisTimeStepSum = lfAccumulated;
-        if (!(lfTimeStep > 0.0f))                                         // `fcmpu f13, 0.0 ; ble` (0x82289B20)
+        if (!(lpData->mfCurrentTimeStep > 0.0f))   // `lfs f13, 4(r29)` 0x82289B18, `fcmpu ; ble` 0x82289B20
             return;
 
         for (u32 luArray = 0; luArray < KU_NUM_DEBRIS_ARRAYS; ++luArray)
@@ -1906,7 +1884,7 @@ namespace BrnParticle
             lrJob.muNumDebrisArrays = 1;
             lrJob.mpTriCache        = lpTriCache;
             lrJob.mfCurrentTime     = lpData->mfCurrentTime;
-            lrJob.mfTimeStep        = lfTimeStep;
+            lrJob.mfTimeStep        = lpData->mfCurrentTimeStep;
             lrJob.mRandom.SetSeed(mRandom.RandomUInt());
             ++miNumDebrisUpdateJobsToWaitOn;
         }

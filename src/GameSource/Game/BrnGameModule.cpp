@@ -3615,13 +3615,31 @@ namespace BrnGame
     }
 
     // @ BrnGameModule.cpp:1253 (X360 0x823A8BB0) - start-of-update-frame hook. The X360 body is
-    // exactly two statements: `*(this + 8919372) = 0.0` (the frame lookback timer) then
-    // `BrnRendererModule::StartOfFrame(this + 15808)`. The renderer call is live now (it rewinds
-    // the game-side dispatch-list ring the world modules fill this frame and opens the shader-
-    // constant table's frame on its bin); the lookback timer member is not in this layout yet.
+    // exactly two statements:
+    //   1. EffectsModule::StartOfFrame -> ParticleModule::StartOfFrame (DWARF _compile/BrnGameUnity.cpp:392-395
+    //      names the call; both are inline, EffectsModule.h:277 / ParticleModule.h:309), compiled to ONE store:
+    //      `lis r10, 0x88 ; ori r9, r10, 0x194C ; lfs f0, flt_82001CC0 (0.0) ; stfsx f0, r11, r9`
+    //      (0x823A8BB0..0x823A8BC8) -- *(this + 0x88194C) = 0.0f. The particle module is this + 0x878B40
+    //      (OnEndOfUpdateFrame hands ParticleModule::EndOfFrame exactly that: `addis r3, r30, 0x88 ; addi r3, r3,
+    //      -0x74C0` at 0x823DC378), so the store is its mRenderData.mfCurrentTimeStep (+0x8E0C): the clear of the
+    //      sum ParticleModule::Update builds over the frame's sim sub-steps (`+= rate * step`,
+    //      0x8228185C..0x82281870). Every reader of the published record -- the spark ring, the trails, the
+    //      debris jobs, the motion blur -- gets the frame's step, and 0.0 on a frame that ran no sub-step.
+    //   2. `BrnRendererModule::StartOfFrame(this + 15808)` (the tail call at 0x823A8BCC): it rewinds the
+    //      game-side dispatch-list ring the world modules fill this frame and opens the shader-constant table's
+    //      frame on its bin.
+    // ⛔ CORRECTED 2026-09-25 (FX-CRASHVFX): this banner used to read the store as "the frame lookback timer ...
+    // not in this layout yet" and the body dropped it. On PC the particle step then grew from boot: the debris
+    // integrated 21.8 s steps (scratch/bugtest/runs/fxcrashvfx_glass/20260925_113502), the spark ring, the trails
+    // and the debris each carried a first-difference workaround, and the motion blur's zero-step arm never ran.
+    // The PC calls this once per UPDATE frame, ahead of that frame's sub-steps, as the console's ThreadLayout does:
+    // BrnMain.cpp's EngineUpdate loop runs OnStartOfUpdateFrame -> OnCompletionOfVsyncWait -> UpdateThread
+    // (GameMain's `do { ... DoUpdate_Effects ... } while (liStep < miNumSimFramesRequired)`, then the flow
+    // state's Render -> DoDispatch, which publishes the record) -> OnEndOfUpdateFrame -> DispatchThread.
     void BrnGameModule::OnStartOfUpdateFrame()
     {
-        mRenderModule.StartOfFrame();
+        mEffectsModule.StartOfFrame();   // *(this + 0x88194C) = 0.0f  (0x823A8BB0..0x823A8BC8)
+        mRenderModule.StartOfFrame();    // the tail call (0x823A8BCC)
     }
 
     // @ BrnGameModule.cpp:1275 - end-of-update-frame hook. The X360 body @0x823DBBA0 runs
