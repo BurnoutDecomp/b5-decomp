@@ -623,15 +623,26 @@ namespace CgsSceneManager
     }
 
     // ===========================================================================
-    // CalcNextSubNode @ 0x828B11A0 -- which of the four sub-nodes a position falls in.
-    // The split is in the world XZ plane about the node centre; the child order is the
-    // one KAF_LOOSE_OCTREE_CHILD_OFFSETS above lays the children out in ((x > cx) | (z > cz) << 1).
+    // CalcNextSubNode @ 0x828B11A0 -- which of the four sub-nodes a position falls in. The
+    // split is in the world XZ plane about the node centre, in the order
+    // KAF_LOOSE_OCTREE_CHILD_OFFSETS above lays the children out.
+    //   0x828B11C8  "lpNode->HasChildren()" (0x820F435C, line 0x207 = 519) on a leaf
+    //   0x828B1224  vcmpgtfp. NODE.z > pos.z (v12 = splat node.z, v13 = splat pos.z); CR6
+    //               all-true -> r11; `beq` 0x828B1248 to the +z pair when it is NOT greater
+    //   0x828B124C  (-z pair) vcmpgtfp. NODE.x > pos.x: greater -> child 0, else +0x60 child 1
+    //   0x828B1268  (+z pair) vcmpgtfp. NODE.x > pos.x: greater -> +0xC0 child 2, else +0x120
+    //               child 3
+    // The console asks whether the NODE is greater, so a position exactly on a centre line --
+    // and a NaN coordinate, for which the compare is false -- goes to the + side; `pos > node`
+    // (the PC's old test) sent both to the - side. (The console returns the child's address,
+    // mpNodes + first child + the offset; every caller adds the offset to the first child.)
     // ===========================================================================
     u32 LooseOctree::CalcNextSubNode(const LooseOctreeNode* lpNode, const Vector4& lrPosition) const
     {
+        CGS_ASSERT(lpNode->HasChildren(), "lpNode->HasChildren()");
         u32 luChild = 0;
-        if (lrPosition.x > lpNode->mPosition.x) { luChild |= 1u; }
-        if (lrPosition.z > lpNode->mPosition.z) { luChild |= 2u; }
+        if (!(lpNode->mPosition.x > lrPosition.x)) { luChild |= 1u; }
+        if (!(lpNode->mPosition.z > lrPosition.z)) { luChild |= 2u; }
         return luChild;
     }
 
