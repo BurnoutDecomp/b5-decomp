@@ -170,11 +170,12 @@ namespace BrnWorld
                                          f32& lfClosestAngleDiff, f32& lfClosestPerpendicularDist)
     {
         // 0x822B1FD4 vsubfp128 v0, v121(vehicle), v120(player); 0x822B1FE8..0x822B1FFC the ground-plane
-        // square: vspltw lanes 2 and 0, vmulfp128 z*z, vmaddfp x*x + z*z (the tree's MagnitudeSquared2D
-        // spelling). Height (lane 1) takes no part.
+        // square: vspltw lanes 2 and 0, vmulfp128 z*z (0x822B1FF8, rounded: ROUNDING_RULE 4), then vmaddfp
+        // x*x + (z*z) (0x822B1FFC, raw D,A,B,C = v0, v0, v13, v0: ONE rounding, ROUNDING_RULE 3). Height
+        // (lane 1) takes no part.
         const Vector3 lPlayerToVehicle = lVehiclePos - lPlayerPos;
-        const f32 lfDistanceSq = lPlayerToVehicle.x * lPlayerToVehicle.x
-                               + lPlayerToVehicle.z * lPlayerToVehicle.z;
+        const f32 lfDistanceSq = std::fmaf(lPlayerToVehicle.x, lPlayerToVehicle.x,
+                                           lPlayerToVehicle.z * lPlayerToVehicle.z);
 
         // 0x822B2010 fcmpu / bgt -> li r3, 0 (0x822B22B0). Not taken on a NaN distance.
         if (lfDistanceSq > KF_POWER_PARK_NEARBY_RADIUS * KF_POWER_PARK_NEARBY_RADIUS)

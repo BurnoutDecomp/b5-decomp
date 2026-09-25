@@ -1118,7 +1118,9 @@ namespace BrnAI
         const f32 lfScaled = lfInputSpeed * KF_AI_MAX_BRAKING_SPEED_PROPORTION;   // flt_820C41FC
         // cap = inputSpeed + (scaled - inputSpeed) * ramp -- lerps from inputSpeed (ramp==0, no
         // cornering yet) toward the scaled-down speed (ramp==1, sharp corner).
-        return lfInputSpeed + (lfScaled - lfInputSpeed) * lfRamp;
+        // 0x8277D2A0 `vmaddfp v0, v12, v0, v13` (raw D,A,B,C: v0 = v12*v13 + v0 = (scaled - input) * ramp + input),
+        // ONE rounding (ROUNDING_RULE 3; the vsubfp at 0x8277D254 and the fmuls at 0x8277D230 are rule 4).
+        return std::fmaf(lfScaled - lfInputSpeed, lfRamp, lfInputSpeed);
     }
 
     // ====================================================================================
@@ -1145,7 +1147,9 @@ namespace BrnAI
         if (lfV < lfFloor)
             lfV = lfFloor;
 
-        return lfV + (lfMinSpeed - lfV) * lfT;
+        // 0x827708C8 `vmaddfp v0, v13, v0, v12` (raw D,A,B,C: v0 = v13*v12 + v0 = (minSpeed - v) * t + v), ONE
+        // rounding (ROUNDING_RULE 3; the vsubfp at 0x827708C4 is rule 4).
+        return std::fmaf(lfMinSpeed - lfV, lfT, lfV);
     }
 
     // ====================================================================================

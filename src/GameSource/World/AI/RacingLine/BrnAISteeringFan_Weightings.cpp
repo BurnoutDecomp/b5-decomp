@@ -121,9 +121,12 @@ void SteeringFan::CalculateFanAngle(AICar* lpCar)
     lfRatio = (-lfRatio >= 0.0f) ? 0.0f : lfRatio;                                   // fsel vs 0.0
     lfRatio = ((1.0f - lfRatio) >= 0.0f) ? lfRatio : 1.0f;                           // fsel vs 1.0
 
-    mfFanAngle        = (KF_STEER_AT_HIGH_SPEED - KF_STEER_AT_LOW_SPEED) * lfRatio
-                        + KF_STEER_AT_LOW_SPEED;                                     // stfs 0x800
-    mfLookAheadRadius = lfRatio * KF_FAN_LOOK_AHEAD_GROWTH + KF_FAN_LOOK_AHEAD_BASE;  // stfs 0x7F8
+    // Both lerps are ONE rounding (ROUNDING_RULE 3): 0x82768D20 `fmadds f0, f10, f13, f0` (f10 = high - low, the
+    // fsubs at 0x82768CE4, rule 4; f13 = the ratio; f0 = low) and 0x82768D2C `fmadds f0, f13, f11, f0` (the
+    // ratio, 15.0, 10.0). fmadds frD = frA*frC + frB == std::fmaf(frA, frC, frB).
+    mfFanAngle        = std::fmaf(KF_STEER_AT_HIGH_SPEED - KF_STEER_AT_LOW_SPEED, lfRatio,
+                                  KF_STEER_AT_LOW_SPEED);                            // stfs 0x800
+    mfLookAheadRadius = std::fmaf(lfRatio, KF_FAN_LOOK_AHEAD_GROWTH, KF_FAN_LOOK_AHEAD_BASE); // stfs 0x7F8
 }
 
 // ========================================================================================
