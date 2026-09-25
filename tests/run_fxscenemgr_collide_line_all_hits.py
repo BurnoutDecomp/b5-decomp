@@ -31,6 +31,11 @@ def main():
     constant = re.search(r"^[^\n/]*\bKF_SHORT_LINE_LENGTH_SQ\s*=\s*[^;]+;", code_mask(source), re.M)
     helpers = source[constant.start():constant.end()].strip() + "\n" + \
         definition(source, "inline bool LeafOverlapsBoxXYZ(")
+    # The line box's VMX max / min (2026-09-25, FX-FOLLOWUPS) -- present from that revision on.
+    for signature in ("inline f32 VmxMaxFp(", "inline f32 VmxMinFp("):
+        vmx = optional_definition(source, signature)
+        if vmx:
+            helpers += "\n" + vmx
     pieces = {"fxsm_cla_helpers.inc": helpers, "fxsm_cla_body.inc": body}
     rc = build_and_run(REPO / "tests" / "FxScenemgrCollideLineAllHits.cpp", pieces, "fxsm_cla",
                        extra_sources=(LINE_CPP, LINE_TESTS_CPP))

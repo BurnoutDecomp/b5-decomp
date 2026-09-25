@@ -23,6 +23,7 @@
 #include "GameShared/GameClasses/Geometric/Intersection/CgsPolygonSoupTests.h"
 #include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h"
+#include <cmath>     // std::signbit (the production VmxMaxFp / VmxMinFp helpers)
 #include <cstdio>
 #include <cstring>
 #include <map>

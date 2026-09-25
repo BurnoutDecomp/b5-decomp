@@ -52,6 +52,7 @@ namespace CgsDev { namespace Log { DebugPrint* gpDebugPrint = nullptr; } }
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <new>
 #include <string>
 #include <vector>
@@ -340,6 +341,18 @@ int main()
         Check(gaAsserts.size() == 3 && gaAsserts[0] == "Line reciprocal X is 0\n"
               && gaAsserts[1] == "Line reciprocal Y is 0\n" && gaAsserts[2] == "Line reciprocal Z is 0\n",
               "D3 TestLineBoundingBoxAgainstAxisAlignedBox4: a zero reciprocal lane fires :769 / :770 / :771 in x, y, z order");
+
+        // vmaxfp / vminfp, not C selects (0x828BD99C..0x828BD9BC): a NaN slab parameter makes far AND near NaN, so
+        // the axis's `1 >= near` lane (vcmpgefp128 0x828BD9B0) fails. Lane 0: x max NaN -> t_max NaN (the vA
+        // operand) beside t_min = 0.5 -- the selects answered far = near = 0.5 and crossed it. Lane 1: x min NaN
+        // (the vB operand). Lanes 2 / 3: finite controls (crossed / past the end).
+        const f32 lfNaN = std::numeric_limits<f32>::quiet_NaN();
+        const Vector4 lHits3 = CgsGeometric::TestLineBoundingBoxAgainstAxisAlignedBox4(
+            MakeBox(5, -1, -1, lfNaN, 1, 1), MakeBox(lfNaN, -1, -1, 6, 1, 1),
+            MakeBox(5, -1, -1, 6, 1, 1), MakeBox(11, -1, -1, 12, 1, 1), lStart, lEnd, lRecip);
+        Check(LaneBits(lHits3, 0) == 0u && LaneBits(lHits3, 1) == 0u
+              && LaneBits(lHits3, 2) == 0xFFFFFFFFu && LaneBits(lHits3, 3) == 0u,
+              "D4 TestLineBoundingBoxAgainstAxisAlignedBox4: a NaN slab parameter in either operand fails its axis (vmaxfp / vminfp answer NaN)");
     }
 
     // ================================================================================================
