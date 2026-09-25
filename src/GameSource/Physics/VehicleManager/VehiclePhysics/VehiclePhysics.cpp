@@ -6059,7 +6059,11 @@ namespace Vehicle
     static const f32 KF_SLAM_TAPER_DENOM = 150.0f;        // flt_82F2A294
     static const s8  KI8_SLAM_NUMBER_MAX = 2;             // saturate
 
-    if (!(mSlamEffect.mfSlamLife <= 0.0f) && !((mSlamEffect.mfTotalSlamTime - mSlamEffect.mfSlamLife) >= KF_SLAM_RATE_LIMIT))
+    // 0x825D4884 `fcmpu life, 0.0` ; 0x825D4888 `bgt` (NOT taken on unordered) -> only an ORDERED
+    // live slam reaches 0x825D48AC `fcmpu total - life, 0.5` ; 0x825D48B0 `blt 0x825D4944` (return 0,
+    // NOT taken on unordered). So the slam is kept only for `life > 0 && total - life < 0.5`, both
+    // ordered; a NaN life or a NaN elapsed time re-arms. (The `!(<=) && !(>=)` spelling refused both.)
+    if (mSlamEffect.mfSlamLife > 0.0f && (mSlamEffect.mfTotalSlamTime - mSlamEffect.mfSlamLife) < KF_SLAM_RATE_LIMIT)
         return 0;   // Breaker 0x825D4944 returns zero on both paths.
 
     f32 lfScale = KF_SLAM_BASE_SCALE;
@@ -6070,9 +6074,10 @@ namespace Vehicle
         // to survive the flagged-zero denominator, which the console has no counterpart for.
         // The denominator is 150.0; the guard is removed with the flag that justified it.
         const f32 lfAirTime = mfSpeedMPH.x;   // this+0x6C0 lane the asm splats (air-time/speed source)
-        f32 lfTaper = lfAirTime / KF_SLAM_TAPER_DENOM;   // fdivs @0x825D48E0
-        if (lfTaper < 0.0f) lfTaper = 0.0f;   // fsel clamp low
-        if (lfTaper > 1.0f) lfTaper = 1.0f;   // fsel clamp high
+        // fdivs @0x825D48E8, then `fneg ; fsel f0, -r, 0.0, r` (0x825D48F0) and `fsubs 1.0 - r ;
+        // fsel f0, 1-r, r, 1.0` (0x825D48FC): rwmath's Clamp, whose fsel takes the ELSE operand on a
+        // NaN -- a NaN ratio comes back as 1.0 (the full 4.0 kick), not NaN.
+        const f32 lfTaper = rw::math::fpu::Clamp(lfAirTime / KF_SLAM_TAPER_DENOM, 0.0f, 1.0f);
         lfScale = lfTaper * KF_SLAM_BASE_SCALE;
     }
 
@@ -6219,7 +6224,10 @@ namespace Vehicle
         lfLife = KF_SLAM_LIFE_FLOOR;
     mSlamEffect.mfSlamLife = lfLife;
 
-    if (lfLife <= 0.0f)
+    // 0x825D4984 `fcmpu life, 0.0` ; 0x825D4988 `bgt` (NOT taken on unordered): only an ORDERED
+    // positive life runs the envelope; a NaN life takes this dead branch (and is not cleared: the
+    // `bgelr` at 0x825D4AB4 returns on unordered). (`life <= 0` sent a NaN life into the envelope.)
+    if (!(lfLife > 0.0f))
     {
         if (lfLife < -mSlamEffect.mfRecoveryTime)
         {
@@ -6234,32 +6242,30 @@ namespace Vehicle
 
     // alive: parabolic envelope env = r - r^2
     const f32 lfR   = lfLife / mSlamEffect.mfTotalSlamTime;
-    const f32 lfEnv = -((lfR * lfR) - lfR);   // = r - r^2
+    // 0x825D49B4 `fnmsubs f0, r, r, r` == -(r*r - r) with ONE rounding (the console fuses it).
+    const f32 lfEnv = -std::fmaf(lfR, lfR, -lfR);   // = r - r^2
     const f32 lfEnvTerm = lfEnv * (mSlamEffect.mfOriginalSteering * KF_SLAM_AMPLITUDE);
     mSlamEffect.mfSteering = lfEnvTerm;   // +0x1114
 
     if (leDriverType == E_DRIVER_TYPE_AI)
     {
         // mode==1 slam-steer-ADD (flt_82F2A500/4FC image-read; see the release note above).
-        f32 lfBase = lrSteer;
-        if (lfBase < -KF_MODE1_STEER_CLAMP) lfBase = -KF_MODE1_STEER_CLAMP;
-        if (lfBase >  KF_MODE1_STEER_CLAMP) lfBase =  KF_MODE1_STEER_CLAMP;
+        // Both clamps are fsel pairs (0x825D49E8..F4 and 0x825D4A18..24): rwmath's Clamp, so a NaN
+        // steer comes back as +0.0025 and a NaN slam term as +1.0 (fsel takes its ELSE on a NaN).
+        const f32 lfBase = rw::math::fpu::Clamp(lrSteer, -KF_MODE1_STEER_CLAMP, KF_MODE1_STEER_CLAMP);
         lrGas = 1.0f;
-        f32 lfAdd = mSlamEffect.mfSteering * KF_MODE1_STEER_SCALE;
-        if (lfAdd < -1.0f) lfAdd = -1.0f;
-        if (lfAdd >  1.0f) lfAdd =  1.0f;
+        const f32 lfAdd = rw::math::fpu::Clamp(mSlamEffect.mfSteering * KF_MODE1_STEER_SCALE, -1.0f, 1.0f);
         lrSteer = lfBase + lfAdd;
     }
     else
     {
         // default fold-into-steering path: clamp(((gas*0.1 + 0.9) * env) + steer, -0.95, 0.95)
-        f32 lfNewSteer = (((lrGas * KF_SLAM_GAS_BLEND) + KF_SLAM_GAS_FLOOR) * lfEnvTerm) + lrSteer;
-        if (lfNewSteer < -KF_SLAM_STEER_CLAMP) lfNewSteer = -KF_SLAM_STEER_CLAMP;
-        if (lfNewSteer >  KF_SLAM_STEER_CLAMP) lfNewSteer =  KF_SLAM_STEER_CLAMP;
-        lrSteer = lfNewSteer;
-        // gas = max(gas, 0.9)
-        if (lrGas < KF_SLAM_GAS_FLOOR)
-            lrGas = KF_SLAM_GAS_FLOOR;
+        // 0x825D4A5C `fmadds gas, 0.1, 0.9` then 0x825D4A60 `fmadds t, envTerm, steer` -- two fused
+        // multiply-adds, one rounding each. The clamp (0x825D4A6C..80) and the gas floor
+        // (0x825D4A8C/90) are fsel forms: a NaN steer comes back as +0.95 and a NaN gas as 0.9.
+        const f32 lfNewSteer = std::fmaf(std::fmaf(lrGas, KF_SLAM_GAS_BLEND, KF_SLAM_GAS_FLOOR), lfEnvTerm, lrSteer);
+        lrSteer = rw::math::fpu::Clamp(lfNewSteer, -KF_SLAM_STEER_CLAMP, KF_SLAM_STEER_CLAMP);
+        lrGas = rw::math::fpu::Max(lrGas, KF_SLAM_GAS_FLOOR);
     }
 
     mbHandBrake = false;   // *(this+4952) = 0
