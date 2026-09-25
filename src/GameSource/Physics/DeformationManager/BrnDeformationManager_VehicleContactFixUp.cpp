@@ -285,8 +285,11 @@ namespace Deformation
         const Vector4&           lLocalSphere  = LocalSphereVec(lrSensor);
         const Vector3            lLocalCentre  = SphereCentre(lLocalSphere);
 
-        // Neighbour pick: boundary neighbour 0, else 1, each accepted only when its sphere lies
-        // on the other car's side (Dot(neighbourCentre - centre, localOther - centre) >= 0).
+        // Neighbour pick: boundary neighbour 0, else 1, each accepted unless its sphere lies strictly
+        // on the far side from the other car. 0x82604AE8 (neighbour 0) and 0x82604B2C (neighbour 1) are
+        // `vcmpgtfp. 0 > dot ; beq accept`, and `beq` is taken when the all-true bit is CLEAR -- so the
+        // test is !(0 > dot), and a NaN dot ACCEPTS the neighbour. (`dot >= 0` refused a NaN dot and
+        // fell to the no-neighbour arm, where the console runs the tangent arm.)
         const DeformationSensor* lpNeighbour = nullptr;
         const u8 lu8Neighbour0 = lrSensor.mpSpec->mau8NextBoundarySensor[0];
         if (static_cast<s32>(lu8Neighbour0) != liSensorIndex)
@@ -294,7 +297,7 @@ namespace Deformation
             const Vector3 lToOther = lLocalOtherPos - lLocalCentre;
 
             const DeformationSensor& lrCandidate0 = lpModel->GetSensorDebug(lu8Neighbour0);
-            if (rw::math::vpu::Dot(SphereCentre(LocalSphereVec(lrCandidate0)) - lLocalCentre, lToOther) >= 0.0f)
+            if (!(0.0f > rw::math::vpu::Dot(SphereCentre(LocalSphereVec(lrCandidate0)) - lLocalCentre, lToOther)))   // 0x82604AE8
             {
                 lpNeighbour = &lrCandidate0;
             }
@@ -304,7 +307,7 @@ namespace Deformation
                 if (static_cast<s32>(lu8Neighbour1) != liSensorIndex)
                 {
                     const DeformationSensor& lrCandidate1 = lpModel->GetSensorDebug(lu8Neighbour1);
-                    if (rw::math::vpu::Dot(SphereCentre(LocalSphereVec(lrCandidate1)) - lLocalCentre, lToOther) >= 0.0f)
+                    if (!(0.0f > rw::math::vpu::Dot(SphereCentre(LocalSphereVec(lrCandidate1)) - lLocalCentre, lToOther)))   // 0x82604B2C
                     {
                         lpNeighbour = &lrCandidate1;
                     }

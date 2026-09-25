@@ -370,7 +370,11 @@ namespace Deformation
 		// The console divides unconditionally (vrefp + 2 Newton refines) and lets the `basis > 0`
 		// gate discard the result; guarding the zero here is value-identical and avoids the inf.
 		const f32 lfRatio      = (lfBasis != 0.0f) ? (lfPenetration / lfBasis) : 0.0f;
-		const f32 lfImpactTime = (lfRatio > 0.0f) ? lfRatio : 0.0f;   // vmaxfp v13, v0, zero
+		// 0x825E1B5C `vmaxfp128 v13, v127(0), v13(ratio)`. VMX max keeps a NaN operand (and orders +0
+		// above -0), so a NaN ratio stays NaN and then fails both `1.0 >= t` gates below: the latch at
+		// 0x825E1B78 and the return at 0x825E1CB8. (`ratio > 0 ? ratio : 0` turned a NaN ratio into 0,
+		// latched it and returned true.)
+		const f32 lfImpactTime = (lfRatio > 0.0f || lfRatio != lfRatio) ? lfRatio : 0.0f;
 
 		const bool lbLatch = ( lfBasis > 0.0f                          // vcmpgtfp v10 > 0 (dword_100A564 == 0.0)
 		                       && lfImpactTime <= 1.0f                 // vcmpgefp 1.0 >= v13
