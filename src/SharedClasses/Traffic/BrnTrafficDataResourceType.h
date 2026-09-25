@@ -98,6 +98,11 @@ struct TrafficData
     const VehicleTraits*  GetVehicleTraitsForVehicleType(u32 luVehicleType) const;
     s32                   GetNumPaintColours() const;
 
+    // ADDITIVE (crash parity FX-TRAFFICLIGHTS, 2026-09-25) -- FindKillZone @ 0x827570A0 (DWARF :80), bodied in
+    // BrnTrafficData.cpp: the kill zone with this id (binary search over the sorted mpaKillZoneIds), or NULL
+    // after the BrnTrafficData.cpp:303 tripwire. Caller: TrafficEntityModule::FireKillZone @0x827343B8.
+    const KillZone*       FindKillZone(KillZoneId lKillZoneId) const;
+
     // Thin hull-array accessor over mpapHulls. The X360 reaches it inline as
     // `mpapHulls[luHull]` (e.g. OnlineStuntRunMode::GetBestStartGridID @0x82331708);
     // de-inlined here and bodied in BrnTrafficData.cpp.

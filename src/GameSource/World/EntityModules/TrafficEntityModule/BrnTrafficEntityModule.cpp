@@ -90,6 +90,8 @@
 #include "GameSource/World/Traffic/BrnVehicleSoaData.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
 #include "GameSource/GameState/BrnGameActions.h"                       // PrepareForModeAction
+#include "GameSource/GameState/BrnGameEvents.h"                        // StreamingCompleteEvent (arm 192 + its latched answer)
+#include "GameSource/GameState/TriggerQueryManager/BrnKillzoneAction.h" // KillzoneAction (arm 110)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficLogger.h" // Logger (mpLogger)
 #include "GameSource/Resource/BrnResourceAllocator.h"                  // BrnResource::GetDebugAllocator (the Logger allocation)
 #include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"          // WitnessTag ([nettraf] lines)
@@ -3642,20 +3644,22 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     // must be mounted or this is an LNK2019).
     UpdateStreaming(lpOutput);
 
+    // 0x8274E744..0x8274E794 -- the latched answer to a WaitForStreamingAction (HandleExternalRequests' arm 192,
+    // which latches mbWaitingForStreaming while the module starts up or tears down):
+    //   lbz +0x7180E ; beq -> skip ; AreAllAssetsLoaded (mStreamer +0x72B58) ; beq -> skip
+    //   stw 0 -> record+0x00 (meModule = E_MODULE_TRAFFIC_ENTITY) ; stb 0 -> +0x7180E
+    //   GetGameEventQueue() (0x82711CE8)->AddEvent(record, 9 (E_EVENT_STREAMING_COMPLETE), 16)
+    // LIVE since crash parity FX-TRAFFICLIGHTS (2026-09-25). The gate that stood here named two blockers, both
+    // resolved: BrnGameEvents.h now carries the DWARF enumerator (E_MODULE_TRAFFIC_ENTITY = 0), and the host
+    // record is 16 bytes like the console's (static_assert at arm 192's emit). mUserId: see arm 192.
     if (mbWaitingForStreaming && mStreamer.AreAllAssetsLoaded())
     {
+        BrnGameState::GameStateModuleIO::StreamingCompleteEvent lStreamingComplete = {};
+        lStreamingComplete.meModule = BrnGameState::GameStateModuleIO::StreamingCompleteEvent::E_MODULE_TRAFFIC_ENTITY;
         mbWaitingForStreaming = false;
-
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "PostPhysicsUpdate StreamingCompleteEvent(E_MODULE_TRAFFIC_ENTITY) emit -- TWO "
-            "blockers, both one step: (a) the tree's EModule enum in BrnGameEvents.h carries "
-            "only an invented-name E_MODULE_WORLD_GRAPHICS=2, while the DecFIGS DWARF gives the "
-            "whole set (TRAFFIC_ENTITY=0, RACE_CAR_ENTITY=1, WORLD_ENTITY=2, GUI_SCREEN=3, "
-            "COUNT=4) and the X360 emit stores literal 0, so it needs an additive completion in "
-            "a header this wave does not own; (b) the console posts `AddEvent(&record, 9, 16)` "
-            "where 16 is the CONSOLE record size, so the host size must come from the host "
-            "type. The FLAG ITSELF is cleared, so the module does not wait forever");
+        lpOutput->GetGameEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStreamingComplete),
+                                                BrnGameState::GameStateModuleIO::E_EVENT_STREAMING_COMPLETE,
+                                                sizeof(lStreamingComplete));
     }
 
     UpdateDensity();
@@ -3733,10 +3737,16 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             {
                 EnterRunningState();
 
+                // 0x8274EC74..0x8274ECB0 -- the same latched answer as above, on the frame start-up ends.
                 if (mbWaitingForStreaming && mStreamer.AreAllAssetsLoaded())
                 {
+                    BrnGameState::GameStateModuleIO::StreamingCompleteEvent lStreamingComplete = {};
+                    lStreamingComplete.meModule =
+                        BrnGameState::GameStateModuleIO::StreamingCompleteEvent::E_MODULE_TRAFFIC_ENTITY;
                     mbWaitingForStreaming = false;
-                    // Same StreamingCompleteEvent emit as above; already gated there.
+                    lpOutput->GetGameEventQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lStreamingComplete),
+                        BrnGameState::GameStateModuleIO::E_EVENT_STREAMING_COMPLETE, sizeof(lStreamingComplete));
                 }
             }
             break;
@@ -4281,11 +4291,24 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         lpInput->GetVehicleManagerOutputInterface()->GetTrafficTypeRequestQueue(),
         lpOutput->GetTrafficTypeResponseQueue());
 
+    // The console's remaining tail (re-read by crash parity FX-TRAFFICLIGHTS, 2026-09-25):
+    //   0x8274EEC8..0x8274EEDC  the output's replay request interface (0x82711D90, the IO header's
+    //                           GetWriteInterfaceAt834784) ->RegisterSerialiser(&the module's TrafficEntitySerialiser
+    //                           at +0x724C0) (0x821F34A0), before the two unlocks;
+    //   0x8274EEF0..0x8274EF3C  after them: serialiser state (lwz 0(+0x724C0)) 1, 2 or 3 and the byte +0x7251B
+    //                           clear -> TrafficEntitySerialiser::Write(0) (0x8265F4E8) -- the replay recording;
+    //   0x8274EF40..0x8274EFD8  PerfMonCpu::StopMonitor x2 and GetMonitorData x5 into the miPerfMon_* stats.
+    // BLOCKED, the replay legs: RegisterSerialiser is bodied (BrnReplayRequestInterface.cpp), but there is no
+    // serialiser to hand it. BrnReplays::TrafficEntitySerialiser (Construct 0x8264C978, Write 0x8265F4E8) is
+    // declared only inside the UNMOUNTED BrnReplayTrafficEntitySerialiser.cpp, the module header has no member at
+    // +0x724C0, and Construct's own serialiser leg is gated (the [T1-traffic-leg] line). That is the traffic
+    // replay subsystem, not a tail call. The perfmon bracket is debug statistics only: left out on purpose.
     {
         static bool sbLogged = false;
         LogMissingLeg_T1(sbLogged,
-            "PostPhysicsUpdate remaining tail legs -- the perfmon bracket and the replay-serialiser "
-            "registration/write");
+            "PostPhysicsUpdate remaining tail legs -- the replay-serialiser registration/write "
+            "(RegisterSerialiser 0x821F34A0 is bodied, but TrafficEntitySerialiser at +0x724C0 is "
+            "not declared or mounted) and the debug-only perfmon bracket");
     }
 
     lpInput->UnlockForRead();
@@ -19494,25 +19517,22 @@ void TrafficEntityModule::HandlePrepareForModeAction(
 // ============================================================================
 // BrnTrafficEntityModule_wT6_03.cpp -- the traffic module's game-action dispatch.
 //
-//   TrafficEntityModule::HandleExternalRequests @0x8274B660 (.cpp 5833)  491 insns  PARTIAL
+//   TrafficEntityModule::HandleExternalRequests @0x8274B660 (.cpp 5833)  491 insns
 //
-// ⭐ WHY THIS EXISTS AS A PARTIAL. HandlePrepareForModeAction (_wT6_02.cpp) is the only
+// ⭐ WHY THIS STARTED AS A PARTIAL. HandlePrepareForModeAction (_wT6_02.cpp) is the only
 // non-debug writer of mbPlayingShowtimeMode, and this is its ONLY caller. Without it the
 // handler is not merely unreached -- it is DISCARDED: /Gy + /OPT:REF drops a function with no
 // caller, and it is measurably absent from Burnout_PC.map. So "the showtime gate is bodied"
 // and "showtime is reachable through the real mode path" are two different claims, and only
 // this file joins them.
 //
-// PARTIAL, and honestly so. The console's switch has sixteen arms over the post-physics game-
-// action queue. Exactly ONE is reconstructed here -- action 23, E_ACTION_PREPARE_FOR_MODE.
-// Every other arm needs a callee with no body in this tree (HandleStopModeAction,
-// RestartTraffic, HideAllTraffic, UnhideAllTraffic, ClearupCrashedTraffic, FireKillZone,
-// KillAllTrafficInCylinder, TrafficLightManager::SetCountdownValue, IsPaused), so each is a
-// named gate rather than an invented body or a trap.
-//
-// ⭐ THIS CANNOT REGRESS ANYTHING, and that is worth stating plainly. Today the WHOLE function
-// is gated at its call site in PostPhysicsUpdate (_wT1_01.cpp), so zero arms run. Running one
-// real arm and logging the other fifteen is strictly closer to the console than running none.
+// ✅ COMPLETE since crash parity FX-TRAFFICLIGHTS (2026-09-25). The console's switch has
+// seventeen arms over twenty-one action ids of the post-physics game-action queue (13, 23, 28,
+// 30, 34, 39, 47, 73, 75, 77, 97..100 in one arm, 110, 143, 192, 225 + 226 in one arm, 236,
+// 244) plus the post-loop Picture Paradise tail, and every one is reconstructed below. The last wave added 13, 30, 73, 75, 77, 110, 192, 244, the
+// tail, and the three callees they needed (HideAllTraffic, UnhideAllTraffic, FireKillZone,
+// bodied after this function; TrafficData::FindKillZone in BrnTrafficData.cpp). The switch
+// DEFAULT is the console's own: an id the table does not list is skipped.
 //
 // ---- the switch value is the ACTION ID, not the jump-table index ---------------------------
 // IDA labels the arm below "jumptable 8274B7EC case 10", which is the TABLE index; the console
@@ -19543,6 +19563,34 @@ void TrafficEntityModule::HandleExternalRequests(
     // 0x8274B680..0x8274B6D0. Both tripwires, both non-gating on the console.
     CGS_ASSERT(lpInput != 0, "lpInput != NULL");      // baked .cpp 5833
     CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");    // baked .cpp 5834
+
+    // ---- the arms' ids and constants (crash parity FX-TRAFFICLIGHTS, 2026-09-25) ----------------------------
+    // Four of the X360 action ids the switch dispatches are not in the tree's EGameActionType (BrnGameActions.h
+    // lists only the slots its producers instantiate). X360 value == jump-table slot + 13; DWARF name and id:
+    const s32 KI_ACTION_EMPTY_TRAFFIC_POOL       = 13;    // slot 0;   DWARF E_ACTION_EMPTY_TRAFFIC_POOL 13 (+0)
+    const s32 KI_ACTION_CAR_SELECT_TRANSITION_IN = 73;    // slot 60;  DWARF E_ACTION_CAR_SELECT_TRANSITION_IN 68 (+5)
+    const s32 KI_ACTION_KILLZONE                 = 110;   // slot 97;  DWARF E_ACTION_KILLZONE 105 (+5)
+    const s32 KI_ACTION_WAIT_FOR_STREAMING       = 192;   // slot 179; DWARF E_ACTION_WAIT_FOR_STREAMING 184 (+8)
+    // Every float below is read from the image (x360rd); none is tuned.
+    const f32 KF_START_GRID_CLEAR_RADIUS        = 30.0f;     // flt_820BA5E8 (0x41F00000), arm 30
+    const f32 KF_START_GRID_CLEAR_HEIGHT        = 10.0f;     // flt_820BA5E4 (0x41200000), arm 30
+    const f32 KF_CAR_SELECT_EXIT_CLEAR_RADIUS   = 150.0f;    // flt_820BA5A4 (0x43160000), arm 77
+    const f32 KF_CAR_SELECT_EXIT_CLEAR_HEIGHT   = 1000.0f;   // flt_820BA604 (0x447A0000), arm 77
+    const f32 KF_FINISH_THINNING_DISTANCE       = 1505.0f;   // flt_820BA814 (0x44BC2000), arm 244
+    const f32 KF_FINISH_THINNING_FACTOR         = 0.5f;      // flt_820BA62C (0x3F000000), arm 244
+    const f32 KF_PICTURE_PARADISE_FAR_DIST_SQ   = 10000.0f;  // unk_820BA610 lane 0 (0x461C4000), 100 m squared; tail
+    const f32 KF_PICTURE_PARADISE_CLEAR_RADIUS  = 90.0f;     // flt_820BA60C (0x42B40000), tail
+    const f32 KF_PICTURE_PARADISE_CLEAR_HEIGHT  = 1000.0f;   // flt_820BA604 (0x447A0000), tail
+    // The car-select sim box and render caps, arms 73 / 77. They are the four lanes of the .data vector
+    // unk_8300CF10 = { 195.0f, 395.0f, 62500.0f, 160000.0f }, seeded by the dyn-init thunk 0x82C66F18 from
+    // flt_8207B604 / flt_820C0804 / flt_82F2FE5C / flt_8200D518 (x360rd). Lanes 0 and 2 are the ones Construct
+    // stores; the two render counts are the arms' own `li` immediates.
+    const f32 KF_TRAFFIC_SIM_RADIUS                 = 195.0f;     // lane 0 (vspltw 0), arm 77
+    const f32 KF_CAR_SELECT_TRAFFIC_SIM_RADIUS      = 395.0f;     // lane 1 (vspltw 1), arm 73
+    const f32 KF_RENDER_CULL_DISTANCE_SQ            = 62500.0f;   // lane 2 (flt_8300CF18), 250 m squared, arm 77
+    const f32 KF_CAR_SELECT_RENDER_CULL_DISTANCE_SQ = 160000.0f;  // lane 3 (flt_8300CF1C), 400 m squared, arm 73
+    const u32 KU_MAX_VEHICLES_TO_RENDER             = 32;         // `li r10, 0x20` @0x8274C090, arm 77
+    const u32 KU_CAR_SELECT_MAX_VEHICLES_TO_RENDER  = 64;         // `li r11, 0x40` @0x8274C034, arm 73
 
     // 0x8274B6D4..0x8274B700. `bl BrnTrafficIO::Inp` is InputBuffer_PostPhysics::
     // GetGameActionQueue() const @0x827117A8 (the read-locked &mGameActionQueue at this+62640),
@@ -19803,6 +19851,315 @@ void TrafficEntityModule::HandleExternalRequests(
             break;
         }
 
+        // --------------------------------------------------------------------------------
+        // 0x8274BD34..0x8274BD94 -- E_ACTION_EMPTY_TRAFFIC_POOL (13, slot 0), DWARF EmptyTrafficMemoryPool
+        // { bool mbEmptyPool } (1 byte). The GUI's car-pool validation (BrnGui::GuiModule::
+        // UpdateCarPoolValidation, 0x82514304 / 0x825145E8) asks the traffic to hand its vehicle memory back,
+        // and later to take it again. UpdateStreaming runs the other half of the handshake (EMPTYING -> EMPTY
+        // once every asset is unloaded, FILLING -> IDLE once they are back) and answers the GUI with
+        // GuiEventTrafficPoolEmptied.
+        //   lbz 0(record) ; lwz +0x2FC (meEmptyTrafficPoolState)
+        //   mbEmptyPool: the .cpp 5937 (0x1731) tripwire "== E_EMPTYTRAFFICPOOLSTATE_IDLE" (0x820BE7F4) ; stw 1
+        //   otherwise:   the .cpp 5943 (0x1737) tripwire "== E_EMPTYTRAFFICPOOLSTATE_EMPTY" (0x820C0524) ; stw 3
+        // --------------------------------------------------------------------------------
+        case KI_ACTION_EMPTY_TRAFFIC_POOL:
+        {
+            const bool lbEmptyPool = (*reinterpret_cast<const u8*>(lpEvent) != 0);
+            if (lbEmptyPool)
+            {
+                CGS_ASSERT(meEmptyTrafficPoolState == E_EMPTYTRAFFICPOOLSTATE_IDLE,
+                           "meEmptyTrafficPoolState == E_EMPTYTRAFFICPOOLSTATE_IDLE");    // baked .cpp 5937
+                meEmptyTrafficPoolState = E_EMPTYTRAFFICPOOLSTATE_EMPTYING;
+            }
+            else
+            {
+                CGS_ASSERT(meEmptyTrafficPoolState == E_EMPTYTRAFFICPOOLSTATE_EMPTY,
+                           "meEmptyTrafficPoolState == E_EMPTYTRAFFICPOOLSTATE_EMPTY");   // baked .cpp 5943
+                meEmptyTrafficPoolState = E_EMPTYTRAFFICPOOLSTATE_FILLING;
+            }
+
+            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
+            if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+            {
+                *lpTrack << "[traffic-track] request 13 empty-pool empty=" << (lbEmptyPool ? 1 : 0)
+                         << " -> state " << static_cast<s32>(meEmptyTrafficPoolState) << "\n";
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------------------
+        // 0x8274BC84..0x8274BD30 -- E_ACTION_STOP_MODE_INTRO (30, slot 17), StopModeIntroAction (the record is
+        // not read). The event's intro is over; an event that clears the traffic sweeps its start grid.
+        //   lbzx +0x717E3 (mbGameModeClearsTraffic) ; beq -> tail
+        //   lbzx +0x717E7 (mbAllowDivergentBehaviour) ; beq -> tail
+        //   GetActiveRaceCarOutputInterface() (0x82711850), once; every active-race-car slot 0..7 (the loop's
+        //   post-increment is operator++ 0x821F1DB8): IsRaceCarActive(i) (0x82277B10) ->
+        //       KillAllTrafficInCylinder(GetRaceCarState(i)->mTransform.wAxis (0x8227D690, +0x1F0 +0x30),
+        //                                30.0f, 10.0f, true)                 -- `li r6, 1`: parked cars too
+        //   tail: lbzx +0x717DC (mbIsOnlineGameMode) ; bne -> done ; stb 0 -> +0x717E1
+        //       (offline, mbAtStartLineSoProtectRaceCarsFromTraffic ends with the intro)
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_STOP_MODE_INTRO:
+        {
+            u32 luSweptRaceCars = 0;   // FLAG PC witness count only
+            if (mbGameModeClearsTraffic && mbAllowDivergentBehaviour)
+            {
+                const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* const lpRaceCars =
+                    lpInput->GetActiveRaceCarOutputInterface();
+                for (EActiveRaceCarIndex leRaceCar = E_ACTIVE_RACE_CAR_INDEX_0;
+                     leRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+                     leRaceCar++)
+                {
+                    if (lpRaceCars->IsRaceCarActive(leRaceCar))
+                    {
+                        const TrafficRemoveReasonTag lTag("intro-start-grid");
+                        KillAllTrafficInCylinder(lpRaceCars->GetRaceCarState(leRaceCar)->mTransform.wAxis,
+                                                 KF_START_GRID_CLEAR_RADIUS, KF_START_GRID_CLEAR_HEIGHT, true);
+                        ++luSweptRaceCars;
+                    }
+                }
+            }
+            if (!mbIsOnlineGameMode)
+            {
+                mbAtStartLineSoProtectRaceCarsFromTraffic = false;
+            }
+
+            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
+            if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+            {
+                *lpTrack << "[traffic-track] request 30 stop-mode-intro clears=" << (mbGameModeClearsTraffic ? 1 : 0)
+                         << " swept race cars=" << luSweptRaceCars << " r=" << KF_START_GRID_CLEAR_RADIUS
+                         << " h=" << KF_START_GRID_CLEAR_HEIGHT << " protect="
+                         << (mbAtStartLineSoProtectRaceCarsFromTraffic ? 1 : 0) << "\n";
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------------------
+        // 0x8274C018..0x8274C04C, 0x8274C0AC -- CAR_SELECT_TRANSITION_IN (73, slot 60),
+        // CarSelectTransitionInAction { bool mbStart; bool mbUnlockingCars } (2 bytes; CarSelectManager posts
+        // it with mbStart set when the junkyard's transition in starts and clear when it ends). Entering the
+        // offline car select widens the traffic box around the showroom:
+        //   lbz 0(record) ; beq -> done ; lbzx +0x717E7 (mbAllowDivergentBehaviour) ; beq -> done
+        //   lvx128 unk_8300CF10 ; vspltw 1 ; stvx128 +0x713B0     mfTrafficSimRadius     = splat(395.0f)
+        //   li 0x40 ; stwx +0x713C0                                muMaxVehiclesToRender  = 64
+        //   stbx r15 (1) +0x713C8                                  mbInOfflineCarSelect   = true (UpdateRaceCarHulls
+        //                                                          then allows more than four hulls)
+        //   lfs flt_8300CF1C ; stfsx +0x713C4                      mfRenderCullDistanceSq = 160000.0f (400 m)
+        // Arm 77 restores Construct's values when the car select ends.
+        // --------------------------------------------------------------------------------
+        case KI_ACTION_CAR_SELECT_TRANSITION_IN:
+        {
+            const bool lbStart = (*reinterpret_cast<const u8*>(lpEvent) != 0);
+            if (lbStart && mbAllowDivergentBehaviour)
+            {
+                mfTrafficSimRadius.x   = KF_CAR_SELECT_TRAFFIC_SIM_RADIUS;
+                mfTrafficSimRadius.y   = KF_CAR_SELECT_TRAFFIC_SIM_RADIUS;
+                mfTrafficSimRadius.z   = KF_CAR_SELECT_TRAFFIC_SIM_RADIUS;
+                mfTrafficSimRadius.w   = KF_CAR_SELECT_TRAFFIC_SIM_RADIUS;
+                muMaxVehiclesToRender  = KU_CAR_SELECT_MAX_VEHICLES_TO_RENDER;
+                mbInOfflineCarSelect   = true;
+                mfRenderCullDistanceSq = KF_CAR_SELECT_RENDER_CULL_DISTANCE_SQ;
+            }
+
+            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
+            if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+            {
+                *lpTrack << "[traffic-track] request 73 car-select transition-in start=" << (lbStart ? 1 : 0)
+                         << " simRadius=" << mfTrafficSimRadius.x << " maxRender=" << muMaxVehiclesToRender
+                         << " cullDistSq=" << mfRenderCullDistanceSq << " inCarSelect=" << (mbInOfflineCarSelect ? 1 : 0)
+                         << "\n";
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------------------
+        // 0x8274C000..0x8274C014 -- E_ACTION_CAR_SELECT_READY (75, slot 62), CarSelectReadyAction
+        // { ECarSelectType } (4 bytes): `lwz 0(record) ; cmpwi 2 ; bne -> done ; bl HideAllTraffic`.
+        // Type 2 is E_CAR_SELECT_TYPE_ONLINE_EVENT_START: OnlineCarSelectManager::StartCarSelectState posts it
+        // (`li r31, 2` @0x82399078). The offline junkyard posts 1 (0x823873C4) and leaves the traffic alone.
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECT_READY:
+        {
+            const BrnGameState::GameStateModuleIO::CarSelectReadyAction* const lpReady =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::CarSelectReadyAction*>(lpEvent);
+            if (lpReady->miCarSelectFlow == BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_ONLINE_EVENT_START)
+            {
+                HideAllTraffic();
+            }
+
+            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
+            if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+            {
+                *lpTrack << "[traffic-track] request 75 car-select ready type=" << lpReady->miCarSelectFlow
+                         << " hidden=" << (mbTrafficIsHidden ? 1 : 0) << "\n";
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------------------
+        // 0x8274C050..0x8274C0AC -- CAR_SELECT_EXIT (77, slot 64; the tree's E_ACTION_CAR_SELECT_FINISHED),
+        // CarSelectExitAction { Vector3 mExitSpawnLocation (+0x00); bool mbOnlineCarSelect (+0x10) } (32 bytes).
+        //   lbz 0x10(record) ; beq -> offline
+        //   online:  bl UnhideAllTraffic (0x8274A500) -- the traffic arm 75 hid comes back
+        //   offline: KillAllTrafficInCylinder(lvx128 0(record), 150.0f, 1000.0f, false) -- the road the car is
+        //            about to come out on is cleared (parked cars stay);
+        //            then, if mbInOfflineCarSelect (lbz +0x713C8), Construct's box comes back:
+        //            lvx128 unk_8300CF10 ; vspltw 0 ; stvx128 +0x713B0     mfTrafficSimRadius     = splat(195.0f)
+        //            li 0x20 ; stwx +0x713C0                                muMaxVehiclesToRender  = 32
+        //            stb 0 +0x713C8                                         mbInOfflineCarSelect   = false
+        //            lfs flt_8300CF18 ; stfsx +0x713C4                      mfRenderCullDistanceSq = 62500.0f (250 m)
+        // Producers: CarSelectManager::UpdateExitState (offline: the exit spawn location, 0x82398D88) and
+        // OnlineCarSelectManager::ExitOnlineCarSelect (online, 0x82388540).
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECT_FINISHED:
+        {
+            const BrnGameState::GameStateModuleIO::CarSelectExitAction* const lpExit =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::CarSelectExitAction*>(lpEvent);
+            const bool lbWasInCarSelect = mbInOfflineCarSelect;   // FLAG PC witness only
+            if (lpExit->mbOnlineCarSelect)
+            {
+                UnhideAllTraffic();
+            }
+            else
+            {
+                {
+                    const TrafficRemoveReasonTag lTag("carselect-exit");
+                    KillAllTrafficInCylinder(lpExit->mExitSpawnLocation, KF_CAR_SELECT_EXIT_CLEAR_RADIUS,
+                                             KF_CAR_SELECT_EXIT_CLEAR_HEIGHT, false);
+                }
+                if (mbInOfflineCarSelect)
+                {
+                    mfTrafficSimRadius.x   = KF_TRAFFIC_SIM_RADIUS;
+                    mfTrafficSimRadius.y   = KF_TRAFFIC_SIM_RADIUS;
+                    mfTrafficSimRadius.z   = KF_TRAFFIC_SIM_RADIUS;
+                    mfTrafficSimRadius.w   = KF_TRAFFIC_SIM_RADIUS;
+                    muMaxVehiclesToRender  = KU_MAX_VEHICLES_TO_RENDER;
+                    mbInOfflineCarSelect   = false;
+                    mfRenderCullDistanceSq = KF_RENDER_CULL_DISTANCE_SQ;
+                }
+            }
+
+            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only. The offline line names the
+            // cylinder's centre: the junkyard's exit spawn location (the producer's record), not the origin.
+            if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+            {
+                *lpTrack << "[traffic-track] request 77 car-select exit online=" << (lpExit->mbOnlineCarSelect ? 1 : 0);
+                if (!lpExit->mbOnlineCarSelect)
+                {
+                    *lpTrack << " cylinder centre=(" << lpExit->mExitSpawnLocation.x << ","
+                             << lpExit->mExitSpawnLocation.y << "," << lpExit->mExitSpawnLocation.z
+                             << ") r=" << KF_CAR_SELECT_EXIT_CLEAR_RADIUS << " h=" << KF_CAR_SELECT_EXIT_CLEAR_HEIGHT
+                             << " restoredBox=" << (lbWasInCarSelect ? 1 : 0);
+                }
+                *lpTrack << " simRadius=" << mfTrafficSimRadius.x << " maxRender=" << muMaxVehiclesToRender
+                         << " hidden=" << (mbTrafficIsHidden ? 1 : 0) << "\n";
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------------------
+        // 0x8274BE64..0x8274BEDC -- E_ACTION_KILLZONE (110, slot 97), KillzoneAction { Array<CgsID,32> }
+        // (264 bytes): TriggerQueryManager::ProcessPlayerTriggers posts it when the player enters a region one
+        // of the trigger data's kill zones lists (0x8239C0C0).
+        //   lbzx +0x717E7 (mbAllowDivergentBehaviour) ; beq -> done    -- offline (FireKillZone asserts it)
+        //   lbzx +0x717E0 (mbGameModeAllowsKillzones) ; beq -> done    -- off during showtime
+        //   lbzx +0x727D4 (mbDEBUGEnableKillzones)    ; beq -> done    -- Construct turns it on
+        //   every id of the record (Array<__int64,32>::GetLength / GetItem, `ld r4`; the length re-read each
+        //   pass): FireKillZone(id) (0x827343B8)
+        // --------------------------------------------------------------------------------
+        case KI_ACTION_KILLZONE:
+        {
+            const BrnGameState::GameStateModuleIO::KillzoneAction* const lpKillzone =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::KillzoneAction*>(lpEvent);
+            if (mbAllowDivergentBehaviour && mbGameModeAllowsKillzones && mbDEBUGEnableKillzones)
+            {
+                for (u32 luItem = 0; luItem < lpKillzone->maRegionIds.GetLength(); ++luItem)
+                {
+                    FireKillZone(lpKillzone->maRegionIds.GetItem(luItem));
+                }
+            }
+
+            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
+            if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+            {
+                *lpTrack << "[traffic-track] request 110 killzone ids=" << lpKillzone->maRegionIds.GetLength()
+                         << " fired=" << ((mbAllowDivergentBehaviour && mbGameModeAllowsKillzones
+                                           && mbDEBUGEnableKillzones) ? 1 : 0) << "\n";
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------------------
+        // 0x8274BC30..0x8274BC80 -- E_ACTION_WAIT_FOR_STREAMING (192, slot 179), WaitForStreamingAction {}.
+        // The game waits for every module's streaming to settle; each module answers with a
+        // StreamingCompleteEvent (game event 9) that names it.
+        //   lwz +0x300 (meState) ; == 2 (E_STATE_TEARING_DOWN) or == 0 (E_STATE_STARTING_UP), and
+        //   lbzx +0x7287E (mbDEBUGTurnTrafficOff) == 0  ->  stbx 1 -> +0x7180E (mbWaitingForStreaming): the
+        //       answer waits for the streamer (PostPhysicsUpdate 0x8274E778 / 0x8274EC94)
+        //   otherwise: answer now -- `stw 0 -> record+0x00` (meModule = E_MODULE_TRAFFIC_ENTITY) ;
+        //       lpOutput->GetGameEventQueue() (0x82711CE8)->AddEvent(record, 9, 16) (0x822E5548)
+        // The console leaves the record's mUserId as stack bytes nobody reads for module 0; the PC record is
+        // value-initialised (FLAG PC: zero). StreamingCompleteEvent is 16 bytes on both.
+        // --------------------------------------------------------------------------------
+        case KI_ACTION_WAIT_FOR_STREAMING:
+        {
+            const bool lbLatch = (meState == E_STATE_TEARING_DOWN || meState == E_STATE_STARTING_UP)
+                              && !mbDEBUGTurnTrafficOff;
+            if (lbLatch)
+            {
+                mbWaitingForStreaming = true;
+            }
+            else
+            {
+                static_assert(sizeof(BrnGameState::GameStateModuleIO::StreamingCompleteEvent) == 16,
+                              "the console posts StreamingCompleteEvent as 16 bytes (`li r6, 0x10` @0x8274BC70)");
+                BrnGameState::GameStateModuleIO::StreamingCompleteEvent lStreamingComplete = {};
+                lStreamingComplete.meModule =
+                    BrnGameState::GameStateModuleIO::StreamingCompleteEvent::E_MODULE_TRAFFIC_ENTITY;
+                lpOutput->GetGameEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStreamingComplete),
+                                                        BrnGameState::GameStateModuleIO::E_EVENT_STREAMING_COMPLETE,
+                                                        sizeof(lStreamingComplete));
+            }
+
+            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
+            if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+            {
+                *lpTrack << "[traffic-track] request 192 wait-for-streaming state=" << static_cast<s32>(meState)
+                         << (lbLatch ? " latched" : " answered module 0") << "\n";
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------------------
+        // 0x8274BF74..0x8274BFA4 -- E_ACTION_HUD_MESSAGE_DIST_TO_FINISH (244, slot 231),
+        // HUDMessageDistanceToFinishAction { f32 mfDistanceToFinish; s32 miPlayerPosition } (8 bytes), posted by
+        // HUDMessageLogic::GenerateDistanceToFinishMessage (0x82395B78) as the finish comes up.
+        //   lbzx +0x717E7 (mbAllowDivergentBehaviour) ; beq -> done
+        //   lfs 0(record) ; lfs 1505.0f ; fcmpu ; bge -> done              -- a NaN distance is skipped too
+        //   lfs +0x71814 (mfGameModeDensityScale) ; fmuls by 0.5f ; stfs   -- rule 4, one product
+        // Every message inside 1505 m halves the event's traffic density again.
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_DIST_TO_FINISH:
+        {
+            const f32 lfDistanceToFinish =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageDistanceToFinishAction*>(lpEvent)
+                    ->mfDistanceToFinish;
+            const bool lbThin = mbAllowDivergentBehaviour && (lfDistanceToFinish < KF_FINISH_THINNING_DISTANCE);
+            if (lbThin)
+            {
+                mfGameModeDensityScale = mfGameModeDensityScale * KF_FINISH_THINNING_FACTOR;
+            }
+
+            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
+            if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+            {
+                *lpTrack << "[traffic-track] request 244 dist-to-finish d=" << lfDistanceToFinish
+                         << " halved=" << (lbThin ? 1 : 0) << " density=" << mfGameModeDensityScale << "\n";
+            }
+            break;
+        }
+
         default:
             break;
         }
@@ -19812,39 +20169,230 @@ void TrafficEntityModule::HandleExternalRequests(
         liType = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
     }
 
+    // ---- 0x8274C0D0..0x8274C19C: the post-loop tail, leaving Picture Paradise --------------------------------
+    // (crash parity FX-TRAFFICLIGHTS, 2026-09-25). The frame the director's camera leaves Picture Paradise (the
+    // photo mode), the traffic around the player is cleared before the game resumes -- unless the camera was
+    // close to the car and looking away from it.
+    //   ld +0x729D0 ; rlwinm 0,17,17          mCameraLastFrame's CameraState current flags (camera +0x140), bit
+    //                                         14 (0x4000) == E_FLAG_IS_PICTURE_PARADISE
+    //   lbz +0x725EB ; stb                    mbInPictureParadise: last frame's value, replaced by this frame's
+    //   was && !is:
+    //     d = mLocalPlayerPosition (lvx128 +0x713D0) - the camera's Pos row (+0x728C0)   vsubfp: rule 4
+    //     dot3(d, d) >= 10000.0f  (vmsum3fp128 0x8274C14C ; vcmpgefp. against splat(unk_820BA610 lane 0))
+    //       -- the player is 100 m or more from the camera -- or else
+    //     dot3(d, the camera's At row +0x728B0) > 0.0f  (vmsum3fp128 0x8274C174 ; vcmpgtfp. against 0)
+    //       -- the player is in front of it:
+    //         KillAllTrafficInCylinder(mLocalPlayerPosition, 90.0f, 1000.0f, false)
+    //   Both compares read CR6's all-lanes bit over splatted dots, so each is one scalar predicate, and a NaN
+    //   fails both (no clear). The dots are FLAG (model): vmsum = one rounding of the f64 sum (xenia
+    //   DOT_PRODUCT_3; ROUNDING_RULE 1).
+    // The retired gate here called this "the +0x72910 bit-14 edge"; the word is +0x729D0 (the camera's flags).
     {
-        // The arms this partial does not run yet. Listed by action id so the next wave can pick
-        // them off individually:
-        //   13  empty-pool state advance (meEmptyTrafficPoolState IDLE->EMPTY, no callee --
-        //       reconstructable today, left out only to keep this file to its one claim)
-        //   28  SetTrafficScaleBasedOnRank -- LIVE above (2026-09-10)
-        //   30  start-line sweep over every active race car  -> KillAllTrafficInCylinder
-        //   34  StartPlayingMode                             -- LIVE above (2026-09-25, FX-NETCRASH, with
-        //       UpdateEventStarts, the consumer of the flag its tripwire reads)
-        //   39  StopMode                                     -- LIVE above (2026-09-10)
-        //   47  countdown + online un-pause                  -- LIVE above (2026-09-25, FX-NETCRASH;
-        //       its TrafficLightManager::SetCountdownValue leg since 30d481f4)
-        //   73  crash-camera proximity kill                   -> (inline, needs the +0x7143x block)
-        //   75  HideAllTraffic                                -> HideAllTraffic
-        //   77  UnhideAllTraffic / cylinder kill              -> UnhideAllTraffic, KillAllTrafficInCylinder
-        //   97..100  drive-thru crash clean-up                -- LIVE above (2026-09-23, G59-D1)
-        //   110 kill-zone list                                -> FireKillZone
-        //   143 predicted-hull reset                          -- LIVE above (2026-09-25, FX-NETCRASH)
-        //   192 streaming request / wait latch
-        //   225,226,236  RestartTraffic (+ the hull copy)     -- LIVE above (2026-09-25, FX-NETCRASH)
-        //   244 low-speed density halving
-        // and the post-loop tail at 0x8274C0D0 (the +0x72910 bit-14 edge that fires a 90 m
-        // KillAllTrafficInCylinder). KillAllTrafficInCylinder is BODIED since G59-D1
-        // (2026-09-23), so arm 30, arm 77's cylinder half and this tail are no longer blocked on
-        // it -- they are simply not wired yet.
-        static bool sbLogged = false;
-        LogMissingLeg_T6(sbLogged,
-            "HandleExternalRequests -- actions 23 (PREPARE_FOR_MODE), 28 (SET_TRAFFIC_SCALE), "
-            "34 (START_PLAYING_MODE), 39 (STOP_MODE), 47 (SET_COUNTDOWN), 97..100 (drive-thru "
-            "clean-up), 143 (SHOWTIME_MODE_SWITCH), 225/226 (local player gone) and 236 "
-            "(RESTART_TRAFFIC) are reconstructed. Arms 13, 30, 73, 75, 77, 110, 192, 244 and the "
-            "post-loop proximity tail are not wired (Hide/UnhideAllTraffic and FireKillZone have no "
-            "body; KillAllTrafficInCylinder is bodied)");
+        const bool lbInPictureParadise = mCameraLastFrame.GetState().IsFlagSet(
+            BrnDirector::Camera::CameraState::E_FLAG_IS_PICTURE_PARADISE);
+        const bool lbWasInPictureParadise = mbInPictureParadise;
+        mbInPictureParadise = lbInPictureParadise;
+
+        if (lbWasInPictureParadise && !lbInPictureParadise)
+        {
+            const Vector3& lrCameraPosition  = mCameraLastFrame.mTransform.Pos();
+            const Vector3& lrCameraDirection = mCameraLastFrame.mTransform.At();
+            Vector3 lToPlayer = mLocalPlayerPosition;
+            lToPlayer.x = mLocalPlayerPosition.x - lrCameraPosition.x;
+            lToPlayer.y = mLocalPlayerPosition.y - lrCameraPosition.y;
+            lToPlayer.z = mLocalPlayerPosition.z - lrCameraPosition.z;
+
+            const f32 lfDistanceSq = static_cast<f32>(static_cast<f64>(lToPlayer.x) * lToPlayer.x
+                                                      + static_cast<f64>(lToPlayer.y) * lToPlayer.y
+                                                      + static_cast<f64>(lToPlayer.z) * lToPlayer.z);
+            bool lbClear = (lfDistanceSq >= KF_PICTURE_PARADISE_FAR_DIST_SQ);
+            if (!lbClear)
+            {
+                const f32 lfAlongView = static_cast<f32>(static_cast<f64>(lToPlayer.x) * lrCameraDirection.x
+                                                         + static_cast<f64>(lToPlayer.y) * lrCameraDirection.y
+                                                         + static_cast<f64>(lToPlayer.z) * lrCameraDirection.z);
+                lbClear = (lfAlongView > 0.0f);
+            }
+            if (lbClear)
+            {
+                const TrafficRemoveReasonTag lTag("picture-paradise-exit");
+                KillAllTrafficInCylinder(mLocalPlayerPosition, KF_PICTURE_PARADISE_CLEAR_RADIUS,
+                                         KF_PICTURE_PARADISE_CLEAR_HEIGHT, false);
+            }
+
+            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
+            if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+            {
+                *lpTrack << "[traffic-track] picture-paradise exit distSq=" << lfDistanceSq
+                         << " cleared=" << (lbClear ? 1 : 0) << "\n";
+            }
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::HideAllTraffic  @ 0x8273F418  (DWARF h:1905; crash parity FX-TRAFFICLIGHTS, 2026-09-25)
+//
+// Caller: HandleExternalRequests' arm 75, the online car select starting. While mbTrafficIsHidden is up the
+// traffic renders nothing (RenderTrafficVehicles' entry gate), never turns physical and is never solid (the
+// collidable caching); UnhideAllTraffic lowers it.
+//   0x8273F424..0x8273F448  lbz +0x725E8 (mbTrafficIsHidden) ; bne -> return ; stb 1
+//   0x8273F44C..0x8273F480  a STACK copy, ten 64-bit words: this+8*(0x5078+i) (mPhysicalVehicles, soa+240) AND
+//                           this+8*(0x505A+i) (mAliveVehicles, soa+0) -- ClearupCrashedTraffic's snapshot, so a
+//                           removal mid-walk never hides the next car
+//   0x8273F484..0x8273F9CC  every set bit, through the inlined FastBitArray<600> iterator and its
+//                           CgsFastBitArray.h tripwires: RemoveVehicle(i) (0x8272E370)
+// Only the PHYSICAL cars are removed: every other alive car keeps its param and comes back with the traffic.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::HideAllTraffic()
+{
+    if (mbTrafficIsHidden)
+    {
+        return;
+    }
+    mbTrafficIsHidden = true;
+
+    typedef CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES> TrafficBitArray;
+
+    TrafficBitArray lPhysicalAliveVehicles;
+    lPhysicalAliveVehicles.SetAnd(mVehicleSoaData.mPhysicalVehicles, mVehicleSoaData.mAliveVehicles);
+
+    for (TrafficBitArray::Iterator lIt = lPhysicalAliveVehicles.Begin();
+         lIt != lPhysicalAliveVehicles.End();
+         ++lIt)
+    {
+        const TrafficRemoveReasonTag lTag("hide-all-traffic");
+        RemoveVehicle(static_cast<u32>(lIt.GetIndex()));
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UnhideAllTraffic  @ 0x8274A500  (DWARF h:1908; crash parity FX-TRAFFICLIGHTS, 2026-09-25)
+//
+// Caller: HandleExternalRequests' arm 77, the online car select ending.
+//   0x8274A510..0x8274A520  lbz +0x725E8 (mbTrafficIsHidden) ; beq -> return
+//   0x8274A524..0x8274A534  lwzx +0x713F0 (meLocalPlayerIndex) ; cmpwi -1 ; beq -> skip the clear
+//   0x8274A538..0x8274A558  KillAllTrafficInCylinder(mLocalPlayerPosition (lvx128 +0x713D0), 150.0f flt_820BA5A4,
+//                           1000.0f flt_820BA604, false) -- no hidden car reappears on top of the player
+//   0x8274A55C..0x8274A560  stb 0 -> mbTrafficIsHidden
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UnhideAllTraffic()
+{
+    const f32 KF_UNHIDE_TRAFFIC_CLEAR_RADIUS = 150.0f;    // flt_820BA5A4 (0x43160000)
+    const f32 KF_UNHIDE_TRAFFIC_CLEAR_HEIGHT = 1000.0f;   // flt_820BA604 (0x447A0000)
+
+    if (!mbTrafficIsHidden)
+    {
+        return;
+    }
+    if (meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        const TrafficRemoveReasonTag lTag("unhide-all-traffic");
+        KillAllTrafficInCylinder(mLocalPlayerPosition, KF_UNHIDE_TRAFFIC_CLEAR_RADIUS, KF_UNHIDE_TRAFFIC_CLEAR_HEIGHT,
+                                 false);
+    }
+    mbTrafficIsHidden = false;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::FireKillZone  @ 0x827343B8  (DWARF h:1473; crash parity FX-TRAFFICLIGHTS, 2026-09-25)
+//
+// Caller: HandleExternalRequests' KILLZONE arm (110), once per id the player's trigger region names (and the
+// debug component's "fire kill zone" entry, 0x8275BB40). A kill zone is a list of lane spans -- a hull, a
+// section and a rung range -- and firing it removes every alive, NON-physical car on those spans in the active
+// hulls: the road beyond a trigger (a jump's landing, a billboard) is emptied of the cars that would sit on it.
+//   0x827343CC..0x82734408  the .cpp 7062 (0x1B96) tripwire "AllowDivergentBehaviour()" (offline only)
+//   0x8273440C..0x82734448  lpKillZone = mpData->FindKillZone(id) (0x827570A0) ; the .cpp 7065 (0x1B99)
+//                           tripwire "lpKillZone" -- non-gating, as on the console
+//   0x8273444C..0x8273445C  lpRegion = mpData->GetKillZoneRegions(lpKillZone->muOffset) (0x82705D08)
+//   every region (lbz +2 muCount, stride 6):
+//     0x8273449C..0x827344D8  mActiveHulls.Contains(muHull) (the CgsSet.h:332 tripwire + Find 0x8270C598)
+//     0x827344DC..0x827344FC  luParam = GetHullRuntime(muHull) (0x8271D9D0)->GetFirstParamInSection(muSection)
+//                             (0x82706768) ; 0xFFFF -> the next region
+//     0x82734500..0x8273452C  lfStart / lfEnd = (f32) muStartRung / muEndRung (fcfid ; frsp: exact)
+//     0x82734530              GetHull(muHull), result unused (a debug local on the console); kept for its tripwires
+//     0x82734534..0x8273456C  skip the section's params before the start rung: while
+//                             maParamListNodes[p].mfParamAlong < lfStart (bge / blt: a NaN stops the skip)
+//     0x82734570..0x827345F0  then while !(mfParamAlong > lfEnd) (bgt / ble: a NaN counts as inside):
+//                               GetVehicle(p) (its .h 2459 bound tripwire, inlined) ; lbz +5 (mxFlags):
+//                               ALIVE (bit 0) && !PHYSICAL (0x08) -> RemoveVehicle(p) (0x8272E370)
+//                               p = maParamListNodes[p].muNextParam, read after the removal ; 0xFFFF -> next region
+//   0x82734608..0x82734668  mDEBUGRecentlyFiredKillZones (Array<FiredKillZoneInfo,8>, +0x727E0): full (8) ->
+//                           Erase(0) (0x8270B670) ; Append({ id, 300 }) (0x8270B548)
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::FireKillZone(u64 lKillZoneId)
+{
+    const s32 KI_FIRED_KILL_ZONE_FRAMES_TO_REMEMBER = 300;   // `li r11, 0x12C` @0x82734654
+    const u32 KU_FIRED_KILL_ZONES_REMEMBERED        = 8;     // `cmplwi r11, 8` @0x82734640 (the array's capacity)
+
+    CGS_ASSERT(mbAllowDivergentBehaviour, "AllowDivergentBehaviour()");   // baked .cpp 7062
+
+    const KillZone* const lpKillZone = mpData->FindKillZone(lKillZoneId);
+    CGS_ASSERT(lpKillZone != NULL, "lpKillZone");                          // baked .cpp 7065
+
+    const KillZoneRegion* lpRegion = mpData->GetKillZoneRegions(lpKillZone->muOffset);
+    for (u32 luRegion = 0; luRegion < lpKillZone->muCount; ++luRegion, ++lpRegion)
+    {
+        if (!mActiveHulls.Contains(lpRegion->muHull))
+        {
+            continue;
+        }
+
+        u32 luParam = GetHullRuntime(lpRegion->muHull)->GetFirstParamInSection(lpRegion->muSection);
+        if (luParam == KU_INVALID_PARAM)
+        {
+            continue;
+        }
+
+        const f32 lfStartRung = static_cast<f32>(lpRegion->muStartRung);
+        const f32 lfEndRung   = static_cast<f32>(lpRegion->muEndRung);
+        (void)GetHull(lpRegion->muHull);
+
+        const ParamListNode* lpNode = &maParamListNodes[luParam];
+        bool lbSectionDone = false;
+        while (lpNode->mfParamAlong < lfStartRung)
+        {
+            luParam = lpNode->muNextParam;
+            if (luParam == KU_INVALID_PARAM)
+            {
+                lbSectionDone = true;
+                break;
+            }
+            lpNode = &maParamListNodes[luParam];
+        }
+
+        while (!lbSectionDone && !(lpNode->mfParamAlong > lfEndRung))
+        {
+            const Vehicle* const lpVehicle = GetVehicle(luParam);
+            if (lpVehicle->IsAlive() && !lpVehicle->IsPhysical())
+            {
+                const TrafficRemoveReasonTag lTag("killzone");
+                RemoveVehicle(luParam);
+            }
+
+            luParam = lpNode->muNextParam;
+            if (luParam == KU_INVALID_PARAM)
+            {
+                break;
+            }
+            lpNode = &maParamListNodes[luParam];
+        }
+    }
+
+    if (mDEBUGRecentlyFiredKillZones.GetLength() == KU_FIRED_KILL_ZONES_REMEMBERED)
+    {
+        mDEBUGRecentlyFiredKillZones.Erase(0);
+    }
+    FiredKillZoneInfo lFired;
+    lFired.mKillZoneId             = lKillZoneId;
+    lFired.miFramesLeftToRemember = KI_FIRED_KILL_ZONE_FRAMES_TO_REMEMBER;
+    mDEBUGRecentlyFiredKillZones.Append(lFired);
+
+    // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only (RemoveVehicle prints each removal).
+    if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+    {
+        *lpTrack << "[traffic-track] kill zone fired id=" << lKillZoneId << " regions="
+                 << static_cast<u32>(lpKillZone->muCount) << "\n";
     }
 }
 

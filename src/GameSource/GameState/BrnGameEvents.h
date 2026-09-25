@@ -321,10 +321,18 @@ struct HitOverheadSignEvent : public GameEvent<E_EVENT_OVERHEAD_SIGN_HIT>
 struct StreamingCompleteEvent : public GameEvent<E_EVENT_STREAMING_COMPLETE>
 {
     // BrnGameEvents.h:757 nested enum; value 2 attested by the X360 UpdateStream store.
+    // ADDITIVE (crash parity FX-TRAFFICLIGHTS, 2026-09-25): the rest of the DWARF enumerator set
+    // (EModule, DWARF BrnGameEvents.h:746: TRAFFIC_ENTITY 0, RACE_CAR_ENTITY 1, WORLD_ENTITY 2,
+    // GUI_SCREEN 3, COUNT 4). The traffic answers a WaitForStreamingAction with module 0
+    // (TrafficEntityModule::HandleExternalRequests `li r11, 0` @0x8274BC60, PostPhysicsUpdate
+    // 0x8274E77C / 0x8274EC98); GameStateModule tallies the four modules' answers.
     enum EModule
     {
+        E_MODULE_TRAFFIC_ENTITY  = 0,
         E_MODULE_RACE_CAR_ENTITY = 1,
-        E_MODULE_WORLD_GRAPHICS = 2,
+        E_MODULE_WORLD_GRAPHICS = 2,    // DWARF name E_MODULE_WORLD_ENTITY (the world entity module posts it)
+        E_MODULE_GUI_SCREEN      = 3,
+        E_MODULE_COUNT           = 4,
     };
 
     EModule meModule;   // :757

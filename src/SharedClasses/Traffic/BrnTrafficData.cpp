@@ -368,4 +368,49 @@ namespace BrnTraffic
 
         return lpHull->GetJunctionForLightTrigger(luLightTrigger);
     }
+
+    // =========================================================================================
+    // TrafficData::FindKillZone -- X360 0x827570A0 (DWARF BrnTrafficData.h:80)
+    // ADDITIVE (crash parity FX-TRAFFICLIGHTS, 2026-09-25). Its one caller is
+    // TrafficEntityModule::FireKillZone @0x827343B8 (HandleExternalRequests' KILLZONE arm, 110).
+    // =========================================================================================
+    // A binary search of the id-sorted mpaKillZoneIds; the kill zone is the same index of
+    // mpaKillZones.
+    //   0x827570AC  lhz r11, 0x1A(r3) ; addi r9, r11, -1  ; high = muNumKillZones - 1 (signed; 0 zones -> -1)
+    //   0x827570BC  cmpwi r9, 0 ; blt                      ; nothing to search
+    //   0x827570C8  add ; srawi 1 ; addze                  ; mid = (low + high) / 2, signed division
+    //   0x827570D8  ldx r10, mid*8, mpaKillZoneIds (+0x20) ; cmpld r28, r10 -- UNSIGNED 64-bit compare
+    //   0x827570E0  bge -> ble found / low = mid + 1       ; else high = mid - 1
+    //   0x827570F4  cmpw low, high ; ble loop
+    //   0x827570FC  the BrnTrafficData.cpp:303 (0x12F) tripwire "Failed to find traffic kill zone with id "
+    //               << id << ". Your traffic & trigger data are probably out of date.", then return NULL
+    //   0x827571A4  lwz r10, 0x24(r3) ; slwi mid, 2 ; add ; return &mpaKillZones[mid] (stride 4 ==
+    //               sizeof(KillZone))
+    // The streamed id is dropped from the assert text, per this file's convention (see the banner).
+    const KillZone* TrafficData::FindKillZone(KillZoneId lKillZoneId) const
+    {
+        s32 liLow  = 0;
+        s32 liHigh = static_cast<s32>(muNumKillZones) - 1;
+        while (liLow <= liHigh)
+        {
+            const s32        liMid = (liLow + liHigh) / 2;
+            const KillZoneId lMid  = mpaKillZoneIds[liMid];
+            if (lKillZoneId < lMid)
+            {
+                liHigh = liMid - 1;
+            }
+            else if (lKillZoneId > lMid)
+            {
+                liLow = liMid + 1;
+            }
+            else
+            {
+                return &mpaKillZones[liMid];
+            }
+        }
+
+        CGS_ASSERT(false, "Failed to find traffic kill zone with id . Your traffic & trigger data are probably "
+                          "out of date.");                                    // BrnTrafficData.cpp:303
+        return nullptr;
+    }
 }
