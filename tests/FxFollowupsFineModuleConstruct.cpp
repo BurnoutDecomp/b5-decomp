@@ -19,6 +19,8 @@
 //     (100, 100) <= 67584 (else "VolumeLineQueryMem is too small"), Initialize({line buffer, ...}, 100, 100).
 // On the host the header is sizeof(VolumeLineQuery) rounded to 16 (0x130; console 0x110) and the VVQ buffer is
 // 0x49600 (console 0x49000).
+// Commit 2 of 2 (the mount) adds the P / R / C checks: Prepare @0x828AA630 and Release @0x828AA730 from every
+// stage. Release from START must reach DONE in one call (the console's fall-through); the old body stopped at MANAGER.
 #include "types.hpp"
 #include <cstddef>
 #include <cstdio>
@@ -164,6 +166,107 @@ int main()
         Check(offsetof(FineIntersectionTestModule, macVolumeLineQueryBuffer) == luVvqBuffer
               && offsetof(FineIntersectionTestModule, mePrepareStage) == luVvqBuffer + 67584u,
               "F6 the buffers are contiguous and the stages follow them (the console's +0x49000 / +0x59800 contiguity)");
+
+        // ========================================================================================================
+        // P / R. Prepare @0x828AA630 and Release @0x828AA730 (commit 2 of 2, the mount). Both are fall-through
+        // switches on the stage word with unsigned compares (`cmplwi stage, 1 ; blt START ; beq MANAGER ;
+        // cmplwi stage, 3 ; blt DONE`, else "Unrecognised release state" and 0); each increment asserts
+        // `new <= 2` (Prepare :137, Release :138). Release's START arm is `bl sub_828AA338` -- the out-of-line
+        // operator++ -- and FALLS THROUGH into the MANAGER arm's inlined increment (0x828AA79C).
+        // ========================================================================================================
+        typedef FineIntersectionTestModule M;
+        CgsSceneManager::EntityManager* const lpEntityA = reinterpret_cast<CgsSceneManager::EntityManager*>(0x1000);
+        CgsSceneManager::VolumeManager* const lpVolumeA = reinterpret_cast<CgsSceneManager::VolumeManager*>(0x2000);
+        CgsSceneManager::EntityManager* const lpEntityB = reinterpret_cast<CgsSceneManager::EntityManager*>(0x3000);
+        CgsSceneManager::VolumeManager* const lpVolumeB = reinterpret_cast<CgsSceneManager::VolumeManager*>(0x4000);
+        gaAsserts.clear();
+
+        bool lbResult = lpModule->Prepare(lpEntityA, lpVolumeA);
+        Check(lbResult && lpModule->mpEntityManager == lpEntityA && lpModule->mpVolumeManager == lpVolumeA
+              && lpModule->mePrepareStage == M::E_FINE_INTERSECTION_PREPARE_DONE
+              && lpModule->meReleaseStage == M::E_FINE_INTERSECTION_RELEASE_START && gaAsserts.empty(),
+              "P1 Prepare from Construct's state (START): +0x59814 = entity manager, +0x59810 = volume manager, "
+              "START -> MANAGER -> DONE, release stage START, 1, no assert");
+
+        // Release from START: the console runs START -> MANAGER -> DONE in ONE call (the fall-through).
+        lbResult = lpModule->Release();
+        Check(lbResult && lpModule->meReleaseStage == M::E_FINE_INTERSECTION_RELEASE_DONE
+              && lpModule->mePrepareStage == M::E_FINE_INTERSECTION_PREPARE_START && gaAsserts.empty(),
+              "R1 Release from START falls through into the MANAGER arm: START -> MANAGER -> DONE in one call "
+              "(0x828AA798 bl sub_828AA338, then 0x828AA79C), prepare stage START, 1, no assert");
+
+        // Release from DONE: straight to 0x828AA7D0.
+        lpModule->meReleaseStage = M::E_FINE_INTERSECTION_RELEASE_DONE;
+        lpModule->mePrepareStage = M::E_FINE_INTERSECTION_PREPARE_DONE;
+        lbResult = lpModule->Release();
+        Check(lbResult && lpModule->meReleaseStage == M::E_FINE_INTERSECTION_RELEASE_DONE
+              && lpModule->mePrepareStage == M::E_FINE_INTERSECTION_PREPARE_START && gaAsserts.empty(),
+              "R2 Release from DONE: no increment, prepare stage START, 1, no assert (0x828AA764 blt 0x828AA7D0)");
+
+        // Release from MANAGER: one increment.
+        lpModule->meReleaseStage = M::E_FINE_INTERSECTION_RELEASE_MANAGER;
+        lpModule->mePrepareStage = M::E_FINE_INTERSECTION_PREPARE_DONE;
+        lbResult = lpModule->Release();
+        Check(lbResult && lpModule->meReleaseStage == M::E_FINE_INTERSECTION_RELEASE_DONE
+              && lpModule->mePrepareStage == M::E_FINE_INTERSECTION_PREPARE_START && gaAsserts.empty(),
+              "R3 Release from MANAGER: MANAGER -> DONE, prepare stage START, 1, no assert (0x828AA75C beq 0x828AA79C)");
+
+        // Release from an unrecognised stage: the assert and 0, nothing written.
+        lpModule->meReleaseStage = static_cast<M::EFineIntersectionTestReleaseStage>(3);
+        lpModule->mePrepareStage = M::E_FINE_INTERSECTION_PREPARE_DONE;
+        lbResult = lpModule->Release();
+        Check(!lbResult && static_cast<int>(lpModule->meReleaseStage) == 3
+              && lpModule->mePrepareStage == M::E_FINE_INTERSECTION_PREPARE_DONE
+              && CountAsserts("Unrecognised release state") == 1 && gaAsserts.size() == 1,
+              "R4 Release from stage 3: \"Unrecognised release state\" (:162), 0, neither stage written");
+        gaAsserts.clear();
+
+        // Prepare from DONE: restart the handshake and re-take the managers.
+        lpModule->mePrepareStage = M::E_FINE_INTERSECTION_PREPARE_DONE;
+        lpModule->meReleaseStage = M::E_FINE_INTERSECTION_RELEASE_DONE;
+        lbResult = lpModule->Prepare(lpEntityB, lpVolumeB);
+        Check(lbResult && lpModule->mpEntityManager == lpEntityB && lpModule->mpVolumeManager == lpVolumeB
+              && lpModule->mePrepareStage == M::E_FINE_INTERSECTION_PREPARE_DONE
+              && lpModule->meReleaseStage == M::E_FINE_INTERSECTION_RELEASE_START && gaAsserts.empty(),
+              "P2 Prepare from DONE: stage = START (0x828AA6A0), then the START arm re-takes both managers, DONE, "
+              "release stage START, 1, no assert");
+
+        // Prepare from MANAGER: the managers are NOT re-taken.
+        lpModule->mePrepareStage = M::E_FINE_INTERSECTION_PREPARE_MANAGER;
+        lpModule->meReleaseStage = M::E_FINE_INTERSECTION_RELEASE_DONE;
+        lbResult = lpModule->Prepare(lpEntityA, lpVolumeA);
+        Check(lbResult && lpModule->mpEntityManager == lpEntityB && lpModule->mpVolumeManager == lpVolumeB
+              && lpModule->mePrepareStage == M::E_FINE_INTERSECTION_PREPARE_DONE
+              && lpModule->meReleaseStage == M::E_FINE_INTERSECTION_RELEASE_START && gaAsserts.empty(),
+              "P3 Prepare from MANAGER: one increment to DONE, the managers untouched, release stage START, 1");
+
+        // Prepare from an unrecognised stage.
+        lpModule->mePrepareStage = static_cast<M::EFineIntersectionTestPrepareStage>(3);
+        lpModule->meReleaseStage = M::E_FINE_INTERSECTION_RELEASE_DONE;
+        lbResult = lpModule->Prepare(lpEntityA, lpVolumeA);
+        Check(!lbResult && static_cast<int>(lpModule->mePrepareStage) == 3
+              && lpModule->meReleaseStage == M::E_FINE_INTERSECTION_RELEASE_DONE
+              && lpModule->mpEntityManager == lpEntityB && lpModule->mpVolumeManager == lpVolumeB
+              && CountAsserts("Unrecognised release state") == 1 && gaAsserts.size() == 1,
+              "P4 Prepare from stage 3: \"Unrecognised release state\" (:122), 0, nothing written");
+        gaAsserts.clear();
+
+        // The cycle SceneManagerModule drives (Prepare @0x828D13E0's call, Release @0x828C7220's call), twice:
+        // every step completes in one call and no increment ever asserts.
+        lpModule->mePrepareStage = M::E_FINE_INTERSECTION_PREPARE_START;
+        lpModule->meReleaseStage = M::E_FINE_INTERSECTION_RELEASE_DONE;
+        bool lbCycle = true;
+        for (int liRound = 0; liRound < 2; ++liRound)
+        {
+            lbCycle = lbCycle && lpModule->Prepare(lpEntityA, lpVolumeA)
+                && lpModule->mePrepareStage == M::E_FINE_INTERSECTION_PREPARE_DONE
+                && lpModule->meReleaseStage == M::E_FINE_INTERSECTION_RELEASE_START;
+            lbCycle = lbCycle && lpModule->Release()
+                && lpModule->meReleaseStage == M::E_FINE_INTERSECTION_RELEASE_DONE
+                && lpModule->mePrepareStage == M::E_FINE_INTERSECTION_PREPARE_START;
+        }
+        Check(lbCycle && gaAsserts.empty(),
+              "C1 Prepare / Release / Prepare / Release: each call completes its handshake, no :137 / :138 assert");
         _aligned_free(lpModule);
     }
 
