@@ -2706,6 +2706,10 @@ void EffectsModule::HandleCrashingTrail(ActiveRaceCarData& /*lrActiveRaceCar*/, 
 // =================================================================================================
 // ⭐⭐⭐ THE CONTACT SPARK DRAINS -- @0x8229B7F8 / @0x82293470 / @0x822906A8.
 //
+// ⛔ 2026-09-24 (FX-CRASHVFX): HandleSparkContacts is CONSOLE-DEAD -- its lbDisableThisEffect byte
+// (byte_82CDB40C) is initialised TRUE and never written, so the along-line route below is the
+// console's code but never its behaviour. See the switch's own note in HandleSparkContacts.
+//
 // This is the producer half of the grinding-spark chain. The consumer half (the particle module's
 // inter-thread queue, ProcessEventQueue and HandleSpawnSparksAlongLineEvent) landed in the same
 // change; before it, HandleSparkContacts had nowhere to post and these three had no reason to run.
@@ -2755,11 +2759,27 @@ void EffectsModule::HandleSparkContacts(const BrnPhysics::ContactSpy::BaseContac
                                         f32 /*lfSurfaceSparkScale*/,     // f5 -- see the banner
                                         bool lbIsCrashing)
 {
-    // byte_82CDB40C -- the module-wide spark kill switch. ⚠ NOTHING IN THE IMAGE WRITES IT: a
-    // findinit.py sweep over the whole ARTIST export set returns exactly one site, the `lbz` two
-    // instructions below, so it is a .bss byte that stays false and the gate never fires. Kept
-    // because it is the console's first instruction, not because it can do anything here.
-    static const bool sbSparkContactsDisabled = false;      // byte_82CDB40C
+    // byte_82CDB40C -- this function's `static bool8_t lbDisableThisEffect` (DecFIGS DWARF
+    // EffectsModule.cpp:1455). ⛔⛔ IT IS TRUE, SO ON THE CONSOLE THIS FUNCTION NEVER POSTS ANYTHING.
+    // ⚠️ CORRECTED 2026-09-24 (FX-CRASHVFX). This read "NOTHING IN THE IMAGE WRITES IT ... so it is a
+    // .bss byte that stays false and the gate never fires" (b5 6b2d999c, the 09-06 spark wave). The
+    // first half holds -- findinit.py finds one site, the `lbz` below, and a whole-image scan for the
+    // pointer value 0x82CDB40C finds none, so no tweakable table can reach it -- but the byte is NOT
+    // .bss: it is INITIALISED .data holding 0x01 (IDA flag word 0x00009501, FF_IVL set; the calibrated
+    // neighbour _gSparkSpawnParamsRaceCarVehicle @0x82CDB3E4 reads 6.7041669 / 44.694443 / 90 / 360
+    // out of the same page). Never written, it stays TRUE and the gate ALWAYS fires. The console's own
+    // words agree (gen_switch_data.py: 0x822906A8 with the image's page posts nothing and draws no
+    // random number; forced to 0 it posts one type-3 record). So does the Remaster: BurnoutPR.exe's
+    // ProcessHingedPartContacts (sub_981D70) keeps the 84/85 filter and the |friction| > 7.5 gate and
+    // then calls NOTHING -- LTCG dropped the dead call -- and none of its 40,742 .code functions posts
+    // a 0x50-byte type-3 record.
+    // ⇒ THE "SCRAPE SPARKS" THE PC BUILD DREW FROM 6b2d999c UNTIL THIS CHANGE -- along-line sparks off
+    //   detached and hinged parts -- WERE A PATH THE CONSOLE NEVER RUNS. The console's scrape and crash
+    //   sparks are ProcessRaceCarContacts' showers (world grinding, vehicle grinding, the crash shower),
+    //   drawn by ParticleModule::HandleSpawnSparkShowerFromPointEvent. Everything below the gate is
+    //   still the console's body, bit for bit; it just never runs (and neither do the
+    //   gauSparkContact* [spark] counters inside it).
+    static const bool sbSparkContactsDisabled = true;       // byte_82CDB40C == 0x01
     if (sbSparkContactsDisabled)
         return;
 

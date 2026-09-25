@@ -94,6 +94,7 @@ namespace BrnParticle
     //   eventsDrained -- records ProcessEventQueue pulled OUT of the dispatch buffer's copy
     //                    (0 here with sparkPosted > 0 convicts the PreRenderUpdate hand-off)
     //   lineSparks    -- SpawnSpark calls HandleSpawnSparksAlongLineEvent made
+    //   showerSparks  -- SpawnSpark calls HandleSpawnSparkShowerFromPointEvent made (FX-CRASHVFX)
     // DELETE-WHEN-STABLE.
     extern u32 gauSparkContactQueueCalls;
     extern u32 gauSparkHingedSeen;
@@ -104,6 +105,7 @@ namespace BrnParticle
     extern u32 gauSparkContactRejected;
     extern u32 gauSparkEventsDrained;
     extern u32 gauSparkLineSpawned;
+    extern u32 gauSparkShowerSpawned;
     struct ParticleDescriptionCollection;   // SharedClasses/Graphics/ParticleDescriptionResourceType.h (handle target; pointer-only here)
 
     // A single playing LION (particle) effect slot. DWARF home ParticleModule.h:87.

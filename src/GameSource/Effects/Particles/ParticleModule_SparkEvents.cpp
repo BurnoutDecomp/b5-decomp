@@ -3,9 +3,19 @@
 //
 // THE DISPATCH-THREAD END OF THE GRINDING-SPARK CHAIN.
 //
-//   BrnParticle::ParticleModule::ProcessEventQueue               @0x8229C418  (113 instr)
-//   BrnParticle::ParticleModule::HandleSpawnSparksAlongLineEvent @0x8229A138  (329 instr)
-//   ... and the three sibling handlers, ANNOUNCED (see the bottom of this file).
+//   BrnParticle::ParticleModule::ProcessEventQueue                    @0x8229C418  (113 instr)
+//   BrnParticle::ParticleModule::HandleSpawnSparksAlongLineEvent      @0x8229A138  (329 instr)
+//   BrnParticle::ParticleModule::HandleSpawnSparkShowerFromPointEvent @0x82299CC8  (284 instr)
+//   ... and the two remaining sibling handlers, ANNOUNCED (see the bottom of this file).
+//
+// ⛔⛔ WHICH ROUTE THE CONSOLE ACTUALLY DRAWS (FX-CRASHVFX 2026-09-24). The along-line chain drawn
+// below is the console's CODE but not its BEHAVIOUR: its only producer, EffectsModule::
+// HandleSparkContacts, returns at its first instruction on the console (byte_82CDB40C, the
+// function-local lbDisableThisEffect, is initialised TRUE and never written -- see the note there),
+// so no type-3 record is ever posted. The sparks a player sees at a scrape or a crash are the
+// SHOWERS: EffectsModule::ProcessRaceCarContacts -> DoSparkShower ->
+// ParticleModule::SpawnSparkShowerFromPoint (type 2) -> HandleSpawnSparkShowerFromPointEvent (HERE)
+// -> SparkArray::SpawnSpark. The PC build drew the along-line sparks from 6b2d999c until then.
 //
 // The chain, end to end, and why every link had to exist before one spark could fire from a real
 // crash:
@@ -81,6 +91,121 @@ namespace BrnParticle
     // console's own word is used. If it ever turns out non-zero the ONLY visible change is that
     // non-body-part sparks gain a symmetric spawn-position jitter.
     static const Vector3 KV_SPARK_SPAWN_JITTER = { 0.0f, 0.0f, 0.0f, 0.0f };   // unk_82FAB950
+
+    // ---------------------------------------------------------------------------------------------
+    // HandleSpawnSparkShowerFromPointEvent's constants and VMX idioms (FX-CRASHVFX 2026-09-24).
+    // ---------------------------------------------------------------------------------------------
+    // flt_82001D9C -- the reflection amount is doubled before it scales the frame's x axis
+    // (`fmuls f0, f13, f0` at 0x82299D7C): a spark heading INTO the surface loses 2 * amount of its
+    // into-the-surface speed, i.e. amount 1.0 is a mirror bounce.
+    static const f32 KF_SHOWER_REFLECTION_SCALE = 2.0f;                   // flt_82001D9C
+    // flt_820139F8 -- one 60 Hz frame (0x3C888889): the burst's sparks are spread back in time over
+    // it, each spawned (1/60) / count earlier than the one before (`fdivs f28, f0, f13`).
+    static const f32 KF_SHOWER_SPAWN_WINDOW = 0.0166666675f;              // flt_820139F8
+    // The CgsNumeric::TrigBaseFunctions5 sin/cos polynomial the shower evaluates its two angles
+    // with -- every one a CRT-initialised .bss splat (thunk cited), the same seven the simple-particle
+    // quad builder reads (ShadedRotatingRenderMethod.cpp):
+    //   0x8307A680 1/2pi (0x82C6EB00)   0x8307A590 (-0.25, 0, -0.25, 0) (0x82C6EBC8)
+    //   0x8307A3C0 1.0   (0x82C6EB78)   0x8307A560 -0.25 (0x82C6EBA0)
+    //   0x8307A670 C5    (0x82C6F150)   0x8307A3B0 C3    (0x82C6F128)   0x8307A5F0 C1 (0x82C6F100)
+    static const f32 KF_SHOWER_ONE_OVER_TWO_PI = 0.15915493667125702f;    // 0x3E22F983
+    static const f32 KF_SHOWER_SIN_PHASE       = -0.25f;                  // unk_8307A590 lanes 0 / 2
+    static const f32 KF_SHOWER_COS_PHASE       = 0.0f;                    // unk_8307A590 lanes 1 / 3
+    static const f32 KF_SHOWER_FOLD_PERIOD     = 1.0f;                    // unk_8307A3C0
+    static const f32 KF_SHOWER_FOLD_BIAS       = -0.25f;                  // unk_8307A560
+    static const f32 KF_SHOWER_POLY_C5         = -71.17897033691406f;     // unk_8307A670 (0xC28E5BA2)
+    static const f32 KF_SHOWER_POLY_C3         = 40.897369384765625f;     // unk_8307A3B0 (0x422396E8)
+    static const f32 KF_SHOWER_POLY_C1         = -6.278042793273926f;     // unk_8307A5F0 (0xC0C8E5BA)
+
+    namespace
+    {
+        // vnmsubfp: -(a*c - b), rounded ONCE, then NEGATED -- zeros too (a QNaN keeps its sign).
+        inline f32 ShowerVnmsub(f32 lfA, f32 lfC, f32 lfB)
+        {
+            const f32 lfDifference = std::fma(lfA, lfC, -lfB);
+            return (lfDifference != lfDifference) ? lfDifference : -lfDifference;
+        }
+
+        // vminfp: a NaN operand propagates (AltiVec: "the result is a QNaN"), the first one first.
+        inline f32 ShowerVMin(f32 lfA, f32 lfB)
+        {
+            if (lfA != lfA) return lfA;
+            if (lfB != lfB) return lfB;
+            return (lfA < lfB) ? lfA : lfB;
+        }
+
+        // vrefp + two Newton-Raphson steps (vnmsubfp 1 - est*x, vmaddfp est + est*r). FLAG (model):
+        // the hardware estimate is taken as its correctly rounded value; the refinements pin it.
+        inline f32 ShowerRefinedRecip(f32 lfX)
+        {
+            f32 lfEstimate = static_cast<f32>(1.0 / static_cast<f64>(lfX));
+            for (u32 luStep = 0; luStep < 2u; ++luStep)
+                lfEstimate = std::fma(lfEstimate, ShowerVnmsub(lfEstimate, lfX, 1.0f), lfEstimate);
+            return lfEstimate;
+        }
+
+        // vmsum3fp128 (one rounding of the exact dot -- FLAG (model), as EffectsModule's Dot3),
+        // then vrsqrtefp + two steps, and the vcmpeqfp / vsel that maps a zero vector to 0.
+        inline f32 ShowerGuardedLength3(const Vector3& lrv)
+        {
+            const f32 lfSquared = static_cast<f32>(static_cast<f64>(lrv.x) * lrv.x + static_cast<f64>(lrv.y) * lrv.y
+                                                 + static_cast<f64>(lrv.z) * lrv.z);
+            if (lfSquared == 0.0f)
+                return 0.0f;
+            f32 lfEstimate = static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfSquared)));
+            for (u32 luStep = 0; luStep < 2u; ++luStep)
+            {
+                const f32 lfEstimateSquared = lfEstimate * lfEstimate;
+                const f32 lfHalf            = lfEstimate * 0.5f;
+                lfEstimate = std::fma(lfHalf, ShowerVnmsub(lfSquared, lfEstimateSquared, 1.0f), lfEstimate);
+            }
+            return lfSquared * lfEstimate;
+        }
+
+        inline f32 ShowerDot3(const Vector3& lrA, const Vector3& lrB)
+        {
+            return static_cast<f32>(static_cast<f64>(lrA.x) * lrB.x + static_cast<f64>(lrA.y) * lrB.y
+                                  + static_cast<f64>(lrA.z) * lrB.z);
+        }
+
+        // One lane of the sin/cos polynomial, step for step and FUSED where the console fuses:
+        //   x = angle * 1/2pi + phase        vmaddfp
+        //   t = min(x - floor(x), 1 - (x - floor(x))) - 0.25     vrfim / vsubfp / vsubfp / vminfp / vaddfp
+        //   p = (t^2 * (t^2 * C5 + C3) + C1) * t                 vmulfp128 / vmaddfp / vmaddfp / vmulfp128
+        // Phase -0.25 gives sin(angle), phase 0 gives cos(angle).
+        inline f32 ShowerSinCosLane(f32 lfAngle, f32 lfPhase)
+        {
+            const f32 lfX        = std::fma(lfAngle, KF_SHOWER_ONE_OVER_TWO_PI, lfPhase);
+            const f32 lfFraction = lfX - std::floor(lfX);
+            const f32 lfT        = ShowerVMin(lfFraction, KF_SHOWER_FOLD_PERIOD - lfFraction) + KF_SHOWER_FOLD_BIAS;
+            const f32 lfT2       = lfT * lfT;
+            const f32 lfInner    = std::fma(lfT2, KF_SHOWER_POLY_C5, KF_SHOWER_POLY_C3);
+            const f32 lfPoly     = std::fma(lfT2, lfInner, KF_SHOWER_POLY_C1);
+            return lfPoly * lfT;
+        }
+
+        // vmaddfp across four lanes: a * splat(s) + b.
+        inline Vector3 ShowerMulAdd(const Vector3& lrA, f32 lfScale, const Vector3& lrB)
+        {
+            Vector3 lv;
+            lv.x = std::fma(lrA.x, lfScale, lrB.x);
+            lv.y = std::fma(lrA.y, lfScale, lrB.y);
+            lv.z = std::fma(lrA.z, lfScale, lrB.z);
+            lv.w = std::fma(lrA.w, lfScale, lrB.w);
+            return lv;
+        }
+
+        // vmulfp across four lanes by a splat.
+        inline Vector3 ShowerScale(const Vector3& lrA, f32 lfScale)
+        {
+            Vector3 lv;
+            lv.x = lrA.x * lfScale;
+            lv.y = lrA.y * lfScale;
+            lv.z = lrA.z * lfScale;
+            lv.w = lrA.w * lfScale;
+            return lv;
+        }
+    }
 
     // The once-only announcement helper every not-reconstructed arm in this file shares.
     namespace
@@ -392,15 +517,13 @@ namespace BrnParticle
     }
 
     // ---------------------------------------------------------------------------------------------
-    // The three sibling handlers. NOT RECONSTRUCTED in this wave; each says so in the log the
-    // first time a record of its type reaches it, so a dropped record is visible rather than
-    // invisible. Nothing in this build publishes any of their types yet:
-    //   * type 1 / type 2 come from ParticleModule::SpawnSparksFromPoint / SpawnSparkShowerFromPoint
-    //     and from EffectsModule::HandleRaceCarRaceCarSparks @0x82290A48 and ::DoSparkShower
-    //     @0x822920C0, which are themselves reached only through ProcessRaceCarContacts;
-    //   * type 5 comes from ParticleModule::FireDebrisBurst.
-    // Each is a real function on the console (290 / 284 / 600 instructions) and each is the next
-    // obvious piece of this file.
+    // The two remaining sibling handlers. NOT RECONSTRUCTED; each says so in the log the first time
+    // a record of its type reaches it, so a dropped record is visible rather than invisible:
+    //   * type 1 comes only from EffectsModule::HandleRaceCarRaceCarSparks @0x82290A48, which is
+    //     CONSOLE-DEAD (byte_82CDB40D, its lbDisableThisEffect, is initialised TRUE): no type-1
+    //     record is ever posted on the console or here, so this handler can never be reached;
+    //   * type 5 comes from ParticleModule::FireDebrisBurst (the crashing / takedown debris bursts
+    //     ProcessRaceCarContacts posts) -- the next piece of this file.
     // ---------------------------------------------------------------------------------------------
     void ParticleModule::HandleSpawnSparksFromPointEvent(const SpawnSparksFromPointEvent* /*lpEvent*/,
                                                          const ParticleRenderData& /*lrRenderData*/)
@@ -411,13 +534,144 @@ namespace BrnParticle
             "record reached ProcessEventQueue and was dropped");
     }
 
-    void ParticleModule::HandleSpawnSparkShowerFromPointEvent(const SpawnSparkShowerFromPointEvent* /*lpEvent*/,
-                                                              const ParticleRenderData& /*lrRenderData*/)
+    // ---------------------------------------------------------------------------------------------
+    // HandleSpawnSparkShowerFromPointEvent @0x82299CC8 (284 instr, DWARF ParticleModule.h:594) --
+    // FX-CRASHVFX 2026-09-24. ⭐ THE SPARKS A PLAYER SEES AT A SCRAPE OR A CRASH ON THE CONSOLE: the
+    // world-grinding, vehicle-grinding and crash showers EffectsModule::DoSparkShower posts.
+    //
+    // The record carries a FRAME (mTransform: x = the contact normal, y / z across and along it,
+    // w = the contact point) and the shower controller's arguments already lerped by the burst size.
+    // Per record, once:
+    //   * speed scale = min(1, |mVelocityToInherit| / mfVelocityScaleSpeedThreshold) -- a slow car
+    //     throws slow sparks (the spawn-speed bounds are multiplied by it);
+    //   * direction randomiser (lateral angle, forward angle, spawn speed, inherited share) between
+    //     (latMin, fwdMin, velMin*s, inhMin) and (latMax, fwdMax, velMax*s, inhMax), and position
+    //     randomiser (x, y, z offset, size) between (-rX, -rYZ, -rYZ, sizeMin) and (rX, rYZ, rYZ,
+    //     sizeMax) -- both assembled with vperm / vsldoi from the record (masks 0x82CDA3C0 /
+    //     0x82CDA400 / 0x82CDB420 / 0x82CDB440) and stored as base + range, exactly Prepare's form.
+    // Per spark (luNumToSpawn of them, asserted > 0):
+    //   * two RandomiseXYZW draws, direction first;
+    //   * sin / cos of both angles (the TrigBaseFunctions5 polynomial, lanes (sinL, cosL, sinF, cosF));
+    //   * direction = (x * sinL + y * cosL) * cosF + z * sinF; velocity = direction * speed +
+    //     inherit * share, then the part heading INTO the surface is reflected:
+    //     v -= x * (2 * reflection) * min(dot(v, x), 0);
+    //   * position = w + x * ox + y * oy + z * oz; height = position.y - ground;
+    //   * SparkArray::SpawnSpark into maSparks[type], the regular bank, stamped with the record's time,
+    //     which then steps BACK by (1/60) / count per spark.
+    // ---------------------------------------------------------------------------------------------
+    void ParticleModule::HandleSpawnSparkShowerFromPointEvent(const SpawnSparkShowerFromPointEvent* lpEvent,
+                                                              const ParticleRenderData& lrRenderData)
     {
-        static bool sbLogged = false;
-        LogSparkEventNotReconstructed(sbLogged,
-            "ParticleModule::HandleSpawnSparkShowerFromPointEvent @0x82299CC8 (284 instr) -- a "
-            "type-2 record reached ProcessEventQueue and was dropped");
+        CGS_ASSERT(lpEvent->meSparkType >= 0 && lpEvent->meSparkType < Native::eSparkArray_Max,
+                   "( lpEvent->meSparkType >= 0 ) && ( lpEvent->meSparkType < BrnParticle::Native::eSparkArray_Max )");
+
+        const Matrix44Affine& lrFrame = lpEvent->mTransform;
+        const f32 lfRenderTime = lrRenderData.mfCurrentTime;                            // f27 (r5 + 8)
+        const f32 lfRingTime   = mSparkFrameDataSetUpdate.GetFrame(0).mfTimeStamp;      // f26 (+0x250B0)
+        const f32 lfGroundY    = lpEvent->mfGroundPositionY;                           // f25
+
+        // v121 -- the reflection axis: x * (2 * amount).
+        const Vector3 lvReflectionAxis =
+            ShowerScale(lrFrame.xAxis, lpEvent->mfReflectionAmount * KF_SHOWER_REFLECTION_SCALE);
+
+        // The speed scale.
+        const f32 lfSpeed      = ShowerGuardedLength3(lpEvent->mVelocityToInherit);
+        const f32 lfSpeedScale =
+            ShowerVMin(1.0f, ShowerRefinedRecip(lpEvent->mfVelocityScaleSpeedThreshold) * lfSpeed);
+
+        const Vector4& lrLateral = lpEvent->mLateralAngleMinMaxForwardAngleMinMax;
+        const Vector4& lrSpeeds  = lpEvent->mVelocityMinMaxInheritanceMinMax;
+        const Vector4& lrSizes   = lpEvent->mSparkSizeMinMaxSpawnRadiusXSpawnRadiusYZ;
+
+        // The direction randomiser (var_B0 / var_C0).
+        Vector4 lvDirectionMin;
+        lvDirectionMin.x = lrLateral.x;
+        lvDirectionMin.y = lrLateral.z;
+        lvDirectionMin.z = lrSpeeds.x * lfSpeedScale;
+        lvDirectionMin.w = lrSpeeds.z;
+        Vector4 lvDirectionMax;
+        lvDirectionMax.x = lrLateral.y;
+        lvDirectionMax.y = lrLateral.w;
+        lvDirectionMax.z = lrSpeeds.y * lfSpeedScale;
+        lvDirectionMax.w = lrSpeeds.w;
+        BrnEffects::Utils::Vector4Randomiser lDirectionRandomiser;
+        lDirectionRandomiser.Prepare(lvDirectionMin, lvDirectionMax);
+
+        // The position / size randomiser (var_D0 / var_E0): the radii's negations are sign-bit
+        // flips (`vxor` with splat(0x80000000)).
+        Vector4 lvOffsetMin;
+        lvOffsetMin.x = -lrSizes.z;
+        lvOffsetMin.y = -lrSizes.w;
+        lvOffsetMin.z = -lrSizes.w;
+        lvOffsetMin.w = lrSizes.x;
+        Vector4 lvOffsetMax;
+        lvOffsetMax.x = lrSizes.z;
+        lvOffsetMax.y = lrSizes.w;
+        lvOffsetMax.z = lrSizes.w;
+        lvOffsetMax.w = lrSizes.y;
+        BrnEffects::Utils::Vector4Randomiser lOffsetRandomiser;
+        lOffsetRandomiser.Prepare(lvOffsetMin, lvOffsetMax);
+
+        const u32 luNumToSpawn = lpEvent->muNumToSpawn;
+        CGS_ASSERT(luNumToSpawn > 0, "luNumToSpawn > 0");
+        // fcfid of the zero-extended count, frsp, then (1/60) / count.
+        const f32 lfTimeStep = KF_SHOWER_SPAWN_WINDOW / static_cast<f32>(static_cast<f64>(luNumToSpawn));
+        f32 lfSpawnTime = lpEvent->mfCurrentTime;                                      // f31
+
+        Native::SparkArray& lrArray = maSparks[lpEvent->meSparkType];                // this + 0x94D0 + type*0x90
+
+        for (u32 luRemaining = luNumToSpawn; luRemaining != 0u; --luRemaining)
+        {
+            const Vector4 lvDirectionDraw = lDirectionRandomiser.RandomiseXYZW(mRandom);   // var_80
+            const Vector4 lvOffsetDraw    = lOffsetRandomiser.RandomiseXYZW(mRandom);      // var_70
+
+            // (sinL, cosL, sinF, cosF): vmrghw (lat, lat, fwd, fwd) against the phase splat.
+            const f32 lfSinLateral = ShowerSinCosLane(lvDirectionDraw.x, KF_SHOWER_SIN_PHASE);
+            const f32 lfCosLateral = ShowerSinCosLane(lvDirectionDraw.x, KF_SHOWER_COS_PHASE);
+            const f32 lfSinForward = ShowerSinCosLane(lvDirectionDraw.y, KF_SHOWER_SIN_PHASE);
+            const f32 lfCosForward = ShowerSinCosLane(lvDirectionDraw.y, KF_SHOWER_COS_PHASE);
+
+            // direction = (x * sinL + y * cosL) * cosF + z * sinF (0x8229A078..0x8229A08C).
+            const Vector3 lvAcross    = ShowerMulAdd(lrFrame.xAxis, lfSinLateral, ShowerScale(lrFrame.yAxis, lfCosLateral));
+            const Vector3 lvDirection = ShowerMulAdd(lvAcross, lfCosForward, ShowerScale(lrFrame.zAxis, lfSinForward));
+
+            // velocity = direction * speed + inherit * share, then the reflection (0x8229A034,
+            // 0x8229A090..0x8229A0A0).
+            const Vector3 lvInherited = ShowerScale(lpEvent->mVelocityToInherit, lvDirectionDraw.w);
+            const Vector3 lvLaunch    = ShowerMulAdd(lvDirection, lvDirectionDraw.z, lvInherited);
+            const f32 lfInto          = ShowerVMin(ShowerDot3(lvLaunch, lrFrame.xAxis), 0.0f);
+            const Vector3 lvBounce    = ShowerScale(lvReflectionAxis, lfInto);
+            Vector3 lvVelocity;
+            lvVelocity.x = lvLaunch.x - lvBounce.x;
+            lvVelocity.y = lvLaunch.y - lvBounce.y;
+            lvVelocity.z = lvLaunch.z - lvBounce.z;
+            lvVelocity.w = lvLaunch.w - lvBounce.w;
+
+            // position = w + x * ox + y * oy + z * oz (three fused steps, 0x8229A0A8..0x8229A0B8).
+            Vector3 lvPosition = ShowerMulAdd(lrFrame.xAxis, lvOffsetDraw.x, lrFrame.wAxis);
+            lvPosition = ShowerMulAdd(lrFrame.yAxis, lvOffsetDraw.y, lvPosition);
+            lvPosition = ShowerMulAdd(lrFrame.zAxis, lvOffsetDraw.z, lvPosition);
+            const f32 lfHeightAbove = lvPosition.y - lfGroundY;                         // f29
+
+            const ParticleCpuMonitors& lrMonitors =
+                ((lrRenderData.muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0)
+                    ? gCrashCpuMonitors : gRaceCpuMonitors;
+            const s32 liMonitor = lrMonitors.miSpawnSpark;
+            CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+            lrArray.SpawnSpark(lvPosition,
+                               lvVelocity,
+                               lvOffsetDraw.w,      // f1 -- the drawn size
+                               lfSpawnTime,         // f2
+                               lfRenderTime,        // f3
+                               lfRingTime,          // f4
+                               lfHeightAbove,       // f5
+                               false);              // r9 -- the regular bank
+
+            CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+            ++gauSparkShowerSpawned;   // [DIAG] DELETE-WHEN-STABLE
+            lfSpawnTime -= lfTimeStep;
+        }
     }
 
     void ParticleModule::HandleFireDebrisBurstEvent(const FireDebrisBurstEvent* /*lpEvent*/)
