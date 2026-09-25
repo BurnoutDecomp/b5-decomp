@@ -939,12 +939,14 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
 // The names look inverted, and they are not: HandleWheels @0x82296E3C reads
 // `lfsx f2, r11, 0x8E08` as AddTrailSegment's `lrCurrentTime`, so +0x08 IS the trail clock,
 // and the DWARF order (mpParticleModule, muCurrentFrame, mfCurrentTime, mfCurrentTimeStep,
-// mfTimeStepMultiplier) puts mfCurrentTime at +0x08. The accumulator at +0x0C is therefore
-// a genuinely monotonic sim-driven clock: NOTHING in the ARTIST build clears it (checked
-// GenerateRenderRequests @0x82281BD8, PreRenderUpdate @0x82294760 and EndOfFrame
-// @0x82294C30 -- PreRenderUpdate publishes it and does not reset it), and Construct's
-// `*(this+0x8E0C) = 0.0` is its only other writer. It is the console's own behaviour, and
-// BrnRendererModule::Render's motion-blur consumer reads it as a timestamp, not a delta.
+// mfTimeStepMultiplier) puts mfCurrentTime at +0x08. The accumulator at +0x0C is the UPDATE
+// FRAME's sum of scaled sub-steps: ParticleModule::StartOfFrame (inline, ParticleModule.h),
+// inlined into BrnGameModule::OnStartOfUpdateFrame @0x823A8BB0, clears it at the start of every
+// update frame (`stfsx f0(0.0), r11, r9` with r9 = 0x88194C = the particle module's +0x8E0C in
+// the game module), and GenerateRenderRequests / PreRenderUpdate publish it as the frame's step.
+// ⛔ CORRECTED 2026-09-25 (FX-CRASHVFX): this banner used to say NOTHING clears it -- the searches
+// looked module-relative (GenerateRenderRequests, PreRenderUpdate, EndOfFrame) and the clear is a
+// game-module-relative store.
 // =========================================================================================
 void ParticleModule::Update(f32 lfTimeStep, f32 lfTime, f32 lfTimeStepMultiplier,
                             const BrnDirector::Camera::Camera* lpCamera)

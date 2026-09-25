@@ -34,10 +34,11 @@
 // missing half.
 //
 // THE TWO-PHASE SHAPE IS KEPT, and it is load-bearing rather than cosmetic: mfCurrentTimeStep is an
-// ACCUMULATOR that lives on the MODULE, not on the IO buffer, and the IO buffer is DOUBLE-BUFFERED
-// and re-Constructed on every Swap. Accumulating into the buffer would alternate between two
-// independent accumulators. So the module-side record is modelled here as a file-static and the
-// buffer gets a whole-record copy, exactly as the console does.
+// ACCUMULATOR that lives on the MODULE, not on the IO buffer (the frame's sum of sub-steps, cleared
+// by ParticleModule::StartOfFrame at the start of every update frame), and the IO buffer is
+// DOUBLE-BUFFERED and re-Constructed on every Swap. Accumulating into the buffer would alternate
+// between two independent accumulators. So the module-side record is modelled here as a file-static
+// and the buffer gets a whole-record copy, exactly as the console does.
 //
 // ⚠ THE COPY IS AN ASSIGNMENT, NOT A 528-BYTE memcpy. 0x210 == 528 is the GUEST size of
 // ParticleRenderData (32-bit pointers); on the x64 host mpParticleModule and mpEnvironmentMap widen
@@ -68,17 +69,15 @@
 //                                            -> record.mfCurrentTimeStep += scale * f1
 //                                               ⚠ AN ACCUMULATOR, not an assignment. Construct
 //                                               @0x82294220 seeds it (`*(a1 + 36364) = 0.0`) and
-//                                               NOTHING in the image ever resets it: an image-wide
-//                                               scan for stores to +0x8E0C finds exactly three
-//                                               functions --
-//                                                 0x822817D8 Update           (this += )
-//                                                 0x82294220 Construct        (= 0.0)
-//                                                 0x82294760 PreRenderUpdate  (READS it into
-//                                                            DispatchThreadUpdateData+4)
-//                                               so it is a monotonically growing sum of scaled sim
-//                                               steps. Downstream only its NON-ZERO-NESS matters:
-//                                               MotionBlurState::Update @0x823F8490 branches on
-//                                               `lfTimeStep == 0.0f` and nothing else reads it.
+//                                               ParticleModule::StartOfFrame clears it at the
+//                                               start of every update frame -- a store inlined
+//                                               into BrnGameModule::OnStartOfUpdateFrame
+//                                               @0x823A8BB0 (`stfsx f0(0.0), r11, r9`, r9 =
+//                                               0x88194C = gameModule + 0x878B40 + 0x8E0C), which
+//                                               module-relative scans cannot see. So it is the
+//                                               frame's sum of scaled sim steps.
+//                                               CORRECTED 2026-09-25 (FX-CRASHVFX): this used to
+//                                               say nothing resets it.
 //     0x82281878  stfsx f31, r31, 0x8E08     -> record.mfCurrentTime = scale * f2
 //     0x82281880-0x822818AC  4x lvx128/stvx128 from r30(=camera+0x00,0x10,0x20,0x30)
 //                                            -> record.mCameraTransform = camera->mTransform
@@ -138,9 +137,8 @@
 // EffectsModule::Update, inside the module scheduler's per-sub-step walk) while
 // GenerateRenderRequests runs once per FRAME (from EffectsModule::GenerateDispatchLists). This
 // producer runs BOTH once per frame, from DoDispatch. Two consequences, both bounded:
-//   * mfCurrentTimeStep accumulates ONE sim step per frame instead of miNumSimFramesRequired of
-//     them, so it grows more slowly than the console's would. It is a monotonically rising number
-//     whose only consumer tests it against 0.0f, so the difference is unobservable here.
+//   * mfCurrentTimeStep carries ONE sim step per frame instead of the frame's miNumSimFramesRequired
+//     of them (the clear below, then the one Update): a frame of two sub-steps publishes one step.
 //   * mfCurrentTime is an ASSIGNMENT of the sim clock, so it is exact either way.
 // DELETE-WHEN the module scheduler drives the real per-sub-step Update.
 //
@@ -170,7 +168,7 @@ namespace
     //     *(a1 + 143671) = 1;        // +0x23137  the camera-switched latch, seeded SET
     //     *(a1 + 36352)  = a1;       // +0x8E00   mpParticleModule = the module itself
     //     *(a1 + 36356)  = 0;        // +0x8E04   muCurrentFrame
-    //     *(a1 + 36364)  = 0.0;      // +0x8E0C   mfCurrentTimeStep (the accumulator's seed)
+    //     *(a1 + 36364)  = 0.0;      // +0x8E0C   mfCurrentTimeStep (cleared every update frame too)
     // An image-wide scan of the 30k exports for `ori rN, rM, 0x30F0|0x3130..0x3134|0x3137`
     // (the way the module forms each of these offsets) plus the matching Hex-Rays decimal forms
     // (143600 / 143664..143668 / 143671) finds exactly three ParticleModule bodies:
@@ -437,6 +435,10 @@ void PCBringUpProduceParticleRenderData(BrnGame::DispatchThreadInputBuffer* lpBu
     if (lpBuffer == 0 || lpCamera == 0)
         return;
 
+    // ParticleModule::StartOfFrame's clear, on this record: BrnGameModule::OnStartOfUpdateFrame @0x823A8BB0
+    // zeroes the module record's mfCurrentTimeStep at the start of every update frame, and DoDispatch runs this
+    // stand-in -- its one Update of the frame -- after it.
+    gRenderData.mfCurrentTimeStep = 0.0f;
     ParticleModuleUpdateBringUp(gRenderData, *lpCamera, lfTimeStep, lfTime, lfTimeStepMultiplier);
 
     // The bracket EffectsModule::GenerateDispatchLists @0x82296668 puts round the call

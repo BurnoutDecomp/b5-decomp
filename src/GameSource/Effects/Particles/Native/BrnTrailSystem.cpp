@@ -489,9 +489,9 @@ namespace Native
             // for ANY reason but "ran out of segments" gets NO continuance seed, so the strip
             // it starts is disconnected from the one it replaces: that is the only construct in
             // this system that can put a real gap in a mark. The timeout arithmetic is printed
-            // term by term because its `dt` is ParticleRenderData::mfCurrentTimeStep, which
-            // ParticleModule::Update ACCUMULATES and never resets -- so whether this test can
-            // ever fire depends on a number no probe has previously shown.
+            // term by term because its `dt` is ParticleRenderData::mfCurrentTimeStep: the update
+            // frame's sum of sub-steps (ParticleModule::StartOfFrame clears it every update frame,
+            // inlined into BrnGameModule::OnStartOfUpdateFrame @0x823A8BB0).
             // `seed=1` means the break was bridged; `seed=0 prev=1` is a REAL GAP.
             // DELETE-WHEN-STABLE.
             if (TrailCadenceProbeEnabled())

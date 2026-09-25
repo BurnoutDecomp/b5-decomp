@@ -13,9 +13,9 @@ scratch/CRASHPARITY_0922/fxcrashvfx_vmxemu/gen_debris_sim_data.py):
   tests/FxCrashVfxDebrisSim.cpp      -- the revision's whole BrnDebrisArrayLite.cpp: every particle, every collide
                                         call's segments, the job Random (6 cases x 3 checks).
   tests/FxCrashVfxDebrisSimBegin.cpp -- the production BeginSimulateDebris body: the expiry calls, the five job
-                                        slots, the jobs started, the module Random, and that the published
-                                        mfCurrentTimeStep ACCUMULATOR is consumed as its first difference (the
-                                        console's per-frame step; see the body's banner) (5 cases x 5 checks).
+                                        slots (the step read VERBATIM off DispatchThreadUpdateData+4, the update
+                                        frame's sum of sub-steps), the jobs started, the module Random
+                                        (5 cases x 4 checks).
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxcrashvfx_debris_sim.py [--rev <b5 rev>]
                                                                              [--root <shadow tree root>]
@@ -39,7 +39,7 @@ RENDER_SIGNATURE = "void ParticleModule::RenderFullResParticles("
 MOUNT = WORKFLOW / "tools/build/build_game_exe.bat"
 
 EXEC_CHECKS = 6 * 3
-BEGIN_CHECKS = 5 * 5
+BEGIN_CHECKS = 5 * 4
 
 
 class RootTree(Tree):
