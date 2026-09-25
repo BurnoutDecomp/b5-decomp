@@ -4,6 +4,8 @@
 #include "GameSource/Director/Utils/BrnSceneQueryInterface.h"      // BrnDirector::SceneQueryInterface::LineTestNearest
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"               // CgsNumeric::Random::RandomInt (the two 20% rolls)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"          // [diag] CgsDev::Log::gpDebugPrint
+#include "vendor/renderware/collision/CollisionVolume.hpp"          // rw::collision::SphereVolume (the camera-in-geometry sphere)
+#include "rw/rwcore_structs.h"                                      // rw::Resource (SphereVolume::Initialize's block descriptor)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
@@ -47,6 +49,16 @@ namespace Camera
 // ----------------------------------------------------------------------------
 namespace
 {
+    // The camera-in-geometry sphere test (GenerateSceneQueries 0x822404C4..0x82240574):
+    //   the radius -- flt_82004014 == 0x3DCCCCCD, loaded once into f30 for both the :845 height
+    //                 tripwire and SphereVolume::Initialize;
+    //   the entity-type flags -- `li r5, 0x1E`, the same mask the visibility lines use;
+    //   the volume block -- 0x80 bytes, the width of the query event's volume slot
+    //                 (SceneQueryInterface::VolumeTestDeepest @0x822170B0 copies 0x80 bytes).
+    const f32 KF_SPHERE_TEST_RADIUS            = 0.1f;
+    const u32 KU_SPHERE_TEST_ENTITY_TYPE_FLAGS = 0x1Eu;
+    const u32 KU_SPHERE_TEST_VOLUME_BLOCK      = 0x80u;
+
     const s32 KI_FAIL_DIAG_LINES = 400;
 
     bool FailDiagLine()
@@ -177,7 +189,8 @@ f32 VisibilityCollisionPolicy::TimeUntilCollisionWithVehicle() const
 //   mbDoingCollisionPrediction  -> the geometry predictor, velocity first (the inlined pair
 //                                  SetVelocity + GenerateSceneQueries, 0x82240468..0x822404AC)
 //   mbCanFail                   -> assert the ground constraint's height is above the sphere test's
-//                                  radius (:845), then the camera-in-geometry sphere test (GATED, below)
+//                                  radius (:845), then the camera-in-geometry sphere test
+//                                  (VolumeTestDeepest, 0x82240528..0x82240574)
 //   the visibility test         -> VisibilityTest::GenerateSceneQueries(camera, E_WORLD_NO_SLOMO dt,
 //                                  random, request, target, bounds, mbDoingVisibilityTestThisTime,
 //                                  target entity)                                     (0x822405A0)
@@ -209,7 +222,7 @@ void VisibilityCollisionPolicy::GenerateSceneQueries(const CollisionPolicyShared
     {
         // `lfs f0, 0x210 ; fcmpu f0, 0.1 ; bgt skip` -- the assert fires unless the height is above
         // the sphere test's radius (0.1, flt_82004014); NaN fires it too.
-        if (mbUseGroundConstraint && !(mGroundConstraint.GetDesiredHeight() > 0.1f))
+        if (mbUseGroundConstraint && !(mGroundConstraint.GetDesiredHeight() > KF_SPHERE_TEST_RADIUS))
         {
             char lacMessage[192];
             std::snprintf(lacMessage, sizeof(lacMessage),
@@ -219,19 +232,29 @@ void VisibilityCollisionPolicy::GenerateSceneQueries(const CollisionPolicyShared
             CGS_ASSERT(false, lacMessage);                                           // :845
         }
 
-        // ⚠️ FLAGGED GATE (conductor-approved G3, 2026-09-25) -- NOT X360. The console then builds a
-        // 0.1 m rw::collision::SphereVolume at the camera (0x82240528..0x82240550) and asks
-        //     request->VolumeTestDeepest(mVolumeTest, 30, 0xFF, &lSphere, lrCamera.mTransform,
-        //                                KU_INVALID_ENTITY_ID (0xFFFFFFFF @0x82CDA790),
-        //                                E_EXCLUDE_ENTITY_ONLY)                   (0x82240574)
-        // whose answer, in ProcessSceneQueryResults, fails a camera that starts inside geometry
-        // (E_FAILED_COLLISION, reason 0). The SceneManager's side of that query,
-        // SceneManagerModule::ProcessVolumeTestDeepest @0x828D4460, is a CGS_ASSERT(false) trap on
-        // this build (CgsSceneManagerModule.cpp) -- it needs BaseCollisionGenerator::
-        // TestSphereAgainstPolySoupList and FineIntersectionTestModule::ComputeVolumeTestDeepest,
-        // neither of which is reconstructed -- so issuing it would assert every frame. mVolumeTest
-        // therefore never receives a package and reason 0 cannot fire.
-        // DELETE-WHEN: ProcessVolumeTestDeepest @0x828D4460 lands (logged by the conductor).
+        // The camera-in-geometry sphere test (0x82240528..0x82240574). A 0.1 m sphere volume
+        // (the same flt_82004014 the :845 tripwire above compares against) is built in a 0x80-byte
+        // stack block (var_B0), through a zeroed five-word rw::Resource (var_E0) whose word 0 is
+        // that block. The camera then asks for the DEEPEST penetration of that sphere at its own
+        // transform:
+        //     flags 30 (0x1E), volume flags 0xFF, no excluded entity (0xFFFFFFFF @0x82CDA790),
+        //     E_EXCLUDE_ENTITY_ONLY (`li r10, 0`).
+        // ProcessSceneQueryResults fails a camera whose sphere is inside geometry with
+        // E_FAILED_COLLISION (reason 0).
+        // [FX-DIRECTOR2 2026-09-25] the G3 gate that stood here is retired: the scene manager now
+        // answers the query (SceneManagerModule::ProcessVolumeTestDeepest @0x828D4460, FX-FOLLOWUPS
+        // b5 35a5e66c).
+        // The producer copies the full 0x80-byte block into its event, as the console's does (its
+        // volume slot is 0x80 wide). The SphereVolume record fills the first 0x60 bytes.
+        alignas(16) u8 laVolumeMemory[KU_SPHERE_TEST_VOLUME_BLOCK];   // var_B0
+        rw::Resource lVolumeResource = {};                            // var_E0: zeroed, word 0 = the block
+        lVolumeResource.m_baseResources[0] = laVolumeMemory;
+        const rw::collision::SphereVolume* lpSphere =
+            rw::collision::SphereVolume::Initialize(lVolumeResource, KF_SPHERE_TEST_RADIUS);   // 0x82240550
+
+        lrSharedInfo.mpRequestInterface->VolumeTestDeepest(
+            mVolumeTest, KU_SPHERE_TEST_ENTITY_TYPE_FLAGS, 0xFFu, lpSphere, lrCamera.mTransform,
+            CgsSceneManager::EntityId(0xFFFFFFFFu), CgsSceneManager::SceneManagerIO::E_EXCLUDE_ENTITY_ONLY);   // 0x82240574
     }
 
     mVisibilityTest.GenerateSceneQueries(lrCamera, lrSharedInfo.mTimestep.Get(Timestep::E_WORLD_NO_SLOMO),
