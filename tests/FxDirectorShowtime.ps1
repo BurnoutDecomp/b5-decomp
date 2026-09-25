@@ -14,10 +14,19 @@
 # Before (FX-CAMRIG run scratch/bugtest/runs/fxcamrig_showtime/20260924_130456): `[bounce] POSTED game action 42 ... duration
 # 1.000000`, then `[slomo] camera post-arbitrator mfSimTimeScale=0.000000` -> `[slomo] simScale=0.005000` for the whole of
 # crash mode, the rig's car moving 0.3 m.
+# FX-SCENARIOS (2026-09-25): the rig-travel check failed on the case's own first-boot path in 3 of 3 runs because
+# crash mode took the frame 6.0 s after the Showtime started (LIVE_FINAL's "720 frames" = 720 [motion] n), with
+# the car at rest. That was a PC defect, not the drive: CrashMode had no slot-8 GetIntroDurationSeconds (console
+# 0x827E2600 = flt_82008718 = 0.0002 s) and inherited the base's 6.0 s stub, so IntroState held the mode 6.0 s in
+# E_GMS_INTRO. Fixed in b5 78d88608; first GREEN on the fix: fxdirector_showtime/20260925_103605 (crash mode on
+# the first mode update, rig travel 15.92 m). The two checks at the end pin it: the Showtime's [mode-intro] line
+# (BRN_INTRO_TIMER_DIAG, NOT X360) carries the console's 0.0002 s, and crash mode takes the frame before one
+# second of mode time has passed (re-scored: 081013 FAIL at tMode 6.000023, 103605 PASS at 0.016667; first run
+# with them: fxdirector_showtime/20260925_111205 GREEN 15/15).
 $case = & (Join-Path $PSScriptRoot 'ShowtimeContacts.ps1')
 $case.Name = 'fxdirector_showtime'
 $case.Bug = 'Showtime crash mode must request the impact-time factor the director received (action 42), not 0: no 0.005 sim floor, the car moves, no assertions.'
-$case.DiagEnv += ',BRN_DIRECTOR_ACTION_DIAG=1,BRN_CRASHCAM_DIAG=1,BRN_CAMRIG_DIAG=1'
+$case.DiagEnv += ',BRN_DIRECTOR_ACTION_DIAG=1,BRN_CRASHCAM_DIAG=1,BRN_CAMRIG_DIAG=1,BRN_INTRO_TIMER_DIAG=1'
 $case.Checks += @(
     @{ Kind = 'LogMatch'; Name = 'director arm 42 stored the posted impact-time factor (1.0)';
        Pattern = '\[director-action\] 42 IMPACT_TIME_START -> mbImpactTimeActive 1 mfImpactTimeSloMoFactor 1\b'; Expect = $true }
@@ -88,6 +97,29 @@ $case.Checks += @(
         }
         $parts = @($counts.Keys | Sort-Object { [int]$_ } | ForEach-Object { "$_ x$($counts[$_])" })
         @{ Pass = $counts.ContainsKey('42'); Detail = ("[director-action] ids: {0}" -f ($parts -join ', ')) }
+    } }
+    @{ Kind = 'Script'; Name = 'the Showtime intro is the console slot 8 of CrashMode (0x827E2600: flt_82008718 = 0.0002 s, timed)'; Script = {
+        param($ctx)
+        $inv = [cultureinfo]::InvariantCulture
+        $rows = @($ctx.LogLines | Where-Object { $_ -match '\[mode-intro\] IntroState::OnEnter mode type 2 ' })
+        $good = @($rows | Where-Object { $_ -match "countdown ([-+0-9.eE]+) s timed 1" -and [math]::Abs([double]::Parse($Matches[1], $inv) - 0.0002) -lt 5e-7 })
+        @{ Pass = ($rows.Count -gt 0 -and $good.Count -eq $rows.Count); Detail = "$($rows.Count) Showtime [mode-intro] line(s), $($good.Count) at 0.0002 s timed: $(($rows | Select-Object -First 1 | ForEach-Object { $_.Trim() }))" }
+    } }
+    @{ Kind = 'Script'; Name = 'crash mode takes the frame within one second of mode time of the Showtime intro (was 6.0 s)'; Script = {
+        param($ctx)
+        $inv = [cultureinfo]::InvariantCulture
+        $intro = -1; $tMode = 0.0; $entered = -1
+        for ($i = 0; $i -lt $ctx.LogLines.Count; $i++) {
+            $l = $ctx.LogLines[$i]
+            if ($intro -lt 0) {
+                if ($l -match '\[director-action\] 146 SHOWTIME_INTRO_START') { $intro = $i }
+                continue
+            }
+            if ($l -match '\[crash-end\] poll=\d+ .* tMode=([-+0-9.eE]+)') { $tMode = [double]::Parse($Matches[1], $inv) }
+            if ($l -match '\[crashcam\] container current state -> 4 \(ArbStateCrashMode\)') { $entered = $i; break }
+        }
+        @{ Pass = ($intro -ge 0 -and $entered -gt $intro -and $tMode -lt 1.0)
+           Detail = ("Showtime intro at log line {0}; crash mode at log line {1}; last [crash-end] tMode before it {2:f6} s" -f $intro, $entered, $tMode) }
     } }
 )
 $case
