@@ -37,10 +37,9 @@
 
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"
 
-#include <cmath>   // std::acos / std::sin / std::cos / std::fabs -- stand-ins for the console's
-                   // XMVectorACos call + inlined XM sin/cos minimax polynomials, per the
-                   // CameraUtils.cpp precedent ("std::acos stands in for the external
-                   // XMVectorACos call").
+#include <cmath>   // std::sin / std::cos / std::fabs -- std::sin / std::cos stand in for the console's
+                   // inlined XM sin/cos minimax polynomials (the XMVectorSinCos follow-up).
+#include "SDKs/XboxMath/XMVectorACos.h"   // XboxMath::XMVectorACos (X360 0x821F0980), the tangent angle
 
 #include "rw/math/vpu/vector3_operation.h"                                                // Dot / Normalize / Negate / operator+-
 #include "rw/math/vpu/matrix44affine_operation.h"                                         // TransformPoint / TransformVector / InverseOfMatrixWithOrthonormal3x3
@@ -203,8 +202,8 @@ namespace Deformation
     // centres to their common average height, rotate the A->B direction about the world Y axis
     // by theta = acos((rA - rB) / |AToB|) toward lPointOnSide, and emit the two touch points
     // (centre + dir * radius) plus the tangent direction. The console's acos is a real
-    // XMVectorACos call and the sin/cos pair an inlined XM minimax polynomial; std:: stands in
-    // per the CameraUtils.cpp precedent.
+    // XMVectorACos call (XboxMath::XMVectorACos here) and the sin/cos pair an inlined XM minimax
+    // polynomial, for which std::sin / std::cos still stand in.
     // ==========================================================================================
     void DeformationManager::CalculateTangentPoints(CgsGeometric::Sphere lSphereAIn,
                                                     CgsGeometric::Sphere lSphereBIn,
@@ -227,7 +226,9 @@ namespace Deformation
         f32 lfCosTheta = (lfRadiusA - lfRadiusB) * (1.0f / lfAToBDist);
         if (lfCosTheta < -1.0f) lfCosTheta = -1.0f;
         if (lfCosTheta >  1.0f) lfCosTheta =  1.0f;
-        const f32 lfTheta = std::acos(lfCosTheta);   // XMVectorACos @0x825DB4xx (real call)
+        // 0x825DB5B8 vmaxfp / 0x825DB5BC vminfp128 (the clamp above, a NaN kept), then 0x825DB5C4
+        // bl XMVectorACos (crash parity FX-GATE: the console's own arc-cosine, not std::acos).
+        const f32 lfTheta = XboxMath::XMVectorACos(lfCosTheta);
 
         // Rotate lAToBDir about the world Y axis by theta; if the rotated direction points away
         // from lPointOnSide (Dot(lPointOnSide - lCentreA, rotated) < 0), rotate by -theta instead

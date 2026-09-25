@@ -11,7 +11,8 @@
 #include "GameSource/World/BrnEntityTypes.h"                                   // BrnWorld::EEntityTypeID -- the owner byte the crash witness names
 
 #include <cstdlib>  // getenv: opt-in PC contact diagnostics
-#include <cmath>    // std::fabs, std::acos
+#include <cmath>    // std::fabs
+#include "SDKs/XboxMath/XMVectorACos.h"   // XboxMath::XMVectorACos (X360 0x821F0980), the angle between the cars
 #include <cstring>  // std::memcpy: the [td-replay] witness prints raw IEEE bits
 #include <cstddef>  // offsetof (layout asserts)
 
@@ -370,7 +371,9 @@ namespace Vehicle
         f32 lfAlignment = vpu::Dot(lvForwardA, lvForwardB);
         if (lfAlignment < -1.0f) lfAlignment = -1.0f;
         if (lfAlignment > 1.0f) lfAlignment = 1.0f;
-        lInfo.mfAngleBetweenCars = std::fabs(std::acos(lfAlignment));
+        // 0x82643524 vmaxfp / 0x82643528 vminfp128 (the clamp above, a NaN kept), then 0x8264352C
+        // bl XMVectorACos (crash parity FX-GATE: the console's own arc-cosine, not std::acos).
+        lInfo.mfAngleBetweenCars = std::fabs(XboxMath::XMVectorACos(lfAlignment));
         lInfo.meAggressorActiveRaceCarIndex = static_cast<EActiveRaceCarIndex>(-1);
         lInfo.meVictimActiveRaceCarIndex = static_cast<EActiveRaceCarIndex>(-1);
         lInfo.meImpactSitutation = E_IMPACT_SITUATION_INVALID;
