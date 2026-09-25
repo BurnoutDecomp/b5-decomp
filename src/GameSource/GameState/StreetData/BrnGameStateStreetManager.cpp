@@ -1908,18 +1908,14 @@ namespace BrnGameState
     // @ 0x82350A88. Per-frame upcoming-streets pump: resolve the player's AI
     // section -> road index, junction-timeout bookkeeping, then the recursive /
     // route walks and the shortcut-flag game action (type 287).
-    // (liReserved is carried by the X360 arity but the body never reads it.)
     // -----------------------------------------------------------------------
     void StreetManager::UpdateUpcomingStreets(
             BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
             BrnAI::AIModuleIO::AICarOutputInterface* lpLastAICarOutputInterface,
             GameStateModuleIO::OutputBuffer* lpOutput,
             f32 lfSimTimeStep,
-            s32 liReserved,
             bool lbUseRoute )
     {
-        (void)liReserved;
-
         bool lbFoundRoad = false;
 
         CGS_ASSERT( lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex() < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
@@ -2299,18 +2295,6 @@ namespace BrnGameState
     }
 }
 
-namespace BrnGameState {
-// Tracking arm of Update 0x82352E90 (0x82352F38..0x82352FA0).
-void StreetManager::UpdateRoadDisplay(BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* active,
-    BrnAI::AIModuleIO::AICarOutputInterface* ai, GameStateModuleIO::OutputBuffer* output,
-    f32 delta, f32 wrongWayTime, bool useRoute)
-{
-    if (wrongWayTime <= 0.0f) mfTotalTimeGoinTheWrongWay = 0.0f;
-    else mfTotalTimeGoinTheWrongWay += wrongWayTime;
-    mbWrongWay = mfTotalTimeGoinTheWrongWay >= 10.0f;
-    UpdateUpcomingStreets(active, ai, output, delta, 0, useRoute);
-}
-}
 
 // ============================================================================
 // FOLDED FROM BrnGameStateStreetManager_wC_01.cpp (wave C) on 2026-09-15 by tools/work/fold_partfiles.py.

@@ -16,6 +16,7 @@
 
 #include "GameSource/GameState/BrnGameEvents.h"                        // GameStateModuleIO::RoadRulesScoreRequestEvent
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                 // OutputBuffer (GetGameActionQueue / GetGuiOutputQueue)
+#include "GameSource/GameState/BrnGameActions.h"                       // RoadRulesRoadScoreAction (action 284)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // CgsModule::Event / VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"           // CgsDev::StrStream (streamed dev assert)
@@ -28,28 +29,6 @@
 #if defined(_MSC_VER)
 #  define strnicmp _strnicmp
 #endif
-
-namespace
-{
-    // -------------------------------------------------------------------
-    // The 48-byte road-score response ProcessScoreRequestEvent builds on the
-    // stack (sp+0x70..0xA0) and hands to VariableEventQueue<13312,16>::
-    // AddEvent(&response, 284, 48).
-    // -------------------------------------------------------------------
-    struct RoadRulesScoreResponse
-    {
-        ::CgsID                       mRoadId;                // +0x00
-        BrnStreetData::ChallengeIndex miChallengeIndex;       // +0x08
-        CgsNetwork::PlayerName        mPlayerName;            // +0x0C (16B)
-        s32                           miRuleType;             // +0x1C
-        s32                           miUserScore;            // +0x20
-        s32                           miHighScore;            // +0x24
-        u8                            mbLocalPlayerIsHolder;  // +0x28
-        u8                            mbUserScoreIsPar;       // +0x29
-        u8                            mbHighScoreIsPar;       // +0x2A
-    };
-    static_assert( sizeof(RoadRulesScoreResponse) == 48, "road-rules score response is 0x30" );
-}
 
 namespace BrnGameState
 {
@@ -83,24 +62,24 @@ void StreetManager::ProcessScoreRequestEvent(
     CGS_ASSERT( lpOutput, "lpOutput" );
     CGS_ASSERT( lpScoreRequestEvent, "lpRequestEvent" );
 
-    RoadRulesScoreResponse lResponse;
+    GameStateModuleIO::RoadRulesRoadScoreAction lResponse;
     lResponse.mPlayerName.Construct( "" );
 
     const BrnStreetData::ChallengeIndex liChallengeIndex = lpScoreRequestEvent->mRoadChallengeIndex;
 
-    lResponse.miChallengeIndex      = liChallengeIndex;
-    lResponse.mbUserScoreIsPar      = 0;
-    lResponse.mbHighScoreIsPar      = 0;
-    lResponse.mbLocalPlayerIsHolder = 0;
-    lResponse.mRoadId               = KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liChallengeIndex];
+    lResponse.mChallengeIndex        = liChallengeIndex;
+    lResponse.mbAIRulesRoadOffline   = false;
+    lResponse.mbAIRulesRoadOnline    = false;
+    lResponse.mbLocalPlayerRulesRoad = false;
+    lResponse.mRoadID               = KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liChallengeIndex];
 
     if ( meActiveRoadRuleType == BrnStreetData::E_SCORE_TYPE_TIME )
     {
-        lResponse.miRuleType = 1;
+        lResponse.meActiveRoadRule = E_ACTIVE_ROAD_RULE_OFFLINE_TIME;
     }
     else if ( meActiveRoadRuleType == BrnStreetData::E_SCORE_TYPE_CRASH )
     {
-        lResponse.miRuleType = 3;
+        lResponse.meActiveRoadRule = E_ACTIVE_ROAD_RULE_OFFLINE_CRASH;
     }
     else
     {
@@ -144,7 +123,7 @@ void StreetManager::ProcessScoreRequestEvent(
 
     if ( lbUserScoreBeatsPar )
     {
-        lResponse.miUserScore = liUserScore;
+        lResponse.miOfflineScore = liUserScore;
     }
     else
     {
@@ -153,8 +132,8 @@ void StreetManager::ProcessScoreRequestEvent(
         lacRivalName[12] = 0;
         lResponse.mPlayerName.Construct( lacRivalName );
 
-        lResponse.miUserScore     = liParScore;
-        lResponse.mbUserScoreIsPar = 1;
+        lResponse.miOfflineScore       = liParScore;
+        lResponse.mbAIRulesRoadOffline = true;
     }
 
     // ---- high score ------------------------------------------------------
@@ -176,9 +155,9 @@ void StreetManager::ProcessScoreRequestEvent(
         }
         else
         {
-            lResponse.mbLocalPlayerIsHolder = 1;
+            lResponse.mbLocalPlayerRulesRoad = true;
         }
-        lResponse.miHighScore = liHighScore;
+        lResponse.miOnlineScore = liHighScore;
     }
     else
     {
@@ -187,14 +166,15 @@ void StreetManager::ProcessScoreRequestEvent(
         lacRivalName[12] = 0;
         lResponse.mPlayerName.Construct( lacRivalName );
 
-        lResponse.miHighScore      = liParScore;
-        lResponse.mbHighScoreIsPar = 1;
+        lResponse.miOnlineScore       = liParScore;
+        lResponse.mbAIRulesRoadOnline = true;
     }
 
     CGS_ASSERT( lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()" );
 
     CgsModule::VariableEventQueue<13312, 16>* lpQueue = lpOutput->GetGuiOutputQueue();
-    lpQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &lResponse ), 284, 48 );
+    lpQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &lResponse ),
+                       GameStateModuleIO::E_ACTION_ROAD_RULES_ROAD_SCORE, sizeof( lResponse ) );
 }
 
 } // namespace BrnGameState

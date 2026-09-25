@@ -118,6 +118,7 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"  // GameModeParams
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"             // InputBuffer::GetGuiEvents()
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // CgsDev::Log::gpDebugPrint
+#include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"  // KI_MAX_CHALLENGES
 #include <stdlib.h>                                                // getenv (the diag guard)
 #include <cstring>                                                 // memset / memcpy
 
@@ -493,6 +494,36 @@ namespace
         u32 muExtensionTime;                   // +0x00
     };
     static_assert(sizeof(HUDMessageRoadRageTimeExtensionActionMirror) == 4, "X360 action 255 size 4");
+
+    // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_ROADRULES_DIAG), first 32 lines, one
+    // line per road-rule action translated. Action 279 posts every frame and has its own
+    // witness in the stunt sibling. 282 also prints the new active rule, 277 / 278 the score
+    // type and 278 the score and its valid-attempt flag, so a run shows a rule start and end.
+    void RoadRuleGuiWitness(s32 liActionType, s32 liGuiEventId,
+                            s32 liDetail = 0, f32 lfScore = 0.0f, bool lbValid = false)
+    {
+        static const bool sbDiag      = (getenv("BRN_ROADRULES_DIAG") != 0);
+        static s32        siLinesLeft = 32;
+        if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            --siLinesLeft;
+            *CgsDev::Log::gpDebugPrint
+                << "[roadrules] action " << liActionType << " -> gui " << liGuiEventId;
+            if (liActionType == 282)
+            {
+                *CgsDev::Log::gpDebugPrint << " rule " << liDetail;
+            }
+            if (liActionType == 277 || liActionType == 278)
+            {
+                *CgsDev::Log::gpDebugPrint << " type " << liDetail;
+            }
+            if (liActionType == 278)
+            {
+                *CgsDev::Log::gpDebugPrint << " score " << lfScore << " valid " << (lbValid ? 1 : 0);
+            }
+            *CgsDev::Log::gpDebugPrint << "\n";
+        }
+    }
 
     // ---------------------------------------------------------------------------------------
     // GuiEventRunFsm posts through the raw queue (24-byte controller record, not a PushGuiEvent
@@ -1327,6 +1358,180 @@ namespace
             BrnGui::GuiEventRoadRuleUpcomingRoads event = {};
             event.Construct(reinterpret_cast<const BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction*>(lpAction));
             PushGuiEvent(event, lpGuiInput);
+            return true;
+        }
+
+        // ---- [RR-GUI] the rest of the road-rule band ---------------------------------------
+        // The switch is indexed by the action id itself (the jump table is read at id*4 with
+        // no rebase; the 273/274/276 arms above sit at their own ids). Console arms, in id order:
+        // 275 -> 344, 277 -> 335, 278 -> 336, 279 -> 338 (in the stunt sibling: it reads the
+        // crash scorer off the game module), 280 -> 339, 281 -> 342, 282 -> 343, 284 -> 345,
+        // 285 -> 346, 286 -> 330. Action 283 (the time-rule warning) sits on the table's DEFAULT
+        // list: the console posts no GUI event for it. Every GUI record here is flat (its home
+        // is BrnGuiEventTypeDefs.h) except 336 / 339, which the HUD reads through their types.
+
+        // 275 -> GuiEventRoadRuleBatchDataResponse (344): the per-road "beaten" table.
+        case BrnGameState::GameStateModuleIO::E_ACTION_ROAD_RULES_BATCH_QUERY:
+        {
+            const BrnGameState::GameStateModuleIO::RoadRulesBatchQueryAction* lpRoadRulesBatchQuery =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::RoadRulesBatchQueryAction*>(lpAction);
+            CGS_ASSERT(lpRoadRulesBatchQuery, "lpRoadRulesBatchQuery");
+            CGS_ASSERT(lpRoadRulesBatchQuery->miNumRoads <= BrnGameState::KI_MAX_CHALLENGES,
+                       "lpRoadRulesBatchQuery->miNumRoads <= BrnGameState::KI_MAX_CHALLENGES");
+
+            // The console record is a frame local whose unwritten slots (roads past the count)
+            // carry stack residue; zero here.
+            BrnGui::GuiEventRoadRuleBatchDataResponse lEvent;
+            memset(&lEvent, 0, sizeof(lEvent));
+            lEvent.miRoadCount = lpRoadRulesBatchQuery->miNumRoads;
+            for (s32 liRoad = 0; liRoad < lEvent.miRoadCount; ++liRoad)
+            {
+                lEvent.maRoadIds[liRoad]                   = lpRoadRulesBatchQuery->maRoadIds[liRoad];
+                lEvent.mabPlayerBeatenOfflineTime[liRoad]  = lpRoadRulesBatchQuery->mabPlayerBeatenParTime[liRoad];
+                lEvent.mabPlayerBeatenOfflineCrash[liRoad] = lpRoadRulesBatchQuery->mabPlayerBeatenParCrash[liRoad];
+                lEvent.mabPlayerBeatenOnlineTime[liRoad]   = lpRoadRulesBatchQuery->mabPlayerBestOnlineTime[liRoad];
+                lEvent.mabPlayerBeatenOnlineCrash[liRoad]  = lpRoadRulesBatchQuery->mabPlayerBestOnlineCrash[liRoad];
+            }
+            PushGuiEvent(lEvent, lpGuiInput);
+            RoadRuleGuiWitness(liActionType, lEvent.GetEventType());
+            return true;
+        }
+
+        // 277 -> GuiEventRoadRuleBegin (335): only the rule's score type crosses (`lwz 8`).
+        case BrnGameState::GameStateModuleIO::E_ACTION_ROAD_RULES_START_RULE:
+        {
+            const BrnGameState::GameStateModuleIO::RoadRulesStartRuleAction* lpStartRule =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::RoadRulesStartRuleAction*>(lpAction);
+            BrnGui::GuiEventRoadRuleBegin lEvent;
+            lEvent.meRuleType = lpStartRule->meScoreType;
+            PushGuiEvent(lEvent, lpGuiInput);
+            RoadRuleGuiWitness(liActionType, lEvent.GetEventType(), lEvent.meRuleType);
+            return true;
+        }
+
+        // 278 -> GuiEventRoadRuleEnd (336): road id, rule type, score, valid-attempt byte.
+        case BrnGameState::GameStateModuleIO::E_ACTION_ROAD_RULES_END_RULE:
+        {
+            const BrnGameState::GameStateModuleIO::RoadRulesEndRuleAction* lpEndRule =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::RoadRulesEndRuleAction*>(lpAction);
+            BrnGui::GuiEventRoadRuleEnd lEvent;
+            lEvent.mRoadId        = lpEndRule->mRoadId;
+            lEvent.meRuleType     = lpEndRule->meScoreType;
+            lEvent.mfScore        = lpEndRule->mfScore;
+            lEvent.mbScoreAttempt = lpEndRule->mbValidAttempt;
+            PushGuiEvent(lEvent, lpGuiInput);
+            RoadRuleGuiWitness(liActionType, lEvent.GetEventType(), lEvent.meRuleType,
+                               lEvent.mfScore, lEvent.mbScoreAttempt);
+            return true;
+        }
+
+        // 280 -> GuiEventRoadRuleUpdateTargetScores (339): the leader / best pair per score type,
+        // rebuilt from the action's friend and user records (GuiEventRoadRuleUpdateTargetScores::
+        // Construct).
+        case BrnGameState::GameStateModuleIO::E_ACTION_ROAD_RULES_UPDATE_TARGET_ROAD_SCORE:
+        {
+            const BrnGameState::GameStateModuleIO::RoadRulesUpdateTargetScoreAction* lpRRAction =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::RoadRulesUpdateTargetScoreAction*>(lpAction);
+            CGS_ASSERT(lpRRAction, "lpRRAction");
+
+            BrnGui::GuiEventRoadRuleUpdateTargetScores lEvent;
+            // [FLAG PC init] the console record is a frame local and a name slot Construct does
+            // not reach (no friend score of that type) carries stack residue; zero here.
+            std::memset(lEvent.maFriendLeader, 0, sizeof(lEvent.maFriendLeader));
+            lEvent.Construct(lpRRAction);
+            PushGuiEvent(lEvent, lpGuiInput);
+            RoadRuleGuiWitness(liActionType, lEvent.GetEventType());
+            return true;
+        }
+
+        // 281 -> GuiEventRoadRuleNewHighScore (342): a field-for-field copy.
+        case BrnGameState::GameStateModuleIO::E_ACTION_ROAD_RULES_NEW_HIGH_SCORE:
+        {
+            const BrnGameState::GameStateModuleIO::RoadRulesNewHighScoreAction* lpRoadRulesHighScoreAction =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::RoadRulesNewHighScoreAction*>(lpAction);
+            CGS_ASSERT(lpRoadRulesHighScoreAction, "lpRoadRulesHighScoreAction");
+
+            BrnGui::GuiEventRoadRuleNewHighScore lEvent;
+            lEvent.mPlayerName                = lpRoadRulesHighScoreAction->mPlayerName;
+            lEvent.mRoadId                    = lpRoadRulesHighScoreAction->mRoadId;
+            lEvent.mbIsLocalPlayer            = lpRoadRulesHighScoreAction->mbIsLocalPlayer;
+            lEvent.meScoreType                = lpRoadRulesHighScoreAction->meScoreType;
+            lEvent.miNumScoresLost            = lpRoadRulesHighScoreAction->miNumScoresLost;
+            lEvent.miNumRoadsNowRuled         = lpRoadRulesHighScoreAction->miNumRoadsNowRuled;
+            lEvent.mbIsWholeRoadOwned         = lpRoadRulesHighScoreAction->mbIsWholeRoadOwned;
+            lEvent.mbWasRulePlayersBefore     = lpRoadRulesHighScoreAction->mbWasRulePlayersBefore;
+            lEvent.mbMultipleScores           = lpRoadRulesHighScoreAction->mbMultipleScores;
+            lEvent.mbOnlineLossButOfflineWin  = lpRoadRulesHighScoreAction->mbOnlineLossButOfflineWin;
+            PushGuiEvent(lEvent, lpGuiInput);
+            RoadRuleGuiWitness(liActionType, lEvent.GetEventType());
+            return true;
+        }
+
+        // 282 -> GuiEventRoadRuleChangeMode (343): the new active rule.
+        case BrnGameState::GameStateModuleIO::E_ACTION_ROAD_RULES_ACTIVE_RULE_CHANGE:
+        {
+            const BrnGameState::GameStateModuleIO::RoadRulesActiveRuleChangeAction* lpRuleChange =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::RoadRulesActiveRuleChangeAction*>(lpAction);
+            BrnGui::GuiEventRoadRuleChangeMode lEvent;
+            lEvent.meScoreType = lpRuleChange->meActiveRoadRule;
+            PushGuiEvent(lEvent, lpGuiInput);
+            RoadRuleGuiWitness(liActionType, lEvent.GetEventType(), lEvent.meScoreType);
+            return true;
+        }
+
+        // 284 -> GuiEventRoadRuleTickerScoreResponse (345): the ticker's per-road score line.
+        case BrnGameState::GameStateModuleIO::E_ACTION_ROAD_RULES_ROAD_SCORE:
+        {
+            const BrnGameState::GameStateModuleIO::RoadRulesRoadScoreAction* lpScoreAction =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::RoadRulesRoadScoreAction*>(lpAction);
+            CGS_ASSERT(lpScoreAction, "lpScoreAction");
+
+            BrnGui::GuiEventRoadRuleTickerScoreResponse lEvent;
+            memset(&lEvent, 0, sizeof(lEvent));
+            lEvent.mPlayerName.Construct(lpScoreAction->mPlayerName.GetPlayerName());
+            lEvent.mRoadID                 = lpScoreAction->mRoadID;
+            lEvent.mRoadChallengeIndex     = lpScoreAction->mChallengeIndex;
+            lEvent.meActiveRoadRule        = lpScoreAction->meActiveRoadRule;
+            lEvent.miOfflineScore          = lpScoreAction->miOfflineScore;
+            lEvent.miOnlineScore           = lpScoreAction->miOnlineScore;
+            lEvent.mbAIRulesRoadOffline    = lpScoreAction->mbAIRulesRoadOffline;
+            lEvent.mbAIRulesRoadOnline     = lpScoreAction->mbAIRulesRoadOnline;
+            lEvent.mbLocalPlayerRulesRoad  = lpScoreAction->mbLocalPlayerRulesRoad;
+            PushGuiEvent(lEvent, lpGuiInput);
+            RoadRuleGuiWitness(liActionType, lEvent.GetEventType());
+            return true;
+        }
+
+        // 285 -> GuiEventRoadRuleNewRulers (346): the record is cleared, then the action's
+        // changed-roads mask is OR'd in (a zero `std`, then `ld` / `or` / `std`).
+        case BrnGameState::GameStateModuleIO::E_ACTION_ROAD_RULES_NEW_RULERS:
+        {
+            const BrnGameState::GameStateModuleIO::RoadRulesNewRulersAction* lpNewRulersAction =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::RoadRulesNewRulersAction*>(lpAction);
+            CGS_ASSERT(lpNewRulersAction, "lpNewRulersAction");
+
+            BrnGui::GuiEventRoadRuleNewRulers lEvent;
+            lEvent.mRoadRulesChangedBitArray.UnSetAll();
+            lEvent.mRoadRulesChangedBitArray.ORArrays(&lEvent.mRoadRulesChangedBitArray,
+                                                      &lpNewRulersAction->mRoadRulesChangedBitArray);
+            PushGuiEvent(lEvent, lpGuiInput);
+            RoadRuleGuiWitness(liActionType, lEvent.GetEventType());
+            return true;
+        }
+
+        // 286 -> GuiEventSetRoadRuleScoreMode (330): the online byte becomes the panel mode.
+        case BrnGameState::GameStateModuleIO::E_ACTION_ROAD_RULES_MODE_SWITCH:
+        {
+            const BrnGameState::GameStateModuleIO::RoadRulesModeSwitchAction* lpRoadRuleModeSwitchAction =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::RoadRulesModeSwitchAction*>(lpAction);
+            CGS_ASSERT(lpRoadRuleModeSwitchAction, "lpRoadRuleModeSwitchAction");
+
+            BrnGui::GuiEventSetRoadRuleScoreMode lEvent;
+            lEvent.meNewRoadRuleScoreMode = lpRoadRuleModeSwitchAction->mbIsOnline
+                                                ? BrnGui::GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE
+                                                : BrnGui::GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_OFFLINE;
+            PushGuiEvent(lEvent, lpGuiInput);
+            RoadRuleGuiWitness(liActionType, lEvent.GetEventType());
             return true;
         }
 

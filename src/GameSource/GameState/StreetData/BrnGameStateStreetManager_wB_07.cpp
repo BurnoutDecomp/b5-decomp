@@ -10,20 +10,6 @@
 // (GetStreetData() == mpStreetData.operator->, the maNetworkChallengeData row
 // stride, the save-game challenge-slot scan, the +0x1CC5 mbFirstDownload store)
 // is mapped to its committed named member -- no raw `*(p+off)` casts.
-//
-// The other two group-7 ledger methods are BLOCKED on missing public accessors
-// (see funcs_blocked in the structured result):
-//   * FillInRoadRulesQuery @ 0x823365A8 -- its final store reads
-//     BrnProgression::ProgressionManager::miNumberOfNumberOfCompleteRoadRulesRuledByPlayer
-//     (the `*(pm + 133464) >= 64` owns-all-roads flag). That member is PRIVATE in
-//     BrnProgressionManager.h with no public getter, and StreetManager is not a
-//     friend of ProgressionManager -- unreachable without editing the frozen header.
-//   * UpdateUserScoresFromServerRecords @ 0x82348FC0 -- assembles the profile's
-//     road-rules id from BrnProgression::Profile::muRoadRulesIDHighBits /
-//     muRoadRulesIDLowBits (both the per-record `mu64RoadRulesID` filter and the
-//     type-232 score-summary payload). Both members are PRIVATE in BrnProfile.h
-//     with no public getter, and StreetManager is not a friend of Profile
-//     (identical to the ProcessConnectedOnlineEvent blocker reported in wB_05).
 // ===========================================================================
 
 #include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"
@@ -48,20 +34,6 @@
 
 namespace BrnGameState
 {
-    namespace
-    {
-        // The road-score record game action (type 280, 104 bytes): the X360 posts
-        // three contiguous stack locals -- the friend high-score entry, the local
-        // player's score entry, and the road id -- as one 104-byte payload. Modelled
-        // as the struct that layout represents (56 + 40 + 8 == 104).
-        struct RoadRulesScoreRecordAction
-        {
-            BrnStreetData::ChallengeHighScoreEntry   mFriendHighScore;   // +0  (56B)
-            BrnStreetData::ChallengePlayerScoreEntry mUserScore;         // +56 (40B)
-            ::CgsID                                  mRoadID;            // +96 (8B)
-        };
-    }
-
     // -----------------------------------------------------------------------
     // @ 0x82348C80. Apply a batch of downloaded friend high-score records to the
     // network challenge table. For every record in the downloaded-events queue:
@@ -155,16 +127,17 @@ namespace BrnGameState
 
                     if ( mpRoadRulesManager->GetCurrentRoadID() == KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liRoadIndex] )
                     {
-                        RoadRulesScoreRecordAction lAction;
-                        GetChallengeUserScore( liRoadIndex, &lAction.mUserScore, false );
-                        GetChallengeFriendHighScore( liRoadIndex, &lAction.mFriendHighScore, false );
-                        lAction.mRoadID = KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liRoadIndex];
+                        GameStateModuleIO::RoadRulesUpdateTargetScoreAction lAction;
+                        GetChallengeUserScore( liRoadIndex, &lAction.mUserScores, false );
+                        GetChallengeFriendHighScore( liRoadIndex, &lAction.mFriendScores, false );
+                        lAction.mRoadId = KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liRoadIndex];
 
                         CGS_ASSERT( lpOutput, "lpOutput" );
                         CGS_ASSERT( lpOutput->GetGameActionQueue() != NULL, "lpOutput->GetGameActionQueue()" );
 
                         lpOutput->GetGuiOutputQueue()->AddEvent(
-                            reinterpret_cast<const CgsModule::Event*>( &lAction ), 280, 104 );
+                            reinterpret_cast<const CgsModule::Event*>( &lAction ),
+                            GameStateModuleIO::E_ACTION_ROAD_RULES_UPDATE_TARGET_ROAD_SCORE, sizeof( lAction ) );
                     }
                 }
             }

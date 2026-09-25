@@ -404,6 +404,10 @@ public:
     s32  GetNumberOfCarsInFlyby();                                 // DWARF :444 / X360 0x82311E38
     bool HasPlayerFinished() const;                                // DWARF :847
     bool IsWaitingForModeDataToLoad() const;                       // DWARF :429 -- returns mbModeDataIsLoading
+    BrnResource::ChallengeListEntry::EFreeburnChallengeStyle GetChallengeStyle() const
+    {
+        return mChallengeManager.GetChallengeStyle();
+    }
     bool IsOnlineGameMode() const;                                 // DWARF :432 / X360 0x82311410  (BODIED)
     f32  GetCountdownTimeForMode() const;                          // DWARF :448 / X360 0x82327D10
     bool IsOnlineModeWithInstantIntro() const;                     // (mode == 15 || 16) && mbInstantIntroSplash

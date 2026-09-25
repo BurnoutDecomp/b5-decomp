@@ -1972,6 +1972,21 @@ namespace BrnGui
                 mbAreRoadRulesAvailable = lpProfileEvent->mbRoadRulesAvailable;
             }
             break;
+        // The road-rule state the HUD, the ticker and the road panels read back. All four
+        // records are flat; 336 reads its rule type at +0x08.
+        case 330:   // GuiEventSetRoadRuleScoreMode -> the panel scoring mode (+44096)
+            meRoadRuleScoreMode =
+                reinterpret_cast<const GuiEventSetRoadRuleScoreMode*>(lpEvent)->meNewRoadRuleScoreMode;
+            break;
+        case 335:   // GuiEventRoadRuleBegin -> that score type's rule is running (+44100)
+            maRoadRuleActiveByType[reinterpret_cast<const GuiEventRoadRuleBegin*>(lpEvent)->meRuleType] = true;
+            break;
+        case 336:   // GuiEventRoadRuleEnd -> that score type's rule is over
+            maRoadRuleActiveByType[reinterpret_cast<const GuiEventRoadRuleEnd*>(lpEvent)->meRuleType] = false;
+            break;
+        case 343:   // GuiEventRoadRuleChangeMode -> the active road rule (+44092, GetActiveRoadRule)
+            meActiveRoadRule = reinterpret_cast<const GuiEventRoadRuleChangeMode*>(lpEvent)->meScoreType;
+            break;
         case 169:
             // ADDITIVE (HUD H1 wave, 2026-08-25). X360 case 169 @0x8250DDF0 (h1_dump.txt):
             // three word copies of the GuiEventChangeDistrict record into the marker source

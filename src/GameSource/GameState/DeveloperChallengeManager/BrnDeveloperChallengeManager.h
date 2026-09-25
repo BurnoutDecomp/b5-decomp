@@ -47,12 +47,10 @@
 // includes THIS header instead (mirroring the StuntModeScoringOnline promotion precedent in
 // BrnGameStateLeafContainers.h). The 16-byte X360 stride is preserved.
 //
-// FLAG: the developer-challenge THRESHOLD constants (min flat-spin angle, min takedown-chain count,
-// road-rule score gates, billboard/road-rage time windows, etc.) are loaded from rodata (the X360
-// `dword_82CDB99x` / `flt_82CDB98x` config words at 0x82CDB97C..0x82CDB9A8); their literal VALUES
-// are NOT present as immediates in the asm and are NOT recoverable from this view. They are modelled
-// as flagged placeholder externs (see the KF_/KI_ constants below) -- NEVER fabricated. Ground them
-// from the rodata table when it is recovered; do NOT trust the placeholder values for behaviour.
+// The developer-challenge THRESHOLD constants (min flat-spin angle, min takedown-chain count,
+// road-rule score gates, billboard/road-rage time windows, etc.) are twelve initialised data words
+// the handlers load by address; nothing in the image stores to them. Their values are read out of
+// the image data and defined in the .cpp (see the KF_/KI_ constants below).
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                          // CgsID (== u64)
@@ -60,6 +58,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"              // Array<T,N>
 #include "GameShared/GameClasses/Containers/CgsFifoQueue.h"          // FifoQueue<T,N>
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"       // CgsContainers::FastBitArray<N>
+#include "SharedClasses/StreetData/BrnChallengeData.h"               // BrnStreetData::ScoreType (OnSetRoadRule)
 
 // Pointer-only members + by-pointer params -> forward declarations (real homes #included by the .cpp).
 namespace BrnProgression { class ProgressionManager; }
@@ -98,9 +97,8 @@ enum EDeveloperChallenge : s32
 };
 
 // ----------------------------------------------------------------------------
-// FLAG: PLACEHOLDER threshold config constants (rodata @ 0x82CDB97C..0x82CDB9A8).
-// The literal values are NOT in the asm (loaded from .data). Declared extern here; defined as
-// flagged placeholders in the .cpp. Ground from rodata when recovered. NEVER trust these values.
+// Threshold config constants: initialised data words, only ever read. Declared extern here;
+// defined with their image values in the .cpp.
 // ----------------------------------------------------------------------------
 extern const f32 KF_DEV_CHALLENGE_FLAT_SPIN_MIN_ANGLE;        // flt_82CDB97C (OnFlatSpin gate)
 extern const f32 KF_DEV_CHALLENGE_ROAD_RAGE_WINDOW;           // flt_82CDB980 (UpdateBufferedRoadRageTakedowns window)
@@ -160,9 +158,11 @@ public:
     // header pulls no GameStateModuleIO dependency; the caller passes the enum's value.)
     void OnTakedown(s32 liGameModeType, u32 luVictimActiveRaceCarIndex);
 
-    // X360 0x8238D860. A road-rule score event. liRoadRuleType: 0 == time-based (car-specific
-    // "PUSMC01" challenge when fast enough), 1 == score-based (E_DEV_CHALLENGE_ROAD_RULE_SET).
-    void OnSetRoadRule(s32 liRoadRuleType, s32 liScore, s32 liCarId);
+    // A new road-rule score was set on road lRoadId. TIME: a fast enough time on one particular road
+    // in a car descended from "PUSMC01" trips E_DEV_CHALLENGE_ROAD_RULE_TIME_CAR. CRASH: a showtime
+    // score above the gate trips E_DEV_CHALLENGE_ROAD_RULE_SET. lRoadId is the full 64-bit road id
+    // (the console compares all 64 bits, `cmpld`).
+    void OnSetRoadRule(BrnStreetData::ScoreType leScoreType, s32 liScore, CgsID lRoadId);
 
     // X360 0x82373338. A stunt offence (e.g. a near-miss / boost chain) completed. Trips
     // E_DEV_CHALLENGE_STUNT_OFFENCE when its score clears the min threshold.

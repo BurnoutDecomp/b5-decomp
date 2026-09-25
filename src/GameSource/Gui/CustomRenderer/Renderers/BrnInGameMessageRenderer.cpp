@@ -42,6 +42,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // CgsDev::Log (the console's own gxMessageFilterFlags prints)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"               // GuiAudioTriggerEvent (the CodeTicker audio pings)
+#include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h" // KI_MAX_CHALLENGES (RequestNewRoadRulesScore)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"       // CgsCore::SPrintf (the road-rule ticker line)
+#include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (the streamed rule-type assert)
 
 #include <cstring>   // strncmp/_strnicmp/strlen
 
@@ -911,23 +914,59 @@ void InGameMessageRenderer::BufferMessagesForGameMode()
 }
 
 // ---------------------------------------------------------------------------
-// RequestNewRoadRulesScore @0x82468E20 -- [FLAG PARKED, named]: the road-rules
-// score-request pump (posts the next queued road-rule query through the output
-// event queue). Its whole surface -- the 64-bit pending mask walk + the score
-// request event layout -- belongs to the road-rules feed, which is unreachable
-// on this build (no active road rule). Returns "nothing outstanding".
+// RequestNewRoadRulesScore -- the road-rules feed's score-request pump.
+// Returns false (nothing requested) when the message list is full, or when there is
+// no next road: in breaking-news mode the lowest road still set in mRoadRulesToShow,
+// otherwise the road after the last score received (the last road is 63). Else it
+// posts GuiEventRoadRuleTickerScoreRequest (329, 4 bytes: the road's challenge index)
+// on the output queue and returns true. Neither path consumes the index here (no
+// store to the mask or to miLastRoadRuleScoreReceived). The bit-array walk's own
+// "bit off the end" assert is the inlined BitArray accessor's, unreachable for 64 bits.
 // ---------------------------------------------------------------------------
 bool InGameMessageRenderer::RequestNewRoadRulesScore()
 {
-    return false;
+    s32 liNumMessages = 0;
+    for (const InGameMessage* lpMessage = mpCurrentMessage; lpMessage != 0;
+         lpMessage = lpMessage->mpNextMessage)
+    {
+        ++liNumMessages;
+    }
+    if (liNumMessages == K_MAX_INGAME_MESSAGES)
+    {
+        return false;
+    }
+
+    s32 liRoadIndex;
+    if (mbShowingBreakingNews)
+    {
+        if (mRoadRulesToShow.IsZero())
+        {
+            return false;
+        }
+        liRoadIndex = mRoadRulesToShow.GetFirstNonZeroBit();
+    }
+    else
+    {
+        if (miLastRoadRuleScoreReceived == BrnGameState::KI_MAX_CHALLENGES - 1)
+        {
+            return false;
+        }
+        liRoadIndex = miLastRoadRuleScoreReceived + 1;
+    }
+
+    CGS_ASSERT(liRoadIndex >= 0, "liRoadIndex >= 0");
+    CGS_ASSERT(liRoadIndex < BrnGameState::KI_MAX_CHALLENGES,
+               "liRoadIndex < BrnGameState::KI_MAX_CHALLENGES");
+
+    // GuiEventRoadRuleTickerScoreRequest: one Road::ChallengeIndex word.
+    mpOutputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liRoadIndex), 329, 4);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
-// RecvEvent @0x82468170 -- the event dispatch. WHOLE for the ticker family
-// (14 font adopt / 64 cache / 145 enable / 505 pause / 534-537-539), PARKED (named)
-// for the road-rules income arms (0..3 score responses, 345 new-score, 346
-// breaking-news mask) -- each needs the road-rules event payload homes and is
-// unreachable offline.
+// RecvEvent -- the event dispatch: the ticker family (14 font adopt /
+// 64 cache / 145 enable / 505 pause / 534-537-539) and the road-rules feed (345 one
+// road's score line, 346 the breaking-news mask of roads with a new ruler).
 // ---------------------------------------------------------------------------
 void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType)
 {
@@ -1183,14 +1222,164 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
             break;
         }
 
-        // [FLAG PARKED, named -- the road-rules income arms. Console: 0..3 = the four
-        // road-rule score RESPONSE flavours (name lookup + time/currency format +
-        // AddNewMessage + the 64-bit shown-mask update), 345 = a new road-rule score
-        // arriving (mode-4 refresh), 346 = the breaking-news mask (mbShowingBreakingNews
-        // latch + fadeout kick). All unreachable offline (no active road rule feeds
-        // them); their payload layouts land with the road-rules feed.]
-        case 0: case 1: case 2: case 3:
-        case 345: case 346:
+        case 345:   // GuiEventRoadRuleTickerScoreResponse -- one road's ticker line
+        {
+            CGS_ASSERT(mpLanguageManager != 0, "mpLanguageManager");
+            if (meTickerMode != E_TICKERMODE_ROADRULES)
+            {
+                break;
+            }
+
+            const GuiEventRoadRuleTickerScoreResponse* lpResponse =
+                reinterpret_cast<const GuiEventRoadRuleTickerScoreResponse*>(lpEvent);
+            const u32 luRoadIndex = static_cast<u32>(lpResponse->mRoadChallengeIndex);
+
+            // Breaking news shows only the roads still in the mask; otherwise the feed walks
+            // the roads in order. (The mask read's index assert is the BitArray accessor's.)
+            const bool lbShowRoad = mbShowingBreakingNews
+                ? mRoadRulesToShow.IsBitSet(luRoadIndex)
+                : (static_cast<s32>(luRoadIndex) > miLastRoadRuleScoreReceived);
+            if (!lbShowRoad)
+            {
+                break;
+            }
+
+            const CgsUnicode::CgsUtf8* lpcFormatString = mpLanguageManager->FindString("RRULES_TKR_123");
+            CGS_ASSERT(lpcFormatString != 0, "lpFormatString");
+
+            // The road's name: its id is the string key; the bare id when there is none.
+            char lacRoadId[16];
+            CgsCore::SPrintf(lacRoadId, 15, "%llu", lpResponse->mRoadID);
+            lacRoadId[15] = 0;
+            const CgsUnicode::CgsUtf8* lpcRoadName = mpLanguageManager->FindString(lacRoadId);
+            if (lpcRoadName == 0)
+            {
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint << "Failed to find road name for Id " << lacRoadId << "\n";
+                }
+                lpcRoadName = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacRoadId);
+            }
+
+            // The ruler: the local player, the par rival (online best is par) or the named holder.
+            char lacRulerName[32];
+            const CgsUnicode::CgsUtf8* lpcRulerName;
+            if (lpResponse->mbLocalPlayerRulesRoad)
+            {
+                lpcRulerName = mpLanguageManager->FindString(mpGuiCache->GetPlayerNameInQuotes());
+                if (lpcRulerName == 0)
+                {
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint << "Failed to find player name with string ID "
+                                                   << mpGuiCache->GetPlayerNameInQuotes() << "\n";
+                    }
+                    lpcRulerName = reinterpret_cast<const CgsUnicode::CgsUtf8*>(mpGuiCache->GetPlayerNameInQuotes());
+                    CGS_ASSERT(lpcRulerName != 0, "lpRulerName");
+                }
+            }
+            else if (lpResponse->mbAIRulesRoadOnline)
+            {
+                CgsCore::SPrintf(lacRulerName, 31, "RULERQ_%llu", lpResponse->mRoadID);
+                lacRulerName[31] = 0;
+                lpcRulerName = mpLanguageManager->FindString(lacRulerName);
+                if (lpcRulerName == 0)
+                {
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint << "Failed to find a rival name for " << lacRulerName << "\n";
+                    }
+                    lpcRulerName = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacRulerName);
+                }
+            }
+            else
+            {
+                CgsCore::SPrintf(lacRulerName, 31, "''%s''", lpResponse->mPlayerName.macName);
+                lacRulerName[31] = 0;
+                lpcRulerName = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacRulerName);
+            }
+
+            // The road's best, as a time (milliseconds) or a crash total.
+            // [FLAG PC init] the console leaves the buffer as stack residue when the rule type
+            // is unhandled (the assert path); empty here.
+            char lacScore[16];
+            lacScore[0] = 0;
+            const f32 lfScore = static_cast<f32>(lpResponse->miOnlineScore);
+            switch (lpResponse->meActiveRoadRule)
+            {
+                case BrnGameState::E_ACTIVE_ROAD_RULE_OFFLINE_TIME:
+                case BrnGameState::E_ACTIVE_ROAD_RULE_ONLINE_TIME:
+                    mpLanguageManager->FormatMinutesAndSecondsAndHundredsString(lacScore, lfScore * 0.001f, 16);
+                    lacScore[15] = 0;
+                    break;
+                case BrnGameState::E_ACTIVE_ROAD_RULE_OFFLINE_CRASH:
+                case BrnGameState::E_ACTIVE_ROAD_RULE_ONLINE_CRASH:
+                    mpLanguageManager->FormatCurrencyString(lacScore, static_cast<s32>(lfScore), 16);
+                    lacScore[15] = 0;
+                    break;
+                default:
+                {
+                    char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                    lStrStream << "Unhandled road rule type " << static_cast<s32>(lpResponse->meActiveRoadRule)
+                               << " in InGameMessageRenderer::RecvEvent\n";
+                    CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
+                    CgsDev::Assert::EndAssert();
+                    break;
+                }
+            }
+
+            if (AddNewMessage(false, /*road rule*/ true, false, false, false, false, false,
+                              lpcFormatString, 3, lpcRoadName, lpcRulerName,
+                              reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacScore)))
+            {
+                mRoadRulesToShow.UnSetBit(luRoadIndex);
+                miLastRoadRuleScoreReceived = static_cast<s32>(luRoadIndex);
+                ++mu8NumRoadRuleScoresShown;
+            }
+            break;
+        }
+
+        case 346:   // GuiEventRoadRuleNewRulers -- the breaking-news mask
+        {
+            const GuiEventRoadRuleNewRulers* lpNewRulers =
+                reinterpret_cast<const GuiEventRoadRuleNewRulers*>(lpEvent);
+            if (mbShowingBreakingNews)
+            {
+                mRoadRulesToShow.ORArrays(&mRoadRulesToShow, &lpNewRulers->mRoadRulesChangedBitArray);
+            }
+            else
+            {
+                mRoadRulesToShow       = lpNewRulers->mRoadRulesChangedBitArray;
+                mbShowingBreakingNews  = true;
+            }
+
+            // Unless a training line is queued, fade the ticker out and drop what it holds so
+            // the news runs next.
+            bool lbTrainingQueued = false;
+            for (InGameMessage* lp = mpCurrentMessage; lp != 0; lp = lp->mpNextMessage)
+            {
+                if (lp->mbIsTrainingMessage)
+                {
+                    lbTrainingQueued = true;
+                    break;
+                }
+            }
+            if (!lbTrainingQueued)
+            {
+                if (meUpdateStage == E_UPDATESTAGE_FADINGIN ||
+                    meUpdateStage == E_UPDATESTAGE_DISPLAYING_MESSAGES ||
+                    meUpdateStage == E_UPDATESTAGE_DISPLAYING_ROADRULES)
+                {
+                    mfTimeRemainingInState = KF_MESSAGE_FADE_TIME;
+                    meUpdateStage          = E_UPDATESTAGE_FADINGOUT;
+                }
+                ClearAllMessages(false, false);
+            }
+            break;
+        }
+
         default:
             break;
     }

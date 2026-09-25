@@ -7,12 +7,9 @@
 // from the asm at 0x82372E90 (Construct) and the per-event handlers). There is NO DWARF entry for
 // this class; the member layout is recovered from Construct + the handlers (see the header).
 //
-// FLAG (read me): several event handlers gate on developer-challenge THRESHOLD constants that the
-// X360 loads from rodata (dword_82CDB99x / flt_82CDB98x @ 0x82CDB97C..0x82CDB9A8). Those literal
-// VALUES are NOT present in the asm and are NOT recovered in this view; they are referenced here via
-// the flagged KF_/KI_ placeholder externs declared in the header and DEFINED (as flagged
-// placeholders) at the bottom of this file. NEVER trust the placeholder values for behaviour --
-// ground them from the rodata table when it is recovered.
+// Several event handlers gate on developer-challenge THRESHOLD constants the console loads from
+// twelve initialised data words (no immediates in the code). They are the KF_/KI_ externs declared
+// in the header and defined with their image values at the bottom of this file.
 //
 // FLAG: a handful of cross-object reads (the stunt scorer's running score, the per-car finish score,
 // the TimerStatus sim time, the stunt-offence score/flag word, the buffered-billboard record fields)
@@ -43,6 +40,15 @@
 
 namespace BrnGameState
 {
+
+namespace
+{
+    // OnSetRoadRule's TIME arm: the one road the car-specific challenge is set on (`lis 6 ; ori
+    // 0x421`), and the single-precision millisecond-to-second scale it multiplies the time by (a
+    // read-only float literal, 0x3A83126F).
+    const CgsID KU_DEV_CHALLENGE_ROAD_RULE_TIME_ROAD_ID = 0x60421u;
+    const f32   KF_MILLISECONDS_TO_SECONDS              = 0.001f;
+}
 
 // ----------------------------------------------------------------------------
 // Construct  (X360 0x82372E90)  [EXECUTED in goal trace]
@@ -152,7 +158,8 @@ void DeveloperChallengeManager::OnFlatSpin(f32 lfFlatSpinAngle)
 // ----------------------------------------------------------------------------
 void DeveloperChallengeManager::OnStuntRunComboPerformed(const f32* lpComboScore)
 {
-    if (*lpComboScore >= KF_DEV_CHALLENGE_STUNT_COMBO_MIN)
+    // `fcmpu ; blt` skips only on an ordered less-than: an unordered score still runs the arm.
+    if (!(*lpComboScore < KF_DEV_CHALLENGE_STUNT_COMBO_MIN))
     {
         CGS_ASSERT(mpProgressionManager != nullptr,               "mpProgressionManager");
         CGS_ASSERT(mpProgressionManager->GetProfile() != nullptr, "mpProgressionManager->GetProfile()");
@@ -181,7 +188,7 @@ void DeveloperChallengeManager::OnStuntOffenceComplete(const u8* lpStuntOffence)
 
         const f32 lfScore = *reinterpret_cast<const f32*>(lpStuntOffence + 104); // FLAG: StuntOffence score @+104
         if (!mpProgressionManager->GetProfile()->IsDeveloperChallengeComplete(E_DEV_CHALLENGE_STUNT_OFFENCE)
-            && lfScore >= KF_DEV_CHALLENGE_STUNT_OFFENCE_MIN_SCORE)
+            && !(lfScore < KF_DEV_CHALLENGE_STUNT_OFFENCE_MIN_SCORE))   // `fcmpu ; blt` skips
         {
             SetChallengeCompleted(E_DEV_CHALLENGE_STUNT_OFFENCE);
         }
@@ -221,52 +228,53 @@ void DeveloperChallengeManager::OnTakedownChain(s32 liChainLength)
 }
 
 // ----------------------------------------------------------------------------
-// OnSetRoadRule  (X360 0x8238D860)
-// liRoadRuleType: 0 == time-based (car-specific), 1 == score-based.
+// OnSetRoadRule
+// A new road-rule score was set on road lRoadId (StreetManager::ProcessNewRoadScore).
+//   TIME  : the score is a time in milliseconds; scaled to seconds (single-precision multiply by
+//           0.001f) it must be strictly below the road-rule gate (`fcmpu ; bge` skips, so the arm
+//           runs only on an ordered less-than), the road must be the one road id 0x60421 (full
+//           64-bit `cmpld`), and the current car must descend from "PUSMC01". No assert guards the
+//           current-car read on this path.
+//   CRASH : a showtime score strictly above the same gate word (`cmpw ; ble` skips, signed).
+//   Any other type streams "dodgy road rule type " << type into the assert buffer; lowered to the
+//   static text per the standing rule for streamed asserts.
+// Each arm opens with the inlined not-yet-complete test on the profile's challenge bits.
 // ----------------------------------------------------------------------------
-void DeveloperChallengeManager::OnSetRoadRule(s32 liRoadRuleType, s32 liScore, s32 liCarId)
+void DeveloperChallengeManager::OnSetRoadRule(BrnStreetData::ScoreType leScoreType, s32 liScore, CgsID lRoadId)
 {
-    if (liRoadRuleType == 1)
+    if (leScoreType == BrnStreetData::E_SCORE_TYPE_TIME)
     {
-        // Score-based road rule -> E_DEV_CHALLENGE_ROAD_RULE_SET when the score clears the gate.
-        CGS_ASSERT(mpProgressionManager != nullptr,               "mpProgressionManager");
-        CGS_ASSERT(mpProgressionManager->GetProfile() != nullptr, "mpProgressionManager->GetProfile()");
-        if (!mpProgressionManager->GetProfile()->IsDeveloperChallengeComplete(E_DEV_CHALLENGE_ROAD_RULE_SET)
-            && liScore > KI_DEV_CHALLENGE_ROAD_RULE_SCORE_MIN)
-        {
-            SetChallengeCompleted(E_DEV_CHALLENGE_ROAD_RULE_SET);
-        }
-    }
-    else if (liRoadRuleType == 0)
-    {
-        // Time-based road rule -> car-specific "PUSMC01" challenge when fast enough.
         CGS_ASSERT(mpProgressionManager != nullptr,               "mpProgressionManager");
         CGS_ASSERT(mpProgressionManager->GetProfile() != nullptr, "mpProgressionManager->GetProfile()");
 
         if (!mpProgressionManager->GetProfile()->IsDeveloperChallengeComplete(E_DEV_CHALLENGE_ROAD_RULE_TIME_CAR))
         {
-            // X360: (liScore * 0.001) < threshold && liCarId == 394273 (a specific road id), then
-            // test the current car against "PUSMC01".
-            // FLAG: the 394273 immediate is the X360 a4-compare literal (asm-grounded), and the
-            //       0.001 scale is flagged; the gate threshold is dword_82CDB998
-            //       (KI_..._SCORE_MIN), the SAME constant the type==1 score gate uses (asm 0x8238DA74).
-            const f32 lfTime = static_cast<f32>(liScore) * 0.001f;
-            if (lfTime < static_cast<f32>(KI_DEV_CHALLENGE_ROAD_RULE_SCORE_MIN) && liCarId == 394273)
+            const f32 lfTimeInSeconds = static_cast<f32>(liScore) * KF_MILLISECONDS_TO_SECONDS;
+            if (lfTimeInSeconds < static_cast<f32>(KI_DEV_CHALLENGE_ROAD_RULE_SCORE_MIN)
+                && lRoadId == KU_DEV_CHALLENGE_ROAD_RULE_TIME_ROAD_ID)
             {
-                CGS_ASSERT(mpProgressionManager->GetCurrentCarData() != nullptr,
-                           "mpProgressionManager->GetCurrentCarData()");
                 const CgsID lCurrentCarId = mpProgressionManager->GetCurrentCarData()->GetId();
-                const CgsID lTargetCarId  = CgsIDCompress("PUSMC01");
-                if (CheckCarID(lCurrentCarId, lTargetCarId))
+                if (CheckCarID(lCurrentCarId, CgsIDCompress("PUSMC01")))
                 {
                     SetChallengeCompleted(E_DEV_CHALLENGE_ROAD_RULE_TIME_CAR);
                 }
             }
         }
     }
+    else if (leScoreType == BrnStreetData::E_SCORE_TYPE_CRASH)
+    {
+        CGS_ASSERT(mpProgressionManager != nullptr,               "mpProgressionManager");
+        CGS_ASSERT(mpProgressionManager->GetProfile() != nullptr, "mpProgressionManager->GetProfile()");
+
+        if (!mpProgressionManager->GetProfile()->IsDeveloperChallengeComplete(E_DEV_CHALLENGE_ROAD_RULE_SET)
+            && liScore > KI_DEV_CHALLENGE_ROAD_RULE_SCORE_MIN)
+        {
+            SetChallengeCompleted(E_DEV_CHALLENGE_ROAD_RULE_SET);
+        }
+    }
     else
     {
-        CGS_ASSERT(false, "dodgy road rule type");
+        CGS_ASSERT(false, "dodgy road rule type ");
     }
 }
 
@@ -530,8 +538,6 @@ void DeveloperChallengeManager::OnEventWin(s32 liGameModeType)
         if (!lpProfile->IsDeveloperChallengeComplete(E_DEV_CHALLENGE_STUNT_SCORE_CAR)
             && liStuntScore >= KI_DEV_CHALLENGE_STUNT_SCORE_CAR_MIN)
         {
-            CGS_ASSERT(mpProgressionManager->GetCurrentCarData() != nullptr,
-                       "mpProgressionManager->GetCurrentCarData()");
             const CgsID lCurrentCarId = mpProgressionManager->GetCurrentCarData()->GetId();
             const CgsID lTargetCarId  = CgsIDCompress("PUSRI01");
             if (CheckCarID(lCurrentCarId, lTargetCarId))
@@ -630,7 +636,8 @@ void DeveloperChallengeManager::UpdateBufferedRoadRageTakedowns()
     f32 lfFront;
     while (maRoadRageTakedownTimes.Peek(&lfFront))
     {
-        if (lfFront >= lfCutoff)
+        // `fcmpu ; bgelr`: stop unless the front time is an ordered less-than the cutoff.
+        if (!(lfFront < lfCutoff))
         {
             break;
         }
@@ -665,22 +672,21 @@ void DeveloperChallengeManager::UpdateBufferedCollectedBillboards()
 }
 
 // ----------------------------------------------------------------------------
-// FLAGGED PLACEHOLDER threshold constants (rodata @ 0x82CDB97C..0x82CDB9A8).
-// The literal values are NOT recoverable from the asm view (loaded from .data, no immediates).
-// Defined here as flagged placeholders (0) so the TU compiles; NEVER trust these for behaviour.
-// Ground from the rodata table when recovered.
+// Threshold constants: twelve initialised data words, values read out of the image (big-endian;
+// the float words decoded as IEEE single). Nothing in the image stores to any of them, so the
+// initialised value is the value the console runs with.
 // ----------------------------------------------------------------------------
-const f32 KF_DEV_CHALLENGE_FLAT_SPIN_MIN_ANGLE     = 0.0f;   // FLAG: placeholder (flt_82CDB97C unknown)
-const f32 KF_DEV_CHALLENGE_ROAD_RAGE_WINDOW        = 0.0f;   // FLAG: placeholder (flt_82CDB980 unknown)
-const f32 KF_DEV_CHALLENGE_BILLBOARD_WINDOW        = 0.0f;   // FLAG: placeholder (flt_82CDB984 unknown)
-const f32 KF_DEV_CHALLENGE_STUNT_OFFENCE_MIN_SCORE = 0.0f;   // FLAG: placeholder (flt_82CDB988 unknown)
-const s32 KI_DEV_CHALLENGE_ROAD_RAGE_BURST_COUNT   = 0;      // FLAG: placeholder (dword_82CDB98C unknown)
-const s32 KI_DEV_CHALLENGE_BILLBOARD_BURST_COUNT   = 0;      // FLAG: placeholder (dword_82CDB990 unknown)
-const s32 KI_DEV_CHALLENGE_TAKEDOWN_CHAIN_MIN      = 0;      // FLAG: placeholder (dword_82CDB994 unknown)
-const s32 KI_DEV_CHALLENGE_ROAD_RULE_SCORE_MIN     = 0;      // FLAG: placeholder (dword_82CDB998 unknown)
-const s32 KI_DEV_CHALLENGE_STUNT_SCORE_MIN         = 0;      // FLAG: placeholder (dword_82CDB99C unknown)
-const s32 KI_DEV_CHALLENGE_STUNT_SCORE_CAR_MIN     = 0;      // FLAG: placeholder (dword_82CDB9A0 unknown)
-const s32 KI_DEV_CHALLENGE_ROAD_RULE_TIME_MIN      = 0;      // FLAG: placeholder (dword_82CDB9A4 unknown)
-const f32 KF_DEV_CHALLENGE_STUNT_COMBO_MIN         = 0.0f;   // FLAG: placeholder (flt_82CDB9A8 unknown)
+const f32 KF_DEV_CHALLENGE_FLAT_SPIN_MIN_ANGLE     = 540.0f;     // 0x44070000
+const f32 KF_DEV_CHALLENGE_ROAD_RAGE_WINDOW        = 60.0f;      // 0x42700000
+const f32 KF_DEV_CHALLENGE_BILLBOARD_WINDOW        = 60.0f;      // 0x42700000
+const f32 KF_DEV_CHALLENGE_STUNT_OFFENCE_MIN_SCORE = 500.0f;     // 0x43FA0000
+const s32 KI_DEV_CHALLENGE_ROAD_RAGE_BURST_COUNT   = 10;
+const s32 KI_DEV_CHALLENGE_BILLBOARD_BURST_COUNT   = 5;
+const s32 KI_DEV_CHALLENGE_TAKEDOWN_CHAIN_MIN      = 30;
+const s32 KI_DEV_CHALLENGE_ROAD_RULE_SCORE_MIN     = 10000000;   // both OnSetRoadRule arms read this one word
+const s32 KI_DEV_CHALLENGE_STUNT_SCORE_MIN         = 100000000;
+const s32 KI_DEV_CHALLENGE_STUNT_SCORE_CAR_MIN     = 500000;
+const s32 KI_DEV_CHALLENGE_ROAD_RULE_TIME_MIN      = 15;
+const f32 KF_DEV_CHALLENGE_STUNT_COMBO_MIN         = 600.0f;     // 0x44160000
 
 }

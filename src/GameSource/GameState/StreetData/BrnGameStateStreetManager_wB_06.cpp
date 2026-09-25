@@ -1,6 +1,7 @@
 #include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"
 
 #include "GameSource/GameState/BrnGameEvents.h"                    // BuddyRemovedEvent / OnlineRoadRulesPersonalBestRecvEvent
+#include "GameSource/GameState/BrnGameActions.h"                   // RoadRulesUpdateTargetScoreAction (action 280)
 #include "GameSource/GameState/BrnGameStateModuleIO.h"             // GameStateModuleIO::OutputBuffer (GetGameActionQueue / GetGuiOutputQueue)
 #include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"    // RoadRulesManager::GetCurrentRoadID
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue<13312,16>::AddEvent / CgsModule::Event
@@ -14,34 +15,12 @@
 //   StreetManager::ProcessNetworkHighScoreEvent @ 0x82349F10
 //   StreetManager::ProcessBuddyRemoved          @ 0x8234A5A8
 //
-// (ProcessScoreRequestEvent @ 0x8234A240 is deferred -- see funcs_blocked: its
-// body calls BrnStreetData::ChallengeParScoresEntry::Copy / ::GetScore, which are
-// file-local to SharedClasses/StreetData/BrnChallengeData.cpp and absent from the
-// frozen BrnStreetData.h POD model of ChallengeParScoresEntry -- the identical gap
-// that blocked GetChallengeParScore in wB_02.)
-//
 // Both handlers scan KAA_SAVE_GAME_CHALLENGE_ROAD_IDS for the road's persisted
 // challenge slot (the inlined qword_82029FA0 table walk) and, when the current
 // road's records changed, post the 104-byte road-score record game action
 // (type 280) onto the OutputBuffer game-action queue. mpStreetData->... is the
 // committed ResourcePtr operator-> (X360 StreetData_::oper on &mpStreetData).
 // ---------------------------------------------------------------------------
-
-namespace
-{
-    // The contiguous 104-byte payload the X360 builds on the stack and hands to
-    // VariableEventQueue<13312,16>::AddEvent(&record, 280, 104): the friend high
-    // score, then the local player's score, then the road id. (ProcessBuddyRemoved
-    // var_90/var_58/var_30; ProcessNetworkHighScoreEvent var_A0/var_68/var_40 -- the
-    // AddEvent pointer is the leading friend-entry address in both.)
-    struct RoadScoreActionRecord
-    {
-        BrnStreetData::ChallengeHighScoreEntry   mFriendHighScore;   // +0   (56B)
-        BrnStreetData::ChallengePlayerScoreEntry mUserScore;         // +56  (40B)
-        ::CgsID                                  mRoadID;            // +96  (8B)
-    };
-    static_assert( sizeof(RoadScoreActionRecord) == 104, "road-score action record is 0x68" );
-}
 
 namespace BrnGameState
 {
@@ -95,16 +74,17 @@ void StreetManager::ProcessNetworkHighScoreEvent(
 
                 if ( mpRoadRulesManager->GetCurrentRoadID() == KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liSlotIndex] )
                 {
-                    RoadScoreActionRecord lRecord;
-                    GetChallengeUserScore( liSlotIndex, &lRecord.mUserScore, false );
-                    GetChallengeFriendHighScore( liSlotIndex, &lRecord.mFriendHighScore, false );
-                    lRecord.mRoadID = KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liSlotIndex];
+                    GameStateModuleIO::RoadRulesUpdateTargetScoreAction lRecord;
+                    GetChallengeUserScore( liSlotIndex, &lRecord.mUserScores, false );
+                    GetChallengeFriendHighScore( liSlotIndex, &lRecord.mFriendScores, false );
+                    lRecord.mRoadId = KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liSlotIndex];
 
                     CGS_ASSERT( lpOutput, "lpOutput" );
                     CGS_ASSERT( lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()" );
 
                     CgsModule::VariableEventQueue<13312, 16>* lpQueue = lpOutput->GetGuiOutputQueue();
-                    lpQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &lRecord ), 280, 104 );
+                    lpQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &lRecord ),
+                       GameStateModuleIO::E_ACTION_ROAD_RULES_UPDATE_TARGET_ROAD_SCORE, sizeof( lRecord ) );
                 }
             }
         }
@@ -143,13 +123,14 @@ void StreetManager::ProcessBuddyRemoved(
             }
         }
 
-        RoadScoreActionRecord lRecord;
-        GetChallengeUserScore( liRoadIndex, &lRecord.mUserScore, false );
-        GetChallengeFriendHighScore( liRoadIndex, &lRecord.mFriendHighScore, false );
-        lRecord.mRoadID = mpRoadRulesManager->GetCurrentRoadID();
+        GameStateModuleIO::RoadRulesUpdateTargetScoreAction lRecord;
+        GetChallengeUserScore( liRoadIndex, &lRecord.mUserScores, false );
+        GetChallengeFriendHighScore( liRoadIndex, &lRecord.mFriendScores, false );
+        lRecord.mRoadId = mpRoadRulesManager->GetCurrentRoadID();
 
         CgsModule::VariableEventQueue<13312, 16>* lpQueue = lpOutput->GetGuiOutputQueue();
-        lpQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &lRecord ), 280, 104 );
+        lpQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &lRecord ),
+                       GameStateModuleIO::E_ACTION_ROAD_RULES_UPDATE_TARGET_ROAD_SCORE, sizeof( lRecord ) );
     }
 
     const u8 luBuddyScrubbedFlag = 0;

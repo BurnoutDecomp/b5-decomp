@@ -1980,6 +1980,9 @@ void GuiModule::Destruct()
                                                               lpProfileData->mpProgressionData);
                     }
                     // fall through -- the record also feeds GuiCache::mpProfile (case 350 below)
+                case 330:   // GuiEventSetRoadRuleScoreMode -- the road-rule panel mode word
+                case 335:   // GuiEventRoadRuleBegin -- the rule's score type marked active
+                case 336:   // GuiEventRoadRuleEnd   -- the rule's score type marked inactive
                 case 169:   // GuiEventChangeDistrict -- the district-marker source words
                 case 147:   // [H3b] GuiEventUpdateHud -- the player {speed,rpm,gear} words
                 case 199:   // [H3b] GuiEventUpdateSatNav -- the icon array (player position arm)
@@ -2067,6 +2070,15 @@ void GuiModule::Destruct()
                     // case-203 arm is its only consumer, and nothing else in the pump touches
                     // it -- so this forward delivers it exactly once. It is the SOLE writer of
                     // GuiCache::maEventStarts, the table GetProfileEventDisplayInfo walks.
+                    mGuiCache.RecEvent(lpEvent, liId);
+                    break;
+
+                case 343:   // GuiEventRoadRuleChangeMode -- the active road rule
+                    // The console's module switch hands the new rule to the skills manager and,
+                    // like every event, then gives the record to GuiCache::RecEvent, which keeps
+                    // it for GetActiveRoadRule (the ticker's road-rules mode reads that).
+                    mBurnoutSkillsManager.SetRoadRuleMode(
+                        reinterpret_cast<const GuiEventRoadRuleChangeMode*>(lpEvent)->meScoreType);
                     mGuiCache.RecEvent(lpEvent, liId);
                     break;
 

@@ -183,26 +183,6 @@ void TriggerQueryManager::UpdateTriggers(
     const BrnTrigger::TriggerData* lpTriggerData = mpTriggerData.operator->();
 
     // ---- 1) one-shot road-limit-region validation ----
-    // ⚠️ [FLAG PC bring-up, gateui r4 boot fix] mpRoadRulesManager is set ONLY by
-    // TriggerQueryManager::Construct @0x82364BF0, which nothing calls yet (GameStateModule
-    // models neither mTakedownManager nor mRoadRulesManager -- the round-2 P4 park). On the
-    // first UpdateTriggers the null manager AV'd inside IsRoadLimitRegionValid (read of
-    // null+0x18, boot-drive 2026-08-20 17:15). Skip ONLY this once-per-track validation until
-    // the real Construct lands; the assert it carries is a content-build diagnostic, not a
-    // gameplay leg. DELETE-WHEN TriggerQueryManager::Construct is called with a real
-    // RoadRulesManager.
-    if (!gsbRoadLimitRegionsValidated && mpRoadRulesManager == 0)
-    {
-        static bool gsbWarnedOnce = false;
-        if (!gsbWarnedOnce && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] PARK: road-limit validation skipped (mpRoadRulesManager null; "
-                   "TriggerQueryManager::Construct @0x82364BF0 not yet called)\n";
-            gsbWarnedOnce = true;
-        }
-        gsbRoadLimitRegionsValidated = true;
-    }
     if (!gsbRoadLimitRegionsValidated)
     {
         const int liGenericRegionCount = lpTriggerData->GetGenericRegionCount();
@@ -229,11 +209,6 @@ void TriggerQueryManager::UpdateTriggers(
         gsbRoadLimitRegionsValidated = true;
     }
 
-    // FLAG PC-platform leaf: the partial game-state startup runs this live update before
-    // the full constructor is mounted. Register its original profiling counters here once;
-    // an unregistered zero handle would alias the game's first monitor.
-    if (gsiUpdateTriggersPM < 0)
-        RegisterTriggerQueryMonitors();
     CgsDev::PerfMonCpu::StartMonitor(gsiUpdateTriggersPM);
 
     // The world trigger-management input interface (write-locked; X360 GetTriggerManagementInput-
@@ -629,52 +604,26 @@ void TriggerQueryManager::ProcessPlayerTriggers(
 
         case BrnTrigger::GenericRegion::E_TYPE_ROAD_LIMIT:
         {
-            // ⛔⛔ [gateui] ROUND-3 PARK (verify_r2_fixgsm F3a) -- THE WHOLE ROAD-LIMIT LEG IS
-            // REMOVED BEHIND THIS FLAG, the way PreWorldUpdate's other legs were reduced. It is
-            // NOT fabricated, and it is recorded here rather than deleted quietly. The console arm is:
-            //
-            //     if (!lpActiveRaceCarInterface->IsPlayerCarActive()) return;
-            //     lVelocity        = lpActiveRaceCarInterface->GetPlayerLinearVelocity();
-            //     lRegionDirection = lpGenericRegion->GetBoxRegion()->ComputeDirection();
-            //     lbEntryDirection = Dot(lVelocity, lRegionDirection) > 0.0f;
-            //     liRoadLimit      = <player RaceCarState::mbCrashing -- the console
-            //                          *(1120*playerIndex + interface + 1914)>   (role unverified)
-            //     luRoadLimitRegionId = GetGroupId() ? GetGroupId() : GetId();
-            //     mpRoadRulesManager->OnRoadLimit(luRoadLimitRegionId, lbEntryDirection,
-            //                                     lpOutput, liRoadLimit);
-            //
-            // WHY IT IS PARKED, measured off the export set rather than argued:
-            // `RoadRulesManager::OnRoadLimit` @0x82352A20 has no body anywhere in b5-decomp/src and
-            // no link stub stands in, and bodying it is not a one-function job -- it calls FOUR
-            // further RoadRulesManager methods that are equally bodiless, ~400 instructions in all:
-            //     OnEndRule    @0x823507C0  ( 79 insns)  -> RoadRulesManager::OnScoreCompleted
-            //     OnStartRule  @0x82348398  (210 insns)  -> StreetManager::GetChallengeParScore /
-            //                                               GetChallengeUserScore /
-            //                                               GetChallengeFriendHighScore,
-            //                                               ChallengeParScoresEntry::GetScore,
-            //                                               ChallengeHighScoreEntry::GetScore
-            //     OnLeaveRoad  @0x82348320  ( 30 insns)
-            //     OnEnterRoad  @0x823481E8  ( 78 insns)  -> StreetManager::GetParRivalId,
-            //                                               ChallengeParScoresEntry::Copy
-            // -- none of which exists either, and all of which write the road-rules timing/score
-            // state that BrnRoadRulesManager.h currently models only as offset-preserving raw
-            // storage (meActiveRoadRule / mePreviousActiveRoadRule are `s32` stand-ins for an
-            // EActiveRoadRule enum with no committed home). That is a whole subsystem, and landing
-            // any part of it would ADD net unresolved externals -- the exact failure mode
-            // verify_gsm/VERDICT.md F2 fails this wave for.
-            //
-            // ⓘ COST OF THE PARK: road-limit regions stop starting/ending Road Rules challenges.
-            // That is a REAL behavioural loss and it is recorded as such -- but it is off the smash
-            // gate / billboard HUD path this wave proves end to end (road limits post no stunt
-            // element and touch neither the StuntManager latch nor game action 58), and without the
-            // park `BrnTriggerQueryManager.cpp` cannot be mounted at all, which costs the wave
-            // BOTH `[UI-gate] OnPropHit ... latch=` (OnPropHit walks maActiveTriggers, written only
-            // by this file's UpdateTriggers) AND everything downstream of it.
-            // ⓘ The SIBLING road-rules leg is NOT parked: `RoadRulesManager::IsRoadLimitRegionValid`
-            // @0x82335268 is bodied console-exact this round (BrnRoadRulesManager.cpp), so
-            // UpdateTriggers' once-per-track "did you build triggers and forget to build RoadRules?"
-            // validation above is live.
-            // RESTORE-WHEN the four RoadRulesManager rule/road bodies land.
+            // The player crossed a road-limit region: RoadRulesManager::OnRoadLimit starts, ends or
+            // hands over the time rule on that road. Only with an active player car.
+            if (!lpActiveRaceCarInterface->IsPlayerCarActive())
+            {
+                break;
+            }
+
+            // Entry direction: the player car's linear velocity (read off GetPlayerRaceCarState)
+            // against the region box's direction, strictly positive (a NaN dot is not an entry).
+            const Vector3 lVelocity        = lpActiveRaceCarInterface->GetPlayerRaceCarState()->mLinearVelocity;
+            const Vector3 lRegionDirection = lpGenericRegion->GetBoxRegion()->ComputeDirection();
+            const bool    lbEntryDirection = rw::math::vpu::Dot(lVelocity, lRegionDirection) > 0.0f;
+
+            // The limit id is the region's group id, else its own id, each a sign-extended 32-bit
+            // word; the last argument is the player car's crashing flag.
+            const CgsID lRoadLimitId =
+                (lpGenericRegion->GetGroupId() != 0) ? lpGenericRegion->GetGroupId() : lpGenericRegion->GetId();
+
+            mpRoadRulesManager->OnRoadLimit(lRoadLimitId, lbEntryDirection, lpOutput,
+                                            lpActiveRaceCarInterface->IsPlayerCarCrashing());
             break;
         }
 

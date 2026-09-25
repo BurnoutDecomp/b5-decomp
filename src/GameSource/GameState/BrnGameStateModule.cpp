@@ -117,23 +117,6 @@ void GameStateModule::Construct()
         mpPreWorldInputBuffer->Construct();   // raises eStatusConstructed and constructs every embedded queue
     }
 
-    // ⭐ X360 0x82380388 (this function) is the console's ONLY caller of
-    // CarSelectManager::Construct @0x823564D0:
-    //     BrnGameState::CarSelectManager::Construct(a1 + 183712, a1 + 42320, a1, a1 + 47920)
-    // i.e. (&mCarSelectManager, &mTriggerQueryManager, this, &mProgressionManager) -- the three
-    // owning pointers the junkyard FSM keeps for its whole life. Verbatim, same arguments.
-    //
-    // ⚠️ ORDER DEVIATION (harmless, and stated rather than hidden): the console runs this AFTER
-    // TriggerQueryManager::Construct @0x82364BF0 and ProgressionManager::Construct, so the two
-    // subobjects are already initialised when their addresses are taken. Neither of those has a
-    // linked body on PC yet (BrnTriggerQueryManager.cpp is unmounted -- it costs 13 unresolved
-    // externals, all from UpdateTriggers/ProcessPlayerTriggers; ProgressionManager::Construct has
-    // no body in the tree at all), so they cannot be called here. CarSelectManager::Construct only
-    // STORES the two pointers -- it never dereferences either -- so taking the address of a
-    // not-yet-constructed subobject is well-defined and the stored value is already final.
-    // DELETE-WHEN those two Constructs land: they must then run BEFORE this line.
-    mCarSelectManager.Construct(&mTriggerQueryManager, this, &mProgressionManager);
-
     // ⭐⭐ [gateui] THE STUNT SUB-OBJECT, wired with the console's own six arguments. X360
     // 0x82380388, the line immediately after OnlineCarSelectManager::Construct:
     //     BrnGameState::StuntManager::Construct(a1 + 183952,   // &mStuntManager
@@ -195,13 +178,9 @@ void GameStateModule::Construct()
     // match the console's ordering as closely as this function's existing (documented) order
     // deviation allows. The three sub-objects whose addresses it takes -- mCarSelectManager,
     // mStreetManager, mStuntManager -- are only STORED, never dereferenced, so taking the address
-    // of one that has not been Constructed yet is well-defined and the stored value is final;
-    // that is the same argument mCarSelectManager.Construct's own banner above makes. The
+    // of one that has not been Constructed yet is well-defined and the stored value is final. The
     // TrainingManager is the heap object allocated further up, so the pointer is non-null here
     // and Construct's `lpTrainingManager != NULL` assert passes.
-    // ⓘ This pays HALF the DELETE-WHEN on mCarSelectManager.Construct's banner above (it asked
-    // for TriggerQueryManager::Construct AND this one to run before that line). The other half
-    // is still absent, so the line is left where it is; see this lane's report.
     mProgressionManager.Construct(&mCarSelectManager, &mStreetManager,
                                   mpTrainingManager, &mStuntManager);
 
@@ -212,8 +191,12 @@ void GameStateModule::Construct()
     // whose banner blamed the missing ClearData; ClearData never touches it. [FX-TAILS-A 2026-09-24]
     mReceiverQueue.Construct();
 
-    mStuntManager.Construct(&mProgressionManager, &mTriggerQueryManager, &mModeManager,
-                            mpTrainingManager, this);
+    // The console's next two calls: TriggerQueryManager::Construct (the progression, takedown and
+    // road-rules managers it keeps) and RoadRulesManager::Construct (the street, mode and training
+    // managers). The TakedownManager and the TrainingManager are the heap objects allocated
+    // above, so both pointers are final and non-null.
+    mTriggerQueryManager.Construct(&mProgressionManager, mpTakedownManager, &mRoadRulesManager);
+    mRoadRulesManager.Construct(&mStreetManager, &mModeManager, mpTrainingManager);
 
     // ⭐ [drive-thru wave 2026-08-27] THE DRIVE-THRU SUB-OBJECT, wired with the console's own five
     // arguments. X360 0x82380388 line 116, immediately after RoadRulesManager::Construct:
@@ -242,6 +225,14 @@ void GameStateModule::Construct()
     // clear, and the four inline event queues bound (a queue that never ran Construct has a NULL
     // mpEvents, and the first AddEventSafe on it fires "mpEvents != NULL").
     mRumbleManager.Construct();
+
+    // CarSelectManager::Construct and StuntManager::Construct, the console's next two calls after
+    // RumbleManager::Construct (the OnlineCarSelectManager's between them is not made here).
+    // CarSelectManager keeps (&mTriggerQueryManager, this, &mProgressionManager) for the junkyard
+    // FSM's whole life.
+    mCarSelectManager.Construct(&mTriggerQueryManager, this, &mProgressionManager);
+    mStuntManager.Construct(&mProgressionManager, &mTriggerQueryManager, &mModeManager,
+                            mpTrainingManager, this);
 
     // ⭐ [FX-RUMBLE] ContactSpyInterface::Construct(gsm+250800) -- call #25 of the same function
     // (0x8238065C), the first of the per-frame input caches' Constructs that precede the
@@ -279,18 +270,16 @@ void GameStateModule::Construct()
     // START stage -- so the snapshots hold the interfaces' own "no data" state (index -1, every
     // active-index slot E_ACTIVE_RACE_CAR_INDEX_INVALID) before any reader runs.
 
-    // Restore StreetManager's full initialization before Prepare loads its data.
-    // The road-display slice owns the original road identity/timeout state;
-    // active road-rule scoring remains in the RoadRulesManager reconstruction.
-    mRoadRulesManager.InitialiseRoadDisplay(&mStreetManager, &mModeManager);
-    mStreetManager.Construct(this, &mProgressionManager, &mRoadRulesManager);
-
     // ⭐ 2026-09-03 (aiwave, lane P1): AchievementManagerBase.cpp is MOUNTED -- the eight externals the
     // bat named are bodied (BrnScoringSystem_Accessors2.cpp / _Queries.cpp, BrnProgressionManager_Rivals.cpp),
     // so the console's call goes back on its line (Construct @0x82380388: r4 = mProgressionManager,
     // r5 = mStreetManager, r6 = mModeManager's ScoringSystem, r7 = this).
     mAchievementManager.Construct(&mProgressionManager, &mStreetManager,
                                   mModeManager.GetScoringSystem(), this);
+
+    // StreetManager::Construct, the console's call after the achievement manager's (its
+    // road-rules manager argument is the one RoadRulesManager::Construct initialised above).
+    mStreetManager.Construct(this, &mProgressionManager, &mRoadRulesManager);
 
     // ⭐ 2026-09-03 (aiwave, lanes P1+P3): DeveloperChallengeManager::Construct @0x82380794 sits right after
     // GameStateImageManagerBase::Construct @0x82380778 and before ClearData @0x823807A8 (r4 = r28
@@ -314,13 +303,6 @@ void GameStateModule::Construct()
     // ClearData at the console's seat: `mr r3, r31 ; bl ClearData` @0x823807A8, the call right after
     // DeveloperChallengeManager::Construct (0x82380794). [FX-TAILS-A 2026-09-24]
     ClearData();
-
-    // DELETE-WHEN those two closures land (StreetManager::Construct additionally needs a
-    // RoadRulesManager member, DWARF :229 / X360 this+183592, for its third argument) -- and
-    // then the WireOwnerPointers call above, the helper itself, and the `= 0` initialisers
-    // backing it all go with them:
-    //     (mAchievementManager.Construct -- DONE above, 2026-09-03)
-    //     mStreetManager.Construct(this, &mProgressionManager, &mRoadRulesManager);
 }
 
 // ----------------------------------------------------------------------------

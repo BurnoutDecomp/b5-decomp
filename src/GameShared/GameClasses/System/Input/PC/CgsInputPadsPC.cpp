@@ -942,6 +942,8 @@ namespace
         case E_GAMEINPUTACTIONS_GUI_DPAD_DOWN:  lpcEventName = "Local\\BurnoutPC_Input_DPadDown"; break;
         case E_GAMEINPUTACTIONS_GUI_DPAD_LEFT:  lpcEventName = "Local\\BurnoutPC_Input_DPadLeft"; break;
         case E_GAMEINPUTACTIONS_GUI_DPAD_RIGHT: lpcEventName = "Local\\BurnoutPC_Input_DPadRight"; break;
+        // 58 is the third action the pad's d-pad UP raises; in free roam it toggles the road rules.
+        case E_GAMEINPUTACTIONS_GUI_EVENT_DETAILS: lpcEventName = "Local\\BurnoutPC_Input_EventDetails"; break;
         case E_GAMEINPUTACTIONS_GUI_SELECT: lpcEventName = "Local\\BurnoutPC_Input_Accept";   break;
         case E_GAMEINPUTACTIONS_GUI_CANCEL: lpcEventName = "Local\\BurnoutPC_Input_Stop";     break;
         case E_GAMEINPUTACTIONS_GUI_DOWN:   lpcEventName = "Local\\BurnoutPC_Input_Next";     break;
