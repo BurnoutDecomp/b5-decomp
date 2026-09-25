@@ -71,8 +71,10 @@ f32 RaceBalancingRoute::ComputeRaceCompletionRatio(f32 lfDistanceToNextCheckpoin
 
     // Interpolate then clamp to [0,1] -- the same ladder, `fneg ; fsel` 0x8277AE0C/0x8277AE10 and
     // `fsubs ; fsel` 0x8277AE14/0x8277AE18: a NaN (e.g. a checkpoint count of 0) is 1.0.
-    f32 lfResult = (lfCheckpointEndRatio - lfCheckpointStartRatio) * lfCheckpointRatio
-                   + lfCheckpointStartRatio;
+    // The lerp is 0x8277AE08 `fmadds f13, f13, f12, f11` = (end - start) * ratio + start, ONE rounding
+    // (ROUNDING_RULE 3; the fsubs at 0x8277AE00 is rule 4).
+    f32 lfResult = std::fmaf(lfCheckpointEndRatio - lfCheckpointStartRatio, lfCheckpointRatio,
+                             lfCheckpointStartRatio);
     lfResult = (-lfResult >= 0.0f) ? 0.0f : lfResult;
     return ((1.0f - lfResult) >= 0.0f) ? lfResult : 1.0f;
 }

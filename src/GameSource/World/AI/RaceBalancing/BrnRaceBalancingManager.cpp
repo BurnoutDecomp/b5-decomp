@@ -18,6 +18,7 @@
 #include "GameSource/World/BrnWorldSharedConstants.h"   // BrnWorld::KI_MAX_RIVALS_IN_MODE (UpdateOpponentRoute's :185 assert)
 
 #include <cstddef>                                   // offsetof (layout pins)
+#include <cmath>                                     // std::fmaf (ComputeTargetSpeed's fmadds)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] BRN_RACEBAL_DIAG witness
@@ -371,7 +372,9 @@ f32 RaceBalancingManager::ComputeTargetSpeed(GraphType leGraphType, const AICar*
             // 0x827917C0 (0x827917D4/0x827917D8 out of range) then `fsubs t,max,m ; fsel m,t,m,max`
             // 0x827917E0/0x827917E4. fsel takes its THIRD operand on an unordered test, so a NaN
             // multiplier is the max (crash parity FX-AINAN2; the old if/if kept the NaN).
-            f32 lfMultiplier = (mfRaceTime - lfTargetTime) * KF_SPEED_DIFFERENCE_MULTIPLIER + 1.0f;
+            // 0x827917AC `fmadds f0, f12, f0, f13` = (raceTime - parTime) * 0.1 + 1.0, ONE rounding (ROUNDING_RULE 3;
+            // the fsubs at 0x82791790 is rule 4; 0.1 @0x820C424C, 1.0 @0x82001C98).
+            f32 lfMultiplier = std::fmaf(mfRaceTime - lfTargetTime, KF_SPEED_DIFFERENCE_MULTIPLIER, 1.0f);
             lfMultiplier = ((lfMinMultiplier - lfMultiplier) >= 0.0f) ? lfMinMultiplier : lfMultiplier;
             lfMultiplier = ((lfMaxMultiplier - lfMultiplier) >= 0.0f) ? lfMultiplier : lfMaxMultiplier;
 
