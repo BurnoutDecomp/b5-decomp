@@ -44,7 +44,13 @@ def wiring(tree):
     construct = squash(body_or_empty(source, CONSTRUCT))
     dcm = construct.find("mDeveloperChallengeManager.Construct(")
     after = construct[dcm:] if dcm >= 0 else ""
-    first_call = re.search(r"\);(\w+)\(", after)
+    # Plain assignments may stand between the two calls: the console stores mbSendSetupPlayerCarPending
+    # (mbIsFirstUpdate, `stbx r24(=1), r31, 0x32DC4` @0x823807A4) between DeveloperChallengeManager::Construct
+    # and `bl ClearData` (FX-AIBUZZ 2026-09-24, conductor-approved). The match is ANCHORED at the statement
+    # after the DeveloperChallengeManager call, so any call there -- free, member, or on an assignment's
+    # right-hand side -- still turns this red (the old unanchored search skipped member calls).
+    dcm_end = after.find(");")
+    first_call = re.match(r"(?:[\w.]+=[^;(]+;)*(\w+)\(", after[dcm_end + 2:]) if dcm_end >= 0 else None
     yield ("Construct calls ClearData() right after DeveloperChallengeManager::Construct (0x82380794 -> 0x823807A8)",
            dcm >= 0 and first_call is not None and first_call.group(1) == "ClearData")
     prepare = squash(body_or_empty(source, PREPARE))

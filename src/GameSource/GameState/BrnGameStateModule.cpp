@@ -298,11 +298,20 @@ void GameStateModule::Construct()
     mDeveloperChallengeManager.Construct(&mProgressionManager, &mStreetManager,
                                          mModeManager.GetScoringSystem(), this);
 
+    // The console's one store between the two calls: `stbx r24(=1, li @0x823803A0), r31, 0x32DC4`
+    // @0x823807A4 -- mbIsFirstUpdate (DWARF BrnGameStateModule.h:272), this tree's
+    // mbSendSetupPlayerCarPending, the one-shot latch PreWorldUpdate @0x823A5510 tests and clears.
+    // [FX-AIBUZZ 2026-09-24] It used to be armed at the end of Prepare's terminal stage, on the belief
+    // that "an event handler" arms it on the console. An image-wide scan of the ARTIST export finds
+    // exactly TWO functions touching +0x32DC4: this store and PreWorldUpdate's test/clear -- nothing
+    // else (not ClearData, not Prepare, no event handler). Nothing observable moves: the only reader,
+    // PreWorldUpdateSetupPlayerCarBringUp, runs only in E_MGS_IN_GAME (BrnGameModule.cpp), long after
+    // Prepare's terminal stage; Prepare runs once per boot; and a re-Prepare now leaves the consumed
+    // latch down, as the console's single arming does.
+    mbSendSetupPlayerCarPending = true;
+
     // ClearData at the console's seat: `mr r3, r31 ; bl ClearData` @0x823807A8, the call right after
     // DeveloperChallengeManager::Construct (0x82380794). [FX-TAILS-A 2026-09-24]
-    // ⓘ The console's one store between the two (`stbx r24(=1), r31, 0x32DC4` @0x823807A4) is
-    // mbIsFirstUpdate (DWARF :272) -- this tree's mbSendSetupPlayerCarPending, which it arms at the
-    // end of Prepare instead; that seat is recorded as a follow-up, not changed here.
     ClearData();
 
     // DELETE-WHEN those two closures land (StreetManager::Construct additionally needs a
@@ -976,14 +985,9 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
                     << " spawnsForThatJunkyard=" << liMatchingSpawns << "\n";
             }
         }
-        // ⭐ ARM THE CONSOLE'S OWN START-OF-GAME LATCH (+0x32DC4). PreWorldUpdate tests it, runs
-        // SendSetupPlayerCarEvent and clears it. The console arms it from an event handler this
-        // slice does not reconstruct; this is the first moment all three of that function's data
-        // preconditions hold (mpVehicleList, mpWheelList and the TriggerQueryManager's TriggerData
-        // are all installed by the stages above), so it is armed here.
-        // [FLAG PC bring-up] the ARMING SITE is the deviation -- the latch and everything it
-        // drives are console code. DELETE-WHEN the arming event handler lands.
-        mbSendSetupPlayerCarPending = true;
+        // ⓘ The start-of-game latch (+0x32DC4, mbSendSetupPlayerCarPending) is NOT armed here any
+        // more: the console arms it once, in Construct (0x823807A4), and nothing else in the image
+        // writes it -- see the note there. [FX-AIBUZZ 2026-09-24: this was the PC's arming site]
 
         // [drive-thru wave 2026-08-27] One-shot: prove Prepare actually classified regions. A
         // non-zero miTotalGasStations is the precondition for every later gas-station claim; a zero
@@ -2273,9 +2277,9 @@ void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp()
         // that ever puts a record in the GUI cache's maEventStarts. Until it ran,
         // GuiCache::GetProfileEventDisplayInfo walked a zero-length array on every sat-nav
         // refresh and fired the console's own "Unable to find event start with event id: ".
-        // ⓘ ONE-SHOT: the latch fires at the end of Prepare's terminal stage, which is the first
-        // moment the producer's three data preconditions (TrafficData, AI lanes, district map)
-        // are all satisfied.
+        // ⓘ ONE-SHOT: the latch is armed once, in Construct (0x823807A4), and this E_MGS_IN_GAME leg is
+        // its first and only consumer -- by then the producer's data preconditions (TrafficData, AI
+        // lanes, district map) are all satisfied. [FX-AIBUZZ 2026-09-24: was armed at Prepare's end]
         SendSetupPlayerCarEvent(lpActionQueue);
         SendSetUpAllEventStartsMessage(mpOutputBuffer);
     }
