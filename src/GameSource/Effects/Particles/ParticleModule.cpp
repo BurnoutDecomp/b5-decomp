@@ -735,8 +735,14 @@ namespace BrnParticle
     // =========================================================================
     namespace
     {
+        // [PC] The published mfCurrentTimeStep accumulator's value at the last BeginSimulateDebris -- see that
+        // function's banner (the spark ring's sfLastConsumedTimeStepSum / the trails' sfLastTrailTimeStepSum,
+        // for the debris). DELETE-WHEN the console's clear of the accumulator is found.
+        f32 sfLastDebrisTimeStepSum = 0.0f;
+
         void DebrisSimWitness(const Native::BrnDebrisArray* lpArrays, u32 luNumArrays,
-                              const BrnGame::DispatchThreadInputBuffer* lpInput, s32 liJobs)
+                              const BrnGame::DispatchThreadInputBuffer* lpInput, s32 liJobs,
+                              const Native::DebrisUpdateJobData* lpJobs)
         {
             static const bool sbArmed = []() {
                 const char* const lpcValue = std::getenv("BRN_DEBRIS_DIAG");
@@ -774,7 +780,7 @@ namespace BrnParticle
                 return;
 
             const f32  lfTime  = lpInput->GetParticleData()->mfCurrentTime;
-            const f32  lfStep  = lpInput->GetParticleData()->mfCurrentTimeStep;
+            const f32  lfStep  = (liJobs > 0) ? lpJobs[0].mfTimeStep : 0.0f;   // the step the jobs integrate
             const bool lbCrash = ((lpInput->GetParticleRenderData()->muFlags >> 6) & 1u) != 0u;
 
             // The mode EDGES, debris or not: the render data's eRenderDataFlagReducedFrameRate (0x40),
@@ -848,10 +854,12 @@ namespace BrnParticle
             ++suLines;
             char lacMsg[400];
             std::snprintf(lacMsg, sizeof(lacMsg),
-                "[debris-sim] f=%u t=%.3f dt=%.4f crash=%d jobs=%d integrated=%u collide=%u bounces=%u | "
+                "[debris-sim] f=%u t=%.3f dt=%.4f crash=%d jobs=%d integrated=%u collide=%u bounces=%u cache=%u | "
                 "array=%u #%u age=%.3f pos=(%.3f,%.3f,%.3f) vel=(%.3f,%.3f,%.3f) angle=%.3f left=%u%s\n",
                 suFrame, static_cast<double>(lfTime), static_cast<double>(lfStep), lbCrash ? 1 : 0, liJobs,
-                luIntegrated, luCollides, luBounces, sTrack.muArray, sTrack.muIndex,
+                luIntegrated, luCollides, luBounces,
+                lpInput->GetBufferCrashTriangleCache()->IsEmpty() ? 0u : 1u,   // 1: the crash cache has triangles
+                sTrack.muArray, sTrack.muIndex,
                 static_cast<double>(lfTime - sTrack.mfBirth),
                 static_cast<double>(lrDebris.mPositionPlusRotVel.x), static_cast<double>(lrDebris.mPositionPlusRotVel.y),
                 static_cast<double>(lrDebris.mPositionPlusRotVel.z), static_cast<double>(lrDebris.mVelocityPlusScale.x),
@@ -929,7 +937,7 @@ namespace BrnParticle
         // debris the queue just spawned is integrated in the same frame.
         BeginSimulateDebris(lpDispatchThreadInput);
         DebrisSimWitness(maDebris, KU_NUM_DEBRIS_ARRAYS, lpDispatchThreadInput,
-                         miNumDebrisUpdateJobsToWaitOn);   // [DIAG] BRN_DEBRIS_DIAG, default off
+                         miNumDebrisUpdateJobsToWaitOn, maDebrisUpdateJobData);   // [DIAG] BRN_DEBRIS_DIAG, default off
 
         const DispatchThreadUpdateData* const lpIn = lpDispatchThreadInput->GetParticleData();
 
@@ -1854,6 +1862,20 @@ namespace BrnParticle
     //      ⭐ HERE each job runs to completion in place instead -- the one scheduling difference
     //      (BrnDebrisArrayLite.h). The debris is integrated before the render reads it, as on the
     //      console.
+    //
+    // ⚠⚠ THE STEP IS THE FIRST DIFFERENCE OF THE PUBLISHED ACCUMULATOR (FX-CRASHVFX, glass live run
+    // scratch/bugtest/runs/fxcrashvfx_glass/20260925_113502). The console reads the step off
+    // DispatchThreadUpdateData+4 (`lfs f13, 4(r29)` at 0x82289B18), which PreRenderUpdate copies from the render data's
+    // mfCurrentTimeStep -- the field ParticleModule::Update ACCUMULATES (`+= rate * step` at
+    // 0x8228185C..0x82281870) and nothing found in the export set clears (RenderSparks' ring-delta banner
+    // has the whole search). Read verbatim, the step is the seconds since the module was built: the
+    // glass run integrated its pieces with dt = 21.8 s at t = 24.3 and every one blew up to inf / NaN
+    // within 30 frames. The console's own debris does not, so on the console the field is a per-frame
+    // step; the spark ring and the trail system, its two other consumers, take the FIRST DIFFERENCE for
+    // the same reason, and so does this -- right under both readings (if the console clears after
+    // publishing, the field is the frame's sum of sim steps and the difference equals it; if not, the
+    // difference is the sim time that passed since the last dispatch frame). DELETE-WHEN the missing
+    // clear is found (then read lpData->mfCurrentTimeStep verbatim, as the console does).
     // =========================================================================
     void ParticleModule::BeginSimulateDebris(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInput)
     {
@@ -1870,7 +1892,10 @@ namespace BrnParticle
             maDebris[luArray].FreeExpiredBuckets(lpData->mfCurrentTime, lbReducedFrameRate);
 
         miNumDebrisUpdateJobsToWaitOn = 0;
-        if (!(lpData->mfCurrentTimeStep > 0.0f))
+        const f32 lfAccumulated = lpData->mfCurrentTimeStep;             // see the banner: differenced
+        const f32 lfTimeStep    = lfAccumulated - sfLastDebrisTimeStepSum;
+        sfLastDebrisTimeStepSum = lfAccumulated;
+        if (!(lfTimeStep > 0.0f))                                         // `fcmpu f13, 0.0 ; ble` (0x82289B20)
             return;
 
         for (u32 luArray = 0; luArray < KU_NUM_DEBRIS_ARRAYS; ++luArray)
@@ -1881,7 +1906,7 @@ namespace BrnParticle
             lrJob.muNumDebrisArrays = 1;
             lrJob.mpTriCache        = lpTriCache;
             lrJob.mfCurrentTime     = lpData->mfCurrentTime;
-            lrJob.mfTimeStep        = lpData->mfCurrentTimeStep;
+            lrJob.mfTimeStep        = lfTimeStep;
             lrJob.mRandom.SetSeed(mRandom.RandomUInt());
             ++miNumDebrisUpdateJobsToWaitOn;
         }
