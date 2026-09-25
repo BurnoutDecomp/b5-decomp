@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CgsDev::Assert (BeginAssert/FireAssert/EndAssert)
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"        // CgsGraphics::Camera + CameraRwFrustum (IsLookingAtTarget)
 #include "vendor/renderware/collision/Frustum.hpp"            // rw::collision::Frustum::IsBoxInFrustum
+#include "rw/math/vpu/matrix44affine_operation.h"             // rw::math::vpu::SLerp (X360 0x82216858), the heading blend
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"     // Camera::Utils::CreateLookAt (the real home)
 #include "SDKs/Packages/ICE/ICECameraSpaceHandler.hpp"        // ICE::CameraSpaceHandler (the real home)
 #include "SDKs/Packages/ICE/ICEAuthor.hpp"                    // ICE::ICEAuthor::FindEditedTakeFromGuid --
@@ -284,12 +285,15 @@ namespace Camera
 
 } // namespace BrnDirector
 
-namespace rw { namespace math { namespace vpu {
-    // Spherical-linear blend between two affine transforms by a per-lane amount. Returns
-    // the blended transform.
-    Matrix44Affine SLerp(const Matrix44Affine& lrFrom, const Matrix44Affine& lrTo,
-                         const f32* lpfAmount);
-}}}
+// ============================================================================
+// RETIRED (2026-09-26, crash parity FX-LASTFIX): the local re-declaration
+//     namespace rw { namespace math { namespace vpu {
+//         Matrix44Affine SLerp(const Matrix44Affine&, const Matrix44Affine&, const f32* lpfAmount); }}}
+// that used to sit here is GONE, with its mounted link stub (DirectorLinkStubs.cpp GROUP D), which returned `lrTo`.
+// No such overload exists on the console: Update's `bl 0x82247354` goes to rw::math::vpu::SLerp @0x82216858, the
+// four-argument body in rw/math/vpu/matrix44affine_operation.h (the amount a splat in v1, the angle out in r6). With
+// the stub and an amount of 1.0f the heading space SNAPPED to the look-at every frame; the console eases it 20% a frame.
+// ============================================================================
 
 namespace BrnDirector
 {
@@ -299,8 +303,12 @@ namespace Camera
 // ----------------------------------------------------------------------------
 // File-scope constants.
 // ----------------------------------------------------------------------------
-// The heading-space-to-look SLerp blend amount.
-static const f32 KF_HEADING_SPACE_2_SLERP_AMOUNT = 1.0f;
+// The heading-space-to-look SLerp blend amount: 0.2 a frame. The console's is the class-static
+// `const VecFloat BehaviourIceAnim::KF_HEADING_SPACE_2_SLERP_AMOUNT` (DWARF BrnBehaviourIceAnim.h:181, defined at
+// BrnBehaviourIceAnim.cpp:21) -- the .bss splat unk_82FAA6F0, which its CRT dynamic initializer 0x82C49580 fills from
+// flt_82004744 (0x3E4CCCCD): lfs, stfs, lvlx, vspltw 0, stvx128. Update loads it into v127 at 0x82247334 and passes it
+// as SLerp's v1 at 0x82247340; SLerp reads its lanes as the one scalar amount.
+static const f32 KF_HEADING_SPACE_2_SLERP_AMOUNT = 0.2f;
 
 // The BYSTANDER look space's Looker block (Update 0x82247714..0x82247760): the tracking / distance-from-target
 // tolerance and the screen-offset scale (f31 = flt_82004014 == 0x3DCCCCCD), the FOV velocity band
@@ -386,6 +394,87 @@ static void BrnDiag_BystanderLookAfter(const void* lpBehaviour, const KeyAnimCon
              liGuid, (lpTake != 0) ? lpTake->macTakeName : "?", luFrame, lrDiag.mfAimBefore,
              BrnDiag_BystanderAimDegrees(lrCamera, lrTarget), lrDiag.mfFovBefore, lrCamera.GetFOV(),
              lrTarget.wAxis.x, lrTarget.wAxis.y, lrTarget.wAxis.z, BrnDiag_BystanderDistance(lrCamera, lrTarget));
+    CgsDev::Log::WriteToLog(lacLine);
+}
+
+// [DIAG] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The heading space's live witness (FX-LASTFIX): on a take's frames
+// 0..5, how many degrees mHeadingSpaceTransform's forward (its z row) is off the look-at's before and after the SLerp,
+// and the SLerp's own remaining angle (its angle out, angle - angle * 0.2). The console eases 20% a frame: on a frame
+// whose look-at moved, after == 0.8 x before (the arc arm; under 2 degrees the lerp arm is within a hair of it). The
+// old link stub made every after 0. 96 lines a run at most. Reads only.
+struct HeadingEaseDiag
+{
+    bool        mbOn;
+    const void* mpBehaviour;
+    s32         miGuid;
+    u32         muFrame;
+    u32         muLines;
+    f32         mfBefore;
+    f32         mfAfter;
+    f32         mfRemaining;
+};
+
+static HeadingEaseDiag& BrnDiag_HeadingEaseState()
+{
+    static HeadingEaseDiag sDiag = { getenv("BRN_CRASHCAM_DIAG") != 0, 0, -1, 0u, 0u, 0.0f, 0.0f, 0.0f };
+    return sDiag;
+}
+
+static f32 BrnDiag_ForwardDegrees(const rw::math::vpu::Matrix44Affine& lrA, const rw::math::vpu::Matrix44Affine& lrB)
+{
+    const rw::math::vpu::Vector3& lrZA = lrA.zAxis;
+    const rw::math::vpu::Vector3& lrZB = lrB.zAxis;
+    const f32 lfCrossX = lrZA.y * lrZB.z - lrZA.z * lrZB.y;
+    const f32 lfCrossY = lrZA.z * lrZB.x - lrZA.x * lrZB.z;
+    const f32 lfCrossZ = lrZA.x * lrZB.y - lrZA.y * lrZB.x;
+    const f32 lfSin = sqrtf(lfCrossX * lfCrossX + lfCrossY * lfCrossY + lfCrossZ * lfCrossZ);
+    const f32 lfCos = lrZA.x * lrZB.x + lrZA.y * lrZB.y + lrZA.z * lrZB.z;
+    return atan2f(lfSin, lfCos) * 57.2957795f;
+}
+
+static void BrnDiag_HeadingEaseBefore(const rw::math::vpu::Matrix44Affine& lrHeading,
+                                      const rw::math::vpu::Matrix44Affine& lrLookAt)
+{
+    HeadingEaseDiag& lrDiag = BrnDiag_HeadingEaseState();
+    if (lrDiag.mbOn)
+        lrDiag.mfBefore = BrnDiag_ForwardDegrees(lrHeading, lrLookAt);
+}
+
+static void BrnDiag_HeadingEaseAfter(const rw::math::vpu::Matrix44Affine& lrHeading,
+                                     const rw::math::vpu::Matrix44Affine& lrLookAt,
+                                     const rw::math::vpu::Vector3& lrAngleOut)
+{
+    HeadingEaseDiag& lrDiag = BrnDiag_HeadingEaseState();
+    if (!lrDiag.mbOn)
+        return;
+    lrDiag.mfAfter     = BrnDiag_ForwardDegrees(lrHeading, lrLookAt);
+    lrDiag.mfRemaining = lrAngleOut.x * 57.2957795f;
+}
+
+static void BrnDiag_HeadingEaseReport(const void* lpBehaviour, const KeyAnimController& lrController,
+                                      ICE::eICESpace leEyeSpace, ICE::eICESpace leLookSpace)
+{
+    HeadingEaseDiag& lrDiag = BrnDiag_HeadingEaseState();
+    if (!lrDiag.mbOn)
+        return;
+    const ICE::ICETakeData* lpTake = lrController.GetTake().GetData();
+    const s32 liGuid = (lpTake != 0) ? lpTake->miGuid : -1;
+    if (lpBehaviour != lrDiag.mpBehaviour || liGuid != lrDiag.miGuid)
+    {
+        lrDiag.mpBehaviour = lpBehaviour;
+        lrDiag.miGuid      = liGuid;
+        lrDiag.muFrame     = 0u;
+    }
+    const u32 luFrame = lrDiag.muFrame++;
+    if (luFrame >= 6u || lrDiag.muLines >= 96u)
+        return;
+    ++lrDiag.muLines;
+    char lacLine[256];
+    snprintf(lacLine, sizeof(lacLine),
+             "[iceanim] heading2 ease take %d '%s' frame %u: %.3f -> %.3f deg (slerp remaining %.3f deg), "
+             "eye space %d look space %d\n",
+             liGuid, (lpTake != 0) ? lpTake->macTakeName : "?", luFrame, lrDiag.mfBefore, lrDiag.mfAfter,
+             lrDiag.mfRemaining, static_cast<s32>(leEyeSpace), static_cast<s32>(leLookSpace));
     CgsDev::Log::WriteToLog(lacLine);
 }
 
@@ -730,9 +819,17 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     mHeadingSpaceTransform.wAxis = GetVehicleWorldPosition(lpLookAtVehicle);
 
     rw::math::vpu::Matrix44Affine lLookAt = CreateHeadingSpaceLookAt(lpLookAtVehicle);
-    f32 lfSlerpAmount = KF_HEADING_SPACE_2_SLERP_AMOUNT;
+
+    // ⭐ (2026-09-26, crash parity FX-LASTFIX) SLerp @0x82216858, `bl` at 0x82247354: r3 the sret (var_360), r4 = r29 =
+    // &mHeadingSpaceTransform (this+0x610) -- FROM, r5 = CreateLookAt's sret -- TO, v1 = v127 = the 0.2 splat, r6 = r22 =
+    // var_390 -- an angle-out slot Update never reads (the looker block re-uses var_390 as scratch). The four result rows
+    // go back into mHeadingSpaceTransform (0x82247360..0x8224737C). It used to call a pointer-amount overload whose
+    // mounted link stub returned `to`, with an amount of 1.0f: the space snapped to the look-at every frame.
+    rw::math::vpu::Vector3 lUnusedAngle;
+    BrnDiag_HeadingEaseBefore(mHeadingSpaceTransform, lLookAt);                            // [DIAG] NOT X360
     mHeadingSpaceTransform =
-        rw::math::vpu::SLerp(mHeadingSpaceTransform, lLookAt, &lfSlerpAmount);
+        rw::math::vpu::SLerp(mHeadingSpaceTransform, lLookAt, KF_HEADING_SPACE_2_SLERP_AMOUNT, &lUnusedAngle);
+    BrnDiag_HeadingEaseAfter(mHeadingSpaceTransform, lLookAt, lUnusedAngle);               // [DIAG] NOT X360
 
     // The take evaluator resolves its reference spaces through its own copy of the shared
     // per-frame handler (through its copy constructor).
@@ -781,6 +878,7 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     // --- Pick the look space + motion-blur amount ---
     const ICE::eICESpace leLookSpace = mKeyAnimController.GetLookSpace();
     const bool lbHasLookSpace = IsLooseHeadingSpace(leLookSpace) || IsLookAtVehicleSpace(leLookSpace);
+    BrnDiag_HeadingEaseReport(this, mKeyAnimController, leEyeSpace, leLookSpace);         // [DIAG] NOT X360
 
     // A take anchored to a car gets NO extra motion blur; a free/world take gets it all. The
     // two amounts and both enable flags are one operation on the camera's effects block.
