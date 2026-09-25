@@ -42,10 +42,12 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"// StartMonitor / StopMonitor
 #include "GameSource/Effects/Particles/ParticleCpuMonitors.h"            // gRaceCpuMonitors / gCrashCpuMonitors
 #include "GameSource/Effects/BrnEffectsUtils.h"                          // Vector3Randomiser
+#include "GameSource/Effects/BrnEffectsDebrisColourRandomiser.h"         // Utils::DebrisColourRandomiser (the burst's colours)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"               // the announcements
 
 #include <cmath>    // sqrtf
 #include <cstdio>   // snprintf (the announcements)
+#include <cstdlib>  // getenv (the [debris-burst] witness)
 
 namespace BrnParticle
 {
@@ -674,11 +676,298 @@ namespace BrnParticle
         }
     }
 
-    void ParticleModule::HandleFireDebrisBurstEvent(const FireDebrisBurstEvent* /*lpEvent*/)
+    // =============================================================================================
+    // ⭐⭐⭐ THE CRASH DEBRIS BURST -- ParticleModule::HandleFireDebrisBurstEvent @0x8229A660 (DWARF
+    // ParticleModule.cpp:1477), FX-CRASHVFX 2026-09-25. It consumes the type-5 record
+    // ParticleModule::FireDebrisBurst posts for a crashing / taken-down car (EffectsModule::HandleBurstDebris)
+    // and throws the car's debris. For each of the four burst arrays -- Coloured (the car's paint), Shiny,
+    // Dark, HighDetail (each array's own preset colour, BrnDebrisArrayParams::mColour) -- the debrisparams'
+    // particle count times the record's scale factor, truncated, pieces, each
+    //   * placed at a random point of the emitter box (RandomFloat(-h, h) per axis, z drawn first);
+    //   * thrown either AT THE CAMERA (when a draw falls below the debrisparams' camera-directed
+    //     probability): towards 0.5 above the camera at 7 m/s, lifted by half a gravity drop over the
+    //     flight time (the lift is a splat, so the console adds it to x, z and w too); or into a CONE: a
+    //     random azimuth and a random angle within the emission-angle variance, at a random speed between the
+    //     burst velocity bounds, plus 5.1..20% of the car's velocity;
+    //   * a random size between the type's bounds, a random spin axis (RandomUnitVector, inlined), a spin
+    //     rate in [0.5, 4.0), and a colour 25%..75% of the way from grey to the base colour, alpha 0.5..0.9
+    //     (DebrisColourRandomiser);
+    // and spawned into the array directly (BrnDebrisArray::SpawnDebris -- this runs on the dispatch thread).
+    // Every fused op is fused; the draws are the console's, in its order; every compare keeps the PPC
+    // polarity for a NaN.
+    // =============================================================================================
+    namespace
     {
-        static bool sbLogged = false;
-        LogSparkEventNotReconstructed(sbLogged,
-            "ParticleModule::HandleFireDebrisBurstEvent @0x8229A660 (600 instr) -- a type-5 "
-            "record reached ProcessEventQueue and was dropped");
+        const f32 KF_DEBRIS_BURST_DEG_TO_RAD    = 0.0174532924f;   // flt_8200D964 (0x3C8EFA35)
+        const f32 KF_DEBRIS_BURST_TWO_PI        = 6.28318548f;     // flt_8200D970 (0x40C90FDB, `lfs f0, 0xC(r16)`)
+        const f32 KF_DEBRIS_BURST_CAMERA_SPEED  = 7.0f;            // flt_820054D0
+        const f32 KF_DEBRIS_BURST_SECONDS_PER_M = 0.142857149f;    // flt_82013AB4 (0x3E124925, 1/7)
+        const f32 KF_DEBRIS_BURST_HALF          = 0.5f;            // flt_82001DA0
+        const f32 KF_DEBRIS_BURST_GRAVITY       = -9.81000042f;    // flt_82013AB8 (0xC11CF5C3)
+        const f32 KF_DEBRIS_BURST_INHERIT_MIN   = 0.0509999990f;   // flt_82013AC0 (0x3D50E560)
+        const f32 KF_DEBRIS_BURST_INHERIT_RANGE = 0.149000004f;    // flt_82013ABC (0x3E189375)
+        const f32 KF_DEBRIS_BURST_SPIN_RANGE    = 3.5f;            // flt_82009BA0
+        const f32 KF_DEBRIS_BURST_SPIN_MIN      = 0.5f;            // flt_82001DA0
+        const f32 KF_DEBRIS_BURST_TWO           = 2.0f;            // flt_82001D9C (RandomUnitVector's 2r - 1 and 2 sqrt)
+        const f32 KF_DEBRIS_BURST_ONE           = 1.0f;            // flt_82001C98
+        // The camera target's offset: unk_82181510, the image's (0, 1, 0, 0) row (`lwz r11, 0x8C(r1)` ->
+        // `lvx128 v13`, then `vmaddfp v0, v13, 0.5, camera`).
+        const f32 KAF_DEBRIS_BURST_CAMERA_UP[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
+        // The colour bounds: CRT-initialised .bss vectors (the image holds zeros; each init thunk was RUN
+        // on emu64 to read them -- scratch/CRASHPARITY_0922/fxcrashvfx_vmxemu/crtinit.py).
+        const f32 KF_DEBRIS_BURST_GREY_WEIGHT     = 0.333330005f;  // unk_82FAB840 x/y/z (0x3EAAAA3B), w 0 <- thunk 0x82C49FD8
+        const f32 KF_DEBRIS_BURST_SATURATION_LOW  = 0.25f;         // unk_82FAB7F0 splat                     <- thunk 0x82C4A010
+        const f32 KF_DEBRIS_BURST_SATURATION_HIGH = 0.75f;         // unk_82FAB890 splat                     <- thunk 0x82C4A038
+        const f32 KF_DEBRIS_BURST_ALPHA_LOW       = 0.5f;          // unk_82FAB7D0 splat                     <- thunk 0x82C4A060
+        const f32 KF_DEBRIS_BURST_ALPHA_HIGH      = 0.899999976f;  // unk_82FACC10 splat (0x3F666666)       <- thunk 0x82C4A088
+
+        // The debrisparams layout words the handler reads (the names are the attribute names the DWARF lists
+        // for the class, matched to the offsets by the reverse-alphabetical layout rule; the offsets are the
+        // loads: the prologue 0x8229A6F0..0x8229A700, the four arms of the type switch 0x8229A82C..0x8229A8BC,
+        // the probability at 0x8229AB44). debrisparams exposes no accessor (EffectsModule.cpp's
+        // DebrisParamsLayout note).
+        const u32 KU_BURST_VELOCITY_MIN       = 0x7C;   // Burst_VelocityMin
+        const u32 KU_BURST_VELOCITY_MAX       = 0x80;   // Burst_VelocityMax
+        const u32 KU_BURST_EMISSION_ANGLE_DEG = 0xD0;   // Burst_EmissionAngleVariance (degrees)
+        const u32 KU_BURST_CAMERA_PROBABILITY = 0xD4;   // Burst_CameraDirectedBurstProbability
+        struct DebrisBurstTypeFields { u32 muNumParticles, muSizeMin, muSizeMax; };
+        const DebrisBurstTypeFields KA_DEBRIS_BURST_TYPE_FIELDS[4] =
+        {
+            { 0xB4, 0x94, 0xA4 },   // eDebrisArray_Coloured    Burst_NumParticles / SizeMin / SizeMax _Coloured
+            { 0xA8, 0x88, 0x98 },   // eDebrisArray_Shiny       ..._Shiny
+            { 0xB0, 0x90, 0xA0 },   // eDebrisArray_Dark        ..._Dark
+            { 0xAC, 0x8C, 0x9C },   // eDebrisArray_HighDetail  ..._HighDetail
+        };
+
+        inline f32 BurstLayoutF32(const u8* lpLayout, u32 luOffset)
+        {
+            return *reinterpret_cast<const f32*>(lpLayout + luOffset);
+        }
+
+        // `fctiwz` + `stfiwx`: truncation to s32, saturating (a NaN gives 0x80000000).
+        inline s32 BurstFctiwz(f32 lfValue)
+        {
+            const f64 lfWide = static_cast<f64>(lfValue);
+            if (lfWide != lfWide)
+                return static_cast<s32>(0x80000000u);
+            if (lfWide >= 2147483647.0)
+                return 0x7FFFFFFF;
+            if (lfWide <= -2147483648.0)
+                return static_cast<s32>(0x80000000u);
+            return static_cast<s32>(lfWide);
+        }
+
+        // vmsum4fp128 (one rounding of the four-term dot -- FLAG (model), as ShowerDot3).
+        inline f32 BurstDot4(const Vector4& lrA, const Vector4& lrB)
+        {
+            return static_cast<f32>(static_cast<f64>(lrA.x) * lrB.x + static_cast<f64>(lrA.y) * lrB.y
+                                  + static_cast<f64>(lrA.z) * lrB.z + static_cast<f64>(lrA.w) * lrB.w);
+        }
+
+        // [DIAG] BRN_DEBRIS_BURST_DIAG=1 -- NOT IN THE X360 BINARY, capped at 40 lines. DELETE-WHEN-STABLE.
+        // One line per burst record: the pieces spawned into each array (Coloured / Shiny / Dark / HighDetail), how
+        // many were thrown at the camera, and the first piece's position and velocity.
+        void DebrisBurstWitness(const FireDebrisBurstEvent* lpEvent, const u32 (&lauPerType)[4], u32 luAtCamera,
+                                const Vector3& lrFirstPosition, const Vector3& lrFirstVelocity)
+        {
+            static const bool sbArmed = []() {
+                const char* const lpcValue = std::getenv("BRN_DEBRIS_BURST_DIAG");
+                return lpcValue != 0 && lpcValue[0] == '1';
+            }();
+            static u32 suLines = 0;
+            if (!sbArmed || suLines >= 40u)
+                return;
+            ++suLines;
+            char lacMsg[320];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[debris-burst] t=%.3f scale=%.3f pieces=%u/%u/%u/%u atCamera=%u first pos=(%.3f,%.3f,%.3f) "
+                "vel=(%.3f,%.3f,%.3f)\n",
+                static_cast<double>(lpEvent->mfCurrentTime), static_cast<double>(lpEvent->mfScaleFactor),
+                lauPerType[0], lauPerType[1], lauPerType[2], lauPerType[3], luAtCamera,
+                static_cast<double>(lrFirstPosition.x), static_cast<double>(lrFirstPosition.y),
+                static_cast<double>(lrFirstPosition.z), static_cast<double>(lrFirstVelocity.x),
+                static_cast<double>(lrFirstVelocity.y), static_cast<double>(lrFirstVelocity.z));
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+
+        // CgsNumeric::Random::RandomUnitVector, inlined by the console (0x8229AE44..0x8229AF50): a point of the
+        // unit disc by rejection -- two RandomFloat() a try, x first, each `fmsubs r, 2.0, 1.0`, the squared
+        // length one fused `fmadds y*y + x*x`, retried while it is >= 1 -- lifted onto the sphere:
+        // (2 sqrt(1 - s) x, 2 sqrt(1 - s) y, 2s - 1), w 0.
+        inline Vector3 BurstRandomUnitVector(CgsNumeric::Random& lrRandom)
+        {
+            f32 lfX, lfY, lfLengthSquared;
+            do
+            {
+                lfX = std::fma(lrRandom.RandomFloat(), KF_DEBRIS_BURST_TWO, -KF_DEBRIS_BURST_ONE);
+                const f32 lfXSquared = lfX * lfX;
+                lfY = std::fma(lrRandom.RandomFloat(), KF_DEBRIS_BURST_TWO, -KF_DEBRIS_BURST_ONE);
+                lfLengthSquared = std::fma(lfY, lfY, lfXSquared);
+            } while (!(lfLengthSquared < KF_DEBRIS_BURST_ONE));   // `fcmpu ; bge` loops on a NaN too
+            const f32 lfScale = std::sqrt(KF_DEBRIS_BURST_ONE - lfLengthSquared) * KF_DEBRIS_BURST_TWO;
+            Vector3 lv;
+            lv.x = lfScale * lfX;
+            lv.y = lfScale * lfY;
+            lv.z = std::fma(lfLengthSquared, KF_DEBRIS_BURST_TWO, -KF_DEBRIS_BURST_ONE);
+            lv.w = 0.0f;
+            return lv;
+        }
+    }
+
+    void ParticleModule::HandleFireDebrisBurstEvent(const FireDebrisBurstEvent* lpEvent)
+    {
+        CGS_ASSERT(lpEvent != 0, "Received a Null Event");
+
+        const u8* const lpLayout =
+            static_cast<const u8*>(((const Attrib::Instance&)lpEvent->mDebrisParams).GetLayoutPointer());
+        const f32 lfConeHalfAngle = BurstLayoutF32(lpLayout, KU_BURST_EMISSION_ANGLE_DEG) * KF_DEBRIS_BURST_DEG_TO_RAD;
+        const f32 lfSpeedMin      = BurstLayoutF32(lpLayout, KU_BURST_VELOCITY_MIN);
+        const f32 lfSpeedMax      = BurstLayoutF32(lpLayout, KU_BURST_VELOCITY_MAX);
+
+        // The type switch's four values live across the loop, all zero at entry (r14: `li r28, 0 ; mr r14, r28`;
+        // v123: `vspltisw128 v125, 0 ; vmr128 v123, v125`; f20 / f15: `lfs f20, flt_82001CC0 ; fmr f15, f20`), so
+        // the default arm -- unreachable, the loop runs over 0..3 -- would reuse the previous type's.
+        s32     liNumParticles = 0;
+        Vector4 lvBaseColour;
+        lvBaseColour.x = 0.0f; lvBaseColour.y = 0.0f; lvBaseColour.z = 0.0f; lvBaseColour.w = 0.0f;
+        f32     lfSizeMin = 0.0f;
+        f32     lfSizeMax = 0.0f;
+
+        u32     lauDiagPieces[4] = { 0u, 0u, 0u, 0u };          // [DIAG] DELETE-WHEN-STABLE
+        u32     luDiagAtCamera = 0u;                            // [DIAG]
+        Vector3 lvDiagFirstPosition, lvDiagFirstVelocity;       // [DIAG]
+        lvDiagFirstPosition.x = lvDiagFirstPosition.y = lvDiagFirstPosition.z = lvDiagFirstPosition.w = 0.0f;
+        lvDiagFirstVelocity = lvDiagFirstPosition;
+
+        for (u32 luType = 0; luType < 4u; ++luType)
+        {
+            // The type switch (jpt 0x8229A81C): the base colour and the type's three layout words.
+            switch (luType)
+            {
+            case Native::eDebrisArray_Coloured:
+                lvBaseColour = lpEvent->mvCarColour;                                   // the car's paint (+0x40)
+                liNumParticles = *reinterpret_cast<const s32*>(lpLayout + KA_DEBRIS_BURST_TYPE_FIELDS[luType].muNumParticles);
+                lfSizeMin = BurstLayoutF32(lpLayout, KA_DEBRIS_BURST_TYPE_FIELDS[luType].muSizeMin);
+                lfSizeMax = BurstLayoutF32(lpLayout, KA_DEBRIS_BURST_TYPE_FIELDS[luType].muSizeMax);
+                break;
+            case Native::eDebrisArray_Shiny:
+            case Native::eDebrisArray_Dark:
+            case Native::eDebrisArray_HighDetail:
+                lvBaseColour = maDebris[luType].Params()->mColour;                     // the preset's +0x20
+                liNumParticles = *reinterpret_cast<const s32*>(lpLayout + KA_DEBRIS_BURST_TYPE_FIELDS[luType].muNumParticles);
+                lfSizeMin = BurstLayoutF32(lpLayout, KA_DEBRIS_BURST_TYPE_FIELDS[luType].muSizeMin);
+                lfSizeMax = BurstLayoutF32(lpLayout, KA_DEBRIS_BURST_TYPE_FIELDS[luType].muSizeMax);
+                break;
+            default:
+                CGS_ASSERT(false, "Unknown Debris Type in ParticleModule !");
+                break;
+            }
+
+            // The colour bounds: the grey of the base colour pushed 25% / 75% of the way back to it, alpha
+            // 0.5 / 0.9 (vmsum4fp128, vsubfp128, two vmaddfp, two vrlimi128 of w -- 0x8229A8F0..0x8229A92C).
+            Vector4 lvWeights;
+            lvWeights.x = KF_DEBRIS_BURST_GREY_WEIGHT; lvWeights.y = KF_DEBRIS_BURST_GREY_WEIGHT;
+            lvWeights.z = KF_DEBRIS_BURST_GREY_WEIGHT; lvWeights.w = 0.0f;
+            const f32 lfGrey = BurstDot4(lvWeights, lvBaseColour);
+            Vector4 lvLow, lvHigh;
+            lvLow.x  = std::fma(lvBaseColour.x - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
+            lvLow.y  = std::fma(lvBaseColour.y - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
+            lvLow.z  = std::fma(lvBaseColour.z - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
+            lvLow.w  = KF_DEBRIS_BURST_ALPHA_LOW;
+            lvHigh.x = std::fma(lvBaseColour.x - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
+            lvHigh.y = std::fma(lvBaseColour.y - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
+            lvHigh.z = std::fma(lvBaseColour.z - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
+            lvHigh.w = KF_DEBRIS_BURST_ALPHA_HIGH;
+            BrnEffects::Utils::DebrisColourRandomiser lColourRandomiser;
+            lColourRandomiser.Prepare(lvLow, lvHigh);
+
+            // count * scale, truncated (`extsw ; fcfid ; frsp ; fmuls ; fctiwz`, 0x8229A8DC..0x8229A95C).
+            const s32 liNumToSpawn = BurstFctiwz(static_cast<f32>(liNumParticles) * lpEvent->mfScaleFactor);
+            if (liNumToSpawn <= 0)
+                continue;
+
+            Native::BrnDebrisArray& lrArray = maDebris[luType];                       // this + 0x22818 + type * 32
+            const Vector3& lrHalf    = lpEvent->mvEmitterHalfExtents;                 // +0x10
+            const Vector3& lrInherit = lpEvent->mvVelocityToInherit;                  // +0x20
+            const Vector3& lrCamera  = lpEvent->mCameraPosition;                      // +0x30
+            for (u32 luLeft = static_cast<u32>(liNumToSpawn); luLeft != 0u; --luLeft)
+            {
+                // The spot in the emitter box: RandomFloat(-h, h) per axis, z drawn first, then y, then x
+                // (the range `h - (-h)`, the negation a `vxor` of the sign bit), added to the spawn position.
+                const f32 lfOffsetZ = mRandom.RandomFloat(-lrHalf.z, lrHalf.z);
+                const f32 lfOffsetY = mRandom.RandomFloat(-lrHalf.y, lrHalf.y);
+                const f32 lfOffsetX = mRandom.RandomFloat(-lrHalf.x, lrHalf.x);
+                Vector3 lvPosition;
+                lvPosition.x = lpEvent->mSpawnPosition.x + lfOffsetX;
+                lvPosition.y = lpEvent->mSpawnPosition.y + lfOffsetY;
+                lvPosition.z = lpEvent->mSpawnPosition.z + lfOffsetZ;
+                lvPosition.w = lpEvent->mSpawnPosition.w + 0.0f;
+
+                Vector3 lvVelocity;
+                const f32 lfAimDraw = mRandom.RandomFloat();
+                if (!(lfAimDraw < BurstLayoutF32(lpLayout, KU_BURST_CAMERA_PROBABILITY)))   // `fcmpu ; bge` 0x8229AB48
+                {
+                    // ---- the cone (0x8229AC14) ----
+                    const f32 lfLateral = mRandom.RandomFloat(-lfConeHalfAngle, lfConeHalfAngle);
+                    const f32 lfAzimuth = mRandom.RandomFloat() * KF_DEBRIS_BURST_TWO_PI;
+                    // One TrigBaseFunctions5 evaluation over (az, az, lat, lat) with the (sin, cos, sin, cos)
+                    // phases (vmrghw, 0x8229ACCC..0x8229AD2C).
+                    const f32 lfSinAzimuth = ShowerSinCosLane(lfAzimuth, KF_SHOWER_SIN_PHASE);
+                    const f32 lfCosAzimuth = ShowerSinCosLane(lfAzimuth, KF_SHOWER_COS_PHASE);
+                    const f32 lfSinLateral = ShowerSinCosLane(lfLateral, KF_SHOWER_SIN_PHASE);
+                    const f32 lfCosLateral = ShowerSinCosLane(lfLateral, KF_SHOWER_COS_PHASE);
+                    // (cos az sin lat, cos lat, sin az cos lat, cos az sin lat): the vperm of 0x82CDA350
+                    // (00010203 14151617 00010203 00010203 -- A.x, B.y, A.x, A.x) and the vrlimi of z
+                    // (0x8229AD68 / 0x8229AD8C), exactly as built -- z pairs sin az with cos lat, not sin lat.
+                    Vector3 lvDirection;
+                    lvDirection.x = lfCosAzimuth * lfSinLateral;
+                    lvDirection.y = lfCosLateral;
+                    lvDirection.z = lfSinAzimuth * lfCosLateral;
+                    lvDirection.w = lvDirection.x;
+                    const f32 lfSpeed   = mRandom.RandomFloat(lfSpeedMin, lfSpeedMax);
+                    const f32 lfInherit = std::fma(mRandom.RandomFloat(), KF_DEBRIS_BURST_INHERIT_RANGE,
+                                                   KF_DEBRIS_BURST_INHERIT_MIN);
+                    // v127 = V * splat(inherit), then vmaddfp128 v127 = dir * splat(speed) + v127.
+                    lvVelocity.x = std::fma(lvDirection.x, lfSpeed, lrInherit.x * lfInherit);
+                    lvVelocity.y = std::fma(lvDirection.y, lfSpeed, lrInherit.y * lfInherit);
+                    lvVelocity.z = std::fma(lvDirection.z, lfSpeed, lrInherit.z * lfInherit);
+                    lvVelocity.w = std::fma(lvDirection.w, lfSpeed, lrInherit.w * lfInherit);
+                }
+                else
+                {
+                    // ---- at the camera: 0.5 above it, 7 m/s, lifted by half a gravity drop (0x8229AB50) ----
+                    Vector3 lvToTarget;
+                    lvToTarget.x = std::fma(KAF_DEBRIS_BURST_CAMERA_UP[0], KF_DEBRIS_BURST_HALF, lrCamera.x) - lvPosition.x;
+                    lvToTarget.y = std::fma(KAF_DEBRIS_BURST_CAMERA_UP[1], KF_DEBRIS_BURST_HALF, lrCamera.y) - lvPosition.y;
+                    lvToTarget.z = std::fma(KAF_DEBRIS_BURST_CAMERA_UP[2], KF_DEBRIS_BURST_HALF, lrCamera.z) - lvPosition.z;
+                    lvToTarget.w = std::fma(KAF_DEBRIS_BURST_CAMERA_UP[3], KF_DEBRIS_BURST_HALF, lrCamera.w) - lvPosition.w;
+                    const f32 lfDistance   = ShowerGuardedLength3(lvToTarget);
+                    const f32 lfFlightTime = lfDistance * KF_DEBRIS_BURST_SECONDS_PER_M;   // fmuls
+                    const f32 lfSpeedScale = KF_DEBRIS_BURST_CAMERA_SPEED / lfDistance;    // fdivs
+                    const f32 lfLift       = (lfFlightTime * KF_DEBRIS_BURST_HALF) * KF_DEBRIS_BURST_GRAVITY;
+                    lvVelocity.x = lvToTarget.x * lfSpeedScale - lfLift;
+                    lvVelocity.y = lvToTarget.y * lfSpeedScale - lfLift;
+                    lvVelocity.z = lvToTarget.z * lfSpeedScale - lfLift;
+                    lvVelocity.w = lvToTarget.w * lfSpeedScale - lfLift;
+                    ++luDiagAtCamera;                                                       // [DIAG]
+                }
+
+                const f32 lfSize     = mRandom.RandomFloat(lfSizeMin, lfSizeMax);          // f28
+                const Vector3 lvAxis = BurstRandomUnitVector(mRandom);
+                const f32 lfSpin     = mRandom.RandomFloat();   // `lfsx f30` -- drawn BEFORE the colour's two
+                Vector4 lvColour;
+                lColourRandomiser.Randomise(lvColour, mRandom);
+                lrArray.SpawnDebris(lvPosition, lvVelocity, lvAxis, lvColour,
+                                    std::fma(lfSpin, KF_DEBRIS_BURST_SPIN_RANGE, KF_DEBRIS_BURST_SPIN_MIN),
+                                    lfSize, lpEvent->mfCurrentTime);
+                if ((lauDiagPieces[0] | lauDiagPieces[1] | lauDiagPieces[2] | lauDiagPieces[3]) == 0u)   // [DIAG]
+                {
+                    lvDiagFirstPosition = lvPosition;
+                    lvDiagFirstVelocity = lvVelocity;
+                }
+                ++lauDiagPieces[luType];                                                    // [DIAG]
+            }
+        }
+        DebrisBurstWitness(lpEvent, lauDiagPieces, luDiagAtCamera, lvDiagFirstPosition, lvDiagFirstVelocity);   // [DIAG]
     }
 }
