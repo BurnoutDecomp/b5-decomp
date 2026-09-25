@@ -417,6 +417,27 @@ namespace BrnDirector
 
         mpCurrentTakedown = 0;             // stw 0, +0x610
         meTakedownType    = E_NUM_TYPES;   // stw 1, +0x614 (the past-the-end "unset" sentinel)
+
+        // [HARNESS] NOT IN THE X360 BINARY -- BRN_ALWAYS_SHUTDOWN_CAM=1 raises the console's OWN debug toggle over
+        // mbAlwaysUseShutdownCam: BrnDirector::DebugComponent::OnActivate @0x82275F68 registers the bool at director
+        // +0x1622C (== this +0x62C) as "Always do shutdown TD camera" (0x82276544..0x8227655C, string 0x8200D140).
+        // With it on, every takedown takes Prepare's shutdown arm -- the SimpleIceTakedownPlayer on the takedown shot
+        // group's rolling index -- as a free-roam rival shutdown (E_ACTION_SHUTDOWN) does. Opt-in only, default off
+        // as on the console. Measured with it (fxdirector2_iceanim_bystander/20260925_220559): the takedown shot
+        // group holds ONE shot, Takedown_ICE_Shut (guid 554362, look spaces [8, 12, 8]). That run also fired
+        // SimpleIceTakedownPlayer::SetIceAnim's class-key assert. The console compares the whole u64 class key
+        // (`ld` + `cmpld` against 0x4644E379A997C1EE, 0x821F58F0..0x821F5904); the PC compares two dwords.
+        // Follow-up, not fixed here.
+        if (getenv("BRN_ALWAYS_SHUTDOWN_CAM") != 0)
+        {
+            mbAlwaysUseShutdownCam = true;
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[crashcam] HARNESS-ONLY (BRN_ALWAYS_SHUTDOWN_CAM=1): the console's debug toggle "
+                       "'Always do shutdown TD camera' is on\n";
+            }
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -1402,6 +1423,17 @@ namespace BrnDirector
                 mSimpleIceTakedown.SetIceAnim(
                     static_cast<Camera::Camera::ShotReference*>(
                         const_cast<void*>(lrTakedown.GetShotListElement(luShotIndex))));
+
+                // [crashcam] BRN_CRASHCAM_DIAG witness (NOT in the console): the shot the rolling index picked and
+                // the ICE take it names (resolved the way BehaviourIceAnim::SetParameters resolves it). Reads only.
+                if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    const Attrib::Gen::iceanim lDiagShot(
+                        *static_cast<const Camera::Camera::ShotReference*>(lrTakedown.GetShotListElement(luShotIndex)), 0);
+                    *CgsDev::Log::gpDebugPrint
+                        << "[crashcam] shutdown takedown shot " << luShotIndex << " of " << luShotCount
+                        << " take guid " << lDiagShot.GetAnimGuid() << " [FLAG PC witness]\n";
+                }
 
                 mpCurrentTakedown = &mSimpleIceTakedown;
             }
