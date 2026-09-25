@@ -1291,6 +1291,43 @@ namespace Vehicle
         }
     }
 
+    namespace
+    {
+        // R(Up, angle) * At from the angle's sine and cosine, as the console computes it right after the inlined
+        // XMVectorSinCos in SetWheelVelocities (0x825FD4A4..0x825FD530) and UpdateWheels (0x8261E6F0..0x8261E79C).
+        // The two blocks are the same sequence (FX-GATE, crash parity 2026-09-25, proven on emu64):
+        //   t = 1 - c (vsubfp128); tx, ty, tz = t * Up and sx, sy, sz = s * Up (vmulfp128: ROUNDING_RULE 4);
+        //   each a*b + c term is ONE vmaddfp (rule 3), each a*b - c term is a vmulfp128 then a vsubfp (rule 4):
+        //     row0 = ( tx*ax + c,  tx*ay + sz,  tx*az - sy )     0x8261E72C / 0x8261E728 / 0x8261E724 + 0x8261E738
+        //     row1 = ( ty*ax - sz, ty*ay + c,   ty*az + sx )     0x8261E744 + 0x8261E754 / 0x8261E748 / 0x8261E730
+        //     row2 = ( tz*ax + sy, tz*ay - sx,  tz*az + c  )     0x8261E750 / 0x8261E74C + 0x8261E758 / 0x8261E734
+        //   then, per lane, row0 * At.x (vmulfp128 0x8261E790), + row1 * At.y (vmaddfp 0x8261E798), + row2 * At.z
+        //   (vmaddfp 0x8261E79C). The console's w lane comes out equal to x (the rows are packed through the
+        //   unk_82CDA350 vperm); every reader is a three-lane Dot, so w stays 0 here.
+        inline Vector3 SteeredDirection(const Vector3& lrUp, const Vector3& lrAt, f32 lfSin, f32 lfCos)
+        {
+            const f32 lfT  = 1.0f - lfCos;
+            const f32 lfTx = lfT * lrUp.x;
+            const f32 lfTy = lfT * lrUp.y;
+            const f32 lfTz = lfT * lrUp.z;
+            const f32 lfSx = lfSin * lrUp.x;
+            const f32 lfSy = lfSin * lrUp.y;
+            const f32 lfSz = lfSin * lrUp.z;
+
+            const Vector3 lvRow0{ std::fmaf(lfTx, lrUp.x, lfCos), std::fmaf(lfTx, lrUp.y, lfSz), lfTx * lrUp.z - lfSy,
+                                  0.0f };
+            const Vector3 lvRow1{ lfTy * lrUp.x - lfSz, std::fmaf(lfTy, lrUp.y, lfCos), std::fmaf(lfTy, lrUp.z, lfSx),
+                                  0.0f };
+            const Vector3 lvRow2{ std::fmaf(lfTz, lrUp.x, lfSy), lfTz * lrUp.y - lfSx, std::fmaf(lfTz, lrUp.z, lfCos),
+                                  0.0f };
+
+            return Vector3{ std::fmaf(lvRow2.x, lrAt.z, std::fmaf(lvRow1.x, lrAt.y, lvRow0.x * lrAt.x)),
+                            std::fmaf(lvRow2.y, lrAt.z, std::fmaf(lvRow1.y, lrAt.y, lvRow0.y * lrAt.x)),
+                            std::fmaf(lvRow2.z, lrAt.z, std::fmaf(lvRow1.z, lrAt.y, lvRow0.z * lrAt.x)),
+                            0.0f };
+        }
+    }
+
     // ==============================================================================================
     //  @0x825FD218  BrnPhysics::Vehicle::VehiclePhysics::SetWheelVelocities   (728 X360 instrs)
     // ==============================================================================================
@@ -1372,7 +1409,8 @@ namespace Vehicle
     //   (SDKs/XboxMath/XMVectorSinCos.h), proven on emu64 against these very words. The 2026-09-03 note
     //   that std::sin / std::cos could differ "by no more than a float ulp" was true, but they differ by
     //   that ulp on about two in three steering angles (267 of the 400 test rows), and it lands in the
-    //   wheel spin re-seed. The Rodrigues rows after it are still unfused (FLAG at the site).
+    //   wheel spin re-seed. The Rodrigues rows and the product with At after it take the console's
+    //   roundings too (SteeredDirection, shared with UpdateWheels).
     //
     // NOT REPRODUCED, deliberately: the console prologue lazily initialises two function-scope
     //   statics -- unk_82FBA210 = splat(100.0f) and unk_82FBA200 = splat(1000.0f), guarded by bits
@@ -1403,32 +1441,16 @@ namespace Vehicle
         // XMVectorSinCos of the +0xFE0 .x lane (0x825FD2F4..0x825FD4B0: sine in v10, cosine in v11),
         // which is XboxMath::XMVectorSinCos bit for bit -- the real words run on emu64 agree with it on
         // 1500 angles (FX-GATE, crash parity 2026-09-25; std::sin / std::cos stood in before).
-        // FLAG (rule 3, open): the Rodrigues rows and the product with At below are still spelt
-        // unfused; the console's are vmaddfp / vmulfp128 / vsubfp at 0x825FD4B4..0x825FD534.
         const f32 lfSteerAngle =
             mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x;
         f32 lfSin;
         f32 lfCos;
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfSteerAngle);
-        const f32 lfOneMinusCos = 1.0f - lfCos;                     // vsubfp128 v10, v127(1.0), v11
 
-        // Columns of the rotation, exactly as the asm packs them (vperm of lanes x/y then a
-        // vrlimi128 of lane z).
-        const Vector3 lvCol0{ lfCos + lfOneMinusCos * lvUp.x * lvUp.x,
-                              lfOneMinusCos * lvUp.x * lvUp.y + lfSin * lvUp.z,
-                              lfOneMinusCos * lvUp.x * lvUp.z - lfSin * lvUp.y, 0.0f };
-        const Vector3 lvCol1{ lfOneMinusCos * lvUp.y * lvUp.x - lfSin * lvUp.z,
-                              lfCos + lfOneMinusCos * lvUp.y * lvUp.y,
-                              lfOneMinusCos * lvUp.y * lvUp.z + lfSin * lvUp.x, 0.0f };
-        const Vector3 lvCol2{ lfOneMinusCos * lvUp.z * lvUp.x + lfSin * lvUp.y,
-                              lfOneMinusCos * lvUp.z * lvUp.y - lfSin * lvUp.x,
-                              lfCos + lfOneMinusCos * lvUp.z * lvUp.z, 0.0f };
-
-        // v125 = R * At  (the asm's `col0*At.x + col1*At.y + col2*At.z` FMA cascade).
-        const Vector3 lvSteeredDirection{
-            lvCol0.x * lvAt.x + lvCol1.x * lvAt.y + lvCol2.x * lvAt.z,
-            lvCol0.y * lvAt.x + lvCol1.y * lvAt.y + lvCol2.y * lvAt.z,
-            lvCol0.z * lvAt.x + lvCol1.z * lvAt.y + lvCol2.z * lvAt.z, 0.0f };
+        // v13 (the steered direction) = R * At: the Rodrigues rows and the product with At,
+        // 0x825FD4A4..0x825FD530, in the console's roundings (SteeredDirection above; the last term is
+        // `vmaddfp128 v13, v12, v0` at 0x825FD530).
+        const Vector3 lvSteeredDirection = SteeredDirection(lvUp, lvAt, lfSin, lfCos);
 
         // ---- the four unrolled wheel blocks ------------------------------------------------------
         for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
@@ -7484,8 +7506,6 @@ namespace Vehicle
         // target here is the member (+0x10E0). The SinCos (0x8261E524..0x8261E710: sine in v10, cosine
         // in v11) is XboxMath::XMVectorSinCos bit for bit -- the real words run on emu64 agree with it on
         // 1500 angles (FX-GATE, crash parity 2026-09-25; std::sin / std::cos stood in before).
-        // FLAG (rule 3, open): the Rodrigues rows and the product with At are still spelt unfused; the
-        // console's are vmaddfp / vmulfp128 / vsubfp at 0x8261E714..0x8261E7A0.
         {
             const Vector3& lvUp = mTransform.Up();
             const Vector3& lvAt = mTransform.At();
@@ -7495,22 +7515,10 @@ namespace Vehicle
             f32 lfSin;
             f32 lfCos;
             XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfSteerAngle);
-            const f32 lfOneMinusCos = 1.0f - lfCos;
 
-            const Vector3 lvCol0{ lfCos + lfOneMinusCos * lvUp.x * lvUp.x,
-                                  lfOneMinusCos * lvUp.x * lvUp.y + lfSin * lvUp.z,
-                                  lfOneMinusCos * lvUp.x * lvUp.z - lfSin * lvUp.y, 0.0f };
-            const Vector3 lvCol1{ lfOneMinusCos * lvUp.y * lvUp.x - lfSin * lvUp.z,
-                                  lfCos + lfOneMinusCos * lvUp.y * lvUp.y,
-                                  lfOneMinusCos * lvUp.y * lvUp.z + lfSin * lvUp.x, 0.0f };
-            const Vector3 lvCol2{ lfOneMinusCos * lvUp.z * lvUp.x + lfSin * lvUp.y,
-                                  lfOneMinusCos * lvUp.z * lvUp.y - lfSin * lvUp.x,
-                                  lfCos + lfOneMinusCos * lvUp.z * lvUp.z, 0.0f };
-
-            mSteeringDirection = Vector3{
-                lvCol0.x * lvAt.x + lvCol1.x * lvAt.y + lvCol2.x * lvAt.z,
-                lvCol0.y * lvAt.x + lvCol1.y * lvAt.y + lvCol2.y * lvAt.z,
-                lvCol0.z * lvAt.x + lvCol1.z * lvAt.y + lvCol2.z * lvAt.z, 0.0f };
+            // The Rodrigues rows and the product with At, 0x8261E6F0..0x8261E79C, in the console's
+            // roundings (SteeredDirection above), stored by `stvx128 v0, r0, r14` at 0x8261E7A0.
+            mSteeringDirection = SteeredDirection(lvUp, lvAt, lfSin, lfCos);
         }
 
         const Vector3& lvAt = mTransform.At();
