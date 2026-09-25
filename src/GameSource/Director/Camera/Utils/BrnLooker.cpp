@@ -15,15 +15,12 @@
 // staticDOF*10 (the DOF scale flt_82004A20 == 10.0; the focal-length scale flt_820049E0 is
 // ungroundable -- see KF_STATIC_FOCAL_LENGTH_SCALE).
 //
-// FLAG (ungroundable rodata): the three depth-of-field blurriness ramp-rate constants the
-// Zoom blend reads (flt_82CDAD18 / flt_82CDAD1C / flt_82CDAD20 -- the per-second blur/unblur
-// rates lerping the camera's mDepthOfField blurriness lane at camera+0x134 toward its target)
-// could not be resolved to numeric values from the available exports (no rodata tool / the
-// .data float is not in the asm packet). They are reconstructed as clearly-named placeholder
-// constants initialised to 0.0f rather than fabricated; see KF_DOF_*_RATE below. This makes
-// the DOF-blur ramp a no-op until the real rates are recovered, but keeps the control flow /
-// member writes faithful. The static-DOF focal-length scale (flt_820049E0) is likewise an
-// ungroundable FLAGGED placeholder.
+// ⭐ GROUNDED 2026-09-25 (FX-DIRECTOR2): the three depth-of-field blurriness ramp rates the Zoom blend reads
+// (flt_82CDAD18 / flt_82CDAD1C / flt_82CDAD20) are 0.1 / 0.1 / 0.15 in the image (x360rd). Each is referenced by
+// exactly one `lfs` in Zoom (0x82222F3C / 0x82222F30 / 0x82222F18) and nothing writes it: findinit finds no other
+// site, no CRT init thunk and no debug-menu registration, and no data word points at it. They were 0.0f
+// placeholders, which froze the camera's blurriness while a looker ran.
+// (The static-DOF focal-length scale flt_820049E0 was grounded 2026-08-20, see KF_STATIC_FOCAL_LENGTH_SCALE.)
 
 #include "GameSource/Director/Camera/Utils/BrnLooker.h"
 
@@ -32,6 +29,7 @@
 #include "rw/math/vpu/vector4_operation.h"                     // VecFloat lane ops
 #include "rw/math/vpu/matrix44affine_operation.h"              // SLerp / IsValid
 #include "rw/math/fpu/scalar_operation.h"                      // Clamp/Abs/Min/Max/Cos/Tan/IsZero
+#include <cmath>                                               // std::fmaf (the blurriness ramp's one fmadds)
 
 namespace BrnDirector
 {
@@ -70,13 +68,10 @@ namespace
     // day this TU mounts, with no assert (SetStaticParams writes members directly).
     const f32 KF_STATIC_FOCAL_LENGTH_SCALE = 100.0f;  // flt_820049E0
 
-    // FLAG (ungroundable): the three depth-of-field blurriness ramp-rate constants. Real
-    // values live in rodata (flt_82CDAD18 / flt_82CDAD1C / flt_82CDAD20) and could not be
-    // recovered from the asm packet; modelled as 0.0f placeholders (the ramp is a no-op)
-    // rather than fabricated. Recover and replace when the rodata is available.
-    const f32 KF_DOF_UNBLUR_RATE = 0.0f;   // flt_82CDAD18 (assessing / first-frame branch)
-    const f32 KF_DOF_HOLD_RATE   = 0.0f;   // flt_82CDAD1C (FOV-at-target branch)
-    const f32 KF_DOF_BLUR_RATE   = 0.0f;   // flt_82CDAD20 (FOV-moving branch)
+    // The three depth-of-field blurriness ramp rates, read from the image (x360rd; one `lfs` reader each, no writer).
+    const f32 KF_DOF_UNBLUR_RATE = 0.1f;    // flt_82CDAD18 == 0x3DCCCCCD (assessing, `lbz 0x1D ; bne` @0x82222E38)
+    const f32 KF_DOF_HOLD_RATE   = 0.1f;    // flt_82CDAD1C == 0x3DCCCCCD (FOV on target, `fcmpu ; beq` @0x82222EDC)
+    const f32 KF_DOF_BLUR_RATE   = 0.15f;   // flt_82CDAD20 == 0x3E19999A (FOV moving, the fall-through @0x82222F0C)
 } // namespace
 
 // Looker::Parameters::Construct is a header inline in BrnLooker.h.
@@ -383,8 +378,10 @@ void Looker::Zoom(VecFloat lvTimeStep,
         }
     }
 
-    // The single blurriness ramp write (camera+0x134).
-    lrCamera.GetDepthOfField().SetBlurriness((lfDofDelta * lfDofRate) + lfBlur);
+    // The single blurriness ramp write (camera+0x134): `fmadds f0, f12, f13, f0` @0x82222F48 -- delta * rate + blur
+    // rounded ONCE (ROUNDING_RULE rule 3). The moving branch's delta is its own `fsubs` (1.0 - blur, 0x82222F24, rule 4);
+    // the other two negate (`fneg` 0x82222F44, exact).
+    lrCamera.GetDepthOfField().SetBlurriness(std::fmaf(lfDofDelta, lfDofRate, lfBlur));
 
     // The static-DOF override path (asm 0x82222F50, gated on mbUseStaticDOF @+0x5C): forward
     // the scaled focal-length / DOF into the camera's DOF parameter block (camera+0x124). The
