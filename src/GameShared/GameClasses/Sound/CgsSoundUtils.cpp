@@ -565,8 +565,10 @@ bool SelectionHistory<512u, u16, u16, 65536ull>::LessThanTimeStamp(
 // @ 0x826C5900 -- reseed mRandom, rebuild maHistory as the identity permutation, Fisher-Yates
 // shuffle, then reset the running timestamp to KU_SIZE. The X360 inlines the whole Random refill
 // spine + the bounded LCG draw; reconstructed here through the CgsNumeric::Random public API.
-// CONFIDENCE low: the exact bounded-draw mapping (RandomUInt(0,KU_SIZE) vs the inlined
-// (seed>>32)&0x1FF) is reconstructed by intent, not verified store-for-store.
+// The draw is RandomUInt(0, KU_SIZE - 1) (crash parity FX-GATE, read at the loop @0x826C5B10):
+// 0x826C5B1C rldicl -> the OLD seed's high word, 0x826C5B2C clrlwi 23 -> & 0x1FF, i.e. % 512 with
+// the constant luMod = (KU_SIZE - 1) - 0 + 1 (so no "luMod > 0" assert); the step is stored at
+// 0x826C5B44. The (0, KU_SIZE) spelling only gave % 512 while RandomUInt(min, max) was one short.
 void SelectionHistory<512u, u16, u16, 65536ull>::Randomize(unsigned int luSeed)
 {
     mRandom.SetSeed(luSeed);
@@ -580,7 +582,7 @@ void SelectionHistory<512u, u16, u16, 65536ull>::Randomize(unsigned int luSeed)
     // Fisher-Yates shuffle driven by mRandom (loop @0x826C5B10).
     for (u16 lu = 0; lu < KU_SIZE; ++lu)
     {
-        const u16 luSwap             = static_cast<u16>(mRandom.RandomUInt(0, KU_SIZE));
+        const u16 luSwap             = static_cast<u16>(mRandom.RandomUInt(0, KU_SIZE - 1));
         const u16 luTemp             = maHistory[lu].mTimeStamp;
         maHistory[lu].mTimeStamp     = maHistory[luSwap].mTimeStamp;
         maHistory[luSwap].mTimeStamp = luTemp;
@@ -628,16 +630,16 @@ void SelectionHistory<512u, u16, u16, 65536ull>::Update(u16 lSelection)
 // (std::_Sort @0x82702948, predicate LessThanTimeStamp), then draws a random pick from the
 // oldest (luNumOfItems/2 + 1) half and returns that entry's mIndex.
 //
-//   luMod = (luNumOfItems >> 1) + 1               ; asm @0x8270294C..0x82702950
-//   pick  = mRandom.RandomUInt(0, luMod)          ; the inlined LCG draw @0x82702980..0x827029BC
-//   return laResults[pick].mIndex                 ; lhzx r3 @0x827029C0
+//   pick  = mRandom.RandomUInt(0, luNumOfItems >> 1)  ; inlined @0x8270294C..0x827029BC:
+//           0x8270294C srwi 1 ; 0x82702950 addi 1 -> luMod = (n >> 1) - 0 + 1 ; 0x82702954 cmplwi ;
+//           bne past "luMod > 0" (li r5, 0x12F = CgsRandom.h:303) ; 0x82702990 the OLD seed's high
+//           word ; 0x827029AC std the step ; 0x827029B0 divwu / mullw / subf -> draw % luMod
+//   return laResults[pick].mIndex                     ; lhzx r3 @0x827029C0
 //
 // The asm inlines the bounded LCG draw directly against mRandom.muSeed (ld/mulld/std @+0x30,
-// multiplier 0x5851F42D4C957F2D, +1); the `twllei r31,0` @0x827029A8 is RandomUInt's internal
-// "luMod > 0" guard (CgsRandom.h:303). Reconstructed here through the public RandomUInt(0,luMod)
-// API rather than re-deriving the LCG by raw offset, matching how Randomize() above is homed.
-// CONFIDENCE low: the exact bounded-draw mapping ((oldSeed>>32) % luMod vs RandomUInt) is
-// reconstructed by intent, sharing the inlined-PRNG caveat flagged on Randomize().
+// multiplier 0x5851F42D4C957F2D, +1); the `twi 6, r31, 0` @0x827029A8 is the compiler's trap for
+// that assert. Reconstructed here through the public RandomUInt(min, max), whose range is inclusive
+// (crash parity FX-GATE: the addi 1 is RandomUInt's own +1, so the bound passed is n >> 1).
 template <u32 tuSize, typename StoredType, typename TimeStampType, u64 tuModulo>
 template <typename LookupType, u32 tuNOldest>
 StoredType SelectionHistory<tuSize, StoredType, TimeStampType, tuModulo>::FindRandomOldest(
@@ -665,8 +667,7 @@ StoredType SelectionHistory<tuSize, StoredType, TimeStampType, tuModulo>::FindRa
     std::sort(laResults, laResults + luNumOfItems, &SelectionHistory::LessThanTimeStamp);
 
     // Random pick from the oldest (n/2 + 1) half.
-    const u32 luMod  = (static_cast<u32>(luNumOfItems) >> 1) + 1u;
-    const u32 luPick = mRandom.RandomUInt(0, luMod);
+    const u32 luPick = mRandom.RandomUInt(0, static_cast<u32>(luNumOfItems) >> 1);
     return laResults[luPick].mIndex;
 }
 
