@@ -18,6 +18,7 @@
 #include "SharedClasses/Traffic/BrnTrafficPvs.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -40,6 +41,13 @@ namespace Assert
 }
 namespace Log { DebugPrint* gpDebugPrint = nullptr; }
 namespace Message { unsigned long long gxMessageFilterFlags = 0; }
+}
+
+// The [nettraf] hull-predict / hull-in witnesses (b5 ca4ac341). The real declaration is included
+// above, so this silent definition must keep its signature.
+namespace BrnNetHarnessPC
+{
+    void WitnessTag(const char*, const char*, const char*, ...) {}
 }
 
 namespace BrnTraffic

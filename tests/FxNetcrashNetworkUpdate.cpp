@@ -18,7 +18,7 @@
 #include <cstring>
 #include <limits>
 
-static unsigned gAsserts = 0, gChecks = 0, gFailures = 0, gGateLogs = 0;
+static unsigned gAsserts = 0, gChecks = 0, gFailures = 0;
 
 namespace CgsDev
 {
@@ -42,14 +42,6 @@ namespace BrnTraffic
 {
 namespace
 {
-    // The module's named-gate logger; the double counts the calls so the test can see the hash leg
-    // being reached (online, RUNNING, decision frame) and nowhere else.
-    inline void LogMissingLeg_T1(bool& lrbAlreadyLogged, const char*)
-    {
-        lrbAlreadyLogged = true;
-        ++gGateLogs;
-    }
-
     // The BRN_NETCRASH_DIAG witness stream stays off here (its lines are PC-only prints).
     CgsDev::Log::DebugPrint* NetCrashDiagStream() { return nullptr; }
     const s32 KI_NETCRASH_HULL_DIAG_MAX_LINES = 48;
@@ -88,12 +80,28 @@ namespace
         FakeData* operator->() { return mp; }
     };
 
+    struct NetFixture;
+
+    // The traffic state hash leg (0x82728ABC..0x82728ACC): `lwzx r3, r14, 0x727B4` (mpLogger) and
+    // `bl Logger::HashState` with r4 = the module. The stand-in counts its calls, remembers the
+    // module it hashed and returns a fixed halfword, so the test can follow the value into the
+    // network interface.
+    struct FakeLogger
+    {
+        unsigned          muCalls;
+        const NetFixture* mpHashedModule;
+        u16               muHash;
+        u16 HashState(const NetFixture* lpModule) { ++muCalls; mpHashedModule = lpModule; return muHash; }
+    };
+
     struct NetFixture
     {
         typedef TrafficEntityModule M;
         static const M::EState E_STATE_RUNNING = M::E_STATE_RUNNING;
 
         FakeDataPtr                                mpData;
+        FakeLogger*                                mpLogger;
+        decltype(M::muUpdateCount)                 muUpdateCount;
         decltype(M::mbHullSyncDivergence)          mbHullSyncDivergence;
         decltype(M::mbAllowDivergentBehaviour)     mbAllowDivergentBehaviour;
         decltype(M::meState)                       meState;
@@ -125,8 +133,25 @@ static void Check(bool lbPass, const char* lpcWhat)
 
 static f32 FromBits(u32 lu) { f32 lf; std::memcpy(&lf, &lu, 4); return lf; }
 
-static Pvs      gPvs;
-static FakeData gData;
+static Pvs        gPvs;
+static FakeData   gData;
+static FakeLogger gLogger;
+
+// The hash leg ran exactly as the console's 0x82728ACC..0x82728AF4 does: one HashState(this) call,
+// then `sth hash, 0x80` / `stw muUpdateCount (+0x71B30), 0x84` / `stb 1, 0x7C` on the network
+// interface (SetDataHash(frame, hash)).
+static bool HashLegRan(const NetFixture& lrModule, const FakeOutput& lrOutput, unsigned luCallsBefore)
+{
+    return gLogger.muCalls == luCallsBefore + 1 && gLogger.mpHashedModule == &lrModule
+        && lrOutput.mNetwork.mbHashValid && lrOutput.mNetwork.muHash == gLogger.muHash
+        && lrOutput.mNetwork.muHashUpdateFrame == lrModule.muUpdateCount;
+}
+
+// ... and did not run at all: no call, the hash-set byte still clear.
+static bool HashLegSkipped(const FakeOutput& lrOutput, unsigned luCallsBefore)
+{
+    return gLogger.muCalls == luCallsBefore && !lrOutput.mNetwork.mbHashValid;
+}
 
 static void Prepare(NetFixture& lrModule, FakeInput& lrInput, FakeOutput& lrOutput)
 {
@@ -141,7 +166,10 @@ static void Prepare(NetFixture& lrModule, FakeInput& lrInput, FakeOutput& lrOutp
     gData.mpPvs         = &gPvs;
 
     std::memset(&lrModule, 0, sizeof(lrModule));
-    lrModule.mpData.mp = &gData;
+    lrModule.mpData.mp     = &gData;
+    lrModule.mpLogger      = &gLogger;
+    lrModule.muUpdateCount = 0x2B7;   // any u16; the store at 0x84 must carry this one
+    gLogger.muHash         = 0xC0DE;
 
     std::memset(&lrInput, 0, sizeof(lrInput));
     for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
@@ -166,7 +194,7 @@ int main()
         lModule.mbNeedToBroadcastHullChange = true;
         lModule.mbHullSyncDivergence        = true;
         lModule.mbDecisionFrame             = true;
-        const unsigned luGates = gGateLogs;
+        const unsigned luCalls = gLogger.muCalls;
 
         lModule.GenerateNetworkUpdateEvents(&lInput, &lOutput);
 
@@ -186,7 +214,8 @@ int main()
         Check(lOutput.mNetwork.mbHullSyncDivergence, "divergence byte copied from mbHullSyncDivergence (stb 0x7E)");
         Check(lOutput.mNetwork.GetActivateHullQueue().GetLength() == 0, "offline: no hull broadcast");
         Check(lModule.mbNeedToBroadcastHullChange, "offline: the pending broadcast is left alone");
-        Check(gGateLogs == luGates, "offline: the hash leg is not reached");
+        Check(HashLegSkipped(lOutput, luCalls),
+              "offline: the hash leg is not reached (bne 0x82728A44 on mbAllowDivergentBehaviour)");
     }
 
     // ---- 2. online, RUNNING, a broadcast pending, a decision frame -----------------------------
@@ -201,7 +230,7 @@ int main()
         lModule.mHullChangeToBroadcast.muUpdateFrame        = 1234;
         lModule.mbHullSyncDivergence        = false;
         lModule.mbDecisionFrame             = true;
-        const unsigned luGates = gGateLogs;
+        const unsigned luCalls = gLogger.muCalls;
 
         lModule.GenerateNetworkUpdateEvents(&lInput, &lOutput);
 
@@ -214,7 +243,9 @@ int main()
               "online RUNNING: mHullChangeToBroadcast goes out as one ActivateHull(arc, hull, frame) (0x82728AA0)");
         Check(!lModule.mbNeedToBroadcastHullChange, "online RUNNING: mbNeedToBroadcastHullChange cleared (0x82728AA4)");
         Check(!lOutput.mNetwork.mbHullSyncDivergence, "divergence byte copied (false)");
-        Check(gGateLogs == luGates + 1, "online RUNNING decision frame: the hash leg is reached (and gated)");
+        Check(HashLegRan(lModule, lOutput, luCalls),
+              "online RUNNING decision frame: Logger::HashState(this) once (0x82728ACC), then hash @0x80, "
+              "muUpdateCount @0x84, hash-set byte @0x7C (0x82728AEC..0x82728AF4)");
     }
 
     // ---- 3. online but still STARTING_UP: nothing goes out --------------------------------------
@@ -225,13 +256,14 @@ int main()
         lModule.meState                     = TrafficEntityModule::E_STATE_STARTING_UP;
         lModule.mbNeedToBroadcastHullChange = true;
         lModule.mbDecisionFrame             = true;
-        const unsigned luGates = gGateLogs;
+        const unsigned luCalls = gLogger.muCalls;
 
         lModule.GenerateNetworkUpdateEvents(&lInput, &lOutput);
 
         Check(lOutput.mNetwork.GetActivateHullQueue().GetLength() == 0 && lModule.mbNeedToBroadcastHullChange,
               "online STARTING_UP: no broadcast, the flag stays set (meState != E_STATE_RUNNING, 0x82728A4C)");
-        Check(gGateLogs == luGates, "online STARTING_UP: the hash leg is not reached");
+        Check(HashLegSkipped(lOutput, luCalls),
+              "online STARTING_UP: the hash leg is not reached (meState != RUNNING, bne 0x82728A50)");
         Check(lOutput.mNetwork.mbActiveHullsValid, "the hull table is published in every state");
     }
 
@@ -243,12 +275,13 @@ int main()
         lModule.meState                     = TrafficEntityModule::E_STATE_RUNNING;
         lModule.mbNeedToBroadcastHullChange = false;
         lModule.mbDecisionFrame             = false;
-        const unsigned luGates = gGateLogs;
+        const unsigned luCalls = gLogger.muCalls;
 
         lModule.GenerateNetworkUpdateEvents(&lInput, &lOutput);
 
         Check(lOutput.mNetwork.GetActivateHullQueue().GetLength() == 0, "online, nothing pending: no broadcast");
-        Check(gGateLogs == luGates, "not a decision frame: the hash leg is not reached");
+        Check(HashLegSkipped(lOutput, luCalls),
+              "not a decision frame: the hash leg is not reached (beq 0x82728AB8 on IsDecisionFrame)");
     }
 
     Check(gAsserts == 0, "no assert fired");
