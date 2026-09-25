@@ -33,6 +33,7 @@
 #include "SharedClasses/Graphics/VFXPropsResourceType.h"              // BrnParticle::VFXPropCollectionResourceType (0x1001B)
 #include "SharedClasses/Graphics/ParticleDescriptionResourceType.h"   // BrnParticle::ParticleDescriptionCollectionResourceType (0x10008)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiHudMessageType.h"  // CgsResource::HudMessageResourceType (0x2C == 44)
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiPopupResourceType.h" // CgsResource::GuiPopupResourceType (0x1F == 31)
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"   // CgsResource::LuaCodeResourceType (0x22)
 #include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResourceType (0x27)
 #include "GameShared/GameClasses/RenderWare/cross/CgsRwRenderableResourceType.h"          // 0xC
@@ -350,6 +351,13 @@ namespace CgsResource
         // build/game/HUDMESSAGES.HM carries `2c 00 00 00` as its resource type at 0x68.
         static HudMessageResourceType      sHudMessage;        // 0x2C  HudMessage (HUDMESSAGES.HM)
         TypeRegistry::Register(&sHudMessage, "HudMessage");
+        // Overlay popups, type 31 (0x1F), registered by the console's
+        // GameDataModule::RegisterResourceTypes as "GuiPopupResourceType". The shipped
+        // build/game/POPUPS.PUP carries `1f 00 00 00` as its resource type at 0x68.
+        // Unregistered, the acquire hands back an un-relocated table and every overlay
+        // request would read a file offset as a pointer.
+        static GuiPopupResourceType        sGuiPopup;          // 0x1F  GuiPopup (POPUPS.PUP)
+        TypeRegistry::Register(&sGuiPopup, "GuiPopup");
         static LuaCodeResourceType         sLuaCode;           // 0x22  LuaCode (FSM scripts; loaded by the GUI flow)
         TypeRegistry::Register(&sLuaCode, "LuaCode");
         static LanguageResourceType        sLanguage;          // 0x27  Language (localised string table)

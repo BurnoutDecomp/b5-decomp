@@ -1,26 +1,13 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiPopupResourceType.h"
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiPopupResource.h"  // CgsGui::GuiPopupResource (the real type)
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   CgsResource::GuiPopupResourceType::FixDown                       @ 0x82851FA8
-//   CgsResource::GuiPopupResourceType::FixUp                         @ 0x82851F98
-//   CgsResource::GuiPopupResourceType::GetSerialisedResourceDescriptor @ 0x82855A18
-//   CgsResource::GuiPopupResourceType::GetTypeID                     @ 0x8284BC90
+// CgsResource::GuiPopupResourceType -- the resource-type handler for Popups.pup (type 31).
 //
-// FixUp/FixDown forward to CgsGui::GuiPopupResource (own TU); FixDown passes the
-// "deep" flag and the delta (the rw::Resource's load base). GetSerialisedResource-
-// Descriptor returns the five-entry descriptor: entry 0 is {size=count, align=16},
-// the remaining four are {size=count, align=1}; count is read from the resource.
-
-namespace CgsGui
-{
-    struct GuiPopupResource
-    {
-        GuiPopupResource* FixUp(int liDelta);
-        GuiPopupResource* FixDown(int liDelta, bool lbDeep);
-    };
-}
+// FixUp / FixDown are single tail calls into CgsGui::GuiPopupResource with the rw::Resource's
+// load base (FixDown passes the deep flag set). The delta is the full-width load base: the
+// shipped POPUPS.PUP carries 8-byte pointer slots.
 
 namespace CgsResource
 {
@@ -34,29 +21,29 @@ namespace CgsResource
     void GuiPopupResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
         static_cast<CgsGui::GuiPopupResource*>(lpResource)->FixDown(
-            static_cast<int>(CgsResource::GetLoadBase(lrResource)), true);
+            CgsResource::GetLoadBase64(lrResource), true);
     }
 
     void GuiPopupResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
         static_cast<CgsGui::GuiPopupResource*>(lpResource)->FixUp(
-            static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+            CgsResource::GetLoadBase64(lrResource));
     }
 
+    // Five-entry descriptor: entry 0 is { miSizeOfPopupResource, 16 } (the console reads the
+    // signed 16-bit field at +0x06), entries 1..4 are { 0, 1 }. The size is read by NAME: on
+    // the host the pointer slot in front of it is 8 bytes wide.
     ResourceDescriptor GuiPopupResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
     {
-        // Count is a signed 16-bit field at byte offset 6 in the X360 build
-        // (lhz + extsh), sign-extended to 32 bits.
-        s16 liCount16 = *reinterpret_cast<const s16*>(reinterpret_cast<uintptr_t>(lpResource) + 6);
-        u32 luCount   = static_cast<u32>(static_cast<s32>(liCount16));
+        const s32 liSize = static_cast<const CgsGui::GuiPopupResource*>(lpResource)->miSizeOfPopupResource;
 
         ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = luCount;
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(liSize);
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16u;
         for (int li = 1; li < 5; ++li)
         {
-            lDescriptor.m_baseResourceDescriptors[li].m_size      = luCount;
-            lDescriptor.m_baseResourceDescriptors[li].m_alignment = 1;
+            lDescriptor.m_baseResourceDescriptors[li].m_size      = 0u;
+            lDescriptor.m_baseResourceDescriptors[li].m_alignment = 1u;
         }
         return lDescriptor;
     }

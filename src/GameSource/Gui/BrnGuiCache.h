@@ -64,7 +64,7 @@ namespace BrnTraffic { struct ScoringTrafficData; } // GetScoringTrafficData ret
 // mpController is passed straight to BrnResource::HudMessageController::
 // GetIndexFromMessageHash @0x8267D4C8 in FilterAndSendOffMessage @0x82511640), so the fork
 // is gone and the real type is named here.
-namespace BrnResource { struct HudMessageController; }
+namespace BrnResource { struct HudMessageController; struct PopupController; }
 
 namespace BrnGui
 {
@@ -1057,6 +1057,16 @@ namespace BrnGui
             CGS_ASSERT(lpDirector != 0, "lpDirector");       // BrnGuiCache.h:2433
             mpHudMessageDirector = lpDirector;
         }
+        // The popup-controller pair. The console inlines the setter into
+        // BrnGui::GuiModule::Construct (the store right after the director's, with its own
+        // "lpController" assert) and the read into GuiModule::Update, which tests the word
+        // for null before handing it to GuiOverlaysDirector::SetController.
+        void SetPopupController(const BrnResource::PopupController* lpController)
+        {
+            CGS_ASSERT(lpController != 0, "lpController");
+            mpPopupController = lpController;
+        }
+        const BrnResource::PopupController* GetPopupController() const { return mpPopupController; }
 
         // [gateui r2] FLAG: ADDITIVE HOST ACCESSOR -- no X360 symbol. The console never
         // needs to ask: its HUD-message controller is always loaded by the time
@@ -1434,7 +1444,7 @@ namespace BrnGui
         // getters already returned const; the setters above are the only writers.
         const BrnResource::HudMessageController* mpHudMessageController; // +0x4070 (16496)
         const HudMessageDirector* mpHudMessageDirector;   // +0x4074 (16500)
-        u8  mPad_4078[4];                                // +0x4078..+0x407B
+        const BrnResource::PopupController* mpPopupController; // +0x4078 (16504) SetPopupController
         // ADDITIVE CARVE (HudMessageAnalyzer keystone): the gameplay-HUD gate byte the
         // analyzer's Update checks before firing crash/challenge/trophy/player-left
         // messages (lbz mpGuiCache+0x407C, X360 @0x82527668/0x825276B0/...). FLAG:

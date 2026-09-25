@@ -1,65 +1,52 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiPopupResource.h"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82851F08
-//   (CgsGui::GuiPopupResource::FixDown)
+// CgsGui::GuiPopupResource -- the load-time relocation pair for the Popups.pup table.
 //
-// Inverse load-time relocation: walks `count` (this[1]) entry pointers stored at
-// the base `this[0]`, subtracts `delta` from each, then rebases the base down by
-// `delta`. Behaviour-faithful to the X360 pseudocode:
+// FixUp rebases the table pointer by the load base, then walks miPopupCount entries and
+// rebases each record pointer. FixDown is the exact inverse, entries first and the table
+// pointer last (the entries are read through the still-rebased table).
 //
-//   if (count > 0)
-//       for i in [0, count):
-//           entry = *(base + i)
-//           if (lbDeep)            // a3: traverses entry's sub-list (see note)
-//               <count-only walk of *(entry+104) items from entry+96>
-//           *(base + i) -= delta
-//   *base -= delta
-//   return this
-//
-// NOTE: when `lbDeep` is set the original walks the entry's sub-array
-// (`*(entry+104)` items starting at `entry+96`) but the loop body performs **no
-// stores or side effects** in the recovered pseudocode — it only advances a
-// counter/cursor. It is preserved here as a no-op guarded by lbDeep so the
-// control-flow shape and the field reads are faithful, but it changes no state.
+// The console steps the table with a 4-byte stride (its pointer width). The shipped
+// POPUPS.PUP is transcoded to 8-byte slots, so the stride here is the host pointer stride,
+// written as an array subscript on the real member type -- the same treatment as
+// GuiHudMessageResource::FixUp.
 
 namespace CgsGui
 {
-    // Member names per burnout.wiki (GUI Popup -> GuiPopupResource) and DWARF
-    // (CgsGuiPopupResource.h:142-144). Offset 4 is confirmed 16-bit by the ASM
-    // (`lhz r11, 4(r3)` + `extsh`) and by DWARF, which declares it as two
-    // consecutive int16_t fields (miPopupCount then miSizeOfPopupResource); the
-    // second field is not read by FixDown but is kept to preserve layout shape.
-    struct GuiPopupResource
+    GuiPopupResource* GuiPopupResource::FixUp(uintptr_t luDelta)
     {
-        u32  mppPopupData;             // 0x00 GuiPopup** (rebased down in place)
-        s16  miPopupCount;              // 0x04 number of popup entry pointers at *mppPopupData
-        s16  miSizeOfPopupResource;     // 0x06 (unused by FixDown; kept for layout fidelity)
+        // The stored value is a serialised offset, not yet a pointer.
+        mppPopupData = reinterpret_cast<GuiPopup**>(
+            reinterpret_cast<uintptr_t>(mppPopupData) + luDelta);
 
-        GuiPopupResource* FixDown(int liDelta, bool lbDeep);
-    };
-
-    GuiPopupResource* GuiPopupResource::FixDown(int liDelta, bool lbDeep)
-    {
-        if (miPopupCount > 0)
+        for (s32 liEntry = 0; liEntry < miPopupCount; ++liEntry)
         {
-            u32* lpaEntries = reinterpret_cast<u32*>(mppPopupData);
-            for (s32 liEntry = 0; liEntry < miPopupCount; ++liEntry)
-            {
-                if (lbDeep)
-                {
-                    // Recovered as a side-effect-free traversal of the entry's
-                    // sub-array; retained for control-flow fidelity only.
-                    const u32 luEntry = lpaEntries[liEntry];
-                    const s32 liSubCount = *reinterpret_cast<s32*>(luEntry + 104);
-                    for (s32 liSub = 0; liSub < liSubCount; ++liSub)
-                    {
-                        // no observable effect in the source build
-                    }
-                }
-                lpaEntries[liEntry] -= static_cast<u32>(liDelta);
-            }
+            mppPopupData[liEntry] = reinterpret_cast<GuiPopup*>(
+                reinterpret_cast<uintptr_t>(mppPopupData[liEntry]) + luDelta);
         }
-        mppPopupData -= static_cast<u32>(liDelta);
+        return this;
+    }
+
+    GuiPopupResource* GuiPopupResource::FixDown(uintptr_t luDelta, bool lbDeep)
+    {
+        for (s32 liEntry = 0; liEntry < miPopupCount; ++liEntry)
+        {
+            if (lbDeep)
+            {
+                // The deep pass walks the record's miMessageParamsUsed message params
+                // (maeMessageParams, 4-byte stride) and stores nothing: the params are
+                // enums with nothing to relocate.
+                const GuiPopup* lpPopup = mppPopupData[liEntry];
+                for (s32 liParam = 0; liParam < lpPopup->miMessageParamsUsed; ++liParam)
+                {
+                }
+            }
+            mppPopupData[liEntry] = reinterpret_cast<GuiPopup*>(
+                reinterpret_cast<uintptr_t>(mppPopupData[liEntry]) - luDelta);
+        }
+
+        mppPopupData = reinterpret_cast<GuiPopup**>(
+            reinterpret_cast<uintptr_t>(mppPopupData) - luDelta);
         return this;
     }
 }

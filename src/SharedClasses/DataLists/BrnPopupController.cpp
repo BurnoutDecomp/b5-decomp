@@ -2,27 +2,24 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress / CgsIDUnCompress / KI_CGSID_STRING_LEN
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint / gxMessageFilterFlags
+#include "GameShared/GameClasses/Development/CgsStrStream.h"              // StrStreamBase operator<<
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"  // CgsResource::Events::AcquireResourceResponse
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"    // CgsResource::ResourceHandle (the bind)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiOverlayFullInfoResponse
 
 #include <cstring>   // memcpy
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   BrnResource::PopupController::GetIndexFromPopupHash  @ 0x8267D6C0
-//   BrnResource::PopupController::AddPopupResource       @ 0x82678D88
-//   BrnResource::PopupController::GetPopup               @ 0x8267EB98
-//
-// Construct (@ its own ledger fn) is declared in the header but bodied by its own TU;
-// it is intentionally not defined here.
+// BrnResource::PopupController: GetIndexFromPopupHash, AddPopupResource and GetPopup.
+// Construct has no body in the image (see the header).
 
 namespace BrnResource
 {
-// @ 0x8267D6C0 -- linear-scan the loaded popup table for the record whose 64-bit
+// Linear-scan the loaded popup table for the record whose 64-bit
 // name-id hash matches lPopupId; -1 when the table is empty or the hash is absent.
 // The not-loaded guard (cpp:142) is non-gating.
 s32 PopupController::GetIndexFromPopupHash(CgsID lPopupId) const
 {
-    CGS_ASSERT(mbIsPopupLoaded, "Trying to use a popup resource before it is loaded");   // cpp:142
+    CGS_ASSERT(mbIsPopupLoaded, "Trying to use a popup resource before it is loaded");
 
     s32 liIndex = 0;                              // cpp:144
     const s32 liTotal = mPopupsPtr->miPopupCount; // cpp:145 (s16 sign-extended)
@@ -40,22 +37,25 @@ s32 PopupController::GetIndexFromPopupHash(CgsID lPopupId) const
     return liIndex;
 }
 
-// @ 0x82678D88 -- bind the controller to a freshly-acquired popup resource bundle.
+// Bind the controller to a freshly-acquired popup resource bundle.
 // Asserts the controller is not already holding one, then binds mPopupsPtr to the
-// ResourceHandle the pool reply carries (X360 inlines the smart-pointer assignment to
-// BaseResourcePtr::CreateFromHandle on the +0x18 handle sub-object) and latches the
+// ResourceHandle the pool reply carries and latches the
 // loaded flag. Called by BrnResource::GameDataModule::PreparePopups.
 void PopupController::AddPopupResource(const CgsResource::Events::AcquireResourceResponse* lpResource)
 {
     CGS_ASSERT(!mbIsPopupLoaded, "Trying to use a popup resource when one is already being used");   // cpp:122
 
-    // AcquireResourceResponse carries the resolved handle pair {mpResourceMemory,
-    // mpSourceEntry} -- exactly a ResourceHandle in memory; bind the popup pointer to it.
-    mPopupsPtr = *reinterpret_cast<const CgsResource::ResourceHandle*>(&lpResource->mpResourceMemory);
-    mbIsPopupLoaded = true;   // stb 1, 0x20(this)
+    // The console binds from the response's handle pair ({mpResourceMemory, mpSourceEntry},
+    // CreateFromHandle on response +0x18); spelled by name through the ResourcePtr
+    // assign-from-handle, which is the same CreateFromHandle.
+    CgsResource::ResourceHandle lHandle;
+    lHandle.mpResourceMemory = lpResource->mpResourceMemory;
+    lHandle.mpSourceEntry    = lpResource->mpSourceEntry;
+    mPopupsPtr = lHandle;
+    mbIsPopupLoaded = true;
 }
 
-// @ 0x8267EB98 -- resolve the popup named by lpOverlayInfo->mNameId and stamp its record
+// Resolve the popup named by lpOverlayInfo->mNameId and stamp its record
 // into the overlay-info response. Falls back to the "TestPopup" default when the hash is
 // absent; returns false only when even the default is missing. Called by
 // BrnGui::GuiOverlaysDirector::SetUpOverlayInfo.
@@ -82,7 +82,7 @@ bool PopupController::GetPopup(BrnGui::GuiOverlayFullInfoResponse* lpOverlayInfo
 
     // Stamp the located popup record into the overlay response. The two records share the
     // leading name/style/icon/title/message layout but place the button-id spans at
-    // different offsets, so the copy is field-for-field (X360: per-field ld/std runs).
+    // different offsets, so the copy is field-for-field (per-field copies).
     const CgsGui::GuiPopup* lpCurrentPopup = mPopupsPtr->mppPopupData[liIndex];   // cpp:80
 
     memcpy(lpOverlayInfo->macTitleId,   lpCurrentPopup->macTitleId,   CgsGui::GuiPopup::MKI_MAX_LENGTH_OF_STRING_ID);

@@ -365,8 +365,8 @@ namespace BrnGame
         // (GameDataModule::Construct @0x82671B90 constructs it at `this + 0x65950`). It is
         // reached here through the additive `GetHudMessageController()` accessor because the
         // console reaches it by offset and this tree does not use offsets.
-        // The second (lpPopupController, +0x65A1F4 == GameData +0x65974) has no reconstructed
-        // type yet and is NOT passed -- see the GuiModule::Construct declaration.
+        // The second, lpPopupController (+0x65A1F4 == GameData +0x65974), is the popup table
+        // PreparePopups fills; it reaches the overlays director through the GuiCache.
         //
         // ⭐ THE HIGH-DEFINITION FLAG (BurnoutDecomp/b5-decomp#11, 2026-09-07). The console's
         // last argument to GuiModule::Construct @0x82518028 is the video-mode HD bool that
@@ -391,7 +391,8 @@ namespace BrnGame
                                     "bundles -- forcing the HD GUI path\n");
             lbHighDef = true;
         }
-        mGuiModule.Construct(mGameDataModule.GetHudMessageController(), lbHighDef);
+        mGuiModule.Construct(mGameDataModule.GetHudMessageController(),
+                             mGameDataModule.GetPopupController(), lbHighDef);
         mGameStateModule.Construct();    // +0x669500  (slot 0; placeholder -> base)
         mEffectsModule.Construct();      // +0x878700  (slot 0; placeholder -> base)
         // (The interim ValidityAccount::SetupFailFlagMask bridge that used to sit here was

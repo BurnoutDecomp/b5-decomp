@@ -666,6 +666,12 @@ public:
     // ("button 2 param isn't used in Overlay."). Returns the SPrintf result.
     s32 GetButton2Param(ParamOut* lpOut) const;
 
+    // The message-param count (miNumMessages, +0x118). Inlined at its one reader,
+    // GuiOverlaysDirector::SetUpOverlayInfo, which also reads the two button-used bytes
+    // directly (hence the friend below).
+    s32 GetMessageParamCount() const { return miNumMessages; }
+    friend struct GuiOverlaysDirector;
+
 private:
     ParamInfo maMessages[KI_MAX_MESSAGES];  // @0x00..0x87 (message params 0,1)
     ParamInfo mButton1;                     // @0x88 (id @0x90, text @0x94)

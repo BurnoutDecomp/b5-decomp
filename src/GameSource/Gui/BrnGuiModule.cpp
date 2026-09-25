@@ -956,6 +956,7 @@ namespace BrnGui
     // constructs the view module, the movie manager, and the real flow-controller chain
     // (cache + HUD flow + FSM controller).
     void GuiModule::Construct(const BrnResource::HudMessageController* lpHudMessageController,
+                              const BrnResource::PopupController* lpPopupController,
                               bool lbHighDef)
     {
         // ARTIST 0x82518054: register GUI profiling handles before any view updates.
@@ -965,6 +966,7 @@ namespace BrnGui
         // X360 GuiModule::Construct @0x82518028, pseudocode lines 327-332 -- the console's
         // own argument assert, fired before anything is built.
         CGS_ASSERT(lpHudMessageController != 0, "lpHudMessageController");   // BrnGuiModule.cpp:229
+        CGS_ASSERT(lpPopupController != 0, "lpPopupController");
 
         // Route through the real BrnGui::ViewModule::Construct @0x824F13B8 with the X360
         // caller's recovered args: the view flapt count (7), a 16:9 aspect, and the real
@@ -1156,6 +1158,10 @@ namespace BrnGui
         // its CgsGui::GuiModule base).
         mHudMessageDirector.Construct(0, &mGuiCache);
         mHudMessageAnalyzer.Construct(&mHudMessageDirector);
+        // The overlays director, constructed inline by the console right after the analyzer.
+        // Its model-module argument is the same missing CgsGui::ModelModule as the HUD
+        // director's above, so it is NULL here too (see BridgeOutEvents).
+        mOverlaysDirector.Construct(0);
 
         // ⭐ [gateui r4] THE CONTROLLER HAND-OFF -- the missing writer of
         // GuiCache::mpHudMessageController. X360 GuiModule::Construct @0x82518028
@@ -1177,6 +1183,9 @@ namespace BrnGui
         mGuiCache.SetHudMessageController(lpHudMessageController);
 
         mGuiCache.SetHudMessageDirector(&mHudMessageDirector);
+        // The popup controller: the console's third argument, stored right after the
+        // director (GuiCache +0x4078).
+        mGuiCache.SetPopupController(lpPopupController);
 
         // The REAL GUI resource-loading module + its persistent IO pair (replaces the
         // host FSM-bundle stand-in). Construct the IO buffers (their embedded queues come
@@ -1476,6 +1485,8 @@ namespace BrnGui
 
         mGuiOutQueue.Construct();
         mpOutputBuffer = &mGuiOutQueue;
+        mOverlayLoopBackQueue.Construct();
+        mOverlayLoopBackQueue.Clear();
 
         // The view-module IO pair the per-frame bridge fills.
         mViewInputBuffer.Construct();
@@ -3241,6 +3252,13 @@ void GuiModule::Destruct()
         }
         mAlwaysAvailInQueue.Clear();
 
+        // ---- 3b'. the overlays director's controller (console: inlined
+        //          GuiOverlaysDirector::SetController, just before the calibration screen).
+        //          The cache word is tested for null first; the setter then stores it and
+        //          asserts it.
+        if (mGuiCache.GetPopupController() != 0)
+            mOverlaysDirector.SetController(mGuiCache.GetPopupController());
+
         // ---- 3c. the colour-calibration screen (X360 GuiModule::Update @0x82529B04) -----
         // The console ticks it here: after the profile/overlay pumps and BEFORE the base
         // module update ticks the flows, with the module's GUI OUT buffer held write-locked
@@ -3342,9 +3360,8 @@ void GuiModule::Destruct()
         //          input buffer, the same one GuiCache::Update is handed at line 1048.
         //
         // The console runs the analyzer between ColourCalibrationScreen::Update (1007) and
-        // GuiOverlaysDirector::Update (1032); this build has no overlays director, so the
-        // block sits immediately after the calibration screen and before the flow ticks --
-        // the same slot.
+        // GuiOverlaysDirector::Update (1032), both inside the GUI input buffer's write lock;
+        // the director follows the analyzer below, in the same lock.
         if (mpGuiEventInputBuffer != 0)
         {
             mpGuiEventInputBuffer->LockForWrite();
@@ -3401,6 +3418,17 @@ void GuiModule::Destruct()
                 mViewInputBuffer.LockForWrite();
                 mHudMessageAnalyzer.Update(lpGuiEvents, &mViewInputBuffer.GetViewStateQueue());
                 mViewInputBuffer.UnlockForWrite();
+
+                // [FLAG PC seam] the previous frame's flow-posted overlay traffic. On the
+                // console it rode the GUI out-event loop-back into this queue at the top of
+                // the update; here it joins the queue only now, after every other reader of
+                // it has run, so the director is the one consumer that sees it (the flows got
+                // the same records at the drain). See mOverlayLoopBackQueue.
+                lpGuiEvents->Append(mOverlayLoopBackQueue);
+                mOverlayLoopBackQueue.Clear();
+
+                // console line 1032: the overlays director drains the queue.
+                mOverlaysDirector.Update(mpGuiEventInputBuffer);
             }
             mpGuiEventInputBuffer->UnlockForWrite();
         }
@@ -3408,6 +3436,11 @@ void GuiModule::Destruct()
         // console line 1035. The director drains its own published messages (event 154)
         // into the model module's input GUI-event queue.
         mHudMessageDirector.Update(&mModelInputBuffer);
+
+        // The overlays director hands its 185/187/188 records to the model input buffer
+        // (console: after the debug components, before GuiCache::Update). The walk below
+        // fans them out to the overlay flow's states.
+        mOverlaysDirector.BridgeOutEvents(&mModelInputBuffer);
 
         // FLAG PC bring-up (dispatch seam, NOT a behaviour change): on the console the
         // records the director just appended are consumed by the embedded
@@ -3785,6 +3818,27 @@ void GuiModule::Destruct()
             mViewOutputBuffer.UnlockForWrite();
         }
 
+        // [FLAG PC seam] keep this frame's overlay traffic from the module out-queue for the
+        // director's next update (see mOverlayLoopBackQueue): the ids its dispatch handles.
+        {
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            s32 liId = mGuiOutQueue.GetFirstEvent(&lpEvent, &liSize);
+            while (liId >= 0 && lpEvent != 0)
+            {
+                switch (liId)
+                {
+                    case 184: case 186: case 188: case 189: case 190: case 279: case 322:
+                        mOverlayLoopBackQueue.AddEvent(lpEvent, liId, liSize);
+                        break;
+                    default:
+                        break;
+                }
+                const CgsModule::Event* lpNext = 0;
+                liId = mGuiOutQueue.GetNextEvent(lpEvent, &lpNext, &liSize);
+                lpEvent = lpNext;
+            }
+        }
     }
 
     // ⭐⭐⭐ THE GUI END-OF-FRAME NOTIFY, restored 2026-09-07. X360 @0x824F1008, verbatim:

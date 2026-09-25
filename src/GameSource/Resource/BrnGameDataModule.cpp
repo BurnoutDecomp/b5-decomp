@@ -155,10 +155,16 @@ namespace BrnResource
             // [gateui r3] X360 stage 13: PrepareHudMessages @0x8266C8E0 -- "HudMessages.hm"
             // into pool 11, then acquire + HudMessageController::AddMessages. This is what
             // gives GuiCache::mpHudMessageController something to point at.
-            // (X360 stage 14 PreparePopups @0x8266CBA0 -- "Popups.pup", same shape, same
-            //  pool -- still deferred: nothing in this tree consumes a PopupController.)
             mePrepareStage = E_PREPARE_HUD_MESSAGES;
             if (!PrepareHudMessages())
+                return false;
+            // fall through
+        case E_PREPARE_POPUPS:
+            // Stage 14: PreparePopups -- "Popups.pup" into pool 11, then acquire +
+            // PopupController::AddPopupResource. This is what gives GuiCache's popup
+            // controller (and so the overlays director) a table to resolve overlays against.
+            mePrepareStage = E_PREPARE_POPUPS;
+            if (!PreparePopups())
                 return false;
             // fall through
         case E_PREPARE_DONE:
@@ -1491,6 +1497,51 @@ namespace BrnResource
         return true;
     }
 
+    // Prepare stage 14, PreparePopups. The same six-state machine as PrepareHudMessages
+    // (pool 11, mbAllowFailiure 0, "Invalid event id received\n" asserts, "Invalid Stage\n"
+    // default) over "Popups.pup"; its terminal step hands the acquire response to
+    // PopupController::AddPopupResource instead of AddMessages. As in the HUD sibling, the
+    // shared helper returns the resolved handle, and the response AddPopupResource reads is
+    // rebuilt from it (AddPopupResource reads only the handle pair).
+    bool GameDataModule::PreparePopups()
+    {
+        CgsResource::ResourceHandle lHandle;
+        lHandle.Clear();
+        if (!PrepareDataListResource(miPopupsPrepareStage,
+                                     "Popups.pup", "Popups.pup",
+                                     false /*mbAllowFailiure*/,
+                                     KI_GUI_DATA_POOL_ID,
+                                     &lHandle))
+        {
+            return false;
+        }
+
+        if (lHandle.mpResourceMemory != 0)
+        {
+            CgsResource::Events::AcquireResourceResponse lResponse;
+            lResponse.mpUser           = &mReceiverQueue;
+            lResponse.miEventId        = 0;
+            lResponse.miPoolId         = KI_GUI_DATA_POOL_ID;
+            lResponse.mpResourceMemory = lHandle.mpResourceMemory;
+            lResponse.mpSourceEntry    = lHandle.mpSourceEntry;
+            mPopupController.AddPopupResource(&lResponse);
+        }
+        else
+        {
+            // [FLAG PC] the console has no null path here (mbAllowFailiure is 0, so a missing
+            // bundle asserts inside the loader). Report instead of binding a null resource.
+            *CgsDev::Log::gpDebugPrint
+                << "[GameData] PreparePopups: Popups.pup did not resolve -- the popup table is"
+                   " EMPTY (every overlay request will assert in PopupController::GetPopup)\n";
+        }
+
+        *CgsDev::Log::gpDebugPrint
+            << "[GameData] PreparePopups: "
+            << ((lHandle.mpResourceMemory != 0) ? "popup table bound" : "no popup table")
+            << "\n";
+        return true;
+    }
+
     void GameDataModule::Construct()
     {
         // X360 0x82671B90 first runs the module base's Construct (stage/DataBuffer reset; it
@@ -1527,6 +1578,7 @@ namespace BrnResource
         miICEListPrepareStage           = 0;
         miWheelListPrepareStage         = 0;
         miHudMessagesPrepareStage       = 0;   // [gateui r3] X360 a1[145]
+        miPopupsPrepareStage            = 0;   // the console Construct stores 0 at +0x65998
 
         // X360 0x82671B90 also constructs the two resident data tables here (VehicleList::
         // Construct @0x82677850 and WheelList::Construct @0x82677DB8 both list

@@ -1,48 +1,47 @@
 #include "GameSource/Gui/BrnGuiOverlaysDirector.h"
 
 #include <cstring>   // std::memcpy (the buffered -> current overlay promote)
+#include <cstdlib>   // std::getenv ([FLAG PC witness] BRN_OVERLAY_DIAG)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Development/CgsStrStream.h"           // CgsDev::StrStreamBase (operator<<)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                        // BrnGui::GuiOverlayRequest
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                  // BrnGui::GuiEventNetworkShowFreeBurnIntro (279)
+#include "GameSource/Gui/BrnGuiCache.h"                                // GuiCache::GetNumActivePlayers / GetOnlinePlayerInfo
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData
+#include "SharedClasses/DataLists/BrnPopupController.h"                // BrnResource::PopupController::GetPopup
 
-// BrnGui::GuiOverlaysDirector -- reconstructed from BURNOUT_X360_ARTIST.XEX.
-//
-// Bodied here (3 ledger functions, DWARF primary file GameSource/Gui/
-// BrnGuiOverlaysDirector.cpp):
-//   GuiOverlaysDirector::HandleOverlayRequest    @0x825162C8
-//   GuiOverlaysDirector::HandleWaitFinishRequest @0x824F39E0
-//   GuiOverlaysDirector::Update                  @0x82520668  (GuiModule::Update)
+// BrnGui::GuiOverlaysDirector.
 //
 // Event ids on the module input queue (the Update dispatch):
 //   64  the GuiCache-ready event (payload = GuiCache*)
 //   184 an overlay request (GuiOverlayRequest)         -> HandleOverlayRequest
-//   186 a full-info request                            -> publish mCurrentOverlay (187, 448B)
+//   186 a full-info request                            -> HandleOverlayFullInfoRequest (187)
 //   188 a wait-finish request                          -> HandleWaitFinishRequest
-//   189 overlay hidden notification                    -> promote the buffered overlay
-//   190 overlay showing notification                   -> bounce the stored wait-finish (188)
+//   189 overlay complete (the overlay state left)      -> promote the buffered overlay
+//   190 overlay showing notification                   -> HandleOverlayShowingNotification
 //   279 show-freeburn-intro request                    -> HandleShowFreeBurnIntroRequest
-//   322 entering-online state                          -> drop a buffered Onl* overlay
-// and on the output queue: 185 = overlay started (the request word), 187 = full info,
+//   322 stop mode                                      -> drop a buffered online-transition overlay
+// and on the output queue: 185 = start an overlay (the popup style word), 187 = full info,
 // 188 = wait finished.
 
 namespace BrnGui
 {
 namespace
 {
-    // BrnGuiOverlaysDirector.cpp:23 (DWARF) -- how long the entering-online splash stays
-    // up (the X360 stores 120 at the four-Onl*-id match).
+    // How long the entering-online splash stays up (frames).
     const s32 KI_FRAMES_TO_SHOW_ENTERING_FREEBURN = 120;
 
-    // The four entering/returning-online overlay names the director special-cases.
-    const char* KPC_ONLINE_OVERLAYS[4] =
+    // The four entering/returning-online overlay names the director special-cases, in the
+    // order the console compares and waves them.
+    const char* const KPC_ONLINE_OVERLAYS[4] =
     {
         "OnHReturnOn", "OnCReturnOn", "OnHEnterOn", "OnCEnterOn"
     };
 
-    // True when the id names one of the four online transition overlays (the X360 emits
-    // the four CgsIDCompress compares inline at each of the three sites).
+    // True when the id names one of the four online transition overlays (the console emits
+    // the four CgsIDCompress compares inline at each site).
     bool IsOnlineTransitionOverlay(CgsID lOverlayId)
     {
         return lOverlayId == CgsIDCompress(KPC_ONLINE_OVERLAYS[0]) ||
@@ -50,164 +49,304 @@ namespace
                lOverlayId == CgsIDCompress(KPC_ONLINE_OVERLAYS[2]) ||
                lOverlayId == CgsIDCompress(KPC_ONLINE_OVERLAYS[3]);
     }
+
+    // [FLAG PC witness] NOT CONSOLE CODE. `[overlay] <what> <name> ...`, opt-in behind
+    // BRN_OVERLAY_DIAG=1, first 64 lines per run: the director's request / start / complete
+    // traffic, so an offline or online overlay can be told apart in a log.
+    void OverlayWitness(const char* lpcWhat, CgsID lOverlayId, s32 liValue)
+    {
+        static s32 siEnabled = -1;
+        static s32 siLines   = 0;
+        if (siEnabled < 0)
+        {
+            const char* lpcEnv = std::getenv("BRN_OVERLAY_DIAG");
+            siEnabled = (lpcEnv != NULL && lpcEnv[0] != '\0' && lpcEnv[0] != '0') ? 1 : 0;
+        }
+        if (siEnabled == 0 || siLines >= 64 || CgsDev::Log::gpDebugPrint == NULL)
+            return;
+        ++siLines;
+        char lacName[16];
+        CgsIDConvertToString(lOverlayId, lacName);
+        lacName[12] = 0;
+        *CgsDev::Log::gpDebugPrint << "[overlay] " << lpcWhat << " " << lacName << " " << liValue << "\n";
+    }
+
+    // Post one 8-byte wait-finish record (188) for the named overlay.
+    void PostWaitFinish(CgsModule::VariableEventQueue<18432, 16>& lrQueue, const char* lpcOverlayName)
+    {
+        GuiOverlayWaitFinishRequest lOverlayFinishRequest;
+        lOverlayFinishRequest.Construct(lpcOverlayName);
+        lrQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lOverlayFinishRequest),
+                         lOverlayFinishRequest.GetEventType(),
+                         static_cast<s32>(sizeof(lOverlayFinishRequest)));
+    }
 }
 
-// @ 0x825162C8
-void GuiOverlaysDirector::HandleOverlayRequest(const GuiOverlayRequest* lpRequest)
+// Inlined by the console into GuiModule::Construct. The GuiCache pointer is not set here:
+// it arrives with the first event 64.
+void GuiOverlaysDirector::Construct(CgsGui::ModelModule* lpModelModule)
+{
+    mpController     = NULL;
+    mpGuiInputBuffer = NULL;
+    mpModelModule    = lpModelModule;
+
+    mbInOverlay                  = false;
+    mbIsWaitRequestValid         = false;
+    mWaitEndRequestId            = 0;
+    miFramesToShowEnteringOnline = -1;
+
+    mOutputQueue.Construct();
+    mOutputQueue.Clear();
+
+    mCurrentOverlay.mNameId  = 0;
+    mBufferedOverlay.mNameId = 0;
+}
+
+void GuiOverlaysDirector::HandleOverlayRequest(const GuiOverlayRequest* lpEvent)
 {
     CGS_ASSERT(mpController != NULL, "mpController");
 
     if (mbInOverlay)
     {
         // Already showing one: park the request in the buffered slot (warning when that
-        // overwrites an as-yet-unshown queued overlay; category bit 0 of the message
-        // filter gates the debug print, exactly as the X360 does).
+        // overwrites an as-yet-unshown queued overlay; category bit 0 of the message filter
+        // gates the debug print).
         if (mBufferedOverlay.mNameId != 0)
         {
-            char lacRequestName[16];
-            CgsIDConvertToString(lpRequest->GetOverlayId(), lacRequestName);
-            lacRequestName[12] = 0;   // the X360 truncates the printable id at 12 chars
+            char lacOverlayName[16];
+            CgsIDConvertToString(lpEvent->GetOverlayId(), lacOverlayName);
+            lacOverlayName[12] = 0;
 
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {
                 *CgsDev::Log::gpDebugPrint
                     << "WARNING - OVERWRITING A QUEUED OVERLAY!\n    Adding overlay named "
-                    << lacRequestName
+                    << lacOverlayName
                     << " over queued overlay "
                     << mBufferedOverlay.macName
                     << "\n\n";
             }
         }
-        SetUpOverlayInfo(&mBufferedOverlay, lpRequest);
+        SetUpOverlayInfo(&mBufferedOverlay, lpEvent);
+        OverlayWitness("buffered", mBufferedOverlay.mNameId, static_cast<s32>(mBufferedOverlay.meStyle));
     }
     else
     {
-        // Idle: make it the current overlay and announce it (event 185 carries the
-        // popup style word -- DWARF-reconciled name; the X360 posts the response's
-        // +0x18 word).
-        SetUpOverlayInfo(&mCurrentOverlay, lpRequest);
-        u32 luStyle = static_cast<u32>(mCurrentOverlay.meStyle);
-        mbInOverlay = true;
-        mOutputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&luStyle), 185, 4);
+        SetUpOverlayInfo(&mCurrentOverlay, lpEvent);
+        StartCurrentOverlay();
+        OverlayWitness("start", mCurrentOverlay.mNameId, static_cast<s32>(mCurrentOverlay.meStyle));
     }
 }
 
-// @ 0x824F39E0
-void GuiOverlaysDirector::HandleWaitFinishRequest(const GuiOverlayWaitFinishRequest* lpRequest)
+void GuiOverlaysDirector::HandleWaitFinishRequest(const GuiOverlayWaitFinishRequest* lpEvent)
 {
     if (!mbInOverlay)
         return;
 
     // Cancel a matching buffered overlay outright.
-    if (mBufferedOverlay.mNameId == lpRequest->mOverlayId)
+    if (mBufferedOverlay.mNameId == lpEvent->mOverlayId)
         mBufferedOverlay.mNameId = 0;
 
-    if (mCurrentOverlay.mNameId == lpRequest->mOverlayId)
+    if (mCurrentOverlay.mNameId == lpEvent->mOverlayId)
     {
         if (mbIsWaitRequestValid)
         {
-            // cpp:392 -- the X360 streams both printable ids into the message; folded
-            // static per convention.
-            CGS_ASSERT(lpRequest->mOverlayId == mWaitEndRequestId,
+            // The console streams both printable ids into the message; folded static.
+            CGS_ASSERT(lpEvent->mOverlayId == mWaitEndRequestId,
                        "Received a finish wait request when one is already stored");
         }
         else
         {
             mbIsWaitRequestValid = true;
-            mWaitEndRequestId    = lpRequest->mOverlayId;
+            mWaitEndRequestId    = lpEvent->mOverlayId;
         }
     }
 }
 
-// @ 0x82520668
-void GuiOverlaysDirector::Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuffer)
+// Fill an overlay description from a request, then stamp the popup record over it. The
+// message and button params are copied through the request's accessors straight into the
+// response's GuiPopupParameter slots ({id word, 64-byte text} -- the accessors' output
+// shape).
+void GuiOverlaysDirector::SetUpOverlayInfo(GuiOverlayFullInfoResponse* lpOverlay,
+                                           const GuiOverlayRequest* lpEvent)
+{
+    static_assert(sizeof(GuiOverlayRequest::ParamOut) == sizeof(CgsGui::GuiPopupParameter),
+                  "a request param copies into a GuiPopupParameter slot");
+
+    lpOverlay->mNameId            = lpEvent->GetOverlayId();
+    lpOverlay->mbButon1ParamUsed  = lpEvent->mbButton1Used != 0;
+    lpOverlay->mbButon2ParamUsed  = lpEvent->mbButton2Used != 0;
+    lpOverlay->miMessageParamsUsed = lpEvent->GetMessageParamCount();
+
+    for (s32 liIter = 0; liIter < lpOverlay->miMessageParamsUsed; ++liIter)
+    {
+        lpEvent->GetMessageParam(
+            reinterpret_cast<GuiOverlayRequest::ParamOut*>(&lpOverlay->maMessageParams[liIter]),
+            liIter);
+    }
+
+    if (lpOverlay->mbButon1ParamUsed)
+        lpEvent->GetButton1Param(reinterpret_cast<GuiOverlayRequest::ParamOut*>(&lpOverlay->mButton1Param));
+
+    if (lpOverlay->mbButon2ParamUsed)
+        lpEvent->GetButton2Param(reinterpret_cast<GuiOverlayRequest::ParamOut*>(&lpOverlay->mButton2Param));
+
+    mpController->GetPopup(lpOverlay);
+}
+
+// GUI event 279, posted when an online free-burn mode's intro stops. With mbShow set it
+// raises the enter/return overlay, worded from the host's point of view; without it, it
+// waves the current overlay and the four online transition overlays through their
+// wait-finish.
+void GuiOverlaysDirector::HandleShowFreeBurnIntroRequest(const GuiEventNetworkShowFreeBurnIntro* lpNotification)
+{
+    typedef BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData InGamePlayerStatusData;
+
+    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+
+    if (lpNotification->mbShow)
+    {
+        const s32 liOnlinePlayerCount = mpGuiCache->GetNumActivePlayers();
+        const InGamePlayerStatusData* lpFirstNonHostPlayerInfo = NULL;
+        const InGamePlayerStatusData* lpHostPlayerInfo         = NULL;
+
+        for (s32 liOnlinePlayerIndex = 0; liOnlinePlayerIndex < liOnlinePlayerCount; ++liOnlinePlayerIndex)
+        {
+            const InGamePlayerStatusData* lpPlayerInfo = mpGuiCache->GetOnlinePlayerInfo(liOnlinePlayerIndex);
+            CGS_ASSERT(lpPlayerInfo != NULL, "lpPlayerInfo");
+
+            if (lpPlayerInfo->mbIsHost)
+                lpHostPlayerInfo = lpPlayerInfo;
+            else if (lpFirstNonHostPlayerInfo == NULL)
+                lpFirstNonHostPlayerInfo = lpPlayerInfo;
+
+            if (lpHostPlayerInfo != NULL && lpFirstNonHostPlayerInfo != NULL)
+                break;
+        }
+
+        CGS_ASSERT(lpHostPlayerInfo != NULL, "lpHostPlayerInfo");
+
+        GuiOverlayRequest lEnterGameOverlayRequest;
+        if (lpNotification->mbFinishedOnlineEvent)
+        {
+            if (lpHostPlayerInfo->mbIsLocalPlayer)
+            {
+                lEnterGameOverlayRequest.Construct("OnHReturnOn");
+            }
+            else
+            {
+                lEnterGameOverlayRequest.Construct("OnCReturnOn");
+                lEnterGameOverlayRequest.AddMessageParam(1, lpHostPlayerInfo->mPlayerName.GetPlayerName());
+            }
+        }
+        else if (lpHostPlayerInfo == NULL ||
+                 (lpHostPlayerInfo->mbIsLocalPlayer && liOnlinePlayerCount == 1))
+        {
+            lEnterGameOverlayRequest.Construct("OnHEnterOn");
+        }
+        else if (lpHostPlayerInfo->mbIsLocalPlayer && liOnlinePlayerCount > 1)
+        {
+            // The local host with company: named after the first non-host player.
+            CGS_ASSERT(lpFirstNonHostPlayerInfo != NULL, "lpFirstNonHostPlayerInfo");
+            lEnterGameOverlayRequest.Construct("OnCEnterOn");
+            lEnterGameOverlayRequest.AddMessageParam(1, lpFirstNonHostPlayerInfo->mPlayerName.GetPlayerName());
+        }
+        else
+        {
+            lEnterGameOverlayRequest.Construct("OnCEnterOn");
+            lEnterGameOverlayRequest.AddMessageParam(1, lpHostPlayerInfo->mPlayerName.GetPlayerName());
+        }
+        HandleOverlayRequest(&lEnterGameOverlayRequest);
+    }
+    else if (mbInOverlay)
+    {
+        GuiOverlayWaitFinishRequest lOverlayFinishRequest;
+        lOverlayFinishRequest.mOverlayId = mCurrentOverlay.mNameId;
+        mOutputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lOverlayFinishRequest),
+                              lOverlayFinishRequest.GetEventType(),
+                              static_cast<s32>(sizeof(lOverlayFinishRequest)));
+
+        for (s32 li = 0; li < 4; ++li)
+            PostWaitFinish(mOutputQueue, KPC_ONLINE_OVERLAYS[li]);
+    }
+}
+
+void GuiOverlaysDirector::Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer)
 {
     // The whole update is gated on a bound controller.
-    if (!mpController)
+    if (mpController == NULL)
         return;
 
-    CGS_ASSERT(lpInputBuffer != NULL,
+    CGS_ASSERT(lpGuiInputBuffer != NULL,
                "Input buffer is not valid. Is it definately locked for reading?");
-    mpGuiInputBuffer = lpInputBuffer;
+    mpGuiInputBuffer = lpGuiInputBuffer;
 
     CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpEventQueue =
-        lpInputBuffer->GetGuiEvents();
+        lpGuiInputBuffer->GetGuiEvents();
     CGS_ASSERT(lpEventQueue != NULL, "lpEventQueue != NULL");
 
-    // ---- drain the inbound GUI events ----
     const CgsModule::Event* lpEvent = NULL;
-    s32 liSize = 0;
-    s32 liEventId = lpEventQueue->GetFirstEvent(&lpEvent, &liSize);
+    s32 liEventSize = 0;
+    s32 liEventType = lpEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
     while (lpEvent != NULL)
     {
-        switch (liEventId)
+        switch (liEventType)
         {
         case 64:   // the GuiCache is ready (payload = GuiCache*)
             CGS_ASSERT(lpEvent != NULL, "lpCacheEvent");
             mpGuiCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
             break;
 
-        case 184:  // an overlay request
+        case 184:
             HandleOverlayRequest(reinterpret_cast<const GuiOverlayRequest*>(lpEvent));
             break;
 
-        case 186:  // full-info request: publish the current overlay description
-            mOutputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&mCurrentOverlay),
-                                  187, sizeof(GuiOverlayFullInfoResponse));
+        case 186:
+            HandleOverlayFullInfoRequest();
             break;
 
-        case 188:  // wait-finish request
-            HandleWaitFinishRequest(
-                reinterpret_cast<const GuiOverlayWaitFinishRequest*>(lpEvent));
+        case 188:
+            HandleWaitFinishRequest(reinterpret_cast<const GuiOverlayWaitFinishRequest*>(lpEvent));
             break;
 
-        case 189:  // the current overlay finished hiding
+        case 189:  // the overlay state left: the record leads with the overlay id
         {
-            const GuiOverlayHiddenNotification* lpHidden =
+            const GuiOverlayHiddenNotification* lpCompleteEvent =
                 reinterpret_cast<const GuiOverlayHiddenNotification*>(lpEvent);
-            if (lpHidden->mOverlayId == mCurrentOverlay.mNameId)
+            OverlayWitness("complete", lpCompleteEvent->mOverlayId,
+                           lpCompleteEvent->mOverlayId == mCurrentOverlay.mNameId ? 1 : 0);
+            if (lpCompleteEvent->mOverlayId == mCurrentOverlay.mNameId)
             {
                 mbInOverlay          = false;
                 mbIsWaitRequestValid = false;
 
                 if (mBufferedOverlay.mNameId != 0)
                 {
-                    // Promote the buffered overlay; an online transition overlay also
-                    // arms the entering-online splash countdown.
+                    // Promote the buffered overlay; an online transition overlay also arms
+                    // the entering-online splash countdown.
                     if (IsOnlineTransitionOverlay(mBufferedOverlay.mNameId))
                         miFramesToShowEnteringOnline = KI_FRAMES_TO_SHOW_ENTERING_FREEBURN;
 
                     std::memcpy(&mCurrentOverlay, &mBufferedOverlay,
                                 sizeof(GuiOverlayFullInfoResponse));
-                    u32 luStyle = static_cast<u32>(mCurrentOverlay.meStyle);
                     mBufferedOverlay.mNameId = 0;
-                    mbInOverlay = true;
-                    mOutputQueue.AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&luStyle), 185, 4);
+                    StartCurrentOverlay();
                 }
             }
             break;
         }
 
-        case 190:  // the current overlay finished showing
-        {
-            const GuiOverlayShowingNotification* lpShowing =
-                reinterpret_cast<const GuiOverlayShowingNotification*>(lpEvent);
-            if (mbIsWaitRequestValid && lpShowing->mOverlayId == mWaitEndRequestId)
-            {
-                // Bounce the stored wait-finish downstream now the overlay is up.
-                mOutputQueue.AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&mWaitEndRequestId), 188, 8);
-            }
+        case 190:
+            HandleOverlayShowingNotification(
+                reinterpret_cast<const GuiOverlayShowingNotification*>(lpEvent));
             break;
-        }
 
-        case 279:  // show the freeburn intro
+        case 279:
             HandleShowFreeBurnIntroRequest(
                 reinterpret_cast<const GuiEventNetworkShowFreeBurnIntro*>(lpEvent));
             break;
 
-        case 322:  // entering the online state: drop a buffered online-transition overlay
+        case 322:  // a mode stopped: drop a buffered online-transition overlay
             if (mBufferedOverlay.mNameId != 0 &&
                 IsOnlineTransitionOverlay(mBufferedOverlay.mNameId))
             {
@@ -219,27 +358,55 @@ void GuiOverlaysDirector::Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuf
             break;
         }
 
-        liEventId = lpEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+        liEventType = lpEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
     }
 
-    // ---- the entering-online splash countdown: on expiry, wave all four online
-    //      transition overlays through their wait-finish. ----
+    // The entering-online splash countdown: on expiry, wave all four online transition
+    // overlays through their wait-finish.
     if (miFramesToShowEnteringOnline >= 0)
     {
         if (--miFramesToShowEnteringOnline < 0)
         {
             miFramesToShowEnteringOnline = -1;
-
-            GuiOverlayWaitFinishRequest lRequest;
             for (s32 li = 0; li < 4; ++li)
-            {
-                lRequest.Construct(KPC_ONLINE_OVERLAYS[li]);
-                mOutputQueue.AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lRequest), 188, 8);
-            }
+                PostWaitFinish(mOutputQueue, KPC_ONLINE_OVERLAYS[li]);
         }
     }
 
     mpGuiInputBuffer = NULL;
+}
+
+// Hand the director's output to the model input buffer, then clear it. The console
+// reaches the buffer through ModelModule::AddGuiEvents, a pure forwarder that never touches
+// its own `this` (it asserts the buffer and appends); this build has no CgsGui::ModelModule,
+// so the append is spelled directly, exactly as HudMessageDirector::Update does.
+void GuiOverlaysDirector::BridgeOutEvents(CgsGui::ModelIO::InputBuffer* lpGuiModelInput)
+{
+    if (mOutputQueue.GetLength() == 0)
+        return;
+
+    CGS_ASSERT(lpGuiModelInput != NULL, "lpGuiModelInput");
+
+    // [FLAG PC] the console asserts "mpModelModule" here. No CgsGui::ModelModule exists on
+    // PC and GuiModule::Construct passes NULL (the HudMessageDirector::Construct precedent),
+    // so the gap is reported once instead of asserting on every overlay frame.
+    // DELETE-WHEN CgsGui::ModelModule is reconstructed; then restore the assert.
+    if (mpModelModule == NULL)
+    {
+        static bool sbWarnedNullModelModule = false;
+        if (!sbWarnedNullModelModule && CgsDev::Log::gpDebugPrint != NULL)
+        {
+            sbWarnedNullModelModule = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[FLAG PC] GuiOverlaysDirector::BridgeOutEvents: no CgsGui::ModelModule on"
+                   " this build; appending straight to the model input buffer\n";
+        }
+    }
+
+    lpGuiModelInput->LockForWrite();
+    lpGuiModelInput->GetEventQueueNonConst()->Append(mOutputQueue);
+    lpGuiModelInput->UnlockForWrite();
+
+    mOutputQueue.Clear();
 }
 }
