@@ -86,9 +86,10 @@
 #include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"      // TestLineSphere4 / TestLineBoundingBoxAgainstAxisAlignedBox4
 #include "vendor/renderware/collision/CollisionVolume.hpp"                    // rw::collision::Volume / BoxVolume / SphereVolume
 
+#include <chrono>    // std::chrono::steady_clock ([DIAG] BRN_OCTREE_HIST_DIAG timing witness)
 #include <cmath>     // std::fabs
 #include <cstdio>    // std::snprintf ([DIAG] BRN_OCTREE_LINE_DIAG)
-#include <cstdlib>   // std::getenv ([DIAG] BRN_CULL_OFF / BRN_OCTREE_LINE_DIAG)
+#include <cstdlib>   // std::getenv ([DIAG] BRN_CULL_OFF / BRN_OCTREE_LINE_DIAG / BRN_OCTREE_HIST_DIAG / BRN_OCTREE_ADAPTIVE_OFF)
 #include <cstring>   // std::memcpy
 
 // includes folded in from the CgsLooseOctree_w*.cpp partfiles (2026-09-15)
@@ -136,6 +137,20 @@ namespace CgsSceneManager
 
     namespace
     {
+        // [DIAG] NOT IN THE X360 BINARY (crash parity FX-OCTREE, 2026-09-25). Opt-in BRN_OCTREE_ADAPTIVE_OFF=1 makes
+        // LooseOctree::Update skip the two adaptive-depth passes, so the tree keeps its static depth as the PC's did
+        // before b4cc6341, and one exe can A/B a live cell with and without the refinement (as BRN_CULL_OFF does for
+        // the frustum test). The console always runs both passes. Unset, it costs one static bool test per flagged
+        // Update and changes nothing.
+        bool OctreeAdaptiveOffDiag()
+        {
+            static const bool sbOff = []() {
+                const char* lpcValue = std::getenv("BRN_OCTREE_ADAPTIVE_OFF");
+                return lpcValue != 0 && lpcValue[0] == '1';
+            }();
+            return sbOff;
+        }
+
         // [DIAG] NOT IN THE X360 BINARY (crash parity FX-OCTREE, 2026-09-25). Opt-in BRN_OCTREE_HIST_DIAG=1: on the
         // first LooseOctree::Update and every KI_OCTREE_HIST_PERIOD-th one after it, the shape of the tree reachable
         // from the root -- per depth, how many nodes, how many entities sit on their own chains, the fullest chain
@@ -143,6 +158,60 @@ namespace CgsSceneManager
         // reachable node's own chain length. It measures how many entities each octree query must test per node
         // (the adaptive-depth refinement is what keeps that at the threshold or below on the console). Capped at
         // KI_OCTREE_HIST_MAX_REPORTS reports; with the variable unset the cost is one static bool test per Update.
+        // The same variable arms a TIMING WITNESS, printed with each report for the window since the previous one:
+        // the wall time of the merge pass, the split pass and UpdateRecursive in the flagged Updates, the node groups
+        // the merge pass returned and the split pass took (pool used-count deltas around each pass, so the recursive
+        // bodies carry no counters), and the frustum walks StartFrustumTestJobs ran (count, time, nodes visited).
+        bool OctreeHistDiagEnabled()
+        {
+            static const bool sbEnabled = []() {
+                const char* lpcValue = std::getenv("BRN_OCTREE_HIST_DIAG");
+                return lpcValue != 0 && lpcValue[0] == '1';
+            }();
+            return sbEnabled;
+        }
+
+        struct OctreeTimingWitness
+        {
+            u64 mu64MergePassNs;
+            u64 mu64SplitPassNs;
+            u64 mu64BoundsNs;
+            u64 mu64FrustumNs;
+            u32 muFlaggedUpdates;
+            u32 muGroupsMerged;
+            u32 muGroupsSplit;
+            u32 muFrustumWalks;
+            u32 muFrustumNodes;
+        };
+        OctreeTimingWitness gOctreeTimingWitness;   // zero-initialised (namespace scope)
+
+        inline u64 OctreeDiagNowNs()
+        {
+            return static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count());
+        }
+
+        // Adds the wall time of its scope to *lpu64Sink when the witness is armed; a no-op otherwise.
+        class OctreeStageTimer
+        {
+        public:
+            explicit OctreeStageTimer(u64* lpu64Sink)
+                : mpu64Sink(OctreeHistDiagEnabled() ? lpu64Sink : 0), mu64Start(mpu64Sink != 0 ? OctreeDiagNowNs() : 0)
+            {
+            }
+            ~OctreeStageTimer()
+            {
+                if (mpu64Sink != 0)
+                {
+                    *mpu64Sink += OctreeDiagNowNs() - mu64Start;
+                }
+            }
+
+        private:
+            u64* mpu64Sink;
+            u64  mu64Start;
+        };
+
         const s32 KI_OCTREE_HIST_PERIOD      = 300;
         const s32 KI_OCTREE_HIST_MAX_REPORTS = 40;
         const u32 KU_OCTREE_HIST_MAX_DEPTH   = 16;
@@ -196,13 +265,9 @@ namespace CgsSceneManager
         void NoteOctreeHistogram(const LooseOctreeNode* lpNodes, u32 luSplitThreshold, u32 luUsedGroups,
                                  u32 luFreeGroups, s32 liStaticGroups)
         {
-            static const bool sbEnabled = []() {
-                const char* lpcValue = std::getenv("BRN_OCTREE_HIST_DIAG");
-                return lpcValue != 0 && lpcValue[0] == '1';
-            }();
             static s32 siUpdates = 0;
             static s32 siReports = 0;
-            if (!sbEnabled || lpNodes == 0 || CgsDev::Log::gpDebugPrint == 0)
+            if (!OctreeHistDiagEnabled() || lpNodes == 0 || CgsDev::Log::gpDebugPrint == 0)
             {
                 return;
             }
@@ -252,6 +317,19 @@ namespace CgsSceneManager
                               lHistogram.mauFullest[luDepth], lHistogram.mauOverThreshold[luDepth], luSplitThreshold);
                 *CgsDev::Log::gpDebugPrint << lacLine;
             }
+
+            const OctreeTimingWitness& lrWitness = gOctreeTimingWitness;
+            std::snprintf(lacLine, sizeof(lacLine),
+                          "[octree-hist] #%d   timing since the last report: %u flagged updates; merge pass %.1f us "
+                          "(%u groups back), split pass %.1f us (%u groups out), bounds %.1f us; %u frustum walks "
+                          "%.1f us, %u nodes visited%s\n",
+                          siReports, lrWitness.muFlaggedUpdates, static_cast<double>(lrWitness.mu64MergePassNs) / 1000.0,
+                          lrWitness.muGroupsMerged, static_cast<double>(lrWitness.mu64SplitPassNs) / 1000.0,
+                          lrWitness.muGroupsSplit, static_cast<double>(lrWitness.mu64BoundsNs) / 1000.0,
+                          lrWitness.muFrustumWalks, static_cast<double>(lrWitness.mu64FrustumNs) / 1000.0,
+                          lrWitness.muFrustumNodes, OctreeAdaptiveOffDiag() ? " [BRN_OCTREE_ADAPTIVE_OFF: passes skipped]" : "");
+            *CgsDev::Log::gpDebugPrint << lacLine;
+            std::memset(&gOctreeTimingWitness, 0, sizeof(gOctreeTimingWitness));
         }
     }
 
@@ -1157,9 +1235,32 @@ namespace CgsSceneManager
     {
         if ((mpRootNode->muFlags & KU_OCTREE_NODE_FLAG_NEEDS_UPDATE) != 0)
         {
-            AdaptiveDepthUpdateRemoveNodesRecursive(0, 0);
-            AdaptiveDepthUpdateAddNodesRecursive(0, 0);
-            UpdateRecursive(0);
+            // The OctreeStageTimer scopes and the used-count deltas are the [DIAG] BRN_OCTREE_HIST_DIAG timing
+            // witness (no-ops when it is unset); the three calls are the console's.
+            const u32 luUsedAtStart = mFreeNodeGroupPool.GetNumUsed();
+            u32 luUsedAfterMerge    = luUsedAtStart;
+            if (!OctreeAdaptiveOffDiag())   // [DIAG] BRN_OCTREE_ADAPTIVE_OFF=1 (A/B only; unset = the console)
+            {
+                {
+                    OctreeStageTimer lTimer(&gOctreeTimingWitness.mu64MergePassNs);
+                    AdaptiveDepthUpdateRemoveNodesRecursive(0, 0);
+                }
+                luUsedAfterMerge = mFreeNodeGroupPool.GetNumUsed();
+                {
+                    OctreeStageTimer lTimer(&gOctreeTimingWitness.mu64SplitPassNs);
+                    AdaptiveDepthUpdateAddNodesRecursive(0, 0);
+                }
+            }
+            {
+                OctreeStageTimer lTimer(&gOctreeTimingWitness.mu64BoundsNs);
+                UpdateRecursive(0);
+            }
+            if (OctreeHistDiagEnabled())
+            {
+                ++gOctreeTimingWitness.muFlaggedUpdates;
+                gOctreeTimingWitness.muGroupsMerged += luUsedAtStart - luUsedAfterMerge;
+                gOctreeTimingWitness.muGroupsSplit  += mFreeNodeGroupPool.GetNumUsed() - luUsedAfterMerge;
+            }
         }
 
         // [DIAG culling wave]
@@ -1515,13 +1616,21 @@ namespace CgsSceneManager
                     siCullOff = (lpcEnv != 0 && lpcEnv[0] == '1') ? 1 : 0;
                 }
 
-                if (siCullOff != 0)
                 {
-                    TrivialAcceptRecursive(0, &lParams);
+                    OctreeStageTimer lTimer(&gOctreeTimingWitness.mu64FrustumNs);   // [DIAG] BRN_OCTREE_HIST_DIAG
+                    if (siCullOff != 0)
+                    {
+                        TrivialAcceptRecursive(0, &lParams);
+                    }
+                    else
+                    {
+                        FrustumTestVpRecursive(0, &lParams);
+                    }
                 }
-                else
+                if (OctreeHistDiagEnabled())   // [DIAG] BRN_OCTREE_HIST_DIAG timing witness
                 {
-                    FrustumTestVpRecursive(0, &lParams);
+                    ++gOctreeTimingWitness.muFrustumWalks;
+                    gOctreeTimingWitness.muFrustumNodes += lParams.muNumNodesVisited;
                 }
 
                 ++lrBuffer.muNumQueries;
