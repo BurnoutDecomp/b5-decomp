@@ -37,8 +37,9 @@
 #include "SDKs/XboxMath/XMVectorSinCos.h"                        // XboxMath::XMVectorSinCos (the three inlined SinCos)
 #include "SDKs/XboxMath/XMScalarSinCos.h"                        // XboxMath::XMScalarSinCos (XMMatrixRotationY's)
 
-#include <cmath>                                                // std::sqrt / std::fabs / std::signbit
+#include <cmath>                                                // std::fmaf / std::fabs / std::signbit
 #include <cstdlib>                                              // getenv (BRN_CAMRIG_DIAG)
+#include <limits>                                               // Dot3's QNaN (ROUNDING_RULE 1 overflow)
 
 namespace
 {
@@ -154,6 +155,70 @@ namespace
         lResult.zAxis = Vector3{ lfSin, 0.0f,  lfCos, 0.0f };
         lResult.wAxis = Vector3{  0.0f, 0.0f,   0.0f, 1.0f };
         return lResult;
+    }
+
+    // Update's own vector arithmetic, rounded as the console rounds it (FX-GATE, crash parity 2026-09-25). The whole
+    // body was run on emu64 from its first word to its return against the PC body (run_fxgate_aftertouch_update.py).
+
+    // ROUNDING_RULE 1 -- vmsum3fp128: the three f32 products are exact in f64, summed left to right in f64 and cast to
+    // f32 ONCE; a finite f64 sum that overflows f32 is a QNaN. FLAG (model): vmsum = one rounding of the f64 sum
+    // (xenia DOT_PRODUCT_3). A car's |velocity|^2 does reach the overflow on a NaN / runaway frame. Update's six sites:
+    // 0x822281E8 |velocity|^2, 0x82228668 the reset test's |velocity|^2, 0x822288F0 |look|^2 (the normalise),
+    // 0x82228AB0 |look|^2 (the look length), 0x82228C70 the SLerp result's |z|^2, 0x82229154 the smoothing's |move|^2.
+    f32 Dot3(const Vector3& lrA, const Vector3& lrB)
+    {
+        const f64 ldSum = static_cast<f64>(lrA.x) * lrB.x + static_cast<f64>(lrA.y) * lrB.y
+                        + static_cast<f64>(lrA.z) * lrB.z;
+        const f32 lfSum = static_cast<f32>(ldSum);
+        if (std::isinf(lfSum) && std::isfinite(ldSum))
+        {
+            return std::numeric_limits<f32>::quiet_NaN();
+        }
+        return lfSum;
+    }
+
+    // ROUNDING_RULE 5 -- the vrsqrtefp estimate refined by TWO Newton-Raphson steps, each
+    //   e2 = e * e (vmulfp128) ; h = e * 0.5 (vmulfp128) ; r = -(x * e2 - 1) (vnmsubfp128) ; e = h * r + e (vmaddfp)
+    // with 1.0 / 0.5 the vcsxwfp128 splats v125 / v122 (0x822281D8 / 0x822281E4). Update runs it at five sites:
+    // 0x82228220..0x82228264, 0x82228878..0x822288A8, 0x82228910..0x82228934, 0x82228AEC..0x82228B2C and
+    // 0x82228C7C..0x82228CA0. FLAG (model): the hardware estimate is taken as the correctly rounded 1 / sqrt(x)
+    // (so +-0 -> +-inf, +inf -> 0 and a negative -> NaN, as vrsqrtefp gives).
+    f32 RefinedReciprocalSqrt(f32 lfValue)
+    {
+        f32 lfEstimate = static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfValue)));
+        for (s32 liStep = 0; liStep < 2; ++liStep)
+        {
+            const f32 lfEstimateSquared = lfEstimate * lfEstimate;
+            const f32 lfHalfEstimate    = lfEstimate * 0.5f;
+            const f32 lfResidual = BrnDirector::Camera::Utils::ConsoleVpu::NegativeMultiplySubtract(
+                lfValue, lfEstimateSquared, 1.0f);
+            lfEstimate = BrnDirector::Camera::Utils::ConsoleVpu::MultiplyAdd(lfHalfEstimate, lfResidual, lfEstimate);
+        }
+        return lfEstimate;
+    }
+
+    // The console's root: x * the refined 1/sqrt(x), with the `vcmpeqfp128 m, x, 0 ; vsel r, r, 0, m` guard that turns
+    // the 0 * inf of a zero x into 0 (the speed 0x82228268..0x82228270, the look-down 0x822288AC / 0x822288B0, the look
+    // length 0x82228B30 / 0x82228B34).
+    f32 GuardedRoot(f32 lfValue)
+    {
+        return (lfValue == 0.0f) ? 0.0f : lfValue * RefinedReciprocalSqrt(lfValue);
+    }
+
+    // vmaddfp over four lanes, a * b + c with ONE rounding per lane (ROUNDING_RULE 3), b a full vector.
+    Vector3 MultiplyAddLanes(const Vector3& lrA, const ::VecFloat& lrB, const Vector3& lrC)
+    {
+        return Vector3{ std::fmaf(lrA.x, lrB.x, lrC.x), std::fmaf(lrA.y, lrB.y, lrC.y),
+                        std::fmaf(lrA.z, lrB.z, lrC.z), std::fmaf(lrA.w, lrB.w, lrC.w) };
+    }
+
+    // The height / distance ease (both arms of the framing): target = (fast - slow) * framing + slow (fmadds),
+    // then value = (target - value) * blend + value (fsubs, fmadds) -- 0x82228A24 / 0x82228A2C, 0x82228A44 /
+    // 0x82228A4C (the debug camera), 0x82228A84 / 0x82228A8C, 0x82228AA4 / 0x82228AAC (by speed).
+    f32 EaseTowardFraming(f32 lfValue, f32 lfSlow, f32 lfFast, f32 lfFraming, f32 lfBlend)
+    {
+        const f32 lfTarget = std::fmaf(lfFast - lfSlow, lfFraming, lfSlow);
+        return std::fmaf(lfTarget - lfValue, lfBlend, lfValue);
     }
 }
 
@@ -317,15 +382,20 @@ bool BehaviourAftertouchCrash::Prepare(const BehaviourSharedPrepareReleaseInfo& 
 //   +0x580 / +0x584 / +0x588  mTimestep.mafTimestep[E_WORLD / E_WORLD_NO_SLOMO / E_GAME]
 //   +0x5D4  mpRandom
 //
-// VMX->portable, the standing convention of this tree's rw::math::vpu home: the console's
-// vrsqrtefp + two Newton steps (Normalize / Magnitude) are the exact std::sqrt forms, via the vendor
-// Normalize / Magnitude. Every branch, compare polarity, operand order, constant and store is
-// transcribed. Its three inlined XMVectorSinCos (range register unk_82000C60 == {pi, 2pi, 1/pi, 1/2pi},
-// coefficient blocks unk_82000BD0..0x82000C2F), XMMatrixRotationY's XMScalarSinCos and the three products
-// they feed (the orbit TransformVector, the pitch and roll Mults) ARE the console's since FX-GATE (crash
-// parity 2026-09-25): the file-local RotationYAxisZ / RotationX / RotationZ / XMMatrixRotationY above and
-// Utils::ConsoleVpu's fused TransformVector / Mult; std::sin / std::cos and the unfused vendor products stood
-// in for them before. The other multiply-adds of this body are still separate operations.
+// Every branch, compare polarity, operand order, constant and store is transcribed, and since FX-GATE (crash
+// parity 2026-09-25) so is the ROUNDING of every operation, per the campaign rule (ROUNDING_RULE.md):
+//   * its three inlined XMVectorSinCos (range register unk_82000C60 == {pi, 2pi, 1/pi, 1/2pi}, coefficient
+//     blocks unk_82000BD0..0x82000C2F) and XMMatrixRotationY's XMScalarSinCos -- the file-local
+//     RotationYAxisZ / RotationX / RotationZ / XMMatrixRotationY above;
+//   * the three products they feed (the orbit TransformVector, the pitch and roll Mults) -- Utils::ConsoleVpu;
+//   * the six vmsum3fp128 dots (rule 1, Dot3), the five vrsqrtefp roots and normalises with their two Newton
+//     steps (rule 5, RefinedReciprocalSqrt / GuardedRoot), and every vmaddfp / vmaddcfp128 / fmadds / fnmsubs
+//     (rule 3): the height tweak, the look-down, the debug parameter, the framing eases, the blend factor, the
+//     look-at targets, the eye, the smoothing and the close-up eye; CameraImpactEffect::Update's decay too.
+// The vendor std::sqrt / std::sin / std::cos forms and separate multiply-adds stood in for them before. The whole
+// body, run on emu64 from its first word to its return, matches this one bit for bit on 40 cases x 3 frames
+// (run_fxgate_aftertouch_update.py; the SLerp and the other out-of-TU callees stubbed on both sides), the w
+// lanes of every stored vector and of the published camera included.
 // ============================================================================
 bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo)
 {
@@ -341,13 +411,13 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     const BrnPhysics::Vehicle::RaceCarState& lrCarState   = lrSharedInfo.mPlayerInfo.mRaceCarState;
     const f32 lfTimestep = lrSharedInfo.GetTimestep(BrnDirector::Timestep::E_WORLD);   // lfs +0x580
 
-    // .cpp:172 -- the car's speed and direction of travel from ONE rsqrt pipeline
-    // (0x822281E8..0x82228270: `vmulfp128 v0, v0, v13` the length, vsel-guarded to 0 for a zero
-    // velocity; `vmulfp128 v126, v12, v13` the direction, which is read only when the velocity
-    // is not IsZero).
-    Vector3 lVelocityDirection;
-    const f32 lfSpeed = rw::math::vpu::NormalizeReturnMagnitude(lrCarState.mLinearVelocity,
-                                                                lVelocityDirection);
+    // .cpp:172 -- the car's speed and direction of travel from ONE rsqrt pipeline (0x822281E8..0x82228270):
+    // |v|^2 by vmsum3fp128 (Dot3), the estimate refined twice, then `vmulfp128 v0, v0, v13` the length
+    // (GuardedRoot: vsel-guarded to 0 for a zero |v|^2) and `vmulfp128 v126, v12, v13` the direction -- NOT
+    // guarded (a zero velocity gives NaN lanes), and read only when the velocity is not IsZero.
+    const f32     lfVelocitySq       = Dot3(lrCarState.mLinearVelocity, lrCarState.mLinearVelocity);
+    const f32     lfSpeed            = GuardedRoot(lfVelocitySq);
+    const Vector3 lVelocityDirection = lrCarState.mLinearVelocity * RefinedReciprocalSqrt(lfVelocitySq);
 
     // .cpp:165..:176 -- lag a copy of the car's frame (the four stvx128 to var_200..var_1D0,
     // then `bl PositionLag::Update` r3 = &mPositionLag, r4 = &mpParameters->mLagParams,
@@ -430,11 +500,11 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     if (mbManualCameraControl)
     {
         // Stay manual until the stick has been idle for KF_TIME_UNTIL_CAMERA_RESET AND the car is
-        // moving: `fcmpu time, 3.0 ; blt` then `vcmpgtfp. v0, KF, |v|^2` (vmsum3fp128). The speed
-        // test compares the SQUARED speed against KF_CAMERA_RESET_MIN_SPEED -- the console's own
-        // mixed units, kept.
+        // moving: `fcmpu time, 3.0 ; blt` then `vcmpgtfp. v0, KF, |v|^2` (vmsum3fp128 @0x82228668,
+        // Dot3). The speed test compares the SQUARED speed against KF_CAMERA_RESET_MIN_SPEED -- the
+        // console's own mixed units, kept.
         if (mfTimeSinceLastManualControl < KF_TIME_UNTIL_CAMERA_RESET
-            || KF_CAMERA_RESET_MIN_SPEED > rw::math::vpu::MagnitudeSquared(lrCarState.mLinearVelocity))
+            || KF_CAMERA_RESET_MIN_SPEED > Dot3(lrCarState.mLinearVelocity, lrCarState.mLinearVelocity))
         {
             lbManualCameraControl = true;
         }
@@ -463,10 +533,10 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
             mManualCameraDirection);
 
         // .cpp:254 -- raise / lower by stick y * KF_CAMERA_Y_ROTATION_SPEED, clamped to
-        // +-KF_MIN_CAMERA_MANUAL_HEIGHT_TWEAK: `vmaddfp v12, v12, v9, v11` (stick*rate + tweak),
-        // `vmaxfp v12, -K, v12` then `vminfp v13, K, v12` (0x822287A8..0x822287B8).
+        // +-KF_MIN_CAMERA_MANUAL_HEIGHT_TWEAK: `vmaddfp v12, v12, v9, v11` (stick*rate + tweak, ONE
+        // rounding: ROUNDING_RULE 3), `vmaxfp v12, -K, v12` then `vminfp v13, K, v12` (0x822287A8..0x822287B8).
         mfManualHeightAdjustment = rw::math::vpu::Splat(VecFloatClamp(
-            lOrbitStick.y * KF_CAMERA_Y_ROTATION_SPEED + mfManualHeightAdjustment.x,
+            std::fmaf(lOrbitStick.y, KF_CAMERA_Y_ROTATION_SPEED, mfManualHeightAdjustment.x),
             -KF_MIN_CAMERA_MANUAL_HEIGHT_TWEAK.x,
             KF_MIN_CAMERA_MANUAL_HEIGHT_TWEAK.x));
 
@@ -482,28 +552,30 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     }
 
     // .cpp:266..:270 -- always look DOWN on the car: the look direction's y is replaced by
-    //   -KF_LOOK_DOWN_SCALE * sqrt( Clamp(y^2, MIN_TAN_SQ * (x^2 + z^2), MAX_TAN_SQ * (x^2 + z^2)) )
-    // (0x822287F8..0x822288B8: x*x + z^2 by vmaddfp, the two VecFloat scales, `vmaxfp v12, lo, y^2`
-    // then `vminfp v13, hi, v12`, the vsel-guarded sqrt, the multiply by splat(-KF_LOOK_DOWN_SCALE)
-    // (`fneg` @0x82228844) and `vrlimi128 v0, v13, 4, 0` into the y lane).
-    const f32 lfHorizontalSq = lLookDirection.x * lLookDirection.x + lLookDirection.z * lLookDirection.z;
+    //   sqrt( Clamp(y^2, MIN_TAN_SQ * (x^2 + z^2), MAX_TAN_SQ * (x^2 + z^2)) ) * -KF_LOOK_DOWN_SCALE
+    // (0x822287F8..0x822288B8: z^2 by vmulfp128, then x * x + z^2 by ONE vmaddfp @0x8222883C, the two VecFloat
+    // scales, `vmaxfp v12, lo, y^2` then `vminfp v13, hi, v12`, the root as GuardedRoot (0x82228878..0x822288B0),
+    // the multiply by splat(-KF_LOOK_DOWN_SCALE) (`fneg` @0x82228844) and `vrlimi128 v0, v13, 4, 0` into the y lane).
+    const f32 lfHorizontalSq = std::fmaf(lLookDirection.x, lLookDirection.x, lLookDirection.z * lLookDirection.z);
     const f32 lfVerticalSq   = lLookDirection.y * lLookDirection.y;
-    lLookDirection.y = -KF_LOOK_DOWN_SCALE
-                     * std::sqrt(VecFloatClamp(lfVerticalSq,
-                                               KF_MIN_CAMERA_LOOK_TAN_SQ_ANGLE.x * lfHorizontalSq,
-                                               KF_MAX_CAMERA_LOOK_TAN_SQ_ANGLE.x * lfHorizontalSq));
+    lLookDirection.y = GuardedRoot(VecFloatClamp(lfVerticalSq,
+                                                 KF_MIN_CAMERA_LOOK_TAN_SQ_ANGLE.x * lfHorizontalSq,
+                                                 KF_MAX_CAMERA_LOOK_TAN_SQ_ANGLE.x * lfHorizontalSq))
+                     * -KF_LOOK_DOWN_SCALE;
 
-    // .cpp:273..:276 -- the desired direction FROM the car TO the camera (0x822288C4..0x82228998).
+    // .cpp:273..:276 -- the desired direction FROM the car TO the camera (0x822288C4..0x82228998): |look|^2 by
+    // vmsum3fp128 @0x822288F0, the refined estimate (NO zero guard: IsZero was tested), look * it, then the sign flip.
     if (!IsZeroVmx(lLookDirection, rw::math::fpu::KF_IS_ZERO_TOLERANCE))
     {
-        mDesiredWorldSpaceNormalizedVectorFromCar =
-            rw::math::vpu::Negate(rw::math::vpu::Normalize(lLookDirection));      // stvx128 +0x2D0
+        mDesiredWorldSpaceNormalizedVectorFromCar = rw::math::vpu::Negate(
+            lLookDirection * RefinedReciprocalSqrt(Dot3(lLookDirection, lLookDirection)));   // stvx128 +0x2D0
         CGS_ASSERT(!IsZeroVmx(mDesiredWorldSpaceNormalizedVectorFromCar,
                               rw::math::fpu::KF_IS_ZERO_TOLERANCE),
                    "!IsZero(mDesiredWorldSpaceNormalizedVectorFromCar)");         // .cpp:276
     }
 
     // .cpp:287..:322 -- the height and distance the camera holds from the car.
+    f32 lfFraming;
     if (mbIsTempDebugCrashCamera)                                                 // lbz +0x3C3
     {
         // The debug crash camera (the takedown state raises this flag): stick y walks a 0..1
@@ -514,37 +586,33 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
             lfAdjust = 0.0f;
         }
 
-        // `fnmsubs f0, (dt_game * adjust), rate, param` then the fsel ladder
-        // fsel(-p, 0.0, p) / fsel(1 - p, p, 1.0) == rw::math::fpu::Clamp(p, 0, 1). Both stored.
-        mfDebugCrashCameraParam0to1 = mfDebugCrashCameraParam0to1
-            - lrSharedInfo.GetTimestep(BrnDirector::Timestep::E_GAME) * lfAdjust * sfAdjustmentRate;
+        // `fnmsubs f0, (dt_game * adjust), rate, param` @0x822289F4 -- param - (dt_game * adjust) * rate with ONE
+        // rounding (ROUNDING_RULE 3) -- then the fsel ladder fsel(-p, 0.0, p) / fsel(1 - p, p, 1.0) ==
+        // rw::math::fpu::Clamp(p, 0, 1). Both stored.
+        mfDebugCrashCameraParam0to1 = Utils::ConsoleVpu::NegativeMultiplySubtract(
+            lrSharedInfo.GetTimestep(BrnDirector::Timestep::E_GAME) * lfAdjust, sfAdjustmentRate,
+            mfDebugCrashCameraParam0to1);
         mfDebugCrashCameraParam0to1 = rw::math::fpu::Clamp(mfDebugCrashCameraParam0to1, 0.0f, 1.0f);
 
-        const f32 lfFraming = mfDebugCrashCameraParam0to1;
-        mfHeight += ((lrParameters.mfFastHeight - lrParameters.mfSlowHeight) * lfFraming
-                     + lrParameters.mfSlowHeight - mfHeight)
-                  * lrParameters.mfHeightDistanceBlendFactor;
-        mfDistance += ((lrParameters.mfFastDistance - lrParameters.mfSlowDistance) * lfFraming
-                       + lrParameters.mfSlowDistance - mfDistance)
-                    * lrParameters.mfHeightDistanceBlendFactor;
+        lfFraming = mfDebugCrashCameraParam0to1;
     }
     else
     {
         // Frame by speed: fsel(q - 1, 1.0, q) == rw::math::fpu::Min(q, 1) with
-        // q = speed / mfHeightDistanceVelocityRange (0x82228A54..0x82228AAC).
-        const f32 lfFraming = rw::math::fpu::Min(lfSpeed / lrParameters.mfHeightDistanceVelocityRange, 1.0f);
-        mfHeight += ((lrParameters.mfFastHeight - lrParameters.mfSlowHeight) * lfFraming
-                     + lrParameters.mfSlowHeight - mfHeight)
-                  * lrParameters.mfHeightDistanceBlendFactor;
-        mfDistance += ((lrParameters.mfFastDistance - lrParameters.mfSlowDistance) * lfFraming
-                       + lrParameters.mfSlowDistance - mfDistance)
-                    * lrParameters.mfHeightDistanceBlendFactor;
+        // q = speed / mfHeightDistanceVelocityRange (0x82228A54..0x82228A80).
+        lfFraming = rw::math::fpu::Min(lfSpeed / lrParameters.mfHeightDistanceVelocityRange, 1.0f);
     }
+    // Both arms then ease the height and the distance toward the framing, two fmadds each (EaseTowardFraming:
+    // 0x82228A24..0x82228A4C, 0x82228A84..0x82228AAC).
+    mfHeight   = EaseTowardFraming(mfHeight, lrParameters.mfSlowHeight, lrParameters.mfFastHeight, lfFraming,
+                                   lrParameters.mfHeightDistanceBlendFactor);
+    mfDistance = EaseTowardFraming(mfDistance, lrParameters.mfSlowDistance, lrParameters.mfFastDistance, lfFraming,
+                                   lrParameters.mfHeightDistanceBlendFactor);
 
     // .cpp:327..:369 -- swing the camera's direction toward the desired one, unless it is there
     // already (IsZero(current - desired) against rw::math::fpu::SMALL_FLOAT, 0x82228AE8..0x82228B48).
-    // The look length is the vsel-guarded Magnitude computed alongside (var_220).
-    const f32 lfLookLength = rw::math::vpu::Magnitude(lLookDirection);
+    // The look length is the GuardedRoot of |look|^2 (vmsum3fp128 @0x82228AB0) computed alongside (var_220).
+    const f32 lfLookLength = GuardedRoot(Dot3(lLookDirection, lLookDirection));
     if (!IsZeroVmx(mWorldSpaceNormalizedVectorFromCar - mDesiredWorldSpaceNormalizedVectorFromCar,
                    KF_SMALL_FLOAT))
     {
@@ -555,28 +623,31 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
             mfBlendFactor = (lfLookLength < 2.0f) ? lrParameters.mfMinimumBlendFactor
                                                   : lrParameters.mfMaximumBlendFactor;
         }
-        mfBlendFactor += (lrParameters.mfManualBlendFactor - mfBlendFactor)
-                       * lrParameters.mfBlendFactorBlendFactor;                  // fmadds @0x82228BB4
+        // (manual - blend) * blend-blend + blend: fsubs, then ONE fmadds @0x82228BB4 (ROUNDING_RULE 3).
+        mfBlendFactor = std::fmaf(lrParameters.mfManualBlendFactor - mfBlendFactor,
+                                  lrParameters.mfBlendFactorBlendFactor, mfBlendFactor);
 
         // .cpp:343..:360 -- blend two look-at frames from the lagged car origin, one along the
         // current direction and one along the desired, by the blend factor (vmaddcfp128
-        // dir * distance + origin @0x82228BC4 / 0x82228BFC, then `bl rw::math::vpu::SLerp` with
-        // the angle-out pointer at var_220, never read).
+        // dir * distance + origin, one rounding per lane, @0x82228BC4 / 0x82228BFC, then
+        // `bl rw::math::vpu::SLerp` with the angle-out pointer at var_220, never read).
         const Matrix44Affine lCurrentLookAt = Utils::CreateLookAt(
-            lCarPosition, lCarPosition + mWorldSpaceNormalizedVectorFromCar * mfDistance);
+            lCarPosition, Utils::ConsoleVpu::MultiplyAdd(mWorldSpaceNormalizedVectorFromCar, mfDistance, lCarPosition));
         const Matrix44Affine lDesiredLookAt = Utils::CreateLookAt(
-            lCarPosition, lCarPosition + mDesiredWorldSpaceNormalizedVectorFromCar * mfDistance);
+            lCarPosition,
+            Utils::ConsoleVpu::MultiplyAdd(mDesiredWorldSpaceNormalizedVectorFromCar, mfDistance, lCarPosition));
         Vector3 lUnusedAngle;
         mWorldSpaceNormalizedVectorFromCar =
             rw::math::vpu::SLerp(lCurrentLookAt, lDesiredLookAt, mfBlendFactor, &lUnusedAngle).zAxis;
 
         // .cpp:362..:369 -- a collapsed result falls back to +Z (gKVector, unk_82181520), and
-        // the direction is re-normalised (rsqrt + two Newton steps, NO zero guard).
+        // the direction is re-normalised (vmsum3fp128 @0x82228C70, the refined estimate, NO zero guard).
         if (IsZeroVmx(mWorldSpaceNormalizedVectorFromCar, rw::math::fpu::KF_IS_ZERO_TOLERANCE))
         {
             mWorldSpaceNormalizedVectorFromCar = rw::math::vpu::GetVector3_ZAxis();
         }
-        mWorldSpaceNormalizedVectorFromCar = rw::math::vpu::Normalize(mWorldSpaceNormalizedVectorFromCar);
+        mWorldSpaceNormalizedVectorFromCar = mWorldSpaceNormalizedVectorFromCar
+            * RefinedReciprocalSqrt(Dot3(mWorldSpaceNormalizedVectorFromCar, mWorldSpaceNormalizedVectorFromCar));
     }
 
     // .cpp:372..:375 -- the four tripwires, in the console's order and polarity.
@@ -596,9 +667,10 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     // .cpp:381..:383 -- the camera sits mfDistance out along its direction from the lagged car
     // origin, lifted by the stick's height tweak along CgsCore::K_V3D_YAXIS, and looks at the
     // origin (vmaddfp128 dir * distance + origin @0x82228E98, vmaddfp Y * tweak + that @0x82228E9C,
-    // `bl CreateLookAt` v1 = eye, v2 = origin).
-    const Vector3 lEyePosition = lCarPosition + mWorldSpaceNormalizedVectorFromCar * mfDistance
-                               + rw::math::vpu::Mult(K_V3D_YAXIS, mfManualHeightAdjustment);
+    // one rounding per lane each, `bl CreateLookAt` v1 = eye, v2 = origin).
+    const Vector3 lEyePosition = MultiplyAddLanes(
+        K_V3D_YAXIS, mfManualHeightAdjustment,
+        Utils::ConsoleVpu::MultiplyAdd(mWorldSpaceNormalizedVectorFromCar, mfDistance, lCarPosition));
     Matrix44Affine lCameraTransform = Utils::CreateLookAt(lEyePosition, lCarPosition);
 
     // .cpp:389 -- lift the camera by mfHeight (the y lane of the translation only: vaddfp then
@@ -616,11 +688,12 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
 
     // .cpp:394..:400 -- smooth small camera moves: within KF_SMOOTHING_STOP_DISTANCE_SQ of last
     // frame's position the camera goes KF_SMOOTHING_FACTOR of the way (`vcmpgtfp. v11, KF, |d|^2`
-    // @0x82229158; `vmaddfp v12, d, last, factor` == d * factor + last @0x8222917C).
+    // @0x82229158 over the vmsum3fp128 @0x82229154; `vmaddfp v12, d, last, factor` == d * factor + last
+    // with one rounding per lane @0x8222917C).
     const Vector3 lCameraMove = lCameraTransform.wAxis - mCameraPositionLastFrame;
-    if (KF_SMOOTHING_STOP_DISTANCE_SQ.x > rw::math::vpu::MagnitudeSquared(lCameraMove))
+    if (KF_SMOOTHING_STOP_DISTANCE_SQ.x > Dot3(lCameraMove, lCameraMove))
     {
-        lCameraTransform.wAxis = mCameraPositionLastFrame + lCameraMove * KF_SMOOTHING_FACTOR;
+        lCameraTransform.wAxis = MultiplyAddLanes(lCameraMove, KF_SMOOTHING_FACTOR, mCameraPositionLastFrame);
     }
     mCameraPositionLastFrame = lCameraTransform.wAxis;                            // stvx128 +0x2F0
 
@@ -671,11 +744,12 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     // lagged origin (gJVector * 0.5, v122 == vcsxwfp128 1,1), from four metres out along the
     // camera's direction flattened onto the ground (GetWorldSpaceVectorFromCar, then SetY(0) --
     // `vrlimi128 v0, v127(0), 4, 3` @0x82229500 -- and two SDK Mults by GetVecFloat_Two,
-    // `vmulfp128 v1, v127, v0` + `vmaddcfp128 v1, v0, v1, v126` @0x82229538/0x8222953C).
+    // `vmulfp128 v1, v127, v0` + `vmaddcfp128 v1, v0, v1, v126` @0x82229538/0x8222953C: the second
+    // is fused with the add (ROUNDING_RULE 3; exact doubling, so it rounds as the two-step form did)).
     const Vector3 lCloseupTarget = lCarPosition - rw::math::vpu::GetVector3_YAxis() * 0.5f;
     Vector3 lFlatVectorFromCar = GetWorldSpaceVectorFromCar();                    // .h:104
     lFlatVectorFromCar.y = 0.0f;
-    const Vector3 lCloseupEye = lCloseupTarget + (lFlatVectorFromCar * 2.0f) * 2.0f;
+    const Vector3 lCloseupEye = Utils::ConsoleVpu::MultiplyAdd(lFlatVectorFromCar * 2.0f, 2.0f, lCloseupTarget);
 
     // .cpp:449..:455 -- blend the published camera into the close-up by the eased close-up amount
     // (SineLerp(0.0, 1.0, +0x3D4), `bl rw::math::vpu::SLerp` r4 = the camera, r5 = the look-at),

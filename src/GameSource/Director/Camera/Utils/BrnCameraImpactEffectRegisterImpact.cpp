@@ -30,6 +30,8 @@
 #include "GameSource/Director/Camera/Utils/BrnCameraImpactEffect.h"
 #include "GameSource/Director/Camera/Camera.h"   // Camera::mTransform (Update shakes it in place)
 
+#include <cmath>                                 // std::fmaf (Update's decay, one fmadds)
+
 namespace BrnDirector
 {
 namespace Camera
@@ -73,6 +75,10 @@ void CameraImpactEffect::Construct()
 // is `fneg f13, impact ; fmadds f0, f13, 0.06, impact` (@0x82229278/0x8222927C) -- the same
 // value as the PS3's `0.0 - impact` for every input (the two differ only in the sign of a zero
 // intermediate, and x + (+-0) with x == +-0 rounds to the same result).
+// ⭐ The decay is ONE fmadds on both consoles (X360 @0x8222927C, PS3 @0x280CC): -impact * decay + impact
+// rounded once (ROUNDING_RULE 3, FX-GATE crash parity 2026-09-25). The PC's separate multiply and add
+// missed it by an ulp on 583 of 20000 impact factors in [0, 1) at the rig's decay 0.06, and the factor
+// carries into the next frame's shake scale.
 // The shake runs on the camera's transform in place (the rig passes the camera itself, r4 = r24,
 // whose transform is its +0x00 member).
 void CameraImpactEffect::Update(Camera& lrCamera, const Parameters& lrParameters, Random& lrRandom,
@@ -82,7 +88,7 @@ void CameraImpactEffect::Update(Camera& lrCamera, const Parameters& lrParameters
                         lrParameters.mfShakeFrequencyScale * lfTimestep,
                         mfImpactFactor * lrParameters.mfShakeMagnitude);
 
-    mfImpactFactor = lrParameters.mfShakeDecayFactor * (0.0f - mfImpactFactor) + mfImpactFactor;
+    mfImpactFactor = std::fmaf(-mfImpactFactor, lrParameters.mfShakeDecayFactor, mfImpactFactor);
 }
 
 } // namespace Utils
