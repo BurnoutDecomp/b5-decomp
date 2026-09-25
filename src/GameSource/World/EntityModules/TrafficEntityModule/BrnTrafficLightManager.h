@@ -39,6 +39,10 @@ namespace BrnTraffic
     // forward-declared to avoid pulling the collection header into this manager header.
     class TrafficLightCollection;
 
+    // ADDITIVE (crash parity FX-TRAFFICLIGHTS, 2026-09-25) -- UpdateHull's parameter. A struct: BrnTrafficHull.h
+    // defines it as one and MSVC mangles the key.
+    struct Hull;
+
     // The flat instance-index bound asserted by GetLightState (X360: cmplwi ..., 0x258).
     static const u32 KU_MAX_TRAFFIC_LIGHT_INSTANCES = 0x258;  // 600
 
@@ -136,6 +140,13 @@ namespace BrnTraffic
         //   ChangeLightState @ 0x827518E0  to red: a light not already RED goes AMBER for KF_AMBER_TIME;
         //                                  otherwise GREEN. Called by TrafficEntityModule::UpdateEventStarts.
         void ChangeLightState(u32 luInstance, bool lbChangeToRed);
+
+        // ADDITIVE (crash parity FX-TRAFFICLIGHTS, 2026-09-25) -- DWARF :134, bodied in
+        // BrnTrafficLightRuntimeState.cpp (this manager's .cpp cannot include BrnTrafficHull.h: BL-1):
+        //   UpdateHull @ 0x827517F8  every light instance of the hull, [muFirstTrafficLight, muLastTrafficLight),
+        //                            runs TrafficLightRuntimeState::Update: an AMBER light runs down to RED.
+        //                            Called by TrafficEntityModule::UpdateJunctions for every active hull.
+        void UpdateHull(const Hull* lpHull, f32 lfTimeDelta);
 
     private:
         // The state array begins at offset 0 of the manager (record base == this).

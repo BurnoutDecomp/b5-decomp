@@ -1,4 +1,5 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficLightManager.h"
+#include "SharedClasses/Traffic/BrnTrafficHull.h"   // Hull::muFirstTrafficLight / muLastTrafficLight (UpdateHull, below)
 
 // BrnTraffic::TrafficLightRuntimeState::Update @ 0x827515D8
 //
@@ -50,6 +51,41 @@ void TrafficLightRuntimeState::Update(f32 lfTimeDelta)
     else if (muState >= E_STATE_COUNT)
     {
         CGS_ASSERT(false, "Unknown light state ");
+    }
+}
+
+// ============================================================================
+// BrnTraffic::TrafficLightManager::UpdateHull @ 0x827517F8 (DWARF BrnTrafficLightManager.h:134, .cpp 263..270)
+// ADDITIVE (crash parity FX-TRAFFICLIGHTS, 2026-09-25).
+//
+// A manager method, bodied in this TU rather than in BrnTrafficLightManager.cpp: it reads the Hull record, and
+// BrnTrafficHull.h cannot share a TU with that .cpp's BrnTrafficLightCollection.h (the two ETrafficLightState
+// homes, BL-1). This TU only includes the manager header.
+//
+//   cmplwi lpHull, 0 ; bne       else the .cpp 269 (0x10D) tripwire "lpHull"              0x82751818..0x8275183C
+//   fcmpu lfTimeDelta, 0.0f (flt_82001CC0) ; bgt
+//                                else the .cpp 270 (0x10E) tripwire "lfTimeDelta > 0.0f"  0x82751840..0x82751868
+//                                (bgt is not taken on a NaN: a NaN delta fires it, as CGS_ASSERT does)
+//   luInstance = lhz +0xA (muFirstTrafficLight) ; while < lhz +0xC (muLastTrafficLight, re-read every pass):
+//     GetLightState(luInstance), inlined: the h:209 (0xD1) bound tripwire, this + 8 * luInstance  0x82751894..
+//     TrafficLightRuntimeState::Update(lfTimeDelta) (bl 0x827515D8)                              0x827518BC
+//
+// Caller: TrafficEntityModule::UpdateJunctions @0x82723EA0, once per active hull after its junction loop, with
+// mfSimTimeSinceLastDecision (0x827244A4 `lfs f1, 0(r16)`, r16 == +0x713F8): an AMBER light runs down to RED.
+// NOTE: Update above keeps the PC's `mfTimer <= 0.0f` test, where the console's `bgt` (0x827516D4) lets a NaN
+// timer fall through to RED. That line is Niaz's; its fix is a HANDOFF entry (scratch/CRASHPARITY_0922/fixes/
+// FX-NET.wip/HANDOFF.md, FX-TRAFFICLIGHTS), so this caller inherits the PC polarity until it lands.
+// ============================================================================
+void TrafficLightManager::UpdateHull(const Hull* lpHull, f32 lfTimeDelta)
+{
+    CGS_ASSERT(lpHull != NULL, "lpHull");                    // .cpp 269
+    CGS_ASSERT(lfTimeDelta > 0.0f, "lfTimeDelta > 0.0f");    // .cpp 270
+
+    for (u32 luInstance = lpHull->muFirstTrafficLight; luInstance < lpHull->muLastTrafficLight; ++luInstance)
+    {
+        // The array still holds the 8-byte placeholder record (see the header); the call goes through the
+        // attested record, as Construct / ChangeLightState do.
+        reinterpret_cast<TrafficLightRuntimeState*>(GetLightState(luInstance))->Update(lfTimeDelta);
     }
 }
 
