@@ -53,5 +53,22 @@ namespace Deformation
         // otherwise apply the impulse exactly as ApplyLocalImpulse does.
         virtual void RecievePassedOnImpulse(const ImpulseParams* lpImpulseParams, VecFloat lvfPassedMagnitude);
     };
+
+    // [carcar-dv] ARRIVAL TAP -- PC WITNESS, NOT X360 (2026-09-25, crash parity FX-LADDER).
+    // DeformableObject::UpdateContacts arms it around one car-car apply when BRN_CARCAR_DV is set;
+    // the shared kernel of the two virtuals above (ApplyImpulseToVehicle) then adds every impulse
+    // the deformation chain hands each of the two cars -- the BODY-space direction row times the
+    // params magnitude, BEFORE the VehiclePhysics handler shapes it -- and the route it took
+    // (1 crashed, 2 wall, 4 car). Unarmed it is one byte test per arrival.
+    // [FLAG PC witness] DELETE-WHEN the car-car contact-impulse chain is signed off live.
+    struct CarCarDvArrivalTap
+    {
+        const BrnPhysics::Vehicle::VehiclePhysics* mapVehicle[2];
+        s32     maiArrivals[2];
+        u32     mauRoutes[2];
+        Vector3 maSumBody[2];
+        bool    mbArmed;
+    };
+    extern CarCarDvArrivalTap gCarCarDvArrivalTap;
 }
 }

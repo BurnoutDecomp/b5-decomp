@@ -107,6 +107,9 @@ namespace Deformation
     // exports name the global AND its rows' initializer (see that TU's banner). With the zero rows
     // every impulse this TU applied multiplied to zero (the silent-drop shape); now real.
 
+    // [carcar-dv] the arrival tap (PC witness, not X360) -- see BrnVehicleRigidBody.h.
+    CarCarDvArrivalTap gCarCarDvArrivalTap = {};
+
     // The shared apply kernel of both functions: build the impulse vector and route it into the
     // attached vehicle. Factored out only for the bodies below to share -- the X360 inlines it into
     // both functions identically. (The PS3 keeps both out-of-line, @0x6E0A60/@0x6E0B8C, and both
@@ -132,6 +135,24 @@ namespace Deformation
             lrDirection.z * lfMagnitude,
             lrDirection.w * lfMagnitude,
         };
+
+        // [carcar-dv] arrival tap -- PC WITNESS, NOT X360 (armed only inside UpdateContacts'
+        // car-car apply when BRN_CARCAR_DV is set). Reads the impulse; changes nothing.
+        if ( gCarCarDvArrivalTap.mbArmed )
+        {
+            for ( s32 liTap = 0; liTap < 2; ++liTap )
+            {
+                if ( gCarCarDvArrivalTap.mapVehicle[liTap] == lpVehicle )
+                {
+                    ++gCarCarDvArrivalTap.maiArrivals[liTap];
+                    gCarCarDvArrivalTap.mauRoutes[liTap] |= lpVehicle->IsCrashing()           ? 1u
+                                                          : lpImpulseParams->mbWorldContact  ? 2u : 4u;
+                    gCarCarDvArrivalTap.maSumBody[liTap].x += liImpulse.x;
+                    gCarCarDvArrivalTap.maSumBody[liTap].y += liImpulse.y;
+                    gCarCarDvArrivalTap.maSumBody[liTap].z += liImpulse.z;
+                }
+            }
+        }
 
         // ---- [chainarrive] PC bring-up instrument -- DELETE WHEN the wall test is banked ---------
         // OPT-IN (BRN_IMPULSE_PROBE=1) so a default run and every golden gate stay byte-identical.
