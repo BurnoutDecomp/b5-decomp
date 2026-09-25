@@ -1,255 +1,199 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentTakedownLookback.h"
 
-#include <cmath>                                                      // sqrtf (the |delta| magnitude)
-#include <cstring>                                                    // memcpy (the authored-default rig-params copy)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "BrnCommonTypes.h"                                           // Vector3
-#include "GameSource/Director/Camera/Camera.h"                        // Camera::Camera (SetCamera / operator=)
 #include "GameSource/BurnoutConstants.h"                              // EActiveRaceCarIndex
+#include "GameSource/Director/Camera/Camera.h"                        // Camera::Camera (SetCamera / operator=)
+#include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"           // ConsoleVpu:: the SDK inlines, rounded as the console
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"  // GameState::mbTakedownActive / meTakedownVictimID
+#include "GameSource/Director/MomentController/BrnMomentSharedInfo.h" // MomentSharedInfo (read by name)
+#include "rw/math/vpu/vector3_operation.h"                            // Vector3 operator-
 
-// BrnDirector::MomentTakedownLookback -- reconstructed from the console executable
-// (home file BrnMomentTakedownLookback.cpp; member names verbatim from
-// the declarations).
+// ============================================================================
+// GameSource/Director/MomentController/Moments/BrnMomentTakedownLookback.cpp
 //
-// Bodied here (4 ledger functions):
-//   Construct   Update
-//   Release   GetName
+// BrnDirector::MomentTakedownLookback -- the "takedown look-back" moment: after the player takes a rival down, a rig
+// camera on the player's car looks back at the wreck while the victim is behind and within 60 m.
+//
+// Bodied here: Construct @0x8225EDB8, Update @0x822662F0, Release @0x8223AA08, GetName @0x821F75C0 and the four
+// vtable one-liners at the end (vtable off_82008CD8).
+//
+// [FX-DIRECTOR2 2026-09-25] Update RE-DERIVED from the X360, with the PS3 build's own body (which names the preset):
+//   * the record is read BY NAME -- the six detail:: reach shims it went through are retired (BrnMomentSharedInfo.cpp),
+//     and the three that never had a body (the victim's two lanes and the rig's look-at helper) are gone;
+//   * the look-back rig's block was a 64-byte ZERO placeholder copied over the block's rig preset; it is
+//     CameraRig::ParamsBonnetLow (the 8-doubleword copy from 0x82CDAA10, slot 8 of the preset table) plus
+//     mbUseShake = true (`stb 1, 0x2A9` == block +0x119);
+//   * the rig is aimed with the header inline BehaviourRig::StartLookingAtRaceCar(1, true) -- race car ONE, a
+//     literal in the console (`stw 1, 0x454`), not the victim's index;
+//   * the geometry reads the DWARF locals (BrnMomentTakedownLookback.cpp:87..:99 / :130..:142) and rounds as the
+//     console does (the campaign rounding rule): three vmsum3fp128 dots (rule 1), NormalizeFast's vrsqrtefp + one
+//     Newton step and the VecFloat divide's vrefp + two (rule 5, with their fused vnmsubfp / vmaddfp, rule 3).
+// ============================================================================
 
 namespace BrnDirector
 {
 
 namespace
 {
-    // Read-only-data leaf floats (values proven from the console image, see the
-    // committed sibling reaches): the along-segment band edges and the eligibility
-    // range the look-back holds the victim inside.
-    const f32 KF_ZERO      = 0.0f;    // band near edge / dot-sign test
-    const f32 KF_ONE       = 1.0f;    // band far edge
-    const f32 KF_MAX_RANGE = 60.0f;   // max victim distance, metres
+    const f32 KF_ZERO                     = 0.0f;    // flt_82001CC0 (the behind / band near-edge tests)
+    const f32 KF_ONE                      = 1.0f;    // flt_82001C98 (the band far edge: one second)
+    const f32 KF_MAX_DISTANCE_TO_VICTIM   = 60.0f;   // flt_82004C6C == 0x42700000 (the PS3 splats 0x42700000 too)
 
-    // Camera-state head bits the moment raises (the moment family's shared per-bit
-    // vocabulary -- BrnCameraState.h; bit roles not yet recovered):
-    const u32 KU_HEAD_FLAG_SEARCHING = 18;   // searching / condition absent
-    const u32 KU_HEAD_FLAG_INHIBITED = 23;   // searching inhibited
-
-    // The authored default lookback-rig parameter sub-block the console build copies verbatim
-    // from read-only data (8 doublewords == 64 bytes) into mLookbackRigParams at its
-    // +0x10 sub-offset, then raises one bool at +0x119. The blob's field surface is
-    // BehaviourRig::Parameters interior; its 64 leaf bytes are NOT individually
-    // name-attested from this TU's console code, so they are carried as an opaque authored
-    // default. FLAG: the values are the zero-image placeholder (that read-only-data block is
-    // not available); the COPY + its sub-offset/flag are console-attested.
-    const u8 KaLookbackRigParamsDefault[64] = { 0 };
-    const u32 KU_LOOKBACK_RIG_PARAMS_SUB_OFFSET  = 0x10;  // copy target: mLookbackRigParams + 0x10
-    const u32 KU_LOOKBACK_RIG_PARAMS_FLAG_OFFSET = 0x119; // flag raised at mLookbackRigParams + 0x119
+    // The moment camera's head bits (the family's shared vocabulary; `oris r11, r11, 4` / `oris r11, r11, 0x80` on
+    // the camera state's head word at moment +0x148).
+    const u32 KU_HEAD_FLAG_SEARCHING = 18;
+    const u32 KU_HEAD_FLAG_INHIBITED = 23;
 }
 
-namespace detail
-{
-    // ---- MomentSharedInfo reaches (the record is un-homed; the Moment base
-    // type-erases it to const void*). DECLARATION-ONLY named helpers per the
-    // moment-family precedent (BrnMomentStationaryCrash.cpp's detail reach); console
-    // shared-info offsets in comments; role names FLAG-inferred from the uses. ----
-
-    // The taken-down victim descriptor (+1284). While it reports a live victim the
-    // look-back can search; it names the victim's race-car index.
-    bool MomentSharedInfo_HasTakedownVictim(const void* lpSharedInfo);        // +1284 byte +0xDA (218)
-    s32  MomentSharedInfo_GetVictimRaceCarIndex(const void* lpSharedInfo);    // +1284 word +0xE0 (224)
-
-    // The "world" context the VehicleRef resolver needs (+1288).
-    const void* MomentSharedInfo_GetWorld(const void* lpSharedInfo);          // +1288
-
-    // Player-frame vectors the geometry reads (each a 16-byte Vector3 the console build
-    // lvx128s straight out of the shared info; the SAME lanes are read out of the
-    // resolved victim object). Roles FLAG-inferred:
-    //   +0x210 (528)  the player's forward / along-track direction
-    //   +0x220 (544)  the player's world position
-    //   +0x330 (816)  a second along-segment reference position
-    const Vector3& MomentSharedInfo_GetForward(const void* lpSharedInfo);          // +0x210
-    const Vector3& MomentSharedInfo_GetPosition(const void* lpSharedInfo);         // +0x220
-    const Vector3& MomentSharedInfo_GetSegmentReference(const void* lpSharedInfo); // +0x330
-
-    // The same two lanes off a resolved vehicle object (VehicleRef::Get's return).
-    const Vector3& Vehicle_GetPosition(const void* lpVehicle);               // +0x220
-    const Vector3& Vehicle_GetSegmentReference(const void* lpVehicle);       // +0x330
-
-    // ⛔ THE TWO RIG-HANDLE RESOLVER SHIMS ARE GONE, on the BrnArbStateDriveThru.cpp
-    // precedent: they were the de-inlined per-instantiation copies of two accessors this tree
-    // already owns, and mRigCameraHandle is ALREADY the canonical
-    // Camera::BehaviourHandle<Camera::BehaviourRig>, so both were reachable by name all along --
-    // GetBehaviour() and GetProducedCamera(). Three mounted arbitrator states call them that way.
-
-    // Aim the freshly allocated rig at race car #1 and snap. The console inlines the
-    // rig's setters into the moment (mLookingAtRef @rig+0x450 = {E_RACE_CAR,1,0,set},
-    // mbLooking @+0x46A = true, mbSnap @+0x46B = true); expressed as a named helper
-    // (the BrnMomentHardStop.cpp Behaviour_SetUseCollisionPolicy precedent) because
-    // those rig members are private. DECLARATION-ONLY.
-    void BehaviourRig_StartLookingAtRaceCarSnapped(Camera::BehaviourRig* lpRig);
-
-    // dot3 / subtract / length of Vector3 lanes (the console build uses the three-lane
-    // vector dot, a vector subtract, and a reciprocal-square-root-refined magnitude).
-    inline f32 Dot3(const Vector3& lrA, const Vector3& lrB)
-    {
-        return lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;
-    }
-    inline Vector3 Sub3(const Vector3& lrA, const Vector3& lrB)
-    {
-        Vector3 lResult;
-        lResult.x = lrA.x - lrB.x;
-        lResult.y = lrA.y - lrB.y;
-        lResult.z = lrA.z - lrB.z;
-        return lResult;
-    }
-    inline f32 Length3(const Vector3& lrV) { return sqrtf(Dot3(lrV, lrV)); }
-}
-using namespace detail;
-
-// The inlined base Moment::Construct, the rig handle clear,
-// the authored lookback-rig Parameters::Construct, the victim clear, and the
-// parameters reset.
+// ============================================================================
+// Construct @0x8225EDB8 (DWARF BrnMomentTakedownLookback.cpp:34)
+//   meState = 0, meType = GetInstanceType() (vtable +0x1C), mbIsInhibited = 0, Camera::Construct(+0x10) -- the
+//   inlined Moment::Construct; the rig handle's five words zeroed (+0x2B0..+0x2C0); BehaviourRig::Parameters::
+//   Construct(+0x190); the victim ref's set byte (+0x2D0) = 0; mpParameters (+0x180) = 0.
+// ============================================================================
 void MomentTakedownLookback::Construct()
 {
-    Moment::Construct();          // inlined in the console build (state/type/inhibit/camera)
-    mRigCameraHandle.Clear();     // the console build zeroes the five handle fields inline
+    Moment::Construct();
+    mRigCameraHandle.Clear();
     mLookbackRigParams.Construct();
-    mVictim.mbSet = false;        // the console build clears the victim ref's set byte (+0x2D0)
+    mVictim.mbSet = false;
     mpParameters  = 0;
 }
 
+// ============================================================================
+// GetName @0x821F75C0 (DWARF :229)
+// ============================================================================
 const char* MomentTakedownLookback::GetName() const
 {
     return "MomentTakedownLookback";
 }
 
-// The inlined guarded rig-handle release, the gates
-// dropped, the searching head bit raised, then back to INACTIVE (this moment parks
-// at state 0, like MomentTumbling::Release -- not its siblings' SEARCHING).
+// ============================================================================
+// Release @0x8223AA08 (DWARF :171)
+//   if the rig handle is allocated: BehaviourManager::UnSetBehaviourUsedByHandle, then the handle cleared; then
+//   mbConditionsMet (+0x17A) = 0, mbCanSwitchToMeNow (+0x178) = 0, head bit 18, meState = 0 (INACTIVE); return 1.
+// ============================================================================
 bool MomentTakedownLookback::Release()
 {
-    mRigCameraHandle.Release();     // the inlined guarded manager-hold drop + clear
-    SetConditionsNotMet();          // 0 -> +0x17A
-    SetCanSwitchToMeNow(false);     // 0 -> +0x178
-    GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);   // @+0x148
-    SetState(E_STATE_INVALID_INACTIVE);   // 0 -> +0x174
+    mRigCameraHandle.Release();
+    SetConditionsNotMet();
+    SetCanSwitchToMeNow(false);
+    GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+    SetState(E_STATE_INVALID_INACTIVE);
     return true;
 }
 
-// The per-frame look-back state machine:
-//   SEARCHING  eligible only while a takedown victim is live; bind the victim to
-//              its race car, resolve its world transform, and test the geometry:
-//              the victim's projection along the player segment must fall OUTSIDE
-//              the [0,1] band AND the victim must be behind the player (the along-
-//              track dot is negative) AND within ~60m. When eligible (and not
-//              inhibited): allocate the rig behaviour, push the authored lookback
-//              rig parameters, aim the rig's look-at at the taken-down race car,
-//              and enter VALID. When inhibited: raise the inhibited head bit.
-//   VALID      hold while the victim stays behind (the along-track dot is negative)
-//              and within ~60m, mirroring the rig-produced camera; otherwise drop
-//              back to SEARCHING.
-void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
-                                    const void* lSharedInfo)
+// ============================================================================
+// Update @0x822662F0 (DWARF :72)
+//
+//   0x82266320  assert "mpParameters != NULL" (:74)
+//   0x82266350  switch (meState): 1 -> SEARCHING, 3 -> VALID, else assert "unhandled case in switch" (:158)
+//
+//   SEARCHING (0x82266494)
+//     no takedown this frame (GameState::mbTakedownActive, +0xDA): conditions not met, cannot switch to me, head
+//     bit 18 (0x822664A8..0x822664B8)
+//     else: mVictim.SetToRaceCar(GameState::meTakedownVictimID) (out of line, 0x821F29D8) and, from the player's
+//     snapshot and the victim's record (resolved twice, 0x822664FC / 0x82266518):
+//       lToVictim                  = victim pos - player pos                        vsubfp128
+//       lDistanceToVictim          = Dot(NormalizeFast(lToVictim), lToVictim)       |lToVictim|
+//       lZDistanceToVictim         = Dot(player z, lToVictim)                       > 0 when the victim is ahead
+//       lNetVictimVel              = victim velocity - player velocity              vsubfp
+//       lTimeToVictimOvertakingUs  = -lZDistanceToVictim / Dot(player z, lNetVictimVel)
+//     the shot is on when the victim is NOT about to draw level within a second (t < 0 or t > 1), is behind
+//     (lZDistanceToVictim < 0) and is within 60 m -- each a vcmpgtfp. (an ordered compare: a NaN fails it);
+//     otherwise not met, as above.
+//     On: inhibited (+0x17B) -> cannot switch to me + head bit 23 (0x82266720), and nothing else. Not inhibited ->
+//       NewBehaviour<BehaviourRig>(the rig handle, 0, this, 1)                    0x822666AC
+//       the block's rig = CameraRig::ParamsBonnetLow (8 doublewords from 0x82CDAA10); mbUseShake = 1
+//       rig->SetParameters(&block) (out of line, 0x821F3B10)
+//       rig->StartLookingAtRaceCar(E_ACTIVE_RACE_CAR_INDEX_1, true) -- the six inlined stores 0x82266700..0x82266714
+//       meState = VALID (3)
+//
+//   VALID (0x82266384)
+//     the same player / victim lanes (the victim resolved twice again, the second result unused, 0x822663B4);
+//     held while the victim is behind and within 60 m: the moment's camera = the rig's produced camera
+//     (Camera::operator=, 0x82266480); otherwise back to SEARCHING (`stw 1, 0x174`, nothing else).
+// ============================================================================
+void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, void* lrBehaviourController, const void* lSharedInfo)
 {
-    Camera::BehaviourManager* lpBehaviourManager =
-        static_cast<Camera::BehaviourManager*>(lrBehaviourController);
+    namespace ConsoleVpu = Camera::Utils::ConsoleVpu;
 
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");   //  (non-gating)
+    Camera::BehaviourManager& lrBehaviourManager = *static_cast<Camera::BehaviourManager*>(lrBehaviourController);
+    const MomentSharedInfo&   lrSharedInfo       = *static_cast<const MomentSharedInfo*>(lSharedInfo);
+
+    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");   // :74
 
     switch (GetState())
     {
     case E_STATE_INVALID_SEARCHING:
     {
-        // ---- eligibility gate: a live takedown victim ----
-        if (!MomentSharedInfo_HasTakedownVictim(lSharedInfo))
+        if (lrSharedInfo.mpGameState->mbTakedownActive)
         {
-            SetConditionsNotMet();
-            SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
-            break;
-        }
+            mVictim.SetToRaceCar(lrSharedInfo.mpGameState->meTakedownVictimID);
 
-        // Bind the victim ref to the taken-down race car, resolve its transform.
-        mVictim.SetToRaceCar(static_cast<EActiveRaceCarIndex>(
-            MomentSharedInfo_GetVictimRaceCarIndex(lSharedInfo)));
+            const Vector3 lPlayerZ   = lrSharedInfo.mPlayerInfo.mRaceCarState.mTransform.zAxis;             // :87
+            const Vector3 lVictimPos = mVictim.GetVehicle(lrSharedInfo).mRaceCarState.mTransform.wAxis;     // :88
+            const Vector3 lPlayerPos = lrSharedInfo.mPlayerInfo.mRaceCarState.mTransform.wAxis;             // :89
+            const Vector3 lVictimVel = mVictim.GetVehicle(lrSharedInfo).mRaceCarState.mLinearVelocity;      // :90
+            const Vector3 lPlayerVel = lrSharedInfo.mPlayerInfo.mRaceCarState.mLinearVelocity;              // :91
 
-        const void* lpWorld  = MomentSharedInfo_GetWorld(lSharedInfo);
-        const void* lpVictim = mVictim.Get(lpWorld);
+            const Vector3 lToVictim           = lVictimPos - lPlayerPos;                                    // :93
+            const Vector3 lToVictimNormalized = ConsoleVpu::NormalizeFast(lToVictim);                       // :94
+            const f32     lfDistanceToVictim  = ConsoleVpu::Dot3(lToVictimNormalized, lToVictim);           // :95
+            const f32     lfZDistanceToVictim = ConsoleVpu::Dot3(lPlayerZ, lToVictim);                      // :96
 
-        // delta  = victim position - player position            (the +0x220 lanes)
-        // delta2 = victim segment-ref - player segment-ref      (the +0x330 lanes)
-        const Vector3& lrForward = MomentSharedInfo_GetForward(lSharedInfo);
-        const Vector3  lDelta  = Sub3(Vehicle_GetPosition(lpVictim),
-                                      MomentSharedInfo_GetPosition(lSharedInfo));
-        const Vector3  lDelta2 = Sub3(Vehicle_GetSegmentReference(lpVictim),
-                                      MomentSharedInfo_GetSegmentReference(lSharedInfo));
+            const Vector3 lNetVictimVel = lVictimVel - lPlayerVel;                                          // :98
+            const f32     lfTimeToVictimOvertakingUs =                                                      // :99
+                ConsoleVpu::Divide(-lfZDistanceToVictim, ConsoleVpu::Dot3(lPlayerZ, lNetVictimVel));
 
-        const f32 lfAlongDot = Dot3(lrForward, lDelta);    // dot(forward, delta)
-        const f32 lfSegDot   = Dot3(lrForward, lDelta2);   // dot(forward, delta2)
-        const f32 lfDist     = Length3(lDelta);            // |delta|
-
-        // The parametric projection of the victim onto the player segment (the console build
-        // reciprocal-of-dot term, sign-flipped): outside [0,1] == the victim is not
-        // between the two segment references.
-        const f32 lfProjection = -lfAlongDot * (1.0f / lfSegDot);
-
-        const bool lbOutsideBand = (KF_ZERO > lfProjection) || (lfProjection > KF_ONE);
-        const bool lbBehind      = (KF_ZERO > lfAlongDot);
-        const bool lbInRange     = (KF_MAX_RANGE > lfDist);
-
-        if (lbOutsideBand && lbBehind && lbInRange)
-        {
-            if (!IsInhibited())
+            if (((KF_ZERO > lfTimeToVictimOvertakingUs) || (lfTimeToVictimOvertakingUs > KF_ONE))
+                && (KF_ZERO > lfZDistanceToVictim)
+                && (KF_MAX_DISTANCE_TO_VICTIM > lfDistanceToVictim))
             {
-                // ---- allocate the rig, push the authored lookback rig params ----
-                lpBehaviourManager->NewBehaviour<Camera::BehaviourRig>(
-                    mRigCameraHandle, 0, this, 1);
+                if (!IsInhibited())
+                {
+                    lrBehaviourManager.NewBehaviour<Camera::BehaviourRig>(mRigCameraHandle, 0, this, 1);
 
-                // Copy the authored default rig sub-block into the
-                // lookback rig parameters, then raise its one authored bool.
-                std::memcpy(reinterpret_cast<u8*>(&mLookbackRigParams)
-                                + KU_LOOKBACK_RIG_PARAMS_SUB_OFFSET,
-                            KaLookbackRigParamsDefault, sizeof(KaLookbackRigParamsDefault));
-                reinterpret_cast<u8*>(&mLookbackRigParams)[KU_LOOKBACK_RIG_PARAMS_FLAG_OFFSET] = 1;
+                    mLookbackRigParams.mRigParams  = Camera::Utils::CameraRig::ParamsBonnetLow;
+                    mLookbackRigParams.mbUseShake  = true;
+                    mRigCameraHandle.GetBehaviour()->SetParameters(&mLookbackRigParams);
+                    mRigCameraHandle.GetBehaviour()->StartLookingAtRaceCar(E_ACTIVE_RACE_CAR_INDEX_1, true);
 
-                mRigCameraHandle.GetBehaviour()->SetParameters(&mLookbackRigParams);
-
-                // Aim the rig's look-at at the taken-down race car and snap (the console build
-                // resolves the rig again, then inlines its look-at/snap setters).
-                BehaviourRig_StartLookingAtRaceCarSnapped(mRigCameraHandle.GetBehaviour());
-
-                SetState(E_STATE_VALID);   // 3 -> +0x174
-            }
-            else
-            {
-                SetCanSwitchToMeNow(false);
-                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
+                    SetState(E_STATE_VALID);
+                }
+                else
+                {
+                    SetCanSwitchToMeNow(false);
+                    GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
+                }
+                break;
             }
         }
-        else
-        {
-            SetConditionsNotMet();
-            SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
-        }
+
+        SetConditionsNotMet();
+        SetCanSwitchToMeNow(false);
+        GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
         break;
     }
 
     case E_STATE_VALID:
     {
-        const void* lpWorld  = MomentSharedInfo_GetWorld(lSharedInfo);
-        const void* lpVictim = mVictim.Get(lpWorld);
+        const Vector3 lPlayerZ   = lrSharedInfo.mPlayerInfo.mRaceCarState.mTransform.zAxis;                 // :130
+        const Vector3 lVictimPos = mVictim.GetVehicle(lrSharedInfo).mRaceCarState.mTransform.wAxis;         // :131
+        const Vector3 lPlayerPos = lrSharedInfo.mPlayerInfo.mRaceCarState.mTransform.wAxis;                 // :132
+        // :133 lVictimVel -- the victim is resolved a second time (0x822663B4) and the lane is never read: the
+        // console keeps the call (its tripwires) and drops the load.
+        mVictim.GetVehicle(lrSharedInfo);
 
-        const Vector3& lrForward = MomentSharedInfo_GetForward(lSharedInfo);
-        const Vector3  lDelta = Sub3(Vehicle_GetPosition(lpVictim),
-                                     MomentSharedInfo_GetPosition(lSharedInfo));
+        const Vector3 lToVictim           = lVictimPos - lPlayerPos;                                        // :136
+        const Vector3 lToVictimNormalized = ConsoleVpu::NormalizeFast(lToVictim);                           // :137
+        const f32     lfDistanceToVictim  = ConsoleVpu::Dot3(lToVictimNormalized, lToVictim);               // :138
+        const f32     lfZDistanceToVictim = ConsoleVpu::Dot3(lPlayerZ, lToVictim);                          // :139
 
-        const f32 lfAlongDot = Dot3(lrForward, lDelta);
-        const f32 lfDist     = Length3(lDelta);
-
-        // Hold only while the victim stays behind (along-track dot negative) AND in
-        // range; either failing drops back to SEARCHING.
-        if ((KF_ZERO > lfAlongDot) && (KF_MAX_RANGE > lfDist))
+        if ((KF_ZERO > lfZDistanceToVictim) && (KF_MAX_DISTANCE_TO_VICTIM > lfDistanceToVictim))
         {
-            SetCamera(mRigCameraHandle.GetProducedCamera());   // mCamera = rig produced camera
+            SetCamera(mRigCameraHandle.GetProducedCamera());
         }
         else
         {
@@ -259,24 +203,21 @@ void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, void* lrBehaviourControl
     }
 
     default:
-        CGS_ASSERT(false, "unhandled case in switch");   //  (non-gating)
+        CGS_ASSERT(false, "unhandled case in switch");   // :158
         break;
     }
 }
 
-}
-
-// ---- [FX-DIRECTOR 2026-09-24] the vtable one-liners the moment factory needs --------------------
-// MomentController::NewMoment's AllocateVoid<MomentTakedownLookback> placement-constructs the moment, which emits its
-// vftable, so every slot needs a body. Read off the console vftable off_82008CD8 (AllocateVoid<MomentTakedownLookback>
-// @0x8224B5D0 stores it at +0) and the ICF-folded slot bodies it points at:
-//   slot 1 Prepare          0x821F7560  meState = E_STATE_INVALID_SEARCHING, return true (the shared
-//                                       body the export names MomentBystanderSeesAction::Prepare)
+// ============================================================================
+// The vtable one-liners (off_82008CD8; AllocateVoid<MomentTakedownLookback> @0x8224B5D0 stores it at +0), and the
+// ICF-folded slot bodies they point at:
+//   slot 1 Prepare          0x821F7560  meState = E_STATE_INVALID_SEARCHING, return true (the shared body the export
+//                                       names MomentBystanderSeesAction::Prepare)
 //   slot 5 Destruct         0x8284CB38  `blr` (the one empty body all twelve moments share)
 //   slot 3 SetParameters    0x821F7670  `stw r4, 0x180(r3)` -- mpParameters
 //   slot 7 GetInstanceType  0x826D7F68  `li r3, 3 ; blr` -- E_MOMENT_TAKEDOWN_LOOKBACK
-namespace BrnDirector
-{
+// [FX-DIRECTOR 2026-09-24]
+// ============================================================================
 bool MomentTakedownLookback::Prepare(void* /*lrBehaviourController*/)
 {
     SetState(E_STATE_INVALID_SEARCHING);   // li r10, 1 ; stw r10, 0x174(r3)
@@ -297,4 +238,5 @@ Moment::EType MomentTakedownLookback::GetInstanceType()
 {
     return E_MOMENT_TAKEDOWN_LOOKBACK;   // li r3, 3
 }
+
 }

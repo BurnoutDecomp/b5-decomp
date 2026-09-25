@@ -32,7 +32,7 @@
 // is homed in BrnMoment.h; MomentTumbling (case 2) and MomentHardStop (case 0) arrive through
 // BrnMomentController.h -> BrnMomentParameterBank.h, which holds both records by value.
 #include "GameSource/Director/MomentController/Moments/BrnMomentHitTraffic.h"         // case 1
-#include "GameSource/Director/MomentController/Moments/BrnMomentTakedownLookback.h"   // case 3 (sizeof only)
+#include "GameSource/Director/MomentController/Moments/BrnMomentTakedownLookback.h"   // case 3 (AllocateVoid)
 #include "GameSource/Director/MomentController/Moments/BrnMomentPassengerSeesAction.h"// case 4
 #include "GameSource/Director/MomentController/Moments/BrnMomentFailsafe.h"           // case 6
 #include "GameSource/Director/MomentController/Moments/BrnMomentPlayerJumping.h"      // case 7 (sizeof only)
@@ -221,19 +221,21 @@ bool MomentController::MomentHandle::Prepare(AbstractPoolVoidHandle lVoidHandle,
 //   5. lpParameters = mMomentParameterBank.GetParameters(leMomentParamID).
 //   6. assert mbIsAllocated, then GetMoment()->SetParameters(lpParameters) (vtable +0xC).
 //
-// ⚠️ GATE (cases 3 and 7 only): AllocateVoid<MomentTakedownLookback> / <MomentPlayerJumping> place those
-//   classes, which emits their vftables, which need their whole closure at link: Camera::BehaviourRig
-//   (Camera/Behaviours/BehaviourRig.cpp -- unmounted; its Utils::CameraRig::Construct @0x8220B0E8 is a
-//   VMX rig-transform pipeline with no body in this tree), the four BehaviourCollection<> instantiations
-//   PlayerJumping holds (six template methods, unnamed ARTIST subs), MomentPlayerJumping::UpdateCamera
-//   @0x8223AB78 and the takedown look-back's three detail:: reach shims. Those two arms return TRUE with
-//   the handle released and unallocated -- exactly what the old stub did for every type -- which
-//   MomentSelector treats as "no moment" (its classification loop skips an unallocated handle).
-//   CONSEQUENCE: no jump cutaway (ArbStateRoaming) and no takedown look-back shot (ArbStateTakedown); the
-//   other ten types allocate for real. (Retail seeds mbAllowJumpMoment false, so the jump cutaway is
-//   gated off on the console as well.)
-//   DELETE-WHEN: BehaviourRig.cpp + CameraRig::Construct + the BehaviourCollection bodies +
-//   MomentPlayerJumping::UpdateCamera + the three look-back shims are in the link.
+// ⚠️ GATE (case 7 only): AllocateVoid<MomentPlayerJumping> places that class, which emits its vftable, which
+//   needs its whole closure at link: the four BehaviourCollection<> instantiations PlayerJumping holds (six
+//   template methods, unnamed ARTIST subs), BehaviourInterpolate and MomentPlayerJumping::UpdateCamera
+//   @0x8223AB78. That arm returns TRUE with the handle released and unallocated -- which MomentSelector
+//   treats as "no moment" (its classification loop skips an unallocated handle). CONSEQUENCE: ArbStateRoaming
+//   (the one selector that registers type 7, @0x82259C00) never gets its jump cutaway; the other eleven types
+//   allocate for real. (Retail seeds mbAllowJumpMoment false, so the jump cutaway's shot is off on the console
+//   as well -- but the moment itself is allocated and ticked there.)
+//   DELETE-WHEN: the BehaviourCollection bodies, BehaviourInterpolate and MomentPlayerJumping::UpdateCamera are
+//   in the link.
+// [FX-DIRECTOR2 2026-09-25] case 3 is UN-GATED: MomentTakedownLookback's closure (BehaviourRig, CameraRig::
+//   Construct, the presets, the look-back's own Update) is bodied and mounted. NOTE no retail selector ever asks
+//   for type 3: MomentSelector::AddMoment @0x82209F80 has three callers -- ArbStateRoaming::Construct {7, 8, 10},
+//   ArbStateCrashing::Construct {2, 2, 0, 5}, ArbStateTakedown::Construct {5, 2, 2} -- so this arm, like the
+//   console's, is reachable only if a descriptor names it.
 bool MomentController::NewMoment(Moment::EType leMomentType,
                                  MomentParameterBank::EMomentParamID leMomentParamID,
                                  MomentHandle& lrMomentHandleInOut,
@@ -254,8 +256,8 @@ bool MomentController::NewMoment(Moment::EType leMomentType,
             lVoidHandle = mMomentPool.AllocateVoid<MomentTumbling>();
             break;
         case Moment::E_MOMENT_TAKEDOWN_LOOKBACK:
-            // ⚠️ GATE -- AllocateVoid<MomentTakedownLookback> (see the banner above).
-            return true;
+            lVoidHandle = mMomentPool.AllocateVoid<MomentTakedownLookback>();
+            break;
         case Moment::E_MOMENT_PASSENGER_SEES_ACTION:
             lVoidHandle = mMomentPool.AllocateVoid<MomentPassengerSeesAction>();
             break;

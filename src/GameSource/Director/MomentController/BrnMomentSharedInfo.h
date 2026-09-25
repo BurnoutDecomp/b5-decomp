@@ -28,16 +28,14 @@
 // the arbitrator state container and the camera parameter bank state for their sub-objects.
 //
 // ⭐ THE PRODUCER IS BODIED (2026-09-24, FX-DIRECTOR): MainDirector::UpdateMoments @0x82250268 builds
-// one on its stack every frame and hands it to MomentController::UpdateAllMoments @0x82239DE8.
-// ⚠ Its CALL in MainDirector::Update (0x82274348) is still gated -- two behaviours the moments pool
-// are hollow shells (see the GATE there) -- so no shim below is reachable at runtime yet.
+// one on its stack every frame and hands it to MomentController::UpdateAllMoments @0x82239DE8, and
+// MainDirector::Update calls it unconditionally (0x82274348; b5 0d4289ce).
+// [FX-DIRECTOR2 2026-09-25] The takedown look-back reads this record BY NAME (its shims are retired).
 //
-// ⓘ TWELVE SHIM NAMES DO NOT MATCH THE MEMBER THEY LAND ON, and the shim names are the ones
+// ⓘ TEN SHIM NAMES DO NOT MATCH THE MEMBER THEY LAND ON, and the shim names are the ones
 // that are wrong -- they were coined from each call site's role before the record existed.
 // Every displacement below is the call site's own; what changed is that the member it lands on
-// is now known. The ten short entries each read as "shim name -> member":
-//   HasTakedownVictim     -> GameState::mbTakedownActive (the SAME flag WasTakedown reads; it
-//                            says a takedown happened, not that a victim slot is filled)
+// is now known. The eight short entries each read as "shim name -> member":
 //   GetStuntFlags         -> GameState::miThisFramesActionFlags
 //   GetTimeCrashing       -> GameState::mfCrashTimeRemaining (remaining, NOT elapsed -- the
 //                            stationary-crash moment's ICE-take-fits test reads the opposite
@@ -50,8 +48,6 @@
 //   HasCrashDynamics      -> RaceCarState::mAboveGroundTestResult.mbValid
 //   GetCrashSpeedDiff     -> RaceCarState::mTransform.yAxis lane 1, i.e. how upright the car
 //                            still is -- nothing to do with speed
-//   GetSegmentReference   -> RaceCarState::mLinearVelocity (so the look-back's "projection"
-//                            is a time to alignment in seconds, not a position parameter)
 // and the two that were already recorded:
 //   MomentSharedInfo_GetCrashVehicleIndex  reads mePlayerActiveRaceCarIndex, which is the
 //       PLAYER's active race-car index, not the crashing car's. Three moment TUs read it under
@@ -61,7 +57,7 @@
 //       block the bystander/tumbling crash shot, but for one specific reason: a totalled
 //       road-rage car is the spiralling deathcam's, which ArbStateCrashing::Prepare selects off
 //       the same flag.
-// Renaming them is a separate pass across nine TUs and is deliberately not done here.
+// Renaming them is a separate pass across the moment TUs that call them and is deliberately not done here.
 //
 // ⓘ The record's layout was re-derived independently of the member order below: every shim's
 // displacement, mapped through an offsetof probe of GameState / RaceCarState / PlayerCrashInfo,

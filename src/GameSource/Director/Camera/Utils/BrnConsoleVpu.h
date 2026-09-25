@@ -3,10 +3,11 @@
 // ============================================================================
 // GameSource/Director/Camera/Utils/BrnConsoleVpu.h
 //
-// [FX-DIRECTOR2 2026-09-25] The RenderWare vpu inlines the director's rig camera executes, written the way the
-// CONSOLE rounds them -- the campaign rounding rule (scratch/CRASHPARITY_0922/ROUNDING_RULE.md). None has a console
-// symbol: each is an SDK inline, expanded at its call sites, and each banner below names the sites whose instructions
-// it was read from.
+// [FX-DIRECTOR2 2026-09-25] The RenderWare vpu inlines the director's rig camera and the takedown look-back execute,
+// written the way the CONSOLE rounds them -- the campaign rounding rule (scratch/CRASHPARITY_0922/ROUNDING_RULE.md).
+// None has a console symbol: each is an SDK inline, expanded at its call sites, and each banner below names the sites
+// whose instructions it was read from. The vmsum3fp128 dot (rule 1) and the refined vrsqrtefp / vrefp estimates
+// (rule 5) are here too, for the look-back's distance and time-to-overtake tests.
 //
 // WHY THEY EXIST: the PC vendor SDK (vendor/renderware/include/rw/math/vpu) evaluates Mult / TransformVector /
 // TransformPoint / InverseOfMatrixWithOrthonormal3x3 as separate f32 multiplies and adds, left to right, and
@@ -44,6 +45,70 @@ namespace ConsoleVpu
     inline f32 MultiplyAdd(f32 lfA, f32 lfB, f32 lfC)
     {
         return std::fma(lfA, lfB, lfC);
+    }
+
+    // vnmsubfp lane: -(a * b - c), rounded ONCE and then negated -- so an exact cancellation is -0; a QNaN keeps its
+    // sign (the EffectsModule.cpp Vnmsub convention, rule 3).
+    inline f32 NegativeMultiplySubtract(f32 lfA, f32 lfB, f32 lfC)
+    {
+        const f32 lfDifference = std::fma(lfA, lfB, -lfC);
+        return (lfDifference != lfDifference) ? lfDifference : -lfDifference;
+    }
+
+    // vmsum3fp128 (rule 1): the three f32 products are exact in f64; they are summed left to right in f64 and the sum
+    // is rounded to f32 ONCE. FLAG (model): xenia-canary's DOT_PRODUCT_3_V128. Its f32-overflow-to-QNaN is not
+    // modelled -- the director's operands (metres, metres per second) stay far below 1.8e19.
+    inline f32 Dot3(const Vector3& lrA, const Vector3& lrB)
+    {
+        return static_cast<f32>(static_cast<f64>(lrA.x) * lrB.x + static_cast<f64>(lrA.y) * lrB.y
+                              + static_cast<f64>(lrA.z) * lrB.z);
+    }
+
+    // ------------------------------------------------------------------------
+    // rw::math::vpu::NormalizeFast, as MomentTakedownLookback::Update runs it (0x82266554..0x822665A4 searching,
+    // 0x822663E8..0x82266454 valid): |v|^2 by vmsum3fp128, a vrsqrtefp estimate refined by ONE Newton-Raphson step
+    //   e2 = e * e (vmulfp128) ; h = e * 0.5 (vmulfp128) ; r = -(|v|^2 * e2 - 1) (vnmsubfp) ; e' = h * r + e (vmaddfp)
+    // then v * e' (vmulfp128). FLAG (model, rule 5): the hardware estimate is taken as the correctly rounded
+    // 1 / sqrt(|v|^2); the refinement then pins the result. A zero v gives NaN lanes (the estimate is +inf and
+    // 0 * inf is NaN), as on the console.
+    // ------------------------------------------------------------------------
+    inline Vector3 NormalizeFast(const Vector3& lrVector)
+    {
+        const f32 KF_HALF = 0.5f;   // vcfsx(vspltisw 1, 1)
+        const f32 KF_ONE  = 1.0f;   // vcfsx(vspltisw 1, 0)
+
+        const f32 lfLengthSquared   = ConsoleVpu::Dot3(lrVector, lrVector);
+        const f32 lfEstimate        = static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfLengthSquared)));
+        const f32 lfEstimateSquared = lfEstimate * lfEstimate;
+        const f32 lfHalfEstimate    = lfEstimate * KF_HALF;
+        const f32 lfResidual        = ConsoleVpu::NegativeMultiplySubtract(lfLengthSquared, lfEstimateSquared, KF_ONE);
+        const f32 lfReciprocalLength = ConsoleVpu::MultiplyAdd(lfHalfEstimate, lfResidual, lfEstimate);
+
+        Vector3 lResult;
+        lResult.x = lrVector.x * lfReciprocalLength;
+        lResult.y = lrVector.y * lfReciprocalLength;
+        lResult.z = lrVector.z * lfReciprocalLength;
+        lResult.w = lrVector.w * lfReciprocalLength;
+        return lResult;
+    }
+
+    // ------------------------------------------------------------------------
+    // The SDK's VecFloat operator/ (a / b), as MomentTakedownLookback::Update runs it (0x8226657C..0x822665B8): a
+    // vrefp estimate of 1 / b refined by TWO Newton-Raphson steps --
+    //   r = -(e * b - 1) (vnmsubfp) ; e' = e * r + e (vmaddfp), twice
+    // -- then e'' * a (vmulfp128). FLAG (model, rule 5): the estimate is taken as the correctly rounded 1 / b.
+    // ------------------------------------------------------------------------
+    inline f32 Divide(f32 lfNumerator, f32 lfDenominator)
+    {
+        const f32 KF_ONE = 1.0f;   // vcfsx(vspltisw 1, 0)
+
+        f32 lfReciprocal = static_cast<f32>(1.0 / static_cast<f64>(lfDenominator));
+        for (s32 liStep = 0; liStep < 2; ++liStep)
+        {
+            const f32 lfResidual = ConsoleVpu::NegativeMultiplySubtract(lfReciprocal, lfDenominator, KF_ONE);
+            lfReciprocal = ConsoleVpu::MultiplyAdd(lfReciprocal, lfResidual, lfReciprocal);
+        }
+        return lfReciprocal * lfNumerator;
     }
 
     // The four lanes of a vmaddfp over a broadcast multiplier: a * s + c.
