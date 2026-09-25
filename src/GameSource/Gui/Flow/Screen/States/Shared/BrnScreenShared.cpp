@@ -11,21 +11,23 @@
 namespace BrnGui
 {
     // -------------------------------------------------------------------------------
-    // KAC_SPLASH_SCREEN_IDS  (X360 dword_82F26638)  -- DEFINITION
-    //   game-mode -> splash-screen resource-id STRING (null == "no splash for this mode").
-    //   SHAPE (const char*[17]) is DWARF-attested (BrnScreenShared.h:28); the 17 string
-    //   CONTENTS are runtime rodata pointers NOT recovered by this TU.
-    //
-    //   *** UNRECOVERED VALUES -- CONSOLIDATOR MUST FILL ***  Read the 17 little-endian
-    //   32-bit pointers at X360 0x82F26638 and replace the placeholder nullptrs. A null
-    //   entry means the mode has no splash screen (the X360 fires a streamed assert and
-    //   returns the (null) entry anyway). Index space is EGameModeType.
+    // KAC_SPLASH_SCREEN_IDS -- game mode -> splash-screen overlay id (null == the mode
+    // has no splash). Values read from the image: the table has EIGHTEEN slots (one per
+    // console game mode); the offline modes 0..9 are null, the online modes carry the
+    // splash overlay ids, and the next rodata table starts right after slot 17.
     // -------------------------------------------------------------------------------
-    const char* const KAC_SPLASH_SCREEN_IDS[17] =
+    const char* const KAC_SPLASH_SCREEN_IDS[18] =
     {
-        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,   // [0]..[5]  TODO(consolidator)
-        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,   // [6]..[11] TODO(consolidator)
-        nullptr, nullptr, nullptr, nullptr, nullptr,            // [12]..[16] TODO(consolidator)
+        nullptr, nullptr, nullptr, nullptr, nullptr,            // [0]..[4]  offline modes
+        nullptr, nullptr, nullptr, nullptr, nullptr,            // [5]..[9]  offline modes
+        "OnSplshRace",                                          // [10]
+        "OnSplshRoadR",                                         // [11]
+        "OnSplshFug",                                           // [12]
+        "OnSplshBHR",                                           // [13]
+        "OnSplshFug",                                           // [14]
+        "OnSplshFreeB",                                         // [15]
+        "OnSplshFreeB",                                         // [16]
+        "OnSplshFug",                                           // [17]
     };
 
     // @ 0x824845E8 -- map a game-mode value to its splash-screen resource-id STRING via the

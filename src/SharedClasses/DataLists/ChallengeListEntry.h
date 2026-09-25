@@ -597,4 +597,11 @@ inline bool ChallengeListEntryAction::HasConvoyTime() const
     return mfConvoyTime > 0.0f;
 }
 
+// The same bare compare over mfTimeLimit (+0x40): GetTimeLimit's own "HasTimeLimit()" guard,
+// and RaceMainHudState's challenge-on arm inlines it.
+inline bool ChallengeListEntryAction::HasTimeLimit() const
+{
+    return mfTimeLimit > 0.0f;
+}
+
 } // namespace BrnResource

@@ -159,7 +159,7 @@ namespace
                                            float lfResolution)
     {
         const s32 liMaxSteps =
-            static_cast<s32>(static_cast<double>((lfMax - lfMin) / (lfResolution * 2.0f)) + 0.5);
+            SaturateToS32(static_cast<double>((lfMax - lfMin) / (lfResolution * 2.0f)) + 0.5);
         const u32 luNumValues = static_cast<u32>(liMaxSteps) + 1u;
         s32 liNumBits = 0;
         if (luNumValues != 0)

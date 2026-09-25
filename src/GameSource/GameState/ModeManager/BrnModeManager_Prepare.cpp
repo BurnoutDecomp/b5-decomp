@@ -263,7 +263,7 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     mbPlayerFinishedTimedOut             = false;  // +0x94FD
     mbPlayerFinishedCarDestroyed  = false;  // +0x94FE
     mbHasPlayerFinished          = false;  // +0x94FF
-    mbModeStartFromRegionEnabled = false;  // +0x9500
+    mbHasAbortedDueToDisconnect = false;  // +0x9500
     mbModeDataIsLoading          = false;  // +0x9501
 
     // First round of a (possibly multi-round) event: wipe the cumulative scoring.

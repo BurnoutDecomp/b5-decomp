@@ -75,6 +75,7 @@ namespace BrnGameState { namespace GameStateModuleIO {
     struct PrepareForModeAction;
     struct StopModeAction;          // game action 39 -- HandleStopModeAction's record
     struct AddRivalCarAction;       // game action 196 -- AddRivalCar's record
+    struct SetupNetworkCarAction;   // game action 5 -- HandleSetupNetworkCarAction's record
 } }
 // [stuntrace start-grid wave] SetupOpponents / SetUpPlayerCarForMode take the mode's parameter
 // block by pointer; the .cpp includes BrnGameModeParams.h for the members.
@@ -786,6 +787,18 @@ public:
     // lbRemovePlayerCar is set.
     void RemoveAllRaceCars(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput,
                            bool lbRemovePlayerCar);
+
+    // The network-car legs of HandleGameActions and PreSceneUpdate. Bodies in
+    // BrnRaceCarEntityModule.cpp, next to HandleGameActions.
+    //
+    // Game action 5 (a remote player changed car): respawn that player's NETWORK car in the same
+    // active slot with the new model / wheels at the record's pose, unless both ids are unchanged.
+    void HandleSetupNetworkCarAction(
+        const BrnGameState::GameStateModuleIO::SetupNetworkCarAction* lpSNCAction,
+        RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
+    // The pre-scene tail: raise / lower each slot's mbNotSendingNetworkUpdates from the input
+    // buffer's lost-contact / regained-contact flags.
+    void UpdateDisconnectedPlayers(const RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput);
 
     // One roster car: its transform (the grid slot's start location, or in the free-burn lobby the
     // local car's own pose for the local player and the origin for a network player -- the first

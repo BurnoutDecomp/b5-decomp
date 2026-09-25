@@ -102,9 +102,9 @@ namespace BrnGui
                      s32 liImageIndex, bool lbShowWorldRank, GuiCache* lpGuiCache);   // cpp:251
         void SetPlayerImageIndex(s32 liImageIndex);                                   // cpp:355
         void DisplayMarkedMan(bool lbMarkedMan);                                      // h:112
-        bool IsVisible() const;                                                       // h:173
-        bool IsComponentLoaded() const;                                              // h:185
-        void SetComponentLoaded();                                                    // h:179
+        bool IsVisible() const          { return meState == E_STATE_VISIBLE; }
+        bool IsComponentLoaded() const  { return mbIsLoaded; }
+        void SetComponentLoaded()       { mbIsLoaded = true; }
 
     private:
         // BrnGuiNetworkPlayerStats.h:133 -- number of stat rows.
@@ -124,6 +124,15 @@ namespace BrnGui
         // pointer pair off_82F25028 -> 0x82049C28 "visible" / 0x82F2502C -> 0x8204B4F8
         // "invisible", whose only xrefs are Update @0x8241700C and @0x82417020.
         static const char* const KAPC_STATE_ID[E_STATE_COUNT];
+
+        // SetInfo's row texts: the per-row description ids, the per-row value id format
+        // (the value's string-table key is the id without its leading '$'), the world-rank
+        // row's two ids and the "no data" text shown without a stats block.
+        static const char* const KAPC_STAT_DESCRIPTION_STRING_ID[KI_MAX_STAT_ROWS];
+        static const char KAC_VALUE_STRING_ID_FORMAT[15];
+        static const char KAC_WORLD_RANK_DESCRIPTION_STRING_ID[19];
+        static const char KAC_WORLD_RANK_VALUE_STRING_ID[12];
+        static const char KAC_NO_DATA_STRING_ID[30];
 
         // @0x8204C6B4 -- the per-stat-type format selector FormatNetworkStats indexes by
         // NetworkPlayerStats::EStatType. Dumped this wave: {11, 0, 14, 3, 13} ==

@@ -3,16 +3,16 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // CgsID, Vector3
 
-#include <cstdint>            // uintptr_t (Pointer32)
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // GameStateModuleIO::GameActionQueue (real typedef)
+#include "GameSource/GameState/CarSelect/BrnCarSelectManager.h" // BrnGameState::HostPointer
 
 // Minimal owning slice for BrnGameState::OnlineCarSelectManager (DWARF: BrnOnlineCarSelectManager.h:61,
 // non-polymorphic struct). Only the members the four reconstructed functions of this TU touch are
 // named; the full ~0x6C layout is reconstructed by this TU's .cpp. The DWARF member ORDER is preserved
 // (it matches the X360 store order exactly: see the per-member X360 offset comments). Pointers are
-// 32-bit on the X360 and stored via Pointer32<T> -- the committed BrnCarSelectManager.h /
-// BrnGameStateFlybyManager.cpp precedent; semantic parity is by named member (x64 byte offsets differ
-// per AGENTS.md), so no byte-exact inter-member padding is forced here.
+// 32-bit on the console and held as full host pointers here (HostPointer<T>, as BrnCarSelectManager.h
+// does); semantic parity is by named member (x64 byte offsets differ per AGENTS.md), so no
+// byte-exact inter-member padding is forced here.
 
 namespace BrnGameState   { class GameStateModule; }
 namespace BrnProgression { class ProgressionManager; }
@@ -20,14 +20,9 @@ namespace BrnResource    { struct VehicleList; struct WheelList; }
 
 namespace BrnGameState
 {
-// X360 32-bit pointer storage (mirrors BrnCarSelectManager.h / BrnGameStateFlybyManager.cpp).
-template <typename T>
-struct Pointer32
-{
-    u32 muAddress;
-    void Set(T* lpPointer) { muAddress = static_cast<u32>(reinterpret_cast<uintptr_t>(lpPointer)); }
-    T*   Get() const       { return reinterpret_cast<T*>(static_cast<uintptr_t>(muAddress)); }
-};
+// The owner and list pointers are held in BrnCarSelectManager.h's HostPointer (a full host
+// pointer). The 32-bit copy this header used to carry truncated x64 addresses; see the note on
+// HostPointer for the measured failure.
 
 struct OnlineCarSelectManager
 {
@@ -58,16 +53,34 @@ struct OnlineCarSelectManager
     void StreamingFinished(CgsID lActiveCarZeroId,
                            GameStateModuleIO::GameActionQueue* lpActionQueue);        // X360 0x82358AC8
 
+    // Reference Prepare(const VehicleList*, const WheelList*), inlined on the console into
+    // GameStateModule::Prepare's terminal stage (the two `stw` into +0x0C / +0x10).
+    void Prepare(const BrnResource::VehicleList* lpVehicleList, const BrnResource::WheelList* lpWheelList)
+    {
+        mpWheelList.Set(lpWheelList);
+        mpVehicleList.Set(lpVehicleList);
+    }
+
+    // Reference inline accessor; ProcessGameEvents' case 123 tests it (`lbzx` of +0x14).
+    bool IsInOnlineCarSelect() const { return mbIsInOnlineCarSelect; }
+
+    // Reference inline accessor; case 123 reads it (`ld` of +0x48) to hand the free-burn car back.
+    CgsID GetFreeburnCarId() const { return mFreeburnCarId; }
+
+    // Leave online car select: reset the state words, post actions 76 / 77 / 7
+    // and lift the car-select pause. Body in BrnOnlineCarSelectManager_wN3_01.cpp.
+    void ExitOnlineCarSelect(GameStateModuleIO::GameActionQueue* lpActionQueue);
+
     // Called by EnterModification; reconstructed by its own slice (declared-only here). DWARF spells
     // it StartCarModificationState(GameStateModuleIO::GameActionQueue*); the X360 forwards the queue arg.
     void StartCarModificationState(GameStateModuleIO::GameActionQueue* lpActionQueue);
 
 private:
     EInternalState                                meInternalState;          // X360 this+0
-    Pointer32<GameStateModule>                    mpGameStateModule;        // X360 this+4
-    Pointer32<BrnProgression::ProgressionManager> mpProgressionManager;     // X360 this+8
-    Pointer32<const BrnResource::VehicleList>     mpVehicleList;            // X360 this+12
-    Pointer32<const BrnResource::WheelList>       mpWheelList;              // X360 this+16
+    HostPointer<GameStateModule>                    mpGameStateModule;        // console +0x04
+    HostPointer<BrnProgression::ProgressionManager> mpProgressionManager;     // console +0x08
+    HostPointer<const BrnResource::VehicleList>     mpVehicleList;            // console +0x0C
+    HostPointer<const BrnResource::WheelList>       mpWheelList;              // console +0x10
     bool                                          mbIsInOnlineCarSelect;    // X360 this+20
     f32                                           mfTimeLeftInCarSelect;    // X360 this+24 (NOT zeroed by Construct)
     Vector3                                       mSpawnPosition;           // X360 this+32 (stvx128 zero)

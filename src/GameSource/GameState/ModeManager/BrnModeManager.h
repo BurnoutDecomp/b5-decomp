@@ -151,8 +151,8 @@ class GameStateModule;
 struct TakedownEvent;              // (element type; complete in BrnTakedownManagerTypes.h)
 class NetworkRoundManager;
 class TriggerQueryManager;
-class StreetManager;
-class MugshotManager;
+struct StreetManager;             // class-key of the real definitions (both are `struct`)
+struct MugshotManager;
 class RoadRulesManager;
 class ModeManagerDebugComponent;   // [X] NOT embedded -- see the DIVERGENCE at its console seat below.
 
@@ -169,6 +169,9 @@ namespace GameStateModuleIO
     // name an incomplete type, and agent 6 bodies PlayerFinishedMode against whatever the event TU
     // lands. DO NOT invent a layout for it here.
     struct PlayerFinishedModeEvent;
+
+    // Case 140's event record (BrnGameEvents.h); used by pointer only here.
+    struct OnlineNewHostEvent;
 }
 
 // ===================================================================================================
@@ -462,6 +465,58 @@ public:
                             GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbIsHost);
     void NetworkPlayerFinalised(BrnNetwork::NetworkPlayerID lPlayerID,
                                 GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbIsHost);
+
+    // ---- the online / free-burn challenge handlers ProcessGameEvents calls ------------------------
+    // Argument order is the console's register order at the ProcessGameEvents call sites. Every
+    // lbIsHost is PlayerStatusInterface::GetLocalPlayerIsHost() read by the caller.
+    // Case 162, subtypes 0 and 2: when lbIsHost, ChallengeManager::BeginChallenge.
+    void HandleLocalStartFreeburnChallengeMessage(CgsID lChallengeID,
+                                                  GameStateModuleIO::GameActionQueue* lpActionQueue,
+                                                  const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutput,
+                                                  bool lbIsHost, bool lbRemote);
+    // Cases 163 / 164: the inlined ChallengeManager::RemoteBeginChallenge / RemoteTriggerFreeburnChallenge.
+    void HandleRemoteStartFreeburnChallengeMessage(CgsID lChallengeID,
+                                                   GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbIsHost);
+    void HandleRemoteTriggeredFreeburnChallengeMessage(CgsID lChallengeID,
+                                                       GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbIsHost);
+    // Case 168.
+    void HandleOnlineEndFreeburnChallengeMessage(GameStateModuleIO::GameActionQueue* lpActionQueue,
+                                                 EChallengeStatus leChallengeStatus, bool lbIsHost);
+    // Cases 162 (subtype 0) and 169.
+    void TriggerFreeburnChallenge(CgsID lChallengeID, GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbIsHost);
+    // Case 169; also read by the rich-presence update.
+    CgsID GetCurrentFreeburnChallengeID();
+    // Case 170. No out-of-line copy exists: the console calls the ChallengeManager's directly on
+    // the embedded member, so this forwarder is inline.
+    void OutputFreeburnChallengeEveryPlayerStatusEvent(GameStateModuleIO::GameActionQueue* lpActionQueue)
+    {
+        mChallengeManager.OutputFreeburnChallengeEveryPlayerStatusEvent(lpActionQueue);
+    }
+    // Cases 171 / 172.
+    void HandleSuccessUpdateEvent(const CgsSystem::TimerStatusInterface* lpTimerStatusInterface,
+                                  const GameStateModuleIO::FburnChallengeSuccessUpdateEvent* lpEvent);
+    void HandleChallengeSuccessEvent(const GameStateModuleIO::FburnChallengeSuccessEvent* lpEvent);
+
+    // ---- a player leaving (cases 129 / 121 / 123 / 124) and the host changing (case 140) ------------
+    void NetworkPlayerRemoved(BrnNetwork::NetworkPlayerID lPlayerID,
+                              GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbIsHost);
+    void SetPlayerDisconnected(BrnNetwork::NetworkPlayerID lPlayerID,
+                               const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutput,
+                               GameStateModuleIO::GameActionQueue* lpActionQueue);
+    void LocalPlayerDisconnected(GameStateModuleIO::GameActionQueue* lpActionQueue);
+    // A road-rule score finished (caller RoadRulesManager::OnScoreCompleted): the
+    // lobby scores it, showtime buffers it, and the challenge manager always sees it.
+    void ProcessNewRoadScore(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
+                             BrnStreetData::ChallengePlayerScoreEntry lScoreEntry,
+                             BrnStreetData::ScoreType leScoreType,
+                             CgsID lRoadID,
+                             BrnStreetData::ChallengeIndex lChallengeIndex);
+    void UserCancelCurrentMode();
+    // Header inline in the original. ProcessGameEvents case 123 sets it before cancelling the mode.
+    void SetAbortedDueToDisconnect() { mbHasAbortedDueToDisconnect = true; }
+    void HandleNewHostEvent(const GameStateModuleIO::OnlineNewHostEvent* lpEvent,
+                            const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutput,
+                            GameStateModuleIO::OutputBuffer* lpOutputBuffer);
     const BrnTraffic::TrafficData*      GetTrafficData() const;           // through the TQM's TriggerData resource
 
     // ---- grid / online-grid helpers (committed declarations; bodies land with agents 5 / 9) -------
@@ -656,11 +711,9 @@ private:
     OnlineStuntRunMode       mOnlineStuntRun;                    // +2256   slots 12, 14 AND 17 (ALIAS -- ORDER NOTE 2)
     OnlineBurningHomeRunMode mOnlineBurningHomeRun;              // +2512   slot 13
     OnlineFreeBurnLobbyMode  mOnlineFreeBurnLobby;               // +2952   slot 15 == E_MODE_ONLINE_FREE_BURN_LOBBY.
-                                                                 //         The console stores the StreetManager at +3252 and
-                                                                 //         the MugshotManager at +3256 INSIDE this object
-                                                                 //         (the embedded BurnoutSkillzManager region begins
-                                                                 //         at +3136) -- see the parked leg in
-                                                                 //         BrnModeManager_Lifecycle.cpp.
+                                                                 //         Its embedded BurnoutSkillzManager begins at +3136;
+                                                                 //         Construct hands it the Street / Mugshot managers
+                                                                 //         through the lobby's two setters.
     OnlineShowtimeMode       mOnlineShowtime;                    // +3296   slot 16 == E_MODE_ONLINE_SHOWTIME
 
     GameStateModuleIO::EGameModeType  meCurrentGameModeType;       // +3476  (C) = -1 (E_MODE_NONE) -- NEVER 0, see hazards H3
@@ -714,20 +767,10 @@ private:
     // nothing downstream of it in GameStateModule is pinned to an absolute offset, so the growth is
     // inert on the host (verified: the whole 66-TU fan-out of this header still compiles).
     //
-    // [x] FOUR OF THE FIVE CALL SITES ARE LIVE (2026-09-07, ChallengeManager mount). The console
-    // spine calls in five times: Construct, Prepare and ProcessEvent (unconditionally, as
-    // ProcessEvent's FIRST statement) in BrnModeManager_Lifecycle.cpp, PreWorldUpdate and
-    // PostWorldUpdate in BrnModeManager_WorldTick.cpp. All are made EXCEPT PreWorldUpdate.
-    // ⛔ PreWorldUpdate stays parked for a reason that is NOT link closure and NOT layout, and the
-    // full evidence is at the site (BrnModeManager_WorldTick.cpp, search "THE ONE CALL OF THE
-    // FIVE"): it is the only one of the five whose ModeManager parent is actually CALLED on this
-    // build (GameStateModule_gUI_00.cpp:1151, every unpaused frame) while ModeManager::Construct is
-    // NOT called at all (ConstructInterModeStateBringUp is the armed seam, and the real Construct
-    // cannot be armed until GameStateModule grows the mRoadRulesManager it has to forward). Making
-    // that one call today would tick a never-constructed ChallengeManager from boot. It also needs
-    // three arguments no accessor in this tree reaches. The other four are on ModeManager entry
-    // points with no caller, so landing them changes no behaviour today and arms them exactly when
-    // their parents arm.
+    // All five console call sites are made: Construct (both construction paths), Prepare and
+    // ProcessEvent in BrnModeManager_Lifecycle.cpp, PreWorldUpdate and PostWorldUpdate in
+    // BrnModeManager_WorldTick.cpp. PreWorldUpdate was the last one parked; it ticks every
+    // unpaused frame now that the bring-up seam constructs the manager.
     // The blocker had been LINK CLOSURE, not layout: the 27 ChallengeManager TUs compiled clean but
     // referenced twelve symbols with no definition anywhere in the tree, and the member itself
     // dragged ChallengeManagerDebugComponent's vtable (GetName / OnActivate) into the static game
@@ -880,6 +923,9 @@ private:
     bool mbHasTimedOut;                     // +38139  0x94FB  PROVISIONAL: UpdateCurrentMode passes it to
                                             //                 ExitCurrentMode as the bool argument.          (C)=0
     bool mbHasCrashedOut;                   // +38140  0x94FC  PROVISIONAL                                    (C)=0
+    // UserCancelCurrentMode writes these two: +0x94FB = 1 and +0x94FC = (mode state == INTRO).
+    // That writer reads as "aborted" / "aborted during intro" (the original names mbHasAborted /
+    // mbAbortedDuringIntro, adjacent in its member order); the names are left until a reader confirms.
     // [x] H4 ARBITRATION -- RULED 2026-08-26 (wave-B fix round), APPLIED 2026-08-26 (CLOSURE
     // round). The two bytes below WERE spelled mbResultsTeamWon (+38141) and
     // mbHasAbortedDueToDisconnect (+38142); both names were refuted by their own writer and both
@@ -911,7 +957,14 @@ private:
                                             //                 MARKED_MAN arm of GetPlayersFinishPosition.
                                             //                                                       (C)=0
     bool mbHasPlayerFinished;               // +38143  0x94FF  PROVISIONAL                                    (C)=0
-    bool mbModeStartFromRegionEnabled;      // +38144  0x9500  PROVISIONAL                                    (C)=0
+    // +0x9500. RENAMED (was the provisional mbModeStartFromRegionEnabled) to the original name, whose
+    // inline setter SetAbortedDueToDisconnect is GameStateModule's only store to this byte
+    // (ProcessGameEvents case 123, the local player losing the connection). SendModeStopMessages
+    // also forces it for a sub-two-player mode and posts it in the stop-mode action; its tail then
+    // quits the online mode (action 41) instead of finishing it. The original member order agrees: after
+    // mbHasTimedOut / mbHasCrashedOut (pinned at +0x94FD / +0x94FE by PlayerFinishedMode) come
+    // mbHasBeenEliminated and mbHasAbortedDueToDisconnect.
+    bool mbHasAbortedDueToDisconnect;       // +38144  0x9500                                                  (C)=0
     bool mbModeDataIsLoading;               // +38145  0x9501  IsWaitingForModeDataToLoad() returns it        (C)=0
     bool mbReadyForModeIntro;               // +38146  0x9502  PROVISIONAL                                    (C)=0
     bool mbIsModePrepared;                  // +38147  0x9503  PROVISIONAL                                    (C)=0

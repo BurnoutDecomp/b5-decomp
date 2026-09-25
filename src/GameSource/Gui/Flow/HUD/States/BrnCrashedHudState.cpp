@@ -14,10 +14,43 @@
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponentUtils.h"
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // GuiEventTickerClearMessages / GuiEventTickerCustomMessage
+#include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h"                // FreeburnChallengeManager
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEventWrapper
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf
+#include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream (the streamed asserts)
+#include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // CgsLanguage::LanguageManager
+#include "SharedClasses/DataLists/ChallengeList.h"                        // BrnResource::ChallengeList
+#include "SharedClasses/DataLists/ChallengeListEntry.h"                   // BrnResource::ChallengeListEntry(Action)
 #include <cstring>
 namespace BrnGui {
 namespace {
     typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
+
+    // The ticker records go out on the GUI-out channel, boxed in the 12-byte wrapper header.
+    const s32 KI_CHANNEL_GUI_OUT = 40;
+
+    // Clear the ticker's challenge lines: {force fade-out 0, delete challenge messages 1}.
+    void PostTickerClear(CgsGui::StateInterface* lpInterface)
+    {
+        GuiEventTickerClearMessages lClear;
+        lClear.maData[0] = 0;
+        lClear.maData[1] = 1;
+        CgsGui::GuiEventWrapper<GuiEventTickerClearMessages, KI_CHANNEL_GUI_OUT> lRecord(lClear);
+        static_assert(sizeof(lRecord) == 16, "the ticker-clear record is 16 bytes");
+        lpInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_GUI_OUT, sizeof(lRecord));
+    }
+
+    // StartFreeburnChallengeTicker's four positional-parameter slots (64 characters each).
+    const s32 KI_TICKER_MAX_PARAMS     = 4;
+    const u32 KU_TICKER_PARAM_TEXT_LEN = 64;
+
+    // The console queues the finished ticker message four times.
+    const s32 KI_TICKER_MESSAGE_POST_COUNT = 4;
+
+    // The completed-challenge bit store is a FastBitArray<2000>.
+    const s32 KI_MAX_CHALLENGE_BITS = 2000;
 }
 const s32 CrashedHudState::maiEventToObserve[21] =
 {
@@ -378,12 +411,151 @@ void CrashedHudState::UpdateRunning()
                     SendStateEvent("PAUSE");
                 break;
 
-            default:
-                // The deferred online challenge arms (573, 574, 576, 578, 579, 581) and the eight registered-
-                // but-undispatched ids land here. The console has no assert on its default path in
-                // this function, so neither does this -- adding one would be an invented arm.
+            // The free-burn challenge arms. 573 carries the selector action word at +8:
+            // action 2 restarts the ticker, 0/1/3 do nothing, anything else asserts.
+            case 573:
+            {
+                const s32 liSelectorAction = lpiPayload[2];
+                if (liSelectorAction == 2)
+                {
+                    StartFreeburnChallengeTicker();
+                }
+                else if (static_cast<u32>(liSelectorAction) > 3u)
+                {
+                    char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                    CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                    lStrStream << "Unknown freeburn challenge selector action ";
+                    lStrStream << liSelectorAction;
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert(
+                        lacMessage,
+                        "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnCrashedHudState.cpp",
+                        937);
+                    CgsDev::Assert::EndAssert();
+                }
                 break;
             }
+
+            // 574 (challenge start): the local-host byte at +8; only a zero byte restarts it.
+            case 574:
+                CGS_ASSERT(lpEvent != 0, "lpChallengeEvent");
+                if (reinterpret_cast<const u8*>(lpEvent)[8] == 0)
+                    StartFreeburnChallengeTicker();
+                break;
+
+            case 576:
+                StartFreeburnChallengeTicker();
+                break;
+
+            case 578:
+            case 579:
+                PostTickerClear(mpStateInterface);
+                break;
+
+            case 581:
+                if (mpCache->GetFreeburnChallengeManager()->IsActive())
+                    StartFreeburnChallengeTicker();
+                break;
+
+            default:
+                // The registered-but-undispatched ids land here. The console has no assert on
+                // its default path in this function, so neither does this.
+                break;
+            }
+        }
+    }
+
+    // Post the running free-burn challenge to the ticker: clear the ticker's challenge lines,
+    // format the challenge description under "CHALLENGE_TICKER_STRING_DESCRIPTION" (its
+    // positional markers filled with the player count and each action's first target value),
+    // then queue "<title> : <description>" four times, prefixed "--- COMPLETED ---" when the
+    // local player has already completed this challenge.
+    void CrashedHudState::StartFreeburnChallengeTicker()
+    {
+        PostTickerClear(mpStateInterface);
+
+        const FreeburnChallengeManager* lpManager = mpCache->GetFreeburnChallengeManager();
+        const BrnResource::ChallengeListEntry* lpChallenge = lpManager->GetCurrentChallenge();
+
+        // The console hands all four (text, format) pairs to FormatAndAddText but fills only
+        // liNumParams of them; the rest are zero-seeded here (never read past liNumParams).
+        char lacParamText[KI_TICKER_MAX_PARAMS][KU_TICKER_PARAM_TEXT_LEN];
+        CgsLanguage::LanguageManager::ParameterFormatType laeParamFormat[KI_TICKER_MAX_PARAMS];
+        for (s32 liSlot = 0; liSlot < KI_TICKER_MAX_PARAMS; ++liSlot)
+        {
+            lacParamText[liSlot][0] = 0;
+            laeParamFormat[liSlot]  = CgsLanguage::LanguageManager::E_FORMAT_TEXT;
+        }
+
+        CgsCore::SnPrintf(lacParamText[0], KU_TICKER_PARAM_TEXT_LEN, "%d", lpChallenge->GetNumPlayers());
+        lacParamText[0][KU_TICKER_PARAM_TEXT_LEN - 1] = 0;
+        laeParamFormat[0] = CgsLanguage::LanguageManager::E_FORMAT_INTEGER;
+
+        s32 liNumParams = 1;
+        for (s32 liActionIndex = 0; liActionIndex < lpChallenge->GetNumActions(); ++liActionIndex)
+        {
+            const BrnResource::ChallengeListEntryAction* lpAction = lpChallenge->GetAction(liActionIndex);
+            if (lpAction->GetNumTargets() != 0)
+            {
+                CgsCore::SnPrintf(lacParamText[liNumParams], KU_TICKER_PARAM_TEXT_LEN, "%d",
+                                  lpAction->GetTargetValue(0));
+                lacParamText[liNumParams][KU_TICKER_PARAM_TEXT_LEN - 1] = 0;
+                laeParamFormat[liNumParams] = CgsLanguage::LanguageManager::E_FORMAT_INTEGER;
+                ++liNumParams;
+            }
+        }
+
+        mpStateInterface->GetLanguageManager()->FormatAndAddText(
+            "CHALLENGE_TICKER_STRING_DESCRIPTION",
+            lpChallenge->GetDescriptionStringID(),
+            CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP,
+            liNumParams,
+            lacParamText[0], laeParamFormat[0],
+            lacParamText[1], laeParamFormat[1],
+            lacParamText[2], laeParamFormat[2],
+            lacParamText[3], laeParamFormat[3]);
+
+        const CgsID lChallengeID = lpChallenge->GetChallengeID();
+        const s32 liChallengeIndex = mpCache->GetFreeburnChallengeList()->GetChallengeIndex(lChallengeID);
+
+        GuiEventTickerCustomMessage lMessage = {};
+        lMessage.Construct(true, false, true, true);
+
+        // The local player's completed-challenge bit (FastBitArray<2000>::IsBitSet, inlined
+        // with its own streamed range assert).
+        if (liChallengeIndex >= KI_MAX_CHALLENGE_BITS)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Index ";
+            lStrStream << liChallengeIndex;
+            lStrStream << " is out of range (max bits: ";
+            lStrStream << KI_MAX_CHALLENGE_BITS;
+            lStrStream << "\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                lacMessage,
+                "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsFastBitArray.h",
+                396);
+            CgsDev::Assert::EndAssert();
+        }
+        const BrnGameState::GameStateModuleIO::CompletedFburnChallenges* lpCompleted =
+            lpManager->GetCompletedChallengesData()->GetLocalPlayerCompletionStatus();
+        const u64 lu64Word = lpCompleted->maxBits[liChallengeIndex >> 6];
+        const bool lbAlreadyCompleted =
+            lu64Word != 0 && (lu64Word & (static_cast<u64>(1) << (liChallengeIndex & 63))) != 0;
+
+        lMessage.AddString(lbAlreadyCompleted ? "--- COMPLETED --- %1 : %2" : "%1 : %2", 1);
+        lMessage.AddString(lpChallenge->GetTitleStringID(), 2);
+        lMessage.AddString("CHALLENGE_TICKER_STRING_DESCRIPTION", 2);
+
+        for (s32 liPost = 0; liPost < KI_TICKER_MESSAGE_POST_COUNT; ++liPost)
+        {
+            CgsGui::GuiEventWrapper<GuiEventTickerCustomMessage, KI_CHANNEL_GUI_OUT> lRecord(lMessage);
+            static_assert(sizeof(lRecord) == 0x824, "the ticker message record is 0x824 bytes");
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_GUI_OUT,
+                static_cast<s32>(sizeof(lRecord)));
         }
     }
 }

@@ -9,6 +9,7 @@
 #include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h"           // BrnStreetData::ChallengeHighScoreEntry
 #include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h"        // BrnGameState::BurnoutSkillzData
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"                    // CgsContainers::FastBitArray<8> (mabDirtyFlags)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT (inline setters)
 
 // ---------------------------------------------------------------------------
 // BrnGameState::BurnoutSkillzManager  (DWARF home BrnBurnoutSkillzManager.h:53)
@@ -84,6 +85,10 @@ namespace BrnGameState
 {
 class BurnoutSkillzManager
 {
+    // ModeManager::PostWorldUpdate's free-burn-lobby arm reads mpScoringSystem and calls the private
+    // SetNewSkillIfGreater inline, on the manager the lobby mode embeds.
+    friend class ModeManager;
+
 public:
     // BrnBurnoutSkillzManager.h:59 / X360 0x82332688
     void Construct(ModeManager* lpModeManager);
@@ -94,14 +99,11 @@ public:
                         GameStateModuleIO::OutputBuffer* lpOutput,
                         bool lbExitingFreeburnLobby);
 
-    // BrnBurnoutSkillzManager.h:72 (body in another TU -- not this 16-function TU)
-    void UpdatePostWorld(const GameStateModuleIO::PostWorldInputBuffer* lpInput);
-
     // X360 0x8233A560. The per-frame post-world entry point: resolve the local player's
     // active-race-car index from the post-world input buffer, feed the frame's post-world
-    // game events into the per-car skill records, then bank the car's takedown count as the
-    // TOTAL skill. Returns the per-car BurnoutSkillzData* it operated on (null when no record).
-    BurnoutSkillzData* PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpInput);
+    // game events into the per-car skill records, then bank the car's takedown count into
+    // skill 9. The original header's name for it is UpdatePostWorld.
+    void PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpInput);
 
     // BrnBurnoutSkillzManager.h:78 / X360 0x82322988
     void SendUpdatePlayerSkillsEvent(EActiveRaceCarIndex leActiveRaceCarIndex, bool lbShowHudMessage);
@@ -113,7 +115,7 @@ public:
                              BrnNetwork::Road::ChallengeIndex liChallengeIndex,
                              EActiveRaceCarIndex leLocalActiveRaceCarIndex);
 
-    // BrnBurnoutSkillzManager.h:94 (body in another TU)
+    // Inlined into OnlineFreeBurnLobbyMode::BufferNewRoadScore; body in the .cpp.
     void BufferNewRoadScore(BrnStreetData::ChallengePlayerScoreEntry lChallengeScore,
                             BrnStreetData::ScoreType leScoreType,
                             BrnNetwork::Road::ChallengeIndex liChallengeIndex);
@@ -121,13 +123,20 @@ public:
     // BrnBurnoutSkillzManager.h:99 / X360 0x82322B98
     void OnEnterRoad(BrnNetwork::Road::ChallengeIndex liRoadIndex);
 
-    // BrnBurnoutSkillzManager.h:104 (trivial setter; body in another TU)
-    void SetStreetManager(StreetManager* lpStreetManager);
+    // Inline setters (inlined into ModeManager::Construct after the lobby mode's own assert).
+    void SetStreetManager(StreetManager* lpStreetManager)
+    {
+        CGS_ASSERT(lpStreetManager, "lpStreetManager");
+        mpStreetManager = lpStreetManager;
+    }
 
-    // BrnBurnoutSkillzManager.h:108 (trivial setter; body in another TU)
-    void SetMugshotManager(MugshotManager* lpMugshotManager);
+    void SetMugshotManager(MugshotManager* lpMugshotManager)
+    {
+        CGS_ASSERT(lpMugshotManager, "lpMugshotManager");
+        mpMugshotManager = lpMugshotManager;
+    }
 
-    // BrnBurnoutSkillzManager.h:113 (body in another TU)
+    // Inlined into ModeManager::SendModeStopMessages; body in the .cpp.
     void OnModeEnd(bool lbExitingFreeburnLobby);
 
 private:

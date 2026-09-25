@@ -10,6 +10,11 @@
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"          // GuiTracker::ClearTracker (RecEvent 321/322 tail)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData::Clear (RecEvent 322)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"  // BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING (RecEvent 321/322 tail)
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"  // CgsNetwork::K_INVALID_PLAYER_ID (RecEvent 245)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"         // LobbyNameCmp (RecEvent 245)
+#include "GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h"   // GuiEventNetworkGameParams (RecEvent 257)
+#include "GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h" // LobbyPlayerStatusData (GetOnlinePlayerColourFromARCI)
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"  // BrnNetHarnessPC::WitnessTag (the [netui] roster line)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
 // (GuiCache::GetNumEventStarts is homed in the partfile BrnGuiCache_wJ_01.cpp.)
 
@@ -1152,6 +1157,68 @@ namespace BrnGui
         };
         static_assert(sizeof(GuiEventSatNavEventFilterPayload) == 12,
                       "GUI event 204 rides a 12-byte record (GuiEvent<204>(12, 12) at the producer)");
+
+        // The three network roster records BrnGameModule::BridgeNetworkToGui posts every frame
+        // (GameBridgeNetworkToX.cpp builds them at these record offsets). This TU cannot include
+        // BrnGuiDemangledEventTypes.h, where the ids are declared opaque, so the fields the
+        // cache reads are named here.
+        //
+        // GUI 243 GuiEventNetworkPlayerList, 168 bytes: one {player id, name} pair per player
+        // (20-byte stride), then the count and the total player count.
+        struct GuiEventNetworkPlayerListPayload
+        {
+            struct PlayerNameInfo
+            {
+                BrnNetwork::NetworkPlayerID mPlayerID;     // +0x00
+                CgsNetwork::PlayerName      mPlayerName;   // +0x04
+            };
+            PlayerNameInfo maPlayerNameInfo[8];            // +0x00 (stride 20)
+            s32            miNumPlayers;                   // +0xA0
+            s32            miTotalNumberPlayers;           // +0xA4
+        };
+        static_assert(sizeof(GuiEventNetworkPlayerListPayload::PlayerNameInfo) == 20,
+                      "the id-243 roster row is 20 bytes");
+        static_assert(sizeof(GuiEventNetworkPlayerListPayload) == 168,
+                      "AddGuiEvent<GuiEventNetworkPlayerList> posts 168 bytes (id 243)");
+
+        // GUI 245 GuiEventNetworkPlayerStatus, 2544 bytes: the eight in-game player records,
+        // the count, the game name and the local-player-is-host byte.
+        struct GuiEventNetworkPlayerStatusPayload
+        {
+            BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData maPlayerInfo[8]; // +0x000 (stride 312)
+            s32  miNumPlayers;                             // +0x9C0
+            char macGameName[36];                          // +0x9C4
+            bool mbLocalPlayerIsHost;                      // +0x9E8
+            u8   mau8Pad[7];                               // +0x9E9
+        };
+        static_assert(sizeof(BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData) == 312,
+                      "the in-game player record stride is 312 bytes");
+        static_assert(offsetof(GuiEventNetworkPlayerStatusPayload, miNumPlayers) == 0x9C0,
+                      "id-245 count @+0x9C0");
+        static_assert(offsetof(GuiEventNetworkPlayerStatusPayload, macGameName) == 0x9C4,
+                      "id-245 game name @+0x9C4");
+        static_assert(offsetof(GuiEventNetworkPlayerStatusPayload, mbLocalPlayerIsHost) == 0x9E8,
+                      "id-245 host byte @+0x9E8");
+        static_assert(sizeof(GuiEventNetworkPlayerStatusPayload) == 2544,
+                      "AddGuiEvent<GuiEventNetworkPlayerStatus> posts 2544 bytes (id 245)");
+
+        // GUI 239 GuiEventRaceDistanceRemaining, 144 bytes (BridgeGameStateToGui). The cache
+        // reads only the eliminated bytes at +0x80.
+        struct GuiEventRaceDistanceRemainingPayload
+        {
+            CgsID maCarId[8];                              // +0x00
+            f32   mafDistanceToFinish[8];                  // +0x40
+            s32   maiOnlineStuntScore[8];                  // +0x60
+            bool  mabPlayerEliminated[8];                  // +0x80
+            bool  mabValid[8];                             // +0x88
+        };
+        static_assert(offsetof(GuiEventRaceDistanceRemainingPayload, mabPlayerEliminated) == 0x80,
+                      "id-239 eliminated bytes @+0x80");
+        static_assert(sizeof(GuiEventRaceDistanceRemainingPayload) == 144,
+                      "AddGuiEvent<GuiEventRaceDistanceRemaining> posts 144 bytes (id 239)");
+
+        // The GuiEventNetworkLobbyPlayerList record (id 244) is 456 bytes.
+        const s32 KI_NETWORK_LOBBY_PLAYER_LIST_SIZE = 456;
     }
 
     void GuiCache::RecEvent(const CgsModule::Event* lpEvent, s32 liEventId)
@@ -1671,6 +1738,197 @@ namespace BrnGui
 
         case 374:
             mbCarUnlockPending = true;                                     // +0x4B75
+            break;
+
+        // ---- the network arms: the online roster, the game params and the connection state ----
+        // The first sub-switch (ids 4..243, rebased by -4) carries 44 / 58 / 108 / 239 / 240 / 243,
+        // id 244 is tested on its own before it, and the second sub-switch (rebased by -0xF5)
+        // carries 245 / 257 / 273 / 320.
+
+        // GUI 243 GuiEventNetworkPlayerList: the pre-game roster. Latch the two counts, clear all
+        // eight in-game player records, then seed one record per listed player with its name and
+        // network id and no race car yet (id 245 fills in the rest by id).
+        case 243:
+        {
+            CGS_ASSERT(lpEvent != 0, "lpNetworkPlayerList");
+            const GuiEventNetworkPlayerListPayload* lpNetworkPlayerList =
+                reinterpret_cast<const GuiEventNetworkPlayerListPayload*>(lpEvent);
+
+            muNumActivePlayers    = static_cast<u32>(lpNetworkPlayerList->miNumPlayers);          // +0xAC74 <- +0xA0
+            muChallengeSlotMirror = static_cast<u32>(lpNetworkPlayerList->miTotalNumberPlayers);  // +0xAC78 <- +0xA4
+            for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
+            {
+                reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(
+                    maPlayerInfo[liPlayer])->Clear();
+            }
+            for (s32 liPlayer = 0; liPlayer < static_cast<s32>(muNumActivePlayers); ++liPlayer)
+            {
+                BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpData =
+                    reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(
+                        maPlayerInfo[liPlayer]);
+                const GuiEventNetworkPlayerListPayload::PlayerNameInfo& lrInfo =
+                    lpNetworkPlayerList->maPlayerNameInfo[liPlayer];
+                std::memcpy(&lpData->mPlayerName, &lrInfo.mPlayerName, sizeof(lpData->mPlayerName));
+                lpData->meActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+                lpData->mNetworkPlayerID     = lrInfo.mPlayerID;
+            }
+            break;
+        }
+
+        // GUI 244 GuiEventNetworkLobbyPlayerList: the lobby roster, adopted whole (one 456-byte
+        // memcpy over maLobbyPlayerInfo and the record's count and tail).
+        case 244:
+        {
+            CGS_ASSERT(lpEvent != 0, "lpNetworkPlayerList");
+            static_assert(offsetof(GuiCache, miLobbyNumPlayers) ==
+                              offsetof(GuiCache, maLobbyPlayerInfo) + sizeof(maLobbyPlayerInfo),
+                          "the id-244 count follows the eight lobby rows");
+            static_assert(sizeof(maLobbyPlayerInfo) + sizeof(miLobbyNumPlayers) + sizeof(mPad_B804) ==
+                              KI_NETWORK_LOBBY_PLAYER_LIST_SIZE,
+                          "the id-244 record is 456 bytes");
+            std::memcpy(maLobbyPlayerInfo, lpEvent, KI_NETWORK_LOBBY_PLAYER_LIST_SIZE);
+            break;
+        }
+
+        // GUI 245 GuiEventNetworkPlayerStatus: the per-frame in-game status, taken only while the
+        // cache is in an online event (+0x4B4C, raised by id 93). Each status record overwrites
+        // the cached record with the same network id; then the host byte and the game name.
+        case 245:
+        {
+            if (!mbOnlineStartInProgress)
+                break;
+
+            CGS_ASSERT(lpEvent != 0, "lpNetworkPlayerStatus");
+            const GuiEventNetworkPlayerStatusPayload* lpNetworkPlayerStatus =
+                reinterpret_cast<const GuiEventNetworkPlayerStatusPayload*>(lpEvent);
+
+            for (s32 liIndex = 0; liIndex < lpNetworkPlayerStatus->miNumPlayers; ++liIndex)
+            {
+                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData& lrStatus =
+                    lpNetworkPlayerStatus->maPlayerInfo[liIndex];
+                const BrnNetwork::NetworkPlayerID lNetworkPlayerID = lrStatus.mNetworkPlayerID;
+                CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+                           "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+
+                BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpData = 0;
+                for (s32 liSlot = 0; liSlot < 8; ++liSlot)
+                {
+                    BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpSlot =
+                        reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(
+                            maPlayerInfo[liSlot]);
+                    if (lpSlot->mNetworkPlayerID == lNetworkPlayerID)
+                    {
+                        lpData = lpSlot;
+                        break;
+                    }
+                }
+                CGS_ASSERT(lpData != 0, "lpData");
+                // [PC GUARD] -- not in the console image: a status record whose id the id-243
+                // roster never listed has no cache slot, and the console goes on to read and
+                // copy through the null record. Skip it after the assert has fired.
+                if (lpData == 0)
+                    continue;
+
+                CGS_ASSERT((lpData->mPlayerName.macName[0] == 0) ||
+                               (LobbyNameCmp(lpData->mPlayerName.macName, lrStatus.mPlayerName.macName) == 0),
+                           "( lpData->mPlayerName.IsEmpty() ) || ( lpData->mPlayerName.IsEqualTo( lpNetworkPlayerStatus->maPlayerInfo[liIndex].mPlayerName ) )");
+                std::memcpy(lpData, &lrStatus, sizeof(*lpData));   // XMemCpy, 312 bytes
+            }
+
+            mbIsOnlineHost = lpNetworkPlayerStatus->mbLocalPlayerIsHost;   // +0xB864 <- +0x9E8
+            CGS_ASSERT(std::strlen(lpNetworkPlayerStatus->macGameName) < sizeof(macOnlineGameName),
+                       "String too long: ");
+            std::strncpy(macOnlineGameName, lpNetworkPlayerStatus->macGameName, sizeof(macOnlineGameName));
+
+            // [netui] witness (PC harness, LAN gated): one line per change of the roster size
+            // or the host byte. Not console code.
+            {
+                static s32  siLastNumPlayers = -1;
+                static bool sbLastIsHost     = false;
+                if (lpNetworkPlayerStatus->miNumPlayers != siLastNumPlayers || mbIsOnlineHost != sbLastIsHost)
+                {
+                    siLastNumPlayers = lpNetworkPlayerStatus->miNumPlayers;
+                    sbLastIsHost     = mbIsOnlineHost;
+                    BrnNetHarnessPC::WitnessTag("netui", "cache-status", "n=%d host=%d game=%.36s",
+                                                siLastNumPlayers, mbIsOnlineHost ? 1 : 0, macOnlineGameName);
+                }
+            }
+            break;
+        }
+
+        // GUI 257 GuiEventNetworkGameParams: the whole 480-byte params record lands on the
+        // +0xA800 mirror (the round events, then meOnlineGameMode .. mbOnlineRanked).
+        case 257:
+            static_assert(offsetof(GuiCache, mbOnlineRanked) + sizeof(mbOnlineRanked) -
+                              offsetof(GuiCache, maOnlineGameModeOptionsStorage) ==
+                              sizeof(GuiEventNetworkGameParams),
+                          "the +0xA800 params mirror is one 480-byte GuiEventNetworkGameParams");
+            std::memcpy(maOnlineGameModeOptionsStorage, lpEvent, sizeof(GuiEventNetworkGameParams));
+            break;
+
+        // GUI 273 GuiEventNetworkLeftGame: the mirror's game security back to public (0).
+        case 273:
+            meOnlineSecurity = 0;                                          // stwx 0, +0xA9C0
+            break;
+
+        // GUI 44 GuiEventNetworkDisconnected: the local player is marked disconnected, the
+        // +0x4B50 byte (mbIsConnectedToNetwork in the reference member run) drops, the params mirror's
+        // security goes back to public and the friends-panel branch mirror is cleared.
+        case 44:
+            // [PC GUARD] -- not in the console image: the console indexes the table with the
+            // player's active race-car index unchecked; with no race car (-1) its store lands on
+            // the byte before the table. Skipped here.
+            if (mePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 &&
+                mePlayerActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT)
+            {
+                maOnlinePlayerDisconnected[mePlayerActiveRaceCarIndex] = true;   // stbx 1, +0xB84C + idx
+            }
+            mbRoadRuleFriendScoresAvailable = false;                       // stb 0,  +0x4B50
+            meOnlineSecurity                = 0;                           // stwx 0, +0xA9C0
+            muFriendsPanelBranchMirror      = 0;                           // stwx 0, +0xB868
+            break;
+
+        // GUI 58: the game launched -- nobody is disconnected or eliminated yet.
+        case 58:
+            for (s32 liIndex = 0; liIndex < 8; ++liIndex)
+            {
+                maOnlinePlayerDisconnected[liIndex] = false;
+            }
+            for (EActiveRaceCarIndex leIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+                 leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+                 leIndex++)
+            {
+                maOnlinePlayerEliminated[leIndex] = false;
+            }
+            break;
+
+        // GUI 108 GuiEventOnlineTimeout: a timeout is pending while the posted time is not
+        // negative (`fcmpu` + `bge`, so a NaN counts as pending).
+        case 108:
+            mbOnlineTimeoutPending = !(*reinterpret_cast<const f32*>(lpEvent) < 0.0f);   // +0x13B5C
+            break;
+
+        // GUI 239 GuiEventRaceDistanceRemaining: the per-car eliminated bytes.
+        case 239:
+        {
+            const GuiEventRaceDistanceRemainingPayload* lpDistance =
+                reinterpret_cast<const GuiEventRaceDistanceRemainingPayload*>(lpEvent);
+            for (s32 liIndex = 0; liIndex < 8; ++liIndex)
+            {
+                maOnlinePlayerEliminated[liIndex] = lpDistance->mabPlayerEliminated[liIndex];
+            }
+            break;
+        }
+
+        // GUI 240 GuiEventRaceDistanceToCheckpoint: the player's distance to the next checkpoint.
+        case 240:
+            mfDistanceToCheckpoint = *reinterpret_cast<const f32*>(lpEvent);   // stfsx +0xA010
+            break;
+
+        // GUI 320: an online showtime event (mode 16) has completed.
+        case 320:
+            if (meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+                mbOnlineEventCompleted = true;                             // stb 1, +0x4B5A
             break;
 
         case 379:
@@ -2623,6 +2881,78 @@ namespace BrnGui
                    "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
 
         return maCurrentPlayerTeam[leActiveRaceCarIndex];
+    }
+
+    EActiveRaceCarIndex GuiCache::GetActiveRaceCarFromNetworkId(s32 lNetworkPlayerID) const
+    {
+        for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
+        {
+            const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer =
+                reinterpret_cast<const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(
+                    maPlayerInfo[liPlayer]);
+            if (lpPlayer->mNetworkPlayerID == lNetworkPlayerID)
+                return lpPlayer->meActiveRaceCarIndex;
+        }
+        return E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    }
+
+    // The team modes (12 / 14) colour a car by its lobby
+    // team (1..8 -> 2, 3, 1, 4, 5, 6, 7, 8); the other modes by its lobby colour index
+    // (0..7 -> 1, 2, 3, 5, 4, 6, 7, 8). An out-of-range team reads as disconnected (11), an
+    // out-of-range colour index as none (0).
+    s32 GuiCache::GetOnlinePlayerColourFromARCI(EActiveRaceCarIndex leActiveRaceCarIndex)
+    {
+        const bool lbTeamMode =
+            (meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FUGITIVE) ||
+            (meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN);
+
+        if (IsActiveRaceCarDisconnected(leActiveRaceCarIndex))
+            return 11;
+        if (IsOnlinePlayerEliminated(leActiveRaceCarIndex))
+            return 10;
+
+        for (s32 liRow = 0; liRow < miLobbyNumPlayers; ++liRow)
+        {
+            const BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData* lpLobbyRow =
+                reinterpret_cast<const BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData*>(
+                    maLobbyPlayerInfo[liRow]);
+            if (GetActiveRaceCarFromNetworkId(lpLobbyRow->mPlayerID) != leActiveRaceCarIndex)
+                continue;
+
+            if (lbTeamMode)
+            {
+                switch (lpLobbyRow->mePlayerTeam)
+                {
+                case 1: return 2;
+                case 2: return 3;
+                case 3: return 1;
+                case 4: return 4;
+                case 5: return 5;
+                case 6: return 6;
+                case 7: return 7;
+                case 8: return 8;
+                default:
+                    CGS_ASSERT(false, "Team index out of range: ");
+                    return 11;
+                }
+            }
+
+            switch (lpLobbyRow->miPlayerColourIndex)
+            {
+            case 0: return 1;
+            case 1: return 2;
+            case 2: return 3;
+            case 3: return 5;
+            case 4: return 4;
+            case 5: return 6;
+            case 6: return 7;
+            case 7: return 8;
+            default:
+                CGS_ASSERT(false, "Colour index out of range: ");
+                return 0;
+            }
+        }
+        return 0;
     }
 }
 

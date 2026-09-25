@@ -83,6 +83,7 @@
 namespace BrnGui
 {
     class GuiCache;   // pointer-held
+    struct GuiEventNetworkGameParams;   // pointer-held (UpdateFreeBurnLobbyEvent)
 
     // DWARF BrnEventInfo.h:70.
     class EventInfoComponent : public BrnFlaptComponent
@@ -214,6 +215,13 @@ namespace BrnGui
         void UpdateCrash(GuiCache* lpCache);
         void UpdateBurningRoute(GuiCache* lpCache);
         void UpdateSurvivor(GuiCache* lpCache);
+
+        // The free-burn lobby panel's three pages (the running challenge, the next online
+        // event's options, the plain lobby) and the shared "host / game security" title line.
+        void UpdateFreeBurnLobbyChallenge(GuiCache* lpCache);
+        void UpdateFreeBurnLobbyEvent(GuiCache* lpCache, const GuiEventNetworkGameParams* lpParams);
+        void UpdateFreeBurnLobbyBasic(GuiCache* lpCache);
+        void ShowFreeburnWithTitleText(GuiCache* lpCache);
 
         // @0x82429C08 (DWARF :317) -- the stunt-run / stunt-attack readout. The X360
         // signature carries a SECOND argument the DWARF/PS3 build lacks: `clrlwi r26,r5,24`

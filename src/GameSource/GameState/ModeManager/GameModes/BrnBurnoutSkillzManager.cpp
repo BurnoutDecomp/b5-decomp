@@ -891,8 +891,10 @@ void BurnoutSkillzManager::UpdateLobbyRoadRulesScores(
 // ----------------------------------------------------------------------------
 void BurnoutSkillzManager::UpdateBurnoutSkillzTotals(::EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex)
 {
-    // Per-skill winner tracking across the SEND-VIA-NETWORK skill range (11 skills).
-    const s32 KI_SKILL_RANGE = BurnoutSkillzData::E_BURNOUT_SKILL_TO_SEND_VIA_NETWORK_COUNT + 2; // 11
+    // Per-skill winner tracking across the SEND-VIA-NETWORK skill range: skills 0..10 (the console
+    // sizes all three scratch arrays at 11 and stops the skill walk at 11). Skill 11 is the TOTAL
+    // written below, so it must not take part in the leader count.
+    const s32 KI_SKILL_RANGE = BurnoutSkillzData::E_BURNOUT_SKILL_TO_SEND_VIA_NETWORK_COUNT; // 11
 
     bool                labIsTie[KI_SKILL_RANGE];
     f32                 lafBestValue[KI_SKILL_RANGE];
@@ -1058,17 +1060,9 @@ void BurnoutSkillzManager::PreWorldUpdate(
         UpdateBoostChains(lpLocalSkillzData, lpActiveCarInterface, leLocalPlayerActiveRaceCarIndex);
     }
 
-    // If any car has a pending skill-update flag, recompute the cross-car totals.
-    bool lbAnyUpdatePending = false;
-    for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
-    {
-        if (maiBurnoutSkillsUpdatedFlags[liCar] != 0)
-        {
-            lbAnyUpdatePending = true;
-            break;
-        }
-    }
-    if (!lbAnyUpdatePending)
+    // If any car is dirty (the +0x90 bit set, not the per-car flag words), recompute the
+    // cross-car totals.
+    if (!mabDirtyFlags.IsZero())
     {
         UpdateBurnoutSkillzTotals(leLocalPlayerActiveRaceCarIndex);
     }
@@ -1134,10 +1128,10 @@ void BurnoutSkillzManager::PreWorldUpdate(
 // PostWorldUpdate. The per-frame post-world entry point. Resolves the
 // local player's active-race-car index from the post-world input buffer's active-car output
 // interface, looks up that car's skillz record, feeds the frame's post-world game events into
-// it, then banks the car's takedown count as the TOTAL skill. Returns the skillz record it
-// operated on (null when the scoring system has no record for the index).
+// it, then banks the car's takedown count into skill slot 9. Returns nothing (the original
+// header spells it UpdatePostWorld).
 // ----------------------------------------------------------------------------
-BurnoutSkillzData* BurnoutSkillzManager::PostWorldUpdate(
+void BurnoutSkillzManager::PostWorldUpdate(
     const GameStateModuleIO::PostWorldInputBuffer* lpInput)
 {
     CGS_ASSERT(lpInput, "lpInput");
@@ -1159,17 +1153,48 @@ BurnoutSkillzData* BurnoutSkillzManager::PostWorldUpdate(
                                             lpInput->GetGameEventQueue(),
                                             leLocalPlayerActiveRaceCarIndex);
 
-        // Bank the car's takedown count (CarScoreData +0x4C) as the TOTAL skill.
+        // Bank the car's takedown count (CarScoreData +0x4C) into skill 9, one of this build's
+        // two extra scoring skills (the enum has no name for it; 11 is the TOTAL that
+        // UpdateBurnoutSkillzTotals owns).
         CarData* lpCarData = mpScoringSystem->GetCarData(leLocalPlayerActiveRaceCarIndex);
         if (lpCarData)
         {
             const s32 liTakedowns = lpCarData->GetScoreData()->GetTakedowns();
-            SetNewSkillIfGreater(BurnoutSkillzData::E_BURNOUT_SKILL_TOTAL, lpSkillzData,
+            SetNewSkillIfGreater(static_cast<BurnoutSkillzData::EBurnoutSkillType>(9), lpSkillzData,
                                  leLocalPlayerActiveRaceCarIndex, static_cast<f32>(liTakedowns));
         }
     }
+}
 
-    return lpSkillzData;
+// ----------------------------------------------------------------------------
+// BufferNewRoadScore. Inlined into OnlineFreeBurnLobbyMode::BufferNewRoadScore: hold the score
+// until the next PreWorldUpdate hands it to ProcessNewRoadScore. Store order is the console's
+// (score, then +0x6C type, then +0x68 index).
+// ----------------------------------------------------------------------------
+void BurnoutSkillzManager::BufferNewRoadScore(BrnStreetData::ChallengePlayerScoreEntry lChallengeScore,
+                                              BrnStreetData::ScoreType leScoreType,
+                                              BrnNetwork::Road::ChallengeIndex liChallengeIndex)
+{
+    mBufferedChallengeScore.Construct();
+    mBufferedChallengeScore.Copy(&lChallengeScore);
+    meBufferedScoreType          = leScoreType;
+    mBufferedScoreChallengeIndex = liChallengeIndex;
+}
+
+// ----------------------------------------------------------------------------
+// OnModeEnd. Inlined into ModeManager::SendModeStopMessages, which passes the same flag it hands
+// ScoringSystem::ClearData. When set, the buffered road score is dropped: the type goes back to
+// the E_SCORE_TYPE_COUNT sentinel and the index to -1 (a rodata word that reads -1, not an
+// immediate).
+// ----------------------------------------------------------------------------
+void BurnoutSkillzManager::OnModeEnd(bool lbExitingFreeburnLobby)
+{
+    if (lbExitingFreeburnLobby)
+    {
+        mBufferedChallengeScore.Construct();
+        meBufferedScoreType          = BrnStreetData::E_SCORE_TYPE_COUNT;   // == 2
+        mBufferedScoreChallengeIndex = -1;
+    }
 }
 
 } // namespace BrnGameState

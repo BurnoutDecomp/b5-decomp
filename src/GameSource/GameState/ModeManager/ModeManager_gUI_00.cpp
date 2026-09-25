@@ -182,6 +182,12 @@ void ModeManager::ConstructInterModeStateBringUp(GameStateModule* lpGameStateMod
         }
     }
 
+    // The real Construct's lobby setters, right after the mode loop as there: the module's own
+    // StreetManager and MugshotManager (the latter allocated by ConstructTakedownBringUp, which
+    // runs before this seam) into the lobby's skillz manager.
+    mOnlineFreeBurnLobby.SetStreetManager(lpGameStateModule->GetStreetManager());
+    mOnlineFreeBurnLobby.SetMugshotManager(lpGameStateModule->GetMugshotManager());
+
     // [stuntrace 2026-08-26] THE SCORING SYSTEM CONSTRUCT -- the real ModeManager::Construct's
     // `ScoringSystem::Construct(this+3504, lpAchievementManager)` call, extracted here because
     // the first live in-air stunt WROTE THROUGH NULL (boot-proven AV @module+0x279B30 in

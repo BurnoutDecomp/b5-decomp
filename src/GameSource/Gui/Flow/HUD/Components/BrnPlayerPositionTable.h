@@ -21,9 +21,8 @@
 // (BrnPlayerPositionTable.h) gated on the X360 ledger. The PlayerPositionSingleData
 // record and the PlayerTypes/RevengeStatus/AwardStatus/HeadsetStatus enums are
 // NOT redeclared here -- they have a committed home in BrnPlayerPositionSingle.h,
-// which this header includes. Full method surface declared for coherence; only
-// ClearStoredData / AddInvisibleTeamLine / FunctionSortTeamHighToLow / SetCache
-// are bodied in this TU so far.
+// which this header includes. Every declared method is bodied in the .cpp except
+// HandleFrameTrigger, which has no console body.
 //
 // X360 byte offsets (access BY NAME): vtable+base @0x00..0x0B,
 // maPlayerComponents[9] @0x0C (stride 0xCC), mpCache @0x738,
@@ -52,7 +51,7 @@ namespace BrnGui
 
     struct PlayerPositionTableComponent : public BasePlayerPositionTableComponent
     {
-        // Public ledger surface (DWARF h:84..123). Only SetCache is bodied here.
+        // Public surface.
         void Construct(const char* lacName, CgsGui::StateInterface* lpStateInterface,
                        const char* lacParentName);
         void Prepare(const char* lacName, const BrnFlapt::FileRef& lFile);
@@ -62,8 +61,7 @@ namespace BrnGui
         void SetCache(GuiCache* lpCache);   // @0x82473458 (this TU)
 
     private:
-        // Private ledger surface (DWARF h:180..256). Bodied here:
-        // ClearStoredData / AddInvisibleTeamLine / FunctionSortTeamHighToLow.
+        // Private surface.
         void ClearStoredData();                                    // @0x8241EEF0 (this TU)
         void FillOutInActiveRaceCarOrder(const GuiEventRaceDistanceRemaining* lpDistanceEvent);
         void FillOutOnlineData(EActiveRaceCarIndex leCurrentActiveRaceCar);
@@ -92,9 +90,8 @@ namespace BrnGui
         PlayerPositionSingleData      maPlayerSingleData[KI_MAX_BARS_NEEDED]; // +0x748 (DWARF h:142, stride 0x38)
         // FLAG: the two enum fields below are raw s32 here (both enums are s32-width): their
         // homes (BurnoutSkillzData::EBurnoutSkillType / ChallengeListEntryAction::EChallengeDataType)
-        // pull in heavy game-state/challenge headers, and no function bodied in this TU touches
-        // them -- kept for layout coherence only. Adopt the real enum types when this TU grows
-        // the freeburn-challenge table logic that uses them.
+        // pull in heavy game-state/challenge headers. The challenge data type also runs to 24
+        // on the console (the caption table and the Construct seed), past the committed enum.
         s32                           meLastFrameSkillState;      // (DWARF h:144, EBurnoutSkillType)
         bool                          mbFreeburnChallengeRunning; // (DWARF h:145)
         s32                           miFreeburnChallengeCurrentData; // (DWARF h:146)

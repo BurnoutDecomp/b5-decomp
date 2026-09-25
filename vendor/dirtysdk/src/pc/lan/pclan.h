@@ -41,6 +41,7 @@ enum PcLanMsgE
     PCLAN_LINK_HELLO,   // peer link handshake (ConnApi client status 3 once acked)
     PCLAN_LINK_ACK,
     PCLAN_DATA,         // NetGameLink packet: u16 len + body
+    PCLAN_HANDOVER,     // leaving host -> members: u32 lobby ident of the member that takes the record over
     PCLAN_NUM_TYPES
 };
 

@@ -14,20 +14,6 @@ namespace BrnWorld
 namespace RaceCarEntityModuleIO
 {
 
-// X360 0x8227D690 -- per-index MUTABLE element accessor into maRaceCarStates[8]
-// (RaceCarState is 1120 bytes; array starts at this+816). Bounds-checks the index then
-// gates on IsRaceCarActive before returning &maRaceCarStates[idx]. DISTINCT from the const
-// GetRaceCarState (returns const RaceCarState*); named GetRaceCarStateMutable to avoid the
-// const/non-const name collision. EActiveRaceCarIndex is an enum, so it indexes directly.
-RCEntityActiveRaceCarOutputInterface::RaceCarState*
-RCEntityActiveRaceCarOutputInterface::GetRaceCarStateMutable(EActiveRaceCarIndex leActiveRaceCarIndex)
-{
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,    "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-    CGS_ASSERT(IsRaceCarActive(leActiveRaceCarIndex),               "IsRaceCarActive( leActiveRaceCarIndex )");
-    return &maRaceCarStates[leActiveRaceCarIndex];
-}
-
 // X360 0x823101C0 -- hidden per-index element-address accessor on the GLOBAL race-car
 // output interface. Bounds-checks the index (NO IsRaceCarActive gate, NO IOBuffer lock bit
 // -- this interface is a plain payload struct), then returns the address of a 36-byte

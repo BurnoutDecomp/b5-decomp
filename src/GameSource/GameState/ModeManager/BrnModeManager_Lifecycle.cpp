@@ -194,22 +194,11 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     }
 
     // ------------------------------------------------------------------------
-    // The free-burn-lobby manager pointers. The console fires TWO asserts per argument, because BOTH
-    // inlined setters are inlined here: BrnOnlineFreeBurnLobbyMode.h:175 AND BrnBurnoutSkillzManager.h:265
-    // for the street manager, :190 / :280 for the mugshot manager. Only one CGS_ASSERT is written per
-    // argument (a duplicate assert on the same condition is noise, not fidelity) -- the pair is
-    // recorded here instead.
-    // [X] PARKED STORES: the console then does `*(this + 3252) = lpStreetManager;` and
-    // `*(this + 3256) = lpMugshotManager;`, which land INSIDE mOnlineFreeBurnLobby (+2952) -- at
-    // +300 / +304 within it, in the embedded BurnoutSkillzManager region that starts at +3136.
-    // BrnOnlineFreeBurnLobbyMode declares no members at all on this tree, so there is nothing to
-    // store into. DELETE-WHEN OnlineFreeBurnLobbyMode/BurnoutSkillzManager grow their
-    // SetStreetManager / SetMugshotManager setters (filed as a header_request).
+    // The free-burn-lobby manager pointers, through the lobby's two inlined setters (each fires
+    // its own assert, then the skillz manager's setter fires its own and stores the pointer).
     // ------------------------------------------------------------------------
-    CGS_ASSERT(lpStreetManager != nullptr, "lpStreetManager");
-    CGS_ASSERT(lpMugshotManager != nullptr, "lpMugshotManager");
-    (void)lpStreetManager;
-    (void)lpMugshotManager;
+    mOnlineFreeBurnLobby.SetStreetManager(lpStreetManager);
+    mOnlineFreeBurnLobby.SetMugshotManager(lpMugshotManager);
 
     // ------------------------------------------------------------------------
     // The scalar / sentinel seeds, in console store order.
@@ -271,7 +260,7 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     mbModeDataIsLoading                = false;                          // +38145
     mbIsModePrepared                   = false;                          // +38147
     mbIsWaitingForSecondPFM            = false;                          // +38132
-    mbModeStartFromRegionEnabled       = false;                          // +38144
+    mbHasAbortedDueToDisconnect       = false;                          // +38144
     mbStuntChallengeActive             = false;                          // +38157
     mbInModeStartRegion                = false;                          // +38133
     mbLastInModeStartRegion            = false;                          // +38134

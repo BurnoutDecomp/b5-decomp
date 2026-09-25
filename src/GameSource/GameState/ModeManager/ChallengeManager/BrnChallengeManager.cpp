@@ -54,6 +54,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h" // GameStateToNetworkInterface::SetPlayerInFreeburnChallenge
 #include "GameSource/Network/BrnNetworkModuleIO.h"                // BrnNetworkModuleIO::E_CHALLENGE_EVENT_* (values 0..3)
 #include "GameShared/GameClasses/Development/CgsStrStream.h"      // CgsDev::StrStream (runtime-value assert message)
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"     // [net] fburn status witness (PC harness)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"        // CgsContainers::BitArray<8> (case-6 rank scratch)
 #include "SharedClasses/DataLists/VehicleList.h"                 // BrnResource::VehicleList::GetVehicleIndex / GetVehicleData
 #include "SharedClasses/DataLists/VehicleListEntry.h"            // BrnResource::VehicleListEntry::GetCarType
@@ -1218,6 +1219,74 @@ s32 ChallengeManager::GetChallengeIndex(CgsID lChallengeID) const
 }
 
 // ----------------------------------------------------------------------------
+// GetChallengeFromID. The list entry for an id. A missing id leaves the result
+// NULL and fires the streamed "Could not find challenge <id> from list of <count> challenges"
+// assert; so does an index whose entry is NULL. Callers: the remote start / trigger handlers.
+// ----------------------------------------------------------------------------
+const BrnResource::ChallengeListEntry* ChallengeManager::GetChallengeFromID(CgsID lChallengeID) const
+{
+    CGS_ASSERT(mpFreeburnChallengeList != 0, "mpFreeburnChallengeList");
+
+    const BrnResource::ChallengeListEntry* lpChallenge = 0;
+    const s32 liChallengeIndex = mpFreeburnChallengeList->GetChallengeIndex(lChallengeID);
+    if (liChallengeIndex >= 0)
+    {
+        lpChallenge = mpFreeburnChallengeList->GetChallengeData(liChallengeIndex);
+    }
+
+    if (lpChallenge == 0)
+    {
+        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+        lStrStream << "Could not find challenge " << static_cast<u64>(lChallengeID)
+                   << " from list of " << static_cast<s32>(mpFreeburnChallengeList->GetChallengeCount())
+                   << " challenges";
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
+        CgsDev::Assert::EndAssert();
+    }
+
+    return lpChallenge;
+}
+
+// ----------------------------------------------------------------------------
+// RemoteBeginChallenge / RemoteTriggerFreeburnChallenge. No out-of-line copy
+// on the console: both are inlined into ModeManager's remote start / trigger handlers, which is
+// where their bodies are read from (the pending flag at +0xE35 / +0xE36, then the current
+// challenge and action index). UpdateRemoteRequests consumes the flags on the next tick.
+// ----------------------------------------------------------------------------
+void ChallengeManager::RemoteBeginChallenge(CgsID lChallengeID)
+{
+    mbRemoteStartPending     = true;
+    mpCurrentChallenge       = GetChallengeFromID(lChallengeID);
+    miCurrentChallengeAction = 0;
+}
+
+void ChallengeManager::RemoteTriggerFreeburnChallenge(CgsID lChallengeID)
+{
+    mbRemoteTriggerPending   = true;
+    mpCurrentChallenge       = GetChallengeFromID(lChallengeID);
+    miCurrentChallengeAction = 0;
+}
+
+// ----------------------------------------------------------------------------
+// GetCurrentFreeburnChallengeID. Inlined into ModeManager's forwarder: 0 while no
+// list is loaded or no challenge is current, else the current entry's id.
+// ----------------------------------------------------------------------------
+CgsID ChallengeManager::GetCurrentFreeburnChallengeID()
+{
+    if (mpFreeburnChallengeList == 0)
+    {
+        return 0;
+    }
+    if (mpCurrentChallenge == 0)
+    {
+        return 0;
+    }
+    return mpCurrentChallenge->GetChallengeID();
+}
+
+// ----------------------------------------------------------------------------
 // CheckForOnlineChallengeUnlocks -- X360 0x82333100. Tally, by challenge player-count, how many
 // challenges the local player has completed (mpProgression->GetProfile()->HasPlayerCompleted...),
 // then for the multi-player player-count categories 1..7 count how many are fully cleared
@@ -1438,7 +1507,7 @@ bool ChallengeManager::UpdateTimer(f32 lfTimeStep)
 
         // X360 lfs f0,+0x40(action) compared to 0.0, then re-reads it via GetTimeLimit for the
         // store (both are the action's mfTimeLimit @+0x40).
-        if (lpAction->GetTimeLimit() > 0.0f)
+        if (lpAction->HasTimeLimit())
         {
             mfChallengeTimer        = lpAction->GetTimeLimit();
             mbChallengeTimerRunning = true;
@@ -2843,6 +2912,17 @@ void ChallengeManager::PreWorldUpdate(
     UpdateResults(lfTimeStep, lpOutputBuffer->GetGuiOutputQueue());
     WriteDataToOutput(lpOutputBuffer);
     UpdateFreeburnSkillsThisFrame(lpActiveRaceCarOutputInterface, lfTimeStep);
+
+    // [PC HARNESS] one bounded "[net] fburn" line per manager status change (LAN / harness runs).
+    static s32 siWitnessedStatus = E_CHALLENGE_MANAGER_STATUS_NONE;
+    if (static_cast<s32>(meChallengeManagerStatus) != siWitnessedStatus)
+    {
+        BrnNetHarnessPC::Witness("fburn", "status %d -> %d id=%llu host=%d frame=%d",
+                                 siWitnessedStatus, static_cast<s32>(meChallengeManagerStatus),
+                                 static_cast<unsigned long long>(GetCurrentFreeburnChallengeID()),
+                                 lbIsOnline ? 1 : 0, liFramesSinceNetworkStart);
+        siWitnessedStatus = static_cast<s32>(meChallengeManagerStatus);
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -4828,9 +4908,9 @@ bool ChallengeManager::CheckCurrentLocation(
     // to Flatten: Flatten @0x822CB8E8 is out-of-line, this site emits no `bl`, and 0x82333878
     // is absent from Flatten's xrefs -- so the IsValid assert Flatten's body fires does NOT
     // execute here. The call target is the Vector2 overload of GetValue (0x82907FF8).
-    // FLAG (Flatten lane mask): unk_82CDA450 is still an un-valued .rdata blob, so XZ-vs-XY is
-    // the same INFERENCE the committed BrnMathUtils.cpp:23-25 carries. If that mask is ever
-    // resolved to XY, this site and BrnMath::Flatten must change together.
+    // The permute mask is dumped from the image: bytes 00 01 02 03 18 19 1A 1B 00 01 02 03
+    // 00 01 02 03, i.e. lane 0 = x and lane 1 = byte 8 of the second (same) operand = z. The
+    // pack is (x, z): XZ, confirmed.
     const Vector2 l2DCarPosition = Vector2{ lCarPosition.x, lCarPosition.z };
     const s32 liDistrict = static_cast<s32>(lpWorldMap->GetValue(l2DCarPosition));
 

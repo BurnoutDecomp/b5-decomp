@@ -82,9 +82,10 @@ namespace GameStateModuleIO
 // BrnOnlineCarSelectManager.h declares its own BrnGameState::Pointer32 with the SAME name in the
 // SAME namespace -- a redefinition the moment both headers meet in one TU).
 //
-// ⚠️ THE SAME TRUNCATING Pointer32 IS STILL COPY-PASTED IN THREE OTHER PLACES, all currently
-// UNMOUNTED (so latent, not live): BrnOnlineCarSelectManager.h:25, BrnGameStateFlybyManager.cpp:7,
-// BrnGameStateOnlineFlybyManager.h:46. Whoever mounts any of them must fix it there too.
+// ⚠️ THE SAME TRUNCATING Pointer32 IS STILL COPY-PASTED IN TWO OTHER PLACES, both currently
+// UNMOUNTED (so latent, not live): BrnGameStateFlybyManager.cpp,
+// BrnGameStateOnlineFlybyManager.h. Whoever mounts any of them must fix it there too.
+// (BrnOnlineCarSelectManager.h now uses HostPointer.)
 template <typename T>
 struct HostPointer
 {

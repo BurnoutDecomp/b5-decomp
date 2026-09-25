@@ -165,10 +165,26 @@ namespace BrnGui
     const char OnlineGameRoomPlayerInfo::KAC_SUBMIT_FEEBDACK_STRING_ID[45] = "$ONLINE_PLAYER_OPTION_SUBMIT_FEEDBACK_PLAYER";
     const char OnlineGameRoomPlayerInfo::KAC_KICK_PLAYER_STRING_ID[34]     = "$ONLINE_PLAYER_OPTION_KICK_PLAYER";
     const char OnlineGameRoomPlayerInfo::KAC_VIEW_EVENT_MENU_ITEM_STRING_ID[36]   = "$ONLINE_LOBBY_OPTION_CHANGE_OPTIONS";
-    // KAC_ASK_TO_LAUNCH_STRING_ID (cpp:225) / KAC_CHALLENGE_TOGGLE_TITLE_STRING_ID
-    // (cpp:231) stay declaration-only: neither is consumed by this TU's 50 functions
-    // and their rodata values were not dumped -- the foreign inlines that read them
-    // define them when they land.
+    // KAC_ASK_TO_LAUNCH_STRING_ID stays declaration-only: nothing in this TU
+    // reads it.
+    // The player-count toggle's title (ShowChallengesOptions passes it to SetupMenuToggle).
+    const char OnlineGameRoomPlayerInfo::KAC_CHALLENGE_TOGGLE_TITLE_STRING_ID[26] = "$ONLINE_CHALLENGE_PLAYERS";
+
+    // Game-mode string ids for the launch overlay's mode parameter, indexed by the game
+    // mode (HandleLaunchingEvent). Eighteen slots; only the online modes carry a string,
+    // the offline modes and the free-burn lobby / showtime slots are null in the image.
+    const char* const OnlineGameRoomPlayerInfo::KPAC_MODE_STRINGS[18] =
+    {
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        "ONLINE_GAME_OPTION_MODE_RACE",
+        "ONLINE_GAME_OPTION_MODE_ROAD_RAGE",
+        "ONLINE_GAME_OPTION_MODE_STUNT",
+        "ONLINE_GAME_OPTION_MODE_BURNING_HOME_RUN",
+        "ONLINE_GAME_OPTION_MODE_STUNT_FREE_FOR_ALL",
+        0,
+        0,
+        "ONLINE_GAME_OPTION_MODE_STUNT_COOP",
+    };
     // DWARF cpp:312 (18 chars incl NUL) -- the help-item accept prompt component name
     // the ShowSettingsScreen ctor-call passes ("HelpItemAccept_mc").
     const char OnlineGameRoomPlayerInfo::KAC_HELPITEM_ACCEPT[18]           = "HelpItemAccept_mc";

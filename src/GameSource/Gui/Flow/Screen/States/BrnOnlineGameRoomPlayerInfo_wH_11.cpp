@@ -51,6 +51,7 @@
 #include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h"                // FreeburnChallengeManager::IsRunning
 #include "GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h"           // BrnGui::GuiEventNetworkGameParams
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                    // GameStateModuleIO::IsOnlineFreeBurnLobby
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"             // [netui] witness lines (LAN / harness only)
 
 namespace BrnGui
 {
@@ -337,6 +338,8 @@ namespace BrnGui
         mpStateInterface->GetOutputEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
             static_cast<s32>(sizeof(GuiOverlayRequestWire)));   // X360 record size 304
+
+        BrnNetHarnessPC::WitnessTag("netui", "overlay", "show %s", lpacOverlayId);
     }
 
     // ---- HandleLaunchQuestion @0x82498038 -----------------------------------------

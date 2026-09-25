@@ -372,14 +372,15 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
 
     if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
     {
-        // [!] ONLINE ARM DEFERRED (hazards H7). Console:
-        //   BurnoutSkillzManager::PreWorldUpdate(this+3136, lpPreWorldInputBuffer,
-        //                                        lpActiveRaceCarOutput, lpOutputBuffer, true)
-        // this+3136 is the BurnoutSkillzManager region embedded INSIDE mOnlineFreeBurnLobby
-        // (BrnModeManager.h's member run pins the lobby at +2952 and the skillz region at +3136).
-        // OnlineFreeBurnLobbyMode declares no members at all on host, so there is no such region
-        // to address and no accessor to reach it. The manager's own TU is now mounted and links
-        // clean, so growing the lobby mode's layout is the only remaining step.
+        // Showtime keeps the lobby's skillz manager ticking: the lobby mode's inlined
+        // BurnoutSkillzOnlyPreWorldUpdate runs only the manager's PreWorldUpdate, flagged as
+        // having left the lobby.
+        mOnlineFreeBurnLobby.BurnoutSkillzOnlyPreWorldUpdate(lpOutputBuffer,
+                                                            lpPreWorldInputBuffer,
+                                                            lpGlobalRaceCarOutput,
+                                                            lpActiveRaceCarOutput,
+                                                            lbPaused,
+                                                            &mScoringSystem);
     }
 
     // ---- (7) the intro-just-finished latch -----------------------------------------------------

@@ -39,6 +39,7 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // DirectorIO::SceneQuery{Input,Output}Buffer
 #include "GameSource/Effects/Particles/ParticleModuleBringUp.h"               // BrnParticle::PCBringUpProduceParticleRenderData (DoDispatch's particle-render-data seam)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface + BrnPhysics::Vehicle::RaceCarState (DoDispatch's TempRaceCarStateCache seam)
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h" // BrnNetHarnessPC::InjectGuiEvents (the LAN test harness hook)
 
 // The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- the world-load
 // stand-in below keys its loading-complete report on it.
@@ -4867,6 +4868,8 @@ namespace BrnGame
                 // 93 and reaches the pause spine.
                 if (lbGameStateWorldLegRuns)
                 {
+                    // [PC HARNESS, not console code] scheduled GUI records (BRN_NET_SCRIPT); inert unless set.
+                    BrnNetHarnessPC::InjectGuiEvents(mGuiModule.GetGuiOutQueue());
                     BridgeGuiToGameState(&mGameStateModule, mGuiModule.GetGuiOutQueue());
                 }
 

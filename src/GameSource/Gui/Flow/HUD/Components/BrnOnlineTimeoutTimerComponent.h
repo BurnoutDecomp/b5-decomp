@@ -3,51 +3,62 @@
 // ===================================================================================
 // BrnGui::OnlineTimeoutComponent -- owning header
 //   b5-decomp/src/GameSource/Gui/Flow/HUD/Components/BrnOnlineTimeoutTimerComponent.h
-//   class:BrnGui::OnlineTimeoutComponent
 //
-// The HUD "online timeout" timer component (an icon component wrapping a Flapt timer
-// field). It drives a single apt view-state output through the component's virtual
-// state-setter (vtable slot +0xC) and tracks whether it is currently shown via a flag.
+// The HUD "online timeout" countdown: an icon component ("OnlineEventTimeout_anim") that
+// owns a counting-down timer field ("Timer_mc" / "TimerText_txt"). RaceMainHudState feeds
+// it the GUI 108 time (SetTime, keeping the smallest time posted this frame) and ticks it
+// once a frame (Update): a non-negative time is shown and the icon transitions in, a
+// negative time transitions it out.
 //
-// Derives from BrnGui::FlaptIconComponent (DecFIGS DWARF BrnOnlineTimeoutTimerComponent.h:58).
-// That base hierarchy (FlaptIconComponent -> ... -> CgsGui::GuiComponent) is not recovered
-// here; only the fields the three reconstructed functions touch are needed, so the leading
-// base/member span is modelled as a reserved head and the recovered fields are placed at
-// their X360 offsets for clarity. Member-by-name access (the gate compiles 64-bit, so the
-// reserved-head offsets are illustrative, not byte-exact).
-//
-// Recovered functions (X360 ARTIST):
-//   Show     @ 0x824735F0  -> SetAptViewState("visible");   mbActive = true
-//   Transin  @ 0x82410A18  -> SetAptViewState("transin");   mbActive = true
-//   Transout @ 0x82410A60  -> SetAptViewState("invisible");  mbActive = false
-// Each calls the component's virtual apt-view-state setter (vtable byte offset +0xC ==
-// slot index 3) with the state string, then sets/clears the +0xA5 "active/shown" byte.
+// Class shape and member names from the reference declaration: derives from
+// FlaptIconComponent; mTimerField (the OnlineTimeOutTimerField typedef of
+// FlaptTimerFieldComponent), mfNewTime, mbNewTimeSet, mbActive. Offsets from the console
+// Construct / Update / SetTime stores (timer field +0x20, mfNewTime +0xA0, mbNewTimeSet
+// +0xA4, mbActive +0xA5); the host layout is pointer-widened, members are used by name.
 // ===================================================================================
 
 #include "types.hpp"
+#include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.h"       // FlaptIconComponent (base)
+#include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptTimerFieldComponent.h" // FlaptTimerFieldComponent (by value)
+
+namespace CgsGui { struct StateInterface; }
+namespace BrnFlapt { struct FileRef; }
 
 namespace BrnGui
 {
-    struct OnlineTimeoutComponent
+    struct OnlineTimeoutComponent : public FlaptIconComponent
     {
-        // X360 +0xA5 -- the "currently shown" flag. Show/Transin set it; Transout clears it.
-        // DWARF spells this member `bool mbActive` (BrnOnlineTimeoutTimerComponent.h:111).
+    public:
+        typedef FlaptTimerFieldComponent OnlineTimeOutTimerField;
+
+        void Construct(const char* lacName, CgsGui::StateInterface* lpStateInterface,
+                       const char* lacParentName);
+        virtual void Prepare(const char* lacName, const BrnFlapt::FileRef& lFile,
+                             const char* lacParentName);
+        void SetTime(f32 lfTime);
+        void Update();
+        void Show();
+
         bool IsActive() const { return mbActive; }
 
-        // @ 0x824735F0 -- show: publish the "visible" apt view state, then mark active.
-        void Show();
-        // @ 0x82410A18 -- transition in: publish "transin", then mark active.
+    private:
         void Transin();
-        // @ 0x82410A60 -- transition out: publish "invisible", then clear active.
         void Transout();
 
-        // ----- recovered layout (member-by-name; reserved head carries the unrecovered base) -----
-        // +0x00 : vtable pointer (FlaptIconComponent base). The virtual at byte offset +0xC
-        //         (slot index 3) is the apt-view-state setter `void (*)(this, const char*)`
-        //         the three functions invoke. Modelled as a typed function-pointer table so
-        //         the dispatch can be reproduced (see BrnOnlineTimeoutTimerComponent.cpp).
-        void**  mppVTable;          // +0x00
-        u8      maHeadReserved[0xA5 - sizeof(void*)]; // +0x08..+0xA4 (base + mTimerField/mfNewTime/...)
-        bool    mbActive;           // +0xA5 (the "shown" flag)
+        // The timer field's colour ramp (the console Construct stores the /255 lanes inline).
+        static const u8  KU_SAFERED     = 255;
+        static const u8  KU_SAFEGREEN   = 204;
+        static const u8  KU_SAFEBLUE    = 0;
+        static const u8  KU_DANGERRED   = 153;
+        static const u8  KU_DANGERGREEN = 16;
+        static const u8  KU_DANGERBLUE  = 16;
+        static const f32 KF_SAFE_BOUNDARY_TIME;     // 15.0f
+        static const f32 KF_DANGER_BOUNDARY_TIME;   //  5.0f
+        static const char KAC_TIMER_NAME[9];        // "Timer_mc"
+
+        OnlineTimeOutTimerField mTimerField;   // +0x20
+        f32                     mfNewTime;     // +0xA0
+        bool                    mbNewTimeSet;  // +0xA4
+        bool                    mbActive;      // +0xA5
     };
 }

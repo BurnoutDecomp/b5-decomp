@@ -15,6 +15,8 @@ namespace BrnGui
     {
         virtual void OnEnter();
         virtual void OnLeave();       // @0x82487EA0 (X360/BrnCrashNavEnterOnlineX360.cpp)
+        // Base pump first, then the system sign-in notification while the sign-in page is up.
+        virtual void Update();
         // @0x82488010 -- the Xbox sign-in UI trigger (base pure-virtual slot 10).
         virtual u32 ShowSignInUI();
 

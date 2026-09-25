@@ -14,6 +14,17 @@
 //                 the host sends PLAY (the record) to its members on every change and once a
 //                 second; 'gsta' sends the 'play' event.
 //   KICK / LEAVE / BYE end a membership.
+//   Host handover: when the host leaves ('glea', or the lobby disconnect) it does not end the game
+//                 for everyone; it names the next host in a HANDOVER to every member. A member that
+//                 loses the host without one (its BYE, a transport timeout) applies the same rule to
+//                 the record it holds. The next host is the first remaining player of the record
+//                 (record order is join order), so every member reaches the same answer without a
+//                 vote. It takes the record over (member table from the peer book, HOST changed) and
+//                 publishes it; the others retarget their host peer. The games component and the
+//                 game manager then see an ordinary 'game' event whose HOST changed, as they did when
+//                 the lobby server moved a game to a new host. A host's 'gdel' (the game's own
+//                 leave of a hosted game) hands over the same way while others are in the record,
+//                 and ends the game only when the host is alone.
 // Records travel as the lobby's tagfield game-record text (the text LobbyApiExtractPlayRecord
 // decodes) plus, per player, the PC-only PORT<n> field (the transport port, so members can
 // open game links to each other). All state is this layer's own; single-threaded.
@@ -30,6 +41,7 @@
 #include "platform.h"   // ds_snzprintf
 
 #include "GameShared/GameClasses/System/PC/CgsPcNetIdentity.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog
 
 #include <windows.h>    // GetTickCount
 
@@ -142,7 +154,10 @@ namespace
         if (g_iLogBudget > 0)
         {
             g_iLogBudget -= 1;
-            NetPrintf(("[net] pclan_lobby: %s %d\n", pText, iValue));
+            // Into the game log (NetPrintf only reaches the debugger): the pair cases read it.
+            char strLine[160];
+            ds_snzprintf(strLine, sizeof(strLine), "[net] pclan_lobby: %s %d\n", pText, iValue);
+            CgsDev::Log::WriteToLog(strLine);
         }
     }
 
@@ -202,6 +217,78 @@ namespace
             DirtyAddrToHostAddr(&uXuid, sizeof(uXuid), &Addr);
         }
         return uXuid;
+    }
+
+    // ---- player colour slots ----------------------------------------------------------------
+    // The lobby server gave every player of a game a colour slot 0..7: byte 15 of the player's
+    // USERPARAMS structure (pattern "13sbbblll": car id, team, flags, colour, marked player,
+    // rank, car colour). No game code writes that byte: every writer Prepares it to -1 and
+    // sends it back unchanged, and the HUD, the map icons and the stunt-run team assignment
+    // read it as the player's lobby colour (out of range asserts every frame). The authority
+    // stamps it: a player keeps its slot for as long as it is in the record, a new player
+    // takes the lowest free one.
+    const char* const KS_USERPARAMS_PATTERN = "13sbbblll";
+    const s32         KI_USERPARAMS_SIZE    = 28;
+    const s32         KI_USERPARAMS_COLOUR  = 15;
+    const s32         KI_MAX_COLOURS        = 8;
+
+    s32 _ParamsColour(const char* pParams)
+    {
+        u8 aData[KI_USERPARAMS_SIZE];
+        memset(aData, 0xFF, sizeof(aData));
+        if ((pParams == NULL) || (pParams[0] == 0))
+        {
+            return -1;
+        }
+        TagFieldGetStructure(pParams, aData, sizeof(aData), KS_USERPARAMS_PATTERN);
+        return (s32)(s8)aData[KI_USERPARAMS_COLOUR];
+    }
+
+    void _ParamsSetColour(char* pParams, s32 iParamsLen, s32 iColour)
+    {
+        u8 aData[KI_USERPARAMS_SIZE];
+        char strText[128];
+        if (pParams[0] == 0)
+        {
+            return;
+        }
+        memset(aData, 0, sizeof(aData));
+        TagFieldGetStructure(pParams, aData, sizeof(aData), KS_USERPARAMS_PATTERN);
+        aData[KI_USERPARAMS_COLOUR] = (u8)(s8)iColour;
+        strText[0] = 0;
+        const s32 iLen = TagFieldSetStructure(strText, sizeof(strText), NULL, aData, sizeof(aData),
+                                              KS_USERPARAMS_PATTERN);
+        if ((iLen > 0) && (iLen < iParamsLen))
+        {
+            memcpy(pParams, strText, (size_t)iLen + 1);
+        }
+    }
+
+    // Give player iPlayer of the record a colour slot: iKeep when it is a slot no other player
+    // holds, else the lowest free one.
+    void _HostStampColour(LobbyApiPlayT* pPlay, s32 iPlayer, s32 iKeep)
+    {
+        u32 uUsed = 0;
+        for (s32 iOther = 0; iOther < pPlay->iCount; ++iOther)
+        {
+            const s32 iColour = (iOther == iPlayer) ? -1 : _ParamsColour(pPlay->aOpponents[iOther].strParams);
+            if ((iColour >= 0) && (iColour < KI_MAX_COLOURS))
+            {
+                uUsed |= 1u << iColour;
+            }
+        }
+        s32 iColour = iKeep;
+        if ((iColour < 0) || (iColour >= KI_MAX_COLOURS) || ((uUsed & (1u << iColour)) != 0))
+        {
+            for (iColour = 0; (iColour < KI_MAX_COLOURS) && ((uUsed & (1u << iColour)) != 0); ++iColour)
+            {
+            }
+        }
+        if (iColour < KI_MAX_COLOURS)
+        {
+            _ParamsSetColour(pPlay->aOpponents[iPlayer].strParams,
+                             (s32)sizeof(pPlay->aOpponents[iPlayer].strParams), iColour);
+        }
     }
 
     // The record as lobby tagfield text, plus PORT<n> per player (0 when unknown).
@@ -481,7 +568,9 @@ namespace
             LobbyApiPlayerT* pPlayer = &g_Lobby.Play.aOpponents[iTarget];
             if ((pField = TagFieldFind(pRequest, "USERPARAMS")) != NULL)
             {
+                const s32 iColour = _ParamsColour(pPlayer->strParams);
                 TagFieldGetString(pField, pPlayer->strParams, sizeof(pPlayer->strParams), "");
+                _HostStampColour(&g_Lobby.Play, iTarget, iColour);
             }
             if ((pField = TagFieldFind(pRequest, "USERFLAGS")) != NULL)
             {
@@ -540,6 +629,108 @@ namespace
         _ClearGame();
         LobbyApiPcPostEvent(g_Lobby.pLobbyApi, LOBBYAPI_CBTYPE_EVNT, KI_EVENT_KICK, 0, strReason);
         LobbyApiPcPostEvent(g_Lobby.pLobbyApi, LOBBYAPI_CBTYPE_EVNT, KI_EVENT_USER, 0, "");
+    }
+
+    // The next host: the named one when it is still in the record, else the first remaining player.
+    u32 _PickSuccessor(u32 uNamed)
+    {
+        if ((uNamed != 0) && (_FindPlayerByIdent(uNamed) >= 0))
+        {
+            return uNamed;
+        }
+        return (g_Lobby.Play.iCount > 0) ? (u32)g_Lobby.Play.aOpponents[0].iIdent : 0;
+    }
+
+    // Member: the host uOldHost is gone (HANDOVER, BYE or timeout). uNamed is the successor the
+    // leaving host named, 0 when it could not name one.
+    void _MemberHostGone(u32 uOldHost, u32 uNamed, s32 iReasonIfOver)
+    {
+        const s32 iOld = _FindPlayerByIdent(uOldHost);
+        if (iOld >= 0)
+        {
+            for (s32 iMove = iOld; iMove < g_Lobby.Play.iCount - 1; ++iMove)
+            {
+                g_Lobby.Play.aOpponents[iMove] = g_Lobby.Play.aOpponents[iMove + 1];
+            }
+            g_Lobby.Play.iCount -= 1;
+            memset(&g_Lobby.Play.aOpponents[g_Lobby.Play.iCount], 0, sizeof(LobbyApiPlayerT));
+        }
+        const u32 uSelf = CgsPcNetIdentityLobbyIdent();
+        const u32 uNext = _PickSuccessor(uNamed);
+        if ((uNext == 0) || (_FindPlayerByIdent(uSelf) < 0))
+        {
+            _Log("host gone, no successor; game over", (s32)uOldHost);
+            _MemberDropped(iReasonIfOver);
+            return;
+        }
+        const s32 iNext = _FindPlayerByIdent(uNext);
+        memcpy(g_Lobby.Play.strHost, g_Lobby.Play.aOpponents[iNext].strPers, sizeof(g_Lobby.Play.strHost));
+        g_Lobby.strLastText[0] = 0;
+
+        if (uNext == uSelf)
+        {
+            // take the record over: every other player is a member we now serve
+            g_Lobby.bHost      = true;
+            g_Lobby.uHostIdent = uSelf;
+            memset(&g_Lobby.HostPeer, 0, sizeof(g_Lobby.HostPeer));
+            memset(g_Lobby.aMembers, 0, sizeof(g_Lobby.aMembers));
+            s32 iMember = 0;
+            for (s32 iPlayer = 0; iPlayer < g_Lobby.Play.iCount; ++iPlayer)
+            {
+                const LobbyApiPlayerT* pPlayer = &g_Lobby.Play.aOpponents[iPlayer];
+                PcLanPeerT Peer;
+                if (((u32)pPlayer->iIdent == uSelf) || !PcLanPeerByIdent((u32)pPlayer->iIdent, &Peer))
+                {
+                    continue;
+                }
+                g_Lobby.aMembers[iMember].uIdent = (u32)pPlayer->iIdent;
+                g_Lobby.aMembers[iMember].uXuid  = _XuidOf(pPlayer->strMachineAddr);
+                g_Lobby.aMembers[iMember].Peer   = Peer;
+                iMember += 1;
+            }
+            _Log("host handover: took over game", (s32)g_Lobby.uGameIdent);
+            _HostPublish(KI_EVENT_GAME, true);
+            return;
+        }
+
+        PcLanPeerT NextPeer;
+        if (!PcLanPeerByIdent(uNext, &NextPeer))
+        {
+            _Log("host handover: next host has no address; game over", (s32)uNext);
+            _MemberDropped(iReasonIfOver);
+            return;
+        }
+        g_Lobby.uHostIdent = uNext;
+        g_Lobby.HostPeer   = NextPeer;
+        _Log("host handover: new host", (s32)uNext);
+
+        static char strText[KI_TEXT_LEN];
+        _FormatPlay(&g_Lobby.Play, NULL, strText, sizeof(strText));
+        LobbyApiPcPostEvent(g_Lobby.pLobbyApi, LOBBYAPI_CBTYPE_EVNT, KI_EVENT_GAME, 0, strText);
+    }
+
+    // Host: leave without ending the game -- name the next host to every member.
+    void _HostHandOver()
+    {
+        const u32 uSelf = CgsPcNetIdentityLobbyIdent();
+        u32 uNext = 0;
+        for (s32 iPlayer = 0; (iPlayer < g_Lobby.Play.iCount) && (uNext == 0); ++iPlayer)
+        {
+            if ((u32)g_Lobby.Play.aOpponents[iPlayer].iIdent != uSelf)
+            {
+                uNext = (u32)g_Lobby.Play.aOpponents[iPlayer].iIdent;
+            }
+        }
+        u8 aBody[4];
+        _Put32(aBody, uNext);
+        for (s32 iMember = 0; iMember < KI_MAX_PLAYERS; ++iMember)
+        {
+            if (g_Lobby.aMembers[iMember].uIdent != 0)
+            {
+                PcLanSendControl(&g_Lobby.aMembers[iMember].Peer, PCLAN_HANDOVER, g_Lobby.uGameIdent, aBody, 4);
+            }
+        }
+        _Log("host handover: leaving, next host", (s32)uNext);
     }
 
     void _SendJoin(const FoundT* pFound)
@@ -667,6 +858,7 @@ namespace
                                   sizeof(pPlayer->strParams), "");
                 pPlayer->uFlags = (u32)TagFieldGetNumber(TagFieldFind(strRequest, "USERFLAGS"), 0);
                 g_Lobby.Play.iCount += 1;
+                _HostStampColour(&g_Lobby.Play, g_Lobby.Play.iCount - 1, -1);
 
                 for (s32 iMember = 0; iMember < KI_MAX_PLAYERS; ++iMember)
                 {
@@ -789,6 +981,18 @@ namespace
         _MemberDropped(iReason);
     }
 
+    void _OnHandover(void* /*pRef*/, const PcLanPeerT* /*pFrom*/, const PcLanHeaderT* pHeader, const uint8_t* pBody)
+    {
+        if (!g_Lobby.bInGame || g_Lobby.bHost || (pHeader->uGameIdent != g_Lobby.uGameIdent) ||
+            (pHeader->uSenderIdent != g_Lobby.uHostIdent))
+        {
+            return;
+        }
+        const u32 uNamed = (pHeader->uLen >= 4) ? _Get32(pBody) : 0;
+        _Log("host left, named next host", (s32)uNamed);
+        _MemberHostGone(pHeader->uSenderIdent, uNamed, KI_KICK_NOGAME);
+    }
+
     void _OnLeave(void* /*pRef*/, const PcLanPeerT* /*pFrom*/, const PcLanHeaderT* pHeader, const uint8_t* /*pBody*/)
     {
         if (!g_Lobby.bInGame || !g_Lobby.bHost || (pHeader->uGameIdent != g_Lobby.uGameIdent))
@@ -816,7 +1020,7 @@ namespace
         else if (pHeader->uSenderIdent == g_Lobby.uHostIdent)
         {
             _Log("host gone", (s32)pHeader->uSenderIdent);
-            _MemberDropped(KI_KICK_LOST_CONNECTION);
+            _MemberHostGone(pHeader->uSenderIdent, 0, KI_KICK_LOST_CONNECTION);
         }
     }
 
@@ -830,6 +1034,7 @@ namespace
         PcLanRegister(PCLAN_LOBBYREQ, bOn ? &_OnLobbyReq : NULL, pLobbyApi);
         PcLanRegister(PCLAN_KICK,     bOn ? &_OnKick     : NULL, pLobbyApi);
         PcLanRegister(PCLAN_LEAVE,    bOn ? &_OnLeave    : NULL, pLobbyApi);
+        PcLanRegister(PCLAN_HANDOVER, bOn ? &_OnHandover : NULL, pLobbyApi);
         // departures come through NetConn's fan-out (pclan has one handler per type)
         if (bOn)
         {
@@ -888,6 +1093,7 @@ namespace
         pPlay->iPrivSlots = TagFieldGetNumber(TagFieldFind(pRequest, "PRIV"), 0);
         pPlay->iCount     = 1;
         _FillSelfPlayer(&pPlay->aOpponents[0], pRequest);
+        _HostStampColour(pPlay, 0, -1);
         TagFieldGetString(TagFieldFind(pRequest, "PASS"), g_Lobby.strPassword, sizeof(g_Lobby.strPassword), "");
 
         g_Lobby.bInGame    = true;
@@ -956,7 +1162,7 @@ namespace
         LobbyApiPcComplete(g_Lobby.pLobbyApi, iId, 0, "");
     }
 
-    void _RequestLeave(s32 iId)
+    void _RequestLeave(s32 iId, s32 iKind)
     {
         LobbyApiRefT* pLobbyApi = g_Lobby.pLobbyApi;
         if (!g_Lobby.bInGame)
@@ -964,9 +1170,18 @@ namespace
             LobbyApiPcComplete(pLobbyApi, iId, KI_ERR_NOT_IN_GAME, "");
             return;
         }
-        if (g_Lobby.bHost)
+        if (g_Lobby.bHost && ((iKind == KI_REQ_LEAVE) || (g_Lobby.Play.iCount > 1)))
         {
-            // the host leaving ends the game for everyone
+            // The host leaving hands the game to the next player. The game's own leave of a
+            // hosted game is always 'gdel' (it never enables the game manager's 'mgrt'
+            // host-migration mode that turns it into 'glea'); while other players are in the
+            // record this authority hands the game over for it as well, and ends it only
+            // when the host is alone.
+            _HostHandOver();
+        }
+        else if (g_Lobby.bHost)
+        {
+            // the host deleting the game ends it for everyone
             u8 aBody[4];
             _Put32(aBody, (u32)KI_KICK_NOGAME);
             for (s32 iMember = 0; iMember < KI_MAX_PLAYERS; ++iMember)
@@ -1050,7 +1265,7 @@ bool PcLanLobbyRequest(LobbyApiRefT* pLobbyApi, s32 iId, s32 iKind, const char* 
     }
     if ((iKind == KI_REQ_LEAVE) || (iKind == KI_REQ_DELETE))
     {
-        _RequestLeave(iId);
+        _RequestLeave(iId, iKind);
         return true;
     }
     if ((iKind == KI_REQ_SET) || (iKind == KI_REQ_START) || (iKind == KI_REQ_RANK))
@@ -1168,17 +1383,9 @@ void PcLanLobbyLeave(LobbyApiRefT* pLobbyApi)
     {
         return;
     }
-    u8 aBody[4];
-    _Put32(aBody, (u32)KI_KICK_NOGAME);
     if (g_Lobby.bHost)
     {
-        for (s32 iMember = 0; iMember < KI_MAX_PLAYERS; ++iMember)
-        {
-            if (g_Lobby.aMembers[iMember].uIdent != 0)
-            {
-                PcLanSendControl(&g_Lobby.aMembers[iMember].Peer, PCLAN_KICK, g_Lobby.uGameIdent, aBody, 4);
-            }
-        }
+        _HostHandOver();
     }
     else
     {

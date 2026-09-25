@@ -25,6 +25,7 @@
 #include "GameSource/Gui/SatNav/BrnMapIconManager.h"   // [H3b] BrnGui::MapIconManager (by-value member)
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"       // BrnGui::GuiTracker (module-owned; X360 +1131872)
 #include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h" // BrnGui::FreeburnChallengeManager (module-owned; X360 +309584)
+#include "GameSource/Gui/BrnGuiBurnoutSkillsManager.h"         // BrnGui::BurnoutSkillsManager (module-owned; GuiCache::mpSkillsManager)
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"                    // BrnGui::HudMessageDirector (module-owned; X360 +639264)
 #include "GameSource/Gui/BrnGuiHudMessageAnalyzer.h"                    // BrnGui::HudMessageAnalyzer (module-owned; X360 +660992)
 #include "GameSource/Gui/BrnGuiWorldDataController.h"                   // BrnGui::WorldDataController (module-owned; X360 +307836)
@@ -387,6 +388,10 @@ namespace BrnGui
         // in-event HUD frame that touched a freeburn-challenge arm of RaceMainHudState fired
         // the "mpChallengeManager" assert (BrnGuiCache.h:2390) and then read off a null
         // pointer -- the user-blocking dialog on starting a stunt race.
+        // The Burnout Skillz page tracker GuiCache::mpSkillsManager points at (the lobby
+        // position table and the bar values read it); constructed, bound and ticked beside the
+        // challenge manager.
+        BurnoutSkillsManager     mBurnoutSkillsManager;
         FreeburnChallengeManager mFreeburnChallengeManager;   // X360 +309584
         BrnScreenFlow     mScreenFlow;      // X360 mScreenFlow (SCREEN = E_GUIFLOW_SCREEN, the front-end)
         BrnHudFlow        mHudFlow;         // X360 +638904-adjacent flow set (HUD = E_GUIFLOW_HUD)

@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsID / CgsIDCompress
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
+#include "GameSource/Gui/SatNav/BrnGuiTracker.h"                           // GuiTracker::ClearTracker
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiOverlayRequest / GuiOverlayCompleteEvent / GuiEventActivateCrashNav
 // BrnGuiDemangledEventTypes.h -- the canonical home of BrnGui::GuiEventNetworkPlayerImage
 // (id 258) -- is not included here; the 258 wire record is built locally below, the same
@@ -237,35 +238,6 @@ namespace BrnGui
         //      Each helper names the X360 member + offset so the GuiCache TU can absorb
         //      it as a real accessor. ---------------------------------------------------
 
-        // FLAG PC-platform leaf: GuiCache::meLastDisconnectedError (DWARF h:1657; X360
-        // +0x4B40, read then cleared by InGame::Update's cache latch) has no committed
-        // accessor; the PC network module is unreconstructed, so no disconnect is pending.
-        s32 CacheTakeLastDisconnectedError(GuiCache* /*lpCache*/) { return 0; }
-
-        // FLAG PC-platform leaf: GuiCache::mbIsOnline (DWARF h:1664; X360 +0x4B4C) has no
-        // committed accessor; the PC boot is offline.
-        bool CacheIsOnline(const GuiCache* /*lpCache*/) { return false; }
-
-        // FLAG PC-platform leaf: GuiCache::mbIsPreparingForInvite (DWARF h:1665; X360
-        // +0x4B4D) boundary read; no invites on PC.
-        bool CacheIsPreparingForInvite(const GuiCache* /*lpCache*/) { return false; }
-
-        // FLAG PC-platform leaf: GuiCache::mbIsStartingGameDueToPlayerJoin (DWARF h:1666;
-        // X360 +0x4B4E) boundary read; no online joins on PC.
-        bool CacheIsStartingGameDueToPlayerJoin(const GuiCache* /*lpCache*/) { return false; }
-
-        // FLAG PC-platform leaf: GuiCache::mbIsPerformInviteReceived (DWARF h:1667; X360
-        // +0x4B4F) boundary read; no invites on PC.
-        bool CacheIsPerformInviteReceived(const GuiCache* /*lpCache*/) { return false; }
-
-        // FLAG PC-platform leaf: GuiCache::mbDoJoinOnlineRankedGame (DWARF h:1669; X360
-        // +0x4B51) boundary write; no-op until the GuiCache TU exposes it.
-        void CacheSetDoJoinOnlineRankedGame(GuiCache* /*lpCache*/, bool /*lbRanked*/) {}
-
-        // FLAG PC-platform leaf: GuiCache::mbDoJoinOnlineFreeburnGame (DWARF h:1670; X360
-        // +0x4B52) boundary write; no-op until the GuiCache TU exposes it.
-        void CacheSetDoJoinOnlineFreeburnGame(GuiCache* /*lpCache*/, bool /*lbFreeburn*/) {}
-
         // ARTIST SelectOnlineMenuOption 0x824D0C9C: restore the return-to-EasyDrive latch.
         // The existing cache accessor has the earlier consumer name OnlineStartPending.
         void CacheSetEnteredOnlineViaEasyDrive(GuiCache* lpCache) { lpCache->SetOnlineStartPending(true); }
@@ -282,10 +254,6 @@ namespace BrnGui
         bool CacheIsInJunkyard(const GuiCache* lpCache)    { return lpCache->IsInJunkyard(); }
         bool CacheIsMugshotActive(const GuiCache* lpCache) { return lpCache->IsMugshotActive(); }
 
-        // FLAG PC-platform leaf: GuiCache::mbCarUnlockPending (DWARF h:1689; X360 +0x4B74)
-        // boundary read; no car-unlock sequence pending on the PC boot.
-        bool CacheIsCarUnlockPending(const GuiCache* /*lpCache*/) { return false; }
-
         // FLAG PC-platform leaf: GuiCache::mCurrentLandmarkIndex (DWARF h:1709; X360
         // s16 +0x5284) has no committed accessor; PC returns the "no event start"
         // sentinel so the event map stays gated until the cache member lands.
@@ -297,28 +265,9 @@ namespace BrnGui
         bool CacheFarPauseGateA(const GuiCache* lpCache) { return lpCache->IsEventPreparedForModeStart(); }
         bool CacheFarPauseGateB(const GuiCache* lpCache) { return lpCache->IsPreRaceFlyByActive(); }
 
-        // FLAG PC-platform leaf: unnamed GuiCache byte @+0xA9E0 the X360
-        // SelectOnlineMenuOption sets to 1 with the join bookkeeping; no-op boundary.
-        void CacheMarkOnlineMenuActionPending(GuiCache* /*lpCache*/) {}
-
         // +0x13B90 == DWARF mbIsLoadingScreenVisible: it suppresses both HandleControllerInput
         // and PauseAllowed while the loading screen is up (see the block above CacheIsInJunkyard).
         bool CacheIsInputSuppressed(const GuiCache* lpCache) { return lpCache->IsLoadingScreenVisible(); }
-
-        // GuiCache::ClearExpectedAptComponentList (X360 @0x824EE528, called with flow
-        // 0) is not declared on the committed GuiCache (same as BrnBootProfile.cpp's).
-        // FLAG PC-platform leaf: no-op boundary until the GuiCache TU exposes it.
-        void CacheClearExpectedAptComponentList(GuiCache* /*lpCache*/) {}
-
-        // GuiCache's GuiTracker* (X360 +0x4054) and GuiTracker::ClearTracker
-        // (@0x824FA0A8) have no committed PC surface. The X360 asserts the tracker
-        // pointer first ("mpGuiCache->GetGuiTracker()"), preserved by the callers.
-        // FLAG PC-platform leaf: no-op boundary until the GuiTracker surface lands.
-        void TrackerClearTracker(GuiCache* /*lpCache*/) {}
-
-        // FLAG PC-platform leaf: the tracker-pointer existence check backing the
-        // "mpGuiCache->GetGuiTracker()" asserts (X360 lwz +0x4054 != 0).
-        bool CacheHasGuiTracker(const GuiCache* lpCache) { return lpCache != 0; }
 
         // The X360 Update reads the profile gate byte at +118033 (= 0x1CD11) each frame
         // and, when it is set, fires "TO_INTRO" + command 476 -- the first-boot entry to
@@ -575,7 +524,7 @@ namespace BrnGui
             return;
         }
 
-        if (!CacheIsOnline(mpGuiCache) &&
+        if (!mpGuiCache->IsOnline() &&
             mpGuiCache->GetGameMode() != BrnGameState::GameStateModuleIO::E_MODE_NONE)
         {
             PostOverlayRequest(mpStateInterface, "CNOnlStrtQn");
@@ -644,7 +593,7 @@ namespace BrnGui
         if (!PauseAllowed())
             return;
 
-        if (CacheIsOnline(mpGuiCache))
+        if (mpGuiCache->IsOnline())
         {
             if (!CacheFarPauseGateA(mpGuiCache))
                 SendStateEvent("ON_PAUSE");
@@ -763,22 +712,22 @@ namespace BrnGui
         case E_MAIN_MENU_OPTIONS_FREEBURN_PLAY_NOW:
         case E_MAIN_MENU_OPTIONS_FREEBURN_CUSTOM_MATCH:
         case E_MAIN_MENU_OPTIONS_FREEBURN_CREATE:
-            CacheSetDoJoinOnlineRankedGame(mpGuiCache, false);
-            CacheSetDoJoinOnlineFreeburnGame(mpGuiCache, true);
+            mpGuiCache->SetDoJoinOnlineRankedGame(false);
+            mpGuiCache->SetDoJoinOnlineFreeburnGame(true);
             break;
 
         case E_MAIN_MENU_OPTIONS_UNRANKED_PLAY_NOW:
         case E_MAIN_MENU_OPTIONS_UNRANKED_CUSTOM_MATCH:
         case E_MAIN_MENU_OPTIONS_UNRANKED_CREATE:
-            CacheSetDoJoinOnlineRankedGame(mpGuiCache, false);
-            CacheSetDoJoinOnlineFreeburnGame(mpGuiCache, false);
+            mpGuiCache->SetDoJoinOnlineRankedGame(false);
+            mpGuiCache->SetDoJoinOnlineFreeburnGame(false);
             break;
 
         case E_MAIN_MENU_OPTIONS_RANKED_PLAY_NOW:
         case E_MAIN_MENU_OPTIONS_RANKED_CUSTOM_MATCH:
         case E_MAIN_MENU_OPTIONS_RANKED_CREATE:
-            CacheSetDoJoinOnlineRankedGame(mpGuiCache, true);
-            CacheSetDoJoinOnlineFreeburnGame(mpGuiCache, false);
+            mpGuiCache->SetDoJoinOnlineRankedGame(true);
+            mpGuiCache->SetDoJoinOnlineFreeburnGame(false);
             break;
 
         default:   // gallery / challenges / scoreboards / news: no join bookkeeping
@@ -788,7 +737,7 @@ namespace BrnGui
 
         if (lbJoinRequest)
         {
-            CacheMarkOnlineMenuActionPending(mpGuiCache);
+            mpGuiCache->SetResetOnlineGameOptions(true);
             PostCommand16<268>(mpStateInterface, KI_CHANNEL_GUI_OUT);
         }
 
@@ -822,12 +771,13 @@ namespace BrnGui
                 CGS_ASSERT(lpCacheEvent->mpGuiCache != 0, "Invalid gui cached");
                 mpGuiCache = lpCacheEvent->mpGuiCache;
 
-                const s32 liDisconnectError = CacheTakeLastDisconnectedError(mpGuiCache);
+                const s32 liDisconnectError = mpGuiCache->GetDoDisconnectPopupError();   // lwz +0x4B40
                 if (liDisconnectError != 0)
                 {
                     PostOverlayRequest(mpStateInterface,
                                        liDisconnectError == KI_SERVER_ERROR_LOBBY_DISCONNECT_D
                                            ? "CNLobbyDiscD" : "CNLobbyDisc");
+                    mpGuiCache->SetDoDisconnectPopup(0);                                 // stw 0, +0x4B40
                 }
             }
         }
@@ -847,15 +797,15 @@ namespace BrnGui
                 break;
 
             case KI_EVENT_CONTROLLER:
-                if (!CacheIsPreparingForInvite(mpGuiCache) &&
-                    !CacheIsPerformInviteReceived(mpGuiCache))
+                if (!mpGuiCache->IsPreparingForInvite() &&
+                    !mpGuiCache->IsPerformInviteReceived())
                 {
                     HandleControllerInput(lpEvent);
                 }
                 break;
 
             case KI_EVENT_PAD_DISCONNECTED:
-                if (!CacheIsOnline(mpGuiCache) && PauseAllowed())
+                if (!mpGuiCache->IsOnline() && PauseAllowed())
                 {
                     ++miNumberOfIgnoredDisconnects;
                     if (miNumberOfIgnoredDisconnects > KI_NUMBER_OF_DISCONNECTS_TO_IGNORE)
@@ -869,14 +819,14 @@ namespace BrnGui
             case 44:   // network in-game failed (the DWARF HandleInGameFailedEvent body,
                        // inlined here by the X360 build)
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:568
-                if (CacheIsOnline(mpGuiCache))
+                if (mpGuiCache->IsOnline())
                     PostOverlayRequest(mpStateInterface, "OnLostConn");
                 break;
 
             case 50:   // invite join go-ahead
-                if (CacheIsPerformInviteReceived(mpGuiCache))
+                if (mpGuiCache->IsPerformInviteReceived())
                 {
-                    CacheClearExpectedAptComponentList(mpGuiCache);
+                    mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
                     SendStateEvent("ENTER_GAME");
                 }
                 break;
@@ -895,7 +845,7 @@ namespace BrnGui
                 if (mpGuiCache->GetInEventColouringGate())
                     break;
                 ShutDownHudComponents();
-                SendStateEvent(CacheIsCarUnlockPending(mpGuiCache) ? "TO_CUNLOCK"
+                SendStateEvent(mpGuiCache->IsJunkyardCarUnlockPending() ? "TO_CUNLOCK"
                                                                    : "TO_CSELECT");
                 break;
 
@@ -905,7 +855,7 @@ namespace BrnGui
                     *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpEvent) + 12);
                 if ((liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
                      liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME) &&
-                    !CacheIsStartingGameDueToPlayerJoin(mpGuiCache))
+                    !mpGuiCache->IsStartingGameDueToPlayerJoin())
                 {
                     SendStateEvent("ENTER_GAME");
                 }
@@ -973,8 +923,8 @@ namespace BrnGui
             case 291:  // offline event finished
             {
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                        // cpp:461
-                CGS_ASSERT(CacheHasGuiTracker(mpGuiCache), "mpGuiCache->GetGuiTracker()");   // cpp:462
-                TrackerClearTracker(mpGuiCache);
+                CGS_ASSERT(mpGuiCache->GetGuiTracker() != 0, "mpGuiCache->GetGuiTracker()");   // cpp:462
+                mpGuiCache->GetGuiTracker()->ClearTracker();
                 const s32 liGameModeType = mpGuiCache->GetGameMode();
                 const bool lbShowtime =
                     liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
@@ -994,8 +944,8 @@ namespace BrnGui
             case 320:  // online event finished
             {
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                        // cpp:443
-                CGS_ASSERT(CacheHasGuiTracker(mpGuiCache), "mpGuiCache->GetGuiTracker()");   // cpp:444
-                TrackerClearTracker(mpGuiCache);
+                CGS_ASSERT(mpGuiCache->GetGuiTracker() != 0, "mpGuiCache->GetGuiTracker()");   // cpp:444
+                mpGuiCache->GetGuiTracker()->ClearTracker();
                 const s32 liGameModeType = mpGuiCache->GetGameMode();
                 const bool lbShowtime =
                     liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
@@ -1007,7 +957,7 @@ namespace BrnGui
             case 322:  // entering-online state (payload byte @+9 == proceed)
                 // The X360 streams the message through StrStream (cpp:418); plain form kept.
                 CGS_ASSERT(mpGuiCache != 0, "INVALID MPGUICACHE IN INGAME::UPDATE");
-                if (CacheIsOnline(mpGuiCache) &&
+                if (mpGuiCache->IsOnline() &&
                     reinterpret_cast<const u8*>(lpEvent)[9] != 0)
                 {
                     SendStateEvent("TO_GAME_ROOM");
@@ -1020,7 +970,7 @@ namespace BrnGui
 
             case 373:  // rival event finished
                 ShutDownHudComponents();
-                TrackerClearTracker(mpGuiCache);
+                mpGuiCache->GetGuiTracker()->ClearTracker();
                 SendStateEvent("TO_RVL_POST");
                 break;
 
@@ -1053,7 +1003,7 @@ namespace BrnGui
                 if (mfTimeUntilTrophyCarUnlockSeq <= 0.0f)
                 {
                     ShutDownHudComponents();
-                    TrackerClearTracker(mpGuiCache);
+                    mpGuiCache->GetGuiTracker()->ClearTracker();
                     SendStateEvent("TO_TRPHY_UNL");
                 }
             }
@@ -1070,7 +1020,7 @@ namespace BrnGui
                 if (mfTimeUntilCompletionSeq <= 0.0f)
                 {
                     ShutDownHudComponents();
-                    TrackerClearTracker(mpGuiCache);
+                    mpGuiCache->GetGuiTracker()->ClearTracker();
                     SendStateEvent("TO_COMPLETED");
                 }
             }

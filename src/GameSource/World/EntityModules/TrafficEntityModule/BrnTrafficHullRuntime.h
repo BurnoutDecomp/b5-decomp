@@ -108,6 +108,10 @@ namespace BrnTraffic
 
         static void _AssertLayout();   // never called; body in the .cpp
 
+        // Logger::HashState copies the section-span occupancy table whole (a direct member
+        // load, no mbPrepared assert).
+        friend struct Logger;
+
     private:
         f32  mafJunctionStateChangeTimes[KU_MAX_JUNCTIONS_PER_HULL];      // :96   +0x000
         u8   mauJunctionCurrentStates[KU_MAX_JUNCTIONS_PER_HULL];         // :97   +0x040

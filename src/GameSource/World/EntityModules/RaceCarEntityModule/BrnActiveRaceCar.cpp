@@ -90,11 +90,11 @@ const f32 ActiveRaceCar::KF_NO_START_LINE_BOOST_CHANGE = -1.0f;
 //                                        -> UpdatePhysicsState -> CalcBodyTransform
 //
 // ⚠️ SCOPE. Construct/Prepare/Attach each write a handful of fields whose TYPES this
-// header still keeps opaque (mAddRemoveNetworkCarForCollisionQueue, the two
-// VolumeInstanceIds, mCrashData, mPrevTransforms, mDeformedBBox). Those writes are
-// reproduced where the storage is a plain byte clear the console itself does with
-// stores (mCrashData, mPrevTransforms' three ring-buffer counters) and FLAGGED where
-// they need an absent type (the VolumeInstanceId pair). Nothing is paraphrased.
+// header still keeps opaque (the two VolumeInstanceIds, mCrashData, mPrevTransforms,
+// mDeformedBBox). Those writes are reproduced where the storage is a plain byte clear the
+// console itself does with stores (mCrashData, mPrevTransforms' three ring-buffer counters)
+// and FLAGGED where they need an absent type (the VolumeInstanceId pair). Nothing is
+// paraphrased.
 // ============================================================================
 
 
@@ -129,12 +129,6 @@ namespace
 // Construct does NOT call Prepare (Prepare's only two xrefs are AttachActiveRaceCar and
 // RaceCarEntityModule::Prepare); the module's Prepare stage 3 sweeps all eight slots
 // right after Construct, which is where the rest of the reset comes from.
-//
-// [FLAG PC bring-up] one console call is not reproduced and not paraphrased: the
-// mHandlingBodyVolumeId / mBaseDeformationID pair and
-// mAddRemoveNetworkCarForCollisionQueue::Construct, all of which need types this header
-// still keeps opaque (CgsSceneManager::VolumeInstanceId and
-// CgsModule::EventQueue<VehicleAddedForCollisionEvent,8>).
 // ----------------------------------------------------------------------------
 void ActiveRaceCar::Construct(EActiveRaceCarIndex leActiveRaceCarIndex)
 {
@@ -213,7 +207,7 @@ void ActiveRaceCar::Construct(EActiveRaceCarIndex leActiveRaceCarIndex)
     // hiding it behind an s32 member.
     meBaseDeformationType        = static_cast<BrnPhysics::Deformation::DeformationResetType>( -1 );
 
-    // [FLAG PC bring-up] mAddRemoveNetworkCarForCollisionQueue.Construct() -- see banner.
+    mAddRemoveNetworkCarForCollisionQueue.Construct();           // +0x000, called on `this`
 
     mCurrentCullingGroup         = 0xFFFF;                        // 0x7D0
     mRenderParams.Reset();                                        // 0x7E0
@@ -626,26 +620,13 @@ void ActiveRaceCar::RemoveFromScene( CgsSceneManager::SceneManagerIO::InSceneUpd
 //   0x822BF738  InSceneUpdateInterface::RemoveForCollision(id64)   <- the FULL 8-byte handle
 //   0x822BF748  stw 0xFFFF, 0x7D0              mCurrentCullingGroup = 0xFFFF
 //   0x822BF74C  IsAttached()                   assert BrnActiveRaceCar.h:0x441 == :1089
-//   0x822BF77C  lbz 0xA4(mpRaceCar) == 2       the NETWORK-car re-add arm -- see BLOCKED
-//
-// [FLAG BLOCKED] the network-car arm (`mpRaceCar->GetType() == E_RACE_CAR_TYPE_NETWORK`). It
-// fires the console's "Trying to add/remove race car more than <max> times in a frame" tripwire
-// and then posts a {mHandlingBodyVolumeId, mbAdded = false}
-// BrnPhysics::Vehicle::VehicleAddedForCollisionEvent onto THIS OBJECT'S OWN queue --
-// `bl VehicleAddedForCollisionEvent_::AddEvent` with r3 still == this, i.e. the queue at
-// ActiveRaceCar +0x000, which the DWARF names mAddRemoveNetworkCarForCollisionQueue
-// (EventQueue<VehicleAddedForCollisionEvent, 8>; the tripwire's `lwz 8(this)` / `lwz 4(this)`
-// are that queue's miLength / miMaxLength).
-// EXACT MISSING ITEM: that member is still `u8 maPad0000[144]` in this header (144 == the
-// 16-byte queue header + 8 * sizeof(VehicleAddedForCollisionEvent), so it does fit exactly).
-// It is deliberately NOT modelled in this wave: naming it would put a live mpEvents pointer at
-// offset 0 of a class whose only construction path (Construct/Prepare/Attach) never calls
-// EventQueue::Construct on it, which is precisely the "mpEvents != NULL / Reached Max length"
-// pair that cost the drivable wave a day on VehicleInputInterface. The arm is UNREACHABLE on
-// this build (E_RACE_CAR_TYPE_NETWORK requires an online session; the only spawn paths that run
-// are the player and the AI rivals).
-// DELETE-WHEN mAddRemoveNetworkCarForCollisionQueue is named AND ActiveRaceCar::Construct
-// constructs it.
+//   then, if mpRaceCar's type byte (+0xA4) is 2, the NETWORK-car arm:
+//       if (miLength >= miMaxLength) the streamed tripwire
+//           "Trying to add/remove race car more than " << miMaxLength << " times in a frame"
+//       post { mHandlingBodyVolumeId, mbAdded = false } onto this car's own
+//           mAddRemoveNetworkCarForCollisionQueue (the AddEvent runs on `this`)
+// CGS_ASSERT takes a plain literal, so the streamed count is dropped from the message; the
+// predicate is the console's.
 // ----------------------------------------------------------------------------
 void ActiveRaceCar::RemoveFromCollision( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
                                          BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface )
@@ -672,7 +653,17 @@ void ActiveRaceCar::RemoveFromCollision( CgsSceneManager::SceneManagerIO::InScen
 
     CGS_ASSERT(IsAttached(), "IsAttached()");                       // BrnActiveRaceCar.h:1089
 
-    // [FLAG BLOCKED] the E_RACE_CAR_TYPE_NETWORK re-add post -- see the banner.
+    if (mpRaceCar->GetType() == E_RACE_CAR_TYPE_NETWORK)
+    {
+        CGS_ASSERT(mAddRemoveNetworkCarForCollisionQueue.GetLength() <
+                       mAddRemoveNetworkCarForCollisionQueue.GetMaxLength(),
+                   "Trying to add/remove race car more than ");
+
+        BrnPhysics::Vehicle::VehicleAddedForCollisionEvent lEvent;
+        lEvent.mRaceCarVolumeInstanceId = mHandlingBodyVolumeId;
+        lEvent.mbAdded                  = false;
+        mAddRemoveNetworkCarForCollisionQueue.AddEvent(lEvent);
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -2401,7 +2392,9 @@ void ActiveRaceCar::UpdateInAirRotations(f32 lfTimeStep)
 //   0x58 bool                                              <- InputBuffer_PrePhysics::
 //                                                             GetInHardStopCamera()
 //   0x60 ptr                                               <- module + 0x18490
-//   0x68 ptr     (`lwz r23, arg_6C`, asserted non-NULL)    <- lpVehicleOutput
+//   0x68 ptr     (asserted non-NULL on entry)              <- lpVehicleOutput  ✔ USED
+//                (declared OutputBuffer_PreScene::VehicleInputInterface*; handed to
+//                 SendAddedRemovedNetworkCarForCollisionEvents)
 //   0x70 int                                               <- module + 0x18368 (meGameModeType)
 //   f1   f32     -> lfTimeStep      ✔ USED   <- module mfTimeStep      (+0x18398)
 //   f2   f32                                 <- module +0x183A0  (mfSimTime)
@@ -2418,7 +2411,7 @@ void ActiveRaceCar::UpdateInAirRotations(f32 lfTimeStep)
 //   and the mbCrashedIntoWater timer.
 //
 // ---- [FLAG PC bring-up] WHAT THIS SLICE DROPS -- named, not paraphrased --------------------
-//  1. `lpVehicleOutput != NULL` (X360 :260) -- the argument itself is not plumbed here.
+//  1. RESTORED: `lpVehicleOutput != NULL`, asserted on entry.
 //  2-3. RESTORED: touching-world status and the crash drive-away decision/timer,
 //       including route-direction inputs and the 1.5-second game-event-38 publish.
 //  4. RESTORED 2026-09-24 (crash parity G61-D4): the IsOnRaceStartState(0) start-line boost
@@ -2426,7 +2419,8 @@ void ActiveRaceCar::UpdateInAirRotations(f32 lfTimeStep)
 //  5. RaceCar::GetTransform / GetPreviousPosition / GetPosition (0x822F7D44..0x822F7DC8):
 //     the console calls them and DISCARDS all three results (v102/v103/v104 are dead in the
 //     decompilation) -- almost certainly an inlined body Hex-Rays lost. Dropped deliberately.
-//  6. SendAddedRemovedNetworkCarForCollisionEvents (0x822F7E70) -- no definition in this tree.
+//  6. RESTORED: SendAddedRemovedNetworkCarForCollisionEvents, between UpdateInAirRotations
+//     and UpdateIndicators.
 //     (CalculateWheelAngularVelocities landed 2026-09-12, UpdateInAirRotations 2026-09-13 and
 //      UpdateIndicators 2026-09-23 (G60-D2/G61-D5); all three are called below.)
 //  7. the mbIsWaitingForDeferredReset -> RequestPlaceOnTrack countdown (0x822F7E80..0x822F7EB8).
@@ -2443,8 +2437,10 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
                            const Vector2& lrCurrentRouteNode,
                            const Vector2& lrNextRouteNode,
                            RaceCarEntityModuleIO::GameEventQueue* lpGameEvents,
-                           CgsNumeric::Random* lpRandom)
+                           CgsNumeric::Random* lpRandom,
+                           BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleOutput)
 {
+    CGS_ASSERT( lpVehicleOutput != 0, "lpVehicleOutput != NULL" );   // the console's first test
     CGS_ASSERT( IsAttached(), "IsAttached()" );          // BrnActiveRaceCar.h:1418
 
     // 0x822F7964..0x822F797C. Not crashing => the "can I drive away?" check is re-armed and the
@@ -2576,6 +2572,10 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
     // which GetCurrentInAirRotations publishes.
     UpdateInAirRotations( lfTimeStepMultiplier );
 
+    // The console's next call, handed the asserted stack argument. Unconditional; only a NETWORK
+    // car ever has events queued.
+    SendAddedRemovedNetworkCarForCollisionEvents( lpVehicleOutput );
+
     // 0x822F7E74..0x822F7E7C: `mr r3, r31 ; fmr f1, f31 ; bl UpdateIndicators` -- f31 is Update's
     // incoming f1 (`fmr f31, f1` @0x822F78E0), i.e. lfTimeStep, NOT the multiplier the two calls
     // above take. Unconditional, every active car.
@@ -2588,6 +2588,27 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
     }
 }
 
+// ----------------------------------------------------------------------------
+// SendAddedRemovedNetworkCarForCollisionEvents (35 insns). Only caller: Update.
+//
+//   assert lpVehicleInput != NULL
+//   for each event of this car's queue (+0x8 is its miLength): GetEvent(i) -> AddEvent on the
+//       interface's queue at +0x20358 (== RecordNetworkCarAddedOrRemovedForCollision)
+//   then zero this car's miLength (the queue is emptied)
+// ----------------------------------------------------------------------------
+void ActiveRaceCar::SendAddedRemovedNetworkCarForCollisionEvents(
+        BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput )
+{
+    CGS_ASSERT( lpVehicleInput != 0, "lpVehicleInput != NULL" );
+
+    for( s32 liEvent = 0; liEvent < mAddRemoveNetworkCarForCollisionQueue.GetLength(); ++liEvent )
+    {
+        lpVehicleInput->RecordNetworkCarAddedOrRemovedForCollision(
+            mAddRemoveNetworkCarForCollisionQueue.GetEvent( liEvent ) );
+    }
+
+    mAddRemoveNetworkCarForCollisionQueue.Clear();
+}
 
 // -------------------------------------------------------------------------------------------------
 // OnCrash @ 0x822A4D60   (75 insns)   -- crash wave 2026-09-02
@@ -3778,19 +3799,25 @@ void ActiveRaceCar::AddToCollision(
 
     CGS_ASSERT(IsAttached(), "IsAttached()");                            // BrnActiveRaceCar.h:1089
 
-    // [FLAG BLOCKED] the E_RACE_CAR_TYPE_NETWORK re-add post -- the exact mirror of the one
-    // RemoveFromCollision @0x822BF668 already parks, and blocked on the same member:
-    //   0x822D437C  if (mpRaceCar->GetType() == E_RACE_CAR_TYPE_NETWORK)
-    //   0x822D4388      if (miLength >= miMaxLength) assert :0x583 == :1411
-    //                       "Trying to add/remove race car more than <max> times in a frame"
-    //   0x822D43FC      post { mHandlingBodyVolumeId, mbAdded = TRUE } onto THIS OBJECT'S own
-    //                   mAddRemoveNetworkCarForCollisionQueue (r3 == this at the AddEvent).
-    // That member is still `u8 maPad0000[144]` in BrnActiveRaceCar.h and ActiveRaceCar's
-    // construction path never calls EventQueue::Construct on it, so naming it would put a
-    // live mpEvents pointer at offset 0 of an unconstructed queue. The arm is UNREACHABLE on
-    // this build (E_RACE_CAR_TYPE_NETWORK needs an online session). Note the polarity: the
-    // ADD post sets mbAdded TRUE where RemoveFromCollision's sets it FALSE.
-    // DELETE-WHEN mAddRemoveNetworkCarForCollisionQueue is named AND Construct constructs it.
+    // The NETWORK-car post, the mirror of RemoveFromCollision's:
+    //   if (mpRaceCar->GetType() == E_RACE_CAR_TYPE_NETWORK)
+    //       if (miLength >= miMaxLength) the streamed tripwire
+    //           "Trying to add/remove race car more than " << miMaxLength << " times in a frame"
+    //       post { mHandlingBodyVolumeId, mbAdded = TRUE } onto this car's own
+    //           mAddRemoveNetworkCarForCollisionQueue (the AddEvent runs on `this`).
+    // The ADD post sets mbAdded TRUE where RemoveFromCollision's sets it FALSE. CGS_ASSERT takes
+    // a plain literal, so the streamed count is dropped from the message.
+    if (mpRaceCar->GetType() == E_RACE_CAR_TYPE_NETWORK)
+    {
+        CGS_ASSERT(mAddRemoveNetworkCarForCollisionQueue.GetLength() <
+                       mAddRemoveNetworkCarForCollisionQueue.GetMaxLength(),
+                   "Trying to add/remove race car more than ");
+
+        BrnPhysics::Vehicle::VehicleAddedForCollisionEvent lEvent;
+        lEvent.mRaceCarVolumeInstanceId = mHandlingBodyVolumeId;
+        lEvent.mbAdded                  = true;
+        mAddRemoveNetworkCarForCollisionQueue.AddEvent(lEvent);
+    }
 
     mbChangeCollisionState     = true;    // 0x78D
     mbCollisionStateToChangeTo = true;    // 0x78E   (RemoveFromCollision writes false here)

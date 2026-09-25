@@ -33,6 +33,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"          // Draw2DText
 #include "GameShared/GameClasses/Network/StartTime/CgsStartTimeManager.h"                   // AreWeSyncingTime
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                             // CgsDev::StrStream (streamed assert)
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"                             // WitnessTag ([nettraf] lines)
 
 namespace BrnNetwork
 {
@@ -53,6 +54,12 @@ namespace BrnNetwork
 
         // Per-hash decay of the "running in the past" amount.
         const f32 KF_IN_THE_PAST_DECAY              = 0.8f;
+
+        // [PC witness] NOT IN THE CONSOLE BINARY. The [nettraf] hash line starts only once this
+        // machine has posted its first traffic restart, so both halves of a LAN pair print the
+        // same update numbers; it prints every tenth update.
+        bool sbWitnessTrafficRestartApplied = false;
+        const u32 KU_WITNESS_HASH_UPDATE_STRIDE = 10u;
 
         // The debug overlay: text size, the three lines' screen positions and colours, and the
         // print buffer. The lag is reported (in seconds, one traffic update per tenth of a
@@ -568,6 +575,11 @@ namespace BrnNetwork
                     sizeof(lRestartMessage.mau16ActiveHulls));
         BufferRestartTrafficMessage(lRestartMessage);
 
+        BrnNetHarnessPC::WitnessTag("nettraf", "restart-send",
+            "fr=%u hulls=%04x,%04x,%04x,%04x,%04x,%04x,%04x,%04x", static_cast<u32>(lu16RestartFrame),
+            lau16ActiveHulls[0], lau16ActiveHulls[1], lau16ActiveHulls[2], lau16ActiveHulls[3],
+            lau16ActiveHulls[4], lau16ActiveHulls[5], lau16ActiveHulls[6], lau16ActiveHulls[7]);
+
         mbRestartNetworkTraffic = false;
         mPendingTrafficResetBitArray.UnSetAll();
     }
@@ -633,8 +645,9 @@ namespace BrnNetwork
     }
 
     // =========================================================================
-    // Delivery callbacks -- both only log a failed delivery ("WARNING: Fack Nack found in
-    // <function>") on the console; there is no state to update.
+    // Delivery callbacks -- both only log ("WARNING: Fack Nack found in <function>") on the
+    // console, and the test is on the SECOND flag (lbWasReliable), not lbDelivered; there is
+    // no state to update, so neither flag is read here.
     // =========================================================================
     void TrafficManager::_HullSyncMessageDeliveredCallback(bool lbDelivered, bool /*lbWasReliable*/,
                                                            CgsNetwork::SignalMessage* /*lpMessage*/,
@@ -1060,6 +1073,12 @@ namespace BrnNetwork
         muLastHashUpdate10HzFrame   = lu16Update10HzFrame;
         muLastTrafficHash           = lu16TrafficHash;
         mbLastHashDataValid         = true;
+
+        if (sbWitnessTrafficRestartApplied && (lu16Update10HzFrame % KU_WITNESS_HASH_UPDATE_STRIDE) == 0u)
+        {
+            BrnNetHarnessPC::WitnessTag("nettraf", "hash", "upd=%u h=%04x",
+                                        static_cast<u32>(lu16Update10HzFrame), static_cast<u32>(lu16TrafficHash));
+        }
     }
 
     // =========================================================================
@@ -1147,6 +1166,10 @@ namespace BrnNetwork
                     // The console logs "DIVERGENCE: Traffic diverged on frame ... with update
                     // frame ..., our hash=..., their hash=...".
                     mbHasTrafficDiverged = true;
+
+                    BrnNetHarnessPC::WitnessTag("nettraf", "DIVERGED", "upd=%u ours=%04x theirs=%04x",
+                                                static_cast<u32>(lu16Update10HzFrame),
+                                                static_cast<u32>(lu16OurHash), static_cast<u32>(lu16TheirHash));
                 }
             }
         }
@@ -1257,6 +1280,14 @@ namespace BrnNetwork
                 mu16LastTrafficResetFrame   = lu16RestartFrame;
                 mu16NumFramesSinceLastReset = 0;
                 OnTrafficRestarted();
+
+                sbWitnessTrafficRestartApplied = true;
+                BrnNetHarnessPC::WitnessTag("nettraf", "restart-apply",
+                    "fr=%u hulls=%04x,%04x,%04x,%04x,%04x,%04x,%04x,%04x", static_cast<u32>(lu16RestartFrame),
+                    lRestartEvent.mau16ActveHulls[0], lRestartEvent.mau16ActveHulls[1],
+                    lRestartEvent.mau16ActveHulls[2], lRestartEvent.mau16ActveHulls[3],
+                    lRestartEvent.mau16ActveHulls[4], lRestartEvent.mau16ActveHulls[5],
+                    lRestartEvent.mau16ActveHulls[6], lRestartEvent.mau16ActveHulls[7]);
             }
         }
     }

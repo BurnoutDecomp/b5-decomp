@@ -107,7 +107,7 @@ namespace
     const char *const kPcLanTypeNames[PCLAN_NUM_TYPES] =
     {
         "ACK", "DISCOVER", "ADVERT", "JOIN_REQ", "JOIN_RESP", "PLAY", "LOBBYREQ",
-        "KICK", "LEAVE", "BYE", "LINK_HELLO", "LINK_ACK", "DATA"
+        "KICK", "LEAVE", "BYE", "LINK_HELLO", "LINK_ACK", "DATA", "HANDOVER"
     };
 
     uint64_t PcLanCoreNowMs()

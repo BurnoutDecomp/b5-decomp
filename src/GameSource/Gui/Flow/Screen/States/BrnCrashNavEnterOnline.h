@@ -59,8 +59,8 @@ namespace BrnGui
 
         // ---- lifecycle virtuals (X360 vtable slots 0/1/2, dumped @0x82074818) --------
         virtual void OnEnter();   // @0x824C2A70 (this TU)
-        virtual void OnLeave();   // @0x824CAB88 -- FOREIGN ledger TU; declared for the vtable + the X360 flavour's base-chain call
-        virtual void Update();    // @0x824E0680 -- FOREIGN ledger TU
+        virtual void OnLeave();   // BrnCrashNavEnterOnline.cpp; the platform flavour chains to it
+        virtual void Update();    // BrnCrashNavEnterOnline.cpp; the platform flavour chains to it
 
         // X360 vtable slot 10 -- pure in the base table (_purecall), overridden by the
         // X360 flavour @0x82488010. u32 per the committed override (the DWARF says void;
@@ -100,9 +100,7 @@ namespace BrnGui
         void ShowSignIn();                                               // @0x824BC6B8 cpp:1127
         void HandleEnteringJunkyard();                                   // @0x824CAFD8 cpp:1418
 
-        // ---- methods of THIS class owned by FOREIGN ledger TUs. Declared so this TU's
-        //      bodies can call them; none is defined in the tree yet, so the screen will
-        //      not link until those TUs land. Deliberately NOT stubbed.
+        // ---- the three page helpers bodied in BrnCrashNavEnterOnline.cpp ---------------
         void HideAllComponents();                                        // @0x824B6578 cpp:1399
         void ShowChatRestrictedPopup();                                  // @0x824BCB18 cpp:1280 (PTMF slot 6)
         void ShowConnectingMessage();                                    // @0x824CAEC8 cpp:1370
@@ -113,6 +111,8 @@ namespace BrnGui
 
         static const s32 maiEventToObserve[12];                     // @0x820660E0
         static const s32 miNumEventsObserved;                       // @0x82066110 == 12
+        static const f32 KF_MESSAGE_DISPLAY_WAIT_TIME;              // == 5.0f (Update's connecting-message delay)
+        static const f32 KF_TIME_TO_SCROLL_ONE_LINE;                // == 0.2f (Update's TOS scroll step)
         static const f32 KF_AXIS_DEAD_ZONE;                         // @0x82066260 == 0.25f
         static const char KAC_TEXTFIELD_COMPONENT[12];              // "MessageText"
         static const char KAC_MESSAGE_BUTTONS_COMPONENT[7];         // "Button"

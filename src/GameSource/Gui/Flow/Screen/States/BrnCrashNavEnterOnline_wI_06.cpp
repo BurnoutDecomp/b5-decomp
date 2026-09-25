@@ -32,6 +32,8 @@ namespace BrnGui
         // with.
         const s32 KI_CONNECT_TYPE_FULL     = 0;
         const s32 KI_CONNECT_TYPE_NO_TITLE = 2;
+
+        const s32 KI_CHANNEL_GUI_OUT = 40;   // the GUI out-queue channel the network drains
     }
 
     // ================================================================================
@@ -95,8 +97,13 @@ namespace BrnGui
                     liConnectType = KI_CONNECT_TYPE_FULL;
                 }
 
+                // The console posts { 4, 272, 12, type } on channel 40 (16 bytes). The type
+                // carries its own GuiEvent header, so it goes straight onto the out-queue on
+                // channel 40; the OutputGuiEvent template would queue it under id 272.
                 GuiEventNetworkConnect lConnect(liConnectType);
-                mpStateInterface->OutputGuiEvent(lConnect);
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lConnect), KI_CHANNEL_GUI_OUT,
+                    static_cast<s32>(sizeof(lConnect)));
             }
         }
     }

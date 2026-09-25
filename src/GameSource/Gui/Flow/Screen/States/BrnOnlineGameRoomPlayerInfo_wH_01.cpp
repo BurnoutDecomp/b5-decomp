@@ -22,6 +22,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (Register/UnRegister/PlayAptMovie/out-queue)
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache, GuiFlow
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiFlow (E_GUIFLOW_SCREEN)
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"             // [netui] witness lines (LAN / harness only)
 
 namespace BrnGui
 {
@@ -163,6 +164,8 @@ namespace BrnGui
         meSubState = E_SUBSTATE_MAIN;   // X360 +87504 = 10
 
         HideLobby();
+
+        BrnNetHarnessPC::WitnessTag("netui", "game-room", "entered");
     }
 
     // ------------------------------------------------ OnLeave @ 0x824A3C18

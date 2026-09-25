@@ -65,12 +65,11 @@
 //     filled from mGameTimer, NOT change the reads here.
 //
 // ---------------------------------------------------------------------------
-// ⓘ SCOPE. This is the STUNT slice plus (2026-08-29) the SHOWTIME slice, not the whole
-// ~17 KB function. Reproduced verbatim: the id-492 build, the id-424 build (including the
+// ⓘ SCOPE. This is the STUNT slice plus (2026-08-29) the SHOWTIME slice and the
+// race-distance pair, not the whole ~17 KB function. Reproduced verbatim: the id-239 /
+// id-240 race-distance pair, the id-492 build, the id-424 build (including the
 // mode-{3,7,12,14,17} time arm), the mode-{7,9,12,14,17} id-428 build and the mode-{2,16}
 // id-434 build. NOT reproduced, and each is a real named gap:
-//   * GuiEventRaceDistanceRemaining (239) / GuiEventRaceDistanceToCheckpoint (240)
-//     @0x823EEA04..0x823EEB1C -- the per-car race-position feed.
 //   * ONE remaining SIBLING arm of the same jpt_823EED94 switch: mode 4 ->
 //     GuiPursuitScoreUpdate (432), which needs its own payload reshape AND its own
 //     GuiCache::RecEvent arm (case 52 of jpt_825101AC). CONSEQUENCE: Pursuit still shows no
@@ -110,6 +109,7 @@
 #include "GameSource/GameState/BrnGameStateModuleIO.h"       // OutputBuffer + the two scoring accessors
 #include "GameSource/GameState/BrnGameStateSharedIO.h"       // ScoringOutputInterface / OnlineScoringOutputInterface / EGameModeType
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"              // GuiEventCurrentStatus / GuiEventScoreUpdate / GuiAttackScoreUpdate
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"       // GuiEventRaceDistanceRemaining / GuiEventRaceDistanceToCheckpoint
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface / TimerStatus
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"     // CgsSystem::Time
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"       // CgsGui::CgsGuiModuleIO::InputBuffer
@@ -174,6 +174,65 @@ namespace
             return;
         }
 
+        // -----------------------------------------------------------------------------
+        // 0. GuiEventRaceDistanceRemaining (239) and GuiEventRaceDistanceToCheckpoint (240),
+        //    posted right after the game-state GUI queue is appended and before the timer
+        //    status is read.
+        //
+        // One lane per active race car. A valid lane (mabValid[i] == 1) carries the car id,
+        // the "distance" the position table sorts by, the car's online stunt score, and the
+        // eliminated byte. In the free-burn lobby modes (15 / 16) the distance is the
+        // number of roads the car rules, converted to a float; in every other mode it is
+        // the car's live distance to the finish. An invalid lane is zeroed.
+        // -----------------------------------------------------------------------------
+        {
+            BrnGui::GuiEventRaceDistanceRemaining lDistanceRemaining;
+            for (EActiveRaceCarIndex leCar = E_ACTIVE_RACE_CAR_INDEX_0;
+                 leCar < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+                 leCar++)
+            {
+                if (lpScoringOutputInterface->mabValid[leCar] == 1)
+                {
+                    const BrnGameState::GameStateModuleIO::EGameModeType leLaneMode =
+                        lpScoringOutputInterface->meGameModeType;
+                    const bool lbFreeBurnLobby =
+                        (leLaneMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY) ||
+                        (leLaneMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
+                    const f32 lfDistance = lbFreeBurnLobby
+                        ? static_cast<f32>(lpScoringOutputInterface->maiNumRoadsRuled[leCar])
+                        : lpScoringOutputInterface->maCarScoreData[leCar].GetDistanceToFinishLive();
+
+                    lDistanceRemaining.mafDistanceToFinish[leCar] = lfDistance;
+                    lDistanceRemaining.maCarId[leCar]             = lpScoringOutputInterface->maCarIds[leCar];
+                    lDistanceRemaining.mabPlayerEliminated[leCar] = lpScoringOutputInterface->mabPlayerEliminated[leCar];
+                    lDistanceRemaining.mabValid[leCar]            = true;
+                    lDistanceRemaining.maiOnlineStuntScore[leCar] =
+                        lpScoringOutputInterface->maCarScoreData[leCar].GetOnlineStuntScore();
+                }
+                else
+                {
+                    lDistanceRemaining.mafDistanceToFinish[leCar] = KF_ZERO;
+                    lDistanceRemaining.maCarId[leCar]             = 0;
+                    lDistanceRemaining.mabPlayerEliminated[leCar] = false;
+                    lDistanceRemaining.mabValid[leCar]            = false;
+                    lDistanceRemaining.maiOnlineStuntScore[leCar] = 0;
+                }
+            }
+            PushGuiEvent(lDistanceRemaining, lpGuiInput);                          // id 239, 144 bytes
+
+            // The player's lane is indexed with no bound test on the console; the same PC
+            // guard as the two reads below keeps the -1 "no event" index off the array.
+            BrnGui::GuiEventRaceDistanceToCheckpoint lDistanceToCheckpoint;
+            lDistanceToCheckpoint.mfDistanceToCheckpoint = KF_ZERO;
+            const s32 liPlayerLane = static_cast<s32>(lpScoringOutputInterface->mePlayerRaceCarIndex);
+            if (IsPlayerRaceCarIndexInRange(liPlayerLane))
+            {
+                lDistanceToCheckpoint.mfDistanceToCheckpoint =
+                    lpScoringOutputInterface->maCarScoreData[liPlayerLane].GetDistanceToNextCheckpointLive();
+            }
+            PushGuiEvent(lDistanceToCheckpoint, lpGuiInput);                       // id 240, 4 bytes
+        }
+
         const CgsSystem::TimerStatus* lpGameTimerStatus =
             lpTimerStatusInterface->GetGameTimerStatus();
         CGS_ASSERT(lpGameTimerStatus != 0, "mTimerStatusInterface.GetGameTimerStatus()"); // :481
@@ -195,7 +254,7 @@ namespace
         // posted from moments earlier (both are addi r4, r1, var_2450), rewrites only
         // +0x00..+0x37, and lets GetAllRemainingCheckpointIndexes fill +0x38.. -- so on
         // console the tail is either checkpoint indexes or the previous record's residue.
-        // This TU does not build the id-239 record, so the tail would be uninitialised
+        // Here the id-239 record is a separate local, so the tail would be uninitialised
         // stack. The consumer only walks it while miNumRemainingCheckpoints > 0, which
         // this slice never sets, so zeroing changes no observable behaviour and removes
         // an uninitialised read.

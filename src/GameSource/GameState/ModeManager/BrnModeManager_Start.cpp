@@ -641,9 +641,10 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
         // OFF THE STUNT-RACE PATH ENTIRELY (modes 2 and 16 only).
     }
 
-    // this + 0x9500 == mbModeStartFromRegionEnabled. Forced true for a sub-two-player non-showtime
-    // mode, i.e. "there was nobody to race, treat it as a region start".
-    lStopModeAction.mu8Field13 = mbModeStartFromRegionEnabled ? 1u : 0u;
+    // this + 0x9500 == mbHasAbortedDueToDisconnect (set by the local-disconnect arm). Forced true
+    // for a sub-two-player non-showtime mode: with nobody left to race, the mode counts as
+    // aborted, which the online tail turns into a quit (action 41).
+    lStopModeAction.mu8Field13 = mbHasAbortedDueToDisconnect ? 1u : 0u;
     if (meCurrentGameModeType != GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY &&
         meCurrentGameModeType != GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
     {
@@ -730,17 +731,12 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
         //       mScoringSystem.mOnlineGameResults.Clear();                 // 0x8230F178
         //     }
         //   }
-        // DEFERRED because it needs, at minimum: GetLocalPlayerNetworkID (ABSENT),
-        // OnlineRoundResults::Construct (declared-only), the two unnamed ScoringSystem CarData
-        // helpers sub_8231DD88 / sub_8231DCD0 / sub_82326878, two private CarData fields
-        // (+0x134 / +0x138) with no accessors (ProgressionManager::OnOnlineRaceComplete is no
-        // longer a blocker -- bodied 2026-09-06 in BrnProgressionManager_Rivals.cpp),
-        // and the E_ACTION_ONLINE_ROUND_RESULT value correction below.
-        // [!!] VALUE CORRECTION TO REPORT: BrnGameActions.h spells
-        // `E_ACTION_ONLINE_ROUND_RESULT = 222` (the PS3 value). The X360 posts THIS record --
-        // sizeof(OnlineRoundResults) == 68, matching the literal `li r6,0x44` -- with
-        // `li r5,0xE6` == 230, i.e. DWARF 222 + 8, the same shift the freeburn-challenge block
-        // already records. Filed as a header_request.
+        // STILL DEFERRED. GetLocalPlayerNetworkID, the car-data lookups, GetLead and the action id
+        // (230) are all in the tree now. What remains: ModeManager::SendGameResultsToNetwork has no
+        // body (it copies the scorer's OnlineGameResults into a 264-byte action 229, and the host
+        // record measures 260 -- a size residue its owner has to settle first), CarData's two words
+        // at +0x134 / +0x138 have no member names or accessors, and OnlineRoundResults::Construct
+        // has no body. The online terminal action below does not depend on this block.
         // OFFLINE IMPACT: none. Every statement above is inside the IsOnline() gate.
     }
 
@@ -755,24 +751,51 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
     // ---- the terminal action: one of six, chosen by online/offline x quit/stop/last-round ----
     if (lbCurrentModeIsOnline)
     {
-        // ================================================================================
-        // [!] ONLINE ARM DEFERRED -- the online half of the terminal-action switch.
-        // ================================================================================
-        // Console @0x8234C548..0x8234C64C:
-        //   if (lbTimedOut)                 -> action 41 (QUIT_MODE_ONLINE), size 8,
-        //                                      {meCurrentGameModeType, 1, junkyard != null}
-        //   else if (lbModeStartedFromRegion)-> action 41, size 8,
-        //                                      {meCurrentGameModeType, 0, junkyard != null}
-        //   else if (!lbOnlineLobbyHandover && !roundsRemaining && mode is not showtime)
-        //                                   -> action 27 (FINISH_MODE_FINAL_ONLINE), size 4,
-        //                                      {meCurrentGameModeType}
-        //   else                            -> action 26 (FINISH_MODE_ONLINE), size 8,
-        //                                      {meCurrentGameModeType, leNextGameModeType}
-        // The two action-41 arms read `ld r11, (mpGameStateModule + 0x2CDC0)` -- the
-        // CarSelectManager junkyard id (BrnGameStateModule.h:411 already annotates that exact
-        // load as `mCarSelectManager.mJunkyardId != kCGSID_NULL`) -- and BrnGameStateModule.h
-        // exposes no accessor for it. header_request #10 (plus the three payload records above).
-        // OFFLINE IMPACT: none.
+        // The online half of the terminal-action switch. A quit (timed out, or a region start
+        // with nobody to race) posts action 41 with the quit reason and whether the player sits
+        // in a junkyard; the last round of a non-showtime mode that is not handing the lobby on
+        // posts action 27; everything else posts action 26 with the next mode. The world treats
+        // 27 and 41 as "remove every network car". The two bytes past the action-41 flags are
+        // posted unwritten on the console; zeroed here.
+        if (lbTimedOut || lbModeStartedFromRegion)
+        {
+            QuitModeOnlineActionRecord lQuitModeOnline;
+            lQuitModeOnline.meGameModeType  = meCurrentGameModeType;
+            lQuitModeOnline.mbQuitByTimeout = lbTimedOut ? 1u : 0u;
+            lQuitModeOnline.mbInJunkyard    =
+                (mpGameStateModule->GetCarSelectManager()->GetJunkyardId() != 0) ? 1u : 0u;
+            lQuitModeOnline.maPad06[0] = 0;
+            lQuitModeOnline.maPad06[1] = 0;
+
+            lpGameActionQueue->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lQuitModeOnline),
+                GameStateModuleIO::E_ACTION_QUIT_MODE_ONLINE,
+                static_cast<s32>(sizeof(QuitModeOnlineActionRecord)));
+        }
+        else if (!lbOnlineLobbyHandover &&
+                 GetNetworkRoundsRemaining(mpNetworkRoundManager) == 0 &&
+                 meCurrentGameModeType != GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME &&
+                 meCurrentGameModeType != GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+        {
+            FinishModeFinalOnlineActionRecord lFinishModeFinalOnline;
+            lFinishModeFinalOnline.meGameModeType = meCurrentGameModeType;
+
+            lpGameActionQueue->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lFinishModeFinalOnline),
+                GameStateModuleIO::E_ACTION_FINISH_MODE_FINAL_ONLINE,
+                static_cast<s32>(sizeof(FinishModeFinalOnlineActionRecord)));
+        }
+        else
+        {
+            FinishModeOnlineActionRecord lFinishModeOnline;
+            lFinishModeOnline.meGameModeType     = meCurrentGameModeType;
+            lFinishModeOnline.meNextGameModeType = leNextGameModeType;
+
+            lpGameActionQueue->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lFinishModeOnline),
+                GameStateModuleIO::E_ACTION_FINISH_MODE_ONLINE,
+                static_cast<s32>(sizeof(FinishModeOnlineActionRecord)));
+        }
     }
     else
     {
@@ -841,26 +864,10 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
     // the campaign's own boot oracle as a scoring bug rather than as a missing wire.
     mScoringSystem.ClearData(!lbOnlineLobbyHandover);   // X360 0x8232A4A8 @0x8234C6B0
 
-    if (!lbOnlineLobbyHandover)
-    {
-        // [X] PARKED LEG -- the BurnoutSkillzManager buffered-road-score reset. Console
-        // @0x8234C6B4..0x8234C6D8, with r30 == this + 0xC40 == mOnlineFreeBurnLobby + 184 (the
-        // embedded BurnoutSkillzManager region the frozen header's mOnlineFreeBurnLobby banner
-        // names, and which BrnModeManager_Lifecycle.cpp's PARKED STORES leg already parks the
-        // StreetManager/MugshotManager half of):
-        //     mBufferedChallengeScore.Construct();               // 0x8267D7E8, skillz + 0x40
-        //     meBufferedScoreType          = 2;                  // skillz + 0x6C
-        //     mBufferedScoreChallengeIndex = dword_820A766C;     // skillz + 0x68
-        // dword_820A766C IS -1, IMAGE-CITED: image.bin offset 0xA766C (VA 0x820A766C) reads
-        // FF FF FF FF big-endian. [!] The pseudocode's `*(a1+3240) = -1` hides that this is a
-        // LOAD from rodata, not an immediate -- worth keeping, because a placeholder-zero sweep
-        // that "fixed" a literal -1 would be wrong for the same reason a .bss zero is not a
-        // console zero.
-        // BLOCKED: BrnOnlineFreeBurnLobbyMode has NO BurnoutSkillzManager member on host (the
-        // class declares only GetName + Start), and BurnoutSkillzManager's three fields are
-        // private with no accessor. header_request #11.
-        // Behaviour cost: a road score buffered when the event started stays buffered.
-    }
+    // The lobby's inlined OnModeEnd: unless the lobby/showtime pair hands straight on, the
+    // skillz manager's buffered road score is reset (fresh score entry, score type 2, challenge
+    // index -1). Same argument as ClearData above.
+    mOnlineFreeBurnLobby.OnModeEnd(!lbOnlineLobbyHandover);
 
     // ✅ LANDED 2026-09-10 (was: PARKED LEG, conductor decision #6). Console @0x8234C6DC..0x8234C6E4:
     //     mr r4, r29                                             ; r29 = !lbOnlineLobbyHandover

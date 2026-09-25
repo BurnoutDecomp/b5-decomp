@@ -3,9 +3,157 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"      // complete GameModeParams/StartGameModeParams/ScoringSystem
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"                   // GetNetworkRoundManager / SetOnlineRaceCars
 #include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h"   // GetNetworkGameEvent + StartNetworkGameEvent
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                  // SendEvent default arm
 
 namespace BrnGameState
 {
+// EGameModeState ids (named file-local, as BrnOnlineFreeBurnMode.cpp does).
+enum
+{
+    KI_GMS_COUNTDOWN      = 0,
+    KI_GMS_INTRO          = 1,
+    KI_GMS_IN_PROGRESS    = 2,
+    KI_GMS_QUIT           = 5,
+    KI_GMS_ONLINE_LOADING = 6,
+    KI_GMS_ONLINE_SPLASH  = 7
+};
+
+// Slot 0. The base GameMode::Construct is called directly and the online byte is stored after it
+// (the OnlineGameMode::Construct pair, inlined), then the embedded manager is constructed.
+void OnlineFreeBurnLobbyMode::Construct(ModeManager* lpModeManager)
+{
+    GameMode::Construct(lpModeManager);
+    mbIsOnline = true;
+    mBurnoutSkillzManager.Construct(lpModeManager);
+}
+
+// Slot 2. All six arguments go to the base first; the manager then gets the input buffer, the
+// active race-car interface and the output buffer, with lbExitingFreeburnLobby = false.
+void OnlineFreeBurnLobbyMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
+                                             const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                                             const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCars,
+                                             const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
+                                             bool lbPaused,
+                                             const ScoringSystem* lpScoringSystem)
+{
+    GameMode::PreWorldUpdate(lpOutput, lpInput, lpGlobalRaceCars, lpActiveRaceCars, lbPaused, lpScoringSystem);
+    mBurnoutSkillzManager.PreWorldUpdate(lpInput, lpActiveRaceCars, lpOutput, false);
+}
+
+// The online-showtime tick of the lobby's manager (ModeManager::UpdateCurrentMode, mode 16): the
+// same manager call as PreWorldUpdate's, with lbExitingFreeburnLobby = true and no base update.
+void OnlineFreeBurnLobbyMode::BurnoutSkillzOnlyPreWorldUpdate(
+    GameStateModuleIO::OutputBuffer* lpOutput,
+    const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* /*lpGlobalRaceCars*/,
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
+    bool /*lbPaused*/,
+    const ScoringSystem* /*lpScoringSystem*/)
+{
+    mBurnoutSkillzManager.PreWorldUpdate(lpInput, lpActiveRaceCars, lpOutput, true);
+}
+
+// Slot 3. A two-instruction tail call.
+void OnlineFreeBurnLobbyMode::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpInput)
+{
+    mBurnoutSkillzManager.PostWorldUpdate(lpInput);
+}
+
+// Slot 19.
+void OnlineFreeBurnLobbyMode::PlayerHasSpawned(::EActiveRaceCarIndex leActiveRaceCarIndex)
+{
+    mBurnoutSkillzManager.SendUpdatePlayerSkillsEvent(leActiveRaceCarIndex, false);
+}
+
+// Slot 12. ABORT -> QUIT and RESTART -> ONLINE_LOADING from any state; otherwise NEXT walks
+// ONLINE_LOADING -> INTRO -> ONLINE_SPLASH -> COUNTDOWN -> IN_PROGRESS -> QUIT. QUIT ignores every
+// event, and OUTRO / RESULTS (never entered by the lobby) fire the assert, whose text is the
+// Showtime one in the console's rodata too.
+void OnlineFreeBurnLobbyMode::SendEvent(EGameModeEvent leEvent)
+{
+    if (leEvent == E_GME_ABORT)
+    {
+        SetCurrentState(KI_GMS_QUIT);
+        return;
+    }
+    if (leEvent == E_GME_RESTART)
+    {
+        SetCurrentState(KI_GMS_ONLINE_LOADING);
+        return;
+    }
+
+    switch (meCurrentState)
+    {
+        case KI_GMS_COUNTDOWN:
+            if (leEvent == E_GME_NEXT)
+            {
+                SetCurrentState(KI_GMS_IN_PROGRESS);
+            }
+            break;
+        case KI_GMS_INTRO:
+            if (leEvent == E_GME_NEXT)
+            {
+                SetCurrentState(KI_GMS_ONLINE_SPLASH);
+            }
+            break;
+        case KI_GMS_IN_PROGRESS:
+            if (leEvent == E_GME_NEXT)
+            {
+                SetCurrentState(KI_GMS_QUIT);
+            }
+            break;
+        case KI_GMS_QUIT:
+            break;
+        case KI_GMS_ONLINE_LOADING:
+            if (leEvent == E_GME_NEXT)
+            {
+                SetCurrentState(KI_GMS_INTRO);
+            }
+            break;
+        case KI_GMS_ONLINE_SPLASH:
+            if (leEvent == E_GME_NEXT)
+            {
+                SetCurrentState(KI_GMS_COUNTDOWN);
+            }
+            break;
+        default:
+            CGS_ASSERT(false, "Should not be in this state in Showtime mode!");
+            break;
+    }
+}
+
+// Slot 20. The score record travels by value; the challenge and active-car indices are the two
+// stack-passed arguments, re-stacked for the manager's call.
+void OnlineFreeBurnLobbyMode::ProcessNewRoadScore(GameStateModuleIO::OutputBuffer* lpOutput,
+                                                  BrnStreetData::ChallengePlayerScoreEntry lScoreEntry,
+                                                  BrnStreetData::ScoreType leScoreType,
+                                                  BrnStreetData::ChallengeIndex lChallengeIndex,
+                                                  ::EActiveRaceCarIndex leActiveRaceCarIndex)
+{
+    mBurnoutSkillzManager.ProcessNewRoadScore(lpOutput, lScoreEntry, leScoreType, lChallengeIndex,
+                                              leActiveRaceCarIndex);
+}
+
+// Out of line: the manager's BufferNewRoadScore inlined here.
+void OnlineFreeBurnLobbyMode::BufferNewRoadScore(BrnStreetData::ChallengePlayerScoreEntry lChallengeScore,
+                                                 BrnStreetData::ScoreType leScoreType,
+                                                 BrnStreetData::ChallengeIndex lChallengeIndex)
+{
+    mBurnoutSkillzManager.BufferNewRoadScore(lChallengeScore, leScoreType, lChallengeIndex);
+}
+
+// Slot 21. A two-instruction tail call.
+void OnlineFreeBurnLobbyMode::OnEnterRoad(BrnStreetData::RoadIndex lRoadIndex)
+{
+    mBurnoutSkillzManager.OnEnterRoad(lRoadIndex);
+}
+
+// Inlined into ModeManager::SendModeStopMessages.
+void OnlineFreeBurnLobbyMode::OnModeEnd(bool lbExitingFreeburnLobby)
+{
+    mBurnoutSkillzManager.OnModeEnd(lbExitingFreeburnLobby);
+}
+
 // X360: BrnGameState::OnlineFreeBurnLobbyMode::GetName. Trivial virtual override of GameMode::GetName;
 // returns the mode's fixed name string. The virtual/trailing-const shape is from the DWARF
 // declaration (the Hex-Rays pseudocode renders it as a plain function and drops const).
