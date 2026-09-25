@@ -9,7 +9,9 @@ wreck shed nothing.
      words are the image's, each cited; the caller hands it the car colour and the player / AI trail debrisparams.
   2. NUMERIC -- tests/FxCrashVfxCrashTrail.cpp compiles the PRODUCTION region onto a fixture and compares every
      SpawnDebris / SpawnSimple, the accumulators and mRandom bit for bit with 0x82290D30 run on emu64
-     (scratch/CRASHPARITY_0922/fxcrashvfx_vmxemu/gen_trail_data.py; 10 cases x 7 checks).
+     (scratch/CRASHPARITY_0922/fxcrashvfx_vmxemu/gen_trail_data.py; 11 cases x 7 checks -- the eleventh (FX-GATE
+     NaN sweep) puts a NaN ring word under the first spin axis's x draw: `fcmpu s, 1.0 ; bge` (0x822912F4) draws
+     again on the unordered compare).
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxcrashvfx_crash_trail.py [--rev <b5 rev>]
                                                                              [--root <shadow tree root>]
@@ -40,8 +42,8 @@ void EffectsModule::HandleCrashingTrail(ActiveRaceCarData&, f32, f32, const Race
 }
 """
 
-# 10 cases x 7 checks (see FxCrashVfxCrashTrail.cpp)
-NUMERIC_CHECKS = 10 * 7
+# 11 cases x 7 checks (see FxCrashVfxCrashTrail.cpp)
+NUMERIC_CHECKS = 11 * 7
 
 
 class RootTree(Tree):
