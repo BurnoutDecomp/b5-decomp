@@ -1245,6 +1245,12 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         void GenerateNetworkUpdateEvents(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
                                          BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput);
 
+        // @0x82743B80. DWARF `void UpdateEventStarts()` (h:1620, BrnTrafficEntityModule.cpp:9477). ADDITIVE
+        // (crash parity FX-NETCRASH, 2026-09-25). PostPhysicsUpdate calls it every frame at 0x8274EE90, right
+        // before GenerateNetworkUpdateEvents: an event start that clears the traffic sets up its start line's
+        // lights once the trigger hull is active.
+        void UpdateEventStarts();
+
         // ---- THE TWO DRAINS OF maNewCrashedVehicles. Bodies in _wT3_01.cpp beside its one
         //      producer, RecordTrafficVehicleIsPhysical.
         // @0x82720030 (428 insns). DWARF `void GenerateCrashedVehicleEvents(

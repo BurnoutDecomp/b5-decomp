@@ -140,6 +140,10 @@ namespace
     // when a light goes amber.
     const f32 KF_COUNTDOWN_RED_TIME = 3.0f;
 
+    // DWARF BrnTrafficLightManager.cpp:28 -- how long a light shows AMBER on its way to RED: flt_820C0F6C
+    // == 2.0f (0x40000000, x360rd), stored by ChangeLightState @0x82751958.
+    const f32 KF_AMBER_TIME = 2.0f;
+
     // [FLAG PC witness] (crash parity FX-NETCRASH; NOT console code). BRN_TRAFFIC_LIGHT_DIAG,
     // capped, reads only: every countdown value the manager receives, and the end of the countdown.
     CgsDev::Log::DebugPrint* TrafficLightDiagStream()
@@ -217,6 +221,45 @@ void TrafficLightManager::SetCountdownValue(s32 liCountdownDisplay)
                 << " -> countdown=" << (mbCountdownLights ? 1 : 0) << " state=" << meCountdownState
                 << " remaining=" << mfCountdownRemainingTime << " [FLAG PC witness]\n";
     }
+}
+
+// -- ChangeLightState @ 0x827518E0 (47 insns) -- DWARF .cpp:175 (luInstance, lbChangeToRed) ----------
+//   cmplwi luInstance, 0x258 ; blt -> else the :391 (0x187) tripwire "luInstance <
+//     KU_MAX_TRAFFIC_LIGHT_INSTANCES" (0x82751900..0x8275191C)
+//   lbChangeToRed (clrlwi r29 ; beq 0x82751978):
+//     GetLightState ; lbz +4 ; beq -> return                  a light already RED stays red
+//     GetLightState ; lfs flt_820C0F6C (2.0f) -> stfs +0 ; lbz +5 ; rlwimi r11, 1, 1, 29, 23 ; stb +5 ;
+//       stb 1 -> +4                                           AMBER for KF_AMBER_TIME, state bit 1 << 1
+//   else:
+//     GetLightState ; lbz +5 ; rlwimi r9, 1, 2, 29, 23 ; stb +5 ; stb 2 -> +4
+//                                                             GREEN, state bit 1 << 2, the time untouched
+// The rlwimi masks (MB 29 > ME 23, wrapped) keep bits 3..7 of the flags byte and replace bits 0..2 with the
+// state's bit: the inlined TrafficLightRuntimeState::SetState (DWARF .cpp:179 / :181). The AMBER then runs
+// down to RED in TrafficLightRuntimeState::Update @0x827515D8.
+void TrafficLightManager::ChangeLightState(u32 luInstance, bool lbChangeToRed)
+{
+    CGS_ASSERT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES, "luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES");
+
+    // The array still holds the 8-byte placeholder record (see the header); the stores go through the
+    // attested record's names, as Construct's do.
+    if (lbChangeToRed)
+    {
+        if (reinterpret_cast<TrafficLightRuntimeState*>(GetLightState(luInstance))->muState
+            == static_cast<u8>(E_TRAFFICLIGHTSTATE_RED))
+        {
+            return;
+        }
+        TrafficLightRuntimeState* const lpState =
+            reinterpret_cast<TrafficLightRuntimeState*>(GetLightState(luInstance));
+        lpState->mfTimer = KF_AMBER_TIME;
+        lpState->muFlags = static_cast<u8>((lpState->muFlags & 0xF8u) | (1u << E_TRAFFICLIGHTSTATE_AMBER));
+        lpState->muState = static_cast<u8>(E_TRAFFICLIGHTSTATE_AMBER);
+        return;
+    }
+
+    TrafficLightRuntimeState* const lpState = reinterpret_cast<TrafficLightRuntimeState*>(GetLightState(luInstance));
+    lpState->muFlags = static_cast<u8>((lpState->muFlags & 0xF8u) | (1u << E_TRAFFICLIGHTSTATE_GREEN));
+    lpState->muState = static_cast<u8>(E_TRAFFICLIGHTSTATE_GREEN);
 }
 
 // -- Update @ 0x827517A8 (20 insns) --------------------------------------------

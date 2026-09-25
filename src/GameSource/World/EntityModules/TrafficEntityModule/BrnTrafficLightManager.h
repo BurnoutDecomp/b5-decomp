@@ -132,6 +132,11 @@ namespace BrnTraffic
         void SetCountdownValue(s32 liCountdownDisplay);
         void Update(f32 lfTimeDelta);
 
+        // ADDITIVE (crash parity FX-NETCRASH, 2026-09-25) -- DWARF :160, bodied in BrnTrafficLightManager.cpp:
+        //   ChangeLightState @ 0x827518E0  to red: a light not already RED goes AMBER for KF_AMBER_TIME;
+        //                                  otherwise GREEN. Called by TrafficEntityModule::UpdateEventStarts.
+        void ChangeLightState(u32 luInstance, bool lbChangeToRed);
+
     private:
         // The state array begins at offset 0 of the manager (record base == this).
         TrafficLightState maLightStates[KU_MAX_TRAFFIC_LIGHT_INSTANCES];

@@ -5,9 +5,12 @@ The online PREPARE_FOR_MODE reset leaves the traffic PAUSED. HandlePrepareForMod
 (E_RUNNINGSTATE_PAUSED) to meRunningStateToUseAfterStartup at 0x827484E4. The console un-pauses it
 through TrafficEntityModule::HandleExternalRequests @0x8274B660, and PC wired none of those arms, so
 online traffic never left PAUSED:
-  47  E_ACTION_SET_COUNTDOWN (0x8274BD98): online, RUNNING && IsPaused() -> meRunningState = NORMAL,
-      else STARTING_UP -> meRunningStateToUseAfterStartup = NORMAL. Its
-      TrafficLightManager::SetCountdownValue leg stays a named gate.
+  34  E_ACTION_START_PLAYING_MODE (0x8274BDF0): TrafficLightManager::SetCountdownValue(0), then the
+      .cpp 5995 tripwire when mbNeedToSetUpLightsForEventStart is still up and mbDEBUGTurnTrafficOff is
+      clear (UpdateEventStarts consumes the flag; crash parity FX-NETCRASH, 2026-09-25).
+  47  E_ACTION_SET_COUNTDOWN (0x8274BD98): TrafficLightManager::SetCountdownValue(record[0]), offline too
+      (b5 30d481f4); then online, RUNNING && IsPaused() -> meRunningState = NORMAL,
+      else STARTING_UP -> meRunningStateToUseAfterStartup = NORMAL.
   143 E_ACTION_SHOWTIME_MODE_SWITCH (0x8274BFE0): !mbEnteringShowtime -> muCurrentlyPredictedHull = 0xFFFF.
   225/226 E_ACTION_LOCAL_PLAYER_DISCONNECTED / _LEFT_GAME (0x8274BE4C): online -> RestartTraffic().
   236 E_ACTION_RESTART_TRAFFIC (0x8274BEE0): online -> RestartTraffic(),
@@ -47,7 +50,7 @@ BODIES = [
 RESET = "void TrafficEntityModule::Reset()"
 REPLAY_IF = "    if (mbActivateOnlineHullsAfterReset)\n"
 
-NUMERIC_CHECKS = 27
+NUMERIC_CHECKS = 34
 
 
 def replay_block(module):
