@@ -431,8 +431,10 @@ void PathLine<2>::Update(f32 lfDeltaTime)
         // tripwire) reads the curve at 1.0, i.e. the stage's finish level.
         const f32 lfFraction = rw::math::fpu::Clamp(mfElapsedTime / maLength[lnStage], 0.0f, 1.0f);
 
-        mfCurrentValue = Curve::GetOutput(lfFraction, maCurveTypes[lnStage]) * lfRange
-                       + maStart[mnCurrentStage];
+        // `fmadds f0, f1(GetOutput), f31(range), f0(maStart[mnCurrentStage])` @0x8268F428: ONE rounding
+        // (FX-AIBUZZ, crash parity 2026-09-25; the PC multiplied, rounded, then added).
+        mfCurrentValue = std::fmaf(Curve::GetOutput(lfFraction, maCurveTypes[lnStage]), lfRange,
+                                   maStart[mnCurrentStage]);
     }
 }
 
@@ -533,8 +535,10 @@ void PathLine<tuNumStages>::Update(f32 lfDeltaTime)
     {
         f32 lfFraction = mfElapsedTime / maLength[lnStage];
         lfFraction = (std::max)(0.0f, (std::min)(1.0f, lfFraction));
-        mfCurrentValue = Curve::GetOutput(lfFraction, maCurveTypes[lnStage]) *
-                         (maFinish[lnStage] - maStart[lnStage]) + maStart[lnStage];
+        // `fmadds f0, f1(GetOutput), f31(finish - start), f0(maStart[mnCurrentStage])` @0x8268F178: ONE
+        // rounding (FX-AIBUZZ, crash parity 2026-09-25; the PC multiplied, rounded, then added).
+        mfCurrentValue = std::fmaf(Curve::GetOutput(lfFraction, maCurveTypes[lnStage]),
+                                   maFinish[lnStage] - maStart[lnStage], maStart[lnStage]);
     }
 }
 
