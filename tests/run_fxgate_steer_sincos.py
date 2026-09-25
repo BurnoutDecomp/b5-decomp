@@ -27,7 +27,9 @@ SITES = [
      "0x8261E524"),
 ]
 START = "const f32 lfSteerAngle"
-END = "const f32 lfOneMinusCos"
+# The span ends where the rotation starts: `const f32 lfOneMinusCos` up to d6efe5e1; since the Rodrigues follow-up,
+# the SteeredDirection call (`const Vector3 lvSteeredDirection` / `mSteeringDirection =`).
+ENDS = ("const f32 lfOneMinusCos", "const Vector3 lvSteeredDirection", "mSteeringDirection =")
 CALL = "XboxMath::XMVectorSinCos(&lfSin,&lfCos,lfSteerAngle);"
 NUMERIC_CHECKS = 800
 
@@ -38,10 +40,12 @@ def span(tree, signature):
     except ValueError:
         return None
     s = body.find(START)
-    e = body.find(END, s)
-    if s < 0 or e < 0:
+    if s < 0:
         return None
-    return code_only(body[s:e])
+    ends = [e for e in (body.find(end, s) for end in ENDS) if e >= 0]
+    if not ends:
+        return None
+    return code_only(body[s:min(ends)])
 
 
 def wiring(tree):
