@@ -4,6 +4,28 @@
 
 namespace BrnGameState
 {
+namespace
+{
+// flt_82008718 (x360rd: 0x3951B717 == 0.0002f), the only load in 0x827E2600. No DWARF name: the
+// DWARF declares the override at BrnCrashMode.h:100 with no named constant beside it.
+const f32 KF_SHOWTIME_INTRO_DURATION_SECONDS = 0.0002f;
+}
+
+// X360: BrnGameState::CrashMode::GetName (0x827E24C8, slot 6). `addi r3,r11,0x5D8` -> 0x820D05D8,
+// which reads "CrashMode\0" (x360rd).
+const char* CrashMode::GetName() const
+{
+    return "CrashMode";
+}
+
+// X360: BrnGameState::CrashMode::GetIntroDurationSeconds (0x827E2600, slot 8 of vtable 0x820D0570,
+// the body OnlineShowtimeMode's slot 8 shares). DWARF shape is f32 (Hex-Rays widens the FP return
+// to double).
+f32 CrashMode::GetIntroDurationSeconds() const
+{
+    return KF_SHOWTIME_INTRO_DURATION_SECONDS;
+}
+
 // X360: BrnGameState::CrashMode::SendEvent (0x82330A58). Maps an inbound EGameModeEvent to a
 // state transition. ABORT -> Quit(5); RESTART -> Intro(1); otherwise the per-state flow
 // Intro(1)->InProgress(2)->Outro(3)->Results(4)->Quit(5). Showtime has no countdown phase, so any

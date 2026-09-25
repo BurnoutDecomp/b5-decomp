@@ -6,17 +6,30 @@ namespace BrnGameState
 {
 // CrashMode is the offline Crash/Showtime game mode. The base chain (OfflineGameMode -> GameMode)
 // is #included from the owning headers; meCurrentState / SetCurrentState / EGameModeEvent come from
-// the GameMode base. Minimal slice (BrnPursuitMode.h precedent): only the SendEvent override this
-// TU reconstructs is declared; the mode's other DWARF methods land with their own functions.
+// the GameMode base. Minimal slice (BrnPursuitMode.h precedent): only the overrides this TU
+// reconstructs are declared; the mode's other DWARF methods land with their own functions.
 //
-// NOT-YET-RECONSTRUCTED OVERRIDE (vtable 0x820D0570, checked 2026-08-26): CrashMode also overrides
-// slot 6 GetName (0x827E24C8 -> "CrashMode") and slot 8 GetIntroDurationSeconds (0x827E2600). No
-// body exists in the tree for either, so they are not declared here (a declaration with no
-// definition is an unresolved external as soon as the vtable is emitted) and the mode inherits the
-// GameMode base for both -- which is why GameMode::GetName now has a base body at all.
+// SLOTS 6 AND 8 LANDED 2026-09-25 (crash parity FX-SCENARIOS). The vtable 0x820D0570 carries
+// slot 6 GetName = 0x827E24C8 and slot 8 GetIntroDurationSeconds = 0x827E2600 (x360rd of
+// 0x820D0588 / 0x820D0590), and the DWARF declares both overrides (BrnCrashMode.h:88 / :100).
+// Until then the mode inherited the GameMode base for both, and the base's slot 8 was a 6.0 s stub:
+// every Showtime sat 6.0 s in E_GMS_INTRO (IntroState times the intro for mode type 2), so the
+// director's crash mode took the frame 6.0 s after the start with the car already at rest, where
+// the console takes it on the first mode update.
 class CrashMode : public OfflineGameMode
 {
 public:
+    // Slot 6 (vtbl+24). X360 0x827E24C8: `lis r11,0x820D ; addi r3,r11,0x5D8 ; blr` -- the string
+    // at 0x820D05D8 reads "CrashMode". DWARF BrnCrashMode.h:88.
+    virtual const char* GetName() const;
+
+    // Slot 8 (vtbl+32). X360 0x827E2600 (one body shared by ICF with OnlineShowtimeMode's slot 8):
+    // `lis r11,flt_82008718@ha ; lfs f1,flt_82008718@l(r11) ; blr`, flt_82008718 = 0x3951B717 =
+    // 0.0002f. DWARF BrnCrashMode.h:100. IntroState::OnEnter @0x823163C8 seeds its countdown from it
+    // (`lwz r11,0x20(r11) ; bctrl` @0x823163E4) and IntroState::Update @0x823164A0 posts NEXT once it
+    // is spent, i.e. on the first mode update: a Showtime has no timed intro to speak of.
+    virtual f32 GetIntroDurationSeconds() const;
+
     virtual void SendEvent(EGameModeEvent leEvent);                    // slot 12, X360 0x82330A58
 
     // X360 0x82322210. Builds the offline crash/showtime GameModeParams.
@@ -38,6 +51,10 @@ public:
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
+static_assert(sizeof(static_cast<const char* (CrashMode::*)() const>(&CrashMode::GetName)) != 0,
+              "CrashMode::GetName must bind GameMode vtable slot 6");
+static_assert(sizeof(static_cast<f32 (CrashMode::*)() const>(&CrashMode::GetIntroDurationSeconds)) != 0,
+              "CrashMode::GetIntroDurationSeconds must bind GameMode vtable slot 8");
 static_assert(sizeof(static_cast<void (CrashMode::*)(EGameModeEvent)>(&CrashMode::SendEvent)) != 0,
               "CrashMode::SendEvent must bind GameMode vtable slot 12");
 static_assert(sizeof(static_cast<void (CrashMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&CrashMode::Start)) != 0,
