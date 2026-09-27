@@ -440,7 +440,7 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
 
         // [DIAG] NOT IN THE X360 BINARY -- one line per prepare-for-mode, the proof rung for
         // the three-leg chain above. Pairs with the "[scoring-bind]" rung in
-        // GameStateModule::PostWorldUpdateStuntBringUp: this one says what the world module
+        // GameStateModule::PostWorldUpdate: this one says what the world module
         // mapped, that one says what the scoring system bound.
         if (CgsDev::Log::gpDebugPrint != 0)
         {

@@ -42,6 +42,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<T,N>
 #include "GameShared/GameClasses/Core/CgsID.h"            // CgsID (== u64)
 #include "SharedClasses/StreetData/BrnChallengeData.h"    // BrnStreetData::ScoreType (by-value param)
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h" // the three event-queue typedefs
 
 // CgsMemory::HeapMalloc is the network-heap allocator (DWARF type; no committed home in the tree
 // yet -- distinct from CgsMemory::LinearMalloc). Used by pointer only (CarData::Prepare,
@@ -109,14 +110,11 @@ namespace BrnGameState
     // BrnAICarOutputInterface.h). The .cpp partials #include that header to deref it; pointer use here.
     typedef BrnAI::AIModuleIO::AICarOutputInterface AICarOutputInterface;
 
-    // GameActionQueue is the real GameStateModuleIO typedef (BrnGameStateSharedIO.h); only
-    // TakedownEventQueue stays an incomplete nested forward decl here.
-    namespace InputBuffer                  { struct TakedownEventQueue; }
+    // GameActionQueue is the real GameStateModuleIO typedef (BrnGameStateSharedIO.h); the three
+    // queue typedefs (takedown, race-car crash, traffic state) come from BrnScoringSystemEventQueues.h.
     // The game state names the network interface unqualified; UpdatePaybackTakedowns takes its
     // real DirtyTrickQueue (EventQueue<DirtyTrickEvent,28>).
     typedef BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface GameStateToNetworkInterface;
-    namespace VehicleManagerOutputInterface{ struct RaceCarCrashEventQueue; }
-    namespace VehicleOutputInterface       { struct PhysicalTrafficStateQueue; }
 
     // Pointer-only param of OnRoadRagePlayerCrashed. Full home is BrnGameStateModuleIO.h; a forward
     // declaration keeps that heavy IO header out of the keystone.

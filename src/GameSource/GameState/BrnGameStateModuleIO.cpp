@@ -250,18 +250,68 @@ PreWorldInputBuffer::GetPlayerStatusInterface() const
 
 // =====================  PostWorldInputBuffer  =====================
 
+// The console's CreateIOBuffer<PostWorldInputBuffer> runs this on every buffer it stages. In
+// console order:
+//     *this = 1                                                  // IOBuffer status: constructed
+//     RaceCarCrashEvent<..,8>::Construct(this + 0x10)            // mRaceCarCrashEventQueue
+//     ContactSpyInterface::Construct(this + 0x6E30)              // mContactSpyInterface
+//     the vehicle output interface at +0x220, inlined: its traffic-state and impact queues and its
+//         game-event queue constructed, the used-cars bits and the five aggressive-driving
+//         flags zeroed                                           // VehicleOutputInterface::Construct
+//     VariableEventQueue<1024,16>::Construct, then ::Clear (this + 0x6E34)
+//                                                                // mTriggerEntityOutputInterface
+//     RCEntityActiveRaceCarOutputInterface::Clear(this + 0x7250) // mActiveRaceCarOutputInterface
+//     the vehicle output interface cleared, inlined: both queue lengths zeroed, the game-event
+//         queue cleared, the used-cars bits and the flags zeroed again
+//                                                                // VehicleOutputInterface::Clear
+//     VariableEventQueue<1536,16>::Construct(this + 0xA4B0)      // mGameEventQueue
+//     35 x { +0x140C[i] = FLT_MAX; +0x1498[i] = 0x7FFF } over +0xAAC0, inlined
+//                                                                // AICarOutputInterface::Construct
+//     TrafficTypeResponse<..,32>::Construct(this + 0xBFA8)      // mTrafficTypeResponseQueue
+// The global race-car output interface (+0x9B40) and mbIsInPictureParadise (+0xC1B8) are not
+// touched: the post-world update step writes both every frame before anything reads them.
+void PostWorldInputBuffer::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+
+    mRaceCarCrashEventQueue.Construct();
+    mContactSpyInterface.Construct();
+    mVehicleOutputInterface.Construct();
+    mTriggerEntityOutputInterface.Construct();
+    mTriggerEntityOutputInterface.Clear();
+    mActiveRaceCarOutputInterface.Clear();
+    mVehicleOutputInterface.Clear();
+    mGameEventQueue.Construct();
+    mAICarOutputInterface.Construct();
+    mTrafficTypeResponseQueue.Construct();
+}
+
+// DestroyIOBuffer<PostWorldInputBuffer> runs this before it frees the buffer. In console order:
+// the game-event queue's Destruct, the contact-spy handle re-initialised with its own Construct
+// (the console calls Construct here, not a destructor), the crash-event and traffic-type
+// response queues' inlined Destruct (one length store each), and the base's Destruct.
+void PostWorldInputBuffer::Destruct()
+{
+    mGameEventQueue.Destruct();
+    mContactSpyInterface.Construct();
+    mRaceCarCrashEventQueue.Destruct();
+    mTrafficTypeResponseQueue.Destruct();
+
+    CgsModule::IOBuffer::Destruct();
+}
+
 // X360 0x8231D218 - read-lock accessor for the vehicle output interface (this+0x220).
 const VehicleOutputInterface* PostWorldInputBuffer::GetVehicleOutputInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const VehicleOutputInterface*>(&mVehicleOutputInterfaceStorage);
+    return &mVehicleOutputInterface;
 }
 
 // X360 0x823B9300 - write-lock accessor for the vehicle output interface (this+0x220).
 VehicleOutputInterface* PostWorldInputBuffer::GetVehicleOutputInterface()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    return reinterpret_cast<VehicleOutputInterface*>(&mVehicleOutputInterfaceStorage);
+    return &mVehicleOutputInterface;
 }
 
 // X360 0x8231D0C8 - read-lock accessor for the game-event queue (this+0xA4B0).
@@ -283,23 +333,18 @@ GameEventQueue* PostWorldInputBuffer::GetGameEventQueue()
 }
 
 // X360 0x8231D2C0 - read-lock accessor for the active-race-car output interface (this+0x7250).
-// Same decompiled shape as its siblings, and the offset falls out of the body directly:
-//     if ( ((*a1 >> 4) & 1) == 0 )
-//         ... FireAssert("Not locked for reading\n",
-//                        "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 210);
-//     return a1 + 29264;                                 // 29264 == 0x7250
-// 0x7250 is where this header seats mActiveRaceCarOutputInterfaceStorage, pinned by the
-// _AssertLayout() static_assert ("RCEntityActiveRaceCarOutputInterface @ +0x7250"), and assert
-// line 210 matches the declaration's recorded line. The seat is still byte storage (the interface's
-// full layout lives in its own TU), so this one keeps the sibling reinterpret_cast form rather
-// than &member -- exactly like GetVehicleOutputInterface above it.
-// The mounted consumers are the wave-B ModeManager legs plus GameBridgeWorldToX / BurnoutSkillzManager.
 const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
 PostWorldInputBuffer::GetActiveRaceCarOutputInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*>(
-               &mActiveRaceCarOutputInterfaceStorage);
+    return &mActiveRaceCarOutputInterface;
+}
+
+// Write-lock twin, assert line 211.
+PostWorldInputBuffer::RCEntityActiveRaceCarOutputInterface* PostWorldInputBuffer::GetActiveRaceCarOutputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return &mActiveRaceCarOutputInterface;
 }
 
 // X360 0x8231D410 - read-lock accessor for the AI-car output interface (this+0xAAC0).
@@ -317,20 +362,32 @@ AICarOutputInterface* PostWorldInputBuffer::GetAICarOutputInterface()
     return &mAICarOutputInterface;
 }
 
-// X360 0x823C9600 - write-lock-guarded forwarder onto the traffic-type response queue (this+0xBFA8).
-// Asserts the write lock, then merges lSource into the member queue via
-// CgsModule::BaseEventQueue<TrafficTypeResponse>::Append.
-bool PostWorldInputBuffer::AppendTrafficTypeResponseQueue(
-        const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>& lSource)
+// Write lock, assert line 220: the source is appended onto the traffic-type response queue
+// (+0xBFA8) with the queue's own Append.
+void PostWorldInputBuffer::AppendTrafficTypeResponseQueue(const TrafficTypeResponseQueue* lpQueue)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    return mTrafficTypeResponseQueue.Append(lSource);
+    mTrafficTypeResponseQueue.Append(*lpQueue);
+}
+
+// Read lock, assert line 219 (+0xBFA8).
+const PostWorldInputBuffer::TrafficTypeResponseQueue* PostWorldInputBuffer::GetTrafficTypeResponseQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mTrafficTypeResponseQueue;
 }
 
 // X360 0x8231D170 - read-lock accessor for the race-car crash-event queue (this+0x10).
 const RaceCarCrashEventQueue* PostWorldInputBuffer::GetRaceCarCrashEventQueue() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mRaceCarCrashEventQueue;
+}
+
+// Write-lock twin, assert line 199 (+0x10).
+RaceCarCrashEventQueue* PostWorldInputBuffer::GetRaceCarCrashEventQueue()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
     return &mRaceCarCrashEventQueue;
 }
 
@@ -347,6 +404,34 @@ TriggerEntityModuleOutputInterface* PostWorldInputBuffer::GetTriggerEntityOutput
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
     return &mTriggerEntityOutputInterface;
+}
+
+// Read lock, assert line 204: the contact-spy handle (+0x6E30).
+const PostWorldInputBuffer::ContactSpyInterface* PostWorldInputBuffer::GetContactSpyInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mContactSpyInterface;
+}
+
+// Write lock, assert line 205.
+PostWorldInputBuffer::ContactSpyInterface* PostWorldInputBuffer::GetContactSpyInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return &mContactSpyInterface;
+}
+
+// Read lock, assert line 213: the global race-car output interface (+0x9B40).
+const PostWorldInputBuffer::RCEntityGlobalRaceCarOutputInterface* PostWorldInputBuffer::GetGlobalRaceCarOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mGlobalRaceCarOutputInterface;
+}
+
+// Write lock, assert line 214.
+PostWorldInputBuffer::RCEntityGlobalRaceCarOutputInterface* PostWorldInputBuffer::GetGlobalRaceCarOutputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return &mGlobalRaceCarOutputInterface;
 }
 
 // =====================  OutputBuffer (GameStateModuleIO TU)  =====================

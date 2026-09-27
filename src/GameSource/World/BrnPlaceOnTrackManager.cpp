@@ -1,5 +1,6 @@
 #include "GameSource/World/BrnPlaceOnTrackManager.h"
 #include "GameSource/Director/BrnDirectorHarness.h"   // [harness] the sweep's BRN_SWEEP_WAIT_ROAMING gate
+#include "GameSource/Game/BrnHarnessWinTeleport.h"    // [win-teleport] the BRN_WIN_TELEPORT mailbox
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
@@ -362,6 +363,10 @@ void PlaceOnTrackManager::PrePhysicsUpdate(
     // that frame's walk below places the car (one frame later than the retired bring-up did).
     // See the block at the bottom of this file.
     ArmCarTeleportBringUp();
+
+    // [win-teleport] the harness guaranteed-win teleport's consumer, answered by the same round
+    // trip. Inert unless BRN_WIN_TELEPORT is set. See the block at the bottom of this file.
+    ArmWinTeleportBringUp();
 
     // [sweep] the deterministic crash sweep, armed on the same frame and answered the same way.
     // See the block at the bottom of this file. Inert unless BRN_CRASH_SWEEP is set.
@@ -866,6 +871,72 @@ void PlaceOnTrackManager::ArmCarTeleportBringUp()
             << "[teleport] car -> (" << sTarget.x << ", " << sTarget.y << ", " << sTarget.z
             << ") heading=(" << sDirection.x << ", " << sDirection.y << ", " << sDirection.z
             << ") from (" << lrHere.x << ", " << lrHere.y << ", " << lrHere.z << ")\n";
+    }
+}
+
+
+// ===========================================================================
+// [win-teleport] ArmWinTeleportBringUp -- NOT a console function, and DELIBERATELY PERMANENT.
+//
+// The World half of BRN_WIN_TELEPORT. The GameState half (GameSource/Game/
+// BrnHarnessWinTeleport.cpp, called from ModeManager::PreWorldUpdate) decides which landmark box
+// the player's car goes to next and posts a sequence-numbered request; this block hands each NEW
+// request to the one call the BRN_CAR_TELEPORT trigger above already makes,
+//     ActiveRaceCar::RequestPlaceOnTrack( position, direction, speed )
+// and the rest of the move is the console's own chain exactly as that banner lists it (line test,
+// ComputeBestPlaceOnT, PlaceCarOnTrack, ResetActiveRaceCar, the analytic seat, VehiclePhysics::
+// Reset). Nothing here writes a transform, a velocity or a physics field.
+//
+// A request that arrives while the car is not live or is already being placed waits here (it is
+// not dropped) and is issued on the first frame the car can take it; a newer request replaces an
+// older one that never went out, so the car always goes where the producer last asked.
+// DELETE-WHEN: NOTHING. Permanent harness capability; with the variable unset the producer never
+// posts, and this costs one atomic load per pre-physics update.
+// ===========================================================================
+void PlaceOnTrackManager::ArmWinTeleportBringUp()
+{
+    static u32 suLastIssuedSeq = 0u;
+
+    BrnGame::HarnessWinTeleport::Request lRequest;
+    if( !BrnGame::HarnessWinTeleport::PeekRequest( suLastIssuedSeq, &lRequest ) )
+    {
+        return;
+    }
+
+    if( mpRaceCarEntityModule == 0 )
+    {
+        return;
+    }
+
+    const EActiveRaceCarIndex lePlayerIndex =
+        mpRaceCarEntityModule->GetPlayerActiveRaceCarIndex();
+    if( lePlayerIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )
+    {
+        return;
+    }
+
+    ActiveRaceCar* lpPlayerCar = mpRaceCarEntityModule->GetActiveRaceCar( lePlayerIndex );
+    if( lpPlayerCar == 0 || !lpPlayerCar->IsActive() || lpPlayerCar->ToBePlacedOnTrack() )
+    {
+        return;   // not live, or a placement is already in flight: try again next frame
+    }
+
+    const Vector3 lFrom = lpPlayerCar->GetPhysicsState()->mTransform.wAxis;
+
+    // THE ONE CALL.
+    lpPlayerCar->RequestPlaceOnTrack( lRequest.mPosition, lRequest.mDirection, lRequest.mfSpeed );
+    suLastIssuedSeq = lRequest.muSeq;
+
+    // [FLAG PC witness] the hand-over, one line per request (the producer spaces them GAP frames
+    // apart), so a producer line with no matching consumer line names the missing half.
+    if( CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[win-teleport] request " << lRequest.muSeq << " -> RequestPlaceOnTrack("
+            << lRequest.mPosition.x << ", " << lRequest.mPosition.y << ", " << lRequest.mPosition.z
+            << ") dir=(" << lRequest.mDirection.x << ", " << lRequest.mDirection.y << ", "
+            << lRequest.mDirection.z << ") speed=" << lRequest.mfSpeed << " from ("
+            << lFrom.x << ", " << lFrom.y << ", " << lFrom.z << ")\n";
     }
 }
 

@@ -672,135 +672,68 @@ namespace BrnGame
     }
 
     // ========================================================================================
-    // ⭐⭐ [gateui] BrnGame::BrnGameModule::BridgeWorldToGameState  @ X360 0x823E5368
+    // BrnGame::BrnGameModule::BridgeWorldToGameState
     //
-    // THE WORLD -> GAME-STATE SEAM. Its game-event leg is the hop that carries the world's
-    // per-frame game events -- including event 111 E_EVENT_RECORD_PROP_HIT, which
-    // WorldModule::BridgeEntityModulesToOutput_PostPhysics (@0x827AEEB0 leg 10) posts from
-    // PropEntityIO's mRecordHitPropQueue -- into the GameState post-world input buffer, from
-    // where GameStateModule::PostWorldUpdate @0x8238F358 carries it to PreWorldUpdate
-    // @0x823A5328 and ProcessGameEvents @0x823A0A18 case 111 ->
-    // StuntManager::OnPropHit @0x8236EE18.
+    // The world -> game-state hand-off: every per-frame world product the post-world half of the
+    // game state reads is copied into the post-world input buffer here. Sole caller:
+    // DoUpdate_GameStatePostWorld, inside its LockBuffersForIO bracket (the post-world input
+    // write-locked, the world update output read-locked) and only when update-set bit 0x20 is
+    // clear. `this` is never read.
     //
-    // SIGNATURE from the ASM prologue (@0x823E537C..0x823E5380): r3 = BrnGameModule* (never
-    // dereferenced in the body), r4 = GameStateModuleIO::PostWorldInputBuffer* (the WRITE
-    // side), r5 = const BrnWorldIO::UpdateOutputBuffer* (the READ side). Home + line proven by
-    // the body's own assert ("lpRouteResponseOutput", GameBridgeWorldToX.cpp:505).
-    // Sole caller: BrnGameModule::DoUpdate_GameStatePostWorld @0x823E92A8, which brackets it
-    // with sub_823B7620 == LockBuffersForIO(postWorldInput, /*sources*/ a4..a8) -- destination
-    // write-locked, every source read-locked -- and gates it on `(luUpdateSet & 0x20) == 0`.
-    //
-    // THE CONSOLE'S TEN LEGS, in body order, each with its measured accessor pair:
-    //    1  RaceCarCrashEvent_::Append( postWorldIn->GetRaceCarCrashEventQueue() /*W,
-    //         0x823B9258 -> +0x10, BrnGameStateModuleIO.h:199*/,
-    //         worldOut->GetVehicleManagerOutputInterface() /*R, 0x823B5978 -> +27680*/ + 0x3A0 )
-    //                                                                       @0x823E539C
-    //  ⭐2  Append<1536,16>( postWorldIn->GetGameEventQueue() /*W, 0x823B91B0 -> +0xA4B0*/,
-    //         worldOut->GetGameEventQueue() const /*R, 0x823B62A8 -> +216116*/ )
-    //                                                                       @0x823E53B8
-    //    3  postWorldIn->AppendTrafficTypeResponseQueue( worldOut->
-    //         GetTrafficTypeResponseQueue() const /*R, 0x823B63F8 -> +155616,
-    //         BrnWorldModuleIO.h:585*/ )                                    @0x823E53CC
-    //    4  *postWorldIn-><+0x6E30> = *worldOut->GetContactSpyInterface()    (one 4-byte word)
-    //         /*W 0x823B93A8 -> +0x6E30 :205; R 0x823B5D68 -> +146656*/     @0x823E53F0
-    //    5  XMemCpy( postWorldIn->GetActiveRaceCarOutputInterface() /*W, 0x823B94F8 -> +0x7250
-    //         :211*/, worldOut->GetActiveRaceCarOutputInterface() const /*R, 0x823B5C18 ->
-    //         +29856*/, 10480 )                                             @0x823E540C
-    //    6  XMemCpy( postWorldIn-><+0x9B40> /*W, 0x823B95A0 :214*/,
-    //         worldOut->GetRaceCarGlobalOutputInterface() const /*R, 0x823B5AC8 -> +52672*/,
-    //         2416 )                                                        @0x823E542C
-    //    7  memcpy( postWorldIn->GetTriggerEntityOutputInterface() /*W, 0x823B9450 -> +0x6E34
-    //         :208*/, worldOut->GetTriggerEntityOutputInterface() const /*R, 0x823B5B70 ->
-    //         +50816*/, 1040 )                                              @0x823E5450
-    //  ⭐8  memcpy( postWorldIn->GetAICarOutputInterface() /*W, 0x823B9648 -> +0xAAC0 :217*/,
-    //         worldOut->GetAICarOutputInterface() const /*R, 0x823B5E10 -> +55088*/, 5352 )
-    //                                                                       @0x823E5474
-    //    9  VehicleOutputInterface::operator=( postWorldIn->GetVehicleOutputInterface() /*W,
-    //         0x823B9300 -> +0x220 :202*/, worldOut->GetVehicleOutputInterface() const
-    //         /*R, 0x823B58D0 -> +16*/ )                                    @0x823E5490
-    //   10  assert(lpRouteResponseOutput);  for each of worldOut->GetRouteResponseQueue()
-    //         const /*R, 0x823B5F60 -> +60440*/ entries: copy the 5136-byte RouteResponse and,
-    //         when its muOwnerId (+0x140C) == 2 (E_OWNER_MODE_MANAGER), AddEvent(
-    //           { u32 muEventId(+0x140E); f32 (nodeCount > 0 ? route->GetDistance() : 0.0f) },
-    //           /*type*/ 174, /*size*/ 8 ) onto postWorldIn->GetGameEventQueue()
-    //                                                                       @0x823E5540
-    //
-    // ⭐ LANDED HERE: legs 2 and 8 -- the only two whose SOURCE and DESTINATION are both real,
-    // complete, correctly-locked types on this build. Leg 2 is the wave's load-bearing hop.
-    //
-    // [FLAG] PARKED, each with the precise blocker -- every one is named here, none is dropped
-    // without a reason and an address:
-    //   * leg 1  -- GameStateModuleIO::PostWorldInputBuffer has no write-lock
-    //     GetRaceCarCrashEventQueue() (only the const half, X360 0x8231D170), and its member is
-    //     still the named-opaque `RaceCarCrashEventQueue { u8 maOpaque[0x210]; }`, so the
-    //     console's EventQueue<RaceCarCrashEvent,8>::Append has nothing to bind to. It also
-    //     needs the VehicleManagerOutputInterface member at its +0x3A0, which is inside an
-    //     opaque span. Owner: gsm (BrnGameStateModuleIO.h).
-    //   * leg 3  -- BrnWorldIO::UpdateOutputBuffer declares only the WRITE-side
-    //     AppendTrafficTypeResponseQueue (:586); the const READ getter the console calls
-    //     (X360 0x823B63F8, BrnWorldModuleIO.h:585, returns +155616) is not declared in-tree.
-    //     Owner: wire (BrnWorldModuleIO.h). Filed as a shared_header_request.
-    //   * leg 4  -- the destination word at PostWorldInputBuffer +0x6E30 (X360 0x823B93A8,
-    //     :205) has no accessor and no named member; it sits inside
-    //     mVehicleOutputInterfaceStorage. Owner: gsm.
-    //   * leg 5  -- no write-lock GetActiveRaceCarOutputInterface() on PostWorldInputBuffer,
-    //     AND ⚠️ A MEASURED SIZE TRAP: the destination member is
-    //     `u8 mActiveRaceCarOutputInterfaceStorage[0x2890]` == 10384 bytes, while the console
-    //     copies 10480 (0x28F0). Landing this leg as a literal byte copy would overrun the
-    //     member by 96 bytes. It must be retyped to the real
-    //     RCEntityActiveRaceCarOutputInterface and copied BY ASSIGNMENT (the same correction
-    //     GameStateModule::PostWorldUpdateStuntBringUp already documents for its own copy of
-    //     this transfer). Owner: gsm.
-    //   * leg 6  -- the destination at PostWorldInputBuffer +0x9B40 (X360 0x823B95A0, :214) has
-    //     no accessor and no named member. Owner: gsm.
-    //   * leg 7  -- the destination accessor exists, but its type is the named-opaque
-    //     `TriggerEntityModuleOutputInterface { u8 maOpaque[16]; }` -- 16 bytes for a 1040-byte
-    //     console copy. Owner: gsm.
-    //   * leg 9  -- GameStateModuleIO::VehicleOutputInterface is a FORWARD-DECLARED class with
-    //     no definition anywhere in the tree, so its operator= (X360 0x823C89C8) cannot be
-    //     named. Owner: gsm.
-    //   * leg 10 -- ⭐ LANDED 2026-09-24 (crash parity FX-BRIDGES CC-11) through
-    //     BridgeWorldToGameState_RouteInfo; the note below is kept as the record of what it needed.
-    //     Everything on the SOURCE side exists (BrnRouteMapModuleIO.h ::
-    //     RouteResponse::GetOwnerId/GetEventId/GetRoute, BrnRoute.h :: GetNodeCount/
-    //     GetDistance -- the console's `lfs` at RouteResponse+8 IS maNodes[0].z, i.e.
-    //     Route::GetDistance()), and so does the destination queue. What is missing is the
-    //     EVENT: game event id 174 and its 8-byte payload have no home in
-    //     GameSource/GameState/BrnGameEvents.h. ProcessGameEvents @0x823A0A18 names the
-    //     consumer's local "lpRouteInfoEvent", so the type wants to be
-    //     `E_EVENT_ROUTE_INFO = 174` + `struct RouteInfoEvent { u32 muEventId; f32 mfDistance; }`.
-    //     Owner: gsm (BrnGameEvents.h). Filed as a shared_header_request; the world side is
-    //     then a ~12-line loop, spelled out above.
-    //
-    // ⚠️ NO CALL SITE YET, and that is deliberate. Nothing on this build creates a
-    // GameStateModuleIO::PostWorldInputBuffer (DoUpdate_GameStatePostWorld @0x823E92A8, which
-    // CreateIOBuffer<PostWorldInputBuffer>s it, is not reconstructed), so this function has no
-    // buffer to be handed. The live PC feed of the SAME two legs is the direct one:
-    // BrnGameModule::Update calls GameStateModule::PostWorldUpdateStuntBringUp with the world
-    // output's GetActiveRaceCarOutputInterface() + GetGameEventQueue() -- ONE feed, not two
-    // (see the banner at that call site in BrnGameModule.cpp). This body is the console shape,
-    // homed where the console homes it, ready for the day the buffer exists.
-    // DELETE-WHEN DoUpdate_GameStatePostWorld lands: then this becomes the only feed and the
-    // bring-up entry point retires.
+    // Ten legs, in console order:
+    //    1  the physics race-car crash events (the vehicle-manager output's +0x3A0 queue) appended
+    //       onto the buffer's crash-event queue
+    //    2  the world's game events appended onto the buffer's game-event queue
+    //    3  the traffic-type responses appended onto the buffer's own queue
+    //    4  the contact-spy handle copied
+    //    5  the active race-car output interface copied (console XMemCpy of 0x28F0 bytes)
+    //    6  the global race-car output interface copied (console XMemCpy of 0x970 bytes)
+    //    7  the trigger-entity output interface copied (console memcpy of 0x410 bytes)
+    //    8  the AI-car output interface copied (console memcpy of 0x14E8 bytes)
+    //    9  the vehicle output interface copied with its own operator=
+    //   10  every route answer the mode manager asked for becomes game event 174 on the buffer's
+    //       game-event queue, after the world's own events from leg 2
+    // Legs 4-8 copy by assignment: the console byte counts are console sizes, and the host
+    // layouts of the active race-car interface and the contact-spy handle are wider.
     // ========================================================================================
-    // ========================================================================================
-    // [FX-BRIDGES CC-11, 2026-09-24] BridgeWorldToGameState_RouteInfo -- LEG 10 of
-    // BridgeWorldToGameState @0x823E5368, de-inlined (see GameBridgeWorldToX.h for why).
-    //   0x823E5494..0x823E54C4  lpRouteResponseOutput = worldOut->GetRouteResponseQueue() const
-    //                           (0x823B5F60); assert it (GameBridgeWorldToX.cpp:505, `li r5, 0x1F9`)
-    //   0x823E54C8..0x823E54D4  the count (`lwz r28, 8(r31)`), read once; f31 = flt_82001CC0 (0.0f)
-    //   0x823E54E0..0x823E54F8  per response: GetEvent(i), and the whole 0x1410-byte record memcpy'd
-    //                           to the stack
-    //   0x823E54FC..0x823E5504  only muOwnerId (+0x140C) == 2 (E_OWNER_MODE_MANAGER) is forwarded
-    //   0x823E5508..0x823E551C  distance = node count (+0x1400) > 0 ? Route::GetDistance() (+0x8) : 0.0f
-    //   0x823E5520..0x823E5540  { (s32) muEventId (+0x140E), distance } -> AddEvent(record, 174, 8)
-    //                           onto the post-world input's game-event queue
-    // ========================================================================================
-    void BridgeWorldToGameState_RouteInfo(CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
-                                          const BrnWorldIO::UpdateOutputBuffer*     lpWorldOutput)
+    void BrnGameModule::BridgeWorldToGameState(
+            BrnGameState::GameStateModuleIO::PostWorldInputBuffer* lpGameStateInput,
+            const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput)
     {
+        // ---- leg 1: the race-car crash events ------------------------------------------------
+        lpGameStateInput->GetRaceCarCrashEventQueue()->Append(
+            *lpWorldOutput->GetVehicleManagerOutputInterface()->GetRaceCarCrashEventQueue());
+
+        // ---- leg 2: the game-event transfer ----------------------------------------------------
+        // Source read-locked (`GetGameEventQueue() const`), destination write-locked
+        // (`GetGameEventQueue()`). Both ends are CgsModule::VariableEventQueue<1536,16> (the game
+        // state's GameEventQueue derives from it), so this is the queue's own bulk Append.
+        lpGameStateInput->GetGameEventQueue()->Append(*lpWorldOutput->GetGameEventQueue());
+
+        // ---- leg 3: the traffic-type responses ---------------------------------------------------
+        lpGameStateInput->AppendTrafficTypeResponseQueue(lpWorldOutput->GetTrafficTypeResponseQueue());
+
+        // ---- legs 4-7: the contact-spy handle and the race-car / trigger interfaces --------------
+        *lpGameStateInput->GetContactSpyInterface()           = *lpWorldOutput->GetContactSpyInterface();
+        *lpGameStateInput->GetActiveRaceCarOutputInterface()  = *lpWorldOutput->GetActiveRaceCarOutputInterface();
+        *lpGameStateInput->GetGlobalRaceCarOutputInterface()  = *lpWorldOutput->GetRaceCarGlobalOutputInterface();
+        *lpGameStateInput->GetTriggerEntityOutputInterface()  = *lpWorldOutput->GetTriggerEntityOutputInterface();
+
+        // ---- leg 8: the AI car output interface ----------------------------------------------------
+        // Both ends are the same type (BrnAI::AIModuleIO::AICarOutputInterface -- BrnWorldModuleIO.h
+        // and BrnGameStateModuleIO.h both typedef it), so the member-wise copy is exact.
+        *lpGameStateInput->GetAICarOutputInterface() = *lpWorldOutput->GetAICarOutputInterface();
+
+        // ---- leg 9: the vehicle output interface -----------------------------------------------------
+        *lpGameStateInput->GetVehicleOutputInterface() = *lpWorldOutput->GetVehicleOutputInterface();
+
+        // ---- leg 10: the mode manager's route answers --------------------------------------------
+        // The response count is read once; each response record is copied whole, and only those
+        // owned by the mode manager (+0x140C == 2) are forwarded as { the response's event id
+        // (+0x140E), the route's distance or 0.0f with no nodes }. Same write-locked destination
+        // queue as leg 2 (legs 3-9 never touch it), so the world's events come first.
         const BrnAI::RouteMapModuleIO::RouteResponseQueue* lpRouteResponseOutput = lpWorldOutput->GetRouteResponseQueue();
-        CGS_ASSERT(lpRouteResponseOutput != 0, "lpRouteResponseOutput");   // GameBridgeWorldToX.cpp:505
+        CGS_ASSERT(lpRouteResponseOutput != 0, "lpRouteResponseOutput");
 
         const s32 liNumResponses = lpRouteResponseOutput->GetLength();
         for (s32 liResponse = 0; liResponse < liNumResponses; ++liResponse)
@@ -812,12 +745,13 @@ namespace BrnGame
                 lRouteInfoEvent.miEventId       = static_cast<s32>(lRouteResponse.GetEventId());
                 lRouteInfoEvent.mfRouteDistance = (lRouteResponse.GetRoute()->GetNodeCount() > 0)
                                                       ? lRouteResponse.GetRoute()->GetDistance()
-                                                      : 0.0f;   // f31 = flt_82001CC0
-                lpGameEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRouteInfoEvent),
-                                           static_cast<s32>(BrnGameState::GameStateModuleIO::E_EVENT_MODE_MANAGER_ROUTE_INFO),
-                                           static_cast<s32>(sizeof(lRouteInfoEvent)));   // li r5, 0xAE ; li r6, 8
+                                                      : 0.0f;
+                lpGameStateInput->GetGameEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lRouteInfoEvent),
+                    static_cast<s32>(BrnGameState::GameStateModuleIO::E_EVENT_MODE_MANAGER_ROUTE_INFO),
+                    static_cast<s32>(sizeof(lRouteInfoEvent)));   // console size 8
 
-                // [DIAG] NOT IN THE X360 BINARY -- BRN_ROUTE_INFO_DIAG: every forwarded answer (first 40).
+                // [FLAG PC witness] BRN_ROUTE_INFO_DIAG: every forwarded answer (first 40).
                 static const bool sbRouteDiag = (getenv("BRN_ROUTE_INFO_DIAG") != 0);
                 static s32 siRouteLinesLeft = 40;
                 if (sbRouteDiag && siRouteLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
@@ -830,55 +764,10 @@ namespace BrnGame
                 }
             }
         }
-    }
 
-    void BrnGameModule::BridgeWorldToGameState(
-            BrnGameState::GameStateModuleIO::PostWorldInputBuffer* lpGameStateInput,
-            const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput)
-    {
-        CGS_ASSERT(lpGameStateInput != 0, "lpGameStateInput != NULL");
-        CGS_ASSERT(lpWorldOutput    != 0, "lpWorldOutput != NULL");
-        if (lpGameStateInput == 0 || lpWorldOutput == 0)
-        {
-            return;
-        }
-
-        // ---- leg 2: the game-event transfer (@0x823E53A4..0x823E53B8) -----------------------
-        // Source read-locked (`GetGameEventQueue() const`), destination write-locked
-        // (`GetGameEventQueue()`) -- the LockBuffersForIO discipline the caller sets up. Both
-        // ends are CgsModule::VariableEventQueue<1536,16>: the world's by typedef
-        // (BrnWorldModuleIO.h:556) and the game state's by the DWARF-attested derivation
-        // (BrnGameEvents.h:314, `GameEventQueue : public VariableEventQueue<1536,16>`), so this
-        // is the console's own bulk Append<1536,16>, unchanged.
-        lpGameStateInput->GetGameEventQueue()->Append(*lpWorldOutput->GetGameEventQueue());
-
-        // ---- leg 8: the AI car output interface (@0x823E5460..0x823E5474) -------------------
-        // ⚠️ COPIED BY ASSIGNMENT, NEVER AT THE CONSOLE'S LITERAL 5352 BYTES. Both ends are the
-        // SAME real type (BrnAI::AIModuleIO::AICarOutputInterface -- BrnWorldModuleIO.h:504 and
-        // BrnGameStateModuleIO.h:169 both typedef it), so a member-wise copy is exact and stays
-        // exact if the host layout ever widens; a literal `memcpy(dst, src, 5352)` would be a
-        // console byte count carried onto the x64 host, which is this tree's most-repeated bug.
-        {
-            const BrnAI::AIModuleIO::AICarOutputInterface* lpAICarSource =
-                lpWorldOutput->GetAICarOutputInterface();
-            BrnGameState::GameStateModuleIO::AICarOutputInterface* lpAICarDest =
-                lpGameStateInput->GetAICarOutputInterface();
-            if (lpAICarSource != 0 && lpAICarDest != 0)
-            {
-                *lpAICarDest = *lpAICarSource;
-            }
-        }
-
-        // ---- leg 10: the mode manager's route answers (@0x823E5494..0x823E554C) -------------
-        // [FX-BRIDGES CC-11, 2026-09-24] Landed through the de-inlined helper above, onto the same
-        // write-locked destination queue leg 2 appends into (legs 3..9 never touch it, so the
-        // queue's content order -- world events, then the answers -- is the console's).
-        BridgeWorldToGameState_RouteInfo(lpGameStateInput->GetGameEventQueue(), lpWorldOutput);
-
-        // [DIAG] NOT IN THE X360 BINARY -- the `[UI-gate]` ladder's GameState-transport rung.
-        // Same logger, same env guard (BRN_PROP_DIAG) and same first-N latch as
-        // PropEntityModule_wQ_04.cpp's "[prop-diag] BREAK" line. The count is read AFTER the
-        // Append because Append does not drain its source.
+        // [FLAG PC witness] BRN_PROP_DIAG: the `[UI-gate]` ladder's GameState-transport rung, same
+        // guard and first-N latch as PropEntityModule_wQ_04.cpp's "[prop-diag] BREAK" line. The
+        // count is read after the Append because Append does not drain its source.
         {
             static const bool sbPropDiag     = ( getenv( "BRN_PROP_DIAG" ) != 0 );
             static s32        siDiagLinesLeft = 8;

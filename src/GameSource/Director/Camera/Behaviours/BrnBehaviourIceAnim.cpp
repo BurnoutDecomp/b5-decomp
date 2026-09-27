@@ -638,6 +638,10 @@ void BehaviourIceAnim::Construct()
     // a fabricated behaviour-level "reset block" at +0xDE0; see ResetPlayback's banner.
     mKeyAnimController.ResetPlayback();
 
+    // --- the embedded looker (+0x660): its whole Construct, inlined by the console (0.0 slerp,
+    // 0.2 assessment time, first-frame / assessing / constructed latches set, force-zoom clear).
+    mLooker.Construct();
+
     // --- the produced camera + the attached-to-car collision policy ---
     mLastCamera.Construct();
     mAttachedToCarCollisionPolicy.Construct(0);

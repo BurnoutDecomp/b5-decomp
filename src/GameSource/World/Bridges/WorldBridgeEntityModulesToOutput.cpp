@@ -988,7 +988,7 @@ void BridgePhysicsToOutput(
     // never the problem -- VehicleManager::WriteOutVehicleStats fills the PHYSICS buffer's copy
     // each frame. Downstream of this leg the whole organic-takedown chain was reading that empty
     // publication: BrnGameModule hands the world copy to
-    // GameStateModule::PostWorldUpdateStuntBringUp, CacheTakedownManagerPostWorldInputData copies
+    // GameStateModule::PostWorldUpdate, CacheTakedownManagerPostWorldInputData copies
     // it into the game-state takedown cache, and the pre-world leg builds its crashing-race-car
     // scratch from that cache -- so CrashingRaceCarInterface::SetFromVehicleOutputInterface wrote
     // all-false every frame and no organic takedown could ever be detected.

@@ -2209,6 +2209,39 @@ void ChallengeManager::HandleRoadRuleScore(BrnStreetData::ChallengePlayerScoreEn
     }
 }
 
+// ----------------------------------------------------------------------------
+// HandleWorldStunt -- a collectible stunt element was just completed. Only a BILLBOARD counts
+// here: the first time a given billboard is smashed it scores one point of the BILLBOARDS
+// freeburn skill, banked immediately, and its id is remembered so a repeat smash of the same
+// board scores nothing. Once the 80-entry list is full new ids are no longer remembered (the
+// score still lands). Every other element type is ignored.
+// ----------------------------------------------------------------------------
+void ChallengeManager::HandleWorldStunt(StuntElementType leStuntElementType, CgsID lStuntID)
+{
+    if (leStuntElementType == E_STUNT_ELEMENT_TYPE_BILLBOARD)
+    {
+        if (!maBillboardsCollected.Contains(lStuntID))
+        {
+            SetCurrentSkillScore(E_FREEBURN_SKILL_BILLBOARDS, 1.0f, true);
+            if (!maBillboardsCollected.IsFull())
+            {
+                maBillboardsCollected.Append(lStuntID);
+            }
+
+            // [FLAG PC witness] opt-in BRN_COLLECT_DIAG, first 16 only. Read-only.
+            static const bool sbCollectDiag = (getenv("BRN_COLLECT_DIAG") != 0);
+            static s32        siCollectDiagLines = 0;
+            if (sbCollectDiag && siCollectDiagLines < 16 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++siCollectDiagLines;
+                *CgsDev::Log::gpDebugPrint
+                    << "[collect] billboard skill +1 tracked=" << maBillboardsCollected.GetCount()
+                    << " status=" << static_cast<s32>(meChallengeManagerStatus) << "\n";
+            }
+        }
+    }
+}
+
 } // namespace BrnGameState
 
 // ============================================================================

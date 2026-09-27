@@ -419,27 +419,9 @@ void ModeManager::TransmitAndIncrementFinishReached(GameStateModuleIO::GameActio
 // ============================================================================================
 void ModeManager::ProcessPlayerCrashes(const GameStateModuleIO::PostWorldInputBuffer* lpPostWorldInputBuffer)
 {
-    // [!] TYPE STAND-IN + [header_request #4]. PostWorldInputBuffer::GetRaceCarCrashEventQueue()
-    // (X360 0x8231D170, read-locked this+0x10) still returns the NAMED-OPAQUE placeholder
-    // `GameStateModuleIO::RaceCarCrashEventQueue { u8 maOpaque[0x210]; }`, whose own header
-    // comment says: "Swap for the real EventQueue<RaceCarCrashEvent,8> when that physics type is
-    // homed." IT IS HOMED -- BrnScoringSystemEventQueues.h completes
-    // `VehicleManagerOutputInterface::RaceCarCrashEventQueue : public EventQueue<RaceCarCrashEvent,8>`,
-    // and that is the exact type ScoringSystem::UpdateCrashes (@0x8231F9B8) and
-    // ChallengeManager::PostWorldUpdate already take. The cast below is a TYPE re-home of the same
-    // bytes at the same offset -- no fabricated offset, no invented member -- and it disappears
-    // the moment the accessor is retyped. Agent 7a's PostWorldUpdate needs the identical fix.
     const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpRaceCarCrashEventQueue =
-        reinterpret_cast<const VehicleManagerOutputInterface::RaceCarCrashEventQueue*>(
-            lpPostWorldInputBuffer->GetRaceCarCrashEventQueue());
+        lpPostWorldInputBuffer->GetRaceCarCrashEventQueue();
 
-    ProcessPlayerCrashes(lpRaceCarCrashEventQueue);
-}
-
-// The body proper, on the queue itself (see the overload note in BrnModeManager.h). The queue
-// walk below is the console's, statement for statement; only the argument changed.
-void ModeManager::ProcessPlayerCrashes(const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue)
-{
     mbPlayerCrashedLastFrame = false;   // X360 `stb r31(=0), 0(this+0x950A)` -- BEFORE the scan
 
     // The X360 re-reads the queue length every iteration (`lwz r11, 8(r30)` @0x8231E6B0).
@@ -480,112 +462,55 @@ void ModeManager::ProcessPlayerCrashes(const CgsModule::BaseEventQueue<BrnPhysic
 // ModeManager::RaceCarTriggersLandmark.
 //
 // (i) NOT A STUNT-RACE PATH: the gate is `meCurrentGameModeType == E_MODE_OFFLINE_RACE` (0) and a
-// stunt race is mode 7. Reconstructed for completeness of the PostWorldUpdate spine.
+// stunt race is mode 7.
 // ============================================================================================
 void ModeManager::CheckForOutOfRangeCarsReachingFinish(const GameStateModuleIO::PostWorldInputBuffer* lpPostWorldInputBuffer)
 {
-    // [!] FETCH-PATH STAND-IN + [header_request #5]. The console reads the GLOBAL race-car output
-    // interface OUT OF THE POST-WORLD INPUT BUFFER: sub_8231D368 is a read-locked accessor
-    // returning `buffer + 0x9B40` (39744) whose assert cites BrnGameStateModuleIO.h:213 -- the
-    // sibling of the :210 GetActiveRaceCarOutputInterface (+0x7250) and the :216
-    // GetAICarOutputInterface (+0xAAC0) the tree already declares. PostWorldInputBuffer has NO such
-    // accessor yet (+0x9B40 falls inside its mPostActiveCarOutputStorage filler), so the
-    // manager-side embed is used instead -- the SAME interface type, fetched from
-    // mpGameStateModule+0x3C0D0 rather than from this frame's snapshot buffer. Re-point at the
-    // buffer accessor the moment header_request #5 lands.
     const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCarOutput =
-        GetGlobalRaceCarOutputInterface();
-
-    // X360 0x8231D410 (read-locked buffer + 0xAAC0, BrnGameStateModuleIO.h:216).
+        lpPostWorldInputBuffer->GetGlobalRaceCarOutputInterface();
     const GameStateModuleIO::AICarOutputInterface* lpAICarOutput =
         lpPostWorldInputBuffer->GetAICarOutputInterface();
 
-    // X360 `lwz r11, 0xD94(r27); cmpwi r11,0; bne -> exit`.
     if (meCurrentGameModeType != GameStateModuleIO::E_MODE_OFFLINE_RACE)
     {
         return;
     }
-    // X360 `lwz r11, 0xD98(r27); lwz r11, 0x28(r11); cmpwi r11,2; bne -> exit`. The console does
-    // NOT null-check mpCurrentGameMode here -- meCurrentGameModeType != E_MODE_NONE already
-    // implies a live mode (hazards H3). Kept faithful.
+    // No null test on mpCurrentGameMode: an offline-race mode type implies a live mode.
     if (mpCurrentGameMode->GetCurrentState() != GameStateModuleIO::E_GMS_IN_PROGRESS)
     {
         return;
     }
 
-    // ============================================================================
-    // PARKED LEG + [header_request #6 and #7] -- the two declarations this body needs and the
-    // frozen tree does not have. NOTHING here is guessed; both console reads are pinned:
-    //
-    //   (a) THE FINISH CHECKPOINT.  X360 `BrnGameState::CheckpointData,16>::GetItem(this+34272, 0)`
-    //       @0x82340858 and again @0x823408CC. this+34272 == mCurrentGameModeParams (+33664) + 608,
-    //       and the callee's own bounds assert reads the Array count at base+704 == 16 * 44 ==
-    //       sizeof(CheckpointData) * 16 -- i.e. it is GameModeParams::maCheckpointDataArray,
-    //       element 0. The two fields taken off it are:
-    //           `lhz r24, 2(r3)`  -> CheckpointData +0x02 muAISectionIndex  (GetAISectionIndex())
-    //           `lhz r29, 0(r11)` -> CheckpointData +0x00 muLandmarkIndex   (GetLandmarkIndex())
-    //       GameModeParams declares maCheckpointDataArray PRIVATE and publishes only
-    //       GetCheckpointCount(); its StartGameModeParams twin already publishes
-    //       `const CheckpointData* GetCheckpointData(s32) const` (BrnGameModeParams.h:330).
-    //       => header_request #6 adds the same accessor to GameModeParams.
-    //
-    //   (b) THE CREDIT CALL.  X360 `bl BrnGameState::ModeManager::RaceCarTriggersLandmark`
-    //       @0x823408F8 with (this, buffer+0x7250 == GetActiveRaceCarOutputInterface(),
-    //       leGlobalRaceCarIndex, leActiveRaceCarIndex, finishLandmarkIndex, false).
-    //       ModeManager::RaceCarTriggersLandmark @0x82337258 is real (its own asserts name both
-    //       index parameters, BrnModeManager.cpp:2573 / :2574) and has three console callers, but
-    //       it is NOT declared in the frozen BrnModeManager.h and belongs to no agent this wave --
-    //       it is also the only writer of the UNPLACED mauLastLandmarkHit[35] the header FLAGs at
-    //       :562-565.  => header_request #7 declares it.
-    //
-    // Until both land, the scan below runs and names every console call it CAN make; the two
-    // parked lines are the only thing missing. A one-for-one revive, not a rewrite:
-    //
-    //   const CheckpointData* lpFinishCheckpoint     = mCurrentGameModeParams.GetCheckpointData(0);
-    //   const u16             luFinishAISectionIndex = lpFinishCheckpoint->GetAISectionIndex();
-    //   ...
-    //   if (luAISectionIndex == luFinishAISectionIndex)
-    //   {
-    //       RaceCarTriggersLandmark(lpPostWorldInputBuffer->GetActiveRaceCarOutputInterface(),
-    //                               leGlobalRaceCarIndex, leActiveRaceCarIndex,
-    //                               mCurrentGameModeParams.GetCheckpointData(0)->GetLandmarkIndex(),
-    //                               false);
-    //   }
-    // ============================================================================
+    // Entry 0 of the checkpoint array; its AI section is read once, before the walk.
+    const u16 luFinishAISectionIndex = mCurrentGameModeParams.GetCheckpointData(0)->GetAISectionIndex();
 
     for (::EGlobalRaceCarIndex leGlobalRaceCarIndex = ::E_GLOBAL_RACE_CAR_INDEX_0;
          leGlobalRaceCarIndex < ::E_GLOBAL_RACE_CAR_INDEX_COUNT;
          leGlobalRaceCarIndex++)
     {
-        // X360 0x8231CAF8 -- only STREAMED-OUT cars are candidates.
+        // Only streamed-out cars are candidates: they fire no trigger of their own.
         if (lpGlobalRaceCarOutput->IsInRange(leGlobalRaceCarIndex))
         {
             continue;
         }
+        if (lpAICarOutput->GetAISectionIndex(static_cast<s32>(leGlobalRaceCarIndex)) != luFinishAISectionIndex)
+        {
+            continue;
+        }
 
-        // X360 0x8230F888 -- the car's current AI section (u16), compared against the finish
-        // checkpoint's AI section. (The comparison itself is parked -- see (a) above.)
-        const u16 luAISectionIndex =
-            lpAICarOutput->GetAISectionIndex(static_cast<s32>(leGlobalRaceCarIndex));
-        (void)luAISectionIndex;
-
-        // X360 0x821F46C8 -- the car's active slot; -1 means it is not in the event at all.
+        // An active slot of -1 means the car is not in the event at all.
         const ::EActiveRaceCarIndex leActiveRaceCarIndex =
             lpGlobalRaceCarOutput->GetActiveRaceCarIndex(leGlobalRaceCarIndex);
         if (leActiveRaceCarIndex == ::E_ACTIVE_RACE_CAR_INDEX_INVALID)
         {
             continue;
         }
-        (void)leActiveRaceCarIndex;
 
-        // (parked: the finish-section match + the RaceCarTriggersLandmark credit -- banner above)
+        RaceCarTriggersLandmark(lpPostWorldInputBuffer->GetActiveRaceCarOutputInterface(),
+                                leGlobalRaceCarIndex, leActiveRaceCarIndex,
+                                mCurrentGameModeParams.GetCheckpointData(0)->GetLandmarkIndex(),
+                                false);
     }
-    // [!] The console's loop-tail `leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT` assert
-    // (BurnoutConstants.h:84, fired at 0x82340908) rides inside the inlined
-    // `operator++(EGlobalRaceCarIndex&, int)` used above. The tree's global post-increment
-    // (BurnoutConstants.h:67-72) is MISSING that CGS_ASSERT even though its EActiveRaceCarIndex
-    // twin four lines below carries the matching one -- filed as header_request #8; once it is
-    // added, this loop picks the assert up for free.
 }
 
 } // namespace BrnGameState

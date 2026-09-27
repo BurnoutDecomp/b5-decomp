@@ -188,8 +188,8 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     // The stunt-detection sub-pass. Only runs while the player car is active. If the player car is
     // in a "disturbed" state this frame (mbPlayerCarCrashing was set last frame, or the car is
-    // crashing / fatally crashing), it abandons the in-progress stunt (clears mbValidStunt
-    // and resets the per-category rating state); otherwise it runs the four category detectors
+    // crashing / fatally crashing), it abandons the in-progress stunt (clears mbValidStunt)
+    // and ends the combo; otherwise it runs the four category detectors
     // (air / drift / boost / driving) and folds their "valid" results into mbStuntInProgress.
     //
     // X360 (0x82338908):
@@ -200,16 +200,14 @@ namespace BrnGameState
     //   * *(a2+10464)                  -> IsPlayerCarCrashing() (player-level bool ORed in)
     //   * v10 = *(1120*v6 + a2 + 0x77B) -> GetRaceCarState(v6)->mbIsFatalyCrashing (element +0x44B)
     //   * disturbed = mbPlayerCarCrashing(last frame, *(v5+48)) || (v9 || *(a2+10464) || v10).
-    //   * disturbed branch: *(v5+43)=0 (mbValidStunt=false) then the vtable-slot-+0x20 reset call.
+    //   * disturbed branch: *(v5+43)=0 (mbValidStunt=false) then the vtable slot +0x20 call, which
+    //     is EndCombo (slot 8 of the StuntModeScoring vtable, dumped from the image).
     //   * else branch: v7 = UpdateAirStunts | UpdateDriftStunts | UpdateBoostStunts | UpdateDrivingStunts.
     //   * tail: *(v5+48) = disturbed (mbPlayerCarCrashing); *(v5+41) = mbStuntInProgress & v7.
     //
     // FLAGs (LEDGER-ONLY method -- no DWARF signature; best-effort per the committed home):
     //   (1) *(a2+10464) modelled as IsPlayerCarCrashing() from the crash/disturbance semantics; the
     //       exact interface field at +10464 was not offset-walked. Re-confirm vs the asm.
-    //   (2) the vtable slot +0x20 reset is modelled as ClearStuntTypeInfo() (the per-category rating
-    //       reset -- the semantic match). The StuntModeScoring vtable ORDER is not reconstructed in
-    //       the committed home, so the exact slot-+0x20 method identity is provisional.
     void StuntModeScoring::UpdateStunts(f32 lfDelta, const ActiveRaceCarOutputInterface* lpRaceCar)
     {
         const EActiveRaceCarIndex lePlayerIndex = lpRaceCar->GetPlayerActiveRaceCarIndex();
@@ -245,9 +243,11 @@ namespace BrnGameState
 
         if (mbPlayerCarCrashing || lbPlayerDisturbedNow)
         {
-            // Disturbed: drop the in-progress stunt and reset the per-category rating state.
+            // Disturbed: drop the in-progress stunt and end the combo. The console dispatches
+            // through the vtable (the online scorer overrides EndCombo); the committed home
+            // declares it non-virtual, so this binds the base body, as UpdateCombo's two calls do.
             mbValidStunt = false;
-            ClearStuntTypeInfo();   // FLAG(2): vtable slot +0x20 reset, modelled by name.
+            EndCombo();
         }
         else
         {

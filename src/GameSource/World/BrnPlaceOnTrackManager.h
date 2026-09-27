@@ -170,6 +170,11 @@ private:
     // console's own. PERMANENT harness capability, not a bring-up shim. See the .cpp banner.
     void ArmCarTeleportBringUp();
 
+    // [win-teleport] NOT a console function -- the consumer half of the harness
+    // `BRN_WIN_TELEPORT` guaranteed-win teleport (GameSource/Game/BrnHarnessWinTeleport.h). Hands
+    // each new mailbox request to ONE ActiveRaceCar::RequestPlaceOnTrack and nothing else.
+    // PERMANENT harness capability, inert unless the variable is set. See the .cpp banner.
+    void ArmWinTeleportBringUp();
 
     // [sweep] NOT an X360 function -- the harness `BRN_CRASH_SWEEP` deterministic crash
     // sweep. Fires a scripted list of ActiveRaceCar::RequestPlaceOnTrack( launch, heading,

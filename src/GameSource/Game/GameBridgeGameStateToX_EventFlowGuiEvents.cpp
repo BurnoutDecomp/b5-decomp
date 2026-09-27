@@ -14,6 +14,9 @@
 //                                                  47, 75, 200, 201 -- and, since 2026-09-02, the
 //                                                  three ROAD RAGE arms 103 / 255 / 205 (-> GUI
 //                                                  168 / 427 / 348), on the same terms as arm 75.
+//                                                  Since 2026-09-27 also the race / burning-route
+//                                                  / post-event arms 40, 113, 204, 206, 208, 210,
+//                                                  251, 262 and 272 (the wrong-car refusal).
 //
 // ⭐⭐⭐ ARM 75 IS NOT AN EVENT-FLOW ARM AND IS HERE ON PURPOSE (returning-player wave,
 // 2026-08-28). It belongs to the CAR-SELECT band, but the same three reasons that put every arm
@@ -494,6 +497,103 @@ namespace
         u32 muExtensionTime;                   // +0x00
     };
     static_assert(sizeof(HUDMessageRoadRageTimeExtensionActionMirror) == 4, "X360 action 255 size 4");
+
+    // =====================================================================================
+    // [race wave, lane BR] RACE / BURNING ROUTE / POST-EVENT ARMS -- wire records.
+    // Same TU-local precedent as every record above: the shells in BrnGuiDemangledEventTypes.h
+    // cannot be included from this TU, so each record is rebuilt from the arm's store map at
+    // the size its AddGuiEvent<T> instantiation passes. Types that have a flat home in
+    // BrnGuiEventTypeDefs.h (316, 375, 425) are used from there instead.
+    // =====================================================================================
+
+    // id 153 size 1 -- AddGuiEvent<CgsGui::GuiEvent<153>> (id and size immediates 0x99 / 1). The
+    // WRONG WAY message. The case-251 arm posts a stack slot it never writes; the consumer
+    // (HudMessageAnalyzer case 153 -> "WrongWay") reads only the id.
+    struct WrongWayWire153
+    {
+        u8 mu8Unused;                          // +0x00  never written by the arm
+        s32 GetEventType() const { return 153; }
+    };
+    static_assert(sizeof(WrongWayWire153) == 1, "id 153 size 1");
+
+    // id 550 size 1 -- AddGuiEvent<GuiEventTimeUp> (immediates 0x226 / 1). The case-262
+    // arm copies the action's one byte (a byte load at +0x00, a byte store). The consumer
+    // (HudMessageAnalyzer case 550) picks "TimeUpPos" when it is set and "TimeUpNeg" when not.
+    // FLAG: the field name is role-derived from the producer (ModeManager::UpdateCurrentMode's
+    // succeeded byte) and that consumer; no declaration names it.
+    struct TimeUpWire550
+    {
+        u8 mbSucceeded;                        // +0x00  action+0x00
+        s32 GetEventType() const { return 550; }
+    };
+    static_assert(sizeof(TimeUpWire550) == 1, "id 550 size 1");
+
+    // id 305 size 4 -- AddGuiEvent<GuiEventAllOfTypeComplete> (immediates 0x131 / 4).
+    // The case-206 arm copies one word (a word load at +0x00, a word store); the consumer
+    // (HudMessageAnalyzer case 305) reads it as the event type whose events are all won.
+    struct AllOfTypeCompleteWire305
+    {
+        s32 meGameEventType;                   // +0x00  AllEventTypeWonAction::leGameEventType
+        s32 GetEventType() const { return 305; }
+    };
+    static_assert(sizeof(AllOfTypeCompleteWire305) == 4, "id 305 size 4");
+
+    // id 306 size 1 -- AddGuiEvent<GuiEventAllOfRivalsShutdown> (immediates 0x132 / 1).
+    // The case-210 arm posts a stack byte it never stores to; the consumer
+    // (HudMessageAnalyzer case 306 -> "EvryRivShut") reads only the id.
+    struct AllOfRivalsShutdownWire306
+    {
+        u8 mu8Unused;                          // +0x00  never written by the arm
+        s32 GetEventType() const { return 306; }
+    };
+    static_assert(sizeof(AllOfRivalsShutdownWire306) == 1, "id 306 size 1");
+
+    // ids 309 / 310 size 2 -- AddGuiEvent<GuiEventGameCompleted> (immediates 0x135 / 2)
+    // and AddGuiEvent<GuiEventGameCompletedOnline> (immediates 0x136 / 2). The case-208
+    // arm copies the action's two bytes at +0x04 / +0x05 into both records the same way.
+    // FLAG: the field names are the producer record's (GameCompletionResultsAction); the GUI
+    // side declares no members.
+    struct GameCompletedWire309
+    {
+        u8 mbGameComplete;                     // +0x00  action+0x04
+        u8 mbCompletionAlreadyRecorded;        // +0x01  action+0x05
+        s32 GetEventType() const { return 309; }
+    };
+    static_assert(sizeof(GameCompletedWire309) == 2, "id 309 size 2");
+
+    struct GameCompletedOnlineWire310
+    {
+        u8 mbGameComplete;                     // +0x00  action+0x04
+        u8 mbCompletionAlreadyRecorded;        // +0x01  action+0x05
+        s32 GetEventType() const { return 310; }
+    };
+    static_assert(sizeof(GameCompletedOnlineWire310) == 2, "id 310 size 2");
+
+    // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_RACEFLOW_DIAG), first 32 lines, one
+    // line per race / burning-route / post-event action translated by the arms below.
+    // A non-null lpacText is printed in place of liValue (the wrong-car arm names the car).
+    void RaceFlowGuiWitness(s32 liActionType, s32 liGuiEventId, const char* lpacDetail,
+                            s32 liValue, const char* lpacText = 0)
+    {
+        static const bool sbDiag      = (getenv("BRN_RACEFLOW_DIAG") != 0);
+        static s32        siLinesLeft = 32;
+        if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            --siLinesLeft;
+            *CgsDev::Log::gpDebugPrint
+                << "[race-flow] action " << liActionType << " -> gui " << liGuiEventId
+                << " (" << lpacDetail << " ";
+            if (lpacText != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << lpacText;
+            }
+            else
+            {
+                *CgsDev::Log::gpDebugPrint << liValue;
+            }
+            *CgsDev::Log::gpDebugPrint << ")\n";
+        }
+    }
 
     // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_ROADRULES_DIAG), first 32 lines, one
     // line per road-rule action translated. Action 279 posts every frame and has its own
@@ -1532,6 +1632,185 @@ namespace
                                                 : BrnGui::GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_OFFLINE;
             PushGuiEvent(lEvent, lpGuiInput);
             RoadRuleGuiWitness(liActionType, lEvent.GetEventType());
+            return true;
+        }
+
+        // =====================================================================================
+        // [race wave, lane BR] RACE / BURNING ROUTE / POST-EVENT ARMS. Every id below is the
+        // console jump-table case itself: GetFirstEvent / GetNextEvent return the stored action
+        // id unchanged and the dispatch indexes the table with it directly (id * 4 under an
+        // unsigned `<= 0x12A` bound, no rebase).
+        // =====================================================================================
+
+        // ---- 40  E_ACTION_QUIT_MODE_OFFLINE (1 byte) --------------------------------------
+        // The offline quit. Null assert on the record, then, unless the byte (the round
+        // manager's starting-game-due-to-player-join flag) is set, hand the HUD back to the
+        // free-burn FSM: GuiEventRunFsm{ CgsIDCompress("BRNFBFSM"), 0, E_GUI_HUD_FREEBURN (1),
+        // E_GUIFLOW_HUD (1) } -- zero into the initial-state slot, one into both enum slots. "BRNFBFSM" is the image literal the prologue caches for the drain.
+        // (Case 25, the offline STOP, compresses the same literal and posts nothing.)
+        case BrnGameState::GameStateModuleIO::E_ACTION_QUIT_MODE_OFFLINE:
+        {
+            CGS_ASSERT(lpAction != 0, "lpQuitModeAction");
+            const u8 lbStartingGameDueToPlayerJoin = *reinterpret_cast<const u8*>(lpAction);
+            if (lbStartingGameDueToPlayerJoin == 0)
+            {
+                PostRunFsm(lpGuiInput, "BRNFBFSM", 0,
+                           BrnGui::E_GUI_HUD_FREEBURN, BrnGui::E_GUIFLOW_HUD);
+            }
+            RaceFlowGuiWitness(liActionType, (lbStartingGameDueToPlayerJoin == 0) ? 144 : -1,
+                               "quit, run BRNFBFSM", (lbStartingGameDueToPlayerJoin == 0) ? 1 : 0);
+            return true;
+        }
+
+        // ---- 113  E_ACTION_RACE_CAR_REACHED_CHECKPOINT (16 bytes) -------------------------
+        // Three words straight across: +0x00 / +0x04 / +0x08 of the action into the 12-byte
+        // GuiRaceCheckpointReached (id 425). Posted for every race car, not only the player;
+        // HudMessageAnalyzer::HandleRaceCheckpointReached filters on the global index.
+        case BrnGameState::GameStateModuleIO::E_ACTION_RACE_CAR_REACHED_CHECKPOINT:
+        {
+            const BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction* lpCheckpoint =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction*>(lpAction);
+
+            BrnGui::GuiRaceCheckpointReached lEvent;
+            lEvent.meActiveRaceCarIndex = lpCheckpoint->meActiveRaceCarIndex;
+            lEvent.meGlobalRaceCarIndex = lpCheckpoint->meGlobalRaceCarIndex;
+            lEvent.miCheckpointIndex    = lpCheckpoint->miCheckPointIndex;
+            PushGuiEvent(lEvent, lpGuiInput);
+
+            RaceFlowGuiWitness(liActionType, lEvent.GetEventType(), "checkpoint",
+                               lEvent.miCheckpointIndex);
+            return true;
+        }
+
+        // ---- 204  E_ACTION_TROPHY_UNLOCK (16 bytes) ---------------------------------------
+        // the word at action+0x08 to record+0x00, then the doubleword at action+0x00 to +0x08, into
+        // GuiEventTrophyCarUnlock (id 375, size 16): the unlock type first, the car second.
+        case BrnGameState::GameStateModuleIO::E_ACTION_TROPHY_UNLOCK:
+        {
+            const BrnGameState::GameStateModuleIO::TrophyUnlockAction* lpTrophy =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::TrophyUnlockAction*>(lpAction);
+
+            BrnGui::GuiEventTrophyCarUnlock lEvent = {};
+            lEvent.meUnlockType = static_cast<s32>(lpTrophy->meUnlockType);
+            lEvent.mTrophyCarID = lpTrophy->mCarToUnlock;
+            PushGuiEvent(lEvent, lpGuiInput);
+
+            RaceFlowGuiWitness(liActionType, lEvent.GetEventType(), "unlock type",
+                               lEvent.meUnlockType);
+            return true;
+        }
+
+        // ---- 206  E_ACTION_ALL_EVENT_TYPE_WON (4 bytes) -----------------------------------
+        // Null assert on the record, then one word into GuiEventAllOfTypeComplete (id 305).
+        case BrnGameState::GameStateModuleIO::E_ACTION_ALL_EVENT_TYPE_WON:
+        {
+            const BrnGameState::GameStateModuleIO::AllEventTypeWonAction* lpAllEventTypeWonAction =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::AllEventTypeWonAction*>(lpAction);
+            CGS_ASSERT(lpAllEventTypeWonAction != 0, "lpAllEventTypeWonAction != NULL");
+
+            AllOfTypeCompleteWire305 lEvent;
+            lEvent.meGameEventType = static_cast<s32>(lpAllEventTypeWonAction->leGameEventType);
+            PushGuiEvent(lEvent, lpGuiInput);
+
+            RaceFlowGuiWitness(liActionType, lEvent.GetEventType(), "event type",
+                               lEvent.meGameEventType);
+            return true;
+        }
+
+        // ---- 208  E_ACTION_GAME_COMPLETION_RESULTS (8 bytes) ------------------------------
+        // The word at action+0x00 is tested against -1: outside a mode the bytes at +0x04 / +0x05 go
+        // to GuiEventGameCompleted (309), inside one to GuiEventGameCompletedOnline (310).
+        case BrnGameState::GameStateModuleIO::E_ACTION_GAME_COMPLETION_RESULTS:
+        {
+            const BrnGameState::GameStateModuleIO::GameCompletionResultsAction* lpCompletion =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::GameCompletionResultsAction*>(lpAction);
+
+            s32 liGuiEventId = 0;
+            if (lpCompletion->meGameMode == BrnGameState::GameStateModuleIO::E_MODE_NONE)
+            {
+                GameCompletedWire309 lEvent;
+                lEvent.mbGameComplete              = lpCompletion->mbGameComplete ? 1u : 0u;
+                lEvent.mbCompletionAlreadyRecorded =
+                    lpCompletion->mbCompletionAlreadyRecorded ? 1u : 0u;
+                PushGuiEvent(lEvent, lpGuiInput);
+                liGuiEventId = lEvent.GetEventType();
+            }
+            else
+            {
+                GameCompletedOnlineWire310 lEvent;
+                lEvent.mbGameComplete              = lpCompletion->mbGameComplete ? 1u : 0u;
+                lEvent.mbCompletionAlreadyRecorded =
+                    lpCompletion->mbCompletionAlreadyRecorded ? 1u : 0u;
+                PushGuiEvent(lEvent, lpGuiInput);
+                liGuiEventId = lEvent.GetEventType();
+            }
+
+            RaceFlowGuiWitness(liActionType, liGuiEventId, "complete",
+                               lpCompletion->mbGameComplete ? 1 : 0);
+            return true;
+        }
+
+        // ---- 210  E_ACTION_ALL_RIVALS_SHUTDOWN (1 byte) -----------------------------------
+        // No load off the action and no store into the frame: GuiEventAllOfRivalsShutdown
+        // (id 306) from an unwritten stack byte.
+        case BrnGameState::GameStateModuleIO::E_ACTION_ALL_RIVALS_SHUTDOWN:
+        {
+            AllOfRivalsShutdownWire306 lEvent;
+            lEvent.mu8Unused = 0;
+            PushGuiEvent(lEvent, lpGuiInput);
+
+            RaceFlowGuiWitness(liActionType, lEvent.GetEventType(), "all rivals shut down", 1);
+            return true;
+        }
+
+        // ---- 251  the WRONG WAY message (no payload) --------------------------------------
+        // No enumerator in BrnGameActions.h (its band note puts the declared WRONG_WAY at this
+        // seat). The arm posts the bare CgsGui::GuiEvent<153> tag from an unwritten stack slot.
+        case 251:
+        {
+            WrongWayWire153 lEvent;
+            lEvent.mu8Unused = 0;
+            PushGuiEvent(lEvent, lpGuiInput);
+
+            RaceFlowGuiWitness(liActionType, lEvent.GetEventType(), "wrong way", 1);
+            return true;
+        }
+
+        // ---- 262  E_ACTION_MODE_TIME_UP (1 byte) ------------------------------------------
+        // The action's byte at +0x00 straight into GuiEventTimeUp (id 550, size 1).
+        case BrnGameState::GameStateModuleIO::E_ACTION_MODE_TIME_UP:
+        {
+            TimeUpWire550 lEvent;
+            lEvent.mbSucceeded = *reinterpret_cast<const u8*>(lpAction);
+            PushGuiEvent(lEvent, lpGuiInput);
+
+            RaceFlowGuiWitness(liActionType, lEvent.GetEventType(), "succeeded",
+                               static_cast<s32>(lEvent.mbSucceeded));
+            return true;
+        }
+
+        // ---- 272  E_ACTION_WRONG_CAR_FOR_CHALLENGE (8 bytes) ------------------------------
+        // The action's doubleword at +0x00 into GuiEventFailedToStartEvent (id 316, size 8):
+        // the car the junction's event demands, straight across. Its consumer is
+        // HudMessageAnalyzer case 316 -> HandleFailedToStartBurningRoute ("BRWrongCar",
+        // naming "CAR_CAPS_<car>").
+        case BrnGameState::GameStateModuleIO::E_ACTION_WRONG_CAR_FOR_CHALLENGE:
+        {
+            const BrnGameState::GameStateModuleIO::WrongCarForChallengeAction* lpWrongCar =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::WrongCarForChallengeAction*>(lpAction);
+
+            BrnGui::GuiEventFailedToStartEvent lEvent;
+            lEvent.mSpecialCarID = lpWrongCar->mSpecialEventCarId;
+            PushGuiEvent(lEvent, lpGuiInput);
+
+            char lacCarId[KI_CGSID_STRING_LEN];
+            CgsIDConvertToString(lEvent.mSpecialCarID, lacCarId);
+            RaceFlowGuiWitness(liActionType, lEvent.GetEventType(), "needs car", 0, lacCarId);
             return true;
         }
 

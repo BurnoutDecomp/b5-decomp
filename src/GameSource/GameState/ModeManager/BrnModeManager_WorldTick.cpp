@@ -41,10 +41,8 @@
 // by the [mode-fsm] rung below printing a rising tick from inside this very arm, and by the
 // finish ladder at the tail of this function firing FinishCurrentMode at mode-time 129.5 s.
 // A wave started this round by reading this banner and concluding the finish ladder never runs.
-// It runs. PostWorldUpdate is the half that is still uncalled: there is no
-// ModeManager::PostWorldUpdate call site (its legs are lifted into
-// GameStateModule::PostWorldUpdateStuntBringUp instead, which is where the console's own
-// position for them is reproduced).
+// It runs. PostWorldUpdate runs too: GameStateModule::PostWorldUpdate calls it with the frame's
+// PostWorldInputBuffer.
 //   BrnGameStateModule.cpp:1268   mModeManager.PreWorldUpdateClocksBringUp(lfGameTimestep);
 // remains the superseded clocks stand-in, and the DELETE-WHEN below still stands for it.
 // PreWorldUpdate below CONTAINS the whole of PreWorldUpdateClocksBringUp -- the mode/online/
@@ -70,7 +68,7 @@
 //                          while ModeManager::Construct is not, so the call would tick a manager
 //                          that ChallengeManager::Construct never ran on. (The missing-accessor
 //                          blocker is gone: all seven arguments are reachable by name.)
-//   PARKED (conductor #4): HUDMessageLogic::PreWorldUpdate / ::PostWorldUpdate.
+//   PARKED (conductor #4): HUDMessageLogic::PreWorldUpdate.
 //   PARKED (header)      : every site whose declaration this frozen tree does not carry; each one
 //                          is filed as a numbered header_request in agent 7a's report.
 // THE OFFLINE STUNT-RACE PATH IS WHOLE: UpdateCurrentMode, the three Transmit* calls, the
@@ -86,12 +84,13 @@
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"        // TrainingManager::IsInPictureParadise (gsm+0xB644)
 #include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"             // CarSelectManager::GetJunkyardId      (gsm+0x2CDC0)
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h"   // StuntModeScoring::PreWorldUpdate / ::Update
-#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h" // VehicleManagerOutputInterface::RaceCarCrashEventQueue (the REAL crash-queue type; header_request #6 stand-in cast)
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h" // the takedown / crash / traffic-state queue typedefs
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"            // VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint ([queue-hwm] diag)
 #include <stdlib.h>                                                        // getenv ([queue-hwm] diag)
+#include "GameSource/Game/BrnHarnessWinTeleport.h"                          // [FLAG PC harness] BRN_WIN_TELEPORT
 
 namespace BrnGameState
 {
@@ -401,6 +400,36 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
 
                 FinishCurrentModeNextUpdateWithFinishPosition(siDebugFinishPos);
             }
+        }
+
+        // [FLAG PC harness] BRN_WIN_TELEPORT, the guaranteed-win teleport. NOT A CONSOLE PATH and
+        // inert unless the variable is set. It only chooses where the player's car is placed next
+        // (the landmark boxes still to be hit); the checkpoint and finish credit stay
+        // RaceCarTriggersLandmark's. Outside the IN_PROGRESS gate so it can report the state the
+        // mode leaves into. The two region reads are private, hence passed by value; the next
+        // checkpoint is only asked for while one remains (GetNextCheckpointIndex asserts on none).
+        // See GameSource/Game/BrnHarnessWinTeleport.h.
+        if (BrnGame::HarnessWinTeleport::IsEnabled() &&
+            mePlayerGlobalRaceCarIndex > E_GLOBAL_RACE_CAR_INDEX_INVALID &&
+            mePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT)
+        {
+            s32 liNextRegionIndex     = -1;
+            s32 liPreviousRegionIndex = -1;
+            if (CountCheckpointsRemaining(mePlayerGlobalRaceCarIndex) > 0u)
+            {
+                const u32 luNext = static_cast<u32>(GetNextLandmarkIndex(mePlayerGlobalRaceCarIndex));
+                if (luNext < muNumLandmarks)
+                {
+                    liNextRegionIndex = static_cast<s16>(maLandmarkIndices[luNext]);
+                }
+                if (luNext > 0u && (luNext - 1u) < muNumLandmarks)
+                {
+                    liPreviousRegionIndex = static_cast<s16>(maLandmarkIndices[luNext - 1u]);
+                }
+            }
+            BrnGame::HarnessWinTeleport::PreWorldUpdate(*this, mePlayerGlobalRaceCarIndex,
+                                                         liNextRegionIndex, liPreviousRegionIndex,
+                                                         lfSimTimeStep, lpActiveRaceCarOutput);
         }
 
         // ==========================================================================================
@@ -790,10 +819,8 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
 //                     const InputBuffer::TakedownEventQueue* lpTakedownQueue,
 //                     f32 lfDelta)                          [DWARF BrnModeManager.h:279]
 // (r3 = this, r4 = lpInput, r5 = lpTakedownQueue, f1 = lfDelta.)
-// The frozen header carries only TWO -- its own banner says the takedown-queue typedef does not
-// exist yet and files it as a header_request; that is header_request #4 below. It is why the
-// UpdateTakedowns / UpdateCrashes pair and the console's second assert live in
-// PostWorldUpdateTakedownScoringBringUp at the tail of this file instead of in this body.
+// Sole caller: GameStateModule::PostWorldUpdate, which passes the module's own takedown-event
+// queue and its cached sim timestep.
 //
 // Interface accessors used below, each pinned by its return offset AND its "Not locked for
 // reading" assert line in BrnGameStateModuleIO.h (the X360 line numbers match the DWARF ones
@@ -806,18 +833,22 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
 // ==============================================================================================
 void
 ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPostWorldInputBuffer,
+                             const InputBuffer::TakedownEventQueue*          lpTakedownQueue,
                              f32                                            lfDelta)
 {
     CgsDev::PerfMonCpu::StartMonitor(miPostWorldUpdatePM);
 
     CGS_ASSERT(lpPostWorldInputBuffer != NULL, "lpInput != NULL");
-    // The console's second assert, CGS_ASSERT(lpTakedownQueue != NULL, "lpTakedownQueue != NULL"),
-    // cannot be reproduced without the parameter; it is carried by
-    // PostWorldUpdateTakedownScoringBringUp, which does take the queue. Fold it back here with
-    // header_request #4.
+    CGS_ASSERT(lpTakedownQueue != NULL, "lpTakedownQueue != NULL");
 
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutput =
         lpPostWorldInputBuffer->GetActiveRaceCarOutputInterface();
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCarOutput =
+        lpPostWorldInputBuffer->GetGlobalRaceCarOutputInterface();
+    // The console takes the vehicle output interface's address once, up front, for the showtime
+    // scorer's traffic-state queue below.
+    const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutput =
+        lpPostWorldInputBuffer->GetVehicleOutputInterface();
 
     if (mpCurrentGameMode != NULL)
     {
@@ -898,11 +929,17 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
 
         mScoringSystem.UpdateTeamStats(lfDelta);
 
-        // The takedown + crash scoring arm the console runs at this point is bodied as
-        // PostWorldUpdateTakedownScoringBringUp at the tail of this file, and is driven from the
-        // lifted post-world leg at the console's own `bl` position. It cannot be called from here:
-        // this function has no takedown-queue parameter (and no caller). Fold it back in at this
-        // point the moment the real post-world buffer lands and PostWorldUpdate is callable.
+        // The takedown + crash scoring arm. The console tests KU_FLAG_DISABLE_ALL_TDS (bit 22 of
+        // the params flag word) only when a mode exists, then asks for the mode in progress; inside
+        // this gate that is exactly the pair below. The trailing two UpdateTakedowns arguments gate
+        // only its online-stunt takedown bonus.
+        if (!mCurrentGameModeParams.GetFlag(GameModeParams::KU_FLAG_DISABLE_ALL_TDS) &&
+            IsGameModeInProgress(mpCurrentGameMode))
+        {
+            mScoringSystem.UpdateTakedowns(lpTakedownQueue, mePlayerActiveRaceCarIndex,
+                                           mbStuntChallengeActive);
+            mScoringSystem.UpdateCrashes(lpPostWorldInputBuffer->GetRaceCarCrashEventQueue());
+        }
 
         mScoringSystem.UpdateDistanceToPlayer(lpActiveRaceCarOutput);
         mScoringSystem.StoreCarIds(lpActiveRaceCarOutput);
@@ -919,18 +956,10 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
         // `rlwinm r11,r11,0,18,18` -- bit 18 == 1 << 13 == 0x2000 == KU_FLAG_HAS_ROUTE.
         if (mCurrentGameModeParams.GetFlag(GameModeParams::KU_FLAG_HAS_ROUTE))
         {
-            // [!] [stuntrace] PARKED (header) -- header_request #11. Console 0x8234AD18:
-            //   ScoringSystem::UpdateRacePositions(&mScoringSystem,
-            //       lpActiveRaceCarOutput,
-            //       lpPostWorldInputBuffer->GetGlobalRaceCarOutputInterface(),
-            //       lpPostWorldInputBuffer->GetAICarOutputInterface(),
-            //       this);
-            // PostWorldInputBuffer::GetGlobalRaceCarOutputInterface() (X360 0x8231D368, +0x9B40,
-            // read-lock line 213) is NOT declared on this tree's PostWorldInputBuffer -- only the
-            // ACTIVE and the AI ones are. The routed-event position sort is a race / burning-route
-            // mechanic; a stunt run has KU_FLAG_HAS_ROUTE clear and never enters this arm.
-
-            // The wrong-way detector needs only the active interface, so it is NOT parked.
+            // The routed-event position sort (races, burning routes, marked man).
+            mScoringSystem.UpdateRacePositions(lpActiveRaceCarOutput, lpGlobalRaceCarOutput,
+                                               lpPostWorldInputBuffer->GetAICarOutputInterface(),
+                                               this);
             mScoringSystem.DetectPlayerDrivingWrongWay(lpActiveRaceCarOutput, lfDelta);
         }
 
@@ -938,70 +967,10 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
         if (meCurrentGameModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
             meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
         {
-            // ⭐⭐⭐ [showtime score wave 2026-08-29] UNPARKED. Console 0x8234AD64:
-            //   CrashModeScoring::Update(&mScoringSystem's mCrashModeScoring,   // this+0xDD0
-            //       lpActiveRaceCarOutput,
-            //       lpPostWorldInputBuffer->GetVehicleOutputInterface()->GetTrafficStateQueue(),
-            //       lfDelta);
-            //
-            // ⛔⛔ THE PARK NOTE WAS WRONG, AND ITS COST WAS THE WHOLE CRASH SCORER.
-            // It read: "the +9760 the console adds to the vehicle interface IS
-            // VehicleOutputInterface::mTrafficStateQueue @0x2620 -- but GameStateModuleIO's
-            // `class VehicleOutputInterface` is a DIFFERENT, still-incomplete forward
-            // declaration over opaque storage, so the queue cannot be reached by name."
-            // Both halves of that are true, and neither is a reason not to call:
-            // CrashModeScoring::Update @0x82320808 NEVER READS THE QUEUE. The f32 rides f1, so
-            // r4 is the interface and r5 is the queue -- and across all 321 instructions r5
-            // appears exactly twice, both times as `li r5, <line>` feeding
-            // CgsDev::Assert::FireAssert (@0x82320858 :189, @0x82320888 :193). The incoming
-            // pointer is dead in the callee, so passing 0 is provably inert.
-            // Because it stayed parked, mfDistanceTravelled and maiNumCarsCrashed never moved,
-            // and the showtime HUD read 0m / 0 for reasons three subsystems away from itself.
-            // [[gates-are-stale-not-dead]] -- ask what the block actually blocks.
-            //
-            // ⚠️ THE NULL IS A DIVERGENCE AND IS FLAGGED AS ONE. It is at the CALL SITE, not in
-            // the callee, and it is inert only because the callee ignores the argument -- which
-            // is checked above, not assumed. DELETE-WHEN GameStateModuleIO::VehicleOutputInterface
-            // models mTrafficStateQueue @0x2620 and the real pointer can be passed by name; the
-            // observable behaviour will not change when it is.
-            //
-            // ⛔⛔ AND IT STILL DOES NOT RUN TODAY -- read the ARMING STATE banner at the top of
-            // this file. PostWorldUpdate itself has NO CALL SITE on this build; GameStateModule
-            // drives PreWorldUpdateClocksBringUp instead and never reaches the post-world half.
-            // So this arm is correct-and-unreached: it costs nothing, it is what the console does,
-            // and it lights up the whole crash scorer the moment PostWorldUpdate is wired. Do not
-            // read "unparked" as "running" -- MEASURED 2026-08-29, the showtime HUD still renders
-            // Distance 0m / Cars Crashed 0 with this landed, because mfDistanceTravelled is never
-            // advanced.
-            //
-            // ⭐ [showtime score wave 2026-08-29] BOTH HALVES OF THAT PARAGRAPH ARE NOW ANSWERED,
-            // and its second half was WRONG. It read: "The other half of that zero is
-            // CrashModeScoring::DealWithHitTrafficCar, whose console caller
-            // GameStateModule::ProcessContacts @0x8236BC68 is not reconstructed at all, so the
-            // crash COUNT has no producer either."
-            //   * DISTANCE: fixed. This arm is still unreached, but the identical call now runs
-            //     from GameStateModule::PostWorldUpdateStuntBringUp's extracted LEG 3, beside the
-            //     stunt arm below -- and the panel counts (filmed 12m -> 49m over 10.5 s).
-            //   * COUNT: the claim was true and NOT SUFFICIENT. DealWithHitTrafficCar never
-            //     touches maiNumCarsCrashed; it records a RecentCrash and bumps
-            //     miCurrentComboCount. maiNumCarsCrashed[] has exactly ONE writer in the image,
-            //     CrashModeScoring::DealWithScoreForVehicleClass @0x82338778, whose exactly-one
-            //     caller is GameStateModule::UpdateShowtimeMode @0x82380EF8 -- on the PRE-world
-            //     half, not this one. ProcessContacts (now landed, and called from LEG 5 of the
-            //     same bring-up entry point) only PRIMES the count: it pushes each victim's
-            //     traffic index onto GameStateModule::mShowtimePendingTrafficIndexStack, and the
-            //     pre-world half has to turn that into a traffic-type request, get an answer back
-            //     from the traffic module, and only then score it. ✅ The three hops that were still
-            //     unreconstructed when this was written landed 2026-09-24 (FX-SHOWTIME2):
-            //     UpdateShowtimeMode's body and its PreWorldUpdate call (b72520a2), PhysicsModule::
-            //     HandleGameActions case 116 onto the traffic-type request queue (d6f7aba1) and
-            //     ProcessGameEvents' case-52/53 bounce relay to actions 144/145 (f2e66b94) -- see the
-            //     stack's banner in BrnGameStateModule.h for the whole chain. [FX-TAILS-A item 8
-            //     2026-09-24: this said "Three of those hops are still unreconstructed".]
-            // [[diagnostics-that-lie]] -- "X has no caller" is not the same claim as
-            // "X is what writes the field".
+            // The showtime crash scorer: distance travelled and the recent-crash bookkeeping. Its
+            // count of cars crashed is scored on the pre-world half (UpdateShowtimeMode).
             mScoringSystem.GetCrashScorer()->Update(lpActiveRaceCarOutput,
-                                                    /* lpTrafficStateQueue */ 0,
+                                                    lpVehicleOutput->GetTrafficStateQueue(),
                                                     lfDelta);
         }
         else if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ROAD_RAGE)
@@ -1038,34 +1007,10 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
             }
         }
 
-        // [x] UN-PARKED 2026-09-07 (ChallengeManager mount). Console 0x8234AEE8:
-        //   ChallengeManager::PostWorldUpdate(this + 28160,
-        //       lpPostWorldInputBuffer->GetRaceCarCrashEventQueue(),
-        //       &lStuntScoreInfo,
-        //       &mTimerStatusInterface);
-        // Behaviour restored: freeburn challenges see the frame's crash events and stunt score.
-        //
-        // [!] TYPE STAND-IN (header_request #6) -- THE IDENTICAL FIX ProcessPlayerCrashes ALREADY
-        // MAKES, and whose own banner (BrnModeManager_TransmitCrash.cpp:425) says in as many words
-        // "Agent 7a's PostWorldUpdate needs the identical fix". PostWorldInputBuffer::
-        // GetRaceCarCrashEventQueue() (X360 0x8231D170, read-locked this+0x10) still returns the
-        // named-opaque placeholder `GameStateModuleIO::RaceCarCrashEventQueue { u8 maOpaque[0x210]; }`,
-        // while the real type IS homed -- BrnScoringSystemEventQueues.h completes
-        // `VehicleManagerOutputInterface::RaceCarCrashEventQueue : public EventQueue<RaceCarCrashEvent,8>`,
-        // which is exactly what ChallengeManager::PostWorldUpdate (and ScoringSystem::UpdateCrashes)
-        // take. The cast is a TYPE re-home of the same bytes at the same offset -- no fabricated
-        // offset, no invented member -- and it disappears the moment the accessor is retyped.
-        //
-        // [!] ORDER NOTE, and it is why this call is SAFE while the PreWorldUpdate one is not:
-        // ModeManager::PostWorldUpdate has NO call site on this build (its legs are lifted into
-        // GameStateModule::PostWorldUpdateStuntBringUp -- see the ARMING STATE banner at the top of
-        // this file), so nothing here can reach an unconstructed mChallengeManager. Read the parked
-        // PreWorldUpdate banner above before assuming the same of that one.
-        mChallengeManager.PostWorldUpdate(
-            reinterpret_cast<const VehicleManagerOutputInterface::RaceCarCrashEventQueue*>(
-                lpPostWorldInputBuffer->GetRaceCarCrashEventQueue()),
-            &lStuntScoreInfo,
-            &mTimerStatusInterface);
+        // Freeburn challenges see the frame's crash events and stunt score.
+        mChallengeManager.PostWorldUpdate(lpPostWorldInputBuffer->GetRaceCarCrashEventQueue(),
+                                          &lStuntScoreInfo,
+                                          &mTimerStatusInterface);
 
         if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
         {
@@ -1126,24 +1071,16 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
         // StuntModeScoring::Update above.
     }
 
-    // [!] [stuntrace] STILL PARKED HERE -- but the leg is LIVE, in the extracted post-world leg.
-    // Console 0x8234B0E8 -- eight register arguments plus f1 plus TWO stack ones (IDA's pseudocode
-    // shows only the register set):
-    //   HUDMessageLogic::PostWorldUpdate(&mHUDMessageLogic, lpActiveRaceCarOutput,
-    //       meCurrentGameModeType, this, &mScoringSystem,
-    //       lpPostWorldInputBuffer->GetRaceCarCrashEventQueue(),
-    //       lpPostWorldInputBuffer->GetVehicleOutputInterface(),
-    //       lpTakedownQueue, lfDelta,
-    //       [sp+0x5C] mePlayerActiveRaceCarIndex, [sp+0x67] IsGameModeInProgress(mpCurrentGameMode));
-    //
-    // ⓘ 2026-08-27 (stunt-scorer latch-drain fix): HUDMessageLogic::PostWorldUpdate is now bodied
-    // (reduced argument set) and CALLED -- but from GameStateModule::PostWorldUpdateStuntBringUp's
-    // LEG 4, not from here, because THIS function has no call site on this build (see the TU
-    // banner: nothing creates a PostWorldInputBuffer). It is the ONLY consumer of the stunt
-    // scorer's mbRecentStunt latch; leaving it unreached is what made
-    // StuntModeScoring::UpdateBufferedScore's CGS_ASSERT(!mbRecentStunt) fire mid-run.
-    // DELETE-WHEN this function becomes the live post-world caller again: the extracted leg then
-    // folds back to `mHUDMessageLogic.PostWorldUpdate(...)` right here, with the full argument set.
+    // The HUD message pump, every post-world tick, mode or not. It is also the one consumer of the
+    // stunt scorer's mbRecentStunt latch armed by the fork above. The console passes ten
+    // arguments; the body takes the seven it reads (see BrnHUDMessageLogic.cpp for the rest).
+    mHUDMessageLogic.PostWorldUpdate(lpActiveRaceCarOutput,
+                                     meCurrentGameModeType,
+                                     &mScoringSystem,
+                                     lpPostWorldInputBuffer->GetRaceCarCrashEventQueue(),
+                                     lpTakedownQueue,
+                                     lfDelta,
+                                     mePlayerActiveRaceCarIndex);
 
     // `lbzx 0x94F5 -> stbx 0x94F6`: the mode-start-region edge detector's one-frame history. This
     // is the ONLY writer of mbLastInModeStartRegion, and it runs every post-world tick, mode or not.
@@ -1171,86 +1108,6 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
     ProcessPlayerCrashes(lpPostWorldInputBuffer);
 
     CgsDev::PerfMonCpu::StopMonitor(miPostWorldUpdatePM);
-}
-
-// ==============================================================================================
-// ModeManager::PostWorldUpdateTakedownScoringBringUp
-//   -- the TAKEDOWN + CRASH SCORING ARM of PostWorldUpdate, at the console's own position in it,
-//      as its own entry point so it can be reached from the lifted post-world leg.
-// ==============================================================================================
-// Console, verbatim:
-//     if (!mpCurrentGameMode || !mCurrentGameModeParams.GetFlag(KU_FLAG_DISABLE_ALL_TDS))
-//         if (mpCurrentGameMode && mpCurrentGameMode->GetCurrentState() == E_GMS_IN_PROGRESS)
-//         {
-//             ScoringSystem::UpdateTakedowns(&mScoringSystem, lpTakedownQueue,
-//                                            mePlayerActiveRaceCarIndex, mbStuntChallengeActive);
-//             ScoringSystem::UpdateCrashes(&mScoringSystem, lpRaceCarCrashEventQueue);
-//         }
-// (`ldx` on mCurrentGameModeParams+0x860 then `rlwinm r11,r11,0,9,9` -- bit 9 of the low word ==
-//  1 << 22 == KU_FLAG_DISABLE_ALL_TDS. IsGameModeInProgress subsumes the null test, so the two
-//  console gates collapse to the pair below with no behaviour change.)
-//
-// THE ARGUMENTS ARE THE DEVIATION, NOT THE BODY. The console's own caller
-// (GameStateModule::PostWorldUpdate) hands ModeManager::PostWorldUpdate the takedown
-// queue in r5 as `gsm + 0x3D050` == gsm+249936 -- the MODULE'S OWN copy of the queue, not a buffer
-// field -- and the crash queue is read out of the post-world buffer. On this build the module copy
-// exists by name and the crash queue arrives as an argument, while the buffer does not exist at
-// all; so this entry point takes the two queues in the types their live holders carry, and the
-// caller passes gsm+249936 by name. Nothing else about the arm changes.
-//
-// [!] THE TWO CONSOLE ARGUMENTS ARE PASSED (FX-GS 2026-09-23, crash-parity G10-D8; they were
-// dropped before, and the reasoning below is why that was inert offline -- it still holds).
-// UpdateTakedowns' console arity is four. The two extra arguments (a3 = mePlayerActiveRaceCarIndex,
-// a4 = mbStuntChallengeActive) gate exactly one thing -- the trailing
-//     if ((a3 == aggressor && GetPlayerTeam(victim) != GetPlayerTeam(aggressor)) || a4)
-//         StuntModeScoringOnline::DealWithTakedown(this + 9760);
-// -- and re-reading UpdateTakedowns' export confirms it: a3/a4 appear nowhere else in the function,
-// every CarScoreData tally above them is unconditional. The callee itself then opens
-// `if (mbStuntModeActive)` and returns immediately when clear, and the only writer of that flag is
-// the ONLINE stunt scorer's Activate. So on an offline event the dropped pair can change nothing
-// observable; the takedown / takedowns-against / marked-man / traitorous tallies are whole. Online,
-// the arm is what turns a player takedown into the +3000 takedown stunt (flt_8202112C).
-//
-// [!] TYPE RE-HOME, the same cast convention BrnTakedownManager_Detect.cpp and ProcessPlayerCrashes
-// above already use for exactly this pair, and for the same reason: the SCORER declarations name the
-// queues as the console's typedefs -- InputBuffer::TakedownEventQueue and
-// VehicleManagerOutputInterface::RaceCarCrashEventQueue (BrnScoringSystemEventQueues.h completes
-// both as the empty struct over EventQueue<TakedownEvent,8> / EventQueue<RaceCarCrashEvent,8>) --
-// while the live holders spell the same bytes as the generic queue templates. Same bytes, same
-// offsets, no fabricated member and no forked type; both casts disappear the moment the holders are
-// retyped to the console's names.
-// ==============================================================================================
-void
-ModeManager::PostWorldUpdateTakedownScoringBringUp(
-        const CgsModule::EventQueue<TakedownEvent, 8>* lpTakedownEventQueue,
-        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue)
-{
-    // The console's own assert on this parameter, restored with the parameter it tests.
-    CGS_ASSERT(lpTakedownEventQueue != NULL, "lpTakedownQueue != NULL");
-
-    if (mCurrentGameModeParams.GetFlag(GameModeParams::KU_FLAG_DISABLE_ALL_TDS) ||
-        !IsGameModeInProgress(mpCurrentGameMode))
-    {
-        return;
-    }
-
-    // r5 = lwzx +0x8038 (mePlayerActiveRaceCarIndex) @0x8234AC4C, r6 = lbzx +0x950D
-    // (mbStuntChallengeActive) @0x8234AC44 -- the two arguments the trailing online-stunt arm reads.
-    mScoringSystem.UpdateTakedowns(
-        reinterpret_cast<const InputBuffer::TakedownEventQueue*>(lpTakedownEventQueue),
-        mePlayerActiveRaceCarIndex, mbStuntChallengeActive);
-
-    // [FLAG PC bring-up] THE NULL TEST IS NOT THE CONSOLE'S. On console the crash queue is a field
-    // of the post-world buffer and is always present; here it arrives from the lifted leg, whose own
-    // ProcessPlayerCrashes call already guards it the same way. UpdateCrashes' first statement is
-    // CGS_ASSERT(lpQueue != NULL) followed by an unguarded walk, so a missing queue must skip the
-    // call, not fire the tripwire. DELETE-WHEN the real post-world buffer lands.
-    if (lpRaceCarCrashEventQueue != NULL)
-    {
-        mScoringSystem.UpdateCrashes(
-            reinterpret_cast<const VehicleManagerOutputInterface::RaceCarCrashEventQueue*>(
-                lpRaceCarCrashEventQueue));
-    }
 }
 
 }

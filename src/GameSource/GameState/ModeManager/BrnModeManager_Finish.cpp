@@ -1056,11 +1056,7 @@ void ModeManager::ShowModeResults(
         }
 
         // record+0xD4 == Profile::GetNumLossesForGameMode(mode).
-        // [!] FLAG: +0xD4 falls inside ShowModeResultsAction's `maPadD0[0x0A]`; written through the
-        // pad at its asm-proven offset. header_request filed to carve it as
-        // `s32 miNumLossesForGameMode; // +0xD4`.
-        const s32 liNumLosses = lpProfile->GetNumLossesForGameMode(meCurrentGameModeType);
-        std::memcpy(&lAction.maPadD0[0x04], &liNumLosses, sizeof(liNumLosses));
+        lAction.miNumLossesForGameMode = lpProfile->GetNumLossesForGameMode(meCurrentGameModeType);
     }
 
     // ---- the progression-rank block ----------------------------------------------------------------

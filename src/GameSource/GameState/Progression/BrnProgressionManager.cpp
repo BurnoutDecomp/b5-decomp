@@ -35,6 +35,7 @@
 #include "GameSource/Math/BrnMathUtils.h"                             // BrnMath::RoundWithNumSignificantFigures (GetStuntRunScoreTarget)
 #include "SharedClasses/DataLists/VehicleList.h"                      // BrnResource::VehicleList (GetVehicleIndex / GetVehicleData)
 #include "SharedClasses/DataLists/VehicleListEntry.h"                 // BrnResource::VehicleListEntry (livery type / parent id)
+#include "BrnDerivedCars.h"                                             // BrnProgression::DerivedCarArray (AddCar's silver-car fan-out)
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                // OutputBuffer::GetResourceRequestInterface
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"     // RequestInterface<3072>::LoadBundle / AcquireResource
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"  // CgsModule::EventReceiverQueue<3072,16>
@@ -1387,19 +1388,17 @@ s8 ProgressionManager::GetProgressionRankForGameMode(BrnGameState::GameStateModu
 // AddCar (X360 0x8237A970).
 // Hand the car to the profile, then two tallies and the derived-("silver")-car fan-out.
 // ARG SHAPE FROM ASM: r3=this, r4=carId, r5=unlockType. (ProgressionManager::OnPlayerCarChange
-// @0x8237AC38 calls it as `li r5,0` -> unlock type E_UNLOCK_TYPE_UNLOCK.)
+// calls it as `li r5,0` -> unlock type E_UNLOCK_TYPE_UNLOCK.)
 //
-// ⛔ HONEST PARTIAL -- the derived-car leg. When the profile's mbSilverCarsUnlocked flag is set the
-// console builds the car's colour-livery list (BrnProgression::DerivedCarArray::
-// ConstructColourLiveryList @0x82374F60), walks it, and for every entry whose livery kind == 4 it
-// adds that derived car to the profile too and marks its unlock sequence already-shown. That
-// whole path needs BrnDerivedCars.h (DerivedCarArray + ConstructColourLiveryList +
-// UnlockDerivedCarCollection + DEBUG_PrintArray, ~600 X360 instructions), which is NOT
-// reconstructed. It is gated on mbSilverCarsUnlocked (Profile+42516 -- the pair was renamed
-// 2026-08-27 to match the X360's own debug strings; the byte and the test are unchanged), which
-// a fresh profile leaves FALSE, so it is
-// off the start-of-game path entirely -- and it announces itself in the log when it is hit.
-// DELETE-WHEN BrnDerivedCars.h lands.
+// THE FAN-OUT. Once the profile's silver-cars flag (Profile+42516) is set, the console builds the
+// added car's colour-livery family on the stack (both count words seeded -1, then
+// ConstructColourLiveryList over mpVehicleList, which it dereferences with no test) and walks it:
+// every member whose livery kind is E_LIVERY_TYPE_SILVER goes straight into the profile through
+// Profile::AddCar with E_UNLOCK_TYPE_GOLD_SILVER -- NOT back through this function, so the two
+// tallies above do not run for it -- and gets its unlock sequence marked already shown
+// (`stb 1, +0x0A` of the new record). The loop bound is re-read every pass through the checked
+// GetLength, and each kind is read through the capacity-checked GetLiveryType, as the console
+// inlines both.
 // --------------------------------------------------------------------------------------------
 CarData* ProgressionManager::AddCar(CgsID lCarId, s32 leUnlockType)
 {
@@ -1424,15 +1423,27 @@ CarData* ProgressionManager::AddCar(CgsID lCarId, s32 leUnlockType)
         ++miMaxCarCount;
     }
 
-    if (mProfile.GetSilverCarsUnlocked())   // Profile+42516, the console's `lwz *(progMgr+42884)`
+    if (mProfile.GetSilverCarsUnlocked())   // Profile+42516
     {
-        if (CgsDev::Log::gpDebugPrint != 0)
+        DerivedCarArray lCarVariants;
+        lCarVariants.ConstructColourLiveryList(mpVehicleList, lCarId);
+
+        for (u32 luIndex = 0; luIndex < lCarVariants.GetLength(); ++luIndex)
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] ProgressionManager::AddCar: the derived-("
-                   "silver)-car fan-out is NOT reconstructed (needs BrnDerivedCars.h -- "
-                   "DerivedCarArray::ConstructColourLiveryList @0x82374F60). Car "
-                << static_cast<u32>(lCarId) << " was added, its derived variants were not.\n";
+            if (lCarVariants.GetLiveryType(luIndex) != BrnResource::VehicleListEntry::E_LIVERY_TYPE_SILVER)
+            {
+                continue;
+            }
+
+            CarData* lpSilverCarData =
+                mProfile.AddCar(lCarVariants.GetItem(luIndex), CarData::E_UNLOCK_TYPE_GOLD_SILVER);
+            if (lpSilverCarData == 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpSilverCarData != NULL", KAC_PROGMGR_FILE, 568);
+                CgsDev::Assert::EndAssert();
+            }
+            lpSilverCarData->SetUnlockSequenceAlreadyShown();
         }
     }
 

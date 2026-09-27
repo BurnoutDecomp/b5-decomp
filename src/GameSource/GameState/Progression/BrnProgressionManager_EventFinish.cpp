@@ -23,55 +23,28 @@
 // offset arithmetic on `this`.
 //
 // -----------------------------------------------------------------------------------
-// ⛔⛔ HONEST PARTIAL -- READ THIS BEFORE "FINISHING" OnEventFinishUpdateProfile ⛔⛔
-//
-// The console body calls TEN functions that have no body anywhere in b5-decomp/src. Each
-// of them is PARKED at its call site with a banner naming the exact missing symbol and a
-// ONE-SHOT log line, because this TU is MOUNTED (tools/build/build_game_exe.bat:2590) and
-// landing the calls would add ten unresolved externals to the link -- the F2 failure mode
-// this campaign keeps re-learning. The parks are, in body order:
-//
-//   P1  DerivedCarArray::ConstructPatternLiveryList @0x823751C0  (declare-only, BrnDerivedCars.h
-//       :96 -- its own banner says "will stay unresolved at link until someone writes their
-//       bodies HERE") + ProgressionManager::UnlockDerivedCarCollection @0x8237AD70 (absent)
-//       -> the WON-EVENT CAR UNLOCK. ProgressionManager::AddCar and CarData::
-//       SetUnlockDeformationAmount both exist; only the derived-car list build is missing.
-//   P2  ProgressionManager::OnTrophyUnlock @0x82389740      (declared, parked in the header)
-//   P3  ProgressionManager::CheckForSpecialCarUnlocks @0x82396058 (declared, parked in the header)
-//   P4  ProgressionManager::UnlockTrophyForEventTypeAllCompleted @0x82395FE8 (absent).
-//       ⭐ NARROWED 2026-09-06 (progression wave, lane profile): Profile::
-//       GetGameModeTypeCompletedAmountSinceTheStart @0x82354B98 now has a body, so the
-//       console's `GetGameModeTypeAmount(mode) == GetGameModeTypeCompletedAmountSinceTheStart
-//       (mode)` condition RUNS; only the trophy call inside it is still parked.
-//   P5  ✅ PAID [progression wave: medals, 2026-09-06] -- ProgressionManager::FixGameModeRanks
-//       @0x82395CD8 is bodied in BrnProgressionManager_Medals.cpp and CALLED at its seat below.
-//   P6  ✅ PAID [progression wave: medals, 2026-09-06] -- ProgressionManager::UpdatePlayerMedals
-//       @0x8239FE50 (producer of action 200) is bodied in BrnProgressionManager_Medals.cpp and
-//       CALLED at its seat below.
-//   P7  ProgressionManager::UnlockRivals                     (absent; fills lpAction->mu64FieldC8)
-//   P8  Paid: rank-up free car uses the recovered ProgressionRankData record.
-//   P9  AchievementManagerBase::OnEventWin -- BODIED, but BrnGameStateAchievementManagerBase.cpp
-//       is deliberately NOT MOUNTED (build_game_exe.bat:2610 "mounting it costs EIGHT ...").
-//   P10 ProgressionManager::ComputeCompletionPercentage @0x8238A198 (absent; 320 instructions)
-//
-// WHAT IS WHOLE (the payoff): the ProfileEvent finished/won flag writes, the previous-win
-// classification, the event-junction -> RaceEventData resolution, the deferred "all win
-// types" arm, the medal tally, AddGameModeTypeCompleted / AddWinForGameMode, the results
-// action's own field writes, the training-tip request, and the two action posts.
-// -----------------------------------------------------------------------------------
+// OnEventFinishUpdateProfile makes every call the console body makes, in the console's
+// order: the won-event car family, the all-events trophy and the silver/gold car re-check,
+// the per-mode trophy, the rank fix-up and medal refresh, the WON_EVENT training tip, the
+// rival unlock, the next-rank car, the achievement hook, the autosave and traffic-scale
+// posts, and the completion percentage stamped into the results record.
 // ===================================================================================
 
 #include "BrnProgressionManager.h"
 #include "BrnProfile.h"
 #include "SharedClasses/Progression/BrnProgressionRankData.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"              // CgsDev::Log::gpDebugPrint (the park lines)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"              // CgsDev::Log::gpDebugPrint (the [eventfinish] witness)
 #include "SharedClasses/Progression/BrnProgressionData.h"               // ProgressionData (rank count / junction table)
 #include "SharedClasses/Progression/BrnRaceEventData.h"                 // EventJunction / RaceEventData
 #include "GameSource/GameState/BrnGameActions.h"                        // GameStateModuleIO::ShowModeResultsAction
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<13312,16>::AddEvent
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"    // TrainingManager::RequestTraining
+#include "SharedClasses/Progression/BrnTrophyUnlockData.h"              // TrophyUnlockData::UnlockType (the all-events trophy)
 #include "BrnDerivedCars.h"                                             // DerivedCarArray (the maBlock58 image)
+#include "GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h" // AchievementManagerBase::OnEventWin
+
+#include <stdlib.h>                                                     // getenv (the [eventfinish] witness gate)
 
 namespace
 {
@@ -115,33 +88,17 @@ const char* const KAC_PROGMGR_FILE =
 const f32 KF_UNLOCK_DEFORM_AMOUNT   = 0.85f;   // flt_82029BB8
 const f32 KF_TRAFFIC_SCALE_AT_RANK  = 1.0f;    // flt_82001C98
 
-// One-shot park reporters. Each parked leg announces itself ONCE per run so a boot trace
-// says exactly which console leg did not execute (campaign house rule: a park must be
-// visible, not silent).
-void ParkOnce(bool& lrbAlreadySaid, const char* lpcMessage)
-{
-    if (lrbAlreadySaid)
-    {
-        return;
-    }
-    lrbAlreadySaid = true;
-    if (CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint << lpcMessage;
-    }
-}
+// [FLAG PC witness] the `[eventfinish] ...` line -- not in the console binary. Opt-in behind
+// BRN_EVENT_FINISH_DIAG (read once), capped at KI_WITNESS_LINE_BUDGET lines a run; it only
+// reads state the function has already written.
+const s32 KI_WITNESS_LINE_BUDGET = 16;
+s32       giWitnessLines         = 0;
 
-bool gbSaidCarUnlock       = false;   // P1
-bool gbSaidTrophyUnlock    = false;   // P2 + P3
-bool gbSaidAllCompleted    = false;   // P4
-// ⛔ RETIRED 2026-09-06 (progression wave, lane medals): `gbSaidFixRanks` (P5) and
-// `gbSaidUpdateMedals` (P6). Both parks are paid -- FixGameModeRanks @0x82395CD8 and
-// UpdatePlayerMedals @0x8239FE50 are bodied in BrnProgressionManager_Medals.cpp and called at
-// their seats. Do not re-mint them.
-bool gbSaidUnlockRivals    = false;   // P7
-bool gbSaidAchievement     = false;   // P9
-bool gbSaidCompletionPct   = false;   // P10
-bool gbSaidNoTrainingMgr   = false;   // the uninstalled mpTrainingManager back-pointer
+bool EventFinishDiagEnabled()
+{
+    static const bool sbDiag = (getenv("BRN_EVENT_FINISH_DIAG") != 0);
+    return sbDiag && CgsDev::Log::gpDebugPrint != 0 && giWitnessLines < KI_WITNESS_LINE_BUDGET;
+}
 }
 
 namespace BrnProgression
@@ -353,14 +310,8 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
         }
 
         // The event's unlock car id: the 8-byte doubleword at RaceEventData +0x10 that the
-        // X360 loads with a single `ld r11, 0x10(r29)` and tests against 0.
-        // ⚠️ NAME NOTE: the semantically-right accessor is RaceEventData::GetUnlockCarId()
-        // (BrnRaceEventData.h:258, "the car id this event unlocks (X360 word +0x14)") but it
-        // is DECLARE-ONLY -- no body anywhere. GetEventInstanceId() is bodied
-        // (BrnRaceEventData.cpp:89) and returns the SAME eight bytes at +0x10, so it is used
-        // here rather than adding an unresolved external. header_request filed to body
-        // GetUnlockCarId as a straight delegation (the Profile::IsStuntElementDone precedent).
-        const CgsID lUnlockCarId = static_cast<CgsID>(lpcRaceEventData->GetEventInstanceId());
+        // console loads with a single `ld` and tests against 0.
+        const CgsID lUnlockCarId = lpcRaceEventData->GetSpecialEventCarId();
 
         bool lbAlreadyWonSpecialEventBefore = false;
 
@@ -419,52 +370,28 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
             // so the copy is byte-for-byte the console's and needs no <cstring>.
             {
                 DerivedCarArray lCarVariants;
-
-                if (mpVehicleList != 0)
-                {
-                    lCarVariants.ConstructPatternLiveryList(mpVehicleList, lUnlockCarId);
-                }
-                else
-                {
-                    // [FLAG PC bring-up] the console dereferences mpVehicleList (+133448) here
-                    // with no test; on PC it is installed by GameStateModule (SetVehicleList) and
-                    // is non-null on every mounted path, but a null one must not fault.
-                    // Clear() leaves an empty-but-constructed list, which is what the block the
-                    // action already carries holds. DELETE-WHEN the outer Construct/Prepare pair
-                    // owns the install unconditionally.
-                    lCarVariants.Clear();
-                    ParkOnce(gbSaidCarUnlock,
-                             "[FLAG PC bring-up] ProgressionManager::OnEventFinishUpdateProfile: "
-                             "mpVehicleList (X360 +133448) is NULL, so the won-event car's livery "
-                             "family could not be built and no car was awarded.\n");
-                }
+                lCarVariants.ConstructPatternLiveryList(mpVehicleList, lUnlockCarId);
 
                 *reinterpret_cast<DerivedCarArray*>(lpAction->maBlock58) = lCarVariants;
                 lpAction->mbHasBlock58 = 1;
 
-                if (mpVehicleList != 0)
+                CarData* lpCarData = AddCar(lCarVariants.GetItem(1), CarData::E_UNLOCK_TYPE_GIFT);
+                if (lpCarData == 0)
                 {
-                    CarData* lpCarData = AddCar(lCarVariants.GetItem(1),
-                                                CarData::E_UNLOCK_TYPE_GIFT);
-                    if (lpCarData == 0)
-                    {
-                        CgsDev::Assert::BeginAssert();
-                        CgsDev::Assert::FireAssert("lpCarData != NULL", KAC_PROGMGR_FILE, 1723);
-                        CgsDev::Assert::EndAssert();
-                    }
-                    else
-                    {
-                        // [PC GUARD] the console stores THROUGH r31 at 0x823A02BC whether or not
-                        // the assert above fired (`stfs f0, 0xC(r31)` sits after loc_823A02B0),
-                        // i.e. a null lpCarData writes 0.85f to address 0x0C. AddCar cannot
-                        // return null in this tree -- Profile::AddCar asserts and returns a real
-                        // record -- so the `else` costs no behaviour and removes the only way
-                        // this leg could turn a console non-event into a host access violation.
-                        lpCarData->SetUnlockDeformationAmount(KF_UNLOCK_DEFORM_AMOUNT);
-                    }
-
-                    UnlockDerivedCarCollection(lCarVariants);
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lpCarData != NULL", KAC_PROGMGR_FILE, 1723);
+                    CgsDev::Assert::EndAssert();
                 }
+                else
+                {
+                    // [PC GUARD] the console stores the deform amount through the record whether
+                    // or not the assert above fired. AddCar cannot return null in this tree --
+                    // Profile::AddCar asserts and returns a real record -- so the `else` costs no
+                    // behaviour and only removes a host access violation on a null record.
+                    lpCarData->SetUnlockDeformationAmount(KF_UNLOCK_DEFORM_AMOUNT);
+                }
+
+                UnlockDerivedCarCollection(lCarVariants);
             }
 
             ArmAllWinTypesCheckIfAtLastRank(lpcRaceEventData);
@@ -491,29 +418,12 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
             CgsDev::Assert::EndAssert();
         }
 
+        // `li r4, 9` -- the every-event-won trophy.
         if (luTotalWinCount >= luMedalCount)
         {
-            // ⛔ PARK P2 -- console: `OnTrophyUnlock(9);` (X360 `li r4,9`, i.e. the
-            // TrophyUnlockData::UnlockType the "every event rank-won" trophy carries).
-            // ProgressionManager::OnTrophyUnlock @0x82389740 is declared in
-            // BrnProgressionManager.h and PARKED there (a 12-case trophy machine over the
-            // PROGRESSION.DAT trophy table; it needs UnlockCarFromTrophy @0x8237B0E8 and an
-            // owning header for the trophy table). DELETE-WHEN it has a body.
-            ParkOnce(gbSaidTrophyUnlock,
-                     "[FLAG PC bring-up] ProgressionManager::OnEventFinishUpdateProfile: "
-                     "OnTrophyUnlock(9) and CheckForSpecialCarUnlocks() are NOT reconstructed "
-                     "(both parked in BrnProgressionManager.h). The all-events-won trophy and "
-                     "the gold/silver car re-check did not run.\n");
+            OnTrophyUnlock(TrophyUnlockData::E_UNLOCKTYPE_COMPLETE_ALL_JUNCTIONEVENTS);
         }
-        // ⛔ PARK P3 -- console: `CheckForSpecialCarUnlocks();` UNCONDITIONALLY here.
-        // @0x82396058, declared + parked in BrnProgressionManager.h (needs
-        // ComputeCompletionPercentage @0x8238A198 and UnlockSpecialCars @0x8237AF38).
-        // (Shares the one-shot line above so a boot trace is not spammed twice.)
-        ParkOnce(gbSaidTrophyUnlock,
-                 "[FLAG PC bring-up] ProgressionManager::OnEventFinishUpdateProfile: "
-                 "OnTrophyUnlock(9) and CheckForSpecialCarUnlocks() are NOT reconstructed "
-                 "(both parked in BrnProgressionManager.h). The all-events-won trophy and "
-                 "the gold/silver car re-check did not run.\n");
+        CheckForSpecialCarUnlocks();
 
         // ---- the per-mode completion tally ----------------------------------------------
         mProfile.AddGameModeTypeCompleted(leGameModeType);
@@ -524,8 +434,7 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
         //         UnlockTrophyForEventTypeAllCompleted(mode);
         // ⭐ [progression wave 2026-09-06, lane profile] the CONDITION is no longer parked:
         // Profile::GetGameModeTypeCompletedAmountSinceTheStart @0x82354B98 now has a body
-        // (BrnProfile.cpp), so both sides of the comparison are the console's own reads and the
-        // park below only fires on the frame the console would have unlocked the trophy.
+        // (BrnProfile.cpp), so both sides of the comparison are the console's own reads.
         if (mProfile.GetGameModeTypeAmount(leGameModeType)
             == mProfile.GetGameModeTypeCompletedAmountSinceTheStart(leGameModeType))
         {
@@ -576,18 +485,7 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
         // type-8 free-burn-clock arm and the type-50 boost gauntlet both fold away), so the
         // inlining is reversed into the real call, which is bodied at
         // BrnTrainingManager.cpp:507.
-        if (mpTrainingManager != 0)
-        {
-            mpTrainingManager->RequestTraining(E_TRAINING_TYPE_WON_EVENT);
-        }
-        else
-        {
-            ParkOnce(gbSaidNoTrainingMgr,
-                     "[FLAG PC bring-up] ProgressionManager::OnEventFinishUpdateProfile: "
-                     "mpTrainingManager (X360 +133440) is NULL -- nothing calls "
-                     "ProgressionManager::SetTrainingManager yet, so the WON_EVENT training "
-                     "tip was not requested.\n");
-        }
+        mpTrainingManager->RequestTraining(E_TRAINING_TYPE_WON_EVENT);
 
         // ⭐ UN-PARKED P7 [progression wave 2026-09-06, lane rivals]: console
         // `lpAction->mu64FieldC8 = UnlockRivals(lpGameActionQueue);` (DWARF :661,
@@ -628,15 +526,7 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
             CgsDev::Assert::FireAssert("mpAchievementManager", KAC_PROGMGR_FILE, 1831);
             CgsDev::Assert::EndAssert();
         }
-        // ⛔ PARK P9 -- console: `AchievementManagerBase::OnEventWin(mpAchievementManager,
-        // leGameModeType);` The body EXISTS (BrnGameStateAchievementManagerBase.cpp:211) but its
-        // TU is deliberately NOT MOUNTED (tools/build/build_game_exe.bat:2610 -- "mounting it
-        // costs EIGHT ..."), so calling it from this mounted TU would break the link.
-        // DELETE-WHEN that TU is mounted; this is a MOUNT decision, not a missing body.
-        ParkOnce(gbSaidAchievement,
-                 "[FLAG PC bring-up] ProgressionManager::OnEventFinishUpdateProfile: "
-                 "AchievementManagerBase::OnEventWin() not called -- its TU "
-                 "(BrnGameStateAchievementManagerBase.cpp) is not mounted.\n");
+        mpAchievementManager->OnEventWin(leGameModeType);
 
         // ---- the autosave request -------------------------------------------------------
         // X360 0x823A05D8: `li r6,1 / li r5,0x37`, payload one byte == 1.
@@ -657,18 +547,25 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
                                     GsmIO::E_ACTION_SET_TRAFFIC_SCALE_BASED_ON_RANK, 4);
     }
 
-    // ⛔ PARK P10 -- console: `lpAction->+0xD0 = ComputeCompletionPercentage();`
-    // (`stfs f1, 0xD0(r19)` -- so +0xD0 is an f32, currently inside ShowModeResultsAction's
-    // maPadD0). ProgressionManager::ComputeCompletionPercentage @0x8238A198 (320 instructions)
-    // is absent from the tree and is ALREADY the stated blocker for two other parked members of
-    // this class (SendGameCompletionResults, CheckForSpecialCarUnlocks). The field keeps
-    // ShowModeResults' memset zero, i.e. "0% complete" in the post-event GUI.
-    // DELETE-WHEN 0x8238A198 lands (and carve `f32 mfCompletionPercentage; // +0xD0` out of
-    // maPadD0 in the same pass -- header_request filed).
-    ParkOnce(gbSaidCompletionPct,
-             "[FLAG PC bring-up] ProgressionManager::OnEventFinishUpdateProfile: "
-             "ComputeCompletionPercentage() is NOT reconstructed (@0x8238A198). The results "
-             "action's completion percentage stays 0.\n");
+    // `stfs f1, 0xD0(r19)` -- the results record's f32 at +0xD0.
+    const f32 lfCompletionPercentage = ComputeCompletionPercentage();
+    lpAction->mfCurrentGameCompletePercentage = lfCompletionPercentage;
+
+    if (EventFinishDiagEnabled())
+    {
+        ++giWitnessLines;
+        *CgsDev::Log::gpDebugPrint
+            << "[eventfinish] event=" << luEventId
+            << " mode="               << static_cast<s32>(leGameModeType)
+            << " pos="                << lpAction->miFinishPosition
+            << " flags="              << static_cast<u32>(lpEvent->GetFlags())
+            << " derivedCars="        << (lpAction->mbHasBlock58 != 0 ? 1 : 0)
+            << " rank="               << static_cast<s32>(mi8ProgressionRank)
+            << " silver="             << (mProfile.GetSilverCarsUnlocked() ? 1 : 0)
+            << " gold="               << (mProfile.GetGoldCarsUnlocked() ? 1 : 0)
+            << " completion="         << lfCompletionPercentage
+            << "\n";
+    }
 }
 
 // ------------------------------------------------------------------------------------
