@@ -39,6 +39,8 @@
 #include "GameSource/Director/BrnDirectorHarness.h"                  // [FX-DIRECTOR2 opt-in] Harness::SceneQueryClosureEnabled
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"   // SceneManagerIO::InputBuffer_Query / OutputBuffer (the external query leg)
 #include "GameShared/GameClasses/Module/CgsModuleUtils.h"            // CgsModule::LockBuffersForIO / UnlockBuffersForIO
+#include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"       // [DIAG BRN_CAMCOLLIDE_DIAG] Camera::VehicleInfo
+#include "vendor/renderware/collision/CollisionVolume.hpp"          // [DIAG BRN_CAMCOLLIDE_DIAG] rw::collision::SphereVolume
 #include "GameSource/Effects/Particles/ParticleModuleBringUp.h"               // BrnParticle::PCBringUpProduceParticleRenderData (DoDispatch's particle-render-data seam)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface + BrnPhysics::Vehicle::RaceCarState (DoDispatch's TempRaceCarStateCache seam)
 #include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h" // BrnNetHarnessPC::InjectGuiEvents (the LAN test harness hook)
@@ -2349,6 +2351,170 @@ namespace BrnGame
         (void)lbDestroyed;
     }
 
+    // ============================================================================
+    // [DIAG BRN_CAMCOLLIDE_DIAG] [FLAG PC witness] -- NOT IN THE X360 BINARY. Default off; inert unset.
+    // (owner's list 2026-09-27, lane L2 CAMCOLLIDE: "the camera tends to be behind walls or below the map for
+    // things like crashes / takedowns / junkyard".)
+    //
+    // Once per director update, AFTER DirectorModule::Update has published the frame's camera, the PUBLISHED eye
+    // is put through the console's own WORLD tests, independently of whether the director's scene-query closure
+    // runs (BRN_FXD2_SCENEQUERY): the queries are staged on a private SceneManagerIO::InputBuffer_Query and
+    // answered by the same WorldModule::ExternalSceneQueriesUpdate the closure uses, so every answer comes from
+    // SceneManagerModule::ProcessVolumeTestDeepest / ProcessLineTestNearest's world arms (flags 2, world only --
+    // no entity candidates, so no fine-module kernel is reached by the lines):
+    //   in     the 0.1 m sphere (flt_82004014, VisibilityCollisionPolicy's own camera-in-geometry test) at the eye
+    //          intersects the world;
+    //   above  a nearest line from 200 m above the eye DOWN to the eye hits a surface (the world is single-sided:
+    //          a hit means a surface facing up lies above the eye);
+    //   below  a nearest line from the eye DOWN 200 m hits a surface;
+    //   occA / occB  a nearest line eye -> player car / car -> eye hits the world (both directions, as
+    //          VisibilityTest does, because a single-sided wall only answers from its front);
+    // UNDER (below the map) = above && !below; OCC = occA || occB. One line per update, capped. The arbitrator
+    // state that owns each frame is read off BRN_CRASHCAM_DIAG's "[crashcam] container current state" lines.
+    // DELETE-WHEN: the owner's camera-collision item is closed.
+    // ============================================================================
+    namespace
+    {
+        const s32 KI_CAMCOLLIDE_MAX_LINES    = 30000;
+        const f32 KF_CAMCOLLIDE_PROBE_METRES = 200.0f;
+
+        void BrnDiag_CamCollideWitness(CgsModule::IOBufferStack* lpInputStack,
+                                       CgsModule::IOBufferStack* lpOutputStack,
+                                       WorldModule& lrWorldModule,
+                                       const BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
+                                       BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutput,
+                                       BrnUpdateSet lUpdateSet)
+        {
+            static const bool sbOn = (getenv("BRN_CAMCOLLIDE_DIAG") != 0);
+            static s32 siLine = 0;
+            if (!sbOn || CgsDev::Log::gpDebugPrint == 0 || siLine >= KI_CAMCOLLIDE_MAX_LINES
+                || lpDirectorInput == 0 || lpDirectorOutput == 0)
+            {
+                return;
+            }
+
+            lpDirectorOutput->LockForRead();
+            const rw::math::vpu::Matrix44Affine lCameraTransform = lpDirectorOutput->GetCameraOutput()->GetTransform();
+            lpDirectorOutput->UnlockForRead();
+
+            lpDirectorInput->LockForRead();
+            const s32 liPlayer = static_cast<s32>(lpDirectorInput->GetPlayerCarIndex());
+            const BrnDirector::Camera::VehicleInfo* lpRaceCars = lpDirectorInput->GetRaceCarInfo();
+            Vector3 lCarPosition;
+            lCarPosition.SetZero();
+            if (lpRaceCars != 0 && liPlayer >= 0)
+            {
+                lCarPosition = lpRaceCars[liPlayer].mRaceCarState.mTransform.wAxis;
+            }
+            lpDirectorInput->UnlockForRead();
+
+            const Vector3& lEye = lCameraTransform.wAxis;
+            if (lEye.x == 0.0f && lEye.y == 0.0f && lEye.z == 0.0f)
+            {
+                return;   // no camera published yet (the boot frames): nothing to classify
+            }
+
+            CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpQuery   = 0;
+            CgsSceneManager::SceneManagerIO::OutputBuffer*      lpResults = 0;
+            lpInputStack->CreateIOBuffer(&lpQuery, "CamCollideQ");
+            if (lpQuery == 0)
+            {
+                return;
+            }
+            lpOutputStack->CreateIOBuffer(&lpResults, "CamCollideR");
+            if (lpResults == 0)
+            {
+                lpInputStack->DestroyIOBuffer(&lpQuery);
+                return;
+            }
+
+            // The query ids: owner 0xEE (no game owner uses it), index = the test.
+            enum { E_TEST_IN = 0, E_TEST_ABOVE, E_TEST_BELOW, E_TEST_OCC_A, E_TEST_OCC_B, E_NUM_TESTS };
+            CgsSceneManager::SceneQueryId laIds[E_NUM_TESTS];
+            for (s32 liTest = 0; liTest < E_NUM_TESTS; ++liTest)
+            {
+                laIds[liTest].Set(0xEEu, static_cast<u16>(liTest));
+            }
+
+            Vector3 lAbove = lEye;
+            lAbove.y += KF_CAMCOLLIDE_PROBE_METRES;
+            Vector3 lBelow = lEye;
+            lBelow.y -= KF_CAMCOLLIDE_PROBE_METRES;
+
+            alignas(16) u8 laVolumeMemory[0x80];
+            rw::Resource lVolumeResource = {};
+            lVolumeResource.m_baseResources[0] = laVolumeMemory;
+            const rw::collision::SphereVolume* lpSphere =
+                rw::collision::SphereVolume::Initialize(lVolumeResource, 0.1f);
+
+            const CgsSceneManager::EntityId lNoEntity(0xFFFFFFFFu);
+            lpQuery->LockForWrite();
+            CgsSceneManager::SceneManagerIO::SceneQueryInterface* lpInterface = lpQuery->GetSceneQueryInterface();
+            lpInterface->VolumeTestDeepest(laIds[E_TEST_IN].mId, 2u, 0xFFu, lpSphere, &lCameraTransform, 0xFFFFFFFFu,
+                                           CgsSceneManager::SceneManagerIO::E_EXCLUDE_ENTITY_ONLY);
+            lpInterface->LineTestNearest(lAbove, lEye, laIds[E_TEST_ABOVE], 2u, 0xFFu, lNoEntity,
+                                         CgsSceneManager::SceneManagerIO::E_NEAREST_EXCLUDE_ENTITY_ONLY);
+            lpInterface->LineTestNearest(lEye, lBelow, laIds[E_TEST_BELOW], 2u, 0xFFu, lNoEntity,
+                                         CgsSceneManager::SceneManagerIO::E_NEAREST_EXCLUDE_ENTITY_ONLY);
+            lpInterface->LineTestNearest(lEye, lCarPosition, laIds[E_TEST_OCC_A], 2u, 0xFFu, lNoEntity,
+                                         CgsSceneManager::SceneManagerIO::E_NEAREST_EXCLUDE_ENTITY_ONLY);
+            lpInterface->LineTestNearest(lCarPosition, lEye, laIds[E_TEST_OCC_B], 2u, 0xFFu, lNoEntity,
+                                         CgsSceneManager::SceneManagerIO::E_NEAREST_EXCLUDE_ENTITY_ONLY);
+            lpQuery->UnlockForWrite();
+
+            lrWorldModule.ExternalSceneQueriesUpdate(lpInputStack, lpOutputStack, lpQuery, lpResults, lUpdateSet);
+
+            s32 laHit[E_NUM_TESTS] = { -1, -1, -1, -1, -1 };
+            lpResults->LockForRead();
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const CgsSceneManager::SceneManagerIO::OutputBuffer* lpConstResults = lpResults;
+            const auto* lpQueue = lpConstResults->GetResultsQueue();
+            for (s32 liType = lpQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent != 0;
+                 liType = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+            {
+                if (liType == 2)
+                {
+                    const CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult* lpNearest =
+                        reinterpret_cast<const CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult*>(lpEvent);
+                    if (lpNearest->mQueryId.GetOwner() == 0xEEu && lpNearest->mQueryId.GetIndex() < E_NUM_TESTS)
+                    {
+                        laHit[lpNearest->mQueryId.GetIndex()] = lpNearest->mbIntersection ? 1 : 0;
+                    }
+                }
+                else if (liType == 5)
+                {
+                    const CgsSceneManager::SceneManagerIO::OutEventVolumeTestDeepestResult* lpDeepest =
+                        reinterpret_cast<const CgsSceneManager::SceneManagerIO::OutEventVolumeTestDeepestResult*>(lpEvent);
+                    if (lpDeepest->mQueryId.GetOwner() == 0xEEu && lpDeepest->mQueryId.GetIndex() == E_TEST_IN)
+                    {
+                        laHit[E_TEST_IN] = lpDeepest->mbIntersection ? 1 : 0;
+                    }
+                }
+            }
+            lpResults->UnlockForRead();
+            lpOutputStack->DestroyIOBuffer(&lpResults);
+            lpInputStack->DestroyIOBuffer(&lpQuery);
+
+            const s32 liOccluded = (laHit[E_TEST_OCC_A] == 1 || laHit[E_TEST_OCC_B] == 1) ? 1 : 0;
+            const s32 liUnder    = (laHit[E_TEST_ABOVE] == 1 && laHit[E_TEST_BELOW] == 0) ? 1 : 0;
+            char lacLine[320];
+            std::snprintf(lacLine, sizeof(lacLine),
+                          "[camcol] f=%d eye=%.3f,%.3f,%.3f car=%.3f,%.3f,%.3f in=%d above=%d below=%d occA=%d occB=%d"
+                          " UNDER=%d OCC=%d\n",
+                          static_cast<int>(siLine),
+                          static_cast<double>(lEye.x), static_cast<double>(lEye.y), static_cast<double>(lEye.z),
+                          static_cast<double>(lCarPosition.x), static_cast<double>(lCarPosition.y),
+                          static_cast<double>(lCarPosition.z),
+                          static_cast<int>(laHit[E_TEST_IN]), static_cast<int>(laHit[E_TEST_ABOVE]),
+                          static_cast<int>(laHit[E_TEST_BELOW]), static_cast<int>(laHit[E_TEST_OCC_A]),
+                          static_cast<int>(laHit[E_TEST_OCC_B]), static_cast<int>(liUnder),
+                          static_cast<int>(liOccluded));
+            *CgsDev::Log::gpDebugPrint << lacLine;
+            ++siLine;
+        }
+    }
+
     void BrnGameModule::DoUpdate_Director(bool lbPostGui)
     {
         if (mpDirectorOutputBuffer == 0)
@@ -2770,6 +2936,13 @@ namespace BrnGame
                 }
                 ++siTraceFrame;
             }
+        }
+
+        // [DIAG BRN_CAMCOLLIDE_DIAG] the published eye through the console's world tests (see the witness).
+        if (!lbPostGui)
+        {
+            BrnDiag_CamCollideWitness(mpUpdateInputBufferStack, mpUpdateOutputBufferStack, mWorldModule,
+                                      lpDirectorInput, mpDirectorOutputBuffer, ConstructUpdateSetFromFsm());
         }
 
         mpUpdateInputBufferStack->DestroyIOBuffer(&lpDirectorInput);
