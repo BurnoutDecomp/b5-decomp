@@ -141,10 +141,6 @@ struct LightTriggerStartData;
 
 namespace BrnNetwork { namespace BrnNetworkModuleIO { struct InGamePlayerStatusInterface; } }
 
-namespace CgsModule { template <typename T> class BaseEventQueue; }          // ProcessPlayerCrashes(queue) overload
-namespace CgsModule { template <typename T, s32 N> class EventQueue; }        // the takedown-event queue the post-world scoring leg takes
-namespace BrnPhysics { namespace Vehicle { struct RaceCarCrashEvent; } }      // (element type; complete in the .cpp)
-
 namespace BrnGameState
 {
 class GameStateModule;
@@ -304,35 +300,12 @@ public:
                         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutput,
                         bool                                          lbPaused);
 
-    // DWARF :156 (X360 0x8234A9E0). The console's middle argument is the takedown-event queue --
-    // CgsModule::EventQueue<TakedownEvent, 8> in the GameState flavour. It is NOT spelled here
-    // because no GameStateModuleIO typedef for it exists yet and a template instantiation cannot be
-    // forward-declared; agent 7a needs it and it is filed as a header_request. Until then the
-    // takedown leg is reached from the PostWorldInputBuffer, which carries the same queue.
+    // The middle argument is the module's own takedown-event queue.
     void PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPostWorldInputBuffer,
+                         const InputBuffer::TakedownEventQueue*          lpTakedownQueue,
                          f32                                            lfDelta);
 
-    // The TAKEDOWN + CRASH SCORING ARM of PostWorldUpdate, at the console's own position, as its
-    // own entry point. THE ARGUMENTS ARE THE DEVIATION, NOT THE BODY -- the same reduction the four other
-    // lifted post-world legs already carry: PostWorldUpdate itself has no caller (nothing on this
-    // build creates a PostWorldInputBuffer) and no takedown-queue parameter, while the module's own
-    // takedown-event queue and the world's race-car crash queue ARE both live at the console's own
-    // call position. The gate inside is the console's, unchanged: KU_FLAG_DISABLE_ALL_TDS clear AND
-    // the current mode in progress. DELETE-WHEN the real post-world buffer lands and PostWorldUpdate
-    // is callable -- the arm folds back into it at its console position.
-    void PostWorldUpdateTakedownScoringBringUp(
-            const CgsModule::EventQueue<TakedownEvent, 8>* lpTakedownEventQueue,
-            const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue);
-
     void ProcessPlayerCrashes(const GameStateModuleIO::PostWorldInputBuffer* lpPostWorldInputBuffer);                 // DWARF :160 / X360 0x8231E638
-    // [road-rage wave 2026-09-02, conductor] THE SAME BODY, taking the queue the buffer version
-    // reads (PostWorldInputBuffer +0x10 == the world output's VehicleManagerOutputInterface
-    // +0x3A0 crash queue, copied there by BridgeWorldToGameState leg 1). Nothing on this build
-    // creates a PostWorldInputBuffer (see GameStateModule_gUI_00.cpp's extracted post-world
-    // leg), so the leg hands the world's queue straight in -- "THE ARGUMENTS ARE THE DEVIATION,
-    // NOT THE BODY". The buffer version delegates here. DELETE-WHEN the real post-world pass
-    // (DoUpdate_GameStatePostWorld @0x823E92A8 + the buffer) lands.
-    void ProcessPlayerCrashes(const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue);
     void CheckForOutOfRangeCarsReachingFinish(const GameStateModuleIO::PostWorldInputBuffer* lpPostWorldInputBuffer); // DWARF :164 / X360 0x82340800
 
     // X360 0x82340AB8 (DWARF :735 plus an X360-only THIRD parameter). ASM BEATS DWARF: the X360 body
@@ -444,19 +417,8 @@ public:
     ScoringSystem*       GetScoringSystem();                              // == &mScoringSystem (X360 +0xDB0; console inlines the adjust)
     const ScoringSystem* GetScoringSystem() const;
 
-    // == &mHUDMessageLogic (X360 +0x6B00). The console emits NO accessor -- every call site
-    // (Construct 0x82340008, Destruct 0x823406E0, StartGameMode 0x8234FCE8, PreWorldUpdate
-    // 0x82353CF4, PostWorldUpdate 0x8234B0E8) reaches it through the inlined `this + 27392`
-    // pointer adjust. Named here for the SAME reason GetScoringSystem is: the live post-world
-    // caller on this build is GameStateModule::PostWorldUpdateStuntBringUp's extracted leg, which
-    // is not a member of this class and must not poke a byte offset (hazards H9).
-    HUDMessageLogic*     GetHUDMessageLogic()       { return &mHUDMessageLogic; }
-    const HUDMessageLogic* GetHUDMessageLogic() const { return &mHUDMessageLogic; }
-    // == mePlayerActiveRaceCarIndex (X360 +0x8038). No console accessor either: ModeManager::
-    // PostWorldUpdate hands `lwzx r29, r31, r17` (r17 = 0x8038 @0x8234AA90) to
-    // HUDMessageLogic::PostWorldUpdate as its [sp+0x5C] stack argument (`stw r29, 0x5C(r1)`
-    // @0x8234B0D4). Named for the same reason as GetHUDMessageLogic -- the extracted post-world leg.
-    // [FX-GS 2026-09-23, crash-parity G11-D1]
+    // == mePlayerActiveRaceCarIndex (+0x8038). The console emits no accessor; this one serves
+    // readers outside the class.
     EActiveRaceCarIndex  GetPlayerActiveRaceCarIndex() const { return mePlayerActiveRaceCarIndex; }
     GameStateModule*     GetGameStateModule();                            // asserts "mpGameStateModule"
     BrnProgression::ProgressionManager* GetProgressionManager() const;    // returns mpProgressionManager (+0x6D5C)
@@ -500,6 +462,7 @@ public:
     void HandleSuccessUpdateEvent(const CgsSystem::TimerStatusInterface* lpTimerStatusInterface,
                                   const GameStateModuleIO::FburnChallengeSuccessUpdateEvent* lpEvent);
     void HandleChallengeSuccessEvent(const GameStateModuleIO::FburnChallengeSuccessEvent* lpEvent);
+    void HandleWorldStunt(StuntElementType leStuntType, CgsID lStuntID);   // StuntManager::ProcessStuntElement; body in BrnModeManager_wW_01.cpp
 
     // ---- a player leaving (cases 129 / 121 / 123 / 124) and the host changing (case 140) ------------
     void NetworkPlayerRemoved(BrnNetwork::NetworkPlayerID lPlayerID,

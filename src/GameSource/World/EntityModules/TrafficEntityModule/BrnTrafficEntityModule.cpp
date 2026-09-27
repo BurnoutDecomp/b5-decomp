@@ -6565,8 +6565,8 @@ void TrafficEntityModule::CreateNewVehicleEntities(BrnTrafficIO::OutputBuffer_Pr
 //
 // Live legs: KillOutOfAreaTraffic, SpawnNewTraffic, SpawnShowtimeTraffic (_wT1_07.cpp),
 // UpdateJunctions (crash parity FX-TRAFFICLIGHTS, 2026-09-25), UpdateParams, UpdateVehicles,
-// UpdateLerpedParamTransforms and UpdateParams_DoTimeSlicedLogic. Still gated: UpdateTrailers,
-// KillTrafficOnStartGridWholeSale, NukeTrafficJams; each gate names its own blocker and cost.
+// UpdateLerpedParamTransforms, UpdateParams_DoTimeSlicedLogic and KillTrafficOnStartGridWholeSale
+// (_wW_01.cpp). Still gated: UpdateTrailers, NukeTrafficJams; each gate names its own blocker and cost.
 // ============================================================================
 
 
@@ -6736,17 +6736,9 @@ void TrafficEntityModule::UpdateDecisionFrame(
         KillOutOfAreaTraffic(&lOldActiveHulls);
     }
 
-    {
-        // GATE: KillTrafficOnStartGridWholeSale (DWARF :1794, takes a Vector3), no body. Its
-        // argument is the player position via sub_823102F0 on the post-physics active-race-car
-        // interface. Event-start-only; a free drive has no start grid to clear.
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "UpdateDecisionFrame leg KillTrafficOnStartGridWholeSale (DWARF :1794) -- no body; "
-            "event-start-only (it clears traffic off the race start grid). Its Vector3 "
-            "argument is the player position via sub_823102F0 on the post-physics active "
-            "race-car interface");
-    }
+    // Called unconditionally, so the player-position getter's own asserts run every decision frame;
+    // the start-line / RUNNING / decision-frame tests are inside the callee (_wW_01.cpp).
+    KillTrafficOnStartGridWholeSale(lpInput->GetActiveRaceCarOutputInterface()->GetPlayerPosition());
 
     SpawnNewTraffic(lNewActiveHulls);
 
@@ -10553,15 +10545,23 @@ void TrafficEntityModule::UpdateParam_CheckIfNeedToSlow(
     {
         if (mbAtStartLineSoProtectRaceCarsFromTraffic)
         {
-            // GATE: CalcRaceCarOnStartGridFuzzyScores @0x82716F10 (0x82738B18), the start-grid
-            // replacement for the cone scan below. BLOCKER: 233 insns, unreconstructed, and it
-            // only runs while the race is still on the grid.
-            // DELETE-WHEN it lands. COST: on the grid the five race-car lanes stay KF_MAX_FLOAT,
-            // so traffic scores NORMAL instead of protecting the grid.
-            static bool sbLoggedStartGrid = false;
-            LogMissingLeg_T2(sbLoggedStartGrid,
-                          "UpdateParam_CheckIfNeedToSlow @0x82738468 start-grid arm -- "
-                          "CalcRaceCarOnStartGridFuzzyScores @0x82716F10 is unreconstructed");
+            // The start-grid replacement for the cone scan below (_wW_01.cpp). The console keeps the
+            // five as broadcast vectors seeded with KF_MAX_FLOAT and hands the callee their stack
+            // slots; one it does not write reads back as the seed.
+            VecFloat lvRCDistance       = SplatLane(lfRCDistance);
+            VecFloat lvRCHeight         = SplatLane(lfRCHeight);
+            VecFloat lvRCClosingSpeed   = SplatLane(lfRCClosingSpeed);
+            VecFloat lvRCLanePos        = SplatLane(lfRCLanePos);
+            VecFloat lvRCSpeedInOurLane = SplatLane(lfRCSpeedInOurLane);
+
+            CalcRaceCarOnStartGridFuzzyScores(luParam, lvRCDistance, lvRCHeight, lvRCClosingSpeed,
+                                              lvRCLanePos, lvRCSpeedInOurLane);
+
+            lfRCDistance       = lvRCDistance.x;
+            lfRCHeight         = lvRCHeight.x;
+            lfRCClosingSpeed   = lvRCClosingSpeed.x;
+            lfRCLanePos        = lvRCLanePos.x;
+            lfRCSpeedInOurLane = lvRCSpeedInOurLane.x;
         }
         else if (!(GetVehicle(luParam)->IsAlive() && GetVehicle(luParam)->IsExtremeSwerving()))
         {
@@ -19246,34 +19246,11 @@ namespace
     const f32 KF_CRASH_SLIDER_MODE_START_DECAY    =   0.2f;  // flt_82004744
     const f32 KF_CRASH_SLIDER_MODE_START_FACTOR   =   1.5f;  // flt_820BA5DC
 
-    // The start-line traffic sweep. flt_820BA294 / flt_820BA5E4, `lfs f1` / `lfs f2`
-    // @0x827486F0..0x827486F4 -- a 200 m radius, 10 m tall cylinder on the player.
-    const f32 KF_START_LINE_CLEAR_RADIUS = 200.0f;
-    const f32 KF_START_LINE_CLEAR_HEIGHT =  10.0f;
-
     // `lfs f13, flt_820BA5C8` @0x827481BC then fctiwz, clamped to [0, 100] by the
     // srawi/and/andi sign-mask pair at 0x827481CC..0x827481F8. GameModeParams carries the
     // large-vehicle share as a 0..1 probability; the module keeps it as a 0..100 integer.
     const f32 KF_LARGE_VEHICLE_PERCENT_SCALE = 100.0f;       // flt_820BA5C8
     const s32 KI_LARGE_VEHICLE_PERCENT_MAX   = 100;
-
-    // NAMED LEG GATE, file-local by this cluster's convention.
-    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    inline void LogMissingLeg_T6(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
-    {
-        if (lrbAlreadyLogged)
-        {
-            return;
-        }
-        lrbAlreadyLogged = true;
-
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[T6-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
-                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
-        }
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -19446,31 +19423,10 @@ void TrafficEntityModule::HandlePrepareForModeAction(
         mbEnsureTrafficLightDelay     = true;                          // -> +0x717E2
         mfTrafficLightChangeBackDelay = 0.0f;                          // -> +0x71408
 
-        // 0x82748698..0x827486B0. Read unconditionally, used only by the arm below -- the
-        // console hoists it out because the accessor asserts and it wants that assert to fire
-        // whether or not the sweep runs.
-        const Vector3 lPlayerPosition =
-            lpInput->GetActiveRaceCarOutputInterface()->GetPlayerPosition();
-
-        // 0x827486B4..0x827486F8. Only on a decision frame, and only while actually running:
-        // sweep a 200 m x 10 m cylinder around the player so the grid is not pre-populated
-        // with traffic the event is about to launch cars into.
-        if (mbAtStartLineSoProtectRaceCarsFromTraffic
-            && meState == E_STATE_RUNNING
-            && IsDecisionFrame())
-        {
-            // GATE: the KillAllTrafficInCylinder @0x82741C58 call. The callee is BODIED since
-            // G59-D1 (2026-09-23); this call site was outside that defect and is not wired yet
-            // (its arguments -- 200 m x 10 m on the player -- are this banner's, not re-read).
-            // DELETE-WHEN the call is re-read from 0x827486B4..0x827486F8 and wired.
-            static bool sbLogged = false;
-            LogMissingLeg_T6(sbLogged,
-                "HandlePrepareForModeAction leg KillAllTrafficInCylinder @0x82741C58 -- not "
-                "wired; the start-line sweep of a 200 m x 10 m cylinder on the player does not "
-                "run, so an event that clears nearby traffic starts with the grid still "
-                "populated. Everything else in this handler is live");
-            (void)lPlayerPosition;
-        }
+        // KillTrafficOnStartGridWholeSale, inlined here by the console: the player position is read
+        // unconditionally (it is the argument), then the start-line / RUNNING / decision-frame tests
+        // and the same 200 m x 10 m cylinder kill, parked cars included, as the out-of-line copy.
+        KillTrafficOnStartGridWholeSale(lpInput->GetActiveRaceCarOutputInterface()->GetPlayerPosition());
     }
 
     // ---- the crash slider, 0x827486FC..0x82748840 ------------------------------------------
@@ -19546,10 +19502,6 @@ void TrafficEntityModule::HandlePrepareForModeAction(
 
 namespace BrnTraffic
 {
-namespace
-{
-// (fold: an identical definition of LogMissingLeg_T6 was dropped here -- this TU defines it once, above)
-}
 
 // ----------------------------------------------------------------------------
 // TrafficEntityModule::HandleExternalRequests  @ 0x8274B660   PARTIAL

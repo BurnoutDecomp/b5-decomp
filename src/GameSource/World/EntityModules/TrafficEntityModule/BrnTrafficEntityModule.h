@@ -1202,6 +1202,12 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // bool (the two floats eat the r4/r5 slots).
         void KillAllTrafficInCylinder(Vector3 lvCentre, f32 lfRadius, f32 lfHeight, bool lbIncludeStatic);
 
+        // While the race cars are protected on the start line and the module is RUNNING, on a decision
+        // frame, clear every car (parked ones too) from a 200 m x 10 m cylinder on lPlayerPosition.
+        // Called by UpdateDecisionFrame and HandlePrepareForModeAction (the latter inlines it on the
+        // console). Body in BrnTrafficEntityModule_wW_01.cpp.
+        void KillTrafficOnStartGridWholeSale(Vector3 lPlayerPosition);
+
         // @0x8273C4C8 (452 insns). DWARF `void TryClearupOffscreenTraffic(
         // const FastBitArray<601>::Iterator&)` (BrnTrafficUnity.cpp:14258); the X360 asm
         // arbitrates the RETURN -- 0x8273CAD4 `li r3,1` on the removal path, 0x8273CBC4
@@ -1485,6 +1491,15 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
                                            const Section* lpSection,
                                            const ::Array<PhysicalVehicleInfo,
                                                          KU_MAX_PHYSICAL_VEHICLES_TO_CACHE>* lpaPhysicalVehicles); // @0x82738468
+        // UpdateParam_CheckIfNeedToSlow's start-grid replacement for its race-car cone scan: the nearest
+        // grid slot ahead of the param stands in for a race car. The five outputs are left untouched
+        // when no slot is ahead. Body in BrnTrafficEntityModule_wW_01.cpp.
+        void CalcRaceCarOnStartGridFuzzyScores(u32 luParam,
+                                               VecFloat& lfRCDistance,
+                                               VecFloat& lfRCHeight,
+                                               VecFloat& lfRCClosingSpeed,
+                                               VecFloat& lfRCLanePos,
+                                               VecFloat& lfRCSpeedInOurLane) const;
         void UpdateParam_CheckIfInsideParamInFront(u32 luParam);     // @0x82717A70
         bool DoesParamNeedToStopForStopline(u32 luParam,
                                             u32 luSectionIndex,

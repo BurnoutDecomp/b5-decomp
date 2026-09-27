@@ -87,6 +87,20 @@ namespace Vehicle
         void Construct();
 
         // No out-of-line console copy: its one caller,
+        // PostWorldInputBuffer::Construct, inlines it right after the active race-car interface's
+        // Clear, as the two queue-length stores (+0x2628 traffic-state, +0x2318 impact), the
+        // game-event queue's Clear (+0x65F0), the 8-byte zero over the used-cars bits and the five
+        // flag bytes, in that order.
+        void Clear()
+        {
+            mTrafficStateQueue.Clear();
+            mImpactEventQueue.Clear();
+            GetGameEventQueue()->Clear();
+            mUsedRaceCars.UnSetAll();
+            mAggressiveDrivingFlags.Clear();
+        }
+
+        // No out-of-line console copy: its one caller,
         // PostSimulationInputBuffer::AppendVehicleOutputInterface, inlines it. Appends the source's
         // traffic-state, impact and game-event queues onto this interface's, then copies the
         // used-cars bitset and all eight race-car states. The queue lengths are not reset first

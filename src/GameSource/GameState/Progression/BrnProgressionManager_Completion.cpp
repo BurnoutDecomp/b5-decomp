@@ -552,34 +552,6 @@ namespace
                giWitnessLinesPrinted < KI_WITNESS_LINE_BUDGET;
     }
 
-    // ------------------------------------------------------------------------------------
-    // The junction-table scan BOTH count functions inline (X360 0x8236FA84..0x8236FAE4 and
-    // 0x82370808..0x82370868, byte-identical): find the authored EventJunction whose id equals
-    // the profile event's id and return its OFFLINE event.
-    //
-    // DWARF names it `ProgressionData::FindOfflineEvent` (the callee hint list of
-    // BrnProgressionManager.cpp:4283), i.e. it belongs on ProgressionData -- but that class's
-    // owning header/TU is not this lane's to grow, and the X360 emits no standalone symbol for
-    // it, so it lives here as a file-local de-inlining with its real home named.
-    // DELETE-WHEN ProgressionData::FindOfflineEvent lands in BrnProgressionData.h/.cpp; this
-    // helper is then one call site away from being replaced by it.
-    //
-    // ⚠️ A MATCH WITH A ZERO OFFLINE SLOT IS A MISS. `lwz r31, 4(r11) / cmplwi r31, 0 / bne`:
-    // the console falls into the same "lpEventData" assert path a no-match would.
-    // ------------------------------------------------------------------------------------
-    const RaceEventData* FindOfflineEvent(const ProgressionData* lpProgressionData, u32 luEventID)
-    {
-        const u32 luJunctionCount = lpProgressionData->GetEventJunctionCount();   // +0x1C
-        for (u32 luIndex = 0; luIndex < luJunctionCount; ++luIndex)
-        {
-            const EventJunction* lpJunction = lpProgressionData->GetEventJunction(luIndex);
-            if (lpJunction->GetID() == luEventID)                                 // `lwz r8, 0(r11)`
-            {
-                return lpJunction->GetOfflineEvent();                             // `lwz r31, 4(r11)`
-            }
-        }
-        return 0;
-    }
 }
 
 // ===================================================================================
@@ -615,7 +587,7 @@ u32 ProgressionManager::GetEventCountForType(s32 leModeType) const
 
         const ProgressionData* lpProgressionData = GetProgressionData();
         const RaceEventData*   lpEventData =
-            (lpProgressionData != 0) ? FindOfflineEvent(lpProgressionData, lpProfileEvent->GetID()) : 0;
+            (lpProgressionData != 0) ? lpProgressionData->FindOfflineEvent(lpProfileEvent->GetID()) : 0;
         if (lpEventData == 0)
         {
             CgsDev::Assert::BeginAssert();
@@ -666,7 +638,7 @@ u32 ProgressionManager::GetEventTypeUniqueWinCount(s32 leModeType, u16 lu16WinTy
 
         const ProgressionData* lpProgressionData = GetProgressionData();
         const RaceEventData*   lpEventData =
-            (lpProgressionData != 0) ? FindOfflineEvent(lpProgressionData, lpProfileEvent->GetID()) : 0;
+            (lpProgressionData != 0) ? lpProgressionData->FindOfflineEvent(lpProfileEvent->GetID()) : 0;
         if (lpEventData == 0)
         {
             CgsDev::Assert::BeginAssert();

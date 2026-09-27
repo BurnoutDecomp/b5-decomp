@@ -16,8 +16,8 @@
 //                                                    CrashingRaceCarInterface is built FROM it by
 //                                                    SetFromVehicleOutputInterface into a STACK
 //                                                    local of PreWorldUpdate (var_6D8).
-// This build has neither a PostWorldInputBuffer nor a per-frame output buffer (mpOutputBuffer is
-// new'd once), so the same state lives in a heap-allocated TakedownPostWorldCache (mpTakedownCache)
+// This build has no per-frame output buffer (mpOutputBuffer is new'd once), and the state lives in
+// a heap-allocated TakedownPostWorldCache (mpTakedownCache)
 // and the manager itself is heap-allocated (mpTakedownManager) -- the mpTrainingManager precedent.
 // FLAG PC deviation: pointers where the console embeds; the bodies below are the console's.
 //   Embedding would need the complete TakedownManager (BrnTakedownManager.h) by value, which
@@ -134,54 +134,19 @@ bool GameStateModule::PrepareTakedownBringUp()
 //   field out of the cache -- SetFromVehicleOutputInterface touches only mUsedRaceCars and the
 //   RaceCarStates -- so the copy is inert; recorded rather than special-cased.
 //
-// [FLAG PC bring-up] THE ARGUMENTS ARE THE DEVIATION, NOT THE BODY -- the same reduction
-// ProcessContacts carries. The console reads both values out of the PostWorldInputBuffer nothing on
-// this build stages; the world module's UpdateOutputBuffer publishes exactly these two types, so
-// they arrive as arguments. The contact-spy word (gsm+250800) is deliberately NOT cached here:
-// this build feeds ProcessContacts the interface directly at the same post-world point
-// (PostWorldUpdateStuntBringUp leg 5), so caching it too would be the one-feed-not-two mistake.
+// The contact-spy handle (gsm+250800, mContactSpyInterface) is cleared and then copied out of the
+// buffer here as well; its reader is RumbleManager::Update's UpdateImpacts on the next pre-world.
 // ==============================================================================================
 void GameStateModule::CacheTakedownManagerPostWorldInputData(
-        const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
-        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue)
+        const GameStateModuleIO::PostWorldInputBuffer* lpInput)
 {
-    if (mpTakedownCache == 0)
-    {
-        return;
-    }
+    CGS_ASSERT(lpInput, "lpInput");
 
     mpTakedownCache->mRaceCarCrashEventQueue.Clear();
-    if (lpRaceCarCrashEventQueue != 0)
-    {
-        mpTakedownCache->mRaceCarCrashEventQueue.Append(*lpRaceCarCrashEventQueue);
-    }
-
-    // [PC GUARD] the console has no null test here -- it reads the interface straight out of the
-    // PostWorldInputBuffer. A null pointer has nothing to copy, so the tripwire costs nothing.
-    if (lpVehicleOutputInterface != 0)
-    {
-        mpTakedownCache->mVehicleOutputInterface = *lpVehicleOutputInterface;
-    }
-}
-
-// The traffic-type response queue is NOT part of CacheTakedownManagerPostWorldInputData. It is
-// TakedownManager::Update's 7th argument, gsm+278480 (r26), a TrafficTypeResponse<32>
-// queue the module owns: Constructed in GameStateModule::Construct and Clear+Append'ed
-// by GameStateModule::PostWorldUpdate itself ( -- the miLength store at and
-// TrafficTypeResponse_::Append at), two `bl` BEFORE the cache call. Reproduced at that
-// position, with the same argument deviation as the cache above.
-void GameStateModule::CacheTakedownTrafficTypeResponses(
-        const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue)
-{
-    if (mpTakedownCache == 0)
-    {
-        return;
-    }
-    mpTakedownCache->mTrafficTypeResponseQueue.Clear();
-    if (lpTrafficTypeResponseQueue != 0)
-    {
-        mpTakedownCache->mTrafficTypeResponseQueue.Append(*lpTrafficTypeResponseQueue);
-    }
+    mContactSpyInterface.Construct();
+    mContactSpyInterface = *lpInput->GetContactSpyInterface();
+    mpTakedownCache->mRaceCarCrashEventQueue.Append(*lpInput->GetRaceCarCrashEventQueue());
+    mpTakedownCache->mVehicleOutputInterface = *lpInput->GetVehicleOutputInterface();
 }
 
 // The !IsSimPaused takedown leg of PreWorldUpdate (see the banner). Replaces the direct

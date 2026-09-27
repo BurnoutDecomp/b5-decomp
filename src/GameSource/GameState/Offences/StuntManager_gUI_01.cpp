@@ -18,7 +18,10 @@
 // second producer of the HUD popup this wave proves.
 #include "GameSource/GameState/Offences/BrnStuntManager.h"
 
+#include <stdlib.h>                                         // getenv ([collect] witness)
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CgsDev::Assert::Begin/Fire/EndAssert (verbatim X360 strings)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::gpDebugPrint ([collect] witness)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue<13312,16>::AddEvent
 
 #include "GameSource/GameState/BrnGameActions.h"            // OnStuntElementCompleteByTypeAction / E_ACTION_..._BY_TYPE
@@ -127,33 +130,23 @@ void StuntManager::CompleteAllStuntType(StuntElementType                    leSt
     lpActionQueueImpl->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAllAction),
                                 GameStateModuleIO::E_ACTION_ON_STUNT_ELEMENT_COMPLETE_BY_TYPE, 4);
 
-    // ⚠️ [gateui] ROUND-3 PARK (verify_r2_fixgsm F4 sweep). The console call here is
-    //     mpProgressionManager->GetAchievementManager()->OnCollectAllStunts(leStuntElementType);
-    // (X360 AchievementManagerBase::OnCollectAllStunts @0x8235AF38). A LINK park, not a
-    // missing-body park: the body is real at
-    // `AchievementManager/BrnGameStateAchievementManagerBase.cpp :: OnCollectAllStunts`, but that
-    // TU is deliberately unmounted and mounting it opens SEVEN externals with no body anywhere in
-    // the tree -- identical reason, identical list, to the OnCollectStunt park in
-    // StuntManager_gUI_00.cpp :: ProcessStuntElement (see its long FLAG for the re-measurement,
-    // which found SEVEN where the bat still says eight). RESTORE-WHEN those seven land.
+    mpProgressionManager->GetAchievementManager()->OnCollectAllStunts(leStuntElementType);
+    mpProgressionManager->OnTrophyUnlock(liTrophyId);
+    mpProgressionManager->CheckForSpecialCarUnlocks();
+    mpProgressionManager->SendGameCompletionResults(lpActionQueueImpl);
 
-    // ⚠️ [gateui] PARKED CALLS, NOT FABRICATED -- the ModeManager::HandleWorldStunt treatment
-    // (StuntManager_gUI_00.cpp :: ProcessStuntElement, step 6). The console's tail is:
-    //     mpProgressionManager->OnTrophyUnlock(liTrophyId);                     // 0x82389740
-    //     mpProgressionManager->CheckForSpecialCarUnlocks();                    // 0x82396058
-    //     mpProgressionManager->SendGameCompletionResults(lpActionQueueImpl);   // 0x82395C28
-    // All three were PARKED by owner `deps` this wave with the measured blocker lists now
-    // carried in BrnProgressionManager.h (missing: UnlockCarFromTrophy @0x8237B0E8, the
-    // ProgressionData trophy-table header, ComputeCompletionPercentage @0x8238A198 (320 insns),
-    // UnlockSpecialCars @0x8237AF38 (106 insns), and an mpModeManager back-pointer at X360
-    // +133436 that nothing models). None has a body anywhere in b5-decomp/src and no link stub
-    // stands in, so calling them is a hard LNK2019 that blocks the whole gsm mount.
-    // ⓘ Off the HUD path: this whole function is the DEBUG-MENU "complete all of this type" arm
-    // (StuntManager::CompleteAllStuntType @0x82399210, reached only from the debug menu). Its own
-    // HUD-visible output -- game action 60 -> GuiEventStuntAllComplete(220) -- is posted ABOVE,
-    // before these calls, and none of them writes lAllAction. Land them when the bodies do.
-    (void)liTrophyId;
-    (void)lpActionQueueImpl;
+    // [FLAG PC witness] opt-in BRN_COLLECT_DIAG, first 8 only. Read-only.
+    static const bool sbCollectDiag = (getenv("BRN_COLLECT_DIAG") != 0);
+    static s32        siCompleteAllDiagLines = 0;
+    if (sbCollectDiag && siCompleteAllDiagLines < 8 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        ++siCompleteAllDiagLines;
+        *CgsDev::Log::gpDebugPrint
+            << "[collect] complete-all type=" << static_cast<s32>(leStuntElementType)
+            << " trophy=" << liTrophyId
+            << " collected=" << mpProgressionManager->GetCollectedStuntElementCount(leStuntElementType)
+            << "\n";
+    }
 }
 
 }

@@ -7704,7 +7704,7 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     //        bridge then hands the whole interface to the world UpdateOutputBuffer --
     //        WorldBridgeEntityModulesToOutput.cpp:473)
     //  -> ScoringSystem::maCarData[slot].meRaceCarIndex                 (bound by
-    //        ModeManager's sweep, run from GameStateModule::PostWorldUpdateStuntBringUp)
+    //        ModeManager's sweep, run from GameStateModule::PostWorldUpdate)
     // With this leg absent the interface published the all-sentinel table forever, so
     // ScoringSystem::GetCarData returned NULL and ModeManager::FinishCurrentMode's
     // StopModeTimer dereferenced it at the end of every offline stunt run

@@ -2920,7 +2920,9 @@ struct ShowModeResultsAction : public GameAction<E_ACTION_SHOW_MODE_RESULTS>
     u8   maBlock58[0x70];     // +0x58..+0xC7 memcpy'd wholesale into the GUI record when mbFieldDF
                               //       is set (0x70 bytes; ShowModeResults' per-player results table)
     u64  mu64FieldC8;         // +0xC8 FLAG
-    u8   maPadD0[0x0A];       // +0xD0..+0xD9
+    f32  mfCurrentGameCompletePercentage; // +0xD0 ProgressionManager::OnEventFinishUpdateProfile
+    s32  miNumLossesForGameMode;          // +0xD4 ModeManager::ShowModeResults (Profile loss count)
+    u8   maPadD8[0x02];       // +0xD8..+0xD9
     u8   mu8FieldDA;          // +0xDA FLAG
     u8   mu8FieldDB;          // +0xDB FLAG
     u8   mu8FieldDC;          // +0xDC FLAG

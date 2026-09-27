@@ -7,7 +7,6 @@
 #include "SDKs/EA/GameTalk/GameTalk.h"               // EA::GameTalk::GameTalkMessage (RenderMetricsMessageHandler)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (GUI-out event 201) + GuiEventProgressionProfileData (350)
 #include "GameSource/Game/GameBridgeGameStateToX.h"  // BrnGame::BridgeGameStateToGui_EventStatus (the GUI-leg status seam)
-#include "GameSource/Game/GameBridgeWorldToX.h"      // [FX-BRIDGES CC-11] BrnGame::BridgeWorldToGameState_RouteInfo (leg 10)
 #include "GameSource/GameState/Progression/BrnProfile.h" // BrnProgression::Profile (the action-193 payload's first word)
 
 #include <cstring>   // memset
@@ -1508,6 +1507,107 @@ namespace BrnGame
         const bool lbDestroyed = lpUpdateInputBufferStack->DestroyIOBuffer(&lpWorldInput);
         CGS_ASSERT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )");        // CgsModuleIOHelper.h:57
         (void)lbDestroyed;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // DoUpdate_GameStatePostWorld -- the game-state post-world leg of the update step.
+    //
+    // Console order:
+    //   StartMonitor(miUT_GameState);
+    //   IOHelper<PostWorldInputBuffer>(inStack, "GameStatePostWorld")   (asserting
+    //     "mpStack->CreateIOBuffer( &mpBuffer, lpcName )", CgsModuleIOHelper.h:52);
+    //   StartMonitor(miUT_GameState_Bridge);
+    //   LockBuffersForIO(buffer, input, world, gui, replaysPostSim, director);
+    //   BridgeGuiToGameState(buffer, gui);
+    //   if (!(updateSet & 0x20)) BridgeWorldToGameState(buffer, world);
+    //   if (director->GetDirectorOutputInterface()->GetPauseRequest())
+    //       game event 43 { GetPauseRequestState() } (1 byte);
+    //   the replay post-sim game events appended onto the buffer's game-event queue;
+    //   if (!mbIsLoadingScreenVisible && !mbDiskError
+    //       && updateSet bit 0x4 != mbControllerDisconnected)
+    //       latch it into mbControllerDisconnected and post game event 10 { it } (1 byte);
+    //   buffer->SetInPictureParadise(the director camera's E_FLAG_IS_PICTURE_PARADISE);
+    //   UnlockBuffersForIO (the same six); StopMonitor(miUT_GameState_Bridge);
+    //   if (!(updateSet & 0x20) && !mbDiskError)
+    //       GameStateModule::PostWorldUpdate(inStack, outStack, buffer, updateSet);
+    //   StopMonitor(miUT_GameState);
+    //   the helper's DestroyIOBuffer (asserting "mpStack->DestroyIOBuffer( &mpBuffer )",
+    //     CgsModuleIOHelper.h:57).
+    //
+    // NOT MADE, each with its blocker:
+    //   * game event 43 -- DirectorIO::OutputBuffer's director output interface is an opaque
+    //     16-byte span with a byte-pointer getter, and BrnDirector::DirectorOutputInterface has
+    //     no GetPauseRequest / GetPauseRequestState (its +0x0E / +0x0F bools). Both live under
+    //     GameSource/Director.
+    //   * the replay post-sim game events -- no replay post-sim output buffer exists per step on
+    //     this build (the caller passes null), and ReplayIO::OutputBuffer_PostSim has no read
+    //     accessor for its game-event queue. The null-guarded lock keeps the console's bracket.
+    //   * game event 10 -- update-set bit 0x4 is set only by ConstructUpdateSet (the input
+    //     module's controller-disconnected byte), which is not reconstructed, and the module has
+    //     no mbControllerDisconnected member; the caller's ConstructUpdateSetFromFsm never sets it.
+    //
+    // BridgeGuiToGameState takes the GUI module's own out-event queue and the game-state module
+    // (its signature is adapted, see its declaration), so its game events reach the module's
+    // carry queue directly rather than through this buffer's game-event queue. They land ahead
+    // of the buffer's events either way, which is the console's order.
+    // ------------------------------------------------------------------------------------
+    void BrnGameModule::DoUpdate_GameStatePostWorld(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
+                                                    CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                                                    const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
+                                                    const BrnWorldIO::UpdateOutputBuffer* lpWorldUpdateOutputBuffer,
+                                                    const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
+                                                    const BrnReplays::ReplayIO::OutputBuffer_PostSim* lpReplaysPostSimOutputBuffer,
+                                                    const BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutputBuffer,
+                                                    BrnUpdateSet lUpdateSet)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
+
+        CgsModule::IOHelper<BrnGameState::GameStateModuleIO::PostWorldInputBuffer> lPostWorldInput(
+            lpUpdateInputBufferStack, "GameStatePostWorld");
+        BrnGameState::GameStateModuleIO::PostWorldInputBuffer* lpPostWorldInput = lPostWorldInput;
+
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState_Bridge);
+
+        // LockBuffersForIO: the buffer write-locked, the five sources read-locked. The replay
+        // post-sim source is the only one this build can pass as null.
+        lpPostWorldInput->LockForWrite();
+        lpInputOutputBuffer->LockForRead();
+        lpWorldUpdateOutputBuffer->LockForRead();
+        lpGuiOutputBuffer->LockForRead();
+        if (lpReplaysPostSimOutputBuffer != 0) lpReplaysPostSimOutputBuffer->LockForRead();
+        lpDirectorOutputBuffer->LockForRead();
+
+        // [PC HARNESS, not console code] scheduled GUI records (BRN_NET_SCRIPT); inert unless set.
+        BrnNetHarnessPC::InjectGuiEvents(mGuiModule.GetGuiOutQueue());
+        BridgeGuiToGameState(&mGameStateModule, mGuiModule.GetGuiOutQueue());
+
+        if ((lUpdateSet & 0x20) == 0)
+        {
+            BridgeWorldToGameState(lpPostWorldInput, lpWorldUpdateOutputBuffer);
+        }
+
+        // The picture-paradise byte is the director camera's own state flag (+0x144 bit 14 on the
+        // console). Construct leaves it unset, so it is written on every pass.
+        lpPostWorldInput->SetInPictureParadise(
+            lpDirectorOutputBuffer->GetCameraOutput()->GetState().IsFlagSet(
+                BrnDirector::Camera::CameraState::E_FLAG_IS_PICTURE_PARADISE));
+
+        lpDirectorOutputBuffer->UnlockForRead();
+        if (lpReplaysPostSimOutputBuffer != 0) lpReplaysPostSimOutputBuffer->UnlockForRead();
+        lpGuiOutputBuffer->UnlockForRead();
+        lpWorldUpdateOutputBuffer->UnlockForRead();
+        lpInputOutputBuffer->UnlockForRead();
+        lpPostWorldInput->UnlockForWrite();
+
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState_Bridge);
+
+        if ((lUpdateSet & 0x20) == 0 && !mbDiskError)
+        {
+            mGameStateModule.PostWorldUpdate(lpUpdateInputBufferStack, lpUpdateOutputBufferStack,
+                                             lpPostWorldInput, lUpdateSet);
+        }
+
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
     }
 
     // ------------------------------------------------------------------------------------
@@ -4956,170 +5056,6 @@ namespace BrnGame
                     lpState->Update();
                 }
 
-                // ⭐⭐ [gateui] THE GAME-STATE POST-WORLD PASS (X360 DoUpdate_GameStatePostWorld
-                // @0x823E92A8 -> GameStateModule::PostWorldUpdate @0x8238F358). Placed here, in
-                // the console's own slot: AFTER the world leg above (lpState->Update() is what
-                // drives DriveWorldUpdateFrame) and BEFORE DoUpdate_Director below.
-                //
-                // ⚠️ THE DIRECT FEED IS DELIBERATE -- ONE FEED, NOT TWO. The console routes both
-                // values through a GameStateModuleIO::PostWorldInputBuffer that
-                // BridgeWorldToGameState @0x823E5368 fills; DoUpdate_GameStatePostWorld
-                // CreateIOBuffer<PostWorldInputBuffer>s that buffer, and NOTHING on this build
-                // does (that entry point is not reconstructed). BridgeWorldToGameState itself IS
-                // now landed, in its console home GameBridgeWorldToX.cpp, with the same two legs
-                // -- but it has no buffer to be handed, so calling it here would need a second,
-                // invented buffer and would then feed the same events twice. The GameState
-                // module's own bring-up entry point takes the two values directly instead
-                // (BrnGameStateModule.h: "THE ARGUMENTS ARE THE DEVIATION, NOT THE BODY"), and
-                // the world OUTPUT buffer hands out exactly these two types.
-                // DELETE-WHEN DoUpdate_GameStatePostWorld lands with a real PostWorldInputBuffer:
-                // then BridgeWorldToGameState becomes the only feed and this call retires.
-                //
-                // Read-locked, like every other reader of this buffer in this file: the console's
-                // LockBuffersForIO(dest, ...sources) makes every source read-locked, and both
-                // getters used here are the const (read-lock) halves.
-                //
-                // ⚠️⚠️ [gateui r3] THE GATE BELOW IS THE FIX FOR A REAL BUFFER OVERRUN (round-2
-                // verify WRONG-1). The round-2 landing ran this feed on EVERY sub-step while its
-                // only drain (PreWorldUpdateStuntBringUp -> ProcessGameEventsPropHitBringUp +
-                // mGameEventCarryQueue.Clear()) ran only inside the E_MGS_IN_GAME block above.
-                // The world runs outside E_MGS_IN_GAME (LoadingScriptedState::UpdateWorldModule ->
-                // DriveWorldUpdateFrame) and DOES produce game events there
-                // (BrnWorldEntityModule.cpp posts StreamingCompleteEvent onto the pre-scene game
-                // event queue, which BridgeWorldEntityInfoToOutput Appends into exactly the queue
-                // read here) -- so the 1536-byte carry queue grew monotonically through loading,
-                // and CgsVariableEventQueue.h's Append<SRCBUF,SRCALIGN> fires
-                // "VariableEventQueue overflowed" and then MEMCPYS ANYWAY, past macData[1536],
-                // into whatever follows it in GameStateModule.
-                //
-                // ⭐ THE CONSOLE HAS NO SUCH ASYMMETRY, AND THIS RESTORES ITS OWN GATE.
-                // DoUpdate_GameStatePostWorld @0x823E92A8 runs BOTH its world->gamestate legs
-                // under the update-set bit the round-2 report quoted and the landed code dropped:
-                //     if ( (a28 & 0x20) == 0 )                    BridgeWorldToGameState(...)
-                //     if ( (a28 & 0x20) == 0 && !*(a1+10094114) )  GameStateModule::PostWorldUpdate(...)
-                // and its PRE-world twin DoUpdate_GameStatePreWorld @0x823EE0E8 gates the DRAIN on
-                // the identical pair:
-                //     if ( *(a1 + 10094265) )  { /* skip -- no PreWorldUpdate at all */ }
-                //     else if ( !*(a1 + 10094114) )  GameStateModule::PreWorldUpdate(...)
-                // gm+10094265 is update-set bit 0x20 and gm+10094114 is bit 0x200
-                // (ConstructUpdateSetFromFsm @0x823BD420, reconstructed in this file) -- i.e.
-                // IsVideoState() and mbDiskError. Producer and drain share ONE predicate on the
-                // console; they now share one here. Spelled through the two predicates rather than
-                // through `ConstructUpdateSetFromFsm() & 0x20` so no magic literal is minted: the
-                // values are identical by construction.
-                //
-                // ⭐ THE `leState == E_MGS_IN_GAME` CONJUNCT IS THE PC BRING-UP HALF, AND IT IS
-                // MANDATORY, NOT BELT-AND-BRACES. The console's drain runs whenever
-                // !IsVideoState() && !mbDiskError -- which INCLUDES InitialLoadingScreen and the
-                // scripted-load states. This tree's drain is narrowed to E_MGS_IN_GAME (see the
-                // pre-world block's own banner for why that narrowing is load-bearing), so the
-                // producer must be narrowed identically or the same monotonic growth survives the
-                // console gate alone. Producer predicate now IMPLIES drain predicate, which is the
-                // invariant that matters. DELETE-WHEN the pre-world leg widens back to the
-                // console's own predicate: then this conjunct goes with it, in one edit.
-                //
-                // ⓘ THE OTHER LEG OF THIS CALL LOSES NOTHING. PostWorldUpdateStuntBringUp also
-                // refreshes mLastActiveRaceCarInterface, which the gate now stops refreshing
-                // outside E_MGS_IN_GAME -- but that snapshot's ONLY consumers
-                // (TriggerQueryManager::UpdateTriggers and StuntManager::Update, both inside
-                // PreWorldUpdateStuntBringUp) stand behind the very same predicate, so no reader
-                // ever sees a staler value than before. Console-consistent for the same reason:
-                // its PostWorldUpdate, which owns the identical XMemCpy, is gated identically to
-                // its PreWorldUpdate.
-                //
-                // ⓘ THE INVARIANT THIS BUYS, stated exactly (the round-2 verify's probe as worded
-                // -- "GetLength() == 0 at the END of every sub-step" -- cannot hold on the console
-                // either): the carry queue is filled AFTER the world leg and drained BEFORE the
-                // next sub-step's world leg, so it holds at most ONE sub-step's events and returns
-                // to zero in every pre-world leg. Growth across sub-steps is what was wrong.
-                const bool lbGameStateWorldLegRuns =
-                    !mMainFlowStateMachine.IsVideoState()               // update-set bit 0x20
-                    && !mbDiskError                                    // update-set bit 0x200
-                    && (leState == BrnGameMainFlowController::E_MGS_IN_GAME);  // PC drain narrowing
-
-                // ⭐ [P1 sim-pause] THE GUI -> GAME-STATE EVENT BRIDGE (X360
-                // DoUpdate_GameStatePostWorld @0x823E92A8 runs BridgeGuiToGameState FIRST,
-                // before BridgeWorldToGameState and PostWorldUpdate -- the console calls it
-                // UNCONDITIONALLY, but on this build its output lands in the carry queue,
-                // whose drain is narrowed to E_MGS_IN_GAME, so the producer stands behind
-                // the same predicate (the r3 overflow rule spelled out below). This is the
-                // caller the tree's "DELETE-WHEN BridgeGuiToGameState has a caller" flags
-                // waited on: GUI event 191 (crash-nav shown/hidden) now becomes game event
-                // 93 and reaches the pause spine.
-                if (lbGameStateWorldLegRuns)
-                {
-                    // [PC HARNESS, not console code] scheduled GUI records (BRN_NET_SCRIPT); inert unless set.
-                    BrnNetHarnessPC::InjectGuiEvents(mGuiModule.GetGuiOutQueue());
-                    BridgeGuiToGameState(&mGameStateModule, mGuiModule.GetGuiOutQueue());
-                }
-
-                if (lbGameStateWorldLegRuns && mpWorldUpdateOutputBuffer != 0)
-                {
-                    // ⚠️ THE `const` IS LOAD-BEARING, NOT STYLE. Both getters are overloaded on
-                    // constness and the two halves assert DIFFERENT locks: the const half tests
-                    // the READ bit ("Not locked for reading"), the non-const half tests the
-                    // WRITE bit ("Not locked for writing"). Calling them through the non-const
-                    // member pointer under LockForRead picks the write-lock overload and fires
-                    // that assert every sub-step. (Caught by the dumpbin UNDEF sweep on this TU:
-                    // the emitted symbol was the QEAA -- non-const -- GetGameEventQueue.)
-                    const BrnWorldIO::UpdateOutputBuffer* lpcWorldOutput = mpWorldUpdateOutputBuffer;
-                    mpWorldUpdateOutputBuffer->LockForRead();
-                    // ⭐ [D4 stuntrace WAVE D] THE THIRD ARGUMENT IS THE FRAME DELTA -- the f1 the
-                    // console's GameStateModule::PostWorldUpdate forwards to
-                    // ModeManager::PostWorldUpdate (`bl` #19). It drives the newly-staged LEG 3,
-                    // the extracted stunt-scorer fork, i.e. StuntModeScoring::Update. Same
-                    // game-timer product every other leg in this block uses, for the same reason
-                    // (nothing on this build stages a PreWorldInputBuffer timer block).
-                    // ⭐ [showtime score wave 2026-08-29] THE FOURTH ARGUMENT IS THE FRAME'S
-                    // CONTACT SPY, feeding the new LEG 5 (GameStateModule::ProcessContacts
-                    // @0x8236BC68 -- the producer CrashModeScoring::DealWithHitTrafficCar and
-                    // ::DealWithHitProp have never had). The console reads it out of the
-                    // PostWorldInputBuffer that BridgeWorldToGameState leg 4 fills; the same
-                    // ONE-FEED-NOT-TWO rule as the first two arguments applies, and the world
-                    // output buffer publishes exactly this type.
-                    // ⚠️ IT IS ONLY BOUND BECAUSE WorldModule::BridgePhysicsToOutput LANDED IN
-                    // THE SAME CHANGE. Before that, UpdateOutputBuffer::mContactSpyInterface had
-                    // no writer anywhere in the tree and this pointer would hand ProcessContacts
-                    // an interface whose IsValid() is false on every frame -- an argument that
-                    // looks live and is inert. [[silent-drop-stubs]]
-                    // ⭐ [FX-BRIDGES CC-11, 2026-09-24] THE POST-WORLD GAME-EVENT QUEUE IS LEGS 2 + 10.
-                    // The console's PostWorldInputBuffer game-event queue (<1536,16>, the one its
-                    // PostWorldUpdate Appends into the carry queue) is filled by BridgeWorldToGameState
-                    // leg 2 (the world's game events) and then leg 10 (event 174 for every route answer
-                    // the mode manager asked for). Same one-feed rule as every argument here: the local
-                    // queue below IS that queue's content, in that order, built from this sub-step's
-                    // world output -- so ProcessGameEvents' case-174 arm sees the answers and the
-                    // checkpoint-distance pump (ModeManager::UpdateCheckpointDistanceRequests) can stop.
-                    CgsModule::VariableEventQueue<1536, 16> lPostWorldGameEventQueue;
-                    lPostWorldGameEventQueue.Construct();
-                    lPostWorldGameEventQueue.Append(*lpcWorldOutput->GetGameEventQueue());
-                    BrnGame::BridgeWorldToGameState_RouteInfo(&lPostWorldGameEventQueue, lpcWorldOutput);
-                    mGameStateModule.PostWorldUpdateStuntBringUp(
-                        lpcWorldOutput->GetActiveRaceCarOutputInterface(),
-                        &lPostWorldGameEventQueue,
-                        mGameTimer.GetRate() * mGameTimer.GetScaleCurrent(),
-                        lpcWorldOutput->GetContactSpyInterface(),
-                        // [road-rage wave 2026-09-02] leg 1 of BridgeWorldToGameState, by the
-                        // same one-feed rule: the race-car crash-event queue the buffer would carry.
-                        lpcWorldOutput->GetVehicleManagerOutputInterface()->GetRaceCarCrashEventQueue(),
-                        // [takedown wave 2026-09-02] the traffic-type response queue, same rule.
-                        lpcWorldOutput->GetTrafficTypeResponseQueue(),
-                        lpcWorldOutput->GetAICarOutputInterface(),
-                        lpcWorldOutput->GetRaceCarGlobalOutputInterface(),
-                        // [takedown wave 2026-09-13] THE NINTH ARGUMENT IS THE FRAME'S VEHICLE
-                        // OUTPUT INTERFACE, and it is the one input
-                        // CacheTakedownManagerPostWorldInputData reads: the console's cache copies
-                        // the interface head plus its eight RaceCarStates out of the
-                        // PostWorldInputBuffer, and TakedownPreWorldLeg then builds the
-                        // crashing-race-car scratch from that copy. Without it
-                        // SetFromVehicleOutputInterface saw a Construct()ed no-slot-in-use cache
-                        // and wrote all-false every frame, so organic takedown detection was blind.
-                        // Same one-feed rule as every argument above; the const overload, inside
-                        // this LockForRead bracket.
-                        lpcWorldOutput->GetVehicleOutputInterface());
-                    mpWorldUpdateOutputBuffer->UnlockForRead();
-                }
-
                 // ---- the RESOURCE tick (FLAG PC placement: the console's own thread) -------
                 // The X360 runs BrnGameModule::ResourceUpdateThread @0x823BC9B8 concurrently
                 // with this loop; the single-threaded host serialises it here, immediately
@@ -5613,6 +5549,33 @@ namespace BrnGame
                     const BrnEffects::EffectsIO::OutputBuffer* lpcEffectsOut = mpEffectsOutputBuffer;
                     mReplayModule.StoreSerialisers(*lpcEffectsOut->GetReplayRequestInterface());
                     mpEffectsOutputBuffer->UnlockForRead();
+                }
+
+                // ---- THE GAME-STATE POST-WORLD LEG -------------------------------------------
+                // Console DoUpdate order: ... DoUpdate_Effects, DoUpdate_Sound,
+                // DoUpdate_ReplaysPostSim, **DoUpdate_GameStatePostWorld**, DoUpdate_NetworkPostSim.
+                // This position matters for two of its inputs: the director camera it reads the
+                // picture-paradise flag from is the one this step's DoUpdate_Director published, and
+                // the GUI out-queue BridgeGuiToGameState walks holds this step's GUI records.
+                //
+                // [FLAG PC placement] Only in E_MGS_IN_GAME. On the console DoUpdate runs in game and
+                // at scripted-load stage 8, and GameStateModule::PostWorldUpdate's carry queue is
+                // drained by the next step's pre-world pass under the same flow states. On this build
+                // that drain (the pre-world block above) is narrowed to E_MGS_IN_GAME, so the
+                // producer is narrowed with it: BridgeGuiToGameState posts into the carry queue
+                // directly, and a producer running where the drain does not would overflow it.
+                // The update set is ConstructUpdateSetFromFsm's, as for the other legs here:
+                // ConstructUpdateSet (the console's source of this argument) is not reconstructed.
+                if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
+                {
+                    DoUpdate_GameStatePostWorld(mpUpdateInputBufferStack,
+                                                mpUpdateOutputBufferStack,
+                                                &mPcInputOutputBuffer,
+                                                mpWorldUpdateOutputBuffer,
+                                                mpGuiOutputBuffer,
+                                                /*replays post-sim out*/ 0,
+                                                mpDirectorOutputBuffer,
+                                                ConstructUpdateSetFromFsm());
                 }
 
                 // ⚠️ FLAG PC quality-of-life: LATCH THIS TICK'S CAMERA.

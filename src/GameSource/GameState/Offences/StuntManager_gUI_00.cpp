@@ -41,6 +41,8 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"       // ScoringSystem::DealWithStunt
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"          // ProgressionManager (profile / counts / unlocks)
 #include "GameSource/GameState/Progression/BrnProfile.h"                     // Profile::AddStuntElement / RecordPropHit / ...
+#include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"         // the stunt-element tutorial tips
+#include "SharedClasses/Progression/BrnTrainingTypes.h"                      // BrnProgression::ETrainingType
 #include "GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h" // OnCollectStunt / OnCollectAllStunts
 
 #include "SharedClasses/Trigger/BrnGenericRegion.h"         // BrnTrigger::GenericRegion::GetGroupId / GetId
@@ -58,6 +60,14 @@ namespace
     // Same cast-through as BrnStuntManager.cpp: the DWARF spells the parameter GameActionQueue (an
     // incomplete alias) while the X360 AddEvent calls target the <13312,16> queue directly.
     typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueImpl;
+
+    // Source path baked into the inlined TrainingManager::GetProfile assert (the tip arm).
+    const char* const KAC_TRAINING_MANAGER_FILE =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TrainingManager/BrnTrainingManager.cpp";
+
+    // The 5.0 s gap a new training tip waits after the last one finished (the value
+    // BrnDriveThruManager.cpp and GameStateModule_gRR_00.cpp name the same way).
+    const f32 KF_TRAINING_TIP_SETTLE_TIME = 5.0f;
 
     // [DIAG] NOT IN THE X360 BINARY. Same env guard + logger as the `[prop-diag] BREAK` rung this
     // ladder hangs off (PropEntityModule_wQ_04.cpp). Evaluated once per process.
@@ -100,8 +110,8 @@ namespace
 //   4. ScoringSystem::DealWithStunt(type, key, isOnline) -- asserting mpModeManager (636) and
 //      its scoring system (637). `isOnline` is the CURRENT GameMode's mbIsOnline, or false when
 //      no mode is running (`v10 = mpCurrentGameMode; v11 = v10 ? v10->mbIsOnline : 0`).
-//   5. The training-tip arm, keyed on the type. [PARKED -- see the FLAG at the site.]
-//   6. ModeManager::HandleWorldStunt(type, key)  [PARKED -- see the FLAG at the site.]
+//   5. The training-tip arm, keyed on the type (SUPER_JUMP / SMASH / BILLBOARD tutorial tips).
+//   6. ModeManager::HandleWorldStunt(type, key) -> the freeburn-challenge billboard skill.
 //   7. When this was NOT a jump: Profile::RecordPropHit(muLastZoneId, muLastPropId).
 //   8. lbAlreadyDone = the key is already in the player's completed-set FOR THIS TYPE
 //      (Set<s64,512>::Find over mpProgressionManager + 4104*type + 30568).
@@ -258,62 +268,74 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     }
 
     // ---- 5) the training-tip arm ----------------------------------------------------------
-    // The X360 emits an inlined TrainingManager gauntlet THREE times here, once per stunt type
-    // (JUMP -> training type 12, SMASH -> 14, BILLBOARD -> 13; MEASURED off the three
-    // `IsTipAllowedInGameMode(..., 0xC/0xE/0xD)` pairs -- NOT 12/13/14 in enum order):
-    //     if (!meTrainingState && !mbInPictureParadise && IsTipAllowedInGameMode(type))
-    //     { Profile* p = GetProfile();          // asserted non-null, BrnTrainingManager.cpp:382
-    //       if (!p->HasPlayerSeenTrainingType(type)
-    //           && (p->GetTime() - mfLastMessageFinishedTime) >= 5.0f)
-    //       { meTrainingState = 1; meCurrentTrainingType = type; } }
-    //
-    // ⚠️⚠️ [gateui] PARKED, NOT FABRICATED -- the same treatment as HandleWorldStunt below, and
-    // for the same measured reason. De-inlining it names SIX symbols that have NO BODY ANYWHERE
-    // in this tree and no link stub standing in:
-    //     TrainingManager::IsTipPending            (BrnTrainingManager.h:108)
-    //     TrainingManager::IsTipAllowedInGameMode  (:123)
-    //     TrainingManager::GetProfile              (:112)
-    //     TrainingManager::GetTimeSinceLastTip     (:115)
-    //     TrainingManager::RequestTip              (:118)
-    //     Profile::HasPlayerSeenTrainingType       (BrnProfile.h:468)
-    // -- and TrainingManager::GetProfile() would additionally null-deref, because nothing in the
-    // tree ever calls TrainingManager::Construct (the only writer of its mpProgressionManager
-    // back-pointer; the console's GameStateModule::Construct @0x82380388 does not call it either).
-    // The tip is a TUTORIAL POPUP: it has no bearing on the collectible bookkeeping, on any of the
-    // five actions this function posts, or on the HUD rung this wave proves. Landing it would cost
-    // the entire mount for that. Lands the moment those six bodies do.
-    //
-    // The type-range assert IS kept -- it is StuntManager's own (BrnStuntManager.cpp:665), it
-    // names nothing foreign, and it is the console's guard against a corrupt latch.
-    if (static_cast<u32>(leElementType) >= 3u)
+    // One inlined tip-request guard per element type, each with its own tutorial tip:
+    // JUMP -> SUPER_JUMP(12), SMASH -> SMASH(14), BILLBOARD -> BILLBOARD(13). The guard is the
+    // one the tree names on TrainingManager (IsTipPending / IsInPictureParadise /
+    // IsTipAllowedInGameMode / GetProfile / GetTimeSinceLastTip / RequestTip), the same shape
+    // GameStateModule::ProcessTakedownEvents uses for its Marked Man tip. The type-count value
+    // asserts and skips the tip; anything past it skips without asserting.
+    BrnProgression::ETrainingType leTrainingType = BrnProgression::E_TRAINING_TYPE_INVALID;
+    switch (leElementType)
     {
-        // X360: `if (type == 3) assert(...)` then jump PAST the whole tip arm. Values above 3
-        // fall through the same way without asserting.
-        if (leElementType == E_STUNT_ELEMENT_TYPE_COUNT)
+    case E_STUNT_ELEMENT_TYPE_JUMP:
+        leTrainingType = BrnProgression::E_TRAINING_TYPE_SUPER_JUMP;
+        break;
+    case E_STUNT_ELEMENT_TYPE_SMASH:
+        leTrainingType = BrnProgression::E_TRAINING_TYPE_SMASH;
+        break;
+    case E_STUNT_ELEMENT_TYPE_BILLBOARD:
+        leTrainingType = BrnProgression::E_TRAINING_TYPE_BILLBOARD;
+        break;
+    case E_STUNT_ELEMENT_TYPE_COUNT:
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("leElementType != E_STUNT_ELEMENT_TYPE_COUNT", KAC_FILE, 665);
+        CgsDev::Assert::EndAssert();
+        break;
+    default:
+        break;
+    }
+
+    if (leTrainingType != BrnProgression::E_TRAINING_TYPE_INVALID
+        && !mpTrainingManager->IsTipPending()
+        && !mpTrainingManager->IsInPictureParadise()
+        && mpTrainingManager->IsTipAllowedInGameMode(leTrainingType))
+    {
+        BrnProgression::Profile* lpProfile = mpTrainingManager->GetProfile();
+        if (!lpProfile)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("leElementType != E_STUNT_ELEMENT_TYPE_COUNT", KAC_FILE, 665);
+            CgsDev::Assert::FireAssert("lpProfile", KAC_TRAINING_MANAGER_FILE, 382);
             CgsDev::Assert::EndAssert();
+        }
+        // The console skips the request on `blt`, so an unordered (NaN) gap still requests.
+        if (!lpProfile->HasPlayerSeenTrainingType(leTrainingType)
+            && !(mpTrainingManager->GetTimeSinceLastTip() < KF_TRAINING_TIP_SETTLE_TIME))
+        {
+            mpTrainingManager->RequestTip(leTrainingType);
+
+            // [FLAG PC witness] opt-in BRN_COLLECT_DIAG, first 16 only. Read-only.
+            static const bool sbCollectDiag = (getenv("BRN_COLLECT_DIAG") != 0);
+            static s32        siTipDiagLines = 0;
+            if (sbCollectDiag && siTipDiagLines < 16 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++siTipDiagLines;
+                *CgsDev::Log::gpDebugPrint
+                    << "[collect] training tip requested type=" << static_cast<s32>(leTrainingType)
+                    << " element=" << static_cast<s32>(leElementType) << "\n";
+            }
         }
     }
 
     // ---- 6) the mode manager's own hook ---------------------------------------------------
+    // Forwards to the embedded freeburn-challenge manager, which scores the BILLBOARDS skill the
+    // first time each billboard is smashed.
     if (!mpModeManager)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mpModeManager", KAC_FILE, 671);
         CgsDev::Assert::EndAssert();
     }
-    // ⚠️ [gateui] PARKED, NOT FABRICATED. The console call here is
-    //     BrnGameState::ModeManager::HandleWorldStunt(mpModeManager, leElementType, lElementKey)
-    //         @0x82337B68, which is a pure forwarder:
-    //         `return ChallengeManager::HandleWorldStunt(modeManager + 28160, key);`
-    // NEITHER end has a body in this tree: ModeManager::HandleWorldStunt is not declared at all,
-    // and ChallengeManager::HandleWorldStunt is declaration-only (BrnChallengeManager.h:310, marked
-    // "not in this TU's X360 ledger"). Calling it would add a link symbol with NO home anywhere,
-    // which would block the whole mount for a freeburn-challenge side effect that has no bearing on
-    // the HUD path this wave proves. Landed the moment either body does; recorded as a park.
-    (void)lElementKey;
+    mpModeManager->HandleWorldStunt(leElementType, lElementKey);
 
     // ---- 7) the per-prop census (smash / billboard only) ----------------------------------
     if (!lbIsJump)
@@ -361,25 +383,9 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
         CgsDev::Assert::FireAssert("mpGameStateModule->GetDeveloperChallengeManager()", KAC_FILE, 695);
         CgsDev::Assert::EndAssert();
     }
-    // ⚠️ [gateui] ROUND-3 PARK (verify_r2_fixgsm F4 sweep). The console runs, UNCONDITIONALLY here
-    // (outside the !lbAlreadyDone gate below):
-    //     mpGameStateModule->GetDeveloperChallengeManager()->OnCollectStunt(type, lElementKey);
-    // `DeveloperChallengeManager::OnCollectStunt` @0x82373028 HAS a real body
-    // (`DeveloperChallengeManager/BrnDeveloperChallengeManager.cpp :: OnCollectStunt`) -- the park
-    // is a LINK park, not a missing-body park. MEASURED (`cl /c` + `dumpbin /SYMBOLS`): that TU is
-    // unmounted and mounting it opens SEVEN externals with no body anywhere in b5-decomp/src --
-    //     StuntModeScoring::GetBestStuntScore, ScoringSystem::GetCarCount,
-    //     CarData::GetFinishScore, OutputBuffer::GetGuiOutputQueue,
-    //     GameStateModule::IsActiveRaceCarStillPresent, Profile::IsDeveloperChallengeComplete
-    // -- plus `ScoringSystem::GetCarData`, which drags the whole unmountable Scoring subsystem
-    // measured at the DealWithStunt park in step 4 above.
-    // ⓘ COST: the developer-challenge billboard census (the Array<CollectedBillboard,5> +
-    // UpdateBufferedCollectedBillboards @0x82372F80 arm) stops counting. The wave scout classes
-    // this consumer as OPTIONAL (scout.md §C, "OPTIONAL counting -- fire and forget, no effect on
-    // the HUD"), and it writes none of the action-58 record's five fields.
-    // The two asserts above are KEPT -- they are StuntManager's own (lines 694/695) and name
-    // nothing foreign. RESTORE-WHEN those seven bodies land.
-    (void)lElementKey;
+    // Runs for every completion, repeat or first (outside the first-completion block below).
+    mpGameStateModule->GetDeveloperChallengeManager()->OnCollectStunt(static_cast<u32>(leElementType),
+                                                                      lElementKey);
 
     // ---- 11) the first-completion block ----------------------------------------------------
     if (lbAlreadyDone)
@@ -409,25 +415,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
         CgsDev::Assert::FireAssert("mpProgressionManager->GetAchievementManager()", KAC_FILE, 710);
         CgsDev::Assert::EndAssert();
     }
-    // ⚠️ [gateui] ROUND-3 PARK (verify_r2_fixgsm F4 sweep). The console call here is
-    //     mpProgressionManager->GetAchievementManager()->OnCollectStunt(leElementType);
-    // (X360 AchievementManagerBase::OnCollectStunt @0x82366EB8). Again a LINK park: the body is
-    // real, at `AchievementManager/BrnGameStateAchievementManagerBase.cpp :: OnCollectStunt`.
-    // That TU is deliberately NOT mounted -- `tools/build/build_game_exe.bat` carries the standing
-    // conductor decision and the reason at its achievement-manager leg ("mounting it costs EIGHT
-    // unresolved externals that have no definition anywhere in the tree"), with the warning that
-    // /OPT:REF does NOT save an unreferenced COMDAT that calls an undefined symbol.
-    // ⓘ RE-MEASURED THIS ROUND: it is now SEVEN, not eight -- owner `deps` bodied
-    // `ProgressionManager::GetCollectedStuntElementCount` this wave. The remaining seven are
-    //     ScoringSystem::GetPlayerScore / GetPlayerModeCrashes / GetPlayerModeTakedowns /
-    //     GetNewlyWreckedCarCount, ProgressionManager::GetCarChallengeWinCount /
-    //     GetProfileTotalTakedowns
-    // (`ScoringSystem::GetNumberOfTakedownsAgainst` is bodied but in the unmountable
-    //  Scoring/BrnScoringSystem_Queries.cpp -- see the DealWithStunt park in step 4).
-    // ⓘ COST: stunt-collectible ACHIEVEMENTS stop incrementing. Off the HUD path -- the scout
-    // classes it OPTIONAL, and it writes none of the action-58 record's five fields.
-    // The assert above is KEPT (StuntManager's own, line 710). RESTORE-WHEN the seven land.
-    (void)leElementType;
+    mpProgressionManager->GetAchievementManager()->OnCollectStunt(leElementType);
 
     // The console's next two calls, in the console's order. X360 0x8239D2E0..0x8239D2F0:
     //     lwz r3, 0x5E8(r31) ; bl CheckForSpecialCarUnlocks       (this only)
@@ -552,14 +540,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
             reinterpret_cast<const CgsModule::Event*>(&lAllAction),
             GameStateModuleIO::E_ACTION_ON_STUNT_ELEMENT_COMPLETE_BY_TYPE, 4);
 
-        // ⚠️ [gateui] ROUND-3 PARK -- the console's
-        //     mpProgressionManager->GetAchievementManager()->OnCollectAllStunts(leElementType);
-        // (X360 AchievementManagerBase::OnCollectAllStunts @0x8235AF38). SAME symbol, SAME reason,
-        // SAME restore condition as the OnCollectStunt park in the first-completion block above:
-        // the body is real in BrnGameStateAchievementManagerBase.cpp, but that TU is deliberately
-        // unmounted and mounting it opens SEVEN externals with no body anywhere in the tree.
-        // The action-60 post ABOVE is the HUD-visible half (-> GuiEventStuntAllComplete(220)) and
-        // it is LIVE; only the achievement side effect is parked.
+        mpProgressionManager->GetAchievementManager()->OnCollectAllStunts(leElementType);
 
         static s32 siAllDiagCount = 0;
         if (UIGateDiagFirstN(&siAllDiagCount))

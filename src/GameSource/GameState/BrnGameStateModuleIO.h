@@ -32,10 +32,11 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"      // SetUpAllEventStartsInterface (OutputBuffer console +176368, embedded by value)
 #include "GameShared/GameClasses/System/Timer/CgsTimerRequestInterface.h" // CgsSystem::TimerRequestInterface (OutputBuffer +16420) -- see the typedef below
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"          // CgsSystem::Time (mGameModeElapsedTime, DWARF BrnGameStateModuleIO.h:351)
-
-// PostWorldInputBuffer hands out the active-race-car output interface by pointer only
-// (GetActiveRaceCarOutputInterface, X360 0x8231D2C0); forward-declare its real home.
-namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
+// The PostWorldInputBuffer members, each embedded by value as its real type (see the struct).
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"        // VehicleOutputInterface (+0x220), VehicleManagerOutputInterface::RaceCarCrashEventQueue (+0x10)
+#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"                      // ContactSpyInterface (+0x6E30)
+#include "GameSource/World/EntityModules/TriggerEntityModule/BrnTriggerEntityModuleIO.h" // TriggerEntityModuleOutputInterface (+0x6E34)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActive/GlobalRaceCarOutputInterface (+0x7250 / +0x9B40)
 
 // TriggerQueryManager::UpdateTriggers arms/removes trigger regions through
 // GetTriggerManagementInputInterface(); the grown interface methods below take these by
@@ -228,11 +229,10 @@ namespace GameStateModuleIO
         };
         Entry maEntries[2];  // 2 * 0x18 == 0x30 bytes
     };
-    class VehicleOutputInterface;          // PostWorldInputBuffer +0x220
-    // PostWorldInputBuffer +0x7250: the active-race-car output interface
-    // (BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface). Returned read-locked
-    // by GetActiveRaceCarOutputInterface (X360 0x8231D2C0, "Not locked for reading" line 210); only
-    // a pointer is handed out, so a forward declaration suffices.
+    // PostWorldInputBuffer +0x220: the physics module's per-race-car snapshot bundle
+    // (BrnPhysics::Vehicle's struct). This alias replaces a local incomplete class of the same
+    // name that no TU could ever define.
+    typedef BrnPhysics::Vehicle::VehicleOutputInterface VehicleOutputInterface;
     // DWARF (BrnGameStateModuleIO.h:73,181,239): the PostWorldInputBuffer AICarOutputInterface
     // is a typedef IMPORT of the AI module's BrnAI::AIModuleIO::AICarOutputInterface (mirrors
     // the ActiveRaceCarOutputInterface == RCEntityActiveRaceCarOutputInterface pattern). It is
@@ -324,18 +324,17 @@ namespace GameStateModuleIO
     // opaque storage to real typed members without moving the surrounding anchors.
     // ========================================================================
 
-    // PostWorldInputBuffer +0x10. DWARF (:198/199, :232): the per-frame race-car crash-event
-    // queue == VehicleManagerOutputInterface::RaceCarCrashEventQueue (an
-    // EventQueue<RaceCarCrashEvent,8>). Read-locked by ModeManager::ProcessPlayerCrashes;
-    // modelled minimally as opaque storage spanning up to the next known member (VehicleOutput
-    // @ +0x220). Swap for the real EventQueue<RaceCarCrashEvent,8> when that physics type is homed.
-    struct RaceCarCrashEventQueue { u8 maOpaque[0x220 - 0x10]; };
+    // PostWorldInputBuffer +0x10: the per-frame race-car crash-event queue, the physics
+    // module's own VehicleManagerOutputInterface::RaceCarCrashEventQueue (an
+    // EventQueue<RaceCarCrashEvent,8>). The ModeManager callers still cast it to the
+    // same-shaped BrnGameState::VehicleManagerOutputInterface::RaceCarCrashEventQueue their
+    // scorer signatures spell (BrnScoringSystemEventQueues.h).
+    typedef BrnPhysics::Vehicle::VehicleManagerOutputInterface::RaceCarCrashEventQueue RaceCarCrashEventQueue;
 
-    // PostWorldInputBuffer +0x6E34. DWARF (:207/208, :235): the trigger-entity-module output
-    // interface (BrnWorld::TriggerEntityModuleIO::TriggerEntityModuleOutputInterface). Returned
-    // read-locked (TriggerQueryManager::PostWorldUpdate) and write-locked (BridgeWorldToGameState).
-    // Modelled minimally as a named opaque payload; swap for the real interface when it is homed.
-    struct TriggerEntityModuleOutputInterface { u8 maOpaque[16]; };
+    // PostWorldInputBuffer +0x6E34: the trigger-entity-module output interface, the world's own
+    // VariableEventQueue<1024,16> alias. Read-locked by TriggerQueryManager::PostWorldUpdate,
+    // write-locked by BridgeWorldToGameState.
+    typedef BrnWorld::TriggerEntityModuleIO::TriggerEntityModuleOutputInterface TriggerEntityModuleOutputInterface;
 
     // PreWorldInputBuffer +0x7B0. This is the network subsystem's real input aggregate, not a
     // GameState-local lookalike. Its final miNetworkFrameSinceStart word (+0x2434) drives online
@@ -501,8 +500,32 @@ namespace GameStateModuleIO
     // ========================================================================
     // PostWorldInputBuffer  (DWARF BrnGameStateModuleIO.h:182)
     // ========================================================================
+    // The world -> game-state hand-off of one frame, and the ONLY way the post-world half of the
+    // game state sees the world. Nobody owns an instance: the game module's post-world update
+    // step stages one per frame on its update input-buffer stack (CreateIOBuffer<T>, which runs
+    // Construct below), fills it under a write lock, hands it read-locked to
+    // GameStateModule::PostWorldUpdate, then destroys it (Destruct below). Console sizeof 0xC1C0.
+    //
+    // HOST LAYOUT: everything up to and including mContactSpyInterface sits at its console
+    // offset. From there on the host drifts: the contact-spy handle is one pointer (4 bytes on
+    // the console, 8 here) and RCEntityActiveRaceCarOutputInterface is 10544 bytes here against
+    // the console's 10480. Every later member keeps its console offset only in its comment; they
+    // are reached by name, and every copy into or out of them must be by assignment, never by a
+    // console byte count.
     struct PostWorldInputBuffer : public CgsModule::IOBuffer
     {
+        typedef BrnPhysics::ContactSpy::ContactSpyInterface                               ContactSpyInterface;
+        typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface     RCEntityActiveRaceCarOutputInterface;
+        typedef BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface     RCEntityGlobalRaceCarOutputInterface;
+        typedef CgsModule::EventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse, 32> TrafficTypeResponseQueue;
+
+        // Raises the constructed bit, then constructs or clears every embedded member in the
+        // console's order (listed at the body).
+        void Construct();
+        // Empties the game-event queue, re-inits the contact-spy handle, empties the two fixed
+        // event queues, then tears down the base.
+        void Destruct();
+
         // X360 0x8231D218 (read-lock; "Not locked for reading", line 201)
         const VehicleOutputInterface* GetVehicleOutputInterface() const;
         // X360 0x823B9300 (write-lock; "Not locked for writing", line 202)
@@ -520,10 +543,28 @@ namespace GameStateModuleIO
         // X360 0x823B9648 (write-lock; "Not locked for writing", line 217) -- non-const twin
         AICarOutputInterface*         GetAICarOutputInterface();
 
-        // X360 0x823C9600 (write-lock; "Not locked for writing", line 220) -- forwards to the
-        // traffic-type response queue's BaseEventQueue<T>::Append.
-        bool AppendTrafficTypeResponseQueue(
-                const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>& lSource);
+        // Write lock, assert line 220: appends the source onto the traffic-type response queue
+        // with the queue's own Append.
+        void AppendTrafficTypeResponseQueue(const TrafficTypeResponseQueue* lpQueue);
+        // Read lock, assert line 219.
+        const TrafficTypeResponseQueue* GetTrafficTypeResponseQueue() const;
+
+        // Write lock, assert line 199 (the const twin is below).
+        RaceCarCrashEventQueue*       GetRaceCarCrashEventQueue();
+        // Read lock, assert line 204 / write lock, assert line 205.
+        const ContactSpyInterface*    GetContactSpyInterface() const;
+        ContactSpyInterface*          GetContactSpyInterface();
+        // Write lock, assert line 211 (the const twin is above).
+        RCEntityActiveRaceCarOutputInterface*       GetActiveRaceCarOutputInterface();
+        // Read lock, assert line 213 / write lock, assert line 214.
+        const RCEntityGlobalRaceCarOutputInterface* GetGlobalRaceCarOutputInterface() const;
+        RCEntityGlobalRaceCarOutputInterface*       GetGlobalRaceCarOutputInterface();
+
+        // Header-inline with no lock test: the post-world update step stores the byte straight
+        // into the write-locked buffer, and GameStateModule::PostWorldUpdate reads it straight
+        // back after it has already dropped its read lock.
+        void       SetInPictureParadise(bool lbIsInPictureParadise) { mbIsInPictureParadise = lbIsInPictureParadise; }
+        const bool GetInPictureParadise() const                      { return mbIsInPictureParadise; }
 
         // X360 0x8231D170 (read-lock; "Not locked for reading", line 198) -- read-side accessor for
         // the race-car crash-event queue (this+0x10). class:BrnGameState catch-all TU;
@@ -537,42 +578,34 @@ namespace GameStateModuleIO
         TriggerEntityModuleOutputInterface*       GetTriggerEntityOutputInterface();
 
     private:
-        u8  maPadToRaceCarCrashEventQueue[0x10 - sizeof(CgsModule::IOBuffer)]; // base end -> 0x0010
-        RaceCarCrashEventQueue mRaceCarCrashEventQueue;               // @ +0x0010 (named opaque -> +0x220)
-        u8  mVehicleOutputInterfaceStorage[0x6E34 - 0x220];          // VehicleOutputInterface @ +0x0220
-        TriggerEntityModuleOutputInterface mTriggerEntityOutputInterface; // @ +0x6E34 (named opaque)
-        u8  mPostVehicleOutputStorage[0x7250 - (0x6E34 + sizeof(TriggerEntityModuleOutputInterface))]; // -> +0x7250
-        // The active-race-car output interface (BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface)
-        // @ +0x7250. Named opaque storage (its full layout lives in its own TU); GetActiveRaceCarOutputInterface
-        // returns &this member. Its GetPlayerActiveRaceCarIndex reads at interface+0x2858.
-        u8  mActiveRaceCarOutputInterfaceStorage[0x2890]; // RCEntityActiveRaceCarOutputInterface @ +0x7250 (covers +0x2858 read)
-        u8  mPostActiveCarOutputStorage[0xA4B0 - (0x7250 + 0x2890)]; // -> +0xA4B0
-        // [gateui] real typed seat (was `u8 mGameEventQueueStorage[0xAAC0 - 0xA4B0]`). This seat
-        // is an EXACT fit at host size (0xAAC0 - 0xA4B0 == 1552 == sizeof(GameEventQueue)), so no
-        // trailing pad -- and the two asserts below are what keep that claim honest.
-        GameEventQueue       mGameEventQueue;                         // GameEventQueue         @ +0xA4B0
-        // Real, complete AICarOutputInterface (BrnAI::AIModuleIO::AICarOutputInterface). sizeof == 0x14E8
-        // (== 0xBFA8 - 0xAAC0), 4-aligned, so it occupies exactly the former placeholder span and leaves
-        // mTrafficTypeResponseQueue pinned at +0xBFA8.
-        AICarOutputInterface mAICarOutputInterface;                   // AICarOutputInterface   @ +0xAAC0
-        // TrafficTypeResponse query-response queue @ +0xBFA8 (49064). Fixed-capacity EventQueue<...,32>;
-        // 16B element stride == sizeof(TrafficTypeResponse). AppendTrafficTypeResponseQueue forwards to it.
-        CgsModule::EventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse, 32> mTrafficTypeResponseQueue; // +0xBFA8
+        RaceCarCrashEventQueue               mRaceCarCrashEventQueue;        // +0x10
+        VehicleOutputInterface               mVehicleOutputInterface;        // +0x220
+        ContactSpyInterface                  mContactSpyInterface;           // +0x6E30
+        TriggerEntityModuleOutputInterface   mTriggerEntityOutputInterface;  // +0x6E34
+        RCEntityActiveRaceCarOutputInterface mActiveRaceCarOutputInterface;  // +0x7250
+        RCEntityGlobalRaceCarOutputInterface mGlobalRaceCarOutputInterface;  // +0x9B40
+        GameEventQueue                       mGameEventQueue;                // +0xA4B0
+        AICarOutputInterface                 mAICarOutputInterface;          // +0xAAC0
+        TrafficTypeResponseQueue             mTrafficTypeResponseQueue;      // +0xBFA8
+        bool                                 mbIsInPictureParadise;          // +0xC1B8
 
-        // Compile-time offset guards (private members -> assert from a member-fn context).
+        // Private members, so the layout is asserted from a member-function context.
         static void _AssertLayout()
         {
-            static_assert(offsetof(PostWorldInputBuffer, mActiveRaceCarOutputInterfaceStorage) == 0x7250,
-                          "RCEntityActiveRaceCarOutputInterface @ +0x7250");
-            static_assert(offsetof(PostWorldInputBuffer, mGameEventQueue) == 0xA4B0,
-                          "GameEventQueue @ +0xA4B0");
-            // [gateui] the exact-fit claim, spelled out: the seat the console's offsets carve is
-            // 0xAAC0 - 0xA4B0 == 1552, and the host queue is 1552. If either moves, this fires
-            // before mAICarOutputInterface silently slides off +0xAAC0.
-            static_assert((0xAAC0 - 0xA4B0) == sizeof(GameEventQueue),
-                          "PostWorldInputBuffer GameEventQueue seat is an exact host fit");
-            static_assert(offsetof(PostWorldInputBuffer, mAICarOutputInterface) == 0xAAC0,
-                          "AICarOutputInterface @ +0xAAC0");
+            // The pointer-free prefix sits at its console offsets.
+            static_assert(offsetof(PostWorldInputBuffer, mRaceCarCrashEventQueue) == 0x10,   "mRaceCarCrashEventQueue @ +0x10");
+            static_assert(offsetof(PostWorldInputBuffer, mVehicleOutputInterface) == 0x220,  "mVehicleOutputInterface @ +0x220");
+            static_assert(offsetof(PostWorldInputBuffer, mContactSpyInterface)    == 0x6E30, "mContactSpyInterface @ +0x6E30");
+            // Members whose host size is the console's. No offset is asserted past
+            // mContactSpyInterface: its pointer and the larger active-race-car interface move
+            // everything after them on the host.
+            static_assert(sizeof(RaceCarCrashEventQueue)               == 0x210,  "RaceCarCrashEventQueue is 0x210 bytes");
+            static_assert(sizeof(VehicleOutputInterface)               == 0x6C10, "VehicleOutputInterface is 0x6C10 bytes");
+            static_assert(sizeof(TriggerEntityModuleOutputInterface)   == 0x410,  "TriggerEntityModuleOutputInterface is 0x410 bytes");
+            static_assert(sizeof(RCEntityGlobalRaceCarOutputInterface) == 0x970,  "RCEntityGlobalRaceCarOutputInterface is 0x970 bytes");
+            static_assert(sizeof(GameEventQueue)                       == 0x610,  "GameEventQueue is 0x610 bytes");
+            static_assert(sizeof(AICarOutputInterface)                 == 0x14E8, "AICarOutputInterface is 0x14E8 bytes");
+            static_assert(sizeof(TrafficTypeResponseQueue)             == 0x210,  "TrafficTypeResponseQueue is 0x210 bytes");
         }
     };
 

@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                         // CgsID (CarSelect player-car-change grows)
 #include "GameSource/BurnoutConstants.h"                            // EActiveRaceCarIndex
+#include "SharedClasses/BrnSharedConstants.h"                       // BrnUpdateSet (PostWorldUpdate)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"  // CgsModule::ModuleSingleBuffered base
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"     // CgsModule::VariableEventQueue<N,16> (output GUI event queue)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CgsDev::Assert Begin/Fire/EndAssert
@@ -57,6 +58,8 @@ namespace BrnGameState  { namespace GameStateModuleIO { struct OutputBuffer; } }
 // reason mpOutputBuffer is -- so this header does not have to pull the whole BrnGameStateModuleIO.h.
 // See GetPreWorldInputBuffer() below for the console attestation and the named PC deviation.
 namespace BrnGameState  { namespace GameStateModuleIO { struct PreWorldInputBuffer; } }
+// PostWorldUpdate's third argument, held by pointer for the same reason.
+namespace BrnGameState  { namespace GameStateModuleIO { struct PostWorldInputBuffer; } }
 // For the DeveloperChallengeManager additive grow below (pointer-only).
 namespace BrnResource    { struct VehicleList; }
 // For the StreetManager wave-C GetDeveloperChallengeManager grow below (pointer-only;
@@ -86,8 +89,8 @@ namespace BrnGameState   { struct TakedownEvent; struct TakedownManager; struct 
 // includes their real headers.
 namespace BrnGameState   { struct MugshotManager; struct PaybackManager; }
 namespace BrnTraffic     { namespace BrnTrafficIO { struct TrafficTypeResponse; } }   // [takedown wave] cache arg
-// CacheTakedownManagerPostWorldInputData takes the post-world VehicleOutputInterface by pointer
-// only; forward-declared rather than pulling BrnVehicleOutputInterface.h into this header.
+// Pointer-only uses of the vehicle output interface; forward-declared rather than pulling
+// BrnVehicleOutputInterface.h into this header.
 namespace BrnPhysics     { namespace Vehicle { struct VehicleOutputInterface; } }
 
 namespace BrnGameState
@@ -101,7 +104,7 @@ namespace GameStateModuleIO
     // is now its single canonical declaration and the PC body (GameStateModule_gUI_00.cpp)
     // returns the CARRY QUEUE -- the named reduction: the console's PostWorldUpdate merges its
     // post-world input queue into the carry queue for the next PreWorldUpdate's ProcessGameEvents,
-    // and on this build (no PostWorldInputBuffer exists) the carry queue IS that seam, with the
+    // and on this build BridgeGuiToGameState still posts into the carry queue directly, with the
     // identical consume point (the pre-world pump) and lifetime (Cleared after the pump).
     CgsModule::VariableEventQueue<1536, 16>* PostWorldInput(GameStateModule* lpModule);
 }
@@ -355,86 +358,29 @@ public:
     DriveThruManager*       GetDriveThruManager()       { return &mDriveThruManager; }
     const DriveThruManager* GetDriveThruManager() const { return &mDriveThruManager; }
 
-    // ------------------------------------------------------------------------
-    // ⭐⭐ [gateui] X360 PostWorldUpdate @0x8238F358 -- ITS TWO STUNT-CHAIN LEGS.
-    //
-    // The console body opens `LockForRead(lpPostWorldInput)` and then, among other copies:
-    //     XMemCpy(this + 235488, lpInput->GetActiveRaceCarOutputInterface(), 10480);   // sub_8231D2C0
-    //     VariableEventQueue<1536,16>::Append<1536,16>(this + 248384,
-    //                                                  lpInput->GetGameEventQueue());  // 0x8231D0C8
-    // i.e. it refreshes mLastActiveRaceCarInterface from the world's published snapshot and folds
-    // the world's per-frame game-event queue into the module's CARRY queue, which PreWorldUpdate
-    // then merges and hands to ProcessGameEvents on the NEXT frame.
-    //
-    // ⛔ WHY BOTH LEGS ARE LOAD-BEARING FOR THIS WAVE, and why the first one is the bigger of the
-    // two: mLastActiveRaceCarInterface had NO WRITER ANYWHERE IN THE TREE (its FLAG at the member
-    // said so), so it read as the Clear()ed "no valid player car" state on every frame. That is
-    // not a cosmetic gap -- TriggerQueryManager::UpdateTriggers gates its ENTIRE active-set
-    // rebuild on `lpActiveRaceCarInterface->IsPlayerCarActive()`, so with a dead interface
-    // maActiveTriggers stays EMPTY for ever and StuntManager::OnPropHit iterates nothing and
-    // latches nothing. StuntManager::Update has the same dependency (an inactive player car makes
-    // it drop the latch instead of processing it).
-    //
-    // [FLAG PC bring-up] THE ARGUMENTS ARE THE DEVIATION, NOT THE BODY. The console reads both
-    // out of a GameStateModuleIO::PostWorldInputBuffer that BridgeWorldToGameState @0x823E5368
-    // fills; nothing on PC creates that buffer (its accessors exist, its producer does not), so
-    // this entry point takes the two values DIRECTLY -- and the world module's OutputBuffer hands
-    // out exactly these two types (BrnWorldModuleIO.h: `GetActiveRaceCarOutputInterface() const`
-    // and `GetGameEventQueue() const`, the latter typedef'd to VariableEventQueue<1536,16>), so
-    // the caller passes them through unchanged. The interface copy is done BY ASSIGNMENT, never
-    // as the console's 10480-byte XMemCpy: the host object is a different size.
-    // DELETE-WHEN PostWorldUpdate lands with a real PostWorldInputBuffer.
-    // ⭐ [D4 stuntrace WAVE D] THE THIRD ARGUMENT IS NEW: the frame delta the console's
-    // GameStateModule::PostWorldUpdate keeps in f1 and forwards to ModeManager::PostWorldUpdate
-    // (@0x8238F358 `bl` #19). It feeds LEG 3 below -- the extracted stunt-scorer fork, i.e. the
-    // call that actually drives StuntModeScoring::Update. See the body for why the leg is
-    // extracted rather than a straight `mModeManager.PostWorldUpdate(...)` (there is no
-    // PostWorldInputBuffer on this build, and a synthesised one would hand ModeManager an
-    // X360-sized opaque blob where a host RCEntityActiveRaceCarOutputInterface must be).
-    // ⭐ [showtime score wave 2026-08-29] THE FOURTH ARGUMENT IS THE FRAME'S CONTACT SPY, and it
-    // feeds the new LEG 5 -- GameStateModule::ProcessContacts, the console's own `bl` #25 of the
-    // same PostWorldUpdate. Same deviation as the first two arguments and for the same reason:
-    // the console reads it out of the PostWorldInputBuffer (+0x6E30, BrnGameStateModuleIO.h:204)
-    // and nothing on this build fills one, while the world module's UpdateOutputBuffer publishes
-    // exactly this type through its const GetContactSpyInterface().
-    void PostWorldUpdateStuntBringUp(
-        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
-                                                      lpActiveRaceCarOutputInterface,
-        const CgsModule::VariableEventQueue<1536, 16>* lpWorldGameEventQueue,
-        f32                                           lfDelta,
-        const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface,
-        // [road-rage wave 2026-09-02] the world output's race-car crash-event queue
-        // (VehicleManagerOutputInterface +0x3A0) -- what BridgeWorldToGameState leg 1 would
-        // copy into PostWorldInputBuffer +0x10; feeds ModeManager::ProcessPlayerCrashes.
-        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue,
-        // [takedown wave] the world output's traffic-type response queue, cached for
-        // TakedownManager::Update's "last traffic type response queue" argument.
-        const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue,
-        const BrnAI::AIModuleIO::AICarOutputInterface* lpAICarOutputInterface,
-        const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCarOutputInterface,
-        // [takedown wave 2026-09-13] the world output's VehicleOutputInterface -- what
-        // BridgeWorldToGameState would copy into the PostWorldInputBuffer, and the ONE input
-        // CacheTakedownManagerPostWorldInputData reads out of it. Same one-feed rule as every
-        // argument above; UpdateOutputBuffer::GetVehicleOutputInterface() const publishes exactly
-        // this type, and the call site passes it inside its own LockForRead bracket.
-        const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface);
+    // The post-world pass. Sole caller: BrnGameModule::DoUpdate_GameStatePostWorld, after
+    // BridgeWorldToGameState has filled the buffer. Copies the buffer's race-car, AI, traffic and
+    // game-event snapshots into the module, runs the mode manager and the trigger queries, then
+    // ProcessContacts, the per-car crashing flags, the player-index publish and the boost tips.
+    // Body in GameStateModule_wW_01.cpp.
+    void PostWorldUpdate(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
+                         CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                         const GameStateModuleIO::PostWorldInputBuffer* lpPostWorldInputBuffer,
+                         BrnUpdateSet lUpdateSet);
 
     // ==========================================================================================
     // ⭐⭐⭐ [showtime score wave 2026-08-29] ProcessContacts -- X360 0x8236BC68, DWARF :853.
     //
     // THE PRODUCER CrashModeScoring::DealWithHitTrafficCar AND ::DealWithHitProp HAVE NEVER HAD.
-    // The console's sole caller is GameStateModule::PostWorldUpdate @0x8238F358 (`bl` #25,
-    // bracketed by PerfMonCpu Start/StopMonitor(*(this+292352) == miProcessContactsPM)), which
-    // itself has no call site on this build -- so on the X360 this function runs every showtime /
-    // stunt-attack frame and here it ran never.
+    // Sole caller: GameStateModule::PostWorldUpdate (GameStateModule_wW_01.cpp).
     //
     // [FLAG PC bring-up] THE ARGUMENT IS THE DEVIATION, NOT THE BODY -- and here the reduction is
     // total rather than partial: the console takes `const PostWorldInputBuffer*` and the ONLY
     // thing it ever reads from it is `GetContactSpyInterface()` (sub_82362988, +0x6E30), called
     // three times. Every other value in the body comes from `this`. So the parameter is that
     // interface, and the body below is the console's, statement for statement.
-    // DELETE-WHEN a real PostWorldInputBuffer exists: change the parameter back and add the one
-    // accessor call at the top -- nothing else in the body moves.
+    // The buffer exists now; restoring the parameter is a change to the body's TU
+    // (BrnGameStateModule.cpp) and its one caller, nothing else in the body moves.
     // ==========================================================================================
     void ProcessContacts(const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface);
 
@@ -537,13 +483,8 @@ public:
     // , post-world `bl` #18. Caches the race-car crash queue (gsm+250272) and the
     // module's copy of the post-world VehicleOutputInterface (gsm+250816) -- the interface the
     // pre-world leg's SetFromVehicleOutputInterface reads. Body in GameStateModule_gTD_00.cpp.
-    void CacheTakedownManagerPostWorldInputData(
-        const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
-        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue);
-    // The separate Clear+Append of the module's TrafficTypeResponse<32> queue (gsm+278480), which
-    // GameStateModule::PostWorldUpdate does itself, two `bl` before the cache call above.
-    void CacheTakedownTrafficTypeResponses(
-        const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue);
+    // It also caches the contact-spy handle (gsm+250800) for next pre-world's rumble pass.
+    void CacheTakedownManagerPostWorldInputData(const GameStateModuleIO::PostWorldInputBuffer* lpInput);
     void TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lpActionQueue, f32 lfGameTimestep,
                              const CgsSystem::TimerStatusInterface& lrTimerStatusInterface, bool lbSimPaused);
     void ClearTakedownRaceCarData();
@@ -1474,7 +1415,7 @@ public:
     // written two ways -- 0x3C0D0 == 245968 -- and it is the GLOBAL interface, not a second ACTIVE
     // one. There is NO live-active interface member on GameStateModule at all: the live one arrives
     // through the world module's input buffer and is only ever COPIED into the two snapshots above.
-    // Refreshed alongside the active snapshot by PostWorldUpdateStuntBringUp.
+    // Refreshed alongside the active snapshot by PostWorldUpdate.
     const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface*
         GetLastGlobalRaceCarInterface() const;
 
@@ -2246,7 +2187,7 @@ private:
     // own IsFull() guard stopped pushing, and "Cars Crashed" never moved. The rest of the chain:
     // action 116 -> PhysicsModule::HandleGameActions case 116 -> VehicleManagerOutputInterface's
     // request queue -> TrafficEntityModule::ProcessTrafficTypeRequests -> the response queue ->
-    // CacheTakedownTrafficTypeResponses -> next frame's UpdateShowtimeMode -> DealWithScoreForVehicleClass
+    // PostWorldUpdate's traffic-type cache -> next frame's UpdateShowtimeMode -> DealWithScoreForVehicleClass
     // + action 140 (director close-up, crash play, GUI 394/399/401).
     // =========================================================================================
 

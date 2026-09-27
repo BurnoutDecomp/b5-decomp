@@ -121,6 +121,8 @@ namespace BrnSound { namespace Module { namespace Io { struct RootInputBuffer; }
 namespace BrnSound { namespace Module { namespace Io { struct RootOutputBuffer; } } }
 namespace BrnReplays { namespace ReplayIO { struct OutputBuffer_PreSim; } }
 namespace BrnEffects { namespace EffectsIO { struct OutputBuffer; } }
+// DoUpdate_GameStatePostWorld parameter type: the replay post-sim OUTPUT buffer (same home).
+namespace BrnReplays { namespace ReplayIO { struct OutputBuffer_PostSim; } }
 // The event-translating bridges (BridgeGuiToGameState / TranslateGuiEventsToNetworkEvents /
 // BridgeGuiToGame) take/return CgsModule::VariableEventQueue<N,16> pointers. Forward-declared
 // here (the bridge bodies include the real CgsVariableEventQueue.h) to keep the heavy template
@@ -266,6 +268,24 @@ namespace BrnGame
                             BrnWorldIO::UpdateOutputBuffer* lpWorldUpdateOutputBuffer,
                             CgsMemory::LinearMalloc* lpWorldFrameAllocator,
                             BrnUpdateSet lUpdateSet);
+
+        // The game-state post-world leg of the update step. Stages a
+        // GameStateModuleIO::PostWorldInputBuffer "GameStatePostWorld" on the update INPUT stack,
+        // and under LockBuffersForIO (the buffer write-locked; the input, world, GUI, replay
+        // post-sim and director outputs read-locked) fills it: BridgeGuiToGameState, then
+        // BridgeWorldToGameState unless update-set bit 0x20 is set, the director's pause request
+        // as game event 43, the replay post-sim game events, the pause-button latch as game event
+        // 10, and the picture-paradise camera flag. With the locks released,
+        // GameStateModule::PostWorldUpdate runs unless bit 0x20 is set or the disk has failed;
+        // then the buffer is destroyed.
+        void DoUpdate_GameStatePostWorld(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
+                                         CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                                         const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
+                                         const BrnWorldIO::UpdateOutputBuffer* lpWorldUpdateOutputBuffer,
+                                         const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
+                                         const BrnReplays::ReplayIO::OutputBuffer_PostSim* lpReplaysPostSimOutputBuffer,
+                                         const BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutputBuffer,
+                                         BrnUpdateSet lUpdateSet);
 
         // The per-frame DIRECTOR leg (2026-07-29, DJ fly-by campaign). Creates this
         // sub-step's director INPUT + scene-query IO buffers on the update stacks and runs the
@@ -673,16 +693,12 @@ namespace BrnGame
         void BridgeWorldToDirector(BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
                                    const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput);
 
-        // ⭐⭐ [gateui] X360 0x823E5368 -- the WORLD->GAME-STATE seam, the hop that carries the
-        // world's per-frame game events (including event 111 E_EVENT_RECORD_PROP_HIT, the
-        // smash-gate / billboard feed) into the game state. Signature from the asm prologue
-        // (r3 = this, unused; r4 = the post-world INPUT buffer, write-locked; r5 = the world
-        // UPDATE OUTPUT buffer, read-locked). Console home + body:
-        // GameSource/Game/GameBridgeWorldToX.cpp, where the ten console legs, the two landed
-        // here, and the eight parks (each with its blocker) are enumerated.
-        // Called by DoUpdate_GameStatePostWorld @0x823E92A8 inside its LockBuffersForIO
-        // bracket -- an entry point this build does not have yet, so this function has no PC
-        // call site; see the banner on the body.
+        // The WORLD->GAME-STATE seam: copies every per-frame world product the post-world half
+        // of the game state reads (crash events, game events, traffic responses, contact spy,
+        // race-car / trigger / AI / vehicle interfaces, the mode manager's route answers) into
+        // the post-world input buffer (write-locked) from the world update output (read-locked).
+        // `this` is unused. Called by DoUpdate_GameStatePostWorld inside its LockBuffersForIO
+        // bracket. Body and leg list: GameSource/Game/GameBridgeWorldToX.cpp.
         void BridgeWorldToGameState(
             BrnGameState::GameStateModuleIO::PostWorldInputBuffer* lpGameStateInput,
             const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput);

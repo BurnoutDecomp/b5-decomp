@@ -2664,9 +2664,7 @@ void GameStateModule::CopyScoringDataToOutput(
 // THE MISSING PRODUCER of CrashModeScoring::DealWithHitProp / ::DealWithHitTrafficCar and of
 // StuntModeScoring::DealWithHitProp. Its sole console caller is GameStateModule::PostWorldUpdate
 // @0x8238F358 (`bl` #25, bracketed by PerfMonCpu Start/StopMonitor(miProcessContactsPM ==
-// *(this+292352))); that function has no call site on this build, so on the X360 this runs on
-// every showtime / stunt-attack frame and here it ran never. Reached now from
-// PostWorldUpdateStuntBringUp's LEG 5, at the console's own position.
+// *(this+292352))), which calls it at the console's own position.
 //
 // [FLAG PC bring-up] ARGUMENT REDUCED, BODY COMPLETE. The console parameter is
 // `const PostWorldInputBuffer*` and the ONLY thing the body ever reads from it is

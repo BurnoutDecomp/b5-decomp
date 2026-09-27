@@ -12,13 +12,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"          // BrnNetwork::NetworkPlayerID
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"             // CgsSystem::Time
 
-// The two queue types the crash-message legs read (DWARF BrnHUDMessageLogic.h:69/:128/:160/:166/:233
-// spell them by these names). Pointers only here; BrnScoringSystemEventQueues.h completes both.
-namespace BrnGameState
-{
-    namespace InputBuffer                   { struct TakedownEventQueue; }
-    namespace VehicleManagerOutputInterface { struct RaceCarCrashEventQueue; }
-}
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h" // the takedown and race-car crash queue typedefs
 
 // ============================================================================
 // b5-decomp/src/GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.h

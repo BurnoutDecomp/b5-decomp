@@ -14,6 +14,7 @@
 #include "SharedClasses/DataLists/ChallengeListEntry.h"          // BrnResource::{ChallengeListEntry, ChallengeListEntryAction}
 #include "SharedClasses/StreetData/BrnChallengeData.h"           // BrnStreetData::{ChallengePlayerScoreEntry, ScoreType}
 #include "GameSource/GameState/ModeManager/ChallengeManager/BrnChallengeManagerDebugComponent.h"  // embedded by value
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h"  // VehicleManagerOutputInterface::RaceCarCrashEventQueue
 
 // ============================================================================
 // b5-decomp/src/GameSource/GameState/ModeManager/ChallengeManager/BrnChallengeManager.h
@@ -75,9 +76,6 @@ namespace BrnGameState
         struct OutputBuffer;                    // full def: BrnGameStateModuleIO.h
         struct FreeburnChallengeUpdateAction;   // full def: BrnGameActions.h
     }
-    // DWARF spells the crash-event queue "VehicleManagerOutputInterface::RaceCarCrashEventQueue"
-    // (same fwd-namespace pattern as the committed BrnScoringSystem.h).
-    namespace VehicleManagerOutputInterface { struct RaceCarCrashEventQueue; }
 
     // ------------------------------------------------------------------------
     // Nested enums (DWARF BrnChallengeManager.h:53 / :63). These are the type's own; not
@@ -316,7 +314,7 @@ namespace BrnGameState
         // X360 0x82334D48.
         void HandleRoadRuleScore(BrnStreetData::ChallengePlayerScoreEntry lChallengeScore,
                                  BrnStreetData::ScoreType leScoreType, CgsID lRoadID);
-        void HandleWorldStunt(StuntElementType leStuntElementType, CgsID lStuntID);  // DWARF :230 (not in this TU's X360 ledger)
+        void HandleWorldStunt(StuntElementType leStuntElementType, CgsID lStuntID);
         // X360 0x82334B00.
         void OnProfileLoaded();
         // X360 0x823240B8 / 0x82347E88 / 0x8234E420 (DWARF :241/:248/:255).

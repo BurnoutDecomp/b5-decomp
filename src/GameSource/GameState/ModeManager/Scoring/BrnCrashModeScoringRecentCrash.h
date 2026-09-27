@@ -35,7 +35,7 @@ namespace BrnGui { struct GuiRemovedTrafficEvent; }
 // was unparked it surfaced as one LNK2019 against a function whose body is right here.
 // [[shadowing-redeclarations]] -- only a LINK finds it, and it names the caller, not the cause.
 namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
-namespace VehicleOutputInterface { class PhysicalTrafficStateQueue; }
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h" // VehicleOutputInterface::PhysicalTrafficStateQueue
 
 // Minimal element-type home for the fixed-capacity
 // Array<BrnGameState::CrashModeScoring::RecentCrash, 64> leaf instantiation (the IsFull/

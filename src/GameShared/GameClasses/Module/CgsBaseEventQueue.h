@@ -219,6 +219,11 @@ namespace CgsModule
         // existing users.
         void Clear() { miLength = 0; }
 
+        // Inlined at its call sites as the single length store:
+        // PostWorldInputBuffer::Destruct empties its crash-event and traffic-type response
+        // queues with exactly that store and nothing else.
+        void Destruct() { miLength = 0; }
+
         s32 GetMaxLength() const { return miMaxLength; }
         s32 GetLength() const { return miLength; }
 
