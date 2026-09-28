@@ -13,6 +13,9 @@
 //   rw::collision::rwcPlaneLineSegIntersect         @ 0x82BA8818
 // (all four in LineSegIntersect.cpp, beside the rwc* kernels they call)
 // (crash parity FX-FOLLOWUPS stage (b), 2026-09-25.)
+// and, since 2026-09-27 (owner's list, lane L2), the two primitive tests those kernels call:
+//   rw::collision::rwcSphereLineSegIntersect        @ 0x82BA81D8
+//   rw::collision::rwcCylinderLineSegIntersect      @ 0x82BAF8A0
 //
 // The rounding is chosen per instruction (scratch/CRASHPARITY_0922/ROUNDING_RULE.md):
 //   rule 3  vmaddfp / vnmsubfp / vmaddfp128 / fmadds / fmsubs / fnmsubs round ONCE. std::fma is used with the
@@ -87,6 +90,19 @@ namespace linemath
     {
         const Vec4 lvOut = { afX, afY, afZ, afW };
         return lvOut;
+    }
+
+    // The console's two-permute cross product (vpermwi128 0x63 / vmulfp128 / vnmsubfp / vpermwi128 0x63): with
+    // perm = (y, z, x, w), pre = round(a * perm(b)) - perm(a) * b (vnmsubfp: ONE rounding), cross = perm(pre), i.e.
+    //   x = round(a.y*b.z) - a.z*b.y,  y = round(a.z*b.x) - a.x*b.z,  z = round(a.x*b.y) - a.y*b.x,
+    //   w = round(a.w*b.w) - a.w*b.w (the +0 / -0 residue),
+    // each difference rounded once. Sites: rwcSphereLineSegIntersect 0x82BA8250..0x82BA8270 (a = toCentre,
+    // b = delta), rwcCylinderLineSegIntersect 0x82BAF8A4..0x82BAF8C4 (a = toBase, b = axis) and
+    // 0x82BAF8FC..0x82BAF910 (a = delta, b = axis).
+    inline Vec4 Cross(const Vec4& arA, const Vec4& arB)
+    {
+        return MakeVec4(Nmsub(arA.z, arB.y, arA.y * arB.z), Nmsub(arA.x, arB.z, arA.z * arB.x),
+                        Nmsub(arA.y, arB.x, arA.x * arB.y), Nmsub(arA.w, arB.w, arA.w * arB.w));
     }
 
     // Lane i (0 = x, 1 = y, 2 = z, 3 = w): the kernels index their vectors by axis, as the console's
