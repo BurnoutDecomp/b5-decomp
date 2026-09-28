@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // ============================================================================
 // CgsAemsInterfaceImplementation.cpp -- CgsSound::Playback::AemsRWSamplePlayer dtor.
 //
@@ -280,6 +281,7 @@ namespace Playback
         }
 
         lpPlayer->mpSndPlayer = lppMainPlugins[0];
+        CgsSound::PcmTrace::Register(lpPlayer->mpSndPlayer, apParams, lpBaseVoice->GetIdent());
         lpPlayer->mpResample = lppMainPlugins[2];
         lpPlayer->mpGain = lppMainPlugins[3];
         rw::audio::core::PlugIn::SetAttribute(lpPlayer->mpResample, 0, 1.0f);
