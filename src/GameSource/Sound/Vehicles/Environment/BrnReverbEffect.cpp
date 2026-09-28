@@ -1,3 +1,6 @@
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameSource/AttribSys/Generated/classes/reverbparams.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnReverbEffect.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnEnclosureControl.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnEnvironmentSoundDiag.h"
@@ -145,6 +148,110 @@ AttribSys::Enums::eReverbTypes::eReverbTypes ReverbEffect::GetActiveReverb() con
     if (lrTriggers.IsTypeActive(GenericRegion::E_TYPE_NARROW_ALLEY))
         leReverb = ReverbTypeNarrowAlley;
     return leReverb;
+}
+
+// Initial values at 82F2CE20/82F2CE1C and 82FFB8C9; original debug variables.
+f32 KF_REVERB_INTERP_TIME_MAX = 500.0f;
+f32 KF_REVERB_INTERP_TIME_MIN = 100.0f;
+bool KB_DEBUG_REVERB_ZONE = false;
+
+// 82C63E00 hashes the three parameter names; 82C636E8 hashes Send01.
+static const u32 K_ParamReverbTime = static_cast<u32>(CgsSound::Playback::Name::MakeHash("ParamReverbTime"));
+static const u32 K_ParamReverbSpaceSize = static_cast<u32>(CgsSound::Playback::Name::MakeHash("ParamReverbSpaceSize"));
+static const u32 K_ParamReverbBrightness = static_cast<u32>(CgsSound::Playback::Name::MakeHash("ParamReverbBrightness"));
+static const u32 K_DefaultSendName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
+
+// ARTIST 826D1498. The physics pointer is the full PhysicsControl; +0x128
+// is mSpeedMPH.current (its UpdateParams stores it at adjusted-this+0x124).
+void ReverbEffect::UpdateParams(f32 afTimeStep)
+{
+    using namespace CgsSound::Utils;
+    const auto leReverb = GetActiveReverb();
+    mReverbType.Update(leReverb);
+    if (mReverbType.HasChanged())
+    {
+        meReverbState = E_REVERB_STATE_INTERPOLATING;
+        const Slope lSlope(SlopeParams(0.0f, 60.0f,
+            KF_REVERB_INTERP_TIME_MAX, KF_REVERB_INTERP_TIME_MIN));
+        const f32 lfMillis = lSlope.GetValue(
+            mpPhysicsControl->GetPhysicsData().mSpeedMPH.GetCurrent(), Curve::E_LINEAR);
+        const f32 lfCurrent = mInterpolateReverb.GetValueFloat();
+        const f32 lfScaledMillis = lfMillis * lfCurrent;
+        f32 lfDuration = lfScaledMillis * 0.001f;
+        // 826D1590 bgt ->1598 keeps it; <=0 OR unordered ->1594 stores .01.
+        if (!(lfDuration > 0.0f))
+            lfDuration = 0.01f;
+
+        // This copy of Initialize is inlined in ARTIST. Keep the stores here:
+        // the duration is already in seconds, and NaN takes the floor above.
+        mInterpolateReverb.mfElapsedTime = 0.0f;
+        mInterpolateReverb.mfLength = lfDuration;
+        mInterpolateReverb.mfStart = lfCurrent;
+        mInterpolateReverb.mfFinish = 0.0f;
+        mInterpolateReverb.meCurveTypes = Curve::E_POWER;
+        mInterpolateReverb.mfCurrentValue = lfCurrent;
+        mInterpolateReverb.mbComplete = false;
+    }
+
+    mInterpolateReverb.Update(afTimeStep);
+    if (meReverbState == E_REVERB_STATE_INTERPOLATING && mInterpolateReverb.IsFinished())
+    {
+        auto* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+        CGS_ASSERT(lpLogicModule != nullptr, "lpLogicModule");
+        const Attrib::Gen::reverbparams lParams(lpLogicModule->GetGlobalData().ReverbSettings(leReverb));
+        mfTime = lParams.Time();
+        mfSpaceSize = lParams.SpaceSize();
+        mfBrightness = lParams.Brightness();
+        mfGain = lParams.Gain();
+        mInterpolateReverb.Initialize(1.0f, 1.0f, 0.0f, Curve::E_LINEAR);
+        meReverbState = E_REVERB_STATE_NONE;
+
+        static s32 siDiagPreset = 0;
+        if (SndEnvDiagBudget(siDiagPreset))
+            *CgsDev::Log::gpDebugPrint << "[sndenv] reverb preset=" << static_cast<s32>(leReverb)
+                << " time=" << mfTime << " space=" << mfSpaceSize
+                << " brightness=" << mfBrightness << " gain=" << mfGain << " [FLAG PC witness]\n";
+    }
+
+    if (KB_DEBUG_REVERB_ZONE)
+    {
+        auto* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+        CGS_ASSERT(lpLogicModule != nullptr, "lpLogicModule");
+        const Attrib::Gen::reverbparams lParams(lpLogicModule->GetGlobalData().ReverbSettings(mReverbType.GetCurrent()));
+        mfTime = lParams.Time();
+        mfSpaceSize = lParams.SpaceSize();
+        mfBrightness = lParams.Brightness();
+        mfGain = lParams.Gain();
+        *CgsDev::Log::gpDebugPrint << "[Time]: " << mfTime << "[Space]: " << mfSpaceSize
+            << "[Bright]: " << mfBrightness << "[Gain]: " << mfGain << "\n";
+        static const char* const kaNames[] = {
+            "ReverbTypeNone", "ReverbTypeTunnel", "ReverbTypeOverpass", "ReverbTypeBridge",
+            "ReverbTypeWarehouse", "ReverbTypeLargeOverheadObject", "ReverbTypeNarrowAlley",
+            "ReverbTypeUrban", "ReverbTypeRural", "ReverbTypeImpactTime", "ReverbTypeSuperSloMo", "ReverbTypeCount"
+        };
+        CgsDev::DebugInterface lDebug;
+        lDebug.Get2dRender().Draw2DText(kaNames[mReverbType.GetCurrent()], 900.0f, 50.0f, 40.0f, 0xFF00FFA0u);
+    }
+}
+
+// ARTIST 826BA590: every frame sends the preset's three parameters and the
+// interpolated wet gain to the live global reverb voice (id 2).
+void ReverbEffect::ProcessUpdate()
+{
+    auto& lrVoice = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)->GetGlobalReverbVoice();
+    lrVoice.SetParameter(0, mfTime, &K_ParamReverbTime);
+    lrVoice.SetParameter(1, mfSpaceSize, &K_ParamReverbSpaceSize);
+    lrVoice.SetParameter(2, mfBrightness, &K_ParamReverbBrightness);
+    const f32 lfMixGain = GetRWACMixerOutputValue(0, Nicotine::DMixIO::DMX_VOL);
+    const f32 lfPresetGain = mInterpolateReverb.GetValueFloat() * mfGain;
+    const f32 lfGain = lfPresetGain * lfMixGain;
+    lrVoice.SetGain(0, lfGain, &K_DefaultSendName);
+
+    static s32 siDiagProcess = 0;
+    if (meReverbState == E_REVERB_STATE_NONE && SndEnvDiagBudget(siDiagProcess))
+        *CgsDev::Log::gpDebugPrint << "[sndenv] reverb applied ready=" << static_cast<s32>(lrVoice.IsReady())
+            << " preset=" << static_cast<s32>(mReverbType.GetCurrent()) << " gain=" << lfGain
+            << " [FLAG PC witness]\n";
 }
 
 // ---------------------------------------------------------------------------

@@ -23,6 +23,7 @@
 
 #include "rw/audio/core/ReverbFilters.h"
 
+#include <cmath>
 #include <cstring> // std::memset (the X360 memset the apply func tail-calls)
 
 namespace rw
@@ -44,18 +45,18 @@ static const f32 KF_DENORMAL_FLUSH = 1.0e-18f;
 AllPassFilter *AllPassFilter::AllPassFilter_ctor(AllPassFilter *self)
 {
     self->mfGain1 = KF_ZERO;  // stfs flt @ +0x10
-    self->miField00 = 0;      // stw r10 (0) @ +0x00
+    self->mpApplyFunc = nullptr;      // stw r10 (0) @ +0x00
     self->mfGain2 = KF_ZERO;  // stfs flt @ +0x14
-    self->miField04 = 0;      // stw r10 (0) @ +0x04
-    self->miField0C = 1;      // stw r11 (1) @ +0x0C
-    self->miMode = 1;         // stw r11 (1) @ +0x08
+    self->mpResetFunc = nullptr;      // stw r10 (0) @ +0x04
+    self->miChannels = 1;      // stw r11 (1) @ +0x0C
+    self->miReadLength = 1;         // stw r11 (1) @ +0x08
     return self;
 }
 
 // -------------------------------------------------------------------------------------
 // AllPassFilterFunc @0x82B64560 -- the all-pass recurrence the apply func tail-calls.
 //
-// The kernel walks `work` (r11, == ctx->mpFeedback in the apply path) forward `count`
+// The kernel walks `work` (r11, == ctx->mpTap in the apply path) forward `count`
 // samples. Three other streams are addressed by a constant byte delta from `work`:
 //   feedback     = base[i + (a6 - a7)]   (the delayed-input read)
 //   feedforwardA = work[i + (a8 - a7)]
@@ -74,53 +75,41 @@ AllPassFilter *AllPassFilter::AllPassFilter_ctor(AllPassFilter *self)
 void AllPassFilterFunc(s32 count, f32 g1, f32 g2, f32 *base, f32 *work,
                        f32 *feedforwardA, f32 *feedforwardB, s32 lowPass)
 {
-    // Byte deltas reduce to element deltas on the f32 streams (the asm keeps them as
-    // raw byte subtractions `subf` then `lfsx`/`stfsx`; element form is equivalent).
-    const ptrdiff_t dFeedback = base - work;         // a6 - a7
-    const ptrdiff_t dForwardA = feedforwardA - work; // a8 - a7
-    const ptrdiff_t dForwardB = feedforwardB - work; // a9 - a7
-
-    if (count <= 0)
-        return;
-
     for (s32 n = 0; n < count; ++n)
     {
-        f32 x = (work[n] + KF_DENORMAL_FLUSH) - KF_DENORMAL_FLUSH;
-        work[n] = x;
-
-        f32 y = work[n + dFeedback] - (g1 * x); // fnmsubs: feedback - g1*x
-        work[n + dForwardA] = y;
-        f32 yf = (y + KF_DENORMAL_FLUSH) - KF_DENORMAL_FLUSH;
-        work[n + dForwardA] = yf;
-
-        f32 fwd = ((yf * g1) + work[n]) * g2; // fmadds g1*yf + work, then fmuls * g2
-        if (lowPass)
-            fwd += work[n + dForwardB]; // fmadds onto prior value (comb accumulate)
-        work[n + dForwardB] = fwd;
+        // ARTIST 82B64560: preserve both bias round trips and each fused site.
+        const f32 biased = work[n] + KF_DENORMAL_FLUSH;
+        work[n] = biased - KF_DENORMAL_FLUSH;
+        const f32 y = std::fmaf(-g1, work[n], base[n]);
+        feedforwardA[n] = y;
+        const f32 yBiased = y + KF_DENORMAL_FLUSH;
+        feedforwardA[n] = yBiased - KF_DENORMAL_FLUSH;
+        const f32 tap = std::fmaf(feedforwardA[n], g1, work[n]);
+        feedforwardB[n] = lowPass ? std::fmaf(tap, g2, feedforwardB[n]) : tap * g2;
     }
 }
 
 // -------------------------------------------------------------------------------------
 // AllPassFilter::AllPassFilterApplyFunc @0x82B64640
-//   if (ctx->miInactive) memset(ctx->mpFeedforward, 0, count*sizeof(f32));
+//   if (ctx->mpTap2) memset(ctx->mpOut, 0, count*sizeof(f32));
 //   else AllPassFilterFunc(count, self->mfGain1, self->mfGain2, ctx->mpBase,
-//                          ctx->mpFeedback, ctx->mpAccum, ctx->mpFeedforward,
+//                          ctx->mpTap, ctx->mpLoadedEnd, ctx->mpOut,
 //                          lowPass = (a3 != 0));
 // (r3=self, r4=count, r5=a3->lowPass, r7=ctx; r6=ctx+0, r7'=ctx+4, r8=ctx+0x10,
 //  r9=ctx+0x14.)
 // -------------------------------------------------------------------------------------
 void *AllPassFilter::AllPassFilterApplyFunc(AllPassFilter *self, s32 count, s32 src,
-                                            f32 *extra, Context *ctx)
+                                            s32 channel, Context *ctx)
 {
-    (void)extra;
-    if (ctx->miInactive)
-        return std::memset(ctx->mpFeedforward, 0, static_cast<usize>(count) * 4);
+    (void)channel;
+    if (ctx->mpTap2)
+        return std::memset(ctx->mpOut, 0, static_cast<usize>(count) * 4);
 
     AllPassFilterFunc(count, self->mfGain1, self->mfGain2,
                       /*base a6  */ ctx->mpBase,
-                      /*work a7  */ ctx->mpFeedback,
-                      /*forwA a8 */ ctx->mpAccum,
-                      /*forwB a9 */ ctx->mpFeedforward,
+                      /*work a7  */ ctx->mpTap,
+                      /*forwA a8 */ ctx->mpLoadedEnd,
+                      /*forwB a9 */ ctx->mpOut,
                       /*lowPass  */ src != 0 ? 1 : 0);
     return nullptr;
 }
@@ -154,14 +143,14 @@ AllPassFilter *AllPassFilter::SetGains(AllPassFilter *self, f32 g1, f32 g2)
 CombFilter *CombFilter::CombFilter_ctor(CombFilter *self)
 {
     self->mfGain1 = KF_ZERO;  // +0x10
-    self->miField00 = 0;      // +0x00
+    self->mpApplyFunc = nullptr;      // +0x00
     self->mfGain2 = KF_ZERO;  // +0x14
-    self->miField04 = 0;      // +0x04
+    self->mpResetFunc = nullptr;      // +0x04
     self->mfGain3 = KF_ZERO;  // +0x18
-    self->miMode = 2;         // +0x08 (li r9,2)
+    self->miReadLength = 2;         // +0x08 (li r9,2)
     self->mfGain4 = KF_ZERO;  // +0x1C
     self->mfState = KF_ZERO;  // +0x20
-    self->miField0C = 1;      // +0x0C (li r11,1)
+    self->miChannels = 1;      // +0x0C (li r11,1)
     return self;
 }
 
@@ -192,10 +181,9 @@ f32 CombFilterFunc(s32 count, f32 g1, f32 g2, f32 g3, f32 g4, f32 state,
     {
         for (s32 n = 0; n < count; ++n)
         {
-            const f32 out = base[n] - (state * g1) - (work[n + 1] * g2); // fnmsubs pair
+            const f32 out = std::fmaf(-work[n + 1], g2, std::fmaf(-state, g1, base[n])); // fnmsubs pair
             accum[n] = out;
-            feedforward[n] = ((work[n] * g3) + work[n + 1]) * g4
-                             + feedforward[n];                            // fmadds onto prior
+            feedforward[n] = std::fmaf(std::fmaf(work[n], g3, work[n + 1]), g4, feedforward[n]);                            // fmadds onto prior
             state = accum[n];                                             // lfsx reload
         }
     }
@@ -203,9 +191,9 @@ f32 CombFilterFunc(s32 count, f32 g1, f32 g2, f32 g3, f32 g4, f32 state,
     {
         for (s32 n = 0; n < count; ++n)
         {
-            const f32 out = base[n] - (state * g1) - (work[n + 1] * g2); // fnmsubs pair
+            const f32 out = std::fmaf(-work[n + 1], g2, std::fmaf(-state, g1, base[n])); // fnmsubs pair
             accum[n] = out;
-            feedforward[n] = ((work[n] * g3) + work[n + 1]) * g4;        // fmuls (overwrite)
+            feedforward[n] = std::fmaf(work[n], g3, work[n + 1]) * g4;        // fmuls (overwrite)
             state = accum[n];                                             // lfs reload
         }
     }
@@ -214,28 +202,28 @@ f32 CombFilterFunc(s32 count, f32 g1, f32 g2, f32 g3, f32 g4, f32 state,
 
 // -------------------------------------------------------------------------------------
 // CombFilter::CombFilterApplyFunc @0x82B64D00
-//   if (ctx->miInactive) memset(ctx->mpFeedforward, 0, count*sizeof(f32));
+//   if (ctx->mpTap2) memset(ctx->mpOut, 0, count*sizeof(f32));
 //   else self->mfState = CombFilterFunc(count, g1..g4, mfState, ctx->mpBase,
-//                                       ctx->mpFeedback, ctx->mpAccum,
-//                                       ctx->mpFeedforward, lowPass = src);
+//                                       ctx->mpTap, ctx->mpLoadedEnd,
+//                                       ctx->mpOut, lowPass = src);
 // (r3=self, r4=count, r5=src->lowPass, r7=ctx; the kernel's stack args are the caller's
 //  r8=ctx+0x10, r11=ctx+0x14, r5 stores. The address has no export JSON; the disasm was
 //  recovered from the XEX image via idat -- see the workflow repo,
 //  scratchpad/waveE/ReverbModel1.rodata.txt.)
 // -------------------------------------------------------------------------------------
 void *CombFilter::CombFilterApplyFunc(CombFilter *self, s32 count, s32 src,
-                                      f32 *extra, Context *ctx)
+                                      s32 channel, Context *ctx)
 {
-    (void)extra;
-    if (ctx->miInactive)
-        return std::memset(ctx->mpFeedforward, 0, static_cast<usize>(count) * 4);
+    (void)channel;
+    if (ctx->mpTap2)
+        return std::memset(ctx->mpOut, 0, static_cast<usize>(count) * 4);
 
     self->mfState = CombFilterFunc(count, self->mfGain1, self->mfGain2,
                                    self->mfGain3, self->mfGain4, self->mfState,
                                    /*base a33 */ ctx->mpBase,
-                                   /*work     */ ctx->mpFeedback,
-                                   /*accum    */ ctx->mpAccum,
-                                   /*forward  */ ctx->mpFeedforward,
+                                   /*work     */ ctx->mpTap,
+                                   /*accum    */ ctx->mpLoadedEnd,
+                                   /*forward  */ ctx->mpOut,
                                    /*lowPass  */ src); // stfs f1 @ +0x20
     return nullptr;
 }

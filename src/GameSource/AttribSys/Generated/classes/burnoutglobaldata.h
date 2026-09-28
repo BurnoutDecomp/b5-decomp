@@ -34,7 +34,7 @@ namespace Gen
         // pointer to element luIndex (24-byte stride) within the instance's layout
         // block, or the shared 24-byte default block when luIndex is out of range.
         void* mPassbyBins(u32 luIndex);     // @0x826820B8
-        void* ReverbSettings(u32 luIndex);  // @0x82682120
+        const RefSpec& ReverbSettings(u32 luIndex) const;  // @0x82682120
         void* ShiftPatterns(u32 luIndex);   // @0x82682188
 
         // The EA Trax song list REFSPEC at +0x548 in this instance's data area, in the
@@ -114,12 +114,12 @@ namespace Gen
 
     // X360 @0x82682120: ReverbSettings. length = GetLength(mpAttributeData+0x178);
     //   element = mpAttributeData + 24*(luIndex+16)  [addi r11,idx,0x10 before the *24].
-    inline void* burnoutglobaldata::ReverbSettings(u32 luIndex)
+    inline const RefSpec& burnoutglobaldata::ReverbSettings(u32 luIndex) const
     {
         u8* lpData = static_cast<u8*>(mpAttributeData);
         if (luIndex >= reinterpret_cast<const Private*>(lpData + 0x178)->GetLength())
-            return DefaultDataArea(0x18u);
-        return lpData + (luIndex + 16u) * 0x18u;
+            return *static_cast<const RefSpec*>(DefaultDataArea(0x18u));
+        return *reinterpret_cast<const RefSpec*>(lpData + (luIndex + 16u) * 0x18u);
     }
 
     // X360 @0x82682188: ShiftPatterns. length = GetLength(mpAttributeData);

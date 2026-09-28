@@ -266,6 +266,9 @@ namespace Attrib
     class Class
     {
     public:
+        // DWARF attribsys.h:594; ARTIST 82802F30 loads the full key.
+        u64 GetKey() const { return mKey; }
+
         // @ 0x82807DD0 -- look up the collection stored under luKey; when the key is
         // absent, fall back to the class's default collection (the on-spine literal
         // default key). Returns NULL only when neither is present.
