@@ -12,7 +12,7 @@
 // Both are reproduced below (the second is a compiler-generated thunk; see note).
 //
 // dep_flags: none un-homed for THIS TU. The destructor teardown touches only
-// meAttachState / meDetachState / mbResourcesReady (all modelled BY NAME). The
+// meAttachState / meDetachState / mbHasLoadedData (all modelled BY NAME). The
 // (a2 & 1) deallocation tail dispatches the global sound allocator (off_82FFB954);
 // that allocator vtable is not homed here, so the `delete` half of the X360 vector
 // deleting destructor is left to the host toolchain rather than reproducing the raw
@@ -27,8 +27,6 @@ namespace Logic
 BrnEffectControl::BrnEffectControl()
     : CgsSound::Logic::EffectControl()
     , IResourceRequester()
-    , mbResourceRequestActive(false)
-    , mbResourcesReady(false)
 {
 }
 
@@ -45,7 +43,7 @@ const char* BrnEffectControl::GetTypeName() const
 
 void BrnEffectControl::ResourcesAreReady()
 {
-    mbResourcesReady = true;
+    mbHasLoadedData = true;
     CGS_ASSERT(GetAttachState() == CgsSound::Logic::EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA,
                "GetAttachState() == E_ATTACH_STATE_WAITING_FOR_DATA");
     meAttachState = CgsSound::Logic::EffectBase::E_ATTACH_STATE_PREPARING;
@@ -61,7 +59,7 @@ ResourceRegistrar& BrnEffectControl::GetResourceRegistrar()
 // ---------------------------------------------------------------------------
 // BrnEffectControl::Detach  @ 0x826EB8B0
 //
-//   if ( *(a1 + 45) )                       ; the outstanding-request byte
+//   if ( *(a1 + 45) )                       ; inherited EffectBase::mbHasLoadedData
 //   {
 //     v2 = (*(*(a1 - 4) + 4))(a1 - 4);      ; IResourceRequester::GetResourceRegistrar
 //     ResourceRegistrar::RemoveRequests(v2, a1 - 4);
@@ -71,7 +69,7 @@ ResourceRegistrar& BrnEffectControl::GetResourceRegistrar()
 //   *(a1 + 32) = 0;                         ; this+0x24  meAttachState = E_ATTACH_STATE_NONE
 //   return 1;
 //
-// (a1 is the IResourceRequester sub-object -- note the `a1 - 4` -- so +36/+32 are this+0x28 /
+// (a1 is the EffectBase sub-object, four bytes after IResourceRequester; +36/+32 are whole-object+0x28 /
 // this+0x24: the same two members the vector deleting destructor @0x826AEF68 stores 3 and 0
 // into. The body is byte-for-byte the sibling BrnEffectObject::Detach @0x826EBF88, which this
 // tree already writes as "clear the request byte, then EffectBase::Detach()".)
@@ -97,9 +95,9 @@ ResourceRegistrar& BrnEffectControl::GetResourceRegistrar()
 // ---------------------------------------------------------------------------
 bool BrnEffectControl::Detach()
 {
-    if (mbResourceRequestActive)
+    if (mbHasLoadedData)
         GetResourceRegistrar().RemoveRequests(static_cast<IResourceRequester*>(this));
-    mbResourceRequestActive = false;
+    mbHasLoadedData = false;
     // meDetachState = E_DETACH_STATE_FINISHED; meAttachState = E_ATTACH_STATE_NONE --
     // the console's two stores, which is exactly what the shared base does. Same expression
     // as the sibling BrnEffectObject::Detach, whose X360 body is identical.
@@ -113,7 +111,7 @@ bool BrnEffectControl::Detach()
 //   stw  off_820AEA38, 4(r31)      ; (transient) base-class IResourceRequester vptr
 //   li   r7, 3 ; stw r7, 0x28(r31)  ; meDetachState = E_DETACH_STATE_FINISHED
 //   stw  off_820AA820, 4(r31)      ; final IResourceRequester sub-object vptr
-//   stb  0, 0x31(r31)              ; mbResourcesReady = false
+//   stb  0, 0x31(r31)              ; mbHasLoadedData = false
 //   stw  0, 0x24(r31)             ; meAttachState = E_ATTACH_STATE_NONE
 //   if (a2 & 1) { ... deallocate via off_82FFB954 (the MemBase allocator) }
 //   return this
@@ -121,7 +119,7 @@ bool BrnEffectControl::Detach()
 // The leading vptr stores are the compiler-emitted devirtualization of the
 // destructor base sub-objects; in reconstructed C++ they are produced implicitly
 // by the destructor chain, so the BODY here is the observable member teardown.
-// The store ORDER below mirrors the asm: meDetachState (+0x28), then mbResourcesReady
+// The store ORDER below mirrors the asm: meDetachState (+0x28), then mbHasLoadedData
 // (+0x31), then meAttachState (+0x24).
 // FLAG: the (a2 & 1) tail invokes the global sound allocator (off_82FFB954) to free
 // the object; that allocator is not homed here, so operator-delete dispatch is left
@@ -130,7 +128,7 @@ bool BrnEffectControl::Detach()
 BrnEffectControl::~BrnEffectControl()
 {
     meDetachState    = CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED; // stw 3, 0x28
-    mbResourcesReady = false;                                               // stb 0, 0x31
+    mbHasLoadedData = false;                                               // stb 0, 0x31
     meAttachState    = CgsSound::Logic::EffectBase::E_ATTACH_STATE_NONE;     // stw 0, 0x24
 }
 

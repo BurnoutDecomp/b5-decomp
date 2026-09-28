@@ -22,8 +22,6 @@ void BrnEffectObject::SampleTag::Construct()
 BrnEffectObject::BrnEffectObject()
     : CgsSound::Logic::EffectObject()
     , IResourceRequester()
-    , mbResourceRequestActive(false)
-    , mbResourcesReady(false)
 {
 }
 
@@ -112,7 +110,7 @@ bool BrnEffectObject::GetSampleTag(u32 eTag, u32 uIndex, u32 uSelection,
 //   stw  off_820AE988, 4(r31)     ; (transient) base-class IResourceRequester vptr
 //   li   r7, 3 ; stw r7, 0x28(r31) ; meDetachState = E_DETACH_STATE_FINISHED
 //   stw  off_820AA820, 4(r31)     ; final IResourceRequester sub-object vptr
-//   stb  0, 0x31(r31)             ; mbResourcesReady = false
+//   stb  0, 0x31(r31)             ; mbHasLoadedData = false
 //   stw  0, 0x24(r31)             ; meAttachState = E_ATTACH_STATE_NONE
 //   if (a2 & 1) { ... deallocate via off_82FFB954 (the MemBase allocator) }
 //   return this
@@ -128,7 +126,7 @@ bool BrnEffectObject::GetSampleTag(u32 eTag, u32 uIndex, u32 uSelection,
 BrnEffectObject::~BrnEffectObject()
 {
     meDetachState    = CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED;
-    mbResourcesReady = false;
+    mbHasLoadedData = false;
     meAttachState    = CgsSound::Logic::EffectBase::E_ATTACH_STATE_NONE;
 }
 
