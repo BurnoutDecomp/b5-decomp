@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 #include "GameShared/GameClasses/Sound/Playback/Splicer/internal/SpliceObjects.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -595,6 +596,11 @@ void SpliceSample::Update( rw::audio::core::System* apRwacSystem,
     lPlay.pRamData = gpSpliceManager->GetSampleData(
         static_cast<SPLICE_TYPE>(mpData->mcSpliceType), mpData->muSampleId );
 
+    // FLAG PC-platform witness: authored bank/sample -> decoder and routed mix.
+    CgsSound::PcmTrace::Register(lppPlugIns[0], lPlay.pRamData,
+        static_cast<unsigned>(mpData->mcSpliceType), "splicer");
+    CgsSound::PcmTrace::Register(mpSendPlugIn, lPlay.pRamData,
+        static_cast<unsigned>(mpData->mcSpliceType), "splicer-mix");
     rw::audio::core::PlugIn::Event( lppPlugIns[0], 0, &lPlay );
     rw::audio::core::PlugIn::SetAttribute( lppPlugIns[1], 0, 0.0f );
 

@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // =====================================================================================
 // rw::audio::core::Send -- member bodies reconstructed from BURNOUT_X360_ARTIST.XEX
 // (PowerPC). The asm is authoritative for every store; see Send.h for the reconstructed
@@ -248,6 +249,8 @@ int Send::Process(Send* self, AudioProcessContext* ctx, char resetRamp)
     for (u32 li = 0; li < luNumSubMixChannels; ++li)
         lpDstChannel[li] = pSubMixBuffer + KI_MIXER_FRAME_SIZE * li; // +1024 bytes/channel
 
+    // FLAG PC-platform witness: optional snapshot around the original mix calls.
+    float* lpBeforeMix = CgsSound::PcmTrace::CaptureMix(self, pSubMixBuffer, luNumSubMixChannels);
     if (self->mfGain == self->mfCurrentGain)
         ReChannelGainMix(lpDstChannel, lpSrcChannel, luNumSubMixChannels,
                          luInputChannels, KI_MIXER_FRAME_SIZE, self->mfGain);
@@ -256,6 +259,7 @@ int Send::Process(Send* self, AudioProcessContext* ctx, char resetRamp)
                              luInputChannels, KI_MIXER_FRAME_SIZE, self->mfGain,
                              self->mfCurrentGain);
 
+    CgsSound::PcmTrace::MeasureMix(self, lpBeforeMix, pSubMixBuffer, luNumSubMixChannels);
     self->mfCurrentGain = self->mfGain; // stfs mfGain, 0x5C
 
     if (luInputChannels)

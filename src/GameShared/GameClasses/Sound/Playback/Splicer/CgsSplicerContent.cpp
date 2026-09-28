@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // ============================================================================
 // CgsSplicerContent.cpp -- CgsSound::Playback splicer TTY dumps + slot teardown.
 //
@@ -87,6 +88,11 @@ bool SplicerContent::DoOnPostLoad()
     CGS_ASSERT(lbLoaded, "Splicer Bank failed to Load");
     if (!lbLoaded)
         return false;
+
+    // FLAG PC-platform witness: bank slots are assigned dynamically on load.
+    CgsSound::PcmTrace::Log("splicer-bank bank=%d name=%llu passby=%d\n", liBank,
+        static_cast<unsigned long long>(GetContentSpec().GetName().GetValue()),
+        GetContentSpec().GetName().GetValue() == Name::MakeHash("PassbyAsset"));
 
     mStatistics.~SpliceBankStatistics();
     ::new (&mStatistics) SpliceBankStatistics(

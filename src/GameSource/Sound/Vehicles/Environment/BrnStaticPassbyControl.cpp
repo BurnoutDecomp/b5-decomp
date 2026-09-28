@@ -1,3 +1,9 @@
+#include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
+#include "GameSource/Sound/Vehicles/BrnPlayerVehicleStateManager.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Sound/Passby/BrnPassbyStateManager.h"
+#include "GameSource/Sound/Vehicles/Environment/BrnEnclosureControl.h"
+#include "GameSource/Sound/Vehicles/Environment/BrnEnvironmentSoundDiag.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnStaticPassbyControl.h"
 
 // =============================================================================
@@ -21,11 +27,11 @@ namespace Vehicles
 namespace Environment
 {
 
-// DWARF-named file-scope constants (BrnStaticPassbyControl.cpp:34/37). Their exact
-// rodata magnitudes are not pinned in this slice (deferred); declared for the bodies.
-// FLAG: values UNVERIFIED -- placeholders for the proximity / re-trigger tuning.
-static const f32 KF_STATIC_PASSBY_VELOCITY_THRESHOLD = 0.0f;
-static const f32 KF_TIME_TO_WAIT_FOR_RETRIGGER       = 0.0f;
+// Original mutable debug constants (DWARF cpp:34/37), image82F2CE0C/10.
+f32 KF_STATIC_PASSBY_VELOCITY_THRESHOLD = 50.0f;
+f32 KF_TIME_TO_WAIT_FOR_RETRIGGER = 1.0f;
+// Record's vector comparison reads 820AA0E0, not the speed threshold.
+static const f32 KF_POSITION_TOLERANCE = 0x1p-16f;
 
 // ---------------------------------------------------------------------------
 // StaticPassbyControl::CreateObject(u32)  @ 0x826D0E38   (the RTTI factory hook)
@@ -78,8 +84,7 @@ StaticPassbyControl::~StaticPassbyControl()
 //   bool Record(const rw::math::vpu::Vector3 lvPosition)
 //
 // Refuse-if-near-existing then append. For each live record, compute the componentwise
-// |record.mvPosition - lvPosition| and compare it against KF_STATIC_PASSBY_VELOCITY_
-// THRESHOLD. If NO component exceeds the threshold -- the new position lies inside the
+// |record.mvPosition - lvPosition| and compare it against KF_POSITION_TOLERANCE. If NO component exceeds the threshold -- the new position lies inside the
 // proximity box of an already-recorded pass-by -- the query is a re-trigger and Record
 // returns false. Otherwise, if the fixed 5-slot buffer is full, return false; else
 // append a fresh record at lvPosition with its countdown seeded to
@@ -101,9 +106,9 @@ bool StaticPassbyControl::PassbyHistory::Record( rw::math::vpu::Vector3 lvPositi
         const f32 lfAbsY = lfDeltaY < 0.0f ? -lfDeltaY : lfDeltaY;
         const f32 lfAbsZ = lfDeltaZ < 0.0f ? -lfDeltaZ : lfDeltaZ;
 
-        const bool lbAnyGreater = (lfAbsX > KF_STATIC_PASSBY_VELOCITY_THRESHOLD) ||
-                                  (lfAbsY > KF_STATIC_PASSBY_VELOCITY_THRESHOLD) ||
-                                  (lfAbsZ > KF_STATIC_PASSBY_VELOCITY_THRESHOLD);
+        const bool lbAnyGreater = (lfAbsX > KF_POSITION_TOLERANCE) ||
+                                  (lfAbsY > KF_POSITION_TOLERANCE) ||
+                                  (lfAbsZ > KF_POSITION_TOLERANCE);
         if ( !lbAnyGreater )
         {
             return false;
@@ -138,7 +143,8 @@ void StaticPassbyControl::PassbyHistory::Update( f32 lfDeltaTime )
     {
         PassbyRecord& lrRecord = mPassbyRecords[luIndex];
         lrRecord.mfTimeStamp -= lfDeltaTime;
-        if ( lrRecord.mfTimeStamp >= 0.0f )
+        // 8269AF9C bge ->AFB0 retains >=0 OR unordered; <0 ->AFA0 erases.
+        if ( !(lrRecord.mfTimeStamp < 0.0f) )
         {
             ++luIndex;
         }
@@ -147,6 +153,88 @@ void StaticPassbyControl::PassbyHistory::Update( f32 lfDeltaTime )
             mPassbyRecords.Erase(luIndex);
         }
     }
+}
+
+// StaticPassby's controller slot is ICF-folded onto 82685D38, named MusicEffect
+// in ARTIST. Vtable820B1FE8 contains that exact pointer: slot0=physics, others=-1.
+s32 StaticPassbyControl::GetController(s32 aiIndex)
+{
+    return aiIndex == 0 ? 0 : -1;
+}
+
+// ARTIST82686228 (adjusted EffectBase this).
+void StaticPassbyControl::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    CGS_ASSERT(apController->GetEffectID() == 0, "Unexpected control.");
+    if (apController->GetEffectID() == 0)
+        mpPhysicsControl = static_cast<Engines::PhysicsControl*>(apController);
+}
+
+// ARTIST8269B738: inlined EffectBase::Attach followed by nineteen count clears.
+bool StaticPassbyControl::Attach()
+{
+    CgsSound::Logic::EffectBase::Attach();
+    for (s32 liType = 0; liType < 19; ++liType)
+        mafHistoryTimeouts[liType].mPassbyRecords.Clear();
+    return true;
+}
+
+// ARTIST826FE1C0; velocity is MPH at physics+0x128, position at physics+0xA0.
+void StaticPassbyControl::UpdateParams(f32 afTimeStep)
+{
+    const auto& lrPhysics = mpPhysicsControl->GetPhysicsData();
+    const Vector3 lPosition = lrPhysics.mPosition3d.GetCurrent();
+    const f32 lfSpeed = lrPhysics.mSpeedMPH.GetCurrent();
+    auto* lpStateBase = GetStateBase();
+    CGS_ASSERT(lpStateBase != nullptr, "lpStateBase");
+    auto* lpPlayerStateMan = static_cast<const PlayerVehicleStateManager*>(lpStateBase->GetStateManager());
+    CGS_ASSERT(lpPlayerStateMan != nullptr, "lpPlayerStateMan");
+    ProcessPassbys(lPosition, lfSpeed, lpPlayerStateMan);
+    UpdateHistory(afTimeStep);
+}
+
+// ARTIST826F51B0, DWARF cpp:203. Query runs even below the speed threshold.
+void StaticPassbyControl::ProcessPassbys(Vector3 lvPosition, f32 afSpeed,
+                                       const PlayerVehicleStateManager* apPlayerStateMan)
+{
+    CGS_ASSERT(apPlayerStateMan != nullptr, "lpPlayerStateMan");
+    BrnSound::World::StaticSoundEntity laEntities[16];
+    const s32 liCount = apPlayerStateMan->Query(lvPosition, 30.0f, laEntities, 16,
+                                               KB_SHOW_STATIC_ENVIRONMENT);
+    // 826F5234 blt ->5268 skips; fallthrough ->5238 includes unordered speed.
+    if (!(afSpeed < KF_STATIC_PASSBY_VELOCITY_THRESHOLD) && liCount > 0)
+        for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+            TriggerPassby(laEntities[liIndex]);
+}
+
+// ARTIST826B9BF0: the packed position retains its W metadata in both copies.
+void StaticPassbyControl::TriggerPassby(const BrnSound::World::StaticSoundEntity& arEntity)
+{
+    const s32 liType = arEntity.GetType();
+    CGS_ASSERT(liType < 19, "lePassbyType < ePassbyTypes::MaxPassbyTypes");
+    const auto& lrPackedPos = arEntity.GetPosPlus();
+    const Vector3 lPosition = {lrPackedPos.x, lrPackedPos.y, lrPackedPos.z, lrPackedPos.w};
+    if (mafHistoryTimeouts[liType].Record(lPosition))
+    {
+        auto* lpModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+        auto* lpManager = static_cast<BrnSound::Logic::Passby::PassbyStateManager*>(
+            lpModule->GetEnvironment().GetStateManager(4));
+        const BrnSound::Logic::Passby::PassbyStateManager::Passby lPassby(
+            lPosition, 0.0f, static_cast<AttribSys::Enums::ePassbyTypes::ePassbyTypes>(liType), false, 1.0f);
+        lpManager->PostPassby(lPassby);
+        static s32 siDiag = 0;
+        if (SndEnvDiagBudget(siDiag))
+            *CgsDev::Log::gpDebugPrint << "[sndenv] static passby type=" << liType
+                << " pos=(" << lPosition.x << "," << lPosition.y << "," << lPosition.z
+                << ") [FLAG PC witness]\n";
+    }
+}
+
+// ARTIST8269B770 (raw image; missing standalone export): nineteen history calls.
+void StaticPassbyControl::UpdateHistory(f32 afTimeStep)
+{
+    for (s32 liType = 0; liType < 19; ++liType)
+        mafHistoryTimeouts[liType].Update(afTimeStep);
 }
 
 } // namespace Environment
