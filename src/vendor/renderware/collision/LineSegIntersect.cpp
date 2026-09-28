@@ -744,7 +744,9 @@ s32 rwcSphereLineSegIntersect(Fraction* lpDist,           // r3
 
     // disc = |delta|^2 * r^2 - crossSq (fmsubs f11, f12, f0, f11: ONE rounding).
     const f32 lfDisc = std::fma(lfDeltaLenSq, lfRadiusSq, -lfCrossSq);
-    if (!(lfDisc >= 0.0f))    // fcmpu f11, f13(0.0) / bge skips -> li r3, 0
+    // `fcmpu f11, f13(0.0) ; bge 0x82BA8294` (0x82BA8284 / 0x82BA8288): bge is TAKEN on an unordered compare,
+    // so only an ORDERED disc < 0 returns 0 -- a NaN disc carries on to the root (owner's list 2026-09-27, L2).
+    if (lfDisc < 0.0f)
     {
         return 0;             // the infinite line misses the sphere
     }
@@ -883,7 +885,9 @@ s32 rwcCylinderLineSegIntersect(Fraction* lpDist,        // r3
     f32 lfDisc = lfCrossDeltaSq * lfCrossBaseSq;                  // fmuls  f13, f10, f13
     lfDisc = std::fma(lfProj, lfProj, -lfDisc);                   // fmsubs f13, f11, f11, f13
     lfDisc = std::fma(lfCrossDeltaSq, lfRadialLimit, lfDisc);     // fmadds f13, f10, f0, f13
-    if (!(lfDisc >= 0.0f))    // fcmpu f13, f12(0.0) / bge skips -> li r3, 0
+    // `fcmpu f13, f12(0.0) ; bge 0x82BAF968` (0x82BAF958 / 0x82BAF95C): bge is TAKEN on an unordered compare,
+    // so only an ORDERED disc < 0 returns 0 -- a NaN disc carries on (owner's list 2026-09-27, L2).
+    if (lfDisc < 0.0f)
     {
         return 0;             // the infinite line misses the cylinder
     }
@@ -1244,8 +1248,9 @@ s32 TriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,   // r3 (r3
 //   0x82BA8360  rwcSphereLineSegIntersect(&dist, &pt1, &seg, &centre, R); not > 0 -> return 0
 //   0x82BA8384  lineParam = num / den (fdivs); position = seg*t + pt1 (vmaddfp 0x82BA83AC);
 //               normal = position - centre (vsubfp 0x82BA83B0)
-//   0x82BA83BC  `fcmpu num, flt_82001CC0 (0.0) ; ble`: a num that is NOT <= 0 (a NaN included) scales the
-//               normal by the refined 1/R (vrefp + 2 steps, 0x82BA83E0..0x82BA83F4);
+//   0x82BA83BC  `fcmpu num, flt_82001CC0 (0.0) ; ble`: only a num that IS > 0 (ordered) scales the
+//               normal by the refined 1/R (vrefp + 2 steps, 0x82BA83E0..0x82BA83F4); `ble` is TAKEN on an unordered
+//               compare, so a NaN num takes the inside arm below;
 //               else (the start was inside) the guarded length |n| (vmsum3fp128, rsqrt + 2 steps, the vcmpeqfp /
 //               vsel that maps |n|^2 == 0 to 0) is compared `vcmpgtfp.` against unk_821800C0 (0x00800000,
 //               FLT_MIN): all-true normalises n by the refined 1/sqrt(|n|^2) -- the console recomputes the same
@@ -1273,7 +1278,7 @@ RwBool SphereVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, cons
     arResult.position  = MaddSplat(lvSeg, arResult.lineParam, arPt1);           // vmaddfp @0x82BA83AC
     Vec4 lvNormal = Sub(arResult.position, lvCentre);                           // vsubfp  @0x82BA83B0
 
-    if (!(lDist.num <= KF_LINE_ZERO))                                           // fcmpu ; ble @0x82BA83BC
+    if (lDist.num > KF_LINE_ZERO)                                               // fcmpu ; ble @0x82BA83BC (NaN: inside)
     {
         lvNormal = MulSplat(lvNormal, RefinedRecip(lfRadius));                  // 0x82BA83E0..0x82BA83F4
     }
@@ -1302,8 +1307,10 @@ RwBool SphereVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, cons
 //   0x82BA9508  the frame: this->transform composed with tm (LineSegKernelMath ComposeFrame), or as it is
 //   0x82BA95FC  pt1 / pt2 into the frame (InvertFrame / ToLocal); delta = end - start
 //   0x82BA9694  per axis i: dir[i] = fsel(delta[i]) (+1 / -1); the separations -h - p and p - h keep the
-//               largest (`ble` -- a NaN takes it; starting value flt_82035570 == -FLT_MAX) with its axis and sign;
-//               region[i] = -1 below the slab (`bge`), +1 above (`ble`), else 0 and counted -- the first inside
+//               largest (`ble` skips the update -- a NaN takes the skip; starting value flt_82035570 == -FLT_MAX)
+//               with its axis and sign;
+//               region[i] = -1 below the slab (`bge` falls through only on an ORDERED p < -h), +1 above (`ble`
+//               falls through only on an ORDERED p > h), else 0 and counted -- a NaN point is inside; the first inside
 //               axis is remembered, the second turns it into the third axis (`subf r31, r31, 3 - i`)
 //   0x82BA9750  lineParam = 0, result.v = this
 //   loop, at most six steps (li r19, 6 ; addic. -1 @0x82BA9C70):
@@ -1375,21 +1382,21 @@ RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const V
         lafDir[luI] = (Lane(lvDelta, luI) >= 0.0f) ? 1.0f : -1.0f;              // fsel @0x82BA96B4
 
         f32 lfSeparation = lfNegHalf - lfPoint;                                 // fsubs @0x82BA96BC
-        if (!(lfSeparation <= lfMaxSeparation))
+        if (lfSeparation > lfMaxSeparation)                                     // fcmpu ; ble @0x82BA96C4 (NaN: skip)
         {
             lfMaxSeparation = lfSeparation; luMaxAxis = luI; lfMaxSign = -1.0f;
         }
         lfSeparation = lfPoint - lfHalf;                                        // fsubs @0x82BA96D4
-        if (!(lfSeparation <= lfMaxSeparation))
+        if (lfSeparation > lfMaxSeparation)                                     // fcmpu ; ble @0x82BA96DC (NaN: skip)
         {
             lfMaxSeparation = lfSeparation; luMaxAxis = luI; lfMaxSign = 1.0f;
         }
 
-        if (!(lfPoint >= lfNegHalf))
+        if (lfPoint < lfNegHalf)                                                // fcmpu ; bge @0x82BA96F0 (NaN: next test)
         {
             lafRegion[luI] = -1.0f;
         }
-        else if (!(lfPoint <= lfHalf))
+        else if (lfPoint > lfHalf)                                              // fcmpu ; ble @0x82BA9704 (NaN: inside)
         {
             lafRegion[luI] = 1.0f;
         }
@@ -1570,11 +1577,11 @@ RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const V
                 Fraction lEvent;
                 lEvent.den = Lane(lvDelta, luEdge) * lfCapSign;                  // fmuls   @0x82BA99C0
                 lEvent.num = Nmsub(Lane(lvPoint, luEdge), lfCapSign, lafHalf[luEdge]);   // fnmsubs @0x82BA99DC
-                if (!(lEvent.den >= KF_LINE_FLT_MIN))                           // bge @0x82BA99E8
+                if (lEvent.den < KF_LINE_FLT_MIN)                               // bge @0x82BA99E8 (NaN: den kept)
                 {
                     lEvent.den = 1.0f;
                 }
-                s32 liEvent = (lEvent.num <= lEvent.den) ? 1 : 0;               // ble @0x82BA99FC
+                s32 liEvent = (lEvent.num > lEvent.den) ? 0 : 1;                // ble @0x82BA99FC (NaN: valid)
                 u32 luEventAxis = luEdge;                                       // r30
                 for (u32 luJ = NextAxis(luEdge); luJ != luEdge; luJ = NextAxis(luJ))
                 {
@@ -1597,7 +1604,7 @@ RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const V
                 }
 
                 if (liHit > 0
-                    && (!(liEvent > 0) || lEvent.num * lDist.den >= lEvent.den * lDist.num))   // 0x82BA9AB8..0x82BA9ACC
+                    && (!(liEvent > 0) || !(lEvent.num * lDist.den < lEvent.den * lDist.num)))   // bge @0x82BA9ACC (NaN: hit)
                 {
                     const f32 lfT = lDist.num / lDist.den;                      // fdivs @0x82BA9DE0
                     lvPosition = MaddSplat(lvDelta, lfT, lvPoint);              // vmaddfp @0x82BA9E14
@@ -1658,8 +1665,8 @@ RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const V
 // (fadds 0x82BAFE74); the barrel is the infinite cylinder of radius R around the frame's z axis.
 //   0x82BAFD60  result.v = this, first
 //   0x82BAFD90  the frame: this->maFrame composed with tm, or as it is; pt1 / pt2 into it; delta = end - start
-//   0x82BAFEE0  the cap the start is beyond: +1 when start.z is NOT <= hh (a NaN included), -1 when it is
-//               NOT >= -hh, else 0 (the barrel)
+//   0x82BAFEE0  the cap the start is beyond: +1 when start.z > hh, -1 when start.z < -hh (both ORDERED: the
+//               `ble` / `bge` are taken on an unordered compare), else 0 (the barrel) -- a NaN start.z is the barrel
 //   0x82BAFF18  lineParam = 0; the walk keeps its current point IN result.position (0x82BAFF28)
 //   loop, at most three steps (li r24, 3 ; addic. -1 @0x82BB0088), delta.z reloaded each time:
 //     a cap c (0x82BAFF48): the sphere at (0, 0, c*hh) -- a start inside it hits at once; if the line moves back
@@ -1713,11 +1720,11 @@ RwBool CapsuleVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, con
     const f32  lfStartZ = lvStart.z;                               // f22
 
     f32 lfCap;                                                     // f31
-    if (!(lfStartZ <= lfHalfHeight))                               // fcmpu ; ble @0x82BAFEF0
+    if (lfStartZ > lfHalfHeight)                                   // fcmpu ; ble @0x82BAFEF0 (NaN: next test)
     {
         lfCap = 1.0f;
     }
-    else if (!(lfStartZ >= -lfHalfHeight))                         // fcmpu ; bge @0x82BAFF04
+    else if (lfStartZ < -lfHalfHeight)                             // fcmpu ; bge @0x82BAFF04 (NaN: the barrel)
     {
         lfCap = -1.0f;                                             // flt_820037C8
     }
@@ -1752,12 +1759,12 @@ RwBool CapsuleVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, con
             }
             s32 liEvent = 0;
             const f32 lfToward = lfDeltaZ * lfCap;                 // fmuls @0x82BAFF9C
-            if (!(lfToward >= 0.0f))                               // bge @0x82BAFFA4
+            if (lfToward < 0.0f)                                   // bge @0x82BAFFA4 (NaN: no event)
             {
                 liEvent    = 1;
                 lEvent.den = -lfToward;                            // fneg @0x82BAFFB8
                 lEvent.num = Nmsub(-arResult.position.z, lfCap, -lfHalfHeight);   // fnmsubs @0x82BAFFBC
-                if (!(lEvent.num <= lEvent.den))                   // ble @0x82BAFFC4
+                if (lEvent.num > lEvent.den)                       // ble @0x82BAFFC4 (NaN: valid)
                 {
                     liEvent = 0;
                 }
@@ -1801,7 +1808,7 @@ RwBool CapsuleVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, con
             lEvent.den = lfDeltaZ * lfCap;                               // fmuls @0x82BB004C
             lEvent.num = std::fma(-lfAlong, lfCap, lfHalfHeight);        // fneg ; fmadds @0x82BB005C
             if (lEvent.num > lEvent.den                                  // bgt @0x82BB0068
-                || lDist.den * lEvent.num >= lDist.num * lEvent.den)     // bge @0x82BB0078
+                || !(lDist.den * lEvent.num < lDist.num * lEvent.den))   // bge @0x82BB0078 (NaN: hit)
             {
                 const f32 lfT = lDist.num / lDist.den;                   // fdivs @0x82BB0218
                 lfCap = 0.0f;                                            // fmr f31, f28 @0x82BB0238
