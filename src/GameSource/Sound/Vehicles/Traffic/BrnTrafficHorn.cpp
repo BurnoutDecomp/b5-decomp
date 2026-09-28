@@ -1,20 +1,22 @@
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficHorn.h"
+#include "GameSource/Sound/Vehicles/Traffic/BrnTrafficControl.h"
+#include "GameSource/Sound/Vehicles/Traffic/BrnTrafficSoundDiag.h"
+#include "GameSource/Sound/Traffic/BrnTrafficState.h"
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 
 // =============================================================================
 // BrnSound::Logic::Traffic::TrafficHorn -- out-of-line bodies.
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. See BrnTrafficHorn.h for the
-// dual-base layout rationale, the embedded VoiceWrapper member (+0x38), the
-// X360-32-bit-vs-host-64-bit offset note, and the un-homed-leaf-member FLAG.
 //
-// This TU's recon'd function set is exactly two entries:
-//   TrafficHorn()                  @ 0x826CAEC0  (the leaf constructor)
-//   `scalar deleting destructor'   @ 0x826E3108  (compiler-synthesised; forwards to
-//        the ~TrafficHorn anchor below -- no separate hand-written body)
-// It mirrors the committed sibling ExplosionEffect (same BrnEffectObject dual base +
-// embedded-VoiceWrapper-at-+0x38 shape); the ONLY divergence is a TrafficHorn-
-// specific leaf vptr/table store at +0x88 (off_820AC1AC), left un-attributed (FLAG)
-// -- it is the vptr of an un-homed member sub-object (DWARF names mHornFunctionPointer,
-// a VoiceWrapper::FunctorPointer<TrafficHorn>, whose home/vtable is DEFERRED).
+// The AEMS names are the console's CRT-hashed tables: ParameterIndexes::
+// AEMS_class_horns (AEMS_type, AEMS_horn_pitch, AEMS_horn_volume, AEMS_horn_azimuth,
+// AEMS_alarm_volume, AEMS_beep_on_off, AEMS_mode) and SendIndexes::AEMS_class_horns
+// (Send01, ReverbSend).
+//
+// Not carried from ProcessUpdate: the KB_HORN_DRAW_CAR_SIZES / KB_HORN_DRAW_CAR_HOOTING
+// DebugRender::DrawText labels, gated on developer switches that are zero in the image.
 // =============================================================================
 
 namespace BrnSound
@@ -24,71 +26,224 @@ namespace Logic
 namespace Traffic
 {
 
-// ---------------------------------------------------------------------------
-// TrafficHorn::TrafficHorn  @ 0x826CAEC0
-//
-//   stfs 0.0f, 0x20 ; stfs 0.0f, 0x1C           ; leaf f32 = 0.0f (FLAG: un-homed)
-//   stw off_820AE954, 4                          ; (transient) IResourceRequester base vptr
-//   sth 0,0x10 ; stw 0,0xC ; stw 0,0x34 ; stw 0,8 ; stb 0,0x30 ; sth 0,0x12
-//   stw 0,0x28 ; stw 0,0x24                      ; base meDetach/meAttach region = 0
-//   stw off_820B3AD0,0 ; stw off_820B3A9C,4      ; final dual-base leaf vptrs
-//   bl CgsSound::Logic::VoiceWrapper::VoiceWrapper(this+0x38)   ; embedded mHornVoice ctor
-//   stw off_820AC1AC, 0x88                        ; FLAG: un-homed leaf member vptr @ +0x88
-//   return this
-//
-// MSVC's INLINED full-object constructor: no `bl` to a base ctor -- it inlines the
-// BrnEffectObject base member zero-init and installs the two leaf vptrs directly,
-// then constructs the embedded VoiceWrapper at +0x38. In reconstructed C++ the two
-// vptr installs + base member zero-init are produced implicitly by the committed
-// BrnEffectObject base sub-object's own default ctor (reused BY NAME); the only
-// hand-written tail effect is the embedded mHornVoice sub-object construction (its
-// member default-construction in the init list, matching the ctor's tail `bl`).
-//
-// FLAG (un-homed leaf members): the additional inlined leaf scalar zero-inits and the
-// vptr store @ +0x88 target TrafficHorn's OWN leaf members. DWARF attests the member
-// SET but NOT a byte-offset layout map, so these stores are not attributed to named
-// members with confidence. Per anti-fabrication they are DECLARATION-ONLY (deferred
-// to the full layout/RTTI recon slice), NOT invented as named fields and NOT
-// raw-offset-hacked here.
-// ---------------------------------------------------------------------------
-TrafficHorn::TrafficHorn()
-    : BrnEffectObject()   // installs the base dual vptrs + zero-inits base members (BY NAME)
-    , mHornVoice()        // tail `bl CgsSound::Logic::VoiceWrapper::VoiceWrapper(this+0x38)`
+namespace
 {
-    // The remaining inlined leaf scalar zero-inits (+0x08/+0x0C/+0x10/+0x12/
-    // +0x1C/+0x20/+0x30/+0x34) and the +0x88 vptr/table-ptr store target un-homed
-    // leaf members (DECLARATION-ONLY; see header FLAG). NOT fabricated here.
+const u32 KAU_TRAFFIC_HORN_PARAMETERS[7] =
+{
+    static_cast<u32>( CgsSound::Playback::Name::MakeHash( "AEMS_type" ) ),
+    static_cast<u32>( CgsSound::Playback::Name::MakeHash( "AEMS_horn_pitch" ) ),
+    static_cast<u32>( CgsSound::Playback::Name::MakeHash( "AEMS_horn_volume" ) ),
+    static_cast<u32>( CgsSound::Playback::Name::MakeHash( "AEMS_horn_azimuth" ) ),
+    static_cast<u32>( CgsSound::Playback::Name::MakeHash( "AEMS_alarm_volume" ) ),
+    static_cast<u32>( CgsSound::Playback::Name::MakeHash( "AEMS_beep_on_off" ) ),
+    static_cast<u32>( CgsSound::Playback::Name::MakeHash( "AEMS_mode" ) ),
+};
+
+const u32 KAU_TRAFFIC_HORN_SENDS[2] =
+{
+    static_cast<u32>( CgsSound::Playback::Name::MakeHash( "Send01" ) ),
+    static_cast<u32>( CgsSound::Playback::Name::MakeHash( "ReverbSend" ) ),
+};
+
+// The shared CRT-hashed "ReverbSend" every traffic voice's CreateParams reads.
+const u32 KU_REVERB_SEND = static_cast<u32>( CgsSound::Playback::Name::MakeHash( "ReverbSend" ) );
+
+// The AEMS patch mode an alarm plays with; a horn plays with mode 0.
+const f32 KF_ALARM_PATCH_MODE = 3.0f;
+
+// The Q15 unit scale applied to the reverb-send mixer output.
+const f32 KF_Q15_TO_UNIT = 3.0518509e-05f;
+
+u32 guHornVoiceWitnesses = 0;
+u32 guHornReleaseWitnesses = 0;
+} // namespace
+
+// The console constructor inlines the BrnEffectObject base zero-inits and both leaf
+// vtables, constructs mHornVoice and installs the functor's vtable.
+TrafficHorn::TrafficHorn()
+    : BrnEffectObject()
+    , mHornVoice()
+    , mHornFunctionPointer()
+{
 }
 
-// ---------------------------------------------------------------------------
-// ~TrafficHorn  (the leaf destructor the scalar deleting destructor @ 0x826E3108
-// forwards to). Its own member-teardown slice is DEFERRED; this out-of-line anchor
-// forwards to the base destructor chain (which tears down the embedded mHornVoice
-// member + the BrnEffectObject base members BY NAME). No fabricated teardown added.
-// It exists so the class has a defined key function (the vtable emission point).
-// ---------------------------------------------------------------------------
+// The voice wrapper destructor, then the BrnEffectObject settle.
 TrafficHorn::~TrafficHorn()
 {
 }
 
-// ---------------------------------------------------------------------------
-// `scalar deleting destructor'  @ 0x826E3108
-//
-//   mr   r31, r3 ; mr r30, r4
-//   bl   ~TrafficHorn                    ; run the (deferred) leaf destructor
-//   if (r30 & 1) {                       ; deleting flavour
-//       memset(&v5[1], 0, 16) ; v5[0] = this
-//       (*(*off_82FFB954 + 0x14))(off_82FFB954, v5)   ; global sound allocator Free(this)
-//   }
-//   return this
-//
-// The single observable source-level side effect is the ~TrafficHorn() call
-// (forwarded to BY NAME above). The (r30 & 1) tail routes the object through the
-// global sound allocator (off_82FFB954, vtable slot +0x14 == Free); that allocator
-// is not homed here, so MSVC's deleting-destructor thunk is re-emitted by the host
-// toolchain from this class's virtual destructor + operator delete. No fabricated
-// allocator is added (same treatment as the committed ExplosionEffect sibling).
-// ---------------------------------------------------------------------------
+// MemBase::operator new(0xB0, "TrafficHorn", flavour) + the constructor; returns the
+// EffectObject view (+0x04).
+CgsSound::Logic::EffectObject* TrafficHorn::CreateObject( u32 /*luType*/ )
+{
+    return new TrafficHorn();
+}
+
+// Descriptor {0x30010, "TrafficHorn", BrnEffectObject::sTypeInfo, &CreateObject}.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* TrafficHorn::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
+        0x30010, "TrafficHorn",
+        CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
+        &TrafficHorn::CreateObject );
+    return &sTypeInfo;
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpTrafficHornReg =
+    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray( TrafficHorn::GetStaticTypeInfo() );
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* TrafficHorn::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* TrafficHorn::GetTypeName() const
+{
+    return "TrafficHorn";
+}
+
+// One controller: control 0, the TrafficControl (identical code to
+// MusicEffect::GetController).
+s32 TrafficHorn::GetController( s32 liIndex )
+{
+    return liIndex == 0 ? 0 : -1;
+}
+
+// Identical code to TrafficSkid::AttachController.
+void TrafficHorn::AttachController( CgsSound::Logic::EffectBase* lpController )
+{
+    if ( lpController->GetEffectID() == 0 )
+        mpTrafficControl = static_cast<TrafficControl*>( lpController );
+}
+
+// Mixer input 0 carries the horn state of the last processed frame.
+void TrafficHorn::UpdateParams( f32 /*lfTimeStep*/ )
+{
+    SetMixerInputValue( 0, mbPrevHornState ? 0x7FFF : 0 );
+}
+
+// Unless the voice is already playing: an alarm (either flavour) plays with patch
+// mode 3 every frame, a horn plays with mode 0 on the frame it starts. Then the voice
+// advances and takes the mixer outputs, the beep flag and the two sends.
+void TrafficHorn::ProcessUpdate()
+{
+    const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* lpEntity = mpTrafficControl->GetTrafficEntity();
+    const bool lbIsHooting = lpEntity->mbIsHooting;
+
+    if ( mHornVoice.GetUpdateStage() != CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_PLAYING )
+    {
+        bool lbPlay = false;
+        if ( lpEntity->muAlarmType == BrnTraffic::BrnTrafficIO::TrafficSoundEntity::E_ALARM_CLASSIC
+             || lpEntity->muAlarmType == BrnTraffic::BrnTrafficIO::TrafficSoundEntity::E_ALARM_HORN )
+        {
+            mfAemsPatchMode = KF_ALARM_PATCH_MODE;
+            lbPlay = true;
+        }
+        else if ( lbIsHooting != mbPrevHornState && lbIsHooting )
+        {
+            mfAemsPatchMode = 0.0f;
+            lbPlay = true;
+        }
+
+        if ( lbPlay )
+        {
+            SetAemsTypeParameter();
+            mHornVoice.Play( 0 );
+
+            // [FLAG PC witness] BRN_TRAFFICSND_DIAG
+            if ( TrafficSoundDiagTake( guHornVoiceWitnesses, 16 ) )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[trafficsnd] voice started type="
+                    << ( mfAemsPatchMode == KF_ALARM_PATCH_MODE ? "alarm" : "horn" )
+                    << " entity=" << static_cast<s32>( lpEntity->mu16EntityIndex )
+                    << " size=" << static_cast<s32>( meTrafficSize ) << "\n";
+            }
+        }
+    }
+
+    mbPrevHornState = lbIsHooting;
+    mHornVoice.Update();
+
+    const f32 lfBeepOnOff   = lbIsHooting ? 1.0f : 0.0f;
+    const f32 lfHornPitch   = GetMixerOutputValue( 1, Nicotine::DMixIO::DMX_PITCH );
+    const f32 lfHornVolume  = GetMixerOutputValue( 0, Nicotine::DMixIO::DMX_VOL );
+    const f32 lfAlarmVolume = GetMixerOutputValue( 5, Nicotine::DMixIO::DMX_VOL );
+    const f32 lfHornAzimuth = GetMixerOutputValue( 2, Nicotine::DMixIO::DMX_AZIM );
+    GetMixerOutputValue( 3, Nicotine::DMixIO::DMX_FREQ );   // read and not used, as on the console
+    const f32 lfReverbSend  = GetMixerOutputValue( 4, Nicotine::DMixIO::DMX_VOL ) * KF_Q15_TO_UNIT;
+
+    mHornVoice.SetParameter( 1, lfHornPitch,   &KAU_TRAFFIC_HORN_PARAMETERS[1] );
+    mHornVoice.SetParameter( 2, lfHornVolume,  &KAU_TRAFFIC_HORN_PARAMETERS[2] );
+    mHornVoice.SetParameter( 4, lfAlarmVolume, &KAU_TRAFFIC_HORN_PARAMETERS[4] );
+    mHornVoice.SetParameter( 3, lfHornAzimuth, &KAU_TRAFFIC_HORN_PARAMETERS[3] );
+    mHornVoice.SetParameter( 5, lfBeepOnOff,   &KAU_TRAFFIC_HORN_PARAMETERS[5] );
+    mHornVoice.SetGain( 1, lfReverbSend, &KAU_TRAFFIC_HORN_SENDS[1] );
+    mHornVoice.SetGain( 0, 1.0f,         &KAU_TRAFFIC_HORN_SENDS[0] );
+}
+
+// The EffectBase attach, then the horn voice created (not played) on the manager's horn
+// bank, and the car's size class kept for the AEMS type parameter.
+bool TrafficHorn::Attach()
+{
+    mHornFunctionPointer.Construct( this, &TrafficHorn::OnPostInitVoice );
+    CgsSound::Logic::EffectBase::Attach();
+    mfAemsPatchMode = 0.0f;
+    mbPrevHornState = false;
+
+    TrafficState* lpTrafficState = static_cast<TrafficState*>( GetStateBase() );
+    CGS_ASSERT( lpTrafficState != 0, "lpTrafficState" );
+    CGS_ASSERT( lpTrafficState->GetTrafficStateManager() != 0, "lpTrafficState->GetTrafficStateManager()" );
+    CGS_ASSERT( mpTrafficControl != 0, "mpTrafficControl" );
+    CGS_ASSERT( mpTrafficControl->GetTrafficEntity() != 0, "mpTrafficControl->GetTrafficEntity()" );
+
+    CgsSound::Logic::VoiceWrapper::CreateParams lParams;
+    lParams.mpLogicModule        = GetLogicModule();
+    lParams.mpOnPostInit         = &mHornFunctionPointer;
+    lParams.mFactoryName         = static_cast<u32>( CgsSound::Playback::AemsFactorySkName().GetValue() );
+    lParams.mVoiceSpecName       = static_cast<u32>( CgsSound::Playback::Name::MakeHash( "AEMS_class_horns" ) );
+    lParams.mpContent            = &lpTrafficState->GetTrafficStateManager()->GetHornAemsBank();
+    lParams.mContentSpecName     = 0;
+    lParams.mSlotName            = static_cast<u32>( CgsSound::Playback::Name::MakeHash( "AEMS_Slot" ) );
+    lParams.mSendName            = static_cast<u32>( CgsSound::Playback::Name::MakeHash( "Send01" ) );
+    lParams.mSubMixVoiceID       = 1;
+    lParams.mReverbSendName      = KU_REVERB_SEND;
+    lParams.mReverbSubMixVoiceID = 2;
+    lParams.miSendIndex          = 0;
+    mHornVoice.Create( lParams );
+
+    meTrafficSize = TrafficStateManager::TrafficClassToSize( mpTrafficControl->GetTrafficEntity()->muVehicleClass );
+    return true;
+}
+
+bool TrafficHorn::Detach()
+{
+    if ( !BrnSound::Logic::BrnEffectObject::Detach() )
+        return false;
+
+    // [FLAG PC witness] BRN_TRAFFICSND_DIAG
+    if ( TrafficSoundDiagTake( guHornReleaseWitnesses, 64 ) )
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[trafficsnd] voice released type=horn stage="
+            << static_cast<s32>( mHornVoice.GetUpdateStage() ) << "\n";
+    }
+
+    mHornVoice.Release();
+    return true;
+}
+
+// Empty on the console (the functor's target is the shared empty body).
+void TrafficHorn::OnPostInitVoice( CgsSound::Logic::VoiceWrapper& /*lrVoice*/ )
+{
+}
+
+// AEMS_type takes the size class, AEMS_mode the patch mode.
+void TrafficHorn::SetAemsTypeParameter()
+{
+    mHornVoice.SetParameter( 0, static_cast<f32>( meTrafficSize ), &KAU_TRAFFIC_HORN_PARAMETERS[0] );
+    mHornVoice.SetParameter( 6, mfAemsPatchMode,                   &KAU_TRAFFIC_HORN_PARAMETERS[6] );
+}
 
 } // namespace Traffic
 } // namespace Logic

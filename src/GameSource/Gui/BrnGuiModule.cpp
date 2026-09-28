@@ -84,6 +84,36 @@ namespace
         return siState != 0;
     }
 
+    // [FLAG PC witness] BRN_FREEROAM_DIAG: one `[freeroam-gui] routed <id> -> <consumer>` line
+    // per free-roam GUI event the inbound dispatch hands to the cache or the tracker, first 8
+    // per id (165 repeats every frame the car sits in a landmark area).
+    void FreeRoamRouteWitness(s32 liId, const char* lpcConsumer)
+    {
+        static const bool sbDiag = (getenv("BRN_FREEROAM_DIAG") != 0);
+        if (!sbDiag || CgsDev::Log::gpDebugPrint == 0)
+            return;
+
+        static const s32 KAI_WITNESSED_IDS[] = { 64, 79, 165, 201, 211, 232, 233 };
+        const s32 KI_NUM_WITNESSED_IDS =
+            static_cast<s32>(sizeof(KAI_WITNESSED_IDS) / sizeof(KAI_WITNESSED_IDS[0]));
+        static s32 saiLinesLeft[sizeof(KAI_WITNESSED_IDS) / sizeof(KAI_WITNESSED_IDS[0])] =
+            { 8, 8, 8, 8, 8, 8, 8 };
+
+        for (s32 liSlot = 0; liSlot < KI_NUM_WITNESSED_IDS; ++liSlot)
+        {
+            if (KAI_WITNESSED_IDS[liSlot] == liId)
+            {
+                if (saiLinesLeft[liSlot] > 0)
+                {
+                    --saiLinesLeft[liSlot];
+                    *CgsDev::Log::gpDebugPrint
+                        << "[freeroam-gui] routed " << liId << " -> " << lpcConsumer << "\n";
+                }
+                return;
+            }
+        }
+    }
+
     // Backing for the per-flow FSM bundle pools (3 mem types each; the boot FSM scripts
     // are tiny single-state bundles ~1.5 KB -- BRNSCREENFSM is the largest at ~68 KB --
     // and each pool reserves 64 KB for its own management structures). One backing per
@@ -2022,6 +2052,10 @@ void GuiModule::Destruct()
                 case 257:   // [net] GuiEventNetworkGameParams -- the params mirror (online game mode)
                 case 273:   // [net] GuiEventNetworkLeftGame -- the params security reset
                 case 320:   // [net] online showtime completed
+                case 79:    // GuiEnteredJunkyard -- the in-junkyard byte
+                case 201:   // GuiEventHideDriveThru -- a closed drive-thru's map row hidden
+                case 375:   // GuiEventTrophyCarUnlock -- the award screen's unlock type and car
+                    FreeRoamRouteWitness(liId, "cache");
                     // [H1 wave 2026-08-25] On the console EVERY module-input event reaches
                     // GuiCache::RecEvent (its ~180-case switch consumes what it wants);
                     // this build's pump routes selectively, so the two cache-consumed ids
@@ -2156,6 +2190,15 @@ void GuiModule::Destruct()
                     // language...) are subsystem follow-ons; their events pass through to
                     // the flow filter below.
                     break;
+            }
+
+            // The console's per-event tail, after GuiCache::RecEvent: the set-tracker, landmark
+            // reached, route-information, cache-pointer and regenerate-route ids go to the
+            // tracker (GuiCache ignores all five).
+            if (liId == 232 || liId == 165 || liId == 211 || liId == 64 || liId == 233)
+            {
+                FreeRoamRouteWitness(liId, "tracker");
+                mGuiTracker.RecEvent(lpEvent, liId, liSize);
             }
 
             // ⭐ [tut-ticker] THE CUSTOM-RENDERER MANAGER FEED (2026-08-24). On the console
@@ -3336,6 +3379,9 @@ void GuiModule::Destruct()
                 lpGameDataInput->UnlockForWrite();
             }
         }
+        // The console's next call after ColourCalibrationScreen::Update, unconditional: the
+        // sat-nav tracker's route request (GUI out 494).
+        mGuiTracker.Update(&mGuiOutQueue);
 
         // ---- 3c'. THE SCREEN-FILTER ARBITRATOR (X360 GuiModule::Update @0x82527A58) --------
         // EffectsArbitrator::EventUpdate @0x825125C0: the 495..500 hook events this frame's

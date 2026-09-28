@@ -313,7 +313,8 @@ void ProgressionManager::PreWorldUpdate(
     // tools/tests/cases/progression_completion.ps1 can watch the drain actually drain -- nothing
     // a 60 s scenario can do earns a trophy car. It touches no profile state and awards no car.
     // See BrnProgressionManager_Completion.cpp. DELETE-WHEN a scenario can complete a category.
-    DEBUG_HarnessSeedTrophyQueue();
+    DEBUG_HarnessSeedTrophyQueue(lfSimTimeStep,
+                                 lpActiveRaceCarInterface->IsPlayerCarActive() && !lbIsInJunkyard);
 
     // `lwz r11, 0xC0(this+0x20808)` -- mQueueOfTrophyCarUnLocks' count word; the CgsArray.h:336
     // "Array used before Construct/Clear was called" assert is GetLength's own (the tree's

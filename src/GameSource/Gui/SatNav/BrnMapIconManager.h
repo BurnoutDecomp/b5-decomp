@@ -343,8 +343,7 @@ namespace BrnGui
 
         // The two per-owner icon passes Update dispatches to (X360 @0x82522588 /
         // @0x825212C0). [H3c]: UpdateSatNavIcons is LANDED (the 16-element apt icon pool
-        // drive); UpdateCrashNavIcons stays a NAMED GATE (the 50-element crash-nav pool
-        // is unreconstructed).
+        // drive), and so is UpdateCrashNavIcons (the 50-element crash-nav pool drive).
         void UpdateSatNavIcons();
         void UpdateCrashNavIcons();
 
@@ -419,9 +418,9 @@ namespace BrnGui
         bool                mbAllowPlayerSelection;    // X360 +0xA1B1 (SetOwnerParameters stores ownerId != E_CRASHNAV_MAP_ONLINE_SELECT_ROUTE)
 
         // [H3c] the embedded 2D event-icon bank (X360 +0xA1B4..+0xA9EF; the type is the
-        // committed BrnEventIconManager model, 175*12 + count + cache pointer). Its
-        // Prepare/Release passes stay parked (declaration-only in its TU); the LARGE-mode
-        // player-proximity pass reads it through the bodied GetEventIconPositions.
+        // committed BrnEventIconManager model, 175*12 + count + cache pointer).
+        // SetOwnerParameters / ReleaseResources drive its Prepare / ReleaseResources; the
+        // LARGE-mode player-proximity pass reads it through GetEventIconPositions.
         EventIconManager    mEventIconManager;         // X360 +0xA1B4
 
         GuiEventDrawEventIcons::EIconDisplayType meEventIconDisplayType; // X360 +0xA9F0 (DWARF h:453)

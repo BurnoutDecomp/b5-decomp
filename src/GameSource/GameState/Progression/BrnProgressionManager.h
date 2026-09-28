@@ -853,8 +853,10 @@ public:
     // UnlockCarFromTrophy, needs a completed trophy category), so without it
     // tools/tests/cases/progression_completion.ps1 could not observe the queue draining. It
     // writes NOTHING to the profile and unlocks no car -- only the transient queue moves.
+    // The value "freeroam" delays the seed until the player car has driven outside the junkyard
+    // for a few seconds of sim time (the award screen case needs the screen flow's INGAME state).
     // DELETE-WHEN a harness scenario can complete a trophy category.
-    void DEBUG_HarnessSeedTrophyQueue();
+    void DEBUG_HarnessSeedTrophyQueue(f32 lfSimTimeStep, bool lbPlayerCarActiveOutsideJunkyard);
 
     // ---- [progression wave: medals] ---------------------------------------------------------
     // THE LICENCE / RANK-UP CHAIN. Bodies in BrnProgressionManager_Medals.cpp; the console homes

@@ -35,10 +35,24 @@ struct CarStereoEffect : public BrnSound::Logic::BrnEffectObject
     // @ 0x826E6298 -- RTTI factory hook.
     static CgsSound::Logic::EffectObject* CreateObject( u32 luType );
 
+    bool Attach() override;
+    void UpdateParams(f32 afTimeStep) override;
+    void ProcessUpdate() override;
+    bool Detach() override;
+
+private:
+    // True while the player is in free roam (no current game mode).
+    bool ShouldPlayMusic();
+
+public:
+
     // DWARF BrnCarStereoEffect.h:105-107.
     CgsSound::Logic::VoiceWrapper        mVoice;        // @ +0x38
     BrnSound::Module::SoundLogicModule*  mpLogicModule;
     bool                                 mbHasStereo;
+
+    // The number of cars whose stereo is playing right now (capped at two).
+    static s32 siNumStereos;
 };
 
 } // namespace Environment

@@ -106,7 +106,11 @@ struct TrafficInAir : public InAirEffect
     TrafficInAir();
     virtual ~TrafficInAir();
 
+    static CgsSound::Logic::EffectObject* CreateObject(u32 luType);
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
     const char* GetTypeName() const override;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+
     bool Attach() override;
     void ProcessUpdate() override;
 

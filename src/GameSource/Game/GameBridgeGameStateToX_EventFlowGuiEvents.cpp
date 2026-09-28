@@ -39,8 +39,7 @@
 // `default:` arm of TranslateGameActionsToGuiEvents calls it
 // (GameBridgeGameStateToX_StuntGuiEvents.cpp:399-406), and this file is mounted (bat 4388).
 // Runtime-proven: BrnGame.log shows action 201 -> gui 311 flowing and action 23 driving the
-// FSM hop to PRE_FLY_BY. The declaration is repeated at the top of this file so the definition
-// is checked against the same signature the header carries.
+// FSM hop to PRE_FLY_BY.
 //
 // WHAT THIS BUYS, IN ORDER OF VISIBILITY
 //   201 -> GuiEventJunctionInfo(311)   THE ORACLE. The consumer half is COMPLETE AND MOUNTED
@@ -130,22 +129,6 @@
 
 namespace BrnGame
 {
-// The declaration the WIRE REQUEST at the top asks the conductor to move into
-// GameSource/Game/GameBridgeGameStateToX.h. Kept here so the definition below is checked against
-// the signature the header will carry.
-bool TranslateEventFlowGameActionToGuiEvent(
-    s32 liActionType,
-    const CgsModule::Event* lpAction,
-    CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
-    const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
-
-// The free-roam arms (junkyard, drive-thru, landmark, super jump, sat-nav switch). Body:
-// GameBridgeGameStateToX_EventFlowGuiEvents_wZ_00.cpp; returns true when an arm consumed the action.
-bool TranslateFreeRoamGameActionToGuiEvent(
-    s32 liActionType,
-    const CgsModule::Event* lpAction,
-    CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput);
-
 namespace
 {
     // The two mode-set tests the event-flow arms share, spelled once. Both are literal

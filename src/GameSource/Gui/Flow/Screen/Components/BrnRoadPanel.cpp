@@ -25,7 +25,6 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                // the boundary one-shot logs
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // ParameterFormatType
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface
@@ -117,75 +116,6 @@ namespace BrnGui
     static const s32 KI_OUT_CHANNEL_GUI_EVENT = 40;
     static const s32 KI_SCORE_MODE_RECORD_SIZE = 16;
 
-    // =================================================================================
-    // ⛔ BrnGui::RoadSignIcon BOUNDARY -- FLAG, INERT STAND-IN, DELETE-WHEN.
-    //
-    // RoadPanel embeds a BrnGui::RoadSignIcon (mRoadSign, the reserved carve at +0xA0) and
-    // calls exactly four of its entry points. RoadSignIcon has NO HOME in the tree: its
-    // canonical one is GameSource/Gui/SatNav/BrnRoadSignIconManager.{h,cpp} (the file path in
-    // its own asserts, RoadSignIcon::Construct @0x824F5170 line 73/74), and homing it means
-    // landing RoadSignIconManager's eight siblings as well -- a separate TU this wave does not
-    // own. Calling the real methods from here would either fork the type or leave four
-    // unresolved externals, so each call is routed through the inert stand-in below.
-    //
-    // The X360 originals, for whoever lands the real home:
-    //   RoadSignIcon::Construct        @0x824F5170  (name, si, parentName, bool)
-    //   RoadSignIcon::SetColour        @0x824F52B8  (colour)
-    //   RoadSignIcon::FindRoadFromName @0x824F53B8  (name) -> road index
-    //   RoadSignIcon::DisplayRoad      -- CrashNavPanel's inline calls sub_82502A88(icon, road, 0)
-    //
-    // CHOSEN INERT RETURN: FindRoadFromName answers -1, the "no such road" index every
-    // RoadSignIcon consumer already tests for -- so DisplayRoad is handed a miss and the sign
-    // simply shows nothing, which is the caller-safe outcome. The three void entry points do
-    // nothing. CONSEQUENCE on this build: the road panel's TEXT is fully correct (that is all
-    // panel-owned state); only the road-sign ARTWORK inside it stays blank and uncoloured.
-    //
-    // DELETE-WHEN BrnGui::RoadSignIcon lands in BrnRoadSignIconManager.h: retype
-    // RoadPanel::maRoadSignReserved to `RoadSignIcon mRoadSign` and replace every
-    // RoadSignIconBoundary::* call below with the real method.
-    // =================================================================================
-    namespace RoadSignIconBoundary
-    {
-        static const s32 KI_NO_ROAD = -1;
-
-        static void LogOnce(const char* lpacWhich)
-        {
-            static bool gsbWarned = false;
-            if (!gsbWarned && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[UI-gate] PARK: BrnGui::RoadSignIcon has no home on this build; "
-                       "RoadPanel's road-sign artwork is inert (first hit: ";
-                *CgsDev::Log::gpDebugPrint << lpacWhich;
-                *CgsDev::Log::gpDebugPrint << ")\n";
-                gsbWarned = true;
-            }
-        }
-
-        static void Construct(void* /*lpRoadSign*/, const char* /*lpacName*/,
-                              CgsGui::StateInterface* /*lpStateInterface*/,
-                              const char* /*lpacParentName*/, bool /*lbFlag*/)
-        {
-            LogOnce("Construct");
-        }
-
-        static void SetColour(void* /*lpRoadSign*/, s32 /*leSignColour*/)
-        {
-            LogOnce("SetColour");
-        }
-
-        static s32 FindRoadFromName(void* /*lpRoadSign*/, const char* /*lpacRoadName*/)
-        {
-            LogOnce("FindRoadFromName");
-            return KI_NO_ROAD;
-        }
-
-        static void DisplayRoad(void* /*lpRoadSign*/, s32 /*liRoadIndex*/, bool /*lbImmediate*/)
-        {
-            LogOnce("DisplayRoad");
-        }
-    }
-
     // @ 0x82418060 -------------------------------------------------------------------
     void RoadPanelData::PanelBox::Construct(const char* lpacYourScore, const char* lpacName1,
                                            const char* lpacScore1, const char* lpacName2,
@@ -231,8 +161,7 @@ namespace BrnGui
         // Base IconComponent construct: no state-identifier table for the panel itself.
         IconComponent::Construct(lpacName, lpStateInterface, 0, lpacParentName);
 
-        RoadSignIconBoundary::Construct(maRoadSignReserved, KAC_ROAD_SIGN_NAME,
-                                        lpStateInterface, GetName(), true);
+        mRoadSign.Construct(KAC_ROAD_SIGN_NAME, lpStateInterface, GetName(), true);
 
         meIcon = KI_DEFAULT_ROAD_ICON;   // stw 64, 0x2A4 -- BEFORE the row loop, as the asm has it
 
@@ -280,24 +209,8 @@ namespace BrnGui
         CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");   // cpp:174
 
         lpGuiCache->AppendExpectedAptComponent(leFlow, GetNameHash());          // a1[33]  == +0x84
-        // a1[73] == +0x124 == maRoadSignReserved(+0x00A0) + GuiComponent::muHashedName(+0x84)
-        // -- the ROAD SIGN's own name hash, not mTargetCaption (which lives at +0x0BE8, so
-        // its hash is +0x0C6C == a1[795], the tail append below).
-        // CORRECTED 2026-08-29: mRoadSign has no committed type (the reserved carve), so the
-        // hash is read at its GuiComponent-relative offset rather than by member name.
-        // The reserved carve is never constructed on this build (RoadSignIconBoundary::Construct
-        // is a parked leaf), so its +0x84 word is ZERO and an expected hash of 0 can never be
-        // marked loaded -- which held the whole crash-nav map behind
-        // AreAllAptComponentsInitialised (2026-09-10). The console value is the RoadSignIcon's
-        // GuiComponent::muHashedName, i.e. CalculateHash of SetName's "%s_%s" composition of
-        // this panel's name and KAC_ROAD_SIGN_NAME; computed here by the same rule until the
-        // RoadSignIcon component itself is homed. DELETE-WHEN mRoadSign is a real GuiComponent.
-        {
-            char lacRoadSignName[CgsGui::GuiComponent::KU_MAX_COMPONENT_NAME_LEN];
-            CgsCore::SPrintf(lacRoadSignName, CgsGui::GuiComponent::KU_MAX_COMPONENT_NAME_LEN,
-                             "%s_%s", GetName(), KAC_ROAD_SIGN_NAME);
-            lpGuiCache->AppendExpectedAptComponent(leFlow, lacRoadSignName);   // a1[73] == +0x124
-        }
+        // The road sign's own name hash (the embedded RoadSignIcon's muHashedName).
+        lpGuiCache->AppendExpectedAptComponent(leFlow, mRoadSign.GetNameHash());
 
         for (s32 liRow = 0; liRow < E_ROW_COUNT; ++liRow)                       // li r30/r31 pair
         {
@@ -325,10 +238,8 @@ namespace BrnGui
     // Inlined into CrashNavPanel::SetRoadPanelData @0x8243A9E4..0x8243AA14 ------------
     void RoadPanel::SetRoadPanelData(const char* lpacRoadName, RoadPanelData& lrData)
     {
-        // Point the sign at the named road (a miss answers KI_NO_ROAD and simply shows nothing).
-        const s32 liRoadIndex = RoadSignIconBoundary::FindRoadFromName(maRoadSignReserved,
-                                                                       lpacRoadName);
-        RoadSignIconBoundary::DisplayRoad(maRoadSignReserved, liRoadIndex, false);
+        // Point the sign at the named road, post hidden.
+        mRoadSign.DisplayRoad(mRoadSign.FindRoadFromName(lpacRoadName), false);
 
         mRoadPanelData = lrData;   // the `memcpy 0x144` -- a pointer-free scalar record
 
@@ -562,7 +473,7 @@ namespace BrnGui
         }
 
         // The colour is re-read (a second GetSignColour call in the asm, not the cached one).
-        RoadSignIconBoundary::SetColour(maRoadSignReserved, GetSignColour());
+        mRoadSign.SetColour(static_cast<RoadSignIcon::ESignColour>(GetSignColour()));
     }
 
     // @ 0x82418550 -------------------------------------------------------------------

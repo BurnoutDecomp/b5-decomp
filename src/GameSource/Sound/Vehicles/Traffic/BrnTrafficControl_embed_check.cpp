@@ -16,10 +16,9 @@ void BrnTrafficControlEmbedCheck(BrnSound::Logic::Traffic::TrafficControl& rObj,
     (void)pBase;
     (void)pEff;
 
-    // Inherited teardown members reachable by name through the committed base.
-    rObj.meDetachState    = CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED;
+    // The public base member and the attach-state accessor, reached by name.
     rObj.mbResourcesReady = false;
-    rObj.meAttachState    = CgsSound::Logic::EffectBase::E_ATTACH_STATE_NONE;
+    (void)rObj.GetAttachState();
 
     rpReq = pReq;
 }

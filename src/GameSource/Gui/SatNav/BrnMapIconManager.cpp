@@ -37,12 +37,8 @@
 // The pool itself (mCrashNavIcons) is modelled now; see the CrashNavIconComponent
 // banner in BrnSatNavIcon.h for the element/0x90 split and its three X360 witnesses.
 //
-// NAMED GATES remaining (each one-shot logged at its site): the crash-nav pool BIND half
-// (CrashNavMapIcon::Construct @0x824481A8 unreconstructed, so the pool's components have
-// no apt clip yet), the landmark/checkpoint passes + the case-4 landmark state machine in
-// BOTH icon passes, the online-route start/finish-point lookups, the LARGE-map rival
-// naming arm, and UpdateCrashNavIcons' trailing GUI event
-// 561 (the crash-nav icon-set handoff; the payload type is not modelled in the tree).
+// NAMED GATES remaining (each one-shot logged at its site): the online-route
+// start/finish-point lookups and the LARGE-map rival naming arm.
 //
 // All branch conditions and the compared constants come from the X360 asm/pseudocode; the
 // game-mode and icon-type literals are resolved to their canonical enumerators (DecFIGS
@@ -479,15 +475,18 @@ void MapIconManager::GetSatNavIconPositions(Vector2* lpav2Positions, s32* lpiNum
 // ============================ H3b: the owner/update surface ============================
 
 // @ 0x824FA0F0 -- bind the cache and reset the whole selection/flag surface. The X360
-// also drives all 50 crash-nav icon components invisible (vtable slot +0x10 with 0) and
-// wipes the embedded event-icon manager (memset 2100 @+0xA1B4) + the road-sign manager's
-// controller/cache/zoom tail -- those pools ride the parked icon slice (see the banner);
-// their storage is zero-initialised static memory on this host, and the one recovered
-// road-sign scalar (mfZoomFactor := 1.0) is set by name.
+// also drives all 50 crash-nav icons invisible, then runs the two embedded managers'
+// Construct (both inlined on the console: the event-icon table wipe and the road-sign
+// controller/cache/zoom tail).
 void MapIconManager::Construct(GuiCache* lpGuiCache)
 {
     CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");   // BrnMapIconManager.cpp:144 (non-gating)
     mpGuiCache = lpGuiCache;
+
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "MAPICONMANAGER: Constructing. Setting OwnerID to Invalid.\n";
+    }
 
     mi8CurrentEventIndex = 0;          // +0x998 (stb 0)
     mOwnerId             = E_OWNERID_INVALID;
@@ -504,6 +503,10 @@ void MapIconManager::Construct(GuiCache* lpGuiCache)
     mbShowOffLineRivalsOnSatNav = false; // +0xAA1D (the halfword-1 store's zero byte)
     mbIconsVisible       = true;       // +0xAA1E (the halfword-1 store's one byte)
     mbIsActive           = true;       // +0xAA22
+    for (s32 liIcon = 0; liIcon < KI_MAX_CRASHNAV_MAP_ICONS; ++liIcon)
+    {
+        mCrashNavIcons[liIcon].mIcon.SetState(MapIconBrnBase::E_ICONSTATE_INVISIBLE);   // icon vtable slot 4
+    }
     mbShowingOnlineRoute = false;      // +0xAA1F
     mbShowingCrashNavRoute = false;    // +0xAA21
     mbShowingPreRaceRoute  = false;    // +0xAA20
@@ -516,15 +519,15 @@ void MapIconManager::Construct(GuiCache* lpGuiCache)
     meEventIconDisplayType = GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT; // +0xA9F0 = 5
     mbShowingDriveThrus  = true;       // +0xA9F4 (stb 1)
     mbAllowPlayerSelection = true;     // +0xA1B1 (stb 1)
-    mRoadSignIconManager.SetZoomFactor(1.0f);   // +0xA198 (stfs 1.0)
+    mEventIconManager.Construct();
+    mRoadSignIconManager.Construct();
 }
 
 // @ 0x82520CE8 -- take ownership of the shared icon set for one screen. The parameter
 // -> member stores and the owner handshake are transcribed whole. The 50+16 apt icon
 // component Construct/Prepare loop is LANDED (F3 2026-08-29 -- it is the only writer of
 // mpStateInterface on the crash-nav pool, so the CrashNavMap main screen used to Update
-// never-constructed elements); RoadSignIconManager::Prepare and EventIconManager::Prepare
-// still ride the parked icon slice -- one-shot-logged where they sit.
+// never-constructed elements), followed by the road-sign and event-icon managers' Prepare.
 MapIconManager::OwnerId MapIconManager::SetOwnerParameters(
     CgsGui::StateInterface* lpStateInterface,
     const char* lpcComponentName,
@@ -626,16 +629,19 @@ MapIconManager::OwnerId MapIconManager::SetOwnerParameters(
         mbAllowPlayerSelection    = (leOwnerId != E_CRASHNAV_MAP_ONLINE_SELECT_ROUTE); // +0xA1B1
 
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // :313 (non-gating)
-        // RoadSignIconManager::Prepare rides the parked icon slice (the 64-sign pool);
-        // the visibility broadcast + flag store are the real recovered effects.
-        mRoadSignIconManager.SetSignsVisible(lbUseRoadSigns ? 1 : 0);
+        mRoadSignIconManager.Prepare(lpStateInterface, mpGuiCache);
+        mRoadSignIconManager.SetSignsVisible(lbUseRoadSigns);
         mbUseRoadSigns = lbUseRoadSigns;                              // +0xA1B0
 
         if (leEventIconDisplayType != GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT)
         {
             CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // :321 (non-gating)
-            // [UI-gate] EventIconManager::Prepare -- parked with the icon slice (the
-            // embedded manager is not modelled); covered by the one-shot print above.
+            // The console passes the constant display type 0 (offline events), no fade and
+            // no ignore list here, whatever leEventIconDisplayType is; the requested type is
+            // only latched below.
+            mEventIconManager.Prepare(lpStateInterface, mpGuiCache, 0.0f,
+                                      GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_OFFLINE_EVENTS,
+                                      NULL, 0);
         }
         meEventIconDisplayType = leEventIconDisplayType;              // +0xA9F0
 
@@ -654,23 +660,18 @@ MapIconManager::OwnerId MapIconManager::SetOwnerParameters(
 }
 
 // @ 0x82520C40 -- give the icon set back. A no-op unless leOwnerId is the current
-// owner; otherwise unregister the 64 road-sign object controllers + release the event
-// icons (both ride the parked icon slice), raise mbIsActive and reset the owner id.
+// owner; otherwise unregister the 64 road-sign object controllers (the road-sign manager's
+// ReleaseResources, inlined on the console), release the event icons when a display type is
+// set (no fade), raise mbIsActive and reset the owner id.
 void MapIconManager::ReleaseResources(CgsGui::StateInterface* lpStateInterface, OwnerId leOwnerId)
 {
-    (void)lpStateInterface;
     if (leOwnerId != mOwnerId)
         return;
 
-    // [UI-gate] the 64 ObjectController::UnRegister calls + EventIconManager::
-    // ReleaseResources (when the display type is real) ride the parked icon slice.
-    static bool sbLoggedReleasePark = false;
-    if (!sbLoggedReleasePark && CgsDev::Log::gpDebugPrint != 0)
+    mRoadSignIconManager.ReleaseResources();
+    if (meEventIconDisplayType != GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT)
     {
-        sbLoggedReleasePark = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[UI-gate] PARK: MapIconManager::ReleaseResources controller/event-icon "
-               "release skipped (apt icon pools unreconstructed)\n";
+        mEventIconManager.ReleaseResources(lpStateInterface, 0.0f);
     }
 
     mbIsActive = true;   // +0xAA22 (the X360's stbx 1 -- the stored value is what it writes)
@@ -1377,9 +1378,8 @@ void MapIconManager::UpdateSatNavIcons()
 
         s32 liState = MapIconBrnBase::E_ICONSTATE_INVISIBLE;   // 0
         bool lbNearEventIcon = false;                          // X360 v22
-        f32 lfStackOffsetY = 0.0f;   // X360 v126 lane 1 -- only the (parked) case-4
-                                     // checkpoint-stacking arms raise it; kept so the
-                                     // commit tail matches the X360 shape.
+        f32 lfStackOffsetY = 0.0f;   // the stack offset's y lane; only the case-4
+                                     // checkpoint-stacking arms raise it.
 
         SatNavMapIcon& lrIcon = mSatNavMapIcons[liIcon + liExtraIcons].mIcon;
         const SatNavIconInfo& lrRecord = mSatNavIconInfo[liIcon];
@@ -1739,16 +1739,12 @@ void MapIconManager::UpdateSatNavIcons()
 //     mbShowOffLineRivalsOnSatNav / freeburn;
 //   * every record's CgsID low word is stamped into the pool icon's muId before the
 //     position commit (the crash-nav renderer keys off it);
-//   * the device position has a per-icon stack OFFSET added (`vaddfp128 v1,v1,v126`);
-//     only the case-4 checkpoint-stacking arms ever raise it, so it is zero here;
-//   * the body ends by posting a GUI event (id 561) carrying the used count and the pool
-//     base -- parked, see below.
+//   * the device position has a per-icon stack offset added; only the case-4
+//     checkpoint-stacking arms raise it;
+//   * the body ends by posting GUI event 561 (the used count and the pool base).
 //
-// NAMED GATES (each one-shot logged, none silent): the two route start-point lookups,
-// the LARGE-map rival arm (GetCrashNavIconStateForRival
-// @0x824F4680 has no body), the whole case-4 landmark state machine (IsStartIcon /
-// IsFinishIcon / IsTrackedIcon / IsPendingRaceLandmark / GuiTracker::GetTrackerInformation
-// and the checkpoint tables are all unreconstructed), and the trailing 561 post.
+// NAMED GATES (each one-shot logged, none silent): the two route start-point lookups and
+// the LARGE-map rival arm (GetCrashNavIconStateForRival has no body).
 void MapIconManager::UpdateCrashNavIcons()
 {
     typedef GuiEventUpdateSatNav::SatNavIconInfo SatNavIconInfo;
@@ -1819,9 +1815,8 @@ void MapIconManager::UpdateCrashNavIcons()
         s32  liState        = MapIconBrnBase::E_ICONSTATE_INVISIBLE;   // 0
         bool lbNearEventIcon = false;                                  // X360 v25
 
-        // X360 v126 -- the device-space offset added to the committed position. Only the
-        // (parked) case-4 checkpoint-stacking arms ever raise it; kept so the commit tail
-        // matches the X360 shape.
+        // The device-space offset added to the committed position; only the case-4
+        // checkpoint-stacking arms raise it.
         Vector2 lv2StackOffset;
         lv2StackOffset.x = 0.0f; lv2StackOffset.y = 0.0f;
         lv2StackOffset.z = 0.0f; lv2StackOffset.w = 0.0f;
@@ -2229,11 +2224,11 @@ void MapIconManager::SetUseRoadSigns(bool lbUseRoadSigns, CgsGui::StateInterface
         if (lbUseRoadSigns)
         {
             mRoadSignIconManager.SetupComponent();
-            mRoadSignIconManager.SetSignsVisible(1);
+            mRoadSignIconManager.SetSignsVisible(true);
         }
         else
         {
-            mRoadSignIconManager.SetSignsVisible(0);
+            mRoadSignIconManager.SetSignsVisible(false);
         }
 
         mbUseRoadSigns = lbUseRoadSigns;   // X360 +0xA1B0

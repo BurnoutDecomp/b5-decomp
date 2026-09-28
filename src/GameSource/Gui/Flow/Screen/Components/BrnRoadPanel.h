@@ -27,7 +27,7 @@
 // MEASURED X360 offsets (documentation only -- the host layout is name-based and every
 // embedded pointer widens; all access below is BY NAME):
 //   +0x0000  IconComponent base    (`IconComponent::Construct(this, name, si, 0, parent)`)
-//   +0x00A0  mRoadSign             (BrnGui::RoadSignIcon -- STILL A CARVE, see below)
+//   +0x00A0  mRoadSign             (BrnGui::RoadSignIcon, 0xC0)
 //   +0x0160  mRoadPanelData        (RoadPanelData, 0x144 -- CrashNavPanel memcpy's here)
 //   +0x02A4  meIcon                (BrnGui::ERoadIcon; Construct stores 64)
 //   +0x02A8  mNames[4]             (TextField, 0x128 stride -> +0x3D0/+0x4F8/+0x620)
@@ -38,13 +38,6 @@
 //   +0x0DA0  meCurrentScoreMode    (GuiEventSetRoadRuleScoreMode::ERoadPanelModes)
 //   +0x0DA4  mbActive
 //   sizeof == 0xDB0
-//
-// ⛔ mRoadSign IS STILL A RESERVED CARVE, DELIBERATELY. BrnGui::RoadSignIcon has no home in
-// the tree (its canonical home is GameSource/Gui/SatNav/BrnRoadSignIconManager.{h,cpp}, per
-// the assert file path in RoadSignIcon::Construct @0x824F5170) and homing it would drag in
-// RoadSignIconManager's eight siblings -- a separate TU this wave does not own. The four
-// RoadSignIcon entry points this panel calls are routed through a documented file-local
-// boundary in BrnRoadPanel.cpp; see the DELETE-WHEN note there.
 // ===================================================================================
 
 #include "types.hpp"
@@ -53,6 +46,7 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnAnimationComponent.h" // BrnGui::AnimationComponent (by value)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                        // BrnGui::GuiFlow
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"    // CgsGui::StateInterface
+#include "GameSource/Gui/View/BrnRoadSignIconManager.h"                // BrnGui::RoadSignIcon (by value)
 
 namespace BrnGui
 {
@@ -209,9 +203,7 @@ namespace BrnGui
         s32 GetSignColour() const;
 
         // ---- DWARF member run (X360 offsets are documentation only) -------------------
-        // Reserved carve stands in ONLY for mRoadSign, whose type has no committed home.
-        u8            maRoadSignReserved[0xC0];    // +0x00A0  mRoadSign (BrnGui::RoadSignIcon,
-                                                   //          DWARF h:154; see the header banner)
+        RoadSignIcon  mRoadSign;                   // +0x00A0
         RoadPanelData mRoadPanelData;              // +0x0160  (DWARF h:156)
         s32           meIcon;                      // +0x02A4  (DWARF h:167, BrnGui::ERoadIcon)
         TextField     mNames[E_ROW_COUNT];         // +0x02A8  (DWARF h:169)

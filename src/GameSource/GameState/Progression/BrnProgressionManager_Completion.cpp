@@ -51,6 +51,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"           // CgsDev::Log::gpDebugPrint ([completion] witnesses)
 
 #include <stdlib.h>                                                  // getenv (the [completion] witness gate)
+#include <cstring>                                                   // strcmp (the trophy seed's mode)
 
 namespace BrnProgression
 {
@@ -1004,16 +1005,41 @@ void ProgressionManager::OnPowerParkResult(s32 liResult, bool lbBetweenOtherPlay
 // only state it moves is the transient in-memory queue, which SendTrophyUnlockUpdate empties on
 // the next frame. The record it builds is the one the two console asserts demand: a non-null
 // CgsID and a non-NONE unlock type.
+//
+// WHEN IT FIRES: any value but "freeroam" seeds on the first PreWorldUpdate (the drain check
+// only needs the queue to move). "freeroam" waits until the player car has been active outside
+// the junkyard for KF_FREEROAM_HOLD seconds of sim time: the GUI 375 the drain raises only
+// arms the award countdown if the screen flow's INGAME state is live, and on the first
+// PreWorldUpdate the screen flow has not even loaded yet.
 // DELETE-WHEN a harness scenario can complete a trophy category on its own.
 // ===================================================================================
-void ProgressionManager::DEBUG_HarnessSeedTrophyQueue()
+void ProgressionManager::DEBUG_HarnessSeedTrophyQueue(f32 lfSimTimeStep,
+                                                      bool lbPlayerCarActiveOutsideJunkyard)
 {
-    static const bool sbSeedEnabled = (getenv("BRN_PROGRESSION_COMPLETION_SEEDTROPHY") != 0);
-    static bool       sbSeeded      = false;
+    static const char* const spcSeedMode   = getenv("BRN_PROGRESSION_COMPLETION_SEEDTROPHY");
+    static const bool        sbSeedEnabled = (spcSeedMode != 0);
+    static const bool        sbSeedFreeRoam =
+        sbSeedEnabled && std::strcmp(spcSeedMode, "freeroam") == 0;
+    static bool              sbSeeded      = false;
+    static f32               sfFreeRoamTime = 0.0f;
+    const f32                KF_FREEROAM_HOLD = 8.0f;   // PC harness hold, not a console value
 
     if (!sbSeedEnabled || sbSeeded)
     {
         return;
+    }
+    if (sbSeedFreeRoam)
+    {
+        if (!lbPlayerCarActiveOutsideJunkyard)
+        {
+            sfFreeRoamTime = 0.0f;
+            return;
+        }
+        sfFreeRoamTime += lfSimTimeStep;
+        if (sfFreeRoamTime < KF_FREEROAM_HOLD)
+        {
+            return;
+        }
     }
     sbSeeded = true;
 
@@ -1025,7 +1051,8 @@ void ProgressionManager::DEBUG_HarnessSeedTrophyQueue()
     if (CgsDev::Log::gpDebugPrint != 0)
     {
         *CgsDev::Log::gpDebugPrint
-            << "[completion] HARNESS STIMULUS (BRN_PROGRESSION_COMPLETION_SEEDTROPHY=1): one "
+            << "[completion] HARNESS STIMULUS (BRN_PROGRESSION_COMPLETION_SEEDTROPHY="
+            << spcSeedMode << "): one "
                "TrophyUnlockAction seeded onto mQueueOfTrophyCarUnLocks; no car was awarded.\n";
     }
 }

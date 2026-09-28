@@ -1,5 +1,6 @@
 #include "GameSource/Sound/Vehicles/Environment/BrnEnclosureControl.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Environment::EnclosureControl -- out-of-line bodies.
@@ -52,6 +53,34 @@ int EnclosureControl::ConvertRegionTypeToIndex( int liRegionType ) const
 CgsSound::Logic::EffectControl* EnclosureControl::Create( bool /*lbFlavour*/ )
 {
     return new EnclosureControl();
+}
+
+// The shortest gap between two whoosh triggers, in seconds; Attach starts the timer here
+// so the first trigger is never suppressed.
+static const f32 KF_MIN_TIME_BETWEEN_TRIGGERS = 0.5f;
+
+// Controller slot 0 is the physics control.
+s32 EnclosureControl::GetController(s32 aiIndex)
+{
+    return aiIndex == 0 ? 0 : -1;
+}
+
+void EnclosureControl::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    CGS_ASSERT(apController->GetEffectID() == 0, "Unexpected control.");
+    if (apController->GetEffectID() == 0)
+        mpPhysicsControl = static_cast<BrnSound::Vehicles::Engines::PhysicsControl*>(apController);
+}
+
+// Clears both trigger sets and arms the trigger timer.
+bool EnclosureControl::Attach()
+{
+    if (!CgsSound::Logic::EffectBase::Attach())
+        return false;
+    for (s32 liPosition = 0; liPosition < E_TRIGGER_POSITION_COUNT; ++liPosition)
+        maTriggerInfo[liPosition].Reset();
+    mfTimeSinceTrigger = KF_MIN_TIME_BETWEEN_TRIGGERS;
+    return true;
 }
 
 // ---------------------------------------------------------------------------

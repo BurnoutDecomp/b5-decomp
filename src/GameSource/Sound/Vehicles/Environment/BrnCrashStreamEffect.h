@@ -5,6 +5,8 @@
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (BY NAME)
 #include "GameSource/Sound/Streaming/BrnIStreamUser.h"             // committed IStreamUser third base (BY NAME)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"       // CgsSound::Playback::Name (MakeHash) (BY NAME)
+#include "GameShared/GameClasses/Sound/Logic/CgsVoice.h"            // CgsSound::Logic::Voice (mSubmix)
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"             // CgsSound::Utils::DataPoint
 
 // =============================================================================
 // BrnSound::Vehicles::Environment::CrashStreamEffect
@@ -16,11 +18,9 @@
 // sub-object), so it multiply-inherits the committed BrnEffectObject + IStreamUser,
 // matching the committed SpeechEffect / PresentationEffect triple-base pattern.
 //
-// FLAG (MINIMAL home): the inlined leaf zero-inits across +0x3C..+0x74 (incl. the -1
-// @ +0x68) target un-homed leaf-member types (mParams == VoiceWrapper::CreateParams;
-// mbShowTime/mbIsCrashing == DataPoint<bool>; mSubmix == CgsSound::Logic::Voice;
-// mpPhysicsControl == opaque ptr) -- DECLARATION-DEFERRED, NOT fabricated. Only the
-// bases (BY NAME) + the attested mePrepareState are materialised.
+// The effect owns a submix voice (connected to the global collision submix) and streams
+// a rotating crash or show-time take through it whenever the player's fatal-crash state
+// or the show-time mode flips.
 // =============================================================================
 
 namespace BrnSound
@@ -53,15 +53,21 @@ struct CrashStreamEffect : public BrnSound::Logic::BrnEffectObject,
 
     s32 GetController(s32 aiIndex) override;
     void AttachController(CgsSound::Logic::EffectBase* apController) override;
+    bool Prepare(CgsSound::Logic::State* apState) override;
+    void UpdateParams(f32 afTimeStep) override;
+    bool Detach() override;
 
     const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
     void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
                            f32 afGain, f32 afElapsedTime) override;
 
-    CgsSound::Logic::VoiceWrapper::CreateParams mParams;
+    // Members in declaration order.
+    CgsSound::Logic::VoiceWrapper::CreateParams  mParams;
+    CgsSound::Utils::DataPoint<bool>             mbShowTime;
+    CgsSound::Utils::DataPoint<bool>             mbIsCrashing;
     BrnSound::Vehicles::Engines::PhysicsControl* mpPhysicsControl;
-
-    ePrepareState mePrepareState;   // @ +0x80 (DWARF h:47; ctor seeds E_PREPARE_STATE_CONSTRUCT_VOICE)
+    CgsSound::Logic::Voice                       mSubmix;
+    ePrepareState                                mePrepareState;
 };
 
 } // namespace Environment

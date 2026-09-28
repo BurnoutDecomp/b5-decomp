@@ -2,8 +2,8 @@
 // b5-decomp/src/GameSource/Game/GameBridgeGameStateToX_EventFlowGuiEvents_wZ_00.cpp
 //
 // The free-roam arms of BrnGame::BrnGameModule::TranslateGameActionsToGuiEvents: junkyard entry,
-// drive-thru discovery and refusals, landmark areas, the super-jump name and failure, and the
-// sat-nav switch. Reached from the `default:` of TranslateEventFlowGameActionToGuiEvent
+// drive-thru discovery, refusals and closing, landmark areas, the super-jump name and failure, and
+// the sat-nav switch. Reached from the `default:` of TranslateEventFlowGameActionToGuiEvent
 // (GameBridgeGameStateToX_EventFlowGuiEvents.cpp); returns true when an arm consumed the action.
 //
 // Every GUI record posted here is the canonical type from BrnGuiDemangledEventTypes.h except the
@@ -27,11 +27,6 @@
 
 namespace BrnGame
 {
-bool TranslateFreeRoamGameActionToGuiEvent(
-    s32 liActionType,
-    const CgsModule::Event* lpAction,
-    CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput);
-
 namespace
 {
     // The drive-thru "discovered" action (104, 12 bytes). Its producer,
@@ -69,6 +64,7 @@ namespace
 
     static_assert(sizeof(BrnGui::GuiEnteredJunkyard) == 1,              "id 79 size 1");
     static_assert(sizeof(BrnGui::GuiEventEnterLandmarkArea) == 2,       "id 165 size 2");
+    static_assert(sizeof(BrnGui::GuiEventHideDriveThru) == sizeof(CgsID), "id 201 size 8");
     static_assert(sizeof(BrnGui::GuiEventMiniMapSwitch) == 1,           "id 205 size 1");
     static_assert(sizeof(BrnGui::GuiEventJumpStarted) == sizeof(CgsID), "id 216 size 8");
     static_assert(sizeof(BrnGui::GuiEventDriveThruDiscovered) == 12,    "id 314 size 12");
@@ -98,6 +94,23 @@ bool TranslateFreeRoamGameActionToGuiEvent(
 {
     switch (liActionType)
     {
+    // ---- 46  the drive-thru CLOSE (8 bytes) ---------------------------------------------------
+    // The closed drive-thru's CgsID (the record's doubleword) straight into GuiEventHideDriveThru
+    // (id 201, size 8). GuiCache's case-201 arm hides that drive-thru's map row.
+    case 46:
+    {
+        const CgsID lDriveThruId = *reinterpret_cast<const CgsID*>(lpAction);
+
+        BrnGui::GuiEventHideDriveThru lEvent;
+        std::memcpy(lEvent.maData, &lDriveThruId, sizeof(lDriveThruId));
+        PushGuiEvent(lEvent, lpGuiInput);
+
+        static s32 siLinesLeft = 8;
+        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(),
+                           static_cast<s32>(static_cast<u32>(lDriveThruId)), siLinesLeft);
+        return true;
+    }
+
     // ---- 57  E_ACTION_SHOW_JUMP_NAME (8 bytes) ------------------------------------------------
     // Null assert on the record, then its doubleword (the jump's stunt-element key) into
     // GuiEventJumpStarted (id 216, size 8).

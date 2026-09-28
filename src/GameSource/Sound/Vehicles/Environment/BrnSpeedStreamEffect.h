@@ -15,12 +15,6 @@
 // sub-object), so it multiply-inherits the committed BrnEffectObject + the committed
 // BrnSound::Logic::Streaming::IStreamUser, matching the committed SpeechEffect /
 // PresentationEffect / StreamingEffect triple-base pattern.
-//
-// FLAG (MINIMAL home): the leaf region +0x3C..+0x68 is the default-construction of
-// mParams (DWARF CgsSound::Logic::VoiceWrapper::CreateParams, un-homed) and
-// mpSpeedStreamControl (SpeedStreamControl*) is un-touched here -- both DECLARATION-
-// DEFERRED per the committed SpeechEffect / StreamingEffect minimal-home convention. No
-// standalone sentinel is invented for the `stw -1` (it belongs to the deferred mParams).
 // =============================================================================
 
 namespace BrnSound
@@ -43,6 +37,8 @@ struct SpeedStreamEffect : public BrnSound::Logic::BrnEffectObject,
 
     s32 GetController(s32 aiIndex) override;
     void AttachController(CgsSound::Logic::EffectBase* apController) override;
+    void UpdateParams(f32 afTimeStep) override;
+    bool Detach() override;
 
     const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
     void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,

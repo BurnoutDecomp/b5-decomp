@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (BY NAME)
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"            // CgsSound::Utils::InterpolateLine / DataPoint (BY NAME)
+#include "GameSource/AttribSys/Enums/eReverbTypes.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Environment::ReverbEffect
@@ -16,9 +17,8 @@
 // FLAG (DWARF-exact ctor): only the two embedded members mInterpolateReverb
 // (InterpolateLine) + mReverbType (DataPoint<eReverbTypes>) are default-CONSTRUCTED by
 // the X360 ctor; the four scalar floats + meReverbState + the two control back-pointers
-// are LEFT UNINITIALIZED (populated on Attach). mReverbType's enum is the un-homed
-// AttribSys::Enums::eReverbTypes; modelled as DataPoint<s32> (matches the two-word
-// zero-init). Absolute offsets are NOT static_asserted across the 32/64 boundary.
+// are LEFT UNINITIALIZED (populated on Attach). Absolute offsets are NOT
+// static_asserted across the 32/64 boundary.
 // =============================================================================
 
 // Pointer-only control back-references -> forward declarations.
@@ -47,6 +47,16 @@ struct ReverbEffect : public BrnSound::Logic::BrnEffectObject
     // @ 0x826D1438 -- RTTI factory hook.
     static CgsSound::Logic::EffectObject* CreateObject( u32 luType );
 
+    bool Attach() override;
+    s32 GetController(s32 aiIndex) override;
+    void AttachController(CgsSound::Logic::EffectBase* apController) override;
+
+private:
+    // The reverb preset the player's surroundings call for right now.
+    AttribSys::Enums::eReverbTypes::eReverbTypes GetActiveReverb() const;
+
+public:
+
     // ---- members in DWARF order (offsets are X360 facts, not asserted on host) ----
     f32          mfTime;         // +0x38 (X360 ctor leaves UNINITIALIZED)
     f32          mfSpaceSize;    // +0x3C (UNINITIALIZED)
@@ -54,7 +64,7 @@ struct ReverbEffect : public BrnSound::Logic::BrnEffectObject
     f32          mfGain;         // +0x44 (UNINITIALIZED)
     CgsSound::Utils::InterpolateLine mInterpolateReverb; // +0x48 (default-constructed)
     eReverbState meReverbState;  // +0x64 (UNINITIALIZED)
-    CgsSound::Utils::DataPoint<s32>  mReverbType;         // +0x68 (default-constructed; eReverbTypes==s32)
+    CgsSound::Utils::DataPoint<AttribSys::Enums::eReverbTypes::eReverbTypes> mReverbType; // +0x68 (default-constructed)
     const EnclosureControl*          mpEnclosureControl; // +0x70 (UNINITIALIZED)
     const BrnSound::Vehicles::Engines::PhysicsControl* mpPhysicsControl; // +0x74 (UNINITIALIZED)
 };

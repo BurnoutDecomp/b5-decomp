@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"
+#include "SharedClasses/Trigger/BrnGenericRegion.h"   // BrnTrigger::GenericRegion::Type, KI_FIRST_SOUND_ENCLOSURE
 
 // =============================================================================
 // BrnSound::Vehicles::Environment::EnclosureControl
@@ -12,27 +13,78 @@
 // BrnEffectObject. Maps a trigger region type to an enclosure-index and owns the
 // enclosure (tunnel/underpass) reverb transition.
 //
-// FLAG (MINIMAL home): ConvertRegionTypeToIndex (pure mapping, `this` unused) +
-// Create + deleting-destructor slice. The full member set is DEFERRED; only the base
-// (BY NAME) is materialised.
+// It tracks, for the player car, which sound-enclosure trigger regions (tunnel,
+// overpass, bridge, ...) are active at the car and just ahead of it. The reverb and
+// ambience effects read the at-entity set.
 // =============================================================================
 
 namespace BrnSound
 {
 namespace Vehicles
 {
+namespace Engines { struct PhysicsControl; }
 namespace Environment
 {
 
+// Where a trigger query was made relative to the car.
+enum eTriggerPosition
+{
+    E_TRIGGER_POSITION_AT_ENTITY       = 0,
+    E_TRIGGER_POSITION_AHEAD_OF_ENTITY = 1,
+    E_TRIGGER_POSITION_COUNT           = 2,
+};
+
+// The active sound-enclosure region set of one trigger query and its previous value.
+// Bit i stands for region type KI_FIRST_SOUND_ENCLOSURE + i.
+struct EntityTriggerInfo
+{
+    void Reset()
+    {
+        muActiveTriggers = 0;
+        muPrevTriggers   = 0;
+    }
+
+    bool HasChanged() const { return muActiveTriggers != muPrevTriggers; }
+
+    bool IsTypeActive(BrnTrigger::GenericRegion::Type aeType) const
+    {
+        return (muActiveTriggers &
+                (1u << (static_cast<s32>(aeType) - BrnTrigger::KI_FIRST_SOUND_ENCLOSURE))) != 0;
+    }
+
+    u32 muActiveTriggers;
+    u32 muPrevTriggers;
+};
+
 struct EnclosureControl : public BrnSound::Logic::BrnEffectControl
 {
-    EnclosureControl() {}
+    EnclosureControl()
+        : mpPhysicsControl(nullptr)
+        , mfTimeSinceTrigger(0.0f)
+    {
+        maTriggerInfo[E_TRIGGER_POSITION_AT_ENTITY].Reset();
+        maTriggerInfo[E_TRIGGER_POSITION_AHEAD_OF_ENTITY].Reset();
+    }
     virtual ~EnclosureControl();    // anchor for the vector deleting destructor @ 0x826B94A8
 
     // @ 0x82685FA0 -- map a region type (19..31) to an enclosure index (pure; `this` unused).
     int ConvertRegionTypeToIndex( int liRegionType ) const;
     // @ 0x826D0A30 -- allocate + construct factory. Returns the EffectObject* base view.
     static CgsSound::Logic::EffectControl* Create( bool lbFlavour );
+
+    s32 GetController(s32 aiIndex) override;
+    void AttachController(CgsSound::Logic::EffectBase* apController) override;
+    bool Attach() override;
+
+    const EntityTriggerInfo& GetTriggerInfo(eTriggerPosition aePosition) const
+    {
+        return maTriggerInfo[aePosition];
+    }
+
+    // Members in declaration order.
+    EntityTriggerInfo                            maTriggerInfo[E_TRIGGER_POSITION_COUNT];
+    BrnSound::Vehicles::Engines::PhysicsControl* mpPhysicsControl;
+    f32                                          mfTimeSinceTrigger;
 };
 
 } // namespace Environment
