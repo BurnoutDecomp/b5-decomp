@@ -1,0 +1,8 @@
+# MenusKnownAsserts.txt -- assert families the OWNERLIST 2026-09-27 lane L5 (MENUS) cases accept, each dated, with its
+# owner. Same format as tools/tests/known_asserts.txt (one PowerShell -match regex per line, applied to the message with
+# the `[ASSERT n] ` prefix and the trailing `(file:line)` stripped).
+#
+# 2026-09-27: every START press fires this once, in BrnNetwork::StateManager::ProcessGuiEvents
+# (src/GameSource/Network/Managers/BrnNetworkStateManager_wN1_04.cpp:1012) off the pause screen's
+# GuiEventNetworkSuspension. Network/** is Niaz's code: reported to the conductor, not this lane's to fix.
+^Invalid suspension type$
