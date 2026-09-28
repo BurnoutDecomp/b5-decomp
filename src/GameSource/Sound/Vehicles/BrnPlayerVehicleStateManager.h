@@ -84,6 +84,13 @@ public:
     // declares but does not body them, so the concrete leaf must override+body them). ----
     virtual void ResourcesAreReady();             // @ 0x826CA4E0
 
+    // DWARF cpp:408; inlined at ARTIST826F5210 (scene is manager+0x98).
+    s32 Query(Vector3 lvPosition, f32 afRadius, BrnSound::World::StaticSoundEntity* apEntities,
+              s32 aiMaxEntities, bool abDrawDebug) const
+    {
+        return mSoundScene.Query(lvPosition, afRadius, apEntities, aiMaxEntities, abDrawDebug);
+    }
+
 private:
     BrnSound::Logic::World::SoundWorldScene mSoundScene;
     CgsSound::Logic::Content mCsisDeformationInterface;

@@ -19,14 +19,13 @@
 // COMMITTED global Array<T,N> (CgsArray.h) -- it does NOT re-declare the count word.
 // mpPhysicsControl (X360 +3408) is deliberately UNINITIALIZED by the ctor (left until
 // Attach). The proximity/time constants are the two DWARF-named file-scope floats
-// KF_STATIC_PASSBY_VELOCITY_THRESHOLD / KF_TIME_TO_WAIT_FOR_RETRIGGER (values deferred
-// -- their rodata magnitudes are not pinned in this slice; declared for the bodies).
+// KF_STATIC_PASSBY_VELOCITY_THRESHOLD / KF_TIME_TO_WAIT_FOR_RETRIGGER (50 MPH / 1 s).
 //
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): members are pinned BY NAME + SEQUENCE.
 // =============================================================================
 
 // mpPhysicsControl is pointer-only here -> forward declaration.
-namespace BrnSound { namespace Vehicles { namespace Engines { struct PhysicsControl; } } }
+namespace BrnSound { namespace World { struct StaticSoundEntity; } namespace Vehicles { class PlayerVehicleStateManager; namespace Engines { struct PhysicsControl; } } }
 
 namespace BrnSound
 {
@@ -60,6 +59,14 @@ struct StaticPassbyControl : public BrnSound::Logic::BrnEffectControl
 
     // @ 0x826D0E38 -- RTTI factory hook.
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );
+
+    s32 GetController(s32 aiIndex) override;
+    void AttachController(CgsSound::Logic::EffectBase* apController) override;
+    bool Attach() override;
+    void UpdateParams(f32 afTimeStep) override;
+    void ProcessPassbys(Vector3 lvPosition, f32 afSpeed, const PlayerVehicleStateManager* apPlayerStateMan);
+    void TriggerPassby(const BrnSound::World::StaticSoundEntity& arEntity);
+    void UpdateHistory(f32 afTimeStep);
 
     // @ +0x40 (X360). The 19-slot history table (stride 0xB0).
     PassbyHistory mafHistoryTimeouts[19];

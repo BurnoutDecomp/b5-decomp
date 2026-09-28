@@ -24,9 +24,9 @@ inline void Log(const char* format, ...)
         std::fflush(file);
     }
 }
-struct Entry { const void* player; const void* sample; unsigned voice; bool emitted; };
+struct Entry { const void* player; const void* sample; unsigned voice; bool emitted; const char* family; };
 inline Entry* Entries() { static Entry entries[256] = {}; return entries; }
-inline void Register(const void* player, const void* sample, unsigned voice)
+inline void Register(const void* player, const void* sample, unsigned voice, const char* family = "aems")
 {
     if (!File()) return;
     static unsigned next = 0;
@@ -34,8 +34,8 @@ inline void Register(const void* player, const void* sample, unsigned voice)
     for (unsigned i = 0; i < 256; ++i)
         if (Entries()[i].player == player) { entry = Entries() + i; break; }
     if (!entry) entry = Entries() + (next++ % 256);
-    *entry = {player, sample, voice, false};
-    Log("aems-player player=%p sample=%p voice=%u\n", player, sample, voice);
+    *entry = {player, sample, voice, false, family};
+    Log("%s-player player=%p sample=%p voice=%u\n", family, player, sample, voice);
 }
 inline void Measure(const void* player, const float* pcm, unsigned count,
                     unsigned channels, unsigned stride)
@@ -53,13 +53,34 @@ inline void Measure(const void* player, const float* pcm, unsigned count,
             }
         if (peak > 0.0f) {
             entry.emitted = true;
-            Log("aems-pcm player=%p sample=%p voice=%u frames=%u channels=%u rms=%.9g peak=%.9g\n",
-                player, entry.sample, entry.voice, count, channels,
+            Log("%s-pcm player=%p sample=%p voice=%u frames=%u channels=%u rms=%.9g peak=%.9g\n",
+                entry.family, player, entry.sample, entry.voice, count, channels,
                 std::sqrt(power / (count * channels)), peak);
         }
         return;
     }
 }
+// FLAG PC-platform witness: isolate this Send's actual contribution to its
+// destination by subtracting a snapshot taken immediately before the mix.
+// This captures the real gain ramp and channel mapping without modifying audio.
+inline float* CaptureMix(const void* sender, const float* pcm, unsigned channels)
+{
+    if (!File() || channels > 6) return nullptr;
+    bool pending = false;
+    for (unsigned i = 0; i < 256; ++i)
+        if (Entries()[i].player == sender && !Entries()[i].emitted) { pending = true; break; }
+    if (!pending) return nullptr;
+    static thread_local float before[6 * 256];
+    for (unsigned i = 0; i < channels * 256; ++i) before[i] = pcm[i];
+    return before;
+}
+inline void MeasureMix(const void* sender, float* before, const float* pcm, unsigned channels)
+{
+    if (!before) return;
+    for (unsigned i = 0; i < channels * 256; ++i) before[i] = pcm[i] - before[i];
+    Measure(sender, before, 256, channels, 256);
+}
+
 // FLAG PC-platform witness: first nonzero output of a DSP effect, after processing.
 inline void MeasureEffect(const char* name, const void* effect, const float* pcm,
                           unsigned count, unsigned channels, unsigned stride)
