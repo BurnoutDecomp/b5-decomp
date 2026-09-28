@@ -25,20 +25,25 @@
 #
 # PASS = a water entry reached the fixed arm with a bank (the [fx-sound-msg] witness,
 # BRN_HUD_SOUND_DIAG, prints `bank=1`), 0 asserts, 0 exceptions.
+# 2026-09-28: first drive on the nearby road. Teleporting directly from the
+# junkyard to the quay can enter water with neither an AI reset section nor a
+# recorded road transform. That artificial setup repeatedly resets underwater.
+# The road shot fills both through normal gameplay, then the quay shot falls in.
 @{
   Name    = 'fxwatersnd_live'
   Area    = 'sound'
   Bug     = 'A player crash into water must play the crash-in-water sting on the collision splice bank, not assert and fault on a NULL bank.'
   Frames  = $false
+  ProfileFixture = 'scratch/OWNERLIST_0927/L2/slot2_profile_drifted_21db22a8.sav'
   Run     = @{
     Drive            = $true
     MotionProbe      = $true
-    MaxSeconds       = 110
+    MaxSeconds       = 80
     SkipIntro        = $true
     AcceptGap        = 1.0
-    CrashSweep       = '1758.5,-0.8,-2399.6'
-    CrashSweepShots  = '1758.5/-0.8/-2399.6/262:12,1790.5/-3.2/-2393.0/260:44,1790.5/-3.2/-2393.0/260:53'
-    CrashSweepSettle = 300
+    CrashSweep       = '1789.888,-2.465,-2338.579'
+    CrashSweepShots  = '1789.888/-2.465/-2338.579/292:12,1790.5/-3.2/-2393.0/260:44'
+    CrashSweepSettle = 600
   }
   DiagEnv = 'BRN_HUD_SOUND_DIAG=1,BRN_WRECK_LATCH_DIAG=1,BRN_CRASH_EXIT_DIAG=1'
   Checks  = @(
