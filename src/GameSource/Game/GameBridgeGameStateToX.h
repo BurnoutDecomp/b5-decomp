@@ -58,6 +58,15 @@ namespace BrnGame
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
         const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
 
+    // The free-roam slice of TranslateGameActionsToGuiEvents (junkyard, drive-thru discovery,
+    // refusals and closing, landmark areas, the super-jump name and failure, the sat-nav switch).
+    // Called from the default arm of TranslateEventFlowGameActionToGuiEvent; returns true when it
+    // consumed the action. Body: GameBridgeGameStateToX_EventFlowGuiEvents_wZ_00.cpp.
+    bool TranslateFreeRoamGameActionToGuiEvent(
+        s32 liActionType,
+        const CgsModule::Event* lpAction,
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput);
+
     // [stuntrace wave E1, 2026-08-26] The event score/timer slice of BridgeGameStateToGui
     // (GuiEventCurrentStatus 492 / GuiEventScoreUpdate 424 / GuiAttackScoreUpdate
     // 428). Called in BrnGameModule's GUI leg inside the read/write-locked bracket, BEFORE

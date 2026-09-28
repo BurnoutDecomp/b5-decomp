@@ -14,6 +14,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Traffic/BrnTrafficState.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
+#include "GameSource/Sound/Vehicles/Traffic/BrnTrafficSkid.h"
 #include "GameSource/Sound/Vehicles/Wheels/BrnWheelControl.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficSoundInterfaces.h"
@@ -178,7 +179,10 @@ bool InAirEffect::Attach()
         return false;
 
     mfTimeSinceJumpCamera = 0.0f;
-    if (GetInstanceId() == 1)
+    // The player/non-player splits below test the owning state manager's id
+    // (1 = player vehicle), not the state's instance number: a traffic or AI
+    // state's instance 1 must not take the player path.
+    if (GetStateId() == 1)
     {
         mfSuspensionSensitivity = 0.05f;
         mfSuspensionThreshold = 0.15f;
@@ -191,13 +195,10 @@ bool InAirEffect::Attach()
 
     mLandingVoices.Prepare(GetLogicModule());
 
-    if (GetInstanceId() == 1)
+    if (GetStateId() == 1)
     {
-        // ARTIST InAirEffect::Attach @0x826F4598: `lwz r6, 0x2958(module)` -- the
-        // bank comes from mapStateManagers[1] (the PLAYER manager, which owns
-        // inair.abi), NOT from this state's own manager. The same effect is aliased
-        // into the AI vehicle state (mask bit 9), whose manager has no such content;
-        // reading `GetStateManager()` there asserted `lpContent` on every AI attach.
+        // The bank comes from the player state manager (mapStateManagers[1]),
+        // which owns inair.abi.
         CgsSound::Logic::Content* lpContent = nullptr;
         CgsSound::Logic::StateManager* lpPlayerStateMan =
             static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
@@ -314,7 +315,7 @@ void InAirEffect::UpdateParams(f32 afTimeStep)
     BrnSound::Module::Io::LogicInputBuffer* lpInput =
         lpModule ? lpModule->GetBrnInputStructure() : nullptr;
     CGS_ASSERT(lpInput != nullptr, "lpInput");
-    if (GetInstanceId() == 1 && lpInput && lpInput->GetDirectorCamera() &&
+    if (GetStateId() == 1 && lpInput && lpInput->GetDirectorCamera() &&
         (lpInput->GetDirectorCamera()->mState_uFlags & 0x80) != 0)
     {
         mfTimeSinceJumpCamera = 0.0f;
@@ -326,7 +327,7 @@ void InAirEffect::UpdateParams(f32 afTimeStep)
 
     UpdatePhysicsData(afTimeStep);
     UpdateWheelLandings(afTimeStep);
-    if (GetInstanceId() == 0 || GetInstanceId() == 1)
+    if (GetStateId() == 0 || GetStateId() == 1)
         UpdateSuspensionSqueeks(afTimeStep);
 
     mInAirVoice.Update();
@@ -391,7 +392,7 @@ void InAirEffect::UpdateWheelLandings(f32)
                     1.0f);
         SetMixerInputValue(0, 0x7FFF);
 
-        if (GetInstanceId() == 1 && lpModule)
+        if (GetStateId() == 1 && lpModule)
         {
             CgsSound::Io::Message<bool> lMessage(false);
             lMessage.Construct(14, 0, 0, 2,
@@ -408,7 +409,7 @@ void InAirEffect::UpdateWheelLandings(f32)
                 BrnSound::Logic::Collision::E_COLLISION_SPLICE_HARD_LANDINGS, 1.0f);
             SetMixerInputValue(1, 0x7FFF);
 
-            if (GetInstanceId() == 0)
+            if (GetStateId() == 0)
             {
                 PlayLanding(
                     BrnSound::Logic::Collision::E_COLLISION_SPLICE_JUNKYARD_LANDING_SWEETNER,
@@ -416,7 +417,7 @@ void InAirEffect::UpdateWheelLandings(f32)
                 SetMixerInputValue(0, 0x7FFF);
             }
 
-            if (GetInstanceId() != 0 &&
+            if (GetStateId() != 0 &&
                 mfTimeSinceJumpCamera < KF_JUMP_CAMERA_LANDING_WINDOW)
             {
                 PlayJumpCamLanding();
@@ -426,7 +427,7 @@ void InAirEffect::UpdateWheelLandings(f32)
     else if (mPhysicsData.mfTimeInAir.GetCurrent() > KF_TIME_IN_AIR_FOR_JUMP)
     {
         SetMixerInputValue(2, 0x7FFF);
-        if (GetInstanceId() == 1 && lpModule)
+        if (GetStateId() == 1 && lpModule)
         {
             CgsSound::Io::Message<bool> lMessage(true);
             lMessage.Construct(14, 0, 0, 2,
@@ -589,6 +590,37 @@ void InAirEffect::PlayJumpCamLanding()
     mfJumpCamLandingVoiceSecondGain = lTag.mfVolume;
 }
 
+// Descriptor {0x30030, "TrafficInAir", InAirEffect's descriptor, &CreateObject}.
+// FLAG: InAirEffect's descriptor is registered in BrnVehicleAudioRegistration.cpp
+// and not reachable from here, so the chain starts at EffectObject's (the
+// JunkyardInAirEffect precedent). TrafficInAir is the only effect-3 descriptor of
+// the traffic state, so the base chain never arbitrates its lookup.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
+TrafficInAir::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
+        0x30030, "TrafficInAir", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
+        &TrafficInAir::CreateObject);
+    return &sTypeInfo;
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const
+    gpTrafficInAirReg = CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(
+        TrafficInAir::GetStaticTypeInfo());
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
+TrafficInAir::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+// MemBase::operator new(0x3F8, "TrafficInAir", flavour) + the constructor; returns
+// the EffectObject view (+0x04).
+CgsSound::Logic::EffectObject* TrafficInAir::CreateObject(u32)
+{
+    return new TrafficInAir();
+}
+
 TrafficInAir::TrafficInAir()
     : InAirEffect()
     , mpTrafficEntity(nullptr)
@@ -612,90 +644,96 @@ bool TrafficInAir::Attach()
     BrnSound::Logic::Traffic::TrafficState* lpState =
         static_cast<BrnSound::Logic::Traffic::TrafficState*>(GetStateBase());
     CGS_ASSERT(lpState != nullptr, "lpState");
-    mpTrafficEntity = lpState ? lpState->GetTrafficEntity() : nullptr;
+    mpTrafficEntity = lpState->GetTrafficEntity();
     return true;
 }
 
+// Inlined into UpdatePhysicsData on the console. Its wheel loop updates the element
+// one past maWheelOnGround[3] (the padding before mafSuspensionHeights) on every
+// pass, so the four wheel flags keep their last values; that out-of-range store is
+// not reproduced. mfTimeSinceReset is left untouched.
 void TrafficInAir::Clear()
 {
     mPhysicsData.mIsOnGround.Update(true);
-    for (u32 luWheel = 0; luWheel < 4; ++luWheel)
-        mPhysicsData.maWheelOnGround[luWheel].Update(true);
     mPhysicsData.mfTimeInAir.Flush(0.0f);
-    mPhysicsData.mfTimeSinceReset = 0.0f;
     mPhysicsData.mbIsCrashing = false;
 }
 
+// Only a physical car is tracked: the wheel contacts and suspension heights come from
+// the car's queued PhysicalTrafficState, and it counts as crashing only while both it
+// and the player car are fatally crashing. No physical state clears the data.
+//
+// FLAG (replay serialiser not in this tree): while the sound serialiser plays back,
+// the console takes the wheel-contact flags and the crash flag from the recorded
+// traffic entity instead. This tree's SoundLogicModule holds no SoundSerialiser, so
+// only the live path runs.
 void TrafficInAir::UpdatePhysicsData(f32 afTimeStep)
 {
-    if (!mpTrafficEntity || !mpTrafficEntity->mbIsPhysical)
+    bool lbFoundState = false;
+    if (mpTrafficEntity->mbIsPhysical)
     {
-        Clear();
-        return;
-    }
+        BrnSound::Module::SoundLogicModule* lpModule =
+            static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+        const BrnSound::Module::Io::LogicInputBuffer* lpInputBuffer =
+            lpModule->GetBrnInputStructure();
+        CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer");
+        const BrnSound::Module::Io::RootInputBuffer::PhysicalTrafficStateQueue*
+            lpPhysicalTrafficStates = lpInputBuffer->GetPhysicalTrafficStates();
 
-    BrnSound::Module::SoundLogicModule* lpModule =
-        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
-    BrnSound::Module::Io::LogicInputBuffer* lpInput =
-        lpModule ? lpModule->GetBrnInputStructure() : nullptr;
-    CGS_ASSERT(lpInput != nullptr, "lpInputBuffer");
-    const BrnSound::Module::Io::RootInputBuffer::PhysicalTrafficStateQueue* lpQueue =
-        lpInput ? lpInput->GetPhysicalTrafficStates() : nullptr;
-
-    const BrnPhysics::Vehicle::PhysicalTrafficState* lpTraffic = nullptr;
-    if (lpQueue)
-    {
-        for (s32 liIndex = 0; liIndex < lpQueue->GetLength(); ++liIndex)
+        const s32 liIndex =
+            BrnSound::Logic::Traffic::TrafficSkid::FindPhysicalTrafficState(
+                lpPhysicalTrafficStates, mpTrafficEntity->mEntityId);
+        if (liIndex != -1)
         {
+            lbFoundState = true;
             const BrnPhysics::Vehicle::PhysicalTrafficState& lrState =
-                lpQueue->GetEvent(liIndex);
-            if (lrState.mEntityID.muValue == mpTrafficEntity->mEntityId.muValue)
+                lpPhysicalTrafficStates->GetEvent(liIndex);
+
+            mPhysicsData.mIsOnGround.Update(false);
+            for (u32 luWheel = 0; luWheel < 4; ++luWheel)
             {
-                lpTraffic = &lrState;
-                break;
+                mPhysicsData.maWheelOnGround[luWheel].Update(
+                    lrState.maWheels[luWheel].mRoadContact.mbIsOnGround);
+                mPhysicsData.mafSuspensionHeights[luWheel] =
+                    lrState.maWheels[luWheel].mfSuspensionHeight;
+                if (mPhysicsData.maWheelOnGround[luWheel].GetCurrent())
+                    mPhysicsData.mIsOnGround.Update(true);
+            }
+
+            mPhysicsData.mbIsCrashing = false;
+            if (lrState.mbIsFatallyCrashing)
+            {
+                mPhysicsData.mbIsCrashing = lpModule->GetBrnInputStructure()
+                    ->GetVehicleInterface()->IsPlayerCarFatalyCrashing();
             }
         }
     }
 
-    if (!lpTraffic)
+    if (!lbFoundState)
     {
         Clear();
         return;
     }
 
-    bool lbAnyWheelOnGround = false;
-    for (u32 luWheel = 0; luWheel < 4; ++luWheel)
-    {
-        const bool lbOnGround =
-            lpTraffic->maWheels[luWheel].mRoadContact.mbIsOnGround;
-        mPhysicsData.maWheelOnGround[luWheel].Update(lbOnGround);
-        mPhysicsData.mafSuspensionHeights[luWheel] =
-            lpTraffic->maWheels[luWheel].mfSuspensionHeight;
-        lbAnyWheelOnGround = lbAnyWheelOnGround || lbOnGround;
-    }
-    mPhysicsData.mIsOnGround.Update(lbAnyWheelOnGround);
+    mPhysicsData.mfTimeInAir.Update(mPhysicsData.mIsOnGround.GetCurrent()
+        ? 0.0f
+        : mPhysicsData.mfTimeInAir.GetCurrent() + afTimeStep);
 
-    bool lbPlayerFatal = false;
-    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
-        lpVehicles = lpInput->GetVehicleInterface();
-    if (lpVehicles)
-        lbPlayerFatal = lpVehicles->IsPlayerCarFatalyCrashing();
-    mPhysicsData.mbIsCrashing =
-        lpTraffic->mbIsFatallyCrashing && lbPlayerFatal;
-
-    const f32 lfPreviousTime = mPhysicsData.mfTimeInAir.GetCurrent();
-    mPhysicsData.mfTimeInAir.Update(
-        lbAnyWheelOnGround ? 0.0f : lfPreviousTime + afTimeStep);
-    mPhysicsData.mfTimeSinceReset = mpPhysicsControl
-        ? mpPhysicsControl->GetPhysicsData().mfTimeSinceRespawn
-        : 0.0f;
+    // FLAG (unrecovered value): the console then loads mfTimeSinceReset from +0x68 of
+    // the control in the mpPhysicsControl slot, the PhysicsControl processed-data
+    // time-since-respawn. In a traffic state that slot holds the TrafficControl
+    // (controller id 0), a 0x44-byte object, so the load reads past its end. The value
+    // cannot be recovered and is not reproduced: mfTimeSinceReset keeps its value
+    // (0 from construction), which holds PlayLanding and PlayJumpCamLanding off for
+    // traffic.
 }
 
+// FLAG (replay serialiser not in this tree): while the sound serialiser records, the
+// console writes the four wheel-contact flags and the crash flag of a physical car
+// into its recorded traffic entity before the base update. This tree's
+// SoundLogicModule holds no SoundSerialiser, so only the base update runs.
 void TrafficInAir::ProcessUpdate()
 {
-    // The playback/recording snapshots use this same typed physics state.  The
-    // serialiser remains owned by SoundLogicModule; this effect never reaches it
-    // through the console's raw module offset on the 64-bit host.
     InAirEffect::ProcessUpdate();
 }
 

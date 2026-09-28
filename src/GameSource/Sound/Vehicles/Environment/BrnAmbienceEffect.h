@@ -3,20 +3,16 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (BY NAME)
+#include "GameSource/Sound/Streaming/BrnIStreamUser.h"             // IStreamUser third base (BY NAME)
 
 // =============================================================================
 // BrnSound::Vehicles::Environment::AmbienceEffect
 //   GameSource/Sound/Vehicles/Environment/BrnAmbienceEffect.{h,cpp}  (DWARF home)
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. DWARF: AmbienceEffect : public
-// BrnEffectObject. The per-car environmental ambience EFFECT OBJECT.
-//
-// FLAG (MINIMAL home): ctor + CreateObj + dtor slice. Beyond the BrnEffectObject dual
-// base the ctor ALSO installs a THIRD polymorphic sub-object base @ +0x38 (un-recovered
-// class -- no DWARF, no Feb-2007 source) and zero-inits un-homed leaf scalars; those are
-// DECLARATION-DEFERRED (not fabricated). Only the base (BY NAME) is materialised, so this
-// leaf is layout-incomplete vs the X360 (same precedent as the committed
-// PlayerVehicleStateManager +0x98 FLAG).
+// The per-car environmental ambience EFFECT OBJECT. Like the speed and crash stream
+// effects it is a BrnEffectObject (primary + IResourceRequester sub-objects) plus an
+// IStreamUser interface sub-object: it streams the ambience bed of the region the
+// ambience control reports, fading each new bed in over two seconds.
 // =============================================================================
 
 namespace BrnSound
@@ -26,13 +22,29 @@ namespace Vehicles
 namespace Environment
 {
 
-struct AmbienceEffect : public BrnSound::Logic::BrnEffectObject
-{
-    AmbienceEffect();               // @ 0x826B9600
-    virtual ~AmbienceEffect();      // leaf vtable emission point (off_820B1F80)
+struct AmbienceControl;
 
-    // @ 0x826D0CC0 -- effect-object factory hook. Returns the +4 IResourceRequester view.
+struct AmbienceEffect : public BrnSound::Logic::BrnEffectObject,
+                        public BrnSound::Logic::Streaming::IStreamUser
+{
+    AmbienceEffect();
+    virtual ~AmbienceEffect();
+
+    // Effect-object factory hook. Returns the IResourceRequester view.
     static BrnSound::Logic::IResourceRequester* CreateObj( u32 luFlavour );
+
+    s32 GetController(s32 aiIndex) override;
+    void AttachController(CgsSound::Logic::EffectBase* apController) override;
+    void UpdateParams(f32 afTimeStep) override;
+    bool Detach() override;
+
+    const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
+    void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
+                           f32 afGain, f32 afElapsedTime) override;
+
+    // Members in declaration order.
+    CgsSound::Logic::VoiceWrapper::CreateParams mParams;
+    AmbienceControl*                            mpAmbienceControl;
 };
 
 } // namespace Environment

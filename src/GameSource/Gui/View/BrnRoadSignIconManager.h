@@ -1,160 +1,178 @@
 #pragma once
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"   // [F3] Vector2 / Vector4 (GetRoadSignIconPositions)
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"
+#include "BrnCommonTypes.h"   // Vector2 / Vector4, CgsID
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"   // CgsGui::GuiComponent (base), CgsGui::StateInterface
+#include "GameSource/Gui/BrnGuiShared.h"   // BrnGui::ERoadIcon (+ gapcRoadIconNames, the 64 icon names)
 
-// BrnGui::RoadSignIconManager - owns the fixed pool of on-map road-sign icon
-// components and broadcasts a single "signs visible" toggle across all of them.
-// Layout/method reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x824F5778 (no prior
-// source, no DecFIGS DWARF for this TU).
-//
-// The manager holds KU_NUM_SIGN_ICONS road-sign icon components inline (observed
-// element stride 0xC0 bytes, array starting @this+0xBC, 64 elements) and a master
-// visibility flag (@this+0x3105). SetSignsVisible walks the pool: when an icon's
-// own visible flag differs from the requested value and that icon has an apt view
-// bound, it drives the icon's apt "_visible" view-state to "true"/"false" through
-// the component's AddOutputAptViewState, then stores the new per-icon flag. The
-// master flag is updated once at the end.
+// BrnGui::RoadSignIcon / BrnGui::RoadSignIconManager -- the 64 road-rule signs on the big
+// map. Every sign is a GuiComponent named after its road's junction id; the manager binds an
+// apt ObjectController to each one, keeps their world positions, colours them from the
+// road-rule batch data and publishes the whole bank to the crash-nav icon renderer (GUI
+// event 562). Declaration shape from the original BrnRoadSignIconManager.h; the member set
+// is gated on the console ledger. Members are accessed by name; the console offsets in the
+// comments are documentation (the host GuiComponent base is wider).
+namespace CgsGui { struct ObjectController; }   // pointer-only (mapObjectController)
+
 namespace BrnGui
 {
-    // The road-rule batch-data response GUI event payload (DWARF: the road-sign
-    // icon manager takes it by const pointer). Defined in another TU; forward-
-    // declared here so the declared-only SetRoadRuleBatchData below can name it.
+    class GuiCache;
     struct GuiEventRoadRuleBatchDataResponse;
 
-    // One on-map road-sign icon. Derives from the GUI component base because the
-    // X360 build calls CgsGui::GuiComponent::AddOutputAptViewState on the element
-    // pointer directly (call site @0x824F57F0, this = element base). The visible /
-    // has-apt flags observed @element+0xBC / +0xBD; the bytes the component base
-    // and unrelated icon state occupy are left as named reserved storage so the
-    // flags land at their observed offsets without any raw-offset casts.
+    // Console size 0xC0 (the pool stride every walker uses).
     struct RoadSignIcon : public CgsGui::GuiComponent
     {
-        // Component base (vptr + name + hash + state-interface) occupies the first
-        // 0xBC bytes; this TU only reads the two flags that follow it.
-        u8  maReservedBaseTail[0xBC - sizeof(CgsGui::GuiComponent)];
-        // @element+0xBC : per-icon visibility flag (0/1).
-        u8  mbVisible;
-        // @element+0xBD : 1 if this icon has an apt view bound and may be toggled.
-        u8  mbHasAptView;
-        // @element+0xBE .. +0xBF (stride padding to 0xC0).
-        u8  maReservedTail[0xC0 - 0xBE];
+        enum EIconType
+        {
+            E_ICON_TYPE_A     = 0,
+            E_ICON_TYPE_B     = 1,
+            E_ICON_TYPE_C     = 2,
+            E_ICON_TYPE_D     = 3,
+            E_ICON_TYPE_E     = 4,
+            E_ICON_TYPE_F     = 5,
+            E_ICON_TYPE_G     = 6,
+            E_ICON_TYPE_COUNT = 7,
+        };
 
-        // ADDITIVE GROW [F3, MapIconManager closure]. The sign's cached WORLD position
-        // lane, X360-attested twice on the SAME 0xC0-stride element:
-        //   * SetupComponent  @0x8250AE90 : `stvx128 v127, r0, r31` with r31 = element+0x90
-        //   * GetRoadSignIconPositions @0x82502B70 : `lvx128 v0, r0, r30`, r30 = element+0x90,
-        //     then lanes {0,1} are re-packed as a world {x, 0, z, 0} triple for WorldToDevice.
-        // On the console it lives at element+0x90, INSIDE the bytes maReservedBaseTail
-        // models; the host GuiComponent base is already wider than 0x90 (its name buffer
-        // plus a 64-bit interface pointer), so the field is appended by name instead --
-        // a raw console offset applied to a host object is exactly the defect class this
-        // project bans. Only lanes {x, y} are written by the console (a 2D world point).
-        Vector4 mv4WorldPosition;   // X360 element+0x90 (host placement differs)
+        enum ESignColour
+        {
+            E_SIGN_COLOUR_GREEN  = 0,
+            E_SIGN_COLOUR_RED    = 1,
+            E_SIGN_COLOUR_SILVER = 2,
+            E_SIGN_COLOUR_GOLD   = 3,
+            E_SIGN_COLOUR_COUNT  = 4,
+        };
 
-        // ADDITIVE GROW [crash-nav FIX2]. Which of the four authored sign-plate COLOURS this
-        // sign draws with. X360-attested as the word at element+0xB4, read by
-        // BrnGui::CrashNavIconRenderer::RenderRoadSign at all four of its sign-size arms
-        // (`lwz r11, 0x1544(r31) / add r11, r30, r11 / lwz r11, 0xB4(r11)` -- r30 == 192*i,
-        // i.e. this 0xC0-stride element), where it drives a 4-way switch that picks both the
-        // plate's atlas rect and the text colour, and whose default fires the assert
-        // "Unknown sign colour" (BrnCrashNavIconRenderer.cpp:2050/2096/2142/2188).
-        // Same host-placement caveat as mv4WorldPosition above: the console offset sits inside
-        // the bytes maReservedBaseTail models, so the field is appended BY NAME.
-        // ⚠️ No producer writes it yet on this build (the sign pool is parked, see
-        // RoadSignIconManager::Update below) -- consumers must treat it as 0 until one does.
-        u32 meSignColour;           // X360 element+0xB4 (host placement differs)
+        // The colour bound the crash-nav renderer's sign switch checks against.
+        static const u32 KU_NUM_SIGN_COLOURS = E_SIGN_COLOUR_COUNT;
 
-        // The bound the RenderRoadSign switch checks (`cmplwi r11, 3 / bgt default`).
-        static const u32 KU_NUM_SIGN_COLOURS = 4;
+        // The component construct plus the sign's own defaults. lbCommunicateWithApt
+        // false (the manager's pool) keeps every setter below apt-silent: they only store.
+        void Construct(const char* lacName, CgsGui::StateInterface* lpStateInterface,
+                       const char* lpacParentName, bool lbCommunicateWithApt);
+
+        // Place the sign (no standalone console symbol: inlined into
+        // RoadSignIconManager::SetupComponent, whose "leIcon >= 0 && leIcon < E_ROADICON_COUNT"
+        // assert is this method's).
+        void SetIcon(ERoadIcon leIcon, const Vector2* lpv2WorldPos, EIconType leIconType, CgsID lRoadId);
+
+        void SetVisible(bool lbVisible);
+
+        // Show a road's sign artwork: by icon (builds "RD_<id>") or by
+        // the frame name itself. lbShowPost drives the sign's post.
+        void DisplayRoad(ERoadIcon leIcon, bool lbShowPost);
+        void DisplayRoad(const char* lpcRoadName, bool lbShowPost);
+
+        // The icon whose name is lpIconName (E_ROADICON_COUNT, after an assert,
+        // when there is none). Reads no member.
+        ERoadIcon FindRoadFromName(const char* lpIconName);
+
+        void SetScreenPosition(Vector2 lv2ScreenPos);
+        void SetColour(ESignColour leColour);
+        void SetScale(Vector2 lv2Scale);
+
+        // Originally `Vector2 mv2WorldPos` (console +0x90): the sign's 2D world position
+        // {x, z} in lanes {0, 1}. FLAG: kept under the committed name and type the crash-nav
+        // renderer already reads (BrnCrashNavIconRenderer.cpp RenderRoadSign); the rename to
+        // the original spelling is a two-line change there.
+        Vector4     mv4WorldPosition;
+        EIconType   meIconType;             // console +0xA0
+        CgsID       mRoadId;                // console +0xA8
+        bool        mbShowPost;             // console +0xB0
+        ESignColour meSignColour;           // console +0xB4
+        bool        mbOfflineTimeRuled;     // console +0xB8
+        bool        mbOfflineCrashRuled;    // console +0xB9
+        bool        mbOnlineTimeRuled;      // console +0xBA
+        bool        mbOnlineCrashRuled;     // console +0xBB
+
+    private:
+        friend class RoadSignIconManager;   // SetSignsVisible walks the two flags below
+
+        static const char* KAPC_SIGN_COLOURS[E_SIGN_COLOUR_COUNT];
+        static const char* mpRoadPrefix;
+        static const char* mpShowSign;
+        static const char* mpTrue;
+        static const char* mpFalse;
+        static const char* mpacRoadFrameName;
+        static const char* mpacRoadColour;
+
+        bool        mbSignVisible;          // console +0xBC
+        bool        mbCommunicateWithApt;   // console +0xBD
     };
 
     class RoadSignIconManager
     {
     public:
-        static const u32 KU_NUM_SIGN_ICONS = 64;
+        static const u32 KU_NUM_SIGN_ICONS = E_ROADICON_COUNT;
 
-        // @ 0x824F5778 : broadcast the visible flag across every road-sign icon.
-        void SetSignsVisible(u8 lbVisible);
+        // Inlined into MapIconManager::Construct: clear the controller table
+        // and the manager tail.
+        void Construct();
 
-        // [H3b] Feed the map's zoom-derived icon scale (DWARF BrnRoadSignIconManager.h:273
-        // mfZoomFactor @this+0x3108 == manager+0xA198 -- the store MapIconManager's
-        // SetZoomFactor note pins). X360-inlined at every call site; the setter is the
-        // committed exposure over the named member.
-        void SetZoomFactor(f32 lfZoomFactor) { mfZoomFactor = lfZoomFactor; }
+        // Construct the 64 sign components (named after their roads) and give
+        // each an apt ObjectController, registered with apt.
+        void Prepare(CgsGui::StateInterface* lpStateInterface, GuiCache* lpGuiCache);
 
-        // ADDITIVE GROW (BrnGui::MapIconManager TU): MapIconManager::SetRoadRuleBatchData
-        // (@0x824B2F80) forwards the road-rule batch response straight into the embedded
-        // RoadSignIconManager (X360 call BrnGui__RoadSignIconManager__SetRoadRuleBatchData
-        // on this+0x7090). DWARF (BrnRoadSignIconManager.h:90) gives the signature. The
-        // body lives in the RoadSignIconManager TU (not yet reconstructed); declared-only
-        // here so the manager TU links against the real declaration.
-        void SetRoadRuleBatchData(const GuiEventRoadRuleBatchDataResponse* lpRoadRules);
+        // Inlined into MapIconManager::ReleaseResources: unregister and forget
+        // every controller.
+        void ReleaseResources();
 
-        // [H3c] MapIconManager::UpdateSatNavIcons @0x82522588 calls the per-frame sign
-        // pass (X360 BrnGui__RoadSignIconManager__Update on this+0x7090) when road signs
-        // are enabled. The body drives the parked 64-sign pool -- one-shot-logged park in
-        // the cpp; only reachable with mbUseRoadSigns set (the big-map screens -- the
-        // sat-nav HUD owner claims the set with road signs OFF).
+        // The per-frame sign pass: screen position, zoom scale and road-rule
+        // colour of every sign, then the bank handed to the crash-nav renderer (GUI event 562).
         void Update();
 
-        // ---------------------------------------------------------------------------
-        // ADDITIVE GROW [F3 2026-08-29, the MapIconManager closure wave]. Four rows the
-        // MapIconManager forwarders reach; each is its own X360 ledger function.
-        // ---------------------------------------------------------------------------
-
-        // @0x8250AE90 -- bind the 64 sign components: per icon compress its name to a
-        // CgsID, take the sign's world position from its object controller (or keep the
-        // cached lane once the pool has already been set up), stamp the id/flag pair and
-        // drive the controller's "_visible" object variable true. Body in this TU.
-        void SetupComponent();
-
-        // @0x824FB1D8 -- append every sign component's hashed name to the owning screen's
-        // expected-apt-component list (and re-register each object controller with the
-        // cache). Body in this TU.
+        // The 64 sign components into the screen's expected-apt list.
         void AppendExpectedComponents();
 
-        // @0x824F56C0 -- the interned component name of the sign at liIndex (the caller
-        // compares the returned pointer by identity). The X360 asserts the index and then
-        // returns `element + 4` == the component's own name buffer.
-        const char* GetIconNameAtIndex(u32 luIndex) const;
-
-        // @0x82502B70 -- transform all 64 sign world positions into device space and
-        // report the count (always KU_NUM_SIGN_ICONS -- the X360 stores the literal 64).
+        // Every sign's world position in device space, and the count (always 64).
         void GetRoadSignIconPositions(Vector2* lpav2Positions, s32* lpiNumIcons) const;
 
-        // The icon count the MapIconManager index asserts compare against ("liRoadSignIndex
-        // < mRoadSignIconManager.GetNumIcons()", BrnMapIconManager.cpp:2602). Inline on the
-        // console -- GetRoadSignNameAtIndex @0x824FAA50 compares against the literal 64.
+        // The sign component's own name.
+        const char* GetIconNameAtIndex(u32 luIndex) const;
+
+        // Read each sign's authored stage position off its apt object into the
+        // world, then show its road.
+        void SetupComponent();
+
+        // Adopt the road-rule batch response's per-road ruled flags.
+        void SetRoadRuleBatchData(const GuiEventRoadRuleBatchDataResponse* lpRoadRules);
+
+        // Latch which road-rule score class the colours follow. The original types the
+        // parameter BrnStreetData::ScoreType; kept s32 to match the committed caller
+        // (CrashNavPanel::GetPanelActiveRoadRuleType).
+        void SetRoadIconFilter(s32 leRoadRuleType);
+
+        // Inline on the console (GetRoadSignNameAtIndex compares against 64).
         s32 GetNumIcons() const { return static_cast<s32>(KU_NUM_SIGN_ICONS); }
 
-        // ADDITIVE GROW (2026-08-29, the CrashNavMap base TU). @0x824F5920 -- latch which
-        // road-rule score class the sign pool should draw. The whole X360 body is a
-        // change-guarded single store to this+12556 == 0x310C, the word directly after
-        // mfZoomFactor, so the member is appended below at that offset. DWARF spells the
-        // parameter `BrnStreetData::ScoreType` (BrnMapIconManager.h:306 forwards the same
-        // type); kept s32 here to match the committed
-        // CrashNavPanel::GetPanelActiveRoadRuleType, whose result is the only value any
-        // reconstructed caller passes. DECLARATION-ONLY -- body belongs to this TU.
-        void SetRoadIconFilter(s32 leScoreType);
+        // Broadcast the visible flag across every sign.
+        void SetSignsVisible(bool lbVisible);
+
+        // Inline on the console (the map screens store the zoom scale straight
+        // into mfZoomFactor).
+        void SetZoomFactor(f32 lfZoomFactor) { mfZoomFactor = lfZoomFactor; }
 
     private:
-        // @this+0x0 : inline pool of road-sign icon components (stride 0xC0). The
-        // per-icon visible flag of element 0 lands @this+0xBC, matching the asm.
-        RoadSignIcon maIcons[KU_NUM_SIGN_ICONS];
-        // @this+0x3000 .. +0x3104 : manager state this TU does not read by name
-        // (the array ends at 0x3000; the master flag sits at 0x3105).
-        u8           maReservedManagerState[0x3105 - (0xC0 * KU_NUM_SIGN_ICONS)];
-        // @this+0x3105 : master "signs visible" flag (last broadcast value).
-        u8           mbSignsVisible;
-        // [H3b additive tail] @this+0x3106..0x3107 stride pad, then the zoom scale the
-        // map screens feed (DWARF h:273; MapIconManager::Construct seeds it to 1.0).
-        u8           mauPad3106[2];
-        f32          mfZoomFactor;   // @this+0x3108 (== manager+0xA198)
-        // [base-TU wave] @this+0x310C (== 12556, the SetRoadIconFilter store target above).
-        // FLAG consumer-named: no DWARF member row is pinned to this offset; the type is
-        // whatever CrashNavPanel::GetPanelActiveRoadRuleType returns.
-        s32          meRoadIconFilter;   // @this+0x310C
+        // Update's zoom-to-scale ramp: the HD set and the SD set.
+        static const f32 KF_ZOOM_RANGE;
+        static const f32 KF_ZOOM_ADJUST;
+        static const f32 KF_MIN_SCALE_FACTOR;
+        static const f32 KF_MAX_SCALE_FACTOR;
+        static const f32 KF_MIN_VIEW_LERP;
+        static const f32 KF_MAX_VIEW_LERP;
+        static f32       KF_SD_MIN_SCALE_FACTOR;
+        static f32       KF_SD_MAX_SCALE_FACTOR;
+        static f32       KF_SD_MIN_VIEW_LERP;
+        static f32       KF_SD_MAX_VIEW_LERP;
+
+        RoadSignIcon               mIcons[KU_NUM_SIGN_ICONS];                // console +0x0000
+        CgsGui::ObjectController*  mapObjectController[KU_NUM_SIGN_ICONS];   // console +0x3000
+        GuiCache*                  mpGuiCache;                               // console +0x3100
+        bool                       mbIconsTransformed;                       // console +0x3104
+        bool                       mbComponentVisible;                       // console +0x3105
+        f32                        mfZoomFactor;                             // console +0x3108
+        // Originally BrnStreetData::ScoreType; s32 to match SetRoadIconFilter.
+        s32                        meRoadRuleType;                           // console +0x310C
+        CgsGui::StateInterface*    mpStateInterface;                         // console +0x3110
     };
 }

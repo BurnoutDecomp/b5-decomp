@@ -27,7 +27,7 @@ namespace BrnGui { class FriendsListComponent; }
 // resource/component watcher embedded in the cache; GuiCache is the cache itself. Only
 // the methods reached by the in-scope GUI code are declared on GuiCache (its full data
 // layout is an out-of-scope boundary object the leaves only touch through these calls).
-namespace CgsGui { class ObjectController; struct GuiEventAptTriggerPayload; class GuiEventTimeInfo; }
+namespace CgsGui { struct ObjectController; struct GuiEventAptTriggerPayload; class GuiEventTimeInfo; }
 // GuiCache::Construct's second argument and the mpSystemUserProfile member below (pointer
 // only; home GameShared/GameClasses/Gui/CgsGuideIntegration.h).
 namespace CgsGui { class SystemUserProfile; }
@@ -658,6 +658,11 @@ namespace BrnGui
         CgsID GetPursuitCarID() const;              // X360 @0x8240F7F0 (mPursuedCarID,  PURSUIT)
         CgsID GetShutdownCarID() const;             // X360 @0x824B3060 (mShutdownCarID)
         s32 GetTrophyCarUnlockType() const;         // X360 @0x824B30C0 (meTrophyCarUnlockType, != NONE)
+        CgsID GetTrophyCarID() const
+        {
+            CGS_ASSERT(mTrophyCarID != static_cast<CgsID>(0), "kCGSID_NULL != mTrophyCarID");
+            return mTrophyCarID;
+        }
         s32 GetActiveRoadRuleScoringMode() const;   // X360 @0x8240FC28 (meRoadRuleScoreMode, != COUNT)
 
         const FreeburnChallengeManager* GetFreeburnChallengeManager() const; // X360 @0x8240F168
@@ -1940,7 +1945,7 @@ namespace BrnGui
         s32 miPursuitRivalDamageLeft_9FE8;               // +0x9FE8 (40936) FLAG: name inferred; only writers recovered
         s32 miPursuitRivalTotalDamage;                   // +0x9FEC (40940)
         CgsID mShutdownCarID;                            // +0x9FF0 (40944)
-        u8  mPad_9FF8[8];                                // +0x9FF8..+0x9FFF
+        CgsID mTrophyCarID;                              // +0x9FF8 (40952)
         s32 meTrophyCarUnlockType;                       // +0xA000 (40960) TrophyUnlockData::UnlockType
         // ---- mRaceCarInfo SoA (ARCI-indexed, 8 lanes) carved from the former mPad_A004[0x9C4] ----
         // ⭐⭐⭐ ADDITIVE CARVE (showtime score wave, 2026-08-29) from the HEAD of the former

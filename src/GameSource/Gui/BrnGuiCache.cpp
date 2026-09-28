@@ -2394,6 +2394,50 @@ namespace BrnGui
             break;
         }
 
+        case 375:
+        {
+            // GuiEventTrophyCarUnlock: the award screen's unlock type (+0xA000) and car (+0x9FF8).
+            const GuiEventTrophyCarUnlock* lpTrophyEvent =
+                reinterpret_cast<const GuiEventTrophyCarUnlock*>(lpEvent);
+            meTrophyCarUnlockType = lpTrophyEvent->meUnlockType;
+            mTrophyCarID          = lpTrophyEvent->mTrophyCarID;
+            break;
+        }
+
+        case 79:
+            // GuiEnteredJunkyard: the payload byte is the in-junkyard flag (+0x4B57, the pause
+            // gate IsInJunkyard reads).
+            mbFreeBurnMenuLocked = *reinterpret_cast<const u8*>(lpEvent) != 0;
+            break;
+
+        case 201:
+        {
+            // GuiEventHideDriveThru: find the drive-thru row carrying the event's CgsID (whole
+            // 64-bit compare) and hide its map icon. An id with no row is ignored.
+            CgsID lDriveThruId;
+            std::memcpy(&lDriveThruId, lpEvent, sizeof(lDriveThruId));
+            for (s32 liDriveThrough = 0; liDriveThrough < miNumDriveThroughs; ++liDriveThrough)
+            {
+                if (maDriveThroughInfo[liDriveThrough].GetCgsId() == lDriveThruId)
+                {
+                    maDriveThroughInfo[liDriveThrough].SetHiddenDriveThru(true);
+
+                    // [FLAG PC witness] BRN_FREEROAM_DIAG, first 8 hides.
+                    static const bool sbDiag = (getenv("BRN_FREEROAM_DIAG") != 0);
+                    static s32 siLinesLeft = 8;
+                    if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        --siLinesLeft;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[freeroam-gui] cache 201 hid drive-thru row " << liDriveThrough
+                            << " id=" << static_cast<u32>(lDriveThruId) << "\n";
+                    }
+                    break;
+                }
+            }
+            break;
+        }
+
         case 77:
             // ADDITIVE (car-select wave 2026-08-02). The X360 switch (rebased by -4) reaches
             // `jumptable 8250DE3C case 77` at 0x8250EE20 and does exactly this: one

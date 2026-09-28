@@ -1941,6 +1941,34 @@ namespace BrnGameState
             const BrnStreetData::RoadIndex liRoadIndex = GetRoadIndexFromAISectionIndex( luRaceCarAISection );
             miCurrentPlayerRoadIndex = liRoadIndex;
 
+            // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_ROADRULES_DIAG): the player's AI
+            // section, the span it carries, whether it is a shortcut and the road it resolves to,
+            // each time the section changes; first 48 lines. A shortcut or junction section has
+            // no street span, so the road is -1 there by design.
+            {
+                static const bool sbDiag        = ( std::getenv( "BRN_ROADRULES_DIAG" ) != 0 );
+                static s32        siLeft        = 48;
+                static u32        suLastSection = 0xFFFFFFFFu;
+                if ( sbDiag && siLeft > 0 && luRaceCarAISection != suLastSection && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    suLastSection = luRaceCarAISection;
+                    --siLeft;
+                    s32  liSpanIndex = -1;
+                    bool lbShortcut  = false;
+                    if ( luRaceCarAISection != 0x7FFF && luRaceCarAISection < mpAISectionData->muNumSections )
+                    {
+                        const BrnAI::AISection* lpDiagSection = mpAISectionData->GetAISection( luRaceCarAISection );
+                        liSpanIndex = lpDiagSection->miSpanIndex;
+                        lbShortcut  = lpDiagSection->IsShortcut();
+                    }
+                    *CgsDev::Log::gpDebugPrint
+                        << "[roadrules] player section " << static_cast<s32>( luRaceCarAISection )
+                        << " span " << liSpanIndex
+                        << " shortcut " << static_cast<s32>( lbShortcut )
+                        << " road " << liRoadIndex << "\n";
+                }
+            }
+
             if ( liRoadIndex == BrnStreetData::KI_INVALID_ROAD_INDEX )
             {
                 // Junction path: invalidate the upcoming/hopeful roads and age the junction timer.

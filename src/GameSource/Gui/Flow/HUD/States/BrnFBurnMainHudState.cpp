@@ -11,8 +11,13 @@
 #include "GameSource/Gui/Flapt/BrnFlaptManager.h"                         // BrnFlapt::FlaptManager
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                         // BrnFlapt::FileRef
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"               // BrnFlapt::MovieClipInstance::ResetTimeline
+#include "GameSource/GameState/Progression/BrnProfile.h"                  // Profile::FindCar / GetSeenTrophyUnlockSequence (event 350)
+#include "GameSource/GameState/Progression/BrnProgressionCarData.h"       // CarData::WasUnlockSequenceAlreadyShown (event 350)
+#include "SharedClasses/Progression/BrnProgressionData.h"                 // ProgressionData::GetTrophyUnlock (event 350)
+#include "SharedClasses/Progression/BrnTrophyUnlockData.h"                // TrophyUnlockData (event 350)
 
 #include <cstdio>    // std::snprintf (the one-shot deferral log)
+#include <cstdlib>   // getenv (the opt-in trophy witness)
 #include <cstring>   // std::strcmp (the apt transition-name dispatch)
 
 // BrnGui::FBurnMainHudState -- reconstructed from BURNOUT_X360_ARTIST.XEX (per-function
@@ -895,19 +900,22 @@ namespace BrnGui
                 UpdateSatNav(lpEvent, liEventId);
                 break;
             case 205:
-                // Show/hide satnav passthrough: view record + the satnav mirror.
-                PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f,
-                               static_cast<u8>(lpiPayload[0] != 0));
+            {
+                // Show/hide satnav passthrough: view record + the satnav mirror. The record
+                // is the one-byte GuiEventMiniMapSwitch; its byte is copied as-is.
+                const u8 lu8Show = *reinterpret_cast<const u8*>(lpEvent);
+                PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f, lu8Show);
                 if (mbSatNavEnabled)   // [H3b] the X360 mirror of the same payload
                 {
                     SatNavShowHidePayload lMirror;
                     lMirror.miOne   = 1;
                     lMirror.mfDelay = 0.0f;
-                    lMirror.mu8Show = static_cast<u8>(lpiPayload[0] != 0);
+                    lMirror.mu8Show = lu8Show;
                     mSatNavComponent.RecvEvent(
                         reinterpret_cast<const CgsModule::Event*>(&lMirror), 213);
                 }
                 break;
+            }
             case 206:
                 ProcessBoostInfo(lpEvent);
                 break;
@@ -1063,13 +1071,73 @@ namespace BrnGui
                         static_cast<BrnGameState::EActiveRoadRule>(lpiPayload[0]));
                 break;
             case 350:   // progression loaded { Profile*, ProgressionData* }
-                // FLAG deferred (Slice B): the trophy-unlock scan
-                // (BrnProgression::ProgressionData::GetTrophyUnlock / Profile::FindCar /
-                // GetSeenTrophyUnlockSequence -> GuiEventTrophyCarUnlock) -- the
-                // progression accessors are not reconstructed. The one-shot latch is
-                // kept so the scan runs once when it lands.
-                mbTrophyUnlockScanned = true;
+            {
+                // FLAG: before the scan the console sets the junction-info panel's
+                // game-complete byte when the profile's progression rank equals the
+                // progression data's rank count (JunctionInfoComponent::SetGameComplete,
+                // inlined there). That setter has no body in the tree, so the store is not
+                // reproduced here yet.
+                //
+                // The trophy-unlock scan, once per entry: the FIRST trophy whose car the
+                // profile owns, whose unlock sequence has not been seen and whose car has not
+                // had its own unlock sequence shown is raised as GUI 375
+                // (GuiEventTrophyCarUnlock: {16, 375, 16} + the 16-byte record, channel 40).
+                // InGame arms the TRPHY_UNLOCK countdown on it, GuiCache latches the type/car.
+                const GuiEventProgressionProfileData* lpProfileData =
+                    reinterpret_cast<const GuiEventProgressionProfileData*>(lpEvent);
+                BrnProgression::Profile* lpProfile = lpProfileData->mpProfile;
+                const BrnProgression::ProgressionData* lpProgressionData =
+                    lpProfileData->mpProgressionData;
+
+                if (!mbTrophyUnlockScanned)
+                {
+                    const u32 luTrophyUnlockCount = lpProgressionData->GetTrophyUnlockCount();
+                    for (u32 luIndex = 0; luIndex < luTrophyUnlockCount; ++luIndex)
+                    {
+                        const BrnProgression::TrophyUnlockData* lpCurrentTrophyUnlockData =
+                            lpProgressionData->GetTrophyUnlock(luIndex);
+                        CGS_ASSERT(lpCurrentTrophyUnlockData, "lpCurrentTrophyUnlockData");
+
+                        const CgsID lCarUnlockId = lpCurrentTrophyUnlockData->GetCarUnlockID();
+                        if (lCarUnlockId == 0)
+                        {
+                            continue;
+                        }
+
+                        const BrnProgression::TrophyUnlockData::UnlockType leUnlockType =
+                            lpCurrentTrophyUnlockData->GetUnlockType();
+                        const BrnProgression::CarData* lpCarData = lpProfile->FindCar(lCarUnlockId);
+                        if (!lpProfile->GetSeenTrophyUnlockSequence(leUnlockType)
+                            && lpCarData != 0
+                            && !lpCarData->WasUnlockSequenceAlreadyShown())
+                        {
+                            GuiEventTrophyCarUnlock lTrophyCarUnlock;
+                            lTrophyCarUnlock.meUnlockType = leUnlockType;
+                            lTrophyCarUnlock.mTrophyCarID = lCarUnlockId;
+                            CgsGui::GuiEventWrapper<GuiEventTrophyCarUnlock, KI_CHANNEL_GUI_OUT>
+                                lTrophyCarUnlockRecord(lTrophyCarUnlock);
+                            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                                reinterpret_cast<const CgsModule::Event*>(&lTrophyCarUnlockRecord),
+                                KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lTrophyCarUnlockRecord)));
+
+                            // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_TROPHY_DIAG),
+                            // first 8 lines: the trophy the scan raised.
+                            static const bool sbTrophyDiag = (getenv("BRN_TROPHY_DIAG") != 0);
+                            static s32 siTrophyDiagLinesLeft = 8;
+                            if (sbTrophyDiag && siTrophyDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+                            {
+                                --siTrophyDiagLinesLeft;
+                                *CgsDev::Log::gpDebugPrint
+                                    << "[trophy] scan raised gui 375 type " << static_cast<s32>(leUnlockType)
+                                    << " index " << static_cast<s32>(luIndex) << "\n";
+                            }
+                            break;
+                        }
+                    }
+                    mbTrophyUnlockScanned = true;
+                }
                 break;
+            }
             case 218:
             case 364: case 365: case 367: case 368:
             case 382: case 383: case 384: case 385: case 386: case 387:

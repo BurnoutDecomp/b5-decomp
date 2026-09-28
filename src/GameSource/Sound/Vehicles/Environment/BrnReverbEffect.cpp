@@ -1,4 +1,11 @@
 #include "GameSource/Sound/Vehicles/Environment/BrnReverbEffect.h"
+#include "GameSource/Sound/Vehicles/Environment/BrnEnclosureControl.h"
+#include "GameSource/Sound/Vehicles/Environment/BrnEnvironmentSoundDiag.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/AttribSys/Enums/eImpactTime.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "SharedClasses/Trigger/BrnGenericRegion.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Environment::ReverbEffect -- out-of-line bodies.
@@ -49,6 +56,95 @@ ReverbEffect::ReverbEffect()
     // mfTime/mfSpaceSize/mfBrightness/mfGain/meReverbState/mpEnclosureControl/
     // mpPhysicsControl: intentionally UNINITIALIZED (the X360 ctor writes nothing here).
 {
+}
+
+// ---------------------------------------------------------------------------
+// ReverbEffect::Attach
+//
+// Starts from the neutral preset (no time, space 15, full brightness and gain), a
+// settled level-1 interpolator, no transition, and a "no preset yet" type so the first
+// update always selects one.
+// ---------------------------------------------------------------------------
+bool ReverbEffect::Attach()
+{
+    if (!CgsSound::Logic::EffectBase::Attach())
+        return false;
+
+    CGS_ASSERT(mpEnclosureControl != nullptr, "mpEnclosureControl");
+    mfTime       = 0.0f;
+    mfSpaceSize  = 15.0f;
+    mfBrightness = 1.0f;
+    mfGain       = 1.0f;
+    mInterpolateReverb.Initialize(1.0f, 1.0f, 0.0f, CgsSound::Utils::Curve::E_LINEAR);
+    meReverbState = E_REVERB_STATE_NONE;
+    mReverbType.Flush(AttribSys::Enums::eReverbTypes::ReverbTypeCount);
+
+    static s32 siDiagAttach = 0;
+    if (SndEnvDiagBudget(siDiagAttach))
+        *CgsDev::Log::gpDebugPrint << "[sndenv] reverb attach [FLAG PC witness]\n";
+    return true;
+}
+
+// Controller slot 0 is the enclosure control, slot 1 the physics control.
+s32 ReverbEffect::GetController(s32 aiIndex)
+{
+    if (aiIndex == 0)
+        return 10;
+    if (aiIndex == 1)
+        return 0;
+    return -1;
+}
+
+void ReverbEffect::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    const s32 liEffectId = apController->GetEffectID();
+    if (liEffectId == 0)
+    {
+        mpPhysicsControl =
+            static_cast<const BrnSound::Vehicles::Engines::PhysicsControl*>(apController);
+        return;
+    }
+    CGS_ASSERT(liEffectId == 10, "Unexpected control.");
+    if (liEffectId == 10)
+        mpEnclosureControl = static_cast<const EnclosureControl*>(apController);
+}
+
+// ---------------------------------------------------------------------------
+// ReverbEffect::GetActiveReverb
+//
+// Very slow impact time selects the super-slow-motion preset and any other impact time
+// the impact preset. In normal time the sound-enclosure regions at the car decide;
+// the later region in the list wins when several are active.
+// ---------------------------------------------------------------------------
+AttribSys::Enums::eReverbTypes::eReverbTypes ReverbEffect::GetActiveReverb() const
+{
+    using namespace AttribSys::Enums::eReverbTypes;
+    using BrnTrigger::GenericRegion;
+
+    const AttribSys::Enums::eImpactTime::eImpactTime leImpactTime =
+        static_cast<const BrnSound::Module::SoundLogicModule*>(mpLogicModule)
+            ->GetFrameInformation().meImpactTime.GetCurrent();
+    if (leImpactTime == AttribSys::Enums::eImpactTime::VSlow)
+        return ReverbTypeSuperSloMo;
+    if (leImpactTime != AttribSys::Enums::eImpactTime::False)
+        return ReverbTypeImpactTime;
+
+    const EntityTriggerInfo& lrTriggers =
+        mpEnclosureControl->GetTriggerInfo(E_TRIGGER_POSITION_AT_ENTITY);
+    eReverbTypes leReverb = ReverbTypeNone;
+    if (lrTriggers.IsTypeActive(GenericRegion::E_TYPE_TUNNEL))
+        leReverb = ReverbTypeTunnel;
+    if (lrTriggers.IsTypeActive(GenericRegion::E_TYPE_OVERPASS))
+        leReverb = ReverbTypeOverpass;
+    if (lrTriggers.IsTypeActive(GenericRegion::E_TYPE_BRIDGE))
+        leReverb = ReverbTypeBridge;
+    if (lrTriggers.IsTypeActive(GenericRegion::E_TYPE_WAREHOUSE))
+        leReverb = ReverbTypeWarehouse;
+    if (lrTriggers.IsTypeActive(GenericRegion::E_TYPE_LARGE_OVERHEAD_OBJECT))
+        leReverb = ReverbTypeLargeOverheadObject;
+    if (lrTriggers.IsTypeActive(GenericRegion::E_TYPE_NARROW_ALLEY))
+        leReverb = ReverbTypeNarrowAlley;
+    return leReverb;
 }
 
 // ---------------------------------------------------------------------------

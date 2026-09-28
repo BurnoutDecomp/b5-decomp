@@ -22,6 +22,8 @@
 #include "rw/audio/core/Mixer.h"      // the process context (mdStreamTime, src/dst, mpFormat)
 #include "rw/audio/core/MixKernels.h" // the three GainVector* fade curves
 
+#include <new> // placement new (the vtable install in CreateInstance)
+
 namespace rw
 {
 namespace audio
@@ -86,11 +88,15 @@ int GainFader::GetSize()
 // -------------------------------------------------------------------------------------
 // CreateInstance @0x82BA2C08 -- placement-init. Opens at unity gain, with no request
 // outstanding and the fade already "finished" (so Process holds at mLastGain until an
-// EVENT_STARTFADE arrives). The console's null test guards ONLY the vtable store; every
-// following store dereferences self, so null is not a supported input.
+// EVENT_STARTFADE arrives). The console's first store, guarded by its null test, installs
+// the vtable; on the host that is the placement construction of GainFader over the stage
+// memory (default-init writes only the vptr), the GainArray / Dac / SubMix precedent.
+// Every following store dereferences self, so null is not a supported input.
 // -------------------------------------------------------------------------------------
 int GainFader::CreateInstance(GainFader *self)
 {
+    if (self)
+        ::new (static_cast<void *>(self)) GainFader;
     self->mLastGain = KF_ONE;                                     // stfs +0x64
     self->mpAttribute = &self->mAttribute[0];                     // stw  +0x0C
     self->mAttribute[ATTRIBUTE_GETCURRENTGAIN].mfValue = KF_ONE;  // stfs +0x28

@@ -25,6 +25,8 @@
 #include "rw/audio/core/Mixer.h"      // Mixer (the process context) + SampleBuffer
 #include "rw/audio/core/MixKernels.h" // CopyWithGainRamp
 
+#include <new> // placement new (the vtable install in CreateInstance)
+
 namespace CgsSound
 {
 namespace Playback
@@ -87,11 +89,18 @@ int GainArray::GetSize()
 // CreateInstance @0x826C3A10 -- point the base attribute table at the six target gains and
 // open every channel at unity, current AND target, so the first frame ramps nowhere.
 //
-// The console's null test guards only its vtable store (which on the host is construction);
-// every following access dereferences self, so null is not a supported input.
+// The console's first store, guarded by its null test, installs the GainArray vtable. On
+// the host that store IS the placement construction of GainArray over the generic stage
+// memory (default-init: the vptr is written, every data member is left untouched), the
+// Dac / SubMix / GinsuPlayer precedent. Without it the stage keeps whatever bytes the
+// voice block held, and Voice::ReleaseImmediate's vt[0] call dispatches through them.
+// Every following access dereferences self, so null is not a supported input.
 // -------------------------------------------------------------------------------------
 int GainArray::CreateInstance(GainArray *self)
 {
+    if (self)
+        ::new (static_cast<void *>(self)) GainArray;
+
     // stw r9(self+0x28), 0xC(r3) -- by name, never a truncated console address.
     self->mpAttribute = self->maTargetGain;
 

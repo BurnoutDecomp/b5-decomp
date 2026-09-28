@@ -674,7 +674,43 @@ namespace BrnGui
     // (i.e. the X360 type is 8-aligned): it forces alignof==8 so the wrapper's miOutEventOffset /
     // record size match the asm, while preserving the X360 sizeof (all such sizes are 8-multiples).
     // ============================================================================
-    struct CalculateRoute : public CgsGui::GuiEvent<494> { u8 maPayload[68]; };  // id 494 size 80
+    // CalculateRoute (GUI out 494, 80 bytes): a two-point route question from the sat-nav
+    // tracker. RECOVERED LAYOUT from its one producer pair, GuiTracker::Update (the two
+    // 16-byte position lanes at +0x00/+0x10, the u16 leg number at +0x44) and
+    // GuiTracker::ContructRouteNodeFromTrackedItem (end type `stwx` at +0x30 + 4i, junction id
+    // at +0x38 + 4i, landmark CgsID `stdx` at +0x20 + 8i), and cross-checked against its
+    // consumer, BrnGameModule::BridgeGuiToGameState case 494, which reads the same offsets and
+    // repacks them into game event 84 (LandmarkRouteRequestEvent). maSectionIndices is never
+    // written by the producer. There is NO GuiEvent header inside the record: the producer
+    // writes the first position lane at +0x00. The member ORDER is the console's (landmark
+    // ids before the end types), not the declaration order of the older game-side twin.
+    struct alignas(16) CalculateRoute
+    {
+        enum ERouteEndPointType
+        {
+            E_ROUTE_END_POINT_TYPE_LANDMARK  = 0,
+            E_ROUTE_END_POINT_TYPE_JUNCTION  = 1,
+            E_ROUTE_END_POINT_TYPE_PLAYERPOS = 2,
+            E_ROUTE_END_POINT_TYPE_COUNT     = 3
+        };
+
+        static const s32 KI_MAX_POINTS = 2;
+
+        Vector3            maPositions[KI_MAX_POINTS];      // +0x00
+        CgsID              maLandmarkIDs[KI_MAX_POINTS];    // +0x20
+        ERouteEndPointType mePointTypes[KI_MAX_POINTS];     // +0x30
+        u32                muJunctionIDs[KI_MAX_POINTS];    // +0x38
+        u16                maSectionIndices[KI_MAX_POINTS]; // +0x40
+        u16                mu16EventID;                     // +0x44
+
+        s32 GetEventType() const { return 494; }
+    };
+    static_assert(sizeof(CalculateRoute) == 0x50, "CalculateRoute is the 80-byte record GuiTracker::Update publishes");
+    static_assert(offsetof(CalculateRoute, maLandmarkIDs)    == 0x20, "landmark ids at +0x20 (stdx, 8-byte stride)");
+    static_assert(offsetof(CalculateRoute, mePointTypes)     == 0x30, "end types at +0x30 (stwx, 4-byte stride)");
+    static_assert(offsetof(CalculateRoute, muJunctionIDs)    == 0x38, "junction ids at +0x38");
+    static_assert(offsetof(CalculateRoute, maSectionIndices) == 0x40, "section indices at +0x40");
+    static_assert(offsetof(CalculateRoute, mu16EventID)      == 0x44, "leg number at +0x44 (sth)");
     struct alignas(8) GuiAudioEvent : public CgsGui::GuiEvent<456> { u8 maPayload[12]; };  // id 456 size 24 [8-aligned: OGE off16]
     // GuiAudioTriggerEvent: NO placeholder here -- the real hand-reconstructed home is
     // BrnGuiEventTypeDefs.h (macComponent/meAction/macLabel/macMovie, id 201, sizeof 112).

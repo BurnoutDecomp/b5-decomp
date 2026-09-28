@@ -30,6 +30,16 @@
 
 namespace BrnGui
 {
+    // No standalone console symbol: inlined into
+    // MapIconManager::Construct, which drops the cache pointer, clears the 175-slot table and
+    // then the count, in that order.
+    void EventIconManager::Construct()
+    {
+        mpGuiCache = NULL;
+        std::memset(ma2DEventIcons, 0, sizeof(ma2DEventIcons));
+        miNumEventIcons = 0;
+    }
+
     // -------------------------------------------------------------------------
     // @ 0x82517390 -- arm the icon pass.
     //

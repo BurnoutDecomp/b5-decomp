@@ -45,12 +45,14 @@
 // GuiEventUpdateSatNav::SatNavIconInfo::SatNavIconType (DWARF BrnGuiTracker.h:59), so the
 // complete enum is required here. No cycle: BrnGuiEventTypeDefs.h does not reach this header.
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // GuiTracker::Update's out queue
 
 namespace CgsModule { struct Event; }   // GuiTracker::RecEvent payload base (pointer-only)
 
 namespace BrnGui
 {
     class GuiCache;   // GuiTracker::mpGuiCache (pointer only; home GameSource/Gui/BrnGuiCache.h)
+    struct CalculateRoute;   // GUI out event 494 (pointer only; home GameSource/Gui/BrnGuiDemangledEventTypes.h)
 
     class GuiTracker
     {
@@ -127,7 +129,9 @@ namespace BrnGui
             Vector3 mv3Position;            // +0x10  DWARF :60 mv3TargetPosition
             u16     muTargetSectionId;      // +0x20  DWARF :61 (unwritten by both producers)
             u8      maPad_22[2];            // +0x22..+0x23
-            u32     mTargetJunctionId;      // +0x24  DWARF :62 (unwritten by both producers)
+            u32     mTargetJunctionId;      // +0x24  (unwritten by both producers;
+                                            //        ContructRouteNodeFromTrackedItem's `lwz 0x24`
+                                            //        reads it for a junction item)
             u16     mTargetLandmarkIndex;   // +0x28  DWARF :63 (LandmarkIndex, `sth`)
             u8      maPad_2A[0x30 - 0x2A];  // +0x2A..+0x2F (pads to the proven 0x30 stride)
         };
@@ -234,8 +238,6 @@ namespace BrnGui
         //     mpGuiCache and mPlayersTrackerInfo are bound once at boot; the console
         //     re-posts 64 per cache update and this build does not, so the player's own
         //     record does not follow the camera yet.
-        //   * GuiTracker::Update and ContructRouteNodeFromTrackedItem
-        //     are still unreconstructed (no body anywhere in the tree).
         void RecEvent(const CgsModule::Event* lpEvent, s32 liEventId, s32 liEventSizeBytes);
 
         // @ 0x824FA008 -- flatten every received route record's live points into
@@ -249,6 +251,17 @@ namespace BrnGui
         // route-receive state. Called by RecEvent's 233 arm.
         void RegenerateRouteData();
 
+        // Original shape `void Update(CgsGui::CgsGuiModuleIO::OutputBuffer*)`, called
+        // once per GuiModule::Update right after ColourCalibrationScreen::Update. While a route
+        // leg is still owed (mbRouteDataPending) it asks for the next one: a CalculateRoute (GUI
+        // out 494) from tracker record [miNumRouteInfoReceived] to the record after it, stamped
+        // with that leg number, then clears the pending flag until RecEvent re-arms it.
+        // FLAG PC-ABI adapter (the parameter only): the PC GUI module has no live
+        // CgsGuiModuleIO::OutputBuffer; its stand-in for that buffer's mOutEvents member is
+        // GuiModule::mGuiOutQueue, handed here directly as ColourCalibrationScreen::Update is.
+        // DELETE-WHEN the GUI module owns a real CgsGuiModuleIO::OutputBuffer.
+        void Update(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutEvents);
+
         // Inlined by EventInfoComponent::UpdateDestinationText, ARTIST0x82412F78.
         s32 GetCurrentlyTrackedIndex() const { return miCurrentlyTrackedIndex; }
         const BrnGameState::LandmarkIndex* GetActivelyTrackedLandmarks(); // ARTIST 0x824F4358
@@ -260,6 +273,13 @@ namespace BrnGui
         s32 GetNumActivelyTrackedLandmarks() const;
 
     private:
+        // Fill end point liNodeIndex (0 or 1) of a CalculateRoute
+        // from one tracker record: a landmark item by its landmark id, a junction item by its
+        // junction id. Any other icon type is a (non-gating) assert.
+        void ContructRouteNodeFromTrackedItem(const TrackerInfo* lpInTrackedItem,
+                                              CalculateRoute* lpOutCalculateRouteEvent,
+                                              s32 liNodeIndex);
+
         // ===============================================================================
         // ⭐⭐ LAYOUT REBUILT 2026-08-29 (FIX1), from the three bodies that own it --
         // RecEvent @0x82501D28, GenerateRouteData @0x824FA008, RegenerateRouteData
