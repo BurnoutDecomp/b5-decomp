@@ -7,7 +7,7 @@
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"   // VehicleTypeData, VehicleTypeUpdateData
 #include "SharedClasses/Traffic/BrnTrafficVehicleTraits.h" // VehicleTraits
 #include "SharedClasses/Traffic/BrnTrafficVehicleAsset.h"  // VehicleAsset
-#include "SharedClasses/Traffic/BrnTrafficLightCollection.h" // TrafficLightCollection (by value)
+#include "SharedClasses/Traffic/Junctions/BrnTrafficLightCollection.h" // TrafficLightCollection (by value)
 #include <cstddef>                                         // offsetof
 
 namespace BrnTraffic

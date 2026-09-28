@@ -36,22 +36,22 @@
 #include "BrnCommonTypes.h"                             // Vector3, Vector3Plus, Matrix44Affine
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
 #include "GameSource/Graphics/BrnCoronaManager.h"       // BrnCoronaManager::BrnSubmissionInterface, BrnCoronaType, eCoronaTypeTrafficLight*
+#include "SharedClasses/Traffic/BrnTrafficSharedConstants.h" // BrnTraffic::ETrafficLightState (DWARF BrnTrafficSharedConstants.h:86)
+#include <cstddef>                                      // offsetof (the host-layout pins in _AssertLayout)
 
 namespace BrnTraffic
 {
     // The corona colour state (X360 stores it per corona as a u8 in mpaCoronaTypes).
     // Pinned by CalcArbitraryAmberCoronaTransform's asm: the per-corona type is asserted
-    // `< 3` (`E_TRAFFICLIGHTSTATE_COUNT`) and an AMBER corona is the `== 1` state. Homed here
-    // in the collection's owning header (the corona colours are a property of this baked view;
-    // the runtime light-phase state machine's enum in BrnTrafficLightManager.h is a distinct
-    // type). If a canonical DWARF home lands, GROW that home and drop this local enum.
-    enum ETrafficLightState
-    {
-        E_TRAFFICLIGHTSTATE_RED   = 0,
-        E_TRAFFICLIGHTSTATE_AMBER = 1,
-        E_TRAFFICLIGHTSTATE_GREEN = 2,
-        E_TRAFFICLIGHTSTATE_COUNT = 3,  // first invalid value (X360 asserts corona type < 3)
-    };
+    // `< 3` (`E_TRAFFICLIGHTSTATE_COUNT`) and an AMBER corona is the `== 1` state.
+    // [L3 RACEINTRO 2026-09-27, structural merge of the BL-1 ODR fork] The type is the DWARF's
+    // BrnTraffic::ETrafficLightState (BrnTrafficSharedConstants.h:86, included above). This header
+    // carried a second copy of the same enum, so no TU could hold both homes; the copy is retired
+    // and these asserts prove the home carries the retired copy's values, enumerator by enumerator.
+    static_assert(E_TRAFFICLIGHTSTATE_RED   == 0, "ETrafficLightState: RED is 0, as the retired copy");
+    static_assert(E_TRAFFICLIGHTSTATE_AMBER == 1, "ETrafficLightState: AMBER is 1, as the retired copy");
+    static_assert(E_TRAFFICLIGHTSTATE_GREEN == 2, "ETrafficLightState: GREEN is 2, as the retired copy");
+    static_assert(E_TRAFFICLIGHTSTATE_COUNT == 3, "ETrafficLightState: COUNT is 3, as the retired copy");
 
     // DWARF BrnTrafficLightCollection.h:60 -- a 2-byte record naming a type's corona run
     // (offset + count into the collection's flat corona arrays). Stride pinned at 2 by
@@ -106,10 +106,47 @@ namespace BrnTraffic
         s32 GetInstanceIndexForInstanceID(u32 luInstanceID) const;
 
         // --- declared for a coherent type (DWARF); bodies live in other TUs ---
-        u32 GetNumTrafficLights() const;
-        const Vector3 GetInstancePos(u32 luInstance) const;
+        // [L3 RACEINTRO 2026-09-27, the BL-1 merge] :82 -- a header inline (the retired
+        // SharedClasses/Traffic/BrnTrafficLightCollection.h carried this body).
+        u32 GetNumTrafficLights() const { return muNumTrafficLights; }
+        // [L3 RACEINTRO 2026-09-27] :93 -- a header inline, bodied at this header's lines 266 / 267:
+        // MainDirector::CalcTrafficLightSpace @0x8221A3A8 inlines it (0x8221A56C..0x8221A5C4) as the
+        // "luInstance < muNumTrafficLights" tripwire (li r5, 0x10A == 266), the "mpaPosAndYRotations"
+        // tripwire (li r5, 0x10B == 267), then `lvx128` of mpaPosAndYRotations[luInstance] (slwi ,4):
+        // the whole 16-byte lane, the Y rotation riding in w.
+        const Vector3 GetInstancePos(u32 luInstance) const
+        {
+            CGS_ASSERT(luInstance < muNumTrafficLights, "luInstance < muNumTrafficLights");
+            CGS_ASSERT(mpaPosAndYRotations, "mpaPosAndYRotations");
+
+            const Vector3Plus& lrPosAndYRotation = mpaPosAndYRotations[luInstance];
+            const Vector3 lInstancePos = { lrPosAndYRotation.x, lrPosAndYRotation.y,
+                                           lrPosAndYRotation.z, lrPosAndYRotation.w };
+            return lInstancePos;
+        }
         void FixUp(const void* lpBaseData);
         void FixDown(const void* lpBaseData);
+
+        // [L3 RACEINTRO 2026-09-27, the BL-1 merge] The host layout tools/assets/bundles/lane_transcode.py
+        // writes TrafficData::mTrafficLights to, pinned by the retired SharedClasses/Traffic/
+        // BrnTrafficLightCollection.h and moved here with it. The six relocated pointers widen 4 -> 8 on
+        // x64 (console +0x08..+0x1C / +0x124 / +0x128). NEVER CALLED; a member because the members are
+        // private (the BrnJunctionLogicBox.h precedent).
+        static void _AssertLayout()
+        {
+            static_assert(sizeof(TrafficLightType) == 2, "TrafficLightType stride");
+            static_assert(offsetof(TrafficLightCollection, mpaPosAndYRotations) == 0x08,
+                          "TrafficLightCollection::mpaPosAndYRotations");
+            static_assert(offsetof(TrafficLightCollection, mpaCoronaPositions) == 0x30,
+                          "TrafficLightCollection::mpaCoronaPositions");
+            static_assert(offsetof(TrafficLightCollection, mauInstanceHashOffsets) == 0x38,
+                          "TrafficLightCollection::mauInstanceHashOffsets");
+            static_assert(offsetof(TrafficLightCollection, mpauInstanceHashTable) == 0x140,
+                          "TrafficLightCollection::mpauInstanceHashTable");
+            static_assert(offsetof(TrafficLightCollection, mpauInstanceHashToIndexLookup) == 0x148,
+                          "TrafficLightCollection::mpauInstanceHashToIndexLookup");
+            static_assert(sizeof(TrafficLightCollection) == 0x150, "TrafficLightCollection host sizeof");
+        }
 
     private:
         // DWARF BrnTrafficLightCollection.h:167/168.

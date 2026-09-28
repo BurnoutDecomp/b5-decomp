@@ -67,6 +67,8 @@
 #include <cstddef>   // offsetof (the alignas(16) records read by console offset)
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"         // WorldMap::GetTrafficData
 #include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"      // GetJunctionLogicBoxForTrafficLight
+#include "SharedClasses/Traffic/Junctions/BrnJunctionLogicBox.h"   // JunctionLogicBox::GetNumLights / GetLight (CalcTrafficLightSpace)
+#include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"         // ConsoleVpu::Dot3 -- vmsum3fp128, rule 1 (CalcTrafficLightSpace)
 
 #include <cstring>   // std::memcpy (the game actions' packed CgsID / word payloads)
 #include <cstdlib>   // [diag] getenv -- BRN_SLOMO_DIAG
@@ -1497,6 +1499,134 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
+    // CalcTrafficLightSpace  @ 0x8221A3A8   (PS3 DWARF: DirectorModule::CalcTrafficLightSpace, BrnDirectorModule.cpp:1865)
+    //
+    // ⭐ BODIED 2026-09-27 (L3 RACEINTRO). THE RACE INTRO'S "CAMERA BELOW THE MAP". The ICE traffic-light reference
+    // space (eICE_TRAFFIC_LIGHT_SPACE, 5) is GameState::mTrafficLightSpace, which BuildBehaviourSharedInfo stages into
+    // every frame's CameraSpaceHandler::mTrafficLightToWorld. This function is its ONLY writer besides GameState::Clear
+    // (identity), and nothing on the PC called it: ProcessInputQueue's countdown push carried it as a GATE comment. So
+    // the countdown take of an offline race, Race_Event_Start (guid 574883, eye / look spaces [SCENE, TRAFFIC_LIGHT,
+    // HEADING]), projected its TRAFFIC_LIGHT interval through the identity -- the published eye at (-0.7, -1.4, 4.0),
+    // the world origin, 3398 m from the car and under the map, for the stretch of the countdown in which the console
+    // frames the start light going red, amber, green (L3 A/B, exes 7fdddf649d45 and d65db9997047 alike:
+    // scratch/bugtest/runs/l3_raceintro_cam_ab).
+    //
+    // The console, word for word (r24 = this, r29 = lpIO):
+    //   0x8221A3D4..0x8221A3EC  lpJLBox = mGameState.mpEventJLBox (this+0x337E0); NULL -> return (nothing written)
+    //   0x8221A3F4              liNumLightControllers = lpJLBox->GetNumLights() (lbz 0x35)
+    //   0x8221A3F0..0x8221A410  lClosestLight = splat(flt_8200173C) = FLT_MAX (0x7F7FFFFF, x360rd)
+    //   0x8221A414..0x8221A43C  lPlayerPos = GetPlayer().mRaceCarState.mTransform.wAxis (+0x1F0 +0x30, v126) and
+    //                           lPlayerZ   = GetPlayer().mRaceCarState.mTransform.zAxis (+0x1F0 +0x20, v125) --
+    //                           AllVehicleData::GetPlayer 0x82205C58, called once for each
+    //   0x8221A430..0x8221A484  lTrafficLightCollection = lpIO->mpWorldMap (+0xC)->GetTrafficData()->mTrafficLights
+    //                           (the inlined WorldMap::GetTrafficData: the h:90 LOADED tripwire, then GetMemoryImage
+    //                           0x82211D00; the collection is TrafficData +0x3C)
+    //   0x8221A48C / 0x8221A688 for liLoop in [0, liNumLightControllers)                       signed: cmpwi / cmpw
+    //     0x8221A4CC..0x8221A500  the box RE-READ from the game state, GetLight(liLoop) (its h:181 tripwire), and
+    //                             liNumLights = that controller's muNumTrafficLights (lbz 0x5B = 0x44 + 0x17); an
+    //                             empty controller is skipped (`cmpwi 0 ; ble`)
+    //     0x8221A50C..0x8221A678  for liLoop2 in [0, liNumLights) -- the count run down in r21, the id cursor r29 += 2:
+    //       GetLight(liLoop) again (h:181); GetTrafficData() again (h:90 + GetMemoryImage);
+    //       lLightPos = that collection's GetInstancePos(mauTrafficLightIds[liLoop2])   inlined: h:266 / h:267, lvx128
+    //       lPlayerToLight   = lLightPos - lPlayerPos                     vsubfp128   0x8221A5C8
+    //       lCurrentDistance = MagnitudeSquared(lPlayerToLight)           vmsum3fp128 0x8221A5CC  (ROUNDING_RULE 1)
+    //       if (lCurrentDistance < lClosestLight)                         vcmpgtfp128. closest, current  0x8221A5D0
+    //         if (Dot(lPlayerToLight, lPlayerZ) > 0)                      vmsum3fp128 0x8221A5E4 ; vcmpgtfp. vs 0
+    //           lClosestLight = lCurrentDistance                          vmr128      0x8221A608
+    //           GetLight(liLoop) (h:181);
+    //           mGameState.mTrafficLightSpace =                           the four lvx128 / stvx128 rows -> +0x337F0
+    //               lTrafficLightCollection.CalcArbitraryAmberCoronaTransform(mauTrafficLightIds[liLoop2])  0x82757478
+    // Both compares are vector compares over splatted lanes whose all-true bit is read (mfocrf ; extrwi 1,24): an
+    // unordered lane is false, so a NaN distance or dot never wins -- as the scalar < / > below. The first of two
+    // equally near lights wins (strict <). vmsum3fp128 is the one-rounding f64 sum (ConsoleVpu::Dot3). FLAG (model):
+    // its f32-overflow-to-QNaN is not modelled (a light 1.8e19 m away), nor the VMX denormal flush (ROUNDING_RULE 6):
+    // the differences of world positions and a unit forward cannot reach the denormal range.
+    // ------------------------------------------------------------------------
+    namespace
+    {
+        // flt_8200173C == 0x7F7FFFFF (x360rd), splatted into lClosestLight: no light is nearer yet.
+        const f32 KF_TRAFFIC_LIGHT_SPACE_NO_LIGHT_YET = 3.40282347e+38f;
+
+        // [DIAG BRN_CAMERA_TRACE] [FLAG PC witness] -- NOT IN THE X360 BINARY. One line per CalcTrafficLightSpace call
+        // (once per countdown): the junction box, the light the space was taken from and where the space landed,
+        // against the player. Reads only. Capped at 16 lines; off unless BRN_CAMERA_TRACE is set.
+        void BrnDiag_ReportTrafficLightSpace(const BrnTraffic::JunctionLogicBox* lpJLBox, s32 liNumLightControllers,
+                                             s32 liNumInstancesTested, s32 liChosenInstance, f32 lfChosenDistanceSq,
+                                             const Vector3& lrPlayerPos, const Matrix44Affine& lrSpace)
+        {
+            static const bool sbOn = (getenv("BRN_CAMERA_TRACE") != 0);
+            static s32 siLines = 0;
+            if (!sbOn || CgsDev::Log::gpDebugPrint == 0 || siLines >= 16)
+                return;
+            ++siLines;
+            *CgsDev::Log::gpDebugPrint
+                << "[tl-space] CalcTrafficLightSpace box " << (lpJLBox != 0 ? static_cast<s32>(lpJLBox->GetID()) : -1)
+                << " controllers " << liNumLightControllers << " instances " << liNumInstancesTested
+                << " chose " << liChosenInstance << " at d2 " << lfChosenDistanceSq
+                << " | space pos " << lrSpace.wAxis.x << "," << lrSpace.wAxis.y << "," << lrSpace.wAxis.z
+                << " fwd " << lrSpace.zAxis.x << "," << lrSpace.zAxis.y << "," << lrSpace.zAxis.z
+                << " | player " << lrPlayerPos.x << "," << lrPlayerPos.y << "," << lrPlayerPos.z
+                << " [FLAG PC witness]\n";
+        }
+    }
+
+    void MainDirector::CalcTrafficLightSpace(const DirectorInputOutput* lpIO)
+    {
+        if (maGameState.mpEventJLBox == 0)
+        {
+            return;
+        }
+
+        const s32 liNumLightControllers = maGameState.mpEventJLBox->GetNumLights();
+        f32 lfClosestLight = KF_TRAFFIC_LIGHT_SPACE_NO_LIGHT_YET;
+
+        const Vector3 lPlayerPos = mAllVehicleData.GetPlayer().mRaceCarState.mTransform.wAxis;
+        const Vector3 lPlayerZ   = mAllVehicleData.GetPlayer().mRaceCarState.mTransform.zAxis;
+
+        const BrnTraffic::TrafficLightCollection& lTrafficLightCollection =
+            lpIO->mpWorldMap->GetTrafficData()->mTrafficLights;
+
+        s32 liDiagInstancesTested = 0;    // [DIAG] NOT X360 -- the witness below
+        s32 liDiagChosenInstance  = -1;   // [DIAG] NOT X360
+
+        for (s32 liLoop = 0; liLoop < liNumLightControllers; ++liLoop)
+        {
+            const s32 liNumLights =
+                maGameState.mpEventJLBox->GetLight(static_cast<u32>(liLoop))->muNumTrafficLights;
+
+            for (s32 liLoop2 = 0; liLoop2 < liNumLights; ++liLoop2)
+            {
+                const u32 luInstance =
+                    maGameState.mpEventJLBox->GetLight(static_cast<u32>(liLoop))->mauTrafficLightIds[liLoop2];
+                const Vector3 lLightPos =
+                    lpIO->mpWorldMap->GetTrafficData()->mTrafficLights.GetInstancePos(luInstance);
+
+                // vsubfp128: every lane (the w lane carries the instance's Y rotation minus the player's w; the
+                // two vmsum3fp128 below never read it).
+                const Vector3 lPlayerToLight = { lLightPos.x - lPlayerPos.x, lLightPos.y - lPlayerPos.y,
+                                                 lLightPos.z - lPlayerPos.z, lLightPos.w - lPlayerPos.w };
+                const f32 lfCurrentDistance = Camera::Utils::ConsoleVpu::Dot3(lPlayerToLight, lPlayerToLight);
+                ++liDiagInstancesTested;   // [DIAG] NOT X360
+
+                if (lfCurrentDistance < lfClosestLight)
+                {
+                    if (Camera::Utils::ConsoleVpu::Dot3(lPlayerToLight, lPlayerZ) > 0.0f)
+                    {
+                        lfClosestLight = lfCurrentDistance;
+                        maGameState.mTrafficLightSpace = lTrafficLightCollection.CalcArbitraryAmberCoronaTransform(
+                            maGameState.mpEventJLBox->GetLight(static_cast<u32>(liLoop))->mauTrafficLightIds[liLoop2]);
+                        liDiagChosenInstance = static_cast<s32>(luInstance);   // [DIAG] NOT X360
+                    }
+                }
+            }
+        }
+
+        BrnDiag_ReportTrafficLightSpace(maGameState.mpEventJLBox, liNumLightControllers,       // [DIAG] NOT X360
+                                        liDiagInstancesTested, liDiagChosenInstance, lfClosestLight,
+                                        lPlayerPos, maGameState.mTrafficLightSpace);
+    }
+
+    // ------------------------------------------------------------------------
     // ProcessInputQueue  @ 0x822372F8   -- ⭐⭐ THE GAME-ACTION -> GAMESTATE SEAM
     //
     // Drain the input buffer's game-action queue (DirectorIO::InputBuffer::GetGameActionQueue
@@ -2308,10 +2438,11 @@ namespace BrnDirector
 
                 maGameState.mEventState.SetCurrent(GameState::E_EVENT_STATE_COUNTDOWN);
 
-                // ⚠️ GATE: CalcTrafficLightSpace( lpIO ) -- declaration-only, and the one thing
-                //    in this TU that is still a multi-stage VMX pipeline (see its declaration).
-                //    The push above is what the roaming ladder reads; the traffic-light space it
-                //    would compute is only consumed by the start-line camera's framing.
+                // ⭐ (2026-09-27, L3 RACEINTRO) `mr r3, r31 ; lwz r4, 0x3B0+arg_1C(r1) ; bl 0x8221A3A8` right after
+                // the push, in both arms (0x82237B00..0x82237B08 / 0x82237B90..0x82237B98): the countdown take's
+                // TRAFFIC_LIGHT interval frames the start light through the space this computes. It was a GATE
+                // comment, so that interval projected through GameState::Clear's identity -- under the map.
+                CalcTrafficLightSpace(lpIO);
                 break;
             }
 
