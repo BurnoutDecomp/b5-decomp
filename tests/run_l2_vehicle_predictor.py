@@ -20,6 +20,12 @@ the camera's position / velocity lanes set to NaN / inf, and 1500 random scenes 
 the time word (0xA5A5A5A5 = untouched; a NaN by class) and the number of asserts fired, per row class.
 A revision without the body does not build (every numeric check counts as failed).
 
+Wiring: the header's DWARF declaration and layout, and (since the call-site commit) the CALL: VisibilityCollision-
+Policy::ProcessSceneQueryResults @0x82224530 runs Update every frame at 0x822245F8 -- after the geometry predictor's
+ProcessSceneQueryResults (itself behind mbDoingCollisionPredictionThisTime), before the reason-9 / reason-10 tests --
+with the shared info's AllVehicleData (+0x1C), the E_WORLD_NO_SLOMO step splatted (+0x64), the camera's position
+(camera + 0x30) and the policy's velocity (+0x220). Before it the call was a FLAGGED gate (no call).
+
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_l2_vehicle_predictor.py [--rev <b5 rev>]
 """
 from pathlib import Path
@@ -29,11 +35,12 @@ import sys
 import tempfile
 
 sys.dont_write_bytecode = True
-from fxgs_common import Tree, code_only, compile_and_run, report
+from fxgs_common import Tree, body_or_empty, code_only, compile_and_run, report
 
 U = "src/GameSource/Director/Camera/Utils/"
 VCP_CPP = U + "BrnVehicleCollisionPredictor.cpp"
 VCP_H = U + "BrnVehicleCollisionPredictor.h"
+POLICY_CPP = "src/GameSource/Director/Camera/BrnVisibilityCollisionPolicy.cpp"
 NUMERIC_CHECKS = 3   # F, A, S
 
 
@@ -50,7 +57,19 @@ def wiring(tree):
                          r"\s*,\s*Vector3\s+\w+\s*\)\s*;", header) is not None
     layout = re.search(r"bool\s+mbHasPredictedCollision\s*;\s*PredictedCollision\s+mSoonestPredictedCollision\s*;",
                        header) is not None
+    body = re.sub(r"\s+", " ", body_or_empty(_read(tree, POLICY_CPP),
+                                              "void VisibilityCollisionPolicy::ProcessSceneQueryResults("))
+    call = re.search(r"mVehicleCollisionPredictor\.Update\( ?\*lrSharedInfo\.mpAllVehicleData ?, ?VecFloat\( ?"
+                     r"lrSharedInfo\.mTimestep\.Get\( ?Timestep::E_WORLD_NO_SLOMO ?\) ?\) ?, ?"
+                     r"lrCamera\.mTransform\.wAxis ?, ?mVelocity ?\) ?;", body)
+    geometry = body.find("mGeometryCollisionPredictor.ProcessSceneQueryResults(")
+    reason9 = body.find("Fail(lrCamera, 9)")
+    placed = (call is not None and 0 <= geometry < call.start() and (reason9 < 0 or call.start() < reason9)
+              and body.count("mVehicleCollisionPredictor.Update(") == 1)
     return [
+        ("BrnVisibilityCollisionPolicy.cpp: ProcessSceneQueryResults @0x82224530 calls mVehicleCollisionPredictor.Update"
+         "(*mpAllVehicleData, VecFloat(E_WORLD_NO_SLOMO dt), camera position, mVelocity) every frame, after the geometry "
+         "predictor and before the reason-9 / 10 tests (0x822245F8)", placed),
         ("BrnVehicleCollisionPredictor.h declares Update(const AllVehicleData&, VecFloat, Vector3, Vector3) (DWARF :63)",
          declared),
         ("BrnVehicleCollisionPredictor.h has the DWARF layout: bool mbHasPredictedCollision (+0), PredictedCollision "

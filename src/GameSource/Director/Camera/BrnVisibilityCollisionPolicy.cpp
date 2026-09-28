@@ -292,18 +292,15 @@ void VisibilityCollisionPolicy::ProcessSceneQueryResults(const CollisionPolicySh
     if (mbDoingCollisionPredictionThisTime)
         mGeometryCollisionPredictor.ProcessSceneQueryResults(lrSharedInfo.mTimestep.Get(Timestep::E_WORLD_NO_SLOMO));
 
-    // ⚠️ FLAGGED GATE -- NOT X360. The console now runs
-    //     Utils::VehicleCollisionPredictor::Update(&mVehicleCollisionPredictor,
-    //         lrSharedInfo.mpAllVehicleData, splat(E_WORLD_NO_SLOMO dt), camera position, mVelocity)
-    //                                                                          (0x822245F8, @0x822230D8)
-    // which clears the prediction and then walks AllVehicleData's TRAFFIC array, testing the
-    // camera's motion line against each traffic car's ellipsoid. The array arrives since
-    // 2026-09-25 (BridgeWorldToDirector step 4 -> AllVehicleData::Update's lpTrafficVehicleArray,
-    // FX-DIRECTOR2 item 3), so the gate's first reason expired; what remains is the callee itself:
-    // VehicleCollisionPredictor::Update has no PC body yet, so the call is still not made. The
-    // prediction keeps its Construct value (none) -- the console's own answer with no traffic car
-    // in range -- so reason 10 cannot fire.
-    // DELETE-WHEN: VehicleCollisionPredictor::Update @0x822230D8 is bodied (logged by the conductor).
+    // The vehicle predictor, EVERY frame -- not behind mbDoingCollisionPredictionThisTime (0x822245C8..0x822245F8):
+    // the shared info's AllVehicleData (`lwz r4, 0x1C`), the E_WORLD_NO_SLOMO step splatted (`lfs f0, 0x64` ;
+    // lvlx ; vspltw v1), the camera's position (`lvx128 v2, camera + 0x30`) and this policy's velocity
+    // (`lvx128 v3, this + 0x220`). It clears the prediction and tests the camera's line against every traffic car's
+    // ellipsoid (Utils::VehicleCollisionPredictor::Update @0x822230D8, 8a5ecebf); reason 10 below reads it.
+    // (Until 2026-09-28 this call was a FLAGGED gate: Update had no PC body, so reason 10 could never fire.)
+    mVehicleCollisionPredictor.Update(*lrSharedInfo.mpAllVehicleData,
+                                      VecFloat(lrSharedInfo.mTimestep.Get(Timestep::E_WORLD_NO_SLOMO)),
+                                      lrCamera.mTransform.wAxis, mVelocity);                    // bl @0x822245F8
 
     if (mbDoingCollisionPredictionThisTime && mGeometryCollisionPredictor.WillCollide()
         && mGeometryCollisionPredictor.GetTimeUntilCollision() < 1.0f && mbFirstFrame && mbCanFail)
