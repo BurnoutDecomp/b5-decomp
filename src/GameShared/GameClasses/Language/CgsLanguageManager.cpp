@@ -290,11 +290,10 @@ namespace CgsLanguage
 
         mpResource = lpResource;
         const u32 luLanguageId = lpResource->meLanguageID;
-        // The console re-derives the PER-LOCALE formatting strings here
-        // (PrepareFormattingStrings @0x82865B70, reading the loaded table). NOT YET
-        // RECONSTRUCTED -- the boot language (English) formats identically through the
-        // defaults; land the per-locale variant with the localisation slice.
-        PrepareDefaultFormattingStrings();
+        // The PER-LOCALE formatting strings, read out of the table just installed
+        // (`bl PrepareFormattingStrings` between the mpResource store and the font pick). See the
+        // function's banner: the English tables are NOT the defaults (currency ',', imperial units).
+        PrepareFormattingStrings();
         mpcDefaultFontName = (luLanguageId == 16u) ? "dfheic" : "NODEFAULTFONTSPECIFIED";
         meLanguage = static_cast<CgsLanguage::ELanguage>(luLanguageId);
     }
@@ -516,6 +515,159 @@ namespace CgsLanguage
         mbIsUsingMetricUnits = true;
         return true;
     }
+
+    namespace
+    {
+        // PrepareFormattingStrings' ids, in the console's order: the .data pointers off_82F33340 ..
+        // off_82F333A0 (r30 = 0x82F333A0, read at -0x60 .. 0), each naming a string at
+        // 0x820E54E0 .. 0x820E5760 -- all read out of the image with the verified reader.
+        const char* const KAC_GENERAL_DECIMAL_SEPARATOR           = "GENERAL_DECIMAL_SEPARATOR";          // off_82F33340
+        const char* const KAC_GENERAL_THOUSANDS_SEPARATOR         = "GENERAL_THOUSANDS_SEPARATOR";        // off_82F33344
+        const char* const KAC_GENERAL_PERCENTAGE_DISPLAY          = "GENERAL_PERCENTAGE_DISPLAY";         // off_82F33348
+        const char* const KAC_GENERAL_X_OVER_Y_DISPLAY            = "GENERAL_X_OVER_Y_DISPLAY";           // off_82F3334C
+        const char* const KAC_GENERAL_CURRENCY_SEPARATOR          = "GENERAL_CURRENCY_SEPARATOR";         // off_82F33350
+        const char* const KAC_GENERAL_CURRENCY_NO_DECIMAL         = "GENERAL_CURRENCY_NO_DECIMAL";        // off_82F33354
+        const char* const KAC_TIME_FORMAT_DATE                    = "TIME_FORMAT_DATE";                   // off_82F33358
+        const char* const KAC_TIME_FORMAT_ALL                     = "TIME_FORMAT_ALL";                    // off_82F3335C
+        const char* const KAC_TIME_FORMAT_HRS_MINS_SECS           = "TIME_FORMAT_HRS_MINS_SECS";          // off_82F33360
+        const char* const KAC_TIME_FORMAT_MINS_SECS_HNDS          = "TIME_FORMAT_MINS_SECS_HNDS";         // off_82F33364
+        const char* const KAC_TIME_FORMAT_MINS_SECS               = "TIME_FORMAT_MINS_SECS";              // off_82F33368
+        const char* const KAC_TIME_FORMAT_SECS_HNDS               = "TIME_FORMAT_SECS_HNDS";              // off_82F3336C
+        const char* const KAC_TIME_FORMAT_SECS                    = "TIME_FORMAT_SECS";                   // off_82F33370
+        const char* const KAC_TIME_FORMAT_SECS_L                  = "TIME_FORMAT_SECS_L";                 // off_82F33374
+        const char* const KAC_TIME_FORMAT_MIN_SECS_MID_TEXT       = "TIME_FORMAT_MIN_SECS_MID_TEXT";      // off_82F33378
+        const char* const KAC_TIME_FORMAT_MINS_SECS_MID_TEXT      = "TIME_FORMAT_MINS_SECS_MID_TEXT";     // off_82F3337C
+        const char* const KAC_DISTANCE_FORMAT_SHORT               = "DISTANCE_FORMAT_SHORT";              // off_82F33380
+        const char* const KAC_DISTANCE_FORMAT_SHORT_L             = "DISTANCE_FORMAT_SHORT_L";            // off_82F33384
+        const char* const KAC_DISTANCE_FORMAT_LONG                = "DISTANCE_FORMAT_LONG";               // off_82F33388
+        const char* const KAC_DISTANCE_FORMAT_LONG_L              = "DISTANCE_FORMAT_LONG_L";             // off_82F3338C
+        const char* const KAC_DISTANCE_FORMAT_ISMETRIC            = "DISTANCE_FORMAT_ISMETRIC";           // off_82F33390
+        const char* const KAC_DISTANCE_FORMAT_SHORT_IMPERIAL      = "DISTANCE_FORMAT_SHORT_IMPERIAL";     // off_82F33394
+        const char* const KAC_DISTANCE_FORMAT_SHORT_IMPERIAL_L    = "DISTANCE_FORMAT_SHORT_IMPERIAL_L";   // off_82F33398
+        const char* const KAC_DISTANCE_FORMAT_LONG_IMPERIAL       = "DISTANCE_FORMAT_LONG_IMPERIAL";      // off_82F3339C
+        const char* const KAC_DISTANCE_FORMAT_LONG_IMPERIAL_L     = "DISTANCE_FORMAT_LONG_IMPERIAL_L";    // off_82F333A0
+
+        // The two unit systems' metres -> display-unit factors (image .rdata, verified reader).
+        const f32 KF_METRIC_LARGE_DISTANCE_CONVERSION   = 0.001f;           // flt_82013F90 = 0x3A83126F (km)
+        const f32 KF_METRIC_SMALL_DISTANCE_CONVERSION   = 1.0f;             // flt_82001C98 = 0x3F800000 (m)
+        const f32 KF_IMPERIAL_LARGE_DISTANCE_CONVERSION = 0.00062137126f;   // flt_820E6B74 = 0x3A22E385 (mi)
+        const f32 KF_IMPERIAL_SMALL_DISTANCE_CONVERSION = 1.0936133f;       // flt_820E60D4 = 0x3F8BFB85 (yd)
+
+        // The switch's two characters (`cmplwi r11, 0x31` @0x82865F38, `cmplwi r11, 0x30` @0x82865FB0).
+        const u8 KU8_IS_METRIC_YES = '1';
+        const u8 KU8_IS_METRIC_NO  = '0';
+    }
+
+    // X360 0x82865B70 CgsLanguage::LanguageManager::PrepareFormattingStrings -- the only caller is
+    // LoadStringTable @0x828664B8, right after the new table is installed.
+    //
+    // ⛔ [owner list 2026-09-28, L6] THIS WAS NEVER CALLED, AND ITS ABSENCE WAS VISIBLE. LoadStringTable
+    // re-stamped the ENGLISH-DEFAULT literals instead (PrepareDefaultFormattingStrings), on the claim
+    // that English renders the same through those defaults. It does not: the English
+    // tables the PC loads (LANGUAGE/0002.bundle, and 0001) carry GENERAL_CURRENCY_SEPARATOR ',' (the
+    // default is '.'), DISTANCE_FORMAT_ISMETRIC '0' -- IMPERIAL: miles and yards -- where the default is
+    // metric, "%1 Kilometers" / "%1 km" / "%1 m" where the defaults spell "%1 Kilometres" / "%1km" /
+    // "%1m", TIME_FORMAT_DATE "%2/%1/%3", TIME_FORMAT_ALL "%1:%2", TIME_FORMAT_SECS "%1" and
+    // "%1 Min %2 Secs". So every distance and every money readout on the PC (the Driver Details panel's
+    // "5,657.6 Kilometres", "414 Meters" and "$6.180.200" among them) differed from the console's
+    // "3,515.4 Miles", "452 Yards" and "$6,180,200". Every other locale follows its own table the same way (French / German / ... carry
+    // '1' and read metric), which is why nothing here forces a unit system.
+    //
+    // Straight line code, statement for statement: four FindString stores then their four null
+    // asserts (cpp:2318..2321), the two currency strings (2327 / 2328), the ten time templates
+    // (2355..2364), the metric switch string (2368), then the switch on its FIRST CHARACTER:
+    //   '1' -> the four metric distance templates, mrLargeDistanceConversion 0.001,
+    //          mbIsUsingMetricUnits = 1, mrSmallDistanceConversion 1.0 (the store order @0x82865F9C..);
+    //   '0' -> the four IMPERIAL templates, 0.00062137126 (metres -> miles), metric flag 0,
+    //          1.0936133 (metres -> yards) (@0x82866014..);
+    //   else: when either localisation-QA mode is on (the debug component's ShowKeysOnly /
+    //          ShowLocalisedTextAsStars, `lbz 0x6165` / `lbz 0x6166`) the metric templates are read and
+    //          the function RETURNS without its distance asserts (0x828660F4..0x8286613C); otherwise it
+    //          asserts "DISTANCE_FORMAT_ISMETRIC needs to be set to either 0 or 1" (cpp:2407) and falls
+    //          through to the four distance-template null asserts (cpp:2410..2413) with the templates
+    //          and the factors left as they were.
+    // The console dereferences the switch string right after its null assert (`lbz r11, 0(r11)`); an
+    // assert is not a guard, and the table always carries the id, so the read is reproduced as is.
+    void LanguageManager::PrepareFormattingStrings()
+    {
+        mpGeneralDecimalSeparator   = FindString(KAC_GENERAL_DECIMAL_SEPARATOR);      // +0x6100
+        mpGeneralThousandsSeparator = FindString(KAC_GENERAL_THOUSANDS_SEPARATOR);    // +0x6104
+        mpGeneralPercentage         = FindString(KAC_GENERAL_PERCENTAGE_DISPLAY);     // +0x6108
+        mpGeneralXOverY             = FindString(KAC_GENERAL_X_OVER_Y_DISPLAY);       // +0x610C
+        CGS_ASSERT(mpGeneralDecimalSeparator != 0,   KAC_GENERAL_DECIMAL_SEPARATOR);    // cpp:2318
+        CGS_ASSERT(mpGeneralThousandsSeparator != 0, KAC_GENERAL_THOUSANDS_SEPARATOR);  // cpp:2319
+        CGS_ASSERT(mpGeneralPercentage != 0,         KAC_GENERAL_PERCENTAGE_DISPLAY);   // cpp:2320
+        CGS_ASSERT(mpGeneralXOverY != 0,             KAC_GENERAL_X_OVER_Y_DISPLAY);     // cpp:2321
+
+        mpGeneralCurrencySeparator = FindString(KAC_GENERAL_CURRENCY_SEPARATOR);      // +0x6110
+        mpGeneralCurrency          = FindString(KAC_GENERAL_CURRENCY_NO_DECIMAL);     // +0x6114
+        CGS_ASSERT(mpGeneralCurrencySeparator != 0, KAC_GENERAL_CURRENCY_SEPARATOR);    // cpp:2327
+        CGS_ASSERT(mpGeneralCurrency != 0,          KAC_GENERAL_CURRENCY_NO_DECIMAL);   // cpp:2328
+
+        mpTimeFormatDate            = FindString(KAC_TIME_FORMAT_DATE);               // +0x6118
+        mpTimeFormatAll             = FindString(KAC_TIME_FORMAT_ALL);                // +0x611C
+        mpTimeFormatHrsMinsSecs     = FindString(KAC_TIME_FORMAT_HRS_MINS_SECS);      // +0x6120
+        mpTimeFormatMinsSecsHnds    = FindString(KAC_TIME_FORMAT_MINS_SECS_HNDS);     // +0x6124
+        mpTimeFormatMinsSecs        = FindString(KAC_TIME_FORMAT_MINS_SECS);          // +0x6128
+        mpTimeFormatSecsHnds        = FindString(KAC_TIME_FORMAT_SECS_HNDS);          // +0x612C
+        mpTimeFormatSecs            = FindString(KAC_TIME_FORMAT_SECS);               // +0x6130
+        mpTimeFormatSecsLong        = FindString(KAC_TIME_FORMAT_SECS_L);             // +0x6134
+        mpTimeFormatMinSecsMidText  = FindString(KAC_TIME_FORMAT_MIN_SECS_MID_TEXT);  // +0x6138
+        mpTimeFormatMinsSecsMidText = FindString(KAC_TIME_FORMAT_MINS_SECS_MID_TEXT); // +0x613C
+        CGS_ASSERT(mpTimeFormatDate != 0,            KAC_TIME_FORMAT_DATE);               // cpp:2355
+        CGS_ASSERT(mpTimeFormatAll != 0,             KAC_TIME_FORMAT_ALL);                // cpp:2356
+        CGS_ASSERT(mpTimeFormatHrsMinsSecs != 0,     KAC_TIME_FORMAT_HRS_MINS_SECS);      // cpp:2357
+        CGS_ASSERT(mpTimeFormatMinsSecsHnds != 0,    KAC_TIME_FORMAT_MINS_SECS_HNDS);     // cpp:2358
+        CGS_ASSERT(mpTimeFormatMinsSecs != 0,        KAC_TIME_FORMAT_MINS_SECS);          // cpp:2359
+        CGS_ASSERT(mpTimeFormatSecsHnds != 0,        KAC_TIME_FORMAT_SECS_HNDS);          // cpp:2360
+        CGS_ASSERT(mpTimeFormatSecs != 0,            KAC_TIME_FORMAT_SECS);               // cpp:2361
+        CGS_ASSERT(mpTimeFormatSecsLong != 0,        KAC_TIME_FORMAT_SECS_L);             // cpp:2362
+        CGS_ASSERT(mpTimeFormatMinSecsMidText != 0,  KAC_TIME_FORMAT_MIN_SECS_MID_TEXT);  // cpp:2363
+        CGS_ASSERT(mpTimeFormatMinsSecsMidText != 0, KAC_TIME_FORMAT_MINS_SECS_MID_TEXT); // cpp:2364
+
+        mpDistanceFormatIsMetric = FindString(KAC_DISTANCE_FORMAT_ISMETRIC);          // +0x6150
+        CGS_ASSERT(mpDistanceFormatIsMetric != 0, KAC_DISTANCE_FORMAT_ISMETRIC);          // cpp:2368
+
+        const u8 lu8IsMetric = mpDistanceFormatIsMetric[0];                            // lbz r11, 0(r11)
+        if (lu8IsMetric == KU8_IS_METRIC_YES)
+        {
+            mpDistanceFormatShort  = FindString(KAC_DISTANCE_FORMAT_SHORT);            // +0x6140
+            mpDistanceFormatShortL = FindString(KAC_DISTANCE_FORMAT_SHORT_L);          // +0x6144
+            mpDistanceFormatLong   = FindString(KAC_DISTANCE_FORMAT_LONG);             // +0x6148
+            mpDistanceFormatLongL  = FindString(KAC_DISTANCE_FORMAT_LONG_L);           // +0x614C
+            mrLargeDistanceConversion = KF_METRIC_LARGE_DISTANCE_CONVERSION;           // +0x60F8
+            mbIsUsingMetricUnits      = true;                                          // +0x60F4
+            mrSmallDistanceConversion = KF_METRIC_SMALL_DISTANCE_CONVERSION;           // +0x60FC
+        }
+        else if (lu8IsMetric == KU8_IS_METRIC_NO)
+        {
+            mpDistanceFormatShort  = FindString(KAC_DISTANCE_FORMAT_SHORT_IMPERIAL);   // +0x6140
+            mpDistanceFormatShortL = FindString(KAC_DISTANCE_FORMAT_SHORT_IMPERIAL_L); // +0x6144
+            mpDistanceFormatLong   = FindString(KAC_DISTANCE_FORMAT_LONG_IMPERIAL);    // +0x6148
+            mpDistanceFormatLongL  = FindString(KAC_DISTANCE_FORMAT_LONG_IMPERIAL_L);  // +0x614C
+            mrLargeDistanceConversion = KF_IMPERIAL_LARGE_DISTANCE_CONVERSION;         // +0x60F8
+            mbIsUsingMetricUnits      = false;                                         // +0x60F4
+            mrSmallDistanceConversion = KF_IMPERIAL_SMALL_DISTANCE_CONVERSION;         // +0x60FC
+        }
+        else
+        {
+            if (mDebugComponent.ShowKeysOnly() || mDebugComponent.ShowLocalisedTextAsStars())
+            {
+                mpDistanceFormatShort  = FindString(KAC_DISTANCE_FORMAT_SHORT);
+                mpDistanceFormatShortL = FindString(KAC_DISTANCE_FORMAT_SHORT_L);
+                mpDistanceFormatLong   = FindString(KAC_DISTANCE_FORMAT_LONG);
+                mpDistanceFormatLongL  = FindString(KAC_DISTANCE_FORMAT_LONG_L);
+                return;
+            }
+            CGS_ASSERT(false, "DISTANCE_FORMAT_ISMETRIC needs to be set to either 0 or 1");    // cpp:2407
+        }
+
+        CGS_ASSERT(mpDistanceFormatShort != 0,  KAC_DISTANCE_FORMAT_SHORT);               // cpp:2410
+        CGS_ASSERT(mpDistanceFormatShortL != 0, KAC_DISTANCE_FORMAT_SHORT_L);             // cpp:2411
+        CGS_ASSERT(mpDistanceFormatLong != 0,   KAC_DISTANCE_FORMAT_LONG);                // cpp:2412
+        CGS_ASSERT(mpDistanceFormatLongL != 0,  KAC_DISTANCE_FORMAT_LONG_L);              // cpp:2413
+    }
+
 
     // @ 0x82862650 -- render liValue into the caller's buffer under one of the
     // four integer formats. The out-of-range assert (cpp:940) and the unknown-

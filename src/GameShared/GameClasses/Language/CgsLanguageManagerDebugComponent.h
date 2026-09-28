@@ -25,8 +25,11 @@
 //   mrDistance                        +0x5C
 //
 // The X360 ledger attests Construct / DrawText / GetName / RenderHUD for this TU; the DWARF's
-// Destruct / GetPath / OnActivate / ShowKeysOnly / ShowLocalisedTextAsStars / GetStarString are not
-// in the X360 set for this slice and are left out (the base GetPath default applies).
+// Destruct / GetPath / OnActivate / GetStarString are not in the X360 set for this slice and are
+// left out (the base GetPath default applies). ShowKeysOnly / ShowLocalisedTextAsStars have no X360
+// symbol because they are INLINED: LanguageManager::PrepareFormattingStrings @0x82866028 / @0x82866034
+// reads them as `lbz 0x6165(this)` / `lbz 0x6166(this)` (this component sits at LanguageManager+0x6154,
+// so +0x11 / +0x12 -- mbShowKeys / mbShowLocalisedTextAsStars).
 
 namespace CgsDev { struct Debug2DImmediateRender; }
 namespace CgsLanguage { class LanguageManager; }
@@ -39,6 +42,11 @@ namespace CgsLanguage
         void Construct( const LanguageManager* lpLanguageManager );   // @ 0x82860A68
 
         void RenderHUD( CgsDev::Debug2DImmediateRender* lpRender ) override;   // @ 0x82863930
+
+        // DWARF CgsLanguageManagerDebugComponent.h:77 / :80, inlined on X360 (see the banner): the
+        // two localisation-QA display modes LanguageManager consults.
+        bool ShowKeysOnly() const             { return mbShowKeys; }
+        bool ShowLocalisedTextAsStars() const { return mbShowLocalisedTextAsStars; }
 
     protected:
         const char* GetName() const override;   // @ 0x82860A58 -> "LanguageManager"

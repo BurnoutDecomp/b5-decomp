@@ -11,6 +11,10 @@
 #     (@0x8238A838..0x8238A888). Expected on this profile: 70 of 86.
 #   * BEST AIR TIME / BEST SPIN showed the IEEE bits of the two floats (7.43 s -> 1089330688, 373.1 deg -> 1136300654):
 #     HandleStatData reads +0xF4 with lfs (@0x824B8968) and +0xF8 with lfs + fctiwz (@0x824B8978).
+# And one on the way to the screen: the distances and the money read in the English-DEFAULT units / separators
+#   ("5,657.6 Kilometres", "414 Meters", "$6.180.200"). LanguageManager::LoadStringTable @0x828664B8 calls
+#   PrepareFormattingStrings @0x82865B70, which reads the loaded table: the English table carries
+#   DISTANCE_FORMAT_ISMETRIC '0' (miles / yards) and GENERAL_CURRENCY_SEPARATOR ','.
 #
 # The run: stage an exe into slot 7 and seed Memcard_7 with the slot-0 copy first:
 #   bash scratch/OWNERLIST_0927/L6/stage_slot7_dd.sh scratch/OWNERLIST_0927/L6/exes/<sha>
@@ -48,6 +52,12 @@
        Pattern = "\[ddetails\] stat text .*bestAirTime_cpt='[^']*7[.,]43"; Min = 1 }
     @{ Kind = 'LogCount'; Name = 'bestSpin_cpt shows 373 (fctiwz of 373.14 @0x824B8978), not 1136300654'
        Pattern = "\[ddetails\] stat text .*bestSpin_cpt='[^']*\b373\b"; Min = 1 }
+    @{ Kind = 'LogCount'; Name = 'totalMileage_cpt reads in MILES (the English table: DISTANCE_FORMAT_ISMETRIC 0, @0x82866000)'
+       Pattern = "\[ddetails\] stat text totalMileage_cpt='[0-9][0-9,.]* Miles'"; Min = 1 }
+    @{ Kind = 'LogCount'; Name = 'bestDrift_cpt reads in YARDS (flt_820E60D4 = 1.0936133)'
+       Pattern = "\[ddetails\] stat text bestDrift_cpt='[0-9][0-9,]* Yards'"; Min = 1 }
+    @{ Kind = 'LogCount'; Name = "bestShowtime_cpt groups with the table's currency separator (',')"
+       Pattern = '\[ddetails\] stat text bestShowtime_cpt=''\$6,180,200'''; Min = 1 }
     @{ Kind = 'LogCount'; Name = 'no field shows a float bit pattern (a 10-digit / billion-sized number, or a ".-" fraction)'
        Pattern = "\[ddetails\] stat text [^=]*='[^']*([0-9]{10}|[0-9]{1,3}(,[0-9]{3}){3}|\.-)"; Max = 0 }
     @{ Kind = 'LogCount'; Name = 'the stat-text witness fired (7 sampled fields across the stat and district arrays)'
