@@ -52,6 +52,7 @@
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                       // GuiEventStatsResponse (event 436)
 #include "GameSource/Gui/Events/BrnGuiEventRankProgressResponse.h"          // GuiEventRankProgressResponse (event 438)
 #include "SharedClasses/Progression/BrnProgressionData.h"                   // ProgressionData::GetProgressionRankCount
+#include <stdlib.h>                                                  // getenv (the [DIAG] stat-text gate)
 #include "GameSource/GameState/Progression/BrnProfile.h"                           // BrnProgression::Profile (mpProfile / the finished-game byte)
 
 namespace BrnGui
@@ -261,15 +262,21 @@ namespace
     // it is de-inlined back to the named record type.
     typedef CgsGui::GuiEventPlayAptMovie GuiEventPlayAptMovieRecord;
 
-    // The stats-response payload (event 436). BrnGuiDemangledEventTypes.h models it as an
-    // opaque 420-byte blob, so this is the same file-local boundary reader the committed
-    // BrnCrashNavStats.cpp:99 uses over the SAME event -- an external-record boundary,
-    // documented inline, not an offset hack on a C++ class.
-    struct StatsReader
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_SCREEN_DIAG=1). The text HandleStatData left in each
+    // field, one line per field, so a live run reads the screen's values without OCR. Called
+    // once per stats response (one per screen entry, plus the elite licence card's re-request).
+    void DiagStatText(const TextField* lpaFields, s32 liNumFields)
     {
-        const u8* mpBase;
-        s32 Word(u32 luOffset) const { return *reinterpret_cast<const s32*>(mpBase + luOffset); }
-    };
+        static const bool sbEnabled = (getenv("BRN_SCREEN_DIAG") != 0);
+        if (!sbEnabled || CgsDev::Log::gpDebugPrint == 0)
+            return;
+        for (s32 liField = 0; liField < liNumFields; ++liField)
+        {
+            *CgsDev::Log::gpDebugPrint << "[ddetails] stat text " << lpaFields[liField].GetName()
+                                       << "='" << lpaFields[liField].GetText() << "'\n";
+        }
+    }
 }
 
 // ---------------------------------------------------------------- OnEnter @0x824CEC80
@@ -814,10 +821,14 @@ bool CrashNavDriverDetails::UpdatePermanent()
             const GuiEventStatsResponse* lpStatsEvent =
                 reinterpret_cast<const GuiEventStatsResponse*>(lpEvent);
             HandleStatData(lpStatsEvent);
-            // The percentage-complete word the licence card shows sits at +0xC4 of the
-            // same record (the console reads `i[49]`).
-            const StatsReader lReader = { reinterpret_cast<const u8*>(lpEvent) };
-            mLicenseComponent.SetPercentageComplete(lReader.Word(0xC4));
+            // [DIAG] BRN_SCREEN_DIAG only -- not in the X360 binary.
+            DiagStatText(maStatTextfields, KI_NUM_STAT_TEXTFIELDS);
+            DiagStatText(maDistrictBillboardsTextfields, KI_NUM_DISTRICTS);
+            DiagStatText(maDistrictJumpsTextfields, KI_NUM_DISTRICTS);
+            DiagStatText(maDistrictSmashesTextfields, KI_NUM_DISTRICTS);
+            // The percentage-complete word the licence card shows: +0xC4 of the same record
+            // (the console reads `i[49]`).
+            mLicenseComponent.SetPercentageComplete(lpStatsEvent->miPercentageComplete);
             break;
         }
 
@@ -999,9 +1010,20 @@ void CrashNavDriverDetails::UpdateStatsPanel()
 // ----------------------------------------------------------- HandleStatData @0x824B8618
 // Fill all 33 stat fields plus the three 5-district columns from the stats response.
 //
-// The record is the same opaque 420-byte GuiEventStatsResponse the committed
-// BrnCrashNavStats.cpp reads, so the same file-local byte-boundary reader is used; every
-// offset below is the X360 `lwz`'s, in the console's own order.
+// READ BY NAME. GuiEventStatsResponse (BrnGuiEventStatsResponse.h) names every field of the
+// 432-byte record at the console's offsets; each read below carries the X360 load it replaces.
+// Every textfield, offset, format id and key string is the console's, in the console's order.
+//
+// ⛔ [owner list 2026-09-28, L6] TWO OF THESE ARE FLOATS, AND THE s32 BYTE CURSOR THIS FUNCTION
+// USED TO READ THROUGH TURNED THEM INTO INTEGERS. The producer stores +0xF4 / +0xF8 with `stfs`
+// (TranslateGameActionsToGuiEvents case 180 @0x823ECA6C / @0x823ECA84), and this consumer loads
+// them with `lfs`:
+//     0x824B8968  lfs  f1, 0xF4(r31)                  -> SetLocalisedText(f32, 5): the air time as is
+//     0x824B8978  lfs  f0, 0xF8(r31) / fctiwz / stfiwx -> "%d" of the TRUNCATED spin angle
+// The old `static_cast<f32>(Word(0xF4))` and `"%d", Word(0xF8)` reinterpreted the IEEE bits: a
+// 7.43 s best air time printed as "-21474836.-48 Seconds" and a 373.1 degree spin as
+// "1,136,300,654 Degrees". Every other field is a word -- `lwz`, then `extsw/std/lfd/fcfid/frsp`
+// where the field takes a float (the time played, the mileage, the best drift, the best oncoming).
 void CrashNavDriverDetails::HandleStatData(const GuiEventStatsResponse* lpStatsEvent)
 {
     CGS_ASSERT(lpStatsEvent != 0, "lpStatsEvent");   // cpp:1050
@@ -1010,107 +1032,124 @@ void CrashNavDriverDetails::HandleStatData(const GuiEventStatsResponse* lpStatsE
     typedef CgsLanguage::LanguageManager LM;
     const LM* lpLanguageManager = mpStateInterface->GetLanguageManager();
 
-    const StatsReader lReader = { reinterpret_cast<const u8*>(lpStatsEvent) };
-
     char lacBuffer[128];
     lacBuffer[63] = 0;   // the X360's `stb 0, var_41` -- the formatter's own cap is 64
 
     // --- the plain single-value fields -------------------------------------------
-    maStatTextfields[0].SetLocalisedText(static_cast<f32>(lReader.Word(0x20)),
+    maStatTextfields[0].SetLocalisedText(static_cast<f32>(lpStatsEvent->miTimePlayed),         // lwz 0x20
                                          LM::E_FORMAT_HOURS_MINUTES_SECONDS);
-    maStatTextfields[1].SetLocalisedText(lReader.Word(0xC4), LM::E_FORMAT_PERCENTAGE);
-    maStatTextfields[2].SetLocalisedText(static_cast<f32>(lReader.Word(0x1C)),
+    maStatTextfields[1].SetLocalisedText(lpStatsEvent->miPercentageComplete,                   // lwz 0xC4
+                                         LM::E_FORMAT_PERCENTAGE);
+    maStatTextfields[2].SetLocalisedText(static_cast<f32>(lpStatsEvent->miDistanceOffline),    // lwz 0x1C
                                          LM::E_FORMAT_AUTO_DISTANCE_LONG);
 
     // --- the "x of y" fields ------------------------------------------------------
-    lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(0x24), lReader.Word(0x28), 64);
+    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miCarsCollected,            // 0x24
+                                          lpStatsEvent->miCarsTotal, 64);                      // 0x28
     maStatTextfields[3].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
 
-    maStatTextfields[4].SetLocalisedText(lReader.Word(0xC0), LM::E_FORMAT_INTEGER);
+    maStatTextfields[4].SetLocalisedText(lpStatsEvent->miCarsToShutdown,                       // 0xC0
+                                         LM::E_FORMAT_INTEGER);
 
-    lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(0xB4), lReader.Word(0xB8), 64);
+    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->mRoadsRuledComplete,        // 0xB4
+                                          lpStatsEvent->mNumberOfRoads, 64);                   // 0xB8
     maStatTextfields[5].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(0xAC), lReader.Word(0xB8), 64);
+    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->mRoadsRuledTime,            // 0xAC
+                                          lpStatsEvent->mNumberOfRoads, 64);                   // 0xB8
     maStatTextfields[6].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(0xB0), lReader.Word(0xB8), 64);
+    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->mRoadsRuledCrash,           // 0xB0
+                                          lpStatsEvent->mNumberOfRoads, 64);                   // 0xB8
     maStatTextfields[7].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(0x104), lReader.Word(0x108), 64);
+    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miEventsFound,              // 0x104
+                                          lpStatsEvent->miTotalEvents, 64);                    // 0x108
     maStatTextfields[8].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(0x70), lReader.Word(0x74), 64);
+    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miSmashes,                  // 0x70
+                                          lpStatsEvent->miSmashTot, 64);                       // 0x74
     maStatTextfields[10].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(0x78), lReader.Word(0x7C), 64);
+    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miStunts,                   // 0x78
+                                          lpStatsEvent->miStuntTot, 64);                       // 0x7C
     maStatTextfields[11].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(0x68), lReader.Word(0x6C), 64);
+    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miJumps,                    // 0x68
+                                          lpStatsEvent->miJumpTot, 64);                        // 0x6C
     maStatTextfields[12].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
 
     // --- the per-event-type "won" counts ------------------------------------------
-    maStatTextfields[13].SetLocalisedText(lReader.Word(0xCC), LM::E_FORMAT_INTEGER);
-    maStatTextfields[14].SetLocalisedText(lReader.Word(0xD0), LM::E_FORMAT_INTEGER);
-    maStatTextfields[15].SetLocalisedText(lReader.Word(0xD4), LM::E_FORMAT_INTEGER);
-    maStatTextfields[16].SetLocalisedText(lReader.Word(0xD8), LM::E_FORMAT_INTEGER);
-    maStatTextfields[17].SetLocalisedText(lReader.Word(0xDC), LM::E_FORMAT_INTEGER);
-    maStatTextfields[18].SetLocalisedText(lReader.Word(0xE0), LM::E_FORMAT_MONEY);
+    maStatTextfields[13].SetLocalisedText(lpStatsEvent->miRacesWon,      LM::E_FORMAT_INTEGER);  // 0xCC
+    maStatTextfields[14].SetLocalisedText(lpStatsEvent->miRoadRagesWon,  LM::E_FORMAT_INTEGER);  // 0xD0
+    maStatTextfields[15].SetLocalisedText(lpStatsEvent->miMarkedManWon,  LM::E_FORMAT_INTEGER);  // 0xD4
+    maStatTextfields[16].SetLocalisedText(lpStatsEvent->miChallengesWon, LM::E_FORMAT_INTEGER);  // 0xD8
+    maStatTextfields[17].SetLocalisedText(lpStatsEvent->miStuntRunsWon,  LM::E_FORMAT_INTEGER);  // 0xDC
+    maStatTextfields[18].SetLocalisedText(lpStatsEvent->miBestShowtime,  LM::E_FORMAT_MONEY);    // 0xE0
 
     // --- the "best" records, each a localisation key with one integer parameter ----
-    CgsCore::SnPrintf(lacBuffer, 64, "%d", lReader.Word(0x100));
+    CgsCore::SnPrintf(lacBuffer, 64, "%d", lpStatsEvent->miHighestStuntScore);                 // 0x100
     maStatTextfields[19].SetLocalisedText("CV_PANEL_EVENTS_SCORE", LM::E_FORMAT_ID_LOOKUP,
                                           1, lacBuffer, LM::E_FORMAT_INTEGER);
 
-    maStatTextfields[20].SetLocalisedText(lReader.Word(0x88), LM::E_FORMAT_INTEGER);
-    maStatTextfields[21].SetLocalisedText(static_cast<f32>(lReader.Word(0xEC)),
+    maStatTextfields[20].SetLocalisedText(lpStatsEvent->miTotalTakedowns,                      // 0x88
+                                          LM::E_FORMAT_INTEGER);
+    maStatTextfields[21].SetLocalisedText(static_cast<f32>(lpStatsEvent->miBestDrift),         // 0xEC
                                           LM::E_FORMAT_AUTO_DISTANCE_LONG);
 
-    CgsCore::SnPrintf(lacBuffer, 64, "%d", lReader.Word(0xE8));
+    CgsCore::SnPrintf(lacBuffer, 64, "%d", lpStatsEvent->miBestBoostChain);                    // 0xE8
     maStatTextfields[22].SetLocalisedText("STAT_BURNOUTS", LM::E_FORMAT_ID_LOOKUP,
                                           1, lacBuffer, LM::E_FORMAT_INTEGER);
 
-    maStatTextfields[23].SetLocalisedText(static_cast<f32>(lReader.Word(0xF0)),
+    maStatTextfields[23].SetLocalisedText(static_cast<f32>(lpStatsEvent->miBestOncoming),      // 0xF0
                                           LM::E_FORMAT_AUTO_DISTANCE_LONG);
-    maStatTextfields[24].SetLocalisedText(static_cast<f32>(lReader.Word(0xF4)),
+    maStatTextfields[24].SetLocalisedText(lpStatsEvent->mfBestAirtime,                         // lfs 0xF4
                                           LM::E_FORMAT_SECONDS_HUNDREDTHS_LONG);
 
-    CgsCore::SnPrintf(lacBuffer, 64, "%d", lReader.Word(0xF8));
+    // `fctiwz` truncates toward zero, as the C++ conversion does.
+    CgsCore::SnPrintf(lacBuffer, 64, "%d", static_cast<s32>(lpStatsEvent->mfBestSpin));        // lfs 0xF8
     maStatTextfields[25].SetLocalisedText("STAT_DEGREES", LM::E_FORMAT_ID_LOOKUP,
                                           1, lacBuffer, LM::E_FORMAT_INTEGER);
 
-    CgsCore::SnPrintf(lacBuffer, 64, "%d", lReader.Word(0xFC));
+    CgsCore::SnPrintf(lacBuffer, 64, "%d", lpStatsEvent->miBestNumBarrelRolls);                // 0xFC
     maStatTextfields[26].SetLocalisedText("x %1", LM::E_FORMAT_TEXT,
                                           1, lacBuffer, LM::E_FORMAT_INTEGER);
 
-    maStatTextfields[27].SetLocalisedText(lReader.Word(0x2C), LM::E_FORMAT_PERCENTAGE);
+    maStatTextfields[27].SetLocalisedText(lpStatsEvent->miPowerParkingBest,                    // 0x2C
+                                          LM::E_FORMAT_PERCENTAGE);
     maStatTextfields[28].SetLocalisedText("CV_PANEL_EVENTS_TD_COUNT", LM::E_FORMAT_ID_LOOKUP,
-                                          lReader.Word(0xE4), LM::E_FORMAT_INTEGER);
+                                          lpStatsEvent->miBestRoadRageTakedownCount,          // 0xE4
+                                          LM::E_FORMAT_INTEGER);
 
     // --- the three district columns, one district per pass ------------------------
-    // The X360 walks a single word cursor at event+0x134 and reads the three "found"
-    // counts at +0/+20/+40 and their three totals at +60/+80/+100.
+    // The X360 walks one word cursor from event+0x134 (0x824B8A1C) and reads the three "found"
+    // counts at +0/+0x14/+0x28 and their totals at +0x3C/+0x50/+0x64 -- element liDistrict of
+    // each of the six named district arrays.
     for (s32 liDistrict = 0; liDistrict < KI_NUM_DISTRICTS; ++liDistrict)
     {
-        const u32 luCursor = 0x134u + static_cast<u32>(liDistrict) * 4u;
-
-        lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(luCursor),
-                                              lReader.Word(luCursor + 60), 64);
+        lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->mBillboardStunts[liDistrict],
+                                              lpStatsEvent->mMaxBillboardStunts[liDistrict], 64);
         maDistrictBillboardsTextfields[liDistrict].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
 
-        lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(luCursor + 20),
-                                              lReader.Word(luCursor + 80), 64);
+        lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->mJumpStunts[liDistrict],
+                                              lpStatsEvent->mMaxJumpStunts[liDistrict], 64);
         maDistrictJumpsTextfields[liDistrict].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
 
-        lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(luCursor + 40),
-                                              lReader.Word(luCursor + 100), 64);
+        lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->mSmashStunts[liDistrict],
+                                              lpStatsEvent->mMaxSmashStunts[liDistrict], 64);
         maDistrictSmashesTextfields[liDistrict].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
     }
 
     // --- the four "found" tallies the console formats after the district loop ------
-    lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(0x130), lReader.Word(0x12C), 64);
+    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miTotalDriveThrusFound,     // 0x130
+                                          lpStatsEvent->miTotalDriveThrus, 64);                // 0x12C
     maStatTextfields[9].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(0x110), lReader.Word(0x120), 64);
+    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miGasStationsFound,         // 0x110
+                                          lpStatsEvent->miGasStationsTotal, 64);               // 0x120
     maStatTextfields[30].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(0x114), lReader.Word(0x124), 64);
+    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miPaintShopsFound,          // 0x114
+                                          lpStatsEvent->miPaintShopsTotal, 64);                // 0x124
     maStatTextfields[31].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(0x10C), lReader.Word(0x11C), 64);
+    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miBodyShopsFound,           // 0x10C
+                                          lpStatsEvent->miBodyShopsTotal, 64);                 // 0x11C
     maStatTextfields[29].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lReader.Word(0x118), lReader.Word(0x128), 64);
+    // "carParksFound_cpt" is fed the JUNK-YARD pair -- the console's own choice.
+    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miJunkYardsFound,           // 0x118
+                                          lpStatsEvent->miJunkYardsTotal, 64);                 // 0x128
     maStatTextfields[32].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
 }
 
