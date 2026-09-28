@@ -71,6 +71,7 @@ const f32 KF_SKID_LARGE_PITCH = 0.8408203125f;
 
 u32 guSkidVoiceWitnesses = 0;
 u32 guSkidReleaseWitnesses = 0;
+u32 guSkidFinishedWitnesses = 0;
 } // namespace
 
 // The console constructor inlines the BrnEffectObject base zero-inits and both leaf
@@ -221,7 +222,19 @@ void TrafficSkid::ProcessUpdate()
     const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* lpTrafficSoundEntity = mpTrafficControl->GetTrafficEntity();
     CGS_ASSERT( lpTrafficSoundEntity != 0, "lpTrafficSoundEntity" );
 
+    const CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE leStageBefore = mSkidVoice.GetUpdateStage();
     mSkidVoice.Update();
+
+    // [FLAG PC witness] BRN_TRAFFICSND_DIAG: the skid voice left PLAYING on its own.
+    if ( leStageBefore == CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_PLAYING
+         && mSkidVoice.GetUpdateStage() == CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_FINISHED
+         && TrafficSoundDiagTake( guSkidFinishedWitnesses, 16 ) )
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[trafficsnd] voice finished type=skid entity="
+            << static_cast<s32>( lpTrafficSoundEntity->mu16EntityIndex ) << "\n";
+    }
+
     if ( !mSkidVoice.IsAlive() )
         return;
 

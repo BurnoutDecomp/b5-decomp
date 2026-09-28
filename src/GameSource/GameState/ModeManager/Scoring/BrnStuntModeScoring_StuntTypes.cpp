@@ -47,10 +47,6 @@
 // flt_ set attributed to it below). The per-constant comments carry the VA each value came
 // from. When the full BrnStuntModeScoring.cpp is reconstructed it owns the canonical block --
 // delete these and let the shared anonymous-namespace constants resolve.
-//
-// STILL UNRECOVERED (and still FLAGged below): the two KVF_REVERSE_TAKEOFF_* gates. They are
-// VecFloat vectors built by dynamic initialisation (the asm loads them as unk_82FADAF0 /
-// unk_82FADC30, both all-zero in the static image), so no static rodata read can recover them.
 // ----------------------------------------------------------------------------
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h"
@@ -133,13 +129,12 @@ namespace BrnGameState
         // Reverse-takeoff direction test (UpdateAirStunts; the X360 VMX block normalises the
         // player velocity, then dots it with the car forward direction and compares vs a cos
         // threshold). The DWARF spells these as the VecFloat KVF_REVERSE_TAKEOFF_* constants.
-        // FLAG -- magnitudes UNRECOVERABLE by a static read, and these two ALONE still hold
-        // placeholders in this file. The X360 loads them as whole vectors from unk_82FADAF0
-        // (the |v| gate, 0x8232C738) and unk_82FADC30 (the cos gate, 0x8232C7C4); both are
-        // all-zero in the static image, so they are written by a dynamic initialiser that has
-        // no IDA export. Recover them with a dyn-init scan, not another rodata read.
-        const f32 KVF_REVERSE_TAKEOFF_MIN_VELOCITY        = 0.0f;  // FLAG: unk_82FADAF0, dyn-init (min |v|)
-        const f32 KVF_REVERSE_TAKEOFF_COS_MAX_ANGLE       = 0.0f;  // FLAG: unk_82FADC30, dyn-init (cos gate)
+        // Both are splatted by static initialisers: the |v| gate from the integer splat 1
+        // converted to float, the cos gate from the rodata float -0.3. So a takeoff only counts
+        // as reversed when the car moves at >= 1 m/s and its velocity is more than ~107 degrees
+        // away from the way it faces.
+        const f32 KVF_REVERSE_TAKEOFF_MIN_VELOCITY        = 1.0f;   // min |v| (m/s)
+        const f32 KVF_REVERSE_TAKEOFF_COS_MAX_ANGLE       = -0.3f;  // cos gate
 
         // Landing-pass "still rotating" gate (X360 flt_82020B30 splat fed to vcmpgtfp on the
         // X lane of GetCurrentInAirRotations). NOT a KF tuning constant -- it is FLT_EPSILON
@@ -210,7 +205,7 @@ namespace BrnGameState
                 // --- reverse-takeoff test (X360 VMX normalise + dot block) ---
                 Vector3 lUnitVelocity = lpActiveRaceCarInterface->GetPlayerLinearVelocity();
                 const f32 lfSpeed = rw::math::vpu::Magnitude(lUnitVelocity);
-                if (lfSpeed > KVF_REVERSE_TAKEOFF_MIN_VELOCITY)
+                if (lfSpeed >= KVF_REVERSE_TAKEOFF_MIN_VELOCITY)
                 {
                     lUnitVelocity = rw::math::vpu::Normalize(lUnitVelocity);
                     const Vector3 lPlayerDirection = lpActiveRaceCarInterface->GetPlayerDirection();

@@ -995,6 +995,21 @@ namespace BrnGui
         }
     }
 
+    // Append one controller + name-hash pair to the controlled list. The asserts do not gate:
+    // a full list is written one past its end, as on the console.
+    void StateLoadingHelper::AppendExpectedControlledObject(
+        u32 luHashedComponentName, CgsGui::ObjectController* lpObjectController)
+    {
+        CGS_ASSERT(luHashedComponentName != 0, "Invalid name hash");
+        CGS_ASSERT(lpObjectController != 0, "Invliad controller object");
+        CGS_ASSERT(muControlledComponentCount < ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH,
+                   "Too many components waiting");
+
+        mpaControlledComponents[muControlledComponentCount]       = lpObjectController;
+        muControlledComponentNameHash[muControlledComponentCount] = luHashedComponentName;
+        ++muControlledComponentCount;
+    }
+
     // @ 0x824FEB58 / @ 0x824FEB50 / @ 0x824FEBB0 / @ 0x824EE7A8 / @ 0x824EE528 --
     // the GuiCache faces of the helpers above (X360: `addi r3,r3,8` + tail-branch
     // into the embedded watcher at +0x8).
@@ -3825,6 +3840,29 @@ namespace BrnGui
     void GuiCache::ClearExpectedControlledAptComponentList()
     {
         mStateLoadingHelper.ClearControlledComponentList();
+    }
+
+    // Both asserts are non-gating; the helper repeats them.
+    void GuiCache::AppendExpectedControlledAptComponent(u32 luNameHash,
+                                                        CgsGui::ObjectController* lpObjectController)
+    {
+        CGS_ASSERT(luNameHash != 0, "Invalid name hash");
+        CGS_ASSERT(lpObjectController != 0, "Invalid ObjectController");
+
+        mStateLoadingHelper.AppendExpectedControlledObject(luNameHash, lpObjectController);
+    }
+
+    // Hashes the whole name (strlen bytes) and hands it to the helper directly.
+    void GuiCache::AppendExpectedControlledAptComponent(const char* lpComponentName,
+                                                        CgsGui::ObjectController* lpObjectController)
+    {
+        CGS_ASSERT(lpComponentName != 0, "Invalid name");
+        CGS_ASSERT(lpObjectController != 0, "Invalid ObjectController");
+
+        const u32 luNameHash = CgsContainers::CgsHash::CalculateHash(
+            const_cast<char*>(lpComponentName),
+            static_cast<int>(std::strlen(lpComponentName)));
+        mStateLoadingHelper.AppendExpectedControlledObject(luNameHash, lpObjectController);
     }
 
     // =============================================================================================

@@ -13,6 +13,9 @@
 //   [trafficsnd] voice started      a traffic voice was told to play (engine, horn, skid)
 //   [trafficsnd] detach             a slot let its TrafficState go (ok=0: not yet attached)
 //   [trafficsnd] voice released     an effect released its voice on detach (with its stage)
+//   [trafficsnd] voice playing      the engine voice reached its PLAYING stage
+//   [trafficsnd] voice finished     an engine or skid voice left PLAYING on its own while
+//                                   its car was still attached
 //
 // Every witness kind is capped by its own counter (first-N lines).
 // =============================================================================

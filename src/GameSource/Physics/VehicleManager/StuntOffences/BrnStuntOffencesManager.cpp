@@ -21,9 +21,9 @@ namespace vpu = rw::math::vpu;
 // the DWARF. None are fabricated -- where a constant was NOT in the exports it is flagged in-line.
 // ============================================================================================
 const f32 KF_MIN_TIME_IN_THE_AIR                      = 0.38f;   // SetCurrentCarInAirStatus: airtime > 0.38s -> count as a jump
-const f32 KF_MIN_ANGLE_FOR_AIR_SPIN                   = 200.0f;  // CheckForRollsAndSpins (completed) deg/s gate
-const f32 KF_MIN_ANGLE_FOR_BARREL_ROLL_COMPLETED      = 30.0f;   // CheckForRollsAndSpins (completed) deg/s gate
-const f32 KF_MIN_ANGLE_FOR_BARREL_ROLL_IN_PROGRESS    = 35.0f;   // CheckForRollsAndSpins (in-progress) deg/s gate
+const f32 KF_MIN_ANGLE_FOR_AIR_SPIN                   = 30.0f;   // CheckForRollsAndSpins: spin lane (deg), in progress and completed
+const f32 KF_MIN_ANGLE_FOR_BARREL_ROLL_COMPLETED      = 200.0f;  // CheckForRollsAndSpins: roll lane (deg), completed on landing
+const f32 KF_MIN_ANGLE_FOR_BARREL_ROLL_IN_PROGRESS    = 35.0f;   // CheckForRollsAndSpins: roll lane (deg), in progress
 const f32 KF_MAX_HANDBREAK_HOLD_TIME                  = 1.0f;    // CheckForHandBreakTurns: stabilise window (s)
 const f32 KF_MIN_FOR_HANDBREAK_TURN                   = 90.0f;   // CheckForHandBreakTurns: deg accumulated -> handbrake turn
 const f32 KF_HANDBRAKE_STABLE_END_TIME                = 1.0f;    // CheckForHandBreakTurns: end-of-turn stable time (s)
@@ -164,8 +164,7 @@ namespace BrnPhysics
         if (!lbInAirNow)
         {
             muCurrentRaceCarState &= ~(E_CURRENT_CAR_STATE_IN_THE_AIR_NOW
-                                       | E_CURRENT_CAR_STATE_LANDING
-                                       | E_CURRENT_CAR_STATE_JUST_LANDED);
+                                       | E_CURRENT_CAR_STATE_LANDING);
             mvPositionAtTakeoff = BrnMath::Flatten(lpRaceCarPhysics->GetPosition());
         }
 
@@ -256,11 +255,11 @@ namespace BrnPhysics
 
     // ============================================================================================
     // @0x8263B508  CheckForRollsAndSpins -- score AIR SPINS (.y axis) + BARREL ROLLS (.z axis).
-    //   mvStuntRollInProgress (+0x10): .y(+0x14, _R31[5]) = air-spin axis, .z(+0x18, _R31[6]) =
-    //   barrel-roll axis (rad/s in car space).  NOTE: the axis<->stunt mapping is the OPPOSITE of the
-    //   intuitive naming -- this matches the X360 asm verbatim (verified vs 0x8263B508):
-    //     .y * deg > threshold  ->  AIR_SPIN flag + air-spin angle member
-    //     .z * deg > threshold  ->  BARREL_ROLL flag + barrel-roll angle member + whole-roll count
+    //   mvStuntRollInProgress (+0x10): .y(+0x14) = the car's yaw axis (air spin), .z(+0x18) = its
+    //   long axis (barrel roll), both the running max of |car-space angle| in radians:
+    //     .y * deg > KF_MIN_ANGLE_FOR_AIR_SPIN (30)                 ->  AIR_SPIN, in progress and completed
+    //     .z * deg > KF_MIN_ANGLE_FOR_BARREL_ROLL_IN_PROGRESS (35)  ->  BARREL_ROLL in progress
+    //     .z * deg > KF_MIN_ANGLE_FOR_BARREL_ROLL_COMPLETED (200)   ->  BARREL_ROLL completed + whole-roll count
     // ============================================================================================
     void StuntOffencesManager::CheckForRollsAndSpins(Vehicle::RaceCarPhysics* lpRaceCarPhysics,
                                                      BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue,
@@ -282,14 +281,15 @@ namespace BrnPhysics
             const f32 lfSpinDeg = mvStuntRollInProgress.y * KF_RAD_TO_DEG;   // _R31[5], air-spin axis
             const f32 lfRollDeg = mvStuntRollInProgress.z * KF_RAD_TO_DEG;   // _R31[6], barrel-roll axis
 
-            // .y * deg > 30 -> AIR_SPIN in progress; store air-spin angle; clear the handbrake-turn
-            // accumulator (asm stfs flt_82001CC0(=0.0) @+0x54 and stb 0 @+0x5C).
-            if (lfSpinDeg > KF_MIN_ANGLE_FOR_BARREL_ROLL_COMPLETED)   // 30.0
+            // AIR_SPIN in progress takes over from a handbrake turn: the handbrake accumulator and
+            // latch are dropped and so is the HANDBREAK_TURN in-progress bit.
+            if (lfSpinDeg > KF_MIN_ANGLE_FOR_AIR_SPIN)
             {
-                muStuntActionInProgress |= E_STUNT_ACTION_IN_PROGRESS_AIR_SPIN;   // |= 2
-                mfHandBreakAngleSoFar = 0.0f;                                     // +0x54  _R31[21]
+                muStuntActionInProgress |= E_STUNT_ACTION_IN_PROGRESS_AIR_SPIN;
+                mfHandBreakAngleSoFar = 0.0f;                                     // +0x54
                 mbHandbreakTurnAttempting = false;                               // +0x5C
-                mfInProgressAirSpinAngle = mvStuntRollInProgress.y;              // +0x1B4 _R31[109]
+                muStuntActionInProgress &= ~E_STUNT_ACTION_IN_PROGRESS_HANDBREAK_TURN;
+                mfInProgressAirSpinAngle = mvStuntRollInProgress.y;              // +0x1B4
             }
             // .z * deg > 35 -> BARREL_ROLL in progress; store barrel-roll angle.
             if (lfRollDeg > KF_MIN_ANGLE_FOR_BARREL_ROLL_IN_PROGRESS)   // 35.0
@@ -308,15 +308,15 @@ namespace BrnPhysics
                 const f32 lfSpinDeg = mvStuntRollInProgress.y * KF_RAD_TO_DEG;   // _R31[5], air-spin axis
                 const f32 lfRollDeg = mvStuntRollInProgress.z * KF_RAD_TO_DEG;   // _R31[6], barrel-roll axis
 
-                // .y * deg > 30 -> AIR_SPIN complete; store the completed air-spin angle.
-                if (lfSpinDeg > KF_MIN_ANGLE_FOR_BARREL_ROLL_COMPLETED)   // 30.0
+                // AIR_SPIN complete; store the completed air-spin angle.
+                if (lfSpinDeg > KF_MIN_ANGLE_FOR_AIR_SPIN)
                 {
                     muStuntActionComplete |= E_STUNT_ACTION_COMPLETE_AIR_SPIN;   // |= 2
                     mfCompletedAirSpinAngle = mvStuntRollInProgress.y;           // +0x18C _R31[99]
                 }
-                // .z * deg > 200 -> BARREL_ROLL complete; store the angle + the whole-roll count
-                // (asm fsel truncate of (rollDeg * (1/360)) + 0.5 -> miCompletedBarrelRolls +0x19C).
-                if (lfRollDeg > KF_MIN_ANGLE_FOR_AIR_SPIN)   // 200.0
+                // BARREL_ROLL complete; store the angle + the whole-roll count, rounded to nearest
+                // (floor of rollDeg * (1/360) + 0.5 -> miCompletedBarrelRolls +0x19C).
+                if (lfRollDeg > KF_MIN_ANGLE_FOR_BARREL_ROLL_COMPLETED)
                 {
                     muStuntActionComplete |= E_STUNT_ACTION_COMPLETE_BARREL_ROLL;   // |= 1
                     mfCompletedBarrelRollAngle = mvStuntRollInProgress.z;           // +0x188 _R31[98]

@@ -2,6 +2,7 @@
 #define CGS_APT_OBJECT_CONTROLLER_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                         // Vector2 (GetPos)
 #include "SDKs/EATech/include/Apt/AptExtObject.h"   // AptExtObject base (and AptValue)
 
 // Pointer-only collaborator (only a pointer is stored / passed through; including the
@@ -105,6 +106,15 @@ namespace CgsGui
         // variable from the bound reference. Bodied by its own ledger TU; declared here
         // for the surface CgsGui::Animator drives.
         f32 GetObjectVariableFloat(const char* lpacVariable);
+
+        // The object's stage position, one ActionScript float each (header-inline; folded
+        // into GetPos).
+        f32 GetPosX() { return GetObjectVariableFloat("_x"); }
+        f32 GetPosY() { return GetObjectVariableFloat("_y"); }
+
+        // The object's stage position as {_x, _y, 0, 0}. RoadSignIconManager::SetupComponent
+        // reads each sign's authored position through it.
+        Vector2 GetPos();
 
         // CgsAptObjectController.cpp:136 - look the named ActionScript variable up on
         // the bound apt reference and return its AptValue (or null). Asserts the key,

@@ -1641,6 +1641,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // pair answered this frame is not asked again by UpdateCheckpointDistanceRequests -- the
     // console's order (ProcessGameEvents precedes ModeManager::PreWorldUpdate in PreWorldUpdate).
     ProcessGameEventsModeManagerRouteInfoBringUp(&lGameEventQueue);
+    ProcessGameEventsLandmarkRouteRequestBringUp(&lGameEventQueue, lpActionQueue);
     // The online player arms (7, 121..125, 129, 139, 140) and the freeburn-challenge arms with
     // the rest of the ModeManager::ProcessEvent feed, same walk (BrnGameStateModule_wN3_01.cpp).
     ProcessGameEventsOnlinePlayerBringUp(&lGameEventQueue, lpActionQueue, mpOutputBuffer);

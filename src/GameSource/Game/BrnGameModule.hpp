@@ -644,6 +644,10 @@ namespace BrnGame
                               const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer);
         void BridgeWorldVehicleDataToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
                                          const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer);
+        // The sat-nav route reply: every E_OWNER_GUI route response in the world output becomes a
+        // route record handed to the GUI module's tracker (GuiTracker::RecEvent, 211). Body in
+        // GameBridgeWorldToGui.cpp.
+        void BridgeWorldRouteInformationToGui(const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput);
         // X360 @0x823E5560 (DWARF BrnGameModule.h:820): the world output's GUI queue -> the GUI
         // input -- 512 traffic pool emptied, 208 score targets / 210 overhead signs (an empty record
         // when the mode is not in progress), 209 removed traffic (also handed to

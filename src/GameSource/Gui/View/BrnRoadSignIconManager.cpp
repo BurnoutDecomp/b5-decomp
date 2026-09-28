@@ -1,6 +1,7 @@
 #include "GameSource/Gui/View/BrnRoadSignIconManager.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the two remaining parks + the BRN_MAPICON_DIAG witness
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the BRN_MAPICON_DIAG witness
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsID.h"               // CgsIDCompress
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"          // CgsGui::GuiEventWrapper (the 562 record)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"   // StateInterface::GetOutputEventQueue
@@ -15,13 +16,6 @@
 // BrnGui::RoadSignIcon / BrnGui::RoadSignIconManager (the asserts name the original home,
 // GameSource/Gui/SatNav/BrnRoadSignIconManager.cpp). Every body follows the console asm; the
 // asserts are the console's own strings and, as on the console, none of them gates.
-//
-// FLAG: RoadSignIconManager::SetupComponent and ::AppendExpectedComponents are still one-shot
-// parks. SetupComponent needs CgsGui::ObjectController::GetPos (no declaration or body in the
-// tree); AppendExpectedComponents needs GuiCache::AppendExpectedControlledAptComponent(const
-// char*, ObjectController*) (no body), without which no controller is ever attached to its apt
-// object and GetPos could not read it anyway. Until both land, the signs keep a zero world
-// position.
 
 namespace BrnGui
 {
@@ -460,30 +454,74 @@ namespace
         mbComponentVisible = lbVisible;
     }
 
-    // [UI-gate] Blocked: see the file banner (ObjectController::GetPos). One-shot park.
+    // Bind every sign to its apt object. The first pass reads each sign's authored stage
+    // position (a 2048 x 2048 stage) off its controller and maps it into the world rect; later
+    // passes keep the position already stored. Every sign then gets its road id, its "RD_"
+    // artwork with the post shown, and is made visible.
     void RoadSignIconManager::SetupComponent()
     {
-        static bool sbLogged = false;
-        if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
+        Vector4 lv4StageRect;
+        lv4StageRect.x = 0.0f;
+        lv4StageRect.y = 0.0f;
+        lv4StageRect.z = 2048.0f;
+        lv4StageRect.w = 2048.0f;
+
+        for (s32 liIndex = 0; liIndex < GetNumIcons(); ++liIndex)
         {
-            sbLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] PARK: RoadSignIconManager::SetupComponent "
-                   "(ObjectController::GetPos unreconstructed)\n";
+            RoadSignIcon&             lrIcon       = mIcons[liIndex];
+            CgsGui::ObjectController* lpController = mapObjectController[liIndex];
+            const CgsID               lRoadId      = CgsIDCompress(lrIcon.GetName());
+
+            Vector2 lv2WorldPos;
+            if (mbIconsTransformed)
+            {
+                lv2WorldPos.x = lrIcon.mv4WorldPosition.x;
+                lv2WorldPos.y = lrIcon.mv4WorldPosition.y;
+                lv2WorldPos.z = lrIcon.mv4WorldPosition.z;
+                lv2WorldPos.w = lrIcon.mv4WorldPosition.w;
+            }
+            else
+            {
+                lv2WorldPos = MapTransform::Transform(lpController->GetPos(), lv4StageRect,
+                                                      MapTransform::GetWorldRect());
+            }
+
+            const ERoadIcon leIcon = static_cast<ERoadIcon>(liIndex);
+            lrIcon.SetIcon(leIcon, &lv2WorldPos, RoadSignIcon::E_ICON_TYPE_A, lRoadId);
+            lrIcon.DisplayRoad(leIcon, true);
+            lpController->SetObjectVariableBoolean("_visible", true);
+        }
+
+        mbComponentVisible = true;
+        mbIconsTransformed = true;
+
+        // [FLAG PC witness] BRN_MAPICON_DIAG, first-N: the first sign's world lanes.
+        static s32 siSetupLines = 0;
+        if (IsMapIconDiagOn() && siSetupLines < KI_MAPICON_DIAG_MAX_LINES && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++siSetupLines;
+            *CgsDev::Log::gpDebugPrint << "[mapicon] road signs set up: " << GetNumIcons()
+                                       << " sign0 world=" << mIcons[0].mv4WorldPosition.x
+                                       << "," << mIcons[0].mv4WorldPosition.y << "\n";
         }
     }
 
-    // [UI-gate] Blocked: see the file banner (GuiCache::AppendExpectedControlledAptComponent).
-    // One-shot park.
+    // Register the 64 sign names as expected screen components and queue each controller to
+    // attach to its apt object on ONLOAD. The controlled list is cleared first.
     void RoadSignIconManager::AppendExpectedComponents()
     {
-        static bool sbLogged = false;
-        if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
+        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // assert line 538
+
+        mpGuiCache->ClearExpectedControlledAptComponentList();
+
+        for (s32 liIndex = 0; liIndex < GetNumIcons(); ++liIndex)
         {
-            sbLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] PARK: RoadSignIconManager::AppendExpectedComponents "
-                   "(GuiCache::AppendExpectedControlledAptComponent unreconstructed)\n";
+            CGS_ASSERT(mapObjectController[liIndex] != 0,
+                       "mapObjectController[liIndex]");   // assert line 545
+
+            const char* lpcName = mIcons[liIndex].GetName();
+            mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, lpcName);
+            mpGuiCache->AppendExpectedControlledAptComponent(lpcName, mapObjectController[liIndex]);
         }
     }
 

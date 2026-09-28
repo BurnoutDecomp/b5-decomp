@@ -225,6 +225,10 @@ namespace BrnGui
         // reads it only for its one-shot diagnostic.
         const WorldDataController& GetWorldDataController() const { return mWorldDataController; }
 
+        // The sat-nav tracker (mGuiTracker). BrnGameModule::BridgeWorldRouteInformationToGui hands
+        // it the route replies.
+        GuiTracker* GetGuiTracker() { return &mGuiTracker; }
+
         // Is the SCREEN flow's live state currently subscribed to liEventId? The observer
         // table is the module's own record of the type-34/35 registration records each state
         // posts from OnEnter (RegisterForEvents), so this is the exact "a state is listening

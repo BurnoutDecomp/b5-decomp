@@ -7,6 +7,7 @@
 //   BrnGameModule::BridgeWorldVehicleDataToGui @0x823E5768  (PS3 named 0x318A18)
 //   BrnGameModule::BridgeWorldTrafficAndPropDataToGui @0x823E5560 (crash parity FX-FLOW, G10-D9 caller)
 //   BrnGameModule::BridgeWorldImpactInformationToGui  @0x823E6A80
+//   BrnGameModule::BridgeWorldRouteInformationToGui   (the sat-nav route reply, GUI 211)
 //
 // PARTIAL SLICE (boost-bar 206 wave, 2026-08-25). The console's per-frame
 // vehicle-data bridge posts, in order: the player-crashing state-change event (377), the
@@ -47,6 +48,9 @@
 #include <cstdlib>                                           // [DIAG] getenv (BRN_TRAFFICGUI_DIAG)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [DIAG] gFilmLatch.mfLiveBoostFraction
+#include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"     // RouteResponse / RouteResponseQueue / E_OWNER_GUI
+#include "GameSource/World/AI/Route/BrnRoute.h"                // Route / RouteNode
+#include "GameSource/Gui/SatNav/BrnGuiTracker.h"               // GuiTracker::RecEvent / RouteInformation
 
 namespace BrnGame
 {
@@ -740,12 +744,103 @@ void BrnGameModule::BridgeWorldToGui(
         const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer)
 {
     BridgeWorldVehicleDataToGui(lpGuiInputBuffer, lpWorldOutputBuffer);              // 0x823EDD68
+    BridgeWorldRouteInformationToGui(lpWorldOutputBuffer);
 
-    // FLAG deferred (console order): BridgeWorldRouteInformationToGui (0x823EDD74) sits here, and
-    // the world-entity-state -> GuiEventRequestCollisionWorldEvent tail (0x823EDD98..0x823EDE08)
-    // follows the impact leg. Each is its own X360 body; they land with their consumers.
+    // FLAG deferred (console order): the world-entity-state -> GuiEventRequestCollisionWorldEvent
+    // tail follows the impact leg; it lands with its consumer.
     BridgeWorldTrafficAndPropDataToGui(lpGuiInputBuffer, lpWorldOutputBuffer);       // 0x823EDD84
     BridgeWorldImpactInformationToGui(lpGuiInputBuffer, lpWorldOutputBuffer);        // 0x823EDD94
+}
+
+// ============================================================================
+// BridgeWorldRouteInformationToGui -- the sat-nav route reply. Every route response the AI
+// module's planner produced for the GUI (owner E_OWNER_GUI; the question was GuiTracker::Update's
+// CalculateRoute, carried by ProcessGameEvents case 84 as action 50) becomes one 5136-byte route
+// record handed straight to the GUI module's tracker: GuiTracker::RecEvent(record, 211, 5136).
+// This is a direct call into the GUI module, not a GUI input event.
+//
+// Per response, in the console's order:
+//   * the response is copied whole; one not owned by the GUI is skipped;
+//   * record +0x1400 = the route's node count, +0x1404 = the response's event id (the leg the
+//     tracker asked for), +0x1408 = the route's distance, or 0.0f when the route has no nodes;
+//   * a route with no nodes posts nothing;
+//   * the "More route segments than the gui can handle" assert (over 320 nodes) is non-gating;
+//     Route::AddNode already stops at 320, so it cannot fire;
+//   * each node becomes the lane {x, 0.0f, y, 0} (RouteNode::GetPositionWithZeroY: the planner's
+//     2-D (x, y) is the world's (x, z));
+//   * then RecEvent.
+// The record is GuiTracker::RouteInformation, the layout RecEvent's case-211 arm reads.
+// ============================================================================
+namespace
+{
+    // The GUI event id RecEvent files a route record under.
+    const s32 KI_GUI_EVENT_ROUTE_INFORMATION = 211;
+}
+
+void BrnGameModule::BridgeWorldRouteInformationToGui(const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput)
+{
+    typedef BrnAI::RouteMapModuleIO::RouteResponse RouteResponse;
+
+    const BrnAI::RouteMapModuleIO::RouteResponseQueue* lpRouteResponseOutput =
+        lpWorldOutput->GetRouteResponseQueue();
+    CGS_ASSERT(lpRouteResponseOutput != 0,
+               "Invalid route response queue in BrnGameModule::BridgeWorldToGui");
+
+    BrnGui::GuiTracker* lpGuiTracker = mGuiModule.GetGuiTracker();
+    CGS_ASSERT(lpGuiTracker != 0, "Invalid gui tracker");
+
+    const s32 liLength = lpRouteResponseOutput->GetLength();
+    for (s32 liIndex = 0; liIndex < liLength; ++liIndex)
+    {
+        const RouteResponse lRouteReponse = lpRouteResponseOutput->GetEvent(liIndex);
+        if (lRouteReponse.GetOwnerId() != BrnAI::RouteMapModuleIO::E_OWNER_GUI)
+        {
+            continue;
+        }
+
+        const BrnAI::Route* lpRoute = lRouteReponse.GetRoute();
+
+        BrnGui::GuiTracker::RouteInformation lGuiRouteInfoEvent;
+        lGuiRouteInfoEvent.miNumPoints     = lpRoute->GetNodeCount();
+        lGuiRouteInfoEvent.miEventId       = static_cast<s32>(lRouteReponse.GetEventId());
+        lGuiRouteInfoEvent.mfRouteDistance = (lGuiRouteInfoEvent.miNumPoints > 0) ? lpRoute->GetDistance() : 0.0f;
+
+        if (lGuiRouteInfoEvent.miNumPoints <= 0)
+        {
+            continue;
+        }
+
+        CGS_ASSERT(lGuiRouteInfoEvent.miNumPoints <= static_cast<s32>(BrnGui::GuiTracker::KU_ROUTE_POINTS_PER_RECORD),
+                   "More route segments than the gui can handle");
+
+        for (s32 liNodeIndex = 0; liNodeIndex < lGuiRouteInfoEvent.miNumPoints; ++liNodeIndex)
+        {
+            const BrnAI::RouteNode* lpRouteNode = lpRoute->GetNode(liNodeIndex);
+            const Vector3 lPositionWithZeroY = { lpRouteNode->GetX(), 0.0f, lpRouteNode->GetY(), 0.0f };
+            lGuiRouteInfoEvent.mav3Points[liNodeIndex] = lPositionWithZeroY;
+        }
+
+        lpGuiTracker->RecEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiRouteInfoEvent),
+                               KI_GUI_EVENT_ROUTE_INFORMATION,
+                               static_cast<s32>(sizeof(lGuiRouteInfoEvent)));   // console size 5136
+
+        // [FLAG PC witness] BRN_SATNAV_DIAG, first 32: one line per route record handed to the
+        // tracker, with the tracker's route state after it.
+        {
+            static const bool sbDiag      = (getenv("BRN_SATNAV_DIAG") != 0);
+            static s32        siLinesLeft = 32;
+            if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                --siLinesLeft;
+                *CgsDev::Log::gpDebugPrint
+                    << "[satnav] route reply 211 leg " << lGuiRouteInfoEvent.miEventId
+                    << " points " << lGuiRouteInfoEvent.miNumPoints
+                    << " distance " << lGuiRouteInfoEvent.mfRouteDistance
+                    << " routeInfoAvailable " << (lpGuiTracker->IsRouteInfoAvailable() ? 1 : 0)
+                    << "\n";
+            }
+        }
+    }
 }
 
 // ============================================================================
