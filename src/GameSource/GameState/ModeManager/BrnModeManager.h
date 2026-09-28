@@ -327,6 +327,10 @@ public:
     void ExitCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
                          bool                             lbTimedOut,
                          GameStateModuleIO::EGameModeType leNextGameModeType);                              // DWARF :258 / X360 0x8234FFE0
+    // [L4 boot order 2026-09-28] X360 0x82337A18: `addi r3, r3, 0x6E00 ; b ChallengeManager::OnProfileLoaded`
+    // -- a tail call on mChallengeManager (+28160). DWARF BrnModeManager.h `void OnProfileLoaded();`.
+    // Sole caller GameStateModule::OnProfileLoaded @0x82397488. Body: BrnModeManager.cpp.
+    void OnProfileLoaded();                                                                                   // X360 0x82337A18
     void HandleLoadingScreenLoaded(GameStateModuleIO::GameActionQueue* lpGameActionQueue);                   // DWARF :584 / X360 0x8234B8A8
     void SetupPathfinding(const StartGameModeParams* lpStartGameModeParams, GameModeParams* lpGameModeParams); // DWARF :542 / X360 0x823291B0
     void SetUpCheckPointsForGameMode(const StartGameModeParams* lpStartGameModeParams,

@@ -1195,6 +1195,35 @@ namespace BrnWorld
             CGS_ASSERT(false, "Shouldn't get here");
         }
 
+        // [DIAG] NOT IN THE X360 BINARY (the console's own "... has been previously hit" lines are behind
+        // gxMessageFilterFlags). BRN_PROPPROG_DIAG=1 only, default off, capped: one line per loaded
+        // E_DONT_RESPAWN / E_RESPAWN_CHANGED prop (the smash gates and billboards the profile's progression
+        // covers) -- where it is, and whether the progression says it was hit. L4 WORLDVFX's live case
+        // (tests/PropProgressionLive.ps1) reads it. DELETE-WHEN-STABLE.
+        if (leRespawnType != BrnPhysics::Props::E_RESPAWN)
+        {
+            static const bool sbPropProgDiag = []() {
+                const char* const lpcValue = getenv("BRN_PROPPROG_DIAG");
+                return lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0';
+            }();
+            static u32 suPropProgLines = 0;
+            if (sbPropProgDiag && suPropProgLines < 400u && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++suPropProgLines;
+                const Vector3& lrPos = lrInstanceData.GetWorldTransform().Pos();
+                const bool lbHit = lbReplayActive ? false
+                                                  : HasPropBeenHit(lu16ZoneId, static_cast<u32>(liZoneDataPropIndex));
+                *CgsDev::Log::gpDebugPrint
+                    << "[propprog] load zone=" << static_cast<u32>(lu16ZoneId)
+                    << " prop=" << liZoneDataPropIndex
+                    << " respawn=" << static_cast<s32>(leRespawnType)
+                    << " hit=" << (lbHit ? 1 : 0)
+                    << " loaded=" << (lbLoadProp ? 1 : 0)
+                    << " type=" << static_cast<u32>(lpProp->muTypeId)
+                    << " pos=(" << lrPos.x << "," << lrPos.y << "," << lrPos.z << ")\n";
+            }
+        }
+
         // ---- build this prop's part instances ------------------------------------------
         const s32 liLastPartIndex = liFirstPartIndex + static_cast<s32>(lpTypeData->GetNumberOfParts());
         lpProp->mu16PartsIndex = static_cast<u16>(liFirstPartIndex);

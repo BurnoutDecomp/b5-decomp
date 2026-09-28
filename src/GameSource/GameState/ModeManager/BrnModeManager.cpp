@@ -266,6 +266,17 @@ void ModeManager::EndStuntChallenge()
 }
 
 // ----------------------------------------------------------------------------
+// [L4 boot order 2026-09-28] ModeManager::OnProfileLoaded -- X360 0x82337A18, the whole body:
+//     addi r3, r3, 0x6E00          ; this + 28160 == &mChallengeManager
+//     b    ChallengeManager::OnProfileLoaded @0x82334B00
+// Sole caller: GameStateModule::OnProfileLoaded @0x82397310 (0x82397488).
+// ----------------------------------------------------------------------------
+void ModeManager::OnProfileLoaded()
+{
+    mChallengeManager.OnProfileLoaded();
+}
+
+// ----------------------------------------------------------------------------
 // Network stunt-score relay.
 // ----------------------------------------------------------------------------
 

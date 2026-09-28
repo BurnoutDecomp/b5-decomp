@@ -178,6 +178,17 @@ namespace BrnWorld
 {
     namespace
     {
+        // [DIAG] NOT IN THE X360 BINARY. BRN_PROPPROG_DIAG=1 only, default off: the prop world's half of the
+        // prop-progression handshake (L4 WORLDVFX 2026-09-27). DELETE-WHEN-STABLE.
+        bool PropProgressionDiag()
+        {
+            static const bool sbArmed = []() {
+                const char* const lpcValue = std::getenv( "BRN_PROPPROG_DIAG" );
+                return lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0';
+            }();
+            return sbArmed && CgsDev::Log::gpDebugPrint != 0;
+        }
+
         // ------------------------------------------------------------------
         // The pre-scene output buffer models its interface members as opaque sized spans
         // (BrnPropEntityModuleIO.h owns that decision). Re-type the handle exactly the way
@@ -417,6 +428,25 @@ namespace BrnWorld
             // through the READ-LOCKED handle, like every other input read in this function.
             mZoneManager.SetHitPropBitArray( lpInputRead->GetHitPropsBitArray() );
 
+            // [DIAG] NOT IN THE X360 BINARY. BRN_PROPPROG_DIAG=1 only, default off (see the
+            // SendingPropProgression arm below). DELETE-WHEN-STABLE.
+            if ( PropProgressionDiag() )
+            {
+                u32 luHitProps = 0;
+                for ( u32 luZone = 0; luZone < KU_MAX_ZONES; ++luZone )
+                {
+                    for ( u32 luProp = 0; luProp < KU_MAX_PROP_INSTANCES_PER_ZONE; ++luProp )
+                    {
+                        if ( mZoneManager.HasPropBeenHit( luZone, luProp ) )
+                        {
+                            ++luHitProps;
+                        }
+                    }
+                }
+                *CgsDev::Log::gpDebugPrint << "[propprog] world: the profile's hit props installed (action 199): "
+                                           << luHitProps << " props -> E_STREAM\n";
+            }
+
             meStreamingMode = E_STREAM;
         }
 
@@ -438,6 +468,15 @@ namespace BrnWorld
                         "meStreamingMode != E_RESET_UNLOADING_FOR_PROFILE" );      // cpp:528
             CGS_ASSERT( meStreamingMode != E_WAITING_FOR_PROFILE_DATA,
                         "meStreamingMode != E_WAITING_FOR_PROFILE_DATA" );         // cpp:529
+            // [DIAG] NOT IN THE X360 BINARY. BRN_PROPPROG_DIAG=1 only, default off: the world's half of
+            // the prop-progression handshake (L4 WORLDVFX, tests/PropProgressionLive.ps1). DELETE-WHEN-STABLE.
+            if ( PropProgressionDiag() )
+            {
+                *CgsDev::Log::gpDebugPrint << "[propprog] world: SendingPropProgression (action 194) -- mode "
+                                           << static_cast<s32>( meStreamingMode )
+                                           << " -> E_RESET_UNLOADING_FOR_PROFILE, loaded zones "
+                                           << static_cast<u32>( muNumberOfLoadedZones ) << "\n";
+            }
             meStreamingMode = E_RESET_UNLOADING_FOR_PROFILE;
         }
 
@@ -456,7 +495,7 @@ namespace BrnWorld
             {
                 const u32 luZone = lpUnloaded->GetEvent( liEvent ).muPropGraphicsId;
                 CGS_ASSERT( luZone < KU_MAX_ZONES,
-                            "luZone < BrnPhysics::Props::KU_MAX_ZONES" );          // cpp:549
+                            "luZone < KU_MAX_ZONES" );          // cpp:549
 
                 mabWaitingForGraphics.UnSetBit( luZone );
                 mapGraphicsLists[luZone] = CgsResource::NULLResourceHandle;

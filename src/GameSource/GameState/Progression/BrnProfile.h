@@ -375,6 +375,10 @@ public:
     void AddRealTimePlayed(f32 lfSeconds)          { mfRealTimePlayed  += lfSeconds; }
     void SetCarPosition(Vector3 lPosition)         { mCarPosition  = lPosition; }
     void SetCarDirection(Vector3 lDirection)       { mCarDirection = lDirection; }
+    // [L4 boot order 2026-09-28] DWARF BrnProfile.h `Vector3 GetCarPosition() const`. No X360 symbol:
+    // GameStateModule::OnProfileLoaded @0x823973D0 inlines it as `lvx128 v1, r30(profile), 0x30` and hands
+    // the saved pose's position to FindNearestJunkyardID.
+    Vector3 GetCarPosition() const                 { return mCarPosition; }
 
     // ADDITIVE GROW (BrnGui::PreRaceFlyByState::Set*Description): the progression-rank byte
     // at +112 (mi8CurrentProgressionRank, Construct seeds it -2). DWARF BrnProfile.h:553
@@ -443,6 +447,23 @@ public:
     const CgsNetwork::NetworkTexture* GetPlayerLicencePicture() const
     { return mbPlayerLicencePictureIsValid ? &mPlayerLicencePicture : 0; }
     bool GetHaveSet100PercentCompletedDate() const { return mbHaveSet100PercentCompletedDate; }
+    // [L4 boot order 2026-09-28] DWARF BrnProfile.h:425 `void FixUp()` -- re-point the licence-picture
+    // texture at the profile's own pixel buffer after a load (the NetworkTexture's buffer pointer is not
+    // part of the save). The PS3 keeps it out of line (DecFIGS 0x23E8E8: Construct + the buffer Prepare);
+    // the X360 inlines it into GameStateModule::OnProfileLoaded @0x82397364..0x8239738C:
+    //     NetworkTexture::Construct(profile+102620)
+    //     sub_82893A80(profile+102620, profile+102648, 0x2580, 0xA0, 0x78, 0x1A200052)
+    // i.e. NetworkTexture::Prepare(buffer, 9600, 160, 120, PIXELFORMAT_DXT1) -- the same call and the
+    // same constants SetPlayerLicencePicture @0x8235A020 uses.
+    void FixUp()
+    {
+        mPlayerLicencePicture.Construct();
+        mPlayerLicencePicture.Prepare(&macPlayerLicenceTextureData[0],
+                                      KI_PLAYERLICENCEPICTURE_TEXTURESIZEINBYTES,
+                                      KI_PLAYERLICENCEPICTURE_WIDTH,
+                                      KI_PLAYERLICENCEPICTURE_HEIGHT,
+                                      renderengine::PIXELFORMAT_DXT1);
+    }
 
     // ---- [drive-thru wave 2026-08-27] the three setters the completion chain needs.
     // The X360 emits no standalone symbol for any of them -- ProgressionManager::
@@ -620,6 +641,11 @@ public:
 
     // Prop-hit bit array.
     void RecordPropHit(s32 liZoneIndex, s32 liPropIndex);                           // 0x82361C48
+    // [L4 WORLDVFX 2026-09-27] DWARF BrnProfile.h:555 / :1030. No X360 symbol of its own: the one
+    // reader, ProcessGameEvents @0x823A0A18's tail, inlines it as gsm+107224 == &mabHitPropBitArray
+    // and hands that address to the prop world in action 199 (PropSmashReportAction).
+    typedef CgsContainers::BitArray<300000u> HitPropsBitArray;
+    const HitPropsBitArray& GetHitProps() const { return mabHitPropBitArray; }
 
     // "Seen all events of a mode won" HUD-message bits (leModeType is the not-yet-homed
     // BrnProgression::RaceEventData::EModeType; taken as the s32 the X360 compares against 6).
@@ -641,6 +667,12 @@ public:
     void SetEventScoreToUpload(CgsID lEventId, s32 liScore,
                                BrnGameState::GameStateModuleIO::EGameModeType leGameMode);      // 0x82371740
     void RemoveEventScoreToUpload(CgsID lEventId);                                  // 0x823718F0
+    // [L4 boot order 2026-09-28] FLAG name (this X360 DLC-era member has no DWARF entry, so neither does
+    // its reader): GameStateModule::OnProfileLoaded @0x82397508..0x82397514 takes its address
+    // (`addis r11, r31, 3 ; addi r11, r11, -0x6E78` == gsm+0x29188 == profile+120040) and posts it as
+    // action 19's payload.
+    const Array<BrnNetwork::LocalEventScoreUploadData, 49>* GetEventScoresToUpload() const
+    { return &maEventScoresToUpload; }
 
     // ------------------------------------------------------------------------
     // ADDITIVE GROW (declare-only) -- bodies in other (not-yet-reconstructed) Progression TUs,

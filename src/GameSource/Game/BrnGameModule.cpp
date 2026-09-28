@@ -4897,27 +4897,33 @@ namespace BrnGame
                 // video states, i.e. under `!IsVideoState()`; the disk-error byte gates the whole
                 // leg):
                 //     if (gm+10094117) { gm+10094117 = 0; PreWorldInput.events += {8 /*1 byte*/}; }
-                // Game event 8 is drained by GameStateModule::PreWorldUpdate's ProcessGameEvents
-                // @0x823A0A18 case 8 -> WaitForStreaming @0x823900E8 -> RequestPause(1) -> action 86,
-                // which is how the console keeps the sim (and, through the sound dispatch's bit 0,
-                // the EA Trax song selection) paused from the MemoryCard exit across the post-title
-                // world load and the intro video, until FinishStreaming.
+                // Game event 8 (E_EVENT_GAME_START) is drained by GameStateModule::PreWorldUpdate's
+                // ProcessGameEvents @0x823A0A18 case 8 (0x823A2758..0x823A2788):
+                //     if (mbWaitForStreaming) { OnProfileLoaded(out, queue); WaitForStreaming(queue); }
+                // ⭐⭐⭐ [L4 boot order 2026-09-28] OnProfileLoaded @0x82397310 IS THE BOOT DELIVERY OF
+                // THE LOADED PROFILE. The profile finishes loading in the MemoryCard state, a video
+                // state, where DoUpdate_GameStatePostWorld skips PostWorldUpdate and so drops the
+                // GUI-352 -> game-event-109 the GUI posts; this event, posted as the MemoryCard state is
+                // left, is what hands the profile to the game state (the saved car at the junkyard
+                // nearest its saved position, the road-rule tables, the max-car count, the prop
+                // world's hit props). This seat used to call only WaitForStreaming, so on PC NONE of
+                // that ran: every session wiped the road-rule records and respawned the default car.
+                // WaitForStreaming -> RequestPause(1) -> action 86 is how the console keeps the sim
+                // (and, through the sound dispatch's bit 0, the EA Trax song selection) paused from
+                // the MemoryCard exit across the post-title world load and the intro video, until
+                // FinishStreaming.
                 // [PC seat] this build's GameState drain is narrowed to E_MGS_IN_GAME (the banner
                 // above), so an event 8 posted here would be thrown away before InGame; the one
-                // hop is collapsed and WaitForStreaming is called in place -- same function, same
-                // argument, same sub-step the console would drain it in.
+                // hop is collapsed and the extracted case-8 arm is called in place -- same arm, same
+                // sub-step the console would drain it in.
                 if (!mMainFlowStateMachine.IsVideoState() && !mbDiskError && mbRequestStreamingWait)
                 {
                     mbRequestStreamingWait = false;
-                    BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
-                        mGameStateModule.GetOutputBuffer();
-                    if (lpGameStateOutput != 0)
+                    if (mGameStateModule.GetOutputBuffer() != 0)
                     {
-                        lpGameStateOutput->LockForWrite();
-                        mGameStateModule.WaitForStreaming(lpGameStateOutput->GetGameActionQueue());
-                        lpGameStateOutput->UnlockForWrite();
+                        mGameStateModule.ProcessGameEventsGameStartBringUp();
                         CgsDev::Log::WriteToLog("[sim-pause] MemoryCard exit -> game event 8 -> "
-                                                "WaitForStreaming (reason 1)\n");
+                                                "OnProfileLoaded + WaitForStreaming (reason 1)\n");
                     }
                 }
                 // [FLAG world-load stand-in] the FinishStreaming seat for BridgeGuiToGame case 65.
@@ -5570,6 +5576,8 @@ namespace BrnGame
                                 u32         muEventsPm;
                                 u64         muSpawnCarGs;
                                 u64         muSpawnCarPm;
+                                s32         miRoadRulesGs;
+                                s32         miMaxCarsGs;
                             };
                             OneProfileSample lSample;
                             lSample.mpGameState       = lpcGameStateProfile;
@@ -5595,6 +5603,26 @@ namespace BrnGame
                                                    ? static_cast<u64>(lpcGameStateProfile->GetSpawnCarId()) : 0u;
                             lSample.muSpawnCarPm = (lpcProfileManagerProfile != 0)
                                                    ? static_cast<u64>(lpcProfileManagerProfile->GetSpawnCarId()) : 0u;
+                            // [L4 boot order 2026-09-28] two more fields, the two a profile load has to
+                            // put back: how many of the profile's 64 road-rule rows hold a score
+                            // (StreetManager::Update copies its own tables INTO the profile every frame,
+                            // so a session that never ran StreetManager::OnProfileLoaded drops this to 0)
+                            // and the "CARS OWNED x/Y" denominator (ProgressionManager::OnLoadProfile).
+                            lSample.miRoadRulesGs = -1;
+                            if (lpcGameStateProfile != 0)
+                            {
+                                lSample.miRoadRulesGs = 0;
+                                for (s32 liRow = 0; liRow < 64; ++liRow)
+                                {
+                                    if (lpcGameStateProfile->GetUserChallengeData(liRow)->ContainsData(
+                                            BrnStreetData::E_SCORE_TYPE_COUNT))
+                                    {
+                                        ++lSample.miRoadRulesGs;
+                                    }
+                                }
+                            }
+                            lSample.miMaxCarsGs =
+                                mGameStateModule.GetProgressionManager()->GetMaxCarCount();
 
                             static bool             sbHaveLast = false;
                             static OneProfileSample sLast;
@@ -5603,13 +5631,14 @@ namespace BrnGame
                             {
                                 sbHaveLast = true;
                                 sLast      = lSample;
-                                char lacProbe[384];
+                                char lacProbe[448];
                                 std::snprintf(
                                     lacProbe, sizeof(lacProbe),
                                     "[one-profile] gameState.mProgressionManager.mProfile=%p"
                                     " profileManager.mpProgressionProfile=%p same=%d |"
                                     " isNewProfile gs=%d pm=%d | medalsFromTheStart gs=%d pm=%d |"
-                                    " eventCount gs=%d pm=%d | spawnCarId gs=%016llX pm=%016llX\n",
+                                    " eventCount gs=%d pm=%d | spawnCarId gs=%016llX pm=%016llX |"
+                                    " roadRules gs=%d | maxCars gs=%d\n",
                                     lSample.mpGameState, lSample.mpProfileManager,
                                     (lSample.mpGameState == lSample.mpProfileManager) ? 1 : 0,
                                     lSample.miNewGs, lSample.miNewPm,
@@ -5618,7 +5647,8 @@ namespace BrnGame
                                     static_cast<s32>(lSample.muEventsGs),
                                     static_cast<s32>(lSample.muEventsPm),
                                     static_cast<unsigned long long>(lSample.muSpawnCarGs),
-                                    static_cast<unsigned long long>(lSample.muSpawnCarPm));
+                                    static_cast<unsigned long long>(lSample.muSpawnCarPm),
+                                    lSample.miRoadRulesGs, lSample.miMaxCarsGs);
                                 CgsDev::Log::WriteToLog(lacProbe);
                             }
                         }

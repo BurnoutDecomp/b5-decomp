@@ -205,47 +205,12 @@ void ProgressionManager::PreWorldUpdate(
     // `lbzx +0x20973` -- mbPlayerMedalsUpdateRequired -> UpdatePlayerMedals + UnlockRivals.
     if (mbPlayerMedalsUpdateRequired)
     {
-        // ⛔ [FLAG PC bring-up] STAND-IN for ProgressionManager::OnLoadProfile @0x823893A8's
-        // RANK-CACHE RESTORE, and it is LOAD-BEARING rather than cosmetic.
-        // OnLoadProfile's head is `UnlockDefaultPlayerCars(); +133492 = 0; +133491 = 1;
-        // +133489 = 1; *(this + 133484) = *(this + 480)` -- that last store copies the SAVED
-        // Profile::mi8CurrentProgressionRank (Profile+0x70) into this manager's rank cache.
-        // NOTHING CALLS OnLoadProfile ON PC: its only caller, GameStateModule::OnProfileLoaded
-        // @0x82397310, is not reconstructed.
-        // WITHOUT IT the cache keeps Construct's -2 for a profile that has already been played,
-        // so UpdatePlayerMedals below re-derives a rank from -2 on EVERY boot, takes the
-        // `newRank > cachedRank` branch, and UnlockToProgressionRank's tail runs
-        // ClearMedalsOnRankUp -- wiping the medals the save just restored, every boot.
-        // WHY HERE AND NOT AT THE Prepare2 SEAM: measured (run 20260906_213407) the save image is
-        // deserialised AFTER Prepare2 and BEFORE the first in-game frame -- that seam logged
-        // "restored from the profile as -2" while the very next `[medals]` line already reported
-        // events=120 out of the save. This arm is the first console seat that runs with a loaded
-        // profile, so it is the earliest honest place for the restore.
-        // ⓘ ONLY the rank restore is stood in for. OnLoadProfile's other work (its own
-        // UnlockDefaultPlayerCars call, the sponsor-car max-car-count scan, mNewlyUnlockedCarID,
-        // mbDriveThruDataDirtyFlag, mbHasJustRankedUp = 0) is NOT reproduced here.
-        // The latch is a function-local static rather than a member because this is not console
-        // state: ProgressionManager is a singleton sub-object, so it is one latch per run.
-        // DELETE-WHEN ProgressionManager::OnLoadProfile is reconstructed and OnProfileLoaded
-        // calls it -- then delete this whole block, not just the call.
-        static bool sbRankCacheRestoredFromProfile = false;
-        if (!sbRankCacheRestoredFromProfile)
-        {
-            sbRankCacheRestoredFromProfile = true;
-            const s8 li8SavedRank = mProfile.GetCurrentProgressionRank();
-            if (li8SavedRank != mi8ProgressionRank)
-            {
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[FLAG PC bring-up] ProgressionManager::PreWorldUpdate: standing in for "
-                           "OnLoadProfile @0x823893A8 -- rank cache "
-                        << static_cast<s32>(mi8ProgressionRank) << " -> "
-                        << static_cast<s32>(li8SavedRank) << " (from the loaded profile).\n";
-                }
-                mi8ProgressionRank = li8SavedRank;              // OnLoadProfile: +133484 = +480
-            }
-        }
+        // ✅ [L4 boot order 2026-09-28] THE OnLoadProfile STAND-IN THAT STOOD HERE IS RETIRED.
+        // It restored the rank cache from the loaded profile on this arm's first pass, because nothing
+        // called ProgressionManager::OnLoadProfile @0x823893A8 on PC. It is bodied now
+        // (BrnProgressionManager.cpp) and GameStateModule::OnProfileLoaded @0x82397310 calls it -- at the
+        // boot through ProcessGameEvents case 8 (the MemoryCard exit), before the first in-game frame
+        // reaches this arm -- and it is also what raises mbPlayerMedalsUpdateRequired for this arm.
 
         // ✅ [progression wave: medals, 2026-09-06] THE MEDALS ARM IS LIVE. UpdatePlayerMedals
         // @0x823A5154 is bodied in BrnProgressionManager_Medals.cpp, and it is the callee that

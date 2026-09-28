@@ -765,6 +765,16 @@ public:
     // table exactly.
     void ProcessGameEventsPropHitBringUp(const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue);
 
+    // ⭐⭐ [L4 2026-09-28] X360 ProcessGameEvents @0x823A0A18, cases 109 and 112 and the dispatcher's
+    // TAIL -- case 109 is OnProfileLoaded (an IN-GAME profile load: GUI 352 -> event 109), case 112 sets
+    // mbPropSystemNeedsProgression (`*(this+292288) = 1`), and the tail (LABEL_648) posts action 199
+    // carrying &profile.mabHitPropBitArray and clears it. OnProfileLoaded's action 194 starts the prop
+    // world's side of that handshake. Without it the profile's hit-prop bits never reached
+    // PropZoneManager::maPreviouslyHitProps, so every smash gate / billboard the save records as broken
+    // respawned intact. Body and banner in GameStateModule_gUI_00.cpp.
+    void ProcessGameEventsPropProgressionBringUp(const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+                                                 GameStateModuleIO::GameActionQueue* lpActionQueue);
+
     // ⭐⭐ [tut-ticker] X360 ProcessGameEvents @0x823A0A18, THE CASE-113 ARM -- "a world system
     // asks for a training tip". Same extraction precedent as the case-111 arm above. The console
     // arm is one call: `BrnGameState::TrainingManager::RequestTraining(this + 46640, *payload)`
@@ -1064,6 +1074,39 @@ public:
     // the console's own game event 78 out of mGameEventCarryQueue, which BridgeGuiToGameState
     // fills -- so the trigger is the GUI's, on both paths, exactly as on the console.
     void PreWorldUpdateSetupPlayerCarBringUp();
+
+    // ⭐⭐⭐ [L4 boot order 2026-09-28] X360 0x82397310 -- OnProfileLoaded. DWARF BrnGameStateModule.h:829
+    // `void OnProfileLoaded(GameStateModuleIO::OutputBuffer*, InputBuffer::GameActionQueue*)`.
+    // THE LOADED PROFILE REACHES THE GAME STATE: Profile::FixUp (the licence-picture texture),
+    // ModeManager::ExitCurrentMode, RoadRulesManager::QuitAnyActiveRules, ProgressionManager::
+    // OnLoadProfile (rank cache, the max-car count), the junkyard entry with the profile's own car at the
+    // junkyard nearest its saved position (GetSpawnCar + CarSelectManager::EnterJunkyardAtStartOfGame),
+    // StreetManager / ModeManager OnProfileLoaded (the road-rule tables, the challenge bits), and
+    // actions 194 / 28 / 19 + RequestUnpause(2). Its two console call sites are ProcessGameEvents case 8
+    // (the boot, ProcessGameEventsGameStartBringUp below) and case 109 (an in-game load,
+    // ProcessGameEventsPropProgressionBringUp). Body: BrnGameStateModule.cpp.
+    void OnProfileLoaded(GameStateModuleIO::OutputBuffer* lpOutput,
+                         GameStateModuleIO::GameActionQueue* lpOutputActionQueue);
+
+    // X360 0x823763C8 -- GetSpawnCar. DWARF BrnGameStateModule.h:787
+    // `CgsID GetSpawnCar(const BrnProgression::Profile*)` (non-const). The profile's saved car, unless
+    // the player's progression rank is below the rank that car needs (its VehicleListEntry gameplay
+    // byte, entry+0x99) -- then the default car, CgsIDCompress("PUSMC01"). Sole caller OnProfileLoaded.
+    CgsID GetSpawnCar(const BrnProgression::Profile* lpProfile);
+
+    // ⭐⭐⭐ [L4 boot order 2026-09-28] X360 ProcessGameEvents @0x823A0A18, THE CASE-8 ARM
+    // (0x823A2758..0x823A2788) -- game event 8, E_EVENT_GAME_START (DWARF BrnGameEvents.h:18):
+    //     lbzx r11, r31, 0x38B70 ; beq <next>         -- mbWaitForStreaming
+    //     bl OnProfileLoaded(this, r27 = the output buffer, r22 = the output action queue)
+    //     bl WaitForStreaming(this, r22)
+    // Event 8 is posted by BrnGameModule::DoUpdate_GameStatePreWorld @0x823EE0E8 once gm+10094117 is set,
+    // which MainGameFlowStateMemoryCard::Update @0x823F2F98 does as the MemoryCard state is left -- so
+    // this is THE BOOT DELIVERY OF THE LOADED PROFILE. mbWaitForStreaming is armed by Construct
+    // @0x82380388 and nothing clears it (ClearData @0x8236B3A8 clears +0x38B71/+0x38B72 but not +0x38B70),
+    // so the arm always runs. [FLAG PC seat] extracted like the other ProcessGameEvents arms; the game
+    // module's event-8 seat calls it in the sub-step the console drains event 8 in. It takes the output
+    // buffer's write lock and raises mbIsUpdating around the arm, as PreWorldUpdate holds both.
+    void ProcessGameEventsGameStartBringUp();
 
     // ⭐⭐ X360 ProcessGameEvents @0x823A0A18, THE CASE-78 ARM (0x823A4590..0x823A45F8) --
     // "the GUI says the player is really in the junkyard now, finish the entry".
@@ -1699,6 +1742,13 @@ private:
     // Console +0x475BC, reference header mfSimTimeStep. PreWorldUpdate latches the sim timer's
     // step here at its top; UpdateRoadRulesManager and StreetManager::Update read it.
     f32 mfSimTimeStep = 0.0f;
+
+    // [L4 WORLDVFX 2026-09-27] Console +0x475C0 (292288), DWARF BrnGameStateModule.h:449
+    // `bool mbPropSystemNeedsProgression` -- the byte right after mfSimTimeStep and before mbIsUpdating
+    // (+0x475C1). ProcessGameEvents case 112 sets it; the dispatcher's tail posts action 199 and clears
+    // it (ProcessGameEventsPropProgressionBringUp). Construct @0x82380388 clears it (`stbx r30, r31, r5`
+    // with r5 = 0x475C0 at 0x8238097C); the initialiser is the same value for the window before Construct.
+    bool mbPropSystemNeedsProgression = false;
 
     // ⭐ X360 +0x38B72 (232306) -- THE SECOND HALF OF THE START-OF-GAME JUNKYARD HANDSHAKE.
     // SendSetupPlayerCarEvent @0x8239A918 sets it; ProcessGameEvents @0x823A0A18 case 78 tests it
