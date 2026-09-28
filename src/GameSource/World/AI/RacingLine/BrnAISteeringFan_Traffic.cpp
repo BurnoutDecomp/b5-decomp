@@ -8,7 +8,7 @@
 #include "GameSource/Math/BrnMathUtils.h"                             // BrnMath::Flatten (XZ ground plane)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 
-#include <cmath>    // std::sqrt (the vrsqrtefp + Newton chains), std::fabs
+#include <cmath>    // std::sqrt (the vrsqrtefp + Newton chains), std::fabs, std::fmaf (the row lerps)
 
 // BrnAI::SteeringFan -- the traffic-avoidance contributor, split out of the weighting partfile.
 //
@@ -89,9 +89,14 @@ namespace
     // This is SteeringFan::Interpolate (DWARF BrnAISteeringFan.cpp:276), which has no IDA export
     // because the compiler inlined it at every call site. It is spelled TU-locally here because
     // BrnAISteeringFan.h belongs to another lane -- see the header_request in this lane's report.
+    // ROUNDING_RULE rule 3 (L6 AIDRIVE, owner list 2026-09-27): the console fuses the multiply-add,
+    // `fsubs f0, new, old ; fmadds f0, f0, f20 (0.2, flt_820C4300), old` @0x82787890/0x82787894 (row
+    // eFan_AvoidTraffic) and @0x827878A0/0x827878A4 (row eFan_AvoidOncomingTraffic) -- ONE rounding
+    // of (to - from) * time + from, with the operands in that order. The PC spelling rounded the
+    // product and the sum separately.
     f32 InterpolateTraffic(f32 lfFrom, f32 lfTo, f32 lfTime)
     {
-        return (lfTo - lfFrom) * lfTime + lfFrom;
+        return std::fmaf(lfTo - lfFrom, lfTime, lfFrom);
     }
 
     // vmsum3fp128 v0, v120, v120 then the two-step rsqrt chain at 0x827878B0..0x827878FC.

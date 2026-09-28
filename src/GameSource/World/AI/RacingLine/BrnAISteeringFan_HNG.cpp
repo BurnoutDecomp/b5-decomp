@@ -4,7 +4,7 @@
 #include "GameSource/World/AI/RacingLine/BrnHardNoGoMap.h"            // HardNoGoMap
 #include "GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h"    // RacingLineGenerator + the gates
 
-#include <cmath>    // std::sqrt (the vrsqrtefp + two-Newton-step length in FanIntersectsEdge)
+#include <cmath>    // std::sqrt (the vrsqrtefp + two-Newton-step length in FanIntersectsEdge), std::fmaf
 
 // BrnAI::SteeringFan -- the HARD-NO-GO / ROUTE-EDGE contributors, partfile 3 of the weighting
 // half. Three functions, all read off the X360 ARTIST image:
@@ -241,13 +241,20 @@ void SteeringFan::IncludeHardNoGo(RacingLineGenerator* lpRacingLineGenerator,
     if (lfMinimum == lfMaximum || lfMinimum == KF_FAN_FLOAT_MAX)
         return;
 
+    // `fsubs f13, max, min ; fdivs f12, 1.0, f13 ; fmuls f12, f12, 0.5` (0x8277A0E0..0x8277A0F4) --
+    // the scale is two roundings, as written.
     const f32 lfScale = (1.0f / (lfMaximum - lfMinimum)) * 0.5f;
     for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
     {
         if (mfWeighting[eFan_ExitHNG][liStep] == 0.0f)
             continue;
+        // ROUNDING_RULE rule 3 (L6 AIDRIVE, owner list 2026-09-27): every one of the 17 rescales is
+        // `fsubs f11, v, min ; fmadds f11, f11, f12 (scale), f13 (0.5)` -- 0x8277A108, 0x8277A120,
+        // 0x8277A138, 0x8277A150, 0x8277A168, 0x8277A180, 0x8277A198, 0x8277A1B0 (the 8-wide block,
+        // run twice) and 0x8277A1E0 (the 17th) -- ONE rounding of (v - min) * scale + 0.5. The PC
+        // spelling rounded the product and the sum separately.
         mfWeighting[eFan_ExitHNG][liStep] =
-            (mfWeighting[eFan_ExitHNG][liStep] - lfMinimum) * lfScale + 0.5f;
+            std::fmaf(mfWeighting[eFan_ExitHNG][liStep] - lfMinimum, lfScale, 0.5f);
     }
 #else
     // The console's 0x82779DF4 arm: no section can be resolved, so all three rows read zero.
@@ -294,7 +301,13 @@ f32 SteeringFan::FanIntersectsEdge(Vector2* lpEdge, s32 liIndex, Vector2 lA, Vec
     const f32 lfEdgeX = lpEdge[liIndex + 1].x - lpEdge[liIndex].x;
     const f32 lfEdgeY = lpEdge[liIndex + 1].y - lpEdge[liIndex].y;
 
-    const f32 lfDenominator = lfDirectionY * lfEdgeX - lfDirectionX * lfEdgeY;
+    // ROUNDING_RULE rule 3 (L6 AIDRIVE, owner list 2026-09-27): the three 2D crosses are each
+    // `fmuls p, a, b ; fmsubs r, c, d, p` -- ONE rounding of c*d - round(a*b):
+    //   0x8277A25C/0x8277A260  denominator = D.y*E.x - round(D.x*E.y)
+    //   0x8277A2A8/0x8277A2AC  edge param  = R.y*D.x - round(R.x*D.y)
+    //   0x8277A2C8/0x8277A2CC  ray param   = R.y*E.x - round(R.x*E.y)
+    // The PC spelling rounded both products. (The |D| root below stays exact std::sqrt: rule 5.)
+    const f32 lfDenominator = std::fmaf(lfDirectionY, lfEdgeX, -(lfDirectionX * lfEdgeY));
     if (!(lfDenominator >  KF_FAN_EDGE_PARALLEL_EPSILON) &&
         !(lfDenominator < -KF_FAN_EDGE_PARALLEL_EPSILON))
         return KF_FAN_EDGE_NO_INTERSECTION;                 // parallel (or NaN) -- no crossing
@@ -303,11 +316,11 @@ f32 SteeringFan::FanIntersectsEdge(Vector2* lpEdge, s32 liIndex, Vector2 lA, Vec
     const f32 lfToEdgeY    = lpEdge[liIndex].y - lA.y;
     const f32 lfReciprocal = 1.0f / lfDenominator;
 
-    const f32 lfEdgeParam = (lfToEdgeY * lfDirectionX - lfToEdgeX * lfDirectionY) * lfReciprocal;
+    const f32 lfEdgeParam = std::fmaf(lfToEdgeY, lfDirectionX, -(lfToEdgeX * lfDirectionY)) * lfReciprocal;
     if (lfEdgeParam < 0.0f || lfEdgeParam > 1.0f)
         return KF_FAN_EDGE_NO_INTERSECTION;                 // the crossing misses the segment
 
-    const f32 lfRayParam = (lfToEdgeY * lfEdgeX - lfToEdgeX * lfEdgeY) * lfReciprocal;
+    const f32 lfRayParam = std::fmaf(lfToEdgeY, lfEdgeX, -(lfToEdgeX * lfEdgeY)) * lfReciprocal;
     if (lfRayParam < 1.0f)
         return KF_FAN_EDGE_NO_INTERSECTION;                 // the crossing is short of lB
 
