@@ -1,4 +1,5 @@
 #include "device.h"
+#include "WindowPresentationPCLeaf.h"
 
 #include <Windows.h>
 #include <d3d9.h>
@@ -200,7 +201,9 @@ void renderengine::Device::Start()
 
     D3DPRESENT_PARAMETERS lPresentParams;
     std::memset(&lPresentParams, 0, sizeof(lPresentParams));
-    lPresentParams.Windowed = gFullscreen ? FALSE : TRUE;
+    // FLAG PC-platform leaf: F11 uses a borderless window, keeping D3D windowed
+    // so toggling does not invalidate the engine's live GPU resources.
+    lPresentParams.Windowed = TRUE;
     // COPY (not DISCARD) preserves the back buffer across Present, so an on-screen overlay drawn
     // outside the normal render loop (the assert dialog: FrameBeginNoClear -> draw -> present) can
     // composite over the last presented frame instead of garbage. Invisible to normal rendering -
@@ -840,7 +843,8 @@ void renderengine::Device::ShowPixelBuffer()
     gDevice->EndScene();
     DumpBackBufferIfRequested();
     WatchBlackFramesIfRequested();   // [diag] BRN_BLACK_FRAME_WATCH (issue #30)
-    const HRESULT lhrPresent = gDevice->Present(nullptr, nullptr, nullptr, nullptr);
+    static PCPresentation sPresentation;
+    const HRESULT lhrPresent = sPresentation.Present(gDevice, hWnd, gVSync != 0);
     // [DIAG] NOT IN THE X360 BINARY -- issue #30: Present's result and the cooperative level, on every
     // present that is not S_OK and on every black present (the watch's flag), rate-limited.
     {

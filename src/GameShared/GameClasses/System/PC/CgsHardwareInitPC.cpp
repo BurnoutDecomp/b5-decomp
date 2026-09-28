@@ -9,6 +9,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [gateui r7] the exit-path diagnostics
 #include "GameShared/GameClasses/System/CgsHarnessSlot.h"    // BRN_HARNESS_SLOT name suffix
 #include "pc/gcm/renderengine/device.h"
+#include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
 
 static const char *kDefaultAutoTestScript = "autotest.txt";
 static const char *autoTestCmdPrefix = "-autotest:";
@@ -140,8 +141,23 @@ void CgsSystem::HardwareInit::RequestShutdown()
 
 static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    static renderengine::PCWindowMode sWindowMode;
     switch (uMsg)
     {
+    case WM_KEYDOWN:
+    case WM_SYSKEYDOWN:
+        if (wParam == VK_F11)
+        {
+            // FLAG PC-platform leaf: one toggle per press, not keyboard auto-repeat.
+            if ((lParam & (1LL << 30)) == 0)
+                sWindowMode.Toggle(hwnd, renderengine::gFullscreen);
+            return 0;
+        }
+        break;
+    case WM_DISPLAYCHANGE:
+        if (renderengine::gFullscreen && !IsIconic(hwnd))
+            sWindowMode.FitMonitor(hwnd);
+        break;
     case WM_CLOSE:
         // User closed the window: raise the shutdown request FIRST, then tear the window down
         // (-> WM_DESTROY). The flag is what actually ends the run -- WM_QUIT alone is not
@@ -181,8 +197,9 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
         // Claim the erase and draw nothing.
         return 1;
     default:
-        return DefWindowProc(hwnd, uMsg, wParam, lParam);
+        break;
     }
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
 // ---------------------------------------------------------------------------
@@ -292,6 +309,11 @@ static HWND CreateGameWindow(const s32 width, const s32 height, bool fullscreen)
 
 void CgsSystem::HardwareInit::InitializeHardware(const char *lpCmdLine)
 {
+    // FLAG PC-platform leaf: keep the game camera/render surfaces at 16:9 even
+    // when config.ini names a 4:3, 16:10 or ultrawide display resolution.
+    const RECT lRenderSize = renderengine::FitDisplay16By9(renderengine::gDisplayWidth, renderengine::gDisplayHeight);
+    renderengine::gDisplayWidth = lRenderSize.right - lRenderSize.left;
+    renderengine::gDisplayHeight = lRenderSize.bottom - lRenderSize.top;
     bool fullscreen = renderengine::gFullscreen;
     s32 width = renderengine::gDisplayWidth;
     s32 height = renderengine::gDisplayHeight;
