@@ -46,6 +46,13 @@
 //     F4  the policy after the frame: as P4, plus the four frustum boxes' states and the resolver's
 //         mVehicleResolveVector
 //     F5  the asserts fired in the frame (CalculateFrustumLineTests' IsValid assert on a NaN camera row)
+//
+// GROUP V (piece 6b) -- the chase cam's traffic push-out: group F's run with the policy constructed with
+//   mbDoVehicleCollision and the traffic resolution above 0.01, so FrustrumCollisionResolver::ResolveVehicleCollisions
+//   @0x82223890 runs (ResolveVehicleCollision @0x8220DBC8, GetHeightAboveTraffic @0x821F9098, XMVectorCos @0x821F06B0,
+//   XMVectorATan @0x821F0A70, the inlined XMVectorSinCos -- all interpreted on emu64) over each case's world: the used
+//   race cars (0 is the attached car) and up to 12 traffic vehicles. V1..V5 check what F1..F5 check; the eye's lift,
+//   its pitch about its own x axis and mVehicleResolveVector are in V2 / V4, the angle's three NaN tripwires in V5.
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
@@ -60,6 +67,7 @@
 #include "GameSource/Director/Camera/Utils/BrnCameraSmoothMover.h"
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
 #include "GameSource/Director/Utils/BrnSceneQueryInterface.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficDirectorInterfaces.h"
 
 #include "L1AttachedPolicyData.h"
 
@@ -587,15 +595,53 @@ static bool VecMatches(const u32* lpuConsole, const Vector3& lrPc)
         && WordMatches(lpuConsole[2], Bits(lrPc.z)) && WordMatches(lpuConsole[3], Bits(lrPc.w));
 }
 
-static void RunFrustumFrames()
+static BrnDirector::Camera::VehicleInfo                            gaRaceCars[8];
+static Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u> gTraffic;
+
+// The world a case runs against: group F's single attached car (group P's), or a group-V case's race cars (0 is the
+// attached car) and traffic. Returns the attached car (what VehicleRef::Get resolves to).
+static BrnDirector::Camera::VehicleInfo* SetupWorld(const L1VehicleCase* lpWorld)
+{
+    gWorld.Construct();
+    gWorld.mePlayerRaceCarIndex = static_cast<EActiveRaceCarIndex>(0);
+    if (lpWorld == 0)
+    {
+        gWorld.mpRaceCars = &gVehicle;
+        gWorld.mUsedRaceCars.SetBit(0u);
+        return &gVehicle;
+    }
+    gWorld.mpRaceCars = gaRaceCars;
+    for (u32 k = 0; k < 8u; ++k)
+    {
+        if (lpWorld->muUsedRaceCars & (1u << k))
+            gWorld.mUsedRaceCars.SetBit(k);
+        RowsFromWords(gaRaceCars[k].mRaceCarState.mTransform, lpWorld->mauRaceCars[k]);
+        gaRaceCars[k].mRaceCarState.mHalfExtent = VecFromWords(lpWorld->mauRaceCars[k] + 16);
+    }
+    gTraffic.Construct();
+    for (u32 k = 0; k < lpWorld->muTrafficCount; ++k)
+    {
+        BrnTraffic::BrnTrafficIO::TrafficDirectorEntity lEntity{};
+        RowsFromWords(lEntity.mLocalTransform, lpWorld->mauTraffic[k]);
+        lEntity.mHalfExtents = VecFromWords(lpWorld->mauTraffic[k] + 16);
+        gTraffic.Append(lEntity);
+    }
+    gWorld.mpTrafficVehicleArray = &gTraffic;
+    return &gaRaceCars[0];
+}
+
+// Groups F and V: lpcTag is the check prefix ("F" / "V"), lpcArm its label.
+static void RunFrustumGroup(const char* lpcTag, const char* lpcArm, u32 luCases, const L1FrustumCase* const* lapCases,
+                            const L1VehicleCase* const* lapWorlds, const L1FrustumFrame* lpFrames,
+                            const u32* lpuStream)
 {
     int liBadCalls = 0, liBadGenerate = 0, liBadProcess = 0, liBadState = 0, liBadAsserts = 0, liFrames = 0;
     int liShown = 0;
 
-    const u32 luCases = sizeof(kaL1FrustumCases) / sizeof(kaL1FrustumCases[0]);
     for (u32 c = 0; c < luCases; ++c)
     {
-        const L1Case& lrCase = kaL1FrustumCases[c].mBase;
+        const L1Case& lrCase = lapCases[c]->mBase;
+        BrnDirector::Camera::VehicleInfo* lpAttached = SetupWorld(lapWorlds != 0 ? lapWorlds[c] : 0);
         CollisionPolicyAttachedToVehicle* lpPolicy = ConstructFromPattern(lrCase.muConstructArgument != 0u);
         gpPolicy = lpPolicy;
         lpPolicy->mbAutoElevate           = static_cast<u8>(lrCase.mauFlags[0]);
@@ -613,11 +659,11 @@ static void RunFrustumFrames()
         lpPolicy->mfTrafficCollisionResolution = FromBits(lrCase.muTrafficResolution);
         lpPolicy->mGroundConstraint.SetDesiredHeight(FromBits(lrCase.muDesiredHeight));
         lpPolicy->mFrustrumCollisionResolver.mVehicleResolveVector =
-            VecFromWords(kaL1FrustumCases[c].mauVehicleResolveVector);
+            VecFromWords(lapCases[c]->mauVehicleResolveVector);
 
-        RowsFromWords(gVehicle.mRaceCarState.mTransform, lrCase.mauVehicle);
-        gVehicle.mRaceCarState.mEntityId.muValue = lrCase.muEntity;
-        gVehicle.mRaceCarState.mfSpeedMPH = FromBits(lrCase.muSpeed);
+        RowsFromWords(lpAttached->mRaceCarState.mTransform, lrCase.mauVehicle);
+        lpAttached->mRaceCarState.mEntityId.muValue = lrCase.muEntity;
+        lpAttached->mRaceCarState.mfSpeedMPH = FromBits(lrCase.muSpeed);
 
         BrnDirector::Camera::CollisionPolicySharedInfo lShared{};
         lShared.mpRequestInterface = &gInterface;
@@ -635,7 +681,7 @@ static void RunFrustumFrames()
         BrnDirector::Camera::CollisionPolicy* lpBase = lpPolicy;
         for (u32 f = 0; f < lrCase.muFrameCount; ++f)
         {
-            const L1FrustumFrame& lrFrame = kaL1FrustumFrames[lrCase.muFirstFrame + f];
+            const L1FrustumFrame& lrFrame = lpFrames[lrCase.muFirstFrame + f];
             ++liFrames;
             RowsFromWords(gCamera.mTransform, lrFrame.mauCamera);
             gCamera.mfFOV                       = FromBits(lrFrame.muFieldOfView);
@@ -649,6 +695,7 @@ static void RunFrustumFrames()
             const int liAsserts0 = giAsserts;
 
             lpBase->GenerateSceneQueries(lShared, gCamera);
+            const rw::math::vpu::Matrix44Affine lSnapshot = gCamera.mTransform;
             const bool lbGenerateOk = RowsMatch(gCamera.mTransform, lrFrame.mauAfterGenerate)
                 && (gCamera.mbHasCustomNearClipDistance ? 1u : 0u) == lrFrame.muAfterGenerateHasCustom
                 && WordMatches(lrFrame.muAfterGenerateCustom, Bits(gCamera.mfCustomNearClipDistance));
@@ -671,7 +718,7 @@ static void RunFrustumFrames()
             // F1 the calls
             bool lbCallsOk = gCalls.size() == lrFrame.muCallWords;
             for (u32 w = 0; lbCallsOk && w < lrFrame.muCallWords; ++w)
-                lbCallsOk = WordMatches(kau32L1FrustumCallStream[lrFrame.muFirstCallWord + w], gCalls[w]);
+                lbCallsOk = WordMatches(lpuStream[lrFrame.muFirstCallWord + w], gCalls[w]);
             // F3 the camera after
             const bool lbProcessOk = RowsMatch(gCamera.mTransform, lrFrame.mauAfterProcess);
             // F4 the state after
@@ -700,8 +747,8 @@ static void RunFrustumFrames()
             if (!(lbCallsOk && lbGenerateOk && lbProcessOk && lbStateOk && lbAssertsOk) && liShown < 6)
             {
                 ++liShown;
-                std::printf("  frustum case %u frame %u: calls %s (console %u words, pc %u) generate %s process %s "
-                            "state %s asserts %s (console %u, pc %d)\n", c, f, lbCallsOk ? "ok" : "BAD",
+                std::printf("  %s case %u frame %u: calls %s (console %u words, pc %u) generate %s process %s "
+                            "state %s asserts %s (console %u, pc %d)\n", lpcTag, c, f, lbCallsOk ? "ok" : "BAD",
                             lrFrame.muCallWords, static_cast<u32>(gCalls.size()), lbGenerateOk ? "ok" : "BAD",
                             lbProcessOk ? "ok" : "BAD", lbStateOk ? "ok" : "BAD", lbAssertsOk ? "ok" : "BAD",
                             lrFrame.muAsserts, giAsserts - liAsserts0);
@@ -709,13 +756,12 @@ static void RunFrustumFrames()
                 {
                     u32 luFirstBad = 0;
                     while (luFirstBad < lrFrame.muCallWords && luFirstBad < gCalls.size()
-                           && WordMatches(kau32L1FrustumCallStream[lrFrame.muFirstCallWord + luFirstBad],
-                                          gCalls[luFirstBad]))
+                           && WordMatches(lpuStream[lrFrame.muFirstCallWord + luFirstBad], gCalls[luFirstBad]))
                         ++luFirstBad;
                     const u32 luFrom = luFirstBad > 8u ? luFirstBad - 8u : 0u;
                     std::printf("    first difference at word %u\n    console:", luFirstBad);
                     for (u32 w = luFrom; w < lrFrame.muCallWords && w < luFrom + 24u; ++w)
-                        std::printf(" %08X", kau32L1FrustumCallStream[lrFrame.muFirstCallWord + w]);
+                        std::printf(" %08X", lpuStream[lrFrame.muFirstCallWord + w]);
                     std::printf("\n    pc     :");
                     for (size_t w = luFrom; w < gCalls.size() && w < luFrom + 24u; ++w)
                         std::printf(" %08X", gCalls[w]);
@@ -731,6 +777,13 @@ static void RunFrustumFrames()
                                 lrFrame.mauAfterProcess[15], Bits(gCamera.mTransform.wAxis.x),
                                 Bits(gCamera.mTransform.wAxis.y), Bits(gCamera.mTransform.wAxis.z),
                                 Bits(gCamera.mTransform.wAxis.w));
+                if (!lbGenerateOk)
+                    std::printf("    camera after generate: console x %08X %08X %08X w %08X %08X %08X | pc x %08X %08X "
+                                "%08X w %08X %08X %08X\n", lrFrame.mauAfterGenerate[0], lrFrame.mauAfterGenerate[1],
+                                lrFrame.mauAfterGenerate[2], lrFrame.mauAfterGenerate[12], lrFrame.mauAfterGenerate[13],
+                                lrFrame.mauAfterGenerate[14], Bits(lSnapshot.xAxis.x), Bits(lSnapshot.xAxis.y),
+                                Bits(lSnapshot.xAxis.z), Bits(lSnapshot.wAxis.x), Bits(lSnapshot.wAxis.y),
+                                Bits(lSnapshot.wAxis.z));
                 if (!lbStateOk)
                     std::printf("    state console traffic %08X reset %u boxes %u %u %u %u resolve %08X %08X %08X %08X"
                                 " | pc traffic %08X reset %u boxes %u %u %u %u resolve %08X %08X %08X %08X\n",
@@ -750,22 +803,45 @@ static void RunFrustumFrames()
         }
     }
 
-    char lacName[160];
-    std::snprintf(lacName, sizeof(lacName), "F1 frustum arm: every call and argument, in order (%d of %d frames wrong)",
-                  liBadCalls, liFrames);
+    char lacName[200];
+    std::snprintf(lacName, sizeof(lacName), "%s1 %s: every call and argument, in order (%d of %d frames wrong)", lpcTag,
+                  lpcArm, liBadCalls, liFrames);
     Check(liBadCalls == 0, lacName);
-    std::snprintf(lacName, sizeof(lacName), "F2 frustum arm: the camera and its near clip after GenerateSceneQueries "
-                  "(%d of %d frames wrong)", liBadGenerate, liFrames);
+    std::snprintf(lacName, sizeof(lacName), "%s2 %s: the camera and its near clip after GenerateSceneQueries (%d of %d "
+                  "frames wrong)", lpcTag, lpcArm, liBadGenerate, liFrames);
     Check(liBadGenerate == 0, lacName);
-    std::snprintf(lacName, sizeof(lacName), "F3 frustum arm: the camera after ProcessSceneQueryResults (%d of %d frames "
-                  "wrong)", liBadProcess, liFrames);
+    std::snprintf(lacName, sizeof(lacName), "%s3 %s: the camera after ProcessSceneQueryResults (%d of %d frames wrong)",
+                  lpcTag, lpcArm, liBadProcess, liFrames);
     Check(liBadProcess == 0, lacName);
-    std::snprintf(lacName, sizeof(lacName), "F4 frustum arm: the policy and its resolver after the frame (%d of %d "
-                  "frames wrong)", liBadState, liFrames);
+    std::snprintf(lacName, sizeof(lacName), "%s4 %s: the policy and its resolver after the frame (%d of %d frames "
+                  "wrong)", lpcTag, lpcArm, liBadState, liFrames);
     Check(liBadState == 0, lacName);
-    std::snprintf(lacName, sizeof(lacName), "F5 frustum arm: the asserts of the frame (%d of %d frames wrong)",
+    std::snprintf(lacName, sizeof(lacName), "%s5 %s: the asserts of the frame (%d of %d frames wrong)", lpcTag, lpcArm,
                   liBadAsserts, liFrames);
     Check(liBadAsserts == 0, lacName);
+}
+
+static void RunFrustumFrames()
+{
+    const u32 luCases = sizeof(kaL1FrustumCases) / sizeof(kaL1FrustumCases[0]);
+    std::vector<const L1FrustumCase*> lCases;
+    for (u32 c = 0; c < luCases; ++c)
+        lCases.push_back(&kaL1FrustumCases[c]);
+    RunFrustumGroup("F", "frustum arm", luCases, lCases.data(), 0, kaL1FrustumFrames, kau32L1FrustumCallStream);
+}
+
+static void RunVehicleFrames()
+{
+    const u32 luCases = sizeof(kaL1VehicleCases) / sizeof(kaL1VehicleCases[0]);
+    std::vector<const L1FrustumCase*> lCases;
+    std::vector<const L1VehicleCase*> lWorlds;
+    for (u32 c = 0; c < luCases; ++c)
+    {
+        lCases.push_back(&kaL1VehicleCases[c].mFrustum);
+        lWorlds.push_back(&kaL1VehicleCases[c]);
+    }
+    RunFrustumGroup("V", "traffic push-out", luCases, lCases.data(), lWorlds.data(), kaL1VehicleFrames,
+                    kau32L1VehicleCallStream);
 }
 #endif
 
@@ -781,11 +857,13 @@ int main()
 #ifndef L1_NO_LAYOUT
     RunFrames();
     RunFrustumFrames();
+    RunVehicleFrames();
 #else
-    const char* lapcNames[10] = { "P1 calls", "P2 camera after Generate", "P3 camera after Process", "P4 policy state",
+    const char* lapcNames[15] = { "P1 calls", "P2 camera after Generate", "P3 camera after Process", "P4 policy state",
                                   "P5 asserts", "F1 calls", "F2 camera after Generate", "F3 camera after Process",
-                                  "F4 policy state", "F5 asserts" };
-    for (int i = 0; i < 10; ++i)
+                                  "F4 policy state", "F5 asserts", "V1 calls", "V2 camera after Generate",
+                                  "V3 camera after Process", "V4 policy state", "V5 asserts" };
+    for (int i = 0; i < 15; ++i)
     {
         char lacName[160];
         std::snprintf(lacName, sizeof(lacName), "%s: not buildable (the revision has no DWARF layout)", lapcNames[i]);

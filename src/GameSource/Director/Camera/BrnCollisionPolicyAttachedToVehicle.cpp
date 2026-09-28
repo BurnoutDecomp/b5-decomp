@@ -15,6 +15,9 @@
 //   - FrustrumCollisionResolver::CalculateFrustumLineTests        @0x8220DDE8   (2026-09-28, piece 6a)
 //   - FrustrumCollisionResolver::RequestFrustumLineTests          @0x8223FD70   (2026-09-28, piece 6a)
 //   - FrustrumCollisionResolver::ProcessSceneQueryResults         @0x822242F8   (2026-09-28, piece 6a)
+//   - FrustrumCollisionResolver::ResolveVehicleCollisions         @0x82223890   (2026-09-28, piece 6b)
+//   - FrustrumCollisionResolver::ResolveVehicleCollision          @0x8220DBC8   (2026-09-28, piece 6b)
+//   - FrustrumCollisionResolver::GetHeightAboveTraffic            @0x821F9098   (2026-09-28, piece 6b)
 // Both Constructs (@0x82224890, the resolver's inlined in it) are inline in BrnCollisionPolicy.h.
 //
 // The policy of every camera that hangs off a car (the chase cam BehaviourGameplayExternal -- which is also the
@@ -25,21 +28,14 @@
 //                             then EITHER post one nearest line test from the car to the camera (the plain arm:
 //                             flags 2 world only, or 0x1E world + entities, excluding the car and its parts) OR -- the
 //                             cameras that set mbUseFrustrumResolver -- ease the traffic resolution and hand over to
-//                             the resolver, which gives the camera its near clip and posts FOUR world-only nearest
+//                             the resolver, which lifts the camera over the cars around it (the chase cam only:
+//                             mbDoVehicleCollision), gives the camera its near clip and posts FOUR world-only nearest
 //                             line tests along the edges of the view frustum, from beside the car to past the corners
 //                             of the near plane;
 //   ProcessSceneQueryResults  pull the camera in front of what they hit (ResolveCollisions: 1 m in front of the plain
 //                             arm's hit, or out of each frustum corner's hit), then raise the minimum elevation when
 //                             the camera was pulled in (UpdateMinElevation) and ease the radius back out
 //                             (UpdateRadius).
-//
-// ⚠️ STAGED (owner's list 2026-09-28, pieces 6a -> 6b). FrustrumCollisionResolver::ResolveVehicleCollisions
-// @0x82223890 -- the push-out from the traffic around the car, with ResolveVehicleCollision @0x8220DBC8 and
-// GetHeightAboveTraffic @0x821F9098 -- lands with piece 6b; until then the resolver's GenerateSceneQueries does not
-// make the call (see there). Unreachable on the PC today: the only camera that constructs its policy with
-// mbDoVehicleCollision is BehaviourGameplayExternal (Construct(true) @0x82224AB0), and it is not on the frustum arm
-// here until its Construct stores (0x82224AF8..0x82224B44) land, after 6b.
-// DELETE-WHEN: piece 6b bodies ResolveVehicleCollisions and the resolver makes the call.
 // ============================================================================
 
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"
@@ -50,6 +46,10 @@
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"              // Get/ApplyPitchAboutPointRads, ResolveLineTest...
 #include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"            // the VMX roundings (Dot3 / fused lanes / Divide)
 #include "SDKs/XboxMath/XMVectorTan.h"                                 // XMVectorTan @0x821F0788 (the half field of view)
+#include "SDKs/XboxMath/XMVectorCos.h"                                 // XMVectorCos @0x821F06B0 (the roof over a car)
+#include "SDKs/XboxMath/XMVectorATan.h"                                // XMVectorATan @0x821F0A70 (the push-out's pitch)
+#include "SDKs/XboxMath/XMVectorSinCos.h"                              // the X rotation's sine / cosine, inlined
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficDirectorInterfaces.h"  // the traffic
 
 #include <cmath>
 
@@ -90,6 +90,10 @@ namespace
 
     // The four frustum line tests' entity types: world only (`li r5, 2` before each of the four calls).
     const u32 KU_FRUSTUM_TEST_ENTITY_TYPES = 2u;
+
+    // rw::math's splat of pi / 2: the .bss VecFloat 0x830180F0 its CRT thunk 0x82C6D200 fills from the .data float
+    // 0x82F3192C == 0x3FC90FDB (GetHeightAboveTraffic 0x821F90E4).
+    const f32 KF_HALF_PI = 1.5707964f;
 
     // The SmoothMover parameters UpdateMinElevation builds on its stack (0x822405F4..0x82240660), field by field.
     const f32 KF_MIN_ELEVATION_MAX       = 70.0f;         // flt_820051BC == 0x428C0000  +0x00 mfMaxValue
@@ -190,6 +194,72 @@ namespace
         return true;
     }
 
+    Vector3 LaneAbs(const Vector3& lrV)   // vandc of the sign mask: the sign bit cleared (a NaN's too)
+    {
+        Vector3 lResult;
+        lResult.x = std::fabs(lrV.x);
+        lResult.y = std::fabs(lrV.y);
+        lResult.z = std::fabs(lrV.z);
+        lResult.w = std::fabs(lrV.w);
+        return lResult;
+    }
+
+    // vmaxfp / vminfp lanes as the AltiVec PEM defines them: the larger (smaller) value, +0 above -0, and a NaN
+    // operand gives a NaN (the first one met is returned).
+    // FLAG (model): the emulator's vmax / vmin return the SECOND operand of two equal zeros; the PEM's +0 / -0 rule is
+    // taken here. Its callers below do not meet two zeros of opposite sign: a length against +0 (itself +0 or
+    // positive), a cosine against 0, a camera height against a roof, a lift against 0 (a difference of positions
+    // is never -0 unless an operand is).
+    f32 VmxMax(f32 lfA, f32 lfB)
+    {
+        if (lfA != lfA)
+            return lfA;
+        if (lfB != lfB)
+            return lfB;
+        if (lfA == 0.0f && lfB == 0.0f)
+            return std::signbit(lfA) ? lfB : lfA;
+        return (lfA > lfB) ? lfA : lfB;
+    }
+
+    f32 VmxMin(f32 lfA, f32 lfB)
+    {
+        if (lfA != lfA)
+            return lfA;
+        if (lfB != lfB)
+            return lfB;
+        if (lfA == 0.0f && lfB == 0.0f)
+            return std::signbit(lfA) ? lfA : lfB;
+        return (lfA < lfB) ? lfA : lfB;
+    }
+
+    Vector3 LaneMax(const Vector3& lrV, f32 lfFloor)
+    {
+        Vector3 lResult;
+        lResult.x = VmxMax(lrV.x, lfFloor);
+        lResult.y = VmxMax(lrV.y, lfFloor);
+        lResult.z = VmxMax(lrV.z, lfFloor);
+        lResult.w = VmxMax(lrV.w, lfFloor);
+        return lResult;
+    }
+
+    // rw::math::vpu::Matrix44AffineFromXRotationAngle as ResolveVehicleCollisions inlines it (0x82223ECC..
+    // 0x822240AC): the XMVectorSinCos inline (SDKs/XboxMath/XMVectorSinCos.h -- the same tables, the same powers
+    // and terms), then the rows packed by the vperm control 0x82CDA350 (lanes a.x, b.y, a.x, a.x) and vrlimi128 into
+    // z:  xAxis {1, 0, 0, 1}  yAxis {0, cos, sin, 0}  zAxis {0, -sin, cos, 0}  wAxis 0   (-sin: a vxor of the sign).
+    // xAxis.w is the 1 the vperm leaves there; the product below never reads a rotation row's w.
+    rw::math::vpu::Matrix44Affine XRotation(f32 lfAngle)
+    {
+        f32 lfSin = 0.0f;
+        f32 lfCos = 0.0f;
+        XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngle);
+        rw::math::vpu::Matrix44Affine lRotation;
+        lRotation.xAxis.x = 1.0f;  lRotation.xAxis.y = 0.0f;    lRotation.xAxis.z = 0.0f;   lRotation.xAxis.w = 1.0f;
+        lRotation.yAxis.x = 0.0f;  lRotation.yAxis.y = lfCos;   lRotation.yAxis.z = lfSin;  lRotation.yAxis.w = 0.0f;
+        lRotation.zAxis.x = 0.0f;  lRotation.zAxis.y = -lfSin;  lRotation.zAxis.z = lfCos;  lRotation.zAxis.w = 0.0f;
+        lRotation.wAxis.x = 0.0f;  lRotation.wAxis.y = 0.0f;    lRotation.wAxis.z = 0.0f;   lRotation.wAxis.w = 0.0f;
+        return lRotation;
+    }
+
     // The attached vehicle's position (its transform's w row: VehicleRef::Get + 0x1F0 + 0x30 at every site).
     const Vector3& AttachedVehiclePosition(const VehicleInfo* lpVehicle)
     {
@@ -205,9 +275,20 @@ VecFloat FrustrumCollisionResolver::sMaxViewportHalfWidth(0.6f);       // 0x82FA
 VecFloat FrustrumCollisionResolver::sMaxViewportHalfHeight(0.5f);      // 0x82FAAAB0 <- 0x82C491D8, flt_82001DA0 0x3F000000
 VecFloat FrustrumCollisionResolver::sTestStartWidthPadding(0.1f);      // 0x82FAAB50 <- 0x82C49200, flt_82004014 0x3DCCCCCD
 VecFloat FrustrumCollisionResolver::sTestLengthPadding(1.0f);          // 0x82FAA910 <- 0x82C49228, flt_82001C98 0x3F800000
+VecFloat FrustrumCollisionResolver::kvfHorizontalExtentsScale(1.0f);           // 0x82FAA9B0 <- 0x82C49250, flt_82001C98 0x3F800000
+VecFloat FrustrumCollisionResolver::kvfVehicleCollisionCurveTopScale(2.5f);    // 0x82FAAA90 <- 0x82C49278, flt_82005548 0x40200000
+VecFloat FrustrumCollisionResolver::kvfVehicleCollisionCurveBottomScale(2.0f); // 0x82FAA970 <- 0x82C492A0, flt_82001D9C 0x40000000
+VecFloat FrustrumCollisionResolver::kvfVehicleCollisionReturnSpeed(0.01f);     // 0x82FAAB30 <- 0x82C492C8, flt_82002138 0x3C23D70A
+VecFloat FrustrumCollisionResolver::kvfDistBelowCarToIgnoreCollision(0.5f);    // 0x82FAA980 <- 0x82C492F0, flt_82001DA0 0x3F000000
 VecFloat FrustrumCollisionResolver::kvfMinVehicleResolveAmount(0.01f); // 0x82FAA700 <- 0x82C49318, flt_82002138 0x3C23D70A
 // A .data float, read where it is used (CalculateFrustumLineTests 0x8220DE28, ProcessSceneQueryResults 0x8222438C).
 f32      FrustrumCollisionResolver::kfFOVBodgeAmount = 2.0f;            // flt_82CDA6E0 == 0x40000000
+
+// DWARF BrnCollisionPolicy.cpp:161 `const VecFloat KVF_MIN_CAMERA_DIST` (namespace BrnDirector::Camera): the floor
+// under the camera-to-target distance ResolveVehicleCollisions divides by. The .bss splat 0x82FAA720, filled by the
+// CRT thunk 0x82C49340 -- the one after kvfMinVehicleResolveAmount's, in definition order -- from flt_82002540 ==
+// 0x38D1B717.
+const VecFloat KVF_MIN_CAMERA_DIST(1.0e-4f);
 
 // The policy's traffic ramp (DWARF BrnCollisionPolicyAttachedToVehicle.cpp:27..:29), folded into literals by the
 // console's compiler (GenerateSceneQueries 0x822527C8 / 0x822527E4 / 0x822527F8):
@@ -494,7 +575,7 @@ void CollisionPolicyAttachedToVehicle::UpdateMinElevation(const CollisionPolicyS
 //               mask vslw(-1, -1)) > the minimum (vcmpgtfp), the four lanes' top bytes gathered by the vperm control
 //               0x0004080C and tested as one word -- ANY lane; a NaN lane counts as zero
 //   0x822525EC  ResolveVehicleCollisions(this, info +0x1C (mpAllVehicleData), v1 = the camera's position (+0x30),
-//               r5 = lCamera, v2 = lTarget) -- STAGED, piece 6b (see the banner)
+//               r5 = lCamera, v2 = lTarget)
 //   0x822525F0  mVehicleResolveVector *= lVehicleResolveAmount (vmulfp128), called or not
 //   0x82252604  else mVehicleResolveVector = 0 (vspltisw 0 ; stvx128)
 //   0x82252634  CalculateFrustumLineTests(v1 = lDesiredNearClip, lCamera, v2 = lTarget, &lForward, &lUp, &lLeft,
@@ -509,10 +590,7 @@ void FrustrumCollisionResolver::GenerateSceneQueries(const CollisionPolicyShared
     {
         const f32 lfResolveAmount = static_cast<f32>(lVehicleResolveAmount);
         if (std::fabs(lfResolveAmount) > static_cast<f32>(kvfMinVehicleResolveAmount))
-        {
-            // STAGED (piece 6b): ResolveVehicleCollisions(lSharedInfo.mpAllVehicleData, lCamera.mTransform.wAxis,
-            // lCamera, lTarget) @0x82223890 -- not made yet; unreachable on the PC (see the banner).
-        }
+            ResolveVehicleCollisions(lSharedInfo.mpAllVehicleData, lCamera.mTransform.wAxis, lCamera, lTarget);
         mVehicleResolveVector = LaneScale(mVehicleResolveVector, lfResolveAmount);
     }
     else
@@ -691,6 +769,175 @@ bool FrustrumCollisionResolver::ProcessSceneQueryResults(const CollisionPolicySh
     mBottomLeft.Clear();
     mBottomRight.Clear();
     return lbHasResolvedAnything;
+}
+
+// ----------------------------------------------------------------------------
+// FrustrumCollisionResolver::ResolveVehicleCollisions @0x82223890 (DWARF BrnCollisionPolicy.cpp:167). r19 = this,
+// r14 = lpAllVehicles, r22 = lCamera; v126 = lCameraPos, v124 = lTarget. Only the chase cam reaches it (its policy is
+// the one constructed with mbDoVehicleCollision), and only while the eased traffic resolution is above
+// kvfMinVehicleResolveAmount.
+//   0x822238C4  lCurrentCameraPos = lCameraPos: the stack copy every ResolveVehicleCollision below lifts
+//   0x822238C0..0x82223924  AllVehicleData::GetTraffic, inlined -- `lwz 0xD0` and its "mpTrafficVehicleArray !=
+//               NULL" (BrnDirectorAllVehicleData.h:96) -- then GetLength's "Array used before Construct/Clear was
+//               called" (CgsArray.h:336)
+//   0x8222393C  each traffic vehicle, in array order: GetItem (@0x821FB940), ResolveVehicleCollision(this, its
+//               mLocalTransform (+0x00), v1 = its mHalfExtents (+0x50), &lCurrentCameraPos)
+//   0x82223968..0x82223BF4  each set bit of the used race cars (+0xC8), ascending -- the attached car included:
+//               AllVehicleData::GetRaceCar @0x82205DE8, ResolveVehicleCollision(this, its mRaceCarState.mTransform
+//               (+0x1F0), v1 = its mRaceCarState.mHalfExtent (+0x350), &lCurrentCameraPos)
+//   0x82223C20  lResolveVector = lCurrentCameraPos - lCameraPos
+//   0x82223C34  mVehicleResolveVector += Max(lResolveVector - mVehicleResolveVector, 0)  (vsubfp, vmaxfp128, vaddfp):
+//               a lift is taken at once ...
+//   0x82223C54  ... and let go at kvfVehicleCollisionReturnSpeed a frame: mVehicleResolveVector =
+//               (lResolveVector - mVehicleResolveVector) * that + mVehicleResolveVector (one vmaddfp)
+//   0x82223C60  the camera's position += mVehicleResolveVector
+//   0x82223C84  lvfDist = Max(the z axis . (lTarget - the camera's position), KVF_MIN_CAMERA_DIST)  vmsum3fp128, vmaxfp
+//   0x82223C90..0x82223CB4  lvfAngle = XMVectorATan(mVehicleResolveVector.y / lvfDist) -- the SDK's operator/ (vrefp
+//               and two Newton-Raphson steps, ConsoleVpu::Divide)
+//   0x82223CC4 / 0x82223D80 / 0x82223E28  three tripwires on the angle (BrnCollisionPolicy.cpp:207 / :208 / :209,
+//               a formatted float message), each `vcmpeqfp128. angle, angle`: all three fire on a NaN
+//   0x82223ECC..0x822240AC  Matrix44AffineFromXRotationAngle(lvfAngle) (XRotation above)
+//   0x822240A4..0x8222411C  the camera's transform = that rotation * the transform (ConsoleVpu::Mult): the eye pitched
+//               about its own x axis by the angle the lift subtends at the target, and its position carried with it
+//   0x82224104..0x822242E0  the IsValid assert on the new transform (BrnCollisionPolicy.cpp:214)
+// ----------------------------------------------------------------------------
+void FrustrumCollisionResolver::ResolveVehicleCollisions(const AllVehicleData* lpAllVehicles, Vector3 lCameraPos,
+                                                         Camera& lCamera, Vector3 lTarget)
+{
+    Vector3 lCurrentCameraPos = lCameraPos;
+
+    const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* lpAllTraffic = lpAllVehicles->GetTraffic();
+    CGS_ASSERT(lpAllTraffic != 0, "mpTrafficVehicleArray != NULL");
+    const s32 liNumTrafficVehicles = static_cast<s32>(lpAllTraffic->GetLength());
+    for (s32 liTrafficIndex = 0; liTrafficIndex < liNumTrafficVehicles; ++liTrafficIndex)
+    {
+        const BrnTraffic::BrnTrafficIO::TrafficDirectorEntity& lrTrafficVehicle =
+            lpAllTraffic->GetItem(static_cast<u32>(liTrafficIndex));
+        ResolveVehicleCollision(lrTrafficVehicle.mLocalTransform, lrTrafficVehicle.mHalfExtents, lCurrentCameraPos);
+    }
+
+    const CgsContainers::BitArray<8u>& lrUsedRaceCars = lpAllVehicles->GetUsedRaceCarsBitArray();
+    for (s32 liRaceCarIndex = lrUsedRaceCars.GetFirstNonZeroBit(); liRaceCarIndex != -1;
+         liRaceCarIndex = lrUsedRaceCars.GetNextNonZeroBit(liRaceCarIndex))
+    {
+        const VehicleInfo& lrRaceCar = lpAllVehicles->GetRaceCar(static_cast<EActiveRaceCarIndex>(liRaceCarIndex));
+        ResolveVehicleCollision(lrRaceCar.mRaceCarState.mTransform, lrRaceCar.mRaceCarState.mHalfExtent,
+                                lCurrentCameraPos);
+    }
+
+    const Vector3 lResolveVector = LaneSubtract(lCurrentCameraPos, lCameraPos);
+    mVehicleResolveVector = LaneAdd(mVehicleResolveVector,
+                                    LaneMax(LaneSubtract(lResolveVector, mVehicleResolveVector), 0.0f));
+    mVehicleResolveVector = Utils::ConsoleVpu::MultiplyAdd(LaneSubtract(lResolveVector, mVehicleResolveVector),
+                                                           kvfVehicleCollisionReturnSpeed, mVehicleResolveVector);
+
+    lCamera.mTransform.wAxis = LaneAdd(lCamera.mTransform.wAxis, mVehicleResolveVector);
+    const f32 lfDist = VmxMax(FlushDenormal(Utils::ConsoleVpu::Dot3(lCamera.mTransform.zAxis,
+                                                                    LaneSubtract(lTarget, lCamera.mTransform.wAxis))),
+                              KVF_MIN_CAMERA_DIST);
+    const f32 lfAngle = XboxMath::XMVectorATan(Utils::ConsoleVpu::Divide(mVehicleResolveVector.y, lfDist));
+    CGS_ASSERT(lfAngle == lfAngle, "IsValid(lvfAngle)");                                   // BrnCollisionPolicy.cpp:207
+    CGS_ASSERT(lfAngle == lfAngle, "IsValid(lvfAngle)");                                   // :208
+    CGS_ASSERT(lfAngle == lfAngle, "IsValid(lvfAngle)");                                   // :209
+
+    lCamera.mTransform = Utils::ConsoleVpu::Mult(XRotation(lfAngle), lCamera.mTransform);
+    CGS_ASSERT(IsValidRows(lCamera.mTransform), "IsValid(lCamera.GetTransform())");        // :214
+}
+
+// ----------------------------------------------------------------------------
+// FrustrumCollisionResolver::ResolveVehicleCollision @0x8220DBC8 (DWARF BrnCollisionPolicy.cpp:223). r4 =
+// &lTrafficTransform, v1 = lTrafficExtentsIn, r5 = &lCurrentCameraPos.
+//   0x8220DC18..0x8220DC34  (Pos().y - lTrafficExtentsIn.y) - kvfDistBelowCarToIgnoreCollision > the camera's y
+//               (vsubfp, vsubfp, vcmpgtfp.): a camera that far under the vehicle's underside is left alone
+//   0x8220DC84  lTrafficAxisUp = the y column {x.y, y.y, z.y, w.y} (vmrghw / vmrglw)
+//   0x8220DC8C  lvfDistanceSq = |Pos() - the camera|^2 (vsubfp128, vmsum3fp128)
+//   0x8220DC94  lTrafficExtents = lTrafficExtentsIn * ((1 - lTrafficAxisUp) * kvfHorizontalExtentsScale + 1)
+//               (vsubfp, vmaddfp, vmulfp128) -- an axis lying flat is widened by the scale
+//   0x8220DCA4  lvfTrafficRadiusSq = |lTrafficExtents * 2|^2 ; lvfDistanceSq < it (vcmpgtfp., ALL lanes: a NaN
+//               fails), else done
+//   0x8220DCE0  lCameraPosFlattened = the camera with y = Pos().y (vrlimi128)
+//   0x8220DD3C  lInverseTrafficTransform = InverseOfMatrixWithOrthonormal3x3 (ConsoleVpu's: the transposed 3x3, the
+//               translation accumulated z first)
+//   0x8220DD64  lLocalCameraPosFlattened = TransformPoint(that, lCameraPosFlattened), then /= lTrafficExtents
+//               (0x8220DD68: times the refined vrefp of 0x8220DCBC / 0x8220DD44, ConsoleVpu::Divide lane by lane)
+//   0x8220DD6C..0x8220DD9C  lvfDist = Magnitude(that): vmsum3fp128, the refined vrsqrtefp, 0 for a zero length
+//               (ConsoleLength)
+//   0x8220DD24  lTrafficExtentAlongY = Abs(lWorldYInTrafficSpace: the inverse's y row) . lTrafficExtents
+//   0x8220DDA0  lvfHeight = GetHeightAboveTraffic(that * kvfVehicleCollisionCurveTopScale,
+//               that * kvfVehicleCollisionCurveBottomScale, lvfDist)
+//   0x8220DDBC  the camera's y = Max(the camera's y, Pos().y + lvfHeight) (vaddfp, vmaxfp, vrlimi128 into the camera
+//               as loaded at 0x8220DC50): the camera is lifted onto the roof, never lowered
+// ----------------------------------------------------------------------------
+void FrustrumCollisionResolver::ResolveVehicleCollision(const Matrix44Affine& lTrafficTransform,
+                                                        Vector3 lTrafficExtentsIn, Vector3& lCurrentCameraPos)
+{
+    const Vector3& lTrafficPos = lTrafficTransform.wAxis;
+    if ((lTrafficPos.y - lTrafficExtentsIn.y) - static_cast<f32>(kvfDistBelowCarToIgnoreCollision) > lCurrentCameraPos.y)
+        return;
+
+    Vector3 lTrafficAxisUp;
+    lTrafficAxisUp.x = lTrafficTransform.xAxis.y;
+    lTrafficAxisUp.y = lTrafficTransform.yAxis.y;
+    lTrafficAxisUp.z = lTrafficTransform.zAxis.y;
+    lTrafficAxisUp.w = lTrafficTransform.wAxis.y;
+
+    const Vector3 lToTraffic   = LaneSubtract(lTrafficPos, lCurrentCameraPos);
+    const f32     lfDistanceSq = FlushDenormal(Utils::ConsoleVpu::Dot3(lToTraffic, lToTraffic));
+
+    const f32 lfHorizontalScale = kvfHorizontalExtentsScale;
+    Vector3 lTrafficExtents;
+    lTrafficExtents.x = lTrafficExtentsIn.x
+                      * Utils::ConsoleVpu::MultiplyAdd(KF_VPU_ONE - lTrafficAxisUp.x, lfHorizontalScale, KF_VPU_ONE);
+    lTrafficExtents.y = lTrafficExtentsIn.y
+                      * Utils::ConsoleVpu::MultiplyAdd(KF_VPU_ONE - lTrafficAxisUp.y, lfHorizontalScale, KF_VPU_ONE);
+    lTrafficExtents.z = lTrafficExtentsIn.z
+                      * Utils::ConsoleVpu::MultiplyAdd(KF_VPU_ONE - lTrafficAxisUp.z, lfHorizontalScale, KF_VPU_ONE);
+    lTrafficExtents.w = lTrafficExtentsIn.w
+                      * Utils::ConsoleVpu::MultiplyAdd(KF_VPU_ONE - lTrafficAxisUp.w, lfHorizontalScale, KF_VPU_ONE);
+
+    const Vector3 lTwiceExtents      = LaneScale(lTrafficExtents, KF_VPU_TWO);
+    const f32     lfTrafficRadiusSq  = FlushDenormal(Utils::ConsoleVpu::Dot3(lTwiceExtents, lTwiceExtents));
+    if (!(lfDistanceSq < lfTrafficRadiusSq))
+        return;
+
+    Vector3 lCameraPosFlattened = lCurrentCameraPos;
+    lCameraPosFlattened.y = lTrafficPos.y;
+    const rw::math::vpu::Matrix44Affine lInverseTrafficTransform =
+        Utils::ConsoleVpu::InverseOfMatrixWithOrthonormal3x3(lTrafficTransform);
+    const Vector3 lLocal = Utils::ConsoleVpu::TransformPoint(lInverseTrafficTransform, lCameraPosFlattened);
+    Vector3 lLocalCameraPosFlattened;
+    lLocalCameraPosFlattened.x = Utils::ConsoleVpu::Divide(lLocal.x, lTrafficExtents.x);
+    lLocalCameraPosFlattened.y = Utils::ConsoleVpu::Divide(lLocal.y, lTrafficExtents.y);
+    lLocalCameraPosFlattened.z = Utils::ConsoleVpu::Divide(lLocal.z, lTrafficExtents.z);
+    lLocalCameraPosFlattened.w = Utils::ConsoleVpu::Divide(lLocal.w, lTrafficExtents.w);
+    const f32 lfDist = ConsoleLength(lLocalCameraPosFlattened);
+
+    const f32 lfTrafficExtentAlongY =
+        FlushDenormal(Utils::ConsoleVpu::Dot3(LaneAbs(lInverseTrafficTransform.yAxis), lTrafficExtents));
+    const f32 lfHeight = GetHeightAboveTraffic(lfTrafficExtentAlongY * static_cast<f32>(kvfVehicleCollisionCurveTopScale),
+                                               lfTrafficExtentAlongY * static_cast<f32>(kvfVehicleCollisionCurveBottomScale),
+                                               lfDist);
+    lCurrentCameraPos.y = VmxMax(lCurrentCameraPos.y, lTrafficPos.y + lfHeight);
+}
+
+// ----------------------------------------------------------------------------
+// FrustrumCollisionResolver::GetHeightAboveTraffic @0x821F9098 (DWARF BrnCollisionPolicy.cpp:333). r3 = the returned
+// VecFloat's slot; v1 = lvfTopCurveFactor, v2 = lvfBottomCurveFactor, v3 = lvfDistanceFromCentre.
+//   0x821F90DC..0x821F90E8  lvfClampedDistanceFromCentre = Clamp(lvfDistanceFromCentre, 0, 2): vmaxfp128(0, d) then
+//               vminfp(2, that) (2 = vcfsx of vspltisw 2)
+//   0x821F90EC  lvfCosDistance = XMVectorCos(that * pi / 2) (vmulfp128 by the splat 0x830180F0; bl 0x821F06B0)
+//   0x821F9100  lvfEllipsoidCurveHeight = Max(cos, 0) * lvfTopCurveFactor (vmaxfp128, vmulfp128)
+//   0x821F9104  + Min(cos, 0) * lvfBottomCurveFactor (vminfp128, one vmaddfp128): the roof over the vehicle's middle
+//               (up to the top factor), falling below zero past its edge (down to minus the bottom factor at 2)
+// ----------------------------------------------------------------------------
+VecFloat FrustrumCollisionResolver::GetHeightAboveTraffic(VecFloat lvfTopCurveFactor, VecFloat lvfBottomCurveFactor,
+                                                          VecFloat lvfDistanceFromCentre)
+{
+    const f32 lfClampedDistanceFromCentre = VmxMin(KF_VPU_TWO, VmxMax(0.0f, static_cast<f32>(lvfDistanceFromCentre)));
+    const f32 lfCosDistance               = XboxMath::XMVectorCos(lfClampedDistanceFromCentre * KF_HALF_PI);
+    const f32 lfEllipsoidCurveHeight      = VmxMax(lfCosDistance, 0.0f) * static_cast<f32>(lvfTopCurveFactor);
+    return VecFloat(Utils::ConsoleVpu::MultiplyAdd(VmxMin(lfCosDistance, 0.0f), lvfBottomCurveFactor,
+                                                   lfEllipsoidCurveHeight));
 }
 
 } // namespace Camera
