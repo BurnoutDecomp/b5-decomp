@@ -608,7 +608,7 @@ public:
     // stamped with the request's event id and the OWNER the answer is routed back to. Callers:
     // ModeManager::UpdateCheckpointDistanceRequests @0x823279B8 (owner E_OWNER_MODE_MANAGER, the
     // checkpoint distances) and ProcessGameEvents case 84 @0x823A18A4 (owner E_OWNER_GUI -- that
-    // arm is not reconstructed on this build). Body: BrnGameStateModule.cpp.
+    // arm is ProcessGameEventsLandmarkRouteRequestBringUp). Body: BrnGameStateModule.cpp.
     void SendRouteRequestAction(const GameStateModuleIO::LandmarkRouteRequestEvent* lpRouteRequestEvent,
                                 GameStateModuleIO::GameActionQueue*                  lpOutputActionQueue,
                                 BrnAI::RouteMapModuleIO::RequestOwner                leRequestOwner);
@@ -869,6 +869,12 @@ public:
     // ProcessGameEvents case 47, the leap relay: CrashModeScoring::DealWithVehicleLeaping on the
     // event, then action 139 (1 byte, GUI 393).
     void ProcessGameEventsVehicleLeapingBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue);
+
+    // ProcessGameEvents case 84, the sat-nav route question: SendRouteRequestAction with owner
+    // E_OWNER_GUI. Body in GameStateModule_wX_00.cpp.
+    void ProcessGameEventsLandmarkRouteRequestBringUp(
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
         GameStateModuleIO::GameActionQueue* lpActionQueue);
 

@@ -2812,12 +2812,12 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
     const RoadSignIcon& lrIcon = mRoadSignIconStatus.mpRoadSignIcons[liIconSlot];
     const f32 lfScale = mRoadSignIconStatus.mfScaleFactor;
 
-    // The console rebuilds the icon's cached +0x90 lane as a world triple with a zeroed third
-    // lane before the transform (`*&v134 = lane; v136 = 0.0`), then WorldToDevice(v, false).
+    // The icon's 2D world lane unflattened to {x, 0, z}, as Update and
+    // GetRoadSignIconPositions do, then WorldToDevice(v, false).
     Vector3 lv3World;
     lv3World.x = lrIcon.mv4WorldPosition.x;
-    lv3World.y = lrIcon.mv4WorldPosition.y;
-    lv3World.z = 0.0f;
+    lv3World.y = 0.0f;
+    lv3World.z = lrIcon.mv4WorldPosition.y;
     lv3World.w = 0.0f;
     const Vector2 lv2Device = MapTransform::WorldToDevice(lv3World, false);
 

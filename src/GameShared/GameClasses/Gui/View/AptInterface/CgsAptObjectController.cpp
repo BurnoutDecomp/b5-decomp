@@ -149,6 +149,21 @@ namespace CgsGui
         return lpObjectValue->toFloat();
     }
 
+    // The two stage coordinates, _y read first as the console reads them, packed into the
+    // low lanes with the upper two zeroed.
+    Vector2 ObjectController::GetPos()
+    {
+        const f32 lfPosY = GetPosY();
+        const f32 lfPosX = GetPosX();
+
+        Vector2 lv2Pos;
+        lv2Pos.x = lfPosX;
+        lv2Pos.y = lfPosY;
+        lv2Pos.z = 0.0f;
+        lv2Pos.w = 0.0f;
+        return lv2Pos;
+    }
+
     // X360 0x8284ADD8. Set the named ActionScript boolean variable on the reference.
     void ObjectController::SetObjectVariableBoolean(const char* lpacVariable, bool lbValue)
     {

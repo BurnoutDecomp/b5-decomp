@@ -100,7 +100,8 @@ void SurvivorMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
 {
     const GameStateModuleIO::TimerStatusInterface* lpTimer = lpInput->GetTimerStatusInterface();
     const f32 lfTimeStep = lpTimer->maEntries[1].mfValue08 * lpTimer->maEntries[1].mfValue04;
-    if (GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS && !(mfRampTimer >= mfMaxRampTimer))
+    // The ramp test is `bge` past the add: an unordered compare skips it, as `<` does.
+    if (GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS && mfRampTimer < mfMaxRampTimer)
         mfRampTimer += lfTimeStep;
     GameMode::PreWorldUpdate(lpOutput, lpInput, lpGlobalRaceCars, lpActiveRaceCars, lbPaused, lpScoringSystem);
     if (lpActiveRaceCars->GetPlayerRaceCarState()->mbCrashing)
@@ -112,7 +113,8 @@ void SurvivorMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
         const f32 lfRamp = mfRampTimer / mfMaxRampTimer;
         const f32 lfDistance = lpScoringSystem->GetRaceCarDistanceToFinish(lpActiveRaceCars->GetPlayerActiveRaceCarIndex());
         liOpponentCount = static_cast<s32>(static_cast<f32>(miMaxOpponentCount) * lfRamp);
-        if (!(lfDistance >= 2000.0f))
+        // `bge` past the near-finish term: an unordered distance adds nothing, as `<` does.
+        if (lfDistance < 2000.0f)
         {
             // The two fctiwz conversions happen BEFORE their integer sum.
             liOpponentCount += static_cast<s32>(std::fma(-lfDistance, 0.0005f, 1.0f)
@@ -207,7 +209,8 @@ bool SurvivorMode::ShouldExit(const ScoringSystem* lpScoringSystem) const
         return true;
     if (mfTimeInReverse > 7.0f)
         return true;
-    if (lfNoInput <= 4.0f || lfStationary <= 3.0f)
+    // Both tests are `ble` to the false return, so an unordered time also answers false.
+    if (!(lfNoInput > 4.0f) || !(lfStationary > 3.0f))
         return false;
     return !mbVisibleCars || lfStationary > 10.0f;
 }

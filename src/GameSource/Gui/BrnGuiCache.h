@@ -237,6 +237,12 @@ namespace BrnGui
         // ADDITIVE GROW (wave J: CrashNavMap::CheckForLoadComplete).
         void ClearControlledComponentList() { muControlledComponentCount = 0; }
 
+        // Queue a controller to be attached when the apt component with this name hash
+        // reports ONLOAD (MarkAptComponentInitialised below). The three asserts do not
+        // gate the append.
+        void AppendExpectedControlledObject(u32 luHashedComponentName,
+                                            CgsGui::ObjectController* lpObjectController);
+
         // IsWaitingAptComponent @ 0x824EDB08 -- linear-scan the flow layer's expected
         // component ids for the hash. ADDITIVE GROW (BrnPauseScreen TU).
         bool IsWaitingAptComponent(GuiFlow leFlow, u32 luComponentNameHash) const;
@@ -396,6 +402,13 @@ namespace BrnGui
         // movie (CrashNavMap::CheckForLoadComplete). Takes no argument -- it is not
         // per-flow. Body links from the GuiCache TU.
         void ClearExpectedControlledAptComponentList();
+
+        // Register a controlled apt component: by name hash, or by name (hashed here). Both
+        // go straight to the embedded helper; neither overload calls the other.
+        void AppendExpectedControlledAptComponent(u32 luNameHash,
+                                                  CgsGui::ObjectController* lpObjectController);
+        void AppendExpectedControlledAptComponent(const char* lpComponentName,
+                                                  CgsGui::ObjectController* lpObjectController);
 
         // RecEvent @ 0x8250DDF0 -- resource completion (14/16) and Apt ONLOAD (21)
         // branches used by the module bridges.
