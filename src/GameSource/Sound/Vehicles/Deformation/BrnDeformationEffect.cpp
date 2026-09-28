@@ -4,24 +4,20 @@
 // BrnSound::Vehicles::Deformation::DeformationEffect -- the car-body crumple/deformation
 // sound effect object. Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX.
 //
-// This batch bodies the four verified functions:
-//   DeformationEffect()  0x826CF6C0   (MSVC inlined full-object ctor)
-//   GetTypeName()        0x82685730   (interned type-tag leaf)
-//   SetupLoadData()      0x826E4C88   (request the crumple patch bank bundle)
-//   Detach()             0x826F39C8   (base detach + release the patch voice)
-//
-// AttachController (0x82685740) is now bodied below (the controller-class gate +
-// mpPhysicsControl latch). Attach (0x826F37E8) remains BLOCKED: its store-for-store body
-// needs the un-homed CgsSound::Logic::VoiceWrapper::Create/Play + VoiceWrapper::CreateParams
-// (a foundational shared-header grow disallowed by scope), the un-homed AEMS interned-hash
-// static-init globals, and an un-homed base +0xE sequence counter -- so it is left
-// declared-only in the header for the vtable shape.
+// Lifecycle and live deformation controls are reconstructed below. UpdateParams
+// restores the ARTIST 826B53B0 sensor/envelope path. SoundLogicModule replay
+// serialiser plumbing remains an explicit separate dependency.
 // ============================================================================
 
 #include "GameSource/Sound/Vehicles/Deformation/BrnDeformationEffect.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h" // complete PhysicsControl for the AttachController downcast (BY NAME)
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
+#include <cmath>
+#include <limits>
 
 namespace BrnSound
 {
@@ -184,11 +180,103 @@ bool DeformationEffect::Attach()
     return true;
 }
 
-void DeformationEffect::UpdateParams(f32 /*afTimeStep*/)
+// ARTIST 826B55F8. FLAG (model): vmsum = one rounding of the f64 sum
+// (xenia DOT_PRODUCT_3), with VMX denormal flush and finite-overflow QNaN.
+static f32 DeformationDisplacementSquared(const Vector3& lDisplacement)
 {
-    // The full deformation-sensor accumulation is independent of the vehicle
-    // engine/road voice path. Preserve the original AEMS output writes using the
-    // current value until that physics producer is homed.
+    const auto flush = [](f32 v) {
+        return std::fpclassify(v) == FP_SUBNORMAL ? std::copysign(0.0f, v) : v;
+    };
+    const double x = flush(lDisplacement.x);
+    const double y = flush(lDisplacement.y);
+    const double z = flush(lDisplacement.z);
+    const double sum = (x * x + y * y) + z * z;
+    const f32 result = static_cast<f32>(sum);
+    if (std::isfinite(sum) && std::isinf(result))
+        return std::numeric_limits<f32>::quiet_NaN();
+    return flush(result);
+}
+
+void DeformationEffect::UpdateParams(f32 afTimeStep)
+{
+    auto* lpModule = static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+    const auto* lpInput = lpModule->GetBrnInputStructure();
+    const auto& lFrame = lpModule->GetFrameInformation();
+    const f32 lfVolume = GetMixerOutputValue(0, 0);
+    const f32 lfPitch = GetMixerOutputValue(2, 1);
+    const f32 lfAzimuth = GetMixerOutputValue(1, 3);
+
+    // ARTIST 826B5508..5854, live simulation branch. SoundLogicModule's replay
+    // serialiser binding (826B54D0..5504 / 5858..587C) remains unhomed.
+    mbDeforming.Update(lFrame.meFatality.GetCurrent() != BrnSound::Logic::E_FATAL_OFF &&
+        lFrame.meImpactTime.GetCurrent() == AttribSys::Enums::eImpactTime::VSlow);
+    if (mbDeforming.GetCurrent())
+    {
+        const auto* lpDeformation = lpInput->GetDeformationInterface().mpDeformationState;
+        if (lpDeformation != nullptr)
+        {
+            const auto* lpCar = lpDeformation->GetCarStateF(
+                mpPhysicsControl->GetRawPhysicsData()->mEntityId.muValue);
+            if (lpCar != nullptr)
+            {
+                const bool lbRising = !mbDeforming.GetPrevious();
+                if (lbRising)
+                {
+                    mFadeOut.Initialize(1.0f, 1.0f, 10.0f, CgsSound::Utils::Curve::E_LINEAR);
+                    mDeformIntensityLagged.Update(0.0f);
+                }
+                f32 lfMaximum = 0.0f;
+                for (u32 i = 0; i < lpCar->mu8NumSensors; ++i)
+                {
+                    // GetSensor's attested accessor is non-const but only reads.
+                    const auto& lSensor = const_cast<BrnPhysics::Deformation::CarState*>(lpCar)
+                        ->GetSensor(static_cast<u8>(i));
+                    const f32 lfSquared = DeformationDisplacementSquared(lSensor.mDisplacement);
+                    lfMaximum = (lfMaximum - lfSquared >= 0.0f) ? lfMaximum : lfSquared;
+                }
+                mDeformAmount.Update(lfMaximum);
+                mDeformDeltaAverage.Record(lbRising ? 0.0f :
+                    lfMaximum - mDeformAmount.GetPrevious());
+                const f32 lfAverage = mDeformDeltaAverage.GetAverage();
+                // 826B5680 ble -> 56E0, including unordered; peak arm 5684.
+                if (lfAverage > mFadeOut.GetValueFloat() * mDeformIntensityLagged.GetCurrent())
+                {
+                    mDeformIntensityLagged.Update(lfAverage);
+                    mFadeOut.Initialize(1.0f, 0.0f, 1000.0f, CgsSound::Utils::Curve::E_LINEAR);
+                }
+                else
+                    mFadeOut.Update(afTimeStep);
+                mfTimeDeforming += afTimeStep;
+            }
+        }
+    }
+    else
+    {
+        if (mbDeforming.GetPrevious())
+            mFadeOut.Initialize(mFadeOut.GetValueFloat(), 0.0f, 1000.0f,
+                CgsSound::Utils::Curve::E_LINEAR);
+        mFadeOut.Update(afTimeStep);
+        mfTimeDeforming = 0.0f;
+        mDeformAmount.Update(0.0f);
+        mDeformDeltaAverage.Flush(0.0f);
+    }
+
+    // Constants: 82F2FD0C=655340, 82F2CD58=1000ms, 82F2CD5C=700.
+    // 826B57C4/E0 are separate fmuls; E8/F4 are fsel (NaN selects 32767).
+    const f32 lfFaded = mFadeOut.GetValueFloat() * mDeformIntensityLagged.GetCurrent();
+    f32 lfTarget = lfFaded * 655340.0f;
+    lfTarget = (-lfTarget >= 0.0f) ? 0.0f : lfTarget;
+    lfTarget = (32767.0f - lfTarget >= 0.0f) ? lfTarget : 32767.0f;
+    // 57F8/5800 bge -> 5854, including unordered; smoothing arm 5804.
+    if (!(mfAemsIntensity < 700.0f) || !(lfTarget < 700.0f))
+        mfAemsIntensity = lfTarget;
+    else if (lfTarget - mfAemsIntensity > 32000.0f)
+        mfAemsIntensity += 32000.0f;
+    else if (mfAemsIntensity - lfTarget > afTimeStep * 500.0f)
+        mfAemsIntensity -= afTimeStep * 500.0f;
+    else
+        mfAemsIntensity = lfTarget;
+
     static const u32 luIntensity = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("AEMS_intensity"));
     static const u32 luVolume = static_cast<u32>(
@@ -202,13 +290,35 @@ void DeformationEffect::UpdateParams(f32 /*afTimeStep*/)
     static const u32 luReverbSend = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("ReverbSend"));
 
-    mPatchVoice.SetParameter(2, mfAemsIntensity, &luIntensity);
-    mPatchVoice.SetParameter(0, GetMixerOutputValue(0, 0), &luVolume);
-    mPatchVoice.SetParameter(3, GetMixerOutputValue(1, 3), &luAzimuth);
-    mPatchVoice.SetParameter(1, GetMixerOutputValue(2, 1), &luPitch);
+    // FLAG PC-platform witness: observe live controls without changing them.
+    if (CgsSound::PcmTrace::File())
+    {
+        static s32 liLastFatal = -1, liLastImpact = -1;
+        static u32 luRows = 0;
+        const s32 liFatal = static_cast<s32>(lFrame.meFatality.GetCurrent());
+        const s32 liImpact = static_cast<s32>(lFrame.meImpactTime.GetCurrent());
+        if (luRows < 96 && (liFatal != liLastFatal || liImpact != liLastImpact || lfTarget > 0.0f))
+        {
+            ++luRows;
+            CgsSound::PcmTrace::Log("crumple-control fatal=%d impact=%d active=%d amount=%.9g delta=%.9g lag=%.9g fade=%.9g target=%.9g volume=%.9g dt=%.9g\n",
+                liFatal, liImpact, mbDeforming.GetCurrent() ? 1 : 0,
+                mDeformAmount.GetCurrent(), mDeformDeltaAverage.GetAverage(),
+                mDeformIntensityLagged.GetCurrent(), mFadeOut.GetValueFloat(),
+                lfTarget, lfVolume, afTimeStep);
+        }
+        liLastFatal = liFatal;
+        liLastImpact = liImpact;
+    }
+
+    // 826B5BAC passes f31 (target), not the smoothed cache at this+0x60.
+    mPatchVoice.SetParameter(2, lfTarget, &luIntensity);
+    mPatchVoice.SetParameter(0, lfVolume, &luVolume);
+    mPatchVoice.SetParameter(3, lfAzimuth, &luAzimuth);
+    mPatchVoice.SetParameter(1, lfPitch, &luPitch);
     mPatchVoice.SetGain(0, 1.0f, &luSend01);
     mPatchVoice.SetGain(1, 0.0f, &luReverbSend);
 }
+
 
 void DeformationEffect::ProcessUpdate()
 {
