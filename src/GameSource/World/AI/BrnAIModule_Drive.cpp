@@ -229,6 +229,117 @@ namespace
     // (velocity), 0x82795C70 (speed) -- and `Inf == Inf` is TRUE, so ARTIST does not assert on Inf.
     inline bool IsFiniteF32(f32 lfValue) { return lfValue == lfValue; }
 
+    // [FLAG PC witness] L6 AIDRIVE (owner list 2026-09-27: "the enemies AIs always crash to the traffic or
+    // to walls"). NOT X360; both default OFF, capped, and read-only (nothing below feeds back into a
+    // decision). DELETE-WHEN the owner's AI item is closed.
+    //   BRN_AI_TRAFFIC_DIAG -> [ai-traffic] once a second: how many traffic entities the traffic module
+    //                          published to the AI this frame, and how many each active driver holds in
+    //                          its avoidance list (the dispatch proof of StoreAISceneResultsForNextFrame).
+    //   BRN_AI_CRASH_DIAG   -> [ai-crash] at every AI car's crash ONSET (AICar crashing 0 -> 1): what the
+    //                          driver saw on its last update -- its speed / desired speed / controls, the
+    //                          fan's bias mode and chosen ray, the largest traffic / oncoming / wall / edge
+    //                          row weights, and the nearest traffic car in its avoidance list; then the
+    //                          racing line's state: initialised, the cached section range, the HNG
+    //                          spread cursor (section / backwards step), how many cached sections have
+    //                          a READY hard-no-go map, and how many interior squares (columns 1..30,
+    //                          the two outer columns are ClearMap's own 0x80000001) those maps hold.
+    inline bool DiagEnvOn(const char* lpcName)
+    {
+        const char* lpcValue = std::getenv(lpcName);
+        return lpcValue != nullptr && lpcValue[0] != '0';
+    }
+
+    inline f32 MaxAbsRow(const f32* lpafRow)
+    {
+        f32 lfMax = 0.0f;
+        for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
+        {
+            const f32 lfAbs = std::fabs(lpafRow[liStep]);
+            if (lfAbs > lfMax)
+                lfMax = lfAbs;
+        }
+        return lfMax;
+    }
+
+    void WitnessCrashOnset(EActiveRaceCarIndex leSlot, AIDriver* lpDriver, const AICar* lpCar, bool lbCrashing,
+                           bool lbIsPlayer)
+    {
+        static const bool sbOn = DiagEnvOn("BRN_AI_CRASH_DIAG");
+        static bool       sabWasCrashing[E_ACTIVE_RACE_CAR_INDEX_COUNT] = { false };
+        static s32        siLines = 0;
+        const s32         liSlot  = static_cast<s32>(leSlot);
+        const bool        lbOnset = lbCrashing && !sabWasCrashing[liSlot];
+        sabWasCrashing[liSlot] = lbCrashing;
+        if (!sbOn || !lbOnset || lbIsPlayer || siLines >= 200 || CgsDev::Log::gpDebugPrint == 0)
+            return;
+        ++siLines;
+
+        const Vector3 lPos = lpCar->GetPosition();
+        const NearbyVehicles* lpNearby = lpDriver->GetNearbyVehicles();
+        s32 liTraffic = 0;
+        f32 lfNearestTraffic = -1.0f;
+        for (s32 liEntry = 0; liEntry < lpNearby->miCount; ++liEntry)
+        {
+            const NearbyVehicle& lrEntry = lpNearby->mVehicle[liEntry];
+            if (lrEntry.mType != E_NEARBY_TRAFFIC)
+                continue;
+            ++liTraffic;
+            const f32 lfDx = lrEntry.mCentre.x - lPos.x;
+            const f32 lfDz = lrEntry.mCentre.y - lPos.z;
+            const f32 lfDistance = std::sqrt(lfDx * lfDx + lfDz * lfDz);
+            if (lfNearestTraffic < 0.0f || lfDistance < lfNearestTraffic)
+                lfNearestTraffic = lfDistance;
+        }
+
+        // The wall data the fan reads (IncludeHardNoGo / DistanceToHardNoGoEdge): the ready maps of
+        // the cached sections and their occupied interior squares. Read-only; IsReady() is checked
+        // before MapSquareOccupiedFast so its ready assert cannot fire; at most the 16 cache slots.
+        RacingLine& lrLine = lpDriver->GetRacingLine();
+        s32 liReady = 0;
+        s32 liOccupied = 0;
+        s32 liVisited = 0;
+        for (s32 liSection = lrLine.mFirstSectionInCache;
+             liSection <= lrLine.mLastSectionInCache && liVisited < RacingLine::KI_SECTION_CACHE_COUNT;
+             ++liSection, ++liVisited)
+        {
+            HardNoGoMap& lrMap =
+                lrLine.maSectionCache[liSection & (RacingLine::KI_SECTION_CACHE_COUNT - 1)].mHardNoGoMap;
+            if (!lrMap.IsReady())
+                continue;
+            ++liReady;
+            for (s32 liHeight = 0; liHeight < KI_HNG_MAP_HEIGHT; ++liHeight)
+                for (s32 liWidth = 1; liWidth < KI_HNG_MAP_WIDTH - 1; ++liWidth)
+                    if (lrMap.MapSquareOccupiedFast(liWidth, liHeight))
+                        ++liOccupied;
+        }
+
+        const SteeringFan& lrFan = lpDriver->mSteeringFan;
+        s32 liBest = 0;
+        for (s32 liStep = 1; liStep < KI_FAN_STEPS; ++liStep)
+            if (lrFan.mfCumulativeWeighting[liStep] > lrFan.mfCumulativeWeighting[liBest])
+                liBest = liStep;
+
+        *CgsDev::Log::gpDebugPrint
+            << "[ai-crash] slot " << liSlot << " global " << lpCar->GetRaceCarIndex()
+            << " pos (" << lPos.x << ", " << lPos.z << ")"
+            << " speed " << lpCar->GetSpeed() << " desired " << lpDriver->GetDesiredSpeed()
+            << " gas " << lpDriver->GetAccelerator() << " brake " << lpDriver->GetBrake()
+            << " steer " << lpDriver->GetSteering()
+            << " bias " << static_cast<s32>(lrFan.meBiasMode) << " best " << liBest
+            << " rows traffic " << MaxAbsRow(lrFan.mfWeighting[eFan_AvoidTraffic])
+            << " oncoming " << MaxAbsRow(lrFan.mfWeighting[eFan_AvoidOncomingTraffic])
+            << " hngAvoid " << MaxAbsRow(lrFan.mfWeighting[eFan_AvoidHNG])
+            << " hngExit " << MaxAbsRow(lrFan.mfWeighting[eFan_ExitHNG])
+            << " edges " << MaxAbsRow(lrFan.mfWeighting[eFan_AvoidEdges])
+            << " nearby " << lpNearby->miCount << " traffic " << liTraffic
+            << " nearestTraffic " << lfNearestTraffic
+            << " rl " << (lrLine.mbIsInitialised ? 1 : 0)
+            << " cache " << lrLine.mFirstSectionInCache << ".." << lrLine.mLastSectionInCache
+            << " spread " << lrLine.miSectionToSpread << "/" << lrLine.miBackwardsStep
+            << " ready " << liReady << " occ " << liOccupied
+            << " [FLAG PC witness]\n";
+    }
+
     // The AI record with its driver type stamped. BrnPlayerDriverControls keeps meDriverType
     // protected and BrnAIDriverControls (lane-foreign header) declares no constructor, so the
     // console's `stw 1, +0x44` (E_DRIVER_TYPE_AI) is done from a derived constructor exactly as
@@ -912,6 +1023,7 @@ void AIModule::StoreDrivenCarData(const AIModuleIO::InputBuffer* lpInputBuffer)
                                  lbDrifting,
                                  lbTouchingAnother,
                                  lbTouchingPlayer);
+        WitnessCrashOnset(leSlot, lpDriver, lpCar, lbCrashing, lbIsPlayer);   // [FLAG PC witness] BRN_AI_CRASH_DIAG
         ++liStored;
     }
 
@@ -966,6 +1078,31 @@ void AIModule::SortTrafficIntoAICars(const AIModuleIO::InputBuffer* lpInputBuffe
         if (lpDriver != 0 && lpDriver->mbIsActive)
         {
             lpDriver->AddNearbyTrafficToAvoidance(lpTraffic);
+        }
+    }
+
+    // [FLAG PC witness] BRN_AI_TRAFFIC_DIAG (see DiagEnvOn): once a second, the traffic entities
+    // published to the AI this frame and each active driver's traffic entries. Read-only.
+    {
+        static const bool sbOn = DiagEnvOn("BRN_AI_TRAFFIC_DIAG");
+        static u32 suFrames = 0;
+        static s32 siLines  = 0;
+        if (sbOn && CgsDev::Log::gpDebugPrint != 0 && (suFrames++ % 60) == 0 && siLines < 150)
+        {
+            ++siLines;
+            *CgsDev::Log::gpDebugPrint << "[ai-traffic] entities " << static_cast<s32>(luEntityCount) << " drivers";
+            for (EActiveRaceCarIndex leSlot = E_ACTIVE_RACE_CAR_INDEX_0; leSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; leSlot++)
+            {
+                const AIDriver* lpDriver = GetAIDriver(leSlot);
+                if (lpDriver == 0 || !lpDriver->mbIsActive)
+                    continue;
+                s32 liTraffic = 0;
+                for (s32 liEntry = 0; liEntry < lpDriver->mNearbyVehicles.miCount; ++liEntry)
+                    if (lpDriver->mNearbyVehicles.mVehicle[liEntry].mType == E_NEARBY_TRAFFIC)
+                        ++liTraffic;
+                *CgsDev::Log::gpDebugPrint << " s" << static_cast<s32>(leSlot) << "=" << liTraffic;
+            }
+            *CgsDev::Log::gpDebugPrint << " [FLAG PC witness]\n";
         }
     }
 #else
