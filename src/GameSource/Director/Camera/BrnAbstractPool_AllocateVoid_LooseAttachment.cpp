@@ -23,8 +23,10 @@
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"   // BrnDirector::AbstractPool<>, AbstractPoolVoidHandle, rw::math::vpu::Vector4
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h"
 
+// (Spelled through the manager's SmallBehaviourPool typedef: the host bucket is widened for x64,
+//  BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS -- the literal <100u,20u> is the console's.)
 namespace BrnDirector
 {
     template AbstractPoolVoidHandle
-    AbstractPool<100u, 20u, rw::math::vpu::Vector4>::AllocateVoid<Camera::BehaviourLooseAttachment>();
+    Camera::BehaviourManager::SmallBehaviourPool::AllocateVoid<Camera::BehaviourLooseAttachment>();
 }
