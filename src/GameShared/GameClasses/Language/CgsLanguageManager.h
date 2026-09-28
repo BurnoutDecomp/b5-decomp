@@ -367,6 +367,11 @@ namespace CgsLanguage
         // English-default literal and sets the metric flag to true. Body links from this TU.
         bool PrepareDefaultFormattingStrings();
 
+        // X360 0x82865B70 (DWARF CgsLanguageManager.h `void PrepareFormattingStrings()`). Reads the
+        // per-locale separators, templates and the DISTANCE_FORMAT_ISMETRIC switch out of the LOADED
+        // string table -- LoadStringTable @0x828664B8's call. Body links from this TU.
+        void PrepareFormattingStrings();
+
     private:
         // CgsLanguageManager.h:52 (DWARF).
         typedef CgsContainers::HashTable<u32, const CgsUnicode::CgsUtf8*, 13> HashIDStringArray;
