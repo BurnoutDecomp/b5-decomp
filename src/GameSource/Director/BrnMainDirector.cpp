@@ -3480,6 +3480,19 @@ namespace BrnDirector
                                               KPC_EVENT_WIN_HOOK, KF_EVENT_WIN_HOOK_BLEND);
             }
 
+            // ARTIST 0x822745D0..0x82274628: a change of the camera's producing behaviour
+            // (Camera +0x50) raises NEW_THIS_FRAME before blending/finalising the camera.
+            // dword_82FAAD74 is the process-wide previous behaviour pointer. This also
+            // resets inertia on a new ICE take; otherwise its first lagged frame can blend
+            // against the origin or another shot's stale transform.
+            static const Camera::Behaviour* spPreviousCameraBehaviour = 0;
+            if (lCamera.mpDebugInfoBehaviour != spPreviousCameraBehaviour &&
+                !lCamera.mState.IsFlagSet(Camera::CameraState::E_FLAG_NEW_THIS_FRAME))
+            {
+                lCamera.mState.SetFlag(Camera::CameraState::E_FLAG_NEW_THIS_FRAME, true);
+            }
+            spPreviousCameraBehaviour = lCamera.mpDebugInfoBehaviour;
+
             // ⭐ (2026-09-25, FX-DIRECTOR2 CC-14) @0x822749D4..0x82274A24 -- THE GAME-CAMERA BLEND.
             // An ICE take keys CAMERA_BLEND_AMOUNT into the frame camera (KeyAnimController::
             // UpdateCameraFromICE stores it * 0.01 as CameraEffects::mfGameCameraBlend, +0xA0 == camera
