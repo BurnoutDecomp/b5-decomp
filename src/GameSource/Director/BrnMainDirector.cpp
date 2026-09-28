@@ -39,7 +39,6 @@
 
 #include "GameSource/Director/BrnMainDirector.h"
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"          // Camera::CollisionPolicySharedInfo (the scene-query pair)
-#include "GameSource/Director/BrnDirectorHarness.h"                 // [FX-DIRECTOR2 opt-in] Harness::SceneQueryClosureEnabled
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                  // BrnGui::GuiPFXHookEnumeration (the 501 record PostGuiUpdate consumes)
 
 #include "GameSource/Director/DirectorModule/BrnDirectorInputOutput.h" // BrnDirector::DirectorInputOutput
@@ -1135,10 +1134,7 @@ namespace BrnDirector
         // the HardStop moment allocates on the crash frame N (ArbStateCrashing::Prepare 0x822655E8 ->
         // NewMoment 0x82255850), goes VALID on N+1, MainDirector::Update publishes its 0.005..0.01 scale
         // (0x82275148) and, with the step's timer order corrected the same day, the world integrates
-        // step N+2 at it (2 full-dt crash frames, the console's count). Until the camera scene-query
-        // closure is live (BRN_FXD2_SCENEQUERY, waiting on FineIntersectionTestModule::
-        // ComputeLineTestNearest @0x828C8CC8, the octree line walk's next hop) the console's
-        // visibility failure of the shot cannot happen here: the HardStop's cameras are always valid.
+        // step N+2 at it (2 full-dt crash frames, the console's count).
         mCrashAnalyser.Update(lpIO->mpInputBuffer, &maGameState,
                               static_cast<EActiveRaceCarIndex>(liPlayerCarIndex));
         // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The analysis on the frames it raises
@@ -3232,16 +3228,11 @@ namespace BrnDirector
         // ⭐ @0x82255834 -- the cameras ASK: every live behaviour's collision policy issues its scene
         // queries for this frame (BehaviourManager::GenerateSceneQueries @0x8221F1C0), answered
         // between the two director passes by DoUpdate_Director's external leg.
-        // ⚠️ [FX-DIRECTOR2 opt-in, NOT X360] behind BRN_FXD2_SCENEQUERY with the rest of the query
-        // path until one live run with it ON is clean (see BrnDirectorHarness.h); the console calls
-        // it unconditionally. The debug printer is the manager's unread fourth argument, as above.
-        if (Harness::SceneQueryClosureEnabled())
-        {
-            Camera::CollisionPolicySharedInfo lPolicyInfo;
-            BuildCollisionPolicySharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lPolicyInfo);
-            mBehaviourManager.GenerateSceneQueries(lpIO->mpInputBuffer->IsSimPaused(), lPolicyInfo,
-                                                   *reinterpret_cast<DebugPrinter*>(saOpaqueDebugPrinter));
-        }
+        // The debug printer is the manager's unread fourth argument, as above.
+        Camera::CollisionPolicySharedInfo lPolicyInfo;
+        BuildCollisionPolicySharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lPolicyInfo);
+        mBehaviourManager.GenerateSceneQueries(lpIO->mpInputBuffer->IsSimPaused(), lPolicyInfo,
+                                               *reinterpret_cast<DebugPrinter*>(saOpaqueDebugPrinter));
     }
 
     // ------------------------------------------------------------------------
@@ -3278,14 +3269,10 @@ namespace BrnDirector
         // (BehaviourManager::ProcessSceneQueryResults @0x8221F438). The console calls it right after
         // building the CollisionPolicySharedInfo, before the ICE camera-space handler and the
         // collision-pass behaviour update below.
-        // ⚠️ [FX-DIRECTOR2 opt-in, NOT X360] behind BRN_FXD2_SCENEQUERY (see the PreScene twin).
-        if (Harness::SceneQueryClosureEnabled())
-        {
-            Camera::CollisionPolicySharedInfo lPolicyInfo;
-            BuildCollisionPolicySharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lPolicyInfo);
-            mBehaviourManager.ProcessSceneQueryResults(lpIO->mpInputBuffer->IsSimPaused(), lPolicyInfo,
-                                                       *reinterpret_cast<DebugPrinter*>(saOpaqueDebugPrinter));
-        }
+        Camera::CollisionPolicySharedInfo lPolicyInfo;
+        BuildCollisionPolicySharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lPolicyInfo);
+        mBehaviourManager.ProcessSceneQueryResults(lpIO->mpInputBuffer->IsSimPaused(), lPolicyInfo,
+                                                   *reinterpret_cast<DebugPrinter*>(saOpaqueDebugPrinter));
 
         // ⭐ @0x8225024C -- the console's own call here, and the one this build was missing.
         mBehaviourManager.PostCollisionUpdateAllBehaviours(

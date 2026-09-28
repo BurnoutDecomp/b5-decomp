@@ -31,7 +31,6 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp" // DirectorIO::OutputBuffer
 #include "GameSource/Director/Utils/BrnSceneQueryInterface.h"      // BrnDirector::SceneQueryInterface (the per-frame post office)
-#include "GameSource/Director/BrnDirectorHarness.h"               // [FX-DIRECTOR2 opt-in] Harness::SceneQueryClosureEnabled
 
 namespace BrnDirector
 {
@@ -306,8 +305,6 @@ bool DirectorModule::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
 // Its one caller is Update @0x82275300. The records are the queue's byte images (the sanctioned
 // external-byte-stream case), read through their SceneManagerIO types.
 //
-// ⚠️ [FX-DIRECTOR2 opt-in, NOT X360] The CALL is behind BRN_FXD2_SCENEQUERY in Update until one
-// live run with the whole query path ON is clean -- see Harness::SceneQueryClosureEnabled().
 // ----------------------------------------------------------------------------
 void DirectorModule::ProcessSceneQueryResults(
         const DirectorIO::SceneQueryInputBuffer* lpSceneQueryInputBuffer)
@@ -544,10 +541,7 @@ s32 DirectorModule::Update(s32 liUnusedA, s32 liUnusedB,
 
     // ---- 1. deliver this frame's scene-query answers ------------------------------------
     // (DoUpdate_Director ran the queries PreSceneQueryUpdate issued between the two passes.)
-    // ⚠️ [FX-DIRECTOR2 opt-in, NOT X360] behind BRN_FXD2_SCENEQUERY with the rest of the query
-    // path until one live run with it ON is clean; the console calls it unconditionally.
-    if (Harness::SceneQueryClosureEnabled())
-        ProcessSceneQueryResults(lpSceneQueryInputBuffer);
+    ProcessSceneQueryResults(lpSceneQueryInputBuffer);
 
     // ---- 2. the post office, PRODUCER SLOT ONLY ------------------------------------
     // asm: v29[0] = SceneQueryOutputB(a7); memset(&v29[1], 0, 24);  -- the six post-office

@@ -12,8 +12,7 @@
 #
 # The witness is L2's BRN_CAMCOLLIDE_DIAG (b5 2596bf4f, NOT IN THE X360 BINARY): per published frame, the eye through
 # a world-only 0.1 m sphere ("in"), the ground above / below, and the eye <-> car line tests ("occA" / "occB", OCC =
-# either hits the world). BRN_FXD2_SCENEQUERY=1 turns the director's scene-query closure on (the camera policies only
-# run with it; L2 owns removing that opt-in).
+# either hits the world). The camera query chain runs by default, as on ARTIST.
 # Wait for the junkyard outro to release the camera before firing, and pin the existing ultra-slow-motion
 # harness scale. After profile delivery was restored, firing during the outro could leave only 31 fallback
 # frames. These controls keep the full crash-camera witness and make closure A/B physics rows comparable.
@@ -30,7 +29,7 @@
     CrashSweepShots = '225:80'
     CrashSweepArm   = 4
   }
-  DiagEnv = 'BRN_CRASH_RESPONSE_DIAG=1,BRN_CAMCOLLIDE_DIAG=1,BRN_CRASHCAM_DIAG=1,BRN_FXD2_SCENEQUERY=1,BRN_VLQ_DIAG=1,BRN_SWEEP_WAIT_ROAMING=1,BRN_ULTRA_SLOMO_SCALE=0.0075'
+  DiagEnv = 'BRN_CRASH_RESPONSE_DIAG=1,BRN_CAMCOLLIDE_DIAG=1,BRN_CRASHCAM_DIAG=1,BRN_VLQ_DIAG=1,BRN_SWEEP_WAIT_ROAMING=1,BRN_ULTRA_SLOMO_SCALE=0.0075'
   Checks  = @(
     @{ Kind = 'NewAsserts'; Name = 'no NEW assert families' }
     @{ Kind = 'LogCount';   Name = 'no exceptions'; Pattern = '\[EXCEPTION\]'; Max = 0 }
