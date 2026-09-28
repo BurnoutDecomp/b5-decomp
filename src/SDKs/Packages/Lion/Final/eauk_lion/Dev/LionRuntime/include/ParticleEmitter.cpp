@@ -2863,18 +2863,35 @@ void cParticleEmitter::ParentMatrixCurrentBuild(cMatrix& arOutMatrix,
 // emitters that follow it.
 //
 //   mEmissionCount++                                                 -- unconditional, first
-//   if (mFlags & KU_FLAG_SUB_EMITTER)  lMatrix = ParentMatrixCurrentBuild(...)
-//   else                               lMatrix = *locator->GetMat(arTime)
-//   lVelocity = lMatrix.translation + <the emitter's own velocity> * elapsedSeconds
+//   if (mFlags & KU_FLAG_SUB_EMITTER)  lMatrix = ParentMatrixCurrentBuild(...), lvVelocity = mParentVel
+//   else                               lMatrix = *locator->GetMat(arTime),      lvVelocity = locator->mVel
+//   lMatrix.translation += lvVelocity * elapsedSeconds;  lMatrix.translation.w = 1
 //   for (b = mpBucket; b; b = b->GetEmitterNext())
-//       if (!b->IsFull() && b->AllocateParticle(...)) { InitialiseParticle(...);
+//       if (!b->IsFull() && b->AllocateParticle(...)) { InitialiseParticle(..., lMatrix, lvVelocity, ...);
 //                                                       b->SetLatestBirthTime(arSpawnTime);
 //                                                       goto spawned; }
 //   b = manager.AllocateBucket(descriptor->mLodGroup, arSpawnTime, descriptor->GetRequiredBucketType())
 //   if (!b) return;                       -- out of buckets: the particle is simply not born
-//   link b onto this emitter; ParticleInsert(b, ...)
+//   link b onto this emitter; ParticleInsert(b, &lMatrix, lvVelocity, ...)
 // spawned:
 //   SpawnSubEmitter(b, 0, arTime)
+//
+// ⭐⭐ THE VELOCITY THE PARTICLE INHERITS IS THE EMITTER'S RAW VELOCITY, NOT THE SPAWN POINT
+// (L4 WORLDVFX, 2026-09-27). The console keeps two stack copies: var_90 = the velocity vector
+// (locator arm: `lvx128 v13, r0, r11` of locator+0x40 == mVel at 0x82914E28, `stvx128 v13` to
+// var_90 at 0x82914E58; sub-emitter arm: `lvx128 v0` of this+0x50 == mParentVel at 0x82914DA4,
+// `stvx128 v0` to var_90 at 0x82914DC0) and var_A0 = a copy of the matrix's translation, and it
+// advances ONLY the matrix: var_50 (lMatrix.wa) = var_A0 + velocity * elapsed (0x82914EA4..
+// 0x82914ED8). InitialiseParticle then gets r7 = &var_80 (the matrix) and r8 = &var_90 (the
+// velocity) at 0x82914F28, and ParticleInsert r5 = &var_80 / r6 = &var_90 at 0x82914FB4 (which it
+// hands on as InitialiseParticle's r8, 0x82913434). InitialiseParticle @0x829116A8 scales that r8
+// vector by mEmitterVelWeight into mLocatorVel (0x82911AF0..0x82911B10).
+// This body used to hand InitialiseParticle the ADVANCED SPAWN POINT as the velocity, so every
+// particle whose behaviour inherits emitter velocity flew off at its own world position in m/s --
+// ~3.7 km/s at Paradise City's coordinates: a smashed window's Glass_shattering sprites drew 52 m
+// from the pane one frame after the shatter (l4_fxglassnan_long/20260927_213017, [lionquad]
+// GLINTERGLASS), and a spark burst's SQUARELIGHT sprites moved ~40 m per frame along their
+// locator's position vector.
 //
 // ⚠ THE VELOCITY TERM IS SCALED BY THE TIME SINCE A DIFFERENT STAMP IN EACH ARM. The sub-emitter
 // arm measures from mParentTime (`lwz r9, 0x198`) and the locator arm from arTime itself
@@ -2897,41 +2914,37 @@ void cParticleEmitter::Emit(cParticleRandomSeed& arSeed,
     ++mEmissionCount;
 
     cMatrix lMatrix;
-    cVector lvVelocity;
+    cVector lvVelocity;   // var_90: the velocity the particle inherits, handed on as it is
+    f32     lfElapsed;
 
     if ((mFlags & KU_FLAG_SUB_EMITTER) != 0)
     {
-        // asm 0x82914D70..0x82914DF4.
+        // asm 0x82914D70..0x82914DE0: the parent's current matrix, and its velocity since the
+        // parent was last rebuilt.
         ParentMatrixCurrentBuild(lMatrix, arSpawnTime, mDt, arTime);
-
-        const f32 lfElapsed =
-            static_cast<f32>(arSpawnTime.GetTicks() - mParentTime.GetTicks()) * KF_TICKS_TO_SECONDS;
-        lvVelocity.x = mParentVel.x * lfElapsed + lMatrix.wa.x;
-        lvVelocity.y = mParentVel.y * lfElapsed + lMatrix.wa.y;
-        lvVelocity.z = mParentVel.z * lfElapsed + lMatrix.wa.z;
+        lvVelocity = mParentVel;
+        lfElapsed  = static_cast<f32>(arSpawnTime.GetTicks() - mParentTime.GetTicks()) * KF_TICKS_TO_SECONDS;
     }
     else
     {
-        // asm 0x82914DF8..0x82914EB0.
+        // asm 0x82914DF8..0x82914EA0: the locator's matrix and velocity.
         const cParticleLocator& lrLocator = *mpBindings->GetpLocator();
-        lMatrix = lrLocator.GetMat(arTime);
-
-        const f32 lfElapsed =
-            static_cast<f32>(arSpawnTime.GetTicks() - arTime.GetTicks()) * KF_TICKS_TO_SECONDS;
-        lvVelocity.x = lrLocator.mVel.x * lfElapsed + lMatrix.wa.x;
-        lvVelocity.y = lrLocator.mVel.y * lfElapsed + lMatrix.wa.y;
-        lvVelocity.z = lrLocator.mVel.z * lfElapsed + lMatrix.wa.z;
+        lMatrix    = lrLocator.GetMat(arTime);
+        lvVelocity = lrLocator.mVel;
+        lfElapsed  = static_cast<f32>(arSpawnTime.GetTicks() - arTime.GetTicks()) * KF_TICKS_TO_SECONDS;
     }
 
-    // asm 0x82914EB4..0x82914ED8 -- the spawn point is the velocity-advanced translation, with
-    // w == 1 (flt_82001C98). The console writes it back over the matrix's own translation row.
-    lMatrix.wa.x = lvVelocity.x;
-    lMatrix.wa.y = lvVelocity.y;
-    lMatrix.wa.z = lvVelocity.z;
+    // asm 0x82914E94..0x82914ED8 -- the spawn point is the translation advanced along the velocity
+    // (one fmuls and one fadds per lane), with w == 1 (flt_82001C98), written back over the
+    // matrix's own translation row. The velocity itself is left as it is (see the banner).
+    lMatrix.wa.x = lvVelocity.x * lfElapsed + lMatrix.wa.x;
+    lMatrix.wa.y = lvVelocity.y * lfElapsed + lMatrix.wa.y;
+    lMatrix.wa.z = lvVelocity.z * lfElapsed + lMatrix.wa.z;
     lMatrix.wa.w = 1.0f;
 
     // [lionspawn] ONE-SHOT bring-up witness. NOT console behaviour. The particle's SPAWN point,
-    // beside the locator row it was derived from -- the first half of the "(carY, carZ, 0) where
+    // beside the locator row it was derived from, and the velocity it inherits (before the
+    // behaviour's mEmitterVelWeight) -- the first half of the "(carY, carZ, 0) where
     // (carX, carY, carZ) belongs" split. DELETE-WHEN-STABLE.
     {
         static bool sbSpawnOnce = false;
