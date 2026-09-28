@@ -40,6 +40,8 @@
 #include "GameSource/Director/Utils/BrnPostOffice.h"
 #include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"
 #include "GameSource/Director/Utils/BrnSceneQueryInterface.h"
+#include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficDirectorInterfaces.h"
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"
 #include "GameSource/Director/Camera/Camera.h"
 #include "GameSource/Director/Camera/BrnCameraState.h"
@@ -282,6 +284,13 @@ static void ConstructOffices()
 
 static void SetupRig()
 {
+    // ProcessSceneQueryResults now calls the production traffic predictor. These world-query
+    // cases have no traffic; supply its real, empty input instead of leaving the pointer null.
+    static AllVehicleData lVehicleData{};
+    static Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u> laTraffic;
+    laTraffic.Clear();
+    lVehicleData.mpTrafficVehicleArray = &laTraffic;
+    gInfo.mpAllVehicleData = &lVehicleData;
     ConstructOffices();
     gSqi.Construct(&gProducer, &gModule.mLineTestFinePostOffice, &gModule.mLineTestNearestPostOffice,
                    &gModule.mLineTestFastDoubleSidedPostOffice, &gModule.mSphereTestFastPostOffice,
