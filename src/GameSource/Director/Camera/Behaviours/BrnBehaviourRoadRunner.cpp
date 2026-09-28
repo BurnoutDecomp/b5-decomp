@@ -263,6 +263,13 @@ namespace
     // `lfDistToMove >= 0.0f` assert's comparand.
     const f32 KF_ZERO = 0.0f;
 
+    // flt_82002540 == 0x38D1B717 (9.9999997e-05) -- the BACKWARD walk's guard, read with x360rd
+    // (OWNERLIST 2026-09-27, lane L5). MoveAlongTrafficLaneBackwards @0x8222B100 keeps the parameter
+    // 0.0001 short of the rung it is leaving: `fsubs f0, f0, f29` in the remaining-distance term
+    // (0x8222B474), and `fsubs f31, f0, f29` after the rung decrement (0x8222B4B4) and on a new
+    // section (0x8222B944). The forward walk's mirror of it is KF_SEGMENT_END_PARAM.
+    const f32 KF_BACKWARD_END_PARAM_GUARD = 9.9999997e-05f;
+
     // The 0xFF / 0xFFFF sentinels PickSplitToTake writes into a dead end.
     const u8  KU_INVALID_SECTION = 0xFF;
     const u16 KU_INVALID_HULL_ID = 0xFFFF;
@@ -443,20 +450,29 @@ void TrafficLaneTruck::MoveAlongTrafficLaneForwards(
 // MoveAlongTrafficLaneBackwards @0x8222B100 -- the mirror walk. Same skeleton with three
 // sign flips, all read off the asm:
 //   * a segment is used up from its START, so the remaining distance is
-//     lfLocalParam * lfSegmentLength (no 0.999 term -- that is the forward end guard);
-//   * the rung DECREMENTS and the parameter floors DOWN one; running out is rung == 0
-//     (the `lbOffEnd` local DWARF names at :448), not rung >= numSegments;
+//     (lfLocalParam - 0.0001) * lfSegmentLength (0x8222B470..0x8222B478; the 0.0001 is
+//     flt_82002540, the backward twin of the forward walk's 0.999 end guard);
+//   * the rung DECREMENTS and the parameter drops to Floor(param) - 0.0001, just inside the
+//     segment it enters (0x8222B488..0x8222B4B4); running out is old rung == 0 (the
+//     `lbOffEnd` local DWARF names at :448), not rung >= numSegments;
 //   * the split comes from PickSplitToTakeBackwards and the walk resumes at the LAST segment
-//     of the new section, so the parameter restarts at numSegments - 1 rather than 0;
+//     of the new section, parameter (f32)(muNumRungs - 1) - 0.0001 (0x8222B91C..0x8222B944);
 //   * the sampled point looks BACKWARD: CreateLookAt(pos, pos - at) (DWARF's call list for
 //     this function names rw::math::vpu::operator- where the forward twin names operator+).
 // Assert lines :394 (mbValid), :409/:450 (the two out-of-sync messages), :476/:481 (the two
 // out-of-bounds messages), :434 / :494 (the parameter range pair).
 //
-// ⚠️ REACHABILITY: on this build the road runner's speed is positive and the frame timestep is
-// positive, so MoveAlongTrafficLane always dispatches FORWARDS. This arm is reconstructed for
-// completeness (BehaviourRoadRunner::Reverse negates the speed, which is what reaches it) but
-// it has NOT been exercised at runtime yet.
+// ⛔ CORRECTED 2026-09-28 (OWNERLIST lane L5): the body carried none of the three 0.0001 guards.
+// After the first rung the parameter sat exactly ON the rung (local parameter 0), so every
+// iteration consumed ZERO distance and walked on -- rung by rung, section by section -- firing
+// both "out of sync" asserts each step: 2.05 million of them in one crash-nav pause
+// (scratch/bugtest/runs/menus_pause_camera_driven/20260928_073346).
+//
+// REACHABILITY: the road runner flies forwards (+3 m/s) until the crash-nav pause turns it about.
+// ArbStateCrashNav's ACTIVE_TURNABOUT state calls BehaviourRoadRunner::Reverse (asm @0x8226DF7C) once
+// the fly-by is past the 400 m OUTER gate, the speed goes negative, and MoveAlongTrafficLane
+// dispatches here. The storm run above reached this arm within three seconds (2 s in ACTIVE, 1 s in
+// ACTIVE_TURNABOUT), because its fly-by was seeded near the world origin, 3.5 km from the car.
 // ----------------------------------------------------------------------------
 void TrafficLaneTruck::MoveAlongTrafficLaneBackwards(
         BrnTraffic::Directions lePreferredDirection,
@@ -483,15 +499,23 @@ void TrafficLaneTruck::MoveAlongTrafficLaneBackwards(
         CGS_ASSERT(luCurrentRung == static_cast<u32>(static_cast<s32>(lfParamAlong)),
                    "Current rung got out of sync: r=");
 
+        // 0x8222B450..0x8222B478: ((param - Floor(param)) - 0.0001) * segment length -- three
+        // single-precision ops (fsubs, fsubs, fmuls) after the two-fsel double floor.
         const f32 lfLocalParam                = lfParamAlong - std::floor(lfParamAlong);
-        const f32 lfRemainingInCurrentSegment = lfLocalParam * lfSegmentLength;
+        const f32 lfRemainingInCurrentSegment =
+            (lfLocalParam - KF_BACKWARD_END_PARAM_GUARD) * lfSegmentLength;
 
         if (lfRemainingInCurrentSegment > lfDistToMove)
             break;
 
         lfDistToMove -= lfRemainingInCurrentSegment;
 
+        // 0x8222B488..0x8222B4B4: the rung is decremented BEFORE the off-end test (cntlzw of the old
+        // rung), and the parameter drops to 0.0001 below the rung it is leaving -- Floor(param) -
+        // 0.0001 -- so it lies inside the segment it is entering.
         const bool lbOffEnd = (luCurrentRung == 0);
+        --luCurrentRung;
+        lfParamAlong = std::floor(lfParamAlong) - KF_BACKWARD_END_PARAM_GUARD;
         if (lbOffEnd)
         {
             u8  luNewSection   = 0;
@@ -520,17 +544,21 @@ void TrafficLaneTruck::MoveAlongTrafficLaneBackwards(
             lpSection            = lpHull->GetSection(luNewSection);
             lpaCumulativeLengths = lpHull->GetRungLengthsForSection(lpSection);
 
+            // 0x8222B91C..0x8222B944: resume on the new section's LAST segment, 0.0001 short of its
+            // far rung -- rung = muNumRungs - 2, param = (f32)(muNumRungs - 1) - 0.0001 -- and check
+            // the pair ("Current rung got out of sync(3)", 0x8222B948..0x8222B958).
             luCurrentRung = lpSection->GetNumSegments() - 1;
-            lfParamAlong  = static_cast<f32>(luCurrentRung) + 1.0f;
+            lfParamAlong  = static_cast<f32>(luCurrentRung + 1) - KF_BACKWARD_END_PARAM_GUARD;
+
+            CGS_ASSERT(luCurrentRung == static_cast<u32>(static_cast<s64>(lfParamAlong)),
+                       "Current rung got out of sync(3): r=");
         }
         else
         {
-            --luCurrentRung;
-            lfParamAlong = std::floor(lfParamAlong);
+            // 0x8222B4BC..0x8222B4CC: fctidz(param) against the decremented rung.
+            CGS_ASSERT(luCurrentRung == static_cast<u32>(static_cast<s64>(lfParamAlong)),
+                       "Current rung got out of sync(2): r=");
         }
-
-        CGS_ASSERT(luCurrentRung == static_cast<u32>(static_cast<s32>(lfParamAlong - 1.0f)),
-                   "Current rung got out of sync(2): r=");
 
         lfSegmentLength = lpaCumulativeLengths[luCurrentRung + 1]
                         - lpaCumulativeLengths[luCurrentRung];
@@ -896,17 +924,16 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
         // The console hands the truck the world map and a Vector3 taken from the shared info at
         // +0x280 -- inside mPlayerInfo, i.e. the PLAYER CAR'S POSITION: the fly-by seats itself
         // on the lane nearest the subject it is about to fly over.
-        //
-        // ⚠️ FLAG PC seed point: mPlayerInfo's interior is not mapped (Behaviour.h models it as
-        // a named opaque sub-object because embedding VehicleInfo drags in a pre-existing
-        // SuspensionSpring ODR fork), so the seed point cannot be sourced from it yet. The
-        // world map's own lane search is fed the ORIGIN instead, which
-        // GetLanePositionNearestPoint answers with the lane nearest the city origin -- a real
-        // lane on a real road, just not the one under the player.
-        // DELETE-WHEN: mPlayerInfo becomes a real VehicleInfo (the SuspensionSpring fork is
-        // reconciled), then pass lrInfo.mPlayerInfo's position.
+        //   0x82247F08  li r11, 0x280 ; 0x82247F14  lvx128 v1, r24(info), r11
+        // mPlayerInfo sits at info +0x60 and its mRaceCarState.mTransform at +0x1F0 (Behaviour.h's
+        // GetEyeTarget), so +0x280 is that transform's translation row, wAxis.
+        // ⛔ CORRECTED 2026-09-28 (OWNERLIST lane L5): this was the ORIGIN, under a FLAG saying
+        // mPlayerInfo was not mapped. It has been a real VehicleInfo since Behaviour.h retired the
+        // SuspensionSpring fork. The ORIGIN seeded the fly-by on the lane nearest (0, 0, 0) --
+        // measured at (-53.2, 78.4, 87.5) while the car was at (3085.7, 6.7, -1441.6) -- and the
+        // crash-nav pause then flew a road on the far side of the city.
         const BrnDirector::WorldMap* lpWorldMap = lrInfo.GetWorldMap();
-        const rw::math::vpu::Vector3 lSeedPoint = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const rw::math::vpu::Vector3 lSeedPoint = lrInfo.mPlayerInfo.mRaceCarState.mTransform.wAxis;
 
         if (lpWorldMap == 0 || !mTrafficLaneTruck.Prepare(*lpWorldMap, lSeedPoint))
         {
@@ -927,6 +954,12 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
         mfDesiredSpeed        = mfDirection * 3.0f;            // +0x294  flt_82004270
         mfDesiredBankingScale = 0.15000001f;                   // +0x2A0  flt_82004E58
     }
+
+    // 0x82247F54..0x82247F64: `ld r11, 0x140(camera) ; ori r11, r11, 2 ; std r11, 0x140(camera)` -- E_FLAG_VALID
+    // (bit 1 of the current flag set, the same word E_FLAG_ROAD_FOLLOWING_CAM is OR'd into at the tail) is raised
+    // on every frame that gets past the seat, straight into the word. ADDED 2026-09-28 (OWNERLIST lane L5): the PC
+    // body skipped it, so the fly-by's camera never said it was valid.
+    lrCamera.GetState().mCurrentFlags.SetBit(CameraState::E_FLAG_VALID);
 
     const f32 lfTimestep = lrInfo.GetTimestep(GetTimestepType());
 
