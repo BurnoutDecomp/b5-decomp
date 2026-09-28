@@ -2695,6 +2695,22 @@ namespace BrnGame
             }
         }
 
+        // ARTIST @0x823E8EF8..0x823E8F2C, after BridgeGameStateToDirector:
+        // replay (update set 0x100) or online -> false; otherwise copy mbSimPaused.
+        // The director uses this byte to hold simulation-driven camera behaviours.
+        // FLAG: replay playback is not implemented; ConstructUpdateSetFromFsm does not
+        // yet receive ConstructUpdateSet's replay bit (@0x823DCB40).
+        if (!lbPostGui)
+        {
+            const u32 KU_UPDATE_SET_REPLAY_PLAYBACK = 0x100u;
+            const bool lbReplayPlayback =
+                (static_cast<u32>(ConstructUpdateSetFromFsm()) & KU_UPDATE_SET_REPLAY_PLAYBACK) != 0;
+
+            lpDirectorInput->LockForWrite();
+            lpDirectorInput->SetSimPaused(!lbReplayPlayback && !mbOnline && mbSimPaused);
+            lpDirectorInput->UnlockForWrite();
+        }
+
         // ------------------------------------------------------------------------------
         // ⛔ THE INTRO FLY-BY STAND-IN IS RETIRED (2026-08-01).
         //
