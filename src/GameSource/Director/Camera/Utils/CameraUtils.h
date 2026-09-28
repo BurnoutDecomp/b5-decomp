@@ -31,6 +31,9 @@
 // types.hpp + CgsAssert.h and does not reach back here, so there is no cycle.
 #include "GameSource/Director/Utils/BrnDirectorTimestep.h"   // BrnDirector::VecFloat -- see above
 
+namespace CgsSceneManager { namespace SceneManagerIO { struct OutEventLineTestNearestResult; } }
+namespace BrnDirector { template <class Type> class PostBox; }   // BrnPostBox.h (ResolveLineTestNearest...)
+
 namespace BrnDirector
 {
 namespace Camera
@@ -240,17 +243,23 @@ namespace Utils
                                             Vector3& lrLastAxis, bool& lrbWasInvertedLastTime,
                                             VecFloat lvT);
 
-    // @0x822183E0. Rotate a look-at frame about a world pivot by a pitch angle (radians).
-    // Used by CollisionPolicyAttachedToVehicle::GenerateSceneQueries.
-    // FLAG (declaration-only): NOT YET DONE. ⛔ ITS OLD REASON IS RETIRED (2026-08-02) -- it
-    // read "an inline VMX Sin/Cos minimax whose coefficient tables (rodata
-    // 82000BD0..82000C60) are not attested as named constants; bodying it would require
-    // fabricating the polynomial", which is exactly what was said about
-    // RotateMatrix44AffineByEulerAnglesZXY below until that turned out to be no obstacle at
-    // all: the coefficients belong to sin/cos, which this family de-optimises to libm, and
-    // 0x82000C60 is the DUMPED range-reduction row { pi, 2pi, 1/pi, 1/(2pi) }, not a
-    // coefficient table. The real work is the pivot/compose order and nobody has done it.
-    Matrix44Affine ApplyPitchAboutPointRads(Vector3 lPoint, VecFloat lvPitchRads);
+    // @0x822183E0 (DWARF CameraUtils.h:87 / :1231). Pitch a transform about a world pivot by an
+    // elevation (radians), in the pivot's own yaw frame: M = ((M - pivot) * Y^-1 * Rx(e)) * Y + pivot,
+    // with Y = CreateLookAt(0, -(M.w - pivot) flattened). Used by CollisionPolicyAttachedToVehicle::
+    // GenerateSceneQueries @0x82252734 (auto-elevate). BODIED 2026-09-28 (owner's list, lane L2) in
+    // CameraUtils.cpp.
+    // ⛔ SIGNATURE CORRECTED 2026-09-28: the DWARF's `void (Matrix44Affine&, Vector3, VecFloat)` --
+    // the transform is IN/OUT through r3 (the console loads and stores its four rows there); the old
+    // `Matrix44Affine (Vector3, VecFloat)` guess had no caller.
+    void ApplyPitchAboutPointRads(Matrix44Affine& lTransformInOut, Vector3 lCentreOfRotation,
+                                  VecFloat lElevationRads);
+
+    // @0x8220CD58 (DWARF CameraUtils.cpp:74 / :944). Push a position out of the surface a nearest
+    // line test hit: when the hit's normal . (position - hit) is below lfMinDistance, the position
+    // becomes hit + normal * lfMinDistance. True when it moved. BODIED 2026-09-28 in CameraUtils.cpp.
+    bool ResolveLineTestNearestUsingNormalStrict(
+        PostBox<CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult>& lPostBox,
+        Vector3& lPosition, f32 lfMinDistance);
 
     // @0x821F25B8. The FOUR near-clip-plane corner positions for a camera transform (a2..a5
     // are the four out-corners, written in asm store order r30/r29/r28/r27). Used by

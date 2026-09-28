@@ -6,6 +6,9 @@
 #include "rw/math/vpu/matrix44affine_operation.h"    // Mult / TransformPoint /
                                                      //   InverseOfMatrixWithOrthonormal3x3
 
+#include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"   // LineTestNearestPostBox (ResolveLineTestNearest...)
+#include "SDKs/XboxMath/XMVectorSinCos.h"                        // XboxMath::XMVectorSinCos (ApplyPitchAboutPointRads)
+
 #include <cmath>   // std::atan / std::acos / std::asin / std::sin / std::cos / std::fabs /
                    //   std::copysign
 
@@ -57,7 +60,10 @@
 // each is an inline VMX minimax / corner lattice / permute over UNATTESTED raw rodata
 // coefficient constants; bodying them store-for-store would fabricate those
 // tables, so they are left unbodied per the no-fabrication rule):
-//   ApplyPitchAboutPointRads          @0x822183E0  (Sin/Cos minimax, rodata 82000BD0..82000C60)
+//   ApplyPitchAboutPointRads          @0x822183E0  -- BODIED 2026-09-28 (owner's list, lane L2), with
+//       ResolveLineTestNearestUsingNormalStrict @0x8220CD58, at the end of this file. The entry below is kept as
+//       the record of why it waited:
+//   (was) ApplyPitchAboutPointRads    @0x822183E0  (Sin/Cos minimax, rodata 82000BD0..82000C60)
 //       ⛔ ITS REASON IS THE ONE THAT JUST EXPIRED FOR ITS NEIGHBOUR -- DO NOT RE-QUOTE IT.
 //       RotateMatrix44AffineByEulerAnglesZXY sat on this same list, citing this same rodata
 //       range, and the coefficients turned out to be an implementation detail of sin and cos
@@ -1436,6 +1442,206 @@ bool PointWillLeaveFrustrum(const Matrix44Affine& lTransform, Vector3 lPoint,
     else if (vel.y < 0.0f) yTime = (-height - point.y) / vel.y;
     *lpfTimeBeforeLeavingSecs = std::fmin(xTime, yTime);
     return true;
+}
+
+// ============================================================================
+// ApplyPitchAboutPointRads @0x822183E0 and ResolveLineTestNearestUsingNormalStrict @0x8220CD58 -- BODIED
+// 2026-09-28 (owner's list, lane L2 CAMCOLLIDE): the two camera utils CollisionPolicyAttachedToVehicle's
+// scene-query pair calls (GenerateSceneQueries @0x82252734, ResolveCollisions @0x82224990).
+// Transcribed operation for operation from the raw instruction stream, the rounding chosen per instruction
+// (scratch/CRASHPARITY_0922/ROUNDING_RULE.md): vmulfp / vsubfp / vaddfp round on their own (rule 4), vmaddfp /
+// vmaddfp128 round ONCE (rule 3), vmsum3fp128 is one rounding of the f64 sum (rule 1). IDA prints the classic
+// vmaddfp in field order D, A, B, C, which computes D = A * C + B.
+// FLAG (PC-platform, rule 6): the VMX flush of denormal operands / results is not modelled.
+// ============================================================================
+namespace
+{
+    Vector3 LaneVector(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
+    {
+        Vector3 l;
+        l.x = lfX;
+        l.y = lfY;
+        l.z = lfZ;
+        l.w = lfW;
+        return l;
+    }
+
+    // vspltw: one lane broadcast.
+    Vector3 LaneSplat(const Vector3& lrV, u32 luLane)
+    {
+        const f32 lf = (luLane == 0u) ? lrV.x : (luLane == 1u) ? lrV.y : (luLane == 2u) ? lrV.z : lrV.w;
+        return LaneVector(lf, lf, lf, lf);
+    }
+
+    Vector3 LaneMul(const Vector3& lrA, const Vector3& lrB)            // vmulfp128
+    {
+        return LaneVector(lrA.x * lrB.x, lrA.y * lrB.y, lrA.z * lrB.z, lrA.w * lrB.w);
+    }
+
+    Vector3 LaneSub(const Vector3& lrA, const Vector3& lrB)            // vsubfp128
+    {
+        return LaneVector(lrA.x - lrB.x, lrA.y - lrB.y, lrA.z - lrB.z, lrA.w - lrB.w);
+    }
+
+    Vector3 LaneAdd(const Vector3& lrA, const Vector3& lrB)            // vaddfp128
+    {
+        return LaneVector(lrA.x + lrB.x, lrA.y + lrB.y, lrA.z + lrB.z, lrA.w + lrB.w);
+    }
+
+    // vmaddfp / vmaddfp128: lrA * lrC + lrB, each lane rounded ONCE.
+    Vector3 LaneMadd(const Vector3& lrA, const Vector3& lrC, const Vector3& lrB)
+    {
+        return LaneVector(std::fma(lrA.x, lrC.x, lrB.x), std::fma(lrA.y, lrC.y, lrB.y),
+                          std::fma(lrA.z, lrC.z, lrB.z), std::fma(lrA.w, lrC.w, lrB.w));
+    }
+
+    Vector3 MergeHigh(const Vector3& lrA, const Vector3& lrB)          // vmrghw: a.x b.x a.y b.y
+    {
+        return LaneVector(lrA.x, lrB.x, lrA.y, lrB.y);
+    }
+
+    Vector3 MergeLow(const Vector3& lrA, const Vector3& lrB)           // vmrglw: a.z b.z a.w b.w
+    {
+        return LaneVector(lrA.z, lrB.z, lrA.w, lrB.w);
+    }
+
+    // vmsum3fp128: the three-lane dot as ONE rounding of the f64 sum (rule 1).
+    f32 Dot3OneRounding(const Vector3& lrA, const Vector3& lrB)
+    {
+        return static_cast<f32>(static_cast<f64>(lrA.x) * lrB.x + static_cast<f64>(lrA.y) * lrB.y
+                                + static_cast<f64>(lrA.z) * lrB.z);
+    }
+
+    // A row times the three direction rows of a basis (the row's w lane unread), the console's chain:
+    //   vmulfp128 r.x * b0 ; vmaddfp r.y * b1 + . ; vmaddfp r.z * b2 + .
+    Vector3 RowTimesBasis(const Vector3& lrRow, const Vector3& lrB0, const Vector3& lrB1, const Vector3& lrB2)
+    {
+        const Vector3 lv0 = LaneMul(LaneSplat(lrRow, 0u), lrB0);
+        const Vector3 lv1 = LaneMadd(LaneSplat(lrRow, 1u), lrB1, lv0);
+        return LaneMadd(LaneSplat(lrRow, 2u), lrB2, lv1);
+    }
+
+    // The translation row: vmaddfp r.x * b0 + t ; vmaddfp r.y * b1 + . ; vmaddfp r.z * b2 + .
+    Vector3 PointTimesAffine(const Vector3& lrRow, const Vector3& lrB0, const Vector3& lrB1, const Vector3& lrB2,
+                             const Vector3& lrT)
+    {
+        const Vector3 lv0 = LaneMadd(LaneSplat(lrRow, 0u), lrB0, lrT);
+        const Vector3 lv1 = LaneMadd(LaneSplat(lrRow, 1u), lrB1, lv0);
+        return LaneMadd(LaneSplat(lrRow, 2u), lrB2, lv1);
+    }
+}
+
+// ----------------------------------------------------------------------------------------
+// @ 0x822183E0 -- DWARF CameraUtils.h:87 (body :1231; locals lFlatForward :1234, lWorldYRotation :1235).
+// Pitch lTransformInOut about lCentreOfRotation by lElevationRads, about the horizontal axis of the
+// frame that looks from the pivot along the transform's flattened position:
+//   0x82218420..0x82218428  M.w -= pivot (written back to the transform)
+//   0x8221842C..0x82218448  lFlatForward = -(M.w.x, 0, M.w.z, M.w.x): the vperm128 against unk_82CDA350
+//                           {A.x, B.y, A.x, A.x} of splat(M.w.x) and zero, lane z inserted from splat(M.w.z)
+//                           (vrlimi128 mask 2), then vxor with vslw(-1,-1) == 0x80000000 (the sign flip)
+//   0x8221844C              lWorldYRotation = CreateLookAt(0, lFlatForward)
+//   0x82218450..0x822184C8  its inverse: the rotation transposed (vmrghw / vmrglw against zero, w lanes 0) and
+//                           the translation (0 - t) * R^T (vmulfp128 z, vmaddfp y, vmaddfp x)
+//   0x822184CC..0x82218534  M = M * inverse, every row stored
+//   0x82218538..0x822186E0  the XDK XMVectorSinCos, inlined (XboxMath::XMVectorSinCos: the same range
+//                           reduction, powers and eleven-term sums, instruction for instruction)
+//   0x822186E4..0x82218754  the X rotation, rows (1,0,0,1) (0,cos,sin,0) (0,-sin,cos,0), translation 0
+//                           (vperm128 against the same control, lane z by vrlimi128), and M = M * it
+//   0x82218758..0x822187C4  M = M * lWorldYRotation, every row stored
+//   0x822187C8..0x822187CC  M.w += pivot
+// The w lanes are carried as the console computes them (the X rotation's first row has w = 1.0).
+// FLAG (PC-platform): CreateLookAt on this build is the de-optimised form (exact normalise, the cross's w lane
+// cleared -- see its banner), so the look-at rows may differ from the console's by an ulp; this body is exact
+// given them.
+void ApplyPitchAboutPointRads(Matrix44Affine& lTransformInOut, Vector3 lCentreOfRotation, VecFloat lElevationRads)
+{
+    const Vector3 lvZero = LaneVector(0.0f, 0.0f, 0.0f, 0.0f);                  // vspltisw128 v127, 0
+
+    lTransformInOut.wAxis = LaneSub(lTransformInOut.wAxis, lCentreOfRotation);  // 0x82218424
+
+    const Vector3& lrRelative = lTransformInOut.wAxis;
+    const Vector3 lFlatForward = LaneVector(-lrRelative.x, -0.0f, -lrRelative.z, -lrRelative.x);   // 0x82218448
+
+    const Matrix44Affine lWorldYRotation = CreateLookAt(lvZero, lFlatForward);   // 0x8221844C
+
+    // The inverse of lWorldYRotation (0x82218470..0x822184C8).
+    const Vector3 lvLowXZ   = MergeLow(lWorldYRotation.xAxis, lWorldYRotation.zAxis);    // vmrglw    v11
+    const Vector3 lvHighXZ  = MergeHigh(lWorldYRotation.xAxis, lWorldYRotation.zAxis);   // vmrghw    v9
+    const Vector3 lvLowY    = MergeLow(lWorldYRotation.yAxis, lvZero);                   // vmrglw128 v10
+    const Vector3 lvHighY   = MergeHigh(lWorldYRotation.yAxis, lvZero);                  // vmrghw128 v7
+    const Vector3 lvInvRow2 = MergeHigh(lvLowXZ, lvLowY);                                // (x.z, y.z, z.z, 0)
+    const Vector3 lvInvRow1 = MergeLow(lvHighXZ, lvHighY);                               // (x.y, y.y, z.y, 0)
+    const Vector3 lvInvRow0 = MergeHigh(lvHighXZ, lvHighY);                              // (x.x, y.x, z.x, 0)
+    const Vector3 lvNegT    = LaneSub(lvZero, lWorldYRotation.wAxis);                    // vsubfp128 v8
+    Vector3 lvInvT = LaneMul(LaneSplat(lvNegT, 2u), lvInvRow2);                          // 0x822184AC
+    lvInvT = LaneMadd(LaneSplat(lvNegT, 1u), lvInvRow1, lvInvT);                         // 0x822184C0
+    lvInvT = LaneMadd(LaneSplat(lvNegT, 0u), lvInvRow0, lvInvT);                         // 0x822184C8
+
+    // M = M * inverse (0x822184CC..0x82218534; every row read before the first store).
+    Matrix44Affine lLocal;
+    lLocal.xAxis = RowTimesBasis(lTransformInOut.xAxis, lvInvRow0, lvInvRow1, lvInvRow2);
+    lLocal.yAxis = RowTimesBasis(lTransformInOut.yAxis, lvInvRow0, lvInvRow1, lvInvRow2);
+    lLocal.zAxis = RowTimesBasis(lTransformInOut.zAxis, lvInvRow0, lvInvRow1, lvInvRow2);
+    lLocal.wAxis = PointTimesAffine(lTransformInOut.wAxis, lvInvRow0, lvInvRow1, lvInvRow2, lvInvT);
+    lTransformInOut = lLocal;
+
+    // The elevation's sine and cosine (0x82218538..0x822186E0; the VecFloat is a splat).
+    f32 lfSin = 0.0f;
+    f32 lfCos = 0.0f;
+    XboxMath::XMVectorSinCos(&lfSin, &lfCos, static_cast<f32>(lElevationRads));
+
+    const Vector3 lvRot0 = LaneVector(1.0f, 0.0f, 0.0f, 1.0f);       // vperm128(1.0, 0), lane z <- 0   0x8221870C
+    const Vector3 lvRot1 = LaneVector(0.0f, lfCos, lfSin, 0.0f);     // vperm128(0, cos), lane z <- sin 0x82218704
+    const Vector3 lvRot2 = LaneVector(0.0f, -lfSin, lfCos, 0.0f);    // vperm128(0, -sin), lane z <- cos 0x82218710
+    const Vector3 lvRot3 = lvZero;                                   // vperm128(0, 0), lane z <- 0     0x822186D0
+
+    // M = M * the X rotation (0x8221871C..0x82218754).
+    Matrix44Affine lPitched;
+    lPitched.xAxis = RowTimesBasis(lLocal.xAxis, lvRot0, lvRot1, lvRot2);
+    lPitched.yAxis = RowTimesBasis(lLocal.yAxis, lvRot0, lvRot1, lvRot2);
+    lPitched.zAxis = RowTimesBasis(lLocal.zAxis, lvRot0, lvRot1, lvRot2);
+    lPitched.wAxis = PointTimesAffine(lLocal.wAxis, lvRot0, lvRot1, lvRot2, lvRot3);
+
+    // M = M * lWorldYRotation (0x82218758..0x822187C4), then back about the pivot (vaddfp128 0x822187C8).
+    lTransformInOut.xAxis = RowTimesBasis(lPitched.xAxis, lWorldYRotation.xAxis, lWorldYRotation.yAxis,
+                                          lWorldYRotation.zAxis);
+    lTransformInOut.yAxis = RowTimesBasis(lPitched.yAxis, lWorldYRotation.xAxis, lWorldYRotation.yAxis,
+                                          lWorldYRotation.zAxis);
+    lTransformInOut.zAxis = RowTimesBasis(lPitched.zAxis, lWorldYRotation.xAxis, lWorldYRotation.yAxis,
+                                          lWorldYRotation.zAxis);
+    lTransformInOut.wAxis = LaneAdd(PointTimesAffine(lPitched.wAxis, lWorldYRotation.xAxis, lWorldYRotation.yAxis,
+                                                     lWorldYRotation.zAxis, lWorldYRotation.wAxis),
+                                    lCentreOfRotation);
+}
+
+// ----------------------------------------------------------------------------------------
+// @ 0x8220CD58 -- DWARF CameraUtils.cpp:944 (locals lbHasResolvedAnything :944, lfLength :948,
+// lIntersectionToPosition :949). Each inlined GetPackage carries its own "meState == E_STATE_GOT_PACKAGE"
+// tripwire (0x8220CD84 / 0x8220CDC4 / 0x8220CDF0), as the PC GetPackage does.
+//   0x8220CDB4  no intersection -> false
+//   0x8220CDF8  lIntersectionToPosition = lPosition - hit            vsubfp128
+//   0x8220CE24  lfLength = normal . lIntersectionToPosition          vmsum3fp128 (rule 1)
+//   0x8220CE30  `fcmpu f0(length), f31(min) ; bge 0x8220CE98`: bge is TAKEN on an unordered compare, so only an
+//               ORDERED length < lfMinDistance moves the position (a NaN length leaves it, false)
+//   0x8220CE7C  lPosition = normal * splat(lfMinDistance) + hit       vmaddfp128, one rounding per lane
+// ----------------------------------------------------------------------------------------
+bool ResolveLineTestNearestUsingNormalStrict(LineTestNearestPostBox& lPostBox, Vector3& lPosition, f32 lfMinDistance)
+{
+    bool lbHasResolvedAnything = false;                                                  // li r27, 0
+
+    if (lPostBox.GetPackage().mbIntersection)
+    {
+        const Vector3 lIntersectionToPosition = LaneSub(lPosition, lPostBox.GetPackage().mPosition);
+        const f32 lfLength = Dot3OneRounding(lPostBox.GetPackage().mNormal, lIntersectionToPosition);
+        if (lfLength < lfMinDistance)
+        {
+            lPosition = LaneMadd(lPostBox.GetPackage().mNormal,
+                                 LaneVector(lfMinDistance, lfMinDistance, lfMinDistance, lfMinDistance),
+                                 lPostBox.GetPackage().mPosition);
+            lbHasResolvedAnything = true;
+        }
+    }
+    return lbHasResolvedAnything;
 }
 
 // ============================================================================
