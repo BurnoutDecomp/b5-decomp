@@ -329,6 +329,7 @@ namespace Io
         GameEventQueue*       GetGameEventQueue();
         // X360 0x82695128 -- the gui-audio event results @ +0x13730.
         const GuiAudioEventResults* GetGuiAudioEventResults() const;
+        void SetGuiAudioEventResults(const GuiAudioEventResults& arResults) { mGuiAudioEventResults = arResults; }
         // X360 0x82695078 -- the gui event queue pointer @ +0xEBA8.
         const GuiEventQueue* GetGuiEventQueue() const;
         // X360 0x82694F28 -- the player's active-race-car slot index @ +0x2F10.

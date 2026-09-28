@@ -14,12 +14,15 @@
 struct CrashComboItemEvent;
 struct TriggerCrashBreakerEvent;
 struct PickupEvent;
-struct VehicleLeaptEvent;
 
 // [showtime-score 2026-08-29] DealWithShowtimeStunt names its argument by pointer only, so a
 // forward declaration keeps BrnGameActions.h out of this keystone header (the by-value embed
 // rule above). The definition lives in GameSource/GameState/BrnGameActions.h.
 namespace BrnGameState { namespace GameStateModuleIO { struct WorldStuntAction; } }
+
+// DealWithVehicleLeaping's argument is the game event GameStateModuleIO::VehicleLeaptEvent (event 47);
+// its home is GameSource/GameState/BrnGameEvents.h. Pointer-only here, same rule as above.
+namespace BrnGameState { namespace GameStateModuleIO { struct VehicleLeaptEvent; } }
 
 // [FX-GS2 2026-09-23, G10-D9] DealWithRemovedTraffic names the GUI's removed-traffic record by
 // pointer only (its home is GameSource/Gui/BrnGuiEventTypeDefs.h), same rule as above.
@@ -135,7 +138,7 @@ struct CrashModeScoring
                                       BrnTraffic::VehicleScoreCategory* lpeVehicleScoreCategory,
                                       s32* lpiScoreMultiplierEarned,
                                       s32* lpiComboBonusEarned);                    // X360 0x82338778
-    void DealWithVehicleLeaping(const VehicleLeaptEvent* lpLeapEvent);             // X360 0x82312980
+    void DealWithVehicleLeaping(const GameStateModuleIO::VehicleLeaptEvent* lpLeapEvent);   // ProcessGameEvents case 47
     // [FX-SHOWTIME2 2026-09-24] DWARF BrnCrashModeScoring.h:152 (body :763). EMPTY on both consoles:
     // the ARTIST call site, ProcessGameEvents case 52 @0x823A3E08, lands on a lone `blr` @0x8284CB38
     // (ICF-folded, named BaseCollisionGenerator::Destruct there) and the PS3 body (DecFIGS 0x1CD04C)

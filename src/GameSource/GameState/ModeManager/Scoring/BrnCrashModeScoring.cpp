@@ -485,7 +485,7 @@ namespace BrnGameState
     // bodied here against the raw first word with a clearly-flagged reinterpret so the count
     // arithmetic is preserved. Replace with the named accessor once VehicleLeaptEvent lands.
     // ------------------------------------------------------------------------
-    void CrashModeScoring::DealWithVehicleLeaping(const VehicleLeaptEvent* lpLeapEvent)
+    void CrashModeScoring::DealWithVehicleLeaping(const GameStateModuleIO::VehicleLeaptEvent* lpLeapEvent)
     {
         const s32 liNumLeaptThisEvent = *reinterpret_cast<const s32*>(lpLeapEvent); // FLAG: un-homed field
         miNumCarsLeaped += liNumLeaptThisEvent;
@@ -1301,5 +1301,24 @@ namespace BrnGameState
     f32 CrashModeScoring::GetBestAirTime() const
     {
         return mfLongestJumpAirTime;     // +0x31C
+    }
+
+    // GetOverallScore -- the showtime score: a hundred points per yard travelled, plus the raw
+    // crash score, all times the crash multiplier. An inline of the original header (its local
+    // liOverallScore is the only trace it leaves), so it has no symbol of its own. Recovered from
+    // the copy inlined in ModeManager::SendModeStopMessages' leaving-showtime post:
+    //   lfs +0x308 ; fmuls by the metres-to-yards word ; fctiwz ; mulli 100 ;
+    //   add +0x2DC ; mullw +0x2E4
+    // The truncating float-to-int conversion is the console's (fctiwz rounds toward zero).
+    // The same sequence is inlined in ModeManager's results record and in
+    // GameStateModule::UpdateRoadRulesManager.
+    s32 CrashModeScoring::GetOverallScore() const
+    {
+        // Metres to yards: image word 0x3F8BFB85, already dumped for the results record.
+        const f32 KF_METRES_TO_YARDS = 1.0936132669448853f;
+
+        const s32 liYardsTravelled = static_cast<s32>(mfDistanceTravelled * KF_METRES_TO_YARDS);
+        const s32 liOverallScore   = (liYardsTravelled * 100 + miBaseScore) * miScoreMultiplier;
+        return liOverallScore;
     }
 }

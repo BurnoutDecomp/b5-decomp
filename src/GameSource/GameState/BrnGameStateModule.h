@@ -866,6 +866,12 @@ public:
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
         GameStateModuleIO::GameActionQueue* lpActionQueue);
 
+    // ProcessGameEvents case 47, the leap relay: CrashModeScoring::DealWithVehicleLeaping on the
+    // event, then action 139 (1 byte, GUI 393).
+    void ProcessGameEventsVehicleLeapingBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue);
+
     // [boost-ticker wave] NOT A CONSOLE FUNCTION -- the shared AddEvent + opt-in
     // BRN_BOOST_TICKER_DIAG witness the eight arms above post through, so each arm reads as
     // the console's own one-liner. See its body.

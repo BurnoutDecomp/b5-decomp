@@ -827,6 +827,70 @@ void GameStateModule::ProcessGameEventsShowtimeBounceBringUp(
 }
 
 // ============================================================================
+// ProcessGameEventsVehicleLeapingBringUp -- the extracted CASE-47 arm of
+// GameStateModule::ProcessGameEvents (the leap relay). Two calls, nothing else:
+//     CrashModeScoring::DealWithVehicleLeaping(this+0x1DF0 (the crash scorer), the event)
+//     AddEvent(queue, a one-byte stack slot the console never writes, 139, 1)
+// The scorer adds the event's leap count to miNumCarsLeaped and resets its event-idle timer
+// (the idle ladder HasCrashModeEnded reads). Action 139 is the payload-less VEHICLE_LEAPT tag the
+// showtime GUI translator turns into GUI 393. Producer of event 47:
+// CrashPlayManager::UpdateCarLeaping, carried by BridgeRaceCarEntityInfoToOutput_PrePhysics and
+// the post-world carry queue. No Clear here (PreWorldUpdateStuntBringUp owns it), no guard: the
+// console runs the arm in every mode.
+// ============================================================================
+namespace
+{
+    // Game event 47, the id CrashPlayManager::UpdateCarLeaping posts (size 4). Not in
+    // EGameEventType yet; spelled here the way that producer spells it until the enumerator lands.
+    const s32 KI_EVENT_VEHICLE_LEAPT = 47;
+}
+
+void GameStateModule::ProcessGameEventsVehicleLeapingBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (lpGameEventQueue == 0 || lpActionQueue == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        if (liType == KI_EVENT_VEHICLE_LEAPT)
+        {
+            CrashModeScoring* const lpCrashScorer = mModeManager.GetScoringSystem()->GetCrashScorer();
+            lpCrashScorer->DealWithVehicleLeaping(
+                reinterpret_cast<const GameStateModuleIO::VehicleLeaptEvent*>(lpEvent));
+
+            const GameStateModuleIO::GameAction<GameStateModuleIO::E_ACTION_VEHICLE_LEAPT> lLeaptAction = {};
+            lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lLeaptAction),
+                                    GameStateModuleIO::E_ACTION_VEHICLE_LEAPT,
+                                    static_cast<s32>(sizeof(lLeaptAction)));
+
+            // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_SHOWTIME_DIAG), first 32 lines.
+            {
+                static const bool sbDiag      = (getenv("BRN_SHOWTIME_DIAG") != 0);
+                static s32        siLinesLeft = 32;
+                if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    --siLinesLeft;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[showtime] event 47 -> action 139: leapt total "
+                        << lpCrashScorer->GetNumCarsLeapt() << "\n";
+                }
+            }
+        }
+
+        const CgsModule::Event* lpCurrent = lpEvent;
+        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+    }
+}
+
+// ============================================================================
 // [boost-ticker wave] The shared post + its opt-in witness. NOT a console function: the
 // console emits a bare AddEvent per arm.// ============================================================================
 // [boost-ticker wave] The shared post + its opt-in witness. NOT a console function: the
@@ -1536,6 +1600,10 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // director (MainDirector::ProcessInputQueue cases 144 / 145), RaceCarEntityModule (144 ->
     // CrashPlayManager::OnBounce) and the GUI translator (144 -> GUI event 402).
     ProcessGameEventsShowtimeBounceBringUp(&lGameEventQueue, lpActionQueue);
+    // The dispatcher's CASE-47 arm (the leap relay), same walk, same must-run-before-the-Clear
+    // constraint. It scores the leap on the crash scorer and posts action 139, which the showtime
+    // GUI translator turns into GUI 393 in the same sub-step.
+    ProcessGameEventsVehicleLeapingBringUp(&lGameEventQueue, lpActionQueue);
     // â­ [P1 sim-pause] the dispatcher's pause-family arms (cases 33/35/36/93), same walk,
     // same must-run-before-the-Clear constraint; RequestPause/RequestUnpause post actions
     // 86/87/88 onto the action queue this function already holds the write lock for --

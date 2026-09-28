@@ -12,6 +12,7 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitiveListWithTriangleListJobDesc.h" // the type-11 descriptor
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitiveListWithTriangleListStreamJobDesc.h" // the type-12 descriptor + its StreamCommand
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitivePairListJobDesc.h" // the type-10 descriptor (CollidePrimitivePairList)
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSweptSphereListWithTriangleListJobDesc.h" // the type-13 descriptor (CollideSweptSphereListWithTriangleList)
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h"        // SimpleDataStreamProducer (CreateStreamProducer)
 #include "SDKs/EATech/eajobs/job.h"                                                       // EA::Jobs::Job (AllocateJob)
 #include "SDKs/EATech/eajobs/job_types.h"                                                 // EA::Jobs::Param (the inline dispatch)
@@ -530,6 +531,58 @@ u16 BaseCollisionGenerator::CollidePrimitivePairList(const PrimitivePairList* lp
 
     // 0x828141CC `mr r3, r30` -- no truncation on the return path; the u16 return type is the
     // DWARF's (CgsCollisionGenerator.h:292). All five measured call sites drop the value.
+    return static_cast<u16>(liResultListIndex);
+}
+
+// =================================================================================================
+// BaseCollisionGenerator::CollideSweptSphereListWithTriangleList (46 insns)
+//
+// The SYNCHRONOUS swept-sphere leg: one swept-sphere list against one triangle list, posted as a
+// single type-13 collision batch. Same steps as CollidePrimitivePairList above, with a second list
+// and the padding float. No asserts.
+//
+// Signature from the prologue: swept list, triangle list, max results, padding (a float, so its
+// integer argument slot is skipped), tag A, tag B. Max results and the two tags go straight to
+// PrepareNewPrimitiveTestResultsList; the lists, the carved result list and the padding go to
+// SweptSphereListWithTriangleListJobDesc::Prepare, which seats muJobType = 13. The returned value
+// is the result-list index, not truncated on the return path; the u16 is the declaration's.
+//
+// FLAG PC-platform leaf: the JobScheduler::AddJobs submit is replaced by running the batch entry
+// inline, exactly as in the two synchronous siblings above (the scheduler singleton does not exist
+// on this build). The perf-monitor bracket therefore times submit + execute on PC.
+// =================================================================================================
+u16 BaseCollisionGenerator::CollideSweptSphereListWithTriangleList(const SweptSphereList* lpSweptSphereList,
+                                                                   const TriangleList*    lpTriangleList,
+                                                                   u16                    lu16MaxNumCollisions,
+                                                                   f32                    lfPadding,
+                                                                   u32                    luUserTagA,
+                                                                   u16                    lu16UserTagB)
+{
+    const s32 liResultListIndex =
+        PrepareNewPrimitiveTestResultsList(lu16MaxNumCollisions, luUserTagA, lu16UserTagB);
+
+    CollisionBatch& lrBatch = maCollisionBatches[CreateNewBatch()];
+
+    SweptSphereListWithTriangleListJobDesc* lpDesc =
+        reinterpret_cast<SweptSphereListWithTriangleListJobDesc*>(
+            lrBatch.GetJobDescription().GetBuffer());
+
+    // The index is narrowed to 16 bits for the subscript only (`clrlwi`).
+    lpDesc->Prepare(lpSweptSphereList, lpTriangleList,
+                    mapCollisionResultLists[static_cast<u16>(liResultListIndex)],
+                    lfPadding);
+
+    CgsDev::PerfMonCpu::StartMonitor(_miStartJobsPerfMon);
+
+    lrBatch.SetupJob();
+    // FLAG PC-platform leaf: run the job body here instead of JobScheduler::AddJobs(batch job, 1).
+    ContactGeneratorEntry(EA::Jobs::Param(static_cast<void*>(lpDesc)),
+                          EA::Jobs::Param(static_cast<void*>(lpDesc)),
+                          EA::Jobs::Param(),
+                          EA::Jobs::Param());
+
+    CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);
+
     return static_cast<u16>(liResultListIndex);
 }
 

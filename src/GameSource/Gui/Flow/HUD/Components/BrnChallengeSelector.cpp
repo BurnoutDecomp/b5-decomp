@@ -21,7 +21,8 @@
 
 #include "GameSource/Gui/Flow/Hud/Components/BrnChallengeSelector.h"
 
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::OutputGuiEvent
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::GetOutputEventQueue
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEventWrapper
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"     // BrnGui::GuiChallengeSelectedEvent
 #include "SharedClasses/DataLists/ChallengeList.h"        // BrnResource::ChallengeList
 #include "SharedClasses/DataLists/ChallengeListEntry.h"   // BrnResource::ChallengeListEntry
@@ -40,6 +41,18 @@ namespace BrnGui
 // FriendsListComponent posts other codes (1/2) for its own transitions; the GameBridge case-573
 // consumer validates the code is in 0..3. Named here for source clarity.
 static const s32 KI_SELECTOR_ACTION_HIDE = 3;
+
+// The inlined StateInterface::OutputGuiEvent<GuiChallengeSelectedEvent>: the payload boxed in a
+// GuiEventWrapper<T,40> ({16, 573, 16} + the 16 payload bytes) and queued on channel 40 at 32
+// bytes. Built here because the shared OutputGuiEvent template queues a raw payload type on its
+// own id with no header, where the GUI-to-game bridge (channel 40 only) never reads it.
+static void PostChallengeSelected(CgsGui::StateInterface* lpStateInterface,
+                                  GuiChallengeSelectedEvent& lrEvent)
+{
+    CgsGui::GuiEventWrapper<GuiChallengeSelectedEvent, 40> lRecord(lrEvent);
+    lpStateInterface->GetOutputEventQueue()->AddEvent(
+        reinterpret_cast<const CgsModule::Event*>(&lRecord), 40, static_cast<s32>(sizeof(lRecord)));
+}
 
 // DWARF: extern const char[8] KAC_TEXT_FIELD_NAME (BrnChallengeSelector.cpp:23); "Text_mc".
 const char ChallengeSelector::KAC_TEXT_FIELD_NAME[8] = "Text_mc";
@@ -232,14 +245,6 @@ void ChallengeSelector::Hide()
     // Build and post the "challenge selected" GUI event. All 16 payload bytes are written; the
     // X360 leaves the word at +0x0C of the 32-byte wrapper record uninitialised (nothing is
     // stored between var_28 @+0x08 and the payload copy @+0x10).
-    //
-    // KNOWN DIVERGENCE, owned elsewhere -- do NOT "fix" it here. GuiChallengeSelectedEvent is one
-    // of the RAW payload types (no CgsModule::Event / GuiEvent<N> base; see
-    // BrnGuiDemangledEventTypes.h:304), and the committed OutputGuiEvent<T> body direct-passes
-    // the event instead of wrapping it, so this call queues AddEvent(&lEvent, 573, 16), not the
-    // AddEvent(&wrapper, 40, 32) measured above. That raw-vs-GuiEvent<N> split is FLAG-owned by
-    // CgsGuiStateInterface.h (see the FLAG above its OutputGuiEvent template) and must be
-    // resolved there, across the payload headers, not by changing this call site.
     GuiChallengeSelectedEvent lEvent;
     lEvent.mChallengeID     = lpEntry->GetChallengeID();  // ld 0xC0 -> mChallengeID
     lEvent.miSelectorAction = KI_SELECTOR_ACTION_HIDE;    // li 3
@@ -248,7 +253,7 @@ void ChallengeSelector::Hide()
     // ChallengeListEntry.h). It returns 1/2/3, stored into the event's 32-bit +0x0C word.
     lEvent.miChall          = static_cast<s32>(lpEntry->GetChallengeStyle());
 
-    mpStateInterface->OutputGuiEvent(lEvent);
+    PostChallengeSelected(mpStateInterface, lEvent);
 }
 
 // -----------------------------------------------------------------------------
@@ -406,15 +411,6 @@ void ChallengeSelector::SelectAvailableChallenge(s32 liAvailableChallengeIndex, 
         // pad word @+0x0C never stored -- followed by the 16-byte payload
         // { mChallengeID, 2, GetChallengeStyle() } @+0x10, then calls
         // mOutEventQueue.AddEvent(&wrapper, /*channel*/40, /*size*/32) (`li r5,0x28` / `li r6,0x20`).
-        //
-        // KNOWN DIVERGENCE, owned elsewhere -- do NOT "fix" it here or at the call below.
-        // GuiChallengeSelectedEvent is one of the RAW payload types (no CgsModule::Event /
-        // GuiEvent<N> base; BrnGuiDemangledEventTypes.h:304), and the committed OutputGuiEvent<T>
-        // body direct-passes the event rather than wrapping it, so what this queues today is
-        // AddEvent(&lEvent, 573, 16) -- not the record measured above. Identical situation to the
-        // reviewed Hide in BrnChallengeSelector.cpp. The raw-vs-GuiEvent<N> split is FLAG-owned
-        // by CgsGuiStateInterface.h and has to be resolved in that header (and the payload
-        // headers it names), never by editing this call site.
         GuiChallengeSelectedEvent lEvent;
         lEvent.mChallengeID     = lpChallengeEntry->GetChallengeID();   // ld r11, 0xC0(r30)
         lEvent.miSelectorAction = KI_SELECTOR_ACTION_SELECT;            // li r11, 2
@@ -422,7 +418,7 @@ void ChallengeSelector::SelectAvailableChallenge(s32 liAvailableChallengeIndex, 
         // 41-char-truncated form of GetChallengeStyle (see ChallengeListEntry.h).
         lEvent.miChall          = static_cast<s32>(lpChallengeEntry->GetChallengeStyle());
 
-        mpStateInterface->OutputGuiEvent(lEvent);
+        PostChallengeSelected(mpStateInterface, lEvent);
     }
 }
 

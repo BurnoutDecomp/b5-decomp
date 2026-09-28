@@ -268,6 +268,15 @@ private:
         EActiveRaceCarIndex aePlayerCarIndex,
         const Io::RootInputBuffer::GameActionQueue& arEvents);
 
+    // Turn each game event 31 (VehicleImpactEvent) into sound message 19 for every
+    // instance of state manager 2, effect object 4. No other game event is handled.
+    void ProcessGameEventQueue(EActiveRaceCarIndex aePlayerCarIndex,
+                               const Io::RootInputBuffer::GameEventQueue* apEvents);
+
+    // React to director-camera flag edges: the junkyard flash and new-car-intro stings,
+    // the online-intro rival sweep and the online race start trigger.
+    void ProcessCameraFlags(const Io::RootInputBuffer::DirectorCamera& arCamera);
+
     // Members in DWARF source order (BrnSoundLogicModule.h:365-383). Only the two
     // touched members are real typed members; the rest of the class tail is omitted
     // from this slice (see header note).
@@ -351,6 +360,16 @@ private:
     Attrib::Gen::burnoutglobaldata mBurnoutGlobalData;
     BrnSound::Logic::FrameInformation mFrameInformation;
     CgsNumeric::Random mRandomGenerator;
+
+    // Latched by the first online-intro rival sweep so the online-race VO goes out once;
+    // cleared again when the intro-start camera flag rises (ProcessCameraFlags).
+    bool mbSeenAnyRivals;
+
+    // The volume hold PrepareStateManagersOnEnteringGameplay opens: while
+    // mbHoldingVolumes is set, Update counts mfHoldTimer down by the game dt and posts
+    // the release once it runs out.
+    f32  mfHoldTimer;
+    bool mbHoldingVolumes;
 
     // (phase B5: the by-value lEnvironment member is RETIRED -- the LOGIC Environment is
     // the ENGINE base's mEnvironment @+0x2950, reached via GetEnvironment().)

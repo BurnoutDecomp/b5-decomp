@@ -131,6 +131,12 @@ namespace Vehicle
         const u32 KU_TRAFFIC_BOX_WORLD_QUEUE         = 10;   // `li r7, 0xA` == maCustomEventQueues[10]
         const u16 KU16_TRAFFIC_BOX_USER_TAG_B        = 0;    // `li r8, 0`
         const f32 KF_TRAFFIC_BOX_CONTACT_PADDING     = 0.0f; // flt_82001CC0
+        const f32 KF_TRAFFIC_SWEPT_CONTACT_PADDING   = 0.0f; // the same rodata word, the swept arm's padding
+
+        // BRN_SWEPT_DIAG witness caps: every batch among the first few, then only batches with
+        // results, never more than the line cap in total.
+        const s32 KI_SWEPT_DIAG_FIRST_BATCHES        = 4;
+        const s32 KI_SWEPT_DIAG_MAX_LINES            = 32;
 
         // DoTrafficWorldContactOrdering @0x825C8F18 owner tags.
         const u32 KU_OWNER_WORLD                     = 0;    // BrnWorld::E_ENTITYTYPE_WORLD
@@ -884,7 +890,10 @@ namespace Vehicle
     //   SIMPLE (mu8PhysicalType == 1)   -> GetSimpleVehicleBox into a 1-slot local pair builder,
     //                                      CollidePrimitiveListAgainstTriangleList (tag 10).
     //   FULL, sphere budget left        -> the deformation spheres into this frame's sphere-triangle
-    //                                      collide stream (tag == the caller's queue index, 9).
+    //                                      collide stream (tag == the caller's queue index, 9), or,
+    //                                      when the car uses swept spheres, one synchronous
+    //                                      swept-sphere batch (CollideSweptSphereListWithTriangleList,
+    //                                      same tag).
     //   FULL, budget exhausted (>= 21)  -> the deformed BBox into the same 1-slot builder path, and
     //                                      mbUsingBoxWithWorld is latched TRUE for this frame.
     // Then ONE ContactGenList marker entry: side A owner 0 (WORLD), side B the car's GLOBAL id
@@ -902,8 +911,8 @@ namespace Vehicle
     //   0x8261C060  the three arms; 0x8261C288 the marker entry
     //
     // EVERY per-frame contact generator appends EXACTLY ONE ContactGenList entry and carves EXACTLY
-    // ONE CollisionResultList, and AddContactResultsToQueue walks the two in lockstep. Both early
-    // returns below therefore return BEFORE the marker entry, never between the two.
+    // ONE CollisionResultList, and AddContactResultsToQueue walks the two in lockstep. The early
+    // return below therefore returns BEFORE the marker entry, never between the two.
     // ==============================================================================================
     void VehicleManager::DoTrafficCarWorldContactGeneration(
         s32 liTrafficIndex, BrnPhysics::Deformation::DeformationManager* lpDeformationManager,
@@ -915,6 +924,7 @@ namespace Vehicle
     {
         typedef CgsSceneManager::CgsCollision::TriangleList TriangleList;
         typedef CgsSceneManager::CgsCollision::SphereList   SphereList;
+        typedef CgsSceneManager::CgsCollision::SweptSphereList SweptSphereList;
         typedef CgsSceneManager::CgsCollision::PrimitivePairListBuilder PrimitivePairListBuilder;
 
         CGS_ASSERT(lpLinearMalloc != nullptr, "lpMalloc != NULL");                            // :1108
@@ -1010,23 +1020,49 @@ namespace Vehicle
                 }
                 else
                 {
-                    // GATE: DoTrafficCarWorldContactGeneration @0x8261BF28 SWEPT arm (0x8261C208).
-                    // Blocker: BaseCollisionGenerator::CollideSweptSphereListWithTriangleList
-                    // @0x82814080 (this body is its ONLY caller) is neither declared nor bodied;
-                    // home CgsCollisionGenerator.h/.cpp, not this cluster's. DELETE-WHEN it lands
-                    // (args: swept list, tri list, 200, flt_82001CC0 0.0f, queue index, 1).
-                    static bool sbLoggedSweptTrafficGate = false;
-                    if (!sbLoggedSweptTrafficGate)
+                    // swept spheres -> one synchronous swept-sphere batch against the cache
+                    const CgsGeometric::SweptSphere* lpSweptSpheres = 0;   // zeroed before the query
+                    const s32 liNumSweptSpheres =
+                        lpDeformationManager->GetSweptSpheresForCar(lPhysicsEntityId, &lpSweptSpheres);
+                    CGS_ASSERT(lpSweptSpheres != nullptr, "lpSpheres");                   // :1231
+
+                    SweptSphereList lSweptSphereList;
+                    lSweptSphereList.mpaSweptSpheres = reinterpret_cast<u8*>(
+                        const_cast<CgsGeometric::SweptSphere*>(lpSweptSpheres));
+                    lSweptSphereList.miNumSpheres    = liNumSweptSpheres;
+
+                    lTriangleList.CheckAlignment();
+                    lTriangleList.ValidateTriangles();
+                    const u16 lu16SweptResultList =
+                        lpContactGenerator->CollideSweptSphereListWithTriangleList(
+                            &lSweptSphereList, &lTriangleList,
+                            KU16_COLLIDE_MAX_RESULTS,                 // 200
+                            KF_TRAFFIC_SWEPT_CONTACT_PADDING,         // 0.0f
+                            luQueueIndex,                             // tag A == the caller's queue (9)
+                            1);                                       // tag B
+
+                    // [FLAG PC witness] BRN_SWEPT_DIAG: the batch ran inline, so its result count
+                    // is already final here. Not in the console build; first-N capped.
+                    static const bool sbSweptDiag = (getenv("BRN_SWEPT_DIAG") != 0);
+                    static s32        siSweptBatches = 0;
+                    static s32        siSweptLines   = 0;
+                    if (sbSweptDiag && CgsDev::Log::gpDebugPrint != nullptr)
                     {
-                        sbLoggedSweptTrafficGate = true;
-                        if (CgsDev::Message::gxMessageFilterFlags & 1)
+                        ++siSweptBatches;
+                        const s32 liNumResults = static_cast<s32>(
+                            lpContactGenerator->GetResultList(lu16SweptResultList).mu16NumResults);
+                        if (siSweptLines < KI_SWEPT_DIAG_MAX_LINES
+                            && (siSweptBatches <= KI_SWEPT_DIAG_FIRST_BATCHES || liNumResults > 0))
+                        {
+                            ++siSweptLines;
                             *CgsDev::Log::gpDebugPrint
-                                << "conductor gate: DoTrafficCarWorldContactGeneration @0x8261BF28 "
-                                   "SWEPT arm reached but not landed -- needs BaseCollisionGenerator::"
-                                   "CollideSweptSphereListWithTriangleList @0x82814080 [FLAG PC boot "
-                                   "gate]. Reported once, not per frame\n";
+                                << "[swept] traffic=" << liTrafficIndex
+                                << " batches=" << siSweptBatches
+                                << " spheres=" << liNumSweptSpheres
+                                << " triBatches=" << liNumTriangleBatches
+                                << " results=" << liNumResults << "\n";
+                        }
                     }
-                    return;   // before the marker entry -- the lockstep note in the banner
                 }
             }
             else

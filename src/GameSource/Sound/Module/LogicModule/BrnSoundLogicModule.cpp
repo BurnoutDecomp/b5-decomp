@@ -13,6 +13,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModuleIo.h"  // Io::LogicPreUpdateOutputBuffer (PreUpdate; phase C1)
 #include "GameSource/Sound/Module/LogicModule/BrnMessageData.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
+#include "GameSource/GameState/BrnGameEvents.h"   // GameStateModuleIO::VehicleImpactEvent (game event 31)
 
 // BrnSound::Module::SoundLogicModule -- accessor bodies recovered from
 // BURNOUT_X360_ARTIST.XEX. See BrnSoundLogicModule.h for the layout/slice notes.
@@ -122,6 +123,16 @@ namespace
         0x00075542u, 0x00075540u, 0x00075541u, 0x000782CDu, 0x000782CEu, 0x000782A8u,
         0x0007725Au, 0x00077255u, 0x0007FC80u, 0x0004E38Cu, 0x0007B999u
     };
+
+    // [FLAG PC witness] BRN_SOUNDLOGIC_DIAG: the [snd-logic] lines (game event in -> sound
+    // message out). The env var is read once; each line family is capped.
+    const s32 KI_SOUNDLOGIC_DIAG_MAX_LINES = 32;
+
+    bool SoundLogicDiagEnabled()
+    {
+        static const bool sbEnabled = (std::getenv("BRN_SOUNDLOGIC_DIAG") != 0);
+        return sbEnabled && CgsDev::Log::gpDebugPrint != 0;
+    }
 }
 
 void SoundLogicModule::ResourcesAreReady()
@@ -262,6 +273,12 @@ void SoundLogicModule::Construct()
 
     // The dispatch state block (X360 this+0x13570) starts zeroed.
     std::memset(&mDispatchState, 0, sizeof(mDispatchState));
+
+    // FLAG host seed: no console constructor writes these three; the console relies on the
+    // module block being zero at allocation, as it does for the unique-id cursor above.
+    mbSeenAnyRivals  = false;
+    mfHoldTimer      = 0.0f;
+    mbHoldingVolumes = false;
 
     // The streaming-resource broker: bring up its request queues + requested/queued pools.
     mResourceRegistrar.Construct();
@@ -579,17 +596,13 @@ void SoundLogicModule::ProcessGuiEvents(
                     << " simPausedBit " << static_cast<s32>(mDispatchState.mu8SimPausedBit) << "\n";
             break;
 
-        case 88:  // Stop / start the playback DAC outright. X360:
-                  //   lpEnv = CgsSound::Playback::Module::Module::GetEnvironment(this+568);
-                  //   *payload ? Playback::Environment::StopDac(lpEnv)
-                  //            : Playback::Environment::StartDac(lpEnv);
-                  // The PLAYBACK module the logic module reaches at +0x238 has no named
-                  // accessor in this tree (GetEnvironment() here is the LOGIC
-                  // environment, a different object), and StartDac/StopDac
-                  // (0x82680F50 / 0x82680FE8) are declaration-only on
-                  // CgsSound::Playback::Environment. NOT reconstructed; reported rather
-                  // than pointed at the wrong environment -- silencing the DAC through
-                  // the wrong object would kill ALL audio.
+        case 88:  // GuiMuteDac: stop the playback DAC when the byte is set, start it
+                  // otherwise. The environment is the embedded PLAYBACK module's, not the
+                  // logic Environment GetEnvironment() returns.
+            if (*lpuPayload)
+                GetPlaybackModule().GetEnvironment()->StopDac();
+            else
+                GetPlaybackModule().GetEnvironment()->StartDac();
             break;
 
         case 256:  // A GUI state whose +440 word is 15 asks for online VO 1.
@@ -705,12 +718,15 @@ void SoundLogicModule::ProcessGuiEvents(
             break;
         }
 
-        case 465:  // GuiEventAudioResults: the console writes the event's first two
-                   // words straight into the sound root INPUT buffer at +79664 (the
-                   // GUI-audio results slot the effects poll), not into a message. That
-                   // slot has no named accessor in this tree; NOT reconstructed, and
-                   // reported rather than guessed at.
+        case 465:  // GuiEventAudioResults: the event's two words into the attached input
+                   // buffer's GuiAudioEventResults, the slot HUDEffect reads.
+        {
+            CGS_ASSERT(lpEvent != 0, "lpResultsEvent");
+            Io::RootInputBuffer::GuiAudioEventResults lResults;
+            std::memcpy(&lResults, lpuPayload, sizeof(lResults));
+            mpBrnLogicInputBuffer->SetGuiAudioEventResults(lResults);
             break;
+        }
 
         default:
             break;
@@ -1072,6 +1088,117 @@ void SoundLogicModule::ProcessGameActionQueue(
     }
 }
 
+// The world -> sound game events. Only a vehicle impact is handled: its three words go out
+// unchanged as sound message 19 to effect object 4 of every instance of state manager 2.
+// The player index is part of the signature but is not read.
+void SoundLogicModule::ProcessGameEventQueue(
+    EActiveRaceCarIndex /*aePlayerCarIndex*/,
+    const Io::RootInputBuffer::GameEventQueue* apEvents)
+{
+    typedef CgsSound::Io::MessageHeader MH;
+    using BrnGameState::GameStateModuleIO::VehicleImpactEvent;
+
+    static s32 siDiagImpactLines = 0;
+
+    const CgsModule::Event* lpEvent = nullptr;
+    s32 liSize = 0;
+    s32 liType = apEvents->GetFirstEvent(&lpEvent, &liSize);
+    while (lpEvent)
+    {
+        if (liType == BrnGameState::GameStateModuleIO::E_EVENT_VEHICLE_IMPACT)
+        {
+            const VehicleImpactEvent& lrImpact =
+                *reinterpret_cast<const VehicleImpactEvent*>(lpEvent);
+            PostSoundMessage(mMessageQueue, 19, 2, MH::KU16_NO_DESTINATION, 4,
+                             MH::E_EFFECT_TYPE_OBJECT, lrImpact);
+
+            // [FLAG PC witness] BRN_SOUNDLOGIC_DIAG, first N impacts.
+            if (SoundLogicDiagEnabled() && siDiagImpactLines < KI_SOUNDLOGIC_DIAG_MAX_LINES)
+            {
+                ++siDiagImpactLines;
+                *CgsDev::Log::gpDebugPrint
+                    << "[snd-logic] impact event 31 type=" << lrImpact.meImpactType
+                    << " aggressor=" << lrImpact.meAggressorActiveRaceCarIndex
+                    << " victim=" << lrImpact.meVictimActiveRaceCarIndex
+                    << " -> sound message 19 manager 2 effect 4\n";
+            }
+        }
+        liType = apEvents->GetNextEvent(lpEvent, &lpEvent, &liSize);
+    }
+}
+
+// The director camera's flag edges. A flag "rises" when it is set this frame and differs
+// from the previous frame's bit.
+//   JY_FLASH rises                    -> GUI audio trigger "CodeCameraFlash" (action 7)
+//   JY_NEW_CAR_INTRO rises            -> sound message 28, the "JunkyardNeon" sting
+//   ONLINE_RACE_INTRO_START rises     -> forget the rivals seen so far
+//   ONLINE_RACE_INTRO_RIVAL is set    -> the rival sweep FX every frame, plus the online-race
+//                                        VO (message 29) the first time
+//   ONLINE_RACE_INTRO_FINISHED rises  -> GUI audio trigger "OnlineRaceStart" (action 0)
+void SoundLogicModule::ProcessCameraFlags(const Io::RootInputBuffer::DirectorCamera& arCamera)
+{
+    typedef CgsSound::Io::MessageHeader MH;
+    typedef BrnDirector::Camera::CameraState CameraState;
+
+    static s32 siDiagCameraLines = 0;
+    const CameraState& lrState = arCamera.mState;
+
+    if (lrState.IsFlagSet(CameraState::E_FLAG_JY_FLASH) &&
+        lrState.HasChanged(CameraState::E_FLAG_JY_FLASH))
+    {
+        CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent> lMessage;
+        lMessage.Construct(6, 0, 0, 0, MH::E_EFFECT_TYPE_OBJECT);
+        lMessage.mData.Construct(7, "", "CodeCameraFlash", "");
+        QueueSoundMessage(mMessageQueue, lMessage);
+        if (SoundLogicDiagEnabled() && siDiagCameraLines < KI_SOUNDLOGIC_DIAG_MAX_LINES)
+        {
+            ++siDiagCameraLines;
+            *CgsDev::Log::gpDebugPrint << "[snd-logic] camera JY_FLASH -> CodeCameraFlash\n";
+        }
+    }
+
+    if (lrState.IsFlagSet(CameraState::E_FLAG_JY_NEW_CAR_INTRO) &&
+        lrState.HasChanged(CameraState::E_FLAG_JY_NEW_CAR_INTRO))
+    {
+        PostSoundMessage(mMessageQueue, 28, 0, 0, 2, MH::E_EFFECT_TYPE_OBJECT,
+                         CgsSound::Playback::Name(
+                             CgsSound::Playback::Name::MakeHash("JunkyardNeon")));
+        if (SoundLogicDiagEnabled() && siDiagCameraLines < KI_SOUNDLOGIC_DIAG_MAX_LINES)
+        {
+            ++siDiagCameraLines;
+            *CgsDev::Log::gpDebugPrint << "[snd-logic] camera JY_NEW_CAR_INTRO -> JunkyardNeon\n";
+        }
+    }
+
+    if (lrState.IsFlagSet(CameraState::E_FLAG_ONLINE_RACE_INTRO_START) &&
+        lrState.HasChanged(CameraState::E_FLAG_ONLINE_RACE_INTRO_START))
+    {
+        mbSeenAnyRivals = false;
+    }
+
+    if (lrState.IsFlagSet(CameraState::E_FLAG_ONLINE_RACE_INTRO_RIVAL))
+    {
+        // FxMessage::E_ONLINE_RIVAL_SWEEP (9) to the FX effect.
+        PostSoundMessage(mMessageQueue, 4, 0, 0, 3, MH::E_EFFECT_TYPE_OBJECT,
+                         static_cast<s32>(9));
+        if (!mbSeenAnyRivals)
+        {
+            PostSoundMessage(mMessageQueue, 29, 0, 0, 5, MH::E_EFFECT_TYPE_OBJECT,
+                             BrnGameState::GameStateModuleIO::E_MODE_ONLINE_RACE);
+        }
+        mbSeenAnyRivals = true;
+    }
+
+    if (lrState.IsFlagSet(CameraState::E_FLAG_ONLINE_RACE_INTRO_FINISHED) &&
+        lrState.HasChanged(CameraState::E_FLAG_ONLINE_RACE_INTRO_FINISHED))
+    {
+        CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent> lMessage;
+        lMessage.Construct(6, 0, 0, 0, MH::E_EFFECT_TYPE_OBJECT);
+        lMessage.mData.Construct(0, "", "OnlineRaceStart", "");
+        QueueSoundMessage(mMessageQueue, lMessage);
+    }
+}
+
 // ARTIST 0x826978A0 / 0x826978B8. SoundLogicModule mirrors the generic logic
 // engine's buffer pair into its typed Burnout pair. State managers use the typed
 // input during Environment::Update, so both pairs must have the same lifetime.
@@ -1204,6 +1331,24 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
     mPreUpdateOutput.mAudioCarDataLoadedQueue.Clear();
     mPreUpdateOutput.mAudioEffectsMessageQueue.Clear();
 
+    // The volume hold opened on entering gameplay: count it down by the game dt and,
+    // once it is no longer positive, release the music and submix holds.
+    if (mbHoldingVolumes)
+    {
+        if (!(mfHoldTimer > 0.0f))
+        {
+            PostSoundMessage(mMessageQueue, 15, 0, 0, 2,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, false);
+            PostSoundMessage(mMessageQueue, 15, 0, 0, 4,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, false);
+            mbHoldingVolumes = false;
+        }
+        else
+        {
+            mfHoldTimer -= af32GameDt;
+        }
+    }
+
     Io::RootInputBuffer* lpInput = static_cast<Io::RootInputBuffer*>(apInputBuffer);
     lpInput->LockForRead();
     UpdateMicrophones(lpInput);
@@ -1211,10 +1356,12 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
     UpdateFrameInformation(af32SimDt, lpInput, aeUpdateSet, lePlayerCarIndex);
     const Io::RootInputBuffer* lpReadInput = lpInput;
     ProcessGameActionQueue(lePlayerCarIndex, lpReadInput->GetGameActionQueue());
+    ProcessCarDataLoadingQueue(*lpInput->GetAudioCarDataLoadedQueueForRead());
+    ProcessGameEventQueue(lePlayerCarIndex, lpReadInput->GetGameEventQueue());
     const Io::RootInputBuffer::GuiEventQueue* lpGuiQueue = lpInput->GetGuiEventQueue();
     ProcessGuiEvents(reinterpret_cast<const CgsModule::VariableEventQueue<18432, 16>*>(
         lpGuiQueue));
-    ProcessCarDataLoadingQueue(*lpInput->GetAudioCarDataLoadedQueueForRead());
+    ProcessCameraFlags(*lpReadInput->GetDirectorCamera());
     lpInput->UnlockForRead();
 
     CgsSound::Logic::Module::Update(af32GameDt, af32SimDt, apInputBuffer, apOutputBuffer);
@@ -1290,13 +1437,8 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
 // registrar-drain bracket, which is the SAME lock/bridge/unlock shape 0x82703FA8..0x82704000
 // uses. Retire this driver when that chain lands; the body below is the console's own.
 //
-// [FLAG] the console's SUCCESS tail (0x826EC17C..0x826EC234) is NOT reproduced: three
-// CgsSound::Io::Message<bool> posts into mMessageQueue -- {event 15, E_EFFECT_TYPE_OBJECT,
-// state-manager 0, effect 2}, {event 15, object, effect 4} and {event 43,
-// E_EFFECT_TYPE_CONTROL, effect 0}, all payload true -- plus `*(this+0x135D0) = 1` and
-// `*(f32*)(this+0x135CC) = [0x82001C98]`. Neither member has a reconstructed name in this
-// header and neither event id has an identified consumer, so they are named here rather than
-// guessed. The prepare loop is the load-bearing half and is reproduced exactly.
+// On success the console holds the music and submix volumes (message 15, true) for one
+// second, restarts the mixer (message 43) and returns true; Update releases the hold.
 // ===========================================================================================
 bool SoundLogicModule::PrepareStateManagersOnEnteringGameplay(s32 luPrepareMask)
 {
@@ -1311,6 +1453,19 @@ bool SoundLogicModule::PrepareStateManagersOnEnteringGameplay(s32 luPrepareMask)
             }
         }
     }
+
+    // E_SOUNDMESSAGE_HOLD_VOLUMES to the music effect (2) and the submixes effect (4).
+    PostSoundMessage(mMessageQueue, 15, 0, 0, 2,
+                     CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, true);
+    PostSoundMessage(mMessageQueue, 15, 0, 0, 4,
+                     CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, true);
+
+    mbHoldingVolumes = true;
+    mfHoldTimer      = 1.0f;
+
+    // E_SOUNDMESSAGE_RESTART_MIXER to the mixer control (0).
+    PostSoundMessage(mMessageQueue, 43, 0, 0, 0,
+                     CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL, true);
 
     return true;
 }
