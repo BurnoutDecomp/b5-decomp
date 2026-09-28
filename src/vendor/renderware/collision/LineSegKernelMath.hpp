@@ -16,6 +16,9 @@
 // and, since 2026-09-27 (owner's list, lane L2), the two primitive tests those kernels call:
 //   rw::collision::rwcSphereLineSegIntersect        @ 0x82BA81D8
 //   rw::collision::rwcCylinderLineSegIntersect      @ 0x82BAF8A0
+// and, since 2026-09-28 (lane L2, stage (c)), the clip the fat cylinder's torus arm builds (VmxMin / VmxMax / Fsel):
+//   rw::collision::AALineClipper::Init              @ 0x828AED60   (AALineClipper.cpp)
+//   rw::collision::AALineClipper::AALineClipper     @ 0x82BAE3C8
 //
 // The rounding is chosen per instruction (scratch/CRASHPARITY_0922/ROUNDING_RULE.md):
 //   rule 3  vmaddfp / vnmsubfp / vmaddfp128 / fmadds / fmsubs / fnmsubs round ONCE. std::fma is used with the
@@ -191,6 +194,30 @@ namespace linemath
     {
         return MaddSplat(lpFrame[2], arDirection.z,
                          MaddSplat(lpFrame[1], arDirection.y, MulSplat(lpFrame[0], arDirection.x)));
+    }
+
+    // vminfp / vmaxfp: a NaN operand gives a NaN (the first NaN operand); -0 is below +0.
+    // (AALineClipper::Init @0x828AED60 / the constructor @0x82BAE3C8; the fat cylinder's torus clip.)
+    inline f32 VmxMin(f32 afA, f32 afB)
+    {
+        if (afA != afA) return afA;
+        if (afB != afB) return afB;
+        if (afA < afB) return afA;
+        if (afB < afA) return afB;
+        return std::signbit(afA) ? afA : afB;
+    }
+    inline f32 VmxMax(f32 afA, f32 afB)
+    {
+        if (afA != afA) return afA;
+        if (afB != afB) return afB;
+        if (afA > afB) return afA;
+        if (afB > afA) return afB;
+        return std::signbit(afA) ? afB : afA;
+    }
+    // fsel fD, fA, fC, fB (IDA prints that order): fA >= 0 (a -0 included) ? fC : fB -- a NaN fA takes fB.
+    inline f32 Fsel(f32 afA, f32 afC, f32 afB)
+    {
+        return (afA >= 0.0f) ? afC : afB;
     }
 
     // The walk's axis successor, `slw r11, 1, axis ; clrlwi r10, r11, 30`: 0 -> 1 -> 2 -> 0.

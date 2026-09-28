@@ -13,22 +13,21 @@
 //
 // No DWARF hints exist for this TU, so the LAYOUT below is
 // reconstructed from the X360 VMX asm. The bodies are hand-vectorised (lvx128 /
-// vsubfp / vmaxfp / vrefp + Newton-Raphson refine / fsel / vandc sign-masking),
-// so -- following the project's FeatureEdge / Triangle4 precedent -- they are
-// lowered to a SEMANTIC, portable, named-member float reconstruction rather than
-// an inline-asm transcription. The store ORDER and offsets are preserved.
+// vsubfp / vmaxfp / vrefp + Newton-Raphson refine / fsel / vandc sign-masking);
+// since 2026-09-28 (lane L2, stage (c)) they are computed lane by lane as the
+// console computes them, every .rdata word read from the image (see the .cpp;
+// tests/run_l2_aalineclipper.py replays the ARTIST words run on emu64).
 //
 // The asm stores four 16-byte rows into the object:
-//     +0x00  mClipMin   : the per-axis lower clip coordinate (start - padded)
-//     +0x10  mClipMax   : the per-axis upper clip coordinate (end + padded)
-//     +0x20  mRecipSpan  : 1 / (mClipMax - mClipMin), reciprocal refined with a
-//                          vrefp + two Newton-Raphson steps
-//     +0x30  mPadExtent  : the segment direction (delta) plus the robustness pad
+//     +0x00  mClipMin   : the per-axis lower clip coordinate (start - signed pad)
+//     +0x10  mSpan      : (end + signed pad) - mClipMin
+//     +0x20  mRecipSpan : 1 / mSpan, vrefp refined by two Newton-Raphson steps
+//     +0x30  mPadExtent : the seed (v3) plus the pad's growth
 //
-// Several .rdata constants are reached only by reference in the asm and carry no
-// value in the export; they are FLAGGED as inferred (see the .cpp):
-//     flt_820F2708, flt_820AD47C  -- robustness epsilons
-//     flt_82001C98, flt_820037C8  -- the fsel sign-select pair
+// .rdata words (tools/re/x360rd.py):
+//     flt_820F2708 == 0.5   -- the scale of the segment's delta
+//     flt_820AD47C == 1e-6  -- the pad's floor, relative to the largest |coordinate|
+//     flt_82001C98 == 1.0, flt_820037C8 == -1.0  -- the fsel sign-select pair
 // ===========================================================================
 
 namespace rw
@@ -75,15 +74,14 @@ public:
     AALineClipper* Init(const Vec4& rStart, const Vec4& rEnd, const Vec4& rDir,
                         const Aabb* lpBox);
 
-    // .rdata constants reached only by reference (no value in the export).
-    // FLAGGED as inferred.
-    static const f32 KF_PAD_EPSILON;     // flt_820F2708 (Init robustness pad)
-    static const f32 KF_ABS_EPSILON;     // flt_820AD47C (abs-extent epsilon)
-    static const f32 KF_FSEL_POS;        // flt_82001C98 (fsel value for sign>=0)
-    static const f32 KF_FSEL_NEG;        // flt_820037C8 (fsel value for sign<0)
+    // .rdata words (tools/re/x360rd.py).
+    static const f32 KF_HALF_DELTA;      // flt_820F2708 == 0x3F000000 (0.5: the delta's scale)
+    static const f32 KF_ABS_EPSILON;     // flt_820AD47C == 0x358637BD (1e-6: the pad floor's scale)
+    static const f32 KF_FSEL_POS;        // flt_82001C98 == 0x3F800000 (fsel value for sign >= 0)
+    static const f32 KF_FSEL_NEG;        // flt_820037C8 == 0xBF800000 (fsel value for sign < 0)
 
     Vec4 mClipMin;     // +0x00
-    Vec4 mClipMax;     // +0x10
+    Vec4 mSpan;        // +0x10
     Vec4 mRecipSpan;   // +0x20
     Vec4 mPadExtent;   // +0x30
 };
