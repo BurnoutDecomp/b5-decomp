@@ -397,11 +397,51 @@ static void BrnDiag_BystanderLookAfter(const void* lpBehaviour, const KeyAnimCon
     CgsDev::Log::WriteToLog(lacLine);
 }
 
+// [DIAG] NOT IN THE X360 BINARY. The line budget of the two FX-LASTFIX witnesses below (L3, 2026-09-28): a flat
+// 96-line cap was used up by the junkyard's three CarSelect takes, which re-prepare every few seconds, before a run
+// reached the take its case waits for (fxlastfix_ice_spaces/20260928_072030: 3 x 32 lines, no Takendown line).
+// Now every take guid gets KU_DIAG_LINES_PER_TAKE lines, for up to KU_DIAG_TAKES guids and
+// KU_DIAG_LINES_PER_RUN lines in all.
+static const u32 KU_DIAG_LINES_PER_TAKE = 12u;
+static const u32 KU_DIAG_TAKES          = 32u;
+static const u32 KU_DIAG_LINES_PER_RUN  = 256u;
+
+struct DiagTakeBudget
+{
+    s32 maiGuid[KU_DIAG_TAKES];
+    u32 mauLines[KU_DIAG_TAKES];
+    u32 muGuids;
+    u32 muLines;
+};
+
+// Whether one more line of this take fits the budget; counts it when it does.
+static bool BrnDiag_TakeBudgetAllows(DiagTakeBudget& lrBudget, s32 liGuid)
+{
+    if (lrBudget.muLines >= KU_DIAG_LINES_PER_RUN)
+        return false;
+    u32 luSlot = 0u;
+    while (luSlot < lrBudget.muGuids && lrBudget.maiGuid[luSlot] != liGuid)
+        ++luSlot;
+    if (luSlot == lrBudget.muGuids)
+    {
+        if (lrBudget.muGuids >= KU_DIAG_TAKES)
+            return false;
+        lrBudget.maiGuid[luSlot]  = liGuid;
+        lrBudget.mauLines[luSlot] = 0u;
+        ++lrBudget.muGuids;
+    }
+    if (lrBudget.mauLines[luSlot] >= KU_DIAG_LINES_PER_TAKE)
+        return false;
+    ++lrBudget.mauLines[luSlot];
+    ++lrBudget.muLines;
+    return true;
+}
+
 // [DIAG] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The heading space's live witness (FX-LASTFIX): on a take's frames
 // 0..5, how many degrees mHeadingSpaceTransform's forward (its z row) is off the look-at's before and after the SLerp,
 // and the SLerp's own remaining angle (its angle out, angle - angle * 0.2). The console eases 20% a frame: on a frame
 // whose look-at moved, after == 0.8 x before (the arc arm; under 2 degrees the lerp arm is within a hair of it). The
-// old link stub made every after 0. 96 lines a run at most. Reads only.
+// old link stub made every after 0. The line budget is per take (DiagTakeBudget above). Reads only.
 struct HeadingEaseDiag
 {
     bool        mbOn;
@@ -466,7 +506,8 @@ static void BrnDiag_HeadingEaseReport(const void* lpBehaviour, const KeyAnimCont
         lrDiag.muFrame     = 0u;
     }
     const u32 luFrame = lrDiag.muFrame++;
-    if (luFrame >= 6u || lrDiag.muLines >= 96u)
+    static DiagTakeBudget sBudget = {};
+    if (luFrame >= 6u || !BrnDiag_TakeBudgetAllows(sBudget, liGuid))
         return;
     ++lrDiag.muLines;
     char lacLine[256];
@@ -482,7 +523,7 @@ static void BrnDiag_HeadingEaseReport(const void* lpBehaviour, const KeyAnimCont
 // 0..5, where the handler the take evaluator reads puts CAR and CAR2 -- metres off the behaviour's primary / secondary
 // vehicle, for the take's copy and for the MainDirector's shared handler (the player / the race car nearest the player)
 // -- and the yaw of HEADING2 in the copy (the eased heading space), in the shared handler (the nearest car's raw
-// transform) and of the secondary vehicle itself. 96 lines a run at most. Reads only.
+// transform) and of the secondary vehicle itself. The line budget is per take (DiagTakeBudget above). Reads only.
 struct SpacesDiag
 {
     bool        mbOn;
@@ -522,7 +563,8 @@ static void BrnDiag_SpacesReport(const void* lpBehaviour, const KeyAnimControlle
         sDiag.muFrame     = 0u;
     }
     const u32 luFrame = sDiag.muFrame++;
-    if (luFrame >= 6u || sDiag.muLines >= 96u)
+    static DiagTakeBudget sBudget = {};
+    if (luFrame >= 6u || !BrnDiag_TakeBudgetAllows(sBudget, liGuid))
         return;
     ++sDiag.muLines;
     const rw::math::vpu::Vector3& lrPrimaryAt   = lrPrimary.mRaceCarState.mTransform.wAxis;
