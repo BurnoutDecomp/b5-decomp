@@ -167,6 +167,8 @@ namespace DirectorIO
         // MainDirector::UpdateArbitrator passes it to Arbitrator::Update as lbPaused, and
         // MainDirector::Update's gameplay middle tests it too.
         bool                                               IsSimPaused() const;
+        // Inlined by ARTIST DoUpdate_Director @0x823E8F2C; DWARF :284.
+        void SetSimPaused(bool lbSimPaused) { mbSimPaused = lbSimPaused; }
 
         // ⭐ X360 @0x82206C50 (`addi r3, r28, 0x3340`, guarded by the "Not locked for reading"
         // assert at BrnDirectorModuleIO.h:583). THE GAME-ACTION QUEUE -- the per-frame stream

@@ -512,12 +512,12 @@ namespace BrnDirector
         // than pool garbage. ⚠️ GATE (unchanged): the five flag bytes that follow it.
         mAllVehicleData.Construct();
 
-        // -- REAL (2026-08-29, crash-camera wave): the player-car tracker. Its four history
-        // journals have to be Construct()ed before anything reads them -- an unconstructed
-        // DataJournal reports miSize 0, so every GetCurrent()/GetPrevious() is an assert plus a
-        // garbage sample. The tracked slot is bound to the player each frame in
-        // PreSceneQueryUpdate, where the console binds it.
-        mVehicleTracker.Construct();
+        // ARTIST does not reset mVehicleTracker here. main's DebugMemoryInit
+        // (@0x823A8ED8) zeroes the director before its C++ constructor, so the
+        // first tracking update appends one sample (mbFirstFrame is false).
+        // VehicleTracker::Construct is the replay reset; calling it here fills
+        // eight zero timesteps on the first resume, then the chase cam divides
+        // by zero. The PC's static game module provides the same initial zeros.
 
         // ⭐ REAL (was held back for host size): the camera-behaviour manager.
         mBehaviourManager.Construct();
