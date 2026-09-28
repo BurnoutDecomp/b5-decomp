@@ -168,12 +168,12 @@ f32 VisibilityCollisionPolicy::TimeUntilCollisionWithGeometry() const
     return mGeometryCollisionPredictor.GetTimeUntilCollision();
 }
 
-// @ 0x821F3858 -- h:431 wrapper assert, then the embedded vehicle predictor's accessor (its own
-// BrnVehicleCollisionPredictor.h:69 "HasPredictedCollision()" tripwire).
+// @ 0x821F3858 -- h:431 wrapper assert, then the embedded vehicle predictor's accessor
+// GetSoonestPredictedCollision (its own BrnVehicleCollisionPredictor.h:69 "HasPredictedCollision()" tripwire).
 f32 VisibilityCollisionPolicy::TimeUntilCollisionWithVehicle() const
 {
     CGS_ASSERT(WillCollideWithVehicle(), "WillCollideWithVehicle()");     // :431 (non-gating)
-    return mVehicleCollisionPredictor.TimeUntilCollision();
+    return mVehicleCollisionPredictor.GetSoonestPredictedCollision().mfTimeUntilCollision;
 }
 
 // ----------------------------------------------------------------------------
@@ -327,7 +327,8 @@ void VisibilityCollisionPolicy::ProcessSceneQueryResults(const CollisionPolicySh
     }
 
     if (mVehicleCollisionPredictor.HasPredictedCollision()
-        && mVehicleCollisionPredictor.TimeUntilCollision() < 1.0f && mbFirstFrame && mbCanFail)
+        && mVehicleCollisionPredictor.GetSoonestPredictedCollision().mfTimeUntilCollision < 1.0f && mbFirstFrame
+        && mbCanFail)
     {
         Fail(lrCamera, 10);  // E_FAILED_STARTED_TOO_NEAR_VEHICLE
     }
