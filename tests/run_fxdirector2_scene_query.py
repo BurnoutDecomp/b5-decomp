@@ -56,6 +56,7 @@ HEADERS = (POLICY_H, DIR + "Utils/BrnPostBox.h", DIR + "Utils/BrnPostOffice.h", 
            "src/GameShared/GameClasses/SceneManager/CgsSceneManagerModuleIO.h")
 EXTRA_SOURCES = (STRSTREAM_CPP, REPO / "src/GameShared/GameClasses/Module/CgsIOBuffer.cpp",
                  REPO / "src/GameShared/GameClasses/Numeric/CgsRandom.cpp",
+                 REPO / (DIR + "Camera/Utils/BrnVehicleCollisionPredictor.cpp"),
                  REPO / "src/vendor/renderware/collision/BoxVolume.cpp")   # SphereVolume::Initialize @0x82BA84E8
 BUILD_BAT = WORKFLOW / "tools/build/build_game_exe.bat"
 NUMERIC_CHECKS = 6 + 5 + 3 + 2 + 10 + 3 + 20 + 5
