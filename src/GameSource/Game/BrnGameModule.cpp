@@ -36,7 +36,6 @@
 #include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h"   // AudioEffectsMessageQueue (the empty-queue construct in DoUpdate_Effects)      // EffectsIO::InputBuffer (DoUpdate_Effects / BridgeEntityToEffects)
 #include "GameSource/GameState/BrnGameStateModuleIO.h" // GameStateModuleIO::OutputBuffer (BridgeGameStateToDirector)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // DirectorIO::SceneQuery{Input,Output}Buffer
-#include "GameSource/Director/BrnDirectorHarness.h"                  // [FX-DIRECTOR2 opt-in] Harness::SceneQueryClosureEnabled
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"   // SceneManagerIO::InputBuffer_Query / OutputBuffer (the external query leg)
 #include "GameShared/GameClasses/Module/CgsModuleUtils.h"            // CgsModule::LockBuffersForIO / UnlockBuffersForIO
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"       // [DIAG BRN_CAMCOLLIDE_DIAG] Camera::VehicleInfo
@@ -2357,8 +2356,8 @@ namespace BrnGame
     // things like crashes / takedowns / junkyard".)
     //
     // Once per director update, AFTER DirectorModule::Update has published the frame's camera, the PUBLISHED eye
-    // is put through the console's own WORLD tests, independently of whether the director's scene-query closure
-    // runs (BRN_FXD2_SCENEQUERY): the queries are staged on a private SceneManagerIO::InputBuffer_Query and
+    // is put through the console's own WORLD tests. These diagnostic queries are staged separately from
+    // the director's camera queries on a private SceneManagerIO::InputBuffer_Query and
     // answered by the same WorldModule::ExternalSceneQueriesUpdate the closure uses, so every answer comes from
     // SceneManagerModule::ProcessVolumeTestDeepest / ProcessLineTestNearest's world arms (flags 2, world only --
     // no entity candidates, so no fine-module kernel is reached by the lines):
@@ -2775,10 +2774,9 @@ namespace BrnGame
             }
         }
 
-        if (!lbPostGui && BrnDirector::Harness::SceneQueryClosureEnabled())
+        if (!lbPostGui)
         {
-            // ⭐ [FX-DIRECTOR2 2026-09-25 -- OPT-IN BRN_FXD2_SCENEQUERY, default OFF until one live run
-            // with it ON is clean] THE CONSOLE'S SCENE-QUERY LEG (DoUpdate_Director @0x823E8DE0). The
+            // The console's scene-query leg (DoUpdate_Director @0x823E8DE0). The
             // director's cameras ASK during PreSceneQueryUpdate and READ THE ANSWERS in Update; the
             // world runs their queries in between, synchronously, in this order:
             //   1. IOHelper<SceneManagerIO::InputBuffer_Query>(input stack, "SceneQuery")   0x823C1A28

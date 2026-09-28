@@ -179,6 +179,9 @@ def wiring(tree):
            and in_order(game[append:], ["->GetSceneQueryInterface()->Append(", "ExternalSceneQueriesUpdate(",
                                         "GetResultsQueue()->Append(", "mDirectorModule.Update("]))
 
+    yield ("the camera query chain has no PC opt-in gate in generation, world dispatch, result delivery or processing",
+           all("SceneQueryClosureEnabled" not in text for text in (pre, post, game, update)))
+
     ice = tree.read(ICE_CPP)
     director_sources = "".join(tree.read(DIR + name) for name in (
         "Camera/Behaviours/BrnBehaviourIceAnim.cpp", "Camera/Behaviours/BrnBehaviourGyroCam.cpp", POLICY_H[len(DIR):]))
