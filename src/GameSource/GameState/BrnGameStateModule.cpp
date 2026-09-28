@@ -2106,9 +2106,9 @@ GameStateModule::FindPlayerScoringIndexForActiveRaceCar(::EActiveRaceCarIndex le
 // SendSetupPlayerCarEvent  @ 0x8239A918   -- THE START-OF-GAME JUNKYARD ENTRY
 //
 // Console body, statement for statement (0x8239A918..0x8239AA30):
-//   1. cache the track's authored player-start pose:
-//        this+48336 = TriggerData::GetPlayerStartPosition()   (lvx128 memory+0x10)
-//        this+48352 = TriggerData::GetPlayerStartDirection()  (lvx128 memory+0x20)
+//   1. seed the profile's car pose with the track's authored player-start pose:
+//        this+48336 (Profile+0x30) = TriggerData::GetPlayerStartPosition()   (lvx128 memory+0x10)
+//        this+48352 (Profile+0x40) = TriggerData::GetPlayerStartDirection()  (lvx128 memory+0x20)
 //   2. entry = VehicleList::GetVehicleData(mpVehicleList, 0);  carId = entry->GetId()
 //   3. wheelId = WheelList::GetWheelData(mpWheelList,
 //                    FindWheelIndexFromName(entry->GetDefaultWheelName()))->mID  (miss -> left 0)
@@ -2127,19 +2127,41 @@ GameStateModule::FindPlayerScoringIndexForActiveRaceCar(::EActiveRaceCarIndex le
 // ever posts the transition-in action, so the director's meJunkyardState stays E_JY_INACTIVE and
 // ArbStateCarSelect is never reached. That was the whole gap.
 //
-// [FLAG PC bring-up] steps 1 (the two cached pose members) and 7 are DROPPED, not paraphrased:
-// the two pose members sit inside this slice's un-modelled span and have no reconstructed reader,
-// and ProgressionManager::OnDriveThru is not reconstructed. Step 4 reads the start position
-// straight from the TriggerData, which is the same value step 1 would have cached.
+// ⭐ [L4 boot order 2026-09-28] STEP 1 IS REAL: THE TWO POSE STORES ARE THE PROFILE'S CAR POSE. The console
+// stores them at this+0xBCD0 / this+0xBCE0 (`stvx128 v127, r31, r10(0xBCD0)` @0x8239A97C, `stvx128 v0, r31,
+// r9(0xBCE0)` @0x8239A980). this+0xBCA0 is mProgressionManager's embedded Profile (OnProfileLoaded's r30), so they
+// are Profile+0x30 mCarPosition and Profile+0x40 mCarDirection -- the spawn-on-load pose OnProfileLoaded
+// @0x82397310 hands FindNearestJunkyardID (`lvx128 v1, r30, 0x30` @0x823973D0). They were dropped here as "cached
+// pose members with no reader"; since the MemoryCard exit runs OnProfileLoaded (f935feb8) the reader exists, and a
+// profile that never had its pose seeded (every PC-written save, and a fresh profile) entered the junkyard nearest
+// the ORIGIN -- 312262 at (-381.6, 13.1, 915.5) -- instead of the track's start junkyard 250700: the crash sweep's
+// cell h225_s80 fired its shot from 4.8 km away (L2, scratch/flow_run/l2rdyoff_h225_s80_r1: `[sweep] shot 0/1 ...
+// from (-299.567108, 8.158300, 923.594910)`, where l2bis74_h225_s80_r1 fired from (3007.971924, -2.540363,
+// -1945.166992)).
+// On the console the one-shot runs in the first loading-scripted frame, before the MemoryCard Deserialise, so a
+// RETURNING profile's saved pose still wins; a new profile keeps the start pose (Profile::Construct @0x823708A8
+// seeds (0,0,0,0) / (1,0,0,0), and ProcessGameEvents case 110 re-runs Construct then this function).
+// [FLAG PC bring-up] step 7 stays DROPPED: ProgressionManager::OnDriveThru is not reconstructed.
 void GameStateModule::SendSetupPlayerCarEvent(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     const BrnTrigger::TriggerData* lpTriggerData = mTriggerQueryManager.GetTriggerData();
-    if (lpTriggerData == 0 || mpVehicleList == 0 || mpWheelList == 0)
+    if (lpTriggerData == 0)
     {
         return;
     }
 
+    // Step 1 -- 0x8239A934..0x8239A980: the track's authored player-start pose (`lvx128 v127, memory, 0x10`
+    // @0x8239A950, `lvx128 v0, memory, 0x20` @0x8239A978) becomes the profile's car pose.
     const Vector3 lPlayerStart = lpTriggerData->GetPlayerStartPosition();
+    BrnProgression::Profile* const lpProfile = mProgressionManager.GetProfile();
+    lpProfile->SetCarPosition(lPlayerStart);
+    lpProfile->SetCarDirection(lpTriggerData->GetPlayerStartDirection());
+
+    // [PC GUARD] the console reads both lists unconditionally (a NULL list would fault in GetVehicleData).
+    if (mpVehicleList == 0 || mpWheelList == 0)
+    {
+        return;
+    }
 
     const BrnResource::VehicleListEntry* lpEntry = mpVehicleList->GetVehicleData(0);
     if (lpEntry == 0)
