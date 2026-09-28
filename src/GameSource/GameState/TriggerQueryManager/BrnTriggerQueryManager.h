@@ -25,6 +25,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameSource/GameState/BrnGameActions.h"
 #include "BrnCommonTypes.h"                                                          // Vector3 (rw::math::vpu::Vector3)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsArray.h"                             // Array<T,N> (generic, committed)
@@ -131,6 +132,13 @@ public:
         DriveThruManager*                                                             lpDriveThruManager,
         const BrnResource::VehicleList*                                               lpVehicleList);
 
+    void SubmitTriggerQueries(GameStateModuleIO::OutputBuffer*, const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*);
+    void CacheSoundQueryPositions(const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*);
+    void PostSoundActions(GameStateModuleIO::OutputBuffer*);
+    void PostWorldUpdateSoundActions(const GameStateModuleIO::PostWorldInputBuffer*, EActiveRaceCarIndex);
+    void CheckSoundActions(const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*);
+    bool IsSoundActionPresent(EntityId, GameStateModuleIO::SoundTriggerAction::eType) const;
+
     // ---- previously-committed functions of this class (kept) ----
 
     // X360 0x82326538. Drain every armed landmark index back out as a "remove trigger" event onto
@@ -195,10 +203,8 @@ private:
     CgsID mPlayerSigTakedownGroupID;                 // this+352 (0x160)
     CgsID mPlayerSuperJumpGroupID;                   // this+360 (0x168)
     CgsID mPlayerRoadLimitGroupID;                   // this+368 (0x170)
-    // this+376 .. this+911: maSoundActions (Array<GameStateModuleIO::SoundTriggerAction,16>,
-    // DWARF h:217) -- not touched by any committed body; reserved so maActiveTriggers still
-    // lands at this+912.
-    u8 mauReserved_SoundActions[912 - 376];          // this+376 .. this+911
+    // DWARF h:217. ARTIST array starts at384 after SIMD alignment; count896.
+    Array<GameStateModuleIO::SoundTriggerAction, 16> maSoundActions;
 
     // this+912. The per-frame active-trigger set (region indexes currently armed in the world
     // TriggerEntityModule). DWARF BrnTriggerQueryManager.h:220 (Array<uint16_t,256u>). Element
@@ -235,10 +241,9 @@ private:
     // "0x1C bytes" annotation on mpTriggerData above is WRONG by 4 and is corrected here.
     CgsResource::ResourcePtr<BrnTraffic::TrafficData> mpTrafficData;   // this+1600
 
-    // this+1632 .. this+1775: maActiveRaceCarPosLastFrame[8] (Vector3[8], DWARF h:229) and
-    // mPlayerLookAheadPos (Vector3, h:230) — not touched by any committed body; reserved so
-    // mLastPlayerPosition lands at this+1776 on the console.
-    u8 mauReserved_AfterTrafficData[1776 - 1632];    // this+1632 .. this+1775
+    // ARTIST PreWorldUpdate8239F6B8 and SubmitTriggerQueries82392948.
+    Vector3 maActiveRaceCarPosLastFrame[8];
+    Vector3 mPlayerLookAheadPos;
 
     // this+1776. Cached player world position from the last trigger refresh (Vector3, 16B SIMD).
     // UpdateTriggers compares the current player position against this (squared distance >
@@ -280,6 +285,9 @@ private:
     bool mbDoSoundLookAheadThisFrame;                // this+1868
     bool mbCarHasTeleported;                          // this+1869
 
+    // DWARF h:248; ARTIST PostWorldUpdate writes/replays this32-byte action.
+    GameStateModuleIO::SoundTriggerAction mCachedLookAheadSoundAction;
+
     // Compile-time offset guards (private members -> assert from a member-fn context).
     static void _AssertLayout();
 };
@@ -308,7 +316,10 @@ public:
 
     // ---- declare-only (DWARF BrnTriggerQueryManager.h:399/408/411/414; bodies land later) ----
     void                SetPackedData(s32 liPackedData);
-    s32                 GetPackedRaceCarIndex() const;
+    s32                 GetPackedRaceCarIndex() const
+    { // Inlined at82392820..8239282C, global byte then active byte.
+        return (static_cast<s32>(meActiveRaceCarIndex) << 8) + static_cast<s32>(meGlobalRaceCarIndex);
+    }
     EGlobalRaceCarIndex GetGlobalRaceCarIndex() const;
     EActiveRaceCarIndex GetActiveRaceCarIndex() const;
 

@@ -1,3 +1,4 @@
+#include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleOutputInterface.h"
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 #include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"
@@ -86,18 +87,6 @@ static const u32 KU_REGION_TRIGGER_ID_TYPE_BITS = 0x38000000u;
 // `li r4,0x38`). It is arg1 of AddTriggerRegion; the RESOLVED region pointer is arg2.
 static const s32 KI_TRIGGER_REGION_QUERY_FLAGS = 56;
 
-// ⚠️ [FLAG PC bring-up, gateui r4 boot fix] The world-side CONSUMER of AddTriggerRegion's
-// events (TriggerEntityModule's registration drain behind WorldModule::BridgeInputToEntityModules)
-// does not drain on this build yet: every active-set rebuild re-posts the whole set, the
-// interface's fixed EventQueue fills, and from the first long drive the boot log storms
-// "EventQueue::AddEvent - Reached Max length" + "Base event queue overflow" (boot-drive
-// 2026-08-20 17:21, asserts 3..24) until the run dies. The posts feed only the world's trigger
-// volume queries (drive-thru/jump car-overlap detection via ProcessPlayerTriggers -- itself still
-// reduced on this build); maActiveTriggers, which OnPropHit walks, is written locally below and
-// is unaffected. Gate the posts OFF until the drain chain is landed and proven.
-// DELETE-WHEN TriggerEntityModule's trigger-registration drain consumes the interface queue.
-static const bool KB_POST_TRIGGER_REGIONS_TO_WORLD = false;
-
 // KillzoneAction game-action: event type 110 (0x6E), record size 264 (0x108).
 static const s32 KI_GAME_ACTION_KILLZONE       = 110;
 static const s32 KI_KILLZONE_ACTION_EVENT_SIZE = 264;
@@ -142,6 +131,8 @@ void TriggerQueryManager::Construct(BrnProgression::ProgressionManager* lpProgre
     // Empty every embedded array (live-count word -> 0). The reserved-preamble arrays
     // (maSoundActions/maLastPlayerTriggers/maLastFrameTriggers) are Construct'd in the full build
     // at +896/+1492/+1560/+1564; the two modelled here are the ones later code touches.
+    maSoundActions.Construct();      // ARTIST82364D14, count at896
+    for (auto& lrPosition : maActiveRaceCarPosLastFrame) lrPosition = Vector3{};
     maActiveTriggers.Construct();      // X360: stw 0 @ +1424
     mLandmarkIndexArray.Construct();   // X360: stw 0 @ +1864
     // ⭐ [bugwave 2026-08-23] DEFECT FIX, not an addition. The comment above used to say these
@@ -237,7 +228,6 @@ void TriggerQueryManager::UpdateTriggers(
             // X360 0x823922D4-E8: resolve the landmark's region index to its region pointer
             // (mppRegions[idx] @ +0x74 == GetRegion(idx)) and submit (flags=56, region pointer).
             const BrnTrigger::TriggerRegion* lpRegion = lpTriggerData->GetRegion(liRegionIndex);
-            if (KB_POST_TRIGGER_REGIONS_TO_WORLD)   // see the bring-up FLAG at the constant
                 lpTriggerInterface->AddTriggerRegion(KI_TRIGGER_REGION_QUERY_FLAGS, lpRegion);
         }
     }
@@ -280,11 +270,7 @@ void TriggerQueryManager::UpdateTriggers(
                 BrnWorld::TriggerEntityModuleIO::InRemoveTriggerEvent lRemoveEvent;
                 lRemoveEvent.mTriggerID =
                     static_cast<u32>(maActiveTriggers[luActive]) | KU_REGION_TRIGGER_ID_TYPE_BITS;
-                if (KB_POST_TRIGGER_REGIONS_TO_WORLD)   // see the bring-up FLAG at the constant --
-                    lpTriggerInterface->RemoveTrigger(lRemoveEvent);   // the REMOVE twin of the parked
-                                                                       // AddTriggerRegion posts (boot-drive
-                                                                       // 2026-08-20 18:18: 285 overflow
-                                                                       // asserts from this producer's queue)
+                    lpTriggerInterface->RemoveTrigger(lRemoveEvent);
             }
 
             CgsDev::PerfMonCpu::StartMonitor(gsiSpikeTrigger2);
@@ -319,7 +305,6 @@ void TriggerQueryManager::UpdateTriggers(
 
                     if (lfDistSq < lfClipDistanceSq)
                     {
-                        if (KB_POST_TRIGGER_REGIONS_TO_WORLD)   // see the bring-up FLAG at the constant
                             lpTriggerInterface->AddTriggerRegion(KI_TRIGGER_REGION_QUERY_FLAGS, lpTriggerRegion);
                         maActiveTriggers.Append(static_cast<u16>(liRegionIndex));
                     }
@@ -656,12 +641,10 @@ void TriggerQueryManager::ProcessPlayerTriggers(
 // comes from: instead of a line-test result queue it tests the player's position against the
 // loaded lane graph's light-trigger boxes directly.
 //
-// WHY A STAND-IN AT ALL: every stage of the console's producer chain is inert on this build (the
-// five "[FLAG PC boot gate] ... inert" lines the sibling banner below lists verbatim), and
-// TriggerQueryManager::SubmitTriggerQueries @0x82392680 -- the request half -- has no body here
-// either. Nothing on PC has ever written mbPlayerInTrafficLightRegion, so
-// GetPlayerCurrentTrafficLightId's own CGS_ASSERT(IsPlayerInTrafficLightRegion()) fires the
-// moment anything asks, and the whole offline event-start chain behind it is unreachable.
+// This point-test stand-in predates the sound-query reconstruction. The world
+// trigger pipeline now runs; SubmitTriggerQueries currently restores its sound
+// slice only. Traffic-light query submission/result handling still uses this
+// existing stand-in and has not been changed by the sound work.
 //
 // THE BOXES. BrnTraffic::TrafficEntityModule::ManageTriggers @0x82747518 is the console's sole
 // producer of owner-57 triggers: it walks every streamed-in hull, then every entry of that hull's
@@ -814,15 +797,8 @@ static bool FindLightTriggerContainingPoint(const BrnTraffic::TrafficData* lpTra
 // place in the whole X360 image: TriggerQueryManager::PostWorldUpdate @0x82386BD8, at
 // `short_32_::Append(this + 1428, &regionIndex)` inside its walk of the PostWorldInputBuffer's
 // TRIGGER LINE-TEST RESULT QUEUE (a VariableEventQueue<1024,16> of owner-56 line-test results
-// produced by the world's TriggerEntityModule). EVERY stage of that producer chain is inert on
-// this build -- the baseline boot log prints all five, verbatim:
-//     "TriggerEntityModule::PreSceneUpdate: inert [FLAG PC boot gate]"
-//     "BrnWorld::TriggerEntityModule::PostSceneUpdate: inert (body not reconstructed)"
-//     "WorldModule::BridgeTriggerModuleToSceneModule_PostScene: inert (body not reconstructed)"
-//     "WorldModule::BridgeSceneQueryResultsToTriggerModule_PrePhysics: inert (body not reconstructed)"
-//     "BrnWorld::TriggerEntityModule::PrePhysicsUpdate: inert (body not reconstructed)"
-// -- and TriggerQueryManager::SubmitTriggerQueries, the request half, has no body here either.
-// So the fan-out below would walk an array that can never be non-empty.
+// produced by the world's TriggerEntityModule). The world pipeline now runs for
+// sound queries; the gameplay-trigger query/result slice still uses this stand-in.
 // The stand-in fills maLastPlayerTriggers by testing the PLAYER'S WORLD POSITION against the
 // armed regions in maActiveTriggers, using the SAME two-stage broadphase + IsPointInsideBox
 // idiom StuntManager::OnPropHit @0x8236EE18 already uses against the same array. It is a POINT
@@ -833,14 +809,9 @@ static bool FindLightTriggerContainingPoint(const BrnTraffic::TrafficData* lpTra
 // PostWorldUpdate @0x82386BD8 becomes the real producer: then delete stage (0) below, mount
 // PostWorldUpdate, and this function is the console's leg verbatim.
 //
-// (P1) SubmitTriggerQueries @0x82392680 -- no body in this tree, and its only consumer is the
-//      same inert TriggerEntityModule. Its absence is exactly what stage (0) stands in for.
-// (P2) maActiveRaceCarPosLastFrame[8] lives inside mauReserved_AfterTrafficData (+1632..+1775),
-//      which this slice does not model as members. Nothing in the mounted set reads it.
-// (P3) the maSoundActions -> action-218 drain: maSoundActions (+376) is likewise reserved
-//      storage here and has no producer on this build (CheckSoundActions @0x82379710 is not
-//      mounted), so the loop would be over an array that is always empty. The two count-zeroing
-//      stores the console makes at 0x8239F8AC for it are therefore also omitted.
+// Sound positions and action218 delivery are reconstructed separately by
+// CacheSoundQueryPositions/PostSoundActions. This function preserves the existing
+// gameplay-trigger fan-out; it no longer stands in for any sound action producer.
 // ============================================================================
 void TriggerQueryManager::PreWorldUpdatePlayerTriggersBringUp(
         GameStateModuleIO::OutputBuffer*            lpOutput,
@@ -1212,6 +1183,7 @@ void TriggerQueryManager::PreWorldUpdatePlayerTriggersBringUp(
     // ------------------------------------------------------------------------------------
     // (2) THE CONSOLE'S TAIL (0x8239F8AC..0x8239F8BC): this frame's set becomes last frame's.
     // ------------------------------------------------------------------------------------
+    PostSoundActions(lpOutput); // ARTIST8239F840..8239F8AC
     maLastFrameTriggers.Clear();                          // stw 0, 0x618(r29)
     maLastFrameTriggers.AppendArray(maLastPlayerTriggers);
     maLastPlayerTriggers.Clear();                         // stw 0, 0x5D4(r29)
@@ -1426,4 +1398,228 @@ void TriggerQueryManager::PostWorldUpdateLandmarksBringUp(
         }
     }
 }
+}
+
+namespace BrnGameState
+{
+// ARTIST 82392680. The line query follows the cached race-car motion. Sound's
+// look-ahead is submitted on alternate eligible records, not alternate frames.
+void TriggerQueryManager::SubmitTriggerQueries(
+    GameStateModuleIO::OutputBuffer* lpOutput,
+    const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface)
+{
+    CGS_ASSERT(lpOutput != NULL, "lpOutput != NULL");
+    CGS_ASSERT(lpActiveRaceCarInterface != NULL, "lpActiveRaceCarInterface != NULL");
+    auto* lpTriggerInterface = lpOutput->GetTriggerQueryInputInterface();
+    CGS_ASSERT(lpTriggerInterface != NULL, "lpTriggerInterface != NULL");
+    for (s32 liCar = static_cast<s32>(lpActiveRaceCarInterface->maCarsInTheRace.GetLength()); liCar > 0; )
+    {
+        const auto& lrCar = lpActiveRaceCarInterface->maCarsInTheRace[--liCar];
+        mbCarHasTeleported = true;
+        const Vector3 lDelta = lrCar.mPreviousPosition - lrCar.mPosition;
+        // 823927E4 vmsum3fp128: one rounding of the three products' sum.
+        const f32 lfDistanceSquared = static_cast<f32>(
+            static_cast<f64>(lDelta.x) * lDelta.x + static_cast<f64>(lDelta.y) * lDelta.y
+            + static_cast<f64>(lDelta.z) * lDelta.z);
+        // vcmpgtfp(100, distanceSquared): unordered also skips the entire arm.
+        if (!(lfDistanceSquared < 100.0f)) continue;
+
+        PackedIndex lPackedCarIndexes;
+        lPackedCarIndexes.SetGlobalRaceCarIndex(lrCar.meGlobalRaceCarIndex);
+        lPackedCarIndexes.SetActiveRaceCarIndex(lrCar.meActiveRaceCarIndex);
+        BrnWorld::TriggerEntityModuleIO::InLineTestEvent lEvent;
+        lEvent.mQueryID.Set(56, lPackedCarIndexes.GetPackedRaceCarIndex());
+        lEvent.mTriggerTypeFlags = 4;
+        lEvent.mLineStart = lrCar.mPreviousPosition;
+        lEvent.mLineEnd = lrCar.mPosition;
+        lpTriggerInterface->AddEvent(&lEvent, 3);
+
+        if (lrCar.mbIsPlayer)
+        {
+            Vector3 lLookAheadDist{lrCar.mDirection.x * 0.25f, lrCar.mDirection.y * 0.25f,
+                                  lrCar.mDirection.z * 0.25f, lrCar.mDirection.w * 0.25f};
+            const f32 lfLengthSquared = static_cast<f32>(
+                static_cast<f64>(lLookAheadDist.x) * lLookAheadDist.x
+                + static_cast<f64>(lLookAheadDist.y) * lLookAheadDist.y
+                + static_cast<f64>(lLookAheadDist.z) * lLookAheadDist.z);
+            // 823928D8..823928F8: vrsqrtefp and TWO Newton steps, with no
+            // zero-vector guard. FLAG (model): correctly rounded initial estimate,
+            // matching the existing console VMX model; denormals are not flushed.
+            f32 lfReciprocalLength = static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfLengthSquared)));
+            for (s32 liStep = 0; liStep < 2; ++liStep)
+            {
+                const f32 lfSquared = lfReciprocalLength * lfReciprocalLength;
+                const f32 lfHalf = lfReciprocalLength * 0.5f;
+                const f32 lfDifference = std::fma(lfLengthSquared, lfSquared, -1.0f);
+                const f32 lfResidual = lfDifference != lfDifference ? lfDifference : -lfDifference;
+                lfReciprocalLength = std::fma(lfHalf, lfResidual, lfReciprocalLength);
+            }
+            const Vector3 lForward{lLookAheadDist.x * lfReciprocalLength,
+                                   lLookAheadDist.y * lfReciprocalLength,
+                                   lLookAheadDist.z * lfReciprocalLength,
+                                   lLookAheadDist.w * lfReciprocalLength};
+            if (lfLengthSquared > 225.0f)
+                lLookAheadDist = Vector3{lForward.x * 15.0f, lForward.y * 15.0f,
+                                         lForward.z * 15.0f, lForward.w * 15.0f};
+            mPlayerLookAheadPos = Vector3{lrCar.mPosition.x + lLookAheadDist.x,
+                                         lrCar.mPosition.y + lLookAheadDist.y,
+                                         lrCar.mPosition.z + lLookAheadDist.z,
+                                         lrCar.mPosition.w + lLookAheadDist.w};
+            if (mbDoSoundLookAheadThisFrame)
+            {
+                lEvent.mQueryID.SetIndex(999);
+                lEvent.mLineStart = mPlayerLookAheadPos;
+                // 82392990 vmaddfp D,A,B,C = A*C+B.
+                lEvent.mLineEnd = Vector3{std::fma(lForward.x, 4.0f, mPlayerLookAheadPos.x),
+                                          std::fma(lForward.y, 4.0f, mPlayerLookAheadPos.y),
+                                          std::fma(lForward.z, 4.0f, mPlayerLookAheadPos.z),
+                                          std::fma(lForward.w, 4.0f, mPlayerLookAheadPos.w)};
+                lpTriggerInterface->AddEvent(&lEvent, 3);
+            }
+        }
+        mbDoSoundLookAheadThisFrame = !mbDoSoundLookAheadThisFrame;
+        mbCarHasTeleported = false;
+    }
+}
+
+// Sound-related legs of ARTIST PreWorldUpdate8239F618..8239F6EC and
+// 8239F840..8239F8AC, split around the existing player-trigger fan-out.
+void TriggerQueryManager::CacheSoundQueryPositions(const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface)
+{
+    for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
+    {
+        const auto leCar = static_cast<EActiveRaceCarIndex>(liCar);
+        if (lpActiveRaceCarInterface->IsRaceCarActive(leCar))
+            maActiveRaceCarPosLastFrame[liCar] = lpActiveRaceCarInterface->GetRaceCarState(leCar)->mTransform.Pos();
+    }
+}
+
+void TriggerQueryManager::PostSoundActions(GameStateModuleIO::OutputBuffer* lpOutput)
+{
+    for (u32 luAction = 0; luAction < maSoundActions.GetLength(); ++luAction)
+        lpOutput->GetGameActionQueue()->AddEvent(&maSoundActions[luAction], 218);
+    maSoundActions.Clear();
+}
+
+// ARTIST8236E858. Matching is on both the entity word and query kind.
+bool TriggerQueryManager::IsSoundActionPresent(EntityId lEntityId,
+    GameStateModuleIO::SoundTriggerAction::eType leResultType) const
+{
+    for (u32 luAction = 0; luAction < maSoundActions.GetLength(); ++luAction)
+    {
+        const auto& lrAction = maSoundActions[luAction];
+        if (lrAction.mEntityId.muValue == lEntityId.muValue && lrAction.meResultType == leResultType)
+            return true;
+    }
+    return false;
+}
+
+// ARTIST82379710. No-overlap results must explicitly clear the prior frame's bits.
+void TriggerQueryManager::CheckSoundActions(const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface)
+{
+    using GameStateModuleIO::SoundTriggerAction;
+    for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
+    {
+        const auto leCar = static_cast<EActiveRaceCarIndex>(liCar);
+        if (lpActiveRaceCarInterface->IsRaceCarActive(leCar))
+        {
+            const EntityId lEntity = lpActiveRaceCarInterface->GetRaceCarState(leCar)->mEntityId;
+            if (!IsSoundActionPresent(lEntity, SoundTriggerAction::E_TYPE_AT_ENTITY))
+            {
+                SoundTriggerAction lAction;
+                lAction.mQueryPos = maActiveRaceCarPosLastFrame[liCar];
+                lAction.mEntityId = lEntity;
+                lAction.meResultType = SoundTriggerAction::E_TYPE_AT_ENTITY;
+                lAction.muActiveTriggers = 0;
+                maSoundActions.Append(lAction);
+            }
+        }
+    }
+    if (lpActiveRaceCarInterface->IsPlayerCarActive())
+    {
+        const EntityId lEntity = lpActiveRaceCarInterface->GetPlayerRaceCarState()->mEntityId;
+        if (!IsSoundActionPresent(lEntity, SoundTriggerAction::E_TYPE_AHEAD_OF_ENTITY))
+        {
+            SoundTriggerAction lAction;
+            lAction.mQueryPos = mPlayerLookAheadPos;
+            lAction.mEntityId = lEntity;
+            lAction.meResultType = SoundTriggerAction::E_TYPE_AHEAD_OF_ENTITY;
+            lAction.muActiveTriggers = 0;
+            maSoundActions.Append(lAction);
+        }
+    }
+}
+
+// Sound legs of ARTIST PostWorldUpdate82386BD8. The gameplay/landmark legs
+// remain in the existing dispatchers; do not deliver those events twice here.
+void TriggerQueryManager::PostWorldUpdateSoundActions(
+    const GameStateModuleIO::PostWorldInputBuffer* lpInput, EActiveRaceCarIndex lePlayerCar)
+{
+    using GameStateModuleIO::SoundTriggerAction;
+    using BrnWorld::TriggerEntityModuleIO::OutLineTestResultEvent;
+    CGS_ASSERT(lpInput != NULL, "lpInput != NULL");
+    const auto* lpTriggerResults = lpInput->GetTriggerEntityOutputInterface();
+    CGS_ASSERT(lpTriggerResults != NULL, "lpTriggerResults != NULL");
+    const auto* lpTriggerResultQueue = lpTriggerResults;
+    CGS_ASSERT(lpTriggerResultQueue != NULL, "lpTriggerResultQueue != NULL");
+    const auto* lpActiveRaceCarInterface = lpInput->GetActiveRaceCarOutputInterface();
+    CGS_ASSERT(lpActiveRaceCarInterface != NULL, "lpActiveRaceCarInterface != NULL");
+    const CgsModule::Event* lpEvent = NULL;
+    s32 liSize = 0;
+    s32 liType = lpTriggerResultQueue->GetFirstEvent(&lpEvent, &liSize);
+    while (lpEvent)
+    {
+        CGS_ASSERT(liType == 1, "Unexpected trigger result");
+        if (liType == 1)
+        {
+            const auto* lpResult = static_cast<const OutLineTestResultEvent*>(lpEvent);
+            if (lpResult->mQueryID.GetOwner() == 56)
+            {
+                const u32 luQueryIndex = lpResult->mQueryID.GetIndex();
+                const bool lbLookAhead = luQueryIndex == 999;
+                const auto leCar = lbLookAhead ? lePlayerCar
+                    : static_cast<EActiveRaceCarIndex>((luQueryIndex >> 8) & 0xff);
+                if (lpActiveRaceCarInterface->IsRaceCarActive(leCar))
+                {
+                    SoundTriggerAction lAction;
+                    lAction.mQueryPos = lbLookAhead ? mPlayerLookAheadPos : maActiveRaceCarPosLastFrame[leCar];
+                    lAction.mEntityId = lpActiveRaceCarInterface->GetRaceCarState(leCar)->mEntityId;
+                    lAction.meResultType = lbLookAhead ? SoundTriggerAction::E_TYPE_AHEAD_OF_ENTITY : SoundTriggerAction::E_TYPE_AT_ENTITY;
+                    lAction.muActiveTriggers = 0;
+                    const auto* lpTriggers = lpResult->GetTriggerIds();
+                    for (s32 liTrigger = 0; liTrigger < lpResult->miNumTriggers; ++liTrigger)
+                    {
+                        const u32 luTrigger = lpTriggers[liTrigger];
+                        if ((luTrigger >> 24) == 56)
+                        {
+                            const auto* lpRegion = mpTriggerData->GetRegion(luTrigger & 0x00ffffff);
+                            if (lpRegion->GetType() == BrnTrigger::TriggerRegion::E_TYPE_GENERIC_REGION)
+                            {
+                                const auto* lpGeneric = static_cast<const BrnTrigger::GenericRegion*>(lpRegion);
+                                const u32 luBit = static_cast<u32>(lpGeneric->GetType()) - 19;
+                                if (luBit <= 12) lAction.muActiveTriggers |= 1u << luBit;
+                            }
+                        }
+                        else if (!lbLookAhead)
+                            CGS_ASSERT((luTrigger >> 24) == 57, "Unknown trigger owner in line test result");
+                    }
+                    if (lbLookAhead) mCachedLookAheadSoundAction = lAction;
+                    maSoundActions.Append(lAction);
+                }
+            }
+        }
+        liType = lpTriggerResultQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+    }
+    if (!mbCarHasTeleported && mbDoSoundLookAheadThisFrame && !mCachedLookAheadSoundAction.IsEmpty())
+    {
+        mCachedLookAheadSoundAction.mQueryPos = mPlayerLookAheadPos;
+        maSoundActions.Append(mCachedLookAheadSoundAction);
+        mCachedLookAheadSoundAction.mQueryPos = Vector3{};
+        mCachedLookAheadSoundAction.mEntityId.muValue = 0;
+        mCachedLookAheadSoundAction.meResultType = SoundTriggerAction::E_TYPE_INVALID;
+        mCachedLookAheadSoundAction.muActiveTriggers = 0;
+    }
+    CheckSoundActions(lpActiveRaceCarInterface);
+}
+
 }

@@ -5827,6 +5827,12 @@ namespace BrnGame
                     {
                         lpGameStateOutput->LockForWrite();
                         lpGameStateOutput->GetGameActionQueue()->Clear();
+                        // FLAG PC-platform leaf: the persistent PC output must retire the
+                        // trigger inputs after their world consumer. The console reconstructs
+                        // all three queues each step in OutputBuffer::Construct82382940.
+                        lpGameStateOutput->GetTriggerManagementInputInterface()->GetAddTriggerEventQueue().Clear();
+                        lpGameStateOutput->GetTriggerManagementInputInterface()->GetRemoveTriggerEventQueue().Clear();
+                        lpGameStateOutput->GetTriggerQueryInputInterface()->Clear();
                         // ⭐ [FLAG PC lifecycle, 2026-08-28 crash-slomo transport wave] THE TIMER
                         // REQUEST SLOT RETIRES WITH THE ACTION QUEUE, and for exactly the reason
                         // spelt out above: on the console this whole OutputBuffer is re-Constructed

@@ -235,9 +235,9 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
         // ---- 3. fill the Trigger record from the event ------------------------------------
         lrTrigger.meType = static_cast<ETriggerTypeID>(liType);
         // The event's gameplay handle (event @+64/+68) is copied into the Trigger record (@+8).
-        lrTrigger.SetHandle(lpEvent->GetTriggerHandle());
+        lrTrigger.SetHandle(lpEvent->mTriggerID);
         // The event's world transform becomes the trigger's transform (position == W column).
-        lrTrigger.mTransform = lpEvent->GetTransform();
+        lrTrigger.mTransform = lpEvent->mTransform;
 
         // The scene EntityId stamped for this trigger: owner = E_ENTITYTYPE_TRIGGER, index = slot.
         CgsSceneManager::EntityId lEntityId;
@@ -245,15 +245,16 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
 
         f32  lfEntityBoundingSphereRadius = 0.0f;
         u8   lu8TriggerTypeFlag           = 0;
-        u8   laVolumeStorage[128];   // staged rw::collision volume image (block-copied by AddDynamicVolume)
+        alignas(16) u8 laVolumeStorage[128];   // staged rw::collision volume image (block-copied by AddDynamicVolume)
         bool lbVolumeOk                   = false;
 
         switch (liType)
         {
             case E_TRIGGERTYPE_PLANE_SEGMENT:   // 0
             {
-                const f32 lfDimX = lpEvent->GetDimensionX();
-                const f32 lfDimY = lpEvent->GetDimensionY();
+                const auto* lpPlane = static_cast<const TriggerEntityModuleIO::InAddPlaneSegmentTriggerEvent*>(lpEvent);
+                const f32 lfDimX = lpPlane->mDimensions.x;
+                const f32 lfDimY = lpPlane->mDimensions.y;
                 if (!(lfDimX > 0.0f) || !(lfDimY > 0.0f))
                 {
                     CgsDev::Assert::BeginAssert();
@@ -284,7 +285,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
 
             case E_TRIGGERTYPE_SPHERE:          // 1
             {
-                const f32 lfRadius = lpEvent->GetRadius();
+                const f32 lfRadius = static_cast<const TriggerEntityModuleIO::InAddSphereTriggerEvent*>(lpEvent)->mfRadius;
                 if (!(lfRadius > 0.0f))
                 {
                     CgsDev::Assert::BeginAssert();
@@ -305,9 +306,10 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
             case E_TRIGGERTYPE_BOX:             // 2
             {
                 // Box: BoxVolume::Initialize gets the HALVED dims (the asm vmulfp128 by 0.5).
-                const f32 lfHX = lpEvent->GetDimensionX() * 0.5f;
-                const f32 lfHY = lpEvent->GetDimensionY() * 0.5f;
-                const f32 lfHZ = lpEvent->GetDimensionZ() * 0.5f;
+                const auto* lpBox = static_cast<const TriggerEntityModuleIO::InAddBoxTriggerEvent*>(lpEvent);
+                const f32 lfHX = lpBox->mDimensions.x * 0.5f;
+                const f32 lfHY = lpBox->mDimensions.y * 0.5f;
+                const f32 lfHZ = lpBox->mDimensions.z * 0.5f;
                 // Staged rw::Resource, 0x822D9520..0x822D9554 (this is the branch whose
                 // `vmulfp128 v1, v0, 0.5` builds the halved-extent Vector3 in v1).
                 rw::Resource lResource = {};
@@ -351,10 +353,13 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
         // ---- 4. register the trigger volume + entity with the scene manager ----------------
         // The trigger type FLAG is the (1<<type) bitmask; the entity-type FLAG fed to AddEntity is
         // the literal 32 (== 1<<5 == KU_ENTITYTYPEFLAG_TRIGGER), NOT the EntityId owner 4.
-        lpOutSceneInputInterface->AddDynamicVolume(lEntityId, laVolumeStorage, lu8TriggerTypeFlag);
+        // ARTIST822D99F8..9A44: both IDs are64-bit; v1 carries the sphere centre.
+        lrTrigger.mVolumeInstanceID.muId = static_cast<u64>(static_cast<u32>(lEntityId)) << 32;
+        const CgsSceneManager::VolumeId lVolumeId(lrTrigger.mVolumeInstanceID.muId);
+        lpOutSceneInputInterface->AddDynamicVolume(lVolumeId, laVolumeStorage, lu8TriggerTypeFlag);
         lpOutSceneInputInterface->AddEntity(lEntityId, KU_ENTITYTYPEFLAG_TRIGGER,
-                                            lfEntityBoundingSphereRadius);
-        lpOutSceneInputInterface->AddVolumeInstance(lEntityId, lrTrigger.mTransform);
+                                            lrTrigger.mTransform.Pos(), lfEntityBoundingSphereRadius);
+        lpOutSceneInputInterface->AddVolumeInstance(lrTrigger.mVolumeInstanceID, lVolumeId, lrTrigger.mTransform);
 
         // advance
         liType = lrQueue.GetNextEvent(reinterpret_cast<const CgsModule::Event*>(lpEvent),
@@ -599,11 +604,7 @@ namespace
 // RemoveEntity takes only the 32-bit entity word out of its high half -- the same split
 // InSceneUpdateInterface records for ActiveRaceCar::RemoveFromScene.
 //
-// FLAG: the id is RECOMPUTED from the slot index rather than read back from the record.
-// ProcessAddTriggerEvents derives it from the slot alone (packed EntityId in the high dword,
-// low dword zero) but keeps it in a local; the record's leading 8 bytes are still spelled as
-// unrecovered padding in BrnTriggerTypes.h. Same bits; DELETE-WHEN that field is named and
-// Add stores it there.
+// Reads the original stored64-bit volume/instance ID (DWARF BrnTrigger.h:46).
 // ---------------------------------------------------------------------------
 void TriggerEntityModule::ProcessRemoveTriggerEvents(
     const TriggerEntityModuleIO::TriggerManagementInputInterface* lpInputInterface,
@@ -649,14 +650,9 @@ void TriggerEntityModule::ProcessRemoveTriggerEvents(
             continue;
         }
 
-        // The record's scene id: entity word in the HIGH dword, low dword zero.
-        CgsSceneManager::EntityId lEntityId;
-        lEntityId.Set(KU_ENTITYTYPE_TRIGGER, static_cast<u32>(liTriggerIndex), 0);
-        const u64 lu64SceneId =
-            static_cast<u64>(static_cast<u32>(lEntityId)) << 32;
-
-        CgsSceneManager::VolumeInstanceId lVolumeInstanceId;
-        lVolumeInstanceId.muId = lu64SceneId;
+        const CgsSceneManager::VolumeInstanceId lVolumeInstanceId = mTriggers[liTriggerIndex].mVolumeInstanceID;
+        const u64 lu64SceneId = lVolumeInstanceId.muId;
+        const CgsSceneManager::EntityId lEntityId(static_cast<u32>(lu64SceneId >> 32));
 
         lpOutSceneInputInterface->RemoveVolumeInstance(lVolumeInstanceId);
         lpOutSceneInputInterface->RemoveEntity(lEntityId, 0);

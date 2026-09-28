@@ -2,6 +2,7 @@
 #define BRN_SOUND_VEHICLES_ENVIRONMENT_ENCLOSURE_CONTROL_H
 
 #include "types.hpp"
+#include "GameSource/GameState/BrnGameActions.h"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"
 #include "SharedClasses/Trigger/BrnGenericRegion.h"   // BrnTrigger::GenericRegion::Type, KI_FIRST_SOUND_ENCLOSURE
 
@@ -27,6 +28,8 @@ namespace Environment
 {
 
 // Where a trigger query was made relative to the car.
+extern bool KB_SHOW_STATIC_ENVIRONMENT; // ARTIST 82FFB8C8, shared with static passbys
+
 enum eTriggerPosition
 {
     E_TRIGGER_POSITION_AT_ENTITY       = 0,
@@ -43,6 +46,8 @@ struct EntityTriggerInfo
         muActiveTriggers = 0;
         muPrevTriggers   = 0;
     }
+
+    BrnTrigger::GenericRegion::Type GetChangeType() const; // ARTIST 82685D88
 
     bool HasChanged() const { return muActiveTriggers != muPrevTriggers; }
 
@@ -75,6 +80,10 @@ struct EnclosureControl : public BrnSound::Logic::BrnEffectControl
     s32 GetController(s32 aiIndex) override;
     void AttachController(CgsSound::Logic::EffectBase* apController) override;
     bool Attach() override;
+    void UpdateParams(f32 afTimeStep) override;
+    void ProcessTriggerAction(const BrnGameState::GameStateModuleIO::SoundTriggerAction& arAction,
+                              eTriggerPosition aePosition);
+    void DrawDebug() const;
 
     const EntityTriggerInfo& GetTriggerInfo(eTriggerPosition aePosition) const
     {
