@@ -322,6 +322,120 @@ void GameStateModule::ProcessGameEventsPropHitBringUp(
 }
 
 // ============================================================================
+// ⭐⭐ [L4 2026-09-28] ProcessGameEventsPropProgressionBringUp -- cases 109 and 112 of
+// GameStateModule::ProcessGameEvents @0x823A0A18 and the dispatcher's tail: AN IN-GAME PROFILE LOAD
+// REACHES THE GAME STATE, AND THE PROFILE'S BROKEN PROPS GO BACK TO THE PROP WORLD.
+//
+//   case 109 (0x823A33D4..0x823A33E4): `mr r5, r22 ; mr r4, r27 ; mr r3, r31 ; bl OnProfileLoaded`
+//            -- OnProfileLoaded(this, <the output buffer>, <the output action queue>). 109 is GUI event
+//            352 translated by BridgeGuiToGameState @0x823DDB78 (`v10 = 109`); ProfileManager::
+//            ReportTaskCompleted @0x82513EC0 posts 352 when a profile load finishes. That is the
+//            IN-GAME load (the crash-nav profile screen). The BOOT profile does NOT come this way: it
+//            finishes in the MemoryCard flow state, a video state, where DoUpdate_GameStatePostWorld
+//            @0x823E92A8 skips PostWorldUpdate (`(updateSet & 0x20) == 0` gate) and so drops the 109 it
+//            bridged; the boot delivery is case 8 (ProcessGameEventsGameStartBringUp).
+//   case 112: `*(this+292288) = 1` -- mbPropSystemNeedsProgression (the prop world asks).
+//   tail (LABEL_648, after the whole walk): if the flag is 1, post action 199 with
+//            gsm+107224 == &profile.mabHitPropBitArray and clear the flag.
+//
+// THE PROP HANDSHAKE, end to end:
+//   1. OnProfileLoaded @0x82397310 posts action 194 (E_ACTION_LOAD_PROFILE, `AddEvent(a3, v14, 194, 1)`).
+//   2. The world bridge turns 194 into InputBuffer_PreScene::SendingPropProgression; PropEntityModule::
+//      PreSceneUpdate moves to E_RESET_UNLOADING_FOR_PROFILE, GenerateTargetList unloads every zone and
+//      moves to E_REQUESTING_PROFILE_DATA, and PostPhysicsUpdate asks for the profile's progression
+//      (E_WAITING_FOR_PROFILE_DATA) -- WorldModule::BridgeEntityModulesToOutput posts game event 112.
+//   3. Case 112 sets mbPropSystemNeedsProgression.                                              [HERE]
+//   4. The tail posts action 199 (E_ACTION_PROP_SMASH_PROGRESSION) with the profile's hit-prop bits
+//      (`AddEvent(v30, &v341, 199, 4)`; `*(v23+292288) = 0`).                                    [HERE]
+//   5. The world bridge turns 199 into SetHitPropsBitArray; PreSceneUpdate copies the profile's 300000
+//      bits into PropZoneManager::maPreviouslyHitProps and resumes streaming, and PropZoneManager::LoadProp
+//      then leaves a hit E_DONT_RESPAWN prop out and swaps a hit E_RESPAWN_CHANGED prop for its broken
+//      alternative type.
+// On the PC, 1, 3 and 4 did not exist: nothing posted 194 or 199 and no arm consumed 112. So
+// maPreviouslyHitProps only ever held what the running session broke (PropZoneManager::RecordHitProp),
+// and after a reboot every smash gate and billboard the save records as broken (673 hit props in the
+// owner's converted save) streamed in intact.
+//
+// ⓘ ARM ORDER. The console answers events in arrival order in ONE walk and runs the tail after it. This
+// tree runs one walk per arm, so this arm is called LAST in PreWorldUpdateStuntBringUp's arm list:
+// its 199 follows every other arm's actions, as the tail's does. A 109 is answered after the actions
+// the other arms posted for the same frame's events instead of in arrival order.
+// ============================================================================
+void GameStateModule::ProcessGameEventsPropProgressionBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    // [DIAG] NOT IN THE X360 BINARY. BRN_PROPPROG_DIAG=1 only, default off, capped (the handshake runs
+    // once per profile load). DELETE-WHEN-STABLE.
+    static const bool sbDiag = []() {
+        const char* const lpcValue = getenv("BRN_PROPPROG_DIAG");
+        return lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0';
+    }();
+    static s32 siDiagLines = 0;
+    const s32 KI_PROPPROG_DIAG_LINES = 24;
+
+    if (lpGameEventQueue != 0)
+    {
+        const CgsModule::Event* lpEvent = 0;
+        s32                     liSize  = 0;
+        s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+        while (lpEvent != 0)
+        {
+            if (liType == GameStateModuleIO::E_EVENT_PROGRESSION_PROFILE_LOADED)
+            {
+                // case 109: `bl OnProfileLoaded` with r4 = the output buffer (ProcessGameEvents' r7 ->
+                // r27) and r5 = the output action queue (its r5 -> r22).
+                OnProfileLoaded(mpOutputBuffer, lpActionQueue);
+                if (sbDiag && siDiagLines < KI_PROPPROG_DIAG_LINES && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    ++siDiagLines;
+                    *CgsDev::Log::gpDebugPrint << "[propprog] event 109 (profile loaded) -> OnProfileLoaded\n";
+                }
+            }
+            else if (liType == GameStateModuleIO::E_EVENT_REQUEST_PROP_PROGRESSION)
+            {
+                mbPropSystemNeedsProgression = true;   // case 112
+                if (sbDiag && siDiagLines < KI_PROPPROG_DIAG_LINES && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    ++siDiagLines;
+                    *CgsDev::Log::gpDebugPrint << "[propprog] event 112 (the prop world asks) -> mbPropSystemNeedsProgression\n";
+                }
+            }
+
+            const CgsModule::Event* lpCurrent = lpEvent;
+            liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+        }
+    }
+
+    // The tail (LABEL_648): `if (*(this+292288) == 1)` -> action 199, then the flag is cleared.
+    if (mbPropSystemNeedsProgression)
+    {
+        const BrnProgression::Profile::HitPropsBitArray& lrHitProps = mProgressionManager.GetProfile()->GetHitProps();
+        const GameStateModuleIO::PropSmashReportAction lReport(&lrHitProps);
+        lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lReport),
+                                GameStateModuleIO::E_ACTION_PROP_SMASH_PROGRESSION,
+                                static_cast<s32>(sizeof(lReport)));
+        mbPropSystemNeedsProgression = false;
+
+        if (sbDiag && siDiagLines < KI_PROPPROG_DIAG_LINES && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++siDiagLines;
+            u32 luHitProps = 0;
+            for (u32 luBit = 0; luBit < 300000u; ++luBit)
+            {
+                if (lrHitProps.IsBitSet(luBit))
+                {
+                    ++luHitProps;
+                }
+            }
+            *CgsDev::Log::gpDebugPrint << "[propprog] action 199 (prop smash progression) posted: the profile holds "
+                                       << luHitProps << " hit props\n";
+        }
+    }
+}
+
+// ============================================================================
 // â­ [H1 district wave 2026-08-25] ProcessGameEventsWorldRegionBringUp -- the extracted
 // CASE-115 arm of GameStateModule::ProcessGameEvents @0x823A0A18 (banner + the console
 // arm's three statements in the header). The queue walk is the dispatcher's own; the
@@ -1467,6 +1581,11 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // The road-rules and street-manager arms (cases 96..100, 103, 130..133, 150), same walk
     // (GameStateModule_RoadRules.cpp).
     ProcessGameEventsRoadRulesBringUp(&lGameEventQueue, lpActionQueue, mpOutputBuffer);
+    // ⭐⭐ [L4 WORLDVFX 2026-09-27] the dispatcher's CASE-109 / CASE-112 arms and its TAIL (the
+    // prop-progression handshake: action 194 on a profile load, action 199 with the profile's hit-prop
+    // bits when the prop world asks). LAST in this list because the tail runs after the console's whole
+    // walk -- see the arm's banner. Same walk, same must-run-before-the-Clear constraint.
+    ProcessGameEventsPropProgressionBringUp(&lGameEventQueue, lpActionQueue);
 
     // ---- 1a) THE TAKEDOWN FEED (console: the `if (!IsSimPaused)` block between #68 and #86) --
     // ⭐⭐⭐ [road-rage wave, agent C] GameStateModule::ProcessTakedownEvents @0x8238FC50. X360

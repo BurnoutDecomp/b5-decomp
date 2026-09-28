@@ -506,6 +506,20 @@ enum EGameActionType
     E_ACTION_REMOVE_ALL_RIVALS          = 195,   // DWARF 187 (+8 X360); size 1    PINNED (producer + consumer)
     E_ACTION_ADD_RIVAL                  = 196,   // DWARF 188 (+8 X360); size 176  PINNED (producer + consumer)
 
+    // [L4 WORLDVFX 2026-09-27] THE PROP-PROGRESSION HANDSHAKE's two actions, pinned at BOTH ends and
+    // carrying the same +8 as the rest of this band:
+    //   PRODUCERS GameStateModule::OnProfileLoaded @0x82397310 posts `AddEvent(a3, v14, 194, 1)`, and
+    //             ProcessGameEvents @0x823A0A18's tail posts `AddEvent(v30, &v341, 199, 4)` with
+    //             v341 = gsm+107224 == the profile's mabHitPropBitArray (profile gsm+48288, +58936).
+    //   CONSUMER  WorldModule::BridgeInputToEntityModules @0x827ADF88: case 194 ->
+    //             InputBuffer_PreScene::SendingPropProgression, case 199 -> SetHitPropsBitArray
+    //             (WorldBridgeInputToEntityModules.cpp's KI_GAME_ACTION_SEND_PROP_PROGRESSION /
+    //             KI_GAME_ACTION_PROP_SMASH_REPORT).
+    //   DWARF     BrnGameActions.h:196 E_ACTION_LOAD_PROFILE == 186 and :201
+    //             E_ACTION_PROP_SMASH_PROGRESSION == 191.
+    E_ACTION_LOAD_PROFILE               = 194,   // DWARF 186 (+8 X360); size 1    PINNED (producer + consumer)
+    E_ACTION_PROP_SMASH_PROGRESSION     = 199,   // DWARF 191 (+8 X360); size 4 (a pointer on the console)
+
     // X360-ATTESTED value: the DWARF (PS3) enumerator is 74, but every X360 producer posts
     // `li r5, 0x4F` (79) with size 8, and the X360 consumer is HandleGameActions' `case 79`.
     // That is the SAME +5 shift this enum already records for NEW_CAR_UNLOCKED (DWARF 57 ->
@@ -1021,6 +1035,31 @@ struct GameAction { };
 // DWARF BrnGameActions.h: empty action; ARTIST case42 posts size1.
 struct PlayerCrashEndingSoonAction : public GameAction<E_ACTION_PLAYER_CRASH_ENDING_SOON> {};
 static_assert(sizeof(PlayerCrashEndingSoonAction) == 1, "empty crash-ending action");
+
+// [L4 WORLDVFX 2026-09-27] DWARF BrnGameActions.h:2959 -- an empty action. OnProfileLoaded @0x82397310
+// posts it with size 1 (`AddEvent(a3, v14, 194, 1)`, v14 an untouched stack byte): the world's answer is
+// InputBuffer_PreScene::SendingPropProgression, i.e. "drop every prop, then ask for the profile's".
+struct LoadProfileAction : public GameAction<E_ACTION_LOAD_PROFILE> {};
+static_assert(sizeof(LoadProfileAction) == 1, "empty load-profile action (li r6, 1)");
+
+// [L4 WORLDVFX 2026-09-27] DWARF BrnGameActions.h:683..:694 -- the profile's hit-prop bits, BY POINTER
+// (`const Profile::HitPropsBitArray* mpabHitPropBitArray`, :694). ProcessGameEvents @0x823A0A18's tail
+// posts it with size 4 == one console pointer; the host record is one host pointer, read back at pointer
+// width by WorldBridgeInputToEntityModules.cpp's PROP_SMASH_REPORT case. Profile::HitPropsBitArray is
+// BitArray<300000u> (DWARF BrnProfile.h:555).
+struct PropSmashReportAction : public GameAction<E_ACTION_PROP_SMASH_PROGRESSION>
+{
+    typedef CgsContainers::BitArray<300000u> HitPropsBitArray;
+
+    explicit PropSmashReportAction(const HitPropsBitArray* lpabHitPropBitArray)   // :691
+        : mpabHitPropBitArray(lpabHitPropBitArray) {}
+
+    const HitPropsBitArray& GetHitProps() const { return *mpabHitPropBitArray; }   // :687
+
+private:
+    const HitPropsBitArray* mpabHitPropBitArray;                                    // :694
+};
+static_assert(sizeof(PropSmashReportAction) == sizeof(void*), "the record is the one pointer (console size 4)");
 
 // =============================================================================================
 // ⭐⭐⭐ ShowtimeModeSwitchAction -- action 143, 16 bytes. THE ONLY WRITER, ANYWHERE IN THE IMAGE,

@@ -1037,6 +1037,40 @@ void LoadingScriptedState::Update()
             &lpNetworkPreSimInput);
     }
 
+    // ---- the GAME-STATE PRE-WORLD pass of the partial spine (X360 @0x823F27BC) --------------
+    // ⭐ [L4 boot order 2026-09-28] Below load stage 8 the console's spine calls
+    // GameStateModule::PreWorldUpdate @0x823A5328 on EVERY frame, unconditionally, right after
+    // BridgeNetworkToGui (0x823F2758) and the spine's BridgeGuiToGameState (0x823F2788), and before
+    // BridgeGameStateToGui (0x823F27D8) and the world leg (BridgeSoundToWorld 0x823F2818):
+    //     bl GameStateModule::PreWorldUpdate(gsm, inStack, outStack,
+    //                                        <a fresh "GameStatePreWorld" buffer, var_DC>,
+    //                                        <a fresh "GameState" output buffer, var_E4>, updateSet)
+    // with no CheckGameActions after it and no controller / network staging of its input (both are
+    // DoUpdate_GameStatePreWorld @0x823EE0E8's, which this spine does not call).
+    // THE LEG THAT MATTERS AT BOOT is the start-of-game one-shot: GameStateModule::Construct
+    // @0x82380388 arms gsm+208324 (mbSendSetupPlayerCarPending) and PreWorldUpdate's first call
+    // (0x823A5510..0x823A5540) runs SendSetupPlayerCarEvent @0x8239A918 and
+    // SendSetUpAllEventStartsMessage @0x823759D0 and clears it -- i.e. in the FIRST frame of the
+    // first loading-scripted state, long before the MemoryCard state deserialises the profile. So the
+    // default car's OnSpecialEventPlayerCarChange(.., true) reaches the profile first and the
+    // Deserialise then restores the saved one. On this build that one-shot only ever ran in
+    // E_MGS_IN_GAME, AFTER the Deserialise, and overwrote the saved spawn car with the default.
+    // Its actions die with the spine's own output buffer on the console (no BridgeGameStateToWorld in
+    // this spine); here the game module retires the persistent buffer's queue at the end of the
+    // sub-step, and the world leg below does not run before stage 6, so the reset-player-car action
+    // never reaches the world either. The junkyard car is placed in game by case 78 ->
+    // CarSelectManager::ReallyEnterJunkyardAtStartOfGame -> StartTransitionInState -> SpawnInStartCar,
+    // as on the console.
+    // [FLAG PC reduction] only the start-of-game legs of PreWorldUpdate run here
+    // (GameStateModule::PreWorldUpdateSetupPlayerCarBringUp: the one-shot, then the case-78 arm over
+    // the carry queue, which nothing fills below stage 8). The rest of the extracted pre-world pump
+    // (drive-thru, car-select tick, stunt / mode / trigger legs, training) stays in the game module's
+    // in-game leg: with this spine's empty input and zero timer they have nothing to do.
+    if (lbPartialSpine)
+    {
+        lpGameModule->GetGameStateModule().PreWorldUpdateSetupPlayerCarBringUp();
+    }
+
     {
         // ---- the per-frame WORLD UPDATE leg (X360 0x823F22D8, stage > 5) ------------
         // Once the scripted load is past LoadWorldModule (stage > 5) the spine drives the

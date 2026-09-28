@@ -71,6 +71,10 @@ enum EGameEventType
     // BrnGameActions.h): 111 matches the X360 ProcessGameEvents @0x823A0A18 jump table's case 111
     // exactly, so its DWARF-contiguous neighbour 112 is trustworthy as-is.
     E_EVENT_REQUEST_PROP_PROGRESSION = 112,  // DWARF BrnGameEvents.h:122
+    // [L4 WORLDVFX 2026-09-27] DWARF BrnGameEvents.h:119, X360-attested at both ends: the GUI
+    // bridge BrnGameModule::BridgeGuiToGameState @0x823DDB78 turns GUI event 352 into it
+    // (`v10 = 109`), and ProcessGameEvents @0x823A0A18 case 109 calls OnProfileLoaded @0x82397310.
+    E_EVENT_PROGRESSION_PROFILE_LOADED = 109,
     E_EVENT_PLAYER_ROUTE_UPDATED    = 117,   // DWARF BrnGameEvents.h:127; posted by AIModule::UpdateCarRoutes @0x827955F0 (1-byte payload)
     E_EVENT_OVERHEAD_SIGN_HIT       = 118,   // DWARF BrnGameEvents.h:76
     // [P1 sim-pause] the four pause-family events the ProcessGameEvents pause arm consumes.

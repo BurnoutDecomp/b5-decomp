@@ -569,6 +569,14 @@ public:
     // ARG SHAPE FROM ASM: r3=this, r4=carId, r5=wheelId, r6=the bool.
     void OnPlayerCarChange(CgsID lCarId, CgsID lWheelId, bool lbUpdateProfile);
 
+    // ⭐⭐ [L4 boot order 2026-09-28] X360 0x823893A8 -- OnLoadProfile. DWARF BrnProgressionManager.h
+    // `void OnLoadProfile();` (PS3 0x27D63C). The progression layer's half of a profile load; its sole
+    // caller is GameStateModule::OnProfileLoaded @0x82397310. Restores the rank cache from the loaded
+    // profile, raises the medal / rival / drive-thru refresh requests, and re-derives miMaxCarCount
+    // (the list's selectable-minus-sponsor count, plus one per sponsor car and one for "CARBEAGT" that
+    // the profile owns). Body: BrnProgressionManager.cpp.
+    void OnLoadProfile();
+
     // ---- [issue #10 "miles driven not recorded", 2026-09-06] the per-frame tick ---------------
     // X360 0x823A4F68 (DWARF BrnProgressionManager.cpp:304). Called by GameStateModule::
     // PreWorldUpdate @0x823A5328 inside its `(lUpdateSet & 8)` leg, after TriggerQueryManager::
@@ -1126,6 +1134,11 @@ private:
     // parks with a one-shot log and the byte stays set (the console clears it in the callee).
     // Construct @0x8237A5F8 seeds 0; false is the host's zero-initialised value.
     bool      mbPlayerMedalsUpdateRequired = false;              // X360 +133491 (0x20973)
+    // [L4 boot order 2026-09-28] X360 +133492 (0x20974). DWARF BrnProgressionManager.h:876
+    // `bool mbPlayerJustWonATrophyUpdateRequired` -- the byte after mbPlayerMedalsUpdateRequired (:875).
+    // OnLoadProfile @0x823893E0 clears it (`stbx r15(0), r29, 0x20974`). ⚠️ NO READER ON PC yet (the
+    // console's PreWorldUpdate trophy leg is not reconstructed); the store is the console's.
+    bool      mbPlayerJustWonATrophyUpdateRequired = false;      // X360 +133492 (0x20974)
 
     // ---- [stuntrace waveB / agent 10] the deferred "all win types for this mode" check -------
     // X360 +133440 (0x20940). The training manager the progression layer queues its

@@ -1502,6 +1502,85 @@ void ProgressionManager::OnPlayerCarChange(CgsID lCarId, CgsID lWheelId, bool lb
 }
 
 // --------------------------------------------------------------------------------------------
+// ⭐⭐ [L4 boot order 2026-09-28] ProgressionManager::OnLoadProfile  (X360 0x823893A8)
+// DWARF BrnProgressionManager.h `void OnLoadProfile();` (PS3 0x27D63C). Sole caller:
+// GameStateModule::OnProfileLoaded @0x82397310 (0x823973C4), right after the profile is loaded.
+//
+//   0x823893B8  UnlockDefaultPlayerCars()
+//   0x823893C0  r11 = lbz this+0x1E0                      -- mProfile.mi8CurrentProgressionRank (Profile+0x70)
+//   0x823893E0  stbx 0   -> +0x20974                      -- mbPlayerJustWonATrophyUpdateRequired
+//   0x823893F0  stb  1   -> +0x20973                      -- mbPlayerMedalsUpdateRequired
+//   0x823893F8  stbx 1   -> +0x20971                      -- mbUpdateRivals (this tree: mbUpdateRivalsRequested)
+//   0x823893FC  stbx r11 -> +0x2096C                      -- the rank cache (this tree: mi8ProgressionRank)
+//   0x82389400  if ((s8)r11 < 0) stb 1 -> +0x20973        -- the same flag again (`extsb ; cmpwi 0 ; bge`)
+//   0x82389438  stbx 1   -> +0x20988                      -- mbDriveThruDataDirtyFlag (this tree: mbDriveThrusDirty)
+//   0x82389440  stbx 0   -> +0x20970                      -- mbHasJustRankedUp
+//   0x82389448  stdx 0   -> +0x20960                      -- mNewlyUnlockedCarID
+//   0x82389458  +0x2095C = list+0x3408 - list+0x340C      -- miMaxCarCount = selectable - sponsor
+//               (list = lwzx +0x20948, mpVehicleList -- ApplyVehicleList @0x82359A20's own formula)
+//   0x823894A8  for (i = 0; i < mProfile.miCarCount /* lwz +0x3DC, re-read each pass */; ++i):
+//                 the inlined GetCarData(i) bounds assert (BrnProfile.h:1923), before EACH field read;
+//                 if (car.meUnlockType /* +0x10 */ == 5)  { ++miMaxCarCount; the "sponsor cars" line }
+//                 if (car.mId == CgsIDCompress("CARBEAGT")) { ++miMaxCarCount; the "TROPY HACK" line }
+//   0x82389674  if (lbzx this+0xA784 /* Profile+42516, mbSilverCarsUnlocked */)
+//                   stbx 1 -> this+0x1CE86                -- Profile+118038, mbHaveSeenEliteCompletionSequence
+//
+// WHY IT MATTERS. Without it the loaded profile's sponsor cars (and CARBEAGT) never grew
+// miMaxCarCount -- the "CARS OWNED x/Y" denominator -- after a reboot, and the rank cache kept
+// Construct's -2 until a PC stand-in in PreWorldUpdate restored it (retired with this body).
+// The two log lines are the console's, behind the console's own `gxMessageFilterFlags & 1` gate.
+// --------------------------------------------------------------------------------------------
+void ProgressionManager::OnLoadProfile()
+{
+    UnlockDefaultPlayerCars();
+
+    const s8 li8SavedRank = mProfile.GetCurrentProgressionRank();
+    mbPlayerJustWonATrophyUpdateRequired = false;
+    mbPlayerMedalsUpdateRequired         = true;
+    mbUpdateRivalsRequested              = true;
+    mi8ProgressionRank                   = li8SavedRank;
+    if (li8SavedRank < 0)
+    {
+        mbPlayerMedalsUpdateRequired = true;
+    }
+
+    mbDriveThrusDirty   = true;
+    mbHasJustRankedUp   = false;
+    mNewlyUnlockedCarID = 0;
+    miMaxCarCount       = mpVehicleList->GetSelectableVehicleCount()      // +0x3408
+                            - mpVehicleList->GetSponsorVehicleCount();    // +0x340C
+
+    for (s32 liCarIndex = 0; liCarIndex < mProfile.GetCarCount(); ++liCarIndex)
+    {
+        if (mProfile.GetCarData(liCarIndex)->GetUnlockType() == CarData::E_UNLOCK_TYPE_SPONSOR)
+        {
+            ++miMaxCarCount;
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "Profile: increasing max car count cos of sponsor cars! ("
+                                           << miMaxCarCount << ")\n";
+            }
+        }
+        if (mProfile.GetCarData(liCarIndex)->GetId() == CgsIDCompress("CARBEAGT"))
+        {
+            ++miMaxCarCount;
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "Profile: increasing max car count cos LAST MINUTE ONLINE CHALLENGE TROPY HACK!!!!! ("
+                    << miMaxCarCount << ")\n";
+            }
+        }
+    }
+
+    if (mProfile.AreSilverCarsUnlocked())
+    {
+        mProfile.SetSeenEliteCompletionSequence();   // Profile::SetSeenEliteCompletionSequence @0x8235A150 is this store
+    }
+}
+
+
+// --------------------------------------------------------------------------------------------
 // GetCarColourAndPalette (X360 0x8237C0D8).
 // Answer lCarId's colour + palette indices. The profile's own CarData record wins; the 0xFF
 // "unset" sentinel in either field falls back to the car's authored defaults out of its

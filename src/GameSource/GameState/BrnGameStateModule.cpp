@@ -47,6 +47,14 @@ static const char* const KAC_GSM_FILE =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp";
 static const char* const KAC_OPPONENTDATA_FILE =
     "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\progression\\BrnOpponentData.h";
+// [L4 boot order 2026-09-28] The path the inlined Profile accessor's "mSpawnCarId != 0" assert names
+// (BrnProfile.h:1903) at both of its console sites here: GetSpawnCar @0x82376414 and OnProfileLoaded
+// @0x8239743C (`lis r11, aGamesourceGame_13@ha` -- the literal as the ARTIST export prints it).
+static const char* const KAC_PROFILE_H_FILE =
+    "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h";
+// OnProfileLoaded @0x823974C4..0x823974DC: `lfs f0, flt_82005450` -- the image word is 0x3F666666
+// (tools/re/x360rd.py 82005450), i.e. 0.9f: the traffic scale posted (action 28) for a rank-0 player.
+static const f32 KF_ONPROFILELOADED_RANK_ZERO_TRAFFIC_SCALE = 0.9f;   // flt_82005450 == 0x3F666666
 
 // ----------------------------------------------------------------------------
 // X360-attested game-action event-type ids + payload sizes (the `li r5,<type>` / `li r6,<size>`
@@ -2172,6 +2180,224 @@ void GameStateModule::SendSetupPlayerCarEvent(GameStateModuleIO::GameActionQueue
     // Step 8 -- X360 `li r11,1; stb r11, <this+0x38B72>`. Arm the "waiting to REALLY enter the
     // junkyard" latch that ProcessGameEvents case 78 tests.
     mbWaitingToPutPlayerInJunkyard = true;
+}
+
+// ============================================================================
+// ⭐⭐⭐ [L4 boot order 2026-09-28] OnProfileLoaded -- X360 0x82397310. THE LOADED PROFILE REACHES THE
+// GAME STATE. DWARF BrnGameStateModule.h:829 (BrnGameStateModule.cpp:6297 on the PS3, where the
+// licence-picture fix-up is still the out-of-line Profile::FixUp; the X360 inlines it).
+//
+// THE CONSOLE BODY, statement for statement (r31 = this, r30 = the profile == this+0xBCA0 ==
+// mProgressionManager's embedded Profile, r28 = lpOutput, r27 = lpOutputActionQueue):
+//   0x8239733C  assert lpProfile != NULL                                          (cpp:6586)
+//   0x82397368  NetworkTexture::Construct(profile+102620) ; NetworkTexture::Prepare(profile+102620,
+//               profile+102648, 0x2580, 0xA0, 0x78, 0x1A200052)                -- Profile::FixUp, inlined
+//   0x823973A4  ModeManager::ExitCurrentMode(this+0x1020, lpOutput, 1, 0x12)
+//   0x823973B4  RoadRulesManager::QuitAnyActiveRules(this+0x2CD28, lpOutput)
+//   0x823973C4  ProgressionManager::OnLoadProfile(this+0xBB30)
+//   0x823973D4  jy  = FindNearestJunkyardID(v1 = lvx128 profile+0x30)             -- the SAVED car position
+//   0x823973E4  car = GetSpawnCar(this, profile)
+//   0x82397404  idx = FindPlayerScoringIndexForActiveRaceCar(GetPlayerActiveRaceCarIndex())
+//   0x82397428  CarSelectManager::EnterJunkyardAtStartOfGame(this+0x2CDA0, queue, jy, car, 0, idx,
+//               this+0x38B80)                                                     -- the wheel is `li r7, 0`
+//   0x8239742C  ld profile.mSpawnCarId / profile.mSpawnWheelId; assert the car != 0 (BrnProfile.h:1903)
+//   0x82397470  OnSpecialEventPlayerCarChange(this, profile.mSpawnCarId, profile.mSpawnWheelId, queue, 1)
+//   0x82397480  StreetManager::OnProfileLoaded(this+0x45768, lpOutput)            -- the road-rule tables
+//   0x82397488  ModeManager::OnProfileLoaded(this+0x1020)                         -- the challenge bits
+//   0x8239749C  AddEvent(queue, <stack byte>, 194, 1)                             -- E_ACTION_LOAD_PROFILE
+//   0x823974B0  stb 1 -> this+0x38B72                                            -- mbWaitingToPutPlayerInJunkyard
+//   0x823974C0  if ((s8)ProgressionManager::GetProgressionRank() < 1)
+//                   AddEvent(queue, &flt_82005450 (0.9f), 28, 4)                  -- E_ACTION_SET_TRAFFIC_SCALE_BASED_ON_RANK
+//   0x823974E8  assert mProgressionManager.GetProfile()                          (cpp:6638)
+//   0x82397510  payload = this+0x29188 == &profile.maEventScoresToUpload
+//   0x82397518  assert lpOutputActionQueue                                        (cpp:6640)
+//   0x82397548  AddEvent(queue, &payload, 19, 4)                                  -- E_ACTION_NON_UPLOADED_MODE_SCORES
+//   0x82397558  RequestUnpause(this, 2, queue)
+//
+// WHY IT MATTERS. Every one of those puts the SAVE back into the running game: the road-rule records
+// (StreetManager copies them out of the profile; StreetManager::Update copies its tables back INTO the
+// profile every frame, so without this call a PC session wiped them and the next save wrote the wipe),
+// the max-car count and the rank cache (OnLoadProfile), the junkyard car (the saved one, at the junkyard
+// nearest where the player left it), and the smashed props (action 194 -> the prop world asks for the
+// profile's hit-prop bits -> ProcessGameEventsPropProgressionBringUp's tail answers).
+//
+// [PC seam] the console reaches this from ProcessGameEvents cases 8 and 109; this tree extracts those two
+// arms (ProcessGameEventsGameStartBringUp / ProcessGameEventsPropProgressionBringUp), and both run it
+// inside the output buffer's write lock with mbIsUpdating raised, as PreWorldUpdate does.
+// ============================================================================
+void GameStateModule::OnProfileLoaded(GameStateModuleIO::OutputBuffer* lpOutput,
+                                      GameStateModuleIO::GameActionQueue* lpOutputActionQueue)
+{
+    BrnProgression::Profile* const lpProfile = mProgressionManager.GetProfile();
+    if (lpProfile == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpProfile != NULL", KAC_GSM_FILE, 6586);
+        CgsDev::Assert::EndAssert();
+    }
+
+    lpProfile->FixUp();
+
+    // `li r6, 0x12` -- the mode-type argument is 18, one past E_MODE_ONLINE_MODE_END (17) on this build:
+    // the ModeManager's slot count (see KI_GAME_MODE_SLOTS; the WorldTick caller spells it the same way).
+    mModeManager.ExitCurrentMode(lpOutput, true,
+                                 static_cast<GameStateModuleIO::EGameModeType>(ModeManager::KI_GAME_MODE_SLOTS));
+    mRoadRulesManager.QuitAnyActiveRules(lpOutput);
+    mProgressionManager.OnLoadProfile();
+
+    const CgsID lJunkyardId = FindNearestJunkyardID(lpProfile->GetCarPosition());
+    const CgsID lSpawnCarId = GetSpawnCar(lpProfile);
+    const GameStateModuleIO::EPlayerScoringIndex leScoringIndex =
+        FindPlayerScoringIndexForActiveRaceCar(GetPlayerActiveRaceCarIndex());
+    mCarSelectManager.EnterJunkyardAtStartOfGame(lpOutputActionQueue, lJunkyardId, lSpawnCarId, 0,
+                                                 leScoringIndex, &mCachedCarSelectChangedAction);
+
+    // `ld r11, 0x50(r30) ; ld r25, 0x58(r30)` -- both ids are read before the inlined accessor's assert,
+    // and the car id is re-read after it (`ld r4, 0x50(r30)`).
+    const CgsID lSpawnWheelId = lpProfile->GetSpawnWheelId();
+    if (lpProfile->GetSpawnCarId() == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mSpawnCarId != 0", KAC_PROFILE_H_FILE, 1903);
+        CgsDev::Assert::EndAssert();
+    }
+    OnSpecialEventPlayerCarChange(lpProfile->GetSpawnCarId(), lSpawnWheelId, lpOutputActionQueue, true);
+
+    mStreetManager.OnProfileLoaded(lpOutput);
+    mModeManager.OnProfileLoaded();
+
+    // Action 194, one byte (`li r6, 1`; the payload is an untouched stack byte -- the record is empty).
+    const GameStateModuleIO::LoadProfileAction lLoadProfile = GameStateModuleIO::LoadProfileAction();
+    lpOutputActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lLoadProfile),
+                                  GameStateModuleIO::E_ACTION_LOAD_PROFILE,
+                                  static_cast<s32>(sizeof(lLoadProfile)));
+
+    mbWaitingToPutPlayerInJunkyard = true;   // `stbx r10(1), r31, 0x38B72`
+
+    // `extsb r11, r3 ; cmpwi cr6, r11, 1 ; bge` -- the SIGNED byte of the rank.
+    if (static_cast<s8>(mProgressionManager.GetProgressionRank()) < 1)
+    {
+        f32 lfTrafficScale = KF_ONPROFILELOADED_RANK_ZERO_TRAFFIC_SCALE;
+        lpOutputActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lfTrafficScale),
+                                      GameStateModuleIO::E_ACTION_SET_TRAFFIC_SCALE_BASED_ON_RANK, 4);
+    }
+
+    if (mProgressionManager.GetProfile() == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mProgressionManager.GetProfile()", KAC_GSM_FILE, 6638);
+        CgsDev::Assert::EndAssert();
+    }
+    // Action 19: the profile's not-yet-uploaded event scores, BY POINTER (the console's payload is the
+    // 4-byte address this+0x29188). The host record is one host pointer, read back at pointer width by
+    // the bridge's E_ACTION_NON_UPLOADED_MODE_SCORES arm (GameBridgeGameStateToX_wN1_01.cpp).
+    GameStateModuleIO::NonUploadedModeScoresAction lNonUploadedModeScores;
+    lNonUploadedModeScores.mpNonUploadedScores = lpProfile->GetEventScoresToUpload();
+    if (lpOutputActionQueue == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpOutputActionQueue", KAC_GSM_FILE, 6640);
+        CgsDev::Assert::EndAssert();
+    }
+    lpOutputActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lNonUploadedModeScores),
+                                  GameStateModuleIO::E_ACTION_NON_UPLOADED_MODE_SCORES,
+                                  static_cast<s32>(sizeof(lNonUploadedModeScores)));
+
+    RequestUnpause(2, lpOutputActionQueue);
+
+    // [witness] NOT IN THE X360 BINARY: one line per profile load (the boot, or an in-game load). The two car
+    // names are the ids' printable form (CgsIDConvertToString @0x82815D30), so a live case can match the car
+    // the world then streams in ("STRM: Adding racecar ... model=VEH_<name>").
+    if (CgsDev::Log::gpDebugPrint != 0)
+    {
+        const Vector3 lSavedPosition = lpProfile->GetCarPosition();
+        char lacSpawnCarName[KI_CGSID_STRING_LEN];
+        char lacProfileCarName[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lSpawnCarId, lacSpawnCarName);
+        CgsIDConvertToString(lpProfile->GetSpawnCarId(), lacProfileCarName);
+        *CgsDev::Log::gpDebugPrint
+            << "[GameStateModule::OnProfileLoaded] junkyard=" << static_cast<u64>(lJunkyardId)
+            << " spawnCar=" << lacSpawnCarName
+            << " profileCar=" << lacProfileCarName
+            << " rank=" << static_cast<s32>(static_cast<s8>(mProgressionManager.GetProgressionRank()))
+            << " maxCars=" << mProgressionManager.GetMaxCarCount()
+            << " savedPos=(" << lSavedPosition.x << ", " << lSavedPosition.y << ", " << lSavedPosition.z
+            << ")\n";
+    }
+}
+
+// ============================================================================
+// GetSpawnCar -- X360 0x823763C8 (DWARF BrnGameStateModule.h:787). The car the loaded profile spawns in.
+//   0x823763E8  assert lpProfile != NULL                                          (cpp:6657)
+//   0x82376408  ld profile+0x50; assert != 0                                      (BrnProfile.h:1903, inlined)
+//   0x82376444  list = this+0x456E8 (mpVehicleList); idx = GetVehicleIndex(list, id)
+//   0x82376458  entry = idx < 0 ? NULL : GetVehicleData(list, idx); assert entry  (cpp:6664)
+//   0x8237648C  gameplay = entry + 0x90; assert gameplay                          (cpp:6668)
+//   0x823764B8  rank byte = lbz 9(gameplay) (entry+0x99, VehicleListEntry::GetUnlockRank)
+//   0x823764C8  `extsb r10, r3 ; cmpw r10, r11 ; blt` -- (s8)GetProgressionRank() < that byte
+//                   -> CgsIDCompress("PUSMC01"), else the profile's id.
+// ============================================================================
+CgsID GameStateModule::GetSpawnCar(const BrnProgression::Profile* lpProfile)
+{
+    if (lpProfile == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpProfile != NULL", KAC_GSM_FILE, 6657);
+        CgsDev::Assert::EndAssert();
+    }
+    if (lpProfile->GetSpawnCarId() == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mSpawnCarId != 0", KAC_PROFILE_H_FILE, 1903);
+        CgsDev::Assert::EndAssert();
+    }
+
+    const CgsID lSpawnCarId = lpProfile->GetSpawnCarId();
+    const BrnResource::VehicleList* const lpVehicleList = mpVehicleList;
+    const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(lSpawnCarId);
+    const BrnResource::VehicleListEntry* const lpVehicleListEntry =
+        (liVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liVehicleIndex);
+    if (lpVehicleListEntry == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpVehicleListEntry != NULL", KAC_GSM_FILE, 6664);
+        CgsDev::Assert::EndAssert();
+        // [FLAG PC guard] the console carries on to `lbz r31, 9(entry+0x90)` with entry == NULL, i.e. it
+        // reads address 0x99 and faults. The PC answers the function's own other result instead of
+        // faulting: the default car.
+        return CgsIDCompress("PUSMC01");
+    }
+    // The console's second assert tests entry+0x90 (the embedded gameplay block), which cannot be NULL
+    // once entry is not; GetUnlockRank() is that block's +0x09 byte.
+    if (static_cast<s32>(static_cast<s8>(mProgressionManager.GetProgressionRank())) <
+        static_cast<s32>(lpVehicleListEntry->GetUnlockRank()))
+    {
+        return CgsIDCompress("PUSMC01");
+    }
+    return lSpawnCarId;
+}
+
+// ============================================================================
+// ProcessGameEventsGameStartBringUp -- ProcessGameEvents @0x823A0A18, the extracted CASE-8 ARM
+// (0x823A2758..0x823A2788). See the header for the console words and the seat.
+// ============================================================================
+void GameStateModule::ProcessGameEventsGameStartBringUp()
+{
+    if (mpOutputBuffer == 0)
+    {
+        return;
+    }
+    mpOutputBuffer->LockForWrite();
+    GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();
+    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");   // BrnGameStateModule.cpp:1149
+    mbIsUpdating = true;
+    if (mbWaitForStreaming)   // `lbzx r11, r31, 0x38B70 ; cmplwi cr6, r11, 0 ; beq`
+    {
+        OnProfileLoaded(mpOutputBuffer, lpActionQueue);
+        WaitForStreaming(lpActionQueue);
+    }
+    mbIsUpdating = false;
+    mpOutputBuffer->UnlockForWrite();
 }
 
 // ============================================================================
