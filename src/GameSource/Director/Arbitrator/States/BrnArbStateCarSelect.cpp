@@ -1056,7 +1056,7 @@ namespace BrnDirector
                 {
                     mbIsLeft = !mbIsLeft;
                     mTransitionCam.GetBehaviour()->ChangeMovie(
-                        mbIsLeft ? mpLeftToRight : mpRightToLeft, lrResources);
+                        mbIsLeft ? mpRightToLeft : mpLeftToRight, lrResources);
                     GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD_ENTERING;
                     Camera::EnsureEffectIsPlaying(GetNonConstCamera(),
                                                   *lrSharedInfo.mpEffectInterface,
@@ -1132,7 +1132,7 @@ namespace BrnDirector
             {
                 mbIsLeft = !mbIsLeft;
                 mTransitionCam.GetBehaviour()->ChangeMovie(
-                    mbIsLeft ? mpLeftToRight : mpRightToLeft, lrResources);
+                    mbIsLeft ? mpRightToLeft : mpLeftToRight, lrResources);
                 GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD_ENTERING;
                 Camera::EnsureEffectIsPlaying(GetNonConstCamera(),
                                               *lrSharedInfo.mpEffectInterface,
@@ -1207,7 +1207,7 @@ namespace BrnDirector
                     {
                         mbIsLeft = !mbIsLeft;
                         mTransitionCam.GetBehaviour()->ChangeMovie(
-                            mbIsLeft ? mpLeftToRight : mpRightToLeft, lrResources);
+                            mbIsLeft ? mpRightToLeft : mpLeftToRight, lrResources);
                         mfTimeInState                = 0.0f;
                         mbWaitingForCarToSpawn       = true;
                         mbWaitingForCarToTouchGround = false;
@@ -1263,7 +1263,7 @@ namespace BrnDirector
                 {
                     mbIsLeft = !mbIsLeft;
                     mTransitionCam.GetBehaviour()->ChangeMovie(
-                        mbIsLeft ? mpLeftToRight : mpRightToLeft, lrResources);
+                        mbIsLeft ? mpRightToLeft : mpLeftToRight, lrResources);
                     GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD_ENTERING;
                     Camera::EnsureEffectIsPlaying(GetNonConstCamera(),
                                                   *lrSharedInfo.mpEffectInterface,
