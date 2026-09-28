@@ -1,6 +1,9 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficLightManager.h"
 #include "SharedClasses/Traffic/Junctions/BrnTrafficLightCollection.h"   // TrafficLightCollection::GetInstanceIndexForInstanceID
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint (the countdown witness)
+#include "SharedClasses/Traffic/BrnTrafficHull.h"                         // Hull::muFirstTrafficLight / muLastTrafficLight
+                                                                          // (the corona renderers; one ETrafficLightState
+                                                                          // home since the BL-1 merge, L3 2026-09-27)
 #include <cstddef>                                                        // offsetof (the countdown member pins)
 #include <cstdlib>                                                        // std::getenv (the countdown witness)
 
@@ -296,6 +299,184 @@ void TrafficLightManager::Update(f32 lfTimeDelta)
         --giTrafficLightDiagLinesLeft;
         *lpDiag << "[traffic-lights] countdown over -> countdown=0 state=" << meCountdownState
                 << " (the lights return to their own phases) [FLAG PC witness]\n";
+    }
+}
+
+// ============================================================================
+// THE CORONA RENDERERS (L3 RACEINTRO, 2026-09-27) -- DWARF BrnTrafficLightManager.h :144 / :154, .cpp:290 / :353.
+//
+// The owner's report: "The races intro doesn't show the traffic light going green". The lights cycled on the PC
+// (0802404c) and followed the event countdown (30d481f4), but nothing drew them: a traffic light's lit lamps are its
+// coronas, and these two renderers -- the only callers of TrafficLightCollection::RenderCoronasForInstance
+// @0x827571B8 -- had no body. TrafficEntityModule::RenderTrafficLightCoronas @0x8271EC80 calls them from the
+// traffic dispatch pass.
+// ============================================================================
+
+namespace
+{
+    // [FLAG PC witness] (L3 RACEINTRO; NOT console code). BRN_TRAFFIC_LIGHT_CORONA_DIAG=<instance>, capped, reads
+    // only: the active-state mask a renderer hands RenderCoronasForInstance for that ONE light instance, each time
+    // it changes -- e.g. a start light through an event countdown (1 RED, 2 AMBER, 4 GREEN; 0 lights nothing).
+    s32 TrafficLightCoronaDiagInstance()
+    {
+        static const char* const spcValue = std::getenv("BRN_TRAFFIC_LIGHT_CORONA_DIAG");
+        static const s32 siInstance = (spcValue != nullptr) ? std::atoi(spcValue) : -1;
+        return siInstance;
+    }
+    u32 guTrafficLightCoronaDiagLastMask  = 0xFFFFFFFFu;
+    s32 giTrafficLightCoronaDiagLinesLeft = 48;
+
+    void ReportTrafficLightCorona(u32 luInstance, bool lbAllLightsRenderer, bool lbCountdown, bool lbSmashed,
+                                  u32 luActiveStates)
+    {
+        // The change key: the mask, whether it is the countdown's, and which renderer drew it.
+        const u32 luMask = lbSmashed ? 0x80000000u
+                                     : (luActiveStates | (lbCountdown ? 0x40000000u : 0u)
+                                        | (lbAllLightsRenderer ? 0x20000000u : 0u));
+        if (static_cast<s32>(luInstance) != TrafficLightCoronaDiagInstance() || luMask == guTrafficLightCoronaDiagLastMask
+            || giTrafficLightCoronaDiagLinesLeft <= 0 || CgsDev::Log::gpDebugPrint == nullptr)
+        {
+            return;
+        }
+        guTrafficLightCoronaDiagLastMask = luMask;
+        --giTrafficLightCoronaDiagLinesLeft;
+        *CgsDev::Log::gpDebugPrint << "[tl-corona] instance " << luInstance << " "
+                                   << (lbAllLightsRenderer ? "RenderAllLightsToBeInStateForHull" : "RenderLightsForHull")
+                                   << (lbCountdown ? " countdown" : "");
+        if (lbSmashed)
+        {
+            *CgsDev::Log::gpDebugPrint << " smashed: not drawn";
+        }
+        else
+        {
+            *CgsDev::Log::gpDebugPrint << " mask " << luActiveStates;
+        }
+        *CgsDev::Log::gpDebugPrint << " [FLAG PC witness]\n";
+    }
+}
+
+// -- TrafficLightRuntimeState::IsSmashed / GetLightState -- DWARF .cpp:100 / :118, inlined by both renderers ---------
+//   IsSmashed:      lbz r11, 5(state) ; rlwinm r11, r11, 0, 0, 24 (& 0xFFFFFF80) ; cmplwi r11, 0 ; bne -> skip
+//   GetLightState:  clrlwi r5, r11, 25 (& 0x7F), r11 the same flags byte (0x8275DDEC / 0x8275DE08)
+// The flags byte is TrafficLightRuntimeState::muFlags (+5): SetState (ChangeLightState's rlwimi) keeps its low three
+// bits at 1 << state, and TrafficLightGotSmashed / GotRestored set / clear the top bit.
+bool TrafficLightRuntimeState::IsSmashed() const
+{
+    return (muFlags & 0x80u) != 0;
+}
+
+u8 TrafficLightRuntimeState::GetLightState() const
+{
+    return static_cast<u8>(muFlags & 0x7Fu);
+}
+
+// -- RenderLightsForHull @ 0x8275DBF0 (a hole in the export set; read with tools/re/ppcdis.py) -- DWARF .cpp:290 ----
+//   r4 lpHull (r25) ; r5 lpTrafficLightData (r24) ; r6 lpCoronaSubmissionInterface (r22) ;
+//   v1 / v2 / v3 = lCameraPosition / lCameraDirection / lfCullDistSq (held in v127 / v126 / v125)
+//   cmplwi lpHull ; bne              else the .cpp:296 (0x128) tripwire "lpHull"             0x8275DC34..0x8275DC58
+//   cmplwi lpTrafficLightData ; bne  else the .cpp:297 (0x129) tripwire "lpTrafficLightData" 0x8275DC5C..0x8275DC7C
+//   lbz 0x12C0 (mbCountdownLights) ; beq -> the lights' own states                          0x8275DC80..0x8275DC88
+//   COUNTDOWN: lwz 0x12C4 ; cmpwi 3 ; bne  else the .cpp:301 (0x12D) tripwire
+//              "meCountdownState != E_TRAFFICLIGHTSTATE_COUNT"                               0x8275DC8C..0x8275DCB0
+//              luActiveStates = 1 << meCountdownState (lwz 0x12C4 again ; slw)               0x8275DCB4..0x8275DCC8
+//              luInstance from lhz +0xA (muFirstTrafficLight) while < lhz +0xC (muLastTrafficLight, re-read):
+//                GetLightState(luInstance), the const inline (h:217, the 0xD9 tripwire)     0x8275DCF0..0x8275DD0C
+//                cmplwi lpLightState ; bne  else the .cpp:309 (0x135) tripwire "lpLightState"
+//                IsSmashed() ; bne -> next light                                           0x8275DD30..0x8275DD3C
+//                RenderCoronasForInstance(luInstance, luActiveStates, lpCoronaSubmissionInterface, v1, v2, v3)
+//                                                                                            (bl 0x827571B8 at 0x8275DD5C)
+//   OWN STATES: the same walk with the .cpp:327 (0x147) "lpLightState" tripwire; the mask is each light's own
+//              GetLightState() (clrlwi r5, r11, 25 at 0x8275DE08; bl 0x827571B8 at 0x8275DE18).
+// Every countdown light shows the countdown's ONE lamp: RED at 3 and 2, AMBER at 1, GREEN at 0 for
+// KF_COUNTDOWN_RED_TIME (SetCountdownValue / Update above).
+void TrafficLightManager::RenderLightsForHull(const Hull* lpHull, const TrafficLightCollection* lpTrafficLightData,
+                                              BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface,
+                                              Vector3 lCameraPosition, Vector3 lCameraDirection,
+                                              VecFloat lfCullDistSq) const
+{
+    CGS_ASSERT(lpHull, "lpHull");                                                        // .cpp:296
+    CGS_ASSERT(lpTrafficLightData, "lpTrafficLightData");                                // .cpp:297
+
+    if (mbCountdownLights)
+    {
+        CGS_ASSERT(meCountdownState != E_TRAFFICLIGHTSTATE_COUNT,
+                   "meCountdownState != E_TRAFFICLIGHTSTATE_COUNT");                      // .cpp:301
+        const u32 luActiveStates = 1u << meCountdownState;
+
+        for (u32 luInstance = lpHull->muFirstTrafficLight; luInstance < lpHull->muLastTrafficLight; ++luInstance)
+        {
+            // The array still holds the 8-byte placeholder record (see the header); the reads go through the
+            // attested record, as Construct / ChangeLightState do.
+            const TrafficLightRuntimeState* lpLightState =
+                reinterpret_cast<const TrafficLightRuntimeState*>(GetLightState(luInstance));
+            CGS_ASSERT(lpLightState, "lpLightState");                                      // .cpp:309
+
+            ReportTrafficLightCorona(luInstance, false, true, lpLightState->IsSmashed(),
+                                     luActiveStates);                                     // [DIAG] NOT X360
+            if (!lpLightState->IsSmashed())
+            {
+                lpTrafficLightData->RenderCoronasForInstance(luInstance, luActiveStates, lpCoronaSubmissionInterface,
+                                                             lCameraPosition, lCameraDirection, lfCullDistSq);
+            }
+        }
+    }
+    else
+    {
+        for (u32 luInstance = lpHull->muFirstTrafficLight; luInstance < lpHull->muLastTrafficLight; ++luInstance)
+        {
+            const TrafficLightRuntimeState* lpLightState =
+                reinterpret_cast<const TrafficLightRuntimeState*>(GetLightState(luInstance));
+            CGS_ASSERT(lpLightState, "lpLightState");                                      // .cpp:327
+
+            ReportTrafficLightCorona(luInstance, false, false, lpLightState->IsSmashed(),
+                                     lpLightState->GetLightState());                      // [DIAG] NOT X360
+            if (!lpLightState->IsSmashed())
+            {
+                lpTrafficLightData->RenderCoronasForInstance(luInstance, lpLightState->GetLightState(),
+                                                             lpCoronaSubmissionInterface, lCameraPosition,
+                                                             lCameraDirection, lfCullDistSq);
+            }
+        }
+    }
+}
+
+// -- RenderAllLightsToBeInStateForHull @ 0x8275DE50 -- DWARF .cpp:353 ---------------------------------------------
+//   r4 lpHull (r26) ; r5 lpTrafficLightData (r24) ; r6 luActiveStates (r23) ; r7 lpCoronaSubmissionInterface (r22) ;
+//   v1 / v2 / v3 as above
+//   cmplwi lpHull ; bne              else the .cpp:359 (0x167) tripwire "lpHull"             0x8275DE98..0x8275DEBC
+//   cmplwi lpTrafficLightData ; bne  else the .cpp:360 (0x168) tripwire "lpTrafficLightData" 0x8275DEC0..0x8275DEE0
+//   luInstance from lhz +0xA while < lhz +0xC (re-read every pass):
+//     GetLightState(luInstance), the const inline (h:217, the 0xD9 tripwire)                0x8275DF14..0x8275DF30
+//     cmplwi lpLightState ; bne  else the .cpp:366 (0x16E) tripwire "lpLightState"          0x8275DF34..0x8275DF50
+//     IsSmashed() ; bne -> next light                                                       0x8275DF54..0x8275DF60
+//     RenderCoronasForInstance(luInstance, luActiveStates, lpCoronaSubmissionInterface, v1, v2, v3)
+//                                                                                            (bl 0x827571B8 at 0x8275DF80)
+// RenderTrafficLightCoronas passes 1 << E_TRAFFICLIGHTSTATE_GREEN (li r6, 4 at 0x8271F244): the lights of every
+// hull the player's simulation does not run show GREEN.
+void TrafficLightManager::RenderAllLightsToBeInStateForHull(const Hull* lpHull,
+                                                            const TrafficLightCollection* lpTrafficLightData,
+                                                            u32 luActiveStates,
+                                                            BrnCoronaManager::BrnSubmissionInterface*
+                                                                lpCoronaSubmissionInterface,
+                                                            Vector3 lCameraPosition, Vector3 lCameraDirection,
+                                                            VecFloat lfCullDistSq) const
+{
+    CGS_ASSERT(lpHull, "lpHull");                                                        // .cpp:359
+    CGS_ASSERT(lpTrafficLightData, "lpTrafficLightData");                                // .cpp:360
+
+    for (u32 luInstance = lpHull->muFirstTrafficLight; luInstance < lpHull->muLastTrafficLight; ++luInstance)
+    {
+        const TrafficLightRuntimeState* lpLightState =
+            reinterpret_cast<const TrafficLightRuntimeState*>(GetLightState(luInstance));
+        CGS_ASSERT(lpLightState, "lpLightState");                                          // .cpp:366
+
+        ReportTrafficLightCorona(luInstance, true, false, lpLightState->IsSmashed(),
+                                 luActiveStates);                                         // [DIAG] NOT X360
+        if (!lpLightState->IsSmashed())
+        {
+            lpTrafficLightData->RenderCoronasForInstance(luInstance, luActiveStates, lpCoronaSubmissionInterface,
+                                                         lCameraPosition, lCameraDirection, lfCullDistSq);
+        }
     }
 }
 

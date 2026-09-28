@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "BrnCommonTypes.h"                          // Vector3, VecFloat (the corona renderers, L3 2026-09-27)
+#include "GameSource/Graphics/BrnCoronaManager.h"   // BrnCoronaManager::BrnSubmissionInterface (the same)
 
 // ---------------------------------------------------------------------------
 // BrnTraffic::TrafficLightManager
@@ -95,6 +97,15 @@ namespace BrnTraffic
         // mfTimer; once it reaches <= 0, clamp the timer to 0, drop to E_STATE_IDLE, and
         // set the low sub-state bits of muFlags to 1. Unknown phases (>=3) assert.
         void Update(f32 lfTimeDelta);
+
+        // ADDITIVE (L3 RACEINTRO, 2026-09-27) -- DWARF BrnTrafficLightManager.h :74 / :77, bodied in
+        // BrnTrafficLightManager.cpp (DWARF .cpp:100 / :118). Both corona renderers inline them:
+        //   IsSmashed      the flags byte's top bit: lbz +5 ; rlwinm 0,0,24 (& 0xFFFFFF80) ; cmplwi 0
+        //                  (0x8275DD30..0x8275DD38, 0x8275DDEC..0x8275DDF4, 0x8275DF54..0x8275DF5C)
+        //   GetLightState  the flags byte's low seven bits: the light's active-state mask, 1 << its state
+        //                  (clrlwi r5, r11, 25 at 0x8275DE08)
+        bool IsSmashed() const;
+        u8   GetLightState() const;
     };
 
     class TrafficLightManager
@@ -148,6 +159,22 @@ namespace BrnTraffic
         //                            Called by TrafficEntityModule::UpdateJunctions for every active hull.
         void UpdateHull(const Hull* lpHull, f32 lfTimeDelta);
 
+        // ADDITIVE (L3 RACEINTRO, 2026-09-27) -- the corona renderers, DWARF :144 / :154, bodied in
+        // BrnTrafficLightManager.cpp (DWARF .cpp:290 / :353). TrafficEntityModule::RenderTrafficLightCoronas
+        // @0x8271EC80 calls the first for every active hull and the second for every other hull in the camera
+        // frustum:
+        //   RenderLightsForHull               @0x8275DBF0  every unsmashed light of the hull in its own state -- or,
+        //                                                  while an event counts down, in the countdown's state
+        //   RenderAllLightsToBeInStateForHull @0x8275DE50  every unsmashed light of the hull in luActiveStates
+        void RenderLightsForHull(const Hull* lpHull, const TrafficLightCollection* lpTrafficLightData,
+                                 BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface,
+                                 Vector3 lCameraPosition, Vector3 lCameraDirection, VecFloat lfCullDistSq) const;
+        void RenderAllLightsToBeInStateForHull(const Hull* lpHull, const TrafficLightCollection* lpTrafficLightData,
+                                               u32 luActiveStates,
+                                               BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface,
+                                               Vector3 lCameraPosition, Vector3 lCameraDirection,
+                                               VecFloat lfCullDistSq) const;
+
     private:
         // The state array begins at offset 0 of the manager (record base == this).
         TrafficLightState maLightStates[KU_MAX_TRAFFIC_LIGHT_INSTANCES];
@@ -163,6 +190,15 @@ namespace BrnTraffic
                                          //                storage: the enum has two homes in this
                                          //                tree that cannot meet in one TU (BL-1)
         f32  mfCountdownRemainingTime;   // :180  +0x12C8
+
+        // ADDITIVE (L3 RACEINTRO, 2026-09-27) -- DWARF :184, the const overload both corona renderers inline, bodied
+        // at this header's line 217: the (0xD9) "luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES" tripwire (cmplwi 0x258
+        // at 0x8275DCF0 / 0x8275DDAC / 0x8275DF14), then this + 8 * luInstance.
+        const TrafficLightState* GetLightState(u32 luInstance) const
+        {
+            CGS_ASSERT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES, "luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES");
+            return &maLightStates[luInstance];
+        }
     };
 
     // ------------------------------------------------------------------------

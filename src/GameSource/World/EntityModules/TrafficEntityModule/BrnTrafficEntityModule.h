@@ -636,6 +636,13 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
                                Vector4 lRearLights,
                                s32* lpiUpdatedNumDamagedVehiclesRendered );
 
+        // @0x8271EC80, DWARF :1845 (L3 RACEINTRO 2026-09-27). The traffic lights' coronas: the active hulls' lights
+        // in their own (or the countdown's) state, every other hull in the camera frustum GREEN. Called by
+        // GenerateDispatchLists off the shadow pass. Body in BrnTrafficEntityModule_Render.cpp.
+        void RenderTrafficLightCoronas( BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface,
+                                        Vector3 lCameraPosition,
+                                        Vector3 lCameraDirection );
+
         // No member sits at X360 +0x71870: GenerateDispatchLists' `stvx128 v127, r29, r11`
         // @0x8273B2DC is the inlined `mFuzzyBehaviours.DEBUGSetLastCameraPos(lCameraPosition)`.
         // mpData is at +0x71840 and a console ResourcePtr is 32 bytes, so mFuzzyBehaviours

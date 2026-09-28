@@ -6,6 +6,7 @@
 //   BrnTraffic::TrafficEntityModule::PreDispatchUpdate     @ 0x8274D900   (EXPORT HOLE)
 //   BrnTraffic::TrafficEntityModule::GenerateDispatchLists @ 0x8273B280
 //   BrnTraffic::TrafficEntityModule::RenderTrafficCar      @ 0x82728B08   (3,252 ln)
+//   BrnTraffic::TrafficEntityModule::RenderTrafficLightCoronas @ 0x8271EC80 (EXPORT HOLE; L3 2026-09-27)
 //
 // All three parameter lists are the DecFIGS DWARF's
 // (dwarfdump/_compile/BrnTrafficUnity.cpp :19315 / :23926 / :23103), each cross-checked
@@ -27,8 +28,10 @@
 //      TrafficPhysicsInfo::maWheelTransforms and its blobby ground shadow is suppressed;
 //   G3 the glass-fracture reset + the damaged-vehicle budget leg;
 //   G4 the detached-body-part override table;
-//   G5 SubmitCoronasForVehicle @0x82727BB0 / RenderTrafficLightCoronas @0x8271EC80;
-//   G6 BrnBlobbyShadowBuffer::AddShadow -- the buffer has no owner on this build.
+//   G5 SubmitCoronasForVehicle @0x82727BB0 (its sibling RenderTrafficLightCoronas @0x8271EC80 landed:
+//      L3 RACEINTRO 2026-09-27);
+//   G6 BrnBlobbyShadowBuffer::AddShadow -- the buffer has no owner on this build;
+//   G7 RenderTrafficLightCoronas' replay-playback source (the serialiser at module +0x724C0).
 // PreDispatchUpdate is otherwise real, including the FastBitArray duplicate suppression and the
 // species-dispatched liveness predicate; GenerateDispatchLists is complete apart from G5;
 // RenderTrafficCar's entry gates, asset/spec resolution, paint colour, body transform, shader
@@ -61,6 +64,8 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                // CgsSceneManager::EntityId
 #include "rw/math/vpu/matrix44affine_operation.h"                           // Mult / MakeRotationX/Y/Z / Inverse / TransformPoint
+#include "GameShared/GameClasses/Graphics/CgsCamera.h"                     // CgsGraphics::Camera (RenderTrafficLightCoronas)
+#include "SharedClasses/Traffic/BrnTrafficPvs.h"                           // Pvs::GetHullIndexForPoint / ForIndices (the same)
 
 #include <cmath>    // powf / sqrtf
 #include <cstdlib>  // getenv / atoi ([tdef-upload] witness, opt-in)
@@ -484,9 +489,9 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
         laRearLights[ luZero ].SetZero();
     }
 
-    // ---- step 7: the corona pass -- NAMED GATE G5 --------------------------
-    // The console's shape, kept as the record of what must land:
-    //   if ( !lpShadowMap->IsRenderingShadowMap() )
+    // ---- step 7: the corona pass (0x8273B438..0x8273B4C4) --------------------
+    // The console's shape:
+    //   if ( !lpShadowMap->IsRenderingShadowMap() )                     lbz 0(r23) ; bne -> step 8
     //   {
     //       CgsDev::PerfMonCpu::StartMonitor( <ship-only monitor id at module +0x72A38> );
     //       for ( i = 0; i < luLength; ++i )
@@ -496,14 +501,30 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
     //                                    laFrontLights[i], laRearLights[i] );   // r6/r7 OUT
     //       CgsDev::PerfMonCpu::StopMonitor( ... );
     //       RenderTrafficLightCoronas( lpInput->GetCoronaSubmissionInterface(),
-    //                                  lCameraPosition, lCameraDirection );
+    //                                  lCameraPosition, lCameraDirection );  // bl 0x8271EC80 at 0x8273B4C4
     //   }
-    // BLOCKERS: SubmitCoronasForVehicle @0x82727BB0 (DWARF :22445) and RenderTrafficLightCoronas
-    // @0x8271EC80 (DWARF :7711, an export hole) have no declaration in this tree; the monitor id
-    // at +0x72A38 is a ship-only member with no DWARF name. The order is load-bearing: the corona
-    // pass runs before the draw pass and only off the shadow pass, matching the race-car leg's
-    // own mbRenderingShadowMap `continue`.
-    // DELETE-WHEN the two producers land.
+    // NAMED GATE G5, what is left of it: SubmitCoronasForVehicle @0x82727BB0 (DWARF :22445) has no
+    // declaration in this tree, so the traffic cars' own light coronas stay unsubmitted and the two light
+    // vectors stay zero; the monitor id at +0x72A38 is a ship-only member with no DWARF name (debug-only).
+    // The order is load-bearing: the corona pass runs before the draw pass and only off the shadow pass,
+    // matching the race-car leg's own mbRenderingShadowMap `continue`.
+    // DELETE-WHEN SubmitCoronasForVehicle lands.
+    if ( !lpShadowMap->IsRenderingShadowMap() )
+    {
+        // [FLAG PC bring-up gate] NOT in the console, which asserts the interface non-null on entry (:14060)
+        // and walks on. On this build the slot is staged every frame by WorldModule's bring-up dispatch
+        // (sTrafficDispatchInput.SetCoronaSubmissionInterface, BrnWorldModule.cpp) from BrnRendererModule's
+        // corona manager, which is Constructed LAZILY inside BrnRendererModule::Render: a non-null interface
+        // does not imply a real corona buffer, and AddCorona writes straight through it. IsReady() is the
+        // manager's own answer, the one the race-car leg asks too (BrnRaceCarEntityModule_Render.cpp).
+        // DELETE the IsReady() term when the corona manager is constructed unconditionally.
+        BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface =
+            lpInput->GetCoronaSubmissionInterface();
+        if ( lpCoronaSubmissionInterface != 0 && lpCoronaSubmissionInterface->IsReady() )
+        {
+            RenderTrafficLightCoronas( lpCoronaSubmissionInterface, lCameraPosition, lCameraDirection );
+        }
+    }
 
     // ---- step 8/9 ----------------------------------------------------------
     // ONE budget for the whole loop. The console seeds it to 0 before the loop and passes its
@@ -533,6 +554,177 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
 
     // ---- step 10 -----------------------------------------------------------
     lpInput->UnlockForRead();
+}
+
+
+// ============================================================================
+// RenderTrafficLightCoronas  @ 0x8271EC80   (L3 RACEINTRO, 2026-09-27)
+//
+// The owner's report: "The races intro doesn't show the traffic light going green". A traffic light's lit lamps
+// are its coronas, and this is the pass that submits them. It had no body and no call, so no traffic light ever
+// lit up on the PC -- not the start light through the countdown, not a free-roam light cycling.
+//
+// DWARF BrnTrafficEntityModule.h :1845 (locals .cpp 3378..3425 on the PS3; the X360 tripwire cites .cpp:3359).
+// A hole in the export set: read off the words 0x8271EC80..0x8271F290 with tools/re/ppcdis.py.
+//   r3 this (r27) ; r4 lpCoronaSubmissionInterface (r15, spilled at 0x3EC) ; v1 lCameraPosition (v125) ;
+//   v2 lCameraDirection (v124)
+//   1. The light manager and the active-hull set: `lbzx +0x72520` -- live (0): &mTrafficLightManager (+0x53790)
+//      and &mActiveHullsForLocalPlayer (+0x3EA9C); the replay arm is gate G7 below. Then the .cpp:3359 (0xD1F)
+//      tripwire "lpTrafficLightManager".
+//   2. PerfMonCpu::StartMonitor / StopMonitor (+0x72A30, then +0x72A34 around step 4): debug-only, left out.
+//   3. Every ACTIVE hull (the Set's GetLength / operator[] tripwires, CgsSet.h:227 / :257 / :258):
+//      lpHull = GetHull(id) (the BrnTrafficEntityModule.h:2229 tripwire), then RenderLightsForHull(lpHull,
+//      &mpData->mTrafficLights, lpCoronaSubmissionInterface, lCameraPosition, lCameraDirection,
+//      VecFloat(KF_RENDER_CULL_CORONA_DISTANCE_SQ)) (bl 0x8275DBF0 at 0x8271EE88): the lights in their own
+//      states -- or, through an event countdown, in the countdown's.
+//   4. The camera frustum's other hulls:
+//      lCamera: mCameraLastFrame.CopyToCgsCamera (bl 0x8220AC48 at 0x8271EEC0), then
+//        SetFarClipPlane(KF_RENDER_CULL_CORONA_DISTANCE), inlined as `stfs f0, 0x2E0(r1)` (camera +0x160) and
+//        bl UpdatePerspectiveProjectionMatrix (0x8271EED4);
+//      laFrustrumPoints: lCamera.GetFrustumPerspectiveVertices (bl 0x827E70E0 at 0x8271EEE0);
+//      lFrustrumMin / lFrustrumMax start at {FLT_MAX x3, 0} / {-FLT_MAX x3, 0} (flt_820BA23C / flt_82035570, w
+//        stored 0), then vminfp / vmaxfp with each of the eight points (0x8271EF34..0x8271EF4C);
+//      mpData->mpPvs->GetHullIndexForPoint(lFrustrumMin, MinX, MinZ) and (lFrustrumMax, MaxX, MaxZ)
+//        (bl 0x827106B8 at 0x8271EF74 / 0x8271EF98; both clamp into the grid);
+//      for liHullZ = MinZ..MaxZ, liHullX = MinX..MaxX (cmpw, both inclusive):
+//        the hull at GetHullIndexForIndices(liHullX, liHullZ) (inlined, the BrnTrafficPvs.h:188 tripwire);
+//        lpHull = GetHull(it) (h:2229, BEFORE the set test);
+//        when the hull is NOT active (CgsSet.h:332 Contains; Find bl 0x8270C598 at 0x8271F1C0 == -1):
+//          RenderAllLightsToBeInStateForHull(lpHull, &mpData->mTrafficLights, 1 << E_TRAFFICLIGHTSTATE_GREEN
+//          (li r6, 4 at 0x8271F244), lpCoronaSubmissionInterface, lCameraPosition, lCameraDirection,
+//          VecFloat(KF_RENDER_CULL_CORONA_DISTANCE_SQ)) (bl 0x8275DE50 at 0x8271F25C).
+//      So every light that no active hull simulates shows GREEN.
+// ============================================================================
+namespace
+{
+    // DWARF BrnTrafficTweakConstants.h:177 KF_RENDER_CULL_CORONA_DISTANCE: the frustum camera's far plane --
+    // flt_8200A034 == 500.0f (0x43FA0000), loaded at 0x8271EECC.
+    const f32 KF_RENDER_CULL_CORONA_DISTANCE = 500.0f;
+
+    // DWARF BrnTrafficTweakConstants.h:232 KF_RENDER_CULL_CORONA_DISTANCE_SQ: the coronas' distance cull --
+    // 0x82F2FE60 == 250000.0f (0x48742400), splatted by lvlx + vspltw128 at 0x8271EE54 / 0x8271F1D0. Its one
+    // reference in the image is this function (tools/re/findinit.py: no writer).
+    const f32 KF_RENDER_CULL_CORONA_DISTANCE_SQ = 250000.0f;
+
+    // The frustum bounds' starting values: flt_820BA23C == 3.40282347e+38f (0x7F7FFFFF, FLT_MAX), negated by
+    // flt_82035570 (0xFF7FFFFF).
+    const f32 KF_FRUSTRUM_BOUND_START = 3.40282347e+38f;
+
+    // vminfp / vmaxfp lanes (0x8271EF40 / 0x8271EF48): a NaN operand is the result (the running bound first),
+    // and -0 sits below +0.
+    f32 VmxMinLane( f32 lfA, f32 lfB )
+    {
+        if ( lfA != lfA ) { return lfA; }
+        if ( lfB != lfB ) { return lfB; }
+        if ( lfA == lfB ) { return std::signbit( lfA ) ? lfA : lfB; }
+        return ( lfA < lfB ) ? lfA : lfB;
+    }
+
+    f32 VmxMaxLane( f32 lfA, f32 lfB )
+    {
+        if ( lfA != lfA ) { return lfA; }
+        if ( lfB != lfB ) { return lfB; }
+        if ( lfA == lfB ) { return std::signbit( lfA ) ? lfB : lfA; }
+        return ( lfA > lfB ) ? lfA : lfB;
+    }
+
+    // [FLAG PC witness] (L3 RACEINTRO; NOT console code). BRN_TRAFFIC_LIGHT_CORONA_DIAG (any value; its
+    // instance form is the manager's), capped, reads only: every 120th pass, how many active hulls and which
+    // frustum cells the pass walked.
+    bool TrafficLightCoronaPassDiagEnabled()
+    {
+        static const bool sbEnabled = std::getenv( "BRN_TRAFFIC_LIGHT_CORONA_DIAG" ) != 0;
+        return sbEnabled;
+    }
+    u32 guTrafficLightCoronaPassCount     = 0;
+    s32 giTrafficLightCoronaPassLinesLeft = 24;
+}
+
+void
+TrafficEntityModule::RenderTrafficLightCoronas( BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface,
+                                                Vector3 lCameraPosition,
+                                                Vector3 lCameraDirection )
+{
+    // ---- step 1, NAMED GATE G7: the replay-playback source ------------------
+    // Under the replay latch at module +0x72520 the console takes both inputs from
+    // BrnReplays::TrafficEntitySerialiser (module +0x724C0; sub_82707090 twice: the manager at its +0x22FB0, the
+    // active-hull set at its +0). The latch and the serialiser are not modelled on this build (the un-emitted DWARF
+    // :776/:777 window; AddVehiclesToTargetList's replay hull source is the same gate), and Construct writes the
+    // latch ZERO, so live play takes this arm. DELETE-WHEN the replay wave lands.
+    const TrafficLightManager* lpTrafficLightManager = &mTrafficLightManager;
+    const ::Set<u16, KU_MAX_ACTIVE_HULLS>& lrActiveHulls = mActiveHullsForLocalPlayer;
+    CGS_ASSERT( lpTrafficLightManager != 0, "lpTrafficLightManager" );              // .cpp:3359
+
+    const VecFloat lfCullDistSq = { KF_RENDER_CULL_CORONA_DISTANCE_SQ, KF_RENDER_CULL_CORONA_DISTANCE_SQ,
+                                    KF_RENDER_CULL_CORONA_DISTANCE_SQ, KF_RENDER_CULL_CORONA_DISTANCE_SQ };
+
+    // ---- step 3: the active hulls ------------------------------------------
+    for ( u32 luActiveHull = 0; luActiveHull < lrActiveHulls.GetLength(); ++luActiveHull )
+    {
+        const Hull* lpHull = GetHull( lrActiveHulls[ luActiveHull ] );
+        lpTrafficLightManager->RenderLightsForHull( lpHull, &mpData->mTrafficLights, lpCoronaSubmissionInterface,
+                                                    lCameraPosition, lCameraDirection, lfCullDistSq );
+    }
+
+    // ---- step 4: every other hull in the camera frustum, GREEN ----------------
+    CgsGraphics::Camera lCamera;
+    mCameraLastFrame.CopyToCgsCamera( &lCamera );
+    lCamera.SetFarClipPlane( KF_RENDER_CULL_CORONA_DISTANCE );
+
+    Vector3 laFrustrumPoints[ 8 ];
+    lCamera.GetFrustumPerspectiveVertices( laFrustrumPoints );
+
+    Vector3 lFrustrumMin = { KF_FRUSTRUM_BOUND_START, KF_FRUSTRUM_BOUND_START, KF_FRUSTRUM_BOUND_START, 0.0f };
+    Vector3 lFrustrumMax = { -KF_FRUSTRUM_BOUND_START, -KF_FRUSTRUM_BOUND_START, -KF_FRUSTRUM_BOUND_START, 0.0f };
+    for ( u32 luIndex = 0; luIndex < 8; ++luIndex )
+    {
+        const Vector3& lrPoint = laFrustrumPoints[ luIndex ];
+        lFrustrumMin.x = VmxMinLane( lFrustrumMin.x, lrPoint.x );
+        lFrustrumMin.y = VmxMinLane( lFrustrumMin.y, lrPoint.y );
+        lFrustrumMin.z = VmxMinLane( lFrustrumMin.z, lrPoint.z );
+        lFrustrumMin.w = VmxMinLane( lFrustrumMin.w, lrPoint.w );
+        lFrustrumMax.x = VmxMaxLane( lFrustrumMax.x, lrPoint.x );
+        lFrustrumMax.y = VmxMaxLane( lFrustrumMax.y, lrPoint.y );
+        lFrustrumMax.z = VmxMaxLane( lFrustrumMax.z, lrPoint.z );
+        lFrustrumMax.w = VmxMaxLane( lFrustrumMax.w, lrPoint.w );
+    }
+
+    s32 liHullIndexMinX = 0;
+    s32 liHullIndexMinZ = 0;
+    s32 liHullIndexMaxX = 0;
+    s32 liHullIndexMaxZ = 0;
+    mpData->mpPvs->GetHullIndexForPoint( lFrustrumMin, liHullIndexMinX, liHullIndexMinZ );
+    mpData->mpPvs->GetHullIndexForPoint( lFrustrumMax, liHullIndexMaxX, liHullIndexMaxZ );
+
+    u32 luDiagOtherHulls = 0;   // [DIAG] NOT X360
+    for ( s32 liHullZ = liHullIndexMinZ; liHullZ <= liHullIndexMaxZ; ++liHullZ )
+    {
+        for ( s32 liHullX = liHullIndexMinX; liHullX <= liHullIndexMaxX; ++liHullX )
+        {
+            const u32   luHullIndex = mpData->mpPvs->GetHullIndexForIndices( liHullX, liHullZ );
+            const Hull* lpHull      = GetHull( luHullIndex );
+            if ( !lrActiveHulls.Contains( static_cast<u16>( luHullIndex ) ) )
+            {
+                lpTrafficLightManager->RenderAllLightsToBeInStateForHull(
+                    lpHull, &mpData->mTrafficLights, 1u << E_TRAFFICLIGHTSTATE_GREEN, lpCoronaSubmissionInterface,
+                    lCameraPosition, lCameraDirection, lfCullDistSq );
+                ++luDiagOtherHulls;
+            }
+        }
+    }
+
+    // [DIAG] NOT X360 -- see TrafficLightCoronaPassDiagEnabled.
+    if ( TrafficLightCoronaPassDiagEnabled() && ( guTrafficLightCoronaPassCount++ % 120u ) == 0u
+         && giTrafficLightCoronaPassLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+    {
+        --giTrafficLightCoronaPassLinesLeft;
+        *CgsDev::Log::gpDebugPrint << "[tl-coronas] pass " << guTrafficLightCoronaPassCount << ": active hulls "
+                                   << lrActiveHulls.GetLength() << " | frustum cells x " << liHullIndexMinX << ".."
+                                   << liHullIndexMaxX << " z " << liHullIndexMinZ << ".." << liHullIndexMaxZ
+                                   << ", other hulls GREEN " << luDiagOtherHulls << " | camera "
+                                   << lCameraPosition.x << "," << lCameraPosition.y << "," << lCameraPosition.z
+                                   << " [FLAG PC witness]\n";
+    }
 }
 
 

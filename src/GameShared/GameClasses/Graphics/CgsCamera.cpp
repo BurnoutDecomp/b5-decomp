@@ -346,6 +346,154 @@ namespace CgsGraphics
         }
     }
 
+    // ========================================================================
+    // CgsGraphics::Camera::GetFrustumPerspectiveVertices @0x827E70E0 (DWARF CgsCamera.h:174, .cpp:456)
+    // ADDITIVE (L3 RACEINTRO, 2026-09-27). A leaf, 0x827E70E0..0x827E72DC, read with tools/re/vmx128.py. Its one
+    // caller is TrafficEntityModule::RenderTrafficLightCoronas @0x8271EC80, which bounds these eight corners to walk
+    // the Pvs cells whose traffic lights it draws.
+    //
+    // frustumVerts[0..3] are the near-plane corners and [4..7] the far-plane ones, each set walked (+x +y), (-x +y),
+    // (-x -y), (+x -y) in the camera's own axes. The DWARF locals name the steps: `Matrix44Affine transform` (the
+    // inverse of mView, inlined as the adjugate), lrNear / lrFar (scalars [7] / [8], lfs 0x15C / 0x160),
+    // lrTanHalfFovX / lrTanHalfFovY (scalars [2] / [5], lfs 0x148 / 0x154), lRightVec, lUpVec, tmpVec3, index.
+    //   the three crosses, each as the console forms it: c = a * b.yzxw (vmulfp128), c = -(a.yzxw * b - c)
+    //     (vnmsubfp, ONE rounding), then c.yzxw (vpermwi128 0x63) -- Z x X at 0x827E7124 / 0x827E7178 / 0x827E7198,
+    //     Y x Z at 0x827E7130 / 0x827E7184 / 0x827E719C, X x Y at 0x827E7138 / 0x827E718C / 0x827E71A0
+    //   det = X . (Y x Z), vmsum3fp128 at 0x827E71AC                                          ROUNDING_RULE 1
+    //   1 / det: the vrefp estimate (0x827E71C0), refined twice by e = -(r * det - 1) (vnmsubfp), r = r * e + r
+    //     (vmaddfp): 0x827E71C4 / 0x827E71C8, then 0x827E71D0 / 0x827E71F4                       rules 5 and 3
+    //   the transform rows are the crosses transposed (vmrghw / vmrglw, 0x827E71A4..0x827E71E0), each * 1/det
+    //     (vmulfp128 0x827E71FC / 0x827E7200 / 0x827E7204). The merge puts (Z x X).x / .y / .z in their w lanes.
+    //   transform.Pos = -W.x * row0 (vmulfp128 0x827E720C), then + -W.y * row1 and + -W.z * row2 (vmaddfp
+    //     0x827E7214 / 0x827E7218). -W is the sign-bit vxor at 0x827E7148.
+    //   lRightVec = row0 * lrTanHalfFovX (0x827E7208) ; lUpVec = row1 * lrTanHalfFovY (0x827E7210)
+    //   the corner directions: d0 = (lRightVec + lUpVec) + row2 (vaddfp 0x827E721C / 0x827E724C);
+    //     d1 = d0 - lRightVec * 2 (vmulfp128 0x827E7270 by flt_82001D9C == 2.0f, vsubfp 0x827E7274);
+    //     d2 = d1 - lUpVec * 2 (0x827E7258 / 0x827E7278) ; d3 = d2 + lRightVec * 2 (vaddfp 0x827E7280)
+    //   for index 0..3: frustumVerts[index] = d * lrNear + Pos and frustumVerts[index + 4] = d * lrFar + Pos, each
+    //     a vmaddfp (ONE rounding): 0x827E72C0 / 0x827E72D0
+    // Every lane is computed, the w lanes too, as the console stores all four.
+    // FLAG (model, rule 5): the vrefp estimate is taken as the correctly rounded 1 / det.
+    // FLAG (rule 6, not modelled): VMX flushes denormals. A lane gets there only when a camera axis component is
+    // below ~1e-19, and a flushed lane then moves a corner by less than 1e-30 m, which the cell walk cannot see.
+    // ========================================================================
+    namespace
+    {
+        // One VMX register's four lanes, so that no rw::math operator rounds between the console's instructions.
+        struct FrustumVertexLanes { f32 maf[4]; };
+
+        FrustumVertexLanes FrustumVertexLanesOf(const Vector4& lrRow)
+        {
+            const FrustumVertexLanes lLanes = { { lrRow.x, lrRow.y, lrRow.z, lrRow.w } };
+            return lLanes;
+        }
+
+        // vmaddfp lane: a * c + b, ONE rounding (rule 3; IDA prints the operands D, A, B, C).
+        inline f32 FrustumVertexMultiplyAdd(f32 lfA, f32 lfC, f32 lfB)
+        {
+            return std::fma(lfA, lfC, lfB);
+        }
+
+        // vnmsubfp lane: -(a * c - b), rounded ONCE and then negated -- an exact cancellation is -0 and a NaN keeps
+        // its sign (the EffectsModule.cpp Vnmsub / ConsoleVpu::NegativeMultiplySubtract convention, rule 3).
+        inline f32 FrustumVertexNegativeMultiplySubtract(f32 lfA, f32 lfC, f32 lfB)
+        {
+            const f32 lfDifference = std::fma(lfA, lfC, -lfB);
+            return (lfDifference != lfDifference) ? lfDifference : -lfDifference;
+        }
+
+        // a x b as the console forms it: c = a * b.yzxw ; c = -(a.yzxw * b - c) ; then c.yzxw.
+        FrustumVertexLanes FrustumVertexCross(const FrustumVertexLanes& lrA, const FrustumVertexLanes& lrB)
+        {
+            static const s32 KAI_YZXW[4] = { 1, 2, 0, 3 };   // vpermwi128 0x63
+            f32 lafC[4];
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                const f32 lfProduct = lrA.maf[liLane] * lrB.maf[KAI_YZXW[liLane]];                      // vmulfp128
+                lafC[liLane] = FrustumVertexNegativeMultiplySubtract(lrA.maf[KAI_YZXW[liLane]], lrB.maf[liLane],
+                                                                     lfProduct);                         // vnmsubfp
+            }
+            const FrustumVertexLanes lCross = { { lafC[1], lafC[2], lafC[0], lafC[3] } };               // vpermwi128
+            return lCross;
+        }
+    }
+
+    void Camera::GetFrustumPerspectiveVertices(Vector3* frustumVerts) const
+    {
+        const f32 KF_ONE = 1.0f;   // vcfsx(vspltisw 1, 0) at 0x827E70E4 / 0x827E7100
+        const f32 KF_TWO = 2.0f;   // flt_82001D9C (0x40000000)
+
+        const FrustumVertexLanes lX = FrustumVertexLanesOf(mView.xAxis);   // lvx128 +0x00
+        const FrustumVertexLanes lY = FrustumVertexLanesOf(mView.yAxis);   // lvx128 +0x10
+        const FrustumVertexLanes lZ = FrustumVertexLanesOf(mView.zAxis);   // lvx128 +0x20
+        const FrustumVertexLanes lW = FrustumVertexLanesOf(mView.wAxis);   // lvx128 +0x30
+
+        const FrustumVertexLanes lZCrossX = FrustumVertexCross(lZ, lX);
+        const FrustumVertexLanes lYCrossZ = FrustumVertexCross(lY, lZ);
+        const FrustumVertexLanes lXCrossY = FrustumVertexCross(lX, lY);
+
+        // det = X . (Y x Z): the three f32 products are exact in f64, summed left to right, rounded once (rule 1).
+        const f32 lfDeterminant = static_cast<f32>(static_cast<f64>(lX.maf[0]) * lYCrossZ.maf[0]
+                                                 + static_cast<f64>(lX.maf[1]) * lYCrossZ.maf[1]
+                                                 + static_cast<f64>(lX.maf[2]) * lYCrossZ.maf[2]);
+        f32 lfReciprocal = static_cast<f32>(1.0 / static_cast<f64>(lfDeterminant));   // vrefp, FLAG (model)
+        for (s32 liStep = 0; liStep < 2; ++liStep)
+        {
+            const f32 lfResidual = FrustumVertexNegativeMultiplySubtract(lfReciprocal, lfDeterminant, KF_ONE);
+            lfReciprocal = FrustumVertexMultiplyAdd(lfReciprocal, lfResidual, lfReciprocal);
+        }
+
+        // transform: rows (Y x Z, Z x X, X x Y, Z x X) transposed, each * 1/det; Pos = -W through them.
+        FrustumVertexLanes laTransform[3];
+        for (s32 liRow = 0; liRow < 3; ++liRow)
+        {
+            laTransform[liRow].maf[0] = lYCrossZ.maf[liRow] * lfReciprocal;
+            laTransform[liRow].maf[1] = lZCrossX.maf[liRow] * lfReciprocal;
+            laTransform[liRow].maf[2] = lXCrossY.maf[liRow] * lfReciprocal;
+            laTransform[liRow].maf[3] = lZCrossX.maf[liRow] * lfReciprocal;
+        }
+        FrustumVertexLanes lPos;
+        for (s32 liLane = 0; liLane < 4; ++liLane)
+        {
+            const f32 lfFromX = -lW.maf[0] * laTransform[0].maf[liLane];
+            const f32 lfFromXY = FrustumVertexMultiplyAdd(-lW.maf[1], laTransform[1].maf[liLane], lfFromX);
+            lPos.maf[liLane] = FrustumVertexMultiplyAdd(-lW.maf[2], laTransform[2].maf[liLane], lfFromXY);
+        }
+
+        const f32 lrNear        = maProjectionScalars[7];   // m_nearClipPlane
+        const f32 lrFar         = maProjectionScalars[8];   // m_farClipPlane
+        const f32 lrTanHalfFovX = maProjectionScalars[2];   // m_tanHalfFovHorizontal
+        const f32 lrTanHalfFovY = maProjectionScalars[5];   // m_tanHalfFovVertical
+
+        FrustumVertexLanes laDirections[4];
+        for (s32 liLane = 0; liLane < 4; ++liLane)
+        {
+            const f32 lfRightVec = laTransform[0].maf[liLane] * lrTanHalfFovX;
+            const f32 lfUpVec    = laTransform[1].maf[liLane] * lrTanHalfFovY;
+            const f32 lfRight2   = lfRightVec * KF_TWO;
+            const f32 lfUp2      = lfUpVec * KF_TWO;
+            laDirections[0].maf[liLane] = (lfRightVec + lfUpVec) + laTransform[2].maf[liLane];
+            laDirections[1].maf[liLane] = laDirections[0].maf[liLane] - lfRight2;
+            laDirections[2].maf[liLane] = laDirections[1].maf[liLane] - lfUp2;
+            laDirections[3].maf[liLane] = laDirections[2].maf[liLane] + lfRight2;
+        }
+
+        for (u32 index = 0; index < 4; ++index)
+        {
+            const FrustumVertexLanes& tmpVec3 = laDirections[index];
+            Vector3& lrNearVertex = frustumVerts[index];
+            Vector3& lrFarVertex  = frustumVerts[index + 4];
+            lrNearVertex.x = FrustumVertexMultiplyAdd(tmpVec3.maf[0], lrNear, lPos.maf[0]);
+            lrNearVertex.y = FrustumVertexMultiplyAdd(tmpVec3.maf[1], lrNear, lPos.maf[1]);
+            lrNearVertex.z = FrustumVertexMultiplyAdd(tmpVec3.maf[2], lrNear, lPos.maf[2]);
+            lrNearVertex.w = FrustumVertexMultiplyAdd(tmpVec3.maf[3], lrNear, lPos.maf[3]);
+            lrFarVertex.x  = FrustumVertexMultiplyAdd(tmpVec3.maf[0], lrFar, lPos.maf[0]);
+            lrFarVertex.y  = FrustumVertexMultiplyAdd(tmpVec3.maf[1], lrFar, lPos.maf[1]);
+            lrFarVertex.z  = FrustumVertexMultiplyAdd(tmpVec3.maf[2], lrFar, lPos.maf[2]);
+            lrFarVertex.w  = FrustumVertexMultiplyAdd(tmpVec3.maf[3], lrFar, lPos.maf[3]);
+        }
+    }
+
     // ------------------------------------------------------------------------
     // CgsGraphics::Camera::GetCgsFrustum @0x827F9778 / GetCgsFrustumParallel
     // @0x827F97B8 -- thin wrappers: write the RW frustum into a stack snapshot,
