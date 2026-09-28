@@ -323,12 +323,14 @@ struct DelayTriggerBlock
     s32 miDelayMilliseconds;
 };
 
+// ARTIST82B70730..778: trigger offset halfword+0, count byte+2,
+// current state word+4. No pointers: the native ABI keeps these offsets.
 struct StateGeneratorBlock
 {
     u16 muTriggerOffset;
-    u16 muCurrent;
-    u16 muCount;
-    u16 muPadding;
+    u8 muCount;
+    u8 muPadding;
+    s32 miCurrent;
     s32 maStates[1];
 };
 
@@ -604,15 +606,15 @@ s32 UpdateStateGenerator(void* apData)
     StateGeneratorBlock* lpBlock = static_cast<StateGeneratorBlock*>(apData);
     s32* lpTriggers = reinterpret_cast<s32*>(
         reinterpret_cast<u8*>(lpBlock) + lpBlock->muTriggerOffset);
-    for (u16 luIndex = 0; luIndex < lpBlock->muCount; ++luIndex)
+    for (u32 luIndex = 0; luIndex < lpBlock->muCount; ++luIndex)
     {
         if (lpTriggers[luIndex])
         {
-            lpBlock->muCurrent = static_cast<u16>(lpBlock->maStates[luIndex]);
+            lpBlock->miCurrent = lpBlock->maStates[luIndex];
             break;
         }
     }
-    return lpBlock->muCurrent;
+    return lpBlock->miCurrent;
 }
 
 s32 UpdateMerge(void* apData)
@@ -634,31 +636,31 @@ s32 UpdateEnvelope(void* apData)
         reinterpret_cast<const u8*>(lpBlock) + lpBlock->muControlOffset);
     f32* lpPoints = lpBlock->maPoints;
 
-    if (liControl == 1 && lpBlock->muPreviousControl != 1)
+    // ARTIST82B707DC..70880: only a stopped envelope starts. Start/release
+    // initialise the slope and jump to the return without consuming a tick.
+    if (liControl == 1 && lpBlock->muPreviousControl == 0)
     {
         lpBlock->mfValue = lpPoints[0];
         lpBlock->muPoint = 0;
         lpBlock->mfTimeRemaining = lpPoints[1];
-        lpBlock->mfStep = lpBlock->mfTimeRemaining != 0.0f
-            ? (lpPoints[2] - lpBlock->mfValue) /
-              lpBlock->mfTimeRemaining * gfAemsStepMilliseconds
-            : 0.0f;
+        lpBlock->mfStep = (lpPoints[2] - lpBlock->mfValue) / lpBlock->mfTimeRemaining;
+        lpBlock->mfStep *= gfAemsStepMilliseconds;
     }
     else if (liControl == 3 && lpBlock->muPreviousControl != 3 &&
-             lpBlock->muPoint < lpBlock->muReleasePoint)
+             lpBlock->muPoint < static_cast<s16>(lpBlock->muReleasePoint))
     {
+        // 82B70824..834 sign-extends the release index before comparing it.
         lpBlock->muPoint = static_cast<u8>(lpBlock->muReleasePoint);
         lpBlock->mfTimeRemaining = lpPoints[1 + 2 * lpBlock->muPoint];
-        lpBlock->mfStep = lpBlock->mfTimeRemaining != 0.0f
-            ? (lpPoints[2 + 2 * lpBlock->muPoint] - lpBlock->mfValue) /
-              lpBlock->mfTimeRemaining * gfAemsStepMilliseconds
-            : 0.0f;
+        lpBlock->mfStep = (lpPoints[2 + 2 * lpBlock->muPoint] - lpBlock->mfValue) /
+                          lpBlock->mfTimeRemaining;
+        lpBlock->mfStep *= gfAemsStepMilliseconds;
     }
-
-    if ((liControl == 1 || liControl == 3) &&
-        lpBlock->muPoint < lpBlock->muPointCount)
+    else if ((liControl == 1 || liControl == 3) &&
+             lpBlock->muPoint < lpBlock->muPointCount)
     {
         lpBlock->mfTimeRemaining -= gfAemsStepMilliseconds;
+        // 82B708BC bgt -> increment; nonpositive/unordered -> next point.
         if (lpBlock->mfTimeRemaining > 0.0f)
         {
             lpBlock->mfValue += lpBlock->mfStep;
@@ -670,10 +672,13 @@ s32 UpdateEnvelope(void* apData)
             if (lpBlock->muPoint < lpBlock->muPointCount)
             {
                 lpBlock->mfTimeRemaining = lpPoints[1 + 2 * lpBlock->muPoint];
-                lpBlock->mfStep = lpBlock->mfTimeRemaining != 0.0f
-                    ? (lpPoints[2 + 2 * lpBlock->muPoint] - lpBlock->mfValue) /
-                      lpBlock->mfTimeRemaining * gfAemsStepMilliseconds
-                    : 0.0f;
+                lpBlock->mfStep = (lpPoints[2 + 2 * lpBlock->muPoint] - lpBlock->mfValue) /
+                                  lpBlock->mfTimeRemaining;
+                lpBlock->mfStep *= gfAemsStepMilliseconds;
+            }
+            else
+            {
+                lpBlock->mfValue = 0.0f; // 82B708E4 ->82B70940, same tick
             }
         }
     }
