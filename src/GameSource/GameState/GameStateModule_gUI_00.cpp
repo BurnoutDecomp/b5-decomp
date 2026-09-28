@@ -1856,6 +1856,8 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // â“˜ IT RUNS AFTER ProcessGameEvents, so OnPropHit above walked the PREVIOUS frame's armed
     // set. That is the console's own order and it is deliberate -- do not "fix" it.
     mTriggerQueryManager.UpdateTriggers(mpOutputBuffer, &mLastActiveRaceCarInterface);
+    mTriggerQueryManager.SubmitTriggerQueries(mpOutputBuffer, &mLastActiveRaceCarInterface);
+    mTriggerQueryManager.CacheSoundQueryPositions(&mLastActiveRaceCarInterface);
 
     // ---- 2b) TriggerQueryManager: FAN THE PLAYER'S TRIGGER HITS OUT --------------------------
     // [bugwave 2026-08-23] THE SUPER-JUMP ROOT-CAUSE FIX. The park note directly above used to

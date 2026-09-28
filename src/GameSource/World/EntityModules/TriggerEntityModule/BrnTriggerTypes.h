@@ -2,6 +2,7 @@
 #define BRN_TRIGGER_TYPES_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Vector3 / Matrix44Affine
 
 // Trigger entity types. ETriggerTypeID is recovered verbatim from the DecFIGS DWARF
@@ -11,9 +12,8 @@
 // W/position column @ +80), the dimensions @ +96, and the radius @ +112. The trigger's gameplay
 // HANDLE word lives at +8 (X360 TriggerEntityModule::ProcessAddTriggerEvents writes the add-event
 // handle there; ProcessLineTestFineResult reads it back to publish the per-overlap handle list).
-// The intervening spans are not touched by these slices and are preserved with explicit padding so
-// every accessed field is named. FLAG: the leading entity-handle/collision-tag word at +0..+7 and
-// the trailing fields after +116 are not yet reconstructed.
+// The leading eight bytes hold mVolumeInstanceID (BrnTrigger.h:46), also used by
+// ProcessRemoveTriggerEvents. Remaining unused spans retain their original padding.
 
 namespace BrnWorld
 {
@@ -34,7 +34,7 @@ namespace BrnWorld
 
     struct Trigger
     {
-        u8                          mPad0[8];    // +0   entity handle / collision tag (unrecovered)
+        CgsSceneManager::VolumeInstanceId mVolumeInstanceID; // DWARF BrnTrigger.h:46
         u32                         mHandle;     // +8   gameplay trigger handle (the add-event handle,
                                                  //      republished per-overlap by ProcessLineTestFineResult)
         ETriggerTypeID              meType;      // +12  E_TRIGGERTYPE_*

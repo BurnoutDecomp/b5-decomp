@@ -688,6 +688,7 @@ namespace GameStateModuleIO
         //
         // X360 0x823B9B88 (read-lock; BrnGameStateModuleIO.h line 279) -- returns this+169068.
         const TriggerQueryInputInterface*      GetTriggerQueryInputInterface() const;
+        TriggerQueryInputInterface*            GetTriggerQueryInputInterface(); // ARTIST82362CD0
         // X360 0x823BA038 (read-lock; BrnGameStateModuleIO.h line 310) -- returns this+173196.
         const RaceCarRaceDistanceInterface*    GetRaceCarRaceDistanceInterface() const;
         // INLINED on X360 (bridge computes this+173240).

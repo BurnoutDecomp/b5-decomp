@@ -1,3 +1,7 @@
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Sound/Passby/BrnPassbyStateManager.h"
+#include "GameSource/Sound/Vehicles/Environment/BrnEnvironmentSoundDiag.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnEnclosureControl.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
@@ -81,6 +85,125 @@ bool EnclosureControl::Attach()
         maTriggerInfo[liPosition].Reset();
     mfTimeSinceTrigger = KF_MIN_TIME_BETWEEN_TRIGGERS;
     return true;
+}
+
+// ARTIST 82685D88. The two unrolled six-bit groups deliberately stop at 30;
+// region 31 is not examined. The last changed region wins on both enter and exit.
+BrnTrigger::GenericRegion::Type EntityTriggerInfo::GetChangeType() const
+{
+    CGS_ASSERT(HasChanged(), "EntityTriggerInfo : Has not changed.");
+    s32 liFound = 19;
+    const u32 luChanged = muActiveTriggers ^ muPrevTriggers;
+    for (s32 liType = 19; liType < 31; ++liType)
+        if (luChanged & (1u << (liType - 19)))
+            liFound = liType;
+    return static_cast<BrnTrigger::GenericRegion::Type>(liFound);
+}
+
+// Original debug bytes 82FFB8C8 and 82FFB8BE (both initially false).
+bool KB_SHOW_STATIC_ENVIRONMENT = false;
+static bool sbDebugWhoosh = false;
+
+// ARTIST 826F4F40, adjusted EffectBase this. DWARF BrnEnclosureControl.cpp:190.
+void EnclosureControl::UpdateParams(f32 afTimeStep)
+{
+    using BrnGameState::GameStateModuleIO::SoundTriggerAction;
+    auto* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    mfTimeSinceTrigger += afTimeStep;
+    CGS_ASSERT(lpLogicModule != nullptr, "lpLogicModule");
+    const EntityId leEntity = mpPhysicsControl->GetRawPhysicsData()->mEntityId;
+    const SoundTriggerAction* lpAction = lpLogicModule->GetSoundTriggerAction(
+        leEntity, SoundTriggerAction::E_TYPE_AT_ENTITY);
+    EntityTriggerInfo& lrHere = maTriggerInfo[E_TRIGGER_POSITION_AT_ENTITY];
+    if (lpAction)
+    {
+        lrHere.muPrevTriggers = lrHere.muActiveTriggers;
+        lrHere.muActiveTriggers = lpAction->muActiveTriggers;
+    }
+    lpAction = lpLogicModule->GetSoundTriggerAction(
+        leEntity, SoundTriggerAction::E_TYPE_AHEAD_OF_ENTITY);
+    if (lpAction)
+        ProcessTriggerAction(*lpAction, E_TRIGGER_POSITION_AHEAD_OF_ENTITY);
+
+    if (lrHere.HasChanged())
+    {
+        CgsSound::Io::Message<bool> lMessage((lrHere.muActiveTriggers & 1) != 0);
+        // 826F5058..68: id39, manager2, instanceFFFF, effect0, CONTROL2.
+        lMessage.Construct(39, 2, CgsSound::Io::MessageHeader::KU16_NO_DESTINATION,
+                           0, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL);
+        lpLogicModule->PostMessage(lMessage);
+        static s32 siDiag = 0;
+        if (SndEnvDiagBudget(siDiag))
+            *CgsDev::Log::gpDebugPrint << "[sndenv] enclosure active=" << lrHere.muActiveTriggers
+                << " previous=" << lrHere.muPrevTriggers << " tunnel=" << static_cast<s32>(lMessage.mData)
+                << " [FLAG PC witness]\n";
+    }
+    if (KB_SHOW_STATIC_ENVIRONMENT)
+        DrawDebug();
+}
+
+// ARTIST 8269AFC8. Both threshold branches are blt: unordered proceeds.
+void EnclosureControl::ProcessTriggerAction(
+    const BrnGameState::GameStateModuleIO::SoundTriggerAction& arAction,
+    eTriggerPosition aePosition)
+{
+    CGS_ASSERT(aePosition < E_TRIGGER_POSITION_COUNT, "lePosition < E_TRIGGER_POSITION_COUNT");
+    EntityTriggerInfo& lrInfo = maTriggerInfo[aePosition];
+    lrInfo.muPrevTriggers = lrInfo.muActiveTriggers;
+    lrInfo.muActiveTriggers = arAction.muActiveTriggers;
+    if (aePosition != E_TRIGGER_POSITION_AHEAD_OF_ENTITY || !lrInfo.HasChanged())
+        return;
+    // 8269B058 blt ->B138 rejects; otherwise ->B05C continues, including NaN.
+    if (mfTimeSinceTrigger < KF_MIN_TIME_BETWEEN_TRIGGERS)
+    {
+        if (sbDebugWhoosh)
+            *CgsDev::Log::gpDebugPrint << "[Whoosh][FAIL] Too little time between triggers.\n";
+        return;
+    }
+    const f32 lfSpeed = mpPhysicsControl->GetPhysicsData().mSpeedMPH.GetCurrent();
+    const s32 liType = ConvertRegionTypeToIndex(lrInfo.GetChangeType());
+    if (liType >= 19)
+        return;
+    // 8269B088 blt ->B11C rejects; otherwise ->B08C posts, including NaN.
+    if (lfSpeed < 60.0f) // 82F2CDF0
+    {
+        if (sbDebugWhoosh)
+            *CgsDev::Log::gpDebugPrint << "[Whoosh][FAIL] Car below velocity threshold.\n";
+        return;
+    }
+    auto* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    mfTimeSinceTrigger = 0.0f;
+    auto* lpPassbys = static_cast<BrnSound::Logic::Passby::PassbyStateManager*>(
+        lpLogicModule->GetEnvironment().GetStateManager(4));
+    const BrnSound::Logic::Passby::PassbyStateManager::Passby lPassby(
+        arAction.mQueryPos, 0.0f,
+        static_cast<AttribSys::Enums::ePassbyTypes::ePassbyTypes>(liType), false, 1.0f);
+    lpPassbys->PostPassby(lPassby);
+    if (sbDebugWhoosh)
+        *CgsDev::Log::gpDebugPrint << "[Whoosh][PASS][Type " << liType << "] Car above velocity threshold.\n";
+    static s32 siDiag = 0;
+    if (SndEnvDiagBudget(siDiag))
+        *CgsDev::Log::gpDebugPrint << "[sndenv] enclosure passby type=" << liType
+            << " mph=" << lfSpeed << " [FLAG PC witness]\n";
+}
+
+// ARTIST 8269B1B0; labels are the twelve pointers at 820A3A64..820A3A90.
+void EnclosureControl::DrawDebug() const
+{
+    static const char* const kaNames[] = {
+        "Tunnel", "Overpass", "Bridge", "Warehouse", "LargeOverheadobject", "NarrowAlley",
+        "Pass Tunnel", "Pass Overpass", "Pass Bridge", "Pass Warehouse", "Pass LargeOverheadobject", "Pass NarrowAlley"
+    };
+    CgsDev::DebugInterface lDebug;
+    auto& lrRender = lDebug.Get2dRender();
+    f32 lfY = 50.0f;
+    for (s32 liType = 19; liType < 31; ++liType)
+        if (maTriggerInfo[E_TRIGGER_POSITION_AT_ENTITY].IsTypeActive(
+            static_cast<BrnTrigger::GenericRegion::Type>(liType)))
+        {
+            lrRender.Draw2DText(kaNames[liType - 19], 900.0f, lfY, 25.0f, 0xFFFFFFFFu);
+            lfY += 30.0f;
+        }
 }
 
 // ---------------------------------------------------------------------------

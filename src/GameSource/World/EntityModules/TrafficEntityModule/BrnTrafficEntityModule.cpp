@@ -21762,9 +21762,9 @@ void TrafficEntityModule::ManageTriggers(BrnTrafficIO::OutputBuffer_PreScene* lp
                 BrnWorld::TriggerEntityModuleIO::InAddBoxTriggerEvent lAddEvent;
                 std::memset(&lAddEvent, 0, sizeof(lAddEvent));
                 lAddEvent.mTransform                 = lpLightTrigger->GetTransform();
-                lAddEvent.mPackedQueryFlagsAndIndex  = lTriggerId;
-                lAddEvent.muTriggerType              = 0xFFu;
-                lAddEvent.muSubType                  = 0xFFu;
+                lAddEvent.mTriggerID  = lTriggerId;
+                lAddEvent.miTriggerRegionType              = 0xFFu;
+                lAddEvent.miGenericRegionType                  = 0xFFu;
                 const Vector3 lDimensions            = lpLightTrigger->GetDimensions();
                 lAddEvent.mDimensions.x              = std::fabs(lDimensions.x);
                 lAddEvent.mDimensions.y              = std::fabs(lDimensions.y);

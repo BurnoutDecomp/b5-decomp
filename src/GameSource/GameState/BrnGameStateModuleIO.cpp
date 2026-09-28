@@ -758,6 +758,13 @@ TriggerManagementInputInterface* OutputBuffer::GetTriggerManagementInputInterfac
 // the member it returns is pinned by the return offset (169068 == 36944 + 132124, i.e. exactly
 // past the trigger-management interface) plus the console's own Construct call
 // `VariableEventQueue<4096,16>::Construct(this + 169068)`.
+// ARTIST82362CD0, mutable twin (write-lock checked).
+TriggerQueryInputInterface* OutputBuffer::GetTriggerQueryInputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return &mTriggerQueryInputInterface;
+}
+
 const TriggerQueryInputInterface* OutputBuffer::GetTriggerQueryInputInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");

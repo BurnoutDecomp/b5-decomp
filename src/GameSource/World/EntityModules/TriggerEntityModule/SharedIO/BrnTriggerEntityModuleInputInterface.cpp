@@ -36,7 +36,7 @@ namespace TriggerEntityModuleIO
 
         // event +0x40: (queryFlags << 24) | sign-extended region index (asm: slwi r8,r4,24 /
         // lhz+extsh r9 / or r9,r8,r9). GetRegionIndex() is the sign-extended 16-bit index.
-        lEvent.mPackedQueryFlagsAndIndex =
+        lEvent.mTriggerID =
             (static_cast<u32>(liQueryFlags) << 24) |
             static_cast<u32>(static_cast<s32>(lpRegion->GetRegionIndex()));
 
@@ -44,17 +44,17 @@ namespace TriggerEntityModuleIO
         lEvent.mTransform = lpBox->ComputeTransform();
 
         // event +0x44: the trigger-region kind byte (lbz 0x2A).
-        lEvent.muTriggerType = static_cast<u8>(lpRegion->GetType());
+        lEvent.miTriggerRegionType = static_cast<u8>(lpRegion->GetType());
 
         // event +0x45: 0xFF when the region IS a generic region, else the GenericRegion category
         // byte at +0x36 (asm: cmplwi meType,2 -> beq set -1, else lbz 0x36). Reproduced exactly.
         if (lpRegion->GetType() == BrnTrigger::TriggerRegion::E_TYPE_GENERIC_REGION)
         {
-            lEvent.muSubType = 0xFFu;
+            lEvent.miGenericRegionType = 0xFFu;
         }
         else
         {
-            lEvent.muSubType =
+            lEvent.miGenericRegionType =
                 static_cast<u8>(static_cast<const BrnTrigger::GenericRegion*>(lpRegion)->GetType());
         }
 

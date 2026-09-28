@@ -1,46 +1,9 @@
-// =============================================================================
-// GameShared/GameClasses/SceneManager/FineIntersectionTestModule/CgsFineIntersectionTestModule_wSQ1.cpp
-//
-// The FineIntersectionTestModule's four Compute* entry points (scene-query wave 1, 2026-09-02):
-//
-//   ComputeLineTestFine      @ 0x828C7D70   (~700 lines of VMX128 pseudocode)
-//   ComputeLineTestNearest   @ 0x828C8CC8   (258 insns)
-//   ComputeVolumeTestDeepest @ 0x828C90D0
-//   ComputeVolumeTestFine    @ 0x828C93C8
-//
-// Split out of CgsFineIntersectionTestModule.cpp because THAT TU is not mounted (its
-// Construct/Prepare are still WorldLinkStubs boot gates -- the module's rw::collision query
-// objects are never brought up on this host), while the scene-query dispatchers in
-// CgsSceneManagerModule_wSQ1.cpp DO reference these four symbols. This TU is mounted on its own.
-//
-// UPDATE 2026-09-25 (crash parity FX-FOLLOWUPS, item 2): CgsFineIntersectionTestModule.cpp IS mounted now, so the
-// module's Construct / Prepare are the console's -- both query objects are built in the module's buffers and the
-// two manager pointers are set. Reason (b) below is gone. Reason (a) stands for the LINE queries: the vendor
-// VolumeLineQuery has its construction entry points (b5 26802ef3) but no line walk (GetIntersections,
-// GetAllIntersections @0x82BB3820, AddVolumeRef, AddPrimitiveRef, InitQuery), so ComputeLineTestFine /
-// ComputeLineTestNearest stay LOUD traps.
-// UPDATE 2026-09-25 (crash parity FX-FOLLOWUPS stage a): the line walk is bodied (VolumeQuery.cpp, InitQuery /
-// Finished in VolumeQuery.hpp) and ComputeLineTestNearest is RECONSTRUCTED below. The walk's own gaps -- the
-// primitive lineSegIntersect slots and aggregate LineIntersectionQuery bodies this host lacks -- are LOUD traps
-// inside the walk. ComputeLineTestFine and ComputeVolumeTestFine stay traps.
-//
-// ⛔ ALL FOUR ARE LOUD TRAPS, NOT BODIES -- and NOT the empty `{}` silent-drop stubs that stood
-// in the unmounted TU until this wave (an untouched OutEventLineTestNearestResult read as "no
-// hit"). The reason an honest body is impossible today even with the asm in hand: every one of
-// them drives rw::collision::VolumeLineQuery / VolumeVolumeQuery::GetAllIntersections over the
-// module's query objects, and on this host (a) VolumeLineQuery::GetIntersections is the
-// `return 0` link-stub in AptRenderLinkStubs.cpp and (b) the module's Prepare is inert, so
-// mpVolumeLineQuery / mpEntityManager / mpVolumeManager are null. A faithful transcription
-// would run, find nothing, and report "no intersection" for every entity -- the exact class of
-// plausible-zero this project keeps getting burned by. Parked LOUDLY instead; the console
-// address is in every message.
-//
-// Reachability: SceneManagerModule::ProcessLineTestNearest @0x828D38C0 calls
-// ComputeLineTestNearest only when the query's entity-type flags include a NON-world bit and the
-// octree returned candidates; the race car's above-ground rays (flags == 2, world only) never
-// come here. (The octree LineTest that would precede it is itself a trap -- see
-// CgsLooseOctree_wSQ1.cpp -- so this is a second fence, not the first.)
-// =============================================================================
+// FineIntersectionTestModule scene-query implementations, split during wave SQ1.
+// ARTIST: LineTestFine828C7D70, LineTestNearest828C8CC8,
+// VolumeTestDeepest828C90D0, VolumeTestFine828C93C8.
+// Construct/Prepare and the vendor query walkers are mounted. LineTestFine now
+// implements the primitive-volume arm used by triggers. Its separate ClusteredMesh
+// fast path828C804C..828C8A9C and VolumeTestFine retain explicit missing-body traps.
 
 #include "GameShared/GameClasses/SceneManager/FineIntersectionTestModule/CgsFineIntersectionTestModule.h"
 
@@ -56,20 +19,92 @@
 
 namespace CgsSceneManager
 {
+    // ARTIST828C7D70: primitive-volume arm828C8AA0..828C8C3C. Results retain
+    // internal entity/instance indices; ProcessLineTestFine resolves their IDs.
     void FineIntersectionTestModule::ComputeLineTestFine(const InEventLineTestFine* lpQuery,
                                                          OutEventLineTestFineResult* lpOutResult,
-                                                         void* /*lpResultsOut*/)
+                                                         void* lpResultsOut)
     {
-        CGS_ASSERT(false, "FineIntersectionTestModule::ComputeLineTestFine @0x828C7D70 is not reconstructed "
-                          "(rw::collision::VolumeLineQuery::GetIntersections is a link-stub on this host)");
-        // Never a silent hit if execution continues past the trap (the ComputeLineTestNearest
-        // precedent below): its caller, SceneManagerModule::ProcessLineTestFine @0x828CDF4C, reads
-        // miNumResults / mpaResults straight back, so they are stated rather than left as whatever
-        // the caller's stack record held. (2026-09-24, FX-SCENEMGR, with that caller's body.)
-        lpOutResult->mQueryId     = lpQuery->mQueryId;
-        lpOutResult->miNumResults = 0;
-        lpOutResult->mpaResults   = 0;
+        auto* lpIntersections = static_cast<FineIntersectionTestIO::OutputBuffer::LineTestIntersectionArray*>(lpResultsOut);
+        u32 luMask = ~0u;
+        u32 luExclude = static_cast<u32>(K_INVALID_ENTITY_ID);
+        if (lpQuery->mu16ExcludeEntityIndex != 0xffff)
+        {
+            const EntityId lExcludeId = mpEntityManager->GetEntityIdByIndex(lpQuery->mu16ExcludeEntityIndex);
+            luMask = lpQuery->mbExcludeParts ? lExcludeId.GetPartComparisonMask() : ~0u;
+            luExclude = luMask & static_cast<u32>(lExcludeId);
+        }
+        CGS_ASSERT(lpOutResult != 0, "lpOutResult != NULL");
+        lpOutResult->mQueryId = lpQuery->mQueryId;
+        s32 liCount = 0;
+        const LineTestIntersection* lpFirst = 0;
+        for (u16 luCandidate = 0; luCandidate < lpQuery->mu16NumEntities; ++luCandidate)
+        {
+            const u16 luEntityIndex = lpQuery->mpau16EntityIndices[luCandidate];
+            if ((static_cast<u32>(mpEntityManager->GetEntityIdByIndex(luEntityIndex)) & luMask) == luExclude)
+                continue;
+            s32 liInstance = 0;
+            const VolumeInstance* lpInstance = mpEntityManager->GetFirstEntityVolumeInstance(luEntityIndex, &liInstance);
+            while (lpInstance)
+            {
+                const s32 liVolume = lpInstance->miVolumeIndex;
+                if ((mpVolumeManager->GetVolumeTypeFlags(liVolume) & lpQuery->mxVolumeTypeFlags) != 0)
+                {
+                    const rw::collision::Volume* lapVolumes[1] = {
+                        reinterpret_cast<const rw::collision::Volume*>(mpVolumeManager->GetRwVolume(liVolume)) };
+                    const Matrix44Affine* lapTransforms[1] = { &lpInstance->mWorldSpaceTransform };
+                    if (rw::collision::gVolumeVTable[lapVolumes[0]->muVTableSlot]->muTypeID == 6)
+                    {
+                        // Unreconstructed original ClusteredMesh fast path828C804C..828C8A9C.
+                        // Trigger boxes take the other arm. Retain the existing explicit trap
+                        // for this separate path instead of reporting a successful empty query.
+                        CGS_ASSERT(false, "ComputeLineTestFine ClusteredMesh fast path @0x828C804C is not reconstructed");
+                    }
+                    else
+                    {
+                        const rw::collision::VolRef::Vec4 lStart = {
+                            lpQuery->mLineStart.x, lpQuery->mLineStart.y, lpQuery->mLineStart.z, lpQuery->mLineStart.w };
+                        const rw::collision::VolRef::Vec4 lEnd = {
+                            lpQuery->mLineEnd.x, lpQuery->mLineEnd.y, lpQuery->mLineEnd.z, lpQuery->mLineEnd.w };
+                        mpVolumeLineQuery->InitQuery(lapVolumes, lapTransforms, 1, lStart, lEnd, 0.0f);
+                        while (!mpVolumeLineQuery->Finished())
+                        {
+                            const u32 luCount = mpVolumeLineQuery->GetAllIntersections();
+                            const rw::collision::VolumeLineSegIntersectResult* lpHits = mpVolumeLineQuery->m_resBuffer;
+                            liCount += luCount;
+                            for (u32 luHit = 0; luHit < luCount; ++luHit)
+                            {
+                                const auto& lrHit = lpHits[luHit];
+                                LineTestIntersection lHit;
+                                lHit.mPosition.x = lrHit.position.x;
+                                lHit.mPosition.y = lrHit.position.y;
+                                lHit.mPosition.z = lrHit.position.z;
+                                lHit.mPosition.w = lrHit.position.w;
+                                lHit.mNormal.x = lrHit.normal.x;
+                                lHit.mNormal.y = lrHit.normal.y;
+                                lHit.mNormal.z = lrHit.normal.z;
+                                lHit.mNormal.w = lrHit.normal.w;
+                                lHit.mVolumeInstanceId.muId = static_cast<u64>(static_cast<s64>(liInstance));
+                                lHit.mEntityId = EntityId(luEntityIndex);
+                                lHit.mfLineParam = lrHit.lineParam;
+                                const auto* lpHitVolume = reinterpret_cast<const rw::collision::Volume*>(lrHit.vRef.muVolumePtr);
+                                lHit.mu16MaterialTag = lpHitVolume ? static_cast<u16>(lpHitVolume->muSurfaceID) : 0;
+                                lHit.mu16GroupTag = lpHitVolume ? static_cast<u16>(lpHitVolume->muGroupID) : 0;
+                                lpIntersections->Append(lHit);
+                                if (!lpFirst)
+                                    lpFirst = &(*lpIntersections)[lpIntersections->GetLength() - 1];
+                            }
+                        }
+                    }
+                }
+                liInstance = lpInstance->miNextEntityVolumeInstance;
+                lpInstance = static_cast<const EntityManager*>(mpEntityManager)->GetVolumeInstance(liInstance);
+            }
+        }
+        lpOutResult->miNumResults = liCount;
+        lpOutResult->mpaResults = lpFirst;
     }
+
 
     // =========================================================================================
     // ComputeLineTestNearest @ 0x828C8CC8 -- RECONSTRUCTED 2026-09-25 (crash parity FX-FOLLOWUPS stage a); it was a

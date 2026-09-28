@@ -80,6 +80,7 @@ void GameStateModule::PostWorldUpdate(CgsModule::IOBufferStack*                 
         // GetPlayerActiveRaceCarIndex()) has no body on this build: its input, the trigger
         // line-test results, has no producer. Its landmark leg stands in at its position, so
         // checkpoints and finishes are credited once per frame (RaceCarTriggersLandmark).
+        mTriggerQueryManager.PostWorldUpdateSoundActions(lpPostWorldInputBuffer, GetPlayerActiveRaceCarIndex());
         mTriggerQueryManager.PostWorldUpdateLandmarksBringUp(
             lpPostWorldInputBuffer->GetActiveRaceCarOutputInterface(), &mModeManager);
     }
