@@ -15,6 +15,12 @@ wall between it and the car (L2's crash cell h225_s80: the fallback camera 8.3 m
 the wall it hit). GenerateSceneQueries @0x82252690, ProcessSceneQueryResults @0x82252888, ResolveCollisions
 @0x82224948, UpdateRadius @0x8220E4D0 and UpdateMinElevation @0x822405B8 are bodied; the FrustrumCollisionResolver
 cameras (mbUseFrustrumResolver) stay on the empty pair until piece 6.
+Stage 6a -- the frustum arm. The cameras that set mbUseFrustrumResolver (the aftertouch crash cam, the spiralling
+deathcam, the loose-attachment and orbit cameras -- and on the console the chase cam and the ICE takes) returned from
+both overrides: no near clip, no line tests, the eye left inside whatever it was in. The policy's arm (the traffic
+resolution eased, the resolver handed the car) and FrustrumCollisionResolver's GenerateSceneQueries @0x82252540,
+CalculateFrustumLineTests @0x8220DDE8, RequestFrustumLineTests @0x8223FD70 and ProcessSceneQueryResults @0x822242F8 are
+bodied (ResolveVehicleCollisions @0x82223890 is 6b).
 
 Numeric: tests/L1AttachedPolicy.cpp compiles against the revision's BrnCollisionPolicy.h (and includes its
 BrnCollisionPolicyAttachedToVehicle.cpp) and replays tests/L1AttachedPolicyData.h, generated from the console's words
@@ -24,6 +30,10 @@ on emu64 by scratch/OWNERLIST_0927/L1/emu/gen_attached_policy.py (seed 929):
               other callee a recorder with the generator's deterministic effect: the calls and their arguments, the
               camera after each half, the policy's state, the asserts. A revision without the DWARF layout cannot
               build group P: its five checks are then counted failed.
+  group F (5) 126 cases x 3 frames of the same on the FRUSTUM arm, the resolver interpreted whole on emu64 (its
+              tunables written by the console's own CRT thunks) and XMVectorTan in the loop; the corner resolve is a
+              recorder. Checked as group P, plus the camera's near clip and the four frustum boxes and the resolver's
+              mVehicleResolveVector. Counted failed with group P when the layout is missing.
 Wiring: the class names the DWARF members and overrides the pair.
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_l1_attached_policy.py [--rev <b5 rev>]
@@ -39,7 +49,9 @@ from fxgs_common import Tree, code_only, compile_and_run, report
 POLICY_H = "src/GameSource/Director/Camera/BrnCollisionPolicy.h"
 POLICY_CPP = "src/GameSource/Director/Camera/BrnCollisionPolicyAttachedToVehicle.cpp"
 VEHICLEREF_CPP = Path(__file__).resolve().parents[1] / "src/GameSource/Director/Utils/BrnVehicleRef.cpp"
-NUMERIC_CHECKS = 11   # C1..C6, P1..P5
+NUMERIC_CHECKS = 16   # C1..C6, P1..P5, F1..F5
+UTILS_H = "src/GameSource/Director/Camera/Utils/CameraUtils.h"
+TAN_H = "src/SDKs/XboxMath/XMVectorTan.h"
 
 
 def _read(tree, path):
@@ -91,8 +103,13 @@ def numeric(tree):
         return None
     body = attached_class(header)
     flags = "" if re.search(r"SmoothMover\s+mPitchMover\s*;", body) else "/DL1_NO_LAYOUT"
+    shadow = {POLICY_H: header}
+    for path in (UTILS_H, TAN_H):     # the revision's own, when it has them
+        text = _read(tree, path)
+        if text:
+            shadow[path] = text
     return compile_and_run(Path(__file__).with_name("L1AttachedPolicy.cpp"), "l1_attached_policy.inc", source,
-                           "L1AttachedPolicy", extra_flags=flags, shadow={POLICY_H: header},
+                           "L1AttachedPolicy", extra_flags=flags, shadow=shadow,
                            extra_sources=(VEHICLEREF_CPP,))
 
 

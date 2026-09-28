@@ -4,40 +4,52 @@
 // Compilation home for the BrnDirector::Camera::CollisionPolicyAttachedToVehicle bodies (DWARF
 // CollisionPolicies/BrnCollisionPolicyAttachedToVehicle.cpp):
 //   - CollisionPolicyAttachedToVehicle::SetDesiredHeight          @0x821F3950
-//   - CollisionPolicyAttachedToVehicle::GenerateSceneQueries      @0x82252690   (2026-09-28, piece 7b)
-//   - CollisionPolicyAttachedToVehicle::ProcessSceneQueryResults  @0x82252888   (2026-09-28, piece 7b)
-//   - CollisionPolicyAttachedToVehicle::ResolveCollisions         @0x82224948   (2026-09-28, piece 7b)
+//   - CollisionPolicyAttachedToVehicle::GenerateSceneQueries      @0x82252690   (2026-09-28, pieces 7b / 6a)
+//   - CollisionPolicyAttachedToVehicle::ProcessSceneQueryResults  @0x82252888   (2026-09-28, pieces 7b / 6a)
+//   - CollisionPolicyAttachedToVehicle::ResolveCollisions         @0x82224948   (2026-09-28, pieces 7b / 6a)
 //   - CollisionPolicyAttachedToVehicle::UpdateRadius              @0x8220E4D0   (2026-09-28, piece 7b)
 //   - CollisionPolicyAttachedToVehicle::UpdateMinElevation        @0x822405B8   (2026-09-28, piece 7b)
-// Construct @0x82224890 is inline in BrnCollisionPolicy.h.
+// and of the FrustrumCollisionResolver the policy embeds (DWARF BrnCollisionPolicy.cpp; on this build the collision
+// policy family is split by class, and the resolver rides with its only embedder):
+//   - FrustrumCollisionResolver::GenerateSceneQueries             @0x82252540   (2026-09-28, piece 6a)
+//   - FrustrumCollisionResolver::CalculateFrustumLineTests        @0x8220DDE8   (2026-09-28, piece 6a)
+//   - FrustrumCollisionResolver::RequestFrustumLineTests          @0x8223FD70   (2026-09-28, piece 6a)
+//   - FrustrumCollisionResolver::ProcessSceneQueryResults         @0x822242F8   (2026-09-28, piece 6a)
+// Both Constructs (@0x82224890, the resolver's inlined in it) are inline in BrnCollisionPolicy.h.
 //
 // The policy of every camera that hangs off a car (the chase cam BehaviourGameplayExternal -- which is also the
 // crash state's fallback camera, SharedCameraContainer::mGameplayExternal -- the gyro cam, the ICE-anim car-relative
 // takes, and the aftertouch / deathcam / loose-attachment / orbit cameras). Per frame, through the director's
 // scene-query pass (MainDirector::UpdateCameraBehavioursPreScene / PostScene):
-//   GenerateSceneQueries      lift the camera to the minimum elevation above the car, ask the ground constraint, and
-//                             post ONE nearest line test from the car to the camera (flags 2 world only, or 0x1E
-//                             world + entities, excluding the car and its parts);
-//   ProcessSceneQueryResults  put the camera 1 m in front of whatever that line hit (ResolveCollisions), then raise the
-//                             minimum elevation when the camera was pulled in (UpdateMinElevation) and ease the
-//                             radius back out (UpdateRadius).
+//   GenerateSceneQueries      lift the camera to the minimum elevation above the car and ask the ground constraint;
+//                             then EITHER post one nearest line test from the car to the camera (the plain arm:
+//                             flags 2 world only, or 0x1E world + entities, excluding the car and its parts) OR -- the
+//                             cameras that set mbUseFrustrumResolver -- ease the traffic resolution and hand over to
+//                             the resolver, which gives the camera its near clip and posts FOUR world-only nearest
+//                             line tests along the edges of the view frustum, from beside the car to past the corners
+//                             of the near plane;
+//   ProcessSceneQueryResults  pull the camera in front of what they hit (ResolveCollisions: 1 m in front of the plain
+//                             arm's hit, or out of each frustum corner's hit), then raise the minimum elevation when
+//                             the camera was pulled in (UpdateMinElevation) and ease the radius back out
+//                             (UpdateRadius).
 //
-// ⚠️ STAGED (owner's list 2026-09-28, pieces 7b -> 6). The FrustrumCollisionResolver arm -- the cameras that set
-// mbUseFrustrumResolver: BehaviourAftertouchCrash, BehaviourSpirallingDeathcam, BehaviourLooseAttachment,
-// BehaviourRotateAboutVehicle -- runs the resolver's own GenerateSceneQueries @0x82252540 / ProcessSceneQueryResults
-// @0x822242F8 (four frustum-edge line tests and the traffic push-out), which land with piece 6. Until then those
-// cameras keep the base class's empty pair (what every car-attached camera had before 7b): both overrides return
-// before touching anything when mbUseFrustrumResolver is set.
-// DELETE-WHEN: piece 6 bodies FrustrumCollisionResolver and the two early returns below become the console's arm.
+// ⚠️ STAGED (owner's list 2026-09-28, pieces 6a -> 6b). FrustrumCollisionResolver::ResolveVehicleCollisions
+// @0x82223890 -- the push-out from the traffic around the car, with ResolveVehicleCollision @0x8220DBC8 and
+// GetHeightAboveTraffic @0x821F9098 -- lands with piece 6b; until then the resolver's GenerateSceneQueries does not
+// make the call (see there). Unreachable on the PC today: the only camera that constructs its policy with
+// mbDoVehicleCollision is BehaviourGameplayExternal (Construct(true) @0x82224AB0), and it is not on the frustum arm
+// here until its Construct stores (0x82224AF8..0x82224B44) land, after 6b.
+// DELETE-WHEN: piece 6b bodies ResolveVehicleCollisions and the resolver makes the call.
 // ============================================================================
 
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"
-#include "GameSource/Director/Camera/Camera.h"                         // Camera::mTransform (the eye)
+#include "GameSource/Director/Camera/Camera.h"                         // Camera::mTransform (the eye), the near clip
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"         // VehicleInfo::mRaceCarState (transform, entity)
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"       // what VehicleRef::Get resolves against
 #include "GameSource/Director/Utils/BrnSceneQueryInterface.h"          // SceneQueryInterface::LineTestNearest
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"              // Get/ApplyPitchAboutPointRads, ResolveLineTest...
-#include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"            // the VMX roundings (Dot3 / fused lanes)
+#include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"            // the VMX roundings (Dot3 / fused lanes / Divide)
+#include "SDKs/XboxMath/XMVectorTan.h"                                 // XMVectorTan @0x821F0788 (the half field of view)
 
 #include <cmath>
 
@@ -49,7 +61,9 @@ namespace Camera
 namespace
 {
     // The literals the bodies load, read from the image.
-    const f32 KF_DEGREES_TO_RADIANS      = 0.017453292f;  // flt_82001744 == 0x3C8EFA35  GenerateSceneQueries 0x82252700
+    const f32 KF_DEGREES_TO_RADIANS      = 0.017453292f;  // flt_82001744 == 0x3C8EFA35  GenerateSceneQueries 0x82252700,
+                                                          //   CalculateFrustumLineTests 0x8220DE44,
+                                                          //   the resolver's ProcessSceneQueryResults 0x822243D0
     const f32 KF_RADIANS_TO_DEGREES      = 57.29578f;     // flt_82001748 == 0x42652EE1  UpdateMinElevation 0x822406A8
     const f32 KF_RESOLVE_MIN_DISTANCE    = 1.0f;          // flt_82001C98 == 0x3F800000  ResolveCollisions 0x8222498C
     const f32 KF_RADIUS_TOLERANCE        = 0.01f;         // flt_82002138 == 0x3C23D70A  UpdateRadius 0x8220E4D4,
@@ -58,6 +72,24 @@ namespace
     const f32 KF_ELEVATION_FULL_RADIUS   = 3.0f;          // flt_82004270 == 0x40400000  UpdateMinElevation 0x82240690
     const f32 KF_FULL_FORCE              = 1.0f;          // flt_82001C98                UpdateMinElevation 0x822406C4
     const f32 KF_NO_FORCE                = 0.0f;          // flt_82001CC0 == 0x00000000  UpdateMinElevation 0x8224065C
+    const f32 KF_NO_TRAFFIC_RESOLUTION   = 0.0f;          // flt_82001CC0                GenerateSceneQueries 0x822527AC
+    const f32 KF_FULL_TRAFFIC_RESOLUTION = 1.0f;          // flt_82001C98                GenerateSceneQueries 0x822527E0
+    const f32 KF_ASPECT_NUMERATOR        = 1.0f;          // flt_82001C98  1 / mfAspectRatio (fdivs):
+                                                          //   CalculateFrustumLineTests 0x8220DED8,
+                                                          //   the resolver's ProcessSceneQueryResults 0x822243AC
+    const f32 KF_NEAR_CLIP_DOUBLING      = 2.0f;          // flt_82001D9C == 0x40000000
+                                                          //   the resolver's ProcessSceneQueryResults 0x8222439C
+
+    // The splats the VMX bodies build in registers (no load): 0.5 and 1 are vcfsx / vcsxwfp128 of vspltisw 1 scaled
+    // by 2^-1 / 2^0 (ProcessSceneQueryResults 0x82252920 / 0x82252928, CalculateFrustumLineTests 0x8220DE24 /
+    // 0x8220DEA4, RequestFrustumLineTests 0x8223FDAC / 0x8223FDB4, the resolver's ProcessSceneQueryResults
+    // 0x82224398), 2 is vcfsx(vspltisw 2, 0) (CalculateFrustumLineTests 0x8220DE18).
+    const f32 KF_VPU_HALF = 0.5f;
+    const f32 KF_VPU_ONE  = 1.0f;
+    const f32 KF_VPU_TWO  = 2.0f;
+
+    // The four frustum line tests' entity types: world only (`li r5, 2` before each of the four calls).
+    const u32 KU_FRUSTUM_TEST_ENTITY_TYPES = 2u;
 
     // The SmoothMover parameters UpdateMinElevation builds on its stack (0x822405F4..0x82240660), field by field.
     const f32 KF_MIN_ELEVATION_MAX       = 70.0f;         // flt_820051BC == 0x428C0000  +0x00 mfMaxValue
@@ -75,29 +107,35 @@ namespace
         return (std::fpclassify(lfValue) == FP_SUBNORMAL) ? std::copysign(0.0f, lfValue) : lfValue;
     }
 
-    // |lV| as ProcessSceneQueryResults computes both radii (0x82252904..0x822529A8, one lane of each):
-    //   d = vmsum3fp128(v, v)                      rule 1: one rounding of the f64 sum (flushed, rule 6)
+    // The refined vrsqrtefp of a squared length, as both |v| (ProcessSceneQueryResults 0x82252904..0x822529A8) and
+    // Normalize (RequestFrustumLineTests, e.g. 0x8223FDFC..0x8223FE64) run it:
     //   e = vrsqrtefp(d)                           rule 5: FLAG (model) the correctly rounded 1 / sqrt(d)
     //   twice: e = vmaddfp(e * 0.5, vnmsubfp(d, e * e, 1), e)    rule 3: each fused, the products rounded (vmulfp128)
-    //   |v| = d * e (vmulfp128), and `vcmpeqfp 0, d ; vsel` gives 0 for a zero d (else 0 * inf).
-    // 0.5 and 1 are the `vcfsx(vspltisw 1, 1)` / `vcfsx(vspltisw 1, 0)` splats (0x82252920 / 0x82252928).
-    f32 ConsoleLength(const Vector3& lrV)
+    f32 RefinedReciprocalSquareRoot(f32 lfSquared)
     {
-        const f32 KF_HALF = 0.5f;
-        const f32 KF_ONE  = 1.0f;
-        const f32 lfSquared = FlushDenormal(Utils::ConsoleVpu::Dot3(lrV, lrV));
         f32 lfEstimate = static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfSquared)));
         for (s32 liStep = 0; liStep < 2; ++liStep)
         {
             const f32 lfEstimateSquared = lfEstimate * lfEstimate;
-            const f32 lfHalfEstimate    = lfEstimate * KF_HALF;
-            const f32 lfResidual = Utils::ConsoleVpu::NegativeMultiplySubtract(lfSquared, lfEstimateSquared, KF_ONE);
+            const f32 lfHalfEstimate    = lfEstimate * KF_VPU_HALF;
+            const f32 lfResidual = Utils::ConsoleVpu::NegativeMultiplySubtract(lfSquared, lfEstimateSquared, KF_VPU_ONE);
             lfEstimate = Utils::ConsoleVpu::MultiplyAdd(lfHalfEstimate, lfResidual, lfEstimate);
         }
+        return lfEstimate;
+    }
+
+    // |lV| as ProcessSceneQueryResults computes both radii (0x82252904..0x822529A8, one lane of each):
+    //   d = vmsum3fp128(v, v)                      rule 1: one rounding of the f64 sum (flushed, rule 6)
+    //   |v| = d * RefinedReciprocalSquareRoot(d) (vmulfp128), and `vcmpeqfp 0, d ; vsel` gives 0 for a zero d (else
+    //   0 * inf).
+    f32 ConsoleLength(const Vector3& lrV)
+    {
+        const f32 lfSquared  = FlushDenormal(Utils::ConsoleVpu::Dot3(lrV, lrV));
+        const f32 lfEstimate = RefinedReciprocalSquareRoot(lfSquared);
         return (lfSquared == 0.0f) ? 0.0f : lfSquared * lfEstimate;
     }
 
-    // vsubfp over four lanes, each rounded once.
+    // vsubfp / vaddfp over four lanes, each rounded once.
     Vector3 LaneSubtract(const Vector3& lrA, const Vector3& lrB)
     {
         Vector3 lResult;
@@ -108,12 +146,74 @@ namespace
         return lResult;
     }
 
+    Vector3 LaneAdd(const Vector3& lrA, const Vector3& lrB)
+    {
+        Vector3 lResult;
+        lResult.x = lrA.x + lrB.x;
+        lResult.y = lrA.y + lrB.y;
+        lResult.z = lrA.z + lrB.z;
+        lResult.w = lrA.w + lrB.w;
+        return lResult;
+    }
+
+    // vmulfp128 of four lanes by a splat, each rounded once.
+    Vector3 LaneScale(const Vector3& lrV, f32 lfScale)
+    {
+        Vector3 lResult;
+        lResult.x = lrV.x * lfScale;
+        lResult.y = lrV.y * lfScale;
+        lResult.z = lrV.z * lfScale;
+        lResult.w = lrV.w * lfScale;
+        return lResult;
+    }
+
+    // rw::math::vpu::Normalize as RequestFrustumLineTests runs it, eight times (e.g. 0x8223FDEC..0x8223FE6C):
+    // d = vmsum3fp128(v, v) (flushed), the refined estimate above, then v * e (vmulfp128). NO zero guard: a zero v
+    // gives e = +inf and NaN lanes, as on the console.
+    Vector3 NormalizeRefined(const Vector3& lrV)
+    {
+        return LaneScale(lrV, RefinedReciprocalSquareRoot(FlushDenormal(Utils::ConsoleVpu::Dot3(lrV, lrV))));
+    }
+
+    // rw::math::vpu::IsValid of a transform, as CalculateFrustumLineTests inlines it (0x8220DFAC..0x8220E13C): the x,
+    // y and z lanes of all four rows compare equal to themselves (vspltw ; vcmpeqfp.) -- no NaN; an infinity passes
+    // and w is not read.
+    bool IsValidRows(const rw::math::vpu::Matrix44Affine& lrTransform)
+    {
+        const Vector3* const lapRows[4] = { &lrTransform.xAxis, &lrTransform.yAxis, &lrTransform.zAxis,
+                                            &lrTransform.wAxis };
+        for (const Vector3* lpRow : lapRows)
+        {
+            if (lpRow->x != lpRow->x || lpRow->y != lpRow->y || lpRow->z != lpRow->z)
+                return false;
+        }
+        return true;
+    }
+
     // The attached vehicle's position (its transform's w row: VehicleRef::Get + 0x1F0 + 0x30 at every site).
     const Vector3& AttachedVehiclePosition(const VehicleInfo* lpVehicle)
     {
         return lpVehicle->mRaceCarState.mTransform.wAxis;
     }
 }
+
+// ----------------------------------------------------------------------------
+// The FrustrumCollisionResolver tunables (DWARF BrnCollisionPolicy.h:157..:172). Each VecFloat is a .bss splat a CRT
+// thunk fills at start-up -- `lfs f0, <rodata> ; stfs ; lvlx ; vspltw 0 ; stvx128` -- so it is the splat of that
+// float, read from the image (the .bss slot <- its thunk, the float):
+VecFloat FrustrumCollisionResolver::sMaxViewportHalfWidth(0.6f);       // 0x82FAA7B0 <- 0x82C491B0, flt_82004D00 0x3F19999A
+VecFloat FrustrumCollisionResolver::sMaxViewportHalfHeight(0.5f);      // 0x82FAAAB0 <- 0x82C491D8, flt_82001DA0 0x3F000000
+VecFloat FrustrumCollisionResolver::sTestStartWidthPadding(0.1f);      // 0x82FAAB50 <- 0x82C49200, flt_82004014 0x3DCCCCCD
+VecFloat FrustrumCollisionResolver::sTestLengthPadding(1.0f);          // 0x82FAA910 <- 0x82C49228, flt_82001C98 0x3F800000
+VecFloat FrustrumCollisionResolver::kvfMinVehicleResolveAmount(0.01f); // 0x82FAA700 <- 0x82C49318, flt_82002138 0x3C23D70A
+// A .data float, read where it is used (CalculateFrustumLineTests 0x8220DE28, ProcessSceneQueryResults 0x8222438C).
+f32      FrustrumCollisionResolver::kfFOVBodgeAmount = 2.0f;            // flt_82CDA6E0 == 0x40000000
+
+// The policy's traffic ramp (DWARF BrnCollisionPolicyAttachedToVehicle.cpp:27..:29), folded into literals by the
+// console's compiler (GenerateSceneQueries 0x822527C8 / 0x822527E4 / 0x822527F8):
+const f32 CollisionPolicyAttachedToVehicle::kfSpeedLimitForTrafficCollision = 35.0f;  // flt_82009D58 == 0x420C0000
+const f32 CollisionPolicyAttachedToVehicle::kfTrafficCollisionRampUp        = 0.05f;  // flt_820047C8 == 0x3D4CCCCD
+const f32 CollisionPolicyAttachedToVehicle::kfTrafficCollisionRampDown      = 0.01f;  // flt_82002138 == 0x3C23D70A
 
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::CollisionPolicyAttachedToVehicle::SetDesiredHeight @0x821F3950
@@ -152,18 +252,23 @@ void CollisionPolicyAttachedToVehicle::SetDesiredHeight(f32 lfDesiredHeight)
 //   0x8225274C  mbUseGroundConstraint (+0x24B) -> GroundConstraint::GenerateSceneQueries(this + 0x1C0, camera,
 //               info +0x60 (the E_WORLD step), info +0x08 (the request interface))
 //   0x82252774  the flags: subfic / subfe / clrrwi / rlwinm / addi 0x1E -> mbTestAgainstWorldOnly ? 2 : 0x1E
-//   0x82252778  mbUseFrustrumResolver (+0x24D) ; beq 0x82252838 -- the frustum arm is piece 6 (see the banner)
+//   0x82252778  mbUseFrustrumResolver (+0x24D) ; beq 0x82252838 (the plain arm)
+//   the frustum arm:
+//   0x82252798  mbResetVehicleCollision (+0x24E) -> cleared (stb 0) and the resolution is 0 (flt_82001CC0); else
+//   0x822527BC  VehicleRef::Get again ; its mfSpeedMPH (+0x3CC) < 35 (flt_82009D58; fcmpu, bge TAKEN unordered, so a
+//               NaN speed eases DOWN): t = fmadds(1 - t, 0.05, t) (fsubs flt_82001C98 - t ; flt_820047C8), else
+//               t = fmadds(-t, 0.01, t) (fneg ; flt_82002138)
+//   0x8225280C  stfs -> mfTrafficCollisionResolution (+0x244)
+//   0x82252830  FrustrumCollisionResolver::GenerateSceneQueries(this + 0x10, info, camera, v1 = the vehicle's
+//               position, v2 = splat(+0x244), v3 = splat(mfDesiredNearClip +0x23C), r6 = mbDoVehicleCollision
+//               (+0x24F)) -> done
+//   the plain arm:
 //   0x82252838  LineTestNearest(info +0x08, this + 0x170 (mCarToCamera), flags, 0xFF, v1 = the vehicle's position,
 //               v2 = the camera's, r7 = the vehicle's entity (+0x3C8), r8 = 1 E_EXCLUDE_ALL_CHILD_PARTS)
 // ----------------------------------------------------------------------------
 void CollisionPolicyAttachedToVehicle::GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo,
                                                             Camera& lrCamera)
 {
-    // STAGED (piece 6): the frustum-resolver cameras keep the base class's empty body until FrustrumCollisionResolver
-    // lands -- see the banner. The console takes 0x822527A0..0x82252834 for them after the lift and the ground query.
-    if (mbUseFrustrumResolver)
-        return;
-
     if (mbAutoElevate)
     {
         const Vector3 lVehiclePosition = AttachedVehiclePosition(mAttachedTo.Get(lrSharedInfo.mpAllVehicleData));
@@ -183,6 +288,31 @@ void CollisionPolicyAttachedToVehicle::GenerateSceneQueries(const CollisionPolic
 
     const u32 lx32EntityTypeFlags = mbTestAgainstWorldOnly ? 2u : 0x1Eu;
 
+    if (mbUseFrustrumResolver)
+    {
+        if (mbResetVehicleCollision)
+        {
+            mbResetVehicleCollision      = 0;
+            mfTrafficCollisionResolution = KF_NO_TRAFFIC_RESOLUTION;
+        }
+        else
+        {
+            const f32 lfResolution = mfTrafficCollisionResolution;
+            if (mAttachedTo.Get(lrSharedInfo.mpAllVehicleData)->mRaceCarState.mfSpeedMPH
+                < kfSpeedLimitForTrafficCollision)
+                mfTrafficCollisionResolution = Utils::ConsoleVpu::MultiplyAdd(
+                    KF_FULL_TRAFFIC_RESOLUTION - lfResolution, kfTrafficCollisionRampUp, lfResolution);
+            else
+                mfTrafficCollisionResolution = Utils::ConsoleVpu::MultiplyAdd(-lfResolution, kfTrafficCollisionRampDown,
+                                                                              lfResolution);
+        }
+
+        mFrustrumCollisionResolver.GenerateSceneQueries(lrSharedInfo, lrCamera, lVehiclePosition,
+                                                        VecFloat(mfTrafficCollisionResolution),
+                                                        VecFloat(mfDesiredNearClip), mbDoVehicleCollision != 0);
+        return;
+    }
+
     lrSharedInfo.mpRequestInterface->LineTestNearest(
         mCarToCamera, lx32EntityTypeFlags, 0xFFu, lVehiclePosition, lCameraPosition,
         CgsSceneManager::EntityId(mAttachedTo.Get(lrSharedInfo.mpAllVehicleData)->mRaceCarState.mEntityId.muValue),
@@ -192,7 +322,7 @@ void CollisionPolicyAttachedToVehicle::GenerateSceneQueries(const CollisionPolic
 // ----------------------------------------------------------------------------
 // ProcessSceneQueryResults @0x82252888 (DWARF .cpp:153). r31 = this, r29 = lrSharedInfo, r30 = lrCamera.
 //   0x822528C4  v126 = the camera's position BEFORE the resolve
-//   0x822528E0  v127 = the vehicle's position ; bl ResolveCollisions(info, camera, v1 = v127)
+//   0x822528E0  v127 = the vehicle's position ; bl ResolveCollisions(info, camera, v1 = v127)  -- both arms
 //   0x822528EC  mbAutoElevate || mbSmoothRadiusChanges, else done
 //   0x82252904  the two radii, |vehicle - camera before| (f31) and |vehicle - camera after| (f30): ConsoleLength
 //   0x822529AC  mbAutoElevate          -> UpdateMinElevation(info, f1 = before, f2 = after, r7 = camera)
@@ -202,10 +332,6 @@ void CollisionPolicyAttachedToVehicle::GenerateSceneQueries(const CollisionPolic
 void CollisionPolicyAttachedToVehicle::ProcessSceneQueryResults(const CollisionPolicySharedInfo& lrSharedInfo,
                                                                 Camera& lrCamera)
 {
-    // STAGED (piece 6): see GenerateSceneQueries.
-    if (mbUseFrustrumResolver)
-        return;
-
     const Vector3 lCameraBefore    = lrCamera.mTransform.wAxis;
     const Vector3 lVehiclePosition = AttachedVehiclePosition(mAttachedTo.Get(lrSharedInfo.mpAllVehicleData));
 
@@ -225,25 +351,34 @@ void CollisionPolicyAttachedToVehicle::ProcessSceneQueryResults(const CollisionP
 }
 
 // ----------------------------------------------------------------------------
-// ResolveCollisions @0x82224948 (DWARF .cpp:185). r31 = this, r28 = lrSharedInfo, r30 = lrCamera.
-//   0x82224960  mbUseFrustrumResolver ; beq 0x82224980 -- the frustum arm (FrustrumCollisionResolver::
-//               ProcessSceneQueryResults(this + 0x10, info, camera, v1, &local) @0x82224974) is piece 6; this body is
-//               not reached for those cameras yet (ProcessSceneQueryResults returns first)
-//   0x82224980  ResolveLineTestNearestUsingNormalStrict(this + 0x170, camera +0x30, flt_82001C98 = 1.0)
+// ResolveCollisions @0x82224948 (DWARF .cpp:185). r31 = this, r28 = lrSharedInfo, r30 = lrCamera, v1 = lVehiclePosition.
+//   0x82224960  mbUseFrustrumResolver ; beq 0x82224980
+//   0x82224974  the frustum arm: FrustrumCollisionResolver::ProcessSceneQueryResults(this + 0x10, info, camera, v1,
+//               r6 = a stack Vector3 nothing reads) -> the answer ; b 0x822249C4
+//   0x82224980  the plain arm: ResolveLineTestNearestUsingNormalStrict(this + 0x170, camera +0x30,
+//               flt_82001C98 = 1.0)
 //   0x82224994  `lwz 0x170 ; cmpwi 2 ; beq` + "meState == E_STATE_GOT_PACKAGE" (BrnPostBox.h:110): an inlined
-//               GetPackage whose answer is unused
+//               GetPackage whose answer is unused (plain arm only)
 //   0x822249C4  moved && mbFailOnContact (+0x24A) -> CollisionPolicy::Fail(this, camera, 0 = E_FAILED_COLLISION)
 //   0x822249EC  mbUseGroundConstraint -> GroundConstraint::ProcessSceneQueryResults(this + 0x1C0, info +0x60, camera)
-//   0x82224A08  stw 0, 0x170 -- the car-to-camera box emptied, whatever happened
+//   0x82224A08  stw 0, 0x170 -- the car-to-camera box emptied, whatever happened (both arms)
 // ----------------------------------------------------------------------------
 void CollisionPolicyAttachedToVehicle::ResolveCollisions(const CollisionPolicySharedInfo& lrSharedInfo,
                                                          Camera& lrCamera, Vector3 lVehiclePosition)
 {
-    (void)lVehiclePosition;   // the frustum arm's argument (piece 6)
-
-    const bool lbMoved = Utils::ResolveLineTestNearestUsingNormalStrict(mCarToCamera, lrCamera.mTransform.wAxis,
-                                                                        KF_RESOLVE_MIN_DISTANCE);
-    (void)mCarToCamera.GetPackage();
+    bool lbMoved;
+    if (mbUseFrustrumResolver)
+    {
+        Vector3 lPlaneNormal;
+        lbMoved = mFrustrumCollisionResolver.ProcessSceneQueryResults(lrSharedInfo, lrCamera, lVehiclePosition,
+                                                                      lPlaneNormal);
+    }
+    else
+    {
+        lbMoved = Utils::ResolveLineTestNearestUsingNormalStrict(mCarToCamera, lrCamera.mTransform.wAxis,
+                                                                 KF_RESOLVE_MIN_DISTANCE);
+        (void)mCarToCamera.GetPackage();
+    }
 
     if (lbMoved && mbFailOnContact)
         Fail(lrCamera, 0);
@@ -340,6 +475,222 @@ void CollisionPolicyAttachedToVehicle::UpdateMinElevation(const CollisionPolicyS
     }
 
     mPitchMover.Update(lrSharedInfo.mTimestep.Get(Timestep::E_GAME), lfForce, lParameters);
+}
+
+// ============================================================================
+// FrustrumCollisionResolver (DWARF BrnCollisionPolicy.cpp) -- piece 6a.
+// Every VecFloat these bodies take or read is a splat (the policy's lvlx / vspltw at 0x82252820..0x8225282C, the
+// tunables' start-up vspltw, the resolver's own lvlx / vspltw of mfMinDistance), so each is taken as its scalar and
+// the ALL / ANY lane tests are the scalar tests. FLAG (rule 6): the VMX flush of denormal operands and results is
+// modelled only on the squared lengths (Normalize's zero case); the camera's distances and extents are metres.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// FrustrumCollisionResolver::GenerateSceneQueries @0x82252540 (DWARF BrnCollisionPolicy.cpp:97). r31 = this,
+// r29 = lSharedInfo, r30 = lCamera, r6 = lbResolveVehicleCollisions; v126 = lTarget, v127 = lVehicleResolveAmount,
+// v125 = lDesiredNearClip.
+//   0x82252584  lbResolveVehicleCollisions ; beq 0x82252604
+//   0x82252588..0x822525D8  !IsZero(lVehicleResolveAmount, kvfMinVehicleResolveAmount): |amount| (vandc of the sign
+//               mask vslw(-1, -1)) > the minimum (vcmpgtfp), the four lanes' top bytes gathered by the vperm control
+//               0x0004080C and tested as one word -- ANY lane; a NaN lane counts as zero
+//   0x822525EC  ResolveVehicleCollisions(this, info +0x1C (mpAllVehicleData), v1 = the camera's position (+0x30),
+//               r5 = lCamera, v2 = lTarget) -- STAGED, piece 6b (see the banner)
+//   0x822525F0  mVehicleResolveVector *= lVehicleResolveAmount (vmulfp128), called or not
+//   0x82252604  else mVehicleResolveVector = 0 (vspltisw 0 ; stvx128)
+//   0x82252634  CalculateFrustumLineTests(v1 = lDesiredNearClip, lCamera, v2 = lTarget, &lForward, &lUp, &lLeft,
+//               &lStart, &lEnd)
+//   0x82252668  RequestFrustumLineTests(info +0x08 (mpRequestInterface), lStart, lLeft, lUp, lEnd, lForward)
+// ----------------------------------------------------------------------------
+void FrustrumCollisionResolver::GenerateSceneQueries(const CollisionPolicySharedInfo& lSharedInfo, Camera& lCamera,
+                                                     Vector3 lTarget, VecFloat lVehicleResolveAmount,
+                                                     VecFloat lDesiredNearClip, bool lbResolveVehicleCollisions)
+{
+    if (lbResolveVehicleCollisions)
+    {
+        const f32 lfResolveAmount = static_cast<f32>(lVehicleResolveAmount);
+        if (std::fabs(lfResolveAmount) > static_cast<f32>(kvfMinVehicleResolveAmount))
+        {
+            // STAGED (piece 6b): ResolveVehicleCollisions(lSharedInfo.mpAllVehicleData, lCamera.mTransform.wAxis,
+            // lCamera, lTarget) @0x82223890 -- not made yet; unreachable on the PC (see the banner).
+        }
+        mVehicleResolveVector = LaneScale(mVehicleResolveVector, lfResolveAmount);
+    }
+    else
+    {
+        mVehicleResolveVector.SetZero();
+    }
+
+    Vector3 lForward;
+    Vector3 lUp;
+    Vector3 lLeft;
+    Vector3 lStart;
+    Vector3 lEnd;
+    CalculateFrustumLineTests(lDesiredNearClip, lCamera, lTarget, lForward, lUp, lLeft, lStart, lEnd);
+    RequestFrustumLineTests(lSharedInfo.mpRequestInterface, lStart, lLeft, lUp, lEnd, lForward);
+}
+
+// ----------------------------------------------------------------------------
+// FrustrumCollisionResolver::CalculateFrustumLineTests @0x8220DDE8 (DWARF BrnCollisionPolicy.cpp:358). r30 = lCamera,
+// r29 / r28 / r27 / r26 / r25 = &lForward / &lUp / &lLeft / &lStart / &lEnd; v1 = lDesiredNearClip, v124 = lTarget.
+//   0x8220DE48  lNewClipDistance = lDesiredNearClip * 2                                        vmulfp128
+//   0x8220DE30  the field of view in radians: (mfFOV (+0x58) + kfFOVBodgeAmount) * flt_82001744   fadds, fmuls
+//   0x8220DE70  tan = XMVectorTan(0.5 * that)                                                   vmulfp128, bl 0x821F0788
+//   0x8220DE74  lViewportHalfWidth = tan * lNewClipDistance                                    vmulfp128
+//   0x8220DE88  > sMaxViewportHalfWidth (vcmpgtfp., ALL lanes: a NaN fails): lNewClipDistance *=
+//               sMaxViewportHalfWidth / lViewportHalfWidth (the SDK's operator/: vrefp and two Newton-Raphson steps,
+//               ConsoleVpu::Divide) and the width becomes the maximum
+//   0x8220DEE0  1 / mfAspectRatio (+0x5C)                                                       fdivs flt_82001C98
+//   0x8220DF0C  lViewportHalfHeight = (tan * that) * lNewClipDistance                          vmulfp128 x2
+//   0x8220DF10  > sMaxViewportHalfHeight: the same clamp
+//   0x8220DF68  Camera::SetCustomNearClipDistance, inlined: mbHasCustomNearClipDistance (+0x15D) = 1 and
+//               mfCustomNearClipDistance (+0x150) = lane 0 of lNewClipDistance * 0.5
+//   0x8220DF84..0x8220DFA8  lForward = the z axis * lNewClipDistance ; lUp = the y axis * lViewportHalfHeight ;
+//               lLeft = the x axis * lViewportHalfWidth (vmulfp128) ; lStart = lTarget ; lEnd = the w axis
+//   0x8220DFAC..0x8220E1A0  the IsValid assert on the camera's transform (BrnCollisionPolicy.cpp:390, a formatted
+//               matrix message)
+// ----------------------------------------------------------------------------
+void FrustrumCollisionResolver::CalculateFrustumLineTests(VecFloat lDesiredNearClip, Camera& lCamera, Vector3 lTarget,
+                                                          Vector3& lForward, Vector3& lUp, Vector3& lLeft,
+                                                          Vector3& lStart, Vector3& lEnd)
+{
+    f32 lfNewClipDistance = static_cast<f32>(lDesiredNearClip) * KF_VPU_TWO;
+    const f32 lfFieldOfView = (lCamera.mfFOV + kfFOVBodgeAmount) * KF_DEGREES_TO_RADIANS;
+    const f32 lfTanHalfFOV  = XboxMath::XMVectorTan(KF_VPU_HALF * lfFieldOfView);
+
+    f32 lfViewportHalfWidth = lfTanHalfFOV * lfNewClipDistance;
+    if (lfViewportHalfWidth > static_cast<f32>(sMaxViewportHalfWidth))
+    {
+        lfNewClipDistance   = lfNewClipDistance * Utils::ConsoleVpu::Divide(sMaxViewportHalfWidth, lfViewportHalfWidth);
+        lfViewportHalfWidth = sMaxViewportHalfWidth;
+    }
+
+    const f32 lfInverseAspectRatio = KF_ASPECT_NUMERATOR / lCamera.mfAspectRatio;
+    f32 lfViewportHalfHeight = (lfTanHalfFOV * lfInverseAspectRatio) * lfNewClipDistance;
+    if (lfViewportHalfHeight > static_cast<f32>(sMaxViewportHalfHeight))
+    {
+        lfNewClipDistance    = lfNewClipDistance
+                             * Utils::ConsoleVpu::Divide(sMaxViewportHalfHeight, lfViewportHalfHeight);
+        lfViewportHalfHeight = sMaxViewportHalfHeight;
+    }
+
+    lCamera.mbHasCustomNearClipDistance = true;
+    lCamera.mfCustomNearClipDistance    = lfNewClipDistance * KF_VPU_HALF;
+
+    lForward = LaneScale(lCamera.mTransform.zAxis, lfNewClipDistance);
+    lUp      = LaneScale(lCamera.mTransform.yAxis, lfViewportHalfHeight);
+    lLeft    = LaneScale(lCamera.mTransform.xAxis, lfViewportHalfWidth);
+    lStart   = lTarget;
+    lEnd     = lCamera.mTransform.wAxis;
+
+    CGS_ASSERT(IsValidRows(lCamera.mTransform), "IsValid(lCamera.GetTransform())");
+}
+
+// ----------------------------------------------------------------------------
+// FrustrumCollisionResolver::RequestFrustumLineTests @0x8223FD70 (DWARF BrnCollisionPolicy.cpp:402). r31 = this,
+// r30 = lpRequestInterface; v124 = lStart, v123 = lLeft, v125 = lUp, v4 = lEnd, v5 = lForward.
+//   0x8223FD88  the near plane's centre, lEnd + lForward (v122)
+//   per corner, in box order -- mTopLeft (+lLeft +lUp), mTopRight (-lLeft +lUp), mBottomLeft (+lLeft -lUp),
+//   mBottomRight (-lLeft -lUp); each sum a vaddfp / vsubfp, the two terms applied left to right:
+//     lLineStart = (lStart +- lLeft) +- lUp ; lLineEnd = ((lEnd + lForward) +- lLeft) +- lUp
+//     lLineStart' = Normalize(lLineStart - lStart) * sTestStartWidthPadding + lLineStart      (vmaddfp: one rounding)
+//     lLineEnd'   = Normalize(lLineEnd - lLineStart) * sTestLengthPadding + lLineEnd          -- the direction is
+//                   taken from the UNPADDED start
+//     LineTestNearest(lpRequestInterface, box, 2 (world only), 0xFF, lLineStart', lLineEnd',
+//                     dword_82CDA790 == 0xFFFFFFFF (K_INVALID_ENTITY_ID), 0 (E_EXCLUDE_ENTITY_ONLY))
+//   at 0x8223FE74 / 0x8223FF30 / 0x8223FFE4 / 0x82240098.
+// ----------------------------------------------------------------------------
+void FrustrumCollisionResolver::RequestFrustumLineTests(const SceneQueryInterface* lpRequestInterface, Vector3 lStart,
+                                                        Vector3 lLeft, Vector3 lUp, Vector3 lEnd, Vector3 lForward)
+{
+    const Vector3 lNearPlaneCentre = LaneAdd(lEnd, lForward);
+
+    const auto RequestCorner = [&](LineTestNearestPostBox& lrBox, const Vector3& lLineStart, const Vector3& lLineEnd)
+    {
+        const Vector3 lPaddedStart = Utils::ConsoleVpu::MultiplyAdd(NormalizeRefined(LaneSubtract(lLineStart, lStart)),
+                                                                    sTestStartWidthPadding, lLineStart);
+        const Vector3 lPaddedEnd   = Utils::ConsoleVpu::MultiplyAdd(
+            NormalizeRefined(LaneSubtract(lLineEnd, lLineStart)), sTestLengthPadding, lLineEnd);
+        lpRequestInterface->LineTestNearest(lrBox, KU_FRUSTUM_TEST_ENTITY_TYPES, 0xFFu, lPaddedStart, lPaddedEnd,
+                                            CgsSceneManager::K_INVALID_ENTITY_ID,
+                                            CgsSceneManager::SceneManagerIO::E_EXCLUDE_ENTITY_ONLY);
+    };
+
+    RequestCorner(mTopLeft,     LaneAdd(LaneAdd(lStart, lLeft), lUp),
+                                LaneAdd(LaneAdd(lNearPlaneCentre, lLeft), lUp));
+    RequestCorner(mTopRight,    LaneAdd(LaneSubtract(lStart, lLeft), lUp),
+                                LaneAdd(LaneSubtract(lNearPlaneCentre, lLeft), lUp));
+    RequestCorner(mBottomLeft,  LaneSubtract(LaneAdd(lStart, lLeft), lUp),
+                                LaneSubtract(LaneAdd(lNearPlaneCentre, lLeft), lUp));
+    RequestCorner(mBottomRight, LaneSubtract(LaneSubtract(lStart, lLeft), lUp),
+                                LaneSubtract(LaneSubtract(lNearPlaneCentre, lLeft), lUp));
+}
+
+// ----------------------------------------------------------------------------
+// FrustrumCollisionResolver::ProcessSceneQueryResults @0x822242F8 (DWARF BrnCollisionPolicy.cpp:443). r29 = this,
+// r28 = lCamera, v124 = lTarget, r6 = &lPlaneNormalOut; lSharedInfo (r4) is never read.
+//   0x82224320  lPlaneNormalOut = 0 (vspltisw 0 ; stvx128)
+//   0x82224324..0x8222436C  kNearClip = lCamera.GetNearClipDistance(), inlined (+0x15D / +0x150 / the +0x140 flag)
+//   0x822243A4  twice it (fmuls flt_82001D9C == 2.0) -- the doubled near clip CalculateFrustumLineTests sized
+//   0x82224394 / 0x822243D8  (mfFOV + kfFOVBodgeAmount) * flt_82001744 ; 0x822243B8  1 / mfAspectRatio (fdivs)
+//   0x822243E8  lForward = the z axis * that (vmulfp128) ; 0x82224404  tan = XMVectorTan(0.5 * the field of view)
+//   0x8222440C  lViewportWidth = tan * 2 kNearClip ; 0x82224448  lViewportHeight = (tan * 1 / aspect) * 2 kNearClip
+//   0x8222444C  lLeft = the x axis * lViewportWidth ; 0x82224454  lUp = the y axis * lViewportHeight
+//   per corner -- lPos RE-READ from the camera's w row before each, since each resolve can move it:
+//     lPosToTarget = lTarget - lPos ; the corner = ((lPos + lForward) +- lLeft) +- lUp
+//     ResolveLineTestNearestUsingDisplacementAndVector(box, the corner, the camera's w row, lPosToTarget,
+//                                                     splat(mfMinDistance +0x150))
+//   at 0x82224460 (mTopLeft +lLeft +lUp), 0x8222448C (mTopRight -lLeft +lUp), 0x822244C4 (mBottomLeft +lLeft -lUp),
+//   0x822244FC (mBottomRight -lLeft -lUp) -- all four always made; the answers OR-ed (lbHasResolvedAnything)
+//   0x82224504..0x82224518  the four boxes emptied (stw 0)
+// ----------------------------------------------------------------------------
+bool FrustrumCollisionResolver::ProcessSceneQueryResults(const CollisionPolicySharedInfo& lSharedInfo, Camera& lCamera,
+                                                         Vector3 lTarget, Vector3& lPlaneNormalOut)
+{
+    (void)lSharedInfo;
+    lPlaneNormalOut.SetZero();
+
+    const f32 lfTwiceNearClip      = lCamera.GetNearClipDistance() * KF_NEAR_CLIP_DOUBLING;
+    const f32 lfFieldOfView        = (lCamera.mfFOV + kfFOVBodgeAmount) * KF_DEGREES_TO_RADIANS;
+    const f32 lfInverseAspectRatio = KF_ASPECT_NUMERATOR / lCamera.mfAspectRatio;
+    const Vector3 lForward         = LaneScale(lCamera.mTransform.zAxis, lfTwiceNearClip);
+    const f32 lfTanHalfFOV         = XboxMath::XMVectorTan(KF_VPU_HALF * lfFieldOfView);
+    const f32 lfViewportWidth      = lfTanHalfFOV * lfTwiceNearClip;
+    const f32 lfViewportHeight     = (lfTanHalfFOV * lfInverseAspectRatio) * lfTwiceNearClip;
+    const Vector3 lLeft            = LaneScale(lCamera.mTransform.xAxis, lfViewportWidth);
+    const Vector3 lUp              = LaneScale(lCamera.mTransform.yAxis, lfViewportHeight);
+    const VecFloat lvMinDistance(mfMinDistance);
+
+    bool lbHasResolvedAnything = false;
+    {
+        const Vector3 lPos = lCamera.mTransform.wAxis;
+        lbHasResolvedAnything |= Utils::ResolveLineTestNearestUsingDisplacementAndVector(
+            mTopLeft, LaneAdd(LaneAdd(LaneAdd(lPos, lForward), lLeft), lUp), lCamera.mTransform.wAxis,
+            LaneSubtract(lTarget, lPos), lvMinDistance);
+    }
+    {
+        const Vector3 lPos = lCamera.mTransform.wAxis;
+        lbHasResolvedAnything |= Utils::ResolveLineTestNearestUsingDisplacementAndVector(
+            mTopRight, LaneAdd(LaneSubtract(LaneAdd(lPos, lForward), lLeft), lUp), lCamera.mTransform.wAxis,
+            LaneSubtract(lTarget, lPos), lvMinDistance);
+    }
+    {
+        const Vector3 lPos = lCamera.mTransform.wAxis;
+        lbHasResolvedAnything |= Utils::ResolveLineTestNearestUsingDisplacementAndVector(
+            mBottomLeft, LaneSubtract(LaneAdd(LaneAdd(lPos, lForward), lLeft), lUp), lCamera.mTransform.wAxis,
+            LaneSubtract(lTarget, lPos), lvMinDistance);
+    }
+    {
+        const Vector3 lPos = lCamera.mTransform.wAxis;
+        lbHasResolvedAnything |= Utils::ResolveLineTestNearestUsingDisplacementAndVector(
+            mBottomRight, LaneSubtract(LaneSubtract(LaneAdd(lPos, lForward), lLeft), lUp), lCamera.mTransform.wAxis,
+            LaneSubtract(lTarget, lPos), lvMinDistance);
+    }
+
+    mTopLeft.Clear();
+    mTopRight.Clear();
+    mBottomLeft.Clear();
+    mBottomRight.Clear();
+    return lbHasResolvedAnything;
 }
 
 } // namespace Camera

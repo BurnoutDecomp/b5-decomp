@@ -1644,6 +1644,90 @@ bool ResolveLineTestNearestUsingNormalStrict(LineTestNearestPostBox& lPostBox, V
     return lbHasResolvedAnything;
 }
 
+// ----------------------------------------------------------------------------------------
+// @ 0x8220CEB0 -- DWARF CameraUtils.cpp:83 / :1083 `bool (LineTestNearestPostBox&, Vector3, Vector3&, Vector3, VecFloat)`.
+// BODIED 2026-09-28 (owner's list, lane L1, piece 6): the frustum resolver's corner resolve (FrustrumCollisionResolver::
+// ProcessSceneQueryResults @0x822242F8 calls it once per near-plane corner). Did not exist on the PC.
+//   0x8220CEDC  GetPackage tripwire #1 ("meState == E_STATE_GOT_PACKAGE", BrnPostBox.h:110) ; 0x8220CF10 no
+//               intersection -> false
+//   0x8220CF1C / 0x8220CF44  tripwires #2 / #3 (the package's position and normal reads)
+//   0x8220CF50  lHitToTest = lTestPoint - hit                                                    vsubfp128
+//   0x8220CF8C  lDistance = normal . lHitToTest                                                  vmsum3fp128 (rule 1)
+//   0x8220CFB8..0x8220CFD0  |lDistance| > FLT_EPSILON (flt_82001770 == 0x34000000; vandc of the sign, vcmpgtfp, the
+//               lanes gathered by vperm 0x0004080C and tested as one word: ANY lane) -- else the test point is ON
+//               the plane: GetPackage #4 (the out-of-line copy, 0x8220CFD8) and
+//               lPosition = normal * lvMinDistance + lPosition (vmaddfp128, one rounding per lane) -> true
+//   0x8220D008  lvMinDistance > lDistance (vcmpgtfp128., ALL lanes: a NaN fails) else -> false
+//   0x8220D020  GetPackage #5 (out-of-line) ; lNormalDotVector = lVector . normal (vmsum3fp128)
+//   0x8220D030..0x8220D0B4  1 / lDistance and 1 / lNormalDotVector: vrefp e, then TWO unguarded Newton-Raphson steps
+//               e' = e * (1 - x e) + e (vnmsubfp / vmaddfp, fused);
+//               lAlongTest   = lHitToTest * ((lvMinDistance - lDistance) * (1 / lDistance))       (vmulfp128 x2)
+//               lAlongVector = lVector    * ((lvMinDistance - lDistance) * (1 / lNormalDotVector))
+//   0x8220D09C..0x8220D0F4  |lNormalDotVector| > FLT_EPSILON (ANY lane, as above) && lNormalDotVector > 0 (ALL
+//               lanes) && |lVector|^2 > |lAlongVector|^2 (vmsum3fp128 twice, ALL lanes) -> lPosition += lAlongVector,
+//               else lPosition += lAlongTest (vaddfp) -> true
+// The VecFloat is taken lane by lane (its callers pass a splat, so the all / any lane tests are the scalar tests).
+// FLAG (estimate model, rule 5): vrefp is the correctly rounded 1 / x (the tree's convention). FLAG (rule 6): the VMX
+// flush of denormal operands / results is not modelled (distances in metres).
+// ----------------------------------------------------------------------------------------
+bool ResolveLineTestNearestUsingDisplacementAndVector(LineTestNearestPostBox& lPostBox, Vector3 lTestPoint,
+                                                      Vector3& lPosition, Vector3 lVector, VecFloat lvMinDistance)
+{
+    const f32 KF_ON_PLANE_EPSILON = 1.1920929e-07f;       // flt_82001770 == 0x34000000 (FLT_EPSILON)
+    const Vector3 lvMin = LaneVector(lvMinDistance.maLanes[0], lvMinDistance.maLanes[1], lvMinDistance.maLanes[2],
+                                     lvMinDistance.maLanes[3]);
+
+    if (!lPostBox.GetPackage().mbIntersection)                                                   // #1
+        return false;
+
+    const Vector3 lHit    = lPostBox.GetPackage().mPosition;                                     // #2
+    const Vector3 lNormal = lPostBox.GetPackage().mNormal;                                       // #3
+    const Vector3 lHitToTest = LaneSub(lTestPoint, lHit);
+    const f32 lfDistance = Dot3OneRounding(lNormal, lHitToTest);
+
+    if (!(std::fabs(lfDistance) > KF_ON_PLANE_EPSILON))
+    {
+        lPosition = LaneMadd(lPostBox.GetPackage().mNormal, lvMin, lPosition);                   // #4
+        return true;
+    }
+
+    if (!(lvMin.x > lfDistance && lvMin.y > lfDistance && lvMin.z > lfDistance && lvMin.w > lfDistance))
+        return false;
+
+    const f32 lfNormalDotVector = Dot3OneRounding(lVector, lPostBox.GetPackage().mNormal);       // #5
+
+    // The refined reciprocals: vrefp (modelled), then e' = e * (1 - x e) + e twice.
+    const auto RefinedReciprocal = [](f32 lfValue) -> f32
+    {
+        f32 lfEstimate = static_cast<f32>(1.0 / static_cast<f64>(lfValue));
+        for (s32 liStep = 0; liStep < 2; ++liStep)
+        {
+            const f32 lfResidual = std::fma(-lfEstimate, lfValue, 1.0f);
+            lfEstimate = std::fma(lfEstimate, lfResidual, lfEstimate);
+        }
+        return lfEstimate;
+    };
+    const f32 lfInverseDistance = RefinedReciprocal(lfDistance);
+    const f32 lfInverseDot      = RefinedReciprocal(lfNormalDotVector);
+
+    const Vector3 lvShortfall   = LaneSub(lvMin, LaneVector(lfDistance, lfDistance, lfDistance, lfDistance));
+    const Vector3 lvTestScale   = LaneMul(LaneVector(lfInverseDistance, lfInverseDistance, lfInverseDistance,
+                                                     lfInverseDistance), lvShortfall);
+    const Vector3 lvVectorScale = LaneMul(LaneVector(lfInverseDot, lfInverseDot, lfInverseDot, lfInverseDot),
+                                          lvShortfall);
+    const Vector3 lAlongTest    = LaneMul(lHitToTest, lvTestScale);
+    const Vector3 lAlongVector  = LaneMul(lVector, lvVectorScale);
+
+    if (std::fabs(lfNormalDotVector) > KF_ON_PLANE_EPSILON && lfNormalDotVector > 0.0f
+        && Dot3OneRounding(lVector, lVector) > Dot3OneRounding(lAlongVector, lAlongVector))
+    {
+        lPosition = LaneAdd(lPosition, lAlongVector);
+        return true;
+    }
+    lPosition = LaneAdd(lPosition, lAlongTest);
+    return true;
+}
+
 // ============================================================================
 // The two range tests BehaviourBystanderCam::Update runs (DWARF CameraUtils.cpp:1376 / :1399).
 // ADDED 2026-09-24 (FX-DIRECTOR). Neither has an X360 symbol: the console inlines both into

@@ -261,6 +261,17 @@ namespace Utils
         PostBox<CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult>& lPostBox,
         Vector3& lPosition, f32 lfMinDistance);
 
+    // @0x8220CEB0 (DWARF CameraUtils.cpp:83 / :1083). Push a position out of the surface a nearest line test hit,
+    // measured at a TEST POINT (one of the frustum resolver's near-plane corners): when the test point is on the
+    // plane the position moves lvMinDistance along the normal; when it is closer than lvMinDistance the position
+    // moves either along lVector (when that is shorter than lVector itself and faces the surface) or along the
+    // hit -> test point direction, far enough to put the test point lvMinDistance out. True when it moved. Used by
+    // FrustrumCollisionResolver::ProcessSceneQueryResults @0x822242F8 (four calls). BODIED 2026-09-28 (owner's
+    // list, lane L1, piece 6) in CameraUtils.cpp.
+    bool ResolveLineTestNearestUsingDisplacementAndVector(
+        PostBox<CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult>& lPostBox,
+        Vector3 lTestPoint, Vector3& lPosition, Vector3 lVector, VecFloat lvMinDistance);
+
     // @0x821F25B8. The FOUR near-clip-plane corner positions for a camera transform (a2..a5
     // are the four out-corners, written in asm store order r30/r29/r28/r27). Used by
     // BehaviourRoadRunner::Update.

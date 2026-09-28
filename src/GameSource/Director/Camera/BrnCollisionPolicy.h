@@ -283,9 +283,8 @@ private:
 //
 // ADDED 2026-09-28 (owner's list, L1 piece 7a): the DWARF members, at the offsets the inlined Construct
 // stores to through `r10 = policy + 0x10` (CollisionPolicyAttachedToVehicle::Construct @0x82224890,
-// 0x822248F4..0x82224908). The method set (GenerateSceneQueries @0x82252540, ProcessSceneQueryResults
-// @0x822242F8, ResolveVehicleCollisions @0x82223890, CalculateFrustumLineTests @0x8220DDE8,
-// RequestFrustumLineTests @0x8223FD70, ...) lands with piece 6.
+// 0x822248F4..0x82224908). Piece 6a (same day) bodies the method set below; ResolveVehicleCollisions
+// @0x82223890 (the push-out from the traffic, only the chase cam asks for it) is piece 6b.
 // ----------------------------------------------------------------------------
 class FrustrumCollisionResolver
 {
@@ -305,11 +304,52 @@ public:
         mBottomRight.Construct();
     }
 
+    // ⭐ THE RESOLVER'S METHOD SET -- BODIED 2026-09-28 (owner's list, L1 piece 6a) in
+    // BrnCollisionPolicyAttachedToVehicle.cpp (the DWARF home is BrnCollisionPolicy.cpp; on this build the family is
+    // split by class and the resolver rides with its only embedder, as GroundConstraint rides with its first).
+    // Signatures and parameter names are the DWARF's (BrnCollisionPolicy.cpp:97 / :402 / :358 / :443).
+    // DWARF :92 -- @0x82252540: push the camera out of the traffic when asked (ResolveVehicleCollisions @0x82223890,
+    // piece 6b), size the near plane (CalculateFrustumLineTests) and post the four frustum-edge line tests
+    // (RequestFrustumLineTests). Its one caller is CollisionPolicyAttachedToVehicle::GenerateSceneQueries @0x82252830.
+    void GenerateSceneQueries(const CollisionPolicySharedInfo& lSharedInfo, Camera& lCamera, Vector3 lTarget,
+                              VecFloat lVehicleResolveAmount, VecFloat lDesiredNearClip,
+                              bool lbResolveVehicleCollisions);
+
+    // DWARF :101 -- @0x8223FD70: four world-only nearest line tests, one per near-plane corner, each from the car
+    // side of the frustum edge (lStart +- lLeft +- lUp, pushed sTestStartWidthPadding further out) to
+    // sTestLengthPadding past the corner of the near plane (lEnd + lForward +- lLeft +- lUp).
+    void RequestFrustumLineTests(const SceneQueryInterface* lpRequestInterface, Vector3 lStart, Vector3 lLeft,
+                                 Vector3 lUp, Vector3 lEnd, Vector3 lForward);
+
+    // DWARF :112 -- @0x8220DDE8: the near plane's half extents from the camera's field of view (plus
+    // kfFOVBodgeAmount) and aspect ratio at twice the desired near clip, that distance shortened until the plane
+    // fits sMaxViewportHalfWidth x sMaxViewportHalfHeight; the camera is given half of it as its custom near clip.
+    // Out: lForward (the z axis at that distance), lUp / lLeft (the y / x axes at the half extents), lStart (the
+    // target) and lEnd (the camera's position).
+    void CalculateFrustumLineTests(VecFloat lDesiredNearClip, Camera& lCamera, Vector3 lTarget, Vector3& lForward,
+                                   Vector3& lUp, Vector3& lLeft, Vector3& lStart, Vector3& lEnd);
+
+    // DWARF :132 -- @0x822242F8: rebuild the near plane from the camera's near clip and push the camera out of each
+    // corner's hit (Utils::ResolveLineTestNearestUsingDisplacementAndVector, all four, in order); true when any
+    // corner moved it. The four boxes are emptied. lPlaneNormalOut is zeroed and nothing else writes it.
+    bool ProcessSceneQueryResults(const CollisionPolicySharedInfo& lSharedInfo, Camera& lCamera, Vector3 lTarget,
+                                  Vector3& lPlaneNormalOut);
+
 private:
     LineTestNearestPostBox mTopLeft;                // :151  +0x000
     LineTestNearestPostBox mTopRight;               // :152  +0x050
     LineTestNearestPostBox mBottomLeft;             // :153  +0x0A0
     LineTestNearestPostBox mBottomRight;            // :154  +0x0F0
+
+    // The tunables the 6a bodies read (DWARF :157..:172, `extern VecFloat` / `extern float32_t`: not const). Each
+    // VecFloat is a .bss splat a CRT thunk fills at start-up from an .rdata float; the definitions cite both.
+    static VecFloat sMaxViewportHalfWidth;          // :157  0x82FAA7B0
+    static VecFloat sMaxViewportHalfHeight;         // :158  0x82FAAAB0
+    static VecFloat sTestStartWidthPadding;         // :160  0x82FAAB50
+    static VecFloat sTestLengthPadding;             // :161  0x82FAA910
+    static f32      kfFOVBodgeAmount;               // :163  .data 0x82CDA6E0
+    static VecFloat kvfMinVehicleResolveAmount;     // :172  0x82FAA700
+
     Vector3                mVehicleResolveVector;   // :174  +0x140
     f32                    mfMinDistance;           // :175  +0x150
 };
@@ -359,7 +399,10 @@ public:
     // Until they landed the class inherited CollisionPolicy's two empty bodies: the scene-query pass reached every
     // car-attached camera and asked it to do nothing, so the chase cam (and with it the crash state's fallback
     // camera) stayed wherever its rig put it -- behind the wall the car hit.
-    // STAGED: the FrustrumCollisionResolver arm (mbUseFrustrumResolver) lands with piece 6; see the bodies.
+    // The FrustrumCollisionResolver arm (mbUseFrustrumResolver: every car-attached camera the console tunes --
+    // the chase cam, the ICE takes, the aftertouch / deathcam / loose-attachment / orbit cameras) BODIED the same
+    // day (piece 6a): the traffic resolution eased, the camera's near clip sized, four frustum-edge line tests, each
+    // corner pushed out of its hit. Its traffic push-out (ResolveVehicleCollisions, the chase cam's only) is 6b.
     void GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) override;
     void ProcessSceneQueryResults(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) override;
 
@@ -455,11 +498,12 @@ private:
     //                              GenerateSceneQueries splats it into
     //                              FrustrumCollisionResolver::GenerateSceneQueries @0x82252824.
     //   +0x240 mfMaxRadius         UpdateRadius @0x8220E4D0 (IDB-named) is its smoother.
-    //   +0x244 mfTrafficCollisionResolution  GenerateSceneQueries @0x822527C4 ramps it toward
-    //                              1.0 at 0.05/frame while the attached vehicle's speed
-    //                              (+0x3CC) is under 35.0, else toward 0.0 at 0.01/frame --
-    //                              i.e. literally the DWARF's kfSpeedLimitForTrafficCollision
-    //                              / kfTrafficCollisionRampUp / kfTrafficCollisionRampDown.
+    //   +0x244 mfTrafficCollisionResolution  GenerateSceneQueries @0x822527C4 eases it toward
+    //                              1.0 (t += (1 - t) * 0.05 per frame, one fmadds) while the
+    //                              attached vehicle's mfSpeedMPH (+0x3CC) is under 35.0, else
+    //                              toward 0.0 (t += -t * 0.01) -- the DWARF's
+    //                              kfSpeedLimitForTrafficCollision / kfTrafficCollisionRampUp /
+    //                              kfTrafficCollisionRampDown. Frustum arm only.
     //   +0x248 mbAutoElevate       Construct seeds 1 (@0x82224928).
     //   +0x249 mbSmoothRadiusChanges  Construct seeds 0.
     //   +0x24A mbFailOnContact     Construct seeds 0 (DWARF has SetFailOnContact).
@@ -482,6 +526,13 @@ private:
     f32 mfDesiredNearClip;                    // +0x23C            DWARF h:128
     f32 mfMaxRadius;                          // +0x240            DWARF h:129 (ResetRadiusSmoothing)
     f32 mfTrafficCollisionResolution;         // +0x244            DWARF h:130 (0..1, ramped)
+
+    // DWARF h:132..h:134 (defined .cpp:27..:29): the ramp GenerateSceneQueries drives mfTrafficCollisionResolution
+    // with on the frustum arm. The console folds them into literals (see the definitions).
+    static const f32 kfSpeedLimitForTrafficCollision;
+    static const f32 kfTrafficCollisionRampUp;
+    static const f32 kfTrafficCollisionRampDown;
+
     u8  mbAutoElevate;                        // +0x248            DWARF h:136 (Construct seeds 1)
     u8  mbSmoothRadiusChanges;                // +0x249            DWARF h:137
     u8  mbFailOnContact;                      // +0x24A            DWARF h:138

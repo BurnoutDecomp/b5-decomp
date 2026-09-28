@@ -31,6 +31,21 @@
 //         mbResetVehicleCollision, the car-to-camera box's state
 //     P5  the asserts fired in the frame (the console's inlined GetPackage tripwire on an unanswered box)
 //   A revision without the DWARF layout cannot build group P (L1_NO_LAYOUT): its five checks are counted failed.
+//
+// GROUP F (piece 6a) -- the scene-query pair, the FRUSTUM arm (mbUseFrustrumResolver 1): the same three-frame run with
+//   the policy's FrustrumCollisionResolver in the loop -- GenerateSceneQueries @0x82252540, CalculateFrustumLineTests
+//   @0x8220DDE8 (XMVectorTan @0x821F0788), RequestFrustumLineTests @0x8223FD70, ProcessSceneQueryResults @0x822242F8
+//   -- with the camera's field of view, aspect ratio and near-clip state set per frame, each frustum box answered or
+//   left waiting between the halves, and sometimes the camera's custom near clip cleared between them. The corner
+//   resolve Utils::ResolveLineTestNearestUsingDisplacementAndVector @0x8220CEB0 is a recorder (id 11, its body has its
+//   own test: run_l1_camera_utils.py), and Camera::GetNearClipDistance is the console's inline (the test does not link
+//   Camera.cpp). A third of the cases construct with mbDoVehicleCollision, with the traffic resolution kept at or
+//   under 0.01 (ResolveVehicleCollisions @0x82223890 is piece 6b and not reached).
+//     F1  every call, in order, with every argument   F2  the camera after GenerateSceneQueries, with its near clip
+//     F3  the camera after ProcessSceneQueryResults
+//     F4  the policy after the frame: as P4, plus the four frustum boxes' states and the resolver's
+//         mVehicleResolveVector
+//     F5  the asserts fired in the frame (CalculateFrustumLineTests' IsValid assert on a NaN camera row)
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
@@ -174,7 +189,7 @@ static void CheckConstruct(bool lbArgument, const L1ConstructStore* lpStores, u3
 namespace
 {
     std::vector<u32>                        gCalls;
-    const L1Frame*                          gpFrame = 0;
+    const u32*                              gpuPitchAnswers = 0;   // the frame's two GetPitchAboutPointRads answers
     int                                     giPitchNext = 0;
     const void*                             gpPolicy = 0;
     const void*                             gpCamera = 0;
@@ -226,7 +241,7 @@ namespace Utils
     // 0 -- the row's answer for this call.
     f32 GetPitchAboutPointRads(Vector3 lCentre, Vector3 lPoint)
     {
-        const u32 luAnswer = (gpFrame != 0 && giPitchNext < 2) ? gpFrame->mauPitch[giPitchNext] : Bits(0.0f);
+        const u32 luAnswer = (gpuPitchAnswers != 0 && giPitchNext < 2) ? gpuPitchAnswers[giPitchNext] : Bits(0.0f);
         ++giPitchNext;
         std::vector<u32> lArgs;
         EmitVector(lArgs, lCentre);
@@ -258,6 +273,29 @@ namespace Utils
         u8 luIntersection = 0;
         std::memcpy(&luIntersection, &lPostBox.mPackage.mbIntersection, 1);
         if (luIntersection == 0)
+            return false;
+        lPosition.x = lPostBox.mPackage.mPosition.x;
+        lPosition.y = lPostBox.mPackage.mPosition.y;
+        lPosition.z = lPostBox.mPackage.mPosition.z;
+        return true;
+    }
+
+    // 11 -- recorded; a box that GOT its package with an intersection moves the position onto the hit (x, y, z) and
+    // answers true.
+    bool ResolveLineTestNearestUsingDisplacementAndVector(LineTestNearestPostBox& lPostBox, Vector3 lTestPoint,
+                                                          Vector3& lPosition, Vector3 lVector, VecFloat lvMinDistance)
+    {
+        std::vector<u32> lArgs;
+        lArgs.push_back(Rel(&lPostBox));
+        EmitVector(lArgs, lTestPoint);
+        lArgs.push_back(Rel(&lPosition));
+        EmitVector(lArgs, lVector);
+        for (int i = 0; i < 4; ++i)
+            lArgs.push_back(Bits(lvMinDistance.maLanes[i]));
+        EmitList(11u, lArgs);
+        u8 luIntersection = 0;
+        std::memcpy(&luIntersection, &lPostBox.mPackage.mbIntersection, 1);
+        if (lPostBox.meState != LineTestNearestPostBox::E_STATE_GOT_PACKAGE || luIntersection == 0)
             return false;
         lPosition.x = lPostBox.mPackage.mPosition.x;
         lPosition.y = lPostBox.mPackage.mPosition.y;
@@ -302,6 +340,17 @@ namespace Utils
     void CollisionPolicy::Fail(Camera& lrCamera, s32 leFailedFlag)
     {
         Emit(6u, { Rel(this), Rel(&lrCamera), static_cast<u32>(leFailedFlag) });
+    }
+
+    // Not a recorder: the console INLINES Camera::GetNearClipDistance @0x82205B68 into the resolver's
+    // ProcessSceneQueryResults (0x82224324..0x8222436C) and this test does not link Camera.cpp, so this is that inline,
+    // flag for flag -- the custom near clip when set, else the camera state's E_FLAG_SMALL_NEAR_CLIP (bit 16 of the
+    // +0x140 flags) picks flt_82CDA55C == 0x3DCCCCCD over flt_82CDA560 == 0x3E19999A (both read from the image).
+    f32 Camera::GetNearClipDistance() const
+    {
+        if (mbHasCustomNearClipDistance)
+            return mfCustomNearClipDistance;
+        return ((mState_uFlags & 0x10000) != 0) ? 0.1f : 0.15f;
     }
 }
 
@@ -415,7 +464,7 @@ static void RunFrames()
             ++liFrames;
             RowsFromWords(gCamera.mTransform, lrFrame.mauCamera);
             gCalls.clear();
-            gpFrame = &lrFrame;
+            gpuPitchAnswers = lrFrame.mauPitch;
             giPitchNext = 0;
             const int liAsserts0 = giAsserts;
 
@@ -518,6 +567,206 @@ static void RunFrames()
                   liFrames);
     Check(liBadAsserts == 0, lacName);
 }
+
+// ============================================================================
+// GROUP F -- the frustum arm (piece 6a)
+// ============================================================================
+static Vector3 VecFromWords(const u32* lpu)
+{
+    Vector3 l;
+    l.x = FromBits(lpu[0]);
+    l.y = FromBits(lpu[1]);
+    l.z = FromBits(lpu[2]);
+    l.w = FromBits(lpu[3]);
+    return l;
+}
+
+static bool VecMatches(const u32* lpuConsole, const Vector3& lrPc)
+{
+    return WordMatches(lpuConsole[0], Bits(lrPc.x)) && WordMatches(lpuConsole[1], Bits(lrPc.y))
+        && WordMatches(lpuConsole[2], Bits(lrPc.z)) && WordMatches(lpuConsole[3], Bits(lrPc.w));
+}
+
+static void RunFrustumFrames()
+{
+    int liBadCalls = 0, liBadGenerate = 0, liBadProcess = 0, liBadState = 0, liBadAsserts = 0, liFrames = 0;
+    int liShown = 0;
+
+    const u32 luCases = sizeof(kaL1FrustumCases) / sizeof(kaL1FrustumCases[0]);
+    for (u32 c = 0; c < luCases; ++c)
+    {
+        const L1Case& lrCase = kaL1FrustumCases[c].mBase;
+        CollisionPolicyAttachedToVehicle* lpPolicy = ConstructFromPattern(lrCase.muConstructArgument != 0u);
+        gpPolicy = lpPolicy;
+        lpPolicy->mbAutoElevate           = static_cast<u8>(lrCase.mauFlags[0]);
+        lpPolicy->mbSmoothRadiusChanges   = static_cast<u8>(lrCase.mauFlags[1]);
+        lpPolicy->mbFailOnContact         = static_cast<u8>(lrCase.mauFlags[2]);
+        lpPolicy->mbUseGroundConstraint   = static_cast<u8>(lrCase.mauFlags[3]);
+        lpPolicy->mbTestAgainstWorldOnly  = static_cast<u8>(lrCase.mauFlags[4]);
+        lpPolicy->mbUseFrustrumResolver   = 1u;
+        lpPolicy->mbResetVehicleCollision = static_cast<u8>(lrCase.mauFlags[5]);
+        lpPolicy->mPitchMover.mfCenteringRate = FromBits(lrCase.mauPitchMover[0]);
+        lpPolicy->mPitchMover.mfCurrentSpeed  = FromBits(lrCase.mauPitchMover[1]);
+        lpPolicy->mPitchMover.mfCurrentValue  = FromBits(lrCase.mauPitchMover[2]);
+        lpPolicy->mfDesiredNearClip            = FromBits(lrCase.muNearClip);
+        lpPolicy->mfMaxRadius                  = FromBits(lrCase.muMaxRadius);
+        lpPolicy->mfTrafficCollisionResolution = FromBits(lrCase.muTrafficResolution);
+        lpPolicy->mGroundConstraint.SetDesiredHeight(FromBits(lrCase.muDesiredHeight));
+        lpPolicy->mFrustrumCollisionResolver.mVehicleResolveVector =
+            VecFromWords(kaL1FrustumCases[c].mauVehicleResolveVector);
+
+        RowsFromWords(gVehicle.mRaceCarState.mTransform, lrCase.mauVehicle);
+        gVehicle.mRaceCarState.mEntityId.muValue = lrCase.muEntity;
+        gVehicle.mRaceCarState.mfSpeedMPH = FromBits(lrCase.muSpeed);
+
+        BrnDirector::Camera::CollisionPolicySharedInfo lShared{};
+        lShared.mpRequestInterface = &gInterface;
+        lShared.mpAllVehicleData = &gWorld;
+        const f32 lfWorld = FromBits(lrCase.mauTimestep[0]);
+        const f32 lfNoSlomo = FromBits(lrCase.mauTimestep[1]);
+        const f32 lfGame = FromBits(lrCase.mauTimestep[2]);
+        lShared.mTimestep.Set(BrnDirector::VecFloat(lfGame), BrnDirector::VecFloat(lfWorld),
+                              BrnDirector::VecFloat(lfNoSlomo), lfGame, lfWorld, lfNoSlomo);
+
+        BrnDirector::LineTestNearestPostBox* const lapBoxes[4] = {
+            &lpPolicy->mFrustrumCollisionResolver.mTopLeft, &lpPolicy->mFrustrumCollisionResolver.mTopRight,
+            &lpPolicy->mFrustrumCollisionResolver.mBottomLeft, &lpPolicy->mFrustrumCollisionResolver.mBottomRight };
+
+        BrnDirector::Camera::CollisionPolicy* lpBase = lpPolicy;
+        for (u32 f = 0; f < lrCase.muFrameCount; ++f)
+        {
+            const L1FrustumFrame& lrFrame = kaL1FrustumFrames[lrCase.muFirstFrame + f];
+            ++liFrames;
+            RowsFromWords(gCamera.mTransform, lrFrame.mauCamera);
+            gCamera.mfFOV                       = FromBits(lrFrame.muFieldOfView);
+            gCamera.mfAspectRatio               = FromBits(lrFrame.muAspectRatio);
+            gCamera.mState_uFlags               = lrFrame.muSmallNearClip ? 0x10000 : 0;
+            gCamera.mfCustomNearClipDistance    = FromBits(lrFrame.muCustomNearClip);
+            gCamera.mbHasCustomNearClipDistance = lrFrame.muHasCustomNearClip != 0u;
+            gCalls.clear();
+            gpuPitchAnswers = lrFrame.mauPitch;
+            giPitchNext = 0;
+            const int liAsserts0 = giAsserts;
+
+            lpBase->GenerateSceneQueries(lShared, gCamera);
+            const bool lbGenerateOk = RowsMatch(gCamera.mTransform, lrFrame.mauAfterGenerate)
+                && (gCamera.mbHasCustomNearClipDistance ? 1u : 0u) == lrFrame.muAfterGenerateHasCustom
+                && WordMatches(lrFrame.muAfterGenerateCustom, Bits(gCamera.mfCustomNearClipDistance));
+
+            if (lrFrame.muClearCustomNearClip)
+                gCamera.mbHasCustomNearClipDistance = false;
+            for (int k = 0; k < 4; ++k)
+            {
+                if (!lrFrame.mauDeliver[k])
+                    continue;
+                lapBoxes[k]->meState = BrnDirector::LineTestNearestPostBox::E_STATE_GOT_PACKAGE;
+                lapBoxes[k]->mPackage.mPosition = VecFromWords(lrFrame.mauHit + 4 * k);
+                lapBoxes[k]->mPackage.mNormal = VecFromWords(lrFrame.mauNormal + 4 * k);
+                const u8 luIntersection = static_cast<u8>(lrFrame.mauIntersection[k]);
+                std::memcpy(&lapBoxes[k]->mPackage.mbIntersection, &luIntersection, 1);
+            }
+
+            lpBase->ProcessSceneQueryResults(lShared, gCamera);
+
+            // F1 the calls
+            bool lbCallsOk = gCalls.size() == lrFrame.muCallWords;
+            for (u32 w = 0; lbCallsOk && w < lrFrame.muCallWords; ++w)
+                lbCallsOk = WordMatches(kau32L1FrustumCallStream[lrFrame.muFirstCallWord + w], gCalls[w]);
+            // F3 the camera after
+            const bool lbProcessOk = RowsMatch(gCamera.mTransform, lrFrame.mauAfterProcess);
+            // F4 the state after
+            u8 luReset = 0;
+            std::memcpy(&luReset, &lpPolicy->mbResetVehicleCollision, 1);
+            bool lbStateOk =
+                WordMatches(lrFrame.mauPitchMover[0], Bits(lpPolicy->mPitchMover.mfCenteringRate))
+                && WordMatches(lrFrame.mauPitchMover[1], Bits(lpPolicy->mPitchMover.mfCurrentSpeed))
+                && WordMatches(lrFrame.mauPitchMover[2], Bits(lpPolicy->mPitchMover.mfCurrentValue))
+                && WordMatches(lrFrame.muMaxRadius, Bits(lpPolicy->mfMaxRadius))
+                && WordMatches(lrFrame.muTrafficResolution, Bits(lpPolicy->mfTrafficCollisionResolution))
+                && lrFrame.muResetVehicleCollision == luReset
+                && lrFrame.muBoxState == static_cast<u32>(lpPolicy->mCarToCamera.meState)
+                && VecMatches(lrFrame.mauVehicleResolveVector,
+                              lpPolicy->mFrustrumCollisionResolver.mVehicleResolveVector);
+            for (int k = 0; k < 4; ++k)
+                lbStateOk = lbStateOk && lrFrame.mauFrustumBoxState[k] == static_cast<u32>(lapBoxes[k]->meState);
+            // F5 the asserts
+            const bool lbAssertsOk = static_cast<u32>(giAsserts - liAsserts0) == lrFrame.muAsserts;
+
+            liBadCalls += lbCallsOk ? 0 : 1;
+            liBadGenerate += lbGenerateOk ? 0 : 1;
+            liBadProcess += lbProcessOk ? 0 : 1;
+            liBadState += lbStateOk ? 0 : 1;
+            liBadAsserts += lbAssertsOk ? 0 : 1;
+            if (!(lbCallsOk && lbGenerateOk && lbProcessOk && lbStateOk && lbAssertsOk) && liShown < 6)
+            {
+                ++liShown;
+                std::printf("  frustum case %u frame %u: calls %s (console %u words, pc %u) generate %s process %s "
+                            "state %s asserts %s (console %u, pc %d)\n", c, f, lbCallsOk ? "ok" : "BAD",
+                            lrFrame.muCallWords, static_cast<u32>(gCalls.size()), lbGenerateOk ? "ok" : "BAD",
+                            lbProcessOk ? "ok" : "BAD", lbStateOk ? "ok" : "BAD", lbAssertsOk ? "ok" : "BAD",
+                            lrFrame.muAsserts, giAsserts - liAsserts0);
+                if (!lbCallsOk)
+                {
+                    u32 luFirstBad = 0;
+                    while (luFirstBad < lrFrame.muCallWords && luFirstBad < gCalls.size()
+                           && WordMatches(kau32L1FrustumCallStream[lrFrame.muFirstCallWord + luFirstBad],
+                                          gCalls[luFirstBad]))
+                        ++luFirstBad;
+                    const u32 luFrom = luFirstBad > 8u ? luFirstBad - 8u : 0u;
+                    std::printf("    first difference at word %u\n    console:", luFirstBad);
+                    for (u32 w = luFrom; w < lrFrame.muCallWords && w < luFrom + 24u; ++w)
+                        std::printf(" %08X", kau32L1FrustumCallStream[lrFrame.muFirstCallWord + w]);
+                    std::printf("\n    pc     :");
+                    for (size_t w = luFrom; w < gCalls.size() && w < luFrom + 24u; ++w)
+                        std::printf(" %08X", gCalls[w]);
+                    std::printf("\n");
+                }
+                if (!lbGenerateOk)
+                    std::printf("    near clip console %u %08X | pc %u %08X\n", lrFrame.muAfterGenerateHasCustom,
+                                lrFrame.muAfterGenerateCustom, gCamera.mbHasCustomNearClipDistance ? 1u : 0u,
+                                Bits(gCamera.mfCustomNearClipDistance));
+                if (!lbProcessOk)
+                    std::printf("    camera w console %08X %08X %08X %08X | pc %08X %08X %08X %08X\n",
+                                lrFrame.mauAfterProcess[12], lrFrame.mauAfterProcess[13], lrFrame.mauAfterProcess[14],
+                                lrFrame.mauAfterProcess[15], Bits(gCamera.mTransform.wAxis.x),
+                                Bits(gCamera.mTransform.wAxis.y), Bits(gCamera.mTransform.wAxis.z),
+                                Bits(gCamera.mTransform.wAxis.w));
+                if (!lbStateOk)
+                    std::printf("    state console traffic %08X reset %u boxes %u %u %u %u resolve %08X %08X %08X %08X"
+                                " | pc traffic %08X reset %u boxes %u %u %u %u resolve %08X %08X %08X %08X\n",
+                                lrFrame.muTrafficResolution, lrFrame.muResetVehicleCollision,
+                                lrFrame.mauFrustumBoxState[0], lrFrame.mauFrustumBoxState[1],
+                                lrFrame.mauFrustumBoxState[2], lrFrame.mauFrustumBoxState[3],
+                                lrFrame.mauVehicleResolveVector[0], lrFrame.mauVehicleResolveVector[1],
+                                lrFrame.mauVehicleResolveVector[2], lrFrame.mauVehicleResolveVector[3],
+                                Bits(lpPolicy->mfTrafficCollisionResolution), luReset,
+                                static_cast<u32>(lapBoxes[0]->meState), static_cast<u32>(lapBoxes[1]->meState),
+                                static_cast<u32>(lapBoxes[2]->meState), static_cast<u32>(lapBoxes[3]->meState),
+                                Bits(lpPolicy->mFrustrumCollisionResolver.mVehicleResolveVector.x),
+                                Bits(lpPolicy->mFrustrumCollisionResolver.mVehicleResolveVector.y),
+                                Bits(lpPolicy->mFrustrumCollisionResolver.mVehicleResolveVector.z),
+                                Bits(lpPolicy->mFrustrumCollisionResolver.mVehicleResolveVector.w));
+            }
+        }
+    }
+
+    char lacName[160];
+    std::snprintf(lacName, sizeof(lacName), "F1 frustum arm: every call and argument, in order (%d of %d frames wrong)",
+                  liBadCalls, liFrames);
+    Check(liBadCalls == 0, lacName);
+    std::snprintf(lacName, sizeof(lacName), "F2 frustum arm: the camera and its near clip after GenerateSceneQueries "
+                  "(%d of %d frames wrong)", liBadGenerate, liFrames);
+    Check(liBadGenerate == 0, lacName);
+    std::snprintf(lacName, sizeof(lacName), "F3 frustum arm: the camera after ProcessSceneQueryResults (%d of %d frames "
+                  "wrong)", liBadProcess, liFrames);
+    Check(liBadProcess == 0, lacName);
+    std::snprintf(lacName, sizeof(lacName), "F4 frustum arm: the policy and its resolver after the frame (%d of %d "
+                  "frames wrong)", liBadState, liFrames);
+    Check(liBadState == 0, lacName);
+    std::snprintf(lacName, sizeof(lacName), "F5 frustum arm: the asserts of the frame (%d of %d frames wrong)",
+                  liBadAsserts, liFrames);
+    Check(liBadAsserts == 0, lacName);
+}
 #endif
 
 int main()
@@ -531,10 +780,12 @@ int main()
 
 #ifndef L1_NO_LAYOUT
     RunFrames();
+    RunFrustumFrames();
 #else
-    const char* lapcNames[5] = { "P1 calls", "P2 camera after Generate", "P3 camera after Process", "P4 policy state",
-                                 "P5 asserts" };
-    for (int i = 0; i < 5; ++i)
+    const char* lapcNames[10] = { "P1 calls", "P2 camera after Generate", "P3 camera after Process", "P4 policy state",
+                                  "P5 asserts", "F1 calls", "F2 camera after Generate", "F3 camera after Process",
+                                  "F4 policy state", "F5 asserts" };
+    for (int i = 0; i < 10; ++i)
     {
         char lacName[160];
         std::snprintf(lacName, sizeof(lacName), "%s: not buildable (the revision has no DWARF layout)", lapcNames[i]);
