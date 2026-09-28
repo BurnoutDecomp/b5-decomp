@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // ============================================================================
 // CgsGenericRwacFactory.cpp
 //
@@ -580,6 +581,18 @@ bool GenericRwacFactory::DoCreateVoice(const VoiceSpec& akrSpec,
 void GenericRwacFactory::HandlePluginEvent(
     u32 au32CommandCount, const uintptr_t* apuCommandWords)
 {
+    // FLAG PC-platform witness: attribute decoder and final per-voice send PCM.
+    const auto TracePlayer = [](rw::audio::core::PlugIn* player, const void* sample,
+                                unsigned id, const char* family, const char* mixFamily) {
+        if (!CgsSound::PcmTrace::File()) return;
+        CgsSound::PcmTrace::Register(player, sample, id, family);
+        auto* voice = player->mpVoice;
+        for (unsigned i = 0; i < voice->mucNumStages; ++i) {
+            auto* stage = voice->mpPlugIns[i];
+            if (stage->mpPlugInDescRunTime->muId == 0x53656E30u) // Send 'Sen0'
+                CgsSound::PcmTrace::Register(stage, sample, id, mixFamily);
+        }
+    };
     CGS_ASSERT(au32CommandCount == 4u,
                "Plugin-event command word count");
     const RwacCommandPluginEvent& lrEvent =
@@ -632,6 +645,13 @@ void GenericRwacFactory::HandlePluginEvent(
         lPlayParams.expelMode = 0.0f;
         lPlayParams.requestHandle = 0.0f;
 
+        // FLAG PC-platform witness: content identity/path -> real player output.
+        TracePlayer(lpPlugin, lParameters.mpWaveContent,
+            static_cast<unsigned>(lParameters.mpWaveContent->GetContentSpec().GetName().GetValue()), "wave", "wave-mix");
+        CgsSound::PcmTrace::Log("wave-source player=%p sample=%p spec=%llu path=%s\n",
+            lpPlugin, lParameters.mpWaveContent,
+            static_cast<unsigned long long>(lParameters.mpWaveContent->GetContentSpec().GetName().GetValue()),
+            lpcStreamPath ? lpcStreamPath : "RAM");
         rw::audio::core::PlugIn::Event(lpPlugin, liEvent, &lPlayParams);
         *lParameters.mpRequestHandle = lPlayParams.requestHandle;
         break;
@@ -655,6 +675,8 @@ void GenericRwacFactory::HandlePluginEvent(
         CGS_ASSERT(luParamCount == 2u,
                    "Single-pointer parameter command word count");
         void* lpParameter = reinterpret_cast<void*>(lauParamWords[1]);
+        if (lauParamWords[0] == E_RWAC_COMMAND_GINSU_ATTACH_DATA_PARAMETERS)
+            TracePlayer(lpPlugin, lpParameter, 0, "ginsu", "ginsu-mix");
         rw::audio::core::PlugIn::Event(lpPlugin, liEvent, &lpParameter);
         break;
     }

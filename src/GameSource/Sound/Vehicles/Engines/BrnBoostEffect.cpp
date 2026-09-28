@@ -1,3 +1,5 @@
+#include "GameShared/GameClasses/Sound/Logic/CgsState.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnBoostEffect.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -147,9 +149,9 @@ bool BoostEffect::Attach()
     mfParam_AEMS_time_boosting = 0.0f;
     mfParam_AEMS_is_boost_blue = 0.0f;
     mfParam_AEMS_skid_intensity = 0.0f;
-    mTimeOfLastBoostOut.Flush(0.0f);
-    mTimeOfLastBoostIn.Flush(0.0f);
-    mTimeInBoost.Flush(0.0f);
+    mTimeOfLastBoostOut.Update(0.0f);
+    mTimeOfLastBoostIn.Update(0.0f);
+    mTimeInBoost.Update(0.0f);
     return true;
 }
 
@@ -160,20 +162,25 @@ void BoostEffect::UpdateParams(f32 afTimeStep)
         return;
 
     const PhysicsControl::PhysicsData& lrPhysics = mpPhysicsControl->GetPhysicsData();
-    const f32 lfNow = mfRunningTime;
+    // ARTIST826B4260..4268: owning State::mfCurTime, not an effect-local clock.
+    const f32 lfNow = mpState->mfCurTime;
     mfParam_AEMS_start_stage_2 = 0.0f;
     mfParam_AEMS_velocity = 1024.0f;
     mfParam_AEMS_volume = GetMixerOutputValue(0, Nicotine::DMixIO::DMX_VOL);
     mfParam_AEMS_is_boost_blue = lrPhysics.IsBlueBoost ? 1.0f : 0.0f;
     mfParam_AEMS_skid_intensity = lrPhysics.mDrifting.GetCurrent() * 1024.0f;
     mfParam_AEMS_boost_remaining = lrPhysics.mfBoostRemaining * 1024.0f;
-    mfParam_AEMS_car_speed = std::max(lrPhysics.mSpeedMPH.GetCurrent() - 256.0f, 0.0f) * 4.0f;
+    // 826B42F0..4310: fsel caps MPH at256, then scales by1/256 and1024.
+    // The negative/unordered arm retains the original speed (no lower clamp).
+    const f32 lfSpeed = lrPhysics.mSpeedMPH.GetCurrent();
+    const f32 lfLimitedSpeed = lfSpeed - 256.0f >= 0.0f ? 256.0f : lfSpeed;
+    mfParam_AEMS_car_speed = (lfLimitedSpeed * 0.00390625f) * 1024.0f;
 
     if (lrPhysics.IsBoosting.GetCurrent() && !lrPhysics.IsBoosting.GetPrevious())
     {
         mfParam_AEMS_control = 1.0f;
         mTimeOfLastBoostIn.Update(lfNow);
-        mTimeInBoost.Flush(0.0f);
+        mTimeInBoost.Update(0.0f);
     }
     else if (!lrPhysics.IsBoosting.GetCurrent() && lrPhysics.IsBoosting.GetPrevious())
     {
@@ -184,11 +191,17 @@ void BoostEffect::UpdateParams(f32 afTimeStep)
     if (lrPhysics.IsBoosting.GetCurrent())
         mTimeInBoost.Update(mTimeInBoost.GetCurrent() + afTimeStep);
 
-    mfParam_AEMS_time_boosting = std::max(32767.0f - mTimeInBoost.GetCurrent() * 100.0f, 0.0f);
-    mfParam_AEMS_time_since_last_boostin =
-        std::max(32767.0f - (lfNow - mTimeOfLastBoostIn.GetPrevious()) * 100.0f, 0.0f);
-    mfParam_AEMS_time_since_last_boostout =
-        std::max(32767.0f - (lfNow - mTimeOfLastBoostOut.GetCurrent()) * 100.0f, 0.0f);
+    // 826B43A8..4408: elapsed centiseconds clamped0..32767. The subtract
+    // supplies fsel's predicate; it is not the returned timer value. fsel with
+    // unordered predicate chooses the negative arm, hence a NaN ends at32767.
+    const auto ClampTimer = [](f32 lfElapsed) {
+        const f32 lfScaled = lfElapsed * 100.0f; // flt820049E0
+        const f32 lfPositive = -lfScaled >= 0.0f ? 0.0f : lfScaled;
+        return 32767.0f - lfPositive >= 0.0f ? lfPositive : 32767.0f; // flt820AD310
+    };
+    mfParam_AEMS_time_boosting = ClampTimer(mTimeInBoost.GetCurrent());
+    mfParam_AEMS_time_since_last_boostin = ClampTimer(lfNow - mTimeOfLastBoostIn.GetPrevious());
+    mfParam_AEMS_time_since_last_boostout = ClampTimer(lfNow - mTimeOfLastBoostOut.GetCurrent());
 
     UpdateBoostStream();
 }
@@ -197,6 +210,19 @@ void BoostEffect::ProcessUpdate()
 {
     UpdateAemsBoostParameters();
     mBoostVoice.Update();
+    // FLAG PC-platform witness: boost edges and the authored control inputs.
+    if (CgsSound::PcmTrace::File()) {
+        static int lastStage = -1, lastBoost = -1;
+        const int stage = mBoostVoice.GetUpdateStage();
+        const int boost = mpPhysicsControl->GetPhysicsData().IsBoosting.GetCurrent();
+        if (stage != lastStage || boost != lastBoost) {
+            lastStage = stage; lastBoost = boost;
+            CgsSound::PcmTrace::Log("boost-input stage=%d boosting=%d speed=%.9g time=%.9g sincein=%.9g sinceout=%.9g volume=%.9g control=%.9g\n",
+                stage, boost, mfParam_AEMS_car_speed, mfParam_AEMS_time_boosting,
+                mfParam_AEMS_time_since_last_boostin, mfParam_AEMS_time_since_last_boostout,
+                mfParam_AEMS_volume, mfParam_AEMS_control);
+        }
+    }
 }
 
 void BoostEffect::UpdateAemsBoostParameters()

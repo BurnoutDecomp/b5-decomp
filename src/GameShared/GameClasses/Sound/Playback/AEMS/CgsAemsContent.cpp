@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // ============================================================================
 // CgsAemsContent.cpp -- CgsSound::Playback::AemsContentSlot runtime bodies.
 //
@@ -133,6 +134,10 @@ bool AemsContent::DoOnPostLoad()
         mpAemsData = 0;
         return false;
     }
+    // FLAG PC-platform witness: original bank identity -> runtime handle.
+    CgsSound::PcmTrace::Log("aems-bank bank=%d spec=%llu path=%s\n", miAemsBankHandle,
+        static_cast<unsigned long long>(GetContentSpec().GetName().GetValue()),
+        GetContentSpec().GetPath());
     mbRemoveBegun = false;
     return true;
 }
