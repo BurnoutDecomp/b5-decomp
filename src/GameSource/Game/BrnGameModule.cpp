@@ -2696,33 +2696,6 @@ namespace BrnGame
             }
         }
 
-        // ⭐ THE DIRECTOR'S SIM-PAUSED FLAG (OWNERLIST 2026-09-27, lane L5). X360 DoUpdate_Director @0x823E8DE0 stages
-        // it right after BridgeGameStateToDirector, 0x823E8EF8..0x823E8F2C:
-        //     0x823E8EF8  rlwinm r11, updateSet, 0,23,23 ; bne 0x823E8F28   the 0x100 update-set bit -> store 0
-        //     0x823E8F0C  lbzx   r11, gm, 0x9A0635       ; bne 0x823E8F28   mbOnline                  -> store 0
-        //     0x823E8F20  lbzx   r11, gm, 0x9A0621                           mbSimPaused               -> store it
-        //     0x823E8F2C  stb    r11, 0x7AC8(input)                          InputBuffer::SetSimPaused
-        // The 0x823E8F28 arm stores 0 when either gate is set; the 0x823E8F18..0x823E8F24 arm, both clear, stores
-        // mbSimPaused. It is the ONLY writer of that byte in the image besides InputBuffer::Construct. The PC never
-        // staged it, so the director saw an unpaused sim through every pause: MainDirector's behaviour updates ran on
-        // the stopped game clock's zero timestep, and BehaviourBystanderCam's Looker fired
-        // "!rw::math::fpu::IsZero(lTimeStep.GetFloat())" (BrnLooker.cpp:282) on every paused frame, where the
-        // console's UpdateAllBehaviours @0x82251960 holds every behaviour that lacks the update-during-pause bit.
-        // FLAG PC platform leaf: the 0x100 bit is the replay-playback bit -- ConstructUpdateSet @0x823DCB40 ORs 0x101
-        // into the fsm set when the ReplayIO pre-sim status has bit 0 -- and this build has no replay module, so
-        // ConstructUpdateSetFromFsm's set (the one this function already hands ExternalSceneQueriesUpdate) never
-        // carries it and that gate is always clear here.
-        if (!lbPostGui)
-        {
-            const u32 KU_UPDATE_SET_REPLAY_PLAYBACK = 0x100u;
-            const bool lbReplayPlayback =
-                (static_cast<u32>(ConstructUpdateSetFromFsm()) & KU_UPDATE_SET_REPLAY_PLAYBACK) != 0;
-
-            lpDirectorInput->LockForWrite();
-            lpDirectorInput->SetSimPaused(!lbReplayPlayback && !mbOnline && mbSimPaused);
-            lpDirectorInput->UnlockForWrite();
-        }
-
         // ------------------------------------------------------------------------------
         // ⛔ THE INTRO FLY-BY STAND-IN IS RETIRED (2026-08-01).
         //
