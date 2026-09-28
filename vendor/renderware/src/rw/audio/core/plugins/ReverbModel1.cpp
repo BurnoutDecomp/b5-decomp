@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // =====================================================================================
 // rw::audio::core::ReverbModel1 bodies -- the "ReverbModel1" reverb plug-in.
 //
@@ -859,7 +860,7 @@ int ReverbModel1::Process(ReverbModel1 *self, AudioProcessContext *ctx)
     // call (the leading two slots of each section ARE the apply/reset function pointers).
     for (int i = 0; i < 6; ++i)
     {
-        IFilter *pCombInterface = reinterpret_cast<IFilter *>(&self->mComb[i]);
+        IFilter *pCombInterface = static_cast<IFilter *>(&self->mComb[i]);
         pCombInterface->mpApplyFunc =
             reinterpret_cast<IFilterApplyFunc>(&CombFilter::CombFilterApplyFunc); // stw @ +0x00
         pCombInterface->mpResetFunc =
@@ -871,7 +872,7 @@ int ReverbModel1::Process(ReverbModel1 *self, AudioProcessContext *ctx)
     // Same for the live all-pass sections (the count is re-read every iteration, as in the asm).
     for (int i = 0; i < self->mbAllPassCount; ++i)
     {
-        IFilter *pAllPassInterface = reinterpret_cast<IFilter *>(&self->mAllPass[i]);
+        IFilter *pAllPassInterface = static_cast<IFilter *>(&self->mAllPass[i]);
         pAllPassInterface->mpApplyFunc =
             reinterpret_cast<IFilterApplyFunc>(&AllPassFilter::AllPassFilterApplyFunc);
         pAllPassInterface->mpResetFunc =
@@ -949,6 +950,7 @@ int ReverbModel1::Process(ReverbModel1 *self, AudioProcessContext *ctx)
             memset(pSrc->mpSamples + pSrc->muStride * channel, 0, 0x400); // XMemSet
     }
 
+    CgsSound::PcmTrace::MeasureEffect("reverb", self, pSrc->mpSamples, 256, self->mBase.mbChannelCount, pSrc->muStride);
     ppScratchTable[3] = pScratchTop; // restore the scratch cursor
     return 1;
 }
@@ -994,9 +996,9 @@ int ReverbModel1::CreateInstance(ReverbModel1 *self)
 
     // Size each delay line from its section's read-length descriptor (miMode).
     for (int i = 0; i < 6; ++i)
-        self->mCombDelay[i].Init(1, 0, self->mComb[i].miMode);
+        self->mCombDelay[i].Init(1, 0, self->mComb[i].miReadLength);
     for (int i = 0; i < allPassCount; ++i)
-        self->mAllPassDelay[i].Init(1, 0, self->mAllPass[i].miMode);
+        self->mAllPassDelay[i].Init(1, 0, self->mAllPass[i].miReadLength);
 
     // Shared all-pass mix gain = 2 / (mode>4 ? mode-1 : mode).
     const s32 modeS = self->mBase.mbChannelCount;

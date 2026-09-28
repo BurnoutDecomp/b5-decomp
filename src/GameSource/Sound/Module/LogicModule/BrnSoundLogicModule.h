@@ -229,6 +229,8 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     const Attrib::Gen::burnoutglobaldata& GetGlobalData() const { return mBurnoutGlobalData; }
     BrnSound::Logic::FrameInformation& GetFrameInformation() { return mFrameInformation; }
     const BrnSound::Logic::FrameInformation& GetFrameInformation() const { return mFrameInformation; }
+    // Inlined in ReverbEffect::ProcessUpdate (ARTIST module+0x51FC).
+    CgsSound::Logic::Voice& GetGlobalReverbVoice() { return mGlobalReverbVoice; }
     CgsNumeric::Random& GetRandomGenerator() { return mRandomGenerator; }
     const Attrib::RefSpec& GetSampleTags(u32 auTag) const
     {

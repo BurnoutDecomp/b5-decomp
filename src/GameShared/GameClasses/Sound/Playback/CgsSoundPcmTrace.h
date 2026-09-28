@@ -60,5 +60,27 @@ inline void Measure(const void* player, const float* pcm, unsigned count,
         return;
     }
 }
+// FLAG PC-platform witness: first nonzero output of a DSP effect, after processing.
+inline void MeasureEffect(const char* name, const void* effect, const float* pcm,
+                          unsigned count, unsigned channels, unsigned stride)
+{
+    if (!File() || !count || !channels) return;
+    static const void* emitted[32] = {};
+    static unsigned next = 0;
+    for (const void* value : emitted) if (value == effect) return;
+    double power = 0.0; float peak = 0.0f;
+    for (unsigned ch = 0; ch < channels; ++ch)
+        for (unsigned i = 0; i < count; ++i) {
+            const float value = pcm[ch * stride + i];
+            power += static_cast<double>(value) * value;
+            if (std::fabs(value) > peak) peak = std::fabs(value);
+        }
+    if (peak > 0.0f) {
+        emitted[next++ % 32] = effect;
+        Log("effect-pcm name=%s effect=%p frames=%u channels=%u rms=%.9g peak=%.9g\n",
+            name, effect, count, channels, std::sqrt(power / (count * channels)), peak);
+    }
+}
+
 }}
 #endif
