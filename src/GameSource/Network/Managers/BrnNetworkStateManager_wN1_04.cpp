@@ -966,10 +966,12 @@ namespace BrnNetwork
 
             case KI_GUI_EVENT_NETWORK_SUSPENSION:
             {
-                const CgsGui::GuiEventNetworkSuspension* lpSuspensionEvent =
-                    static_cast<const CgsGui::GuiEventNetworkSuspension*>(lpRecord);
+                // ARTIST 0x82578510: the GUI router has unwrapped this event; r25
+                // points at its four-byte payload, and lwz reads the type at +0.
+                const CgsGui::GuiEventNetworkSuspension::ESuspensionType leSuspensionType =
+                    *static_cast<const CgsGui::GuiEventNetworkSuspension::ESuspensionType*>(lpPayload);
 
-                switch (lpSuspensionEvent->meSuspensionType)
+                switch (leSuspensionType)
                 {
                 case CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND:
                     if (mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn()
