@@ -2469,10 +2469,12 @@ void CollisionStateManager::UpdateResolver(
                 ++lru32EventBudget;
                 char lacLine[160];
                 std::snprintf(lacLine, sizeof(lacLine),
-                              "[collision-audio] glass event vehicle=%08x part=%d state=%d dontplay=%d crack=%g\n",
+                              "[collision-audio] glass event vehicle=%08x part=%d state=%d dontplay=%d crack=%g fatal=%d impact=%d\n",
                               static_cast<unsigned>(lrEvent.mVehicleEntityId.muValue),
                               static_cast<s32>(lrEvent.meGlassPart), static_cast<s32>(lrEvent.meNewState),
-                              lrEvent.mbDontPlaySmashEffect ? 1 : 0, static_cast<double>(lrEvent.mfCrackAmount));
+                              lrEvent.mbDontPlaySmashEffect ? 1 : 0, static_cast<double>(lrEvent.mfCrackAmount),
+                              static_cast<s32>(mFrameInformation.meFatality.GetCurrent()),
+                              static_cast<s32>(mFrameInformation.meImpactTime.GetCurrent()));
                 *CgsDev::Log::gpDebugPrint << lacLine;
             }
         }
