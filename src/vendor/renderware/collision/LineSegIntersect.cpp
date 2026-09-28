@@ -698,10 +698,11 @@ RwBool SolveQuarticRoots(f32 lafCoefficients[5], f32& arRoot)
 // segment end (proj - |delta|^2 > 0 with its square beyond disc), and return
 // the near root as the Fraction (proj - sqrt(disc)) / |delta|^2.
 //
-// VMX lowering notes: vmsum3fp128 -> Dot3; the vpermwi128 0x63 / vmulfp128 /
-// vnmsubfp / vpermwi128 two-permute idiom @ 0x82BA8250..0x82BA8270 is exactly
-// Cross(toCentre, aLineDelta). fmsubs f11,f12,f0,f11 (scalar operand order
-// fD = fA*fC - fB, multiplier SECOND) = deltaLenSq*radiusSq - crossSq. Branch
+// ROUNDING (owner's list 2026-09-27, lane L2 -- the wave-2 scalar lowering rounded every product and sum):
+// vmsum3fp128 is linemath::Dot3 (rule 1, one rounding of the f64 sum); the vpermwi128 0x63 / vmulfp128 /
+// vnmsubfp / vpermwi128 idiom @ 0x82BA8250..0x82BA8270 is linemath::Cross(toCentre, aLineDelta) (its
+// vnmsubfp difference rounded ONCE, rule 3); fmsubs f11,f12,f0,f11 (fD = fA*fC - fB, multiplier SECOND)
+// = deltaLenSq*radiusSq - crossSq, ONE rounding (rule 3). Branch
 // polarity is preserved exactly, including the unordered (NaN) direction of
 // every fcmpu, via the !(...) forms below (the SolveQuarticRoots loop-back
 // precedent).
@@ -717,7 +718,7 @@ s32 rwcSphereLineSegIntersect(Fraction* lpDist,           // r3
     // toCentre = centre - start (lvx128 v0 / v13 ; vsubfp v13).
     const Vec4 lvToCentre = Sub(*lpCentre, *lpLineStart);
     // |toCentre|^2 (vmsum3fp128 v0, v13, v13 -> stack round-trip -> lfs f13).
-    const f32 lfDistSq = Dot3(lvToCentre, lvToCentre);
+    const f32 lfDistSq = linemath::Dot3(lvToCentre, lvToCentre);
 
     // fcmpu f13, f0 / bge loc_82BA821C: only a STRICTLY inside start takes
     // the immediate-hit path (unordered goes to the main path with the asm).
@@ -730,19 +731,19 @@ s32 rwcSphereLineSegIntersect(Fraction* lpDist,           // r3
     }
 
     // proj = dot3(toCentre, delta) (vmsum3fp128 v12, v13, v0).
-    const f32 lfProj = Dot3(lvToCentre, *lpLineDelta);
+    const f32 lfProj = linemath::Dot3(lvToCentre, *lpLineDelta);
     if (!(lfProj > 0.0f))     // fcmpu f10, f13(0.0) / bgt skips -> li r3, -1
     {
         return -1;            // segment points away from (or grazes) the sphere
     }
 
-    const f32 lfDeltaLenSq = Dot3(*lpLineDelta, *lpLineDelta);   // vmsum3fp128 v11
+    const f32 lfDeltaLenSq = linemath::Dot3(*lpLineDelta, *lpLineDelta);   // vmsum3fp128 v11
     // |cross(toCentre, delta)|^2 -- the two-permute cross idiom + vmsum3fp128.
-    const Vec4 lvCross   = Cross(lvToCentre, *lpLineDelta);
-    const f32  lfCrossSq = Dot3(lvCross, lvCross);
+    const Vec4 lvCross   = linemath::Cross(lvToCentre, *lpLineDelta);
+    const f32  lfCrossSq = linemath::Dot3(lvCross, lvCross);
 
-    // disc = |delta|^2 * r^2 - crossSq (fmsubs f11, f12, f0, f11).
-    const f32 lfDisc = lfDeltaLenSq * lfRadiusSq - lfCrossSq;
+    // disc = |delta|^2 * r^2 - crossSq (fmsubs f11, f12, f0, f11: ONE rounding).
+    const f32 lfDisc = std::fma(lfDeltaLenSq, lfRadiusSq, -lfCrossSq);
     if (!(lfDisc >= 0.0f))    // fcmpu f11, f13(0.0) / bge skips -> li r3, 0
     {
         return 0;             // the infinite line misses the sphere
@@ -825,10 +826,10 @@ s32 rwcPlaneLineSegIntersect(Fraction* lpDist, f32 afOrig, f32 afSeg, f32 afSign
 // abInvert selects the FAR root (exit surface, sign -1, only when the exit
 // lies strictly inside the segment) and drops the receding-line -1 abort.
 //
-// VMX lowering notes: both crosses are the two-permute idiom -> Cross;
-// vmsum3fp128 -> Dot3. Scalar tail: fmuls f13,f10,f13 / fmsubs f13,f11,f11,
-// f13 / fmadds f13,f10,f0,f13 build the discriminant in exactly the order
-// below; fnmsubs f0,f13,f0,f11 (fD = -(fA*fC - fB)) = proj - sign*sqrt(disc).
+// ROUNDING (owner's list 2026-09-27, lane L2): both crosses are the two-permute idiom -> linemath::Cross
+// (vnmsubfp, rule 3); vmsum3fp128 -> linemath::Dot3 (rule 1). Scalar tail: fmuls f13,f10,f13 (rounded) /
+// fmsubs f13,f11,f11,f13 / fmadds f13,f10,f0,f13 (each ONE rounding, rule 3) build the discriminant in exactly
+// the order below; fnmsubs f0,f13,f0,f11 (fD = -(fA*fC - fB)) = proj - sign*sqrt(disc).
 // Branch polarity (incl. the unordered direction of every fcmpu) is
 // preserved via the !(...) forms.
 // ===========================================================================
@@ -849,8 +850,8 @@ s32 rwcCylinderLineSegIntersect(Fraction* lpDist,        // r3
     // toBase = base - start (vsubfp v0, v3, v1) and its axis cross
     // (two-permute idiom @ 0x82BAF8A4..0x82BAF8C4).
     const Vec4 lvToBase      = Sub(aBase, aLineStart);
-    const Vec4 lvCrossBase   = Cross(lvToBase, aAxis);
-    const f32  lfCrossBaseSq = Dot3(lvCrossBase, lvCrossBase);   // vmsum3fp128 v12
+    const Vec4 lvCrossBase   = linemath::Cross(lvToBase, aAxis);
+    const f32  lfCrossBaseSq = linemath::Dot3(lvCrossBase, lvCrossBase);   // vmsum3fp128 v12
 
     // fcmpu f13, f0 / bge loc_82BAF8FC ; cmplwi r7 / bne loc_82BAF8FC: only a
     // STRICTLY radially-inside start with abIgnoreInside == 0 early-accepts
@@ -865,8 +866,8 @@ s32 rwcCylinderLineSegIntersect(Fraction* lpDist,        // r3
     // cross(delta, axis) (two-permute idiom @ 0x82BAF8FC..0x82BAF910) and the
     // projected approach term proj = dot3(crossBase, crossDelta)
     // (vmsum3fp128 v0, v0, v13).
-    const Vec4 lvCrossDelta = Cross(aLineDelta, aAxis);
-    const f32  lfProj       = Dot3(lvCrossBase, lvCrossDelta);
+    const Vec4 lvCrossDelta = linemath::Cross(aLineDelta, aAxis);
+    const f32  lfProj       = linemath::Dot3(lvCrossBase, lvCrossDelta);
 
     // cmplwi r6 / bne skips ; fcmpu f11, f12(0.0) / bgt skips -> li r3, -1.
     if (abInvert == 0 && !(lfProj > 0.0f))
@@ -874,14 +875,14 @@ s32 rwcCylinderLineSegIntersect(Fraction* lpDist,        // r3
         return -1;            // segment points away from the surface
     }
 
-    const f32 lfCrossDeltaSq = Dot3(lvCrossDelta, lvCrossDelta);   // vmsum3fp128 v0
+    const f32 lfCrossDeltaSq = linemath::Dot3(lvCrossDelta, lvCrossDelta);   // vmsum3fp128 v0
 
     // Discriminant, in asm order (fmuls f13, f10, f13 ; fmsubs f13, f11, f11,
     // f13 ; fmadds f13, f10, f0, f13):
     //   disc = crossDeltaSq*|axis|^2*r^2 + (proj^2 - crossDeltaSq*crossBaseSq)
-    f32 lfDisc = lfCrossDeltaSq * lfCrossBaseSq;
-    lfDisc = lfProj * lfProj - lfDisc;
-    lfDisc = lfCrossDeltaSq * lfRadialLimit + lfDisc;
+    f32 lfDisc = lfCrossDeltaSq * lfCrossBaseSq;                  // fmuls  f13, f10, f13
+    lfDisc = std::fma(lfProj, lfProj, -lfDisc);                   // fmsubs f13, f11, f11, f13
+    lfDisc = std::fma(lfCrossDeltaSq, lfRadialLimit, lfDisc);     // fmadds f13, f10, f0, f13
     if (!(lfDisc >= 0.0f))    // fcmpu f13, f12(0.0) / bge skips -> li r3, 0
     {
         return 0;             // the infinite line misses the cylinder
