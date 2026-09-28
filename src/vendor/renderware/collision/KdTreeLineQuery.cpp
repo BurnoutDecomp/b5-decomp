@@ -37,7 +37,7 @@ namespace
     // The shared .rdata zero/one floats reached by reference in the ctor asm
     // (already valued elsewhere in the project): flt_82001CC0 == 0.0f seeds the
     // clip tMin and flt_82001C98 == 1.0f seeds the clip tMax. flt_820AD47C ==
-    // 1.0e-6f is the dir-seed pad epsilon (matches AALineClipper::KF_PAD_EPSILON).
+    // 1.0e-6f is the dir-seed pad epsilon (AALineClipper::KF_ABS_EPSILON's word).
     const f32 KF_CLIP_MIN_INIT = 0.0f; // flt_82001CC0
     const f32 KF_CLIP_MAX_INIT = 1.0f; // flt_82001C98
     const f32 KF_SEED_PAD_EPS  = 1.0e-6f; // flt_820AD47C
