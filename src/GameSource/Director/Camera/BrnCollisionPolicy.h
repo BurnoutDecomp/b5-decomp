@@ -283,8 +283,8 @@ private:
 //
 // ADDED 2026-09-28 (owner's list, L1 piece 7a): the DWARF members, at the offsets the inlined Construct
 // stores to through `r10 = policy + 0x10` (CollisionPolicyAttachedToVehicle::Construct @0x82224890,
-// 0x822248F4..0x82224908). Piece 6a (same day) bodies the method set below; ResolveVehicleCollisions
-// @0x82223890 (the push-out from the traffic, only the chase cam asks for it) is piece 6b.
+// 0x822248F4..0x82224908). Pieces 6a / 6b (same day) body the method set below: the frustum arm, then
+// ResolveVehicleCollisions @0x82223890, the lift over the traffic only the chase cam asks for.
 // ----------------------------------------------------------------------------
 class FrustrumCollisionResolver
 {
@@ -308,8 +308,8 @@ public:
     // BrnCollisionPolicyAttachedToVehicle.cpp (the DWARF home is BrnCollisionPolicy.cpp; on this build the family is
     // split by class and the resolver rides with its only embedder, as GroundConstraint rides with its first).
     // Signatures and parameter names are the DWARF's (BrnCollisionPolicy.cpp:97 / :402 / :358 / :443).
-    // DWARF :92 -- @0x82252540: push the camera out of the traffic when asked (ResolveVehicleCollisions @0x82223890,
-    // piece 6b), size the near plane (CalculateFrustumLineTests) and post the four frustum-edge line tests
+    // DWARF :92 -- @0x82252540: lift the camera over the traffic when asked (ResolveVehicleCollisions @0x82223890),
+    // size the near plane (CalculateFrustumLineTests) and post the four frustum-edge line tests
     // (RequestFrustumLineTests). Its one caller is CollisionPolicyAttachedToVehicle::GenerateSceneQueries @0x82252830.
     void GenerateSceneQueries(const CollisionPolicySharedInfo& lSharedInfo, Camera& lCamera, Vector3 lTarget,
                               VecFloat lVehicleResolveAmount, VecFloat lDesiredNearClip,
@@ -329,6 +329,20 @@ public:
     void CalculateFrustumLineTests(VecFloat lDesiredNearClip, Camera& lCamera, Vector3 lTarget, Vector3& lForward,
                                    Vector3& lUp, Vector3& lLeft, Vector3& lStart, Vector3& lEnd);
 
+    // DWARF :119 -- @0x82223890 (piece 6b): lift the camera over every car around it -- each traffic vehicle, then
+    // each used race car (the attached one included), through ResolveVehicleCollision -- and ease
+    // mVehicleResolveVector toward that lift (up at once, back down at kvfVehicleCollisionReturnSpeed). The camera
+    // is moved by the eased vector and pitched about its own x axis by the angle it subtends at the target
+    // (Matrix44AffineFromXRotationAngle), so the target stays framed.
+    void ResolveVehicleCollisions(const AllVehicleData* lpAllVehicles, Vector3 lCameraPos, Camera& lCamera,
+                                  Vector3 lTarget);
+
+    // DWARF :125 -- @0x8220DBC8 (piece 6b): raise lCurrentCameraPos to the curved roof over one vehicle -- an
+    // ellipsoid over its (up-weighted) half extents, a sphere-curve skirt below, GetHeightAboveTraffic -- when the
+    // camera is within twice those extents and not more than kvfDistBelowCarToIgnoreCollision under the vehicle.
+    void ResolveVehicleCollision(const Matrix44Affine& lTrafficTransform, Vector3 lTrafficExtentsIn,
+                                 Vector3& lCurrentCameraPos);
+
     // DWARF :132 -- @0x822242F8: rebuild the near plane from the camera's near clip and push the camera out of each
     // corner's hit (Utils::ResolveLineTestNearestUsingDisplacementAndVector, all four, in order); true when any
     // corner moved it. The four boxes are emptied. lPlaneNormalOut is zeroed and nothing else writes it.
@@ -336,19 +350,29 @@ public:
                                   Vector3& lPlaneNormalOut);
 
 private:
+    // DWARF :149 -- @0x821F9098 (piece 6b): the roof's height at a normalised distance from the vehicle's centre:
+    // cos(clamp(d, 0, 2) * pi / 2) scaled by the top factor above zero and by the bottom factor below it.
+    VecFloat GetHeightAboveTraffic(VecFloat lvfTopCurveFactor, VecFloat lvfBottomCurveFactor,
+                                   VecFloat lvfDistanceFromCentre);
+
     LineTestNearestPostBox mTopLeft;                // :151  +0x000
     LineTestNearestPostBox mTopRight;               // :152  +0x050
     LineTestNearestPostBox mBottomLeft;             // :153  +0x0A0
     LineTestNearestPostBox mBottomRight;            // :154  +0x0F0
 
-    // The tunables the 6a bodies read (DWARF :157..:172, `extern VecFloat` / `extern float32_t`: not const). Each
+    // The tunables the bodies read (DWARF :157..:172, `extern VecFloat` / `extern float32_t`: not const). Each
     // VecFloat is a .bss splat a CRT thunk fills at start-up from an .rdata float; the definitions cite both.
-    static VecFloat sMaxViewportHalfWidth;          // :157  0x82FAA7B0
-    static VecFloat sMaxViewportHalfHeight;         // :158  0x82FAAAB0
-    static VecFloat sTestStartWidthPadding;         // :160  0x82FAAB50
-    static VecFloat sTestLengthPadding;             // :161  0x82FAA910
-    static f32      kfFOVBodgeAmount;               // :163  .data 0x82CDA6E0
-    static VecFloat kvfMinVehicleResolveAmount;     // :172  0x82FAA700
+    static VecFloat sMaxViewportHalfWidth;                // :157  0x82FAA7B0
+    static VecFloat sMaxViewportHalfHeight;               // :158  0x82FAAAB0
+    static VecFloat sTestStartWidthPadding;               // :160  0x82FAAB50
+    static VecFloat sTestLengthPadding;                   // :161  0x82FAA910
+    static f32      kfFOVBodgeAmount;                     // :163  .data 0x82CDA6E0
+    static VecFloat kvfHorizontalExtentsScale;            // :167  0x82FAA9B0
+    static VecFloat kvfVehicleCollisionCurveTopScale;     // :168  0x82FAAA90
+    static VecFloat kvfVehicleCollisionCurveBottomScale;  // :169  0x82FAA970
+    static VecFloat kvfVehicleCollisionReturnSpeed;       // :170  0x82FAAB30
+    static VecFloat kvfDistBelowCarToIgnoreCollision;     // :171  0x82FAA980
+    static VecFloat kvfMinVehicleResolveAmount;           // :172  0x82FAA700
 
     Vector3                mVehicleResolveVector;   // :174  +0x140
     f32                    mfMinDistance;           // :175  +0x150
@@ -402,7 +426,7 @@ public:
     // The FrustrumCollisionResolver arm (mbUseFrustrumResolver: every car-attached camera the console tunes --
     // the chase cam, the ICE takes, the aftertouch / deathcam / loose-attachment / orbit cameras) BODIED the same
     // day (piece 6a): the traffic resolution eased, the camera's near clip sized, four frustum-edge line tests, each
-    // corner pushed out of its hit. Its traffic push-out (ResolveVehicleCollisions, the chase cam's only) is 6b.
+    // corner pushed out of its hit; and (piece 6b) the chase cam's lift over the traffic, ResolveVehicleCollisions.
     void GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) override;
     void ProcessSceneQueryResults(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) override;
 

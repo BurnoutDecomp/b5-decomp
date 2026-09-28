@@ -3,9 +3,12 @@
 // scratch/OWNERLIST_0927/L1/emu/gen_camutils_l1.py):
 //   XMVectorTan                                                       @0x821F0788   (src/SDKs/XboxMath/XMVectorTan.h)
 //   BrnDirector::Camera::Utils::ResolveLineTestNearestUsingDisplacementAndVector @0x8220CEB0   (CameraUtils.cpp)
+//   XMVectorCos                                                       @0x821F06B0   (src/SDKs/XboxMath/XMVectorCos.h,
+//                                                                                    piece 6b: the roof over a car)
 // run_l1_camera_utils.py puts the revision's XMVectorTan.h in the include path and extracts the revision's lane helpers
 // and the resolve body from CameraUtils.cpp into l1_camutils_bodies.inc.
 //   T1  every XMVectorTan row, bit for bit (a NaN lane by class: the VMX and SSE NaN payloads differ)
+//   T2  every XMVectorCos row, the same way (L1_NO_COS: the revision has no XMVectorCos.h -- counted failed)
 //   D1  every resolve row's answer       D2  every resolve row's position, bit for bit       D3  the tripwires fired
 #include <cmath>
 #include <cstdio>
@@ -17,6 +20,9 @@
 #include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"
 #include "SDKs/XboxMath/XMVectorTan.h"
+#ifndef L1_NO_COS
+#include "SDKs/XboxMath/XMVectorCos.h"
+#endif
 
 #include "L1CameraUtilsData.h"
 
@@ -87,6 +93,26 @@ int main()
     }
     std::snprintf(lacName, sizeof(lacName), "T1 XMVectorTan @0x821F0788, every row (%d of %u wrong)", liBadTan, luTanRows);
     Check(liBadTan == 0, lacName);
+
+    // T2
+#ifndef L1_NO_COS
+    int liBadCos = 0;
+    const u32 luCosRows = sizeof(kaL1CosRows) / sizeof(kaL1CosRows[0]);
+    for (u32 i = 0; i < luCosRows; ++i)
+    {
+        const u32 luPc = Bits(XboxMath::XMVectorCos(FromBits(kaL1CosRows[i].muX)));
+        if (!WordMatches(kaL1CosRows[i].mauOut[0], luPc))
+        {
+            if (liBadCos < 8)
+                std::printf("  cos(%08X): console %08X pc %08X\n", kaL1CosRows[i].muX, kaL1CosRows[i].mauOut[0], luPc);
+            ++liBadCos;
+        }
+    }
+    std::snprintf(lacName, sizeof(lacName), "T2 XMVectorCos @0x821F06B0, every row (%d of %u wrong)", liBadCos, luCosRows);
+    Check(liBadCos == 0, lacName);
+#else
+    Check(false, "T2 XMVectorCos @0x821F06B0: not buildable (the revision has no src/SDKs/XboxMath/XMVectorCos.h)");
+#endif
 
     // D1..D3
     int liBadRet = 0, liBadPos = 0, liBadAsserts = 0;

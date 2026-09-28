@@ -21,6 +21,9 @@ both overrides: no near clip, no line tests, the eye left inside whatever it was
 resolution eased, the resolver handed the car) and FrustrumCollisionResolver's GenerateSceneQueries @0x82252540,
 CalculateFrustumLineTests @0x8220DDE8, RequestFrustumLineTests @0x8223FD70 and ProcessSceneQueryResults @0x822242F8 are
 bodied (ResolveVehicleCollisions @0x82223890 is 6b).
+Stage 6b -- the traffic push-out. FrustrumCollisionResolver::ResolveVehicleCollisions @0x82223890 (with
+ResolveVehicleCollision @0x8220DBC8, GetHeightAboveTraffic @0x821F9098 and the new XMVectorCos.h) lifts the chase cam
+over the cars around it and pitches it to keep its target framed.
 
 Numeric: tests/L1AttachedPolicy.cpp compiles against the revision's BrnCollisionPolicy.h (and includes its
 BrnCollisionPolicyAttachedToVehicle.cpp) and replays tests/L1AttachedPolicyData.h, generated from the console's words
@@ -34,6 +37,10 @@ on emu64 by scratch/OWNERLIST_0927/L1/emu/gen_attached_policy.py (seed 929):
               tunables written by the console's own CRT thunks) and XMVectorTan in the loop; the corner resolve is a
               recorder. Checked as group P, plus the camera's near clip and the four frustum boxes and the resolver's
               mVehicleResolveVector. Counted failed with group P when the layout is missing.
+  group V (5) 110 cases x 3 frames of the chase cam's traffic push-out (piece 6b): the frustum arm with
+              mbDoVehicleCollision and the traffic resolution above 0.01, ResolveVehicleCollisions and everything under
+              it interpreted on emu64 over each case's race cars and traffic (3075 per-vehicle resolves, 2555 reaching
+              the roof). Checked as group F.
 Wiring: the class names the DWARF members and overrides the pair.
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_l1_attached_policy.py [--rev <b5 rev>]
@@ -49,9 +56,10 @@ from fxgs_common import Tree, code_only, compile_and_run, report
 POLICY_H = "src/GameSource/Director/Camera/BrnCollisionPolicy.h"
 POLICY_CPP = "src/GameSource/Director/Camera/BrnCollisionPolicyAttachedToVehicle.cpp"
 VEHICLEREF_CPP = Path(__file__).resolve().parents[1] / "src/GameSource/Director/Utils/BrnVehicleRef.cpp"
-NUMERIC_CHECKS = 16   # C1..C6, P1..P5, F1..F5
+NUMERIC_CHECKS = 21   # C1..C6, P1..P5, F1..F5, V1..V5
 UTILS_H = "src/GameSource/Director/Camera/Utils/CameraUtils.h"
 TAN_H = "src/SDKs/XboxMath/XMVectorTan.h"
+COS_H = "src/SDKs/XboxMath/XMVectorCos.h"
 
 
 def _read(tree, path):
@@ -104,7 +112,7 @@ def numeric(tree):
     body = attached_class(header)
     flags = "" if re.search(r"SmoothMover\s+mPitchMover\s*;", body) else "/DL1_NO_LAYOUT"
     shadow = {POLICY_H: header}
-    for path in (UTILS_H, TAN_H):     # the revision's own, when it has them
+    for path in (UTILS_H, TAN_H, COS_H):     # the revision's own, when it has them
         text = _read(tree, path)
         if text:
             shadow[path] = text
