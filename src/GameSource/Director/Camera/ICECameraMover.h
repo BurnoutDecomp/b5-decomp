@@ -59,16 +59,21 @@ namespace ICE
 struct ICEGroup;
 
 // ----------------------------------------------------------------------------
-// ICE::ICECameraAnchor (reconstruction reference ICECameraMover.hpp:62). The reference
-// space the mover anchors against -- it wraps a CameraSpaceHandler (the eight take
-// reference-space matrices) and exposes the car's geometry position / forward /
-// velocity / acceleration derived from it.
+// ICE::ICECameraAnchor (DWARF ICECameraMover.hpp:62). The reference space the mover anchors
+// against: it wraps one CameraSpaceHandler (the eight take reference-space matrices) at +0x00,
+// so an anchor's address IS its handler's address -- which is why the console reads the car
+// rows straight off the anchor pointer (mpCar+0x10 / +0x20 / +0x30 == mCarToWorld's yAxis /
+// zAxis / wAxis) and hands it to CameraSpaceHandler::TransformToWorld as the `this`
+// (ICECameraMover::UpdateTransformationMatrix @0x8253AE34 / @0x8253AE5C, lwz r4, 0(mover)).
+// BrnDirector::ICEWrapper embeds one (DWARF ICEWrapper.hpp:76 mICECameraAnchor, +0x11ED0).
 //
-// Only the geometry-position and forward-vector accessors are touched by this TU
-// (UpdateForwardVector / UpdateHardCuts read the car's forward + position), so the
-// rest of the method set is DECLARATION-ONLY here; bodies land with the anchor's own
-// TU (mSpace's mCarToWorld provides the reads at mpCar+0x20 / mpCar+0x30 -- the zAxis
-// (forward) and wAxis (position) of the car-to-world affine).
+// ⭐ OWNERLIST 2026-09-27 (lane L5): GetSpace / SetAnchor BODIED as the header inlines the
+// console expands -- neither has an ARTIST symbol. SetAnchor is ICEWrapper::Update's first
+// statement, `CameraSpaceHandler::operator=(wrapper + 0x11ED0, lrSpace)` @0x82540194; GetSpace
+// is the anchor's own address (the mover's TransformToWorld calls pass mpCar as the handler).
+// GetGeometryPosition / GetForwardVector are bodied in SDKs/Packages/ICE/ICECameraMover.cpp (their
+// DWARF home, ICECameraMover.cpp:86 / :102). The remaining DWARF methods stay declaration-only:
+// nothing on the console's playback path calls them.
 // ----------------------------------------------------------------------------
 struct ICECameraAnchor
 {
@@ -76,11 +81,9 @@ public:
     void Construct();
     void Destruct();
 
-    const CameraSpaceHandler& GetSpace() const;
-    void SetAnchor(const CameraSpaceHandler& lrSpace);
+    const CameraSpaceHandler& GetSpace() const              { return mSpace; }     // :71
+    void SetAnchor(const CameraSpaceHandler& lrSpace)       { mSpace = lrSpace; }  // :77
 
-    // Car geometry derived from mSpace.mCarToWorld (forward == zAxis, position ==
-    // wAxis). Used by the mover; declaration-only here.
     Vector3 GetGeometryPosition();
     Vector3 GetForwardVector();
     Matrix4 GetGeometryOrientation() const;
@@ -89,9 +92,8 @@ public:
     f32     GetVelocityMagnitude();
 
 private:
-    // @0x00  The eight take reference-space transforms (mCarToWorld first); the
-    // mover reads its mCarToWorld zAxis/wAxis (mpCar+0x20 / mpCar+0x30).
-    CameraSpaceHandler mSpace;
+    // @0x00  The eight take reference-space transforms (mCarToWorld first).
+    CameraSpaceHandler mSpace;                                // DWARF :89
 };
 
 // ----------------------------------------------------------------------------
@@ -122,34 +124,29 @@ public:
 
     void Destruct();
 
-    // Per-frame driver entry points (each declared with the frame time-step; some
-    // helpers ignore it). Update / UpdateFrameBegin are sibling-TU entry points kept
-    // declaration-only here (not in this TU).
+    // The per-frame driver (DWARF ICECameraMover.hpp:113..:115). BODIED 2026-09-27 (OWNERLIST lane L5) in
+    // SDKs/Packages/ICE/ICECameraMover.cpp. Their one console caller is ICEWrapper::Update @0x82540180, which
+    // expands Update(1.0f) in place: UpdateFrameBegin (the take test, a `bl UpdateSimTime` and the inlined
+    // UpdateEventTag, 0x82540200..0x8254024C) and then `bl UpdateFrameEnd` @0x82540254.
     void Update(f32 lfTimeStep);
     void UpdateFrameBegin(f32 lfTimeStep);
     // Finish the per-frame update: while a take is bound, refresh the transform /
     // forward / lens / focus / hard-cuts / fade / overlay / bloom, then push the
-    // world->camera matrix into the ICE camera. (Consumer: ICEWrapper::Update.)
+    // world->camera matrix into the ICE camera.
     void UpdateFrameEnd(f32 lfTimeStep);
 
     ICECameraAnchor* GetAnchor() { return mpCar; }
 
     // Point the mover at the take it should drive (the manager's active take). The ICE
-    // wrapper sets it after starting a movie; Update reads it back.
+    // wrapper sets it after starting a movie (ICEWrapper::PlayMovie).
     void     SetTake(ICETake* lpTake) { mpTake = lpTake; }
-    ICETake* GetTake() const          { return mpTake; }
-
-    // Advance the per-frame sim-time scale from the take's sim-time channel, clamp it
-    // into [0,1], store it, and push it into the ICE camera. (Consumer: ICEWrapper::Update.)
-    void UpdateSimTime(f32 lfTimeStep);
-
-    // Cache the active take's per-frame event-tag value (channel 41). The consumer
-    // (ICEWrapper::Update) samples the channel and hands it here; UpdateEventTag (its
-    // own TU) reads it back. Sets muOldTag (+0x188).
-    void SetCurrentTakeValueInt(s32 liValue) { muOldTag = static_cast<u32>(liValue); }
 
 private:
-    // --- The per-frame take->camera pipeline reconstructed in this TU ---
+    // --- The per-frame take->camera pipeline (SDKs/Packages/ICE/ICECameraMover.cpp) ---
+    // UpdateSimTime / UpdateEventTag are private in the DWARF (ICECameraMover.hpp:128 / :129): they are reached
+    // only through UpdateFrameBegin.
+    void UpdateSimTime(f32 lfTimeStep);
+    void UpdateEventTag(f32 lfTimeStep);
     void UpdateTransformationMatrix(f32 lfTimeStep);
     void UpdateForwardVector(f32 lfTimeStep);
     void UpdateLens(f32 lfTimeStep);
@@ -163,7 +160,6 @@ private:
     //     follow-on ICECameraMover work). Kept here so the type's method set matches
     //     the reconstruction reference; the per-TU `cl /c` gate does not link. ---
     void UpdateScreenshots(f32 lfTimeStep);
-    void UpdateEventTag(f32 lfTimeStep);
     void UpdateLetterBox(f32 lfTimeStep);
     void UpdateConstraints(f32 lfTimeStep);
     void UpdateAccelOffset(f32 lfTimeStep, Vector3* lpAccelOffset);

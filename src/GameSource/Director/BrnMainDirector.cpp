@@ -3414,8 +3414,8 @@ namespace BrnDirector
     // touches the camera the arbitrator just produced):
     //   * UpdateDebugPrinters / DebugLog::Print / DebugLog::Update -- DebugPrinter and
     //     DebugLog are un-homed named regions.
-    //   * UpdateICE -- declaration-only (the ICE take is un-homed). (UpdateMoments is bodied and
-    //     CALLED since 2026-09-24 -- see the call site.)
+    //   * (UpdateICE is bodied and CALLED since 2026-09-28, BrnMainDirector_wM_01.cpp; UpdateMoments
+    //     since 2026-09-24 -- see the call sites.)
     //     ⚠️ ORDERING NOTE: the console runs those BEFORE UpdateArbitrator, so the
     //     arbitrator sees last frame's behaviour output rather than this frame's. That is a
     //     one-frame staleness in the behaviour-driven camera, not a wrong camera.
@@ -3468,7 +3468,9 @@ namespace BrnDirector
             // scratch/bugtest/runs/fxdirector_moment_tick/20260924_181711 and
             // scratch/bugtest/runs/fxdirector_stunt_jump/20260924_182507.
             UpdateMoments(lpIO, liPlayerCarIndex);
-            // ⚠️ GATE: if ( !<ICE-owns-frame latch> ) UpdateICE( lpIO, liPlayerCarIndex );
+            // ⭐ @0x8227434C..0x8227436C (OWNERLIST 09-27, L5) -- the ICE tick: `lbzx +0x3543C` (DWARF
+            // mbDebugZeroTimestep) ; bne -> skip ; bl UpdateICE. It moves the ICE camera the pause / crash-nav takes show.
+            if (maStateFlagTail[E_FLAG_TAIL_DEBUG_ZERO_TIMESTEP] == 0) UpdateICE(lpIO, liPlayerCarIndex);
 
             // ⭐ The arbitrator picks and runs the state that owns this frame's camera.
             UpdateArbitrator(lpIO, lCamera, liPlayerCarIndex);

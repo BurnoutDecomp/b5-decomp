@@ -28,6 +28,13 @@ namespace ICE
     // the (PS3-only here) method set.
     struct ICEOverlay
     {
+        // ICEOverlays.hpp:57 / :60 (DWARF). ⭐ BODIED 2026-09-27 (OWNERLIST lane L5) as the one-word
+        // stores the console inlines through ICE::ICECamera::SetOverlay / ::ClearOverlay into
+        // ICECameraMover::UpdateOverlay @0x8252E4A8: `stw r3, 0(camera)` (0x8252E508, the new id) and
+        // `stw r7(=0), 0(camera)` (0x8252E4FC) -- mICEOverlay is the ICE camera's first member.
+        void SetOverlay(s32 liOverlay) { muOverlay = static_cast<u32>(liOverlay); }
+        void UnSetOverlay()            { muOverlay = 0; }
+
         u32 muOverlay;   // ICEOverlays.hpp:69
     };
 }

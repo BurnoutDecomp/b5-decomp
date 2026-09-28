@@ -161,9 +161,9 @@ namespace ICEMath
     // DECLARATION-ONLY (TU body).
     void SinCos(f32* lpfSin, f32* lpfCos, Angle leAngle);
 
-    // ATan @0x8252ABD8: arctangent of a 2D (y, x) pair -> ICE::Angle.
-    // DECLARATION-ONLY (TU body).
-    Angle ATan(f32 lfY, f32 lfX);
+    // ATan @0x8252ABD8: atan2(lfY, lfX) -> ICE::Angle. The divisor comes FIRST (f1) and the
+    // dividend second (f2) -- the asm's order; see the TU body.
+    Angle ATan(f32 lfX, f32 lfY);
 
     // Sqrt: inlined at every console call site (no standalone symbol). TU body.
     f32 Sqrt(f32 lfValue);
@@ -204,7 +204,7 @@ namespace ICEMath
     // === Camera / lens ======================================================
     extern const f32 ASPECT_X;   // value not in the exports
     extern const f32 LENS_BASE;  // value not in the exports
-    Angle ConvertLensLengthToFovAngle(f32 lfLensLength);   // DECL-ONLY
+    Angle ConvertLensLengthToFovAngle(f32 lfLensLength);   // TU body (ATan(lens, 15.960001f))
 
     // === Angle <-> unit conversions =========================================
     namespace Angles
@@ -215,7 +215,7 @@ namespace ICEMath
         f32   RadToDeg(f32 lfRadians);   // DECL-ONLY
         f32   RevToRad(f32 lfRevs);      // DECL-ONLY
         Angle RevToAng(f32 lfRevs);      // DECL-ONLY
-        f32   AngToDeg(Angle leAngle);   // DECL-ONLY
+        f32   AngToDeg(Angle leAngle);   // TU body (the ICECameraMover::UpdateLens expansion)
         f32   AngToFloat(Angle leAngle); // DECL-ONLY
     }
 

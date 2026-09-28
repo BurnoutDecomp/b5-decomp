@@ -5,9 +5,7 @@
 //
 // ⭐⭐ WHY THIS IS A FILE OF ITS OWN. The function's declared home is
 // GameSource/Director/BrnDirectorICEWrapper.cpp, but that TU is NOT on the exe source list
-// and mounting it costs the link two unresolved externals it does not have today
-// (ICEManager::GetCameraTake and ICECameraMover::Construct -- measured, and recorded in the
-// build script's mount ledger). Prepare itself needs NEITHER. This is the same file-split
+// (its EditorOn / EditorOff reach the un-homed DebugInterface console toggles). This is the same file-split
 // pattern the camera wave used for BrnCameraTweakerConstruct.cpp: give the one function that
 // can land today its own TU, and leave the rest of the class's home file where it is.
 // DELETE-WHEN: BrnDirectorICEWrapper.cpp joins the link -- then move this body into it.
@@ -22,8 +20,11 @@
 // ============================================================================
 
 #include "GameSource/Director/BrnDirectorICEWrapper.h"
+#include "GameSource/Director/BrnDirectorResourceManager.h"               // DirectorResourceManager::GetIceResourceManager
+#include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"        // AllocatorList::GetRawResource / ...Descriptor
 #include "SDKs/Packages/ICE/ICEData.hpp"        // ICE::InitICEDescriptions
 #include "SDKs/Packages/ICE/ICEDataEnums.hpp"   // ICE::ICEElementDescriptions / eICE_NUM_ELEMENTS
+#include "SDKs/Packages/ICE/ICEMemory.hpp"      // ICE::spICEMemory, ICE::ICEPointers
 
 namespace BrnDirector
 {
@@ -56,46 +57,70 @@ namespace BrnDirector
     // function re-zeroes every schedule's counts before loop 2 refills them, so it is
     // idempotent; both are reproduced rather than "cleaned up".
     //
-    // ⚠️ WHAT IS GATED, AND WHAT IT COSTS. Four sub-object constructions are held back, each
-    // because its callee is un-homed or un-mounted, NOT because it is thought unnecessary:
-    //   * ICE::ICEMemory::Construct + CgsMemory::HeapMalloc::Prepare + the `spICEMemory = this`
-    //     store. spICEMemory is the ICE EDIT heap singleton; its only consumers in this tree
-    //     are the ICE AUTHORING paths (ICEAuthor*, ICETake's undo/PushUndo, NewEditBuffer).
-    //     CONSEQUENCE: the in-game ICE editor cannot allocate. Take PLAYBACK -- which is what
-    //     the junkyard and game-intro cameras use -- allocates nothing and is unaffected.
-    //   * ICE::ICECameraMover::Construct (both call sites) and ICE::ICEManager::Construct.
-    //     Neither TU is in the link, and both take argument sets pointing into un-homed
-    //     wrapper interior regions. CONSEQUENCE: the ICE editor's camera mover and its
-    //     manager are inert -- again an authoring-side surface. MainDirector::UpdateICE, the
-    //     one consumer of ICEManager::GetCameraTake, is itself a documented gate.
-    //   DELETE-WHEN: ICEMemory.cpp / ICECameraMover.cpp / ICEManager.cpp are in the link.
+    // ⭐⭐ UN-GATED 2026-09-27 (OWNERLIST lane L5 -- the pause camera). Stage 0 used to skip the
+    // console's first seven stores and calls (the resource-manager store, the ICE heap, spICEMemory,
+    // ICECameraMover::Construct and ICEManager::Construct) under a banner that called them editor-only.
+    // They are not: ICEWrapper::PlayMovie resolves every movie through mpResourceManager
+    // (DirectorResourceManager::GetKeyAnim), ICEManager::Update advances playback by *mpTimer (a pointer
+    // only ICEManager::Construct stores), and the camera mover writes through the anchor / camera
+    // pointers only ICECameraMover::Construct stores. The first movie ever played -- the pause menu's
+    // playlist, ArbStateCrashNav::Prepare @0x822660A8 -> ICEMoviePlayer::Loop -> PlayMovie -- died on
+    // the null resource manager (an AV in DirectorResourceManager::GetKeyAnim). All seven are the
+    // console's, in its order (0x8253DDF8..0x8253DEAC); the only PC reading is how the arguments are
+    // named:
+    //   *(this + 0x11B24) = arg 3                 mpResourceManager
+    //   *GetRawResource(list, 34) / ...Descriptor  the "Ice" raw bank (BrnMemoryMapData.h: bank 34,
+    //                                              0x40000 bytes) -- its first base pointer and size
+    //   ICEMemory::Construct(this, ...)           mICEMemory, the wrapper's first member (offset 0)
+    //   HeapMalloc::Prepare(this)                 mICEMemory's HeapMalloc base
+    //   dword_82FB62C0 = this                     ICE::spICEMemory = &mICEMemory
+    //   ICECameraMover::Construct(this+0x11BD0, 1, this+0x11ED0, this+0x11D60, <camera take>, 0, rm+0x228)
+    //                                             the take is ICEManager::GetCameraTake inlined
+    //                                             (manager +0x1CE0 ? +0x15A8 : +0x1D38); rm+0x228 is the
+    //                                             resource manager's ICEResourceMgr (GetIceResourceManager)
+    //   ICEManager::Construct(this+0xA40, &{this, this+0x9B24, this+0x11B28, this+0x11ED0, this+0x9B20,
+    //                                        rm+0x228})     the inlined ICEPointers::Construct
     //
     // ⚠️ THE STAGE WORD IS THE REAL ONE. miICELoadStateB is the wrapper's own named member at
     // console +0x120E8 == 73960, which is exactly the word the asm loads and stores. It is
     // zeroed by ICEWrapper::Construct, so a fresh wrapper enters at stage 0 as the console's
-    // does. The three parameters keep their committed spelling; the console's uses of arguments
-    // 2 and 3 (the allocator list and the pointer stored at +0x11B24) belong to the gated
-    // ICEMemory leg, so they are untouched here.
+    // does. The compare is UNSIGNED (`cmplwi cr6, r11, 1` @0x8253DDCC): 0 -> stage 0, 1 -> stage 1,
+    // anything else -> done.
     // ------------------------------------------------------------------------
     bool ICEWrapper::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
                              const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
                              const DirectorResourceManager* lpResourceManager)
     {
         (void)lpOutputBuffer;
-        (void)lpAllocatorList;
-        (void)lpResourceManager;
 
-        if (miICELoadStateB > 1)
+        // The Ice raw bank (BrnMemoryMapData.h KAC_MEMORY_MAP_RAW_ALLOCATORS: bank 34, "Ice").
+        const s32 KI_ICE_RAW_BANK = 34;   // li r4, 0x22 @0x8253DDF0 / 0x8253DE08
+
+        const u32 luStage = static_cast<u32>(miICELoadStateB);
+        if (luStage > 1u)
         {
             return true;
         }
 
-        if (miICELoadStateB == 0)
+        if (luStage == 0u)
         {
             miICELoadStateB = 0;
+            mpResourceManager = const_cast<DirectorResourceManager*>(lpResourceManager);   // stwx @0x8253DDFC
 
-            // ⚠️ GATE: the ICEMemory / HeapMalloc / spICEMemory leg (see the banner).
-            // ⚠️ GATE: ICECameraMover::Construct + ICEManager::Construct (see the banner).
+            rw::Resource*           lpResource = lpAllocatorList->GetRawResource(KI_ICE_RAW_BANK);
+            rw::ResourceDescriptor* lpDesc     = lpAllocatorList->GetRawResourceDescriptor(KI_ICE_RAW_BANK);
+            mICEMemory.Construct(lpResource->m_baseResources[0],
+                                 static_cast<s32>(lpDesc->m_baseResourceDescriptors[0].m_size));   // @0x8253DE24
+            mICEMemory.Prepare();                                                                  // @0x8253DE2C
+            ICE::spICEMemory = &mICEMemory;                                                        // @0x8253DE3C
+
+            mCameraMover.Construct(1, &mICECameraAnchor, &mICECamera, mICEManager.GetCameraTake(), 0,
+                                   lpResourceManager->GetIceResourceManager());                   // @0x8253DE70
+
+            ICE::ICEPointers lICEPointers;
+            lICEPointers.Construct(&mICEFileHandler, &mActionQueue, &mICEMemory, &mICECameraAnchor, &mICETimer,
+                                   lpResourceManager->GetIceResourceManager());
+            mICEManager.Construct(&lICEPointers);                                                  // @0x8253DEAC
 
             // ⭐ The element-description system's runtime bring-up. The console runs the
             // per-element Prepare sweep explicitly and then calls InitICEDescriptions, which
@@ -111,7 +136,9 @@ namespace BrnDirector
 
         miICELoadStateB = 1;
 
-        // ⚠️ GATE: the trailing ICECameraMover::Construct (see the banner).
+        // The stage-1 leg re-Constructs the mover, every call, with the same arguments (@0x8253DF14).
+        mCameraMover.Construct(1, &mICECameraAnchor, &mICECamera, mICEManager.GetCameraTake(), 0,
+                               lpResourceManager->GetIceResourceManager());
 
         return true;
     }

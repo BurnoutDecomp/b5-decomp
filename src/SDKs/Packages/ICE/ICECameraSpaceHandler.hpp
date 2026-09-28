@@ -148,7 +148,11 @@ public:
     void GetSpaceTransformationMatrix(Matrix4* lpMatrix, u8 lu8Space) const;
     void GetWorldOrientationMatrix(Matrix4* lpMatrix, u8 lu8SpaceA, u8 lu8SpaceB) const;
 
-    const Matrix44Affine& GetCarToWorld() const;
+    // ⭐ BODIED 2026-09-27 (OWNERLIST lane L5) as the header inline the console expands: it has no
+    // ARTIST symbol, and ICECameraMover reads the rows it returns straight off the handler (mCarToWorld
+    // @+0x000): UpdateTransformationMatrix's up row (lvx128 +0x10 @0x8253AE90), UpdateForwardVector's
+    // forward row (lvx128 +0x20 @0x82533C4C), Construct / UpdateHardCuts's position row (lvx128 +0x30).
+    const Matrix44Affine& GetCarToWorld() const    { return mCarToWorld; }
 
     // ⭐ BODIED 2026-09-26 (crash parity FX-LASTFIX item 1b) -- INLINE, because that is where the DWARF puts them:
     // the four setters are declared at ICECameraSpaceHandler.hpp:82 / :86 / :90 / :95 and ICECameraSpaceHandler.cpp

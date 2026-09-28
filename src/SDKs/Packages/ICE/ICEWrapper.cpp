@@ -4,9 +4,9 @@
 // Runtime bodies for BrnDirector::ICEWrapper (the director-side ICE owner). The home
 // (member layout) is GameSource/Director/BrnDirectorICEWrapper.h; members are accessed
 // BY NAME here -- the struct-relative offsets quoted in comments are provenance only,
-// never used as casts. The two functions left in this TU:
-//   Update           per-frame: cache spaces, scale sim time, advance + render + drive mover
+// never used as casts. The one function left in this TU:
 //   UpdateAction     queue this frame's dev-tools input actions
+// (Update moved to ICEWrapper_wG_11.cpp on 2026-09-27.)
 //
 // The ctor / EditorOn / EditorOff / ReconstructCameraMover bodies live in the sibling
 // TU GameSource/Director/BrnDirectorICEWrapper.cpp (same home); Construct, Destruct,
@@ -45,64 +45,13 @@ namespace
     const s32 KI_RELEASE_ACTION_ID     = 28;
     const f32 KF_RELEASE_ACTION_DATA   = 1.0f;
 
-    // The take channel Update samples for the mover's per-frame integer value.
-    const s32 KI_MOVER_VALUE_CHANNEL   = 41;
 }
 
 // ----------------------------------------------------------------------------
-// BrnDirector::ICEWrapper::Update
-//
-// Per-frame tick:
-//   * copy the incoming reference spaces into the cache,
-//   * compute the sim-time scale from the game timer (base step * multiplier),
-//   * advance the ICE manager and render the editor,
-//   * if a movie is playing OR the editor is active, drive the camera mover: advance
-//     its sim time, sample the active take's per-frame value (channel 41) into the
-//     mover, then finish the mover's frame.
-//
-// Member map (provenance): CameraSpaceHandler::operator= (+0x11ED0 = lrSpace);
-// mfTimeScale = game-timer-status (+8) * (+4) (+0x9B20); ICEManager::Update (+0xA40);
-// ICEController::Render (mController, +0x2750); the gate reads mbPlaybackDataSet
-// (manager +0x1CE0) || editor menus-active (+0x2BA8); the mover work is at +0x11BD0,
-// its take pointer at +0x110, its per-frame value at +0x188.
+// BrnDirector::ICEWrapper::Update -- MOVED 2026-09-27 (OWNERLIST lane L5) to
+// SDKs/Packages/ICE/ICEWrapper_wG_11.cpp, which is in the link: it indexes neither converter
+// table, and MainDirector::UpdateICE @0x82238FC0 calls it every frame.
 // ----------------------------------------------------------------------------
-void ICEWrapper::Update(const CgsSystem::TimerStatusInterface* lpTimer,
-                        const ICE::CameraSpaceHandler& lrSpace)
-{
-    // Cache this frame's reference spaces.
-    mCameraSpaceHandler = lrSpace;
-
-    // Sim-time scale is the PRODUCT of the game timer status' two step fields read
-    // directly off the timer (the +8 multiplier times the +4 base step). FLAG: field
-    // names are mfTimeStepMultiplier (+8) and mfBaseTimeStep (+4) of the game TimerStatus,
-    // which sits at the head of the TimerStatusInterface.
-    const CgsSystem::TimerStatus* lpGameStatus = lpTimer->GetGameTimerStatus();
-    mfTimeScale = lpGameStatus->GetTimeStepMultiplier() * lpGameStatus->GetBaseTimeStep();
-
-    // Advance the manager, then let the editor draw its overlay.
-    mICEManager.Update();
-    mICEManager.GetEditor().Render();
-
-    // Drive the mover while a movie is playing or the editor is up.
-    if (mICEManager.IsPlaybackDataSet() || mICEManager.GetEditor().AreMenusActive())
-    {
-        const f32 lfSimTime = 1.0f;
-
-        ICE::ICETake* lpTake = mCameraMover.GetTake();
-        if (lpTake != 0)
-        {
-            mCameraMover.UpdateSimTime(lfSimTime);
-
-            lpTake = mCameraMover.GetTake();
-            if (lpTake->GetParameter() <= 0.0f)
-                mCameraMover.SetCurrentTakeValueInt(0);
-
-            mCameraMover.SetCurrentTakeValueInt(lpTake->GetValueInt(KI_MOVER_VALUE_CHANNEL));
-        }
-
-        mCameraMover.UpdateFrameEnd(lfSimTime);
-    }
-}
 
 // ----------------------------------------------------------------------------
 // BrnDirector::ICEWrapper::UpdateAction

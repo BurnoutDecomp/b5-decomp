@@ -5,6 +5,10 @@
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"   // CgsMemory::HeapMalloc (base + embedded edit heap)
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT (bTList<T>::iterator::operator++)
 
+// ICETimer::Update's parameter (DWARF ICETimer.hpp:41, `const TimerStatusInterface *`) is the game's
+// CgsSystem timer-status interface; pointer-only here, its home is included by the TU that bodies Update.
+namespace CgsSystem { class TimerStatusInterface; }
+
 // ============================================================================
 // SDKs/Packages/ICE/ICEMemory.hpp
 //
@@ -44,7 +48,7 @@ namespace ICE
 // ---------------------------------------------------------------------------
 class ICEFileHandler;
 class ActionQueue;
-class ICECameraAnchor;
+struct ICECameraAnchor;   // DWARF `struct ICE::ICECameraAnchor` (ICECameraMover.hpp:62); defined in ICECameraMover.h
 struct IResourceManager;
 
 // ---------------------------------------------------------------------------
@@ -55,10 +59,8 @@ struct IResourceManager;
 // as the playback time delta. Modelled fully from the DWARF (3 methods + 1 field);
 // only GetTimestep carries an inline body, the rest are declaration-only.
 //
-// FLAG: TimerStatusInterface (the Update parameter) is an external/not-yet-
-// reconstructed type, referenced by pointer only -> forward-declared.
+// The Update parameter is CgsSystem::TimerStatusInterface (forward-declared at the top of this file).
 // ---------------------------------------------------------------------------
-class TimerStatusInterface;
 
 struct ICETimer
 {
@@ -66,21 +68,17 @@ private:
     f32 mfTimestep;   // @0x00  current per-frame timestep (seconds)
 
 public:
-    void Construct();
-    void Update(const TimerStatusInterface* lpStatus);
+    // ⭐ BODIED 2026-09-27 (OWNERLIST lane L5). Neither has an ARTIST symbol: the console inlines both into
+    // their one caller each. Construct is ICEWrapper::Construct's `stfsx f0(0.0), this, 0x9B20` @0x82533B3C;
+    // Update is ICEWrapper::Update's `lfs f0, 8(status) ; lfs f13, 4(status) ; fmuls ; stfsx this+0x9B20`
+    // @0x825401B0..0x825401C4 -- its body is in SDKs/Packages/ICE/ICEWrapper_wG_11.cpp beside that caller
+    // (it needs the timer-status home).
+    void Construct() { mfTimestep = 0.0f; }
+    void Update(const CgsSystem::TimerStatusInterface* lpStatus);
 
     f32  GetTimestep() const { return mfTimestep; }
 };
 
-// ---------------------------------------------------------------------------
-// ICE::ICEPointers (DWARF SDKs/Packages/ICE/ICEMemory.hpp:83). The subsystem
-// pointer bundle handed to ICEManager::Construct: it carries the ICE memory
-// manager, the take text sink, the action queue, the camera anchor, the frame
-// timer, and the resource manager. The FIELD ORDER is DWARF-attested and
-// corroborated by the X360 ICEManager::Construct word reads (a2[0]=mpICEMemory,
-// a2[1]=mpICEFileHandler, a2[4]=mpICETimer, a2[5]=mpResourceManager). All members
-// are pointers, so the forward-declared dependency types suffice.
-// ---------------------------------------------------------------------------
 struct ICEMemory;   // defined below (the manager itself can appear in the bundle)
 
 struct ICEPointers
@@ -92,12 +90,22 @@ struct ICEPointers
     ICETimer*                    mpICETimer;         // @0x10  (a2[4])
     const IResourceManager*      mpResourceManager;  // @0x14  (a2[5])
 
+    // DWARF ICEMemory.hpp:87. ⭐ BODIED 2026-09-27 (OWNERLIST lane L5) as the six stores its one console
+    // caller inlines: ICEWrapper::Prepare @0x8253DD90 fills the stack bundle at 0x8253DE7C..0x8253DEA8.
     void Construct(ICEFileHandler* lpFileHandler,
                    ActionQueue* lpActionQueue,
                    ICEMemory* lpICEMemory,
                    ICECameraAnchor* lpCameraAnchor,
                    ICETimer* lpTimer,
-                   const IResourceManager* lpResourceManager);
+                   const IResourceManager* lpResourceManager)
+    {
+        mpICEMemory       = lpICEMemory;
+        mpICEFileHandler  = lpFileHandler;
+        mpActionQueue     = lpActionQueue;
+        mpICECameraAnchor = lpCameraAnchor;
+        mpICETimer        = lpTimer;
+        mpResourceManager = lpResourceManager;
+    }
 };
 
 // ============================================================================
