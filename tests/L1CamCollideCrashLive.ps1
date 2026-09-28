@@ -14,6 +14,9 @@
 # a world-only 0.1 m sphere ("in"), the ground above / below, and the eye <-> car line tests ("occA" / "occB", OCC =
 # either hits the world). BRN_FXD2_SCENEQUERY=1 turns the director's scene-query closure on (the camera policies only
 # run with it; L2 owns removing that opt-in).
+# Wait for the junkyard outro to release the camera before firing, and pin the existing ultra-slow-motion
+# harness scale. After profile delivery was restored, firing during the outro could leave only 31 fallback
+# frames. These controls keep the full crash-camera witness and make closure A/B physics rows comparable.
 #   powershell -ExecutionPolicy Bypass -File tools\tests\run_case.ps1 -Case b5-decomp\tests\L1CamCollideCrashLive.ps1 -Slot 1
 @{
   Name    = 'l1_camcollide_crash'
@@ -22,12 +25,12 @@
   Frames  = $false
   Run     = @{
     Drive           = $true
-    MaxSeconds      = 75
+    MaxSeconds      = 100
     CrashSweep      = '3261.11,-3.7,-1914.09'
     CrashSweepShots = '225:80'
     CrashSweepArm   = 4
   }
-  DiagEnv = 'BRN_CRASH_RESPONSE_DIAG=1,BRN_CAMCOLLIDE_DIAG=1,BRN_CRASHCAM_DIAG=1,BRN_FXD2_SCENEQUERY=1,BRN_VLQ_DIAG=1'
+  DiagEnv = 'BRN_CRASH_RESPONSE_DIAG=1,BRN_CAMCOLLIDE_DIAG=1,BRN_CRASHCAM_DIAG=1,BRN_FXD2_SCENEQUERY=1,BRN_VLQ_DIAG=1,BRN_SWEEP_WAIT_ROAMING=1,BRN_ULTRA_SLOMO_SCALE=0.0075'
   Checks  = @(
     @{ Kind = 'NewAsserts'; Name = 'no NEW assert families' }
     @{ Kind = 'LogCount';   Name = 'no exceptions'; Pattern = '\[EXCEPTION\]'; Max = 0 }
@@ -62,6 +65,6 @@
         }
         @{ Pass = $true; Detail = (($order | ForEach-Object { "$_ $($t[$_].f) (in $($t[$_].i), UNDER $($t[$_].u), OCC $($t[$_].o))" }) -join ' | ') }
       } }
-    @{ Kind = 'LogCount';   Name = 'report: volume line-kernel traps (L2 stage (c), informational)'; Pattern = '\[vlq\] TRAP'; Max = 1000000 }
+    @{ Kind = 'LogCount';   Name = 'no volume line-kernel traps'; Pattern = '\[vlq\] TRAP'; Max = 0 }
   )
 }

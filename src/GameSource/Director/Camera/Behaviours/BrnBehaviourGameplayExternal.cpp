@@ -225,14 +225,9 @@ void BehaviourGameplayExternal::Parameters::Set(const Source* lpSource)
 // ⭐ RESOLVED 2026-08-01 -- mCollisionPolicy USED TO BE A THIRD ENTRY IN THAT FLAG LIST.
 //   `CollisionPolicyAttachedToVehicle::Construct(this+0x50, 1)` @0x82224AB0 is a real call
 //   and it is now reproduced below: the type gained a declared+bodied `Construct(bool)` in
-//   BrnCollisionPolicy.h and, as of the 2026-08-01 DWARF tail carve, named members for every
-//   byte it seeds except mPitchMover's two floats. (The old note's "four further stores the
-//   console makes right after it" was wrong -- +664/+665/+668/+669 are stores made BY the
-//   policy's own Construct at policy +0x248/+0x249/+0x24C/+0x24D, not by this function; the
-//   asm here goes straight from the call to the mLastCarPos/mLastDisplacement zeroing.)
-//   ⚠️ CONSEQUENCE OF THE OLD OMISSION: the chase cam's policy was never seeded at all --
-//   in particular mfMaxRadius stayed 0 instead of FLT_MAX, i.e. "the camera is always
-//   further out than allowed", and mbAutoElevate stayed false.
+//   BrnCollisionPolicy.h. This behaviour then overrides four policy defaults: auto-elevation is off,
+//   while world-only tests, frustum resolution and radius smoothing are on. ARTIST makes these
+//   stores here at 0x82224AF8 / 0x82224B34 / 0x82224B3C / 0x82224B44, after the policy Construct.
 // ============================================================================
 void BehaviourGameplayExternal::Construct()
 {
@@ -240,6 +235,10 @@ void BehaviourGameplayExternal::Construct()
 
     mRotationController.Construct();     // stvx128 0,+32 / +48..+66 / +72 / +76
     mCollisionPolicy.Construct(true);    // 0x82224AB0: Construct(this+0x50, r4 = 1)
+    mCollisionPolicy.SetAutoElevate(false);          // 0x82224AF8: this+0x298
+    mCollisionPolicy.SetTestAgainstWorldOnly(true);  // 0x82224B34: this+0x29C
+    mCollisionPolicy.SetUseFrustrumResolver(true);    // 0x82224B3C: this+0x29D
+    mCollisionPolicy.SetSmoothRadiusChanges(true);   // 0x82224B44: this+0x299
     mAirShake.Construct();               // *(this + 672/676/680/684) = 0.0f
     mImpactShake.Construct();            // *(this + 688/692/696/700) = 0.0f
 
