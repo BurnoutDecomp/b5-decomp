@@ -1,9 +1,11 @@
 // L2 CAMCOLLIDE (owner's list 2026-09-27): the three volume line kernels and the two primitive tests they call,
 // rwcSphereLineSegIntersect @0x82BA81D8 / rwcCylinderLineSegIntersect @0x82BAF8A0, against the console's own answers.
-// Two runners build this file:
+// Three runners build this file:
 //   run_l2_line_kernel_rounding.py  (/DL2_LKN_FINITE_ONLY) the finite rows, bit for bit -- the console's rounding of
 //                                   the primitives (vmsum3fp128 rule 1, the vnmsubfp cross and fmsubs / fmadds rule 3);
-//   run_l2_line_kernel_nan.py       every row -- also the NaN arms below.
+//   run_l2_line_kernel_nan.py       every row -- also the NaN arms below;
+//   run_l2_cylinder_line.py         (/DL2_LKN_CYLINDER) L2CylinderLineData.h instead: the cylinder's line kernel
+//                                   (stage (c), 2026-09-28), kind 5 = CylinderVolume::ThinLineSegIntersect @0x82BADCE0.
 // REVIEW-K DELTA 2 found 13 fcmpu branches of 623c92bf that were spelled `!(a <= b)` /
 // `!(a >= b)` where the console's `ble` / `bge` (bc 4,gt / bc 4,lt) are TAKEN on an unordered compare, so a NaN went
 // to the other arm (and the primitives' discriminant tests 0x82BA8288 / 0x82BAF95C had the same misreading):
@@ -32,11 +34,16 @@
 
 #include "vendor/renderware/collision/CollisionVolume.hpp"
 #include "vendor/renderware/collision/CapsuleVolume.hpp"
+#include "vendor/renderware/collision/CylinderVolume.hpp"
 #include "vendor/renderware/collision/LineSegIntersect.hpp"
 #include "vendor/renderware/collision/LineSegKernelMath.hpp"
 #include "vendor/renderware/collision/GPInstance.hpp"   // TriangleNearestPointRegion (stubbed below)
 
+#if defined(L2_LKN_CYLINDER)
+#include "L2CylinderLineData.h"      // run_l2_cylinder_line.py: the cylinder's line kernel (kind 5)
+#else
 #include "L2LineKernelNanData.h"
+#endif
 
 namespace rw { namespace collision {
 // LineSegIntersect.cpp's fat triangle walk calls it; none of the three kernels reaches that walk.
@@ -162,7 +169,7 @@ static bool RunRow(const L2KernelRow& lrRow, char* lpcWhy, size_t luWhy)
 {
     Call lCall;
     BuildCall(lrRow, lCall);
-    if (lCall.muKind >= 3)
+    if (lCall.muKind == 3 || lCall.muKind == 4)
         return RunPrimitive(lrRow, lCall, lpcWhy, luWhy);
 
     alignas(16) u8 laVolume[96];
@@ -196,12 +203,25 @@ static bool RunRow(const L2KernelRow& lrRow, char* lpcWhy, size_t luWhy)
         lpVolumeObject = &lBox;
         lbRet = lBox.LineSegIntersect(lvPt1, lvPt2, lpTm, lResult, lfFat);
     }
-    else
+    else if (lCall.muKind == 2)
     {
         CapsuleVolume lCapsule;
         std::memcpy(&lCapsule, laVolume, sizeof(laVolume));
         lpVolumeObject = &lCapsule;
         lbRet = lCapsule.LineSegIntersect(lvPt1, lvPt2, lpTm, lResult, lfFat);
+    }
+    else
+    {
+#if defined(L2_LKN_CYLINDER)
+        // kind 5: CylinderVolume::ThinLineSegIntersect @0x82BADCE0, called directly.
+        CylinderVolume lCylinder;
+        std::memcpy(&lCylinder, laVolume, sizeof(laVolume));
+        lpVolumeObject = &lCylinder;
+        lbRet = lCylinder.ThinLineSegIntersect(lvPt1, lvPt2, lpTm, lResult, lfFat);
+#else
+        std::snprintf(lpcWhy, luWhy, "kind %u is not built in this configuration", lCall.muKind);
+        return false;
+#endif
     }
 
     // result.v: the console writes the volume's address (muV = 1) or leaves the sentinel (muV = 0).
@@ -254,8 +274,9 @@ int main()
         }
         if (lbFinite)
         {
-            ++laFiniteRows[luKind >= 3 ? 1 : 0];
-            if (!lbOk) ++laFiniteFails[luKind >= 3 ? 1 : 0];
+            const int liPrimitive = (luKind == 3 || luKind == 4) ? 1 : 0;
+            ++laFiniteRows[liPrimitive];
+            if (!lbOk) ++laFiniteFails[liPrimitive];
         }
         else if (!lbAnyNanSite)
         {
@@ -283,13 +304,15 @@ int main()
 
     char lacLabel[256];
     std::snprintf(lacLabel, sizeof(lacLabel),
-                  "F1 finite kernel rows (sphere / box / capsule): %d of %d match the console bit for bit",
+                  "F1 finite volume kernel rows: %d of %d match the console bit for bit",
                   laFiniteRows[0] - laFiniteFails[0], laFiniteRows[0]);
     Check(laFiniteFails[0] == 0 && laFiniteRows[0] > 0, lacLabel);
+#if !defined(L2_LKN_CYLINDER)
     std::snprintf(lacLabel, sizeof(lacLabel),
                   "F2 finite primitive rows (rwcSphere / rwcCylinder, arbitrary axes): %d of %d match the console bit "
                   "for bit", laFiniteRows[1] - laFiniteFails[1], laFiniteRows[1]);
     Check(laFiniteFails[1] == 0 && laFiniteRows[1] > 0, lacLabel);
+#endif
 #if !defined(L2_LKN_FINITE_ONLY)
     for (int s = 0; s < KI_SITES; ++s)
     {

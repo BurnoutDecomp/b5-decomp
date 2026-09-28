@@ -116,6 +116,7 @@ namespace collision
 class AABBox;        // vendor/renderware/collision/AABBox.hpp -- GetBBox's reference out-param
                      // (same NAMED-not-included precedent as CollisionVolume.hpp:89-96)
 
+struct VolumeLineSegIntersectResult;   // vendor/renderware/collision/LineSegIntersect.hpp (ThinLineSegIntersect)
 struct GPInstance;   // vendor/renderware/collision/GPInstance.hpp (same
                      // forward-decl precedent as CapsuleVolume.hpp:56)
 
@@ -167,6 +168,15 @@ public:
     // (r4 / r5 are dead in the asm; the cylinder axis is always its maximum
     // feature here).
     void GetMaximumFeature(RwBool abCcw, const Vec4& arDir, Feature& arResult) const;
+
+    // @ 0x82BADCE0 (441 insns) -- the ZERO-fatness arm of the cylinder's line kernel: the segment arPt1 -> arPt2
+    // against the frame's z cylinder |z| <= mfHalfHeight, radius mfRadius, in its frame (composed with lpTransform
+    // when given); fills arResult on a hit (1). LANDED 2026-09-28 (owner's list, lane L2, stage (c)); body in
+    // LineSegIntersect.cpp. The dispatcher LineSegIntersect @0x82BAF688 (mfFatness + afFatness == 0 -> this, else
+    // FatLineSegIntersect @0x82BAEB10) and the descriptor slot land with the fat arm. The same argument list as
+    // the other volumes' LineSegIntersect (r3..r7, f1); the thin arm never reads afFatness.
+    RwBool ThinLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+                                VolumeLineSegIntersectResult& arResult, f32 afFatness) const;
 
     // --- members (X360-asm-attested offsets; inferred names) ----------------
     // The local frame: three basis rows + a centre row. Initialize seeds
