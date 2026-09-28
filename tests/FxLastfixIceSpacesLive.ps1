@@ -10,7 +10,8 @@
 # This case is FxDirectorTakedownCamForced.ps1 (the reversed force-takedown harness; ArbStateCrashing starts the
 # authored taken-down ICE camera with the KILLER as the secondary vehicle). The taken-down take Takendown (guid 575630)
 # looks from CAR to CAR2 (eye TAKEDOWN) at CAR2 (look CAR2), so it frames the killer only through these writes.
-# Witness (NOT X360, BRN_CRASHCAM_DIAG, armed by RivalOrganic): per take, frames 0..5, 96 lines a run at most:
+# Witness (NOT X360, BRN_CRASHCAM_DIAG, armed by RivalOrganic): per take, frames 0..5, 12 lines per take guid (L3
+# 2026-09-28: the flat 96-line cap was used up by the junkyard's CarSelect takes before Takendown ran):
 #   [iceanim] spaces take G 'name' frame N: eye E look L | CAR primary id P: take T m, shared S m | CAR2 secondary id Q:
 #     take T m, shared S m | HEADING2 yaw take Y, shared R, secondary Z deg | forced loose F
 # "take" / "shared" are how many metres the take's copy / the shared handler put that space off the behaviour's own
@@ -48,4 +49,6 @@ $case.Checks += @(
         @{ Pass = $true; Detail = ($lines -join ' || ') }
     } }
 )
+# The organic harness's boot-order assert cascade is tolerated, and nothing else (FxLastfixHarnessAsserts.ps1).
+$case = & (Join-Path $PSScriptRoot 'FxLastfixHarnessAsserts.ps1') $case
 $case
