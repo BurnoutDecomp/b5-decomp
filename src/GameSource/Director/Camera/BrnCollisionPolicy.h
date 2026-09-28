@@ -3,11 +3,13 @@
 
 #include "types.hpp"
 #include <cfloat>                                    // FLT_MAX (ResetRadiusSmoothing; XEX rodata @0x8200173C)
+#include <cstddef>                                   // offsetof (CollisionPolicyAttachedToVehicle::_AssertLayout)
 #include "BrnCommonTypes.h"                          // Matrix44Affine / Vector3 (SetTarget / SetVelocity)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the policy sanity tripwires)
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                // CgsSceneManager::EntityId (SetTarget)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"                   // Camera::AABBox (SetTarget)
 #include "GameSource/Director/Camera/Utils/BrnVehicleCollisionPredictor.h"  // Utils::VehicleCollisionPredictor (embedded)
+#include "GameSource/Director/Camera/Utils/BrnCameraSmoothMover.h"          // Utils::SmoothMover (CollisionPolicyAttachedToVehicle::mPitchMover)
 #include "GameSource/Director/Utils/BrnVehicleRef.h"                        // BrnDirector::VehicleRef (SetVehicleRef)
 #include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"          // the post boxes the policies wait on
 #include "GameSource/Director/Utils/BrnDirectorTimestep.h"                 // BrnDirector::Timestep (CollisionPolicySharedInfo)
@@ -232,25 +234,107 @@ private:
 };
 
 // ----------------------------------------------------------------------------
-// BrnDirector::Camera::CollisionPolicyAttachedToVehicle
+// BrnDirector::Camera::GroundConstraint (DWARF BrnCollisionPolicy.h:241)
 //
-// A camera collision policy that keeps the camera attached at a desired height above the tracked
-// vehicle. The gyro-cam Update seeds the policy's desired height each frame; the ICE-anim
-// behaviour embeds one and Constructs it, and hands it back through GetCollisionPolicy when the
-// take's eye space is car-relative.
+// Keeps the camera at mfDesiredHeight above the ground: one world-only nearest line test straight
+// down through the camera; when it hits, the camera's height is set to hit + desired height.
+// Embedded by both VisibilityCollisionPolicy (+0x1C0) and CollisionPolicyAttachedToVehicle (+0x1C0).
+// MOVED UP 2026-09-28 (owner's list, L1 piece 7a): CollisionPolicyAttachedToVehicle now embeds it by
+// value (DWARF h:123 mGroundConstraint), so it is defined before that class. Unchanged otherwise.
+// ----------------------------------------------------------------------------
+class GroundConstraint
+{
+public:
+    // DWARF :298. Inlined (policy +0x1C0 `stw 0` and +0x210 `stfs -1.0f`, flt_820037C8).
+    void Construct()
+    {
+        mLineTest.Construct();
+        mfDesiredHeight = -1.0f;          // flt_820037C8 == 0xBF800000
+    }
+
+    // DWARF :304 -- @0x82240200. Body: BrnVisibilityCollisionPolicy.cpp.
+    void GenerateSceneQueries(const Camera& lrCamera, f32 lfTimestep,
+                              const SceneQueryInterface* lpRequestInterface);
+
+    // DWARF :309 -- @0x8220E3A0; false when the ground was not found. Body:
+    // BrnVisibilityCollisionPolicy.cpp.
+    bool ProcessSceneQueryResults(f32 lfTimestep, Camera& lrCamera);
+
+    void SetDesiredHeight(f32 lfDesiredHeight) { mfDesiredHeight = lfDesiredHeight; }   // :313
+    f32  GetDesiredHeight() const              { return mfDesiredHeight; }             // :316
+
+    // DWARF :294 / :295 -- the line runs from KF_MIN_TEST_ABOVE_LENGTH above the camera down to
+    // max(KF_MIN_TEST_BELOW_LENGTH, mfDesiredHeight) below that start (the two float literals the
+    // body loads: flt_82001C98 == 1.0f and flt_8200426C == 5.0f).
+    static const f32 KF_MIN_TEST_BELOW_LENGTH;
+    static const f32 KF_MIN_TEST_ABOVE_LENGTH;
+
+private:
+    LineTestNearestPostBox mLineTest;               // :320  +0x00
+    f32                    mfDesiredHeight;         // :321  +0x50
+};
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::FrustrumCollisionResolver (DWARF BrnCollisionPolicy.h:80..175; "Frustrum" is the
+// DWARF's own spelling) -- the car-attached camera's near-plane resolver: four nearest line tests along the
+// corner edges of the view frustum, and the push-out from the traffic around the attached car. Embedded by
+// CollisionPolicyAttachedToVehicle at +0x10 (DWARF h:121 mFrustrumCollisionResolver).
+//
+// ADDED 2026-09-28 (owner's list, L1 piece 7a): the DWARF members, at the offsets the inlined Construct
+// stores to through `r10 = policy + 0x10` (CollisionPolicyAttachedToVehicle::Construct @0x82224890,
+// 0x822248F4..0x82224908). The method set (GenerateSceneQueries @0x82252540, ProcessSceneQueryResults
+// @0x822242F8, ResolveVehicleCollisions @0x82223890, CalculateFrustumLineTests @0x8220DDE8,
+// RequestFrustumLineTests @0x8223FD70, ...) lands with piece 6.
+// ----------------------------------------------------------------------------
+class FrustrumCollisionResolver
+{
+public:
+    // DWARF :80. No out-of-line copy: CollisionPolicyAttachedToVehicle::Construct inlines it (r10 = this):
+    //   0x822248F4  stfs    flt_82002138 (0x3C23D70A == 0.01f), 0x150(r10)   mfMinDistance
+    //   0x822248F8  stw     0, 0x00(r10)                                     mTopLeft emptied
+    //   0x822248FC  stvx128 vspltisw(0), r10, 0x140                          mVehicleResolveVector = 0
+    //   0x82224900  stw     0, 0x50(r10) / 0x82224904 0xA0 / 0x82224908 0xF0  the other three boxes emptied
+    void Construct()
+    {
+        mfMinDistance = 0.01f;
+        mTopLeft.Construct();
+        mVehicleResolveVector.SetZero();
+        mTopRight.Construct();
+        mBottomLeft.Construct();
+        mBottomRight.Construct();
+    }
+
+private:
+    LineTestNearestPostBox mTopLeft;                // :151  +0x000
+    LineTestNearestPostBox mTopRight;               // :152  +0x050
+    LineTestNearestPostBox mBottomLeft;             // :153  +0x0A0
+    LineTestNearestPostBox mBottomRight;            // :154  +0x0F0
+    Vector3                mVehicleResolveVector;   // :174  +0x140
+    f32                    mfMinDistance;           // :175  +0x150
+};
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::CollisionPolicyAttachedToVehicle (DWARF CollisionPolicies/
+// BrnCollisionPolicyAttachedToVehicle.h:42)
+//
+// The collision policy of the cameras that hang off a vehicle (the chase cam BehaviourGameplayExternal,
+// the gyro cam, the ICE-anim's car-relative takes, the aftertouch / deathcam / loose-attachment / orbit
+// cameras): it keeps the eye out of the world between the car and the camera, at a minimum elevation
+// above the car, and (for the ground-constrained ones) at a height above the ground. The gyro-cam Update
+// seeds the policy's desired height each frame; the ICE-anim behaviour embeds one and Constructs it, and
+// hands it back through GetCollisionPolicy when the take's eye space is car-relative.
 // ----------------------------------------------------------------------------
 class CollisionPolicyAttachedToVehicle : public CollisionPolicy
 {
 public:
-    // Set the desired camera height above the vehicle. @0x821F3950: raises
-    // mbUseGroundConstraint (+0x24B), asserts the height is positive, then stores it at
-    // +0x210 -- which the DWARF member order puts INSIDE mGroundConstraint, i.e. the console
-    // spelling is `mbUseGroundConstraint = true; mGroundConstraint.SetDesiredHeight(h);`.
-    // Modelled here as the flat pair until GroundConstraint gets a home.
+    // Set the desired camera height above the ground. @0x821F3950: raises mbUseGroundConstraint (+0x24B),
+    // asserts the height is positive, then stores it at +0x210 -- mGroundConstraint's mfDesiredHeight
+    // (the constraint sits at +0x1C0, its height at its own +0x50). Body:
+    // BrnCollisionPolicyAttachedToVehicle.cpp.
     void SetDesiredHeight(f32 lfDesiredHeight);
 
-    // ⭐ Construct @0x82224890 -- BODIED 2026-08-01 (below). BehaviourIceAnim::Construct
-    // @0x822561E4 calls it on the policy it embeds at +0x260 with a trailing 0.
+    // ⭐ Construct @0x82224890 (DWARF BrnCollisionPolicyAttachedToVehicle.cpp:42) -- body below.
+    // BehaviourIceAnim::Construct @0x822561E4 calls it on the policy it embeds at +0x260 with a trailing 0.
     //
     // ⚠️ THE PARAMETER IS A BOOL, NOT A SELECTOR. The store is `stb r4, 0x24F(r3)`
     // (@0x82224924) and the value is later consumed as an `lbz` handed to
@@ -271,14 +355,13 @@ public:
     // the policy sits at behaviour +0x260 -- immediately before raising
     // mbUseAttachedToCarCollisionPolicy. It is a POLICY write, not a Camera write (a retired
     // `IceAnimCameraOps::SetEyeSpaceRows` placeholder mis-attributed it to the camera).
-    // ⚠️ The destination is now a NAMED member: mVehicleRef @+0x220, carved out of the old
-    // maReserved214 span below -- see the ⛔ note on that span.
-    // FLAG: the METHOD NAME is inferred from the role (no symbol survives); the four-word copy
-    // at policy +0x220 is asm-attested, and +0x220 is independently attested six more times by
-    // `VehicleRef::Get(this + 0x220, lpAllVehicleData)` in UpdateMinElevation @0x82240668,
-    // GenerateSceneQueries @0x822526CC/@0x82252738/@0x822527B4 and ProcessSceneQueryResults
-    // @0x822528BC -- plus by Construct itself, which seeds it with a verbatim inline of
-    // VehicleRef::Construct() + VehicleRef::Set's E_PLAYER_CAR arm.
+    // The destination is mAttachedTo (+0x220). The DWARF's own name for this method is
+    // SetAttachedTo(VehicleRef&) (h:169); the PC name predates the DWARF read and every caller uses it.
+    // +0x220 is independently attested six more times by `VehicleRef::Get(this + 0x220,
+    // lpAllVehicleData)` in UpdateMinElevation @0x82240668, GenerateSceneQueries
+    // @0x822526CC/@0x82252738/@0x822527B4 and ProcessSceneQueryResults @0x822528BC -- plus by
+    // Construct itself, which seeds it with a verbatim inline of VehicleRef::Construct() +
+    // VehicleRef::Set's E_PLAYER_CAR arm.
     void SetVehicleRef(const BrnDirector::VehicleRef& lrVehicleRef);
 
     // ⭐ ResetRadiusSmoothing (DWARF BrnCollisionPolicyAttachedToVehicle.h:112) -- BODIED
@@ -317,25 +400,35 @@ public:
     void SetUseFrustrumResolver(bool lbUseResolver)       { mbUseFrustrumResolver = lbUseResolver; }
 
 private:
-    // FLAG: only the members the bodied functions reach are modelled at their asm-attested
-    //   offsets; the rest of the policy rig lands with its full TU.
-    //     +0x000 .. +0x20F  policy rig not modelled here (the DWARF puts
-    //                       mFrustrumCollisionResolver @+0x010, mCarToCamera @+0x170 and
-    //                       mGroundConstraint @+0x1C0 in here -- see GenerateSceneQueries
-    //                       @0x82252690, which reaches all three by those displacements)
-    //     +0x210            mfDesiredHeight     (stfs f31, 0x210)
-    //     +0x214 .. +0x21F  rig members not modelled here
-    //     +0x220            mVehicleRef         (16 bytes; DWARF name mAttachedTo)
-    //     +0x230 .. +0x23B  mPitchMover (Utils::SmoothMover; DWARF h:126)
-    //     +0x23C            mfDesiredNearClip            (DWARF h:128)
-    //     +0x240            mfMaxRadius                  (DWARF h:129)
-    //     +0x244            mfTrafficCollisionResolution (DWARF h:130)
-    //     +0x248 .. +0x24F  the EIGHT bools, DWARF h:136..h:143, in declaration order
+    // ⭐ DWARF LAYOUT 2026-09-28 (owner's list, L1 piece 7a). Every member is the DWARF's
+    // (references/DecFIGS/dwarfdump/GameSource/Director/Camera/CollisionPolicies/
+    // BrnCollisionPolicyAttachedToVehicle.h), in its order, at the console offset the asm reaches it by:
+    //   +0x010  mFrustrumCollisionResolver  Construct's r10 = this + 0x10; GenerateSceneQueries @0x8225281C and
+    //                                       ResolveCollisions @0x82224970 pass `this + 0x10`
+    //   +0x170  mCarToCamera                Construct `stw 0, 0x170`; GenerateSceneQueries @0x8225285C hands
+    //                                       `this + 0x170` to SceneQueryInterface::LineTestNearest;
+    //                                       ResolveCollisions resolves (@0x82224984) and empties (@0x82224A0C) it
+    //   +0x1C0  mGroundConstraint           GroundConstraint::GenerateSceneQueries(this + 0x1C0) @0x82252768 and
+    //                                       ::ProcessSceneQueryResults(this + 0x1C0) @0x82224A00; its
+    //                                       mfDesiredHeight is the +0x210 float SetDesiredHeight stores
+    //   +0x220  mAttachedTo                 VehicleRef::Get(this + 0x220) at six sites (see SetVehicleRef)
+    //   +0x230  mPitchMover                 SmoothMover::Update(this + 0x230) @0x822406D4; its value (+0x238) is
+    //                                       the minimum elevation in degrees (GenerateSceneQueries @0x822526F0,
+    //                                       UpdateMinElevation @0x8224068C / 0x822406BC)
+    //   +0x23C  mfDesiredNearClip / +0x240 mfMaxRadius / +0x244 mfTrafficCollisionResolution
+    //   +0x248  the eight bools, DWARF h:136..h:143, in declaration order
+    // Until this wave the first four were two reserved spans and a flat `mfDesiredHeight` (+0x210), and
+    // mPitchMover a third span, so Construct could not seed the resolver, the two line tests or the minimum
+    // elevation, and no scene-query body could be written against them.
     //
-    // ⭐ TAIL CARVED 2026-08-01 from references/DecFIGS/dwarfdump/GameSource/Director/Camera/
-    // CollisionPolicies/BrnCollisionPolicyAttachedToVehicle.h, which lists the whole member
-    // set in order. Three floats then eight bools fill +0x23C..+0x24F EXACTLY -- which is an
-    // independent third confirmation of the 0x250 size. Each name is also asm-attested:
+    // HOST == CONSOLE for this class: the CollisionPolicy base is 8 bytes on the console (vptr + mbHasFailed)
+    // and 16 on the host, and the resolver's 16-byte alignment puts it at +0x10 on both -- so every offset
+    // above and the 0x250 size hold on the host too. _AssertLayout pins them; the embedders rely on the size
+    // (BehaviourLooseAttachment's and BehaviourGameplayExternal's layout asserts, the camera-behaviour pool
+    // buckets). Parity is still by named member: nothing indexes these by offset.
+    //
+    // The tail, carved 2026-08-01 from the same DWARF (three floats then eight bools fill +0x23C..+0x24F
+    // exactly -- an independent confirmation of the 0x250 size). Each name is also asm-attested:
     //   +0x23C mfDesiredNearClip   Construct seeds the .data global @0x82CDA560 (0.15) and
     //                              GenerateSceneQueries splats it into
     //                              FrustrumCollisionResolver::GenerateSceneQueries @0x82252824.
@@ -350,48 +443,20 @@ private:
     //   +0x24A mbFailOnContact     Construct seeds 0 (DWARF has SetFailOnContact).
     //   +0x24B mbUseGroundConstraint  gates GroundConstraint::GenerateSceneQueries @0x82252750
     //                              (and ::ProcessSceneQueryResults) -- which is why
-    //                              SetDesiredHeight raises it. ⚠️ RENAMED from the old
-    //                              `mbHaveDesiredHeight` guess.
+    //                              SetDesiredHeight raises it.
     //   +0x24C mbTestAgainstWorldOnly  @0x82252774 selects the SceneQueryInterface collision
     //                              mask handed to LineTestNearest: 0x1E when clear, 0x02
     //                              (world only) when set.
     //   +0x24D mbUseFrustrumResolver  @0x82252778 picks the FrustrumCollisionResolver arm over
     //                              the plain LineTestNearest arm.
     //   +0x24E mbResetVehicleCollision  the one-shot ResetTrafficCollision raises.
-    //   +0x24F mbDoVehicleCollision  Construct's ARGUMENT. ⚠️ RENAMED from the old
-    //                              `mbUseVehicleFrustumCollision` guess -- the DWARF's
-    //                              Construct(bool) parameter lands on the LAST bool, and
-    //                              GenerateSceneQueries @0x82252814 forwards it to
-    //                              FrustrumCollisionResolver::GenerateSceneQueries.
-    //
-    // ⛔ CORRECTED 2026-08-01 -- THE OLD `maReserved214[0x214 .. 0x24A]` SPAN SWALLOWED A
-    // NAMED MEMBER. It covered +0x220, where the policy's own BrnDirector::VehicleRef lives
-    // (attested seven independent ways, see SetVehicleRef above) and +0x230, where a
-    // Utils::SmoothMover sits (`SmoothMover::Update(this + 0x230, ...)` @0x822406D0). With the
-    // span in place SetVehicleRef had no member to write at all -- it could only ever have been
-    // a reinterpret_cast into reserved bytes. The VehicleRef is carved out by name; only the
-    // SmoothMover (+0x230..+0x23B, whose own +0x234/+0x238 seeds are Construct's) is still a
-    // span. The three floats at +0x23C/+0x240/+0x244 are named as of the 2026-08-01 DWARF
-    // carve above -- and the SAME defect applied to +0x240: with the span in place,
-    // ResetRadiusSmoothing() (and therefore SharedCameraContainer::
-    // ForcePrimaryGameplayBehaviourToFinish, whose whole job is that store) had no member to
-    // write either.
-    //
-    // ⭐ SIZE 0x250, GROWN 2026-07-29 (was 0x24C, which was 4 bytes short -- the old tail
-    // simply stopped at the last member this header names). Pinned from
-    // BehaviourGameplayExternal, which embeds one of these at +0x50 and whose next member
-    // (mAirShake) the asm puts at +0x2A0: 0x50 + 0x250 == 0x2A0 exactly. The DWARF tail
-    // carved in 2026-08-01 (3 floats + 8 bools filling +0x23C..+0x24F) is the third
-    // independent agreement on that size; the IceAnim fork's retired slice was the second.
-    // (the leading span starts AFTER the CollisionPolicy base sub-object -- the console
-    //  vptr that used to sit inside maReserved000 is the base's; same convention BehaviourRig.h's
-    //  VisibilityCollisionPolicy uses. Console displacements in the comments are unchanged.)
-    u8  maReserved000[0x210 - sizeof(CollisionPolicy)];  // .. +0x20F  rig members not modelled here
-    f32 mfDesiredHeight;                      // +0x210            desired camera height (stored)
-    u8  maReserved214[0x220 - 0x214];         // +0x214 .. +0x21F  rig members not modelled here
-    BrnDirector::VehicleRef mVehicleRef;      // +0x220            the vehicle the camera hangs off
-                                              //                   (DWARF h:124 mAttachedTo)
-    u8  maReserved230[0x23C - 0x230];         // +0x230 .. +0x23B  mPitchMover (Utils::SmoothMover)
+    //   +0x24F mbDoVehicleCollision  Construct's ARGUMENT; GenerateSceneQueries @0x82252814 forwards it
+    //                              to FrustrumCollisionResolver::GenerateSceneQueries.
+    FrustrumCollisionResolver mFrustrumCollisionResolver;   // +0x010 (0x160)  DWARF h:121
+    LineTestNearestPostBox    mCarToCamera;                 // +0x170 (0x50)   DWARF h:122
+    GroundConstraint          mGroundConstraint;            // +0x1C0 (0x60)   DWARF h:123
+    BrnDirector::VehicleRef   mAttachedTo;                  // +0x220 (0x10)   DWARF h:124
+    Utils::SmoothMover        mPitchMover;                  // +0x230 (0x0C)   DWARF h:126
     f32 mfDesiredNearClip;                    // +0x23C            DWARF h:128
     f32 mfMaxRadius;                          // +0x240            DWARF h:129 (ResetRadiusSmoothing)
     f32 mfTrafficCollisionResolution;         // +0x244            DWARF h:130 (0..1, ramped)
@@ -403,27 +468,40 @@ private:
     u8  mbUseFrustrumResolver;                // +0x24D            DWARF h:141
     u8  mbResetVehicleCollision;              // +0x24E            DWARF h:142 (the one-shot)
     u8  mbDoVehicleCollision;                 // +0x24F            DWARF h:143 (Construct's argument)
+
+    // Never called: the static_asserts are evaluated when the body is compiled. See the HOST == CONSOLE note.
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(CollisionPolicyAttachedToVehicle, mFrustrumCollisionResolver) == 0x010,
+                      "mFrustrumCollisionResolver at the console +0x10");
+        static_assert(offsetof(CollisionPolicyAttachedToVehicle, mCarToCamera) == 0x170,
+                      "mCarToCamera at the console +0x170");
+        static_assert(offsetof(CollisionPolicyAttachedToVehicle, mGroundConstraint) == 0x1C0,
+                      "mGroundConstraint at the console +0x1C0 (its height at +0x210)");
+        static_assert(offsetof(CollisionPolicyAttachedToVehicle, mAttachedTo) == 0x220,
+                      "mAttachedTo at the console +0x220");
+        static_assert(offsetof(CollisionPolicyAttachedToVehicle, mPitchMover) == 0x230,
+                      "mPitchMover at the console +0x230");
+        static_assert(offsetof(CollisionPolicyAttachedToVehicle, mfDesiredNearClip) == 0x23C,
+                      "the tail floats at the console +0x23C");
+        static_assert(offsetof(CollisionPolicyAttachedToVehicle, mbAutoElevate) == 0x248,
+                      "the eight bools at the console +0x248");
+        static_assert(sizeof(CollisionPolicyAttachedToVehicle) == 0x250,
+                      "the console stride of the vehicle-attached policy");
+    }
 };
 
 // ----------------------------------------------------------------------------
-// CollisionPolicyAttachedToVehicle::Construct @0x82224890 -- BODIED 2026-08-01, from the asm.
-// TAIL COMPLETED 2026-08-01 (second pass): the eight bools + three floats the DWARF names are
-// now real members, so the seeds this banner used to list as GATED are reproduced below.
-//
-// ⚠️ STILL GATED (they land inside reserved spans, and poking them by offset is exactly what
-// the x64 rule forbids):
-//   * the FrustrumCollisionResolver sub-object zeroing (+0x10/+0x60/+0xB0/+0x100 record heads,
-//     a Vector4 at +0x150 and an f32 0.01f at +0x160),
-//   * the LineTestNearest post-box head (+0x170) and the GroundConstraint head (+0x1C0),
-//   * mPitchMover's two seeds (+0x234 = 0.0f and +0x238 = -89.0f, the min elevation).
-// ⚠️ CONSEQUENCE (narrowed): the collision RADIUS is now seeded; the MIN ELEVATION still is
-// not, so UpdateMinElevation @0x82240668 will read whatever the memory held until the
-// SmoothMover TU lands.
+// CollisionPolicyAttachedToVehicle::Construct @0x82224890 -- every store the console makes, grouped by
+// member (the console interleaves them; each is a plain store to a distinct address). COMPLETED
+// 2026-09-28 (owner's list, L1 piece 7a): with the DWARF members in place the resolver, the two line
+// tests and the pitch mover are seeded too -- until then the minimum elevation (+0x238) and the line
+// tests' states were whatever the memory held.
 // ⚠️ Construct does NOT write +0x00 -- the vptr is installed by the C++ constructor, not here.
-// ⚠️ Construct also does NOT write mfTrafficCollisionResolution (+0x244) or
-// mbResetVehicleCollision (+0x24E) -- faithful: the console leaves both to the behaviour's
-// Prepare, which calls ResetTrafficCollision().
-// DELETE-WHEN: the collision-policy rig TU lands and the two residual spans become members.
+// ⚠️ Construct does NOT write mfTrafficCollisionResolution (+0x244), mbResetVehicleCollision
+// (+0x24E) or mPitchMover.mfCenteringRate (+0x230) -- faithful: the console leaves the first two to the
+// behaviour's Prepare (ResetTrafficCollision()), and the centering rate is never read (UpdateMinElevation's
+// parameters have mbUseCentering false).
 // ----------------------------------------------------------------------------
 inline void CollisionPolicyAttachedToVehicle::Construct(bool lbDoVehicleCollision)
 {
@@ -432,23 +510,19 @@ inline void CollisionPolicyAttachedToVehicle::Construct(bool lbDoVehicleCollisio
 
     // 0x822248D4..0x822248E4 -- an inlined VehicleRef::Construct() followed by the
     // E_PLAYER_CAR arm of VehicleRef::Set: byte-for-byte the same four stores, same order.
-    mVehicleRef.Construct();
-    mVehicleRef.Set(BrnDirector::VehicleRef::E_PLAYER_CAR,
+    mAttachedTo.Construct();
+    mAttachedTo.Set(BrnDirector::VehicleRef::E_PLAYER_CAR,
                     static_cast<EActiveRaceCarIndex>(0), 0u);
 
-    // 0x822248EC  stfs -1.0f, 0x210(this)
-    mfDesiredHeight      = -1.0f;
+    // 0x822248E8  stw 0, 0x170(this)                        -- the car-to-camera box emptied.
+    mCarToCamera.Construct();
 
-    // 0x8222492C..0x8222493C -- the three tail floats, in the console's store order.
-    // ⚠️ +0x23C is loaded from the .data global @0x82CDA560, NOT from an immediate: it is a
-    //   tunable default near clip (the DWARF's FrustrumCollisionResolver carries an
-    //   `extern VecFloat sDefaultDesiredNearClip` / `extern float32_t kfNearClipDistance`
-    //   pair). Its shipped value is 0x3E19999A == 0.15f, read out of the IDB .id1; spelt as
-    //   a literal here because the global has no home yet.
-    //   FLAG: if that global is ever homed, take the value from it instead.
-    mfDesiredNearClip    = 0.15f;                 // 0x8222493C stfs flt_82CDA560, 0x23C
-    mfMaxRadius          = FLT_MAX;               // 0x82224934 stfs flt_8200173C, 0x240
-    //   (+0x238 = -89.0f and +0x234 = 0.0f are mPitchMover's -- see the GATE above.)
+    // 0x822248EC  stfs flt_820037C8 (-1.0f), 0x210(this)   -- GroundConstraint::Construct, inlined:
+    // 0x822248F0  stw 0, 0x1C0(this)                          its height, then its box emptied.
+    mGroundConstraint.Construct();
+
+    // 0x822248F4..0x82224908 (r10 = this + 0x10)            -- FrustrumCollisionResolver::Construct, inlined.
+    mFrustrumCollisionResolver.Construct();
 
     // 0x8222490C..0x82224928 -- the bool block, in the console's (scrambled) store order.
     mbFailOnContact       = 0;                    // 0x8222490C stb 0, 0x24A
@@ -458,6 +532,23 @@ inline void CollisionPolicyAttachedToVehicle::Construct(bool lbDoVehicleCollisio
     mbSmoothRadiusChanges = 0;                    // 0x8222491C stb 0, 0x249
     mbDoVehicleCollision  = lbDoVehicleCollision ? 1u : 0u;   // 0x82224924 stb r4, 0x24F  <- THE ARGUMENT
     mbAutoElevate         = 1;                    // 0x82224928 stb 1, 0x248
+
+    // 0x8222492C / 0x82224930 -- the pitch mover's two seeds, value then speed: the minimum elevation
+    // starts at -89 degrees (flt_82008610 == 0xC2B20000), i.e. no floor. SmoothMover::Construct(-89.0f)
+    // inlined (DWARF h:73 has no out-of-line copy; the same two-store shape with mfCenteringRate left
+    // alone is CameraSphericalRotationController::Construct's).
+    mPitchMover.mfCurrentValue = -89.0f;          // 0x8222492C stfs flt_82008610, 0x238
+    mPitchMover.mfCurrentSpeed = 0.0f;            // 0x82224930 stfs flt_82001CC0, 0x234
+
+    // 0x82224934 / 0x8222493C -- the two tail floats Construct seeds.
+    // ⚠️ +0x23C is loaded from the .data global @0x82CDA560, NOT from an immediate: it is a
+    //   tunable default near clip (the DWARF's FrustrumCollisionResolver carries an
+    //   `extern VecFloat sDefaultDesiredNearClip` / `extern float32_t kfNearClipDistance`
+    //   pair). Its shipped value is 0x3E19999A == 0.15f (read from the image); spelt as
+    //   a literal here because the global has no home yet.
+    //   FLAG: if that global is ever homed, take the value from it instead.
+    mfMaxRadius          = FLT_MAX;               // 0x82224934 stfs flt_8200173C, 0x240
+    mfDesiredNearClip    = 0.15f;                 // 0x8222493C stfs flt_82CDA560, 0x23C
 }
 
 // ----------------------------------------------------------------------------
@@ -467,7 +558,7 @@ inline void CollisionPolicyAttachedToVehicle::Construct(bool lbDoVehicleCollisio
 // ----------------------------------------------------------------------------
 inline void CollisionPolicyAttachedToVehicle::SetVehicleRef(const BrnDirector::VehicleRef& lrVehicleRef)
 {
-    mVehicleRef = lrVehicleRef;
+    mAttachedTo = lrVehicleRef;
 }
 
 // ----------------------------------------------------------------------------
@@ -532,46 +623,6 @@ private:
     bool                   mbTestLookingAt;         // :283  +0xB0
     bool                   mbOccluded;              // :284  +0xB1
     bool                   mbIsOnScreen;            // :285  +0xB2
-};
-
-// ----------------------------------------------------------------------------
-// BrnDirector::Camera::GroundConstraint (DWARF BrnCollisionPolicy.h:241)
-//
-// Keeps the camera at mfDesiredHeight above the ground: one world-only nearest line test straight
-// down through the camera; when it hits, the camera's height is set to hit + desired height.
-// Embedded by both VisibilityCollisionPolicy (+0x1C0) and CollisionPolicyAttachedToVehicle
-// (+0x1C0 -- still a reserved span there; its ResolveCollisions @0x82224948 is not in this closure).
-// ----------------------------------------------------------------------------
-class GroundConstraint
-{
-public:
-    // DWARF :298. Inlined (policy +0x1C0 `stw 0` and +0x210 `stfs -1.0f`, flt_820037C8).
-    void Construct()
-    {
-        mLineTest.Construct();
-        mfDesiredHeight = -1.0f;          // flt_820037C8 == 0xBF800000
-    }
-
-    // DWARF :304 -- @0x82240200. Body: BrnVisibilityCollisionPolicy.cpp.
-    void GenerateSceneQueries(const Camera& lrCamera, f32 lfTimestep,
-                              const SceneQueryInterface* lpRequestInterface);
-
-    // DWARF :309 -- @0x8220E3A0; false when the ground was not found. Body:
-    // BrnVisibilityCollisionPolicy.cpp.
-    bool ProcessSceneQueryResults(f32 lfTimestep, Camera& lrCamera);
-
-    void SetDesiredHeight(f32 lfDesiredHeight) { mfDesiredHeight = lfDesiredHeight; }   // :313
-    f32  GetDesiredHeight() const              { return mfDesiredHeight; }             // :316
-
-    // DWARF :294 / :295 -- the line runs from KF_MIN_TEST_ABOVE_LENGTH above the camera down to
-    // max(KF_MIN_TEST_BELOW_LENGTH, mfDesiredHeight) below that start (the two float literals the
-    // body loads: flt_82001C98 == 1.0f and flt_8200426C == 5.0f).
-    static const f32 KF_MIN_TEST_BELOW_LENGTH;
-    static const f32 KF_MIN_TEST_ABOVE_LENGTH;
-
-private:
-    LineTestNearestPostBox mLineTest;               // :320  +0x00
-    f32                    mfDesiredHeight;         // :321  +0x50
 };
 
 // ============================================================================

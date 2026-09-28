@@ -24,7 +24,7 @@ namespace Camera
 //   fcmpu cr6, f31, f0         ; lfDesiredHeight vs 0.0f
 //   bgt   skip                 ; assert when NOT (lfDesiredHeight > 0.0f)
 //   ... Begin/Fire/End assert "lfDesiredHeight > 0.0f" ...
-//   stfs  f31, 0x210(this)     ; mfDesiredHeight = lfDesiredHeight
+//   stfs  f31, 0x210(this)     ; mGroundConstraint.mfDesiredHeight = lfDesiredHeight
 // ----------------------------------------------------------------------------
 void CollisionPolicyAttachedToVehicle::SetDesiredHeight(f32 lfDesiredHeight)
 {
@@ -34,7 +34,10 @@ void CollisionPolicyAttachedToVehicle::SetDesiredHeight(f32 lfDesiredHeight)
     // asking for the ground constraint.
     mbUseGroundConstraint = 1;                                        // stb 1, 0x24B (before assert)
     CGS_ASSERT(lfDesiredHeight > 0.0f, "lfDesiredHeight > 0.0f");     // fcmpu f31, 0.0f; bgt
-    mfDesiredHeight = lfDesiredHeight;                               // stfs f31, 0x210(this)
+    // +0x210 is mGroundConstraint (+0x1C0)'s own mfDesiredHeight (+0x50): the inlined
+    // GroundConstraint::SetDesiredHeight (DWARF BrnCollisionPolicy.h:313). Until 2026-09-28 the
+    // policy modelled it as a flat float of its own.
+    mGroundConstraint.SetDesiredHeight(lfDesiredHeight);             // stfs f31, 0x210(this)
 }
 
 } // namespace Camera
