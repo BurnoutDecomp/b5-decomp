@@ -196,8 +196,9 @@ public:
     virtual ~CollisionPolicy() {}
 
     // DWARF :333 / :338 -- the two per-frame virtuals, in the console's slot order. The base
-    // bodies do nothing: a policy that does not override them (CollisionPolicyAttachedToVehicle and
-    // FrustrumCollisionResolver on this build) issues and consumes no queries.
+    // bodies do nothing: a policy that does not override them issues and consumes no queries.
+    // (Both derived policies override them: VisibilityCollisionPolicy since 2026-09-25,
+    // CollisionPolicyAttachedToVehicle since 2026-09-28.)
     // ⭐ SIGNATURES CORRECTED 2026-09-25 (FX-DIRECTOR2): `(const void*, Camera&)` was a stand-in for
     // the DWARF's `(const CollisionPolicySharedInfo&, Camera&)`.
     virtual void GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera)
@@ -348,6 +349,27 @@ public:
     // (+0x24D), which is a DIFFERENT bool Construct always zeroes.
     // (VERIFIED: width, call-site values, and the DWARF name. INFERRED: nothing.)
     void Construct(bool lbDoVehicleCollision);
+
+    // ⭐ THE SCENE-QUERY PAIR -- BODIED 2026-09-28 (owner's list, L1 piece 7b; DWARF
+    // BrnCollisionPolicyAttachedToVehicle.cpp:75 / :153) in BrnCollisionPolicyAttachedToVehicle.cpp:
+    //   GenerateSceneQueries      @0x82252690  lift the camera to the minimum elevation above the car (auto-elevate),
+    //                                         ask the ground constraint, and post the car -> camera line test
+    //   ProcessSceneQueryResults  @0x82252888  pull the camera in front of what that line hit (ResolveCollisions),
+    //                                         then raise the minimum elevation / ease the radius
+    // Until they landed the class inherited CollisionPolicy's two empty bodies: the scene-query pass reached every
+    // car-attached camera and asked it to do nothing, so the chase cam (and with it the crash state's fallback
+    // camera) stayed wherever its rig put it -- behind the wall the car hit.
+    // STAGED: the FrustrumCollisionResolver arm (mbUseFrustrumResolver) lands with piece 6; see the bodies.
+    void GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) override;
+    void ProcessSceneQueryResults(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) override;
+
+    // DWARF .cpp:185 / :220 / :251 -- @0x82224948 / @0x8220E4D0 / @0x822405B8. Bodies:
+    // BrnCollisionPolicyAttachedToVehicle.cpp. The two radii are |vehicle - camera| before and after
+    // ResolveCollisions moved the camera.
+    void ResolveCollisions(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera, Vector3 lVehiclePosition);
+    void UpdateRadius(Camera& lrCamera, f32 lfOldRadius, f32 lfNewRadius, Vector3 lVehicleToCamera);
+    void UpdateMinElevation(const CollisionPolicySharedInfo& lrSharedInfo, f32 lfOldRadius, f32 lfNewRadius,
+                            Camera& lrCamera);
 
     // ⭐ SetVehicleRef -- BODIED 2026-08-01 (below). X360 BehaviourIceAnim::Update
     // @0x82247568..0x822475A4 copies the 16-byte VehicleRef (the four words at ref
