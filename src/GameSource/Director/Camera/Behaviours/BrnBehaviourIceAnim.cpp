@@ -687,6 +687,8 @@ void BehaviourIceAnim::Construct()
     // --- the produced camera + the attached-to-car collision policy ---
     mLastCamera.Construct();
     mAttachedToCarCollisionPolicy.Construct(0);
+    mAttachedToCarCollisionPolicy.SetTestAgainstWorldOnly(true);  // 0x82256264: this+0x4AC
+    mAttachedToCarCollisionPolicy.SetUseFrustrumResolver(true);    // 0x82256268: this+0x4AD
 }
 
 // ============================================================================
