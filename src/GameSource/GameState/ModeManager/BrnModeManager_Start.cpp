@@ -36,6 +36,7 @@
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 
 #include <cstddef>   // offsetof (the action-record layout pins)
+#include <cstdlib>   // getenv (the [showtime] BRN_SHOWTIME_DIAG witness)
 #include <cstring>   // std::memcpy / std::memset (the opaque frame-rate-request write; the
                      //   two tail records the console posts with un-written stack bytes)
 
@@ -609,36 +610,50 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
     if (meCurrentGameModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
         meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
     {
-        // [X] PARKED ARM -- the SHOWTIME mode-switch post. Console @0x8234BFDC..0x8234C044:
-        //     record[0] = *(mpGameStateModule + 232296);        // mLocalPlayerNetworkID
-        //     record[4] = mePlayerActiveRaceCarIndex;           // this + 0x8038
-        //     record[8] = (100 * (s32)(*(f32*)(this+0x10D8) * 1.0936133f)
-        //                       + *(s32*)(this+0x10B4)) * *(s32*)(this+0x10AC);
-        //     *(u8*)(record + 0x0C) = 0;                        // stb r20, var_114 @0x8234BFF0
-        //     AddEvent(lpGameActionQueue, record, 143, 16);
-        // [!] STORE ADDED TO THIS BANNER 2026-08-26 (fix round): the +0x0C byte was previously
-        // omitted from the park description, which would have left a 16-byte wire record one field
-        // short when it is re-armed. Re-derived against the record base -- the AddEvent payload
-        // pointer is `addi r4, r1, var_120` @0x8234C004, and var_120 - var_114 == 0x0C -- and r20
-        // is this body's zero register. So the record is
-        // { u32 @+0x00 network id, u32 @+0x04 active race-car index, s32 @+0x08 score, u8 @+0x0C 0 }
-        // with +0x0D..+0x0F padding to the posted size of 16.
-        // Action 143 == DWARF 135 E_ACTION_SHOWTIME_MODE_SWITCH under the +8 shift measured above
-        // -- and the ModeManager member that drives it is literally miFramesUntilModeSwitchSend,
-        // which PrepareForMode arms only for modes 2 / 16. The three scalars are
-        // mScoringSystem + 0x328 / +0x304 / +0x2FC, i.e. CrashModeScoring internals (the crash
-        // score, its bonus and its multiplier); 1.0936133f is the metres->yards constant,
-        // IMAGE-CITED from flt_820DB5A8 (image.bin offset 0xDB5A8 reads 3F 8B FB 85 big-endian
-        // == 1.0936132669448853f).
-        // BLOCKED ON FOUR ABSENT DECLARATIONS, filed as header_requests #7..#9:
-        //   * GameStateModule::GetLocalPlayerNetworkID() -- the member at gsm+232296 is named
-        //     (BrnGameStateFlybyManager.cpp:131/151 identifies it) but BrnGameStateModule.h
-        //     declares neither member nor accessor;
-        //   * three CrashModeScoring accessors for +0x2FC / +0x304 / +0x328 (hazards H9 forbids
-        //     reaching ScoringSystem internals by raw offset);
-        //   * the 16-byte action-143 record.
-        // Behaviour cost: SHOWTIME (crash mode) does not publish its end-of-mode switch summary.
-        // OFF THE STUNT-RACE PATH ENTIRELY (modes 2 and 16 only).
+        // Leaving showtime: the same action-143 record UpdateCurrentMode posts on the way in, now
+        // carrying the session's overall score and +0x0C == 0. The console builds it in this
+        // order: the local network id (gsm+0x38B68), the player's active race-car index
+        // (+0x8038), the crash scorer's overall score (the inlined GetOverallScore sequence over
+        // scorer +0x308 / +0x2DC / +0x2E4), the entering byte cleared; then AddEvent(143, 16).
+        // It is posted before the action-39 summary below. Consumers: the GUI bridge (GUI 397,
+        // HudMessageAnalyzer::HandleShowtimeModeSwitch), RaceCarEntityModule (clears
+        // ActiveRaceCar::mbIsInShowtime) and the network bridge.
+        CrashModeScoring* const lpCrashScorer = mScoringSystem.GetCrashScorer();
+
+        GameStateModuleIO::ShowtimeModeSwitchAction lSwitch;
+        lSwitch.mNetworkPlayerID     = mpGameStateModule->GetLocalPlayerNetworkID();
+        lSwitch.meActiveRaceCarIndex = mePlayerActiveRaceCarIndex;
+        lSwitch.miFinalShowtimeScore = lpCrashScorer->GetOverallScore();
+        lSwitch.mbEnteringShowtime   = false;
+        lSwitch.maPad[0] = 0;   // never written by the console; zeroed so the host posts no stack bytes
+        lSwitch.maPad[1] = 0;
+        lSwitch.maPad[2] = 0;
+
+        lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSwitch),
+                                    GameStateModuleIO::E_ACTION_SHOWTIME_MODE_SWITCH,
+                                    static_cast<s32>(sizeof(GameStateModuleIO::ShowtimeModeSwitchAction)));
+
+        // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_SHOWTIME_DIAG), first 16 lines: why the
+        // session ended, the score it posted and the parts it was built from.
+        {
+            static const bool sbDiag      = (std::getenv("BRN_SHOWTIME_DIAG") != 0);
+            static s32        siLinesLeft = 16;
+            if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                --siLinesLeft;
+                *CgsDev::Log::gpDebugPrint
+                    << "[showtime] leaving: mode " << static_cast<s32>(meCurrentGameModeType)
+                    << " timedOut " << (lbTimedOut ? 1 : 0)
+                    << " next " << static_cast<s32>(leNextGameModeType)
+                    << " car " << static_cast<s32>(lSwitch.meActiveRaceCarIndex)
+                    << " finalScore " << lSwitch.miFinalShowtimeScore
+                    << " base " << lpCrashScorer->GetRawScore()
+                    << " multiplier " << lpCrashScorer->GetScoreMultiplier()
+                    << " distance " << lpCrashScorer->GetDistanceTravelled()
+                    << " leapt " << lpCrashScorer->GetNumCarsLeapt()
+                    << " crashed " << lpCrashScorer->GetNumCarsCrashed() << "\n";
+            }
+        }
     }
 
     // this + 0x9500 == mbHasAbortedDueToDisconnect (set by the local-disconnect arm). Forced true

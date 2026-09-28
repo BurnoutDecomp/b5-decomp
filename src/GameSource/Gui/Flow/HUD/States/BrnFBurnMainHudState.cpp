@@ -911,7 +911,7 @@ namespace BrnGui
             case 206:
                 ProcessBoostInfo(lpEvent);
                 break;
-            case 221:   // boost amount changed (f32)
+            case 221:   // GuiEventSetBlackBars (f32 black-bar amount, posted by BridgeDirectorToGui)
             {
                 const f32 lfBoost = *reinterpret_cast<const f32*>(lpiPayload);
                 if (mfBoostAmountPrev != lfBoost)

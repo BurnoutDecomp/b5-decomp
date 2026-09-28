@@ -17,6 +17,9 @@
 //                                                  Since 2026-09-27 also the race / burning-route
 //                                                  / post-event arms 40, 113, 204, 206, 208, 210,
 //                                                  251, 262 and 272 (the wrong-car refusal).
+//   GameBridgeGameStateToX_EventFlowGuiEvents_wZ_00.cpp -- the free-roam arms 57, 99, 104, 105,
+//                                                  109, 190, 263, 264 and 265, reached from the
+//                                                  `default:` of this file's switch.
 //
 // ⭐⭐⭐ ARM 75 IS NOT AN EVENT-FLOW ARM AND IS HERE ON PURPOSE (returning-player wave,
 // 2026-08-28). It belongs to the CAR-SELECT band, but the same three reasons that put every arm
@@ -135,6 +138,13 @@ bool TranslateEventFlowGameActionToGuiEvent(
     const CgsModule::Event* lpAction,
     CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
     const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
+
+// The free-roam arms (junkyard, drive-thru, landmark, super jump, sat-nav switch). Body:
+// GameBridgeGameStateToX_EventFlowGuiEvents_wZ_00.cpp; returns true when an arm consumed the action.
+bool TranslateFreeRoamGameActionToGuiEvent(
+    s32 liActionType,
+    const CgsModule::Event* lpAction,
+    CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput);
 
 namespace
 {
@@ -1815,8 +1825,8 @@ namespace
         }
 
         default:
-            // Not an event-flow action -- the caller keeps its own default behaviour.
-            return false;
+            // Not an event-flow action: the free-roam sibling gets it next.
+            return TranslateFreeRoamGameActionToGuiEvent(liActionType, lpAction, lpGuiInput);
         }
     }
 } // namespace BrnGame

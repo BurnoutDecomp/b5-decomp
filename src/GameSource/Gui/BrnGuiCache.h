@@ -1394,6 +1394,7 @@ namespace BrnGui
         // them (GetTargetScoreInEvent / GetCurrentScoreInEvent / GetCurrentTimeInEvent /
         // GetCurrentComboInEvent / GetMultiplierInEvent / GetStuntToDisplay / GetTime).
         friend class BrnGui::EventInfoComponent;
+        friend struct RaceMainHudState;
 
         // ===================================================================
         //  DATA LAYOUT -- named anchors at asm-proven `this+offset`, gaps

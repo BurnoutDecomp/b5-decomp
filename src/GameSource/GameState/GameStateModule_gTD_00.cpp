@@ -272,6 +272,76 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
         }
     }
 
+    // [PC HARNESS, not console code] BRN_FORCE_RIVAL_TAKEDOWN=<seconds>: the free-roam rival hunt.
+    // The two knobs above need an IN_PROGRESS mode and a fixed victim; this one runs only while NO mode is
+    // running (free burn) and picks its victim from the frame's active race cars: the first active,
+    // loaded, non-crashing rival slot (IsRaceCarRival). Once such a slot has been seen for that many
+    // seconds of game time, the player's slot is armed as the aggressor of a STANDARD takedown of the
+    // rival: the "Force takedown" debug action's arming (HarnessForceTakenDown: Clear, then the
+    // pending event) plus the two car model ids DetectStandardTakedown writes into the pending event.
+    // Everything after the arming is the console's code: ProcessQueuedTakedowns confirms it,
+    // ProcessTakedownEvent's free-burn arm posts the ShutdownAction and calls
+    // ProgressionManager::OnPursuitWon with the victim slot's rival id.
+    // ProcessQueuedTakedowns drops an arm whose aggressor is under KF_MIN_TAKEDOWN_SPEED, so the arm
+    // is repeated every second of rival time (at most forty times) until the tick is seen posting the
+    // rival state change (197); the drive script must get the player above that speed while the
+    // rival is in range. Off unless the variable is set. DELETE-WHEN a scripted ram on a roaming
+    // rival can be relied on.
+    static const char* spcForceRival      = getenv("BRN_FORCE_RIVAL_TAKEDOWN");
+    static f32         sfRivalSeenTime    = 0.0f;
+    static s32         siRivalHuntShots   = 0;
+    static s32         siRivalHuntWitness = 0;
+    if (spcForceRival != 0 && siRivalHuntShots < 40 && mModeManager.GetCurrentGameMode() == 0)
+    {
+        const EActiveRaceCarIndex lePlayer = mLastActiveRaceCarInterface.GetPlayerActiveRaceCarIndex();
+        EActiveRaceCarIndex leRival = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        if (lePlayer != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        {
+            for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+            {
+                const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(liSlot);
+                if (leSlot == lePlayer || !mLastActiveRaceCarInterface.IsRaceCarActive(leSlot) ||
+                    !mLastActiveRaceCarInterface.IsRaceCarRival(leSlot) ||
+                    !mLastActiveRaceCarInterface.IsRaceCarLoaded(leSlot) ||
+                    mLastActiveRaceCarInterface.GetRaceCarState(leSlot)->mbCrashing)
+                {
+                    continue;
+                }
+                leRival = leSlot;
+                break;
+            }
+        }
+
+        if (leRival != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        {
+            if (sfRivalSeenTime == 0.0f && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "[rival-hunt] rival active in slot " << static_cast<s32>(leRival)
+                                           << " rivalId=" << static_cast<u64>(mLastActiveRaceCarInterface.GetRivalId(leRival))
+                                           << " (player slot " << static_cast<s32>(lePlayer) << ") [FLAG PC harness]\n";
+            }
+            sfRivalSeenTime += lfGameTimestep;
+
+            if (sfRivalSeenTime >= static_cast<f32>(atof(spcForceRival)) + static_cast<f32>(siRivalHuntShots))
+            {
+                ++siRivalHuntShots;
+                siRivalHuntWitness = 16;
+                mpTakedownManager->HarnessForceTakenDown(lePlayer, leRival);
+                TakedownEvent& lrPending = mpTakedownManager->GetRaceCarData(lePlayer)->mPendingTakedownEvent;
+                lrPending.mAggressorCarID = mLastActiveRaceCarInterface.GetCarModelId(lePlayer);
+                lrPending.mVictimCarID    = mLastActiveRaceCarInterface.GetCarModelId(leRival);
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint << "[rival-hunt] HARNESS force-takedown fired (player car "
+                                               << static_cast<s32>(lePlayer) << " -> rival car " << static_cast<s32>(leRival)
+                                               << ", rivalId=" << static_cast<u64>(mLastActiveRaceCarInterface.GetRivalId(leRival))
+                                               << ", player " << mLastActiveRaceCarInterface.GetRaceCarState(lePlayer)->mfSpeedMPH
+                                               << " mph, shot " << siRivalHuntShots << ") [FLAG PC harness]\n";
+                }
+            }
+        }
+    }
+
     // 0x823A59D4..0x823A59F4: the manager's tick. The console runs PreWorldUpdate under
     // LockBuffersForIO (DoUpdate_GameStatePreWorld), so the pre-world buffer's const accessors
     // (GetTakedownEventInputQueue asserts "Not locked for reading", BrnGameStateModuleIO.cpp:147)
@@ -282,6 +352,7 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
     // the network-to-game-state interface), exactly as they do inside the console's own lock.
     // `addi r3, r31, 0x238 ; bl TakedownManager::Update` @0x823A59F0 -- the embedded manager, no
     // test (the `!= 0` guard this call carried is gone, FX-TAILS-A 2026-09-24; Construct sets it).
+    const s32 liActionsBeforeTick = lpActionQueue->GetLength();
     mpPreWorldInputBuffer->LockForRead();
     mpTakedownManager->Update(&mLastActiveRaceCarInterface,
                               lfGameTimestep,
@@ -290,6 +361,36 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
                               mpPreWorldInputBuffer,
                               mpOutputBuffer,
                               &mpTakedownCache->mTrafficTypeResponseQueue);
+
+    // [PC HARNESS, not console code] the rival hunt's witness: for a few frames after an arm, every
+    // game action the takedown tick itself posted (the queue entries past the length it had before the
+    // tick) -- the takedown camera (6), ON_PLAYER_TAKEDOWN (14), SHUTDOWN (120), and from
+    // OnPursuitWon the rival state change (197) and the forced autosave (55). Nothing on PC logs the
+    // arrival of 197, so this is where its post is observable. Only after a BRN_FORCE_RIVAL_TAKEDOWN arm.
+    if (siRivalHuntWitness > 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        --siRivalHuntWitness;
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize   = 0;
+        s32 liIndex  = 0;
+        s32 liAction = lpActionQueue->GetFirstEvent(&lpEvent, &liSize);
+        while (lpEvent != 0)
+        {
+            if (liIndex >= liActionsBeforeTick)
+            {
+                *CgsDev::Log::gpDebugPrint << "[rival-hunt] takedown tick posted action " << liAction
+                                           << " (size " << liSize << ") [FLAG PC harness]\n";
+                if (liAction == GameStateModuleIO::E_ACTION_RIVAL_STATE_CHANGED)
+                {
+                    siRivalHuntShots = 40;   // the pursuit is won: stop re-arming
+                }
+            }
+            ++liIndex;
+            const CgsModule::Event* lpNext = 0;
+            liAction = lpActionQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent  = lpNext;
+        }
+    }
 
     // 0x823A59F8..0x823A5A10: `*(gsm+249944) = 0; TakedownEvent_::Append(gsm+249936, out's queue)`.
     mpTakedownCache->mTakedownEventQueue.Append(*lpOutputTakedownQueue);   // (the copy was cleared above)

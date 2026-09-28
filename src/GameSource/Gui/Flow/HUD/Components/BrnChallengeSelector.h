@@ -47,8 +47,11 @@ namespace BrnGui
         void Show();   // @ 0x82410AA8
         void Hide();   // @ 0x82436F70
 
-        // ---- declared-only (each reconstructed in its own TU) ----
-        bool IsVisible();
+        // Header-inline in the original; no out-of-line symbol exists.
+        // RaceMainHudState::UpdateRunning's hide arms fold it to a byte load of mbVisible.
+        bool IsVisible() { return mbVisible; }
+
+        // ---- declared-only ----
         void HandleControllerInput(const CgsGui::GuiEventControllerInputPressed* lpEvent);
 
         // ADDITIVE GROW ([stuntrace F2] wave, 2026-08-27) -- the two DWARF-declared

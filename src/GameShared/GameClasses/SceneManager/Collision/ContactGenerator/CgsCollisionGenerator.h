@@ -293,6 +293,19 @@ namespace CgsCollision
                                                     u16                     lu16UserTagB,
                                                     bool                    lbUseOptimisedBoxTests); // @0x828141D8 (DWARF :257)
 
+        // The SYNCHRONOUS swept-sphere twin of AddSweptSphereListWithTriangleListToStream: carve a
+        // result list, create a batch, prepare a type-13 SweptSphereListWithTriangleListJobDesc over
+        // it and dispatch. Returns the result-list index. Parameter order and names follow the
+        // debug-info declaration; the padding float travels in a float register, so the two tags
+        // follow it. Its one caller is VehicleManager::DoTrafficCarWorldContactGeneration's swept
+        // arm. Body in CgsCollisionGenerator.cpp.
+        u16 CollideSweptSphereListWithTriangleList(const SweptSphereList* lpSweptSphereList,
+                                                   const TriangleList*    lpTriangleList,
+                                                   u16                    lu16MaxNumCollisions,
+                                                   f32                    lfPadding,
+                                                   u32                    luUserTagA,
+                                                   u16                    lu16UserTagB);
+
         // ==========================================================================================
         // ⭐ ADDED 2026-08-14 (walls leg 1): the two collide-stream COMMAND POSTERS
         // DoRaceCarWorldContactGeneration @0x825EB140 calls per live race car per frame. Console

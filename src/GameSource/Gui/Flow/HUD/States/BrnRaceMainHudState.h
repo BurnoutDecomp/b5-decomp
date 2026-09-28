@@ -219,8 +219,10 @@ namespace BrnGui
         //   DoRoadRuleShot(const GuiMugshotControlEvent*)                             .cpp:3983
         //   AddCrashCombo(BrnWorld::EComboEntryType, f32)                             .cpp:4058
         // (CgsGui::LocaliseFormat, GuiEventChangeReplayState and BrnWorld::EComboEntryType
-        // are absent; GuiMugshotControlEvent exists twice, ODR-forked between
-        // GameSource/Game/GameBridgeNetworkToX.h and GameSource/Gui/BrnGuiDemangledEventTypes.h.)
+        // are absent; GuiMugshotControlEvent's one home, BrnGuiDemangledEventTypes.h, is an
+        // opaque GuiEvent<325> header plus `u8 maPayload[12]`, while its producer writes a
+        // 24-byte payload from the record's own address: +0x00 road CgsID, +0x08 response,
+        // +0x0C image type, +0x10 opponent race-car index, +0x14 local-aggressor bool.)
 
         // ---- the static .rdata tables (DWARF BrnRaceMainHudState.h:217..221) ----------
         // 76 entries; values read from the XEX image at 0x8205AC08 and landed in the .cpp.

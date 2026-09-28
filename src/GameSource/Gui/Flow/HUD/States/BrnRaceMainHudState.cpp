@@ -16,6 +16,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData
 
 #include <cstdio>    // std::snprintf (the one-shot deferral log)
+#include <cstdlib>   // std::getenv (BRN_PAYBACK_DIAG)
 
 // includes folded in from the BrnRaceMainHudState_w*.cpp partfiles (2026-09-15)
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream (the two streamed asserts)
@@ -203,6 +204,36 @@ namespace BrnGui
                     CgsDev::Log::WriteToLog(lac);
                     return;
                 }
+            }
+        }
+
+        // [FLAG PC witness] BRN_PAYBACK_DIAG: opt-in trace of the payback widget and the
+        // freeburn challenge selector/ticker calls this state makes. No console counterpart.
+        // Each tag is logged on its first KI_PAYBACK_DIAG_REPEAT sightings only.
+        const s32 KI_PAYBACK_DIAG_TAGS   = 16;
+        const s32 KI_PAYBACK_DIAG_REPEAT = 4;
+
+        void PaybackDiag(const char* lpacTag, s32 liValueA, s32 liValueB)
+        {
+            static const bool sbEnabled = (std::getenv("BRN_PAYBACK_DIAG") != 0);
+            if (!sbEnabled)
+                return;
+
+            static const char* sapcTags[KI_PAYBACK_DIAG_TAGS];
+            static s32         saiSeen[KI_PAYBACK_DIAG_TAGS];
+            for (s32 li = 0; li < KI_PAYBACK_DIAG_TAGS; ++li)
+            {
+                if (sapcTags[li] == 0)
+                    sapcTags[li] = lpacTag;
+                if (sapcTags[li] != lpacTag)
+                    continue;
+                if (saiSeen[li] >= KI_PAYBACK_DIAG_REPEAT)
+                    return;
+                ++saiSeen[li];
+                char lac[160];
+                std::snprintf(lac, sizeof(lac), "[payback] %s %d %d\n", lpacTag, liValueA, liValueB);
+                CgsDev::Log::WriteToLog(lac);
+                return;
             }
         }
 
@@ -1830,14 +1861,9 @@ namespace BrnGui
 //     bl   BrnGui__EventInfoComponent__Update
 //
 // COMPONENT DEFERRALS. Same rule and same idiom as the sibling BrnFBurnMainHudState.cpp: an
-// arm whose component TU is not on the build (tools/build/build_game_exe.bat) or whose method
-// has no declaration yet keeps the X360 gate and control flow verbatim and logs the gap once
-// instead of inventing a body. Deferred here: PlayerPositionTableComponent, PaybackComponent,
-// OnlineTimeoutComponent, ChallengeSelector, the five FriendsListComponent
-// entry points that have no body anywhere, HandleMugshotEvent (not declared -- it is in the
-// header's RESIDUE block) and the freeburn challenge-on arm. For E_MODE_STUNT_ATTACK (7)
-// UpdateSetupState turns the gate byte OFF for every one of those except the friends list,
-// so none of them executes on the stunt-race bring-up path.
+// arm whose method has no declaration yet keeps the console gate and control flow verbatim and
+// logs the gap once instead of inventing a body. Deferred here: HandleMugshotEvent (not
+// declared -- it is in the header's RESIDUE block).
 
 namespace BrnGui
 {
@@ -2059,20 +2085,24 @@ namespace BrnGui
                 if (mbHudMessages)
                     mHudMessageComponent.TerminateMessages();
                 break;
-            case 177:
+            case 177:   // GuiDirtyTrickNewEvent: the trick type and the victim's race-car index
                 if (mbPaybackComponent)
                 {
-                    // FLAG deferred: BrnPaybackComponent.cpp is not on the build
-                    // (BeginAwardAnimation(payload[2], payload[1]) @0x8243E148).
-                    LogDeferredComponent("PaybackComponent::BeginAwardAnimation");
+                    const GuiDirtyTrickNewEvent* lpTrick =
+                        reinterpret_cast<const GuiDirtyTrickNewEvent*>(lpEvent);
+                    PaybackDiag("begin-award trick/victim",
+                                static_cast<s32>(lpTrick->meTrickType),
+                                static_cast<s32>(lpTrick->meVictimActiveRaceCarIndex));
+                    mPaybackComponent.BeginAwardAnimation(lpTrick->meTrickType,
+                                                          lpTrick->meVictimActiveRaceCarIndex);
                 }
                 break;
             case 179:
             case 180:
                 if (mbPaybackComponent)
                 {
-                    // FLAG deferred: PaybackComponent::BecomeInvisible @0x8241FFE8 -- TU off the build.
-                    LogDeferredComponent("PaybackComponent::BecomeInvisible");
+                    PaybackDiag("become-invisible event", liEventId, 0);
+                    mPaybackComponent.BecomeInvisible();
                 }
                 break;
             case 182:   // hide the event HUD
@@ -2188,9 +2218,8 @@ namespace BrnGui
                 if (mbMugShotComponent)
                 {
                     // FLAG deferred: HandleMugshotEvent @0x82475CD0 is in the header's
-                    // RESIDUE block -- its GuiMugshotControlEvent parameter type is
-                    // ODR-forked between GameBridgeNetworkToX.h and
-                    // BrnGuiDemangledEventTypes.h, so it has no declaration to call.
+                    // RESIDUE block -- its GuiMugshotControlEvent parameter type is still
+                    // an opaque payload with no named fields, so it has no declaration to call.
                     LogDeferredComponent("RaceMainHudState::HandleMugshotEvent");
                 }
                 break;
@@ -2304,25 +2333,40 @@ namespace BrnGui
             case 398:
                 mbBounceBoostPromptNeeded = (lpiPayload[0] != 0);
                 break;
-            case 573:   // freeburn challenge selector action
-                if (lpiPayload[2] == 2 || lpiPayload[2] == 3)
+            case 573:   // GuiChallengeSelectedEvent: the selector action picks the arm
+            {
+                // The selector gate (+0x166) is cleared on every UpdateSetupState path, so on
+                // the console these five selector arms never pass their gate.
+                const GuiChallengeSelectedEvent* lpSelected =
+                    reinterpret_cast<const GuiChallengeSelectedEvent*>(lpEvent);
+                switch (lpSelected->miSelectorAction)
                 {
+                case 0:
+                case 1:
+                    break;
+                case 2:
                     if (mbFreeburnChallengeSelector)
                     {
-                        // FLAG deferred: BrnChallengeSelector.cpp / _wL_01.cpp are not on the
-                        // build and their mount has three unresolved residuals
-                        // (ChallengeList::GetChallengeCount, ChallengeListEntry::
-                        // GetNumPlayers / GetDescriptionStringID). Action 2 =
-                        // SetAvailableChallenges(cache->muChallengeSlotMirror) +
-                        // SelectAvailableChallengeByID(*payload, false); action 3 = Hide().
-                        LogDeferredComponent("ChallengeSelector::(action 2/3)");
+                        PaybackDiag("selector select-by-id action", 2, 0);
+                        mChallengeSelectorComponent.SetAvailableChallenges(
+                            static_cast<s32>(mpCache->muChallengeSlotMirror));
+                        mChallengeSelectorComponent.SelectAvailableChallengeByID(
+                            lpSelected->mChallengeID, false);
                     }
-                }
-                else if (lpiPayload[2] > 3)
-                {
+                    break;
+                case 3:
+                    if (mbFreeburnChallengeSelector)
+                    {
+                        PaybackDiag("selector hide action", 3, 0);
+                        mChallengeSelectorComponent.Hide();
+                    }
+                    break;
+                default:
                     CGS_ASSERT(false, "Unknown freeburn challenge selector action");   // cpp:1478 (streamed)
+                    break;
                 }
                 break;
+            }
             case 574:
                 CGS_ASSERT(lpEvent != 0, "lpChallengeEvent");   // cpp:1361 (non-gating)
                 if (*(reinterpret_cast<const u8*>(lpEvent) + 8) != 0)
@@ -2333,37 +2377,49 @@ namespace BrnGui
                 else if (mbFreeburnChallengeSelector)
                 {
                     CGS_ASSERT(mpCache != 0, "mpCache");   // cpp:1379 (non-gating)
-                    // FLAG deferred (X360 @0x8247FCDC): SetAvailableChallenges(
-                    // mpCache->muChallengeSlotMirror @+0xAC78) then
-                    // SelectAvailableChallengeByID(the CgsID at payload+0 -- `ld r4,0(r29)`,
-                    // a 64-bit load Hex-Rays renders as the 32-bit v4[1]), lbSelect false.
-                    LogDeferredComponent("ChallengeSelector::SelectAvailableChallengeByID");
+                    PaybackDiag("selector select-by-id event", 574, 0);
+                    mChallengeSelectorComponent.SetAvailableChallenges(
+                        static_cast<s32>(mpCache->muChallengeSlotMirror));
+                    // The payload opens with the challenge's full 64-bit CgsID.
+                    mChallengeSelectorComponent.SelectAvailableChallengeByID(
+                        *reinterpret_cast<const CgsID*>(lpEvent), false);
                 }
                 break;
             case 576:
                 if (mbFreeburnChallengeButtonStart)
                     mChallengeComponent.Hide();
-                if (mbFreeburnChallengeSelector)
+                if (mbFreeburnChallengeSelector && mChallengeSelectorComponent.IsVisible())
                 {
-                    // FLAG deferred: `if (selector.IsVisible()) selector.Hide();`
-                    LogDeferredComponent("ChallengeSelector::Hide");
+                    PaybackDiag("selector hide event", 576, 0);
+                    mChallengeSelectorComponent.Hide();
                 }
                 break;
             case 578:
-                if (mbFreeburnChallengeSelector)
+                if (!mpCache->IsLocalPlayerHost() && mbFreeburnChallengeSelector &&
+                    mChallengeSelectorComponent.IsVisible())
                 {
-                    // FLAG deferred: the same Hide, additionally gated on the cache's
-                    // online-host byte (X360 `!*(mpCache + 47204)`).
-                    LogDeferredComponent("ChallengeSelector::Hide");
+                    PaybackDiag("selector hide event", 578, 0);
+                    mChallengeSelectorComponent.Hide();
                 }
                 break;
             case 582:
                 if (mbFreeburnChallengeSelector)
                 {
-                    CGS_ASSERT(lpEvent != 0, "lpShowChallengeSelectorEvent");   // cpp:887 (non-gating)
-                    // FLAG deferred: SetAvailableChallenges -> GetAvailableChallengeCount>0
-                    // -> Show + SelectAvailableChallengeByID/SelectAvailableChallenge.
-                    LogDeferredComponent("ChallengeSelector::Show");
+                    mChallengeSelectorComponent.SetAvailableChallenges(
+                        static_cast<s32>(mpCache->muChallengeSlotMirror));
+                    const s32 liAvailable = mChallengeSelectorComponent.GetAvailableChallengeCount();
+                    if (liAvailable > 0)
+                    {
+                        CGS_ASSERT(lpEvent != 0, "lpShowChallengeSelectorEvent");   // cpp:887 (non-gating)
+                        PaybackDiag("selector show available", liAvailable, 0);
+                        mChallengeSelectorComponent.Show();
+                        // A zero id selects the first available challenge instead.
+                        const CgsID lChallengeID = *reinterpret_cast<const CgsID*>(lpEvent);
+                        if (lChallengeID != 0)
+                            mChallengeSelectorComponent.SelectAvailableChallengeByID(lChallengeID, true);
+                        else
+                            mChallengeSelectorComponent.SelectAvailableChallenge(0, true);
+                    }
                 }
                 break;
             case 583:
@@ -2513,8 +2569,8 @@ namespace BrnGui
         }
         if (mbPaybackComponent)
         {
-            // FLAG deferred: PaybackComponent::Update @0x8241FF38 -- TU off the build.
-            LogDeferredComponent("PaybackComponent::Update");
+            PaybackDiag("update", 0, 0);
+            mPaybackComponent.Update(mpCache->GetTime());
         }
         if (mbCompass)
         {
@@ -2726,30 +2782,9 @@ namespace BrnGui
 // COMPONENT DEFERRALS. Same rule and same one-shot helper as the sibling
 // BrnRaceMainHudState_wS3.cpp:183 / BrnFBurnMainHudState.cpp:216: a call whose callee is not
 // reachable from the build keeps the console's gate and control flow verbatim and logs the
-// gap once instead of inventing a body. FOUR here, each named at its site:
+// gap once instead of inventing a body. ONE here, named at its site:
 //   * EventInfoComponent::HandleTrigger -- undeclared on the component, and ICF-folded EMPTY
 //     in retail, so the deferral costs no behaviour at all.
-//   * ChallengeSelector::HandleLoadNotification and
-//     PaybackComponent::RespondToTransitionComplete -- both TUs are on disk but NOT on the
-//     build (only their BrnHudStatesLinkStubs.cpp Construct scaffolds are), and wS3 already
-//     defers every arm of both for exactly this reason. Deferring them TU-wide is what keeps
-//     the RACE_MAIN mount linkable.
-//   * the local player's completed-challenge bit -- the GUI FreeburnChallengeManager's
-//     mCompletedData tail is deliberately unmodelled (BrnGuiFreeburnChallengeManager.h:148,
-//     "HONEST BOUNDARY").
-//
-// ⚠ TWO LINK RESIDUALS THIS FILE ADDS (reported, not papered over -- both are real data
-// accessors whose values would be visibly wrong if stood in):
-//   * BrnResource::ChallengeListEntry::GetDescriptionStringID() const -- declared-only, NO
-//     body anywhere. BrnHudStatesLinkStubs.cpp:107 already names it as the ChallengeSelector
-//     mount's residual, and ChallengeListEntry.h:427 documents the fix: it is the identical
-//     shape to the already-inline GetTitleStringID, over macDescriptionStringID (+0xA0).
-//   * BrnResource::ChallengeListEntryAction::GetTargetValue(s32) const -- FULLY bodied at
-//     SharedClasses/DataLists/ChallengeListEntry.cpp:71; that TU is simply not in
-//     tools/build/build_game_exe.bat yet.
-// (A third, BrnResource::ChallengeListEntry::GetNumPlayers(), links TODAY only to the
-// BrnFriendsListLinkGates.cpp:116 gate, which returns 0 and logs -- so the ticker's player
-// -count parameter renders "0" until the DataLists body lands. Not this file's gate.)
 // ===================================================================================
 
 
@@ -2961,16 +2996,7 @@ namespace BrnGui
                 if (std::strstr(lpacClipName,
                                 mChallengeSelectorComponent.GetName()) != 0)
                 {
-                    // FLAG deferred: ChallengeSelector's TU (BrnChallengeSelector.cpp +
-                    // BrnChallengeSelector_wL_01.cpp) is NOT on the build -- only the
-                    // BrnHudStatesLinkStubs.cpp Construct scaffold is -- so every out-of-line
-                    // method of it is deferred TU-wide by this wave; the sibling
-                    // BrnRaceMainHudState_wS3.cpp:639/:648 defers Show/Hide for the same
-                    // reason. The gate and the name match above are the console's, verbatim.
-                    // DELETE-WHEN: the ChallengeSelector pair mounts (and its scaffold dies);
-                    // the line then becomes
-                    // `mChallengeSelectorComponent.HandleLoadNotification(lpacClipName);`.
-                    LogDeferredComponent("ChallengeSelector::HandleLoadNotification");
+                    mChallengeSelectorComponent.HandleLoadNotification(lpacClipName);
                 }
             }
         }
@@ -2984,15 +3010,8 @@ namespace BrnGui
             if (std::strcmp(lpacClipName, macPaybackName) == 0)
             {
                 // @0x82474728 `addi r3, r28, 0x920` == &mPaybackComponent.
-                // FLAG deferred: BrnPaybackComponent.cpp is NOT on the build (its TU still
-                // owes SendAwardTriggerableEvent -- BrnHudStatesLinkStubs.cpp:118 -- and only
-                // its Construct scaffold is mounted), and the sibling
-                // BrnRaceMainHudState_wS3.cpp defers every PaybackComponent arm for the same
-                // reason. UpdateSetupState clears mbPaybackComponent on the stunt-race path,
-                // so this arm does not execute on the bring-up route either way.
-                // DELETE-WHEN: BrnPaybackComponent.cpp mounts; the line then becomes
-                // `mPaybackComponent.RespondToTransitionComplete();`.
-                LogDeferredComponent("PaybackComponent::RespondToTransitionComplete");
+                PaybackDiag("transition-complete", 0, 0);
+                mPaybackComponent.RespondToTransitionComplete();
             }
         }
 
@@ -3135,20 +3154,32 @@ namespace BrnGui
         // bit store (`addi r26, r19, 0x7F0` == the LOCAL player's CompletedFburnChallenges
         // inside mCompletedData; `srawi 6 / slwi 3 / ldx` then `1ULL << (index & 63)`),
         // including that template's own range assert -- "Index <n> is out of range (max bits:
-        // 2000)", CgsFastBitArray.h:396, streamed in hex. A set bit means the local player has
-        // ALREADY completed this challenge, and the ticker then prefixes the line with "[~]".
-        // FLAG deferred: BrnGuiFreeburnChallengeManager.h:148 deliberately leaves the
-        // mCompletedData tail unmodelled ("HONEST BOUNDARY" -- its real home is the GameState
-        // IO header graph), so there is no way to read the bit by name from here and no way
-        // to reach it at all without growing that header. Deferred to "not completed", which
-        // is the common case and the un-prefixed format; the index is still computed above
-        // because FormatAndAddText's line above does not depend on it and the lookup is the
-        // half that is recoverable.
-        // DELETE-WHEN: BrnGuiFreeburnChallengeManager.h models mCompletedData (or publishes
-        // `bool HasLocalPlayerCompleted(s32 liChallengeIndex) const`); this becomes that call.
-        LogDeferredComponent("FreeburnChallengeManager::mCompletedData (completed-challenge bit)");
-        const bool lbAlreadyCompleted = false;
-        (void)liChallengeIndex;
+        // 2000)", CgsFastBitArray.h:396. The range test is a SIGNED compare against 2000, and
+        // the assert does not gate the read. A set bit means the local player has ALREADY
+        // completed this challenge, and the ticker then prefixes the line with "[~]".
+        const s32 KI_MAX_CHALLENGE_BITS = 2000;
+        if (liChallengeIndex >= KI_MAX_CHALLENGE_BITS)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Index ";
+            lStrStream << liChallengeIndex;
+            lStrStream << " is out of range (max bits: ";
+            lStrStream << KI_MAX_CHALLENGE_BITS;
+            lStrStream << "\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                lacMessage,
+                "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsFastBitArray.h",
+                396);
+            CgsDev::Assert::EndAssert();
+        }
+        const BrnGameState::GameStateModuleIO::CompletedFburnChallenges* lpCompleted =
+            lpManager->GetCompletedChallengesData()->GetLocalPlayerCompletionStatus();
+        const u64 lu64Word = lpCompleted->maxBits[liChallengeIndex >> 6];
+        const bool lbAlreadyCompleted =
+            lu64Word != 0 && (lu64Word & (static_cast<u64>(1) << (liChallengeIndex & 63))) != 0;
+        PaybackDiag("ticker completed index/bit", liChallengeIndex, lbAlreadyCompleted ? 1 : 0);
 
         // @0x8247ADC8..0x8247AE34 -- the separator format. FRENCH (ELanguage 10) puts a space
         // BEFORE the colon; every other language does not. The "[~]" prefix marks a challenge

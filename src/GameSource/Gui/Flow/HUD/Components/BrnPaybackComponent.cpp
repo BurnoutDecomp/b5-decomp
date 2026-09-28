@@ -28,7 +28,8 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"        // CgsDev::Log::gpDebugPrint (the [p0-payback] witness)
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface::OutputGuiEvent
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface::GetOutputEventQueue
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEventWrapper
 #include "GameSource/Gui/BrnGuiCache.h"                               // BrnGui::GuiCache (GetOnlinePlayerInfo)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData (mPlayerName / meActiveRaceCarIndex)
 
@@ -42,49 +43,54 @@ static const char* const msacHelpItemInstanceName = "PaybackButton";
 static const u32 KU_NUM_RANDOM_TO_SHOW           = 4;
 static const f32 KF_TIME_TO_DELAY_SHOWING_ICON   = 1.5f;
 
-// The apt "TargetIconType" view-state string per award icon (X360 off_82F24978, DWARF cpp:29
-// const char*[4]). off_82F24978[0] == "SlashDown" is asm-attested (SetDisplayedIcon @0x82411748);
-// the remaining ids carry the EAwardTypes enum names (same convention the committed
-// BrnNorthIndicator style-string table uses). Only ids 0..2 are reachable (SetDisplayedIcon
-// bounds the index to < 3). FLAG: [1..3] are enum-name reconstructions, not asm-attested rodata.
-static const char* const KAPC_AWARD_STRINGS[PaybackComponent::E_AT_COUNT] =
+// The apt "TargetIconType" view-state string per award icon. The image table
+// holds THREE entries, read out of the image: "SlashDown", "LockDown", "PowerDown"; the next
+// word is already the help item's "PaybackButton". Three matches SetDisplayedIcon's `< 3` bound.
+static const s32 KI_NUM_AWARD_STRINGS = 3;
+static const char* const KAPC_AWARD_STRINGS[KI_NUM_AWARD_STRINGS] =
 {
-    "SlashDown",     // E_AT_SLASHDOWN    (asm-attested)
-    "LockDown",      // E_AT_LOCKDOWN     (enum-name reconstruction)
-    "TakeoverDown",  // E_AT_TAKEOVERDOWN (enum-name reconstruction)
-    "EvilAxis",      // E_AT_EVIL_AXIS    (enum-name reconstruction)
+    "SlashDown",     // E_AT_SLASHDOWN
+    "LockDown",      // E_AT_LOCKDOWN
+    "PowerDown",     // E_AT_TAKEOVERDOWN
 };
 
-// Payback-type -> award-icon map (X360 dword_8204B8A4, DWARF cpp:41 EAwardTypes[4]). Indexed by
-// BrnNetwork::EPaybackType in ShowAvailableInstantly (bounded to < 3). FLAG: NO entry is
-// asm-attested (the asm only shows the indexed load); reconstructed as the identity mapping
-// implied by the parallel EPaybackType / EAwardTypes ordering (e.g. BOOST_LOCK -> LOCKDOWN).
-static const PaybackComponent::EAwardTypes KAE_PAYBACKS_TO_AWARD_TYPE[PaybackComponent::E_AT_COUNT] =
+// Payback-type -> award-icon map. Indexed by BrnNetwork::EPaybackType in
+// ShowAvailableInstantly (bounded to < 3). The image table reads {0, 1, 2}, the identity map.
+static const PaybackComponent::EAwardTypes KAE_PAYBACKS_TO_AWARD_TYPE[KI_NUM_AWARD_STRINGS] =
 {
     PaybackComponent::E_AT_SLASHDOWN,    // E_PAYBACK_TYPE_REVERSE_STEERING
     PaybackComponent::E_AT_LOCKDOWN,     // E_PAYBACK_TYPE_BOOST_LOCK
     PaybackComponent::E_AT_TAKEOVERDOWN, // E_PAYBACK_TYPE_AGGRESSORS_CONTROLS_AFFECTS_VICTIM
-    PaybackComponent::E_AT_EVIL_AXIS,    // E_PAYBACK_TYPE_SIX_AXIS_STEERING (unreachable, bound < 3)
 };
 
-// FLAG: X360 Construct seeds mRandom from a process-wide construction counter kept in a .data
-// word (dword_82F256EC) that it advances by 42 on every PaybackComponent construction, so
-// successive payback widgets get distinct icon sequences. The DWARF names no symbol for this
-// word; modelled here as a file-scope counter. Only PaybackComponent::Construct references it in
-// the recovered call graph.
-static u32 suPaybackConstructSeedCounter = 0;
+// Construct seeds mRandom from a process-wide construction counter kept in a .data word that
+// it advances by 42 on every PaybackComponent construction, so successive payback widgets get
+// distinct icon sequences. The image initialises the word to 123 and no startup code writes
+// it. No symbol names it; modelled as a file-scope counter.
+static u32 suPaybackConstructSeedCounter = 123;
 
 namespace
 {
-    // FLAG: the fixed OutputGuiEvent record BeginAwardAnimation posts carries an event whose id
-    // (370) is un-named in the DecFIGS DWARF and whose single payload byte the binary leaves
-    // uninitialised. Modelled as a 1-byte GetEventType()==370 event so OutputGuiEvent reproduces
-    // the exact {size=1, type=370, offset=12} / 16-byte record the asm builds.
+    // FLAG: the fixed record BeginAwardAnimation posts carries an event whose id (370) has no
+    // recovered name and whose single payload byte the binary leaves uninitialised. Modelled
+    // as a 1-byte GetEventType()==370 payload.
     struct GuiEventPaybackBeginAward
     {
         u8  muPayload;
         s32 GetEventType() const { return 370; }
     };
+
+    // The inlined StateInterface::OutputGuiEvent: the payload boxed in a GuiEventWrapper<T,40>
+    // ({1, 370, 12} + the payload byte) and queued on channel 40 at 16 bytes. Built here because
+    // the shared OutputGuiEvent template queues a raw payload type on its own id with no
+    // header, where the GUI-to-game bridge (channel 40 only) never reads it.
+    void PostPaybackBeginAward(CgsGui::StateInterface* lpStateInterface)
+    {
+        GuiEventPaybackBeginAward lEvent;   // payload left uninitialised, matching the binary
+        CgsGui::GuiEventWrapper<GuiEventPaybackBeginAward, 40> lRecord(lEvent);
+        lpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRecord), 40, static_cast<s32>(sizeof(lRecord)));
+    }
 }
 
 // @0x8242E3A8
@@ -169,8 +175,7 @@ void PaybackComponent::UpdateState()
 void PaybackComponent::BeginAwardAnimation(BrnNetwork::EPaybackType /*lePaybackType*/,
                                            ::EActiveRaceCarIndex /*leVictimRaceCarIndex*/)
 {
-    GuiEventPaybackBeginAward lEvent;   // payload left uninitialised, matching the binary
-    mpStateInterface->OutputGuiEvent(lEvent);
+    PostPaybackBeginAward(mpStateInterface);
 }
 
 // @0x8241FF40
@@ -271,14 +276,10 @@ void PaybackComponent::RespondToTransitionComplete()
 // Announce that the settled payback award is now triggerable. The recovered
 // body posts the SAME fixed output record BeginAwardAnimation posts: it loads the component's
 // state interface, builds the { payload bytes = 1, event id = 370, payload offset = 12 }
-// header with a single uninitialised payload byte, and queues it on the state's output event
-// queue. Reusing the file-local event type posts exactly what BeginAwardAnimation posts,
-// subject to the same flagged raw-vs-wrapped divergence of the OutputGuiEvent helper
-// (see CgsGuiStateInterface.h), rather than hand-rolling a second copy of the record.
+// header with a single uninitialised payload byte, and queues it on channel 40 at 16 bytes.
 void PaybackComponent::SendAwardTriggerableEvent()
 {
-    GuiEventPaybackBeginAward lEvent;   // payload left uninitialised, matching the binary
-    mpStateInterface->OutputGuiEvent(lEvent);
+    PostPaybackBeginAward(mpStateInterface);
 }
 
 // @0x824116C8

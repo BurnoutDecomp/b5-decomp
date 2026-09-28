@@ -262,7 +262,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
             // banner in BrnGameActions.h for the field-name provenance (the DWARF-named GUI twin).
             // The score word is the console's LITERAL ZERO on this producer -- it is
             // SendModeStopMessages @0x8234BFDC, the LEAVING post, that carries the real
-            // end-of-mode score, and that one is still parked on three CrashModeScoring accessors.
+            // end-of-mode score.
             GameStateModuleIO::ShowtimeModeSwitchAction lSwitch;
             lSwitch.mNetworkPlayerID     = mpGameStateModule->GetLocalPlayerNetworkID();  // gsm+0x38B68
             lSwitch.meActiveRaceCarIndex = mePlayerActiveRaceCarIndex;                    // this+0x8038

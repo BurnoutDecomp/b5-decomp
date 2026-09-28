@@ -284,8 +284,9 @@ namespace BrnGame
                     liType = 104; liSize = 8; lbEmit = true;
                     break;
                 case 352:
-                    reinterpret_cast<s32*>(lpOut)[0] = lpW[0];
-                    liType = 109; liSize = 4; lbEmit = true;
+                    // The loaded profile's pointer (console size 4); the host copies all of it.
+                    std::memcpy(lpOut, lp, sizeof(const void*));
+                    liType = 109; liSize = static_cast<s32>(sizeof(const void*)); lbEmit = true;
                     break;
                 case 354:
                     liType = 110; liSize = 1; lbEmit = true;   // signal

@@ -1077,7 +1077,7 @@ static_assert(sizeof(PropSmashReportAction) == sizeof(void*), "the record is the
 //               stb r21(1),           +0x0C   ENTERING showtime
 //               AddEvent(queue, &record, 0x8F == 143, 0x10 == 16)
 //   PRODUCER  ModeManager::SendModeStopMessages @0x8234BFDC posts the SAME id/size with the
-//             real end-of-mode score and +0x0C == 0 (LEAVING showtime). Still parked there.
+//             real end-of-mode score and +0x0C == 0 (LEAVING showtime).
 //   CONSUMER  RaceCarEntityModule::HandleGameActions @0x8230BE08, second jump table case 36
 //             (asm 0x8230D714): GetActiveRaceCar(*(u32*)(ev+4))->mbIsInShowtime = *(u8*)(ev+0xC).
 //             ⚠️ Its assert string is "lpModeSwitchAction" (the pointer preloaded into var_2C0 at
