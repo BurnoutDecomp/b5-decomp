@@ -9,8 +9,10 @@
 // BrnBehaviourManager.cpp group TU and lives here on its own.
 //
 // The shared AllocateBehaviour<TBehaviour> body is out-of-line in BrnBehaviourManager.h.
-// sizeof(BehaviourIceAnim) == 3904 (> the 1600-byte small bucket) -> mLargeBehaviourPool
-// ("large behaviour"), matching the X360 asm at 0x82263428.
+// The X360 asm at 0x82263428 reads the LARGE pool ("large behaviour"), so
+// ConsoleBehaviourPool<BehaviourIceAnim> is LARGE -> mLargeBehaviourPool. The host
+// sizeof(BehaviourIceAnim) (3984 when measured 2026-09-27; console 3632, `li r7` @0x822597D0)
+// must fit the 4000-byte large bucket -- AllocateBehaviour<> static_asserts it.
 // ============================================================================
 
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"

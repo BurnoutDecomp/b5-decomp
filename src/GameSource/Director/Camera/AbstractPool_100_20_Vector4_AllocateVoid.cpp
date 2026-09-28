@@ -15,9 +15,13 @@
 // space" -> construct T (the two vptr stores in the pseudocode) -> Prepare).
 //
 // Two X360 ledger symbols land here, both AllocateVoid<TBehaviour> over the SMALL
-// (100 Vector4 == 1600-byte bucket) pool -- both behaviours fit the small bucket, so
+// (console: 100 Vector4 == 1600-byte bucket) pool -- the console's AllocateBehaviour<T>
+// siblings name the small pool for both (ConsoleBehaviourPool, BrnBehaviourManager.h), so
 // BehaviourManager::AllocateBehaviour<T> routes them to mSmallBehaviourPool, whose
-// AllocateVoid<T> is exactly this pool's member template:
+// AllocateVoid<T> is exactly this pool's member template. The pool is spelled through the
+// manager's SmallBehaviourPool typedef: on this host its bucket is widened for x64
+// (KU_SMALL_BEHAVIOUR_POOL_UNITS, a FLAG PC platform leaf), so the literal <100u,20u> would
+// instantiate a pool the manager no longer holds.
 //
 //   AllocateVoid<BehaviourRotateAboutVehicle>  @ 0x82253F08
 //       (called by BehaviourManager::AllocateBehaviour<BehaviourRotateAboutVehicle>)
@@ -37,8 +41,8 @@
 
 // --- AllocateVoid<BehaviourRotateAboutVehicle> @0x82253F08 --------------------------------
 template BrnDirector::AbstractPoolVoidHandle
-BrnDirector::AbstractPool<100u, 20u, rw::math::vpu::Vector4>::AllocateVoid<BrnDirector::Camera::BehaviourRotateAboutVehicle>();
+BrnDirector::Camera::BehaviourManager::SmallBehaviourPool::AllocateVoid<BrnDirector::Camera::BehaviourRotateAboutVehicle>();
 
 // --- AllocateVoid<BehaviourSpirallingDeathcam> @0x82254000 -------------------------------
 template BrnDirector::AbstractPoolVoidHandle
-BrnDirector::AbstractPool<100u, 20u, rw::math::vpu::Vector4>::AllocateVoid<BrnDirector::Camera::BehaviourSpirallingDeathcam>();
+BrnDirector::Camera::BehaviourManager::SmallBehaviourPool::AllocateVoid<BrnDirector::Camera::BehaviourSpirallingDeathcam>();

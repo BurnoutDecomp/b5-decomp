@@ -131,6 +131,80 @@ namespace Camera
     // ------------------------------------------------------------------------
     class BehaviourInterpolate;
 
+    // ------------------------------------------------------------------------
+    // ⭐ THE CONSOLE'S POOL, PER BEHAVIOUR TYPE (2026-09-27, owner's list: "some asserts and crashes").
+    //
+    // BehaviourManager::AllocateBehaviour<TBehaviour> has twenty console instantiations, and each
+    // one's asm names exactly ONE pool: it reads that pool's free count, fires that pool's
+    // out-of-slots assert and hands that pool to AllocateVoid. The console compiler chose the pool
+    // from the CONSOLE sizeof. The x64 widening moves host sizes, so the HOST sizeof cannot choose
+    // it: BehaviourGyroCam is 0x640 == 1600 bytes on the console (`li r7,0x640` @0x822598D8, its
+    // AllocateVoid) -- exactly the small bucket -- and 1632 on this host, so the sizeof rule this
+    // header used sent every gyro rig to the 8-slot LARGE pool. Take-downs, tumbles and crash shots
+    // all allocate GyroCams; the owner's three crash dumps (exe d65db9997047) each hold FOUR of them
+    // in the large pool beside the two gameplay cameras and two ICE takes, and the fifth -- the
+    // take-down's own -- found it empty: "Ran out of slots when trying to allocate a large behaviour",
+    // then the AV in ObjectPool::operator[](-1), while the small pool -- where the console keeps every
+    // GyroCam -- had 15 of its 20 slots free.
+    //
+    // So the pool is written down per type, as each console sibling's asm names it:
+    //   LARGE: `lwz r11,0x7D30(r30)` (the large pool's free count), `mr r4,r30` (the pool at the
+    //          manager's head), "Ran out of slots when trying to allocate a large behaviour" (h:1148)
+    //   SMALL: `lwzx r11,r30,0xFAA0` (the small pool's free count), `addi r4,r30,0x7D40`,
+    //          "Ran out of slots when trying to allocate a small behaviour" (h:1137)
+    // and AllocateBehaviour<> below takes the pool from this table. There is no primary template:
+    // a behaviour nobody has looked up on the console has no pool, and does not compile.
+    // ------------------------------------------------------------------------
+    class  BehaviourAftertouchCam;
+    class  BehaviourAftertouchCrash;
+    class  BehaviourBystanderCam;
+    class  BehaviourDebugFlyWorld;
+    class  BehaviourDebugOrbitPlayer;
+    class  BehaviourFailsafe;
+    class  BehaviourFixedCam;
+    class  BehaviourGameplayBumper;
+    class  BehaviourGameplayExternal;
+    class  BehaviourGyroCam;
+    class  BehaviourHeliCam;
+    class  BehaviourIceAnim;
+    class  BehaviourLooseAttachment;
+    struct BehaviourPassengerCam;
+    class  BehaviourRenderMetrics;
+    class  BehaviourRig;
+    class  BehaviourRoadRunner;
+    class  BehaviourRotateAboutVehicle;
+    class  BehaviourSpirallingDeathcam;
+
+    enum EBehaviourPool
+    {
+        E_BEHAVIOUR_POOL_SMALL,   // BehaviourManager::mSmallBehaviourPool (console AbstractPool<100,20,Vector4>)
+        E_BEHAVIOUR_POOL_LARGE    // BehaviourManager::mLargeBehaviourPool (console AbstractPool<250,8,Vector4>)
+    };
+
+    template <typename TBehaviour> struct ConsoleBehaviourPool;
+
+    //                                                                                                          AllocateBehaviour<>  AllocateVoid<>
+    template <> struct ConsoleBehaviourPool<BehaviourFailsafe>           { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_LARGE; };  // @0x82259100  @0x82253C08
+    template <> struct ConsoleBehaviourPool<BehaviourGameplayBumper>     { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_LARGE; };  // @0x82253250  @0x8224BAB8
+    template <> struct ConsoleBehaviourPool<BehaviourGameplayExternal>   { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_LARGE; };  // @0x82258E28  @0x82253820
+    template <> struct ConsoleBehaviourPool<BehaviourIceAnim>            { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_LARGE; };  // @0x82263428  @0x82259710
+    template <> struct ConsoleBehaviourPool<BehaviourAftertouchCam>      { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x82263370  @0x82259608
+    template <> struct ConsoleBehaviourPool<BehaviourAftertouchCrash>    { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x82258ED8  @0x82253920
+    template <> struct ConsoleBehaviourPool<BehaviourBystanderCam>       { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x82259048  @0x82253B10
+    template <> struct ConsoleBehaviourPool<BehaviourDebugFlyWorld>      { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x82230690  @0x82214750
+    template <> struct ConsoleBehaviourPool<BehaviourDebugOrbitPlayer>   { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x822305D8  @0x82214668
+    template <> struct ConsoleBehaviourPool<BehaviourFixedCam>           { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x82259268  @0x82253E10
+    template <> struct ConsoleBehaviourPool<BehaviourGyroCam>            { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x822634D8  @0x822597F8
+    template <> struct ConsoleBehaviourPool<BehaviourHeliCam>            { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x82230748  @0x82214838
+    template <> struct ConsoleBehaviourPool<BehaviourInterpolate>        { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x82258D70  @0x82253728
+    template <> struct ConsoleBehaviourPool<BehaviourLooseAttachment>    { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x822591B0  @0x82253D18
+    template <> struct ConsoleBehaviourPool<BehaviourPassengerCam>       { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x82230800  @0x82214920
+    template <> struct ConsoleBehaviourPool<BehaviourRenderMetrics>      { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x8224B770  @0x82230A80
+    template <> struct ConsoleBehaviourPool<BehaviourRig>                { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x82258F90  @0x82253A18
+    template <> struct ConsoleBehaviourPool<BehaviourRoadRunner>         { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x8224B6B8  @0x82230998
+    template <> struct ConsoleBehaviourPool<BehaviourRotateAboutVehicle> { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x82259320  @0x82253F08
+    template <> struct ConsoleBehaviourPool<BehaviourSpirallingDeathcam> { static const EBehaviourPool KE_POOL = E_BEHAVIOUR_POOL_SMALL; };  // @0x822593D8  @0x82254000
+
     // BehaviourHandle<TBehaviour> is DEFINED below BehaviourManager (it names the manager's
     // nested HelperPool / BehaviourHelper by value). Forward-declared here so the manager's
     // own signatures can take it by reference.
@@ -194,6 +268,33 @@ namespace Camera
         // every CgsBitArray.h:203 index assert in this class uses).
         enum { KI_MAX_BEHAVIOURS = 28 };
 
+        // The two behaviour-storage pools (DWARF :322 / :323). Console types, from the mangled
+        // AllocateVoid siblings: AbstractPool<250,8,Vector4> (?$AbstractPool@$0PK@$07..., eight
+        // 4000-byte slots) and AbstractPool<100,20,Vector4> (?$AbstractPool@$0GE@$0BE@..., twenty
+        // 1600-byte slots); BehaviourManager::Prepare @0x8223DBE0 refills 8 and 20. The SLOT COUNTS
+        // are behaviour and are the console's.
+        //
+        // FLAG PC platform leaf (x64 pointer widening): the SMALL BUCKET. On the console it is
+        // exactly the largest small behaviour, BehaviourGyroCam (0x640 bytes, `li r7,0x640`
+        // @0x822598D8). On this host the same GyroCam is 1632 bytes -- every vptr and pointer in it
+        // widened -- so the console's 100 Vector4 cannot hold it. The rule survives and the number
+        // is re-derived from it: the host bucket is the host's largest small behaviour, 102 Vector4
+        // == 1632 bytes (the pool grows by 20 * 32 bytes). BrnBehaviourManager.cpp static_asserts
+        // that equality against the real BehaviourGyroCam, and AllocateBehaviour<> static_asserts
+        // every behaviour against the bucket of the pool the console gives it. The large bucket
+        // still holds every large behaviour on this host (the largest, IceAnim, is 3984 of 4000
+        // bytes) and stays the console's.
+        static const u32 KU_LARGE_BEHAVIOUR_POOL_UNITS         = 250u;
+        static const u32 KU_LARGE_BEHAVIOUR_POOL_SLOTS         = 8u;
+        static const u32 KU_SMALL_BEHAVIOUR_POOL_UNITS_CONSOLE = 100u;
+        static const u32 KU_SMALL_BEHAVIOUR_POOL_UNITS         = 102u;   // FLAG PC platform leaf (above)
+        static const u32 KU_SMALL_BEHAVIOUR_POOL_SLOTS         = 20u;
+
+        typedef BrnDirector::AbstractPool<KU_LARGE_BEHAVIOUR_POOL_UNITS, KU_LARGE_BEHAVIOUR_POOL_SLOTS,
+                                          rw::math::vpu::Vector4> LargeBehaviourPool;
+        typedef BrnDirector::AbstractPool<KU_SMALL_BEHAVIOUR_POOL_UNITS, KU_SMALL_BEHAVIOUR_POOL_SLOTS,
+                                          rw::math::vpu::Vector4> SmallBehaviourPool;
+
         // The single attached camera-tweaker slot (DWARF BrnBehaviourManager.h:353..:356).
         // FLAG: mTweaker is the committed BrnDirector::Camera::Utils::Tweaker (BrnCameraTweaker.h),
         //   but pulling that home in here collides with the minimal Tweaker fork that
@@ -241,7 +342,7 @@ namespace Camera
         // call sites that pass a non-ArbitratorState `this` still resolve.
         void CheckNoBehavioursAreAllocatedByState(const void* lpState);
 
-        const BrnDirector::AbstractPool<250u, 8u, rw::math::vpu::Vector4>* DebugGetLargePool() const { return &mLargeBehaviourPool; }
+        const LargeBehaviourPool* DebugGetLargePool() const { return &mLargeBehaviourPool; }
 
         void DetachAllTweakers();
         const Camera& GetCameraFromBehaviour(BehaviourHelperIndex lHelper) const;
@@ -303,14 +404,14 @@ namespace Camera
         // helper pool, and the `T**` was the helper's FIRST WORD taken by address -- i.e.
         // mBehaviourPoolHandle.mpObject. No pointer-to-pointer fiction is needed.
 
-        // Reserve a slot for a fresh TBehaviour from the size-appropriate behaviour pool and
-        // hand back the four-word type-erased pool handle. X360-attested template family
-        // (BehaviourManager::AllocateBehaviour<TBehaviour> @0x82263370 and its 19 siblings): the
-        // compiler bakes the pool choice per instantiation from sizeof(TBehaviour) -- a behaviour
-        // that fits the small pool's bucket (<=100 Vector4 == 1600 bytes) shares the many-slot
-        // small pool (mSmallBehaviourPool), otherwise it takes one of the few large slots
-        // (mLargeBehaviourPool). Asserts the chosen pool has a free slot (dumping the manager's
-        // behaviour table first when exhausted), then returns pool.AllocateVoid<TBehaviour>().
+        // Reserve a slot for a fresh TBehaviour from its behaviour pool and hand back the
+        // four-word type-erased pool handle. X360-attested template family
+        // (BehaviourManager::AllocateBehaviour<TBehaviour> @0x82263370 and its 19 siblings): each
+        // instantiation reads ONE pool -- the many-slot small pool (mSmallBehaviourPool) or one of
+        // the few large slots (mLargeBehaviourPool) -- and the pool is the one the console's
+        // sibling names, from ConsoleBehaviourPool<TBehaviour> (see the table above the class).
+        // Asserts the chosen pool has a free slot (dumping the manager's behaviour table first
+        // when exhausted), then returns pool.AllocateVoid<TBehaviour>().
         // Out-of-line template body below (needs the pool members complete). The concrete
         // instantiations are emitted by BrnBehaviourManager.cpp (one per behaviour type).
         template <typename TBehaviour>
@@ -366,9 +467,10 @@ namespace Camera
         template <int tiTag>
         struct OpaqueSub { u8 maOpaque[4]; /* FLAG: size un-pinned (placeholder) */ };
 
-        // +console 0x...  the two behaviour-storage pools (DWARF :322 / :323).
-        BrnDirector::AbstractPool<250u, 8u, rw::math::vpu::Vector4> mLargeBehaviourPool;   // :322
-        BrnDirector::AbstractPool<100u, 20u, rw::math::vpu::Vector4> mSmallBehaviourPool;  // :323
+        // +console 0x0 / 0x7D40  the two behaviour-storage pools (DWARF :322 / :323; the types and
+        // the small bucket's host widening are at the KU_*_BEHAVIOUR_POOL_* constants above).
+        LargeBehaviourPool mLargeBehaviourPool;                                            // :322
+        SmallBehaviourPool mSmallBehaviourPool;                                            // :323
 
         // +console 0xFAB0 (64176)  the live-behaviour helper pool (DWARF :324).
         HelperPool mBehaviourHelperPool;                                                   // :324
@@ -548,12 +650,17 @@ namespace Camera
     // ------------------------------------------------------------------------
     // BehaviourManager::AllocateBehaviour<TBehaviour> @0x82263370 (and its 19 per-behaviour-type
     // siblings) -- reserve a pool slot for a fresh TBehaviour and return the four-word type-erased
-    // handle. ONE shared body; the compiler folds the sizeof compare to a single pool at each
-    // instantiation, exactly reproducing each sibling's asm (one pool access, one assert message):
-    //   * fits the small bucket  (sizeof(TBehaviour) <= 1600) -> mSmallBehaviourPool, "small
-    //     behaviour" out-of-slots message (BrnBehaviourManager.h:1137 on the X360);
-    //   * otherwise               (sizeof up to the large bucket 4000)  -> mLargeBehaviourPool,
-    //     "large behaviour" message (:1148).
+    // handle. ONE shared body; each instantiation reads ONE pool, exactly reproducing its sibling's
+    // asm (one pool access, one assert message):
+    //   * ConsoleBehaviourPool<TBehaviour> == SMALL -> mSmallBehaviourPool, "small behaviour"
+    //     out-of-slots message (BrnBehaviourManager.h:1137 on the X360), e.g. GyroCam @0x822634D8;
+    //   * ConsoleBehaviourPool<TBehaviour> == LARGE -> mLargeBehaviourPool, "large behaviour"
+    //     message (:1148), e.g. Failsafe @0x82259100.
+    // The pool is the console's, from the table above the class -- NOT recomputed from the host
+    // sizeof, which the x64 widening has moved (GyroCam: 1600 on the console, 1632 here). What the
+    // host sizeof must still do is FIT: a behaviour larger than its pool's bucket would be
+    // placement-new'd over the next slot (AllocateVoid's own "object is too large" is a non-gating
+    // runtime assert), so that is a compile-time error here instead.
     // The out-of-slots pre-check reads the pool's free counter, DebugDumpToTTY()s the manager, then
     // trips the non-gating assert (the X360 falls through into AllocateVoid regardless, matching
     // CGS_ASSERT). AbstractPool::AllocateVoid<TBehaviour> pops a slot, constructs the behaviour in
@@ -562,11 +669,12 @@ namespace Camera
     template <typename TBehaviour>
     inline AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour()
     {
-        // Compile-time pool selection: a behaviour that fits the small pool's bucket shares the
-        // many-slot small pool; anything larger takes one of the few large slots. The X360 bakes
-        // this to a single pool per instantiation (the dead branch is folded away).
-        if (sizeof(TBehaviour) <= sizeof(decltype(mSmallBehaviourPool)::Bucket))
+        if constexpr (ConsoleBehaviourPool<TBehaviour>::KE_POOL == E_BEHAVIOUR_POOL_SMALL)
         {
+            static_assert(sizeof(TBehaviour) <= sizeof(SmallBehaviourPool::Bucket),
+                          "a small behaviour outgrew the host small bucket: re-derive "
+                          "BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS");
+
             const s32 liNumFree = mSmallBehaviourPool.GetNumFreeObjects();
             if (liNumFree <= 0)
             {
@@ -577,6 +685,11 @@ namespace Camera
         }
         else
         {
+            static_assert(ConsoleBehaviourPool<TBehaviour>::KE_POOL == E_BEHAVIOUR_POOL_LARGE,
+                          "ConsoleBehaviourPool: unknown pool");
+            static_assert(sizeof(TBehaviour) <= sizeof(LargeBehaviourPool::Bucket),
+                          "a large behaviour outgrew the large bucket (4000 bytes on the console)");
+
             const s32 liNumFree = mLargeBehaviourPool.GetNumFreeObjects();
             if (liNumFree <= 0)
             {

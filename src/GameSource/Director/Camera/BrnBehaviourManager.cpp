@@ -13,6 +13,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"           // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"        // gpDebugPrint / gxMessageFilterFlags
 #include <cstdlib>   // getenv (BRN_CAM_INPUT_DIAG)
+#include <cstring>   // strncmp (BRN_CAMPOOL_DIAG)
 
 // The behaviour-type homes, pulled in so each AllocateBehaviour<TBehaviour> explicit
 // instantiation (below) sees a COMPLETE TBehaviour (AllocateVoid<T> needs sizeof(T) + a
@@ -81,6 +82,69 @@ namespace Camera
                 return false;
             --siLinesLeft;
             return true;
+        }
+
+        // [diag, NOT X360] BRN_CAMPOOL_DIAG (owner's list 2026-09-27, L1 CAMPOOL): one line per camera
+        // behaviour the manager brings up ('+', PrepareBehaviours) or hands back ('-', ReleaseBehaviours) --
+        // its full debug name, its size, the pool it lives in, both pools' free counts and their
+        // low-water marks over the session. The witness for "the large pool runs dry": the owner's
+        // crash was the eight large slots all taken.
+        //
+        // It also prints what the LARGE pool would hold on the code before 2026-09-27 for the very
+        // same live set (routing never changes which behaviours exist, only where they live):
+        //     old large free = large free
+        //                    - live small-pool behaviours larger than the console's 1600-byte small
+        //                      bucket (the old rule sent those to the large pool: GyroCam, 1632 here)
+        //                    - large behaviours handed back by ArbStateCarSelect (the old build had no
+        //                      ArbStateCarSelect::Release, so it never handed them back; exact for one
+        //                      junkyard visit per session -- on a second visit the old build's Prepare
+        //                      re-used those handles, so it held at most the latest set)
+        // When that reaches 0 and another such behaviour is allocated, the old build asserted "Ran out of
+        // slots when trying to allocate a large behaviour" and read ObjectPool::operator[](-1).
+        // The counters run whenever the variable is set; only the printing is capped.
+        bool CampoolDiagOn()
+        {
+            static const bool sbOn = (std::getenv("BRN_CAMPOOL_DIAG") != 0);
+            return sbOn && CgsDev::Log::gpDebugPrint != 0;
+        }
+
+        s32 siCampoolHostLargeInSmall  = 0;   // live small-pool behaviours over the console's 1600 bytes
+        s32 siCampoolCarSelectLargeHeld = 0;  // large behaviours the old build's car select never released
+
+        void CampoolCount(char lcEvent, const char* lpcFullName, s32 liSizeBytes, bool lbSmall, bool lbLarge)
+        {
+            const s32 liSign = (lcEvent == '+') ? 1 : -1;
+            if (lbSmall && liSizeBytes > static_cast<s32>(BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS_CONSOLE
+                                                          * sizeof(rw::math::vpu::Vector4)))
+                siCampoolHostLargeInSmall += liSign;
+            if (lcEvent == '-' && lbLarge && std::strncmp(lpcFullName, "ArbStateCarSelect::", 19) == 0)
+                ++siCampoolCarSelectLargeHeld;
+        }
+
+        void CampoolWitness(char lcEvent, const char* lpcFullName, s32 liSizeBytes, const char* lpcPool,
+                            s32 liLargeFree, s32 liSmallFree, u32 luLiveBehaviours)
+        {
+            static s32 siLargeLow    = 0x7FFFFFFF;
+            static s32 siSmallLow    = 0x7FFFFFFF;
+            static s32 siOldLargeLow = 0x7FFFFFFF;
+            static s32 siLinesLeft   = 3000;
+            const s32 liOldLargeFree = liLargeFree - siCampoolHostLargeInSmall - siCampoolCarSelectLargeHeld;
+            if (liLargeFree < siLargeLow)
+                siLargeLow = liLargeFree;
+            if (liSmallFree < siSmallLow)
+                siSmallLow = liSmallFree;
+            if (liOldLargeFree < siOldLargeLow)
+                siOldLargeLow = liOldLargeFree;
+            if (siLinesLeft <= 0)
+                return;
+            --siLinesLeft;
+            const char lacEvent[2] = { lcEvent, 0 };
+            *CgsDev::Log::gpDebugPrint << "[campool] " << lacEvent << " " << lpcFullName
+                                       << " size " << liSizeBytes << " pool " << lpcPool
+                                       << " | large free " << liLargeFree << " (low " << siLargeLow << ")"
+                                       << " small free " << liSmallFree << " (low " << siSmallLow << ")"
+                                       << " live " << luLiveBehaviours
+                                       << " | old large free " << liOldLargeFree << " (low " << siOldLargeLow << ")\n";
         }
     }
 
@@ -774,6 +838,21 @@ namespace Camera
             (void)lbPrepared;
 
             mBehaviourNeedsPreparingFlags.UnSetBit(static_cast<u32>(liHelper));
+
+            if (CampoolDiagOn())   // [diag, NOT X360] BRN_CAMPOOL_DIAG
+            {
+                const BehaviourHelper& lrHelper = mBehaviourHelperPool[lHelper];
+                const IAbstractPoolFreeObject* lpPool = lrHelper.mBehaviourPoolHandle.GetFreeObjectInterface();
+                char lacFullName[64];
+                lrHelper.GetDebugFullName(lacFullName);
+                const bool lbLarge = (lpPool == &mLargeBehaviourPool);
+                const bool lbSmall = (lpPool == &mSmallBehaviourPool);
+                CampoolCount('+', lacFullName, lrHelper.mBehaviourPoolHandle.GetSize(), lbSmall, lbLarge);
+                CampoolWitness('+', lacFullName, lrHelper.mBehaviourPoolHandle.GetSize(),
+                               lbLarge ? "LARGE" : (lbSmall ? "SMALL" : "?"),
+                               mLargeBehaviourPool.GetNumFreeObjects(), mSmallBehaviourPool.GetNumFreeObjects(),
+                               mBehaviourHelperIndexArray.GetLength());
+            }
         }
     }
 
@@ -815,6 +894,18 @@ namespace Camera
 
             BehaviourHelper& lrHelper = mBehaviourHelperPool[lHelper];
 
+            // [diag, NOT X360] BRN_CAMPOOL_DIAG: the name and pool are taken before the owners are cleared.
+            const bool lbWitness = CampoolDiagOn();
+            char lacWitnessName[64] = "";
+            const IAbstractPoolFreeObject* lpWitnessPool = 0;
+            s32 liWitnessSize = 0;
+            if (lbWitness)
+            {
+                lrHelper.GetDebugFullName(lacWitnessName);
+                lpWitnessPool = lrHelper.GetPoolHandle().GetFreeObjectInterface();
+                liWitnessSize = lrHelper.GetPoolHandle().GetSize();
+            }
+
             lLockInterface.SetBehaviourHelperIndex(lHelper);
 
             lrHelper.GetBehaviour()->Release(lSharedInfo);
@@ -830,6 +921,17 @@ namespace Camera
             mBehaviourHelperIndexArray.EraseInstancesOf(lHelper);
 
             mBehaviourNeedsReleasingFlags.UnSetBit(static_cast<u32>(liHelper));
+
+            if (lbWitness)
+            {
+                const bool lbLarge = (lpWitnessPool == &mLargeBehaviourPool);
+                const bool lbSmall = (lpWitnessPool == &mSmallBehaviourPool);
+                CampoolCount('-', lacWitnessName, liWitnessSize, lbSmall, lbLarge);
+                CampoolWitness('-', lacWitnessName, liWitnessSize,
+                               lbLarge ? "LARGE" : (lbSmall ? "SMALL" : "?"),
+                               mLargeBehaviourPool.GetNumFreeObjects(), mSmallBehaviourPool.GetNumFreeObjects(),
+                               mBehaviourHelperIndexArray.GetLength());
+            }
         }
     }
 
@@ -1141,24 +1243,38 @@ namespace Camera
     // AllocateBehaviour<TBehaviour> explicit instantiations (X360 @0x82263370 &c.)
     //
     // The ONE shared body lives out-of-line in BrnBehaviourManager.h; these lines emit the
-    // concrete per-behaviour-type symbols the X360 ledger tracks. Each compiler-baked
-    // instantiation picks its pool from sizeof(TBehaviour): a behaviour that fits the small
-    // pool's 1600-byte bucket -> mSmallBehaviourPool ("small behaviour"); larger -> the 4000-byte
-    // mLargeBehaviourPool ("large behaviour"). Measured routing (matches every sibling's asm):
-    //   LARGE pool: Failsafe GameplayBumper GameplayExternal IceAnim -- each far past the bucket
-    //               on the console and on the host alike; and GyroCam, which fits the console's
-    //               1600-byte bucket EXACTLY but MEASURES 1632 here (host pointer width and
-    //               alignment through the whole record, the Behaviour base included), so it
-    //               routes LARGE. That is a host-width consequence, not a reconstruction choice
-    //               -- the only route back into the small bucket is trimming a reserved span,
-    //               which would be a layout accommodation. ⚠️ It is also a real capacity
-    //               divergence: the gyro rigs move off a 20-slot pool onto an 8-slot one that
-    //               already holds the four above, and two rigs are allocated at once on the
-    //               destruction-path and drive-by takedowns. Headroom, but not the console's.
-    //   SMALL pool: all others.
+    // concrete per-behaviour-type symbols the X360 ledger tracks. Each instantiation takes the
+    // pool its console sibling reads (ConsoleBehaviourPool, BrnBehaviourManager.h):
+    //   LARGE pool: Failsafe GameplayBumper GameplayExternal IceAnim.
+    //   SMALL pool: all others -- GyroCam included.
+    // ⛔ RETIRED 2026-09-27: the pool used to be chosen HERE from the host sizeof against the
+    // console's 1600-byte bucket. GyroCam fills that bucket exactly on the console (0x640,
+    // `li r7,0x640` @0x822598D8) and measures 1632 here, so every gyro rig went to the 8-slot
+    // large pool. The note that stood here called that "headroom, but not the console's"; the
+    // owner's crash dumps measured the headroom: four GyroCams (three tumbling moments and the
+    // take-down) beside the two gameplay cameras and the car-select's two ICE takes filled all
+    // eight large slots, and the take-down's second rig asserted "Ran out of slots when trying
+    // to allocate a large behaviour" and read ObjectPool::operator[](-1). Now the small bucket
+    // is widened for the host instead (KU_SMALL_BEHAVIOUR_POOL_UNITS) -- pinned just below.
     // IceAnim / RenderMetrics / Rig are instantiated in their own isolated TUs (their headers'
     // shared-slice re-declarations collide with each other and with the real shared headers).
     // ========================================================================
+
+    // FLAG PC platform leaf (x64 pointer widening) -- THE SMALL BUCKET'S DERIVATION, pinned where
+    // the real BehaviourGyroCam is complete. The console's small bucket is exactly its largest
+    // small behaviour, GyroCam (100 Vector4 == 0x640 == sizeof, @0x822598D8); the host bucket is
+    // re-derived by the same rule from the host GyroCam. If GyroCam's host layout changes, this
+    // stops compiling instead of the pool silently mis-sizing; re-derive the constant.
+    static_assert(sizeof(BehaviourManager::SmallBehaviourPool::Bucket)
+                      == BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS * sizeof(rw::math::vpu::Vector4),
+                  "the small bucket is KU_SMALL_BEHAVIOUR_POOL_UNITS Vector4");
+    static_assert(sizeof(BehaviourManager::SmallBehaviourPool::Bucket)
+                      == (sizeof(BehaviourGyroCam) + sizeof(rw::math::vpu::Vector4) - 1)
+                             / sizeof(rw::math::vpu::Vector4) * sizeof(rw::math::vpu::Vector4),
+                  "the host small bucket is the host's largest small behaviour (BehaviourGyroCam), as "
+                  "the console's is its own: re-derive BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS");
+    static_assert(BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS_CONSOLE * 16u == 0x640u,
+                  "the console's small bucket: 100 Vector4 == sizeof(BehaviourGyroCam) on the console");
     template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourAftertouchCam>();
     template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourAftertouchCrash>();
     template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourBystanderCam>();

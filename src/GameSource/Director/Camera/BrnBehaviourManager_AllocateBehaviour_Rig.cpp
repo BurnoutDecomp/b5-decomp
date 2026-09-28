@@ -9,8 +9,9 @@
 // shared headers -- so this instantiation lives on its own.
 //
 // The shared AllocateBehaviour<TBehaviour> body is out-of-line in BrnBehaviourManager.h.
-// sizeof(BehaviourRig) == 1152 (<= the 1600-byte small bucket) -> mSmallBehaviourPool
-// ("small behaviour"), matching the X360 asm at 0x82258F90.
+// The X360 asm at 0x82258F90 reads the SMALL pool ("small behaviour"), so
+// ConsoleBehaviourPool<BehaviourRig> is SMALL -> mSmallBehaviourPool (host sizeof 1152,
+// console 1136 -- `li r7` @0x82253AEC; AllocateBehaviour<> static_asserts the fit).
 // ============================================================================
 
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"

@@ -72,6 +72,10 @@ public:
     const void* Get() const       { return mpObject; }
     s32         GetSize() const   { return miSize; }
 
+    // The pool that served the object (the +0x04 word). Read by the behaviour manager's
+    // BRN_CAMPOOL_DIAG witness to name which of its two pools a behaviour lives in.
+    const IAbstractPoolFreeObject* GetFreeObjectInterface() const { return mpFreeObjectInterface; }
+
     bool        operator==(const AbstractPoolVoidHandle& lrOther) const;
 
 protected:
