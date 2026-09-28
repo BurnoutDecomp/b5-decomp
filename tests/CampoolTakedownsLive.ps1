@@ -44,7 +44,9 @@ $case.Checks = @(
         param($ctx)
         $low = $null; $n = 0
         foreach ($line in $ctx.LogLines) {
-            if ($line -match '\[campool\] [+-] .* large free (-?\d+) \(low (-?\d+)\)') {
+            # Anchored on "| large free ... small free": the line also ends with "| old large free", the pre-fix
+            # counterfactual, which a greedy `.* large free` would read instead of the real pool.
+            if ($line -match '\[campool\] [+-] .*\| large free (-?\d+) \(low (-?\d+)\) small free') {
                 $n++; $v = [int]$Matches[2]; if ($null -eq $low -or $v -lt $low) { $low = $v }
             }
         }
