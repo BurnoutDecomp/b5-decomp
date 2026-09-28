@@ -143,8 +143,8 @@ namespace Logic
         // handle (+0x118/+0x11C) <- src handle (+0x48/+0x4C)
         mResourceHandle = lrSource.mResourceHandle;
 
-        // Resource identity/hash (+0x120/+0x128) <- the requested resource.
-        mResourceId = lrSource.mResourceHandle.GetResourceId();
+        // ARTIST 82695748: copy the name hash, without querying the handle.
+        // Bundle-only loads have no resource handle; release uses the bundle name.
         muResourceNameHash = static_cast<u32>(lrSource.miResourceType);
 
         // FAITHFUL: the ctor really sets mState (+0x130) = 5; +0x12C = 0; +0x138 (mpRequester) = 0.
