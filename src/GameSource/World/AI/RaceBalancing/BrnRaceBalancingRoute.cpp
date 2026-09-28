@@ -109,9 +109,13 @@ f32 RaceBalancingRoute::GetAISectionSpeed(const AISection* lpAISection,
     const u32 luSpeed = lpAISection->muSpeed;
     CGS_ASSERT(luSpeed < E_SECTION_SPEED_COUNT, "muSpeed < E_SECTION_SPEED_COUNT");
 
-    return (lpAISectionsData->mafSectionMaxSpeeds[luSpeed]
-            - lpAISectionsData->mafSectionMinSpeeds[luSpeed]) * lfSpeedRatio
-           + lpAISectionsData->mafSectionMinSpeeds[luSpeed];
+    // ROUNDING_RULE rule 3 (L6 AIDRIVE, owner list 2026-09-27): `fsubs f13, max, min ; fmadds f1, f13,
+    // f31 (ratio), f0 (min)` @0x8276980C/0x82769810 -- the rubber band's par-speed lerp is ONE rounding
+    // of (max - min) * ratio + min. The PC spelling rounded the product first.
+    return std::fmaf(lpAISectionsData->mafSectionMaxSpeeds[luSpeed]
+                         - lpAISectionsData->mafSectionMinSpeeds[luSpeed],
+                     lfSpeedRatio,
+                     lpAISectionsData->mafSectionMinSpeeds[luSpeed]);
 }
 
 // @0x82789368

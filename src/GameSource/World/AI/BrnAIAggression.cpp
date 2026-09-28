@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"       // CgsNumeric::Random (mRandom.RandomFloat)
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu vector ops
 
-#include <cmath>   // std::fabs, std::sqrt where the de-SIMD'd math needs scalar helpers
+#include <cmath>   // std::fabs, std::sqrt where the de-SIMD'd math needs scalar helpers; std::fmaf (rule 3)
 #include <cstdlib>  // [DIAG] getenv -- BRN_MM_DIAG only
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] CgsDev::Log::gpDebugPrint -- BRN_MM_DIAG only
 
@@ -261,7 +261,10 @@ f32 AIAggression::CalcSpeedMatchSpeed(f32 lfTimeStep, f32 lfTargetSpeed)
     }
     else
     {
-        lfMaxAccel = mpCar->GetAggressiveness()->GetAcclerationRateForSpeedMatch() * 15.0f + 5.0f;
+        // ROUNDING_RULE rule 3 (L6 AIDRIVE, owner list 2026-09-27): `fmadds f0, f12 (car+0x1420, the
+        // knob), f0 (flt_820C4238 15.0), f13 (flt_820C488C 5.0)` @0x8278B824 -- ONE rounding of
+        // rate * 15 + 5. The PC spelling rounded the product first.
+        lfMaxAccel = std::fmaf(mpCar->GetAggressiveness()->GetAcclerationRateForSpeedMatch(), 15.0f, 5.0f);
     }
 
     const f32 lfMaxStep = lfMaxAccel * lfTargetSpeed;
