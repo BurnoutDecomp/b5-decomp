@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // =====================================================================================
 // rw::audio::core::SndPlayer1 -- the engine's sample player.
 //
@@ -1478,6 +1479,7 @@ int SndPlayer1::Process(SndPlayer1 *self, AudioProcessContext *ctx, bool /*abUnu
 
         // The main decode runs even at count zero -- the console does not guard it.
         liProduced = lpDecoder->Decode(AsDecoderBuffer(lpDst), liToDecode);
+        CgsSound::PcmTrace::Measure(self, lpDst->mpSamples, static_cast<unsigned>(liProduced > 0 ? liProduced : 0), lpRequest->numChannels, lpDst->muStride);
 
         SampleBuffer *lpOldSrc = ctx->mpSrcBuffer;
         ctx->mpSrcBuffer = lpDst;

@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // ============================================================================
 // SDKs/EATech/include/snd/sndaems.cpp
 //
@@ -215,12 +216,17 @@ bool ApplyCsisRelocations(ModuleBank* apBank, const ModuleBank* apSource)
         lId.muInterfaceId = *reinterpret_cast<const u16*>(lpSource + luId + 0x02);
         lId.mpName = reinterpret_cast<const char*>(lpSource + luId + 0x04);
 
+        // ARTIST 82B71964 and XB1 14096C69E: serialized kind 0 is a global,
+        // kind 1 a class, and the remaining kind a function. Class relocations
+        // must resolve the constructor list that the module subscribes below.
         if (luKind == 0)
-            reinterpret_cast<Csis::ClassHandle*>(lpBase + luTarget)->SetFast(&lId);
-        else if (luKind == 1)
-            reinterpret_cast<Csis::FunctionHandle*>(lpBase + luTarget)->SetFast(&lId);
-        else
             reinterpret_cast<Csis::GlobalVariableHandle*>(lpBase + luTarget)->SetFast(&lId);
+        else if (luKind == 1)
+            reinterpret_cast<Csis::ClassHandle*>(lpBase + luTarget)->SetFast(&lId);
+        else
+            reinterpret_cast<Csis::FunctionHandle*>(lpBase + luTarget)->SetFast(&lId);
+
+        CgsSound::PcmTrace::Log("aems-class bank=%d kind=%u name=%s\n", apBank->miBankHandle, luKind, lId.mpName);
 
         // XB1 sub_14096C510 dispatches each relocation and deliberately ignores
         // the resolver's return value.  CSIS content and AEMS banks are streamed
@@ -942,6 +948,8 @@ IAemsSamplePlayer* CreateSamplePlayer(AemsPlayerBlock* apBlock,
                                ((luEncodedOffset & 0x0000FF00u) << 8)  |
                                ((luEncodedOffset & 0x00FF0000u) >> 8)  |
                                ((luEncodedOffset & 0xFF000000u) >> 24);
+
+    CgsSound::PcmTrace::Log("aems-select bank=%d sample=%p index=%u\n", apBlock->mpBank->miBankHandle, lpSampleBank + luSampleOffset, luSampleIndex);
 
     int laiOutputs[6];
     for (u32 luOutput = 0; luOutput < 6; ++luOutput)
