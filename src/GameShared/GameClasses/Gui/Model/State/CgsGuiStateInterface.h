@@ -248,4 +248,14 @@ namespace CgsGui
         CgsLanguage::LanguageManager* GetLanguageManager();
         bool                          IsUsingMetricUnits();
     };
+
+    // ARTIST OutputGuiEvent<GuiEventNetworkSuspension> 0x82493A88 sends
+    // {4,45,12,type} on channel 40. This legacy event type already contains that
+    // wrapper, so queue it once, on the wrapper channel. The GUI router then
+    // delivers the single payload word to event-45 consumers.
+    template <>
+    inline void StateInterface::OutputGuiEvent<GuiEventNetworkSuspension>(GuiEventNetworkSuspension& lrEvent)
+    {
+        mOutEventQueue.AddEvent(&lrEvent, 40, static_cast<s32>(sizeof(lrEvent)));
+    }
 }
