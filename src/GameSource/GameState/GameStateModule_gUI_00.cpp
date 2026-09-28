@@ -1912,7 +1912,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     //     mr   r6, r29             ; lpOutput
     //     mr   r7, r23             ; gsm+235488 == this module's active-race-car snapshot
     //     mr   r8, r21             ; the caller's update-set halfword (arg_3E)
-    //     clrlwi r9, r11, 24       ; lbIsInJunkyard == (invite XUID != 0) || gsm+0x2CE34 byte
+    //     clrlwi r9, r11, 24       ; lbIsInJunkyard == (junkyard id != 0) || gsm+0x2CE34 byte
     //     bl   ProgressionManager::PreWorldUpdate
     // This is the ONLY console caller of ProgressionManager::AddDistanceDriven @0x823668F0, the
     // writer of every "distance driven" number in the game (Profile online/offline, the per-car-
@@ -1924,22 +1924,24 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // declaration): the sim step is the sim timer's base*multiplier, exactly what gsm+292284
     // holds on the console; the game step is the argument this pump was handed.
     //
-    // [FLAG PC bring-up] TWO arguments are PC derivations, named rather than hidden -- the SAME
-    // two the DriveThruManager::Update call at the top of this function already carries:
+    // [FLAG PC bring-up] ONE argument is a PC derivation, named rather than hidden:
     //   * lUpdateSet -- the console's caller value comes from ConstructUpdateSetFromFsm; this pump
     //     has no update set. The callee tests ONLY bit 0 (network catch-up, the same bit Physics/
     //     AI test -- never set on an offline build), so 0 is the offline console value.
-    //   * lbIsInJunkyard -- (invite in progress) || the gsm+0x2CE34 occupancy byte; neither is
-    //     staged here, false as for DriveThruManager. Cost: while the player is IN the junkyard
-    //     the callee integrates distance (0 -- the car is stationary) instead of saving the
-    //     spawn pose to the profile. DELETE-WHEN the junkyard-occupancy latch is reconstructed.
+    //
+    // ARTIST PreWorldUpdate @0x823A5B48..0x823A5B80: the full 64-bit junkyard id at
+    // this+0x2CDC0 (CarSelectManager+0x20) OR the online car-select byte at this+0x2CE34.
+    // While either is set, ProgressionManager saves the car's pose instead of integrating
+    // distance. OnProfileLoaded uses that saved pose to choose the next boot's junkyard.
     {
         const f32 lfSimTimestep =
             lrTimerStatusInterface.GetSimTimerStatus()->GetCurrentTimeStep();
         const BrnUpdateSet luUpdateSet = 0;
+        const bool lbIsInJunkyard = (mCarSelectManager.GetJunkyardId() != 0)
+                                 || mOnlineCarSelectManager.IsInOnlineCarSelect();
         mProgressionManager.PreWorldUpdate(lfSimTimestep, lfGameTimestep,
                                            mpOutputBuffer, &mLastActiveRaceCarInterface,
-                                           luUpdateSet, /*lbIsInJunkyard*/ false);
+                                           luUpdateSet, lbIsInJunkyard);
     }
 
     // Read-locked for the same reason leg 1b is: whatever D3's bodies read off the buffer, they
