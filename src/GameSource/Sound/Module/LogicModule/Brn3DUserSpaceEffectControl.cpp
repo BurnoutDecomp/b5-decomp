@@ -1,6 +1,7 @@
 #include "GameSource/Sound/Module/LogicModule/Brn3DUserSpaceEffectControl.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
+#include <cmath>
 
 // =============================================================================
 // BrnSound::Logic::Brn3DUserSpaceEffectControl -- out-of-line bodies.
@@ -86,19 +87,41 @@ void Brn3DUserSpaceEffectControl::AttachTransform(const Matrix44Affine* apTransf
     mpTransform = apTransform;
 }
 
-// ARTIST @0x826968E8. Positions supplied by collision states are in the
-// attached transform's user space; the Cgs3d base always receives the stable
-// generated world-space member.
+// ARTIST 826968E8: the supplied point is WORLD space. Store it in the
+// attached transform's local space, then let UpdateParams regenerate the world
+// position from the current transform. A forward transform here applies the
+// camera translation twice and places audible collisions kilometres away.
 void Brn3DUserSpaceEffectControl::AttachEmitterPosition(const Vector3* apPosition)
 {
     CGS_ASSERT(mpTransform != nullptr, "mpTransform");
     CGS_ASSERT(apPosition != nullptr, "lpPosition");
-    if (!mpTransform || !apPosition)
-        return;
+    CGS_ASSERT(rw::math::vpu::IsValid(*mpTransform), "IsValid( *mpTransform )");
+    CGS_ASSERT(rw::math::vpu::IsValid(*apPosition), "IsValid( *lpPosition )");
 
-    mPositionInUserSpace = *apPosition;
-    mGeneratedPosition = rw::math::vpu::TransformPoint(
-        *mpTransform, mPositionInUserSpace);
+    // 82696BC0 vsubfp and 82696BFC..6C10: transpose the orthonormal
+    // rotation, rotate -translation, then accumulate the world point X/Y/Z.
+    // Campaign rules 3/4/6: preserve each VMX rounding and denormal flush.
+    const auto flush = [](f32 v) {
+        return std::fpclassify(v) == FP_SUBNORMAL ? std::copysign(0.0f, v) : v;
+    };
+    const auto multiplyAdd = [&](f32 a, f32 b, f32 c) {
+        return flush(std::fma(flush(a), flush(b), flush(c)));
+    };
+    const Vector3& translation = mpTransform->wAxis;
+    const auto inverseComponent = [&](const Vector3& axis) {
+        f32 value = flush(flush(0.0f - flush(translation.z)) * flush(axis.z));
+        value = multiplyAdd(0.0f - flush(translation.y), axis.y, value);
+        value = multiplyAdd(0.0f - flush(translation.x), axis.x, value);
+        value = multiplyAdd(axis.x, apPosition->x, value);
+        value = multiplyAdd(axis.y, apPosition->y, value);
+        return multiplyAdd(axis.z, apPosition->z, value);
+    };
+    mPositionInUserSpace = Vector3{
+        inverseComponent(mpTransform->xAxis),
+        inverseComponent(mpTransform->yAxis),
+        inverseComponent(mpTransform->zAxis), 0.0f};
+    // 82696BD8 stores the stable generated member's address; it does not
+    // write mGeneratedPosition until the next UpdateParams.
     CgsSound::Logic::Cgs3dEffectControl::AttachEmitterPosition(&mGeneratedPosition);
 }
 
