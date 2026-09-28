@@ -261,10 +261,14 @@ namespace BrnAI
             if (mbIsPlayer)
                 return KF_DESIRED_INRANGE_PLAYER;
 
+            // ROUNDING_RULE rule 3 (L6 AIDRIVE, owner list 2026-09-27): both arms are `fnmsubs f1, f12
+            // (opponent index), f0 (scale), f13 (base)` = -(index * scale - base), ONE rounding
+            // (@0x82796138 style 2, @0x82796168 otherwise). Spelt as the negated fma so a zero result
+            // keeps fnmsubs' sign (-(+0) = -0), as FX-GATE spells ComputeSpeedRatio's fnmsubs.
             const f32 lfOpponent = static_cast<f32>(miOpponentIndex);
             if (meRouteFindingStyle == E_ROUTE_FINDING_ROAD_RAGE)
-                return KF_DESIRED_OPP_BASE_RACE - lfOpponent * KF_DESIRED_OPP_SCALE_RACE;
-            return KF_DESIRED_OPP_BASE_DEFAULT - lfOpponent * KF_DESIRED_OPP_SCALE_DEFAULT;
+                return -std::fmaf(lfOpponent, KF_DESIRED_OPP_SCALE_RACE, -KF_DESIRED_OPP_BASE_RACE);
+            return -std::fmaf(lfOpponent, KF_DESIRED_OPP_SCALE_DEFAULT, -KF_DESIRED_OPP_BASE_DEFAULT);
         }
 
         switch (meSpeedSelectionMethod)
