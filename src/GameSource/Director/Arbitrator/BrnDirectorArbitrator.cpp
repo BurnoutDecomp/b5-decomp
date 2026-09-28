@@ -386,50 +386,47 @@ namespace BrnDirector
             if (mbDoAttractMode)
                 meState = E_STATE_CHANGING_TO_ATTRACT_MODE;
 
-            // ⚠️ GATE: the CRASH_NAV trigger --
-            //     `if ( (mpGameState[257] || mpGameState[432]) && !mpGameState[217] ) {
-            //          mArbStateCrashNav.Prepare(info); mArbStateCrashNav.Update(info);
-            //          meState = E_STATE_CRASH_NAV_ICE_CAMERAS; }`
-            //
-            //   ⛔⛔ THE OLD REASON HERE WAS STALE AND IS CORRECTED (2026-08-29). It read
-            //   "All three keys are bytes in the un-homed GameState block". They are not, and
-            //   have not been for weeks -- all three are named members of BrnDirector::GameState
-            //   today, each at its own asm-attested offset in GameState::Clear:
-            //       [257] == +0x101 -> mbCrashNavShown            (written by
-            //                          MainDirector::PostGuiUpdate from the GUI's 191{0})
-            //       [432] == +0x1B0 -> mbDoing100PercentSequence
-            //       [217] == +0x0D9 -> mbGameIntroFlybyActive
-            //   Read this gate's reason as a bug report, not as a fact: the trigger is
-            //   expressible verbatim right now.
-            //
-            //   ⭐ WHAT THIS GATE ACTUALLY COSTS. This is the OFFLINE PAUSE's world look. The
-            //   GUI pause screens (CrashNavDriverDetails / CrashNavMapMain) post 191{0} on
-            //   OnEnter, which is exactly what raises mbCrashNavShown -- so on the console this
-            //   arm fires the moment the player presses START. ArbStateCrashNav::Prepare
-            //   @0x822660A8 then copies SharedPlaylists::GetPausePlaylist (1256 bytes) into the
-            //   state and ICEMoviePlayer::Loop()s it, which is why the retail pause camera keeps
-            //   MOVING while the sim is frozen; the played camera's CameraEffects hook name then
-            //   reaches BrnGui::EffectsArbitrator through BridgeDirectorToGui, which is why the
-            //   retail pause world is BLACK AND WHITE. Ours is a frozen, full-colour world
-            //   because this arm never runs. (Measured 2026-08-29: world-region frame delta
-            //   0.000 across ~6300 presents of pause, mean per-pixel saturation unchanged.)
-            //
-            //   ⚠️ THE REAL BLOCKERS, in order -- none of them is the GameState:
-            //     1. ArbStateCrashNav::Prepare (X360 @0x822660A8) is NOT reconstructed. Calling
-            //        the vtable +4 slot today would reach the ArbitratorState base, and
-            //        ArbStateCrashNav::Update would then dereference an unallocated
-            //        mRoadRunnerCam handle -- strictly worse than not entering.
-            //     2. GameSource/Director/Arbitrator/States/BrnArbStateCrashNav.cpp does not
-            //        COMPILE (BrnICEMoviePlayer.h:239/243/280 need a complete
-            //        Camera::BehaviourInterpolate) and is not mounted in build_game_exe.bat.
-            //     3. The greyscale half additionally needs BrnGameModule::BridgeDirectorToGui
-            //        (@0x823DD5C0, GameBridgeDirectorToX.cpp) -- which does not exist anywhere in
-            //        b5-decomp -- plus the three Gui/PFX TUs (BrnGuiEffectsArbitrator.cpp,
-            //        BrnPfxHookBlender.cpp, BrnGuiPFXHookNodeBlender.cpp); those three DO compile
-            //        clean today but are unmounted, and are inert without (3)'s bridge.
-            //   CONSEQUENCE: crash navigation (picture paradise) AND the offline pause's moving
-            //   black-and-white world are never entered from here.
-            //   DELETE-WHEN: blockers 1 and 2 are closed (the greyscale needs 3 as well).
+            // ⭐⭐ THE CRASH_NAV TRIGGER -- THE PAUSE CAMERA (OWNERLIST 2026-09-27, lane L5).
+            //   Console 0x8226B0A0..0x8226B100, verbatim:
+            //       lwz r11, 0x24(info)        ; mpGameState
+            //       lbz 0x101 / bne -> test    ; mbCrashNavShown            (GameState +0x101)
+            //       lbz 0x1B0 / beq -> skip    ; mbDoing100PercentSequence  (GameState +0x1B0)
+            //   test: lbz 0xD9 / bne -> skip   ; mbGameIntroFlybyActive     (GameState +0x0D9)
+            //       mArbStateCrashNav vtable +4 (Prepare), then vtable +8 (Update)
+            //       li 4 ; stw 0x44F8           ; meState = E_STATE_CRASH_NAV_ICE_CAMERAS
+            //   It sits after the attract-mode trigger (0x8226B08C) and before the
+            //   render-metrics one (0x8226B104), so a frame that raises both lands on 4.
+            //   The GUI pause screens (CrashNavDriverDetails / CrashNavMapMain) post 191{0} on
+            //   OnEnter; BridgeGuiToDirector turns it into SetGotCrashNavShownEvent and
+            //   MainDirector::PostGuiUpdate raises mbCrashNavShown -- so this arm fires the
+            //   frame after the player presses START. ArbStateCrashNav::Prepare @0x822660A8 then
+            //   loops the shared PAUSE playlist through its ICE movie player (the moving pause
+            //   camera), and ArbStateCrashNav::Update @0x8226DC98 requests "Black_In_BW" /
+            //   "Black_Out_BW" on its camera every frame (the black-and-white world, through
+            //   BridgeDirectorToGui -> GUI 495 -> BrnGui::EffectsArbitrator::StartHook).
+            //   ⛔ The PC carried this arm as a comment until 2026-09-27 behind three blockers
+            //   that had all closed (Prepare bodied, BrnArbStateCrashNav.cpp and the
+            //   GameBridgeDirectorToX.cpp / Gui/PFX TUs mounted): every pause kept the frozen
+            //   gameplay camera in full colour.
+            if ((lrSharedInfo.mpGameState->mbCrashNavShown ||
+                 lrSharedInfo.mpGameState->mbDoing100PercentSequence) &&
+                !lrSharedInfo.mpGameState->mbGameIntroFlybyActive)
+            {
+                mArbStateCrashNav.Prepare(lrSharedInfo);    // vtable +4 @0x8226B0E0
+                mArbStateCrashNav.Update(lrSharedInfo);     // vtable +8 @0x8226B0F8
+                meState = E_STATE_CRASH_NAV_ICE_CAMERAS;    // stw 4, +0x44F8 @0x8226B100
+
+                // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. One line per entry.
+                if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[pause-cam] arbitrator NORMAL -> CRASH_NAV_ICE_CAMERAS (crashNavShown "
+                        << (lrSharedInfo.mpGameState->mbCrashNavShown ? 1 : 0) << " 100pct "
+                        << (lrSharedInfo.mpGameState->mbDoing100PercentSequence ? 1 : 0)
+                        << " paused " << (lbPaused ? 1 : 0) << ") crash-nav active "
+                        << (mArbStateCrashNav.IsActive() ? 1 : 0) << "\n";
+                }
+            }
 
             // ⚠️ GATE: the RENDER_METRICS trigger --
             //     `if ( mbDoRenderMetrics ) { meState = E_STATE_RENDER_METRICS;
@@ -453,21 +450,35 @@ namespace BrnDirector
         // ---- 3: CRASH_NAV --------------------------------------------------------------
         case E_STATE_CRASH_NAV:
             lrCameraInOut = mStateContainer.GetCurrentState()->GetCamera();
-            // ⚠️ GATE: `if ( !mpGameState[257] ) meState = E_STATE_NORMAL;` -- un-homed
-            //   GameState byte. CONSEQUENCE: once entered (which the trigger gate above
-            //   prevents today) this state would not exit. DELETE-WHEN: as (a).
+            // Console 0x8226B3D8..0x8226B3EC: `lwz 0x24(info) ; lbz 0x101 ; bne ; li 2 ;
+            // stw 0x44F8` -- back to NORMAL once the crash nav is no longer shown. (The old gate
+            // here called GameState +0x101 "un-homed"; it is the named mbCrashNavShown.)
+            if (!lrSharedInfo.mpGameState->mbCrashNavShown)
+                meState = E_STATE_NORMAL;
             break;
 
         // ---- 4: CRASH_NAV_ICE_CAMERAS --------------------------------------------------
         case E_STATE_CRASH_NAV_ICE_CAMERAS:
-            // X360 asserts mArbStateCrashNav.IsActive() (BrnDirectorArbitrator.cpp:295) --
-            // ⚠️ GATE: IsActive() is DWARF-listed but has no committed declaration on
-            //   ArbStateCrashNav (its header records the omission), so the tripwire is not
-            //   reproduced. Non-gating on the console too.
+            // Console 0x8226B358..0x8226B3BC: assert IsActive() (BrnDirectorArbitrator.cpp:295,
+            // li r5 0x127), tick the state (vtable +8), take its camera (arb +0x3920 == the
+            // state's +0x10 Camera), and drop back to NORMAL on the frame it has released
+            // itself (ArbStateCrashNav::Release zeroes meState; the same `lwz 0x4188 ; cmpwi 0`).
+            CGS_ASSERT(mArbStateCrashNav.IsActive(), "mArbStateCrashNav.IsActive()");
             mArbStateCrashNav.Update(lrSharedInfo);
             lrCameraInOut = mArbStateCrashNav.GetCamera();
-            // ⚠️ GATE: the `if ( !mArbStateCrashNav.<active> ) meState = E_STATE_NORMAL;` exit,
-            //   same missing accessor. DELETE-WHEN: ArbStateCrashNav::IsActive is declared.
+            if (!mArbStateCrashNav.IsActive())
+            {
+                meState = E_STATE_NORMAL;                   // li 2 ; stw 0x44F8 @0x8226B3B8
+
+                // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. One line per exit.
+                if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[pause-cam] arbitrator CRASH_NAV_ICE_CAMERAS -> NORMAL (crashNavShown "
+                        << (lrSharedInfo.mpGameState->mbCrashNavShown ? 1 : 0)
+                        << " paused " << (lbPaused ? 1 : 0) << ")\n";
+                }
+            }
             break;
 
         // ---- 5: CHANGING_TO_ATTRACT_MODE  /  6: ATTRACT_MODE  ⭐ THE DJ FLY-BY ----------
