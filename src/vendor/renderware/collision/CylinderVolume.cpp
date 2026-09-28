@@ -26,18 +26,11 @@
 // 2026-08-18 and re-dumped from the image again this cluster
 // (scratchpad/waveQ6/ida_vt2/out.json).
 //
-// Three functions are still NOT homed here (see the header for the measured
-// reasons; every insn count below was dumped this cluster by a targeted
-// headless idat run on a PRIVATE .i64 copy, because none of the three has a
-// per-address export JSON):
-//   LineSegIntersect     @ 0x82BAF688 --   8 insns, FULLY RECOVERED, but it is
-//                                          a pure tail-call dispatcher onto the
-//                                          two kernels below, and neither has a
-//                                          body anywhere in the tree, so
-//                                          landing it = two LNK2019s.
-//   FatLineSegIntersect  @ 0x82BAEB10 -- 733 insns, register-level VMX kernel
-//   ThinLineSegIntersect @ 0x82BADCE0 -- 441 insns, register-level VMX kernel
-// Left BLOCKED per the project's no-fabrication rule.
+// The line kernel is homed in LineSegIntersect.cpp beside the other volumes'
+// (2026-09-28, owner's list, lane L2 CAMCOLLIDE, stage (c); see the header):
+//   LineSegIntersect     @ 0x82BAF688 --   8 insns, the tail-call dispatcher
+//   FatLineSegIntersect  @ 0x82BAEB10 -- 733 insns
+//   ThinLineSegIntersect @ 0x82BADCE0 -- 441 insns
 // ===========================================================================
 
 namespace rw

@@ -27,7 +27,11 @@ from fxgs_common import Tree, definition, code_only, compile_and_run, report
 
 C = "src/vendor/renderware/collision/"
 LSI_CPP = C + "LineSegIntersect.cpp"
-HEADERS = [C + "CollisionVolume.hpp", C + "CapsuleVolume.hpp", C + "LineSegIntersect.hpp", C + "LineSegKernelMath.hpp"]
+HEADERS = [C + "CollisionVolume.hpp", C + "CapsuleVolume.hpp", C + "LineSegIntersect.hpp", C + "LineSegKernelMath.hpp",
+           C + "CylinderVolume.hpp", C + "AALineClipper.hpp"]
+# LineSegIntersect.cpp holds the cylinder's line kernel since 2026-09-28 (lane L2, stage (c)): its fat arm builds an
+# AALineClipper, so the revision's AALineClipper.cpp links beside it.
+AALC_CPP = C + "AALineClipper.cpp"
 VTABLES = C + "VolumeVTables.cpp"
 KERNELS = ["RwBool SphereVolume::LineSegIntersect(", "RwBool BoxVolume::LineSegIntersect(",
            "RwBool CapsuleVolume::LineSegIntersect(", "s32 rwcPlaneLineSegIntersect("]
@@ -92,12 +96,18 @@ def numeric(tree):
             print("NUMERIC: cannot build -- " + path + " is absent")
             return None
         shadow[path] = text
+    aalc_text = _read(tree, AALC_CPP)
     with tempfile.TemporaryDirectory(prefix="brn_fxfu_lk_") as directory:
         lsi = Path(directory) / "LineSegIntersect.cpp"
         lsi.write_text(lsi_text, encoding="utf-8")
+        sources = [lsi]
+        if aalc_text:
+            aalc = Path(directory) / "AALineClipper.cpp"
+            aalc.write_text(aalc_text, encoding="utf-8")
+            sources.append(aalc)
         return compile_and_run(Path(__file__).with_name("FxFollowupsLineKernels.cpp"), "fxfu_lk_unused.inc",
                                "// not included: the kernels come from LineSegIntersect.cpp\n",
-                               "FxFollowupsLineKernels", shadow=shadow, extra_sources=(lsi,))
+                               "FxFollowupsLineKernels", shadow=shadow, extra_sources=tuple(sources))
 
 
 def main():

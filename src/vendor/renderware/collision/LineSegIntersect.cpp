@@ -3,6 +3,7 @@
 #include "vendor/renderware/collision/CollisionVolume.hpp"    // SphereVolume / BoxVolume (stage (b) kernels)
 #include "vendor/renderware/collision/CapsuleVolume.hpp"      // CapsuleVolume (stage (b) kernel)
 #include "vendor/renderware/collision/CylinderVolume.hpp"     // CylinderVolume (stage (c) kernel)
+#include "vendor/renderware/collision/AALineClipper.hpp"      // AALineClipper (the fat cylinder's torus clip)
 #include "vendor/renderware/collision/LineSegKernelMath.hpp"  // the kernels' console rounding (stage (b))
 
 #include <cmath>     // sqrt, fabs, powf
@@ -23,8 +24,11 @@
 //   rw::collision::SphereVolume::LineSegIntersect  @ 0x82BA82C8 (2026-09-25, stage (b) -- at the foot)
 //   rw::collision::BoxVolume::LineSegIntersect     @ 0x82BA9478 (2026-09-25, stage (b) -- at the foot)
 //   rw::collision::CapsuleVolume::LineSegIntersect @ 0x82BAFCF8 (2026-09-25, stage (b) -- at the foot)
-// The stage (b) bodies do NOT follow the lowering note below: they round per instruction (LineSegKernelMath.hpp,
-// scratch ROUNDING_RULE.md) and keep all four lanes.
+//   rw::collision::CylinderVolume::ThinLineSegIntersect @ 0x82BADCE0 (2026-09-28, owner's list L2, stage (c))
+//   rw::collision::CylinderVolume::FatLineSegIntersect  @ 0x82BAEB10 (2026-09-28, stage (c))
+//   rw::collision::CylinderVolume::LineSegIntersect     @ 0x82BAF688 (2026-09-28, stage (c): the dispatcher)
+// The stage (b) / (c) bodies do NOT follow the lowering note below: they round per instruction
+// (LineSegKernelMath.hpp, scratch ROUNDING_RULE.md) and keep all four lanes.
 //
 // Every hand-vectorised body is lowered to portable scalar maths per the
 // committed Feature / FeatureEdge / AALineClipper precedent; branch polarity,
@@ -1985,6 +1989,253 @@ RwBool CylinderVolume::ThinLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2
         arResult.normal   = FrameDirection(maFrame, lvNormal);     // 0x82BAE38C..0x82BAE39C
     }
     return 1;                                                      // li r3, 1 @0x82BAE3A4
+}
+
+// ===========================================================================
+// rw::collision::CylinderVolume::FatLineSegIntersect @ 0x82BAEB10 (733 insns) -- LANDED 2026-09-28 (owner's list,
+// lane L2 CAMCOLLIDE, stage (c)). The fattened arm of the cylinder's line kernel (the dispatcher below sends every
+// call whose mfFatness + afFatness is not exactly 0 here): the cylinder |z| <= h, radius r, grown by
+// fat = mfFatness + afFatness (fadds @0x82BAEC94), its cap edges rounded by a torus of major radius r, minor fat.
+//   0x82BAEB68             result.v = this; the frame composed / inverted / the points into it, as the thin arm
+//   0x82BAED38 / ED70       both points above h + fat: a miss;  0x82BAEDB4 / EDEC  both below -h - fat: a miss
+//   0x82BAEE00..0x82BAEE84  the start radially outside -- x^2 + y^2 > fat + r^2 (fadds f0 = f31 + f13: NOT
+//                           (r + fat)^2, CONSOLE QUIRK) -- and moving away: (T - start) . delta < 0, T the volume's
+//                           OWN translation row (vsubfp v0, v8, v1) with ALL THREE lanes dotted (the thin arm zeroes
+//                           z; this one does not) -- CONSOLE QUIRK, reproduced
+//   0x82BAEE88..0x82BAEFA4  the entry cap plane, whatever the start's height (no slab test here, unlike the thin
+//                           arm): n = the axis, negated in every lane when delta.z > 0; t = RefinedRecip(n.delta) *
+//                           ((h + fat) - n.start); p = delta * t + start; a flat-cap hit when p.x^2 + p.y^2
+//                           (vmulfp128 / vmaddfp) < r^2 * 1.001 -- the bound is `fmul f12, f13, f0` against the
+//                           DOUBLE dbl_821803A8 == 0x3FF004189374BC6A (1.001) and stays a double; `fcmpu ; bge`
+//                           (0x82BAEFA4) is TAKEN on an unordered compare. Hit: lineParam t, position p, normal n
+//   0x82BAEFB8..0x82BAEFCC  the torus is wanted (r28) when that radius is also < (r + fat)^2 (fadds / fmuls)
+//   0x82BAEFD0..0x82BAF198  the barrel of radius r + fat (rwcCylinderLineSegIntersect, 1.0, invert 0,
+//                           ignoreInside 0): t = num / den, p = delta * t + start; h > p.z > -h is a barrel hit
+//                           (position p, lineParam t, normal the radial (p.x, p.y, 0, p.w) through RefinedRsqrt);
+//                           h + fat > p.z > -h - fat wants the torus, on the cap side of p.z (the axis when
+//                           p.z > 0, else its negation)
+//   0x82BAF1E4..0x82BAF584  the torus: an AALineClipper over the box 1.5 * (-(r + fat), -(r + fat), -fat) ..
+//                           1.5 * (r + fat, r + fat, fat) about the cap centre n * h; its clip interval
+//                           [max(tlo.x, tlo.y, tlo.z, 0), min(thi.x, thi.y, thi.z, 1)] by the console's fsel
+//                           chains; rwcTorusLineSegIntersect on the clipped segment (start delta * t0 + rel, a
+//                           vmaddcfp128; direction delta * (t1 - t0)); taken when its root u is below the result's
+//                           CURRENT lineParam (the memory as it stands -- `lfs f13, 0x40(r29)` @0x82BAF3E4) or no hit
+//                           was made yet; t = (t1 - t0) * u + t0 (fmadds); p = delta * t + start; the normal
+//                           from the ring point r * radial / |radial| (|radial| by vrsqrtefp + 2 steps, 0 when the
+//                           radial is 0 -- vsel; its reciprocal by vrefp + 2 steps) to p, normalised
+//   0x82BAF58C..0x82BAF668  ALWAYS on the way out (hit or not): position / normal out of the frame -- read from the
+//                           result record as it stands -- then position -= normal * afFatness
+// FLAG (PC-platform): rwcTorusLineSegIntersect's SolveQuarticRoots evaluates its five inlined VMX powf cascades as
+// powf (the tree's standing convention, see VmxPowF), so its damped Newton walk can stop on a neighbouring iterate:
+// the torus arm agrees with the console to < 1e-4 on well-conditioned rows and ~2e-3 on a line tangent to the tube
+// (tests/run_l2_cylinder_line.py, check T); the early-outs, the flat cap, the barrel and the way out are bit for bit
+// (AALineClipper is the console's since 8b2adf55). FLAG (rule 6): the VMX denormal flush is not modelled.
+// ===========================================================================
+RwBool CylinderVolume::FatLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+                                           VolumeLineSegIntersectResult& arResult, f32 afFatness) const
+{
+    using namespace linemath;
+    using linemath::Dot3; using linemath::MakeVec4; using linemath::Sub;   // this TU has helpers of these names
+
+    const Vec4 lvBase = MakeVec4(0.0f, 0.0f, 0.0f, 0.0f);          // var_230
+    const Vec4 lvAxis = MakeVec4(0.0f, 0.0f, 1.0f, 0.0f);          // var_220
+    arResult.v = reinterpret_cast<uintptr_t>(this);                // stw r30, 0(r29) @0x82BAEB68
+
+    Vec4 lavFrame[4];
+    if (lpTransform != 0)
+    {
+        ComposeFrame(maFrame, lpTransform, lavFrame);              // 0x82BAEB9C..0x82BAEC30
+    }
+    else
+    {
+        lavFrame[0] = maFrame[0];
+        lavFrame[1] = maFrame[1];
+        lavFrame[2] = maFrame[2];
+        lavFrame[3] = maFrame[3];
+    }
+    const LocalFrame lLocal = InvertFrame(lavFrame);               // 0x82BAEC68..0x82BAECE8
+    const Vec4 lvStart = ToLocal(lLocal, arPt1);                   // v1 (var_210)
+    const Vec4 lvEnd   = ToLocal(lLocal, arPt2);                   // v0 (var_1A0)
+    const Vec4 lvDelta = Sub(lvEnd, lvStart);                      // vsubfp v2 @0x82BAED0C (var_200)
+    const f32  lfFat           = mfFatness + afFatness;            // fadds f31 @0x82BAEC94
+    const f32  lfHalfHeight    = mfHalfHeight;                     // f28 (+0x44)
+    const f32  lfRadiusSq      = mfRadius * mfRadius;              // fmuls f13 @0x82BAECBC
+    const f32  lfCapHeight     = lfFat + lfHalfHeight;             // fadds f30 @0x82BAECCC
+    const f32  lfNegHalfHeight = -lfHalfHeight;                    // fneg f26 @0x82BAED88
+    const f32  lfNegCapHeight  = lfNegHalfHeight - lfFat;          // fsubs f0 @0x82BAED94
+
+    if (lvStart.z > lfCapHeight && lvEnd.z > lfCapHeight)          // 0x82BAED38 / 0x82BAED70
+    {
+        return 0;
+    }
+    if (lfNegCapHeight > lvStart.z && lfNegCapHeight > lvEnd.z)    // 0x82BAEDB4 / 0x82BAEDEC
+    {
+        return 0;
+    }
+
+    const Vec4 lvStartRadial = MakeVec4(lvStart.x, lvStart.y, 0.0f, lvStart.w);   // stfs f29, var_258
+    if (Dot3(lvStartRadial, lvStartRadial) > lfFat + lfRadiusSq)  // fadds @0x82BAEE00 ; vcmpgtfp. @0x82BAEE3C
+    {
+        if (0.0f > Dot3(Sub(maFrame[3], lvStart), lvDelta))       // vsubfp v0, v8, v1 @0x82BAEE4C ; @0x82BAEE78
+        {
+            return 0;
+        }
+    }
+
+    RwBool lbHit = 0;                                              // r27
+    bool   lbTorus = false;                                        // r28
+    Vec4   lvCapNormal = (lvDelta.z > 0.0f)                        // vcmpgtfp. @0x82BAEEC4 -> v126
+                       ? MakeVec4(-lvAxis.x, -lvAxis.y, -lvAxis.z, -lvAxis.w)   // vxor128 0x80000000 @0x82BAEEDC
+                       : lvAxis;
+    const f32 lfApproach      = Dot3(lvCapNormal, lvDelta);        // vmsum3fp128 v0 @0x82BAEEE0
+    const f32 lfStartDistance = Dot3(lvCapNormal, lvStart);        // vmsum3fp128 v13 @0x82BAEEE8
+    static const f64 KD_CAP_DISC_SLACK = 1.001;                    // dbl_821803A8 == 0x3FF004189374BC6A
+    const f64 ldCapDiscLimit = static_cast<f64>(lfRadiusSq) * KD_CAP_DISC_SLACK;   // fmul f12, f13, f0 (double)
+    const f32 lfCapT = RefinedRecip(lfApproach) * (lfCapHeight - lfStartDistance);   // fsubs @0x82BAEF24 ; vmulfp128 @0x82BAEF50
+    const Vec4 lvCapPoint = MaddSplat(lvDelta, lfCapT, lvStart);   // vmaddfp @0x82BAEF7C
+    const f32 lfCapRadialSq = std::fma(lvCapPoint.x, lvCapPoint.x, lvCapPoint.y * lvCapPoint.y);   // @0x82BAEF94
+    if (static_cast<f64>(lfCapRadialSq) < ldCapDiscLimit)          // fcmpu ; bge @0x82BAEFA4 (NaN: on)
+    {
+        arResult.lineParam = lfCapT;                               // stfs f0, 0x40(r29) @0x82BAEFA8
+        arResult.position  = lvCapPoint;                           // stvx128 v0 @0x82BAEFAC
+        arResult.normal    = lvCapNormal;                          // stvx128 v126 @0x82BAEFB0
+        lbHit = 1;                                                 // li r27, 1 @0x82BAF588
+    }
+    else
+    {
+        const f32 lfFatRadius = mfRadius + lfFat;                  // fadds @0x82BAEFBC
+        if (lfCapRadialSq < lfFatRadius * lfFatRadius)             // fmuls ; fcmpu ; bge @0x82BAEFC8
+        {
+            lbTorus = true;                                        // li r28, 1
+        }
+
+        Fraction lDist;
+        if (rwcCylinderLineSegIntersect(&lDist, KF_LINE_ONE, mfRadius + lfFat, 0, 0, lvStart, lvDelta, lvBase,
+                                        lvAxis) == 1)              // @0x82BAEFF4 ; cmpwi r3, 1 ; bne @0x82BAF00C
+        {
+            const f32 lfT = lDist.num / lDist.den;                 // fdivs @0x82BAF020
+            const Vec4 lvPoint = MaddSplat(lvDelta, lfT, lvStart); // vmaddfp @0x82BAF058
+            if (lfHalfHeight > lvPoint.z && lvPoint.z > lfNegHalfHeight)   // 0x82BAF068 / 0x82BAF09C
+            {
+                arResult.position  = lvPoint;                      // stvx128 v0, r29, r25 @0x82BAF0B0
+                arResult.lineParam = lfT;                          // stfs f0, 0x40(r29) @0x82BAF0B8
+                lbHit = 1;                                         // li r27, 1 @0x82BAF0C4
+                const Vec4 lvRadial = MakeVec4(lvPoint.x, lvPoint.y, 0.0f, lvPoint.w);   // stfs f29, var_258
+                arResult.normal = MulSplat(lvRadial, RefinedRsqrt(Dot3(lvRadial, lvRadial)));   // 0x82BAF0E4..0x82BAF11C
+            }
+            else if (lfCapHeight > lvPoint.z && lvPoint.z > -lfCapHeight)   // 0x82BAF148 / 0x82BAF180 (fneg f0, f30)
+            {
+                lbTorus = true;                                    // li r28, 1 @0x82BAF198
+                lvCapNormal = (lvPoint.z > 0.0f)                   // vcmpgtfp. @0x82BAF1B8
+                            ? lvAxis                               // vmr128 v126, v124
+                            : MakeVec4(-lvAxis.x, -lvAxis.y, -lvAxis.z, -lvAxis.w);   // vxor128 @0x82BAF1D8
+            }
+        }
+
+        if (lbTorus)                                               // cmplwi r28, 0 ; beq @0x82BAF1E0
+        {
+            // ---- the rounded cap edge (0x82BAF1E4) ----
+            const Vec4 lvCapCentre = MulSplat(lvCapNormal, lfHalfHeight);   // vmulfp128 @0x82BAF278
+            const f32  lfBoxScale  = 1.5f;                         // flt_82004D04 == 0x3FC00000
+            const f32  lfFatR      = mfRadius + lfFat;             // fadds f11 / f13 @0x82BAF260 / 0x82BAF26C
+            const f32  lfNegFatR   = -mfRadius - lfFat;            // fneg ; fsubs @0x82BAF290 / 0x82BAF29C
+            const Vec4 lvBoxMax = MulSplat(MakeVec4(lfFatR, lfFatR, lfFat, 0.0f), lfBoxScale);        // v123
+            const Vec4 lvBoxMin = MulSplat(MakeVec4(lfNegFatR, lfNegFatR, -lfFat, 0.0f), lfBoxScale); // v122
+            const Vec4 lvRelStart = Sub(lvStart, lvCapCentre);     // vsubfp128 v124 @0x82BAF2B4
+            const Vec4 lvRelEnd   = MakeVec4(lvRelStart.x + lvDelta.x, lvRelStart.y + lvDelta.y,
+                                             lvRelStart.z + lvDelta.z, lvRelStart.w + lvDelta.w);   // vaddfp128 @0x82BAF2D0
+
+            AALineClipper::Aabb lBox;
+            lBox.mMin.x = lvBoxMin.x; lBox.mMin.y = lvBoxMin.y; lBox.mMin.z = lvBoxMin.z; lBox.mMin.w = lvBoxMin.w;
+            lBox.mMax.x = lvBoxMax.x; lBox.mMax.y = lvBoxMax.y; lBox.mMax.z = lvBoxMax.z; lBox.mMax.w = lvBoxMax.w;
+            AALineClipper::Vec4 lClipStart = { lvRelStart.x, lvRelStart.y, lvRelStart.z, lvRelStart.w };
+            AALineClipper::Vec4 lClipEnd   = { lvRelEnd.x, lvRelEnd.y, lvRelEnd.z, lvRelEnd.w };
+            const AALineClipper lClipper(lClipStart, lClipEnd, &lBox);   // @0x82BAF2D8
+
+            // 0x82BAF2DC..0x82BAF310: the box's slab parameters -- ((min - pad) - clipMin) * recip and
+            // ((max + pad) - clipMin) * recip, per lane, then lane-wise min / max.
+            const Vec4 lvPad   = MakeVec4(lClipper.mPadExtent.x, lClipper.mPadExtent.y, lClipper.mPadExtent.z,
+                                          lClipper.mPadExtent.w);
+            const Vec4 lvOrg   = MakeVec4(lClipper.mClipMin.x, lClipper.mClipMin.y, lClipper.mClipMin.z,
+                                          lClipper.mClipMin.w);
+            const Vec4 lvRecip = MakeVec4(lClipper.mRecipSpan.x, lClipper.mRecipSpan.y, lClipper.mRecipSpan.z,
+                                          lClipper.mRecipSpan.w);
+            const Vec4 lvLo = Sub(Sub(lvBoxMin, lvPad), lvOrg);    // vsubfp128 / vsubfp
+            const Vec4 lvHi = Sub(MakeVec4(lvBoxMax.x + lvPad.x, lvBoxMax.y + lvPad.y, lvBoxMax.z + lvPad.z,
+                                           lvBoxMax.w + lvPad.w), lvOrg);   // vaddfp128 / vsubfp
+            const Vec4 lvTa = MakeVec4(lvRecip.x * lvLo.x, lvRecip.y * lvLo.y, lvRecip.z * lvLo.z, lvRecip.w * lvLo.w);
+            const Vec4 lvTb = MakeVec4(lvRecip.x * lvHi.x, lvRecip.y * lvHi.y, lvRecip.z * lvHi.z, lvRecip.w * lvHi.w);
+            const Vec4 lvTlo = MakeVec4(VmxMin(lvTa.x, lvTb.x), VmxMin(lvTa.y, lvTb.y), VmxMin(lvTa.z, lvTb.z), 0.0f);
+            const Vec4 lvThi = MakeVec4(VmxMax(lvTa.x, lvTb.x), VmxMax(lvTa.y, lvTb.y), VmxMax(lvTa.z, lvTb.z), 0.0f);
+
+            // 0x82BAF320..0x82BAF368: the entry = max(tlo.x, tlo.y, tlo.z, 0), the exit = min(thi.x, thi.y,
+            // thi.z, 1), each step an fsubs + fsel (fsel d, a, b, c == a >= 0 ? b : c; a NaN takes c).
+            f32 lfEnter = Fsel(lvTlo.x - lvTlo.y, lvTlo.x, lvTlo.y);
+            f32 lfExit  = Fsel(lvThi.x - lvThi.y, lvThi.y, lvThi.x);
+            lfEnter = Fsel(lfEnter - lvTlo.z, lfEnter, lvTlo.z);
+            lfExit  = Fsel(lfExit - lvThi.z, lvThi.z, lfExit);
+            lfEnter = Fsel(-lfEnter, KF_LINE_ZERO, lfEnter);       // fneg ; fsel f30, f12, f29, f0
+            lfExit  = Fsel(KF_LINE_ONE - lfExit, lfExit, KF_LINE_ONE);   // fsubs ; fsel f0, f11, f13, f27
+
+            if (lfEnter < lfExit)                                  // fcmpu ; bge @0x82BAF370 (NaN: none)
+            {
+                const f32 lfSpan = lfExit - lfEnter;               // fsubs f27 @0x82BAF378
+                const Vec4 lvClipDirection = MulSplat(lvDelta, lfSpan);                 // vmulfp128 @0x82BAF3CC
+                const Vec4 lvClipStart = MaddSplat(lvDelta, lfEnter, lvRelStart);       // vmaddcfp128 @0x82BAF3D4
+                f32 lfRoot = KF_LINE_ZERO;                         // stfs f29, var_250
+                if (rwcTorusLineSegIntersect(lfRoot, lvClipStart, lvClipDirection, mfRadius, lfFat) == 1   // @0x82BAF3D8
+                    && (lfRoot < arResult.lineParam || lbHit == 0))   // fcmpu ; blt @0x82BAF3F0 ; cmplwi r27 @0x82BAF3F4
+                {
+                    const f32 lfT = std::fma(lfSpan, lfRoot, lfEnter);                   // fmadds @0x82BAF408
+                    arResult.lineParam = lfT;                      // stfs f0, 0x40(r29) @0x82BAF418
+                    const Vec4 lvPoint = MaddSplat(lvDelta, lfT, lvStart);              // vmaddfp @0x82BAF46C
+                    arResult.position = lvPoint;                   // stvx128 v11, r29, r25 @0x82BAF474
+                    const Vec4 lvRel = Sub(lvPoint, lvCapCentre);  // vsubfp @0x82BAF470
+                    const Vec4 lvRadial = MakeVec4(lvRel.x, lvRel.y, 0.0f, lvRel.w);    // stfs f29, var_208
+                    const f32 lfRadialSq = Dot3(lvRadial, lvRadial);                    // vmsum3fp128 @0x82BAF4A0
+                    f32 lfRadialLength = lfRadialSq * RefinedRsqrt(lfRadialSq);         // vmulfp128 @0x82BAF508
+                    if (lfRadialSq == 0.0f)                        // vcmpeqfp128 @0x82BAF4C4 ; vsel @0x82BAF50C
+                    {
+                        lfRadialLength = 0.0f;
+                    }
+                    const Vec4 lvRingOffset = MulSplat(MulSplat(lvRadial, RefinedRecip(lfRadialLength)), mfRadius);   // 0x82BAF51C..0x82BAF540
+                    const Vec4 lvTube = Sub(Sub(lvPoint, lvCapCentre), lvRingOffset);   // vsubfp @0x82BAF504 / 0x82BAF548
+                    arResult.normal = MulSplat(lvTube, RefinedRsqrt(Dot3(lvTube, lvTube)));   // 0x82BAF54C..0x82BAF580
+                    lbHit = 1;                                     // li r27, 1 @0x82BAF588
+                }
+            }
+        }
+    }
+
+    // ---- out of the frame, hit or not (0x82BAF58C): the result record as it stands ----
+    if (lpTransform != 0)
+    {
+        arResult.position = FramePoint(lavFrame, arResult.position);   // vmaddfp128 chain @0x82BAF5B4..0x82BAF5CC
+        arResult.normal   = FrameDirection(lavFrame, arResult.normal);
+    }
+    else
+    {
+        arResult.position = FramePoint(maFrame, arResult.position);    // 0x82BAF600..0x82BAF610
+        arResult.normal   = FrameDirection(maFrame, arResult.normal);  // 0x82BAF618..0x82BAF62C
+    }
+    arResult.position = Sub(arResult.position, MulSplat(arResult.normal, afFatness));   // 0x82BAF660 / 0x82BAF664
+    return lbHit;
+}
+
+// ===========================================================================
+// rw::collision::CylinderVolume::LineSegIntersect @ 0x82BAF688 (8 insns) -- the descriptor's lineSegIntersect slot
+// (VolumeVTables.cpp, unparked 2026-09-28): `lfs f0, 0x50(r3) ; fadds f13, f0, f1 ; fcmpu f13, 0.0 (flt_82001CC0) ;
+// bne` -- a total fatness of exactly 0 tail-calls the thin arm, anything else (a NaN included: bne is taken on an
+// unordered compare) the fat arm, with the arguments untouched.
+// ===========================================================================
+RwBool CylinderVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+                                        VolumeLineSegIntersectResult& arResult, f32 afFatness) const
+{
+    if (mfFatness + afFatness != 0.0f)
+    {
+        return FatLineSegIntersect(arPt1, arPt2, lpTransform, arResult, afFatness);   // b 0x82BAEB10
+    }
+    return ThinLineSegIntersect(arPt1, arPt2, lpTransform, arResult, afFatness);      // b 0x82BADCE0
 }
 
 } // namespace collision

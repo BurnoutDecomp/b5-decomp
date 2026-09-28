@@ -103,12 +103,15 @@
 //  getInterval         82BAC980 ✅ 82BAC980 ✅  82BAC980 ✅   82BAC980 ✅ 82BAC980 ✅   0 (image)
 //  getMaximumFeature   82BA81B0 ✅ 82BAF808 ✅  82BBACD0 ✅   82BA87F0 ✅ 82BAC988 ✅   82B0F1B8 ✅
 //  createGPInstance    82BA8100 ✅ 82BAF6F0 ✅  82BBAA00 ✅   82BA92E8 ✅ 82BAC7F8 ⭐   82B0F1B8 ✅
-//  lineSegIntersect    82BA82C8 ⛔P 82BAFCF8 ⛔P 82BBB970 ✅   82BA9478 ⛔P 82BAF688 ⛔P  0 (image)
+//  lineSegIntersect    82BA82C8 ✅ 82BAFCF8 ✅  82BBB970 ✅   82BA9478 ✅ 82BAF688 ✅   0 (image)
 //  release             82AD5078 ✅ 82AD5078 ✅  82AD5078 ✅   82AD5078 ✅ 82AD5078 ✅   82AD5078 ✅
 //
 //  ✅ = bound to a real body (36 of the 40 slots the image binds).
 //  UPDATED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)): the lineSegIntersect slots of SPHERE (82BA82C8),
 //       CAPSULE (82BAFCF8) and BOX (82BA9478) are bound too -- 39 of the 40; CYLINDER (82BAF688) stays parked.
+//  UPDATED 2026-09-28 (owner's list, lane L2 CAMCOLLIDE, stage (c)): CYLINDER's lineSegIntersect (82BAF688) is
+//       bound -- all 40 of the slots the image binds; nothing is parked. The dispatcher and its two kernels
+//       (ThinLineSegIntersect 82BADCE0 / FatLineSegIntersect 82BAEB10) are in LineSegIntersect.cpp.
 //  ⭐ = bound 2026-08-19 by wave Q6 cluster C4, from bodies landed the same day in
 //       TriangleVolume.cpp / CylinderVolume.cpp. Both were wave-Q5 parks; the counts moved
 //       34 -> 36 bound and 6 -> 4 parked. The per-type slot masks the run-time descriptor
@@ -394,6 +397,14 @@ namespace
         return AsCylinder(lpV)->CreateGPInstance(arInstance, lpTransform);
     }
 
+    // @ 0x82BAF688 CylinderVolume::LineSegIntersect -- bound 2026-09-28 (owner's list, lane L2 CAMCOLLIDE, stage
+    // (c)); the dispatcher and its two kernels are in LineSegIntersect.cpp.
+    RwBool CylinderLineSegIntersect(const Volume* lpV, const Vec4& arPt1, const Vec4& arPt2,
+                                    const Vec4* lpTransform, VolumeLineSegIntersectResult& arResult, f32 afFatness)
+    {
+        return AsCylinder(lpV)->LineSegIntersect(arPt1, arPt2, lpTransform, arResult, afFatness);
+    }
+
     // -----------------------------------------------------------------------------------
     // [6] AGGREGATE -- unk_82F919D0. Bodies in AggregateVolume.cpp.
     // -----------------------------------------------------------------------------------
@@ -502,22 +513,14 @@ const Volume::VTable gVolumeHandler_82F91894 =                  // type 5 CYLIND
     // rodata. That was stale in the helpful direction: the table has been homed as
     // g_aGPVolumeMethods since 2026-08-18, and its CYLINDER row was re-dumped this cluster.)
     CylinderCreateGPInstance,               // 82BAC7F8  CylinderVolume::CreateGPInstance
-    // ⛔ STILL PARKED -- CylinderVolume::LineSegIntersect @0x82BAF688, but the park is now
-    // MEASURED rather than unknown. Wave Q5 could only say "no per-address export JSON, so it
-    // needs a targeted headless idat run before anyone can even size it". That run happened
-    // (scratchpad/waveQ6/ida_vt2/): the function is EIGHT instructions and is recovered in
-    // full -- a pure two-way TAIL-CALL dispatcher, `mfFatness + afFatness == 0.0f` (the
-    // compared scalar flt_82001CC0 re-dumped as word 0x00000000) picking
-    // CylinderVolume::ThinLineSegIntersect @0x82BADCE0, anything else
-    // CylinderVolume::FatLineSegIntersect @0x82BAEB10.
-    // THE BLOCKER IS NOW EXACT, AND IT IS NOT THE DISPATCHER: neither kernel has a body
-    // anywhere in the tree (441 and 733 instructions respectively, both measured, both
-    // register-allocated VMX over rwcCylinderLineSegIntersect / rwcTorusLineSegIntersect /
-    // AALineClipper). Landing the eight instructions into the already-mounted
-    // CylinderVolume.cpp would plant two guaranteed LNK2019s that `cl /c` cannot see
-    // (AGENTS gotcha 12), so the slot stays an honest NULL until the kernels land. The whole
-    // recovered dispatcher is written out in CylinderVolume.hpp's BLOCKED banner.
-    0,
+    // ✅ UNPARKED 2026-09-28 (owner's list, lane L2 CAMCOLLIDE, stage (c)). The park read: the
+    // eight-instruction dispatcher (`mfFatness + afFatness == 0.0f`, flt_82001CC0 == 0x00000000:
+    // ThinLineSegIntersect @0x82BADCE0, anything else FatLineSegIntersect @0x82BAEB10) had no
+    // bodies to tail-call. All three are in LineSegIntersect.cpp now, checked against the ARTIST
+    // words run on emu64 (tests/run_l2_cylinder_line.py). Until this slot was bound, a camera line
+    // test that staged a cylinder hit VolumeLineQuery::GetIntersections' LOUD trap and the
+    // cylinder was not tested.
+    CylinderLineSegIntersect,               // 82BAF688  CylinderVolume::LineSegIntersect
     FoldedReleaseEmptyBody,                  // 82AD5078
     "CylinderVolume",
     0

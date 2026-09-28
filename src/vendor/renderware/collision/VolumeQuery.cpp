@@ -1012,10 +1012,11 @@ u32 VolumeLineQuery::GetIntersections()
                 GetVolumeDescriptor(lpPrimitive)->mpfnLineSegIntersect;
             if (lpfnLineSegIntersect == 0)
             {
-                // [PC TRAP, NOT X360] the descriptor's lineSegIntersect slot has no host body: CYLINDER @0x82BAF688
-                // is parked in VolumeVTables.cpp (SPHERE @0x82BA82C8, CAPSULE @0x82BAFCF8 and BOX @0x82BA9478 are
-                // bound since 2026-09-25, stage (b)).
-                // (AGGREGATE's slot is genuinely 0 in the image; AddVolumeRef never stages an aggregate.)
+                // [PC TRAP, NOT X360] the descriptor's lineSegIntersect slot has no host body. Every primitive's
+                // slot is bound: SPHERE @0x82BA82C8, CAPSULE @0x82BAFCF8 and BOX @0x82BA9478 since 2026-09-25
+                // (stage (b)), TRIANGLE @0x82BBB970 since 2026-08-19, CYLINDER @0x82BAF688 since 2026-09-28 (stage
+                // (c), lane L2). AGGREGATE's slot is genuinely 0 in the image and AddVolumeRef never stages an
+                // aggregate, so this is a tripwire for a descriptor that is not one of the six.
                 // Announced once per type and asserted; the primitive is then passed over, NOT tested.
                 static bool sabSlotAnnounced[E_VOLUMETYPE_NUMINTERNALTYPES] = {};
                 const u32 luType = lpPrimitive->muVTableSlot < static_cast<u32>(E_VOLUMETYPE_NUMINTERNALTYPES)
@@ -1024,7 +1025,7 @@ u32 VolumeLineQuery::GetIntersections()
                 std::snprintf(lacAnnouncement, sizeof(lacAnnouncement),
                               "[vlq] TRAP (PC, NOT X360): rw::collision::VolumeLineQuery::GetIntersections "
                               "@0x82BB3470 staged a volume of type %u whose descriptor's lineSegIntersect slot has "
-                              "no host body (VolumeVTables.cpp: CYLINDER 0x82BAF688 is parked): the volume is NOT "
+                              "no host body (VolumeVTables.cpp binds every primitive's): the volume is NOT "
                               "tested.\n", luType);
                 LineWalkTrap(sabSlotAnnounced[luType], lacAnnouncement,
                              "VolumeLineQuery::GetIntersections @0x82BB3470: a staged primitive's lineSegIntersect "

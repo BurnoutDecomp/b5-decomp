@@ -19,6 +19,10 @@
 // and, since 2026-09-28 (lane L2, stage (c)), the clip the fat cylinder's torus arm builds (VmxMin / VmxMax / Fsel):
 //   rw::collision::AALineClipper::Init              @ 0x828AED60   (AALineClipper.cpp)
 //   rw::collision::AALineClipper::AALineClipper     @ 0x82BAE3C8
+// and the cylinder's line kernel (LineSegIntersect.cpp):
+//   rw::collision::CylinderVolume::LineSegIntersect      @ 0x82BAF688   (the dispatcher)
+//   rw::collision::CylinderVolume::ThinLineSegIntersect  @ 0x82BADCE0
+//   rw::collision::CylinderVolume::FatLineSegIntersect   @ 0x82BAEB10
 //
 // The rounding is chosen per instruction (scratch/CRASHPARITY_0922/ROUNDING_RULE.md):
 //   rule 3  vmaddfp / vnmsubfp / vmaddfp128 / fmadds / fmsubs / fnmsubs round ONCE. std::fma is used with the
@@ -197,7 +201,8 @@ namespace linemath
     }
 
     // vminfp / vmaxfp: a NaN operand gives a NaN (the first NaN operand); -0 is below +0.
-    // (AALineClipper::Init @0x828AED60 / the constructor @0x82BAE3C8; the fat cylinder's torus clip.)
+    // (AALineClipper::Init @0x828AED60 / the constructor @0x82BAE3C8; the fat cylinder's torus clip 0x82BAF30C /
+    // 0x82BAF310.)
     inline f32 VmxMin(f32 afA, f32 afB)
     {
         if (afA != afA) return afA;
