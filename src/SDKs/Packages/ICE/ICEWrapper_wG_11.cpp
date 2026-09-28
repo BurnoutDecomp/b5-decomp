@@ -1,9 +1,10 @@
 // ============================================================================
 // BrnDirector::ICEWrapper::Construct / ::Destruct / ::PlayMovie / ::GetCurrentMovie /
-// ::IsPlayingMovie, split out of SDKs/Packages/ICE/ICEWrapper.cpp: what keeps that TU
-// off the link is its remaining pair, Update and UpdateAction, which index two
-// dev-tools control->action converter tables whose contents are not recovered and which
-// have no definition anywhere in the tree.
+// ::IsPlayingMovie / ::Update, split out of SDKs/Packages/ICE/ICEWrapper.cpp: what keeps that
+// TU off the link is UpdateAction, which indexes two dev-tools control->action converter
+// tables whose contents are not recovered and which have no definition anywhere in the tree.
+// (Update moved here 2026-09-27, OWNERLIST lane L5: it indexes neither table, and the pause
+// camera needs it -- MainDirector::UpdateICE @0x82238FC0 calls it every frame.)
 // DELETE-WHEN: those two tables are homed and ICEWrapper.cpp can mount -- then move
 // these bodies back into it.
 // MainDirector embeds the wrapper by value and Constructs it at boot, before the
@@ -14,6 +15,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameSource/Director/BrnDirectorResourceManager.h"        // DirectorResourceManager::GetKeyAnim
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface (ICETimer::Update)
 
 namespace BrnDirector
 {
@@ -29,7 +31,8 @@ namespace BrnDirector
 // Member map (provenance): VehicleRef::Construct(&mVehicleRef @+0x120F0) then
 // +0x120F0=0, +0x120FC=1, +0x120F8=0, +0x120F4=-1; mActionQueue's miLength at +0x11BC8
 // is zeroed; +0x120E8 then +0x120E4 are the two load-state scalars; Camera::Construct
-// on +0x11D70 (mICECamera's embedded director camera); mfTimeScale at +0x9B20. No
+// on +0x11D70 (mICECamera's embedded director camera); mICETimer (+0x9B20) = 0.0 -- the
+// inlined ICETimer::Construct, `stfsx f0(flt_82001CC0), r31, 0x9B20` @0x82533B3C. No
 // write to the manager playback flag, the current-movie id or the accept-input gate.
 // ----------------------------------------------------------------------------
 void ICEWrapper::Construct()
@@ -55,20 +58,21 @@ void ICEWrapper::Construct()
     // director camera's Construct -- the only store the recorded call makes.
     mICECamera.GetCamera()->Construct();
 
-    // No sim-time scale until the first Update.
-    mfTimeScale = 0.0f;
+    // No ICE timestep until the first Update.
+    mICETimer.Construct();
 }
 
 // ----------------------------------------------------------------------------
-// Destruct
+// Destruct @0x82533B58
 //
-// Tear down the runtime: destruct the ICE manager (+0xA40), then the base heap --
-// the CgsMemory::HeapMalloc this wrapper IS.
+// Tear down the runtime: destruct the ICE manager (+0xA40, @0x82533B70), then the ICE heap --
+// `bl CgsMemory::HeapMalloc::Destruct` on the wrapper's own `this` @0x82533B78, i.e. the
+// HeapMalloc base of mICEMemory at offset 0 (ICEMemory declares no Destruct of its own).
 // ----------------------------------------------------------------------------
 void ICEWrapper::Destruct()
 {
     mICEManager.Destruct();
-    HeapMalloc::Destruct();
+    mICEMemory.Destruct();
 }
 
 // ----------------------------------------------------------------------------
@@ -148,5 +152,56 @@ bool ICEWrapper::IsPlayingMovie()
 {
     return mICEManager.IsPlaybackDataSet();
 }
+
+// ----------------------------------------------------------------------------
+// Update @0x82540180
+//
+// The per-frame tick, called once a frame by MainDirector::UpdateICE @0x82238FC0:
+//   0x825401A8  mICECameraAnchor.SetAnchor(lrSpace)       (CameraSpaceHandler::operator= on +0x11ED0)
+//   0x825401B0  mICETimer.Update(lpTimer)                  (inlined: [+8] * [+4] -> +0x9B20)
+//   0x825401C8  mICEManager.Update()
+//   0x825401D0  the editor's Render (ICEController::Render on +0x2750; returns at once unless
+//               the editor is up, miState > 0)
+//   0x825401D4  if (the manager is playing a movie back (+0x2720 == manager +0x1CE0) ||
+//                   the editor is up (+0x35E8 == controller +0xE98, > 0))
+//   0x82540200..0x82540254  mCameraMover.Update(1.0f)      (inlined: UpdateFrameBegin, then
+//               `bl UpdateFrameEnd`; the 1.0 is flt_82001C98)
+// ----------------------------------------------------------------------------
+void ICEWrapper::Update(const CgsSystem::TimerStatusInterface* lpTimer,
+                        const ICE::CameraSpaceHandler& lrSpace)
+{
+    mICECameraAnchor.SetAnchor(lrSpace);
+    mICETimer.Update(lpTimer);
+
+    mICEManager.Update();
+    mICEManager.GetEditor().Render();
+
+    if (mICEManager.IsPlaybackDataSet() || mICEManager.GetEditor().AreMenusActive())
+    {
+        mCameraMover.Update(1.0f);
+    }
+}
+
+} // namespace BrnDirector
+
+namespace ICE
+{
+
+// ----------------------------------------------------------------------------
+// ICETimer::Update (DWARF ICETimer.hpp:41). No ARTIST symbol: its one expansion is
+// ICEWrapper::Update above, 0x825401B0..0x825401C4 --
+//     lfs f0, 8(status) ; lfs f13, 4(status) ; fmuls f0, f0, f13 ; stfsx f0, this, 0x9B20
+// -- the game timer status's multiplier (+8) times its base step (+4), one rounding.
+// ----------------------------------------------------------------------------
+void ICETimer::Update(const CgsSystem::TimerStatusInterface* lpStatus)
+{
+    const CgsSystem::TimerStatus* lpGameStatus = lpStatus->GetGameTimerStatus();
+    mfTimestep = lpGameStatus->GetTimeStepMultiplier() * lpGameStatus->GetBaseTimeStep();
+}
+
+} // namespace ICE
+
+namespace BrnDirector
+{
 
 } // namespace BrnDirector

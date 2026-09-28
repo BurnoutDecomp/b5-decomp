@@ -2,7 +2,8 @@
 #define BRN_DIRECTOR_ICE_WRAPPER_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"          // CgsMemory::HeapMalloc (base heap + embedded scratch heap)
+#include "SDKs/Packages/ICE/ICEMemory.hpp"                        // ICE::ICEMemory (mICEMemory), ICE::ICETimer, ICE::ICEPointers
+#include "SDKs/Packages/ICE/ICEFile.hpp"                          // ICE::ICEFileHandler (mICEFileHandler)
 #include "SDKs/Packages/ICE/ICEManager.hpp"                       // ICE::ICEManager (embedded by value)
 #include "SDKs/Packages/ICE/ICEActionQueue.hpp"                   // ICE::ActionQueue / ICE::EControlToICEAction (dev-input queue)
 #include "SDKs/Packages/ICE/ICECameraSpaceHandler.hpp"            // ICE::CameraSpaceHandler (per-frame reference spaces)
@@ -31,22 +32,23 @@ namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // Dir
 // turns the in-game editor on/off in response to dev-tool messages.
 //
 // ----------------------------------------------------------------------------
-// LAYOUT (member NAMES from this subsystem's role; OFFSETS/ORDER derived from the
-// reconstructed functions' member accesses -- the ctor, Construct, Destruct,
-// PlayMovie, Update, GetCurrentMovie, IsPlayingMovie and UpdateAction). Members are
-// accessed BY NAME; the offsets are recorded for
-// provenance, never used as casts. The heaps, manager, mover, camera, space handler
-// and action queue are embedded BY VALUE and our rebuilt sizes differ from the
-// recorded build, so the relative offsets below are NOT reproduced with padding --
-// members are declared in their recorded ORDER and parity is by name.
+// LAYOUT (member NAMES from the DWARF, ICEWrapper.hpp:215..:246; OFFSETS/ORDER from the
+// X360 functions' member accesses -- the ctor, Prepare, Construct, Destruct, PlayMovie,
+// Update, GetCurrentMovie, IsPlayingMovie and UpdateAction). Members are accessed BY
+// NAME; the offsets are recorded for provenance, never used as casts. The memory
+// manager, manager, mover, camera, anchor and action queue are embedded BY VALUE and our
+// rebuilt sizes differ from the recorded build, so the relative offsets below are NOT
+// reproduced with padding -- members are declared in their recorded ORDER and parity is
+// by name.
 //
-//   +0x00000  CgsMemory::HeapMalloc  (base)        general heap; Destruct calls
-//                                                  HeapMalloc::Destruct(this) at +0x0,
-//                                                  ctor builds its allocator at +0x08
-//   +0x00520  CgsMemory::HeapMalloc  mScratchHeap  second heap (ctor builds its
-//                                                  allocator at +0x528)
+//   +0x00000  ICE::ICEMemory         mICEMemory    the ICE heap (a HeapMalloc) + its edit
+//                                                  heap at +0x520; Prepare constructs it,
+//                                                  Destruct calls HeapMalloc::Destruct(this)
 //   +0x00A40  ICE::ICEManager        mICEManager   live takes + embedded editor
-//   +0x09B20  f32                    mfTimeScale   per-frame sim-time scale
+//   +0x09B20  ICE::ICETimer          mICETimer     the per-frame ICE timestep (Construct
+//                                                  zeroes it, Update writes it)
+//   +0x09B24  ICE::ICEFileHandler    mICEFileHandler  the editor's take-text sink (32 KB);
+//                                                  Prepare hands it to ICEManager::Construct
 //   +0x11B24  DirectorResourceManager* mpResourceManager  take-data provider (PlayMovie)
 //   +0x11B28  ICE::ActionQueue       mActionQueue  dev-tools input action stack
 //                                                  (its miLength word lands at +0x11BC8;
@@ -56,7 +58,8 @@ namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // Dir
 //   +0x11D60  ICE::ICECamera         mICECamera    the ICE camera (its embedded Camera at +0x10
 //                                                  lands at +0x11D70 -- the Camera::Construct
 //                                                  target Construct() pokes)
-//   +0x11ED0  ICE::CameraSpaceHandler mCameraSpaceHandler  per-frame reference spaces
+//   +0x11ED0  ICE::ICECameraAnchor   mICECameraAnchor  per-frame reference spaces (the
+//                                                  mover's car anchor)
 //   +0x120F0  BrnDirector::VehicleRef mVehicleRef  the vehicle the active take anchors to
 //   +0x12100  CgsResource::ID        mCurrentMovieID  id of the take currently playing (8 bytes)
 //   +0x12108  bool                   mbAcceptInput  dev-tools input gate for UpdateAction
@@ -65,7 +68,18 @@ namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // Dir
 // (+0x11BC8) / maMoverInputA (+0x11D60) / maMoverInputB (+0x11ED0) placeholders are
 // RETIRED. The reconstructed functions prove +0x11BC8 is the action queue's own
 // miLength sentinel word (not a separate member), +0x11D60 is mICECamera (its
-// embedded Camera sits at +0x11D70), and +0x11ED0 is mCameraSpaceHandler.
+// embedded Camera sits at +0x11D70), and +0x11ED0 is mICECameraAnchor.
+//
+// ⭐ RETYPED 2026-09-27 (OWNERLIST lane L5 -- the pause camera needs the ICE movie playback
+// live): the wrapper used to DERIVE from CgsMemory::HeapMalloc and embed a second HeapMalloc
+// (mScratchHeap), keep a bare `f32 mfTimeScale` and a bare CameraSpaceHandler. The DWARF has
+// an ICE::ICEMemory member (which IS that HeapMalloc + edit-heap pair), an ICE::ICETimer and
+// an ICE::ICECameraAnchor, and ICEWrapper::Prepare @0x8253DD90 hands exactly those, typed, to
+// ICEMemory::Construct / ICEManager::Construct (the ICEPointers bundle: this, +0x9B24, +0x11B28,
+// +0x11ED0, +0x9B20, resourceManager+0x228) and ICECameraMover::Construct (+0x11ED0 as the anchor).
+// ARTIST also carries the editor's ICEFileHandler at +0x9B24 (the 0x8000-byte gap before
+// mpResourceManager is its KI_WRITEBUFFER_SIZE buffer); the PS3 DWARF's :218..:222 line gap is
+// where it sits, so it is declared there.
 //
 // FLAG: BrnDirector::Camera::Utils::DebugController (UpdateAction's argument) and the
 //   two dev-input converter tables are dev-tools types with no reconstructed home.
@@ -102,7 +116,7 @@ struct ICEPlayingMovie
     bool            mbIsValid;                    // a take is playing
 };
 
-class ICEWrapper : public CgsMemory::HeapMalloc
+class ICEWrapper
 {
 public:
     // Construct the wrapper object: builds the two heaps + the manager + the mover and
@@ -151,8 +165,9 @@ public:
     void PlayMovie(CgsResource::ID lTakeId, f32 lfStartPosition,
                    VehicleRef::EType leVehicleRefType, EActiveRaceCarIndex leRaceCar);
 
-    // Per-frame tick: cache the reference spaces, compute the sim-time scale from the
-    // frame timer, advance the manager, render the editor, and drive the camera mover.
+    // Per-frame tick: cache the reference spaces, take the ICE timestep from the frame timer,
+    // advance the manager, render the editor, and drive the camera mover. X360 @0x82540180,
+    // called once a frame by MainDirector::UpdateICE @0x82238FC0.
     void Update(const CgsSystem::TimerStatusInterface* lpTimer,
                 const ICE::CameraSpaceHandler& lrSpace);
 
@@ -231,17 +246,20 @@ public:
     ICE::ICEGroup*    GetShakeGroup();
 
 private:
-    // +0x00520  Second heap embedded after the base HeapMalloc (the base heap itself is
-    // the CgsMemory::HeapMalloc this class derives from -- Destruct's HeapMalloc::Destruct(this)
-    // and the ctor's allocator-at-+0x08 build target it).
-    CgsMemory::HeapMalloc mScratchHeap;
+    // +0x00000  The ICE memory manager: the ICE heap (its HeapMalloc base, at offset 0 -- so
+    // the console passes the wrapper's own `this` wherever an ICEMemory* is wanted) and the
+    // editor's edit heap at +0x520. Prepare constructs both; Destruct tears the base down.
+    ICE::ICEMemory mICEMemory;
 
     // +0x00A40  The top-level ICE manager (live takes + embedded editor/controller).
     ICE::ICEManager mICEManager;
 
-    // +0x09B20  Per-frame sim-time scale (base time-step * multiplier). Update writes it
-    // from the frame timer; Construct zeroes it.
-    f32 mfTimeScale;
+    // +0x09B20  The ICE timestep (the game timer's rate * scale, written by Update through the
+    // inlined ICETimer::Update; Construct zeroes it through the inlined ICETimer::Construct).
+    ICE::ICETimer mICETimer;
+
+    // +0x09B24  The editor's take-text sink (ICEPointers::mpICEFileHandler).
+    ICE::ICEFileHandler mICEFileHandler;
 
     // +0x11B24  The take-data provider PlayMovie resolves take ids through.
     DirectorResourceManager* mpResourceManager;
@@ -257,8 +275,9 @@ private:
     // +0x11D70 -- the address Construct() hands to Camera::Camera::Construct).
     ICE::ICECamera mICECamera;
 
-    // +0x11ED0  The per-frame reference-space cache Update copies the incoming spaces into.
-    ICE::CameraSpaceHandler mCameraSpaceHandler;
+    // +0x11ED0  The mover's car anchor: the per-frame reference-space cache Update copies the
+    // incoming spaces into (ICECameraAnchor::SetAnchor, `CameraSpaceHandler::operator=` @0x825401A8).
+    ICE::ICECameraAnchor mICECameraAnchor;
 
     // FLAG (provisional names): two ICE load-state scalars the DWARF lists just before
     // mVehicleRef. Construct zeroes exactly these two (+0x120E4 and +0x120E8); their

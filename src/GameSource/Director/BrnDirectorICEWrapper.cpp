@@ -102,21 +102,15 @@ void ICEWrapper::EditorOff()
 // 5th arg is the shake group (ICEGroup*), passed null here. (The 11 reconstructed mover
 // functions show the second arg stored at mover+0x00 as its ICECameraAnchor* mpCar, the
 // third at +0x04 as mpICECamera, the fourth at +0x110 as mpTake):
-//   (mover, viewIndex=1, &mCameraSpaceHandler, &mICECamera, cameraTake, shakeGroup=0, context)
-//
-// FLAG: the mover's anchor (ICE::ICECameraAnchor) is the layout `{ CameraSpaceHandler
-//   mSpace; }`, so the wrapper's reference-space cache &mCameraSpaceHandler IS the
-//   anchor's leading member -- the two pointers address the same bytes. Bridge the
-//   types with a reinterpret_cast (layout-coincident head), not an offset poke; the
-//   mover only reads the anchor's car-to-world (its mSpace).
+//   (mover, viewIndex=1, &mICECameraAnchor, &mICECamera, cameraTake, shakeGroup=0, context)
+// (The anchor was a reinterpret_cast of a bare CameraSpaceHandler member until 2026-09-27; the
+// member is the DWARF's ICE::ICECameraAnchor mICECameraAnchor now, so no cast is needed.)
 // ---------------------------------------------------------------------------
 void ICEWrapper::ReconstructCameraMover(const ICE::IResourceManager* lpResourceManager)
 {
     ICE::ICETake* lpCameraTake = mICEManager.GetCameraTake();
 
-    mCameraMover.Construct(1,
-                           reinterpret_cast<ICE::ICECameraAnchor*>(&mCameraSpaceHandler),
-                           &mICECamera, lpCameraTake, 0, lpResourceManager);
+    mCameraMover.Construct(1, &mICECameraAnchor, &mICECamera, lpCameraTake, 0, lpResourceManager);
 }
 
 } // namespace BrnDirector

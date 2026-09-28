@@ -96,7 +96,12 @@ struct CameraEffects
     // target whenever CameraState::E_FLAG_APPLYING_RACE_END_EFFECT is set. The comment
     // above already named it; this is the consumer it was waiting for.
     f32 mfRaceEndEffectAmount;         // +0x84
-    u8  maReserved88[0x90 - 0x88];     // +0x88 muFadeColor, +0x8C meOverlay
+    // +0x88 -- CARVED 2026-09-27 (OWNERLIST lane L5) for its first attested writer: the ICE camera's
+    // fade, ICE::ICECamera::SetFadeColor @0x8252B500, which packs the clamped channels into one ARGB
+    // word and stores it with `stw r10, 0x100(r3)` -- ICECamera +0x100 == its embedded Camera (+0x10)
+    // + mEffects (+0x68) + 0x88. DWARF name and type: BrnCameraEffects.h:306 `uint32_t muFadeColor`.
+    u32 muFadeColor;                   // +0x88
+    u8  maReserved8C[0x90 - 0x8C];     // +0x8C meOverlay (DWARF :307; no consumer attested yet)
 
     // +0x90 / +0x94: the per-camera BLOOM MODIFIERS (DWARF :309 mfBloomThreshold, :310
     //   mfBloomLuminance). CARVED 2026-08-16 out of the old maReserved84 span, X360-attested by
@@ -282,6 +287,15 @@ struct CameraEffects
     f32 GetRaceEndEffectAmount() const { return mfRaceEndEffectAmount; }
 
     f32 GetSimTimeScale() const { return mfSimTimeScale; }
+
+    // The two ICE-camera writers (DWARF: ICE::ICECamera::SetSimTimeMultiplier calls
+    // CameraEffects::SetSimTimeScale, ICECamera::SetFadeColor calls CameraEffects::SetFadeColor --
+    // references/DecFIGS/dwarfdump/SDKs/Packages/ICE/ICECamera.cpp :84 / :104). Neither has an X360
+    // symbol; the console inlines each to one store: `stfs f0, 0x114(r10)` in
+    // ICECameraMover::UpdateSimTime @0x8252E49C (ICECamera +0x114 == mEffects +0x9C) and
+    // `stw r10, 0x100(r3)` @0x8252B59C (== mEffects +0x88).
+    void SetSimTimeScale(f32 lfSimTimeScale) { mfSimTimeScale = lfSimTimeScale; }
+    void SetFadeColor(u32 luColourARGB)      { muFadeColor = luColourARGB; }
 
     // ADDITIVE GROW (MomentPlayerJumping::Update @0x82275AA4..: the moment registers
     // its "Jump_Effect" start hook on the stack camera it is about to adopt with the

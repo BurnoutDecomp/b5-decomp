@@ -23,14 +23,17 @@
 // `ICECamera::Camera` is the DWARF's `typedef Camera Camera` (ICECamera.hpp:39) --
 // it imports the director camera, so mCamera is a BrnDirector::Camera::Camera.
 //
-// Only SetCameraMatrix has a reconstructed body (its TU, ICECamera.cpp). The rest
-// of the method set is DECLARATION-ONLY -- the per-TU `cl /c` gate does not link,
-// so the declarations are enough; each lands a body with its own ledger TU.
+// Bodied in ICECamera.cpp (the DWARF's own home for every one of them): SetCameraMatrix, and --
+// since 2026-09-27 (OWNERLIST lane L5, the pause camera) -- the eight setters the ICE camera mover
+// drives each frame: SetSimTimeMultiplier, SetFadeColor, SetDepthOfField, SetFieldOfView, SetBloom,
+// SetOverlay, ClearOverlay, SetHideOverlay. The rest of the method set is DECLARATION-ONLY (no
+// caller on the console's playback path).
 // ============================================================================
 
 #include "types.hpp"
 #include "rw/math/vpu/types.h"                       // rw::math::vpu::Matrix44Affine
 #include "SDKs/Packages/ICE/ICEOverlays.hpp"         // ICE::ICEOverlay (by value)
+#include "SDKs/Packages/ICE/ICEMath.hpp"             // ICE::Matrix4 (SetCameraMatrix's argument)
 #include "GameSource/Director/Camera/Camera.h"       // BrnDirector::Camera::Camera (by value)
 #include <cstddef>                                   // offsetof
 
@@ -43,8 +46,8 @@ namespace ICE
         // ICECamera.hpp:39: the director camera, imported under ICE's namespace.
         typedef BrnDirector::Camera::Camera Camera;
 
-        // --- The X360-shaped methods (DWARF ICECamera.hpp). Declaration-only except
-        //     SetCameraMatrix (reconstructed in ICECamera.cpp). ----------------------
+        // --- The X360-shaped methods (DWARF ICECamera.hpp). The ones the mover drives are bodied in
+        //     ICECamera.cpp (see the file head); the rest are declaration-only. ------------------
         void Construct();                                                   // :53
         void Destruct();                                                    // :54
 
@@ -75,11 +78,13 @@ namespace ICE
         void SetBloom(f32, f32);                                           // :116
         void SetTargetDistance(f32);                                       // :120
 
-        // ICECamera.hpp:123. Copies the take matrix into the director camera's
-        // transform, revalidates it, and marks the camera dirty. Body: ICECamera.cpp.
-        // Returns the validated-transform pointer (X360 asm forwards the
-        // ValidateTransformWithDebugInfo result; see ICECamera.cpp note).
-        rw::math::vpu::Matrix44Affine* SetCameraMatrix(const rw::math::vpu::Matrix44Affine& lrMatrix);
+        // ICECamera.hpp:123 -- the DWARF shape, `SetCameraMatrix(Matrix4*, float32_t)`: the mover hands
+        // it its own world->camera Matrix4 (ICECameraMover::UpdateFrameEnd @0x8253DA04, `addi r4, r31,
+        // 0x120`) and the frame's sim time (`fmuls f1, f0, f31` @0x8253DA0C), which the body never
+        // reads. Copies the take matrix into the director camera's transform, revalidates it, and
+        // marks the camera dirty. Body: ICECamera.cpp. Returns the validated-transform pointer (the
+        // X360 forwards ValidateTransformWithDebugInfo's r3; see ICECamera.cpp).
+        rw::math::vpu::Matrix44Affine* SetCameraMatrix(Matrix4* lpMatrix, f32 lfTime);
 
         void SetOverlay(s32);                                             // :127
         void ClearOverlay();                                              // :128
