@@ -105,6 +105,12 @@ namespace CgsGraphics
         // build and negates every result plane.
         void GetFrustumPerspective(CameraRwFrustum& lrOut, bool lbNegateNearFar) const;
 
+        // ADDITIVE (L3 RACEINTRO, 2026-09-27) -- CgsGraphics::Camera::GetFrustumPerspectiveVertices @0x827E70E0
+        // (DWARF :174, `void GetFrustumPerspectiveVertices(Vector3*) const`): the eight world-space corners of the
+        // perspective view volume, [0..3] on the near plane and [4..7] on the far one. Its one caller is
+        // TrafficEntityModule::RenderTrafficLightCoronas @0x8271EC80 (the frustum's Pvs cells).
+        void GetFrustumPerspectiveVertices(Vector3* frustumVerts) const;
+
         // CgsGraphics::Camera::GetCgsFrustum @0x827F9778 (DWARF :144) -- the RW
         // frustum converted into the CGS swizzled-plane form.
         void GetCgsFrustum(CgsGeometric::Frustum& lrOut) const;
