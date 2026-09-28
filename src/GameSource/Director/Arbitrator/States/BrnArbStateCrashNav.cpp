@@ -17,6 +17,7 @@
 #include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"             // ConsoleVpu::Dot3 (the vmsum3fp128 model, rule 1)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // [diag] CgsDev::Log::gpDebugPrint
 #include <cstdlib>                                                        // [diag] getenv (BRN_CRASHCAM_DIAG)
+#include <cmath>                                                          // [diag] std::sqrt (the sample line's carDist)
 
 // ============================================================================
 // BrnDirector::ArbStateCrashNav -- reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity)
@@ -422,7 +423,8 @@ namespace BrnDirector
                         << " wrapperPlaying " << (lrSharedInfo.mpICEWrapper->IsPlayingMovie() ? 1 : 0)
                         << " movieValid " << (lMovie.mbIsValid ? 1 : 0) << " pos " << lMovie.mfPlaybackPositionParameter
                         << " iceEye (" << lIceEye.x << ", " << lIceEye.y << ", " << lIceEye.z << ")"
-                        << " stateEye (" << lStateEye.x << ", " << lStateEye.y << ", " << lStateEye.z << ")\n";
+                        << " stateEye (" << lStateEye.x << ", " << lStateEye.y << ", " << lStateEye.z << ")"
+                        << " carDist " << std::sqrt(PlayerToCameraDistanceSquared(lrSharedInfo, lrCamera)) << "\n";
                 }
             }
 
