@@ -14,10 +14,8 @@ void BrnEffectControlEmbedCheck(BrnSound::Logic::BrnEffectControl& rObj,
     BrnSound::Logic::IResourceRequester* pReq     = &rObj;
     (void)pControl;
 
-    // The teardown members the destructor touches, reachable by name.
-    rObj.mbResourcesReady = false;
-    rObj.meAttachState    = CgsSound::Logic::EffectBase::E_ATTACH_STATE_NONE;
-    rObj.meDetachState    = CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED;
+    // Exercise the inherited teardown state without accessing protected fields.
+    rObj.ResetOnDestroy();
 
     rpReq = pReq;
 }

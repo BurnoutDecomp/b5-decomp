@@ -12,22 +12,12 @@
 //   GameSource/Sound/Module/LogicModule/BrnEffectObject.h (DWARF home) +
 //   GameSource/Sound/Module/LogicModule/BrnEffectObject.cpp
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. BrnEffectObject is a sound-logic
-// effect object: it multiply-inherits CgsSound::Logic::EffectObject (the engine
-// effect-base path: attach/detach state machine + owning SoundLogicModule
-// pointer) AND BrnSound::Logic::IResourceRequester (the streaming-resource
-// interface). The X360 vtable layout proves the dual base: the vector deleting
-// destructor writes a primary vptr at this+0 and the IResourceRequester
-// sub-object vptr at this+4, and the IResourceRequester thunks adjust by 4
-// (e.g. the `vector deleting destructor adjustor{4}` does `this - 4` to recover
-// the primary object before forwarding to the real destructor @ 0x826AF4C8).
-//
-// LAYOUT NOTE (X360 32-bit vs host 64-bit): the X360 ASM accesses members by
-// absolute byte offset (meAttachState @ +0x24, meDetachState @ +0x28,
-// mpLogicModule @ +0x2C, mbResourceRequestActive @ +0x2D, mbResourcesReady @
-// +0x31). Those offsets assume 4-byte pointers and a 4-byte vptr; on a 64-bit
-// host pointer/vptr widths differ, so members are pinned BY NAME and SEQUENCE
-// only and absolute offsets are NOT static_asserted across pointer members.
+// The ARTIST whole-object base is IResourceRequester; EffectBase is +4.
+// ResourcesAreReady (82696778) receives the former and sets +0x31;
+// Detach (826EBF88 object / 826EB8B0 control) receives the latter and
+// tests/clears +0x2D. Both address EffectBase::mbHasLoadedData, named by
+// DecFIGS CgsEffectBase.h:754. The host expresses interface adjustments
+// through C++ base conversions instead of console offsets.
 // =============================================================================
 
 #if 0 // RETIRED: the former minimal rival engine-effect definitions; canonical CgsEffectBase.h is used above.
@@ -123,11 +113,11 @@ struct BrnEffectObject : public CgsSound::Logic::EffectObject,
     virtual void ResourcesAreReady()
     {
         // X360 STORE ORDER (0x82696778):
-        //   stb 1, +0x31   (mbResourcesReady = true)   -- precedes the assert
+        //   stb 1, +0x31   (mbHasLoadedData = true)   -- precedes the assert
         //   lwz    +0x24   (read meAttachState)
         //   assert meAttachState == E_ATTACH_STATE_WAITING_FOR_DATA
         //   stw 2, +0x24   (meAttachState = E_ATTACH_STATE_PREPARING)
-        mbResourcesReady = true;
+        mbHasLoadedData = true;
         CGS_ASSERT(GetAttachState() == CgsSound::Logic::EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA,
                    "GetAttachState() == E_ATTACH_STATE_WAITING_FOR_DATA");
         meAttachState = CgsSound::Logic::EffectBase::E_ATTACH_STATE_PREPARING;
@@ -137,82 +127,23 @@ struct BrnEffectObject : public CgsSound::Logic::EffectObject,
     // (ASM @ 0x82696850 forwards to the owning module's embedded registrar).
     virtual ResourceRegistrar& GetResourceRegistrar();
 
-    // BrnEffectObject.h:171 — override of EffectBase::Detach, bodied inline in
-    // this DWARF home. ASM @ 0x826EBF88: if a resource request is outstanding,
-    // pull this object's requests out of its registrar, then perform the same
-    // attach/detach reset as EffectBase::Detach @ 0x826805F0.
+    // ARTIST 826EBFA0 reads EffectBase+0x2D. ResourcesAreReady's
+    // 82696794 store uses IResourceRequester+0x31: the SAME inherited
+    // mbHasLoadedData, because the console EffectBase subobject starts +4.
+    // Do not split it into a separate request-issued latch: LoadAsset may be
+    // called directly through IResourceRequester (boost/crumple do this).
     virtual bool Detach()
     {
-        // X360 STORE ORDER (0x826EBF88):
-        //   if (this+0x2D /* mbResourceRequestActive */) {
-        //       reg = (this as IResourceRequester)->GetResourceRegistrar();
-        //       reg.RemoveRequests(this as IResourceRequester);
-        //   }
-        //   stb 0, +0x2D   (request/data-ready byte = false)
-        //   stw 3, +0x24   (meDetachState = E_DETACH_STATE_FINISHED)
-        //   stw 0, +0x20   (meAttachState = E_ATTACH_STATE_NONE)
-        //   return true
-        if (mbResourceRequestActive)
-        {
+        if (mbHasLoadedData)
             GetResourceRegistrar().RemoveRequests(static_cast<IResourceRequester*>(this));
-        }
-        mbResourceRequestActive = false;
+        mbHasLoadedData = false;
         return CgsSound::Logic::EffectBase::Detach();
-    }
-
-
-    // ================= [FLAG PC bring-up] THE SET HALF OF THE +0x2D LATCH =================
-    // Detach above is X360-attested (0x826EBF88): it TESTS mbResourceRequestActive, and only
-    // then pulls this requester's rows out of the registrar. Nothing in this tree ever set
-    // that byte to true, so the release arm was DEAD CODE and every request an effect ever
-    // made stayed on the resource's requester list forever.
-    //
-    // MEASURED (scratch/flow_run/carW, -StartEvent -AIDrive, 275 s, five AI rivals):
-    // 137 AI sound attaches, 16 detaches, and 196 x "We've run out of nodes." out of
-    // LinkedListHelper<IResourceRequester*,16>::AddTail via ResourceRegistrar::UpdateRequests.
-    // UpdateRequests appends the requester unconditionally, so a re-request by a requester
-    // that never released takes a SECOND node; the fixed 16-node per-resource pool is then
-    // exhausted by ~16 attach/detach cycles. The witness named both ends:
-    //   [reg-pool] ... 16/16 for bundle 'sound\aems\InAir.bundle' ... requester 0x676ECD30
-    //   [reg-pool] ... 16/16 for bundle 'Engines\af355519.bundle' ... requester 0x66C678B0
-    // -- the SAME requester pointer re-added for the SAME bundle, which is exactly the
-    // signature of a missing release.
-    //
-    // WHAT IS AND IS NOT INVENTED. The latch's test-and-clear half is read from the console;
-    // its name is "a resource request is active"; and the only event that can make that true
-    // is issuing one. The set is placed at the single choke point through which an effect
-    // issues a request -- IResourceRequester::LoadAsset @0x826E2348 -- by hiding it with a
-    // forwarding overload, so every unqualified LoadAsset in an effect leaf latches. No leaf
-    // is edited and no request is changed; only the flag the console's own Detach reads.
-    // The console's own store site for +0x2D has NOT been located in the image (a 43-site
-    // `stb ...0x2D` sweep found five non-zero writers, none in the sound range), so the
-    // PLACEMENT is inferred and marked; the EXISTENCE of a setter is not in doubt, because a
-    // latch that is only ever tested and cleared cannot be what the console shipped.
-    // DELETE-WHEN the console's store site is found and this moves to it verbatim.
-    void LoadAsset(const char* lpcBundleName, const char* lpcResourceName,
-                   ResourceRegistrar::EType leType)
-    {
-        mbResourceRequestActive = true;
-        IResourceRequester::LoadAsset(lpcBundleName, lpcResourceName, leType);
-    }
-
-    void LoadAsset(const char* lpcResourceName, EResourcePool lePool,
-                   ResourceRegistrar::EType leType)
-    {
-        mbResourceRequestActive = true;
-        IResourceRequester::LoadAsset(lpcResourceName, lePool, leType);
     }
 
     // BrnEffectObject.h:207 — resolve a sample tag. Declared for home
     // completeness; not bodied by this group (outside this TU's func set).
     bool GetSampleTag(u32 eTag, u32 uIndex, u32 uCount, SampleTag& rTag) const;
 
-    // Members observed in the X360 layout (by name; ORDER per access pattern).
-    //   +0x2D -> mbResourceRequestActive (Detach gate; cleared in the dtor path)
-    //   +0x31 -> mbResourcesReady        (set by ResourcesAreReady; cleared in dtor)
-    // FLAG: X360 byte offsets (+0x2D, +0x31) not asserted on the 64-bit host.
-    bool mbResourceRequestActive;
-    bool mbResourcesReady;
 };
 
 } // namespace Logic
