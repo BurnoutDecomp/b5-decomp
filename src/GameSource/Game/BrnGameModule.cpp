@@ -2814,7 +2814,7 @@ namespace BrnGame
             //   6. a FRESH SceneQueryOutputBuffer ("DirectorSQ"), DirectorModule::Update 0x82275300 on it
             //      and the SQ input, then that buffer destroyed
             //   7. the SQ input and the external query buffer destroyed
-            // lbIsReplaying == false and the unread framework arguments are as on the OFF path below.
+            // The PC has no replay playback path; the framework arguments remain unread.
             CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpExternalQuery   = 0;
             BrnDirector::DirectorIO::SceneQueryInputBuffer*     lpSceneQueryInput = 0;
             mpUpdateInputBufferStack->CreateIOBuffer(&lpExternalQuery, "SceneQuery");
@@ -2868,28 +2868,6 @@ namespace BrnGame
                 mpUpdateInputBufferStack->DestroyIOBuffer(&lpSceneQueryInput);
             if (lpExternalQuery != 0)
                 mpUpdateInputBufferStack->DestroyIOBuffer(&lpExternalQuery);
-        }
-        else if (!lbPostGui)
-        {
-            BrnDirector::DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutput = 0;
-            BrnDirector::DirectorIO::SceneQueryInputBuffer*  lpSceneQueryInput  = 0;
-            mpUpdateOutputBufferStack->CreateIOBuffer(&lpSceneQueryOutput, "DirectorSceneQuery");
-            mpUpdateInputBufferStack->CreateIOBuffer(&lpSceneQueryInput, "DirectorSceneQuery");
-            if (lpSceneQueryOutput != 0 && lpSceneQueryInput != 0)
-            {
-
-                // lbIsReplaying == false: the PC has no replay playback path (the module's own
-                // replay legs are documented gates).
-                mDirectorModule.PreSceneQueryUpdate(0, 0, lpDirectorInput,
-                                                    mpDirectorOutputBuffer,
-                                                    lpSceneQueryOutput, false);
-                mDirectorModule.Update(0, 0, lpDirectorInput, mpDirectorOutputBuffer,
-                                       lpSceneQueryInput, lpSceneQueryOutput);
-            }
-            if (lpSceneQueryInput != 0)
-                mpUpdateInputBufferStack->DestroyIOBuffer(&lpSceneQueryInput);
-            if (lpSceneQueryOutput != 0)
-                mpUpdateOutputBufferStack->DestroyIOBuffer(&lpSceneQueryOutput);
         }
         else
         {
