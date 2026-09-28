@@ -84,7 +84,14 @@ namespace BrnDirector
         // moving pause camera. It is now overridden and bodied in the .cpp.
         //
         // Destruct() is genuinely absent from this TU's X360 function set (base declaration
-        // kept, no override). The DWARF also lists IsActive(); likewise absent, and omitted.
+        // kept, no override).
+
+        // DWARF BrnArbStateCrashNav.h:102 -- a header inline, so it has no symbol of its own; the
+        // console expands it in Arbitrator::Update @0x8226ADA0 case 4 as `lwz r11, 0x4188(arb)`
+        // (arb +0x3910 mArbStateCrashNav + 0x878 meState) then `cmpwi 0`, and its own assert text
+        // "mArbStateCrashNav.IsActive()" (BrnDirectorArbitrator.cpp:295, @0x8226B378) names it.
+        // Active == any state but E_STATE_INACTIVE.
+        bool        IsActive() const { return meState != E_STATE_INACTIVE; }
 
     private:
         // ⭐⭐ THE NESTED HANDLE / PARAMS FORKS ARE RETIRED (2026-08-29, pause-greyscale wave).
