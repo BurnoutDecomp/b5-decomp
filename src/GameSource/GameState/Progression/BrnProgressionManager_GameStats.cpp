@@ -64,13 +64,6 @@ namespace
         "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp";
     const char* const KAC_STUNT_MANAGER_H =
         "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\offences\\BrnStuntManager.h";
-
-    // The three livery-type tags a non-sponsor car must carry to count as COLLECTED
-    // (X360 @0x8238A848: `lbz r11, 0xE9(vd)` then `cmplwi 1 / cmplwi 3 / cmplwi 4`).
-    // FLAG: the tag VALUES are the asm's; no enum for BrnResource::ELiveryType is homed yet.
-    const u8 KU8_LIVERY_TYPE_COUNTS_AS_COLLECTED_A = 1;
-    const u8 KU8_LIVERY_TYPE_COUNTS_AS_COLLECTED_B = 3;
-    const u8 KU8_LIVERY_TYPE_COUNTS_AS_COLLECTED_C = 4;
 }
 
 // ===================================================================================
@@ -173,8 +166,24 @@ void ProgressionManager::GetGameStats(GsmIO::GameStats*                 lpGameSt
     // A car counts when EITHER
     //   (a) its CarData unlock type is E_UNLOCK_TYPE_SPONSOR (5) and the player's progression
     //       rank has reached the vehicle entry's required rank (`lbz 0x99`), OR
-    //   (b) the entry is flagged a "trophy" car (`lwz 0x94 & 1`) AND its livery-type tag is
-    //       one of 1 / 3 / 4 (`lbz 0xE9`).
+    //   (b) the entry's flags word has bit 0 set (`lwz 0x94 & 1`) AND its livery-type tag is
+    //       NOT one of 1 / 3 / 4 (`lbz 0xE9`) -- i.e. a base or pattern car, never one of its
+    //       colour / silver variants.
+    // ⛔ [owner list 2026-09-28, L6] (b) WAS INVERTED, and CARS OWNED read 171/86 on the owner's
+    // profile (the 101 colour + 70 silver variants it holds) where the console shows 70/86.
+    // Read the tail of the livery test with both arms named:
+    //     0x8238A848  lbz    r11, 0xE9(r31)
+    //     0x8238A84C  cmplwi r11, 1 / beq 0x8238A868     ; }
+    //     0x8238A854  cmplwi r11, 3 / beq 0x8238A868     ; } r11 = (livery in {1,3,4})
+    //     0x8238A85C  cmplwi r11, 4 / mr r11, 0 / bne 0x8238A86C
+    //     0x8238A868  li     r11, 1                      ; }
+    //     0x8238A870  cmplwi r11, 0
+    //     0x8238A874  li     r11, 1
+    //     0x8238A878  beq    0x8238A880                  ; NOT in the set -> r11 = 1 -> COUNT
+    //     0x8238A87C  mr     r11, 0                      ; in the set (or bit 0 clear) -> no count
+    //     0x8238A884  cmplwi r11, 0 / beq 0x8238A890 (skip) ; 0x8238A88C addi r26, r26, 1
+    // The set is exactly VehicleListEntry::IsLiveryColour() -- the same {1, 3, 4} the colour-livery
+    // builders test (ConstructColourLiveryList @0x82374F60) -- so it is spelled through it.
     // The two asserts are the console's: the index-range one is the inlined
     // Profile::GetCarData's (BrnProfile.h:1923) and the two null ones are this function's own
     // (BrnProgressionManager.cpp:3475 / :3478).
@@ -220,15 +229,10 @@ void ProgressionManager::GetGameStats(GsmIO::GameStats*                 lpGameSt
                     ++liCarsCollected;
                 }
             }
-            else if (lpVehicleData->IsTrophyCar())
+            else if (lpVehicleData->IsTrophyCar() && !lpVehicleData->IsLiveryColour())
             {
-                const u8 lu8LiveryType = lpVehicleData->GetLiveryType();
-                if (lu8LiveryType == KU8_LIVERY_TYPE_COUNTS_AS_COLLECTED_A ||
-                    lu8LiveryType == KU8_LIVERY_TYPE_COUNTS_AS_COLLECTED_B ||
-                    lu8LiveryType == KU8_LIVERY_TYPE_COUNTS_AS_COLLECTED_C)
-                {
-                    ++liCarsCollected;
-                }
+                // IsTrophyCar() is the `lwz 0x94 & 1` bit (VehicleListEntry.h's name for it).
+                ++liCarsCollected;
             }
         }
     }
