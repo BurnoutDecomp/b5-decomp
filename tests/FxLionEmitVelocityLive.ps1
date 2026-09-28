@@ -59,7 +59,9 @@ $NearestShatter = {
     CrashSweepSettle = 240
     CrashSweepArm    = 4
   }
-  DiagEnv = 'BRN_GLASS_DIAG=1'
+  # Reserve the bounded particle witness for glass: smoke can otherwise consume
+  # all 96 lines before the first pane shatters. This option only filters logs.
+  DiagEnv = 'BRN_GLASS_DIAG=1,BRN_LIONQUAD_GLASS=1'
   Checks  = @(
     @{ Kind = 'Mark';     Name = 'reached DRIVING'; Phase = 'DRIVING' }
     @{ Kind = 'LogCount'; Name = 'the sweep fired (the car was placed and launched)'; Pattern = '\[sweep\] shot 0/'; Min = 1 }

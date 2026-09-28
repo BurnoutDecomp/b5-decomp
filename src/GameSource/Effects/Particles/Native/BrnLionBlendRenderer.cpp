@@ -32,6 +32,8 @@
 
 #include <cmath>   // sqrtf -- the two normalisations
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstdlib>  // [lionquad] opt-in glass witness filter
+#include <cstring>  // [lionquad] texture names
 #include <cstdio>   // [lionsprite] witness   // the one-shot CreateInternalMaterial announcement
 #include "GameSource/Effects/Particles/LionParticleRender.h"   // LionParticleRender::CreateInternalMaterial / cParticleMaterial (the Lion trap stubs below)
 
@@ -544,6 +546,20 @@ namespace
                          const RenderedParticle& arPart,
                          const rw::math::vpu::Vector3* apPoints)
     {
+        // [DIAG] NOT X360. Other effects can consume all 96 witness lines before
+        // a window breaks. Keep the existing budget, but let the glass regression
+        // reserve it for the two shatter textures. This never filters the draw.
+        static const bool sbGlassOnly = []() {
+            const char* value = std::getenv("BRN_LIONQUAD_GLASS");
+            return value && value[0] == '1';
+        }();
+        if (sbGlassOnly)
+        {
+            const char* name = arMaterial.mpTextureName.Get();
+            if (!name || (std::strcmp(name, "GLINTERGLASS") != 0 &&
+                          std::strcmp(name, "TWINKY") != 0))
+                return;
+        }
         static const u32 KU_LIONQUAD_SLOTS  = 16u;
         static const u32 KU_LIONQUAD_PERIOD = 4000u;
         static const u32 KU_LIONQUAD_SHOTS  = 96u;
