@@ -6,17 +6,25 @@ the ICE-anim car-relative takes, the aftertouch / deathcam / loose-attachment / 
   src/GameSource/Director/Camera/BrnCollisionPolicy.h                      (the class, its inline Construct)
   src/GameSource/Director/Camera/BrnCollisionPolicyAttachedToVehicle.cpp   (its out-of-line bodies)
 
-Stage 7a -- the DWARF layout and Construct @0x82224890. Three reserved spans and a flat float stood where the DWARF
-puts mFrustrumCollisionResolver (+0x10), mCarToCamera (+0x170), mGroundConstraint (+0x1C0) and mPitchMover (+0x230),
-so Construct could not seed them: the frustum resolver's four boxes and minimum distance, the car-to-camera box, the
-ground constraint's box and the pitch mover's speed and value (the minimum elevation, -89 degrees) were whatever the
-memory held.
+Stage 7a (88cf3b6d) -- the DWARF layout and Construct @0x82224890. Three reserved spans and a flat float stood where
+the DWARF puts mFrustrumCollisionResolver (+0x10), mCarToCamera (+0x170), mGroundConstraint (+0x1C0) and mPitchMover
+(+0x230), so Construct could not seed them.
+Stage 7b -- the scene-query pair, the plain arm. The class inherited CollisionPolicy's two empty bodies, so the
+director's scene-query pass asked every car-attached camera to do nothing: the chase cam never pulled in front of the
+wall between it and the car (L2's crash cell h225_s80: the fallback camera 8.3 m behind the car, on the far side of
+the wall it hit). GenerateSceneQueries @0x82252690, ProcessSceneQueryResults @0x82252888, ResolveCollisions
+@0x82224948, UpdateRadius @0x8220E4D0 and UpdateMinElevation @0x822405B8 are bodied; the FrustrumCollisionResolver
+cameras (mbUseFrustrumResolver) stay on the empty pair until piece 6.
 
 Numeric: tests/L1AttachedPolicy.cpp compiles against the revision's BrnCollisionPolicy.h (and includes its
 BrnCollisionPolicyAttachedToVehicle.cpp) and replays tests/L1AttachedPolicyData.h, generated from the console's words
-on emu64 by scratch/OWNERLIST_0927/L1/emu/gen_attached_policy.py (seed 929): group C, the store set of Construct(false)
-and Construct(true) from a pattern-filled policy (6 checks).
-Wiring: the class names the DWARF members.
+on emu64 by scratch/OWNERLIST_0927/L1/emu/gen_attached_policy.py (seed 929):
+  group C (6) the store set of Construct(false) and Construct(true) from a pattern-filled policy;
+  group P (5) 160 cases x 3 frames of Generate -> the car-to-camera answer -> Process through the base pointer, every
+              other callee a recorder with the generator's deterministic effect: the calls and their arguments, the
+              camera after each half, the policy's state, the asserts. A revision without the DWARF layout cannot
+              build group P: its five checks are then counted failed.
+Wiring: the class names the DWARF members and overrides the pair.
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_l1_attached_policy.py [--rev <b5 rev>]
 """
@@ -31,7 +39,7 @@ from fxgs_common import Tree, code_only, compile_and_run, report
 POLICY_H = "src/GameSource/Director/Camera/BrnCollisionPolicy.h"
 POLICY_CPP = "src/GameSource/Director/Camera/BrnCollisionPolicyAttachedToVehicle.cpp"
 VEHICLEREF_CPP = Path(__file__).resolve().parents[1] / "src/GameSource/Director/Utils/BrnVehicleRef.cpp"
-NUMERIC_CHECKS = 6   # C1..C6
+NUMERIC_CHECKS = 11   # C1..C6, P1..P5
 
 
 def _read(tree, path):
@@ -69,6 +77,10 @@ def wiring(tree):
                re.search(member + r"\s*;", body) is not None)
     yield ("no reserved span is left in CollisionPolicyAttachedToVehicle",
            body != "" and re.search(r"\bmaReserved\w*\s*\[", body) is None)
+    for name, address in (("GenerateSceneQueries", "@0x82252690"), ("ProcessSceneQueryResults", "@0x82252888")):
+        yield ("CollisionPolicyAttachedToVehicle overrides %s (%s)" % (name, address),
+               re.search(r"void\s+" + name + r"\s*\(\s*const\s+CollisionPolicySharedInfo\s*&\s*\w*\s*,\s*Camera\s*&"
+                         r"\s*\w*\s*\)\s*override\s*;", body) is not None)
 
 
 def numeric(tree):
@@ -77,8 +89,11 @@ def numeric(tree):
     if "class CollisionPolicyAttachedToVehicle" not in header:
         print("NUMERIC: cannot build -- no CollisionPolicyAttachedToVehicle in BrnCollisionPolicy.h")
         return None
+    body = attached_class(header)
+    flags = "" if re.search(r"SmoothMover\s+mPitchMover\s*;", body) else "/DL1_NO_LAYOUT"
     return compile_and_run(Path(__file__).with_name("L1AttachedPolicy.cpp"), "l1_attached_policy.inc", source,
-                           "L1AttachedPolicy", shadow={POLICY_H: header}, extra_sources=(VEHICLEREF_CPP,))
+                           "L1AttachedPolicy", extra_flags=flags, shadow={POLICY_H: header},
+                           extra_sources=(VEHICLEREF_CPP,))
 
 
 def main():
