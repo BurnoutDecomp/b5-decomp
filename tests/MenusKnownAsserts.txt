@@ -6,3 +6,9 @@
 # (src/GameSource/Network/Managers/BrnNetworkStateManager_wN1_04.cpp:1012) off the pause screen's
 # GuiEventNetworkSuspension. Network/** is Niaz's code: reported to the conductor, not this lane's to fix.
 ^Invalid suspension type$
+#
+# 2026-09-28: while the Driver Details pause is up, BehaviourBystanderCam (and the other behaviours without the
+# update-during-pause bit) tick on a zero timestep and fire this once a frame (BrnLooker.cpp:282). The fix, the
+# director sim-paused store 3e2fee5d, was reverted by e0b1a070 because the PC boot order made the spawn assert; it
+# re-lands on top of lane L4's boot-order parity. Owner: L5 (re-land) / L4 (boot order). Remove this line then.
+^!rw::math::fpu::IsZero\(lTimeStep\.GetFloat\(\)\)$
