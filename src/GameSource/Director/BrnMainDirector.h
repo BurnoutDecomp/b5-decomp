@@ -248,11 +248,17 @@ namespace BrnDirector
         void HandlePrepareForModeAction(const BrnGameState::GameStateModuleIO::PrepareForModeAction& lrAction,
                                         const DirectorInputOutput* lpIO);
 
-        // X360 0x8221A3A8. Compute the traffic-light reference space for the current event.
-        // DECLARATION-ONLY + FLAG (multi-stage VMX pipeline; never scalar-paraphrased).
-        void CalcTrafficLightSpace(s32 liArg2, s32 liArg3, s32 liArg4, s32 liArg5, s32 liArg6,
-                                   s32 liArg7, s32 liArg8, s32 liArg9, s32 liArg10, s32 liArg11,
-                                   s32 liArg12, s32 liArg13, s32 liArg14);
+        // X360 0x8221A3A8. Compute the traffic-light reference space for the current event: the amber
+        // corona transform of the event junction's light nearest the player and in front of it, into
+        // GameState::mTrafficLightSpace (ICE's eICE_TRAFFIC_LIGHT_SPACE). Called by ProcessInputQueue's
+        // countdown push (cases 30 / 47). ⭐ BODIED 2026-09-27 (L3 RACEINTRO) -- see the .cpp.
+        // ⚠️ THE OLD DECLARATION HAD THIRTEEN s32 PARAMETERS: Hex-Rays' phantoms. The console reads r3
+        // (this) and r4 only -- `mr r29, r4` @0x8221A3D0, then `lwz r31, 0xC(r29)` = the frame's
+        // DirectorInputOutput::mpWorldMap -- and both call sites load r4 from ProcessInputQueue's own lpIO
+        // (`lwz r4, 0x3B0+arg_1C(r1)` @0x82237B04 / 0x82237B94). The PS3 DWARF has no parameter at all
+        // (DirectorModule::CalcTrafficLightSpace(), BrnDirectorModule.cpp:1865): there it was a member of
+        // the module that owned the world map.
+        void CalcTrafficLightSpace(const DirectorInputOutput* lpIO);
 
         // ---- debug helpers (all DECLARATION-ONLY + FLAGGED) ----------------------------
 
