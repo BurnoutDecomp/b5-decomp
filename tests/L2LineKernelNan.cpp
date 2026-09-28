@@ -5,7 +5,9 @@
 //                                   the primitives (vmsum3fp128 rule 1, the vnmsubfp cross and fmsubs / fmadds rule 3);
 //   run_l2_line_kernel_nan.py       every row -- also the NaN arms below;
 //   run_l2_cylinder_line.py         (/DL2_LKN_CYLINDER) L2CylinderLineData.h instead: the cylinder's line kernel
-//                                   (stage (c), 2026-09-28), kind 5 = CylinderVolume::ThinLineSegIntersect @0x82BADCE0.
+//                                   (stage (c), 2026-09-28), kind 5 = CylinderVolume::ThinLineSegIntersect @0x82BADCE0
+//                                   called directly, kind 6 = the descriptor's entry CylinderVolume::LineSegIntersect
+//                                   @0x82BAF688 (the thin arm, or FatLineSegIntersect @0x82BAEB10 and its torus arm).
 // REVIEW-K DELTA 2 found 13 fcmpu branches of 623c92bf that were spelled `!(a <= b)` /
 // `!(a >= b)` where the console's `ble` / `bge` (bc 4,gt / bc 4,lt) are TAKEN on an unordered compare, so a NaN went
 // to the other arm (and the primitives' discriminant tests 0x82BA8288 / 0x82BAF95C had the same misreading):
@@ -86,6 +88,43 @@ static bool VecMatches(const u32 (&lauConsole)[4], const Vec4& arPc)
         && LaneMatches(lauConsole[2], Bits(arPc.z)) && LaneMatches(lauConsole[3], Bits(arPc.w));
 }
 
+// The fat cylinder's torus arm (the rows whose site fat_torus_reached is set; L2CylinderLineData.h only) is not bit
+// for bit -- FLAG (PC-platform): rwcTorusLineSegIntersect's SolveQuarticRoots @0x82BACA30 evaluates the console's five
+// inlined VMX powf cascades (log2 / 2^-f minimax rows unk_82014AC0..AF0, a refined reciprocal, the special-case
+// network) as powf (the tree's VmxPowF convention), so its damped Newton walk stops on a neighbouring iterate. Those
+// rows are judged apart (check T): the return, result.v, every unwritten lane and every NaN class exactly, every other
+// lane within KF_TORUS_TOLERANCE of max(1, |console|) -- a gross-error bound, not a precision claim: a wrong root,
+// side, sign or normal moves a lane by the tube (the fatness, >= 0.05 in these rows), while the powf model moves the
+// well-conditioned rows by < 1e-4 and the four grazing rows (a line tangent to the tube: a double root, where an ulp
+// moves the root by its square root) by ~2e-3. The worst deviation is printed.
+static const f32 KF_TORUS_TOLERANCE = 1.0e-2f;
+static f32 gfTorusWorst = 0.0f;
+
+static bool LaneClose(u32 luConsole, u32 luPc)
+{
+    if (luConsole == KU_UNWRITTEN || luPc == KU_UNWRITTEN)
+        return luConsole == luPc;
+    if (IsNanBits(luConsole) || IsNanBits(luPc))
+        return IsNanBits(luConsole) && IsNanBits(luPc);
+    const f32 lfConsole = FromBits(luConsole);
+    const f32 lfPc = FromBits(luPc);
+    if (std::isinf(lfConsole) || std::isinf(lfPc))
+        return luConsole == luPc;
+    const f32 lfDeviation = std::fabs(lfConsole - lfPc) / std::fmax(1.0f, std::fabs(lfConsole));
+    if (lfDeviation > gfTorusWorst)
+        gfTorusWorst = lfDeviation;
+    return lfDeviation <= KF_TORUS_TOLERANCE;
+}
+
+static bool VecClose(const u32 (&lauConsole)[4], const Vec4& arPc)
+{
+    const bool lbX = LaneClose(lauConsole[0], Bits(arPc.x));
+    const bool lbY = LaneClose(lauConsole[1], Bits(arPc.y));
+    const bool lbZ = LaneClose(lauConsole[2], Bits(arPc.z));
+    const bool lbW = LaneClose(lauConsole[3], Bits(arPc.w));
+    return lbX && lbY && lbZ && lbW;
+}
+
 static Vec4 VecFromWords(const u32* lpu)
 {
     Vec4 l = { FromBits(lpu[0]), FromBits(lpu[1]), FromBits(lpu[2]), FromBits(lpu[3]) };
@@ -164,8 +203,8 @@ static bool RunPrimitive(const L2KernelRow& lrRow, const Call& arCall, char* lpc
     return false;
 }
 
-// One row through the PC function; true when every output agrees with the console's.
-static bool RunRow(const L2KernelRow& lrRow, char* lpcWhy, size_t luWhy)
+// One row through the PC function; true when every output agrees with the console's (a torus row: to the tolerance).
+static bool RunRow(const L2KernelRow& lrRow, bool abTorus, char* lpcWhy, size_t luWhy)
 {
     Call lCall;
     BuildCall(lrRow, lCall);
@@ -213,11 +252,15 @@ static bool RunRow(const L2KernelRow& lrRow, char* lpcWhy, size_t luWhy)
     else
     {
 #if defined(L2_LKN_CYLINDER)
-        // kind 5: CylinderVolume::ThinLineSegIntersect @0x82BADCE0, called directly.
+        // kind 5: CylinderVolume::ThinLineSegIntersect @0x82BADCE0, called directly; kind 6: the descriptor's entry
+        // CylinderVolume::LineSegIntersect @0x82BAF688 (the thin arm, or FatLineSegIntersect @0x82BAEB10).
         CylinderVolume lCylinder;
         std::memcpy(&lCylinder, laVolume, sizeof(laVolume));
         lpVolumeObject = &lCylinder;
-        lbRet = lCylinder.ThinLineSegIntersect(lvPt1, lvPt2, lpTm, lResult, lfFat);
+        if (lCall.muKind == 6)
+            lbRet = lCylinder.LineSegIntersect(lvPt1, lvPt2, lpTm, lResult, lfFat);
+        else
+            lbRet = lCylinder.ThinLineSegIntersect(lvPt1, lvPt2, lpTm, lResult, lfFat);
 #else
         std::snprintf(lpcWhy, luWhy, "kind %u is not built in this configuration", lCall.muKind);
         return false;
@@ -229,10 +272,14 @@ static bool RunRow(const L2KernelRow& lrRow, char* lpcWhy, size_t luWhy)
     const bool lbVOk = (lrRow.muV == 0) ? !lbVWritten
                                         : (lResult.v == reinterpret_cast<uintptr_t>(lpVolumeObject));
     const bool lbRetOk = (static_cast<u32>(lbRet ? 1 : 0) == lrRow.muRet);
-    const bool lbPos = VecMatches(lrRow.mauPosition, lResult.position);
-    const bool lbNrm = VecMatches(lrRow.mauNormal, lResult.normal);
-    const bool lbVp  = VecMatches(lrRow.mauVolParam, lResult.volParam);
-    const bool lbLp  = LaneMatches(lrRow.muLineParam, Bits(lResult.lineParam));
+    const bool lbPos = abTorus ? VecClose(lrRow.mauPosition, lResult.position)
+                               : VecMatches(lrRow.mauPosition, lResult.position);
+    const bool lbNrm = abTorus ? VecClose(lrRow.mauNormal, lResult.normal)
+                               : VecMatches(lrRow.mauNormal, lResult.normal);
+    const bool lbVp  = abTorus ? VecClose(lrRow.mauVolParam, lResult.volParam)
+                               : VecMatches(lrRow.mauVolParam, lResult.volParam);
+    const bool lbLp  = abTorus ? LaneClose(lrRow.muLineParam, Bits(lResult.lineParam))
+                               : LaneMatches(lrRow.muLineParam, Bits(lResult.lineParam));
     if (lbRetOk && lbVOk && lbPos && lbNrm && lbVp && lbLp)
         return true;
     std::snprintf(lpcWhy, luWhy,
@@ -248,10 +295,19 @@ int main()
     const int KI_SITES = static_cast<int>(sizeof(kapcL2Sites) / sizeof(kapcL2Sites[0]));
     const int KI_ROWS  = static_cast<int>(sizeof(kaL2KernelRows) / sizeof(kaL2KernelRows[0]));
 
+    // The torus arm's marker site (L2CylinderLineData.h's fat_torus_reached; absent from L2LineKernelNanData.h).
+    int liTorusSite = -1;
+    for (int s = 0; s < KI_SITES; ++s)
+    {
+        if (std::strncmp(kapcL2Sites[s], "fat_torus_reached", 17) == 0)
+            liTorusSite = s;
+    }
+
     int laNanRows[16] = { 0 };
     int laNanFails[16] = { 0 };
     int laFiniteRows[2] = { 0, 0 }, laFiniteFails[2] = { 0, 0 };   // [0] the three kernels, [1] the two primitives
     int liOtherRows = 0, liOtherFails = 0;
+    int liTorusRows = 0, liTorusFails = 0, liTorusHits = 0;
     int liShown = 0;
     static char lacFiniteLines[12][400];
     int liFiniteShown = 0;
@@ -259,9 +315,24 @@ int main()
     {
         const L2KernelRow& lrRow = kaL2KernelRows[r];
         char lacWhy[320] = { 0 };
-        const bool lbOk = RunRow(lrRow, lacWhy, sizeof(lacWhy));
+        const bool lbTorus = (liTorusSite >= 0) && (((lrRow.muSites >> (2 * liTorusSite)) & 3u) != 0);
+        const bool lbOk = RunRow(lrRow, lbTorus, lacWhy, sizeof(lacWhy));
         const bool lbFinite = (lrRow.muWhere0 == 0);          // a row that overwrites no input word
         const u32 luKind = kaL2Inputs[lrRow.muInput].muKind;
+        if (lbTorus)
+        {
+            ++liTorusRows;
+            if (lrRow.muRet != 0) ++liTorusHits;
+            if (!lbOk) ++liTorusFails;
+            if (!lbOk && liShown < 16 && !KB_FINITE_ONLY)
+            {
+                ++liShown;
+                std::printf("  torus row %d (input %u, kind %u, word %u:%u = %08X) sites %08X: %s\n", r,
+                            lrRow.muInput, luKind, lrRow.muWhere0, lrRow.muWord0, lrRow.muBits0, lrRow.muSites,
+                            lacWhy);
+            }
+            continue;                                          // judged by check T only
+        }
         bool lbAnyNanSite = false;
         for (int s = 0; s < KI_SITES; ++s)
         {
@@ -316,6 +387,8 @@ int main()
 #if !defined(L2_LKN_FINITE_ONLY)
     for (int s = 0; s < KI_SITES; ++s)
     {
+        if (s == liTorusSite)
+            continue;                                          // a marker, not a branch: check T
         if (laNanRows[s] == 0)
         {
             std::snprintf(lacLabel, sizeof(lacLabel),
@@ -331,8 +404,18 @@ int main()
                   "O  special rows that reach no listed NaN arm: %d of %d match the console", liOtherRows - liOtherFails,
                   liOtherRows);
     Check(liOtherFails == 0, lacLabel);
+    if (liTorusSite >= 0)
+    {
+        std::snprintf(lacLabel, sizeof(lacLabel),
+                      "T  rows that run the fat arm's torus (%d hits): %d of %d agree -- return, result.v, unwritten "
+                      "lanes and NaN classes exactly, other lanes within %g of max(1, |console|) (FLAG PC-platform: "
+                      "VmxPowF; worst %.3g)", liTorusHits, liTorusRows - liTorusFails, liTorusRows,
+                      static_cast<double>(KF_TORUS_TOLERANCE), static_cast<double>(gfTorusWorst));
+        Check(liTorusFails == 0 && liTorusRows > 0, lacLabel);
+    }
 #else
     (void)laNanRows; (void)laNanFails; (void)liOtherRows; (void)liOtherFails; (void)KI_SITES; (void)liShown;
+    (void)liTorusRows; (void)liTorusFails; (void)liTorusHits;
 #endif
 
     std::printf("L2LineKernelNan: %u checks, %u failures\n", guChecks, guFailures);

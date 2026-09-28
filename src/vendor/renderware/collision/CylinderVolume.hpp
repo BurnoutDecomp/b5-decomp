@@ -33,41 +33,30 @@
 //   0x82BAD938 GetIntervals, 0x82AD5078 the ICF-folded empty `blr` }.
 // Nothing about the body was ever blocked; only the table was, and it is not.
 //
-// BLOCKED (not reconstructed here -- see CylinderVolume.cpp for the precise
-// reasons; declarations omitted per the TriangleVolume precedent):
+// LANDED 2026-09-28 (owner's list, lane L2 CAMCOLLIDE, stage (c)) -- the three
+// that were BLOCKED here, bodied in LineSegIntersect.cpp beside the other
+// volumes' line kernels, every lane checked against the ARTIST words run on
+// emu64 (tests/run_l2_cylinder_line.py), and the descriptor slot bound in
+// VolumeVTables.cpp:
 //     rw::collision::CylinderVolume::LineSegIntersect     @ 0x82BAF688
-//        -- MEASURED 2026-08-19 (wave Q6 targeted headless idat on a PRIVATE
-//           .i64 copy; this address had NO per-address export JSON, which is
-//           why the wave-Q5 record could only call it "unsized"):
-//           EIGHT instructions, and the whole body is recovered --
+//        -- eight instructions, a pure two-way TAIL-CALL dispatcher:
 //             lfs   f0, 0x50(r3)          ; f0  = this->mfFatness
 //             fadds f13, f0, f1           ; f13 = mfFatness + the caller's fatness
-//             lfs   f0, flt_82001CC0      ; == 0.0f (word 0x00000000, re-dumped)
+//             lfs   f0, flt_82001CC0      ; == 0.0f (word 0x00000000)
 //             fcmpu cr6, f13, f0
-//             bne   cr6, loc_82BAF6A4     ; total fatness != 0 -> the fat arm
+//             bne   cr6, loc_82BAF6A4     ; total fatness != 0 (or NaN) -> the fat arm
 //             b     ThinLineSegIntersect  ; 0x82BAF6A0, the fall-through arm
 //           loc_82BAF6A4:
 //             b     FatLineSegIntersect
-//           i.e. a pure two-way TAIL-CALL dispatcher: total fatness exactly
-//           zero picks the thin kernel, anything else the fat one.
-//           IT IS STILL BLOCKED, and the blocker is now named exactly: both
-//           tail-call targets are unreconstructed and have NO body anywhere in
-//           the tree, so landing the eight instructions would plant two
-//           guaranteed LNK2019s in an already-mounted TU (AGENTS gotcha 12 --
-//           `cl /c` cannot see that). Land the two kernels first, then this.
 //     rw::collision::CylinderVolume::FatLineSegIntersect  @ 0x82BAEB10
-//        -- MEASURED: 733 instructions (0x82BAEB10..0x82BAF684). Calls
-//           AALineClipper::AALineClipper, rwcCylinderLineSegIntersect,
-//           rwcTorusLineSegIntersect, with __savevmx_117/__savefpr_25 hand
-//           register allocation.
+//        -- 733 instructions (0x82BAEB10..0x82BAF684): the cylinder grown by the
+//           total fatness, its cap edges rounded by a torus (AALineClipper::
+//           AALineClipper, rwcCylinderLineSegIntersect, rwcTorusLineSegIntersect).
+//           FLAG (PC-platform): the torus root comes from SolveQuarticRoots, whose
+//           five inlined VMX powf cascades are evaluated as powf (VmxPowF).
 //     rw::collision::CylinderVolume::ThinLineSegIntersect @ 0x82BADCE0
-//        -- MEASURED: 441 instructions (0x82BADCE0..0x82BAE3C4). Calls
-//           rwcCylinderLineSegIntersect, with __savevmx_124 hand register
-//           allocation.
-//        (The two counts above replace this banner's earlier "~500-instruction"
-//        estimate -- they are now dumped, not guessed. A faithful de-optimised
-//        reconstruction of their per-lane geometry still cannot be grounded
-//        with confidence, so they stay BLOCKED per the no-fabrication rule.)
+//        -- 441 instructions (0x82BADCE0..0x82BAE3C4), over
+//           rwcCylinderLineSegIntersect.
 //
 // NO DWARF / Feb-2007 source exists for this TU. The LAYOUT below is entirely
 // X360-asm-attested (member OFFSETS are ground truth, pinned by the
@@ -116,7 +105,7 @@ namespace collision
 class AABBox;        // vendor/renderware/collision/AABBox.hpp -- GetBBox's reference out-param
                      // (same NAMED-not-included precedent as CollisionVolume.hpp:89-96)
 
-struct VolumeLineSegIntersectResult;   // vendor/renderware/collision/LineSegIntersect.hpp (ThinLineSegIntersect)
+struct VolumeLineSegIntersectResult;   // vendor/renderware/collision/LineSegIntersect.hpp (the line kernels)
 struct GPInstance;   // vendor/renderware/collision/GPInstance.hpp (same
                      // forward-decl precedent as CapsuleVolume.hpp:56)
 
@@ -172,11 +161,23 @@ public:
     // @ 0x82BADCE0 (441 insns) -- the ZERO-fatness arm of the cylinder's line kernel: the segment arPt1 -> arPt2
     // against the frame's z cylinder |z| <= mfHalfHeight, radius mfRadius, in its frame (composed with lpTransform
     // when given); fills arResult on a hit (1). LANDED 2026-09-28 (owner's list, lane L2, stage (c)); body in
-    // LineSegIntersect.cpp. The dispatcher LineSegIntersect @0x82BAF688 (mfFatness + afFatness == 0 -> this, else
-    // FatLineSegIntersect @0x82BAEB10) and the descriptor slot land with the fat arm. The same argument list as
-    // the other volumes' LineSegIntersect (r3..r7, f1); the thin arm never reads afFatness.
+    // LineSegIntersect.cpp. The dispatcher LineSegIntersect @0x82BAF688 below sends it every call whose
+    // mfFatness + afFatness is exactly 0. The same argument list as the other volumes' LineSegIntersect
+    // (r3..r7, f1); the thin arm never reads afFatness.
     RwBool ThinLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
                                 VolumeLineSegIntersectResult& arResult, f32 afFatness) const;
+
+    // @ 0x82BAEB10 (733 insns) -- the FATTENED arm: the cylinder grown by mfFatness + afFatness, its cap edges
+    // rounded by a torus (rwcTorusLineSegIntersect over an AALineClipper box). LANDED 2026-09-28 (lane L2,
+    // stage (c)); body in LineSegIntersect.cpp.
+    RwBool FatLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+                               VolumeLineSegIntersectResult& arResult, f32 afFatness) const;
+
+    // @ 0x82BAF688 (8 insns) -- the descriptor's lineSegIntersect slot: mfFatness + afFatness == 0 tail-calls
+    // ThinLineSegIntersect, anything else (a NaN included) FatLineSegIntersect. LANDED 2026-09-28; bound in
+    // VolumeVTables.cpp.
+    RwBool LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+                            VolumeLineSegIntersectResult& arResult, f32 afFatness) const;
 
     // --- members (X360-asm-attested offsets; inferred names) ----------------
     // The local frame: three basis rows + a centre row. Initialize seeds
