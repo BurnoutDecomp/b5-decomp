@@ -14,6 +14,9 @@
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h" // ArbitratorStateContainer::GetSharedPlaylists (Prepare)
 #include "GameSource/Director/Camera/BrnSharedCameraContainer.h"        // SharedCameraContainer::GetGameplayCameraHelperIndex
 #include "GameSource/Director/Utils/BrnDirectorTimestep.h"              // BrnDirector::Timestep::E_GAME (the fly-by's clock)
+#include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"             // ConsoleVpu::Dot3 (the vmsum3fp128 model, rule 1)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"              // [diag] CgsDev::Log::gpDebugPrint
+#include <cstdlib>                                                        // [diag] getenv (BRN_CRASHCAM_DIAG)
 
 // ============================================================================
 // BrnDirector::ArbStateCrashNav -- reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity)
@@ -42,25 +45,28 @@ namespace BrnDirector
 
         // The crash-nav per-frame depth-of-field "blurriness" the fly-by camera requests
         // (SF_CRASHNAV_BLURRINESS, loaded as flt_82CDA4E0 into the camera's running-blur lane each
-        // ACTIVE/TURNABOUT/WAITING frame). FLAG (value): flt_82CDA4E0 is not in any available rodata
-        // dump, so the VALUE below is a flagged placeholder -- only the symbol->member mapping
-        // (read off the load offset) is asm-attested. Pin the real value when the 0x82CDA4E0 rodata
-        // is dumped.
-        const f32 SF_CRASHNAV_BLURRINESS = 1.0f;  // flt_82CDA4E0  FLAG: value undumped (placeholder)
+        // ACTIVE/TURNABOUT/WAITING frame: lfs @0x8226DDB0 / 0x8226DF54 / 0x8226E150, stfs camera
+        // +0x134). VALUE READ FROM THE IMAGE (tools/re/x360rd.py 0x82CDA4E0): 3F800000 == 1.0.
+        const f32 SF_CRASHNAV_BLURRINESS = 1.0f;  // flt_82CDA4E0 == 3F800000
 
         // The two squared-distance gates the fly-by turnabout / re-entry tests the player's distance
         // from the crash-nav camera position against (the X360 vmsum3fp128 squared length compared by
-        // vcmpgtfp against these rodata constants). DWARF names them VecFloat; here the scalar
-        // single-lane value is read (the project's de-modelled-VecFloat rule).
-        //   OUTER (case 3, unk_82FAAAF0): squaredDist > OUTER -> blend OUT and turn about (-> case 4).
-        //   INNER (case 4, unk_82FAA990): squaredDist < INNER -> come back in (-> case 3).
-        // FLAG (values): unk_82FAAAF0 / unk_82FAA990 are not in any available rodata dump, so the
-        // VALUES below are flagged placeholders -- only the symbol->member mapping (read off the
-        // load offsets) is asm-attested. The comparison DIRECTIONS are X360-attested (the OUTER test
-        // is `dist > OUTER`; the INNER test is `INNER > dist`). Pin the real values when the
-        // 0x82FAAAF0 / 0x82FAA990 rodata is dumped. Do NOT treat these magnitudes as ground truth.
-        const f32 KF_MAX_CRASH_NAV_PIC_PARADISE_OUTER_DISTANCE_SQ = 1.0f;  // unk_82FAAAF0  FLAG: undumped
-        const f32 KF_MAX_CRASH_NAV_PIC_PARADISE_INNER_DISTANCE_SQ = 1.0f;  // unk_82FAA990  FLAG: undumped
+        // vcmpgtfp against these constants). DWARF names them VecFloat; here the scalar single-lane
+        // value is read (the project's de-modelled-VecFloat rule).
+        //   OUTER (case 3, unk_82FAAAF0 @0x8226DE5C): squaredDist > OUTER -> fade and turn about (-> 4).
+        //   INNER (case 4, unk_82FAA990 @0x8226E038): INNER > squaredDist -> come back in (-> 3).
+        // ⭐ BOTH ARE .bss DYNAMIC-INIT CONSTANTS -- the image reads 0 at both addresses BY
+        // DEFINITION, which is why the old body carried a 1.0 "undumped" placeholder for each
+        // (OWNERLIST 2026-09-27, lane L5). tools/re/findinit.py names their CRT-init thunks, which
+        // splat one .rdata float into all four lanes (lfs / lvlx / vspltw / stvx128):
+        //   0x82C48488..0x82C484AC: lfs flt_8200D518 (481C4000 == 160000.0 == 400 m squared)
+        //                           -> stvx128 unk_82FAAAF0
+        //   0x82C484B0..0x82C484D4: lfs flt_8200D51C (47EF4200 == 122500.0 == 350 m squared)
+        //                           -> stvx128 unk_82FAA990
+        // With the 1.0 placeholders any fly-by frame 1 m from the car turned about after 2 s and
+        // could never come back (no camera is ever inside 1 m of the car's centre).
+        const f32 KF_MAX_CRASH_NAV_PIC_PARADISE_OUTER_DISTANCE_SQ = 160000.0f;  // unk_82FAAAF0 = splat(flt_8200D518)
+        const f32 KF_MAX_CRASH_NAV_PIC_PARADISE_INNER_DISTANCE_SQ = 122500.0f;  // unk_82FAA990 = splat(flt_8200D51C)
 
         // The time-in-state thresholds the fly-by waits before testing the distance gates / the
         // turnabout completion (lfs flt_82001D9C == 2.0 for the distance gate; flt_82001CC0/C98
@@ -95,8 +101,12 @@ namespace BrnDirector
         // +0x220, i.e. VehicleInfo::GetWorldPosition), the camera EYE position from this state's
         // camera +0x30 (mTransform's translation row, asm `lvx128 v13, this, 0x40` with mCamera
         // embedded at this+0x10 -> camera+0x30) -- NOT mSubject (+0x40, the look-at target) --
-        // subtracts them (vsubfp), and squares-and-sums the xyz lanes (vmsum3fp128). Expressed here
-        // through the committed vpu vocabulary BY NAME (NOT paraphrased to a per-axis scalar formula).
+        // subtracts them (`vsubfp v0, v13, v0` == camera - player, @0x8226DE44 / 0x8226E020), and
+        // squares-and-sums the xyz lanes (`vmsum3fp128 v0, v0, v0` @0x8226DE50 / 0x8226E02C).
+        // Rounding (ROUNDING_RULE.md): the vsubfp lanes are rounded each (rule 4, the vpu
+        // operator-); the vmsum3fp128 is ONE rounding of the f64 sum (rule 1, ConsoleVpu::Dot3).
+        // FLAG (model): vmsum = one rounding of the f64 sum (xenia DOT_PRODUCT_3). Rule 6: a
+        // denormal lane or sum needs the eye within ~1e-19 m of the car's origin -- not reachable.
         inline f32 PlayerToCameraDistanceSquared(const ArbStateSharedInfo& lrSharedInfo,
                                                   const Camera::Camera& lrCamera)
         {
@@ -110,7 +120,8 @@ namespace BrnDirector
             const rw::math::vpu::Vector3& lrCameraPos =
                 reinterpret_cast<const rw::math::vpu::Vector3&>(lrCamera.GetTransform().wAxis);
 
-            return rw::math::vpu::MagnitudeSquared(lrPlayerPos - lrCameraPos);  // vsubfp + vmsum3fp128
+            const rw::math::vpu::Vector3 lDelta = lrCameraPos - lrPlayerPos;          // vsubfp
+            return Camera::Utils::ConsoleVpu::Dot3(lDelta, lDelta);                   // vmsum3fp128
         }
 
         // The player-car "keep crash-nav running" gate byte.
@@ -224,6 +235,16 @@ namespace BrnDirector
         }
 
         meState = E_STATE_PREPARING;   // +0x878 = 1
+
+        // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. One line per entry edge.
+        if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[pause-cam] ArbStateCrashNav::Prepare INACTIVE -> PREPARING (movie player playing "
+                << (mICEMoviePlayer.IsPlaying() ? 1 : 0) << ", pause playlist "
+                << lrSharedInfo.mpStateContainer->GetSharedPlaylists().GetPausePlaylist().GetMovieCount()
+                << " takes, fly-by allocated " << (mRoadRunnerCam.IsAllocated() ? 1 : 0) << ")\n";
+        }
 
         // The movie player is only set up once; a re-entry while it is still playing keeps the
         // take that is already running (X360 `lbz r11, 0x830` -> mICEMoviePlayer.IsPlaying()).
@@ -383,6 +404,28 @@ namespace BrnDirector
                 lrCamera = mICEMoviePlayer.GetCamera();
             }
 
+            // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. Every 30th ACTIVE frame: which source
+            // drives the pause camera, the ICE take's playback position, and where the ICE camera is.
+            {
+                static s32 siPauseCamDiagFrame = 0;
+                if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0 &&
+                    (siPauseCamDiagFrame++ % 30) == 0)
+                {
+                    const ICEPlayingMovie lMovie = lrSharedInfo.mpICEWrapper->GetCurrentMovie();
+                    const Camera::Camera* lpIceCamera = lrSharedInfo.mpICEWrapper->GetCamera();
+                    const rw::math::vpu::Vector3 lIceEye = lpIceCamera->GetTransform().wAxis;
+                    const rw::math::vpu::Vector3 lStateEye = lrCamera.GetTransform().wAxis;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[pause-cam] sample t " << mfTimeInState << " flyby " << (lbDriveFlyByCamera ? 1 : 0)
+                        << " inInterp " << (mICEMoviePlayer.mInInterpolator.IsAllocated() ? 1 : 0)
+                        << " outInterp " << (mICEMoviePlayer.mOutInterpolator.IsAllocated() ? 1 : 0)
+                        << " wrapperPlaying " << (lrSharedInfo.mpICEWrapper->IsPlayingMovie() ? 1 : 0)
+                        << " movieValid " << (lMovie.mbIsValid ? 1 : 0) << " pos " << lMovie.mfPlaybackPositionParameter
+                        << " iceEye (" << lIceEye.x << ", " << lIceEye.y << ", " << lIceEye.z << ")"
+                        << " stateEye (" << lStateEye.x << ", " << lStateEye.y << ", " << lStateEye.z << ")\n";
+                }
+            }
+
             // Fade IN of black while the take wants it, OUT otherwise.
             const char* lpcFadeHook = mRoadRunnerCam.GetBehaviour()->ShouldFadeBlackIn()
                                           ? "Black_In_BW" : "Black_Out_BW";
@@ -532,5 +575,24 @@ namespace BrnDirector
         // timestep, then raise the camera's "small near clip" dirty bit.
         mfTimeInState += lrSharedInfo.mfTimestep;                       // +0x880 += *(a2+0x5C)
         GetNonConstCamera().mState_uFlags |= KU_CAMERA_DIRTY_SMALL_NEAR_CLIP;  // oris +0x150, 1
+
+        // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. One line per meState edge, with the
+        // fly-by / movie-player camera choice and the fade hook the camera now carries.
+        {
+            static EState seLastState = E_STATE_INACTIVE;
+            if (meState != seLastState && getenv("BRN_CRASHCAM_DIAG") != 0 &&
+                CgsDev::Log::gpDebugPrint != 0)
+            {
+                const Camera::CameraEffects& lrEffects = GetNonConstCamera().GetEffects();
+                *CgsDev::Log::gpDebugPrint
+                    << "[pause-cam] ArbStateCrashNav state " << static_cast<s32>(seLastState) << " -> "
+                    << static_cast<s32>(meState) << " (time " << mfTimeInState << ", fly-by finished "
+                    << ((mRoadRunnerCam.IsAllocated() && mRoadRunnerCam.GetBehaviour()->HasFinished()) ? 1 : 0)
+                    << ", movie playing " << (mICEMoviePlayer.IsPlaying() ? 1 : 0) << ", start hook '"
+                    << (lrEffects.mbHasStartHookNameString ? lrEffects.mStartHookNameString.mHookNameString : "")
+                    << "')\n";
+            }
+            seLastState = meState;
+        }
     }
 }
