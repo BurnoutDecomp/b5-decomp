@@ -31,21 +31,24 @@
 //   ArbStateCarSelect::SetupJunkyardShotgroup @0x821F64A0
 //   ArbStateCarSelect::StartCarUnlockCam      @0x8226F398
 //   ArbStateCarSelect::Update                 @0x8226F5D0
+//   ArbStateCarSelect::Release                @0x82236050   (restored 2026-09-27)
 //   InterpolaterHelper::Prepare               @0x82266200
 //
 // The director's OFFLINE junkyard (car-select) arbitrator state -- and, through the
 // GameState::mbNewProfileIntroActive branch of its PREPARING state, the retail
 // NEW-PROFILE GAME-INTRO fly-by camera. See the header banner for the intro path.
 //
-// SCOPE NOTE. The X360 ledger's function set for this TU is the six functions listed
-// above plus InterpolaterHelper::Prepare; every one is reconstructed here, and every arm
-// of Update's 14-way state machine is reproduced. `Release` / `Destruct` (DWARF
-// BrnArbStateCarSelect.cpp:1017 / :1038) are NOT in this build's export set, so no
-// override is declared for them -- the base declarations stand. Three sub-behaviours the
-// X360 inlines are documented ⚠️ GATEs rather than fabricated (each carries its own
-// CONSEQUENCE + DELETE-WHEN): the CHANGING_TO_ROAMING hand-off (needs Release), the
-// per-frame impact shake (needs CameraImpactEffect::Update + CameraShake::Parameters),
-// and the car-asset's own unlock movie (needs the burnoutcarasset generated field set).
+// SCOPE NOTE. The X360 ledger's function set for this TU is the functions listed above plus
+// InterpolaterHelper::Prepare; every one is reconstructed here, and every arm of Update's
+// 14-way state machine is reproduced. `Destruct` (DWARF BrnArbStateCarSelect.cpp:1038) is not
+// in this build's export set, so the base declaration stands. ⛔ `Release` (DWARF :1017) was
+// read the same way and was WRONG: ARTIST has it at 0x82236050 (the export set files it under
+// BrnBehaviourManager.h, whose handle-release bodies it inlines), and its absence here leaked
+// the car-select's camera behaviours on every junkyard exit -- see the body. Two sub-behaviours
+// the X360 inlines are documented ⚠️ GATEs rather than fabricated (each carries its own
+// CONSEQUENCE + DELETE-WHEN): the per-frame impact shake (needs CameraImpactEffect::Update +
+// CameraShake::Parameters), and the car-asset's own unlock movie (needs the burnoutcarasset
+// generated field set).
 //
 // All member access is BY NAME (the x64 gate rule); the console byte offsets quoted in
 // the header are provenance only.
@@ -327,6 +330,53 @@ namespace BrnDirector
     const char* ArbStateCarSelect::GetName() const
     {
         return "ArbStateCarSelect";
+    }
+
+    // ------------------------------------------------------------------------
+    // Release @0x82236050
+    //
+    // Hand every camera behaviour the state still holds back to the manager and drop to
+    // INACTIVE. The console, store for store:
+    //     0x82236068  stw 0, 0x2D4(this)          meState = E_STATE_INACTIVE -- FIRST
+    //     then nine inlined BehaviourHandle::Release bodies (`lbz` the allocated byte; if set,
+    //     UnSetBehaviourUsedByHandle(handle.mpManager, handle key), clear pool / manager /
+    //     behaviour, clear the byte), in this order:
+    //         +0x180 mTransitionCam            +0x20C mToCarSelectInterpolater
+    //         +0x25C mFromGameplayInterpolater +0x234 mToGameplayInterpolater
+    //         +0x1A8 mIntroNoNewCars           +0x1BC mIntroNewCars
+    //         +0x1F8 mLookAroundCarCam         +0x1E4 mIdleCam
+    //         +0x1D0 mGameIntro
+    //     0x822361D4  mr r4,this; lwz r3,0x18(info)   CheckNoBehavioursAreAllocatedByState(this)
+    //     li r3,1                                      return true
+    // mCarUnlockCam (+0x194) is the one handle it does NOT touch: Update's CAR_UNLOCK arm hands
+    // it back itself.
+    //
+    // ⛔ THIS OVERRIDE WAS MISSING (restored 2026-09-27, owner's list L1 CAMPOOL). The old
+    // banner read the function's absence from the export set as "no override", so the
+    // CHANGING_TO_ROAMING hand-off's virtual Release dispatched to ArbitratorState::Release
+    // (`return true`) and every junkyard exit LEFT the car-select's behaviours allocated: in all
+    // three of the owner's crash dumps ArbStateCarSelect still owns two IceAnim takes (two of
+    // the eight LARGE behaviour slots), the look-around-car RotateAboutVehicle and an
+    // interpolator, in free roam. The DecFIGS DWARF declares this override
+    // (`virtual bool Release(ArbStateSharedInfo&)`, defined at BrnArbStateCarSelect.cpp:1017)
+    // and ARTIST has its body; it was a hole in the export set, not in the class.
+    // ------------------------------------------------------------------------
+    bool ArbStateCarSelect::Release(ArbStateSharedInfo& lrSharedInfo)
+    {
+        meState = E_STATE_INACTIVE;
+
+        mTransitionCam.Release();
+        mToCarSelectInterpolater.Release();
+        mFromGameplayInterpolater.Release();
+        mToGameplayInterpolater.Release();
+        mIntroNoNewCars.Release();
+        mIntroNewCars.Release();
+        mLookAroundCarCam.Release();
+        mIdleCam.Release();
+        mGameIntro.Release();
+
+        lrSharedInfo.mpBehaviourManager->CheckNoBehavioursAreAllocatedByState(this);
+        return true;
     }
 
     // ------------------------------------------------------------------------
@@ -1308,24 +1358,13 @@ namespace BrnDirector
             {
                 lrSharedInfo.mpStateContainer->SetCurrentState(
                     ArbitratorStateContainer::E_STATE_ROAMING);
-                Release(lrSharedInfo);   // the virtual
-
-                // FLAG (family invariant, not a transcription): drop out of the hand-off state.
-                // The DecFIGS DWARF DOES declare `virtual bool ArbStateCarSelect::Release(
-                // ArbStateSharedInfo&)` (BrnArbStateCarSelect.h:196) -- so the class overrides it
-                // and the earlier note's "Release() is NOT in this TU's X360 export set" was a
-                // HOLE IN THE EXPORT SET, not a missing override. That override's body is not
-                // recovered, but every sibling Release in this family ends `meState =
-                // E_STATE_INACTIVE` (ArbStateRoaming::Release, ArbStateCrashing::Release,
-                // ArbStateCrashMode's ...), and the state machine's correctness depends on it:
-                // ⛔ WITHOUT THIS LINE THE STATE STAYS AT CHANGING_TO_ROAMING AND RE-TAKES THE
-                // FRAME EVERY UPDATE. Measured: `[crashcam] container current state -> 1
-                // (ArbStateRoaming)` 6,066 times in one run, and because UpdateAll visits
-                // CarSelect (index 8) AFTER Crashing (index 2), the crash camera was handed the
-                // frame and had it taken away again in the same update -- the state machine ran
-                // perfectly and nothing it produced could ever reach the screen.
-                // DELETE-WHEN: ArbStateCarSelect::Release is recovered and this moves into it.
-                meState = E_STATE_INACTIVE;
+                // The virtual (X360 `(*(*this + 12))(this, info)`): ArbStateCarSelect::Release
+                // @0x82236050, which drops meState to INACTIVE as its FIRST store and hands the
+                // state's behaviours back. (The `meState = E_STATE_INACTIVE` that used to follow
+                // this call stood in for the override while it was missing -- without it the
+                // state re-took the frame every update, `[crashcam] container current state -> 1`
+                // 6,066 times in one run. It lives in Release now, where the console has it.)
+                Release(lrSharedInfo);
             }
             break;
 
