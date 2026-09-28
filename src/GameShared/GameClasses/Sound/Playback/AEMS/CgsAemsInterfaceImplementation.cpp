@@ -267,7 +267,8 @@ namespace Playback
         else
         {
             for (u32 luChannel = 0; luChannel < luChannels; ++luChannel)
-                AddStage(0, mRouteHandle, 1);
+                // ARTIST 826C2B24..28: each Route sees every source channel.
+                AddStage(0, mRouteHandle, luChannels);
         }
 
         rw::audio::core::PlugIn** lppMainPlugins = 0;
@@ -296,7 +297,12 @@ namespace Playback
         {
             lpPlayer->mNumPannerVoices = 1;
             lpPlayer->mpPan2D[0] = lppMainPlugins[4];
-            lpPlayer->mpSendWet = lppMainPlugins[5];
+            // ARTIST 826C2D08 leaves mpSendWet null. The dry Send stays
+            // local (r30 at 826C2F60), so wet controls cannot mute it.
+            rw::audio::core::PlugIn* lpDrySend = lppMainPlugins[5];
+            // FLAG PC-platform witness: real post-gain sample contribution.
+            CgsSound::PcmTrace::Register(lpDrySend, apParams,
+                lpBaseVoice->GetIdent(), "aems-mix");
             if (apOutputs)
             {
                 const f32 lfAzimuth = static_cast<f32>(apOutputs[0]) *
@@ -307,7 +313,7 @@ namespace Playback
             }
             void* lapTarget[1] = { lpInternalSubmix };
             rw::audio::core::Send::EventEvent(
-                reinterpret_cast<rw::audio::core::Send*>(lpPlayer->mpSendWet),
+                reinterpret_cast<rw::audio::core::Send*>(lpDrySend),
                 0, lapTarget);
         }
         else
@@ -334,7 +340,13 @@ namespace Playback
                         1, 3, laPanner, &lppPannerPlugins, lpSystem);
                 if (!lpPlayer->mpPannerVoice[luChannel])
                     continue;
+                // ARTIST 826C2DE8/2E08 uses the main voice priority.
+                rw::audio::core::Voice::SetPriority(
+                    lpPlayer->mpPannerVoice[luChannel],
+                    static_cast<f32>(aiNumOutputs) * 0.01f);
                 lpPlayer->mpPan2D[luChannel] = lppPannerPlugins[1];
+                CgsSound::PcmTrace::Register(lppPannerPlugins[2], apParams,
+                    lpBaseVoice->GetIdent(), "aems-mix");
                 if (apOutputs)
                 {
                     const f32 lfAzimuth = static_cast<f32>(apOutputs[luChannel]) *
