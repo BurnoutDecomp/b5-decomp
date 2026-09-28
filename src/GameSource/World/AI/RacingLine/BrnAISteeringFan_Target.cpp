@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cfloat>   // FLT_MAX (the -3.4028235e38 / +3.4028235e38 seeds)
+#include <cmath>    // std::fmaf (AccumulateWeightings' fmadds)
 #include <cstdlib>  // [DIAG] getenv (BRN_AI_FAN_DIAG)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] BRN_AI_FAN_DIAG witness
 
@@ -131,20 +132,29 @@ SteeringFan* SteeringFan::AccumulateWeightings()
     for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
         lafAccumulated[liStep] = 0.0f;
 
+    // ROUNDING_RULE rule 3 (L6 AIDRIVE, owner list 2026-09-27): every fold is ONE rounding --
+    // `fmadds acc, weight, bias, acc` at 0x827790FC, 0x82779100, 0x82779114, 0x82779118, 0x8277912C,
+    // 0x82779130, 0x82779144, 0x82779148 (the 8-wide block, run twice) and 0x82779194 (the 17th);
+    // two of them spell the product bias * weight, which fmaf's exact product does not tell apart.
+    // The PC spelling rounded each product before the add, so near-equal rays could swap places in
+    // GetBestIndex's max.
     for (s32 liContributor = 0; liContributor < E_FAN_CONTRIBUTORS_COUNT; ++liContributor)
     {
         const f32 lfBias = kfBias[meBiasMode][liContributor];
         if (lfBias != 0.0f)
         {
             for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
-                lafAccumulated[liStep] += mfWeighting[liContributor][liStep] * lfBias;
+                lafAccumulated[liStep] =
+                    std::fmaf(mfWeighting[liContributor][liStep], lfBias, lafAccumulated[liStep]);
         }
     }
 
+    // `fsubs f12, acc, cum ; fmadds f12, f12, f0 (0.5), cum` at 0x82779208 .. 0x82779278 (x2) and
+    // 0x827792AC -- one rounding too (value-neutral here: the halving is exact above the subnormals).
     for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
     {
         const f32 lfCumulative = mfCumulativeWeighting[liStep];
-        mfCumulativeWeighting[liStep] = lfCumulative + (lafAccumulated[liStep] - lfCumulative) * 0.5f;
+        mfCumulativeWeighting[liStep] = std::fmaf(lafAccumulated[liStep] - lfCumulative, 0.5f, lfCumulative);
     }
 
     // [DIAG] NOT IN THE X360 BINARY (BRN_AI_FAN_DIAG=1). mfCumulativeWeighting measured ALL
