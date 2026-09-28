@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // =====================================================================================
 // rw::audio::core::GinsuPlayer / GinsuSynthData bodies -- the granular engine-sound
 // synthesizer ("Gns0"), the heart of Burnout's car-engine audio.
@@ -948,6 +949,9 @@ int GinsuPlayer::Process(GinsuPlayer *self, Mixer *ctx, bool /*isLastInput*/)
     SampleBuffer *lpTemp = ctx->mpSrcBuffer;
     ctx->mpSrcBuffer = ctx->mpDstBuffer;
     ctx->mpDstBuffer = lpTemp;
+    // FLAG PC-platform witness: synthesized engine output, read-only.
+    CgsSound::PcmTrace::Measure(self, ctx->mpSrcBuffer->mpSamples,
+        ctx->mNumSamples, ctx->mbChannelCount, ctx->mpSrcBuffer->muStride);
     return 1;   // BUFFERSTATUS_AVAILABLE
 }
 
