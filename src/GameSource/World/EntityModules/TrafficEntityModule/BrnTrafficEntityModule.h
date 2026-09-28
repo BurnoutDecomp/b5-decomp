@@ -550,6 +550,11 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // Online only: queue the network-replicated traffic the crash module says must crash.
         void HandleCrashingNetworkTraffic( const BrnTrafficIO::InputBuffer_PostScene* lpInput );
 
+        // Pre-physics: the per-race-car AI frustum-query answers (AIPostSceneQueryRequests' queries,
+        // answered by the scene pass) -> maStoredAITrafficData, the lists the NEXT post-scene publishes.
+        // X360 @0x82728400; DWARF BrnTrafficEntityModule.h:1759 (BrnTrafficEntityModule.cpp:14621).
+        void StoreAISceneResultsForNextFrame( const BrnTrafficIO::InputBuffer_PrePhysics* lpInput );
+
         // Last frame's per-race-car nearby-traffic lists -> this frame's AI interface.
         void ConvertSceneResultsToTrafficDataForAI( BrnTrafficIO::OutputBuffer_PostScene* lpOutput );
 

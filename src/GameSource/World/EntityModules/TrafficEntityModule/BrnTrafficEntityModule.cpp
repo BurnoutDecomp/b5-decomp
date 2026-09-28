@@ -817,10 +817,15 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
             // that turns the module's maNewRemovedVehicles into physics RemoveTrafficEvents,
             // i.e. the only thing that ever frees a slot in the 20-car physical pool.
             CleanUpCrashedVehiclePhysics( lpOutput );
-            {
-                static bool sbLogged = false;
-                LogMissingLeg_Q7PrePhysics( sbLogged, "StoreAISceneResultsForNextFrame (in) (no export dumped)" );
-            }
+
+            // 0x8274C7FC..0x8274C804 `mr r4,r28 (lpInput) ; mr r3,r31 ; bl` -- LANDED (L6 AIDRIVE,
+            // 2026-09-27; was a LogMissingLeg park whose "no export dumped" note was stale: the
+            // export is 0x82728400.json). The last leg of the running arm: last post-scene's AI
+            // frustum-query answers become maStoredAITrafficData, the ONLY source of the traffic
+            // entities ConvertSceneResultsToTrafficDataForAI publishes to the AI. With it parked every
+            // rival's avoidance list held race cars only, and the steering fan's AvoidTraffic /
+            // AvoidOncomingTraffic rows (kfBias -100 / -400) never saw a traffic car.
+            StoreAISceneResultsForNextFrame( lpInput );
         }
         break;
 
@@ -20516,11 +20521,15 @@ namespace
 {
     // The two scene-query ids this module registers for its own coarse queries. Both are
     // image .data constants read back from the retail build; the matching result consumers
-    // (ProcessNearbyTrafficSceneQueryResults / StoreAISceneResultsForNextFrame, neither
-    // reconstructed yet) compare against the same two words, the AI one as a base plus the
-    // active-race-car index.
+    // (ProcessNearbyTrafficSceneQueryResults / StoreAISceneResultsForNextFrame) compare against
+    // the same two words, the AI one as a base plus the active-race-car index.
     const u32 KU_NEARBY_TRAFFIC_SPHERE_QUERY_ID = 99u;
-    const u32 KU_AI_FRUSTUM_QUERY_ID_BASE       = 31438u;
+    const u32 KU_AI_FRUSTUM_QUERY_ID_BASE       = 31438u;   // dword_82F2FE8C == 0x7ACE
+    // The LAST id StoreAISceneResultsForNextFrame accepts: .bss dword_8300CB54, written by the CRT
+    // thunk 0x82C66740..0x82C66750 as `lwz dword_82F2FE8C ; addi +0x23 ; stw` == base + 35. The
+    // drain's range test is `cmplw id, base ; blt` then `cmplw id, last ; bgt` (0x827284A4..B4),
+    // both ends inclusive. Only base + 0..7 are ever posted (AIPostSceneQueryRequests' eight cars).
+    const u32 KU_AI_FRUSTUM_QUERY_ID_LAST       = KU_AI_FRUSTUM_QUERY_ID_BASE + 35u;
 
     // The sphere query around the frame camera: radius, and the entity-type mask it carries.
     const f32 KF_NEARBY_TRAFFIC_QUERY_RADIUS  = 70.0f;
@@ -20682,6 +20691,71 @@ void TrafficEntityModule::CreateTrafficAIEntity( u32                            
         lWorld.w = 0.0f;
 
         lpOutEntity->maBBCorners[ liCorner ] = lWorld;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// StoreAISceneResultsForNextFrame @0x82728400  (DWARF BrnTrafficEntityModule.cpp:14621)
+//
+// The pre-physics drain of the per-race-car AI frustum queries AIPostSceneQueryRequests posts
+// every post-scene. The scene pass answers them into the pre-physics input's scene-result queue
+// (WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics); this keeps each car's answer
+// as that car's maStoredAITrafficData record, which the NEXT post-scene's
+// ConvertSceneResultsToTrafficDataForAI turns into TrafficAIEntity records for the AI module.
+// It is the ONLY writer of the records' id lists.
+//
+//   0x82728414  assert( lpInput != NULL )                              baked line 14808 (0x39D8)
+//   0x8272843C  sub_82711310 == InputBuffer_PrePhysics::GetSceneResultQueue() const (the read-lock
+//               tripwire, then lpInput + 0x28C30)
+//   0x82728448  GetLength() > 0, else nothing (cmpwi / ble)
+//   0x8272846C  GetFirstEvent / 0x827284FC GetNextEvent, walking while the event pointer is set
+//   0x827284A0  the query id (+0) in [dword_82F2FE8C, dword_8300CB54]   (cmplw blt / cmplw bgt)
+//   0x827284B8  n = +8 (miNumResultsAttempted -- the SECOND count; the scene pass writes the
+//               attempted count there, 0x828C67F8) ; `cmpwi n, 0x20 ; ble` -> n = min(n, 32)
+//   0x827284CC  record = maStoredAITrafficData[id - base] (mulli 0x88)
+//   0x827284E0  meRaceCarIndex = id - base (stwx +0x79388)
+//   0x827284E4  memcpy( maTrafficEntityIDs (+0x79390), the ids at +0xC, 4 * n )
+//   0x827284E8  miNumTrafficIDs = n (stwx +0x7938C)
+// Results for any other query id (the nearby-traffic sphere, 99) are passed over.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::StoreAISceneResultsForNextFrame( const BrnTrafficIO::InputBuffer_PrePhysics* lpInput )
+{
+    CGS_ASSERT( lpInput != NULL, "lpInput != NULL" );   // baked line 14808
+
+    const BrnTrafficIO::InputBuffer_PrePhysics::SceneResultQueue* lpSceneResultQueue =
+        lpInput->GetSceneResultQueue();
+
+    if ( lpSceneResultQueue->GetLength() > 0 )
+    {
+        const CgsModule::Event* lpEvent = NULL;
+        s32                     liSize  = 0;
+        lpSceneResultQueue->GetFirstEvent( &lpEvent, &liSize );
+
+        while ( lpEvent != NULL )
+        {
+            const CgsSceneManager::SceneManagerIO::OutCoarseQueryResult* lpCoarseTestResult =
+                static_cast<const CgsSceneManager::SceneManagerIO::OutCoarseQueryResult*>( lpEvent );
+
+            const u32 luQueryId = lpCoarseTestResult->mQueryId.mId;
+            if ( luQueryId >= KU_AI_FRUSTUM_QUERY_ID_BASE && luQueryId <= KU_AI_FRUSTUM_QUERY_ID_LAST )
+            {
+                const s32 liRaceCarIndex = static_cast<s32>( luQueryId - KU_AI_FRUSTUM_QUERY_ID_BASE );
+
+                s32 liNumResultsToCopy = lpCoarseTestResult->miNumResultsAttempted;
+                if ( liNumResultsToCopy > BrnTrafficIO::KI_MAX_TRAFFIC_NEAR_A_RACECAR )
+                {
+                    liNumResultsToCopy = BrnTrafficIO::KI_MAX_TRAFFIC_NEAR_A_RACECAR;
+                }
+
+                StoredAITrafficData& lrStored = maStoredAITrafficData[ liRaceCarIndex ];
+                lrStored.meRaceCarIndex = static_cast<EActiveRaceCarIndex>( liRaceCarIndex );
+                std::memcpy( lrStored.maTrafficEntityIDs, lpCoarseTestResult->GetEntityIds(),
+                             sizeof( EntityId ) * static_cast<u32>( liNumResultsToCopy ) );
+                lrStored.miNumTrafficIDs = liNumResultsToCopy;
+            }
+
+            lpSceneResultQueue->GetNextEvent( lpEvent, &lpEvent, &liSize );
+        }
     }
 }
 
