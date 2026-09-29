@@ -8187,6 +8187,7 @@ namespace
             case BrnAI::E_HARNESS_AI_PAD_CRUISE:  return "cruise";
             case BrnAI::E_HARNESS_AI_PAD_RACE:    return "race";
             case BrnAI::E_HARNESS_AI_PAD_PURSUIT: return "pursuit";
+            case BrnAI::E_HARNESS_AI_PAD_COMBAT: return "combat";
             default:                              return "off";
         }
     }
@@ -8212,10 +8213,12 @@ namespace
         {
             return BrnAI::E_HARNESS_AI_PAD_PURSUIT;
         }
+        if ( std::strcmp( lpcSpec, "combat" ) == 0 )
+            return BrnAI::E_HARNESS_AI_PAD_COMBAT;
         if ( CgsDev::Log::gpDebugPrint != 0 )
         {
             *CgsDev::Log::gpDebugPrint << "[ai-pad] REFUSED: BRN_AI_PAD_PLAYER='" << lpcSpec
-                                       << "' is not cruise | race | pursuit -- the seat stays OFF [PC HARNESS]\n";
+                                       << "' is not cruise | race | pursuit | combat -- the seat stays OFF [PC HARNESS]\n";
         }
         return BrnAI::E_HARNESS_AI_PAD_OFF;
     }
@@ -8253,7 +8256,8 @@ void WorldModule::HarnessArmAIPadPlayer()
         {
             lpcBlocked = "the player's AI driver slot is not active";
         }
-        else if ( seMode == BrnAI::E_HARNESS_AI_PAD_RACE && !lpDriver->GetCar()->mbIsInGameMode )
+        else if ( (seMode == BrnAI::E_HARNESS_AI_PAD_RACE || seMode == BrnAI::E_HARNESS_AI_PAD_COMBAT)
+                  && !lpDriver->GetCar()->mbIsInGameMode )
         {
             lpcBlocked = "race: no event is running";
         }
@@ -8332,6 +8336,14 @@ void WorldModule::HarnessStashAIPadControls( BrnAI::AIModuleIO::OutputBuffer* lp
         lrStash.mfSteering  = lpControls->mfSteering;
         lrStash.mbBoost     = lpControls->mbBoost;
         lrStash.mbRamming   = lrPad.mbRamming;
+        if (lrPad.meMode == BrnAI::E_HARNESS_AI_PAD_COMBAT && lrPad.mbCombatControl)
+        {
+            lrStash.mfSteering = lrPad.mfCombatSteering;
+            lrStash.mfGas = 1.0f;
+            lrStash.mfBrake = 0.0f;
+            lrStash.mfHandBrake = 0.0f;
+            lrStash.mbBoost = true;
+        }
         break;
     }
     lpAIOutput->UnlockForRead();

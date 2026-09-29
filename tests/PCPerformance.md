@@ -242,6 +242,34 @@ must be accounted for in future measurements rather than attributed wholesale
 to normal gameplay. The current native input path must retain key-edge, modifier,
 late-created event and capture semantics when that work is optimized.
 
+## Combat workload qualification
+
+`BRN_AI_PAD_PLAYER=race` follows the racing line and is insufficient evidence of
+heavy Road Rage performance. A forced player crash is also insufficient.
+
+`BRN_AI_PAD_PLAYER=combat` is an opt-in benchmark controller. It retains the AI
+route planner, selects nearby rivals travelling in the same direction, and commits
+ordinary player steering/throttle/boost to a close intercept. Physics, damage,
+debris and takedown scoring remain the game paths. Steering uses the game's signed
+XZ angle convention. Without the variable, this controller does not run.
+
+`tests/PCPerformanceCombatLive.ps1` qualifies the workload through the existing
+case runner and a private slot. It requires five player-credited takedowns across
+three rivals plus launch/roll evidence for two rival slots. This is a diagnostic
+qualification run, with crash logging and the existing `BRN_AI_MADNESS=1` rival
+aggression override enabled, not a clean timing comparison.
+One 90-second development capture produced seven credited takedowns across five
+rivals with no assertions/exceptions. Two subsequent quiet runs produced only one
+each; the controller is not deterministic, and those runs were rejected as insufficient
+player combat despite reaching four crashing and two airborne rivals at once.
+
+`BRN_FRAME_PROFILE=1` now records player takedown counts/victim masks, peak rival
+crash/airborne counts across simulation steps per rendered frame, and the ending QPC timestamp in its
+bounded in-memory trace. Match these timestamps to the foreground measurement
+window and qualify every measured run. Exclude post-event free driving. Clean
+timing runs disable screenshots and verbose crash witnesses; the counters remain.
+These checks do not establish 165 FPS or completion of the optimization work.
+
 ## Remaining original optimization gaps
 
 - The native main loop still executes update and dispatch serially. Original

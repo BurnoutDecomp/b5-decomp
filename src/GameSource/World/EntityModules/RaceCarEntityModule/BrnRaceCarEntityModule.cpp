@@ -1,3 +1,7 @@
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#ifdef AddMonitor
+#undef AddMonitor
+#endif
 // ============================================================================
 // BrnWorld::RaceCarEntityModule -- the race-car entity module (file TU).
 //
@@ -8415,6 +8419,9 @@ void RaceCarEntityModule::UpdateBoost(
                 == static_cast<s32>( mePlayerActiveRaceCarIndex ) )
         {
             mBoostManager.GetBoostStrategy()->OnTakedown();
+            // FLAG PC-platform leaf: in-memory workload evidence for a scored
+            // player takedown, with no per-frame log traffic during benchmarks.
+            renderengine::FrameProfile::PlayerTakedown(static_cast<s32>(lrEvent.meVictimIndex));
             // FLAG owner-requested original-game bug fix: ARTIST 82304BF4..82304BFC
             // skips this store once GetDamagedCarCount() reaches five (including
             // the player/network cars). Physics and skin readback continue, but

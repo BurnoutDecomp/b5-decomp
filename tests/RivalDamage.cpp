@@ -1,4 +1,5 @@
 // Production takedown consumers run against controlled vehicle/boost state.
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"
@@ -153,7 +154,13 @@ int main()
                 lPackInput.mQueue.AddEvent(lEvent);
             }
         }
+        renderengine::FrameProfile::Frame lTrace;
+        renderengine::FrameProfile::gCapture.mpCurrent = &lTrace;
         lPack.UpdateBoostTakedowns(&lPackInput);
+        renderengine::FrameProfile::gCapture.mpCurrent = nullptr;
+        Check(lTrace.muPlayerTakedowns == E_ACTIVE_RACE_CAR_INDEX_COUNT - liAlreadyDamaged
+              && lTrace.muTakedownVictims == (255u ^ ((1u << liAlreadyDamaged) - 1u)),
+              "frame trace counts credited victims once, without counting pre-existing damage");
         lPack.ProcessTakedownEvents(&lPackInput.mQueue);
         Check(lPack.GetDamagedCarCount() == E_ACTIVE_RACE_CAR_INDEX_COUNT,
               "all eight active cars can use deformation rendering");

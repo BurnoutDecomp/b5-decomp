@@ -168,6 +168,10 @@
 #define BRNAI_TRAFFICAI_ENTITY_ACCESSORS_PRESENT 1   // flipped 2026-09-03: the accessors are inline in BrnTrafficAIInterfaces.h
 #endif
 
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#ifdef AddMonitor
+#undef AddMonitor
+#endif
 #include "GameSource/World/AI/BrnAIModule.h"
 #include "GameSource/World/AI/BrnAICar.h"
 #include "GameSource/World/AI/BrnAIDriver.h"
@@ -186,6 +190,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "SharedClasses/AI/AISectionsResourceType.h"                    // BrnAI::AISectionsData
 #include "GameSource/World/AI/BrnAIHarnessPad.h"                        // [PC HARNESS] BRN_AI_PAD_PLAYER (gHarnessAIPad)
+#include "GameSource/World/AI/BrnAIHarnessCombatPC.h"
 #include "GameSource/Math/BrnMathUtils.h"                               // [PC HARNESS] BrnMath::Flatten (the pursuit geometry)
 
 #if BRNAI_AIWAVE_A3_LANDED
@@ -799,6 +804,7 @@ void AIModule::UpdateDrivers(const AIModuleIO::InputBuffer* lpInputBuffer,
 
     static s32 siWitnessFrames = 0;
     s32 liActiveDrivers = 0;
+    unsigned luProfileRivals = 0, luProfileCrashing = 0, luProfileAirborne = 0;
 
     for (EActiveRaceCarIndex leSlot = leFirst; leSlot < leLast; leSlot++)
     {
@@ -844,6 +850,13 @@ void AIModule::UpdateDrivers(const AIModuleIO::InputBuffer* lpInputBuffer,
 
         // ---- the place-on-track hand-off: the AI car asked to be re-seated (reset fan-out) ----
         AICar* lpCar = lpDriver->GetCar();
+        if (renderengine::FrameProfile::Active() && lpDriver->mbIsActive && lpCar
+            && leSlot != mePlayerActiveRaceCarIndex && lpCar->mbIsInGameMode)
+        {
+            ++luProfileRivals;
+            if (lpCar->IsCrashing()) ++luProfileCrashing;
+            if (lpCar->IsInAir()) ++luProfileAirborne;
+        }
         if (lpCar != 0 && lpCar->mbPlaceOnTrackRequested)
         {
             const f32     lfSpeed     = lpCar->mfPlaceOnTrackSpeed;
@@ -868,6 +881,7 @@ void AIModule::UpdateDrivers(const AIModuleIO::InputBuffer* lpInputBuffer,
     }
 
     ++miLineUpdateTokenCounter;
+    renderengine::FrameProfile::RivalSample(luProfileRivals, luProfileCrashing, luProfileAirborne);
     if (miLineUpdateTokenCounter >= KI_MAX_ACTIVE_RACE_CARS)
     {
         miLineUpdateTokenCounter = 0;
@@ -1658,10 +1672,12 @@ namespace
 void AIModule::HarnessAIPadPursuit(AICar* lpPlayerCar)
 {
     HarnessAIPad& lrPad = gHarnessAIPad;
+    lrPad.mbCombatControl = false;
+    const bool lbCombat = lrPad.meMode == E_HARNESS_AI_PAD_COMBAT;
 
     const AIDriver* lpPlayerDriver = GetAIDriver(mePlayerActiveRaceCarIndex);
     const bool lbPursuing = lrPad.mbArmed
-                         && lrPad.meMode == E_HARNESS_AI_PAD_PURSUIT
+                         && (lrPad.meMode == E_HARNESS_AI_PAD_PURSUIT || lbCombat)
                          && lpPlayerCar != 0
                          && lpPlayerDriver != 0
                          && lpPlayerDriver->GetCar() == lpPlayerCar;
@@ -1736,6 +1752,20 @@ void AIModule::HarnessAIPadPursuit(AICar* lpPlayerCar)
         lrCandidate.mfSeparation = std::sqrt(lfDx * lfDx + lfDz * lfDz);
         lrCandidate.mfAheadness  = lfDx * lfFacingX + lfDz * lfFacingZ;
         lrCandidate.mbInWindow   = false;
+        // FLAG PC-platform leaf: a benchmark attacker should stay with the
+        // moving pack, rather than U-turn after a passed car or ram head-on.
+        if (lbCombat)
+        {
+            const Vector3 lDirection = lpCar->GetDirection();
+            const f32 lfSameDirection = lDirection.x * lfFacingX + lDirection.z * lfFacingZ;
+            const f32 lfHeight = lpCar->GetPosition().y - lpPlayerCar->GetPosition().y;
+            if (lfSameDirection < 0.35f || lrCandidate.mfAheadness < -5.0f
+                || std::fabs(lfHeight) > 3.0f)
+            {
+                --liCandidates;
+                continue;
+            }
+        }
 
         // The slam window, from the player driver's own avoidance record of this car: a rival the
         // avoidance feed did not list (an OUT_OF_RANGE car never is) is out of the fan's reach.
@@ -1846,6 +1876,16 @@ void AIModule::HarnessAIPadPursuit(AICar* lpPlayerCar)
     }
 
     const AICar* lpTarget        = GetAICar(static_cast<u32>(lrPad.miTarget));
+    if (lbCombat && lpPlayerCar->mbIsInGameMode && !lpPlayerCar->IsCrashing() && !lpPlayerCar->IsInAir())
+    {
+        const Vector3 lTargetPosition = lpTarget->GetPosition();
+        const Vector3 lTargetVelocity = lpTarget->GetVelocity();
+        const HarnessCombatAimPC lAim = AimHarnessCombatPC(
+            lTargetPosition.x - lPlayerPosition.x, lTargetPosition.z - lPlayerPosition.y,
+            lfFacingX, lfFacingZ, lTargetVelocity.x, lTargetVelocity.z, lpPlayerCar->GetSpeed());
+        lrPad.mbCombatControl = lAim.mbCommit;
+        lrPad.mfCombatSteering = lAim.mfSteering;
+    }
     const u16    luTargetSection = lpTarget->GetBestSectionIndex();
     const u16    luOwnSection    = lpPlayerCar->GetBestSectionIndex();
     if (luTargetSection == AICar::KI_INVALID_SECTION_INDEX || luOwnSection == AICar::KI_INVALID_SECTION_INDEX
