@@ -9,6 +9,7 @@
 #include <cstdlib>   // std::exit (the TUB save-dir failure path)
 
 #include "pc/gcm/renderengine/device.h"
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -325,23 +326,31 @@ void EngineUpdate()
             // BrnGameModule::Update @0x823C5480 brackets ThreadLayout::Update with the CPU
             // profiler's frame start/stop. This inline PC loop is the current ThreadLayout
             // stand-in, so retain the bracket around the complete update/dispatch sequence.
+            renderengine::FrameProfile::Begin();
             CgsDev::PerfMonCpu::StartProfiling();
-            gGameModule.OnStartOfUpdateFrame();
-            gGameModule.OnCompletionOfVsyncWait();
-            gGameModule.UpdateThread();
-            // NOTE: the render feed (X360 BrnGameModule::DoDispatch @0x823DC458) is NOT
-            // driven from here. Its only console caller is MainGameFlowStateInGame::Render
-            // @0x823E79B8, i.e. the active main-flow state's Render slot, which
-            // BrnGameModule::GameMain already runs once per frame from inside UpdateThread()
-            // above -- so it is reached exactly in the IN_GAME state and nowhere else. That
-            // still satisfies the ordering the GDL ring needs (the lists are written after
-            // the world update and before OnEndOfUpdateFrame's swap publishes the frame to
-            // the render side). Calling it here as well drove the world producer through the
-            // boot logos, the legal screens, the title and the menus, where the console
-            // renders no world at all.
-            gGameModule.OnEndOfUpdateFrame();
-            gGameModule.DispatchThread();
+            {
+                renderengine::FrameProfile::Scope lUpdateProfile(renderengine::FrameProfile::UPDATE);
+                gGameModule.OnStartOfUpdateFrame();
+                gGameModule.OnCompletionOfVsyncWait();
+                gGameModule.UpdateThread();
+                // NOTE: the render feed (X360 BrnGameModule::DoDispatch @0x823DC458) is NOT
+                // driven from here. Its only console caller is MainGameFlowStateInGame::Render
+                // @0x823E79B8, i.e. the active main-flow state's Render slot, which
+                // BrnGameModule::GameMain already runs once per frame from inside UpdateThread()
+                // above -- so it is reached exactly in the IN_GAME state and nowhere else. That
+                // still satisfies the ordering the GDL ring needs (the lists are written after
+                // the world update and before OnEndOfUpdateFrame's swap publishes the frame to
+                // the render side). Calling it here as well drove the world producer through the
+                // boot logos, the legal screens, the title and the menus, where the console
+                // renders no world at all.
+                gGameModule.OnEndOfUpdateFrame();
+            }
+            {
+                renderengine::FrameProfile::Scope lDispatchProfile(renderengine::FrameProfile::DISPATCH);
+                gGameModule.DispatchThread();
+            }
             CgsDev::PerfMonCpu::StopProfiling();
+            renderengine::FrameProfile::End();
         }
     }
 
@@ -365,6 +374,7 @@ void EngineRelease()
     // voice, releases the engine and unloads xaudio2_9.dll. Without it the voice kept sounding
     // for as long as the process lived.
     CgsSystem::AudioOutputPC::Close();
+    renderengine::FrameProfile::Finish();
 
     SaveConfig();
 

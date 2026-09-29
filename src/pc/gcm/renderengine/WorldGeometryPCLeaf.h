@@ -75,6 +75,8 @@ namespace renderengine
         u32   muNumVertices;
         u32   muMinIndex;              // range referenced by the baked index run
         u32   muMaxIndex;
+        u32   muVertexOffset;          // byte offset in a pooled native vertex buffer
+        u32   muIndexStart;            // index offset in a pooled native index buffer
         s32   miPrimitiveType;         // D3DPRIMITIVETYPE, after any strip re-cut
         u32   muPrimitiveCount;
         u32   mau32FirstIndices[3];    // the first three indices of the SUBMITTED run
@@ -128,4 +130,5 @@ namespace renderengine
     // device teardown / reset path exists; wire it there, next to the other renderengine
     // shutdown leaves.
     void WorldGeometry_ReleaseAll();
+    void WorldGeometry_BeginFrame();  // poll retirement fences without waiting
 }
