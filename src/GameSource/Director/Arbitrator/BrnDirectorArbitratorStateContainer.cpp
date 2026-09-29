@@ -4,6 +4,7 @@
 #include <cstdlib>                                          // [diag] getenv
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "types.hpp"
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnDirector::ArbitratorStateContainer::ConstructAll @ 0x8224F020
@@ -66,6 +67,7 @@ namespace BrnDirector
     // ArbStateAttractMode::Update does the same on its roaming hand-off).
     void ArbitratorStateContainer::SetCurrentState(EState leState)
     {
+        renderengine::FrameProfile::Camera(static_cast<int>(leState));
         // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. This function is the SINGLE writer
         // of mpCurrentState, i.e. the one place that decides which arbitrator state owns the
         // frame, and nothing in the build reported it. Off unless the variable is set.

@@ -1,4 +1,5 @@
 #include "pc/gcm/renderengine/WorldGeometryPCLeaf.cpp"
+#include <d3dcompiler.h>
 
 namespace renderengine {
     IDirect3DDevice9* gDevice = nullptr;
@@ -12,12 +13,8 @@ static int checks, failures;
 static void Check(bool pass,const char* name) {
     ++checks; if (!pass) { ++failures; std::printf("FAIL %s\n",name); }
 }
-static DWORD DrawPixel(const renderengine::WorldGeometryDraw& draw,unsigned base=0) {
+static DWORD ReadPixel(unsigned x=16,unsigned y=16) {
     auto device=renderengine::gDevice;
-    device->Clear(0,nullptr,D3DCLEAR_TARGET,0xff000000,1,0);
-    device->BeginScene();
-    Check(SUCCEEDED(renderengine::WorldGeometry_Submit(draw,base)),"native retained draw succeeds");
-    device->EndScene();
     IDirect3DSurface9* back=nullptr; IDirect3DSurface9* readback=nullptr;
     DWORD pixel=0;
     if (SUCCEEDED(device->GetBackBuffer(0,0,D3DBACKBUFFER_TYPE_MONO,&back)) &&
@@ -25,12 +22,20 @@ static DWORD DrawPixel(const renderengine::WorldGeometryDraw& draw,unsigned base
         SUCCEEDED(device->GetRenderTargetData(back,readback))) {
         D3DLOCKED_RECT lock={};
         if (SUCCEEDED(readback->LockRect(&lock,nullptr,D3DLOCK_READONLY))) {
-            std::memcpy(&pixel,static_cast<const char*>(lock.pBits)+16*lock.Pitch+16*4,4);
+            std::memcpy(&pixel,static_cast<const char*>(lock.pBits)+y*lock.Pitch+x*4,4);
             readback->UnlockRect();
         }
     }
     if (readback) readback->Release(); if (back) back->Release();
     return pixel&0x00ffffff;
+}
+static DWORD DrawPixel(const renderengine::WorldGeometryDraw& draw,unsigned base=0) {
+    auto device=renderengine::gDevice;
+    device->Clear(0,nullptr,D3DCLEAR_TARGET,0xff000000,1,0);
+    device->BeginScene();
+    Check(SUCCEEDED(renderengine::WorldGeometry_Submit(draw,base)),"native retained draw succeeds");
+    device->EndScene();
+    return ReadPixel();
 }
 int main() {
     using namespace renderengine;
@@ -91,6 +96,48 @@ int main() {
     ip.miMappedPrimitiveType=D3DPT_LINELIST; ip.muMappedPrimitiveCount=1;
     Check(WorldGeometry_Prepare(vp,ip,&second)==E_WORLDGEOMETRY_READY && second.muMinIndex==0 && second.muMaxIndex==1,
           "unused 16-bit line-list tail cannot inflate the vertex range");
+
+    Vertex queued[]={{0,0,0.5f,1,0xff00ff00},{32,0,0.5f,1,0xff00ff00},{0,64,0.5f,1,0xff00ff00}};
+    vp.mpHeader=vp.mpData=queued;vp.muNumVertices=3;
+    ip.mpHeader=ip.mpRun=indices;ip.muIndexCount=3;ip.miMappedPrimitiveType=D3DPT_TRIANGLELIST;
+    Check(WorldGeometry_Prepare(vp,ip,&first)==E_WORLDGEOMETRY_READY,"queued old geometry prepares");
+    gDevice->Clear(0,nullptr,D3DCLEAR_TARGET,0xff000000,1,0);gDevice->BeginScene();
+    Check(SUCCEEDED(WorldGeometry_Submit(first,0)),"old geometry submits before source retirement");
+    WorldGeometry_OnResourceMemoryFreed(queued,sizeof(queued));
+    for(auto& v:queued){v.x+=32;v.colour=0xffff0000;}
+    Check(WorldGeometry_Prepare(vp,ip,&second)==E_WORLDGEOMETRY_READY,"same source address prepares new geometry while old draw is queued");
+    Check(first.mpVertexBuffer!=second.mpVertexBuffer || first.muVertexOffset!=second.muVertexOffset,
+          "pending GPU use keeps the retired native range unavailable");
+    Check(SUCCEEDED(WorldGeometry_Submit(second,0)),"new geometry submits through its distinct range");
+    gDevice->EndScene();WorldGeometry_BeginFrame();
+    Check(ReadPixel(8,16)==0x00ff00 && ReadPixel(40,16)==0xff0000,"queued old and new GPU draws both retain their own pixels");
+    WorldGeometry_BeginFrame();
+    Check(sGeometryPool.mStatistics.muRetiredBytes==0,"completed native event releases retired ranges");
+
+    struct PackedVertex { float x,y,z; unsigned normal; };
+    const unsigned normal=511u|(512u<<10)|(513u<<20); // +1, clamped -512, -511
+    PackedVertex packed[]={{-1,1,.5f,normal},{1,1,.5f,normal},{-1,-1,.5f,normal}};
+    vp.mpHeader=vp.mpData=packed;vp.muSourceStride=16;vp.muExpandedStride=24;
+    vp.muDec3nCount=1;vp.mau16Dec3nOffsets[0]=12;
+    Check(WorldGeometry_Prepare(vp,ip,&second)==E_WORLDGEOMETRY_READY && second.muVertexOffset!=0,"DEC3N data uploads into a nonzero pooled offset");
+    const char* vs="float4 main(float3 p:POSITION,float3 n:NORMAL,out float3 c:TEXCOORD0):POSITION { c=n*0.5+0.5;return float4(p,1); }";
+    const char* ps="float4 main(float3 c:TEXCOORD0):COLOR { return float4(c,1); }";
+    ID3DBlob* vsCode=nullptr;ID3DBlob* psCode=nullptr;
+    Check(SUCCEEDED(D3DCompile(vs,std::strlen(vs),nullptr,nullptr,nullptr,"main","vs_3_0",0,0,&vsCode,nullptr)) &&
+          SUCCEEDED(D3DCompile(ps,std::strlen(ps),nullptr,nullptr,nullptr,"main","ps_3_0",0,0,&psCode,nullptr)),"normal-to-colour GPU oracle compiles");
+    IDirect3DVertexShader9* vertexShader=nullptr;IDirect3DPixelShader9* pixelShader=nullptr;
+    IDirect3DVertexDeclaration9* declaration=nullptr;
+    const D3DVERTEXELEMENT9 elements[]={{0,0,D3DDECLTYPE_FLOAT3,D3DDECLMETHOD_DEFAULT,D3DDECLUSAGE_POSITION,0},
+                                     {0,12,D3DDECLTYPE_FLOAT3,D3DDECLMETHOD_DEFAULT,D3DDECLUSAGE_NORMAL,0},D3DDECL_END()};
+    Check(vsCode && psCode && SUCCEEDED(gDevice->CreateVertexShader(static_cast<const DWORD*>(vsCode->GetBufferPointer()),&vertexShader)) &&
+          SUCCEEDED(gDevice->CreatePixelShader(static_cast<const DWORD*>(psCode->GetBufferPointer()),&pixelShader)) &&
+          SUCCEEDED(gDevice->CreateVertexDeclaration(elements,&declaration)),"normal-to-colour GPU oracle creates");
+    if(vertexShader&&pixelShader&&declaration){
+        gDevice->SetVertexShader(vertexShader);gDevice->SetPixelShader(pixelShader);gDevice->SetVertexDeclaration(declaration);
+        Check(DrawPixel(second)==0xff0000,"CPU-staged DEC3N endpoints and channel offsets survive native upload");
+    }
+    if(declaration)declaration->Release();if(vertexShader)vertexShader->Release();if(pixelShader)pixelShader->Release();
+    if(vsCode)vsCode->Release();if(psCode)psCode->Release();
     WorldGeometry_ReleaseAll();
     gDevice->Release(); gDevice=nullptr; d3d->Release(); DestroyWindow(window);
     std::printf("PCWorldGeometryBuffers: %d checks, %d failures\n",checks,failures);

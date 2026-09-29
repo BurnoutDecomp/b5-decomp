@@ -1,6 +1,8 @@
 #include "device.h"
 #include "WindowPresentationPCLeaf.h"
 #include "DisplayResizePCLeaf.h"
+#include "FrameProfilePCLeaf.h"
+#include "WorldGeometryPCLeaf.h"
 
 #include <Windows.h>
 #include <d3d9.h>
@@ -318,6 +320,7 @@ bool renderengine::Device::FrameBegin()
     {
         return false;
     }
+    WorldGeometry_BeginFrame();
     gDevice->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);
     return SUCCEEDED(gDevice->BeginScene());
 }
@@ -884,7 +887,12 @@ void renderengine::Device::ShowPixelBuffer()
     WatchBlackFramesIfRequested();   // [diag] BRN_BLACK_FRAME_WATCH (issue #30)
     IDirect3DSurface9* lpFrame = nullptr;
     PCGetBackBuffer(&lpFrame);
-    const HRESULT lhrPresent = gPresentation.Present(gDevice, hWnd, gVSync != 0, lpFrame);
+    HRESULT lhrPresent;
+    {
+        FrameProfile::Scope lPresentProfile(FrameProfile::PRESENT);
+        lhrPresent = gPresentation.Present(gDevice, hWnd, gVSync != 0, lpFrame);
+        FrameProfile::Present();
+    }
     if (lpFrame) lpFrame->Release();
     // [DIAG] NOT IN THE X360 BINARY -- issue #30: Present's result and the cooperative level, on every
     // present that is not S_OK and on every black present (the watch's flag), rate-limited.

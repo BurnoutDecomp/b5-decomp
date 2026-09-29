@@ -11,7 +11,7 @@ visibility. It does **not** establish original-PC minimum requirements or a lock
 | --- | --- |
 | Shared shader-constant shadow | ARTIST `DrawRenderableMeshZOnly::Interpret`, `0x827F6654..66C0` and `0x827F718C..71F8`, skips unchanged source blocks. All PC float-constant writers now share a register-value cache, including GUI and diagnostics. Value comparison handles mutable PC source buffers and overlapping register ranges. |
 | Shared sampler-state shadow | ARTIST `shadow::Device::SetState`, `0x82276A2C..34`, and whole texture-state bind `0x8227D17C..98` avoid duplicate writes. The PC cache covers all native sampler writers and keeps pixel, displacement and vertex sampler IDs separate. Failed writes never establish cached state. |
-| Native static geometry | The console binds resident GPU resource memory. PC retained vertex/index mirrors now prefer `DEFAULT/WRITEONLY`, with the previous `MANAGED` pool retained when native allocation fails. Streaming retirement and cache generations are preserved. F11 does not reset the device. |
+| Native static geometry | The console binds resident GPU resource memory. PC retained vertex/index mirrors share dynamic `DEFAULT/WRITEONLY` pages. First writes use DISCARD; subsequent writes use NOOVERWRITE into unused or GPU-retired spans. EVENT query completion, not CPU frame count, permits reuse. Unsupported devices or allocation failures fall back to individual MANAGED buffers. Streaming retirement and cache generations are preserved. F11 does not reset the device. |
 | Exact indexed-draw ranges | Cache the minimum/maximum indices consumed by the final native topology after primitive-reset conversion. D3D9 receives that mesh range rather than the full shared vertex buffer. Ignore incomplete list tails, and retain nonzero base-vertex addressing. |
 | SIMD colour-cube blending | ARTIST `0x82AD2F38` and `0x82AD4170` use vector kernels specialized by source count. SSE2 restores both properties for the PC job. Existing PC truncation/clamping, BGRA layout, source order and destination pitches remain unchanged. |
 | Optional diagnostics | Wheel index/bounds scans require `BRN_WHEEL_DIAG=1`. Composite GPU readback sampling requires existing `BRN_RT_PROBE=1`. `BRN_WHEEL_ZALWAYS` remains independent. |
@@ -27,6 +27,7 @@ From the parent workflow checkout:
 
 ```powershell
 python b5-decomp/tests/run_pc_shader_constant_cache.py
+python b5-decomp/tests/run_pc_geometry_buffer_pool.py
 python b5-decomp/tests/run_pc_world_geometry_buffers.py
 python b5-decomp/tests/run_pc_tint_blend.py
 python b5-decomp/tests/run_pc_fullscreen.py
@@ -35,7 +36,7 @@ python b5-decomp/tests/run_world_vertex_lifetime.py
 .\build.cmd exe --jobs 4
 ```
 
-The six suites pass 323 checks. They include real D3D9 register/sampler reads,
+The first six suites passed 323 checks before the geometry pool change. They include real D3D9 register/sampler reads,
 rendered pixel checks after geometry retirement/address reuse, 16/32-bit indices,
 primitive resets and incomplete tails, nonzero base/minimum indices, fullscreen
 persistence, resize rollback and pixel coverage through 4K. The SIMD test compares
@@ -98,6 +99,66 @@ present); its historical stamp is `21dc3410+dirty`. The measured optimized build
 is `bea3c1a9b5f5...`, `8932ad0b+dirty`. The `original720_static` / `reviewed720_static` pair uses the reviewed build
 `581724937222...`, including the allocation fallback and incomplete-tail fix.
 
+## Camera-transition allocation stalls
+
+The first pass's individual DEFAULT buffers improved average costs but caused a
+latency regression. A 1440p Road Rage event-camera cut created 1,217 vertex and 665
+index buffers in one frame: geometry preparation took 195.78 ms and the complete
+frame took 239.30 ms. Switching the same executable to MANAGED reduced the worst
+frame to 70.27 ms. The current implementation replaces per-mesh DEFAULT allocation
+with pooled pages, and stages packed-normal conversion in ordinary CPU memory
+before copying to the GPU mapping.
+
+Pages hold immutable slices of one buffer kind. Source retirement invalidates
+draw-cache entries immediately, but storage is reclaimed only after a completed
+D3D9 EVENT query. Polling never flushes or waits. An unavailable/failed query
+quarantines pending storage and selects the MANAGED fallback. No DISCARD operation
+can destroy another live slice. Vertex byte offsets and index start offsets travel
+with the draw; the existing base/minimum-index rules still apply.
+
+Same 65-second foreground Road Rage scenario, 2560x1440, unchanged graphics:
+
+| Geometry storage | FPS | p50 frame ms | p95 | p99 | Maximum | Host CPU |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Individual DEFAULT | 49.12 | 18.97 | 30.79 | 44.00 | 239.30 | 32.81% |
+| Individual MANAGED control | 48.52 | 19.84 | 27.56 | 30.87 | 70.27 | 30.00% |
+| Pooled DEFAULT | 56.20 | 17.19 | 23.17 | 28.81 | 37.66 | 32.51% |
+
+FPS is sampled after warm-up; frame percentiles include gameplay from the first
+departure from car select through shutdown. The pooled run includes event, crash
+and actual takedown cameras, with no frame exceeding 50 ms. Its largest upload
+frame cached 1,800 streams with four native allocations in 7.65 ms.
+
+A separate 240-second pooled run reached 54.79 FPS with 38.40% host CPU load.
+Its p99 was 34.62 ms and maximum 90.42 ms, with 13 frames over 50 ms. The worst
+frame spent 72.56 ms inside presentation. This is evidence that bulk allocation
+stalls are reduced, **not** that all gameplay stutter is fixed. Pool residency
+plateaued while streamed live data changed and ended at 70 MiB resident / 67.9 MiB
+live with no pending retired bytes; completed holes were reused.
+
+New/expanded checks: 61 controlled asynchronous-pool checks; 31 native geometry
+checks (including queued draws across address reuse and a shader-based packed
+normal oracle); 16 declaration-lifetime checks; 37 resize/pixel checks. The
+2,654-TU canonical build passes without warnings for this batch. Fresh-eyes review
+passed. CPU tracing is opt-in with `BRN_FRAME_PROFILE=1`, allocates a bounded capture
+once, and performs file I/O only after audio shutdown. The `.frames.json` companion
+records dropped frames so truncated traces cannot be treated as complete.
+
+Evidence: parent `scratch/performance_goal_0929/`, especially
+`default_roadrage_cuts`, `managed_roadrage_cuts`, `pooled_roadrage_cuts`, and
+`pooled_long_roadrage`. Per-run traces, summaries, logs and binary provenance are
+retained. Pooled measured binary SHA-256 prefix: `b98ad1cd731e`.
+
+The final pool build (`08848411195c`) also passes the seven-check live
+streaming/crash case (five placements and 15 declaration retirements) and the
+F11/resize/pause/minimize sequence, with private configuration restored. Inspected
+driving and damaged-car frames retain road, foliage, vehicle and HUD rendering.
+A profiling-disabled 65-second Road Rage run completed without trace output,
+assertions or exceptions, with every sample foreground. It measured 49.86 FPS at
+40.17% host CPU load; differing host load prevents an overhead estimate against
+the earlier profiled runs. Evidence: `geometry_live`, `display_live`, and
+`pooled_profile_disabled` in the same evidence directory.
+
 ## Remaining original optimization gaps
 
 - The native main loop still executes update and dispatch serially. Original
@@ -106,6 +167,10 @@ is `bea3c1a9b5f5...`, `8932ad0b+dirty`. The `original720_static` / `reviewed720_
 - Original wheel/mesh instancing is expanded into individual native draws. Restoring
   hardware instancing needs the matching shader and instance-stream representation;
   merely changing the draw flag is insufficient.
+- Dispatch sort-key packing still has explicit reconstruction gaps. Verify the
+  keys and sorting algorithm against ARTIST before changing command ordering.
+- Presentation and resource-update spikes remain after pooling. Separate the
+  output copy from the native Present wait, and audit original resource pacing.
 - TUB's native device creation (`0x947F10`) selects PUREDEVICE when supported.
   This port uses ordinary hardware vertex processing and relies on native Get-state
   operations. Its missing complete state shadow must be resolved before safely

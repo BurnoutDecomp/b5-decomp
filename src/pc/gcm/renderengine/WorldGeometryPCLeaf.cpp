@@ -26,6 +26,8 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"  // [diag] BrnDiag::LogBoundSurfaces
 #include "pc/gcm/renderengine/WorldGeometryPCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/GeometryBufferPoolD3D9PCLeaf.h"
 #include "pc/gcm/renderengine/device.h"                    // renderengine::gDevice
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::WriteToLog
 
@@ -40,6 +42,9 @@ namespace renderengine
 {
 namespace
 {
+    using GeometryPoolType = PCGeometryBufferPool<D3D9GeometryPoolBackend>;
+    GeometryPoolType sGeometryPool;
+    std::vector<u8> sVertexBakeScratch;
     // ---- keys ---------------------------------------------------------------
     // Both keys are compared and hashed as RAW BYTES, so every field -- including
     // the padding a struct with mixed widths carries -- has to be deterministic.
@@ -174,6 +179,7 @@ namespace
 
     struct RetainedVertexBuffer
     {
+        GeometryPoolType::Allocation mAllocation;
         IDirect3DVertexBuffer9* mpBuffer;
         const u8*               mpSourceBegin;
         const u8*               mpSourceEnd;
@@ -185,6 +191,8 @@ namespace
 
     struct RetainedIndexBuffer
     {
+        GeometryPoolType::Allocation mAllocation;
+        u32 muIndexStart;
         IDirect3DIndexBuffer9* mpBuffer;
         const u8*              mpSourceBegin;
         const u8*              mpSourceEnd;
@@ -341,6 +349,17 @@ namespace
         return renderengine::gDevice;
     }
 
+    D3DPOOL GeometryPool()
+    {
+        // FLAG PC-platform leaf: controlled allocation A/B for frame-time traces.
+        // Geometry, topology and draw parameters are identical on both routes.
+        static const bool sbManaged = [] {
+            const char* lpValue = std::getenv("BRN_GEOMETRY_MANAGED");
+            return lpValue && lpValue[0] == '1';
+        }();
+        return sbManaged ? D3DPOOL_MANAGED : D3DPOOL_DEFAULT;
+    }
+
     inline uintptr_t PageOf(const void* lpPointer)
     {
         return reinterpret_cast<uintptr_t>(lpPointer) >> KU_PAGE_SHIFT;
@@ -413,15 +432,10 @@ namespace
     // The DEC3N expansion below is the per-draw loop from WorldDraw_IndexedUP, moved
     // verbatim: sign-extend ten bits, normalise by 511, clamp -512 to -1, and keep
     // the untouched prefix/tail bytes of each vertex record where they were.
-    bool FillVertexBuffer(IDirect3DVertexBuffer9* lpBuffer,
-                          const WorldGeometryVertexPlan& lrPlan)
+    void BakeVertexData(u8* lpDestination, const WorldGeometryVertexPlan& lrPlan)
     {
-        void* lpLocked = nullptr;
-        if (FAILED(lpBuffer->Lock(0, 0, &lpLocked, 0)) || lpLocked == nullptr)
-            return false;
-
+        FrameProfile::Scope lConvertProfile(FrameProfile::GEOMETRY_CONVERT);
         const u8* const lpSource = static_cast<const u8*>(lrPlan.mpData);
-        u8* const lpDestination  = static_cast<u8*>(lpLocked);
 
         if (lrPlan.muDec3nCount == 0)
         {
@@ -466,9 +480,6 @@ namespace
                             lpSourceVertex + luSourceCursor, luTailBytes);
             }
         }
-
-        lpBuffer->Unlock();
-        return true;
     }
 
     // lrKey is MakeVertexKey(lrPlan), built by the caller so the front-cache miss path can
@@ -479,6 +490,8 @@ namespace
         VertexMap::iterator lIt = sVertexBuffers.find(lrKey);
         if (lIt != sVertexBuffers.end())
             return lIt->second.mpBuffer != nullptr ? &lIt->second : nullptr;
+
+        FrameProfile::Scope lPrepareProfile(FrameProfile::GEOMETRY_PREPARE);
 
         IDirect3DDevice9* const lpDevice = Dev();
         const u32 luBytes = lrPlan.muNumVertices * lrPlan.muExpandedStride;
@@ -494,21 +507,36 @@ namespace
 
         if (lpDevice != nullptr && luBytes != 0)
         {
-            // FLAG PC-platform leaf: keep immutable streams in GPU memory, as on
-            // X360, without D3D9's managed system-memory copy and residency walk.
-            // F11 replaces targets without Reset; streaming still retires mirrors.
-            // Retain the old pool as a fallback when a native allocation is refused.
-            if (FAILED(lpDevice->CreateVertexBuffer(luBytes, D3DUSAGE_WRITEONLY, 0,
-                                                    D3DPOOL_DEFAULT, &lEntry.mpBuffer, nullptr)))
+            const void* lpPayload = lrPlan.mpData;
+            if (lrPlan.muDec3nCount)
             {
-                if (FAILED(lpDevice->CreateVertexBuffer(luBytes, D3DUSAGE_WRITEONLY, 0,
-                                                        D3DPOOL_MANAGED, &lEntry.mpBuffer, nullptr)))
-                    lEntry.mpBuffer = nullptr;
+                // Convert in ordinary CPU memory, then copy once into the GPU's
+                // write-combined mapping. Per-component writes into that mapping
+                // made cold camera views disproportionately expensive.
+                sVertexBakeScratch.resize(luBytes);
+                BakeVertexData(sVertexBakeScratch.data(), lrPlan);
+                lpPayload = sVertexBakeScratch.data();
             }
-            if (lEntry.mpBuffer != nullptr && !FillVertexBuffer(lEntry.mpBuffer, lrPlan))
+            if (GeometryPool() == D3DPOOL_DEFAULT && sGeometryPool.Store(lpDevice,
+                    GeometryBufferKind::Vertex, lpPayload, luBytes, lEntry.mAllocation))
+                lEntry.mpBuffer = static_cast<IDirect3DVertexBuffer9*>(lEntry.mAllocation.GetBuffer());
+            else
             {
-                lEntry.mpBuffer->Release();
-                lEntry.mpBuffer = nullptr;
+                // Unsupported hardware or an allocation failure retains the old
+                // individual managed-buffer path, with identical payload bytes.
+                if (SUCCEEDED(lpDevice->CreateVertexBuffer(luBytes, D3DUSAGE_WRITEONLY, 0,
+                        D3DPOOL_MANAGED, &lEntry.mpBuffer, nullptr)))
+                {
+                    FrameProfile::NativeBuffer();
+                    void* lpLocked = nullptr;
+                    if (SUCCEEDED(lEntry.mpBuffer->Lock(0, luBytes, &lpLocked, 0)) && lpLocked)
+                    {
+                        std::memcpy(lpLocked, lpPayload, luBytes);
+                        if (FAILED(lEntry.mpBuffer->Unlock()))
+                        { lEntry.mpBuffer->Release(); lEntry.mpBuffer = nullptr; }
+                    }
+                    else { lEntry.mpBuffer->Release(); lEntry.mpBuffer = nullptr; }
+                }
             }
         }
 
@@ -517,6 +545,7 @@ namespace
         else
         {
             ++suVertexBuffersCreated;
+            FrameProfile::Geometry(true, luBytes);
             suVertexBytes += luBytes;
         }
 
@@ -582,6 +611,7 @@ namespace
             return &lIt->second;
         }
 
+        FrameProfile::Scope lPrepareProfile(FrameProfile::GEOMETRY_PREPARE);
         const u32 luIndexSize = lrPlan.mb32Bit ? 4u : 2u;
         const u8* const lpRun = static_cast<const u8*>(lrPlan.mpRun);
 
@@ -656,30 +686,27 @@ namespace
         IDirect3DDevice9* const lpDevice = Dev();
         if (lpDevice != nullptr && luPayloadBytes != 0)
         {
-            if (FAILED(lpDevice->CreateIndexBuffer(
-                    luPayloadBytes, D3DUSAGE_WRITEONLY,
-                    lrPlan.mb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
-                    D3DPOOL_DEFAULT, &lEntry.mpBuffer, nullptr)))
+            const GeometryBufferKind leKind = lrPlan.mb32Bit
+                ? GeometryBufferKind::Index32 : GeometryBufferKind::Index16;
+            if (GeometryPool() == D3DPOOL_DEFAULT && sGeometryPool.Store(lpDevice,
+                    leKind, lpPayload, luPayloadBytes, lEntry.mAllocation))
             {
-                if (FAILED(lpDevice->CreateIndexBuffer(
-                        luPayloadBytes, D3DUSAGE_WRITEONLY,
-                        lrPlan.mb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
-                        D3DPOOL_MANAGED, &lEntry.mpBuffer, nullptr)))
-                    lEntry.mpBuffer = nullptr;
+                lEntry.mpBuffer = static_cast<IDirect3DIndexBuffer9*>(lEntry.mAllocation.GetBuffer());
+                lEntry.muIndexStart = lEntry.mAllocation.muOffset / luIndexSize;
             }
-            if (lEntry.mpBuffer != nullptr)
+            else if (SUCCEEDED(lpDevice->CreateIndexBuffer(luPayloadBytes, D3DUSAGE_WRITEONLY,
+                    lrPlan.mb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
+                    D3DPOOL_MANAGED, &lEntry.mpBuffer, nullptr)))
             {
+                FrameProfile::NativeBuffer();
                 void* lpLocked = nullptr;
-                if (SUCCEEDED(lEntry.mpBuffer->Lock(0, 0, &lpLocked, 0)) && lpLocked != nullptr)
+                if (SUCCEEDED(lEntry.mpBuffer->Lock(0, luPayloadBytes, &lpLocked, 0)) && lpLocked)
                 {
                     std::memcpy(lpLocked, lpPayload, luPayloadBytes);
-                    lEntry.mpBuffer->Unlock();
+                    if (FAILED(lEntry.mpBuffer->Unlock()))
+                    { lEntry.mpBuffer->Release(); lEntry.mpBuffer = nullptr; }
                 }
-                else
-                {
-                    lEntry.mpBuffer->Release();
-                    lEntry.mpBuffer = nullptr;
-                }
+                else { lEntry.mpBuffer->Release(); lEntry.mpBuffer = nullptr; }
             }
         }
 
@@ -688,6 +715,7 @@ namespace
         else
         {
             ++suIndexBuffersCreated;
+            FrameProfile::Geometry(false, luPayloadBytes);
             suIndexBytes += luPayloadBytes;
             lEntry.muBytes = luPayloadBytes;
 
@@ -745,6 +773,8 @@ namespace
         lpOutDraw->mpIndexBuffer    = lrIndex.mpBuffer;
         lpOutDraw->muExpandedStride = lrVertex.muStride;
         lpOutDraw->muNumVertices    = lrVertex.muNumVertices;
+        lpOutDraw->muVertexOffset   = lrVertex.mAllocation.muOffset;
+        lpOutDraw->muIndexStart     = lrIndex.muIndexStart;
         lpOutDraw->muMinIndex       = lrIndex.muMinIndex;
         lpOutDraw->muMaxIndex       = lrIndex.muMaxIndex;
         lpOutDraw->miPrimitiveType  = lrIndex.miPrimitiveType;
@@ -843,13 +873,15 @@ EWorldGeometryPrepare WorldGeometry_Prepare(const WorldGeometryVertexPlan& lrVer
 
 s32 WorldGeometry_Submit(const WorldGeometryDraw& lrDraw, u32 luBaseVertexIndex)
 {
+    FrameProfile::Scope lSubmitProfile(FrameProfile::GEOMETRY_SUBMIT);
+    FrameProfile::Draw();
     IDirect3DDevice9* const lpDevice = Dev();
     if (lpDevice == nullptr || lrDraw.mpVertexBuffer == nullptr
         || lrDraw.mpIndexBuffer == nullptr)
         return static_cast<s32>(E_FAIL);
 
     lpDevice->SetStreamSource(0, static_cast<IDirect3DVertexBuffer9*>(lrDraw.mpVertexBuffer),
-                              0, lrDraw.muExpandedStride);
+                              lrDraw.muVertexOffset, lrDraw.muExpandedStride);
     lpDevice->SetIndices(static_cast<IDirect3DIndexBuffer9*>(lrDraw.mpIndexBuffer));
 
     // [DIAG] THE WORLD PASS'S OWN DEPTH STATE, at the moment a world mesh actually draws.
@@ -866,7 +898,7 @@ s32 WorldGeometry_Submit(const WorldGeometryDraw& lrDraw, u32 luBaseVertexIndex)
         static_cast<INT>(luBaseVertexIndex),
         lrDraw.muMinIndex,
         lrDraw.muMaxIndex - lrDraw.muMinIndex + 1u,
-        0,
+        lrDraw.muIndexStart,
         lrDraw.muPrimitiveCount);
     return static_cast<s32>(lhr);
 }
@@ -917,9 +949,11 @@ void WorldGeometry_OnResourceMemoryFreed(const void* lpBase, size_t luSize)
                 RetireFrontCache();
                 if (lIt->second.mpBuffer != nullptr)
                 {
-                    lIt->second.mpBuffer->Release();
+                    if (lIt->second.mAllocation) sGeometryPool.Retire(lIt->second.mAllocation);
+                    else lIt->second.mpBuffer->Release();
                     suVertexBytes -= lIt->second.muBytes;
                     ++suVertexBuffersEvicted;
+                    FrameProfile::Retire();
                 }
                 sVertexBuffers.erase(lIt);
             }
@@ -947,9 +981,11 @@ void WorldGeometry_OnResourceMemoryFreed(const void* lpBase, size_t luSize)
                 RetireFrontCache();     // before the Release and the erase; see the vertex sweep
                 if (lIt->second.mpBuffer != nullptr)
                 {
-                    lIt->second.mpBuffer->Release();
+                    if (lIt->second.mAllocation) sGeometryPool.Retire(lIt->second.mAllocation);
+                    else lIt->second.mpBuffer->Release();
                     suIndexBytes -= lIt->second.muBytes;
                     ++suIndexBuffersEvicted;
+                    FrameProfile::Retire();
                 }
                 sIndexBuffers.erase(lIt);
             }
@@ -958,6 +994,11 @@ void WorldGeometry_OnResourceMemoryFreed(const void* lpBase, size_t luSize)
                 sIndexPages.erase(lIndexPage);
         }
     }
+}
+
+void WorldGeometry_BeginFrame()
+{
+    sGeometryPool.BeginFrame();
 }
 
 void WorldGeometry_ReleaseAll()
@@ -972,14 +1013,15 @@ void WorldGeometry_ReleaseAll()
 
     for (VertexMap::iterator lIt = sVertexBuffers.begin(); lIt != sVertexBuffers.end(); ++lIt)
     {
-        if (lIt->second.mpBuffer != nullptr)
+        if (lIt->second.mpBuffer != nullptr && !lIt->second.mAllocation)
             lIt->second.mpBuffer->Release();
     }
     for (IndexMap::iterator lIt = sIndexBuffers.begin(); lIt != sIndexBuffers.end(); ++lIt)
     {
-        if (lIt->second.mpBuffer != nullptr)
+        if (lIt->second.mpBuffer != nullptr && !lIt->second.mAllocation)
             lIt->second.mpBuffer->Release();
     }
+    sGeometryPool.ReleaseAll();
     sVertexBuffers.clear();
     sIndexBuffers.clear();
     sVertexPages.clear();
