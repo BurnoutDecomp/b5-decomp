@@ -123,6 +123,8 @@ void LoadConfig()
     renderengine::gDisplayWidth  = GetPrivateProfileIntA("Display", "Width",  renderengine::gDisplayWidth,  lacPath);
     renderengine::gDisplayHeight = GetPrivateProfileIntA("Display", "Height", renderengine::gDisplayHeight, lacPath);
     renderengine::gAdapterIndex  = GetPrivateProfileIntA("Display", "AdapterIndex", renderengine::gAdapterIndex, lacPath);
+    // FLAG PC-platform leaf: restore the last successful F11 window mode.
+    renderengine::gFullscreen = GetPrivateProfileIntA("Display", "Fullscreen", 0, lacPath) != 0;
     // Present sync (device.h gVSync): 1 = vertical sync (default), 0 = immediate presents.
     renderengine::gVSync = (GetPrivateProfileIntA("Display", "VSync", renderengine::gVSync, lacPath) == 0) ? 0 : 1;
 
@@ -183,6 +185,18 @@ void LoadConfig()
 #endif
 }
 
+// FLAG PC-platform leaf: persist the mode immediately after F11, even if the
+// process later crashes or is closed before normal engine teardown completes.
+// Only this key is written: a resize is applied by the renderer on the next frame.
+void SaveFullscreenConfigPC()
+{
+#ifdef WIN32
+    char lacPath[MAX_PATH];
+    getGameSaveDir(lacPath, "config.ini");
+    WritePrivateProfileStringA("Display", "Fullscreen", renderengine::gFullscreen ? "1" : "0", lacPath);
+#endif
+}
+
 // TUB saveConfig 0x7CCCD0: validateMultiMonitors [gated -- multi-monitor globals], then write
 // config.ini. Mirrors LoadConfig's reconstructed subset; the remaining TUB writes are gated
 // with their reads (see LoadConfig).
@@ -192,6 +206,7 @@ void SaveConfig()
     char lacPath[MAX_PATH];
     getGameSaveDir(lacPath, "config.ini");
     char lacValue[128];
+    SaveFullscreenConfigPC();
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gDisplayWidth);
     WritePrivateProfileStringA("Display", "Width", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gDisplayHeight);

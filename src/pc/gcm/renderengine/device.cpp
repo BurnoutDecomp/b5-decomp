@@ -184,7 +184,7 @@ bool renderengine::Device::Initialize()
     gSunCorona = 1;
     // Vertical sync unless config.ini `[Display] VSync=0` (see device.h).
     gVSync = 1;
-    // TUB seeds fullscreen=true; forced windowed during the PC bring-up.
+    // First-run default; LoadConfig restores the saved fullscreen mode next.
     gFullscreen = false;
 
     // Windowed bring-up renders at the 1280x720 window client size so the back buffer is
