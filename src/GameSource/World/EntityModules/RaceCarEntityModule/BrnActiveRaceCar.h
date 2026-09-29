@@ -972,8 +972,9 @@ public:
     // WHY NOT IN RenderParams: its layout is X360-pinned down to sizeof == 5280
     // (BrnActiveRaceCarRenderParams.cpp's static_assert block). ActiveRaceCar is not.
     //
-    // WHAT IS BLENDED: the body, six WORLD wheel transforms and the WORLD transforms
-    // of damaged/detached panels. NOT the wheel SCALE matrices (a scale,
+    // WHAT IS BLENDED: the body, six WORLD wheel transforms, the WORLD transforms
+    // of damaged/detached panels, and the 128 deformation/scratch rows. The skin
+    // and its hinged panels must use the same render time. NOT the wheel SCALE matrices (a scale,
     // republished only when the wheel scale changes), not the LOD, not the visibility bits,
     // not the light locators: those are discrete per-tick decisions, and blending a
     // decision produces a state the game was never in.
@@ -1404,5 +1405,10 @@ private:
     // Damage events carry world poses even while a panel is still attached. Track by
     // model part index: the compact event queue can reorder or lose entries each tick.
     CgsSystem::FrameInterpolation::PoseTrack maPartPoseTracks[KU_MAX_BODY_PARTS_PER_RACE_CAR];
+    // FLAG PC-platform leaf: render-only history for the fixed-tick deformation
+    // rows. RenderParams keeps its pinned layout; physics still owns its raw skin.
+    Vector3Plus maPreviousVerletOffsetsPC[KU_MAX_RACE_CAR_VERLET_POINTS];
+    Vector3Plus maCurrentVerletOffsetsPC[KU_MAX_RACE_CAR_VERLET_POINTS];
+    bool mbVerletPoseValidPC;
 };
 }

@@ -884,6 +884,9 @@ void ActiveRaceCar::CalcBodyTransform(Matrix44Affine& lrBodyTransform) const
 void ActiveRaceCar::RestoreTickRenderPose()
 {
     mBodyPoseTrack.Restore(mRenderParams.GetBodyTransformForWrite());
+    if (mbVerletPoseValidPC)
+        std::memcpy(mRenderParams.GetVerletOffsets(), maCurrentVerletOffsetsPC,
+                    sizeof(maCurrentVerletOffsetsPC));
     for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
         maWheelPoseTracks[luWheel].Restore(mRenderParams.GetWheelTransform(luWheel));
     RenderParams::DetachedPartRenderQueue& lrParts = mRenderParams.GetDetachedPartQueue();
@@ -899,6 +902,17 @@ void ActiveRaceCar::RestoreTickRenderPose()
 void ActiveRaceCar::LatchTickRenderPose()
 {
     mBodyPoseTrack.Latch(mRenderParams.GetBodyTransform());
+    // ARTIST ReadUpdatedActiveRaceCarDataFromPhysics (0x822E8E54..0x822E8F88)
+    // publishes all 128 skin rows with the tick's body/part poses. PC renders
+    // between ticks: showing the newest skin beside blended panels opens seams.
+    // Seed both endpoints on the first tick, then retain the same history as the
+    // rigid poses. Restore above prevents an unwritten tick feeding back a blend.
+    std::memcpy(maPreviousVerletOffsetsPC,
+                mbVerletPoseValidPC ? maCurrentVerletOffsetsPC : mRenderParams.GetVerletOffsets(),
+                sizeof(maPreviousVerletOffsetsPC));
+    std::memcpy(maCurrentVerletOffsetsPC, mRenderParams.GetVerletOffsets(),
+                sizeof(maCurrentVerletOffsetsPC));
+    mbVerletPoseValidPC = true;
     for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
         maWheelPoseTracks[luWheel].Latch(mRenderParams.GetWheelTransform(luWheel));
     bool labPresent[KU_MAX_BODY_PARTS_PER_RACE_CAR] = {};
@@ -920,6 +934,21 @@ void ActiveRaceCar::LatchTickRenderPose()
 void ActiveRaceCar::ApplyRenderPoseInterpolation(f32 lfAlpha)
 {
     mBodyPoseTrack.Apply(mRenderParams.GetBodyTransformForWrite(), lfAlpha);
+    if (mbVerletPoseValidPC)
+    {
+        using CgsSystem::FrameInterpolation::BlendScalar;
+        Vector3Plus* lpOffsets = mRenderParams.GetVerletOffsets();
+        for (u32 luPoint = 0; luPoint < KU_MAX_RACE_CAR_VERLET_POINTS; ++luPoint)
+        {
+            const Vector3Plus& lrPrevious = maPreviousVerletOffsetsPC[luPoint];
+            const Vector3Plus& lrCurrent = maCurrentVerletOffsetsPC[luPoint];
+            lpOffsets[luPoint] = {
+                BlendScalar(lrPrevious.x, lrCurrent.x, lfAlpha),
+                BlendScalar(lrPrevious.y, lrCurrent.y, lfAlpha),
+                BlendScalar(lrPrevious.z, lrCurrent.z, lfAlpha),
+                BlendScalar(lrPrevious.w, lrCurrent.w, lfAlpha) };
+        }
+    }
     for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
         maWheelPoseTracks[luWheel].Apply(mRenderParams.GetWheelTransform(luWheel), lfAlpha);
     RenderParams::DetachedPartRenderQueue& lrParts = mRenderParams.GetDetachedPartQueue();
@@ -1487,6 +1516,7 @@ void ActiveRaceCar::SeedPhysicsStateFromCreateEventBringUp(const Matrix44Affine&
 void ActiveRaceCar::ResetRenderPoseInterpolation()
 {
     mBodyPoseTrack.Reset();
+    mbVerletPoseValidPC = false;
     for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
         maWheelPoseTracks[luWheel].Reset();
     for (u32 luPart = 0; luPart < KU_MAX_BODY_PARTS_PER_RACE_CAR; ++luPart)
@@ -2773,6 +2803,9 @@ void ActiveRaceCar::ResetVerletOffsets()
 {
     CGS_ASSERT( !IsInactive(), "!IsInactive()" );   // BrnActiveRaceCar.cpp:1128
 
+    // FLAG PC-platform leaf: repair/resource replacement must not restore or
+    // interpolate the old damage after the console reset clears the skin below.
+    mbVerletPoseValidPC = false;
     Vector3Plus* lpVerletOffsets = mRenderParams.GetVerletOffsets();
     const Vector3Plus lZero = { 0.0f, 0.0f, 0.0f, 0.0f };
     for( u32 luPartIndex = 0; luPartIndex < KU_MAX_RACE_CAR_VERLET_POINTS; ++luPartIndex )

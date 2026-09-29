@@ -30,9 +30,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix="brn_part_interpolation_") as directory:
         output = Path(directory)
         methods = ['#include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"',
-                   "namespace BrnWorld {"]
+                   "#include <cstring>", "namespace BrnWorld {"]
         for name in ("RestoreTickRenderPose", "LatchTickRenderPose",
-                     "ApplyRenderPoseInterpolation", "ResetRenderPoseInterpolation"):
+                     "ApplyRenderPoseInterpolation", "ResetRenderPoseInterpolation",
+                     "ResetVerletOffsets"):
             methods.append(definition(CAR / "BrnActiveRaceCar.cpp", "void ActiveRaceCar::" + name + "("))
         methods.append(definition(CAR / "BrnActiveRaceCarRenderParams.cpp",
                                   "Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelTransform("))
