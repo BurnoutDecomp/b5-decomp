@@ -73,6 +73,8 @@ namespace renderengine
         void* mpIndexBuffer;           // IDirect3DIndexBuffer9*
         u32   muExpandedStride;
         u32   muNumVertices;
+        u32   muMinIndex;              // range referenced by the baked index run
+        u32   muMaxIndex;
         s32   miPrimitiveType;         // D3DPRIMITIVETYPE, after any strip re-cut
         u32   muPrimitiveCount;
         u32   mau32FirstIndices[3];    // the first three indices of the SUBMITTED run

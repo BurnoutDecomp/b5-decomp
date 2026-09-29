@@ -1,4 +1,7 @@
 #include "types.hpp"
+#if defined(_M_X64) || defined(_M_IX86)
+#include <emmintrin.h>
+#endif
 
 #include <cstdio>   // std::snprintf (the one-shot diagnostics)
 
@@ -125,10 +128,10 @@ namespace
         lpDest[KU_DEST_BYTE_A] = KU_DEST_ALPHA;
     }
 
-    // The shared walk. `luSourceCount` sources are mixed by their weights; the six console kernels
-    // are the compiler's/author's per-count specialisations of exactly this loop nest (AGENTS.md:
-    // re-roll the unrolled form, keep the dispatch that selects it).
-    void BlendCubes(TintBlendParameters& lrParameters, u32 luSourceCount)
+    // ARTIST has source-count-specialized VMX kernels. Retain that specialization
+    // and SIMD throughput on PC; SSE2 is baseline on the x64 target.
+    template <u32 luSourceCount>
+    void BlendCubes(TintBlendParameters& lrParameters)
     {
         const u32 luSize   = lrParameters.size;
         const u32 luBlocks = luSize >> 4;   // `srwi r27, r11, 4` -- the tail is dropped
@@ -149,6 +152,13 @@ namespace
             }
         }
 
+#if defined(_M_X64) || defined(_M_IX86)
+        __m128 lavWeight[luSourceCount];
+        for (u32 luSource = 0; luSource < luSourceCount; ++luSource)
+            lavWeight[luSource] = _mm_set1_ps(lafFactor[luSource]);
+        const __m128i lvZero = _mm_setzero_si128();
+        const __m128 lvMaximum = _mm_set1_ps(255.0f);
+#endif
         u8* lpDestSlice = lrParameters.dst;
         for (u32 luZ = 0u; luZ < luSize; ++luZ)
         {
@@ -156,6 +166,53 @@ namespace
             for (u32 luY = 0u; luY < luSize; ++luY)
             {
                 u8* lpDestTexel = lpDestRow;
+#if defined(_M_X64) || defined(_M_IX86)
+                // FLAG PC-platform leaf: the VMX job works on sixteen RGB texels
+                // at a time (48 source bytes). SSE2 widens/mixes sixteen component
+                // bytes per pass, then packs with the existing PC clamp/truncate
+                // policy. Every load stays inside the same 48-byte block.
+                for (u32 luBlock = 0; luBlock < luBlocks; ++luBlock)
+                {
+                    alignas(16) u8 laRGB[48];
+                    for (u32 luPart = 0; luPart < 3; ++luPart)
+                    {
+                        __m128 laSum[4] = {_mm_setzero_ps(), _mm_setzero_ps(),
+                                          _mm_setzero_ps(), _mm_setzero_ps()};
+                        for (u32 luSource = 0; luSource < luSourceCount; ++luSource)
+                        {
+                            const __m128i lvBytes = _mm_loadu_si128(
+                                reinterpret_cast<const __m128i*>(lapSource[luSource] + luPart * 16));
+                            const __m128i lvLow = _mm_unpacklo_epi8(lvBytes, lvZero);
+                            const __m128i lvHigh = _mm_unpackhi_epi8(lvBytes, lvZero);
+                            const __m128 laValue[4] = {
+                                _mm_cvtepi32_ps(_mm_unpacklo_epi16(lvLow, lvZero)),
+                                _mm_cvtepi32_ps(_mm_unpackhi_epi16(lvLow, lvZero)),
+                                _mm_cvtepi32_ps(_mm_unpacklo_epi16(lvHigh, lvZero)),
+                                _mm_cvtepi32_ps(_mm_unpackhi_epi16(lvHigh, lvZero))};
+                            for (u32 luLane = 0; luLane < 4; ++luLane)
+                                laSum[luLane] = _mm_add_ps(laSum[luLane],
+                                    _mm_mul_ps(laValue[luLane], lavWeight[luSource]));
+                        }
+                        __m128i laInteger[4];
+                        for (u32 luLane = 0; luLane < 4; ++luLane)
+                            laInteger[luLane] = _mm_cvttps_epi32(_mm_min_ps(lvMaximum,
+                                _mm_max_ps(_mm_setzero_ps(), laSum[luLane])));
+                        _mm_store_si128(reinterpret_cast<__m128i*>(laRGB + luPart * 16),
+                            _mm_packus_epi16(_mm_packs_epi32(laInteger[0], laInteger[1]),
+                                             _mm_packs_epi32(laInteger[2], laInteger[3])));
+                    }
+                    for (u32 luTexel = 0; luTexel < 16; ++luTexel)
+                    {
+                        lpDestTexel[0] = laRGB[luTexel * 3 + 2];
+                        lpDestTexel[1] = laRGB[luTexel * 3 + 1];
+                        lpDestTexel[2] = laRGB[luTexel * 3];
+                        lpDestTexel[3] = KU_DEST_ALPHA;
+                        lpDestTexel += KU_DEST_BYTES_PER_TEXEL;
+                    }
+                    for (u32 luSource = 0; luSource < luSourceCount; ++luSource)
+                        lapSource[luSource] += 48;
+                }
+#else
                 for (u32 luTexel = 0u; luTexel < luBlocks * KU_TEXELS_PER_BLOCK; ++luTexel)
                 {
                     f32 lafChannel[3] = { 0.0f, 0.0f, 0.0f };
@@ -171,6 +228,7 @@ namespace
                     StoreTexel(lpDestTexel, lafChannel[0], lafChannel[1], lafChannel[2]);
                     lpDestTexel += KU_DEST_BYTES_PER_TEXEL;
                 }
+#endif
                 lpDestRow += lrParameters.dstStride;
             }
             lpDestSlice += lrParameters.dstSliceStride;
@@ -221,11 +279,11 @@ namespace
     // Blend2Cubes @0x82AD4170 / Blend3Cubes @0x82AD4280 / Blend4Cubes @0x82AD43D0 /
     // Blend5Cubes @0x82AD4528 / Blend6Cubes @0x82AD46B0 -- the same nest with one more source and
     // one more splatted weight each (`lfs f0,0x2C` .. `lfs f9,0x40`; `lwz r29,0x14` .. `lwz r24,0x28`).
-    void Blend2Cubes(TintBlendParameters& lrParameters) { BlendCubes(lrParameters, 2u); }
-    void Blend3Cubes(TintBlendParameters& lrParameters) { BlendCubes(lrParameters, 3u); }
-    void Blend4Cubes(TintBlendParameters& lrParameters) { BlendCubes(lrParameters, 4u); }
-    void Blend5Cubes(TintBlendParameters& lrParameters) { BlendCubes(lrParameters, 5u); }
-    void Blend6Cubes(TintBlendParameters& lrParameters) { BlendCubes(lrParameters, 6u); }
+    void Blend2Cubes(TintBlendParameters& lrParameters) { BlendCubes<2u>(lrParameters); }
+    void Blend3Cubes(TintBlendParameters& lrParameters) { BlendCubes<3u>(lrParameters); }
+    void Blend4Cubes(TintBlendParameters& lrParameters) { BlendCubes<4u>(lrParameters); }
+    void Blend5Cubes(TintBlendParameters& lrParameters) { BlendCubes<5u>(lrParameters); }
+    void Blend6Cubes(TintBlendParameters& lrParameters) { BlendCubes<6u>(lrParameters); }
 
     // ============================================================================================
     // TintBlend @0x82AD4860 -- eight instructions, and all eight are one indirect jump:

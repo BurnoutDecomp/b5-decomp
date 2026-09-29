@@ -1057,14 +1057,12 @@ namespace shadow
     // The scratch pointer table the constants come from was gathered at AddToBin time by
     // AddShaderTechniqueConstantsToDispatchBin in the order [A][C][B][D].
     //
-    // FLAG PC-platform leaf, three items:
-    //   * the Xenos direct constant-memory writes become Set{Vertex,Pixel}ShaderConstantF;
-    //   * the render-state TRIPLE is still not bound from data (the MaterialState porter +
-    //     the x64 state-object seam are open) -- the renderer's per-pass defaults stand;
-    //   * the shadow-compare fast path (skip a constant whose source pointer already sits in
-    //     maConstants[slot].maShaderState[stage].mpLatestCopyInPushBuffer) is not modelled:
-    //     every listed constant is uploaded. That is the console's "shader changed" branch,
-    //     i.e. always correct, only redundant.
+    // FLAG PC-platform leaf: Xenos constant-memory writes go through the shared
+    // ShaderConstantCachePCLeaf before Set{Vertex,Pixel}ShaderConstantF. Every
+    // listed constant is offered here, but unchanged register values are skipped
+    // at the native boundary. Value comparison also catches PC sources mutated
+    // in place, unlike the console's latest-push-buffer-pointer comparison.
+    // SetMaterialRenderStatesPC below applies the technique's state triple.
     // =====================================================================================
     namespace
     {

@@ -194,6 +194,8 @@ namespace
         u32                    muBytes;
         u32                    mau32FirstIndices[3];
         u32                    muFirstIndexCount;
+        u32                    muMinIndex;
+        u32                    muMaxIndex;
     };
 
     typedef std::unordered_map<VertexKey, RetainedVertexBuffer,
@@ -492,12 +494,17 @@ namespace
 
         if (lpDevice != nullptr && luBytes != 0)
         {
-            // MANAGED, WRITEONLY: written once at creation and never read back. The
-            // build has no device-reset path, so MANAGED is a convenience here rather
-            // than a lost-device requirement.
+            // FLAG PC-platform leaf: keep immutable streams in GPU memory, as on
+            // X360, without D3D9's managed system-memory copy and residency walk.
+            // F11 replaces targets without Reset; streaming still retires mirrors.
+            // Retain the old pool as a fallback when a native allocation is refused.
             if (FAILED(lpDevice->CreateVertexBuffer(luBytes, D3DUSAGE_WRITEONLY, 0,
-                                                    D3DPOOL_MANAGED, &lEntry.mpBuffer, nullptr)))
-                lEntry.mpBuffer = nullptr;
+                                                    D3DPOOL_DEFAULT, &lEntry.mpBuffer, nullptr)))
+            {
+                if (FAILED(lpDevice->CreateVertexBuffer(luBytes, D3DUSAGE_WRITEONLY, 0,
+                                                        D3DPOOL_MANAGED, &lEntry.mpBuffer, nullptr)))
+                    lEntry.mpBuffer = nullptr;
+            }
             if (lEntry.mpBuffer != nullptr && !FillVertexBuffer(lEntry.mpBuffer, lrPlan))
             {
                 lEntry.mpBuffer->Release();
@@ -652,8 +659,14 @@ namespace
             if (FAILED(lpDevice->CreateIndexBuffer(
                     luPayloadBytes, D3DUSAGE_WRITEONLY,
                     lrPlan.mb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
-                    D3DPOOL_MANAGED, &lEntry.mpBuffer, nullptr)))
-                lEntry.mpBuffer = nullptr;
+                    D3DPOOL_DEFAULT, &lEntry.mpBuffer, nullptr)))
+            {
+                if (FAILED(lpDevice->CreateIndexBuffer(
+                        luPayloadBytes, D3DUSAGE_WRITEONLY,
+                        lrPlan.mb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
+                        D3DPOOL_MANAGED, &lEntry.mpBuffer, nullptr)))
+                    lEntry.mpBuffer = nullptr;
+            }
             if (lEntry.mpBuffer != nullptr)
             {
                 void* lpLocked = nullptr;
@@ -689,6 +702,31 @@ namespace
                     ? reinterpret_cast<const u32*>(lpPayload)[lu]
                     : reinterpret_cast<const u16*>(lpPayload)[lu];
             }
+            // D3D9 consumes a vertex range as well as an index run. Compute the
+            // exact range once from the final (possibly reset-expanded) payload,
+            // instead of advertising the whole shared vertex buffer every draw.
+            // Lists can contain an incomplete trailing primitive which D3D never
+            // reads. Its padding/reset sentinel must not widen the native range.
+            u64 luConsumed = luAvailable;
+            switch (lEntry.miPrimitiveType)
+            {
+            case D3DPT_POINTLIST: luConsumed = lEntry.muPrimitiveCount; break;
+            case D3DPT_LINELIST: luConsumed = u64(lEntry.muPrimitiveCount) * 2u; break;
+            case D3DPT_LINESTRIP: luConsumed = u64(lEntry.muPrimitiveCount) + 1u; break;
+            case D3DPT_TRIANGLELIST: luConsumed = u64(lEntry.muPrimitiveCount) * 3u; break;
+            case D3DPT_TRIANGLESTRIP:
+            case D3DPT_TRIANGLEFAN: luConsumed = u64(lEntry.muPrimitiveCount) + 2u; break;
+            }
+            if (luConsumed > luAvailable) luConsumed = luAvailable;
+            lEntry.muMinIndex = luConsumed ? 0xffffffffu : 0u;
+            for (u32 lu = 0; lu < luConsumed; ++lu)
+            {
+                const u32 luIndex = lrPlan.mb32Bit
+                    ? reinterpret_cast<const u32*>(lpPayload)[lu]
+                    : reinterpret_cast<const u16*>(lpPayload)[lu];
+                if (luIndex < lEntry.muMinIndex) lEntry.muMinIndex = luIndex;
+                if (luIndex > lEntry.muMaxIndex) lEntry.muMaxIndex = luIndex;
+            }
         }
 
         RetainedIndexBuffer& lrStored = sIndexBuffers[lrKey] = lEntry;
@@ -707,6 +745,8 @@ namespace
         lpOutDraw->mpIndexBuffer    = lrIndex.mpBuffer;
         lpOutDraw->muExpandedStride = lrVertex.muStride;
         lpOutDraw->muNumVertices    = lrVertex.muNumVertices;
+        lpOutDraw->muMinIndex       = lrIndex.muMinIndex;
+        lpOutDraw->muMaxIndex       = lrIndex.muMaxIndex;
         lpOutDraw->miPrimitiveType  = lrIndex.miPrimitiveType;
         lpOutDraw->muPrimitiveCount = lrIndex.muPrimitiveCount;
         lpOutDraw->muFirstIndexCount = lrIndex.muFirstIndexCount;
@@ -824,8 +864,8 @@ s32 WorldGeometry_Submit(const WorldGeometryDraw& lrDraw, u32 luBaseVertexIndex)
     const HRESULT lhr = lpDevice->DrawIndexedPrimitive(
         static_cast<D3DPRIMITIVETYPE>(lrDraw.miPrimitiveType),
         static_cast<INT>(luBaseVertexIndex),
-        0,
-        lrDraw.muNumVertices - luBaseVertexIndex,
+        lrDraw.muMinIndex,
+        lrDraw.muMaxIndex - lrDraw.muMinIndex + 1u,
         0,
         lrDraw.muPrimitiveCount);
     return static_cast<s32>(lhr);

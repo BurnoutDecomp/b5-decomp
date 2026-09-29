@@ -4,6 +4,8 @@
 
 #include <Windows.h>
 #include <d3d9.h>
+#include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
+#include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
 #include <cstring>
 #include <cstdio>   // [diag] BRN_FRAME_DUMP back-buffer BMP writer
 #include <cstdlib>  // [diag] atoi -- BRN_FRAME_DUMP_EVERY period override
@@ -283,6 +285,8 @@ void renderengine::Device::Start()
     // X360 dword_83271614) is installed HERE on the console too -- Device::Start is what publishes
     // the front-buffer descriptor. On PC it is the swap chain's back buffer + the auto
     // depth-stencil created above; captured now, while they are exactly what is bound.
+    gPCShaderConstantCache.Invalidate();
+    gPCSamplerStateCache.Invalidate();
     PCInstallDefaultRenderTargetState(static_cast<u32>(gDisplayWidth), static_cast<u32>(gDisplayHeight));
 
     ShowWindow(hWnd, SW_SHOWNORMAL);
