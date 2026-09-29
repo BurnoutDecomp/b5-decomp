@@ -32,7 +32,7 @@ parser.add_argument('--case', default='b5-decomp/tests/RivalOrganic.ps1')
 parser.add_argument('--run-name', default='rival_organic')
 parser.add_argument('--no-unstick', action='store_true',
                     help='never back out of a wedge (reproduce a wedged-player run as it was)')
-parser.add_argument('--ai-pad', choices=('cruise', 'race', 'pursuit'), default=None,
+parser.add_argument('--ai-pad', choices=('cruise', 'race', 'pursuit', 'combat'), default=None,
                     help='the game\'s own AI drives the player car through the pad path (BRN_AI_PAD_PLAYER)')
 parser.add_argument('--no-frames', action='store_true',
                     help='force the case\'s Frames off (the disk rule: no frame dumps unless a picture is the witness)')

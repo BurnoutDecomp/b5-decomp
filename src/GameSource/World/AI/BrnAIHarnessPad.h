@@ -49,6 +49,7 @@ namespace BrnAI
         E_HARNESS_AI_PAD_CRUISE  = 1,   // the console seat's own driving, armed whenever the pad has the car
         E_HARNESS_AI_PAD_RACE    = 2,   // the same, armed only while the player's AICar is in a game mode
         E_HARNESS_AI_PAD_PURSUIT = 3,   // route to the nearest attached rival and ram it
+        E_HARNESS_AI_PAD_COMBAT  = 4,   // benchmark: commit pad steering to a nearby rival
     };
 
     struct HarnessAIPad
@@ -70,6 +71,9 @@ namespace BrnAI
         s32  miPlans;                         // log counters
         s32  miTargetChanges;
         s32  miRamEntries;
+        // FLAG PC-platform leaf: input-only close-range intercept for combat tests.
+        bool mbCombatControl = false;
+        f32  mfCombatSteering = 0.0f;
     };
 
     // Defined in BrnAIModule_Drive.cpp. Its initialiser is OFF / unarmed / no target: without
