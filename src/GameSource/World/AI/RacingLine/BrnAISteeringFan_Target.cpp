@@ -164,7 +164,8 @@ SteeringFan* SteeringFan::AccumulateWeightings()
     // it folds are themselves empty. Print the bias mode, how many bias entries are live, and
     // the largest absolute contributor weight -- that separates "never called" from "called
     // with nothing to fold" from "folded but the bias row is zero".
-    if (getenv("BRN_AI_FAN_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+    static const bool sbFanDiag = getenv("BRN_AI_FAN_DIAG") != 0;
+    if (sbFanDiag && CgsDev::Log::gpDebugPrint != 0)
     {
         static u32 suAccumCall = 0;
         if ((suAccumCall++ % 240) == 0)

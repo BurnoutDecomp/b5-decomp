@@ -1048,7 +1048,8 @@ namespace BrnAI
         // Rate limited to one line per car per ~2 s.
         // NOTE: the accumulator is a file-local static keyed by opponent index, NOT a member --
         // AIDriver's layout is pinned by offsetof static_asserts and must not grow.
-        if (getenv("BRN_AI_SPEED_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+        static const bool sbSpeedDiag = getenv("BRN_AI_SPEED_DIAG") != 0;
+        if (sbSpeedDiag && CgsDev::Log::gpDebugPrint != 0)
         {
             static f32 safAiSpeedDiagAccum[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
             const s32 liOpp  = mpCarHost->GetOpponentIndex();
