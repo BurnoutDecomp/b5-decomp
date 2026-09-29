@@ -1,11 +1,23 @@
 // Exercise the production window procedure and presentation leaf on real Win32/D3D9.
 #include <Windows.h>
 #include <d3d9.h>
+#include <shlobj.h>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
 #include "pc/gcm/renderengine/DisplayResizePCLeaf.h"
 #include "GameSource/Graphics/BrnAntiAliasTiling.h"
-namespace renderengine { bool gFullscreen = false; }
+namespace renderengine {
+bool gFullscreen = false;
+int gDisplayWidth = 640, gDisplayHeight = 360, gAdapterIndex = 0, gVSync = 1;
+int gAntiAliasing = 0, gAlphaToCoverage = 1, gEnvironmentMap = 1;
+int gEnvironmentMap30Hz = 1, gCoronas = 1, gSunCorona = 1;
+}
+namespace BrnGame { bool gbDecoupleSimulationFromRenderRate = true; }
+static renderengine::PCWindowMode sWindowMode;
+static const char* windowClassName = "BurnoutFullscreenStartupRegression";
+static const char* windowName = "Fullscreen startup regression";
 struct NullLog { template<class T> NullLog& operator<<(const T&) { return *this; } };
 namespace CgsDev { namespace Log { NullLog* gpDebugPrint = nullptr; } }
 namespace CgsSystem { struct HardwareInit { static void RequestShutdown() {} }; }
@@ -39,6 +51,14 @@ static bool SurfaceIs(IDirect3DDevice9* device, IDirect3DSurface9* surface, cons
 }
 int main() {
     renderengine::EnablePerMonitorDpi();
+    // The runner places this executable in a private temporary directory. Use
+    // the production path/config functions without touching the game's INI.
+    char config[MAX_PATH];
+    getGameSaveDir(config, "config.ini");
+    LoadConfig();
+    Check(!renderengine::gFullscreen, "missing fullscreen preference defaults to windowed");
+    WritePrivateProfileStringA("Display", "Width", "640", config);
+    WritePrivateProfileStringA("Display", "Height", "360", config);
     WNDCLASSA cls = {};
     cls.lpfnWndProc = windowProc;
     cls.hInstance = GetModuleHandle(nullptr);
@@ -56,12 +76,18 @@ int main() {
         RECT actual;
         GetWindowRect(window, &actual);
         Check(renderengine::gFullscreen && EqualRect(&actual, &monitor.rcMonitor), "F11 fills the current monitor");
+        Check(GetPrivateProfileIntA("Display", "Fullscreen", -1, config) == 1,
+              "F11 persists fullscreen immediately");
+        Check(GetPrivateProfileIntA("Display", "Width", -1, config) == 640,
+              "F11 does not overwrite other display settings");
         Check((GetWindowLongPtr(window, GWL_STYLE) & WS_CAPTION) == 0, "fullscreen has no title bar");
         SendMessage(window, WM_KEYDOWN, VK_F11, 1LL << 30);
         Check(renderengine::gFullscreen, "held F11 does not toggle repeatedly");
         SendMessage(window, WM_SYSKEYDOWN, VK_F11, 1);
         GetWindowRect(window, &actual);
         Check(!renderengine::gFullscreen && EqualRect(&actual, &initial), "F11 restores exact window position and size");
+        Check(GetPrivateProfileIntA("Display", "Fullscreen", -1, config) == 0,
+              "F11 persists windowed mode immediately");
         Check((GetWindowLongPtr(window, GWL_STYLE) & WS_OVERLAPPEDWINDOW) == WS_OVERLAPPEDWINDOW, "window frame restored");
     }
     const struct { LONG w,h; RECT view; } sizes[] = {
@@ -176,6 +202,42 @@ int main() {
     if (d3d) d3d->Release();
     DestroyWindow(window);
     UnregisterClassA(cls.lpszClassName,cls.hInstance);
+
+    renderengine::gFullscreen = true;
+    SaveConfig(); // normal shutdown also retains the selected mode
+    renderengine::gFullscreen = false;
+    LoadConfig();
+    Check(renderengine::gFullscreen, "fullscreen survives a fresh config load");
+    window = CreateGameWindow(renderengine::gDisplayWidth, renderengine::gDisplayHeight,
+                              renderengine::gFullscreen);
+    RECT actual = {};
+    GetWindowRect(window, &actual);
+    GetMonitorInfo(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor);
+    Check(window && renderengine::gFullscreen && EqualRect(&actual, &monitor.rcMonitor),
+          "saved fullscreen startup fills the current monitor rather than the saved render size");
+    ShowWindow(window, SW_SHOWNORMAL); // the device shows the game after window creation
+    SendMessage(window, WM_KEYDOWN, VK_F11, 1);
+    GetClientRect(window, &actual);
+    Check(!renderengine::gFullscreen && actual.right == 640 && actual.bottom == 360 &&
+          (GetWindowLongPtr(window, GWL_STYLE) & WS_OVERLAPPEDWINDOW) == WS_OVERLAPPEDWINDOW,
+          "F11 after fullscreen startup restores a valid framed window");
+    Check(IsWindowVisible(window) != FALSE, "leaving saved fullscreen keeps the game visible");
+    DestroyWindow(window);
+    renderengine::gFullscreen = true;
+    LoadConfig();
+    Check(!renderengine::gFullscreen, "windowed mode survives a fresh config load");
+    window = CreateGameWindow(renderengine::gDisplayWidth, renderengine::gDisplayHeight,
+                              renderengine::gFullscreen);
+    GetClientRect(window, &actual);
+    Check(window && !renderengine::gFullscreen && actual.right == 640 && actual.bottom == 360,
+          "saved windowed startup keeps the configured client size");
+    DestroyWindow(window);
+    UnregisterClassA(windowClassName, cls.hInstance);
+    WritePrivateProfileStringA("Display", "Fullscreen", "1", config);
+    windowProc(nullptr, WM_KEYDOWN, VK_F11, 1); // a failed transition cannot rewrite the preference
+    Check(GetPrivateProfileIntA("Display", "Fullscreen", -1, config) == 1,
+          "failed fullscreen toggle preserves the saved preference");
+    DeleteFileA(config);
     std::printf("PCFullscreen: %d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

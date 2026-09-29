@@ -11,6 +11,9 @@
 #include "pc/gcm/renderengine/device.h"
 #include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
 
+// PC configuration entry point in GameSource/Main/BrnMain.cpp.
+void SaveFullscreenConfigPC();
+
 static const char *kDefaultAutoTestScript = "autotest.txt";
 static const char *autoTestCmdPrefix = "-autotest:";
 
@@ -29,6 +32,7 @@ static bool deviceChangedSinceLaunch = false;
 static s32 mouseX = 0;
 static s32 mouseY = 0;
 static bool leftMouseDown = false;
+static renderengine::PCWindowMode sWindowMode;
 
 // TODO: This should be defined in a header file
 static bool gEnableMultiThreading = false;
@@ -141,7 +145,6 @@ void CgsSystem::HardwareInit::RequestShutdown()
 
 static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    static renderengine::PCWindowMode sWindowMode;
     switch (uMsg)
     {
     case WM_KEYDOWN:
@@ -149,8 +152,9 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
         if (wParam == VK_F11)
         {
             // FLAG PC-platform leaf: one toggle per press, not keyboard auto-repeat.
-            if ((lParam & (1LL << 30)) == 0)
-                sWindowMode.Toggle(hwnd, renderengine::gFullscreen);
+            if ((lParam & (1LL << 30)) == 0 &&
+                sWindowMode.Toggle(hwnd, renderengine::gFullscreen))
+                SaveFullscreenConfigPC();
             return 0;
         }
         break;
@@ -291,10 +295,13 @@ static HWND CreateGameWindow(const s32 width, const s32 height, bool fullscreen)
     DWORD style = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
     tagRECT rc;
     SetRect(&rc, 0, 0, width, height);
-    if (fullscreen)
-        style = WS_POPUP | WS_CLIPCHILDREN;
     AdjustWindowRect(&rc, style, FALSE);
 
+    // FLAG PC-platform leaf: enter saved fullscreen through the F11 path so it
+    // fills the current monitor and retains a valid windowed restore placement.
+    // While CreateWindow sends DPI/size messages, the window is still windowed.
+    renderengine::gFullscreen = false;
+    sWindowMode = renderengine::PCWindowMode();
     HWND window = CreateWindowEx(
         0,
         windowClassName, windowName,
@@ -311,6 +318,8 @@ static HWND CreateGameWindow(const s32 width, const s32 height, bool fullscreen)
     }
 
     DisableSystemBackdrop(window);
+    if (fullscreen)
+        sWindowMode.Toggle(window, renderengine::gFullscreen);
 
     HDEVNOTIFY notify = nullptr;
     return RegisterDeviceNotif(&notify) ? window : nullptr;
@@ -452,6 +461,16 @@ void CgsSystem::HardwareInit::InitializeHardware(const char *lpCmdLine)
         gEnableMultiThreading = true; // Enable multithreading on Vista and later
 
     renderengine::hWnd = CreateGameWindow(width, height, fullscreen);
+    if (renderengine::gFullscreen)
+    {
+        RECT lClient = {};
+        if (GetClientRect(renderengine::hWnd, &lClient))
+        {
+            const RECT lFullscreenRenderSize = renderengine::FitDisplay16By9(lClient.right, lClient.bottom);
+            renderengine::gDisplayWidth = lFullscreenRenderSize.right - lFullscreenRenderSize.left;
+            renderengine::gDisplayHeight = lFullscreenRenderSize.bottom - lFullscreenRenderSize.top;
+        }
+    }
     SetSystemParameters(false);
     hCursor = SetCursor(nullptr);
     ShowCursor(FALSE);
