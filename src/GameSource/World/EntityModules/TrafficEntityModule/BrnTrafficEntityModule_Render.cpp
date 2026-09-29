@@ -69,6 +69,8 @@
 
 #include <cmath>    // powf / sqrtf
 #include <cstdlib>  // getenv / atoi ([tdef-upload] witness, opt-in)
+#include <cstdio>
+#include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h"
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable; bodied by
 // the CgsShaderConstants TU). Same extern the sibling render TUs carry.
@@ -87,6 +89,28 @@ extern s32 giWheelsToRender;
 
 namespace BrnTraffic
 {
+
+// FLAG PC-platform leaf: latch every live vehicle on every simulation tick,
+// including vehicles absent from the current view and unchanged/paused poses.
+// Rendering reads copies, so there is no blended pose to restore into physics.
+void TrafficEntityModule::LatchRenderPosesPC()
+{
+    for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
+    {
+        const Vehicle& lrVehicle = maVehicles[luVehicle];
+        auto& lrHistory = maRenderPosesPC[luVehicle];
+        if (!lrVehicle.IsAlive())
+        {
+            lrHistory.Reset();
+            continue;
+        }
+        const TrafficPhysicsInfo* lpPhysics = lrVehicle.IsPhysical()
+            ? GetTrafficPhysicsInfoForVehicl(luVehicle) : nullptr;
+        lrHistory.Latch(maVehicleTransforms[luVehicle], lrVehicle.GetPitch_Roll_Steering_WheelRot(),
+                        lpPhysics ? lpPhysics->maWheelTransforms : nullptr,
+                        lpPhysics ? lpPhysics->mabWheelExists : nullptr);
+    }
+}
 
 // ============================================================================
 // FILE-SCOPE CONSTANTS
@@ -883,9 +907,16 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     // pair. maVehicleTransforms is read directly: the console's GetVehicleTransform is an
     // indexed read plus a validity assert, inlined at this site, and no declaration for it
     // exists in the tree (SetVehicleTransform is C4's; the getter was never declared).
-    const Matrix44Affine lBodyTransform = maVehicleTransforms[ luEntityIdx ];
+    // FLAG PC-platform leaf: use the same tick fraction as the race cars and
+    // camera in every render pass; leave maVehicleTransforms authoritative.
+    const f32 lfRenderAlpha = CgsSystem::FrameInterpolation::IsEnabled()
+        ? CgsSystem::FrameInterpolation::GetAlpha() : 1.0f;
+    const RenderPosePC& lrRenderPose = maRenderPosesPC[luEntityIdx];
+    const Matrix44Affine lBodyTransform =
+        lrRenderPose.SampleBody(maVehicleTransforms[luEntityIdx], lfRenderAlpha);
 
-    const Vector4 lPitchRollSteerWheel = lpVehicle->GetPitch_Roll_Steering_WheelRot();
+    const Vector4 lPitchRollSteerWheel =
+        lrRenderPose.SampleAngles(lpVehicle->GetPitch_Roll_Steering_WheelRot(), lfRenderAlpha);
     const f32 lfPitch    = lPitchRollSteerWheel.x;
     const f32 lfRoll     = lPitchRollSteerWheel.y;
     const f32 lfSteering = lPitchRollSteerWheel.z;
@@ -900,6 +931,42 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     // ---- the shadow-pass selector (identical to the race car's) ------------
     const bool lbShadowPass = lpShadowMap->IsRenderingShadowMap()
                            && lpShadowMap->IsUsingZOnlyRenderingPath();
+
+    // FLAG PC-platform leaf: bounded presentation witness. Record the transform
+    // actually submitted to the renderer, once per vehicle/present, never a
+    // pre-interpolation simulation sample. Off unless explicitly requested.
+    static const bool sbPoseDiag = std::getenv("BRN_TRAFFIC_INTERP_DIAG") != nullptr;
+    if (sbPoseDiag && !lpShadowMap->IsRenderingShadowMap())
+    {
+        static u32 sauLastPresent[KU_MAX_TOTAL_TRAFFIC] = {};
+        static u32 suLines = 0;
+        static u32 suFrame = 0;
+        static u32 suPhysical = 0, suDriving = 0;
+        const u32 luFrame = renderengine::guPresentCount;
+        if (suFrame != luFrame) { suFrame = luFrame; suPhysical = suDriving = 0; }
+        if (suLines < 48000 && sauLastPresent[luEntityIdx] != luFrame
+            && (lbIsPhysical ? suPhysical < 4 : suDriving < 1))
+        {
+            sauLastPresent[luEntityIdx] = luFrame;
+            ++suLines;
+            if (lbIsPhysical) ++suPhysical; else ++suDriving;
+            const auto& lrRaw = maVehicleTransforms[luEntityIdx];
+            char lacMessage[512];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                "[traffic-pose] frame=%u id=%u physical=%u crash=%u alpha=%.6f ms=%.3f"
+                " raw=(%.6f,%.6f,%.6f) render=(%.6f,%.6f,%.6f)"
+                " basis=(%.6f,%.6f,%.6f,%.6f,%.6f,%.6f)\n",
+                luFrame, luEntityIdx, lbIsPhysical ? 1u : 0u,
+                lpPhysicsInfo && lpPhysicsInfo->mbIsFatallyCrashing ? 1u : 0u,
+                CgsSystem::FrameInterpolation::GetAlpha(),
+                CgsSystem::FrameInterpolation::GetFrameSeconds() * 1000.0f,
+                lrRaw.wAxis.x, lrRaw.wAxis.y, lrRaw.wAxis.z,
+                lBodyTransform.wAxis.x, lBodyTransform.wAxis.y, lBodyTransform.wAxis.z,
+                lBodyTransform.xAxis.x, lBodyTransform.xAxis.y, lBodyTransform.xAxis.z,
+                lBodyTransform.zAxis.x, lBodyTransform.zAxis.y, lBodyTransform.zAxis.z);
+            CgsDev::Log::WriteToLog(lacMessage);
+        }
+    }
 
     // ---- the deforming-vehicle arm: glass-fracture reset, the LIVE verlet block, the
     //      damaged-vehicle budget and the technique index (0x82729794..0x8272984C) ------------
@@ -1366,7 +1433,8 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
                     lPhysicalScale.zAxis.z = lpPhysicalWheelSpec->mScale.z;
 
                     laWheelMatrices[ liInstanceCount ] = rw::math::vpu::Mult(
-                        lPhysicalScale, lpPhysicsInfo->maWheelTransforms[ liWheel ] );
+                        lPhysicalScale, lrRenderPose.SampleWheel(liWheel,
+                            lpPhysicsInfo->maWheelTransforms[liWheel], lfRenderAlpha));
                     laWheelConstants[ liInstanceCount ] = lv4WheelConstants;
                     lapWheelMatrices[ liInstanceCount ] = &laWheelMatrices[ liInstanceCount ];
                     ++liInstanceCount;
