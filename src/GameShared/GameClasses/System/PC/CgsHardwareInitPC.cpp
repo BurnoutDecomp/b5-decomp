@@ -158,6 +158,14 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
         if (renderengine::gFullscreen && !IsIconic(hwnd))
             sWindowMode.FitMonitor(hwnd);
         break;
+    case WM_DPICHANGED:
+        if (renderengine::gFullscreen)
+            sWindowMode.FitMonitor(hwnd);
+        else if (const RECT* lpRect = reinterpret_cast<const RECT*>(lParam))
+            SetWindowPos(hwnd, nullptr, lpRect->left, lpRect->top,
+                         lpRect->right - lpRect->left, lpRect->bottom - lpRect->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        return 0;
     case WM_CLOSE:
         // User closed the window: raise the shutdown request FIRST, then tear the window down
         // (-> WM_DESTROY). The flag is what actually ends the run -- WM_QUIT alone is not
@@ -251,6 +259,7 @@ static void DisableSystemBackdrop(HWND window)
 
 static HWND CreateGameWindow(const s32 width, const s32 height, bool fullscreen)
 {
+    renderengine::EnablePerMonitorDpi();
     HINSTANCE module = GetModuleHandle(nullptr);
 
     char filename[MAX_PATH + 7];

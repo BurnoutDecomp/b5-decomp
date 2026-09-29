@@ -5579,7 +5579,7 @@ namespace BrnDiag
         IDirect3DSurface9* lpRt      = nullptr; lpDevice->GetRenderTarget(0, &lpRt);
         IDirect3DSurface9* lpDepth   = nullptr; lpDevice->GetDepthStencilSurface(&lpDepth);
         IDirect3DSurface9* lpBackBuf = nullptr;
-        lpDevice->GetBackBuffer(0u, 0u, D3DBACKBUFFER_TYPE_MONO, &lpBackBuf);
+        renderengine::PCGetBackBuffer(&lpBackBuf);
 
         char lacRt[96], lacDepth[96], lacBack[96];
         DiagFormatSurface(lpRt,      lacRt,    sizeof(lacRt));
@@ -6873,7 +6873,7 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
             ++suDiagSkidRuns;
         ++suDiagRuns;
         IDirect3DSurface9* lpBoundRt = nullptr;  lpDevice->GetRenderTarget(0, &lpBoundRt);
-        IDirect3DSurface9* lpBackBuf = nullptr;  lpDevice->GetBackBuffer(0u, 0u, D3DBACKBUFFER_TYPE_MONO, &lpBackBuf);
+        IDirect3DSurface9* lpBackBuf = nullptr;  renderengine::PCGetBackBuffer(&lpBackBuf);
         IDirect3DSurface9* lpDepth   = nullptr;  lpDevice->GetDepthStencilSurface(&lpDepth);
         IDirect3DVertexShader9*      lpVs   = nullptr; lpDevice->GetVertexShader(&lpVs);
         IDirect3DPixelShader9*       lpPs   = nullptr; lpDevice->GetPixelShader(&lpPs);
@@ -7955,7 +7955,7 @@ void PCSceneBlit_Begin()
     // reconstructed yet. So this does it, and hands the frame back to the 2D tail on the swap
     // chain exactly as it found it before the bracket existed.
     IDirect3DSurface9* lpBackBuffer = nullptr;
-    if (SUCCEEDED(lpDevice->GetBackBuffer(0u, 0u, D3DBACKBUFFER_TYPE_MONO, &lpBackBuffer))
+    if (SUCCEEDED(renderengine::PCGetBackBuffer(&lpBackBuffer))
         && lpBackBuffer != nullptr)
     {
         lpDevice->SetRenderTarget(0, lpBackBuffer);   // also resets the viewport to the full surface
@@ -8915,7 +8915,7 @@ namespace
     bool TilingBoundColourIsBackBuffer(IDirect3DDevice9* lpDevice, IDirect3DSurface9* lpBound)
     {
         IDirect3DSurface9* lpBackBuffer = nullptr;
-        if (FAILED(lpDevice->GetBackBuffer(0u, 0u, D3DBACKBUFFER_TYPE_MONO, &lpBackBuffer))
+        if (FAILED(renderengine::PCGetBackBuffer(&lpBackBuffer))
             || lpBackBuffer == nullptr)
         {
             return false;

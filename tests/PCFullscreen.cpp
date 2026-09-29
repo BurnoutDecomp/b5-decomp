@@ -3,6 +3,8 @@
 #include <d3d9.h>
 #include <cstdio>
 #include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
+#include "pc/gcm/renderengine/DisplayResizePCLeaf.h"
+#include "GameSource/Graphics/BrnAntiAliasTiling.h"
 namespace renderengine { bool gFullscreen = false; }
 struct NullLog { template<class T> NullLog& operator<<(const T&) { return *this; } };
 namespace CgsDev { namespace Log { NullLog* gpDebugPrint = nullptr; } }
@@ -36,6 +38,7 @@ static bool SurfaceIs(IDirect3DDevice9* device, IDirect3DSurface9* surface, cons
     return matches;
 }
 int main() {
+    renderengine::EnablePerMonitorDpi();
     WNDCLASSA cls = {};
     cls.lpfnWndProc = windowProc;
     cls.hInstance = GetModuleHandle(nullptr);
@@ -101,6 +104,72 @@ int main() {
             Check(SurfaceIs(device,source,whole), "original render buffer preserved for overlay rendering");
         }
         presenter.Release();
+        renderengine::PCFrameBuffer frame;
+        IDirect3DTexture9* asset = nullptr;
+        device->CreateTexture(16,16,1,0,D3DFMT_A8R8G8B8,D3DPOOL_MANAGED,&asset,nullptr);
+        D3DLOCKED_RECT assetLock = {};
+        if (asset && SUCCEEDED(asset->LockRect(0,&assetLock,nullptr,0))) {
+            *static_cast<DWORD*>(assetLock.pBits) = 0xff123456;
+            asset->UnlockRect(0);
+        }
+        const struct { UINT w,h; } renderSizes[] = {
+            {1920,1080}, {2560,1440}, {3840,2160}, {1001,563}, {640,360}, {1920,1080}
+        };
+        for (const auto& size : renderSizes) {
+            Check(frame.Resize(device,window,size.w,size.h,false), "native frame resize succeeds without Reset");
+            frame.Bind(device);
+            IDirect3DSurface9* native = nullptr;
+            frame.GetBackBuffer(device,&native);
+            D3DSURFACE_DESC desc = {};
+            if (native) native->GetDesc(&desc);
+            Check(desc.Width == size.w && desc.Height == size.h, "render surface really has the requested pixel dimensions");
+            device->ColorFill(native,nullptr,0xff4997d1);
+            Check(SUCCEEDED(presenter.Present(device,window,false,native)), "native frame is presented after resize");
+            const RECT outputView = renderengine::FitDisplay16By9(320,180);
+            IDirect3DSurface9* output = nullptr;
+            if (presenter.mpSwapChain) presenter.mpSwapChain->GetBackBuffer(0,D3DBACKBUFFER_TYPE_MONO,&output);
+            Check(output && SurfaceIs(device,output,outputView), "presentation samples the new frame rather than the implicit back buffer");
+            if (output) output->Release();
+            const auto plan = BrnGraphics::ScaleTilingPlan(BrnGraphics::KMSAA_TILING_PLAN,size.w,size.h);
+            const auto& top = plan.maTile[0]; const auto& bottom = plan.maTile[1];
+            Check(top.mu32Left == 0 && top.mu32Top == 0 && top.mu32Right == size.w &&
+                  top.mu32Bottom == bottom.mu32Top && bottom.mu32Left == 0 &&
+                  bottom.mu32Right == size.w && bottom.mu32Bottom == size.h,
+                  "MSAA tiles cover every pixel with no gap or overlap, including odd sizes");
+            const auto single = BrnGraphics::ScaleTilingPlan(BrnGraphics::KNO_MSAA_TILING_PLAN,size.w,size.h);
+            Check(single.maTile[0].mu32Right == size.w && single.maTile[0].mu32Bottom == size.h,
+                  "non-MSAA resolve covers the complete resized image");
+            bool preserved = asset && SUCCEEDED(asset->LockRect(0,&assetLock,nullptr,D3DLOCK_READONLY));
+            if (preserved) { preserved = *static_cast<DWORD*>(assetLock.pBits) == 0xff123456; asset->UnlockRect(0); }
+            Check(preserved, "loaded texture contents survive repeated resolution changes");
+            native->Release();
+        }
+        IDirect3DSurface9* beforeFailure = nullptr;
+        frame.GetBackBuffer(device,&beforeFailure);
+        Check(!frame.Resize(device,window,0,0,false), "zero/minimized extent is rejected");
+        IDirect3DSurface9* afterFailure = nullptr;
+        frame.GetBackBuffer(device,&afterFailure);
+        Check(beforeFailure == afterFailure, "failed resize preserves the previous buffer");
+        beforeFailure->Release(); afterFailure->Release();
+        auto oldOutput = presenter.mpSwapChain;
+        Check(FAILED(presenter.Prepare(device,window,false,0,0)) && presenter.mpSwapChain==oldOutput,
+              "failed output preparation retains the previous swap chain");
+        RECT fallbackOuter = {0,0,400,300};
+        AdjustWindowRect(&fallbackOuter,WS_OVERLAPPEDWINDOW,FALSE);
+        SetWindowPos(window,nullptr,0,0,fallbackOuter.right-fallbackOuter.left,fallbackOuter.bottom-fallbackOuter.top,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+        // Simulate a remembered allocation failure for this new output extent.
+        presenter.miFailedWidth=400; presenter.miFailedHeight=300;
+        IDirect3DSurface9* native = nullptr; frame.GetBackBuffer(device,&native);
+        Check(SUCCEEDED(presenter.Present(device,window,false,native)) && presenter.mpSwapChain==oldOutput,
+              "output allocation failure still presents the frame through the previous chain");
+        IDirect3DSurface9* fallback = nullptr;
+        presenter.mpSwapChain->GetBackBuffer(0,D3DBACKBUFFER_TYPE_MONO,&fallback);
+        const RECT fallbackView = {0,22,320,157};
+        Check(SurfaceIs(device,fallback,fallbackView),"fallback maps black bars to the retained output extent");
+        fallback->Release(); native->Release();
+        if (asset) asset->Release();
+        presenter.Release();
+        frame.Release();
         source->Release();
         device->Release();
     }

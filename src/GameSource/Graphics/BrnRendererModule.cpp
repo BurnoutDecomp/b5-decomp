@@ -3083,8 +3083,11 @@ void BrnRendererModule::BeginRenderAntiAliased(f32 lfWhiteLevel, bool lbClearSte
         // wave, which recovered both plans byte-exact AND names these two functions as its readers.
         // The stencil byte is zero-extended into the DWORD parameter (`clrlwi r9, r27, 24`
         // @0x823FFB44).
+        const auto lPlan = BrnGraphics::ScaleTilingPlan(BrnGraphics::KMSAA_TILING_PLAN,
+            mAllocatedRenderTargets.GetAntiAliasBuffer()->GetWidth(),
+            mAllocatedRenderTargets.GetAntiAliasBuffer()->GetHeight());
         renderengine::D3DDevice_BeginTiling(lpDevice, 0u, KU_NUM_MSAA_TILES,
-                                            BrnGraphics::KMSAA_TILING_PLAN.maTile,
+                                            lPlan.maTile,
                                             &lvClearColour, KF_CLEAR_Z, luStencilClearValue);
 
         // The screen-clear GPU monitor brackets the predication RESET only -- the clear itself rode
@@ -3235,7 +3238,9 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
             // `addi r27, r11, 8` @0x823FFC94-0x823FFCA0, r25 = &unk_8203E080) -- i.e. maTile[tile] of
             // the 0x48-byte record whose committed home is GameSource/Graphics/BrnAntiAliasTiling.h.
             const BrnGraphics::AntiAliasTilingPlan::TileRect& lrTile =
-                BrnGraphics::KMSAA_TILING_PLAN.maTile[luTile];
+                BrnGraphics::ScaleTilingPlan(BrnGraphics::KMSAA_TILING_PLAN,
+                    mAllocatedRenderTargets.GetAntiAliasBuffer()->GetWidth(),
+                    mAllocatedRenderTargets.GetAntiAliasBuffer()->GetHeight()).maTile[luTile];
 
             // Each tile lands back at its own screen position: the destination point is the tile
             // rect's top-left corner. The asm reads the rect's FIRST TWO dwords -- `lwz r10, 8(r11)`
@@ -3302,7 +3307,9 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
         // The single full-screen rectangle: `addi r5, r26, (unk_8203E0D0 - 0x8203E0C8)` @0x823FFDC8
         // with r26 = &unk_8203E0C8, i.e. &KNO_MSAA_TILING_PLAN.maTile[0].
         const BrnGraphics::AntiAliasTilingPlan::TileRect& lrScreen =
-            BrnGraphics::KNO_MSAA_TILING_PLAN.maTile[0];
+            BrnGraphics::ScaleTilingPlan(BrnGraphics::KNO_MSAA_TILING_PLAN,
+                mAllocatedRenderTargets.GetAntiAliasBuffer()->GetWidth(),
+                mAllocatedRenderTargets.GetAntiAliasBuffer()->GetHeight()).maTile[0];
 
 #if BRN_GPU_PERFMON_AVAILABLE
         CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles);
@@ -5321,6 +5328,8 @@ void BrnRendererModule::PublishSkyConstantsBringUp(BrnShaderConstantsFrame* lpFr
 // passes are reconstructed incrementally as their subsystems come online.
 void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer)
 {
+    if (EnsureShadowMapTarget(mAllocatedRenderTargets))
+        mAllocatedRenderTargets.PCResizeDisplay();
     if (!renderengine::Device::FrameBegin())
     {
         return;

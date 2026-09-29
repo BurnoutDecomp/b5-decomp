@@ -23,8 +23,15 @@
 
 #include "types.hpp"
 
+namespace rw { namespace graphics { namespace postfx { class RenderTarget; } } }
+
 namespace renderengine
 {
+    // FLAG PC-platform leaf: transactional resize of the screen-dependent pool.
+    bool PCResizeDisplayTargets(rw::graphics::postfx::RenderTarget* lpScene,
+                                rw::graphics::postfx::RenderTarget* lpDownSample,
+                                rw::graphics::postfx::RenderTarget* lpParticle,
+                                u32 luWidth, u32 luHeight);
     class DepthStencilState;   // renderstates.h (the real 0x60-byte state object)
     class RenderTargetState;   // PostFxRenderTargetPCLeaf.cpp (the bound-surface descriptor)
 

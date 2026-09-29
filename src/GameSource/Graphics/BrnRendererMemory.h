@@ -180,6 +180,7 @@ struct BrnRendererMemory
     // asks it before ROUTING the Lion particle pass at all: with no particle buffer the console's
     // !mbIsInJunkyard arm has nowhere to draw, and the plume would simply disappear.
     bool PCBringUpParticleCompositeChainReady() const;
+    void PCResizeDisplay();
 
     // The post-fx spine's two targets, created lazily on the first frame that has a D3D9 device.
     // See the banner on EnsurePostFxSceneTargets in BrnRendererModule.cpp for why this is a bring-up
