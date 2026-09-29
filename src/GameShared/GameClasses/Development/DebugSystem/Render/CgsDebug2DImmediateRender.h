@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                                       // Vector2 (rw::math::vpu::Vector2)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"               // CgsGraphics::Im2d, Basic2dColouredTexturedVertex
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"         // renderengine::PrimitiveType
 #include "GameShared/GameClasses/Development/VectorFont/CgsVectorFont.h"          // mVectorFont (DrawText)
 #include "GameShared/GameClasses/Fonts/CgsFont.h"                                 // SafeResourceHandle<Font> (SetDebugFont)
@@ -97,7 +98,7 @@ namespace CgsDev
         f32 CalcTextWidth(const char* lpcText, f32 lfScale) const;
         Vector2 CalcTextExtent(const char* lpcText, f32 lfScale) const;
 
-        void SetRenderBuffer(CgsGraphics::Im2d* lpRenderBuffer);
+        void SetRenderBuffer(CgsGraphics::Im2dRenderBuffer* lpRenderBuffer);
         bool HasRenderBuffer() const { return mpRenderBuffer != nullptr; }   // safe to Begin() only once set
 
         // The debug-font handoff (X360 0x823B13A8): store the loaded bitmap Font's handle so DrawText
@@ -120,7 +121,7 @@ namespace CgsDev
         // The debug VECTOR font - DrawText's fallback when mpFont is null (the vector font needs no
         // font resource). The X360 carries both the resource-font handle (above) and this here.
         VectorFont                               mVectorFont;
-        CgsGraphics::Im2d*                       mpRenderBuffer;
+        CgsGraphics::Im2dRenderBuffer*           mpRenderBuffer;
         f32                                      mfVirtualScreenWidth;
         f32                                      mfVirtualScreenHeight;
         CgsGraphics::Basic2dColouredTexturedVertex maIm2dVertsArray[KI_VERTEX_BUFFER_SIZE];

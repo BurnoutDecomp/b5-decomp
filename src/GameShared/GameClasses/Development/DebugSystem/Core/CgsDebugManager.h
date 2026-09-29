@@ -53,7 +53,7 @@ namespace CgsDev
         static const DebugManagerConstructParameters DEFAULT;
     };
 }
-namespace CgsGraphics { struct Im2d; class Im3dRenderBuffer; }
+namespace CgsGraphics { struct Im2dRenderBuffer; class Im3dRenderBuffer; }
 namespace BrnGame { class BrnGameModule; }
 namespace CgsDev
 {
@@ -129,7 +129,7 @@ namespace CgsDev
         // render buffers, then RenderWorld (3D) + RenderHUD (2D). Nothing else - the overlay
         // QUEUEING (build info / fps / memory) is BrnGameModule::DebugManagerRender's job.
         void Render(const Matrix44& lViewProjection, const Vector3& lCameraPosition,
-                    CgsGraphics::Im3dRenderBuffer* lp3dRenderBuffer, CgsGraphics::Im2d* lp2dRenderBuffer);
+                    CgsGraphics::Im3dRenderBuffer* lp3dRenderBuffer, CgsGraphics::Im2dRenderBuffer* lp2dRenderBuffer);
         // X360 @0x8282E030: 3D Begin -> Dispatch3D the buffered world-space prims -> each active
         // component's RenderWorld -> End. (The 3D draw bodies are the Debug3D render follow-on.)
         void RenderWorld(const Matrix44& lViewProjection, const Vector3& lCameraPosition);

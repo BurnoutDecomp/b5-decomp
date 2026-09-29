@@ -38,7 +38,7 @@ namespace CgsGui
     // ARTIST 0x82857748: publish default states before each custom component.
     void CustomRenderComponentInterface::Render(ImRendererSet* lpRendererSet)
     {
-        auto& lrBuffer = lpRendererSet->mpIm2dRenderBuffer->mCommandBuffer;
+        auto& lrBuffer = *lpRendererSet->mpIm2dRenderBuffer;
         lrBuffer.BeginRendering();
         lrBuffer.SetState(gpGuiBlendStateStandard);
         lrBuffer.SetState(gpGuiRasterizerStateCullNone);

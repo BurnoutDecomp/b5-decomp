@@ -124,7 +124,7 @@ namespace CgsDev
         mpRenderBuffer = nullptr;
     }
 
-    void Debug2DImmediateRender::SetRenderBuffer(CgsGraphics::Im2d* lpRenderBuffer)
+    void Debug2DImmediateRender::SetRenderBuffer(CgsGraphics::Im2dRenderBuffer* lpRenderBuffer)
     {
         mpRenderBuffer = lpRenderBuffer;
     }
@@ -221,7 +221,7 @@ namespace CgsDev
     // an untextured coloured quad. The full debug state set (depth/raster/sampler) is the follow-on.
     void Debug2DImmediateRender::SetDebugRenderStates()
     {
-        mpRenderBuffer->SetState(static_cast<const CgsGraphics::BlendState*>(nullptr));
+        mpRenderBuffer->SetState(static_cast<const renderengine::BlendState*>(nullptr));
 
         // CRITICAL: the debug prims are solid-coloured, but the Im2d stage modulates texture x diffuse
         // and the loading screen leaves its texture bound - so without unbinding it the boxes sample

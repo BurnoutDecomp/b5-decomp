@@ -167,13 +167,7 @@ void ViewModule::RenderInternal(const CgsGui::ViewIO::InputBuffer* lpInput)
 {
     CgsGui::ViewModule::RenderBlackScreen();
     CgsGui::ViewModule::RenderInternal(lpInput);
-    // FLAG PC-platform leaf: flush the Apt/GUI command buffer HERE, so the FLAPT HUD below --
-    // which reaches D3D9 immediately, not through that buffer -- paints OVER the sat-nav map
-    // instead of under it. On the console both submitters share ONE recorded buffer and this
-    // ordering is automatic; on PC the two backends are split and the single flush used to run
-    // after the whole view render, which put the opaque map on top of the player arrow every
-    // frame. BRN_FLAPT_AFTER_DISPATCH=0 restores that old order for A/B on one binary.
-    DrainAptRenderResidueBeforeFlapt();
+    // Both walks append to the same buffer; the consumer preserves this order.
     mFlaptManager.Render();
 }
 

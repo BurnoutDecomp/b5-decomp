@@ -17,6 +17,7 @@ damage visibility. It does **not** establish original-PC minimum requirements or
 | Optional diagnostics | Wheel index/bounds scans require `BRN_WHEEL_DIAG=1`. Composite GPU readback sampling requires existing `BRN_RT_PROBE=1`. `BRN_WHEEL_ZALWAYS` remains independent. |
 | Diagnostic lookup overhead | GUI routing checks the two eligible trace event IDs before reading the environment. Hot AI speed/fan diagnostics cache their startup switches, matching adjacent diagnostic code. Messages, rate limits and game calculations are unchanged. |
 | Complete mesh sort keys | ARTIST `0x827FD4CC..5D4` builds keys up to 44 bits; `Submit` at `0x822A0888` shifts the complete u64 key before appending the 20-bit packet offset. Restore priority, shader/material grouping, Z-depth ordering and 36-bit pre-Z keys. `RadixSortJob::Execute` actually calls `std::_Sort<u64*,int>` (`0x82AD28B0`), now matched with in-place `std::sort`. |
+| Buffered 2D preparation | Restore the separate `Im2dRenderBuffer` type and share its stream between APT and FLAPT. ARTIST `0x827F9EBC..9F10` dispatches combined transform/texture/blend/static-draw records; the PC dispatcher now handles them. Native NDC/unit-colour inputs are translated into the existing PC logical/byte-colour command representation. The early APT flush and fake renderer-set cast are removed. Movie/debug draws also record into real buffers. Frame callbacks remain serial while the remaining ownership audit proceeds. |
 
 The native state shadows are invalidated at device creation. Any future raw float
 constant/sampler write or state-block restoration must use these wrappers or
@@ -31,6 +32,7 @@ From the parent workflow checkout:
 python b5-decomp/tests/run_pc_shader_constant_cache.py
 python b5-decomp/tests/run_pc_geometry_buffer_pool.py
 python b5-decomp/tests/run_pc_dispatch_sort.py
+python b5-decomp/tests/run_pc_im2d_buffer.py
 python b5-decomp/tests/run_pc_world_geometry_buffers.py
 python b5-decomp/tests/run_pc_tint_blend.py
 python b5-decomp/tests/run_pc_fullscreen.py
@@ -38,6 +40,18 @@ python b5-decomp/tests/run_pc_display_resize.py
 python b5-decomp/tests/run_world_vertex_lifetime.py
 .\build.cmd exe --jobs 4
 ```
+
+The 2D suite passes 62 native checks at 320x180, 1280x720 and 2560x1440:
+recording without a device, frozen-bank independence, copied dynamic vertices,
+APT/FLAPT layer order, text-shaped reserved runs, colour shifts over a dark texture,
+clipping, independent texture/blend flag behavior, and failure of each required
+allocation (partial resources are returned and failed buffers cannot be consumed). `--drop-batches` reproduces
+the missing opcode in a temporary consumer and fails 15 pixel checks. A 65-second
+1440p Road Rage capture completed without assertions or command-buffer overflows;
+HUD, popup, minimap arrow and debug text captures were inspected. This establishes
+the buffering prerequisite, not parallel frame execution or a measured FPS gain.
+The live display case also completed F11, resize, pause-map, minimize and restore;
+boot-video playback and the return to GUI/gameplay were captured on the repaired build.
 
 The first six suites passed 323 checks before the geometry pool change. They include real D3D9 register/sampler reads,
 rendered pixel checks after geometry retirement/address reuse, 16/32-bit indices,
@@ -69,7 +83,7 @@ Evidence: `display_live/result.json`, events and frames. Live build SHA-256 pref
 
 Hardware: i7-14650HX, RTX 4070 **Laptop** GPU, 63.7 GiB RAM. The live device log
 confirms the NVIDIA adapter. These are short local captures on a busy desktop,
-with roughly 30–34% aggregate host CPU load, not a hardware requirement benchmark.
+with roughly 30Ã¢â‚¬â€œ34% aggregate host CPU load, not a hardware requirement benchmark.
 
 Private slot 8; same save seed and assets; VSync off; 2x scene MSAA (console default),
 alpha-to-coverage, reflections, coronas and post-processing unchanged. Each listed
@@ -90,8 +104,8 @@ frame-identical replay, so small differences should not be treated as a win.
 
 In Road Rage, the caches skipped about 39% of float-constant uploads and 97% of
 sampler-state writes. These are avoided API calls, not percentages of frame-time
-improvement. The four-source 32-cube microbenchmark measured 0.405–0.453 ms scalar
-versus 0.084–0.093 ms SIMD, about 4.8x for this job alone.
+improvement. The four-source 32-cube microbenchmark measured 0.405Ã¢â‚¬â€œ0.453 ms scalar
+versus 0.084Ã¢â‚¬â€œ0.093 ms SIMD, about 4.8x for this job alone.
 
 Evidence is under the parent checkout's `scratch/performance_0929/`: paired
 `samples.summary.json`/`samples.json`, per-run flow logs and executable SHA-256

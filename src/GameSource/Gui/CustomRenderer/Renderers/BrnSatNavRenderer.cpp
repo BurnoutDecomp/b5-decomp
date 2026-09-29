@@ -1208,7 +1208,7 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     if (lpAptBuffer == 0)
         return;
     CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrCmd =
-        lpAptBuffer->mCommandBuffer;
+        *lpAptBuffer;
 
     // Gate: both the map and the mask texture must have arrived in the render payload
     // (X360 lwz +0x7C / +0x80). Without them the console clears its output surface

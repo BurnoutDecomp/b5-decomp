@@ -119,15 +119,7 @@ namespace BrnGui
     };
 
     // ---- the 2D pixel-order drain hook (homed in BrnGuiModule.cpp) --------------------
-    // FLAG PC-platform leaf. Flushes the Apt/GUI command buffer to D3D9 from inside
-    // ViewModule::RenderInternal, BEFORE mFlaptManager.Render() submits the HUD through the
-    // IMMEDIATE Im2d backend -- so the HUD lands on top of the sat-nav map, as the console's
-    // single recorded buffer replays it. ON by default; BRN_FLAPT_AFTER_DISPATCH=0 restores
-    // the old order on the same binary (the fix's falsification control). Declared here (not
-    // via BrnGuiModule.h) so this TU keeps avoiding GuiModule.h's heavy transitive includes,
-    // exactly as GetAlwaysAvailableComponentsManager does. Full mechanism note at the
-    // definition in BrnGuiModule.cpp.
-    void DrainAptRenderResidueBeforeFlapt();
+
 }
 
 #endif // BRN_GUI_VIEW_MODULE_H

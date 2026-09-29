@@ -10,10 +10,9 @@
 //   Im2dRenderBuffer::PushBoostBarColours                  @0x824502A8
 //   Im2dRenderBuffer::BatchTransformTextureBlendRenderStatic @0x8246F7D0
 //
-// (The fifth X360 Im2dRenderBuffer command writer, SetTransform @0x8244FF30, is
-// byte-identical to ImRenderBuffer<V>::SetTransform already defined in
-// CgsImRenderBufferTemplate.cpp -- the opcode-16 / 80-byte transform append -- so
-// it is NOT re-homed here; it is the same symbol on the folded PC target.)
+// SetTransform @0x8244FF30 uses the base opcode-16 writer. The native interface
+// below adapts its NDC/unit-colour inputs to the existing PC command consumer's
+// logical/byte-colour representation; no extra command opcode is introduced.
 //
 // The X360 asm proves these operate on THIS buffer's layout: every one derives the
 // command-line base as (r3 + 4) + 0x20 == mpWriteBuffer, reads muCommandBufferSize
@@ -38,10 +37,60 @@
 // members THIS TU owns are explicitly instantiated, PER MEMBER (the wave-30 lesson).
 // =============================================================================
 
-#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h"
 
 namespace CgsGraphics
 {
+    Im2dTransform Im2dTransformToLogicalPC(const Im2dTransform& lrTransform)
+    {
+        Im2dTransform lLogical = lrTransform;
+        lLogical.mOriginXYZ.x = (lrTransform.mOriginXYZ.x + 1.0f) * 640.0f;
+        lLogical.mOriginXYZ.y = (1.0f - lrTransform.mOriginXYZ.y) * 360.0f;
+        lLogical.mRightUp.x *= 640.0f;
+        lLogical.mRightUp.y *= -360.0f;
+        lLogical.mRightUp.z *= 640.0f;
+        lLogical.mRightUp.w *= -360.0f;
+        lLogical.mColourScale.x *= 255.0f;
+        lLogical.mColourScale.y *= 255.0f;
+        lLogical.mColourScale.z *= 255.0f;
+        lLogical.mColourScale.w *= 255.0f;
+        lLogical.mColourShift.x *= 255.0f;
+        lLogical.mColourShift.y *= 255.0f;
+        lLogical.mColourShift.z *= 255.0f;
+        lLogical.mColourShift.w *= 255.0f;
+        return lLogical;
+    }
+
+    // FLAG PC-platform leaf: replay the shared native command representation.
+    // ARTIST's virtual Dispatch(Im2d*) const consumes the same frozen bank.
+    void Im2dRenderBuffer::Dispatch(Im2d* /*lpRenderer*/) const
+    {
+        Im2dColouredTexturedRenderBuffer::Dispatch();
+    }
+
+    // FLAG PC-platform leaf: native transform units at the shared writer boundary.
+    void Im2dRenderBuffer::SetTransform(const Im2dTransform& lrTransform)
+    {
+        Im2dColouredTexturedRenderBuffer::SetTransform(Im2dTransformToLogicalPC(lrTransform));
+    }
+
+    void Im2dRenderBuffer::BatchTransformTextureBlendRenderStatic(
+        const Im2dTransform& lrTransform, renderengine::Texture* lpTexture,
+        const renderengine::BlendState* lpBlendState, renderengine::PrimitiveType lePrimitiveType,
+        const Basic2dColouredTexturedVertex* lpVertices, u32 luNumVertices, u8 lu8Flags)
+    {
+        Im2dColouredTexturedRenderBuffer::BatchTransformTextureBlendRenderStatic(
+            Im2dTransformToLogicalPC(lrTransform), lpTexture, lpBlendState,
+            lePrimitiveType, lpVertices, luNumVertices, lu8Flags);
+    }
+
+    void Im2dRenderBuffer::PushMask(renderengine::Texture* lpTexture,
+        const Basic2dColouredTexturedVertex* lpaLogicalCorners)
+    {
+        PushMaskGeometry(reinterpret_cast<uintptr_t>(lpTexture),
+                         lpaLogicalCorners[0], lpaLogicalCorners[1]);
+    }
+
     // -------------------------------------------------------------------------
     // PushMask @0x82450030 - push a clip mask built from a 2-vertex screen-space
     // corner run bound to lpTextureState. The X360 body appends the 16-byte

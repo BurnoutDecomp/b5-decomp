@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 #include "GameSource/Gui/Flapt/BrnFlaptManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -73,10 +74,7 @@ void FlaptManager::Construct(CgsGui::ImRendererSet* lpImRenderers,
         maFlaptFileInstances[luFile].Construct(lpAlternateTextColours,
                                                liNumAlternateColours);
 
-    // FLAG (type fork): FlaptRenderSet models slot 0 of CgsGui::ImRendererSet (the
-    // shared immediate-mode render buffer); reconcile the two types when the
-    // AptIm2dRenderBuffer / CgsGraphics::Im2d render-buffer web unifies.
-    mRenderer.Construct(reinterpret_cast<FlaptRenderSet*>(lpImRenderers),
+    mRenderer.Construct(lpImRenderers,
                         lpTextRenderer, lpLanguageManager, lpFonts);
 
     // The 16 flapt CPU monitors the X360 Construct registers (@0x82472694..), in the
@@ -224,10 +222,10 @@ void FlaptManager::Update(f32 lfTimeStep)
 // the un-homed BrnGui::GuiPerfmons::Initialise -- still -1 here) plus the "FRender"
 // handle Construct registers (dword_82FB3B10).
 // Per-frame draw: bracket in the two CPU perf monitors; start the frame on the embedded
-// renderer; draw the single active (HUD) file instance through it; flush the immediate-
+// renderer; draw the single active (HUD) file instance through it; close the recorded-
 // mode render buffer (EndRendering); then clear the renderer's per-frame texture/blend
 // cache so the next frame re-binds. The X360 reaches the render buffer as
-// mRenderer.mpImRenderSet->mpIm2dRenderBuffer + 4 (the command sub-object), which folds
+// mRenderer.mpImRenderSet->mpIm2dRenderBuffer + 4 (the command base sub-object), reached
 // to the named buffer on the PC Im2d; its int return is dropped (header declares void).
 void FlaptManager::Render()
 {

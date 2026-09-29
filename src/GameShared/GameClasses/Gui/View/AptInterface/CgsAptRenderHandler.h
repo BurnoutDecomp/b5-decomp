@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptString.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"      // CgsGraphics::Im2dTransform (mVertexTransform)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // CgsGraphics::ImRenderBuffer<V> (the +4 command buffer)
@@ -55,20 +56,9 @@ namespace CgsGuiModuleIO { struct ImRendererSet; }         // the active 2D/3D r
 
 namespace CgsGui
 {
-    // The active 2D renderer the Apt rasteriser drives. On the X360 this is an Im2dRenderBuffer:
-    // its leading word is a head slot (the value GetIm2dRendererType returns the ADDRESS of), and
-    // the actual command-buffer state (CgsGraphics::ImRenderBuffer<V>) lives at +4. Render reads
-    // GetIm2dRendererType() (the base pointer) and then `base + 4` (this mCommandBuffer) and issues
-    // every command -- SetTransform, SetProgram, SetState, SetTexture, RenderFromStaticVertexBuffer
-    // -- through it. (X360 Im2dRenderBuffer::SetTransform @0x8244FF30 takes the base and itself does
-    // `+4`; the per-mesh ops in Render take `base + 4` directly. The committed ImRenderBuffer<V>
-    // template IS that +4 command-buffer object -- its members line up with 0x20/0x30/0x34/0x41
-    // relative to base+4 -- so SetTransform here is called on mCommandBuffer too.)
-    struct AptIm2dRenderBuffer
-    {
-        u32 mu32Head;   // [c:0x00] the renderer base head word (GetIm2dRendererType returns &this)
-        CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex> mCommandBuffer; // [c:0x04]
-    };
+    // APT and FLAPT share the actual polymorphic Im2dRenderBuffer. The console
+    // +4 adjustment is its base-class adjustment, not a separate head-word wrapper.
+    typedef CgsGraphics::Im2dRenderBuffer AptIm2dRenderBuffer;
 
     class AptRenderHandler
     {
@@ -195,11 +185,11 @@ namespace CgsGui
         void* GetImRendererSetRaw() const
         { return mpImRenderers; }
 
-        // The active 2D command buffer (GetIm2dRendererType()->mCommandBuffer == base+4). The
+        // The active 2D command buffer (the ImRenderBuffer<V> base subobject). The
         // mask-push/pop callbacks (DrawRenderingUnit) append raw mask commands through it.
         CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* GetCommandBuffer()
         {
-            return &GetIm2dRendererType()->mCommandBuffer;
+            return GetIm2dRendererType();
         }
 
         // The 2D renderer BASE pointer the DrawString callback hands to TextRenderer::RenderString

@@ -12,7 +12,8 @@
 // (Re-home step A of retirement slice 5: the buffer instance itself still lives
 // with the bring-up host; it moves here in step B.)
 
-namespace CgsGui { struct AptIm2dRenderBuffer; }
+namespace CgsGraphics { struct Im2dRenderBuffer; }
+namespace CgsGui { typedef CgsGraphics::Im2dRenderBuffer AptIm2dRenderBuffer; }
 
 namespace CgsGui
 {

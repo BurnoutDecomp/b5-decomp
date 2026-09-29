@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 #include "GameSource/Gui/Flapt/BrnFlaptRenderer.h"
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"   // CgsGraphics::Im2d (full def) + ImRenderer<V>::SetProgram + the batch/transform command API
@@ -69,7 +70,7 @@ const u8 KU_BATCH_FLAG_SETBLEND   = 2;
 // null, so it is never bound (the batch inherits the current device blend) -- tolerable and
 // non-asserting. Replace both with `extern` refs into mgStateLibrary once ConstructOnceOnly
 // is brought into the build.
-const CgsGraphics::BlendState* const gpFlaptDefaultBlendState = 0;
+const renderengine::BlendState* const gpFlaptDefaultBlendState = 0;
 
 // Interim ConstructWhiteTexture (see FLAG above): the faithful 4x4 all-white A8R8G8B8 fallback,
 // built once via the render-engine Texture2D create/lock/fill/unlock path the PC texture
@@ -224,14 +225,14 @@ void FlaptRenderer::RenderMesh(const Mesh* lpMesh, const FlaptFile* lpFile)
     CGS_ASSERT(static_cast<u32>(lpMesh->muVertOffset + lpMesh->muNumVerts) <= lpFile->muNumVerts,
                "(uint32_t)( lpMesh->muVertOffset + lpMesh->muNumVerts ) <= lpFile->muNumVerts");
 
-    const CgsGraphics::BlendState* lpBlendState = gpFlaptDefaultBlendState;
+    const renderengine::BlendState* lpBlendState = gpFlaptDefaultBlendState;
 
     // Only re-bind the texture/blend state the batch command actually changes.
     u8 luFlags = 0;
     if (mpCurrentBlendState != lpBlendState)
     {
         luFlags = KU_BATCH_FLAG_SETBLEND;
-        mpCurrentBlendState = const_cast<CgsGraphics::BlendState*>(lpBlendState);
+        mpCurrentBlendState = const_cast<renderengine::BlendState*>(lpBlendState);
     }
     if (mpCurrentTexture != lpTexture)
     {
@@ -448,30 +449,23 @@ void FlaptRenderer::RenderMask(const Mesh* lpMesh, const FlaptFile* lpFile,
     // transform to fold and the mask degenerates to the mesh's raw local quad.
     mpImRenderSet->mpIm2dRenderBuffer->SetTransform(lrTransform);
 
+    // FLAG PC-platform leaf: the shared native mask records contain logical
+    // screen corners. Fold the same composed transform as the mesh before
+    // recording; the old immediate backend did this fold at submission time.
+    const CgsGraphics::Im2dTransform lLogical =
+        CgsGraphics::Im2dTransformToLogicalPC(lrTransform);
+    for (u32 luCorner = 0; luCorner < 2; ++luCorner)
+    {
+        const f32 lfX = laMaskVerts[luCorner].mv2Pos.x;
+        const f32 lfY = laMaskVerts[luCorner].mv2Pos.y;
+        laMaskVerts[luCorner].mv2Pos.x = lLogical.mOriginXYZ.x
+            + lLogical.mRightUp.x * lfX + lLogical.mRightUp.z * lfY;
+        laMaskVerts[luCorner].mv2Pos.y = lLogical.mOriginXYZ.y
+            + lLogical.mRightUp.y * lfX + lLogical.mRightUp.w * lfY;
+    }
+
     mpImRenderSet->mpIm2dRenderBuffer->PushMask(
         const_cast<renderengine::Texture*>(lpTexture), laMaskVerts);
-
-    // [DIAG] NOT IN THE X360 BINARY. [gateui r6] The mask-rect probe: prints the
-    // back-buffer scissor the push installed. Before this round every FLAPT mask folded to
-    // a ~31x31 px rect in the screen's top-left corner (the corners were read as 1280x720
-    // logical coordinates), which clipped the whole masked layer -- the HUD-message
-    // banner's ribbon body -- away. A rect that now tracks the wipe is the proof.
-    {
-        static const bool sbUiGateDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-        static s32        siDiagPrinted = 0;
-        if ( sbUiGateDiag && siDiagPrinted < 12 && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            ++siDiagPrinted;
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] flapt mask rect=(" << CgsGraphics::gLastIm2dMaskRect[0]
-                << "," << CgsGraphics::gLastIm2dMaskRect[1]
-                << ")-(" << CgsGraphics::gLastIm2dMaskRect[2]
-                << "," << CgsGraphics::gLastIm2dMaskRect[3]
-                << ") localMin=(" << lMinVert.mv2Pos.x << "," << lMinVert.mv2Pos.y
-                << ") localMax=(" << lMaxVert.mv2Pos.x << "," << lMaxVert.mv2Pos.y
-                << ")\n";
-        }
-    }
 
     // Count this mesh against the currently-open mask.
     ++mMaskMeshCounts[mMaskMeshCounts.GetLength() - 1];

@@ -152,7 +152,7 @@ namespace
             return 0;
         CgsGui::AptIm2dRenderBuffer* lpAptBuffer =
             *reinterpret_cast<CgsGui::AptIm2dRenderBuffer* const*>(lpRendererSet);
-        return (lpAptBuffer != 0) ? &lpAptBuffer->mCommandBuffer : 0;
+        return lpAptBuffer;
     }
 
     // Event-type ids RecvEvent @0x82449E98 drains (its three switch arms).

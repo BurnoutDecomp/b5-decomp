@@ -1,5 +1,6 @@
 #include "GameSource/Graphics/BrnRendererModule.h"
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"           // CgsRenderTarget::GetDepthTexture (the s15 bind)
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device::SetResource (the global texture binds)
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                      // renderengine::PCSurfaceBracket_* (the scene-target bracket)
@@ -724,6 +725,13 @@ namespace
     const u32 KU_PC_DISPATCH_BIN_BYTES     = 12u * 1024u * 1024u;
     const u32 KU_PC_GDL_DISPATCH_BIN_BYTES = 8u * 1024u * 1024u;
     const u32 KU_NUM_DISPATCH_LISTS        = 25u;   // X360 Construct: GetList ids 0..24
+    // FLAG PC-platform leaf: native pointers enlarge 2D commands. The GUI's
+    // existing 512 KiB streams bound the main buffer; debug retains ARTIST's
+    // 2 MiB vertex stream and doubles its 80 KiB command budget for x64.
+    const u32 KU_PC_IM2D_COMMAND_BYTES = 512u * 1024u;
+    const u32 KU_PC_IM2D_VERTEX_BYTES = 512u * 1024u;
+    const u32 KU_PC_IM2D_DEBUG_COMMAND_BYTES = 160u * 1024u;
+    const u32 KU_PC_IM2D_DEBUG_VERTEX_BYTES = 2u * 1024u * 1024u;
 
     bool EnsureWorldDispatchAllocator()
     {
@@ -732,6 +740,9 @@ namespace
 
         const u32 luHeapBytes = KU_PC_DISPATCH_BIN_BYTES
                               + 2u * KU_PC_GDL_DISPATCH_BIN_BYTES
+                              + 2u * (KU_PC_IM2D_COMMAND_BYTES + KU_PC_IM2D_VERTEX_BYTES
+                                    + KU_PC_IM2D_DEBUG_COMMAND_BYTES + KU_PC_IM2D_DEBUG_VERTEX_BYTES)
+                              + 8u * 128u
                               + (3u * 4096u)   // per-bin align128(size)+128 slop + headroom
                               + (192u * 1024u); // + the small renderengine objects that share
                                                //   this allocator (the sky dome's four buffer
@@ -1446,6 +1457,8 @@ namespace
 
 void BrnRendererModule::Construct()
 {
+    mIm2dRenderBuffer.Construct();
+    mIm2dDebugRenderBuffer.Construct();
     // Double-buffered per-frame shader constants (maShaderConstantsFrames[2]).
     // ⭐ THE REUSABLE LOADING-SCREEN ALLOCATOR, 2026-08-17 (boot audit F-P2-4/F-P6-12). The
     // console owns this as an embedded member at renderer+0xC8FC and lends its address to the
@@ -1527,6 +1540,12 @@ void BrnRendererModule::Construct()
     // write frame while Render walks the read frame.
     if (EnsureWorldDispatchAllocator())
     {
+        const bool lbIm2dReady = mIm2dRenderBuffer.Prepare(KU_PC_IM2D_COMMAND_BYTES,
+            KU_PC_IM2D_VERTEX_BYTES, &sWorldDispatchAllocator, false);
+        const bool lbIm2dDebugReady = mIm2dDebugRenderBuffer.Prepare(KU_PC_IM2D_DEBUG_COMMAND_BYTES,
+            KU_PC_IM2D_DEBUG_VERTEX_BYTES, &sWorldDispatchAllocator, true);
+        CGS_ASSERT(lbIm2dReady, "mIm2dRenderBuffer.Prepare");
+        CGS_ASSERT(lbIm2dDebugReady, "mIm2dDebugRenderBuffer.Prepare");
         mSingleBufferedDispatchFrame.Construct(KU_NUM_DISPATCH_LISTS,
                                                KU_PC_DISPATCH_BIN_BYTES,
                                                &sWorldDispatchAllocator);
@@ -5328,6 +5347,14 @@ void BrnRendererModule::PublishSkyConstantsBringUp(BrnShaderConstantsFrame* lpFr
 // passes are reconstructed incrementally as their subsystems come online.
 void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer)
 {
+    // FLAG PC-platform leaf: missing host storage cannot produce a valid frame.
+    // This also covers failure to create the allocator before Prepare is called.
+    if (!mIm2dRenderBuffer.IsPreparedPC() || !mIm2dDebugRenderBuffer.IsPreparedPC())
+    {
+        CgsDev::Log::WriteToLog("[renderer] 2D command storage unavailable; shutting down.\n");
+        CgsSystem::HardwareInit::RequestShutdown();
+        return;
+    }
     if (EnsureShadowMapTarget(mAllocatedRenderTargets))
         mAllocatedRenderTargets.PCResizeDisplay();
     if (!renderengine::Device::FrameBegin())
@@ -6752,7 +6779,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // pass, exactly the console order). Clean no-op until the GUI module is prepared.
     // This is how BootLegal's Title_Screen02 movie reaches the screen. [GUI render path]
     if (BrnGui::gpActiveGuiModule != 0)
-        BrnGui::gpActiveGuiModule->Render(&mIm2dRenderer);
+        BrnGui::gpActiveGuiModule->Render(&mIm2dRenderBuffer);
 
     // (gameplay-render passes here when reconstructed; gated off during the loading screen)
 
@@ -6835,29 +6862,28 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             mIm2dRenderer.EndRendering();
         }
         // The video frame quad holds with the ownership underlay -- see the fade seat above.
-        if (!lbLoadingFadePending)
-            BrnGui::gpActiveMovieManager->Render(&mIm2dRenderer);
+        if (!lbLoadingFadePending && mIm2dRenderBuffer.IsPreparedPC())
+        {
+            BrnGui::gpActiveMovieManager->Render(&mIm2dRenderBuffer);
+            mIm2dRenderBuffer.Swap();
+            mIm2dRenderBuffer.Clear();
+            mIm2dRenderBuffer.Dispatch(&mIm2dRenderer);
+        }
     }
 
-    // The debug-overlay FLUSH point. On the X360, BrnGameModule::DebugManagerRender @0x823BCB88
-    // (the dispatch side) queues the overlay and ends by calling DebugManager::Render, which
-    // replays the queued prims into the debug Im2dRenderBuffer; the GPU then consumes that buffer
-    // here, between the 2D foreground and the present. On PC Im2dRenderBuffer IS the immediate
-    // renderer (CgsImRenderBuffer.h's documented fold), so the replay itself must land at this
-    // point of the frame -- DebugManagerRender queues on the dispatch side, and its trailing
-    // DebugManager::Render call is issued HERE instead (its FLAG PC fold). The 2D buffer is the
-    // live Im2d the frame renders through; the 3D buffer is the published debug Im3d
-    // (mIm3dDebugRenderBuffer -- its drawing path is the Debug3D follow-on). The view/camera args
-    // feed only that deferred 3D pass (the console derives them from the dispatch camera
-    // matrices, not yet reconstructed), so identity/zero stand in.
+    // Record the debug primitives, then consume their frozen buffer above the
+    // foreground/movie layers. The 3D debug buffer remains on its existing path.
     if (CgsDev::DebugManager* lpDebugManager = CgsDev::DebugManager::ThreadSafeAquire())
     {
         Matrix44 lViewProjection;
         lViewProjection.SetIdentity();
         Vector3 lCameraPosition;
         lCameraPosition.SetZero();
-        lpDebugManager->Render(lViewProjection, lCameraPosition, &mIm3dDebugRenderBuffer, &mIm2dRenderer);
+        lpDebugManager->Render(lViewProjection, lCameraPosition, &mIm3dDebugRenderBuffer, &mIm2dDebugRenderBuffer);
         CgsDev::DebugManager::ThreadSafeRelease(lpDebugManager);
+        mIm2dDebugRenderBuffer.Swap();
+        mIm2dDebugRenderBuffer.Clear();
+        mIm2dDebugRenderBuffer.Dispatch(&mIm2dRenderer);
     }
 
     // The three per-thread monitor squares (X360 RenderThreeThreadMonitors). The real per-thread
