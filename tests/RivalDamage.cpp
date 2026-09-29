@@ -127,11 +127,43 @@ int main()
     Check(!lModule.maActiveRaceCars[2].mRender.mbDamaged, "network victim keeps its existing rendering state");
     for (int liCar = 0; liCar < 5; ++liCar) lModule.maActiveRaceCars[liCar].mRender.mbDamaged = true;
     SetEvent(lInput,0,5); lModule.UpdateBoostTakedowns(&lInput);
-    Check(!lModule.maActiveRaceCars[5].mRender.mbDamaged, "five damaged active cars exhaust the console budget");
+    Check(lModule.maActiveRaceCars[5].mRender.mbDamaged,
+          "five already damaged cars must not hide a new takedown victim's deformation");
     lModule.maActiveRaceCars[4].mbActive = false;
-    Check(lModule.GetDamagedCarCount() == 4, "inactive damaged cars do not consume the budget");
+    Check(lModule.GetDamagedCarCount() == 5, "damage count includes the new victim and excludes inactive cars");
+    lInput.mQueue.Clear(); // the original gate has no retry once the event has been consumed
     lModule.UpdateBoostTakedowns(&lInput);
-    Check(lModule.maActiveRaceCars[5].mRender.mbDamaged, "free budget admits a newly taken-down rival");
+    Check(lModule.maActiveRaceCars[5].mRender.mbDamaged, "damage stays enabled after the takedown event expires");
+
+    // Multiple takedowns in a tick can cross the old cap. Cover the complete
+    // eight-car roster without suppressing boost, near-miss exclusion or lifecycle.
+    for (s32 liAlreadyDamaged = 4; liAlreadyDamaged <= 7; ++liAlreadyDamaged)
+    {
+        RaceCarEntityModule lPack;
+        Input lPackInput;
+        lPack.maActiveRaceCars[0].mCar.meType = BrnWorld::E_RACE_CAR_TYPE_PLAYER;
+        for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
+        {
+            lPack.maActiveRaceCars[liCar].mRender.mbDamaged = liCar < liAlreadyDamaged;
+            if (liCar >= liAlreadyDamaged)
+            {
+                BrnGameState::TakedownEvent lEvent{};
+                lEvent.meAggressorIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+                lEvent.meVictimIndex = static_cast<EActiveRaceCarIndex>(liCar);
+                lPackInput.mQueue.AddEvent(lEvent);
+            }
+        }
+        lPack.UpdateBoostTakedowns(&lPackInput);
+        lPack.ProcessTakedownEvents(&lPackInput.mQueue);
+        Check(lPack.GetDamagedCarCount() == E_ACTIVE_RACE_CAR_INDEX_COUNT,
+              "all eight active cars can use deformation rendering");
+        Check(lPack.mBoostManager.mStrategy.miRewards == E_ACTIVE_RACE_CAR_INDEX_COUNT - liAlreadyDamaged,
+              "every credited takedown still awards boost above the former cap");
+        for (s32 liVictim = liAlreadyDamaged; liVictim < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liVictim)
+            Check(lPack.maActiveRaceCars[liVictim].mbTakenDown &&
+                  lPack.mNearMissManager.mTakenDown.count(liVictim) == 1,
+                  "every victim still enters takedown and near-miss bookkeeping");
+    }
     lInput.mQueue.Clear(); lModule.mBoostManager.mStrategy.miRewards = 0;
     lModule.UpdateBoostTakedowns(&lInput); lModule.ProcessTakedownEvents(&lInput.mQueue);
     Check(lModule.mBoostManager.mStrategy.miRewards == 0, "empty event queues have no reward side effects");

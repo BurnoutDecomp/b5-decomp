@@ -4253,8 +4253,8 @@ void RaceCarEntityModule::HandleGameActions(
         // Producer: TakedownManager::ProcessTakedownEvent posts 120 (size 24) for a player
         // takedown with NO current game mode (@0x823940AC..0x823940D0) INSTEAD of queuing the
         // TakedownEvent, so UpdateBoost's damage switch-on never sees a free-burn SHUTDOWN and
-        // this arm is its only one. There is no five-damaged-car budget here (UpdateBoost's
-        // GetDamagedCarCount() < 5 is that path's alone).
+        // this arm is its only one. ARTIST has no five-damaged-car budget here;
+        // UpdateBoost's original budget is also removed by the owner-requested fix below.
         case BrnGameState::GameStateModuleIO::E_ACTION_SHUTDOWN: // 120
         {
             const BrnGameState::GameStateModuleIO::ShutdownAction* lpShutdown =
@@ -8415,18 +8415,18 @@ void RaceCarEntityModule::UpdateBoost(
                 == static_cast<s32>( mePlayerActiveRaceCarIndex ) )
         {
             mBoostManager.GetBoostStrategy()->OnTakedown();
-            // ARTIST 82304BF0..82304C90: enable the victim's deforming render
-            // technique, respecting the original five-damaged-car budget.
-            if( GetDamagedCarCount() < 5 )
-            {
-                ActiveRaceCar* lpVictim = GetActiveRaceCar(lrEvent.meVictimIndex);
-                CGS_ASSERT(lpVictim != 0, "lpVictim");
-                RaceCar* lpVictimCar = lpVictim->GetGlobalRaceCar();
-                CGS_ASSERT(lpVictimCar->GetType() < E_RACE_CAR_TYPE_COUNT,
-                           "muType < E_RACE_CAR_TYPE_COUNT");
-                if( lpVictimCar->IsAIDriven() )
-                    lpVictim->GetRenderParams()->SetDamaged(true);
-            }
+            // FLAG owner-requested original-game bug fix: ARTIST 82304BF4..82304BFC
+            // skips this store once GetDamagedCarCount() reaches five (including
+            // the player/network cars). Physics and skin readback continue, but
+            // the victim keeps the intact shader for its entire crash. Remove
+            // that visual-only cap; each of the eight active cars owns its skin.
+            ActiveRaceCar* lpVictim = GetActiveRaceCar(lrEvent.meVictimIndex);
+            CGS_ASSERT(lpVictim != 0, "lpVictim");
+            RaceCar* lpVictimCar = lpVictim->GetGlobalRaceCar();
+            CGS_ASSERT(lpVictimCar->GetType() < E_RACE_CAR_TYPE_COUNT,
+                       "muType < E_RACE_CAR_TYPE_COUNT");
+            if( lpVictimCar->IsAIDriven() )
+                lpVictim->GetRenderParams()->SetDamaged(true);
             // FLAG PC diagnostic: join player credit to that same victim's
             // physical/deformation readback in ActiveRaceCar::UpdateDeformationState.
             static const bool sbTraceRivalDamage = getenv("BRN_RIVAL_DAMAGE_DIAG") != 0;

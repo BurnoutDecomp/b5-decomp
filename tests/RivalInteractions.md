@@ -54,10 +54,36 @@ python b5-decomp/tests/run_rival_damage.py
 python b5-decomp/tests/run_rival_organic.py --case b5-decomp/tests/RivalDamage.ps1 --run-name rival_damage
 ```
 
-The 13 focused checks cover damage-model activation on player takedowns, the five
-active damaged-car budget, AI/network ownership, boost rewards and penalties, and
-victim lifecycle flags. They execute the production takedown consumers with
-controlled vehicle state.
+The 35 focused checks cover damage-model activation on player takedowns through
+all eight active car slots, AI/network ownership, boost rewards and penalties,
+and victim lifecycle flags. They execute the production takedown consumers with
+controlled vehicle state, including several takedowns in one tick and persistence
+after the event queue is consumed.
+
+### Original-game visual damage limit removed (2026-09-29)
+
+ARTIST `UpdateBoost` calls `GetDamagedCarCount` at `0x82304BF4`, compares the
+result with five at `0x82304BF8`, and skips the victim's `mbDamaged = true` store
+when the count is at least five. The count includes active player and network
+cars as well as AI cars. Physics still deforms the victim, changes its collision
+shape and detaches wheels; `RenderRaceCar` keeps selecting the intact body/glass
+techniques because the render flag was never enabled. There is no later retry
+when another damaged car leaves, since the takedown event has been consumed.
+
+At the owner's request, that visual-only cap is deliberately removed. The
+player-credit and AI-victim conditions, boost reward and takedown bookkeeping
+are unchanged. This is an intentional fix to original-game behaviour, not a
+claim that ARTIST lacks the branch. The existing free-burn SHUTDOWN action
+already enables damage without this cap.
+
+This does not increase the physics allocation: each active car already owns
+128 skin rows, and deformation output publishes every live model independently
+of the render flag. The shared output holds 28 models; the active race-car roster
+has eight slots. The threshold regression fails on the original gated code and
+passes after removing the gate; it also covers batches crossing the old limit.
+The full executable build passes. A live `RivalDamage` attempt reached real car
+contacts but stopped in `rw::audio::core::PlugIn::Event` before a credited
+takedown, so it does not establish a live visual pass for this fix.
 
 The driving case uses real collisions and links player credit to the same victim's
 crash state, enabled damage rendering, nonzero deformation and changing pose.
