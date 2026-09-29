@@ -2462,6 +2462,7 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
                                       luVehicle,
                                       mVehicleSoaData);
 
+        maRenderPosesPC[luVehicle].Reset(); // New parked vehicle in a reused slot.
         SetVehicleTransform(luVehicle, lOutMatrix);
 
         if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
@@ -4316,6 +4317,8 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             "not declared or mounted) and the debug-only perfmon bracket");
     }
 
+    LatchRenderPosesPC(); // FLAG PC-platform leaf: after every traffic pose producer.
+
     lpInput->UnlockForRead();
     lpOutput->UnlockForWrite();
 }
@@ -4781,6 +4784,7 @@ void TrafficEntityModule::ResetEventData()
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::Reset()
 {
+    for (auto& lrRenderPose : maRenderPosesPC) lrRenderPose.Reset();
     // Both generators get the inlined Random::Construct: seed 2413850050 (the default seed),
     // cursor 0, then eight ring slots each written from the current seed's high word before the
     // seed steps. Random::Construct() is exactly that stream -- its stored seed
@@ -11306,6 +11310,7 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
                                         mVehicleSoaData,
                                         luTrailerIndex);
 
+        maRenderPosesPC[luParam].Reset(); // New driving vehicle in a reused slot.
         SetVehicleTransform(luParam, lOutMatrix);
     }
 
