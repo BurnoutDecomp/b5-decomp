@@ -42,7 +42,8 @@ namespace BrnAI
         // ~93 into that array while GetSpeedRatio reads 0 off the SAME object -- so if this is
         // running per-frame rather than once per race entry, it is wiping the fan every frame
         // and pinning every AI car at quarter speed.
-        if (getenv("BRN_AI_FAN_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+        static const bool sbFanDiag = getenv("BRN_AI_FAN_DIAG") != 0;
+        if (sbFanDiag && CgsDev::Log::gpDebugPrint != 0)
         {
             static u32 suPrepCall = 0;
             ++suPrepCall;
@@ -157,7 +158,8 @@ namespace BrnAI
         // because that scan is "first wins on ties" starting at -FLT_MAX, ray 0 is exactly what
         // an ALL-EQUAL (e.g. all-zero) weighting array yields. So print the array's spread, not
         // just the index. Rate limited to one line per ~2 s across all cars.
-        if (getenv("BRN_AI_FAN_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+        static const bool sbFanDiag = getenv("BRN_AI_FAN_DIAG") != 0;
+        if (sbFanDiag && CgsDev::Log::gpDebugPrint != 0)
         {
             static u32 suCall = 0;
             if ((suCall++ % 240) == 0)

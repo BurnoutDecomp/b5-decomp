@@ -1765,7 +1765,7 @@ void GuiModule::Destruct()
     {
         if (liId < 0 || liId >= KI_MAX_OBSERVED_EVENT_ID)
             return;
-        if (std::getenv("BRN_EASYDRIVE_TRACE") && (liId == 284 || liId == 94) && CgsDev::Log::gpDebugPrint)
+        if ((liId == 284 || liId == 94) && CgsDev::Log::gpDebugPrint && std::getenv("BRN_EASYDRIVE_TRACE"))
             *CgsDev::Log::gpDebugPrint << "[easydrive-route] id " << liId << " screen "
                 << (mabObservedEventIds[0][liId] ? 1 : 0) << " hud " << (mabObservedEventIds[1][liId] ? 1 : 0) << "\n";
 

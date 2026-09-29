@@ -15,6 +15,7 @@ damage visibility. It does **not** establish original-PC minimum requirements or
 | Exact indexed-draw ranges | Cache the minimum/maximum indices consumed by the final native topology after primitive-reset conversion. D3D9 receives that mesh range rather than the full shared vertex buffer. Ignore incomplete list tails, and retain nonzero base-vertex addressing. |
 | SIMD colour-cube blending | ARTIST `0x82AD2F38` and `0x82AD4170` use vector kernels specialized by source count. SSE2 restores both properties for the PC job. Existing PC truncation/clamping, BGRA layout, source order and destination pitches remain unchanged. |
 | Optional diagnostics | Wheel index/bounds scans require `BRN_WHEEL_DIAG=1`. Composite GPU readback sampling requires existing `BRN_RT_PROBE=1`. `BRN_WHEEL_ZALWAYS` remains independent. |
+| Diagnostic lookup overhead | GUI routing checks the two eligible trace event IDs before reading the environment. Hot AI speed/fan diagnostics cache their startup switches, matching adjacent diagnostic code. Messages, rate limits and game calculations are unchanged. |
 | Complete mesh sort keys | ARTIST `0x827FD4CC..5D4` builds keys up to 44 bits; `Submit` at `0x822A0888` shifts the complete u64 key before appending the 20-bit packet offset. Restore priority, shader/material grouping, Z-depth ordering and 36-bit pre-Z keys. `RadixSortJob::Execute` actually calls `std::_Sort<u64*,int>` (`0x82AD28B0`), now matched with in-place `std::sort`. |
 
 The native state shadows are invalidated at device creation. Any future raw float
@@ -200,6 +201,32 @@ The opt-in trace now separates CPU copy submission, native Present waiting and
 dispatch sorting. These are CPU intervals: a fast asynchronous copy call does
 not establish its GPU cost. A run that loses foreground focus is excluded from
 comparative FPS claims (`pooled_partitioned` is one such run).
+
+## CPU and GPU attribution
+
+A separate 20-second, 16-sample capture (`sort_gpu_attribution`) attributes the
+game's 3D work to the RTX: about 13.1% average utilization. Its main CPU thread
+uses about 72.5% of one core and another game thread about 47.4%. Intel activity
+is largely attributed to Windows presentation/compositing and desktop UI
+processes. The internal 2560x1600/165-Hz panel is an Intel output. This is
+consistent with CPU/presentation limits; low total CPU utilization does not
+exclude a constrained thread. Hybrid graphics can use NVIDIA for rendering
+while Intel handles display output ([NVIDIA Optimus](https://www.nvidia.com/en-us/geforce/technologies/optimus/technology/)).
+
+The profiling-disabled `stable_cpu_profile` uses proper StackWalk64 unwinding.
+It identifies native presentation and indexed-draw submission as the largest
+sampled call sites. Repeated diagnostic environment lookups also appear in GUI
+event routing and AI speed/fan routines. After the diagnostic changes,
+`diag_hotpath_profile` no longer samples those targeted GUI/AI environment calls.
+An enabled run (`diag_hotpath_enabled`) still emits 133 AI-speed, 81 fan and seven
+GUI trace lines, without assertions or exceptions. Canonical build and review
+pass; no full-game FPS gain is claimed for this small change.
+
+The automated harness adds a separate keyboard-polling cost: missing debug-key
+named events are reopened on every frame. This is partly harness-specific and
+must be accounted for in future measurements rather than attributed wholesale
+to normal gameplay. The current native input path must retain key-edge, modifier,
+late-created event and capture semantics when that work is optimized.
 
 ## Remaining original optimization gaps
 
