@@ -63,6 +63,7 @@
 
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"
 #include "pc/gcm/renderengine/device.h"                  // renderengine::gDevice / gD3D9 / Device::SetState
+#include "pc/gcm/renderengine/DisplayResizePCLeaf.h"
 #include "pc/gcm/renderengine/texture.h"                 // renderengine::Texture (mpD3DTexture)
 #include "pc/gcm/renderengine/renderstates.h"            // renderengine::TextureState (the colour sampler states)
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"        // renderengine::ShadowDepthFormat* (homed below)
@@ -1129,8 +1130,6 @@ namespace renderengine
         IDirect3DDevice9* const lpDevice = Dev();
         if (lpDevice == nullptr)
             return;
-        if (rw::graphics::postfx::gpDefaultRenderTargetState != nullptr)
-            return;                                        // installed once per device
 
         IDirect3DSurface9* lpColour = nullptr;
         IDirect3DSurface9* lpDepth  = nullptr;
@@ -1146,6 +1145,10 @@ namespace renderengine
             return;
         }
 
+        // FLAG PC-platform leaf: replace the surfaces in the same state object;
+        // the pool's back-buffer descriptor keeps a pointer to this object.
+        if (sDefaultState.mpColourSurface) sDefaultState.mpColourSurface->Release();
+        if (sDefaultState.mpDepthSurface) sDefaultState.mpDepthSurface->Release();
         sDefaultState.mpColourSurface = lpColour;
         sDefaultState.mpDepthSurface  = lpDepth;
         sDefaultState.muWidth         = luWidth;
@@ -1158,6 +1161,79 @@ namespace renderengine
                       static_cast<unsigned>(luWidth), static_cast<unsigned>(luHeight),
                       static_cast<void*>(lpColour), static_cast<void*>(lpDepth));
         CgsDev::Log::WriteToLog(lacMsg);
+    }
+
+    // FLAG PC-platform leaf: allocate the complete resize before publishing it.
+    // Keep engine Target/Texture/TextureState identities stable: shader and
+    // render-target caches refer to those wrappers, not just their GPU handles.
+    bool PCResizeDisplayTargets(rw::graphics::postfx::RenderTarget* lpScene,
+                                rw::graphics::postfx::RenderTarget* lpDownSample,
+                                rw::graphics::postfx::RenderTarget* lpParticle,
+                                u32 luWidth, u32 luHeight)
+    {
+        using rw::graphics::postfx::RenderTarget;
+        RenderTarget* const lapTargets[] = {lpScene, lpDownSample, lpParticle};
+        PCSurfaceResize laColour[3];
+        PCSurfaceResize laDepth[3];
+        for (u32 luIndex = 0; luIndex < 3; ++luIndex)
+        {
+            RenderTarget* lpTarget = lapTargets[luIndex];
+            if (!lpTarget) continue;
+            RenderTargetState* lpState = lpTarget->GetSectionRenderTargetState(0);
+            const u32 luDivisor = luIndex == 2 ? 2 : 1;
+            if (!lpState || !lpState->mpColourSurface || !lpState->mpDepthSurface
+                || !laColour[luIndex].Prepare(Dev(), lpState->mpColourSurface,
+                                              luWidth / luDivisor, luHeight / luDivisor)
+                || !laDepth[luIndex].Prepare(Dev(), lpState->mpDepthSurface,
+                                             luWidth / luDivisor, luHeight / luDivisor))
+                return false;
+        }
+        if (!Device::ResizeDisplay(luWidth, luHeight)) return false;
+
+        // The old buffers may still be sampled from the previous frame. Drop
+        // those bindings and invalidate the engine's state shadow before swap.
+        for (u32 luUnit = 0; luUnit < 16; ++luUnit) Dev()->SetTexture(luUnit, nullptr);
+        shadow::Device::ResetShadowing();
+        gpLastRenderTargetState = nullptr;
+        for (u32 luIndex = 0; luIndex < 3; ++luIndex)
+        {
+            RenderTarget* lpTarget = lapTargets[luIndex];
+            if (!lpTarget) continue;
+            RenderTargetState* lpState = lpTarget->GetSectionRenderTargetState(0);
+            const u32 luDivisor = luIndex == 2 ? 2 : 1;
+            const u32 luTargetWidth = luWidth / luDivisor;
+            const u32 luTargetHeight = luHeight / luDivisor;
+            Texture* const lapTextures[] = {
+                lpTarget->maColourTargets[0].mpTexture, lpTarget->mDepthTarget.mpTexture};
+            PCSurfaceResize* const lapNew[] = {&laColour[luIndex], &laDepth[luIndex]};
+            for (u32 luPlane = 0; luPlane < 2; ++luPlane)
+            {
+                Texture* lpTexture = lapTextures[luPlane];
+                if (!lpTexture) continue;
+                if (lpTexture->mpD3DTexture) lpTexture->mpD3DTexture->Release();
+                lpTexture->mpD3DTexture = lapNew[luPlane]->mpTexture;
+                lapNew[luPlane]->mpTexture = nullptr;
+                lpTexture->muWidth = static_cast<u16>(luTargetWidth);
+                lpTexture->muHeight = static_cast<u16>(luTargetHeight);
+            }
+            lpState->mpColourSurface->Release();
+            lpState->mpDepthSurface->Release();
+            lpState->mpColourSurface = laColour[luIndex].mpSurface;
+            lpState->mpDepthSurface = laDepth[luIndex].mpSurface;
+            laColour[luIndex].mpSurface = laDepth[luIndex].mpSurface = nullptr;
+            lpState->muWidth = lpTarget->muWidth = luTargetWidth;
+            lpState->muHeight = lpTarget->muHeight = luTargetHeight;
+            for (auto& lrRecord : gaDepthTargetRecords)
+            {
+                if (lrRecord.mpTarget != lpTarget) continue;
+                lrRecord.muWidth = luTargetWidth;
+                lrRecord.muHeight = luTargetHeight;
+            }
+            PCBringUpClearRenderTargetState(lpState);
+        }
+        Device::SetState(rw::graphics::postfx::gpDefaultRenderTargetState);
+        gpLastRenderTargetState = nullptr;
+        return true;
     }
 }
 

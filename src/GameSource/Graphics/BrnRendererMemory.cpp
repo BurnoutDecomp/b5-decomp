@@ -1,3 +1,4 @@
+#include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
 #include "GameSource/Graphics/BrnRendererMemory.h"
 
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"  // CgsRenderTarget (+ serialise-side setters)
@@ -476,6 +477,56 @@ CgsRenderTarget* BrnRendererMemory::GetShadowMapBuffer(s32 liIndex)
     return mapRenderTarget[liIndex + 1];
 }
 
+// FLAG PC-platform leaf: apply the current client size between frames. On a GPU
+// allocation failure retain the entire old frame and let presentation scale it.
+void BrnRendererMemory::PCResizeDisplay()
+{
+    if (!renderengine::gDevice || IsIconic(renderengine::hWnd)) return;
+    RECT lClient = {};
+    if (!GetClientRect(renderengine::hWnd, &lClient)) return;
+    const RECT lView = renderengine::FitDisplay16By9(lClient.right, lClient.bottom);
+    const u32 luWidth = static_cast<u32>(lView.right - lView.left);
+    const u32 luHeight = static_cast<u32>(lView.bottom - lView.top);
+    if (luWidth < 2 || luHeight < 2) return;
+    static u32 suFailedWidth = 0, suFailedHeight = 0;
+    if (luWidth != suFailedWidth || luHeight != suFailedHeight)
+        suFailedWidth = suFailedHeight = 0;
+    if (luWidth == static_cast<u32>(renderengine::gDisplayWidth)
+        && luHeight == static_cast<u32>(renderengine::gDisplayHeight)) return;
+    if (luWidth == suFailedWidth && luHeight == suFailedHeight) return;
+    auto lpTarget = [](CgsRenderTarget* lpBuffer) {
+        return lpBuffer ? lpBuffer->GetRenderTarget() : nullptr;
+    };
+    CgsRenderTarget* const lapBuffers[] = {GetAntiAliasBuffer(), GetDownSampleBuffer(),
+                                          GetBackBuffer(), GetParticleBuffer()};
+    for (auto* lpBuffer : lapBuffers)
+        if (lpBuffer && !lpBuffer->GetRenderTarget()) return;
+    if (!renderengine::PCResizeDisplayTargets(lpTarget(GetAntiAliasBuffer()),
+        lpTarget(GetDownSampleBuffer()), lpTarget(GetParticleBuffer()), luWidth, luHeight))
+    {
+        suFailedWidth = luWidth;
+        suFailedHeight = luHeight;
+        CgsDev::Log::WriteToLog("[display] resize allocation failed; retaining previous render resolution\n");
+        return;
+    }
+    suFailedWidth = suFailedHeight = 0;
+    mu32ScreenWidth = luWidth;
+    mu32ScreenHeight = luHeight;
+    for (u32 luIndex = 0; luIndex < 4; ++luIndex)
+    {
+        CgsRenderTarget* lpBuffer = lapBuffers[luIndex];
+        if (!lpBuffer) continue;
+        const u32 luDivisor = luIndex == 3 ? 2 : 1;
+        lpBuffer->SetDimensions(luWidth / luDivisor, luHeight / luDivisor);
+        if (auto* lpRenderTarget = lpBuffer->GetRenderTarget())
+        {
+            lpRenderTarget->muWidth = luWidth / luDivisor;
+            lpRenderTarget->muHeight = luHeight / luDivisor;
+        }
+    }
+}
+
+
 // [PC bring-up] Create the post-fx spine's two render targets. NOT a console function -- the console
 // builds the whole pool in Construct @0x823FCA38, which is still gated out (see the
 // BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE banner and the EnsurePostFxSceneTargets banner in
@@ -483,7 +534,7 @@ CgsRenderTarget* BrnRendererMemory::GetShadowMapBuffer(s32 liIndex)
 // creators without un-gating Construct, and it does nothing they do not do.
 //
 // ⚠️ MUST RUN AFTER PCBringUpCreateShadowMapBufferOnly, which nulls every pool slot. The caller
-// enforces that; this asserts it, because getting it backwards would silently drop the shadow target.
+// enforces that; this asserts it, because reversing the order would overwrite the shadow target's pool slot.
 //
 // DELETE WITH THE BRING-UP, together with PCBringUpCreateShadowMapBufferOnly.
 void BrnRendererMemory::PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator* lpAllocator,

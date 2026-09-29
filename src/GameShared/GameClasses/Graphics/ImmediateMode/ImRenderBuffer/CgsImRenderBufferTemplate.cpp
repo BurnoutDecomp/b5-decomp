@@ -2070,7 +2070,7 @@ namespace CgsGraphics
                         IDirect3DSurface9* lpRt0 = nullptr;
                         IDirect3DSurface9* lpBb  = nullptr;
                         lpDevice->GetRenderTarget(0, &lpRt0);
-                        lpDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &lpBb);
+                        renderengine::PCGetBackBuffer(&lpBb);
                         char lacIm[200];
                         std::snprintf(lacIm, sizeof(lacIm), "[im2d-diag] present=%u batch n=%u hr=0x%08X rt0=%p backbuffer=%p program=%d\n",
                                       renderengine::guPresentCount, luCount, static_cast<unsigned>(lhrImDraw), static_cast<void*>(lpRt0), static_cast<void*>(lpBb), static_cast<int>(li8LatchedProgram));

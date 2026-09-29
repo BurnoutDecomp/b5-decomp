@@ -5,6 +5,7 @@
 
 struct IDirect3D9;
 struct IDirect3DDevice9;
+struct IDirect3DSurface9;
 
 namespace renderengine
 {
@@ -97,6 +98,10 @@ namespace renderengine
     extern IDirect3D9* gD3D9;
     extern IDirect3DDevice9* gDevice;
 
+    // FLAG PC-platform leaf: the active, resizable frame buffer. AddRefs the
+    // returned surface just like IDirect3DDevice9::GetBackBuffer.
+    HRESULT PCGetBackBuffer(IDirect3DSurface9** lppSurface);
+
     // The adapter's current display refresh rate in Hz, or 0 if it cannot be read.
     // ⭐ 2026-08-16 (boot audit F-P1-9). BrnGameModule::Construct's step 9 seeds both game
     // timers with 1/<refresh rate>, and the console reads that rate out of the display mode
@@ -168,6 +173,7 @@ namespace renderengine
         static bool FrameBegin();
         static bool FrameBeginNoClear();
         static void ShowPixelBuffer();
+        static bool ResizeDisplay(u32 luWidth, u32 luHeight);
 
         // Bind a render-target (surface) state on the device (DWARF renderengine::device.h:1042;
         // X360 guest renderengine__Device__SetState). The post-fx render-target wrapper calls this to

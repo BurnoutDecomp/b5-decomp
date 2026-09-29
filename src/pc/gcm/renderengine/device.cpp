@@ -1,5 +1,6 @@
 #include "device.h"
 #include "WindowPresentationPCLeaf.h"
+#include "DisplayResizePCLeaf.h"
 
 #include <Windows.h>
 #include <d3d9.h>
@@ -105,6 +106,40 @@ HWND renderengine::hWnd = nullptr;
 
 IDirect3D9*       renderengine::gD3D9 = nullptr;
 IDirect3DDevice9* renderengine::gDevice = nullptr;
+
+namespace
+{
+    renderengine::PCFrameBuffer gFrameBuffer;
+    renderengine::PCPresentation gPresentation;
+}
+
+HRESULT renderengine::PCGetBackBuffer(IDirect3DSurface9** lppSurface)
+{
+    return gFrameBuffer.GetBackBuffer(gDevice, lppSurface);
+}
+
+// FLAG PC-platform leaf: called between frames, after the scene's replacement
+// surfaces have all been allocated. No device Reset and no loss of world assets.
+bool renderengine::Device::ResizeDisplay(u32 luWidth, u32 luHeight)
+{
+    RECT lClient = {};
+    if (!GetClientRect(hWnd, &lClient)
+        || FAILED(gPresentation.Prepare(gDevice, hWnd, gVSync != 0, lClient.right, lClient.bottom)))
+        return false;
+    if (!gFrameBuffer.Resize(gDevice, hWnd, luWidth, luHeight, gVSync != 0))
+        return false;
+    gFrameBuffer.Bind(gDevice);
+    PCInstallDefaultRenderTargetState(luWidth, luHeight);
+    gDisplayWidth = static_cast<s32>(luWidth);
+    gDisplayHeight = static_cast<s32>(luHeight);
+    const RECT lScissor = {0, 0, gDisplayWidth, gDisplayHeight};
+    gDevice->SetScissorRect(&lScissor);
+    char lacMessage[128];
+    std::snprintf(lacMessage, sizeof(lacMessage),
+                  "[display] rendering at %ux%u (native window pixels)\n", luWidth, luHeight);
+    CgsDev::Log::WriteToLog(lacMessage);
+    return true;
+}
 
 // @ TUB 0x7CC080 - detect the desktop resolution and seed the default graphics
 // settings. (TUB additionally seeds motion-blur / shadow / env-map / SSAO / texture
@@ -423,7 +458,7 @@ static void WatchBlackFramesIfRequested()
     }
 
     IDirect3DSurface9* lpBack = nullptr;
-    if (FAILED(renderengine::gDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &lpBack)) || lpBack == nullptr)
+    if (FAILED(renderengine::PCGetBackBuffer(&lpBack)) || lpBack == nullptr)
     {
         return;
     }
@@ -497,7 +532,7 @@ static void WatchBlackFramesIfRequested()
         if (suBlackRun <= 2u && renderengine::guPresentCount > 2000u)
         {
             IDirect3DSurface9* lpFull = nullptr;
-            if (SUCCEEDED(renderengine::gDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &lpFull)) && lpFull != nullptr)
+            if (SUCCEEDED(renderengine::PCGetBackBuffer(&lpFull)) && lpFull != nullptr)
             {
                 D3DSURFACE_DESC lFullDesc;
                 lpFull->GetDesc(&lFullDesc);
@@ -709,7 +744,7 @@ static void DumpBackBufferIfRequested()
     }
 
     IDirect3DSurface9* lpBack = nullptr;
-    if (FAILED(renderengine::gDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &lpBack)) || lpBack == nullptr)
+    if (FAILED(renderengine::PCGetBackBuffer(&lpBack)) || lpBack == nullptr)
     {
         return;
     }
@@ -843,8 +878,10 @@ void renderengine::Device::ShowPixelBuffer()
     gDevice->EndScene();
     DumpBackBufferIfRequested();
     WatchBlackFramesIfRequested();   // [diag] BRN_BLACK_FRAME_WATCH (issue #30)
-    static PCPresentation sPresentation;
-    const HRESULT lhrPresent = sPresentation.Present(gDevice, hWnd, gVSync != 0);
+    IDirect3DSurface9* lpFrame = nullptr;
+    PCGetBackBuffer(&lpFrame);
+    const HRESULT lhrPresent = gPresentation.Present(gDevice, hWnd, gVSync != 0, lpFrame);
+    if (lpFrame) lpFrame->Release();
     // [DIAG] NOT IN THE X360 BINARY -- issue #30: Present's result and the cooperative level, on every
     // present that is not S_OK and on every black present (the watch's flag), rate-limited.
     {
@@ -857,7 +894,7 @@ void renderengine::Device::ShowPixelBuffer()
             IDirect3DSurface9* lpRt0 = nullptr;
             IDirect3DSurface9* lpBb  = nullptr;
             gDevice->GetRenderTarget(0, &lpRt0);
-            gDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &lpBb);
+            renderengine::PCGetBackBuffer(&lpBb);
             char lacMsg[200];
             std::snprintf(lacMsg, sizeof(lacMsg),
                           "[present-diag] present=%u hrPresent=0x%08X coop=0x%08X rt0=%p backbuffer=%p%s\n",

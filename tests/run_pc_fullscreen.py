@@ -11,7 +11,9 @@ def read(path):
     return (a.source_root / path).read_text(encoding='utf-8') if a.source_root else Tree().read(path)
 path = 'src/GameShared/GameClasses/System/PC/CgsHardwareInitPC.cpp'
 code = definition(read(path), 'static LRESULT CALLBACK windowProc(')
-header = 'src/pc/gcm/renderengine/WindowPresentationPCLeaf.h'
+headers = ['src/pc/gcm/renderengine/WindowPresentationPCLeaf.h',
+           'src/pc/gcm/renderengine/DisplayResizePCLeaf.h',
+           'src/GameSource/Graphics/BrnAntiAliasTiling.h']
 numeric = compile_and_run(HERE / 'PCFullscreen.cpp', 'pc_fullscreen_window.inc', code, 'PCFullscreen',
-                          shadow={header:read(header)}, extra_flags='d3d9.lib user32.lib')
-raise SystemExit(report('run_pc_fullscreen', [], numeric, 26))
+                          shadow={header:read(header) for header in headers}, extra_flags='d3d9.lib user32.lib')
+raise SystemExit(report('run_pc_fullscreen', [], numeric, 73))

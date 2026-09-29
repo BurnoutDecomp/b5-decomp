@@ -86,6 +86,24 @@ namespace BrnGraphics
     {
         0, 1, { { 0, 0, 1280, 720 } }
     };
+
+    // FLAG PC-platform leaf: the console rectangles partition a 720p EDRAM
+    // surface. Scale shared edges identically so clears and colour/depth
+    // resolves cover the whole PC target, including odd pixel dimensions.
+    inline AntiAliasTilingPlan ScaleTilingPlan(const AntiAliasTilingPlan& lrPlan,
+                                              u32 luWidth, u32 luHeight)
+    {
+        AntiAliasTilingPlan lPlan = lrPlan;
+        for (u32 luTile = 0; luTile < lPlan.mu32NumTiles; ++luTile)
+        {
+            auto& lrRect = lPlan.maTile[luTile];
+            lrRect.mu32Left = static_cast<u32>(static_cast<u64>(lrRect.mu32Left) * luWidth / 1280u);
+            lrRect.mu32Right = static_cast<u32>(static_cast<u64>(lrRect.mu32Right) * luWidth / 1280u);
+            lrRect.mu32Top = static_cast<u32>(static_cast<u64>(lrRect.mu32Top) * luHeight / 720u);
+            lrRect.mu32Bottom = static_cast<u32>(static_cast<u64>(lrRect.mu32Bottom) * luHeight / 720u);
+        }
+        return lPlan;
+    }
 }
 
 #endif // BRN_ANTI_ALIAS_TILING_H
