@@ -378,13 +378,13 @@ namespace CgsGui
             return;
 
         // Fetch the active 2D renderer base (GetIm2dRendererType == **(this+108588)) and reach its
-        // command buffer at `base + 4` (mCommandBuffer). The guest stamps the transform on the base
+        // command buffer at `base + 4` (the ImRenderBuffer<V> base). The guest stamps the transform on the base
         // (Im2dRenderBuffer::SetTransform, which itself does +4) and the per-mesh ops on base+4
         // (v18 = ret + 4); the committed ImRenderBuffer<V> template is that base+4 command object, so
         // every command here goes through it. REUSE: the committed ImRenderBuffer<V> command API.
         AptIm2dRenderBuffer* lpRenderer = GetIm2dRendererType();
         CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* lpBuffer =
-            &lpRenderer->mCommandBuffer;
+            lpRenderer;
 
         // Stamp the per-batch transform (the inlined 80-byte SET_TRANSFORM command writer).
         lpBuffer->SetTransform(mVertexTransform);

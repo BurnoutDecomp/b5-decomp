@@ -645,7 +645,7 @@ namespace CgsGui
             return;
 
         CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrBuffer =
-            mImRenderers.mpIm2dRenderBuffer->mCommandBuffer;
+            *mImRenderers.mpIm2dRenderBuffer;
 
         lrBuffer.BeginRendering();
 
@@ -716,7 +716,7 @@ namespace CgsGui
         const s32 liDeltaMs = static_cast<s32>(mfRenderTimeDelta * 1000.0f);
 
         CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrBuffer =
-            mImRenderers.mpIm2dRenderBuffer->mCommandBuffer;
+            *mImRenderers.mpIm2dRenderBuffer;
 
         // ⭐ [tut-ticker] the custom-renderer-manager LAYER-1 render, LIVE (2026-08-24).
         // Guest @0x82858AF8: `(*(**(view+57352) + 24))(mgr, view+592, 1)` -- vtbl +0x18 IS

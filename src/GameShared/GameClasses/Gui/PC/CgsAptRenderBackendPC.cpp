@@ -17,7 +17,7 @@ namespace CgsGui
             return;
 
         CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrBuffer =
-            lpBuffer->mCommandBuffer;
+            *lpBuffer;
         lrBuffer.Swap();
         lrBuffer.Clear();
         lrBuffer.Dispatch();

@@ -1280,7 +1280,7 @@ namespace
             return 0;
         CgsGui::AptIm2dRenderBuffer* lpAptBuffer =
             *reinterpret_cast<CgsGui::AptIm2dRenderBuffer* const*>(lpRendererSet);
-        return (lpAptBuffer != 0) ? &lpAptBuffer->mCommandBuffer : 0;
+        return lpAptBuffer;
     }
 
     // The per-IconState rival/player icon colour (RenderRivals' jump table

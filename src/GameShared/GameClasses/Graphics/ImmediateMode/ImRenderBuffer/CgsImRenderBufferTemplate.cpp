@@ -94,6 +94,8 @@ namespace CgsGraphics
                                     rw::IResourceAllocator* lpAllocator,
                                     bool lbFailGracefully)
     {
+        if (lpAllocator == nullptr)
+            return false;
         mbFailGracefully    = lbFailGracefully;
         muCommandBufferSize = luCommandBufferSizeBytes;
         muVertexBufferSize  = luVertexBufferSizeBytes;
@@ -104,7 +106,9 @@ namespace CgsGraphics
 
         // Helper mirroring the PS3 descriptor build + allocator call. The descriptor
         // is {size, alignment=128} in entry 0 (the PS3 body fills entry 1 = 128 too).
-        auto lAllocate = [lpAllocator](u32 luBytes) -> u8*
+        rw::Resource laResources[4] = {};
+        u32 luResourceCount = 0;
+        auto lAllocate = [lpAllocator, &laResources, &luResourceCount](u32 luBytes) -> u8*
         {
             rw::ResourceDescriptor lDescriptor;
             lDescriptor.m_baseResourceDescriptors[0].m_size      = luBytes;
@@ -115,7 +119,8 @@ namespace CgsGraphics
             lDescriptor.m_baseResourceDescriptors[2].m_alignment = 1u;
             lDescriptor.m_baseResourceDescriptors[3].m_size      = 0u;
             lDescriptor.m_baseResourceDescriptors[3].m_alignment = 1u;
-            rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, nullptr);
+            rw::Resource& lResource = laResources[luResourceCount++];
+            lResource = lpAllocator->DoAllocate(lDescriptor, nullptr);
             return static_cast<u8*>(lResource.m_baseResources[0]);
         };
 
@@ -123,6 +128,23 @@ namespace CgsGraphics
         maBuffers[0].mpu8VertexBuffer  = lAllocate(luVertexAllocBytes);
         maBuffers[1].mpu8CommandBuffer = lAllocate(luCommandAllocBytes);
         maBuffers[1].mpu8VertexBuffer  = lAllocate(luVertexAllocBytes);
+
+        // FLAG PC-platform leaf: a partially allocated pair is unusable. Give
+        // every successful allocation back and leave no publishable bank behind.
+        if (!maBuffers[0].mpu8CommandBuffer || !maBuffers[0].mpu8VertexBuffer
+            || !maBuffers[1].mpu8CommandBuffer || !maBuffers[1].mpu8VertexBuffer)
+        {
+            for (u32 luResource = 0; luResource < luResourceCount; ++luResource)
+            {
+                bool lbAllocated = false;
+                for (u32 luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
+                    lbAllocated |= laResources[luResource].m_baseResources[luLane] != nullptr;
+                if (lbAllocated)
+                    lpAllocator->DoFree(laResources[luResource]);
+            }
+            Construct();
+            return false;
+        }
 
         // The PS3 body writes a 0 type into the head of every freshly-allocated
         // command/vertex buffer (an empty terminator the first GetFirstCommand sees).
@@ -717,7 +739,7 @@ namespace CgsGraphics
     const ImCommand* ImRenderBuffer<V>::GetFirstCommand() const
     {
         const SingleBuffer* lpDispatch = mpDispatchBuffer;                    // this+36
-        if (lpDispatch->muCommandBufferWritePos)
+        if (lpDispatch && lpDispatch->muCommandBufferWritePos)
             return reinterpret_cast<const ImCommand*>(lpDispatch->mpu8CommandBuffer);
         return nullptr;
     }
@@ -1289,10 +1311,10 @@ namespace CgsGraphics
     // and submits each command through renderengine::gDevice.
     // -------------------------------------------------------------------------
     template <typename V>
-    void ImRenderBuffer<V>::Dispatch()
+    void ImRenderBuffer<V>::Dispatch() const
     {
         IDirect3DDevice9* lpDevice = renderengine::gDevice;
-        if (lpDevice == nullptr)
+        if (lpDevice == nullptr || !IsPreparedPC())
         {
             return;
         }
@@ -1390,17 +1412,28 @@ namespace CgsGraphics
         enum { KI_DISPATCH_MAX = 2048 };
         static DispatchScreenVertex saBatch[KI_DISPATCH_MAX];
 
-        // Walk the frozen dispatch buffer command-by-command (the PS3 while(GetNextCommand) loop).
-        for (const ImCommand* lpCommand = GetFirstCommand();
-             lpCommand != nullptr;
-             lpCommand = GetNextCommand(lpCommand))
+        // The same state operations serve individual records and ARTIST's
+        // combined FLAPT record (opcode 22); the latter must not be skipped.
+        const auto lDispatchCommand = [&](const ImCommand* lpCommand)
         {
             switch (lpCommand->muType)
             {
             case IM_CMD_BEGIN_RENDERING:   // case 0
+                // Match the native Im2d block boundary. A previous custom
+                // renderer must not tint, clip or additively blend the next block.
+                lbHaveTransform = false;
+                liMaskDepth = 0;
+                lbMaskStageBound = lbMaskScissorOn = false;
+                li8LatchedProgram = 0;
+                lbBoostPairLatched = false;
+                lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+                lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+                lpDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+                lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+                lpDevice->SetTextureStageState(2, D3DTSS_COLOROP, D3DTOP_DISABLE);
+                lpDevice->SetTextureStageState(2, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+                break;
             case IM_CMD_END_RENDERING:     // case 1
-                // Block open/close: the PS3 resets/clears the active-renderer shadow; on PC the
-                // device render state is already installed above and persists across the block.
                 break;
 
             case IM_CMD_SET_TRANSFORM:     // case 16 - latch the per-batch transform (80-byte record)
@@ -2105,6 +2138,45 @@ namespace CgsGraphics
             default:
                 break;
             }
+        };
+
+        for (const ImCommand* lpCommand = GetFirstCommand(); lpCommand != nullptr;
+             lpCommand = GetNextCommand(lpCommand))
+        {
+            if (lpCommand->muType != IM_CMD_BATCH_TRANSFORM_TEXTURE_BLEND_RENDER)
+            {
+                lDispatchCommand(lpCommand);
+                continue;
+            }
+
+            // ARTIST 0x827F9EBC..0x827F9F10: always transform, conditionally
+            // bind texture (bit 0) and blend (bit 1), then submit the static run.
+            const ImCommandBatchTransformTextureBlendRender<V>& lrBatch =
+                *static_cast<const ImCommandBatchTransformTextureBlendRender<V>*>(lpCommand);
+            ImCommandSetTransform lTransformCommand = {};
+            lTransformCommand.muType = IM_CMD_SET_TRANSFORM;
+            lTransformCommand.mTransform = lrBatch.mTransform;
+            lDispatchCommand(&lTransformCommand);
+            if ((lrBatch.mu8Flags & 1u) != 0u)
+            {
+                ImCommandSetTexture lTextureCommand = {};
+                lTextureCommand.muType = IM_CMD_SET_TEXTURE;
+                lTextureCommand.mpTexture = lrBatch.mpTexture;
+                lDispatchCommand(&lTextureCommand);
+            }
+            if ((lrBatch.mu8Flags & 2u) != 0u)
+            {
+                ImCommandSetStateBlend lBlendCommand = {};
+                lBlendCommand.muType = IM_CMD_SET_STATE_BLEND;
+                lBlendCommand.mpBlendState = lrBatch.mpBlendState;
+                lDispatchCommand(&lBlendCommand);
+            }
+            ImCommandRenderPrimitives<V> lDrawCommand = {};
+            lDrawCommand.muType = IM_CMD_RENDER_PRIMITIVES;
+            lDrawCommand.mePrimitiveType = lrBatch.mePrimitiveType;
+            lDrawCommand.mpVertices = lrBatch.mpVertices;
+            lDrawCommand.muNumVertices = lrBatch.muNumVertices;
+            lDispatchCommand(&lDrawCommand);
         }
 
         if (lbMaskScissorOn)

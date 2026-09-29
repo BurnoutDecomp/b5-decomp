@@ -38,22 +38,14 @@
 
 namespace CgsGraphics
 {
-    struct Im2d;          // the immediate-mode render buffer the render set feeds (== Im2dRenderBuffer on the PC fold)
     struct TextObject;    // one piece of bitmap-font text (RenderTextField param; defined in CgsFontRenderer.h)
 }
 
+namespace CgsGui { struct ImRendererSet; }
+
 namespace BrnFlapt
 {
-    // The render set handed to FlaptRenderer::Construct (X360 asserted name
-    // "lpImRenderSet"). The only member the X360 ledger attests is its leading
-    // immediate-mode render buffer, named by the RenderMesh assert string
-    // "mpImRenderSet->mpIm2dRenderBuffer" (the `!**this` check). Modeled minimally
-    // here (no separate home header exists for the type); grow additively if a
-    // FlaptRenderSet TU is later recovered.
-    struct FlaptRenderSet
-    {
-        CgsGraphics::Im2d* mpIm2dRenderBuffer;   // +0x00 (the 2D render buffer the commands drive)
-    };
+    typedef CgsGui::ImRendererSet FlaptRenderSet;
 
     struct FlaptRenderer
     {

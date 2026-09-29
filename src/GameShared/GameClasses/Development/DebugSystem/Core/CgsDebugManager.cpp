@@ -592,7 +592,7 @@ namespace CgsDev
     // rate, memory - lives with the caller (BrnGameModule::DebugManagerRender @0x823BCB88), which
     // also gates the whole pass on the debug font having arrived.
     void DebugManager::Render(const Matrix44& lViewProjection, const Vector3& lCameraPosition,
-                             CgsGraphics::Im3dRenderBuffer* lp3dRenderBuffer, CgsGraphics::Im2d* lp2dRenderBuffer)
+                             CgsGraphics::Im3dRenderBuffer* lp3dRenderBuffer, CgsGraphics::Im2dRenderBuffer* lp2dRenderBuffer)
     {
         CGS_ASSERT(mp3dRender != nullptr, "mp3dRender");
         CGS_ASSERT(mp2dRender != nullptr, "mp2dRender");

@@ -685,7 +685,7 @@ void InGameMessageRenderer::DrawMessages(CgsGraphics::Im2dRenderBuffer* lpBuffer
             mTextObject.CalculateAutosizing();
         }
         mpTextRenderer->RenderStringBuffered(
-            &reinterpret_cast<CgsGui::AptIm2dRenderBuffer*>(lpBuffer)->mCommandBuffer,
+            lpBuffer,
             mTextObject);
 
         if ((mTextObject.mfFontHeight * lfWidth) + lfPosX <= 0.0f)
@@ -734,7 +734,7 @@ void InGameMessageRenderer::DrawMessages(CgsGraphics::Im2dRenderBuffer* lpBuffer
             }
         }
         mpTextRenderer->RenderStringBuffered(
-            &reinterpret_cast<CgsGui::AptIm2dRenderBuffer*>(lpBuffer)->mCommandBuffer,
+            lpBuffer,
             mTextObject);
 
         InGameMessage* lpHead   = mpCurrentMessage;
@@ -852,7 +852,7 @@ void InGameMessageRenderer::DrawBackground(CgsGraphics::Im2dRenderBuffer* lpBuff
     // stores only a POINTER to the run, and these vertices are stack locals that are
     // gone by dispatch time (the 14:04 boot proved it: every band invisible).
     CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrCmd =
-        reinterpret_cast<CgsGui::AptIm2dRenderBuffer*>(lpBuffer)->mCommandBuffer;
+        *lpBuffer;
     lrCmd.SetTexture(0);
     lrCmd.Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
 }
@@ -1440,9 +1440,9 @@ void InGameMessageRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet
         return;
     }
     CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrCmd =
-        lpAptBuffer->mCommandBuffer;
+        *lpAptBuffer;
     CgsGraphics::Im2dRenderBuffer* lpBuffer =
-        reinterpret_cast<CgsGraphics::Im2dRenderBuffer*>(lpAptBuffer);
+        lpAptBuffer;
 
     // Publish the batch transform. The CONSOLE builds the canonical screen->NDC block
     // ({1/640, -1/360, -1, +1} + the aspect fold) because its GPU consumed NDC. The PC

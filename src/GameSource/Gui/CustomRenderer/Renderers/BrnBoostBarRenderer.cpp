@@ -1018,7 +1018,7 @@ namespace
             return 0;
         CgsGui::AptIm2dRenderBuffer* lpAptBuffer =
             *reinterpret_cast<CgsGui::AptIm2dRenderBuffer* const*>(lpImRenderers);
-        return (lpAptBuffer != 0) ? &lpAptBuffer->mCommandBuffer : 0;
+        return (lpAptBuffer != 0) ? lpAptBuffer : 0;
     }
 
     // Pack a 0..1 colour into the BillboardInfo::muDiffuse word. The billboard draw
@@ -1048,7 +1048,7 @@ void BoostBarRenderer::RenderQuad(const Vector4& lv4Rect, const Vector4& lv4Colo
     if (lpAptBuffer == 0)
         return;
     CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrCmd =
-        lpAptBuffer->mCommandBuffer;
+        *lpAptBuffer;
 
     const u32 luColour = PackBoostColour(lv4Colour);
 
