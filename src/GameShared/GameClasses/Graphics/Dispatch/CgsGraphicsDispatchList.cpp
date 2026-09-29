@@ -1,7 +1,8 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include <algorithm>   // std::stable_sort (the PC synchronous RadixSort stand-in)
+#include <algorithm>   // std::sort (ARTIST RadixSortJob::Execute uses std::_Sort)
 #include <cstdint>     // uintptr_t (128-byte alignment of the flat key array)
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 
 // =============================================================================
 // CgsGraphicsDispatchList.cpp
@@ -42,7 +43,7 @@ DispatchList* DispatchList::ReserveKey()
 // @ 0x822A0808
 // Submit a packet under a sort key: pack (sortKey << 20 | packetLocalOffset) into
 // the tail block's next slot, then advance the block and list counts.
-DispatchList* DispatchList::Submit(s32 li32SortKey, DispatchCommand* lpPacket)
+void DispatchList::Submit(u64 lu64SortKey, DispatchCommand* lpPacket)
 {
     CGS_ASSERT(lpPacket != NULL, "lpPacket != NULL");
 
@@ -55,7 +56,7 @@ DispatchList* DispatchList::Submit(s32 li32SortKey, DispatchCommand* lpPacket)
     const u32 luPacketLocalOffset = static_cast<u32>(lpPacket - m_pBinBase);
 
     const u64 luKey =
-        (static_cast<u64>(static_cast<u32>(li32SortKey)) << SortKey::KU_SHIFT_KEY)
+        (lu64SortKey << SortKey::KU_SHIFT_KEY)
         | (luPacketLocalOffset & SortKey::KU_MASK_OFFSET);
 
     // Store the record first, then range-check the offset (matches the asm order).
@@ -67,7 +68,6 @@ DispatchList* DispatchList::Submit(s32 li32SortKey, DispatchCommand* lpPacket)
 
     ++lpTail->muCount;
     ++muCount;
-    return this;
 }
 
 // @ 0x827FA730
@@ -147,16 +147,18 @@ DispatchList* DispatchList::PrepareSortJobInfo(SortJobInfo* lpJobInfo)
 
 // [PC leaf] The X360 sorts each prepared list on a RadixSort job (RadixSortEntry
 // @0x82AD2020, packaged by BrnRendererModule sub_823F5EA0). The PC bring-up has no
-// job scheduler yet, so the same prepare + ascending stable sort runs synchronously
-// here. Radix sort is a stable ascending sort over the u64 records, which
-// std::stable_sort reproduces order-for-order.
+// job scheduler yet, so prepare + sort runs synchronously here. Despite the job
+// name, ARTIST RadixSortJob::Execute @0x82AD2898..28B0 calls std::_Sort<u64*,int>.
+// Sorting the complete records also orders equal material keys by packet offset;
+// identical records refer to the same packet and require no stable-sort storage.
 void DispatchList::SortForDispatch()
 {
+    renderengine::FrameProfile::Scope lSortProfile(renderengine::FrameProfile::DISPATCH_SORT);
     SortJobInfo lJobInfo;
     PrepareSortJobInfo(&lJobInfo);
     if (mpSortedKeys != 0 && muCount > 1)
     {
-        std::stable_sort(mpSortedKeys, mpSortedKeys + muCount);
+        std::sort(mpSortedKeys, mpSortedKeys + muCount);
     }
 }
 

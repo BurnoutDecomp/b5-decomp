@@ -16,7 +16,8 @@ namespace renderengine
     namespace FrameProfile
     {
         enum Section { UPDATE, DISPATCH, GEOMETRY_PREPARE, GEOMETRY_LOCK,
-                       GEOMETRY_CONVERT, GEOMETRY_UNLOCK, GEOMETRY_SUBMIT, PRESENT, NUM_SECTIONS };
+                       GEOMETRY_CONVERT, GEOMETRY_UNLOCK, GEOMETRY_SUBMIT, PRESENT,
+                       PRESENT_COPY, PRESENT_WAIT, DISPATCH_SORT, NUM_SECTIONS };
         struct Frame
         {
             LONGLONG miBegin = 0, miEnd = 0, miPreviousEnd = 0;
@@ -119,7 +120,7 @@ namespace renderengine
                 std::snprintf(lacPath + luLength, MAX_PATH - luLength, ".frames.csv");
                 if (FILE* lpFile = std::fopen(lacPath, "w"))
                 {
-                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers\n");
+                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers\n");
                     const double lfMs = 1000.0 / static_cast<double>(gCapture.miFrequency);
                     for (unsigned lu = 0; lu < gCapture.muCount; ++lu)
                     {

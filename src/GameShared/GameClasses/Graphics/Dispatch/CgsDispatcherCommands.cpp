@@ -649,6 +649,42 @@ void DrawRenderableMesh::InterpretOcclusionQuery(DispatchCommand* lpCommand, f32
 // (the console forwards the trailer's byte unchanged; the PC expansion forwards 1
 // because it has already unrolled the instances).
 // =============================================================================
+// Inlined key construction in DrawRenderable::Interpret, ARTIST
+// 0x827FD4CC..0x827FD5D4. Keys occupy up to 44 bits BEFORE Submit appends the
+// 20-bit packet offset. The pseudocode loses the high half of the PPC registers.
+static u64 MeshSortKey(const MaterialTechniqueView& lrTechnique, bool lbZOnly, f32 lfClipZ)
+{
+    const u64 luVertex = lrTechnique.mu16VertexProgramHash12 & 0xFFFu;
+    const u64 luPixel = lrTechnique.mu16PixelProgramHash12 & 0xFFFu;
+    const u64 luMaterial = lrTechnique.mu16MaterialHash16;
+    const u64 luPriority = lrTechnique.mu16Flags2 & 7u;
+    if (!lbZOnly)
+        return (luPriority << 41) | (luPixel << 25) | (luMaterial << 9) | (luVertex >> 3);
+
+    // unk_83011230: CRT @0x82C6C718..73C splats flt_820AD310 = 32767.0f.
+    // fctiwz then signed clamp [0,32767]. Compare before the host conversion
+    // to preserve PPC saturation for infinities and avoid an out-of-range cast.
+    const f32 lfScaledDepth = lfClipZ * 32767.0f;
+    const u64 luDepth = !(lfScaledDepth > 0.0f) ? 0u :
+        lfScaledDepth >= 32767.0f ? 32767u : static_cast<u32>(lfScaledDepth);
+    if (lrTechnique.mu16Flags & 8u)
+    {
+        // @0x827FD570 rlwinm r10,r9,12,4,15 keeps pixel-hash bits 4..11;
+        // do not "fix" this to a full 12-bit hash. Alpha-tested draws prioritize
+        // material over depth, unlike the opaque Z path below.
+        return (u64(1) << 43) | ((luPixel & 0xFF0u) << 27) | (luMaterial << 15) | luDepth;
+    }
+    return (luPixel << 31) | (luDepth << 16) | luMaterial;
+}
+
+// ARTIST 0x827FD768..0x827FD794: three 12-bit fields, not a u32 key.
+static u64 PreZSortKey(const MaterialTechniqueView& lrTechnique)
+{
+    return (static_cast<u64>(lrTechnique.mu16PixelProgramHash12 & 0xFFFu) << 24)
+        | (static_cast<u64>(lrTechnique.mu16MaterialHash16 & 0xFFFu) << 12)
+        | (lrTechnique.mu16VertexProgramHash12 & 0xFFFu);
+}
+
 static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame* lpFrame,
                                    DispatchObjectContext* lpContext, const u8* lpTrailer,
                                    u32 luOpaqueListId, u32 luTransparentListId,
@@ -756,12 +792,17 @@ static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame
         if ((lpMesh->mu8Flags & lpTrailer[4]) != 0)
             continue;
 
-        // Per-mesh packed-OOBB frustum cull.
-        if (lbFrustumTest)
+        // The sort/pre-Z depth is the transformed MESH centre (the output's
+        // fourth row at stack+var_B0), not the object's WVP translation.
+        // FLAG PC-platform leaf: also initialize it when the coarse frustum
+        // test skips per-mesh tests. The console then reads an unwritten stack
+        // matrix; a native depth sort must never consume indeterminate values.
+        rw::math::vpu::Matrix44 lMeshClipBox;
+        if (lbFrustumTest || lpTrailer[0] != 0 ||
+            (lpContext->mbPreZEnabled && lpTrailer[1] != 255u))
         {
-            rw::math::vpu::Matrix44 lMeshClipBox;
             lpMesh->mPackedBoundingBox.MultiplyByMatrix(lWorldViewProjection, lMeshClipBox);
-            if (FrustumTest(lMeshClipBox) != 0)
+            if (lbFrustumTest && FrustumTest(lMeshClipBox) != 0)
                 continue;
         }
 
@@ -829,24 +870,9 @@ static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame
             std::memcpy(&lpMeshCmd[8], &lWorldViewProjection, 64);
             CGS_ASSERT(lbAdded, "Failed to add mesh to dispatch bin");
 
-            // Sort key from the technique's sort fields (X360 bit-packing across
-            // +0x0A/+0x0C/+0x0E/+0x10; z-only folds a 15-bit quantised distance).
-            // FLAG: the exact bit packing is Hex-Rays-fused in the export; the
-            // key preserves the primary field order (postmortem: pin vs raw asm).
-            s32 liSortKey;
-            if (lpTrailer[0] != 0)
-            {
-                liSortKey = static_cast<s32>(
-                    ((lpTechnique->mu16SortKeyB & 0xFFFu) << 16) | lpTechnique->mu16SortKeyC);
-            }
-            else
-            {
-                liSortKey = static_cast<s32>(
-                    ((lpTechnique->mu16SortKeyB & 0xFFFu) << 19)
-                  | ((lpTechnique->mu16SortKeyD & 0x7u) << 16)
-                  | (lpTechnique->mu16SortKeyA & 0xFFFu));
-            }
-            lpList->Submit(liSortKey, lpPeek);
+            const bool lbZOnly = lpTrailer[0] != 0;
+            lpList->Submit(MeshSortKey(*lpTechnique, lbZOnly,
+                lbZOnly ? lMeshClipBox.wAxis.z : 0.0f), lpPeek);
         }
 
         // Optional pre-Z re-emit.
@@ -858,9 +884,9 @@ static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame
                 u32 luPreZTechnique = luNumVd - 1u;
                 if (luPreZTechnique > lpTrailer[3]) luPreZTechnique = lpTrailer[3];
 
-                // Distance gate: the object's clip-space w (depth) against the
+                // Distance gate: the mesh centre's clip-space w against the
                 // pre-Z distance threshold vector.
-                const f32 lfDepth = lWorldViewProjection.wAxis.w;
+                const f32 lfDepth = lMeshClipBox.wAxis.w;
                 if (!(lfDepth > lpContext->mvPreZDistanceThreshold[0]))
                 {
                     const MaterialTechniqueView* lpPreZTech =
@@ -885,13 +911,7 @@ static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame
                     u32* lpPreZCmd = reinterpret_cast<u32*>(lpPreZPacket);
                     std::memcpy(&lpPreZCmd[8], &lWorldViewProjection, 64);
 
-                    // Pre-Z sort key packs the technique's B/D/A sort fields
-                    // (Material[6]/[7]/[5] in the export). Same FLAG as above.
-                    const s32 liPreZKey = static_cast<s32>(
-                        ((((lpPreZTech->mu16SortKeyB << 12) & 0xFFF000u)
-                          | (lpPreZTech->mu16SortKeyC & 0xFFFu)) << 12)
-                        | (lpPreZTech->mu16SortKeyA & 0xFFFu));
-                    lpPreZList->Submit(liPreZKey, lpPreZPacket);
+                    lpPreZList->Submit(PreZSortKey(*lpPreZTech), lpPreZPacket);
                 }
             }
         }
