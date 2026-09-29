@@ -62,6 +62,7 @@
 
 #include <Windows.h>
 #include <d3d9.h>
+#include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
 #include <cstring>
 #include <cstdio>
 
@@ -961,9 +962,9 @@ namespace renderengine
                     LogLine(lacMsg);
                 }
                 if (lrRow.mbPixel)
-                    lpDevice->SetPixelShaderConstantF(lrRow.mau8Register, lpfData, lrRow.mau8Count);
+                    renderengine::PCSetPixelShaderConstantF(lpDevice, lrRow.mau8Register, lpfData, lrRow.mau8Count);
                 else
-                    lpDevice->SetVertexShaderConstantF(lrRow.mau8Register, lpfData, lrRow.mau8Count);
+                    renderengine::PCSetVertexShaderConstantF(lpDevice, lrRow.mau8Register, lpfData, lrRow.mau8Count);
             }
         }
         suStagedCount = 0u;

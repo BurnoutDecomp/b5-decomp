@@ -11,6 +11,7 @@
 #include "pc/gcm/renderengine/renderstates.h"  // TextureState::mpRaster (SetState(TextureState*))
 
 #include <d3d9.h>
+#include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
 #include <cstdio>   // [diag] BRN_IM2D_TRACE line formatting
 
 // PC / D3D9 implementation of the CgsGraphics immediate-mode 2D renderer. The X360/PS3
@@ -134,9 +135,9 @@ namespace CgsGraphics
         renderengine::Texture* lpTexture = (lpTextureState != nullptr) ? lpTextureState->mpRaster : nullptr;
         lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
         // Use bilinear filtering
-        lpDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-        lpDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-        lpDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+        renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+        renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+        renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
         lpDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
         lpDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
         lpDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
@@ -165,9 +166,9 @@ namespace CgsGraphics
         // previous frame is cleared (the console's mask state is per-frame too).
         lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
         // Bilinear (D3D9 defaults to POINT -> blocky); no mip filtering for the 1:1 2D content.
-        lpDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-        lpDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-        lpDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+        renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+        renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+        renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
         lpDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
         lpDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
         lpDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);

@@ -18,6 +18,8 @@
 // <Windows.h> + <d3d9.h> must be brought in first, before that guarded include runs.
 #include <Windows.h>                            // full Win32 (LPMSG / winuser) for <d3d9.h>
 #include <d3d9.h>
+#include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
+#include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
 
 #include "pc/gcm/renderengine/device.h"        // renderengine::gDevice, gDisplayWidth/Height (the existing PC D3D9 device)
 #include "pc/gcm/renderengine/texture.h"        // renderengine::Texture::mpD3DTexture
@@ -1374,9 +1376,9 @@ namespace CgsGraphics
         lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
         lpDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-        lpDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-        lpDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-        lpDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+        renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+        renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+        renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
         lpDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
         lpDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
         lpDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
@@ -1689,9 +1691,9 @@ namespace CgsGraphics
                     lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
                     lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG2, D3DTA_CURRENT);
                     const DWORD luMaskFilter = lbWhiteMask ? D3DTEXF_POINT : D3DTEXF_LINEAR;
-                    lpDevice->SetSamplerState(1, D3DSAMP_MINFILTER, luMaskFilter);
-                    lpDevice->SetSamplerState(1, D3DSAMP_MAGFILTER, luMaskFilter);
-                    lpDevice->SetSamplerState(1, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+                    renderengine::PCSetSamplerState(lpDevice, 1, D3DSAMP_MINFILTER, luMaskFilter);
+                    renderengine::PCSetSamplerState(lpDevice, 1, D3DSAMP_MAGFILTER, luMaskFilter);
+                    renderengine::PCSetSamplerState(lpDevice, 1, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
                     // â­ [map-world 2026-08-29] THE MASK CROP. This pair used to be a hardcoded
                     // D3DTADDRESS_BORDER/0 for BOTH opcodes -- a stand-in calibrated against the
                     // boost-bar and sat-nav masks, whose masked draws happen to stay inside the
@@ -1719,9 +1721,9 @@ namespace CgsGraphics
                         DispatchTextureStateAddressModes(lpMaskState,
                                                          &luMaskAddressU, &luMaskAddressV);
                     }
-                    lpDevice->SetSamplerState(1, D3DSAMP_ADDRESSU, luMaskAddressU);
-                    lpDevice->SetSamplerState(1, D3DSAMP_ADDRESSV, luMaskAddressV);
-                    lpDevice->SetSamplerState(1, D3DSAMP_BORDERCOLOR, 0x00000000u);
+                    renderengine::PCSetSamplerState(lpDevice, 1, D3DSAMP_ADDRESSU, luMaskAddressU);
+                    renderengine::PCSetSamplerState(lpDevice, 1, D3DSAMP_ADDRESSV, luMaskAddressV);
+                    renderengine::PCSetSamplerState(lpDevice, 1, D3DSAMP_BORDERCOLOR, 0x00000000u);
                     lbMaskStageBound = true;
                 }
                 break;
@@ -2012,9 +2014,9 @@ namespace CgsGraphics
                     const f32 lafInner[4] = { lfBoostInnerR, lfBoostInnerG, lfBoostInnerB, 0.0f };
                     const f32 lafShift[4] = { lfColShiftR / 255.0f, lfColShiftG / 255.0f,
                                               lfColShiftB / 255.0f, 0.0f };
-                    lpDevice->SetPixelShaderConstantF(0, lafOuter, 1);
-                    lpDevice->SetPixelShaderConstantF(1, lafInner, 1);
-                    lpDevice->SetPixelShaderConstantF(2, lafShift, 1);
+                    renderengine::PCSetPixelShaderConstantF(lpDevice, 0, lafOuter, 1);
+                    renderengine::PCSetPixelShaderConstantF(lpDevice, 1, lafInner, 1);
+                    renderengine::PCSetPixelShaderConstantF(lpDevice, 2, lafShift, 1);
                     lpDevice->SetPixelShader(lpBoostPs);
                 }
                 if (lbNeedShift)

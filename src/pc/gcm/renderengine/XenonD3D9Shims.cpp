@@ -41,6 +41,8 @@
 
 #include <Windows.h>
 #include <d3d9.h>
+#include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
+#include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
 #include <cstring>
 #include <cstdio>
 #include <cstdarg>   // [diag] va_list (the stride-aware vertex dump below)
@@ -1427,7 +1429,7 @@ namespace renderengine
         sbHaveLastWvp = true;
         IDirect3DDevice9* lpDevice = Dev();
         if (lpDevice != nullptr)
-            lpDevice->SetVertexShaderConstantF(KU_FALLBACK_WVP_REGISTER, lpWvpRows16, 4);
+            renderengine::PCSetVertexShaderConstantF(lpDevice, KU_FALLBACK_WVP_REGISTER, lpWvpRows16, 4);
     }
 
     // ---- the REAL per-technique program path (PC leaf) ----------------------
@@ -1537,9 +1539,9 @@ namespace renderengine
             luNumRegisters = luLimit - luRegister;
 
         if (lbPixel)
-            lpDevice->SetPixelShaderConstantF(luRegister, static_cast<const float*>(lpData), luNumRegisters);
+            renderengine::PCSetPixelShaderConstantF(lpDevice, luRegister, static_cast<const float*>(lpData), luNumRegisters);
         else
-            lpDevice->SetVertexShaderConstantF(luRegister, static_cast<const float*>(lpData), luNumRegisters);
+            renderengine::PCSetVertexShaderConstantF(lpDevice, luRegister, static_cast<const float*>(lpData), luNumRegisters);
     }
 
     // =========================================================================================
@@ -1650,18 +1652,18 @@ namespace renderengine
             luAddrW = static_cast<DWORD>(D3DTADDRESS_CLAMP);
         }
 
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU, luAddrU);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV, luAddrV);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW, luAddrW);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSU, luAddrU);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSV, luAddrV);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSW, luAddrW);
         // Every shipped world block says LINEAR/LINEAR/LINEAR with MaxAnisotropy = MAX_1_1;
         // keep the set this path already applied.
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
         // D3DSAMP_MIPMAPLODBIAS takes the float's BIT PATTERN as its DWORD.
         DWORD luBiasBits;
         std::memcpy(&luBiasBits, &lfLodBias, sizeof(luBiasBits));
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPMAPLODBIAS, luBiasBits);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPMAPLODBIAS, luBiasBits);
 
         // [DIAG] NOT IN THE X360 BINARY. BRN_WSAMP_DIAG=1 only.
         // NAMED FOR WHAT IT MEASURES: how many world sampler binds this run APPLIED a sampler
@@ -2390,11 +2392,11 @@ namespace renderengine
             if (spTechniqueUnit0Texture == nullptr && lpTechniqueTexture != nullptr)
             {
                 lpDevice->SetTexture(0, lpTechniqueTexture);
-                lpDevice->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
-                lpDevice->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
-                lpDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-                lpDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-                lpDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+                renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+                renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+                renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+                renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+                renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
             }
             lpDevice->SetVertexShader(spFallbackTexVs);
             static const bool sbUvDebug = (::GetEnvironmentVariableA("BRN_WORLD_UVDEBUG", nullptr, 0) != 0);
@@ -3102,7 +3104,7 @@ namespace renderengine
         LogOnce("crumforce", "[crumple] BRN_CRUMPLE_FORCE armed -- g_damageConstants.x is being"
                              " OVERRIDDEN on every vehicle Damaged draw. NOT a default run.\n");
         const float lafForced[4] = { sfAmount, 0.0f, 0.0f, 0.0f };
-        lpDevice->SetPixelShaderConstantF(5u, lafForced, 1u);
+        renderengine::PCSetPixelShaderConstantF(lpDevice, 5u, lafForced, 1u);
     }
 
     void CrumpleProbe_AtDraw(IDirect3DDevice9* lpDevice, const u8* lpVertices,
@@ -3778,7 +3780,7 @@ namespace renderengine
             return;
         for (u32 lu = 0; lu < 128u; ++lu)
             safForce[lu * 4 + 3] = lfValue;
-        lpDevice->SetVertexShaderConstantF(0u, safForce, 128u);
+        renderengine::PCSetVertexShaderConstantF(lpDevice, 0u, safForce, 128u);
     }
 
     // =====================================================================================
@@ -4140,7 +4142,7 @@ namespace renderengine
 
         const f32 lfInv = (sfStrength > 0.0f) ? (1.0f / sfStrength) : 0.0f;
         const float lafForced[4] = { (1.0f - sfStrength) * lfInv, lfInv, 0.0f, 0.0f };
-        lpDevice->SetPixelShaderConstantF(5u, lafForced, 1u);
+        renderengine::PCSetPixelShaderConstantF(lpDevice, 5u, lafForced, 1u);
     }
 
     void WorldDraw_IndexedUP(u32 luPrimTypeXenon, u32 luBaseVertexIndex,
@@ -4304,7 +4306,10 @@ namespace renderengine
 
         // [DIAG wheels] scan the run this draw will actually submit, BEFORE the strip
         // expansion, so an out-of-range index value is visible as a number.
-        const bool lbInstancedDiag = sbNextDrawIsInstanced;
+        const bool lbInstancedDraw = sbNextDrawIsInstanced;
+        static const char* spcWheelDiag = std::getenv("BRN_WHEEL_DIAG");
+        static const bool sbWheelDiag = spcWheelDiag && spcWheelDiag[0] && spcWheelDiag[0] != '0';
+        const bool lbInstancedDiag = lbInstancedDraw && sbWheelDiag;
         sbNextDrawIsInstanced = false;
         u32 luDiagMin = 0xFFFFFFFFu, luDiagMax = 0u, luDiagResets = 0u;
         if (lbInstancedDiag)
@@ -4395,7 +4400,7 @@ namespace renderengine
         // and something in front of them wins the depth test". Off unless the variable is set.
         DWORD luSavedZFunc = 0;
         bool  lbZDefeated  = false;
-        if (lbInstancedDiag)
+        if (lbInstancedDraw)
         {
             static const int siWheelZAlways =
                 (std::getenv("BRN_WHEEL_ZALWAYS") != nullptr) ? 1 : 0;
@@ -5897,25 +5902,25 @@ namespace
         if (lpDevice == nullptr || luUnit >= KU_RAW_DEPTH_MAX_SAMPLER_UNITS)
             return;
 
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER,     D3DTEXF_LINEAR);  // X360 minFilter = 1
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER,     D3DTEXF_LINEAR);  // X360 magFilter = 1
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_NONE);    // X360 mipFilter = 0
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_CLAMP);  // X360 addressU = 2
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_CLAMP);  // X360 addressV = 2
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_CLAMP);  // X360 addressW = 2
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER,     D3DTEXF_LINEAR);  // X360 minFilter = 1
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAGFILTER,     D3DTEXF_LINEAR);  // X360 magFilter = 1
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_NONE);    // X360 mipFilter = 0
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_CLAMP);  // X360 addressU = 2
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_CLAMP);  // X360 addressV = 2
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_CLAMP);  // X360 addressW = 2
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
         // ⚠ 1, NOT the console's 13, AND THAT IS DELIBERATE. Tint::Initialize @0x82403B48 does put
         // maxAnisotropy = 0xD in the lookup TextureState (`li r10, 0xD` @0x82403C54 -> `stw r10,
         // 0x1A0+var_120(r1)` @0x82403C9C, which rwgpfxtint.cpp carries as muMaxAnisotropy = 13), but
         // D3D9 consults MAXANISOTROPY only while MINFILTER or MAGFILTER is D3DTEXF_ANISOTROPIC --
         // and both are LINEAR two lines above, exactly as the console sets them. Writing 13 here
         // would change nothing and would read as an anisotropic filter that is not being asked for.
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXANISOTROPY, 1u);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
         // 0.0f, explicitly: this helper writes a COMPLETE sampler set, and since
         // ApplyWorldSamplerBlock started pushing the console's own (negative) mip LOD bias on
         // world units, "the D3D9 default" is no longer what an untouched unit holds.
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPMAPLODBIAS,  0u);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPMAPLODBIAS,  0u);
     }
 
     // =========================================================================================
@@ -5944,18 +5949,18 @@ namespace
         if (lpDevice == nullptr || luUnit >= KU_RAW_DEPTH_MAX_SAMPLER_UNITS)
             return;
 
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER,     D3DTEXF_LINEAR);  // X360 minFilter = 1
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER,     D3DTEXF_LINEAR);  // X360 magFilter = 1
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_LINEAR);  // X360 mipFilter = 1
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_CLAMP);  // X360 addressU = 2
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_CLAMP);  // X360 addressV = 2
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_CLAMP);  // X360 addressW = 2
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER,     D3DTEXF_LINEAR);  // X360 minFilter = 1
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAGFILTER,     D3DTEXF_LINEAR);  // X360 magFilter = 1
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_LINEAR);  // X360 mipFilter = 1
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_CLAMP);  // X360 addressU = 2
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_CLAMP);  // X360 addressV = 2
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_CLAMP);  // X360 addressW = 2
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
         // 1, not the console's 13 -- same reasoning as ApplyVolumeSamplerState above: D3D9 consults
         // MAXANISOTROPY only while a filter is D3DTEXF_ANISOTROPIC, and neither is.
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPMAPLODBIAS,  0u);   // see the volume seam
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXANISOTROPY, 1u);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPMAPLODBIAS,  0u);   // see the volume seam
     }
 
     void ApplyRawDepthSamplerState(IDirect3DDevice9* lpDevice, u32 luUnit)
@@ -5963,16 +5968,16 @@ namespace
         if (lpDevice == nullptr || luUnit >= KU_RAW_DEPTH_MAX_SAMPLER_UNITS)
             return;
 
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER,     D3DTEXF_POINT);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER,     D3DTEXF_POINT);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_NONE);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_CLAMP);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_CLAMP);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_CLAMP);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPMAPLODBIAS,  0u);   // see the volume seam
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER,     D3DTEXF_POINT);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAGFILTER,     D3DTEXF_POINT);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_NONE);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_CLAMP);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_CLAMP);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_CLAMP);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXANISOTROPY, 1u);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPMAPLODBIAS,  0u);   // see the volume seam
     }
 
     // =========================================================================================
@@ -6099,20 +6104,20 @@ namespace
             leFilter = D3DTEXF_LINEAR;
         }
 
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER,     leFilter);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER,     leFilter);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER,     leFilter);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAGFILTER,     leFilter);
         // NONE, and it is not a choice: the composite's source is a single-level render target,
         // so there is no mip chain to filter. The console's mip word (KU_SAMPLER_MIP_FILTER = 2)
         // is identical across all four of Construct's samplers (BrnPostFxShader.cpp:383), i.e. it
         // is not what tells the arms apart, and the three seams above install NONE for the same
         // single-level reason.
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_NONE);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_CLAMP);  // X360 addressU = 2
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_CLAMP);  // X360 addressV = 2
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_CLAMP);  // X360 addressW = 2
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, luAppliedAniso);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_NONE);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_CLAMP);  // X360 addressU = 2
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_CLAMP);  // X360 addressV = 2
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_CLAMP);  // X360 addressW = 2
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXANISOTROPY, luAppliedAniso);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
     }
 }
 }  // extern "C++"
@@ -6518,7 +6523,8 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
     const bool lbSampleThisRun =
         ((suRunTotal % 2000u) == 0u && suRunTotal <= 12000u) ||
         (lbCompositeDraw && (suCompositeDraws % 500u) == 0u && suCompositeDraws <= 6000u);
-    if (lbSampleThisRun && suImVertsStride == 20u)
+    // GPU readbacks synchronize the driver; this sampling is diagnostic-only.
+    if (DiagRtProbeEnabled() && lbSampleThisRun && suImVertsStride == 20u)
     {
         IDirect3DSurface9* lpRt = nullptr;
         IDirect3DBaseTexture9* lpTex0 = nullptr;
@@ -8036,12 +8042,12 @@ void PCSceneBlit_Begin()
     // point fetch. THAT IS THE TRIPWIRE: if the whole screen looks slightly soft, the offset is
     // wrong, not the filter. Point-sampling here would HIDE that error rather than fix it, which
     // is why the filter stays LINEAR.
-    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_ADDRESSU,    D3DTADDRESS_CLAMP);
-    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_ADDRESSV,    D3DTADDRESS_CLAMP);
-    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MINFILTER,   D3DTEXF_LINEAR);
-    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MAGFILTER,   D3DTEXF_LINEAR);
-    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MIPFILTER,   D3DTEXF_NONE);
-    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_SRGBTEXTURE, FALSE);
+    renderengine::PCSetSamplerState(lpDevice, KU_BLIT_SAMPLER_UNIT, D3DSAMP_ADDRESSU,    D3DTADDRESS_CLAMP);
+    renderengine::PCSetSamplerState(lpDevice, KU_BLIT_SAMPLER_UNIT, D3DSAMP_ADDRESSV,    D3DTADDRESS_CLAMP);
+    renderengine::PCSetSamplerState(lpDevice, KU_BLIT_SAMPLER_UNIT, D3DSAMP_MINFILTER,   D3DTEXF_LINEAR);
+    renderengine::PCSetSamplerState(lpDevice, KU_BLIT_SAMPLER_UNIT, D3DSAMP_MAGFILTER,   D3DTEXF_LINEAR);
+    renderengine::PCSetSamplerState(lpDevice, KU_BLIT_SAMPLER_UNIT, D3DSAMP_MIPFILTER,   D3DTEXF_NONE);
+    renderengine::PCSetSamplerState(lpDevice, KU_BLIT_SAMPLER_UNIT, D3DSAMP_SRGBTEXTURE, FALSE);
 
     // ---- (4) OPAQUE, TEXTURE ONLY. -------------------------------------------------------
     // ⚠ THE ALPHA IS THE TRAP. ImRenderer<V>::BeginRendering turns blending ON with
@@ -8103,12 +8109,12 @@ void PCSceneBlit_End()
     lpDevice->SetRenderState(D3DRS_ZWRITEENABLE,      suSavedZWriteEnable);
     lpDevice->SetRenderState(D3DRS_CULLMODE,          suSavedCullMode);
     lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, suSavedScissorEnable);
-    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_ADDRESSU,    suSavedAddressU);
-    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_ADDRESSV,    suSavedAddressV);
-    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MINFILTER,   suSavedMinFilter);
-    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MAGFILTER,   suSavedMagFilter);
-    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_MIPFILTER,   suSavedMipFilter);
-    lpDevice->SetSamplerState(KU_BLIT_SAMPLER_UNIT, D3DSAMP_SRGBTEXTURE, suSavedSrgbTexture);
+    renderengine::PCSetSamplerState(lpDevice, KU_BLIT_SAMPLER_UNIT, D3DSAMP_ADDRESSU,    suSavedAddressU);
+    renderengine::PCSetSamplerState(lpDevice, KU_BLIT_SAMPLER_UNIT, D3DSAMP_ADDRESSV,    suSavedAddressV);
+    renderengine::PCSetSamplerState(lpDevice, KU_BLIT_SAMPLER_UNIT, D3DSAMP_MINFILTER,   suSavedMinFilter);
+    renderengine::PCSetSamplerState(lpDevice, KU_BLIT_SAMPLER_UNIT, D3DSAMP_MAGFILTER,   suSavedMagFilter);
+    renderengine::PCSetSamplerState(lpDevice, KU_BLIT_SAMPLER_UNIT, D3DSAMP_MIPFILTER,   suSavedMipFilter);
+    renderengine::PCSetSamplerState(lpDevice, KU_BLIT_SAMPLER_UNIT, D3DSAMP_SRGBTEXTURE, suSavedSrgbTexture);
     lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_COLOROP,   suSavedColourOp);
     lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_COLORARG1, suSavedColourArg1);
     lpDevice->SetTextureStageState(KU_BLIT_SAMPLER_UNIT, D3DTSS_ALPHAOP,   suSavedAlphaOp);
@@ -8154,15 +8160,15 @@ void ShadowSampler_ApplyState(u32 luUnit)
 
     const DWORD leFilter = ShadowDepthFormatIsHardwareCompare() ? D3DTEXF_LINEAR : D3DTEXF_POINT;
 
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER,   leFilter);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER,   leFilter);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER,   D3DTEXF_NONE);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU,    D3DTADDRESS_CLAMP);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV,    D3DTADDRESS_CLAMP);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW,    D3DTADDRESS_CLAMP);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXMIPLEVEL, 0u);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE, FALSE);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER,   leFilter);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAGFILTER,   leFilter);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPFILTER,   D3DTEXF_NONE);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSU,    D3DTADDRESS_CLAMP);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSV,    D3DTADDRESS_CLAMP);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSW,    D3DTADDRESS_CLAMP);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXMIPLEVEL, 0u);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXANISOTROPY, 1u);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_SRGBTEXTURE, FALSE);
 }
 
 // =============================================================================
@@ -8206,16 +8212,16 @@ void GlassFractureSampler_ApplyState(u32 luUnit)
     if (lpDevice == nullptr || luUnit >= 16u)
         return;
 
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_WRAP);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_WRAP);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_WRAP);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER,     D3DTEXF_LINEAR);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER,     D3DTEXF_LINEAR);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_LINEAR);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPMAPLODBIAS, 0u);
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_WRAP);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_WRAP);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_WRAP);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAGFILTER,     D3DTEXF_LINEAR);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER,     D3DTEXF_LINEAR);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_LINEAR);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXANISOTROPY, 1u);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPMAPLODBIAS, 0u);
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
 }
 
 // =============================================================================
@@ -8292,15 +8298,15 @@ void LionParticleSampler_ApplyState(u32 luUnit)
     if (lpDevice == nullptr || luUnit >= 16u)
         return;
 
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER,   D3DTEXF_LINEAR);      // X360 minFilter = 1
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER,   D3DTEXF_LINEAR);      // X360 magFilter = 1
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER,   D3DTEXF_NONE);        // X360 mipFilter = 0
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU,    D3DTADDRESS_CLAMP);   // X360 addressU = 2
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV,    D3DTADDRESS_CLAMP);   // X360 addressV = 2
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER,   D3DTEXF_LINEAR);      // X360 minFilter = 1
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAGFILTER,   D3DTEXF_LINEAR);      // X360 magFilter = 1
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPFILTER,   D3DTEXF_NONE);        // X360 mipFilter = 0
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSU,    D3DTADDRESS_CLAMP);   // X360 addressU = 2
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSV,    D3DTADDRESS_CLAMP);   // X360 addressV = 2
     // addressW is 0 in this state (ConstructSamplerState writes a literal 0 there, not a4/a5) and
     // a 2D fetch never consults it, so it is deliberately left alone rather than clamped to match
     // the tint sampler -- writing a W the console does not ask for would be an invention.
-    lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPMAPLODBIAS, 0u);                // X360 mipLodBias = 0.0f
+    renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPMAPLODBIAS, 0u);                // X360 mipLodBias = 0.0f
 }
 
 // =============================================================================================
