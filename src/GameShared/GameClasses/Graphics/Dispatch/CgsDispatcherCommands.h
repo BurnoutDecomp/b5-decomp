@@ -164,10 +164,10 @@ struct MaterialTechniqueView
     u32 muShaderTechnique;      // +0x00 (u32 slot in the 32-bit image)
     u32 muRenderStateGroup;     // +0x04 (u32 slot)
     u16 mu16Flags;              // +0x08
-    u16 mu16SortKeyA;           // +0x0A
-    u16 mu16SortKeyB;           // +0x0C
-    u16 mu16SortKeyC;           // +0x0E
-    u16 mu16SortKeyD;           // +0x10
+    u16 mu16VertexProgramHash12; // +0x0A (DecFIGS CgsMaterialTechnique.h:199)
+    u16 mu16PixelProgramHash12;  // +0x0C
+    u16 mu16MaterialHash16;      // +0x0E
+    u16 mu16Flags2;             // +0x10 (low 3 bits: technique priority)
 };
 
 // -----------------------------------------------------------------------------

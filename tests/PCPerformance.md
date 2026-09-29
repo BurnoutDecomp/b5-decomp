@@ -1,8 +1,8 @@
 # PC rendering performance
 
-This pass restores lost work avoidance and SIMD processing without changing
-resolution, antialiasing, draw order, LOD distances, reflection settings or damage
-visibility. It does **not** establish original-PC minimum requirements or a locked
+This work restores original work avoidance, draw ordering and SIMD processing
+while preserving resolution, antialiasing, LOD distances, reflection settings and
+damage visibility. It does **not** establish original-PC minimum requirements or a locked
 165 FPS at 1440p.
 
 ## Implemented
@@ -15,6 +15,7 @@ visibility. It does **not** establish original-PC minimum requirements or a lock
 | Exact indexed-draw ranges | Cache the minimum/maximum indices consumed by the final native topology after primitive-reset conversion. D3D9 receives that mesh range rather than the full shared vertex buffer. Ignore incomplete list tails, and retain nonzero base-vertex addressing. |
 | SIMD colour-cube blending | ARTIST `0x82AD2F38` and `0x82AD4170` use vector kernels specialized by source count. SSE2 restores both properties for the PC job. Existing PC truncation/clamping, BGRA layout, source order and destination pitches remain unchanged. |
 | Optional diagnostics | Wheel index/bounds scans require `BRN_WHEEL_DIAG=1`. Composite GPU readback sampling requires existing `BRN_RT_PROBE=1`. `BRN_WHEEL_ZALWAYS` remains independent. |
+| Complete mesh sort keys | ARTIST `0x827FD4CC..5D4` builds keys up to 44 bits; `Submit` at `0x822A0888` shifts the complete u64 key before appending the 20-bit packet offset. Restore priority, shader/material grouping, Z-depth ordering and 36-bit pre-Z keys. `RadixSortJob::Execute` actually calls `std::_Sort<u64*,int>` (`0x82AD28B0`), now matched with in-place `std::sort`. |
 
 The native state shadows are invalidated at device creation. Any future raw float
 constant/sampler write or state-block restoration must use these wrappers or
@@ -28,6 +29,7 @@ From the parent workflow checkout:
 ```powershell
 python b5-decomp/tests/run_pc_shader_constant_cache.py
 python b5-decomp/tests/run_pc_geometry_buffer_pool.py
+python b5-decomp/tests/run_pc_dispatch_sort.py
 python b5-decomp/tests/run_pc_world_geometry_buffers.py
 python b5-decomp/tests/run_pc_tint_blend.py
 python b5-decomp/tests/run_pc_fullscreen.py
@@ -159,6 +161,46 @@ assertions or exceptions, with every sample foreground. It measured 49.86 FPS at
 the earlier profiled runs. Evidence: `geometry_live`, `display_live`, and
 `pooled_profile_disabled` in the same evidence directory.
 
+## Original draw ordering
+
+The old port truncated sort keys to 32 bits and approximated the field packing,
+omitting material distinctions and depth. The full signature is attested by the
+64-bit PPC register operations and DecFIGS `Submit(uint64_t, DispatchCommand*)`.
+Colour, opaque Z, alpha-tested Z and pre-Z key fields now follow those instructions,
+including the alpha path's unusual reduced pixel-hash mask. Z depth uses the
+transformed packed mesh-box centre and the recovered 32767.0 scale.
+
+When the original skips per-mesh frustum tests, its depth path reads an unwritten
+stack matrix. The PC implementation computes the mesh centre whenever depth is
+needed, including pre-Z's distance gate, so its ordering is defined. This is
+explicitly marked as a host adaptation. Material fields use their DWARF names.
+
+The regression compiles real production bodies and headers. It checks key packing
+against an independent PPC mask/shift oracle over 4,096 cases, depth conversion
+boundaries, all 44 submitted key bits, packet offsets, multi-block flattening,
+unsigned sorting, ties and allocation behavior. It passes 19 checks; the prior
+`8f5a6b8e` implementation compiles but fails 14 numerically. The fixture exceeds
+MSVC's small stack temporary so it detects stable-sort heap allocation.
+The 87 native fullscreen/config/pixel checks and canonical build also pass.
+Independent assembly review passes. Work-audit findings for the touched object
+interpreter's block allocation/assert are covered by its existing `ReserveKey`
+call; unrelated instancing/occlusion/job gaps keep the overall TU incomplete.
+
+Foreground 65-second 1440p Road Rage pair: 51.72 FPS before / 51.45 after,
+26.46 / 26.13 CPU ms per frame, host CPU 36.80% / 35.46%. p99 was 34.29 / 33.87 ms;
+both had three frames over 50 ms. These runs demonstrate **no convincing overall
+FPS gain** from this stage. Scripted traffic/contact paths differ; this is a
+verified restoration of original ordering, not evidence that the performance
+goal is met. Separate live driving/crash captures were inspected and contain no
+assertions or exceptions. Evidence: `sort_control`, `sort_candidate`,
+`sort_gpu_visual`, and `dispatch_sort_review.md` under the same parent scratch
+directory. Measured candidate binary SHA-256 prefix: `86fec661108b`.
+
+The opt-in trace now separates CPU copy submission, native Present waiting and
+dispatch sorting. These are CPU intervals: a fast asynchronous copy call does
+not establish its GPU cost. A run that loses foreground focus is excluded from
+comparative FPS claims (`pooled_partitioned` is one such run).
+
 ## Remaining original optimization gaps
 
 - The native main loop still executes update and dispatch serially. Original
@@ -167,8 +209,9 @@ the earlier profiled runs. Evidence: `geometry_live`, `display_live`, and
 - Original wheel/mesh instancing is expanded into individual native draws. Restoring
   hardware instancing needs the matching shader and instance-stream representation;
   merely changing the draw flag is insufficient.
-- Dispatch sort-key packing still has explicit reconstruction gaps. Verify the
-  keys and sorting algorithm against ARTIST before changing command ordering.
+- Native occlusion queries/conditional rendering remain disabled or incomplete.
+  Restore the original visibility work only with a conservative PC backend that
+  preserves visible geometry and does not turn query reads into GPU stalls.
 - Presentation and resource-update spikes remain after pooling. Separate the
   output copy from the native Present wait, and audit original resource pacing.
 - TUB's native device creation (`0x947F10`) selects PUREDEVICE when supported.

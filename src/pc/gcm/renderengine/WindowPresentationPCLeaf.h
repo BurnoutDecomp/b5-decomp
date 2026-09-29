@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include <d3d9.h>
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 
 // FLAG PC-platform leaf: owner-requested F11 borderless fullscreen and 16:9
 // presentation. The console owns its display; Windows window placement and
@@ -170,10 +171,15 @@ namespace renderengine
             if (!lpFrame && EqualRect(&lView, &lClient))
             {
                 Release();
+                FrameProfile::Scope lWaitProfile(FrameProfile::PRESENT_WAIT);
                 return lpDevice->Present(nullptr, nullptr, lhWindow, nullptr);
             }
 
-            const HRESULT lPrepare = Prepare(lpDevice, lhWindow, lbVSync, lClient.right, lClient.bottom);
+            HRESULT lPrepare;
+            {
+                FrameProfile::Scope lCopyProfile(FrameProfile::PRESENT_COPY);
+                lPrepare = Prepare(lpDevice, lhWindow, lbVSync, lClient.right, lClient.bottom);
+            }
             if (FAILED(lPrepare) && !mpSwapChain) return lPrepare;
             // If output allocation failed, retain the old output and map the
             // client-space bars into it. Present scales the whole result back
@@ -187,17 +193,24 @@ namespace renderengine
             IDirect3DSurface9* lpSource = nullptr;
             IDirect3DSurface9* lpOutput = nullptr;
             HRESULT lResult = S_OK;
-            if (lpFrame)
             {
-                lpSource = lpFrame;
-                lpSource->AddRef();
+                FrameProfile::Scope lCopyProfile(FrameProfile::PRESENT_COPY);
+                if (lpFrame)
+                {
+                    lpSource = lpFrame;
+                    lpSource->AddRef();
+                }
+                else
+                    lResult = lpDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &lpSource);
+                if (SUCCEEDED(lResult)) lResult = mpSwapChain->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &lpOutput);
+                if (SUCCEEDED(lResult)) lResult = lpDevice->ColorFill(lpOutput, nullptr, D3DCOLOR_XRGB(0, 0, 0));
+                if (SUCCEEDED(lResult)) lResult = lpDevice->StretchRect(lpSource, nullptr, lpOutput, &lOutputView, meFilter);
             }
-            else
-                lResult = lpDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &lpSource);
-            if (SUCCEEDED(lResult)) lResult = mpSwapChain->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &lpOutput);
-            if (SUCCEEDED(lResult)) lResult = lpDevice->ColorFill(lpOutput, nullptr, D3DCOLOR_XRGB(0, 0, 0));
-            if (SUCCEEDED(lResult)) lResult = lpDevice->StretchRect(lpSource, nullptr, lpOutput, &lOutputView, meFilter);
-            if (SUCCEEDED(lResult)) lResult = mpSwapChain->Present(nullptr, nullptr, lhWindow, nullptr, 0);
+            if (SUCCEEDED(lResult))
+            {
+                FrameProfile::Scope lWaitProfile(FrameProfile::PRESENT_WAIT);
+                lResult = mpSwapChain->Present(nullptr, nullptr, lhWindow, nullptr, 0);
+            }
             if (lpOutput) lpOutput->Release();
             if (lpSource) lpSource->Release();
             return lResult;

@@ -147,7 +147,7 @@ public:
 
     // ---- Functions bodied by this TU (CgsGraphicsDispatchList.cpp) -----------
     DispatchList* ReserveKey();                                       // @ 0x822A0788
-    DispatchList* Submit(s32 li32SortKey, DispatchCommand* lpPacket); // @ 0x822A0808
+    void Submit(u64 lu64SortKey, DispatchCommand* lpPacket);           // @ 0x822A0808
     // @ 0x827FA730 -- append a fresh 64-record KeyBlock (carved from the list's bin)
     // to the chain and make it the tail.
     DispatchList* AllocateKeyBlock();
@@ -158,8 +158,8 @@ public:
     // [PC leaf] The X360 sorts each list on a RadixSort job (RadixSortEntry
     // @0x82AD2020) between PrepareSortJobInfo and the dispatch walk. The PC
     // bring-up has no job scheduler yet, so this member runs the same
-    // prepare-then-sort synchronously (std::stable_sort over the u64 records --
-    // radix sort is stable, ascending; same resulting order).
+    // prepare-then-sort synchronously. Despite the job name, ARTIST
+    // RadixSortJob::Execute @0x82AD28B0 calls std::_Sort over unsigned u64s.
     void SortForDispatch();
 
     // WorldEntityModule::RenderInstance @0x822D5AB0 reads the submitted-packet count
