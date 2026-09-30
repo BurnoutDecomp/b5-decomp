@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"           // gpDebugPrint / gxMessageFilterFlags (filtered prints)
 #include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h" // PoolIO::OutputBuffer / PoolOutputQueue (event posts)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // Events::AllocateResourceListResponse (live-update reply)
+#include "GameShared/GameClasses/System/Resource/CgsEntryListResource.h"
+#include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"
 
 // ======================================================================================
 // CgsResource::PoolModule -- reconstructed from BURNOUT_X360_ARTIST.XEX (source CgsPoolModule.cpp).
@@ -39,59 +41,27 @@ namespace CgsResource
         "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModule.cpp";
 
     // ----------------------------------------------------------------------------------------------
-    // @ 0x828E2ED0 -- ConvertPoolRequestOptions: project a CreatePoolRequest (lpRequest) into a
-    // Pool::InitOptions (lpOutOptions). The X360 copies a fixed set of fields by raw offset; this is an
-    // external request<->options field map (serialised request layout), so the copy is expressed
-    // against the byte layout of both records (documented inline) rather than inventing two C++ structs
-    // -- the request record (CreatePoolRequest) is not reconstructed as a type in this TU.
-    //
-    // Field map (request offset -> options offset), read off the asm:
-    //   req+0x08 -> opt+0x00 (id)              req+0x0C -> opt+0x04 (name ptr, &req[0x0C])
-    //   req+0x2C -> opt+0x58                    req+0x30 -> opt+0x50      req+0x34 -> opt+0x54
-    //   req+0x5C -> opt+0x5C                    req+0xA8(byte) -> opt+0xA4(byte)
-    //   per-heap (3x): opt+0x08/0x14/0x20 = 2*req[0x50/0x54/0x58]+1 (max nodes);
-    //                  opt+0x0C/0x18/0x24 = req+0x38/0x40/0x48 lo (size);
-    //                  opt+0x10/0x1C/0x28 = req+0x38/0x40/0x48 hi (align)
-    // ----------------------------------------------------------------------------------------------
+    // ARTIST 828E2ED0: project the request's scalar sizing fields into the
+    // native pool options. The name borrows the request's inline buffer; its
+    // caller must retain that request through pool creation. Dependency pointers,
+    // bank backing and resource descriptors are filled by DoCreatePoolRequest.
     void PoolModule::ConvertPoolRequestOptions(const void* lpRequest, void* lpOutOptions)
     {
-        const u8* lpcReq = static_cast<const u8*>(lpRequest);
-        u8*       lpcOpt = static_cast<u8*>(lpOutOptions);
-
-        // Helpers for the serialised request/options records (external fixed layout -> raw access OK).
-        #define RD_U32(p, off) (*reinterpret_cast<const u32*>((p) + (off)))
-        #define RD_U64(p, off) (*reinterpret_cast<const u64*>((p) + (off)))
-        #define WR_U32(p, off, v) (*reinterpret_cast<u32*>((p) + (off)) = (u32)(v))
-        #define WR_U64(p, off, v) (*reinterpret_cast<u64*>((p) + (off)) = (u64)(v))
-
-        WR_U32(lpcOpt, 0x00, RD_U32(lpcReq, 0x08));                  // id
-        // name = &req[0x0C] (the inline name buffer). [marked: this writes the X360 4-byte field strides
-        // into an opaque record; the request/options types are NOT reconstructed in this TU, so the name
-        // pointer is stored X360-width to keep the record's field stride self-consistent for its reader.]
-        WR_U32(lpcOpt, 0x04, (u32)(uintptr_t)(lpcReq + 0x0C));
-        WR_U32(lpcOpt, 0x58, RD_U32(lpcReq, 0x2C));
-        WR_U32(lpcOpt, 0x50, RD_U32(lpcReq, 0x30));
-        WR_U32(lpcOpt, 0x54, RD_U32(lpcReq, 0x34));
-        WR_U32(lpcOpt, 0x5C, RD_U32(lpcReq, 0x5C));
-        *(lpcOpt + 0xA4) = *(lpcReq + 0xA8);                         // byte flag
-
-        // Heap 0: maxNodes = 2*req[0x50]+1; size/align = the 8-byte field at req+0x38.
-        u64 lu0 = RD_U64(lpcReq, 0x38);
-        WR_U32(lpcOpt, 0x08, 2u * RD_U32(lpcReq, 0x50) + 1u);
-        WR_U64(lpcOpt, 0x0C, lu0);                                   // opt+0x0C size, opt+0x10 align
-        // Heap 1.
-        u64 lu1 = RD_U64(lpcReq, 0x40);
-        WR_U32(lpcOpt, 0x14, 2u * RD_U32(lpcReq, 0x54) + 1u);
-        WR_U64(lpcOpt, 0x18, lu1);
-        // Heap 2.
-        u64 lu2 = RD_U64(lpcReq, 0x48);
-        WR_U32(lpcOpt, 0x20, 2u * RD_U32(lpcReq, 0x58) + 1u);
-        WR_U64(lpcOpt, 0x24, lu2);
-
-        #undef RD_U32
-        #undef RD_U64
-        #undef WR_U32
-        #undef WR_U64
+        const Events::CreatePoolRequest& lrRequest = *static_cast<const Events::CreatePoolRequest*>(lpRequest);
+        Pool::InitOptions& lrOptions = *static_cast<Pool::InitOptions*>(lpOutOptions);
+        lrOptions.miId = lrRequest.miPoolId;
+        lrOptions.mpcName = lrRequest.mpcName;
+        lrOptions.miRefCountThreshold = lrRequest.miDeletionDelayFrames;
+        lrOptions.muMaxResources = lrRequest.muMaxResources;
+        lrOptions.muMaxImports = lrRequest.muMaxImports;
+        lrOptions.miNumDependencies = lrRequest.miNumDependencies;
+        lrOptions.mbAllowDefragmentation = lrRequest.mbAllowDefragmentation;
+        for (s32 li = 0; li < 3; ++li)
+        {
+            lrOptions.maHeapInfo[li].muMaxNodes = 2u * lrRequest.mauMaxResources[li] + 1u;
+            lrOptions.maHeapInfo[li].muHeapMemorySize = lrRequest.mDescriptor.m_baseResourceDescriptors[li].m_size;
+            lrOptions.maHeapInfo[li].muHeapAlignment = lrRequest.mDescriptor.m_baseResourceDescriptors[li].m_alignment;
+        }
     }
 
     // ----------------------------------------------------------------------------------------------
@@ -139,9 +109,56 @@ namespace CgsResource
     // ----------------------------------------------------------------------------------------------
     void PoolModule::DoDeletePoolRequest(const void* lpResponse)
     {
-        const u8* lpcResp = static_cast<const u8*>(lpResponse);
-        const s32 liResult = *reinterpret_cast<const s32*>(lpcResp + 0x0C);
-        CGS_ASSERT(liResult == 0, "Destroy Bank Failed");   // CgsPoolModule.cpp:1309
+        const CgsMemory::MemoryIO::DestroyBankResponse* lpResult =
+            static_cast<const CgsMemory::MemoryIO::DestroyBankResponse*>(lpResponse);
+        CGS_ASSERT(lpResult->GetResult() == CgsMemory::MemoryIO::E_RESULT_OK, "Destroy Bank Failed");
+    }
+
+    // ARTIST 82901748. The list itself becomes available before fixing up its
+    // range. The returned handle owns the entry, not the entry's main-memory data.
+    void PoolModule::DoFixUpAndResolveResourceListRequest(
+        const Events::FixUpAndResolveResourceListRequest* lpRequest, PoolIO::OutputBuffer* lpOutput)
+    {
+        const s32 liPoolIndex = GetPoolIndex(lpRequest->miPoolId);
+        CGS_ASSERT(liPoolIndex != -1, "liPoolIndex != -1");
+        Pool& lrPool = maPools[liPoolIndex];
+        s32 liListIndex;
+        Entry* lpEntry = lrPool.FindResource(lpRequest->mListId, false, 3, &liListIndex);
+        CGS_ASSERT(lpEntry != nullptr, "lpResource");
+        lrPool.SetEntryStatus(liListIndex, 2);
+        const EntryListResource* lpList = static_cast<const EntryListResource*>(lpEntry->mResource.m_baseResources[0]);
+        lrPool.FixUpAndResolveResourceList(lpList->mIds, lpList->muNumEntries,
+            lpRequest->miFirstIndex, lpRequest->miCount, lpRequest->mbFinalFixup, lpRequest->mbFixUpDependencies);
+
+        Events::FixUpAndResolveResourceListResponse lResponse = {};
+        lResponse.miEventId = lpRequest->miEventId;
+        lResponse.miPoolId = lpRequest->miPoolId;
+        lResponse.mListHandle.mpResourceMemory = &lpEntry->mResource.m_baseResources[0];
+        lResponse.mListHandle.mpSourceEntry = lpEntry;
+        lResponse.mpIds = lpList->mIds;
+        lResponse.miNumEntries = lpList->muNumEntries;
+        lpOutput->GetPoolOutputQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lResponse), 19, sizeof(lResponse));
+    }
+
+    // ARTIST 828FD310: acknowledge the request after arming deallocation. Pool
+    // updates retire each resource only once its original countdown expires.
+    void PoolModule::DoUnloadResourceListRequest(
+        const Events::UnloadResourceListRequest* lpRequest, PoolIO::OutputBuffer* lpOutput)
+    {
+        CGS_ASSERT(mProcessState == E_UPDATESTATE_IDLE || mProcessState == E_UPDATESTATE_DEALLOCATING_LIST,
+                   "Can only unload when idle or already unloading\n");
+        const s32 liPoolIndex = GetPoolIndex(lpRequest->miPoolId);
+        CGS_ASSERT(liPoolIndex != -1, "liPoolIndex != -1");
+        mDeAllocateState.Begin(&maPools[liPoolIndex], lpRequest->mListId);
+        mProcessState = E_UPDATESTATE_DEALLOCATING_LIST;
+
+        Events::UnloadResourceListResponse lResponse = {};
+        lResponse.miEventId = lpRequest->miEventId;
+        lResponse.miPoolId = lpRequest->miPoolId;
+        lResponse.mListId = lpRequest->mListId;
+        lpOutput->GetPoolOutputQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lResponse), 21, sizeof(lResponse));
     }
 
     // ----------------------------------------------------------------------------------------------

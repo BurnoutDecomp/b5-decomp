@@ -186,7 +186,8 @@ namespace CgsResource
         void ResolveAllDestScratchResources();
         void ResolveAllResourcesThatImportList(const ID* lpIDs, u32 luNumIDs);
         void ResolveAllResourcesThatImportList(const ID* lpIDs, void** lppValues, u32 luNumIDs);
-        void FixUpAndResolveResourceList(const ID* lpIDs, s32 liA, s32 liB, s32 liC, bool lbD, bool lbE);
+        void FixUpAndResolveResourceList(const ID* lpIDs, s32 liNumIDs, s32 liFirstIndex,
+                                        s32 liCount, bool lbFinalFixup, bool lbFixUpDependencies);
         void BeginDefragmentation(ScratchPool* lpScratchPool, RelocateRequest* lpRequests, RelocateSource* lpSources, u32 luNum, s32 liMemType);
         void BeginEmergencyDefragmentation(CgsMemory::Relocator* lpRelocator, CgsMemory::RelocationParams* lpParams, RelocateRequest* lpRequests, RelocateSource* lpSources, u32 luNum, s32 liMemType);
         void DeleteEntry(s16 liIndex);

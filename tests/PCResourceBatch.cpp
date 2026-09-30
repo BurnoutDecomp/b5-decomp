@@ -5,6 +5,10 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
 #include "GameShared/GameClasses/System/Resource/PoolModuleStates/CgsAllocatePoolModuleState.h"
+#include "GameShared/GameClasses/System/Resource/PoolModuleStates/CgsDeAllocatePoolModuleState.h"
+#include "GameShared/GameClasses/System/Resource/CgsEntryListResource.h"
+#include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h"
+#include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -13,6 +17,13 @@ static const void* retiredBases[3];
 static size_t retiredSizes[3];
 static u32 freeBytesAtRetirement[3];
 static CgsResource::Pool* observedRetirementPool;
+static bool observeLifecycle, validationResult = true;
+static int lifecycle[32], lifecycleCount;
+struct ResourceBody { void* imported; int id; };
+static void TraceLifecycle(int phase, const void* resource) {
+    if(observeLifecycle && lifecycleCount<32)
+        lifecycle[lifecycleCount++]=phase+static_cast<const ResourceBody*>(resource)->id;
+}
 namespace CgsDev {
 namespace Assert {
 int BeginAssert() { return 0; }
@@ -36,13 +47,29 @@ namespace renderengine { void WorldGeometry_OnResourceMemoryFreed(const void* ba
 } }
 namespace CgsResource {
 static bool sabLoggedPoolFull[64] = {};
-struct MemberType : Type { u32 GetTypeID() const override { return 123; } };
+struct MemberType : Type {
+    u32 GetTypeID() const override { return 123; }
+    void FixUp(void* resource, const rw::Resource&) const override { TraceLifecycle(100,resource); }
+    bool DeSerialise(void* resource) const override { TraceLifecycle(200,resource); return true; }
+    void PostFixUp(void* resource, const rw::Resource&) const override { TraceLifecycle(300,resource); }
+    bool DebugValidate(const void* resource) const override { TraceLifecycle(400,resource); return validationResult; }
+};
 static MemberType memberType;
-// Type lookup is the only PoolModule boundary here. All allocation/state/heap bodies are production.
+// Module registry/slot lookup is the fixture boundary. Allocation, fixup, unload,
+// response generation, queues, state machines and heap bodies are production.
 class PoolModule {
 public:
     static const int KI_MAX_ALLOCATION_REQUESTS = 4096;
+    enum { E_UPDATESTATE_IDLE=0, E_UPDATESTATE_DEALLOCATING_LIST=2 };
+    Pool* maPools = nullptr;
+    int mProcessState = E_UPDATESTATE_IDLE;
+    DeAllocatePoolModuleState mDeAllocateState = {};
     const Type* FindResourceType(u32 id) { return id==123 ? &memberType : nullptr; }
+    int GetPoolIndex(s32 id) { return maPools && maPools->GetId()==id ? 0 : -1; }
+    static void ConvertPoolRequestOptions(const void*, void*);
+    void DoDeletePoolRequest(const void*);
+    void DoFixUpAndResolveResourceListRequest(const Events::FixUpAndResolveResourceListRequest*,PoolIO::OutputBuffer*);
+    void DoUnloadResourceListRequest(const Events::UnloadResourceListRequest*,PoolIO::OutputBuffer*);
 };
 CgsDev::StrStreamBase& operator<<(CgsDev::StrStreamBase& out, ID) { return out; } // disabled diagnostic formatting only
 }
@@ -78,6 +105,7 @@ struct Fixture {
             set.mapAllocRequests[t]=requests[t]; set.mapAllocResults[t]=results[t];
         }
         pool.Construct(); pool.InitPool(&options); state.Construct(&registry);
+        registry.maPools=&pool; registry.mDeAllocateState.Construct(&registry);
         list.SetHash(0x80000000ABCDEFFFull);
         for (int i=0; i<2; ++i) {
             entries[i].mResourceId.SetHash(101+i); entries[i].muResourceTypeId=123;
@@ -249,6 +277,160 @@ int main() {
         f.pool.DeleteEntry(static_cast<s16>(slot));
         observedRetirementPool=nullptr;
         Check(f.Slot(request.mID)<0 && f.pool.muNumFreeResources==16, "unconditional deletion retires replacement and frees hash/slot");
+    }
+    {
+        Fixture f;
+        for(int i=0;i<2;++i) {
+            f.entries[i].mauUncompressedSizeAndAlignment[0]=0x40000060;
+            f.entries[i].muImportOffset=32; f.entries[i].muImportCount=1;
+        }
+        f.Begin();
+        Check(f.state.Update()==AllocatePoolModuleState::E_RESULT_SUCCESS,"lifecycle fixture allocates real heap resources");
+        ID ids[2]={f.entries[0].mResourceId,f.entries[1].mResourceId};
+        for(int i=0;i<2;++i) {
+            auto* data=static_cast<ResourceBody*>(f.outputs[i].m_baseResources[0]);
+            std::memset(data,0,96); data->id=i+1;
+            auto* import=reinterpret_cast<BundleV2::ImportEntry*>(reinterpret_cast<char*>(data)+32);
+            import->mResourceId=ids[1-i]; import->muOffset=0;
+        }
+        observeLifecycle=true; lifecycleCount=0;
+        f.pool.FixUpAndResolveResourceList(ids,2,1,1,false,false);
+        Check(lifecycleCount==2 && lifecycle[0]==102 && lifecycle[1]==202,
+              "partial fixup obeys nonzero first index and runs deserialise after fixup");
+        Check(static_cast<ResourceBody*>(f.outputs[1].m_baseResources[0])->imported==f.outputs[0].m_baseResources[0]
+            && static_cast<ResourceBody*>(f.outputs[0].m_baseResources[0])->imported==nullptr,
+              "partial range resolves only its own native import slots");
+        Check(f.pool.GetEntryStatusDirect(f.Slot(ids[0]))==1 && f.pool.GetEntryStatusDirect(f.Slot(ids[1]))==1,
+              "partial fixup leaves resources unpublished");
+        f.pool.FixUpAndResolveResourceList(ids,2,0,1,false,false);
+        Check(lifecycleCount==4 && lifecycle[2]==101 && lifecycle[3]==201
+            && static_cast<ResourceBody*>(f.outputs[0].m_baseResources[0])->imported==f.outputs[1].m_baseResources[0],
+              "second range resolves reciprocal imports without refixing the earlier range");
+        f.pool.FixUpAndResolveResourceList(ids,2,2,0,true,false);
+        Check(lifecycleCount==8 && lifecycle[4]==301 && lifecycle[5]==401 && lifecycle[6]==302 && lifecycle[7]==402,
+              "empty final range publishes and validates all earlier chunks in list order");
+        Check(f.pool.GetEntryStatusDirect(f.Slot(ids[0]))==2 && f.pool.GetEntryStatusDirect(f.Slot(ids[1]))==2,
+              "final fixup marks both members loaded");
+        f.pool.FixUpAndResolveResourceList(ids,2,0,2,true,false);
+        Check(lifecycleCount==8,"already loaded shared resources are never fixed or post-fixed twice");
+        observeLifecycle=false;
+    }
+    {
+        Fixture dependency, f;
+        for(int i=0;i<2;++i) {
+            dependency.entries[i].mResourceId.SetHash(201+i);
+            dependency.entries[i].muImportCount=0; f.entries[i].muImportCount=0;
+        }
+        dependency.list.SetHash(0x8000000000000200ull);
+        dependency.Begin(); dependency.state.Update();
+        ID dependencyIds[2]={dependency.entries[0].mResourceId,dependency.entries[1].mResourceId};
+        f.pool.miNumDependencies=1; f.pool.mapDependencies[0]=&dependency.pool;
+        f.pool.FixUpAndResolveResourceList(dependencyIds,2,0,2,true,false);
+        Check(dependency.pool.GetEntryStatusDirect(dependency.Slot(dependencyIds[0]))==1,
+              "local fixup does not publish dependency resources");
+        f.pool.FixUpAndResolveResourceList(dependencyIds,2,0,2,true,true);
+        Check(dependency.pool.GetEntryStatusDirect(dependency.Slot(dependencyIds[0]))==2
+            && dependency.pool.GetEntryStatusDirect(dependency.Slot(dependencyIds[1]))==2,
+              "dependency fixup publishes entries in their owning pool");
+        dependency.pool.SetEntryStatus(dependency.Slot(dependency.list),2);
+        f.entries[0].mResourceId=dependencyIds[0];
+        f.Begin();
+        Check(f.state.Update()==AllocatePoolModuleState::E_RESULT_SUCCESS && !f.needs[0] && f.needs[1],
+              "new list shares loaded dependency and allocates only its local member");
+        ID ids[2]={f.entries[0].mResourceId,f.entries[1].mResourceId};
+        f.pool.FixUpAndResolveResourceList(ids,2,0,2,true,false);
+        f.pool.SetEntryStatus(f.Slot(f.list),2);
+        f.pool.miRefCountThreshold=3; dependency.pool.miRefCountThreshold=5;
+        const int own=f.Slot(ids[1]), shared=dependency.Slot(ids[0]), list=f.Slot(f.list);
+        const u32 freeBefore=f.pool.maHeaps[0].GetAmountFreeBytes();
+        DeAllocatePoolModuleState release;
+        release.Construct(&f.registry); release.Begin(&f.pool,f.list);
+        Check(f.pool.GetEntryRefCount(own)==0 && f.pool.GetEntryRefCount(list)==0
+            && dependency.pool.GetEntryRefCount(shared)==1,
+              "unload decrements each member in its actual owning pool");
+        Check(f.pool.maHeaps[0].GetAmountFreeBytes()==freeBefore && f.pool.GetEntryStatusDirect(own)==2,
+              "unload acknowledgement retains memory for the pool retirement countdown");
+        Check(release.Update()==DeAllocatePoolModuleState::E_UPDATE_BUSY && release.miFramesRemaining==2,
+              "deallocation driver remains busy during retirement delay");
+        release.Begin(&dependency.pool,dependency.list);
+        Check(release.miFramesRemaining==5 && dependency.pool.GetEntryRefCount(shared)==0,
+              "another unload extends delay to longer owning-pool threshold");
+        bool busy=true;
+        for(int i=0;i<5;++i) busy &= release.Update()==DeAllocatePoolModuleState::E_UPDATE_BUSY;
+        Check(busy && release.Update()==DeAllocatePoolModuleState::E_UPDATE_IDLE
+            && release.GetPendingAllocation()==nullptr,"deallocation completes after countdown without inventing pending requests");
+    }
+    {
+        Fixture f;
+        for(int i=0;i<2;++i) f.entries[i].muImportCount=0;
+        f.Begin(); f.state.Update();
+        PoolIO::OutputBuffer out;
+        out.Construct(); out.LockForWrite();
+        Events::FixUpAndResolveResourceListRequest fix = {};
+        fix.mpUser=reinterpret_cast<CgsModule::BaseEventReceiverQueue*>(0x123456789000ull);
+        fix.miEventId=91; fix.miPoolId=f.pool.GetId(); fix.mListId=f.list;
+        fix.miCount=2; fix.mbFinalFixup=true;
+        f.registry.DoFixUpAndResolveResourceListRequest(&fix,&out);
+        out.UnlockForWrite(); out.LockForRead();
+        const CgsModule::Event* event=nullptr; s32 size=0;
+        auto* queue=static_cast<const PoolIO::OutputBuffer&>(out).GetPoolOutputQueue();
+        int tag=queue->GetFirstEvent(&event,&size);
+        const auto* fixed=reinterpret_cast<const Events::FixUpAndResolveResourceListResponse*>(event);
+        Check(tag==19 && size==sizeof(*fixed) && fixed->mpUser==nullptr && fixed->miEventId==91
+            && fixed->miPoolId==fix.miPoolId,"fixup response echoes IDs using the native record size and original null user");
+        Entry* listEntry=&f.pool.mpResourceEntries[f.Slot(f.list)];
+        const auto* list=static_cast<const EntryListResource*>(listEntry->mResource.m_baseResources[0]);
+        Check(fixed->mListHandle.mpSourceEntry==listEntry && fixed->mListHandle.mpResourceMemory==&listEntry->mResource
+            && fixed->mpIds==list->mIds && fixed->miNumEntries==2 && f.pool.GetEntryStatusDirect(f.Slot(f.list))==2,
+            "fixup response retains full native owner handle and points to the pool-owned list");
+        out.UnlockForRead(); out.LockForWrite(); out.GetPoolOutputQueue()->Clear();
+        Events::UnloadResourceListRequest unload = {};
+        unload.miPoolId=fix.miPoolId; unload.miEventId=92; unload.mListId=f.list;
+        f.pool.miRefCountThreshold=3;
+        f.registry.DoUnloadResourceListRequest(&unload,&out);
+        out.UnlockForWrite(); out.LockForRead();
+        tag=queue->GetFirstEvent(&event,&size);
+        const auto* released=reinterpret_cast<const Events::UnloadResourceListResponse*>(event);
+        Check(tag==21 && size==sizeof(*released) && released->mListId==f.list && released->miEventId==92
+            && released->miPoolId==fix.miPoolId && released->mpUser==nullptr,"unload response preserves full list hash and native record size");
+        Check(f.registry.mProcessState==PoolModule::E_UPDATESTATE_DEALLOCATING_LIST
+            && f.registry.mDeAllocateState.miFramesRemaining==3 && f.pool.FindResourceIndex(f.list,true,2)>=0,
+            "unload response is queued before retirement completes");
+        out.UnlockForRead(); out.Destruct();
+
+        Events::CreatePoolRequest create = {};
+        create.miPoolId=19; std::strcpy(create.mpcName,"native pool");
+        create.miDeletionDelayFrames=7; create.muMaxResources=200; create.muMaxImports=300;
+        create.miNumDependencies=4; create.mbAllowDefragmentation=true;
+        for(int i=0;i<3;++i) {
+            create.mauMaxResources[i]=10+i;
+            create.mDescriptor.m_baseResourceDescriptors[i].m_size=1000+i*256;
+            create.mDescriptor.m_baseResourceDescriptors[i].m_alignment=16u<<i;
+        }
+        Pool::InitOptions options = {};
+        options.miBankId=12345; options.mapDependencies[0]=&f.pool;
+        options.mResource.m_baseResources[0]=reinterpret_cast<void*>(0xABCDEF123400ull);
+        f.registry.ConvertPoolRequestOptions(&create,&options);
+        Check(options.miId==19 && options.mpcName==create.mpcName && options.miRefCountThreshold==7
+            && options.muMaxResources==200 && options.muMaxImports==300
+            && options.miNumDependencies==4 && options.mbAllowDefragmentation,
+            "native options conversion preserves scalar fields and full name pointer");
+        bool heaps=true;
+        for(int i=0;i<3;++i) heaps &= options.maHeapInfo[i].muMaxNodes==21+i*2
+            && options.maHeapInfo[i].muHeapMemorySize==1000+i*256 && options.maHeapInfo[i].muHeapAlignment==(16u<<i);
+        Check(heaps,"pool conversion maps each heap's count, size and alignment independently");
+        Check(options.miBankId==12345 && options.mapDependencies[0]==&f.pool
+            && options.mResource.m_baseResources[0]==reinterpret_cast<void*>(0xABCDEF123400ull),
+            "options conversion leaves caller-owned backing and dependency fields untouched");
+        CgsMemory::MemoryIO::DestroyBankResponse destroyed;
+        destroyed.Construct(reinterpret_cast<CgsModule::BaseEventReceiverQueue*>(0x123400001000ull),87);
+        const int before=assertions;
+        f.registry.DoDeletePoolRequest(&destroyed);
+        Check(assertions==before,"successful native bank response does not read event metadata as a failure code");
+        destroyed.SetResult(CgsMemory::MemoryIO::E_RESULT_NOT_EMPTY);
+        f.registry.DoDeletePoolRequest(&destroyed);
+        Check(assertions==before+1,"failed native bank response triggers original destruction assertion");
+        assertions=before;
     }
     Check(assertions==0, "no unexpected engine assertion");
     std::printf("PCResourceBatch: %d checks, %d failures\n", checks, failures);

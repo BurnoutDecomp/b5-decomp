@@ -222,6 +222,8 @@ namespace CgsResource
         mAllocListSet.ClearCountsAndResults();
         mProcessState = E_UPDATESTATE_IDLE;
         mAllocateState.Construct(this);
+        mDeAllocateState.Construct(this);
+        mPendingAllocationRequests.Construct();
 
         // ---- DEFERRED back half (rw-allocator + subsystem gated) ----------------------------------
         // Still deferred (need the allocator + subsystems): (1) the built-in "IDList" type (allocate +
@@ -262,8 +264,8 @@ namespace CgsResource
             {
                 if (liId == 10)        // CreatePool
                     DoCreatePoolRequest(reinterpret_cast<const CgsMemory::MemoryIO::CreateResourceResponse*>(lpEvent));
-                else if (liId == 13)   // DeletePool (DoDeletePoolRequest -- deferred)
-                    {}
+                else if (liId == 13)   // DeletePool
+                    DoDeletePoolRequest(lpEvent);
                 else
                     CGS_ASSERT(false, "Invalid Event Id.\n");
 
