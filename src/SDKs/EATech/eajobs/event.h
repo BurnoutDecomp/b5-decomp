@@ -112,7 +112,7 @@ namespace Detail
 
         // Append by value. Walks the chain to the node with free space (or that
         // owns no full successor), allocating + zero-initialising a fresh overflow
-        // node through the default ICoreAllocator when the tail is full. Stores the
+        // node through the installed Jobs allocator when the tail is full. Stores the
         // element (member-wise) into the tail node's next free slot and bumps mSize.
         void Add(const T& rElement);
 
@@ -125,8 +125,8 @@ namespace Detail
         u32              mPad1;
 
     private:
-        BucketListNode(const BucketListNode&);
-        BucketListNode& operator=(const BucketListNode&);
+        BucketListNode(const BucketListNode&) = delete;
+        BucketListNode& operator=(const BucketListNode&) = delete;
     };
 }
 }

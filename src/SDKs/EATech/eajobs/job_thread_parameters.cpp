@@ -1,6 +1,6 @@
 #include "SDKs/EATech/eajobs/job_thread_parameters.h"
 
-#include "SDKs/EATech/eathread/BrnEAThreadX360.h" // EA::Thread::ThreadParameters
+#include "eathread/eathread_thread.h" // Native EAThread parameter defaults.
 
 // ============================================================================
 // SDKs/EATech/eajobs/job_thread_parameters.cpp

@@ -78,13 +78,12 @@ namespace Jobs
     // into it; otherwise the backend pointer is null. The result is stored into
     // mSchedulers[0] and mInitialized is set.
     //
-    // Only the second argument participates in the X360 body (r4 -> the backend's
-    // uMaxJobs); iMaxThreads is the DWARF-surface first parameter and is unused here
-    // (the worker count is driven later by AddThread).
-    void JobScheduler::Initialize(int /*iMaxThreads*/, int iMaxJobs)
+    // r3 is this; r4, the FIRST explicit argument, is the local job capacity.
+    // The second explicit argument is unused on X360 (workers use AddThread).
+    void JobScheduler::Initialize(int iMaxJobs, int /*iUnusedCapacity*/)
     {
         Allocator* lpAllocator = GetAllocator();
-        void* lpvBlock = lpAllocator->Allocate(
+        void* lpvBlock = lpAllocator->Alloc(
             sizeof(LocalBackend::LocalBackend), "EA::Jobs::LocalBackend::LocalBackend", 1, 16, 0);
 
         LocalBackend::LocalBackend* lpBackend = 0;

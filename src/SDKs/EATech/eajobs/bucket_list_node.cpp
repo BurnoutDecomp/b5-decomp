@@ -1,7 +1,9 @@
 #include "SDKs/EATech/eajobs/event.h"
+#include "SDKs/EATech/eajobs/jobs.h"
 #include "SDKs/EATech/eajobs/job.h" // EA::Jobs::Job::Dependency (BucketListNode payload)
 
 #include <cstring> // std::memset (raw zero-init mirrors the asm dword stores)
+#include <new>
 
 // EA::Jobs::Detail::BucketListNode<T,N> generic, reconstructed once and explicitly
 // instantiated for the (T,N) the X360 .XEX actually emits in this group:
@@ -49,10 +51,16 @@ namespace Detail
     template <typename T, int N>
     BucketListNode<T, N>::~BucketListNode()
     {
+        Clear();
+    }
+
+    template <typename T, int N>
+    void BucketListNode<T, N>::Clear()
+    {
         if (mNext)
         {
             EA::Allocator::ICoreAllocator* lpAllocator =
-                EA::Allocator::ICoreAllocator::GetDefaultAllocator();
+                EA::Jobs::GetAllocator();
             // Destroy + free each chained overflow node (the recursion in the asm).
             BucketListNode* lpNode = mNext;
             mNext = 0;
@@ -64,12 +72,6 @@ namespace Detail
         {
             mSize = 0;
         }
-    }
-
-    template <typename T, int N>
-    void BucketListNode<T, N>::Clear()
-    {
-        this->~BucketListNode();
     }
 
     template <typename T, int N>
@@ -93,7 +95,7 @@ namespace Detail
             if (!lpNode->mNext)
             {
                 EA::Allocator::ICoreAllocator* lpAllocator =
-                    EA::Allocator::ICoreAllocator::GetDefaultAllocator();
+                    EA::Jobs::GetAllocator();
                 // Exact X360 request: sizeof(node) bytes, debug tag, flags 0,
                 // 16-byte alignment, alignment offset 0.
                 void* lpRaw = lpAllocator->Alloc(
@@ -105,11 +107,9 @@ namespace Detail
                 BucketListNode* lpNew = 0;
                 if (lpRaw)
                 {
-                    lpNew = static_cast<BucketListNode*>(lpRaw);
-                    // Zero the bucket (the asm's 16 dword-stores), then mNext/mSize.
-                    std::memset(lpNew->mBucket, 0, sizeof(lpNew->mBucket));
-                    lpNew->mNext = 0;
-                    lpNew->mSize = 0;
+                    // The inlined console constructor zeroes the bucket and links.
+                    // Start the native object's lifetime before assigning elements.
+                    lpNew = new (lpRaw) BucketListNode;
                 }
                 lpNode->mNext = lpNew;
             }

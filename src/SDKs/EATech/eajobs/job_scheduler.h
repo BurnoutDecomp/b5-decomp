@@ -2,12 +2,7 @@
 #define EA_JOBS_JOB_SCHEDULER_H
 
 #include "types.hpp"
-#include "SDKs/EATech/eathread/BrnEAThreadX360.h"        // EA::Thread::Futex -- PROJECT X360 home (CRITICAL_SECTION-backed lock).
-                                                         // NOT the vendor eathread/eathread_futex.h: that header transitively
-                                                         // pulls a divergent EA::Thread::MutexParameters which collides (C2011)
-                                                         // with the X360-faithful one in BrnEAThreadX360.h (reached via
-                                                         // local_backend.h -> job_thread.h). The single project-homed
-                                                         // EA::Thread types are the ones the X360 build links.
+#include "eathread/eathread_futex.h" // Same native EAThread ABI as the linked worker implementation.
 #include "SDKs/EATech/eajobs/job_types.h"               // JobEnvironment, JobAffinity, Detail::SchedulerBackend, JobInstanceHandle, Job
 #include "SDKs/EATech/eajobs/job_thread_parameters.h"   // JobThreadParameters
 #include "SDKs/EATech/eajobs/job_thread_handle.h"       // JobThreadHandle
@@ -35,7 +30,6 @@ namespace Jobs
     struct EntryPoint;
     struct Param;
     struct JobMetrics;
-    struct WaitOnCallback;
 
     // job_scheduler.h:35 -- DWARF member layout:
     //   mSchedulers[2] (Detail::SchedulerBackend*)
@@ -54,9 +48,9 @@ namespace Jobs
         // job_scheduler.h:45 -- enable/disable per-job profiling instrumentation.
         void SetProfiling(bool lbEnable);
 
-        // job_scheduler.h:46 -- bring up the scheduler with the given worker/job
-        // capacities (HardwareInit passes 128, 128).
-        void Initialize(int iMaxThreads, int iMaxJobs);
+        // ARTIST82BCC390 consumes r4 (local job capacity); the second capacity
+        // argument is unused by this build. Worker count is set by AddThread.
+        void Initialize(int iMaxJobs, int iUnusedCapacity);
 
         // job_scheduler.h:47 -- tear the scheduler down.
         void Destroy();

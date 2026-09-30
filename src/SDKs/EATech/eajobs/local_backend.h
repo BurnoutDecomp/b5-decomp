@@ -9,12 +9,13 @@
 #include "SDKs/EATech/eajobs/reference_count.h" // EA::Jobs::Detail::ReferenceCount (the +0x270 word)
 #include "SDKs/EATech/eajobs/job_thread.h"   // EA::Jobs::LocalBackend::JobThread (32 embedded worker threads)
 #include "SDKs/EATech/eajobs/job_thread_handle.h" // EA::Jobs::JobThreadHandle (AddThread / GetThreadHandle out-struct)
-#include "SDKs/EATech/eathread/eathread_semaphore.h" // EA::Thread::Semaphore (conditional member)
+#include "SDKs/EATech/eajobs/profiling.h"
+#include "eathread/eathread_semaphore.h" // Native EAThread semaphore (conditional member).
 
 // SDKs/EATech/eajobs/local_backend.h
 //
 // EA::Jobs::LocalBackend::JobInstance -- one slot in the LocalBackend scheduler's
-// job-instance table: the per-submission state (job parameters + handle + start
+// job-instance table: the per-submission state (entry point + arguments + start
 // timestamp), the per-phase begin/end event lists, an optional completion
 // semaphore, and the two spinlocks (a garbage-collector reservation word and the
 // event-list try-lock word). Plus the nested AutoTryLockEventList RAII helper.
@@ -36,9 +37,8 @@
 //   +0x004 mParameters        (44-byte job params blob)   -- memcpy(this+4, src, 0x2C)
 //          within mParameters: +0x10 priority(=128 default), +0x14 affinity(=63 default),
 //          +0x25 the "has semaphore" flag (lbz 0x29(this) gates the semaphore).
-//   +0x030 mStartTimeStamp    (u64; QueryPerformanceCounter low word, hi = flag byte)
-//   +0x038 mHandle            (JobInstanceHandle, 16B)    -- 4 dwords from a3[0..3]
-//   +0x048 mPad48             (8B gap, unwritten)
+//   +0x030 mStartTimeStamp    (u64; full QueryPerformanceCounter timestamp)
+//   +0x038 mExecution        (four arguments, then thread/begin/end qwords)
 //   +0x050 mEventLists[2]     (Detail::BucketListNode<Event,16>, 272B each: begin/end)
 //   +0x270 mGarbageCollectorLock (u32 reservation word)
 //   +0x274 mSemaphore         (EA::Thread::Semaphore, 16B; constructed only if flag set)
@@ -54,24 +54,9 @@ namespace Jobs
 {
 namespace LocalBackend
 {
-    // The 44-byte (0x2C) job-parameters blob copied wholesale into the instance by
-    // Initialize (`memcpy(this+4, src, 0x2C)`). Only the fields the X360 ctor stores
-    // a known default into are named (the priority/affinity defaults map exactly to
-    // the EA::Jobs JobPriority/JobAffinity enumerators); the rest stay as honest
-    // padding so each named field lands at its proven offset WITHOUT raw casts.
-    struct JobInstanceParameters
-    {
-        u8  mPad00[0x10];   // +0x04..+0x14 (ctor stores byte 0 at rel +0; rest filled by memcpy)
-        u32 mPriority;      // +0x14 -- ctor default 128 (JOB_PRIORITY_DEFAULT / MEDIUM)
-        u32 mAffinity;      // +0x18 -- ctor default 63  (JOB_AFFINITY_ANY)
-        u32 mPad18;         // +0x1C -- ctor default 0
-        u32 mPad1C;         // +0x20 -- ctor default 0
-        u32 mFlags24;       // +0x24 -- ctor default 1
-        u8  mPad28;         // +0x28 -- ctor default 0
-        u8  mbHasSemaphore; // +0x29 -- ctor default 0; nonzero == build mSemaphore
-        u8  mPad2A[2];      // +0x2A..+0x2C
-        u32 mPad2C;         // +0x2C -- ctor default 0  (end of the 0x2C blob)
-    };
+    // ARTIST Initialize copies a complete EntryPoint (44 bytes on X360).
+    // Typed native assignment preserves its wider function pointer.
+    using JobInstanceParameters = EntryPoint;
 
     // EA::Jobs::LocalBackend::JobInstance -- one scheduler slot (see header banner).
     struct JobInstance
@@ -89,13 +74,9 @@ namespace LocalBackend
         // null mNext/mSize). Does NOT touch the (conditionally-built) semaphore.
         ~JobInstance();
 
-        // @ 0x82BCAA18 -- (re)initialise this slot from a submitted job: copy the
-        // 44-byte parameters, stamp the start time (QueryPerformanceCounter low word),
-        // record the handle, mark live (mStatus 0, mGarbageCollectorLock 1), build the
-        // semaphore iff the parameters flag it, then reset the event lists + played
-        // flags. pParameters -> the 44-byte job-params source; rHandle -> the slot's
-        // JobInstanceHandle (4 dwords).
-        void Initialize(const void* pParameters, const JobInstanceHandle& rHandle);
+        // @ 0x82BCAA18 -- copy the entry point, full submission timestamp and four
+        // arguments, mark live, build the optional semaphore, reset phase lists.
+        void Initialize(const EntryPoint* pParameters, const Param* pArguments);
 
         // @ 0x82BCA968 -- garbage-collect this slot: spin to take the GC reservation
         // word (CAS 1 -> 0), destruct the semaphore iff present, clear the played
@@ -121,8 +102,14 @@ namespace LocalBackend
         u32                              mStatus;                // +0x000
         JobInstanceParameters            mParameters;            // +0x004 (0x2C)
         u64                              mStartTimeStamp;        // +0x030
-        JobInstanceHandle                mHandle;                // +0x038 (0x10)
-        u8                               mPad48[8];              // +0x048 (gap)
+        // ARTIST Run82BCC2F0 consumes four arguments, then overlays their
+        // storage with thread/start/end profiling qwords. Native arguments
+        // retain full pointers. Initialize starts the argument member lifetime.
+        union ExecutionData {
+            Param mArguments[4];
+            struct ProfileData { u64 mThreadId, mBegin, mEnd; } mProfile;
+            ExecutionData() : mArguments{} {}
+        } mExecution;
         Detail::BucketListNode<Event, 16> mEventLists[KI_NUM_EVENT_LISTS]; // +0x050 (2 * 0x110)
         u32                              mGarbageCollectorLock;  // +0x270
         // The semaphore lives at +0x274 but is built only when mbHasSemaphore is set
@@ -211,7 +198,7 @@ namespace LocalBackend
     //   +0x5A0 mpProfilingCallback          (profiling metrics sink; 0 == disabled)
     //   +0x5A4 mpProfilingContext           (user context handed to the callback)
     //   +0x5A8 mGarbageCollectorCursor      (s32 round-robin GC scan cursor)
-    //   +0x5AC mpDefaultSleepContext        (ctor arg a3; the host's wait context)
+    //   +0x5AC mpEnableProfiling        (ctor arg a3; scheduler profiling-enable flag)
     //   +0x5B0 mJobThreadSleepTimeoutMS     (u32; ctor default 1)
     //
     // The packed priority-queue word (u64 per slot):
@@ -239,13 +226,25 @@ namespace LocalBackend
 
         // The "free / completed" state tag (top 3 bits of the slot word's HIGH word).
         // X360: `lis r8,0x6000` compared against `clrrwi r9,r9,29` (top-3-bits mask).
-        enum { KU_SLOT_STATE_MASK = 0xE0000000u, KU_SLOT_STATE_FREE = 0x60000000u };
+        static constexpr u64 KU_SLOT_STATE_MASK = 0xE000000000000000ull;
+        static constexpr u64 KU_SLOT_STATE_FREE = 0x6000000000000000ull;
+        // FLAG PC-platform leaf: the original enabler writes the HIGH word
+        // of a packed u64 queue entry. Name both halves on little-endian PC.
+        union SlotWord {
+            u64 mValue;
+            struct { u32 mLow, mHigh; };
+            // FLAG PC-platform leaf: aligned x64 reads are atomic; MSVC volatile
+            // reloads/acquires worker publications instead of caching a queue word.
+            operator u64() const { return *reinterpret_cast<const volatile u64*>(&mValue); }
+            SlotWord& operator=(u64 value) { mValue=value; return *this; }
+        };
+        static_assert(sizeof(SlotWord)==sizeof(u64), "packed job slot width");
 
         // @ 0x82BCBCB8 -- bring the backend up: stamp the vtable, default the cursors,
         // construct the 32 idle worker threads, release the submission counter, default
-        // the profiling/sleep fields (uContext kept), then allocate + construct the
+        // the profiling/sleep fields (profiling flag pointer kept), then allocate + construct the
         // JobInstance table (uMaxJobs slots) and the parallel priority-queue (all -1).
-        LocalBackend(u32 uMaxJobs, void* pContext);
+        LocalBackend(u32 uMaxJobs, bool* pEnableProfiling);
 
         // @ 0x82BCBF38 -- tear the backend down: tell every worker to quit + wake it,
         // join them all, run a final garbage-collection pass, free the instance table
@@ -276,20 +275,11 @@ namespace LocalBackend
         virtual int SubmitEvent(u64 uSubmissionId, u64 uHandleQword,
                                 const void* pPayload, int iWhen);
 
-        // @ 0x82BCA878 (vtable +0x38) AddBarrier -- the SchedulerBackend +0x38 slot. The
-        // X360 body (the GetAllowSleepOn logic) consults whether the slot keyed by
-        // (uSubmissionId, uHandleQword) permits a blocking sleep-on: it dispatches its OWN
-        // vtable +0x30 (IsJobComplete) and, if the job is not already complete and the slot
-        // still holds this submission, reads the instance's mAllowSleepOn byte (returning 0
-        // otherwise). This IS the override that makes LocalBackend concrete; the dependent
-        // handle is the X360's r4 argument (the body keys off the submission id / handle
-        // qword the dependency carries). (Backend-internal name: GetAllowSleepOn.)
-        virtual void AddBarrier(JobInstanceHandle* pDependentHandle, u64 uSubmissionId,
-                                u64 uHandleQword);
-
-        // The +0x38 body's recovered result (0 == not sleepable). AddBarrier evaluates it
-        // for its side-effect dispatch; surfaced as a named helper so the value the X360
-        // computes is reachable without a void return swallowing it.
+        // ARTIST82BCA7B8, vtable+38: return an enabling Event by value.
+        virtual Event AddBarrier(u64 uSubmissionId, u64 uHandleQword);
+        // ARTIST82BC9CB8: expose the ready-word address and value.
+        void GetEnabler(u64 uSubmissionId, u64 uHandleQword, u32*& pLocation, u32& uValue);
+        // ARTIST82BCA878 is the distinct vtable+40 sleepability query.
         int GetAllowSleepOn(u64 uSubmissionId, u64 uHandleQword);
 
         // @ 0x82BCBA80 (vtable +0x3C) SleepOn: BLOCKING wait on the slot keyed by
@@ -344,10 +334,9 @@ namespace LocalBackend
         // @ 0x82BC9CB8 -- read the slot keyed by uHandleQword: write its packed
         // priority-queue entry pointer to *ppEntry and the masked (low-61-bit) state word
         // (>>32) to *puState. (X360 internal name: GetEnabler.)
-        void GetEnabler(u64 uSubmissionId, u64 uHandleQword, u64** ppEntry, u32* puState);
 
         // @ 0x82BC9E68 / 0x82BC9E70 -- install the profiling sink + its user context.
-        void SetProfilingCallback(void* pCallback);
+        void SetProfilingCallback(ProfilerCallback* pCallback);
         void SetProfilingContext(void* pContext);
 
         // @ 0x82BCBB48 -- force one full garbage-collection sweep (FlushProfile == GC
@@ -367,15 +356,15 @@ namespace LocalBackend
 
         // +0x000 inherited Detail::SchedulerBackend vtable
         JobInstance*              mpJobInstances;            // +0x004
-        u64*                      mpPriorityQueue;           // +0x008
+        SlotWord*                 mpPriorityQueue;           // +0x008
         s32                       mNextSlot;                 // +0x00C
         s32                       mNumSlots;                 // +0x010
         JobThread                 mThreads[KI_NUM_THREADS];  // +0x014 (32 * 0x2C)
         u64                       mSubmissionCounter;        // +0x598
-        void*                     mpProfilingCallback;       // +0x5A0
+        ProfilerCallback*         mpProfilingCallback;       // +0x5A0
         void*                     mpProfilingContext;        // +0x5A4
         s32                       mGarbageCollectorCursor;   // +0x5A8
-        void*                     mpDefaultSleepContext;     // +0x5AC (ctor arg a3)
+        bool*                     mpEnableProfiling;     // +0x5AC (ctor arg a3)
         u32                       mJobThreadSleepTimeoutMS;  // +0x5B0
 
     private:

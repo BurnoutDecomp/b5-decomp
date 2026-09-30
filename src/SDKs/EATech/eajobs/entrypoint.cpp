@@ -25,6 +25,10 @@ namespace EA
 {
 namespace Jobs
 {
+    const char* EntryPoint::GetName() const { return mName; }
+    JobAffinity EntryPoint::GetAffinity() const { return mAffinity; }
+    JobEnvironment EntryPoint::GetEnvironment() const { return mEnvironment; }
+    JobPriority EntryPoint::GetPriority() const { return mPriority; }
     // ------------------------------------------------------------------------
     // SetCode @0x82BC9840 -- ⚠️ EXPORT HOLE (no 0x82BC9840.json). Five instructions
     // lifted from the image with ppcdis.py:

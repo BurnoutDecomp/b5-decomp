@@ -400,7 +400,7 @@ namespace EA { namespace Thread {
     { gThreadLocalStorageSlot = const_cast<void*>(pData); return true; }         // FLAG PC-platform leaf: single-threaded TLS (one slot)
     void* ThreadLocalStorage::GetValue() { return gThreadLocalStorageSlot; }     // FLAG PC-platform leaf: single-threaded TLS (one slot)
 
-    IRunnable::~IRunnable() {}   // FLAG PC-platform leaf: single-threaded PC (empty virtual dtor)
+    // IRunnable destruction is supplied by the native EAThread header.
 
 }}
 
@@ -418,39 +418,8 @@ EA::Thread::ThreadLocalStorage gAptTargetTls;
 // BrnEAThreadX360.h and would collide with the int GetThreadId() above).
 namespace EA { namespace Jobs {
 
-    Event::Event() {}   // FLAG PC-platform leaf: synchronous jobs on PC (no event state)
-
-    JobThreadHandle::JobThreadHandle(Detail::SchedulerBackend* pBackend, u32 uHandle)   // FLAG PC-platform leaf: synchronous jobs on PC
-    { (void)pBackend; (void)uHandle; }
-    JobThreadHandle::JobThreadHandle() {}   // FLAG PC-platform leaf: synchronous jobs on PC
-
-    // The vendor accessors (declaration-only in entry_point.h): trivial member reads,
-    // inlined on the console.
-    JobAffinity    EntryPoint::GetAffinity()    const { return mAffinity; }
-    JobEnvironment EntryPoint::GetEnvironment() const { return mEnvironment; }
-    JobPriority    EntryPoint::GetPriority()    const { return mPriority; }
-
-    // The mDependencies twin of Job::GetNumDependents (job.cpp): this node's bucket count
-    // + the overflow chain's ListSize.
-    int Job::GetNumDependencies() const
-    {
-        u32 luOverflow = 0;
-        if (mDependencies.mNext)
-            luOverflow = mDependencies.mNext->ListSize();
-        return static_cast<int>(mDependencies.mSize + luOverflow);
-    }
-
-    // Minimal LocalBackend-scope decls for the two worker entry points (jobs run
-    // synchronously on the main thread, so both are no-ops).
-    namespace LocalBackend {
-        class LocalBackend;
-        struct JobInstance { void Run(); };
-        class  JobThread   { public: void Start(const EA::Jobs::JobThreadParameters* pParameters, LocalBackend* pBackend); };
-
-        void JobInstance::Run() {}   // FLAG PC-platform leaf: synchronous jobs on PC (main-thread run)
-        void JobThread::Start(const EA::Jobs::JobThreadParameters* pParameters, LocalBackend* pBackend)   // FLAG PC-platform leaf: synchronous jobs on PC (no worker threads)
-        { (void)pParameters; (void)pBackend; }
-    }
+    // Job execution/start and event/worker-handle construction are now homed
+    // in the scheduler TUs. Do not reintroduce synchronous no-op substitutes.
 
 }}
 

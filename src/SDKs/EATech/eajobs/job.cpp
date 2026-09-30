@@ -55,20 +55,7 @@ namespace Jobs
     // li 0x80 at +0x10), affinity 63 (JOB_AFFINITY_ANY, li 0x3F at +0x14),
     // code-recycle 1 (the li 1 at +0x20), everything else zero. The block is built
     // here field-by-field so no struct-internal layout is hardcoded.
-    static EntryPoint MakeDefaultEntryPoint()
-    {
-        EntryPoint lEntryPoint;
-        std::memset(&lEntryPoint, 0, sizeof(lEntryPoint));
-        // The X360 default block stores: name[0]=0 (memset covers it), priority@+0x10
-        // = 0x80, affinity@+0x14 = 0x3F, code-recycle@+0x20 = 1. EntryPoint's setters
-        // are the only public mutators; the priority/code-recycle fields have no
-        // setter, so the default block is materialised through the raw 44-byte image.
-        u8* lpBytes = reinterpret_cast<u8*>(&lEntryPoint);
-        *reinterpret_cast<u32*>(lpBytes + 0x10) = 128; // mPriority    = JOB_PRIORITY_DEFAULT
-        *reinterpret_cast<u32*>(lpBytes + 0x14) = 63;  // mAffinity    = JOB_AFFINITY_ANY
-        *reinterpret_cast<u32*>(lpBytes + 0x20) = 1;   // mCodeRecycle = CODE_RECYCLE_DEFAULT
-        return lEntryPoint;
-    }
+    static EntryPoint MakeDefaultEntryPoint() { return EntryPoint(); }
 
     // @ 0x82BCA110 -- reset the job to its default (empty) state.
     void Job::Clear()
@@ -191,6 +178,11 @@ namespace Jobs
         return mDependents.mBucket[iIndex];
     }
 
+    int Job::GetNumDependencies() const
+    {
+        return static_cast<int>(mDependencies.ListSize());
+    }
+
     // @ 0x82BCA390 -- how many dependents across the bucket chain.
     int Job::GetNumDependents() const
     {
@@ -230,14 +222,14 @@ namespace Jobs
     }
 
     // @ 0x82BCB238 -- spin-wait on this job's instance handle until done.
-    void Job::WaitOn()
+    void Job::WaitOn(WaitOnCallback* pCallback, void* pContext, s32 lSleepMs) const
     {
         // Liveness guard read off mJobInstanceHandle (the +0x40 handle), then forward
-        // to JobInstanceHandle::WaitOn (the spin/yield loop) with no extra knobs.
+        // to JobInstanceHandle::WaitOn, preserving r4/r5/r6 through the tail call.
         if (mJobInstanceHandle.mSchedulerBackend != 0
             && (mJobInstanceHandle.mIndex != 0 || mJobInstanceHandle.mSubmissionId != 0))
         {
-            mJobInstanceHandle.WaitOn(); // no-knobs form (see job_types.h WaitOn note)
+            mJobInstanceHandle.WaitOn(pCallback, pContext, lSleepMs);
         }
     }
 
@@ -262,9 +254,7 @@ namespace Jobs
         // Build a barrier handle against this instance and copy it (four words) into
         // mStartEvent (+0x340). The X360 AddBarrier(&temp, &mJobInstanceHandle) makes a
         // fresh handle wait on this job's instance; its returned 16 bytes seed mStartEvent.
-        JobInstanceHandle lStartHandle;
-        lStartHandle.AddBarrier(mJobInstanceHandle);
-        std::memcpy(&mStartEvent, &lStartHandle, sizeof(mStartEvent));
+        mStartEvent=mJobInstanceHandle.AddBarrier();
         return &mJobInstanceHandle;
     }
 
@@ -315,8 +305,7 @@ namespace Jobs
                 // submit the edge through the dependency job's backend (vtable +0x34).
                 if (lrDependency.mJob != 0)
                 {
-                    JobInstanceHandle lBarrier;
-                    lBarrier.AddBarrier(mJobInstanceHandle);
+                    Event lBarrier=mJobInstanceHandle.AddBarrier();
 
                     const Job* lpDepJob = lrDependency.mJob;
                     Detail::SchedulerBackend* lpBackend =
@@ -334,8 +323,7 @@ namespace Jobs
                     && (lrDependency.mJobInstanceHandle.mIndex != 0
                         || lrDependency.mJobInstanceHandle.mSubmissionId != 0))
                 {
-                    JobInstanceHandle lBarrier;
-                    lBarrier.AddBarrier(mJobInstanceHandle);
+                    Event lBarrier=mJobInstanceHandle.AddBarrier();
 
                     Detail::SchedulerBackend* lpBackend =
                         lrDependency.mJobInstanceHandle.mSchedulerBackend;

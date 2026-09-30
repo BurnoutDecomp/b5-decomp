@@ -71,6 +71,22 @@ namespace LocalBackend
         return 0;
     }
 
+    // ARTIST82BC9EC8..82BC9F5C (export hole).
+    void JobThread::Start(const JobThreadParameters* pParameters,LocalBackend* pBackend)
+    {
+        mParameters=*pParameters;
+        mpBackend=pBackend;
+        mbStarted=true;
+        mbQuit=false;
+        EA::Thread::ThreadParameters parameters;
+        parameters.mpName=mParameters.ptrToName;
+        parameters.mnProcessor=mParameters.processor;
+        parameters.mnPriority=mParameters.priority;
+        parameters.mnStackSize=mParameters.stackSize;
+        mThread.Begin(this,nullptr,&parameters,
+            EA::Thread::Thread::GetGlobalRunnableClassUserWrapper());
+    }
+
     // @ 0x82BC9F60 -- if started, join the OS thread; then clear the started flag.
     void JobThread::WaitForEnd()
     {
@@ -78,7 +94,7 @@ namespace LocalBackend
         {
             // The X360 passes (&unk_821823E8, 0): wait forever, no return-value
             // out-param. unk_821823E8 is the "infinite" absolute-timeout sentinel.
-            mThread.WaitForEnd(0, 0);
+            mThread.WaitForEnd(EA::Thread::kTimeoutNone, nullptr);
         }
         mbStarted = false;
     }

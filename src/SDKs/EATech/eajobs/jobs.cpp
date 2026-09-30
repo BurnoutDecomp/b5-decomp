@@ -1,6 +1,7 @@
 #include "SDKs/EATech/eajobs/jobs.h"
 
 #include <intrin.h> // _InterlockedExchange (MSVC atomic intrinsic)
+#include <windows.h>
 
 // ============================================================================
 // SDKs/EATech/eajobs/jobs.cpp
@@ -23,13 +24,6 @@ namespace Jobs
     // off_8327F280 -- the process-wide Jobs allocator, installed by SetAllocator
     // and consumed by the rest of the job_manager SDK.
     static void* spAllocator = 0;
-
-    // dbl_8327F288 -- the lazily-cached seconds-per-tick value (0.0 until the first
-    // TicksToSeconds call computes it).
-    static f64 sdSecondsPerTick = 0.0;
-
-    // The X360 hardware timebase frequency (asm: lis 0x2F9 / ori 0x838 = 0x02F90838).
-    static const u64 KU_TIMEBASE_FREQUENCY = 49875000ull;
 
     // @ 0x82BCC6E8 -- atomic store of uValue into *puLocation; returns puLocation.
     u32* AtomicStore(u32* puLocation, u32 uValue)
@@ -56,12 +50,13 @@ namespace Jobs
     // @ 0x82BC9988 -- ticks -> seconds, caching 1.0/freq on first use.
     f32 TicksToSeconds(u64 uTicks)
     {
-        f64 ldSecondsPerTick = sdSecondsPerTick;
-        if (sdSecondsPerTick == 0.0)
-        {
-            ldSecondsPerTick = 1.0 / static_cast<f64>(KU_TIMEBASE_FREQUENCY);
-            sdSecondsPerTick = ldSecondsPerTick;
-        }
+        // FLAG PC-platform leaf: native jobs timestamp with QPC. Local-static
+        // initialization publishes its frequency safely to concurrent workers.
+        static const f64 ldSecondsPerTick = [] {
+            LARGE_INTEGER frequency;
+            QueryPerformanceFrequency(&frequency);
+            return 1.0 / static_cast<f64>(frequency.QuadPart);
+        }();
         return static_cast<f32>(static_cast<f64>(uTicks) * ldSecondsPerTick);
     }
 

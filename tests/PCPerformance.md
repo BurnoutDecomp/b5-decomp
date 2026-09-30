@@ -603,6 +603,40 @@ activation gates. Original ResourceModule returns the pool's busy result to
 GameDataModule and `mbStalled`; it does not spin internally. Restore that return
 propagation with the staged pipeline. This batch establishes no FPS gain.
 
+## Native job execution and decompression integration
+
+The recovered EAJobs scheduler now executes jobs through the shipping native
+EAThread library. The repairs preserve full-width entry points and arguments,
+the original high-word queue states and barriers, event-only jobs, completion
+semaphores, profiling records, and worker shutdown. Wait callbacks retain their
+pointer context and full 64-bit start timestamp. Worker identity uses the same
+native system ID for enumeration and profiling.
+
+`python b5-decomp/tests/run_pc_native_jobs.py` passes 34 checks with actual
+native workers. Erasing saved arguments fails eight checks in the original
+18-check suite; truncating the wait timestamp fails three in the expanded
+32-check suite. The relocation integration still passes 30 checks.
+
+`python b5-decomp/tests/run_pc_native_decompression.py` passes ten checks using
+the actual engine heaps, scheduler, EAThread workers, decompression interface,
+worker and zlib. The original 400 KiB arena accommodates 128 native job slots;
+the 128 KiB inflate arena handles a 700,000-byte resource across two batches.
+Polling and blocking completion reproduce exact bytes, preserve guards and
+return both heaps' storage after repeated streams and teardown. Disk input is
+fixture data; this does not establish native filesystem/loader integration.
+
+The canonical 2,668-TU build and scheduler review pass. Hardware job startup,
+allocator-backed loader construction, I/O routing and failure teardown remain
+activation work. The production watchdog installer is also unresolved; the
+wait-helper test installs its predicate inside the fixture. This component
+repair establishes no measured gameplay FPS gain.
+
+Final build `abd4531d1fd0` also passes a 120-second visual Road Rage check
+(`combat_native_jobs_reviewed_0930`): 16 credited player takedowns across seven
+rivals, peak five crashing/two airborne rivals, and zero assertions/exceptions.
+All 1,178 focus samples are foreground. Captured damage, world and HUD frames
+were inspected; screenshot capture excludes this run from FPS comparisons.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still
