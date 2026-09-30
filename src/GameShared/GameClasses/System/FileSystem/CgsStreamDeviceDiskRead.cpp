@@ -200,6 +200,26 @@ namespace CgsFileSystem
         Service();
     }
 
+    // ARTIST8290112C-48 /8290132C-44: each operation locks independently;
+    // the ring's locked-block flags protect the exposed bytes between calls.
+    bool StreamDeviceDiskRead::StartAsyncRead(void** lppData, u32* lpuAmount)
+    {
+        FileFutexHelper lGuard(mFutex);
+        return StartAsyncReadInternal(lppData, lpuAmount);
+    }
+
+    void StreamDeviceDiskRead::StopAsyncRead(u32 luAmount)
+    {
+        FileFutexHelper lGuard(mFutex);
+        StopAsyncReadInternal(luAmount);
+    }
+
+    // Inlined at ARTIST82900FCC, before deciding whether to prefetch.
+    bool StreamDeviceDiskRead::IsEndOfFile() const
+    {
+        return mbIsEndOfFile;
+    }
+
     // Read @ 0x829041B8 — synchronous read of luAmount bytes out of the streamed ring into lpDest
     // (lpDest may be null to just consume). Loops draining loaded blocks until the request is
     // satisfied or the stream runs dry; returns the number of bytes delivered (luAmount on full

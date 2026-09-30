@@ -574,8 +574,31 @@ a recovery capture also shows sparse/white ground. This is not complete visual
 coverage or a combat timing result. Final build `7f5bc07983c1` additionally
 contains the tested resident-replacement guard; that staged path is still cold.
 
+The compressed stage now restores ARTIST's 512 KiB input batches and
+nonblocking job completion. It preserves the staging buffer while a job is
+pending and carries an unfinished resource into the next batch. The previously
+missing `WaitForFlushJobs` body is at `828DB428`; the exporter omitted it.
+Source-present partial entries and a created-but-source-empty next entry have
+different completion checks, which the restored code retains.
+
+The combined production stage/interface/worker/zlib fixture passes 15 checks:
+a 700,000-byte incompressible resource split across batches, gaps and resident
+skips, pending-job protection, completion on another thread, exact output bytes,
+guards, allocation cleanup, delayed disk availability and blocking completion.
+Restoring the old stage fails ten checks; dropping the carried entry fails three.
+Disk, job scheduling and heap allocation remain explicit fixture boundaries.
+The uncompressed fixture still passes 31 checks, with aborting compression
+boundaries so accidental compressed execution cannot produce a false pass.
+
+Build `fadb41f1fab4` passes the canonical 2,668-TU build and independent review.
+Its 90-second visual Road Rage check (`combat_compressed_layout_0930`) records
+eight credited takedowns across four rivals, peak five crashing/two airborne
+rivals, an active event, and zero assertions/exceptions. This is functional
+coverage only: screenshot capture and 821/882 foreground samples exclude FPS
+comparisons, and the restored compressed path is still inactive in the game.
+
 ResourceModule still selects synchronous loading. Allocator-backed construction,
-compressed-stream submission/waits, failed-load teardown and staged I/O remain
+native job execution, failed-load teardown and staged I/O remain
 activation gates. Original ResourceModule returns the pool's busy result to
 GameDataModule and `mbStalled`; it does not spin internally. Restore that return
 propagation with the staged pipeline. This batch establishes no FPS gain.

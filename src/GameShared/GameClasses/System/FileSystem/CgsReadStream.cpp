@@ -20,6 +20,21 @@ void ReadStream::Seek(u64 auPosition)
     mpStreamDevice->Seek(auPosition);
 }
 
+bool ReadStream::StartAsyncRead(void** lppData, u32* lpuAmount)
+{
+    return mpStreamDevice->StartAsyncRead(lppData, lpuAmount);
+}
+
+void ReadStream::StopAsyncRead(u32 luAmount)
+{
+    mpStreamDevice->StopAsyncRead(luAmount);
+}
+
+bool ReadStream::IsBufferComplete() const
+{
+    return mpStreamDevice->IsEndOfFile();
+}
+
 bool ReadStream::IsValid() const
 {
     return mpStreamDevice != 0;

@@ -40,7 +40,10 @@ shadow={
     '#pragma once\nnamespace CgsModule { struct ModuleSingleBuffered { bool mbIsNewModule=false; void Construct(){} }; }\n',
  'src/GameShared/Jobs/DecompressionJob/DecompressionJobInterface.h':
     '#pragma once\n#include <cstdlib>\n#include "types.hpp"\nnamespace CgsResource { struct DecompressionJobInterface {\n'
-    'void BeginStream(){std::abort();} void CreateEntry(void*,u32){std::abort();}\n}; }\n'
+    'void BeginStream(){std::abort();} void CreateEntry(void*,u32){std::abort();}\n'
+    'bool WaitForFlushJobs(bool){std::abort();} void EndStream(){std::abort();}\n'
+    'void AppendToEntry(void*,u32){std::abort();} void FinishEntry(){std::abort();}\n'
+    'bool RunFlushJobs(){std::abort();}\n}; }\n'
 }
 numeric=compile_and_run(Path(__file__).with_name('PCBundleStages.cpp'),
     'pc_bundle_stages.inc',adapter,'PCBundleStages',shadow=shadow,
