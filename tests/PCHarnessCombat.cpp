@@ -17,6 +17,14 @@ int main() {
     check(!AimHarnessCombatPC(3,8,0,1,0,0,0).mbCommit,"retain AI recovery when stopped");
     const auto side = AimHarnessCombatPC(10,0,0,1,0,30,50);
     check(side.mbCommit && std::fabs(side.mfSteering) <= 0.55f,"bound steering at high speed while attacking alongside");
+    const auto close = AimHarnessCombatPC(2,0,0,1,0,50,50);
+    const auto closeLeft = AimHarnessCombatPC(-2,0,0,1,0,50,50);
+    check(close.mbCommit && close.mfSteering==-0.55f && closeLeft.mfSteering==0.55f,
+        "alongside rival gets a decisive bounded side hit in either direction");
+    check(std::fabs(AimHarnessCombatPC(2,12,0,1,0,50,50).mfSteering)<std::fabs(close.mfSteering),
+        "shove releases once the rival is ahead, returning to an approach line");
+    check(std::fabs(AimHarnessCombatPC(0.1f,0,0,1,0,50,50).mfSteering)<0.1f,
+        "nearly centred target does not trigger alternating full-steer shoves");
     std::printf("PCHarnessCombat: %d checks, %d failures\n",checks,failures);
     return failures ? 1 : 0;
 }

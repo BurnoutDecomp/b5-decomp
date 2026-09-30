@@ -1709,6 +1709,7 @@ void AIModule::HarnessAIPadPursuit(AICar* lpPlayerCar)
         f32  mfSeparation;   // ground-plane metres between the two AICar positions
         f32  mfAheadness;    // metres along the player's facing
         bool mbInWindow;     // inside the console's slam window (see the constants above)
+        HarnessCombatAimPC mCombatAim;
     };
     Candidate   laCandidates[KI_MAX_OUT_OF_RANGE_RACE_CARS];
     s32         liCandidates     = 0;
@@ -1752,6 +1753,7 @@ void AIModule::HarnessAIPadPursuit(AICar* lpPlayerCar)
         lrCandidate.mfSeparation = std::sqrt(lfDx * lfDx + lfDz * lfDz);
         lrCandidate.mfAheadness  = lfDx * lfFacingX + lfDz * lfFacingZ;
         lrCandidate.mbInWindow   = false;
+        lrCandidate.mCombatAim = {false, 0.0f};
         // FLAG PC-platform leaf: a benchmark attacker should stay with the
         // moving pack, rather than U-turn after a passed car or ram head-on.
         if (lbCombat)
@@ -1765,6 +1767,9 @@ void AIModule::HarnessAIPadPursuit(AICar* lpPlayerCar)
                 --liCandidates;
                 continue;
             }
+            const Vector3 lVelocity = lpCar->GetVelocity();
+            lrCandidate.mCombatAim = AimHarnessCombatPC(lfDx, lfDz, lfFacingX, lfFacingZ,
+                lVelocity.x, lVelocity.z, lpPlayerCar->GetSpeed());
         }
 
         // The slam window, from the player driver's own avoidance record of this car: a rival the
@@ -1791,6 +1796,7 @@ void AIModule::HarnessAIPadPursuit(AICar* lpPlayerCar)
     const Candidate* lpNearest = 0;
     const Candidate* lpSlam    = 0;
     const Candidate* lpCurrent = 0;
+    const Candidate* lpCombatReach = 0;
     for (s32 liCandidate = 0; liCandidate < liCandidates; ++liCandidate)
     {
         const Candidate* lpCandidate = &laCandidates[liCandidate];
@@ -1806,6 +1812,9 @@ void AIModule::HarnessAIPadPursuit(AICar* lpPlayerCar)
         {
             lpCurrent = lpCandidate;
         }
+        if (lpCandidate->mCombatAim.mbCommit
+            && (lpCombatReach == 0 || lpCandidate->mfSeparation < lpCombatReach->mfSeparation))
+            lpCombatReach = lpCandidate;
     }
 
     // ---- the target --------------------------------------------------------------------------
@@ -1820,7 +1829,15 @@ void AIModule::HarnessAIPadPursuit(AICar* lpPlayerCar)
 
     const Candidate* lpTargetCandidate = lpCurrent;
     const char*      lpcWhy            = "";
-    if (lpSlam != 0 && !(lpCurrent != 0 && lpCurrent->mbInWindow))
+    // An avoidance-fan slam candidate can be across too many lanes for the
+    // combat pad to reach. Prefer a reachable rival over retaining that target.
+    if (lbCombat && lpCombatReach != 0)
+    {
+        if (!(lpCurrent != 0 && lpCurrent->mCombatAim.mbCommit && lpCurrent->mbInWindow))
+            lpTargetCandidate = lpCombatReach;
+        lpcWhy = "reachable combat intercept";
+    }
+    else if (lpSlam != 0 && !(lpCurrent != 0 && lpCurrent->mbInWindow))
     {
         lpTargetCandidate = lpSlam;      // a rival inside the slam window is rammed first
         lpcWhy            = "inside the slam window";
@@ -1878,11 +1895,7 @@ void AIModule::HarnessAIPadPursuit(AICar* lpPlayerCar)
     const AICar* lpTarget        = GetAICar(static_cast<u32>(lrPad.miTarget));
     if (lbCombat && lpPlayerCar->mbIsInGameMode && !lpPlayerCar->IsCrashing() && !lpPlayerCar->IsInAir())
     {
-        const Vector3 lTargetPosition = lpTarget->GetPosition();
-        const Vector3 lTargetVelocity = lpTarget->GetVelocity();
-        const HarnessCombatAimPC lAim = AimHarnessCombatPC(
-            lTargetPosition.x - lPlayerPosition.x, lTargetPosition.z - lPlayerPosition.y,
-            lfFacingX, lfFacingZ, lTargetVelocity.x, lTargetVelocity.z, lpPlayerCar->GetSpeed());
+        const HarnessCombatAimPC lAim = lpTargetCandidate->mCombatAim;
         lrPad.mbCombatControl = lAim.mbCommit;
         lrPad.mfCombatSteering = lAim.mfSteering;
     }

@@ -5,8 +5,18 @@ $case.Name = 'pc_performance_combat'
 $case.Bug = 'A combat performance run must contain repeated player takedowns and tumbling rival wrecks.'
 $case.Frames = $false
 $case.Run.MaxSeconds = 150
-$case.DiagEnv = 'BRN_AI_PAD_PLAYER=combat,BRN_AI_MADNESS=1,BRN_FRAME_PROFILE=1,BRN_RIVAL_DAMAGE_DIAG=1,BRN_TD_DIAG=1,BRN_CRASHCAM_DIAG=1'
+$case.DiagEnv = 'BRN_AI_PAD_PLAYER=combat,BRN_AI_MADNESS=1,BRN_DEBUG_PLAYER_CAR=PUSPK01,BRN_FRAME_PROFILE=1,BRN_RIVAL_DAMAGE_DIAG=1,BRN_TD_DIAG=1,BRN_CRASHCAM_DIAG=1'
 $case.Checks += @(
+    @{ Kind = 'Script'; Name = 'requested combat car actually streamed'; Script = {
+        param($ctx)
+        $actual = '(none)'
+        $started = $false
+        foreach ($line in $ctx.LogLines) {
+            if ($line -match '\[start\] \*+ HARNESS-ONLY START INJECTION') { $started = $true; break }
+            if ($line -match 'STRM: Adding racecar for streaming: car=0, model=VEH_([A-Z0-9]+)\b') { $actual = $Matches[1] }
+        }
+        @{ Pass = $started -and $actual -eq 'PUSPK01'; Detail = "streamed player model before event=$actual, expected PUSPK01; event started=$started" }
+    } }
     @{ Kind = 'Script'; Name = 'at least five player takedowns across three rivals'; Script = {
         param($ctx)
         $victims = @($ctx.LogLines | ForEach-Object {
