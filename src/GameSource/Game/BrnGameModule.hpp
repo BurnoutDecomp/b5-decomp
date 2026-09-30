@@ -439,6 +439,11 @@ namespace BrnGame
         void DebugManagerRender();
 
         // IThreadClass implementation (the engine drives these on their threads).
+        virtual void Update();                                      // ARTIST 0x823C5480
+        void BeginFramesPC(bool lbAllowParallel);
+        void EndFramesPC();
+        void PrepareDebugOverlayForDispatchPC();
+        void SynchronizeDispatchPC();
         bool UpdateThread() override;
         void DispatchThread() override;                               // @ BrnGameModule.cpp:1221
         void ResourceUpdateThread(Mutex* lpMutex) override;
@@ -1132,7 +1137,16 @@ namespace BrnGame
         // side writes it (BridgeGuiToGame's loading-screen commands, IsStalled/IsDiskError,
         // brightness/contrast), OnEndOfUpdateFrame swaps it, and the dispatch/render side
         // reads it (BrnRendererModule::Render's per-frame AddCommand forward).
+        CgsSystem::ThreadLayout mThreadLayout;                        // h:530
         BrnGame::DispatchThreadInputBufferManager mDispatchThreadInputBufferManager; // h:531
+        // FLAG PC-platform leaf: native initialization and reply pacing while
+        // simulation is decoupled from the render rate.
+        bool mbFrameLayoutInitializedPC = false;
+        bool mbAllowFrameOverlapPC = false;
+        bool mbActiveFrameOverlapPC = false;
+        bool mbInsideUpdatePC = false;
+        bool mbResourceRequestedPC = false;
+        bool mbPrepareResourceRequestedPC = false;
         // The calibration settings the game module OWNS and BridgeGuiToGame @0x823CB758 publishes
         // into the dispatch write buffer every update frame (its unconditional tail:
         // LockForWrite / SetBrightness / SetContrast / SetCalibrationUnfriendlyEnablePostFx /

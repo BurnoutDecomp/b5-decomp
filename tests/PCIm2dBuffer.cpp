@@ -7,8 +7,10 @@
 #include <vector>
 #include <cmath>
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"
+#include "GameShared/GameClasses/Gui/PC/CgsAptRenderBackendPC.h"
 #include "pc/gcm/renderengine/device.h"
 #include "pc/gcm/renderengine/texture.h"
+#include "pc/gcm/renderengine/AssertFramePCLeaf.h"
 
 namespace renderengine {
 IDirect3DDevice9* gDevice = nullptr;
@@ -89,6 +91,63 @@ struct FailingAllocator : rw::LinearResourceAllocator {
     }
     void DoFree(const rw::Resource&) override { ++frees; }
 };
+static void CheckAssertFrame(IDirect3DDevice9* device, IDirect3DSurface9* scene, unsigned width, unsigned height) {
+    IDirect3DSurface9* modal=nullptr;
+    IDirect3DSurface9* depth=nullptr;
+    const HRESULT mr=device->CreateRenderTarget(width,height,D3DFMT_X8R8G8B8,D3DMULTISAMPLE_NONE,0,FALSE,&modal,nullptr);
+    const HRESULT dr=device->CreateDepthStencilSurface(width,height,D3DFMT_D24S8,D3DMULTISAMPLE_NONE,0,TRUE,&depth,nullptr);
+    Check(SUCCEEDED(mr) && SUCCEEDED(dr),"native assertion targets prepare");
+    if (!modal || !depth) { if(modal)modal->Release(); if(depth)depth->Release(); return; }
+    device->SetRenderTarget(0,scene); device->SetDepthStencilSurface(depth);
+    const D3DVIEWPORT9 before={7,9,width/2,height/2,.2f,.8f};
+    device->SetViewport(&before);
+    device->SetRenderState(D3DRS_ZENABLE,TRUE);
+    const float oldValue[4]={1,2,3,4}, newValue[4]={5,6,7,8};
+    renderengine::PCSetVertexShaderConstantF(device,17,oldValue,1);
+    renderengine::PCSetSamplerState(device,3,D3DSAMP_ADDRESSU,D3DTADDRESS_WRAP);
+    Check(SUCCEEDED(device->BeginScene()),"assertion interrupts an open scene");
+    {
+        renderengine::PCAssertFrame saved(device,modal);
+        Check(saved.IsReady(),"modal frame can preserve the interrupted state");
+        IDirect3DSurface9* bound=nullptr; device->GetRenderTarget(0,&bound);
+        Check(bound==modal,"assertion binds its visible target instead of the offscreen scene");
+        if(bound)bound->Release();
+        device->BeginScene();
+        device->Clear(0,nullptr,D3DCLEAR_TARGET,0xff00ff00,1,0);
+        renderengine::PCSetVertexShaderConstantF(device,17,newValue,1);
+        renderengine::PCSetSamplerState(device,3,D3DSAMP_ADDRESSU,D3DTADDRESS_CLAMP);
+        device->SetRenderState(D3DRS_ZENABLE,FALSE);
+        device->EndScene();
+    }
+    Check(FAILED(device->BeginScene()),"resume restores the caller's open scene bracket");
+    device->EndScene();
+    IDirect3DSurface9* bound=nullptr; IDirect3DSurface9* restoredDepth=nullptr;
+    device->GetRenderTarget(0,&bound); device->GetDepthStencilSurface(&restoredDepth);
+    Check(bound==scene && restoredDepth==depth,"resume restores colour and depth targets");
+    if(bound)bound->Release(); if(restoredDepth)restoredDepth->Release();
+    D3DVIEWPORT9 viewport={}; DWORD z=0,address=0; float values[4]={};
+    device->GetViewport(&viewport); device->GetRenderState(D3DRS_ZENABLE,&z);
+    device->GetVertexShaderConstantF(17,values,1);
+    device->GetSamplerState(3,D3DSAMP_ADDRESSU,&address);
+    Check(!std::memcmp(&viewport,&before,sizeof(before)) && z==TRUE && address==D3DTADDRESS_WRAP
+          && !std::memcmp(values,oldValue,sizeof(values)),"resume restores pipeline, viewport and shader state");
+    renderengine::PCSetVertexShaderConstantF(device,17,newValue,1);
+    renderengine::PCSetSamplerState(device,3,D3DSAMP_ADDRESSU,D3DTADDRESS_CLAMP);
+    device->GetVertexShaderConstantF(17,values,1);
+    device->GetSamplerState(3,D3DSAMP_ADDRESSU,&address);
+    Check(!std::memcmp(values,newValue,sizeof(values)) && address==D3DTADDRESS_CLAMP,
+          "native caches cannot skip the first upload after context restoration");
+    const auto pixels=Pixels(modal);
+    Check(!pixels.empty() && (pixels[0]&0xffffff)==0x00ff00,"modal rendering reached the visible surface");
+    {
+        renderengine::PCAssertFrame saved(device,modal);
+        device->BeginScene(); device->EndScene();
+    }
+    Check(SUCCEEDED(device->BeginScene()),"an assertion between frames leaves the scene closed");
+    device->EndScene();
+    device->SetDepthStencilSurface(nullptr);
+    depth->Release(); modal->Release();
+}
 int main() {
     HWND window = CreateWindowA("STATIC", "Buffered 2D regression", WS_OVERLAPPEDWINDOW,
         0,0,320,180,nullptr,nullptr,GetModuleHandle(nullptr),nullptr);
@@ -156,18 +215,21 @@ int main() {
         buffer.RenderEnd(topology,glyph,4); buffer.EndRendering();
         renderengine::gDevice = device;
         Check(At(Pixels(target),640,360) == 0, "recording does not draw on the GPU");
-        buffer.Swap(); buffer.Clear();
+        CgsGui::PublishAptIm2dRenderBufferPC(&buffer);
         // Fill the other bank while the published stream remains available.
         Basic2dColouredTexturedVertex next[4];
         Quad(next,0,0,1280,720,{0,0,255,255});
         buffer.BeginRendering(); buffer.SetTexture(nullptr);
         buffer.Render(topology,next,4); buffer.EndRendering();
         std::memset(next,0,sizeof(next));
-        device->BeginScene(); buffer.Dispatch(&immediate); device->EndScene();
+        device->BeginScene(); CgsGui::DispatchAptIm2dRenderBufferPC(&buffer); device->EndScene();
         const auto published = Pixels(target);
         Check(At(published,160,90) == 0xff0000, "APT background remains behind FLAPT");
         Check(At(published,400,360) == 0x00ff00, "combined FLAPT record draws at correct resolution");
         Check(At(published,640,360) == 0xffff00, "reserved text vertices follow their transform");
+        device->BeginScene(); CgsGui::DispatchAptIm2dRenderBufferPC(&buffer); device->EndScene();
+        Check(At(Pixels(target),640,360) == 0xffff00,
+              "consuming a published GUI frame never swaps the producer bank");
         buffer.Swap(); buffer.Clear();
         device->BeginScene(); buffer.Dispatch(&immediate); device->EndScene();
         Check(At(Pixels(target),640,360) == 0x0000ff, "next bank owns copied dynamic vertices");
@@ -232,6 +294,7 @@ int main() {
         Check(Close(At(Pixels(target),640,360),0x201008), "unset texture flag preserves the bound texture");
         DWORD blend = 0; device->GetRenderState(D3DRS_DESTBLEND,&blend);
         Check(blend == D3DBLEND_INVSRCALPHA, "set blend flag binds standard blending");
+        CheckAssertFrame(device,target,widths[resolution],heights[resolution]);
         raster->Release(); target->Release();
     }
     Check(CgsDev::Assert::gAssertions == 0, "production command writers raised no assertions");

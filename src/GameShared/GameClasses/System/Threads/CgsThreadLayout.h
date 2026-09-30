@@ -19,9 +19,11 @@
 #include "eathread/eathread_thread.h"                           // EA::Thread::Thread
 #include "eathread/eathread_barrier.h"                          // EA::Thread::Barrier
 #include "eathread/eathread_atomic.h"                           // EA::Thread::AtomicPointer
+#include <exception>
 
 class Mutex;
-struct AssertData;
+namespace CgsDev { namespace Assert { struct AssertData; } }
+using AssertData = CgsDev::Assert::AssertData;
 
 namespace CgsSystem
 {
@@ -39,6 +41,7 @@ namespace CgsSystem
     struct ThreadLayout
     {
         ThreadLayout();
+        ~ThreadLayout();
 
         void                Begin(IThreadClass* lpThreadInterface,
                                   s32 liPerfMonResource,
@@ -50,11 +53,18 @@ namespace CgsSystem
         EA::Thread::ThreadId GetUpdateThreadId() const;
         EA::Thread::ThreadId GetDispatchThreadId() const;
         bool                InteruptThreadForAssert(const AssertData* lpAssert);
+        // FLAG PC-platform leaf: join the dispatch worker before destroying the
+        // native window/device. The console kept this worker until process exit.
+        void                EndPC(bool lbCloseFrameOwner = true);
+        void                SetParallelEnabledPC(bool lbEnabled) { mbParallelEnabledPC = lbEnabled; }
+        void                WaitForUpdateCompletionPC();
+        void                SynchronizeDispatchPC();
 
     private:
         void     InitThreads();
-        intptr_t GlobalThreadBeginWrapper(EA::Thread::RunnableFunction defaultRunnableFunction, void* lpContext);
-        intptr_t DispatchThread(void* lpContext);
+        static intptr_t GlobalThreadBeginWrapper(EA::Thread::RunnableFunction defaultRunnableFunction, void* lpContext);
+        static intptr_t DispatchThread(void* lpContext);
+        void     WaitForDispatchCompletionPC();
 
         // Layout from the DecFIGS DWARF (member order); the X360 asm pins the offsets the
         // bodies touch (mpThreadClass @0, the perf-mon ids @4/8/12, meFrameRate/percentage/
@@ -72,5 +82,15 @@ namespace CgsSystem
         volatile s32                  miResourcePercentageOfFrame;
         bool                          mbUpdatingResourceSystem;
         EA::Thread::AtomicPointer     mAssertFromSecondaryThread;
+        // FLAG PC-platform leaf: the window-owning update thread must service
+        // synchronous Win32 messages while the D3D dispatch thread finishes.
+        void*                         mpDispatchReadyEventPC;
+        void*                         mpUpdateReadyEventPC;
+        EA::Thread::AtomicInt32        mStopDispatchPC;
+        bool                          mbDispatchStartedPC;
+        bool                          mbFrameInFlightPC;
+        bool                          mbParallelEnabledPC;
+        // FLAG PC-platform leaf: propagate worker exceptions after joining it.
+        std::exception_ptr            mDispatchExceptionPC;
     };
 }

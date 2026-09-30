@@ -127,6 +127,10 @@ namespace BrnGui
         // Apt bring-up, and receives the movie presentation surface as the argument.
         // Called from BrnRendererModule::Render (the PC render thread).
         void Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer);
+        // FLAG PC-platform leaf: separate the producer's publication from the
+        // render thread's consumption of the previous completed GUI frame.
+        void PublishRenderBufferPC();
+        void DispatchRenderBufferPC();
 
         // ⭐⭐ THE GUI END-OF-FRAME NOTIFY. X360 BrnGui::GuiModule::EndOfFrame @0x824F1008 is
         // three instructions -- `addis r3,r3,5 ; addi r3,r3,-0x3D70 ; b CustomRendererManager::

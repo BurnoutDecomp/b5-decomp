@@ -11,15 +11,21 @@
 
 namespace CgsGui
 {
+    void PublishAptIm2dRenderBufferPC(AptIm2dRenderBuffer* lpBuffer)
+    {
+        if (lpBuffer == nullptr || !lpBuffer->IsPreparedPC())
+            return;
+        lpBuffer->Swap();
+        lpBuffer->Clear();
+    }
+
     void DispatchAptIm2dRenderBufferPC(AptIm2dRenderBuffer* lpBuffer)
     {
-        if (lpBuffer == nullptr)
+        if (lpBuffer == nullptr || !lpBuffer->IsPreparedPC())
             return;
 
         CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrBuffer =
             *lpBuffer;
-        lrBuffer.Swap();
-        lrBuffer.Clear();
         lrBuffer.Dispatch();
 
         static bool s_bFlushProbed = false;

@@ -27,45 +27,48 @@ namespace CgsDev
 
     StrStreamBase& StrStreamBase::operator<<(s32 liValue)
     {
+        PrintMode& leCurrentMode = GetPrintModePC();
         char lacBuffer[KI_FORMAT_BUFFER_SIZE];
-        if (mePrintMode == E_PRINTMODE_DECIMAL)
+        if (leCurrentMode == E_PRINTMODE_DECIMAL)
         {
             std::snprintf(lacBuffer, sizeof(lacBuffer), KAC_INTEGER, liValue);
         }
         else
         {
             std::snprintf(lacBuffer, sizeof(lacBuffer), KAC_PADDED_HEX, (unsigned)liValue);
-            if (mePrintMode == E_PRINTMODE_HEXONCE)
-                mePrintMode = E_PRINTMODE_DECIMAL;
+            if (leCurrentMode == E_PRINTMODE_HEXONCE)
+                leCurrentMode = E_PRINTMODE_DECIMAL;
         }
         return *this << lacBuffer;
     }
 
     StrStreamBase& StrStreamBase::operator<<(u32 luValue)
     {
+        PrintMode& leCurrentMode = GetPrintModePC();
         char lacBuffer[KI_FORMAT_BUFFER_SIZE];
-        if (mePrintMode == E_PRINTMODE_DECIMAL)
+        if (leCurrentMode == E_PRINTMODE_DECIMAL)
         {
             std::snprintf(lacBuffer, sizeof(lacBuffer), KAC_UNSIGNED, luValue);
         }
         else
         {
             std::snprintf(lacBuffer, sizeof(lacBuffer), KAC_PADDED_HEX, luValue);
-            if (mePrintMode == E_PRINTMODE_HEXONCE)
-                mePrintMode = E_PRINTMODE_DECIMAL;
+            if (leCurrentMode == E_PRINTMODE_HEXONCE)
+                leCurrentMode = E_PRINTMODE_DECIMAL;
         }
         return *this << lacBuffer;
     }
 
     StrStreamBase& StrStreamBase::operator<<(u64 luValue)
     {
-        if (mePrintMode == E_PRINTMODE_DECIMAL)
+        PrintMode& leCurrentMode = GetPrintModePC();
+        if (leCurrentMode == E_PRINTMODE_DECIMAL)
             Append64IntDecimal(luValue);
         else
         {
             Append64IntHex(luValue);
-            if (mePrintMode == E_PRINTMODE_HEXONCE)
-                mePrintMode = E_PRINTMODE_DECIMAL;
+            if (leCurrentMode == E_PRINTMODE_HEXONCE)
+                leCurrentMode = E_PRINTMODE_DECIMAL;
         }
         return *this;
     }
@@ -86,7 +89,7 @@ namespace CgsDev
 
     StrStreamBase& StrStreamBase::operator<<(PrintMode leMode)
     {
-        mePrintMode = leMode;
+        GetPrintModePC() = leMode;
         return *this;
     }
 

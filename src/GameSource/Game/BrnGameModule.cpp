@@ -1,3 +1,8 @@
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "GameShared/GameClasses/Core/CgsAssertProbePC.h"
+#ifdef AddMonitor
+#undef AddMonitor
+#endif
 #include "SharedClasses/DataLists/VehicleListEntry.h"
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                     // BrnGui::GuiPFXHookEnumeration (case 501 size pin)
 #include "GameShared/GameClasses/Containers/CgsArray.h"
@@ -46,6 +51,7 @@
 
 // The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- the world-load
 // stand-in below keys its loading-complete report on it.
+namespace renderengine { void PublishPresentDiagnosticsPC(); }
 namespace BrnGameMainFlowController { extern bool gBrnInGameStateActive; }
 
 // ---- Xbox 360 XDK entry point (real prototype lives in the XDK). Displays the system
@@ -3990,7 +3996,10 @@ namespace BrnGame
             // own resource thread; the single-threaded host has to do it here, and this is
             // the point in the pass where the locks are free -- the same point the console
             // reaches after its renderer update.
-            mGameDataModule.Update(lpGameDataInput, lpGameDataOutput);
+            if (mbFrameLayoutInitializedPC && mbInsideUpdatePC)
+                mbPrepareResourceRequestedPC = true;
+            else
+                mGameDataModule.Update(lpGameDataInput, lpGameDataOutput);
         }
 
         return lbDone;
@@ -4030,6 +4039,7 @@ namespace BrnGame
     // state's Render -> DoDispatch, which publishes the record) -> OnEndOfUpdateFrame -> DispatchThread.
     void BrnGameModule::OnStartOfUpdateFrame()
     {
+        renderengine::FrameProfile::Scope lFramePhaseProfile(renderengine::FrameProfile::UPDATE);
         mEffectsModule.StartOfFrame();   // *(this + 0x88194C) = 0.0f  (0x823A8BB0..0x823A8BC8)
         mRenderModule.StartOfFrame();    // the tail call (0x823A8BCC)
     }
@@ -4054,6 +4064,7 @@ namespace BrnGame
     // written slot and every world dispatch list reads empty).
     void BrnGameModule::OnEndOfUpdateFrame()
     {
+        renderengine::FrameProfile::Scope lFramePhaseProfile(renderengine::FrameProfile::UPDATE);
         // ⭐⭐⭐ THE PARTICLE END-OF-FRAME, restored 2026-09-07 (GitHub issue #17, "tyre marks
         // appear in chunks"). The console runs it HERE, before the dispatch swap and before the
         // GUI/renderer end-of-frame:
@@ -4104,7 +4115,12 @@ namespace BrnGame
         // from slot 1 and can never appear. Full derivation on the body in BrnGuiModule.cpp.
         mGuiModule.EndOfFrame();   // X360 @0x823DBBA0 calls it HERE, before mRenderModule's
 
+        // FLAG PC-platform leaf: native video uploads and GUI preparation run
+        // after the dispatch join. Publish them with the world's completed frame.
+        mRenderModule.Prepare2DFramePC();
+        mGuiModule.PublishRenderBufferPC();
         mRenderModule.EndOfFrame();
+        renderengine::PublishPresentDiagnosticsPC();
     }
 
     // @ 0x823BC9B8 (BrnGameModule.cpp:1533) - the resource-update worker-thread body. The X360
@@ -4245,6 +4261,30 @@ namespace BrnGame
 
     void BrnGameModule::ResourceUpdateThread(Mutex* /*lpMutex*/)
     {
+        if (mbFrameLayoutInitializedPC)
+        {
+            if (mbInsideUpdatePC)
+            {
+                mbResourceRequestedPC = true;
+                return;
+            }
+            const bool lbRuntimeRequest = mbResourceRequestedPC;
+            const bool lbPrepareRequest = mbPrepareResourceRequestedPC;
+            mbResourceRequestedPC = mbPrepareResourceRequestedPC = false;
+            // Native zero-step frames must not produce another reply before
+            // InternalBaseStreamer consumes the previous simulation step's one.
+            if (!lbRuntimeRequest)
+            {
+                if (lbPrepareRequest)
+                {
+                    renderengine::FrameProfile::Scope lResourceProfile(renderengine::FrameProfile::UPDATE);
+                    mGameDataModule.Update(BrnGameMainFlowController::GetScriptedLoadGameDataInput(),
+                                          BrnGameMainFlowController::GetScriptedLoadGameDataOutput());
+                }
+                return;
+            }
+        }
+        renderengine::FrameProfile::Scope lResourceProfile(renderengine::FrameProfile::UPDATE);
         BrnResource::GameDataIO::InputBuffer*  lpGameDataInput =
             BrnGameMainFlowController::GetScriptedLoadGameDataInput();
         BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
@@ -4388,11 +4428,22 @@ namespace BrnGame
         // dispatch side, before the renderer consumes the frame. Same order here: queue first,
         // then render. (The queued text is flushed by DebugManager::Render at the renderer's
         // overlay point -- see the note at the end of DebugManagerRender.)
-        DebugManagerRender();
+        renderengine::FrameProfile::Scope lDispatchProfile(renderengine::FrameProfile::DISPATCH);
 
         // The console dispatch thread hands the renderer the manager's READ buffer (the
         // frame the update side just published via OnEndOfUpdateFrame's swap).
-        mRenderModule.Render(mDispatchThreadInputBufferManager.GetReadBuffer());
+        const DispatchThreadInputBuffer* lpRead = mDispatchThreadInputBufferManager.GetReadBuffer();
+        if (lpRead != nullptr)
+        {
+            lpRead->LockForRead();
+            const bool lbHasParticles = lpRead->GetParticleRenderData()->mpParticleModule != nullptr;
+            lpRead->UnlockForRead();
+            // FLAG PC-platform leaf: the module scheduler's dispatch callback
+            // runs here on the frozen input, before the renderer builds particles.
+            if (lbHasParticles)
+                mEffectsModule.DispatchThreadUpdate(lpRead);
+        }
+        mRenderModule.Render(lpRead);
     }
 
     // Faithful port of X360 DebugManagerRender @0x823BCB88 (called from DoDispatch each dispatch
@@ -5878,28 +5929,8 @@ namespace BrnGame
             }
             while (liStep < miNumSimFramesRequired);
         }
-        // ⛔ NO PER-FRAME RESOURCE PUMP HERE -- TRIED 2026-08-17, REVERTED THE SAME DAY.
-        //
-        // The idea was sound on its face: ResourceUpdateThread is the only thing that drains
-        // the GameData request queue, on the console it is a free-running THREAD
-        // (@0x823BC9B8) rather than anything the simulation rate paces, and once zero-step
-        // frames existed it dropped from the render rate to 60 Hz -- which does cost loading
-        // throughput. So an `else` arm here pumped it once on frames that ran no sub-step.
-        //
-        // IT BROKE A CONSUMER. BrnWorld::InternalBaseStreamer::UpdateLoading (BrnBaseStreamer
-        // .cpp:436, X360 0x827D41E8) is a per-TICK state machine that takes exactly ONE reply
-        // per visit: it returns early on an empty receiver queue and asserts
-        // `mGDReceiverQueue.GetLength() == 1` otherwise. Pumping ~2.2x per tick lets a second
-        // reply land before the streamer next looks, and the assert fires -- MEASURED, one
-        // assert per boot with the arm in, none without it, everything else identical.
-        //
-        // Pumping the producer faster than the console does is not more faithful, it is just
-        // different, and the difference lands on a consumer written for the console's rate.
-        // The real fix for loading throughput is the console's own architecture -- give the
-        // resource pump its own thread, where the streamer's per-tick consumption and the
-        // pump's rate are decoupled by the IO buffer locks rather than by luck. Until then
-        // the pump stays where the single-threaded host can reason about it: once per
-        // simulation sub-step, above.
+        // The resource callback is requested per simulation step above and
+        // consumed once after the dispatch join. Zero-step frames request none.
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_TotalUpdate);
         sbSimUpdateComplete = 1;
 
@@ -6146,8 +6177,68 @@ namespace BrnGame
     // @ BrnGameModule.cpp:1146 - the update-thread stage machine: drives GamePrepare (one-time
     // setup) -> GameMain (per-frame update, repeating) -> GameRelease (teardown). meGameUpdateStage
     // is PREPARE(0)/MAIN(1)/RELEASE(2). Returns true to keep the thread alive.
+    // ARTIST 0x823C5480: the public frame entry brackets ThreadLayout::Update.
+    // Massive's console hardware callback has no native PC service.
+    void BrnGameModule::Update()
+    {
+        CgsDev::PerfMonCpu::StartProfiling();
+        {
+            renderengine::FrameProfile::Scope lDisplayProfile(renderengine::FrameProfile::UPDATE);
+            mRenderModule.PrepareDisplayPC();
+        }
+        const bool lbParallel = mbAllowFrameOverlapPC
+            && meGameUpdateStage == E_GAMEUPDATESTAGE_MAIN
+            && mMainFlowStateMachine.IsInGameState();
+        if (lbParallel != mbActiveFrameOverlapPC)
+        {
+            mThreadLayout.EndPC(false);
+            mThreadLayout.SetParallelEnabledPC(lbParallel);
+            mThreadLayout.Begin(this, mCpuMonitors.miUT_Resource,
+                mCpuMonitors.miUT_ThreadSync, mCpuMonitors.miUT_WaitOnDispatch);
+            mbActiveFrameOverlapPC = lbParallel;
+        }
+        mThreadLayout.Update();
+        CgsDev::PerfMonCpu::StopProfiling();
+    }
+
+    void BrnGameModule::BeginFramesPC(bool lbAllowParallel)
+    {
+        mbAllowFrameOverlapPC = lbAllowParallel;
+        mbActiveFrameOverlapPC = false;
+        mThreadLayout.SetParallelEnabledPC(false);
+        mThreadLayout.Begin(this, mCpuMonitors.miUT_Resource,
+            mCpuMonitors.miUT_ThreadSync, mCpuMonitors.miUT_WaitOnDispatch);
+        mbFrameLayoutInitializedPC = true;
+    }
+
+    void BrnGameModule::EndFramesPC()
+    {
+        mThreadLayout.EndPC();
+        mbFrameLayoutInitializedPC = false;
+    }
+
+    void BrnGameModule::PrepareDebugOverlayForDispatchPC()
+    {
+        mThreadLayout.WaitForUpdateCompletionPC();
+        DebugManagerRender();
+    }
+
+    void BrnGameModule::SynchronizeDispatchPC()
+    {
+        if (mbFrameLayoutInitializedPC)
+            mThreadLayout.SynchronizeDispatchPC();
+    }
+
     bool BrnGameModule::UpdateThread()
     {
+        renderengine::FrameProfile::Scope lUpdateProfile(renderengine::FrameProfile::UPDATE);
+        struct UpdateScopePC
+        {
+            bool& mrInside;
+            explicit UpdateScopePC(bool& lrInside) : mrInside(lrInside) { mrInside = true; }
+            ~UpdateScopePC() { mrInside = false; }
+        } lUpdateScope(mbInsideUpdatePC);
+        CgsDev::Assert::PollFrameProbePC(0);
         switch (meGameUpdateStage)
         {
         case E_GAMEUPDATESTAGE_PREPARE:
@@ -6190,6 +6281,7 @@ namespace BrnGame
     // catch-up loop count).
     void BrnGameModule::OnCompletionOfVsyncWait()
     {
+        renderengine::FrameProfile::Scope lFramePhaseProfile(renderengine::FrameProfile::UPDATE);
         miNumSimFramesRequired = mFrameRateManager.UpdatePostRenderWait(
             mi8ActualFrameRateMinStepsThisFrame, mi8ActualFrameRateMaxStepsThisFrame);
 

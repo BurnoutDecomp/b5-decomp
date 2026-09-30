@@ -303,6 +303,10 @@ void EngineUpdate()
     // (the assert screen, CgsDev::Assert::Manager::DisplayAssertScreen) receives the close and
     // therefore the WM_QUIT, which never reaches this pump at all. That is exactly how a closed
     // window used to leave the process running headless with the menu-music voice still sounding.
+    // FLAG PC-platform leaf: native gameplay overlaps update and dispatch.
+    // BRN_FRAME_PARALLEL=0 retains the serial control with the same publication.
+    const char* lpcParallel = std::getenv("BRN_FRAME_PARALLEL");
+    gGameModule.BeginFramesPC(!lpcParallel || lpcParallel[0] == '1');
     MSG lMsg;
     ZeroMemory(&lMsg, sizeof(lMsg));
     while (lMsg.message != WM_QUIT && !CgsSystem::HardwareInit::IsHardwareWantingToShutdown())
@@ -327,32 +331,12 @@ void EngineUpdate()
             // profiler's frame start/stop. This inline PC loop is the current ThreadLayout
             // stand-in, so retain the bracket around the complete update/dispatch sequence.
             renderengine::FrameProfile::Begin();
-            CgsDev::PerfMonCpu::StartProfiling();
-            {
-                renderengine::FrameProfile::Scope lUpdateProfile(renderengine::FrameProfile::UPDATE);
-                gGameModule.OnStartOfUpdateFrame();
-                gGameModule.OnCompletionOfVsyncWait();
-                gGameModule.UpdateThread();
-                // NOTE: the render feed (X360 BrnGameModule::DoDispatch @0x823DC458) is NOT
-                // driven from here. Its only console caller is MainGameFlowStateInGame::Render
-                // @0x823E79B8, i.e. the active main-flow state's Render slot, which
-                // BrnGameModule::GameMain already runs once per frame from inside UpdateThread()
-                // above -- so it is reached exactly in the IN_GAME state and nowhere else. That
-                // still satisfies the ordering the GDL ring needs (the lists are written after
-                // the world update and before OnEndOfUpdateFrame's swap publishes the frame to
-                // the render side). Calling it here as well drove the world producer through the
-                // boot logos, the legal screens, the title and the menus, where the console
-                // renders no world at all.
-                gGameModule.OnEndOfUpdateFrame();
-            }
-            {
-                renderengine::FrameProfile::Scope lDispatchProfile(renderengine::FrameProfile::DISPATCH);
-                gGameModule.DispatchThread();
-            }
-            CgsDev::PerfMonCpu::StopProfiling();
+            gGameModule.Update();
             renderengine::FrameProfile::End();
         }
     }
+
+    gGameModule.EndFramesPC();
 
     // ⭐ [gateui r7 / defect B] NAME THE EXIT. A run that ends here ended because the game was
     // ASKED to stop; a run whose log simply stops mid-frame with none of these lines was killed

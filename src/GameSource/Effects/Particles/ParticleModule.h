@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // CgsModule::EventReceiverQueue<16384,16> (mReceiverQueue)
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::SafeResourceHandle<T>
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                 // CgsNumeric::Random (mRandom, BY VALUE)
+#include "GameSource/Effects/Particles/Native/ParticleFramePC.h"
 #include "SDKs/Packages/Lion/Final/Allocator/include/CoreAllocator/ITaggedAllocator.h" // EA::Allocator::ITaggedAllocator (IInternalAllocator's base)
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"   // CgsGraphics::Camera (ParticleRenderData::mCgsCamera, BY VALUE)
 #include "SharedClasses/Graphics/TextureNameMapResourceType.h"         // BrnParticle::TextureNameMap (mTextureNameMap handle target)
@@ -409,6 +410,11 @@ namespace BrnParticle
             u16                           muFlags;               // DWARF :604 (guest +0x200)
             const renderengine::Texture*  mpEnvironmentMap;      // DWARF :605 (guest +0x204)
             f32                           mfWhiteLevel;          // DWARF :606 (guest +0x208)
+            // FLAG PC-platform leaf: keep all render passes on one published
+            // state while the next update changes junkyard/suspend/debug flags.
+            bool                          mbInJunkyardPC;
+            bool                          mbPlayingEffectsSuspendedPC;
+            bool                          mbZFadeEnabledPC;
         };
 
         ParticleModule();
@@ -943,6 +949,13 @@ namespace BrnParticle
         u16   mu16SpawnBufferCount;                    // +0x2B7A0 (Prepare: 0)
         u8    maSpawnBufferHeaderTail[0x2B7B0 - 0x2B7A2];
         void* mpSparkSpawnBuffer;                      // +0x2B7B0 (178096)
+
+        Native::SimpleParticleFramePC mSimpleParticleFramePC;
+        Native::ParticleRandomAccessPC mRandomAccessPC;
+        template<class Draw> decltype(auto) DrawRandomPC(Draw lfDraw)
+        {
+            return mRandomAccessPC.Execute(mRandom, lfDraw);
+        }
     };
 
 }

@@ -37,11 +37,15 @@ namespace Log
     // every completed line on disk; only the intra-line syscalls are gone. Anything that writes
     // through WriteToLog directly (asserts, the crash reporter) first drains a pending partial
     // line, so ordering in the file is unchanged.
-    static char   s_lacLine[2048];
-    static size_t s_luLineLen = 0;
+    // FLAG PC-platform leaf: each native thread assembles its own stream line;
+    // only completed writes share the file/debugger sink.
+    static thread_local char   s_lacLine[2048];
+    static thread_local size_t s_luLineLen = 0;
+    static SRWLOCK sOutputLock = SRWLOCK_INIT;
 
     static void WriteRaw(const char* lpcText)
     {
+        AcquireSRWLockExclusive(&sOutputLock);
         static FILE* s_lpLogFile = OpenLogFile();
         if (s_lpLogFile)
         {
@@ -49,6 +53,7 @@ namespace Log
             std::fflush(s_lpLogFile);
         }
         OutputDebugStringA(lpcText);
+        ReleaseSRWLockExclusive(&sOutputLock);
     }
 
     static void FlushPendingLine()

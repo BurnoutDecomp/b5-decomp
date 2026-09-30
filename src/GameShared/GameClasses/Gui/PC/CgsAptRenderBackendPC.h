@@ -17,6 +17,9 @@ namespace CgsGui { typedef CgsGraphics::Im2dRenderBuffer AptIm2dRenderBuffer; }
 
 namespace CgsGui
 {
+    // Publish only after the previous consumer has joined. Dispatch never swaps
+    // producer storage, so recording the next frame cannot change its input.
+    void PublishAptIm2dRenderBufferPC(AptIm2dRenderBuffer* lpBuffer);
     // Freeze + flush one frame's filled command buffer to D3D9.
     //   Swap  freezes the write buffer for dispatch;
     //   Clear resets the NEW write buffer's stream positions (Swap alone does NOT --

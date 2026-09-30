@@ -353,6 +353,7 @@ namespace
     // HUD draw through; the Dispatch() path is the fully-reconstructed PC D3D9 flush.)
     CgsGui::AptIm2dRenderBuffer s_AptRenderBuffer;
     bool                        s_bRenderBufferReady = false;
+    bool                        s_bRenderBufferPublished = false;
 
     // A non-null 3D-renderer sentinel so AptRenderHandler::Render's
     // `mpImRenderers->mp3dRenderer != 0` assert passes. The Apt boot/title movies are
@@ -858,9 +859,17 @@ namespace BrnGui
 
     // FLAG PC-platform leaf: publish and consume the shared APT/FLAPT stream
     // once, after both producers have appended their records in view order.
-    void DispatchAptRenderResidue()
+    void GuiModule::PublishRenderBufferPC()
     {
-        if (!s_bRuntimeReady || !s_bAuxReady || !s_bRenderBufferReady)
+        if (!s_bRenderBufferReady)
+            return;
+        CgsGui::PublishAptIm2dRenderBufferPC(&s_AptRenderBuffer);
+        s_bRenderBufferPublished = true;
+    }
+
+    void GuiModule::DispatchRenderBufferPC()
+    {
+        if (!s_bRenderBufferPublished)
             return;
 
         // The flush body is re-homed to the PC backend TU (slice 5 step A): the
@@ -3937,8 +3946,6 @@ void GuiModule::Destruct()
         // PC dispatch leaf: freeze + flush the filled Apt command buffer to D3D9 (the
         // console render thread consumes the buffers via the custom-renderer-manager
         // bracket RenderInternal notifies).
-        DispatchAptRenderResidue();
-
         // Fullscreen movies present over the view content, inside this pass -- the X360
         // Render's UpdateAndRenderMovieManager call (@0x825146B8). The states manage the
         // loading screen around videos through the real protocol (BootLoading::OnLeave /

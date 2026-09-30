@@ -5,6 +5,7 @@
 // (AddPhysicalDevice 0x828F9320 + PhysicalDeviceThread 0x828F1EA8 land in the worker step.)
 
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include <cstdlib>   // malloc / free
 #include <cstring>   // strcmp / strncpy / strlen
@@ -456,8 +457,7 @@ namespace CgsFileSystem
             lpOp->mpfCallback = SyncOpCallback;
             lpOp->mpContext   = lpComp;
             lpPool->AddOperation(lpOp);
-            const u32 luWaitForever = 0xFFFFFFFFu;
-            lpComp->mpDone->Wait(&luWaitForever);
+            CgsDev::Assert::WaitForWorkerPC(*lpComp->mpDone);
             return lpComp->miResult;
         }
     }
@@ -480,7 +480,6 @@ namespace CgsFileSystem
         lComp.miResult = 0;
         lComp.mHandle.Clear();
         lComp.muSize   = 0;
-        const u32 luWaitForever = 0xFFFFFFFFu;
 
         // OPEN (read mode == 1). The worker delivers the file handle in the callback's result.
         Operation lOp;
@@ -493,7 +492,7 @@ namespace CgsFileSystem
         lOp.mpfCallback = SyncOpCallback;
         lOp.mpContext   = &lComp;
         lpPool->AddOperation(&lOp);
-        lDone.Wait(&luWaitForever);
+        CgsDev::Assert::WaitForWorkerPC(lDone);
         const Handle lHandle = lComp.mHandle;
         if (lComp.miResult != 0 || lHandle.IsNull())
             return -1;
@@ -508,7 +507,7 @@ namespace CgsFileSystem
         lOp.mpfCallback = SyncOpCallback;
         lOp.mpContext   = &lComp;
         lpPool->AddOperation(&lOp);
-        lDone.Wait(&luWaitForever);
+        CgsDev::Assert::WaitForWorkerPC(lDone);
         const int liBytes = lComp.miResult == 0 ? static_cast<int>(lComp.muSize) : -1;
 
         // CLOSE.
@@ -518,7 +517,7 @@ namespace CgsFileSystem
         lOp.mpfCallback = SyncOpCallback;
         lOp.mpContext   = &lComp;
         lpPool->AddOperation(&lOp);
-        lDone.Wait(&luWaitForever);
+        CgsDev::Assert::WaitForWorkerPC(lDone);
 
         return liBytes;
     }

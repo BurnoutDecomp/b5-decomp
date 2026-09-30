@@ -136,6 +136,8 @@ namespace BrnParticle
         };
 
         CgsNumeric::Random     mRandom;
+        // Native lock concurrency is covered by PCParticleFrame.
+        template<class Draw> decltype(auto) DrawRandomPC(Draw lfDraw) { return lfDraw(mRandom); }
         Native::SparkArray*    maSparks;
         FakeSparkFrameDataSet  mSparkFrameDataSetUpdate;
 

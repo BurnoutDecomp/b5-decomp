@@ -203,7 +203,9 @@ namespace BrnParticle
         const Native::CB4ParticleArrayStandardParams* const lpParams = lrArray.mpStandardParams;
 
         const f32 lfRotationalVelocity =
-            mRandom.RandomFloat(lpParams->mrRotationSpeedMin, lpParams->mrRotationSpeedMax);
+            DrawRandomPC([&](CgsNumeric::Random& lrRandom) {
+                return lrRandom.RandomFloat(lpParams->mrRotationSpeedMin, lpParams->mrRotationSpeedMax);
+            });
 
         lrArray.SpawnParticle(lvPosition, lvVelocity, lfSpawnTime, lfSizeScale,
                               lfRotationalVelocity, false, lfAlpha);
@@ -234,7 +236,9 @@ namespace BrnParticle
         const Native::CB4ParticleArrayStandardParams* const lpParams = lrArray.mpStandardParams;
 
         f32 lfRotationalVelocity =
-            mRandom.RandomFloat(lpParams->mrRotationSpeedMin, lpParams->mrRotationSpeedMax) * lfAngularVelocityScale;
+            DrawRandomPC([&](CgsNumeric::Random& lrRandom) {
+                return lrRandom.RandomFloat(lpParams->mrRotationSpeedMin, lpParams->mrRotationSpeedMax);
+            }) * lfAngularVelocityScale;
         if (lbReverseRotation)
             lfRotationalVelocity = -lfRotationalVelocity;
 
@@ -479,6 +483,9 @@ namespace BrnParticle
             mRenderData.muFlags |= ParticleRenderData::eRenderDataFlagReducedFrameRate; // 0x40
 
         ++mRenderData.muCurrentFrame;
+        mRenderData.mbInJunkyardPC = mbIsInJunkyard;
+        mRenderData.mbPlayingEffectsSuspendedPC = mbPlayingEffectsSuspended;
+        mRenderData.mbZFadeEnabledPC = mbZFadeEnabled;
 
         TimeStepWitness(mRenderData);   // [DIAG] BRN_TSTEP_DIAG, default off
         *lpDispatchThreadInput->GetParticleRenderData() = mRenderData;
@@ -786,6 +793,8 @@ namespace BrnParticle
     // =========================================================================
     void ParticleModule::EndOfFrame(bool lbStalled)
     {
+        mSimpleParticleFramePC.Publish(maSimpleParticles);
+
         mbStalled = lbStalled;
         mTrailSystem.EndOfFrame();
     }
@@ -1014,7 +1023,7 @@ namespace BrnParticle
         // `v34[0] = (S32)(*v7 * 3000.0)` -- one conversion for the whole loop.
         const cTime lTime = LionTimeFromSeconds(lpIn->mfCurrentTime);
 
-        if (mbPlayingEffectsSuspended)
+        if (lpDispatchThreadInput->GetParticleRenderData()->mbPlayingEffectsSuspendedPC)
             return;
 
         for (u32 luChanged = 0; luChanged < lpIn->muChangedEffects; ++luChanged)
@@ -1393,13 +1402,13 @@ namespace BrnParticle
 
                 gSimpleParticleBatchArray.Clear();
                 Native::SimpleParticleVertexBufferBuilder::BuildDispatchData(
-                    &lrLockedParticleBuffer, gSimpleParticleBatchArray, maSimpleParticles,
+                    &lrLockedParticleBuffer, gSimpleParticleBatchArray, mSimpleParticleFramePC.GetArrays(),
                     KAU_SIMPLE_PRE_LION_TYPES, 10u,
                     lpRenderData->mfCurrentTime, lpRenderData->mCgsCamera,
                     lpRenderData->mfWhiteLevel, lbRenderCrashBanks);
                 gSimpleParticleBatchArray.SetPreLionCount();
                 Native::SimpleParticleVertexBufferBuilder::BuildDispatchData(
-                    &lrLockedParticleBuffer, gSimpleParticleBatchArray, maSimpleParticles,
+                    &lrLockedParticleBuffer, gSimpleParticleBatchArray, mSimpleParticleFramePC.GetArrays(),
                     KAU_SIMPLE_POST_LION_TYPES, 2u,
                     lpRenderData->mfCurrentTime, lpRenderData->mCgsCamera,
                     lpRenderData->mfWhiteLevel, lbRenderCrashBanks);
@@ -1603,7 +1612,7 @@ namespace BrnParticle
             // cLionFX::Update -> cParticleEmitterManager::Update -> cParticleEmitter::Update
             // -> Generate / Emit / ParticleBuild. Gated on the same mbPlayingEffectsSuspended
             // the draw half below uses, so a suspended world neither ages nor draws.
-            if (!mbPlayingEffectsSuspended)
+            if (!lpRenderData->mbPlayingEffectsSuspendedPC)
             {
                 cLionFX::Update(LionTimeFromSeconds(lpRenderData->mfCurrentTime));
             }
@@ -1617,7 +1626,7 @@ namespace BrnParticle
         mVertexBufferManagerLion.FlipBuffer();
         EffectsVertexBufferLocked& lrLockedBuffer = mVertexBufferManagerLion.Lock();
 
-        if (!mbPlayingEffectsSuspended)
+        if (!lpRenderData->mbPlayingEffectsSuspendedPC)
         {
             // ---- the packed LRTB frustum the Lion culler tests against ---------------------
             // CgsGraphics::Camera::GetFrustum writes SIX world-space planes, each [Nx,Ny,Nz,D]
@@ -1784,7 +1793,7 @@ namespace BrnParticle
         // particle buffer the other arm has nowhere to draw, so this one has to keep drawing or
         // the plume vanishes. When the pool is built by BrnRendererMemory::Construct the
         // disjunct is deleted and the gate is the console's `if (mbIsInJunkyard)` alone.
-        if (mbIsInJunkyard || !QuarterResRoutingLive())
+        if (lpRenderData->mbInJunkyardPC || !QuarterResRoutingLive())
         {
             renderengine::VertexBuffer* const lpVertexBuffer =
                 mVertexBufferManagerLion.GetVertexBuffer();
@@ -1916,7 +1925,7 @@ namespace BrnParticle
             lrJob.mpTriCache        = lpTriCache;
             lrJob.mfCurrentTime     = lpData->mfCurrentTime;
             lrJob.mfTimeStep        = lpData->mfCurrentTimeStep;
-            lrJob.mRandom.SetSeed(mRandom.RandomUInt());
+            lrJob.mRandom.SetSeed(DrawRandomPC([](CgsNumeric::Random& lrRandom) { return lrRandom.RandomUInt(); }));
             ++miNumDebrisUpdateJobsToWaitOn;
         }
 
@@ -1998,7 +2007,7 @@ namespace BrnParticle
         // this function on this build; Dispatch's banner says what that costs (the z-fade arm).
         const bool lbZFade =
             ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0)
-            || mbZFadeEnabled;
+            || lpRenderData->mbZFadeEnabledPC;
         renderengine::VertexBuffer* const lpParticleVertexBuffer =
             mVertexBufferManagerParticles.GetVertexBuffer();
         CGS_ASSERT(gSimpleParticleBatchArray.GetCount() != -1, "Array used before Construct/Clear was called");
@@ -2010,7 +2019,7 @@ namespace BrnParticle
         mSimpleParticleRenderer.Dispatch(lpParticleVertexBuffer, gSimpleParticleBatchArray,
                                          0u, luPreLionCount, 0, lfNearPlane, lfFarPlane, lbZFade);
 
-        if (!mbIsInJunkyard)
+        if (!lpRenderData->mbInJunkyardPC)
         {
             renderengine::VertexBuffer* const lpVertexBuffer =
                 mVertexBufferManagerLion.GetVertexBuffer();
