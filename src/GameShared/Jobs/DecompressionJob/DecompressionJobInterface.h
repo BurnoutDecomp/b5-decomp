@@ -34,9 +34,8 @@ namespace EA { namespace Jobs { class JobScheduler; } }
 // DWARF/X360 DELTA: the PS3 DWARF spells the heap as macMallocBuffer[65536] + maMallocNodes[256]
 // (an inline IndexedNodeHeap); the X360 ARTIST build uses a CgsMemory::HeapMalloc over a 128-KiB
 // buffer (HeapMalloc::Construct(macMallocBuffer, KU_COMPRESSION_BUFFER_SIZE) @ Construct). The
-// X360 spine is authoritative. The PS3-only Destruct()/WaitForFlushJobs(bool) are NOT in the X360
-// function set (inlined into callers there), so they are omitted -- only the seven X360-attested
-// methods are declared.
+// X360 spine is authoritative. WaitForFlushJobs is an exporter hole, not an
+// inlined/PS3-only method: ARTIST82901038 calls its body at828DB428.
 
 namespace CgsResource
 {
@@ -53,7 +52,9 @@ namespace CgsResource
     {
     public:
         // Inlined BundleLoaderModule ctor827DD270 constructs this job unnamed.
-        DecompressionJobInterface() : mJob(nullptr) {}
+        // Native instances need the same clear entry latch as the original
+        // zero-initialized module storage before the first CreateEntry.
+        DecompressionJobInterface() : mJob(nullptr), mbEntryInProgress(false) {}
         // DecompressionJobInterface.h:59 -- the size of the heap buffer the interface owns
         // (HeapMalloc::Construct passes 0x20000 in Construct's asm).
         static const u32 KU_COMPRESSION_BUFFER_SIZE = 131072;
@@ -69,6 +70,10 @@ namespace CgsResource
         // DecompressionJobInterface.cpp:113 / X360 0x828DB2C0 -- flush the accumulated batch to the
         // job scheduler as one decompression job. Returns true if a job was submitted.
         bool RunFlushJobs();
+
+        // ARTIST828DB428: poll or wait, then retain an unfinished entry for
+        // the next source chunk and return to E_DJS_ADDING_ENTRIES.
+        bool WaitForFlushJobs(bool lbWait);
 
         // DecompressionJobInterface.cpp:249 / X360 0x828DB658 -- close the streaming batch.
         void EndStream();

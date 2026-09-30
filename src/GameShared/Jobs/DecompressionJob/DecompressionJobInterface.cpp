@@ -4,6 +4,7 @@
 #include "SDKs/EATech/eajobs/job_types.h"                     // EA::Jobs::JOB_ENVIRONMENT_LOCAL
 
 #include <cstring>   // std::memset (models the X360 memset intrinsic)
+#include <cstdio>
 
 // GameShared/Jobs/DecompressionJob/DecompressionJobInterface.cpp
 //
@@ -67,9 +68,8 @@ void DecompressionJobInterface::BeginStream()
     muNumEntries = 0;
     meStage      = E_DJS_ADDING_ENTRIES;
 
-    // Clear the descriptor + the saved-stream snapshot. The X360 zeros 128 bytes for each (the
-    // job-data block is a fixed 128-byte slot on the spine); here the descriptor is its real
-    // 16-byte size and the snapshot its 128 bytes -- the worker reads the same fields either way.
+    // Clear the descriptor and saved state using their native sizes; both
+    // occupy 128-byte console slots in ARTIST.
     std::memset(&mJobData, 0, sizeof(mJobData));
     std::memset(&mJobStatus, 0, sizeof(mJobStatus));
 
@@ -129,6 +129,58 @@ bool DecompressionJobInterface::RunFlushJobs()
     mJob.SetData(&mJobData, sizeof(mJobData));
     mJob.SetName("Decompression");
     mpScheduler->AddJobs(&mJob, 1);
+    return true;
+}
+
+// ARTIST828DB428..828DB654 (raw assembly; absent from the exporter).
+bool DecompressionJobInterface::WaitForFlushJobs(bool lbWait)
+{
+    if (meStage != E_DJS_FLUSHING)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Invalid stage to begin flush\n", KPC_ASSERT_FILE, 187);
+        CgsDev::Assert::EndAssert();
+    }
+    if (lbWait)
+        mJob.WaitOn();
+    else if (!mJob.IsDone())
+        return false;
+
+    if (mbEntryInProgress)
+    {
+        // An entry created after the final complete resource may not yet
+        // have source bytes; RunFlushJobs excludes that entry from the job.
+        const CompressedData lLast = mpEntries[muNumEntries - 1];
+        if (lLast.mpSourceBuffer != nullptr && mJobStatus.miLastInflateResult != Z_OK)
+        {
+            char lacMessage[256];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                "Entry is in progress but source stream failed with error or ended (result=%d)\n",
+                mJobStatus.miLastInflateResult);
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 209);
+            CgsDev::Assert::EndAssert();
+        }
+        mpEntries[0] = lLast;
+        muNumEntries = 1;
+        mpEntries[0].mpSourceBuffer = nullptr;
+        mpEntries[0].muSourceSize = 0;
+    }
+    else
+    {
+        if (mJobStatus.miLastInflateResult != Z_STREAM_END)
+        {
+            char lacMessage[256];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                "Entry is in progress but source stream failed with error or did not complete (result=%d)\n",
+                mJobStatus.miLastInflateResult);
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 225);
+            CgsDev::Assert::EndAssert();
+        }
+        muNumEntries = 0;
+    }
+    meStage = E_DJS_ADDING_ENTRIES;
     return true;
 }
 

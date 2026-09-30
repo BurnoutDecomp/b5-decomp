@@ -25,6 +25,9 @@ namespace CgsFileSystem {
 void ReadStream::Construct(StreamDeviceDiskRead* p){mpStreamDevice=p;}
 ReadStream& ReadStream::operator=(StreamDeviceDiskRead* p){mpStreamDevice=p;return *this;}
 bool ReadStream::IsValid() const{return mpStreamDevice!=nullptr;}
+bool ReadStream::StartAsyncRead(void**,u32*){std::abort();}
+void ReadStream::StopAsyncRead(u32){std::abort();}
+bool ReadStream::IsBufferComplete() const{std::abort();}
 u64 ReadStream::Tell() const{return reinterpret_cast<Reader*>(mpStreamDevice)->position;}
 u32 ReadStream::GetAmountOfDataInBuffer() const {
     const auto& r=*reinterpret_cast<Reader*>(mpStreamDevice);return static_cast<u32>(r.available-r.position);

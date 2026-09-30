@@ -43,6 +43,7 @@ public:
     };
 
     BundleLoaderModule() = default;
+    static const u32 KU_SECONDARY_STREAM_BUFFER_SIZE = 0x80000;
     void Construct();
     bool Prepare();
     bool Release();
@@ -120,6 +121,8 @@ private:
     s32 miNumLoadedBundles;
     s32 miMaxLoadedBundles;
     DecompressionJobInterface mDecompressionJobInterface;
+    void* mpDecompressionStreamStart;
+    u32 muDecompressionStreamSize;
     bool mbStreamJobStarted;
     bool mbOnLastStreamJob;
     BundleLoaderIO::InputBuffer_Record::PoolReceiveQueue mPoolReceiveQueueCache;

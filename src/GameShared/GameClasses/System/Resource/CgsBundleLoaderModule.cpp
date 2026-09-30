@@ -458,9 +458,84 @@ void BundleLoaderModule::RecordPostUpdateEvents(const BundleLoaderIO::InputBuffe
     }
     lpLock->UnlockForRead();
 }
-bool BundleLoaderModule::StreamCompressedDataAsJobFunc(void*)
+bool BundleLoaderModule::StreamCompressedDataAsJobFunc(void* lpOutputBuffer)
 {
-    CGS_ASSERT(false, "BundleLoaderModule::StreamCompressedDataAsJobFunc: deferred (streaming FSM layout pass)");
+    // ARTIST82900FA0..829013F4. Copy at most one 512-KiB batch into the
+    // secondary buffer, whose lifetime extends until its inflate job completes.
+    auto* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
+    auto& lrStream = maStreams[miCurrentStream];
+    if ((lrStream.IsBufferComplete() || (mbStreamJobStarted && mbOnLastStreamJob))
+        && mQueuedLoads.GetLength() == 0)
+        CheckForLoads(lpOutput);
+
+    if (mbStreamJobStarted)
+    {
+        if (!mDecompressionJobInterface.WaitForFlushJobs(false))
+            return false;
+        mbStreamJobStarted = false;
+        if (mbOnLastStreamJob)
+        {
+            mDecompressionJobInterface.EndStream();
+            return true;
+        }
+    }
+    SendPartialFixupRequest(lpOutput);
+    u32 luCopied = 0;
+    while (lrStream.GetAmountOfDataInBuffer() != 0)
+    {
+        const u64 luBegin = lrStream.Tell();
+        u64 luPosition = luBegin;
+        lrStream.StartAsyncRead(&mpDecompressionStreamStart, &muDecompressionStreamSize);
+        u32 luAvailable = muDecompressionStreamSize;
+        while (luAvailable != 0 && luCopied < KU_SECONDARY_STREAM_BUFFER_SIZE)
+        {
+            const auto& lrEntry = mAllocationResponse.mpEntries[miCurrentResource];
+            const u64 luDesired = static_cast<u64>(lrEntry.mauDiskOffset[miCurrentMemoryType])
+                                + mCurrentBundle.mauResourceDataOffset[miCurrentMemoryType];
+            if (luDesired > luPosition)
+            {
+                const u32 luSkip = static_cast<u32>((luDesired - luPosition < luAvailable)
+                    ? luDesired - luPosition : luAvailable);
+                luPosition += luSkip;
+                luAvailable -= luSkip;
+                continue;
+            }
+            const u32 luRemaining = lrEntry.GetDiskSize(miCurrentMemoryType) - miCurrentResourcePosition;
+            u32 luAmount = luRemaining < luAvailable ? luRemaining : luAvailable;
+            if (luAmount > KU_SECONDARY_STREAM_BUFFER_SIZE - luCopied)
+                luAmount = KU_SECONDARY_STREAM_BUFFER_SIZE - luCopied;
+            void* lpCopy = mpcSecondaryStreamBuffer + luCopied;
+            std::memcpy(lpCopy, static_cast<const char*>(mpDecompressionStreamStart)
+                + static_cast<size_t>(luPosition - luBegin), luAmount);
+            mDecompressionJobInterface.AppendToEntry(lpCopy, luAmount);
+            luCopied = (luCopied + luAmount + 15) & ~15u;
+            if (luAmount == luRemaining)
+            {
+                mDecompressionJobInterface.FinishEntry();
+                if (!MoveToNextResource())
+                {
+                    mbOnLastStreamJob = true;
+                    // ARTIST8290130C skips the final cursor increment: these
+                    // copied bytes remain in the ring until the stream closes.
+                    break;
+                }
+                const auto& lrNext = mAllocationResponse.mpEntries[miCurrentResource];
+                mDecompressionJobInterface.CreateEntry(
+                    mAllocationResponse.mpResources[miCurrentResource].m_baseResources[miCurrentMemoryType],
+                    lrNext.GetUncompressedSize(miCurrentMemoryType));
+            }
+            else
+                miCurrentResourcePosition += luAmount;
+            luPosition += luAmount;
+            luAvailable -= luAmount;
+        }
+        lrStream.StopAsyncRead(static_cast<u32>(luPosition - luBegin));
+        mbStreamJobStarted = mDecompressionJobInterface.RunFlushJobs();
+        if (mbStreamJobStarted)
+            break;
+        CGS_ASSERT(!mbOnLastStreamJob,
+            "Should never finish the last resource without any data to stream!");
+    }
     return false;
 }
 bool BundleLoaderModule::StreamIdleFunc(void* lpOutputBuffer)
