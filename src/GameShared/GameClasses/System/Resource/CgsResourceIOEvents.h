@@ -4,6 +4,7 @@
 // Events derive from an empty per-module Event base (CgsModule event convention).
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"        // CgsResource::ID (64-bit hash)
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"    // fix-up response owns a native handle
 #include "GameShared/GameClasses/System/Resource/CgsSmallResource.h"     // SmallResourceDescriptor (Entry::ResourceDescriptor form)
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundle2.h"   // BundleV2 (struct) + nested ResourceEntry
 #include "GameShared/GameClasses/System/FileSystem/CgsReadStream.h"      // CgsFileSystem::ReadStream (ReadStreamEvent carries it by value)
@@ -268,6 +269,54 @@ namespace Events
         SmallResource*                 mpResources;   // +0x24  ResourceHandle::Resource*
         Entry*                         mpListEntry;   // +0x28  the list's own entry-list resource entry
         bool                           mbFailed;      // +0x2C, DWARF :639; allocation result 4 is FAILED_SAFELY
+    };
+
+    // ARTIST 82901748: input tag 18, output tag 19. These are in-process
+    // records; their pointer fields and queue sizes follow the native ABI.
+    struct FixUpAndResolveResourceListRequest : public PoolEvent
+    {
+        ID   mListId;
+        s32  miFirstIndex;
+        s32  miCount;
+        bool mbFinalFixup;
+        bool mbFixUpDependencies;
+
+        ID GetListId() const { return mListId; }
+        void SetListId(ID lId) { mListId = lId; }
+        s32 GetFirstIndex() const { return miFirstIndex; }
+        s32 GetCount() const { return miCount; }
+        bool IsFinalFixup() const { return mbFinalFixup; }
+        bool IsFixUpDependenciesSet() const { return mbFixUpDependencies; }
+    };
+
+    struct FixUpAndResolveResourceListResponse : public PoolEvent
+    {
+        ResourceHandle mListHandle;
+        const ID*      mpIds;
+        s32            miNumEntries;
+
+        ResourceHandle GetListHandle() const { return mListHandle; }
+        void SetListHandle(ResourceHandle lHandle) { mListHandle = lHandle; }
+        const ID* GetIds() const { return mpIds; }
+        void SetIds(const ID* lpIds) { mpIds = lpIds; }
+        s32 GetNumEntries() const { return miNumEntries; }
+        void SetNumEntries(s32 liNumEntries) { miNumEntries = liNumEntries; }
+    };
+
+    // ARTIST 828FD310: unload is acknowledged when its reference countdown
+    // begins (tag 21), before the unreferenced entries are actually freed.
+    struct UnloadResourceListRequest : public PoolEvent
+    {
+        ID mListId;
+        ID GetListId() const { return mListId; }
+        void SetListId(ID lId) { mListId = lId; }
+    };
+
+    struct UnloadResourceListResponse : public PoolEvent
+    {
+        ID mListId;
+        ID GetListId() const { return mListId; }
+        void SetListId(ID lId) { mListId = lId; }
     };
 
     // Acquire a single already-loaded resource by id from a pool (resource request id 4 -> pool input).

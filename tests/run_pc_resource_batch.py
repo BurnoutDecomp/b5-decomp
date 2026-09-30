@@ -1,6 +1,7 @@
 """Production allocation state + pool batches over the real heap allocator.
 
 --old-free reinstates the old empty pointer-free body as a negative control.
+--old-records reinstates the console-width native pool request/response views.
 """
 import argparse
 from pathlib import Path
@@ -8,6 +9,7 @@ from fxgs_common import Tree, REPO, STRSTREAM_CPP, definition, compile_and_run, 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--old-free', action='store_true')
+parser.add_argument('--old-records', action='store_true')
 args = parser.parse_args()
 base = 'src/GameShared/GameClasses/System/Resource/'
 tree = Tree()
@@ -15,6 +17,8 @@ pool = tree.read(base + 'CgsResourcePool.cpp')
 names = ['Construct', 'InitPool', 'InitManagementData',
          'GetId', 'GetName', 'GetHeapAlignment', 'GetNumEntriesInPurgatory',
          'GetEntryRefCount', 'SetEntryRefCount', 'IncEntryRefCount', 'DecEntryRefCount',
+         'GetRefCountThreshold', 'FixUpEntry', 'PostFixUpEntry', 'ResolveImportForEntry',
+         'ResolveImportsForEntry', 'FixUpAndResolveResourceList',
          'SetEntryStatus', 'SetEntryImportCount', 'FindResourceIndex', 'FindResource',
          'FindResourceWithDependencies', 'FindResourceIndexWithDependencies',
          'AllocateResourceEntry', 'CreateEntry', 'CreateEntryInSlot', 'AllocateMemoryForResource',
@@ -39,6 +43,17 @@ for name in ['Construct', 'BeginAllocation', 'GenerateResponse', 'Update', 'Debu
     signature = next(line.strip() for line in state.splitlines()
                      if f'AllocatePoolModuleState::{name}(' in line and not line.strip().startswith('//'))
     code += definition(state, signature) + '\n'
+deallocate = tree.read(base + 'PoolModuleStates/CgsDeAllocatePoolModuleState.cpp')
+for name in ['Construct', 'Begin', 'Update']:
+    signature = next(line.strip() for line in deallocate.splitlines()
+                     if f'DeAllocatePoolModuleState::{name}(' in line and not line.strip().startswith('//'))
+    code += definition(deallocate, signature) + '\n'
+driver = tree.read(base + 'CgsPoolModule.cpp')
+for name in ['ConvertPoolRequestOptions', 'DoDeletePoolRequest',
+             'DoFixUpAndResolveResourceListRequest', 'DoUnloadResourceListRequest']:
+    source = Tree('afcb3588').read(base + 'CgsPoolModule.cpp') if args.old_records and name in [
+        'ConvertPoolRequestOptions', 'DoDeletePoolRequest'] else driver
+    code += definition(source, f'void PoolModule::{name}(') + '\n'
 code += '}\n'
 heap = tree.read(base + 'CgsResourceHeap.cpp')
 if args.old_free:
@@ -49,5 +64,7 @@ numeric = compile_and_run(Path(__file__).with_name('PCResourceBatch.cpp'), 'pc_r
         REPO / 'src/GameShared/GameClasses/Memory/CgsLinearMalloc.cpp',
         REPO / base / 'CgsResourceTypeBase.cpp', REPO / base / 'CgsEntryListResource.cpp',
         REPO / base / 'CgsBaseResourcePtr.cpp', REPO / base / 'CgsResourcePtr.cpp',
+        REPO / base / 'CgsPoolModuleIO_OutputBuffer.cpp',
+        REPO / 'src/GameShared/GameClasses/Module/CgsIOBuffer.cpp',
         REPO / base / 'CgsSmallResource.cpp', REPO / 'vendor/renderware/src/rw/BaseResourceDescriptor.cpp'])
-raise SystemExit(report('run_pc_resource_batch', [], numeric, 33))
+raise SystemExit(report('run_pc_resource_batch', [], numeric, 58))

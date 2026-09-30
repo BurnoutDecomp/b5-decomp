@@ -727,6 +727,55 @@ namespace CgsResource
         return lbAllResolved;
     }
 
+    // ARTIST 828FE2D0. Streaming can fix up successive ranges before the final
+    // publication pass. Only status-1 entries belong to this load; shared loaded
+    // resources must not be fixed up a second time.
+    void Pool::FixUpAndResolveResourceList(const ID* lpIDs, s32 liNumIDs, s32 liFirstIndex,
+                                         s32 liCount, bool lbFinalFixup, bool lbFixUpDependencies)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        bool lbUnresolved = false;
+        for (s32 li = liFirstIndex; li < liFirstIndex + liCount; ++li)
+        {
+            Pool* lpOwner = this;
+            s32 liIndex;
+            Entry* lpEntry = lbFixUpDependencies
+                ? FindResourceWithDependencies(lpIDs[li], &lpOwner, false, 1, &liIndex)
+                : FindResource(lpIDs[li], false, 1, &liIndex);
+            if (lpEntry != nullptr)
+            {
+                lpOwner->FixUpEntry(lpEntry);
+                if (!lpOwner->ResolveImportsForEntry(liIndex))
+                    lbUnresolved = true;
+            }
+        }
+        CGS_ASSERT(!lbUnresolved, "Some resources were not found");
+
+        if (lbFinalFixup)
+        {
+            for (s32 li = 0; li < liNumIDs; ++li)
+            {
+                Pool* lpOwner = this;
+                s32 liIndex;
+                Entry* lpEntry = lbFixUpDependencies
+                    ? FindResourceWithDependencies(lpIDs[li], &lpOwner, false, 1, &liIndex)
+                    : FindResource(lpIDs[li], false, 1, &liIndex);
+                if (lpEntry != nullptr)
+                {
+                    lpOwner->SetEntryStatus(liIndex, 2);
+                    lpOwner->PostFixUpEntry(lpEntry);
+                    if (!lpEntry->mpResourceType->DebugValidate(lpEntry->mResource.m_baseResources[0]))
+                    {
+                        char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                        CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+                        lMessage << "Failed to validate resource " << lpEntry->mID << "\n";
+                        CGS_ASSERT(false, lacMessage);
+                    }
+                }
+            }
+        }
+    }
+
     // ---- batch allocation / heap flattening (the defragmenter's pool-side surface) --------
 
     // 828EDD38: resource-slot occupancy and the three heaps' node/byte statistics.

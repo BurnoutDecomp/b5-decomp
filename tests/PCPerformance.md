@@ -403,6 +403,30 @@ real alias ring and a retirement callback boundary, not D3D cache contents.
 Console per-step PerfMon hooks and its debug allocation-failure injector remain
 outside this restoration. No new FPS gain or completion of streaming is claimed.
 
+## Resource-list lifecycle and native pool records
+
+The resource lifecycle extension passes 58 checks in `run_pc_resource_batch.py`.
+It exercises the recovered partial/final fixup passes with reciprocal imports,
+dependency-pool ownership, and actual native pool output queues. Unload replies
+are emitted after references are decremented and the original delay is armed;
+the test does not claim that the still-unconnected per-pool retirement loop ran.
+Pool options and deletion replies now use typed native fields. The
+`--old-records` control restores their pre-change offset-based bodies and fails
+four of the 58 checks. The 14 streaming IO checks also pass.
+
+This extension remains a prerequisite for the original asynchronous loader.
+The game still uses synchronous loading. Pool dispatch, full defragmentation
+initialization/progression, and failed-load teardown are activation gates; the
+passing unit tests and clean shipping build do not establish an FPS improvement.
+
+Build `5bb1cb0e81a3` passed a quiet 90-second 2560x1440 combat run
+(`combat_pool_lifecycle_0930`): six player credits across four rivals, peak four
+crashing/two airborne rivals, 1,926 frames with multiple crashing rivals, no
+event end, and all 883 focus samples foreground. No assertions or exceptions
+were recorded. It averaged 62.93 FPS, with p99 27.22 ms and maximum 38.98 ms.
+The fights differ from previous runs, so these numbers establish neither a
+speedup nor a regression. The 165 FPS objective remains unmet.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still

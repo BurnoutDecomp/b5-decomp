@@ -20,6 +20,7 @@
 namespace CgsResource
 {
     class PoolModule;
+    class Pool;
     // CgsDeAllocatePoolModuleState.h - one of the PoolModule's step states.
     class DeAllocatePoolModuleState : public BasePoolModuleState
     {
@@ -42,6 +43,9 @@ namespace CgsResource
             E_STATE_COUNTING = 1
         };
 
+        void Construct(PoolModule* lpPoolModule);
+        void Begin(Pool* lpPool, ID lListId); // ARTIST 828F7DC8
+
         // The polled step @ 0x828DA830 (called by PoolModule::UpdateDeAllocating).
         u32 Update();   // THIS PASS @ 0x828DA830
 
@@ -58,7 +62,7 @@ namespace CgsResource
     private:
         u32 muState;            // +0x00  state token (EState)
         PoolModule* mpPoolModule; // +0x04, Construct 828FC0B8 and DWARF :78
-        u32 muFramesRemaining;  // +0x08  settle counter
+        s32 miFramesRemaining;  // +0x08  signed settle counter (Begin uses cmpw)
         bool mbGotPendingAllocationRequest; // +0x0C, DWARF :81
         // +0x10 on the console; the pending record widens with its native pointer fields.
         Events::AllocateResourceListRequest mPendingAllocationRequest; // DWARF :82

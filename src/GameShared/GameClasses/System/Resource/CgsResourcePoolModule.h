@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"     // base
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"   // mReceiverQueue
+#include "GameShared/GameClasses/Containers/CgsFifoQueue.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"    // Pool (128 embedded)
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"    // Type (type table)
 #include "GameShared/GameClasses/System/Resource/CgsResourceScratchPool.h" // ScratchPool (defrag staging, embedded)
@@ -210,7 +211,8 @@ namespace CgsResource
 
         // ---- request -> pool-options conversion (CgsPoolModule.cpp:1027) --------------
         // @ 0x828E2ED0 -- copy a CreatePoolRequest into a Pool::InitOptions (id/name/heap sizing).
-        void ConvertPoolRequestOptions(const void* lpRequest, void* lpOutOptions);
+        // ARTIST 828E2ED0 reads the request from r3 and options from r4; no this.
+        static void ConvertPoolRequestOptions(const void* lpRequest, void* lpOutOptions);
 
         // @ 0x828F3CD0 -- DebugReport: visit every live pool (id != -1 && valid).
         void DebugReport(FPoolReportCallback lpfnCallback, void* lpUserData);
@@ -226,6 +228,10 @@ namespace CgsResource
         // ---- request handlers ----------------------------------------------------------
         // @ 0x828EC590 -- forward an AllocateResourceListRequest to AllocateResourceList.
         void DoAllocateResourceListRequest(const void* lpRequest);
+        void DoFixUpAndResolveResourceListRequest(
+            const Events::FixUpAndResolveResourceListRequest* lpRequest, PoolIO::OutputBuffer* lpOutput);
+        void DoUnloadResourceListRequest(
+            const Events::UnloadResourceListRequest* lpRequest, PoolIO::OutputBuffer* lpOutput);
         // @ 0x828D81D0 -- DeletePool response handler (asserts on failure result).
         void DoDeletePoolRequest(const void* lpResponse);
 
@@ -283,8 +289,7 @@ namespace CgsResource
         CgsMemory::Relocator        mRelocator;          // :216
         CgsMemory::RelocationParams mRelocationParams;   // :217
 
-        // [DWARF :219] mPendingAllocationRequests (FifoQueue<AllocateResourceListRequest,4>) -- not
-        // reconstructed as a complete type, explicit padding.
-        u8 mPadPendingAllocationRequests[64];
+        // ARTIST 829076D8 dequeues at most one request while idle.
+        FifoQueue<Events::AllocateResourceListRequest, 4> mPendingAllocationRequests;
     };
 }
