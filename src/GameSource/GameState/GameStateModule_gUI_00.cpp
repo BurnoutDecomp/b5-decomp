@@ -2840,7 +2840,9 @@ void GameStateModule::HarnessInjectEventStartBringUp(GameStateModuleIO::OutputBu
         return;
     }
 
-    if (!mTriggerQueryManager.IsPlayerInTrafficLightRegion())
+    // A benchmark car swap can finish while the junkyard UI is still open.
+    // Wait for its normal exit before injecting the event-start gesture.
+    if (mCarSelectManager.IsInJunkyard() || !mTriggerQueryManager.IsPlayerInTrafficLightRegion())
     {
         return;
     }
@@ -2848,6 +2850,40 @@ void GameStateModule::HarnessInjectEventStartBringUp(GameStateModuleIO::OutputBu
     if (mModeManager.GetCurrentGameMode() != 0)
     {
         return;
+    }
+
+    // FLAG PC-platform leaf: when both harness requests are armed, finish the
+    // debug car swap before starting a mode (the swap itself requires freeburn).
+    // Resolve the same ID/name forms as HarnessInjectPlayerCarBringUp.
+    static const char* spcRequestedCar = getenv("BRN_DEBUG_PLAYER_CAR");
+    if (spcRequestedCar != 0 && spcRequestedCar[0] != '\0')
+    {
+        static CgsID slRequestedCarId = 0;
+        if (slRequestedCarId == 0)
+        {
+            const BrnResource::VehicleList* lpVehicles = GetVehicleList();
+            const CgsID lId = CgsIDCompress(spcRequestedCar);
+            for (s32 li = 0; lpVehicles != 0 && li < lpVehicles->GetVehicleCount(); ++li)
+            {
+                const BrnResource::VehicleListEntry* lpEntry = lpVehicles->GetVehicleData(li);
+                if (lpEntry != 0 && (lpEntry->GetId() == lId
+                    || _stricmp(lpEntry->GetName(), spcRequestedCar) == 0))
+                {
+                    slRequestedCarId = lpEntry->GetId();
+                    break;
+                }
+            }
+        }
+        if (slRequestedCarId == 0 || GetActivePlayerCarId() != slRequestedCarId)
+            return;
+        // The requested ID changes before the world finishes streaming/resetting
+        // the replacement. Wait for the published, loaded player model too.
+        if (!mLastActiveRaceCarInterface.IsPlayerCarActive())
+            return;
+        const EActiveRaceCarIndex lePlayer = mLastActiveRaceCarInterface.GetPlayerActiveRaceCarIndex();
+        if (!mLastActiveRaceCarInterface.IsRaceCarLoaded(lePlayer)
+            || mLastActiveRaceCarInterface.GetCarModelId(lePlayer) != slRequestedCarId)
+            return;
     }
 
     sbFired = true;

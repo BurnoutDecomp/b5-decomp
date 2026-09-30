@@ -27,8 +27,14 @@ inline HarnessCombatAimPC AimHarnessCombatPC(float dx, float dz, float facingX, 
         return {false, 0.0f};
     // Match BrnAI::FindSignedAngleBetween2DVectors: the signed XZ
     // cross is facingX*aimZ - facingZ*aimX, the negative of aimSide.
-    const float desired = -std::atan2(aimSide, aimAhead) * 1.4f;
+    float desired = -std::atan2(aimSide, aimAhead) * 1.4f;
     const float limit = speed > 35.0f ? 0.55f : 0.8f;
+    // Once alongside, commit to the side hit. Following the forward lead point
+    // can otherwise settle into parallel rubbing instead of a decisive impact.
+    // Keep the existing speed-dependent steering bound and release the shove
+    // as soon as the target is no longer alongside.
+    if (std::fabs(ahead) < 4.0f && std::fabs(side) > 0.5f && std::fabs(side) < 5.0f)
+        desired = side > 0.0f ? -limit : limit;
     return {true, std::fmax(-limit, std::fmin(limit, desired))};
 }
 }

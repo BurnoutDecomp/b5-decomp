@@ -270,6 +270,39 @@ window and qualify every measured run. Exclude post-event free driving. Clean
 timing runs disable screenshots and verbose crash witnesses; the counters remain.
 These checks do not establish 165 FPS or completion of the optimization work.
 
+The combat fixture now requests the stock PUSPK01 pickup through the existing
+debug car-change event. Automatic event start waits until the junkyard has
+closed and the requested car is active and loaded in the world snapshot. The
+case checks which model was streamed **before** event start: a swap after Road
+Rage ends cannot satisfy it. This fixes the old race where event start disabled
+the freeburn-only car swap. No physics, damage or scoring parameters change.
+
+The first corrected visual run (`combat_loaded_pickup_visual_0930`, build
+`efca51988650`) verifies PUSPK01 before start, driving, zero assertions/exceptions
+and damaged-car/HUD recovery. It remains rejected as combat evidence: its
+90-second measurement contains three player takedowns and only one airborne
+rival at once. The setup correction passes independent review; the 2,668-TU
+build is clean. A reliable setup alone does not qualify a performance sample.
+
+The controller now prefers a reachable intercept over an unreachable avoidance
+target and commits to a side hit when alongside, keeping its existing speed
+dependent steering limits and returning to lead pursuit as the rival moves
+ahead. These changes affect only the opted-in benchmark pad. Aiming checks pass
+11/11; restoring the previous aiming body fails one. Independent review passes.
+
+Visual run `combat_side_hit_visual_0930` on `42061b5c269c` meets the workload
+threshold: eight player-credited takedowns across five rivals, peak four crashing
+and two airborne rivals, 1,971 frames with multiple rival crashes, and no asserts
+or exceptions. The event remains active and all 883 focus samples are foreground.
+Captured frames show an airborne rival, collision debris, damage and the crash
+camera. Screenshot capture excludes this run from clean timing comparisons.
+
+The quiet repeat (`combat_side_hit_quiet_0930`, same executable) has four
+credited takedowns across two rivals, peak five crashing/four airborne rivals,
+1,466 frames with multiple crashes, full foreground and zero asserts/exceptions.
+It is rejected by the unchanged five-takedown/three-victim minimum. The fights
+remain variable; no new qualified FPS result or causal FPS improvement is claimed.
+
 ## Frame overlap integration
 
 Gameplay now runs the original frame coordinator with a native dispatch worker
