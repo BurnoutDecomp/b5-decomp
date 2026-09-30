@@ -15,6 +15,15 @@
 
 namespace CgsResource
 {
+    // Inlined ARTIST memory-lane access, e.g. CreateEntryListResource 828F7C60.
+    SmallResource::SmallMemoryResource SmallResource::GetMemoryResource() const
+    {
+        return m_baseResources[E_MEMTYPE_MAINMEMORY];
+    }
+    SmallResource::SmallMemoryResource& SmallResource::GetMemoryResource()
+    {
+        return m_baseResources[E_MEMTYPE_MAINMEMORY];
+    }
     // small -> rw (build the rw::Resource view FixUp/PostFixUp/DeSerialise operate on).
     void SmallResource::ConvertToRWResource(rw::Resource& lrResource)
     {

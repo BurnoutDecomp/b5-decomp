@@ -20,10 +20,19 @@ namespace CgsResource
 {
 namespace BundleLoaderIO
 {
-    void InputBuffer_Update::_AssertLayout()
+    void InputBuffer_Update::Construct()
     {
-        static_assert(offsetof(InputBuffer_Update, mLoadBundleRequestQueue) == 0x0004,
-                      "mLoadBundleRequestQueue @0x0004");
+        IOBuffer::Construct();
+        mLoadBundleRequestQueue.Construct();
+        mUnloadBundleRequestQueue.Construct();
+    }
+
+    void InputBuffer_Update::Destruct() { IOBuffer::Destruct(); }
+
+    const InputBuffer_Update::LoadBundleRequestQueue* InputBuffer_Update::GetLoadBundleRequestQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mLoadBundleRequestQueue;
     }
 
     // X360 0x828E1D48: read-lock; return this + 4 (the load-bundle request queue).

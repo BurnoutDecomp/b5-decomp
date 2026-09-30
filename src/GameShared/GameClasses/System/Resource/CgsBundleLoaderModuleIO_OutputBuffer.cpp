@@ -23,10 +23,31 @@ namespace CgsResource
 {
 namespace BundleLoaderIO
 {
-    void OutputBuffer::_AssertLayout()
+    void OutputBuffer::Construct()
     {
-        static_assert(offsetof(OutputBuffer, mPoolSendQueue) == 0x0004, "mPoolSendQueue @0x0004");
-        static_assert(offsetof(OutputBuffer, mStreamRequestQueue) == 0x1342C, "mStreamRequestQueue @0x1342C");
+        IOBuffer::Construct();
+        mPoolSendQueue.Construct();
+        mLoadBundleResponseQueue.Construct();
+        mUnloadBundleResponseQueue.Construct();
+        mStreamRequestQueue.Construct();
+    }
+
+    void OutputBuffer::Destruct() { IOBuffer::Destruct(); }
+
+    const OutputBuffer::PoolSendQueue* OutputBuffer::GetPoolSendQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mPoolSendQueue;
+    }
+
+    OutputBuffer::PoolSendQueue* OutputBuffer::GetPoolSendQueue() { return GetPool(); }
+
+    const OutputBuffer::StreamRequestQueue* OutputBuffer::GetStreamRequestQueue() const { return GetStream(); }
+
+    OutputBuffer::StreamRequestQueue* OutputBuffer::GetStreamRequestQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mStreamRequestQueue;
     }
 
     // X360 0x828E21E0: write-lock; return this + 4 (the pool-send queue).

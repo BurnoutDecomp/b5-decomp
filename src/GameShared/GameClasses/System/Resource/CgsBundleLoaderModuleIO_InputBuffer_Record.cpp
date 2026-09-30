@@ -20,9 +20,22 @@ namespace CgsResource
 {
 namespace BundleLoaderIO
 {
-    void InputBuffer_Record::_AssertLayout()
+    void InputBuffer_Record::Construct()
     {
-        static_assert(offsetof(InputBuffer_Record, mPoolReceiveQueue) == 0x0004, "mPoolReceiveQueue @0x0004");
+        IOBuffer::Construct();
+        mPoolReceiveQueue.Construct();
+    }
+
+    void InputBuffer_Record::Destruct() { IOBuffer::Destruct(); }
+
+    const InputBuffer_Record::PoolReceiveQueue* InputBuffer_Record::GetPoolReceiveQueue() const
+    {
+        return GetRecord();
+    }
+
+    InputBuffer_Record::PoolReceiveQueue* InputBuffer_Record::GetPoolReceiveQueue()
+    {
+        return GetRecord();
     }
 
     // X360 0x828E1FE8: read-lock; return this + 4.

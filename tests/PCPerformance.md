@@ -368,6 +368,41 @@ convincing benefit in the accepted combat runs; it was removed. Its private
 measurements remain under `present_discard_combat_0930_repeat` and
 `present_copy_combat_0930_repeat`. No presentation speedup is claimed.
 
+## Staged loading foundations
+
+The next restoration stage supplies real native bundle-loader IO queues and
+allocation records, the original batch allocation state and its pool helpers.
+Successful memory types survive purgatory retries instead of being allocated
+again. The old 32-bit-offset request decoder and 48-byte response buffer have
+been replaced by typed records. This is preparation for the original streaming
+FSM: the live game still uses `ProcessLoadRequests` and its synchronous loader.
+
+This work also restores `Heap::Free(void*)`, which was empty. It is used by
+partial allocation cleanup and live resource replacement. The real-heap suite
+`run_pc_resource_batch.py` passes 33 checks, including retained batch allocations,
+failure cleanup, the defrag handoff, alias propagation and retirement callbacks
+before freeing memory. Its `--old-free` control fails seven checks (32 execute;
+the completion-only defrag check is skipped when the prerequisite fails).
+`run_pc_resource_streaming_io.py` passes 14 checks over the actual IO buffers;
+its `--old-driver` control fails four native-record decoding checks. The earlier
+46 bundle ownership checks also pass.
+
+The foundation build `c1c8ecb29d57` passed startup and functional streaming/camera
+coverage (`staged_allocation_live`) with zero new assertions, exceptions or stale
+vertex-format reports. Three requested relocations seated successfully; two
+requests during crashes did not, and are excluded. Inspected frames show the
+damaged car, scenery and HUD through crash recovery. This capture is not a combat
+timing result. Final build `567cdc9c12da` changes only comments and an assertion
+message from that live build and compiles without warnings.
+
+Async activation still requires the original loader and pool dispatch, complete
+scratch/defrag initialization, emergency-defrag inputs, and failure teardown.
+The allocation defrag test supplies the planner's completion at its boundary;
+it does not run the actual planner. The live-replacement unit test covers the
+real alias ring and a retirement callback boundary, not D3D cache contents.
+Console per-step PerfMon hooks and its debug allocation-failure injector remain
+outside this restoration. No new FPS gain or completion of streaming is claimed.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still

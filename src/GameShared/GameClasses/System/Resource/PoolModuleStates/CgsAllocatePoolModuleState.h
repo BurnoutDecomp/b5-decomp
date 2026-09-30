@@ -5,11 +5,12 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"                                   // ID (embedded by value)
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundle2.h"                              // BundleV2::ResourceEntry (pointer member)
 #include "GameShared/GameClasses/System/Resource/CgsEntryListResource.h"                            // EntryListResourceType (embedded by value)
+#include "GameShared/GameClasses/System/Resource/CgsSmallResource.h"
 
 // CgsResource::AllocatePoolModuleState -- the PoolModule's "allocating a resource list" step state.
 // PoolModule::UpdateAllocating (X360 0x82904860) polls Update() once per frame and dispatches on the
-// EAllocateResult it returns: SUCCESS/SIMPLEFRAG -> finalise + post the response; ERROR -> assert;
-// PEND -> wait; INTELLIFRAG -> hand off to IntelliFragPoolModuleState.
+// EAllocateResult it returns: SUCCESS/FAILED_SAFELY -> post the response; ERROR -> assert;
+// PEND -> wait; DEFRAGMENT -> hand off to IntelliFragPoolModuleState.
 //
 // DECOMPILED from BURNOUT_X360_ARTIST.XEX. Base + layout: the DecFIGS DWARF
 // (CgsAllocatePoolModuleState.h) attests `AllocatePoolModuleState : public BasePoolModuleState` (the
@@ -25,20 +26,19 @@ namespace CgsResource
     class Pool;
     class PoolModule;
     class Entry;
+    namespace Events { struct AllocateResourceListResponse; }
 
     class AllocatePoolModuleState : public BasePoolModuleState
     {
     public:
-        // The per-frame poll result PoolModule::UpdateAllocating dispatches on. (Enum kept as the
-        // driver reconstruction spells it; DWARF names the same 0..4 values
-        // SUCCESS/ERROR/PEND/DEFRAGMENT/FAILED_SAFELY.)
+        // Per-frame poll results, named by DecFIGS and numbered by ARTIST's switch.
         enum EAllocateResult
         {
             E_RESULT_SUCCESS    = 0,
             E_RESULT_ERROR      = 1,
             E_RESULT_PEND       = 2,
-            E_RESULT_INTELLIFRAG = 3,
-            E_RESULT_SIMPLEFRAG = 4,
+            E_RESULT_DEFRAGMENT  = 3,
+            E_RESULT_FAILED_SAFELY = 4,
         };
 
         // The step machine's internal state token (meState @ this+0). DWARF CgsAllocatePoolModuleState.h:55.
@@ -51,20 +51,24 @@ namespace CgsResource
             E_STATE_DEFRAG_WAITING       = 4,
         };
 
+        void Construct(PoolModule* lpPoolModule);
+        Pool* GetPool() { return mpPool; }
+        AllocListSet* GetAllocSet() { return mpAllocListSet; }
+
         // @ 0x828DA568 -- arm the state from an allocate-resource-list request: latch the pool, list id,
         // bundle-entry array + count, the batch working set and the caller's output arrays, then move to
         // E_STATE_CHECK_CREATE_ENTRIES. Asserts the machine was idle. mpOutResources is the caller's
-        // output handle array (DWARF type ResourceHandle::Resource*, not yet homed -> pointer-only void*).
+        // output resource array (ResourceHandle::Resource == SmallResource).
         void BeginAllocation(Pool* lpPool, ID lListId, const BundleV2::ResourceEntry* lpEntries,
                              s32 liNumEntries, AllocListSet* lpAllocListSet, bool* lpOutNeeds,
-                             void* lpOutResources, bool lbAllowFailiure);
+                             SmallResource* lpOutResources, bool lbAllowFailiure);
 
         // @ 0x82902640 -- run one allocation step; returns the EAllocateResult above.
         u32 Update();
 
-        // Fill the caller's resource-list response record from this step's working set. Body lives in
-        // this state's own TU (deferred); the driver delegates the working-set copy here.
-        void GenerateResponse(void* lpOutResponse);
+        // Fill the native resource-list response from the allocation working set.
+        void GenerateResponse(Events::AllocateResourceListResponse* lpOutResponse);
+        void DebugPrintAllocListSet();
 
     private:
         // @ 0x828FF228 -- resolve every bundle entry's already-present dependency: per entry, look it up
@@ -98,7 +102,7 @@ namespace CgsResource
         s32                             miNumEntries;               // +0x14  :97
         AllocListSet*                   mpAllocListSet;             // +0x18  :98
         bool*                           mpOutNeeds;                 // +0x1C  :99
-        void*                           mpOutResources;             // +0x20  :100 (DWARF ResourceHandle::Resource*)
+        SmallResource*                  mpOutResources;             // +0x20  :100 (ResourceHandle::Resource*)
         Entry*                          mpOutListEntry;             // +0x24  :101
         s16                             miNeedCount;                // +0x28  :102
         EntryListResourceType           mEntryListResourceType;     // +0x2C  :103

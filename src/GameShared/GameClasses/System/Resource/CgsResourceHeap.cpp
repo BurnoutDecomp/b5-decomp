@@ -322,13 +322,50 @@ namespace CgsResource
             muLargestFree = lpEntry->GetSize();
     }
 
-    // Free the allocated block at an address. Only reached on the pool's alloc-failure cleanup path
-    // (AllocateMemoryForResource backs out the pools it already carved when a later pool runs out of
-    // room) -- which never happens for a correctly-sized pool. The address->node resolution
-    // (FindFreeNodeContainingAddress / the allocated-node walk) is deferred, so this is a no-op for
-    // now; an undersized pool already asserts at the call site. Use Free(u16) for normal frees.
-    void Heap::Free(void* /*lpPtr*/)
+    // ARTIST 828FD918 (export hole): resolve the exact block address and free its node.
+    // Used by partial-allocation cleanup and by the live-update replacement path.
+    void Heap::Free(void* lpPtr)
     {
+        mbUpdated = true;
+        CGS_ASSERT(reinterpret_cast<uintptr_t>(lpPtr) % muHeapAlignment == 0,
+                   "((int)lpcAddress % muHeapAlignment) == 0");
+        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode; lpNode = mUsedNodes.GetNext(lpNode))
+        {
+            if (lpNode->GetData()->GetAddress() == lpPtr)
+            {
+                Free(static_cast<u16>(lpNode - mpNodes));
+                break;
+            }
+        }
+    }
+
+    s32 Heap::GetMaxNodes() const { return miNumNodes; }
+
+    // 828ECF90: include both allocated and free blocks in the used-node count.
+    void Heap::GetNodeUsageStatistics(s32* lpUsedNodes, s32* lpUnusedNodes,
+        s32* lpAllocatedNodes, s32* lpFreeNodes, s32* lpAllocatedBytes,
+        s32* lpFreeBytes, s32* lpLargestFree)
+    {
+        *lpUsedNodes = *lpAllocatedNodes = *lpFreeNodes = 0;
+        *lpAllocatedBytes = *lpFreeBytes = *lpLargestFree = 0;
+        *lpUnusedNodes = mUnusedNodes.GetCount();
+        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode; lpNode = mUsedNodes.GetNext(lpNode))
+        {
+            ++*lpUsedNodes;
+            const HeapEntry* lpEntry = lpNode->GetData();
+            const s32 liSize = static_cast<s32>(lpEntry->GetSize());
+            if (lpEntry->IsAllocated())
+            {
+                ++*lpAllocatedNodes;
+                *lpAllocatedBytes += liSize;
+            }
+            else
+            {
+                ++*lpFreeNodes;
+                *lpFreeBytes += liSize;
+                if (*lpLargestFree <= liSize) *lpLargestFree = liSize;
+            }
+        }
     }
 
     u32 Heap::GetHeapAlignment() const { return muHeapAlignment; }

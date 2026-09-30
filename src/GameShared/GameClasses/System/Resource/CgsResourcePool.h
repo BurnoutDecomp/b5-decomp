@@ -155,7 +155,7 @@ namespace CgsResource
         bool Invalidate(SmallResource* lpResource, Entry::ResourceDescriptor* lpDescriptor);
         bool Validate();
         const s16* CreateBatchEntrySlots(s16 liNumSlots);
-        ECreateResult ExecuteBatchAllocations(AllocListSet* lpAllocListSet, bool lbAllowDefrag);
+        ECreateResult ExecuteBatchAllocations(AllocListSet* lpAllocListSet, bool lbRetryFailedOnly);
         EBatchAllocResult ExecuteBatchAllocation(AllocListSet* lpAllocListSet, s32 liMemType);
         EBatchAllocResult ExecuteBatchAddressedAllocation(s32 liMemType, AllocRequestAddressed* lpRequests, AllocResult* lpResults, u32 luNumRequests, bool lbFreeOnFailure);
         ECreateResult MergeBatchAllocations(AllocListSet* lpAllocListSet, const BundleV2::ResourceEntry* lpResourceEntry, SmallResource* lpResource);
