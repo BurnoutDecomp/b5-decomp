@@ -93,7 +93,7 @@ namespace CgsResource
     // arm-up countdown, then wait while the pool is still defragmenting; once clear, scan the batch
     // alloc-list results for a memory type that still needs defragmenting and kick BeginDefragment
     // on it (advancing to DEFRAGMENTING_HEAP). DEFRAGMENTING_HEAP -> once the pool reports its defrag
-    // mem-type idle (-1), re-arm and do the final allocations. Any other state is invalid.
+    // frame latch idle (-1), re-arm and do the final allocations. Any other state is invalid.
     //
     // The console body reads the base-private alloc-result array directly; this reconstruction
     // reaches it through the attested base accessor GetAllocationResult(memType) (the same array
@@ -137,7 +137,7 @@ namespace CgsResource
 
         if (meState == E_STATE_DEFRAGMENTING_HEAP)
         {
-            if (GetPool()->GetDefragMemType() == -1)   // pool defrag done
+            if (!GetPool()->IsDefragmenting())   // ARTIST 828FFA24: frame counter == -1
             {
                 meState = E_STATE_START_DEFRAGMENTING;
                 DoFinalAllocations();

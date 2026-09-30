@@ -193,7 +193,9 @@ namespace CgsResource
         void DeleteEntry(s16 liIndex);
         void DeleteMemoryForEntry(ID lID);
         bool ReAllocateMemoryForEntry(ID lID, Entry::ResourceDescriptor* lpDescriptor, s32 liMemType, SmallResource* lpResource);
-        // -1 == this pool's defrag stage is idle/done; the frag strategies poll it for completion.
+        // DWARF :495; ARTIST 828FF89C/828FFA24 tests the frame latch, not the
+        // retained memory-type selector. The selector need not reset on completion.
+        bool IsDefragmenting() const;
         s32  GetDefragMemType() const;
         void BuildAllocRequestForEntry(AllocListSet* lpAllocListSet, u16 luIndex, Entry* lpEntry);
 

@@ -243,6 +243,7 @@ namespace CgsResource
     bool Pool::GetAllowDefragmentation() const     { return mbAllowDefragmentation; }
     void Pool::SetAllowDefragmentation(bool lbAllow) { mbAllowDefragmentation = lbAllow; }
     s32  Pool::GetDefragMemType() const            { return miDefragMemType; }
+    bool Pool::IsDefragmenting() const           { return miDefragFrame != -1; }
 
     s16  Pool::GetEntryRefCount(s32 liIndex) const       { return mpiResourceRefCounts[liIndex]; }
     void Pool::SetEntryRefCount(s32 liIndex, s16 liRefCount) { mpiResourceRefCounts[liIndex] = liRefCount; }
@@ -592,6 +593,8 @@ namespace CgsResource
         miRefCountThreshold    = lpOptions->miRefCountThreshold;
         miBankId               = lpOptions->miBankId;
         mbAllowDefragmentation = lpOptions->mbAllowDefragmentation;
+        miDefragFrame          = -1; // ARTIST 82902204: no relocation in progress
+        mpCurrentScratchPool   = nullptr; // ARTIST 8290220C
         meDefragStage          = DEFRAGSTAGE_IDLE;   // (defrag-state init; the full machinery is deferred.
                                                      //  ⚠ when it lands: a defrag MOVE relocates a resource
                                                      //  without FreeMemoryForResource, so it must also notify
