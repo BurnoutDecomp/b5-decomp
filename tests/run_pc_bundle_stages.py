@@ -9,6 +9,8 @@ parser.add_argument('--reuse-live-update',action='store_true',
     help='negative control: restore resident reuse for live replacement requests')
 parser.add_argument('--original-cache-lookup',action='store_true',
     help='negative control: restore the untagged ARTIST resident lookup')
+parser.add_argument('--early-cached-reply',action='store_true',
+    help='negative control: let resident replies overtake the active bundle')
 args=parser.parse_args()
 tree=Tree()
 base='src/GameShared/GameClasses/'
@@ -27,6 +29,10 @@ if args.original_cache_lookup:
     marker='\n                    | 0x8000000000000000ull'
     assert lookup.count(marker)==1
     stages=stages.replace(lookup,lookup.replace(marker,''))
+if args.early_cached_reply:
+    guard='        if (meStreamStage != STREAMSTAGE_IDLE)\n            return false;\n'
+    assert stages.count(guard)==1
+    stages=stages.replace(guard,'')
 driver=tree.read(resource+'CgsResourceBundleLoaderModule.cpp')
 adapter='namespace CgsResource {\n'+definition(driver,'void BundleLoaderModule::Construct()')+'\n'
 adapter+=definition(driver,'bool BundleLoaderModule::Update(')+'\n}\n'
@@ -54,4 +60,4 @@ numeric=compile_and_run(Path(__file__).with_name('PCBundleStages.cpp'),
         *[REPO/resource/name for name in ['CgsResourceBundle2.cpp','CgsResourceIOEvents.cpp',
          'CgsBundleLoaderModuleIO_InputBuffer.cpp','CgsBundleLoaderModuleIO_InputBuffer_Update.cpp',
          'CgsBundleLoaderModuleIO_InputBuffer_Record.cpp','CgsBundleLoaderModuleIO_OutputBuffer.cpp']]])
-raise SystemExit(report('run_pc_bundle_stages',[],numeric,31))
+raise SystemExit(report('run_pc_bundle_stages',[],numeric,35))

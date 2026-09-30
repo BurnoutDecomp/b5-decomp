@@ -1908,13 +1908,16 @@ namespace renderengine
         sVdSourceWitness.clear();
     }
 
-    void* WorldVd32_GetDeclaration(const void* lpVdImage, u32* lpuStride)
+    static void* WorldVd32_GetDeclarationInternal(const void* lpVdImage, u32* lpuStride, bool lbPublish)
     {
         *lpuStride = 0;
+        if (lbPublish)
+        {
         sbLastDeclHasTexcoord0 = false;
         suLastDeclUsageMask    = 0;
         suLastDeclSourceStride = 0;
         suLastDeclDec3nCount   = 0;
+        }
         if (lpVdImage == nullptr)
             return nullptr;
 
@@ -1948,6 +1951,7 @@ namespace renderengine
         if (lIt != sVdCache.end())
         {
             *lpuStride = lIt->second.muStride;
+            if (!lbPublish) return lIt->second.mpDeclaration;
             sbLastDeclHasTexcoord0 = lIt->second.mbHasTexcoord0;
             suLastDeclUsageMask    = lIt->second.muUsageMask;
             suLastDeclSourceStride = lIt->second.muSourceStride;
@@ -2223,8 +2227,11 @@ namespace renderengine
         }
         // Bind to the STORED entry, not the local: spLastDeclElements below has to point at
         // the cache's own buffer (the cache-hit path hands out the same pointer).
+        // Prewarming must not cache a transient creation failure.
+        if (!lbPublish && !lEntry.mpDeclaration) return nullptr;
         const Vd32Cached& lrStored = (sVdCache[reinterpret_cast<uintptr_t>(lpVdImage)] = lEntry);
         *lpuStride = lrStored.muStride;
+        if (!lbPublish) return lrStored.mpDeclaration;
         sbLastDeclHasTexcoord0 = lrStored.mbHasTexcoord0;
         suLastDeclUsageMask    = lrStored.muUsageMask;
         suLastDeclSourceStride = lrStored.muSourceStride;
@@ -2246,6 +2253,21 @@ namespace renderengine
         if (lEntry.muDec3nCount != 0 && lEntry.mpDeclaration != nullptr)
             LogOnce("vd32dec3n", "[WorldVd32] driver lacks DEC3N; packed normals expanded to FLOAT3\n");
         return lEntry.mpDeclaration;
+    }
+
+    void* WorldVd32_GetDeclaration(const void* lpVdImage, u32* lpuStride)
+    {
+        return WorldVd32_GetDeclarationInternal(lpVdImage, lpuStride, true);
+    }
+
+    // FLAG PC-platform leaf: original resource FixUp creates the declaration.
+    // Keep it in the native lifetime cache without changing the current draw's
+    // published vertex layout. Device-less early loads can create it on first use.
+    bool WorldVd32_PrepareResource(const void* lpVdImage)
+    {
+        if (!Dev()) return false;
+        u32 luStride = 0;
+        return WorldVd32_GetDeclarationInternal(lpVdImage, &luStride, false) != nullptr;
     }
 
     // [PC bring-up shim] Choose the fallback pair for the mesh just bound: the

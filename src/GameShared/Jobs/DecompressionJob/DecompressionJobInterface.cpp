@@ -27,6 +27,18 @@ namespace
 namespace CgsResource
 {
 
+// FLAG PC-platform leaf: native shutdown may interrupt streaming between chunks.
+void DecompressionJobInterface::CancelStreamPC()
+{
+    if (meStage == E_DJS_IDLE) return;
+    if (meStage == E_DJS_FLUSHING) mJob.WaitOn();
+    if (mJobStatus.mDecompressionStream.state) mNativeWorker.CancelStreamPC();
+    std::memset(&mJobStatus, 0, sizeof(mJobStatus));
+    mbEntryInProgress = false;
+    muNumEntries = 0;
+    meStage = E_DJS_IDLE;
+}
+
 // DecompressionJobInterface.cpp:40 / X360 0x828DB0C0
 void DecompressionJobInterface::Construct(EA::Jobs::JobScheduler* lpScheduler,
                                           CompressedData*         lpEntries,

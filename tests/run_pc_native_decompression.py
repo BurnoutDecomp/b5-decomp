@@ -25,4 +25,4 @@ sources += [REPO/'vendor/zlib/src'/n for n in
 numeric=compile_and_run(Path(__file__).with_name('PCNativeDecompression.cpp'),
     'pc_native_compressed_payload.inc',arrays,'PCNativeDecompression',
     extra_flags='/F8388608 winmm.lib dbghelp.lib psapi.lib',extra_sources=sources)
-raise SystemExit(report('run_pc_native_decompression',[],numeric,10))
+raise SystemExit(report('run_pc_native_decompression',[],numeric,12))

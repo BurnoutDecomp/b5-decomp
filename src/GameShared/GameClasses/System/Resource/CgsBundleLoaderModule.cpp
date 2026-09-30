@@ -73,6 +73,11 @@ bool BundleLoaderModule::CheckForLoads(BundleLoaderIO::OutputBuffer* lpOutput) /
         }
         if (liLoaded == miMaxLoadedBundles)
             break;
+        // The repaired resident fast path must retain the original completion
+        // order. During prefetch the active bundle may still be fixing up;
+        // publishing a later cache hit here would overtake its load response.
+        if (meStreamStage != STREAMSTAGE_IDLE)
+            return false;
         ++mpLoadedBundles[liLoaded].miRefCount;
         PostLoadFinishedEvent(lpOutput, &lRequest, Events::LoadBundleResponse::E_RESULT_SUCCESS);
         mLoadRequestQueue.Pop(&lRequest);
@@ -329,6 +334,9 @@ void BundleLoaderModule::ProcessReceiverQueue() // 828E2888
         if (liTag == 16) {
             const auto* lpResponse = reinterpret_cast<const Events::OpenReadStreamResponse*>(lpEvent);
             maStreams[lpResponse->GetEventId()] = lpResponse->GetStream();
+            mabStreamOpenFailed[lpResponse->GetEventId()] = !lpResponse->GetStream().IsValid();
+            if (mabStreamOpenFailed[lpResponse->GetEventId()])
+                mabStreamBuffersUsed[lpResponse->GetEventId()] = false;
         } else if (liTag == 18) {
             const auto* lpResponse = reinterpret_cast<const Events::CloseReadStreamResponse*>(lpEvent);
             mabStreamBuffersUsed[lpResponse->GetEventId()] = false;
@@ -570,6 +578,15 @@ void BundleLoaderModule::UpdateStream(void* lpOutputBuffer) // 82906B30
         // fall through: ready stages advance within the same update.
     case STREAMSTAGE_STREAMHEADER:
         meStreamStage = STREAMSTAGE_STREAMHEADER;
+        // FLAG PC-platform leaf: match the existing PC loader's failure reply
+        // when an asynchronous open fails, then allow the next queued load.
+        if (mabStreamOpenFailed[miCurrentStream])
+        {
+            mabStreamOpenFailed[miCurrentStream] = false;
+            PostLoadFinishedEvent(lpOutput, &mLoadRequest, Events::LoadBundleResponse::E_RESULT_OUT_OF_MEMORY);
+            meStreamStage = STREAMSTAGE_IDLE;
+            break;
+        }
         if (!StreamHeaderFunc()) break;
         // fall through
     case STREAMSTAGE_STREAMDEBUGDATA:

@@ -292,6 +292,59 @@ int main(){
             "live replacement of a resident bundle opens its data without an extra logical reference or premature success");
         f.output.UnlockForRead();
     }
+    {
+        Fixture f;
+        f.loader.meStreamStage=BundleLoaderModule::STREAMSTAGE_FIXUP;
+        f.loader.mLoadRequest.SetFileName("active.bundle");
+        f.loader.mLoadRequest.miEventId=90;f.loader.mLoadRequest.miPoolId=3;
+        Events::LoadBundleRequest cached{};cached.SetFileName("resident.bundle");
+        cached.miEventId=91;cached.miPoolId=3;
+        f.loaded[0].miPoolId=3;f.loaded[0].miRefCount=1;
+        f.loaded[0].mResourceId.SetHash(static_cast<u32>(ID::HashString(
+            reinterpret_cast<const u8*>(cached.macFileName)))|0x8000000000000000ull);
+        f.loader.mLoadRequestQueue.Push(&cached,0);
+        f.Tick();
+        f.output.LockForRead();const auto& out=static_cast<const BundleLoaderIO::OutputBuffer&>(f.output);
+        Check(out.GetLoadBundleResponseQueue()->GetLength()==0 && f.loaded[0].miRefCount==1
+            && f.loader.mLoadRequestQueue.GetLength()==1,
+            "a resident prefetch waits for the earlier bundle's final fixup and completion");
+        f.output.UnlockForRead();
+        f.loader.meStreamStage=BundleLoaderModule::STREAMSTAGE_LOADDONE;
+        f.loader.mAllocationResponse.mbFailed=false;
+        f.Tick();f.Tick();
+        f.output.LockForRead();const auto* replies=out.GetLoadBundleResponseQueue();
+        Check(replies->GetLength()==2 && replies->GetEvent(0).miEventId==90
+            && replies->GetEvent(1).miEventId==91 && f.loaded[0].miRefCount==2,
+            "the active load completes before the cached load with exactly one new reference");
+        f.output.UnlockForRead();
+    }
+    {
+        Fixture f;
+        Events::LoadBundleRequest request{};request.SetFileName("missing.bundle");
+        request.miPoolId=3;request.miEventId=97;request.mpUser=&f.loader.mReceiverQueue;
+        f.loader.mLoadRequestQueue.Push(&request,0);f.Tick();ClearOutput(f.output);
+        CgsFileSystem::ReadStream invalid;invalid.Construct(nullptr);
+        Events::OpenReadStreamResponse failed{};
+        failed.Construct(&f.loader.mReceiverQueue,f.loader.miCurrentStream,invalid);
+        f.loader.mReceiverQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&failed),16,sizeof(failed));
+        f.Tick();
+        f.output.LockForRead();const auto& out=static_cast<const BundleLoaderIO::OutputBuffer&>(f.output);
+        const auto* replies=out.GetLoadBundleResponseQueue();
+        Check(replies->GetLength()==1 && replies->GetEvent(0).miEventId==97
+            && replies->GetEvent(0).meResult==Events::LoadBundleResponse::E_RESULT_OUT_OF_MEMORY
+            && f.loader.meStreamStage==BundleLoaderModule::STREAMSTAGE_IDLE
+            && !f.loader.mabStreamBuffersUsed[f.loader.miCurrentStream],
+            "failed opens return the original request identity and release the stream reservation");
+        f.output.UnlockForRead();ClearOutput(f.output);
+        request.SetFileName("next.bundle");request.miEventId=98;
+        f.loader.mLoadRequestQueue.Push(&request,0);f.Tick();
+        f.output.LockForRead();Events::OpenReadStreamRequest open{};
+        Check(EventAt(out.GetStreamRequestQueue(),16,open)
+            && f.loader.meStreamStage==BundleLoaderModule::STREAMSTAGE_STREAMHEADER
+            && f.loader.mLoadRequest.miEventId==98,
+            "a failed open does not block the next queued bundle");
+        f.output.UnlockForRead();
+    }
     Check(assertions==0,"valid staged protocol satisfies engine assertions");
     std::printf("PCBundleStages: %d checks, %d failures\n",checks,failures);
     return failures?1:0;

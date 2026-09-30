@@ -10,6 +10,10 @@
 #include "GameShared/GameClasses/System/CgsHarnessSlot.h"    // BRN_HARNESS_SLOT name suffix
 #include "pc/gcm/renderengine/device.h"
 #include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
+#include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
+#include "SDKs/EATech/eajobs/jobs.h"
+#include "SDKs/EATech/eajobs/job_scheduler.h"
+#include "SDKs/EATech/eajobs/job_thread_parameters.h"
 
 // PC configuration entry point in GameSource/Main/BrnMain.cpp.
 void SaveFullscreenConfigPC();
@@ -44,11 +48,16 @@ char CgsSystem::HardwareInit::macAutoTestScriptToRun[64];
 
 char CgsSystem::HardwareInit::macTitleIdFromCmdLine[10];
 
-//JobScheduler CgsSystem::HardwareInit::mJobManager; // TODO: Implement HardwareInit
+// Keep allocator storage alive until the scheduler and its workers are destroyed.
+CgsMemory::HeapMallocCoreAllocator CgsSystem::HardwareInit::mJobManagerAllocator;
+EA::Jobs::JobScheduler CgsSystem::HardwareInit::mJobManager;
 
 char CgsSystem::HardwareInit::macJobManagerBuffer[400 * 1024]; // 400 KB buffer for job manager
 
-//CgsMemory::HeapMallocCoreAllocator CgsSystem::HardwareInit::mJobManagerAllocator; // TODO: Implement HardwareInit
+EA::Jobs::JobScheduler* CgsSystem::JobManager()
+{
+    return &HardwareInit::mJobManager;
+}
 
 volatile bool CgsSystem::HardwareInit::mbHardwareRequestsShutdown;
 
@@ -476,11 +485,29 @@ void CgsSystem::HardwareInit::InitializeHardware(const char *lpCmdLine)
     ShowCursor(FALSE);
     CoInitialize(nullptr);
 
+    // ARTIST828E06B8..828E075C: fixed400KiB heap,128 job slots and3 workers.
+    // FLAG PC-platform leaf: native EAThread defaults choose Windows priority
+    // and CPU placement; console priority350/CPU1,3,5 are not native policies.
+    mJobManagerAllocator.Construct(macJobManagerBuffer, sizeof(macJobManagerBuffer));
+    EA::Jobs::SetAllocator(&mJobManagerAllocator);
+    mJobManager.SetProfiling(true);
+    mJobManager.Initialize(128, 128);
+    for (s32 liThread = 0; liThread < 3; ++liThread)
+    {
+        EA::Jobs::JobThreadParameters lParameters;
+        mJobManager.AddThread(lParameters);
+    }
+
     // TODO: Implement CgsSystem::HardwareInit::InitializeHardware
 }
 
 void CgsSystem::HardwareInit::ReleaseHardware()
 {
+    // Join before retiring the arena used by job records and dependency events.
+    mJobManager.Destroy();
+    mJobManagerAllocator.Destruct();
+    EA::Jobs::SetAllocator(nullptr);
+
     SetCursor(hCursor);
     ShowCursor(TRUE);
 
@@ -517,7 +544,7 @@ bool CgsSystem::HardwareInit::IsAlreadyRunning()
     }
 
     // No existing mutex, create a new one
-    CreateMutex(nullptr, FALSE, lpcMutexName);
+    CreateMutexA(nullptr, FALSE, lpcMutexName);
     return FALSE;
 }
 

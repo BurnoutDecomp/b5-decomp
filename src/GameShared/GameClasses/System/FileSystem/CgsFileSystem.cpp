@@ -41,6 +41,7 @@ namespace CgsFileSystem
         , mpDebugAllocator(nullptr)
         , mpDiskLayout(nullptr)
         , mpMemFileSystem(nullptr)
+        , mbReleasing(false)
     {
     }
 
@@ -142,6 +143,17 @@ namespace CgsFileSystem
                StreamDeviceDiskRead::E_STATUS_OPEN;
     }
 
+    // FLAG PC-platform leaf: ARTIST leaves failed opens closed (OnOpen82900740)
+    // while its resource poll waits only for OPEN. Preserve native load-failure
+    // replies rather than retaining a pending record and stream buffer forever.
+    bool FileSystem::HasReadStreamFailedPC(ReadStream lStream) const
+    {
+        if (!lStream.mpStreamDevice) return true;
+        const auto leStatus = GetEffectiveStreamStatus(lStream.mpStreamDevice);
+        return leStatus == StreamDeviceDiskRead::E_STATUS_CLOSED
+            || leStatus == StreamDeviceDiskRead::E_STATUS_ERROR;
+    }
+
     // @0x828D6708. Receives the slot index; resolves it to the stream engine, then tests CLOSED.
     bool FileSystem::IsReadStreamClosed(s32 liIndex)
     {
@@ -156,6 +168,7 @@ namespace CgsFileSystem
         for (u32 luIndex = 0; luIndex < KU_MAX_READ_STREAMS; ++luIndex)
             maReadStreams[luIndex].Construct(this, &mLog);
         muNumUsedReadStreams = 0;
+        mbReleasing = false;
     }
 
     bool FileSystem::Prepare()
@@ -165,9 +178,28 @@ namespace CgsFileSystem
         // qualified root to the game's working directory.
         GetDeviceManager()->SetDefaultPath("p_dvd:");
         mbPrepared = true;
+        mbReleasing = false;
         return true;
     }
 
-    bool FileSystem::Release()  { return true; }
+    bool FileSystem::Release()
+    {
+        // FLAG PC-platform leaf: the native async device retains pointers into
+        // these rings. Request close once, and let callbacks finish before the
+        // owning resource arena can be retired.
+        if (!mbReleasing)
+        {
+            for (auto& lrStream : maReadStreams)
+                if (GetEffectiveStreamStatus(&lrStream) != StreamDeviceDiskRead::E_STATUS_CLOSED)
+                    lrStream.Close();
+            mbReleasing = true;
+        }
+        for (const auto& lrStream : maReadStreams)
+            if (GetEffectiveStreamStatus(&lrStream) != StreamDeviceDiskRead::E_STATUS_CLOSED)
+                return false;
+        muNumUsedReadStreams = 0;
+        mbPrepared = false;
+        return true;
+    }
     void FileSystem::Destruct() {}
 }
