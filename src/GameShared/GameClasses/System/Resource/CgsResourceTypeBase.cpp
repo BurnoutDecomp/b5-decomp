@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
 #include "rw/rwcore_structs.h"   // rw::Resource, rw::BaseResourceDescriptors<5> (= ResourceDescriptor)
+#include <cstdint>
 
 // Default bodies for the CgsResource::Type polymorphic base. Concrete handlers (RwRaster, Font, ...)
 // override the virtuals they implement; whatever they leave alone falls through to these no-op /
@@ -43,9 +44,21 @@ namespace CgsResource
     {
     }
 
-    void Type::ReBase(void* /*lpResource*/, rw::Resource& /*lrSource*/, rw::Resource& /*lrDest*/,
-                      ResourceDescriptor& /*lrSize*/, s32 /*liMemType*/) const
+    // ARTIST 828EDFC0: apply the moved memory lane's address delta through
+    // the resource's virtual FixUp. Other lanes carry zero offsets.
+    void Type::ReBase(void* lpResource, rw::Resource& lrSource, rw::Resource& lrDest,
+                      ResourceDescriptor& /*lrSize*/, s32 liMemType) const
     {
+        rw::Resource lOffset;
+        for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
+            lOffset.m_baseResources[lu] = nullptr;
+        // FLAG PC-platform leaf: staging and live memory are separate native
+        // allocations. Integer address subtraction preserves the console's
+        // wrapping delta without undefined cross-allocation pointer subtraction.
+        const uintptr_t luDelta = reinterpret_cast<uintptr_t>(lrDest.m_baseResources[liMemType])
+                                - reinterpret_cast<uintptr_t>(lrSource.m_baseResources[liMemType]);
+        lOffset.m_baseResources[liMemType] = reinterpret_cast<void*>(luDelta);
+        FixUp(lpResource, lOffset);
     }
 
     uint32_t Type::GetImportCount(const void* /*lpResource*/) const

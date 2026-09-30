@@ -12,6 +12,15 @@
 
 namespace CgsResource
 {
+    // Inlined ARTIST PoolModule::Construct 828FC0B8. Begin sets the countdown.
+    void EmergencyFragPoolModuleState::Construct(PoolModule* lpPoolModule)
+    {
+        BaseDefragPoolModuleState::Construct(lpPoolModule);
+        meState = E_STATE_IDLE;
+        mpRelocator = nullptr;
+        mpRelocationParams = nullptr;
+    }
+
     // -------- Begin --------
     // Run the base Begin first (it copies the working set + null-asserts the pointers), then assert
     // we are currently idle, arm the step machine and latch the Relocator plus its parameter block

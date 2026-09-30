@@ -1,4 +1,4 @@
-#include "GameShared/GameClasses/Containers/CgsLinearSOAHashTable.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceImportHashTable.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 // CgsContainers::LinearSOAHashTable<CgsResource::ImportHashTableValue>::Initialize
@@ -18,21 +18,6 @@
 //   std  -1,     this+0x08              ; miInvalidKey = 0xFFFFFFFFFFFFFFFF
 //   loop slot in [0, miLength):  *(keys + 8*slot) = miInvalidKey   ; clear every key slot
 // preceded by the power-of-2 length assert (the CGS_ASSERT below).
-
-namespace CgsResource
-{
-    // The value carried in each import-hash-table slot. The X360 Initialize only touches the
-    // 64-bit key array (it clears keys to the empty sentinel); the value array base is recorded
-    // but not initialised here, so its concrete contents are opaque to this TU. Modelled as a
-    // 16-byte import record (id + resolved pointer + offset) at the asm-observed value stride.
-    struct ImportHashTableValue
-    {
-        u64   muImportId;       // import resource id (key mirror)
-        void* mpResolved;       // resolved import pointer
-        u32   muOffset;         // byte offset of the import pointer within the resource
-        u32   muPad;            // alignment
-    };
-}
 
 namespace CgsContainers
 {

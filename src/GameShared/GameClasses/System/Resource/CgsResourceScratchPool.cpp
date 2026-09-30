@@ -1,112 +1,244 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceScratchPool.h"
-#include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"  // PoolModule::InitOptions (the X360 a1)
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include <cstdlib>
+#include <cstdint>
 
-// CgsResource::ScratchPool - see the header. This pass lands the type + the fully-visible
-// simple bodies (Construct/Clear/GetEntry). The sizing + defrag-streaming surface is
-// DEFERRED with the resource-defrag subsystem (inert marked stubs).
 namespace CgsResource
 {
-    // Inlined into PoolModule::Construct 0x828FC0B8: construct the master + 3 per-memtype
-    // bump allocators and the two distribution streams, give each stream a 10 MB/Update
-    // budget, and clear the cursor/entry fields. (The scratch backing memory is adopted
-    // later by InitPool, once the rw allocator has handed it the overhead block.)
-    void ScratchPool::Construct()
+    namespace
     {
-        mMasterAllocator.Construct();
-        for (s32 li = 0; li < KI_NUM_MEMTYPES; ++li)
-            maMemTypeAllocators[li].Construct();
-
-        mGatherStream.Construct();
-        mScatterStream.Construct();
-        mGatherStream.SetBytesPerUpdate(10485760);   // X360: *(gather+0) = 10 MB
-        mScatterStream.SetBytesPerUpdate(10485760);  // X360: *(scatter+0) = 10 MB
-
-        mStage                = E_STAGE_IDLE;
-        mField31              = 0;
-        mpEntries             = 0;
-        mpIdList              = 0;
-        muNumEntries          = 0;
-        muMaxEntries          = 0;
-        miMemType             = 0;
-        mpDistributionEntries = 0;
-        muIdMapCount          = 0;
-        muIdMapClearValue     = 0;
-        mpIdMap               = 0;
-    }
-
-    // @ 0x828EDE08 - reset for reuse: drop the staged entries, rewind each per-memtype
-    // allocator, and clear the id map. (The master backing region is left intact.)
-    void ScratchPool::Clear()
-    {
-        muNumEntries = 0;
-        for (s32 li = 0; li < KI_NUM_MEMTYPES; ++li)
-            maMemTypeAllocators[li].FreeAll();
-
-        // X360: for (i < muIdMapCount) *(u32*)(mpIdMap + 8*i) = muIdMapClearValue;
-        if (mpIdMap != 0)
+        // ARTIST 828F6BE4..828F6C28: next power of two >= 3 * maxEntries.
+        u32 ScratchHashLength(u32 luMaxEntries)
         {
-            u8* lpMap = static_cast<u8*>(mpIdMap);
-            for (u32 lu = 0; lu < muIdMapCount; ++lu)
-                *reinterpret_cast<u32*>(lpMap + 8u * lu) = muIdMapClearValue;
+            u32 luLength = 3u * luMaxEntries - 1u;
+            luLength |= luLength >> 1;
+            luLength |= luLength >> 2;
+            luLength |= luLength >> 4;
+            luLength |= luLength >> 8;
+            luLength |= luLength >> 16;
+            return luLength + 1u;
         }
     }
 
-    // @ 0x828D7E50 - bounds-checked access into the staged-entry array.
-    ScratchPool::Entry* ScratchPool::GetEntry(u32 luIndex)
+    // Inlined in PoolModule::Construct, ARTIST 828FC0B8.
+    void ScratchPool::Construct()
     {
-        CGS_ASSERT(luIndex < muNumEntries, "Entry out of range");
+        mAllocator.Construct();
+        for (s32 li = 0; li < KI_NUM_TYPES; ++li)
+            maResourceAllocators[li].Construct();
+        mGatherStream.Construct();
+        mScatterStream.Construct();
+        mGatherStream.SetBytesPerUpdate(10485760);
+        mScatterStream.SetBytesPerUpdate(10485760);
+        mePrepareStage = E_PREPARESTAGE_START;
+        meReleaseStage = E_RELEASESTAGE_DONE;
+        meUpdateStage = E_UPDATESTAGE_IDLE;
+        miBankId = -1;
+        mpEntries = nullptr;
+        mpEntryIds = nullptr;
+        muNumEntries = 0;
+        muMaxEntries = 0;
+        miCurrentMemType = 0;
+        mpDistributionEntries = nullptr;
+        mImportHashTable = ImportHashTable{};
+    }
+
+    // Inlined in ARTIST PoolModule::Construct before ScratchPool::InitPool.
+    bool ScratchPool::Prepare()
+    {
+        if (mePrepareStage == E_PREPARESTAGE_START || mePrepareStage == E_PREPARESTAGE_DONE)
+        {
+            mePrepareStage = E_PREPARESTAGE_DONE;
+            meReleaseStage = E_RELEASESTAGE_START;
+            return true;
+        }
+        CGS_ASSERT(false, "Should never get here!\n");
+        return false;
+    }
+
+    // ARTIST 828E2BB8: (20+16+8)*(N+1) + (8+8)*(hashLength+64)
+    // plus the fixed 0x94-byte allowance returned by 82BBCF10. That helper
+    // reads no input: it is not an unknown distribution-buffer size.
+    // FLAG PC-platform leaf: use native sizeof for records containing pointers.
+    u32 ScratchPool::GetOverheadMemoryRequired(const InitOptions* lpOptions)
+    {
+        return static_cast<u32>((sizeof(ScratchEntry) + sizeof(CgsMemory::DistributionStreamEntry) + sizeof(ID))
+            * (lpOptions->muMaxEntries + 1u)
+            + (sizeof(u64) + sizeof(ImportHashTableValue)) * (ScratchHashLength(lpOptions->muMaxEntries) + 64u)
+            + 0x94u);
+    }
+
+    // ARTIST 828F6B60..828F6E20. Overhead and resource staging buffers have
+    // independent owners; carve only the tables from the overhead allocator.
+    void ScratchPool::InitPool(const InitOptions* lpOptions)
+    {
+        mAllocator.Create(lpOptions->mpOverhead, lpOptions->muOverheadMemorySize);
+        mAllocator.SetAlignment(KU_SCRATCH_MEMORY_ALIGNMENT);
+        mpEntries = static_cast<ScratchEntry*>(mAllocator.Malloc(sizeof(ScratchEntry) * lpOptions->muMaxEntries));
+        mpDistributionEntries = static_cast<CgsMemory::DistributionStreamEntry*>(
+            mAllocator.Malloc(sizeof(CgsMemory::DistributionStreamEntry) * lpOptions->muMaxEntries));
+        mpEntryIds = static_cast<ID*>(mAllocator.Malloc(sizeof(ID) * (lpOptions->muMaxEntries + 1u)));
+        const u32 luHashLength = ScratchHashLength(lpOptions->muMaxEntries);
+        u64* lpKeys = static_cast<u64*>(mAllocator.Malloc(sizeof(u64) * luHashLength));
+        ImportHashTableValue* lpValues = static_cast<ImportHashTableValue*>(
+            mAllocator.Malloc(sizeof(ImportHashTableValue) * luHashLength));
+        mImportHashTable.Initialize(lpKeys, lpValues, static_cast<s32>(luHashLength));
+        CGS_ASSERT(mpEntries != nullptr && mpDistributionEntries != nullptr && mpEntryIds != nullptr,
+                   "Failiure to allocate\n");
+        muNumEntries = 0;
+        muMaxEntries = lpOptions->muMaxEntries;
+        miBankId = lpOptions->miBankId;
+
+        SmallResource lResource;
+        for (s32 li = 0; li < KI_NUM_TYPES; ++li)
+            lResource.m_baseResources[li] = nullptr;
+        SmallResourceDescriptor lDescriptor;
+        lResource.CreateFromRWResource(lpOptions->mResource);
+        lDescriptor.CreateFromRWDescriptor(lpOptions->mDescriptor);
+        for (s32 li = 0; li < KI_NUM_TYPES; ++li)
+        {
+            const u32 luSize = lDescriptor.m_baseResourceDescriptors[li].m_size;
+            if (luSize != 0)
+            {
+                CGS_ASSERT(lResource.m_baseResources[li] != nullptr, "Allocator has NULL pointer\n");
+                maResourceAllocators[li].Create(lResource.m_baseResources[li], luSize);
+            }
+        }
+    }
+
+    // ARTIST 828EDE08: rewind each resource allocator and clear all 64-bit keys.
+    void ScratchPool::Clear()
+    {
+        muNumEntries = 0;
+        for (s32 li = 0; li < KI_NUM_TYPES; ++li)
+            maResourceAllocators[li].FreeAll();
+        mImportHashTable.Clear();
+    }
+
+    // ARTIST 828D7E50; native ScratchEntry widens its three pointers.
+    ScratchEntry* ScratchPool::GetEntry(u32 luIndex)
+    {
+        CGS_ASSERT(luIndex < muNumEntries, "Entry out of range\n");
         return &mpEntries[luIndex];
     }
 
-    // @ 0x828E2BB8 - size the scratch pool's overhead block from the pool-manager's
-    // InitOptions (PoolModule::InitOptions, the X360 r3). Three contributions are summed:
-    //
-    //   (1) the staged-entry table:  44 * (miMaxResourceToDefrag + 1)
-    //       (ASM: r11 = *a1; r11 += 1; r30 = r11 * 0x2C).  0x2C/entry = the 20-byte Entry
-    //       plus its parallel 8-byte id-map slot, rounded to the table stride.
-    //
-    //   (2) the id->index hash table:  16 * (NextPow2Minus1(3*N - 1) + 0x41)
-    //       where N = miMaxResourceToDefrag. The ASM computes, on a 64-bit value, the classic
-    //       round-(n)-up-to-(2^k - 1) bit cascade (n |= n>>1; >>2; >>4; >>8; >>16) over
-    //       (3*N - 1), adds 0x41 (65) slots of headroom, then <<4 (x16 bytes per hash slot).
-    //
-    //   (3) the gather/scatter distribution-buffer term:  v5[0]
-    //       produced by sub_82BBCF10(&v5, &options.mDefragBufferResource[..], &options
-    //       .mDefragBufferDescriptor[1]) - a distribution-stream sizing helper that walks the
-    //       defrag buffer's per-memtype descriptor/resource pair. sub_82BBCF10 is NOT a
-    //       recovered TU (external/unknown) and its result is the only un-grounded term here,
-    //       so it is carried as a clearly-flagged 0 placeholder rather than fabricated. It is
-    //       the deferred defrag-buffer contribution; reconstruct it (and call it here) with the
-    //       PoolModule defrag-state machine / DistributionStream sizing subsystem.
-    u32 ScratchPool::GetOverheadMemoryRequired(const void* lpInitOptions)
+    // ARTIST 828EDE80: r4=resource entry, r5=pool slot, r6=memory type,
+    // r7=destination pointer. Failed staging consumes no entry or hash slot.
+    void* ScratchPool::AddEntry(Entry* lpEntry, s32 liEntryId, s32 liMemType, void* lpDestLocation)
     {
-        const PoolModule::InitOptions* lpOptions =
-            static_cast<const PoolModule::InitOptions*>(lpInitOptions);
-        const u32 luMaxEntries = static_cast<u32>(lpOptions->miMaxResourceToDefrag);
-
-        // (1) staged-entry table.
-        const u32 luEntryTableBytes = 44u * (luMaxEntries + 1u);
-
-        // (2) hash table: smallest (2^k - 1) >= (3*N - 1), + 65 slots, * 16 bytes/slot.
-        u32 luHashSlots = 3u * luMaxEntries - 1u;
-        luHashSlots |= luHashSlots >> 1;
-        luHashSlots |= luHashSlots >> 2;
-        luHashSlots |= luHashSlots >> 4;
-        luHashSlots |= luHashSlots >> 8;
-        luHashSlots |= luHashSlots >> 16;
-        const u32 luHashTableBytes = 16u * (luHashSlots + 0x41u);
-
-        // (3) defrag distribution-buffer term - un-recoverable (sub_82BBCF10); flagged-0.
-        const u32 luDistributionBufferBytes = 0u;  // FLAGGED PLACEHOLDER: deferred (sub_82BBCF10)
-
-        return luEntryTableBytes + luHashTableBytes + luDistributionBufferBytes;
+        if (muNumEntries >= muMaxEntries)
+            return nullptr;
+        mpEntryIds[muNumEntries] = lpEntry->mID;
+        const rw::BaseResourceDescriptor& lrDescriptor = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[liMemType];
+        CgsMemory::LinearMalloc& lrAllocator = maResourceAllocators[liMemType];
+        lrAllocator.SetAlignment(lrDescriptor.m_alignment);
+        void* lpTemp = lrAllocator.Malloc(lrDescriptor.m_size);
+        if (lpTemp == nullptr)
+            return nullptr;
+        ScratchEntry& lrScratch = mpEntries[muNumEntries];
+        lrScratch.miEntryId = liEntryId;
+        lrScratch.mpSrcLocation = lpEntry->mResource.m_baseResources[liMemType];
+        lrScratch.mpTempLocation = lpTemp;
+        lrScratch.mpDestLocation = lpDestLocation;
+        lrScratch.muSize = lrDescriptor.m_size;
+        mImportHashTable.AddEntry(lpEntry->mID, lpTemp, lpDestLocation);
+        ++muNumEntries;
+        return lpTemp;
     }
-    void ScratchPool::InitPool(const void* /*lpInitOptions*/) {}
-    void* ScratchPool::AddEntry(const void* /*lpDesc*/, u32 /*luId*/, s32 /*liMemType*/, u32 /*luUserData*/) { return 0; }
-    s32  ScratchPool::BeginDistribution(s32 /*liMemType*/) { return 0; }
-    bool ScratchPool::UpdateGather() { return true; }
-    bool ScratchPool::UpdateScatter() { return true; }
-    void ScratchPool::BuildGatherDistributionList() {}
-    void ScratchPool::BuildScatterDistributionList() {}
+
+    // ARTIST 828E3398. Build the gather list first, then arm the stream.
+    void ScratchPool::BeginDistribution(s32 liMemType)
+    {
+        CGS_ASSERT(meUpdateStage == E_UPDATESTAGE_IDLE, "Can not begin distribution during none-idle stage\n");
+        miCurrentMemType = liMemType;
+        BuildGatherDistributionList();
+        CGS_ASSERT(mpDistributionEntries != nullptr, "Distribution entries are NULL\n");
+        u8* lpBase = static_cast<u8*>(maResourceAllocators[miCurrentMemType].GetStartAddress());
+        if (lpBase == nullptr)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+            lMessage << "Linear allocator is NULL for memtype " << miCurrentMemType << "\n";
+            CGS_ASSERT(false, lacMessage);
+        }
+        mGatherStream.Execute(mpDistributionEntries, muNumEntries, lpBase);
+        meUpdateStage = E_UPDATESTAGE_GATHERING;
+    }
+
+    // ARTIST 828E3568: scatter is armed only once the entire gather completes.
+    bool ScratchPool::UpdateGather()
+    {
+        CGS_ASSERT(meUpdateStage == E_UPDATESTAGE_GATHERING, "Can not call UpdateGather unless in gather stage\n");
+        if (!mGatherStream.Update())
+            return false;
+        BuildScatterDistributionList();
+        mScatterStream.Execute(mpDistributionEntries, muNumEntries,
+            static_cast<u8*>(maResourceAllocators[miCurrentMemType].GetStartAddress()));
+        meUpdateStage = E_UPDATESTAGE_SCATTERING;
+        return true;
+    }
+
+    // ARTIST 828D8DE0.
+    bool ScratchPool::UpdateScatter()
+    {
+        CGS_ASSERT(meUpdateStage == E_UPDATESTAGE_SCATTERING, "Can not call UpdateScatter unless in scatter stage\n");
+        if (!mScatterStream.Update())
+            return false;
+        meUpdateStage = E_UPDATESTAGE_IDLE;
+        return true;
+    }
+
+    // ARTIST 828D8EA8. The list uses byte offsets into this memory type's
+    // packed allocator; alignment gaps must not be collapsed between entries.
+    void ScratchPool::BuildGatherDistributionList()
+    {
+        const uintptr_t luBase = reinterpret_cast<uintptr_t>(maResourceAllocators[miCurrentMemType].GetStartAddress());
+        for (u32 lu = 0; lu < muNumEntries; ++lu)
+        {
+            const ScratchEntry& lrEntry = mpEntries[lu];
+            CgsMemory::DistributionStreamEntry& lrDistribution = mpDistributionEntries[lu];
+            lrDistribution.mpScatteredAddress = static_cast<u8*>(lrEntry.mpSrcLocation);
+            lrDistribution.muLength = lrEntry.muSize;
+            lrDistribution.muPackedOffset = static_cast<u32>(reinterpret_cast<uintptr_t>(lrEntry.mpTempLocation) - luBase);
+            const uintptr_t lauValues[] = {
+                reinterpret_cast<uintptr_t>(lrDistribution.mpScatteredAddress),
+                lrDistribution.muPackedOffset, lrDistribution.muLength
+            };
+            const char* const lapNames[] = { "Source address for entry ", "Dest offset for entry ", "Size for entry " };
+            for (u32 luField = 0; luField < 3; ++luField)
+            {
+                if ((lauValues[luField] & 15u) != 0)
+                {
+                    char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                    CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+                    lMessage << lapNames[luField] << lu << " is " << static_cast<u64>(lauValues[luField])
+                             << " - not multiple of 16 bytes\n";
+                    CGS_ASSERT(false, lacMessage);
+                }
+            }
+        }
+    }
+
+    // ARTIST 828D9330: retain length/packed offset; only replace source by dest.
+    void ScratchPool::BuildScatterDistributionList()
+    {
+        for (u32 lu = 0; lu < muNumEntries; ++lu)
+            mpDistributionEntries[lu].mpScatteredAddress = static_cast<u8*>(mpEntries[lu].mpDestLocation);
+    }
+
+    // ARTIST 828D9378 compares complete unsigned 64-bit IDs, not their low words.
+    s32 ScratchPool::SortIdsQSortCallback(const void* lpLeft, const void* lpRight)
+    {
+        const ID lLeft = *static_cast<const ID*>(lpLeft);
+        const ID lRight = *static_cast<const ID*>(lpRight);
+        return lLeft < lRight ? -1 : (lLeft > lRight ? 1 : 0);
+    }
+
+    void ScratchPool::SortIdList()
+    {
+        std::qsort(mpEntryIds, muNumEntries, sizeof(ID), &SortIdsQSortCallback);
+        // Inlined in ARTIST Pool::AddResourcesToScratchPool 828F6748.
+        mpEntryIds[muNumEntries].SetHash(~u64(0));
+    }
 }

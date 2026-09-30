@@ -445,6 +445,40 @@ driving with the world, player and HUD, and 3600 covers the player's own wreck.
 All 884 focus samples were foreground. Frame captures were enabled, so this
 run is functional evidence and is excluded from FPS comparisons.
 
+## Scratch relocation and pool maintenance
+
+The pool manager now runs the original allocation/deallocation, intelligent and
+emergency defrag state dispatch and per-pool maintenance after the frame joins.
+Scratch storage uses native records, bounded gather/scatter copies, the original
+768-entry capacity, and 1 MiB main / 2 MiB graphics staging from the existing
+low-4GB resource arena. Default resource rebasing, alias publication, reciprocal
+imports, retirement delays and native graphics-cache retirement are restored.
+
+The original emergency bounce-copy loop repeatedly overwrote the start of its
+destination for multi-chunk overlaps. Its native repair advances both addresses
+and selects the safe copy direction. Converted car texture data includes a
+1,398,128-byte resource, larger than the original 1 MiB bounce buffer.
+
+Focused checks pass: scratch copies 28/28, actual silent pool relocation 17/17,
+emergency copy job 24/24, driver parameters 11/11, and lifecycle 59/59.
+Restoring the old stream, empty rebase, overlapping copy and parameter bodies
+causes 7, 3, 9 and 3 failures respectively. The relocation test uses real heaps,
+alias rings, byte copies and two staging batches; its emergency dispatcher is
+an aborting boundary. It does not establish full emergency pool completion.
+Fresh review passed after restoring both original null-import-table branches.
+
+Build `82fb05db0a67` compiles all 2,665 TUs cleanly and ran 90 seconds at
+2560x1440 with 883/883 foreground samples and zero assertions or exceptions.
+Inspected captures show the damaged player car, world and HUD across a wreck
+and recovery. The event ended with zero player takedowns, so this run
+(`combat_scratch_reviewed_0930`) is rejected as combat evidence. Its FPS is
+excluded; this is functional startup/maintenance coverage only.
+
+The loader still uses synchronous bundle loading and does not yet produce the
+staged allocation-list requests. Planner look-ahead clearing, a graphics-lane
+pool move, complete emergency handling, staged I/O and failed-load teardown
+remain activation gates. No FPS gain is established by this restoration.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still

@@ -8,11 +8,11 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"    // ResourceHandle (acquire-list output array)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIdList.h"    // ResourceIdList (acquire-list payload)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"       // ResourcePtr<ResourceIdList>
+#include "GameShared/GameClasses/System/Resource/CgsResourceIdListResourceType.h"
+#include <new>
 
-// CgsResource::PoolModule - see the header. This pass reconstructs the rw-allocator-
-// INDEPENDENT spine (GetPoolIndex / FindResourceType / Prepare / Release / Destruct).
-// Construct + the dispatch spine + the DoXxxRequest handlers + the defrag-state machine are
-// DEFERRED (rw allocator middleware / defrag subsystem) as inert marked stubs.
+// Original pool manager lifecycle and native storage. The resource-list
+// dispatch is integrated separately from construction of its working state.
 namespace CgsResource
 {
     // @ 0x828D80E8 - linear search of the 128 pools for the one with this id; -1 if absent.
@@ -141,13 +141,8 @@ namespace CgsResource
         CgsModule::ModuleSingleBuffered::Destruct();
     }
 
-    // @ 0x828FC0B8 - bring up the pool manager. This pass lands the rw-allocator-INDEPENDENT
-    // structural front half: base module Construct, the prepare/release stage init, and the per-pool
-    // Construct of all 128 pools (each pool to its clean empty state). The allocator-gated back half
-    // is DEFERRED (see below) - it needs the richer ResourceModule::InitOptions (type list + scratch
-    // params) + the resource-type-object subsystem + ScratchPool::InitPool, none of which are wired
-    // yet; nothing drives the pools (only Prepare, which already tolerates the constructed pools), so
-    // running just the front half is safe + faithful to the X360 ordering.
+    // ARTIST 828FC0B8: construct the pool bank, type registry, scratch staging,
+    // allocation/relocation storage and the five request-processing states.
     void PoolModule::Construct(const void* lpInitOptions, void* lpAllocator)
     {
         mbIsNewModule = true;   // X360 *(this+4)=1 (set at the end of Construct; base Prepare skips old IO)
@@ -157,15 +152,23 @@ namespace CgsResource
         for (s32 li = 0; li < KI_MAX_POOLS; ++li)              // X360: Pool::Construct loop (stride 464)
             maPools[li].Construct();
 
-        // ---- Type registry (allocator-INDEPENDENT portion) ----------------------------------------
-        // Register the game-specific resource types (mPoolInitOptions.mpGameSpecificTypes) into maTypes
-        // so FindResourceType can resolve them by id. The X360 first registers a built-in "IDList" type
-        // (allocated via the allocator + given the IDListResourceType vtable, then GetTypeID/CanDefrag
-        // cached) -- that, being allocator + IDListResourceType gated, is DEFERRED, so the registry
-        // currently holds only the game-specific list (which is empty until RegisterResourceTypes fills
-        // it -> this loop is a no-op for now, behaviour-preserving). The X360 id key is the type's cached
-        // id (*(type+8) == Type::GetCachedId()).
+        rw::IResourceAllocator* lpResourceAllocator = static_cast<rw::IResourceAllocator*>(lpAllocator);
+        CGS_ASSERT(lpResourceAllocator != nullptr, "lpAllocator");
+
+        // Register the original built-in ID-list handler before game-specific
+        // types. Its cache is initialized through the same virtuals as the game types.
         mNumTypes = 0;
+        rw::ResourceDescriptor lIdListDescriptor;
+        lIdListDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(IdListResourceType);
+        lIdListDescriptor.m_baseResourceDescriptors[0].m_alignment = alignof(IdListResourceType);
+        void* lpIdListMemory = lpResourceAllocator->DoAllocate(lIdListDescriptor, nullptr).m_baseResources[0];
+        CGS_ASSERT(lpIdListMemory != nullptr, "Out of memory\n");
+        IdListResourceType* lpIdListType = ::new (lpIdListMemory) IdListResourceType;
+        lpIdListType->InitCachedValues();
+        maTypes[mNumTypes].mpType = lpIdListType;
+        maTypes[mNumTypes].muTypeId = lpIdListType->GetCachedId();
+        maTypes[mNumTypes].mpcName = "IDList";
+        ++mNumTypes;
         const InitOptions* lpOptions = static_cast<const InitOptions*>(lpInitOptions);
         if (lpOptions != 0 && lpOptions->mpGameSpecificTypes != 0)
         {
@@ -183,18 +186,16 @@ namespace CgsResource
             }
         }
 
-        // ScratchPool: construct the defrag-staging object (allocator-INDEPENDENT: the X360 inlines its
-        // 4x LinearMalloc::Construct + 2x stream Construct + budget/zero here). Its InitPool (which carves
-        // the scratch overhead from the allocator) stays DEFERRED -- nothing defragments yet.
+        // The original staging pool borrows the caller's resource buffers and
+        // owns tables carved from its separately allocated overhead block below.
         mScratchPool.Construct();
 
         // Bind the receiver queue's backing buffer (create/delete-pool events land here via
         // ProcessMemoryResponse, drained by ProcessReceiverQueue).
         mReceiverQueue.Construct();
 
-        // Relocator: clear the block-copy engine's running latches. Its parameter block's op
-        // and staging buffers still come from the allocator-carved defrag arrays (deferred
-        // below), so nothing can be relocated yet.
+        // Clear the copy engine's busy latches before binding its operation
+        // storage and bounce buffer below.
         mRelocator.Construct();
 
         // (The real pool set is created by GameDataModule::CreatePools, which drives CreatePool over the
@@ -203,8 +204,20 @@ namespace CgsResource
         // ARTIST 828FC0B8 allocates 4096 request/result records for each memory
         // type. Native records contain 64-bit pointers, so retain the count and
         // use their host sizeof/alignment when carving the parent allocator.
-        rw::IResourceAllocator* lpResourceAllocator = static_cast<rw::IResourceAllocator*>(lpAllocator);
-        CGS_ASSERT(lpResourceAllocator != nullptr, "lpAllocator");
+        CGS_ASSERT(lpOptions != nullptr, "lpInitOptions");
+        ScratchPool::InitOptions lScratchOptions = {};
+        lScratchOptions.muMaxEntries = static_cast<u32>(lpOptions->miMaxResourceToDefrag);
+        lScratchOptions.miBankId = 999;
+        lScratchOptions.mDescriptor = lpOptions->mDefragBufferDescriptor;
+        lScratchOptions.mResource = lpOptions->mDefragBufferResource;
+        lScratchOptions.muOverheadMemorySize = ScratchPool::GetOverheadMemoryRequired(&lScratchOptions);
+        rw::ResourceDescriptor lScratchDescriptor;
+        lScratchDescriptor.m_baseResourceDescriptors[0].m_size = lScratchOptions.muOverheadMemorySize;
+        lScratchDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        lScratchOptions.mpOverhead = lpResourceAllocator->DoAllocate(lScratchDescriptor, nullptr).m_baseResources[0];
+        CGS_ASSERT(lScratchOptions.mpOverhead != nullptr, "Out of memory\n");
+        mScratchPool.Prepare();
+        mScratchPool.InitPool(&lScratchOptions);
         for (s32 t = 0; t < 3; ++t)
         {
             rw::ResourceDescriptor lDescriptor = {};
@@ -220,22 +233,49 @@ namespace CgsResource
             CGS_ASSERT(mAllocListSet.mapAllocResults[t] != nullptr, "Out of memory\n");
         }
         mAllocListSet.ClearCountsAndResults();
+
+        // ARTIST 828FC0B8: request arrays, relocation/source arrays, a linear
+        // heap with eight look-ahead records, and shared distribution/job storage.
+        // FLAG PC-platform leaf: allocation counts are original; native records
+        // widen their pointers and therefore require host sizeof/alignment.
+        const auto lAllocateWorkingMemory = [lpResourceAllocator](size_t luSize, u32 luAlignment) -> void*
+        {
+            rw::ResourceDescriptor lDescriptor;
+            lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(luSize);
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
+            void* lpMemory = lpResourceAllocator->DoAllocate(lDescriptor, nullptr).m_baseResources[0];
+            CGS_ASSERT(lpMemory != nullptr, "Out of memory\n");
+            return lpMemory;
+        };
+        mpAddressedAllocRequests = static_cast<AllocRequestAddressed*>(lAllocateWorkingMemory(
+            sizeof(AllocRequestAddressed) * KI_MAX_ALLOCATION_REQUESTS, alignof(AllocRequestAddressed)));
+        mpRelocateRequests = static_cast<RelocateRequest*>(lAllocateWorkingMemory(
+            sizeof(RelocateRequest) * KU_MAX_POOL_ENTRIES, 128));
+        mpLinearHeapNodes = static_cast<LinearHeapNode*>(lAllocateWorkingMemory(
+            sizeof(LinearHeapNode) * (KU_MAX_LINEAR_HEAP_LENGTH + 8u), 128));
+        const size_t luSharedStride = sizeof(DistributionEntry) > sizeof(RelocationEntry)
+            ? sizeof(DistributionEntry) : sizeof(RelocationEntry);
+        mpDistributionEntries = static_cast<DistributionEntry*>(lAllocateWorkingMemory(
+            luSharedStride * KU_MAX_POOL_ENTRIES, 128));
+        mpRelocationEntries = reinterpret_cast<RelocationEntry*>(mpDistributionEntries);
+        mpRelocateSources = static_cast<RelocateSource*>(lAllocateWorkingMemory(
+            sizeof(RelocateSource) * KU_MAX_POOL_ENTRIES, 128));
+        mRelocationParams.mpOps = mpRelocationEntries;
+        mRelocationParams.miNumOps = 0;
+        mRelocationParams.mpBounceBuffer = lScratchOptions.mResource.m_baseResources[0];
+        mRelocationParams.miBounceBufferSize = lScratchOptions.mDescriptor.m_baseResourceDescriptors[0].m_size;
         mProcessState = E_UPDATESTATE_IDLE;
         mAllocateState.Construct(this);
         mDeAllocateState.Construct(this);
+        mIntelliFragState.Construct(this);
+        mLiveUpdateState.Construct(this);
+        mEmergencyFragState.Construct(this);
         mPendingAllocationRequests.Construct();
 
-        // ---- DEFERRED back half (rw-allocator + subsystem gated) ----------------------------------
-        // Still deferred (need the allocator + subsystems): (1) the built-in "IDList" type (allocate +
-        // IDListResourceType vtable + cache); (2) ScratchPool::InitPool over an allocator-carved
-        // OverheadMemoryRequired block (CgsPoolModule.cpp:119 "Out of memory"); (3) the defrag
-        // scratch arrays (:164-168); (4) the remaining defrag/live-update sub-object setup.
-        // The allocation request/result arrays and ordinary allocation state above are restored.
+
     }
-    // @ 0x829076D8 - per-frame pool dispatch (pool-create slice): write-lock the output + read-lock the
-    // input, drain the input requests (ProcessInputBuffer), unlock the input, drain the receiver queue
-    // (ProcessReceiverQueue -> DoCreatePoolRequest), unlock the output. [The defrag state machine + the
-    // per-pool Pool::Update loop are deferred -- nothing defragments during pool bring-up.]
+    // ARTIST 829076D8: process requests, advance the module state, then tick each
+    // live pool. Defrag escalation may advance again within this same update.
     bool PoolModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
     {
         PoolIO::InputBuffer*  lpIn  = static_cast<PoolIO::InputBuffer*>(lpInputBuffer);
@@ -246,8 +286,27 @@ namespace CgsResource
         ProcessInputBuffer(lpIn, lpOut);
         lpIn->UnlockForRead();
         ProcessReceiverQueue(lpOut);
+        if (mProcessState == E_UPDATESTATE_IDLE)
+        {
+            Events::AllocateResourceListRequest lRequest;
+            if (mPendingAllocationRequests.Pop(&lRequest))
+                DoAllocateResourceListRequest(&lRequest);
+        }
+        switch (mProcessState)
+        {
+        case E_UPDATESTATE_ALLOCATING_LIST: UpdateAllocating(lpOut); break;
+        case E_UPDATESTATE_DEALLOCATING_LIST: UpdateDeAllocating(lpOut); break;
+        case E_UPDATESTATE_LIVEUPDATE: UpdateLiveUpdate(lpOut); break;
+        }
+        if (mProcessState == E_UPDATESTATE_INTELLIFRAG)
+            UpdateIntelliFrag(lpOut);
+        if (mProcessState == E_UPDATESTATE_EMERGENCYFRAG)
+            UpdateEmergencyFrag(lpOut);
         lpOut->UnlockForWrite();
-        return false;
+        for (s32 li = 0; li < KI_MAX_POOLS; ++li)
+            if (maPools[li].GetId() != -1)
+                maPools[li].Update();
+        return mProcessState == E_UPDATESTATE_EMERGENCYFRAG;
     }
 
     // @ 0x82906FD0 - drain the receiver queue: dispatch each event by id (10 = CreatePool ->
@@ -307,6 +366,19 @@ namespace CgsResource
             {
                 DoAcquireResourceListRequest(
                     reinterpret_cast<const Events::AcquireResourceListRequest*>(lpEvent), lpOut);
+            }
+            else if (liId == 16)
+            {
+                mPendingAllocationRequests.Push(reinterpret_cast<const Events::AllocateResourceListRequest*>(lpEvent));
+            }
+            else if (liId == 18)
+            {
+                DoFixUpAndResolveResourceListRequest(
+                    reinterpret_cast<const Events::FixUpAndResolveResourceListRequest*>(lpEvent), lpOut);
+            }
+            else if (liId == 20)
+            {
+                DoUnloadResourceListRequest(reinterpret_cast<const Events::UnloadResourceListRequest*>(lpEvent), lpOut);
             }
             const CgsModule::Event* lpNext = 0;
             liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);

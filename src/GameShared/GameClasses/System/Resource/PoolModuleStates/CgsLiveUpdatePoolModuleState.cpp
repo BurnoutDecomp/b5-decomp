@@ -30,6 +30,20 @@
 
 namespace CgsResource
 {
+    // Inlined ARTIST PoolModule::Construct 828FC0B8. The remaining working
+    // fields are set by BeginAllocation and the creation step before use.
+    void LiveUpdatePoolModuleState::Construct(PoolModule* lpPoolModule)
+    {
+        meState = E_STATE_IDLE;
+        mpPool = nullptr;
+        mListId.SetHash(static_cast<u32>(ID::HashString(reinterpret_cast<const u8*>(""))));
+        mpEntries = nullptr;
+        miNumEntries = 0;
+        mpOutNeeds = nullptr;
+        mpOutResources = nullptr;
+        mpPoolModule = lpPoolModule;
+    }
+
 namespace
 {
     // The entry-list resource's in-memory payload. CreateEntryListResource sizes the pool allocation as

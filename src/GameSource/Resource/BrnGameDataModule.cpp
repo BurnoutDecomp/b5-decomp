@@ -1710,6 +1710,28 @@ namespace BrnResource
         }
         s_InitOptions.mPoolInitOptions.mpGameSpecificTypes    = s_aGameTypes;
         s_InitOptions.mPoolInitOptions.miNumGameSpecificTypes = lNumGameTypes;
+
+        // ARTIST ConstructResourceModule 8266D570: 768 staged resources,
+        // 1 MiB main scratch and 2 MiB graphics scratch, both 128-byte aligned.
+        CgsResource::PoolModule::InitOptions& lrPoolOptions = s_InitOptions.mPoolInitOptions;
+        lrPoolOptions.miMaxResourceToDefrag = 768;
+        lrPoolOptions.muDebugBufferSize = 0x800000;
+        const u32 lauScratchSizes[] = { 0x100000, 0x200000 };
+        const u32 lauScratchLanes[] = { 0, 2 };
+        for (u32 lu = 0; lu < 2; ++lu)
+        {
+            const u32 luLane = lauScratchLanes[lu];
+            lrPoolOptions.mDefragBufferDescriptor.m_baseResourceDescriptors[luLane].m_size = lauScratchSizes[lu];
+            lrPoolOptions.mDefragBufferDescriptor.m_baseResourceDescriptors[luLane].m_alignment = 128;
+            // FLAG PC-platform leaf: both resource domains are host buffers on
+            // D3D9. Carve through the same low-4GB allocator as GameDataRoot1,
+            // retaining valid legacy PointerFromU32 imports during staging.
+            rw::ResourceDescriptor lScratchDescriptor;
+            lScratchDescriptor.m_baseResourceDescriptors[0].m_size = lauScratchSizes[lu];
+            lScratchDescriptor.m_baseResourceDescriptors[0].m_alignment = 128;
+            lrPoolOptions.mDefragBufferResource.m_baseResources[luLane] =
+                lpAllocator->DoAllocate(lScratchDescriptor, "ResourceDefragScratch").m_baseResources[0];
+        }
         s_InitOptions.mDebugParams.mpDebugAllocator           = lpAllocator;
         *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: registered "
                                   << (s32)lNumGameTypes << " resource types into the pool registry\n";
