@@ -323,11 +323,45 @@ their aggregate and sum to `update_ms`.
 
 `combat_resource_detail_0930` qualified with seven player credits and full
 foreground focus. Its largest resource stall was a 27.12 ms unload, including
-12.29 ms of file I/O; other unloads took 14–18 ms. The current native unload path
-rereads the bundle to recover resource IDs. ARTIST's `CheckForUnloads`
+12.29 ms of file I/O; other unloads took 14–18 ms. That native unload path
+reread the bundle to recover resource IDs. ARTIST's `CheckForUnloads`
 (`0x828FB308`) instead uses its loaded-bundle table and entry-list resource.
-Restoring that ownership and the remaining asynchronous streaming state machine
-is still pending. The diagnostic build is `d4c1d975ad08`.
+The diagnostic baseline build is `d4c1d975ad08`.
+
+The synchronous loader now retains the original type-29 entry list in its pool,
+using the bit-63 filename-hash marker from ARTIST. Unload releases those member
+references and then the list, with no file access. Repeated low-level loads and
+shared dependency resources retain matching references. Allocation failures roll
+back the entire attempt before fixups; the native path no longer reports a
+partially allocated bundle as successfully loaded. The canonical list layout is
+also shared with `AllocatePoolModuleState` (owner name, count at 0x100, IDs at
+0x108). This does not yet restore the higher-level logical bundle table or the
+asynchronous streaming and deallocation state machines.
+
+`run_pc_bundle_ownership.py` passes 46 checks against production loader bodies
+with deterministic file/heap/fixup boundaries. Cases include duplicate/shared
+loads, removed or changed files, failed allocations, pool reuse, unknown unloads
+and fixup ordering. The pre-fix control (`--rev 78122001 --skip-malformed`) fails
+28 of 44 checks; malformed-input cases are skipped because that loader does not
+validate their bounds. The fixture does not exercise GPU cache invalidation or
+defragmentation.
+
+Build `15a0f3131d98` passed the shipping build without warnings. Its quiet
+`combat_retained_list_0930_repeat` run qualified with six player credits across
+five rivals, peak five crashing/two airborne rivals, an active event and all
+883 samples foreground, with no assertions or exceptions. Unload-only frames
+have zero file time; the largest unload was 11.57 ms. Loads still reached
+23.10 ms. Overall performance was 64.48 FPS, p99 27.29 ms: no overall FPS gain
+or 165 FPS lock is established by this change. An earlier two-credit run that
+ended the event was rejected. These traces are under
+`scratch/performance_goal_0929/` in the workflow checkout.
+
+The separate `bundle_streaming_live` functional capture exercised GPU declaration
+retirement and crash-camera recovery with zero stale-format reports, assertions
+or exceptions. Four of five requested relocations seated successfully; one
+request made during a crash was rejected and is not counted as a valid
+transition. Inspected frames show intact scenery, cars and HUD after recovery.
+The run contains frame captures and diagnostics and is not timing evidence.
 
 An output-swap-chain DISCARD experiment passed display checks but showed no
 convincing benefit in the accepted combat runs; it was removed. Its private

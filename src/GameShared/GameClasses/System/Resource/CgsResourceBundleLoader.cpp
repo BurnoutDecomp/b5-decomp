@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"     // Pool, NewResource, Entry
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundle2.h"  // BundleV2
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"     // Type
+#include "GameShared/GameClasses/System/Resource/CgsEntryListResource.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"  // async FS engine (ReadWholeFile)
 #include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"     // EnsureDeviceManagerUp
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // gpDebugPrint (read trace)
@@ -51,6 +52,88 @@ namespace CgsResource
 
 namespace CgsResource
 {
+    // CheckForUnloads 828FB52C-534 tags the zero-extended HashString result with bit 63.
+    // The pool ID is a separate field; ordinary member resource IDs remain untagged.
+    static ID BundleListId(const char* lpcFileName)
+    {
+        ID lId;
+        lId.SetHash(static_cast<u32>(ID::HashString(reinterpret_cast<const u8*>(lpcFileName)))
+                    | 0x8000000000000000ull);
+        return lId;
+    }
+
+    // FLAG PC-platform leaf: the synchronous native loader owns its allocation transaction.
+    // The console allocation state retries a whole batch before publishing it. Here a failed
+    // allocation must undo every reference acquired by this attempt, including a revived entry's
+    // exact previous count. No FixUp/PostFixUp runs until all allocations have succeeded.
+    struct BundleReferencePC
+    {
+        Pool* mpPool;
+        s32 miSlot;
+        s16 miPreviousCount;
+        bool mbCreated;
+    };
+
+    class BundleReferencesPC
+    {
+    public:
+        explicit BundleReferencesPC(u32 luCount)
+            : mpReferences(static_cast<BundleReferencePC*>(calloc(luCount, sizeof(BundleReferencePC)))),
+              muCount(luCount), mbCommitted(false) {}
+        ~BundleReferencesPC()
+        {
+            if (mpReferences && !mbCommitted)
+            {
+                for (u32 i = muCount; i != 0; --i)
+                {
+                    const BundleReferencePC& lrRef = mpReferences[i - 1];
+                    if (!lrRef.mpPool) continue;
+                    if (lrRef.mbCreated)
+                        lrRef.mpPool->RemoveReference(static_cast<u32>(lrRef.miSlot));
+                    else
+                        lrRef.mpPool->SetEntryRefCount(lrRef.miSlot, lrRef.miPreviousCount);
+                }
+            }
+            free(mpReferences);
+        }
+        bool IsValid() const { return mpReferences != nullptr; }
+        const BundleReferencePC& operator[](u32 i) const { return mpReferences[i]; }
+        void Acquire(u32 i, Pool* lpPool, s32 liSlot, bool lbCreated)
+        {
+            BundleReferencePC& lrRef = mpReferences[i];
+            lrRef.mpPool = lpPool;
+            lrRef.miSlot = liSlot;
+            lrRef.mbCreated = lbCreated;
+            lrRef.miPreviousCount = lpPool->GetEntryRefCount(liSlot);
+            if (!lbCreated)
+            {
+                if (lrRef.miPreviousCount > 0) lpPool->IncEntryRefCount(liSlot);
+                else lpPool->SetEntryRefCount(liSlot, 1);
+            }
+        }
+        void Commit() { mbCommitted = true; }
+
+    private:
+        BundleReferencePC* mpReferences;
+        u32 muCount;
+        bool mbCommitted;
+        BundleReferencesPC(const BundleReferencesPC&) = delete;
+        BundleReferencesPC& operator=(const BundleReferencesPC&) = delete;
+    };
+
+    static const EntryListResource* GetBundleList(const Entry* lpEntry)
+    {
+        if (!lpEntry || !lpEntry->mpResourceType || lpEntry->mpResourceType->GetTypeID() != 29)
+            return nullptr;
+        const u32 luSize = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[0].m_size;
+        const EntryListResource* lpList =
+            static_cast<const EntryListResource*>(lpEntry->mResource.m_baseResources[0]);
+        if (!lpList || luSize < EntryListResource::KI_HEADERSIZE
+            || lpList->muNumEntries > (luSize - EntryListResource::KI_HEADERSIZE) / sizeof(ID))
+            return nullptr;
+        return lpList;
+    }
+
     s32 BundleLoader::LoadBundle(const char* lpcFileName, Pool* lpPool, FTypeResolver lpfnResolveType)
     {
         // ---- read the whole bundle file (through the live async FS engine; CRT leaf early) --
@@ -58,7 +141,7 @@ namespace CgsResource
         char* lpcBundle  = ReadBundleFile(lpcFileName, &llFileSize);
         if (lpcBundle == 0)
             return KI_LOAD_FILE_MISSING;   // [FLAG PC bring-up] -- see the header
-        if (llFileSize <= static_cast<long>(sizeof(BundleV2)))
+        if (llFileSize < static_cast<long>(sizeof(BundleV2)))
         {
             free(lpcBundle);
             return -1;
@@ -76,16 +159,97 @@ namespace CgsResource
         }
 
         const u32 luEntryCount = lpHeader->muResourceEntriesCount;
-        BundleV2::ResourceEntry* lpEntries =
-            reinterpret_cast<BundleV2::ResourceEntry*>(lpcBundle + lpHeader->muResourceEntriesOffset);
-
-        // Remember each created slot so the fixup passes (which run only after every resource
-        // is in place) can revisit them. -1 = the entry was skipped.
-        s32* lpiSlots = static_cast<s32*>(malloc(sizeof(s32) * (luEntryCount != 0 ? luEntryCount : 1)));
-        if (lpiSlots == 0)
+        const u32 luFileSize = static_cast<u32>(llFileSize);
+        if (lpHeader->muResourceEntriesOffset > luFileSize
+            || luEntryCount > (luFileSize - lpHeader->muResourceEntriesOffset) / sizeof(BundleV2::ResourceEntry))
         {
             free(lpcBundle);
-            return -1;
+            return KI_LOAD_FAILED;
+        }
+        BundleV2::ResourceEntry* lpEntries =
+            reinterpret_cast<BundleV2::ResourceEntry*>(lpcBundle + lpHeader->muResourceEntriesOffset);
+        const ID lListId = BundleListId(lpcFileName);
+        // Validate copy ranges before taking any references. Native bundles are uncompressed.
+        for (u32 i = 0; i < luEntryCount; ++i)
+        {
+            if (lpEntries[i].mResourceId == lListId)
+            {
+                free(lpcBundle);
+                return KI_LOAD_FAILED;
+            }
+            for (u32 t = 0; t < BundleV2::E_MEMTYPE_NUMTYPES; ++t)
+            {
+                const u32 luBytes = lpEntries[i].GetUncompressedSize(t);
+                const u64 luOffset = static_cast<u64>(lpHeader->mauResourceDataOffset[t]) + lpEntries[i].mauDiskOffset[t];
+                if (luBytes && (luOffset > luFileSize || luBytes > luFileSize - luOffset))
+                {
+                    free(lpcBundle);
+                    return KI_LOAD_FAILED;
+                }
+            }
+        }
+
+        BundleReferencesPC lReferences(luEntryCount + 1);
+        if (!lReferences.IsValid())
+        {
+            free(lpcBundle);
+            return KI_LOAD_FAILED;
+        }
+
+        // AllocatePoolModuleState::CheckEntryListDependency searches this pool only, unlike
+        // its member dependency pass. The list lives in the pool and follows its lifetime.
+        s32 liListSlot = -1;
+        Entry* lpListEntry = lpPool->FindResource(lListId, true, 3, &liListSlot);
+        if (lpListEntry)
+        {
+            const EntryListResource* lpList = GetBundleList(lpListEntry);
+            if (!lpList || lpList->muNumEntries != luEntryCount)
+            {
+                free(lpcBundle);
+                return KI_LOAD_FAILED;
+            }
+            for (u32 i = 0; i < luEntryCount; ++i)
+            {
+                // A changed resident bundle belongs to the separate live-update path.
+                if (lpList->mIds[i] != lpEntries[i].mResourceId)
+                {
+                    free(lpcBundle);
+                    return KI_LOAD_FAILED;
+                }
+            }
+            lReferences.Acquire(0, lpPool, liListSlot, false);
+        }
+        else
+        {
+            static EntryListResourceType sListType = [] {
+                EntryListResourceType lType;
+                lType.InitCachedValues();
+                return lType;
+            }();
+            const u32 luAlignment = lpPool->GetHeapAlignment(0);
+            const u64 luSize = (static_cast<u64>(luEntryCount) * sizeof(ID)
+                + EntryListResource::KI_HEADERSIZE + luAlignment - 1) & ~static_cast<u64>(luAlignment - 1);
+            if (luSize > 0xFFFFFFFFull)
+            {
+                free(lpcBundle);
+                return KI_LOAD_FAILED;
+            }
+            NewResource lListResource = {};
+            lListResource.mID = lListId;
+            lListResource.mpResourceType = &sListType;
+            lListResource.mResourceDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(luSize);
+            lListResource.mResourceDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
+            if (lpPool->CreateEntry(&lListResource, &lpListEntry, &liListSlot, true) != Pool::CREATERESULT_OK)
+            {
+                free(lpcBundle);
+                return KI_LOAD_FAILED;
+            }
+            lReferences.Acquire(0, lpPool, liListSlot, true);
+            EntryListResource* lpList = static_cast<EntryListResource*>(lpListEntry->mResource.m_baseResources[0]);
+            std::strncpy(lpList->macOwnerName, lpcFileName, EntryListResource::KI_MAXOWNERLENGTH - 1);
+            lpList->macOwnerName[EntryListResource::KI_MAXOWNERLENGTH - 1] = 0;
+            lpList->muNumEntries = luEntryCount;
+            for (u32 i = 0; i < luEntryCount; ++i) lpList->mIds[i] = lpEntries[i].mResourceId;
         }
 
         // ---- pass 0: the dependency check == CgsResource::AllocatePoolModuleState::
@@ -105,13 +269,6 @@ namespace CgsResource
         //
         // The X360 also reports a "Hash conflict" when a resident resource's per-memtype size
         // differs from the bundle entry's; reproduced as a one-shot log.
-        u8* lpu8Create = static_cast<u8*>(malloc(luEntryCount != 0 ? luEntryCount : 1));
-        if (lpu8Create == 0)
-        {
-            free(lpiSlots);
-            free(lpcBundle);
-            return -1;
-        }
         s32 liShared = 0;
         for (u32 luIndex = 0; luIndex < luEntryCount; ++luIndex)
         {
@@ -123,16 +280,12 @@ namespace CgsResource
                                                                  true, 3, &liFoundIndex);
             if (lpFound == 0 || lpFoundPool == 0 || liFoundIndex < 0)
             {
-                lpu8Create[luIndex] = 1;
                 continue;
             }
 
             // Resident: reference it and skip the create (X360 clamps the stored count to
             // at least 1 -- `v23 = v22 > 0 ? v22 + 1 : 1`).
-            if (lpFoundPool->GetEntryRefCount(liFoundIndex) > 0)
-                lpFoundPool->IncEntryRefCount(liFoundIndex);
-            else
-                lpFoundPool->SetEntryRefCount(liFoundIndex, 1);
+            lReferences.Acquire(luIndex + 1, lpFoundPool, liFoundIndex, false);
 
             for (u32 luMemType = 0; luMemType < BundleV2::E_MEMTYPE_NUMTYPES; ++luMemType)
             {
@@ -150,37 +303,14 @@ namespace CgsResource
                 }
             }
 
-            lpu8Create[luIndex] = 0;
-            lpiSlots[luIndex]   = -1;   // not created here -- the fixup passes must skip it
             ++liShared;
         }
-
-        // ⭐ ON THE MISSING "ENTRY-LIST LEG" (boot audit F-P7-21), resolved 2026-08-17.
-        //
-        // The console's CheckListDependencies closes with
-        // `mbCreateEntryListResource = CheckEntryListDependency()` @0x828FF460-70, and this
-        // mirror has no equivalent -- which the audit recorded as "no per-bundle EntryList
-        // validation on PC".
-        //
-        // It is a mis-scope, not a gap. CheckEntryListDependency asks whether THE LIST'S OWN
-        // entry-list resource is resident (`FindResource(mListId, ...)`), and mListId exists
-        // only when a resource LIST is being allocated. This function loads a BUNDLE: it has
-        // no list id and creates no entry-list resource, so there is nothing for that leg to
-        // validate. Grep confirms it -- not one list-id or entry-list symbol appears in this
-        // file.
-        //
-        // The leg IS present where it belongs: AllocatePoolModuleState carries
-        // mbCreateEntryListResource and calls CheckEntryListDependency / CreateEntryListResource
-        // (CgsAllocatePoolModuleState.cpp:133/:169/:221). What this mirror borrows from
-        // CheckListDependencies is only the per-entry dependency pass above, which is the part
-        // a bundle load needs.
-        // Recorded here so the finding is not re-opened against this function.
 
         // ---- pass 1: create + allocate + copy each resource ---------------------------
         s32 liLoaded = 0;
         for (u32 luIndex = 0; luIndex < luEntryCount; ++luIndex)
         {
-            if (lpu8Create[luIndex] == 0)
+            if (lReferences[luIndex + 1].mpPool)
                 continue;
 
             BundleV2::ResourceEntry& lrEntry = lpEntries[luIndex];
@@ -228,10 +358,10 @@ namespace CgsResource
             s32    liSlot  = -1;
             if (lpPool->CreateEntry(&lNewResource, &lpEntry, &liSlot, true) != Pool::CREATERESULT_OK)
             {
-                lpiSlots[luIndex] = -1;   // out of entries / memory -- skip
-                continue;
+                free(lpcBundle);
+                return KI_LOAD_FAILED;
             }
-            lpiSlots[luIndex] = liSlot;
+            lReferences.Acquire(luIndex + 1, lpPool, liSlot, true);
 
             // copy each memory pool's (uncompressed) data from the bundle into the allocation
             for (u32 luMemType = 0; luMemType < BundleV2::E_MEMTYPE_NUMTYPES; ++luMemType)
@@ -251,23 +381,23 @@ namespace CgsResource
         // see every resource already fixed up). Only run for resources with a known Type.
         for (u32 luIndex = 0; luIndex < luEntryCount; ++luIndex)
         {
-            const s32 liSlot = lpiSlots[luIndex];
-            if (liSlot < 0) continue;
+            if (!lReferences[luIndex + 1].mbCreated) continue;
+            const s32 liSlot = lReferences[luIndex + 1].miSlot;
             Entry* lpEntry = &lpPool->mpResourceEntries[liSlot];
             if (lpEntry->mpResourceType != 0)
                 lpPool->FixUpEntry(lpEntry);
         }
         for (u32 luIndex = 0; luIndex < luEntryCount; ++luIndex)
         {
-            const s32 liSlot = lpiSlots[luIndex];
-            if (liSlot < 0) continue;
+            if (!lReferences[luIndex + 1].mbCreated) continue;
+            const s32 liSlot = lReferences[luIndex + 1].miSlot;
             if (lpPool->mpResourceEntries[liSlot].mpResourceType != 0)
                 lpPool->ResolveImportsForEntry(liSlot);
         }
         for (u32 luIndex = 0; luIndex < luEntryCount; ++luIndex)
         {
-            const s32 liSlot = lpiSlots[luIndex];
-            if (liSlot < 0) continue;
+            if (!lReferences[luIndex + 1].mbCreated) continue;
+            const s32 liSlot = lReferences[luIndex + 1].miSlot;
             Entry* lpEntry = &lpPool->mpResourceEntries[liSlot];
             if (lpEntry->mpResourceType != 0)
                 lpPool->PostFixUpEntry(lpEntry);
@@ -280,64 +410,48 @@ namespace CgsResource
         // AcquireResource) gates on status & 2, so this is what makes a streamed resource acquirable.
         for (u32 luIndex = 0; luIndex < luEntryCount; ++luIndex)
         {
-            const s32 liSlot = lpiSlots[luIndex];
-            if (liSlot < 0) continue;
+            if (!lReferences[luIndex + 1].mbCreated) continue;
+            const s32 liSlot = lReferences[luIndex + 1].miSlot;
             lpPool->SetEntryStatus(liSlot, 2);
         }
+        lpPool->SetEntryStatus(liListSlot, 2);
+        lReferences.Commit();
 
         if (liShared != 0 && (CgsDev::Message::gxMessageFilterFlags & 1))
             *CgsDev::Log::gpDebugPrint << "[stream]   '" << lpcFileName << "': " << liShared
                                        << " of " << static_cast<s32>(luEntryCount)
                                        << " already resident (referenced, not duplicated)\n";
 
-        free(lpu8Create);
-        free(lpiSlots);
         free(lpcBundle);
         return liLoaded;
     }
 
-    // Unload a bundle's resources from a pool (the inverse of LoadBundle). Re-read the bundle's resource
-    // id list and ref-count-release each one; Pool::RemoveReference frees a resource's heap memory + slot
-    // when its ref count reaches zero (so a resource still imported elsewhere survives). [PC synchronous
-    // form -- the X360 async unload uses the DeAllocate state machine + tracks loaded bundles.]
+    // CheckForUnloads uses the resident entry list, never the bundle file. Keep the list alive
+    // until all member references from this low-level load have been released. Higher-level
+    // logical bundle refcounts and asynchronous DeAllocate scheduling remain the module's job.
     s32 BundleLoader::UnloadBundle(const char* lpcFileName, Pool* lpPool)
     {
-        long  llFileSize = 0;
-        char* lpcBundle  = ReadBundleFile(lpcFileName, &llFileSize);
-        if (lpcBundle == 0)
-            return -1;
-        if (llFileSize <= static_cast<long>(sizeof(BundleV2)))
-        {
-            free(lpcBundle);
-            return -1;
-        }
-
-        BundleV2* lpHeader = reinterpret_cast<BundleV2*>(lpcBundle);
-        if (lpHeader->muVersion != BundleV2::KU_VERSION || lpHeader->muPlatform != BundleV2::KU_PLATFORM)
-        {
-            free(lpcBundle);
-            return -1;
-        }
-
-        const u32 luEntryCount = lpHeader->muResourceEntriesCount;
-        BundleV2::ResourceEntry* lpEntries =
-            reinterpret_cast<BundleV2::ResourceEntry*>(lpcBundle + lpHeader->muResourceEntriesOffset);
+        s32 liListSlot = -1;
+        const EntryListResource* lpList = GetBundleList(
+            lpPool->FindResource(BundleListId(lpcFileName), true, 3, &liListSlot));
+        if (!lpList)
+            return KI_LOAD_FAILED; // native cleanup also handles optional bundles whose load failed
 
         s32 liUnloaded = 0;
-        for (u32 luIndex = 0; luIndex < luEntryCount; ++luIndex)
+        for (u32 luIndex = 0; luIndex < lpList->muNumEntries; ++luIndex)
         {
             // find the resource by id (any in-use status; ignore the ref-count gate), then release a ref.
             // Ids are stored raw/untagged (see LoadBundle) and looked up in the same form. The search
             // spans the dependency pools exactly as LoadBundle's CheckListDependencies pass does, so
             // every reference that pass took is given back to the pool that owns it.
-            ID lId = lpEntries[luIndex].mResourceId;
+            ID lId = lpList->mIds[luIndex];
             Pool*     lpFoundPool = 0;
             const s32 liSlot = lpPool->FindResourceIndexWithDependencies(lId, &lpFoundPool, true, 0xFF);
             if (liSlot >= 0 && lpFoundPool != 0 && lpFoundPool->RemoveReference(static_cast<u32>(liSlot)))
                 ++liUnloaded;
         }
 
-        free(lpcBundle);
+        lpPool->RemoveReference(static_cast<u32>(liListSlot));
         return liUnloaded;
     }
 }

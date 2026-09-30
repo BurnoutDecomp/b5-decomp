@@ -6,8 +6,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint / gxMessageFilterFlags
 
-#include <cstddef>   // offsetof (layout pin for the resource-memory view)
-
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
 // THIS TU (GameShared/.../PoolModuleStates/CgsAllocatePoolModuleState.cpp) -- the working steps of the
@@ -28,29 +26,6 @@
 
 namespace CgsResource
 {
-namespace
-{
-    // The entry-list resource's in-memory payload. CreateResourceList sizes the pool allocation as
-    // alignUp(8 * miNumEntries + 263): a small header, the member count at +0x100, then the packed
-    // array of member resource ids at +0x108. This is resource memory -- an allocated data blob whose
-    // layout is fixed by the format, not a managed C++ object -- so it is addressed as a single data
-    // view (the AGENTS.md serialised/resource-blob exception), not a chain of offset casts.
-    struct EntryListResourceData
-    {
-        u8   muHeaderFlag;      // +0x000  cleared on (re)build
-        u8   maPad0[0xFF];      // +0x001
-        u32  muNumEntries;      // +0x100
-        u8   maPad1[4];         // +0x104
-        ID   maEntryIds[1];     // +0x108  (flexible: miNumEntries ids follow)
-
-        static void AssertLayout()
-        {
-            static_assert(offsetof(EntryListResourceData, muNumEntries) == 0x100, "count @ +0x100");
-            static_assert(offsetof(EntryListResourceData, maEntryIds)   == 0x108, "ids @ +0x108");
-        }
-    };
-}
-
     // -------- BeginAllocation @ 0x828DA568 --------
     // Latch the request working set and move the machine out of idle. The X360 asserts the machine was
     // idle (streamed message) before overwriting the working set; miCountDown is armed to 1 and the two
@@ -264,14 +239,14 @@ namespace
 
         if (mbCreateEntryListResource)
         {
-            EntryListResourceData* lpData =
-                static_cast<EntryListResourceData*>(lpResource->mResource.GetMemoryResource());
+            EntryListResource* lpData =
+                static_cast<EntryListResource*>(lpResource->mResource.GetMemoryResource());
 
             lpData->muNumEntries = static_cast<u32>(miNumEntries);
-            lpData->muHeaderFlag = 0;
+            lpData->macOwnerName[0] = 0;
             for (s32 i = 0; i < miNumEntries; ++i)
             {
-                lpData->maEntryIds[i] = mpEntries[i].mResourceId;
+                lpData->mIds[i] = mpEntries[i].mResourceId;
             }
         }
 
