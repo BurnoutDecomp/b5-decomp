@@ -222,8 +222,8 @@ namespace CgsResource
             lParams.mpRelocateSources           = mpRelocateSources;
             lParams.muMaxAddressedAllocRequests = KI_MAX_ALLOCATION_REQUESTS;   // X360 v30 = 4096
             lParams.muMaxRelocateRequests       = KU_MAX_POOL_ENTRIES;          // X360 v32 = 36863
-            lParams.muMaxDistributionRequests   = KU_MAX_DISTRIBUTION_COMMANDS; // X360 v33 = 0xFFFF
-            lParams.muMaxLinearHeapNodes        = KU_MAX_POOL_ENTRIES;          // X360 v31 = 36863
+            lParams.muMaxDistributionRequests   = KU_MAX_POOL_ENTRIES;          // ARTIST parameter word 9
+            lParams.muMaxLinearHeapNodes        = KU_MAX_LINEAR_HEAP_LENGTH;    // ARTIST parameter word 10 = 0xFFFF
             lParams.muMaxRelocateSources        = KU_MAX_POOL_ENTRIES;          // X360 v34 = 36863
             lParams.mpScratchPool               = &mScratchPool;
 
@@ -308,8 +308,8 @@ namespace CgsResource
             // instead of the scratch pool. The X360 fills an EmergencyFragParams from the intellifrag
             // working set + this module's defrag buffers + the embedded Relocator/RelocationParams.
             EmergencyFragParams lParams;
-            lParams.mpPool                      = 0;   // [marked] working-set copy DEFERRED with the state
-            lParams.mpAllocListSet              = 0;
+            lParams.mpPool                      = mAllocateState.GetPool();
+            lParams.mpAllocListSet              = mAllocateState.GetAllocSet();
             lParams.mpAddressedAllocRequests    = mpAddressedAllocRequests;
             lParams.mpRelocateRequests          = mpRelocateRequests;
             lParams.mpDistributionEntries       = mpDistributionEntries;
@@ -317,8 +317,8 @@ namespace CgsResource
             lParams.mpRelocateSources           = mpRelocateSources;
             lParams.muMaxAddressedAllocRequests = KI_MAX_ALLOCATION_REQUESTS;   // 4096
             lParams.muMaxRelocateRequests       = KU_MAX_POOL_ENTRIES;          // 36863
-            lParams.muMaxDistributionRequests   = KU_MAX_DISTRIBUTION_COMMANDS; // 0xFFFF
-            lParams.muMaxLinearHeapNodes        = KU_MAX_POOL_ENTRIES;          // 36863
+            lParams.muMaxDistributionRequests   = KU_MAX_POOL_ENTRIES;          // 36863
+            lParams.muMaxLinearHeapNodes        = KU_MAX_LINEAR_HEAP_LENGTH;    // 0xFFFF
             lParams.muMaxRelocateSources        = KU_MAX_POOL_ENTRIES;          // 36863
             lParams.mpRelocator        = &mRelocator;
             lParams.mpRelocationParams = &mRelocationParams;
@@ -329,6 +329,28 @@ namespace CgsResource
         }
         default:
             CGS_ASSERT(false, "Intellifrag state returned invalid result code\n");   // :714
+            break;
+        }
+    }
+
+    // ARTIST 829015F0: finish the emergency pass or retain its stall request.
+    void PoolModule::UpdateEmergencyFrag(void* /*lpOutputBuffer*/)
+    {
+        switch (mEmergencyFragState.Update())
+        {
+        case EmergencyFragPoolModuleState::E_RESULT_SUCCESS:
+            mProcessState = E_UPDATESTATE_ALLOCATING_LIST;
+            break;
+        case EmergencyFragPoolModuleState::E_RESULT_ERROR:
+            CGS_ASSERT(false, "Error during intellifrag\n");
+            break;
+        case EmergencyFragPoolModuleState::E_RESULT_PEND:
+            break;
+        case EmergencyFragPoolModuleState::E_RESULT_EMERGENCY:
+            CGS_ASSERT(false, "Emergency defragment failed - time to commit suicide :(\n");
+            break;
+        default:
+            CGS_ASSERT(false, "Emergency defragment state returned invalid result code\n");
             break;
         }
     }

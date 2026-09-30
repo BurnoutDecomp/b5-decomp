@@ -70,14 +70,11 @@ namespace CgsResource
     // lrSize (a5) is not referenced by the X360 body.
     void Type::ReBaseTechniqueFixupWithOffset(
         void* lpResource, rw::Resource& lrSource, rw::Resource& lrDest,
-        ResourceDescriptor& /*lrSize*/, s32 liMemType) const
+        ResourceDescriptor& lrSize, s32 liMemType) const
     {
-        rw::Resource lOffset = {};
-        ptrdiff_t liDelta = static_cast<char*>(lrDest.m_baseResources[liMemType])
-                           - static_cast<char*>(lrSource.m_baseResources[liMemType]);
-        lOffset.m_baseResources[liMemType] = reinterpret_cast<void*>(liDelta);
-
-        FixUp(lpResource, lOffset);
+        // The default ReBase virtual is this technique in ARTIST. Qualify the
+        // call to avoid redispatching to an override that selected this helper.
+        Type::ReBase(lpResource, lrSource, lrDest, lrSize, liMemType);
     }
 
     // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82666180.

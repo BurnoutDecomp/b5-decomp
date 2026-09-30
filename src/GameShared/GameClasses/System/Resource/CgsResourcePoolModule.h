@@ -23,7 +23,7 @@ namespace CgsResource { namespace Events { struct AcquireResourceRequest; } }   
 namespace CgsResource { namespace Events { struct AcquireResourceListRequest; } } // DoAcquireResourceListRequest
 // Defrag distribution/relocation records (pointer members only; full layouts live in the deferred
 // defrag subsystem -- forward-declared to avoid a transitive cascade for pointer-only storage).
-namespace CgsResource { struct DistributionEntry; struct RelocationEntry; }
+namespace CgsResource { using RelocationEntry = CgsMemory::RelocateOp; }
 
 // CgsResource::PoolModule - the resource-pool manager module (X360 CgsPoolModule.cpp). It
 // owns the game's fixed bank of 128 resource Pools and a registry of resource Types, and
@@ -37,28 +37,10 @@ namespace CgsResource { struct DistributionEntry; struct RelocationEntry; }
 // 0x82906FD0, GetPoolIndex 0x828D80E8, FindResourceType 0x828D8268, CreatePool 0x82904B20,
 // + the DoXxxRequest handlers and the UpdateXxx defrag-state drivers.
 //
-// Layout: faithful field order; x64 widths; the PC compiler lays the class out (we identify
-// members by the X360 offsets but do NOT byte-match). Populated incrementally: this pass
-// lands the members the pure-logic spine needs (type table, the 128 Pools, the two stage
-// machines, the receiver queue) plus the embedded defrag infra (ScratchPool/Relocator);
-// the defrag-state cluster, the EA Job, the RW mutexes, the embedded resource registry and
-// the typed request queues are added with the passes that use them.
-//
-// DEFER STATUS: this home reconstructs the rw-allocator-INDEPENDENT spine - GetPoolIndex,
-// FindResourceType, and the Prepare/Release/Destruct stage machines (they only iterate the
-// 128 Pools + the base module + the receiver queue) - plus, in the CgsPoolModule.cpp ledger TU
-// (the X360 source path for the same class), the per-frame defrag-state DRIVERS (UpdateAllocating /
-// UpdateDeAllocating / UpdateIntelliFrag / UpdateLiveUpdate), the request handlers
-// (ConvertPoolRequestOptions / DoAllocateResourceListRequest / DoDeletePoolRequest / DebugReport),
-// and the embedded defrag-state cluster they poll. Still DEFERRED (rw-allocator middleware / defrag
-// subsystem, trap-stubbed at link): Construct's rw-allocator back half (the 128 pools' backing memory),
-// AllocateResourceList, the step machines' own Update/Begin/GenerateResponse bodies, and the Relocator -
-// nothing drives them until the GameDataModule runs.
-//
-// NOTE: this header is the single canonical home for CgsResource::PoolModule. The defrag-state
-// drivers + their working-set members were folded in here (additively) so the CgsPoolModule.cpp TU
-// compiles against ONE class definition - the earlier dual-header ODR (a separate CgsPoolModule.h
-// redefining the class) is resolved.
+// Native fields retain the original responsibilities and fixed capacities;
+// pointer-bearing records use the host ABI. Scratch storage and state construction
+// are restored. Full per-frame request dispatch and staged bundle loading remain
+// separate integration work.
 namespace CgsResource
 {
     // The CreatePool request payload CreatePools publishes to the ResourceModule input (event id 0).
@@ -120,9 +102,8 @@ namespace CgsResource
         // CgsResource::PoolModule::InitOptions (DWARF CgsPoolModule.h:121) - the pool-manager bring-up
         // options PoolModule::Construct consumes (the X360 `a2`): the defrag/scratch-buffer sizing plus
         // the game-specific resource-type list (registered into maTypes after the built-in "IDList").
-        // [ARTIST 5-TYPE DRIFT: the X360 mDefragBufferDescriptor is a 5-type ResourceDescriptor (40B)
-        // and mDefragBufferResource is 5 base ptrs; modelled here with the rw 4-type typedefs since the
-        // defrag buffer is a deferred subsystem -- widen to 5-type when the defrag path is reconstructed.]
+        // Both the original and native RW records contain five resource lanes;
+        // native pointers widen while the byte counts retain their original units.
         struct InitOptions
         {
             // A game-specific resource type to register into maTypes (X360 a2 type list / count).
@@ -145,7 +126,7 @@ namespace CgsResource
         // FIFO indices (CreatePool path establishes them; in-class-zeroed below). Trivial ctor.
         PoolModule() {}
 
-        // ---- lifecycle (Construct is rw-allocator-gated -> deferred) -------------------
+        // ---- lifecycle ---------------------------------------------------------------
         void Construct(const void* lpInitOptions, void* lpAllocator);
         bool Prepare();
         bool Release();
@@ -223,6 +204,7 @@ namespace CgsResource
         void UpdateAllocating(void* lpOutputBuffer);     // @ 0x82904860
         void UpdateDeAllocating(void* lpOutputBuffer);   // @ 0x828F38E8
         void UpdateIntelliFrag(void* lpOutputBuffer);    // @ 0x829013F8
+        void UpdateEmergencyFrag(void* lpOutputBuffer);  // @ 0x829015F0
         void UpdateLiveUpdate(void* lpOutputBuffer);     // @ 0x82906E70
 
         // ---- request handlers ----------------------------------------------------------

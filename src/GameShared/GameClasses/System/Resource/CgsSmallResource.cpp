@@ -31,6 +31,15 @@ namespace CgsResource
         lrResource.m_baseResources[2] = m_baseResources[1];   // graphics
     }
 
+    // Inlined ARTIST 828ED8C4..828ED8E8.
+    // The third small-resource lane is unused on X360; RW slots 0 and 2
+    // carry the two populated descriptors, matching ConvertToRWResource.
+    void SmallResourceDescriptor::ConvertToRWDescriptor(ResourceDescriptor& lrDescriptor) const
+    {
+        lrDescriptor.m_baseResourceDescriptors[0] = m_baseResourceDescriptors[0];
+        lrDescriptor.m_baseResourceDescriptors[2] = m_baseResourceDescriptors[1];
+    }
+
     // rw -> small (0x828EB6E8): take the two populated rw slots (main=0, graphics=2) into the
     // compact 3-pool form; the other serialised categories must be empty. The X360 fires THREE
     // "unitialized memory" asserts (slots 3, 4, 1 -- asm 0x828EB708/EB788/EB7E8, lines 200/201/202)

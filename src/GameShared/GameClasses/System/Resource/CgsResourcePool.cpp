@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (the null-type boot gate)
 #include "GameShared/Jobs/Relocator/CgsRelocator.h"          // Relocator / RelocationParams / RelocateOp
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceScratchPool.h"
 #include <cstring>
 
 #include <cstdint>   // uintptr_t (the Heap allocation owner is the slot index)
@@ -40,6 +41,45 @@ namespace CgsResource
     {
         // [FLAG PC diagnostic] one heap-FULL report per pool id (see the report site below).
         bool sabLoggedPoolFull[64] = { false };
+
+        // ARTIST 820F7024 contains exactly the two populated X360 mappings.
+        // The third small-resource lane is a dummy and has no RW counterpart.
+        s32 GetRelocationRWMemoryType(s32 liMemType)
+        {
+            CGS_ASSERT(liMemType >= 0 && liMemType < 2, "Invalid resource relocation memory type\n");
+            static const s32 saiMemoryTypes[] = { 0, 2 };
+            return saiMemoryTypes[liMemType];
+        }
+
+        // FLAG PC-platform leaf: native D3D buffers mirror host resource bytes.
+        // A move retires the old range even though its heap is not freed here.
+        void RetireRelocatedResourcePC(const Entry& lrEntry, s32 liMemType, const void* lpDestination)
+        {
+            const void* lpSource = lrEntry.mResource.m_baseResources[liMemType];
+            if (lpSource != lpDestination)
+                renderengine::WorldGeometry_OnResourceMemoryFreed(lpSource,
+                    lrEntry.mResourceDescriptor.m_baseResourceDescriptors[liMemType].m_size);
+        }
+
+        // FLAG PC-platform leaf: retain the existing native bundle import-width
+        // contract (legacy world graphs use low-4GB pointers; widened graphs may
+        // use full native addresses). Runtime staging must preserve that contract.
+        void WriteScratchImportPC(void* lpMainMemory, u32 luOffset, void* lpTarget)
+        {
+            u8* lpSlot = static_cast<u8*>(lpMainMemory) + luOffset;
+            const uintptr_t luTarget = reinterpret_cast<uintptr_t>(lpTarget);
+            if ((luTarget >> 32) != 0)
+                std::memcpy(lpSlot, &lpTarget, sizeof(lpTarget));
+            else
+            {
+                const u32 luNarrowTarget = static_cast<u32>(luTarget);
+                std::memcpy(lpSlot, &luNarrowTarget, sizeof(luNarrowTarget));
+            }
+        }
+
+        // Console debug frame counter at 830EA924; one relocation is driven by
+        // the pool module at a time. Independent of the per-pool death countdown.
+        s32 siDefragDebugFrame = 0;
 
         u32 GetManagementHashLength(u32 luMaxResources)
         {
@@ -1081,4 +1121,301 @@ namespace CgsResource
 
         mpCurrentRelocator->Execute(lpParams);
     }
+
+    // ARTIST 829024D8: retire only loaded resources after their original signed
+    // reference countdown, then progress this pool's active relocation.
+    void Pool::Update()
+    {
+        if (!mbIsValid)
+            return;
+        miNumResourcesInPurgatory = 0;
+        for (u32 lu = 0; lu < muMaxResources; ++lu)
+        {
+            if ((mpx8ResourceStatuses[lu] & 2u) != 0)
+            {
+                const s16 liReferences = mpiResourceRefCounts[lu];
+                if (liReferences > -miRefCountThreshold)
+                {
+                    if (liReferences <= 0)
+                    {
+                        --mpiResourceRefCounts[lu];
+                        ++miNumResourcesInPurgatory;
+                    }
+                }
+                else
+                    DeleteEntry(static_cast<s16>(lu));
+            }
+        }
+        if (IsDefragmenting())
+        {
+            if (mpCurrentRelocator != nullptr)
+                UpdateEmergencyDefrag();
+            else if (mpCurrentScratchPool != nullptr)
+                UpdateDefrag();
+            else
+                CGS_ASSERT(false, "Invalid defragmentation mode - don't have a relocator (for emergency frag) or scratch pool (for silent frag)\n");
+        }
+    }
+
+    // ARTIST 828F6628: the relocation source owner is the original pool slot;
+    // ExecuteBatchRelocation has already assigned the request's destination node.
+    bool Pool::AddResourceToScratchPool(u32 luIndex)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        const s32 liEntryId = static_cast<s32>(reinterpret_cast<uintptr_t>(mpRelocateSources[luIndex].mpOwner));
+        Entry* lpEntry = &mpResourceEntries[liEntryId];
+        void* lpDestination = maHeaps[miDefragMemType].GetBaseAddress() + mpRelocateRequests[luIndex].muDestOffset;
+        if (mpCurrentScratchPool->AddEntry(lpEntry, liEntryId, miDefragMemType, lpDestination) == nullptr)
+            return false;
+        lpEntry->mauHeapIndices[miDefragMemType] = mpRelocateRequests[luIndex].muNode;
+        return true;
+    }
+
+    // ARTIST 828F6748: staging can stop at capacity and continue with another
+    // batch. The sorted ID list has one spare sentinel element.
+    bool Pool::AddResourcesToScratchPool()
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        u32 lu = muNextRelocation;
+        for (; lu < muNumRelocations; ++lu)
+            if (!AddResourceToScratchPool(lu))
+                break;
+        muNextRelocation = lu;
+        mpCurrentScratchPool->SortIdList();
+        return true;
+    }
+
+    // ARTIST 828ED558. Publish the temporary resource to aliases before the
+    // type's rebasing callback, matching the original observable ordering.
+    bool Pool::RebaseResourceToScratchPool(s32 liIndex)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        ScratchEntry* lpScratch = mpCurrentScratchPool->GetEntry(liIndex);
+        Entry* lpEntry = &mpResourceEntries[lpScratch->miEntryId];
+        rw::Resource lSource = {}, lDest = {};
+        ResourceDescriptor lDescriptor;
+        lpEntry->mResource.ConvertToRWResource(lSource);
+        lDest = lSource;
+        lpEntry->mResourceDescriptor.ConvertToRWDescriptor(lDescriptor);
+        const s32 liRWMemType = GetRelocationRWMemoryType(miDefragMemType);
+        lDest.m_baseResources[liRWMemType] = lpScratch->mpTempLocation;
+        RetireRelocatedResourcePC(*lpEntry, miDefragMemType, lpScratch->mpTempLocation);
+        lpEntry->mResource.CreateFromRWResource(lDest);
+        reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource)->Propogate();
+        lpEntry->mpResourceType->ReBase(lDest.m_baseResources[0], lSource, lDest, lDescriptor, liRWMemType);
+        return true;
+    }
+
+    // ARTIST 828ED778: the same publication order when leaving scratch space.
+    bool Pool::RebaseResourceFromScratchPool(s32 liIndex)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        ScratchEntry* lpScratch = mpCurrentScratchPool->GetEntry(liIndex);
+        Entry* lpEntry = &mpResourceEntries[lpScratch->miEntryId];
+        rw::Resource lSource = {}, lDest = {};
+        ResourceDescriptor lDescriptor;
+        lpEntry->mResource.ConvertToRWResource(lSource);
+        lDest = lSource;
+        lpEntry->mResourceDescriptor.ConvertToRWDescriptor(lDescriptor);
+        const s32 liRWMemType = GetRelocationRWMemoryType(miDefragMemType);
+        lDest.m_baseResources[liRWMemType] = lpScratch->mpDestLocation;
+        RetireRelocatedResourcePC(*lpEntry, miDefragMemType, lpScratch->mpDestLocation);
+        lpEntry->mResource.CreateFromRWResource(lDest);
+        reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource)->Propogate();
+        lpEntry->mpResourceType->ReBase(lDest.m_baseResources[0], lSource, lDest, lDescriptor, liRWMemType);
+        return true;
+    }
+
+    // ARTIST 828ED998 / 828EDB68. Keep processing the rest of the batch if a
+    // resource-specific assertion is continued by the original assert system.
+    bool Pool::RebaseResourcesToScratchPool()
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        for (u32 lu = 0; lu < mpCurrentScratchPool->GetNumEntries(); ++lu)
+        {
+            if (!RebaseResourceToScratchPool(lu))
+            {
+                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+                lMessage << "Defragmentation failiure for scratch entry " << lu << "\n";
+                CGS_ASSERT(false, lacMessage);
+            }
+        }
+        return true;
+    }
+
+    bool Pool::RebaseResourcesFromScratchPool()
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        for (u32 lu = 0; lu < mpCurrentScratchPool->GetNumEntries(); ++lu)
+        {
+            if (!RebaseResourceFromScratchPool(lu))
+            {
+                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+                lMessage << "Defragmentation failure for scratch entry " << lu << "\n";
+                CGS_ASSERT(false, lacMessage);
+            }
+        }
+        return true;
+    }
+
+    // ARTIST 828ED298 / 828ED3F8: change only imports that participate in the
+    // current scratch batch. Already loaded unrelated imports remain untouched.
+    void Pool::ResolveAllTempScratchResources()
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        for (u32 lu = 0; lu < muMaxResources; ++lu)
+        {
+            if ((mpx8ResourceStatuses[lu] & 2u) == 0 || mpiResourceImportCounts[lu] <= 0)
+                continue;
+            Entry& lrEntry = mpResourceEntries[lu];
+            const BundleV2::ImportEntry* lpImports = reinterpret_cast<const BundleV2::ImportEntry*>(
+                reinterpret_cast<uintptr_t>(lrEntry.mResource.m_baseResources[0]) + lrEntry.muImportTableOffset);
+            if (lpImports == nullptr)
+                continue;
+            for (s32 liImport = 0; liImport < mpiResourceImportCounts[lu]; ++liImport)
+            {
+                void* lpTarget = mpCurrentScratchPool->GetTempAddress(lpImports[liImport].mResourceId);
+                if (lpTarget != nullptr)
+                    WriteScratchImportPC(lrEntry.mResource.m_baseResources[0], lpImports[liImport].muOffset, lpTarget);
+            }
+        }
+    }
+
+    void Pool::ResolveAllDestScratchResources()
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        for (u32 lu = 0; lu < muMaxResources; ++lu)
+        {
+            if ((mpx8ResourceStatuses[lu] & 2u) == 0 || mpiResourceImportCounts[lu] <= 0)
+                continue;
+            Entry& lrEntry = mpResourceEntries[lu];
+            const BundleV2::ImportEntry* lpImports = reinterpret_cast<const BundleV2::ImportEntry*>(
+                reinterpret_cast<uintptr_t>(lrEntry.mResource.m_baseResources[0]) + lrEntry.muImportTableOffset);
+            if (lpImports == nullptr)
+                continue;
+            for (s32 liImport = 0; liImport < mpiResourceImportCounts[lu]; ++liImport)
+            {
+                void* lpTarget = mpCurrentScratchPool->GetDestAddress(lpImports[liImport].mResourceId);
+                if (lpTarget != nullptr)
+                    WriteScratchImportPC(lrEntry.mResource.m_baseResources[0], lpImports[liImport].muOffset, lpTarget);
+            }
+        }
+    }
+
+    // ARTIST 828D8D10: the completion latch is the frame counter. Only the
+    // silent path also clears the memory-type selector when all batches finish.
+    void Pool::BeginDefragNextSetOfRelocations()
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        if (muNextRelocation < muNumRelocations)
+        {
+            miDefragFrame = 0;
+            meDefragStage = DEFRAGSTAGE_WAIT_FOR_INITIAL_DEATHS;
+        }
+        else
+        {
+            meDefragStage = DEFRAGSTAGE_IDLE;
+            miDefragFrame = -1;
+            miDefragMemType = -1;
+        }
+    }
+
+    // ARTIST 828FE758: gather -> publish scratch -> wait for old frames ->
+    // scatter -> publish destination -> wait before reusing temporary memory.
+    // Deliberate fallthrough lets ready stages advance in the same update.
+    void Pool::UpdateDefrag()
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        CGS_ASSERT(miNumResourcesInPurgatory == 0,
+                   "Can not defragment while resource in purgatory - defrag trigger should have picked this up\n");
+        switch (meDefragStage)
+        {
+        case DEFRAGSTAGE_WAIT_FOR_INITIAL_DEATHS:
+            siDefragDebugFrame = 0;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "Start defragmenting on defrag frame " << siDefragDebugFrame << "\n";
+            mpCurrentScratchPool->Clear();
+            AddResourcesToScratchPool();
+            mpCurrentScratchPool->BeginDistribution(miDefragMemType);
+            // fall through
+        case DEFRAGSTAGE_MAKE_TEMP_COPIES:
+            meDefragStage = DEFRAGSTAGE_MAKE_TEMP_COPIES;
+            if (!mpCurrentScratchPool->UpdateGather())
+                break;
+            RebaseResourcesToScratchPool();
+            if (miDefragMemType == 0)
+                ResolveAllTempScratchResources();
+            miDefragFrame = -1;
+            // fall through
+        case DEFRAGSTAGE_WAIT_FOR_SOURCE_DEATH:
+            meDefragStage = DEFRAGSTAGE_WAIT_FOR_SOURCE_DEATH;
+            if (miDefragFrame <= miRefCountThreshold)
+                break;
+            // fall through
+        case DEFRAGSTAGE_MAKE_DEST_COPIES:
+            meDefragStage = DEFRAGSTAGE_MAKE_DEST_COPIES;
+            if (!mpCurrentScratchPool->UpdateScatter())
+                break;
+            RebaseResourcesFromScratchPool();
+            if (miDefragMemType == 0)
+                ResolveAllDestScratchResources();
+            miDefragFrame = -1;
+            // fall through
+        case DEFRAGSTAGE_WAIT_FOR_TEMP_DEATH:
+            meDefragStage = DEFRAGSTAGE_WAIT_FOR_TEMP_DEATH;
+            if (miDefragFrame <= miRefCountThreshold)
+                break;
+            // fall through
+        case DEFRAGSTAGE_DONE:
+            meDefragStage = DEFRAGSTAGE_DONE;
+            mpCurrentScratchPool->Clear();
+            BeginDefragNextSetOfRelocations();
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "End defragmenting on defrag frame " << siDefragDebugFrame << "\n";
+            return;
+        default:
+            CGS_ASSERT(false, "Invalid defrag stage\n");
+            break;
+        }
+        ++siDefragDebugFrame;
+        ++miDefragFrame;
+    }
+
+    // ARTIST 828FEC28: emergency copies finish before rebasing. Unlike silent
+    // defrag, each type callback precedes alias publication on this path.
+    void Pool::UpdateEmergencyDefrag()
+    {
+        if (miDefragFrame < 1)
+        {
+            ++miDefragFrame;
+            return;
+        }
+        mpCurrentRelocator->Update(true, true);
+        u8* lpBase = reinterpret_cast<u8*>(maHeaps[miDefragMemType].GetBaseAddress());
+        const s32 liRWMemType = GetRelocationRWMemoryType(miDefragMemType);
+        for (u32 lu = 0; lu < muNumRelocations; ++lu)
+        {
+            const s32 liEntryId = static_cast<s32>(reinterpret_cast<uintptr_t>(mpRelocateSources[lu].mpOwner));
+            Entry* lpEntry = &mpResourceEntries[liEntryId];
+            rw::Resource lSource = {}, lDest = {};
+            ResourceDescriptor lDescriptor;
+            lpEntry->mResource.ConvertToRWResource(lSource);
+            lDest = lSource;
+            lpEntry->mResourceDescriptor.ConvertToRWDescriptor(lDescriptor);
+            void* lpDestination = lpBase + mpRelocateRequests[lu].muDestOffset;
+            lDest.m_baseResources[liRWMemType] = lpDestination;
+            RetireRelocatedResourcePC(*lpEntry, miDefragMemType, lpDestination);
+            lpEntry->mpResourceType->ReBase(lDest.m_baseResources[0], lSource, lDest, lDescriptor, liRWMemType);
+            lpEntry->mResource.CreateFromRWResource(lDest);
+            reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource)->Propogate();
+            lpEntry->mauHeapIndices[miDefragMemType] = mpRelocateRequests[lu].muNode;
+        }
+        if (miDefragMemType == 0)
+            ResolveAllResources();
+        meDefragStage = DEFRAGSTAGE_IDLE;
+        miDefragFrame = -1;
+    }
+
 }

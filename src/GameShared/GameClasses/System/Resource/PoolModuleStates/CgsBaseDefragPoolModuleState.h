@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Resource/CgsResourceHeap.h"   // AllocRequestAddressed / RelocateRequest / RelocateSource / LinearHeapNode / EBatchAllocResult
+#include "GameShared/GameClasses/Memory/CgsDistributionStream.h"
 
 // CgsResource::BaseDefragPoolModuleState - the shared base for the resource pool's
 // defragmentation module-states (IntelliFrag / EmergencyFrag derive from it). A pool-module
@@ -26,7 +27,7 @@ namespace CgsResource
     class Pool;
     class PoolModule;
     struct AllocListSet;
-    struct DistributionEntry;
+    using DistributionEntry = CgsMemory::DistributionStreamEntry;
 
     // CgsBaseDefragPoolModuleState.h:48 - the working set handed to Begin(): the pool to
     // defragment plus the caller-owned scratch arrays and their capacities.

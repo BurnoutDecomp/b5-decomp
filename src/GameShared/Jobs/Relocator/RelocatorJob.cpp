@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cstring>   // memcpy
+#include <cstdint>
 
 // RelocatorJob::Execute - the copy body of the relocation job.
 
@@ -29,35 +30,38 @@ void RelocatorJob::Execute(void* lpvJobData)
 
         char* lpcSource = static_cast<char*>(lrOp.mpSource);
         char* lpcDest   = static_cast<char*>(lrOp.mpDest);
-        const s32 liSize = static_cast<s32>(lrOp.muSize);
+        const u32 luSize = lrOp.muSize;
+        if (luSize == 0)
+            continue;
 
-        // Disjoint spans copy straight through. The two comparisons are the console's, as
-        // written: destination end at or below the source start, or destination at or after
-        // the source end.
-        if (lpcDest + liSize - 1 <= lpcSource || lpcDest >= lpcSource + liSize - 1)
+        // FLAG PC-platform leaf: compare native addresses, not unrelated C++
+        // pointers. Half-open spans correctly classify even one-byte overlaps.
+        const uintptr_t luSource = reinterpret_cast<uintptr_t>(lpcSource);
+        const uintptr_t luDest = reinterpret_cast<uintptr_t>(lpcDest);
+        if (luDest + luSize <= luSource || luDest >= luSource + luSize)
         {
-            memcpy(lpcDest, lpcSource, static_cast<size_t>(liSize));
+            memcpy(lpcDest, lpcSource, luSize);
             continue;
         }
 
-        // Overlapping: bounce the block through the staging buffer a chunk at a time. Only
-        // the read cursor advances - the console re-reads the op's destination every chunk,
-        // so each chunk lands at the same destination address. Reproduced as written.
-        s32   liRemaining = liSize;
-        char* lpcCursor   = lpcSource;
-        while (liRemaining > 0)
+        // Native correctness repair to ARTIST 82AD2C7C..82AD2CB8: the original
+        // advances only the source and overwrites the beginning of the destination
+        // on every chunk. Real car resources exceed the 1 MiB bounce buffer.
+        // Advance both sides and copy backward when a higher destination overlaps
+        // unread source bytes. Preserve the bounded temporary-buffer contract.
+        CGS_ASSERT(lpData->mpBounceBuffer != nullptr && lpData->miBounceBufferSize > 0,
+                   "Overlapping relocation requires a non-empty bounce buffer\n");
+        if (lpData->mpBounceBuffer == nullptr || lpData->miBounceBufferSize <= 0)
+            return;
+        u32 luRemaining = luSize;
+        while (luRemaining != 0)
         {
-            s32 liChunk = lpData->miBounceBufferSize;
-            if (liRemaining <= liChunk)
-            {
-                liChunk = liRemaining;
-            }
-
-            memcpy(lpData->mpBounceBuffer, lpcCursor, static_cast<size_t>(liChunk));
-            memcpy(lrOp.mpDest, lpData->mpBounceBuffer, static_cast<size_t>(liChunk));
-
-            liRemaining -= liChunk;
-            lpcCursor   += liChunk;
+            const u32 luCapacity = static_cast<u32>(lpData->miBounceBufferSize);
+            const u32 luChunk = luRemaining < luCapacity ? luRemaining : luCapacity;
+            const u32 luOffset = luDest > luSource ? luRemaining - luChunk : luSize - luRemaining;
+            memcpy(lpData->mpBounceBuffer, lpcSource + luOffset, luChunk);
+            memcpy(lpcDest + luOffset, lpData->mpBounceBuffer, luChunk);
+            luRemaining -= luChunk;
         }
     }
 }

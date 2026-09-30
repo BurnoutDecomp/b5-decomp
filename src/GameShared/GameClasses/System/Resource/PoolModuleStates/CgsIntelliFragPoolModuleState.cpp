@@ -11,6 +11,14 @@
 
 namespace CgsResource
 {
+    // Inlined ARTIST PoolModule::Construct 828FC0B8.
+    void IntelliFragPoolModuleState::Construct(PoolModule* lpPoolModule)
+    {
+        BaseDefragPoolModuleState::Construct(lpPoolModule);
+        meState = E_STATE_IDLE;
+        mpScratchPool = nullptr;
+    }
+
     // -------- Begin --------
     // Run the base Begin first (working-set copy + null asserts), assert we are idle, then arm the
     // step machine: cap a single pass at 2MB (the base's miMaxToMove, written at +0x48), set

@@ -50,6 +50,8 @@ namespace CgsResource
             E_STATE_WAIT               = 3,
         };
 
+        void Construct(PoolModule* lpPoolModule);
+
         // @ 0x828DAAF0 -- arm the state from a live-update request: latch the pool, list id, bundle-entry
         // array + count and the caller's output arrays, reset the wait counter, and move the machine to
         // its start token (3). Asserts the machine was idle. mpOutResources is the caller's output handle

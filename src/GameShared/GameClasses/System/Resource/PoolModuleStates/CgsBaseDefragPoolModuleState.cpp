@@ -23,6 +23,26 @@
 
 namespace CgsResource
 {
+    // Inlined ARTIST PoolModule::Construct 828FC0B8 for both strategies.
+    void BaseDefragPoolModuleState::Construct(PoolModule* lpPoolModule)
+    {
+        mpPoolModule = lpPoolModule;
+        miCurrentMemType = -1;
+        mpPool = nullptr;
+        mpAllocListSet = nullptr;
+        mpAddressedAllocRequests = nullptr;
+        mpRelocateRequests = nullptr;
+        mpDistributionEntries = nullptr;
+        mpLinearHeapNodes = nullptr;
+        mpRelocateSources = nullptr;
+        muMaxAddressedAllocRequests = 0;
+        muMaxRelocateRequests = 0;
+        muMaxDistributionRequests = 0;
+        muMaxLinearHeapNodes = 0;
+        muMaxRelocateSources = 0;
+        miMaxToMove = 0x20000000;
+    }
+
     // -------- Begin @ 0x828DA090 --------
     // Reset the current mem-type to -1, then copy the caller's BaseDefragParams working set
     // into our members (mpPool .. muMaxRelocateSources -- 12 fields, in declaration order),
