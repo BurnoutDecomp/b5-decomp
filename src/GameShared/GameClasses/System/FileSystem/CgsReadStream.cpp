@@ -25,6 +25,16 @@ bool ReadStream::IsValid() const
     return mpStreamDevice != 0;
 }
 
+u64 ReadStream::Tell() const
+{
+    return mpStreamDevice->Tell();
+}
+
+u32 ReadStream::GetAmountOfDataInBuffer() const
+{
+    return mpStreamDevice->GetAmountOfDataInBuffer();
+}
+
 ReadStream& ReadStream::operator=(StreamDeviceDiskRead* apStreamDevice)
 {
     mpStreamDevice = apStreamDevice;

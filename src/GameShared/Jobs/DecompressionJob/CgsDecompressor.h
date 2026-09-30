@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "SDKs/EATech/eajobs/job_types.h"
 #include "zlib.h"   // z_stream + inflateInit_/inflate/inflateEnd (vendor zlib 1.1.3 interface)
 
 // CgsResource::Decompressor -- the zlib inflate worker that the decompression job runs over a
@@ -21,6 +22,7 @@ namespace CgsMemory { class HeapMalloc; }
 
 namespace CgsResource
 {
+    class Decompressor;
     // StatusClasses.h:43 -- one compressed entry: a source (compressed) span and the destination
     // (uncompressed) span. Mapped onto zlib's {next_in, avail_in, next_out, avail_out}.
     struct CompressedData
@@ -57,6 +59,9 @@ namespace CgsResource
         CompressedData*         mpEntries;       // +4  compressed entry array
         u32                     muNumEntries;    // +8  entry count
         CgsMemory::HeapMalloc*  mpHeapMalloc;    // +12 heap the zlib callbacks allocate through
+        // FLAG PC-platform leaf: native zlib retains the address of its
+        // z_stream. Keep one worker per streaming interface across job threads.
+        Decompressor*          mpNativeWorker;
     };
 
     // The inflate worker. It keeps a working zlib stream (mStream) into which it copies the saved
@@ -95,10 +100,9 @@ namespace CgsResource
     };
 
     // 0x82ACCCA0 -- the EA::Jobs local-job entry point the decompression job runs. The
-    // scheduler invokes it on a worker thread with the job's data pointer; it builds a
-    // Decompressor on the worker stack and runs it over the DecompressionJobData. The
-    // address is handed to EA::Jobs::EntryPoint::SetCode by DecompressionJobInterface::
-    // RunFlushJobs. Declared with the job's data pointer as a plain argument (the EA
-    // local-job ABI passes it in the first parameter slot).
-    void DecompressionJobEntry(void* lpvJobData);
+    // data pointer arrives in the second of four EA job parameters (r4 on PPC).
+    // The native interface retains a stable worker for the lifetime of the
+    // compressed stream, replacing console thread-id arithmetic and raw strides.
+    void DecompressionJobEntry(EA::Jobs::Param lParam0, EA::Jobs::Param lParam1,
+                               EA::Jobs::Param lParam2, EA::Jobs::Param lParam3);
 }

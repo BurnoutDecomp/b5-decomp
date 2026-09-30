@@ -503,6 +503,50 @@ staged allocation-list requests. ResourceModule's emergency stall handling,
 staged I/O, failed-load teardown, and live graphics-cache behavior during actual
 in-game relocation remain activation gates. No FPS gain is established.
 
+## Staged bundle protocol and native decompression worker
+
+The recovered loader stages now use named native fields, two stream slots,
+priority queues, typed allocation/fixup events, partial reads and bounded partial
+fixups. The byte-copy cursor includes both the resource disk offset and the
+bundle's memory-type data offset, as ARTIST's assembly requires. The native
+loaded-bundle table tracks logical references and releases the pool list only
+when the final owner unloads it.
+
+Resident reuse deliberately corrects an original inconsistency: ARTIST's
+`CheckForLoads` compares an untagged CRC at `828FB934`, while insertion at
+`828FB114` and unload use bit 63. The native lookup uses the tagged ID.
+Live-update replacement requests bypass reuse, so they still open their data
+and cannot report success before replacement. This branch is an explicit bug
+correction, not a claim of literal original behavior.
+
+The native decompressor now initializes zlib with `sizeof(z_stream)` and the
+vendored version, copies named snapshot fields, and accepts the original second
+EA job parameter. Each interface owns a stable worker: vendored zlib binds its
+internal state to the stream address, including when another thread resumes it.
+The original source-empty initial flush and resume behavior are preserved.
+
+Production protocol tests pass 31/31 and worker/zlib tests 14/14. Restoring the
+old header stage fails 11 checks (the earlier 30-check suite); restoring the
+untagged lookup fails four, swallowing live replacements fails one, and restoring
+the old zlib initialization fails eight. Protocol tests replace the disk reader,
+pool replies and base-module lifecycle; worker tests replace heap allocation.
+Neither suite establishes the complete runtime pipeline. Independent review
+passes, and the shipping build compiles 2,668 TUs without warnings or errors.
+
+Functional run `bundle_stages_layout_0930` on `ee17c7dd4f60` passes seven log
+checks with no assertions, exceptions or stale vertex formats. Only three of
+five requested relocations actually seat correctly; the two attempted during
+crashes are rejected. Captures show normal driving, damage and HUD recovery, but
+a recovery capture also shows sparse/white ground. This is not complete visual
+coverage or a combat timing result. Final build `7f5bc07983c1` additionally
+contains the tested resident-replacement guard; that staged path is still cold.
+
+ResourceModule still selects synchronous loading. Allocator-backed construction,
+compressed-stream submission/waits, failed-load teardown and staged I/O remain
+activation gates. Original ResourceModule returns the pool's busy result to
+GameDataModule and `mbStalled`; it does not spin internally. Restore that return
+propagation with the staged pipeline. This batch establishes no FPS gain.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still

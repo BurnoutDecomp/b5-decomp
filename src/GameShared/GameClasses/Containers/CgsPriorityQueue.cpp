@@ -4,6 +4,18 @@
 
 namespace CgsContainers
 {
+// Inlined BundleLoaderModule::Construct828EBAF8 (load and unload queues).
+void BasePriorityQueue::Construct(u32 luMaxEntries, u32 luNumberToCheck,
+                                 u32* lpuEntryIndices, s32* lpiEntryPriorities)
+{
+    muMaxEntries = luMaxEntries;
+    muNumEntries = 0;
+    muNumberToCheck = luNumberToCheck;
+    mpuEntryIndices = lpuEntryIndices;
+    mpiEntryPriorities = lpiEntryPriorities;
+    for (u32 lu = 0; lu < muMaxEntries; ++lu)
+        mpuEntryIndices[lu] = lu;
+}
 // X360 0x82815160. Append a priority entry; returns the pre-seeded entry-index for the slot.
 u32 BasePriorityQueue::AddEntry(s32 liPriority)
 {

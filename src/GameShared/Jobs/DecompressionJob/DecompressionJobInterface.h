@@ -4,7 +4,9 @@
 #include "GameShared/Jobs/DecompressionJob/CgsDecompressor.h" // CompressedData, DecompressionJobData/Status, DecompressionJobEntry
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"      // CgsMemory::HeapMalloc (mHeap, embedded by value)
 #include "SDKs/EATech/eajobs/job.h"                            // EA::Jobs::Job (mJob, embedded by value)
-#include "SDKs/EATech/eajobs/job_scheduler.h"                  // EA::Jobs::JobScheduler (mpScheduler)
+// Only a scheduler pointer is stored here. Keep the console scheduler's
+// platform thread declarations out of native clients' public include chain.
+namespace EA { namespace Jobs { class JobScheduler; } }
 
 // GameShared/Jobs/DecompressionJob/DecompressionJobInterface.h
 //
@@ -50,6 +52,8 @@ namespace CgsResource
     class DecompressionJobInterface
     {
     public:
+        // Inlined BundleLoaderModule ctor827DD270 constructs this job unnamed.
+        DecompressionJobInterface() : mJob(nullptr) {}
         // DecompressionJobInterface.h:59 -- the size of the heap buffer the interface owns
         // (HeapMalloc::Construct passes 0x20000 in Construct's asm).
         static const u32 KU_COMPRESSION_BUFFER_SIZE = 131072;
@@ -92,5 +96,8 @@ namespace CgsResource
         bool                    mbEntryInProgress;  // +0x4E0 a CreateEntry has not yet been FinishEntry'd
         CgsMemory::HeapMalloc   mHeap;              // +0x4E4 the heap the job's zlib callbacks use
         u8                      macMallocBuffer[KU_COMPRESSION_BUFFER_SIZE]; // +0xA04 the heap's backing buffer
+        // FLAG PC-platform leaf: stable zlib workspace for this stream; the
+        // original selects a console worker-slot context instead.
+        Decompressor            mNativeWorker;
     };
 }
