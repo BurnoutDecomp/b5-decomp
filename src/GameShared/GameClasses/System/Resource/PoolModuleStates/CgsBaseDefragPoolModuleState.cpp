@@ -205,19 +205,12 @@ namespace CgsResource
 namespace CgsResource
 {
     // -------- AddAddressedAllocRequest --------
-    // Append one addressed allocation request at the running count and return the old count,
-    // mirroring the AddRelocateRequest sibling.
-    // FLAG: this body is modelled from its two call sites and the sibling's shape, not from a
-    // console body; the over-capacity assert wording is unknown, so the guard refuses to write
-    // past muMaxAddressedAllocRequests instead of firing an invented assert.
+    // ARTIST 828D7F08: r4=size, r5=offset, r6=owner; assert capacity, append,
+    // and return the old count. The original diagnostic is at 820F81C0.
     u32 BaseDefragPoolModuleState::AddAddressedAllocRequest(u32 luSize, u32 luOffset, void* lpOwner)
     {
-        CGS_ASSERT(mpAddressedAllocRequests, "mpAddressedAllocRequests");
-
-        if (muAddressedAllocCount >= muMaxAddressedAllocRequests)
-        {
-            return muAddressedAllocCount;   // FLAG: console assert wording unknown -- refuse instead
-        }
+        CGS_ASSERT(muAddressedAllocCount < muMaxAddressedAllocRequests,
+                   "Out of addressed alloc space\n");
 
         AllocRequestAddressed& lRequest = mpAddressedAllocRequests[muAddressedAllocCount];
         lRequest.muSize   = luSize;
@@ -255,6 +248,12 @@ namespace CgsResource
         muRelocationCount     = 0;
         muNumLinearHeapNodes  = mpPool->GenerateLinearHeap(miCurrentMemType, mpLinearHeapNodes,
                                                            static_cast<u16>(muMaxLinearHeapNodes));
+        // FLAG PC-platform leaf: ARTIST GenerateLinearHeap (828ECD18) clears
+        // look-ahead cache lines with dcbz128. Both original planners include
+        // the one-past-last record in their scan. Make that zero-size free
+        // guard explicit on the host, including short heaps and reused arrays.
+        // PoolModule reserves eight extra native records beyond the capacity.
+        mpLinearHeapNodes[muNumLinearHeapNodes] = LinearHeapNode{};
         if (muNumLinearHeapNodes <= 1)
         {
             return true;   // a single node is either an empty or an unfragmented heap

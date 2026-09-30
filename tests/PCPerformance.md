@@ -474,10 +474,34 @@ and recovery. The event ended with zero player takedowns, so this run
 (`combat_scratch_reviewed_0930`) is rejected as combat evidence. Its FPS is
 excluded; this is functional startup/maintenance coverage only.
 
+The subsequent planner correction explicitly clears the spare record visited
+by the original inclusive scans. ARTIST's heap flattening used `dcbz128`
+look-ahead clearing; the native path had omitted its observable effect. The
+explicit guard also strengthens short-heap behavior where the original cache
+line operations did not necessarily clear that particular record. The
+addressed-allocation helper also now uses its recovered original capacity
+assertion and native fields instead of silently refusing overflow.
+
+The expanded relocation suite passes 30 checks, including graphics staging and
+actual emergency planner/job/pool completion. A real 3776-byte allocation fails
+against separate 128- and 3712-byte free spans, then succeeds after compaction,
+leaving 64 free bytes. It checks payloads, internal and graphics pointers,
+alias publication order and completion latches. It uses the same direct job
+dispatch as the native runtime; asynchronous scheduler waits abort the fixture.
+The `--old-planner` control restores the previous production body and fails
+eight of the 30 checks after asserting on the stale one-past node.
+
+Build `2ed5a773248b` passes the canonical build. The quiet 90-second run named
+`combat_planner_pickup_0930` actually retained PUSMC02: the requested PUSPK01
+debug swap never passed the game's no-active-event gate. It recorded three
+player takedowns, peak five crashing/three airborne rivals, full foreground,
+and zero assertions/exceptions, but the event ended. It is rejected as a
+qualified timing run; its name does not establish which car was tested.
+
 The loader still uses synchronous bundle loading and does not yet produce the
-staged allocation-list requests. Planner look-ahead clearing, a graphics-lane
-pool move, complete emergency handling, staged I/O and failed-load teardown
-remain activation gates. No FPS gain is established by this restoration.
+staged allocation-list requests. ResourceModule's emergency stall handling,
+staged I/O, failed-load teardown, and live graphics-cache behavior during actual
+in-game relocation remain activation gates. No FPS gain is established.
 
 ## Remaining original optimization gaps
 
