@@ -16,6 +16,7 @@ struct BasePriorityQueue
 public:
     void Tick(s32 liPriorityDelta);
     void Clear();
+    s32 GetLength() const { return static_cast<s32>(muNumEntries); }
 
     // Read accessors for the parallel arrays, both bounds-checked against the LIVE entry count
     // (muNumEntries), not capacity. Signed index compare mirrors the X360 cmpw (static_cast<s32>
@@ -37,9 +38,7 @@ private:
     u32  muNumberToCheck;     // +0x08
     u32* mpuEntryIndices;     // +0x0C  parallel index array
     s32* mpiEntryPriorities;  // +0x10  parallel priority array
-    // sizeof(BasePriorityQueue) == 20 (X360 32-bit spine) -- DO NOT GROW: it is embedded by
-    // value at fixed offsets inside CgsResource::BundleLoaderModule (mLoadQueue/mUnloadQueue).
-    // The templated derived PriorityQueue<T,N> (below) calls the protected Construct/AddEntry.
+    // The host widens both backing pointers. Callers use named members.
 };
 
 // PriorityQueue<T,N> -- the priority-ordered request queue used by the resource IO module.
@@ -79,6 +78,24 @@ public:
 
         const u32 luIndex = AddEntry(liPriority);
         std::memcpy(mpData + luIndex, lpItem, sizeof(T));
+        return true;
+    }
+
+    // Inlined by ARTIST CheckForLoads828FB758 and CheckForUnloads828FB308.
+    bool Peek(T* lpItem) const
+    {
+        u32 luIndex;
+        if (!GetNextIndexByPriority(&luIndex)) return false;
+        *lpItem = mpData[luIndex];
+        return true;
+    }
+
+    bool Pop(T* lpItem)
+    {
+        u32 luIndex;
+        if (!GetNextIndexByPriority(&luIndex)) return false;
+        *lpItem = mpData[luIndex];
+        RemoveEntry(luIndex);
         return true;
     }
 

@@ -1,4 +1,5 @@
 #include "GameShared/Jobs/DecompressionJob/DecompressionJobInterface.h"
+#include "SDKs/EATech/eajobs/job_scheduler.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CgsDev::Assert Begin/Fire/End triad
 #include "SDKs/EATech/eajobs/job_types.h"                     // EA::Jobs::JOB_ENVIRONMENT_LOCAL
 
@@ -99,6 +100,7 @@ bool DecompressionJobInterface::RunFlushJobs()
     mJobData.mpStatus     = &mJobStatus;
     mJobData.mpEntries    = mpEntries;
     mJobData.mpHeapMalloc = &mHeap;
+    mJobData.mpNativeWorker = &mNativeWorker;
 
     // The X360 drops the last entry from the flush count when its source buffer is still empty
     // (the in-progress entry was created but never given a source): the entry at index

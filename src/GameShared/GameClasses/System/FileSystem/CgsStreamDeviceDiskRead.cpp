@@ -244,6 +244,14 @@ namespace CgsFileSystem
 
     // GetAmountOfDataInBuffer @ 0x828DCDE0 — total contiguously-loaded, not-yet-consumed bytes,
     // walking loaded blocks forward from the output cursor.
+    // Inlined by ARTIST StreamDataFunc at829046CC-D8: lock, read the
+    // 64-bit output position at+0x570, unlock, then return the snapshot.
+    u64 StreamDeviceDiskRead::Tell()
+    {
+        FileFutexHelper lGuard(mFutex);
+        return muOutputPosition;
+    }
+
     u32 StreamDeviceDiskRead::GetAmountOfDataInBuffer() const
     {
         FileFutexHelper lGuard(const_cast<EA::Thread::Futex&>(mFutex));

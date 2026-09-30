@@ -3,9 +3,9 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"  // PoolModule::GetPool (resolve poolId)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // [stream] trace
 
-// CgsResource::BundleLoaderModule - see the header. This pass reconstructs the rw/file-
-// INDEPENDENT spine (Prepare / Release / Destruct). Construct + the streaming state machine
-// + dispatch are DEFERRED (rw allocator / FileSystem / job system) as inert marked stubs.
+// Bundle loader lifetime and native adapters. The staged protocol lives in
+// CgsBundleLoaderModule.cpp; ResourceModule still selects the synchronous path
+// until allocator setup, compressed-stream jobs and failure teardown are ready.
 namespace CgsResource
 {
     // @ 0x828E2678 - resumable prepare stage machine: free every stream slot, clear the
@@ -16,18 +16,18 @@ namespace CgsResource
         switch (mePrepareStage)
         {
         case E_STAGE_START:
-            mField426 = 0;
-            mField427 = 0;
-            mField140 = 0;
-            muStreamSlotCursor = 0;
-            for (u32 lu = 0; lu < muNumStreamSlots; ++lu)
+            maStreams[0] = nullptr;
+            maStreams[1] = nullptr;
+            meStreamStage = STREAMSTAGE_IDLE;
+            miNumLoadedBundles = 0;
+            for (s32 li = 0; li < miMaxLoadedBundles; ++li)
             {
-                mpStreamSlots[lu].miId     = -1;
-                mpStreamSlots[lu].mField24 = 0;
+                mpLoadedBundles[li].miPoolId = -1;
+                mpLoadedBundles[li].miRefCount = 0;
             }
             mReceiverQueue.Clear();
-            mLoadQueue.Clear();
-            mUnloadQueue.Clear();
+            mLoadRequestQueue.Clear();
+            mUnloadRequestQueue.Clear();
             // fall through
         case E_STAGE_RUNNING:
             mePrepareStage = E_STAGE_RUNNING;
@@ -75,17 +75,47 @@ namespace CgsResource
         CgsModule::ModuleSingleBuffered::Destruct();
     }
 
-    // ---- DEFERRED (rw allocator / FileSystem / job system) ---------------------------
-    // Construct (0x828EBAF8) embeds the EA::Allocator::GeneralAllocator (the deferred PPMalloc)
-    // and the two EA::Jobs::Job, and carves the stream-slot pool. The streaming state machine
-    // (Update 0x82907638 / UpdateStream 0x82906B30 / the StreamIdle/Header/EntryList/Data/Done
-    // Func steps), ProcessReceiverQueue (0x828E2888) / ProcessPoolResponses (0x828EC148),
-    // CheckForLoads (0x828FB758) / CheckForUnloads (0x828FB308) and the bundle parse path read
-    // .BUNDLE files off disk through the FileSystem, decompress via the job system, and create
-    // resources through the PoolModule + rw allocator. All inert until the GameDataModule runs.
-    void BundleLoaderModule::Construct() { mLoadRequests.Construct(); mUnloadRequests.Construct(); }
-    bool BundleLoaderModule::Update(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) { return false; }
-    void BundleLoaderModule::ProcessReceiverQueue() {}
+    // Compatibility construction for the current synchronous ResourceModule.
+    // Allocator-backed Construct (ARTIST828EBAF8) and compressed job submission
+    // must be restored before selecting the staged driver below at runtime.
+    void BundleLoaderModule::Construct()
+    {
+        CgsModule::ModuleSingleBuffered::Construct();
+        mbIsNewModule = true;
+        mLoadRequests.Construct();
+        mUnloadRequests.Construct();
+        mReceiverQueue.Construct();
+        mLoadRequestQueue.Construct(128);
+        mUnloadRequestQueue.Construct(128);
+        mQueuedLoads.Construct();
+        mPoolReceiveQueueCache.Construct();
+        mePrepareStage = E_STAGE_START;
+        meReleaseStage = E_STAGE_DONE;
+        miCurrentStream = 0;
+        mabStreamBuffersUsed[0] = false;
+        mabStreamBuffersUsed[1] = false;
+        // The allocator-backed Construct supplies these tables when the staged
+        // runtime is connected. The synchronous startup has no loaded table.
+        mpLoadedBundles = nullptr;
+        miMaxLoadedBundles = 0;
+        miMaxPartialFixups = 60;
+    }
+    bool BundleLoaderModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
+    {
+        // ARTIST82907638; the legacy native adapter has a bool return, unused
+        // by the resource dispatcher. Input and output lifetime matches ARTIST.
+        auto* lpInput = static_cast<BundleLoaderIO::InputBuffer_Update*>(lpInputBuffer);
+        auto* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
+        lpOutput->LockForWrite();
+        lpInput->LockForRead();
+        ProcessReceiverQueue();
+        ProcessBundleLoadRequests(lpInput, lpOutput);
+        ProcessPoolResponses();
+        lpInput->UnlockForRead();
+        UpdateStream(lpOutput);
+        lpOutput->UnlockForWrite();
+        return false;
+    }
 
     // Queue a LoadBundleRequest routed here by the ResourceModule shuttle (resource request id 2).
     void BundleLoaderModule::EnqueueLoadRequest(const Events::LoadBundleRequest& lrRequest)
