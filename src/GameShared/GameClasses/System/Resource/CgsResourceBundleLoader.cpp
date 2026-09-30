@@ -9,6 +9,8 @@
 #include <cstdlib>   // malloc / free
 #include <cstring>   // memcpy
 
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+
 namespace CgsResource
 {
     // Read a whole bundle file through the LIVE async file-system engine (the DeviceManager worker
@@ -25,7 +27,11 @@ namespace CgsResource
             return 0;   // engine could not be brought up (catastrophic)
 
         u32   luSize = 0;
-        void* lpBuf  = lpManager->ReadWholeFile(lpcFileName, &luSize);
+        void* lpBuf = nullptr;
+        {
+            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_FILE);
+            lpBuf = lpManager->ReadWholeFile(lpcFileName, &luSize);
+        }
         if (!lpBuf)
             return 0;
 

@@ -4039,7 +4039,7 @@ namespace BrnGame
     // state's Render -> DoDispatch, which publishes the record) -> OnEndOfUpdateFrame -> DispatchThread.
     void BrnGameModule::OnStartOfUpdateFrame()
     {
-        renderengine::FrameProfile::Scope lFramePhaseProfile(renderengine::FrameProfile::UPDATE);
+        renderengine::FrameProfile::Scope lFramePhaseProfile(renderengine::FrameProfile::UPDATE, renderengine::FrameProfile::UPDATE_START);
         mEffectsModule.StartOfFrame();   // *(this + 0x88194C) = 0.0f  (0x823A8BB0..0x823A8BC8)
         mRenderModule.StartOfFrame();    // the tail call (0x823A8BCC)
     }
@@ -4064,7 +4064,7 @@ namespace BrnGame
     // written slot and every world dispatch list reads empty).
     void BrnGameModule::OnEndOfUpdateFrame()
     {
-        renderengine::FrameProfile::Scope lFramePhaseProfile(renderengine::FrameProfile::UPDATE);
+        renderengine::FrameProfile::Scope lFramePhaseProfile(renderengine::FrameProfile::UPDATE, renderengine::FrameProfile::UPDATE_PUBLISH);
         // ⭐⭐⭐ THE PARTICLE END-OF-FRAME, restored 2026-09-07 (GitHub issue #17, "tyre marks
         // appear in chunks"). The console runs it HERE, before the dispatch swap and before the
         // GUI/renderer end-of-frame:
@@ -4277,14 +4277,14 @@ namespace BrnGame
             {
                 if (lbPrepareRequest)
                 {
-                    renderengine::FrameProfile::Scope lResourceProfile(renderengine::FrameProfile::UPDATE);
+                    renderengine::FrameProfile::Scope lResourceProfile(renderengine::FrameProfile::UPDATE, renderengine::FrameProfile::UPDATE_RESOURCE);
                     mGameDataModule.Update(BrnGameMainFlowController::GetScriptedLoadGameDataInput(),
                                           BrnGameMainFlowController::GetScriptedLoadGameDataOutput());
                 }
                 return;
             }
         }
-        renderengine::FrameProfile::Scope lResourceProfile(renderengine::FrameProfile::UPDATE);
+        renderengine::FrameProfile::Scope lResourceProfile(renderengine::FrameProfile::UPDATE, renderengine::FrameProfile::UPDATE_RESOURCE);
         BrnResource::GameDataIO::InputBuffer*  lpGameDataInput =
             BrnGameMainFlowController::GetScriptedLoadGameDataInput();
         BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
@@ -6183,7 +6183,7 @@ namespace BrnGame
     {
         CgsDev::PerfMonCpu::StartProfiling();
         {
-            renderengine::FrameProfile::Scope lDisplayProfile(renderengine::FrameProfile::UPDATE);
+            renderengine::FrameProfile::Scope lDisplayProfile(renderengine::FrameProfile::UPDATE, renderengine::FrameProfile::UPDATE_DISPLAY);
             mRenderModule.PrepareDisplayPC();
         }
         const bool lbParallel = mbAllowFrameOverlapPC
@@ -6231,7 +6231,7 @@ namespace BrnGame
 
     bool BrnGameModule::UpdateThread()
     {
-        renderengine::FrameProfile::Scope lUpdateProfile(renderengine::FrameProfile::UPDATE);
+        renderengine::FrameProfile::Scope lUpdateProfile(renderengine::FrameProfile::UPDATE, renderengine::FrameProfile::UPDATE_SIMULATION);
         struct UpdateScopePC
         {
             bool& mrInside;
@@ -6281,7 +6281,7 @@ namespace BrnGame
     // catch-up loop count).
     void BrnGameModule::OnCompletionOfVsyncWait()
     {
-        renderengine::FrameProfile::Scope lFramePhaseProfile(renderengine::FrameProfile::UPDATE);
+        renderengine::FrameProfile::Scope lFramePhaseProfile(renderengine::FrameProfile::UPDATE, renderengine::FrameProfile::UPDATE_TIMING);
         miNumSimFramesRequired = mFrameRateManager.UpdatePostRenderWait(
             mi8ActualFrameRateMinStepsThisFrame, mi8ActualFrameRateMaxStepsThisFrame);
 
