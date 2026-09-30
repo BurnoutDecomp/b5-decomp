@@ -1,6 +1,6 @@
 #include "SDKs/EATech/eajobs/local_backend.h"
 
-#include "SDKs/EATech/eathread/BrnEAThreadX360.h" // EA::Thread::SemaphoreParameters
+#include "eathread/eathread_semaphore.h"
 #include "SDKs/EATech/eajobs/jobs.h"               // EA::Jobs::Allocator / GetAllocator (off_8327F280 Free)
 
 #include <intrin.h>  // _InterlockedCompareExchange / _InterlockedExchange (atomic CAS)
@@ -83,8 +83,8 @@ namespace LocalBackend
     // @ 0x82BCBB50 -- construct an empty slot.
     JobInstance::JobInstance()
         : mStatus(0)              // stw 0,0(this)
-        // mStartTimeStamp(+0x30) and mHandle(+0x38) are NOT written by the ctor asm -- they stay
-        // indeterminate until Initialize() stamps them (don't add zeroing the binary lacks).
+        // The submission timestamp is written by Initialize; arguments are assigned
+        // there before publication, then Run overlays them with profiling data.
         // mEventLists[0..1] default-construct (empty BucketListNode<Event,16>):
         // the X360 `vector constructor iterator` over 16 Events + nulled mNext/mSize.
         , mGarbageCollectorLock(0) // stw 0,0x270(this)
@@ -93,11 +93,8 @@ namespace LocalBackend
         , mbEndPlayed(false)       // stb 0,0x289(this)
     {
         // Job-parameter defaults (the ctor's individual stores into the +0x04 blob).
-        std::memset(&mParameters, 0, sizeof(mParameters));
-        mParameters.mPriority = 128; // JOB_PRIORITY_DEFAULT / MEDIUM (li r11,0x80)
-        mParameters.mAffinity = 63;  // JOB_AFFINITY_ANY              (li r10,0x3F)
-        mParameters.mFlags24  = 1;   // (li r28,1; stw r28,0x24)
-        // mParameters.mbHasSemaphore stays 0 -- no semaphore until Initialize asks.
+        mParameters = EntryPoint();
+        // mParameters.mAllowSleepOn stays 0 -- no semaphore until Initialize asks.
 
         // The semaphore is NOT constructed here (the X360 ctor never touches +0x274).
     }
@@ -116,10 +113,10 @@ namespace LocalBackend
     }
 
     // @ 0x82BCAA18 -- (re)initialise the slot from a submitted job.
-    void JobInstance::Initialize(const void* pParameters, const JobInstanceHandle& rHandle)
+    void JobInstance::Initialize(const EntryPoint* pParameters, const Param* pArguments)
     {
         // memcpy(this+4, src, 0x2C) -- copy the 44-byte job-parameters blob.
-        std::memcpy(&mParameters, pParameters, sizeof(mParameters));
+        mParameters = *pParameters;
 
         // Stamp the start time with the FULL 64-bit performance counter (asm `ld r11,var_30 /
         // std r11,0x30`). The mbHasSemaphore byte (+0x29) only GATES the semaphore-build branch
@@ -128,15 +125,16 @@ namespace LocalBackend
         QueryPerformanceCounter(&lCounter);
         mStartTimeStamp = static_cast<u64>(lCounter.QuadPart);
 
-        // Record the handle (a3[0..3]) and mark the slot live.
-        mHandle  = rHandle;
+        // Record the four arguments (r5 points to the source block) and mark live.
+        new (&mExecution) ExecutionData;
+        for (int i=0;i<4;++i) mExecution.mArguments[i]=pArguments[i];
         mStatus  = 0;                 // stw 0,0(this)
         mGarbageCollectorLock = 1;    // stw 1,0x270(this) -- slot is in use
 
         // Build the completion semaphore iff the parameters flag it. The X360 inlines
         // EA::Thread::Semaphore::Semaphore(SemaphoreParameters{0, intra=1, ""}, true)
         // into the slot's +0x274 storage (sub_82B439D0).
-        if (mParameters.mbHasSemaphore)
+        if (mParameters.mAllowSleepOn)
         {
             EA::Thread::SemaphoreParameters lParams(0, true, 0);
             new (mSemaphoreStorage) EA::Thread::Semaphore(&lParams, true);
@@ -149,21 +147,35 @@ namespace LocalBackend
             mEventLists[liList].Clear();
     }
 
+    // ARTIST82BCC2F0..82BCC388, absent from the exporter. r3-r6 receive
+    // the four saved job arguments; profiling reuses that storage after return.
+    void JobInstance::Run()
+    {
+        PlayEventList(Event::EVENT_WHEN_JOB_BEGIN);
+        if (mParameters.mBreakOnEntry) DebugBreak();
+        LARGE_INTEGER begin,end;
+        QueryPerformanceCounter(&begin);
+        // ARTIST82BCC324..32C permits event-only jobs with no code entry.
+        if (mParameters.mpfnLocalJob)
+            mParameters.mpfnLocalJob(mExecution.mArguments[0],mExecution.mArguments[1],
+                                    mExecution.mArguments[2],mExecution.mArguments[3]);
+        const u64 threadId=static_cast<u64>(EA::Thread::GetSysThreadId());
+        QueryPerformanceCounter(&end);
+        mExecution.mProfile={threadId,static_cast<u64>(begin.QuadPart),static_cast<u64>(end.QuadPart)};
+        PlayEventList(Event::EVENT_WHEN_JOB_END);
+    }
+
     // @ 0x82BCA968 -- garbage-collect the slot.
     void JobInstance::Clear()
     {
-        // Spin to take the GC reservation word: the X360 loops on lwarx/stwcx.
-        // releasing the word (1 -> 0) and breaks out either way; modelled as a
-        // CAS 1 -> 0 retried until the word is observed as anything but 1.
+        // One strong CAS matches the console reservation loop: reservation loss
+        // retries internally; either comparison result then proceeds to cleanup.
         volatile long* lpGcLock =
             reinterpret_cast<volatile long*>(&mGarbageCollectorLock);
-        while (_InterlockedCompareExchange(lpGcLock, 0, 1) == 1)
-        {
-            // reservation lost / word toggled -- retry, matching the asm's spin.
-        }
+        _InterlockedCompareExchange(lpGcLock, 0, 1);
 
         // Destruct the semaphore iff one was built (lbz 0x29 gate).
-        if (mParameters.mbHasSemaphore)
+        if (mParameters.mAllowSleepOn)
             Semaphore()->~Semaphore();
 
         // Clear the played flags and both event lists.
@@ -184,11 +196,11 @@ namespace LocalBackend
     // @ 0x82BCAAE8 -- wait on then re-post the completion semaphore (if owned).
     void JobInstance::SleepOn()
     {
-        if (!mParameters.mbHasSemaphore)
+        if (!mParameters.mAllowSleepOn)
             return;
 
         EA::Thread::Semaphore* lpSemaphore = Semaphore();
-        lpSemaphore->Wait(&KU_INFINITE_TIMEOUT);
+        lpSemaphore->Wait(EA::Thread::kTimeoutNone);
         lpSemaphore->Post(1);
     }
 
@@ -297,7 +309,7 @@ namespace LocalBackend
     //   +0x004 mpJobInstances   +0x008 mpPriorityQueue  +0x00C mNextSlot
     //   +0x010 mNumSlots        +0x014 mThreads[32]     +0x598 mSubmissionCounter
     //   +0x5A0 mpProfilingCallback +0x5A4 mpProfilingContext +0x5A8 mGarbageCollectorCursor
-    //   +0x5AC mpDefaultSleepContext +0x5B0 mJobThreadSleepTimeoutMS
+    //   +0x5AC mpEnableProfiling +0x5B0 mJobThreadSleepTimeoutMS
     // The compile gate is an LLP64 (8-byte-pointer) host, so the absolute byte offsets
     // cannot be reproduced here -- only the pointer-width-INVARIANT structural facts the
     // CRITICAL fix turns on. The load-bearing one: there is EXACTLY ONE vptr at +0x0
@@ -318,8 +330,8 @@ namespace LocalBackend
         static_assert(offsetof(LocalBackend, mSubmissionCounter)     < offsetof(LocalBackend, mpProfilingCallback),     "mSubmissionCounter < mpProfilingCallback");
         static_assert(offsetof(LocalBackend, mpProfilingCallback)    < offsetof(LocalBackend, mpProfilingContext),      "mpProfilingCallback < mpProfilingContext");
         static_assert(offsetof(LocalBackend, mpProfilingContext)     < offsetof(LocalBackend, mGarbageCollectorCursor), "mpProfilingContext < mGarbageCollectorCursor");
-        static_assert(offsetof(LocalBackend, mGarbageCollectorCursor) < offsetof(LocalBackend, mpDefaultSleepContext),  "mGarbageCollectorCursor < mpDefaultSleepContext");
-        static_assert(offsetof(LocalBackend, mpDefaultSleepContext)  < offsetof(LocalBackend, mJobThreadSleepTimeoutMS),"mpDefaultSleepContext < mJobThreadSleepTimeoutMS");
+        static_assert(offsetof(LocalBackend, mGarbageCollectorCursor) < offsetof(LocalBackend, mpEnableProfiling),  "mGarbageCollectorCursor < mpEnableProfiling");
+        static_assert(offsetof(LocalBackend, mpEnableProfiling)  < offsetof(LocalBackend, mJobThreadSleepTimeoutMS),"mpEnableProfiling < mJobThreadSleepTimeoutMS");
         // The 32 inline workers occupy a real span between mThreads and the next member.
         static_assert(offsetof(LocalBackend, mSubmissionCounter) - offsetof(LocalBackend, mThreads)
                           == LocalBackend::KI_NUM_THREADS * sizeof(JobThread),
@@ -327,7 +339,7 @@ namespace LocalBackend
     }
 
     // @ 0x82BCBCB8
-    LocalBackend::LocalBackend(u32 uMaxJobs, void* pContext)
+    LocalBackend::LocalBackend(u32 uMaxJobs, bool* pEnableProfiling)
     {
         // (vtable +0x0 is installed by the C++ ABI prologue == off_82182500.)
         mpJobInstances = 0;           // stw 0,4(this)
@@ -336,15 +348,15 @@ namespace LocalBackend
 
         // Construct the 32 idle worker threads (the X360 `vector constructor iterator`
         // over JobThread at this+0x14, stride 0x2C).
-        for (int liThread = 0; liThread < KI_NUM_THREADS; ++liThread)
-            new (&mThreads[liThread]) JobThread();
+        // mThreads is a typed C++ array: its members are already constructed.
+        // Repeating the console vector-constructor loop would leak wake events.
 
         // Release the submission counter (reservation loop storing 0 at +0x598).
         mSubmissionCounter       = 0;
         mpProfilingCallback      = 0;          // stw 0,0x5A0
         mpProfilingContext       = 0;          // stw 0,0x5A4
         mGarbageCollectorCursor  = 0;          // stw 0,0x5A8
-        mpDefaultSleepContext    = pContext;   // stw r27,0x5AC (ctor arg a3)
+        mpEnableProfiling    = pEnableProfiling;   // stw r27,0x5AC (ctor arg a3)
         mJobThreadSleepTimeoutMS = 1;          // li r11,1; stw r11,0x5B0
 
         EA::Jobs::Allocator* lpAllocator = EA::Jobs::GetAllocator();
@@ -352,14 +364,9 @@ namespace LocalBackend
         // Allocate + construct the JobInstance table (uMaxJobs slots, 0x290 stride). The
         // X360 saturates the byte count to 0xFFFFFFFF on overflow (the > 0x63E706 and
         // > 0xFFFFFFEF guards) and asks the allocator for size+16, align 16.
-        u32 luInstanceBytes = 656u * uMaxJobs;
-        if (uMaxJobs > 0x63E706u)
-            luInstanceBytes = 0xFFFFFFFFu;
-        u32 luInstanceRequest = luInstanceBytes + 16u;
-        if (luInstanceBytes > 0xFFFFFFEFu)
-            luInstanceRequest = 0xFFFFFFFFu;
+        const size_t luInstanceRequest = sizeof(JobInstance)*static_cast<size_t>(uMaxJobs)+16;
 
-        void* lpInstanceBlock = lpAllocator->Allocate(
+        void* lpInstanceBlock = lpAllocator->Alloc(
             luInstanceRequest, "EA::Jobs::LocalBackend::JobInstance", 1, 16, 0);
         if (lpInstanceBlock)
         {
@@ -382,7 +389,7 @@ namespace LocalBackend
         u32 luQueueBytes = 8u * uMaxJobs;
         if (uMaxJobs > 0x1FFFFFFFu)
             luQueueBytes = 0xFFFFFFFFu;
-        u64* lpQueue = static_cast<u64*>(lpAllocator->Allocate(
+        SlotWord* lpQueue = static_cast<SlotWord*>(lpAllocator->Alloc(
             luQueueBytes, "EA::Jobs::PriorityQueueEntry", 0, 128, 0));
         if (lpQueue)
         {
@@ -425,8 +432,7 @@ namespace LocalBackend
             lpAllocator->Free(mpPriorityQueue, 0);
 
         // Destruct the 32 worker threads (reverse order, matching the X360 walk).
-        for (int liThread = KI_NUM_THREADS - 1; liThread >= 0; --liThread)
-            mThreads[liThread].~JobThread();
+        // The typed worker array destructs once through normal C++ lifetime.
 
         // (The C++ ABI dtor epilogue stamps the Detail::SchedulerBackend base vtable
         // off_82182408 into vtable +0x0 -- the X360's final `stw off_82182408,0(this)`.)
@@ -435,7 +441,7 @@ namespace LocalBackend
     // @ 0x82BCC010 (vtable +0x28) -- CreateNotReadyInstance / AddNotReady.
     void LocalBackend::CreateNotReadyInstance(JobInstanceHandle* pOutHandle,
                                               const EntryPoint*  pEntryPoint,
-                                              const Param*       /*pParams*/)
+                                              const Param*       pParams)
     {
         // Atomically take the next submission id (X360 increments the +0x598 counter
         // under the masked reservation and keeps the post-increment value).
@@ -496,7 +502,7 @@ namespace LocalBackend
                     // Won the slot: initialise the JobInstance and publish the handle.
                     JobInstanceHandle lNewHandle(this, static_cast<u16>(liSlot),
                                                  luSubmissionId);
-                    mpJobInstances[liSlot].Initialize(pEntryPoint, lNewHandle);
+                    mpJobInstances[liSlot].Initialize(pEntryPoint, pParams);
                     mNextSlot = liSlot;
                     pOutHandle->mSubmissionId     = luSubmissionId;
                     pOutHandle->mSchedulerBackend = this;
@@ -521,7 +527,7 @@ namespace LocalBackend
             return 1;
 
         // Top-3-bits state tag == FREE -> done.
-        if ((static_cast<u32>(luEntry) & KU_SLOT_STATE_MASK) == KU_SLOT_STATE_FREE)
+        if ((luEntry & KU_SLOT_STATE_MASK) == KU_SLOT_STATE_FREE)
             return 1;
         // Fully reclaimed word -> done.
         if (luEntry == static_cast<u64>(-1))
@@ -556,7 +562,7 @@ namespace LocalBackend
         {
             // Spin while the slot is live, still holds our submission, and this phase
             // has NOT yet been played.
-            while ((static_cast<u32>(mpPriorityQueue[luIndex]) & KU_SLOT_STATE_MASK)
+            while ((static_cast<u64>(mpPriorityQueue[luIndex]) & KU_SLOT_STATE_MASK)
                        != KU_SLOT_STATE_FREE
                    && (mpPriorityQueue[luIndex] & 0x7FFFFFFFFFFFull) == uSubmissionId
                    && !*lpPlayedFlag)
@@ -566,7 +572,7 @@ namespace LocalBackend
                 {
                     // Re-check under the lock: if it went done/replayed, run the event
                     // immediately; otherwise append it to the phase's event list.
-                    if ((static_cast<u32>(mpPriorityQueue[luIndex]) & KU_SLOT_STATE_MASK)
+                    if ((static_cast<u64>(mpPriorityQueue[luIndex]) & KU_SLOT_STATE_MASK)
                             == KU_SLOT_STATE_FREE
                         || (mpPriorityQueue[luIndex] & 0x7FFFFFFFFFFFull) != uSubmissionId
                         || *lpPlayedFlag)
@@ -588,19 +594,29 @@ namespace LocalBackend
         return 0;
     }
 
-    // @ 0x82BCA878 (vtable +0x38) -- AddBarrier. The X360 +0x38 slot body is the
-    // GetAllowSleepOn logic: it dispatches the instance's OWN vtable +0x30
-    // (IsJobComplete) and, when the job is still pending and the slot holds this
-    // submission, reads the mAllowSleepOn byte. The slot is invoked as AddBarrier (the
-    // base's void +0x38); the dependent handle is the X360's r4 argument. The recovered
-    // result is computed by GetAllowSleepOn below; AddBarrier evaluates it for the slot.
-    void LocalBackend::AddBarrier(JobInstanceHandle* /*pDependentHandle*/,
-                                  u64 uSubmissionId, u64 uHandleQword)
+    // @ 0x82BCA7B8 (vtable +0x38): increment this instance's prerequisite count
+    // and return the event which enables its packed queue word on the final signal.
+    Event LocalBackend::AddBarrier(u64 uSubmissionId,u64 uHandleQword)
     {
-        GetAllowSleepOn(uSubmissionId, uHandleQword);
+        const u32 index=SlotIndexFromHandle(uHandleQword);
+        JobInstance* instance=(uSubmissionId==(static_cast<u64>(mpPriorityQueue[index])&0x7FFFFFFFFFFFull))
+            ? &mpJobInstances[index] : nullptr;
+        u32* location=nullptr;u32 value=0;
+        GetEnabler(uSubmissionId,uHandleQword,location,value);
+        // FLAG PC-platform leaf: dependency completion may race a later
+        // submission adding another barrier. Pair with Event::Run's decrement.
+        _InterlockedIncrement(reinterpret_cast<volatile long*>(&instance->mStatus));
+        return Event(Event::EVENT_TYPE_WRITE,value,location,&instance->mStatus);
     }
 
-    // The +0x38 body's recovered logic (0 == not sleepable). The leading
+    void LocalBackend::GetEnabler(u64,u64 uHandleQword,u32*& pLocation,u32& uValue)
+    {
+        SlotWord& slot=mpPriorityQueue[SlotIndexFromHandle(uHandleQword)];
+        pLocation=&slot.mHigh;
+        uValue=static_cast<u32>(static_cast<u64>(slot)>>32)&0x1FFFFFFFu;
+    }
+
+    // @ 0x82BCA878 (vtable +0x40), 0 == not sleepable. The leading
     // `(*(*this + 48))(this)` in the asm is THIS object's vtable +0x30 == IsJobComplete.
     int LocalBackend::GetAllowSleepOn(u64 uSubmissionId, u64 uHandleQword)
     {
@@ -620,7 +636,7 @@ namespace LocalBackend
 
         // The JobInstance mAllowSleepOn byte at +0x29 (mParameters+0x25). Read by name
         // through mParameters to honour the no-raw-offset rule.
-        return lpInstance->mParameters.mbHasSemaphore;
+        return lpInstance->mParameters.mAllowSleepOn;
     }
 
     // @ 0x82BCBA80 (vtable +0x3C) -- SleepOn.
@@ -665,10 +681,10 @@ namespace LocalBackend
 
         // Pick the slot with the smallest packed word among the ready entries (the X360
         // ORs in the affinity-don't-care mask before comparing).
-        u64 luAffinityFill = (~static_cast<u64>(uAffinityMask) & 0xFFull) << 23;
+        u64 luAffinityFill = (~static_cast<u64>(uAffinityMask) & 0x3Full) << 55;
         s32 liBest = -1;
         u64 luBestWord = static_cast<u64>(-1);
-        u64* lpQueue = mpPriorityQueue;
+        SlotWord* lpQueue = mpPriorityQueue;
         for (s32 liSlot = 0; liSlot < liCount; ++liSlot)
         {
             u64 luWord = lpQueue[liSlot] | luAffinityFill;
@@ -685,18 +701,19 @@ namespace LocalBackend
             reinterpret_cast<volatile __int64*>(&lpQueue[liBest]);
         u64 luOriginal = static_cast<u64>(*lpEntry);
 
-        // Affinity gate: the job's affinity (bits 23..28) must intersect the mask.
-        u32 luJobAffinity = static_cast<u32>(luOriginal >> 23) & 0x3Fu;
+        // Bits 55..60 store the complement of the job's six affinity bits.
+        u32 luJobAffinity = static_cast<u32>(luOriginal >> 55) & 0x3Fu;
         if ((uAffinityMask & ~luJobAffinity) == 0)
             return 0;
 
-        // The "running" word: clear the top state nibble and set the 0x20000000 tag.
-        u64 luRunning = (luOriginal & 0x1FFFFFFFull) | 0x20000000ull;
+        // Clear the three state bits and construct the RUNNING word.
+        const u64 luReady = luOriginal & ~KU_SLOT_STATE_MASK;
+        u64 luRunning = luReady | 0x2000000000000000ull;
 
-        // CAS the slot from its captured value into the running state.
+        // Only a READY word can transition to RUNNING, even if the scan saw NOT_READY.
         if (_InterlockedCompareExchange64(lpEntry, static_cast<__int64>(luRunning),
-                                          static_cast<__int64>(luOriginal))
-        != static_cast<__int64>(luOriginal))
+                                          static_cast<__int64>(luReady))
+        != static_cast<__int64>(luReady))
         {
             return 0; // lost the race -> nothing ran
         }
@@ -706,31 +723,29 @@ namespace LocalBackend
         lpInstance->Run();
 
         // The "completed" word: set the 0x60000000 free/done tag.
-        u64 luDone = (luRunning & 0x1FFFFFFFull) | 0x60000000ull;
+        u64 luDone = luReady | KU_SLOT_STATE_FREE;
 
-        if (lpInstance->mParameters.mbHasSemaphore)
+        if (lpInstance->mParameters.mAllowSleepOn)
         {
-            // Sleep-on jobs: hold a reference, publish the original word back, post the
+            // Sleep-on jobs: hold a reference, publish DONE, post the
             // completion permit, then drop the reference.
             lpInstance->RefCount()->Increment();
-            _InterlockedCompareExchange64(lpEntry, static_cast<__int64>(luOriginal),
+            _InterlockedCompareExchange64(lpEntry, static_cast<__int64>(luDone),
                                           static_cast<__int64>(luRunning));
-            if (lpInstance->mParameters.mbHasSemaphore)
+            if (lpInstance->mParameters.mAllowSleepOn)
                 lpInstance->Semaphore()->Post(1);
             lpInstance->RefCount()->Decrement();
         }
-        else if (mpDefaultSleepContext)
+        else if (mpEnableProfiling && *mpEnableProfiling)
         {
-            // Keep the job alive (republish the original word) when a default sleep
-            // context is installed.
-            _InterlockedCompareExchange64(lpEntry, static_cast<__int64>(luOriginal),
+            // Keep the completed record for GC while scheduler profiling is enabled.
+            _InterlockedCompareExchange64(lpEntry, static_cast<__int64>(luDone),
                                           static_cast<__int64>(luRunning));
         }
         else
         {
             // Mark the slot free/done (-1 republish via the running word).
-            _InterlockedCompareExchange64(lpEntry, static_cast<__int64>(luDone),
-                                          static_cast<__int64>(luRunning));
+            _InterlockedCompareExchange64(lpEntry, -1, static_cast<__int64>(luRunning));
         }
 
         // Wake the workers so they pick up newly-ready / completed work.
@@ -792,11 +807,11 @@ namespace LocalBackend
         s32 liCount  = mNumSlots;
         if (liCount > 0)
         {
-            const u64* lpQueue = mpPriorityQueue;
+            const SlotWord* lpQueue = mpPriorityQueue;
             for (s32 liSlot = 0; liSlot < liCount; ++liSlot)
             {
                 u64 luWord = lpQueue[liSlot];
-                if ((static_cast<u32>(luWord) & KU_SLOT_STATE_MASK) != KU_SLOT_STATE_FREE
+                if ((luWord & KU_SLOT_STATE_MASK) != KU_SLOT_STATE_FREE
                     && luWord != static_cast<u64>(-1))
                 {
                     ++liResult;
@@ -824,8 +839,9 @@ namespace LocalBackend
     // (`clrldi r3,r3,32`) before returning it as a job-thread id.
     u64 LocalBackend::GetThreadId(int iIndex) const
     {
-        EA::Thread::ThreadId lId = mThreads[iIndex].mThread.GetId();
-        return static_cast<u32>(reinterpret_cast<uintptr_t>(lId));
+        // FLAG PC-platform leaf: native EAThread::ThreadId is a HANDLE. Export
+        // its system ID, the same identity recorded by JobInstance::Run.
+        return static_cast<u64>(EA::Thread::GetSysThreadId(mThreads[iIndex].mThread.GetId()));
     }
 
     // @ 0x82BCA770 -- GetThreadParameters.
@@ -835,18 +851,10 @@ namespace LocalBackend
     }
 
     // @ 0x82BC9CB8 -- GetEnabler.
-    void LocalBackend::GetEnabler(u64 /*uSubmissionId*/, u64 uHandleQword,
-                                  u64** ppEntry, u32* puState)
-    {
-        u32 luIndex = SlotIndexFromHandle(uHandleQword);
-        u64* lpEntry = &mpPriorityQueue[luIndex];
-        u64 luWord = *lpEntry & 0x1FFFFFFFFFFFFFFFull; // clrldi r10,r10,3 (top 3 bits clear)
-        *puState = static_cast<u32>(luWord >> 32);
-        *ppEntry = lpEntry;
-    }
+
 
     // @ 0x82BC9E68 -- SetProfilingCallback.
-    void LocalBackend::SetProfilingCallback(void* pCallback)
+    void LocalBackend::SetProfilingCallback(ProfilerCallback* pCallback)
     {
         mpProfilingCallback = pCallback;
     }
@@ -881,56 +889,7 @@ namespace LocalBackend
     //   init   : +0x20=0(byte) +0x30=0x80 +0x34=0x3F +0x38=0 +0x3C=0
     //            +0x40=1 +0x44=0(byte) +0x45=0(byte) +0x48=0
     //
-    // The init defaults at +0x30..+0x48 and the params memcpy (+0x20..+0x4C) write the
-    // SAME storage: the init loop runs over every record up front, then harvest
-    // overwrites +0x00..+0x4C for the records it actually reclaims. So the trailing
-    // region is one union -- a named default-fields view (what the init loop fills /
-    // what a never-harvested tail record keeps) aliased onto the params blob (what the
-    // harvest memcpy lands).
-    struct GcProfileRecord
-    {
-        // Init-loop default values for the +0x20 region (the per-cursor stores).
-        struct DefaultFields
-        {
-            u8  mByte20;    // +0x20 init 0
-            u8  mPad21[0xF];// +0x21 .. +0x30
-            u32 mField30;   // +0x30 init 0x80
-            u32 mField34;   // +0x34 init 0x3F
-            u32 mField38;   // +0x38 init 0
-            u32 mField3C;   // +0x3C init 0
-            u32 mField40;   // +0x40 init 1
-            u8  mField44;   // +0x44 init 0
-            u8  mField45;   // +0x45 init 0
-            u8  mPad46[2];  // +0x46 .. +0x48
-            u32 mField48;   // +0x48 init 0
-            u32 mPad4C;     // +0x4C (pads to the 0x50 stride)
-        };
-
-        u64 mStartTimeStamp;     // +0x00 <- JobInstance +0x30 (mStartTimeStamp)
-        u64 mField08;            // +0x08 <- JobInstance +0x40
-        u64 mField10;            // +0x10 <- JobInstance +0x48
-        u64 mField18;            // +0x18 <- JobInstance +0x38 (handle word)
-        union
-        {
-            u8            mParameters[0x2C]; // +0x20 <- memcpy(instance+0x04, 0x2C)
-            DefaultFields mDefaults;         // +0x20 init-loop defaults (aliased)
-        };
-    };
-    // Pin the harvest store destinations + the init-field offsets exactly (uncalled).
-    static void GcProfileRecord_AssertLayout()
-    {
-        static_assert(offsetof(GcProfileRecord, mStartTimeStamp) == 0x00, "rec+0x00 <- instance+0x30");
-        static_assert(offsetof(GcProfileRecord, mField08)        == 0x08, "rec+0x08 <- instance+0x40");
-        static_assert(offsetof(GcProfileRecord, mField10)        == 0x10, "rec+0x10 <- instance+0x48");
-        static_assert(offsetof(GcProfileRecord, mField18)        == 0x18, "rec+0x18 <- instance+0x38");
-        static_assert(offsetof(GcProfileRecord, mParameters)     == 0x20, "rec+0x20 params memcpy");
-        static_assert(offsetof(GcProfileRecord, mDefaults)               == 0x20, "rec+0x20 defaults base");
-        static_assert(offsetof(GcProfileRecord, mDefaults.mField30)      == 0x30, "rec+0x30 init 0x80");
-        static_assert(offsetof(GcProfileRecord, mDefaults.mField34)      == 0x34, "rec+0x34 init 0x3F");
-        static_assert(offsetof(GcProfileRecord, mDefaults.mField40)      == 0x40, "rec+0x40 init 1");
-        static_assert(offsetof(GcProfileRecord, mDefaults.mField48)      == 0x48, "rec+0x48 init 0");
-        static_assert(sizeof(GcProfileRecord)                    == 0x50, "rec 0x50 stride");
-    }
+    // The trailing EntryPoint is default-constructed, then assigned on harvest.
 
     // @ 0x82BCB718 -- TryToRunJobInstanceGarbageCollector.
     void LocalBackend::TryToRunJobInstanceGarbageCollector(int bForce, int iClearArg2,
@@ -941,14 +900,7 @@ namespace LocalBackend
 
         // Stage-buffer of up to 23 profiling records (defaults set per the X360 init
         // loop). Only consumed when a profiling callback is installed.
-        GcProfileRecord laRecords[23];
-        std::memset(laRecords, 0, sizeof(laRecords));
-        for (int liRec = 0; liRec < 23; ++liRec)
-        {
-            laRecords[liRec].mDefaults.mField30 = 0x80; // stw 0x80,-4(cursor) == rec+0x30
-            laRecords[liRec].mDefaults.mField34 = 0x3F; // stw 0x3F, 0(cursor) == rec+0x34
-            laRecords[liRec].mDefaults.mField40 = 1;    // stw 1,  0xC(cursor) == rec+0x40
-        }
+        JobMetrics laRecords[23]{};
 
         s32 liStart = mGarbageCollectorCursor;
         if (bForce == 1)
@@ -976,12 +928,13 @@ namespace LocalBackend
                     reinterpret_cast<volatile __int64*>(&mpPriorityQueue[liSlot]);
                 u64 luCaptured = static_cast<u64>(*lpEntry);
 
-                // Try to re-store the captured word (a no-op CAS used purely to observe a
-                // stable value); if the slot changed under us, skip it.
-                bool lbStable =
-                    (_InterlockedCompareExchange64(lpEntry, static_cast<__int64>(luCaptured),
-                                                   static_cast<__int64>(luCaptured))
-                     == static_cast<__int64>(luCaptured));
+                // ARTIST82BCB7EC..854: claim only a completed slot,
+                // changing its state from DONE to GC. Never reclaim a live job.
+                const u64 luDone=(luCaptured&~KU_SLOT_STATE_MASK)|KU_SLOT_STATE_FREE;
+                const u64 luCollecting=(luCaptured&~KU_SLOT_STATE_MASK)|0x8000000000000000ull;
+                bool lbStable=(_InterlockedCompareExchange64(lpEntry,
+                    static_cast<__int64>(luCollecting),static_cast<__int64>(luDone))
+                    ==static_cast<__int64>(luDone));
 
                 if (lbStable)
                 {
@@ -992,7 +945,7 @@ namespace LocalBackend
                     // sleeper); otherwise (count != 1) it republishes the captured word and SKIPS
                     // reclaim. mCount is the s32 ReferenceCount word; CAS 1->0 mirrors the binary.
                     bool lbReclaim = true;
-                    if (lpInstance->mParameters.mbHasSemaphore)
+                    if (lpInstance->mParameters.mAllowSleepOn)
                     {
                         volatile long* lpRefCount =
                             reinterpret_cast<volatile long*>(&lpInstance->RefCount()->mCount);
@@ -1001,8 +954,8 @@ namespace LocalBackend
                             // still referenced (outstanding sleeper) -> leave the slot alive,
                             // republish the captured queue word and advance without reclaiming.
                             _InterlockedCompareExchange64(
-                                lpEntry, static_cast<__int64>(luCaptured),
-                                static_cast<__int64>(*lpEntry));
+                                lpEntry, static_cast<__int64>(luDone),
+                                static_cast<__int64>(luCollecting));
                             lbReclaim = false;
                         }
                     }
@@ -1014,23 +967,15 @@ namespace LocalBackend
                         // the 44-byte params blob -- to the record offsets pinned above.
                         if (mpProfilingCallback)
                         {
-                            GcProfileRecord& lrRec = laRecords[liRecCount];
-                            // The handle (instance+0x38, 16B) supplies two of the harvested
-                            // qwords: its first qword (+0x38 == mSubmissionId) and its second
-                            // (+0x40 == mSchedulerBackend|mIndex). Read through the handle's
-                            // own address so each qword is keyed to its named member base.
-                            const u64* lpHandleQwords =
-                                reinterpret_cast<const u64*>(&lpInstance->mHandle);
-                            lrRec.mStartTimeStamp = lpInstance->mStartTimeStamp; // rec+0x00 <- inst+0x30
-                            lrRec.mField08        = lpHandleQwords[1];           // rec+0x08 <- inst+0x40
-                            lrRec.mField10        = *reinterpret_cast<const u64*>(lpInstance->mPad48); // rec+0x10 <- inst+0x48
-                            lrRec.mField18        = lpHandleQwords[0];           // rec+0x18 <- inst+0x38
-                            std::memcpy(&lrRec.mParameters, &lpInstance->mParameters, 0x2C); // rec+0x20 <- inst+0x04
+                            JobMetrics& lrRec = laRecords[liRecCount];
+                            lrRec.ticksAtSubmission=lpInstance->mStartTimeStamp;
+                            lrRec.ticksAtBegin=lpInstance->mExecution.mProfile.mBegin;
+                            lrRec.ticksAtEnd=lpInstance->mExecution.mProfile.mEnd;
+                            lrRec.threadId=lpInstance->mExecution.mProfile.mThreadId;
+                            lrRec.entryPoint=lpInstance->mParameters;
                             if (++liRecCount == 23)
                             {
-                                typedef void (*GcCallback)(void*, int, void*);
-                                reinterpret_cast<GcCallback>(mpProfilingCallback)(
-                                    laRecords, 23, mpProfilingContext);
+                                mpProfilingCallback(laRecords, 23, mpProfilingContext);
                                 liRecCount = 0;
                             }
                         }
@@ -1043,7 +988,7 @@ namespace LocalBackend
                         // Republish the queue word as -1 (mark fully reclaimed).
                         _InterlockedCompareExchange64(
                             lpEntry, static_cast<__int64>(-1),
-                            static_cast<__int64>(*lpEntry));
+                            static_cast<__int64>(luCollecting));
 
                         if (bForce == 1)
                         {
@@ -1078,9 +1023,7 @@ namespace LocalBackend
         // Flush any staged profiling records.
         if (liRecCount > 0 && mpProfilingCallback)
         {
-            typedef void (*GcCallback)(void*, int, void*);
-            reinterpret_cast<GcCallback>(mpProfilingCallback)(
-                laRecords, liRecCount, mpProfilingContext);
+            mpProfilingCallback(laRecords, liRecCount, mpProfilingContext);
         }
 
         (void)iClearArg2;

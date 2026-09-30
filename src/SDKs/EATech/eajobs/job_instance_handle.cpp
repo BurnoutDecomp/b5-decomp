@@ -1,4 +1,5 @@
 #include "SDKs/EATech/eajobs/job_types.h" // EA::Jobs::JobInstanceHandle, SchedulerBackend
+#include "SDKs/EATech/eajobs/event.h"
 #include "SDKs/EATech/eajobs/detail.h"     // EA::Jobs::Detail::WaitOnYieldHelper
 
 #include <windows.h>  // QueryPerformanceCounter, LARGE_INTEGER
@@ -57,23 +58,16 @@ namespace Jobs
     }
 
     // @ 0x82BC9A50
-    JobInstanceHandle& JobInstanceHandle::AddBarrier(const JobInstanceHandle& lrDependency)
+    Event JobInstanceHandle::AddBarrier()
     {
-        // The X360 reads the backend, submission id and packed +0x8 qword from the
-        // DEPENDENCY handle (a2 = lrDependency) -- NOT from this -- then dispatches that
-        // backend's vtable slot +0x38, passing THIS handle as the dependent. (The binary
-        // hands the dependent handle in r3 and the backend in r4; modelled here as the
-        // backend virtual taking the dependent handle as its first explicit argument --
-        // the same four operands reach the same slot-0x38 dispatch.)
-        Detail::SchedulerBackend* lpBackend = lrDependency.mSchedulerBackend;
-        lpBackend->AddBarrier(this, lrDependency.mSubmissionId, PackHandleQword(lrDependency));
-        return *this;
+        // ARTIST82BC9A50: r3 is the Event return buffer, r4 is this.
+        // DWARF confirms Event AddBarrier(), with no explicit argument.
+        return mSchedulerBackend->AddBarrier(mSubmissionId, PackHandleQword(*this));
     }
 
     // @ 0x82BCA470
-    int JobInstanceHandle::WaitOn(Detail::WaitOnYieldCallbackArg pYieldCallback,
-                                  int                            iYieldContext,
-                                  s32                            lYieldSleepMs)
+    void JobInstanceHandle::WaitOn(WaitOnCallback* pYieldCallback,
+                                   void* pYieldContext, s32 lYieldSleepMs) const
     {
         u8 lbDone = 0; // v10[0] -- the done flag handed to WaitOnYieldHelper
 
@@ -97,12 +91,11 @@ namespace Jobs
 
             // One yield pass: optional user predicate, optional sleep, elapsed-time
             // budget. Returns nonzero to keep waiting, 0 to give up.
-            liResult = Detail::WaitOnYieldHelper(pYieldCallback, iYieldContext,
-                                                 lYieldSleepMs, lStart.LowPart, &lbDone);
+            liResult = Detail::WaitOnYieldHelper(pYieldCallback, pYieldContext,
+                lYieldSleepMs, static_cast<u64>(lStart.QuadPart), &lbDone);
         }
         while (liResult);
 
-        return liResult;
     }
 }
 }

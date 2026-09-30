@@ -107,7 +107,8 @@ namespace Jobs
         // job.h:92 -- block on the backend's "sleep on instance" entry until done. X360 0x82BCA1F8.
         void SleepOn();
         // job.h:94 -- spin-wait on this job's instance handle until done. X360 0x82BCB238.
-        void WaitOn();
+        void WaitOn(WaitOnCallback* pCallback = 0, void* pContext = 0,
+                    s32 lSleepMs = -1) const;
 
         // job.h:110 -- (scheduler-internal) record THIS job's instance handle from the
         // backend's just-submitted slot and seed mStartEvent's barrier. X360 0x82BCA3D8.

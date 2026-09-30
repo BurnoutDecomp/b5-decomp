@@ -60,10 +60,11 @@ namespace Jobs
     struct Job;
     struct JobInstanceHandle;
     struct EntryPoint;   // entry_point.h -- CreateNotReadyInstance's entry argument
+    struct Event;
 
     // job_types.h -- a single 32-bit job argument word. Jobs receive four of them
     // (Job::mParams[4] / the local-job entry signature); SetData packs the data
-    // pointer + size into two of the slots. Modelled as a 4-byte POD holding a union
+    // pointer + size into two of the slots. Native pointers widen the console four-byte union
     // so it can carry a pointer, an int, or a float interchangeably (the X360 stores
     // raw words). Tag is `struct` to match the job_scheduler.h forward declaration.
     struct Param
@@ -83,12 +84,21 @@ namespace Jobs
         Param(f32 lfValue) : mfValue(lfValue) {}
     };
 
+    // wait_on.h:19/27 (DecFIGS), callback dispatch ARTIST82BC9B88.
+    enum WaitOnControl
+    {
+        WAIT_ON_CANCEL = 0,
+        WAIT_ON_CONTINUE = 1,
+        WAIT_ON_YIELD_THEN_CONTINUE = 2
+    };
+    typedef WaitOnControl WaitOnCallback(void* pContext);
+
     namespace Detail
     {
         // The user yield-predicate JobInstanceHandle::WaitOn threads through to
         // WaitOnYieldHelper (declared in detail.h; redeclared here so the handle
         // surface does not pull detail.h). Nonzero == keep waiting.
-        typedef int (*WaitOnYieldCallbackArg)(int iContext);
+        typedef WaitOnCallback* WaitOnYieldCallbackArg;
 
         // SchedulerBackend -- the polymorphic owner of submitted job-instance slots.
         // Only the two virtual entry points JobInstanceHandle dispatches into are
@@ -139,7 +149,7 @@ namespace Jobs
             // waits on the instance keyed by (uSubmissionId, uHandleQword). The X360
             // dispatches this through the *dependency's* backend vtable, handing it the
             // dependent handle, the backend, and the dependency's submission key.
-            virtual void AddBarrier(JobInstanceHandle* pDependentHandle, u64 uSubmissionId, u64 uHandleQword) = 0;
+            virtual Event AddBarrier(u64 uSubmissionId, u64 uHandleQword) = 0;
 
             // vtable slot +0x3C: BLOCKING wait on the instance keyed by (uSubmissionId,
             // uHandleQword) -- the backend's "sleep on instance" entry. Job::SleepOn
@@ -163,29 +173,16 @@ namespace Jobs
         JobInstanceHandle();
         JobInstanceHandle(Detail::SchedulerBackend* pBackend, u16 uIndex, u64 uSubmissionId);
 
-        // @ 0x82BC9A50 -- make THIS handle's instance wait on the dependency instance
-        // (the argument). The X360 reads the backend + submission key from the DEPENDENCY
-        // handle (a2), then dispatches that backend's vtable slot +0x38 with this handle
-        // as the dependent. Returns *this.
-        JobInstanceHandle& AddBarrier(const JobInstanceHandle& lrDependency);
+        // @ 0x82BC9A50 -- return a barrier event for THIS instance. Signaling
+        // its final outstanding barrier makes the instance ready.
+        Event AddBarrier();
 
-        // @ 0x82BCA470 -- block until this submitted job instance has completed (or a
-        // watchdog budget gives up). Each spin: ask the backend whether the instance
-        // is complete (vtable slot +0x30); if not, run one WaitOnYieldHelper pass
-        // (optional user predicate / sleep / elapsed-time budget). Returns nonzero
-        // while it should keep waiting; 0 once the wait is satisfied/abandoned.
-        //   pYieldCallback : optional predicate run each spin (nonzero == keep waiting)
-        //   iYieldContext  : argument forwarded to pYieldCallback
-        //   lYieldSleepMs  : if >= 0, ms to sleep each spin
-        // Job::WaitOn @ 0x82BCB238 tail-calls this with only `this` set up (the PPC
-        // tail-`b` loads no argument registers), i.e. the no-knobs form: no user
-        // predicate, no context, and a NEGATIVE sleep that WaitOn's own `>= 0` gate
-        // treats as "don't sleep". Modelled as default arguments so that no-arg call
-        // site keeps compiling; the -1 sleep is grounded by that attested `>= 0` gate,
-        // not an invented timeout. Existing 3-arg callers are unaffected.
-        int WaitOn(Detail::WaitOnYieldCallbackArg pYieldCallback = 0,
-                   int                            iYieldContext  = 0,
-                   s32                            lYieldSleepMs   = -1);
+        // @ 0x82BCA470 -- wait until complete, or until the callback/watchdog
+        // cancels. DWARF pins void return and pointer context. Job::WaitOn's
+        // tail branch preserves r4/r5/r6; game callers supply null/null/-1.
+        void WaitOn(WaitOnCallback* pYieldCallback = 0,
+                    void*          pYieldContext = 0,
+                    s32            lYieldSleepMs = -1) const;
 
         u64                       mSubmissionId;     // +0x0
         Detail::SchedulerBackend* mSchedulerBackend; // +0x8

@@ -1,4 +1,5 @@
 #include "SDKs/EATech/eajobs/event.h"
+#include "SDKs/EATech/eajobs/jobs.h"
 
 #include <intrin.h> // _InterlockedDecrement (MSVC atomic intrinsic)
 
@@ -22,6 +23,26 @@ namespace EA
 {
 namespace Jobs
 {
+    Event::Event() : mType(EVENT_TYPE_NONE), mDecrementerLocation(nullptr)
+    {
+        mWritePtrValue=nullptr; mWritePtrLocation=nullptr;
+    }
+    Event::Event(Type type,u32 value,u32* location,u32* counter)
+        : mType(type),mDecrementerLocation(counter)
+    {
+        mWritePtrValue=nullptr; mWriteValue=value; mWriteLocation=location;
+    }
+    Event::Event(Type type,void (&callback)(void*),void* context,u32* counter)
+        : mType(type),mDecrementerLocation(counter)
+    {
+        mCallback=&callback; mContext=context;
+    }
+    Event::Event(Type type,void* value,void** location,u32* counter)
+        : mType(type),mDecrementerLocation(counter)
+    {
+        mWritePtrValue=value; mWritePtrLocation=location;
+    }
+
     void Event::Run() const
     {
         if (mDecrementerLocation)
@@ -38,9 +59,17 @@ namespace Jobs
             if (mCallback)
                 mCallback(mContext);
         }
-        else if (mType == EVENT_TYPE_WRITE || mType == EVENT_TYPE_WRITE_PTR)
+        else if (mType == EVENT_TYPE_WRITE)
         {
-            *mWriteLocation = mWriteValue;
+            // FLAG PC-platform leaf: an enabler publishes initialized arguments
+            // to native workers, paired with their queue-word acquire loads.
+            AtomicStore(mWriteLocation, mWriteValue);
+        }
+        else if (mType == EVENT_TYPE_WRITE_PTR)
+        {
+            // FLAG PC-platform leaf: the console's two store types are both
+            // 32 bits; native pointer writes must preserve the complete address.
+            *mWritePtrLocation = mWritePtrValue;
         }
     }
 }

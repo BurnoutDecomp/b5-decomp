@@ -29,6 +29,7 @@ namespace EA
 {
 namespace Jobs
 {
+    namespace LocalBackend { struct JobInstance; class LocalBackend; }
     struct EntryPoint
     {
         // entry_point.h:26 -- per-job kernel-swap control.
@@ -46,6 +47,13 @@ namespace Jobs
             CODE_RECYCLE_ON      = 1,
             CODE_RECYCLE_DEFAULT = 1
         };
+
+        // ARTIST default settings (Job::Clear82BCA110 and JobInstance ctor).
+        // Native pointers are initialized by member, not a console byte image.
+        EntryPoint() : mName{}, mPriority(JOB_PRIORITY_DEFAULT), mAffinity(JOB_AFFINITY_ANY),
+            mEnvironment(JOB_ENVIRONMENT_LOCAL), mKernelSwap(SWAP_OFF),
+            mCodeRecycle(CODE_RECYCLE_ON), mBreakOnEntry(false), mAllowSleepOn(false),
+            mpfnLocalJob(nullptr) {}
 
         // entry_point.h:55 -- point this entry at a job's code. The environment form
         // selects JOB_ENVIRONMENT_LOCAL (a function pointer) or JOB_ENVIRONMENT_SPU_THREADS
@@ -77,6 +85,8 @@ namespace Jobs
         JobAffinity    GetAffinity() const;
 
     private:
+        friend struct LocalBackend::JobInstance;
+        friend class LocalBackend::LocalBackend;
         char           mName[16];        // +0x00 entry_point.h:78
         JobPriority    mPriority;        // +0x10 entry_point.h:80
         JobAffinity    mAffinity;        // +0x14 entry_point.h:81 (SetAffinity stores here)

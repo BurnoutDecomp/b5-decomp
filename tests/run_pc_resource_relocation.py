@@ -40,10 +40,10 @@ for signature in ['static u64 PackHandleQword(', 'static EntryPoint MakeDefaultE
                   'void Job::Clear(', 'Job::Job(const char* lpcName)', 'Job::~Job(', 'void Job::SetData(',
                   'bool Job::IsDone(', 'void Job::WaitOn(', 'void Job::SetCode(', 'void Job::SetName(']:
     job_code+=definition(jobs,signature)+'\n'
-# Match the synchronous shipping backend's constructor/allocation leaves.
+# Retain the synchronous fixture's allocator boundary.
 # Real dependency buckets remain empty in this direct-dispatch integration.
 leaves=tree.read('src/SDKs/EATech/AptRenderLinkStubs.cpp')
-job_code+=definition(leaves,'Event::Event()')+'\n} namespace Allocator {\n'
+job_code+='\n} namespace Allocator {\n'
 job_code+=definition(leaves,'ICoreAllocator* ICoreAllocator::GetDefaultAllocator()')+'\n} }\n'
 numeric=compile_and_run(Path(__file__).with_name('PCResourceRelocation.cpp'),
     'pc_resource_relocation.inc',code,'PCResourceRelocation',extra_flags='/Gy',
@@ -53,7 +53,7 @@ numeric=compile_and_run(Path(__file__).with_name('PCResourceRelocation.cpp'),
         *[REPO/resource/'PoolModuleStates'/name for name in ['CgsIntelliFragPoolModuleState.cpp',
              'CgsEmergencyFragPoolModuleState.cpp']],
         *[REPO/'src/GameShared/Jobs/Relocator'/name for name in ['CgsRelocator.cpp','Relocator.cpp','RelocatorJob.cpp']],
-        *[REPO/'src/SDKs/EATech/eajobs'/name for name in ['entrypoint.cpp','bucket_list_node.cpp','event.cpp']],
+        *[REPO/'src/SDKs/EATech/eajobs'/name for name in ['entrypoint.cpp','bucket_list_node.cpp','event.cpp','jobs.cpp']],
         *[REPO/resource/name for name in ['CgsResourceScratchPool.cpp','CgsResourceImportHashTable.cpp',
              'CgsSmallResource.cpp','CgsBaseResourcePtr.cpp','CgsResourcePtr.cpp']],
         *[REPO/base/'Memory'/name for name in ['CgsLinearMalloc.cpp','CgsDistributionStream.cpp',

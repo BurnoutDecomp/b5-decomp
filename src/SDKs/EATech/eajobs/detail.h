@@ -1,7 +1,7 @@
 #ifndef EA_JOBS_DETAIL_H
 #define EA_JOBS_DETAIL_H
 
-#include "types.hpp"
+#include "SDKs/EATech/eajobs/job_types.h"
 
 // SDKs/EATech/eajobs/detail.h
 //
@@ -21,19 +21,19 @@ namespace Detail
 {
     // A user wait callback: returns nonzero to keep waiting, 0 to stop. (X360 calls
     // it through ctr with the single arg in r3.)
-    typedef int (*WaitOnYieldCallback)(int iContext);
+    typedef WaitOnCallback* WaitOnYieldCallback;
 
     // @ 0x82BC9B60 -- one iteration of WaitOn's yield loop.
     //   pCallback   : optional predicate; if present and it returns 0, stop (false).
-    //   iContext    : argument passed to pCallback.
+    //   pContext    : argument passed to pCallback.
     //   lSleepMs    : if >= 0, sleep this many ms (via EA::Thread::ThreadSleep).
-    //   iStartTicks : the QPC tick stamp the wait started at (elapsed budget base).
+    //   uStartTicks : the QPC tick stamp the wait started at (elapsed budget base).
     //   pbDone      : the done flag; if already set, keep waiting (true).
     // Returns nonzero to continue yielding, 0 to give up.
     int WaitOnYieldHelper(WaitOnYieldCallback pCallback,
-                          int                 iContext,
+                          void*               pContext,
                           s32                 lSleepMs,
-                          int                 iStartTicks,
+                          u64                 uStartTicks,
                           const u8*           pbDone);
 }
 }

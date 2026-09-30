@@ -51,7 +51,7 @@ void WorldGeometry_OnResourceMemoryFreed(const void* base,size_t) {
 namespace EA { namespace Jobs {
 // The production native relocator executes its real copy job directly and has
 // no scheduler instance. Any accidental asynchronous backend wait is a failure.
-int JobInstanceHandle::WaitOn(Detail::WaitOnYieldCallbackArg,int,s32) { std::abort(); }
+void JobInstanceHandle::WaitOn(WaitOnCallback*,void*,s32) const { std::abort(); }
 } }
 namespace CgsMemory {
 }
