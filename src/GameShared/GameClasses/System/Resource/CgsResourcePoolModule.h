@@ -229,10 +229,9 @@ namespace CgsResource
         // @ 0x828D81D0 -- DeletePool response handler (asserts on failure result).
         void DoDeletePoolRequest(const void* lpResponse);
 
-        // @ 0x82900690 -- AllocateResourceList (own TU): walk the bundle entries, batch the per-pool
-        // allocations, drive the defrag state machine. First arg is an 8-byte resource ID (asm ld 0x10).
-        bool AllocateResourceList(u64 luId, s32 liEventId, const void* lpEntries, s32 liNumEntries,
-                                  bool* lpbOut, void* lpHandles, bool lbA, bool lbB);
+        // @ 0x828E2F88 -- select the pool and arm ordinary or live-update allocation.
+        bool AllocateResourceList(u64 luId, s32 liPoolId, const void* lpEntries, s32 liNumEntries,
+                                  bool* lpNeeds, void* lpResources, bool lbLiveUpdateReplace, bool lbAllowFailiure);
 
     private:
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
@@ -243,6 +242,7 @@ namespace CgsResource
         Pool              maPools[KI_MAX_POOLS];      // +0x1A38 the 128 resource pools (464B X360 stride)
         CgsModule::EventReceiverQueue<16384, 16> mReceiverQueue; // +0x158C4 (a1[22033]) create/delete-pool events (DWARF CgsPoolModule.h:217)
         ScratchPool       mScratchPool;              // +0x198C0 (a1+104576) defrag staging (Construct'd; InitPool deferred)
+        AllocListSet      mAllocListSet;             // +0x19B00; DWARF CgsPoolModule.h:198
         s32               mProcessState;             // +0x19B30 defrag/alloc state machine (0..6)
 
         // CgsResource::Events::CreatePoolRequest_128 (X360 a1+66104): the FIFO of pool options awaiting

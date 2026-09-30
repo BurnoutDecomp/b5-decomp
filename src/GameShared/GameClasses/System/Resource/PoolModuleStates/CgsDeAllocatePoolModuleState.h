@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Resource/PoolModuleStates/CgsBaseDefragPoolModuleState.h"  // BasePoolModuleState
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
 
 // CgsResource::DeAllocatePoolModuleState - the pool module's "deallocating" step state. While a
 // pool is tearing down a resource, the PoolModule keeps this state active and polls it once per
@@ -13,11 +14,12 @@
 // read from that body's loads/stores: the state token is the leading word (lwz r10,0(r11) /
 // stw r10,0(r11)) and the frame counter is at +8 (lwz r10,8(r11) / stw r10,8(r11)). We identify
 // members by their X360 offsets but do NOT byte-match (PC widths apply). The DWARF home for this
-// TU is CgsDeAllocatePoolModuleState.cpp; field +4 is not touched by this step and is modelled
-// as reserved storage so the +8 counter sits at its observed offset.
+// TU is CgsDeAllocatePoolModuleState.cpp; field +4 is the pool-module owner pointer,
+// identified by Construct and DWARF. Native pointer widths determine the host offsets.
 
 namespace CgsResource
 {
+    class PoolModule;
     // CgsDeAllocatePoolModuleState.h - one of the PoolModule's step states.
     class DeAllocatePoolModuleState : public BasePoolModuleState
     {
@@ -46,17 +48,19 @@ namespace CgsResource
         // On completion (Update result 3) PoolModule::UpdateDeAllocating forwards the originating
         // allocate request back to DoAllocateResourceListRequest. The X360 inlines the selection
         // (mbHaveRequest ? &mRequest : 0) at +0xC/+0x10 of this state; expose it as a named accessor
-        // so the driver never pokes this object's layout by raw offset. Body lives in this state's own
-        // TU (CgsDeAllocatePoolModuleState.cpp; deferred -- trap-stubbed at link).
-        const void* GetPendingAllocateRequest() const;
+        // so the driver never reads this object's layout through console-width offsets.
+        Events::AllocateResourceListRequest* GetPendingAllocation()
+        {
+            return mbGotPendingAllocationRequest ? &mPendingAllocationRequest : nullptr;
+        }
+        void CancelPendingAllocation() { mbGotPendingAllocationRequest = false; }
 
     private:
         u32 muState;            // +0x00  state token (EState)
-        u32 muReserved04;       // +0x04  not referenced by the poll step (kept for +8 placement)
+        PoolModule* mpPoolModule; // +0x04, Construct 828FC0B8 and DWARF :78
         u32 muFramesRemaining;  // +0x08  settle counter
-        u8  mbHaveRequest;      // +0x0C  "a request is stashed" flag (read by UpdateDeAllocating)
-        // +0x10 the stashed AllocateResourceListRequest record (returned by GetPendingAllocateRequest;
-        // its full layout belongs to this state's own TU) -- reserved here as opaque storage.
-        u8  maPendingRequest[64];
+        bool mbGotPendingAllocationRequest; // +0x0C, DWARF :81
+        // +0x10 on the console; the pending record widens with its native pointer fields.
+        Events::AllocateResourceListRequest mPendingAllocationRequest; // DWARF :82
     };
 }

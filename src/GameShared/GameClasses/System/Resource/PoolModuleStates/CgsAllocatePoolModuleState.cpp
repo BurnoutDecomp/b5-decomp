@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/System/Resource/PoolModuleStates/CgsAllocatePoolModuleState.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"        // Pool / AllocListSet / NewResource / Entry / SmallResource
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"  // PoolModule::FindResourceType / KI_MAX_ALLOCATION_REQUESTS
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint / gxMessageFilterFlags
 
@@ -26,6 +27,122 @@
 
 namespace CgsResource
 {
+    // Inlined into ARTIST PoolModule::Construct 828FC0B8. The generated list type
+    // caches its virtual type ID and defragmentation policy just like registered types.
+    void AllocatePoolModuleState::Construct(PoolModule* lpPoolModule)
+    {
+        meState = E_STATE_IDLE;
+        mpPool = nullptr;
+        mListId.SetHash(static_cast<u32>(ID::HashString(reinterpret_cast<const u8*>(""))));
+        mpEntries = nullptr;
+        miNumEntries = 0;
+        mpAllocListSet = nullptr;
+        mpOutNeeds = nullptr;
+        mpOutResources = nullptr;
+        mpPoolModule = lpPoolModule;
+        mbAllowFailiure = false;
+        mbCreateEntryListResource = false;
+        mbWaitingForPurgatory = false;
+        mEntryListResourceType.InitCachedValues();
+    }
+
+    // Inlined at 829048FC..8290494C. The driver fills miEventId and mbFailed.
+    void AllocatePoolModuleState::GenerateResponse(Events::AllocateResourceListResponse* lpResponse)
+    {
+        lpResponse->mpUser = nullptr;
+        lpResponse->miEventId = 0;
+        lpResponse->miPoolId = mpPool ? mpPool->GetId() : -1;
+        lpResponse->mListId = mListId;
+        lpResponse->mpEntries = mpEntries;
+        lpResponse->miNumEntries = miNumEntries;
+        lpResponse->mpNeeds = mpOutNeeds;
+        lpResponse->mpResources = mpOutResources;
+        lpResponse->mpListEntry = mpOutListEntry;
+    }
+
+    // 82902640. Creation and successful allocation/merge fall through within one
+    // update. Pending purgatory and defragmentation retain the working set across frames.
+    u32 AllocatePoolModuleState::Update()
+    {
+        switch (meState)
+        {
+        case E_STATE_IDLE:
+            return E_RESULT_SUCCESS;
+        case E_STATE_CHECK_CREATE_ENTRIES:
+            mpAllocListSet->ClearCountsAndResults();
+            miNeedCount = static_cast<s16>(CheckListDependencies());
+            if (!CreateResourceList())
+            {
+                meState = E_STATE_IDLE;
+                return mbAllowFailiure ? E_RESULT_FAILED_SAFELY : E_RESULT_ERROR;
+            }
+            [[fallthrough]];
+        case E_STATE_ALLOCATE:
+        {
+            meState = E_STATE_ALLOCATE;
+            const Pool::ECreateResult leResult = mpPool->ExecuteBatchAllocations(mpAllocListSet, mbWaitingForPurgatory);
+            if (leResult != Pool::CREATERESULT_OK && mpPool->GetNumEntriesInPurgatory() > 0)
+            {
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint << "Failed to allocate into pool " << mpPool->GetName()
+                        << " - pending until there are no more resources in purgatory:\n";
+                mbWaitingForPurgatory = true;
+                DebugPrintAllocListSet();
+                return E_RESULT_PEND;
+            }
+            if (leResult == Pool::CREATERESULT_OUTOFMEMORY)
+            {
+                UndoEntryCreations();
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint << "Failed to allocate into pool " << mpPool->GetName()
+                        << (mbAllowFailiure ? " - failing safely:\n" : " - error:\n");
+                DebugPrintAllocListSet();
+                return mbAllowFailiure ? E_RESULT_FAILED_SAFELY : E_RESULT_ERROR;
+            }
+            if (leResult == Pool::CREATERESULT_NEEDDEFRAGGING)
+            {
+                meState = E_STATE_DEFRAG_WAITING;
+                return E_RESULT_DEFRAGMENT;
+            }
+            [[fallthrough]];
+        }
+        case E_STATE_MERGE_ALLOCATIONS:
+        case E_STATE_DEFRAG_WAITING:
+        {
+            meState = E_STATE_MERGE_ALLOCATIONS;
+            mpPool->MergeBatchAllocations(mpAllocListSet, mpEntries, mpOutResources);
+            Entry* lpList = CreateEntryListResource();
+            if (!lpList)
+            {
+                CGS_ASSERT(false, "Could not create resource to hold entry list with entries\n");
+                meState = E_STATE_IDLE;
+                return E_RESULT_ERROR;
+            }
+            mpOutListEntry = lpList;
+            meState = E_STATE_IDLE;
+            --miCountDown;
+            return E_RESULT_SUCCESS;
+        }
+        default:
+            CGS_ASSERT(false, "Allocate internal state is invalid\n");
+            return E_RESULT_ERROR;
+        }
+    }
+
+    // 828DA658; tables at ARTIST 820F7018 (results) and 820F702C (memory types).
+    void AllocatePoolModuleState::DebugPrintAllocListSet()
+    {
+        static const char* const lapResults[] = { "Success", "Fail - need defrag", "Fail - no room" };
+        static const char* const lapTypes[] = { "MAIN", "PHYSICAL", "DUMMY" };
+        for (s32 t = 0; t < 3; ++t)
+        {
+            if (mpAllocListSet->manAllocRequestCounts[t] && (CgsDev::Message::gxMessageFilterFlags & 1))
+                *CgsDev::Log::gpDebugPrint << "Memory type " << lapTypes[t] << ", attempted allocations: "
+                    << mpAllocListSet->manAllocRequestCounts[t] << ", result: "
+                    << lapResults[mpAllocListSet->maeAllocRequestResults[t]] << "\n";
+        }
+    }
+
     // -------- BeginAllocation @ 0x828DA568 --------
     // Latch the request working set and move the machine out of idle. The X360 asserts the machine was
     // idle (streamed message) before overwriting the working set; miCountDown is armed to 1 and the two
@@ -33,7 +150,7 @@ namespace CgsResource
     void AllocatePoolModuleState::BeginAllocation(Pool* lpPool, ID lListId,
                                                   const BundleV2::ResourceEntry* lpEntries, s32 liNumEntries,
                                                   AllocListSet* lpAllocListSet, bool* lpOutNeeds,
-                                                  void* lpOutResources, bool lbAllowFailiure)
+                                                  SmallResource* lpOutResources, bool lbAllowFailiure)
     {
         CGS_ASSERT(meState == E_STATE_IDLE, "Can not begin allocation during none-idle state\n");   // :88
 

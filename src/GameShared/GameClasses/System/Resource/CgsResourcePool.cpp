@@ -3,6 +3,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (the null-type boot gate)
 #include "GameShared/Jobs/Relocator/CgsRelocator.h"          // Relocator / RelocationParams / RelocateOp
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
+#include <cstring>
 
 #include <cstdint>   // uintptr_t (the Heap allocation owner is the slot index)
 #include <cstddef>   // size_t (the PC-leaf free notification below)
@@ -234,6 +236,7 @@ namespace CgsResource
     s32  Pool::GetBankId()                         { return miBankId; }
     bool Pool::IsValid() const                     { return mbIsValid; }
     s32  Pool::GetNumDependencies() const          { return miNumDependencies; }
+    Pool* Pool::GetDependency(s32 liIndex) const   { return mapDependencies[liIndex]; }
     s32  Pool::GetRefCountThreshold()              { return miRefCountThreshold; }
     s32  Pool::GetNumEntriesInPurgatory() const    { return miNumResourcesInPurgatory; }
     u32  Pool::GetHeapAlignment(s32 liMemType) const { return maHeaps[liMemType].GetHeapAlignment(); }
@@ -725,6 +728,208 @@ namespace CgsResource
     }
 
     // ---- batch allocation / heap flattening (the defragmenter's pool-side surface) --------
+
+    // 828EDD38: resource-slot occupancy and the three heaps' node/byte statistics.
+    void Pool::DebugReport(FPoolReportCallback lpfnCallback, void* lpUserData)
+    {
+        PoolStats lStats;
+        lStats.mpcPoolName = macName;
+        lStats.miPoolMaxResources = muMaxResources;
+        lStats.miPoolFreeResources = muNumFreeResources;
+        lStats.miPoolUsedResources = muMaxResources - muNumFreeResources;
+        for (s32 t = 0; t < 3; ++t)
+        {
+            s32 liUsedNodes, liUnusedNodes, liAllocatedNodes, liFreeNodes, liUsedBytes, liFreeBytes, liLargest;
+            maHeaps[t].GetNodeUsageStatistics(&liUsedNodes, &liUnusedNodes, &liAllocatedNodes,
+                &liFreeNodes, &liUsedBytes, &liFreeBytes, &liLargest);
+            lStats.maiHeapSize[t] = liUsedBytes + liFreeBytes;
+            lStats.maiHeapUsed[t] = liUsedBytes;
+            lStats.maiHeapFree[t] = liFreeBytes;
+            lStats.maiHeapMaxResources[t] = maHeaps[t].GetMaxNodes() / 2;
+            lStats.maiHeapUsedResources[t] = liUsedNodes;
+            lStats.maiHeapFreeResources[t] = lStats.maiHeapMaxResources[t] - liUsedNodes;
+            lStats.maiHeapLargestBlock[t] = liLargest;
+        }
+        lpfnCallback(lStats, lpUserData);
+    }
+
+    // 828FE0F8: unconditional deletion (the caller already owns the lifetime decision).
+    void Pool::DeleteEntry(s16 liIndex)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        Entry* lpEntry = &mpResourceEntries[liIndex];
+        mHashTable.RemoveEntry(lpEntry->mID);
+        FreeMemoryForResource(lpEntry);
+        FreeResourceEntry(liIndex);
+    }
+
+    // 828FE1F0: live updates re-resolve only fully loaded resources.
+    void Pool::ResolveAllResources()
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        for (u32 i = 0; i < muMaxResources; ++i)
+            if (mpx8ResourceStatuses[i] & 2)
+                ResolveImportsForEntry(i);
+    }
+
+    // 828FEE68: keep the entry and its intrusive pointer ring during live replacement.
+    void Pool::DeleteMemoryForEntry(ID lId)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        s32 liSlot;
+        Entry* lpEntry = FindResource(lId, false, 2, &liSlot);
+        CGS_ASSERT(lpEntry != nullptr, "Failed to find entry to delete memory for\n");
+        for (s32 t = 0; t < 3; ++t)
+        {
+            void* lpMemory = lpEntry->mResource.m_baseResources[t];
+            if (lpMemory)
+            {
+                const u32 luSize = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[t].m_size;
+                // FLAG PC-platform leaf: retire D3D mirrors before reusing host heap memory.
+                renderengine::WorldGeometry_OnResourceMemoryFreed(lpMemory, luSize);
+                maHeaps[t].Free(lpMemory);
+                std::memset(lpMemory, 0xCD, luSize);
+            }
+        }
+    }
+
+    // 828F6880. r6 is the replacement import count; Malloc uses best-fit and top allocation.
+    bool Pool::ReAllocateMemoryForEntry(ID lId, Entry::ResourceDescriptor* lpDescriptor,
+                                        s32 liNumImports, SmallResource* lpResource)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        s32 liSlot;
+        Entry* lpEntry = FindResource(lId, false, 2, &liSlot);
+        CGS_ASSERT(lpEntry != nullptr, "Failed to find entry to delete memory for\n");
+        SmallResource lResource;
+        for (s32 t = 0; t < 3; ++t)
+        {
+            lResource.m_baseResources[t] = nullptr;
+            const u32 luSize = lpDescriptor->m_baseResourceDescriptors[t].m_size;
+            if (luSize)
+            {
+                u16 luNode;
+                void* lpMemory = maHeaps[t].Malloc(luSize, "", reinterpret_cast<void*>(static_cast<uintptr_t>(liSlot)),
+                    0xFFFF, &luNode, true, true, nullptr);
+                CGS_ASSERT(lpMemory != nullptr, "Failed to re-allocate memory\n");
+                lResource.m_baseResources[t] = lpMemory;
+                lpEntry->mauHeapIndices[t] = luNode;
+            }
+        }
+        lpEntry->mResource = lResource;
+        if (liNumImports != mpiResourceImportCounts[liSlot] && (CgsDev::Message::gxMessageFilterFlags & 1))
+            *CgsDev::Log::gpDebugPrint << "New entry has different number of imports\n";
+        mpiResourceImportCounts[liSlot] = liNumImports;
+        mpx8ResourceStatuses[liSlot] = 1;
+        lpEntry->mpResourceThis->Propogate();
+        *lpResource = lResource;
+        return true;
+    }
+
+    // ARTIST AllocatePoolModuleState::Update 829026D4-F0 (inlined).
+    void AllocListSet::ClearCountsAndResults()
+    {
+        for (s32 i = 0; i < 3; ++i)
+        {
+            manAllocRequestCounts[i] = 0;
+            maeAllocRequestResults[i] = E_BATCHALLOCRESULT_SUCCESS;
+        }
+    }
+
+    // 828D8B88: reserve the free slots in one sweep. CreateEntryInSlot will mark them
+    // loading; this step only records their indices and accounts for the reservation.
+    const s16* Pool::CreateBatchEntrySlots(s16 liNumSlots)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        const u16 luCount = static_cast<u16>(liNumSlots);
+        if (muNumFreeResources < luCount)
+            return nullptr;
+        u16 luFound = 0;
+        for (u16 luSlot = 0; luFound < luCount; ++luSlot)
+        {
+            CGS_ASSERT(luSlot < muMaxResources,
+                "Somehow gone past end of resources array even though the number free is definately big enough\n");
+            if (mpx8ResourceStatuses[luSlot] == 0)
+                mpnBatchIndices[luFound++] = static_cast<s16>(luSlot);
+        }
+        muNumFreeResources -= luCount;
+        return mpnBatchIndices;
+    }
+
+    // 828E0E50..828E0F68, recovered directly from the ARTIST image (export hole).
+    // The heap owner is the entry index, not an Entry pointer; retain it at native width.
+    void Pool::BuildAllocRequestForEntry(AllocListSet* lpSet, u16 luIndex, Entry* lpEntry)
+    {
+        for (s32 t = 0; t < 3; ++t)
+        {
+            const auto& lrDescriptor = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[t];
+            if (lrDescriptor.m_size == 0) continue;
+            AllocRequest& lrRequest = lpSet->mapAllocRequests[t][lpSet->manAllocRequestCounts[t]++];
+            lrRequest.muSize = lrDescriptor.m_size;
+            lrRequest.muAlignment = lrDescriptor.m_alignment;
+            lrRequest.mbAllocateTop = lpEntry->mpResourceType->GetCachedCanDefrag();
+            lrRequest.mpOwner = reinterpret_cast<void*>(static_cast<uintptr_t>(luIndex));
+        }
+    }
+
+    // 828FDFA0. On a purgatory retry, successful memory types already own their
+    // allocations and must not be allocated again. No-room takes precedence over defrag.
+    Pool::ECreateResult Pool::ExecuteBatchAllocations(AllocListSet* lpSet, bool lbRetryFailedOnly)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        bool lbNoRoom = false;
+        bool lbNeedDefrag = false;
+        for (s32 t = 0; t < 3; ++t)
+        {
+            if (lpSet->manAllocRequestCounts[t] == 0)
+                lpSet->maeAllocRequestResults[t] = E_BATCHALLOCRESULT_SUCCESS;
+            else if (!lbRetryFailedOnly || lpSet->maeAllocRequestResults[t] != E_BATCHALLOCRESULT_SUCCESS)
+            {
+                const EBatchAllocResult leResult = ExecuteBatchAllocation(lpSet, t);
+                lpSet->maeAllocRequestResults[t] = leResult;
+                lbNoRoom |= leResult == E_BATCHALLOCRESULT_FAIL_NO_ROOM;
+                lbNeedDefrag |= leResult == E_BATCHALLOCRESULT_FAIL_NEED_DEFRAG;
+            }
+        }
+        // The console additionally resets its debug allocation-failure injector here.
+        // That diagnostic selector is not part of the native heap interface.
+        return lbNoRoom ? CREATERESULT_OUTOFMEMORY
+            : (lbNeedDefrag ? CREATERESULT_NEEDDEFRAGGING : CREATERESULT_OK);
+    }
+
+    // 828E31D0: graphics allocations must be installed before main memory publishes
+    // each complete three-pointer resource to the streaming destination array.
+    Pool::ECreateResult Pool::MergeBatchAllocations(AllocListSet* lpSet,
+        const BundleV2::ResourceEntry* lpEntries, SmallResource* lpResources)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        for (s32 t = 1; t < 3; ++t)
+        {
+            for (u32 i = 0; i < lpSet->manAllocRequestCounts[t]; ++i)
+            {
+                const u32 luSlot = static_cast<u32>(reinterpret_cast<uintptr_t>(lpSet->mapAllocRequests[t][i].mpOwner));
+                Entry& lrEntry = mpResourceEntries[luSlot];
+                lrEntry.mResource.m_baseResources[t] = lpSet->mapAllocResults[t][i].mpData;
+                lrEntry.mauHeapIndices[t] = lpSet->mapAllocResults[t][i].muIndex;
+            }
+        }
+        for (u32 i = 0; i < lpSet->manAllocRequestCounts[0]; ++i)
+        {
+            const u32 luSlot = static_cast<u32>(reinterpret_cast<uintptr_t>(lpSet->mapAllocRequests[0][i].mpOwner));
+            Entry& lrEntry = mpResourceEntries[luSlot];
+            lrEntry.mResource.m_baseResources[0] = lpSet->mapAllocResults[0][i].mpData;
+            lrEntry.mauHeapIndices[0] = lpSet->mapAllocResults[0][i].muIndex;
+            const s32 liSourceIndex = mpiResourceImportCounts[luSlot];
+            if (liSourceIndex == -1) // the generated entry-list resource has no input bundle entry
+                mpiResourceImportCounts[luSlot] = 0;
+            else
+            {
+                mpiResourceImportCounts[luSlot] = lpEntries[liSourceIndex].muImportCount;
+                lpResources[liSourceIndex] = lrEntry.mResource;
+            }
+        }
+        return CREATERESULT_OK;
+    }
     //
     // All three are thin per-memory-type forwarders onto the matching Heap. The console asserts
     // first (the pool must be valid / the memory type must be one of the three) and then indexes

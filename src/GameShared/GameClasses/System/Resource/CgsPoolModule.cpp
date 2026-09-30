@@ -29,10 +29,8 @@
 //   UpdateLiveUpdate                0x82906E70   (defrag-state driver -- fully reconstructed)
 //   AllocateResourceList            0x82900690   (own TU -- trap-stub here)
 //
-// Calling convention verified from the asm prologues (PPC fastcall: r3=this). Every store/branch/
-// early-out in the asm has a counterpart below; control flow is de-goto'd / de-switch-jumped into
-// idiomatic C++ but semantically identical. Assert message strings + source line numbers are read
-// off the asm string operands. Members are referenced by name (offsets in the header).
+// Allocation request/response bodies use native typed records. Other legacy conversion paths
+// below still contain console-width record views and need completion before full async activation.
 // ======================================================================================
 namespace CgsResource
 {
@@ -115,7 +113,7 @@ namespace CgsResource
     // and forward its fields to AllocateResourceList, then latch the request's event id into
     // miAllocateRequestEventId (X360 *(a1+105268) = *(req+4)).
     //
-    // The request record is a serialised event payload (external fixed layout). Register->field map read
+        // Register->field map read
     // off the asm prologue (AllocateResourceList(this, r4..r11)):
     //   r4 = ld   req+0x10  (8-byte ID)               r5 = lwz  req+0x08  (s32 event id)
     //   r6 = lwz  req+0x18  (ResourceEntry* lo)        r7 = lwz  req+0x20  (s32 numEntries)
@@ -126,22 +124,12 @@ namespace CgsResource
     // ----------------------------------------------------------------------------------------------
     void PoolModule::DoAllocateResourceListRequest(const void* lpRequest)
     {
-        const u8* lpcReq = static_cast<const u8*>(lpRequest);
-        const u64   luId         = *reinterpret_cast<const u64*>(lpcReq + 0x10);   // ld r4,0x10 (8B)
-        const s32   liEventId    = *reinterpret_cast<const s32*>(lpcReq + 0x08);   // lwz r5,8
-        const void* lpEntries    = *reinterpret_cast<const void* const*>(lpcReq + 0x18); // lwz r6,0x18
-        const s32   liNumEntries = *reinterpret_cast<const s32*>(lpcReq + 0x20);   // lwz r7,0x20
-        const void* lpbOut       = *reinterpret_cast<const void* const*>(lpcReq + 0x24); // lwz r8,0x24
-        const void* lpHandles    = *reinterpret_cast<const void* const*>(lpcReq + 0x28); // lwz r9,0x28
-        const bool  lbFlagA      = (*(lpcReq + 0x2C) != 0);   // lbz r10,0x2C
-        const bool  lbFlagB      = (*(lpcReq + 0x2D) != 0);   // lbz r11,0x2D
-
-        AllocateResourceList(luId, liEventId,
-                             const_cast<void*>(lpEntries), liNumEntries,
-                             reinterpret_cast<bool*>(const_cast<void*>(lpbOut)),
-                             const_cast<void*>(lpHandles), lbFlagA, lbFlagB);
-
-        miAllocateRequestEventId = *reinterpret_cast<const s32*>(lpcReq + 0x04);   // X360 *(a1+105268)=*(req+4)
+        const Events::AllocateResourceListRequest& lrRequest =
+            *static_cast<const Events::AllocateResourceListRequest*>(lpRequest);
+        AllocateResourceList(lrRequest.mListId.GetHash(), lrRequest.miPoolId,
+            lrRequest.mpEntries, lrRequest.miNumEntries, lrRequest.mpNeeds,
+            lrRequest.mpResources, lrRequest.mbLiveUpdateReplace, lrRequest.mbAllowFailiure);
+        miAllocateRequestEventId = lrRequest.miEventId;
     }
 
     // ----------------------------------------------------------------------------------------------
@@ -158,9 +146,9 @@ namespace CgsResource
 
     // ----------------------------------------------------------------------------------------------
     // @ 0x82904860 -- UpdateAllocating: poll the allocate step (mAllocateState.Update()) and dispatch:
-    //   SUCCESS(0)/SIMPLEFRAG(4): finalise -- build the 48-byte allocate-response event from the
+    //   SUCCESS(0)/FAILED_SAFELY(4): finalise -- build the allocate-response event from the
     //       allocate-state working set + the request's event id, post it to the pool output queue
-    //       (event id 17, 48 bytes), and drop back to IDLE.
+    //       (event id 17, native sizeof), and drop back to IDLE.
     //   ERROR(1):  assert "Allocation state returned error during load - out of memory loading bundle!"
     //   PEND(2):   nothing (stay allocating).
     //   INTELLIFRAG(3): hand off to the intelligent defrag pass (mIntelliFragState.Begin) and switch to
@@ -173,29 +161,27 @@ namespace CgsResource
         switch (luResult)
         {
         case AllocatePoolModuleState::E_RESULT_SUCCESS:
-        case AllocatePoolModuleState::E_RESULT_SIMPLEFRAG:
+        case AllocatePoolModuleState::E_RESULT_FAILED_SAFELY:
         {
             CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer");   // CgsPoolModule.cpp:534 (asm li r5,0x216)
 
-            // Build the 48-byte allocate-response event (queue event id 17). The X360 marshals the body
+            // Build the native allocate-response event (console size 48; queue event id 17).
+            // The X360 marshals the body
             // from the allocate state's working set (the lwz/ld off r31=&mAllocateState across
             // 0x829048E4..0x8290494C: the owner field *(state+4)+0x10C, the 8-byte id at +8, and the
             // +0x10/0x14/0x1C/0x20/0x24 counters) -- delegate that copy to GenerateResponse (the state
             // owns its layout), then stamp the three DRIVER-controlled fields the asm writes directly:
             //   [+0x00] = 0                          (stw r29, r29=0)
             //   [+0x04] = miAllocateRequestEventId   (lwzx *(this+0x19B34))
-            //   [+0x2C] = (result==SUCCESS) ? 0 : 1  (simple-frag flag; asm cntlzw(result)/extrwi/xori)
-            struct AllocateResponseEvent { u8 mPayload[48]; } lEvent;
-            for (s32 li = 0; li < (s32)sizeof(lEvent.mPayload); ++li)
-                lEvent.mPayload[li] = 0;
+            //   [+0x2C] = (result==SUCCESS) ? 0 : 1  (mbFailed; asm cntlzw/result/extrwi/xori)
+            Events::AllocateResourceListResponse lEvent = {};
             mAllocateState.GenerateResponse(&lEvent);
-            *reinterpret_cast<s32*>(lEvent.mPayload + 0x00) = 0;
-            *reinterpret_cast<s32*>(lEvent.mPayload + 0x04) = miAllocateRequestEventId;
-            lEvent.mPayload[0x2C] = (luResult == AllocatePoolModuleState::E_RESULT_SUCCESS) ? 0 : 1;
+            lEvent.miEventId = miAllocateRequestEventId;
+            lEvent.mbFailed = luResult != AllocatePoolModuleState::E_RESULT_SUCCESS;
 
             PoolIO::OutputBuffer* lpOut = static_cast<PoolIO::OutputBuffer*>(lpOutputBuffer);
             lpOut->GetPoolOutputQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), 17, 48);
+                reinterpret_cast<const CgsModule::Event*>(&lEvent), 17, sizeof(lEvent));
 
             mProcessState = E_UPDATESTATE_IDLE;   // X360 *(this+0x19B30) = 0
             break;
@@ -205,13 +191,13 @@ namespace CgsResource
             break;
         case AllocatePoolModuleState::E_RESULT_PEND:
             break;
-        case AllocatePoolModuleState::E_RESULT_INTELLIFRAG:
+        case AllocatePoolModuleState::E_RESULT_DEFRAGMENT:
         {
             // Hand off to the intelligent defrag pass. The X360 fills an IntelliFragParams from the
             // allocate state's working set + this module's defrag scratch buffers, then Begins it.
             IntelliFragParams lParams;
-            lParams.mpPool                      = 0;   // [marked] working-set copy DEFERRED with AllocateState
-            lParams.mpAllocListSet              = 0;
+            lParams.mpPool                      = mAllocateState.GetPool();
+            lParams.mpAllocListSet              = mAllocateState.GetAllocSet();
             lParams.mpAddressedAllocRequests    = mpAddressedAllocRequests;
             lParams.mpRelocateRequests          = mpRelocateRequests;
             lParams.mpDistributionEntries       = mpDistributionEntries;
@@ -266,8 +252,9 @@ namespace CgsResource
             // its have-request flag is clear) to the allocate handler. The X360 makes this call
             // UNCONDITIONALLY -- the null case is reached only defensively. (Asm: lbz +0xC -> r4 =
             // (flag ? &state+0x10 : 0); bl DoAllocateResourceListRequest.)
-            DoAllocateResourceListRequest(mDeAllocateState.GetPendingAllocateRequest());
-            // X360 *(this+0x19B8C) byte = 0 -- clear the live-update-in-progress flag (mLiveUpdateState region).
+            DoAllocateResourceListRequest(mDeAllocateState.GetPendingAllocation());
+            // 828F394C: clear this deallocation state's pending-request latch.
+            mDeAllocateState.CancelPendingAllocation();
             break;
         }
         default:
@@ -350,7 +337,7 @@ namespace CgsResource
             // event id 17). Modelled with the typed response record (x64-widened; see CgsResourceIOEvents.h).
             Events::AllocateResourceListResponse lEvent;
             mLiveUpdateState.GenerateResponse(&lEvent);
-            lEvent.mbSimpleFrag = false;                    // X360 stb r30(0) into [+0x2C]
+            lEvent.mbFailed = false;                        // X360 stb r30(0) into [+0x2C]
             lEvent.miEventId    = miAllocateRequestEventId; // X360 stw *(this+0x19B34) into [+0x04]
 
             PoolIO::OutputBuffer* lpOut = static_cast<PoolIO::OutputBuffer*>(lpOutputBuffer);
@@ -373,17 +360,39 @@ namespace CgsResource
     }
 
     // ----------------------------------------------------------------------------------------------
-    // AllocateResourceList -- the heavy resource-list allocator the DoAllocateResourceListRequest /
-    // UpdateDeAllocating paths forward to (CgsPoolModule.cpp:1694). It belongs to its own pass (it walks
-    // the bundle entries, batches the per-pool allocations, and drives the defrag state machine); it is
-    // a trap-stub body here so the per-TU compile gate is satisfied without inventing its logic.
+    // AllocateResourceList -- select the target pool and arm ordinary or live-update allocation.
+    // The actual allocation is performed by the corresponding update state.
     // ----------------------------------------------------------------------------------------------
-    bool PoolModule::AllocateResourceList(u64 luId, s32 liEventId, const void* lpEntries, s32 liNumEntries,
-                                          bool* lpbOut, void* lpHandles, bool lbA, bool lbB)
+    bool PoolModule::AllocateResourceList(u64 luId, s32 liPoolId, const void* lpEntries, s32 liNumEntries,
+                                          bool* lpNeeds, void* lpResources, bool lbLiveUpdateReplace, bool lbAllowFailiure)
     {
-        (void)luId; (void)liEventId; (void)lpEntries; (void)liNumEntries;
-        (void)lpbOut; (void)lpHandles; (void)lbA; (void)lbB;
-        CGS_ASSERT(false, "AllocateResourceList: deferred (own TU)");
-        return false;
+        // ARTIST 828E2F88 (the old 82900690 citation was incorrect). r4 carries
+        // the whole ID; r5 is the pool ID, and r11 carries allow-failure.
+        CGS_ASSERT(mProcessState == E_UPDATESTATE_IDLE || mProcessState == E_UPDATESTATE_DEALLOCATING_LIST,
+                   "Can only entry allocate list state from idle state\n");
+        ID lId;
+        lId.SetHash(luId);
+        Pool* lpPool = nullptr;
+        if (!lbLiveUpdateReplace || liPoolId >= 0)
+        {
+            const s32 liPoolIndex = GetPoolIndex(liPoolId);
+            CGS_ASSERT(liPoolIndex >= 0, "Pool not found\n");
+            lpPool = &maPools[liPoolIndex];
+        }
+        if (lbLiveUpdateReplace)
+        {
+            mLiveUpdateState.BeginAllocation(lpPool, lId,
+                static_cast<const BundleV2::ResourceEntry*>(lpEntries), liNumEntries,
+                lpNeeds, static_cast<SmallResource*>(lpResources));
+            mProcessState = E_UPDATESTATE_LIVEUPDATE;
+        }
+        else
+        {
+            mAllocateState.BeginAllocation(lpPool, lId,
+                static_cast<const BundleV2::ResourceEntry*>(lpEntries), liNumEntries,
+                &mAllocListSet, lpNeeds, static_cast<SmallResource*>(lpResources), lbAllowFailiure);
+            mProcessState = E_UPDATESTATE_ALLOCATING_LIST;
+        }
+        return true;
     }
 }

@@ -76,6 +76,8 @@ namespace CgsResource
     // is safe. Source-line refs kept in trailing comments for traceability.
     struct BaseResourcePtr
     {
+        // ARTIST Pool::ReAllocateMemoryForEntry calls Propogate on its owner ring.
+        friend class Pool;
     public:
         BaseResourcePtr();      // @0x82204E20 (bodied in CgsBaseResourcePtr.cpp)
         ~BaseResourcePtr();     // @0x821F1E18 (bodied in CgsBaseResourcePtr.cpp)

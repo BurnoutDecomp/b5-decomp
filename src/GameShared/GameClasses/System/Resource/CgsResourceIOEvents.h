@@ -245,7 +245,7 @@ namespace Events
         char*                               mpcDebugData;        // +28
         s32                                 miNumEntries;        // +32
         bool*                               mpNeeds;             // +36
-        void*                               mpResources;         // +40  (ResourceHandle::Resource*)
+        SmallResource*                      mpResources;         // +40  ResourceHandle::Resource*
         bool                                mbLiveUpdateReplace; // +44
         bool                                mbAllowFailiure;     // +45
         bool                                mbCompressedBundle;  // +46
@@ -255,9 +255,9 @@ namespace Events
     // (queue event id 17) when it finishes. The step state's GenerateResponse fills the working-set body
     // (list id + the caller's bundle-entry array/count/output arrays + the resolved pool id); the driver
     // (PoolModule::UpdateAllocating / UpdateLiveUpdate) then stamps the request's event id (miEventId)
-    // and the trailing simple-frag flag before posting. X360 store offsets (from GenerateResponse
+    // and the trailing failure flag before posting. X360 store offsets (from GenerateResponse
     // 0x828E4200): miPoolId@+0x08, mListId@+0x10, mpEntries@+0x18, miNumEntries@+0x1C, mpNeeds@+0x20,
-    // mpResources@+0x24, mpListEntry@+0x28, mbSimpleFrag@+0x2C (48-byte record on the 32-bit target;
+    // mpResources@+0x24, mpListEntry@+0x28, mbFailed@+0x2C (48-byte record on the 32-bit target;
     // x64-widened here). Field order mirrors AllocateResourceListRequest.
     struct AllocateResourceListResponse : public PoolEvent
     {
@@ -265,9 +265,9 @@ namespace Events
         const BundleV2::ResourceEntry* mpEntries;     // +0x18
         s32                            miNumEntries;  // +0x1C
         bool*                          mpNeeds;       // +0x20
-        void*                          mpResources;   // +0x24  (ResourceHandle::Resource*)
+        SmallResource*                 mpResources;   // +0x24  ResourceHandle::Resource*
         Entry*                         mpListEntry;   // +0x28  the list's own entry-list resource entry
-        bool                           mbSimpleFrag;  // +0x2C  driver-stamped (simple-frag / result flag)
+        bool                           mbFailed;      // +0x2C, DWARF :639; allocation result 4 is FAILED_SAFELY
     };
 
     // Acquire a single already-loaded resource by id from a pool (resource request id 4 -> pool input).

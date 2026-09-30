@@ -200,14 +200,35 @@ namespace CgsResource
         // (The real pool set is created by GameDataModule::CreatePools, which drives CreatePool over the
         // extracted memory-map table -- not here. The earlier single [5b TEST] pool was retired once that
         // data-driven loader landed.)
-        (void)lpAllocator;
+        // ARTIST 828FC0B8 allocates 4096 request/result records for each memory
+        // type. Native records contain 64-bit pointers, so retain the count and
+        // use their host sizeof/alignment when carving the parent allocator.
+        rw::IResourceAllocator* lpResourceAllocator = static_cast<rw::IResourceAllocator*>(lpAllocator);
+        CGS_ASSERT(lpResourceAllocator != nullptr, "lpAllocator");
+        for (s32 t = 0; t < 3; ++t)
+        {
+            rw::ResourceDescriptor lDescriptor = {};
+            lDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(AllocRequest) * KI_MAX_ALLOCATION_REQUESTS;
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = alignof(AllocRequest);
+            mAllocListSet.mapAllocRequests[t] = static_cast<AllocRequest*>(
+                lpResourceAllocator->DoAllocate(lDescriptor, nullptr).m_baseResources[0]);
+            lDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(AllocResult) * KI_MAX_ALLOCATION_REQUESTS;
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = alignof(AllocResult);
+            mAllocListSet.mapAllocResults[t] = static_cast<AllocResult*>(
+                lpResourceAllocator->DoAllocate(lDescriptor, nullptr).m_baseResources[0]);
+            CGS_ASSERT(mAllocListSet.mapAllocRequests[t] != nullptr, "Out of memory\n");
+            CGS_ASSERT(mAllocListSet.mapAllocResults[t] != nullptr, "Out of memory\n");
+        }
+        mAllocListSet.ClearCountsAndResults();
+        mProcessState = E_UPDATESTATE_IDLE;
+        mAllocateState.Construct(this);
 
         // ---- DEFERRED back half (rw-allocator + subsystem gated) ----------------------------------
         // Still deferred (need the allocator + subsystems): (1) the built-in "IDList" type (allocate +
         // IDListResourceType vtable + cache); (2) ScratchPool::InitPool over an allocator-carved
-        // OverheadMemoryRequired block (CgsPoolModule.cpp:119 "Out of memory"); (3) the 5 pool-type
-        // resource regions through the allocator (:130/131/164-168); (4) the two ID::HashString-keyed
-        // defrag sub-objects; (5) zeroing the defrag-state cluster.
+        // OverheadMemoryRequired block (CgsPoolModule.cpp:119 "Out of memory"); (3) the defrag
+        // scratch arrays (:164-168); (4) the remaining defrag/live-update sub-object setup.
+        // The allocation request/result arrays and ordinary allocation state above are restored.
     }
     // @ 0x829076D8 - per-frame pool dispatch (pool-create slice): write-lock the output + read-lock the
     // input, drain the input requests (ProcessInputBuffer), unlock the input, drain the receiver queue
