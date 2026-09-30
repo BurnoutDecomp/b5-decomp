@@ -82,6 +82,19 @@ int main(){
             }
             Check(repeated&&decoder.mHeap.GetLargestFreeBlock(true)==originalInflateFree,
                 "blocking completion and repeated streams preserve outputs and reclaim inflate storage");
+            decoder.BeginStream();decoder.CreateEntry(output.data()+16,sizeof(Payload));
+            decoder.AppendToEntry(const_cast<u8*>(Packed),split);decoder.RunFlushJobs();
+            decoder.CancelStreamPC();
+            Check(decoder.meStage==CgsResource::E_DJS_IDLE&&!decoder.mbEntryInProgress
+                &&decoder.mHeap.GetLargestFreeBlock(true)==originalInflateFree,
+                "cancelling an unfinished stream joins the worker and frees its native inflate workspace");
+            u8 resumed[64]{};
+            decoder.BeginStream();decoder.CreateEntry(resumed,sizeof(resumed));
+            decoder.AppendToEntry(const_cast<u8*>(SmallPacked),sizeof(SmallPacked));decoder.FinishEntry();
+            decoder.RunFlushJobs();decoder.WaitForFlushJobs(true);decoder.EndStream();
+            Check(std::memcmp(resumed,Payload,sizeof(resumed))==0
+                &&decoder.mHeap.GetLargestFreeBlock(true)==originalInflateFree,
+                "a cancelled interface can start another stream without stale inflate state");
         }
         scheduler.Destroy();
     }

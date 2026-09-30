@@ -2,12 +2,18 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"  // PoolModule::GetPool (resolve poolId)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // [stream] trace
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"
+#include <new>
 
-// Bundle loader lifetime and native adapters. The staged protocol lives in
-// CgsBundleLoaderModule.cpp; ResourceModule still selects the synchronous path
-// until allocator setup, compressed-stream jobs and failure teardown are ready.
+// Bundle loader lifetime and native adapters. ResourceModule drives the staged
+// protocol in CgsBundleLoaderModule.cpp with allocator-backed stream buffers.
 namespace CgsResource
 {
+    // FLAG PC-platform leaf: resource destinations must outlive native workers.
+    void BundleLoaderModule::CancelStreamPC()
+    {
+        mDecompressionJobInterface.CancelStreamPC();
+    }
     // @ 0x828E2678 - resumable prepare stage machine: free every stream slot, clear the
     // receiver + load/unload queues, then bring up the base module.
     bool BundleLoaderModule::Prepare()
@@ -18,6 +24,7 @@ namespace CgsResource
         case E_STAGE_START:
             maStreams[0] = nullptr;
             maStreams[1] = nullptr;
+            mabStreamOpenFailed[0] = mabStreamOpenFailed[1] = false;
             meStreamStage = STREAMSTAGE_IDLE;
             miNumLoadedBundles = 0;
             for (s32 li = 0; li < miMaxLoadedBundles; ++li)
@@ -75,9 +82,8 @@ namespace CgsResource
         CgsModule::ModuleSingleBuffered::Destruct();
     }
 
-    // Compatibility construction for the current synchronous ResourceModule.
-    // Allocator-backed Construct (ARTIST828EBAF8) and compressed job submission
-    // must be restored before selecting the staged driver below at runtime.
+    // Shared queue initialization. Production supplies the backing allocations
+    // through the ARTIST828EBAF8 overload; protocol fixtures supply their own.
     void BundleLoaderModule::Construct()
     {
         CgsModule::ModuleSingleBuffered::Construct();
@@ -94,11 +100,70 @@ namespace CgsResource
         miCurrentStream = 0;
         mabStreamBuffersUsed[0] = false;
         mabStreamBuffersUsed[1] = false;
-        // The allocator-backed Construct supplies these tables when the staged
-        // runtime is connected. The synchronous startup has no loaded table.
+        mabStreamOpenFailed[0] = mabStreamOpenFailed[1] = false;
+        // The allocator-backed overload supplies the loaded-bundle table.
         mpLoadedBundles = nullptr;
         miMaxLoadedBundles = 0;
         miMaxPartialFixups = 60;
+    }
+
+    // ARTIST828EBAF8..828EC144; descriptors contain five native resource lanes.
+    // Backing blocks belong to the supplied resource allocator's lifetime.
+    void BundleLoaderModule::Construct(const InitOptions* lpOptions,
+                                      rw::IResourceAllocator* lpAllocator,
+                                      rw::IResourceAllocator* lpDebugAllocator)
+    {
+        Construct();
+        miBundleHeaderBufferSize = lpOptions->miBundleHeaderBufferSize;
+        miDebugBufferSize = lpOptions->miDebugDataBufferSize;
+        miStreamBufferSize = lpOptions->miStreamBufferSize;
+        miMaxBundles = lpOptions->miMaxBundles;
+        miMaxResourcesPerBundle = lpOptions->miMaxResourcesPerBundle;
+        miMaxLoadedBundles = miMaxBundles;
+        mbForceUpperCaseFileNames = lpOptions->mbForceUpperCaseFileNames;
+        miNumLoadedBundles = 0;
+
+        const auto lAllocate = [lpAllocator](size_t luSize, u32 luAlignment) -> void*
+        {
+            rw::ResourceDescriptor lDescriptor;
+            lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(luSize);
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
+            return lpAllocator->DoAllocate(lDescriptor, nullptr).m_baseResources[0];
+        };
+        mpDecompressionEntries = static_cast<CompressedData*>(lAllocate(
+            sizeof(CompressedData) * miMaxResourcesPerBundle, 128));
+        mapcStreamBuffers[0] = static_cast<char*>(lAllocate(miStreamBufferSize, 128));
+        mapcStreamBuffers[1] = static_cast<char*>(lAllocate(miStreamBufferSize, 128));
+        mpcSecondaryStreamBuffer = static_cast<char*>(lAllocate(KU_SECONDARY_STREAM_BUFFER_SIZE, 128));
+        mpcHeaderBuffer = static_cast<char*>(lAllocate(miBundleHeaderBufferSize, 16));
+        mpNeeds = static_cast<bool*>(lAllocate(sizeof(bool) * miMaxResourcesPerBundle, 16));
+        mpResources = static_cast<SmallResource*>(lAllocate(sizeof(SmallResource) * miMaxResourcesPerBundle, 16));
+        mpLoadedBundles = static_cast<LoadedBundleData*>(lAllocate(sizeof(LoadedBundleData) * miMaxLoadedBundles, 16));
+        if (mpResources)
+            for (s32 li = 0; li < miMaxResourcesPerBundle; ++li) ::new (mpResources + li) SmallResource;
+        if (mpLoadedBundles)
+            for (s32 li = 0; li < miMaxLoadedBundles; ++li) ::new (mpLoadedBundles + li) LoadedBundleData;
+        mpcDebugDataBuffer = nullptr;
+        if (miDebugBufferSize > 0 && lpDebugAllocator)
+        {
+            rw::ResourceDescriptor lDebugDescriptor;
+            lDebugDescriptor.m_baseResourceDescriptors[0].m_size = miDebugBufferSize;
+            lDebugDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+            mpcDebugDataBuffer = static_cast<char*>(
+                lpDebugAllocator->DoAllocate(lDebugDescriptor, nullptr).m_baseResources[0]);
+        }
+        mDecompressionJobInterface.Construct(CgsSystem::JobManager(), mpDecompressionEntries,
+                                             miMaxResourcesPerBundle);
+        CGS_ASSERT(mpcHeaderBuffer && mpNeeds && mpResources && mpLoadedBundles,
+                   "Ran out of memory allocating bundle loader\n");
+        CGS_ASSERT(mapcStreamBuffers[0], "Ran out of memory allocating stream buffer 0\n");
+        CGS_ASSERT(mapcStreamBuffers[1], "Ran out of memory allocating stream buffer 1\n");
+        miCurrentMemoryType = 0;
+        miCurrentResourcePosition = 0;
+        miCurrentResource = 0;
+        LARGE_INTEGER lTicks;
+        QueryPerformanceCounter(&lTicks);
+        muTimerTrace = static_cast<u64>(lTicks.QuadPart);
     }
     bool BundleLoaderModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
     {

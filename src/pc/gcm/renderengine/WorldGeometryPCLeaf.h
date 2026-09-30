@@ -123,6 +123,8 @@ namespace renderengine
     // are implemented by XenonD3D9Shims and called by the mirror lifecycle below.
     void WorldVd32_OnResourceMemoryFreed(const void* lpBase, size_t luSize);
     void WorldVd32_ReleaseAll();
+    // Create the native declaration at resource fixup without publishing draw state.
+    bool WorldVd32_PrepareResource(const void* lpVdImage);
 
     // Release everything. NO CALLER TODAY: this build never tears the D3D device down
     // (there is no gDevice->Release() anywhere -- process exit reclaims it), so nothing

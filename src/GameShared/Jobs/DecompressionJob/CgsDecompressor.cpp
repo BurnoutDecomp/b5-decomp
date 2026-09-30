@@ -7,6 +7,12 @@
 
 namespace CgsResource
 {
+    void Decompressor::CancelStreamPC()
+    {
+        // FLAG PC-platform leaf: the stable native worker owns zlib's state.
+        // The caller has joined execution and verified an active stream state.
+        if (mStream.state) inflateEnd(&mStream);
+    }
     // 0x82ACC9C0 -- zlib zalloc trampoline. zlib passes the z_stream::opaque (our `this`) and the
     // item count/size; allocate items*size from the job's heap at 4-byte alignment.
     void* Decompressor::CompressorAllocateCallback(void* lpOpaque, uInt luItems, uInt luSize)

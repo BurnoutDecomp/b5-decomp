@@ -11,6 +11,7 @@
 
 namespace CgsResource {
 class PoolModule;
+struct CompressedData;
 struct RunningLoad { Events::LoadBundleRequest mLoadRequest; };
 
 // DecFIGS CgsBundleLoaderModule.h:62; ARTIST ProcessPoolResponses 828EC148.
@@ -45,9 +46,12 @@ public:
     BundleLoaderModule() = default;
     static const u32 KU_SECONDARY_STREAM_BUFFER_SIZE = 0x80000;
     void Construct();
+    void Construct(const InitOptions* lpOptions, rw::IResourceAllocator* lpAllocator,
+                   rw::IResourceAllocator* lpDebugAllocator);
     bool Prepare();
     bool Release();
     void Destruct();
+    void CancelStreamPC();
     bool Update(void* lpInputBuffer, void* lpOutputBuffer);
     void ProcessReceiverQueue();
     void ProcessPoolResponses();
@@ -60,8 +64,7 @@ public:
     bool CheckForLoads(BundleLoaderIO::OutputBuffer* lpOutput);
     bool CheckForUnloads(BundleLoaderIO::OutputBuffer* lpOutput);
 
-    // Existing synchronous intake remains until ResourceModule's full stream,
-    // failure and emergency-stall handoffs are connected.
+    // Legacy synchronous adapter; the runtime uses the staged input protocol.
     void EnqueueLoadRequest(const Events::LoadBundleRequest& lrRequest);
     void ProcessLoadRequests(PoolModule* lpPoolModule, FTypeResolver lpfnResolveType);
     void EnqueueUnloadRequest(const Events::UnloadBundleRequest& lrRequest);
@@ -97,6 +100,8 @@ private:
     char* mpcHeaderBuffer;
     char* mpcDebugDataBuffer;
     bool mabStreamBuffersUsed[2];
+    // FLAG PC-platform leaf: invalid open-response handles retire failed loads.
+    bool mabStreamOpenFailed[2];
     char* mapcStreamBuffers[2];
     char* mpcSecondaryStreamBuffer;
     bool* mpNeeds;
@@ -121,6 +126,7 @@ private:
     s32 miNumLoadedBundles;
     s32 miMaxLoadedBundles;
     DecompressionJobInterface mDecompressionJobInterface;
+    CompressedData* mpDecompressionEntries;
     void* mpDecompressionStreamStart;
     u32 muDecompressionStreamSize;
     bool mbStreamJobStarted;

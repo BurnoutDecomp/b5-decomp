@@ -9,9 +9,8 @@
 #include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include <cstring>                                    // memset (InitOptions zero-init)
 
-// CgsResource::ResourceModule - see the header. This pass reconstructs the lifecycle
-// orchestration spine (Prepare / Release). Construct + Update + the request shuttles are
-// DEFERRED (rw allocator middleware) as inert marked stubs.
+// CgsResource::ResourceModule: native module lifetime and staged request shuttles.
+// Update preserves the loader -> pool -> memory order and delayed pool replies.
 namespace CgsResource
 {
     // Minimal placeholder debug component (deferred).
@@ -82,6 +81,8 @@ namespace CgsResource
         switch (meReleaseStage)
         {
         case E_RELEASE_START:
+            mBundleLoaderModule.CancelStreamPC();
+            // fall through
         case E_RELEASE_POOL:
             meReleaseStage = E_RELEASE_POOL;
             if (!mPoolModule.Release())
@@ -117,13 +118,8 @@ namespace CgsResource
         }
     }
 
-    // @ 0x829055B0 - construct the sub-modules over the resource heaps. [5b in progress] lpInitOptions
-    // is now the real CgsResource::ResourceModule::InitOptions composite (the GameDataModule builds it);
-    // each sub-module gets its own option block. Brings up the MemoryModule (carves the bank/block tables
-    // from the resource allocator, from mMemoryInitOptions) and the PoolModule structural front half
-    // (base + 128 Pool::Construct + stages); the PoolModule allocator-gated back half (consumes
-    // mPoolInitOptions), BundleLoaderModule/FileSystem Construct + the FileSystem GeneralResourceAllocator
-    // remain deferred (next 5b passes). lpAllocator is the root rw::IResourceAllocator.
+    // ARTIST829055B0: construct the modules over the supplied resource allocator.
+    // FileSystem uses its existing native device-manager adapter.
     void ResourceModule::Construct(const void* lpInitOptions, void* lpAllocator)
     {
         if (lpInitOptions == 0 || lpAllocator == 0)
@@ -135,18 +131,29 @@ namespace CgsResource
             const_cast<CgsMemory::MemoryModule::InitOptions*>(&lpOptions->mMemoryInitOptions),
             lpRwAllocator);
         mFileSystem.Construct();
-        // PoolModule front half (rw-allocator-independent: base + 128 Pool::Construct + stage init).
-        // It receives its own mPoolInitOptions; the front half ignores it (the type-registry /
-        // ScratchPool / region allocations that consume it are deferred to the back half).
         mPoolModule.Construct(&lpOptions->mPoolInitOptions, lpAllocator);
-        // Bundle loader intake queues (the X360 BundleLoaderModule::Construct 0x828EBAF8
-        // runs from this chain; the PC slice constructs the load/unload request queues the
-        // GameData world-request pump routes into).
-        mBundleLoaderModule.Construct();
+        mBundleLoaderModule.Construct(&lpOptions->mLoaderInitOptions, lpRwAllocator,
+                                      lpOptions->mDebugParams.mpDebugAllocator);
     }
-    // Update (0x82907948) pumps each sub-module + shuttles requests; Destruct (0x828EC6B0) tears them
-    // down. Deferred.
-    void ResourceModule::Destruct() {}
+    // ARTIST828EC6B0, with retirement of native pending-response allocations.
+    void ResourceModule::Destruct()
+    {
+        // FLAG PC-platform leaf: temporary native response records are owned
+        // by this shuttle. Release has closed the stream slots before teardown.
+        PendingFileResponse* lapPending[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES] = {};
+        const s32 liCount = mPendingFileResponses.Get(lapPending, KI_MAX_PENDING_FILE_SYSTEM_RESPONSES);
+        for (s32 li = 0; li < liCount; ++li)
+        {
+            if (lapPending[li]->meEvent == 16)
+                delete static_cast<Events::OpenReadStreamResponse*>(lapPending[li]->mpResponse);
+            else if (lapPending[li]->meEvent == 18)
+                delete static_cast<Events::CloseReadStreamResponse*>(lapPending[li]->mpResponse);
+            mPendingFileResponses.Push(mPendingFileResponses.GetObjectIndex(lapPending[li]));
+        }
+        // ARTIST828EC6B0.
+        mFileSystem.Destruct();
+        CgsModule::ModuleSingleBuffered::Destruct();
+    }
 
     // @ 0x82907268 - route inbound resource requests to the sub-module inputs. Pool-create slice: a
     // CreatePool request (id 0) is forwarded to the pool input queue. [The bundle/file/memory request
@@ -183,6 +190,87 @@ namespace CgsResource
             liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;
         }
+    }
+
+    // ARTIST82907268: native event sizes are carried by the queue. Pool and
+    // memory tags below are the original switch values, not resource tags.
+    void ResourceModule::ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn,
+        CgsMemory::MemoryIO::InputBuffer* lpMemIn,
+        BundleLoaderIO::InputBuffer_Update* lpLoaderIn, PoolIO::InputBuffer* lpPoolIn)
+    {
+        const auto* lpQueue = static_cast<const ResourceIO::InputBuffer*>(lpResIn)->GetResourceQueue();
+        auto* lpPoolQueue = lpPoolIn->GetPoolInputQueue();
+        const CgsModule::Event* lpEvent = nullptr;
+        s32 liSize = 0;
+        s32 liTag = lpQueue->GetFirstEvent(&lpEvent, &liSize);
+        while (lpEvent)
+        {
+            switch (liTag)
+            {
+            case 0: lpPoolQueue->AddEvent(lpEvent, 0, liSize); break;
+            case 1: break;
+            case 2: lpLoaderIn->GetLoadBundleRequestQueue()->AddEvent(
+                        *reinterpret_cast<const Events::LoadBundleRequest*>(lpEvent)); break;
+            case 3: lpLoaderIn->GetUnloadBundleRequestQueue()->AddEvent(
+                        *reinterpret_cast<const Events::UnloadBundleRequest*>(lpEvent)); break;
+            case 4: case 5: lpPoolQueue->AddEvent(lpEvent, liTag, liSize); break;
+            case 6: lpPoolQueue->AddEvent(lpEvent, 8, liSize); break;
+            case 7: lpPoolQueue->AddEvent(lpEvent, 11, liSize); break;
+            case 8: lpPoolQueue->AddEvent(lpEvent, 12, liSize); break;
+            case 9: case 10: case 11: case 12: case 13: case 14: case 15:
+                lpMemIn->GetMemoryRequestQueue()->AddEvent(lpEvent, 1, liSize); break;
+            case 16: AddOpenReadStreamRequest(reinterpret_cast<const Events::OpenReadStreamRequest*>(lpEvent)); break;
+            case 17: AddOpenWriteStreamRequest(reinterpret_cast<const Events::OpenWriteStreamRequest*>(lpEvent)); break;
+            case 18: AddCloseReadStreamRequest(reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent)); break;
+            case 19: AddCloseWriteStreamRequest(reinterpret_cast<const Events::CloseWriteStreamRequest*>(lpEvent)); break;
+            default: CGS_ASSERT(false, "Invalid event id\n"); break;
+            }
+            const CgsModule::Event* lpNext = nullptr;
+            liTag = lpQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+    }
+
+    // ARTIST82907580..82907630 (export hole).
+    void ResourceModule::ProcessBundleLoaderStreamRequests(const BundleLoaderIO::OutputBuffer* lpLoaderOut)
+    {
+        const auto* lpQueue = lpLoaderOut->GetStreamRequestQueue();
+        const CgsModule::Event* lpEvent = nullptr;
+        s32 liSize = 0;
+        s32 liTag = lpQueue->GetFirstEvent(&lpEvent, &liSize);
+        while (lpEvent)
+        {
+            if (liTag == 16)
+                AddOpenReadStreamRequest(reinterpret_cast<const Events::OpenReadStreamRequest*>(lpEvent));
+            else if (liTag == 18)
+                AddCloseReadStreamRequest(reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent));
+            else
+                CGS_ASSERT(false, "Unexpected request from bundle loader\n");
+            const CgsModule::Event* lpNext = nullptr;
+            liTag = lpQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+    }
+
+    // ARTIST828EC788: bundle replies precede externally addressed pool replies.
+    void ResourceModule::ProcessResourceResponses(const BundleLoaderIO::OutputBuffer* lpLoaderOut,
+                                                  PoolIO::OutputBuffer* lpPoolOut)
+    {
+        const auto* lpLoads = lpLoaderOut->GetLoadBundleResponseQueue();
+        for (s32 li = 0; li < lpLoads->GetLength(); ++li)
+        {
+            const auto& lrResponse = lpLoads->GetEvent(li);
+            if (lrResponse.mpUser)
+                lrResponse.mpUser->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrResponse), 2, sizeof(lrResponse));
+        }
+        const auto* lpUnloads = lpLoaderOut->GetUnloadBundleResponseQueue();
+        for (s32 li = 0; li < lpUnloads->GetLength(); ++li)
+        {
+            const auto& lrResponse = lpUnloads->GetEvent(li);
+            if (lrResponse.mpUser)
+                lrResponse.mpUser->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrResponse), 3, sizeof(lrResponse));
+        }
+        ProcessPoolOutputResponses(lpPoolOut);
     }
 
     // ARTIST @0x829070B0. Start the asynchronous read-stream open, build the
@@ -270,7 +358,30 @@ namespace CgsResource
                 Events::OpenReadStreamResponse* lpResponse =
                     static_cast<Events::OpenReadStreamResponse*>(
                         lpPending->mpResponse);
-                lbComplete = mFileSystem.IsReadStreamOpen(lpResponse->GetStream());
+                // FLAG PC-platform leaf: finish a failed open only after its
+                // stream slot has closed. The invalid response handle carries
+                // failure without changing the original response record shape.
+                if (lpPending->muFileId != 0xFFFFFFFFu)
+                {
+                    lbComplete = mFileSystem.IsReadStreamClosed(lpPending->muFileId);
+                }
+                else if (mFileSystem.HasReadStreamFailedPC(lpResponse->GetStream()))
+                {
+                    const auto lStream = lpResponse->GetStream();
+                    if (lStream.IsValid())
+                    {
+                        lpPending->muFileId = mFileSystem.GetReadStreamIndex(lStream);
+                        mFileSystem.CloseReadStream(lStream);
+                        lbComplete = mFileSystem.IsReadStreamClosed(lpPending->muFileId);
+                    }
+                    else
+                        lbComplete = true;
+                    CgsFileSystem::ReadStream lInvalid;
+                    lInvalid.Construct(nullptr);
+                    lpResponse->Construct(lpResponse->GetUser(), lpResponse->GetEventId(), lInvalid);
+                }
+                else
+                    lbComplete = mFileSystem.IsReadStreamOpen(lpResponse->GetStream());
                 lpUser = lpResponse->GetUser();
                 liResponseSize = sizeof(*lpResponse);
             }
@@ -329,14 +440,15 @@ namespace CgsResource
         {
             CgsModule::BaseEventReceiverQueue* lpUser =
                 reinterpret_cast<const Events::PoolEvent*>(lpEvent)->mpUser;
-            if (lpUser != 0)
+            if (lpUser != 0 && liId >= 0 && liId < 15)
             {
                 // dword_820F7194[tag]: [6] == 4 (acquire), [7] == 5 (acquire-list). Both values are
                 // read straight out of the ARTIST image's translation table, so the acquire mapping
                 // that was already committed here doubles as the calibration for the new one.
-                const s32 liUserId = (liId == 6) ? 4 /*AcquireResource response*/
-                                   : (liId == 7) ? 5 /*AcquireResourceList response*/
-                                                 : liId;
+                // ARTIST820F7194, calibrated by acquire6->4/acquire-list7->5.
+                static const s32 kaiReceiverTags[15] =
+                    {26,0,26,1,26,26,4,5,26,6,24,7,8,7,8};
+                const s32 liUserId = kaiReceiverTags[liId];
                 lpUser->AddEvent(lpEvent, liUserId, liSize);
             }
             const CgsModule::Event* lpNext = 0;
@@ -345,82 +457,71 @@ namespace CgsResource
         }
     }
 
-    // @ 0x82907948 - the per-frame streaming shuttle (pool-create slice): route inbound resource requests
-    // to the pool, run the pool module (CreatePool -> memory requests; receiver -> DoCreatePoolRequest),
-    // forward pool memory requests to the MemoryModule, run it (allocate the banks), then route the memory
-    // responses back to the pool's receiver queue. Multi-frame: a CreatePool sent in frame N has its bank
-    // allocated + response queued the same frame, but the receiver is drained at the START of the pool
-    // update, so DoCreatePoolRequest (the actual CreatePool) runs frame N+1. The scratch sub-module IO
-    // buffers are function-static (the X360 creates them on an IOBufferStack each frame). [The bundle-loader
-    // + file-system sub-shuttles + ProcessResourceResponses are deferred -- not exercised by pool creation.]
+    // ARTIST82907948: pump loader, pool and memory in order. Allocation/fixup
+    // responses are retained until the next update, as in the original pipeline.
     bool ResourceModule::Update(void* lpInputBuffer, void* /*lpOutputBuffer*/)
     {
-        ResourceIO::InputBuffer* lpResIn = static_cast<ResourceIO::InputBuffer*>(lpInputBuffer);
-        if (lpResIn == 0)
-            return false;
+        auto* lpResIn = static_cast<ResourceIO::InputBuffer*>(lpInputBuffer);
+        if (!lpResIn) return false;
+
+        // FLAG PC-platform leaf: the current module adapter receives no IO stacks.
+        // Reuse its serialized scratch buffers; Construct resets queue metadata,
+        // not the backing event arrays. Stage ordering is ARTIST82907948.
+        static PoolIO::InputBuffer s_poolIn;
+        static PoolIO::OutputBuffer s_poolOut;
+        static CgsMemory::MemoryIO::InputBuffer s_memIn;
+        static CgsMemory::MemoryIO::OutputBuffer s_memOut;
+        static BundleLoaderIO::InputBuffer_Update s_loaderIn;
+        static BundleLoaderIO::OutputBuffer s_loaderOut;
+        static BundleLoaderIO::InputBuffer_Record s_loaderRecord;
+        s_poolIn.Construct(); s_poolOut.Construct();
+        s_memIn.Construct(); s_memOut.Construct();
+        s_loaderIn.Construct(); s_loaderOut.Construct(); s_loaderRecord.Construct();
 
         ProcessPendingFileSystemResponses();
-
-        static PoolIO::InputBuffer               s_poolIn;
-        static PoolIO::OutputBuffer              s_poolOut;
-        static CgsMemory::MemoryIO::InputBuffer  s_memIn;
-        static CgsMemory::MemoryIO::OutputBuffer s_memOut;
-        static bool s_ctor = false;
-        if (!s_ctor) { s_poolIn.Construct(); s_poolOut.Construct(); s_memIn.Construct(); s_memOut.Construct(); s_ctor = true; }
-
-        // clear the scratch sub-module queues for this frame
-        s_poolIn.LockForWrite();  s_poolIn.GetPoolInputQueue()->Clear();            s_poolIn.UnlockForWrite();
-        s_poolOut.LockForWrite(); s_poolOut.GetPoolResourceRequestQueue()->Clear(); s_poolOut.GetPoolOutputQueue()->Clear(); s_poolOut.UnlockForWrite();
-        s_memIn.LockForWrite();   s_memIn.GetMemoryRequestQueue()->Clear();         s_memIn.UnlockForWrite();
-        s_memOut.LockForWrite();  s_memOut.GetMemoryResponseQueue()->Clear();       s_memOut.UnlockForWrite();
-
-        // [1] inbound resource requests -> pool input, then consume the resource input.
-        lpResIn->LockForRead(); s_poolIn.LockForWrite();
-        ProcessResourceRequests(lpResIn, &s_poolIn);
-        s_poolIn.UnlockForWrite(); lpResIn->UnlockForRead();
+        lpResIn->LockForRead();
+        s_memIn.LockForWrite(); s_loaderIn.LockForWrite(); s_poolIn.LockForWrite();
+        ProcessResourceRequests(lpResIn, &s_memIn, &s_loaderIn, &s_poolIn);
+        s_poolIn.UnlockForWrite(); s_loaderIn.UnlockForWrite(); s_memIn.UnlockForWrite();
+        lpResIn->UnlockForRead();
         lpResIn->LockForWrite(); lpResIn->GetResourceQueue()->Clear(); lpResIn->UnlockForWrite();
 
-        // [2] pool module: CreatePool requests -> memory requests; AcquireResource -> pool output;
-        //     drain receiver -> DoCreatePoolRequest.
-        {
-            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_POOL);
-            mPoolModule.Update(&s_poolIn, &s_poolOut);
-        }
-
-        // [2b] route pool output responses (AcquireResource etc.) back to their requesters.
-        s_poolOut.LockForRead();
-        ProcessPoolOutputResponses(&s_poolOut);
-        s_poolOut.UnlockForRead();
-
-        // [3] pool memory requests -> MemoryModule input.
-        s_poolOut.LockForRead(); s_memIn.LockForWrite();
-        ProcessPoolResourceRequests(&s_memIn, &s_poolOut);
-        s_memIn.UnlockForWrite(); s_poolOut.UnlockForRead();
-
-        // [4] MemoryModule: allocate the requested banks.
-        {
-            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_MEMORY);
-            mMemoryModule.Update(0, 0, &s_memIn, &s_memOut);
-        }
-
-        // [5] memory responses -> their receiver queues (drained next frame by the pool module).
-        s_memOut.LockForRead();
-        ProcessMemoryResponses(&s_memOut);
-        s_memOut.UnlockForRead();
-
-        // [6] bundle loader: drain the LoadBundleRequests routed in [1] and load each into its (already
-        // created) pool via the PC synchronous BundleLoader, replying with a LoadBundleResponse. [The X360
-        // async streaming FSM + FileSystem are the deferred remainder; see BundleLoaderModule.]
         {
             renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_LOAD);
-            mBundleLoaderModule.ProcessLoadRequests(&mPoolModule, ResolveResourceType);
+            mBundleLoaderModule.Update(&s_loaderIn, &s_loaderOut);
+            s_loaderOut.LockForRead();
+            ProcessBundleLoaderStreamRequests(&s_loaderOut);
+            s_loaderOut.UnlockForRead();
         }
+        s_poolIn.LockForWrite(); s_loaderOut.LockForRead();
+        s_poolIn.GetPoolInputQueue()->Append(
+            *static_cast<const BundleLoaderIO::OutputBuffer&>(s_loaderOut).GetPoolSendQueue());
+        s_loaderOut.UnlockForRead(); s_poolIn.UnlockForWrite();
+        bool lbBusy;
         {
-            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_UNLOAD);
-            mBundleLoaderModule.ProcessUnloadRequests(&mPoolModule);
+            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_POOL);
+            lbBusy = mPoolModule.Update(&s_poolIn, &s_poolOut);
         }
+        // Retain pool replies for the NEXT loader update. Its current source
+        // buffers stay owned by this load until allocation/fixup completion.
+        s_loaderRecord.LockForWrite(); s_poolOut.LockForRead();
+        s_loaderRecord.GetPoolReceiveQueue()->Append(
+            *static_cast<const PoolIO::OutputBuffer&>(s_poolOut).GetPoolOutputQueue());
+        s_poolOut.UnlockForRead(); s_loaderRecord.UnlockForWrite();
+        mBundleLoaderModule.RecordPostUpdateEvents(&s_loaderRecord);
 
-        return false;
+        s_memIn.LockForWrite(); s_poolOut.LockForRead();
+        ProcessPoolResourceRequests(&s_memIn, &s_poolOut);
+        s_poolOut.UnlockForRead(); s_memIn.UnlockForWrite();
+        {
+            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_MEMORY);
+            mMemoryModule.Update(nullptr, nullptr, &s_memIn, &s_memOut);
+        }
+        s_memOut.LockForRead(); ProcessMemoryResponses(&s_memOut); s_memOut.UnlockForRead();
+        s_loaderOut.LockForRead(); s_poolOut.LockForRead();
+        ProcessResourceResponses(&s_loaderOut, &s_poolOut);
+        s_poolOut.UnlockForRead(); s_loaderOut.UnlockForRead();
+        return lbBusy;
     }
 
     // @ 0x829019F0 - forward the pool module's emitted resource-memory requests into the MemoryModule
@@ -468,8 +569,9 @@ namespace CgsResource
             CgsModule::BaseEventReceiverQueue* lpReceiver = lpResp->GetUser();
             if (lpReceiver != 0)
             {
-                const s32 liReceiverTag =
-                    (lpResp->GetEventType() == CgsMemory::MemoryIO::E_EVENT_TYPE_CREATE_RESOURCE) ? 10 : 0;
+                // ARTIST820F71D0; CREATE_RESOURCE6->10 is the pool-create path.
+                static const s32 kaiReceiverTags[7] = {9,13,11,12,14,15,10};
+                const s32 liReceiverTag = kaiReceiverTags[lpResp->GetEventType()];
                 lpReceiver->AddEvent(lpEvent, liReceiverTag, liSize);
             }
             const CgsModule::Event* lpNext = 0;

@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"   // TypeRegistry::Register
 
 #include "GameShared/GameClasses/RenderWare/CgsRwRasterResourceType.h"
+#include "GameShared/GameClasses/RenderWare/PS3/CgsRwVertexDescResourceTypePS3.h"
 #include "GameShared/GameClasses/RenderWare/CgsRwTextureStateResourceType.h"
 #include "GameShared/GameClasses/RenderWare/CgsMaterialStateResourceType.h"
 #include "GameShared/GameClasses/RenderWare/CgsRwColourCubeResourceType.h"   // CgsResource::RwColourCubeResourceType (0x2B)
@@ -112,6 +113,9 @@ namespace CgsResource
         // ---- in BrnResource::GameDataModule::RegisterResourceTypes order (0x82667EA8) --------
         static RwRasterResourceType        sRwRaster;          // [game #1]  0x00  Texture / RwRaster
         TypeRegistry::Register(&sRwRaster, "RwRaster");
+        // ARTIST82668024..82668078 registers vertex descriptors with vtable820A0CC0.
+        static RwVertexDescResourceType sRwVertexDesc;
+        TypeRegistry::Register(&sRwVertexDesc, "RwVertexDesc");
         static RwTextureStateResourceType  sRwTextureState;    // [game #5]  0x0E  TextureState
         TypeRegistry::Register(&sRwTextureState, "RwTextureState");
         static MaterialStateResourceType   sMaterialState;     // [game #6]  0x0F  MaterialState / BlendState

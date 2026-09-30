@@ -11,6 +11,8 @@ namespace CgsResource
 class RwVertexDescResourceType : public Type
 {
 public:
+    u32 GetTypeID() const override;
+    EDebugResourceCategory GetDebugResourceCategory() const override;
     ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
     void               FixUp(void* lpResource, const rw::Resource& lrResource) const override;
 };

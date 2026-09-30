@@ -1711,6 +1711,16 @@ namespace BrnResource
         s_InitOptions.mPoolInitOptions.mpGameSpecificTypes    = s_aGameTypes;
         s_InitOptions.mPoolInitOptions.miNumGameSpecificTypes = lNumGameTypes;
 
+        // ARTIST8266D5DC..D61C: reusable loader buffers and table capacities.
+        // The former synchronous adapter never consumed these option fields.
+        auto& lrLoaderOptions = s_InitOptions.mLoaderInitOptions;
+        lrLoaderOptions.miBundleHeaderBufferSize = 0x80000;
+        lrLoaderOptions.miDebugDataBufferSize = 0x200000;
+        lrLoaderOptions.miStreamBufferSize = 0x400000;
+        lrLoaderOptions.miMaxBundles = 512;
+        lrLoaderOptions.miMaxResourcesPerBundle = 10240;
+        lrLoaderOptions.mbForceUpperCaseFileNames = true;
+
         // ARTIST ConstructResourceModule 8266D570: 768 staged resources,
         // 1 MiB main scratch and 2 MiB graphics scratch, both 128-byte aligned.
         CgsResource::PoolModule::InitOptions& lrPoolOptions = s_InitOptions.mPoolInitOptions;

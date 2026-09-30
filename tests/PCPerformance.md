@@ -597,9 +597,9 @@ rivals, an active event, and zero assertions/exceptions. This is functional
 coverage only: screenshot capture and 821/882 foreground samples exclude FPS
 comparisons, and the restored compressed path is still inactive in the game.
 
-ResourceModule still selects synchronous loading. Allocator-backed construction,
-native job execution, failed-load teardown and staged I/O remain
-activation gates. Original ResourceModule returns the pool's busy result to
+At that checkpoint ResourceModule still selected synchronous loading.
+Allocator-backed construction, native job execution, failed-load teardown and
+staged I/O were activation gates. Original ResourceModule returns the pool's busy result to
 GameDataModule and `mbStalled`; it does not spin internally. Restore that return
 propagation with the staged pipeline. This batch establishes no FPS gain.
 
@@ -626,8 +626,8 @@ return both heaps' storage after repeated streams and teardown. Disk input is
 fixture data; this does not establish native filesystem/loader integration.
 
 The canonical 2,668-TU build and scheduler review pass. Hardware job startup,
-allocator-backed loader construction, I/O routing and failure teardown remain
-activation work. The production watchdog installer is also unresolved; the
+allocator-backed loader construction, I/O routing and failure teardown were
+still activation work at that checkpoint. The production watchdog installer is unresolved; the
 wait-helper test installs its predicate inside the fixture. This component
 repair establishes no measured gameplay FPS gain.
 
@@ -636,6 +636,57 @@ Final build `abd4531d1fd0` also passes a 120-second visual Road Rage check
 rivals, peak five crashing/two airborne rivals, and zero assertions/exceptions.
 All 1,178 focus samples are foreground. Captured damage, world and HUD frames
 were inspected; screenshot capture excludes this run from FPS comparisons.
+
+## Staged loader runtime activation
+
+ResourceModule now drives the original staged loader, pool and memory pipeline.
+Hardware initialization creates three native EAThread workers using the original
+400 KiB scheduler arena and 128 job slots. GameData supplies the original loader
+capacities: two 4 MiB stream buffers, a 512 KiB header buffer, 512 bundle records
+and 10,240 resource records. Native pointer widths determine table allocation
+sizes. The 512 KiB compressed-data staging buffer belongs to the loader allocator.
+
+Pool replies become visible to the loader on the next update, and the pool's
+busy result reaches GameData. Read-ahead retains independent stream-buffer
+ownership. Failed opens return a failed bundle response and release their stream
+reservation. Cancellation waits for an outstanding decompression job before
+releasing its inflate state or resource destinations.
+
+Activating this path exposed two missing runtime details. Vertex-descriptor
+resource type 10 was unregistered; it now prepares its native declaration during
+FixUp using the existing lifetime cache, without altering the current draw's
+published vertex layout. A resident-cache completion could also overtake an
+earlier bundle still being fixed up. Cached replies now wait for that completion;
+uncached read-ahead remains enabled.
+
+Focused validation passes 87 checks: 35 uncompressed stage checks, 15 compressed
+stage checks, 12 native decompression/heap/cancellation checks, 13 native request
+shuttle checks, and 12 D3D9 declaration preparation/lifetime checks. Removing the
+completion-order guard fails two checks; publishing draw state during declaration
+preparation fails four. Independent review and the canonical 2,668-TU build pass.
+
+Build `0926b5ea90c9` completed a 120-second visual Road Rage run with seven player
+takedowns across five rivals, peak four crashing/three airborne rivals, and no
+assertions or exceptions. Takedown-camera damage and subsequent world/HUD frames
+were inspected. The event ended during the measurement window, and screenshots
+were enabled, so this run establishes no FPS comparison.
+
+A subsequent pair of 90-second 1440p runs with screenshots disabled both passed
+the combat gate and all 884 foreground samples. Control `abd4531d1fd0` recorded
+66.63 FPS, p99 25.96 ms and maximum38.89 ms; candidate `0926b5ea90c9` recorded
+65.61 FPS, p99 24.60 ms and maximum32.71 ms. Host CPU load was31.12%/31.27%.
+Process CPU time was24.25/26.56 ms per frame. Combat differed (six versus ten
+player takedowns, peak six versus five crashing rivals), so the pair establishes
+neither an average FPS gain nor a causal tail-latency improvement. Both had zero
+assertions, exceptions or frames exceeding50 ms. Run directories are
+`loader_timing_control_0930` and `loader_timing_candidate_0930`.
+
+Remaining boundaries are explicit: the native adapter still uses serialized
+static IO buffers; file/patch request routes 20..23/25 and filesystem-status output
+are absent. Corrupt/mid-read failure cleanup is unproved. BrnMain still gates the
+full game-module release chain, so ResourceModule cancellation is tested when
+invoked but is not claimed as normal-exit cleanup. Hardware shutdown joins its
+workers before retiring their allocator. These changes do not establish 165 FPS.
 
 ## Remaining original optimization gaps
 
