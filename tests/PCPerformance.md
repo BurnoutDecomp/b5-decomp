@@ -314,6 +314,26 @@ from 1024x768 through ultrawide and the OS-clamped 3840x1575 client. The rendere
 retains its 16:9 viewport. The case exited normally with no assertions or
 exceptions, and representative world/menu captures were inspected.
 
+The optional frame trace now separates update timing into display preparation,
+frame start, simulation, resource processing, publication and timing bookkeeping.
+Resource detail includes pool, memory, load, unload, file I/O and attribute work.
+These resource timings are inclusive: file I/O is inside load/unload, so do not
+sum all resource columns. The six update columns use the same measured ticks as
+their aggregate and sum to `update_ms`.
+
+`combat_resource_detail_0930` qualified with seven player credits and full
+foreground focus. Its largest resource stall was a 27.12 ms unload, including
+12.29 ms of file I/O; other unloads took 14–18 ms. The current native unload path
+rereads the bundle to recover resource IDs. ARTIST's `CheckForUnloads`
+(`0x828FB308`) instead uses its loaded-bundle table and entry-list resource.
+Restoring that ownership and the remaining asynchronous streaming state machine
+is still pending. The diagnostic build is `d4c1d975ad08`.
+
+An output-swap-chain DISCARD experiment passed display checks but showed no
+convincing benefit in the accepted combat runs; it was removed. Its private
+measurements remain under `present_discard_combat_0930_repeat` and
+`present_copy_combat_0930_repeat`. No presentation speedup is claimed.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still

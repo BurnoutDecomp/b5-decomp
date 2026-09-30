@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // receiver-queue forward target
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h" // ResolveResourceType (bundle FixUp resolver)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"     // Events::PoolEvent (pool response routing)
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include <cstring>                                    // memset (InitOptions zero-init)
 
 // CgsResource::ResourceModule - see the header. This pass reconstructs the lifecycle
@@ -381,7 +382,10 @@ namespace CgsResource
 
         // [2] pool module: CreatePool requests -> memory requests; AcquireResource -> pool output;
         //     drain receiver -> DoCreatePoolRequest.
-        mPoolModule.Update(&s_poolIn, &s_poolOut);
+        {
+            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_POOL);
+            mPoolModule.Update(&s_poolIn, &s_poolOut);
+        }
 
         // [2b] route pool output responses (AcquireResource etc.) back to their requesters.
         s_poolOut.LockForRead();
@@ -394,7 +398,10 @@ namespace CgsResource
         s_memIn.UnlockForWrite(); s_poolOut.UnlockForRead();
 
         // [4] MemoryModule: allocate the requested banks.
-        mMemoryModule.Update(0, 0, &s_memIn, &s_memOut);
+        {
+            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_MEMORY);
+            mMemoryModule.Update(0, 0, &s_memIn, &s_memOut);
+        }
 
         // [5] memory responses -> their receiver queues (drained next frame by the pool module).
         s_memOut.LockForRead();
@@ -404,8 +411,14 @@ namespace CgsResource
         // [6] bundle loader: drain the LoadBundleRequests routed in [1] and load each into its (already
         // created) pool via the PC synchronous BundleLoader, replying with a LoadBundleResponse. [The X360
         // async streaming FSM + FileSystem are the deferred remainder; see BundleLoaderModule.]
-        mBundleLoaderModule.ProcessLoadRequests(&mPoolModule, ResolveResourceType);
-        mBundleLoaderModule.ProcessUnloadRequests(&mPoolModule);
+        {
+            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_LOAD);
+            mBundleLoaderModule.ProcessLoadRequests(&mPoolModule, ResolveResourceType);
+        }
+        {
+            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_UNLOAD);
+            mBundleLoaderModule.ProcessUnloadRequests(&mPoolModule);
+        }
 
         return false;
     }

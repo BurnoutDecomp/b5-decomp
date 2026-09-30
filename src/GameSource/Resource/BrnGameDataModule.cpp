@@ -35,6 +35,8 @@
 // lifecycle spine (Prepare's base -> ResourceModule::Prepare core). The rw-allocator-gated
 // bring-up (CreateBanks/CreatePools/CreateAllocators), the DLC/AttribSys/HUD/popup prepare
 // stages, Construct, Update, Destruct and the ProcessXxxRequest handlers are DEFERRED.
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+
 namespace BrnResource
 {
     // "New module": mark before any Prepare. NO logging here -- BrnGameModule embeds GameDataModule by
@@ -1993,7 +1995,10 @@ namespace BrnResource
         // drain (a1+395888: 3 -> vault registered, 5 -> vault unregistered, else "Invalid
         // request received\n" line 1946). Handlers that need the resource input re-lock it
         // themselves (the X360 passes it unlocked here too). ------------------------------
-        mAttribSysModule.Update(&s_AttribInput);
+        {
+            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_ATTRIB);
+            mAttribSysModule.Update(&s_AttribInput);
+        }
         // [PC placement] the X360 destroys the per-frame "Attrib" carve at the end of
         // Update; the persistent static must drop the drained requests itself.
         s_AttribInput.LockForWrite();

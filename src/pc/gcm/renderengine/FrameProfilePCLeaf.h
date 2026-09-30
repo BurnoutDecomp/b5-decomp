@@ -17,7 +17,11 @@ namespace renderengine
     {
         enum Section { UPDATE, DISPATCH, GEOMETRY_PREPARE, GEOMETRY_LOCK,
                        GEOMETRY_CONVERT, GEOMETRY_UNLOCK, GEOMETRY_SUBMIT, PRESENT,
-                       PRESENT_COPY, PRESENT_WAIT, DISPATCH_SORT, NUM_SECTIONS };
+                       PRESENT_COPY, PRESENT_WAIT, DISPATCH_SORT,
+                       UPDATE_DISPLAY, UPDATE_START, UPDATE_SIMULATION,
+                       UPDATE_RESOURCE, UPDATE_PUBLISH, UPDATE_TIMING,
+                       RESOURCE_POOL, RESOURCE_MEMORY, RESOURCE_LOAD, RESOURCE_UNLOAD,
+                       RESOURCE_FILE, RESOURCE_ATTRIB, NUM_SECTIONS };
         struct Frame
         {
             LONGLONG miBegin = 0, miEnd = 0, miPreviousEnd = 0;
@@ -86,10 +90,18 @@ namespace renderengine
         {
             Frame* mpFrame;
             Section meSection;
+            Section meDetail;
             LONGLONG miBegin;
-            explicit Scope(Section leSection)
-                : mpFrame(gCapture.mpCurrent), meSection(leSection), miBegin(mpFrame ? Now() : 0) {}
-            ~Scope() { if (mpFrame) mpFrame->maTicks[meSection] += Now() - miBegin; }
+            explicit Scope(Section leSection, Section leDetail = NUM_SECTIONS)
+                : mpFrame(gCapture.mpCurrent), meSection(leSection), meDetail(leDetail),
+                  miBegin(mpFrame ? Now() : 0) {}
+            ~Scope()
+            {
+                if (!mpFrame) return;
+                const LONGLONG liElapsed = Now() - miBegin;
+                mpFrame->maTicks[meSection] += liElapsed;
+                if (meDetail != NUM_SECTIONS) mpFrame->maTicks[meDetail] += liElapsed;
+            }
             Scope(const Scope&) = delete;
             Scope& operator=(const Scope&) = delete;
         };
@@ -142,7 +154,7 @@ namespace renderengine
                 std::snprintf(lacPath + luLength, MAX_PATH - luLength, ".frames.csv");
                 if (FILE* lpFile = std::fopen(lacPath, "w"))
                 {
-                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end\n");
+                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end\n");
                     const double lfMs = 1000.0 / static_cast<double>(gCapture.miFrequency);
                     for (unsigned lu = 0; lu < gCapture.muCount; ++lu)
                     {
