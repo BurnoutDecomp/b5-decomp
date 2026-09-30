@@ -232,6 +232,9 @@ int main()
         std::memset(saParticles, 0, sizeof(saParticles));
         std::memset(saParams, 0, sizeof(saParams));
         BrnParticle::ParticleModule* lpParticles = reinterpret_cast<BrnParticle::ParticleModule*>(saParticles);
+#ifdef BRN_TEST_PARTICLE_RANDOM_PC
+        new (&lpParticles->mRandomAccessPC) BrnParticle::Native::ParticleRandomAccessPC;
+#endif
         SetRandom(lpParticles->mRandom, lrCase.mauPmRing, lrCase.muPmSeed, lrCase.muPmIndex);
         gpArrays = &lpParticles->maSimpleParticles[0];
         for (u32 t = 0; t < BrnParticle::ParticleModule::KU_NUM_SIMPLE_ARRAYS; ++t)
@@ -346,6 +349,9 @@ int main()
               && SameRandom(lpParticles->mRandom, lrCase.mauPmRingOut, lrCase.muPmSeedOut, lrCase.muPmIndexOut)
               && gAsserts == lrCase.muAsserts,
               lName + " -- the accumulators, both rings, the asserts" + lacState);
+#ifdef BRN_TEST_PARTICLE_RANDOM_PC
+        lpParticles->mRandomAccessPC.~ParticleRandomAccessPC();
+#endif
     }
 
     char lacLine[200];

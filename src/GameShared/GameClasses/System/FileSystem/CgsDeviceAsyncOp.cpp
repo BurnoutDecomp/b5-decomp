@@ -52,7 +52,7 @@ namespace CgsFileSystem
     void AsyncOp::Wait()
     {
         CGS_ASSERT(mbOperating, "No operation\n");
-        mSemaphore.Wait();
+        CgsDev::Assert::WaitForWorkerPC(mSemaphore);
         mbOperating = false;
     }
 

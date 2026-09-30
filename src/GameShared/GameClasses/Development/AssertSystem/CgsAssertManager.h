@@ -45,6 +45,10 @@ namespace Assert
         void SetRenderer(Debug2DImmediateRender* lpRenderer);   // CgsAssertManager.h:117
         void SetMapFileReader(MapFile::Reader* lpReader, const char* lpcMapFileName);  // CgsAssertManager.h:120
         void HandleAssert(const char* lpcMessage, const char* lpcFile, s32 liLine);
+        // FLAG PC-platform leaf: keep the failing worker's stack when its
+        // assertion is handed to the frame owner; shutdown uses logging only.
+        void HandleAssertCapturedPC(const char* lpcMessage, const char* lpcFile, s32 liLine,
+                                    const StackUnpick& lrStack, bool lbAllowDisplay);
 
         // The pending assert (for DebugManager::RenderAssert, the on-screen overlay).
         bool              HasAssert() const     { return mbGotAssert; }
@@ -52,6 +56,7 @@ namespace Assert
 
     private:
         void ExecuteAssertHandlers();        // CgsAssertManager.h:160
+        void LogCallstackPC(StackUnpick& lrStack);
         void DoAssert();                     // CgsAssertManager.h:154 - the blocking on-screen halt loop
         void DisplayAssertScreen();          // CgsAssertManager.h:174 - render one frame of the dialog + present
         void DisplayCurrentAssert();         // CgsAssertManager.h:177

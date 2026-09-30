@@ -2,6 +2,8 @@
 
 #include <Windows.h>   // QueryPerformanceCounter / QueryPerformanceFrequency (high-res timer)
 #include <new>         // ::operator new[] (monitor array backing)
+#include <atomic>
+#include <mutex>
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
@@ -26,7 +28,9 @@ namespace CgsDev
         {
             PerfMonCpuInstance* gpMonitorsArray   = nullptr;
             s32                 giMaxMonitorCount  = 0;
-            s32                 giMonitorCount     = 0;
+            std::atomic<s32>    giMonitorCount{0};
+            std::mutex         gMonitorRegistration;
+            s32*               gpCompletedCallsPC = nullptr;
             s32                 giNumIterations    = 1;
             s64                 gi64TimerFrequency = 0;
             PerfMonGameFrequency geGameFrequency  = E_PMF_60HZ;
@@ -74,6 +78,7 @@ namespace CgsDev
 
             gpMonitorsArray = static_cast<PerfMonCpuInstance*>(
                 ::operator new[](static_cast<size_t>(liMaxMonitorCount) * sizeof(PerfMonCpuInstance)));
+            gpCompletedCallsPC = new s32[liMaxMonitorCount]();
 
             for (s32 liIndex = 0; liIndex < liMaxMonitorCount; ++liIndex)
             {
@@ -102,6 +107,8 @@ namespace CgsDev
 
         void Destruct()
         {
+            delete[] gpCompletedCallsPC;
+            gpCompletedCallsPC = nullptr;
             if (gpMonitorsArray)
             {
                 ::operator delete[](gpMonitorsArray);
@@ -127,6 +134,7 @@ namespace CgsDev
                 lrInstance.mu64Value            = 0;
                 lrInstance.miFrameCounter       = 0;
                 lrInstance.miNumCalls           = 0;
+                gpCompletedCallsPC[liIndex]      = 0;
                 lrInstance.miMaxCalls           = 0;
                 lrInstance.mfCurrentValue       = 0.0f;
                 lrInstance.mfMinMaxValue        = 0.0f;
@@ -192,6 +200,7 @@ namespace CgsDev
                     lrInstance.miNumCalls /= liIterations;
                     lfCurrent /= static_cast<f32>(liIterations);
                 }
+                gpCompletedCallsPC[liIndex] = lrInstance.miNumCalls;
 
                 lrInstance.mfCurrentValue = lfCurrent;
                 lrInstance.mfAverageAccumulator += lfCurrent;
@@ -218,10 +227,13 @@ namespace CgsDev
 
         s32 AddMonitor(const char* lpcName, PerfMonCpuPage lePage, bool lbMinimum, f32 lfCpuBudget, bool lbScaled)
         {
+            // FLAG PC-platform leaf: lazy monitor registration can occur on
+            // either frame thread. Publish only a completely initialized slot.
+            const std::lock_guard<std::mutex> lRegistrationLock(gMonitorRegistration);
             if (!gpMonitorsArray || giMonitorCount >= giMaxMonitorCount)
                 return -1;
 
-            const s32 liHandle = giMonitorCount++;
+            const s32 liHandle = giMonitorCount.load(std::memory_order_relaxed);
             PerfMonCpuInstance& lrInstance = gpMonitorsArray[liHandle];
 
             s32 liChar = 0;
@@ -238,6 +250,7 @@ namespace CgsDev
             lrInstance.mbActive        = false;
             lrInstance.miOrigLibPerfTraceId = -1;
             lrInstance.miLibPerfTraceId = -1;
+            giMonitorCount.store(liHandle + 1, std::memory_order_release);
             return liHandle;
         }
 
@@ -305,7 +318,10 @@ namespace CgsDev
             lpData->mfAverageValue      = lrInstance.mfAverageValue;
             lpData->mfMinMaxValue       = lrInstance.mfMinMaxValue;
             lpData->mfCpuBudget         = lrInstance.mfCpuBudget;
-            lpData->miNumCalls          = lrInstance.miNumCalls;
+            // FLAG PC-platform leaf: the overlay reads the last completed
+            // frame, matching mfCurrentValue. Live sync counters may still run
+            // on the update thread while the dispatch thread draws this overlay.
+            lpData->miNumCalls          = gpCompletedCallsPC[liMonitorHandle];
             lpData->miMaxCalls          = lrInstance.miMaxCalls;
             lpData->mbTraced            = lrInstance.mbLibPerfTagged;
             lpData->mfCurrentTraceValue = 0.0f;

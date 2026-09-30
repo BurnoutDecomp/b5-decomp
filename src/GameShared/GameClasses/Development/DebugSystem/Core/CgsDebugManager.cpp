@@ -540,7 +540,7 @@ namespace CgsDev
     // map-resolved function name (mpMapReader->GetStackEntryName), falling back to "    0x%08X". Queued
     // into the buffered renderer at x=50, text size 16, 18px line advance, in the carved assert colour
     // (dword_82F32268). The X360 reaches the call-stack + map reader through the AssertData record.
-    void DebugManager::RenderAssert(const Assert::AssertData* lpData)
+    static void QueueAssertText(DebugRender& lrRenderer, const Assert::AssertData* lpData)
     {
         if (!lpData)
             return;
@@ -550,9 +550,9 @@ namespace CgsDev
 
         std::snprintf(lacBuffer, sizeof(lacBuffer), "%d:%s",
                       lpData->miLine, lpData->mpcFile ? lpData->mpcFile : "?");
-        mBufferedRenderer.Draw2DText(lacBuffer, 50.0f, 50.0f, 16.0f, luColour);
+        lrRenderer.Draw2DText(lacBuffer, 50.0f, 50.0f, 16.0f, luColour);
 
-        mBufferedRenderer.Draw2DText(lpData->macAssertMessage, 50.0f, 68.0f, 16.0f, luColour);
+        lrRenderer.Draw2DText(lpData->macAssertMessage, 50.0f, 68.0f, 16.0f, luColour);
 
         f32 lfY = 93.0f;
         const s32 liCount = lpData->mStack.GetNumStackAddresses();
@@ -566,24 +566,34 @@ namespace CgsDev
                               static_cast<u32>(lpData->mStack.GetStackAddress(liIndex)));
                 lpcName = lacAddr;
             }
-            mBufferedRenderer.Draw2DText(lpcName, 50.0f, lfY, 16.0f, luColour);
+            lrRenderer.Draw2DText(lpcName, 50.0f, lfY, 16.0f, luColour);
             lfY += 18.0f;
         }
     }
 
-    // Flush one frame of the assert overlay through the 2D renderer. On the X360 the display-owning
-    // thread paints RenderAssert (driven through BrnRendererModule::RenderAssert) while the asserting
-    // thread parks in DoAssert; on the single-threaded boot the one (frozen) thread paints it here, from
-    // the assert freeze loop. Uses the render buffer the last Render set on mp2dRender.
-    void DebugManager::RenderAssertOverlay()
+    void DebugManager::RenderAssert(const Assert::AssertData* lpData)
     {
-        if (!Assert::gAssertManager.HasAssert() || mp2dRender == nullptr || !mp2dRender->HasRenderBuffer())
-            return;
+        QueueAssertText(mBufferedRenderer, lpData);
+    }
 
-        mp2dRender->Begin();
-        RenderAssert(&Assert::gAssertManager.GetAssertData());   // queue line:file + message + call-stack
-        mBufferedRenderer.Dispatch2D(mp2dRender, true);          // flush them
-        mp2dRender->End();
+    void DebugManager::RenderAssertToBufferPC(const Assert::AssertData* lpData,
+                                             CgsGraphics::Im2dRenderBuffer* lpBuffer)
+    {
+        if (!lpData || !lpBuffer || !lpBuffer->IsPreparedPC())
+            return;
+        Debug2DImmediateRender lRenderer;
+        lRenderer.Construct(mpAllocator, 1280.0f, 720.0f);
+        if (mp2dRender)
+            lRenderer.SetDebugFont(mp2dRender->GetDebugFontPC());
+        lRenderer.SetRenderBuffer(lpBuffer);
+        DebugRender lPrimitives;
+        lPrimitives.Construct();
+        QueueAssertText(lPrimitives, lpData);
+        lRenderer.Begin();
+        lPrimitives.Dispatch2D(&lRenderer, true);
+        lRenderer.End();
+        lPrimitives.Destruct();
+        lRenderer.Destruct();
     }
 
     // Faithful port of X360 Render @0x8282F770: assert both renderers exist, point them at this

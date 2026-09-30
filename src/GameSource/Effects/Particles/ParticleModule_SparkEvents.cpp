@@ -463,8 +463,8 @@ namespace BrnParticle
                     // so re-ordering them changes every spark. The console draws the inheritance
                     // first (inline, before the RandomiseXYZ call it then makes), then the spread,
                     // then -- only for non-body-part types -- the position jitter, then the size.
-                    const Vector3 lvInherited = lVelocityInheritance.RandomInterpolate(mRandom);
-                    const Vector3 lvSpread    = lVelocitySpread.RandomiseXYZ(mRandom);
+                    const Vector3 lvInherited = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lVelocityInheritance.RandomInterpolate(lrRandom); });
+                    const Vector3 lvSpread    = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lVelocitySpread.RandomiseXYZ(lrRandom); });
 
                     Vector3 lvVelocity;
                     lvVelocity.x = lvSpread.x + lvInherited.x;
@@ -475,7 +475,7 @@ namespace BrnParticle
                     Vector3 lvSpawnPosition = lvPoint;
                     if (!lbIsBodyPartContact)
                     {
-                        const Vector3 lvJitter = lPositionJitter.RandomiseXYZ(mRandom);
+                        const Vector3 lvJitter = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lPositionJitter.RandomiseXYZ(lrRandom); });
                         lvSpawnPosition.x += lvJitter.x;
                         lvSpawnPosition.y += lvJitter.y;
                         lvSpawnPosition.z += lvJitter.z;
@@ -491,7 +491,7 @@ namespace BrnParticle
 
                     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
-                    const f32 lfSize = mRandom.RandomFloat(KF_SPARK_SIZE_MIN, KF_SPARK_SIZE_MAX);
+                    const f32 lfSize = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(KF_SPARK_SIZE_MIN, KF_SPARK_SIZE_MAX); });
 
                     lrArray.SpawnSpark(lvSpawnPosition,
                                        lvVelocity,
@@ -624,8 +624,8 @@ namespace BrnParticle
 
         for (u32 luRemaining = luNumToSpawn; luRemaining != 0u; --luRemaining)
         {
-            const Vector4 lvDirectionDraw = lDirectionRandomiser.RandomiseXYZW(mRandom);   // var_80
-            const Vector4 lvOffsetDraw    = lOffsetRandomiser.RandomiseXYZW(mRandom);      // var_70
+            const Vector4 lvDirectionDraw = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lDirectionRandomiser.RandomiseXYZW(lrRandom); });   // var_80
+            const Vector4 lvOffsetDraw    = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lOffsetRandomiser.RandomiseXYZW(lrRandom); });      // var_70
 
             // (sinL, cosL, sinF, cosF): vmrghw (lat, lat, fwd, fwd) against the phase splat.
             const f32 lfSinLateral = ShowerSinCosLane(lvDirectionDraw.x, KF_SHOWER_SIN_PHASE);
@@ -894,9 +894,9 @@ namespace BrnParticle
             {
                 // The spot in the emitter box: RandomFloat(-h, h) per axis, z drawn first, then y, then x
                 // (the range `h - (-h)`, the negation a `vxor` of the sign bit), added to the spawn position.
-                const f32 lfOffsetZ = mRandom.RandomFloat(-lrHalf.z, lrHalf.z);
-                const f32 lfOffsetY = mRandom.RandomFloat(-lrHalf.y, lrHalf.y);
-                const f32 lfOffsetX = mRandom.RandomFloat(-lrHalf.x, lrHalf.x);
+                const f32 lfOffsetZ = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(-lrHalf.z, lrHalf.z); });
+                const f32 lfOffsetY = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(-lrHalf.y, lrHalf.y); });
+                const f32 lfOffsetX = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(-lrHalf.x, lrHalf.x); });
                 Vector3 lvPosition;
                 lvPosition.x = lpEvent->mSpawnPosition.x + lfOffsetX;
                 lvPosition.y = lpEvent->mSpawnPosition.y + lfOffsetY;
@@ -904,12 +904,12 @@ namespace BrnParticle
                 lvPosition.w = lpEvent->mSpawnPosition.w + 0.0f;
 
                 Vector3 lvVelocity;
-                const f32 lfAimDraw = mRandom.RandomFloat();
+                const f32 lfAimDraw = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(); });
                 if (!(lfAimDraw < BurstLayoutF32(lpLayout, KU_BURST_CAMERA_PROBABILITY)))   // `fcmpu ; bge` 0x8229AB48
                 {
                     // ---- the cone (0x8229AC14) ----
-                    const f32 lfLateral = mRandom.RandomFloat(-lfConeHalfAngle, lfConeHalfAngle);
-                    const f32 lfAzimuth = mRandom.RandomFloat() * KF_DEBRIS_BURST_TWO_PI;
+                    const f32 lfLateral = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(-lfConeHalfAngle, lfConeHalfAngle); });
+                    const f32 lfAzimuth = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(); }) * KF_DEBRIS_BURST_TWO_PI;
                     // One TrigBaseFunctions5 evaluation over (az, az, lat, lat) with the (sin, cos, sin, cos)
                     // phases (vmrghw, 0x8229ACCC..0x8229AD2C).
                     const f32 lfSinAzimuth = ShowerSinCosLane(lfAzimuth, KF_SHOWER_SIN_PHASE);
@@ -924,8 +924,8 @@ namespace BrnParticle
                     lvDirection.y = lfCosLateral;
                     lvDirection.z = lfSinAzimuth * lfCosLateral;
                     lvDirection.w = lvDirection.x;
-                    const f32 lfSpeed   = mRandom.RandomFloat(lfSpeedMin, lfSpeedMax);
-                    const f32 lfInherit = std::fma(mRandom.RandomFloat(), KF_DEBRIS_BURST_INHERIT_RANGE,
+                    const f32 lfSpeed   = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(lfSpeedMin, lfSpeedMax); });
+                    const f32 lfInherit = std::fma(DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(); }), KF_DEBRIS_BURST_INHERIT_RANGE,
                                                    KF_DEBRIS_BURST_INHERIT_MIN);
                     // v127 = V * splat(inherit), then vmaddfp128 v127 = dir * splat(speed) + v127.
                     lvVelocity.x = std::fma(lvDirection.x, lfSpeed, lrInherit.x * lfInherit);
@@ -952,11 +952,11 @@ namespace BrnParticle
                     ++luDiagAtCamera;                                                       // [DIAG]
                 }
 
-                const f32 lfSize     = mRandom.RandomFloat(lfSizeMin, lfSizeMax);          // f28
-                const Vector3 lvAxis = BurstRandomUnitVector(mRandom);
-                const f32 lfSpin     = mRandom.RandomFloat();   // `lfsx f30` -- drawn BEFORE the colour's two
+                const f32 lfSize     = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(lfSizeMin, lfSizeMax); });          // f28
+                const Vector3 lvAxis = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return BurstRandomUnitVector(lrRandom); });
+                const f32 lfSpin     = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(); });   // `lfsx f30` -- drawn BEFORE the colour's two
                 Vector4 lvColour;
-                lColourRandomiser.Randomise(lvColour, mRandom);
+                DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lColourRandomiser.Randomise(lvColour, lrRandom); });
                 lrArray.SpawnDebris(lvPosition, lvVelocity, lvAxis, lvColour,
                                     std::fma(lfSpin, KF_DEBRIS_BURST_SPIN_RANGE, KF_DEBRIS_BURST_SPIN_MIN),
                                     lfSize, lpEvent->mfCurrentTime);

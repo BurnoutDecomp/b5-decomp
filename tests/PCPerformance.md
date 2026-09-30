@@ -270,11 +270,54 @@ window and qualify every measured run. Exclude post-event free driving. Clean
 timing runs disable screenshots and verbose crash witnesses; the counters remain.
 These checks do not establish 165 FPS or completion of the optimization work.
 
+## Frame overlap integration
+
+Gameplay now runs the original frame coordinator with a native dispatch worker
+by default; `BRN_FRAME_PARALLEL=0` selects the serial control. Startup remains
+serial. The joined boundary
+publishes world, GUI, movie, shader, simple-particle and diagnostic data, and
+services resource updates.
+
+Native adaptations preserve window-message processing during waits, propagate
+worker failures, and restore the graphics context around a separately buffered
+assertion dialog. Foreign worker assertions retain their originating stack;
+when the owner is waiting on their operation, they are logged without attempting
+to render an incomplete frame. The wait path never blocks the window owner on
+an assertion mutex held by dispatch. Particle RNG draws keep the original
+generator under narrow locks; logging assembles and formats each thread's lines
+independently.
+
+The native coordinator suite covers simultaneous assertions, synchronous device
+waits, window-message dependencies, shutdown and exceptions. Particle, logging,
+captured-stack, shader-publication and D3D buffer tests accompany it. Deliberate
+negative controls reproduce the old deadlocks, shared particle banks and mixed
+log lines. Console-derived wheel-smoke, spark-shower, debris-burst and debris
+simulation results still pass (136, 24, 73 and 44 checks respectively). Live modal
+assertions render correctly and can resume or close normally. These are
+correctness checks, not evidence of a particular FPS gain.
+
+The 2560x1440 combat captures with binary `7f4f30343d15` include a diagnostic
+run with eight player credits across five rivals and launch/roll evidence on
+three rival slots. A quiet parallel run qualified with seven credits, four
+simultaneously crashing rivals and two airborne rivals; it averaged 66.17 FPS
+(p99 26.07 ms). The accepted serial control recorded eleven credits and averaged
+58.77 FPS (p99 28.50 ms). Both stayed foreground for the entire 90-second window,
+kept the event active and had no assertions/exceptions. Exact fights differ, so
+this is a preliminary comparison, not a controlled percentage improvement.
+An earlier three-credit serial run was rejected. The 165 FPS target remains
+unmet. Evidence is under `scratch/performance_goal_0929/combat_*_0930_*` in the
+workflow checkout.
+
+Default activation was then built as `24244b930dfe` and verified through actual
+worker-start logging, F11, pause/resume, minimize/restore and window resizing
+from 1024x768 through ultrawide and the OS-clamped 3840x1575 client. The renderer
+retains its 16:9 viewport. The case exited normally with no assertions or
+exceptions, and representative world/menu captures were inspected.
+
 ## Remaining original optimization gaps
 
-- The native main loop still executes update and dispatch serially. Original
-  `ThreadLayout` overlaps these stages. Parallelizing it requires respecting the
-  existing frame buffers and removing shared mutable PC-backend assumptions.
+- Frame overlap is active, but the measured dispatch/presentation path still
+  dominates the frame; broader combat and streaming coverage remains useful.
 - Original wheel/mesh instancing is expanded into individual native draws. Restoring
   hardware instancing needs the matching shader and instance-stream representation;
   merely changing the draw flag is insufficient.

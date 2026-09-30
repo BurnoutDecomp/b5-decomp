@@ -107,6 +107,9 @@ namespace CgsDev
         // (see GamePrepare). HasResourceFont mirrors DrawText's "mpFont != NULLResourceHandle" test.
         void SetDebugFont(const CgsResource::SafeResourceHandle<CgsResource::Font>& lrFont);
         bool HasResourceFont() const { return !mpFont.IsNull(); }
+        // FLAG PC-platform leaf: the modal assertion renderer borrows the same
+        // loaded font without disturbing an interrupted HUD batch.
+        const CgsResource::SafeResourceHandle<CgsResource::Font>& GetDebugFontPC() const { return mpFont; }
 
     private:
         void DispatchVertices();

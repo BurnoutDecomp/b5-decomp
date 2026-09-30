@@ -1,4 +1,5 @@
 #include "GameSource/Effects/EffectsModule.h"
+#include "GameSource/Game/BrnGameModule.hpp"
 
 #include "GameSource/Effects/ParticleEffectHelper.h"                               // ParticleEffectHelper / RaceCarParticleEffectHelper
 #include "GameSource/Effects/BrnEffectsUtils.h"
@@ -1601,6 +1602,10 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
         lbRunStep = (siEffectsSuspendState == 0);
         break;
     case 3:
+        // FLAG PC-platform leaf: this rare reset clears dispatch-owned Lion
+        // instances. Finish their published frame before changing the array.
+        if (BrnGame::BrnGameModule* lpGame = BrnGame::GetMainGameModule())
+            lpGame->SynchronizeDispatchPC();
         mParticleModule.SuspendPlayingEffects();
         siEffectsSuspendState = 1;
         break;
@@ -2675,57 +2680,30 @@ void EffectsModule::GenerateDispatchLists(CgsModule::IOBufferStack* lpInputBuffe
     CGS_ASSERT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )");   // CgsModuleIOHelper.h:57
     (void)lbDestroyed;
 
-    // =====================================================================================
-    // THE LION EFFECT HAND-OFF (added 2026-09-05, the boost-exhaust wave).
-    //
-    // ⭐⭐ WITHOUT THESE TWO CALLS NOTHING IN THE GAME EVER CREATES A PARTICLE EMITTER, and
-    // that is measured, not argued: with the whole Lion render closure landed and reachable,
-    // a two-minute driving run printed `[lionfx] Render: emitters live=0` once and never
-    // again. StartLionEffect only STAMPS a maPlayingEffects slot with CREATE; the pair below
-    // is the only thing that reads that stamp, and DispatchThreadUpdate's
-    // cLionFX::EffectCreate -> cLionEffectManager::EffectCreate ->
-    // cLionParticleEffectManager::BindingsAttach -> cParticleEmitterManager::Register is the
-    // only route to a live emitter that exists.
-    //
-    // CONSOLE SHAPE, exactly: they are MODULE VTABLE ENTRIES, not calls this function makes.
-    // BrnEffects::EffectsModule::PreRenderUpdate @0x8227FE10 write-locks the dispatch buffer,
-    // memcpys the crash triangle cache into it and then calls the particle module's slot 72
-    // (its own PreRenderUpdate); ::DispatchThreadUpdate @0x8227FE88 read-locks the buffer and
-    // calls slot 76. The module framework drives both once a frame, in that order.
-    //
-    // FLAG PC bring-up wiring: the framework's PreRenderUpdate / DispatchThreadUpdate leg does
-    // not exist on this build (no module's PreRenderUpdate is called anywhere in the tree), so
-    // the pair is driven from HERE -- GenerateDispatchLists, the per-frame dispatch hook that
-    // IS live, is the same DoDispatch pass the console's own calls belong to, and it already
-    // owns this very buffer one statement earlier. The order below is the console's: publish
-    // (write lock), then consume (read lock), both BEFORE the render thread's
-    // BuildLionVertexBuffers runs cLionFX::Update on the emitters this creates.
-    // ⛔ THE TWO LOCK WINDOWS MUST NOT NEST -- IOBuffer::LockForRead asserts "Already locked
-    // for write" -- which is why they sit outside the GenerateRenderRequests bracket above
-    // rather than inside it, and why PreRenderUpdate takes its own write lock internally
-    // exactly as the console's wrapper does.
-    // DELETE-WHEN the module framework's PreRenderUpdate / DispatchThreadUpdate leg lands:
-    // these become EffectsModule::PreRenderUpdate @0x8227FE10 / ::DispatchThreadUpdate
-    // @0x8227FE88 overrides and the framework calls them.
-    //
-    // ⭐ FX-CRASHVFX 2026-09-25: EffectsModule::PreRenderUpdate's OWN statement, which this stand-in
-    // used to drop (the banner above names it; nothing did it): LockForWrite, then
-    // memcpy(GetBufferCrashTriangleCache(), &mCrashTriangleCache, 0x1E80) -- `addis r4, r30, 3 ;
-    // addi r4, r4, -0x2C00` (this + 0x2D400) and `li r5, 0x1E80`, 0x8227FE30..0x8227FE50 -- then
-    // UnlockForWrite, and only then the particle module's slot 72. That buffer copy is the cache
-    // ParticleModule::BeginSimulateDebris hands every debris job; without it the jobs saw an EMPTY
-    // cache (the glass live run 20260925_115837: crash=1 on every frame, collide=0 on every frame)
-    // and no piece ever collided with the ground the crashing car's triangles describe.
-    // =====================================================================================
+    // Publish the particle inputs on the producer. Their consumption belongs
+    // to DispatchThreadUpdate on the render owner, after the frame-buffer swap.
+    PreRenderUpdate(lpDispatchThreadInputBuffer);
+
+}
+
+// ARTIST 0x8227FE10: copy the crash cache, then publish the particle inputs.
+void EffectsModule::PreRenderUpdate(BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer)
+{
     lpDispatchThreadInputBuffer->LockForWrite();
     *lpDispatchThreadInputBuffer->GetBufferCrashTriangleCache() = mCrashTriangleCache;
     lpDispatchThreadInputBuffer->UnlockForWrite();
     mParticleModule.PreRenderUpdate(lpDispatchThreadInputBuffer);
+}
 
+// ARTIST 0x8227FE88: only the dispatch owner consumes particle events/jobs.
+void EffectsModule::DispatchThreadUpdate(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer)
+{
+    CGS_ASSERT(lpDispatchThreadInputBuffer != nullptr, "lpDispatchThreadInputBuffer != NULL");
     lpDispatchThreadInputBuffer->LockForRead();
     mParticleModule.DispatchThreadUpdate(lpDispatchThreadInputBuffer);
     lpDispatchThreadInputBuffer->UnlockForRead();
 }
+
 
 // =============================================================================
 // GenerateRenderRequests  @0x8227FF10  (DWARF :1197) -- the post-fx effects frames.

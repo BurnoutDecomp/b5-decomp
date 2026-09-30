@@ -116,6 +116,8 @@ namespace BrnParticle
     {
     public:
         CgsNumeric::Random     mRandom;
+        // Native lock concurrency is covered by PCParticleFrame.
+        template<class Draw> decltype(auto) DrawRandomPC(Draw lfDraw) { return lfDraw(mRandom); }
         Native::BrnDebrisArray maDebris[5];
 
         void HandleFireDebrisBurstEvent(const FireDebrisBurstEvent* lpEvent);

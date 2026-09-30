@@ -1,3 +1,5 @@
+#include "GameSource/Game/BrnGameModule.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertProbePC.h"
 #include "GameSource/Graphics/BrnRendererModule.h"
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
@@ -742,6 +744,7 @@ namespace
                               + 2u * KU_PC_GDL_DISPATCH_BIN_BYTES
                               + 2u * (KU_PC_IM2D_COMMAND_BYTES + KU_PC_IM2D_VERTEX_BYTES
                                     + KU_PC_IM2D_DEBUG_COMMAND_BYTES + KU_PC_IM2D_DEBUG_VERTEX_BYTES)
+                              + 2u * (KU_PC_IM2D_DEBUG_COMMAND_BYTES + KU_PC_IM2D_DEBUG_VERTEX_BYTES) // modal banks
                               + 8u * 128u
                               + (3u * 4096u)   // per-bin align128(size)+128 slop + headroom
                               + (192u * 1024u); // + the small renderengine objects that share
@@ -1067,12 +1070,11 @@ namespace
     // ============================================================================================
     const f32 KF_CORONA_CAMERA_FOV_GATE = 0.1f;   // X360 flt_82004014 (DATA_DUMP.md)
 
-    void PCBringUpPublishCoronaCamera(BrnCoronaManager& lrCoronaManager)
+    void PCBringUpPublishCoronaCamera(BrnCoronaManager& lrCoronaManager,
+                                     const BrnShaderConstantsFrame& lrFrame)
     {
-        if (!gBrnSkyCameraBringUp.mbValid)
-            return;
-
-        const Matrix44& lrViewProjection = gBrnSkyCameraBringUp.mViewProjection;
+        const Matrix44 lrViewProjection = lrFrame.GetViewProjectionMatrix();
+        const Vector3 lViewPosition = lrFrame.GetViewPosition();
 
         // |column 0| and |column 1| of the row-vector view-projection (see the banner).
         const f32 lfOotHalfFovH = std::sqrt(lrViewProjection.xAxis.x * lrViewProjection.xAxis.x
@@ -1098,7 +1100,7 @@ namespace
         lvViewXyScale.w = 0.0f;
 
         lrCoronaManager.PCBringUpSetRenderCamera(lrViewProjection,
-                                                  gBrnSkyCameraBringUp.mViewPosition,
+                                                  lViewPosition,
                                                   lvViewXyScale);
 
         {
@@ -1131,9 +1133,9 @@ namespace
                               " viewXyScale=(%.4f %.4f) = (max(ootH,1), (ootV/ootH)*max(ootH,1))"
                               " | rawOotFovH=%.4f rawOotFovV=%.4f fovH=%.1f fovV=%.1f"
                               " aspect=%.4f\n",
-                              gBrnSkyCameraBringUp.mViewPosition.x,
-                              gBrnSkyCameraBringUp.mViewPosition.y,
-                              gBrnSkyCameraBringUp.mViewPosition.z,
+                              lViewPosition.x,
+                              lViewPosition.y,
+                              lViewPosition.z,
                               lvViewXyScale.x, lvViewXyScale.y,
                               lfOotHalfFovH, lfOotHalfFovV, lfFovHDeg, lfFovVDeg,
                               (lfOotHalfFovH > 0.0f) ? (lfOotHalfFovV / lfOotHalfFovH) : 0.0f);
@@ -1459,6 +1461,7 @@ void BrnRendererModule::Construct()
 {
     mIm2dRenderBuffer.Construct();
     mIm2dDebugRenderBuffer.Construct();
+    mIm2dAssertRenderBufferPC.Construct();
     // Double-buffered per-frame shader constants (maShaderConstantsFrames[2]).
     // ⭐ THE REUSABLE LOADING-SCREEN ALLOCATOR, 2026-08-17 (boot audit F-P2-4/F-P6-12). The
     // console owns this as an embedded member at renderer+0xC8FC and lends its address to the
@@ -1544,8 +1547,11 @@ void BrnRendererModule::Construct()
             KU_PC_IM2D_VERTEX_BYTES, &sWorldDispatchAllocator, false);
         const bool lbIm2dDebugReady = mIm2dDebugRenderBuffer.Prepare(KU_PC_IM2D_DEBUG_COMMAND_BYTES,
             KU_PC_IM2D_DEBUG_VERTEX_BYTES, &sWorldDispatchAllocator, true);
+        const bool lbAssertReady = mIm2dAssertRenderBufferPC.Prepare(KU_PC_IM2D_DEBUG_COMMAND_BYTES,
+            KU_PC_IM2D_DEBUG_VERTEX_BYTES, &sWorldDispatchAllocator, true);
         CGS_ASSERT(lbIm2dReady, "mIm2dRenderBuffer.Prepare");
         CGS_ASSERT(lbIm2dDebugReady, "mIm2dDebugRenderBuffer.Prepare");
+        CGS_ASSERT(lbAssertReady, "mIm2dAssertRenderBufferPC.Prepare");
         mSingleBufferedDispatchFrame.Construct(KU_NUM_DISPATCH_LISTS,
                                                KU_PC_DISPATCH_BIN_BYTES,
                                                &sWorldDispatchAllocator);
@@ -2057,6 +2063,12 @@ BrnEffectsFrame* BrnRendererModule::GetFXEventsEffectsFrameBringUp(u8 luSlot)
 // flip would be harmless today and wrong tomorrow; it is kept where the asm has it.
 void BrnRendererModule::SwapBuffers()
 {
+    if (mIm2dRenderBuffer.IsPreparedPC())
+    {
+        mIm2dRenderBuffer.Swap();
+        mIm2dRenderBuffer.Clear();
+        mu8PCMovieWriteFrame ^= 1u;
+    }
     // NOT behind the mpInterpreter early-out below. That gate is about the GDL ring; the effects
     // frames are a separate double buffer, and skipping their flip would freeze the internal slot on
     // whatever the first frame left -- so bloom would latch to frame 0's all-false frame forever.
@@ -2077,6 +2089,15 @@ void BrnRendererModule::SwapBuffers()
 
     if (mpInterpreter == 0)
         return;
+
+    // FLAG PC-platform leaf: bridge the world's native producer while both
+    // frame threads are joined. Every render pass consumes the internal slot;
+    // none may copy the live producer while the next update is writing it.
+    const bool lbShaderFrameValid = gBrnSkyCameraBringUp.mbValid
+        && gbBrnWorldShaderConstantsFrameBringUpValid;
+    maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameExternal] = lbShaderFrameValid;
+    if (lbShaderFrameValid)
+        PublishSkyConstantsBringUp(&maShaderConstantsFrames[mu8ShaderConstantsFrameExternal]);
 
     mDoubleBufferedDispatchFrame.Swap();
 
@@ -4942,27 +4963,23 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
         }
     }
 
+    CgsDev::Assert::PollFrameProbePC(1);
+
     // ---- THE SKY (X360 Render @0x8240BFA8: BrnSkyDomeManager::Render right here, between
     // the opaque and the transparent passes, gated on mbRenderSky). --------------------
     // The dome is camera-centred and 9500 units across, so it is drawn AFTER the opaque
     // geometry and depth-tests against it (its depth/stencil state writes no depth) --
     // it fills only the pixels the city left empty.
     //
-    // gbBrnWorldShaderConstantsFrameBringUpValid is the flag over the frame
-    // PublishSkyConstantsBringUp now COPIES, so the pass names it explicitly rather than
-    // depending on it transitively. It is already implied by gBrnSkyCameraBringUp.mbValid --
-    // WorldModule::GenerateDispatchListsBringUp raises the frame flag at
-    // BrnWorldModule.cpp:5541 and the camera flag at :5556, straight-line, in that order, and
-    // neither is ever cleared -- but naming it here means a future edit that separates the two
-    // producers cannot silently draw a sky with no constants behind it.
+    // The joined publication copied the world frame into the internal slot.
+    // Sky, reflections, coronas and post-FX consume that same immutable frame.
     if (mbRenderSky && (lbPreZWork || lbOpaqueWork || lbTransparentWork)
-        && gBrnSkyCameraBringUp.mbValid && gbBrnWorldShaderConstantsFrameBringUpValid
+        && maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameInternal]
         && EnsureSkyDomeBringUp())
 
     {
-        BrnShaderConstantsFrame& lrFrame =
-            maShaderConstantsFrames[mu8ShaderConstantsFrameExternal];
-        PublishSkyConstantsBringUp(&lrFrame);
+        const BrnShaderConstantsFrame& lrFrame =
+            maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
         mSkyDome.Render(&mIm3dRendererSkyDome,
                         mpCloudDensity0Texture, mpCloudLighting0Texture,
                         &lrFrame);
@@ -5089,131 +5106,18 @@ bool BrnRendererModule::EnsureSkyDomeBringUp()
 // The per-frame sky/cloud constants -- SINCE THIS WAVE, A COPY OF THE LIVE WORLD FRAME.
 //
 // ---- WHY THIS IS A COPY AND NOT A PRODUCER (X360, proven from the asm) ----------------
-// On the console the BrnShaderConstantsFrame the sky pass reads is filled by the WORLD, not
-// by the renderer; the renderer only lends it the storage. The chain is a POINTER handed
-// across the dispatch IO buffers:
-//
-//   BrnRendererModule::Update @0x82405E28, 0x824060C0-0x824060D4
-//       lbz   r11, 0xAD1(r31)          <- mu8ShaderConstantsFrameExternal
-//       mulli r11, r11, 0x320          <- sizeof(BrnShaderConstantsFrame)
-//       addi  r4,  r11, 0x490          <- &maShaderConstantsFrames[external]
-//       bl    RendererIO::OutputBuffer::SetShaderConstantsFrame   @0x823FB608
-//   -> BrnGame::BrnGameModule::BridgeRendererToWorld @0x823CDD20 -- the SINGLE xref of both
-//       RendererIO::OutputBuffer::GetShaderConstantsFrame        @0x823B3DE8 and
-//       BrnWorldIO::DispatchInputBuffer::SetShaderConstantsFrame @0x823B50B0
-//   -> WorldModule::GenerateDispatchLists @0x827D1CE8 -- the SINGLE xref of
-//       BrnWorldIO::DispatchInputBuffer::GetShaderConstantsFrame @0x827BBEF0 -- which hands
-//       it to WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410 (r8), and that
-//       function writes the frame IN PLACE.
-//
-// The renderer never writes a byte of it. The four frame setters the console emitted
-// out-of-line have exactly two callers between them, both in the world:
-//       SetViewProjectionMatrix       @0x827B0018 <- 0x827D1410
-//       SetCameraTransform            @0x827B0158 <- 0x827D1410
-//       SetEnvMapViewProjectionMatrix @0x827B00A8 <- 0x827D1CE8
-//       SetEnvMapViewPosition         @0x827B01E8 <- 0x827D1CE8
-// and Render's own sky call reads the OTHER slot of the double buffer -- the one SwapBuffers
-// promoted, i.e. the frame the world filled last dispatch:
-//       0x8240D0FC  lbz  r11, 0xAD0(r31)      <- mu8ShaderConstantsFrameInternal
-//       0x8240D110  addi r27, r11, 0x490
-//       0x8240D15C  bl   BrnSkyDomeManager::Render   (r7 = r27)
-//
-// So the console's sky is lit by the environment manager, through the world, one dispatch
-// late. The PC seam is therefore a COPY of gBrnWorldShaderConstantsFrameBringUp -- the frame
-// WorldModule::GenerateDispatchListsBringUp fills every dispatch through the REAL
-// WorldModule::SetupShaderConstantsBeforeRendering (BrnShaderConstantsFrame.h) -- and not a
-// second, hard-coded producer. Every environment value below is the live environment
-// manager's, at the live time of day.
-//
-// ---- WHAT WAS HERE BEFORE, AND WHY IT IS GONE ----------------------------------------
-// Until this wave this function hard-coded the noon keyframe ENV_KF_Paradise_ingame_junk_
-// city_1200 and the OLD bring-up key-light direction (0.406, -0.812, 0.419). Step 9 made the
-// world's own shading publish real, so the world moved to the environment manager's key light
-// while the sky kept the frozen one: the sun disc sat 51.2 degrees away from the direction the
-// city was lit and shadowed from at the timeline's own 13:00 start (61.7 degrees at 12:00,
-// 38.5 at 14:00 -- the gap moves because the frozen one cannot), and the sky never changed
-// colour as the day advanced. That incoherence is what this change closes. The hard-coded set
-// is DELETED, not kept as a fallback -- see the ordering proof below.
-//
-// ---- ORDERING / VALIDITY (measured, not assumed) --------------------------------------
-// Does the sky ever draw before the world's first dispatch? No, and it cannot:
-//   * the host frame is BrnMain.cpp EngineUpdate :210-224 --
-//         UpdateThread()  [ -> GameMain -> MainGameFlowStateInGame::Render ->
-//                            BrnGameModule::DoDispatch -> WorldModule::
-//                            GenerateDispatchListsBringUp (BrnGameModule.cpp:1502) ]
-//      -> OnEndOfUpdateFrame()  -> DispatchThread()  [ -> BrnRendererModule::Render ]
-//     so the world producer runs BEFORE this function in the same host frame;
-//   * gbBrnWorldShaderConstantsFrameBringUpValid is raised at BrnWorldModule.cpp:5541 and
-//     gBrnSkyCameraBringUp.mbValid at :5556 -- the same function, straight-line, frame first,
-//     no branch or return between them -- and neither is ever cleared (the only other
-//     mentions are the definitions at BrnWorldModule.cpp:127 and BrnRendererModule.cpp:2523).
-//     The sky pass is already gated on gBrnSkyCameraBringUp.mbValid, so "the camera is valid"
-//     already implies "the live frame is valid".
-// The gate at the call site now names the live frame explicitly anyway, so the dependency is
-// visible rather than transitive; the early-out below is belt-and-braces and reports itself.
-//
-// ---- THE TWO ARITHMETIC CONSEQUENCES, both intended ------------------------------------
-//  * WHITE LEVEL. The live producer publishes EnvironmentManager::mfWhiteLevel, which
-//    Construct @0x827CA408 seeds to 0.5f (KF_DEF_WHITE_LEVEL, BrnEnvironmentManager.cpp:40),
-//    and GenerateShaderConstants @0x827D0098 pre-multiplies every colour by it. The sky
-//    gradient therefore arrives at HALF the old hard-coded numbers -- which is exactly the
-//    level the WORLD has been lit at since step 9, so the two now agree. The old text
-//    published at white level 1.0 and hand-divided the two cloud colours by
-//    KF_CLOUD_COLOUR_SCALE (2.0) to cancel it; that hand-division is DELETED, because the
-//    console's own round trip does it: keyframe * 0.5 (manager) * 2.0 (BrnSkyDomeManager::
-//    Render's ScaleVector4) == the authored colour. The clouds therefore do NOT change value.
-//    ⚠ AND THE FRAME'S WHITE LEVEL ITSELF CHANGES -- deliberately (step-10 verify finding, taken
-//    as console-faithful): the slot this function publishes becomes the INTERNAL frame after
-//    SwapBuffers (BrnRendererModule.cpp SwapBuffers: Internal = External, the new External is
-//    re-Constructed), and Render reads maShaderConstantsFrames[Internal].GetWhiteLevel() into
-//    BeginRenderAntiAliased (the clear colour) and BrnPostFx::Render (GlobalParams.x =
-//    1/whiteLevel). Since step 9 the world constants were ALREADY at the console's 0.5 while
-//    the composite still divided by the Construct-seeded 1.0 -- the frame was half as bright as
-//    the console's; with 0.5 published here the tonemap doubles it back, which is the console's
-//    own round trip. Expect the boot frames to read BRIGHTER than step 9's, not darker.
-//  * KEY LIGHT. GetKeyLightDirection() is the manager's CLAMPED direction
-//    (BrnEnvironmentManager.cpp:538, ComputeKeyLightDirection on the 09:00..16:00-clamped time
-//    of day) -- bit-identical to EnvironmentManager::CalcKeyLightDirection() @0x827B0638,
-//    which is what the shadow producer already uses (BrnWorldModule.cpp:5663). So the sun in
-//    the sky, the world's key light and the shadow cascades all come off the same value, and
-//    the `[sky]` line below must read the same numbers as `[shadow-prod] keyLight`.
-//
-// ---- WHAT IS COPIED --------------------------------------------------------------------
-// The seventeen ENVIRONMENT members WorldModule::SetupShaderConstantsBeforeRendering writes,
-// plus mCameraTransform. NOT the view-projection / view position: those stay
-// gBrnSkyCameraBringUp's, because the sky pass's framing is the renderer's own on PC (the
-// dispatch IO buffer set that would carry the world's is not real). They are the same camera
-// today -- GenerateDispatchListsBringUp passes the same lViewProjection/lEye to the producer
-// at :5535 that it stages at :5554 -- so this is a redundancy, not a divergence.
-// Never written by either side, on the console or here: mCloudLayerRadii (+0x240, which the
-// console's producer does not write either).
-//
-// ⭐ CORRECTED 2026-08-17 (reflections step 1). This paragraph used to end "...and the six env-map
-// face matrices + mEnvMapViewPosition (written by WorldModule::GenerateDispatchLists @0x827D1CE8
-// for BrnSkyDomeManager::RenderToEnvironmentMap, a pass this build does not run)". That pass DOES
-// run now -- BrnRendererModule::Render's six-face loop -- and BrnSkyDomeManager::
-// RenderToEnvironmentMap reads BOTH of those members off the frame it is handed
-// (BrnSkyDomeManager.cpp:724-725, GetEnvMapViewProjectionMatrix(leFace) / GetEnvMapViewPosition).
-// So they are COPIED across now, from the same live world frame as everything else. The producer
-// side is WorldModule::GenerateDispatchLists :4014/:4083 (SetEnvMapViewPosition +
-// SetEnvMapViewProjectionMatrix), which the envproducer half of this wave brings live; until it
-// does, the copy carries whatever BrnShaderConstantsFrame::Construct left there, which is what a
-// console frame before the first env-map dispatch carries too. Copying zeroes would put a
-// degenerate view-projection in front of the dome and draw nothing -- visible as a face that has
-// world geometry but no sky, which is exactly what the "[envmap] first face pass: ... sky=1" line
-// plus a black upper hemisphere would report.
-//
-// DELETE-WHEN the dispatch IO buffer set is real: then BrnRendererModule::Update publishes
-// maShaderConstantsFrames[external] through RendererIO::OutputBuffer::SetShaderConstantsFrame,
-// the world fills that very object, and both this function and gBrnSkyCameraBringUp go away.
+// FLAG PC-platform leaf: the world still fills its native bridge record rather
+// than the RendererIO pointer. Copy it only from SwapBuffers, while update and
+// dispatch are joined. ARTIST Update 0x824060C8 publishes the external slot to
+// WorldModule; SwapBuffers makes it internal, and Render 0x8240D0FC reads that
+// internal slot. The native consumer now follows the same immutable-frame rule.
+// Keep the renderer framing and all six reflection matrices in the same copy.
 void BrnRendererModule::PublishSkyConstantsBringUp(BrnShaderConstantsFrame* lpFrame)
 {
     if (lpFrame == 0)
         return;
 
-    // Unreachable on this build (see the ordering proof in the banner); kept so the function
-    // is safe on its own and REPORTS rather than publishing a frame of zeros -- a frame of
-    // zeros is a black sky with a white level of 0, which looks like a render bug.
+    // Boot has no world frame until the first producer completes.
     if (!gbBrnWorldShaderConstantsFrameBringUpValid)
     {
         static bool sbLoggedNoLiveFrame = false;
@@ -5345,6 +5249,31 @@ void BrnRendererModule::PublishSkyConstantsBringUp(BrnShaderConstantsFrame* lpFr
 // data, so those passes are data-gated off; Option B reconstructs the part that actually
 // runs - frame begin, the loading-screen foreground overlay, and the present. The gameplay
 // passes are reconstructed incrementally as their subsystems come online.
+void BrnRendererModule::PrepareDisplayPC()
+{
+    if (EnsureShadowMapTarget(mAllocatedRenderTargets))
+        mAllocatedRenderTargets.PCResizeDisplay();
+}
+
+void BrnRendererModule::Prepare2DFramePC()
+{
+    if (!mIm2dRenderBuffer.IsPreparedPC())
+        return;
+    if (BrnGui::gpActiveGuiModule != nullptr)
+        BrnGui::gpActiveGuiModule->Render(&mIm2dRenderBuffer);
+
+    PCMovieFrame& lrMovie = maPCMovieFrames[mu8PCMovieWriteFrame];
+    lrMovie = PCMovieFrame{};
+    if (BrnGui::gpActiveMovieManager != nullptr)
+    {
+        lrMovie.mbManagerPresent = true;
+        lrMovie.mbPresenting = BrnGui::gpActiveMovieManager->IsMoviePresentationActive();
+        lrMovie.mbQueued = BrnGui::gpActiveMovieManager->IsMovieQueued();
+        lrMovie.miState = static_cast<s32>(BrnGui::gpActiveMovieManager->GetState());
+        BrnGui::gpActiveMovieManager->Render(&mIm2dRenderBuffer);
+    }
+}
+
 void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer)
 {
     // FLAG PC-platform leaf: missing host storage cannot produce a valid frame.
@@ -5355,8 +5284,6 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         CgsSystem::HardwareInit::RequestShutdown();
         return;
     }
-    if (EnsureShadowMapTarget(mAllocatedRenderTargets))
-        mAllocatedRenderTargets.PCResizeDisplay();
     if (!renderengine::Device::FrameBegin())
     {
         return;
@@ -5906,30 +5833,13 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         // (BrnRendererModule.cpp, the mbRenderSky block), and this pass carries the same set so that
         // the two can never disagree about whether a dome exists.
         //
-        // THE FRAME. The console copies maShaderConstantsFrames[mu8ShaderConstantsFrameInternal]
-        // (`lbz r11, 0xAD0(r31)` / `mulli r11, r11, 0x320` / `addi r4, r11, 0x490` @0x8240CD34-
-        // 0x8240CD40, the copy constructor at 0x8240CD44) and hands the copy's address to
-        // RenderToEnvironmentMap. On PC the sky's constants come from the bring-up publisher into
-        // the EXTERNAL slot instead -- that is not this wave's choice, it is what the live sky pass
-        // in RenderWorldPasses already does and why (see PublishSkyConstantsBringUp's banner: the
-        // slot this publisher writes BECOMES the internal frame after SwapBuffers). Publishing it
-        // here, before the loop, is what lets the env-map faces read the SIX FACE MATRICES and
-        // mEnvMapViewPosition the world producer wrote this dispatch -- values PublishSkyConstantsBringUp
-        // did not copy until this wave. RenderWorldPasses publishes the same frame again from the
-        // same source a few hundred lines later; the two writes are identical by construction
-        // (nothing writes gBrnWorldShaderConstantsFrameBringUp inside Render).
-        // (BRN_ENVMAP_DEBUG no longer suppresses the world or the sky: the leaf's Resolve(face)
-        //  paints only the top-left quadrant of the REAL resolved face -- verify F2, cubeleaf run 2.)
+        // ARTIST 0x8240CD34..0x8240CD44 copies the INTERNAL shading frame.
+        // The native producer bridge now publishes it at SwapBuffers, after join.
         const bool lbDebugFaceColours = EnvMapDebugFaceColours();
         (void)lbDebugFaceColours;
         const bool lbSkyReady = mbRenderSky
-                             && gBrnSkyCameraBringUp.mbValid
-                             && gbBrnWorldShaderConstantsFrameBringUpValid
+                             && maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameInternal]
                              && EnsureSkyDomeBringUp();
-        if (lbSkyReady)
-        {
-            PublishSkyConstantsBringUp(&maShaderConstantsFrames[mu8ShaderConstantsFrameExternal]);
-        }
 
         // FLAG PC-platform leaf: park the cube off sampler 13 for the length of the pass (see the
         // READ-WHILE-WRITTEN note above). shadow::Device::SetResource caches on the pointer, so
@@ -6026,7 +5936,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
                 // hoisted: it is 800 bytes three times a frame, and the literal shape is worth more
                 // than the copy is worth saving.
                 const BrnShaderConstantsFrame lFrame =
-                    maShaderConstantsFrames[mu8ShaderConstantsFrameExternal];
+                    maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
                 mSkyDome.RenderToEnvironmentMap(
                     static_cast<BrnGraphics::EEnvironmentMapFace>(luFace),
                     &mIm3dRendererSkyDome,
@@ -6249,7 +6159,9 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         // anti-alias bracket did not open.)
         if (lbSceneBracketOpen && mbRenderCoronas && EnsureCoronaManagerBringUp(mCoronaManager))
         {
-            PCBringUpPublishCoronaCamera(mCoronaManager);
+            if (maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameInternal])
+                PCBringUpPublishCoronaCamera(mCoronaManager,
+                    maShaderConstantsFrames[mu8ShaderConstantsFrameInternal]);
             mCoronaManager.Render(lfFrameWhiteLevel);
         }
 
@@ -6779,7 +6691,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // pass, exactly the console order). Clean no-op until the GUI module is prepared.
     // This is how BootLegal's Title_Screen02 movie reaches the screen. [GUI render path]
     if (BrnGui::gpActiveGuiModule != 0)
-        BrnGui::gpActiveGuiModule->Render(&mIm2dRenderBuffer);
+        BrnGui::gpActiveGuiModule->DispatchRenderBufferPC();
 
     // (gameplay-render passes here when reconstructed; gated off during the loading screen)
 
@@ -6792,7 +6704,8 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // is BootLegal::OnEnter's). The PC FFmpeg substitute has no overlay plane, so its
     // presentation quad draws here, after the loading-screen foreground, to reproduce
     // that layering. The manager's Update stays in its real GUI-pass home.
-    if (BrnGui::gpActiveMovieManager != 0)
+    const PCMovieFrame& lrMovie = maPCMovieFrames[mu8PCMovieWriteFrame ^ 1u];
+    if (lrMovie.mbManagerPresent)
     {
         // The XMV presentation owns the screen for the WHOLE video cycle, not just the
         // frames a picture is up: the console shows BLACK between the boot logos (player
@@ -6820,7 +6733,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         const bool lbLoadingFadePending =
             mLoadingScreenRenderer.IsForegroundHideFadePending();
         const bool lbPresenting = !lbLoadingFadePending &&
-            BrnGui::gpActiveMovieManager->IsMoviePresentationActive();
+            lrMovie.mbPresenting;
         const u64  lu64PresentNow  = CgsSystem::GetSystemTimerBaseTime64();
         const u64  lu64PresentFreq = CgsSystem::GetSystemTimerFrequency64();
         if (lbPresenting)
@@ -6847,8 +6760,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
                 std::snprintf(lacMsg, sizeof(lacMsg),
                               "[MovieOwn] f=%u presenting=%d owns=%d queued=%d state=%d\n",
                               renderengine::guPresentCount, lbPresenting ? 1 : 0, lbOwnsScreen ? 1 : 0,
-                              BrnGui::gpActiveMovieManager->IsMovieQueued() ? 1 : 0,
-                              static_cast<s32>(BrnGui::gpActiveMovieManager->GetState()));
+                              lrMovie.mbQueued ? 1 : 0, lrMovie.miState);
                 CgsDev::Log::WriteToLog(lacMsg);
             }
         }
@@ -6864,12 +6776,12 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         // The video frame quad holds with the ownership underlay -- see the fade seat above.
         if (!lbLoadingFadePending && mIm2dRenderBuffer.IsPreparedPC())
         {
-            BrnGui::gpActiveMovieManager->Render(&mIm2dRenderBuffer);
-            mIm2dRenderBuffer.Swap();
-            mIm2dRenderBuffer.Clear();
             mIm2dRenderBuffer.Dispatch(&mIm2dRenderer);
         }
     }
+
+    if (BrnGame::BrnGameModule* lpGame = BrnGame::GetMainGameModule())
+        lpGame->PrepareDebugOverlayForDispatchPC();
 
     // Record the debug primitives, then consume their frozen buffer above the
     // foreground/movie layers. The 3D debug buffer remains on its existing path.
@@ -6914,11 +6826,20 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     renderengine::Device::ShowPixelBuffer();
 }
 
-// Renders the on-screen assert overlay (forwarded from BrnGameModule::RenderAssert). The real
-// body draws the assert text via the immediate-mode renderer; minimal until the assert overlay
-// path is reconstructed (asserts are inert on the boot/loading path).
-void BrnRendererModule::RenderAssert(const AssertData* /*lpAssertData*/)
+// FLAG PC-platform leaf: the modal loop consumes its own bank on the fenced
+// render owner. The game and debug producers retain their interrupted commands.
+void BrnRendererModule::RenderAssert(const CgsDev::Assert::AssertData* lpAssertData)
 {
+    if (!mIm2dAssertRenderBufferPC.IsPreparedPC())
+        return;
+    if (CgsDev::DebugManager* lpDebug = CgsDev::DebugManager::GetInstance())
+    {
+        mIm2dAssertRenderBufferPC.Clear();
+        lpDebug->RenderAssertToBufferPC(lpAssertData, &mIm2dAssertRenderBufferPC);
+        mIm2dAssertRenderBufferPC.Swap();
+        mIm2dAssertRenderBufferPC.Clear();
+        mIm2dAssertRenderBufferPC.Dispatch(&mAssertIm2dRendererPC);
+    }
 }
 
 // The corona manager's published (swap-current) submission interface. Bodied 2026-08-17

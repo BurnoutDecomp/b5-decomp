@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+namespace EA { namespace Thread { class Semaphore; } }
 
 // The assert front-end. CgsDev::Assert is a NAMESPACE of free functions (not a
 // class of statics): the X360 build attests BeginAssert / FireAssert / EndAssert
@@ -34,6 +35,16 @@ namespace Assert
     int   BeginAssert();
     int   FireAssert(const char* lpcExpression, const char* lpcFile, int liLine);
     void* EndAssert();
+
+    // FLAG PC-platform leaf: assertions coordinate before taking the assert
+    // mutex. Foreign workers publish captured failures for the joined owner.
+    using FrameFencePC = void (*)(void*);
+    void AttachFrameOwnerPC(void* lpOwner, FrameFencePC lpFence);
+    void DetachFrameOwnerPC(void* lpOwner);
+    void SetDispatchThreadPC(bool lbDispatch);
+    void DispatchPendingAssertsPC(bool lbAllowDisplay = true);
+    void ServiceWorkerAssertsWhileWaitingPC();
+    int WaitForWorkerPC(EA::Thread::Semaphore& lrCompletion);
 }
 }
 

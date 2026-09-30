@@ -2,16 +2,20 @@
                         // message pump). Included FIRST so winuser.h is fully pulled in before any merged
                         // renderengine header (reached via device.h below) can suppress it with WIN32_LEAN_AND_MEAN.
 #undef DrawText         // winuser.h defines DrawText as a macro (->DrawTextW); undef it so this file's own
+#ifdef AddMonitor
+#undef AddMonitor
+#endif
                         // DrawText method (the assert-overlay text path) resolves. (device.h's later guarded
                         // re-include won't redefine it.)
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // mpRender Begin/End/HasRenderBuffer
-#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"               // DebugManager::RenderAssertOverlay (the ARTIST overlay)
 #include "GameShared/GameClasses/Development/MapFile/Reader/CgsMapFileReaderMinimalMemory.h"  // the call-stack symbol resolver
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"  // IsHardwareWantingToShutdown (the window-close request)
 #include "GameShared/GameClasses/System/CgsHarnessSlot.h"   // BRN_HARNESS_SLOT name suffix (parallel harness slots)
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device (FrameBegin/ShowPixelBuffer) + <Windows.h>
+#include "GameSource/Game/BrnGameModule.hpp"
+#include "pc/gcm/renderengine/AssertFramePCLeaf.h"
 #undef DrawText                            // <Windows.h> (via device.h) #defines DrawText -> DrawTextA; keep our method name
 
 #include <cstdio>    // snprintf (the X360 used CgsCore::SPrintf)
@@ -178,6 +182,14 @@ namespace Assert
 
     void Manager::HandleAssert(const char* lpcMessage, const char* lpcFile, s32 liLine)
     {
+        StackUnpick lStack;
+        lStack.Prepare();
+        HandleAssertCapturedPC(lpcMessage, lpcFile, liLine, lStack, true);
+    }
+
+    void Manager::HandleAssertCapturedPC(const char* lpcMessage, const char* lpcFile, s32 liLine,
+                                         const StackUnpick& lrStack, bool lbAllowDisplay)
+    {
         if (!lpcMessage)
             lpcMessage = "<no expression>";
         if (!lpcFile)
@@ -194,8 +206,22 @@ namespace Assert
             return;
         }
 
-        StackUnpick lStack;
-        lStack.Prepare();
+        // A worker released during shutdown still needs its own captured stack
+        // in the log. Do not replace an earlier pending on-screen assertion.
+        if (!lbAllowDisplay)
+        {
+            *Log::gpDebugPrint << "[ASSERT " << miAssertCount << "] " << lpcMessage
+                               << " (" << lpcFile << ":" << liLine << ")\n";
+            if (!mbInAssert)
+            {
+                mbInAssert = true;
+                StackUnpick lStack = lrStack;
+                LogCallstackPC(lStack);
+                ExecuteAssertHandlers();
+                mbInAssert = false;
+            }
+            return;
+        }
 
         if (!mbGotAssert)
         {
@@ -204,7 +230,7 @@ namespace Assert
             mCurrentAssert.mpcFile     = lpcFile;
             mCurrentAssert.miLine      = liLine;
             mCurrentAssert.mpMapReader = nullptr;
-            mCurrentAssert.mStack      = lStack;
+            mCurrentAssert.mStack      = lrStack;
             mbGotAssert = true;
         }
 
@@ -249,10 +275,8 @@ namespace Assert
     // so the game freezes on a non-fatal assert, shows the report, and can continue. The blocking runs on
     // the asserting thread (the only thread on the loading boot); InteruptThreadForAssert is the
     // threading follow-on.
-    void Manager::DoAssert()
+    void Manager::LogCallstackPC(StackUnpick& lrStack)
     {
-        mbInAssert = true;
-
         // Resolve the captured call-stack against the function map (X360 DoAssert: open + read the map via
         // the reader, store it on the current assert, then dump the resolved call-stack to the log). The
         // reader is wired lazily on first use; it opens the map next to the executable.
@@ -260,30 +284,46 @@ namespace Assert
             SetMapFileReader(&gMinimalMemoryReader, GetDefaultMapFilePath());
         if (mpMapFileReader)
         {
-            mpMapFileReader->Prepare(mpcMapFileName, &mCurrentAssert.mStack);
-            mCurrentAssert.mpMapReader = mpMapFileReader;
+            mpMapFileReader->Prepare(mpcMapFileName, &lrStack);
         }
 
         Log::DebugPrint* lpLog = Log::gpDebugPrint;
         *lpLog << "  Callstack:\n";
-        for (s32 liIndex = 0; liIndex < mCurrentAssert.mStack.GetNumStackAddresses(); ++liIndex)
+        for (s32 liIndex = 0; liIndex < lrStack.GetNumStackAddresses(); ++liIndex)
         {
             const char* lpcName = mpMapFileReader ? mpMapFileReader->GetStackEntryName(liIndex) : nullptr;
             if (lpcName)
                 *lpLog << "    " << lpcName << "\n";
             else
-                *lpLog << "    " << reinterpret_cast<void*>(mCurrentAssert.mStack.GetStackAddress(liIndex)) << "\n";
+                *lpLog << "    " << reinterpret_cast<void*>(lrStack.GetStackAddress(liIndex)) << "\n";
         }
         *lpLog << "  EndCallstack\n";
+    }
+
+    void Manager::DoAssert()
+    {
+        mbInAssert = true;
+        LogCallstackPC(mCurrentAssert.mStack);
+        mCurrentAssert.mpMapReader = mpMapFileReader;
 
         ExecuteAssertHandlers();
 
-        // InteruptThreadForAssert (halt the other threads) is the threading follow-on. The X360 then loops
-        // forever in DisplayAssertScreen; this build halts on-screen + resumes on END, but only once the
-        // renderer can draw - an early assert (before the first rendered frame) has logged + resolved
-        // above and continues.
+        // The native front end has coordinated frame ownership before entering
+        // the assert mutex. Keep the modal END-to-resume loop on that owner.
+        // Early asserts with no prepared renderer remain logged-only.
         if (CanRenderAssert())
         {
+            IDirect3DSurface9* lpBackBuffer = nullptr;
+            renderengine::PCGetBackBuffer(&lpBackBuffer);
+            renderengine::PCAssertFrame lSavedFrame(renderengine::gDevice, lpBackBuffer);
+            if (lpBackBuffer) lpBackBuffer->Release();
+            if (!lSavedFrame.IsReady())
+            {
+                Log::WriteToLog("[assert] could not preserve the native render context; report retained in log.\n");
+                ClearCurrentAssert();
+                mbInAssert = false;
+                return;
+            }
             // FLAG PC-platform leaf: the unattended boot harness drives the game through
             // named auto-reset events only (see CgsInputPadsPC::ConsumeHarnessAction) and
             // cannot press END; with the same BRN_INPUT_ALLOW_BACKGROUND marker set,
@@ -374,16 +414,10 @@ namespace Assert
                 return;
         }
 
-        // Paint the RenderAssert OVERLAY - the look the real ARTIST build shows ("line:file" + the failed
-        // expression + the map-resolved call-stack). On the X360 the display-owning thread paints
-        // DebugManager::RenderAssert while the asserting thread parks; on this single-threaded boot the one
-        // (frozen) thread paints it here. (Manager::DisplayCurrentAssert below is the asserting-thread's own
-        // "CGSASSERT" dialog - the faithful path for when threading lands, currently not the active display.)
-        if (DebugManager* lpDebugManager = DebugManager::ThreadSafeAquire())
-        {
-            lpDebugManager->RenderAssertOverlay();
-            DebugManager::ThreadSafeRelease(lpDebugManager);
-        }
+        // Record and consume the ARTIST text layout using the renderer's
+        // separate modal bank. No normal HUD command is consumed or overwritten.
+        if (BrnGame::BrnGameModule* lpGame = BrnGame::GetMainGameModule())
+            lpGame->RenderAssert(&mCurrentAssert);
 
         renderengine::Device::ShowPixelBuffer();
     }

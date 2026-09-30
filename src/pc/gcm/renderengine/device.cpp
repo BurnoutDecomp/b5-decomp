@@ -6,6 +6,8 @@
 
 #include <Windows.h>
 #include <d3d9.h>
+#undef DrawText
+#include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"
 #include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
 #include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
 #include <cstring>
@@ -237,6 +239,12 @@ void renderengine::Device::Start()
     DWORD luBehaviorFlags = (lCaps.DevCaps & D3DDEVCAPS_HWTRANSFORMANDLIGHT)
                                 ? D3DCREATE_HARDWARE_VERTEXPROCESSING
                                 : D3DCREATE_SOFTWARE_VERTEXPROCESSING;
+    // FLAG PC-platform leaf: the window/message pump remains on the main thread
+    // while ThreadLayout dispatches D3D work on its render thread. D3D9 requires
+    // MULTITHREADED for that arrangement, even when our resource phase is joined.
+    // Keep the same device policy in the serial benchmark control as well.
+    // https://learn.microsoft.com/en-us/windows/win32/direct3d9/d3dcreate
+    luBehaviorFlags |= D3DCREATE_MULTITHREADED;
 
     D3DPRESENT_PARAMETERS lPresentParams;
     std::memset(&lPresentParams, 0, sizeof(lPresentParams));
@@ -338,15 +346,26 @@ bool renderengine::Device::FrameBeginNoClear()
 }
 
 // [diag] present counter shared with the draw-trace diagnostics (CgsIm2d.cpp reads it to
-// stamp traced draws with their frame). Plain u32; single render thread on the PC boot.
-namespace renderengine { u32 guPresentCount = 0; }
+// stamp traced draws with their frame). The live counters stay on dispatch.
+namespace renderengine {
+    static u32 guDispatchPresentCountPC = 0;
+    static bool gbDispatchLastPresentBlackPC = false;
+    u32 guPresentCount = 0;
+    bool gbDiagLastPresentBlack = false;
+    // FLAG PC-platform leaf: publish after join so update-side diagnostics
+    // never read counters while dispatch modifies the next present.
+    void PublishPresentDiagnosticsPC()
+    {
+        guPresentCount = guDispatchPresentCountPC;
+        gbDiagLastPresentBlack = gbDispatchLastPresentBlackPC;
+    }
+}
 // [DIAG] NOT IN THE X360 BINARY -- what the game submitted during the present being watched
 // (issue #30): draws through the two Xenon draw shims, EDRAM resolves and the last resolve's
 // destination. A black present with draws == 0 is the game skipping its frame; one with the
 // usual thousands of draws and no resolve to the back buffer is a routing/composite defect.
 namespace renderengine { u32 guDiagDraws = 0; u32 guDiagResolves = 0; void* gpDiagLastResolveDest = nullptr;
-                         u32 guDiagWorldDraws = 0; u32 guDiagImBatches = 0; u32 guDiagImFullBlack = 0; u32 guDiagComposites = 0;
-                         bool gbDiagLastPresentBlack = false; }   // [DIAG] the watched present was black -- game-side prints key on it
+                         u32 guDiagWorldDraws = 0; u32 guDiagImBatches = 0; u32 guDiagImFullBlack = 0; u32 guDiagComposites = 0; }   // [DIAG] the watched present was black -- game-side prints key on it
 
 // [diag] BRN_FRAME_DUMP=<dir>: save the back buffer as BMP into <dir> every Nth present
 // (PrintWindow returns black against this device, so the game dumps its own frames).
@@ -504,7 +523,7 @@ static void WatchBlackFramesIfRequested()
     }
     spSys->UnlockRect();
     const f32 lfMean = static_cast<f32>(luSum) / static_cast<f32>(KU_W * KU_H * 3u);
-    renderengine::gbDiagLastPresentBlack = (lfMean < static_cast<f32>(siThreshold)) && renderengine::guPresentCount > 2000u;
+    renderengine::gbDispatchLastPresentBlackPC = (lfMean < static_cast<f32>(siThreshold)) && renderengine::guDispatchPresentCountPC > 2000u;
 
     if (lfMean < static_cast<f32>(siThreshold))
     {
@@ -513,7 +532,7 @@ static void WatchBlackFramesIfRequested()
             char lacMsg[200];
             std::snprintf(lacMsg, sizeof(lacMsg),
                           "[black-frame] BEGIN present=%u tick=%llu mean=%.1f prevMean=%.1f draws=%u resolves=%u lastResolveDest=%p world=%u im2d=%u imFullBlack=%u composites=%u\n",
-                          renderengine::guPresentCount,
+                          renderengine::guDispatchPresentCountPC,
                           static_cast<unsigned long long>(GetTickCount64()), lfMean, sfPrevMean,
                           renderengine::guDiagDraws, renderengine::guDiagResolves, renderengine::gpDiagLastResolveDest,
                           renderengine::guDiagWorldDraws, renderengine::guDiagImBatches, renderengine::guDiagImFullBlack, renderengine::guDiagComposites);
@@ -525,7 +544,7 @@ static void WatchBlackFramesIfRequested()
             char lacRun[160];
             std::snprintf(lacRun, sizeof(lacRun),
                           "[black-frame]   present=%u mean=%.1f draws=%u resolves=%u lastResolveDest=%p world=%u im2d=%u imFullBlack=%u composites=%u\n",
-                          renderengine::guPresentCount, lfMean, renderengine::guDiagDraws,
+                          renderengine::guDispatchPresentCountPC, lfMean, renderengine::guDiagDraws,
                           renderengine::guDiagResolves, renderengine::gpDiagLastResolveDest,
                           renderengine::guDiagWorldDraws, renderengine::guDiagImBatches, renderengine::guDiagImFullBlack, renderengine::guDiagComposites);
             CgsDev::Log::WriteToLog(lacRun);
@@ -536,7 +555,7 @@ static void WatchBlackFramesIfRequested()
         // (`blackframe_<present>.bmp`), so "black" can be told apart from "world missing, HUD
         // drawn" -- a mean of 1.1 with a HUD on screen is the scene / post-fx path, a mean of 0.0
         // is the presenter. Two files per window, cost only when a window opens.
-        if (suBlackRun <= 2u && renderengine::guPresentCount > 2000u)
+        if (suBlackRun <= 2u && renderengine::guDispatchPresentCountPC > 2000u)
         {
             IDirect3DSurface9* lpFull = nullptr;
             if (SUCCEEDED(renderengine::PCGetBackBuffer(&lpFull)) && lpFull != nullptr)
@@ -552,7 +571,7 @@ static void WatchBlackFramesIfRequested()
                     if (SUCCEEDED(lpFullSys->LockRect(&lFullLock, nullptr, D3DLOCK_READONLY)))
                     {
                         char lacPath[128];
-                        std::snprintf(lacPath, sizeof(lacPath), "blackframe_%06u.bmp", renderengine::guPresentCount);
+                        std::snprintf(lacPath, sizeof(lacPath), "blackframe_%06u.bmp", renderengine::guDispatchPresentCountPC);
                         FILE* lpFile = std::fopen(lacPath, "wb");
                         if (lpFile != nullptr)
                         {
@@ -588,7 +607,7 @@ static void WatchBlackFramesIfRequested()
         char lacMsg[200];
         std::snprintf(lacMsg, sizeof(lacMsg),
                       "[black-frame] END present=%u tick=%llu after=%u presents mean=%.1f (this present: world=%u im2d=%u composites=%u)\n",
-                      renderengine::guPresentCount,
+                      renderengine::guDispatchPresentCountPC,
                       static_cast<unsigned long long>(GetTickCount64()), suBlackRun, lfMean,
                       renderengine::guDiagWorldDraws, renderengine::guDiagImBatches, renderengine::guDiagComposites);
         CgsDev::Log::WriteToLog(lacMsg);
@@ -607,7 +626,7 @@ static void DumpBackBufferIfRequested()
         DWORD luLen = GetEnvironmentVariableA("BRN_FRAME_DUMP", sacDir, sizeof(sacDir));
         if (luLen == 0 || luLen >= sizeof(sacDir)) { sacDir[0] = 0; }
     }
-    if (sacDir[0] == 0 || (renderengine::guPresentCount % renderengine::FrameDumpEvery()) != 0u)
+    if (sacDir[0] == 0 || (renderengine::guDispatchPresentCountPC % renderengine::FrameDumpEvery()) != 0u)
     {
         return;
     }
@@ -699,6 +718,10 @@ static void DumpBackBufferIfRequested()
             {
                 siArm = 7;
             }
+            else if (_stricmp(lacArm, "assert") == 0)
+            {
+                siArm = 8;
+            }
             else
             {
                 siArm = 1;
@@ -742,6 +765,8 @@ static void DumpBackBufferIfRequested()
         }
             return;
         }
+        if (siArm == 8 && !CgsDev::Assert::gAssertManager.HasAssert())
+            return;
         if (suMax != 0u)
         {
             static u32 suWritten = 0u;
@@ -767,7 +792,7 @@ static void DumpBackBufferIfRequested()
         {
             char lacPath[600];
             std::snprintf(lacPath, sizeof(lacPath), "%s\\bb_%06u.bmp",
-                          sacDir, renderengine::guPresentCount);
+                          sacDir, renderengine::guDispatchPresentCountPC);
             FILE* lpFile = std::fopen(lacPath, "wb");
             if (lpFile != nullptr)
             {
@@ -841,7 +866,7 @@ static void DumpBackBufferIfRequested()
                     // frame-coupled sim makes impossible by frame index. See the banner on
                     // BrnDiag::FilmLatch::mfCarPosX.
                     std::fprintf(lpCsv, "%u,%.6f,%.6f,%.6f,%d,%d,%.3f,%.3f,%.3f,%u,%u,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%u,%u,%.4f,%.3f,%.3f,%.3f,%u\n",
-                                 renderengine::guPresentCount,
+                                 renderengine::guDispatchPresentCountPC,
                                  BrnDiag::gFilmLatch.mfLiveSimScale,
                                  BrnDiag::gFilmLatch.mfLiveSimStep,
                                  BrnDiag::gFilmLatch.mfLiveBoostFraction,
@@ -899,7 +924,7 @@ void renderengine::Device::ShowPixelBuffer()
     {
         static u32 suPrinted = 0u;
         static HRESULT shrLast = S_OK;
-        if ((lhrPresent != S_OK && lhrPresent != shrLast) || (renderengine::gbDiagLastPresentBlack && suPrinted < 64u))
+        if ((lhrPresent != S_OK && lhrPresent != shrLast) || (renderengine::gbDispatchLastPresentBlackPC && suPrinted < 64u))
         {
             shrLast = lhrPresent;
             ++suPrinted;
@@ -910,15 +935,15 @@ void renderengine::Device::ShowPixelBuffer()
             char lacMsg[200];
             std::snprintf(lacMsg, sizeof(lacMsg),
                           "[present-diag] present=%u hrPresent=0x%08X coop=0x%08X rt0=%p backbuffer=%p%s\n",
-                          renderengine::guPresentCount, static_cast<unsigned>(lhrPresent),
+                          renderengine::guDispatchPresentCountPC, static_cast<unsigned>(lhrPresent),
                           static_cast<unsigned>(gDevice->TestCooperativeLevel()), static_cast<void*>(lpRt0), static_cast<void*>(lpBb),
-                          renderengine::gbDiagLastPresentBlack ? " (black present)" : "");
+                          renderengine::gbDispatchLastPresentBlackPC ? " (black present)" : "");
             if (lpRt0 != nullptr) lpRt0->Release();
             if (lpBb != nullptr) lpBb->Release();
             CgsDev::Log::WriteToLog(lacMsg);
         }
     }
-    ++renderengine::guPresentCount;
+    ++renderengine::guDispatchPresentCountPC;
     renderengine::guDiagDraws = 0;   // [DIAG] issue #30 per-present counters
     renderengine::guDiagResolves = 0;
     renderengine::gpDiagLastResolveDest = nullptr;

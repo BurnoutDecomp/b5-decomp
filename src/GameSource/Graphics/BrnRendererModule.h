@@ -2,6 +2,7 @@
 #include "GameSource/Effects/EffectsDebugPostFxSettingsPC.h"
 
 #include "types.hpp"
+namespace CgsDev { namespace Assert { struct AssertData; } }
 
 // Real loading-screen-path member types (Option B: these are reconstructed for real; the
 // off-path gameplay-render subsystems below remain opaque storage until reached).
@@ -342,9 +343,13 @@ public:
     // is reconstructed; the gameplay-render path (shadows/world/cars/particles/post-fx) is
     // data-gated off during boot and reconstructed incrementally.
     void Render(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
+    // FLAG PC-platform leaf: GUI/movie preparation happens at the joined frame
+    // boundary; Render consumes commands and metadata published with that frame.
+    void Prepare2DFramePC();
+    void PrepareDisplayPC();
 
     // Renders the on-screen assert overlay (forwarded from BrnGameModule::RenderAssert).
-    void RenderAssert(const struct AssertData* lpAssertData);
+    void RenderAssert(const CgsDev::Assert::AssertData* lpAssertData);
 
     // ---- the per-frame GDL (game-side dispatch list) ring contract ----------
     // The console drives the +0x2A8 BufferedDispatchFrame from three entry points; the
@@ -684,11 +689,22 @@ private:
     CgsGraphics::DispatchFrame         mSingleBufferedDispatchFrame;
     BrnGraphics::EffectsArbitrator     mEffectsArbitrator;
     BrnShaderConstantsFrame            maShaderConstantsFrames[2];
+    // FLAG PC-platform leaf: validity travels with the frozen sky/lighting frame.
+    bool                  maShaderConstantsFrameValidPC[2] = {};
     u8                    mu8ShaderConstantsFrameInternal;
     u8                    mu8ShaderConstantsFrameExternal;
     CgsGraphics::DispatchPacketInterpreter* mpInterpreter;
     void (*maInterpretFunctions[KU_NUM_INTERPRET_FUNCTIONS])(CgsGraphics::DispatchCommand*, CgsGraphics::DispatchFrame*, void*, f32);
     CgsGraphics::Im2dRenderBuffer       mIm2dRenderBuffer;
+    struct PCMovieFrame
+    {
+        bool mbManagerPresent = false;
+        bool mbPresenting = false;
+        bool mbQueued = false;
+        s32 miState = 0;
+    };
+    PCMovieFrame                      maPCMovieFrames[2];
+    u8                                mu8PCMovieWriteFrame = 0;
     CgsGraphics::Im2d                   mIm2dRenderer;
     CgsGraphics::Im2dUntex              mIm2dRendererUntex;
     CgsGraphics::Im3dRenderBuffer       mIm3dRenderBuffer;
@@ -699,6 +715,9 @@ private:
     CgsGraphics::Im3dZOnly              mIm3dRendererZOnly;
     CgsGraphics::Im3dRenderBuffer       mIm3dDebugRenderBuffer;
     CgsGraphics::Im2dRenderBuffer       mIm2dDebugRenderBuffer;
+    // FLAG PC-platform leaf: a modal assertion must not overwrite the HUD bank.
+    CgsGraphics::Im2dRenderBuffer       mIm2dAssertRenderBufferPC;
+    CgsGraphics::Im2d                   mAssertIm2dRendererPC;
     renderengine::TextureState*         mpTextureState;
     TextureStateParameters              mTextureStateParams;
     Resource                            mTextureStateResource;

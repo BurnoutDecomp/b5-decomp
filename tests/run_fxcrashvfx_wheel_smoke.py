@@ -74,7 +74,7 @@ def wiring(tree):
     spawn = body(module, SPAWN_SIGNATURE)
     yield ("ParticleModule::SpawnWheelSmoke has a body: one draw over the array's rotation-speed range, times the "
            "angular scale, negated for the reversed wheels, into the REGULAR bank at alpha 1.0 (0x82281AF0)",
-           spawn != "" and "mRandom.RandomFloat(lpParams->mrRotationSpeedMin, lpParams->mrRotationSpeedMax)" in spawn
+           spawn != "" and re.search(r"(?:mRandom|lrRandom)\.RandomFloat\(lpParams->mrRotationSpeedMin, lpParams->mrRotationSpeedMax\)", spawn)
            and "* lfAngularVelocityScale" in spawn and "-lfRotationalVelocity" in spawn
            and re.search(r"SpawnParticle\(lvPosition,\s*lvVelocity,\s*lfSpawnTime,\s*lfSizeScale,\s*"
                          r"lfRotationalVelocity,\s*false,\s*1\.0f\)", spawn) is not None)
@@ -116,6 +116,8 @@ def numeric(tree):
     module = tree.read(MODULE_CPP)
     shadow = {relative: tree.read(relative) for relative in SHADOW_HEADERS if tree.read(relative)}
     inc = source + "\n"
+    if "DrawRandomPC" in module:
+        inc = "#define BRN_TEST_PARTICLE_RANDOM_PC 1\n" + inc
     try:
         # SpawnWheelSmoke joins the unit when the revision has it (a revision without it never calls it).
         inc += "\nnamespace BrnParticle\n{\n" + definition(module, SPAWN_SIGNATURE) + "\n}\n"

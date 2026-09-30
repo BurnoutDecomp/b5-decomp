@@ -559,6 +559,7 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
             lrArray.mBankRegular.Prepare(&lrArray);
             lrArray.mBankCrash.Prepare(&lrArray);
         }
+        mSimpleParticleFramePC.Prepare(maSimpleParticles);
 
         // --- the spark spawn buffer ----------------------------------------------------------
         // ⚠ the console stores the count with `sthx` (a HALFWORD) even though the DWARF types

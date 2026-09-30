@@ -41,6 +41,9 @@ namespace CgsDev
         void AppendFormat(const char* lpcFormat, ...);
 
     protected:
+        // FLAG PC-platform leaf: the shared debug stream keeps formatting state
+        // per native thread; ordinary caller-owned streams retain their member.
+        virtual PrintMode& GetPrintModePC() { return mePrintMode; }
         void Append64IntDecimal(u64 luValue);
         void Append64IntHex(u64 luValue);
 

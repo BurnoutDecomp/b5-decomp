@@ -28,6 +28,13 @@ namespace Log
         using StrStreamBase::operator<<;
 
         StrStreamBase& operator<<(const char* lpcText) override;
+
+    protected:
+        PrintMode& GetPrintModePC() override
+        {
+            static thread_local PrintMode seMode = E_PRINTMODE_DECIMAL;
+            return seMode;
+        }
     };
 
     extern DebugPrint* gpDebugPrint;

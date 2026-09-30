@@ -86,6 +86,9 @@ namespace BrnParticle
 
         Native::BrnDebrisArray      maDebris[KU_NUM_DEBRIS_ARRAYS];
         CgsNumeric::Random          mRandom;
+        // This fixture verifies console arithmetic; PCParticleFrame tests the
+        // native lock around the same draw callable with concurrent threads.
+        template<class Draw> decltype(auto) DrawRandomPC(Draw lfDraw) { return lfDraw(mRandom); }
         Native::DebrisUpdateJobData maDebrisUpdateJobData[KI_NUM_DEBRIS_UPDATE_JOBS];
         s32                         miNumDebrisUpdateJobsToWaitOn;
 

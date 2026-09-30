@@ -271,6 +271,8 @@ namespace BrnEffects
         void GenerateDispatchLists(CgsModule::IOBufferStack* lpInputBufferStack,
                                    const EffectsIO::DispatchInputBuffer* lpDispatchInputBuffer,
                                    BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
+        virtual void PreRenderUpdate(BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
+        virtual void DispatchThreadUpdate(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
         // @0x822793E0 (DWARF :2110). Static: raises the QA "restart effects" latch.
         static void RestartEffects();
 
