@@ -10,6 +10,7 @@ from fxgs_common import Tree, REPO, STRSTREAM_CPP, definition, compile_and_run, 
 parser = argparse.ArgumentParser()
 parser.add_argument('--old-free', action='store_true')
 parser.add_argument('--old-records', action='store_true')
+parser.add_argument('--old-init', action='store_true', help='restore the missing idle initialization')
 args = parser.parse_args()
 base = 'src/GameShared/GameClasses/System/Resource/'
 tree = Tree()
@@ -17,7 +18,7 @@ pool = tree.read(base + 'CgsResourcePool.cpp')
 names = ['Construct', 'InitPool', 'InitManagementData',
          'GetId', 'GetName', 'GetHeapAlignment', 'GetNumEntriesInPurgatory',
          'GetEntryRefCount', 'SetEntryRefCount', 'IncEntryRefCount', 'DecEntryRefCount',
-         'GetRefCountThreshold', 'FixUpEntry', 'PostFixUpEntry', 'ResolveImportForEntry',
+         'GetRefCountThreshold', 'IsDefragmenting', 'FixUpEntry', 'PostFixUpEntry', 'ResolveImportForEntry',
          'ResolveImportsForEntry', 'FixUpAndResolveResourceList',
          'SetEntryStatus', 'SetEntryImportCount', 'FindResourceIndex', 'FindResource',
          'FindResourceWithDependencies', 'FindResourceIndexWithDependencies',
@@ -30,7 +31,8 @@ code = 'namespace CgsResource {\n' + definition(pool, 'u32 GetManagementHashLeng
 for name in names:
     signature = next(line.strip() for line in pool.splitlines()
                      if f'Pool::{name}(' in line and not line.strip().startswith('//'))
-    code += definition(pool, signature) + '\n'
+    source = Tree('64f9b755').read(base + 'CgsResourcePool.cpp') if args.old_init and name == 'InitPool' else pool
+    code += definition(source, signature) + '\n'
 code += definition(pool, 'void AllocListSet::ClearCountsAndResults(') + '\n'
 code += definition(tree.read(base + 'CgsResourceID.cpp'), 's32 ID::HashString(') + '\n'
 bundle = tree.read(base + 'CgsResourceBundle2.cpp')
@@ -67,4 +69,4 @@ numeric = compile_and_run(Path(__file__).with_name('PCResourceBatch.cpp'), 'pc_r
         REPO / base / 'CgsPoolModuleIO_OutputBuffer.cpp',
         REPO / 'src/GameShared/GameClasses/Module/CgsIOBuffer.cpp',
         REPO / base / 'CgsSmallResource.cpp', REPO / 'vendor/renderware/src/rw/BaseResourceDescriptor.cpp'])
-raise SystemExit(report('run_pc_resource_batch', [], numeric, 58))
+raise SystemExit(report('run_pc_resource_batch', [], numeric, 59))

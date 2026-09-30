@@ -427,6 +427,24 @@ were recorded. It averaged 62.93 FPS, with p99 27.22 ms and maximum 38.98 ms.
 The fights differ from previous runs, so these numbers establish neither a
 speedup nor a regression. The 165 FPS objective remains unmet.
 
+The subsequent defrag completion correction restores `IsDefragmenting()` and
+the original idle initialization. Both the intelligent and emergency pollers
+had mistaken the retained memory-type selector for the frame counter that marks
+completion. `run_pc_resource_defrag_state.py` passes 20 checks; its `--old-poll`
+control fails six. The planner and final allocator are counting boundaries in
+this test, so it does not exercise actual relocation. The expanded resource
+batch suite passes 59 checks; `--old-init` fails the new idle-initialization
+check. These fixes remove activation blockers without enabling asynchronous
+streaming or establishing a performance gain.
+
+The functional capture `combat_defrag_idle_visual_0930` on build `3b7c5003971b`
+records nine player takedowns across six rivals, peak three crashing/three
+airborne rivals, and no event end, assertions or exceptions. Captures 2520 and
+2880 show a flying rival wreck and a two-in-a-row takedown; 3120 shows resumed
+driving with the world, player and HUD, and 3600 covers the player's own wreck.
+All 884 focus samples were foreground. Frame captures were enabled, so this
+run is functional evidence and is excluded from FPS comparisons.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still

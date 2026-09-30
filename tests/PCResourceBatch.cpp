@@ -125,6 +125,8 @@ int main() {
     memberType.InitCachedValues();
     {
         Fixture f;
+        Check(!f.pool.IsDefragmenting() && f.pool.miDefragFrame==-1 && f.pool.mpCurrentScratchPool==nullptr,
+              "newly initialized pool has the original idle defrag latch and no scratch owner");
         f.Begin();
         Check(f.state.Update()==AllocatePoolModuleState::E_RESULT_SUCCESS, "creation/allocation/merge completes in one successful update");
         Check(f.needs[0] && f.needs[1] && f.set.manAllocRequestCounts[0]==3

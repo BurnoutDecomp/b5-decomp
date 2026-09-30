@@ -130,7 +130,7 @@ namespace CgsResource
     //                           NEED_DEFRAG kicks off BeginDefragment for that memtype (PEND on
     //                           success; on failure fall back to IDLE and escalate to EMERGENCY). If
     //                           none need defrag, return to IDLE and report SUCCESS.
-    //   DEFRAGMENTING_HEAP(2):  once the pool's defrag latch has cleared (GetDefragMemType()==-1),
+    //   DEFRAGMENTING_HEAP(2):  once the pool's frame latch has cleared (!IsDefragmenting()),
     //                           re-latch and arm the final addressed allocations; return PEND.
     //   >=3 (invalid):          assert tripwire, return ERROR.
     IntelliFragPoolModuleState::EIntelliFragResult IntelliFragPoolModuleState::Update()
@@ -168,7 +168,7 @@ namespace CgsResource
             return E_RESULT_SUCCESS;
 
         case E_STATE_DEFRAGMENTING_HEAP:                // meState == 2
-            if (GetPool()->GetDefragMemType() == -1)    // pool defrag done
+            if (!GetPool()->IsDefragmenting())    // ARTIST 828FF89C: frame counter == -1
             {
                 meState = E_STATE_START_DEFRAGMENTING;
                 DoFinalAllocations();
