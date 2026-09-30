@@ -20,8 +20,9 @@ namespace CgsResource
     // and allocate each resource in a Pool -> copy its data -> fix up its pointers and resolve
     // its imports. It is faithful to the bundle FORMAT (CgsResourceBundle2) and to the
     // per-resource create/fixup/import logic (CgsResource::Pool, decompiled from the X360);
-    // only the IO is PC-shaped (a CRT file read replacing the 360 async stream) -- the "PC IO
-    // layer" of the resource system.
+    // Its current synchronous scheduling still differs from the original asynchronous FSM.
+    // File reads use DeviceManager, and each load retains the original type-29 entry list in
+    // the destination pool so unloading needs no file access.
     //
     // The on-disk data is treated as uncompressed and native-endian here; converting the 360
     // bundle bytes (decompression + big-endian swizzle via BundleV2::EndianSwap) is the data
@@ -29,8 +30,9 @@ namespace CgsResource
     class BundleLoader
     {
     public:
-        // Load lpcFileName into lpPool. Returns the number of resources loaded, or -1 on a
-        // read / format error. If lpfnResolveType is null (or a resource's type is unknown),
+        // Load lpcFileName into lpPool. Returns the number of newly created member resources,
+        // or a negative error; allocation failure rolls back this load's references. If
+        // lpfnResolveType is null (or a resource's type is unknown),
         // that resource is created and its data copied, but it is not fixed up.
         // Stored-id form: the RAW on-disc 64-bit entry id, UNTAGGED -- the X360 store path
         // (AllocatePoolModuleState::CreateResourceList 0x828FF480) registers `*(u64*)entry`
@@ -45,11 +47,9 @@ namespace CgsResource
 
         s32 LoadBundle(const char* lpcFileName, Pool* lpPool, FTypeResolver lpfnResolveType);
 
-        // Unload lpcFileName's resources from lpPool: re-read the bundle's resource id list and
-        // ref-count-release each (Pool::RemoveReference -> frees memory + slot at refcount 0). Returns the
-        // number of resources unloaded, or -1 on a read/format error. [The X360 async unload tracks loaded
-        // bundles + drives the DeAllocate state machine; this PC synchronous form re-derives the id list
-        // from the file and releases directly.]
+        // Release one low-level load using the pool-resident entry list, then release the list.
+        // Returns the number of member resources freed (excluding the list), or -1 if no valid
+        // resident list exists. Shared resources survive until their last reference is released.
         s32 UnloadBundle(const char* lpcFileName, Pool* lpPool);
     };
 }
