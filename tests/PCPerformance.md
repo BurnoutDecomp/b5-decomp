@@ -1208,8 +1208,8 @@ million raw thread cycles. Both frames have zero geometry evictions. This
 identifies substantial texture-creation CPU work in addition to the previously
 observed driver wait; it is not a clean FPS measurement.
 
-A private staging-reuse experiment recorded zero hits during both streaming
-runs, so it is not included. Investigation found that normal pool retirement
+The initial staging-reuse experiment recorded zero hits during both streaming
+runs and was excluded at that stage. Investigation found that normal pool retirement
 frees raster backing bytes without releasing the separately-created native D3D
 texture. FixDown can release it, but is not called on that path. Native raster
 relocation also needs review before a lifetime fix: the inherited ReBase passes
@@ -1251,11 +1251,46 @@ crashing and six airborne, and no assertions, exceptions or event end.
 These instrumented captures are not clean FPS measurements.
 
 Texture creation still produces resource spikes: one 139-texture batch takes
-9.51 ms to realize. The staging cache remains excluded pending a new comparison
-now that native retirement actually occurs. This repair removes a lifetime leak;
+9.51 ms to realize. The lifetime-only build excluded staging reuse pending a fresh comparison.
+The reuse change below follows that repair. Fixing ownership removes a lifetime leak;
 it does not establish locked 165 FPS. Evidence: `texture_lifetime_validation_1001.md`
 and `texture_lifetime_*_1001` runs in the parent checkout's
 `scratch/performance_goal_0929/`.
+
+## Reusing retired CPU texture storage
+
+D3D9Ex texture creation now reuses compatible retired SYSTEMMEM upload textures.
+Live textures keep exclusive editable storage; GPU texture objects are not reused.
+Keys include device, type, format, dimensions and resolved mip count. Dirty,
+locked, failed or incomplete uploads are discarded normally. The cache is
+bounded to 128 objects and 16 MiB of estimated padded pixel storage; driver
+metadata is additional. `BRN_TEXTURE_STAGING_CACHE=0` selects the old path.
+
+In a controlled native test of warmed 64-texture batches, full creation/copy/
+upload time falls from 1.76 to 0.64 ms at 64×64, 3.70 to 1.25 ms at 256×256,
+and 6.55 to 2.84 ms at 512×512. Those are isolated allocation measurements.
+
+Both live five-area runs process 734 raster creations and pass all seven
+streaming/camera checks. Reuse avoids 332 CPU staging allocations (45%). CPU
+creation/lookup time totals 22.19 versus 13.64 ms; total texture realization
+60.64 versus 51.02 ms. Raw thread cycles also fall. Their rendered workloads
+and batch timing differ substantially, so overall FPS is not comparable.
+
+A captured 120-second Road Rage run qualifies with six takedowns across four
+rivals, up to four crashing/three airborne, and no assertions, exceptions or
+event end. It reuses storage for 455 of 517 textures. Driving/crash images retain
+textures and UI. This is diagnostic coverage, not a clean FPS benchmark.
+
+Native pixel tests pass 34 checks with reuse on and off, ownership/bounds tests
+22, resource lifetime 48, and recorder 36. Removing format matching fails two
+checks; caching failed uploads fails two. Build, faithfulness and independent
+review pass, with eight existing C4661 build warnings. Evidence:
+`staging_reuse_validation_1001.md`, `native_texture_staging_summary_1001.json`,
+`staging_fixed_comparison_1001.json` and `staging_reuse_combat_1001` under the
+parent checkout's `scratch/performance_goal_0929/`.
+
+GPU allocation, draw submission and other frame spikes remain. This change
+reduces texture setup work; it does not establish a locked 165 FPS.
 
 ## Remaining original optimization gaps
 

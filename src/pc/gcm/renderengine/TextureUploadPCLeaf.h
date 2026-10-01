@@ -3,6 +3,7 @@
 #include <d3d9.h>
 #include <new>
 #include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/TextureStagingCachePCLeaf.h"
 
 // FLAG PC-platform leaf: D3D9Ex has no MANAGED pool. Keep a SYSTEMMEM upload
 // texture attached to the DEFAULT texture through COM private data. This keeps
@@ -27,17 +28,23 @@ namespace renderengine::TextureUploadPC
         volatile LONG miReferences = 1;
     public:
         IDirect3DBaseTexture9* mpTexture;
+        StagingKey mKey;
         const UINT muLevels, muFaces;
         DWORD* mpLockFlags = nullptr;
         UINT muActiveLocks = 0;
         bool mbDirty = false;
-        explicit Shadow(IDirect3DBaseTexture9* lpSource)
-            : mpTexture(lpSource), muLevels(lpSource->GetLevelCount()), muFaces(lpSource->GetType()==D3DRTYPE_CUBETEXTURE?6:1)
+        bool mbReusable = true;
+        explicit Shadow(IDirect3DBaseTexture9* lpSource, const StagingKey& lrKey)
+            : mpTexture(lpSource), mKey(lrKey), muLevels(lpSource->GetLevelCount()), muFaces(lpSource->GetType()==D3DRTYPE_CUBETEXTURE?6:1)
         {
             mpLockFlags = new (std::nothrow) DWORD[muLevels*muFaces];
             if (mpLockFlags) for (UINT luIndex=0;luIndex<muLevels*muFaces;++luIndex) mpLockFlags[luIndex]=~DWORD(0);
         }
-        ~Shadow() { delete[] mpLockFlags; mpTexture->Release(); }
+        ~Shadow() {
+            delete[] mpLockFlags;
+            if (!mbReusable || muActiveLocks || mbDirty) mpTexture->Release();
+            else gStagingCache.Retire(mpTexture, mKey);
+        }
         HRESULT STDMETHODCALLTYPE QueryInterface(REFIID lrIID,void** lppValue) override
         {
             if (!lppValue) return E_POINTER;
@@ -74,7 +81,7 @@ namespace renderengine::TextureUploadPC
         if (!lpTexture || FAILED(lpTexture->GetPrivateData(KU_SHADOW_ID,&lpShadow,&luBytes))) return nullptr;
         return lpShadow; // GetPrivateData adds a reference for D3DSPD_IUNKNOWN.
     }
-    template<class Texture,class Create> HRESULT CreatePair(IDirect3DDevice9* lpDevice,Texture** lppTexture,Create lCreate)
+    template<class Texture,class Create> HRESULT CreatePair(IDirect3DDevice9* lpDevice,Texture** lppTexture,StagingKey lKey,Create lCreate)
     {
         if (!lppTexture) return E_POINTER;
         *lppTexture=nullptr;
@@ -89,12 +96,19 @@ namespace renderengine::TextureUploadPC
           lhResult=lCreate(D3DPOOL_DEFAULT,&lpGpuTexture); }
         if(SUCCEEDED(lhResult)) {
             FrameProfile::CycleScope lProfile(FrameProfile::TEXTURE_CPU_CREATE);
-            lhResult=lCreate(D3DPOOL_SYSTEMMEM,&lpCpuTexture);
+            lKey.mpDevice = lpDevice;
+            lKey.muLevels = lpGpuTexture->GetLevelCount();
+            lpCpuTexture = static_cast<Texture*>(gStagingCache.Take(lKey));
+            FrameProfile::TextureStaging(lpCpuTexture != nullptr);
+            if (!lpCpuTexture) lhResult=lCreate(D3DPOOL_SYSTEMMEM,&lpCpuTexture);
         }
         if(FAILED(lhResult)) { if(lpCpuTexture)lpCpuTexture->Release(); if(lpGpuTexture)lpGpuTexture->Release(); return lhResult; }
-        Shadow* lpShadow=new(std::nothrow) Shadow(lpCpuTexture);
+        Shadow* lpShadow=new(std::nothrow) Shadow(lpCpuTexture, lKey);
         if(!lpShadow) { lpCpuTexture->Release(); lpGpuTexture->Release(); return E_OUTOFMEMORY; }
-        if(!lpShadow->mpLockFlags || lpCpuTexture->GetLevelCount()!=lpGpuTexture->GetLevelCount())lhResult=E_OUTOFMEMORY;
+        if(!lpShadow->mpLockFlags || lpCpuTexture->GetLevelCount()!=lpGpuTexture->GetLevelCount()) {
+            lpShadow->mbReusable=false;
+            lhResult=E_OUTOFMEMORY;
+        }
         else lhResult=lpGpuTexture->SetPrivateData(KU_SHADOW_ID,static_cast<IUnknown*>(lpShadow),sizeof(IUnknown*),D3DSPD_IUNKNOWN);
         lpShadow->Release();
         if(FAILED(lhResult)) { lpGpuTexture->Release(); return lhResult; }
@@ -102,17 +116,17 @@ namespace renderengine::TextureUploadPC
     }
     inline HRESULT Create2D(IDirect3DDevice9* lpDevice,UINT luWidth,UINT luHeight,UINT luNumLevels,D3DFORMAT leFormat,IDirect3DTexture9** lppTexture)
     {
-        return CreatePair(lpDevice,lppTexture,[&](D3DPOOL lePool,IDirect3DTexture9** lppValue) {
+        return CreatePair(lpDevice,lppTexture,{lpDevice,D3DRTYPE_TEXTURE,leFormat,luWidth,luHeight,1,luNumLevels},[&](D3DPOOL lePool,IDirect3DTexture9** lppValue) {
             return lpDevice->CreateTexture(luWidth,luHeight,luNumLevels,0,leFormat,lePool,lppValue,nullptr); });
     }
     inline HRESULT CreateCube(IDirect3DDevice9* lpDevice,UINT luEdge,UINT luNumLevels,D3DFORMAT leFormat,IDirect3DCubeTexture9** lppTexture)
     {
-        return CreatePair(lpDevice,lppTexture,[&](D3DPOOL lePool,IDirect3DCubeTexture9** lppValue) {
+        return CreatePair(lpDevice,lppTexture,{lpDevice,D3DRTYPE_CUBETEXTURE,leFormat,luEdge,luEdge,6,luNumLevels},[&](D3DPOOL lePool,IDirect3DCubeTexture9** lppValue) {
             return lpDevice->CreateCubeTexture(luEdge,luNumLevels,0,leFormat,lePool,lppValue,nullptr); });
     }
     inline HRESULT CreateVolume(IDirect3DDevice9* lpDevice,UINT luWidth,UINT luHeight,UINT luDepth,UINT luNumLevels,D3DFORMAT leFormat,IDirect3DVolumeTexture9** lppTexture)
     {
-        return CreatePair(lpDevice,lppTexture,[&](D3DPOOL lePool,IDirect3DVolumeTexture9** lppValue) {
+        return CreatePair(lpDevice,lppTexture,{lpDevice,D3DRTYPE_VOLUMETEXTURE,leFormat,luWidth,luHeight,luDepth,luNumLevels},[&](D3DPOOL lePool,IDirect3DVolumeTexture9** lppValue) {
             return lpDevice->CreateVolumeTexture(luWidth,luHeight,luDepth,luNumLevels,0,leFormat,lePool,lppValue,nullptr); });
     }
     class Upload
@@ -121,7 +135,12 @@ namespace renderengine::TextureUploadPC
         Shadow* mpShadow;
         HRESULT mhResult = S_OK;
     public:
-        explicit Upload(IDirect3DBaseTexture9* lpDestination) : mpDestination(lpDestination),mpShadow(Acquire(lpDestination)) {}
+        explicit Upload(IDirect3DBaseTexture9* lpDestination) : mpDestination(lpDestination),mpShadow(Acquire(lpDestination))
+        {
+            // Bulk uploads lock native storage directly. Only a completed upload
+            // proves that all native locks were released and the storage is reusable.
+            if(mpShadow)mpShadow->mbReusable=false;
+        }
         ~Upload() { if(mpShadow)mpShadow->Release(); }
         Upload(const Upload&)=delete;
         Upload& operator=(const Upload&)=delete;
@@ -133,7 +152,9 @@ namespace renderengine::TextureUploadPC
             if (FAILED(mhResult)) return mhResult;
             if(!mpShadow)return S_OK;
             for(UINT luFace=0;luFace<mpShadow->muFaces;++luFace)mpShadow->MarkDirty(luFace);
-            return mpShadow->Upload(mpDestination);
+            const HRESULT lhResult=mpShadow->Upload(mpDestination);
+            mpShadow->mbReusable=SUCCEEDED(lhResult);
+            return lhResult;
         }
     };
     inline HRESULT Lock(IDirect3DBaseTexture9* lpTexture,UINT luLevel,UINT luFace,DWORD luFlags,D3DLOCKED_BOX& lrBox)
