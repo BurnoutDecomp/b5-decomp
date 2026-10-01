@@ -6,7 +6,10 @@ os.environ.pop('NoDefaultCurrentDirectoryInExePath',None)
 p=argparse.ArgumentParser();p.add_argument('--skip-up-invalidation',action='store_true');p.add_argument('--skip-assert-invalidation',action='store_true')
 p.add_argument('--skip-draw-record',action='store_true',help='negative: leave warm geometry without its completed draw metadata')
 p.add_argument('--skip-release-retirement',action='store_true',help='negative: retain stale draw records after full geometry release')
+p.add_argument('--unaligned',action='store_true',help='exercise the previous allocation policy as an exact-pixel control')
 a=p.parse_args()
+if a.unaligned:os.environ['BRN_GEOMETRY_ALIGN_STRIDE']='0'
+else:os.environ.pop('BRN_GEOMETRY_ALIGN_STRIDE',None)
 shadow={}
 if a.skip_draw_record:
     path='src/pc/gcm/renderengine/WorldGeometryPCLeaf.cpp';text=Tree().read(path)
@@ -29,4 +32,4 @@ if a.skip_assert_invalidation:
 here=Path(__file__).resolve().parent
 result=compile_and_run(here/'PCWorldGeometryBuffers.cpp','unused.inc','',
                        'PCWorldGeometryBuffers',extra_flags='d3d9.lib user32.lib d3dcompiler.lib',shadow=shadow)
-raise SystemExit(report('run_pc_world_geometry_buffers',[],result,55))
+raise SystemExit(report('run_pc_world_geometry_buffers',[],result,75 if a.unaligned else 79))

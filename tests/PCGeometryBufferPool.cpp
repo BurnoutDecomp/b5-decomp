@@ -91,6 +91,80 @@ int main() {
         backend.failIssue=!pollFailure;pool.BeginFrame();backend.failPoll=pollFailure;pool.BeginFrame();
         Check(!pool.Store(device,GeometryBufferKind::Vertex,data,48,b)&&!page->destroyed,"failed synchronization quarantines bytes instead of reusing them");
     }
+    {
+        Pool pool(256);auto& backend=pool.GetBackend();Pool::Allocation a,b,c,d;
+        Check(!pool.Store(device,GeometryBufferKind::Vertex,data,16,a,0)
+              &&!pool.Store(device,GeometryBufferKind::Vertex,data,16,a,~0u)
+              &&backend.creates==0,"invalid or overflowing alignment is rejected before allocating");
+        Check(pool.Store(device,GeometryBufferKind::Vertex,data,16,a),"unaligned prefix fixture uploads");
+        Check(pool.Store(device,GeometryBufferKind::Vertex,data,40,b,24)
+              &&a.GetBuffer()==b.GetBuffer()&&b.muOffset==48&&b.muBytes==48,
+              "non-power-of-two stride preserves both 16-byte and whole-vertex alignment");
+        Check(pool.Store(device,GeometryBufferKind::Vertex,data,32,c)
+              &&c.GetBuffer()==a.GetBuffer()&&c.muOffset==16,
+              "alignment prefix stays available for a smaller mesh");
+        pool.Retire(b);pool.BeginFrame();
+        Check(pool.Store(device,GeometryBufferKind::Vertex,data,48,d,24)
+              &&d.muOffset==96,"a pending aligned span cannot be reused");
+        backend.lastIssue->ready=true;pool.BeginFrame();
+        Check(pool.Store(device,GeometryBufferKind::Vertex,data,48,b,24)
+              &&b.muOffset==48,"completed aligned span is reusable without touching its neighbours");
+        Check(!std::memcmp(a.GetBuffer()->data.data()+a.muOffset,data,16)
+              &&!std::memcmp(c.GetBuffer()->data.data()+c.muOffset,data,32)
+              &&!std::memcmp(d.GetBuffer()->data.data()+d.muOffset,data,48),
+              "aligned reuse preserves all live payloads");
+    }
+    {
+        Pool pool(256);Pool::Allocation a,b;auto& backend=pool.GetBackend();
+        pool.Store(device,GeometryBufferKind::Vertex,data,16,a);
+        backend.failUpload=true;
+        Check(!pool.Store(device,GeometryBufferKind::Vertex,data,48,b,36)
+              &&!b&&pool.mStatistics.muLiveBytes==16,
+              "aligned upload failure returns its reservation without counting it live");
+        Check(!std::memcmp(a.GetBuffer()->data.data(),data,16),"failed aligned upload preserves older live geometry");
+        backend.failUpload=false;
+        Check(pool.Store(device,GeometryBufferKind::Vertex,data,48,b,36)
+              &&b.GetBuffer()!=a.GetBuffer(),"failed upload page remains quarantined");
+    }
+    {
+        Pool pool(512);auto& backend=pool.GetBackend();
+        struct Live { Pool::Allocation allocation; unsigned bytes; unsigned char value; };
+        std::vector<Live> live;
+        unsigned random=0x175ab823u;
+        bool aligned=true,disjoint=true,preserved=true,stored=true;
+        const unsigned strides[]={12,20,24,28,32,36,40,44,48,52,64,80};
+        for(unsigned step=0;step<160;++step) {
+            random=random*1664525u+1013904223u;
+            if(live.size()>12 || (!live.empty()&&(random&3u)==0)) {
+                const unsigned index=random%live.size();pool.Retire(live[index].allocation);
+                live.erase(live.begin()+index);pool.BeginFrame();
+                if((step&1u)==0) {
+                    for(auto& fence:backend.fences)if(!fence->destroyed&&fence->issued)fence->ready=true;
+                    pool.BeginFrame();
+                }
+            } else {
+                const unsigned stride=strides[(random>>8)%12],bytes=stride*(1+(random>>16)%3);
+                std::vector<unsigned char> payload(bytes,static_cast<unsigned char>(step+1));
+                Live entry{{},bytes,static_cast<unsigned char>(step+1)};
+                if(!pool.Store(device,GeometryBufferKind::Vertex,payload.data(),bytes,entry.allocation,stride)) {stored=false;break;}
+                aligned &= entry.allocation.muOffset%stride==0&&entry.allocation.muOffset%16==0;
+                for(const auto& other:live)if(entry.allocation.GetBuffer()==other.allocation.GetBuffer())
+                    disjoint &= entry.allocation.muOffset+entry.allocation.muBytes<=other.allocation.muOffset
+                        ||other.allocation.muOffset+other.allocation.muBytes<=entry.allocation.muOffset;
+                live.push_back(entry);
+            }
+            for(const auto& entry:live)for(unsigned byte=0;byte<entry.bytes;++byte)
+                preserved &= entry.allocation.GetBuffer()->data[entry.allocation.muOffset+byte]==entry.value;
+        }
+        Check(stored&&aligned,"mixed vertex strides remain aligned through fragmentation and fence completion");
+        Check(disjoint&&preserved,"mixed-stride allocations preserve every live range and its complete payload");
+        for(auto& entry:live)pool.Retire(entry.allocation);
+        pool.BeginFrame();
+        for(auto& fence:backend.fences)if(!fence->destroyed&&fence->issued)fence->ready=true;
+        pool.BeginFrame();
+        Check(pool.mStatistics.muResidentBytes==0&&pool.mStatistics.muRetiredBytes==0,
+              "prefix and suffix fragments do not retain empty pages after final fence completion");
+    }
     std::printf("PCGeometryBufferPool: %d checks, %d failures\n",checks,failures);
     return failures?1:0;
 }

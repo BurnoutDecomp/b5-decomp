@@ -1060,6 +1060,53 @@ independent elapsed/cycle clocks, CSV alignment and timing-only precedence.
 Removing cycle accumulation fails two checks; retaining section timers in
 timing-only mode fails three. The native geometry suite still passes 55 checks.
 
+## Whole-vertex geometry alignment
+
+Pooled vertex allocations now satisfy both 16-byte alignment and the expanded
+vertex stride. The existing indexed-draw rebasing can therefore keep stream zero
+at byte offset zero across compatible meshes. This preserves every vertex address
+while avoiding native stream updates. Requested alignments need not be powers of
+two; reusable prefix/suffix ranges and GPU-fenced retirement remain intact.
+`BRN_GEOMETRY_ALIGN_STRIDE=0` selects the previous allocation policy.
+
+A native D3D9Ex probe with 5,120 indexed draws per frame produced identical full
+images across both policies. For strides 20/36, stable stream offsets reduced CPU
+submission from about 1.3 ms to 0.3 ms. Already-aligned 32/48-byte controls were
+neutral. This is a submission benchmark, not a whole-game multiplier.
+
+The same executable was measured off/on/on/off in a stationary 1440p scene,
+45 seconds per run, with full foreground coverage and timing-only recording:
+
+| Pair | Previous policy FPS | Aligned policy FPS | Native vertex binds/frame, previous → aligned |
+| --- | ---: | ---: | ---: |
+| First | 161.41 | 170.93 | 3,620 → 3,037 |
+| Reversed | 164.19 | 166.90 | 3,624 → 2,926 |
+
+The observed gain is 1.7–5.9%; native vertex bindings fall 16–19%. Each run records
+about 5,078 draws per frame, with 297 pre-Z meshes and 84 instances. All
+four finish with 28 MiB of native geometry pages, so these scenes show no increase
+in page residency. Frames outside the 165 FPS budget fall from 51.2% to 30.3% and
+47.5% to 38.5%, respectively. P99 improves in the first pair but is slightly worse
+in the second; this does not establish a universal tail-latency improvement.
+
+Allocator regression: 334 checks pass, including fragmented mixed-stride reuse,
+alignment overflow, failed uploads, live payload integrity and pending GPU fences.
+Ignoring alignment fails six checks. Native geometry passes 79 checks; the old
+policy passes its 75-check pixel control. Canonical build and independent review
+pass. The captured 120-second Road Rage run qualifies with eight takedowns, up to
+four crashing/two airborne rivals, no assertions/exceptions, and inspected driving,
+crash-camera and damaged-car frames.
+
+A separate clean 150-second Road Rage run qualifies with 13 takedowns across all
+seven rivals and three crashing/three airborne together. It averages 170.34 FPS,
+P99 8.93 ms, maximum 16.78 ms; 42.66% of frames miss the 165 FPS budget. The 29
+camera transitions reach 8.41 ms on the cut and 12.34 ms nearby. This route has
+about 24% more draws/frame than the preceding 188.64 FPS combat run, so those
+averages are not a matched performance comparison. Allocation/resource stalls and
+locked 165 FPS remain unresolved. Evidence: `stride_static_comparison_1001.json`,
+`stride_alignment_validation.md` and the six `stride_*_1001` runs under the
+parent checkout's `scratch/performance_goal_0929/`.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still
