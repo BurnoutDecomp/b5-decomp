@@ -954,6 +954,38 @@ not a whole-game or locked 165 FPS claim. The qualified 90-second pickup Road Ra
 run recorded 10 takedowns, six victims and 184.77 FPS average, but its p99 frame time
 was 8.79 ms; camera changes and slow frames still require work.
 
+## Object-to-mesh conversion jobs
+
+The original 16-job conversion path is restored, including the four partitions
+of world list 11 at 128-command constant-refresh boundaries. Each job owns its
+context and output lists, obtains 16 KiB blocks atomically, then flushes its key
+chains. The renderer joins every job before reconnecting, merging and reclaiming
+unused command memory. Native pointer types replace the old console 32-bit image
+accesses, and the formerly unfinished relocation/append functions are recovered
+from ARTIST 827EE868/827E9590. Sort keys and visibility policies are preserved.
+
+Enable it with `BRN_MESH_JOBS=1`; `BRN_MESH_JOBS_CHAIN=1` additionally selects the
+original serialized dependency chain for comparison. **The native default stays
+serial**: two 45-second pairs measured 160.12/154.99 FPS with jobs versus 159.68/156.08
+without, while the jobs consumed more total CPU time. That establishes no reliable
+FPS improvement. The optional path is restored infrastructure, not a claimed gain.
+
+The enabled 150-second 1440p combat run qualified with 13 takedowns/seven victims,
+peak four crashing/four airborne rivals, 1470/1470 focus samples and zero assertions
+or exceptions. It averaged 184.79 FPS, p99 8.50 ms, maximum 15.53 ms; 31.60% of frames missed
+the 165 FPS budget. Thirty camera changes had a maximum 11.66 ms interval and 13.15 ms
+maximum within eight surrounding frames. This is not a matched combat speedup
+or a locked 165 FPS result. Captured visual checks are separate from timed runs.
+
+`python b5-decomp/tests/run_pc_object_mesh_jobs.py` checks production allocation,
+partitioning, context ownership, walks, merges and completion on actual EAJobs
+workers against an independent synthetic packet oracle. All 17 checks pass, as does
+`--chain`; `--break-partition` fails five checks and `--drop-final-flush` trips the
+reconnection assertion. The synthetic emitter does not certify GPU pixels;
+separate live captures exercised damaged cars, airborne rivals, wreck cameras,
+shadows, world geometry and HUD rendering. `object_to_mesh_ms` now measures the
+owner's whole conversion interval, avoiding shared per-object timer writes.
+
 ## Frame-pacing measurements
 
 For frame-pacing measurements, use `BRN_FRAME_PROFILE=1` with

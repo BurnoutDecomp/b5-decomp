@@ -103,9 +103,9 @@ struct DispatchObjectContext;
 //   0x14  mpBlockListTail    KeyBlock*         (a1[5]) -- current (last) key block
 //   0x18  mpSortedKeys       u64*              (a1[6]) -- flat sorted record array
 //                                                (PrepareSortJobInfo fills; walkers read)
-//   0x11C word zeroed by Construct/Reset (sort bookkeeping; honest tail span)
-// The span past 0x1C out to the X360-verified sizeof(DispatchList) == 384 is NOT
-// exercised by any recovered function and stays an honest reserved span.
+//   0x01C mapChainBlockArray[64] -- saved chains from shared-bin blocks
+//   0x11C muChainBlockCount     -- consumed by ReconnectChainBlocks
+// ARTIST827EE868/827E9438 and the CgsDispatcher.h DWARF pin the shared-bin tail.
 class DispatchList
 {
 public:
@@ -125,6 +125,7 @@ public:
     // AllocateKeyBlock @0x827FA730 sizes each block at 64 records; the block is carved
     // from the list's bin as [header][64 x u64 keys].
     static const u32 KU_KEYBLOCK_CAPACITY = 64u;
+    static const u32 KU_MAX_BLOCKS_PER_CHAIN = 64u;
 
     // Packed 64-bit sort record: the sort key in the high bits, the packet's
     // bin-local quad-word offset in the low 20 bits.
@@ -165,6 +166,13 @@ public:
     // WorldEntityModule::RenderInstance @0x822D5AB0 reads the submitted-packet count
     // (muCount @0x0C) for its every-128th "send all shader constants" cadence.
     u32 GetCount() const { return muCount; }
+    KeyBlock* GetFirstKeyBlock() const { return mpBlockListHead; }
+    void SetSingleKeyBlock(KeyBlock* lpBlock)
+    {
+        mpBlockListHead = mpBlockListTail = lpBlock;
+        muCount = lpBlock->muCount;
+    }
+    void SetDispatchBinMasterStart(DispatchCommand* lpBase) { m_pBinBase = lpBase; }
 
     // ---- The dispatch walkers (bodied in CgsDispatcherCommands.cpp, matching the
     // ---- X360 file attribution of their assert strings) ----------------------
@@ -186,13 +194,12 @@ public:
 
     // ---- Declared-only surface (homed by other TUs) -------------------------
     // @ 0x827EE868 -- rebase this list's command/key pointers for main memory.
-    DispatchList* RelocateForMainMemory(u32 luBinBase, u32 luBinOffset, u32 luListOffset);
-    // @ 0x827E9438 -- re-link the block chain after a job-side flat copy (the
-    // multi-threaded object-to-mesh path; not needed by the PC single-threaded path).
-    DispatchList* ReconnectChainBlocks();
-    // Append another list's records onto this one (the multi-threaded merge path;
-    // no X360 export carries a standalone body -- declared for the MT path only).
-    DispatchList* Append(DispatchList* lpOther);
+    void RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOutput,
+                               uintptr_t luBinMaster);
+    // @ 0x827E9438 -- re-link the chains saved as each shared block was flushed.
+    void ReconnectChainBlocks();
+    // @ 0x827E9590 -- transfer the other list's chain and empty the source.
+    void Append(DispatchList* lpOther);
 
 private:
     friend class DispatchFrame;   // Construct/Reset initialise the per-list fields (@0x827F7790/@0x827FA8E0)
@@ -205,13 +212,9 @@ private:
     KeyBlock*        mpBlockListHead;      // 0x10 (a1[4])
     KeyBlock*        mpBlockListTail;      // 0x14 (a1[5])
     u64*             mpSortedKeys;         // 0x18 (a1[6]) -- flat sorted record array
-    // FLAG: opaque tail out to the X360-verified sizeof(DispatchList) == 384 (0x180).
-    // Sized against the 32-bit X360 ABI; only the +0x11C word inside it is touched
-    // (zeroed) by Construct/Reset -- modelled as the leading word of the span. (On the
-    // LLP64 x64 gate the byte total legitimately differs — GetList uses the literal
-    // 384 stride, never sizeof, so this span is documentary only.)
-    u32              muWord11C;            // X360 0x11C (zeroed by Construct/Reset)
-    u8               maReservedTail[0x180u - 0x20u - 0x4u];
+    KeyBlock*        mapChainBlockArray[KU_MAX_BLOCKS_PER_CHAIN]; // X360 +0x1C
+    u32              muChainBlockCount;                        // X360 +0x11C
+    u8               maReservedTail[0x180u - 0x120u];           // console alignment tail
 
     // Never called; pins the one pointer-invariant offset fact.
     static void _AssertLayout()
@@ -231,6 +234,7 @@ public:
     // ---- Functions owned/bodied by this TU ----------------------------------
     DispatchCommand* AllocateCommand(u32 luNumExtraQwords);   // @ 0x827F9168
     void*            AllocateMemoryFast(u32 luQwords);        // @ 0x822A0620
+    void             Align(u32 luAlignment);                 // @ 0x827FA698
     void*            BeginAllocateMemory(u32 luMaxQwords);    // @ 0x827F9260
     void             BeginPacket();                           // @ 0x822A06C0
     // @ 0x827F7310 -- size the bin (luSizeBytes >> 4 qwords), zero the cursors and
@@ -244,8 +248,15 @@ public:
     u32              GetSizeQwords() const { return m_uSize; }
     u32              GetUsedQwords() const
     {
+        if (!m_pBin) return 0;
         return static_cast<u32>(m_pNextWord - m_pBin);
     }
+    DispatchCommand* GetBinCurrent() const { return m_pNextWord; }
+    void SetBinCurrent(DispatchCommand* lpCurrent) { m_pNextWord = lpCurrent; }
+    void SetBinRange(DispatchCommand* lpBegin, DispatchCommand* lpEnd)
+    { m_pBin = m_pNextWord = lpBegin; m_uSize = static_cast<u32>(lpEnd - lpBegin); }
+    void SetMemoryCallback(void (*lpCallback)(void*), void* lpContext)
+    { mpMemoryCallback = lpCallback; mpMemoryContext = lpContext; }
 
     // WorldEntityModule::GenerateDispatchLists @0x822D5AB0 inline: take the packet
     // chain built since BeginPacket (read + clear m_pPacketStart/m_pLastCommandInPacket,
@@ -284,22 +295,18 @@ private:
     // @0x827FA8E0 (+0x24 <- used-qword snapshot) and ConstructWithSharedBinMemory
     // @0x827EE7C8 (+0x28/+0x2C/+0x30 = the SPU shared-memory block parameters).
     u32              m_uUsedQwordsSnapshot;             // 0x24
-    u32              m_uSharedMemoryStart;              // 0x28 (SPU path; dead on PC)
-    u32              m_uSharedMemoryBlockMax;           // 0x2C (SPU path; dead on PC)
-    u32*             m_pSharedNextFreeAtomic;           // 0x30 (SPU path; dead on PC)
+    DispatchCommand* mpSharedBinStart;                  // 0x28
+    u32              m_uSharedMemoryBlockMax;           // 0x2C
+    u32*             m_pSharedNextFreeAtomic;           // 0x30
+    DispatchFrame*   mpDispatchFrame;                   // 0x34
 };
 
-// DispatchFrame owns an array of DispatchLists plus an embedded bin. Only the
-// two members touched by GetList are modelled with X360-verified offsets:
+// DispatchFrame owns an array of DispatchLists plus an embedded bin:
 //   0x000  m_paLists           DispatchList*   (a1[0])
 //   0x100  muNumDispatchLists  uint32_t        (a1[64])
 // The X360 GetList stride for the list array is 384 bytes (== sizeof every
-// DispatchList; PPC: a2*3 << 7). The 0xFC-byte span between m_paLists and
-// muNumDispatchLists holds the embedded DispatchBin (m_Bin) plus the
-// shared-bin / relocation bookkeeping that the leak header lists but that are
-// not exercised by any function in this TU. Rather than fabricate those
-// intermediate fields as X360 facts, this gap is a HONEST reserved span sized
-// to land muNumDispatchLists at its verified 0x100 offset.
+// DispatchList; PPC: a2*3 << 7). Shared block/master addresses follow the count
+// at console offsets0x104/0x108 and widen with native pointers.
 class DispatchFrame
 {
 public:
@@ -318,35 +325,31 @@ public:
     DispatchBin&  GetBin() { return m_Bin; }
 
     // ---- Shared-memory output path (bodied in CgsDispatcherCommands.cpp) ------
-    // These operate on the SPU/shared-memory frame image (the produced bin output
-    // block + relocation bookkeeping past 0x100). The members past muNumDispatchLists
-    // are part of the larger SPU job-state frame and are reached as that serialised
-    // image, so these take `this` as a raw frame and are not re-typed here.
-    //
     // @ 0x827EE7C8 -- build the embedded bin + every output list against shared mem.
-    static DispatchFrame* ConstructWithSharedBinMemory(
-        DispatchFrame* lpResult, DispatchList* lpaDispatchListArray,
-        u32 luDispatchListCount, u32 luDispatchBinMasterAddress,
-        u32 luSharedMemoryStartAddress, u32* lpSharedMemoryBlockNextFreeAtomic,
+    void ConstructWithSharedBinMemory(DispatchList* lpaDispatchListArray,
+        u32 luDispatchListCount, uintptr_t luDispatchBinMasterAddress,
+        uintptr_t luSharedMemoryStartAddress, u32* lpSharedMemoryBlockNextFreeAtomic,
         u32 luSharedMemoryBlockMax);
     // @ 0x827EE970 -- relocate every list in the frame for main-memory addressing.
-    static DispatchFrame* RelocateForMainMemory(DispatchFrame* lpResult,
-        u32 luBinBase, u32 luBinOffset, u32 luListOffset);
+    void RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOutput,
+                               uintptr_t luBinMaster);
     // @ 0x827F72A8 -- flush the produced bin block into its active shared block.
-    static DispatchFrame* FlushBlockToSharedMemory(DispatchFrame* lpResult);
+    void FlushBlockToSharedMemory();
+    void SetActiveBlockInSharedMemory(uintptr_t luAddress) { mpDispatchBinOutputAddress = luAddress; }
+    uintptr_t GetActiveBlockInSharedMemory() const { return mpDispatchBinOutputAddress; }
+    uintptr_t GetDispatchBinMasterAddress() const { return mpDispatchBinMasterAddress; }
+    u32 GetNumDispatchLists() const { return muNumDispatchLists; }
 
 private:
     DispatchList* m_paLists;                            // 0x000
-    // FLAG: opaque span between m_paLists and the embedded bin (per-list relocation
-    // / shared-bin bookkeeping the leak header lists but no TU here reads). Sized to
-    // land m_Bin at its X360-verified 0x80 offset.
+    // Padding to the original128-byte bin boundary.
     u8            maReservedPreBin[0x80u - sizeof(DispatchList*)];
     DispatchBin   m_Bin;                                // 0x080 (embedded bin)
-    // FLAG: opaque span between the embedded bin and muNumDispatchLists (shared-bin
-    // self-pointer a1[45] + relocation bookkeeping). Sized to land
-    // muNumDispatchLists at its X360-verified 0x100 offset.
+    // The bin's frame back-pointer is modelled above; retain the remaining pad.
     u8            maReservedPostBin[0x100u - 0x80u - sizeof(DispatchBin)];
     u32           muNumDispatchLists;                   // 0x100
+    uintptr_t     mpDispatchBinOutputAddress;           // X360 0x104
+    uintptr_t     mpDispatchBinMasterAddress;           // X360 0x108
 };
 
 } // namespace CgsGraphics

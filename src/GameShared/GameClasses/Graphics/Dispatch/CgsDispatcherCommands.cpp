@@ -1,5 +1,6 @@
 // =============================================================================
 #include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "GameShared/Jobs/ObjectToMesh/ObjectToMeshJob.h"
 // CgsDispatcherCommands.cpp  (GameShared/GameClasses/Graphics/Dispatch)
 //
 // The render-dispatch command family: building the packed DispatchCommand stream
@@ -111,13 +112,6 @@ namespace
         u64 lu64 = 0;
         std::memcpy(&lu64, lpWords, sizeof(lu64));
         return reinterpret_cast<void*>(static_cast<uintptr_t>(lu64));
-    }
-
-    // Truncating pointer->u32 for the (PC-dead) SPU shared-memory image helpers;
-    // X360 stored real 32-bit guest pointers here.
-    inline u32 PtrToGuestU32(const void* lpPointer)
-    {
-        return static_cast<u32>(reinterpret_cast<uintptr_t>(lpPointer));
     }
 
     // The command id lives in word0's HIGH byte, not its low bits:
@@ -270,143 +264,65 @@ SetupBuiltinInterpreters(DispatchPacketInterpreter::InterpretFn* lpaInterpreters
 // stored 4-byte guest pointers.
 // =============================================================================
 
-// =============================================================================
-// CgsGraphics::DispatchFrame::ConstructWithSharedBinMemory  @ 0x827EE7C8
-// =============================================================================
-DispatchFrame* DispatchFrame::ConstructWithSharedBinMemory(
-        DispatchFrame* lpResult, DispatchList* lpaDispatchListArray,
-        u32 luDispatchListCount, u32 luDispatchBinMasterAddress,
-        u32 luSharedMemoryStartAddress, u32* lpSharedMemoryBlockNextFreeAtomic,
+// Shared-bin methods: ARTIST827EE7C8/827EE970/827F72A8. The X360 local jobs
+// already write directly to shared memory; the pointers are native-width here.
+void DispatchFrame::ConstructWithSharedBinMemory(DispatchList* lpaDispatchListArray,
+        u32 luDispatchListCount, uintptr_t luDispatchBinMasterAddress,
+        uintptr_t luSharedMemoryStartAddress, u32* lpSharedMemoryBlockNextFreeAtomic,
         u32 luSharedMemoryBlockMax)
 {
-    u32* lpFrame = reinterpret_cast<u32*>(lpResult);
-    u32* lpBin   = lpFrame + (0x80 / 4);               // embedded bin @ frame+0x80
-
-    lpBin[0x28 / 4] = luSharedMemoryStartAddress;      // 0xA8: bin shared-mem base (a5, stw r7,0x28)
-    lpBin[0x30 / 4] = PtrToGuestU32(lpSharedMemoryBlockNextFreeAtomic); // 0xB0: next-free atomic ptr (a6, stw r8,0x30)
-    lpBin[0x2C / 4] = luSharedMemoryBlockMax;          // 0xAC: shared-mem block max (a7, stw r9,0x2C)
-    lpBin[0x08 / 4] = 0;                               // 0x88: m_pBin
-    lpBin[0x0C / 4] = 0;                               // 0x8C: m_pNextWord
-    lpBin[0x18 / 4] = 0;                               // 0x98: m_uSize
-    lpBin[0x10 / 4] = 0;                               // 0x90
-    lpBin[0x14 / 4] = 0;                               // 0x94
-    lpBin[0x20 / 4] = 0;                               // 0xA0
-    lpBin[0x24 / 4] = 0;                               // 0xA4
-
-    lpFrame[0xB4 / 4]  = PtrToGuestU32(lpResult);            // shared-bin self-pointer (stw r3,0xB4)
-    lpFrame[0x108 / 4] = luDispatchBinMasterAddress;         // dispatch-bin master address (a4, stw r6,0x108);
-                                                            // FlushBlockToSharedMemory reads this for RelocateForMainMemory
-    lpFrame[0x104 / 4] = 0;                                  // active-block address
-    lpFrame[0]         = PtrToGuestU32(lpaDispatchListArray);  // m_paLists
-    lpFrame[0x100 / 4] = luDispatchListCount;                // muNumDispatchLists
-
-    if (luDispatchListCount != 0)
+    m_Bin = DispatchBin{};
+    m_Bin.mpSharedBinStart = reinterpret_cast<DispatchCommand*>(luSharedMemoryStartAddress);
+    m_Bin.m_pSharedNextFreeAtomic = lpSharedMemoryBlockNextFreeAtomic;
+    m_Bin.m_uSharedMemoryBlockMax = luSharedMemoryBlockMax;
+    m_Bin.mpDispatchFrame = this;
+    mpDispatchBinMasterAddress = luDispatchBinMasterAddress;
+    mpDispatchBinOutputAddress = 0;
+    m_paLists = lpaDispatchListArray;
+    muNumDispatchLists = luDispatchListCount;
+    for (u32 luList = 0; luList < luDispatchListCount; ++luList)
     {
-        u32 luListByteOffset = 0;
-        u32 luIndex          = 0;
-        do
-        {
-            ++luIndex;
-            u32* lpList = reinterpret_cast<u32*>(static_cast<uintptr_t>(lpFrame[0] + luListByteOffset));
-            luListByteOffset += 384;                  // sizeof(DispatchList) (32-bit guest image)
-            lpList[0x0C / 4]  = 0;
-            lpList[0x04 / 4]  = PtrToGuestU32(lpBin);   // list -> embedded bin
-            lpList[0x11C / 4] = 0;
-            lpList[0]         = 0;
-            lpList[0x10 / 4]  = 0;
-            lpList[0x14 / 4]  = 0;
-            lpList[0x18 / 4]  = 0;
-            lpList[0x08 / 4]  = lpBin[0x08 / 4];       // copy current m_pBin
-        }
-        while (luIndex < lpFrame[0x100 / 4]);
+        DispatchList& lrList = m_paLists[luList];
+        lrList.muCount = 0;
+        lrList.mpDispatchBin = &m_Bin;
+        lrList.muChainBlockCount = 0;
+        lrList.muWord00 = 0;
+        lrList.mpBlockListHead = lrList.mpBlockListTail = nullptr;
+        lrList.mpSortedKeys = nullptr;
+        lrList.m_pBinBase = m_Bin.GetBase();
     }
-    return lpResult;
 }
 
-// =============================================================================
-// CgsGraphics::DispatchFrame::RelocateForMainMemory  @ 0x827EE970
-// =============================================================================
-DispatchFrame* DispatchFrame::RelocateForMainMemory(DispatchFrame* lpResult,
-                                                    u32 luBinBase, u32 luBinOffset,
-                                                    u32 luListOffset)
+void DispatchFrame::RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOutput,
+                                         uintptr_t luBinMaster)
 {
-    u32* lpFrame = reinterpret_cast<u32*>(lpResult);
-    DispatchFrame* lpRet = lpResult;
-
-    if (lpFrame[0x100 / 4] != 0)
-    {
-        u32 luListByteOffset = 0;
-        u32 luIndex          = 0;
-        do
-        {
-            DispatchList* lpList =
-                reinterpret_cast<DispatchList*>(static_cast<uintptr_t>(lpFrame[0] + luListByteOffset));
-            lpRet = reinterpret_cast<DispatchFrame*>(
-                lpList->RelocateForMainMemory(luBinBase, luBinOffset, luListOffset));
-            ++luIndex;
-            luListByteOffset += 384;
-        }
-        while (luIndex < lpFrame[0x100 / 4]);
-    }
-    return lpRet;
+    for (u32 luList = 0; luList < muNumDispatchLists; ++luList)
+        m_paLists[luList].RelocateForMainMemory(luBinBase, luBinOutput, luBinMaster);
 }
 
-// =============================================================================
-// CgsGraphics::DispatchFrame::FlushBlockToSharedMemory  @ 0x827F72A8
-// =============================================================================
-DispatchFrame* DispatchFrame::FlushBlockToSharedMemory(DispatchFrame* lpResult)
+void DispatchFrame::FlushBlockToSharedMemory()
 {
-    u32* lpFrame = reinterpret_cast<u32*>(lpResult);
-    DispatchFrame* lpRet = lpResult;
-
-    u32 luActiveBlock = lpFrame[0x104 / 4];           // active shared-mem block address
-    if (luActiveBlock != 0)
+    if (mpDispatchBinOutputAddress)
     {
-        RelocateForMainMemory(lpResult, lpFrame[0x88 / 4],
-                              luActiveBlock, lpFrame[0x108 / 4]);
-        u32 luDst = lpFrame[0x104 / 4];
-        u32 luSrc = lpFrame[0x88 / 4];                // produced bin base
-        if (luDst != luSrc)
-        {
-            lpRet = reinterpret_cast<DispatchFrame*>(
-                memcpy(reinterpret_cast<void*>(static_cast<uintptr_t>(luDst)),
-                       reinterpret_cast<void*>(static_cast<uintptr_t>(luSrc)),
-                       16u * lpFrame[0x98 / 4]));      // 0x98: bin size in quad-words
-        }
+        const uintptr_t luSource = reinterpret_cast<uintptr_t>(m_Bin.GetBase());
+        RelocateForMainMemory(luSource, mpDispatchBinOutputAddress, mpDispatchBinMasterAddress);
+        if (mpDispatchBinOutputAddress != luSource)
+            std::memcpy(reinterpret_cast<void*>(mpDispatchBinOutputAddress),
+                        reinterpret_cast<void*>(luSource),
+                        sizeof(DispatchCommand) * m_Bin.GetSizeQwords());
     }
-    lpFrame[0x104 / 4] = 0;                            // clear active block
-    return lpRet;
+    mpDispatchBinOutputAddress = 0;
 }
 
-// =============================================================================
-// ObjectToMeshJob::SharedMemoryChangeCallback  @ 0x827EE760  (SPU path; PC-dead)
-// =============================================================================
-DispatchFrame* ObjectToMeshJob_SharedMemoryChangeCallback(DispatchFrame* lpResult)
+// X360-native members used by 827FF380 and 827EE760. The PS3 DMA staging
+// buffers are unnecessary for the shared-address-space X360/PC path.
+struct DispatchObjectContext_JobState
 {
-    u32* lpFrame = reinterpret_cast<u32*>(lpResult);
-
-    u32 luActiveBlock = lpFrame[0x104 / 4];
-    lpFrame[0x4394 / 4] = 0;
-    lpFrame[0x88 / 4]   = luActiveBlock;              // m_pBin -> new block
-    lpFrame[0x8C / 4]   = luActiveBlock;              // m_pNextWord -> new block
-    lpFrame[0x98 / 4]   = 1024;                       // bin size = KU_BLOCK_SIZE_IN_QUAD_WORDS
-
-    u32 luMainMemOffset = lpFrame[0x108 / 4] + lpFrame[0x88 / 4] - lpFrame[0x104 / 4];
-    if (lpFrame[0x100 / 4] != 0)
-    {
-        u32 luListByteOffset = 0;
-        u32 luIndex          = 0;
-        do
-        {
-            ++luIndex;
-            u32* lpList = reinterpret_cast<u32*>(static_cast<uintptr_t>(luListByteOffset + lpFrame[0]));
-            luListByteOffset += 384;
-            lpList[0x08 / 4] = luMainMemOffset;
-        }
-        while (luIndex < lpFrame[0x100 / 4]);
-    }
-    return lpResult;
-}
+    DispatchFrame lDispatchFrameLocal;
+    DispatchList lInputDispatchList;
+    ObjectToMeshJobInfo* lpObjectToMeshJobInfo;
+    uintptr_t luOffsetToMainMemory;
+};
 
 // =============================================================================
 // ShaderConstantsExternal::AddToDispatchBinFromStatePointers  @ 0x827E93B8
@@ -778,14 +694,12 @@ static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame
     // so without any judgement call. DELETE-WHEN issue #26 is closed.
     // =====================================================================
     {
-        static s32 siOobbDiag = -1;
-        if (siOobbDiag < 0)
-        {
-            const char* lpcEnv = std::getenv("BRN_OOBB_DIAG");
-            siOobbDiag = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
-        }
+        static const s32 siOobbDiag = [] {
+            const char* lpcValue = std::getenv("BRN_OOBB_DIAG");
+            return lpcValue && lpcValue[0] && lpcValue[0] != '0' ? 1 : 0;
+        }();
         static s32 siOobbSamples = 0;
-        if (siOobbDiag != 0 && siOobbSamples < 120 && CgsDev::Log::gpDebugPrint != 0)
+        if (!lpContext->mpJobState && siOobbDiag != 0 && siOobbSamples < 120 && CgsDev::Log::gpDebugPrint != 0)
         {
             const f32 lfSphereR = lpRenderable->mBoundingSphere.w;
             if (lfSphereR > 50.0f)      // only the big meshes -- a backdrop is hundreds of metres
@@ -859,7 +773,7 @@ static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame
         if (lpAssembly == 0 || lpAssembly->GetLength() == 0)
         {
             static bool sbLoggedNullAssembly = false;
-            if (!sbLoggedNullAssembly && CgsDev::Log::gpDebugPrint != 0)
+            if (!lpContext->mpJobState && !sbLoggedNullAssembly && CgsDev::Log::gpDebugPrint != 0)
             {
                 sbLoggedNullAssembly = true;
                 *CgsDev::Log::gpDebugPrint
@@ -969,7 +883,6 @@ static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame
 void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFrame,
                                void* lpUserData, f32 /*lfTime*/)
 {
-    renderengine::FrameProfile::DetailScope lDetailProfile(renderengine::FrameProfile::OBJECT_TO_MESH);
     u32* lpWords = reinterpret_cast<u32*>(lpCommand);
     DispatchObjectContext* lpContext = static_cast<DispatchObjectContext*>(lpUserData);
 
@@ -1042,12 +955,10 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
     // ParticleRenderData::mCgsCamera. Nobody has compared them. This prints the world's side;
     // the trail's is already in [trailpass] xform and [ImVerts diag] vs c0..c3.
     {
-        static int siVpProbe = -1;
-        if (siVpProbe < 0)
-        {
+        static const bool sbVpProbe = [] {
             const char* lpcValue = std::getenv("BRN_VP_PROBE");
-            siVpProbe = (lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != (char)48) ? 1 : 0;
-        }
+            return lpcValue && lpcValue[0] && lpcValue[0] != '0';
+        }();
         static u32 suVpSeen = 0;
         static u32 suVpPrinted = 0;
         // Sampled, not a prefix: this runs thousands of times a frame and the shadow cascades go
@@ -1055,7 +966,7 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
         // ⚠ GATED ON THE SCENE COLOUR PASS. Unfiltered, seven of the first eight samples
         // were the shadow cascades and an env-map face -- orthographic and 90-degree
         // cameras that have nothing to do with the depth the trail is tested against.
-        if (siVpProbe == 1 && lpViewProjection != 0 && suVpPrinted < 8u
+        if (!lpContext->mpJobState && sbVpProbe && lpViewProjection != 0 && suVpPrinted < 8u
             && ((++suVpSeen % 499u) == 0u) && BrnDiag::IsSceneColourPass())
         {
             ++suVpPrinted;
@@ -1125,7 +1036,7 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
             // draws all at the same place would otherwise look identical to a correct
             // one in the log.
             static u32 suLoggedInstanceCount = 0;
-            if (suLoggedInstanceCount != luNumInstanceDraws && CgsDev::Log::gpDebugPrint != 0)
+            if (!lpContext->mpJobState && suLoggedInstanceCount != luNumInstanceDraws && CgsDev::Log::gpDebugPrint != 0)
             {
                 suLoggedInstanceCount = luNumInstanceDraws;
                 // [DIAG wheels] constant 0 -- the object's OWN world matrix, i.e. what a
@@ -1162,7 +1073,7 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
         else
         {
             static bool sbLoggedMissingInstanceMatrices = false;
-            if (!sbLoggedMissingInstanceMatrices && CgsDev::Log::gpDebugPrint != 0)
+            if (!lpContext->mpJobState && !sbLoggedMissingInstanceMatrices && CgsDev::Log::gpDebugPrint != 0)
             {
                 sbLoggedMissingInstanceMatrices = true;
                 *CgsDev::Log::gpDebugPrint
@@ -1459,19 +1370,6 @@ void DispatchList::DispatchAllMeshesZOnly(DispatchPacketInterpreter* lpInterpret
 }
 
 // =============================================================================
-// ObjectToMeshJob::ExecuteImplementation  @ 0x827FF380  (SPU job path; PC-dead)
-// =============================================================================
-void* ObjectToMeshJob_ExecuteImplementation(void* lpJobScratch, const u32* lpInput)
-{
-    // lpInput[0x28/4] == frame number; -1 sentinel means "skip this job".
-    if (lpInput[0x28 / 4] == 0xFFFFFFFFu)
-        return lpJobScratch;
-
-    CGS_ASSERT(false, "ObjectToMeshJob::ExecuteImplementation not fully reconstructed");
-    return lpJobScratch;
-}
-
-// =============================================================================
 // DrawRenderableMeshZOnly::Interpret @ 0x827F5AC8 -- the depth-only GPU path
 // (the pre-Z pass and the shadow cascades).
 //
@@ -1562,3 +1460,59 @@ void DrawRenderableMeshZOnly::Interpret(DispatchCommand* lpCommand, DispatchFram
 }
 
 } // namespace CgsGraphics
+
+// ARTIST827EE760. HandleMemoryOverflow has selected a fresh 16 KiB block.
+// Keep each output key relative to the owner frame's master bin, not this block.
+void ObjectToMeshJob::SharedMemoryChangeCallback(void* lpContext)
+{
+    auto* lpState = static_cast<CgsGraphics::DispatchObjectContext_JobState*>(lpContext);
+    CgsGraphics::DispatchFrame& lrFrame = lpState->lDispatchFrameLocal;
+    lpState->luOffsetToMainMemory = 0;
+    auto* lpBlock = reinterpret_cast<CgsGraphics::DispatchCommand*>(lrFrame.GetActiveBlockInSharedMemory());
+    lrFrame.GetBin().SetBinRange(lpBlock, lpBlock + CgsGraphics::DispatchBin::KU_BLOCK_SIZE_IN_QUAD_WORDS);
+    const uintptr_t luMaster = lrFrame.GetDispatchBinMasterAddress()
+        + reinterpret_cast<uintptr_t>(lrFrame.GetBin().GetBase()) - lrFrame.GetActiveBlockInSharedMemory();
+    for (u32 luList = 0; luList < lrFrame.GetNumDispatchLists(); ++luList)
+        lrFrame.GetList(luList)->SetDispatchBinMasterStart(reinterpret_cast<CgsGraphics::DispatchCommand*>(luMaster));
+}
+
+// ARTIST827FF380: private context/input view, bounded key-block walks, shared
+// output blocks, then a final flush. r4 is the data argument; -1 is a start-index
+// sentinel, not a frame number. The X360 path uses the caller's output-list array
+// directly, so its conditional PS3 local-store copy is not taken.
+void ObjectToMeshJob::ExecuteImplementation(ObjectToMeshJobInfo* lpData)
+{
+    using namespace CgsGraphics;
+    if (lpData->miStartIndex == -1) return;
+
+    DispatchObjectContext lContext = *lpData->mpDispatchObjectContext;
+    DispatchObjectContext_JobState lState{};
+    lContext.ResetShadowing();
+    lContext.mpJobState = &lState;
+    lState.lpObjectToMeshJobInfo = lpData;
+    lState.lInputDispatchList = *lpData->mpDispatchListInput;
+    CGS_ASSERT(lpData->muDispatchListOutputCount <= 26u, "Try increasing KU_MAX_OUTPUT_DISPATCH_LISTS");
+    DispatchFrame& lrOutput = lState.lDispatchFrameLocal;
+    lrOutput.ConstructWithSharedBinMemory(lpData->mpaDispatchListOutputArray,
+        lpData->muDispatchListOutputCount, reinterpret_cast<uintptr_t>(lpData->mpDispatchBinMasterAddress),
+        lpData->muSharedMemoryStartAddress, lpData->mpSharedMemoryBlockNextFreeAtomic,
+        lpData->muSharedMemoryBlockMax);
+    lrOutput.GetBin().SetMemoryCallback(&ObjectToMeshJob::SharedMemoryChangeCallback, &lState);
+    lrOutput.GetBin().HandleMemoryOverflow(1);
+
+    s32 liBlockBase = 0;
+    for (DispatchList::KeyBlock* lpBlock = lpData->mpDispatchListInput->GetFirstKeyBlock();
+         lpBlock; lpBlock = lpBlock->mpNext)
+    {
+        lState.lInputDispatchList.SetSingleKeyBlock(lpBlock);
+        s32 liFirst = lpData->miStartIndex - liBlockBase;
+        if (liFirst < 0) liFirst = 0;
+        s32 liEnd = lpData->miEndIndex - liBlockBase;
+        if (liEnd < 0) liEnd = 0;
+        if (liEnd > static_cast<s32>(lpBlock->muCount)) liEnd = static_cast<s32>(lpBlock->muCount);
+        lState.lInputDispatchList.DispatchAllObjectToMesh(lpData->mpDispatchInterpreter,
+            &lrOutput, &lContext, liFirst, liEnd - liFirst);
+        liBlockBase += lpBlock->muCount;
+    }
+    lrOutput.FlushBlockToSharedMemory();
+}

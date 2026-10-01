@@ -23,6 +23,7 @@ namespace CgsDev { namespace Assert { struct AssertData; } }
 // null-named job. The real EA::Thread::RWMutex comes in via CgsDataBuffer.h (pulled by the real
 // ModuleSingleBuffered base).
 #include "SDKs/EATech/eajobs/job.h"
+#include "GameShared/Jobs/ObjectToMesh/ObjectToMesh.h"
 
 // The REAL dispatch-frame family (BufferedDispatchFrame / DispatchFrame /
 // DispatchList / DispatchBin / DispatchObjectContext / the interpreter) -- the
@@ -531,12 +532,16 @@ private:
     void RenderLetterBoxBars(CgsGraphics::Im2d& lIm2d, f32 lfDestAspectRatio);
 
     // Expand every GDL object list (0..12) of the read-side buffered
-    // frame into the mesh lists (0..24) of the render frame. The PC runs the console's
-    // own single-threaded fallback path (the 16-job path needs the job scheduler).
+    // frame into the mesh lists (0..24). The original 16-job path is available
+    // with BRN_MESH_JOBS=1; native measurements currently retain the serial default.
     void ConvertObjectsToMeshes(CgsGraphics::BufferedDispatchFrame* lpGdlFrames,
                                 CgsGraphics::DispatchFrame* lpMeshFrame,
                                 CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
                                 const CgsGraphics::DispatchObjectContext* lpContext);
+    void CreateObjectToMeshJob(u32 luJobIndex,
+                              const CgsGraphics::DispatchObjectContext* lpContext,
+                              CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
+                              u32 luInputList, s32 liGroupIndex, u32 luGroupSize);
 
     // Sort every pass list of the render frame (on the console, RadixSort jobs;
     // PC: the synchronous DispatchList::SortForDispatch stand-in).
@@ -741,6 +746,7 @@ private:
     CgsDepthStencilStateFactory         mDepthStencilStateFactory;
     BrnResource::LinearResourceAllocator* mpGraphicsAllocator;
     EA::Jobs::Job                       maObjectToMeshJob[KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS];
+    ObjectToMeshJobInfo                 maObjectToMeshJobData[KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS];
     CgsGraphics::DispatchObjectContext  maObjectToMeshJobContext[KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS];
     CgsGraphics::DispatchList*          mapaObjectToMeshJobOutputDispatchLists[KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS];
     EA::Jobs::Job                       maShadowMapSortJob[KU_NUM_SHADOWMAP_DISPATCH_JOBS];

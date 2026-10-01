@@ -4,6 +4,8 @@
 #include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
+#include "SDKs/EATech/eajobs/job_scheduler.h"
+#include "SDKs/EATech/eajobs/jobs.h"
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"           // CgsRenderTarget::GetDepthTexture (the s15 bind)
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device::SetResource (the global texture binds)
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                      // renderengine::PCSurfaceBracket_* (the scene-target bracket)
@@ -2124,17 +2126,140 @@ void BrnRendererModule::EndOfFrame()
     SwapBuffers();
 }
 
-// @ 0x823F5898 - BrnRendererModule::ConvertObjectsToMeshes. The X360 runs 16
-// object-to-mesh jobs when the MT switch (byte_82F2423C) is on, else the
-// single-threaded fallback: per GDL object list j in 0..12, reset the constant
-// table's dispatch shadow, take a fresh copy of the 240-byte object context and
-// expand the read-side frame's list into the render frame's mesh lists.
-// The PC bring-up runs that ST fallback (the job scheduler is not up).
+namespace
+{
+    // ARTIST82FAEDD8/82FAEDD4/82FAEE00. The render owner publishes these before
+    // submission and does not reclaim the bin until every conversion has joined.
+    CgsGraphics::DispatchCommand* spObjectToMeshSharedMemory;
+    u32 suObjectToMeshSharedBlockMax;
+    alignas(128) u32 suObjectToMeshNextBlock;
+}
+
+// ARTIST823F5670: copy the job record, clear the job, then set code/data/name.
+static void FillInObjectToMeshJobData(EA::Jobs::Job* lpOutJob,
+                                     ObjectToMeshJobInfo* lpOutJobData,
+                                     const ObjectToMeshJobInfo* lpInput)
+{
+    CGS_ASSERT(lpOutJobData != nullptr, "lpOutJobData");
+    CGS_ASSERT(lpOutJob != nullptr, "lpOutJob");
+    *lpOutJobData = *lpInput;
+    lpOutJob->Clear();
+    lpOutJob->SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+                      reinterpret_cast<const void*>(&ObjectToMeshEntry), 0);
+    lpOutJob->SetData(lpOutJobData, sizeof(*lpOutJobData));
+    lpOutJob->SetName("ObjectToMesh");
+}
+
+// ARTIST823F5748. World input list11 is partitioned on complete 128-object
+// constant-refresh groups. Starting a worker at an arbitrary key loses inherited
+// constants; the four original partitions preserve those producer boundaries.
+void BrnRendererModule::CreateObjectToMeshJob(u32 luJobIndex,
+        const CgsGraphics::DispatchObjectContext* lpContext,
+        CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
+        u32 luInputList, s32 liGroupIndex, u32 luGroupSize)
+{
+    auto* lpInput = mDoubleBufferedDispatchFrame.GetDispatchFrameForRead().GetList(luInputList);
+    maObjectToMeshJobContext[luJobIndex] = *lpContext;
+    maObjectToMeshJobContext[luJobIndex].miListIdBase = liGroupIndex;
+    CGS_ASSERT(liGroupIndex >= 0 && static_cast<u32>(liGroupIndex) < luGroupSize,
+               "0 <= luGroupIndex && luGroupIndex < luGroupSize");
+    const u32 luGroups = (lpInput->GetCount() + 127u) >> 7;
+    ObjectToMeshJobInfo lInput{};
+    lInput.muListID = luJobIndex;
+    lInput.mpDispatchInterpreter = lpInterpreter;
+    lInput.mpDispatchObjectContext = &maObjectToMeshJobContext[luJobIndex];
+    lInput.mpDispatchListInput = lpInput;
+    lInput.mpaDispatchListOutputArray = mapaObjectToMeshJobOutputDispatchLists[luJobIndex];
+    lInput.muDispatchListOutputCount = 25u;
+    lInput.mpDispatchBinMasterAddress = lpInterpreter->GetSingleBufferedDispatchFrame()->GetBin().GetBase();
+    lInput.muSharedMemoryStartAddress = reinterpret_cast<uintptr_t>(spObjectToMeshSharedMemory);
+    lInput.mpSharedMemoryBlockNextFreeAtomic = &suObjectToMeshNextBlock;
+    lInput.muSharedMemoryBlockMax = suObjectToMeshSharedBlockMax;
+    lInput.miStartIndex = static_cast<s32>((luGroups * static_cast<u32>(liGroupIndex) / luGroupSize) << 7);
+    lInput.miEndIndex = static_cast<s32>((luGroups * (static_cast<u32>(liGroupIndex) + 1u) / luGroupSize) << 7);
+    FillInObjectToMeshJobData(&maObjectToMeshJob[luJobIndex], &maObjectToMeshJobData[luJobIndex], &lInput);
+}
+
+// ARTIST823F5898. Both original switches82F2423C/D initialize to1. Keep the
+// serial fallback and dependency-chain controls for native comparisons.
 void BrnRendererModule::ConvertObjectsToMeshes(CgsGraphics::BufferedDispatchFrame* lpGdlFrames,
-                                               CgsGraphics::DispatchFrame* /*lpMeshFrame*/,
+                                               CgsGraphics::DispatchFrame* lpMeshFrame,
                                                CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
                                                const CgsGraphics::DispatchObjectContext* lpContext)
 {
+    // Profile the owner's full conversion interval. Per-object timer writes
+    // cannot safely accumulate into the same frame from multiple workers.
+    renderengine::FrameProfile::DetailScope lConversionProfile(renderengine::FrameProfile::OBJECT_TO_MESH);
+    // FLAG PC-platform leaf: BRN_MESH_JOBS=1 enables the original job path.
+    // Matched native runs found no consistent FPS benefit and higher total CPU
+    // time, so retain the serial default until further pipeline work improves it.
+    static const bool sbJobsEnabled = [] {
+        const char* lpcValue = std::getenv("BRN_MESH_JOBS");
+        return lpcValue && lpcValue[0] && lpcValue[0] != '0';
+    }();
+    static const bool sbChainJobs = [] {
+        const char* lpcValue = std::getenv("BRN_MESH_JOBS_CHAIN");
+        return lpcValue && lpcValue[0] && lpcValue[0] != '0';
+    }();
+    if (sbJobsEnabled)
+    {
+        using namespace CgsGraphics;
+        DispatchBin& lrBin = lpInterpreter->GetSingleBufferedDispatchFrame()->GetBin();
+        for (u32 luJob = 0; luJob < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++luJob)
+        {
+            lrBin.Align(128u);
+            mapaObjectToMeshJobOutputDispatchLists[luJob] = static_cast<DispatchList*>(
+                lrBin.AllocateMemoryFast((25u * sizeof(DispatchList) + 15u) / 16u));
+        }
+        lrBin.Align(128u);
+        const u32 luAvailable = lrBin.GetSizeQwords() - lrBin.GetUsedQwords();
+        const u32 luSharedQwords = (luAvailable & ~7u) - 1u;
+        spObjectToMeshSharedMemory = static_cast<DispatchCommand*>(lrBin.AllocateMemoryFast(luSharedQwords));
+        EA::Jobs::AtomicStore(&suObjectToMeshNextBlock, 0);
+        suObjectToMeshSharedBlockMax = luSharedQwords / DispatchBin::KU_BLOCK_SIZE_IN_QUAD_WORDS;
+        for (u32 luGroup = 0; luGroup < 4u; ++luGroup)
+            CreateObjectToMeshJob(luGroup, lpContext, lpInterpreter, 11u, luGroup, 4u);
+        CreateObjectToMeshJob(4u, lpContext, lpInterpreter, 12u, 0, 1u);
+        for (u32 luList = 0; luList < 11u; ++luList)
+            CreateObjectToMeshJob(luList + 5u, lpContext, lpInterpreter, luList, 0, 1u);
+
+        if (sbChainJobs)
+        {
+            for (u32 luJob = 1; luJob < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++luJob)
+                maObjectToMeshJob[luJob].DependsOn(maObjectToMeshJob[luJob - 1u], EA::Jobs::Event::EVENT_WHEN_JOB_END);
+            CgsSystem::JobManager()->AddTree(&maObjectToMeshJob[KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS - 1u]);
+        }
+        else
+        {
+            for (u32 luJob = 0; luJob < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++luJob)
+                CgsSystem::JobManager()->AddJobs(&maObjectToMeshJob[luJob], 1);
+        }
+        for (u32 luJob = 0; luJob < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++luJob)
+            maObjectToMeshJob[luJob].WaitOn();
+
+        u32 luBlocksUsed = suObjectToMeshNextBlock;
+        if (luBlocksUsed > suObjectToMeshSharedBlockMax)
+        {
+            CGS_ASSERT(false, "Object-to-mesh conversion jobs failed due to insufficient memory.");
+            luBlocksUsed = suObjectToMeshSharedBlockMax;
+        }
+        lrBin.SetBinCurrent(spObjectToMeshSharedMemory
+            + static_cast<size_t>(luBlocksUsed) * DispatchBin::KU_BLOCK_SIZE_IN_QUAD_WORDS);
+        for (u32 luJob = 0; luJob < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++luJob)
+        {
+            for (u32 luList = 0; luList < 25u; ++luList)
+            {
+                DispatchList& lrOutput = mapaObjectToMeshJobOutputDispatchLists[luJob][luList];
+                lrOutput.ReconnectChainBlocks();
+                lpMeshFrame->GetList(luList)->Append(&lrOutput);
+            }
+        }
+        static const u32 KAU_BASE_LISTS[] = { 11u, 15u, 21u };
+        for (u32 luBase : KAU_BASE_LISTS)
+            for (u32 luGroup = 1; luGroup < 4u; ++luGroup)
+                lpMeshFrame->GetList(luBase)->Append(lpMeshFrame->GetList(luBase + luGroup));
+        return;
+    }
     for (u32 luListId = 0; luListId < 13u; ++luListId)
     {
         // X360 per-pass prologue: mShaderConstantTable.ResetShadowingForDispatch()
