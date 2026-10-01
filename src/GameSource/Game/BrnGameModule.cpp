@@ -4441,7 +4441,10 @@ namespace BrnGame
             // FLAG PC-platform leaf: the module scheduler's dispatch callback
             // runs here on the frozen input, before the renderer builds particles.
             if (lbHasParticles)
+            {
+                renderengine::FrameProfile::Scope lEffectsProfile(renderengine::FrameProfile::DISPATCH_EFFECTS);
                 mEffectsModule.DispatchThreadUpdate(lpRead);
+            }
         }
         mRenderModule.Render(lpRead);
     }

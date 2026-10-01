@@ -5414,6 +5414,8 @@ void BrnRendererModule::Prepare2DFramePC()
 
 void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer)
 {
+    using namespace renderengine::FrameProfile;
+    Stage lRenderStage(RENDER_SETUP);
     // FLAG PC-platform leaf: missing host storage cannot produce a valid frame.
     // This also covers failure to create the allocator before Prepare is called.
     if (!mIm2dRenderBuffer.IsPreparedPC() || !mIm2dDebugRenderBuffer.IsPreparedPC())
@@ -5460,7 +5462,9 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // pass below consumes mesh lists 0..4 and, on the console, runs before the world passes.
     // The context object is on Render's stack exactly as the X360 keeps it.
     CgsGraphics::DispatchObjectContext lDispatchContext;
+    lRenderStage.Next(RENDER_BUILD_LISTS);
     const bool lbDispatchReady = BuildDispatchLists(&lDispatchContext);
+    lRenderStage.Next(RENDER_SETUP);
 
     // [PC bring-up] Realise the shadow-map render target. The console builds the whole
     // render-target pool in BrnRendererMemory::Construct during BrnRendererModule::Construct;
@@ -5550,6 +5554,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
 
     if (mbRenderPostFX && lbTintBlendWillDrain)
     {
+        lRenderStage.Next(RENDER_TINT);
         // v296 -- DispatchThreadInputBuffer::GetCalibrationUnfriendlyEnablePostFx. The console
         // reads it ONCE near the top of Render (pseudocode lines 440-441) and ANDs it into this
         // block AND into all six effects in the apply block; this is the same read, inside the
@@ -5562,6 +5567,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
 
         BrnRendererBeginPostFxTintBlend(
             sbEffectsArbitratorConstructed ? &mEffectsArbitrator : 0, lbTintEffectsAllowed);
+        lRenderStage.Next(RENDER_SETUP);
     }
 
 #if BRN_ENVMAP_PASS_AVAILABLE
@@ -5781,7 +5787,9 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // console orders it. Gated on mRenderSwitches.mbRenderShadows.
     if (lbDispatchReady)
     {
+        lRenderStage.Next(RENDER_SHADOWS);
         RenderShadowMapPasses(&lDispatchContext);
+        lRenderStage.Next(RENDER_SETUP);
     }
 
 #if BRN_ANTIALIAS_BRACKET_AVAILABLE
@@ -5961,6 +5969,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     //     sorted here and the wait would be a wait on nothing. The maEnvmapSortJobs array is still
     //     carried in the layout, unused, and the six waits come back with the job scheduler.
     // ============================================================================================
+    lRenderStage.Next(RENDER_ENVMAP);
     if (mRenderSwitches.mbRenderEnvmap && lbSceneBracketOpen
         && lpDispatchThreadInputBuffer != 0
         && EnsureEnvMapTarget(mAllocatedRenderTargets))
@@ -6234,6 +6243,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     }
 #endif  // BRN_ENVMAP_PASS_AVAILABLE
 
+    lRenderStage.Next(RENDER_SETUP);
     if (lbSceneBracketOpen)
     {
         BeginRenderAntiAliased(lfFrameWhiteLevel, lbSceneClearStencil, luSceneStencilClearValue);
@@ -6252,6 +6262,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         // and VIEW-PROJECTION into the trail renderer -- the matrix TrailSystem::Render transforms
         // its strips by. Without it the tyre marks are transformed by a matrix nobody wrote.
         // Same null test, same DELETE-WHEN, as the full-res pass -- see its banner.
+        lRenderStage.Next(RENDER_PARTICLE_BUILD);
         if (mbRenderParticles && lpDispatchThreadInputBuffer != 0)
         {
             const BrnParticle::ParticleModule::ParticleRenderData* lpPreRenderData =
@@ -6269,7 +6280,9 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             }
         }
 
+        lRenderStage.Next(RENDER_WORLD);
         RenderWorldPasses(lpDispatchThreadInputBuffer, &lDispatchContext);
+        lRenderStage.Next(RENDER_PARTICLES);
 
         // ==========================================================================================
         // THE CORONA PASS (coronas step 1, 2026-08-17).
@@ -6381,6 +6394,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     }
 
 #if BRN_ANTIALIAS_BRACKET_AVAILABLE
+    lRenderStage.Next(RENDER_COMPOSITE);
     if (lbSceneBracketOpen)
     {
         // ---- THE CARS-vs-WORLD MOTION-BLUR MASK, CARRIED OUT OF THE STENCIL (step 11) -------
@@ -6800,6 +6814,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // bring-up -- when the flow is still parked on the loading screen -- the world
     // geometry the passes above just drew is completely covered. Environment-gated and
     // read once; the default path is untouched. DELETE with the bring-up.
+    lRenderStage.Next(RENDER_GUI);
     static int siWorldOnly = -1;
     if (siWorldOnly < 0)
     {
@@ -6810,6 +6825,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     {
         if (lpDispatchThreadInputBuffer != 0)
             lpDispatchThreadInputBuffer->UnlockForRead();   // the frame-long read lock, both exits
+        lRenderStage.Next(RENDER_PRESENT);
         renderengine::Device::ShowPixelBuffer();
         return;
     }
@@ -6961,6 +6977,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     if (lpDispatchThreadInputBuffer != 0)
         lpDispatchThreadInputBuffer->UnlockForRead();
 
+    lRenderStage.Next(RENDER_PRESENT);
     renderengine::Device::ShowPixelBuffer();
 }
 

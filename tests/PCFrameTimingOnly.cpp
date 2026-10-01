@@ -32,13 +32,15 @@ static void Check(bool lbPass, const char* lpcName)
     ++suChecks;
     if (!lbPass) { ++suFailures; std::printf("FAIL: %s\n", lpcName); }
 }
-static void Reset(const char* lpcEnabled, const char* lpcTimingOnly, const char* lpcDetail)
+static void Reset(const char* lpcEnabled, const char* lpcTimingOnly, const char* lpcDetail,
+                  const char* lpcCoarse = "0")
 {
     delete[] fp::gCapture.mpFrames;
     fp::gCapture = fp::Capture{};
     _putenv_s("BRN_FRAME_PROFILE", lpcEnabled);
     _putenv_s("BRN_FRAME_TIMING_ONLY", lpcTimingOnly);
     _putenv_s("BRN_FRAME_DETAIL", lpcDetail);
+    _putenv_s("BRN_FRAME_COARSE", lpcCoarse);
     _putenv_s("BRN_GPU_PROFILE", "0");
     suClockReads = 0;
     siTicks = 100;
@@ -58,12 +60,28 @@ static std::string ReadOutput(const char* lpcSuffix)
     }
     return lContents;
 }
+static double CsvValue(const std::string& lrCsv, const char* lpcColumn)
+{
+    const size_t luHeaderEnd = lrCsv.find('\n');
+    const size_t luName = lrCsv.find(lpcColumn);
+    if (luName == std::string::npos || luName >= luHeaderEnd) return -1;
+    unsigned luColumn = 0;
+    for (size_t lu = 0; lu < luName; ++lu) if (lrCsv[lu] == ',') ++luColumn;
+    size_t luValue = luHeaderEnd + 1;
+    while (luColumn--) {
+        luValue = lrCsv.find(',', luValue);
+        if (luValue == std::string::npos) return -1;
+        ++luValue;
+    }
+    return std::atof(lrCsv.c_str() + luValue);
+}
 
 int main()
 {
-    Reset("1", "1", "1");
+    Reset("1", "1", "1", "1");
     fp::Camera(1);
     fp::Begin();
+    { fp::Stage lStage(fp::RENDER_SETUP); lStage.Next(fp::RENDER_SHADOWS); }
     for (unsigned lu = 0; lu < 5000; ++lu)
     {
         fp::Scope lSubmit(fp::GEOMETRY_SUBMIT);
@@ -132,9 +150,59 @@ int main()
           && fp::gCapture.mpFrames[0].maTicks[fp::MESH_CONSTANTS] == 60,
           "full section profiling remains available");
 
-    Reset("0", "1", "1");
+    Reset("1", "0", "1", "1");
     fp::Begin();
-    { fp::Scope lSubmit(fp::GEOMETRY_SUBMIT); fp::DetailScope lDetail(fp::MESH_CONSTANTS); }
+    {
+        fp::Stage lStage(fp::RENDER_SETUP);
+        siTicks += 40;
+        lStage.Next(fp::RENDER_SHADOWS);
+        for (unsigned lu = 0; lu < 5000; ++lu) {
+            fp::Scope lSubmit(fp::GEOMETRY_SUBMIT);
+            fp::DetailScope lDetail(fp::WORLD_DRAW);
+            fp::Draw();
+        }
+        siTicks += 80;
+        lStage.Next(fp::RENDER_WORLD);
+        siTicks += 60;
+    }
+    fp::Present();
+    fp::End();
+    Check(suClockReads == 6, "coarse mode records stages without 5000 per-draw clocks");
+    const fp::Frame& lrCoarse = fp::gCapture.mpFrames[0];
+    Check(lrCoarse.maTicks[fp::RENDER_SETUP] == 40
+          && lrCoarse.maTicks[fp::RENDER_SHADOWS] == 80
+          && lrCoarse.maTicks[fp::RENDER_WORLD] == 60
+          && lrCoarse.miEnd - lrCoarse.miBegin == 180,
+          "consecutive stages partition elapsed time without overlap or gaps");
+    Check(lrCoarse.maTicks[fp::WORLD_DRAW] == 0 && lrCoarse.maTicks[fp::GEOMETRY_SUBMIT] == 0
+          && lrCoarse.muDraws == 5000 && lrCoarse.muPresents == 1,
+          "coarse mode preserves counts and suppresses detailed mode even when requested");
+    fp::Finish();
+    const std::string lCoarseCsv = ReadOutput(".frames.csv");
+    Check(CsvValue(lCoarseCsv, "render_setup_ms") == 0.04
+          && CsvValue(lCoarseCsv, "render_shadows_ms") == 0.08
+          && CsvValue(lCoarseCsv, "render_world_ms") == 0.06
+          && CsvValue(lCoarseCsv, "draws") == 5000
+          && CsvValue(lCoarseCsv, "presents") == 1,
+          "new CSV columns retain stage and existing counter alignment");
+    Check(ReadOutput(".frames.json").find("\"coarse\":true") != std::string::npos,
+          "saved metadata identifies coarse attribution");
+
+    Reset("1", "0", "0", "1");
+    fp::Begin();
+    { fp::Scope lPrepare(fp::GEOMETRY_PREPARE);
+      siTicks += 30;
+      { fp::Scope lLock(fp::GEOMETRY_LOCK); siTicks += 10; }
+    }
+    fp::End();
+    Check(suClockReads == 6 && fp::gCapture.mpFrames[0].maTicks[fp::GEOMETRY_PREPARE] == 40
+          && fp::gCapture.mpFrames[0].maTicks[fp::GEOMETRY_LOCK] == 10,
+          "coarse mode retains cold allocation attribution without timing cached draws");
+
+    Reset("0", "1", "1", "1");
+    fp::Begin();
+    { fp::Scope lSubmit(fp::GEOMETRY_SUBMIT); fp::DetailScope lDetail(fp::MESH_CONSTANTS);
+      fp::Stage lStage(fp::RENDER_SETUP); lStage.Next(fp::RENDER_WORLD); }
     fp::End();
     Check(!fp::Active() && !fp::gCapture.mpFrames && suClockReads == 0,
           "timing-only option never enables a disabled capture");
