@@ -18,6 +18,7 @@
 // <Windows.h> + <d3d9.h> must be brought in first, before that guarded include runs.
 #include <Windows.h>                            // full Win32 (LPMSG / winuser) for <d3d9.h>
 #include <d3d9.h>
+#include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
 #include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
 #include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
 
@@ -1032,8 +1033,10 @@ namespace CgsGraphics
             D3DSURFACE_DESC lDesc;
             if (FAILED(lpD3D->GetLevelDesc(0, &lDesc))) return;
 
+            renderengine::TextureUploadPC::Upload lReadAccess(lpD3D);
+            auto* lpRead = static_cast<IDirect3DTexture9*>(lReadAccess.Storage());
             D3DLOCKED_RECT lLock;
-            if (FAILED(lpD3D->LockRect(0, &lLock, 0, D3DLOCK_READONLY)))
+            if (FAILED(lpRead->LockRect(0, &lLock, 0, D3DLOCK_READONLY)))
                 return;   // DEFAULT-pool textures are not lockable; skip them
 
             char lacDir[512];
@@ -1056,7 +1059,7 @@ namespace CgsGraphics
                 std::fwrite(lLock.pBits, 1, luRows * lLock.Pitch, lpFile);
                 std::fclose(lpFile);
             }
-            lpD3D->UnlockRect(0);
+            lpRead->UnlockRect(0);
         }
 
         // [diag] BRN_CXFORM_TRACE: one line per DISTINCT large batch (bounds + final colour).
@@ -1169,15 +1172,16 @@ namespace CgsGraphics
             if (spWhite == nullptr && !sbTried)
             {
                 sbTried = true;
-                if (SUCCEEDED(lpDevice->CreateTexture(1, 1, 1, 0, D3DFMT_A8R8G8B8,
-                                                      D3DPOOL_MANAGED, &spWhite, nullptr)) &&
+                if (SUCCEEDED(renderengine::TextureUploadPC::Create2D(lpDevice, 1, 1, 1,
+                                                      D3DFMT_A8R8G8B8, &spWhite)) &&
                     spWhite != nullptr)
                 {
-                    D3DLOCKED_RECT lLock;
-                    if (SUCCEEDED(spWhite->LockRect(0, &lLock, nullptr, 0)))
+                    D3DLOCKED_BOX lLock = {};
+                    if (SUCCEEDED(renderengine::TextureUploadPC::Lock(spWhite, 0, 0, 0, lLock)))
                     {
                         *static_cast<u32*>(lLock.pBits) = 0xFFFFFFFFu;
-                        spWhite->UnlockRect(0);
+                        if (FAILED(renderengine::TextureUploadPC::Unlock(spWhite, 0, 0)))
+                        { spWhite->Release(); spWhite = nullptr; }
                     }
                     else
                     {

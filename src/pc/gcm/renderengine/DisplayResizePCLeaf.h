@@ -2,6 +2,8 @@
 
 #include <Windows.h>
 #include <d3d9.h>
+#include <utility>
+#include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
 
 // FLAG PC-platform leaf: prepare replacement D3D9 surfaces without Reset(), so
 // a window resize preserves the loaded world's textures, buffers and shaders.
@@ -59,6 +61,8 @@ namespace renderengine
         PCFrameBuffer(const PCFrameBuffer&) = delete;
         PCFrameBuffer& operator=(const PCFrameBuffer&) = delete;
         ~PCFrameBuffer() { Release(); }
+        void Swap(PCFrameBuffer& other)
+        { std::swap(mpSwapChain,other.mpSwapChain);std::swap(mpColour,other.mpColour);std::swap(mpDepth,other.mpDepth); }
 
         void Release()
         {
@@ -84,18 +88,18 @@ namespace renderengine
             lParameters.PresentationInterval = lbVSync
                 ? D3DPRESENT_INTERVAL_DEFAULT : D3DPRESENT_INTERVAL_IMMEDIATE;
             PCFrameBuffer lPending;
-            if (FAILED(lpDevice->CreateAdditionalSwapChain(&lParameters, &lPending.mpSwapChain))
-                || FAILED(lPending.mpSwapChain->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO,
-                                                              &lPending.mpColour))
-                || FAILED(lpDevice->CreateDepthStencilSurface(luWidth, luHeight, D3DFMT_D24S8,
+            if (TextureUploadPC::IsExtended(lpDevice))
+            {
+                if (FAILED(lpDevice->CreateRenderTarget(luWidth,luHeight,D3DFMT_X8R8G8B8,
+                    D3DMULTISAMPLE_NONE,0,FALSE,&lPending.mpColour,nullptr))) return false;
+            }
+            else if (FAILED(lpDevice->CreateAdditionalSwapChain(&lParameters, &lPending.mpSwapChain))
+                || FAILED(lPending.mpSwapChain->GetBackBuffer(0,D3DBACKBUFFER_TYPE_MONO,&lPending.mpColour)))
+                return false;
+            if (FAILED(lpDevice->CreateDepthStencilSurface(luWidth, luHeight, D3DFMT_D24S8,
                     D3DMULTISAMPLE_NONE, 0, FALSE, &lPending.mpDepth, nullptr)))
                 return false;
-            Release();
-            mpSwapChain = lPending.mpSwapChain;
-            mpColour = lPending.mpColour;
-            mpDepth = lPending.mpDepth;
-            lPending.mpSwapChain = nullptr;
-            lPending.mpColour = lPending.mpDepth = nullptr;
+            Swap(lPending);
             return true;
         }
 

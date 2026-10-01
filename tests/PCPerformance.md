@@ -11,7 +11,7 @@ damage visibility. It does **not** establish original-PC minimum requirements or
 | --- | --- |
 | Shared shader-constant shadow | ARTIST `DrawRenderableMeshZOnly::Interpret`, `0x827F6654..66C0` and `0x827F718C..71F8`, skips unchanged source blocks. All PC float-constant writers now share a register-value cache, including GUI and diagnostics. Value comparison handles mutable PC source buffers and overlapping register ranges. |
 | Shared sampler-state shadow | ARTIST `shadow::Device::SetState`, `0x82276A2C..34`, and whole texture-state bind `0x8227D17C..98` avoid duplicate writes. The PC cache covers all native sampler writers and keeps pixel, displacement and vertex sampler IDs separate. Failed writes never establish cached state. |
-| Native static geometry | The console binds resident GPU resource memory. PC retained vertex/index mirrors share dynamic `DEFAULT/WRITEONLY` pages. First writes use DISCARD; subsequent writes use NOOVERWRITE into unused or GPU-retired spans. EVENT query completion, not CPU frame count, permits reuse. Unsupported devices or allocation failures fall back to individual MANAGED buffers. Streaming retirement and cache generations are preserved. F11 does not reset the device. |
+| Native static geometry | The console binds resident GPU resource memory. PC retained vertex/index mirrors share dynamic `DEFAULT/WRITEONLY` pages. First writes use DISCARD; subsequent writes use NOOVERWRITE into unused or GPU-retired spans. EVENT query completion, not CPU frame count, permits reuse. Unsupported devices or allocation failures fall back to individual buffers (MANAGED on D3D9, DEFAULT on D3D9Ex). Streaming retirement and cache generations are preserved. |
 | Exact indexed-draw ranges | Cache the minimum/maximum indices consumed by the final native topology after primitive-reset conversion. D3D9 receives that mesh range rather than the full shared vertex buffer. Ignore incomplete list tails, and retain nonzero base-vertex addressing. |
 | SIMD colour-cube blending | ARTIST `0x82AD2F38` and `0x82AD4170` use vector kernels specialized by source count. SSE2 restores both properties for the PC job. Existing PC truncation/clamping, BGRA layout, source order and destination pitches remain unchanged. |
 | Optional diagnostics | Wheel index/bounds scans require `BRN_WHEEL_DIAG=1`. Composite GPU readback sampling requires existing `BRN_RT_PROBE=1`. `BRN_WHEEL_ZALWAYS` remains independent. |
@@ -21,8 +21,10 @@ damage visibility. It does **not** establish original-PC minimum requirements or
 
 The native state shadows are invalidated at device creation. Any future raw float
 constant/sampler write or state-block restoration must use these wrappers or
-invalidate them. A future device Reset must also retire/recreate DEFAULT geometry;
-the current renderer resizes through additional swap chains without Reset.
+invalidate them. Legacy D3D9 resizes through additional swap chains without Reset.
+The D3D9Ex presentation path uses ResetEx, which preserves resources and device
+state; the retained render target is rebound afterward. Replacing it with legacy
+Reset would require a separate resource and state recovery implementation.
 
 ## Verification
 
@@ -36,6 +38,8 @@ python b5-decomp/tests/run_pc_im2d_buffer.py
 python b5-decomp/tests/run_pc_world_geometry_buffers.py
 python b5-decomp/tests/run_pc_tint_blend.py
 python b5-decomp/tests/run_pc_fullscreen.py
+python b5-decomp/tests/run_pc_flip_resources.py
+python b5-decomp/tests/run_pc_flip_presentation.py
 python b5-decomp/tests/run_pc_display_resize.py
 python b5-decomp/tests/run_world_vertex_lifetime.py
 .\build.cmd exe --jobs 4
@@ -822,9 +826,53 @@ presentation-path result, not game FPS evidence. Primary flip presentation is
 therefore the next integration candidate; just changing the device to 9Ex did
 not help. The [flip-model documentation](https://learn.microsoft.com/en-us/windows/win32/direct3darticles/direct3d-9ex-improvements)
 describes handing surfaces to DWM instead of the legacy extra composition copy.
-The game still uses its reviewed legacy presentation path. Texture/buffer upload,
-resize, retained assert frames, fullscreen, live combat and timing validation
-remain necessary before enabling the candidate.
+The primary flip path is now integrated and selected by default, with automatic
+legacy fallback when the extended API, device or initial output is unavailable.
+`BRN_PRESENT_FLIP=0` selects the legacy path explicitly for comparison.
+
+## Primary flip presentation
+
+The D3D9Ex primary chain presents retained scene surfaces through FLIPEX. The
+separate retained surface preserves assert overlays and resize fallback. ResetEx
+runs only on the creation thread between joined engine frames; failed resize
+restores the old output, and an unrecovered failure stops rendering until reset
+succeeds. Only successful native presents count toward the presentation counter.
+
+Editable textures use SYSTEMMEM staging paired with DEFAULT GPU storage on 9Ex;
+legacy retains MANAGED storage. All mip levels, cube faces, compressed block rows,
+GUI alpha, colour-volume slices and runtime edits are preserved. Writable sublevel
+edits dirty level zero, including on legacy D3D9. The serialized texture header
+is unchanged. Runtime edits publish after the last overlapping CPU lock closes.
+
+The native resource suite passes 25 checks and the presentation suite passes 39,
+including full nonuniform scaled-output equivalence against legacy, failure and
+rollback paths, retained pixels, F11 and skipped-presentation counters. Removing
+uploads fails 10 checks; removing the flip filter policy fails one. The independent
+review passes. The canonical final build succeeds with four pre-existing C4661
+explicit-template-instantiation warnings in ImRenderBuffer.
+
+Same-binary 45-second stationary runs at 2560x1440, fully foreground, use unchanged
+graphics settings and no captures, GPU queries or detailed timers:
+
+| Metric | Legacy | Primary flip |
+| --- | ---: | ---: |
+| Average FPS | 69.89 | 120.55 |
+| Mean native Present wait | 6.38 ms | 0.63 ms |
+| 99th-percentile frame time | 26.03 ms | 11.41 ms |
+| Maximum frame time | 35.39 ms | 16.01 ms |
+
+This is a 72.5% gain in the fixed scene, not a whole-game claim. Both runs render
+2,676 opaque world meshes and 297 pre-Z meshes. Evidence under the parent checkout:
+`scratch/performance_goal_0929/flip_pair_{legacy,flip}_static_1001/`.
+
+Live F11, resizing, pause/resume and minimize/restore pass, including odd dimensions
+and letterboxing. Captured 1440p combat qualifies with eight takedowns across five
+victims and peak five crashing/three airborne rivals, without assertions or
+exceptions. Damaged vehicles, HUD and world output were inspected. Both intro
+videos were captured on the final default build after delaying the harness's
+Accept key. Capture-run FPS is excluded. Earlier 90-second flip combat runs
+included the event ending, so their overall FPS is also excluded. These exclusions
+must not be converted into a claimed combat speedup or a locked 165 FPS result.
 
 ## Remaining original optimization gaps
 
@@ -839,8 +887,8 @@ remain necessary before enabling the candidate.
   been established, so this must not be counted as a proven missing active
   optimization. Any native implementation must preserve visibility without GPU
   waits or stale results after camera cuts.
-- Presentation and resource-update spikes remain after pooling. Separate the
-  output copy from the native Present wait, and audit original resource pacing.
+- Primary flip removes most of the measured presentation wait. Remaining work
+  includes draw submission and resource-update spikes under combat and streaming.
 - TUB's native device creation (`0x947F10`) selects PUREDEVICE when supported.
   This port uses ordinary hardware vertex processing and relies on native Get-state
   operations. Its missing complete state shadow must be resolved before safely

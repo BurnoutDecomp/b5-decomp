@@ -204,6 +204,13 @@ namespace renderengine::GpuFrameTimingPC
         gRecorder.Begin(FrameProfile::gCapture.muCount);
     }
     inline void SceneComplete() { gRecorder.SceneComplete(); }
+    inline void DeviceReset()
+    {
+        // Reset/lost-device transitions invalidate outstanding timestamp spans.
+        // Release is safe even while lost; do not poll the device here.
+        gRecorder.Reset();
+        gBackend.device=nullptr;
+    }
     inline void OutputComplete() { gRecorder.OutputComplete(); }
     inline void AbandonCurrentFrame()
     {

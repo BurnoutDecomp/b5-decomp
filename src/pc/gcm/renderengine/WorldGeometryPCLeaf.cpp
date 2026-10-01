@@ -1,3 +1,4 @@
+#include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
 // =============================================================================
 // WorldGeometryPCLeaf.cpp  (pc/gcm/renderengine)
 //
@@ -525,7 +526,7 @@ namespace
                 // Unsupported hardware or an allocation failure retains the old
                 // individual managed-buffer path, with identical payload bytes.
                 if (SUCCEEDED(lpDevice->CreateVertexBuffer(luBytes, D3DUSAGE_WRITEONLY, 0,
-                        D3DPOOL_MANAGED, &lEntry.mpBuffer, nullptr)))
+                        TextureUploadPC::StaticBufferPool(lpDevice), &lEntry.mpBuffer, nullptr)))
                 {
                     FrameProfile::NativeBuffer();
                     void* lpLocked = nullptr;
@@ -696,7 +697,7 @@ namespace
             }
             else if (SUCCEEDED(lpDevice->CreateIndexBuffer(luPayloadBytes, D3DUSAGE_WRITEONLY,
                     lrPlan.mb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
-                    D3DPOOL_MANAGED, &lEntry.mpBuffer, nullptr)))
+                    TextureUploadPC::StaticBufferPool(lpDevice), &lEntry.mpBuffer, nullptr)))
             {
                 FrameProfile::NativeBuffer();
                 void* lpLocked = nullptr;

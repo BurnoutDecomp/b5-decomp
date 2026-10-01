@@ -4,6 +4,7 @@
 #include "rw/rwcore_structs.h"   // rw::Resource (the rw-resource Initialize overload's memory block)
 
 #include <d3d9.h>
+#include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
 #include <cstring>   // memcpy
 #include <cstdio>    // snprintf
 #include <cstddef>   // offsetof
@@ -118,8 +119,8 @@ namespace renderengine
 
         const UINT luLevels = (lpParams->muNumLevels != 0u) ? lpParams->muNumLevels : 1u;
         IDirect3DTexture9* lpD3DTexture = nullptr;
-        if (FAILED(gDevice->CreateTexture(lpParams->muWidth, lpParams->muHeight, luLevels, 0,
-                                          D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &lpD3DTexture, nullptr)))
+        if (FAILED(TextureUploadPC::Create2D(gDevice, lpParams->muWidth, lpParams->muHeight, luLevels,
+                                          D3DFMT_A8R8G8B8, &lpD3DTexture)))
         {
             return nullptr;
         }
@@ -213,61 +214,15 @@ namespace renderengine
     void Texture::Lock(Texture* lpTexture, s32 liLevel, s32 liFace, s32 liFlags, LockInfo* lpLockInfoOut)
     {
         lpLockInfoOut->mpBits = nullptr;
-        lpLockInfoOut->muPitch = 0u;
-        // Record WHAT WAS LOCKED, before any early-out, so Unlock can undo exactly this lock --
-        // the same two stores the Locked* overload makes and the same two the X360 Lock makes
-        // (`*(a5 + 18) = a3` level / `*(a5 + 19) = a4` face @0x82B62B20). See the LockInfo banner
-        // in texture.h: without them this overload's Unlock had to guess level 0 / face 0.
+        lpLockInfoOut->muPitch = 0;
         lpLockInfoOut->mu8MipLevel = static_cast<u8>(liLevel);
-        lpLockInfoOut->mu8Index    = static_cast<u8>(liFace);
-        if (lpTexture == nullptr || lpTexture->mpD3DTexture == nullptr)
+        lpLockInfoOut->mu8Index = static_cast<u8>(liFace);
+        D3DLOCKED_BOX lLock = {};
+        if (lpTexture && SUCCEEDED(TextureUploadPC::Lock(lpTexture->mpD3DTexture,
+                static_cast<UINT>(liLevel), static_cast<UINT>(liFace), static_cast<DWORD>(liFlags), lLock)))
         {
-            return;
-        }
-
-        // The CUBE arm, and the face argument this leaf had been discarding. X360 Lock @0x82B62B20
-        // dispatches on GetType and hands the face through:
-        //     if ( Type == 3 ) D3DCubeTexture_LockRect(a1, a4 /*FACE*/, a3 /*LEVEL*/, &v20, 0, v10);
-        // (a4 is r6 -- the same slot the ARRAY arm passes as its array index and the 2D/volume arms
-        // ignore). D3D9's IDirect3DCubeTexture9::LockRect takes the same two in the same order.
-        // muSliceStride stays 0 for a cube: the console's LABEL_14 (line/2D/array/cube) writes
-        // `*(a5 + 20) = 0` and only the VOLUME arm publishes a slice pitch.
-        if (TextureIsCube(lpTexture))
-        {
-            IDirect3DCubeTexture9* lpD3DCube =
-                static_cast<IDirect3DCubeTexture9*>(lpTexture->mpD3DTexture);
-            D3DLOCKED_RECT lLockedFace;
-            if (SUCCEEDED(lpD3DCube->LockRect(static_cast<D3DCUBEMAP_FACES>(liFace),
-                                              static_cast<UINT>(liLevel), &lLockedFace, nullptr,
-                                              static_cast<DWORD>(liFlags))))
-            {
-                lpLockInfoOut->mpBits = lLockedFace.pBits;
-                lpLockInfoOut->muPitch = static_cast<u32>(lLockedFace.Pitch);
-            }
-            return;
-        }
-
-        if (TextureIsVolume(lpTexture))
-        {
-            IDirect3DVolumeTexture9* lpD3DVolume =
-                static_cast<IDirect3DVolumeTexture9*>(lpTexture->mpD3DTexture);
-            D3DLOCKED_BOX lLockedBox;
-            if (SUCCEEDED(lpD3DVolume->LockBox(static_cast<UINT>(liLevel), &lLockedBox, nullptr,
-                                               static_cast<DWORD>(liFlags))))
-            {
-                lpLockInfoOut->mpBits = lLockedBox.pBits;
-                lpLockInfoOut->muPitch = static_cast<u32>(lLockedBox.RowPitch);
-            }
-            return;
-        }
-
-        IDirect3DTexture9* lpD3DTexture = static_cast<IDirect3DTexture9*>(lpTexture->mpD3DTexture);
-        D3DLOCKED_RECT lLockedRect;
-        if (SUCCEEDED(lpD3DTexture->LockRect(static_cast<UINT>(liLevel), &lLockedRect, nullptr,
-                                             static_cast<DWORD>(liFlags))))
-        {
-            lpLockInfoOut->mpBits = lLockedRect.pBits;
-            lpLockInfoOut->muPitch = static_cast<u32>(lLockedRect.Pitch);
+            lpLockInfoOut->mpBits = lLock.pBits;
+            lpLockInfoOut->muPitch = static_cast<u32>(lLock.RowPitch);
         }
     }
 
@@ -295,27 +250,9 @@ namespace renderengine
         // ==========================================================================================
         void UnlockSurface(Texture* lpTexture, u32 luLevel, u32 luIndex)
         {
-            if (lpTexture == nullptr || lpTexture->mpD3DTexture == nullptr)
-            {
-                return;
-            }
-            if (TextureIsCube(lpTexture))
-            {
-                static_cast<IDirect3DCubeTexture9*>(lpTexture->mpD3DTexture)
-                    ->UnlockRect(static_cast<D3DCUBEMAP_FACES>(luIndex),
-                                 static_cast<UINT>(luLevel));
-                return;
-            }
-            if (TextureIsVolume(lpTexture))
-            {
-                // The console's volume arm passes the LEVEL only -- a volume lock is a whole box,
-                // there is no per-slice index.
-                static_cast<IDirect3DVolumeTexture9*>(lpTexture->mpD3DTexture)
-                    ->UnlockBox(static_cast<UINT>(luLevel));
-                return;
-            }
-            static_cast<IDirect3DTexture9*>(lpTexture->mpD3DTexture)
-                ->UnlockRect(static_cast<UINT>(luLevel));
+            if (lpTexture && lpTexture->mpD3DTexture &&
+                FAILED(TextureUploadPC::Unlock(lpTexture->mpD3DTexture, luLevel, luIndex)))
+                CgsDev::Log::WriteToLog("[Texture] unlock/upload failed\n");
         }
     }
 
@@ -537,14 +474,14 @@ namespace renderengine
 
             const UINT luCubeLevels = (lpParams->muNumLevels != 0u) ? lpParams->muNumLevels : 1u;
             IDirect3DCubeTexture9* lpD3DCube = nullptr;
-            const HRESULT lhrCube = gDevice->CreateCubeTexture(
-                lpParams->muWidth, luCubeLevels, 0,
-                static_cast<D3DFORMAT>(lpParams->miFormat), D3DPOOL_MANAGED, &lpD3DCube, nullptr);
+            const HRESULT lhrCube = TextureUploadPC::CreateCube(gDevice,
+                lpParams->muWidth, luCubeLevels,
+                static_cast<D3DFORMAT>(lpParams->miFormat), &lpD3DCube);
             if (FAILED(lhrCube))
             {
                 char lacCube[176];
                 std::snprintf(lacCube, sizeof(lacCube),
-                    "[Texture] CreateCubeTexture(fmt=%d edge=%u mips=%u MANAGED) failed hr=0x%08X\n",
+                    "[Texture] CreateCubeTexture(fmt=%d edge=%u mips=%u) failed hr=0x%08X\n",
                     lpParams->miFormat, lpParams->muWidth,
                     static_cast<unsigned>(luCubeLevels), static_cast<unsigned>(lhrCube));
                 CgsDev::Log::WriteToLog(lacCube);
@@ -569,6 +506,8 @@ namespace renderengine
                 return;   // created empty (no shipped cube is, but the render-target path is)
             }
 
+            TextureUploadPC::Upload lUpload(lpD3DCube);
+            auto* lpUploadTexture = static_cast<IDirect3DCubeTexture9*>(lUpload.Storage());
             // THE UPLOAD ORDER IS FACE-MAJOR, and that is read off the converter rather than
             // assumed: tools/assets/bundles/x360_tex.py:349-351 is `for face in range(faces): for
             // lvl in range(mips):`, each level written as tight rows (block rows for DXT). So the
@@ -599,7 +538,7 @@ namespace renderengine
                     if (luNumRows == 0u) luNumRows = 1u;
 
                     D3DLOCKED_RECT lLockedFace;
-                    if (SUCCEEDED(lpD3DCube->LockRect(static_cast<D3DCUBEMAP_FACES>(luFace), luLevel,
+                    if (lUpload.Accept(lpUploadTexture->LockRect(static_cast<D3DCUBEMAP_FACES>(luFace), luLevel,
                                                       &lLockedFace, nullptr, 0)))
                     {
                         u8* lpDestFace = static_cast<u8*>(lLockedFace.pBits);
@@ -616,12 +555,17 @@ namespace renderengine
                                        lpCubeSource + luRow * luRowBytes, luRowBytes);
                             }
                         }
-                        lpD3DCube->UnlockRect(static_cast<D3DCUBEMAP_FACES>(luFace), luLevel);
+                        lUpload.Accept(lpUploadTexture->UnlockRect(static_cast<D3DCUBEMAP_FACES>(luFace), luLevel));
                     }
                     lpCubeSource += luMipBytes;
                     luFaceW = (luFaceW > 1u) ? (luFaceW >> 1) : 1u;
                     luFaceH = (luFaceH > 1u) ? (luFaceH >> 1) : 1u;
                 }
+            }
+            if (FAILED(lUpload.Finish()))
+            {
+                CgsDev::Log::WriteToLog("[Texture] staged upload failed\n");
+                Destroy(lpTexture);
             }
             return;
         }
@@ -631,14 +575,14 @@ namespace renderengine
         {
             const UINT luVolumeLevels = (lpParams->muNumLevels != 0u) ? lpParams->muNumLevels : 1u;
             IDirect3DVolumeTexture9* lpD3DVolume = nullptr;
-            const HRESULT lhrVolume = gDevice->CreateVolumeTexture(
-                lpParams->muWidth, lpParams->muHeight, lpParams->muDepth, luVolumeLevels, 0,
-                static_cast<D3DFORMAT>(lpParams->miFormat), D3DPOOL_MANAGED, &lpD3DVolume, nullptr);
+            const HRESULT lhrVolume = TextureUploadPC::CreateVolume(gDevice,
+                lpParams->muWidth, lpParams->muHeight, lpParams->muDepth, luVolumeLevels,
+                static_cast<D3DFORMAT>(lpParams->miFormat), &lpD3DVolume);
             if (FAILED(lhrVolume))
             {
                 char lacVol[176];
                 std::snprintf(lacVol, sizeof(lacVol),
-                    "[Texture] CreateVolumeTexture(fmt=%d %ux%ux%u mips=%u MANAGED) failed hr=0x%08X\n",
+                    "[Texture] CreateVolumeTexture(fmt=%d %ux%ux%u mips=%u) failed hr=0x%08X\n",
                     lpParams->miFormat, lpParams->muWidth, lpParams->muHeight, lpParams->muDepth,
                     static_cast<unsigned>(luVolumeLevels), static_cast<unsigned>(lhrVolume));
                 CgsDev::Log::WriteToLog(lacVol);
@@ -657,51 +601,65 @@ namespace renderengine
                 return;
             }
 
-            // Upload the top level only, honouring the runtime's own RowPitch/SlicePitch. The
+            TextureUploadPC::Upload lUpload(lpD3DVolume);
+            auto* lpUploadTexture = static_cast<IDirect3DVolumeTexture9*>(lUpload.Storage());
+            // Upload every mip, honouring the runtime's own RowPitch/SlicePitch. The
             // serialised volume is TIGHTLY packed (one row per row of BLOCKS for a compressed
             // format, pixel rows otherwise); a managed volume surface may pad either. The row unit
             // is the same one the 2D path below uses -- a block row for DXT, a pixel row otherwise
             // -- because using bits-per-pixel on a compressed format is what turned a 16 KB source
             // into a 98 KB read (step-10 fix round).
             const u32 luVolumeBytesPerBlock = lFormatBytesPerBlock(lpParams->miFormat);
-            const u32 luSrcRowBytes = (luVolumeBytesPerBlock != 0u)
-                ? ((lpParams->muWidth + 3u) / 4u) * luVolumeBytesPerBlock
-                : (lpParams->muWidth * lFormatBitsPerPixel(lpParams->miFormat) + 7u) / 8u;
-            const u32 luSrcNumRows = (luVolumeBytesPerBlock != 0u)
-                ? (lpParams->muHeight + 3u) / 4u
-                : lpParams->muHeight;
-            const u32 luSrcSliceBytes = luSrcRowBytes * luSrcNumRows;
-            D3DLOCKED_BOX lLockedBox;
-            if (SUCCEEDED(lpD3DVolume->LockBox(0u, &lLockedBox, nullptr, 0)))
+            const u8* lpSourceMip = static_cast<const u8*>(lpPixelData);
+            u32 luMipWidth = lpParams->muWidth;
+            u32 luMipHeight = lpParams->muHeight;
+            u32 luMipDepth = lpParams->muDepth;
+            for (UINT luLevel = 0u; luLevel < luVolumeLevels; ++luLevel)
             {
-                const u8* lpSourceSlice = static_cast<const u8*>(lpPixelData);
-                u8* const lpDestBase = static_cast<u8*>(lLockedBox.pBits);
-                for (u32 luSlice = 0u; luSlice < lpParams->muDepth; ++luSlice)
+                const u32 luSrcRowBytes = (luVolumeBytesPerBlock != 0u)
+                    ? ((luMipWidth + 3u) / 4u) * luVolumeBytesPerBlock
+                    : (luMipWidth * lFormatBitsPerPixel(lpParams->miFormat) + 7u) / 8u;
+                const u32 luSrcNumRows = (luVolumeBytesPerBlock != 0u)
+                    ? (luMipHeight + 3u) / 4u : luMipHeight;
+                const u32 luSrcSliceBytes = luSrcRowBytes * luSrcNumRows;
+                D3DLOCKED_BOX lLockedBox;
+                if (lUpload.Accept(lpUploadTexture->LockBox(luLevel, &lLockedBox, nullptr, 0)))
                 {
-                    for (u32 luRow = 0u; luRow < luSrcNumRows; ++luRow)
+                    u8* const lpDestBase = static_cast<u8*>(lLockedBox.pBits);
+                    for (u32 luSlice = 0u; luSlice < luMipDepth; ++luSlice)
                     {
-                        memcpy(lpDestBase + luSlice * static_cast<u32>(lLockedBox.SlicePitch)
-                                          + luRow * static_cast<u32>(lLockedBox.RowPitch),
-                               lpSourceSlice + luRow * luSrcRowBytes,
-                               luSrcRowBytes);
+                        for (u32 luRow = 0u; luRow < luSrcNumRows; ++luRow)
+                        {
+                            memcpy(lpDestBase + luSlice * static_cast<u32>(lLockedBox.SlicePitch)
+                                              + luRow * static_cast<u32>(lLockedBox.RowPitch),
+                                   lpSourceMip + luSlice * luSrcSliceBytes + luRow * luSrcRowBytes,
+                                   luSrcRowBytes);
+                        }
                     }
-                    lpSourceSlice += luSrcSliceBytes;
+                    lUpload.Accept(lpUploadTexture->UnlockBox(luLevel));
                 }
-                lpD3DVolume->UnlockBox(0u);
+                lpSourceMip += luSrcSliceBytes * luMipDepth;
+                luMipWidth = (luMipWidth > 1u) ? (luMipWidth >> 1) : 1u;
+                luMipHeight = (luMipHeight > 1u) ? (luMipHeight >> 1) : 1u;
+                luMipDepth = (luMipDepth > 1u) ? (luMipDepth >> 1) : 1u;
+            }
+            if (FAILED(lUpload.Finish()))
+            {
+                CgsDev::Log::WriteToLog("[Texture] staged upload failed\n");
+                Destroy(lpTexture);
             }
             return;
         }
 
         const UINT luLevels = (lpParams->muNumLevels != 0u) ? lpParams->muNumLevels : 1u;
         IDirect3DTexture9* lpD3DTexture = nullptr;
-        const HRESULT lhrCreate = gDevice->CreateTexture(lpParams->muWidth, lpParams->muHeight, luLevels, 0,
-                                                         static_cast<D3DFORMAT>(lpParams->miFormat),
-                                                         D3DPOOL_MANAGED, &lpD3DTexture, nullptr);
+        const HRESULT lhrCreate = TextureUploadPC::Create2D(gDevice, lpParams->muWidth, lpParams->muHeight, luLevels,
+                                                         static_cast<D3DFORMAT>(lpParams->miFormat), &lpD3DTexture);
         if (FAILED(lhrCreate))
         {
             char lac[160];
             std::snprintf(lac, sizeof(lac),
-                "[Texture] CreateTexture(fmt=%d %ux%u mips=%u MANAGED) failed hr=0x%08X\n",
+                "[Texture] CreateTexture(fmt=%d %ux%u mips=%u) failed hr=0x%08X\n",
                 lpParams->miFormat, lpParams->muWidth, lpParams->muHeight,
                 static_cast<unsigned>(luLevels), static_cast<unsigned>(lhrCreate));
             CgsDev::Log::WriteToLog(lac);
@@ -714,6 +672,8 @@ namespace renderengine
             return;  // created empty (the data pipeline supplies pixels later)
         }
 
+        TextureUploadPC::Upload lUpload(lpD3DTexture);
+        auto* lpUploadTexture = static_cast<IDirect3DTexture9*>(lUpload.Storage());
         // Upload each mip: the loader stores the chain TIGHTLY PACKED in graphics-local memory
         // (the serialised pixel block the bundle carries; tools/assets/bundles/x360_tex.py
         // produces exactly that from the console's tiled + packed-mip-tail layout). Copy row by
@@ -743,7 +703,7 @@ namespace renderengine
             if (luNumRows == 0u) luNumRows = 1u;
 
             D3DLOCKED_RECT lLockedRect;
-            if (SUCCEEDED(lpD3DTexture->LockRect(luLevel, &lLockedRect, nullptr, 0)))
+            if (lUpload.Accept(lpUploadTexture->LockRect(luLevel, &lLockedRect, nullptr, 0)))
             {
                 u8* lpDest = static_cast<u8*>(lLockedRect.pBits);
                 const u32 luDestPitch = static_cast<u32>(lLockedRect.Pitch);
@@ -759,11 +719,16 @@ namespace renderengine
                                luRowBytes);
                     }
                 }
-                lpD3DTexture->UnlockRect(luLevel);
+                lUpload.Accept(lpUploadTexture->UnlockRect(luLevel));
             }
             lpSource += luMipBytes;
             luW = (luW > 1u) ? (luW >> 1) : 1u;
             luH = (luH > 1u) ? (luH >> 1) : 1u;
+        }
+        if (FAILED(lUpload.Finish()))
+        {
+            CgsDev::Log::WriteToLog("[Texture] staged upload failed\n");
+            Destroy(lpTexture);
         }
     }
 
@@ -849,53 +814,13 @@ namespace renderengine
         lpLockedOut->mu8Index      = static_cast<u8>(liFace);
         lpLockedOut->muLockFlags   = static_cast<u32>(liFlags);
 
-        if (lpTexture != nullptr && lpTexture->mpD3DTexture != nullptr)
+        D3DLOCKED_BOX lLock = {};
+        if (lpTexture && SUCCEEDED(TextureUploadPC::Lock(lpTexture->mpD3DTexture,
+                static_cast<UINT>(liLevel), static_cast<UINT>(liFace), static_cast<DWORD>(liFlags), lLock)))
         {
-            if (TextureIsCube(lpTexture))
-            {
-                // X360 Lock's `Type == 3` arm: D3DCubeTexture_LockRect(this, FACE, LEVEL, ...).
-                // muSliceStride stays 0 (the console's shared LABEL_14 writes 0 there for every
-                // non-volume shape).
-                IDirect3DCubeTexture9* lpD3DCube =
-                    static_cast<IDirect3DCubeTexture9*>(lpTexture->mpD3DTexture);
-                D3DLOCKED_RECT lLockedFace;
-                if (SUCCEEDED(lpD3DCube->LockRect(static_cast<D3DCUBEMAP_FACES>(liFace),
-                                                  static_cast<UINT>(liLevel), &lLockedFace, nullptr,
-                                                  static_cast<DWORD>(liFlags))))
-                {
-                    lpLockedOut->mpPixelData = lLockedFace.pBits;
-                    lpLockedOut->muStride    = static_cast<u32>(lLockedFace.Pitch);
-                }
-            }
-            else if (TextureIsVolume(lpTexture))
-            {
-                // The VOLUME lock, and the reason this overload had to learn one: it is the lock
-                // rw::graphics::postfx::Tint::BeginBlendJob @0x823F8310 takes, and the two words it
-                // publishes into the blend job are `lwz r11, 0xAC` (muStride) and `lwz r10, 0xB8`
-                // (muSliceStride). D3D9 hands both back in the D3DLOCKED_BOX; with the old 2D-only
-                // path muSliceStride stayed 0 and every slice of the blend wrote over slice 0.
-                IDirect3DVolumeTexture9* lpD3DVolume =
-                    static_cast<IDirect3DVolumeTexture9*>(lpTexture->mpD3DTexture);
-                D3DLOCKED_BOX lLockedBox;
-                if (SUCCEEDED(lpD3DVolume->LockBox(static_cast<UINT>(liLevel), &lLockedBox, nullptr,
-                                                   static_cast<DWORD>(liFlags))))
-                {
-                    lpLockedOut->mpPixelData   = lLockedBox.pBits;
-                    lpLockedOut->muStride      = static_cast<u32>(lLockedBox.RowPitch);
-                    lpLockedOut->muSliceStride = static_cast<u32>(lLockedBox.SlicePitch);
-                }
-            }
-            else
-            {
-                IDirect3DTexture9* lpD3DTexture = static_cast<IDirect3DTexture9*>(lpTexture->mpD3DTexture);
-                D3DLOCKED_RECT lLockedRect;
-                if (SUCCEEDED(lpD3DTexture->LockRect(static_cast<UINT>(liLevel), &lLockedRect, nullptr,
-                                                     static_cast<DWORD>(liFlags))))
-                {
-                    lpLockedOut->mpPixelData = lLockedRect.pBits;
-                    lpLockedOut->muStride    = static_cast<u32>(lLockedRect.Pitch);
-                }
-            }
+            lpLockedOut->mpPixelData = lLock.pBits;
+            lpLockedOut->muStride = static_cast<u32>(lLock.RowPitch);
+            lpLockedOut->muSliceStride = static_cast<u32>(lLock.SlicePitch);
         }
 
         u32 luWidth = GetWidth(lpTexture) >> liLevel;

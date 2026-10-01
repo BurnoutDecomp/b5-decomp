@@ -1,9 +1,11 @@
 #include "pc/gcm/renderengine/GpuFrameTimingPCLeaf.h"
+#include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
 #include <vector>
 #include <cstdio>
 #include <cmath>
 
 using namespace renderengine::GpuFrameTimingPC;
+static renderengine::PCPresentation gPresentation;
 namespace renderengine {
     IDirect3DDevice9* gDevice = nullptr;
     struct Device { static bool FrameBeginNoClear(); };

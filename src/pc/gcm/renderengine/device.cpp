@@ -128,12 +128,13 @@ HRESULT renderengine::PCGetBackBuffer(IDirect3DSurface9** lppSurface)
 // surfaces have all been allocated. No device Reset and no loss of world assets.
 bool renderengine::Device::ResizeDisplay(u32 luWidth, u32 luHeight)
 {
+    PCFrameBuffer lPending;
+    if (!lPending.Resize(gDevice, hWnd, luWidth, luHeight, gVSync != 0)) return false;
     RECT lClient = {};
-    if (!GetClientRect(hWnd, &lClient)
-        || FAILED(gPresentation.Prepare(gDevice, hWnd, gVSync != 0, lClient.right, lClient.bottom)))
-        return false;
-    if (!gFrameBuffer.Resize(gDevice, hWnd, luWidth, luHeight, gVSync != 0))
-        return false;
+    if (!GetClientRect(hWnd, &lClient)) return false;
+    const HRESULT lPrepare=gPresentation.Prepare(gDevice,hWnd,gVSync!=0,lClient.right,lClient.bottom);
+    if (FAILED(lPrepare) && (!gPresentation.IsFlip() || !gPresentation.Ready())) return false;
+    gFrameBuffer.Swap(lPending);
     gFrameBuffer.Bind(gDevice);
     PCInstallDefaultRenderTargetState(luWidth, luHeight);
     gDisplayWidth = static_cast<s32>(luWidth);
@@ -145,6 +146,34 @@ bool renderengine::Device::ResizeDisplay(u32 luWidth, u32 luHeight)
                   "[display] rendering at %ux%u (native window pixels)\n", luWidth, luHeight);
     CgsDev::Log::WriteToLog(lacMessage);
     return true;
+}
+
+// FLAG PC-platform leaf: the main/window thread calls this before starting a
+// frame. Render, uploads and timestamp polling stay stopped after a failed
+// ResetEx until either the requested output or its previous size is recovered.
+bool renderengine::Device::PreparePresentationPC()
+{
+    if (!gPresentation.IsFlip()) return true;
+    RECT lClient = {};
+    if (!GetClientRect(hWnd,&lClient)) return false;
+    if (IsIconic(hWnd) || lClient.right<=0 || lClient.bottom<=0) return gPresentation.Ready();
+    const unsigned luBefore=gPresentation.OutputGeneration();
+    const HRESULT lResult=gPresentation.Prepare(gDevice,hWnd,gVSync!=0,lClient.right,lClient.bottom,true);
+    if (gPresentation.Ready() && luBefore!=gPresentation.OutputGeneration())
+    {
+        gFrameBuffer.Bind(gDevice);
+        PCInstallDefaultRenderTargetState(gDisplayWidth,gDisplayHeight);
+    }
+    static HRESULT shLast = S_OK;
+    if (FAILED(lResult) && lResult!=shLast)
+    {
+        char lacMessage[128];
+        std::snprintf(lacMessage,sizeof(lacMessage),"[display] flip output reset hr=0x%08X recovered=%d\n",
+            static_cast<unsigned>(lResult),gPresentation.Ready()?1:0);
+        CgsDev::Log::WriteToLog(lacMessage);
+    }
+    shLast=lResult;
+    return gPresentation.Ready();
 }
 
 // @ TUB 0x7CC080 - detect the desktop resolution and seed the default graphics
@@ -215,7 +244,19 @@ void renderengine::Device::Start()
         return;
     }
 
-    gD3D9 = Direct3DCreate9(D3D_SDK_VERSION);
+    IDirect3D9Ex* lpExtendedApi = nullptr;
+    // FLAG PC-platform leaf: present retained frames through the native flip
+    // model where supported. Keep an explicit legacy control for comparison
+    // and fall back automatically if the API/device/output cannot be created.
+    const char* lpcFlip = std::getenv("BRN_PRESENT_FLIP");
+    if (!lpcFlip || lpcFlip[0]!='0')
+    {
+        using CreateExtended = HRESULT(WINAPI*)(UINT,IDirect3D9Ex**);
+        const auto lpCreateExtended = reinterpret_cast<CreateExtended>(
+            GetProcAddress(GetModuleHandleA("d3d9.dll"),"Direct3DCreate9Ex"));
+        if (lpCreateExtended) lpCreateExtended(D3D_SDK_VERSION,&lpExtendedApi);
+    }
+    gD3D9 = lpExtendedApi ? lpExtendedApi : Direct3DCreate9(D3D_SDK_VERSION);
     if (gD3D9 == nullptr)
     {
         CgsDev::Log::WriteToLog("[device] Start: Direct3DCreate9 returned null -- NO DEVICE this run\n");
@@ -266,8 +307,41 @@ void renderengine::Device::Start()
     lPresentParams.PresentationInterval =
         (gVSync != 0) ? D3DPRESENT_INTERVAL_DEFAULT : D3DPRESENT_INTERVAL_IMMEDIATE;
 
-    HRESULT lhCreateResult = gD3D9->CreateDevice(gAdapterIndex, D3DDEVTYPE_HAL, hWnd,
+    HRESULT lhCreateResult = E_FAIL;
+    if (lpExtendedApi)
+    {
+        D3DPRESENT_PARAMETERS lFlipParams=lPresentParams;
+        RECT lClient={}; GetClientRect(hWnd,&lClient);
+        lFlipParams.BackBufferWidth=lClient.right;
+        lFlipParams.BackBufferHeight=lClient.bottom;
+        lFlipParams.SwapEffect=D3DSWAPEFFECT_FLIPEX;
+        lFlipParams.BackBufferCount=2;
+        lFlipParams.EnableAutoDepthStencil=FALSE;
+        const D3DPRESENT_PARAMETERS lRequested=lFlipParams;
+        IDirect3DDevice9Ex* lpExtendedDevice=nullptr;
+        lhCreateResult=lpExtendedApi->CreateDeviceEx(gAdapterIndex,D3DDEVTYPE_HAL,hWnd,
+            luBehaviorFlags,&lFlipParams,nullptr,&lpExtendedDevice);
+        if (SUCCEEDED(lhCreateResult))
+        {
+            gDevice=lpExtendedDevice;
+            if (gFrameBuffer.Resize(gDevice,hWnd,gDisplayWidth,gDisplayHeight,gVSync!=0))
+            {
+                gFrameBuffer.Bind(gDevice);
+                gPresentation.ConfigureFlip(lpExtendedDevice,lRequested);
+                CgsDev::Log::WriteToLog("[device] presentation=primary-flip buffers=2\n");
+            }
+            else { gDevice->Release();gDevice=nullptr; }
+        }
+        if (!gDevice)
+        {
+            gD3D9->Release();gD3D9=Direct3DCreate9(D3D_SDK_VERSION);
+            CgsDev::Log::WriteToLog("[device] primary flip unavailable; using legacy presentation\n");
+        }
+    }
+    if (!gDevice && gD3D9)
+        lhCreateResult = gD3D9->CreateDevice(gAdapterIndex, D3DDEVTYPE_HAL, hWnd,
                                                  luBehaviorFlags, &lPresentParams, &gDevice);
+    if (!gDevice && SUCCEEDED(lhCreateResult)) lhCreateResult=E_FAIL;
     if (FAILED(lhCreateResult))
     {
         char lacMsg[128];
@@ -324,7 +398,7 @@ namespace renderengine
 // scene so immediate-mode draws are accepted. Returns false if the device is not ready.
 bool renderengine::Device::FrameBegin()
 {
-    if (gDevice == nullptr)
+    if (gDevice == nullptr || !gPresentation.Ready())
     {
         return false;
     }
@@ -339,7 +413,7 @@ bool renderengine::Device::FrameBegin()
 // the frozen frame. Returns false if the device is not ready or a scene is already open.
 bool renderengine::Device::FrameBeginNoClear()
 {
-    if (gDevice == nullptr)
+    if (gDevice == nullptr || !gPresentation.Ready())
     {
         return false;
     }
@@ -905,7 +979,7 @@ static void DumpBackBufferIfRequested()
 // End the scene and present the back buffer to the window.
 void renderengine::Device::ShowPixelBuffer()
 {
-    if (gDevice == nullptr)
+    if (gDevice == nullptr || !gPresentation.Ready())
     {
         return;
     }
@@ -920,7 +994,7 @@ void renderengine::Device::ShowPixelBuffer()
         FrameProfile::Scope lPresentProfile(FrameProfile::PRESENT);
         lhrPresent = gPresentation.Present(gDevice, hWnd, gVSync != 0, lpFrame);
         GpuFrameTimingPC::OutputComplete(); // also closes an early-out/minimized frame
-        FrameProfile::Present();
+        if (gPresentation.LastPresentSucceeded()) FrameProfile::Present();
     }
     if (lpFrame) lpFrame->Release();
     // [DIAG] NOT IN THE X360 BINARY -- issue #30: Present's result and the cooperative level, on every
@@ -947,7 +1021,7 @@ void renderengine::Device::ShowPixelBuffer()
             CgsDev::Log::WriteToLog(lacMsg);
         }
     }
-    ++renderengine::guDispatchPresentCountPC;
+    if (gPresentation.LastPresentSucceeded()) ++renderengine::guDispatchPresentCountPC;
     renderengine::guDiagDraws = 0;   // [DIAG] issue #30 per-present counters
     renderengine::guDiagResolves = 0;
     renderengine::gpDiagLastResolveDest = nullptr;

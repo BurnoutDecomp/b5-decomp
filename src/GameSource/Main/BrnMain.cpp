@@ -330,6 +330,11 @@ void EngineUpdate()
             // BrnGameModule::Update @0x823C5480 brackets ThreadLayout::Update with the CPU
             // profiler's frame start/stop. This inline PC loop is the current ThreadLayout
             // stand-in, so retain the bracket around the complete update/dispatch sequence.
+            if (!renderengine::Device::PreparePresentationPC())
+            {
+                Sleep(10); // keep processing window messages while the device recovers
+                continue;
+            }
             renderengine::FrameProfile::Begin();
             gGameModule.Update();
             renderengine::FrameProfile::End();

@@ -1,3 +1,4 @@
+#include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
 // =============================================================================
 // XenonD3D9Shims.cpp  (pc/gcm/renderengine)
 //
@@ -7113,7 +7114,9 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
                 // Only an uncompressed lock can be read as texels; a DXT surface locks to
                 // BLOCKS, so report the first block words instead and say which it is.
                 D3DLOCKED_RECT lLock;
-                if (SUCCEEDED(lpTex->LockRect(0, &lLock, nullptr, D3DLOCK_READONLY)))
+                renderengine::TextureUploadPC::Upload lReadAccess(lpTex);
+                auto* lpRead = static_cast<IDirect3DTexture9*>(lReadAccess.Storage());
+                if (SUCCEEDED(lpRead->LockRect(0, &lLock, nullptr, D3DLOCK_READONLY)))
                 {
                     const unsigned* const lpuWords = static_cast<const unsigned*>(lLock.pBits);
                     for (int li = 0; li < 4; ++li) lauTexel[li] = lpuWords[li];
@@ -7125,7 +7128,7 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
                         const unsigned luA = (lpuWords[li] >> 24) & 0xFFu;
                         if (luA > luAlphaMax) luAlphaMax = luA;
                     }
-                    lpTex->UnlockRect(0);
+                    lpRead->UnlockRect(0);
                 }
             }
             std::snprintf(lacMsg, sizeof(lacMsg),

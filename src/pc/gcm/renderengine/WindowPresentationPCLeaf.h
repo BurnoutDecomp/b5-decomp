@@ -4,6 +4,7 @@
 #include <d3d9.h>
 #include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include "pc/gcm/renderengine/GpuFrameTimingPCLeaf.h"
+#include "pc/gcm/renderengine/FlipSwapChainPCLeaf.h"
 
 // FLAG PC-platform leaf: owner-requested F11 borderless fullscreen and 16:9
 // presentation. The console owns its display; Windows window placement and
@@ -104,30 +105,57 @@ namespace renderengine
     {
     private:
         IDirect3DSwapChain9* mpSwapChain = nullptr;
+        FlipSwapChainPC mFlip;
+        bool mbPresented = false;
         LONG miWidth = 0;
         LONG miHeight = 0;
         LONG miFailedWidth = 0;
         LONG miFailedHeight = 0;
         D3DTEXTUREFILTERTYPE meFilter = D3DTEXF_NONE;
 
+        void SelectFilter(IDirect3DDevice9* lpDevice)
+        {
+            D3DCAPS9 lCaps = {};
+            lpDevice->GetDeviceCaps(&lCaps);
+            const DWORD luLinearCaps = D3DPTFILTERCAPS_MINFLINEAR | D3DPTFILTERCAPS_MAGFLINEAR;
+            meFilter = (lCaps.StretchRectFilterCaps & luLinearCaps) == luLinearCaps ? D3DTEXF_LINEAR : D3DTEXF_NONE;
+        }
+
     public:
         PCPresentation() = default;
         PCPresentation(const PCPresentation&) = delete;
         PCPresentation& operator=(const PCPresentation&) = delete;
         ~PCPresentation() { Release(); }
+        bool IsFlip() const { return mFlip.Active(); }
+        bool Ready() const { return mFlip.Ready(); }
+        bool LastPresentSucceeded() const { return mbPresented; }
+        unsigned OutputGeneration() const { return mFlip.Generation(); }
+        void ConfigureFlip(IDirect3DDevice9Ex* lpDevice,const D3DPRESENT_PARAMETERS& lrParameters)
+        {
+            Release();mFlip.Configure(lpDevice,lrParameters);
+            miWidth=lrParameters.BackBufferWidth;miHeight=lrParameters.BackBufferHeight;
+            SelectFilter(lpDevice);
+        }
 
         void Release()
         {
             if (mpSwapChain) mpSwapChain->Release();
+            mFlip.Release();
             mpSwapChain = nullptr;
             miWidth = miHeight = 0;
             miFailedWidth = miFailedHeight = 0;
         }
 
         HRESULT Prepare(IDirect3DDevice9* lpDevice, HWND lhWindow, bool lbVSync,
-                        LONG liWidth, LONG liHeight)
+                        LONG liWidth, LONG liHeight, bool lbAllowFlipReset = false)
         {
             if (liWidth <= 0 || liHeight <= 0) return D3DERR_INVALIDCALL;
+            if (mFlip.Active())
+            {
+                const HRESULT lResult=mFlip.Prepare(lhWindow,lbVSync,liWidth,liHeight,lbAllowFlipReset);
+                miWidth=mFlip.Width();miHeight=mFlip.Height();
+                return lResult;
+            }
             if (liWidth != miFailedWidth || liHeight != miFailedHeight)
                 miFailedWidth = miFailedHeight = 0;
             if (mpSwapChain && miWidth == liWidth && miHeight == liHeight) return S_OK;
@@ -153,10 +181,7 @@ namespace renderengine
             mpSwapChain = lpPending;
             miWidth = liWidth;
             miHeight = liHeight;
-            D3DCAPS9 lCaps = {};
-            lpDevice->GetDeviceCaps(&lCaps);
-            const DWORD luLinearCaps = D3DPTFILTERCAPS_MINFLINEAR | D3DPTFILTERCAPS_MAGFLINEAR;
-            meFilter = (lCaps.StretchRectFilterCaps & luLinearCaps) == luLinearCaps ? D3DTEXF_LINEAR : D3DTEXF_NONE;
+            SelectFilter(lpDevice);
             return S_OK;
         }
 
@@ -164,17 +189,21 @@ namespace renderengine
         HRESULT Present(IDirect3DDevice9* lpDevice, HWND lhWindow, bool lbVSync,
                         IDirect3DSurface9* lpFrame = nullptr)
         {
+            mbPresented=false;
             RECT lClient;
             if (!GetClientRect(lhWindow, &lClient)) return E_FAIL;
             if (IsIconic(lhWindow) || lClient.right <= 0 || lClient.bottom <= 0) return S_OK;
             const RECT lView = FitDisplay16By9(lClient.right, lClient.bottom);
             if (lView.right <= lView.left || lView.bottom <= lView.top) return S_OK;
-            if (!lpFrame && EqualRect(&lView, &lClient))
+            if (mFlip.Active() && (!lpFrame || !mFlip.Ready())) return D3DERR_INVALIDCALL;
+            if (!mFlip.Active() && !lpFrame && EqualRect(&lView, &lClient))
             {
                 Release();
                 FrameProfile::Scope lWaitProfile(FrameProfile::PRESENT_WAIT);
                 GpuFrameTimingPC::OutputComplete();
-                return lpDevice->Present(nullptr, nullptr, lhWindow, nullptr);
+                const HRESULT lResult=lpDevice->Present(nullptr,nullptr,lhWindow,nullptr);
+                mbPresented=lResult==S_OK;
+                return lResult;
             }
 
             HRESULT lPrepare;
@@ -182,7 +211,8 @@ namespace renderengine
                 FrameProfile::Scope lCopyProfile(FrameProfile::PRESENT_COPY);
                 lPrepare = Prepare(lpDevice, lhWindow, lbVSync, lClient.right, lClient.bottom);
             }
-            if (FAILED(lPrepare) && !mpSwapChain) return lPrepare;
+            if (FAILED(lPrepare) && !mpSwapChain && !mFlip.Active()) return lPrepare;
+            if (!mFlip.Ready()) return D3DERR_DEVICELOST;
             // If output allocation failed, retain the old output and map the
             // client-space bars into it. Present scales the whole result back
             // to the client, so the game still has the correct aspect ratio.
@@ -204,7 +234,8 @@ namespace renderengine
                 }
                 else
                     lResult = lpDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &lpSource);
-                if (SUCCEEDED(lResult)) lResult = mpSwapChain->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &lpOutput);
+                if (SUCCEEDED(lResult)) lResult = mFlip.Active()?mFlip.GetBackBuffer(&lpOutput)
+                    :mpSwapChain->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &lpOutput);
                 if (SUCCEEDED(lResult)) lResult = lpDevice->ColorFill(lpOutput, nullptr, D3DCOLOR_XRGB(0, 0, 0));
                 if (SUCCEEDED(lResult)) lResult = lpDevice->StretchRect(lpSource, nullptr, lpOutput, &lOutputView, meFilter);
             }
@@ -212,10 +243,11 @@ namespace renderengine
             {
                 FrameProfile::Scope lWaitProfile(FrameProfile::PRESENT_WAIT);
                 GpuFrameTimingPC::OutputComplete();
-                lResult = mpSwapChain->Present(nullptr, nullptr, lhWindow, nullptr, 0);
+                lResult = mFlip.Active()?mFlip.Present():mpSwapChain->Present(nullptr, nullptr, lhWindow, nullptr, 0);
             }
             if (lpOutput) lpOutput->Release();
             if (lpSource) lpSource->Release();
+            mbPresented=lResult==S_OK;
             return lResult;
         }
     };
