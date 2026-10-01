@@ -1570,6 +1570,9 @@ void BrnRendererModule::Construct()
         mpInterpreter->SetTime(0.0f);
     }
 
+    // ARTIST @8240BF30..BF54 initializes the inlined shadow manager before the loading screen.
+    mShadowMapRenderManager.Construct(2);
+
     // The loading-screen renderer (creates its textures + scratch buffer, picks language).
     mLoadingScreenRenderer.Construct();
 
@@ -2463,26 +2466,20 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
             // array is still carried in the layout, unused, for when the job scheduler lands --
             // at which point these five waits come back with it.
 
+            // ARTIST Render @8240C84C..CB0C brackets lists 0/1/4 with the Front helpers
+            // and 2/3 with the Back helpers. The manager flag selects the locked group.
+            if (liSlot == 0)
+                mShadowMapRenderManager.BeginFrontFaceCullRender();
+            else
+                mShadowMapRenderManager.BeginBackFaceCullRender();
+
             mSingleBufferedDispatchFrame.GetList(static_cast<u32>(liList))
                 ->DispatchAllMeshesZOnly(mpInterpreter, lpContext);
 
-            // [PARKED - unattested data] The console wraps ONE list per cascade (the first when
-            // mbForceFrontFaceCull is clear, the second when it is set) in the cull-state bracket
-            //   sub_82276B38(dword_83010A3C); shadow::Device::LockRasteriserState();
-            //   ... UnlockRasteriserState(); sub_82276B38(dword_83010A38);
-            // which the DWARF names ShadowMapRenderManager::Begin/EndFrontFaceCullRender and
-            // Begin/EndBackFaceCullRender (both inlined by the X360 compiler, so neither has an
-            // exported body). sub_82276B38 is ImRendererBase::SetState(const RasterizerState*),
-            // and the two arguments are DATA globals: the IDA exports carry no data section, so
-            // the contents of dword_83010A3C / dword_83010A38 -- the whole point of the bracket,
-            // its cull mode and depth bias -- are unattested. Standing up a plausible
-            // "cull front faces" RasterizerState here would be a fabricated constant, and locking
-            // the rasteriser WITHOUT first setting one is strictly worse than not locking (the
-            // pass would inherit whatever state the previous frame left and refuse every
-            // per-material rasteriser bind for the rest of the walk). So the bracket is omitted:
-            // casters render with their own material rasteriser state, which is what the console
-            // does for the OTHER list of every cascade anyway. Restore this when the two globals'
-            // bytes are recovered.
+            if (liSlot == 0)
+                mShadowMapRenderManager.EndFrontFaceCullRender();
+            else
+                mShadowMapRenderManager.EndBackFaceCullRender();
         }
 
         renderengine::ShadowProbe_End(static_cast<u32>(liCascade));

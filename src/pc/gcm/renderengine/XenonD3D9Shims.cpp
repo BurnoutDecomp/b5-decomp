@@ -4498,25 +4498,12 @@ namespace renderengine
         // OFF unless one of the three variables is set; with none set this block does nothing
         // and the draw is byte-for-byte what it was.
         //
-        // WHY IT EXISTS. Once sampler 15 really compares (see ShadowSampler_ApplyState), the
-        // next thing between "no shadows" and "correct shadows" is SHADOW ACNE, and this build
-        // has nothing to prevent it: the shipped vertex shaders apply NO depth bias to the
-        // shadow coordinate (verified across the world VS set -- o3.xyz is the raw
-        // worldPos * ShadowMap_WorldToLight[0] with nothing added), so on the console the bias
-        // must come from the pass's own rasteriser state. That is exactly the bracket
-        // BrnRendererModule::RenderShadowMapPasses parks: sub_82276B38(dword_83010A3C) /
-        // (dword_83010A38), whose two RasterizerState globals are DATA and are not in any IDA
-        // export -- so their cull mode and depth bias are unattested and cannot be written
-        // down honestly. What IS attested is the intent: ShadowMap::Construct sets
-        // maTsmBBInfo[i].mbInvertCullMode = true for all three cascades
-        // (BrnShadowMap.cpp:223, stb r11, 0x23C(r10)) -- the console renders casters with the
-        // cull mode inverted, the classic depth-acne remedy.
-        // These knobs let that be MEASURED without fabricating the constants:
+        // The original shadow brackets now bind the FRONT/BACK factory states recovered
+        // from CgsRasterizerStateFactory::Construct @827EBF30 (zero depth/slope bias).
+        // These optional controls remain diagnostic overrides, not production tuning:
         //   BRN_SHADOW_CULL=none|cw|ccw    force a cull mode for caster draws
         //   BRN_SHADOW_BIAS=<float>        D3DRS_DEPTHBIAS for caster draws
         //   BRN_SHADOW_SLOPEBIAS=<float>   D3DRS_SLOPESCALEDEPTHBIAS for caster draws
-        // Whatever value turns out to be right is still a PARK until the two globals' bytes
-        // are recovered -- a knob that produces a good picture is evidence, not attestation.
         // ---- [PROBE] the clip-space tally + the slot's first-draw device state -----------
         // Scoped by suShadowClipSlot alone, NOT by sbShadowPassActive: the world-opaque
         // CONTROL (slot 3) is measured by the same classifier on purpose, and a control that
