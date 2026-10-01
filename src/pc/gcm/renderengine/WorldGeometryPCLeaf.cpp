@@ -543,8 +543,13 @@ namespace
             {
                 // Unsupported hardware or an allocation failure retains the old
                 // individual managed-buffer path, with identical payload bytes.
-                if (SUCCEEDED(lpDevice->CreateVertexBuffer(luBytes, D3DUSAGE_WRITEONLY, 0,
-                        TextureUploadPC::StaticBufferPool(lpDevice), &lEntry.mpBuffer, nullptr)))
+                HRESULT lhCreate;
+                {
+                    FrameProfile::CycleScope lCreateProfile(FrameProfile::GEOMETRY_CREATE);
+                    lhCreate = lpDevice->CreateVertexBuffer(luBytes, D3DUSAGE_WRITEONLY, 0,
+                        TextureUploadPC::StaticBufferPool(lpDevice), &lEntry.mpBuffer, nullptr);
+                }
+                if (SUCCEEDED(lhCreate))
                 {
                     FrameProfile::NativeBuffer();
                     void* lpLocked = nullptr;
@@ -713,9 +718,12 @@ namespace
                 lEntry.mpBuffer = static_cast<IDirect3DIndexBuffer9*>(lEntry.mAllocation.GetBuffer());
                 lEntry.muIndexStart = lEntry.mAllocation.muOffset / luIndexSize;
             }
-            else if (SUCCEEDED(lpDevice->CreateIndexBuffer(luPayloadBytes, D3DUSAGE_WRITEONLY,
+            else if ([&] {
+                FrameProfile::CycleScope lCreateProfile(FrameProfile::GEOMETRY_CREATE);
+                return SUCCEEDED(lpDevice->CreateIndexBuffer(luPayloadBytes, D3DUSAGE_WRITEONLY,
                     lrPlan.mb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
-                    TextureUploadPC::StaticBufferPool(lpDevice), &lEntry.mpBuffer, nullptr)))
+                    TextureUploadPC::StaticBufferPool(lpDevice), &lEntry.mpBuffer, nullptr));
+            }())
             {
                 FrameProfile::NativeBuffer();
                 void* lpLocked = nullptr;

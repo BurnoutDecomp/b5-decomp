@@ -1039,6 +1039,27 @@ still records exactly two endpoint clocks per frame. Metadata records `coarse`
 separately from `timing_only`. Coarse runs diagnose expensive stages; use a
 separate timing-only run for FPS and frame-pacing claims.
 
+To investigate sparse upload/resource stalls, add `BRN_FRAME_CPU_CYCLES=1`.
+Native geometry creation, pooled buffer locks, pooled upload copies and resource
+pool updates then record raw thread CPU cycles alongside elapsed time. Creation
+and pooled copy now also have separate `geometry_create_ms` and
+`geometry_copy_ms` columns. These spans overlap the existing geometry/resource
+timers; they are not additional frame costs. Individual-buffer fallback locks
+and copies are not covered by the new pooled lock/copy probes.
+
+The recorder dynamically resolves `QueryThreadCycleTime` only when requested.
+Metadata reports `cpu_cycles` and `cpu_cycles_available`; failed samples increment
+`cycle_read_failures` and produce no cycle delta. Timing-only and disabled capture
+perform no cycle queries. Raw cycles must not be converted to milliseconds or
+clock frequency. Compare them with elapsed time to investigate CPU work versus
+waiting or descheduling, without treating this alone as proof of a particular
+GPU or scheduler cause. These captures are diagnostic, not clean FPS evidence.
+
+The recorder suite passes 26 checks, including missing APIs, failed reads,
+independent elapsed/cycle clocks, CSV alignment and timing-only precedence.
+Removing cycle accumulation fails two checks; retaining section timers in
+timing-only mode fails three. The native geometry suite still passes 55 checks.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still
