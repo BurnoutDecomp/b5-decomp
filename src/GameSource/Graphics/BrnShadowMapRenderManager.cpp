@@ -2,6 +2,8 @@
 
 #include "GameSource/Graphics/BrnRendererMemory.h"                  // BrnRendererMemory::GetShadowMapBuffer
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"        // CgsRenderTarget (Get*/SetRenderTargetState/GetRenderTarget)
+#include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h" // RenderTarget::mDepthTarget.Resolve()
 #include "pc/gcm/renderengine/Xbox2SurfaceShims.h"                  // renderengine::gpD3DDevice
@@ -38,6 +40,60 @@ namespace
 // rather than left zero-initialised (which would have selected the never-taken separate-target
 // branch and asked BrnRendererMemory for three shadow buffers instead of one).
 namespace BrnGraphics { bool gbCombinedShadowMapViewport = true; }
+
+// Inlined in ARTIST BrnRendererModule::Construct @8240BF30..BF54: manager+0 = 3,
+// manager+4 = 2, manager+8 = true. DWARF names the argument luBaseRenderTargetIndex.
+void BrnGraphics::ShadowMapRenderManager::Construct(u32 luBaseRenderTargetIndex)
+{
+    muWriteBufferIndex = luBaseRenderTargetIndex + 1;
+    muReadBufferIndex = luBaseRenderTargetIndex;
+    mbForceFrontFaceCull = true;
+}
+
+// ARTIST Render @8240C84C..C864 and 8240C8B0..C8C4, repeated for lists 1 and 4.
+// Factory Construct @827EBF30 stores BACK at 83010A38 and FRONT at 83010A3C;
+// these are initialized states, with zero depth/slope bias, not unresolved data.
+void BrnGraphics::ShadowMapRenderManager::BeginFrontFaceCullRender()
+{
+    if (!mbForceFrontFaceCull)
+    {
+        shadow::Device::SetState(CgsRasterizerStateFactory::GetState(
+            E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT));
+        shadow::Device::LockRasteriserState();
+    }
+}
+
+void BrnGraphics::ShadowMapRenderManager::EndFrontFaceCullRender()
+{
+    if (!mbForceFrontFaceCull)
+    {
+        shadow::Device::UnlockRasteriserState();
+        shadow::Device::SetState(CgsRasterizerStateFactory::GetState(
+            E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK));
+    }
+}
+
+// ARTIST Render @8240C8F0..C908 and 8240C924..C938, repeated for list 3.
+// The flag selects which caster group receives the SAME fixed front-cull state.
+void BrnGraphics::ShadowMapRenderManager::BeginBackFaceCullRender()
+{
+    if (mbForceFrontFaceCull)
+    {
+        shadow::Device::SetState(CgsRasterizerStateFactory::GetState(
+            E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT));
+        shadow::Device::LockRasteriserState();
+    }
+}
+
+void BrnGraphics::ShadowMapRenderManager::EndBackFaceCullRender()
+{
+    if (mbForceFrontFaceCull)
+    {
+        shadow::Device::UnlockRasteriserState();
+        shadow::Device::SetState(CgsRasterizerStateFactory::GetState(
+            E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK));
+    }
+}
 
 // BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap  @ 0x823F7858
 // Bind the shadow-map render target for one shadow face's draw pass, install the shared shadow-pass

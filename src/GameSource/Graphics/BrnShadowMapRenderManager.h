@@ -8,11 +8,9 @@
 // wraps the renderer's shadow-map render targets (owned by BrnRendererMemory) with the Begin/End pass
 // bracketing that binds each face's viewport + scissor and resolves the depth surface afterwards.
 //
-// Shape from the DecFIGS DWARF (GameSource/Graphics/BrnShadowMapRenderManager.h). Only the two
-// X360-ARTIST-attested pass-bracket methods (BeginRenderShadowMap @0x823F7858 /
-// EndRenderShadowMap @0x823FD708, both called by BrnRendererModule::Render) are given bodies in the
-// .cpp; the remaining DWARF-listed methods are declared (ledger-gated) so the class shape matches, with
-// bodies belonging to their own TUs. The class is embedded by value in BrnRendererModule.
+// Shape from the DecFIGS DWARF (GameSource/Graphics/BrnShadowMapRenderManager.h).
+// Pass methods have standalone ARTIST bodies; Construct and the cull brackets are recovered from
+// their inlined copies in BrnRendererModule::Construct/Render. The class is embedded by value there.
 
 struct BrnRendererMemory;   // BrnRendererMemory.h declares it `struct` (C4099 if mismatched)
 class CgsRenderTarget;
@@ -43,8 +41,14 @@ namespace BrnGraphics
         // 0x823FD708 -- resolve face liIndex's shadow depth surface out to its sampleable texture.
         void EndRenderShadowMap(s32 liIndex, BrnRendererMemory* lpAllocatedRenderTargets);
 
-        // --- remaining DWARF-listed surface (ledger-gated declarations; bodies in their own TUs) ------
+        // Inlined in ARTIST BrnRendererModule::Construct/Render; see the .cpp evidence.
         void Construct(u32 luBaseRenderTargetIndex);
+        void BeginFrontFaceCullRender();
+        void EndFrontFaceCullRender();
+        void BeginBackFaceCullRender();
+        void EndBackFaceCullRender();
+
+        // --- remaining DWARF-listed surface (ledger-gated declarations; bodies in their own TUs) ------
         void Destruct();
         u32  GetWriteBufferIndex() const;
         u32  GetReadBufferIndex() const;
@@ -55,10 +59,6 @@ namespace BrnGraphics
                                     BrnRendererMemory* lpAllocatedRenderTargets,
                                     u32 lxRendererFlags,
                                     CgsGraphics::Im2d* lp2dRenderer);
-        void BeginFrontFaceCullRender();
-        void EndFrontFaceCullRender();
-        void BeginBackFaceCullRender();
-        void EndBackFaceCullRender();
 
     protected:
         // DWARF member set + order (BrnShadowMapRenderManager.h:112-114).

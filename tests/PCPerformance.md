@@ -10,6 +10,7 @@ damage visibility. It does **not** establish original-PC minimum requirements or
 | Change | Original evidence and PC implementation |
 | --- | --- |
 | Shared shader-constant shadow | ARTIST `DrawRenderableMeshZOnly::Interpret`, `0x827F6654..66C0` and `0x827F718C..71F8`, skips unchanged source blocks. All PC float-constant writers now share a register-value cache, including GUI and diagnostics. Value comparison handles mutable PC source buffers and overlapping register ranges. |
+| Shadow caster cull brackets | Restore ARTIST `Render` `0x8240C84C..CB0C`: the initialized manager flag selects front-cull locks for lists 2/3 by default, or 0/1/4 when cleared. Factory slots at `0x83010A38/3C` pin BACK/FRONT with zero depth biases. Locked groups skip material rasterizer writes; every bracket unlocks and restores BACK before later rendering. |
 | Shared sampler-state shadow | ARTIST `shadow::Device::SetState`, `0x82276A2C..34`, and whole texture-state bind `0x8227D17C..98` avoid duplicate writes. The PC cache covers all native sampler writers and keeps pixel, displacement and vertex sampler IDs separate. Failed writes never establish cached state. |
 | Native static geometry | The console binds resident GPU resource memory. PC retained vertex/index mirrors share dynamic `DEFAULT/WRITEONLY` pages. First writes use DISCARD; subsequent writes use NOOVERWRITE into unused or GPU-retired spans. EVENT query completion, not CPU frame count, permits reuse. Unsupported devices or allocation failures fall back to individual buffers (MANAGED on D3D9, DEFAULT on D3D9Ex). Streaming retirement and cache generations are preserved. |
 | Exact indexed-draw ranges | Cache the minimum/maximum indices consumed by the final native topology after primitive-reset conversion. D3D9 receives that mesh range rather than the full shared vertex buffer. Ignore incomplete list tails, and retain nonzero base-vertex addressing. |
@@ -32,6 +33,7 @@ From the parent workflow checkout:
 
 ```powershell
 python b5-decomp/tests/run_pc_shader_constant_cache.py
+python b5-decomp/tests/run_pc_shadow_cull.py
 python b5-decomp/tests/run_pc_geometry_buffer_pool.py
 python b5-decomp/tests/run_pc_dispatch_sort.py
 python b5-decomp/tests/run_pc_im2d_buffer.py
