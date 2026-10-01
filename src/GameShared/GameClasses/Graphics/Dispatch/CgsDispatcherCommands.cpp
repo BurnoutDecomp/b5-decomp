@@ -61,6 +61,7 @@
 #include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"  // [diag] BrnDiag::IsSceneColourPass
 #include <cstdio>    // [diag] snprintf (the [vpcmp] view-projection probe)
 #include <cstdlib>   // [diag] getenv  (BRN_VP_PROBE)
+#include <xmmintrin.h>
 
 namespace CgsGraphics
 {
@@ -136,6 +137,40 @@ namespace
     {
         return reinterpret_cast<u32*>(
             reinterpret_cast<u8*>(lpBinBase) + (static_cast<u32>(luRecord) & 0xFFFFFu) * 16u);
+    }
+
+    // FLAG PC-platform leaf: ARTIST 827F29A0..827F2A8C fetches the packet two
+    // draws ahead and the next mesh's first two 128-byte cache lines. x64 uses
+    // 64-byte cache lines and host-width command pointers. These are hints,
+    // never data reads: a short variable-sized mesh may end within the span.
+    inline void PrefetchDispatchSpanPC(const void* lpData, u32 luBytes)
+    {
+        const uintptr_t luAddress = reinterpret_cast<uintptr_t>(lpData);
+        for (u32 luOffset = 0; luOffset < luBytes; luOffset += 64u)
+            _mm_prefetch(reinterpret_cast<const char*>(luAddress + luOffset), _MM_HINT_T0);
+    }
+
+    inline bool MeshPrefetchEnabledPC()
+    {
+        static const bool sbEnabled = [] {
+            const char* lpcValue = std::getenv("BRN_MESH_PREFETCH");
+            return !lpcValue || lpcValue[0] != '0';
+        }();
+        return sbEnabled;
+    }
+
+    inline void PrefetchMeshCommandsPC(DispatchCommand* lpBinBase, const u64* lpuKeys,
+                                       u32 luIndex, u32 luEnd)
+    {
+        if (luIndex >= luEnd || luEnd - luIndex <= 2u) return;
+        const u32* lpCommand2 = PacketFromRecord(lpBinBase, lpuKeys[luIndex + 2u]);
+        const u32* lpCommand1 = PacketFromRecord(lpBinBase, lpuKeys[luIndex + 1u]);
+        CGS_ASSERT(CommandIdOf(lpCommand1[0]) == DispatchCommand::E_DRAWRENDERABLEMESH,
+                   "lpCommand1->GetCommandID() == DRAWRENDERABLEMESH");
+        CGS_ASSERT(CommandIdOf(lpCommand2[0]) == DispatchCommand::E_DRAWRENDERABLEMESH,
+                   "lpCommand2->GetCommandID() == DRAWRENDERABLEMESH");
+        PrefetchDispatchSpanPC(lpCommand2, 128u);
+        PrefetchDispatchSpanPC(ReadCommandPointer(&lpCommand1[2]), 256u);
     }
 
     // The dirty-constant block size in qwords for `count` constants under the
@@ -1296,8 +1331,11 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* /*lpInterpreter*/
 
     CGS_ASSERT(mpSortedKeys != 0, "mpSortedKeys != NULL (PrepareSortJobInfo/SortForDispatch must run first)");
 
+    const bool lbPrefetch = MeshPrefetchEnabledPC();
     for (u32 luIndex = luFirst; luIndex < luEnd; ++luIndex)
     {
+        if (lbPrefetch)
+            PrefetchMeshCommandsPC(m_pBinBase, mpSortedKeys, luIndex, luEnd);
         CGS_ASSERT(luIndex < muCount, "luIndex < muTotalKeyCount");
         u32* lpPacket = PacketFromRecord(m_pBinBase, mpSortedKeys[luIndex]);
         CGS_ASSERT(CommandIdOf(lpPacket[0]) == DispatchCommand::E_DRAWRENDERABLEMESH,
