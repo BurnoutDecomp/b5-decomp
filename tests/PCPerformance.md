@@ -925,7 +925,20 @@ its FPS is excluded. Evidence: `binding_display_live_1001` and
 `binding_combat_visual_1001`. Locked 165 FPS and a qualified clean combat comparison
 remain unestablished.
 
-## Remaining original optimization gaps
+## Native shader and declaration bindings
+
+Native vertex shaders, pixel shaders and vertex declarations now share a
+successful-binding cache across world, instanced, GUI and debug rendering.
+`BRN_SHADER_BIND_CACHE=0` retains the previous native calls for comparison.
+Failed binds remain retryable; device creation/reset and assertion state-block
+restoration invalidate the cache. FVF selection invalidates the declaration it
+replaces. All native writers must use the shared wrappers or invalidate first.
+The device owns references to its bound objects; the cache borrows their identity.
+Native pixel and state checks are in `run_pc_shader_bindings.py`, including
+negative controls for missing FVF and state-block invalidation. The optimization
+does not skip draws, shader constants or instanced transforms.
+
+## Frame-pacing measurements
 
 For frame-pacing measurements, use `BRN_FRAME_PROFILE=1` with
 `BRN_FRAME_TIMING_ONLY=1`. This records two clock reads per frame while retaining
@@ -936,6 +949,8 @@ metadata marks `timing_only: true`. Leave this option off for CPU attribution.
 GPU timestamp queries and screenshots are separate diagnostics and still add
 overhead if enabled. `BRN_FRAME_PROFILE=0` keeps all frame recording disabled.
 The recorder regression is `python b5-decomp/tests/run_pc_frame_timing_only.py`.
+
+## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still
   dominates the frame; broader combat and streaming coverage remains useful.

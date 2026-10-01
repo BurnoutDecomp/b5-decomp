@@ -5,6 +5,7 @@
 #include <cstring>
 #include <cstdlib>
 #include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
+#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
 #include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
 using u32=unsigned;using u64=unsigned long long;using f32=float;
 extern "C" { __declspec(dllexport) DWORD NvOptimusEnablement=1;

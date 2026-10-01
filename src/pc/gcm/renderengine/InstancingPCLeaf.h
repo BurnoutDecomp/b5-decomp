@@ -1,4 +1,5 @@
 #pragma once
+#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
 
 // FLAG PC-platform leaf: D3D9 instance streams replace Xenos manual vertex
 // fetch. The original shader arithmetic is retained; only the source of the
@@ -369,8 +370,8 @@ public:
         cursor += bytes;
         if (FAILED(stream) || FAILED(device->SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | count))
             || FAILED(device->SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1))
-            || FAILED(device->SetVertexDeclaration(variant->declaration))
-            || FAILED(device->SetVertexShader(variant->shader))) { End(); return false; }
+            || FAILED(renderengine::PCSetVertexDeclaration(device, variant->declaration))
+            || FAILED(renderengine::PCSetVertexShader(device, variant->shader))) { End(); return false; }
         return true;
     }
     void End()
@@ -379,8 +380,8 @@ public:
         device->SetStreamSourceFreq(0, 1);
         device->SetStreamSourceFreq(1, 1);
         device->SetStreamSource(1, nullptr, 0, 0);
-        device->SetVertexDeclaration(active->original.declaration);
-        device->SetVertexShader(active->original.shader);
+        renderengine::PCSetVertexDeclaration(device, active->original.declaration);
+        renderengine::PCSetVertexShader(device, active->original.shader);
         active = nullptr;
     }
 };

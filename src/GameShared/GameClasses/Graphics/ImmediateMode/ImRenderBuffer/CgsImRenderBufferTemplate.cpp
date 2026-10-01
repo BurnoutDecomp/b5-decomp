@@ -1,3 +1,4 @@
+#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
 #include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 // =============================================================================
 // CgsGraphics::ImRenderBuffer<V> - method bodies, faithfully decompiled from the
@@ -1395,8 +1396,8 @@ namespace CgsGraphics
         // explicitly -- while a programmable shader is still bound (a preceding world pass leaves
         // its last technique's pair bound) the runtime ignores SetFVF and every texture-stage
         // state below and shades the whole Apt/GUI frame with those programs.
-        lpDevice->SetVertexShader(nullptr);
-        lpDevice->SetPixelShader(nullptr);
+        renderengine::PCSetVertexShader(lpDevice, nullptr);
+        renderengine::PCSetPixelShader(lpDevice, nullptr);
         lpDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
         lpDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
         lpDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
@@ -1410,7 +1411,7 @@ namespace CgsGraphics
         lpDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
         lpDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
         lpDevice->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
-        lpDevice->SetFVF(KU_DISPATCH_FVF);
+        renderengine::PCSetFVF(lpDevice, KU_DISPATCH_FVF);
 
         // A scratch CPU batch for the per-draw vertex fold. Sized like CgsIm2d.cpp's reserve scratch
         // so a whole line of glyph quads / a full Apt mesh never overflows in one DrawPrimitiveUP.
@@ -2055,7 +2056,7 @@ namespace CgsGraphics
                     renderengine::PCSetPixelShaderConstantF(lpDevice, 0, lafOuter, 1);
                     renderengine::PCSetPixelShaderConstantF(lpDevice, 1, lafInner, 1);
                     renderengine::PCSetPixelShaderConstantF(lpDevice, 2, lafShift, 1);
-                    lpDevice->SetPixelShader(lpBoostPs);
+                    renderengine::PCSetPixelShader(lpDevice, lpBoostPs);
                 }
                 if (lbNeedShift)
                 {
@@ -2123,7 +2124,7 @@ namespace CgsGraphics
                 if (lpBoostPs != nullptr)
                 {
                     // Back to fixed function for every non-boost-bar batch in this walk.
-                    lpDevice->SetPixelShader(nullptr);
+                    renderengine::PCSetPixelShader(lpDevice, nullptr);
                 }
                 if (lbNeedShift)
                 {

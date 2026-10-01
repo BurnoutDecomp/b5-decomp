@@ -4,6 +4,7 @@
 #include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
 #include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
 #include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
+#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
 
 namespace renderengine
 {
@@ -51,6 +52,7 @@ namespace renderengine
                 gPCShaderConstantCache.Invalidate();
                 gPCSamplerStateCache.Invalidate();
                 GeometryBindingsPC::gCache.Invalidate();
+                gPCShaderBindingCache.Invalidate();
                 if (mbSceneWasOpen) mpDevice->BeginScene();
             }
             for (auto* lpTarget : mapTargets) if (lpTarget) lpTarget->Release();

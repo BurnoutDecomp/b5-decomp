@@ -1,3 +1,4 @@
+#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
 #include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 #if !defined(D_PLATFORM_X360)
 // The RenderWare headers define NOUSER before including Windows headers.  D3D9 still
@@ -278,10 +279,10 @@ namespace CgsDev
                                                lrSource.mv4Colour.g, lrSource.mv4Colour.b);
             }
 
-            lpDevice->SetVertexShader(nullptr);
-            lpDevice->SetPixelShader(nullptr);
+            renderengine::PCSetVertexShader(lpDevice, nullptr);
+            renderengine::PCSetPixelShader(lpDevice, nullptr);
             lpDevice->SetTexture(0, nullptr);
-            lpDevice->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
+            renderengine::PCSetFVF(lpDevice, D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
             lpDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
             lpDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
             lpDevice->SetRenderState(D3DRS_ZENABLE, meZTestEnable == E_ZTEST_ON ? TRUE : FALSE);

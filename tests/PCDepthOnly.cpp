@@ -7,6 +7,7 @@
 #include <vector>
 #include <unordered_map>
 #include "pc/gcm/renderengine/DepthOnlyPCLeaf.h"
+#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
 #include "pc/gcm/renderengine/renderstates.h"
 #include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"
 #include "depth_technique.inc"
@@ -163,7 +164,7 @@ float4 plain():COLOR{return colour;}
     D3DVERTEXELEMENT9 layout[]={{0,0,D3DDECLTYPE_FLOAT3,D3DDECLMETHOD_DEFAULT,D3DDECLUSAGE_POSITION,0},
         {0,12,D3DDECLTYPE_FLOAT2,D3DDECLMETHOD_DEFAULT,D3DDECLUSAGE_TEXCOORD,0},D3DDECL_END()};
     IDirect3DVertexDeclaration9* declaration=nullptr;device->CreateVertexDeclaration(layout,&declaration);if(!declaration)return 6;
-    device->SetVertexDeclaration(declaration);device->SetRenderState(D3DRS_CULLMODE,D3DCULL_NONE);
+    renderengine::PCSetVertexDeclaration(device,declaration);device->SetRenderState(D3DRS_CULLMODE,D3DCULL_NONE);
     device->SetRenderState(D3DRS_ZENABLE,TRUE);device->SetRenderState(D3DRS_ZWRITEENABLE,TRUE);
     device->SetRenderState(D3DRS_ZFUNC,D3DCMP_LESSEQUAL);device->SetRenderState(D3DRS_ALPHABLENDENABLE,FALSE);
     IDirect3DTexture9* texture=nullptr;device->CreateTexture(4,1,1,D3DUSAGE_DYNAMIC,D3DFMT_A8R8G8B8,D3DPOOL_DEFAULT,&texture,nullptr);
@@ -182,7 +183,9 @@ float4 plain():COLOR{return colour;}
     material->mpBlendState=CgsBlendStateFactory::GetState(0);
     IDirect3DPixelShader9* nativePlain=nullptr;device->CreatePixelShader(static_cast<DWORD*>(plain->GetBufferPointer()),&nativePlain);
     if(!nativePlain)return 9;
-    auto background=[&]{device->SetPixelShader(nativePlain);device->SetRenderState(D3DRS_COLORWRITEENABLE,15);device->SetRenderState(D3DRS_ALPHATESTENABLE,FALSE);return Quad(.75f);};
+    // Match the production renderer's shared native-writer boundary for this
+    // fixture pass; a raw setter would bypass the very shadow being tested.
+    auto background=[&]{renderengine::PCSetPixelShader(device,nativePlain);device->SetRenderState(D3DRS_COLORWRITEENABLE,15);device->SetRenderState(D3DRS_ALPHATESTENABLE,FALSE);return Quad(.75f);};
     device->Clear(0,nullptr,D3DCLEAR_TARGET|D3DCLEAR_ZBUFFER,0xff0000ff,1,0);device->BeginScene();
     HRESULT front=Quad(.25f);HRESULT back=background();device->EndScene();
     Check(SUCCEEDED(front)&&SUCCEEDED(back)&&Pixel(target,readback)==0xff0000ff,"opaque depth ignores a material shader that kills every pixel and blocks the background");
@@ -209,7 +212,7 @@ float4 plain():COLOR{return colour;}
     Check(mask==15&&shadow::Device::mpBlendState==material->mpBlendState&&spRealPs==sPsCache[low+0x9000+20],"colour pass restores material blend and pixel program");
     device->Clear(0,nullptr,D3DCLEAR_TARGET|D3DCLEAR_ZBUFFER,0xff0000ff,1,0);device->BeginScene();front=Quad(.25f);device->EndScene();
     Check(SUCCEEDED(front)&&Pixel(target,readback,8)==0xffffffffu&&Pixel(target,readback,56)==0xffffffffu,"restored colour pass writes the actual material texture across the whole quad");
-    technique->mu16Flags=0;bind(true);auto* saved=spRealPs;device->SetPixelShader(nativePlain);device->SetPixelShader(spRealPs);
+    technique->mu16Flags=0;bind(true);auto* saved=spRealPs;renderengine::PCSetPixelShader(device,nativePlain);renderengine::PCSetPixelShader(device,spRealPs);
     IDirect3DPixelShader9* rebound=nullptr;device->GetPixelShader(&rebound);
     Check(rebound==saved&&rebound==sPsCache[renderengine::DepthOnlyPC::KAU_PIXEL_CODE],"the saved real-program pointer reasserts the minimal shader after an intervening pass");if(rebound)rebound->Release();
     const size_t cached=sPsCache.size();for(int i=0;i<50;++i)bind(true);
