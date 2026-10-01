@@ -229,7 +229,7 @@ namespace shadow
         static void SetMeshObjectConstantsPC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
                                              void* const* lppConstScratch, bool lbZOnly);
 
-        // [PC bring-up shim] Upload the per-object world-view-projection carried in
+        // [PC bring-up shim] Retain and publish for fallback the world-view-projection carried in
         // the PC mesh command (see CgsDispatcherCommands.cpp header note).
         static void SetObjectTransformPC(const f32* lpWvpRows16);
 

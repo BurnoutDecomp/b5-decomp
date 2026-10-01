@@ -115,7 +115,7 @@ namespace renderengine
     // Bind the FLAGGED fallback world shader (compiled once at first use); returns false when the
     // device/compiler is unavailable (the draw is skipped rather than issued undefined).
     bool WorldFallbackShader_Bind();
-    // Upload the row-vector WVP (4x float4) for the fallback shader.
+    // Retain the row-vector WVP; publish it when a fallback shader consumes it.
     void WorldFallbackShader_SetWvp(const f32* lpWvpRows16);
     // Bind a material's own sampler textures (the DATA half of the X360 technique bind --
     // DispatchAllMeshes' lpaInternalSamplers loop). Returns true when a texture was bound.
