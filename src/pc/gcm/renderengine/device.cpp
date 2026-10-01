@@ -329,6 +329,7 @@ bool renderengine::Device::FrameBegin()
         return false;
     }
     WorldGeometry_BeginFrame();
+    GpuFrameTimingPC::Begin(gDevice);
     gDevice->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);
     return SUCCEEDED(gDevice->BeginScene());
 }
@@ -342,6 +343,7 @@ bool renderengine::Device::FrameBeginNoClear()
     {
         return false;
     }
+    GpuFrameTimingPC::AbandonCurrentFrame();
     return SUCCEEDED(gDevice->BeginScene());
 }
 
@@ -908,6 +910,7 @@ void renderengine::Device::ShowPixelBuffer()
         return;
     }
     gDevice->EndScene();
+    GpuFrameTimingPC::SceneComplete();
     DumpBackBufferIfRequested();
     WatchBlackFramesIfRequested();   // [diag] BRN_BLACK_FRAME_WATCH (issue #30)
     IDirect3DSurface9* lpFrame = nullptr;
@@ -916,6 +919,7 @@ void renderengine::Device::ShowPixelBuffer()
     {
         FrameProfile::Scope lPresentProfile(FrameProfile::PRESENT);
         lhrPresent = gPresentation.Present(gDevice, hWnd, gVSync != 0, lpFrame);
+        GpuFrameTimingPC::OutputComplete(); // also closes an early-out/minimized frame
         FrameProfile::Present();
     }
     if (lpFrame) lpFrame->Release();

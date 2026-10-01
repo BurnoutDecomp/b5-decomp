@@ -3,6 +3,7 @@
 #include <Windows.h>
 #include <d3d9.h>
 #include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/GpuFrameTimingPCLeaf.h"
 
 // FLAG PC-platform leaf: owner-requested F11 borderless fullscreen and 16:9
 // presentation. The console owns its display; Windows window placement and
@@ -172,6 +173,7 @@ namespace renderengine
             {
                 Release();
                 FrameProfile::Scope lWaitProfile(FrameProfile::PRESENT_WAIT);
+                GpuFrameTimingPC::OutputComplete();
                 return lpDevice->Present(nullptr, nullptr, lhWindow, nullptr);
             }
 
@@ -209,6 +211,7 @@ namespace renderengine
             if (SUCCEEDED(lResult))
             {
                 FrameProfile::Scope lWaitProfile(FrameProfile::PRESENT_WAIT);
+                GpuFrameTimingPC::OutputComplete();
                 lResult = mpSwapChain->Present(nullptr, nullptr, lhWindow, nullptr, 0);
             }
             if (lpOutput) lpOutput->Release();

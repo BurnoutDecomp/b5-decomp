@@ -776,15 +776,69 @@ major costs; the fixed-scene pair still spends about 6.3 ms per frame in Present
 That wait includes queued work and does not by itself establish GPU execution
 time. Neither the combat results nor a locked 165 FPS target are solved here.
 
+## Native GPU timing and presentation attribution
+
+`BRN_GPU_PROFILE=1`, together with `BRN_FRAME_PROFILE=1`, records the scene and
+output-copy timestamp spans. An eight-packet query ring reads older results with
+flags zero, without flushing or waiting. CSV `gpu_status` distinguishes off,
+pending, valid, invalid, unavailable and ring-full samples; absent timings are
+-1, not zero. These are elapsed GPU timeline spans and can include starvation;
+they are not a direct GPU-busy measurement. See the [D3D9 query contract](https://learn.microsoft.com/en-us/windows/win32/direct3d9/queries).
+
+The actual assert-overlay entry hook abandons the current sample, including a
+prefix already presented during takeover. Subsequent frames resume normally.
+`run_pc_gpu_frame_timing.py` passes 16 checks, including native D3D9 completion,
+pixel/state preservation, unavailable/pending/error/disjoint handling and the
+production overlay hook. Removing that hook's invalidation fails two checks.
+Independent review, the canonical build and the 87 fullscreen/config checks pass.
+
+Focused stationary diagnostic runs (`gpu_timeline_stationary_1001` and
+`gpu_timeline_720_1001`) produced 2,073 and 3,215 valid samples respectively:
+
+| Render size | Scene GPU span | Output-copy GPU span | CPU wait in Present |
+| --- | ---: | ---: | ---: |
+| 1280x720 | 5.70 ms | 0.015 ms | 2.17 ms |
+| 2560x1440 | 6.58 ms | 0.042 ms | 6.28 ms |
+
+Final build `2c8cd604aca3` also completed a 90-second Road Rage diagnostic with
+eight takedowns across six victims, peak four crashing/two airborne rivals,
+885/885 foreground samples and no assertions or exceptions. All 6,416 measured
+frames have valid GPU timestamps, including crash/takedown camera changes.
+Mean scene/output spans are 5.33/0.046 ms; mean Present wait is 7.37 ms.
+The workload qualifies as combat, but GPU-query runs are excluded from clean
+FPS comparisons. Evidence: `gpu_timeline_combat_1001`.
+
+The renderer's extra output blit is small; the later native presentation wait
+grows much more with resolution. This does not exclude transfer/composition work
+inside Present. An opt-in two-buffer DISCARD experiment confirmed two active
+output buffers but still waited 6.35 ms; it was removed. It is not a shipped
+optimization or a supported configuration option.
+
+A separate synthetic probe on the same RTX adapter compares actual successful
+Present calls after a six-millisecond producer interval. All six trials had
+100/100 foreground samples and no API errors. At 1440p, legacy COPY averaged
+7.83 ms, D3D9Ex COPY 8.55 ms, and D3D9Ex primary FLIPEX 0.52 ms. This is a
+presentation-path result, not game FPS evidence. Primary flip presentation is
+therefore the next integration candidate; just changing the device to 9Ex did
+not help. The [flip-model documentation](https://learn.microsoft.com/en-us/windows/win32/direct3darticles/direct3d-9ex-improvements)
+describes handing surfaces to DWM instead of the legacy extra composition copy.
+The game still uses its reviewed legacy presentation path. Texture/buffer upload,
+resize, retained assert frames, fullscreen, live combat and timing validation
+remain necessary before enabling the candidate.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still
   dominates the frame; broader combat and streaming coverage remains useful.
 - Native wheel/mesh instancing is active. Further gains need measured reductions
   in the much larger remaining draw-submission and presentation costs.
-- Native occlusion queries/conditional rendering remain disabled or incomplete.
-  Restore the original visibility work only with a conservative PC backend that
-  preserves visible geometry and does not turn query reads into GPU stalls.
+- Native occlusion queries/conditional rendering remain incomplete. ARTIST's
+  master switch actually starts disabled (`827F1E18/827F1E58` store zero at
+  manager+0x331), despite enabled world-pass options. The renderer tests both;
+  its debug menu exposes the master switch. An ordinary-play activation has not
+  been established, so this must not be counted as a proven missing active
+  optimization. Any native implementation must preserve visibility without GPU
+  waits or stale results after camera cuts.
 - Presentation and resource-update spikes remain after pooling. Separate the
   output copy from the native Present wait, and audit original resource pacing.
 - TUB's native device creation (`0x947F10`) selects PUREDEVICE when supported.
