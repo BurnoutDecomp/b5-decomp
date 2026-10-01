@@ -37,6 +37,8 @@ namespace renderengine
             unsigned muRivals = 0, muCrashingRivals = 0, muAirborneRivals = 0;
             unsigned muInstancedDraws = 0, muInstances = 0;
             unsigned muPreZMeshes = 0, muWorldOpaqueMeshes = 0, muCarOpaqueMeshes = 0;
+            unsigned muGpuStatus = 0;
+            double mfGpuSceneMs = -1, mfGpuOutputMs = -1;
         };
         struct Capture
         {
@@ -48,6 +50,8 @@ namespace renderengine
             LONGLONG miFrequency = 0, miPreviousEnd = 0;
             bool mbInitialized = false;
             bool mbDetailed = false;
+            bool mbGpuTiming = false;
+            void (*mpFinishGpu)() = nullptr;
         };
         inline Capture gCapture;
         constexpr unsigned KU_CAPACITY = 65536;
@@ -66,6 +70,8 @@ namespace renderengine
                 const char* lpcEnable = std::getenv("BRN_FRAME_PROFILE");
                 const char* lpcDetail = std::getenv("BRN_FRAME_DETAIL");
                 gCapture.mbDetailed = lpcDetail && lpcDetail[0] && lpcDetail[0] != '0';
+                const char* lpcGpu = std::getenv("BRN_GPU_PROFILE");
+                gCapture.mbGpuTiming = lpcGpu && lpcGpu[0] && lpcGpu[0] != '0';
                 if (lpcEnable && lpcEnable[0] && lpcEnable[0] != '0')
                 {
                     LARGE_INTEGER lFrequency;
@@ -166,6 +172,7 @@ namespace renderengine
         inline void Finish()
         {
             if (!gCapture.mpFrames) return;
+            if (gCapture.mpFinishGpu) { gCapture.mpFinishGpu(); gCapture.mpFinishGpu = nullptr; }
             char lacPath[MAX_PATH];
             const DWORD luLength = GetModuleFileNameA(nullptr, lacPath, MAX_PATH);
             if (luLength && luLength + 18 < MAX_PATH)
@@ -173,7 +180,7 @@ namespace renderengine
                 std::snprintf(lacPath + luLength, MAX_PATH - luLength, ".frames.csv");
                 if (FILE* lpFile = std::fopen(lacPath, "w"))
                 {
-                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,object_to_mesh_ms,mesh_technique_ms,mesh_constants_ms,mesh_buffers_ms,geometry_lookup_ms,world_draw_ms,immediate_draw_ms,postfx_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end,instanced_draws,instances,prez_meshes,world_opaque_meshes,car_opaque_meshes\n");
+                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,object_to_mesh_ms,mesh_technique_ms,mesh_constants_ms,mesh_buffers_ms,geometry_lookup_ms,world_draw_ms,immediate_draw_ms,postfx_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end,instanced_draws,instances,prez_meshes,world_opaque_meshes,car_opaque_meshes,gpu_status,gpu_scene_ms,gpu_output_ms\n");
                     const double lfMs = 1000.0 / static_cast<double>(gCapture.miFrequency);
                     for (unsigned lu = 0; lu < gCapture.muCount; ++lu)
                     {
@@ -184,10 +191,11 @@ namespace renderengine
                             (lr.miEnd - lr.miBegin) * lfMs);
                         for (unsigned ls = 0; ls < NUM_SECTIONS; ++ls)
                             std::fprintf(lpFile, ",%.6f", lr.maTicks[ls] * lfMs);
-                        std::fprintf(lpFile, ",%u,%u,%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%lld,%u,%u,%u,%u,%u\n", lr.muVertexCreates,
+                        std::fprintf(lpFile, ",%u,%u,%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%lld,%u,%u,%u,%u,%u", lr.muVertexCreates,
                             lr.muIndexCreates, lr.muUploadedBytes, lr.muEvictions, lr.muDraws,
                             lr.miCameraBegin, lr.miCameraEnd, lr.muCameraChanges, lr.muPresents, lr.muNativeBuffers,
                             lr.muPlayerTakedowns, lr.muTakedownVictims, lr.muRivals, lr.muCrashingRivals, lr.muAirborneRivals, lr.miEnd, lr.muInstancedDraws, lr.muInstances, lr.muPreZMeshes, lr.muWorldOpaqueMeshes, lr.muCarOpaqueMeshes);
+                        std::fprintf(lpFile, ",%u,%.6f,%.6f\n", lr.muGpuStatus, lr.mfGpuSceneMs, lr.mfGpuOutputMs);
                     }
                     std::fclose(lpFile);
                 }
