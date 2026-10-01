@@ -2266,6 +2266,7 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
     // never again, so it would permanently report zeroes (the wheel-render wave's bug, and the
     // reason the mesh-list probe below is written the same way). Reprints whenever the triple
     // changes, which is exactly when casters enter or leave a cascade.
+    if (renderengine::ShadowProbe_Enabled())
     {
         static u32 sauLastCounts[3] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
         if ((lauCascadeCounts[0] != sauLastCounts[0]
@@ -2394,6 +2395,7 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
     // power-of-two bucket of each pixel count, so it reprints when something
     // meaningful changes and stays quiet while the camera merely moves.
     // =========================================================================
+    if (renderengine::ShadowProbe_Enabled())
     {
         u32 lauPixels[3] = { 0u, 0u, 0u };
         u32 lauHave[3]   = { 0u, 0u, 0u };

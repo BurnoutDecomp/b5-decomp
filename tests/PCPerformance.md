@@ -874,6 +874,24 @@ Accept key. Capture-run FPS is excluded. Earlier 90-second flip combat runs
 included the event ending, so their overall FPS is also excluded. These exclusions
 must not be converted into a claimed combat speedup or a locked 165 FPS result.
 
+## Opt-in shadow diagnostics
+
+Shadow diagnostic vertex sampling and pixel-count queries are now opt-in through
+`BRN_SHADOW_PROBE=1`. Normal cascade rendering, shader/state changes and HUD totals
+are unchanged. Existing `BRN_SHADOW_CULL`, `BRN_SHADOW_BIAS`, `BRN_SHADOW_SLOPEBIAS`,
+`BRN_SHADOW_FALLBACKVS`, `BRN_SHADOW_ZALWAYS` and `BRN_SHADOW_FORCECWE` experiments
+still enable their diagnostic readouts unless `BRN_SHADOW_PROBE=0` overrides them.
+
+Same-binary 45-second foreground stationary 1440p runs measured 115.64 FPS with
+the probe enabled and 125.37 FPS with it disabled (+8.4% in this pair). P99 frame
+time fell from 12.10 to 10.96 ms. Both render 2,676 opaque world meshes and 297
+pre-Z meshes. The enabled run produced 620 shadow reports; the default run
+produced none of those reports. Native shadow pixels were inspected in the
+separate default capture. Build, bounded independent review and faithfulness pass.
+Evidence: `shadow_probe_{on,off}_static_1001`, `shadow_probe_off_visual_1001` under
+the parent checkout's performance scratch directory. This does not establish a
+Road Rage speedup or locked 165 FPS.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still
