@@ -16,9 +16,9 @@ namespace CgsResource
     // and the PS3 FixUp both operate on one). On X360/PS3 the raster IS GPU memory, so FixUp/
     // FixDown rebase packed pixel offsets; on PC the D3D9 raster has no such offsets, so FixUp
     // realises the texture (creates the D3D texture) and FixDown releases it -- the platform
-    // divergence is contained to those two bodies (see the .cpp). Overrides exactly the eight
-    // virtuals the PS3 header overrides; the rest (PostFixUp/ReBase/CanDefrag/DebugValidate)
-    // inherit CgsResource::Type.
+    // divergence is documented in the .cpp. The native backend also overrides the existing
+    // ReBase slot to retain the D3D object when host memory moves. PostFixUp, CanDefrag and
+    // DebugValidate inherit CgsResource::Type.
     class RwRasterResourceType : public Type
     {
     public:
@@ -29,6 +29,9 @@ namespace CgsResource
         virtual bool                   DeSerialise(void* lpResource) const;
         virtual void                   FixDown(void* lpResource, const rw::Resource& lrResource) const;
         virtual void                   FixUp(void* lpResource, const rw::Resource& lrResource) const;
+        // FLAG PC-platform leaf: native texture objects survive host-memory moves.
+        void ReBase(void* lpResource, rw::Resource& lrSource, rw::Resource& lrDest,
+                    ResourceDescriptor& lrSize, s32 liMemType) const override;
         virtual uint32_t               GetImportCount(const void* lpResource) const;
         virtual void                   GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const;
         virtual EDebugResourceCategory GetDebugResourceCategory() const;

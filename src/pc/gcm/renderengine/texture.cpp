@@ -9,9 +9,86 @@
 #include <cstdio>    // snprintf
 #include <cstddef>   // offsetof
 #include <new>       // placement new (build the texture object into rw resource memory)
+#include <mutex>
+#include <unordered_map>
+#include "pc/gcm/renderengine/TextureResourcePCLeaf.h"
 
 namespace renderengine
 {
+    namespace
+    {
+        // FLAG PC-platform leaf: these records track the entry's existing COM
+        // reference; registration does not AddRef. Stable entry keys avoid
+        // address collisions while a batch of heap blocks is being relocated.
+        struct ResourceTextureOwners
+        {
+            std::mutex mMutex;
+            std::unordered_map<const void*, IDirect3DBaseTexture9*> mOwners;
+            std::unordered_map<IDirect3DBaseTexture9*, const void*> mTextures;
+        };
+        ResourceTextureOwners& TextureOwners()
+        {
+            static ResourceTextureOwners sOwners;
+            return sOwners;
+        }
+        void ForgetResourceTexture(IDirect3DBaseTexture9* lpTexture)
+        {
+            auto& lrOwners = TextureOwners();
+            std::lock_guard<std::mutex> lGuard(lrOwners.mMutex);
+            const auto lFound = lrOwners.mTextures.find(lpTexture);
+            if (lFound == lrOwners.mTextures.end()) return;
+            lrOwners.mOwners.erase(lFound->second);
+            lrOwners.mTextures.erase(lFound);
+            FrameProfile::ResourceTexture(true);
+        }
+    }
+
+    void TextureResource_OnEntryFixedUp(const void* lpOwner, void* lpHeader)
+    {
+        IDirect3DBaseTexture9* lpNative = lpHeader ? static_cast<Texture*>(lpHeader)->mpD3DTexture : nullptr;
+        IDirect3DBaseTexture9* lpPrevious = nullptr;
+        auto& lrOwners = TextureOwners();
+        {
+            std::lock_guard<std::mutex> lGuard(lrOwners.mMutex);
+            const auto lFound = lrOwners.mOwners.find(lpOwner);
+            if (lFound != lrOwners.mOwners.end())
+            {
+                if (lFound->second == lpNative) return;
+                lpPrevious = lFound->second;
+                lrOwners.mTextures.erase(lpPrevious);
+                lrOwners.mOwners.erase(lFound);
+            }
+            if (lpNative)
+            {
+                lrOwners.mOwners.emplace(lpOwner, lpNative);
+                lrOwners.mTextures.emplace(lpNative, lpOwner);
+                FrameProfile::ResourceTexture(false);
+            }
+        }
+        // Never call into D3D while holding the ownership mutex.
+        if (lpPrevious) { FrameProfile::ResourceTexture(true); lpPrevious->Release(); }
+    }
+
+    void TextureResource_OnEntryFreed(const void* lpOwner, void* lpHeader)
+    {
+        IDirect3DBaseTexture9* lpNative = nullptr;
+        auto& lrOwners = TextureOwners();
+        {
+            std::lock_guard<std::mutex> lGuard(lrOwners.mMutex);
+            const auto lFound = lrOwners.mOwners.find(lpOwner);
+            if (lFound == lrOwners.mOwners.end()) return;
+            lpNative = lFound->second;
+            lrOwners.mTextures.erase(lpNative);
+            lrOwners.mOwners.erase(lFound);
+        }
+        // Only inspect headers belonging to a registered native allocation.
+        // They may now reside in another heap or in the scratch pool.
+        auto* lpTexture = static_cast<Texture*>(lpHeader);
+        if (lpTexture && lpTexture->mpD3DTexture == lpNative) lpTexture->mpD3DTexture = nullptr;
+        FrameProfile::ResourceTexture(true);
+        lpNative->Release();
+    }
+
     // [PC diagnostic] see texture.h. The staging-surface shape is XenonD3D9Shims.cpp's composite
     // ReadCentre probe (GetRenderTargetData refuses MULTISAMPLED sources -- reported, not retried).
     bool Texture::PCReadBackTexel0(const Texture* lpTexture, u32* lpuTexel, s32* lpiFormat)
@@ -740,6 +817,7 @@ namespace renderengine
         {
             return;
         }
+        ForgetResourceTexture(lpTexture->mpD3DTexture);
         lpTexture->mpD3DTexture->Release();
         lpTexture->mpD3DTexture = nullptr;
     }

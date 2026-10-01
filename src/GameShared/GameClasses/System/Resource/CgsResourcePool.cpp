@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceScratchPool.h"
 #include <cstring>
+#include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
+#include "pc/gcm/renderengine/TextureResourcePCLeaf.h"
 
 #include <cstdint>   // uintptr_t (the Heap allocation owner is the slot index)
 #include <cstddef>   // size_t (the PC-leaf free notification below)
@@ -466,6 +468,7 @@ namespace CgsResource
     void Pool::FreeMemoryForResource(Entry* lpEntry)
     {
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // :687
+        renderengine::TextureResource_OnEntryFreed(lpEntry, lpEntry->mResource.m_baseResources[0]);
         for (s32 lt = 0; lt < E_MEMTYPE_NUMTYPES; ++lt)
         {
             if (lpEntry->mResource.m_baseResources[lt] != 0)
@@ -485,6 +488,12 @@ namespace CgsResource
                 lpEntry->mauHeapIndices[lt]            = 0;
             }
         }
+        // ARTIST 828F5D38-4C clears all three owner words, then publishes the
+        // empty resource to its alias ring twice. Cached aliases must not keep
+        // pointers to the heap bytes (or native raster) just retired above.
+        auto* lpOwner = reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource);
+        lpOwner->Propogate();
+        lpOwner->Propogate();
     }
 
     // Ref-counted acquire: bump the entry's ref count and return it. (The X360 AddReference/RemoveReference
@@ -673,6 +682,10 @@ namespace CgsResource
         lpEntry->mResource.ConvertToRWResource(lrwResource);
         lpEntry->mpResourceType->FixUp(lpEntry->mResource.m_baseResources[0], lrwResource);
         lpEntry->mpResourceType->DeSerialise(lpEntry->mResource.m_baseResources[0]);
+        // FLAG PC-platform leaf: remember only a realized native raster, never
+        // interpret an unfixed serialized header during later rollback/free.
+        if (lpEntry->mpResourceType->GetTypeID() == E_RESOURCETYPE_TEXTURE)
+            renderengine::TextureResource_OnEntryFixedUp(lpEntry, lpEntry->mResource.m_baseResources[0]);
     }
 
     // 0x828EB920 - the post-fixup pass (Type::PostFixUp), run after imports are resolved.
@@ -871,6 +884,7 @@ namespace CgsResource
         s32 liSlot;
         Entry* lpEntry = FindResource(lId, false, 2, &liSlot);
         CGS_ASSERT(lpEntry != nullptr, "Failed to find entry to delete memory for\n");
+        renderengine::TextureResource_OnEntryFreed(lpEntry, lpEntry->mResource.m_baseResources[0]);
         for (s32 t = 0; t < 3; ++t)
         {
             void* lpMemory = lpEntry->mResource.m_baseResources[t];

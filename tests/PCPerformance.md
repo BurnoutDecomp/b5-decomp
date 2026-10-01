@@ -1213,14 +1213,49 @@ runs, so it is not included. Investigation found that normal pool retirement
 frees raster backing bytes without releasing the separately-created native D3D
 texture. FixDown can release it, but is not called on that path. Native raster
 relocation also needs review before a lifetime fix: the inherited ReBase passes
-address deltas to a PC FixUp that expects absolute pixel data. These remain
-open defects; this diagnostic change does not claim to fix them.
+address deltas to a PC FixUp that expects absolute pixel data. The lifetime repair described below addresses these defects; the diagnostic
+change itself did not fix them.
 
 Recorder tests pass 34 checks; dropping cycle deltas fails nine, including all
 seven new columns. Native texture tests pass 25, and the canonical build,
 faithfulness gate and bounded independent review pass. Evidence:
 `resource_attribution_validation_1001.md` and `resource_attribution_streaming_1001`
 in the parent checkout's `scratch/performance_goal_0929/`.
+
+## Native texture lifetime during streaming
+
+The pool now releases each realized raster's native D3D reference before its
+heap bytes are freed or replaced. Ownership is tracked by the resource entry,
+which remains stable when headers move. Unfixed serialized data is not treated
+as a COM pointer. Explicit texture destruction removes registration so a later
+pool free cannot release it twice.
+
+Native raster relocation preserves the D3D texture and its editable CPU shadow.
+It no longer sends memory-lane deltas into the absolute-data upload path.
+Pool retirement also restores ARTIST's two alias-propagation calls, clearing
+retained resource pointers after the original identity becomes empty.
+
+The native lifetime suite passes 48 checks across D3D9 and 9Ex, including GPU
+mip pixels, partial and unfixed loads, header/pixel relocation, reused addresses,
+live replacement, aliases and external COM references. Omitting retirement
+fails 16 checks; omitting propagation fails two. General resource allocation
+passes 59, actual relocation/jobs 30, existing native textures 25 and the
+recorder 35. Build, faithfulness and independent review pass. The build has
+eight existing C4661 Im2d/ImRenderBuffer template-instantiation warnings.
+
+The captured five-area streaming run passes all seven checks and records 1,220
+new raster owners and 1,296 native-reference releases in its measured window.
+Crash and driving images retain world/car textures and HUD. A separate captured
+Road Rage run qualifies with nine takedowns across five rivals, up to four
+crashing and six airborne, and no assertions, exceptions or event end.
+These instrumented captures are not clean FPS measurements.
+
+Texture creation still produces resource spikes: one 139-texture batch takes
+9.51 ms to realize. The staging cache remains excluded pending a new comparison
+now that native retirement actually occurs. This repair removes a lifetime leak;
+it does not establish locked 165 FPS. Evidence: `texture_lifetime_validation_1001.md`
+and `texture_lifetime_*_1001` runs in the parent checkout's
+`scratch/performance_goal_0929/`.
 
 ## Remaining original optimization gaps
 
