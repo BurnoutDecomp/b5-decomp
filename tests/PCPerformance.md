@@ -1107,6 +1107,55 @@ locked 165 FPS remain unresolved. Evidence: `stride_static_comparison_1001.json`
 `stride_alignment_validation.md` and the six `stride_*_1001` runs under the
 parent checkout's `scratch/performance_goal_0929/`.
 
+## Larger retained-geometry pages
+
+Native geometry pages now default to 8 MiB. This reduces native resource creation
+and buffer switches while preserving the existing alignment, upload, fallback and
+GPU-fenced retirement paths. The startup control `BRN_GEOMETRY_PAGE_MB` accepts
+exact values `1`, `2`, `4` or `8`; `1` selects the preceding policy. These are
+measured PC allocation choices, not sizes recovered from the console.
+
+Same-executable, full-foreground 1440p stationary runs, 45 seconds each:
+
+| Page size | Observed FPS | Native geometry residency | Vertex / index binds per frame |
+| --- | ---: | ---: | ---: |
+| 1 MiB | 168.44–169.52 | 27–28 MiB | 2,940–3,027 / 1,107–1,153 |
+| 4 MiB | 175.76–177.79 | 32 MiB | 2,381–2,406 / 4 |
+| 8 MiB | 179.19–179.54 | 40 MiB | 1,844–1,918 / 4 |
+
+The 1/4/4/1 comparison improves FPS by about 4.3% in both pairs. Subsequent 8/4/8
+runs show a smaller additional gain. All runs record about 5,078 draws per frame.
+Eight MiB costs more residency; P99 remains variable, and 15–17% of frames in
+these 8 MiB runs still exceed the 165 FPS budget.
+
+The two instrumented camera/streaming runs pass the existing seven checks:
+five area transitions, declaration retirement, crash-camera entry and returns
+to driving, with no assertions, stale formats or exceptions. With roughly
+63–65 MiB uploaded during their measured windows, new native buffer creations
+fall from 26 to 3. Ending native geometry residency is 48 versus 56 MiB.
+Driving/crash captures were inspected. These captured runs diagnose allocation
+frequency; their FPS is not clean performance evidence.
+
+The final default also passes a clean 90-second 1440p Road Rage measurement:
+885/885 foreground samples, seven takedowns across five rivals, up to four
+crashing/two airborne together, and no assertions, exceptions or event end.
+It averages 186.06 FPS, P99 7.88 ms and maximum 16.06 ms. The 18 camera cuts reach
+8.67 ms on the cut and 16.06 ms nearby. Of 16,738 frames, 3,655 (21.84%) exceed
+the 165 FPS budget. Different combat routes prevent using this as a matched
+before/after gain. Two earlier combat runs passed their workload requirements
+but lost focus briefly; their FPS results were rejected.
+
+The GPU suite passes 91 checks at 1, 4 and 8 MiB and with the final default. It
+includes real draws beyond 3 MiB in both vertex and index buffers, using both
+index widths. Truncating the native index offset to 16 bits fails four checks,
+including both rendered pixels. The canonical build and independent review pass.
+Evidence: `page_capacity_validation_1001.md`, `page_capacity_static_comparison_1001.json`,
+`page_camera_comparison_1001.json` and the `page_*_1001` runs in the parent
+checkout's `scratch/performance_goal_0929/`.
+
+This change reduces geometry allocation frequency. It does not remove all
+driver waits, streamed-texture creation costs or CPU resource-retirement spikes.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still
