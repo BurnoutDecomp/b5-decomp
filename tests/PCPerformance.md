@@ -988,6 +988,29 @@ owner's whole conversion interval, avoiding shared per-object timer writes.
 
 ## Frame-pacing measurements
 
+Packed DEC3N normal expansion now uses a 4 KiB table containing the exact scalar
+float result for every signed 10-bit input, including the -512 clamp. Separate
+compiled kernels keep the scalar comparison branch outside the vertex loop;
+`BRN_GEOMETRY_NORMAL_LUT=0` selects that control. This applies when a new retained
+vertex buffer needs expansion on hardware lacking native DEC3N support.
+
+`python b5-decomp/tests/run_pc_packed_normal.py` passes 57 checks in both modes:
+all 1,024 values in every channel, unused high bits, varied and unaligned layouts,
+multiple packed fields, zero/tail counts, complete record bytes and guard pages.
+Removing the clamp fails 28 checks. The native geometry/GPU suite passes 55/55.
+Isolated production-kernel measurements for 65,536 vertices were 0.226 versus
+1.248 ms for one normal per 16-byte source record, 0.363 versus 2.262 ms for two
+per 32-byte record, and 0.636 versus 4.403 ms for four per 48-byte record. These
+are conversion timings, not a whole-game FPS multiplier.
+
+The separate clean 150-second 1440p Road Rage run exercised 17 takedowns across
+seven rivals, with up to four crashing and two airborne together. All 1,473 focus
+samples passed, with no assertions, exceptions or event end. It averaged 188.64
+FPS, P99 8.36 ms and maximum 14.49 ms; 26.90% of frames exceeded the 6.06 ms budget.
+Thirty-five camera transitions had a maximum 8.84 ms interval and 14.49 ms nearby.
+Different combat routes prevent claiming a matched overall FPS gain. Upload and
+resource-pool stalls remain, and locked 165 FPS is still unproven.
+
 For frame-pacing measurements, use `BRN_FRAME_PROFILE=1` with
 `BRN_FRAME_TIMING_ONLY=1`. This records two clock reads per frame while retaining
 draw counts, successful presents, camera transitions and combat qualification
