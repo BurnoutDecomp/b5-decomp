@@ -1,3 +1,4 @@
+#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 #include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
 // =============================================================================
 // XenonD3D9Shims.cpp  (pc/gcm/renderengine)
@@ -4760,7 +4761,7 @@ namespace renderengine
         if (lbDrawIssued) ++renderengine::guDiagWorldDraws;
         const HRESULT lhrDraw = !lbDrawIssued ? D3D_OK : lbRetained
                 ? static_cast<HRESULT>(WorldGeometry_Submit(lRetained, luBaseVertexIndex))
-                : lpDevice->DrawIndexedPrimitiveUP(lePrim, 0, luNumVertices, luPrimCount,
+                : renderengine::GeometryBindingsPC::DrawIndexedPrimitiveUP(lpDevice, lePrim, 0, luNumVertices, luPrimCount,
                                                    lpIndices,
                                                    lb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
                                                    lpVertices, suVertexStride);
@@ -5258,7 +5259,7 @@ namespace renderengine
                     + static_cast<size_t>(luFirstQuad) * 4u * suVertexStride;
 
                 ++renderengine::guDiagWorldDraws;   // [DIAG] issue #30 per-present counters
-                const HRESULT lhr = lpDevice->DrawIndexedPrimitiveUP(
+                const HRESULT lhr = renderengine::GeometryBindingsPC::DrawIndexedPrimitiveUP(lpDevice,
                     D3DPT_TRIANGLELIST,
                     0,                                  // MinVertexIndex
                     luChunkQuads * 4u,                  // NumVertices
@@ -5291,7 +5292,7 @@ namespace renderengine
                 return;
             }
             ++renderengine::guDiagWorldDraws;   // [DIAG] issue #30 per-present counters
-            lhrDraw = lpDevice->DrawPrimitiveUP(lePrim, luPrimCount, lpRun, suVertexStride);
+            lhrDraw = renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, lePrim, luPrimCount, lpRun, suVertexStride);
             luPrimsDrawn = luPrimCount;
         }
 
@@ -6533,7 +6534,7 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
         return;   // the same silent early-out every sibling shim in this block takes
     }
 
-    const HRESULT lhrDraw = lpDevice->DrawPrimitiveUP(seImVertsPrimitive, suImVertsPrimCount,
+    const HRESULT lhrDraw = renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, seImVertsPrimitive, suImVertsPrimCount,
                                                       sauImVertsScratch, suImVertsStride);
 
     // [DIAG one-shot x4] the first immediate runs, with the device state they drew against --
@@ -6798,7 +6799,7 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
                         if (FAILED(lpDev->CreateQuery(D3DQUERYTYPE_OCCLUSION, &lpQ)) || lpQ == nullptr)
                             return false;
                         lpQ->Issue(D3DISSUE_BEGIN);
-                        lpDev->DrawPrimitiveUP(seImVertsPrimitive, suImVertsPrimCount,
+                        renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDev, seImVertsPrimitive, suImVertsPrimCount,
                                                sauImVertsScratch, suImVertsStride);
                         lpQ->Issue(D3DISSUE_END);
                         bool lbGot = false;
@@ -9569,7 +9570,7 @@ namespace
         // nothing and can touch neither the scene colour nor the depth it is about to resolve.
         const f32 lafDummyPoint[3] = { 0.0f, 0.0f, 0.0f };
         const HRESULT lHrDraw =
-            lpDevice->DrawPrimitiveUP(D3DPT_POINTLIST, 1u, lafDummyPoint, sizeof(f32) * 3u);
+            renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, D3DPT_POINTLIST, 1u, lafDummyPoint, sizeof(f32) * 3u);
 
         lpDevice->SetRenderState(D3DRS_ZWRITEENABLE,     TRUE);
         lpDevice->SetRenderState(D3DRS_ZENABLE,          TRUE);
@@ -10388,7 +10389,7 @@ void PCStampMotionBlurMask(u32 luCarsBlurStencil, u32 luWorldBlurStencil)
         const D3DCOLOR lCarsColour = D3DCOLOR_ARGB(static_cast<int>(luCarsByte), 0, 0, 0);
         for (u32 luVertex = 0; luVertex < 4u; ++luVertex)
             laQuad[luVertex].mDiffuse = lCarsColour;
-        const HRESULT lHr = lpDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2u, laQuad,
+        const HRESULT lHr = renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, D3DPT_TRIANGLESTRIP, 2u, laQuad,
                                                       sizeof(MaskStampVertex));
         if (FAILED(lHr))
             lHrDraw = lHr;
@@ -10402,7 +10403,7 @@ void PCStampMotionBlurMask(u32 luCarsBlurStencil, u32 luWorldBlurStencil)
         const D3DCOLOR lWorldColour = D3DCOLOR_ARGB(static_cast<int>(luWorldByte), 0, 0, 0);
         for (u32 luVertex = 0; luVertex < 4u; ++luVertex)
             laQuad[luVertex].mDiffuse = lWorldColour;
-        const HRESULT lHr = lpDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2u, laQuad,
+        const HRESULT lHr = renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, D3DPT_TRIANGLESTRIP, 2u, laQuad,
                                                       sizeof(MaskStampVertex));
         if (FAILED(lHr))
             lHrDraw = lHr;

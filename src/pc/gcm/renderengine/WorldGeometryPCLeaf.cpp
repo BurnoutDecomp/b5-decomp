@@ -1,4 +1,5 @@
 #include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
+#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 // =============================================================================
 // WorldGeometryPCLeaf.cpp  (pc/gcm/renderengine)
 //
@@ -882,9 +883,15 @@ s32 WorldGeometry_Submit(const WorldGeometryDraw& lrDraw, u32 luBaseVertexIndex)
         || lrDraw.mpIndexBuffer == nullptr)
         return static_cast<s32>(E_FAIL);
 
-    lpDevice->SetStreamSource(0, static_cast<IDirect3DVertexBuffer9*>(lrDraw.mpVertexBuffer),
-                              lrDraw.muVertexOffset, lrDraw.muExpandedStride);
-    lpDevice->SetIndices(static_cast<IDirect3DIndexBuffer9*>(lrDraw.mpIndexBuffer));
+    const GeometryBindingsPC::VertexWindow lWindow = GeometryBindingsPC::Rebase(
+        lrDraw.muVertexOffset, lrDraw.muExpandedStride, static_cast<INT>(luBaseVertexIndex));
+    if (lWindow.muOffset != lrDraw.muVertexOffset) FrameProfile::RebasedDraw();
+    HRESULT lhBind = GeometryBindingsPC::gCache.BindVertex(lpDevice,
+        static_cast<IDirect3DVertexBuffer9*>(lrDraw.mpVertexBuffer), lWindow.muOffset, lrDraw.muExpandedStride);
+    if (FAILED(lhBind)) return static_cast<s32>(lhBind);
+    lhBind = GeometryBindingsPC::gCache.BindIndex(lpDevice,
+        static_cast<IDirect3DIndexBuffer9*>(lrDraw.mpIndexBuffer));
+    if (FAILED(lhBind)) return static_cast<s32>(lhBind);
 
     // [DIAG] THE WORLD PASS'S OWN DEPTH STATE, at the moment a world mesh actually draws.
     // The tyre mark is rejected by the depth test against whatever this pass left in the
@@ -897,7 +904,7 @@ s32 WorldGeometry_Submit(const WorldGeometryDraw& lrDraw, u32 luBaseVertexIndex)
     // the base vertex either way.
     const HRESULT lhr = lpDevice->DrawIndexedPrimitive(
         static_cast<D3DPRIMITIVETYPE>(lrDraw.miPrimitiveType),
-        static_cast<INT>(luBaseVertexIndex),
+        lWindow.miBase,
         lrDraw.muMinIndex,
         lrDraw.muMaxIndex - lrDraw.muMinIndex + 1u,
         lrDraw.muIndexStart,
@@ -1005,6 +1012,7 @@ void WorldGeometry_BeginFrame()
 
 void WorldGeometry_ReleaseAll()
 {
+    GeometryBindingsPC::gCache.Invalidate();
     WorldVd32_ReleaseAll();
     // First, before a single node dies: every front-cache slot points into the maps about
     // to be cleared, so retire them all up front (unconditionally here -- this erases

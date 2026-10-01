@@ -1,3 +1,4 @@
+#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 // <d3d9.h> needs winuser (LPMSG), but a transitive include below (rw/core/debug/DebugCriticalSection.h
 // via the renderengine/Im2d chain) defines NOUSER/NOGDI ahead of its own <windows.h>, which strips
 // winuser. Bring the full <Windows.h> in FIRST so LPMSG is defined before any NOUSER guard runs --
@@ -262,7 +263,7 @@ namespace CgsGraphics
         SelectFixedFunctionPipeline(lpDevice);
         lpDevice->SetFVF(KU_SCREEN_FVF);
         // The loading screen submits 4-vertex quads as triangle strips.
-        lpDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, luCount - 2u, saBatch, sizeof(D3DScreenVertex));
+        renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, D3DPT_TRIANGLESTRIP, luCount - 2u, saBatch, sizeof(D3DScreenVertex));
     }
 
     // The X360 reserve/submit buffer API, folded onto the PC immediate renderer (see CgsImRenderBuffer.h).
@@ -328,7 +329,7 @@ namespace CgsGraphics
         SelectFixedFunctionPipeline(lpDevice);   // pairs with SetFVF (see Render above)
         lpDevice->SetFVF(KU_SCREEN_FVF);
         // One triangle strip per line: the font's glyph quads are joined by degenerate connectors.
-        lpDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, luVertexCount - 2u, saBatch, sizeof(D3DScreenVertex));
+        renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, D3DPT_TRIANGLESTRIP, luVertexCount - 2u, saBatch, sizeof(D3DScreenVertex));
     }
 
     // ---- Im2dTransform -----------------------------------------------------------

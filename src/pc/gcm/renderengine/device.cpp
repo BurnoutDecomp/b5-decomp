@@ -1,3 +1,4 @@
+#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 #include "device.h"
 #include "WindowPresentationPCLeaf.h"
 #include "DisplayResizePCLeaf.h"
@@ -371,6 +372,7 @@ void renderengine::Device::Start()
     // depth-stencil created above; captured now, while they are exactly what is bound.
     gPCShaderConstantCache.Invalidate();
     gPCSamplerStateCache.Invalidate();
+    GeometryBindingsPC::gCache.Invalidate();
     PCInstallDefaultRenderTargetState(static_cast<u32>(gDisplayWidth), static_cast<u32>(gDisplayHeight));
 
     ShowWindow(hWnd, SW_SHOWNORMAL);

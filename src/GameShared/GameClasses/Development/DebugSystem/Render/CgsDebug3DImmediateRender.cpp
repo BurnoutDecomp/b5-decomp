@@ -1,3 +1,4 @@
+#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 #if !defined(D_PLATFORM_X360)
 // The RenderWare headers define NOUSER before including Windows headers.  D3D9 still
 // requires winuser's LPMSG, so establish the complete Win32/D3D declarations first.
@@ -294,10 +295,10 @@ namespace CgsDev
             lpDevice->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
 
             if (meDrawingMode == E_DRAWING_LINES || meDrawingMode == E_DRAWING_TRISTRIP_LINES)
-                lpDevice->DrawPrimitiveUP(D3DPT_LINELIST, static_cast<UINT>(miIm3dVertsHead / 2),
+                renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, D3DPT_LINELIST, static_cast<UINT>(miIm3dVertsHead / 2),
                                           saVertices, sizeof(ScreenVertex));
             else
-                lpDevice->DrawPrimitiveUP(D3DPT_TRIANGLELIST, static_cast<UINT>(miIm3dVertsHead / 3),
+                renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, D3DPT_TRIANGLELIST, static_cast<UINT>(miIm3dVertsHead / 3),
                                           saVertices, sizeof(ScreenVertex));
         }
 #endif
