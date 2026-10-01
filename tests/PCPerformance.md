@@ -1156,6 +1156,41 @@ checkout's `scratch/performance_goal_0929/`.
 This change reduces geometry allocation frequency. It does not remove all
 driver waits, streamed-texture creation costs or CPU resource-retirement spikes.
 
+## Source-address lookup during geometry retirement
+
+The CPU eviction index now groups source addresses into 4 KiB buckets. Its
+previous 64 KiB buckets repeatedly scanned unrelated small resource headers as
+individual resources were freed. Registration still covers every touched bucket,
+and the existing exact byte-range check decides which buffers retire. GPU page
+capacity, contents, retirement fences and draw-cache invalidation are unchanged.
+`BRN_GEOMETRY_SOURCE_PAGE_KB=16` or `64` selects the comparison policies.
+
+An isolated production-code probe retires 4,096 resource pairs in sequential and
+shuffled order. For 512-byte and 4 KiB source blocks, retirement drops from
+32–45 ms to 2–3.6 ms. For 32 KiB blocks it drops from 30–38 ms to 6–8 ms, but
+registration rises from about 1.7 ms to 4.9 ms. The latter fixture also raises the
+cost of scanning unrelated 64 MiB free ranges from about 0.02 ms to 0.65 ms. Finer
+lookup tables have a construction and memory cost; this is not an FPS multiplier.
+
+Both live five-area/crash-camera runs pass all seven streaming checks. The new
+lookup processes one 6,026-buffer retirement batch in 3.13 ms of resource-update
+time; the old lookup takes 4.2–5.2 ms for batches of roughly 3,800–4,200 buffers.
+Exact loads differ, and resource updates include other work, so these are useful
+runtime observations rather than a matched whole-game speedup. The candidate
+still has 8–9 ms resource-update frames with zero geometry retirements.
+
+The new interval suite passes 23 checks at all three bucket sizes, covering
+both owner maps, separate header/data notifications, neighbours, exclusive ends,
+cross-bucket sources and reused addresses. Dropping the last source bucket fails
+eight checks. Native rendering passes 91 checks. The canonical build and
+independent review pass. A separate diagnostic Road Rage run qualifies with 14
+takedowns across six rivals, up to four crashing/two airborne, and no assertions,
+exceptions or event end. It is not a clean FPS measurement.
+
+Evidence: `retirement_buckets_validation_1001.md`,
+`retirement_streaming_comparison_1001.json`, and the `retirement_*_1001` runs in
+the parent checkout's `scratch/performance_goal_0929/`.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still
