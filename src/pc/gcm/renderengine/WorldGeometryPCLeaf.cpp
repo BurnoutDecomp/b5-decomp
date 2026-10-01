@@ -46,7 +46,20 @@ namespace renderengine
 namespace
 {
     using GeometryPoolType = PCGeometryBufferPool<D3D9GeometryPoolBackend>;
-    GeometryPoolType sGeometryPool;
+    // FLAG PC-platform leaf: share native buffers across more retained meshes
+    // to avoid creation stalls and stream/index binding changes. The 8 MiB
+    // default is a measured PC policy; bounded smaller sizes retain A/B controls.
+    GeometryPoolType sGeometryPool([] {
+        const char* lpcValue = std::getenv("BRN_GEOMETRY_PAGE_MB");
+        if (lpcValue && lpcValue[0] && lpcValue[1] == '\0')
+        {
+            if (lpcValue[0] == '1') return 1024u * 1024u;
+            if (lpcValue[0] == '2') return 2u * 1024u * 1024u;
+            if (lpcValue[0] == '4') return 4u * 1024u * 1024u;
+            if (lpcValue[0] == '8') return 8u * 1024u * 1024u;
+        }
+        return 8u * 1024u * 1024u;
+    }());
     std::vector<u8> sVertexBakeScratch;
     // ---- keys ---------------------------------------------------------------
     // Both keys are compared and hashed as RAW BYTES, so every field -- including

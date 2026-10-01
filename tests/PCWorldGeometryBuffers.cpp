@@ -90,6 +90,34 @@ int main() {
     WorldGeometryIndexPlan ip={}; ip.mpHeader=ip.mpRun=indices; ip.muIndexCount=3;
     ip.miMappedPrimitiveType=D3DPT_TRIANGLELIST; ip.muMappedPrimitiveCount=1;
     WorldGeometryDraw first={},second={};
+    for(bool wide:{false,true}) {
+        WorldGeometry_ReleaseAll();
+        const unsigned prefixBytes=3u*1024u*1024u+16u;
+        std::vector<u8> prefix(prefixBytes,0);
+        GeometryPoolType::Allocation vertexPrefix,indexPrefix;
+        const auto kind=wide?GeometryBufferKind::Index32:GeometryBufferKind::Index16;
+        Check(sGeometryPool.Store(gDevice,GeometryBufferKind::Vertex,prefix.data(),prefixBytes,vertexPrefix)
+              &&sGeometryPool.Store(gDevice,kind,prefix.data(),prefixBytes,indexPrefix),
+              "large native prefixes prepare both vertex and index storage");
+        const unsigned wideIndices[]={0,1,2};auto highIp=ip;
+        if(wide){highIp.mpHeader=highIp.mpRun=wideIndices;highIp.mb32Bit=true;}
+        WorldGeometryDraw high={};
+        Check(WorldGeometry_Prepare(vp,highIp,&high)==E_WORLDGEOMETRY_READY,
+              "geometry prepares after multi-megabyte native allocations");
+        D3DVERTEXBUFFER_DESC vertexDesc{};D3DINDEXBUFFER_DESC indexDesc{};
+        static_cast<IDirect3DVertexBuffer9*>(vertexPrefix.GetBuffer())->GetDesc(&vertexDesc);
+        static_cast<IDirect3DIndexBuffer9*>(indexPrefix.GetBuffer())->GetDesc(&indexDesc);
+        if(vertexDesc.Size>=prefixBytes+256u)
+            Check(high.mpVertexBuffer==vertexPrefix.GetBuffer()&&high.muVertexOffset>=prefixBytes,
+                  "large vertex page reuses its tail beyond three MiB");
+        else Check(high.mpVertexBuffer!=vertexPrefix.GetBuffer(),"full small vertex page spills to another buffer");
+        if(indexDesc.Size>=prefixBytes+256u)
+            Check(high.mpIndexBuffer==indexPrefix.GetBuffer()&&high.muIndexStart*(wide?4u:2u)>=prefixBytes,
+                  "both index widths address runs beyond three MiB");
+        else Check(high.mpIndexBuffer!=indexPrefix.GetBuffer(),"full small index page spills to another buffer");
+        Check(DrawPixel(high)==0x00ff00,"multi-megabyte offsets preserve the complete native draw address");
+    }
+    WorldGeometry_ReleaseAll();
     Check(WorldGeometry_Prepare(vp,ip,&first)==E_WORLDGEOMETRY_READY,"production geometry creates GPU buffers");
     if (first.mpVertexBuffer && first.mpIndexBuffer) {
         Check(first.muMinIndex==0 && first.muMaxIndex==2,"16-bit triangle list retains its exact vertex range");
