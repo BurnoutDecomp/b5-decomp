@@ -106,6 +106,31 @@ int main() {
         Check(WorldGeometry_Prepare(vp,ip,&second)==E_WORLDGEOMETRY_READY,"reused source address is rebuilt after streaming retirement");
         Check(DrawPixel(second)==0xff0000,"retired GPU geometry cannot survive source address reuse");
     }
+    for(unsigned stride:{20u,28u,36u,44u}) {
+        WorldGeometry_ReleaseAll();
+        WorldGeometryDraw prefix={},aligned={};
+        Check(WorldGeometry_Prepare(vp,ip,&prefix)==E_WORLDGEOMETRY_READY,
+              "native alignment fixture leaves a partial-vertex page offset");
+        std::vector<u8> bytes(3*stride);
+        for(unsigned vertex=0;vertex<3;++vertex)
+            std::memcpy(bytes.data()+vertex*stride,&vertices[vertex],sizeof(Vertex));
+        auto padded=vp;padded.mpHeader=padded.mpData=bytes.data();
+        padded.muSourceStride=padded.muExpandedStride=stride;
+        Check(WorldGeometry_Prepare(padded,ip,&aligned)==E_WORLDGEOMETRY_READY
+              &&aligned.mpVertexBuffer==prefix.mpVertexBuffer,
+              "mixed vertex strides share a native page");
+        const char* mode=std::getenv("BRN_GEOMETRY_ALIGN_STRIDE");
+        if(!mode||mode[0]!='0')Check(aligned.muVertexOffset%stride==0,
+              "production whole-vertex alignment covers non-power-of-two strides");
+        Check(DrawPixel(aligned)==0xff0000,"aligned nonzero-offset vertices retain their expected native pixel");
+        IDirect3DVertexBuffer9* bound=nullptr;UINT offset=~0u,boundStride=0;
+        Check(SUCCEEDED(gDevice->GetStreamSource(0,&bound,&offset,&boundStride))
+              &&bound==aligned.mpVertexBuffer&&boundStride==stride
+              &&offset==aligned.muVertexOffset%stride,
+              "native binding uses the exact rebased byte offset and stride");
+        if(bound)bound->Release();
+        WorldGeometry_ReleaseAll();
+    }
     Vertex offsetVertices[7]={};
     for (unsigned i=0;i<3;++i) offsetVertices[i+4]=vertices[i];
     const unsigned int strips[]={3,4,5,0xffffffffu,3,4,5};

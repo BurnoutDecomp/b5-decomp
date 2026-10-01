@@ -4,6 +4,7 @@
 #include <list>
 #include <vector>
 #include <limits>
+#include <numeric>
 #include <utility>
 
 // FLAG PC-platform leaf: GPU-visible resource storage for the console's retained
@@ -119,20 +120,40 @@ namespace renderengine
         Backend& GetBackend() { return mBackend; }
 
         bool Store(Context lContext, GeometryBufferKind leKind, const void* lpData,
-                   unsigned luBytes, Allocation& lrOut)
+                   unsigned luBytes, Allocation& lrOut, unsigned luAlignment = 16u)
         {
             lrOut = Allocation{};
-            if (!lpData || !luBytes || luBytes > (std::numeric_limits<unsigned>::max)() - 15u
+            if (!lpData || !luBytes || !luAlignment
+                || luBytes > (std::numeric_limits<unsigned>::max)() - 15u)
+                return false;
+            // Preserve the native 16-byte alignment and support vertex strides
+            // which are not powers of two. A whole-vertex page offset lets the
+            // indexed draw keep stream zero bound at byte offset zero.
+            const unsigned long long luCombinedAlignment =
+                16ull / std::gcd(16u, luAlignment) * luAlignment;
+            if (luCombinedAlignment > (std::numeric_limits<unsigned>::max)()
                 || !Initialize(lContext)) return false;
             const unsigned luReserved = (luBytes + 15u) & ~15u;
             Page* lpPage = nullptr;
-            unsigned luRange = 0;
+            unsigned luRange = 0, luOffset = 0;
             for (auto& lrPage : mPages)
             {
                 if (!lrPage.mbWritable || lrPage.meKind != leKind) continue;
                 for (unsigned lu = 0; lu < lrPage.mFree.size(); ++lu)
-                    if (lrPage.mFree[lu].muBytes >= luReserved)
-                    { lpPage = &lrPage; luRange = lu; break; }
+                {
+                    const Range& lrRange = lrPage.mFree[lu];
+                    if (lrRange.muBytes < luReserved) continue;
+                    const unsigned long long luAlignedOffset =
+                        (lrRange.muOffset + luCombinedAlignment - 1u)
+                        / luCombinedAlignment * luCombinedAlignment;
+                    if (luAlignedOffset + luReserved
+                        <= static_cast<unsigned long long>(lrRange.muOffset) + lrRange.muBytes)
+                    {
+                        lpPage = &lrPage; luRange = lu;
+                        luOffset = static_cast<unsigned>(luAlignedOffset);
+                        break;
+                    }
+                }
                 if (lpPage) break;
             }
             if (!lpPage)
@@ -147,10 +168,20 @@ namespace renderengine
                 ++mStatistics.muPagesCreated;
                 mStatistics.muResidentBytes += luCapacity;
             }
-            Range& lrRange = lpPage->mFree[luRange];
-            lrOut = Allocation{lpPage, lrRange.muOffset, luReserved};
-            lrRange.muOffset += luReserved; lrRange.muBytes -= luReserved;
-            if (!lrRange.muBytes) lpPage->mFree.erase(lpPage->mFree.begin() + luRange);
+            const Range lRange = lpPage->mFree[luRange];
+            lrOut = Allocation{lpPage, luOffset, luReserved};
+            const unsigned luPrefix = luOffset - lRange.muOffset;
+            const unsigned luSuffix = lRange.muBytes - luPrefix - luReserved;
+            if (luPrefix)
+            {
+                lpPage->mFree[luRange] = Range{lRange.muOffset, luPrefix};
+                if (luSuffix) lpPage->mFree.insert(lpPage->mFree.begin() + luRange + 1u,
+                    Range{luOffset + luReserved, luSuffix});
+            }
+            else if (luSuffix)
+                lpPage->mFree[luRange] = Range{luOffset + luReserved, luSuffix};
+            else
+                lpPage->mFree.erase(lpPage->mFree.begin() + luRange);
             ++lpPage->muLive;
             mStatistics.muLiveBytes += luReserved;
             // DISCARD is legal only on a brand-new page before any slice can have

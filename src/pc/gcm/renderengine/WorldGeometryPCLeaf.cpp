@@ -360,6 +360,18 @@ namespace
         return sbManaged ? D3DPOOL_MANAGED : D3DPOOL_DEFAULT;
     }
 
+    unsigned VertexPoolAlignment(unsigned luStride)
+    {
+        // FLAG PC-platform leaf: keep byte offsets divisible by the vertex
+        // stride so GeometryBindingsPC::Rebase can retain a zero-offset stream.
+        // This avoids D3D9 stream updates without changing vertex addresses.
+        static const bool sbAligned = [] {
+            const char* lpcValue = std::getenv("BRN_GEOMETRY_ALIGN_STRIDE");
+            return !lpcValue || lpcValue[0] != '0';
+        }();
+        return sbAligned && luStride && !(luStride & 3u) ? luStride : 16u;
+    }
+
     inline uintptr_t PageOf(const void* lpPointer)
     {
         return reinterpret_cast<uintptr_t>(lpPointer) >> KU_PAGE_SHIFT;
@@ -537,7 +549,8 @@ namespace
                 lpPayload = sVertexBakeScratch.data();
             }
             if (GeometryPool() == D3DPOOL_DEFAULT && sGeometryPool.Store(lpDevice,
-                    GeometryBufferKind::Vertex, lpPayload, luBytes, lEntry.mAllocation))
+                    GeometryBufferKind::Vertex, lpPayload, luBytes, lEntry.mAllocation,
+                    VertexPoolAlignment(lrPlan.muExpandedStride)))
                 lEntry.mpBuffer = static_cast<IDirect3DVertexBuffer9*>(lEntry.mAllocation.GetBuffer());
             else
             {
