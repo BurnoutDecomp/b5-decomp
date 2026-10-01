@@ -69,6 +69,27 @@ struct Sampler
     ~Sampler(){if(vs)vs->Release();for(auto* p:ps)if(p)p->Release();if(declaration)declaration->Release();if(target)target->Release();if(readback)readback->Release();}
 };
 static DWORD Colour(unsigned face,unsigned mip) {return 0xFF000000|(0x20+face*27)<<16|(0x30+mip*41)<<8|0x67;}
+// Warm the retired staging cache with different bytes. Existing GPU pixel
+// checks then prove that reusing storage replaces all mips/faces/slices.
+static void CreateRecycled(Texture* destination,const Texture::Parameters* params,const void* pixels)
+{
+    if(!IsExtended(renderengine::gDevice)){Texture::Create(destination,params,pixels);return;}
+    Texture old{};
+    std::vector<unsigned char> poison(Texture::GetPixelDataSize(params->meType,params->muWidth,
+        params->muHeight,params->muDepth,params->miFormat,params->muNumLevels),0xCD);
+    Texture::Create(&old,params,poison.data());
+    Shadow* previous=Acquire(old.mpD3DTexture);
+    IDirect3DBaseTexture9* source=previous?previous->mpTexture:nullptr;
+    if(source)source->AddRef();
+    if(previous)previous->Release();
+    Texture::Destroy(&old);
+    Texture::Create(destination,params,pixels);
+    Shadow* current=Acquire(destination->mpD3DTexture);
+    Check(source&&current&&((current->mpTexture==source)==StagingCache::Enabled()),
+        "retired staging storage is reused only with the cache enabled");
+    if(current)current->Release();
+    if(source)source->Release();
+}
 static void TestDevice(bool extended)
 {
     HWND window=CreateWindowA("STATIC","Flip resource checks",WS_OVERLAPPEDWINDOW,0,0,64,64,nullptr,nullptr,GetModuleHandle(nullptr),nullptr);
@@ -86,7 +107,7 @@ static void TestDevice(bool extended)
         Texture regular{};Texture::Parameters p{};p.meType=Texture::E_TYPE_2D;p.muWidth=8;p.muHeight=4;p.muDepth=1;p.muNumLevels=4;p.miFormat=D3DFMT_A8R8G8B8;
         std::vector<DWORD> data;
         for(unsigned mip=0;mip<4;++mip)data.insert(data.end(),(8u>>mip?8u>>mip:1)*(4u>>mip?4u>>mip:1),Colour(0,mip));
-        Texture::Create(&regular,&p,data.data());
+        CreateRecycled(&regular,&p,data.data());
         bool pixels=regular.mpD3DTexture!=nullptr;
         for(unsigned mip=0;mip<4;++mip){const float coord[]={.5f,.5f,0,float(mip)};pixels&=sample.Pixel(regular.mpD3DTexture,0,coord,Colour(0,mip));}
         Check(pixels,"production 2D loader preserves every mip on the GPU");
@@ -102,7 +123,7 @@ static void TestDevice(bool extended)
         Check(readonly,"lean read-only locks retain editable texture contents");
         Texture cube{};p.meType=Texture::E_TYPE_CUBE;p.muWidth=p.muHeight=4;p.muDepth=6;p.muNumLevels=3;
         data.clear();for(unsigned face=0;face<6;++face)for(unsigned mip=0;mip<3;++mip)data.insert(data.end(),(4u>>mip)*(4u>>mip),Colour(face,mip));
-        Texture::Create(&cube,&p,data.data());
+        CreateRecycled(&cube,&p,data.data());
         const float axes[6][3]={{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}};
         pixels=cube.mpD3DTexture!=nullptr;
         for(unsigned face=0;face<6;++face)for(unsigned mip=0;mip<3;++mip){float coord[]={axes[face][0],axes[face][1],axes[face][2],float(mip)};pixels&=sample.Pixel(cube.mpD3DTexture,1,coord,Colour(face,mip));}
@@ -115,19 +136,19 @@ static void TestDevice(bool extended)
             for(unsigned block=0;block<side*side;++block){unsigned short colour=palette[(face+mip)%6];
                 blocks.push_back(static_cast<unsigned char>(colour));blocks.push_back(static_cast<unsigned char>(colour>>8));
                 blocks.insert(blocks.end(),6,0);}}
-        Texture::Create(&compressed,&p,blocks.data());pixels=compressed.mpD3DTexture!=nullptr;
+        CreateRecycled(&compressed,&p,blocks.data());pixels=compressed.mpD3DTexture!=nullptr;
         for(unsigned face=0;face<6;++face)for(unsigned mip=0;mip<4;++mip){float coord[]={axes[face][0],axes[face][1],axes[face][2],float(mip)};
             pixels&=sample.Pixel(compressed.mpD3DTexture,1,coord,rgb[(face+mip)%6]);}
         Check(pixels,"compressed cube block rows and sub-four-pixel mips reach the GPU unchanged");
         Texture alpha{};p.meType=Texture::E_TYPE_2D;p.muWidth=5;p.muHeight=3;p.muDepth=1;p.muNumLevels=1;p.miFormat=D3DFMT_A8;
         const unsigned char alphaData[15]={17,17,17,17,17,128,128,128,128,128,240,240,240,240,240};
-        Texture::Create(&alpha,&p,alphaData);
+        CreateRecycled(&alpha,&p,alphaData);
         bool alphaValid=true;for(unsigned row=0;row<3;++row){float coord[]={.5f,(row+.5f)/3,0,0};
             alphaValid&=sample.Pixel(alpha.mpD3DTexture,0,coord,DWORD(alphaData[row*5])<<24,0xFF000000);}
         Check(alphaValid,"padded single-channel texture rows retain GUI alpha");
         Texture volume{};p.meType=Texture::E_TYPE_VOLUME;p.muWidth=4;p.muHeight=2;p.muDepth=4;p.muNumLevels=1;
         p.miFormat=D3DFMT_A8R8G8B8;
-        Texture::Create(&volume,&p,nullptr);Texture::Lock(&volume,0,0,0,&lock);
+        CreateRecycled(&volume,&p,nullptr);Texture::Lock(&volume,0,0,0,&lock);
         updated=lock.mpPixelData&&lock.muSliceStride&&lock.muVolumeDepth==4;
         if(updated){for(unsigned z=0;z<4;++z)for(unsigned y=0;y<2;++y)for(unsigned x=0;x<4;++x)
             reinterpret_cast<DWORD*>(static_cast<char*>(lock.mpPixelData)+z*lock.muSliceStride+y*lock.muStride)[x]=Colour(z,0);
@@ -138,7 +159,7 @@ static void TestDevice(bool extended)
         data.clear();
         for(unsigned mip=0;mip<3;++mip)for(unsigned z=0;z<(4u>>mip);++z)
             data.insert(data.end(),(4u>>mip)*(4u>>mip),Colour(z,mip));
-        Texture::Create(&volumeMips,&p,data.data());pixels=volumeMips.mpD3DTexture!=nullptr;
+        CreateRecycled(&volumeMips,&p,data.data());pixels=volumeMips.mpD3DTexture!=nullptr;
         for(unsigned mip=0;mip<3;++mip)for(unsigned z=0;z<(4u>>mip);++z){
             float coord[]={.5f,.5f,(z+.5f)/(4u>>mip),float(mip)};
             pixels&=sample.Pixel(volumeMips.mpD3DTexture,2,coord,Colour(z,mip));}
@@ -162,6 +183,41 @@ static void TestDevice(bool extended)
                 Texture::Unlock(&regular,&second);const float mip1[]={.5f,.5f,0,1};
                 overlap&=sample.Pixel(regular.mpD3DTexture,0,mip0,0xFF554433)&&sample.Pixel(regular.mpD3DTexture,0,mip1,0xFF997755);}
             Check(overlap,"overlapping mip edits publish only after the last CPU lock is released");}
+        if(extended){
+            gStagingCache.Clear();
+            IDirect3DTexture9* failed=nullptr;
+            Check(SUCCEEDED(Create2D(device,8,4,4,D3DFMT_A8R8G8B8,&failed)),"failure-path texture created");
+            Shadow* owner=Acquire(failed);
+            StagingKey key=owner?owner->mKey:StagingKey{};
+            auto* storage=owner?static_cast<IDirect3DTexture9*>(owner->mpTexture):nullptr;
+            if(storage)storage->AddRef();if(owner)owner->Release();
+            bool rejected=false;
+            if(storage){
+                {
+                    Upload upload(failed);D3DLOCKED_RECT nativeLock{};
+                    bool locked=upload.Accept(storage->LockRect(0,&nativeLock,nullptr,0));
+                    // Inject a failed direct unlock while mip zero remains locked.
+                    const HRESULT badUnlock=storage->UnlockRect(99);
+                    upload.Accept(badUnlock);
+                    rejected=locked&&FAILED(badUnlock)&&FAILED(upload.Finish());
+                    // Fixture cleanup only: production cannot assume failure
+                    // left the native lock in a recoverable state.
+                    if(locked)storage->UnlockRect(0);
+                }
+            }
+            if(failed)failed->Release();
+            auto* poisoned=gStagingCache.Take(key);
+            Check(rejected&&!poisoned,"failed bulk unlock cannot poison a later staging-cache hit");
+            if(poisoned)poisoned->Release();if(storage)storage->Release();
+            gStagingCache.Clear();
+            IDirect3DTexture9* mismatched=nullptr;
+            const HRESULT mismatch=CreatePair(device,&mismatched,key,[&](D3DPOOL pool,IDirect3DTexture9** output){
+                return device->CreateTexture(8,4,pool==D3DPOOL_SYSTEMMEM?1:4,0,D3DFMT_A8R8G8B8,pool,output,nullptr);
+            });
+            auto* incompatible=gStagingCache.Take(key);
+            Check(FAILED(mismatch)&&!mismatched&&!incompatible,"mismatched mip allocation never enters the resolved-key cache");
+            if(incompatible)incompatible->Release();if(mismatched)mismatched->Release();
+        }
         if(extended){D3DPRESENT_PARAMETERS reset=params;reset.BackBufferWidth=96;reset.BackBufferHeight=80;
             const HRESULT resetResult=exDevice->ResetEx(&reset,nullptr);
             Check(SUCCEEDED(resetResult)&&sample.Pixel(regular.mpD3DTexture,0,mip2,0xFF112233),
@@ -173,6 +229,7 @@ static void TestDevice(bool extended)
             Check(retained==2&&last==0,"destroying the GPU texture releases its staging owner without a reference cycle");}
         Texture::Destroy(&cube);Texture::Destroy(&volume);Texture::Destroy(&volumeMips);Texture::Destroy(&compressed);Texture::Destroy(&alpha);
     }
+    gStagingCache.Clear();
     renderengine::gDevice=nullptr;device->Release();api->Release();DestroyWindow(window);
 }
 int main(){TestDevice(false);TestDevice(true);std::printf("PCFlipResources: %d checks, %d failures\n",checks,failures);return failures?1:0;}

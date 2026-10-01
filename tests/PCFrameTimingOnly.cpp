@@ -121,6 +121,7 @@ int main()
     fp::GeometryBinding(true, true);
     fp::GeometryBinding(false, false);
     fp::ResourceTexture(false); fp::ResourceTexture(false); fp::ResourceTexture(true);
+    fp::TextureStaging(false); fp::TextureStaging(true); fp::TextureStaging(true);
     fp::Present();
     siTicks = 6100;
     fp::End();
@@ -167,6 +168,9 @@ int main()
 
     Check(CsvValue(lCsv, "raster_creates") == 2 && CsvValue(lCsv, "raster_releases") == 1,
           "native raster ownership counters survive timing-only capture");
+
+    Check(CsvValue(lCsv, "staging_creates") == 1 && CsvValue(lCsv, "staging_reuses") == 2,
+          "staging counters coexist with native ownership counters in timing-only output");
 
     Reset("1", "0", "1");
     fp::Begin();
