@@ -174,6 +174,7 @@ namespace renderengine
         static bool FrameBeginNoClear();
         static void ShowPixelBuffer();
         static bool ResizeDisplay(u32 luWidth, u32 luHeight);
+        static bool PreparePresentationPC();
 
         // Bind a render-target (surface) state on the device (DWARF renderengine::device.h:1042;
         // X360 guest renderengine__Device__SetState). The post-fx render-target wrapper calls this to
