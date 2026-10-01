@@ -11,6 +11,8 @@
 // FLAG PC-platform leaf: opt-in CPU frame tracing. No file I/O occurs inside a
 // measured frame. BRN_FRAME_PROFILE=1 collects bounded records and writes them
 // beside the executable on orderly shutdown (private harness slots stay private).
+// BRN_FRAME_TIMING_ONLY=1 keeps frame endpoints/counters but skips every section
+// timer, including the ordinary per-draw timers, for frame-pacing measurements.
 namespace renderengine
 {
     namespace FrameProfile
@@ -52,6 +54,7 @@ namespace renderengine
             LONGLONG miFrequency = 0, miPreviousEnd = 0;
             bool mbInitialized = false;
             bool mbDetailed = false;
+            bool mbTimingOnly = false;
             bool mbGpuTiming = false;
             void (*mpFinishGpu)() = nullptr;
         };
@@ -72,6 +75,8 @@ namespace renderengine
                 const char* lpcEnable = std::getenv("BRN_FRAME_PROFILE");
                 const char* lpcDetail = std::getenv("BRN_FRAME_DETAIL");
                 gCapture.mbDetailed = lpcDetail && lpcDetail[0] && lpcDetail[0] != '0';
+                const char* lpcTimingOnly = std::getenv("BRN_FRAME_TIMING_ONLY");
+                gCapture.mbTimingOnly = lpcTimingOnly && lpcTimingOnly[0] && lpcTimingOnly[0] != '0';
                 const char* lpcGpu = std::getenv("BRN_GPU_PROFILE");
                 gCapture.mbGpuTiming = lpcGpu && lpcGpu[0] && lpcGpu[0] != '0';
                 if (lpcEnable && lpcEnable[0] && lpcEnable[0] != '0')
@@ -108,7 +113,8 @@ namespace renderengine
             Section meDetail;
             LONGLONG miBegin;
             explicit Scope(Section leSection, Section leDetail = NUM_SECTIONS, bool lbEnabled = true)
-                : mpFrame(lbEnabled ? gCapture.mpCurrent : nullptr), meSection(leSection), meDetail(leDetail),
+                : mpFrame(lbEnabled && !gCapture.mbTimingOnly ? gCapture.mpCurrent : nullptr),
+                  meSection(leSection), meDetail(leDetail),
                   miBegin(mpFrame ? Now() : 0) {}
             ~Scope()
             {
@@ -120,8 +126,8 @@ namespace renderengine
             Scope(const Scope&) = delete;
             Scope& operator=(const Scope&) = delete;
         };
-        // Per-draw timing is a separate opt-in so clean comparisons retain
-        // the usual tracing overhead instead of thousands of extra QPC reads.
+        // Extra per-draw sections are separately enabled. Timing-only mode
+        // suppresses both these and the ordinary section timers above.
         struct DetailScope : Scope
         {
             explicit DetailScope(Section leSection)
@@ -214,8 +220,9 @@ namespace renderengine
                 std::snprintf(lacPath + luLength, MAX_PATH - luLength, ".frames.json");
                 if (FILE* lpFile = std::fopen(lacPath, "w"))
                 {
-                    std::fprintf(lpFile, "{\"frames\":%u,\"dropped_frames\":%u,\"counter_frequency\":%lld}\n",
-                        gCapture.muCount, gCapture.muDropped, gCapture.miFrequency);
+                    std::fprintf(lpFile, "{\"frames\":%u,\"dropped_frames\":%u,\"counter_frequency\":%lld,\"timing_only\":%s}\n",
+                        gCapture.muCount, gCapture.muDropped, gCapture.miFrequency,
+                        gCapture.mbTimingOnly ? "true" : "false");
                     std::fclose(lpFile);
                 }
             }
