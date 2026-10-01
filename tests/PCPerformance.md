@@ -927,6 +927,16 @@ remain unestablished.
 
 ## Remaining original optimization gaps
 
+For frame-pacing measurements, use `BRN_FRAME_PROFILE=1` with
+`BRN_FRAME_TIMING_ONLY=1`. This records two clock reads per frame while retaining
+draw counts, successful presents, camera transitions and combat qualification
+counters. Every section timer is disabled, including those normally active
+without `BRN_FRAME_DETAIL`; section-time CSV columns are therefore zero. The
+metadata marks `timing_only: true`. Leave this option off for CPU attribution.
+GPU timestamp queries and screenshots are separate diagnostics and still add
+overhead if enabled. `BRN_FRAME_PROFILE=0` keeps all frame recording disabled.
+The recorder regression is `python b5-decomp/tests/run_pc_frame_timing_only.py`.
+
 - Frame overlap is active, but the measured dispatch/presentation path still
   dominates the frame; broader combat and streaming coverage remains useful.
 - Native wheel/mesh instancing is active. Further gains need measured reductions
