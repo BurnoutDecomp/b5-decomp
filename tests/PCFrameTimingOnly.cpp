@@ -103,6 +103,8 @@ int main()
     fp::Begin();
     { fp::Stage lStage(fp::RENDER_SETUP); lStage.Next(fp::RENDER_SHADOWS); }
     { fp::CycleScope lCreate(fp::GEOMETRY_CREATE); }
+    for (unsigned lu = fp::POOL_REQUESTS; lu < fp::NUM_SECTIONS; ++lu)
+    { fp::CycleScope lScope(static_cast<fp::Section>(lu)); }
     for (unsigned lu = 0; lu < 5000; ++lu)
     {
         fp::Scope lSubmit(fp::GEOMETRY_SUBMIT);
@@ -233,6 +235,41 @@ int main()
           "CSV names align with new wall-time and raw-cycle columns");
     Check(ReadOutput(".frames.json").find("\"cpu_cycles_available\":true") != std::string::npos,
           "metadata identifies the available optional cycle source");
+
+    Reset("1", "0", "0", "1", "1");
+    fp::Begin();
+    for (unsigned lu = fp::POOL_REQUESTS; lu < fp::NUM_SECTIONS; ++lu)
+    {
+        fp::CycleScope lScope(static_cast<fp::Section>(lu));
+        siTicks += (lu - fp::POOL_REQUESTS + 1) * 1000;
+        suCycles += (lu - fp::POOL_REQUESTS + 1) * 100;
+    }
+    fp::End(); fp::Finish();
+    const std::string lResourceCsv = ReadOutput(".frames.csv");
+    Check(CsvValue(lResourceCsv, "pool_requests_ms") == 1
+          && CsvValue(lResourceCsv, "pool_requests_cycles") == 100,
+          "pool_requests wall time and raw cycles keep separate CSV columns");
+    Check(CsvValue(lResourceCsv, "pool_states_ms") == 2
+          && CsvValue(lResourceCsv, "pool_states_cycles") == 200,
+          "pool_states wall time and raw cycles keep separate CSV columns");
+    Check(CsvValue(lResourceCsv, "pool_retire_ms") == 3
+          && CsvValue(lResourceCsv, "pool_retire_cycles") == 300,
+          "pool_retire wall time and raw cycles keep separate CSV columns");
+    Check(CsvValue(lResourceCsv, "texture_realize_ms") == 4
+          && CsvValue(lResourceCsv, "texture_realize_cycles") == 400,
+          "texture_realize wall time and raw cycles keep separate CSV columns");
+    Check(CsvValue(lResourceCsv, "texture_gpu_create_ms") == 5
+          && CsvValue(lResourceCsv, "texture_gpu_create_cycles") == 500,
+          "texture_gpu_create wall time and raw cycles keep separate CSV columns");
+    Check(CsvValue(lResourceCsv, "texture_cpu_create_ms") == 6
+          && CsvValue(lResourceCsv, "texture_cpu_create_cycles") == 600,
+          "texture_cpu_create wall time and raw cycles keep separate CSV columns");
+    Check(CsvValue(lResourceCsv, "texture_upload_ms") == 7
+          && CsvValue(lResourceCsv, "texture_upload_cycles") == 700,
+          "texture_upload wall time and raw cycles keep separate CSV columns");
+    Check(CsvValue(lResourceCsv, "draws") == 0
+          && CsvValue(lResourceCsv, "cycle_read_failures") == 0,
+          "resource sections preserve subsequent counter alignment");
 
     Reset("1", "0", "0", "1", "1");
     fp::Begin(); sbCycleReadSucceeds = false;

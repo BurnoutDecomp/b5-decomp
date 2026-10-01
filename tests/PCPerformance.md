@@ -1191,6 +1191,37 @@ Evidence: `retirement_buckets_validation_1001.md`,
 `retirement_streaming_comparison_1001.json`, and the `retirement_*_1001` runs in
 the parent checkout's `scratch/performance_goal_0929/`.
 
+## Resource spikes: native texture allocation
+
+Coarse tracing now separates pool request processing, allocation state updates,
+and per-pool updates. It also measures texture realization, GPU and SYSTEMMEM
+creation, and uploads. `BRN_FRAME_CPU_CYCLES=1` records raw thread cycles for
+these spans. Timing-only and disabled profiling still suppress their clocks.
+Runtime texture edits also upload outside resource updates, so upload totals
+must not be treated as a strict subset of realization totals.
+
+A five-area diagnostic run passes all seven streaming/camera checks. Its two
+largest resource frames take 14.35 and 12.86 ms; texture realization accounts
+for 13.53 and 12.08 ms. In the first, native GPU creation takes 5.92 ms,
+SYSTEMMEM creation 6.69 ms, and upload 0.15 ms. Realization consumes 30.33
+million raw thread cycles. Both frames have zero geometry evictions. This
+identifies substantial texture-creation CPU work in addition to the previously
+observed driver wait; it is not a clean FPS measurement.
+
+A private staging-reuse experiment recorded zero hits during both streaming
+runs, so it is not included. Investigation found that normal pool retirement
+frees raster backing bytes without releasing the separately-created native D3D
+texture. FixDown can release it, but is not called on that path. Native raster
+relocation also needs review before a lifetime fix: the inherited ReBase passes
+address deltas to a PC FixUp that expects absolute pixel data. These remain
+open defects; this diagnostic change does not claim to fix them.
+
+Recorder tests pass 34 checks; dropping cycle deltas fails nine, including all
+seven new columns. Native texture tests pass 25, and the canonical build,
+faithfulness gate and bounded independent review pass. Evidence:
+`resource_attribution_validation_1001.md` and `resource_attribution_streaming_1001`
+in the parent checkout's `scratch/performance_goal_0929/`.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still
