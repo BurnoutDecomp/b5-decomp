@@ -4200,6 +4200,7 @@ namespace renderengine
     void WorldDraw_IndexedUP(u32 luPrimTypeXenon, u32 luBaseVertexIndex,
                              u32 luStartIndex, u32 luIndexCount)
     {
+    renderengine::FrameProfile::DetailScope lDetailProfile(renderengine::FrameProfile::WORLD_DRAW);
         Stride0Diag_AtDraw("WorldDraw_IndexedUP", luIndexCount);   // [FLAG PC DIAG] BRN_STRIDE0_DIAG, default off
         IDirect3DDevice9* lpDevice = Dev();
         ResolveFastSetStrideFromShader(lpDevice);   // FLAG PC platform leaf: a stride-0 stream's stride (above)
@@ -5165,6 +5166,7 @@ namespace renderengine
 
     void WorldDraw_NonIndexedUP(u32 luPrimTypeXenon, u32 luStartVertex, u32 luVertexCount)
     {
+    renderengine::FrameProfile::DetailScope lDetailProfile(renderengine::FrameProfile::IMMEDIATE_DRAW);
         Stride0Diag_AtDraw("WorldDraw_NonIndexedUP", luVertexCount);   // [FLAG PC DIAG] BRN_STRIDE0_DIAG, default off
         IDirect3DDevice9* lpDevice = Dev();
         ResolveFastSetStrideFromShader(lpDevice);   // FLAG PC platform leaf: a stride-0 stream's stride (above)

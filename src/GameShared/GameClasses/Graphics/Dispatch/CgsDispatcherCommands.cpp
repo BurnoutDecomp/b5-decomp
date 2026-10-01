@@ -1,4 +1,5 @@
 // =============================================================================
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 // CgsDispatcherCommands.cpp  (GameShared/GameClasses/Graphics/Dispatch)
 //
 // The render-dispatch command family: building the packed DispatchCommand stream
@@ -933,6 +934,7 @@ static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame
 void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFrame,
                                void* lpUserData, f32 /*lfTime*/)
 {
+    renderengine::FrameProfile::DetailScope lDetailProfile(renderengine::FrameProfile::OBJECT_TO_MESH);
     u32* lpWords = reinterpret_cast<u32*>(lpCommand);
     DispatchObjectContext* lpContext = static_cast<DispatchObjectContext*>(lpUserData);
 

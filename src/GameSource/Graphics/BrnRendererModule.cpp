@@ -1,6 +1,7 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertProbePC.h"
 #include "GameSource/Graphics/BrnRendererModule.h"
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"           // CgsRenderTarget::GetDepthTexture (the s15 bind)
@@ -2190,9 +2191,18 @@ bool BrnRendererModule::BuildDispatchLists(CgsGraphics::DispatchObjectContext* l
     lpContext->miListIdBase       = 0;
     lpContext->mbPreZEnabled      = mbRenderPreZ;
     lpContext->mbPreZAlphaEnabled = mbRenderPreZAlpha;
-    const f32 lfPreZDistance = mbPreZNearOnly ? mfPreZDistanceThreshold : 100000.0f;
+    // ARTIST8240C0FC..8240C130 copies the LINEAR threshold into context+E0.
+    // Interpret827FD62C..654 compares the mesh centre's clip w against it.
+    // The near-only switch controls a separate global used by occlusion;
+    // it neither squares nor overrides this object-to-mesh threshold.
+    // FLAG PC-platform leaf: retain the old range for controlled measurements.
+    static const bool sbLegacyPreZRange = [] {
+        const char* value = std::getenv("BRN_PREZ_ALL");
+        return value && value[0] && value[0] != '0';
+    }();
+    const f32 lfPreZDistance = sbLegacyPreZRange ? 10000000000.0f : mfPreZDistanceThreshold;
     for (u32 luLane = 0; luLane < 4; ++luLane)
-        lpContext->mvPreZDistanceThreshold[luLane] = lfPreZDistance * lfPreZDistance;
+        lpContext->mvPreZDistanceThreshold[luLane] = lfPreZDistance;
 
     // Object -> mesh expansion + the pass sorts.
     ConvertObjectsToMeshes(&mDoubleBufferedDispatchFrame, &mSingleBufferedDispatchFrame,
@@ -4816,6 +4826,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     const u32 luWorldOpaque      = mSingleBufferedDispatchFrame.GetList(11)->GetCount();
     const u32 luWorldTransparent = mSingleBufferedDispatchFrame.GetList(15)->GetCount();
     const u32 luCarTransparent   = mSingleBufferedDispatchFrame.GetList(20)->GetCount();
+    renderengine::FrameProfile::SceneLists(luPreZ, luWorldOpaque, luCarOpaque);
     mu32NumWorldOpaqueObjectTotals      += luWorldOpaque;
     mu32NumCarOpaqueObjectTotals        += luCarOpaque;
     mu32NumWorldTransparentObjectTotals += luWorldTransparent;

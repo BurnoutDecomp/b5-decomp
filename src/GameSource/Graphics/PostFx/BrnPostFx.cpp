@@ -1,4 +1,5 @@
 #include "GameSource/Graphics/PostFx/BrnPostFx.h"
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 
 #include <new>                                                                  // placement new (the carved effects)
 #include <cstdio>                                                               // std::snprintf (the seam's sampled diag)
@@ -969,6 +970,7 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
                                     bool lbMotionBlurEnabled,
                                     renderengine::Texture* lpOverrideSourceTexture)
 {
+    renderengine::FrameProfile::DetailScope lDetailProfile(renderengine::FrameProfile::POSTFX);
     ++renderengine::guDiagComposites;   // [DIAG] issue #30 per-present counters
     // The console's own source and destination: BrnRendererModule::Render @0x8240BFA8 loads
     // `lwz r27, 0x248(r31)` and `lwz r29, 0x24C(r31)` off mAllocatedRenderTargets at this+0x238,

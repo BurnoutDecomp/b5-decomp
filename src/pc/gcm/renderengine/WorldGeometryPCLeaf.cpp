@@ -799,6 +799,7 @@ EWorldGeometryPrepare WorldGeometry_Prepare(const WorldGeometryVertexPlan& lrVer
                                             const WorldGeometryIndexPlan& lrIndexPlan,
                                             WorldGeometryDraw* lpOutDraw)
 {
+    renderengine::FrameProfile::DetailScope lDetailProfile(renderengine::FrameProfile::GEOMETRY_LOOKUP);
     if (Dev() == nullptr || lrVertexPlan.mpData == nullptr || lrIndexPlan.mpRun == nullptr
         || lrVertexPlan.muNumVertices == 0 || lrVertexPlan.muExpandedStride == 0
         || lrIndexPlan.muIndexCount == 0)

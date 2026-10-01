@@ -727,6 +727,55 @@ The next profiling pass must separate remaining shader/state/dispatch costs from
 native Present waiting. Existing `geometry_prepare_ms` measures buffer creation,
 not the full retained-cache lookup path.
 
+## Original pre-Z range and draw-cost attribution
+
+ARTIST's renderer constructor (`8240A778`, stores at `8240BC78/BC7C`) enables
+near-only pre-Z and sets its distance to 200.0 (`8203BA4C = 43480000`). Render
+copies that **linear** distance into the object context at `8240C0FC..C130`.
+The mesh interpreter compares it to the transformed mesh centre's clip-space W
+at `827FD62C..654`. The separate near-only switch controls an occlusion global,
+not this context value.
+
+The port previously chose 100000 and squared it, effectively drawing distant
+opaque geometry again in the depth-only prepass. The original defaults and
+linear context value are restored. Normal colour passes still draw distant
+geometry. `BRN_PREZ_ALL=1` selects the previous range for comparisons.
+
+`run_pc_prez_range.py` passes seven checks using production context setup and
+the actual admission expression. It covers the 200 boundary, adjacent floats,
+distant meshes, the independent switch, nonintegral tuning and frame setup.
+The old context body fails five checks. Independent review, scoped faithfulness
+and the canonical build pass. A live 1440p capture shows intact near and far
+geometry, car, road and sky; the run exits without assertions or exceptions.
+
+Same-binary 1440p comparisons on build `75d6472f5a73`:
+
+| Workload | Previous range | Original range | Interpretation |
+| --- | ---: | ---: | --- |
+| Fixed scene, 45 seconds | 60.19 FPS | 70.74 FPS | 17.5% higher throughput in this scene |
+| Pre-Z meshes in that scene | 1,897 | 297 | 1,600 redundant depth draws removed |
+| World opaque meshes in that scene | 2,676 | 2,676 | Colour-list geometry preserved |
+| Fixed-scene p99 frame time | 29.61 ms | 25.34 ms | One paired observation |
+| Road Rage combat, 90 seconds | 69.71 FPS | 70.17 FPS | No meaningful combat speedup demonstrated |
+
+Both combat runs qualify: eight/seven takedowns, four victims each, multiple
+crashing and airborne rivals, 885/885 foreground samples each, no assertions,
+exceptions or frames over 50 ms. The fights and visible world mesh counts differ,
+so this pair does not isolate a combat gain. The fixed scene also retains moving
+traffic; its colour world count and view remain constant. Evidence is under
+`scratch/performance_goal_0929/prez_{stationary,combat}_{all,near}_1001` in the
+workflow workspace. The visual run is `prez_visual_1001`.
+
+`BRN_FRAME_DETAIL=1` adds opt-in timing for mesh expansion, technique/constants/
+buffer binding, full geometry-cache lookup, world/immediate draws and post-FX.
+It requires the existing `BRN_FRAME_PROFILE=1`; ordinary traces avoid these
+extra per-draw timer reads. Scopes can nest and must not be added together.
+Scene-list counts are included in ordinary frame traces. The diagnostic
+`renderer_breakdown_1001` identifies submission and native Present waiting as
+major costs; the fixed-scene pair still spends about 6.3 ms per frame in Present.
+That wait includes queued work and does not by itself establish GPU execution
+time. Neither the combat results nor a locked 165 FPS target are solved here.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still

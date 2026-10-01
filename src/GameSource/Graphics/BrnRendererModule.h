@@ -971,9 +971,10 @@ inline BrnRendererModule::BrnRendererModule()
     mbOcclusionCullCarTransparent = false;
     mbOcclusionCullWorldTransparent = false;
     mbOcclusionCullShadowMap = false;
-    mbPreZNearOnly = false;
+    // ARTIST8240BC78/7C: near-only flag and linear threshold (float8203BA4C).
+    mbPreZNearOnly = true;
     mbRenderPreZAlpha = false;
-    mfPreZDistanceThreshold = 0.0f;
+    mfPreZDistanceThreshold = 200.0f;
     mfOccludeeNearClipOffset = 0.0f;
     muOcclusionCullIndexCountThreshold = 0;
     mbGreyBackgroundColour = false;
