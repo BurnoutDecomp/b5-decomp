@@ -197,7 +197,10 @@ namespace renderengine
     // question). Bracket a cascade's draws with Begin/End; LastPixels returns the PREVIOUS
     // frame's count without stalling. ShadowProbe_TextureBound asks the runtime -- not the
     // engine's own shadow cache -- whether a texture is really bound at a sampler unit.
-    // All four defined in XenonD3D9Shims.cpp. DELETE with the shadow bring-up.
+    // Opt-in through BRN_SHADOW_PROBE=1; shadow override experiments also enable
+    // it unless BRN_SHADOW_PROBE explicitly disables it. These reports never
+    // decide what the renderer draws. Defined in XenonD3D9Shims.cpp.
+    bool ShadowProbe_Enabled();
     void ShadowProbe_Begin(u32 luCascade);
     void ShadowProbe_End(u32 luCascade);
     bool ShadowProbe_LastPixels(u32 luCascade, u32* lpuPixels);

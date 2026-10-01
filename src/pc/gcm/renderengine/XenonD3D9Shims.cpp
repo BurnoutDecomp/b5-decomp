@@ -8505,8 +8505,27 @@ namespace
     bool             sabShadowQueryHaveResult[KU_SHADOW_PROBE_CASCADES] = {};
 }
 
+// FLAG PC-platform leaf: debug-only pixel queries and CPU vertex tallies are
+// unnecessary during ordinary play. Preserve explicit shadow experiments.
+bool ShadowProbe_Enabled()
+{
+    static const bool sbEnabled = [] {
+        const char* lpcProbe = std::getenv("BRN_SHADOW_PROBE");
+        if (lpcProbe != nullptr)
+            return lpcProbe[0] != '\0' && lpcProbe[0] != '0';
+        return std::getenv("BRN_SHADOW_CULL") != nullptr
+            || std::getenv("BRN_SHADOW_BIAS") != nullptr
+            || std::getenv("BRN_SHADOW_SLOPEBIAS") != nullptr
+            || std::getenv("BRN_SHADOW_FALLBACKVS") != nullptr
+            || std::getenv("BRN_SHADOW_ZALWAYS") != nullptr
+            || std::getenv("BRN_SHADOW_FORCECWE") != nullptr;
+    }();
+    return sbEnabled;
+}
+
 void ShadowProbe_Begin(u32 luCascade)
 {
+    if (!ShadowProbe_Enabled()) return;
     IDirect3DDevice9* const lpDevice = Dev();
     if (lpDevice == nullptr || luCascade >= KU_SHADOW_PROBE_CASCADES)
         return;
