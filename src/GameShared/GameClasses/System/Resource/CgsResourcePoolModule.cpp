@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"       // ResourcePtr<ResourceIdList>
 #include "GameShared/GameClasses/System/Resource/CgsResourceIdListResourceType.h"
 #include <new>
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 
 // Original pool manager lifecycle and native storage. The resource-list
 // dispatch is integrated separately from construction of its working state.
@@ -281,31 +282,40 @@ namespace CgsResource
         PoolIO::InputBuffer*  lpIn  = static_cast<PoolIO::InputBuffer*>(lpInputBuffer);
         PoolIO::OutputBuffer* lpOut = static_cast<PoolIO::OutputBuffer*>(lpOutputBuffer);
 
-        lpOut->LockForWrite();
-        lpIn->LockForRead();
-        ProcessInputBuffer(lpIn, lpOut);
-        lpIn->UnlockForRead();
-        ProcessReceiverQueue(lpOut);
-        if (mProcessState == E_UPDATESTATE_IDLE)
         {
-            Events::AllocateResourceListRequest lRequest;
-            if (mPendingAllocationRequests.Pop(&lRequest))
-                DoAllocateResourceListRequest(&lRequest);
+            renderengine::FrameProfile::CycleScope lProfile(renderengine::FrameProfile::POOL_REQUESTS);
+            lpOut->LockForWrite();
+            lpIn->LockForRead();
+            ProcessInputBuffer(lpIn, lpOut);
+            lpIn->UnlockForRead();
+            ProcessReceiverQueue(lpOut);
+            if (mProcessState == E_UPDATESTATE_IDLE)
+            {
+                Events::AllocateResourceListRequest lRequest;
+                if (mPendingAllocationRequests.Pop(&lRequest))
+                    DoAllocateResourceListRequest(&lRequest);
+            }
         }
-        switch (mProcessState)
         {
-        case E_UPDATESTATE_ALLOCATING_LIST: UpdateAllocating(lpOut); break;
-        case E_UPDATESTATE_DEALLOCATING_LIST: UpdateDeAllocating(lpOut); break;
-        case E_UPDATESTATE_LIVEUPDATE: UpdateLiveUpdate(lpOut); break;
+            renderengine::FrameProfile::CycleScope lProfile(renderengine::FrameProfile::POOL_STATES);
+            switch (mProcessState)
+            {
+            case E_UPDATESTATE_ALLOCATING_LIST: UpdateAllocating(lpOut); break;
+            case E_UPDATESTATE_DEALLOCATING_LIST: UpdateDeAllocating(lpOut); break;
+            case E_UPDATESTATE_LIVEUPDATE: UpdateLiveUpdate(lpOut); break;
+            }
+            if (mProcessState == E_UPDATESTATE_INTELLIFRAG)
+                UpdateIntelliFrag(lpOut);
+            if (mProcessState == E_UPDATESTATE_EMERGENCYFRAG)
+                UpdateEmergencyFrag(lpOut);
+            lpOut->UnlockForWrite();
         }
-        if (mProcessState == E_UPDATESTATE_INTELLIFRAG)
-            UpdateIntelliFrag(lpOut);
-        if (mProcessState == E_UPDATESTATE_EMERGENCYFRAG)
-            UpdateEmergencyFrag(lpOut);
-        lpOut->UnlockForWrite();
-        for (s32 li = 0; li < KI_MAX_POOLS; ++li)
-            if (maPools[li].GetId() != -1)
-                maPools[li].Update();
+        {
+            renderengine::FrameProfile::CycleScope lProfile(renderengine::FrameProfile::POOL_RETIRE);
+            for (s32 li = 0; li < KI_MAX_POOLS; ++li)
+                if (maPools[li].GetId() != -1)
+                    maPools[li].Update();
+        }
         return mProcessState == E_UPDATESTATE_EMERGENCYFRAG;
     }
 

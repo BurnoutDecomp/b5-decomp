@@ -422,6 +422,7 @@ namespace renderengine
     // of RwRasterResourceType::FixUp.
     void Texture::Create(Texture* lpTexture, const Parameters* lpParams, const void* lpPixelData)
     {
+        FrameProfile::CycleScope lProfile(FrameProfile::TEXTURE_REALIZE);
         lpTexture->miFormat = lpParams->miFormat;
         lpTexture->muWidth = static_cast<u16>(lpParams->muWidth);
         lpTexture->muHeight = static_cast<u16>(lpParams->muHeight);

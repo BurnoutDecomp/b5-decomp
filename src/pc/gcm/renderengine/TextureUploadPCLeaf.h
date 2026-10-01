@@ -2,6 +2,7 @@
 
 #include <d3d9.h>
 #include <new>
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 
 // FLAG PC-platform leaf: D3D9Ex has no MANAGED pool. Keep a SYSTEMMEM upload
 // texture attached to the DEFAULT texture through COM private data. This keeps
@@ -59,6 +60,7 @@ namespace renderengine::TextureUploadPC
         HRESULT Upload(IDirect3DBaseTexture9* lpDestination)
         {
             if (!mbDirty || muActiveLocks) return S_OK;
+            FrameProfile::CycleScope lProfile(FrameProfile::TEXTURE_UPLOAD);
             IDirect3DDevice9* lpDevice=nullptr;
             HRESULT lhResult=lpDestination->GetDevice(&lpDevice);
             if(SUCCEEDED(lhResult)) { lhResult=lpDevice->UpdateTexture(mpTexture,lpDestination); lpDevice->Release(); }
@@ -77,10 +79,18 @@ namespace renderengine::TextureUploadPC
         if (!lppTexture) return E_POINTER;
         *lppTexture=nullptr;
         if (!lpDevice) return D3DERR_INVALIDCALL;
-        if (!IsExtended(lpDevice)) return lCreate(D3DPOOL_MANAGED,lppTexture);
+        if (!IsExtended(lpDevice)) {
+            FrameProfile::CycleScope lProfile(FrameProfile::TEXTURE_GPU_CREATE);
+            return lCreate(D3DPOOL_MANAGED,lppTexture);
+        }
         Texture *lpGpuTexture=nullptr,*lpCpuTexture=nullptr;
-        HRESULT lhResult=lCreate(D3DPOOL_DEFAULT,&lpGpuTexture);
-        if(SUCCEEDED(lhResult))lhResult=lCreate(D3DPOOL_SYSTEMMEM,&lpCpuTexture);
+        HRESULT lhResult;
+        { FrameProfile::CycleScope lProfile(FrameProfile::TEXTURE_GPU_CREATE);
+          lhResult=lCreate(D3DPOOL_DEFAULT,&lpGpuTexture); }
+        if(SUCCEEDED(lhResult)) {
+            FrameProfile::CycleScope lProfile(FrameProfile::TEXTURE_CPU_CREATE);
+            lhResult=lCreate(D3DPOOL_SYSTEMMEM,&lpCpuTexture);
+        }
         if(FAILED(lhResult)) { if(lpCpuTexture)lpCpuTexture->Release(); if(lpGpuTexture)lpGpuTexture->Release(); return lhResult; }
         Shadow* lpShadow=new(std::nothrow) Shadow(lpCpuTexture);
         if(!lpShadow) { lpCpuTexture->Release(); lpGpuTexture->Release(); return E_OUTOFMEMORY; }
