@@ -254,9 +254,9 @@ namespace
     // looked up under up to THREE different plans a frame (its lit technique, the z-only
     // pre-pass and the shadow cascades bind different declarations / runs), so the live key
     // set is ~10k, a load factor of ~1.2 on 8192. 32768 slots puts it at ~0.3 (~75% hits).
-    // The static footprint is 3.6 MB, but a probe touches ONE line per slot and the slots
-    // are sparse, so the lines actually touched per frame (~10k) do not grow with the table
-    // -- what grows is only how often two live keys share a slot.
+    // The table retains the completed draw as well as its full keys. A hit reads
+    // contiguous metadata instead of following two map nodes for the same immutable
+    // buffer/range values on every draw. At 160 bytes per entry this is 5 MiB.
     const u32 KU_FRONT_CACHE_ENTRIES = 32768u;
     static_assert((KU_FRONT_CACHE_ENTRIES & (KU_FRONT_CACHE_ENTRIES - 1u)) == 0u,
                   "the slot index is masked, not reduced -- entry count must be a power of two");
@@ -269,21 +269,18 @@ namespace
         u64                   muGeneration;   // 0 = never filled; see suGeometryGeneration
         VertexKey             mVertexKey;
         IndexKey              mIndexKey;
-        RetainedVertexBuffer* mpVertex;       // -> the map node's value, NOT owned
-        RetainedIndexBuffer*  mpIndex;        // -> the map node's value, NOT owned
+        WorldGeometryDraw     mDraw;          // borrowed native buffers, NOT owned
     };
 
     // POD in BSS: every slot starts at generation 0, which no live generation ever equals,
     // so the cold cache is all misses with no explicit initialisation anywhere.
     GeometryFrontCacheEntry saFrontCache[KU_FRONT_CACHE_ENTRIES];
 
-    // THE USE-AFTER-FREE GUARD. The slots above point straight into the maps' nodes. That
-    // is sound while they live -- unordered_map node addresses are stable across insert and
-    // rehash, so growth can never invalidate a slot -- but ERASE frees the node, and two
-    // places erase: the eviction sweep in WorldGeometry_OnResourceMemoryFreed and
-    // WorldGeometry_ReleaseAll. Both bump this counter AS they erase (see the call sites),
-    // and a hit is taken only when the slot was filled at its current value, so one erase
-    // anywhere retires every slot at once and no stale pointer can ever be dereferenced.
+    // THE LIFETIME GUARD. The cached draw borrows the maps' native buffer allocations.
+    // Their offsets, topology and ranges are immutable after creation. Both owners'
+    // erase paths (OnResourceMemoryFreed and ReleaseAll) retire this generation BEFORE
+    // releasing an allocation, so a hit never returns a retired native pointer/range.
+    // Map insertions/rehashes do not change the cached allocation or its metadata.
     //
     // Retiring the whole cache is the right trade because evictions are BURSTY: a track-unit
     // swap frees thousands of mirrors in one notification storm and would have invalidated
@@ -811,7 +808,7 @@ EWorldGeometryPrepare WorldGeometry_Prepare(const WorldGeometryVertexPlan& lrVer
     // Steady state is a repeat draw, so try the one slot these plans hash to before going
     // near either map. The hit is taken ONLY when both conditions hold:
     //   * the slot was filled at the CURRENT generation -- nothing has been erased since,
-    //     so its two node pointers still point at live map values (see suGeometryGeneration);
+    //     so its borrowed buffer allocations are still live (see suGeometryGeneration);
     //   * BOTH stored keys match these plans in full -- the same identity RawEqual would
     //     have tested, so the mirrors returned are exactly the ones the map lookups would
     //     have found, under this plan's stride/primitive type and no other's.
@@ -824,7 +821,7 @@ EWorldGeometryPrepare WorldGeometry_Prepare(const WorldGeometryVertexPlan& lrVer
         && IndexKeyMatchesPlan(lrSlot.mIndexKey, lrIndexPlan))
     {
         ++suFrontCacheHits;
-        FillDraw(*lrSlot.mpVertex, *lrSlot.mpIndex, lpOutDraw);
+        *lpOutDraw = lrSlot.mDraw;
         return E_WORLDGEOMETRY_READY;
     }
     ++suFrontCacheMisses;
@@ -860,16 +857,15 @@ EWorldGeometryPrepare WorldGeometry_Prepare(const WorldGeometryVertexPlan& lrVer
     // outcome field for the hit path to test.
     //
     // The generation is read AFTER the acquires on purpose: it is the generation these two
-    // pointers are live under. Nothing on the acquire path can erase a node (creation only
+    // allocations are live under. Nothing on the acquire path can erase a node (creation only
     // inserts, and D3D9's own managed-pool eviction does not run our free hook), so it
     // cannot have moved between the lookup and this store.
     lrSlot.mVertexKey   = lVertexKey;
     lrSlot.mIndexKey    = lIndexKey;
-    lrSlot.mpVertex     = lpVertex;
-    lrSlot.mpIndex      = lpIndex;
+    FillDraw(*lpVertex, *lpIndex, lpOutDraw);
+    lrSlot.mDraw        = *lpOutDraw;
     lrSlot.muGeneration = suGeometryGeneration;
 
-    FillDraw(*lpVertex, *lpIndex, lpOutDraw);
     ReportIfDue();
     return E_WORLDGEOMETRY_READY;
 }
@@ -950,7 +946,7 @@ void WorldGeometry_OnResourceMemoryFreed(const void* lpBase, size_t luSize)
                     continue;
                 }
                 // BEFORE the Release AND the erase, never after: a front-cache slot may
-                // point at this node and hand out its mpBuffer, so the cache is retired
+                // hand out this allocation's mpBuffer/range, so the cache is retired
                 // first and no window exists in which a slot could still be believed. One
                 // increment, adjacent to the free, so the ordering cannot be lost in a later
                 // edit. (Bumping per eviction rather than per sweep costs nothing -- the
@@ -1014,8 +1010,8 @@ void WorldGeometry_ReleaseAll()
 {
     GeometryBindingsPC::gCache.Invalidate();
     WorldVd32_ReleaseAll();
-    // First, before a single node dies: every front-cache slot points into the maps about
-    // to be cleared, so retire them all up front (unconditionally here -- this erases
+    // First, before a single allocation dies: front-cache draws borrow those buffers,
+    // so retire them all up front (unconditionally here -- this erases
     // everything by definition).
     RetireFrontCache();
     suFrontCacheHits   = 0;

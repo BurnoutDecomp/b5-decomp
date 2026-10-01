@@ -118,7 +118,34 @@ int main() {
         Check(second.muMinIndex==3 && second.muMaxIndex==5 && second.muPrimitiveCount==2,
               "range comes from final triangles and excludes reset markers");
         Check(DrawPixel(second,1)==0xff0000,"nonzero minimum index and base vertex preserve rendered geometry");
+        WorldGeometryDraw warm={};const auto hits=suFrontCacheHits;
+        Check(WorldGeometry_Prepare(vp,ip,&warm)==E_WORLDGEOMETRY_READY&&suFrontCacheHits==hits+1
+              &&std::memcmp(&second,&warm,sizeof(warm))==0,
+              "warm geometry retains every draw field including pooled offsets, recut topology and first indices");
+        Check(DrawPixel(warm,1)==0xff0000,"cached draw metadata renders the same nonzero-base reset-strip pixel");
     }
+    // Retiring only the index resource must also invalidate completed cached
+    // draws, even though the vertex allocation remains resident and unchanged.
+    Vertex colourTriangles[6];
+    for(unsigned i=0;i<6;++i){colourTriangles[i]=vertices[i%3];colourTriangles[i].colour=i<3?0xffff0000:0xff0000ff;}
+    unsigned short mutableIndices[]={0,1,2};
+    WorldGeometryVertexPlan colourVp={};colourVp.mpHeader=colourVp.mpData=colourTriangles;
+    colourVp.muNumVertices=6;colourVp.muSourceStride=colourVp.muExpandedStride=sizeof(Vertex);
+    WorldGeometryIndexPlan colourIp={};colourIp.mpHeader=colourIp.mpRun=mutableIndices;
+    colourIp.muIndexCount=3;colourIp.miMappedPrimitiveType=D3DPT_TRIANGLELIST;colourIp.muMappedPrimitiveCount=1;
+    WorldGeometryDraw colourDraw={};
+    Check(WorldGeometry_Prepare(colourVp,colourIp,&colourDraw)==E_WORLDGEOMETRY_READY
+          &&WorldGeometry_Prepare(colourVp,colourIp,&colourDraw)==E_WORLDGEOMETRY_READY
+          &&DrawPixel(colourDraw)==0xff0000,"cached indexed geometry initially selects the red triangle");
+    WorldGeometry_OnResourceMemoryFreed(mutableIndices,sizeof(mutableIndices));
+    mutableIndices[0]=3;mutableIndices[1]=4;mutableIndices[2]=5;
+    Check(WorldGeometry_Prepare(colourVp,colourIp,&colourDraw)==E_WORLDGEOMETRY_READY
+          &&colourDraw.muMinIndex==3&&colourDraw.muMaxIndex==5&&DrawPixel(colourDraw)==0x0000ff,
+          "index-only retirement and source-address reuse replace cached ranges and render the blue triangle");
+    WorldGeometry_ReleaseAll();
+    for(unsigned i=3;i<6;++i)colourTriangles[i].colour=0xffffff00;
+    Check(WorldGeometry_Prepare(colourVp,colourIp,&colourDraw)==E_WORLDGEOMETRY_READY
+          &&DrawPixel(colourDraw)==0xffff00,"full geometry release rebuilds changed source data and renders the yellow triangle");
     const unsigned int triangleTail[]={0,1,2,0xffffffffu};
     vp.mpHeader=vp.mpData=vertices; vp.muNumVertices=3;
     ip.mpHeader=ip.mpRun=triangleTail; ip.muIndexCount=4; ip.mb32Bit=true; ip.mbResetEnabled=false;
