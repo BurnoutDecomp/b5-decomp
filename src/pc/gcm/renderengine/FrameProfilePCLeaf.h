@@ -39,6 +39,8 @@ namespace renderengine
             unsigned muPreZMeshes = 0, muWorldOpaqueMeshes = 0, muCarOpaqueMeshes = 0;
             unsigned muGpuStatus = 0;
             double mfGpuSceneMs = -1, mfGpuOutputMs = -1;
+            unsigned muVertexBindRequests = 0, muVertexBindSkips = 0;
+            unsigned muIndexBindRequests = 0, muIndexBindSkips = 0, muRebasedDraws = 0;
         };
         struct Capture
         {
@@ -144,6 +146,15 @@ namespace renderengine
         inline void Draw() { if (gCapture.mpCurrent) ++gCapture.mpCurrent->muDraws; }
         inline void Present() { if (gCapture.mpCurrent) ++gCapture.mpCurrent->muPresents; }
         inline void NativeBuffer() { if (gCapture.mpCurrent) ++gCapture.mpCurrent->muNativeBuffers; }
+        inline void GeometryBinding(bool lbVertex, bool lbSkipped)
+        {
+            if (Frame* lpFrame = gCapture.mpCurrent)
+            {
+                if (lbVertex) { ++lpFrame->muVertexBindRequests; lpFrame->muVertexBindSkips += lbSkipped; }
+                else { ++lpFrame->muIndexBindRequests; lpFrame->muIndexBindSkips += lbSkipped; }
+            }
+        }
+        inline void RebasedDraw() { if (gCapture.mpCurrent) ++gCapture.mpCurrent->muRebasedDraws; }
         inline void Instanced(unsigned count) { if (gCapture.mpCurrent) {
             ++gCapture.mpCurrent->muInstancedDraws; gCapture.mpCurrent->muInstances += count; } }
         inline void SceneLists(unsigned preZ, unsigned world, unsigned cars) { if (gCapture.mpCurrent) {
@@ -180,7 +191,7 @@ namespace renderengine
                 std::snprintf(lacPath + luLength, MAX_PATH - luLength, ".frames.csv");
                 if (FILE* lpFile = std::fopen(lacPath, "w"))
                 {
-                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,object_to_mesh_ms,mesh_technique_ms,mesh_constants_ms,mesh_buffers_ms,geometry_lookup_ms,world_draw_ms,immediate_draw_ms,postfx_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end,instanced_draws,instances,prez_meshes,world_opaque_meshes,car_opaque_meshes,gpu_status,gpu_scene_ms,gpu_output_ms\n");
+                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,object_to_mesh_ms,mesh_technique_ms,mesh_constants_ms,mesh_buffers_ms,geometry_lookup_ms,world_draw_ms,immediate_draw_ms,postfx_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end,instanced_draws,instances,prez_meshes,world_opaque_meshes,car_opaque_meshes,gpu_status,gpu_scene_ms,gpu_output_ms,vb_bind_requests,vb_bind_skips,ib_bind_requests,ib_bind_skips,rebased_draws\n");
                     const double lfMs = 1000.0 / static_cast<double>(gCapture.miFrequency);
                     for (unsigned lu = 0; lu < gCapture.muCount; ++lu)
                     {
@@ -195,7 +206,8 @@ namespace renderengine
                             lr.muIndexCreates, lr.muUploadedBytes, lr.muEvictions, lr.muDraws,
                             lr.miCameraBegin, lr.miCameraEnd, lr.muCameraChanges, lr.muPresents, lr.muNativeBuffers,
                             lr.muPlayerTakedowns, lr.muTakedownVictims, lr.muRivals, lr.muCrashingRivals, lr.muAirborneRivals, lr.miEnd, lr.muInstancedDraws, lr.muInstances, lr.muPreZMeshes, lr.muWorldOpaqueMeshes, lr.muCarOpaqueMeshes);
-                        std::fprintf(lpFile, ",%u,%.6f,%.6f\n", lr.muGpuStatus, lr.mfGpuSceneMs, lr.mfGpuOutputMs);
+                        std::fprintf(lpFile, ",%u,%.6f,%.6f,%u,%u,%u,%u,%u\n", lr.muGpuStatus, lr.mfGpuSceneMs, lr.mfGpuOutputMs,
+                            lr.muVertexBindRequests, lr.muVertexBindSkips, lr.muIndexBindRequests, lr.muIndexBindSkips, lr.muRebasedDraws);
                     }
                     std::fclose(lpFile);
                 }

@@ -3,6 +3,7 @@
 #include <d3d9.h>
 #include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
 #include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
+#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 
 namespace renderengine
 {
@@ -49,6 +50,7 @@ namespace renderengine
                 mpState->Apply();
                 gPCShaderConstantCache.Invalidate();
                 gPCSamplerStateCache.Invalidate();
+                GeometryBindingsPC::gCache.Invalidate();
                 if (mbSceneWasOpen) mpDevice->BeginScene();
             }
             for (auto* lpTarget : mapTargets) if (lpTarget) lpTarget->Release();

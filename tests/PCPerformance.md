@@ -36,6 +36,7 @@ python b5-decomp/tests/run_pc_geometry_buffer_pool.py
 python b5-decomp/tests/run_pc_dispatch_sort.py
 python b5-decomp/tests/run_pc_im2d_buffer.py
 python b5-decomp/tests/run_pc_world_geometry_buffers.py
+python b5-decomp/tests/run_pc_instancing.py
 python b5-decomp/tests/run_pc_tint_blend.py
 python b5-decomp/tests/run_pc_fullscreen.py
 python b5-decomp/tests/run_pc_flip_resources.py
@@ -891,6 +892,38 @@ separate default capture. Build, bounded independent review and faithfulness pas
 Evidence: `shadow_probe_{on,off}_static_1001`, `shadow_probe_off_visual_1001` under
 the parent checkout's performance scratch directory. This does not establish a
 Road Rage speedup or locked 165 FPS.
+
+## Native geometry bindings
+
+Native stream-zero and index-buffer bindings now reuse successful bindings.
+Whole pooled vertices move into the indexed draw's base where the resulting byte
+addresses are identical. Negative/overflowing bases and unusual layouts keep
+the prior addressing form. `BRN_GEOMETRY_BIND_CACHE=0` selects the old bindings
+and disables rebasing for comparison. Immediate-mode draws invalidate the
+bindings they clear, following the [D3D9 UP contract](https://learn.microsoft.com/en-us/windows/win32/api/d3d9/nf-d3d9-idirect3ddevice9-drawindexedprimitiveup);
+assert restoration, device creation/reset and full geometry release also invalidate.
+
+Native geometry checks pass 46/46, including failed binds, source retirement,
+UP draws, real assert state restoration, signed bases, compressed normals and
+16/32-bit indices. Instancing passes 18/18 including a rebased pooled source;
+the GUI, display and GPU-timing suites pass 95/95, 87/87 and 16/16. Removing UP
+invalidation fails four checks; removing assert invalidation produces wrong pixels.
+
+The same-binary 1440p stationary pair skips 27.7% of vertex bindings and 76.9% of
+index bindings (about 5,315 API calls per frame), with identical world/pre-Z counts.
+Mean geometry submission falls from 2.03 to 1.83 ms. Average FPS is 123.95 versus
+126.11; P99 is 10.92 versus 10.91 ms. This small pair is not evidence of another
+large FPS gain. Both runs remain fully foreground. Frame CSV fields
+`vb_bind_requests`, `vb_bind_skips`, `ib_bind_requests`, `ib_bind_skips` and
+`rebased_draws` record actual use. Evidence: `binding_{control,default}_static_1001`.
+
+Live F11/resize/pause/minimize and a 75-second combat/streaming capture pass without
+assertions, exceptions or native draw failures. The combat capture has four player
+takedowns across three victims, peak four crashing/two airborne rivals and intact
+vehicle/world/HUD pixels; it is below the five-takedown benchmark threshold, so
+its FPS is excluded. Evidence: `binding_display_live_1001` and
+`binding_combat_visual_1001`. Locked 165 FPS and a qualified clean combat comparison
+remain unestablished.
 
 ## Remaining original optimization gaps
 

@@ -2,6 +2,7 @@
 
 #include <d3d9.h>
 #include "pc/gcm/renderengine/GpuFrameTimingPCLeaf.h"
+#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 
 // FLAG PC-platform leaf: primary D3D9Ex flip output. ResetEx must execute on the
 // device-creation thread, between joined engine frames. A failed reset is rolled
@@ -45,6 +46,7 @@ namespace renderengine
             if(!mbLost && luWidth==muFailedWidth && luHeight==muFailedHeight)return E_OUTOFMEMORY;
             if(!lbAllowReset || GetCurrentThreadId()!=muThread)return E_PENDING;
             GpuFrameTimingPC::DeviceReset();
+            GeometryBindingsPC::gCache.Invalidate();
             D3DPRESENT_PARAMETERS lDesired=mParameters;
             lDesired.BackBufferWidth=luWidth;lDesired.BackBufferHeight=luHeight;lDesired.PresentationInterval=luInterval;
             D3DPRESENT_PARAMETERS lRequest=lDesired; // ResetEx overwrites size/count fields.

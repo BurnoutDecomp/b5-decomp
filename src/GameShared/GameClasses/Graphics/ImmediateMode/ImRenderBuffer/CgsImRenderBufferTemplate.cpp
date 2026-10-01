@@ -1,3 +1,4 @@
+#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 // =============================================================================
 // CgsGraphics::ImRenderBuffer<V> - method bodies, faithfully decompiled from the
 // PS3 External ELF dossiers for the <Basic2dColouredTexturedVertex> instantiation
@@ -2099,7 +2100,7 @@ namespace CgsGraphics
                     CgsDev::Log::WriteToLog(lacDispMsg);
                 }
 
-                const HRESULT lhrImDraw = lpDevice->DrawPrimitiveUP(leTopology, luPrimCount, saBatch, sizeof(DispatchScreenVertex));
+                const HRESULT lhrImDraw = renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, leTopology, luPrimCount, saBatch, sizeof(DispatchScreenVertex));
                 // [DIAG] NOT IN THE X360 BINARY -- issue #30: on black presents, where did this batch go and did it fail.
                 {
                     static u32 suImBlackPrinted = 0u;

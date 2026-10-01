@@ -100,7 +100,10 @@ namespace renderengine
                                                 const WorldGeometryIndexPlan& lrIndexPlan,
                                                 WorldGeometryDraw* lpOutDraw);
 
-    // Bind the mirrors and submit. Returns the D3D9 HRESULT of the draw.
+    // Bind the mirrors and submit. Pooled whole-vertex offsets may move into
+    // BaseVertexIndex without changing vertex addresses; redundant native
+    // bindings are shared with the UP/state-block invalidation paths.
+    // Returns the D3D9 HRESULT of a failed bind or the draw.
     s32 WorldGeometry_Submit(const WorldGeometryDraw& lrDraw, u32 luBaseVertexIndex);
 
     // Release every mirror whose header pointer or source bytes lie inside the block

@@ -23,4 +23,4 @@ if args.uniform_matrix or args.explicit_operands_only:
 result=compile_and_run(Path(__file__).with_name('PCInstancing.cpp'),
     'pc_instancing_unused.inc','', 'PCInstancing',shadow=shadow,
     extra_flags='d3d9.lib d3dcompiler.lib user32.lib')
-raise SystemExit(report('run_pc_instancing',[],result,17))
+raise SystemExit(report('run_pc_instancing',[],result,18))

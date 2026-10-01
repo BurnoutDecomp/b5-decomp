@@ -5,6 +5,7 @@
 #include <vector>
 #include <cstring>
 #include "pc/gcm/renderengine/InstancingPCLeaf.h"
+#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 
 static int checks, failures;
 static void Check(bool ok, const char* text) { ++checks; if (!ok) { ++failures; std::printf("FAIL %s\n", text); } }
@@ -110,6 +111,21 @@ float4 ps(Output v):COLOR0 { return v.colour; }
     cache.End();device->EndScene();const auto instanced=Pixels(device);
     Check(began&&SUCCEEDED(draw),"the real D3D9 device executes one indexed hardware-instanced draw");
     Check(began&&reference==instanced,"one instanced draw exactly matches five draws including matrix selection, wheel values and blending order");
+    IDirect3DVertexBuffer9* padded=nullptr;
+    device->CreateVertexBuffer(64+sizeof(vertices),D3DUSAGE_WRITEONLY,0,D3DPOOL_MANAGED,&padded,nullptr);
+    bool rebased=padded&&SUCCEEDED(padded->Lock(64,sizeof(vertices),&data,0));
+    if(rebased){std::memcpy(data,vertices,sizeof(vertices));padded->Unlock();
+        const auto window=renderengine::GeometryBindingsPC::Rebase(64,20,0);
+        device->Clear(0,nullptr,D3DCLEAR_TARGET,0,1,0);device->BeginScene();
+        rebased=cache.Begin(device,vs,declaration,matrices[0],wheel[0],5);
+        renderengine::GeometryBindingsPC::gCache.BindVertex(device,padded,window.muOffset,20);
+        renderengine::GeometryBindingsPC::gCache.BindIndex(device,ib);
+        if(rebased)rebased=SUCCEEDED(device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST,window.miBase,0,3,0,1));
+        cache.End();device->EndScene();rebased&=Pixels(device)==reference;
+        renderengine::GeometryBindingsPC::gCache.BindVertex(device,vb,0,20);
+    }
+    Check(rebased,"rebasing a pooled vertex offset preserves independent instance-stream addressing");
+    if(padded)padded->Release();
     UINT frequency0=0,frequency1=0,stride=0,offset=0;IDirect3DVertexBuffer9* extra=nullptr;
     device->GetStreamSourceFreq(0,&frequency0);device->GetStreamSourceFreq(1,&frequency1);
     device->GetStreamSource(1,&extra,&offset,&stride);

@@ -1,4 +1,5 @@
 #include "pc/gcm/renderengine/WorldGeometryPCLeaf.cpp"
+#include "pc/gcm/renderengine/AssertFramePCLeaf.h"
 #include <d3dcompiler.h>
 
 namespace renderengine {
@@ -12,6 +13,38 @@ namespace CgsDev { namespace Log { void WriteToLog(const char*) {} } }
 static int checks, failures;
 static void Check(bool pass,const char* name) {
     ++checks; if (!pass) { ++failures; std::printf("FAIL %s\n",name); }
+}
+static void BindingProtocol() {
+    using namespace renderengine::GeometryBindingsPC;
+    struct Device {
+        unsigned vertexCalls=0,indexCalls=0;
+        bool failVertex=false,failIndex=false;
+        HRESULT SetStreamSource(UINT,IDirect3DVertexBuffer9*,UINT,UINT) {
+            ++vertexCalls;return failVertex?D3DERR_INVALIDCALL:S_OK;
+        }
+        HRESULT SetIndices(IDirect3DIndexBuffer9*) {++indexCalls;return failIndex?D3DERR_INVALIDCALL:S_OK;}
+    } first,second;
+    Cache cache;
+    auto* vertex=reinterpret_cast<IDirect3DVertexBuffer9*>(uintptr_t(1));
+    auto* index=reinterpret_cast<IDirect3DIndexBuffer9*>(uintptr_t(2));
+    cache.BindVertex(&first,vertex,4,20);cache.BindIndex(&first,index);
+    cache.BindVertex(&first,vertex,4,20);cache.BindIndex(&first,index);
+    Check(first.vertexCalls==1&&first.indexCalls==1,"identical successful bindings avoid native calls");
+    cache.BindVertex(&first,vertex,8,20);cache.BindVertex(&first,vertex,8,24);
+    Check(first.vertexCalls==3,"offset and stride changes cannot reuse a stale binding");
+    first.failVertex=true;
+    Check(FAILED(cache.BindVertex(&first,vertex,12,24)),"failed vertex binding propagates failure");
+    first.failVertex=false;cache.BindVertex(&first,vertex,12,24);
+    Check(first.vertexCalls==5,"failed vertex bindings are retried even for the same request");
+    cache.InvalidateUP(&first,true);first.failIndex=true;
+    Check(FAILED(cache.BindIndex(&first,index)),"failed index binding propagates failure");
+    first.failIndex=false;cache.BindIndex(&first,index);
+    Check(first.indexCalls==3,"failed index bindings are retried even for the same request");
+    cache.BindVertex(&second,vertex,12,24);cache.BindIndex(&second,index);
+    Check(second.vertexCalls==1&&second.indexCalls==1,"another device cannot inherit the previous bindings");
+    const auto negative=Rebase(64,20,-1),overflow=Rebase(64,4,INT_MAX),zero=Rebase(64,0,3);
+    Check(negative.muOffset==64&&negative.miBase==-1&&overflow.muOffset==64&&overflow.miBase==INT_MAX&&zero.muOffset==64&&zero.miBase==3,
+          "negative, overflowing and zero-stride bases retain their original addressing");
 }
 static DWORD ReadPixel(unsigned x=16,unsigned y=16) {
     auto device=renderengine::gDevice;
@@ -38,6 +71,8 @@ static DWORD DrawPixel(const renderengine::WorldGeometryDraw& draw,unsigned base
     return ReadPixel();
 }
 int main() {
+    _putenv_s("BRN_GEOMETRY_BIND_CACHE","1");
+    BindingProtocol();
     using namespace renderengine;
     HWND window=CreateWindowA("STATIC","Geometry buffers",WS_OVERLAPPEDWINDOW,0,0,64,64,nullptr,nullptr,GetModuleHandle(nullptr),nullptr);
     auto d3d=Direct3DCreate9(D3D_SDK_VERSION);
@@ -91,6 +126,45 @@ int main() {
     Check(WorldGeometry_Prepare(vp,ip,&second)==E_WORLDGEOMETRY_READY,"incomplete triangle-list tail is accepted");
     Check(second.muMinIndex==0 && second.muMaxIndex==2,"unused 32-bit tail cannot wrap or inflate the vertex range");
     Check(DrawPixel(second)==0xff0000,"valid triangle before unused sentinel still renders");
+    // A GUI/debug UP draw clears bindings inside D3D9. The next retained draw
+    // must bind them again even when its resource identities did not change.
+    Vertex blue[3];std::memcpy(blue,vertices,sizeof(blue));
+    for(auto& v:blue)v.colour=0xff0000ff;
+    for(bool indexed:{false,true}) {
+        GeometryBindingsPC::gCache.Invalidate();
+        FrameProfile::Frame frame{};FrameProfile::gCapture.mpCurrent=&frame;
+        gDevice->Clear(0,nullptr,D3DCLEAR_TARGET,0,1,0);gDevice->BeginScene();
+        WorldGeometry_Submit(second,0);
+        HRESULT up=indexed?GeometryBindingsPC::DrawIndexedPrimitiveUP(gDevice,D3DPT_TRIANGLELIST,0,3,1,indices,D3DFMT_INDEX16,blue,sizeof(Vertex))
+                          :GeometryBindingsPC::DrawPrimitiveUP(gDevice,D3DPT_TRIANGLELIST,1,blue,sizeof(Vertex));
+        const HRESULT restored=WorldGeometry_Submit(second,0);gDevice->EndScene();
+        FrameProfile::gCapture.mpCurrent=nullptr;
+        Check(SUCCEEDED(up)&&SUCCEEDED(restored)&&ReadPixel()==0xff0000,"retained geometry restores correct pixels after an UP draw");
+        Check(frame.muVertexBindRequests==2&&frame.muVertexBindSkips==0&&frame.muIndexBindSkips==(indexed?0u:1u),
+              "UP invalidation preserves only bindings that D3D actually retains");
+    }
+    // Exercise the real assert state-block restoration with a different native
+    // vertex buffer bound during the overlay. Cache invalidation must follow Apply.
+    IDirect3DVertexBuffer9* overlayBuffer=nullptr;void* overlayBytes=nullptr;
+    gDevice->CreateVertexBuffer(sizeof(blue),D3DUSAGE_WRITEONLY,0,D3DPOOL_DEFAULT,&overlayBuffer,nullptr);
+    bool overlayValid=overlayBuffer&&SUCCEEDED(overlayBuffer->Lock(0,0,&overlayBytes,0));
+    if(overlayValid){std::memcpy(overlayBytes,blue,sizeof(blue));overlayBuffer->Unlock();
+        WorldGeometryDraw overlay=second;overlay.mpVertexBuffer=overlayBuffer;overlay.muVertexOffset=0;
+        gDevice->BeginScene();WorldGeometry_Submit(second,0);
+        IDirect3DSurface9* back=nullptr;gDevice->GetBackBuffer(0,0,D3DBACKBUFFER_TYPE_MONO,&back);
+        { PCAssertFrame scope(gDevice,back);overlayValid&=scope.IsReady();
+            gDevice->BeginScene();overlayValid&=SUCCEEDED(WorldGeometry_Submit(overlay,0));gDevice->EndScene(); }
+        if(back)back->Release();
+        gDevice->Clear(0,nullptr,D3DCLEAR_TARGET,0,1,0);
+        overlayValid&=SUCCEEDED(WorldGeometry_Submit(overlay,0));gDevice->EndScene();
+        overlayValid&=ReadPixel()==0x0000ff;
+    }
+    Check(overlayValid,"assert state restoration cannot leave a stale native binding cache");
+    if(overlayBuffer)overlayBuffer->Release();
+    const unsigned short negativeIndices[]={1,2,3};WorldGeometryDraw negativeDraw{};
+    ip.mpHeader=ip.mpRun=negativeIndices;ip.muIndexCount=3;ip.mb32Bit=false;
+    Check(WorldGeometry_Prepare(vp,ip,&negativeDraw)==E_WORLDGEOMETRY_READY&&DrawPixel(negativeDraw,~0u)==0xff0000,
+          "valid negative base with nonzero minimum index keeps its original pixels");
     const unsigned short lineTail[]={0,1,0xffffu};
     ip.mpHeader=ip.mpRun=lineTail; ip.muIndexCount=3; ip.mb32Bit=false;
     ip.miMappedPrimitiveType=D3DPT_LINELIST; ip.muMappedPrimitiveCount=1;
