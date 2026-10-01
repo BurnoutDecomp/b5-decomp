@@ -33,6 +33,7 @@ namespace renderengine
             unsigned muNativeBuffers = 0;
             unsigned muPlayerTakedowns = 0, muTakedownVictims = 0;
             unsigned muRivals = 0, muCrashingRivals = 0, muAirborneRivals = 0;
+            unsigned muInstancedDraws = 0, muInstances = 0;
         };
         struct Capture
         {
@@ -124,6 +125,8 @@ namespace renderengine
         inline void Draw() { if (gCapture.mpCurrent) ++gCapture.mpCurrent->muDraws; }
         inline void Present() { if (gCapture.mpCurrent) ++gCapture.mpCurrent->muPresents; }
         inline void NativeBuffer() { if (gCapture.mpCurrent) ++gCapture.mpCurrent->muNativeBuffers; }
+        inline void Instanced(unsigned count) { if (gCapture.mpCurrent) {
+            ++gCapture.mpCurrent->muInstancedDraws; gCapture.mpCurrent->muInstances += count; } }
         inline bool Active() { return gCapture.mpCurrent != nullptr; }
         inline void PlayerTakedown(int liVictim)
         {
@@ -154,7 +157,7 @@ namespace renderengine
                 std::snprintf(lacPath + luLength, MAX_PATH - luLength, ".frames.csv");
                 if (FILE* lpFile = std::fopen(lacPath, "w"))
                 {
-                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end\n");
+                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end,instanced_draws,instances\n");
                     const double lfMs = 1000.0 / static_cast<double>(gCapture.miFrequency);
                     for (unsigned lu = 0; lu < gCapture.muCount; ++lu)
                     {
@@ -165,10 +168,10 @@ namespace renderengine
                             (lr.miEnd - lr.miBegin) * lfMs);
                         for (unsigned ls = 0; ls < NUM_SECTIONS; ++ls)
                             std::fprintf(lpFile, ",%.6f", lr.maTicks[ls] * lfMs);
-                        std::fprintf(lpFile, ",%u,%u,%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%lld\n", lr.muVertexCreates,
+                        std::fprintf(lpFile, ",%u,%u,%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%lld,%u,%u\n", lr.muVertexCreates,
                             lr.muIndexCreates, lr.muUploadedBytes, lr.muEvictions, lr.muDraws,
                             lr.miCameraBegin, lr.miCameraEnd, lr.muCameraChanges, lr.muPresents, lr.muNativeBuffers,
-                            lr.muPlayerTakedowns, lr.muTakedownVictims, lr.muRivals, lr.muCrashingRivals, lr.muAirborneRivals, lr.miEnd);
+                            lr.muPlayerTakedowns, lr.muTakedownVictims, lr.muRivals, lr.muCrashingRivals, lr.muAirborneRivals, lr.miEnd, lr.muInstancedDraws, lr.muInstances);
                     }
                     std::fclose(lpFile);
                 }

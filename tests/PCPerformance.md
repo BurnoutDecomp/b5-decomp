@@ -688,13 +688,51 @@ full game-module release chain, so ResourceModule cancellation is tested when
 invoked but is not claimed as normal-exit cleanup. Hardware shutdown joins its
 workers before retiring their allocator. These changes do not establish 165 FPS.
 
+## Native geometry instancing
+
+The original instance groups now reach D3D9 as one indexed draw in both colour
+and shadow passes. Dispatch packets retain the original matrix/index snapshots;
+the instance stream supplies each matrix and wheel value to a variant of the
+existing vertex shader. Shader arithmetic and the pixel shader remain unchanged.
+Unsupported register/stream combinations retain individual draws with complete
+per-instance constant bindings. `BRN_INSTANCING_EXPAND=1` selects the previous
+CPU expansion for comparisons.
+
+The native backend follows the [D3D9 indexed-instancing contract](https://learn.microsoft.com/en-us/windows/win32/direct3d9/efficiently-drawing-multiple-instances-of-geometry):
+separate geometry and instance streams, reset frequencies after submission,
+dynamic buffer retirement through DISCARD/NOOVERWRITE, and declaration-lifetime
+cache invalidation. Matrix instructions also retain their implicit consecutive
+register reads; mixed uniform/instance spans use contiguous temporary copies.
+
+`run_pc_instancing.py` passes 17 native checks. One five-instance draw exactly
+matches five individual draws, including distinct transforms, wheel values and
+overlapping blending. Targeted valid `m4x4 c19` and `m3x2 c23` programs test spans
+crossing a world matrix at c20..23. Ignoring implicit spans fails both pixel tests;
+forcing one matrix for every instance fails the general pixel comparison.
+The existing declaration-retirement and dispatch-sort suites pass 12 and 19
+checks respectively. Independent review and the canonical build pass.
+
+The initial live build completed a 90-second Road Rage with eight credited
+takedowns, four victims, peak four crashing/two airborne rivals and no assertions
+or exceptions. Its trace recorded about 96 native batches per frame with instances,
+averaging four instances per batch, among roughly 5,090 total draws. Screenshots
+exclude its FPS from comparisons. Final build `f9d0599a18dc`, including the reviewed
+matrix correction, passes fullscreen, resize, pause/resume and minimize/restore
+checks; normal and odd-resolution driving frames were inspected.
+
+The first quiet comparison lost focus and was rejected. No average FPS gain is
+claimed yet. Removing roughly 300 draws from a scene with over 5,000 should not
+be mistaken for the 2.5x throughput improvement needed to move 66 FPS to 165 FPS.
+The next profiling pass must separate remaining shader/state/dispatch costs from
+native Present waiting. Existing `geometry_prepare_ms` measures buffer creation,
+not the full retained-cache lookup path.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still
   dominates the frame; broader combat and streaming coverage remains useful.
-- Original wheel/mesh instancing is expanded into individual native draws. Restoring
-  hardware instancing needs the matching shader and instance-stream representation;
-  merely changing the draw flag is insufficient.
+- Native wheel/mesh instancing is active. Further gains need measured reductions
+  in the much larger remaining draw-submission and presentation costs.
 - Native occlusion queries/conditional rendering remain disabled or incomplete.
   Restore the original visibility work only with a conservative PC backend that
   preserves visible geometry and does not turn query reads into GPU stalls.

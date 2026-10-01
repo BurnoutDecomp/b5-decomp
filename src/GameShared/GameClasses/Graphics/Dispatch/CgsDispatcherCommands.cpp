@@ -43,6 +43,7 @@
 // =============================================================================
 
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h"
+#include "pc/gcm/renderengine/InstancedDrawPCLeaf.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"        // DispatchBin / DispatchFrame / DispatchList
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsOcclusionCullManager.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/Renderable.h"
@@ -690,7 +691,8 @@ static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame
                                    u32 luOpaqueListId, u32 luTransparentListId,
                                    u8 lu8Technique, bool lbFrustumTest, s32 liListBase,
                                    u8 lu8MeshInstanceCount,
-                                   const rw::math::vpu::Matrix44& lWorldViewProjection)
+                                   const rw::math::vpu::Matrix44& lWorldViewProjection,
+                                   const renderengine::WorldInstanceDrawPC* lpInstances = nullptr)
 {
     const u32 luNumMeshes = lpRenderable->mu16NumMeshes;
 
@@ -868,6 +870,7 @@ static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame
             CGS_ASSERT(lpPeek != 0, "Failed to add mesh to dispatch bin");
             u32* lpMeshCmd = reinterpret_cast<u32*>(lpPeek);
             std::memcpy(&lpMeshCmd[8], &lWorldViewProjection, 64);
+            WriteCommandPointer(&lpMeshCmd[6], lpInstances);
             CGS_ASSERT(lbAdded, "Failed to add mesh to dispatch bin");
 
             const bool lbZOnly = lpTrailer[0] != 0;
@@ -910,6 +913,7 @@ static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame
                                "Failed to add mesh to dispatch bin (pre-z)");
                     u32* lpPreZCmd = reinterpret_cast<u32*>(lpPreZPacket);
                     std::memcpy(&lpPreZCmd[8], &lWorldViewProjection, 64);
+                    WriteCommandPointer(&lpPreZCmd[6], lpInstances);
 
                     lpPreZList->Submit(PreZSortKey(*lpPreZTech), lpPreZPacket);
                 }
@@ -1031,38 +1035,11 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
         }
     }
 
-    // -------------------------------------------------------------------------
-    // [PC bring-up shim] INSTANCING EXPANSION.
-    //
-    // The console draws an N-instance object as ONE command: the instancing vertex
-    // shader picks its own world matrix out of shader constant 6
-    // ("InstancingMatrixArray", five Matrix44Affine, published by
-    // Model::SetupShaderConstantsForInstancing) using the per-instance index in
-    // constant 7, and the GPU replays the index buffer N times.
-    //
-    // This build has neither half of that: the instanced draw leaf
-    // (DrawInstancedIndexedPrimitive_Custom) is a loud trap in DispatchAllMeshes, and
-    // the PC path renders through a FALLBACK shader that is fed exactly one
-    // world-view-projection per draw (Device::SetObjectTransformPC ->
-    // WorldFallbackShader_SetWvp). Submitting the console's single N-instance command
-    // unchanged would either hit the trap or stack all N instances on one transform.
-    //
-    // So the expansion happens HERE, in the object -> mesh step that already owns the
-    // per-object WVP shim: one N-instance object command becomes N single-instance
-    // mesh commands, each carrying instance i's own WVP. Nothing upstream changes --
-    // RenderRaceCar stays the console's one-instanced-draw decompile -- and nothing
-    // downstream needs the trap, because every emitted command now says instances == 1.
-    //
-    // The instance matrices come out of the command's own restored constant block
-    // (constant 6), i.e. the console's own channel; they are already 4x4 with the w
-    // lanes fixed by SetShaderConstantArrayData. If the object claims instances but the
-    // constant is absent, fall back to the single constant-0 draw rather than guess.
-    //
-    // DELETE when a real instanced draw path exists on the D3D9 back end.
-    // -------------------------------------------------------------------------
-    // The per-instance channels, by their ShaderConstantTable slot (the constructor's own
-    // numbering: AddShaderConstant(0, "world"), AddShaderConstantArray(6,
-    // "InstancingMatrixArray"), AddShaderConstantArray(7, "InstancingIndexArray")).
+    // ARTIST submits one instance group and leaves matrix selection to the GPU.
+    // The native path carries constant6/7 snapshots to a D3D9 instance stream.
+    // BRN_INSTANCING_EXPAND=1 retains the earlier scalar expansion for controlled
+    // comparisons; unsupported native shaders are expanded at mesh submission.
+    // Constants0/6/7 are world, InstancingMatrixArray and InstancingIndexArray.
     const u32 KU_CONSTANT_WORLD                   = 0u;
     const u32 KU_CONSTANT_INSTANCING_MATRIX_ARRAY = 6u;
     const u32 KU_CONSTANT_INSTANCING_INDEX_ARRAY  = 7u;
@@ -1079,6 +1056,32 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
         if (lpaInstanceWorlds != 0)
         {
             luNumInstanceDraws = lu8InstanceCount;
+
+            // ARTIST827FCDA0 emits one mesh command with the original instance
+            // count. Carry its two constant arrays through the spare native
+            // payload pointer; D3D9 consumes them as an instance stream.
+            static const bool sbExpandInstances = [] {
+                const char* value = std::getenv("BRN_INSTANCING_EXPAND");
+                return value && value[0] && value[0] != '0';
+            }();
+            if (!sbExpandInstances && lu8InstanceCount <= 5)
+            {
+                auto* lpInstances = static_cast<renderengine::WorldInstanceDrawPC*>(
+                    lpFrame->GetBin().AllocateMemoryFast(
+                        (sizeof(renderengine::WorldInstanceDrawPC) + 15) / 16));
+                ::new (lpInstances) renderengine::WorldInstanceDrawPC{
+                    reinterpret_cast<const float*>(lpaInstanceWorlds),
+                    reinterpret_cast<const float*>(lpaInstanceIndices),
+                    reinterpret_cast<const float*>(lpViewProjection), lu8InstanceCount};
+                rw::math::vpu::Matrix44 lWorldViewProjection;
+                renderengine::WorldInstanceWvpPC(reinterpret_cast<const float*>(lpWorld),
+                    reinterpret_cast<const float*>(lpViewProjection),
+                    reinterpret_cast<float*>(&lWorldViewProjection));
+                EmitObjectMeshCommands(lpRenderable, lpFrame, lpContext, lpTrailer,
+                    luOpaqueListId, luTransparentListId, lu8Technique, lbFrustumTest,
+                    liListBase, lu8InstanceCount, lWorldViewProjection, lpInstances);
+                return;
+            }
 
             // [DIAG] latched on the EXPANDED COUNT and on the spread of the instance
             // translations, not on a "ran once" bool -- an expansion that produced N
@@ -1133,37 +1136,9 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
         }
     }
 
-    // -------------------------------------------------------------------------
-    // [PC bring-up shim] THE PER-INSTANCE CONSTANT CHANNELS.
-    //
-    // The expansion above already gives draw i its own WVP. That is enough for the flagged
-    // fallback shader, and NOT enough for the technique's real vertex program, which reads
-    // the object matrix out of a shader CONSTANT (see the substitute table in
-    // CgsShaderConstants.cpp: the recompiled PC program spells InstancingMatrixArray `world`
-    // and InstancingIndexArray `g_wheelConstants`). Those constants are gathered per emitted
-    // mesh command, inside EmitObjectMeshCommands -> AddShaderTechniqueConstantsToDispatchBin
-    // -> ShaderConstantsExternal_GatherFromContext, which reads them from THIS context.
-    //
-    // So for the duration of draw i the two instancing slots point at ENTRY i of their own
-    // arrays. Both targets live in the dispatch bin (they are the command's own restored
-    // constant copies), so the pointers outlive the mesh commands that reference them,
-    // exactly as the unmodified array base did. The saved values are put back after the loop
-    // because the context is shared with every later object in the walk.
-    //
-    // ⚠ A single entry is 4 quad-words (matrix) / 1 quad-word (index vector), where the
-    // console constants declare 5 entries. Nothing can read past entry i, because reading the
-    // WHOLE array needs a program that declares InstancingMatrixArray -- and none of the 220
-    // program buffers in the shipped PC bundle does (measured; that is the very gap the
-    // substitute table exists for). Revisit this the day one does.
-    //
-    // `world` (slot 0) rides along for the same reason and with the same meaning: for draw i
-    // the object's world matrix IS instance i's. No technique in the shipped bundle names both
-    // (the 19 instancing blocks name neither `world` nor anything else), so this only matters
-    // if an instanced renderable is ever drawn through a non-instanced technique -- and then
-    // it is the difference between N copies at N places and N copies stacked on one.
-    //
-    // DELETE with the expansion itself, when a real instanced draw path exists on D3D9.
-    // -------------------------------------------------------------------------
+    // Expanded comparison path: each mesh packet retains one array entry, as
+    // required by the original non-instanced PC shader counterparts. Restore the
+    // context afterward so later objects retain their own constant snapshots.
     const rw::math::vpu::Vector4* const lpSavedWorldConstant =
         lpContext->mapConstantData[KU_CONSTANT_WORLD];
     const rw::math::vpu::Vector4* const lpSavedInstancingMatrixConstant =
@@ -1397,9 +1372,12 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* /*lpInterpreter*/
         shadow::Device::SetMeshBuffersPC(lpMesh, luTechnique);
         if (lu8Instances > 1u && lpMesh->mu8InstanceCount > 1u)
         {
-            // Instanced world models are asserted off upstream
-            // (WorldEntityModule: "Instancing not supported"); loud trap.
-            CGS_ASSERT(false, "DrawInstancedIndexedPrimitive_Custom not yet reconstructed on PC");
+            const auto* lpInstances = static_cast<const renderengine::WorldInstanceDrawPC*>(
+                ReadCommandPointer(&lpPacket[6]));
+            CGS_ASSERT(lpInstances && lpInstances->muCount == lu8Instances, "Missing native instance snapshots");
+            if (lpInstances)
+                shadow::Device::DrawInstancedMeshPC(lpMesh, lpInstances, lpTechnique,
+                    reinterpret_cast<void* const*>(lppConstScratch), false);
         }
         else
         {
@@ -1531,7 +1509,12 @@ void DrawRenderableMeshZOnly::Interpret(DispatchCommand* lpCommand, DispatchFram
     shadow::Device::SetMeshBuffersPC(lpMesh, luTechnique);
     if (lu8Instances > 1u && lpMesh->mu8InstanceCount > 1u)
     {
-        CGS_ASSERT(false, "DrawInstancedIndexedPrimitive_Custom not yet reconstructed on PC");
+        const auto* lpInstances = static_cast<const renderengine::WorldInstanceDrawPC*>(
+            ReadCommandPointer(&lpPacket[6]));
+        CGS_ASSERT(lpInstances && lpInstances->muCount == lu8Instances, "Missing native instance snapshots");
+        if (lpInstances)
+            shadow::Device::DrawInstancedMeshPC(lpMesh, lpInstances, lpTechnique,
+                reinterpret_cast<void* const*>(lppConstScratch), true);
     }
     else
     {

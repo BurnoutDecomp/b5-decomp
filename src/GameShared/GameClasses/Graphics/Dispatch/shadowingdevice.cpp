@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
+#include "pc/gcm/renderengine/InstancedDrawPCLeaf.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -1611,6 +1612,73 @@ namespace shadow
     // DELETE the slice when a real instanced draw path (manual fetch / SV_InstanceID) exists
     // on the D3D9 back end.
     // ========================================================================
+    // FLAG PC-platform leaf: retain the original one-command instance group.
+    // Unsupported native shader/stream combinations still draw every instance
+    // with its original per-instance constants and the same first index slice.
+    void Device::DrawInstancedMeshPC(const RenderableMesh* lpMesh,
+        const renderengine::WorldInstanceDrawPC* lpInstances,
+        const CgsGraphics::MaterialTechniqueView* lpTechnique,
+        void* const* lppConstScratch, bool lbZOnly)
+    {
+        // Original DrawInstancedIndexedPrimitive_Custom827ED808 bounds.
+        if (lpInstances->muCount == 0) return;
+        CGS_ASSERT(lpInstances->muCount >= 1, "luInstanceCount >= 1");
+        CGS_ASSERT(lpInstances->muCount <= lpMesh->mu8InstanceCount, "luInstanceCount <= luInstanceMax");
+        if (lpInstances->muCount > lpMesh->mu8InstanceCount) return;
+        const auto* lpTech = reinterpret_cast<const u8*>(lpTechnique);
+        u32 luShaderTechnique;
+        std::memcpy(&luShaderTechnique, lpTech, sizeof(luShaderTechnique));
+        const auto* lpShader = reinterpret_cast<const u8*>(static_cast<uintptr_t>(luShaderTechnique));
+        const auto* lpVertexBlock = lpShader ? reinterpret_cast<const u32*>(lpShader + 0x1C) : nullptr;
+        const auto* lpPixelBlock = lpShader ? reinterpret_cast<const u32*>(lpShader + 0x50) : nullptr;
+        bool lbPixelInstances = false;
+        if (!lbZOnly && lpPixelBlock && lpPixelBlock[0])
+        {
+            const auto* lpSlots = reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpPixelBlock[1]));
+            for (u32 li = 0; lpSlots && li < lpPixelBlock[0]; ++li)
+                if (lpSlots[li] == 0 || lpSlots[li] == 6 || lpSlots[li] == 7) lbPixelInstances = true;
+        }
+        const ::DrawIndexedParameters& lrDraw = lpMesh->mDrawIndexedParameters;
+        const u32 luTotal = lrDraw.muNumVertices + 1u;
+        if (!lbPixelInstances && lpMesh->mu8InstanceCount > 1
+            && luTotal % lpMesh->mu8InstanceCount == 0
+            && renderengine::WorldDraw_TryInstancedPC(lrDraw.mePrimitiveType,
+                lrDraw.muBaseVertexIndex, lrDraw.muMinVertexIndex,
+                luTotal / lpMesh->mu8InstanceCount, *lpInstances)) return;
+
+        const auto lApply = [](const u32* lpBlock, void* const* lpSources,
+            const float* lpWorld, const float* lpIndex, bool lbPixel)
+        {
+            if (!lpBlock) return;
+            const auto* lpSlots = reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpBlock[1]));
+            const auto* lpHandles = reinterpret_cast<const u8*>(static_cast<uintptr_t>(lpBlock[3]));
+            if (!lpSlots || !lpHandles || !lpSources) return;
+            for (u32 li = 0; li < lpBlock[0]; ++li)
+            {
+                const void* lpSource = lpSources[li];
+                if (lpSlots[li] == 0 || lpSlots[li] == 6) lpSource = lpWorld;
+                else if (lpSlots[li] == 7 && lpIndex) lpSource = lpIndex;
+                if (lpSource && lpHandles[li * 4 + 3])
+                    renderengine::WorldShaderConstants_Set(lbPixel, lpHandles[li * 4],
+                        lpSource, lpHandles[li * 4 + 3]);
+            }
+        };
+        for (u32 li = 0; li < lpInstances->muCount; ++li)
+        {
+            const float* lpWorld = lpInstances->Matrix(li);
+            CGS_ASSERT(lpWorld, "Invalid instancing matrix index");
+            if (!lpWorld) continue;
+            const float* lpIndex = lpInstances->mpIndices ? lpInstances->mpIndices + li * 4 : nullptr;
+            lApply(lpVertexBlock, lppConstScratch, lpWorld, lpIndex, false);
+            if (!lbZOnly && lpVertexBlock && lppConstScratch)
+                lApply(lpPixelBlock, lppConstScratch + lpVertexBlock[0], lpWorld, lpIndex, true);
+            float laWvp[16];
+            renderengine::WorldInstanceWvpPC(lpWorld, lpInstances->mpViewProjection, laWvp);
+            SetObjectTransformPC(laWvp);
+            DrawIndexedMeshPC(lpMesh);
+        }
+    }
+
     void Device::DrawIndexedMeshPC(const RenderableMesh* lpMesh)
     {
         // NOTE the global qualification: shadow::Device declares its OWN nested
