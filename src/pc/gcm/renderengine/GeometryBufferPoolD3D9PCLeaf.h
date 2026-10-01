@@ -24,6 +24,7 @@ namespace renderengine
         }
         Buffer CreateBuffer(Context lpDevice, GeometryBufferKind leKind, unsigned luBytes)
         {
+            FrameProfile::CycleScope lCreateProfile(FrameProfile::GEOMETRY_CREATE);
             const DWORD luUsage = D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY;
             if (leKind == GeometryBufferKind::Vertex)
             {
@@ -47,13 +48,17 @@ namespace renderengine
             void* lpDestination = nullptr;
             HRESULT lResult;
             {
-                FrameProfile::Scope lLockProfile(FrameProfile::GEOMETRY_LOCK);
+                FrameProfile::CycleScope lLockProfile(FrameProfile::GEOMETRY_LOCK);
                 lResult = leKind == GeometryBufferKind::Vertex
                     ? static_cast<IDirect3DVertexBuffer9*>(lpBuffer)->Lock(luOffset, luBytes, &lpDestination, luFlags)
                     : static_cast<IDirect3DIndexBuffer9*>(lpBuffer)->Lock(luOffset, luBytes, &lpDestination, luFlags);
             }
             if (FAILED(lResult)) return false;
-            if (lpDestination) std::memcpy(lpDestination, lpData, luBytes);
+            if (lpDestination)
+            {
+                FrameProfile::CycleScope lCopyProfile(FrameProfile::GEOMETRY_COPY);
+                std::memcpy(lpDestination, lpData, luBytes);
+            }
             {
                 FrameProfile::Scope lUnlockProfile(FrameProfile::GEOMETRY_UNLOCK);
                 lResult = leKind == GeometryBufferKind::Vertex

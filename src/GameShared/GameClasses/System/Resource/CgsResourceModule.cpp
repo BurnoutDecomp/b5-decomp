@@ -499,7 +499,7 @@ namespace CgsResource
         s_loaderOut.UnlockForRead(); s_poolIn.UnlockForWrite();
         bool lbBusy;
         {
-            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_POOL);
+            renderengine::FrameProfile::CycleScope lProfile(renderengine::FrameProfile::RESOURCE_POOL);
             lbBusy = mPoolModule.Update(&s_poolIn, &s_poolOut);
         }
         // Retain pool replies for the NEXT loader update. Its current source
