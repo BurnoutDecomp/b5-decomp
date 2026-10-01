@@ -1,3 +1,4 @@
+#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
 #include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 // <d3d9.h> needs winuser (LPMSG), but a transitive include below (rw/core/debug/DebugCriticalSection.h
 // via the renderengine/Im2d chain) defines NOUSER/NOGDI ahead of its own <windows.h>, which strips
@@ -80,8 +81,8 @@ namespace
     // technique's programs from transforming and shading every 2D quad behind it.
     void SelectFixedFunctionPipeline(IDirect3DDevice9* lpDevice)
     {
-        lpDevice->SetVertexShader(nullptr);
-        lpDevice->SetPixelShader(nullptr);
+        renderengine::PCSetVertexShader(lpDevice, nullptr);
+        renderengine::PCSetPixelShader(lpDevice, nullptr);
     }
 
     // The text path submits whole-line triangle strips (6 verts/glyph); size the reserve/submit
@@ -261,7 +262,7 @@ namespace CgsGraphics
         // together on every draw (see SelectFixedFunctionPipeline): batches reach here
         // through paths that do not all open with BeginRendering.
         SelectFixedFunctionPipeline(lpDevice);
-        lpDevice->SetFVF(KU_SCREEN_FVF);
+        renderengine::PCSetFVF(lpDevice, KU_SCREEN_FVF);
         // The loading screen submits 4-vertex quads as triangle strips.
         renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, D3DPT_TRIANGLESTRIP, luCount - 2u, saBatch, sizeof(D3DScreenVertex));
     }
@@ -327,7 +328,7 @@ namespace CgsGraphics
         }
 
         SelectFixedFunctionPipeline(lpDevice);   // pairs with SetFVF (see Render above)
-        lpDevice->SetFVF(KU_SCREEN_FVF);
+        renderengine::PCSetFVF(lpDevice, KU_SCREEN_FVF);
         // One triangle strip per line: the font's glyph quads are joined by degenerate connectors.
         renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, D3DPT_TRIANGLESTRIP, luVertexCount - 2u, saBatch, sizeof(D3DScreenVertex));
     }

@@ -1,3 +1,4 @@
+#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
 #include "pc/gcm/renderengine/DepthOnlyPCLeaf.h"
 #include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 #include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
@@ -1418,8 +1419,8 @@ namespace renderengine
         // it does not fall back to fixed function just because a later draw sets an FVF. The
         // 2D tail draws through the fixed-function pipeline, so the pass boundary hands the
         // device back with no programs bound, exactly as it found it.
-        lpDevice->SetVertexShader(nullptr);
-        lpDevice->SetPixelShader(nullptr);
+        renderengine::PCSetVertexShader(lpDevice, nullptr);
+        renderengine::PCSetPixelShader(lpDevice, nullptr);
     }
 
     // ---- world-pass leaf hooks (declared in shadowingdevice.cpp) -----------
@@ -1439,9 +1440,9 @@ namespace renderengine
         IDirect3DDevice9* lpDevice = Dev();
         if (lpDevice == nullptr || !CompileFallbackShaders(lpDevice))
             return false;
-        lpDevice->SetVertexShader(spFallbackVs);
+        renderengine::PCSetVertexShader(lpDevice, spFallbackVs);
         spMeshVertexShader = spFallbackVs;
-        lpDevice->SetPixelShader(spFallbackPs);
+        renderengine::PCSetPixelShader(lpDevice, spFallbackPs);
         WorldFallbackShader_ApplyWvp();
         return true;
     }
@@ -1514,8 +1515,8 @@ namespace renderengine
             return false;
         }
 
-        lpDevice->SetVertexShader(lrpVs);
-        lpDevice->SetPixelShader(lrpPs);
+        renderengine::PCSetVertexShader(lpDevice, lrpVs);
+        renderengine::PCSetPixelShader(lpDevice, lrpPs);
         spRealVs            = lrpVs;
         spRealPs            = lrpPs;
         suRealVsInputMask   = VertexShaderInputMask(lpVertexPayload);
@@ -2386,9 +2387,9 @@ namespace renderengine
             }
             // Re-assert: an earlier mesh of this same technique may have swapped in the
             // fallback pair.
-            lpDevice->SetVertexShader(spRealVs);
+            renderengine::PCSetVertexShader(lpDevice, spRealVs);
             spMeshVertexShader = spRealVs;
-            lpDevice->SetPixelShader(spRealPs);
+            renderengine::PCSetPixelShader(lpDevice, spRealPs);
 
             // ---- [DIAG wheels] a CONSOLE-INSTANCED mesh drawing with its OWN programs.
             // Latched on the outcome BITS, never on a "printed once" bool: the wheel renderable
@@ -2463,17 +2464,17 @@ namespace renderengine
                 renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
                 renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
             }
-            lpDevice->SetVertexShader(spFallbackTexVs);
+            renderengine::PCSetVertexShader(lpDevice, spFallbackTexVs);
             spMeshVertexShader = spFallbackTexVs;
             static const bool sbUvDebug = (::GetEnvironmentVariableA("BRN_WORLD_UVDEBUG", nullptr, 0) != 0);
-            lpDevice->SetPixelShader((sbUvDebug && spFallbackUvDebugPs != nullptr)
+            renderengine::PCSetPixelShader(lpDevice, (sbUvDebug && spFallbackUvDebugPs != nullptr)
                                      ? spFallbackUvDebugPs : spFallbackTexPs);
         }
         else
         {
-            lpDevice->SetVertexShader(spFallbackVs);
+            renderengine::PCSetVertexShader(lpDevice, spFallbackVs);
             spMeshVertexShader = spFallbackVs;
-            lpDevice->SetPixelShader(spFallbackPs);
+            renderengine::PCSetPixelShader(lpDevice, spFallbackPs);
         }
 
         WorldFallbackShader_ApplyWvp();
@@ -5796,7 +5797,7 @@ void D3DDevice_SetVertexShader(IDirect3DDevice9* /*lpDeviceArg*/, void* lpShader
 
     if (lpShader == nullptr)
     {
-        lpDevice->SetVertexShader(nullptr);
+        renderengine::PCSetVertexShader(lpDevice, nullptr);
         return;
     }
     // The pointer is the program image at ProgramBufferData+0x14. When the
@@ -5809,7 +5810,7 @@ void D3DDevice_SetVertexShader(IDirect3DDevice9* /*lpDeviceArg*/, void* lpShader
             lpDevice->CreateVertexShader(static_cast<const DWORD*>(lpShader), &lrpVs);
         if (lrpVs != nullptr)
         {
-            lpDevice->SetVertexShader(lrpVs);
+            renderengine::PCSetVertexShader(lpDevice, lrpVs);
             return;
         }
     }
@@ -5824,7 +5825,7 @@ void D3DDevice_SetPixelShader(IDirect3DDevice9* /*lpDeviceArg*/, void* lpShader)
 
     if (lpShader == nullptr)
     {
-        lpDevice->SetPixelShader(nullptr);
+        renderengine::PCSetPixelShader(lpDevice, nullptr);
         return;
     }
     if (LooksLikeD3D9Bytecode(lpShader, true))
@@ -5834,7 +5835,7 @@ void D3DDevice_SetPixelShader(IDirect3DDevice9* /*lpDeviceArg*/, void* lpShader)
             lpDevice->CreatePixelShader(static_cast<const DWORD*>(lpShader), &lrpPs);
         if (lrpPs != nullptr)
         {
-            lpDevice->SetPixelShader(lrpPs);
+            renderengine::PCSetPixelShader(lpDevice, lrpPs);
             return;
         }
     }
@@ -5847,7 +5848,7 @@ void D3DDevice_SetVertexDeclaration(IDirect3DDevice9* /*lpDeviceArg*/, void* lpD
     IDirect3DDevice9* lpDevice = Dev();
     sbWorldDeclarationValid = lpDecl != nullptr;
     if (lpDevice != nullptr && lpDecl != nullptr)
-        lpDevice->SetVertexDeclaration(static_cast<IDirect3DVertexDeclaration9*>(lpDecl));
+        renderengine::PCSetVertexDeclaration(lpDevice, static_cast<IDirect3DVertexDeclaration9*>(lpDecl));
 }
 
 void D3DDevice_SetIndices(IDirect3DDevice9* /*lpDeviceArg*/, void* lpIndexData)
@@ -9588,9 +9589,9 @@ namespace
 
         // ---- the published RESZ sequence ---------------------------------------------------
         lpDevice->SetTexture(0u, lpDest);
-        lpDevice->SetVertexShader(nullptr);
-        lpDevice->SetPixelShader(nullptr);
-        lpDevice->SetFVF(D3DFVF_XYZ);
+        renderengine::PCSetVertexShader(lpDevice, nullptr);
+        renderengine::PCSetPixelShader(lpDevice, nullptr);
+        renderengine::PCSetFVF(lpDevice, D3DFVF_XYZ);
         lpDevice->SetRenderState(D3DRS_ZENABLE,          FALSE);
         lpDevice->SetRenderState(D3DRS_ZWRITEENABLE,     FALSE);
         lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE, 0u);
@@ -9613,11 +9614,11 @@ namespace
         lpDevice->SetRenderState(D3DRS_ZWRITEENABLE,     luSavedZWrite);
         lpDevice->SetRenderState(D3DRS_ZENABLE,          luSavedZEnable);
         if (lpSavedDecl != nullptr)
-            lpDevice->SetVertexDeclaration(lpSavedDecl);
+            renderengine::PCSetVertexDeclaration(lpDevice, lpSavedDecl);
         else
-            lpDevice->SetFVF(luSavedFvf);       // nothing had a declaration: restore the FVF
-        lpDevice->SetPixelShader(lpSavedPs);
-        lpDevice->SetVertexShader(lpSavedVs);
+            renderengine::PCSetFVF(lpDevice, luSavedFvf);       // nothing had a declaration: restore the FVF
+        renderengine::PCSetPixelShader(lpDevice, lpSavedPs);
+        renderengine::PCSetVertexShader(lpDevice, lpSavedVs);
         lpDevice->SetTexture(0u, lpSavedTexture0);
 
         if (lpSavedDecl     != nullptr) lpSavedDecl->Release();
@@ -10329,9 +10330,9 @@ void PCStampMotionBlurMask(u32 luCarsBlurStencil, u32 luWorldBlurStencil)
     sbMaskStampActive = true;
     AlphaCoverage_Reconcile();
 
-    lpDevice->SetVertexShader(nullptr);
-    lpDevice->SetPixelShader(nullptr);
-    lpDevice->SetFVF(KU_MASK_STAMP_FVF);   // also clears any bound vertex declaration
+    renderengine::PCSetVertexShader(lpDevice, nullptr);
+    renderengine::PCSetPixelShader(lpDevice, nullptr);
+    renderengine::PCSetFVF(lpDevice, KU_MASK_STAMP_FVF);   // also clears any bound vertex declaration
 
     lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE,  FALSE);
     lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE,   FALSE);
@@ -10450,11 +10451,11 @@ void PCStampMotionBlurMask(u32 luCarsBlurStencil, u32 luWorldBlurStencil)
     lpDevice->SetTextureStageState(0u, D3DTSS_COLOROP,   luSavedColourOp);
 
     if (lpSavedDecl != nullptr)
-        lpDevice->SetVertexDeclaration(lpSavedDecl);
+        renderengine::PCSetVertexDeclaration(lpDevice, lpSavedDecl);
     else
-        lpDevice->SetFVF(luSavedFvf);       // nothing had a declaration: restore the FVF
-    lpDevice->SetPixelShader(lpSavedPs);
-    lpDevice->SetVertexShader(lpSavedVs);
+        renderengine::PCSetFVF(lpDevice, luSavedFvf);       // nothing had a declaration: restore the FVF
+    renderengine::PCSetPixelShader(lpDevice, lpSavedPs);
+    renderengine::PCSetVertexShader(lpDevice, lpSavedVs);
 
     for (u32 luState = 0; luState < KU_MASK_STAMP_SAVED_STATE_COUNT; ++luState)
         lpDevice->SetRenderState(KAE_MASK_STAMP_SAVED_STATES[luState], lauSavedState[luState]);

@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"
 #include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
 #include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
+#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
 #include <cstring>
 #include <cstdio>   // [diag] BRN_FRAME_DUMP back-buffer BMP writer
 #include <cstdlib>  // [diag] atoi -- BRN_FRAME_DUMP_EVERY period override
@@ -373,6 +374,7 @@ void renderengine::Device::Start()
     gPCShaderConstantCache.Invalidate();
     gPCSamplerStateCache.Invalidate();
     GeometryBindingsPC::gCache.Invalidate();
+    gPCShaderBindingCache.Invalidate();
     PCInstallDefaultRenderTargetState(static_cast<u32>(gDisplayWidth), static_cast<u32>(gDisplayHeight));
 
     ShowWindow(hWnd, SW_SHOWNORMAL);
