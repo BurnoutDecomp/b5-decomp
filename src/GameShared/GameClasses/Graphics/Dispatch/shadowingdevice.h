@@ -17,6 +17,7 @@ namespace CgsGraphics { struct MaterialTechniqueView; }  // CgsDispatcherCommand
 // headers already, so the definitions are complete where the bodies need them.
 namespace renderengine
 {
+    struct WorldInstanceDrawPC;
     class  DepthStencilState;
     class  RasterizerState;
     struct BlendMaterialState;
@@ -240,6 +241,10 @@ namespace shadow
 
         // [PC leaf] Issue the mesh's indexed draw (mDrawIndexedParameters).
         static void DrawIndexedMeshPC(const RenderableMesh* lpMesh);
+        static void DrawInstancedMeshPC(const RenderableMesh* lpMesh,
+            const renderengine::WorldInstanceDrawPC* lpInstances,
+            const CgsGraphics::MaterialTechniqueView* lpTechnique,
+            void* const* lppConstScratch, bool lbZOnly);
 
     private:
         // [PC leaf] Bind the samplers the TECHNIQUE names: technique+0x22 binding count,

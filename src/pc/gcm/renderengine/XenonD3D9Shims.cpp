@@ -34,6 +34,9 @@
 #include "pc/gcm/renderengine/texture.h"          // renderengine::Texture::mpD3DTexture (world sampler bind)
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h" // renderengine::PCSurfaceBracket_* (homed at the bottom of this TU)
 #include "pc/gcm/renderengine/WorldGeometryPCLeaf.h" // the RETAINED dispatch-path geometry mirrors
+#include "pc/gcm/renderengine/InstancedDrawPCLeaf.h"
+#include "pc/gcm/renderengine/InstancingPCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsXboxConditionalRenderShims.h" // the predicated-draw externs homed at the bottom of this TU
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h" // [diag] BrnDiag::LogBoundSurfaces (homed in this TU)
@@ -540,6 +543,11 @@ namespace
     IDirect3DBaseTexture9*  spTechniqueFirstTexture  = nullptr;  // the first it bound anywhere
     // Set by WorldVd32_GetDeclaration for the mesh currently being bound.
     bool                    sbLastDeclHasTexcoord0 = false;
+    renderengine::InstancingPC::Cache sInstanceCache;
+    IDirect3DVertexShader9*  spMeshVertexShader = nullptr;
+    IDirect3DVertexDeclaration9* spMeshDeclaration = nullptr;
+    const renderengine::WorldInstanceDrawPC* spInstanceDraw = nullptr;
+    bool                    sbInstanceDrawHandled = false;
     u64                     suLastDeclUsageMask = 0;
     u32                     suLastDeclSourceStride = 0;
     u32                     suLastDeclDec3nCount = 0;
@@ -1419,6 +1427,7 @@ namespace renderengine
         if (lpDevice == nullptr || !CompileFallbackShaders(lpDevice))
             return false;
         lpDevice->SetVertexShader(spFallbackVs);
+        spMeshVertexShader = spFallbackVs;
         lpDevice->SetPixelShader(spFallbackPs);
         return true;
     }
@@ -1882,7 +1891,10 @@ namespace renderengine
             if (spLastDeclElements == lIt->second.macElements)
                 spLastDeclElements = "";
             if (lIt->second.mpDeclaration != nullptr)
+            {
+                sInstanceCache.RetireDeclaration(lIt->second.mpDeclaration);
                 lIt->second.mpDeclaration->Release();
+            }
             sVdSourceWitness.erase(reinterpret_cast<const void*>(lIt->first));
             lIt = sVdCache.erase(lIt);
             ++luRetired;
@@ -1900,6 +1912,8 @@ namespace renderengine
     // FLAG PC-platform leaf: release the declaration cache with the other D3D mirrors.
     void WorldVd32_ReleaseAll()
     {
+        sInstanceCache.Release();
+        spMeshDeclaration = nullptr;
         spLastDeclElements = "";
         for (auto& lrEntry : sVdCache)
             if (lrEntry.second.mpDeclaration != nullptr)
@@ -2257,7 +2271,9 @@ namespace renderengine
 
     void* WorldVd32_GetDeclaration(const void* lpVdImage, u32* lpuStride)
     {
-        return WorldVd32_GetDeclarationInternal(lpVdImage, lpuStride, true);
+        spMeshDeclaration = static_cast<IDirect3DVertexDeclaration9*>(
+            WorldVd32_GetDeclarationInternal(lpVdImage, lpuStride, true));
+        return spMeshDeclaration;
     }
 
     // FLAG PC-platform leaf: original resource FixUp creates the declaration.
@@ -2345,6 +2361,7 @@ namespace renderengine
             // Re-assert: an earlier mesh of this same technique may have swapped in the
             // fallback pair.
             lpDevice->SetVertexShader(spRealVs);
+            spMeshVertexShader = spRealVs;
             lpDevice->SetPixelShader(spRealPs);
 
             // ---- [DIAG wheels] a CONSOLE-INSTANCED mesh drawing with its OWN programs.
@@ -2421,6 +2438,7 @@ namespace renderengine
                 renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
             }
             lpDevice->SetVertexShader(spFallbackTexVs);
+            spMeshVertexShader = spFallbackTexVs;
             static const bool sbUvDebug = (::GetEnvironmentVariableA("BRN_WORLD_UVDEBUG", nullptr, 0) != 0);
             lpDevice->SetPixelShader((sbUvDebug && spFallbackUvDebugPs != nullptr)
                                      ? spFallbackUvDebugPs : spFallbackTexPs);
@@ -2428,6 +2446,7 @@ namespace renderengine
         else
         {
             lpDevice->SetVertexShader(spFallbackVs);
+            spMeshVertexShader = spFallbackVs;
             lpDevice->SetPixelShader(spFallbackPs);
         }
 
@@ -4167,6 +4186,17 @@ namespace renderengine
         renderengine::PCSetPixelShaderConstantF(lpDevice, 5u, lafForced, 1u);
     }
 
+    bool WorldDraw_TryInstancedPC(u32 primitive, u32 baseVertex, u32 startIndex,
+                                  u32 indexCount, const WorldInstanceDrawPC& instances)
+    {
+        spInstanceDraw = &instances;
+        sbInstanceDrawHandled = false;
+        sbNextDrawIsInstanced = true;
+        WorldDraw_IndexedUP(primitive, baseVertex, startIndex, indexCount);
+        spInstanceDraw = nullptr;
+        return sbInstanceDrawHandled;
+    }
+
     void WorldDraw_IndexedUP(u32 luPrimTypeXenon, u32 luBaseVertexIndex,
                              u32 luStartIndex, u32 luIndexCount)
     {
@@ -4721,14 +4751,23 @@ namespace renderengine
         // offsets the vertex POINTER by baseVertex * stride and passes base 0, the retained
         // form passes BaseVertexIndex = baseVertex against the whole mirrored buffer, so the
         // run's index values address the same vertices either way.
-        ++renderengine::guDiagWorldDraws;   // [DIAG] issue #30 per-present counters
-        const HRESULT lhrDraw =
-            lbRetained
+        const bool lbNativeInstances = spInstanceDraw && lbRetained
+            && sInstanceCache.Begin(lpDevice, spMeshVertexShader, spMeshDeclaration,
+                spInstanceDraw->mpMatrices, spInstanceDraw->mpIndices, spInstanceDraw->muCount);
+        const bool lbDrawIssued = !spInstanceDraw || lbNativeInstances;
+        if (lbDrawIssued) ++renderengine::guDiagWorldDraws;
+        const HRESULT lhrDraw = !lbDrawIssued ? D3D_OK : lbRetained
                 ? static_cast<HRESULT>(WorldGeometry_Submit(lRetained, luBaseVertexIndex))
                 : lpDevice->DrawIndexedPrimitiveUP(lePrim, 0, luNumVertices, luPrimCount,
                                                    lpIndices,
                                                    lb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
                                                    lpVertices, suVertexStride);
+        if (lbNativeInstances)
+        {
+            sInstanceCache.End();
+            sbInstanceDrawHandled = SUCCEEDED(lhrDraw);
+            if (sbInstanceDrawHandled) FrameProfile::Instanced(spInstanceDraw->muCount);
+        }
 
         if (lbShadowStateOverridden)
         {
@@ -4750,9 +4789,9 @@ namespace renderengine
         // pass's [shadow-fetch] line to tell "no draws reached the shadow target" apart from
         // "draws reached it and rasterised nothing" -- the two have identical symptoms in the
         // frame and completely different causes. DELETE with the shadow bring-up probes.
-        if (SUCCEEDED(lhrDraw))
+        if (SUCCEEDED(lhrDraw) && lbDrawIssued)
             ++guWorldDrawCalls;
-        else if (lbRetained)
+        else if (FAILED(lhrDraw) && lbRetained)
         {
             // A retained submit the runtime rejected (D3DERR_INVALIDCALL: a run whose index
             // values reach past NumVertices - BaseVertexIndex would be the classic cause; the
