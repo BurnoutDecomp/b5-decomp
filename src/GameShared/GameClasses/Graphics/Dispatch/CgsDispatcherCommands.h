@@ -48,6 +48,7 @@ namespace CgsGraphics
 struct OcclusionCullManager;  // CgsOcclusionCullManager.h
 struct MaterialAssembly;      // CgsMaterialAssembly.h
 struct MaterialTechnique;     // CgsMaterialTechnique.h (incomplete; pointer-only)
+struct DispatchObjectContext_JobState;
 
 // -----------------------------------------------------------------------------
 // DispatchObjectContext -- the per-pass "object -> mesh" expansion context the
@@ -55,8 +56,7 @@ struct MaterialTechnique;     // CgsMaterialTechnique.h (incomplete; pointer-onl
 // @0x8240BFA8 builds one 240-byte image and ConvertObjectsToMeshes memcpy's a
 // fresh copy per pass). Layout recovered from the X360 byte offsets (comments);
 // the x64 gate models it by named members (the constant shadow widens to host
-// pointers). The heavier SPU job state (DispatchObjectContext_JobState) wraps
-// this image and stays with the (PC-unused) job path.
+// pointers). Each conversion job owns its DispatchObjectContext_JobState.
 //
 //   +0x00  mapConstantData[50]      -- shader-constant pointer shadow; [0] = the
 //                                     world matrix, [3] = the view-projection
@@ -70,7 +70,7 @@ struct DispatchObjectContext
 {
     const rw::math::vpu::Vector4* mapConstantData[50]; // +0x00 (X360 u32 slots)
     s32   miListIdBase;                                // +0xC8
-    u32   muPad0xCC;                                   // +0xCC (unrecovered word)
+    DispatchObjectContext_JobState* mpJobState;         // +0xCC (DWARF CgsShaderConstants.h:749)
     bool  mbPreZEnabled;                               // +0xD0
     bool  mbPreZAlphaEnabled;                          // +0xD1
     u8    maPad0xD2[14];                               // +0xD2..0xDF (unrecovered)

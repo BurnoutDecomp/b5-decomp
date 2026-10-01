@@ -162,25 +162,88 @@ void DispatchList::SortForDispatch()
     }
 }
 
-// @ 0x827EE868 -- the per-list half of the SPU main-memory relocation pass
-// (DispatchFrame::RelocateForMainMemory @0x827EE970 calls it once per list; that
-// caller IS recovered and lives in CgsDispatcherCommands.cpp).
-//
-// NOT RECONSTRUCTED: 0x827EE868 carries no entry in .ida-exports/
-// BURNOUT_X360_ARTIST.XEX (the address is known only as the callee name in the
-// caller's xrefs_from), so there is no pseudocode/asm to reconstruct from and no
-// honest body can be written. The whole relocation pass is the PS3/SPU shared-bin
-// path: it rebases a job-produced list's bin/key pointers from local-store
-// addresses into main memory. The PC build never produces a job-side frame
-// (ConvertObjectsToMeshes runs the single-threaded fallback), so this is
-// unreachable here -- it exists only to close the recovered caller's link edge.
-DispatchList* DispatchList::RelocateForMainMemory(u32 /*luBinBase*/, u32 /*luBinOffset*/,
-                                                  u32 /*luListOffset*/)
+// ARTIST827EE868..96C, recovered directly from the image (the JSON export has a
+// hole). Save the current chain, then clear it for the next shared block. r6 is
+// unused on X360: keys already carry offsets from the master bin.
+void DispatchList::RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOutput,
+                                        uintptr_t /*luBinMaster*/)
 {
-    CGS_ASSERT(false,
-               "DispatchList::RelocateForMainMemory: X360 body @0x827EE868 absent from the "
-               "IDA export set (SPU shared-bin relocation path; unreachable on PC)");
-    return this;
+    const uintptr_t luDelta = luBinOutput - luBinBase;
+    if (luDelta != 0)
+    {
+        for (KeyBlock* lpBlock = mpBlockListHead; lpBlock != nullptr;)
+        {
+            KeyBlock* lpNext = lpBlock->mpNext;
+            if (lpBlock->mpKeys)
+                lpBlock->mpKeys = reinterpret_cast<u64*>(reinterpret_cast<uintptr_t>(lpBlock->mpKeys) + luDelta);
+            if (lpNext)
+                lpBlock->mpNext = reinterpret_cast<KeyBlock*>(reinterpret_cast<uintptr_t>(lpNext) + luDelta);
+            lpBlock = lpNext;
+        }
+        if (mpBlockListHead)
+            mpBlockListHead = reinterpret_cast<KeyBlock*>(reinterpret_cast<uintptr_t>(mpBlockListHead) + luDelta);
+        if (mpBlockListTail)
+            mpBlockListTail = reinterpret_cast<KeyBlock*>(reinterpret_cast<uintptr_t>(mpBlockListTail) + luDelta);
+    }
+    if (mpBlockListHead)
+    {
+        CGS_ASSERT(muChainBlockCount < KU_MAX_BLOCKS_PER_CHAIN,
+                   "muChainBlockCount < KU_MAX_BLOCKS_PER_CHAIN");
+        mapChainBlockArray[muChainBlockCount++] = mpBlockListHead;
+    }
+    muCount = 0;
+    mpBlockListHead = mpBlockListTail = nullptr;
+}
+
+// ARTIST827E9438: concatenate saved chains and recount their keys after joining
+// the conversion jobs. Each chain still contains ordinary 64-key blocks.
+void DispatchList::ReconnectChainBlocks()
+{
+    CGS_ASSERT(mpBlockListHead == nullptr, "mpBlockListHead == NULL");
+    CGS_ASSERT(mpBlockListTail == nullptr, "mpBlockListTail == NULL");
+    muCount = 0;
+    for (u32 luChain = 0; luChain < muChainBlockCount; ++luChain)
+    {
+        KeyBlock* lpBlock = mapChainBlockArray[luChain];
+        for (;;)
+        {
+            CGS_ASSERT(lpBlock->muCapacity <= KU_KEYBLOCK_CAPACITY,
+                       "lpBlockWithinChain->muKeyCapacity <= KU_MAX_KEYS_PER_BLOCK");
+            muCount += lpBlock->muCount;
+            if (!lpBlock->mpNext) break;
+            lpBlock = lpBlock->mpNext;
+        }
+        if (luChain + 1u < muChainBlockCount)
+            lpBlock->mpNext = mapChainBlockArray[luChain + 1u];
+        else
+            mpBlockListTail = lpBlock;
+    }
+    if (muChainBlockCount)
+        mpBlockListHead = mapChainBlockArray[0];
+}
+
+// ARTIST827E9590..96A0: Append transfers ownership of the source chain.
+void DispatchList::Append(DispatchList* lpOther)
+{
+    CGS_ASSERT(lpOther != nullptr, "lpOther != NULL");
+    CGS_ASSERT(lpOther != this, "lpOther != this");
+    if (lpOther->mpBlockListHead)
+    {
+        if (mpBlockListTail)
+        {
+            CGS_ASSERT(mpBlockListTail->mpNext == nullptr, "mpBlockListTail->mpNext == NULL");
+            mpBlockListTail->mpNext = lpOther->mpBlockListHead;
+        }
+        else
+        {
+            CGS_ASSERT(mpBlockListHead == nullptr, "mpBlockListHead == NULL");
+            mpBlockListHead = lpOther->mpBlockListHead;
+        }
+        mpBlockListTail = lpOther->mpBlockListTail;
+        muCount += lpOther->muCount;
+        lpOther->muCount = 0;
+        lpOther->mpBlockListHead = lpOther->mpBlockListTail = nullptr;
+    }
 }
 
 } // namespace CgsGraphics

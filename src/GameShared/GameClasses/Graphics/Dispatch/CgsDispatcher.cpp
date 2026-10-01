@@ -71,6 +71,19 @@ void* DispatchBin::AllocateMemoryFast(u32 luQwords)
     return lpResult;
 }
 
+// ARTIST827FA698..714: align the current address, allocating only the padding.
+void DispatchBin::Align(u32 luAlignment)
+{
+    const uintptr_t luCurrent = reinterpret_cast<uintptr_t>(m_pNextWord);
+    const uintptr_t luAligned = (luCurrent + luAlignment - 1u) & ~uintptr_t(luAlignment - 1u);
+    if (luAligned != luCurrent)
+    {
+        AllocateMemoryFast(static_cast<u32>((luAligned - luCurrent) / sizeof(DispatchCommand)));
+        CGS_ASSERT(reinterpret_cast<uintptr_t>(m_pNextWord) % luAlignment == 0,
+                   "uintptr_t(m_pNextWord) % luAlignment == 0");
+    }
+}
+
 // @ 0x827F9260
 // Begin a variable-size memory allocation: reserve up to luMaxQwords quad-words
 // and mark the active block at the current write head.
@@ -157,9 +170,10 @@ void DispatchBin::Construct(u32 luSizeBytes, rw::IResourceAllocator* lpAllocator
     m_pActiveAllocateMemoryBlock = 0;
     m_uSizeUsedLastTime    = 0;
     m_uUsedQwordsSnapshot  = 0;
-    m_uSharedMemoryStart   = 0;
+    mpSharedBinStart       = 0;
     m_uSharedMemoryBlockMax = 0;
     m_pSharedNextFreeAtomic = 0;
+    mpDispatchFrame        = 0;
 
     rw::ResourceDescriptor lDescriptor;
     lDescriptor.m_baseResourceDescriptors[0].m_size      = ((luSizeBytes + 127u) & ~127u) + 128u;
@@ -180,6 +194,8 @@ void DispatchBin::Construct(u32 luSizeBytes, rw::IResourceAllocator* lpAllocator
 void DispatchFrame::Construct(u32 luNumLists, u32 luBinSizeBytes, rw::IResourceAllocator* lpAllocator)
 {
     muNumDispatchLists = luNumLists;
+    mpDispatchBinOutputAddress = 0;
+    mpDispatchBinMasterAddress = 0;
 
     // X360 allocates 384 * n through the engine allocator (sub_82C08C00, the RW
     // heap thunk) with an overflow clamp; the x64 gate sizes by the host sizeof
@@ -195,7 +211,7 @@ void DispatchFrame::Construct(u32 luNumLists, u32 luBinSizeBytes, rw::IResourceA
         DispatchList* lpList  = GetList(luListId);
         lpList->muCount         = 0;
         lpList->mpDispatchBin   = &m_Bin;
-        lpList->muWord11C       = 0;
+        lpList->muChainBlockCount = 0;
         lpList->muWord00        = 0;
         lpList->mpBlockListHead = 0;
         lpList->mpBlockListTail = 0;
@@ -220,7 +236,7 @@ void DispatchFrame::Reset()
         lpList->mpBlockListHead = 0;
         lpList->mpBlockListTail = 0;
         lpList->muCount         = 0;
-        lpList->muWord11C       = 0;
+        lpList->muChainBlockCount = 0;
         lpList->mpSortedKeys    = 0;
         lpList->AllocateKeyBlock();
     }
@@ -271,19 +287,12 @@ void DispatchFrame::Release()
 //
 // Every caller checks `used + request >= size`, calls this, and then CARRIES ON
 // WRITING at m_pNextWord, so the handler has exactly two outcomes: rebind the bin
-// onto a fresh 16KB shared-memory block (the SPU job image; the bin is REBASED, it
+// onto a fresh 16KB shared-memory block (the bin is REBASED, it
 // never grows), or a fatal formatted assert. No allocator fallback.
 //
-// On this build the rebind leg is unreachable: Construct zeroes the three
-// shared-memory fields and only ConstructWithSharedBinMemory (SPU-side, dead on PC)
-// ever sets them, so this function is its assert.
-//
-// FLAG: a shared-memory DispatchFrame is a packed 32-bit guest image, not a host
-// object. The bin's back-pointer to its frame (bin+0x34 == frame+0xB4) and the
-// frame's active-block address (frame+0x104) have no named members, so leg 1 reaches
-// them through the guest word image -- the same exception CgsDispatcherCommands.cpp
-// declares for this family. Every such read sits behind the m_uSharedMemoryStart
-// guard and cannot execute on the host.
+// ConstructWithSharedBinMemory enables the shared branch for the original
+// object-to-mesh jobs. The bin/frame back-pointers and block addresses are native
+// pointers, with the original 16 KiB atomic block claim and callback contract.
 // =============================================================================
 
 
@@ -302,14 +311,6 @@ namespace
             _InterlockedIncrement(reinterpret_cast<long volatile*>(lpCounter)));
     }
 
-    // The guest word image of a shared-memory DispatchFrame (see the banner).
-    inline u32* SharedFrameWords(void* lpFrame)
-    {
-        return reinterpret_cast<u32*>(lpFrame);
-    }
-
-    const u32 KU_SHARED_BLOCK_SHIFT = 14u;   // 16384 bytes per shared block
-    const u32 KU_FRAME_ACTIVE_BLOCK_WORD = 0x104u / 4u;
 }
 
 void DispatchBin::HandleMemoryOverflow(u32 luRequestedQuadWords)
@@ -317,7 +318,7 @@ void DispatchBin::HandleMemoryOverflow(u32 luRequestedQuadWords)
     bool lbHandled              = false;
     bool lbSharedMemoryExhausted = false;
 
-    if (m_uSharedMemoryStart != 0)
+    if (mpSharedBinStart != 0)
     {
         CGS_ASSERT(m_pSharedNextFreeAtomic != NULL,
                    "mpSharedBinBlockNextFree_Atomic != NULL");
@@ -331,19 +332,11 @@ void DispatchBin::HandleMemoryOverflow(u32 luRequestedQuadWords)
         }
         else
         {
-            // The bin's owning shared-memory frame (bin+0x34 == frame+0xB4).
-            void* lpFrameImage = reinterpret_cast<void*>(
-                static_cast<uintptr_t>(SharedFrameWords(this)[0x34u / 4u]));
-            DispatchFrame* lpFrame = reinterpret_cast<DispatchFrame*>(lpFrameImage);
-
             // Push the block the bin has been filling out to shared memory before
             // rebinding onto the new one.
-            DispatchFrame::FlushBlockToSharedMemory(lpFrame);
-
-            const u32 luBlockAddress =
-                (luBlockIndex << KU_SHARED_BLOCK_SHIFT) + m_uSharedMemoryStart;
-            DispatchCommand* lpBlock = reinterpret_cast<DispatchCommand*>(
-                static_cast<uintptr_t>(luBlockAddress));
+            mpDispatchFrame->FlushBlockToSharedMemory();
+            DispatchCommand* lpBlock = mpSharedBinStart
+                + static_cast<size_t>(luBlockIndex) * KU_BLOCK_SIZE_IN_QUAD_WORDS;
 
             // The rewind happens UNCONDITIONALLY here -- the console stores all
             // eight words BEFORE the request-size test below, so an over-large
@@ -362,18 +355,8 @@ void DispatchBin::HandleMemoryOverflow(u32 luRequestedQuadWords)
             // never be satisfied by rebasing, so it falls through to the assert.
             if (luRequestedQuadWords <= KU_BLOCK_SIZE_IN_QUAD_WORDS)
             {
-                SharedFrameWords(lpFrame)[KU_FRAME_ACTIVE_BLOCK_WORD] = luBlockAddress;
-
-                // Notify the owner that the bin moved (the SPU-side relocation hook).
-                // FLAG: the console dispatches this callback UNCONDITIONALLY. The
-                // null test is the one deviation in this body, and it is on a leg
-                // that cannot execute here (see the banner); Construct zeroes
-                // mpMemoryCallback, so an unguarded call would be a null call the
-                // moment anybody wires the shared path up on the host.
-                if (mpMemoryCallback != 0)
-                {
-                    mpMemoryCallback(mpMemoryContext);
-                }
+                mpDispatchFrame->SetActiveBlockInSharedMemory(reinterpret_cast<uintptr_t>(lpBlock));
+                mpMemoryCallback(mpMemoryContext);
                 lbHandled = true;
             }
         }
