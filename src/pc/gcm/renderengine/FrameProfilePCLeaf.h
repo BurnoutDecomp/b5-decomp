@@ -13,6 +13,8 @@
 // beside the executable on orderly shutdown (private harness slots stay private).
 // BRN_FRAME_TIMING_ONLY=1 keeps frame endpoints/counters but skips every section
 // timer, including the ordinary per-draw timers, for frame-pacing measurements.
+// BRN_FRAME_COARSE=1 keeps frame/update/render-stage attribution without per-draw
+// clock reads. Timing-only still takes precedence over both diagnostic modes.
 namespace renderengine
 {
     namespace FrameProfile
@@ -25,7 +27,11 @@ namespace renderengine
                        RESOURCE_POOL, RESOURCE_MEMORY, RESOURCE_LOAD, RESOURCE_UNLOAD,
                        RESOURCE_FILE, RESOURCE_ATTRIB, OBJECT_TO_MESH,
                        MESH_TECHNIQUE, MESH_CONSTANTS, MESH_BUFFERS,
-                       GEOMETRY_LOOKUP, WORLD_DRAW, IMMEDIATE_DRAW, POSTFX, NUM_SECTIONS };
+                       GEOMETRY_LOOKUP, WORLD_DRAW, IMMEDIATE_DRAW, POSTFX,
+                       DISPATCH_EFFECTS, RENDER_SETUP, RENDER_BUILD_LISTS, RENDER_TINT,
+                       RENDER_SHADOWS, RENDER_ENVMAP, RENDER_PARTICLE_BUILD,
+                       RENDER_WORLD, RENDER_PARTICLES, RENDER_COMPOSITE, RENDER_GUI,
+                       RENDER_PRESENT, NUM_SECTIONS };
         struct Frame
         {
             LONGLONG miBegin = 0, miEnd = 0, miPreviousEnd = 0;
@@ -55,6 +61,7 @@ namespace renderengine
             bool mbInitialized = false;
             bool mbDetailed = false;
             bool mbTimingOnly = false;
+            bool mbCoarse = false;
             bool mbGpuTiming = false;
             void (*mpFinishGpu)() = nullptr;
         };
@@ -77,6 +84,8 @@ namespace renderengine
                 gCapture.mbDetailed = lpcDetail && lpcDetail[0] && lpcDetail[0] != '0';
                 const char* lpcTimingOnly = std::getenv("BRN_FRAME_TIMING_ONLY");
                 gCapture.mbTimingOnly = lpcTimingOnly && lpcTimingOnly[0] && lpcTimingOnly[0] != '0';
+                const char* lpcCoarse = std::getenv("BRN_FRAME_COARSE");
+                gCapture.mbCoarse = lpcCoarse && lpcCoarse[0] && lpcCoarse[0] != '0';
                 const char* lpcGpu = std::getenv("BRN_GPU_PROFILE");
                 gCapture.mbGpuTiming = lpcGpu && lpcGpu[0] && lpcGpu[0] != '0';
                 if (lpcEnable && lpcEnable[0] && lpcEnable[0] != '0')
@@ -108,12 +117,26 @@ namespace renderengine
         }
         struct Scope
         {
+            static bool IsCoarseSection(Section leSection)
+            {
+                return leSection == UPDATE || leSection == DISPATCH
+                    // These run only on a new geometry mirror, not cache hits.
+                    || (leSection >= GEOMETRY_PREPARE && leSection <= GEOMETRY_UNLOCK)
+                    || (leSection >= PRESENT && leSection <= RESOURCE_ATTRIB)
+                    || leSection >= DISPATCH_EFFECTS;
+            }
+            static Frame* FrameFor(Section leSection, bool lbEnabled)
+            {
+                return lbEnabled && !gCapture.mbTimingOnly
+                    && (!gCapture.mbCoarse || IsCoarseSection(leSection))
+                    ? gCapture.mpCurrent : nullptr;
+            }
             Frame* mpFrame;
             Section meSection;
             Section meDetail;
             LONGLONG miBegin;
             explicit Scope(Section leSection, Section leDetail = NUM_SECTIONS, bool lbEnabled = true)
-                : mpFrame(lbEnabled && !gCapture.mbTimingOnly ? gCapture.mpCurrent : nullptr),
+                : mpFrame(FrameFor(leSection, lbEnabled)),
                   meSection(leSection), meDetail(leDetail),
                   miBegin(mpFrame ? Now() : 0) {}
             ~Scope()
@@ -132,6 +155,32 @@ namespace renderengine
         {
             explicit DetailScope(Section leSection)
                 : Scope(leSection, NUM_SECTIONS, gCapture.mbDetailed) {}
+        };
+        // Consecutive stages share boundary timestamps: each interval belongs
+        // to exactly one stage, including early returns. Only the render owner
+        // uses this object. It does not add clocks when recording is disabled.
+        struct Stage
+        {
+            Frame* mpFrame;
+            Section meSection;
+            LONGLONG miBegin;
+            explicit Stage(Section leSection)
+                : mpFrame(Scope::FrameFor(leSection, true)), meSection(leSection),
+                  miBegin(mpFrame ? Now() : 0) {}
+            void Next(Section leSection)
+            {
+                if (!mpFrame) return;
+                const LONGLONG liNow = Now();
+                mpFrame->maTicks[meSection] += liNow - miBegin;
+                meSection = leSection;
+                miBegin = liNow;
+            }
+            ~Stage()
+            {
+                if (mpFrame) mpFrame->maTicks[meSection] += Now() - miBegin;
+            }
+            Stage(const Stage&) = delete;
+            Stage& operator=(const Stage&) = delete;
         };
         inline void Camera(int liCamera)
         {
@@ -197,7 +246,7 @@ namespace renderengine
                 std::snprintf(lacPath + luLength, MAX_PATH - luLength, ".frames.csv");
                 if (FILE* lpFile = std::fopen(lacPath, "w"))
                 {
-                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,object_to_mesh_ms,mesh_technique_ms,mesh_constants_ms,mesh_buffers_ms,geometry_lookup_ms,world_draw_ms,immediate_draw_ms,postfx_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end,instanced_draws,instances,prez_meshes,world_opaque_meshes,car_opaque_meshes,gpu_status,gpu_scene_ms,gpu_output_ms,vb_bind_requests,vb_bind_skips,ib_bind_requests,ib_bind_skips,rebased_draws\n");
+                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,object_to_mesh_ms,mesh_technique_ms,mesh_constants_ms,mesh_buffers_ms,geometry_lookup_ms,world_draw_ms,immediate_draw_ms,postfx_ms,dispatch_effects_ms,render_setup_ms,render_build_lists_ms,render_tint_ms,render_shadows_ms,render_envmap_ms,render_particle_build_ms,render_world_ms,render_particles_ms,render_composite_ms,render_gui_ms,render_present_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end,instanced_draws,instances,prez_meshes,world_opaque_meshes,car_opaque_meshes,gpu_status,gpu_scene_ms,gpu_output_ms,vb_bind_requests,vb_bind_skips,ib_bind_requests,ib_bind_skips,rebased_draws\n");
                     const double lfMs = 1000.0 / static_cast<double>(gCapture.miFrequency);
                     for (unsigned lu = 0; lu < gCapture.muCount; ++lu)
                     {
@@ -220,9 +269,9 @@ namespace renderengine
                 std::snprintf(lacPath + luLength, MAX_PATH - luLength, ".frames.json");
                 if (FILE* lpFile = std::fopen(lacPath, "w"))
                 {
-                    std::fprintf(lpFile, "{\"frames\":%u,\"dropped_frames\":%u,\"counter_frequency\":%lld,\"timing_only\":%s}\n",
+                    std::fprintf(lpFile, "{\"frames\":%u,\"dropped_frames\":%u,\"counter_frequency\":%lld,\"timing_only\":%s,\"coarse\":%s}\n",
                         gCapture.muCount, gCapture.muDropped, gCapture.miFrequency,
-                        gCapture.mbTimingOnly ? "true" : "false");
+                        gCapture.mbTimingOnly ? "true" : "false", gCapture.mbCoarse ? "true" : "false");
                     std::fclose(lpFile);
                 }
             }

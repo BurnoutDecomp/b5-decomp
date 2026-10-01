@@ -998,6 +998,24 @@ GPU timestamp queries and screenshots are separate diagnostics and still add
 overhead if enabled. `BRN_FRAME_PROFILE=0` keeps all frame recording disabled.
 The recorder regression is `python b5-decomp/tests/run_pc_frame_timing_only.py`.
 
+For attribution without per-draw clocks, use `BRN_FRAME_PROFILE=1` with
+`BRN_FRAME_COARSE=1`. The CSV records consecutive renderer stages: setup,
+dispatch-list building, tint scheduling, shadow maps, environment maps, particle
+preparation, world/car drawing, particles/coronas, composite, GUI and presentation.
+`render_composite_ms` includes the scene resolve, sun-corona work and quarter-size
+particle rendering as well as the final composite. `dispatch_effects_ms` covers
+particle dispatch before the renderer. Together these stages partition the render
+thread's dispatch interval, apart from the small entry/exit instrumentation gaps.
+Existing aggregate timers may overlap these stages and must not be added to them.
+
+Coarse mode suppresses per-draw timers even if `BRN_FRAME_DETAIL=1` is also set;
+unmeasured columns remain zero. Geometry preparation/lock/conversion/unlock timers
+remain available for cold cache entries; cached draws incur none of those clocks.
+Those cold-entry timings overlap the render stages. `BRN_FRAME_TIMING_ONLY=1` takes precedence and
+still records exactly two endpoint clocks per frame. Metadata records `coarse`
+separately from `timing_only`. Coarse runs diagnose expensive stages; use a
+separate timing-only run for FPS and frame-pacing claims.
+
 ## Remaining original optimization gaps
 
 - Frame overlap is active, but the measured dispatch/presentation path still
