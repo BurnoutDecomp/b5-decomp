@@ -234,9 +234,16 @@ namespace
     // A free notification names a byte range, not a key, so the mirrors touching a
     // range have to be findable without walking the whole map (the pool frees one
     // resource at a time and a track swap frees thousands). Every mirror registers
-    // its key under each 64 KB page its header and its source bytes fall in; a free
-    // then only visits the pages the freed block covers.
-    const u32 KU_PAGE_SHIFT = 16u;
+    // its key under each 4 KiB source-address bucket its header and bytes touch.
+    // Dense small headers made 64 KiB buckets repeatedly scan unrelated keys on
+    // each resource free. Finer buckets retain the same exact RangeHit test.
+    // This lookup granularity is independent of the native GPU page capacity.
+    const u32 KU_PAGE_SHIFT = [] {
+        const char* lpcValue = std::getenv("BRN_GEOMETRY_SOURCE_PAGE_KB");
+        if (lpcValue && std::strcmp(lpcValue, "64") == 0) return 16u;
+        if (lpcValue && std::strcmp(lpcValue, "16") == 0) return 14u;
+        return 12u;
+    }();
 
     typedef std::unordered_map<uintptr_t, std::vector<VertexKey> > VertexPageIndex;
     typedef std::unordered_map<uintptr_t, std::vector<IndexKey> >  IndexPageIndex;
