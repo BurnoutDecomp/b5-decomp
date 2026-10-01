@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include "pc/gcm/renderengine/InstancedDrawPCLeaf.h"
 
 #include <cstddef>
@@ -1295,6 +1296,7 @@ namespace shadow
                                     const void* lpMaterialAssembly,
                                     void* const* lppConstScratch, bool lbZOnly)
     {
+    renderengine::FrameProfile::DetailScope lDetailProfile(renderengine::FrameProfile::MESH_TECHNIQUE);
         const u8* const lpTech = reinterpret_cast<const u8*>(lpTechnique);
         const u32 luShaderTechnique = (lpTech != 0) ? *reinterpret_cast<const u32*>(lpTech) : 0u;
         const u8* const lpST =
@@ -1421,6 +1423,7 @@ namespace shadow
     void Device::SetMeshObjectConstantsPC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
                                           void* const* lppConstScratch, bool lbZOnly)
     {
+    renderengine::FrameProfile::DetailScope lDetailProfile(renderengine::FrameProfile::MESH_CONSTANTS);
         if (!renderengine::WorldShader_RealProgramsBound())
             return;
         const u8* const lpTech = reinterpret_cast<const u8*>(lpTechnique);
@@ -1534,6 +1537,7 @@ namespace shadow
     // the converter hard-fails multi-stream descriptors upstream).
     void Device::SetMeshBuffersPC(const RenderableMesh* lpMesh, u32 luTechniqueIndex)
     {
+    renderengine::FrameProfile::DetailScope lDetailProfile(renderengine::FrameProfile::MESH_BUFFERS);
         const void* const* lppBuffers = lpMesh->maBuffers;
         const u32 luNumVb = lpMesh->mu8NumVertexBuffers;
 
