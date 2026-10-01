@@ -1,3 +1,4 @@
+#include "pc/gcm/renderengine/DepthOnlyPCLeaf.h"
 #include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 #include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
 // =============================================================================
@@ -1454,7 +1455,7 @@ namespace renderengine
     // Returns false (leaving nothing bound) when either payload is not D3D9 bytecode or
     // the object cannot be created; the caller then keeps the flagged fallback pair.
     bool WorldPrograms_Bind(const void* lpVertexPayload, const void* lpPixelPayload,
-                            const char* lpcTechniqueName)
+                            const char* lpcTechniqueName, bool lbDepthOnly)
     {
         IDirect3DDevice9* lpDevice = Dev();
         sbRealProgramsBound = false;
@@ -1476,6 +1477,11 @@ namespace renderengine
             WorldShader_ReportFallback(lpcTechniqueName, E_WORLD_FALLBACK_NOT_D3D9_BYTECODE);
             return false;
         }
+
+        // SM3 requires a matching shader-model pair. Older valid techniques
+        // keep their material program rather than mixing VS1/2 with PS3.
+        if (lbDepthOnly && *static_cast<const DWORD*>(lpVertexPayload) == D3DVS_VERSION(3, 0))
+            lpPixelPayload = DepthOnlyPC::KAU_PIXEL_CODE;
 
         IDirect3DVertexShader9*& lrpVs = sVsCache[lpVertexPayload];
         if (lrpVs == nullptr)

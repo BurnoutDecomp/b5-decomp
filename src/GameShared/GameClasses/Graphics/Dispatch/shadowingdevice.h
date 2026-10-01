@@ -349,12 +349,5 @@ namespace shadow
         // muMisc*/muUnused64 copy while SetMaterialRenderStatesPC compared the mpLast* copy, so a
         // console invalidation was invisible to the dispatch walk and vice versa. Every former
         // mpLast* reader now uses the single slot.
-        // FLAG PC-platform leaf: the console's blend compare is against two DIFFERENT
-        // objects (the material's own state for the colour passes, an engine-wide Z-only
-        // state for the depth-only pass), so the object pointer alone identifies the
-        // binding. The PC leaf derives the Z-only blend from the material's own state
-        // (see SetMaterialRenderStatesPC), so the same pointer can stand for two
-        // different bindings and the cache has to remember which one it was.
-        static bool  mbLastBlendZOnly;
     };
 }

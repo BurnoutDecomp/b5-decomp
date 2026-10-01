@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include "pc/gcm/renderengine/InstancedDrawPCLeaf.h"
+#include "pc/gcm/renderengine/DepthOnlyPCLeaf.h"
+#include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -136,7 +138,7 @@ namespace renderengine
     // lpcTechniqueName is the ShaderTechnique blob's own name (+148), used only by the leaf's
     // per-technique fallback survey; it may be null.
     bool  WorldPrograms_Bind(const void* lpVertexPayload, const void* lpPixelPayload,
-                             const char* lpcTechniqueName);
+                             const char* lpcTechniqueName, bool lbDepthOnly);
     // [DIAG] Record in that survey that a technique had no program pair at all.
     void  WorldShader_ReportTechniqueHasNoPrograms(const char* lpcTechniqueName);
     // Forget the real programs (the fallback pair owns the device again).
@@ -253,9 +255,6 @@ namespace shadow
     // @0x827F2718 reaches them as 0xD8 / 0x14 / 0xDC off r27, and r27 IS off_83010950
     // (`addi r11, r11, off_83010950@l` @0x827F2754 -> `stw r11, var_140(r1)` @0x827F2760 ->
     // `lwz r27, var_140(r1)` @0x827F2EE0), the file-scope shadow block.
-    // mbLastBlendZOnly STAYS: it is not a duplicate of any console word, it is the PC leaf's own
-    // companion to mpBlendState (its FLAG is in the header).
-    bool  Device::mbLastBlendZOnly = false;
 
     bool Device::Initialize()
     {
@@ -967,25 +966,6 @@ namespace shadow
     // no internal null check, so the guard belongs THERE -- see the FLAGGED early-out in
     // Xbox2SetStateLowLevelShadowed.
     //
-    // NOTHING IS ADDED TO THIS BODY -- and the reason is worth stating, because an earlier draft of
-    // this pass DID add a store here and it was wrong to.
-    // `mbLastBlendZOnly` is a host-only bool (FLAGGED in the header) recording whether the last blend
-    // APPLY was SetMaterialRenderStatesPC's derived colour-write-off object rather than the cached
-    // pointer itself; the console needs no such bool because its Z-only blend states are two
-    // engine-wide objects with their own pointers. This setter now writes the same cache word
-    // (mpBlendState) that SetMaterialRenderStatesPC writes, so the question is whether the pair can
-    // desynchronise. It cannot, and the chain is closed and grep-checked:
-    //   * mbLastBlendZOnly is READ in exactly one place, shadowingdevice.cpp:978, inside
-    //     SetMaterialRenderStatesPC;
-    //   * SetMaterialRenderStatesPC has exactly one caller, shadowingdevice.cpp:1045 in
-    //     SetMeshTechniquePC, i.e. inside a mesh-dispatch walk;
-    //   * every walk opens with shadow::Device::ResetProgramShadows (CgsDispatcherCommands.cpp:1118
-    //     for DispatchAllMeshes, :1234 for DispatchAllMeshesZOnly), which clears mpBlendState and
-    //     mbLastBlendZOnly TOGETHER.
-    // (`grep -rn "mbLastBlendZOnly\|SetMaterialRenderStatesPC" b5-decomp/src` returns those sites and
-    // no others outside comments.) So the flag is never read against a cache word this setter wrote,
-    // and adding a store the console does not perform would be invention, not safety. If a later pass
-    // ever removes ResetProgramShadows' invalidation, THIS pairing is what must be revisited first.
     void Device::SetState(const renderengine::BlendMaterialState* lpState)
     {
         if (!mbBlendStateLocked && mpBlendState != lpState)
@@ -1029,8 +1009,6 @@ namespace shadow
     // there writes render states from outside the shadow.
     // The cost is one redundant full-block push per walk (lbWasUnset == true on the first bind).
     // RETIRE THESE FOUR STORES the day SetWorldPassDefaultStates is retired -- not before.
-    // mbLastBlendZOnly is reset with them because it is mpBlendState's companion (see its FLAG in the
-    // header); resetting one without the other is what would desynchronise the pair.
     void Device::ResetProgramShadows()
     {
         mpVertexProgramShadow = nullptr;
@@ -1039,7 +1017,6 @@ namespace shadow
         mpBlendState        = nullptr;
         mpDepthStencilState = nullptr;
         mpRasterizerState   = nullptr;
-        mbLastBlendZOnly    = false;
     }
 
     // =====================================================================================
@@ -1245,44 +1222,21 @@ namespace shadow
             Xbox2SetDepthStencilStateLowLevelShadowed(
                 const_cast<renderengine::DepthStencilState*>(mpDepthStencilState), true);
         }
-        if (lpMaterialState->mpBlendState != mpBlendState || mbLastBlendZOnly != lbZOnly)
+        // ARTIST 827F5DE4..5E80 selects factory slots 7/8 by technique bit3.
+        // Construct 827EB2D8 fills those slots (stores at 827EBA84/827EBB70),
+        // and the renderer initializes the factory before dispatching meshes.
+        // Cache the actual selected state, so different opaque materials share
+        // the same depth-only blend and alpha-tested techniques select slot8.
+        const renderengine::BlendMaterialState* lpWantedBlend = lpMaterialState->mpBlendState;
+        if (lbZOnly)
+            lpWantedBlend = CgsBlendStateFactory::GetState((lpTechnique->mu16Flags & 8u)
+                ? E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_ALPHA_TEST
+                : E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_NO_ALPHA_TEST);
+        if (lpWantedBlend != mpBlendState)
         {
-            mpBlendState = lpMaterialState->mpBlendState;
-            mbLastBlendZOnly = lbZOnly;
-            if (!lbZOnly)
-            {
-                Xbox2SetStateLowLevelShadowed(
-                    const_cast<renderengine::BlendMaterialState*>(mpBlendState), true);
-            }
-            else if (mpBlendState != nullptr)
-            {
-                // FLAG PC-platform leaf. THE CONSOLE'S Z-ONLY BLEND STATE IS AN ENGINE
-                // GLOBAL, NOT THE MATERIAL'S: DrawRenderableMeshZOnly::Interpret
-                // @0x827F5AC8 binds `(techniqueFlags >> 3) & 1 ? dword_83010F90
-                // : dword_83010F8C` (sub_82276A68 == this same applier) while taking the
-                // depth-stencil and rasteriser objects out of the technique's own
-                // MaterialState. Those two globals are DATA -- the IDA exports carry no
-                // data section, and the only other reference to either in all 30084
-                // exported functions is BrnRendererModule::BeginQuarterResBuffer
-                // @0x82408C38, which reads dword_83010F8C the same way. Their contents
-                // are therefore unattested.
-                //
-                // What they must be is not: a depth-only pass writes no colour, and the
-                // choice is made on the alpha-test flag alone. So the leaf takes the
-                // technique's OWN blend state -- which for a real pre-Z technique variant
-                // already carries ColorWriteEnable == 0 (5 of the 11 MaterialStates in the
-                // shipped world data are exactly that) and the material's own alpha func /
-                // ref -- and forces the four ColorWriteEnable words to 0. That makes the
-                // pass depth-only even for a mesh whose assembly has no separate pre-Z
-                // technique (the pre-Z technique index is clamped to numVertexDescriptors-1,
-                // so such a mesh re-uses its COLOUR technique here).
-                renderengine::BlendMaterialState lZOnlyBlend = *mpBlendState;
-                lZOnlyBlend.maState[renderengine::BlendMaterialState::E_WORD_COLOUR_WRITE_ENABLE]  = 0u;
-                lZOnlyBlend.maState[renderengine::BlendMaterialState::E_WORD_COLOUR_WRITE_ENABLE1] = 0u;
-                lZOnlyBlend.maState[renderengine::BlendMaterialState::E_WORD_COLOUR_WRITE_ENABLE2] = 0u;
-                lZOnlyBlend.maState[renderengine::BlendMaterialState::E_WORD_COLOUR_WRITE_ENABLE3] = 0u;
-                Xbox2SetStateLowLevelShadowed(&lZOnlyBlend, true);
-            }
+            mpBlendState = lpWantedBlend;
+            Xbox2SetStateLowLevelShadowed(
+                const_cast<renderengine::BlendMaterialState*>(mpBlendState), true);
         }
         if (!mbRasteriserStateLocked && lpMaterialState->mpRasterizerState != mpRasterizerState)
         {
@@ -1329,20 +1283,23 @@ namespace shadow
                   static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpST + 148)))   // serialised blob
             : 0;
 
+        const bool lbMaterialPixel = renderengine::DepthOnlyPC::NeedsMaterialPixelShader(
+            lbZOnly, lpTechnique ? lpTechnique->mu16Flags : 0u);
+        const bool lbVertexProgramChanged = SetVertexProgram(lpVertexProgram);
+        const bool lbPixelProgramChanged = SetPixelProgram(lbMaterialPixel ? lpPixelProgram : nullptr);
+
         bool lbRealBound = false;
         if (lpVertexProgram != 0 && lpPixelProgram != 0)
         {
             lbRealBound = renderengine::WorldPrograms_Bind(
                 reinterpret_cast<const u8*>(lpVertexProgram) + 0x14,
                 reinterpret_cast<const u8*>(lpPixelProgram) + 0x14,
-                lpcTechniqueName);
+                lpcTechniqueName, !lbMaterialPixel && renderengine::DepthOnlyPC::Enabled());
         }
         else
         {
             renderengine::WorldShader_ReportTechniqueHasNoPrograms(lpcTechniqueName);
         }
-        const bool lbVertexProgramChanged = SetVertexProgram(lpVertexProgram);
-        const bool lbPixelProgramChanged  = SetPixelProgram(lpPixelProgram);
 
         if (!lbRealBound)
         {
@@ -1405,13 +1362,9 @@ namespace shadow
         // bring-up path, which binds every material-scope sampler because the fallback
         // pixel shader only has s0.
         //
-        // The Z-only interpreter binds the pixel side ONLY for an alpha-tested technique
-        // (@0x827F5AC8: `if ((flags >> 3) & 1) { SetPixelProgram(ps); <these samplers> }
-        // else SetPixelProgram(0)`) -- a depth-only draw of an opaque surface needs no
-        // texture at all. Same gate here; the pixel PROGRAM itself stays bound because
-        // D3D9 has no null-pixel-shader path alongside a vs_3_0 (FLAG PC-platform leaf,
-        // and harmless: the pass writes no colour).
-        if (!lbZOnly || ((lpTechnique->mu16Flags >> 3) & 1u) != 0u)
+        // ARTIST 827F6948..6A7C keeps material samplers only for alpha-tested
+        // depth geometry. Opaque depth uses the input-free native SM3 shader.
+        if (lbMaterialPixel)
         {
             BindTechniqueSamplers(lpTech, lpAssembly);
         }

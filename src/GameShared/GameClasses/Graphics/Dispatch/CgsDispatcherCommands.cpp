@@ -1444,9 +1444,8 @@ void* ObjectToMeshJob_ExecuteImplementation(void* lpJobScratch, const u32* lpInp
 //     DEPTH-STENCIL (+0x04) and RASTERISER (+0x08) objects exactly as the colour
 //     walk does, but the BLEND object comes from one of two engine-wide Z-only
 //     states -- `(technique->mu16Flags >> 3) & 1 ? dword_83010F90 :
-//     dword_83010F8C` -- instead of the material's own. See the FLAG in
-//     shadow::Device::SetMaterialRenderStatesPC for how the PC leaf reproduces
-//     the two globals (whose contents no export attests).
+//     dword_83010F8C` -- instead of the material's own. The PC selects the same
+//     CgsBlendStateFactory slots 7/8; Construct fills them before dispatch.
 //  2. PIXEL SIDE. Only an ALPHA-TESTED technique binds a pixel program and the
 //     technique's samplers; otherwise the console binds `SetPixelProgram(0)` and
 //     no textures at all. Neither pixel constant block runs -- which is exactly

@@ -12,28 +12,9 @@
 // Destruct / Prepare have no body anywhere in the image and GetState is inlined into
 // its readers (see the header).
 //
-// -----------------------------------------------------------------------------
-// LINK. This TU is NOT in tools/build/build_game_exe.bat, and BrnRendererModule.h is
-// deliberately NOT changed to include the header, so nothing in the boot link
-// constructs a CgsBlendStateFactory and no vtable for it is emitted there. Two
-// reasons, both load-bearing:
-//
-//   1. Mounting the class into BrnRendererModule (which embeds it BY VALUE, and which
-//      is reached from `static BrnGame::BrnGameModule gGameModule;` in BrnMain.cpp)
-//      makes the vtable live in the linked exe and requires every virtual to be
-//      defined in that link. All three of this class's virtuals ARE defined -- Construct
-//      below, Destruct and Prepare as flagged fillers at the end of this file -- but the sibling
-//      CgsRasterizerStateFactory still declares itself TU-locally and non-polymorphic
-//      in its own .cpp, so the three-header swap cannot be completed honestly yet.
-//   2. Mounting it would buy nothing today anyway: NOTHING calls
-//      BrnRendererModule::Construct -> mBlendStateFactory.Construct on this build, so
-//      every slot would still read null, and a null slot handed to the frame bracket's
-//      blend third is a live null dereference (the bracket compares wanted against
-//      ImRendererBase::mgpLastState, which any immediate-mode draw leaves non-null, so
-//      the inequality fires and shadow::Device::Xbox2SetStateLowLevelShadowed reads
-//      lpu[0] with no null guard -- see shadowingdevice.cpp).
-//      The table becomes usable when something CALLS Construct, not when the class is
-//      embedded.
+// BrnRendererModule initializes this factory before dispatch. Slots 7/8 are
+// the original depth-only states at 83010F8C/83010F90, selected by the mesh
+// interpreter's alpha-test flag (ARTIST 827F5E64..5E80).
 // =============================================================================
 
 // The definition of the private static table declared in the header. The console's
