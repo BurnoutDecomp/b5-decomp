@@ -1,5 +1,6 @@
 #include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
 #include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
+#include "pc/gcm/renderengine/PackedNormalPCLeaf.h"
 // =============================================================================
 // WorldGeometryPCLeaf.cpp  (pc/gcm/renderengine)
 //
@@ -14,8 +15,8 @@
 // frame. This TU does it once per (buffer, plan) pair and keeps the result in a
 // device buffer.
 //
-// NOTHING HERE CHANGES WHAT IS DRAWN. The DEC3N expansion is a literal copy of the
-// per-draw loop it replaces, and the strip re-cut emits exactly the triangles (and
+// NOTHING HERE CHANGES WHAT IS DRAWN. The DEC3N expansion preserves the values of
+// the per-draw loop it replaces, and the strip re-cut emits exactly the triangles (and
 // the winding, and the degenerate-stitch skips) that ExpandStripRunsToList emits.
 //
 // SCOPE: only the DISPATCH publisher's geometry is mirrored -- the serialised bundle
@@ -428,38 +429,39 @@ namespace
     }
 
     // ---- vertex mirror creation ---------------------------------------------
-    // The DEC3N expansion below is the per-draw loop from WorldDraw_IndexedUP, moved
-    // verbatim: sign-extend ten bits, normalise by 511, clamp -512 to -1, and keep
-    // the untouched prefix/tail bytes of each vertex record where they were.
-    void BakeVertexData(u8* lpDestination, const WorldGeometryVertexPlan& lrPlan)
+    // Preserve the original signed10-bit /511 conversion, including the -512
+    // clamp and untouched record bytes. Compile separate kernels so the scalar
+    // comparison control adds no branch/register pressure inside the lookup loop.
+    template<bool TB_USE_LOOKUP>
+    __declspec(noinline) void BakePackedVertexData(u8* lpDestination, const WorldGeometryVertexPlan& lrPlan)
     {
-        FrameProfile::Scope lConvertProfile(FrameProfile::GEOMETRY_CONVERT);
         const u8* const lpSource = static_cast<const u8*>(lrPlan.mpData);
-
-        if (lrPlan.muDec3nCount == 0)
+        const f32* const lpfNormalTable = PackedNormalPC::gDecodeTable.mafValues;
+        for (u32 luVertex = 0; luVertex < lrPlan.muNumVertices; ++luVertex)
         {
-            std::memcpy(lpDestination, lpSource,
-                        static_cast<size_t>(lrPlan.muNumVertices) * lrPlan.muSourceStride);
-        }
-        else
-        {
-            for (u32 luVertex = 0; luVertex < lrPlan.muNumVertices; ++luVertex)
+            const u8* lpSourceVertex = lpSource + luVertex * lrPlan.muSourceStride;
+            u8* lpDestinationVertex  = lpDestination + luVertex * lrPlan.muExpandedStride;
+            u32 luSourceCursor      = 0;
+            u32 luDestinationCursor = 0;
+            for (u32 luPacked = 0; luPacked < lrPlan.muDec3nCount; ++luPacked)
             {
-                const u8* lpSourceVertex = lpSource + luVertex * lrPlan.muSourceStride;
-                u8* lpDestinationVertex  = lpDestination + luVertex * lrPlan.muExpandedStride;
-                u32 luSourceCursor      = 0;
-                u32 luDestinationCursor = 0;
-                for (u32 luPacked = 0; luPacked < lrPlan.muDec3nCount; ++luPacked)
-                {
-                    const u32 luOffset = lrPlan.mau16Dec3nOffsets[luPacked];
-                    const u32 luPrefixBytes = luOffset - luSourceCursor;
-                    std::memcpy(lpDestinationVertex + luDestinationCursor,
-                                lpSourceVertex + luSourceCursor, luPrefixBytes);
-                    luDestinationCursor += luPrefixBytes;
+                const u32 luOffset = lrPlan.mau16Dec3nOffsets[luPacked];
+                const u32 luPrefixBytes = luOffset - luSourceCursor;
+                std::memcpy(lpDestinationVertex + luDestinationCursor,
+                            lpSourceVertex + luSourceCursor, luPrefixBytes);
+                luDestinationCursor += luPrefixBytes;
 
-                    u32 luValue;
-                    std::memcpy(&luValue, lpSourceVertex + luOffset, sizeof(luValue));
-                    f32 lafNormal[3];
+                u32 luValue;
+                std::memcpy(&luValue, lpSourceVertex + luOffset, sizeof(luValue));
+                f32 lafNormal[3];
+                if constexpr (TB_USE_LOOKUP)
+                {
+                    lafNormal[0] = lpfNormalTable[luValue & 1023u];
+                    lafNormal[1] = lpfNormalTable[(luValue >> 10) & 1023u];
+                    lafNormal[2] = lpfNormalTable[(luValue >> 20) & 1023u];
+                }
+                else
+                {
                     for (u32 luComponent = 0; luComponent < 3; ++luComponent)
                     {
                         int liComponent = static_cast<int>(
@@ -469,15 +471,33 @@ namespace
                         lafNormal[luComponent] = liComponent <= -512
                             ? -1.0f : static_cast<f32>(liComponent) / 511.0f;
                     }
-                    std::memcpy(lpDestinationVertex + luDestinationCursor,
-                                lafNormal, sizeof(lafNormal));
-                    luSourceCursor = luOffset + 4u;
-                    luDestinationCursor += sizeof(lafNormal);
                 }
-                const u32 luTailBytes = lrPlan.muSourceStride - luSourceCursor;
                 std::memcpy(lpDestinationVertex + luDestinationCursor,
-                            lpSourceVertex + luSourceCursor, luTailBytes);
+                            lafNormal, sizeof(lafNormal));
+                luSourceCursor = luOffset + 4u;
+                luDestinationCursor += sizeof(lafNormal);
             }
+            const u32 luTailBytes = lrPlan.muSourceStride - luSourceCursor;
+            std::memcpy(lpDestinationVertex + luDestinationCursor,
+                        lpSourceVertex + luSourceCursor, luTailBytes);
+        }
+    }
+
+    void BakeVertexData(u8* lpDestination, const WorldGeometryVertexPlan& lrPlan)
+    {
+        FrameProfile::Scope lConvertProfile(FrameProfile::GEOMETRY_CONVERT);
+        if (lrPlan.muDec3nCount == 0)
+        {
+            std::memcpy(lpDestination, lrPlan.mpData,
+                        static_cast<size_t>(lrPlan.muNumVertices) * lrPlan.muSourceStride);
+        }
+        else if (PackedNormalPC::Enabled())
+        {
+            BakePackedVertexData<true>(lpDestination, lrPlan);
+        }
+        else
+        {
+            BakePackedVertexData<false>(lpDestination, lrPlan);
         }
     }
 
