@@ -422,7 +422,7 @@ namespace
 
     // ---- the FLAGGED fallback world shader ----------------------------------
     // Compiled once through d3dcompiler_47 (loaded dynamically; no import-lib
-    // dependency). Transforms by the row-vector WVP uploaded to c0..c3 and
+    // dependency). Transforms by the row-vector WVP uploaded to c240..c243 and
     // shades by a screen-space-derivative face normal, so raw geometry reads as
     // 3D without any real material data. LOUD BRING-UP SHIM: replaced by the
     // converted per-technique shaders (SHADERS_PC.BNDL) when their load path +
@@ -873,8 +873,8 @@ namespace
     // The technique the last program bind considered, for the per-technique fallback survey.
     // Points into the streamed ShaderTechnique blob (+148), so it outlives the bind.
     const char* spCurrentTechniqueName = nullptr;
-    // The most recent per-object WVP (the fallback shader's c0..c3). Kept so a mesh that
-    // has to drop back to the fallback can restore it after a real-constant upload.
+    // The most recent per-object WVP for fallback c240..c243. Real shaders use
+    // their own constants; late fallback and diagnostics can publish this copy.
     f32         safLastWvp[16] = { 0 };
     bool        sbHaveLastWvp = false;
 
@@ -1424,6 +1424,16 @@ namespace renderengine
 
     // ---- world-pass leaf hooks (declared in shadowingdevice.cpp) -----------
 
+    // FLAG PC-platform leaf: c240..c243 belong only to the fallback shaders.
+    // Keep the current object's CPU matrix available and publish it when those
+    // shaders become active, including late fallback inside a real technique.
+    void WorldFallbackShader_ApplyWvp()
+    {
+        IDirect3DDevice9* lpDevice = Dev();
+        if (lpDevice != nullptr && sbHaveLastWvp)
+            renderengine::PCSetVertexShaderConstantF(lpDevice, KU_FALLBACK_WVP_REGISTER, safLastWvp, 4);
+    }
+
     bool WorldFallbackShader_Bind()
     {
         IDirect3DDevice9* lpDevice = Dev();
@@ -1432,6 +1442,7 @@ namespace renderengine
         lpDevice->SetVertexShader(spFallbackVs);
         spMeshVertexShader = spFallbackVs;
         lpDevice->SetPixelShader(spFallbackPs);
+        WorldFallbackShader_ApplyWvp();
         return true;
     }
 
@@ -1439,9 +1450,16 @@ namespace renderengine
     {
         std::memcpy(safLastWvp, lpWvpRows16, sizeof(safLastWvp));
         sbHaveLastWvp = true;
-        IDirect3DDevice9* lpDevice = Dev();
-        if (lpDevice != nullptr)
-            renderengine::PCSetVertexShaderConstantF(lpDevice, KU_FALLBACK_WVP_REGISTER, lpWvpRows16, 4);
+        static const bool sbEager = [] {
+            const char* lpcValue = std::getenv("BRN_FALLBACK_WVP_EAGER");
+            return lpcValue && lpcValue[0] == '1';
+        }();
+        // Active fallback draws still consume matrix changes immediately (the
+        // scalar instance loop need not select its shader again). A real mesh
+        // uses the technique's own constants and needs no fallback upload.
+        if (sbEager || (spFallbackVs && spMeshVertexShader == spFallbackVs)
+                    || (spFallbackTexVs && spMeshVertexShader == spFallbackTexVs))
+            WorldFallbackShader_ApplyWvp();
     }
 
     // ---- the REAL per-technique program path (PC leaf) ----------------------
@@ -2457,6 +2475,8 @@ namespace renderengine
             spMeshVertexShader = spFallbackVs;
             lpDevice->SetPixelShader(spFallbackPs);
         }
+
+        WorldFallbackShader_ApplyWvp();
 
         // ---- [DIAG wheels leg 1] the FORCED (console-instanced) selection, one line per
         // DISTINCT outcome. ⛔ DELETE-WHEN the wheels are confirmed textured on a booted run.
@@ -5739,6 +5759,9 @@ namespace BrnDiag
             // engine builds (CgsCamera.cpp UpdatePerspectiveProjectionMatrix, verified
             // against ARTIST 0x827EC778); the trail's own is 0.305 m.
             {
+                // Materialize the reserved diagnostic matrix for this readback;
+                // ordinary real-shader draws do not need it on the device.
+                renderengine::WorldFallbackShader_ApplyWvp();
                 float lafObj[4 * 4] = { 0 };
                 lpDevice->GetVertexShaderConstantF(240, lafObj, 4);
                 char lacObj[420];
