@@ -120,6 +120,7 @@ int main()
     fp::Instanced(4);
     fp::GeometryBinding(true, true);
     fp::GeometryBinding(false, false);
+    fp::ResourceTexture(false); fp::ResourceTexture(false); fp::ResourceTexture(true);
     fp::Present();
     siTicks = 6100;
     fp::End();
@@ -163,6 +164,9 @@ int main()
     Check(lCsv.find("0,0.006000,6.000000,6.000000,") != std::string::npos
           && lCsv.find("1,0.012000,6.000000,5.800000,") != std::string::npos,
           "saved CSV preserves interval and active duration independently");
+
+    Check(CsvValue(lCsv, "raster_creates") == 2 && CsvValue(lCsv, "raster_releases") == 1,
+          "native raster ownership counters survive timing-only capture");
 
     Reset("1", "0", "1");
     fp::Begin();

@@ -25,4 +25,4 @@ if args.drop_cycle_deltas:
     source = source.replace(needle, 'mpFrame->maCycles[meSection] += 0')
 result = compile_and_run(Path(__file__).with_name('PCFrameTimingOnly.cpp'),
                          'pc_frame_timing_only.inc', source, 'PCFrameTimingOnly')
-raise SystemExit(report('run_pc_frame_timing_only', [], result, 34))
+raise SystemExit(report('run_pc_frame_timing_only', [], result, 35))

@@ -39,6 +39,7 @@ namespace renderengine
             LONGLONG maTicks[NUM_SECTIONS] = {};
             unsigned long long maCycles[NUM_SECTIONS] = {};
             unsigned muCycleReadFailures = 0;
+            unsigned muRasterCreates = 0, muRasterReleases = 0;
             unsigned muVertexCreates = 0, muIndexCreates = 0, muEvictions = 0, muDraws = 0;
             unsigned long long muUploadedBytes = 0;
             int miCameraBegin = -1, miCameraEnd = -1;
@@ -237,6 +238,14 @@ namespace renderengine
                 lpFrame->muUploadedBytes += luBytes;
             }
         }
+        inline void ResourceTexture(bool lbReleased)
+        {
+            if (Frame* lpFrame = gCapture.mpCurrent)
+            {
+                if (lbReleased) ++lpFrame->muRasterReleases;
+                else ++lpFrame->muRasterCreates;
+            }
+        }
         inline void Retire() { if (gCapture.mpCurrent) ++gCapture.mpCurrent->muEvictions; }
         inline void Draw() { if (gCapture.mpCurrent) ++gCapture.mpCurrent->muDraws; }
         inline void Present() { if (gCapture.mpCurrent) ++gCapture.mpCurrent->muPresents; }
@@ -286,7 +295,7 @@ namespace renderengine
                 std::snprintf(lacPath + luLength, MAX_PATH - luLength, ".frames.csv");
                 if (FILE* lpFile = std::fopen(lacPath, "w"))
                 {
-                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,object_to_mesh_ms,mesh_technique_ms,mesh_constants_ms,mesh_buffers_ms,geometry_lookup_ms,world_draw_ms,immediate_draw_ms,postfx_ms,dispatch_effects_ms,render_setup_ms,render_build_lists_ms,render_tint_ms,render_shadows_ms,render_envmap_ms,render_particle_build_ms,render_world_ms,render_particles_ms,render_composite_ms,render_gui_ms,render_present_ms,geometry_create_ms,geometry_copy_ms,pool_requests_ms,pool_states_ms,pool_retire_ms,texture_realize_ms,texture_gpu_create_ms,texture_cpu_create_ms,texture_upload_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end,instanced_draws,instances,prez_meshes,world_opaque_meshes,car_opaque_meshes,gpu_status,gpu_scene_ms,gpu_output_ms,vb_bind_requests,vb_bind_skips,ib_bind_requests,ib_bind_skips,rebased_draws,geometry_create_cycles,geometry_lock_cycles,geometry_copy_cycles,resource_pool_cycles,pool_requests_cycles,pool_states_cycles,pool_retire_cycles,texture_realize_cycles,texture_gpu_create_cycles,texture_cpu_create_cycles,texture_upload_cycles,cycle_read_failures\n");
+                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,object_to_mesh_ms,mesh_technique_ms,mesh_constants_ms,mesh_buffers_ms,geometry_lookup_ms,world_draw_ms,immediate_draw_ms,postfx_ms,dispatch_effects_ms,render_setup_ms,render_build_lists_ms,render_tint_ms,render_shadows_ms,render_envmap_ms,render_particle_build_ms,render_world_ms,render_particles_ms,render_composite_ms,render_gui_ms,render_present_ms,geometry_create_ms,geometry_copy_ms,pool_requests_ms,pool_states_ms,pool_retire_ms,texture_realize_ms,texture_gpu_create_ms,texture_cpu_create_ms,texture_upload_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end,instanced_draws,instances,prez_meshes,world_opaque_meshes,car_opaque_meshes,gpu_status,gpu_scene_ms,gpu_output_ms,vb_bind_requests,vb_bind_skips,ib_bind_requests,ib_bind_skips,rebased_draws,geometry_create_cycles,geometry_lock_cycles,geometry_copy_cycles,resource_pool_cycles,pool_requests_cycles,pool_states_cycles,pool_retire_cycles,texture_realize_cycles,texture_gpu_create_cycles,texture_cpu_create_cycles,texture_upload_cycles,raster_creates,raster_releases,cycle_read_failures\n");
                     const double lfMs = 1000.0 / static_cast<double>(gCapture.miFrequency);
                     for (unsigned lu = 0; lu < gCapture.muCount; ++lu)
                     {
@@ -307,7 +316,7 @@ namespace renderengine
                             lr.maCycles[GEOMETRY_LOCK], lr.maCycles[GEOMETRY_COPY], lr.maCycles[RESOURCE_POOL]);
                         for (unsigned ls = POOL_REQUESTS; ls < NUM_SECTIONS; ++ls)
                             std::fprintf(lpFile, ",%llu", lr.maCycles[ls]);
-                        std::fprintf(lpFile, ",%u\n", lr.muCycleReadFailures);
+                        std::fprintf(lpFile, ",%u,%u,%u\n", lr.muRasterCreates, lr.muRasterReleases, lr.muCycleReadFailures);
                     }
                     std::fclose(lpFile);
                 }

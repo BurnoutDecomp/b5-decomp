@@ -3,6 +3,12 @@
 #include <cstring>
 #include <malloc.h>
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
+// Native raster ownership is covered by PCResourceTextureLifetime.
+namespace renderengine {
+void TextureResource_OnEntryFixedUp(const void*,void*) {}
+void TextureResource_OnEntryFreed(const void*,void*) {}
+}
 #include "GameShared/GameClasses/System/Resource/CgsResourceScratchPool.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/Jobs/Relocator/CgsRelocator.h"
