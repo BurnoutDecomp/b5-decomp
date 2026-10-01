@@ -938,6 +938,22 @@ Native pixel and state checks are in `run_pc_shader_bindings.py`, including
 negative controls for missing FVF and state-block invalidation. The optimization
 does not skip draws, shader constants or instanced transforms.
 
+## Mesh data prefetch
+
+The mesh dispatcher now restores ARTIST's two-command lookahead
+(`0x827F29A0..0x827F2A8C`): prefetch the packet two entries ahead and the next
+mesh's metadata. The host adaptation preserves the dispatch subrange and
+64-bit pointers, using 64-byte cache hints for the console's 128-byte spans.
+`BRN_MESH_PREFETCH=0` disables it for comparison. The guarded-key and pointer
+regression is `python b5-decomp/tests/run_pc_mesh_prefetch.py`.
+
+Repeated same-binary fullscreen 1440p tests measured 153.86/154.55 FPS with the
+lookahead disabled and 160.09/161.17 FPS enabled. Both render 2676 world meshes,
+297 pre-Z meshes and 84 instances. This is a roughly 4% fixed-scene improvement,
+not a whole-game or locked 165 FPS claim. The qualified 90-second pickup Road Rage
+run recorded 10 takedowns, six victims and 184.77 FPS average, but its p99 frame time
+was 8.79 ms; camera changes and slow frames still require work.
+
 ## Frame-pacing measurements
 
 For frame-pacing measurements, use `BRN_FRAME_PROFILE=1` with
