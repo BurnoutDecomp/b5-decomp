@@ -43,9 +43,8 @@ namespace renderengine
 
         void SetVehicleLodPreset(VehicleLodPresetPC lePreset)
         {
-            // Exact be32 values from the Breaker graphics patches, not multipliers:
-            // High's LOD3/4 are 150/210 (its patch comments say 210/300);
-            // Low's LOD2 is 17. The be32 bytes are authoritative.
+            // Preset distances decoded from reference float32 values, not multipliers.
+            // High's LOD3/4 are 150/210; Low's LOD2 is 17.
             static const f32 kaafDistances[E_VEHICLE_LOD_CUSTOM][5] =
             {
                 { 10.0f, 22.0f,  35.0f,  50.0f,  70.0f },

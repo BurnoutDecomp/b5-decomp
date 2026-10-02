@@ -177,7 +177,7 @@ namespace BrnWorld
     {
         // ---- render toggles + tuning scalars (0x827B4434..0x827B44E0) -------
         mbRenderTrafficIntoShadowMap  = false;                        // stb r28, 0x14FB
-        // FLAG PC-platform leaf: optional native equivalent of the traffic-shadow patch.
+        // FLAG PC-platform leaf: configurable traffic shadows.
         mbRenderTrafficIntoShadowMap = renderengine::GetGraphicsSettingsPC().mbTrafficShadows;
         mbRenderShadowMapView         = true;                         // stb r11, 0x14F8
         mbRenderWorldIntoShadowMap    = true;                         // stb r11, 0x14F9

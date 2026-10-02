@@ -20,7 +20,7 @@ the picture at every resolution. Geometry and text draw into the larger target;
 existing bitmap assets retain their original detail. Windows display scaling does
 not reduce the game's rendering resolution.
 
-Graphics patch equivalents and native MSAA sample counts are documented in
+Native graphics settings and MSAA sample counts are documented in
 [PC graphics options](PC_GRAPHICS.md).
 
 `config.ini` `[Display] Width` and `Height` bound the initial 16:9 window size. F11 uses
