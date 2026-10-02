@@ -41,6 +41,18 @@ Switching to a named preset retains inactive custom keys. Vehicle presets set th
 quality LOD table; the engine still blends it with the original aggressive LOD
 table according to vehicle crowding.
 
+The player car always uses LOD0. Vehicle presets affect traffic and other race
+cars, so changing a preset does not change the detail of your own car. World/prop
+distance settings change when authored meshes switch detail; nearby objects
+already using LOD0 can look identical. Prop distances also affect distance culling.
+World instances beyond all three override bands retain their authored distance
+LOD, matching the original engine's fallback.
+
+`EnvironmentMapLOD` selects world meshes drawn into reflections. It does not
+increase the reflection texture resolution, which remains 128×128 per cube face,
+or change the reflective properties of the car's materials. Traffic shadows use
+the original near-only policy and are visible around nearby traffic.
+
 ## Anti-aliasing
 
 `[Settings] AntiAliasing` already drives native D3D9 scene MSAA:
@@ -96,3 +108,10 @@ The live smoke test uses a private slot with High vehicle LOD, extended world/pr
 LOD distances, reduced bloom, detailed reflections, traffic shadows, and 8× AA.
 It checks driving, the actual AA target and fault-free logs, captures bounded
 frames for visual review, and restores the slot's original INI.
+
+For runtime evidence, set `BRN_GRAPHICS_DIAG=1` before launching. The optional
+`[graphics-effect]` log records actual submitted LOD distributions for world,
+props, reflection geometry, traffic and race cars, plus traffic caster records.
+Each five-value distribution is LOD0 through LOD4. `distinct` counts submissions
+whose model offers different renderables across its LOD states. These counters
+describe submitted geometry; camera and GPU culling still determine visible pixels.

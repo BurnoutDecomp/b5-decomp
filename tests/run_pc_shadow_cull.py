@@ -13,8 +13,9 @@ os.environ.pop('NoDefaultCurrentDirectoryInExePath', None)
 parser = argparse.ArgumentParser()
 parser.add_argument('--omit-brackets', action='store_true')
 parser.add_argument('--invert-group', action='store_true')
+parser.add_argument('--rev', help='b5 source revision, including the missing-traffic regression control')
 args = parser.parse_args()
-tree = Tree()
+tree = Tree(args.rev)
 manager = tree.read('src/GameSource/Graphics/BrnShadowMapRenderManager.cpp')
 renderer = tree.read('src/GameSource/Graphics/BrnRendererModule.cpp')
 device = tree.read('src/GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.cpp')
@@ -47,6 +48,10 @@ if args.invert_group:
     loop = loop.replace('if (liSlot == 0)', 'if (liSlot != 0)')
 construct = definition(renderer, 'void BrnRendererModule::Construct(')
 construct_call = re.search(r'mShadowMapRenderManager\.Construct\([^;]+;', construct).group()
+producer = definition(tree.read('src/GameSource/World/BrnWorldModule.cpp'),
+                      'WorldModule::GenerateDispatchListsBringUp(')
+traffic_gate = re.search(r'const bool lbTraffic = mShadowMap\.GetRenderTrafficIntoShadowMap\(\).*?;', producer, re.S)
+traffic = (traffic_gate.group() + '\n' + definition(producer, 'if (lbTraffic)\n')) if traffic_gate else '// No traffic caster leg in this source revision.\n'
 technique = definition(tree.read('src/GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h'),
                        'struct MaterialTechniqueView') + ';'
 shadow = {
@@ -60,7 +65,8 @@ shadow = {
 result = compile_and_run(Path(__file__).with_name('PCShadowCull.cpp'), 'shadow_cull.inc', bodies,
     'PCShadowCull', shadow=shadow, extra_files={
         'shadow_cull_technique.inc': 'namespace CgsGraphics {\n' + technique + '\n}\n',
-        'shadow_cull_loop.inc': loop, 'shadow_cull_construct.inc': construct_call},
+        'shadow_cull_loop.inc': loop, 'shadow_cull_construct.inc': construct_call,
+        'shadow_traffic_caster.inc': traffic},
     extra_sources=[REPO / 'src/GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.cpp',
                    REPO / 'src/pc/gcm/renderengine/RasterizerState.cpp',
                    REPO / 'src/GameShared/GameClasses/Graphics/CgsBlendStateFactory.cpp',

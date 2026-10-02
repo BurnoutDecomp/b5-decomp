@@ -35,6 +35,9 @@ namespace Message {static unsigned gxMessageFilterFlags=0;}
 namespace Log {static QuietLog stream;static QuietLog* gpDebugPrint=&stream;}
 }
 namespace renderengine {
+struct GraphicsDiagnosticsPC { u32 muTrafficShadowRecords=0; };
+static bool GraphicsDiagnosticsEnabledPC(){return false;}
+static GraphicsDiagnosticsPC& GetGraphicsDiagnosticsPC(){static GraphicsDiagnosticsPC state;return state;}
 static u64 drawCalls;
 static bool resetEnabled;
 static u32 resetIndex;
@@ -81,6 +84,7 @@ static void DrawAndCheck(u32 mode)
         &&Pixel(56)==(mode==1?0xff000000u:0xffffffffu),"native opposite-winding pixels match selected cull state");
 }
 static bool forceFront=true;
+static bool trafficMode=false;
 static int emptyList=-1;
 static std::vector<int> lists,begins,ends;
 static renderengine::MaterialState* material;
@@ -98,9 +102,12 @@ void BrnGraphics::ShadowMapRenderManager::EndRenderShadowMap(s32 index,BrnRender
 }
 struct List {
     int index;
+    int trafficRecords=0;
+    int GetCount() const {return trafficRecords;}
     void DispatchAllMeshesZOnly(void*,void*)
     {
         lists.push_back(index);
+        if(trafficMode&&trafficRecords==0)return;
         const bool locked=forceFront?(index==2||index==3):(index==0||index==1||index==4);
         Check(shadow::Device::mbRasteriserStateLocked==locked,"assembly-defined caster group owns the lock");
         const int before=nativeBinds;
@@ -130,6 +137,42 @@ struct RendererFixture {
     }
     void Render(void* lpContext){
 #include "shadow_cull_loop.inc"
+    }
+};
+
+struct TrafficShadowSelector {
+    bool enabled=false,nearOnly=true;
+    bool GetRenderTrafficIntoShadowMap() const{return enabled;}
+    bool GetRenderTrafficNearOnly() const{return nearOnly;}
+};
+struct TrafficFog {float x,y,z,w;};
+struct TrafficCamera {int id=17;};
+struct TrafficModuleFixture {
+    Frame* frame=nullptr;
+    int calls=0;
+    void GenerateDispatchLists(const int*,const int&,TrafficFog scatter,TrafficFog colour,
+                               TrafficFog,TrafficFog,int object,int opaque,int transparent,const TrafficCamera& camera)
+    {
+        Check(object==opaque&&object==transparent,"traffic caster uses the same object/mesh list");
+        Check(scatter.x==0&&scatter.y==0&&scatter.z==0&&scatter.w==0&&
+              colour.x==0&&colour.y==0&&colour.z==0&&colour.w==0,"shadow caster gets zero fog constants");
+        Check(camera.id==17,"traffic caster receives the actual camera record");
+        ++calls;++frame->GetList(object)->trafficRecords;
+    }
+};
+struct TrafficProducerFixture {
+    TrafficShadowSelector mShadowMap;
+    TrafficModuleFixture mTrafficEntityModule;
+    TrafficCamera mLastCameraInput;
+    Frame* frame=nullptr;
+    void Produce(u32 luCascade)
+    {
+        using Vector4=TrafficFog;
+        Frame* lpDispatchFrame=frame;
+        int sTrafficDispatchInput=0;
+        struct {int maTrafficRenderInfos=0;} sTrafficRenderInfos;
+        TrafficFog lEye{},lForward{};
+#include "shadow_traffic_caster.inc"
     }
 };
 int main()
@@ -171,6 +214,28 @@ int main()
         shadow::Device::SetMaterialRenderStatesPC(&technique,false);DrawAndCheck(0);
         Check(renderengine::resetEnabled&&renderengine::resetIndex==0xffff,"factory primitive-reset state survives the bracket");
     }
+    trafficMode=true;forceFront=true;emptyList=-1;
+    renderer.mShadowMapRenderManager.mbForceFrontFaceCull=true;
+    TrafficProducerFixture producer;producer.frame=&renderer.mSingleBufferedDispatchFrame;
+    producer.mTrafficEntityModule.frame=producer.frame;
+    for(int enabled=0;enabled<2;++enabled){
+        for(auto& entry:producer.frame->entries)entry.trafficRecords=0;
+        producer.mTrafficEntityModule.calls=0;producer.mShadowMap.enabled=enabled!=0;producer.mShadowMap.nearOnly=true;
+        for(u32 cascade=0;cascade<3;++cascade)producer.Produce(cascade);
+        Check(producer.mTrafficEntityModule.calls==enabled,"traffic setting controls the active producer call");
+        Check(producer.frame->entries[2].trafficRecords==enabled&&producer.frame->entries[0].trafficRecords==0&&
+              producer.frame->entries[3].trafficRecords==0&&producer.frame->entries[4].trafficRecords==0,
+              "near-only traffic routes to caster list 2 and no other cascade");
+        Dev()->Clear(0,nullptr,D3DCLEAR_TARGET,0xff000000,1,0);renderer.Render(nullptr);
+        Check(Pixel(8)==(enabled?0xffffffffu:0xff000000u),"traffic setting changes native caster pixels through the renderer loop");
+    }
+    producer.mShadowMap.nearOnly=false;producer.mTrafficEntityModule.calls=0;
+    for(auto& entry:producer.frame->entries)entry.trafficRecords=0;
+    for(u32 cascade=0;cascade<3;++cascade)producer.Produce(cascade);
+    Check(producer.mTrafficEntityModule.calls==3&&producer.frame->entries[2].trafficRecords==1&&
+          producer.frame->entries[3].trafficRecords==1&&producer.frame->entries[4].trafficRecords==1,
+          "original unrestricted traffic policy uses cascade+2 list routing");
+    trafficMode=false;
     shadow::Device::SetState(CgsRasterizerStateFactory::GetState(0));
     renderer.mShadowMapRenderManager.mbForceFrontFaceCull=true;
     renderer.mShadowMapRenderManager.BeginBackFaceCullRender();
