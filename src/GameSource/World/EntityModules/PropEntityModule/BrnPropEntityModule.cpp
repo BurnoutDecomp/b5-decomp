@@ -296,7 +296,7 @@ namespace BrnWorld
             mauOverrideLodDistances[li8Lod] = 100 * (li8Lod + 1);
         }
 
-        // FLAG PC-platform leaf: the patch changes this loop's base and enables overrides.
+        // FLAG PC-platform leaf: configure the original LOD distance override base.
         const renderengine::GraphicsSettingsPC& lrGraphics = renderengine::GetGraphicsSettingsPC();
         lrGraphics.ApplyLodOverride(lrGraphics.miPropLodOverrideDistance,
                                   mbOverrideLodDistances, mauOverrideLodDistances);

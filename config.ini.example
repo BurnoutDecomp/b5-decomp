@@ -18,15 +18,15 @@ Coronas=1
 SunCorona=1
 
 [Graphics]
-; Original defaults. See docs/PC_GRAPHICS.md for the Breaker patch equivalents.
-; Bloom patch: 0.3. Zero removes the bloom contribution.
+; Native graphics settings. See docs/PC_GRAPHICS.md for details.
+; Bloom strength: 1 = original, 0.3 = reduced, 0 = no bloom contribution.
 BloomLuminanceScale=1
 ; Reflection world LOD: 0 = highest detail, 1 = medium, 2 = original.
 EnvironmentMapLOD=2
-; Traffic-shadow patch: 1.
+; Traffic shadows: 0 = off, 1 = on.
 TrafficShadows=0
-; 0 = original asset LODs. High patch = 3000 for both.
-; Low patch = 1 for world, 50 for props. The three bands use distance * 1/2/3.
+; 0 = original asset LODs. Extended-distance example: 3000 for both.
+; Short-distance examples: 1 for world, 50 for props. Bands use distance * 1/2/3.
 WorldLODOverrideDistance=0
 PropLODOverrideDistance=0
 ; Default, Potato, Low, Medium, High, Ultra, Custom (case-insensitive).

@@ -153,9 +153,9 @@ void LoadConfig()
     if (liAntiAliasing > 16) liAntiAliasing = 16;
     renderengine::gAntiAliasing = liAntiAliasing;
 
-    // FLAG PC-platform leaf: expose the Breaker graphics patches through the INI.
+    // FLAG PC-platform leaf: configure the original graphics controls through the INI.
     // These are the original writable globals; all per-module settings are applied
-    // by Construct, after this load. The vehicle patches change only the QUALITY table.
+    // by Construct, after this load. Vehicle presets set the QUALITY table.
     renderengine::LoadGraphicsSettingsPC(lacPath);
     const renderengine::GraphicsSettingsPC& lrGraphics = renderengine::GetGraphicsSettingsPC();
     gfBloomLuminanceScale = lrGraphics.mfBloomLuminanceScale;

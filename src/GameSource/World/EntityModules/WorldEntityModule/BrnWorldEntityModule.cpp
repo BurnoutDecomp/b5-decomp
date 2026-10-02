@@ -155,7 +155,7 @@ WorldEntityModule::Construct( void )
         mauOverrideLodDistances[ liI ] = 300 * ( liI + 1 );
     }
 
-    // FLAG PC-platform leaf: seed the exact members changed by the Breaker patches.
+    // FLAG PC-platform leaf: seed reflection detail and LOD distance settings.
     const renderengine::GraphicsSettingsPC& lrGraphics = renderengine::GetGraphicsSettingsPC();
     miEnvironmentMapLOD = lrGraphics.miEnvironmentMapLod;
     lrGraphics.ApplyLodOverride(lrGraphics.miWorldLodOverrideDistance,

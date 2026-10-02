@@ -41,7 +41,7 @@ static void Set(const char* lpcKey, const char* lpcValue)
 static void CheckTable(const float* lpafExpected)
 {
     for (u32 luLod = 0; luLod < 5u; ++luLod)
-        Check(BrnWorld::KA_VEHICLE_QUALITY_LOD_DISTANCE[luLod] == lpafExpected[luLod], "exact vehicle patch distance reaches engine global");
+        Check(BrnWorld::KA_VEHICLE_QUALITY_LOD_DISTANCE[luLod] == lpafExpected[luLod], "exact vehicle LOD distance reaches engine global");
 }
 
 static void ConfigChecks()
@@ -57,8 +57,8 @@ static void ConfigChecks()
     lrGraphics.ApplyLodOverride(0, lbOverride, laiDistances);
     Check(!lbOverride && laiDistances[0] == 300 && laiDistances[2] == 900, "default does not enable distance overrides");
 
-    // Raw be32 patch words, decoded independently of production's decimal tables.
-    // High's comments disagree with its actual LOD3/4 bytes: 150/210, not 210/300.
+    // Reference float32 bit patterns, decoded independently of production's decimal tables.
+    // High's LOD3/4 distances are 150/210.
     const u32 kaauExpectedBits[6][5] =
     {
         {0x41200000,0x41b00000,0x420c0000,0x42480000,0x428c0000},
@@ -85,17 +85,17 @@ static void ConfigChecks()
     WritePrivateProfileStringA("Settings","AntiAliasing","8",gacTestIni);
     LoadConfig();
     Check(gfBloomLuminanceScale == 0.3f && lrGraphics.miEnvironmentMapLod == 0 && lrGraphics.mbTrafficShadows,
-          "active Xenia bloom/reflection/shadow settings reach native state");
+          "configured bloom/reflection/shadow settings reach native state");
     lrGraphics.ApplyLodOverride(lrGraphics.miWorldLodOverrideDistance, lbOverride, laiDistances);
     Check(lbOverride && laiDistances[0] == 3000 && laiDistances[1] == 6000 && laiDistances[2] == 9000,
-          "High world patch uses all three multiplied bands");
+          "extended world LOD override uses all three multiplied bands");
     lrGraphics.ApplyLodOverride(lrGraphics.miPropLodOverrideDistance, lbOverride, laiDistances);
-    Check(lbOverride && laiDistances[0] == 3000 && laiDistances[2] == 9000, "High prop patch bands");
+    Check(lbOverride && laiDistances[0] == 3000 && laiDistances[2] == 9000, "extended prop LOD distance bands");
     Set("WorldLODOverrideDistance","1"); Set("PropLODOverrideDistance","50"); LoadConfig();
     lrGraphics.ApplyLodOverride(lrGraphics.miWorldLodOverrideDistance, lbOverride, laiDistances);
-    Check(laiDistances[0] == 1 && laiDistances[2] == 3, "Low world patch bands");
+    Check(laiDistances[0] == 1 && laiDistances[2] == 3, "short world LOD distance bands");
     lrGraphics.ApplyLodOverride(lrGraphics.miPropLodOverrideDistance, lbOverride, laiDistances);
-    Check(laiDistances[0] == 50 && laiDistances[2] == 150, "Low prop patch bands");
+    Check(laiDistances[0] == 50 && laiDistances[2] == 150, "short prop LOD distance bands");
     Set("VehicleLOD0Distance","12.5"); Set("VehicleLODPreset","Default"); LoadConfig(); SaveConfig();
     CheckTable(kaafExpected[0]);
     char lacValue[128];
