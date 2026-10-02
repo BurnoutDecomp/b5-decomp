@@ -1,4 +1,5 @@
 #pragma once
+#include "pc/gcm/renderengine/DepthRangePCLeaf.h"
 
 #include <Windows.h>
 #include <d3d9.h>
@@ -115,7 +116,7 @@ namespace renderengine
         void Bind(IDirect3DDevice9* lpDevice) const
         {
             lpDevice->SetDepthStencilSurface(nullptr);
-            lpDevice->SetRenderTarget(0, mpColour);
+            DepthRangePC::SetRenderTarget(lpDevice, 0, mpColour);
             lpDevice->SetDepthStencilSurface(mpDepth);
         }
     };

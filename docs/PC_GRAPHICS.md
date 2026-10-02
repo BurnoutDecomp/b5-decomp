@@ -53,6 +53,12 @@ increase the reflection texture resolution, which remains 128×128 per cube face
 or change the reflective properties of the car's materials. Traffic shadows use
 the original near-only policy and are visible around nearby traffic.
 
+Vehicle paint, body panels and window glass sample the same dynamic reflection
+cube. Props use their current world transforms, including during motion, and the
+original reflection LOD2 selection. `EnvironmentMapLOD` changes world geometry
+detail only. The PC backend translates the original inverted depth range and sky
+depth test so scenery and props survive the final sky draw in each cube face.
+
 ## Anti-aliasing
 
 `[Settings] AntiAliasing` already drives native D3D9 scene MSAA:
@@ -96,6 +102,7 @@ From the workflow checkout:
 
 ```powershell
 python b5-decomp/tests/run_pc_graphics_settings.py
+python b5-decomp/tests/run_pc_reflection_depth.py
 python b5-decomp/tests/run_pc_fullscreen.py
 python b5-decomp/tests/run_pc_display_resize.py
 powershell -NoProfile -ExecutionPolicy Bypass -File b5-decomp/tests/PCGraphicsSettingsLive.ps1
@@ -104,6 +111,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File b5-decomp/tests/PCGraphicsSe
 The graphics runner exercises production INI loading/saving, exact presets,
 invalid values, engine-global assignment, the original LOD classifier, and native
 D3D9 MSAA surface creation, binding, draw and resolve.
+The reflection runner checks native pixels through the production viewport and
+depth-state setters, clears, final sky draw and main-scene target handoff. It
+covers moving fixture transforms and both D24S8 and stencil-less D16 depth.
 The live smoke test uses a private slot with High vehicle LOD, extended world/prop
 LOD distances, reduced bloom, detailed reflections, traffic shadows, and 8× AA.
 It checks driving, the actual AA target and fault-free logs, captures bounded
