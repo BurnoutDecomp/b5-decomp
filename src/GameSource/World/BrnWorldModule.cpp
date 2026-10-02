@@ -30,6 +30,7 @@
 // ============================================================================
 #include <ctime>   // [DIAG culling wave] clock() for the producer-fps readout
 #include "pc/gcm/renderengine/GraphicsDiagnosticsPCLeaf.h"
+#include "pc/gcm/renderengine/EnvironmentMapPCLeaf.h"
 #include <chrono>  // [DIAG shadow-perf wave] steady_clock for the per-phase producer timers
 #include <cstdlib>                                                // getenv/atof (the BRN_WORLD_CAMDIST bring-up diagnostic)
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"   // CgsGraphics::ShaderConstantTable
@@ -3785,7 +3786,7 @@ WorldModule::GenerateFrustumQueries(
             CgsGraphics::Camera lFaceCamera = mEnvironmentMap.maEnvMapCameras[ liFace ];
             CgsGraphics::Camera lProjectedCamera;
             lFaceCamera.Clone( &lProjectedCamera );
-            lProjectedCamera.UpdatePerspectiveProjectionMatrix();
+            renderengine::SetEnvironmentMapProjectionPC(lProjectedCamera);
 
             // ⭐ CORRECTED 2026-08-17 (reflections step 1): lbNegateNearFar is TRUE for the
             // env-map faces. This leg used to call the no-arg PC bridge
@@ -4335,12 +4336,11 @@ WorldModule::GenerateDispatchLists(
             // and record its view-projection for the env-map resolve -- ON THE
             // LOCAL COPY (X360 v219): the member maEnvMapCameras[face] is never
             // mutated by the dispatch pass.
-            // ⚠ FLAG PC-platform leaf (b5-decomp#5): the console's trailing
-            // SetPerspectiveProjectionMatrixRightHanded is dropped here for the same reason it
-            // is dropped in GenerateDispatchListsBringUp's env-map arm (the live producer) --
-            // see the FLAG there and on EnvironmentMap::Update. Kept in step so the two
-            // producers cannot disagree the day this one goes live.
+            // FLAG PC-platform leaf: far-clip setters rebuild the ordinary
+            // projection. Reapply the native cube orientation before publishing
+            // the sky matrix, matching the world/prop face projection above.
             lFaceCamera.SetFarClipPlane( 10000.0f );   // the store + the D3D rebuild, one member
+            renderengine::SetEnvironmentMapProjectionPC(lFaceCamera);
             lpShaderConstantsFrame->SetEnvMapViewProjectionMatrix(
                 static_cast<BrnGraphics::EEnvironmentMapFace>( liFace ),
                 lFaceCamera.GetViewProjectionMatrix() );
@@ -6766,7 +6766,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 CgsGraphics::Camera lFaceCamera = mEnvironmentMap.maEnvMapCameras[ liFace ];
                 CgsGraphics::Camera lProjectedCamera;
                 lFaceCamera.Clone( &lProjectedCamera );
-                lProjectedCamera.UpdatePerspectiveProjectionMatrix();
+                renderengine::SetEnvironmentMapProjectionPC(lProjectedCamera);
 
                 // ⚠ negate = FALSE since 2026-09-06 (b5-decomp#5). It used to be TRUE, to match
                 // the RIGHT-HANDED projection EnvironmentMap::Update left on the face cameras --
@@ -7553,15 +7553,11 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 // :4080-4085 -- push the far clip out for the RENDERER's copy of the face
                 // view-projection and publish it into the frame (the SKY DOME reads it back as
                 // GetEnvMapViewProjectionMatrix(face)).
-                // ⚠ FLAG PC-platform leaf (b5-decomp#5, 2026-09-06): the console's trailing
-                // SetPerspectiveProjectionMatrixRightHanded @0x827EC698 is DROPPED. It is the
-                // only thing that made the published matrix right-handed, and on D3D9 -- paired
-                // with LookAt's LEFT-handed view -- it drew the sky dome's ANTIPODAL hemisphere
-                // into every face, which is what put the ground on +Y and the sky on -Y. The
-                // rebuild SetFarClipPlane already performed leaves the ordinary D3D projection
-                // in place, which is the same matrix the world and prop legs above were handed.
-                // Full derivation on the FLAG in EnvironmentMap::Update; the two move together.
+                // FLAG PC-platform leaf: far-clip setters rebuild the ordinary
+                // projection. Reapply the native cube orientation before publishing
+                // the sky matrix, matching the world/prop face projection above.
                 lFaceCamera.SetFarClipPlane( 10000.0f );   // the store + the D3D rebuild, one member
+                renderengine::SetEnvironmentMapProjectionPC(lFaceCamera);
                 gBrnWorldShaderConstantsFrameBringUp.LockForWriting();
                 gBrnWorldShaderConstantsFrameBringUp.SetEnvMapViewProjectionMatrix(
                     static_cast< BrnGraphics::EEnvironmentMapFace >( liFace ),

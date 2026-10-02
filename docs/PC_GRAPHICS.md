@@ -103,6 +103,7 @@ From the workflow checkout:
 ```powershell
 python b5-decomp/tests/run_pc_graphics_settings.py
 python b5-decomp/tests/run_pc_reflection_depth.py
+python b5-decomp/tests/run_pc_reflection_orientation.py
 python b5-decomp/tests/run_pc_fullscreen.py
 python b5-decomp/tests/run_pc_display_resize.py
 powershell -NoProfile -ExecutionPolicy Bypass -File b5-decomp/tests/PCGraphicsSettingsLive.ps1
@@ -114,6 +115,9 @@ D3D9 MSAA surface creation, binding, draw and resolve.
 The reflection runner checks native pixels through the production viewport and
 depth-state setters, clears, final sky draw and main-scene target handoff. It
 covers moving fixture transforms and both D24S8 and stencil-less D16 depth.
+The orientation runner renders a continuous scene through the actual cube-face
+cameras and samples it on the GPU across all twelve cube edges. It includes the
+original and PC producer sky projection rebuilds and the reflection cull state.
 The live smoke test uses a private slot with High vehicle LOD, extended world/prop
 LOD distances, reduced bloom, detailed reflections, traffic shadows, and 8× AA.
 It checks driving, the actual AA target and fault-free logs, captures bounded

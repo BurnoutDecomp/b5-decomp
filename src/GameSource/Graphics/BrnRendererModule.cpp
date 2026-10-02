@@ -2784,29 +2784,14 @@ void BrnRendererModule::BeginRenderEnvironmentMapFace(u32 luFace, f32 lfWhiteLev
     // The three cached render-state applies (see the banner for each slot's identification).
     shadow::Device::SetState(CgsDepthStencilStateFactory::GetState(
                                  E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON));
-    // ⚠ FLAG PC-platform leaf (b5-decomp#5, 2026-09-06): CULL_MODE_**BACK**, not the console's
-    // CULL_MODE_FRONT, and it is the SECOND HALF of one change -- it must move with the env-map
-    // face projection and never on its own.
-    //
-    // The console's face cameras carried a RIGHT-handed projection (clip.w = -view.z, from
-    // Camera::SetPerspectiveProjectionMatrixRightHanded @0x827EC698), which negates the projected
-    // x and y and therefore REVERSES every triangle's screen winding. CULL FRONT is what turns
-    // that back into ordinary front-face rendering; the two are one state. This build's PC leaf
-    // publishes the ordinary D3D projection for the faces instead (see the FLAG on
-    // BrnGraphics::EnvironmentMap::Update -- the right-handed pair drew the ANTIPODAL hemisphere
-    // into every face on D3D9), so the winding is no longer reversed and CULL FRONT would cull
-    // exactly the surfaces the console keeps.
-    //
-    // MEASURED, both ways, with BRN_ENVMAP_STATS reading the resolved faces back off the GPU:
-    //   RH projection + CULL FRONT : +Y face = the GROUND (lum 39), -Y face = the SKY (lum 78)
-    //   D3D projection + CULL FRONT: +Y face = the SKY (lum 78), -Y face = FLAT CLEAR COLOUR
-    //                                (lum 38.0, std 0.00) with 90-106 meshes dispatched into it --
-    //                                the road drawn and then culled, one-sided, so it vanished
-    //                                while the buildings' back faces kept the side faces busy.
-    //   D3D projection + CULL BACK : the state below.
-    // DELETE-WHEN the face projection goes back to the console's right-handed build.
+    // FLAG PC-platform leaf: the native cube projection mirrors clip X to
+    // compensate for the original LookAt horizontal basis. That reverses screen
+    // winding relative to the former PC projection, so restore the original
+    // CULL FRONT state attested by BeginRenderEnvironmentMapFace @0x823F63E0.
+    // Projection and cull state must change together; ordinary world passes keep
+    // their existing camera and rasterizer states.
     shadow::Device::SetState(CgsRasterizerStateFactory::GetState(
-                                 E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK));
+                                 E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT));
     shadow::Device::SetState(CgsBlendStateFactory::GetState(
                                  E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA));
 }
