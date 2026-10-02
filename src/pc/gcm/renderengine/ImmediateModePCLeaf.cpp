@@ -59,6 +59,7 @@
 // =============================================================================
 
 #include "types.hpp"
+#include "pc/gcm/renderengine/DepthRangePCLeaf.h"
 
 #include <Windows.h>
 #include <d3d9.h>
@@ -340,22 +341,13 @@ namespace
         DWORD meDepthFunction;
     };
 
-    // The MAIN sky pass (X360 dword_83010F38 / F3C / F4C) and the ENV-MAP pass
-    // (dword_83010F50). The console's state objects are packed Xenos register blocks
-    // whose initialiser values were not recovered; these carry the only configuration
-    // the sky pass can have given WHERE it is drawn.
-    //
-    // The pass order is the X360's: pre-Z -> cars opaque -> world opaque -> SKY ->
-    // transparents. Drawing a camera-centred dome AFTER the opaque geometry only works
-    // if it depth-tests against what is already there and does not write depth --
-    // otherwise it would either be occluded everywhere (no test, drawn over) or would
-    // stamp its own depth over the city. So: test on with LESS, write OFF, no blending,
-    // no alpha test, and cull NONE (the same shared cull-none rasteriser
-    // CgsGuiViewModule.cpp names -- a dome is viewed from the inside, so a culled
-    // winding would drop the whole thing).
-    // The depth FUNCTION is LESSEQUAL, not LESS: the dome is at the far end of the depth
-    // range by construction, so a fragment that lands exactly on the cleared 1.0 (which a
-    // 9500-unit dome under a 12000-unit far plane does to within a few ULPs) has to pass.
+    // MAIN sky depth (dword_83010F4C) and ENV-MAP sky depth (dword_83010F50)
+    // come from ARTIST ImRendererBase::ConstructOnceOnly @0x827F1C20:
+    //   @0x827F1D14..28: ConstructDepthStencilState(alloc, 1, 0, 3)
+    //   @0x827F1D2C..40: ConstructDepthStencilState(alloc, 1, 0, 6)
+    // Both test depth without writing it. Xenos 3 is LESSEQUAL; 6 is GREATEREQUAL
+    // for the inverted cube-face viewport. The sky draws after opaque geometry,
+    // so this test preserves that geometry and fills only the background.
     ImBlendState        sSkyDomeBlendState        = { FALSE, D3DBLEND_ONE, D3DBLEND_ZERO, FALSE, FALSE };
     // X360 dword_83010F20 == ImRendererBase::ConstructBlendState(alloc, 6, 7, 0) in
     // ConstructOnceOnly @0x827F1C20: source SRCALPHA (Xenon blend enum 6), destination
@@ -392,9 +384,10 @@ namespace
     ImRasterizerState   sImDebrisRasterizerState  = { D3DCULL_CW, D3DFILL_SOLID };
     ImDepthStencilState sImDebrisDepthStencilState = { TRUE, TRUE, D3DCMP_LESSEQUAL };
     ImDepthStencilState sSkyDomeDepthStencilState = { TRUE, FALSE, D3DCMP_LESSEQUAL };
-    // The env-map faces are rendered into a freshly cleared face with nothing else in
-    // it, so that pass takes the depth test out of the way entirely.
-    ImDepthStencilState sSkyDomeEnvMapDepthStencilState = { FALSE, FALSE, D3DCMP_ALWAYS };
+    // ARTIST ConstructOnceOnly @0x827F1D2C..40 builds (test=1, write=0, func=6),
+    // stored at dword_83010F50. The sky must fill only the cleared background,
+    // preserving the world and moving props already rendered into this face.
+    ImDepthStencilState sSkyDomeEnvMapDepthStencilState = { TRUE, FALSE, D3DCMP_GREATEREQUAL };
 
     // -------------------------------------------------------------------------
     // The SHADOW-MAP pass depth/stencil state (X360 dword_8301090C).
@@ -587,7 +580,8 @@ void ImDeviceSetDepthStencilState(void* lpState)
     lpDevice->SetRenderState(D3DRS_ZENABLE,
                              lpDepth->mbDepthTestEnable ? D3DZB_TRUE : D3DZB_FALSE);
     lpDevice->SetRenderState(D3DRS_ZWRITEENABLE, lpDepth->mbDepthWriteEnable);
-    lpDevice->SetRenderState(D3DRS_ZFUNC, lpDepth->meDepthFunction);
+    renderengine::DepthRangePC::SetDepthFunction(lpDevice,
+        static_cast<D3DCMPFUNC>(lpDepth->meDepthFunction));
     lpDevice->SetRenderState(D3DRS_STENCILENABLE, FALSE);
 }
 
@@ -659,15 +653,16 @@ void DeviceClearDepthStencil(const renderengine::ClearDepthStencilParameters* lp
     if (luFlags == 0)
         return;
 
+    const f32 lfNativeDepth = renderengine::DepthRangePC::ClearDepth(lpDevice, lpParameters->mfDepth);
     HRESULT lhr = lpDevice->Clear(0, nullptr, luFlags, D3DCOLOR_ARGB(0, 0, 0, 0),
-                                  lpParameters->mfDepth, lpParameters->mu32Stencil);
+                                  lfNativeDepth, lpParameters->mu32Stencil);
     bool lbDroppedStencil = false;
     if (FAILED(lhr) && (luFlags & D3DCLEAR_STENCIL) != 0)
     {
         luFlags &= ~static_cast<DWORD>(D3DCLEAR_STENCIL);
         lbDroppedStencil = true;
         lhr = lpDevice->Clear(0, nullptr, luFlags, D3DCOLOR_ARGB(0, 0, 0, 0),
-                              lpParameters->mfDepth, lpParameters->mu32Stencil);
+                              lfNativeDepth, lpParameters->mu32Stencil);
     }
 
     // ⚠ VALUE-LATCHED, not a `static bool` one-shot. The old one-shots here could only ever
@@ -835,15 +830,16 @@ void renderengine::Device::Clear(const renderengine::ClearColorParameters& lrCle
     const D3DCOLOR lColour = D3DCOLOR_ARGB(lauChannel[3], lauChannel[0],
                                            lauChannel[1], lauChannel[2]);
 
+    const f32 lfNativeDepth = renderengine::DepthRangePC::ClearDepth(lpDevice, lrClearDepthStencil.mfDepth);
     HRESULT lhr = lpDevice->Clear(0, nullptr, luFlags, lColour,
-                                  lrClearDepthStencil.mfDepth, lrClearDepthStencil.mu32Stencil);
+                                  lfNativeDepth, lrClearDepthStencil.mu32Stencil);
     bool lbDroppedStencil = false;
     if (FAILED(lhr) && (luFlags & D3DCLEAR_STENCIL) != 0)
     {
         luFlags &= ~static_cast<DWORD>(D3DCLEAR_STENCIL);
         lbDroppedStencil = true;
         lhr = lpDevice->Clear(0, nullptr, luFlags, lColour,
-                              lrClearDepthStencil.mfDepth, lrClearDepthStencil.mu32Stencil);
+                              lfNativeDepth, lrClearDepthStencil.mu32Stencil);
     }
 
     // VALUE-LATCHED, not a `static bool` one-shot -- the same reason spelled out on the sibling:

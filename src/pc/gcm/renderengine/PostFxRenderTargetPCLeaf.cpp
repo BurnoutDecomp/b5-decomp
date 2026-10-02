@@ -60,6 +60,7 @@
 #include <d3d9.h>
 
 #include "types.hpp"
+#include "pc/gcm/renderengine/DepthRangePCLeaf.h"
 
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"
 #include "pc/gcm/renderengine/device.h"                  // renderengine::gDevice / gD3D9 / Device::SetState
@@ -1104,7 +1105,7 @@ namespace renderengine
         // it mid-swap, so the depth surface is dropped first and re-bound after.
         lpDevice->SetDepthStencilSurface(nullptr);
         if (lpColour != nullptr)
-            lpDevice->SetRenderTarget(0, lpColour);
+            DepthRangePC::SetRenderTarget(lpDevice, 0, lpColour);
         lpDevice->SetDepthStencilSurface(lpState->mpDepthSurface);
 
         // The bound colour target's sample count is an input of the alpha-to-coverage
@@ -1967,7 +1968,7 @@ namespace postfx
         lViewport.Height = muHeight;
         lViewport.MinZ   = 0.0f;
         lViewport.MaxZ   = 1.0f;
-        lpDevice->SetViewport(&lViewport);
+        renderengine::DepthRangePC::SetViewport(lpDevice, lViewport);
 
         RECT lScissor;
         lScissor.left   = 0;

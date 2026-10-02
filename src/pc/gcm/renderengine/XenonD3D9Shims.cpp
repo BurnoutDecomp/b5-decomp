@@ -1,5 +1,6 @@
 #include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
 #include "pc/gcm/renderengine/DepthOnlyPCLeaf.h"
+#include "pc/gcm/renderengine/DepthRangePCLeaf.h"
 #include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 #include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
 // =============================================================================
@@ -7604,7 +7605,7 @@ void D3DDevice_SetRenderState_ZFunc(IDirect3DDevice9*, u32 luValue)
 {
     IDirect3DDevice9* lpDevice = Dev();
     if (lpDevice != nullptr)
-        lpDevice->SetRenderState(D3DRS_ZFUNC, XenonCompareToD3D9(luValue));
+        renderengine::DepthRangePC::SetDepthFunction(lpDevice, static_cast<D3DCMPFUNC>(XenonCompareToD3D9(luValue)));
 }
 void D3DDevice_SetRenderState_StencilEnable(IDirect3DDevice9*, u32 luValue)
 {
@@ -7797,7 +7798,7 @@ void D3DDevice_SetViewportF(void* /*lpDeviceArg*/, const void* lpViewport)
     lViewport.Height = static_cast<DWORD>(lfHeight > 0.0f ? lfHeight : 0.0f);
     lViewport.MinZ   = lpfViewport[4];
     lViewport.MaxZ   = lpfViewport[5];
-    lpDevice->SetViewport(&lViewport);
+    renderengine::DepthRangePC::SetViewport(lpDevice, lViewport);
 }
 
 void D3DDevice_SetScissorRect(void* /*lpDeviceArg*/, const void* lpRect)
@@ -7860,6 +7861,7 @@ namespace
     IDirect3DSurface9* spSavedColourSurface = nullptr;
     IDirect3DSurface9* spSavedDepthSurface  = nullptr;
     D3DVIEWPORT9       sSavedViewport       = {};
+    bool              sbSavedDepthInverted = false;
     RECT               sSavedScissor        = {};
     BOOL               sbSavedScissorEnable = FALSE;
     bool               sbSurfacesSaved      = false;
@@ -7883,6 +7885,7 @@ void PCSurfaceBracket_Save()
     if (FAILED(lpDevice->GetDepthStencilSurface(&spSavedDepthSurface)))
         spSavedDepthSurface = nullptr;   // a device with no depth buffer bound is legal
     lpDevice->GetViewport(&sSavedViewport);
+    sbSavedDepthInverted = renderengine::DepthRangePC::GetState(lpDevice).mbInverted;
     lpDevice->GetScissorRect(&sSavedScissor);
     {
         DWORD luScissorEnable = FALSE;
@@ -7937,7 +7940,10 @@ void PCSurfaceBracket_Restore()
         if (spSavedColourSurface != nullptr)
             lpDevice->SetRenderTarget(0, spSavedColourSurface);
         lpDevice->SetDepthStencilSurface(spSavedDepthSurface);   // null is a valid unbind
-        lpDevice->SetViewport(&sSavedViewport);
+        D3DVIEWPORT9 lLogicalViewport = sSavedViewport;
+        if (sbSavedDepthInverted)
+            std::swap(lLogicalViewport.MinZ, lLogicalViewport.MaxZ);
+        renderengine::DepthRangePC::SetViewport(lpDevice, lLogicalViewport);
         lpDevice->SetScissorRect(&sSavedScissor);
         lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, sbSavedScissorEnable);
 
@@ -8048,7 +8054,7 @@ void PCSceneBlit_Begin()
     if (SUCCEEDED(renderengine::PCGetBackBuffer(&lpBackBuffer))
         && lpBackBuffer != nullptr)
     {
-        lpDevice->SetRenderTarget(0, lpBackBuffer);   // also resets the viewport to the full surface
+        renderengine::DepthRangePC::SetRenderTarget(lpDevice, 0, lpBackBuffer);
         lpBackBuffer->Release();                      // GetBackBuffer AddRefs
     }
     // No depth surface: the blit is a screen-space quad with Z off, and the depth surface still
@@ -9147,7 +9153,8 @@ namespace
             lbForcedViewport = SUCCEEDED(lpDevice->SetViewport(&lFullViewport));
         }
 
-        HRESULT lHr = lpDevice->Clear(luRects, lpaRects, luFlags, lColour, lfClearZ,
+        const f32 lfNativeClearZ = renderengine::DepthRangePC::ClearDepth(lpDevice, lfClearZ);
+        HRESULT lHr = lpDevice->Clear(luRects, lpaRects, luFlags, lColour, lfNativeClearZ,
                                       static_cast<DWORD>(luClearStencil));
 
         // Clear is ALL-OR-NOTHING (see the banner). The one failure mode worth surviving is a
@@ -9159,7 +9166,7 @@ namespace
             LogOnce("tiling-clear-nostencil",
                     "[tiling] Clear rejected D3DCLEAR_STENCIL -- the bound depth surface has no"
                     " stencil bits; retrying depth-only.\n");
-            lHr = lpDevice->Clear(luRects, lpaRects, luFlags, lColour, lfClearZ,
+            lHr = lpDevice->Clear(luRects, lpaRects, luFlags, lColour, lfNativeClearZ,
                                   static_cast<DWORD>(luClearStencil));
         }
 
