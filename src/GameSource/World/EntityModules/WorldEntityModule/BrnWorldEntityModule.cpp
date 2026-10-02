@@ -22,6 +22,7 @@
 // =============================================================================
 
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModule.h"
+#include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
@@ -153,6 +154,12 @@ WorldEntityModule::Construct( void )
     {
         mauOverrideLodDistances[ liI ] = 300 * ( liI + 1 );
     }
+
+    // FLAG PC-platform leaf: seed the exact members changed by the Breaker patches.
+    const renderengine::GraphicsSettingsPC& lrGraphics = renderengine::GetGraphicsSettingsPC();
+    miEnvironmentMapLOD = lrGraphics.miEnvironmentMapLod;
+    lrGraphics.ApplyLodOverride(lrGraphics.miWorldLodOverrideDistance,
+                              mbOverrideLodDistances, mauOverrideLodDistances);
 
     mbWaitingForStreaming = false;
     mbUseCarForPvs = false;

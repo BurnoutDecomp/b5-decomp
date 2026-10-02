@@ -1,0 +1,39 @@
+; Copy the settings you want into config.ini beside Burnout_PC.exe, then restart.
+[Display]
+Width=1280
+Height=720
+Fullscreen=0
+AdapterIndex=0
+VSync=1
+DecoupleSimulation=1
+
+[Settings]
+; 0 = console default (2x scene MSAA), 1 = off, 2/4/8 = requested samples.
+; Unsupported counts fall back to the highest lower count supported by colour and depth.
+AntiAliasing=0
+AlphaToCoverage=1
+EnvironmentMap=1
+EnvironmentMap30Hz=1
+Coronas=1
+SunCorona=1
+
+[Graphics]
+; Original defaults. See docs/PC_GRAPHICS.md for the Breaker patch equivalents.
+; Bloom patch: 0.3. Zero removes the bloom contribution.
+BloomLuminanceScale=1
+; Reflection world LOD: 0 = highest detail, 1 = medium, 2 = original.
+EnvironmentMapLOD=2
+; Traffic-shadow patch: 1.
+TrafficShadows=0
+; 0 = original asset LODs. High patch = 3000 for both.
+; Low patch = 1 for world, 50 for props. The three bands use distance * 1/2/3.
+WorldLODOverrideDistance=0
+PropLODOverrideDistance=0
+; Default, Potato, Low, Medium, High, Ultra, Custom (case-insensitive).
+VehicleLODPreset=Default
+; Only read with VehicleLODPreset=Custom. Distances must be nondecreasing.
+VehicleLOD0Distance=10
+VehicleLOD1Distance=22
+VehicleLOD2Distance=35
+VehicleLOD3Distance=50
+VehicleLOD4Distance=70

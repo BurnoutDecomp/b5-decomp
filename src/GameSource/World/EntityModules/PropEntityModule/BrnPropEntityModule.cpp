@@ -32,6 +32,7 @@
 // ============================================================================
 
 #include "BrnPropEntityModule.h"
+#include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
 
 #include "BrnPropEntityModuleIO.h"                       // PropEntityIO::OutputBuffer_Prepare
 #include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
@@ -294,6 +295,11 @@ namespace BrnWorld
         {
             mauOverrideLodDistances[li8Lod] = 100 * (li8Lod + 1);
         }
+
+        // FLAG PC-platform leaf: the patch changes this loop's base and enables overrides.
+        const renderengine::GraphicsSettingsPC& lrGraphics = renderengine::GetGraphicsSettingsPC();
+        lrGraphics.ApplyLodOverride(lrGraphics.miPropLodOverrideDistance,
+                                  mbOverrideLodDistances, mauOverrideLodDistances);
 
         // PARK -- the tail of the X360 body (0x822FA38C..0x822FA52C) takes the global
         // CgsDebugManager critical section and registers eight MODULE-level debug

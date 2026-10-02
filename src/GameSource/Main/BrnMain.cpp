@@ -9,6 +9,9 @@
 #include <cstdlib>   // std::exit (the TUB save-dir failure path)
 
 #include "pc/gcm/renderengine/device.h"
+#include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
+#include "GameSource/Graphics/BrnRendererModule.h"
+#include "GameSource/World/BrnWorldModule.h"
 #include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
@@ -150,6 +153,23 @@ void LoadConfig()
     if (liAntiAliasing > 16) liAntiAliasing = 16;
     renderengine::gAntiAliasing = liAntiAliasing;
 
+    // FLAG PC-platform leaf: expose the Breaker graphics patches through the INI.
+    // These are the original writable globals; all per-module settings are applied
+    // by Construct, after this load. The vehicle patches change only the QUALITY table.
+    renderengine::LoadGraphicsSettingsPC(lacPath);
+    const renderengine::GraphicsSettingsPC& lrGraphics = renderengine::GetGraphicsSettingsPC();
+    gfBloomLuminanceScale = lrGraphics.mfBloomLuminanceScale;
+    for (u32 luLod = 0; luLod < 5u; ++luLod)
+        BrnWorld::KA_VEHICLE_QUALITY_LOD_DISTANCE[luLod] = lrGraphics.mafVehicleLodDistances[luLod];
+    char lacGraphicsLog[384];
+    std::snprintf(lacGraphicsLog, sizeof(lacGraphicsLog),
+        "[graphics] bloom=%.9g envmapLOD=%d trafficShadows=%d worldLOD=%d propLOD=%d vehicleLOD=%s aaRequest=%d\n",
+        lrGraphics.mfBloomLuminanceScale, lrGraphics.miEnvironmentMapLod,
+        lrGraphics.mbTrafficShadows ? 1 : 0, lrGraphics.miWorldLodOverrideDistance,
+        lrGraphics.miPropLodOverrideDistance, renderengine::VehicleLodPresetNamePC(lrGraphics.meVehicleLodPreset),
+        renderengine::gAntiAliasing);
+    CgsDev::Log::WriteToLog(lacGraphicsLog);
+
     // The alpha-to-coverage off switch (rung 9); 0/1, anything else clamped to 1 because
     // the setting has no third state -- see the declaration in device.h.
     const s32 liAlphaToCoverage =
@@ -233,6 +253,7 @@ void SaveConfig()
     WritePrivateProfileStringA("Settings", "Coronas", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gSunCorona);
     WritePrivateProfileStringA("Settings", "SunCorona", lacValue, lacPath);
+    renderengine::SaveGraphicsSettingsPC(lacPath);
 #endif
 }
 
