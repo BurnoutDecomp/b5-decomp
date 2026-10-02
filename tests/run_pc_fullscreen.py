@@ -18,6 +18,7 @@ code += '\n' + '\n'.join(definition(source, signature) for signature in (
     'static LRESULT CALLBACK windowProc(', 'static bool RegisterDeviceNotif(',
     'static void DisableSystemBackdrop(', 'static HWND CreateGameWindow('))
 headers = ['src/pc/gcm/renderengine/WindowPresentationPCLeaf.h',
+           'src/pc/gcm/renderengine/GraphicsSettingsPCLeaf.h',
            'src/pc/gcm/renderengine/DisplayResizePCLeaf.h',
            'src/GameSource/Graphics/BrnAntiAliasTiling.h']
 numeric = compile_and_run(HERE / 'PCFullscreen.cpp', 'pc_fullscreen_window.inc', code, 'PCFullscreen',

@@ -67,6 +67,8 @@ namespace BrnPhysics { namespace PhysicsModuleIO { class OutputBuffer; } }
 
 namespace BrnWorld
 {
+    // Original ARTIST writable quality LOD table (0x82F307B4).
+    extern f32 KA_VEHICLE_QUALITY_LOD_DISTANCE[5];
 
     // ------------------------------------------------------------------------
     // FilteredEntityData  (DWARF BrnWorldModule.h:86) -- the per-dispatch

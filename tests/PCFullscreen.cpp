@@ -8,6 +8,9 @@
 #include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
 #include "pc/gcm/renderengine/DisplayResizePCLeaf.h"
 #include "GameSource/Graphics/BrnAntiAliasTiling.h"
+#include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
+float gfBloomLuminanceScale = 1.0f;
+namespace BrnWorld { float KA_VEHICLE_QUALITY_LOD_DISTANCE[5] = {10,22,35,50,70}; }
 namespace renderengine {
 bool gFullscreen = false;
 int gDisplayWidth = 640, gDisplayHeight = 360, gAdapterIndex = 0, gVSync = 1;
@@ -19,7 +22,7 @@ static renderengine::PCWindowMode sWindowMode;
 static const char* windowClassName = "BurnoutFullscreenStartupRegression";
 static const char* windowName = "Fullscreen startup regression";
 struct NullLog { template<class T> NullLog& operator<<(const T&) { return *this; } };
-namespace CgsDev { namespace Log { NullLog* gpDebugPrint = nullptr; } }
+namespace CgsDev { namespace Log { NullLog* gpDebugPrint = nullptr; void WriteToLog(const char*) {} } }
 namespace CgsSystem { struct HardwareInit { static void RequestShutdown() {} }; }
 #include "pc_fullscreen_window.inc"
 static int checks, failures;

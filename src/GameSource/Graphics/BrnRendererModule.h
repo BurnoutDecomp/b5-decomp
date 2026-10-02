@@ -2,6 +2,8 @@
 #include "GameSource/Effects/EffectsDebugPostFxSettingsPC.h"
 
 #include "types.hpp"
+// Original ARTIST debug-tunable bloom scale, defined by BrnRendererModule.cpp.
+extern f32 gfBloomLuminanceScale;
 namespace CgsDev { namespace Assert { struct AssertData; } }
 
 // Real loading-screen-path member types (Option B: these are reconstructed for real; the
