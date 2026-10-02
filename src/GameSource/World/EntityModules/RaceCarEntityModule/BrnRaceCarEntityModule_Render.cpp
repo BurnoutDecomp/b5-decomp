@@ -76,6 +76,7 @@
 // ============================================================================
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
+#include "pc/gcm/renderengine/GraphicsDiagnosticsPCLeaf.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h" // InputBuffer_GenerateDispatchLists
 
 #include "GameShared/GameClasses/Graphics/CgsModel.h"                    // CgsGraphics::Model / Renderable
@@ -855,6 +856,8 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
             }
 
             const CgsGraphics::Renderable* lpRenderable = lpModel->GetRenderable( leLOD );
+            if (!lbShadowPass)
+                renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_RACECAR, lpModel, leLOD);
             CGS_ASSERT( lpRenderable != 0, "Missing renderable in a model" );
 
             CgsGraphics::DispatchList* lpDispatchList = lpDispatchFrame->GetList( liObjectList );

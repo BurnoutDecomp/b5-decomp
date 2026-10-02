@@ -23,6 +23,7 @@
 
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModule.h"
 #include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
+#include "pc/gcm/renderengine/GraphicsDiagnosticsPCLeaf.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
@@ -2004,6 +2005,12 @@ WorldEntityModule::RenderInstance(
 
     const Renderable* lpRenderable =
         lpModel->GetRenderable( static_cast<CgsGraphics::Model::State>( luLodState ) );
+    if (!lbShadow)
+    {
+        renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_WORLD, lpModel, luLodState);
+        if (renderengine::GraphicsDiagnosticsEnabledPC())
+            renderengine::GetGraphicsDiagnosticsPC().muWorldBase = mbOverrideLodDistances ? mauOverrideLodDistances[0] : 0;
+    }
     CGS_ASSERT( lpRenderable, "Missing renderable in a model" );
     CGS_ASSERT( lpDispatchFrame, "lpDispatchFrame" );
 
@@ -2340,6 +2347,8 @@ WorldEntityModule::GenerateDispatchListsForEnvironmentMap(
 
     CgsGraphics::DispatchFrame* lpDispatchFrame = lpInputBuffer->GetDispatchFrame();
     const s32 liEnvironmentMapLOD = miEnvironmentMapLOD;
+    if (renderengine::GraphicsDiagnosticsEnabledPC())
+        renderengine::GetGraphicsDiagnosticsPC().muEnvLod = liEnvironmentMapLOD;
 
     const u32 luNumEntities = lrVisibleEntities.GetLength();
 
@@ -2362,19 +2371,26 @@ WorldEntityModule::GenerateDispatchListsForEnvironmentMap(
         CgsGraphics::Model* lpModel = lpInstance->mpModel;
         CGS_ASSERT( lpModel, "lpModel" );
 
+        if (renderengine::GraphicsDiagnosticsEnabledPC())
+            ++renderengine::GetGraphicsDiagnosticsPC().muEnvConsidered;
         if ( !lpModel->DoesStateExist( static_cast<CgsGraphics::Model::State>( liEnvironmentMapLOD ) ) )
         {
+            if (renderengine::GraphicsDiagnosticsEnabledPC())
+                ++renderengine::GetGraphicsDiagnosticsPC().muEnvMissing;
             continue;
         }
 
         const f32 lfLodDistance = lpModel->GetLodDistance( liEnvironmentMapLOD );
         if ( lfDistanceSq >= lfLodDistance * lfLodDistance )
         {
+            if (renderengine::GraphicsDiagnosticsEnabledPC())
+                ++renderengine::GetGraphicsDiagnosticsPC().muEnvCulled;
             continue;
         }
 
         const Renderable* lpRenderable =
             lpModel->GetRenderable( static_cast<CgsGraphics::Model::State>( liEnvironmentMapLOD ) );
+        renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_ENVMAP, lpModel, liEnvironmentMapLOD);
         CGS_ASSERT( lpRenderable, "Missing renderable in a model" );
         CGS_ASSERT( lpDispatchFrame, "lpDispatchFrame" );
 

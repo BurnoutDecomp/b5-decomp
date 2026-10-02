@@ -48,6 +48,7 @@
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
+#include "pc/gcm/renderengine/GraphicsDiagnosticsPCLeaf.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
 
 #include "GameShared/GameClasses/Graphics/CgsModel.h"                       // Model / Renderable / State
@@ -1234,6 +1235,8 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
                                      lBodyRollTransform );
 
             const CgsGraphics::Renderable* lpRenderable = lpModel->GetRenderable( lLOD );
+            if (!lbShadowPass)
+                renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_TRAFFIC, lpModel, lLOD);
             CGS_ASSERT( lpRenderable != 0, "Missing renderable in a model" );
             if ( lpRenderable == 0 )
             {

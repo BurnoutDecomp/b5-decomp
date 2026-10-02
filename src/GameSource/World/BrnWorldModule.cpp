@@ -29,6 +29,7 @@
 //              blocked, to be bodied once their sub-module/IO deps are homed.
 // ============================================================================
 #include <ctime>   // [DIAG culling wave] clock() for the producer-fps readout
+#include "pc/gcm/renderengine/GraphicsDiagnosticsPCLeaf.h"
 #include <chrono>  // [DIAG shadow-perf wave] steady_clock for the per-phase producer timers
 #include <cstdlib>                                                // getenv/atof (the BRN_WORLD_CAMDIST bring-up diagnostic)
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"   // CgsGraphics::ShaderConstantTable
@@ -5384,6 +5385,7 @@ static bool IsFiniteMatrix44BringUp( const Matrix44& lrMatrix )
 void
 WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatchFrame )
 {
+    renderengine::BeginGraphicsDiagnosticsPC();
     if ( lpDispatchFrame == 0 )
     {
         return;
@@ -7624,20 +7626,17 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         // at the bottom of this block anyway, so the table's end-of-frame state is byte
         // for byte what it was before this arm existed.)
         //
-        // SCOPE, honestly: TRAFFIC and PROPS are gated OFF. The console seeds their
-        // dispatch inputs here too, but this producer owns no BrnTrafficIO /
-        // PropEntityIO buffers (the console gets them from DoDispatch's IO stacks, which
-        // do not exist), and inventing them would be fabrication. World + race cars --
-        // the two feeds this producer already drives for the main view -- are the ones
-        // that matter, and they are wired for real.
+        // This producer stages world, race-car and traffic casters using its prepared
+        // main-view IO buffers. Traffic uses the original enable/near-only gate and
+        // caster lists below. Props are not yet submitted as shadow casters here;
+        // the separate original producer retains all four module legs.
         //
         // CASCADE -> LIST MAP, read off :4251 (`liCascadeList = (c >= 2) ? c + 2 : c`;
         // the traffic feed uses c + 2 throughout, which is why the far cascade skips the
         // env-map ids): cascade 0 -> list 0, cascade 1 -> list 1, cascade 2 -> list 4.
-        // Those are GDL OBJECT lists AND the destination mesh lists; the renderer sorts
-        // {0,2,1,3,4} and its cascade passes are still gated off
-        // (BrnRendererModule::RenderWorldPasses), so nothing is drawn from them yet --
-        // they are what the "MESH lists:" probe will finally show as non-empty.
+        // Those are GDL OBJECT lists AND destination mesh lists. The renderer sorts
+        // {0,2,1,3,4} and RenderShadowMapPasses consumes both caster groups for each
+        // cascade with the original cull-state brackets.
         // ==================================================================
         const ShadowPerfClock::time_point lCascadeStart = ShadowPerfNow();
         if ( lbShadowArmLive && liResultType >= 0 && lpFrustumTestResult != 0 )
@@ -7693,6 +7692,10 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 const bool lbRaceCars = mShadowMap.GetRenderRaceCarsIntoShadowMap()
                                      && ( luCascade == 0 || !mShadowMap.GetRenderRaceCarsNearOnly() );
                 const bool lbWorld    = mShadowMap.GetRenderWorldIntoShadowMap();
+                // FLAG PC-platform leaf: restore ARTIST's traffic caster leg in the
+                // active PC producer, using the original near-only policy.
+                const bool lbTraffic = mShadowMap.GetRenderTrafficIntoShadowMap()
+                                    && (luCascade == 0 || !mShadowMap.GetRenderTrafficNearOnly());
 
                 // [DIAG shadow-perf] this cascade's filter + seeding.
                 const ShadowPerfClock::time_point lCascFilterStart = ShadowPerfNow();
@@ -7815,6 +7818,19 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                         lEye );
                 }
                 gShadowPerf.mfCascadeCarUs += ShadowPerfUsSince( lCascCarStart );
+
+                if (lbTraffic)
+                {
+                    const s32 liTrafficCascadeList = static_cast<s32>(luCascade) + 2;
+                    const s32 liBeforeTraffic = static_cast<s32>(lpDispatchFrame->GetList(liTrafficCascadeList)->GetCount());
+                    mTrafficEntityModule.GenerateDispatchLists(
+                        &sTrafficDispatchInput, sTrafficRenderInfos.maTrafficRenderInfos,
+                        Vector4{0.0f,0.0f,0.0f,0.0f}, Vector4{0.0f,0.0f,0.0f,0.0f},
+                        lEye, lForward, liTrafficCascadeList, liTrafficCascadeList, liTrafficCascadeList, mLastCameraInput);
+                    if (renderengine::GraphicsDiagnosticsEnabledPC())
+                        renderengine::GetGraphicsDiagnosticsPC().muTrafficShadowRecords +=
+                            static_cast<u32>(lpDispatchFrame->GetList(liTrafficCascadeList)->GetCount() - liBeforeTraffic);
+                }
 
                 const s32 liRecordsAfterCar = static_cast< s32 >(
                     lpDispatchFrame->GetList( liCascadeList )->GetCount() );
@@ -8039,6 +8055,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             }
         }
     }
+    renderengine::EndGraphicsDiagnosticsPC();
 }
 
 

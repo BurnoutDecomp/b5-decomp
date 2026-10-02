@@ -100,6 +100,7 @@
 // ============================================================================
 
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModule.h"
+#include "pc/gcm/renderengine/GraphicsDiagnosticsPCLeaf.h"
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
 
 #include "GameSource/World/BrnEntityTypes.h"                              // E_ENTITYTYPE_PROP
@@ -203,6 +204,8 @@ PropEntityModule::RenderModel(
         * lfLodDistanceZoomScale;
 
     const u32 luNumLods    = lpModel->GetNumLods();
+    if (renderengine::GraphicsDiagnosticsEnabledPC())
+        renderengine::GetGraphicsDiagnosticsPC().muPropBase = mbOverrideLodDistances ? mauOverrideLodDistances[0] : 0;
     const u32 luLastLod    = luNumLods - 1;
     CGS_ASSERT( luLastLod < luNumLods, "Invalid LOD index" );
 
@@ -270,6 +273,10 @@ PropEntityModule::RenderModel(
     }
 
     CGS_ASSERT( lpModel->DoesStateExist( leLodState ), "lpModel->DoesStateExist( leLodState )" );
+    if (!lbRenderingEnvironmentMap)
+    {
+        renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_PROP, lpModel, leLodState);
+    }
 
     // ---- instanced models go to the collector, not to a draw ----------------
     // @0x822C4B90: bit 0 of mu8Flags. The collector batches up to
