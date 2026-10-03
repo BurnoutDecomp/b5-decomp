@@ -2996,8 +2996,12 @@ namespace BrnGame
         const BrnDirector::Camera::Camera* lpCamera = mpDirectorOutputBuffer->GetCameraOutput();
         if (lpCamera != 0)
         {
-            mbPreviousTickCameraValid = mbCurrentTickCameraValid;
-            if (mbCurrentTickCameraValid)
+            // FLAG PC quality-of-life: the director's native cut flag also resets
+            // render interpolation. Blending across shots invents an intermediate
+            // camera for the render frames before the next simulation tick.
+            mbPreviousTickCameraValid = mbCurrentTickCameraValid
+                && !lpCamera->GetState().IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_NEW_THIS_FRAME);
+            if (mbPreviousTickCameraValid)
                 mPreviousTickCamera = mCurrentTickCamera;
 
             mCurrentTickCamera       = *lpCamera;
@@ -4428,7 +4432,7 @@ namespace BrnGame
         // dispatch side, before the renderer consumes the frame. Same order here: queue first,
         // then render. (The queued text is flushed by DebugManager::Render at the renderer's
         // overlay point -- see the note at the end of DebugManagerRender.)
-        renderengine::FrameProfile::Scope lDispatchProfile(renderengine::FrameProfile::DISPATCH);
+        renderengine::FrameProfile::CycleScope lDispatchProfile(renderengine::FrameProfile::DISPATCH);
 
         // The console dispatch thread hands the renderer the manager's READ buffer (the
         // frame the update side just published via OnEndOfUpdateFrame's swap).
@@ -6234,7 +6238,7 @@ namespace BrnGame
 
     bool BrnGameModule::UpdateThread()
     {
-        renderengine::FrameProfile::Scope lUpdateProfile(renderengine::FrameProfile::UPDATE, renderengine::FrameProfile::UPDATE_SIMULATION);
+        renderengine::FrameProfile::CycleScope lUpdateProfile(renderengine::FrameProfile::UPDATE, renderengine::FrameProfile::UPDATE_SIMULATION);
         struct UpdateScopePC
         {
             bool& mrInside;

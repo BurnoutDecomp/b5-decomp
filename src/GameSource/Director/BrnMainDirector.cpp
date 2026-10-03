@@ -38,6 +38,7 @@
 // ============================================================================
 
 #include "GameSource/Director/BrnMainDirector.h"
+#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"          // Camera::CollisionPolicySharedInfo (the scene-query pair)
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                  // BrnGui::GuiPFXHookEnumeration (the 501 record PostGuiUpdate consumes)
 
@@ -3707,6 +3708,10 @@ namespace BrnDirector
 
         // [diag] BRN_CAMERA_TRACE -- the per-frame published-camera witness (see the helper).
         BrnDiag_ReportCamera(lCamera);
+
+        // FLAG PC-platform leaf: opt-in tracing of the camera actually published.
+        renderengine::FrameProfile::CameraOutput(lCamera.mpDebugInfoBehaviour, lCamera.mpSourceShot,
+            lCamera.GetState().IsFlagSet(Camera::CameraState::E_FLAG_NEW_THIS_FRAME));
 
         lCamera.CopyToCgsCamera(&mCgsCamera);
 

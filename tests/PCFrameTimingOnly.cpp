@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <thread>
 
 static unsigned suClockReads = 0;
 static LONGLONG siTicks = 0;
@@ -18,6 +19,7 @@ static BOOL WINAPI TestCycles(HANDLE, PULONG64 lpValue)
     *lpValue = suCycles;
     return TRUE;
 }
+static BOOL WINAPI TestFailingCycles(HANDLE, PULONG64) { return FALSE; }
 static FARPROC WINAPI TestGetProcAddress(HMODULE, LPCSTR lpcName)
 {
     return sbCycleApiAvailable && std::strcmp(lpcName, "QueryThreadCycleTime") == 0
@@ -101,6 +103,7 @@ int main()
     Reset("1", "1", "1", "1", "1");
     fp::Camera(1);
     fp::Begin();
+    fp::CameraOutput(reinterpret_cast<void*>(1), reinterpret_cast<void*>(2), true);
     { fp::Stage lStage(fp::RENDER_SETUP); lStage.Next(fp::RENDER_SHADOWS); }
     { fp::CycleScope lCreate(fp::GEOMETRY_CREATE); }
     for (unsigned lu = fp::POOL_REQUESTS; lu < fp::NUM_SECTIONS; ++lu)
@@ -306,12 +309,94 @@ int main()
 
     Reset("0", "1", "1", "1", "1");
     fp::Begin();
+    fp::CameraOutput(reinterpret_cast<void*>(1), reinterpret_cast<void*>(2), true);
     { fp::Scope lSubmit(fp::GEOMETRY_SUBMIT); fp::DetailScope lDetail(fp::MESH_CONSTANTS);
       fp::Stage lStage(fp::RENDER_SETUP); lStage.Next(fp::RENDER_WORLD);
       fp::CycleScope lCreate(fp::GEOMETRY_CREATE); }
     fp::End();
-    Check(!fp::Active() && !fp::gCapture.mpFrames && suClockReads == 0 && suCycleReads == 0,
+    Check(!fp::Active() && !fp::gCapture.mpFrames && suClockReads == 0 && suCycleReads == 0
+          && fp::gCapture.muBehaviour == 0 && fp::gCapture.muShot == 0,
           "timing-only option never enables a disabled capture");
+
+    Reset("1", "1", "0");
+    fp::Camera(3);
+    fp::Begin();
+    fp::CameraOutput(reinterpret_cast<void*>(1234), reinterpret_cast<void*>(5678), true);
+    fp::End();
+    Check(fp::gCapture.mpFrames[0].muCameraPublications == 1
+          && fp::gCapture.mpFrames[0].muNewCameraPublications == 1
+          && fp::gCapture.mpFrames[0].muBehaviourChanges == 1
+          && fp::gCapture.mpFrames[0].muShotChanges == 1,
+          "published camera producers and native new-shot flag are retained");
+    fp::Begin();
+    fp::CameraOutput(reinterpret_cast<void*>(1234), reinterpret_cast<void*>(5678), true);
+    fp::CameraOutput(reinterpret_cast<void*>(1234), reinterpret_cast<void*>(9012), false);
+    fp::End();
+    Check(fp::gCapture.mpFrames[1].muCameraChanges == 0
+          && fp::gCapture.mpFrames[1].muCameraPublications == 2
+          && fp::gCapture.mpFrames[1].muNewCameraPublications == 1
+          && fp::gCapture.mpFrames[1].muBehaviourChanges == 0
+          && fp::gCapture.mpFrames[1].muShotChanges == 1
+          && fp::gCapture.mpFrames[1].muShotBegin == 5678
+          && fp::gCapture.mpFrames[1].muShotEnd == 9012,
+          "same-state and reused-producer shot changes survive multiple publications");
+    fp::Begin(); fp::End();
+    Check(fp::gCapture.mpFrames[2].muShotBegin == 9012
+          && fp::gCapture.mpFrames[2].muShotEnd == 9012
+          && fp::gCapture.mpFrames[2].muCameraPublications == 0
+          && suClockReads == 6 && suCycleReads == 0,
+          "frames without simulation retain camera identity without extra clocks");
+    fp::Finish();
+    const std::string lCameraCsv = ReadOutput(".frames.csv");
+    Check(CsvValue(lCameraCsv, "camera_behaviour_begin") == 0
+          && CsvValue(lCameraCsv, "camera_behaviour_end") == 1234
+          && CsvValue(lCameraCsv, "camera_shot_end") == 5678
+          && CsvValue(lCameraCsv, "camera_new_publications") == 1
+          && CsvValue(lCameraCsv, "camera_changes") == 0,
+          "camera publication columns preserve the distinct arbitrator-state marker");
+
+    Reset("1", "0", "0", "1", "1");
+    fp::Begin();
+    { fp::CycleScope lUpdate(fp::UPDATE, fp::UPDATE_SIMULATION);
+      siTicks += 20; suCycles += 17;
+      { fp::CycleScope lMesh(fp::UPDATE_MESH_PREPARE); siTicks += 5; suCycles += 7; }
+    }
+    { fp::CycleScope lDispatch(fp::DISPATCH); siTicks += 60; suCycles += 3; }
+    fp::End();
+    Check(fp::gCapture.mpFrames[0].maTicks[fp::UPDATE_SIMULATION] == 25
+          && fp::gCapture.mpFrames[0].maTicks[fp::DISPATCH] == 60
+          && fp::gCapture.mpFrames[0].maCycles[fp::UPDATE] == 24
+          && fp::gCapture.mpFrames[0].maCycles[fp::UPDATE_SIMULATION] == 24
+          && fp::gCapture.mpFrames[0].maCycles[fp::UPDATE_MESH_PREPARE] == 7
+          && fp::gCapture.mpFrames[0].maCycles[fp::DISPATCH] == 3,
+          "simulation detail and dispatch cycles remain independent of elapsed waits");
+    fp::Finish();
+    const std::string lThreadCsv = ReadOutput(".frames.csv");
+    Check(CsvValue(lThreadCsv, "update_cycles") == -1
+          && CsvValue(lThreadCsv, "update_simulation_cycles") == 24
+          && CsvValue(lThreadCsv, "dispatch_cycles") == 3
+          && CsvValue(lThreadCsv, "update_mesh_prepare_cycles") == 7
+          && CsvValue(lThreadCsv, "update_simulation_ms") == 0.025,
+          "root thread cycle totals and nested preparation use the correct CSV columns");
+
+    Reset("1", "0", "0", "1", "0");
+    fp::Begin();
+    fp::gCapture.mpReadThreadCycles = &TestFailingCycles;
+    {
+        // Construct/destroy on the owner so the deterministic wall clock and
+        // section accumulators are not concurrently written by this test.
+        fp::CycleScope lScope(fp::UPDATE);
+        std::thread workers[4];
+        for (auto& worker : workers)
+            worker = std::thread([&lScope] {
+                ULONG64 cycles = 0;
+                for (unsigned i = 0; i < 100000; ++i) lScope.Read(cycles);
+            });
+        for (auto& worker : workers) worker.join();
+    }
+    fp::End();
+    Check(fp::gCapture.mpFrames[0].muCycleReadFailures == 400000,
+          "concurrent cycle-query failures retain every report");
 
     Reset("1", "1", "0");
     fp::Begin();

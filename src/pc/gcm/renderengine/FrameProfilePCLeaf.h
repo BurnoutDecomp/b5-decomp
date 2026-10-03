@@ -39,13 +39,17 @@ namespace renderengine
             LONGLONG maTicks[NUM_SECTIONS] = {};
             unsigned long long maCycles[NUM_SECTIONS] = {};
             unsigned muMeshPrepared = 0, muMeshRebuilt = 0;
-            unsigned muCycleReadFailures = 0;
+            LONG muCycleReadFailures = 0;
             unsigned muRasterCreates = 0, muRasterReleases = 0;
             unsigned muStagingCreates = 0, muStagingReuses = 0;
             unsigned muVertexCreates = 0, muIndexCreates = 0, muEvictions = 0, muDraws = 0;
             unsigned long long muUploadedBytes = 0;
             int miCameraBegin = -1, miCameraEnd = -1;
             unsigned muCameraChanges = 0, muPresents = 0;
+            unsigned long long muBehaviourBegin = 0, muBehaviourEnd = 0;
+            unsigned long long muShotBegin = 0, muShotEnd = 0;
+            unsigned muCameraPublications = 0, muNewCameraPublications = 0;
+            unsigned muBehaviourChanges = 0, muShotChanges = 0;
             unsigned muNativeBuffers = 0;
             unsigned muPlayerTakedowns = 0, muTakedownVictims = 0;
             unsigned muRivals = 0, muCrashingRivals = 0, muAirborneRivals = 0;
@@ -63,6 +67,7 @@ namespace renderengine
             unsigned muCount = 0;
             unsigned muDropped = 0;
             int miCamera = -1;
+            unsigned long long muBehaviour = 0, muShot = 0;
             LONGLONG miFrequency = 0, miPreviousEnd = 0;
             bool mbInitialized = false;
             bool mbDetailed = false;
@@ -116,6 +121,8 @@ namespace renderengine
             lrFrame = Frame{};
             lrFrame.miPreviousEnd = gCapture.miPreviousEnd;
             lrFrame.miCameraBegin = gCapture.miCamera;
+            lrFrame.muBehaviourBegin = lrFrame.muBehaviourEnd = gCapture.muBehaviour;
+            lrFrame.muShotBegin = lrFrame.muShotEnd = gCapture.muShot;
             lrFrame.miBegin = Now();
             gCapture.mpCurrent = &lrFrame;
         }
@@ -181,10 +188,11 @@ namespace renderengine
             {
                 if (gCapture.mpReadThreadCycles
                     && gCapture.mpReadThreadCycles(GetCurrentThread(), &lruCycles)) return true;
-                ++mpFrame->muCycleReadFailures;
+                InterlockedIncrement(&mpFrame->muCycleReadFailures);
                 return false;
             }
-            explicit CycleScope(Section leSection) : Scope(leSection)
+            explicit CycleScope(Section leSection, Section leDetail = NUM_SECTIONS)
+                : Scope(leSection, leDetail)
             {
                 if (mpFrame && gCapture.mbCpuCycles) mbCyclesValid = Read(muBeginCycles);
             }
@@ -194,8 +202,13 @@ namespace renderengine
                 ULONG64 luEnd = 0;
                 if (Read(luEnd))
                 {
-                    if (luEnd >= muBeginCycles) mpFrame->maCycles[meSection] += luEnd - muBeginCycles;
-                    else ++mpFrame->muCycleReadFailures;
+                    if (luEnd >= muBeginCycles)
+                    {
+                        mpFrame->maCycles[meSection] += luEnd - muBeginCycles;
+                        if (meDetail != NUM_SECTIONS)
+                            mpFrame->maCycles[meDetail] += luEnd - muBeginCycles;
+                    }
+                    else InterlockedIncrement(&mpFrame->muCycleReadFailures);
                 }
             }
         };
@@ -230,6 +243,25 @@ namespace renderengine
             if (gCapture.mpCurrent && gCapture.miCamera != liCamera)
                 ++gCapture.mpCurrent->muCameraChanges;
             gCapture.miCamera = liCamera;
+        }
+        // The arbitrator state is not a shot identity: a takedown can publish a
+        // new shot while staying in the same state. Record the actual published
+        // camera's producers and native NEW_THIS_FRAME flag, without dereferencing
+        // retained pointers or inferring cuts from camera motion. Several simulation
+        // publications may occur in one rendered frame, so count publications.
+        inline void CameraOutput(const void* lpBehaviour, const void* lpShot, bool lbNew)
+        {
+            if (Frame* lpFrame = gCapture.mpCurrent)
+            {
+                const auto luBehaviour = static_cast<unsigned long long>(reinterpret_cast<ULONG_PTR>(lpBehaviour));
+                const auto luShot = static_cast<unsigned long long>(reinterpret_cast<ULONG_PTR>(lpShot));
+                ++lpFrame->muCameraPublications;
+                lpFrame->muNewCameraPublications += lbNew;
+                lpFrame->muBehaviourChanges += gCapture.muBehaviour != luBehaviour;
+                lpFrame->muShotChanges += gCapture.muShot != luShot;
+                lpFrame->muBehaviourEnd = gCapture.muBehaviour = luBehaviour;
+                lpFrame->muShotEnd = gCapture.muShot = luShot;
+            }
         }
         inline void Geometry(bool lbVertex, unsigned luBytes)
         {
@@ -305,7 +337,7 @@ namespace renderengine
                 std::snprintf(lacPath + luLength, MAX_PATH - luLength, ".frames.csv");
                 if (FILE* lpFile = std::fopen(lacPath, "w"))
                 {
-                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,object_to_mesh_ms,mesh_technique_ms,mesh_constants_ms,mesh_buffers_ms,geometry_lookup_ms,world_draw_ms,immediate_draw_ms,postfx_ms,dispatch_effects_ms,render_setup_ms,render_build_lists_ms,render_tint_ms,render_shadows_ms,render_envmap_ms,render_particle_build_ms,render_world_ms,render_particles_ms,render_composite_ms,render_gui_ms,render_present_ms,geometry_create_ms,geometry_copy_ms,pool_requests_ms,pool_states_ms,pool_retire_ms,texture_realize_ms,texture_gpu_create_ms,texture_cpu_create_ms,texture_upload_ms,update_mesh_prepare_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end,instanced_draws,instances,prez_meshes,world_opaque_meshes,car_opaque_meshes,gpu_status,gpu_scene_ms,gpu_output_ms,vb_bind_requests,vb_bind_skips,ib_bind_requests,ib_bind_skips,rebased_draws,geometry_create_cycles,geometry_lock_cycles,geometry_copy_cycles,resource_pool_cycles,pool_requests_cycles,pool_states_cycles,pool_retire_cycles,texture_realize_cycles,texture_gpu_create_cycles,texture_cpu_create_cycles,texture_upload_cycles,update_mesh_prepare_cycles,raster_creates,raster_releases,staging_creates,staging_reuses,cycle_read_failures,mesh_prepared,mesh_rebuilt\n");
+                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,object_to_mesh_ms,mesh_technique_ms,mesh_constants_ms,mesh_buffers_ms,geometry_lookup_ms,world_draw_ms,immediate_draw_ms,postfx_ms,dispatch_effects_ms,render_setup_ms,render_build_lists_ms,render_tint_ms,render_shadows_ms,render_envmap_ms,render_particle_build_ms,render_world_ms,render_particles_ms,render_composite_ms,render_gui_ms,render_present_ms,geometry_create_ms,geometry_copy_ms,pool_requests_ms,pool_states_ms,pool_retire_ms,texture_realize_ms,texture_gpu_create_ms,texture_cpu_create_ms,texture_upload_ms,update_mesh_prepare_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end,instanced_draws,instances,prez_meshes,world_opaque_meshes,car_opaque_meshes,gpu_status,gpu_scene_ms,gpu_output_ms,vb_bind_requests,vb_bind_skips,ib_bind_requests,ib_bind_skips,rebased_draws,geometry_create_cycles,geometry_lock_cycles,geometry_copy_cycles,resource_pool_cycles,pool_requests_cycles,pool_states_cycles,pool_retire_cycles,texture_realize_cycles,texture_gpu_create_cycles,texture_cpu_create_cycles,texture_upload_cycles,update_mesh_prepare_cycles,raster_creates,raster_releases,staging_creates,staging_reuses,cycle_read_failures,mesh_prepared,mesh_rebuilt,camera_behaviour_begin,camera_behaviour_end,camera_shot_begin,camera_shot_end,camera_publications,camera_new_publications,camera_behaviour_changes,camera_shot_changes,update_simulation_cycles,dispatch_cycles\n");
                     const double lfMs = 1000.0 / static_cast<double>(gCapture.miFrequency);
                     for (unsigned lu = 0; lu < gCapture.muCount; ++lu)
                     {
@@ -326,7 +358,11 @@ namespace renderengine
                             lr.maCycles[GEOMETRY_LOCK], lr.maCycles[GEOMETRY_COPY], lr.maCycles[RESOURCE_POOL]);
                         for (unsigned ls = POOL_REQUESTS; ls < NUM_SECTIONS; ++ls)
                             std::fprintf(lpFile, ",%llu", lr.maCycles[ls]);
-                        std::fprintf(lpFile, ",%u,%u,%u,%u,%u,%u,%u\n", lr.muRasterCreates, lr.muRasterReleases, lr.muStagingCreates, lr.muStagingReuses, lr.muCycleReadFailures, lr.muMeshPrepared, lr.muMeshRebuilt);
+                        std::fprintf(lpFile, ",%u,%u,%u,%u,%u,%u,%u", lr.muRasterCreates, lr.muRasterReleases, lr.muStagingCreates, lr.muStagingReuses, static_cast<unsigned>(lr.muCycleReadFailures), lr.muMeshPrepared, lr.muMeshRebuilt);
+                        std::fprintf(lpFile, ",%llu,%llu,%llu,%llu,%u,%u,%u,%u,%llu,%llu\n",
+                            lr.muBehaviourBegin, lr.muBehaviourEnd, lr.muShotBegin, lr.muShotEnd,
+                            lr.muCameraPublications, lr.muNewCameraPublications, lr.muBehaviourChanges, lr.muShotChanges,
+                            lr.maCycles[UPDATE_SIMULATION], lr.maCycles[DISPATCH]);
                     }
                     std::fclose(lpFile);
                 }
