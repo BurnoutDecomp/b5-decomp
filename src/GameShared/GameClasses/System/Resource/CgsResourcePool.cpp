@@ -8,6 +8,7 @@
 #include <cstring>
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
 #include "pc/gcm/renderengine/TextureResourcePCLeaf.h"
+#include "pc/gcm/renderengine/MeshPreparationPCLeaf.h"
 
 #include <cstdint>   // uintptr_t (the Heap allocation owner is the slot index)
 #include <cstddef>   // size_t (the PC-leaf free notification below)
@@ -57,6 +58,7 @@ namespace CgsResource
         // A move retires the old range even though its heap is not freed here.
         void RetireRelocatedResourcePC(const Entry& lrEntry, s32 liMemType, const void* lpDestination)
         {
+            renderengine::MeshPreparationPC::ResourceChanged();
             const void* lpSource = lrEntry.mResource.m_baseResources[liMemType];
             if (lpSource != lpDestination)
                 renderengine::WorldGeometry_OnResourceMemoryFreed(lpSource,
@@ -68,6 +70,7 @@ namespace CgsResource
         // use full native addresses). Runtime staging must preserve that contract.
         void WriteScratchImportPC(void* lpMainMemory, u32 luOffset, void* lpTarget)
         {
+            renderengine::MeshPreparationPC::ResourceChanged();
             u8* lpSlot = static_cast<u8*>(lpMainMemory) + luOffset;
             const uintptr_t luTarget = reinterpret_cast<uintptr_t>(lpTarget);
             if ((luTarget >> 32) != 0)
@@ -467,6 +470,7 @@ namespace CgsResource
     // the resource pointer + heap node index.
     void Pool::FreeMemoryForResource(Entry* lpEntry)
     {
+        renderengine::MeshPreparationPC::ResourceChanged();
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // :687
         renderengine::TextureResource_OnEntryFreed(lpEntry, lpEntry->mResource.m_baseResources[0]);
         for (s32 lt = 0; lt < E_MEMTYPE_NUMTYPES; ++lt)
@@ -678,6 +682,7 @@ namespace CgsResource
     // rw::Resource view of its per-pool memory) then deserialise it (Type::DeSerialise).
     void Pool::FixUpEntry(Entry* lpEntry)
     {
+        renderengine::MeshPreparationPC::ResourceChanged();
         rw::Resource lrwResource = rw::Resource();
         lpEntry->mResource.ConvertToRWResource(lrwResource);
         lpEntry->mpResourceType->FixUp(lpEntry->mResource.m_baseResources[0], lrwResource);
@@ -691,6 +696,7 @@ namespace CgsResource
     // 0x828EB920 - the post-fixup pass (Type::PostFixUp), run after imports are resolved.
     void Pool::PostFixUpEntry(Entry* lpEntry)
     {
+        renderengine::MeshPreparationPC::ResourceChanged();
         rw::Resource lrwResource = rw::Resource();
         lpEntry->mResource.ConvertToRWResource(lrwResource);
         lpEntry->mpResourceType->PostFixUp(lpEntry->mResource.m_baseResources[0], lrwResource);
@@ -701,6 +707,7 @@ namespace CgsResource
     // resource at the import's byte offset. Returns false (and writes null) if unresolved.
     bool Pool::ResolveImportForEntry(Entry* lpEntry, BundleV2::ImportEntry* lpImport)
     {
+        renderengine::MeshPreparationPC::ResourceChanged();
         CGS_ASSERT(lpImport->muOffset < lpEntry->mResourceDescriptor.m_baseResourceDescriptors[0].m_size,
                    "Import offset out of range\n");   // :1730
 
@@ -880,6 +887,7 @@ namespace CgsResource
     // 828FEE68: keep the entry and its intrusive pointer ring during live replacement.
     void Pool::DeleteMemoryForEntry(ID lId)
     {
+        renderengine::MeshPreparationPC::ResourceChanged();
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");
         s32 liSlot;
         Entry* lpEntry = FindResource(lId, false, 2, &liSlot);
@@ -903,6 +911,7 @@ namespace CgsResource
     bool Pool::ReAllocateMemoryForEntry(ID lId, Entry::ResourceDescriptor* lpDescriptor,
                                         s32 liNumImports, SmallResource* lpResource)
     {
+        renderengine::MeshPreparationPC::ResourceChanged();
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");
         s32 liSlot;
         Entry* lpEntry = FindResource(lId, false, 2, &liSlot);

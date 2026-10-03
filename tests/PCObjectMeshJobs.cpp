@@ -17,6 +17,7 @@
 #include "SDKs/EATech/eajobs/job_scheduler.h"
 #include "SDKs/EATech/eajobs/job_thread_parameters.h"
 #include "SDKs/EATech/eajobs/jobs.h"
+#include "pc/gcm/renderengine/MeshJobOwnerWaitPCLeaf.h"
 
 static int checks, failures;
 static std::atomic<int> badConstants{0}, active{0}, peak{0};
@@ -24,13 +25,14 @@ static std::mutex threadLock;
 static std::set<DWORD> workers;
 static void Check(bool ok, const char* message)
 { ++checks; if (!ok) { ++failures; std::printf("FAIL %s\n", message); } }
+#undef CGS_ASSERT
 #define CGS_ASSERT(ok, message) do { if (!(ok)) throw std::runtime_error(message); } while (0)
 namespace CgsDev {
 namespace Assert {
-constexpr unsigned KI_MESSAGEBUFFERSIZE=8192;
-inline void BeginAssert() {}
-inline void FireAssert(const char* message, const char*, int) { throw std::runtime_error(message); }
-inline void EndAssert() {}
+inline int BeginAssert() { return 0; }
+inline int FireAssert(const char* message, const char*, int) { throw std::runtime_error(message); }
+inline void* EndAssert() { return nullptr; }
+inline void ServiceWorkerAssertsWhileWaitingPC() {}
 }
 struct StrStream {
     StrStream(char* out, unsigned) { out[0]=0; }
@@ -63,6 +65,9 @@ struct BrnRendererModule {
     ObjectToMeshJobInfo maObjectToMeshJobData[16];
     DispatchObjectContext maObjectToMeshJobContext[16];
     DispatchList* mapaObjectToMeshJobOutputDispatchLists[16];
+    DispatchPacketInterpreter* mpMeshProducerInterpreterPC = nullptr;
+    void CreateObjectToMeshJobPC(DispatchFrame*, u32, const DispatchObjectContext*, DispatchPacketInterpreter*, u32, s32, u32);
+    void ConvertObjectsToMeshesPC(DispatchFrame*, DispatchFrame*, DispatchPacketInterpreter*, const DispatchObjectContext*);
     void CreateObjectToMeshJob(u32, const DispatchObjectContext*, DispatchPacketInterpreter*, u32, s32, u32);
     void ConvertObjectsToMeshes(BufferedDispatchFrame*, DispatchFrame*, DispatchPacketInterpreter*, const DispatchObjectContext*);
 };
@@ -229,7 +234,13 @@ int main()
     auto* interpreter=&interpreterObject;
     interpreter->SetSingleBufferedDispatchFrame(&output);
     Seed(output,outputLists,25,outputArena);
+    #ifdef MESH_TEST_WRITE_BANK
+    renderer.mDoubleBufferedDispatchFrame.mpRead=nullptr;
+    renderer.mpMeshProducerInterpreterPC=interpreter;
+    renderer.ConvertObjectsToMeshesPC(&input,&output,interpreter,&context);
+#else
     renderer.ConvertObjectsToMeshes(&renderer.mDoubleBufferedDispatchFrame,&output,interpreter,&context);
+#endif
     bool packets=true, emptyGroups=true;
     for(unsigned l=0;l<25;++l) { packets&=Read(output,l)==expected[l];
         if(l==12||l==13||l==14||l==16||l==17||l==18||l==22||l==23||l==24)emptyGroups&=output.GetList(l)->GetCount()==0; }
@@ -255,7 +266,12 @@ int main()
     bool repeated=true;
     for(unsigned iteration=0;iteration<20;++iteration) {
         Seed(output,outputLists,25,outputArena);
-        renderer.ConvertObjectsToMeshes(&renderer.mDoubleBufferedDispatchFrame,&output,interpreter,&context);
+        #ifdef MESH_TEST_WRITE_BANK
+    renderer.mDoubleBufferedDispatchFrame.mpRead=nullptr;
+    renderer.ConvertObjectsToMeshesPC(&input,&output,interpreter,&context);
+#else
+    renderer.ConvertObjectsToMeshes(&renderer.mDoubleBufferedDispatchFrame,&output,interpreter,&context);
+#endif
         for(unsigned l=0;l<25;++l)repeated&=Read(output,l)==expected[l];
     }
     Check(repeated,"twenty joined frame resets retain every draw without stale chains");

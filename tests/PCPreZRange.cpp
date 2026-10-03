@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cmath>
 #include <limits>
+#define CGS_ASSERT(ok, message) do { if (!(ok)) std::abort(); } while (0)
 static int checks,failures;
 static void Check(bool value,const char* message){++checks;if(!value){++failures;std::printf("FAIL %s\n",message);}}
 namespace CgsGraphics {
@@ -23,6 +24,10 @@ struct PreZRenderer {
     bool mbRenderPreZ=true,mbRenderPreZAlpha=false,mbPreZNearOnly=false;
     float mfPreZDistanceThreshold=0;
     int converted=0,sorted=0;
+    void* mpMeshProducerInterpreterPC=nullptr;
+    struct Prepared { bool mbReady=false; } maPreparedMeshFramesPC[2];
+    unsigned muMeshReadFramePC=0;
+    void InitializeDispatchContextPC(CgsGraphics::DispatchObjectContext*) const;
     void Defaults();
     bool BuildDispatchLists(CgsGraphics::DispatchObjectContext*);
     void ConvertObjectsToMeshes(FrameBoundary*,FrameBoundary*,InterpreterBoundary*,CgsGraphics::DispatchObjectContext*){++converted;}

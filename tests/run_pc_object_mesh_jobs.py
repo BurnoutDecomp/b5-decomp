@@ -13,6 +13,7 @@ p = argparse.ArgumentParser()
 p.add_argument('--break-partition', action='store_true')
 p.add_argument('--drop-final-flush', action='store_true')
 p.add_argument('--chain', action='store_true')
+p.add_argument('--write-bank', action='store_true')
 p.add_argument('--legacy-chain-limit', action='store_true')
 a = p.parse_args()
 t = Tree()
@@ -55,12 +56,14 @@ code += execute + '\n'
 code += 'namespace { CgsGraphics::DispatchCommand* spObjectToMeshSharedMemory;\n'
 code += 'u32 suObjectToMeshSharedBlockMax; alignas(128) u32 suObjectToMeshNextBlock; }\n'
 code += definition(renderer, 'static void FillInObjectToMeshJobData(') + '\n'
-create = definition(renderer, 'void BrnRendererModule::CreateObjectToMeshJob(')
+code += definition(renderer, 'void BrnRendererModule::CreateObjectToMeshJob(') + '\n'
+create = definition(renderer, 'void BrnRendererModule::CreateObjectToMeshJobPC(')
 if a.break_partition:
     line = '    FillInObjectToMeshJobData(&maObjectToMeshJob[luJobIndex]'
     assert create.count(line) == 1
     create = create.replace(line, '    if (luJobIndex > 0u && luJobIndex < 4u) ++lInput.miStartIndex;\n' + line)
 code += create + '\n' + definition(renderer, 'void BrnRendererModule::ConvertObjectsToMeshes(')
+code += '\n' + definition(renderer, 'void BrnRendererModule::ConvertObjectsToMeshesPC(')
 jobdir = 'src/SDKs/EATech/eajobs/'
 sources = [REPO / jobdir / n for n in ['bucket_list_node.cpp', 'entrypoint.cpp', 'event.cpp',
     'job.cpp', 'job_instance_handle.cpp', 'job_scheduler.cpp', 'job_thread.cpp', 'job_thread_parameters.cpp',
@@ -72,6 +75,6 @@ sources += [REPO / 'vendor/coreallocator/source/icoreallocator_interface.cpp',
             REPO / 'src/GameShared/Jobs/ObjectToMesh/ObjectToMesh.cpp',
             REPO / 'src/GameShared/Jobs/ObjectToMesh/ObjectToMeshJob.cpp']
 result = compile_and_run(Path(__file__).with_name('PCObjectMeshJobs.cpp'), 'pc_object_mesh_jobs.inc', code,
-    'PCObjectMeshJobs', extra_flags='winmm.lib dbghelp.lib psapi.lib' + (' /DMESH_TEST_CHAIN' if a.chain else ''),
+    'PCObjectMeshJobs', extra_flags='winmm.lib dbghelp.lib psapi.lib user32.lib' + (' /DMESH_TEST_CHAIN' if a.chain else '') + (' /DMESH_TEST_WRITE_BANK' if a.write_bank else ''),
     extra_sources=sources)
 raise SystemExit(report('run_pc_object_mesh_jobs', [], result, 17))

@@ -6246,26 +6246,31 @@ namespace BrnGame
         {
         case E_GAMEUPDATESTAGE_PREPARE:
             if (!GamePrepare())
-                return true;
+                break;
             meGameUpdateStage = E_GAMEUPDATESTAGE_MAIN;
             GameMain();
-            return true;
+            break;
 
         case E_GAMEUPDATESTAGE_MAIN:
             meGameUpdateStage = E_GAMEUPDATESTAGE_MAIN;
             GameMain();
-            return true;
+            break;
 
         case E_GAMEUPDATESTAGE_RELEASE:
             meGameUpdateStage = E_GAMEUPDATESTAGE_RELEASE;
             if (GameRelease())
                 meGameUpdateStage = E_GAMEUPDATESTAGE_PREPARE;
-            return true;
+            break;
 
         default:
             CGS_ASSERT(false, "Invalid update stage\n");
-            return true;
+            break;
         }
+        // FLAG PC-platform leaf: the completed write GDL may be expanded while
+        // the render worker consumes the previous bank. The joined publication
+        // revalidates resources before making this result visible.
+        mRenderModule.PrepareMeshFrameForWritePC();
+        return true;
     }
 
     // @ BrnGameModule.cpp:3872 - debug helper: fill liNumBytes at lpDest with the repeating

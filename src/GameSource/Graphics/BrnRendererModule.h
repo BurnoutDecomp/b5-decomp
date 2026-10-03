@@ -350,6 +350,11 @@ public:
     // boundary; Render consumes commands and metadata published with that frame.
     void Prepare2DFramePC();
     void PrepareDisplayPC();
+    // FLAG PC-platform leaf: update-side CPU expansion; publication stays at
+    // the joined GDL swap. BRN_MESH_PREPARE=0 retains render-side preparation.
+    void PrepareMeshFrameForWritePC();
+    void BeginMeshFramePC();
+    void PublishMeshFramePC();
 
     // Renders the on-screen assert overlay (forwarded from BrnGameModule::RenderAssert).
     void RenderAssert(const CgsDev::Assert::AssertData* lpAssertData);
@@ -544,6 +549,15 @@ private:
                               const CgsGraphics::DispatchObjectContext* lpContext,
                               CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
                               u32 luInputList, s32 liGroupIndex, u32 luGroupSize);
+    void CreateObjectToMeshJobPC(CgsGraphics::DispatchFrame* lpInputFrame, u32 luJobIndex,
+                                const CgsGraphics::DispatchObjectContext* lpContext,
+                                CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
+                                u32 luInputList, s32 liGroupIndex, u32 luGroupSize);
+    void ConvertObjectsToMeshesPC(CgsGraphics::DispatchFrame* lpInputFrame,
+                                 CgsGraphics::DispatchFrame* lpMeshFrame,
+                                 CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
+                                 const CgsGraphics::DispatchObjectContext* lpContext);
+    void InitializeDispatchContextPC(CgsGraphics::DispatchObjectContext* lpContext) const;
 
     // Sort every pass list of the render frame (on the console, RadixSort jobs;
     // PC: the synchronous DispatchList::SortForDispatch stand-in).
@@ -836,6 +850,27 @@ private:
     bool                                mbDiskErrorLastFrame;
     s32                                 miFramesSinceDiskErrorReported;
     DebugComponent                      mDebugComponent;
+
+    // FLAG PC-platform leaf: physical bins never move; swapping their owners
+    // keeps DispatchList/DispatchBin back-pointers and GDL constant lifetimes
+    // intact. Only the joined main thread changes the read index/interpreter.
+    struct PreparedMeshFramePC
+    {
+        CgsGraphics::DispatchFrame* mpFrame = nullptr;
+        u64 muResourceEpoch = 0;
+        f32 mfPreZDistance = 0.0f;
+        bool mbPreZ = false, mbPreZAlpha = false, mbReady = false;
+    };
+    CgsGraphics::DispatchFrame mSecondMeshFramePC;
+    PreparedMeshFramePC maPreparedMeshFramesPC[2];
+    CgsGraphics::DispatchPacketInterpreter* mpMeshProducerInterpreterPC = nullptr;
+    u32 muMeshReadFramePC = 0;
+    void PrepareMeshFramePC(u32 luBank, CgsGraphics::DispatchFrame* lpInput);
+    CgsGraphics::DispatchFrame& GetMeshFrameForReadPC()
+    {
+        return mpMeshProducerInterpreterPC
+            ? *maPreparedMeshFramesPC[muMeshReadFramePC].mpFrame : mSingleBufferedDispatchFrame;
+    }
 };
 
 inline void BrnRendererModule::ClearDispatchCounters()

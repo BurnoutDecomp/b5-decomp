@@ -39,6 +39,7 @@ struct BrnRendererModule {
     BrnShaderConstantsFrame maShaderConstantsFrames[2];
     bool maShaderConstantsFrameValidPC[2] = {};
     unsigned mu8ShaderConstantsFrameInternal = 0, mu8ShaderConstantsFrameExternal = 0;
+    void PublishMeshFramePC() {} // Adjacent mesh publication is tested separately.
     void SwapBuffers();
     void PublishSkyConstantsBringUp(BrnShaderConstantsFrame*);
 };
