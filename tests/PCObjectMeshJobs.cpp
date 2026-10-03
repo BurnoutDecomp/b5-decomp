@@ -70,7 +70,7 @@ struct BrnRendererModule {
 #include "pc_object_mesh_jobs.inc"
 
 struct alignas(16) Constant { float value[4]; };
-static Constant constants[13][16];
+static Constant constants[13][64];
 
 // Deterministic emitter boundary: full constants at producer indices0,128,...,
 // inherited constants between them; one wide command per output pass stresses
@@ -127,22 +127,82 @@ static std::vector<Row> Read(DispatchFrame& frame, unsigned list)
     std::sort(rows.begin(),rows.end());return rows;
 }
 
+static bool CheckManyRelocatedChains()
+{
+    // Separate source/destination regions exercise the copy-after-relocation
+    // contract, including the first spill and subsequent appends to that spill.
+    constexpr unsigned count=96;
+    alignas(16) unsigned char sourceBytes[256]={};
+    alignas(16) unsigned char destinations[count][256]={};
+    DispatchList list{};
+    bool completed=true;
+    try {
+        for(unsigned i=0;i<count;++i) {
+            std::memset(sourceBytes,0,sizeof(sourceBytes));
+            auto* block=reinterpret_cast<DispatchList::KeyBlock*>(sourceBytes);
+            auto* tail=reinterpret_cast<DispatchList::KeyBlock*>(sourceBytes+128);
+            block->mpKeys=reinterpret_cast<u64*>(sourceBytes+32);block->muCount=2;block->muCapacity=64;
+            block->mpNext=tail;
+            tail->mpKeys=reinterpret_cast<u64*>(sourceBytes+160);tail->muCount=2;tail->muCapacity=64;
+            block->mpKeys[0]=0xabcdef1200000000ULL+4*i;
+            block->mpKeys[1]=0xabcdef1200000001ULL+4*i;
+            tail->mpKeys[0]=0xabcdef1200000002ULL+4*i;
+            tail->mpKeys[1]=0xabcdef1200000003ULL+4*i;
+            list.mpBlockListHead=block;list.mpBlockListTail=tail;list.muCount=4;
+            list.RelocateForMainMemory(reinterpret_cast<uintptr_t>(sourceBytes),
+                reinterpret_cast<uintptr_t>(destinations[i]),0);
+            std::memcpy(destinations[i],sourceBytes,sizeof(sourceBytes));
+            // Empty flushes must leave the last relocated tail available.
+            list.RelocateForMainMemory(0,0,0);
+        }
+    } catch(const std::exception&) { completed=false; }
+    Check(completed,"96 relocated chains fit without exceeding the original 64-head array");
+    if(!completed)return false;
+    Check(list.muChainBlockCount==DispatchList::KU_MAX_BLOCKS_PER_CHAIN,
+          "extra shared blocks reuse the last chain head without growing metadata");
+    list.ReconnectChainBlocks();
+    bool exact=list.GetCount()==4*count;
+    auto* block=list.GetFirstKeyBlock();
+    for(unsigned i=0;i<count;++i) {
+        exact&=block==reinterpret_cast<DispatchList::KeyBlock*>(destinations[i]);
+        if(!exact)break;
+        exact&=block->mpKeys==reinterpret_cast<u64*>(destinations[i]+32)
+            &&block->mpKeys[0]==0xabcdef1200000000ULL+4*i
+            &&block->mpKeys[1]==0xabcdef1200000001ULL+4*i;
+        block=block->mpNext;
+        exact&=block==reinterpret_cast<DispatchList::KeyBlock*>(destinations[i]+128);
+        if(!exact)break;
+        exact&=block->mpKeys==reinterpret_cast<u64*>(destinations[i]+160)
+            &&block->mpKeys[0]==0xabcdef1200000002ULL+4*i
+            &&block->mpKeys[1]==0xabcdef1200000003ULL+4*i;
+        block=block->mpNext;
+    }
+    Check(exact&&block==nullptr,"every spilled key survives relocation in its original order");
+    return exact;
+}
+
 int main()
 {
+    static_assert(sizeof(DispatchList)==(sizeof(void*)==8?672u:384u),
+                  "native chain metadata stays within the existing list footprint");
     _putenv_s("BRN_MESH_JOBS","1");
 #ifdef MESH_TEST_CHAIN
     _putenv_s("BRN_MESH_JOBS_CHAIN","1");
 #endif
+    if(!CheckManyRelocatedChains()) {
+        std::printf("PCObjectMeshJobs: %d checks, %d failures\n",checks,failures);
+        return 1;
+    }
     Allocator allocator; EA::Jobs::SetAllocator(&allocator); scheduler.Initialize(128,128);
     for(int i=0;i<3;++i) { EA::Jobs::JobThreadParameters params; scheduler.AddThread(params); }
     Arena inputArena(2*1024*1024), outputArena(8*1024*1024), serialArena(8*1024*1024);
     Check(reinterpret_cast<uintptr_t>(outputArena.data)>UINT32_MAX,"shared output uses a real address above4GiB");
     DispatchFrame input{},output{},serial{}; DispatchList inputLists[13],outputLists[25],serialLists[25];
     Seed(input,inputLists,13,inputArena);
-    const unsigned counts[13]={0,1,63,64,65,127,128,129,255,256,257,1057,137};
+    const unsigned counts[13]={4097,1,63,64,65,127,128,129,255,256,257,1057,137};
     unsigned total=0;
     for(unsigned l=0;l<13;++l) {
-        total+=counts[l];for(unsigned i=0;i<16;++i)constants[l][i].value[0]=float(l*1000+i);
+        total+=counts[l];for(unsigned i=0;i<64;++i)constants[l][i].value[0]=float(l*1000+i);
         for(unsigned id=0;id<counts[l];++id) {
             auto& bin=input.GetBin();bin.BeginPacket();auto* packet=bin.AllocateCommand(0);
             packet->muWords[0]=0x01000000;packet->muWords[1]=id;packet->muWords[3]=l;
@@ -182,6 +242,8 @@ int main()
         &&renderer.maObjectToMeshJobData[i].miEndIndex==ends[i];
     Check(partitions,"1057 world objects split at the original four128-object group boundaries");
     Check(suObjectToMeshNextBlock>16,"output exceeds the initial sixteen blocks and exercises rollover");
+    Check(renderer.mapaObjectToMeshJobOutputDispatchLists[5][0].muChainBlockCount==DispatchList::KU_MAX_BLOCKS_PER_CHAIN,
+          "real parallel worker output crosses the original per-list shared-block limit");
     Check(output.GetBin().GetUsedQwords()<output.GetBin().GetSizeQwords(),"unused shared reservation is reclaimed for the sorts");
     Check(inputArena.Guards()&&outputArena.Guards()&&serialArena.Guards(),"input/output allocations retain their guard bytes");
     Check(context.mpJobState==nullptr&&context.mapConstantData[3]==nullptr,"worker shadowing never modifies the owner context");

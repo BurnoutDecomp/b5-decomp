@@ -187,9 +187,23 @@ void DispatchList::RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOut
     }
     if (mpBlockListHead)
     {
-        CGS_ASSERT(muChainBlockCount < KU_MAX_BLOCKS_PER_CHAIN,
-                   "muChainBlockCount < KU_MAX_BLOCKS_PER_CHAIN");
-        mapChainBlockArray[muChainBlockCount++] = mpBlockListHead;
+        if (muChainBlockCount < KU_MAX_BLOCKS_PER_CHAIN)
+        {
+            mapChainBlockArray[muChainBlockCount++] = mpBlockListHead;
+        }
+        else
+        {
+            // FLAG PC-platform leaf: the original 64-head array is too small
+            // for extended-detail PC scenes. Coalesce additional chains into
+            // its last entry. The previous block is already copied to shared
+            // memory; do not dereference this block's relocated tail until its
+            // own FlushBlockToSharedMemory copy has completed. The consumer
+            // still traverses ordinary KeyBlocks, after all jobs have joined.
+            CGS_ASSERT(muChainBlockCount == KU_MAX_BLOCKS_PER_CHAIN && mpRelocatedChainTailPC,
+                       "Full saved chain array has a relocated tail");
+            mpRelocatedChainTailPC->mpNext = mpBlockListHead;
+        }
+        mpRelocatedChainTailPC = mpBlockListTail;
     }
     muCount = 0;
     mpBlockListHead = mpBlockListTail = nullptr;

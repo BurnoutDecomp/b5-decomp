@@ -286,6 +286,7 @@ void DispatchFrame::ConstructWithSharedBinMemory(DispatchList* lpaDispatchListAr
         lrList.muCount = 0;
         lrList.mpDispatchBin = &m_Bin;
         lrList.muChainBlockCount = 0;
+        lrList.mpRelocatedChainTailPC = nullptr;
         lrList.muWord00 = 0;
         lrList.mpBlockListHead = lrList.mpBlockListTail = nullptr;
         lrList.mpSortedKeys = nullptr;
