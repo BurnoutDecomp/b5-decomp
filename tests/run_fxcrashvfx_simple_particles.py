@@ -19,10 +19,12 @@ EffectsModule::LoadNativeParticleParams @0x82290510 each announced their simple-
 """
 from pathlib import Path
 import argparse
+import os
 import re
 import sys
 
 sys.dont_write_bytecode = True
+os.environ.pop('NoDefaultCurrentDirectoryInExePath', None)
 from fxgs_common import REPO, Tree, body_or_empty, code_only, compile_and_run, definition, report
 
 ARRAY_H = "src/GameSource/Effects/Particles/Native/BrnSimpleParticleArray.h"
@@ -62,7 +64,8 @@ def wiring(tree):
     module = tree.read(MODULE_CPP).replace("\r\n", "\n")
     spawn = body_or_empty(module, "    void ParticleModule::SpawnSimple(")
     yield ("ParticleModule::SpawnSimple has a body that draws mRandom and calls SpawnParticle (0x82281A10)",
-           "SpawnParticle(" in spawn and "mRandom.RandomFloat(" in spawn)
+           "SpawnParticle(" in spawn and ("mRandom.RandomFloat(" in spawn or
+           ("DrawRandomPC(" in spawn and "lrRandom.RandomFloat(" in spawn)))
 
 
 def numeric(tree):
@@ -84,10 +87,17 @@ def numeric(tree):
         print("NUMERIC: cannot build -- production bodies absent: " + "; ".join(missing))
         return None
     spawn = spawn.replace("ParticleModule::SpawnSimple(", "ParticleModuleFixture::SpawnSimple(")
+    random_access = ""
+    if "DrawRandomPC(" in spawn:
+        module_h = tree.read("src/GameSource/Effects/Particles/ParticleModule.h")
+        random_access = "    Native::ParticleRandomAccessPC mRandomAccessPC;\n" + definition(
+            module_h, "template<class Draw> decltype(auto) DrawRandomPC(") + "\n"
     fixture = (
+        '#include "GameSource/Effects/Particles/Native/ParticleFramePC.h"\n'
         "\nnamespace BrnParticle {\n"
         "struct ParticleModuleFixture {\n"
         "    CgsNumeric::Random mRandom;\n"
+        + random_access +
         "    Native::BrnSimpleParticleArray maSimpleParticles[Native::eParticleArray_Max];\n"
         "    void SpawnSimple(Vector3 lvPosition, Vector3 lvVelocity, Native::ENativeParticleType leParticleType,\n"
         "                     f32 lfSizeScale, f32 lfSpawnTime, f32 lfAlpha);\n"
