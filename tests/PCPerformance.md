@@ -1464,3 +1464,55 @@ crash cause remains unproved. The lifetime defect and its repair are independent
 validated. Evidence is retained in the workflow's
 `scratch/performance_max_1003` directory. The original maximum settings remain
 the acceptance target; locked 165 FPS is still unproved.
+
+## Four-triangle swept contacts (2026-10-03)
+
+The original vehicle/world swept-sphere kernel evaluates four triangles together
+in VMX registers. The PC lowering evaluated them one at a time. The SSE2 path
+restores four-lane execution while retaining the existing PC exact square-root
+and division operations. It is enabled by default on SSE2 targets;
+`BRN_SWEPT_SPHERE_SIMD=0` selects the scalar comparison path.
+
+The hit masks, face precedence, later-pair ties, contact times, and unconditional
+outputs are preserved. Grouped output stores follow ARTIST 0x8283EF50, including
+same-type aliasing, and the valid mask is read after the outputs. The face helper
+retains the shipped A/B/AB/BC/CA candidate set from 0x82839AC0. No collision tests
+are removed and no graphics settings or floating-point mode are changed.
+
+Native regression checks exercise analytic contacts and boundaries, degenerate
+geometry, signed zero, non-finite inputs, partial valid-mask bits and output
+aliasing. A corpus of 20,000 four-triangle batches is replayed with and without
+FTZ/DAZ: all masks and finite output bits match the established scalar lowering.
+NaNs are compared by classification; this does not claim console floating-point
+bit equivalence. Compiled controls detect dropped valid masks and zeroed contact
+times. The public default and explicit scalar selection are both exercised.
+
+A 200,000-call CPU benchmark on the test laptop took 106-114 ms for the scalar
+kernel and about 24 ms for SIMD, with matching output checksums. This is roughly
+4.4 times faster for this kernel. It is not a whole-game FPS multiplier.
+
+```powershell
+python -X utf8 b5-decomp/tests/run_pc_swept_sphere_simd.py
+python -X utf8 b5-decomp/tests/run_pc_swept_sphere_simd.py --scalar-fallback
+python -X utf8 b5-decomp/tests/run_pc_swept_sphere_simd.py --benchmark
+```
+
+At the exact maximum target (including VSync), qualified 120-second Road Rage
+runs produced the following results. The first three use the same executable
+with the comparison switch; the fourth uses the final default-enabled build.
+
+| Kernel | Average FPS | P99 frame time | Mean world meshes | Takedowns |
+| --- | ---: | ---: | ---: | ---: |
+| Scalar | 163.34 | 7.72 ms | 1799 | 12 |
+| SIMD | 163.53 | 7.51 ms | 1508 | 15 |
+| Scalar | 159.28 | 8.68 ms | 2449 | 8 |
+| SIMD, final default | 161.06 | 8.31 ms | 1847 | 13 |
+
+Scene complexity varied substantially. These measurements do not establish a
+repeatable whole-game FPS improvement. Three additional attempts ended their
+events during the measurement and were excluded from combat timing. The final
+run had six distinct credited victims, up to five crashing and three airborne
+rivals, all 1187 samples foreground, and no assertions or exceptions. Two frames
+exceeded 16.67 ms; the maximum was 19.57 ms. A separate captured run preserved
+visible damage, world rendering, shadows and HUD. Locked 165 FPS and complete
+removal of camera-transition stutters remain unproved.

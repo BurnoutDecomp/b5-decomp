@@ -59,9 +59,11 @@
 
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSweptSphere.h"  // the swept kernel below
+#include "pc/geometric/SweptSphereSIMDPCLeaf.h"
 
 #include <cmath>     // std::sqrt (the vrsqrtefp lowering)
 #include <cstring>   // std::memcpy (mask lane bit patterns)
+#include <cstdlib>
 
 namespace CgsGeometric
 {
@@ -473,6 +475,23 @@ namespace CgsGeometric
         Vector3& lContactNormal3, Vector3& lTriangleNormal3,
         Vector3Plus& lSphereContactPoint3, Vector3Plus& lTriangleContactPoint3)
     {
+#if defined(_M_X64) || defined(__SSE2__) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+        // FLAG PC-platform leaf: original four-wide execution using SSE2 and the
+        // established PC arithmetic. BRN_SWEPT_SPHERE_SIMD=0 selects the scalar
+        // comparison path; platforms without SSE2 retain that path as well.
+        static const bool sbSimd = [] {
+            const char* lpValue = std::getenv("BRN_SWEPT_SPHERE_SIMD");
+            return !lpValue || lpValue[0] != '0';
+        }();
+        if (sbSimd)
+        {
+            return SweptSpherePC::Run(lSweptSphere, lTriangles,
+                lContactNormal0, lTriangleNormal0, lSphereContactPoint0, lTriangleContactPoint0,
+                lContactNormal1, lTriangleNormal1, lSphereContactPoint1, lTriangleContactPoint1,
+                lContactNormal2, lTriangleNormal2, lSphereContactPoint2, lTriangleContactPoint2,
+                lContactNormal3, lTriangleNormal3, lSphereContactPoint3, lTriangleContactPoint3);
+        }
+#endif
         Vector3*     lapContactNormal[4]        = { &lContactNormal0, &lContactNormal1,
                                                     &lContactNormal2, &lContactNormal3 };
         Vector3*     lapTriangleNormal[4]       = { &lTriangleNormal0, &lTriangleNormal1,
