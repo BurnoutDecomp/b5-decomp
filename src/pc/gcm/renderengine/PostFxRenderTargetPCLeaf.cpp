@@ -65,6 +65,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"
 #include "pc/gcm/renderengine/device.h"                  // renderengine::gDevice / gD3D9 / Device::SetState
 #include "pc/gcm/renderengine/DisplayResizePCLeaf.h"
+#include "pc/gcm/renderengine/NvApiResourceRegistryPCLeaf.h"
 #include "pc/gcm/renderengine/texture.h"                 // renderengine::Texture (mpD3DTexture)
 #include "pc/gcm/renderengine/renderstates.h"            // renderengine::TextureState (the colour sampler states)
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"        // renderengine::ShadowDepthFormat* (homed below)
@@ -1188,6 +1189,14 @@ namespace renderengine
                 || !laDepth[luIndex].Prepare(Dev(), lpState->mpDepthSurface,
                                              luWidth / luDivisor, luHeight / luDivisor))
                 return false;
+        }
+        // NVAPI may have registered the scene depth surface, the resolve
+        // texture and its level-zero surface. Retire all three while their
+        // owners are alive; address reuse must never inherit registration.
+        if (!gNvApiDepthResourcesPC.Clear())
+        {
+            CgsDev::Log::WriteToLog("[display] NVAPI resource retirement failed; retaining previous targets\n");
+            return false;
         }
         if (!Device::ResizeDisplay(luWidth, luHeight)) return false;
 
