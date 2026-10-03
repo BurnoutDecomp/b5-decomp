@@ -13,11 +13,19 @@ p = argparse.ArgumentParser()
 p.add_argument('--break-partition', action='store_true')
 p.add_argument('--drop-final-flush', action='store_true')
 p.add_argument('--chain', action='store_true')
+p.add_argument('--legacy-chain-limit', action='store_true')
 a = p.parse_args()
 t = Tree()
 base = 'src/GameShared/GameClasses/Graphics/Dispatch/'
 bins = t.read(base + 'CgsDispatcher.cpp')
 lists = t.read(base + 'CgsGraphicsDispatchList.cpp')
+if a.legacy_chain_limit:
+    start = lists.index('        if (muChainBlockCount < KU_MAX_BLOCKS_PER_CHAIN)')
+    end = lists.index('        mpRelocatedChainTailPC = mpBlockListTail;', start)
+    lists = lists[:start] + '''        CGS_ASSERT(muChainBlockCount < KU_MAX_BLOCKS_PER_CHAIN,
+                   "muChainBlockCount < KU_MAX_BLOCKS_PER_CHAIN");
+        mapChainBlockArray[muChainBlockCount++] = mpBlockListHead;
+''' + lists[end:]
 commands = t.read(base + 'CgsDispatcherCommands.cpp')
 renderer = t.read('src/GameSource/Graphics/BrnRendererModule.cpp')
 code = 'namespace CgsGraphics {\n'

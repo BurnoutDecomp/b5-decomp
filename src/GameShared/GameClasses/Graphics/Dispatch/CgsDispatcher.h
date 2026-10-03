@@ -214,7 +214,12 @@ private:
     u64*             mpSortedKeys;         // 0x18 (a1[6]) -- flat sorted record array
     KeyBlock*        mapChainBlockArray[KU_MAX_BLOCKS_PER_CHAIN]; // X360 +0x1C
     u32              muChainBlockCount;                        // X360 +0x11C
-    u8               maReservedTail[0x180u - 0x120u];           // console alignment tail
+    // FLAG PC-platform leaf: extended LODs can emit more than 64 shared blocks
+    // into one list. Retain the previous relocated tail so overflow chains can
+    // be linked into the final saved chain without dropping draws or allocating.
+    // Use the otherwise unused alignment tail; the host list size is unchanged.
+    KeyBlock*        mpRelocatedChainTailPC;
+    u8               maReservedTail[0x180u - 0x120u - sizeof(KeyBlock*)];
 
     // Never called; pins the one pointer-invariant offset fact.
     static void _AssertLayout()
