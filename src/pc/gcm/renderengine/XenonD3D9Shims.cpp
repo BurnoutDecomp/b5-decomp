@@ -3,6 +3,7 @@
 #include "pc/gcm/renderengine/DepthRangePCLeaf.h"
 #include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 #include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
+#include "pc/gcm/renderengine/NvApiResourceRegistryPCLeaf.h"
 // =============================================================================
 // XenonD3D9Shims.cpp  (pc/gcm/renderengine)
 //
@@ -9356,7 +9357,8 @@ namespace
     // Interface ids are the published constants from nvapi_interface.h; a wrong or absent one
     // simply comes back null from nvapi_QueryInterface and the path reports itself unavailable.
     // NVAPI requires both resources to be registered (NvAPI_D3D9_RegisterResource) before
-    // StretchRectEx accepts them; registration is cached per resource pointer.
+    // StretchRectEx accepts them. The native registry retains their identities
+    // and unregisters them at the joined resize/reset boundary before release.
     typedef void* (__cdecl* NvApiQueryInterfaceFn)(unsigned int);
     typedef int   (__cdecl* NvApiInitializeFn)();
     typedef int   (__cdecl* NvApiD3D9RegisterResourceFn)(IDirect3DResource9*);
@@ -9365,14 +9367,13 @@ namespace
                                                      const RECT*, D3DTEXTUREFILTERTYPE);
     const unsigned int KU_NVAPI_ID_INITIALIZE             = 0x0150E828u;
     const unsigned int KU_NVAPI_ID_D3D9_REGISTER_RESOURCE = 0xA064BDFCu;
+    const unsigned int KU_NVAPI_ID_D3D9_UNREGISTER_RESOURCE = 0xBB2B17AAu;
     const unsigned int KU_NVAPI_ID_D3D9_STRETCH_RECT_EX   = 0x22DE03AAu;
-    const u32          KU_NVAPI_MAX_REGISTERED            = 8u;
 
     int                          siNvApiState       = -1;   // -1 untried, 0 unavailable, 1 ready
     NvApiD3D9RegisterResourceFn  spNvApiRegister    = nullptr;
+    NvApiD3D9RegisterResourceFn  spNvApiUnregister  = nullptr;
     NvApiD3D9StretchRectExFn     spNvApiStretchRect = nullptr;
-    IDirect3DResource9*          sapNvApiRegistered[KU_NVAPI_MAX_REGISTERED] = {};
-    u32                          suNvApiRegistered  = 0u;
 
     bool TilingNvApiReady()
     {
@@ -9392,11 +9393,16 @@ namespace
             reinterpret_cast<NvApiInitializeFn>(lpQuery(KU_NVAPI_ID_INITIALIZE));
         spNvApiRegister    = reinterpret_cast<NvApiD3D9RegisterResourceFn>(
                                  lpQuery(KU_NVAPI_ID_D3D9_REGISTER_RESOURCE));
+        spNvApiUnregister  = reinterpret_cast<NvApiD3D9RegisterResourceFn>(
+                                 lpQuery(KU_NVAPI_ID_D3D9_UNREGISTER_RESOURCE));
         spNvApiStretchRect = reinterpret_cast<NvApiD3D9StretchRectExFn>(
                                  lpQuery(KU_NVAPI_ID_D3D9_STRETCH_RECT_EX));
-        if (lpInitialize == nullptr || spNvApiRegister == nullptr || spNvApiStretchRect == nullptr)
+        if (lpInitialize == nullptr || spNvApiRegister == nullptr
+            || spNvApiUnregister == nullptr || spNvApiStretchRect == nullptr)
             return false;
         if (lpInitialize() != 0)
+            return false;
+        if (!gNvApiDepthResourcesPC.Configure(spNvApiRegister, spNvApiUnregister))
             return false;
 
         siNvApiState = 1;
@@ -9405,16 +9411,7 @@ namespace
 
     bool TilingNvApiRegister(IDirect3DResource9* lpResource)
     {
-        for (u32 luSlot = 0u; luSlot < suNvApiRegistered; ++luSlot)
-        {
-            if (sapNvApiRegistered[luSlot] == lpResource)
-                return true;
-        }
-        if (spNvApiRegister(lpResource) != 0)
-            return false;
-        if (suNvApiRegistered < KU_NVAPI_MAX_REGISTERED)
-            sapNvApiRegistered[suNvApiRegistered++] = lpResource;
-        return true;
+        return gNvApiDepthResourcesPC.Register(lpResource);
     }
 
     // Returns true when the NVAPI path RAN (success or its own logged failure), false when it is

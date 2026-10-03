@@ -4,6 +4,7 @@
 #include "pc/gcm/renderengine/GpuFrameTimingPCLeaf.h"
 #include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 #include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
+#include "pc/gcm/renderengine/NvApiResourceRegistryPCLeaf.h"
 
 // FLAG PC-platform leaf: primary D3D9Ex flip output. ResetEx must execute on the
 // device-creation thread, between joined engine frames. A failed reset is rolled
@@ -46,6 +47,9 @@ namespace renderengine
             if(!mbLost && luWidth==Width() && luHeight==Height() && luInterval==mParameters.PresentationInterval)return S_OK;
             if(!mbLost && luWidth==muFailedWidth && luHeight==muFailedHeight)return E_OUTOFMEMORY;
             if(!lbAllowReset || GetCurrentThreadId()!=muThread)return E_PENDING;
+            // The next frame re-registers retained resources if needed. Do not
+            // reset/release resources whose NVAPI retirement failed.
+            if(!gNvApiDepthResourcesPC.Clear())return E_FAIL;
             GpuFrameTimingPC::DeviceReset();
             GeometryBindingsPC::gCache.Invalidate();
             gPCShaderBindingCache.Invalidate();
