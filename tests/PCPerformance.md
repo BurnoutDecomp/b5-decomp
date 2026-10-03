@@ -5,6 +5,46 @@ while preserving resolution, antialiasing, LOD distances, reflection settings an
 damage visibility. It does **not** establish original-PC minimum requirements or a locked
 165 FPS at 1440p.
 
+## Compiler boundary checks (2026-10-03)
+
+A private whole-program optimization build exposed three correctness issues.
+Lion's local `bool8_t` alias differed from EABase's native type depending on
+include order, producing different C++ names for the same virtual interface.
+Lion now uses EABase's declaration. The permanently synchronous traffic-job
+branch now discards its unavailable console-scheduler alternative with
+`if constexpr`. Playback lookup/creation returns construct their result handles
+directly, preserving the explicit reference operations without depending on
+optional named-return elision. General handle ownership and the traffic execution
+policy are unchanged.
+
+`run_pc_lion_bool_abi.py` passes three cross-TU checks; HEAD before this repair
+reproduces the bool/unsigned-char link mismatch. `run_pc_playback_handle_return.py`
+passes ten checks with `/Zc:nrvo-`; the previous source reproduces the three
+missing copy-constructor symbols, and removing Acquire fails eight checks.
+Particle publication, glass filtering and simple-particle checks pass 9, 5 and
+47 checks respectively. The simple-particle fixture now extracts the actual
+`DrawRandomPC` helper used by the current producer. Independent review passes.
+
+Both the canonical build and an isolated `/GL` + `/LTCG` build link. Four clean
+maximum-detail, VSync-off runs measured normal/LTCG/LTCG/normal at
+192.24/180.12/181.25/180.02 FPS. This does not establish a repeatable LTCG gain;
+the shipping compiler configuration remains unchanged. The normal candidate
+completed a captured 120-second maximum-settings Road Rage with nine credited
+takedowns across six victims, up to four crashing/four airborne rivals, full
+foreground coverage and no assertions or exceptions. Captures cover gameplay,
+damage, sparks and the takedown UI; this is runtime coverage, not clean FPS evidence.
+
+Background application state matters on the measured laptop. One matched scene
+pair with the prior published executable measured 170.20 FPS with Lively active
+and 192.67 with its wallpaper paused (world count unchanged; traffic varied).
+The user then authorized closing Lively. A clean 120-second Road Rage on that
+published executable, with Lively closed and the exact target including VSync,
+qualified with ten takedowns/five victims and averaged 159.56 FPS, p99 8.63 ms,
+maximum 18.15 ms. Locked 165 FPS remains unproved. Evidence is under the parent
+checkout's `scratch/performance_max_1003/`: `ltcg_comparison.json`,
+`wallpaper_comparison.json`, `wallpaper_closed_combat`, and
+`optimizer_boundaries_combat_visual`.
+
 ## Implemented
 
 | Change | Original evidence and PC implementation |

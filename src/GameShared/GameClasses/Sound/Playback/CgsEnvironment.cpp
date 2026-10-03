@@ -183,26 +183,26 @@ Registry* Environment::GetRegistry()
     return mpRegistry;
 }
 
+// Return handles directly into the caller's result slot. The explicit reference
+// operations below remain the ownership contract; C++17 result construction
+// avoids introducing a copy when optional named-return elision is disabled.
 // DecFIGS @ 0x441058 (the standalone X360 body was folded/not exported). Walk
 // the registered factory handles in order and return an acquired handle to the
 // first factory whose interned name matches. The ARTIST CreateVoice/CreateContent
 // callers attest this exact contract at their Environment::Ge call sites.
 Handle<Factory> Environment::GetFactory(Name aName)
 {
-    Handle<Factory> lhResult(static_cast<Factory*>(0));
     for (u32 lu32I = 0; lu32I < mu32FactoryCount; ++lu32I)
     {
         Factory* lpFactory = mphFactory[lu32I].GetObject();
         if (lpFactory && lpFactory->GetName() == aName)
         {
-            lhResult.SetObject(lpFactory);
             lpFactory->Acquire();
-            return lhResult;
+            return Handle<Factory>(lpFactory);
         }
     }
 
-    lhResult.SetObject(0);
-    return lhResult;
+    return Handle<Factory>(nullptr);
 }
 
 // @ 0x826BFAF0. Look a voice up by ident. The X360 `*(voice + 0x0C)` is
@@ -212,7 +212,6 @@ Handle<Factory> Environment::GetFactory(Name aName)
 // match, or an empty handle.
 Handle<Voice> Environment::GetVoice(u32 au32Id)
 {
-    Handle<Voice> lhResult(static_cast<Voice*>(0));
     if (mu32VoiceCount)
     {
         for (u32 lu32I = 0; lu32I < mu32VoiceCount; ++lu32I)
@@ -223,15 +222,13 @@ Handle<Voice> Environment::GetVoice(u32 au32Id)
                 CGS_ASSERT(lpVoice, "mpObject");
                 if (au32Id == lpVoice->GetIdent())
                 {
-                    lhResult.SetObject(lpVoice);
                     lpVoice->Acquire();
-                    return lhResult;
+                    return Handle<Voice>(lpVoice);
                 }
             }
         }
     }
-    lhResult.SetObject(0);
-    return lhResult;
+    return Handle<Voice>(nullptr);
 }
 
 // @ 0x826BFE50. Walk the voice table for the tagged factory's player voice whose
@@ -250,11 +247,9 @@ Handle<Voice> Environment::GetVoice(u32 au32Id)
 Handle<Voice> Environment::GetRwacVoiceByPlugin(
     const rw::audio::core::PlugIn* apPlugin)
 {
-    Handle<Voice> lhResult(static_cast<Voice*>(0));
     if (mu32VoiceCount == 0)
     {
-        lhResult.SetObject(0);
-        return lhResult;
+        return Handle<Voice>(nullptr);
     }
 
     for (u32 lu32I = 0; lu32I < mu32VoiceCount; ++lu32I)
@@ -291,16 +286,14 @@ Handle<Voice> Environment::GetRwacVoiceByPlugin(
 
         if (lbMatched)
         {
-            lhResult.SetObject(lpVoice);
             lpVoice->Acquire();
             lpVoice->Release();
-            return lhResult;
+            return Handle<Voice>(lpVoice);
         }
         lpVoice->Release();
     }
 
-    lhResult.SetObject(0);
-    return lhResult;
+    return Handle<Voice>(nullptr);
 }
 
 // @ 0x82680F50. Start the DAC plug-in: lock the audio-core System, fire the start
@@ -481,11 +474,9 @@ Handle<Environment> Environment::Create(const EnvironmentSpec& lrSpec)
 
     CGS_ASSERT(lpEnvironment != 0, "lpNewEnvironment");
 
-    Handle<Environment> lhResult;
-    lhResult.SetObject(lpEnvironment);
     if (lpEnvironment)
         lpEnvironment->Acquire();
-    return lhResult;
+    return Handle<Environment>(lpEnvironment);
 }
 
 // =============================================================================

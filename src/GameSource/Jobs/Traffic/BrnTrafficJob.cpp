@@ -97,7 +97,7 @@ void TrafficJobStub::Execute(JobParams* lpParams)
 
     mbRunningJob = true;
 
-    if (KB_PC_SYNCHRONOUS_JOB_DISPATCH)
+    if constexpr (KB_PC_SYNCHRONOUS_JOB_DISPATCH)
     {
         // FLAG PC-platform leaf: run the worker inline instead of gJobManager.AddJobs(&mJob, 1).
         // Reason + DELETE-WHEN are on KB_PC_SYNCHRONOUS_JOB_DISPATCH above.
@@ -108,7 +108,12 @@ void TrafficJobStub::Execute(JobParams* lpParams)
         return;
     }
 
-    gJobManager.AddJobs(&mJob, 1);
+    else
+    {
+        // The console scheduler has no native definition here. Discard this
+        // inactive branch in C++ itself rather than depending on dead-code removal.
+        gJobManager.AddJobs(&mJob, 1);
+    }
 }
 
 // X360 @0x829172E0. The console derives the worker id from EA::Thread::GetThreadId (an SPU
