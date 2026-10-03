@@ -11,7 +11,7 @@ base='src/GameShared/GameClasses/'
 resource=base+'System/Resource/'
 tree=Tree()
 pool=tree.read(resource+'CgsResourcePool.cpp')
-code='namespace CgsResource { namespace {\nbool sabLoggedPoolFull[64] = {};\ns32 siDefragDebugFrame=0;\n'
+code='#include "pc/gcm/renderengine/MeshPreparationPCLeaf.h"\nnamespace CgsResource { namespace {\nbool sabLoggedPoolFull[64] = {};\ns32 siDefragDebugFrame=0;\n'
 for signature in ['u32 GetManagementHashLength(', 's32 GetRelocationRWMemoryType(',
                   'void RetireRelocatedResourcePC(', 'void WriteScratchImportPC(']:
     code+=definition(pool,signature)+'\n'

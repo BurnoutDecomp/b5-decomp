@@ -6,7 +6,7 @@ os.environ.pop('NoDefaultCurrentDirectoryInExePath',None)
 parser=argparse.ArgumentParser();parser.add_argument('--omit-retirement',action='store_true');parser.add_argument('--omit-propagation',action='store_true');args=parser.parse_args()
 base='src/GameShared/GameClasses/System/Resource/'
 tree=Tree();pool=tree.read(base+'CgsResourcePool.cpp')
-code='namespace CgsResource {\n'+definition(pool,'void Pool::FixUpEntry(')+'\n'+definition(pool,'void Pool::FreeMemoryForResource(')+'\n'+definition(pool,'void Pool::DeleteMemoryForEntry(')+'\n}\n'
+code='#include "pc/gcm/renderengine/MeshPreparationPCLeaf.h"\nnamespace CgsResource {\n'+definition(pool,'void Pool::FixUpEntry(')+'\n'+definition(pool,'void Pool::FreeMemoryForResource(')+'\n'+definition(pool,'void Pool::DeleteMemoryForEntry(')+'\n}\n'
 if args.omit_retirement:
     needle='renderengine::TextureResource_OnEntryFreed(lpEntry, lpEntry->mResource.m_baseResources[0]);'
     assert code.count(needle)==2;code=code.replace(needle,'')

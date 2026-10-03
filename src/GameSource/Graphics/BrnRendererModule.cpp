@@ -1,7 +1,9 @@
+#include "pc/gcm/renderengine/MeshJobOwnerWaitPCLeaf.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertProbePC.h"
 #include "GameSource/Graphics/BrnRendererModule.h"
 #include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/MeshPreparationPCLeaf.h"
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
 #include "SDKs/EATech/eajobs/job_scheduler.h"
@@ -738,18 +740,27 @@ namespace
     const u32 KU_PC_IM2D_DEBUG_COMMAND_BYTES = 160u * 1024u;
     const u32 KU_PC_IM2D_DEBUG_VERTEX_BYTES = 2u * 1024u * 1024u;
 
+    bool MeshPreparationEnabledPC()
+    {
+        static const bool sbEnabled = [] {
+            const char* lpValue = std::getenv("BRN_MESH_PREPARE");
+            return !lpValue || lpValue[0] != '0';
+        }();
+        return sbEnabled;
+    }
+
     bool EnsureWorldDispatchAllocator()
     {
         if (sbWorldDispatchAllocatorReady)
             return true;
 
-        const u32 luHeapBytes = KU_PC_DISPATCH_BIN_BYTES
+        const u32 luHeapBytes = (MeshPreparationEnabledPC() ? 2u : 1u) * KU_PC_DISPATCH_BIN_BYTES
                               + 2u * KU_PC_GDL_DISPATCH_BIN_BYTES
                               + 2u * (KU_PC_IM2D_COMMAND_BYTES + KU_PC_IM2D_VERTEX_BYTES
                                     + KU_PC_IM2D_DEBUG_COMMAND_BYTES + KU_PC_IM2D_DEBUG_VERTEX_BYTES)
                               + 2u * (KU_PC_IM2D_DEBUG_COMMAND_BYTES + KU_PC_IM2D_DEBUG_VERTEX_BYTES) // modal banks
                               + 8u * 128u
-                              + (3u * 4096u)   // per-bin align128(size)+128 slop + headroom
+                              + (4u * 4096u)   // per-bin align128(size)+128 slop + headroom
                               + (192u * 1024u); // + the small renderengine objects that share
                                                //   this allocator (the sky dome's four buffer
                                                //   headers); without it their DoAllocate came
@@ -1568,6 +1579,15 @@ void BrnRendererModule::Construct()
         mpInterpreter = new CgsGraphics::DispatchPacketInterpreter(maInterpretFunctions, 4);
         mpInterpreter->SetSingleBufferedDispatchFrame(&mSingleBufferedDispatchFrame);
         mpInterpreter->SetTime(0.0f);
+        if (MeshPreparationEnabledPC())
+        {
+            mSecondMeshFramePC.Construct(KU_NUM_DISPATCH_LISTS,
+                KU_PC_DISPATCH_BIN_BYTES, &sWorldDispatchAllocator);
+            maPreparedMeshFramesPC[0].mpFrame = &mSingleBufferedDispatchFrame;
+            maPreparedMeshFramesPC[1].mpFrame = &mSecondMeshFramePC;
+            mpMeshProducerInterpreterPC = new CgsGraphics::DispatchPacketInterpreter(maInterpretFunctions, 4);
+            CgsDev::Log::WriteToLog("[renderer] update-side mesh preparation enabled (two native bins).\n");
+        }
     }
 
     // ARTIST @8240BF30..BF54 initializes the inlined shadow manager before the loading screen.
@@ -1671,6 +1691,7 @@ void BrnRendererModule::StartOfFrame()
     mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite().Reset();
     CgsGraphics::mShaderConstantTable.BeginFrame(
         &mDoubleBufferedDispatchFrame.GetDispatchBinForWrite());
+    BeginMeshFramePC();
 }
 
 // ==================================================================================================
@@ -2105,6 +2126,7 @@ void BrnRendererModule::SwapBuffers()
     if (lbShaderFrameValid)
         PublishSkyConstantsBringUp(&maShaderConstantsFrames[mu8ShaderConstantsFrameExternal]);
 
+    PublishMeshFramePC();
     mDoubleBufferedDispatchFrame.Swap();
 
     mu8ShaderConstantsFrameInternal = mu8ShaderConstantsFrameExternal;
@@ -2161,7 +2183,18 @@ void BrnRendererModule::CreateObjectToMeshJob(u32 luJobIndex,
         CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
         u32 luInputList, s32 liGroupIndex, u32 luGroupSize)
 {
-    auto* lpInput = mDoubleBufferedDispatchFrame.GetDispatchFrameForRead().GetList(luInputList);
+    CreateObjectToMeshJobPC(&mDoubleBufferedDispatchFrame.GetDispatchFrameForRead(),
+        luJobIndex, lpContext, lpInterpreter, luInputList, liGroupIndex, luGroupSize);
+}
+
+// FLAG PC-platform leaf: explicit source bank permits update-side conversion
+// without advancing the GDL read cursor while the renderer still owns it.
+void BrnRendererModule::CreateObjectToMeshJobPC(CgsGraphics::DispatchFrame* lpInputFrame,
+        u32 luJobIndex, const CgsGraphics::DispatchObjectContext* lpContext,
+        CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
+        u32 luInputList, s32 liGroupIndex, u32 luGroupSize)
+{
+    auto* lpInput = lpInputFrame->GetList(luInputList);
     maObjectToMeshJobContext[luJobIndex] = *lpContext;
     maObjectToMeshJobContext[luJobIndex].miListIdBase = liGroupIndex;
     CGS_ASSERT(liGroupIndex >= 0 && static_cast<u32>(liGroupIndex) < luGroupSize,
@@ -2189,6 +2222,16 @@ void BrnRendererModule::ConvertObjectsToMeshes(CgsGraphics::BufferedDispatchFram
                                                CgsGraphics::DispatchFrame* lpMeshFrame,
                                                CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
                                                const CgsGraphics::DispatchObjectContext* lpContext)
+{
+    ConvertObjectsToMeshesPC(&lpGdlFrames->GetDispatchFrameForRead(),
+        lpMeshFrame, lpInterpreter, lpContext);
+}
+
+// FLAG PC-platform leaf: both schedules execute the same original conversion.
+void BrnRendererModule::ConvertObjectsToMeshesPC(CgsGraphics::DispatchFrame* lpInputFrame,
+        CgsGraphics::DispatchFrame* lpMeshFrame,
+        CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
+        const CgsGraphics::DispatchObjectContext* lpContext)
 {
     // Profile the owner's full conversion interval. Per-object timer writes
     // cannot safely accumulate into the same frame from multiple workers.
@@ -2221,10 +2264,10 @@ void BrnRendererModule::ConvertObjectsToMeshes(CgsGraphics::BufferedDispatchFram
         EA::Jobs::AtomicStore(&suObjectToMeshNextBlock, 0);
         suObjectToMeshSharedBlockMax = luSharedQwords / DispatchBin::KU_BLOCK_SIZE_IN_QUAD_WORDS;
         for (u32 luGroup = 0; luGroup < 4u; ++luGroup)
-            CreateObjectToMeshJob(luGroup, lpContext, lpInterpreter, 11u, luGroup, 4u);
-        CreateObjectToMeshJob(4u, lpContext, lpInterpreter, 12u, 0, 1u);
+            CreateObjectToMeshJobPC(lpInputFrame, luGroup, lpContext, lpInterpreter, 11u, luGroup, 4u);
+        CreateObjectToMeshJobPC(lpInputFrame, 4u, lpContext, lpInterpreter, 12u, 0, 1u);
         for (u32 luList = 0; luList < 11u; ++luList)
-            CreateObjectToMeshJob(luList + 5u, lpContext, lpInterpreter, luList, 0, 1u);
+            CreateObjectToMeshJobPC(lpInputFrame, luList + 5u, lpContext, lpInterpreter, luList, 0, 1u);
 
         if (sbChainJobs)
         {
@@ -2237,8 +2280,14 @@ void BrnRendererModule::ConvertObjectsToMeshes(CgsGraphics::BufferedDispatchFram
             for (u32 luJob = 0; luJob < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++luJob)
                 CgsSystem::JobManager()->AddJobs(&maObjectToMeshJob[luJob], 1);
         }
+        // Only update-side preparation owns the window/message queue. The
+        // normal render-thread join retains the original callback-free wait.
+        renderengine::MeshJobOwnerWaitPC lOwnerWait;
+        const bool lbOwnerWait = lpInterpreter == mpMeshProducerInterpreterPC;
         for (u32 luJob = 0; luJob < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++luJob)
-            maObjectToMeshJob[luJob].WaitOn();
+            maObjectToMeshJob[luJob].WaitOn(
+                lbOwnerWait ? &renderengine::MeshJobOwnerWaitPC::Poll : nullptr,
+                lbOwnerWait ? &lOwnerWait : nullptr);
 
         u32 luBlocksUsed = suObjectToMeshNextBlock;
         if (luBlocksUsed > suObjectToMeshSharedBlockMax)
@@ -2274,8 +2323,7 @@ void BrnRendererModule::ConvertObjectsToMeshes(CgsGraphics::BufferedDispatchFram
         CgsGraphics::DispatchObjectContext lContextCopy;
         std::memcpy(&lContextCopy, lpContext, sizeof(lContextCopy));
 
-        CgsGraphics::DispatchFrame& lrGdlFrame = lpGdlFrames->GetDispatchFrameForRead();
-        lrGdlFrame.GetList(luListId)->DispatchAllObjectToMesh(
+        lpInputFrame->GetList(luListId)->DispatchAllObjectToMesh(
             lpInterpreter, lpInterpreter->GetSingleBufferedDispatchFrame(),
             &lContextCopy, 0, -1);
     }
@@ -2298,21 +2346,9 @@ void BrnRendererModule::SortDispatchLists(CgsGraphics::DispatchFrame* lpMeshFram
 // object->mesh expansion and the pass sorts. This block used to open RenderWorldPasses; it is
 // hoisted into its own method (and called from Render) because the console runs it BEFORE the
 // shadow-map pass, which consumes mesh lists 0..4.
-bool BrnRendererModule::BuildDispatchLists(CgsGraphics::DispatchObjectContext* lpContext)
+void BrnRendererModule::InitializeDispatchContextPC(CgsGraphics::DispatchObjectContext* lpContext) const
 {
-    using namespace CgsGraphics;
-
     std::memset(lpContext, 0, sizeof(*lpContext));
-
-    if (mpInterpreter == 0)
-        return false;
-
-    // Start-of-frame: reset the render frame + point the interpreter at it
-    // (X360: DispatchFrame::Reset(this+768); interp+12 = frame; interp+8 = 0).
-    mSingleBufferedDispatchFrame.Reset();
-    mpInterpreter->SetSingleBufferedDispatchFrame(&mSingleBufferedDispatchFrame);
-    mpInterpreter->SetTime(0.0f);
-
     // The 240-byte object context (X360 builds it on the Render stack):
     // constant shadow cleared, list base 0, the pre-Z config from the module.
     lpContext->ResetShadowing();
@@ -2332,11 +2368,87 @@ bool BrnRendererModule::BuildDispatchLists(CgsGraphics::DispatchObjectContext* l
     for (u32 luLane = 0; luLane < 4; ++luLane)
         lpContext->mvPreZDistanceThreshold[luLane] = lfPreZDistance;
 
-    // Object -> mesh expansion + the pass sorts.
+}
+
+bool BrnRendererModule::BuildDispatchLists(CgsGraphics::DispatchObjectContext* lpContext)
+{
+    InitializeDispatchContextPC(lpContext);
+    if (mpInterpreter == nullptr)
+        return false;
+    if (mpMeshProducerInterpreterPC != nullptr)
+    {
+        // Prepared and published before releasing the render worker. Never
+        // expand on both owners: diagnostics and the shared job arena have one
+        // conversion owner even when this frame is rendered without overlap.
+        CGS_ASSERT(maPreparedMeshFramesPC[muMeshReadFramePC].mbReady, "mesh frame not published");
+        return maPreparedMeshFramesPC[muMeshReadFramePC].mbReady;
+    }
+    mSingleBufferedDispatchFrame.Reset();
+    mpInterpreter->SetSingleBufferedDispatchFrame(&mSingleBufferedDispatchFrame);
+    mpInterpreter->SetTime(0.0f);
     ConvertObjectsToMeshes(&mDoubleBufferedDispatchFrame, &mSingleBufferedDispatchFrame,
                            mpInterpreter, lpContext);
     SortDispatchLists(&mSingleBufferedDispatchFrame);
     return true;
+}
+
+// FLAG PC-platform leaf: only the main/update owner expands mesh commands.
+// Each output bank stays paired with the GDL containing its constant data.
+void BrnRendererModule::PrepareMeshFramePC(u32 luBank, CgsGraphics::DispatchFrame* lpInput)
+{
+    PreparedMeshFramePC& lrPrepared = maPreparedMeshFramesPC[luBank];
+    const u64 luEpoch = renderengine::MeshPreparationPC::ResourceEpoch();
+    if (lrPrepared.mbReady && lrPrepared.muResourceEpoch == luEpoch
+        && lrPrepared.mbPreZ == mbRenderPreZ && lrPrepared.mbPreZAlpha == mbRenderPreZAlpha
+        && lrPrepared.mfPreZDistance == mfPreZDistanceThreshold)
+        return;
+
+    renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::UPDATE_MESH_PREPARE);
+    if (auto* lpProfile = renderengine::FrameProfile::gCapture.mpCurrent)
+    {
+        ++lpProfile->muMeshPrepared;
+        if (lrPrepared.mbReady) ++lpProfile->muMeshRebuilt;
+    }
+    CgsGraphics::DispatchObjectContext lContext;
+    InitializeDispatchContextPC(&lContext);
+    lrPrepared.mpFrame->Reset();
+    mpMeshProducerInterpreterPC->SetSingleBufferedDispatchFrame(lrPrepared.mpFrame);
+    mpMeshProducerInterpreterPC->SetTime(0.0f);
+    ConvertObjectsToMeshesPC(lpInput, lrPrepared.mpFrame, mpMeshProducerInterpreterPC, &lContext);
+    SortDispatchLists(lrPrepared.mpFrame);
+    lrPrepared.muResourceEpoch = luEpoch;
+    lrPrepared.mbPreZ = mbRenderPreZ;
+    lrPrepared.mbPreZAlpha = mbRenderPreZAlpha;
+    lrPrepared.mfPreZDistance = mfPreZDistanceThreshold;
+    lrPrepared.mbReady = true;
+}
+
+void BrnRendererModule::BeginMeshFramePC()
+{
+    if (mpMeshProducerInterpreterPC == nullptr) return;
+    // Called before releasing the render worker: cover cold start and controls
+    // changed since publication. The other bin can now be recycled by update.
+    maPreparedMeshFramesPC[1u - muMeshReadFramePC].mbReady = false;
+    PrepareMeshFramePC(muMeshReadFramePC, &mDoubleBufferedDispatchFrame.GetDispatchFrameForRead());
+    mpInterpreter->SetSingleBufferedDispatchFrame(&GetMeshFrameForReadPC());
+    mpInterpreter->SetTime(0.0f);
+}
+
+void BrnRendererModule::PrepareMeshFrameForWritePC()
+{
+    if (mpMeshProducerInterpreterPC == nullptr) return;
+    PrepareMeshFramePC(1u - muMeshReadFramePC, &mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite());
+}
+
+void BrnRendererModule::PublishMeshFramePC()
+{
+    if (mpMeshProducerInterpreterPC == nullptr) return;
+    // Render has joined and resource updates have completed. Rebuild if their
+    // fixups/imports/relocations invalidated the speculative CPU preparation.
+    PrepareMeshFrameForWritePC();
+    muMeshReadFramePC = 1u - muMeshReadFramePC;
+    mpInterpreter->SetSingleBufferedDispatchFrame(&GetMeshFrameForReadPC());
+    mpInterpreter->SetTime(0.0f);
 }
 
 // =============================================================================
@@ -2382,7 +2494,7 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
             if (liList < 0)
                 continue;
             lauCascadeCounts[liCascade] +=
-                mSingleBufferedDispatchFrame.GetList(static_cast<u32>(liList))->GetCount();
+                GetMeshFrameForReadPC().GetList(static_cast<u32>(liList))->GetCount();
         }
         luTotalShadowRecords += lauCascadeCounts[liCascade];
     }
@@ -2473,7 +2585,7 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
             else
                 mShadowMapRenderManager.BeginBackFaceCullRender();
 
-            mSingleBufferedDispatchFrame.GetList(static_cast<u32>(liList))
+            GetMeshFrameForReadPC().GetList(static_cast<u32>(liList))
                 ->DispatchAllMeshesZOnly(mpInterpreter, lpContext);
 
             if (liSlot == 0)
@@ -4930,11 +5042,11 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     DispatchObjectContext& lContext = *lpContext;
 
     // Pass stats (X360 60-frame averages; the raw totals feed the debug HUD).
-    const u32 luPreZ             = mSingleBufferedDispatchFrame.GetList(21)->GetCount();
-    const u32 luCarOpaque        = mSingleBufferedDispatchFrame.GetList(19)->GetCount();
-    const u32 luWorldOpaque      = mSingleBufferedDispatchFrame.GetList(11)->GetCount();
-    const u32 luWorldTransparent = mSingleBufferedDispatchFrame.GetList(15)->GetCount();
-    const u32 luCarTransparent   = mSingleBufferedDispatchFrame.GetList(20)->GetCount();
+    const u32 luPreZ             = GetMeshFrameForReadPC().GetList(21)->GetCount();
+    const u32 luCarOpaque        = GetMeshFrameForReadPC().GetList(19)->GetCount();
+    const u32 luWorldOpaque      = GetMeshFrameForReadPC().GetList(11)->GetCount();
+    const u32 luWorldTransparent = GetMeshFrameForReadPC().GetList(15)->GetCount();
+    const u32 luCarTransparent   = GetMeshFrameForReadPC().GetList(20)->GetCount();
     renderengine::FrameProfile::SceneLists(luPreZ, luWorldOpaque, luCarOpaque);
     mu32NumWorldOpaqueObjectTotals      += luWorldOpaque;
     mu32NumCarOpaqueObjectTotals        += luCarOpaque;
@@ -4960,7 +5072,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
         {
             u32 luTotal = 0;
             for (u32 luList = 0; luList < 25u; ++luList)
-                luTotal += mSingleBufferedDispatchFrame.GetList(luList)->GetCount();
+                luTotal += GetMeshFrameForReadPC().GetList(luList)->GetCount();
             if (luTotal != 0)
             {
                 sbLoggedLists = true;
@@ -4968,7 +5080,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
                 *CgsDev::Log::gpDebugPrint << "[FLAG PC bring-up] MESH lists:";
                 for (u32 luList = 0; luList < 25u; ++luList)
                 {
-                    const u32 luCount = mSingleBufferedDispatchFrame.GetList(luList)->GetCount();
+                    const u32 luCount = GetMeshFrameForReadPC().GetList(luList)->GetCount();
                     if (luCount != 0)
                         *CgsDev::Log::gpDebugPrint << " [" << static_cast<s32>(luList)
                                                    << "]=" << static_cast<s32>(luCount);
@@ -5001,7 +5113,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     if (lbPreZWork)
     {
         renderengine::Device::SetWorldPassDefaultStates(false);
-        mSingleBufferedDispatchFrame.GetList(21)->DispatchAllMeshesZOnly(mpInterpreter, &lContext);
+        GetMeshFrameForReadPC().GetList(21)->DispatchAllMeshesZOnly(mpInterpreter, &lContext);
     }
 
     // ==============================================================================================
@@ -5064,7 +5176,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
             if (lbForceCarStencil)
                 shadow::Device::BeginForceStencilWrite(lCarMaskBytes.mu8CarsBlurStencil);
 
-            mSingleBufferedDispatchFrame.GetList(19)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+            GetMeshFrameForReadPC().GetList(19)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
 
             if (lbForceCarStencil)
                 shadow::Device::EndForceStencilWrite();
@@ -5078,7 +5190,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
             // The world-opaque walk is that pass. Read one frame late like the others, so it
             // costs a query issue and nothing else. DELETE with the shadow bring-up probes.
             renderengine::ShadowProbe_Begin(3u);
-            mSingleBufferedDispatchFrame.GetList(11)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+            GetMeshFrameForReadPC().GetList(11)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
             renderengine::ShadowProbe_End(3u);
         }
     }
@@ -5115,7 +5227,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
 
         if (mbRenderWorldTransparent)
         {
-            mSingleBufferedDispatchFrame.GetList(15)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+            GetMeshFrameForReadPC().GetList(15)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
         }
         // X360 @0x8240D338-0x8240D348 / @0x8240D3F4-0x8240D3FC: the car-TRANSPARENT window. The
         // whole window sits INSIDE the mbRenderCarsTransparent gate: `lbzx r11, r31, 0xC417` /
@@ -5131,7 +5243,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
             if (lbForceCarStencil)
                 shadow::Device::BeginForceStencilWrite(lCarMaskBytes.mu8CarsBlurStencil);
 
-            mSingleBufferedDispatchFrame.GetList(20)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+            GetMeshFrameForReadPC().GetList(20)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
 
             if (lbForceCarStencil)
                 shadow::Device::EndForceStencilWrite();
@@ -6047,7 +6159,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             shadow::Device::LockDepthStencilState();
 
             CgsGraphics::DispatchList* const lpList =
-                mSingleBufferedDispatchFrame.GetList(KU_ENV_MAP_FIRST_MESH_LIST + luFace);
+                GetMeshFrameForReadPC().GetList(KU_ENV_MAP_FIRST_MESH_LIST + luFace);
             const u32 luMeshCount = lpList->GetCount();
             lauStatFaceMeshes[luFace] = luMeshCount;
             lpList->DispatchAllMeshes(mpInterpreter, &lDispatchContext, 0, -1);

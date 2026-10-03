@@ -8,6 +8,8 @@ p=argparse.ArgumentParser();p.add_argument('--old-context',action='store_true');
 root='src/GameSource/Graphics/BrnRendererModule'
 current=Tree();body=definition(Tree('be68dc2a' if args.old_context else None).read(root+'.cpp'),
     'bool BrnRendererModule::BuildDispatchLists(').replace('BrnRendererModule::','PreZRenderer::')
+if not args.old_context:
+    body = definition(current.read(root+'.cpp'), 'void BrnRendererModule::InitializeDispatchContextPC(').replace('BrnRendererModule::','PreZRenderer::') + '\n' + body
 header=current.read(root+'.h')
 defaults='\n'.join(re.search(r'^    '+name+r' = [^;]+;',header,re.M)[0]
     for name in ['mbPreZNearOnly','mfPreZDistanceThreshold'])

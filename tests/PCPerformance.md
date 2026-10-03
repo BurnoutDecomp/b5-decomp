@@ -19,7 +19,7 @@ damage visibility. It does **not** establish original-PC minimum requirements or
 | Optional diagnostics | Wheel index/bounds scans require `BRN_WHEEL_DIAG=1`. Composite GPU readback sampling requires existing `BRN_RT_PROBE=1`. `BRN_WHEEL_ZALWAYS` remains independent. |
 | Diagnostic lookup overhead | GUI routing checks the two eligible trace event IDs before reading the environment. Hot AI speed/fan diagnostics cache their startup switches, matching adjacent diagnostic code. Messages, rate limits and game calculations are unchanged. |
 | Complete mesh sort keys | ARTIST `0x827FD4CC..5D4` builds keys up to 44 bits; `Submit` at `0x822A0888` shifts the complete u64 key before appending the 20-bit packet offset. Restore priority, shader/material grouping, Z-depth ordering and 36-bit pre-Z keys. `RadixSortJob::Execute` actually calls `std::_Sort<u64*,int>` (`0x82AD28B0`), now matched with in-place `std::sort`. |
-| Buffered 2D preparation | Restore the separate `Im2dRenderBuffer` type and share its stream between APT and FLAPT. ARTIST `0x827F9EBC..9F10` dispatches combined transform/texture/blend/static-draw records; the PC dispatcher now handles them. Native NDC/unit-colour inputs are translated into the existing PC logical/byte-colour command representation. The early APT flush and fake renderer-set cast are removed. Movie/debug draws also record into real buffers. Frame callbacks remain serial while the remaining ownership audit proceeds. |
+| Buffered 2D preparation | Restore the separate `Im2dRenderBuffer` type and share its stream between APT and FLAPT. ARTIST `0x827F9EBC..9F10` dispatches combined transform/texture/blend/static-draw records; the PC dispatcher now handles them. Native NDC/unit-colour inputs are translated into the existing PC logical/byte-colour command representation. The early APT flush and fake renderer-set cast are removed. Movie/debug draws also record into real buffers. The frame overlap integration below publishes them at the joined frame boundary. |
 
 The native state shadows are invalidated at device creation. Any future raw float
 constant/sampler write or state-block restoration must use these wrappers or
@@ -1324,3 +1324,103 @@ reduces texture setup work; it does not establish a locked 165 FPS.
 Static geometry conversion/cache reuse and streaming invalidation already existed
 before this pass. They were retained. No graphics-quality reduction or restoration
 of the original five-damaged-car visibility cap is used to improve these numbers.
+
+## Mesh preparation during update (2026-10-03)
+
+The native renderer now expands and sorts the completed update-side object lists
+while the render thread submits the previous frame. This is a PC scheduling
+adaptation: original conversion, partition boundaries, constant inheritance,
+pass routing and sorting are unchanged. A second 12 MiB output bin and a separate
+producer interpreter keep the two frames independent. Physical frames never move;
+ownership flips with the matching GDL and shader frame, keeping constant pointers
+valid.
+
+Resource fixup, post-fixup, import writes, retirement, live replacement and
+relocation advance a native generation. Changes to resources or pre-Z controls
+force a joined rebuild before publication. Cold and empty frames also produce
+valid output. Update-side worker joins service queued assertions and Windows
+messages, preserving WM_QUIT. Render-side waits retain their previous behavior.
+
+Preparation during update is enabled by default. `BRN_MESH_PREPARE=0` selects the
+previous render-side schedule; `BRN_MESH_JOBS=1` remains an independent opt-in.
+The profiler records `update_mesh_prepare_ms`, `mesh_prepared` and `mesh_rebuilt`.
+Timing-only mode adds no section clocks.
+
+At the maximum settings captured on October 3 (1440p, 8x MSAA, full-rate
+reflections, reflection LOD0, world/prop LOD bases of 3000, Ultra vehicles and
+traffic shadows), four 45-second runs of the same executable measured:
+
+| Order | Preparation | Average FPS | 99th percentile frame time |
+| --- | --- | ---: | ---: |
+| 1 | During rendering | 138.42 | 10.85 ms |
+| 2 | During update | 155.80 | 9.63 ms |
+| 3 | During update | 158.47 | 9.05 ms |
+| 4 | During rendering | 139.58 | 10.14 ms |
+
+All samples were foreground. VSync was disabled only for this diagnostic
+comparison. World opaque work remained 3926 meshes, and total draws remained
+8452-8490. Mean throughput improved about 13% in this stationary workload. A later
+run of the previously published executable measured 143.81 FPS, illustrating
+run-to-run variation. A lighter-settings control measured 217.73 FPS without
+overlap and 241.17 FPS with it, using the same executable for both 35-second runs.
+
+A clean 120-second Road Rage run at the exact maximum target, including VSync,
+qualified with eight takedowns, four distinct victims, up to four rivals crashing
+and airborne, and 2758 frames with multiple crashing rivals. All 1181 focus
+samples were foreground; no assertions, exceptions or event end occurred.
+It averaged 148.95 FPS, with a 10.68 ms 99th percentile and a 15.71 ms maximum.
+This establishes a clean combat measurement at these settings, not a combat
+speedup or a locked 165 FPS.
+
+Native regressions cover 128 concurrent frame publications, constant lifetimes,
+physical-bin reuse, resource/control invalidation, empty/disabled paths, actual
+conversion on an explicit input bank, and a real EAJobs worker that asserts and
+sends synchronous window messages. Compiled negative controls detect stale
+resource generations, wrong-bank output, omitted assertion service and omitted
+message pumping.
+
+```powershell
+python b5-decomp/tests/run_pc_mesh_preparation.py
+python b5-decomp/tests/run_pc_mesh_job_owner_wait.py
+python b5-decomp/tests/run_pc_object_mesh_jobs.py --write-bank
+```
+
+## NVIDIA depth resource retirement (2026-10-03)
+
+The old NVAPI depth-resolve cache retained eight raw resource addresses without
+unregistering them. Target replacement freed those objects, so address reuse
+could falsely inherit registration. Registrations beyond eight succeeded without
+being tracked and were repeated every frame.
+
+The native registry now tracks every successful registration and holds a COM
+reference until paired unregistration succeeds. This includes the source depth
+surface, destination texture and its level-zero surface, even when a resolve
+variant is unused. Failed registration takes no reference. Failed unregistration
+retains the object and blocks resize/reset until retirement can be retried.
+Joined target replacement and ResetEx retire registrations before releasing
+owners. No per-frame GPU wait or graphics reduction is introduced.
+
+The regression passes 20 checks, including 17 simultaneous resource lifetimes,
+address reuse, duplicate suppression and failure handling. Real NVIDIA depth
+resolves preserve sampled GPU pixels across twelve generations of 8x MSAA
+surfaces, with unregistration and ResetEx occurring before readback. Restoring
+untracked eight-entry overflow fails six contract checks before GPU execution.
+
+```powershell
+python b5-decomp/tests/run_pc_nvapi_resource_registry.py
+```
+
+The combined build passed repeated F11 transitions, six window-size requests,
+minimize/restore and pause-menu rendering. The OS constrained oversized requests;
+actual captured sizes ranged from 1024x576 to 2564x1442. A separate streaming run
+passed all seven existing checks: five area transitions, twelve declaration
+retirements, crash-camera entry and four returns to driving, without assertions,
+exceptions or stale vertex formats. Captured world, car, reflection, shadow and
+HUD images were inspected.
+
+The registration defect was found while investigating one intermittent driver
+crash during resize. Subsequent unmodified controls also passed, so the exact
+crash cause remains unproved. The lifetime defect and its repair are independently
+validated. Evidence is retained in the workflow's
+`scratch/performance_max_1003` directory. The original maximum settings remain
+the acceptance target; locked 165 FPS is still unproved.
