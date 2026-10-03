@@ -1559,3 +1559,48 @@ arbitrator-state change. No assertions, exceptions or event end occurred.
 Average throughput was 162.76 FPS, P99 frame time 8.11 ms and maximum 15.27 ms.
 This validates the runtime and establishes a current measurement; it does not
 prove a repeatable FPS gain, removal of every reported stutter, or locked 165 FPS.
+
+## Packed mesh bounds (2026-10-03)
+
+Packed OOBB decoding and matrix products now use SSE2, restoring the original
+vector execution while retaining the established PC arithmetic. The control
+`BRN_PACKED_OOBB_SIMD=0` selects the scalar path at process startup. No ISA above
+SSE2, approximate reciprocal, new culling rule or graphics reduction is used.
+
+The matrix product also fixes an aliasing defect: ARTIST loads every input row
+before its first output store, whereas the previous scalar loop could overwrite
+an input row needed later when input and output named the same matrix. Both
+current paths now preserve that original input snapshot. The live caller examined
+uses separate matrices, so this correctness fix is not claimed as a measured
+gameplay defect or source of the reported stutters.
+
+Default and scalar-control suites each pass 13 checks, including 40,000 packed
+boxes and general projective matrices under each of two MXCSR modes. All finite
+output bits match the scalar equations; NaNs are compared by classification.
+Analytic cases cover byte order, signed positions, independent scales, homogeneous
+lanes, zero quaternions, in-place products and non-finite zero-weight terms.
+The previous public multiply fails the alias checks; disabling normalization
+fails the numerical controls. This does not claim console float-bit identity.
+
+One million complete decode-and-product operations took about 40-44 ms on the
+scalar path and 21 ms through the SIMD public path, with matching checksums.
+Decode alone took 17.5-18.1 ms versus 12.8-14.2 ms. These are CPU-kernel results.
+
+Same-binary, uncapped maximum-settings stationary runs measured 185.64 FPS off,
+176.48 on, 178.74 on and 176.33 off. Every run had 445/445 foreground samples and
+3926 opaque world meshes; traffic work varied. The first control differs from the
+closing control, so a repeatable whole-game gain is not established. VSync was
+disabled only for this comparison.
+
+The final default build also passed a captured 120-second Road Rage run at the
+unchanged maximum target, including VSync: nine takedowns across six victims,
+up to three crashing and two airborne rivals, all 1187 samples foreground, and
+no assertions, exceptions or event end. Captured takedown damage, detached parts,
+world geometry, shadows and HUD were inspected. Capture-run FPS is excluded from
+performance claims. Locked 165 FPS remains unproved.
+
+```powershell
+python -X utf8 b5-decomp/tests/run_pc_packed_oobb_simd.py
+python -X utf8 b5-decomp/tests/run_pc_packed_oobb_simd.py --scalar-control
+python -X utf8 b5-decomp/tests/run_pc_packed_oobb_simd.py --benchmark
+```
