@@ -120,8 +120,8 @@ namespace CgsSystem
         // display transform currently holds -- so a frame that dispatches several passes
         // (main view, shadow cascades, env-map faces) may call it per pass.
         //
-        // Cuts are handled by BlendTransform: a jump too large for one tick (a spawn, a
-        // place-on-track, a shot change) snaps instead of smearing.
+        // Producers reset history for known discontinuities. BlendTransform itself
+        // does not distinguish a teleport or camera cut from continuous motion.
         // ====================================================================
         class PoseTrack
         {

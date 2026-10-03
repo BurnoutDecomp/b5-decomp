@@ -2403,7 +2403,7 @@ void BrnRendererModule::PrepareMeshFramePC(u32 luBank, CgsGraphics::DispatchFram
         && lrPrepared.mfPreZDistance == mfPreZDistanceThreshold)
         return;
 
-    renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::UPDATE_MESH_PREPARE);
+    renderengine::FrameProfile::CycleScope lProfile(renderengine::FrameProfile::UPDATE_MESH_PREPARE);
     if (auto* lpProfile = renderengine::FrameProfile::gCapture.mpCurrent)
     {
         ++lpProfile->muMeshPrepared;

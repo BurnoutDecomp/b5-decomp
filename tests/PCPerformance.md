@@ -1516,3 +1516,46 @@ rivals, all 1187 samples foreground, and no assertions or exceptions. Two frames
 exceeded 16.67 ms; the maximum was 19.57 ms. A separate captured run preserved
 visible damage, world rendering, shadows and HUD. Locked 165 FPS and complete
 removal of camera-transition stutters remain unproved.
+
+## Camera cuts and frame attribution (2026-10-03)
+
+The PC render-camera latch previously retained interpolation history across an
+authored hard cut. Render-only frames could therefore show an intermediate pose
+and FOV between unrelated shots even though the director had set its native
+`E_FLAG_NEW_THIS_FRAME` flag. The latch now discards previous history on that
+flag. The next ordinary tick resumes smooth interpolation from the new camera.
+Continuous motion uses the existing engine blend; no distance or angle heuristic
+is introduced. Camera selection, effects and state flags remain the current tick's.
+
+The native regression compiles the actual latch and interpolation methods with
+the real camera types and math. It passes 17 checks covering first publication,
+continuous movement, cut translation/rotation/FOV at five render alphas, frames
+without a simulation tick, small same-producer cuts and consecutive cuts. The
+previous published implementation fails eight checks. The original director's
+cut-flag producer suite remains 13/13.
+
+Frame traces now distinguish arbitrator-state transitions from published camera
+behaviour/shot identities and native new-camera flags. A frame may contain more
+than one simulation publication, and publication can precede the rendered view
+through the frame pipeline; these counters are not a pixel-level cut detector.
+Optional raw thread cycles cover simulation, nested mesh preparation and dispatch.
+Simulation cycles do not cover the broader `update_ms` aggregate. Query-failure
+counts use atomic increments because update and dispatch can report concurrently.
+The recorder suite passes 43 checks, including CSV alignment, disabled/timing-only
+clock bounds and 400,000 concurrent query failures. Restoring plain increments
+fails that concurrency regression.
+
+```powershell
+python -X utf8 b5-decomp/tests/run_pc_camera_cut_interpolation.py
+python -X utf8 b5-decomp/tests/run_pc_camera_cut_interpolation.py --rev aaa5ccc8
+python -X utf8 b5-decomp/tests/run_pc_frame_timing_only.py
+```
+
+The second command is an expected-failure control. A final clean 120-second
+Road Rage run at the exact maximum target qualified with 12 takedowns across
+seven victims, up to four crashing and three airborne rivals, and all 1187 focus
+samples foreground. It recorded 23 new-camera publications, 17 without an
+arbitrator-state change. No assertions, exceptions or event end occurred.
+Average throughput was 162.76 FPS, P99 frame time 8.11 ms and maximum 15.27 ms.
+This validates the runtime and establishes a current measurement; it does not
+prove a repeatable FPS gain, removal of every reported stutter, or locked 165 FPS.
