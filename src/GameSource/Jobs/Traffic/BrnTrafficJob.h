@@ -17,7 +17,6 @@
 
 #include "types.hpp"
 #include "SDKs/EATech/eajobs/job.h"                    // EA::Jobs::Job (embedded by value, mEntryPoint public)
-#include "SDKs/EATech/eajobs/job_scheduler.h"          // EA::Jobs::JobScheduler (gJobManager)
 #include "SDKs/EATech/eajobs/job_types.h"              // EA::Jobs::Param
 #include "GameSource/Jobs/Traffic/TrafficCommon.h"     // BrnTraffic::JobParams / UpdateVehiclesJobParams
 #include "GameSource/Jobs/Traffic/BrnUpdateVehiclesJob.h" // BrnTraffic::UpdateVehiclesJob (embedded by value)
@@ -28,7 +27,7 @@ namespace BrnTraffic {
 // DWARF Traffic.h:28. The snapshot of the job parameter block the worker reads. On the X360
 // it lives in a fixed 256-byte reserved slot (SetData is handed 0x100); the live UpdateVehicles
 // arm is 160 bytes (== sizeof(UpdateVehiclesJobParams)).
-struct TrafficJobData
+struct alignas(128) TrafficJobData
 {
     JobParams mParams;    // Traffic.h:31
 };
@@ -60,14 +59,11 @@ extern TrafficJob gaTrafficJobs[KU_MAX_TRAFFIC_JOB_WORKERS];
 // (`mr r29, r4` then `bl TrafficJob::Execute` with r4 == r29).
 void TrafficJobEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param);
 
-// X360 unk_830EA650 -- the process-wide job scheduler singleton (CgsSystem::HardwareInit brings
-// it up). No committed home yet; declared extern here (link-time resolves to its owning TU).
-extern EA::Jobs::JobScheduler gJobManager;
-
 // DWARF BrnTrafficJob.h:50.
 struct TrafficJobStub
 {
 public:
+    TrafficJobStub() : mbRunningJob(false), mJob(nullptr) {}
     void Construct();                                       // h:55
     void Destruct();                                        // h:59
     // @0x82752CB0 -- wire the embedded job at TrafficJobEntry over a snapshot of lpParams and

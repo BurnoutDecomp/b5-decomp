@@ -14,8 +14,8 @@
 // HOST-NATIVE LAYOUT: nothing strides or offsets by an X360 byte, every access is by member
 // name, and the _AssertLayout pins cover relative order plus asm-attested array counts only.
 // Ship pool sizes differ from the DWARF (KU_MAX_STATIC_TRAFFIC 199, KU_MAX_TOTAL_TRAFFIC
-// 600); see BrnTrafficConstants.h. One member is still absent, marked `[MEMBER HOLE 5]` at
-// its ordered position with the exact blocker (holes 1, 2, 4 and 6 closed).
+// 600); see BrnTrafficConstants.h. The four original traffic-job wrappers own
+// their parameter snapshots and physical-request lists at the DWARF position.
 // =============================================================================
 
 #include "types.hpp"        // u8/u16/u32/s8/s32/u64/f32
@@ -46,6 +46,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficStaticParam.h"      // StaticTrafficParam
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicleTypeRuntime.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficMiscRuntimeClasses.h" // BrnTraffic::PhysicalReason
+#include "GameSource/Jobs/Traffic/BrnTrafficJob.h"
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"   // ETrafficType, eCrashTrafficType (promotion)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficHullRuntime.h"      // HullRuntime
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficLightManager.h"     // TrafficLightManager
@@ -1638,15 +1639,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         CgsNumeric::Random    mRand;                             // :615
         CgsNumeric::Random    mEffectRand;                       // :616
 
-        // [MEMBER HOLE 5 -- DWARF :619] TrafficJobStub maJobs[4]
-        //   BLOCKER (measured): including BrnTrafficJob.h here fails every mounted
-        //   traffic TU with C2011 on EA::Thread::{Semaphore,Mutex,Condition,RWMutex}Parameters
-        //   -- SDKs/EATech/eathread/BrnEAThreadX360.h redefines the vendor/EAThread snapshot's
-        //   types, and it arrives ONLY through BrnTrafficJob.h -> eajobs/job_scheduler.h.
-        //   BrnTrafficJob.h's other includes are clean against this header (probed).
-        //   FIX (one line, owner GameSource/Jobs/Traffic): move job_scheduler.h out of
-        //   BrnTrafficJob.h into BrnTrafficJob.cpp; `extern JobScheduler gJobManager;` needs
-        //   only an incomplete type. Insert HERE then, and drop the host split in _wT2_04.cpp.
+        TrafficJobStub        maJobs[KU_MAX_JOBS];                // :619
         u32                   muNumUpdateVehiclesJobs;           // :620
 
         // ---- the vehicle pools: three pools in one array (X360-attested). Standard is

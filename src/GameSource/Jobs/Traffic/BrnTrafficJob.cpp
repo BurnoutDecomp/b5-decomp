@@ -3,9 +3,12 @@
 #include "SDKs/EATech/eajobs/entry_point.h"                   // EA::Jobs::EntryPoint
 #include "SDKs/EATech/eajobs/job_scheduler.h"                 // EA::Jobs::JobScheduler::AddJobs
 #include "SDKs/EATech/eajobs/job_types.h"                     // EA::Jobs::JOB_ENVIRONMENT_LOCAL
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"
+#include "pc/gcm/renderengine/MeshJobOwnerWaitPCLeaf.h"
 
 
 #include <cstring>   // std::memcpy (models the X360 memcpy intrinsic)
+#include <cstdlib>
 
 // GameSource/Jobs/Traffic/BrnTrafficJob.cpp
 //
@@ -25,19 +28,25 @@ namespace BrnTraffic
 {
 namespace
 {
-    // FLAG PC-platform leaf: single-threaded job dispatch. The console submits mJob to
-    // EA::Jobs::JobScheduler gJobManager (X360 unk_830EA650), which CgsSystem::HardwareInit
-    // brings up; that singleton has no committed home on this host, so TrafficJobEntry runs
-    // inline here and WaitOn is a no-op. One worker slot is live, so the worker id is 0.
-    // DELETE-WHEN gJobManager is homed and Initialize()d during boot.
-    const bool KB_PC_SYNCHRONOUS_JOB_DISPATCH = true;
-    const u32  KU_PC_SYNCHRONOUS_WORKER_ID    = 0;
+    // FLAG PC-platform leaf: enable only after native parity/timing validation.
+    // The old traffic witness writes shared camera state; retain its ordered
+    // owner execution when that diagnostic is requested.
+    bool UseNativeTrafficJobsPC()
+    {
+        static const bool sbEnabled = [] {
+            const char* lpcValue = std::getenv("BRN_TRAFFIC_JOBS");
+            return lpcValue && lpcValue[0] == '1'
+                && !std::getenv("BRN_TRAFFIC_DIAG")
+                && !std::getenv("BRN_WORLD_CAMTRAFFIC");
+        }();
+        return sbEnabled;
+    }
 
-    // The fixed descriptor slot SetData is handed (0x100 literal @0x82752D2C). Host pointer
+    // The fixed descriptor slot SetData is handed (0x100 literal @0x82752D84). Host pointer
     // widening grows TrafficJobData, so pin that it still fits.
     const u32 KU_JOB_DESCRIPTOR_BYTES = 256;
-    static_assert(sizeof(TrafficJobData) <= KU_JOB_DESCRIPTOR_BYTES,
-                  "TrafficJobData outgrew the console's 256-byte job descriptor slot");
+    static_assert(sizeof(TrafficJobData) == KU_JOB_DESCRIPTOR_BYTES,
+                  "TrafficJobData must own the entire submitted 256-byte slot");
 }
 
 // X360 unk_831B9C80.
@@ -55,17 +64,22 @@ void TrafficJobStub::Destruct()
 {
 }
 
-// BrnTrafficJob.cpp:99 / DWARF BrnTrafficJob.h:67. EXPORT HOLE at X360 0x82752DC8 (no
-// per-function JSON), so only the shape is attested: the console blocks on mJob then drops
-// mbRunningJob. Under the synchronous dispatch above the work already ran inside Execute.
+// ARTIST82752DC8..82752E34, recovered directly from the image: assert running,
+// wait on the embedded job with sleep=-1, then clear the running flag.
 void TrafficJobStub::WaitOn()
 {
+    CGS_ASSERT(mbRunningJob, "mbRunningJob");
+    // FLAG PC-platform leaf: this join runs on the frame/window owner. Service
+    // dependent native window messages and worker assertions until completion.
+    renderengine::MeshJobOwnerWaitPC lOwnerWait;
+    mJob.WaitOn(&renderengine::MeshJobOwnerWaitPC::Poll, &lOwnerWait);
     mbRunningJob = false;
 }
 
 // DWARF BrnTrafficJob.h:71.
 PhysicalRequestInfoList* TrafficJobStub::GetNewPhysicalRequests()
 {
+    CGS_ASSERT(!mbRunningJob, "!mbRunningJob");
     return &mNewPhysicalRequests;
 }
 
@@ -97,39 +111,31 @@ void TrafficJobStub::Execute(JobParams* lpParams)
 
     mbRunningJob = true;
 
-    if constexpr (KB_PC_SYNCHRONOUS_JOB_DISPATCH)
+    if (UseNativeTrafficJobsPC())
     {
-        // FLAG PC-platform leaf: run the worker inline instead of gJobManager.AddJobs(&mJob, 1).
-        // Reason + DELETE-WHEN are on KB_PC_SYNCHRONOUS_JOB_DISPATCH above.
-        TrafficJobEntry(EA::Jobs::Param(static_cast<u32>(KU_PC_SYNCHRONOUS_WORKER_ID)),
-                        EA::Jobs::Param(static_cast<void*>(&mJobData)),
-                        EA::Jobs::Param(),
-                        EA::Jobs::Param());
-        return;
+        CgsSystem::JobManager()->AddJobs(&mJob, 1);
     }
 
     else
     {
-        // The console scheduler has no native definition here. Discard this
-        // inactive branch in C++ itself rather than depending on dead-code removal.
-        gJobManager.AddJobs(&mJob, 1);
+        TrafficJobEntry(EA::Jobs::Param(), EA::Jobs::Param(static_cast<void*>(&mJobData)),
+                        EA::Jobs::Param(), EA::Jobs::Param());
     }
 }
 
 // X360 @0x829172E0. The console derives the worker id from EA::Thread::GetThreadId (an SPU
 // slot on PS3), asserts it is in range ("SPU Id out of range: ", Traffic.cpp:57) and runs the
 // matching TrafficJob over the params carried in the SECOND job argument.
-void TrafficJobEntry(EA::Jobs::Param lWorkerId,
+void TrafficJobEntry(EA::Jobs::Param,
                      EA::Jobs::Param lData,
                      EA::Jobs::Param,
                      EA::Jobs::Param)
 {
-    // FLAG PC-platform leaf: the worker id is the job argument, not a thread-id derived SPU
-    // slot. Reason + DELETE-WHEN on KB_PC_SYNCHRONOUS_JOB_DISPATCH.
-    const u32 luWorkerId = lWorkerId.muValue;
-    CGS_ASSERT(luWorkerId < KU_MAX_TRAFFIC_JOB_WORKERS, "SPU Id out of range: ");
-
-    gaTrafficJobs[luWorkerId].Execute(static_cast<JobParams*>(lData.mpValue));
+    // FLAG PC-platform leaf: native thread IDs are not the console's six worker
+    // indices, and Param0 is not a worker ID. Each host thread keeps the original
+    // worker state separately; Initialise resets it for every submitted slice.
+    static thread_local TrafficJob slWorker;
+    slWorker.Execute(static_cast<JobParams*>(lData.mpValue));
 }
 
 // X360 @0x829174B0 (TrafficJob.cpp:51 / :69).
