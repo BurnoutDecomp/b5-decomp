@@ -31,6 +31,10 @@ namespace renderengine
             unsigned muBytes = 0, muLive = 0, muRetired = 0;
             bool mbWritten = false, mbWritable = true;
             std::vector<Range> mFree;
+            // Every range before muSearchStart has at most muSkippedMax bytes.
+            // A larger request may skip that prefix without changing first-fit
+            // placement. A smaller request starts from zero as before.
+            unsigned muSearchStart = 0, muSkippedMax = 0;
         };
     public:
         struct Allocation
@@ -44,6 +48,7 @@ namespace renderengine
         {
             unsigned long long muPagesCreated = 0, muPagesDestroyed = 0;
             unsigned long long muResidentBytes = 0, muLiveBytes = 0, muRetiredBytes = 0;
+            unsigned long long muRangeProbes = 0;
         } mStatistics;
     private:
         struct RetiredBatch { Fence mFence{}; std::vector<Allocation> mAllocations; };
@@ -51,6 +56,7 @@ namespace renderengine
         Context mContext{};
         bool mbInitialized = false, mbSupported = false;
         unsigned muPageBytes;
+        bool mbSkipSmallRanges;
         std::list<Page> mPages;
         std::vector<Allocation> mRetiring;
         std::list<RetiredBatch> mBatches;
@@ -78,6 +84,9 @@ namespace renderengine
                 lPosition = lrPage.mFree.erase(lPosition);
             }
             lrPage.mFree.insert(lPosition, lRange);
+            // Coalescing can enlarge a previously rejected range and changes
+            // vector indices. The next search must establish a fresh prefix.
+            lrPage.muSearchStart = lrPage.muSkippedMax = 0;
         }
         void ReleaseEmptyPages()
         {
@@ -111,9 +120,52 @@ namespace renderengine
             }
             return mbSupported;
         }
+        template<bool TB_SKIP_SMALL_RANGES>
+        bool FindRange(Page& lrPage, unsigned luReserved,
+                       unsigned long long luAlignment, unsigned& lruRange, unsigned& lruOffset)
+        {
+            unsigned luStart = 0, luSkippedMax = 0;
+            if constexpr (TB_SKIP_SMALL_RANGES)
+            {
+                if (luReserved > lrPage.muSkippedMax)
+                {
+                    luStart = lrPage.muSearchStart;
+                    luSkippedMax = lrPage.muSkippedMax;
+                }
+            }
+            unsigned lu = luStart;
+            for (; lu < lrPage.mFree.size(); ++lu)
+            {
+                const Range& lrRange = lrPage.mFree[lu];
+                if (lrRange.muBytes >= luReserved)
+                {
+                    const unsigned long long luAlignedOffset =
+                        (lrRange.muOffset + luAlignment - 1u) / luAlignment * luAlignment;
+                    if (luAlignedOffset + luReserved
+                        <= static_cast<unsigned long long>(lrRange.muOffset) + lrRange.muBytes)
+                    {
+                        lruOffset = static_cast<unsigned>(luAlignedOffset);
+                        break;
+                    }
+                }
+                if constexpr (TB_SKIP_SMALL_RANGES)
+                    luSkippedMax = (std::max)(luSkippedMax, lrRange.muBytes);
+            }
+            const bool lbFound = lu < lrPage.mFree.size();
+            // Count once per searched page, avoiding writes in the scan loop.
+            mStatistics.muRangeProbes += lu - luStart + (lbFound ? 1u : 0u);
+            if constexpr (TB_SKIP_SMALL_RANGES)
+            {
+                lrPage.muSkippedMax = luSkippedMax;
+                lrPage.muSearchStart = lu;
+            }
+            if (lbFound) lruRange = lu;
+            return lbFound;
+        }
     public:
-        explicit PCGeometryBufferPool(unsigned luPageBytes = 1024u * 1024u)
-            : muPageBytes(luPageBytes) {}
+        explicit PCGeometryBufferPool(unsigned luPageBytes = 1024u * 1024u,
+                                      bool lbSkipSmallRanges = true)
+            : muPageBytes(luPageBytes), mbSkipSmallRanges(lbSkipSmallRanges) {}
         ~PCGeometryBufferPool() { ReleaseAll(); }
         PCGeometryBufferPool(const PCGeometryBufferPool&) = delete;
         PCGeometryBufferPool& operator=(const PCGeometryBufferPool&) = delete;
@@ -139,22 +191,10 @@ namespace renderengine
             for (auto& lrPage : mPages)
             {
                 if (!lrPage.mbWritable || lrPage.meKind != leKind) continue;
-                for (unsigned lu = 0; lu < lrPage.mFree.size(); ++lu)
-                {
-                    const Range& lrRange = lrPage.mFree[lu];
-                    if (lrRange.muBytes < luReserved) continue;
-                    const unsigned long long luAlignedOffset =
-                        (lrRange.muOffset + luCombinedAlignment - 1u)
-                        / luCombinedAlignment * luCombinedAlignment;
-                    if (luAlignedOffset + luReserved
-                        <= static_cast<unsigned long long>(lrRange.muOffset) + lrRange.muBytes)
-                    {
-                        lpPage = &lrPage; luRange = lu;
-                        luOffset = static_cast<unsigned>(luAlignedOffset);
-                        break;
-                    }
-                }
-                if (lpPage) break;
+                const bool lbFound = mbSkipSmallRanges
+                    ? FindRange<true>(lrPage, luReserved, luCombinedAlignment, luRange, luOffset)
+                    : FindRange<false>(lrPage, luReserved, luCombinedAlignment, luRange, luOffset);
+                if (lbFound) { lpPage = &lrPage; break; }
             }
             if (!lpPage)
             {
@@ -182,6 +222,13 @@ namespace renderengine
                 lpPage->mFree[luRange] = Range{luOffset + luReserved, luSuffix};
             else
                 lpPage->mFree.erase(lpPage->mFree.begin() + luRange);
+            // The alignment prefix may be the first usable span for a later
+            // mesh. Include its size in the bound so it remains searchable.
+            if (mbSkipSmallRanges)
+            {
+                lpPage->muSkippedMax = (std::max)(lpPage->muSkippedMax, luPrefix);
+                lpPage->muSearchStart = luRange + (luPrefix ? 1u : 0u);
+            }
             ++lpPage->muLive;
             mStatistics.muLiveBytes += luReserved;
             // DISCARD is legal only on a brand-new page before any slice can have
