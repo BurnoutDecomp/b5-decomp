@@ -1846,3 +1846,48 @@ python b5-decomp/tests/run_pc_traffic_jobs.py
 python b5-decomp/tests/run_pc_traffic_jobs.py --serial
 python b5-decomp/tests/run_pc_traffic_jobs.py --diagnostic
 ```
+
+## CPU placement and sustained-run diagnostics (2026-10-04)
+
+`BRN_FRAME_THREAD_PLACEMENT=1` adds thread IDs and processor-group/number samples
+at the simulation and dispatch scope endpoints. It requires frame recording;
+timing-only mode suppresses it. These are endpoint samples, not a complete
+scheduling trace. Multiple simulation steps retain the first start and last end;
+a frame with no scope records an unavailable processor sentinel. The recorder
+passes 54/54 native checks, including group identity, distinct thread owners,
+CSV alignment and disabled-mode overhead. Dropping the processor group fails
+the identity and CSV checks.
+
+Read-only Windows policy/topology sampling accompanied a private stationary run
+and a 120-second Road Rage. The game retained unrestricted process/thread masks,
+normal thread priority, priority boosting and no explicit execution-speed
+throttling policy. More than 99.8% of dispatch endpoint samples were on the
+higher-performance CPU class in both runs. This does not exclude migrations
+between endpoints, but it provides no basis for a forced affinity policy.
+
+The stationary run also exposes substantial variation within one launch. With
+3926 opaque world meshes throughout, the first five seconds measured 286.19 FPS
+and the final five approximately 180.90 FPS. Windows' processor-performance
+counter, associated with the sampled render cores, fell from approximately 216
+to 156 over the same periods. Traffic work varied. This is correlation, not a
+diagnosis of thermal or power limiting, and diagnostic FPS is not a speedup
+claim. Future small-effect comparisons require a sustained baseline and evidence
+that this variation is controlled.
+
+The combat run reached 11 credited takedowns across five opponents, with peaks
+of five crashing and three airborne rivals, all 1187 focus samples foreground,
+and no assertions/exceptions. It published 28 camera-change markers. Immediately
+after marker frame 9386, frame 9387 prepared 360 vertex and 359 index mirrors,
+uploading 1,748,266 bytes. Geometry preparation consumed 2.635 ms (including
+1.192 ms storage, 0.456 ms index building and 0.689 ms registration). No new
+native geometry buffer was allocated in that frame: the mirrors used existing
+pool pages. World rendering consumed 5.302 ms and Present waiting 6.102 ms, with
+a 14.344 ms total interval. The next frame reused the geometry with zero
+preparation time. A separate frame spent 4.276 ms creating native textures.
+These observations direct the remaining work toward first-use geometry and
+resource stalls as well as draw submission. They do not prove locked 165 FPS.
+
+Evidence lives under the parent `scratch/performance_max_1003` directories
+`thread_placement_stationary` and `thread_placement_combat`. The unrelated
+compact-cache experiment was archived and reverted after control drift prevented
+a repeatable-benefit conclusion; it is not part of the published renderer.

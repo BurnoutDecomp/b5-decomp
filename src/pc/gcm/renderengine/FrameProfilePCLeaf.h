@@ -60,6 +60,11 @@ namespace renderengine
             double mfGpuSceneMs = -1, mfGpuOutputMs = -1;
             unsigned muVertexBindRequests = 0, muVertexBindSkips = 0;
             unsigned muIndexBindRequests = 0, muIndexBindSkips = 0, muRebasedDraws = 0;
+            // Optional endpoint samples, not a full scheduling trace. Encode
+            // group and group-relative CPU number to avoid aliases above 64 CPUs.
+            unsigned maThreadId[2] = {};
+            unsigned maProcessorBegin[2] = { ~0u, ~0u };
+            unsigned maProcessorEnd[2] = { ~0u, ~0u };
         };
         struct Capture
         {
@@ -75,6 +80,7 @@ namespace renderengine
             bool mbTimingOnly = false;
             bool mbCoarse = false;
             bool mbCpuCycles = false;
+            bool mbThreadPlacement = false;
             using ReadThreadCycles = BOOL(WINAPI*)(HANDLE, PULONG64);
             ReadThreadCycles mpReadThreadCycles = nullptr;
             bool mbGpuTiming = false;
@@ -103,6 +109,8 @@ namespace renderengine
                 gCapture.mbCoarse = lpcCoarse && lpcCoarse[0] && lpcCoarse[0] != '0';
                 const char* lpcCycles = std::getenv("BRN_FRAME_CPU_CYCLES");
                 gCapture.mbCpuCycles = lpcCycles && lpcCycles[0] && lpcCycles[0] != '0';
+                const char* lpcPlacement = std::getenv("BRN_FRAME_THREAD_PLACEMENT");
+                gCapture.mbThreadPlacement = lpcPlacement && lpcPlacement[0] && lpcPlacement[0] != '0';
                 const char* lpcGpu = std::getenv("BRN_GPU_PROFILE");
                 gCapture.mbGpuTiming = lpcGpu && lpcGpu[0] && lpcGpu[0] != '0';
                 if (lpcEnable && lpcEnable[0] && lpcEnable[0] != '0')
@@ -185,6 +193,13 @@ namespace renderengine
         {
             ULONG64 muBeginCycles = 0;
             bool mbCyclesValid = false;
+            int miPlacementSlot = -1;
+            static unsigned CurrentProcessor()
+            {
+                PROCESSOR_NUMBER lProcessor{};
+                GetCurrentProcessorNumberEx(&lProcessor);
+                return (static_cast<unsigned>(lProcessor.Group) << 8) | lProcessor.Number;
+            }
             bool Read(ULONG64& lruCycles)
             {
                 if (gCapture.mpReadThreadCycles
@@ -195,10 +210,22 @@ namespace renderengine
             explicit CycleScope(Section leSection, Section leDetail = NUM_SECTIONS)
                 : Scope(leSection, leDetail)
             {
+                if (mpFrame && gCapture.mbThreadPlacement
+                    && (leSection == DISPATCH
+                        || (leSection == UPDATE && leDetail == UPDATE_SIMULATION)))
+                {
+                    miPlacementSlot = leSection == DISPATCH ? 1 : 0;
+                    mpFrame->maThreadId[miPlacementSlot] = GetCurrentThreadId();
+                    const unsigned luProcessor = CurrentProcessor();
+                    if (mpFrame->maProcessorBegin[miPlacementSlot] == ~0u)
+                        mpFrame->maProcessorBegin[miPlacementSlot] = luProcessor;
+                }
                 if (mpFrame && gCapture.mbCpuCycles) mbCyclesValid = Read(muBeginCycles);
             }
             ~CycleScope()
             {
+                if (miPlacementSlot >= 0)
+                    mpFrame->maProcessorEnd[miPlacementSlot] = CurrentProcessor();
                 if (!mbCyclesValid) return;
                 ULONG64 luEnd = 0;
                 if (Read(luEnd))
@@ -338,7 +365,7 @@ namespace renderengine
                 std::snprintf(lacPath + luLength, MAX_PATH - luLength, ".frames.csv");
                 if (FILE* lpFile = std::fopen(lacPath, "w"))
                 {
-                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,object_to_mesh_ms,mesh_technique_ms,mesh_constants_ms,mesh_buffers_ms,geometry_lookup_ms,world_draw_ms,immediate_draw_ms,postfx_ms,dispatch_effects_ms,render_setup_ms,render_build_lists_ms,render_tint_ms,render_shadows_ms,render_envmap_ms,render_particle_build_ms,render_world_ms,render_particles_ms,render_composite_ms,render_gui_ms,render_present_ms,geometry_create_ms,geometry_copy_ms,pool_requests_ms,pool_states_ms,pool_retire_ms,texture_realize_ms,texture_gpu_create_ms,texture_cpu_create_ms,texture_upload_ms,update_mesh_prepare_ms,geometry_store_ms,geometry_index_build_ms,geometry_register_ms,update_sort_wait_ms,render_sort_wait_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end,instanced_draws,instances,prez_meshes,world_opaque_meshes,car_opaque_meshes,gpu_status,gpu_scene_ms,gpu_output_ms,vb_bind_requests,vb_bind_skips,ib_bind_requests,ib_bind_skips,rebased_draws,geometry_create_cycles,geometry_lock_cycles,geometry_copy_cycles,resource_pool_cycles,pool_requests_cycles,pool_states_cycles,pool_retire_cycles,texture_realize_cycles,texture_gpu_create_cycles,texture_cpu_create_cycles,texture_upload_cycles,update_mesh_prepare_cycles,geometry_store_cycles,geometry_index_build_cycles,geometry_register_cycles,raster_creates,raster_releases,staging_creates,staging_reuses,cycle_read_failures,mesh_prepared,mesh_rebuilt,camera_behaviour_begin,camera_behaviour_end,camera_shot_begin,camera_shot_end,camera_publications,camera_new_publications,camera_behaviour_changes,camera_shot_changes,update_simulation_cycles,dispatch_cycles\n");
+                    std::fprintf(lpFile, "frame,time_s,interval_ms,active_ms,update_ms,dispatch_ms,geometry_prepare_ms,geometry_lock_ms,geometry_convert_ms,geometry_unlock_ms,geometry_submit_ms,present_ms,present_copy_ms,present_wait_ms,dispatch_sort_ms,update_display_ms,update_start_ms,update_simulation_ms,update_resource_ms,update_publish_ms,update_timing_ms,resource_pool_ms,resource_memory_ms,resource_load_ms,resource_unload_ms,resource_file_ms,resource_attrib_ms,object_to_mesh_ms,mesh_technique_ms,mesh_constants_ms,mesh_buffers_ms,geometry_lookup_ms,world_draw_ms,immediate_draw_ms,postfx_ms,dispatch_effects_ms,render_setup_ms,render_build_lists_ms,render_tint_ms,render_shadows_ms,render_envmap_ms,render_particle_build_ms,render_world_ms,render_particles_ms,render_composite_ms,render_gui_ms,render_present_ms,geometry_create_ms,geometry_copy_ms,pool_requests_ms,pool_states_ms,pool_retire_ms,texture_realize_ms,texture_gpu_create_ms,texture_cpu_create_ms,texture_upload_ms,update_mesh_prepare_ms,geometry_store_ms,geometry_index_build_ms,geometry_register_ms,update_sort_wait_ms,render_sort_wait_ms,vb_creates,ib_creates,upload_bytes,evictions,draws,camera_begin,camera_end,camera_changes,presents,native_buffers,player_takedowns,takedown_victims,rivals,crashing_rivals,airborne_rivals,qpc_end,instanced_draws,instances,prez_meshes,world_opaque_meshes,car_opaque_meshes,gpu_status,gpu_scene_ms,gpu_output_ms,vb_bind_requests,vb_bind_skips,ib_bind_requests,ib_bind_skips,rebased_draws,geometry_create_cycles,geometry_lock_cycles,geometry_copy_cycles,resource_pool_cycles,pool_requests_cycles,pool_states_cycles,pool_retire_cycles,texture_realize_cycles,texture_gpu_create_cycles,texture_cpu_create_cycles,texture_upload_cycles,update_mesh_prepare_cycles,geometry_store_cycles,geometry_index_build_cycles,geometry_register_cycles,raster_creates,raster_releases,staging_creates,staging_reuses,cycle_read_failures,mesh_prepared,mesh_rebuilt,camera_behaviour_begin,camera_behaviour_end,camera_shot_begin,camera_shot_end,camera_publications,camera_new_publications,camera_behaviour_changes,camera_shot_changes,update_simulation_cycles,dispatch_cycles,update_thread_id,update_processor_begin,update_processor_end,dispatch_thread_id,dispatch_processor_begin,dispatch_processor_end\n");
                     const double lfMs = 1000.0 / static_cast<double>(gCapture.miFrequency);
                     for (unsigned lu = 0; lu < gCapture.muCount; ++lu)
                     {
@@ -360,20 +387,23 @@ namespace renderengine
                         for (unsigned ls = POOL_REQUESTS; ls <= GEOMETRY_REGISTER; ++ls)
                             std::fprintf(lpFile, ",%llu", lr.maCycles[ls]);
                         std::fprintf(lpFile, ",%u,%u,%u,%u,%u,%u,%u", lr.muRasterCreates, lr.muRasterReleases, lr.muStagingCreates, lr.muStagingReuses, static_cast<unsigned>(lr.muCycleReadFailures), lr.muMeshPrepared, lr.muMeshRebuilt);
-                        std::fprintf(lpFile, ",%llu,%llu,%llu,%llu,%u,%u,%u,%u,%llu,%llu\n",
+                        std::fprintf(lpFile, ",%llu,%llu,%llu,%llu,%u,%u,%u,%u,%llu,%llu,%u,%u,%u,%u,%u,%u\n",
                             lr.muBehaviourBegin, lr.muBehaviourEnd, lr.muShotBegin, lr.muShotEnd,
                             lr.muCameraPublications, lr.muNewCameraPublications, lr.muBehaviourChanges, lr.muShotChanges,
-                            lr.maCycles[UPDATE_SIMULATION], lr.maCycles[DISPATCH]);
+                            lr.maCycles[UPDATE_SIMULATION], lr.maCycles[DISPATCH],
+                            lr.maThreadId[0], lr.maProcessorBegin[0], lr.maProcessorEnd[0],
+                            lr.maThreadId[1], lr.maProcessorBegin[1], lr.maProcessorEnd[1]);
                     }
                     std::fclose(lpFile);
                 }
                 std::snprintf(lacPath + luLength, MAX_PATH - luLength, ".frames.json");
                 if (FILE* lpFile = std::fopen(lacPath, "w"))
                 {
-                    std::fprintf(lpFile, "{\"frames\":%u,\"dropped_frames\":%u,\"counter_frequency\":%lld,\"timing_only\":%s,\"coarse\":%s,\"cpu_cycles\":%s,\"cpu_cycles_available\":%s}\n",
+                    std::fprintf(lpFile, "{\"frames\":%u,\"dropped_frames\":%u,\"counter_frequency\":%lld,\"timing_only\":%s,\"coarse\":%s,\"cpu_cycles\":%s,\"cpu_cycles_available\":%s,\"thread_placement\":%s}\n",
                         gCapture.muCount, gCapture.muDropped, gCapture.miFrequency,
                         gCapture.mbTimingOnly ? "true" : "false", gCapture.mbCoarse ? "true" : "false",
-                        gCapture.mbCpuCycles ? "true" : "false", gCapture.mpReadThreadCycles ? "true" : "false");
+                        gCapture.mbCpuCycles ? "true" : "false", gCapture.mpReadThreadCycles ? "true" : "false",
+                        gCapture.mbThreadPlacement ? "true" : "false");
                     std::fclose(lpFile);
                 }
             }

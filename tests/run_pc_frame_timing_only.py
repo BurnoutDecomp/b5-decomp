@@ -11,8 +11,13 @@ parser.add_argument('--keep-coarse-draw-timers', action='store_true')
 parser.add_argument('--drop-cycle-deltas', action='store_true')
 parser.add_argument('--drop-new-camera-marker', action='store_true')
 parser.add_argument('--non-atomic-cycle-failures', action='store_true')
+parser.add_argument('--drop-processor-group', action='store_true')
 args = parser.parse_args()
 source = Tree().read('src/pc/gcm/renderengine/FrameProfilePCLeaf.h')
+if args.drop_processor_group:
+    needle = '(static_cast<unsigned>(lProcessor.Group) << 8) | lProcessor.Number'
+    assert source.count(needle) == 1
+    source = source.replace(needle, 'lProcessor.Number')
 if args.keep_section_timers:
     needle = 'lbEnabled && !gCapture.mbTimingOnly'
     assert source.count(needle) == 1
@@ -35,4 +40,4 @@ if args.non_atomic_cycle_failures:
     source = source.replace(needle, '++mpFrame->muCycleReadFailures')
 result = compile_and_run(Path(__file__).with_name('PCFrameTimingOnly.cpp'),
                          'pc_frame_timing_only.inc', source, 'PCFrameTimingOnly')
-raise SystemExit(report('run_pc_frame_timing_only', [], result, 47))
+raise SystemExit(report('run_pc_frame_timing_only', [], result, 54))
