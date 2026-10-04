@@ -7,6 +7,7 @@
 
 #include <Windows.h>
 #include <d3d9.h>
+#include <d3d9on12.h>
 #undef DrawText
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"
 #include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
@@ -354,6 +355,22 @@ void renderengine::Device::Start()
         return;
     }
     CgsDev::Log::WriteToLog("[device] Start: device created, window shown.\n");
+    {
+        // FLAG PC-platform leaf: identify the live backend once. Loading
+        // d3d9on12.dll does not establish that this particular device uses it.
+        // Microsoft documents E_NOINTERFACE for devices which are not on 9On12.
+        // https://devblogs.microsoft.com/directx/coming-to-directx-12-d3d9on12-and-d3d11on12-resource-interop-apis/
+        IDirect3DDevice9On12* lpOn12 = nullptr;
+        const HRESULT lhBackend = gDevice->QueryInterface(__uuidof(IDirect3DDevice9On12),
+            reinterpret_cast<void**>(&lpOn12));
+        const char* lpcBackend = SUCCEEDED(lhBackend) && lpOn12 ? "yes"
+            : lhBackend == E_NOINTERFACE ? "no" : "unknown";
+        char lacBackend[128];
+        std::snprintf(lacBackend, sizeof(lacBackend), "[device] D3D9On12=%s interface_hr=0x%08X\n",
+            lpcBackend, static_cast<unsigned>(lhBackend));
+        CgsDev::Log::WriteToLog(lacBackend);
+        if (lpOn12) lpOn12->Release();
+    }
     {
         D3DADAPTER_IDENTIFIER9 lIdent;
         std::memset(&lIdent, 0, sizeof(lIdent));
