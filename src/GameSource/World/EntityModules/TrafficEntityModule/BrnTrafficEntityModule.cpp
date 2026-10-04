@@ -5098,8 +5098,7 @@ void TrafficEntityModule::Reset()
 // TrafficPhysicsInfo constructs, ResetEventData + Reset, and the 96 VehicleTypeRuntime
 // constructs.
 //
-// Gated: the ~25 vectorised tuning members (:799..:821), the four TrafficJobStub constructs
-// ([MEMBER HOLE 5]), the replay serialiser, the 102,800-byte
+// Gated: the replay serialiser, the 102,800-byte
 // maTrafficPhysicsInfoList memset, the debug component allocation, and the debug-render stream reader. Each is a named one-shot below.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::Construct()
@@ -5163,8 +5162,9 @@ void TrafficEntityModule::Construct()
                    static_cast<f32>(std::cos(0.1745329238474369)), 30.0f, 0.25f, 0.0f);   // 0x727A0
 
     // 0x827407B8..0x827407CC is `for (4) maJobs[i].Construct()`; 0x827407D8/0x827407F8 is
-    // `li r8, 4; stw r8, 0x2A00(r31)`. The stub Constructs live in the host job table in
-    // _wT2_04.cpp while [MEMBER HOLE 5] is open (blocker measured in the header).
+    // `li r8, 4; stw r8, 0x2A00(r31)`.
+    for (u32 luJob = 0; luJob < KU_MAX_JOBS; ++luJob)
+        maJobs[luJob].Construct();
     muNumUpdateVehiclesJobs = KU_MAX_JOBS;
 
     // The console inlines EventReceiverQueue<4096,16>::Construct at 0x827407E0..0x82740844
@@ -11145,35 +11145,6 @@ namespace
 
 // (fold: an identical definition of TrafficDiagStream was dropped here -- this TU defines it once, above)
 
-    // HOST SEAT for [MEMBER HOLE 5] TrafficJobStub maJobs[4] (blocker measured in
-    // BrnTrafficEntityModule.h). FLAG PC-platform leaf: single-threaded job dispatch. The
-    // console's stub only snapshots the params and submits; TrafficJobStub::Execute
-    // @0x82752CB0 already runs the worker inline on this host, so the split runs it here.
-    // File scope, like the console's own gaTrafficJobs table -- no module member invented.
-    // DELETE-WHEN BrnTrafficJob.h stops pulling eajobs/job_scheduler.h.
-    }  // anonymous namespace -- the two host tables need external linkage (SendPhysicalRequests
-       // in _wT2_01 drains gaHostNewPhysicalRequests).
-    UpdateVehiclesJob       gaHostUpdateVehiclesJobs[KU_MAX_JOBS];
-    PhysicalRequestInfoList gaHostNewPhysicalRequests[KU_MAX_JOBS];
-    namespace
-    {
-
-    // Stands in for Construct's 4x TrafficJobStub::Construct @0x827407B8 (which only
-    // Constructs the request list and clears mbRunningJob).
-    void EnsureHostJobsConstructed()
-    {
-        static bool sbDone = false;
-        if (sbDone)
-        {
-            return;
-        }
-        sbDone = true;
-        for (u32 luJob = 0; luJob < KU_MAX_JOBS; ++luJob)
-        {
-            gaHostNewPhysicalRequests[luJob].Construct();
-        }
-    }
-
     // Feb-2007 KF_MAX_DIST_ACROSS_LANE_lhs, folded by the ship into `ring * 1.4f -
     // flt_820BA4D0(0.7f)` at 0x8273ABB0. Deliberately NOT the module member
     // KF_MAX_DIST_ACROSS_LANE (DWARF :802): the spawn path uses the literal.
@@ -11399,7 +11370,7 @@ void TrafficEntityModule::CacheRaceCarState(
 //
 // The job splitter. It creates this decision frame's vehicles, snapshots the race cars, then
 // hands [0, KU_MAX_PARAMS) to muNumUpdateVehiclesJobs workers in equal slices (the last slice
-// always ends at 400). The stubs are the host table above while [MEMBER HOLE 5] is open.
+// always ends at 400). Each original stub owns its snapshot and request list.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateVehicles(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
@@ -11432,8 +11403,6 @@ void TrafficEntityModule::UpdateVehicles(
     // mbHardcoreSwerveForMode (+0x717DF), mbGameModeAllowsSwerving (+0x717DE) and
     // mbDEBUGStopTrafficMoving (+0x727B8); f1/f2/f3 are mfSimTimeStep, mfSimTimeSinceLastDecision
     // and mfCrashSliderFinalValue; and v1 is the +0x728C0 lane == mCameraLastFrame's Pos row.
-    EnsureHostJobsConstructed();
-
     // Console `twllei r11, 0` -- the divide traps on a zero job count.
     CGS_ASSERT(muNumUpdateVehiclesJobs != 0, "muNumUpdateVehiclesJobs != 0");
 
@@ -11449,8 +11418,8 @@ void TrafficEntityModule::UpdateVehicles(
                                    ? KU_MAX_PARAMS
                                    : (luBeginParam + luParamsPerJob);
 
-        UpdateVehiclesJobParams lJobParams;
-        lJobParams.Construct(
+        JobParams lJobParams;
+        lJobParams.mUpdateVehicles.Construct(
             luBeginParam,
             luEndParam,
             mpData->mpapHulls,
@@ -11473,10 +11442,7 @@ void TrafficEntityModule::UpdateVehicles(
             mfCrashSliderFinalValue,
             0);   // lpDebugStream: the console passes &unk_8300CD00, which has no home here
 
-        // SetOutputs, inlined exactly as TrafficJobStub::Execute @0x82752CB0 does it.
-        lJobParams.mpOutNewPhysicalRequests = &gaHostNewPhysicalRequests[luJob];
-
-        gaHostUpdateVehiclesJobs[luJob].Execute(&lJobParams);
+        maJobs[luJob].Execute(&lJobParams);
 
         // 0x82745178..0x827451A4: one bare LCG step on mEffectRand per job (ld/mulld/addi 1/std
         // at +0x20, no ring touch) -- CgsNumeric::Random::RandomBool's step, result unused.
@@ -11485,8 +11451,9 @@ void TrafficEntityModule::UpdateVehicles(
         luBeginParam = luEndParam;
     }
 
-    // The console's second loop is 4x TrafficJobStub::WaitOn @0x827451CC..0x827451E4. Under the
-    // synchronous dispatch above every slice has already completed, so the join is a no-op.
+    // ARTIST827451CC..827451E4: every slice completes before subsequent module work.
+    for (u32 luJob = 0; luJob < muNumUpdateVehiclesJobs; ++luJob)
+        maJobs[luJob].WaitOn();
 }
 
 // ----------------------------------------------------------------------------
@@ -12816,18 +12783,6 @@ namespace
 // (fold: an identical definition of KU_HACK_BASE_VOLUME_ID was dropped here -- this TU defines it once, above)
 }
 
-// HOST SEAT REACHED ACROSS A TU BOUNDARY. The console walks maJobs[0..
-// muNumUpdateVehiclesJobs) (DWARF :619) and calls TrafficJobStub::GetNewPhysicalRequests on
-// each. That member is [MEMBER HOLE 5] on this tree (BrnTrafficJob.h cannot be included from
-// BrnTrafficEntityModule.h -- EAThread C2011), and its host stand-in lives in
-// BrnTrafficEntityModule_wT2_04.cpp, which seats it in an ANONYMOUS namespace. The producer
-// (UpdateVehicles' job split) writes that array and this consumer reads it, so the two must be
-// the same object: declared extern here rather than forked into a second array.
-// LINK BLOCKER for the conductor, one line in a file this cluster does not own: move
-// gaHostUpdateVehiclesJobs / gaHostNewPhysicalRequests out of _wT2_04.cpp's anonymous
-// namespace (into namespace BrnTraffic) so this declaration resolves. See REPORT section 2.
-extern PhysicalRequestInfoList gaHostNewPhysicalRequests[KU_MAX_JOBS];
-
 // ----------------------------------------------------------------------------
 // TrafficEntityModule::SendPhysicalRequests  @ 0x8274C510 (96)   DWARF :1569
 //
@@ -12855,18 +12810,12 @@ void TrafficEntityModule::SendPhysicalRequests(BrnTrafficIO::OutputBuffer_PrePhy
     // producer side in _wT2_04.cpp (muNumUpdateVehiclesJobs is only ever set to KU_MAX_JOBS).
     for (u32 luJob = 0; luJob < muNumUpdateVehiclesJobs; ++luJob)
     {
-        // Console: maJobs[luJob].GetNewPhysicalRequests(), with THREE `!mbRunningJob` asserts
-        // (BrnTrafficJob.h:97) -- one before the size read, one before each element read, one
-        // before the clear. The host split runs the worker inline inside TrafficJobStub::
-        // Execute, so no job is ever running here and TrafficJobStub is not a module member;
-        // the asserts have no host counterpart.
-        PhysicalRequestInfoList& lrRequests = gaHostNewPhysicalRequests[luJob];
-
         // GetLength() re-evaluated per iteration, exactly as the console re-loads the count
         // word (0x8274C5B4 / 0x8274C5D8) and re-fires the CgsArray.h:336 assert.
-        for (u32 luRequest = 0; luRequest < lrRequests.GetLength(); ++luRequest)
+        for (u32 luRequest = 0;
+             luRequest < maJobs[luJob].GetNewPhysicalRequests()->GetLength(); ++luRequest)
         {
-            const PhysicalRequestInfo& lrInfo = lrRequests[luRequest];
+            const PhysicalRequestInfo& lrInfo = (*maJobs[luJob].GetNewPhysicalRequests())[luRequest];
 
             SafeRequestMakeVehiclePhysical(lrInfo.muVehicle,
                                            static_cast<PhysicalReason>(lrInfo.miReason),
@@ -12877,7 +12826,7 @@ void TrafficEntityModule::SendPhysicalRequests(BrnTrafficIO::OutputBuffer_PrePhy
                                            lpMadePhysical);
         }
 
-        lrRequests.Clear();   // 0x8274C670 `stw r20, 0x548(r29)` == the count word
+        maJobs[luJob].GetNewPhysicalRequests()->Clear();   // ARTIST8274C670
     }
 }
 

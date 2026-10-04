@@ -1349,9 +1349,8 @@ reduces texture setup work; it does not establish a locked 165 FPS.
 - Render-list sort jobs are restored as an opt-in path; the default still sorts
   synchronously. Object-to-mesh conversion jobs also remain opt-in because
   earlier paired native measurements did not show a reliable gain.
-- The original four traffic vehicle-update jobs still execute their slices
-  serially. The active module bypass and its job/parameter ownership require
-  reconstruction together; changing the unused stub alone will not parallelize it.
+- The original four traffic vehicle-update jobs are restored as an opt-in path.
+  Their default policy remains serial pending a demonstrated native benefit.
 - Frame overlap is active, but the measured dispatch/presentation path still
   dominates the frame; broader combat and streaming coverage remains useful.
 - Native wheel/mesh instancing is active. Further gains need measured reductions
@@ -1787,4 +1786,63 @@ exceptions or event end. Average throughput was 163.90 FPS, p99 7.43 ms and maxi
 python b5-decomp/tests/run_pc_dispatch_sort_jobs.py
 python b5-decomp/tests/run_pc_mesh_preparation.py
 python b5-decomp/tests/run_pc_frame_timing_only.py
+```
+
+## Original traffic vehicle-update jobs (2026-10-04)
+
+`BRN_TRAFFIC_JOBS=1` enables the original four vehicle-update submissions. The
+module now owns its `TrafficJobStub` array, parameter/RNG snapshots and physical
+request lists. This replaces the active inline bypass and shared host arrays.
+The module joins every slice before returning, then drains physical requests in
+the original job/list order. Native worker state is thread-local; neither a
+Windows thread ID nor EAJobs Param0 is treated as a console worker index.
+
+The missing-export wait routine was recovered from the ARTIST image at
+`82752DC8..82752E34`: assert running, wait on the embedded job, clear the flag.
+Native owner waits additionally service dependent Windows messages and worker
+assertions. The submitted 256-byte descriptor is fully owned and aligned.
+Traffic-camera diagnostics retain serial execution because their existing
+witness writes shared camera state. Missing-leg log latches use atomic guards.
+Existing unreconstructed kernel behavior is unchanged by this scheduling work.
+
+The native regression compiles the actual complete vehicle-update kernel,
+road/axle and random code with the real EAJobs backend. It passes 105/105 in
+parallel, serial and diagnostic modes. It compares complete vehicle state,
+transforms and axles bit for bit against serial execution, including camera
+distance changes, actual road collision, stopped movement and swerving inputs.
+It also checks 4/3/1-job partitions, remainder bounds, snapshots, immutable
+inputs, request order, untouched static/trailer slots and owner messages.
+Negative controls detect shared worker state, borrowed stack parameters,
+omitted joins and reversed request order. Existing traffic interpolation and
+sympathetic-crasher suites pass 50/50 and 14/14. Canonical builds and independent
+source review pass.
+
+A captured 120-second maximum-settings Road Rage completed 13 takedowns across
+seven rivals, peaking at five crashing and two airborne rivals. All 1188 focus
+samples were foreground, with no assertions, exceptions or premature event end.
+Traffic, damage and collision effects were inspected in the captures. This is
+correctness evidence; capture-induced frame spikes are excluded from FPS claims.
+Evidence: `scratch/performance_max_1003/traffic_jobs_combat_visual` in the parent
+checkout.
+
+The same-binary stationary ABBA kept maximum graphics settings with only VSync
+disabled. Serial/jobs/jobs/serial measured 207.91/192.69/191.31/198.20 FPS, with
+all focus samples foreground and 3926 world meshes in every run; traffic varied.
+The jobs used more total CPU time and increased the sampled traffic interval
+from about 0.035 to 0.048 ms. This is no basis for enabling them by default;
+the default remains serial. These measurements do not establish an equivalent
+percentage change in other scenes. Evidence: `traffic_jobs_comparison.json`.
+
+The default serial policy then completed a clean 120-second Road Rage at the
+exact maximum target including VSync: ten takedowns across six rivals, peak four
+crashing/three airborne, all 1187 focus samples foreground, and no assertions,
+exceptions or event end. Average throughput was 162.60 FPS, p99 7.92 ms and maximum
+14.56 ms. It remains below the locked-165 goal. This is a runtime result, not a
+matched comparison against the earlier published executable. Evidence:
+`traffic_jobs_default_combat` in the same scratch root.
+
+```powershell
+python b5-decomp/tests/run_pc_traffic_jobs.py
+python b5-decomp/tests/run_pc_traffic_jobs.py --serial
+python b5-decomp/tests/run_pc_traffic_jobs.py --diagnostic
 ```

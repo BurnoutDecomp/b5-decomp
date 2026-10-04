@@ -30,6 +30,7 @@
 
 #include <cmath>
 #include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG probe)
+#include <atomic>
 
 // [DIAG] the renderer's present counter. BRN_FRAME_DUMP names its BMPs bb_<guPresentCount>.bmp,
 // so stamping the traffic track with it makes a logged number and a dumped pixel come from ONE
@@ -60,13 +61,13 @@ namespace
     }
 
     // NAMED LEG GATE, file-local. NOT IN THE X360 BINARY.
-    inline void LogMissingLeg(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
+    inline void LogMissingLeg(std::atomic<bool>& lrbAlreadyLogged, const char* lpcLegNameAndReason)
     {
-        if (lrbAlreadyLogged)
+        if (lrbAlreadyLogged.load(std::memory_order_relaxed)
+            || lrbAlreadyLogged.exchange(true, std::memory_order_relaxed))
         {
             return;
         }
-        lrbAlreadyLogged = true;
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
         {
@@ -543,7 +544,7 @@ void UpdateVehiclesJob::UpdateVehicle()
     // and BrnTrafficVehicle.h is not this cluster's file, so no accessor exists to set it.
     // Nothing in the tree reads the bit yet. DELETE-WHEN Vehicle gains the setter.
     {
-        static bool sbLogged = false;
+        static std::atomic<bool> sbLogged{false};
         LogMissingLeg(sbLogged,
             "UpdateVehicle's partial-update latch @0x8291D9E4 -- sets bit 0x80 of Vehicle+4 "
             "(muSpecies), which is private and has no setter. PARKED because NOTHING IN THE "
@@ -845,7 +846,7 @@ void UpdateVehiclesJob::RequestNewPhysicalVehicle(u16 luVehicle, PhysicalReason 
     {
         // Kill switch only (KB_T2_ALLOW_PHYSICAL_PROMOTION above). Flip it to false to take
         // the whole world-side promotion chain out of the frame without unmounting anything.
-        static bool sbLogged = false;
+        static std::atomic<bool> sbLogged{false};
         LogMissingLeg(sbLogged,
             "RequestNewPhysicalVehicle @0x8291CE48 -- KB_T2_ALLOW_PHYSICAL_PROMOTION is off");
         return;
@@ -868,7 +869,7 @@ void UpdateVehiclesJob::RequestNewPhysicalVehicle(u16 luVehicle, PhysicalReason 
 // @0x8291A8C0. EXPORT HOLE.
 void UpdateVehiclesJob::UpdateEffects(const Param* lpParam)
 {
-    static bool sbLogged = false;
+    static std::atomic<bool> sbLogged{false};
     LogMissingLeg(sbLogged,
         "UpdateEffects @0x8291A8C0 -- EXPORT HOLE: the ARTIST export set jumps 0x8291A5E0 -> "
         "0x8291AC60, so no pseudocode or asm exists for it. Cost: no indicator / headlight / "
@@ -1097,7 +1098,7 @@ VecFloat UpdateVehiclesJob::CalcSwerveAmount(Vector3 lRaceCarPosition,
                 CGS_ASSERT(rw::math::vpu::IsValid(lPredictedPos),
                            "RwMath::IsValid( lPredictedPos )");
 
-                static bool sbLogged = false;
+                static std::atomic<bool> sbLogged{false};
                 LogMissingLeg(sbLogged,
                     "CalcSwerveAmount's predicted-intersection refinement @0x8291D644 -- "
                     "BrnTraffic::GetLineLineIntersectionParamXZ @0x8291AC60 is declared nowhere "
