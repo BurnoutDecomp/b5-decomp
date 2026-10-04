@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h"
 #include "GameShared/GameClasses/System/Input/CgsInputPads.h"   // CgsInput::InputPads / DeviceX360Pad (UpdatePadDevices)
+#include "pc/input/XInputPollingPCLeaf.h"
 
 #include <cstring>   // std::memset
 #include <cstdlib>   // std::getenv (the harness focus-gate bypass)
@@ -178,6 +179,26 @@ namespace
     // Win32 codes the PC XDK leaves answer with (the same values the X360 XDK returns).
     const unsigned long KU_XINPUT_ERROR_SUCCESS              = 0;     // ERROR_SUCCESS
     const unsigned long KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED = 1167;  // 0x48F ERROR_DEVICE_NOT_CONNECTED
+
+    // FLAG PC-platform leaf: avoid repeated Windows device enumeration while
+    // the host slot is empty. Input values for connected pads are never cached.
+    unsigned long ReadHostPad0(XInputState* lpState)
+    {
+        const XInputGetStateFn lpfGetState = ResolveXInputGetState();
+        if (!lpfGetState)
+            return KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED;
+        static const bool sbBackoff = [] {
+            const char* lpcControl = std::getenv("BRN_XINPUT_POLL_BACKOFF");
+            return !lpcControl || lpcControl[0] != '0';
+        }();
+        if (!sbBackoff)
+            return lpfGetState(0, lpState);
+        if (!CgsInput::gPCDisconnectedPadPoll.ShouldPoll(GetTickCount64()))
+            return KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED;
+        const unsigned long luResult = lpfGetState(0, lpState);
+        CgsInput::gPCDisconnectedPadPoll.RecordResult(luResult, GetTickCount64());
+        return luResult;
+    }
 
     // XINPUT_GAMEPAD wButtons bits, with the CgsInput::EPadButton control each one drives
     // on the console (DeviceX360Pad::Update @0x828E7AB0 store order, device float array base
@@ -1160,8 +1181,7 @@ namespace CgsInput
         bool lbXPad = false;
         if (lbPadAllowed)
         {
-            if (XInputGetStateFn lpfGetState = ResolveXInputGetState())
-                lbXPad = (lpfGetState(0, &lXState) == 0);   // ERROR_SUCCESS
+            lbXPad = (ReadHostPad0(&lXState) == KU_XINPUT_ERROR_SUCCESS);
         }
 
         // ---- [input] focus witness -------------------------------------------------------
@@ -1502,12 +1522,8 @@ namespace CgsInput
     {
         const u32 KU_PC_PAD_PORT = 0;   // XInput user 0 == console port 0 (UpdatePlayer0's slot)
 
-        bool lbDevicePresent = false;
-        if (XInputGetStateFn lpfGetState = ResolveXInputGetState())
-        {
-            XInputState lState;
-            lbDevicePresent = (lpfGetState(KU_PC_PAD_PORT, &lState) == KU_XINPUT_ERROR_SUCCESS);
-        }
+        XInputState lState;
+        const bool lbDevicePresent = ReadHostPad0(&lState) == KU_XINPUT_ERROR_SUCCESS;
 
         DeviceX360Pad& lrPad = lpPads->maPads[KU_PC_PAD_PORT];
         if (lrPad.mePort != -1 && !lbDevicePresent)

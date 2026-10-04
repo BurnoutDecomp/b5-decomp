@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/System/CgsHarnessSlot.h"    // BRN_HARNESS_SLOT name suffix
 #include "pc/gcm/renderengine/device.h"
 #include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
+#include "pc/input/XInputPollingPCLeaf.h"
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 #include "SDKs/EATech/eajobs/jobs.h"
 #include "SDKs/EATech/eajobs/job_scheduler.h"
@@ -156,6 +157,11 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 {
     switch (uMsg)
     {
+    case WM_DEVICECHANGE:
+        // FLAG PC-platform leaf: allow hot-plug discovery on the next input
+        // update. A one-second fallback also covers missed notifications.
+        CgsInput::gPCDisconnectedPadPoll.RequestProbe();
+        break;
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
         if (wParam == VK_F11)
