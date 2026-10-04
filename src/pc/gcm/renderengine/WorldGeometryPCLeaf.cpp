@@ -1,6 +1,7 @@
 #include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
 #include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
 #include "pc/gcm/renderengine/PackedNormalPCLeaf.h"
+#include "pc/gcm/renderengine/IndexRangePCLeaf.h"
 // =============================================================================
 // WorldGeometryPCLeaf.cpp  (pc/gcm/renderengine)
 //
@@ -64,6 +65,10 @@ namespace
         return !lpcValue || lpcValue[0] != '0';
     }());
     std::vector<u8> sVertexBakeScratch;
+    const bool sbSpecializedIndexRange = [] {
+        const char* lpcValue = std::getenv("BRN_GEOMETRY_INDEX_RANGE");
+        return !lpcValue || lpcValue[0] != '0';
+    }();
     // ---- keys ---------------------------------------------------------------
     // Both keys are compared and hashed as RAW BYTES, so every field -- including
     // the padding a struct with mixed widths carries -- has to be deterministic.
@@ -823,14 +828,25 @@ namespace
             case D3DPT_TRIANGLEFAN: luConsumed = u64(lEntry.muPrimitiveCount) + 2u; break;
             }
             if (luConsumed > luAvailable) luConsumed = luAvailable;
-            lEntry.muMinIndex = luConsumed ? 0xffffffffu : 0u;
-            for (u32 lu = 0; lu < luConsumed; ++lu)
+            if (sbSpecializedIndexRange)
             {
-                const u32 luIndex = lrPlan.mb32Bit
-                    ? reinterpret_cast<const u32*>(lpPayload)[lu]
-                    : reinterpret_cast<const u16*>(lpPayload)[lu];
-                if (luIndex < lEntry.muMinIndex) lEntry.muMinIndex = luIndex;
-                if (luIndex > lEntry.muMaxIndex) lEntry.muMaxIndex = luIndex;
+                const IndexRangePC::Range lRange = lrPlan.mb32Bit
+                    ? IndexRangePC::Scan<u32>(lpPayload, static_cast<size_t>(luConsumed))
+                    : IndexRangePC::Scan<u16>(lpPayload, static_cast<size_t>(luConsumed));
+                lEntry.muMinIndex = lRange.muMin;
+                lEntry.muMaxIndex = lRange.muMax;
+            }
+            else
+            {
+                lEntry.muMinIndex = luConsumed ? 0xffffffffu : 0u;
+                for (u32 lu = 0; lu < luConsumed; ++lu)
+                {
+                    const u32 luIndex = lrPlan.mb32Bit
+                        ? reinterpret_cast<const u32*>(lpPayload)[lu]
+                        : reinterpret_cast<const u16*>(lpPayload)[lu];
+                    if (luIndex < lEntry.muMinIndex) lEntry.muMinIndex = luIndex;
+                    if (luIndex > lEntry.muMaxIndex) lEntry.muMaxIndex = luIndex;
+                }
             }
         }
 

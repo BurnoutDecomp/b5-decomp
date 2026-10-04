@@ -1931,3 +1931,48 @@ exceptions or event end. Average throughput was 163.94 FPS, p99 7.47 ms and
 maximum 13.58 ms. This is runtime validation of the default policy, not a matched
 FPS comparison; the full performance target remains unmet. Evidence:
 `scratch/performance_max_1003/geometry_range_search_final_combat`.
+
+## Index-bound reduction by index width (2026-10-04)
+
+Retained index mirrors now select a 16-bit or 32-bit reduction before scanning
+their consumed indices. The previous loop selected the width for each element;
+the typed plain-C++ loops allow the compiler to optimize both widths. The
+existing consumed-index clamp is unchanged, including incomplete list tails.
+The helper handles unaligned input and returns `{0,0}` without reading memory for
+an empty range. `BRN_GEOMETRY_INDEX_RANGE=0` retains the old loop for comparison.
+Triangle order, strip expansion, index payloads and GPU lifetime are unchanged.
+
+The dedicated fixture passes 8,504 checks against a sorted-copy oracle, covering
+both unsigned widths, signed-bit boundaries, short lengths, every byte alignment
+and an inaccessible page directly after the range. Negative controls detect
+32-bit truncation (4,126 failures), omitted tail elements (344), and overreads
+(451). The production geometry fixture passes 91 native pixel/lifetime checks;
+the canonical build and independent review pass.
+
+Within one process, legacy/typed/typed/legacy scans of 20 million 16-bit values
+in 128-index runs took 11.80/1.35/1.33/11.91 ms. The 32-bit long-run comparison
+was approximately neutral. This measures the reduction kernel, not overall
+FPS. A hand-written SIMD prototype was slower on most lengths and was archived;
+the published implementation uses plain C++ with the normal build flags.
+
+A separate proposal to submit reset-free strips directly was rejected: comparing
+the existing production strip and expanded-list paths produced different pixels
+in 88 of 216 raster cases, including flat shading and wireframe. No such topology
+change is included. The scratch probe and its SIMD alternative remain outside
+the source tree.
+
+The 120-second diagnostic Road Rage completed 14 takedowns across six opponents,
+with peak five crashing and three airborne rivals, all 1187 focus samples
+foreground, and no assertions, exceptions or event end. A 16.67 ms frame included
+1.29 ms of new geometry preparation and 7.62 ms inside Present. Cold geometry,
+render submission, presentation and resource stalls remain broader work; this
+does not establish locked 165 FPS. Evidence is in the parent scratch directory
+`geometry_index_range_combat`, with the kernel data in
+`index_range_final_kernel.log` and rejected raster probe in `strip_raster_probe.log`.
+
+The subsequent clean 120-second maximum-settings run completed eight takedowns
+across four opponents, peaking at five crashing and five airborne rivals. All
+1187 focus samples were foreground, with no assertions, exceptions or event end.
+It averaged 163.43 FPS, p99 7.46 ms and maximum 14.03 ms. Different combat and host
+conditions prevent treating this as a matched speedup or regression comparison.
+Evidence: `geometry_index_range_clean_combat` in the same scratch root.
