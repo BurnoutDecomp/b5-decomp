@@ -1636,3 +1636,42 @@ and three airborne rivals, and all 1185 focus samples foreground. There were no
 assertions, exceptions or event end. It measured 160.64 FPS, P99 frame time
 9.33 ms and maximum 14.09 ms. This validates the final default path under combat;
 locked 165 FPS remains unachieved.
+
+## Disconnected XInput polling (2026-10-04)
+
+Both PC input consumers previously queried XInput user zero independently on
+every update, including when no pad was connected. Repeated stack samples found
+those queries inside Windows device-interface enumeration. The host transport
+now shares only `ERROR_DEVICE_NOT_CONNECTED` for one second. A device-change
+message requests a new probe on the next input update; the timer also discovers
+controllers when a notification is missed. Connected input samples and other
+errors keep the original polling rate. Input mapping, focus gates and rumble
+are unchanged. `BRN_XINPUT_POLL_BACKOFF=0` restores the previous polling policy.
+This follows [Microsoft's advice for empty XInput slots](https://learn.microsoft.com/en-us/windows/win32/xinput/getting-started-with-xinput).
+
+The new native fixture compiles the full PC input source with a scripted device
+and clock. Its 16 default checks and three control checks cover shared absence,
+retry boundaries, notifications, disconnect/reconnect action edges,
+unexpected errors, notifications during a query and clock wrap. Existing
+connected-input coverage also remains 32/32. Physical controller hot-plug was
+not exercised; reconnect behaviour was tested with scripted inputs. The
+canonical build and independent source review passed; four existing C4661
+warnings in the immediate-renderer explicit instantiations remain.
+
+In a same-build stationary ABBA at maximum settings with only VSync disabled,
+control/enabled/enabled/control measured 165.75/170.90/170.87/164.99 FPS, about
+3.3% higher for the enabled pair. World mesh counts were identical and every
+focus sample was foreground; traffic counts varied. Lively had restarted and
+was present during all four runs, so this is a result for those conditions,
+not a universal performance percentage. It was closed before the final run.
+
+The final clean 120-second Road Rage at the exact maximum 2560x1440 target with
+VSync qualified with 11 takedowns across five victims, up to five crashing and
+two airborne rivals, and all 1187 focus samples foreground. No assertions,
+exceptions or event end occurred. Average throughput was 163.28 FPS, P99 frame
+time 7.57 ms and maximum 17.62 ms. Locked 165 FPS and removal of all stutters
+remain unproved.
+
+```powershell
+python -X utf8 b5-decomp/tests/run_pc_xinput_polling.py
+```
