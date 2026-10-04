@@ -12,6 +12,7 @@ os.environ.pop('NoDefaultCurrentDirectoryInExePath', None)
 p = argparse.ArgumentParser()
 p.add_argument('--stale-resources', action='store_true')
 p.add_argument('--wrong-bank', action='store_true')
+p.add_argument('--skip-sort-join', action='store_true')
 a = p.parse_args()
 t = Tree()
 renderer = t.read('src/GameSource/Graphics/BrnRendererModule.cpp')
@@ -29,6 +30,8 @@ if a.stale_resources:
 if a.wrong_bank:
     code = code.replace('PrepareMeshFramePC(1u - muMeshReadFramePC,',
                         'PrepareMeshFramePC(muMeshReadFramePC,')
+if a.skip_sort_join:
+    code = code.replace('lrPrepared.mSortJobs.WaitAll();', '')
 state = definition(header, 'struct PreparedMeshFramePC') + ';\n'
 state += definition(header, 'CgsGraphics::DispatchFrame& GetMeshFrameForReadPC(')
 
@@ -54,4 +57,4 @@ for sig in ['void BrnRendererModule::RenderShadowMapPasses(',
 result = compile_and_run(Path(__file__).with_name('PCMeshPreparation.cpp'),
     'pc_mesh_preparation.inc', code, 'PCMeshPreparation',
     extra_files={'pc_mesh_preparation_state.inc': state})
-raise SystemExit(report('run_pc_mesh_preparation', wiring, result, 18))
+raise SystemExit(report('run_pc_mesh_preparation', wiring, result, 19))

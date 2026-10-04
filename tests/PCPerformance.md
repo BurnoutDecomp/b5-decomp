@@ -1346,6 +1346,12 @@ reduces texture setup work; it does not establish a locked 165 FPS.
 
 ## Remaining original optimization gaps
 
+- Render-list sort jobs are restored as an opt-in path; the default still sorts
+  synchronously. Object-to-mesh conversion jobs also remain opt-in because
+  earlier paired native measurements did not show a reliable gain.
+- The original four traffic vehicle-update jobs still execute their slices
+  serially. The active module bypass and its job/parameter ownership require
+  reconstruction together; changing the unused stub alone will not parallelize it.
 - Frame overlap is active, but the measured dispatch/presentation path still
   dominates the frame; broader combat and streaming coverage remains useful.
 - Native wheel/mesh instancing is active. Further gains need measured reductions
@@ -1718,3 +1724,67 @@ with 11.98 ms in GPU texture creation. That run qualified with 15 takedowns
 across seven rivals and all 1187 focus samples foreground. The experiment was
 reverted; the published presentation policy is unchanged. Instrumented combat
 FPS is excluded from clean performance claims. Locked 165 FPS remains unmet.
+
+## Original render-list sort jobs (2026-10-04)
+
+`BRN_SORT_JOBS=1` restores the original sixteen asynchronous sort jobs. ARTIST
+`823F5F70` prepares lists `{0,2,1,3,4,5,6,7,8,9,10,21,11,19,15,20}` and normally
+submits a dependency chain; each rendering pass waits for its own list before
+reading keys. The recovered `RadixSortJob::Execute` at `82AD2818` calls an
+unsigned whole-record `std::_Sort`, represented by native `std::sort`. Despite
+the historical name, this is not a newly introduced radix-sort algorithm.
+
+Each of the two native mesh-frame banks owns its job descriptors. Flattening
+and allocation stay on the producer; workers sort disjoint published arrays.
+Rebuilds join before resetting storage. Render completion drains skipped-pass
+jobs, and frame shutdown joins both banks before destroying the scheduler or
+detaching the assertion owner. Owner waits continue servicing Windows messages
+and worker assertions. Extended PC lists above 65,535 records retain a full-count
+sort rather than truncating to the original 16-bit descriptor count.
+
+`BRN_SORT_JOBS_WIDE=1` additionally submits independent jobs. This PC branch
+includes the fifth shadow list: the original optional wide branch prepared it
+but submitted only four shadow jobs. The ordinary chain already submits all 16.
+The default remains off; restoring a worker path does not itself establish a
+speedup on this native backend.
+
+Native tests run the actual entries and EAJobs scheduler against real dispatch
+storage: 121/121 checks. They cover unsigned ordering, every selected list,
+untouched auxiliary lists, empty/singleton and 65,535/65,536/65,537-record lists,
+overlapping banks, delayed workers, owner message pumping, reuse and teardown.
+Negative controls for missing shadow work, count truncation, missing reuse or
+shutdown joins, and missing owner pumping all fail. Preparation/publication
+passes 25/25; the frame recorder passes 47/47, including the two separate owner/
+render sort-wait columns. Existing sort-key and mesh-worker checks pass 19/19
+and 21/21. The canonical executable builds and independent review passes.
+
+The first private live test revealed an exit purecall: the last published bank
+had not been consumed before scheduler destruction. That candidate was rejected.
+After the shutdown repair, a captured 120-second maximum-settings wide-job Road
+Rage completed 12 takedowns across six rivals, peaking at five crashing and two
+airborne rivals. All 1187 focus samples were foreground, with no assertions,
+exceptions or premature event end. Driving, debris, damaged-player and wreck
+captures were inspected. This captured/coarse run is correctness evidence,
+not clean FPS evidence. Results are in the parent checkout under
+`scratch/performance_max_1003/sort_jobs_wide_combat_fixed`.
+
+Four clean stationary runs used the same executable and maximum target settings,
+with only VSync disabled. Serial/chain/chain/serial measured
+192.33/191.65/193.25/195.37 FPS. All focus samples were foreground and the world
+count stayed at 3926 meshes; traffic counts varied. The chain pair averaged
+192.45 versus 193.85 FPS for serial, with slightly higher total CPU time. This
+does not establish a gain; the synchronous default is retained. Evidence:
+`scratch/performance_max_1003/sort_jobs_comparison.json`.
+
+The repaired default chain also completed a clean 120-second Road Rage at the
+exact maximum target including VSync: 13 takedowns across six victims, peak five
+crashing/two airborne rivals, all 1187 focus samples foreground, and no assertions,
+exceptions or event end. Average throughput was 163.90 FPS, p99 7.43 ms and maximum
+12.77 ms. This is a qualified combat measurement, not a matched speedup or locked
+165 FPS result. Evidence: `sort_jobs_chain_combat_fixed` in the same scratch root.
+
+```powershell
+python b5-decomp/tests/run_pc_dispatch_sort_jobs.py
+python b5-decomp/tests/run_pc_mesh_preparation.py
+python b5-decomp/tests/run_pc_frame_timing_only.py
+```
