@@ -278,6 +278,15 @@ int main()
     Check(CsvValue(lResourceCsv, "texture_upload_ms") == 7
           && CsvValue(lResourceCsv, "texture_upload_cycles") == 700,
           "texture_upload wall time and raw cycles keep separate CSV columns");
+    Check(CsvValue(lResourceCsv, "geometry_store_ms") == 9
+          && CsvValue(lResourceCsv, "geometry_store_cycles") == 900,
+          "geometry_store includes allocator work and keeps separate clock columns");
+    Check(CsvValue(lResourceCsv, "geometry_index_build_ms") == 10
+          && CsvValue(lResourceCsv, "geometry_index_build_cycles") == 1000,
+          "geometry_index_build keeps separate clock columns");
+    Check(CsvValue(lResourceCsv, "geometry_register_ms") == 11
+          && CsvValue(lResourceCsv, "geometry_register_cycles") == 1100,
+          "geometry_register keeps separate clock columns");
     Check(CsvValue(lResourceCsv, "draws") == 0
           && CsvValue(lResourceCsv, "cycle_read_failures") == 0,
           "resource sections preserve subsequent counter alignment");

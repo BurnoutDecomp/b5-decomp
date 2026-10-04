@@ -461,6 +461,15 @@ namespace
     }
 
     // ---- vertex mirror creation ---------------------------------------------
+    bool StoreGeometry(IDirect3DDevice9* lpDevice, GeometryBufferKind leKind,
+                       const void* lpData, unsigned luBytes,
+                       GeometryPoolType::Allocation& lrAllocation, unsigned luAlignment = 16u)
+    {
+        // Includes allocator search/bookkeeping and the nested native upload.
+        FrameProfile::CycleScope lProfile(FrameProfile::GEOMETRY_STORE);
+        return sGeometryPool.Store(lpDevice, leKind, lpData, luBytes, lrAllocation, luAlignment);
+    }
+
     // Preserve the original signed10-bit /511 conversion, including the -512
     // clamp and untouched record bytes. Compile separate kernels so the scalar
     // comparison control adds no branch/register pressure inside the lookup loop.
@@ -568,7 +577,7 @@ namespace
                 BakeVertexData(sVertexBakeScratch.data(), lrPlan);
                 lpPayload = sVertexBakeScratch.data();
             }
-            if (GeometryPool() == D3DPOOL_DEFAULT && sGeometryPool.Store(lpDevice,
+            if (GeometryPool() == D3DPOOL_DEFAULT && StoreGeometry(lpDevice,
                     GeometryBufferKind::Vertex, lpPayload, luBytes, lEntry.mAllocation,
                     VertexPoolAlignment(lrPlan.muExpandedStride)))
                 lEntry.mpBuffer = static_cast<IDirect3DVertexBuffer9*>(lEntry.mAllocation.GetBuffer());
@@ -608,6 +617,7 @@ namespace
 
         // A failed creation is cached too (as a null mirror) so a mesh that cannot be
         // retained does not retry -- and re-fail -- on every single draw.
+        FrameProfile::CycleScope lRegisterProfile(FrameProfile::GEOMETRY_REGISTER);
         RetainedVertexBuffer& lrStored = sVertexBuffers[lrKey] = lEntry;
         RegisterPages(sVertexPages, lrKey, lEntry.mpHeader,
                       lEntry.mpSourceBegin, lEntry.mpSourceEnd);
@@ -689,6 +699,7 @@ namespace
 
         if (lbExpandStrip)
         {
+            FrameProfile::CycleScope lIndexProfile(FrameProfile::GEOMETRY_INDEX_BUILD);
             // Upper bound: a strip of N indices can yield at most N triangles.
             sBakeScratch.clear();
             sBakeScratch.resize(static_cast<size_t>(lrPlan.muIndexCount) * 3u * luIndexSize);
@@ -727,6 +738,7 @@ namespace
             {
                 lEntry.muPrimitiveCount = 0;
                 lEntry.muFirstIndexCount = 0xFFFFFFFFu;   // the SKIP marker (see above)
+                FrameProfile::CycleScope lRegisterProfile(FrameProfile::GEOMETRY_REGISTER);
                 sIndexBuffers[lrKey] = lEntry;
                 RegisterPages(sIndexPages, lrKey, lEntry.mpHeader,
                               lEntry.mpSourceBegin, lEntry.mpSourceEnd);
@@ -745,7 +757,7 @@ namespace
         {
             const GeometryBufferKind leKind = lrPlan.mb32Bit
                 ? GeometryBufferKind::Index32 : GeometryBufferKind::Index16;
-            if (GeometryPool() == D3DPOOL_DEFAULT && sGeometryPool.Store(lpDevice,
+            if (GeometryPool() == D3DPOOL_DEFAULT && StoreGeometry(lpDevice,
                     leKind, lpPayload, luPayloadBytes, lEntry.mAllocation))
             {
                 lEntry.mpBuffer = static_cast<IDirect3DIndexBuffer9*>(lEntry.mAllocation.GetBuffer());
@@ -778,6 +790,8 @@ namespace
             FrameProfile::Geometry(false, luPayloadBytes);
             suIndexBytes += luPayloadBytes;
             lEntry.muBytes = luPayloadBytes;
+
+            FrameProfile::CycleScope lIndexProfile(FrameProfile::GEOMETRY_INDEX_BUILD);
 
             // The first three SUBMITTED index values, kept so the caller's clip-space
             // and wheel probes can sample the same vertices they used to read straight
@@ -817,6 +831,7 @@ namespace
             }
         }
 
+        FrameProfile::CycleScope lRegisterProfile(FrameProfile::GEOMETRY_REGISTER);
         RetainedIndexBuffer& lrStored = sIndexBuffers[lrKey] = lEntry;
         RegisterPages(sIndexPages, lrKey, lEntry.mpHeader,
                       lEntry.mpSourceBegin, lEntry.mpSourceEnd);
