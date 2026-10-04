@@ -11,6 +11,13 @@ static unsigned suClockReads = 0;
 static LONGLONG siTicks = 0;
 static unsigned suCycleReads = 0;
 static ULONG64 suCycles = 0;
+static unsigned suPlacementReads = 0;
+static thread_local PROCESSOR_NUMBER sProcessor{};
+static void WINAPI TestProcessorNumber(PPROCESSOR_NUMBER lpNumber)
+{
+    ++suPlacementReads;
+    *lpNumber = sProcessor;
+}
 static bool sbCycleApiAvailable = true, sbCycleReadSucceeds = true;
 static BOOL WINAPI TestCycles(HANDLE, PULONG64 lpValue)
 {
@@ -39,7 +46,9 @@ static BOOL WINAPI TestFrequency(LARGE_INTEGER* lpValue)
 #define QueryPerformanceCounter TestCounter
 #define QueryPerformanceFrequency TestFrequency
 #define GetProcAddress TestGetProcAddress
+#define GetCurrentProcessorNumberEx TestProcessorNumber
 #include "pc_frame_timing_only.inc"
+#undef GetCurrentProcessorNumberEx
 #undef GetProcAddress
 #undef QueryPerformanceCounter
 #undef QueryPerformanceFrequency
@@ -52,7 +61,7 @@ static void Check(bool lbPass, const char* lpcName)
     if (!lbPass) { ++suFailures; std::printf("FAIL: %s\n", lpcName); }
 }
 static void Reset(const char* lpcEnabled, const char* lpcTimingOnly, const char* lpcDetail,
-                  const char* lpcCoarse = "0", const char* lpcCycles = "0")
+                  const char* lpcCoarse = "0", const char* lpcCycles = "0", const char* lpcPlacement = "0")
 {
     delete[] fp::gCapture.mpFrames;
     fp::gCapture = fp::Capture{};
@@ -61,10 +70,12 @@ static void Reset(const char* lpcEnabled, const char* lpcTimingOnly, const char*
     _putenv_s("BRN_FRAME_DETAIL", lpcDetail);
     _putenv_s("BRN_FRAME_COARSE", lpcCoarse);
     _putenv_s("BRN_FRAME_CPU_CYCLES", lpcCycles);
+    _putenv_s("BRN_FRAME_THREAD_PLACEMENT", lpcPlacement);
     _putenv_s("BRN_GPU_PROFILE", "0");
     suClockReads = 0;
     siTicks = 100;
     suCycleReads = 0; suCycles = 10;
+    suPlacementReads = 0; sProcessor = PROCESSOR_NUMBER{};
     sbCycleApiAvailable = sbCycleReadSucceeds = true;
 }
 static std::string ReadOutput(const char* lpcSuffix)
@@ -417,6 +428,57 @@ int main()
     fp::End();
     Check(fp::gCapture.mpFrames[0].muCycleReadFailures == 400000,
           "concurrent cycle-query failures retain every report");
+
+    Check(suPlacementReads == 0, "placement sampling is disabled by default");
+    Reset("1", "0", "0", "1", "0", "1");
+    fp::Begin();
+    sProcessor.Group = 1; sProcessor.Number = 3;
+    { fp::CycleScope lUpdate(fp::UPDATE, fp::UPDATE_SIMULATION);
+      sProcessor.Group = 2; sProcessor.Number = 5;
+      { fp::CycleScope lNested(fp::UPDATE_MESH_PREPARE); }
+    }
+    { fp::CycleScope lUpdate(fp::UPDATE, fp::UPDATE_SIMULATION); sProcessor.Number = 6; }
+    std::thread lDispatchThread([] {
+        sProcessor.Group = 0; sProcessor.Number = 7;
+        fp::CycleScope lDispatch(fp::DISPATCH); sProcessor.Number = 9;
+    });
+    lDispatchThread.join();
+    fp::End();
+    const fp::Frame& lrPlacement = fp::gCapture.mpFrames[0];
+    Check(lrPlacement.maProcessorBegin[0] == 259 && lrPlacement.maProcessorEnd[0] == 518
+          && lrPlacement.maProcessorBegin[1] == 7 && lrPlacement.maProcessorEnd[1] == 9
+          && lrPlacement.maThreadId[0] == GetCurrentThreadId()
+          && lrPlacement.maThreadId[1] != 0 && lrPlacement.maThreadId[1] != lrPlacement.maThreadId[0],
+          "placement preserves processor groups, root owners and first/last simulation endpoints");
+    Check(suPlacementReads == 6 && suCycleReads == 0,
+          "placement samples only roots independently of CPU cycle queries");
+    fp::Begin(); fp::End();
+    Check(fp::gCapture.mpFrames[1].maThreadId[0] == 0
+          && fp::gCapture.mpFrames[1].maProcessorBegin[0] == ~0u
+          && fp::gCapture.mpFrames[1].maProcessorEnd[1] == ~0u,
+          "frames without root scopes retain unavailable processor sentinels");
+    fp::Finish();
+    const std::string lPlacementCsv = ReadOutput(".frames.csv");
+    Check(CsvValue(lPlacementCsv, "update_processor_begin") == 259
+          && CsvValue(lPlacementCsv, "update_processor_end") == 518
+          && CsvValue(lPlacementCsv, "dispatch_processor_begin") == 7
+          && CsvValue(lPlacementCsv, "dispatch_processor_end") == 9
+          && CsvValue(lPlacementCsv, "dispatch_thread_id") != CsvValue(lPlacementCsv, "update_thread_id")
+          && ReadOutput(".frames.json").find("\"thread_placement\":true") != std::string::npos,
+          "CSV and metadata preserve placement identities and endpoint columns");
+    Reset("1", "1", "0", "1", "1", "1");
+    fp::Begin();
+    { fp::CycleScope lUpdate(fp::UPDATE, fp::UPDATE_SIMULATION); fp::CycleScope lDispatch(fp::DISPATCH); }
+    fp::End();
+    Check(suPlacementReads == 0 && suCycleReads == 0 && suClockReads == 2
+          && fp::gCapture.mpFrames[0].maProcessorBegin[0] == ~0u,
+          "timing-only suppresses explicit placement requests and keeps two clocks");
+    Reset("0", "0", "0", "1", "1", "1");
+    fp::Begin();
+    { fp::CycleScope lDispatch(fp::DISPATCH); }
+    fp::End();
+    Check(suPlacementReads == 0 && suClockReads == 0,
+          "placement option never enables disabled frame recording");
 
     Reset("1", "1", "0");
     fp::Begin();
