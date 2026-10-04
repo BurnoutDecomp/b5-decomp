@@ -45,6 +45,15 @@ checkout's `scratch/performance_max_1003/`: `ltcg_comparison.json`,
 `wallpaper_comparison.json`, `wallpaper_closed_combat`, and
 `optimizer_boundaries_combat_visual`.
 
+## Native backend identification (2026-10-04)
+
+The startup log now queries the live game device for `IDirect3DDevice9On12`
+and records `D3D9On12=yes/no/unknown` with the HRESULT. A loaded DLL alone does
+not identify the backend. The query retains no interface reference and changes
+no graphics settings or device state. This is diagnostic information, not an
+optimization. The canonical build and a maximum-settings live run confirm
+`no`, `0x80004002` (`E_NOINTERFACE`), on this laptop's NVIDIA device.
+
 ## Implemented
 
 | Change | Original evidence and PC implementation |
