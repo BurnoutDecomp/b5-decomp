@@ -6220,6 +6220,8 @@ namespace BrnGame
 
     void BrnGameModule::EndFramesPC()
     {
+        mThreadLayout.SynchronizeDispatchPC();
+        mRenderModule.EndMeshFramesPC();
         mThreadLayout.EndPC();
         mbFrameLayoutInitializedPC = false;
     }

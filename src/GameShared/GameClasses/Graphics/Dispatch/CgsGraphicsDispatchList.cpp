@@ -14,7 +14,7 @@
 //   CgsGraphics::DispatchList::Submit             @ 0x822A0808
 //   CgsGraphics::DispatchList::AllocateKeyBlock   @ 0x827FA730
 //   CgsGraphics::DispatchList::PrepareSortJobInfo @ 0x827FA7D0
-//   (+ SortForDispatch, the PC synchronous stand-in for the RadixSort job)
+//   (+ SortForDispatch, the PC synchronous fallback for the RadixSort job)
 //
 // A DispatchList accumulates 64-bit sort records (one per Submit) into a chain of
 // fixed-capacity KeyBlocks. ReserveKey guarantees the tail block has room (rolling
@@ -146,9 +146,9 @@ DispatchList* DispatchList::PrepareSortJobInfo(SortJobInfo* lpJobInfo)
 }
 
 // [PC leaf] The X360 sorts each prepared list on a RadixSort job (RadixSortEntry
-// @0x82AD2020, packaged by BrnRendererModule sub_823F5EA0). The PC bring-up has no
-// job scheduler yet, so prepare + sort runs synchronously here. Despite the job
-// name, ARTIST RadixSortJob::Execute @0x82AD2898..28B0 calls std::_Sort<u64*,int>.
+// @0x82AD2020, packaged by BrnRendererModule sub_823F5EA0). This remains the
+// fallback when native sort jobs are disabled. Despite the
+// job name, ARTIST RadixSortJob::Execute @0x82AD2818 calls std::_Sort<u64*,int>.
 // Sorting the complete records also orders equal material keys by packet offset;
 // identical records refer to the same packet and require no stable-sort storage.
 void DispatchList::SortForDispatch()

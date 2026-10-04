@@ -35,4 +35,4 @@ if args.non_atomic_cycle_failures:
     source = source.replace(needle, '++mpFrame->muCycleReadFailures')
 result = compile_and_run(Path(__file__).with_name('PCFrameTimingOnly.cpp'),
                          'pc_frame_timing_only.inc', source, 'PCFrameTimingOnly')
-raise SystemExit(report('run_pc_frame_timing_only', [], result, 46))
+raise SystemExit(report('run_pc_frame_timing_only', [], result, 47))

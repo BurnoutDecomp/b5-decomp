@@ -155,9 +155,8 @@ struct Resource
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"
 
-struct SortInfo
-{
-};
+#include "GameShared/Jobs/RadixSort/RadixSort.h"
+#include "pc/gcm/renderengine/DispatchSortJobsPCLeaf.h"
 
 // DispatchObjectContext / DispatchList are the real CgsGraphics types now
 // (CgsDispatcherCommands.h / CgsDispatcher.h, included above).
@@ -355,6 +354,7 @@ public:
     void PrepareMeshFrameForWritePC();
     void BeginMeshFramePC();
     void PublishMeshFramePC();
+    void EndMeshFramesPC();
 
     // Renders the on-screen assert overlay (forwarded from BrnGameModule::RenderAssert).
     void RenderAssert(const CgsDev::Assert::AssertData* lpAssertData);
@@ -857,6 +857,7 @@ private:
     struct PreparedMeshFramePC
     {
         CgsGraphics::DispatchFrame* mpFrame = nullptr;
+        renderengine::DispatchSortJobsPC mSortJobs;
         u64 muResourceEpoch = 0;
         f32 mfPreZDistance = 0.0f;
         bool mbPreZ = false, mbPreZAlpha = false, mbReady = false;
@@ -866,6 +867,15 @@ private:
     CgsGraphics::DispatchPacketInterpreter* mpMeshProducerInterpreterPC = nullptr;
     u32 muMeshReadFramePC = 0;
     void PrepareMeshFramePC(u32 luBank, CgsGraphics::DispatchFrame* lpInput);
+    renderengine::DispatchSortJobsPC& GetMeshSortJobsPC(CgsGraphics::DispatchFrame* lpFrame)
+    {
+        return maPreparedMeshFramesPC[mpMeshProducerInterpreterPC
+            && lpFrame == maPreparedMeshFramesPC[1].mpFrame ? 1 : 0].mSortJobs;
+    }
+    void WaitForMeshSortPC(u32 luList)
+    {
+        maPreparedMeshFramesPC[mpMeshProducerInterpreterPC ? muMeshReadFramePC : 0].mSortJobs.WaitList(luList);
+    }
     CgsGraphics::DispatchFrame& GetMeshFrameForReadPC()
     {
         return mpMeshProducerInterpreterPC

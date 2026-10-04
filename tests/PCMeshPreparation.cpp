@@ -14,7 +14,7 @@ using u32 = std::uint32_t;
 using u64 = std::uint64_t;
 using f32 = float;
 #define CGS_ASSERT(ok, message) do { if (!(ok)) std::abort(); } while (0)
-static unsigned checks, failures, conversions, sorts, materialVersion = 1;
+static unsigned checks, failures, conversions, sorts, materialVersion = 1, resetWhileSorting = 0;
 static void Check(bool ok, const char* name)
 {
     ++checks;
@@ -31,9 +31,10 @@ struct DispatchObjectContext {
 struct Mesh { int id; const float* constant; unsigned material; };
 struct DispatchFrame {
     float constant = 0;
+    bool* pendingSort = nullptr;
     std::vector<int> objects;
     std::vector<Mesh> meshes;
-    void Reset() { objects.clear(); meshes.clear(); }
+    void Reset() { if (pendingSort && *pendingSort) ++resetWhileSorting; objects.clear(); meshes.clear(); }
 };
 struct BufferedDispatchFrame {
     DispatchFrame frames[2];
@@ -47,6 +48,15 @@ struct DispatchPacketInterpreter {
     float time = -1;
     void SetSingleBufferedDispatchFrame(DispatchFrame* p) { frame = p; }
     void SetTime(float value) { time = value; }
+};
+}
+// Sorting is the asynchronous boundary in this fixture. Native worker execution
+// and joins are covered by PCDispatchSortJobs; here a pending marker catches
+// resets before the production preparation code joins its bank.
+namespace renderengine {
+struct DispatchSortJobsPC {
+    bool pending = false;
+    void WaitAll() { pending = false; }
 };
 }
 struct BrnRendererModule {
@@ -86,6 +96,10 @@ struct BrnRendererModule {
     void SortDispatchLists(CgsGraphics::DispatchFrame* frame)
     {
         ++sorts;
+        for (auto& bank : maPreparedMeshFramesPC) if (bank.mpFrame == frame) {
+            bank.mSortJobs.pending = true;
+            frame->pendingSort = &bank.mSortJobs.pending;
+        }
         std::sort(frame->meshes.begin(), frame->meshes.end(),
             [](const auto& a, const auto& b) { return a.id < b.id; });
     }
@@ -200,6 +214,7 @@ int main()
     Check(r.consumer.frame->meshes.empty() && r.BuildDispatchLists(&context),
           "empty/loading frames clear all old commands");
     Check(sorts == conversions, "every newly expanded bank is sorted exactly once");
+    Check(resetWhileSorting == 0, "bank reuse and resource/control rebuilds join before resetting command storage");
     Check(profile.maTicks[fp::UPDATE_MESH_PREPARE] == 0,
           "timing-only mode does not add preparation clock reads");
 

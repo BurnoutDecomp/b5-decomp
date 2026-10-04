@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "pc/gcm/renderengine/MeshJobOwnerWaitPCLeaf.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertProbePC.h"
@@ -2329,11 +2330,123 @@ void BrnRendererModule::ConvertObjectsToMeshesPC(CgsGraphics::DispatchFrame* lpI
     }
 }
 
-// @ 0x823F5F70 - BrnRendererModule::SortDispatchLists. The X360 preps 16
-// RadixSort jobs over lists {0,2,1,3,4, 5..10, 21, 11, 19, 15, 20}; the PC
-// bring-up sorts the same lists synchronously.
+// ARTIST823F5EA0 / DecFIGS _FillInJobData(Job*,SortInfo*,DispatchList*).
+static void FillInSortJobData(EA::Jobs::Job* lpOutJob, SortInfo* lpOutJobData,
+                             CgsGraphics::DispatchList* lpDispatchList)
+{
+    lpDispatchList->PrepareSortJobInfo(&lpOutJobData->mInputOutputInfo);
+    CGS_ASSERT(lpOutJobData, "lpOutJobData");
+    CGS_ASSERT(lpOutJob, "lpOutJob");
+    const auto luAddress = reinterpret_cast<uintptr_t>(lpOutJobData->mInputOutputInfo.mpaFlatKeys);
+    lpOutJobData->mu64KeyInAddress = luAddress;
+    lpOutJobData->mu64KeyOutAddress = luAddress;
+    lpOutJobData->mu16Count = static_cast<u16>(lpOutJobData->mInputOutputInfo.muKeyCount);
+    lpOutJob->Clear();
+    lpOutJob->mEntryPoint.SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+        reinterpret_cast<const void*>(&RadixSortEntry), 0);
+    lpOutJob->SetData(lpOutJobData, sizeof(SortInfo));
+    lpOutJob->mEntryPoint.SetName("RadixSort");
+}
+
+namespace renderengine
+{
+    DispatchSortJobsPC::DispatchSortJobsPC()
+        : maJobs{EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
+                 EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
+                 EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
+                 EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr)}
+        , mOwnerThread(EA::Thread::GetThreadId())
+    {}
+
+    DispatchSortJobsPC::~DispatchSortJobsPC() { WaitAll(); }
+
+    // FLAG PC-platform leaf: extended scene settings can exceed the console's
+    // 16-bit count. Preserve the prior PC full-list sort for those lists.
+    static void WideSortEntryPC(EA::Jobs::Param, EA::Jobs::Param lData,
+                                EA::Jobs::Param, EA::Jobs::Param)
+    {
+        const auto* lpData = static_cast<const SortInfo*>(lData.mpValue);
+        u64* lpaKeys = lpData->mInputOutputInfo.mpaFlatKeys;
+        const u32 luCount = lpData->mInputOutputInfo.muKeyCount;
+        if (luCount > 1) std::sort(lpaKeys, lpaKeys + luCount);
+    }
+
+    void DispatchSortJobsPC::Begin(CgsGraphics::DispatchFrame* lpFrame,
+                                  EA::Jobs::JobScheduler* lpScheduler, bool lbWide)
+    {
+        WaitAll();
+        // Flattening allocates from one shared frame bin, so it stays on the
+        // producer. Workers only sort disjoint, already-published key arrays.
+        for (u32 luJob = 0; luJob < KU_COUNT; ++luJob)
+        {
+            FillInSortJobData(&maJobs[luJob], &maData[luJob], lpFrame->GetList(KAU_LISTS[luJob]));
+            if (maData[luJob].mInputOutputInfo.muKeyCount > 0xffffu)
+                maJobs[luJob].SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+                    reinterpret_cast<const void*>(&WideSortEntryPC), 0);
+        }
+        muPending = (1u << KU_COUNT) - 1u;
+        if (!lbWide)
+        {
+            for (u32 luJob = 1; luJob < KU_COUNT; ++luJob)
+                maJobs[luJob].DependsOn(maJobs[luJob - 1], EA::Jobs::Event::EVENT_WHEN_JOB_END);
+            lpScheduler->AddTree(&maJobs[KU_COUNT - 1]);
+        }
+        else
+        {
+            // FLAG PC-platform leaf: ARTIST's optional wide branch submits only
+            // four of its five shadow lists. Submit all prepared lists here so
+            // the third cascade cannot consume an unsorted/unsubmitted list4.
+            for (u32 luJob = 0; luJob < KU_COUNT; ++luJob)
+                lpScheduler->AddJobs(&maJobs[luJob], 1);
+        }
+    }
+
+    void DispatchSortJobsPC::WaitIndex(u32 luIndex)
+    {
+        const u32 luBit = 1u << luIndex;
+        if (!(muPending & luBit)) return;
+        const bool lbOwner = EA::Thread::GetThreadId() == mOwnerThread;
+        FrameProfile::Scope lWaitProfile(lbOwner ? FrameProfile::UPDATE_SORT_WAIT : FrameProfile::RENDER_SORT_WAIT);
+        MeshJobOwnerWaitPC lOwnerWait;
+        maJobs[luIndex].WaitOn(lbOwner ? &MeshJobOwnerWaitPC::Poll : nullptr,
+                              lbOwner ? &lOwnerWait : nullptr);
+        muPending &= ~luBit;
+    }
+
+    void DispatchSortJobsPC::WaitList(u32 luList)
+    {
+        if (!muPending) return;
+        for (u32 luIndex = 0; luIndex < KU_COUNT; ++luIndex)
+            if (KAU_LISTS[luIndex] == luList) { WaitIndex(luIndex); return; }
+    }
+
+    void DispatchSortJobsPC::WaitAll()
+    {
+        for (u32 luIndex = 0; muPending && luIndex < KU_COUNT; ++luIndex)
+            WaitIndex(luIndex);
+    }
+}
+
+// ARTIST823F5F70 prepares sixteen jobs. Its default is the dependency chain;
+// the optional wide branch submits independent jobs. Native frame banks retain
+// their own descriptors until their consumers or a rebuild join them.
 void BrnRendererModule::SortDispatchLists(CgsGraphics::DispatchFrame* lpMeshFrame)
 {
+    static const bool sbJobs = [] {
+        const char* lpcValue = std::getenv("BRN_SORT_JOBS");
+        return lpcValue && lpcValue[0] == '1';
+    }();
+    static const bool sbWide = [] {
+        const char* lpcValue = std::getenv("BRN_SORT_JOBS_WIDE");
+        return lpcValue && lpcValue[0] == '1';
+    }();
+    if (sbJobs)
+    {
+        renderengine::FrameProfile::Scope lSortProfile(renderengine::FrameProfile::DISPATCH_SORT);
+        GetMeshSortJobsPC(lpMeshFrame).Begin(lpMeshFrame, CgsSystem::JobManager(),
+            mbSortDisplayListsWideNotLong || sbWide);
+        return;
+    }
     static const u32 KAU_SORTED_LISTS[16] =
         { 0u, 2u, 1u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 21u, 11u, 19u, 15u, 20u };
     for (u32 luIndex = 0; luIndex < 16u; ++luIndex)
@@ -2411,6 +2524,7 @@ void BrnRendererModule::PrepareMeshFramePC(u32 luBank, CgsGraphics::DispatchFram
     }
     CgsGraphics::DispatchObjectContext lContext;
     InitializeDispatchContextPC(&lContext);
+    lrPrepared.mSortJobs.WaitAll();
     lrPrepared.mpFrame->Reset();
     mpMeshProducerInterpreterPC->SetSingleBufferedDispatchFrame(lrPrepared.mpFrame);
     mpMeshProducerInterpreterPC->SetTime(0.0f);
@@ -2451,6 +2565,15 @@ void BrnRendererModule::PublishMeshFramePC()
     mpInterpreter->SetTime(0.0f);
 }
 
+void BrnRendererModule::EndMeshFramesPC()
+{
+    // FLAG PC-platform leaf: the last published bank may never be rendered.
+    // Join both banks while the scheduler and frame-owner assertion service
+    // still exist, before the later static renderer destructor sees them.
+    for (auto& lrPrepared : maPreparedMeshFramesPC)
+        lrPrepared.mSortJobs.WaitAll();
+}
+
 // =============================================================================
 // @0x8240BFA8 (Render:545-640) - BrnRendererModule's SHADOW-MAP PASS.
 //
@@ -2463,9 +2586,8 @@ void BrnRendererModule::PublishMeshFramePC()
 // the manager &mAllocatedRenderTargets. The cascade count is not a variable on the console
 // either -- the body is written out three times.
 //
-// TWO PIECES OF THE CONSOLE BODY ARE DELIBERATELY ABSENT; both are marked below:
-//   (a) the six EA::Jobs::Job::WaitOn(maShadowMapSortJob[n]) calls, and
-//   (b) the front/back-face cull bracket around one list per cascade.
+// Each of the five lists joins its sort job before consumption. The front/back
+// helpers bracket the corresponding rasterizer state just as on the console.
 // =============================================================================
 void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext* lpContext)
 {
@@ -2569,14 +2691,7 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
             if (liList < 0)
                 continue;
 
-            // [X360 ONLY] EA::Jobs::Job::WaitOn(&maShadowMapSortJob[liList], 0, 0, -1) sits here
-            // on the console -- one wait per list, immediately before its GetList. It is a
-            // rendezvous with the RadixSort job SortDispatchLists kicked off for that list, and
-            // it has NO PC counterpart to write: SortDispatchLists runs the sorts SYNCHRONOUSLY
-            // on this very thread (see its body), so by the time control reaches here every list
-            // is already sorted and a wait would be a wait on nothing. The maShadowMapSortJob
-            // array is still carried in the layout, unused, for when the job scheduler lands --
-            // at which point these five waits come back with it.
+            WaitForMeshSortPC(static_cast<u32>(liList));
 
             // ARTIST Render @8240C84C..CB0C brackets lists 0/1/4 with the Front helpers
             // and 2/3 with the Back helpers. The manager flag selects the locked group.
@@ -5113,6 +5228,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     if (lbPreZWork)
     {
         renderengine::Device::SetWorldPassDefaultStates(false);
+        WaitForMeshSortPC(21u);
         GetMeshFrameForReadPC().GetList(21)->DispatchAllMeshesZOnly(mpInterpreter, &lContext);
     }
 
@@ -5176,6 +5292,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
             if (lbForceCarStencil)
                 shadow::Device::BeginForceStencilWrite(lCarMaskBytes.mu8CarsBlurStencil);
 
+            WaitForMeshSortPC(19u);
             GetMeshFrameForReadPC().GetList(19)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
 
             if (lbForceCarStencil)
@@ -5190,6 +5307,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
             // The world-opaque walk is that pass. Read one frame late like the others, so it
             // costs a query issue and nothing else. DELETE with the shadow bring-up probes.
             renderengine::ShadowProbe_Begin(3u);
+            WaitForMeshSortPC(11u);
             GetMeshFrameForReadPC().GetList(11)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
             renderengine::ShadowProbe_End(3u);
         }
@@ -5227,6 +5345,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
 
         if (mbRenderWorldTransparent)
         {
+            WaitForMeshSortPC(15u);
             GetMeshFrameForReadPC().GetList(15)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
         }
         // X360 @0x8240D338-0x8240D348 / @0x8240D3F4-0x8240D3FC: the car-TRANSPARENT window. The
@@ -5243,6 +5362,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
             if (lbForceCarStencil)
                 shadow::Device::BeginForceStencilWrite(lCarMaskBytes.mu8CarsBlurStencil);
 
+            WaitForMeshSortPC(20u);
             GetMeshFrameForReadPC().GetList(20)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
 
             if (lbForceCarStencil)
@@ -5508,6 +5628,13 @@ void BrnRendererModule::Prepare2DFramePC()
 
 void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer)
 {
+    // Finish unused/disabled-pass sorts as well, before this frame returns to
+    // resource publication or shutdown. Individual passes join before reading.
+    struct SortCompletionPC { renderengine::DispatchSortJobsPC& mJobs;
+        ~SortCompletionPC() { mJobs.WaitAll(); } };
+    SortCompletionPC lSortCompletion{
+        maPreparedMeshFramesPC[mpMeshProducerInterpreterPC ? muMeshReadFramePC : 0].mSortJobs};
+
     using namespace renderengine::FrameProfile;
     Stage lRenderStage(RENDER_SETUP);
     // FLAG PC-platform leaf: missing host storage cannot produce a valid frame.
@@ -6056,12 +6183,8 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     //   * the PerfMonGpu / PerfMonCpu Start/Stop pairs (miEnvironmentMap gpu +51664, cpu +51528,
     //     per-face wait +51532) -- the whole of Render carries none of them on this build; see the
     //     BRN_GPU_PERFMON_AVAILABLE banner.
-    //   * `EA::Jobs::Job::WaitOn(&maEnvmapSortJobs[face], 0, 0, -1)` @0x8240CBF8 -- one per face, a
-    //     rendezvous with the RadixSort job SortDispatchLists kicked off for list 5+face. It has NO
-    //     PC counterpart to write, for exactly the reason the shadow pass's identical note gives:
-    //     SortDispatchLists runs its sorts SYNCHRONOUSLY on this thread, so every list is already
-    //     sorted here and the wait would be a wait on nothing. The maEnvmapSortJobs array is still
-    //     carried in the layout, unused, and the six waits come back with the job scheduler.
+    // The per-face sort rendezvous at ARTIST8240CBF8 is handled below by
+    // WaitForMeshSortPC, using the descriptors belonging to this frame bank.
     // ============================================================================================
     lRenderStage.Next(RENDER_ENVMAP);
     if (mRenderSwitches.mbRenderEnvmap && lbSceneBracketOpen
@@ -6158,6 +6281,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             shadow::Device::LockRasteriserState();
             shadow::Device::LockDepthStencilState();
 
+            WaitForMeshSortPC(KU_ENV_MAP_FIRST_MESH_LIST + luFace);
             CgsGraphics::DispatchList* const lpList =
                 GetMeshFrameForReadPC().GetList(KU_ENV_MAP_FIRST_MESH_LIST + luFace);
             const u32 luMeshCount = lpList->GetCount();

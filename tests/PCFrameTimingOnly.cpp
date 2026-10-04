@@ -327,6 +327,17 @@ int main()
           && fp::gCapture.muBehaviour == 0 && fp::gCapture.muShot == 0,
           "timing-only option never enables a disabled capture");
 
+    Reset("1", "0", "0", "1", "0");
+    fp::Begin();
+    { fp::Scope lWait(fp::UPDATE_SORT_WAIT); siTicks += 13; }
+    { fp::Scope lWait(fp::RENDER_SORT_WAIT); siTicks += 17; }
+    fp::End(); fp::Finish();
+    const std::string lSortCsv = ReadOutput(".frames.csv");
+    Check(CsvValue(lSortCsv, "update_sort_wait_ms") == 0.013
+          && CsvValue(lSortCsv, "render_sort_wait_ms") == 0.017
+          && CsvValue(lSortCsv, "raster_creates") == 0,
+          "separate owner and render sort waits preserve CSV column alignment");
+
     Reset("1", "1", "0");
     fp::Camera(3);
     fp::Begin();
