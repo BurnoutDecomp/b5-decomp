@@ -1675,3 +1675,37 @@ remain unproved.
 ```powershell
 python -X utf8 b5-decomp/tests/run_pc_xinput_polling.py
 ```
+
+## Cold geometry and allocation waits (2026-10-04)
+
+Frame traces now separate cold geometry storage, index preparation and retained
+cache registration. Storage includes pool search/bookkeeping and the nested
+native upload. Index preparation includes strip conversion and consumed-index
+bounds; an empty strip's registration is nested within that section. The spans
+are not all additive. Wall time and optional raw thread cycles have distinct
+CSV columns. Disabled and timing-only recording suppress these clocks.
+
+The recorder regression passes 46 checks, including the new columns and the
+following counters' alignment. Native geometry still passes 91 checks. Canonical
+build and independent review pass, with eight existing C4661 warnings.
+
+A qualified 120-second combat diagnostic at the unchanged maximum target
+recorded 13 takedowns across seven rivals, with all 1187 focus samples foreground
+and no assertions, exceptions or event end. One frame built 614 vertex and 614
+index mirrors without allocating another native buffer: preparation took
+3.68 ms, including 1.87 ms storage, 0.62 ms index work and 0.86 ms registration.
+These measurements do not establish an allocator defect or FPS improvement.
+
+The same run caught a 19.97 ms frame with 12.87 ms inside native GPU texture
+creation, involving six rasters. Those calls recorded 620,715 thread cycles;
+CPU staging took 0.15 ms. This points to a possible allocation wait, not proof
+of shader compilation or a particular driver cause.
+
+A private queue-limit experiment kept all graphics settings and two flip
+buffers unchanged. Stationary default/one/two/default limits measured
+163.17/164.25/163.99/164.58 FPS; the closing default was as good as the changed
+limits. A one-frame-limit combat diagnostic still recorded an 18.89 ms frame
+with 11.98 ms in GPU texture creation. That run qualified with 15 takedowns
+across seven rivals and all 1187 focus samples foreground. The experiment was
+reverted; the published presentation policy is unchanged. Instrumented combat
+FPS is excluded from clean performance claims. Locked 165 FPS remains unmet.
