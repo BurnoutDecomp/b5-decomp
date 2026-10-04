@@ -1604,3 +1604,35 @@ python -X utf8 b5-decomp/tests/run_pc_packed_oobb_simd.py
 python -X utf8 b5-decomp/tests/run_pc_packed_oobb_simd.py --scalar-control
 python -X utf8 b5-decomp/tests/run_pc_packed_oobb_simd.py --benchmark
 ```
+
+## Inactive damage diagnostics (2026-10-04)
+
+The indexed draw path now checks once whether any of the six crumple, scratch
+and glass diagnostic controls is present. With all controls absent it avoids
+calling their six inactive helpers on every draw. A present value, including
+zero or an empty string, preserves all original calls in their original order.
+`BRN_DAMAGE_PROBE_FAST=0` also retains the previous path. The helper bodies and
+normal damage rendering are unchanged.
+
+A private measurement build alternated the guard within one running process:
+twelve eight-second blocks, with half a second excluded at each boundary.
+Three balanced groups measured 3.80%, 3.15% and 3.95% fewer dispatch CPU cycles
+per draw. All 828 in-block focus samples were foreground, with no cycle-query
+failures. Traffic and shader mixes varied, so this is not a fixed whole-game
+FPS improvement. The mutable measurement control is absent from the final build;
+the shipped control is resolved at first use. This comparison used maximum
+settings with VSync disabled only for measurement.
+
+The final canonical build passed with no compiler failures or warnings, and an
+independent review checked the six helpers' dependencies and early returns.
+A live control run with all three `FORCE` variables set to zero reached each
+helper's armed path without assertions or exceptions. Captures showed body
+damage, detached parts, shadows and HUD; that event ended early and its FPS is
+excluded from performance evidence.
+
+A separate clean 120-second run at the exact maximum 2560x1440 target, including
+VSync, qualified with eight takedowns across five victims, up to three crashing
+and three airborne rivals, and all 1185 focus samples foreground. There were no
+assertions, exceptions or event end. It measured 160.64 FPS, P99 frame time
+9.33 ms and maximum 14.09 ms. This validates the final default path under combat;
+locked 165 FPS remains unachieved.

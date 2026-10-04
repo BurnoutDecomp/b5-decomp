@@ -4748,23 +4748,41 @@ namespace renderengine
         // [PROBE, env-gated] the sampler/constant state THIS draw runs under -- read off the
         // device on the line above the draw, after every override in this function. See the
         // banner on CrumpleProbe_AtDraw for why the bind site is the wrong place to ask.
-        CrumpleProbe_AtDraw(lpDevice, static_cast<const u8*>(lpVertexData),
-                            suVertexSourceStride, luNumVertices);
-        // [DIAG, env-gated] BRN_CRUMPLE_FORCE=<0..1> -- see CrumpleForce_Apply's banner.
-        CrumpleForce_Apply(lpDevice);
-        // [PROBE, env-gated] BRN_SCRATCH_PROBE -- the W lane of g_verletOffsets, per ROW and
-        // per VERTEX, at this draw. Same placement and the same reason as the crumple probe.
-        ScratchProbe_AtDraw(lpDevice, static_cast<const u8*>(lpVertexData),
-                            suVertexSourceStride, luNumVertices);
-        // [DIAG, env-gated] BRN_SCRATCH_FORCE=<0..1>. AFTER the probe, so the probe always
-        // reports the value the SIMULATION published, never the forced one.
-        ScratchForce_Apply(lpDevice);
-        // [PROBE, env-gated] BRN_GLASSFX_PROBE -- sampler 14 and the three glass-fracture
-        // constants, at this draw. Same placement and the same reason as the two above.
-        GlassFxProbe_AtDraw(lpDevice);
-        // [DIAG, env-gated] BRN_GLASSFX_FORCE=<0..1>. AFTER the probe, so the probe always
-        // reports the value the SIMULATION published, never the forced one.
-        GlassFxForce_Apply(lpDevice);
+        // FLAG PC-platform leaf: avoid six call/TLS prologues when damage
+        // diagnostics are inactive. Resolve once, just like the helpers. Any
+        // present variable keeps the original path, including FORCE=0 or empty.
+        // BRN_DAMAGE_PROBE_FAST=0 retains the original calls for comparison.
+        static const bool sbSkipInactiveDamageProbes = [] {
+            const char* lpcFast = std::getenv("BRN_DAMAGE_PROBE_FAST");
+            if (lpcFast && lpcFast[0] == '0') return false;
+            const char* const lapNames[] = {
+                "BRN_CRUMPLE_PROBE", "BRN_CRUMPLE_FORCE", "BRN_SCRATCH_PROBE",
+                "BRN_SCRATCH_FORCE", "BRN_GLASSFX_PROBE", "BRN_GLASSFX_FORCE"
+            };
+            for (const char* lpcName : lapNames)
+                if (std::getenv(lpcName)) return false;
+            return true;
+        }();
+        if (!sbSkipInactiveDamageProbes)
+        {
+            CrumpleProbe_AtDraw(lpDevice, static_cast<const u8*>(lpVertexData),
+                                suVertexSourceStride, luNumVertices);
+            // [DIAG, env-gated] BRN_CRUMPLE_FORCE=<0..1> -- see CrumpleForce_Apply's banner.
+            CrumpleForce_Apply(lpDevice);
+            // [PROBE, env-gated] BRN_SCRATCH_PROBE -- the W lane of g_verletOffsets, per ROW and
+            // per VERTEX, at this draw. Same placement and the same reason as the crumple probe.
+            ScratchProbe_AtDraw(lpDevice, static_cast<const u8*>(lpVertexData),
+                                suVertexSourceStride, luNumVertices);
+            // [DIAG, env-gated] BRN_SCRATCH_FORCE=<0..1>. AFTER the probe, so the probe always
+            // reports the value the SIMULATION published, never the forced one.
+            ScratchForce_Apply(lpDevice);
+            // [PROBE, env-gated] BRN_GLASSFX_PROBE -- sampler 14 and the three glass-fracture
+            // constants, at this draw. Same placement and the same reason as the two above.
+            GlassFxProbe_AtDraw(lpDevice);
+            // [DIAG, env-gated] BRN_GLASSFX_FORCE=<0..1>. AFTER the probe, so the probe always
+            // reports the value the SIMULATION published, never the forced one.
+            GlassFxForce_Apply(lpDevice);
+        }
 
         // The retained submit is the exact equivalent of the UP call beside it: the UP form
         // offsets the vertex POINTER by baseVertex * stride and passes base 0, the retained
