@@ -1891,3 +1891,43 @@ Evidence lives under the parent `scratch/performance_max_1003` directories
 `thread_placement_stationary` and `thread_placement_combat`. The unrelated
 compact-cache experiment was archived and reverted after control drift prevented
 a repeatable-benefit conclusion; it is not part of the published renderer.
+
+## Geometry allocation search (2026-10-04)
+
+The native geometry pool now remembers an upper bound on the sizes of ranges
+already rejected at the beginning of a page's free list. A new request larger
+than that bound can start searching after the prefix. Smaller and exact-fit
+requests still search from the beginning, so this preserves the previous
+first-fit offsets, buffer identities, page counts and payloads. Returned or
+coalesced spans invalidate the bound before the next search. GPU retirement
+fences, alignment, allocation failure and upload behavior are unchanged.
+
+`BRN_GEOMETRY_RANGE_SEARCH=0` selects the linear comparison path. Its scan is a
+separate template variant without prefix bookkeeping inside the loop. Both
+variants count inspected ranges once per searched page, so measurement adds no
+per-range counter writes. Normal cached draws do not allocate or run either scan.
+
+The pool fixture passes 17,239 checks, including a 3,000-allocation cold sequence
+and a 5,000-operation paired replay with small requests, retirement, coalescing
+and delayed fence completion. The cold sequence retains exactly the same offsets
+and bytes while inspecting 250,538 ranges instead of 3,019,600. The stale-bound
+negative control fails three checks; incorrectly skipping equal-size spans fails
+four. The production geometry fixture passes 91 native pixel/lifetime checks.
+The final canonical build and independent source review pass.
+
+Initial live diagnostic captures inspected about 2,792 ranges per new mirror with
+linear search versus 116 with the bound. These runs used an earlier per-range
+counter, and the candidate's event ended early, so they provide no valid FPS or
+frame-time comparison. They are retained as diagnostic evidence only in the
+parent scratch directories `geometry_range_search_control` and
+`geometry_range_search_candidate`. The final implementation removes those
+per-range writes. This change does not eliminate conversion, uploads, texture
+creation or every camera-cut stall, and it does not establish locked 165 FPS.
+
+The final binary completed a clean 120-second Road Rage at the exact maximum
+target: eight credited takedowns across four opponents, peak four crashing and
+three airborne rivals, all 1187 focus samples foreground, and no assertions,
+exceptions or event end. Average throughput was 163.94 FPS, p99 7.47 ms and
+maximum 13.58 ms. This is runtime validation of the default policy, not a matched
+FPS comparison; the full performance target remains unmet. Evidence:
+`scratch/performance_max_1003/geometry_range_search_final_combat`.

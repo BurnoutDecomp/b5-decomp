@@ -59,6 +59,9 @@ namespace
             if (lpcValue[0] == '8') return 8u * 1024u * 1024u;
         }
         return 8u * 1024u * 1024u;
+    }(), [] {
+        const char* lpcValue = std::getenv("BRN_GEOMETRY_RANGE_SEARCH");
+        return !lpcValue || lpcValue[0] != '0';
     }());
     std::vector<u8> sVertexBakeScratch;
     // ---- keys ---------------------------------------------------------------
