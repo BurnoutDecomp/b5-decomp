@@ -46,6 +46,26 @@ namespace SaveLoadPC
                         const void* lpMugshots, u32 luMugshotsSize,
                         const char* lpacTitle, const char* lpacDescription);
 
+    // FLAG PC-platform leaf: asynchronous storage behind the existing save task.
+    // Begin copies all caller-owned bytes and captures the destination directory.
+    // Completion is consumed by the game thread; the writer never calls game code.
+    using WriteTicket = u64;
+    enum EWriteStatus { E_WRITE_UNKNOWN, E_WRITE_PENDING, E_WRITE_SUCCEEDED, E_WRITE_FAILED };
+    struct WriteReport
+    {
+        char macName[260]{};
+        u32 muImageSize = 0, muMugshotsSize = 0;
+        double mfWriteMilliseconds = 0;
+    };
+    bool InitializeAsyncWrites();
+    WriteTicket BeginWriteContainer(const char* lpacName,
+        const void* lpImage, u32 luImageSize, const void* lpMugshots, u32 luMugshotsSize,
+        const char* lpacTitle, const char* lpacDescription);
+    EWriteStatus PollWriteContainer(WriteTicket luTicket, WriteReport& lrReport);
+    // Teardown only: wait for this accepted write, then discard its completion.
+    // Process shutdown also drains every accepted write.
+    void FinishWriteContainer(WriteTicket luTicket);
+
     // Read the container back: validates the header (magic/version), requires the
     // stored payload sizes to match the destination sizes exactly, verifies the
     // checksum, then fills both destinations. The mugshot destination is optional

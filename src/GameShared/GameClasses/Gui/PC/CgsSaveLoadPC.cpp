@@ -6,6 +6,16 @@
 
 #include <cstring>
 #include <cstdio>
+#include <condition_variable>
+#include <deque>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <vector>
+#include <chrono>
+#include <exception>
 
 #include <Windows.h>
 
@@ -149,7 +159,7 @@ bool ContainerExists(const char* lpacName)
            (luAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
 }
 
-bool WriteContainer(const char* lpacName,
+static bool WriteContainerAtPath(const char* lpcDirectory, const char* lpcPath,
                     const void* lpImage, u32 luImageSize,
                     const void* lpMugshots, u32 luMugshotsSize,
                     const char* lpacTitle, const char* lpacDescription)
@@ -163,15 +173,9 @@ bool WriteContainer(const char* lpacName,
         luMugshotsSize = 0;
     }
 
-    char lacPath[MAX_PATH];
-    if (!BuildContainerPath(lacPath, sizeof(lacPath), lpacName))
-    {
-        return false;
-    }
-
     // The container directory may not exist on a fresh install; ERROR_ALREADY_EXISTS
     // is the normal case afterwards.
-    ::CreateDirectoryA(MemcardDir(), 0);
+    ::CreateDirectoryA(lpcDirectory, 0);
 
     ContainerHeader lHeader;
     std::memset(&lHeader, 0, sizeof(lHeader));
@@ -185,14 +189,9 @@ bool WriteContainer(const char* lpacName,
 
     // Write the whole container to a temp sibling, then swap it in atomically so an
     // interrupted save can never destroy the previous good container.
-    char lacTempPath[MAX_PATH];
-    const int liWritten = std::snprintf(lacTempPath, sizeof(lacTempPath), "%s.tmp", lacPath);
-    if (liWritten <= 0 || static_cast<u32>(liWritten) >= sizeof(lacTempPath))
-    {
-        return false;
-    }
+    const std::string lTempPath = std::string(lpcPath) + ".tmp";
 
-    HANDLE lhFile = ::CreateFileA(lacTempPath, GENERIC_WRITE, 0, 0, CREATE_ALWAYS,
+    HANDLE lhFile = ::CreateFileA(lTempPath.c_str(), GENERIC_WRITE, 0, 0, CREATE_ALWAYS,
                                   FILE_ATTRIBUTE_NORMAL, 0);
     if (lhFile == INVALID_HANDLE_VALUE)
     {
@@ -207,17 +206,212 @@ bool WriteContainer(const char* lpacName,
 
     if (!lbOk)
     {
-        ::DeleteFileA(lacTempPath);
+        ::DeleteFileA(lTempPath.c_str());
         return false;
     }
 
-    if (::MoveFileExA(lacTempPath, lacPath, MOVEFILE_REPLACE_EXISTING) == 0)
+    if (::MoveFileExA(lTempPath.c_str(), lpcPath, MOVEFILE_REPLACE_EXISTING) == 0)
     {
-        ::DeleteFileA(lacTempPath);
+        ::DeleteFileA(lTempPath.c_str());
         return false;
     }
     return true;
 }
+
+bool WriteContainer(const char* lpacName,
+                    const void* lpImage, u32 luImageSize,
+                    const void* lpMugshots, u32 luMugshotsSize,
+                    const char* lpacTitle, const char* lpacDescription)
+{
+    char lacPath[MAX_PATH];
+    if (!BuildContainerPath(lacPath, sizeof(lacPath), lpacName)) return false;
+    try
+    {
+        return WriteContainerAtPath(MemcardDir(), lacPath, lpImage, luImageSize,
+                                    lpMugshots, luMugshotsSize, lpacTitle, lpacDescription);
+    }
+    catch (const std::exception&) { return false; }
+}
+
+namespace
+{
+    struct PendingWrite
+    {
+        WriteTicket muTicket = 0;
+        std::string mDirectory, mPath, mTitle, mDescription;
+        std::vector<u8> mImage, mMugshots;
+        WriteReport mReport;
+        bool mbComplete = false, mbSucceeded = false;
+    };
+
+    bool CaptureWrite(PendingWrite& lrWrite, const char* lpcName,
+        const void* lpImage, u32 luImageBytes, const void* lpMugshots, u32 luMugshotBytes,
+        const char* lpcTitle, const char* lpcDescription)
+    {
+        char lacRelative[MAX_PATH];
+        if (!lpImage || !luImageBytes || !BuildContainerPath(lacRelative, sizeof(lacRelative), lpcName))
+            return false;
+        // Capture the directory before the caller can change process working directory.
+        const DWORD luRequired = GetFullPathNameA(MemcardDir(), 0, nullptr, nullptr);
+        if (!luRequired) return false;
+        std::vector<char> lDirectory(luRequired);
+        const DWORD luLength = GetFullPathNameA(MemcardDir(), luRequired, lDirectory.data(), nullptr);
+        if (!luLength || luLength >= luRequired) return false;
+        lrWrite.mDirectory.assign(lDirectory.data(), luLength);
+        lrWrite.mPath = lrWrite.mDirectory + "\\" + lpcName + KACP_SAVE_EXTENSION;
+        lrWrite.mTitle = lpcTitle ? lpcTitle : "";
+        lrWrite.mDescription = lpcDescription ? lpcDescription : "";
+        lrWrite.mImage.assign(static_cast<const u8*>(lpImage), static_cast<const u8*>(lpImage) + luImageBytes);
+        if (lpMugshots && luMugshotBytes)
+            lrWrite.mMugshots.assign(static_cast<const u8*>(lpMugshots), static_cast<const u8*>(lpMugshots) + luMugshotBytes);
+        CopyStringField(lrWrite.mReport.macName, sizeof(lrWrite.mReport.macName), lpcName);
+        lrWrite.mReport.muImageSize = luImageBytes;
+        lrWrite.mReport.muMugshotsSize = static_cast<u32>(lrWrite.mMugshots.size());
+        return true;
+    }
+
+    // One file writer preserves submission order, including saves to the same
+    // container. Its mutex protects queue/state only and never covers file IO.
+    class AsyncWriter
+    {
+        static constexpr size_t KU_PENDING_LIMIT = 32;
+        std::mutex mMutex;
+        std::condition_variable mChanged;
+        std::thread mThread;
+        std::unordered_map<WriteTicket, std::unique_ptr<PendingWrite>> mWrites;
+        std::deque<PendingWrite*> mQueue;
+        WriteTicket muNextTicket = 1;
+        bool mbStopping = false;
+
+        void Run()
+        {
+            for (;;)
+            {
+                PendingWrite* lpWrite;
+                {
+                    std::unique_lock<std::mutex> lLock(mMutex);
+                    mChanged.wait(lLock, [&] { return mbStopping || !mQueue.empty(); });
+                    if (mQueue.empty()) return;
+                    lpWrite = mQueue.front();
+                    mQueue.pop_front();
+                }
+                const auto lBegin = std::chrono::steady_clock::now();
+                bool lbSucceeded = false;
+                try
+                {
+                    lbSucceeded = WriteContainerAtPath(lpWrite->mDirectory.c_str(), lpWrite->mPath.c_str(),
+                        lpWrite->mImage.data(), static_cast<u32>(lpWrite->mImage.size()),
+                        lpWrite->mMugshots.data(), static_cast<u32>(lpWrite->mMugshots.size()),
+                        lpWrite->mTitle.c_str(), lpWrite->mDescription.c_str());
+                }
+                catch (const std::exception&) {}
+                // Release the large snapshots on the IO worker as well. Polling
+                // completion on the game thread only copies the small report.
+                std::vector<u8>().swap(lpWrite->mImage);
+                std::vector<u8>().swap(lpWrite->mMugshots);
+                const double lfMilliseconds = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - lBegin).count();
+                {
+                    std::lock_guard<std::mutex> lLock(mMutex);
+                    lpWrite->mbSucceeded = lbSucceeded;
+                    lpWrite->mReport.mfWriteMilliseconds = lfMilliseconds;
+                    lpWrite->mbComplete = true;
+                }
+                // A poller may destroy the completed request after the unlock.
+                // Do not touch lpWrite again, including while notifying waiters.
+                mChanged.notify_all();
+            }
+        }
+
+    public:
+        ~AsyncWriter() { Stop(); }
+        bool Start()
+        {
+            std::lock_guard<std::mutex> lLock(mMutex);
+            if (mbStopping) return false;
+            if (mThread.joinable()) return true;
+            try { mThread = std::thread([this] { Run(); }); }
+            catch (const std::exception&) { return false; }
+            return true;
+        }
+        WriteTicket Submit(std::unique_ptr<PendingWrite> lpWrite)
+        {
+            if (!Start()) return 0;
+            std::lock_guard<std::mutex> lLock(mMutex);
+            if (mbStopping || !muNextTicket || mWrites.size() >= KU_PENDING_LIMIT) return 0;
+            const WriteTicket luTicket = muNextTicket++;
+            lpWrite->muTicket = luTicket;
+            auto lInserted = mWrites.emplace(luTicket, std::move(lpWrite));
+            try { mQueue.push_back(lInserted.first->second.get()); }
+            catch (...) { mWrites.erase(lInserted.first); throw; }
+            mChanged.notify_one();
+            return luTicket;
+        }
+        EWriteStatus Poll(WriteTicket luTicket, WriteReport& lrReport)
+        {
+            std::lock_guard<std::mutex> lLock(mMutex);
+            const auto lIt = mWrites.find(luTicket);
+            if (lIt == mWrites.end()) return E_WRITE_UNKNOWN;
+            if (!lIt->second->mbComplete) return E_WRITE_PENDING;
+            lrReport = lIt->second->mReport;
+            const bool lbSucceeded = lIt->second->mbSucceeded;
+            mWrites.erase(lIt);
+            return lbSucceeded ? E_WRITE_SUCCEEDED : E_WRITE_FAILED;
+        }
+        void Finish(WriteTicket luTicket)
+        {
+            std::unique_lock<std::mutex> lLock(mMutex);
+            mChanged.wait(lLock, [&] {
+                const auto lIt = mWrites.find(luTicket);
+                return lIt == mWrites.end() || lIt->second->mbComplete;
+            });
+            mWrites.erase(luTicket);
+        }
+        void Stop()
+        {
+            {
+                std::lock_guard<std::mutex> lLock(mMutex);
+                mbStopping = true;
+            }
+            mChanged.notify_all();
+            if (mThread.joinable()) mThread.join();
+        }
+    };
+    AsyncWriter& GetAsyncWriter()
+    {
+        static AsyncWriter sWriter;
+        return sWriter;
+    }
+}
+
+bool InitializeAsyncWrites()
+{
+    // Resolve the harness directory on the caller before any worker can use it.
+    (void)MemcardDir();
+    return GetAsyncWriter().Start();
+}
+WriteTicket BeginWriteContainer(const char* lpacName,
+    const void* lpImage, u32 luImageSize, const void* lpMugshots, u32 luMugshotsSize,
+    const char* lpacTitle, const char* lpacDescription)
+{
+    try
+    {
+        auto lWrite = std::make_unique<PendingWrite>();
+        if (!CaptureWrite(*lWrite, lpacName, lpImage, luImageSize, lpMugshots,
+                          luMugshotsSize, lpacTitle, lpacDescription)) return 0;
+        return GetAsyncWriter().Submit(std::move(lWrite));
+    }
+    catch (const std::exception&) { return 0; }
+}
+EWriteStatus PollWriteContainer(WriteTicket luTicket, WriteReport& lrReport)
+{
+    return GetAsyncWriter().Poll(luTicket, lrReport);
+}
+void FinishWriteContainer(WriteTicket luTicket)
+{
+    if (luTicket) GetAsyncWriter().Finish(luTicket);
+}
+
 
 EContainerReadResult ReadContainer(const char* lpacName,
                                    void* lpImage, u32 luImageSize,
