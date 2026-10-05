@@ -251,6 +251,21 @@ int main() {
     Check(WorldGeometry_Prepare(vp,ip,&second)==E_WORLDGEOMETRY_READY && second.muMinIndex==0 && second.muMaxIndex==1,
           "unused 16-bit line-list tail cannot inflate the vertex range");
 
+    const auto savedIndexPlan=ip;
+    unsigned short emptyStrip[]={0xffffu,0xffffu,0xffffu};
+    ip.mpHeader=ip.mpRun=emptyStrip;ip.muIndexCount=3;ip.mb32Bit=false;
+    ip.miMappedPrimitiveType=D3DPT_TRIANGLESTRIP;ip.muMappedPrimitiveCount=1;
+    ip.mbResetEnabled=true;ip.muResetIndex=0xffffu;
+    Check(WorldGeometry_Prepare(vp,ip,&second)==E_WORLDGEOMETRY_SKIP,
+          "all-reset strip retains an empty-run marker");
+    Check(WorldGeometry_Prepare(vp,ip,&second)==E_WORLDGEOMETRY_SKIP,
+          "repeated empty strip remains skipped");
+    WorldGeometry_OnResourceMemoryFreed(emptyStrip,sizeof(emptyStrip));
+    emptyStrip[0]=0;emptyStrip[1]=1;emptyStrip[2]=2;
+    Check(WorldGeometry_Prepare(vp,ip,&second)==E_WORLDGEOMETRY_READY && second.muPrimitiveCount==1,
+          "reused empty-strip source is rebuilt instead of retaining the old skip marker");
+    ip=savedIndexPlan;
+
     Vertex queued[]={{0,0,0.5f,1,0xff00ff00},{32,0,0.5f,1,0xff00ff00},{0,64,0.5f,1,0xff00ff00}};
     vp.mpHeader=vp.mpData=queued;vp.muNumVertices=3;
     ip.mpHeader=ip.mpRun=indices;ip.muIndexCount=3;ip.miMappedPrimitiveType=D3DPT_TRIANGLELIST;

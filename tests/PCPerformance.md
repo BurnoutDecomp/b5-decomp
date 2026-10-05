@@ -2028,3 +2028,59 @@ an affected-PC improvement. No locked-165-FPS claim is made. Evidence:
 `scratch/performance_max_1003/async_log_clean_combat`. The earlier diagnostic run
 had zero queue drops/file errors, seven takedowns, and zero slow logger calls;
 it is not a clean FPS comparison. Final independent review: pass.
+
+## Compact geometry eviction references (2026-10-05)
+
+The source-memory page index now stores an 8-byte slot/generation reference to
+an owning geometry-map node, instead of copying each full 56-byte vertex key or
+32-byte index key into every touched page. Full cache keys and exact range tests
+are unchanged. References are retired before map erasure and cannot revive when
+a slot, source address, or map allocation is reused. Slot storage is reused and
+retains its high-water capacity; generation exhaustion retires a slot permanently.
+`BRN_GEOMETRY_COMPACT_LIFETIME=0` retains the full-key index for comparison.
+
+The post-logging diagnostic trace exposed a cold frame creating 623 vertex and
+623 index mirrors in 3.923 ms, including 1.006 ms registering them for eviction.
+The production registration/eviction benchmark for 20,000 entries measured
+full-key/compact/compact/full-key registration at 14.280/12.392/7.840/11.734 ms
+and eviction at 9.513/7.038/4.891/7.505 ms. This is CPU bookkeeping evidence,
+not a whole-game FPS claim. The simpler page-vector benchmark also showed lower
+storage; the real implementation includes a bounded reusable slot table and one
+8-byte token in each retained entry.
+
+`run_pc_geometry_entry_references.py` passes 11 checks, including map rehash,
+100,000 reuse operations and forced generation exhaustion. Removing generation
+validation fails four checks; wrapping it fails one. `run_pc_geometry_lifetime.py`
+passes 14 checks in both modes through production registration/eviction: split
+header/data notifications, partial-page overlap, stale reference removal, failed
+allocations, empty-strip records and full release. The real D3D9 suite now passes
+94 checks in both modes, including empty-strip creation and address-reuse rebuild.
+
+The optional-path 120-second maximum-settings combat run completed 14 credited
+takedowns across six rivals, peaking at six crashing/three airborne, all 1174 focus
+samples foreground, and no assertions/exceptions or event end. Registration took
+1.161 microseconds / 2209.6 recorded cycles per created mirror, versus 1.399 / 2707.2
+in the prior control. Workloads and GPU-query settings differ, so the aggregate
+164.88 versus 164.46 diagnostic FPS is not a causal gain measurement. The worst
+candidate frame was 27.32 ms, including 19.99 ms of native texture creation and no
+geometry preparation/registration. Texture allocation and presentation stalls
+remain open; this change does not establish locked 165 FPS or full hitch removal.
+Evidence: `compact_lifetime_*` and `geometry_registration_production.log` under
+the parent `scratch/performance_max_1003/` directory.
+
+Benchmark caveat: background-input tests were opening 256 missing debug-key event
+objects each frame. A private control pre-creates unsignaled channels without
+injecting input, dropping the observed debug-manager slice from 0.629 to 0.080 ms.
+Ordinary physical keyboard input does not take the missing-event path. This is
+harness overhead, not a shipping-game optimization. The private measurement flag
+is `-PrimeDebugEvents`; results must state whether it was used.
+
+The final default executable passed the clean 120-second 1440p/max-settings Road
+Rage check: six credited takedowns across five rivals, peak four crashing/four
+airborne, 1171/1171 samples foreground, no assertions/exceptions or event end,
+and no frames over 50 ms. It averaged 161.74 FPS, p99 8.23 ms, maximum 14.25 ms.
+This qualifies runtime behavior; different combat/host conditions prevent using
+it as a matched overall speedup. Evidence: `compact_lifetime_clean_combat_retry`.
+The first clean attempt ended the event and is excluded from combat timing claims.
+Final source review passes; build completes without warnings/errors. The wider
+performance goal remains open.
