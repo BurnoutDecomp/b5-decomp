@@ -2154,3 +2154,61 @@ Storage stalls in this path no longer block ordinary gameplay; snapshot copying,
 completion polling and teardown still run on the caller. Native texture creation
 and presentation stalls remain separate work. Local validation does not prove
 that all hitches on the affected PC are fixed or establish locked 165 FPS.
+
+## Four-way geometry lookup cache (2026-10-05)
+
+The PC renderer now uses four-way sets with compact fingerprints to look up
+already-prepared geometry. This reduces collisions between active draw plans.
+Every candidate still passes the complete existing vertex/index key comparisons;
+a fingerprint match alone can never return a draw. Native buffer contents,
+allocations, ranges, draw order and GPU retirement fences are unchanged. Epoch
+retirement invalidates borrowed draws before owner release; epoch rollover now
+clears both lookup policies before reusing a generation value.
+
+The active associative table holds 16,384 draws in 4096 sets and occupies
+2.625 MiB, compared with the previous 32,768-entry direct-mapped table's 5 MiB.
+The old table remains compiled as a control, selected by
+`BRN_GEOMETRY_ASSOC_CACHE=0`; these are table capacities, not a claim about total
+process-memory savings. The associative policy is the default.
+
+A private trace captured 887,765 real lookup requests in short consecutive
+frame windows during maximum-settings Road Rage. A replay using the production
+key helpers and retained-map reference returned identical draw metadata for
+every request across five tested cache configurations. The chosen policy reduced
+misses from 57,015 to 28,222. Paired direct/associative kernel times were
+15.78/14.01 ms and 14.96/13.89 ms. This measures lookup work, not game FPS.
+
+Four live stationary runs used the same candidate EXE and maximum graphics,
+temporarily disabling VSync to expose throughput. Each had 60 seconds of warmup
+and 60 seconds of measurement, in control/candidate/candidate/control order.
+Results were 171.76/176.39/178.02/173.77 FPS, an observed mean difference of 2.6%.
+The first pair had nearly identical draw counts (about 9307/frame); the final
+control had 1.3% more draws because of live traffic. World meshes stayed at 3926
+and pre-Z meshes at 298 in all runs. Cache misses fell from 5.37-5.64% to 0.984%;
+all four had 593/593 foreground samples, zero assertions and no dropped trace
+records. These were coarse/cycle diagnostic comparisons with PrimeDebugEvents,
+not a deterministic replay or proof of locked 165 FPS in combat.
+
+The header fixture passes 24 checks, including deliberate full-fingerprint
+collisions, separate sets, replacement, stale epochs, and generation reuse after
+clear. Removing identity, epoch or clear guards fails 13, 3 or 1 checks. The real
+registration/lifetime fixture passes 14 checks. The native D3D fixture passes
+104 checks in both policies and with the new default, covering pixels, source
+reuse, pending GPU reads, four active views and epoch rollover. Independent
+source review passes; the canonical build has no warnings or errors.
+
+Evidence is under parent `scratch/performance_max_1003/`: `post_save_dispatch_cpu`,
+`geometry_lookup_trace_combat`, `geometry_cache_replay_v2`, the four
+`assoc_static_*` runs, and `associative_cache_comparison.json`. Broader rendering,
+presentation and rare allocation stalls remain unresolved.
+
+The final default build completed 120 seconds of Road Rage at the original
+1440p/max-settings target with VSync restored: 18 credited takedowns across seven
+rivals, peak five crashing/two airborne, all 1187 samples foreground, no
+assertions/exceptions or event end, and no frames over 50 ms. It averaged
+163.43 FPS, p99 7.73 ms and maximum 14.05 ms. The sampler confirmed the new cache
+was active; its miss fraction was 0.349% despite 22,985 retirement-epoch increments
+in 15 sample bins. This clean gameplay check used PrimeDebugEvents and no
+coarse/cycle/RIP profiling. Different combat trajectories prevent comparing its
+FPS directly with earlier runs. Evidence: `associative_geometry_clean_combat`.
+The full performance target remains unmet.

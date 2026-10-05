@@ -308,6 +308,45 @@ int main() {
     if(declaration)declaration->Release();if(vertexShader)vertexShader->Release();if(pixelShader)pixelShader->Release();
     if(vsCode)vsCode->Release();if(psCode)psCode->Release();
     WorldGeometry_ReleaseAll();
+
+    // One source can be viewed under different complete plans. Retained draw
+    // metadata must stay distinct even when the front-cache fingerprints collide.
+    Vertex cacheVertices[8]{};
+    const unsigned short cacheIndices[]={0,1,2};
+    WorldGeometryVertexPlan cacheVp{};
+    cacheVp.mpHeader=cacheVp.mpData=cacheVertices;
+    cacheVp.muSourceStride=cacheVp.muExpandedStride=sizeof(Vertex);
+    WorldGeometryIndexPlan cacheIp{};
+    cacheIp.mpHeader=cacheIp.mpRun=cacheIndices;
+    cacheIp.muIndexCount=3;cacheIp.miMappedPrimitiveType=D3DPT_TRIANGLELIST;
+    cacheIp.muMappedPrimitiveCount=1;
+    suGeometryGeneration=1;
+    std::memset(saFrontCache,0,sizeof(saFrontCache));
+    sAssociativeFrontCache.Clear();
+    WorldGeometryDraw cacheDraws[4]{};
+    for(unsigned i=0;i<4;++i) {
+        cacheVp.muNumVertices=4+i;
+        Check(WorldGeometry_Prepare(cacheVp,cacheIp,&cacheDraws[i])==E_WORLDGEOMETRY_READY,
+              "shared source prepares distinct native vertex-count views");
+    }
+    const auto hitsBefore=suFrontCacheHits;
+    for(unsigned i=0;i<4;++i) {
+        cacheVp.muNumVertices=4+i;
+        WorldGeometryDraw result{};
+        Check(WorldGeometry_Prepare(cacheVp,cacheIp,&result)==E_WORLDGEOMETRY_READY
+              &&std::memcmp(&result,&cacheDraws[i],sizeof(result))==0,
+              "warm native view retains its own complete draw metadata");
+    }
+    Check(!sbAssociativeFrontCache || suFrontCacheHits-hitsBefore==4,
+          "four-way native cache retains all four active views");
+    suGeometryGeneration=~0ull;
+    RetireFrontCache();
+    const auto hitsBeforeWrap=suFrontCacheHits;
+    WorldGeometryDraw wrapped{};
+    Check(suGeometryGeneration==1 && WorldGeometry_Prepare(cacheVp,cacheIp,&wrapped)==E_WORLDGEOMETRY_READY
+          &&suFrontCacheHits==hitsBeforeWrap && std::memcmp(&wrapped,&cacheDraws[3],sizeof(wrapped))==0,
+          "generation rollover cannot revive an ancient borrowed draw");
+    WorldGeometry_ReleaseAll();
     gDevice->Release(); gDevice=nullptr; d3d->Release(); DestroyWindow(window);
     std::printf("PCWorldGeometryBuffers: %d checks, %d failures\n",checks,failures);
     return failures?1:0;
