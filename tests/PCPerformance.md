@@ -2208,9 +2208,11 @@ rivals, peak five crashing/two airborne, all 1187 samples foreground, no
 assertions/exceptions or event end, and no frames over 50 ms. It averaged
 163.43 FPS, p99 7.73 ms and maximum 14.05 ms. The sampler confirmed the new cache
 was active; its miss fraction was 0.349% despite 22,985 retirement-epoch increments
-in 15 sample bins. This clean gameplay check used PrimeDebugEvents and no
-coarse/cycle/RIP profiling. Different combat trajectories prevent comparing its
-FPS directly with earlier runs. Evidence: `associative_geometry_clean_combat`.
+in 15 sample bins. This gameplay check used PrimeDebugEvents and no
+coarse/cycle/RIP profiling, but ordinary section timers were enabled. It is
+instrumented evidence, not a timing-only benchmark. Different combat trajectories
+prevent comparing its FPS directly with earlier runs.
+Evidence: `associative_geometry_clean_combat`.
 The full performance target remains unmet.
 
 ## Reserve retained-geometry tables before gameplay (2026-10-05)
@@ -2252,11 +2254,61 @@ Evidence: parent `scratch/performance_max_1003/current_camera_cold_costs`,
 `geometry_reserve_probe_combat/registration_analysis.json`. Presentation waits,
 other cold geometry work and rare native allocation stalls remain separate work.
 
-Final clean `geometry_reserve_clean_combat`: 120 seconds at the original maximum
+Instrumented `geometry_reserve_clean_combat`: 120 seconds at the original maximum
 1440p target with VSync, five credited takedowns across three rivals, peak three
 crashing/two airborne, 1,310 frames with multiple crashing rivals, all 1,186
 samples foreground, no assertions/exceptions/event end and no frame over 50 ms.
 It averaged 162.70 FPS, p99 7.83 ms and maximum 13.03 ms. The run used the final
-default build, PrimeDebugEvents and timing-only capture without the registration,
-coarse/cycle or stack probes. Different combat trajectories preclude a matched
+default build and PrimeDebugEvents without the registration, coarse/cycle or
+stack probes. Its recorder metadata has `timing_only=false`: ordinary section
+timers were enabled. The previous description as timing-only was incorrect.
+Different combat trajectories preclude a matched
 FPS comparison. Locked 165 FPS and elimination of every hitch remain unproven.
+
+## Frame-capture qualification correction (2026-10-05)
+
+The private benchmark previously enabled `BRN_FRAME_PROFILE=1` without enabling
+`BRN_FRAME_TIMING_ONLY=1`. Its qualifier rejected optional detailed/coarse/cycle
+probes but did not reject ordinary section timers. Consequently some recent
+captures were incorrectly described as clean or timing-only. Their recorded
+values remain diagnostic evidence; they are not minimally instrumented FPS
+benchmarks. The two affected release checks immediately above are corrected.
+
+The benchmark now defaults to timing-only mode unless section attribution is
+explicitly requested. Qualification checks the actual recorder metadata, requires
+zero section/cycle readings and no dropped records, and rejects missing evidence.
+The corrected check rejects the recorded geometry-reservation and coarse-latency
+runs, accepts the earlier actual timing-only camera-cut capture, and passes eight
+additional positive/negative checks.
+
+Two new 120-second attempts used the existing 43877387 executable, the exact
+maximum-settings target and PrimeDebugEvents. Both confirmed timing-only mode,
+zero section readings, zero dropped records, full focus and no assertions or
+exceptions. Both Road Rage events ended before measurement completed, so neither
+whole-run average qualifies as sustained-combat timing. Their active-combat
+frames still include intervals of 12.40 and 12.35 ms with seven rivals and two
+crashing rivals; removing recorder timers does not establish locked 165 FPS.
+No game optimization or causal FPS improvement is claimed by this correction.
+
+Evidence: parent `scratch/performance_max_1003/timing_policy_checks_1005.json`,
+`release43877387_timingonly_1005` and
+`release43877387_timingonly_repeat_1005`. Original captures/reports are preserved;
+their prior clean/timing-only labels are superseded by the metadata check.
+
+## Original PC query-pacing policy (2026-10-05)
+
+The inspected TUB PC startup/frame/reset chain disables its optional query
+pacing. Device::Start at 0x53E130 overwrites generic configuration defaults with
+5 at config+0x20 and 0 at config+0x24. Creation at 0x947F10 therefore skips the
+optional event-query ring. Frame begin at 0x7CE010 jumps to noncontiguous chunks
+at 0x9485F0/0x948610, where an unsigned selector greater than 2 bypasses the
+GetData/Release wait. Graphics reset at 0x5402D0 preserves these fields. Frame
+end at 0x7CE0A0 clears bookkeeping and calls EndScene, followed by Present in
+the main renderer.
+
+The missing tail chunks were verified directly from a private copy of the IDA
+database, including references to the configuration/query globals. Generic
+defaults 2/128 and shutdown-only query flushes must not be mistaken for active
+per-frame optimization. This closes that specific missing-original-pacing
+hypothesis; it does not settle modern D3D9Ex queue latency or displayed FPS.
+Evidence: parent `scratch/performance_max_1003/tub_pacing_audit_1005/`.
