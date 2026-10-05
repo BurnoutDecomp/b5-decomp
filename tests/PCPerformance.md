@@ -2084,3 +2084,73 @@ it as a matched overall speedup. Evidence: `compact_lifetime_clean_combat_retry`
 The first clean attempt ended the event and is excluded from combat timing claims.
 Final source review passes; build completes without warnings/errors. The wider
 performance goal remains open.
+
+## Asynchronous profile writes (2026-10-05)
+
+The PC save path previously hashed the profile and mugshots, wrote the container,
+flushed the file and atomically replaced the old save on the game thread. This
+could stall gameplay on storage latency. Original X360 Save (0x82856040) starts
+the operation and calls Update; Update (0x8284C4E0) queries completion without
+waiting. ProfileManager::Autosave (0x82513958) buffers subsequent operations while
+a task is running. The native PC backend now preserves that asynchronous task
+behavior using a persistent writer and main-thread completion polling.
+
+Submission snapshots the payload, metadata and absolute destination. The worker
+serializes accepted writes, performs the existing FNV checksum/write/flush/rename
+sequence and releases the large snapshots. No disk operation holds the queue
+mutex. A maximum of 32 outstanding requests bounds retained work, including
+completed requests not yet polled. Update removes the pending task before calling
+its handler, allowing the existing buffered-save callback to submit another save.
+Release waits for its outstanding write and discards the old completion; normal
+process shutdown drains accepted work. Reads and the B5SV v1 format are unchanged.
+
+The affected-PC trace's first autosave is near the unexplained 355.7 ms GUI/update
+frame. That trace lacks save-call timings, so it does not prove that autosaving
+caused this particular freeze. Blocking writes are a confirmed code defect;
+the association with that captured frame remains a hypothesis.
+
+The native backend fixture passes 27 checks with real temporary files, including
+deliberately blocked IO, immutable snapshots, destination capture, ordered writes,
+queue bounds, shutdown and flush/rename failures preserving the previous save.
+Forcing synchronous submission and removing the queue bound each produce an
+expected regression failure. The task fixture passes 14 checks through the actual
+Save/Update helpers and native backend, with unrelated SDK/UI seams mocked. It
+covers nonblocking polls, main-thread exactly-once completion, buffered reentry,
+map rehash, failure and owner release/reuse. The shipping build and independent
+source review pass; no SaveLoadSystem class layout changed.
+
+The diagnostic 120-second 1440p/max-settings Road Rage completed 11 takedowns
+across six rivals, peaking at five crashing/two airborne, all 1182 focus samples
+foreground, with no assertions, exceptions or event end. Maximum frame time was
+19.15 ms and no frame exceeded 50 ms. A real autosave completed with 6.56 ms of
+worker IO. Logging recorded no slow calls, dropped writes or file errors. This
+run used coarse/cycle/log profiling and the private PrimeDebugEvents control;
+its throughput is not a clean FPS result. The saved 1,223,256-byte container has
+the expected image/mugshot sizes and independently validated FNV checksum.
+Evidence: `async_save_candidate_combat` in the parent performance scratch.
+
+The exact captured save (SHA-256 beginning 9785b923) was then loaded by a new
+game process. Bootup read and all five profile-validation terms passed; a second
+autosave completed with 6.64 ms worker IO. The 120-second combat run had six
+takedowns across five rivals, no faults or event end, all 1180 samples foreground,
+and no frames over 50 ms (maximum 19.74 ms). Throughput was only 148.79 FPS.
+The preceding release, starting from the same save and settings, subsequently
+averaged 154.16 FPS with maximum 23.76 ms. Lively and its browser processes were
+active, consuming about one CPU core; these differing combat runs do not isolate
+a build-related speed difference. Evidence: `async_save_clean_reload_combat`,
+`async_save_prior_reload_control` and `async_save_lively_before.json`.
+
+After closing Lively through its normal shutdown command, the same candidate
+passed a final 120-second maximum-settings Road Rage: seven takedowns across
+five rivals, peak four crashing/two airborne, all 1186 samples foreground, no
+faults or event end, and no frames over 50 ms. It averaged 162.39 FPS, p99 8.13 ms,
+maximum 15.58 ms. The saved profile again passed boot validation. This run used
+the private PrimeDebugEvents control but no coarse/cycle/logger instrumentation.
+It restores performance near the earlier local range, without establishing a
+matched FPS gain or attributing the whole prior difference to the wallpaper.
+Evidence: `async_save_clean_wallpaper_off` and `async_save_lively_after.json`.
+
+Storage stalls in this path no longer block ordinary gameplay; snapshot copying,
+completion polling and teardown still run on the caller. Native texture creation
+and presentation stalls remain separate work. Local validation does not prove
+that all hitches on the affected PC are fixed or establish locked 165 FPS.

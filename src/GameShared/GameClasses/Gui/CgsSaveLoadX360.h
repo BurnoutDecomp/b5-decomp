@@ -219,7 +219,7 @@ namespace CgsGui
         // setup, the same composition Bootup uses). Bind the result handler, push the
         // metadata/save-info, then run the storage write and report the result. On PC the
         // storage edge is the CgsSaveLoadPC container (FLAG'd leaf in the body); the
-        // console's asynchronous WriteSave completion becomes a synchronous report.
+        // native writer keeps the task pending; Update reports its completed I/O result.
         void Save(SaveLoadTaskResultHandler* lpResultHandler, const SaveLoadMetadata& lrMetadata,
                   const SaveInfo& lrSaveInfo);
 

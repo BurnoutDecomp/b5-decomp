@@ -43,6 +43,8 @@
 
 #include <cstddef>   // offsetof (layout pins)
 #include <cstring>   // strncpy, memset
+#include <unordered_map>
+#include <exception>
 
 #include <Windows.h> // CreateFileA, GetFileSize, CloseHandle, XGetOverlappedResult shim
 
@@ -53,6 +55,37 @@ extern "C" DWORD XGetOverlappedResult(void* lpOverlapped, DWORD* lpdwResult, BOO
 
 namespace
 {
+    // FLAG PC-platform leaf: tickets preserve the console class layout. Only the
+    // game thread touches this table; the file worker owns byte snapshots only.
+    struct PendingSavePC
+    {
+        CgsGui::SaveLoadPC::WriteTicket muTicket = 0;
+        CgsGui::SaveLoadTaskResultHandler* mpHandler = nullptr;
+    };
+    std::unordered_map<CgsGui::SaveLoadSystem*, PendingSavePC> sPendingSavesPC;
+
+    void FinishPendingSavePC(CgsGui::SaveLoadSystem* lpSystem)
+    {
+        const auto lIt = sPendingSavesPC.find(lpSystem);
+        if (lIt == sPendingSavesPC.end()) return;
+        CgsGui::SaveLoadPC::FinishWriteContainer(lIt->second.muTicket);
+        sPendingSavesPC.erase(lIt);
+    }
+    void ReportSavePC(CgsGui::SaveLoadTaskResultHandler* lpHandler,
+                      CgsGui::SaveLoadPC::EWriteStatus leStatus,
+                      const CgsGui::SaveLoadPC::WriteReport& lrReport)
+    {
+        const bool lbSucceeded = leStatus == CgsGui::SaveLoadPC::E_WRITE_SUCCEEDED;
+        if (CgsDev::Log::gpDebugPrint)
+            *CgsDev::Log::gpDebugPrint << "[SaveLoadPC] profile container "
+                << (lbSucceeded ? "WRITTEN" : "write FAILED") << " name='" << lrReport.macName
+                << "' image=" << lrReport.muImageSize << " mugshots=" << lrReport.muMugshotsSize
+                << " io_ms=" << static_cast<f32>(lrReport.mfWriteMilliseconds) << "\n";
+        if (lpHandler)
+            lpHandler->HandleSaveLoadTaskResult(lbSucceeded ? CgsGui::E_SAVELOADTASKRESULT_SUCCESS
+                                                            : CgsGui::E_SAVELOADTASKRESULT_FAILURE);
+    }
+
     // ---- File-scope state (X360 off_8305A6F8) ---------------------------------------------------
     // The shared ContentInformation provider the save/load system publishes in Prepare and uses in
     // Prepare/Release. The X360 stores &mContentInfoVptr here and dispatches its vtable
@@ -181,6 +214,7 @@ namespace CgsGui
                                    const char* lpcSaveFilePath, s32 liNumberOfMugshotTypes,
                                    s32 liNumberOfMugshotsPerType, u32 luExtraFilesSizeBytes)
     {
+        FinishPendingSavePC(this); // drain an earlier native task before reusing this owner
         CGS_ASSERT(lpMessageDisplay != nullptr, "lpMessageDisplay != NULL");
         CGS_ASSERT(lpLanguageManager != nullptr, "lpLanguageManager != NULL");
 
@@ -269,6 +303,8 @@ namespace CgsGui
                                                           reinterpret_cast<u8*>(this) + 4,
                                                           laGameInfo);  // +0x184
         mpMemcardInterface->SetActive(1);                    // (*(*Instance+52))(Instance,1)
+        SaveLoadPC::InitializeAsyncWrites(); // start the native writer during preparation
+
 
         // Mugshot buffer = per-mugshot size * mugshots-per-type * type count.
         const s32 liMugshotBytes = miExtraFilesSizeBytes * miNumberOfMugshotsPerType * miNumberOfMugshotTypes;
@@ -303,6 +339,7 @@ namespace CgsGui
     // X360 0x8284C158. Free the content-information file buffer through the shared provider.
     bool SaveLoadSystem::Release()
     {
+        FinishPendingSavePC(this); // snapshots finish before storage/owner teardown
         gpContentInfoProvider->mpVtbl->mpfnFree(gpContentInfoProvider,
                                                 mpContentInfoFileBuffer, miContentInfoFileSize);
         miContentInfoFileSize   = 0;     // +0x208
@@ -328,6 +365,23 @@ namespace CgsGui
         if (mpMemcardInterface != nullptr)
         {
             mpMemcardInterface->Update(0);
+        }
+
+        // Match the original completion boundary: callbacks run from Update,
+        // never from the IO worker or before the atomic container write finishes.
+        const auto lPending = sPendingSavesPC.find(this);
+        if (lPending != sPendingSavesPC.end() && lPending->second.muTicket)
+        {
+            SaveLoadPC::WriteReport lReport;
+            const auto leResult = SaveLoadPC::PollWriteContainer(lPending->second.muTicket, lReport);
+            if (leResult != SaveLoadPC::E_WRITE_PENDING)
+            {
+                auto* lpHandler = lPending->second.mpHandler;
+                lPending->second = PendingSavePC{};
+                ReportSavePC(lpHandler, leResult, lReport);
+                // The callback can immediately submit a buffered save or release
+                // this owner. Do not use lPending or member state after it.
+            }
         }
     }
 
@@ -455,6 +509,36 @@ namespace CgsGui
         void* lpSaveInfo = CreateRealmcSaveInfoPC(&lSaveInfo, this);
         mpMemcardInterface->WriteSave(lpSaveInfo, 2, laEntries, 0, &lTitleInfo);
 
+        // FLAG PC-platform leaf: the console WriteSave above owns asynchronous
+        // storage. Its host stand-in is inert; the native container worker supplies
+        // the same pending/completion behavior with owned snapshots.
+        auto* lpHandler = reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay);
+        CGS_ASSERT(lpHandler, "Save task requires a result handler");
+        if (!lpHandler) return;
+        bool lbQueued = false;
+        try
+        {
+            auto& lrPending = sPendingSavesPC[this];
+            CGS_ASSERT(!lrPending.muTicket, "Save task already pending");
+            if (lrPending.muTicket) return;
+            lrPending.mpHandler = lpHandler;
+            lrPending.muTicket = SaveLoadPC::BeginWriteContainer(
+                macTitle, mStoredDataView.mpData, mStoredDataView.miSize,
+                mpMugshotBufferData, static_cast<u32>(GetMugshotBufferSizeBytes()),
+                macSaveInfoComment, macSaveInfoDescription);
+            lbQueued = lrPending.muTicket != 0;
+            if (!lbQueued) lrPending = PendingSavePC{};
+        }
+        catch (const std::exception&) {}
+        if (!lbQueued)
+        {
+            SaveLoadPC::WriteReport lReport;
+            std::strncpy(lReport.macName, macTitle, sizeof(lReport.macName) - 1);
+            lReport.muImageSize = mStoredDataView.miSize;
+            lReport.muMugshotsSize = GetMugshotBufferSizeBytes();
+            ReportSavePC(lpHandler, SaveLoadPC::E_WRITE_FAILED, lReport);
+            return;
+        }
         Update();
     }
 
@@ -465,38 +549,14 @@ namespace CgsGui
     void SaveLoadSystem::Save(SaveLoadTaskResultHandler* lpResultHandler,
                               const SaveLoadMetadata& lrMetadata, const SaveInfo& lrSaveInfo)
     {
-        mpActiveMessageDisplay = reinterpret_cast<MessageDisplay*>(lpResultHandler);   // +0x130
-
+        const auto lPending = sPendingSavesPC.find(this);
+        CGS_ASSERT(lPending == sPendingSavesPC.end() || !lPending->second.muTicket,
+                   "Save task already pending");
+        if (lPending != sPendingSavesPC.end() && lPending->second.muTicket) return;
+        mpActiveMessageDisplay = reinterpret_cast<MessageDisplay*>(lpResultHandler);
         SetMetadata(&lrMetadata, &lrSaveInfo);
         CaptureStoredDataView(lrMetadata);
-
-        // FLAG PC-platform leaf: the X360 continues into the memory-card write (the
-        // CheckSave pre-flight + WriteSave entries the 0-arg Save builds), whose ASYNC
-        // completion later reports the result to the bound handler. On PC the storage
-        // edge is the CgsSaveLoadPC container: write it synchronously (the profile image
-        // named by the metadata -- macTitle carries the metadata's save filename after
-        // SetMetadata -- plus the mugshot blob, the console's second save entry) and
-        // report the real I/O outcome here.
-        const bool lbOk = SaveLoadPC::WriteContainer(
-            macTitle, mStoredDataView.mpData, mStoredDataView.miSize,
-            mpMugshotBufferData, static_cast<u32>(GetMugshotBufferSizeBytes()),
-            macSaveInfoComment, macSaveInfoDescription);
-
-        // [DIAG] NOT IN THE X360 BINARY -- the storage edge's byte counts, so a save can be
-        // measured (image bytes + mugshot bytes) rather than inferred from "it said WRITTEN".
-        if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[SaveLoadPC] profile container " << (lbOk ? "WRITTEN" : "write FAILED")
-                << " name='" << macTitle
-                << "' image=" << mStoredDataView.miSize
-                << " mugshots=" << GetMugshotBufferSizeBytes() << "\n";
-        }
-
-        Update();
-        reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
-            ->HandleSaveLoadTaskResult(lbOk ? E_SAVELOADTASKRESULT_SUCCESS
-                                            : E_SAVELOADTASKRESULT_FAILURE);
+        Save();
     }
 
     // The autosave task (BrnGui::ProfileManager::Autosave @0x82513958 drives it; same
