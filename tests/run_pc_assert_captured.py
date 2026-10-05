@@ -11,4 +11,4 @@ body="\n".join(definition(source, signature) for signature in (
 result=compile_and_run(Path(__file__).with_name("PCAssertCaptured.cpp"), "assert_captured.inc", body,
     "PCAssertCaptured", extra_flags="/Gy /Gw",
     extra_sources=[STRSTREAM_CPP, REPO/"src/GameShared/GameClasses/Development/StackUnpick/CgsStackUnpick.cpp"])
-raise SystemExit(report("run_pc_assert_captured", [], result, 6))
+raise SystemExit(report("run_pc_assert_captured", [], result, 7))

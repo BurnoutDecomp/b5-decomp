@@ -44,6 +44,7 @@ int main() {
     *Log::gpDebugPrint << "partial "; Log::WriteToLog("direct\n");
     std::string longLine(10000, 'x'); longLine += '\n';
     *Log::gpDebugPrint << longLine.c_str();
+    Log::FlushLog();
     char path[MAX_PATH]; GetModuleFileNameA(nullptr, path, MAX_PATH);
     std::string logPath(path); logPath.resize(logPath.find_last_of("\\/")+1); logPath += "BrnGame.log";
     FILE* input = std::fopen(logPath.c_str(), "rb");

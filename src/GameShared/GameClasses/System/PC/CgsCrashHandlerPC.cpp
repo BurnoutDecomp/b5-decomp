@@ -32,7 +32,14 @@ namespace
     // must not recurse.
     volatile LONG gCrashHandled = 0;
 
-    void Emit(const char* lpcText) { CgsDev::Log::WriteToLog(lpcText); }
+    void Emit(const char* lpcText)
+    {
+        // A fatal report must survive termination even if the normal logging
+        // worker or a thread holding the output lock is the one that failed.
+        if (InterlockedCompareExchange(&gCrashHandled, 0, 0) != 0)
+            CgsDev::Log::WriteToLogEmergency(lpcText);
+        else CgsDev::Log::WriteToLog(lpcText);
+    }
 
     void Emitf(const char* lpcFormat, ...)
     {
@@ -500,14 +507,14 @@ namespace
     // the SIGABRT hook's screenshot still lands.
     void PurecallProbe()
     {
-        Emit("[exit-diag] PURE VIRTUAL CALL\n");
+        CgsDev::Log::WriteToLogEmergency("[exit-diag] PURE VIRTUAL CALL\n");
         AbortSignalHandler(SIGABRT);
         std::abort();
     }
 
     void TerminateProbe()
     {
-        Emit("[exit-diag] std::terminate\n");
+        CgsDev::Log::WriteToLogEmergency("[exit-diag] std::terminate\n");
         AbortSignalHandler(SIGABRT);
         std::abort();
     }
@@ -601,6 +608,7 @@ namespace
             const HANDLE lhHeap = GetProcessHeap();
             if (lhHeap != NULL && HeapValidate(lhHeap, 0, NULL) == FALSE)
             {
+                CgsDev::Log::CriticalLogScopePC lCriticalLog;
                 // One report: once the heap is damaged every later sweep fails too, and each
                 // report re-reads the 1.1 MB map file.
                 gsuNextHeapCheckMs = ~0ull;
