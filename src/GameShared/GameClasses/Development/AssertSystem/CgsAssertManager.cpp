@@ -190,6 +190,7 @@ namespace Assert
     void Manager::HandleAssertCapturedPC(const char* lpcMessage, const char* lpcFile, s32 liLine,
                                          const StackUnpick& lrStack, bool lbAllowDisplay)
     {
+        Log::CriticalLogScopePC lCriticalLog;
         if (!lpcMessage)
             lpcMessage = "<no expression>";
         if (!lpcFile)
@@ -236,6 +237,7 @@ namespace Assert
 
         *Log::gpDebugPrint << "[ASSERT " << miAssertCount << "] " << lpcMessage
                            << " (" << lpcFile << ":" << liLine << ")\npress END to continue";
+        Log::FlushLog();
 
         // A nested assert raised while the dialog is already up is logged, but does not start a second
         // halt (X360 byte_83019201 gate).
@@ -277,6 +279,7 @@ namespace Assert
     // threading follow-on.
     void Manager::LogCallstackPC(StackUnpick& lrStack)
     {
+        Log::CriticalLogScopePC lCriticalLog;
         // Resolve the captured call-stack against the function map (X360 DoAssert: open + read the map via
         // the reader, store it on the current assert, then dump the resolved call-stack to the log). The
         // reader is wired lazily on first use; it opens the map next to the executable.
@@ -298,10 +301,12 @@ namespace Assert
                 *lpLog << "    " << reinterpret_cast<void*>(lrStack.GetStackAddress(liIndex)) << "\n";
         }
         *lpLog << "  EndCallstack\n";
+        Log::FlushLog();
     }
 
     void Manager::DoAssert()
     {
+        Log::CriticalLogScopePC lCriticalLog;
         mbInAssert = true;
         LogCallstackPC(mCurrentAssert.mStack);
         mCurrentAssert.mpMapReader = mpMapFileReader;

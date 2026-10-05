@@ -15,6 +15,20 @@ namespace Log
 {
     // Central sink: append one chunk of text to the game log file (and the debugger output).
     void WriteToLog(const char* lpcText);
+    // FLAG PC-platform leaf: explicit durability boundaries. Ordinary output is
+    // queued; critical reports bypass its locks and append synchronously to
+    // BrnGame.emergency.log, also mirroring to BrnGame.log after initialization.
+    // The emergency file is preserved across launches, including startup faults.
+    void FlushLog();
+    void WriteToLogEmergency(const char* lpcText);
+    class CriticalLogScopePC
+    {
+    public:
+        CriticalLogScopePC();
+        ~CriticalLogScopePC();
+        CriticalLogScopePC(const CriticalLogScopePC&) = delete;
+        CriticalLogScopePC& operator=(const CriticalLogScopePC&) = delete;
+    };
 
     // The debug-print stream: a StrStreamBase whose char* sink forwards to WriteToLog, so the
     // engine's `gpDebugPrint << ...` logging lands in the log file.

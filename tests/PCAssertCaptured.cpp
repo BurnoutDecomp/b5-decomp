@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Development/MapFile/Reader/CgsMapFileReader.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
-static int checks, failures, displays, handlers;
+static int checks, failures, displays, handlers, flushes, criticalDepth;
 static std::string output;
 static uintptr_t resolvedAddress;
 static void Check(bool value, const char* name) {
@@ -13,7 +13,10 @@ static void Check(bool value, const char* name) {
 }
 namespace CgsDev {
 namespace Log {
-StrStreamBase& DebugPrint::operator<<(const char* text) { output += text; return *this; }
+CriticalLogScopePC::CriticalLogScopePC() { ++criticalDepth; }
+CriticalLogScopePC::~CriticalLogScopePC() { --criticalDepth; }
+void FlushLog() { ++flushes; }
+StrStreamBase& DebugPrint::operator<<(const char* text) { if (!criticalDepth) ++failures; output += text; return *this; }
 static DebugPrint print;
 DebugPrint* gpDebugPrint = &print;
 }
@@ -31,7 +34,7 @@ static MapFile::Reader gMinimalMemoryReader;
 static const char* GetDefaultMapFilePath() { return "test.cgsmap"; }
 static s32 NoteAssertSite(const char*, s32) { return 0; }
 void Manager::DoAssert() { ++displays; }
-void Manager::ExecuteAssertHandlers() { ++handlers; }
+void Manager::ExecuteAssertHandlers() { if (flushes <= handlers) ++failures; ++handlers; }
 #include "assert_captured.inc"
 } }
 int main() {
@@ -52,6 +55,7 @@ int main() {
           manager.mCurrentAssert.mStack.GetStackAddress(0)==0x87654321, "shutdown logging preserves the first pending assertion");
     Check(resolvedAddress==0x12345678 && handlers==2, "shutdown report does not substitute the stale pending stack");
     Check(output.find("press END")==std::string::npos, "headless report does not ask for an unavailable dialog key");
+    Check(flushes == 2, "each captured stack is drained before assert handlers run");
     std::printf("PCAssertCaptured: %d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

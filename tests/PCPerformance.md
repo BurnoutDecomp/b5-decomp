@@ -1976,3 +1976,55 @@ across four opponents, peaking at five crashing and five airborne rivals. All
 It averaged 163.43 FPS, p99 7.46 ms and maximum 14.03 ms. Different combat and host
 conditions prevent treating this as a matched speedup or regression comparison.
 Evidence: `geometry_index_range_clean_combat` in the same scratch root.
+
+
+## File logging stalls on the affected PC (2026-10-05)
+
+A 5800X / RTX 4070 SUPER capture recorded 63,662 frames and 71 slow log calls.
+After the first 20 seconds, 45 of 47 presented frames longer than 50 ms overlap
+synchronous producer-side log IO or its shared output-lock wait. File calls took
+up to 219.93 ms; one blocked file call also held the other game thread for
+163.05 ms. Debugger output was not the long sink in those records. This identifies
+blocking file logging; it does not identify the SSD itself as faulty. Evidence:
+`user_5800x_hitches_1004/log_correlation.json` in the parent performance scratch.
+
+Ordinary file output now goes through a fixed 256 KiB queue and a native writer
+using 32 KiB batches. No file operation occurs under the queue lock, and no disk
+wait occurs on the producer's ordinary path after startup. Normal exit drains the
+queue; late exit messages can still append. In an extended disk stall the queue
+may drop routine diagnostics instead of blocking gameplay; shutdown reports the
+number of lost writes/bytes. The debugger sink remains synchronous. Set
+`BRN_LOG_ASYNC=0` for a synchronous comparison; default is asynchronous.
+
+Assertions and fatal reports bypass the queue synchronously. They append to
+`BrnGame.emergency.log`, which normal startup never truncates, and mirror to the
+main log after its initialization. The emergency backup persists across launches,
+so its existence alone is not evidence of a fault in the current run. Pure virtual
+calls, std::terminate, and the heap-corruption witness use this path before any
+potentially failing report work. Critical FlushLog does not wait for the normal
+writer. This is a PC diagnostics change, not a reconstruction of console logging.
+
+`BRN_LOG_PROFILE=1` collects bounded in-memory timing records and writes
+`.logtiming.csv/.json` beside the EXE at orderly exit. CSV source identifies
+`producer` versus `file_worker`; worker disk stalls are not producer frame stalls.
+JSON includes queue drops and file errors. Profiling is off by default.
+
+Native queue, concurrent-line, assertion, emergency, and optional timing tests
+cover delayed IO, overflow, drain/order, startup truncation races, and fatal paths
+while ordinary logging is locked. Deliberately moving IO under the queue lock,
+sharing the truncatable emergency filename, or routing fatal reports back through
+the queue makes the corresponding regressions fail. Two captured hitches remain
+unattributed (76.9 ms cold geometry frame and 355.7 ms GUI/update wait); the overall
+locked-165-FPS target is still open. A new affected-PC capture is needed to measure
+how much of the reported stutter this removes in that environment.
+
+The final 1a2b0e88 executable (including the filename-boundary fix) passed a clean
+120-second maximum-settings 2560x1440 Road Rage: eight credited takedowns across
+six rivals, peak five crashing/four airborne, 1173/1173 samples foreground, no
+assertions/exceptions or event end, and no frames over 50 ms. It averaged 163.26
+FPS with p99 7.70 ms and maximum 15.38 ms. This local run did not reproduce the
+other PC's large stalls; it verifies gameplay and local pacing, not the size of
+an affected-PC improvement. No locked-165-FPS claim is made. Evidence:
+`scratch/performance_max_1003/async_log_clean_combat`. The earlier diagnostic run
+had zero queue drops/file errors, seven takedowns, and zero slow logger calls;
+it is not a clean FPS comparison. Final independent review: pass.
