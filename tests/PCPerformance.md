@@ -2212,3 +2212,51 @@ in 15 sample bins. This clean gameplay check used PrimeDebugEvents and no
 coarse/cycle/RIP profiling. Different combat trajectories prevent comparing its
 FPS directly with earlier runs. Evidence: `associative_geometry_clean_combat`.
 The full performance target remains unmet.
+
+## Reserve retained-geometry tables before gameplay (2026-10-05)
+
+A fresh maximum-settings combat capture found a 1.42 ms registration of a single
+580-byte vertex buffer, while its upload took only 0.004 ms. A private probe then
+split registration into map insertion, generation-slot allocation and source-page
+indexing. It recorded 49,639 registrations without drops. In the measured window,
+the vertex map grew from 16,384 to 32,768 buckets during one insertion and spent
+1.4732 ms rebuilding the table. Index-map growth cost 0.5881 ms and source-page
+map growth cost 0.3494 ms. These are identified CPU costs, not evidence that every
+reported hitch has the same cause.
+
+The PC leaf now creates empty tables before gameplay: 65,536 vertex-map buckets,
+32,768 index-map buckets and 32,768/16,384 source-page buckets. Only the selected
+compact or legacy source-page maps receive this reservation. The four active
+bucket arrays total 2.25 MiB with the shipping MSVC representation; some of this
+storage was previously allocated by growth during gameplay. These are initial
+capacities, not limits. Larger populations retain normal growth; entries, hashes,
+full-key comparisons, reverse references and GPU ownership are unchanged. Clear
+retains the bucket storage for reuse. `BRN_GEOMETRY_RESERVE=0` restores the previous
+allocation policy for comparison.
+
+The candidate probe observed 43,386 registrations with no dropped records and no
+bucket growth. Its index population reached 9,339, crossing the old 8,192-entry
+threshold; source pages also crossed their old growth threshold. Its vertex peak
+was 15,978, below the control's 16,384 threshold, so the two gameplay routes are
+not a matched vertex-growth timing experiment. The largest individual measured
+registration was 0.0999 ms. The candidate's warmed vertex table has room for
+65,536 entries at the unchanged load factor. This removes the identified growth
+mechanism within those warm capacities; no average-FPS improvement is claimed.
+
+Native production geometry checks pass 104/104 with the final default. Existing
+registration and resource-lifetime checks pass 14/14 in each of compact and legacy
+modes. Independent source review passes. Private probe code is archived outside
+the shipping tree; the canonical clean build succeeds without warnings or errors.
+Evidence: parent `scratch/performance_max_1003/current_camera_cold_costs`,
+`geometry_registration_probe_combat/registration_analysis.json` and
+`geometry_reserve_probe_combat/registration_analysis.json`. Presentation waits,
+other cold geometry work and rare native allocation stalls remain separate work.
+
+Final clean `geometry_reserve_clean_combat`: 120 seconds at the original maximum
+1440p target with VSync, five credited takedowns across three rivals, peak three
+crashing/two airborne, 1,310 frames with multiple crashing rivals, all 1,186
+samples foreground, no assertions/exceptions/event end and no frame over 50 ms.
+It averaged 162.70 FPS, p99 7.83 ms and maximum 13.03 ms. The run used the final
+default build, PrimeDebugEvents and timing-only capture without the registration,
+coarse/cycle or stack probes. Different combat trajectories preclude a matched
+FPS comparison. Locked 165 FPS and elimination of every hitch remain unproven.

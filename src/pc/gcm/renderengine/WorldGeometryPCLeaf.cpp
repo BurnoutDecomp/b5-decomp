@@ -239,8 +239,22 @@ namespace
     typedef std::unordered_map<IndexKey, RetainedIndexBuffer,
                                RawHash<IndexKey>, RawEqual<IndexKey> > IndexMap;
 
-    VertexMap sVertexBuffers;
-    IndexMap  sIndexBuffers;
+    // FLAG PC-platform leaf: allocate empty bucket arrays before gameplay. A
+    // measured 16,384 -> 32,768 vertex-map rehash cost 1.47 ms inside one draw;
+    // index/source-page growth added smaller spikes. These are warm capacities,
+    // not limits: larger resident sets retain ordinary map growth. At MSVC's
+    // current two-pointer bucket layout the four active arrays total 2.25 MiB.
+    // Retained entries, source ranges and GPU ownership are unchanged.
+    const bool sbReserveGeometryCaches = [] {
+        const char* lpcValue = std::getenv("BRN_GEOMETRY_RESERVE");
+        return !lpcValue || lpcValue[0] != '0';
+    }();
+    const bool sbCompactLifetime = [] {
+        const char* lpcValue = std::getenv("BRN_GEOMETRY_COMPACT_LIFETIME");
+        return !lpcValue || lpcValue[0] != '0';
+    }();
+    VertexMap sVertexBuffers(sbReserveGeometryCaches ? 65536u : 0u);
+    IndexMap  sIndexBuffers(sbReserveGeometryCaches ? 32768u : 0u);
 
     // ---- the eviction index -------------------------------------------------
     // A free notification names a byte range, not a key, so the mirrors touching a
@@ -261,16 +275,13 @@ namespace
     typedef std::unordered_map<uintptr_t, std::vector<VertexKey> > VertexPageIndex;
     typedef std::unordered_map<uintptr_t, std::vector<IndexKey> >  IndexPageIndex;
 
-    VertexPageIndex sVertexPages;
-    IndexPageIndex  sIndexPages;
+    VertexPageIndex sVertexPages(sbReserveGeometryCaches && !sbCompactLifetime ? 32768u : 0u);
+    IndexPageIndex  sIndexPages(sbReserveGeometryCaches && !sbCompactLifetime ? 16384u : 0u);
     using TokenPageIndex = std::unordered_map<uintptr_t, std::vector<u64>>;
-    TokenPageIndex sVertexTokenPages, sIndexTokenPages;
+    TokenPageIndex sVertexTokenPages(sbReserveGeometryCaches && sbCompactLifetime ? 32768u : 0u);
+    TokenPageIndex sIndexTokenPages(sbReserveGeometryCaches && sbCompactLifetime ? 16384u : 0u);
     GeometryEntryReferencesPC<VertexMap::value_type> sVertexReferences;
     GeometryEntryReferencesPC<IndexMap::value_type> sIndexReferences;
-    const bool sbCompactLifetime = [] {
-        const char* lpcValue = std::getenv("BRN_GEOMETRY_COMPACT_LIFETIME");
-        return !lpcValue || lpcValue[0] != '0';
-    }();
 
 
     // Reused across creations (never touched on the draw path): the strip re-cut
@@ -1026,17 +1037,19 @@ EWorldGeometryPrepare WorldGeometry_Prepare(const WorldGeometryVertexPlan& lrVer
     ++suFrontCacheMisses;
 
     // ---- slow path: the maps, exactly as before --------------------------------------
-    // Sized once for the measured live set (~10k VB / ~5k IB mirrors while driving) so
-    // the find walks short bucket chains from the start instead of rehashing its way up
-    // through a dozen doublings. It sits here rather than above the fast path because a
-    // slot can only be filled by this path, so nothing can hit the cache before the first
-    // insert -- and the fast path is left with no statics to test.
+    // The comparison control retains the previous first-use reservation. The
+    // default already allocated larger empty tables before gameplay; do not
+    // request a smaller reservation here (other STL implementations may shrink).
+    // Keep this once-only check off the front-cache hit path.
     static bool sbReserved = false;
     if (!sbReserved)
     {
         sbReserved = true;
-        sVertexBuffers.reserve(16384u);
-        sIndexBuffers.reserve(8192u);
+        if (!sbReserveGeometryCaches)
+        {
+            sVertexBuffers.reserve(16384u);
+            sIndexBuffers.reserve(8192u);
+        }
     }
 
     const VertexKey lVertexKey = MakeVertexKey(lrVertexPlan);
