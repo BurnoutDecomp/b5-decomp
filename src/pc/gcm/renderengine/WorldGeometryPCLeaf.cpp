@@ -32,6 +32,7 @@
 #include "pc/gcm/renderengine/WorldGeometryPCLeaf.h"
 #include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include "pc/gcm/renderengine/GeometryBufferPoolD3D9PCLeaf.h"
+#include "pc/gcm/renderengine/GeometryEntryReferencesPCLeaf.h"
 #include "pc/gcm/renderengine/device.h"                    // renderengine::gDevice
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::WriteToLog
 
@@ -203,6 +204,7 @@ namespace
 
     struct RetainedVertexBuffer
     {
+        u64 muEvictionToken;
         GeometryPoolType::Allocation mAllocation;
         IDirect3DVertexBuffer9* mpBuffer;
         const u8*               mpSourceBegin;
@@ -215,6 +217,7 @@ namespace
 
     struct RetainedIndexBuffer
     {
+        u64 muEvictionToken;
         GeometryPoolType::Allocation mAllocation;
         u32 muIndexStart;
         IDirect3DIndexBuffer9* mpBuffer;
@@ -242,7 +245,8 @@ namespace
     // A free notification names a byte range, not a key, so the mirrors touching a
     // range have to be findable without walking the whole map (the pool frees one
     // resource at a time and a track swap frees thousands). Every mirror registers
-    // its key under each 4 KiB source-address bucket its header and bytes touch.
+    // a compact generation-checked reference under each 4 KiB source-address
+    // bucket its header and bytes touch. The full-key path remains a control.
     // Dense small headers made 64 KiB buckets repeatedly scan unrelated keys on
     // each resource free. Finer buckets retain the same exact RangeHit test.
     // This lookup granularity is independent of the native GPU page capacity.
@@ -258,6 +262,15 @@ namespace
 
     VertexPageIndex sVertexPages;
     IndexPageIndex  sIndexPages;
+    using TokenPageIndex = std::unordered_map<uintptr_t, std::vector<u64>>;
+    TokenPageIndex sVertexTokenPages, sIndexTokenPages;
+    GeometryEntryReferencesPC<VertexMap::value_type> sVertexReferences;
+    GeometryEntryReferencesPC<IndexMap::value_type> sIndexReferences;
+    const bool sbCompactLifetime = [] {
+        const char* lpcValue = std::getenv("BRN_GEOMETRY_COMPACT_LIFETIME");
+        return !lpcValue || lpcValue[0] != '0';
+    }();
+
 
     // Reused across creations (never touched on the draw path): the strip re-cut
     // writes into this before the index buffer is sized and filled.
@@ -418,6 +431,27 @@ namespace
             if (luPage != luHeaderPage)
                 lrIndex[luPage].push_back(lrKey);
         }
+    }
+
+    template<class TMap, class TIndex, class TReferences>
+    typename TMap::mapped_type& RegisterMirror(TMap& lrMap, TIndex& lrLegacy,
+        TokenPageIndex& lrCompact, TReferences& lrReferences,
+        const typename TMap::key_type& lrKey, const typename TMap::mapped_type& lrEntry)
+    {
+        auto lInserted = lrMap.emplace(lrKey, lrEntry);
+        auto& lrStored = lInserted.first->second;
+        if (lInserted.second)
+        {
+            if (sbCompactLifetime)
+            {
+                lrStored.muEvictionToken = lrReferences.Add(&*lInserted.first);
+                RegisterPages(lrCompact, lrStored.muEvictionToken, lrStored.mpHeader,
+                              lrStored.mpSourceBegin, lrStored.mpSourceEnd);
+            }
+            else RegisterPages(lrLegacy, lrKey, lrStored.mpHeader,
+                               lrStored.mpSourceBegin, lrStored.mpSourceEnd);
+        }
+        return lrStored;
     }
 
     // One log line, at most every ten seconds AND only when a counter moved. Called from
@@ -626,9 +660,8 @@ namespace
         // A failed creation is cached too (as a null mirror) so a mesh that cannot be
         // retained does not retry -- and re-fail -- on every single draw.
         FrameProfile::CycleScope lRegisterProfile(FrameProfile::GEOMETRY_REGISTER);
-        RetainedVertexBuffer& lrStored = sVertexBuffers[lrKey] = lEntry;
-        RegisterPages(sVertexPages, lrKey, lEntry.mpHeader,
-                      lEntry.mpSourceBegin, lEntry.mpSourceEnd);
+        RetainedVertexBuffer& lrStored = RegisterMirror(sVertexBuffers, sVertexPages,
+            sVertexTokenPages, sVertexReferences, lrKey, lEntry);
         return lrStored.mpBuffer != nullptr ? &lrStored : nullptr;
     }
 
@@ -747,9 +780,8 @@ namespace
                 lEntry.muPrimitiveCount = 0;
                 lEntry.muFirstIndexCount = 0xFFFFFFFFu;   // the SKIP marker (see above)
                 FrameProfile::CycleScope lRegisterProfile(FrameProfile::GEOMETRY_REGISTER);
-                sIndexBuffers[lrKey] = lEntry;
-                RegisterPages(sIndexPages, lrKey, lEntry.mpHeader,
-                              lEntry.mpSourceBegin, lEntry.mpSourceEnd);
+                RegisterMirror(sIndexBuffers, sIndexPages, sIndexTokenPages,
+                               sIndexReferences, lrKey, lEntry);
                 *lpbSkip = true;
                 return nullptr;
             }
@@ -851,9 +883,8 @@ namespace
         }
 
         FrameProfile::CycleScope lRegisterProfile(FrameProfile::GEOMETRY_REGISTER);
-        RetainedIndexBuffer& lrStored = sIndexBuffers[lrKey] = lEntry;
-        RegisterPages(sIndexPages, lrKey, lEntry.mpHeader,
-                      lEntry.mpSourceBegin, lEntry.mpSourceEnd);
+        RetainedIndexBuffer& lrStored = RegisterMirror(sIndexBuffers, sIndexPages,
+            sIndexTokenPages, sIndexReferences, lrKey, lEntry);
         return lrStored.mpBuffer != nullptr ? &lrStored : nullptr;
     }
 
@@ -886,6 +917,46 @@ namespace
         if (lpHeaderBytes >= lpFreeBegin && lpHeaderBytes < lpFreeEnd)
             return true;
         return lpBegin < lpFreeEnd && lpEnd > lpFreeBegin;
+    }
+
+    template<class TMap, class TReferences>
+    void SweepTokenPages(TokenPageIndex& lrPages, TMap& lrMap, TReferences& lrReferences,
+                         const u8* lpBegin, const u8* lpEnd, u64& luBytes, u32& luEvicted)
+    {
+        const uintptr_t luLast = PageOf(lpEnd - 1);
+        for (uintptr_t luPage = PageOf(lpBegin); luPage <= luLast; ++luPage)
+        {
+            auto lPage = lrPages.find(luPage);
+            if (lPage == lrPages.end()) continue;
+            auto& lrTokens = lPage->second;
+            size_t luKept = 0;
+            for (u64 luToken : lrTokens)
+            {
+                auto* lpNode = lrReferences.Find(luToken);
+                if (!lpNode) continue;
+                auto& lrEntry = lpNode->second;
+                if (!RangeHit(lrEntry.mpHeader, lrEntry.mpSourceBegin,
+                              lrEntry.mpSourceEnd, lpBegin, lpEnd))
+                {
+                    lrTokens[luKept++] = luToken;
+                    continue;
+                }
+                const auto lKey = lpNode->first;
+                RetireFrontCache();
+                lrReferences.Retire(luToken);
+                if (lrEntry.mpBuffer)
+                {
+                    if (lrEntry.mAllocation) sGeometryPool.Retire(lrEntry.mAllocation);
+                    else lrEntry.mpBuffer->Release();
+                    luBytes -= lrEntry.muBytes;
+                    ++luEvicted;
+                    FrameProfile::Retire();
+                }
+                lrMap.erase(lKey);
+            }
+            lrTokens.resize(luKept);
+            if (lrTokens.empty()) lrPages.erase(lPage);
+        }
     }
 }
 
@@ -1019,6 +1090,14 @@ void WorldGeometry_OnResourceMemoryFreed(const void* lpBase, size_t luSize)
 
     const u8* const lpFreeBegin = static_cast<const u8*>(lpBase);
     const u8* const lpFreeEnd   = lpFreeBegin + luSize;
+    if (sbCompactLifetime)
+    {
+        SweepTokenPages(sVertexTokenPages, sVertexBuffers, sVertexReferences,
+                        lpFreeBegin, lpFreeEnd, suVertexBytes, suVertexBuffersEvicted);
+        SweepTokenPages(sIndexTokenPages, sIndexBuffers, sIndexReferences,
+                        lpFreeBegin, lpFreeEnd, suIndexBytes, suIndexBuffersEvicted);
+        return;
+    }
     const uintptr_t luFirstPage = PageOf(lpFreeBegin);
     const uintptr_t luLastPage  = PageOf(lpFreeEnd - 1);
 
@@ -1114,11 +1193,13 @@ void WorldGeometry_ReleaseAll()
 
     for (VertexMap::iterator lIt = sVertexBuffers.begin(); lIt != sVertexBuffers.end(); ++lIt)
     {
+        sVertexReferences.Retire(lIt->second.muEvictionToken);
         if (lIt->second.mpBuffer != nullptr && !lIt->second.mAllocation)
             lIt->second.mpBuffer->Release();
     }
     for (IndexMap::iterator lIt = sIndexBuffers.begin(); lIt != sIndexBuffers.end(); ++lIt)
     {
+        sIndexReferences.Retire(lIt->second.muEvictionToken);
         if (lIt->second.mpBuffer != nullptr && !lIt->second.mAllocation)
             lIt->second.mpBuffer->Release();
     }
@@ -1127,6 +1208,8 @@ void WorldGeometry_ReleaseAll()
     sIndexBuffers.clear();
     sVertexPages.clear();
     sIndexPages.clear();
+    sVertexTokenPages.clear();
+    sIndexTokenPages.clear();
     suVertexBytes = 0;
     suIndexBytes  = 0;
 }
