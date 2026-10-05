@@ -14,8 +14,8 @@ else:os.environ.pop('BRN_GEOMETRY_ALIGN_STRIDE',None)
 shadow={}
 if a.skip_draw_record:
     path='src/pc/gcm/renderengine/WorldGeometryPCLeaf.cpp';text=Tree().read(path)
-    before='    lrSlot.mDraw        = *lpOutDraw;';assert text.count(before)==1
-    shadow[path]=text.replace(before,'')
+    before='    const GeometryFrontCacheEntry lEntry{suGeometryGeneration, lVertexKey, lIndexKey, *lpOutDraw};';assert text.count(before)==1
+    shadow[path]=text.replace(before,before.replace('*lpOutDraw','WorldGeometryDraw{}'))
 if a.skip_release_retirement:
     path='src/pc/gcm/renderengine/WorldGeometryPCLeaf.cpp';text=shadow.get(path,Tree().read(path))
     before=definition(text,'void WorldGeometry_ReleaseAll()');assert before.count('RetireFrontCache();')==1
@@ -37,4 +37,4 @@ if a.truncate_pool_index:
 here=Path(__file__).resolve().parent
 result=compile_and_run(here/'PCWorldGeometryBuffers.cpp','unused.inc','',
                        'PCWorldGeometryBuffers',extra_flags='d3d9.lib user32.lib d3dcompiler.lib',shadow=shadow)
-raise SystemExit(report('run_pc_world_geometry_buffers',[],result,90 if a.unaligned else 94))
+raise SystemExit(report('run_pc_world_geometry_buffers',[],result,100 if a.unaligned else 104))

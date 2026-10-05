@@ -33,6 +33,7 @@
 #include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include "pc/gcm/renderengine/GeometryBufferPoolD3D9PCLeaf.h"
 #include "pc/gcm/renderengine/GeometryEntryReferencesPCLeaf.h"
+#include "pc/gcm/renderengine/GeometryAssociativeFrontCachePCLeaf.h"
 #include "pc/gcm/renderengine/device.h"                    // renderengine::gDevice
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::WriteToLog
 
@@ -276,7 +277,7 @@ namespace
     // writes into this before the index buffer is sized and filled.
     std::vector<u8> sBakeScratch;
 
-    // ---- the direct-mapped front cache --------------------------------------
+    // ---- the direct-mapped front cache (legacy control) ---------------------
     // WHY: once the mirrors exist, the two unordered_map probes ARE the remaining cost of
     // WorldGeometry_Prepare. Measured on a 17 ms in-world frame at ~3,500-4,000 dispatch
     // draws: Prepare 10.7% inclusive, of which AcquireVertexBuffer self 3.0%,
@@ -317,6 +318,15 @@ namespace
     // POD in BSS: every slot starts at generation 0, which no live generation ever equals,
     // so the cold cache is all misses with no explicit initialisation anywhere.
     GeometryFrontCacheEntry saFrontCache[KU_FRONT_CACHE_ENTRIES];
+    GeometryAssociativeFrontCachePC<GeometryFrontCacheEntry, 4096> sAssociativeFrontCache;
+    // FLAG PC-platform leaf: four-way tags reduce conflicts and the active table
+    // footprint. Full keys are still checked before returning borrowed draw data.
+    // BRN_GEOMETRY_ASSOC_CACHE=0 retains the legacy direct-mapped control.
+    const bool sbAssociativeFrontCache = [] {
+        const char* value = std::getenv("BRN_GEOMETRY_ASSOC_CACHE");
+        return !value || value[0] != '0';
+    }();
+
 
     // THE LIFETIME GUARD. The cached draw borrows the maps' native buffer allocations.
     // Their offsets, topology and ranges are immutable after creation. Both owners'
@@ -334,8 +344,13 @@ namespace
     inline void RetireFrontCache()
     {
         ++suGeometryGeneration;
-        if (suGeometryGeneration == 0)      // 64-bit, so unreachable in practice; keeps the
-            suGeometryGeneration = 1;       // "0 means empty" invariant true unconditionally
+        if (suGeometryGeneration == 0)
+        {
+            // A reused epoch must not revive an ancient borrowed draw.
+            std::memset(saFrontCache, 0, sizeof(saFrontCache));
+            sAssociativeFrontCache.Clear();
+            suGeometryGeneration = 1;
+        }
     }
 
     // The words that actually discriminate one draw from another. This picks the SLOT only
@@ -349,7 +364,7 @@ namespace
     // draws of every mesh mapped to ONE slot and evicted each other every frame -- a flat
     // 50% miss rate that did not move when the table was quadrupled. That is thrash, not
     // capacity, and it made Prepare MORE expensive than the maps alone (12.6% vs 10.7%).
-    inline u32 FrontCacheSlot(const WorldGeometryVertexPlan& lrVertexPlan,
+    inline u64 FrontCacheHash(const WorldGeometryVertexPlan& lrVertexPlan,
                               const WorldGeometryIndexPlan& lrIndexPlan)
     {
         u64 luHash = static_cast<u64>(reinterpret_cast<uintptr_t>(lrVertexPlan.mpHeader));
@@ -362,9 +377,16 @@ namespace
                    | (static_cast<u64>(lrIndexPlan.muMappedPrimitiveCount) << 32))
                   * 0x94D049BB133111EBull;
         luHash *= 0xBF58476D1CE4E5B9ull;
-        // Take bits 32..46 (15 bits for 32768 slots): multiplication carries entropy
-        // upward, and the low bits of a heap pointer are alignment zeros shared by every key.
-        return static_cast<u32>(luHash >> 32) & (KU_FRONT_CACHE_ENTRIES - 1u);
+        // Preserve the full mix for associative fingerprints. Both policies take
+        // set bits from the upper half, away from aligned pointer low bits.
+        return luHash;
+    }
+
+    inline u32 FrontCacheSlot(const WorldGeometryVertexPlan& lrVertexPlan,
+                              const WorldGeometryIndexPlan& lrIndexPlan)
+    {
+        return static_cast<u32>(FrontCacheHash(lrVertexPlan, lrIndexPlan) >> 32)
+            & (KU_FRONT_CACHE_ENTRIES - 1u);
     }
 
     // ---- counters -----------------------------------------------------------
@@ -971,23 +993,34 @@ EWorldGeometryPrepare WorldGeometry_Prepare(const WorldGeometryVertexPlan& lrVer
         return E_WORLDGEOMETRY_UNAVAILABLE;
 
     // ---- fast path: the same mesh, drawn again ---------------------------------------
-    // Steady state is a repeat draw, so try the one slot these plans hash to before going
+    // Steady state is a repeat draw, so check cached candidates before going
     // near either map. The hit is taken ONLY when both conditions hold:
     //   * the slot was filled at the CURRENT generation -- nothing has been erased since,
     //     so its borrowed buffer allocations are still live (see suGeometryGeneration);
     //   * BOTH stored keys match these plans in full -- the same identity RawEqual would
     //     have tested, so the mirrors returned are exactly the ones the map lookups would
     //     have found, under this plan's stride/primitive type and no other's.
-    // Anything else -- a retired slot, a different mesh landing on the slot, a first-ever
+    // Anything else -- retired candidates, colliding identities, a first-ever
     // draw -- is a miss and falls through to the maps unchanged.
-    const u32 luSlot = FrontCacheSlot(lrVertexPlan, lrIndexPlan);
-    GeometryFrontCacheEntry& lrSlot = saFrontCache[luSlot];
-    if (lrSlot.muGeneration == suGeometryGeneration
-        && VertexKeyMatchesPlan(lrSlot.mVertexKey, lrVertexPlan)
-        && IndexKeyMatchesPlan(lrSlot.mIndexKey, lrIndexPlan))
+    const u64 luHash = FrontCacheHash(lrVertexPlan, lrIndexPlan);
+    GeometryFrontCacheEntry* lpLegacySlot = nullptr;
+    const GeometryFrontCacheEntry* lpCached = nullptr;
+    const auto lMatches = [&](const GeometryFrontCacheEntry& lrEntry) {
+        return VertexKeyMatchesPlan(lrEntry.mVertexKey, lrVertexPlan)
+            && IndexKeyMatchesPlan(lrEntry.mIndexKey, lrIndexPlan);
+    };
+    if (sbAssociativeFrontCache)
+        lpCached = sAssociativeFrontCache.Find(luHash, suGeometryGeneration, lMatches);
+    else
+    {
+        lpLegacySlot = &saFrontCache[static_cast<u32>(luHash >> 32) & (KU_FRONT_CACHE_ENTRIES - 1u)];
+        if (lpLegacySlot->muGeneration == suGeometryGeneration && lMatches(*lpLegacySlot))
+            lpCached = lpLegacySlot;
+    }
+    if (lpCached)
     {
         ++suFrontCacheHits;
-        *lpOutDraw = lrSlot.mDraw;
+        *lpOutDraw = lpCached->mDraw;
         return E_WORLDGEOMETRY_READY;
     }
     ++suFrontCacheMisses;
@@ -1026,11 +1059,12 @@ EWorldGeometryPrepare WorldGeometry_Prepare(const WorldGeometryVertexPlan& lrVer
     // allocations are live under. Nothing on the acquire path can erase a node (creation only
     // inserts, and D3D9's own managed-pool eviction does not run our free hook), so it
     // cannot have moved between the lookup and this store.
-    lrSlot.mVertexKey   = lVertexKey;
-    lrSlot.mIndexKey    = lIndexKey;
     FillDraw(*lpVertex, *lpIndex, lpOutDraw);
-    lrSlot.mDraw        = *lpOutDraw;
-    lrSlot.muGeneration = suGeometryGeneration;
+    const GeometryFrontCacheEntry lEntry{suGeometryGeneration, lVertexKey, lIndexKey, *lpOutDraw};
+    if (sbAssociativeFrontCache)
+        sAssociativeFrontCache.Store(luHash, suGeometryGeneration, lEntry);
+    else
+        *lpLegacySlot = lEntry;
 
     ReportIfDue();
     return E_WORLDGEOMETRY_READY;
