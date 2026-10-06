@@ -8,6 +8,9 @@
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnNetworkPlayerImageRenderer.h" // the live slot-0 component
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnInGameMessageRenderer.h"      // [tut-ticker] the live slot-8 component
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnBoostBarRenderer.h"           // [boost-bar] the live slot-4 component
+#include "GameSource/Gui/CustomRenderer/Renderers/BrnBlackBarRenderer.h"
+#include "GameSource/Gui/CustomRenderer/Renderers/BrnCreditsTextRenderer.h"
+#include "GameSource/Gui/CustomRenderer/Renderers/BrnAboveCarRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnSatNavRenderer.h"             // [H3b] the live slot-1 component (the minimap)
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnMainMapRenderer.h"            // [map-world] the live slot-2 component (THE MAP WORLD)
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnCrashNavIconRenderer.h"       // [map-world] the live slot-3 component (the icon layer on top of it)
@@ -188,6 +191,10 @@ private:
     // boost gauge, reconstructed whole 2026-08-24/25 (lifecycle + state machine + the full
     // render family). The hollow-shell caveat above no longer applies to it either.
     BoostBarRenderer mBoostBarRenderer;
+
+    BlackBarRenderer mBlackBarRenderer;
+    CreditsTextRenderer mCreditsTextRenderer;
+    AboveCarRenderer mAboveCarRenderer; // ARTIST manager+1B930
 
     // Guest +0x1F498: the master rendering-enable flag SetAllRenderingState() stores.
     bool mbRenderingEnable;

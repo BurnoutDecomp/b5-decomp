@@ -257,13 +257,13 @@ void CustomRendererManager::Construct()
     // ⭐ [boost-bar] slot 4 is LIVE (2026-08-25): the reconstructed BoostBarRenderer
     // subobject (guest this+0xE520), the in-game boost gauge.
     mapCustomRenderComponents[E_BOOSTBAR]             = &mBoostBarRenderer;
-    mapCustomRenderComponents[E_ABOVECAR]             = 0;
+    mapCustomRenderComponents[E_ABOVECAR]             = &mAboveCarRenderer;
     mapCustomRenderComponents[E_PROGRESSBAR]          = 0;
-    mapCustomRenderComponents[E_BLACKBAR]             = 0;
+    mapCustomRenderComponents[E_BLACKBAR]             = &mBlackBarRenderer;
     // ⭐ [tut-ticker] slot 8 is LIVE (2026-08-24): the reconstructed InGameMessageRenderer
     // subobject (guest this+0x1E0F0), the bottom-of-screen ticker.
     mapCustomRenderComponents[E_INGAME_MESSAGE]       = &mInGameMessageRenderer;
-    mapCustomRenderComponents[E_CREDITS_TEXT]         = 0;
+    mapCustomRenderComponents[E_CREDITS_TEXT]         = &mCreditsTextRenderer;
 
     // guest `stbx 0 -> +0x1F498`
     mbRenderingEnable = false;
@@ -864,15 +864,13 @@ CustomRendererManager* CustomRendererManager::SetFlaptRenderer(BrnFlapt::FlaptRe
 //   (*(a1[28680] + 56))(a1 + 28680);       ; CREDITS TEXT subobject (+114720), vtable +0x38
 //   a1[14372] = a2;                        ; +0xE090   (inside the CrashNavIcon subobject)
 //   a1[32029] = a2;                        ; +0x1F474
-// ⚠️ The +0x38 slot is PAST the end of CustomRenderComponentInterface (which ends at
-// +0x34), i.e. it is a CreditsTextRenderer-specific virtual, and the two mirrored stores
-// land inside renderer subobjects this build does not embed. All three are therefore
-// documented rather than emulated. (The previous version of this function called
-// `mapCustomRenderComponents[E_INGAME_MESSAGE]->Update()` here -- the wrong component AND
-// a real, unrelated per-frame method. Deleted, not re-stubbed.)
+// The extended credits virtual and both embedded renderers receive the same renderer.
 void CustomRendererManager::SetTextRenderer(CgsGraphics::TextRenderer* lpTextRenderer)
 {
     mpTextRenderer = lpTextRenderer;
+    mCreditsTextRenderer.SetTextRenderer(lpTextRenderer);
+    mAboveCarRenderer.SetTextRenderer(lpTextRenderer); // ARTIST manager+1BEC4
+    mCrashNavIconRenderer.SetTextRenderer(lpTextRenderer); // ARTIST 82445588, manager+E090.
 
     // ⭐ [tut-ticker] the guest's `a1[32029] = a2` -- +0x1F474 IS the embedded
     // InGameMessageRenderer's mpTextRenderer (renderer base 0x1E0F0 + its +4996), so the
@@ -888,14 +886,15 @@ void CustomRendererManager::SetTextRenderer(CgsGraphics::TextRenderer* lpTextRen
 //   assert(a2);
 //   a1[11308] = a2;                        ; +0xB0B0   (inside the CrashNavIcon subobject)
 //   return BrnGui::InGameMessageRenderer::SetLanguageManager(a1 + 30780, a2);
-// The tail call targets the INGAME MESSAGE subobject (+123120) -- a non-virtual member on
-// a renderer this build does not embed yet. Same treatment as SetTextRenderer: the
-// manager-level store is authoritative here, the rest is named, not faked.
+// The credits virtual, road-name renderer store and ticker tail call are all live.
 void CustomRendererManager::SetLanguageManager(CgsLanguage::LanguageManager* lpLanguageManager)
 {
     mpLanguageManager = lpLanguageManager;
+    mCreditsTextRenderer.SetLanguageManager(lpLanguageManager);
+    mAboveCarRenderer.SetLanguageManager(lpLanguageManager); // ARTIST manager+1BEC8
 
     CGS_ASSERT(lpLanguageManager != 0, "lpLanguageManager");
+    mCrashNavIconRenderer.SetLanguageManager(lpLanguageManager); // ARTIST 82445624, manager+B0B0.
 
     // ⭐ [tut-ticker] the guest's tail call -- `return InGameMessageRenderer::
     // SetLanguageManager(a1 + 30780, a2)` targets the slot-8 subobject (+123120), embedded

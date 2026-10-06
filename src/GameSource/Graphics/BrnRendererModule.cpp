@@ -6,6 +6,7 @@
 #include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include "pc/gcm/renderengine/MeshPreparationPCLeaf.h"
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
+#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // optional repair-frame observation
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
 #include "SDKs/EATech/eajobs/job_scheduler.h"
 #include "SDKs/EATech/eajobs/jobs.h"
@@ -740,6 +741,14 @@ namespace
     const u32 KU_PC_IM2D_VERTEX_BYTES = 512u * 1024u;
     const u32 KU_PC_IM2D_DEBUG_COMMAND_BYTES = 160u * 1024u;
     const u32 KU_PC_IM2D_DEBUG_VERTEX_BYTES = 2u * 1024u * 1024u;
+    const u32 KU_PC_IM3D_COMMAND_BYTES = 0x400u;
+    const u32 KU_PC_IM3D_VERTEX_BYTES = 0x8000u;
+    const u32 KU_PC_IM3D_DEBUG_COMMAND_BYTES = 0x100000u;
+    const u32 KU_PC_IM3D_DEBUG_VERTEX_BYTES = 0x100000u;
+    const u32 KU_PC_IM3D_RACE_COMMAND_BYTES = 0x20000u;
+    const u32 KU_PC_IM3D_RACE_VERTEX_BYTES = 0x20000u;
+    const u32 KU_PC_IM3D_MENUS_COMMAND_BYTES = 512u;
+    const u32 KU_PC_IM3D_MENUS_VERTEX_BYTES = 4u;
 
     bool MeshPreparationEnabledPC()
     {
@@ -760,7 +769,12 @@ namespace
                               + 2u * (KU_PC_IM2D_COMMAND_BYTES + KU_PC_IM2D_VERTEX_BYTES
                                     + KU_PC_IM2D_DEBUG_COMMAND_BYTES + KU_PC_IM2D_DEBUG_VERTEX_BYTES)
                               + 2u * (KU_PC_IM2D_DEBUG_COMMAND_BYTES + KU_PC_IM2D_DEBUG_VERTEX_BYTES) // modal banks
-                              + 8u * 128u
+                              // Every prepared3D buffer shares this allocator.
+                              + 2u * (KU_PC_IM3D_COMMAND_BYTES + KU_PC_IM3D_VERTEX_BYTES
+                                    + KU_PC_IM3D_DEBUG_COMMAND_BYTES + KU_PC_IM3D_DEBUG_VERTEX_BYTES
+                                    + KU_PC_IM3D_RACE_COMMAND_BYTES + KU_PC_IM3D_RACE_VERTEX_BYTES
+                                    + KU_PC_IM3D_MENUS_COMMAND_BYTES + KU_PC_IM3D_MENUS_VERTEX_BYTES)
+                              + 28u * 128u // four allocations per each of seven immediate buffers
                               + (4u * 4096u)   // per-bin align128(size)+128 slop + headroom
                               + (192u * 1024u); // + the small renderengine objects that share
                                                //   this allocator (the sky dome's four buffer
@@ -785,6 +799,13 @@ namespace
         sWorldDispatchAllocator.Initialize(lHeapResource, lHeapCapacity);
         sbWorldDispatchAllocatorReady = true;
         return true;
+    }
+
+    // FLAG PC-platform leaf: a failed native allocation has no dispatchable
+    // command bank. Do not Reset it and attempt a key-block store through null.
+    bool DispatchStorageAvailablePC(CgsGraphics::DispatchFrame* lpFrame)
+    {
+        return lpFrame && lpFrame->GetBin().GetBase() != nullptr;
     }
 
     // ============================================================================================
@@ -1477,6 +1498,11 @@ void BrnRendererModule::Construct()
     mIm2dRenderBuffer.Construct();
     mIm2dDebugRenderBuffer.Construct();
     mIm2dAssertRenderBufferPC.Construct();
+    mIm3dRenderBuffer.Construct();
+    mIm3dDebugRenderBuffer.Construct();
+    mIm3dBufferRacePosition.Construct();
+    mIm3dBufferMenusAndHud.Construct();
+    CgsGraphics::PrepareIm3dStateLibraryPC();
     // Double-buffered per-frame shader constants (maShaderConstantsFrames[2]).
     // ⭐ THE REUSABLE LOADING-SCREEN ALLOCATOR, 2026-08-17 (boot audit F-P2-4/F-P6-12). The
     // console owns this as an embedded member at renderer+0xC8FC and lends its address to the
@@ -1567,6 +1593,17 @@ void BrnRendererModule::Construct()
         CGS_ASSERT(lbIm2dReady, "mIm2dRenderBuffer.Prepare");
         CGS_ASSERT(lbIm2dDebugReady, "mIm2dDebugRenderBuffer.Prepare");
         CGS_ASSERT(lbAssertReady, "mIm2dAssertRenderBufferPC.Prepare");
+        // ARTIST Prepare82409C20: textured3D source vertex banks are32-byte
+        // records, including RacePosition's128KiB commands/vertices. MenusHud
+        // uses512 command bytes and static vertex runs (4-byte vertex bank).
+        const bool lbIm3dReady = mIm3dRenderBuffer.Prepare(KU_PC_IM3D_COMMAND_BYTES, KU_PC_IM3D_VERTEX_BYTES, &sWorldDispatchAllocator, false);
+        const bool lbIm3dDebugReady = mIm3dDebugRenderBuffer.Prepare(KU_PC_IM3D_DEBUG_COMMAND_BYTES, KU_PC_IM3D_DEBUG_VERTEX_BYTES, &sWorldDispatchAllocator, true);
+        const bool lbRacePositionReady = mIm3dBufferRacePosition.Prepare(KU_PC_IM3D_RACE_COMMAND_BYTES, KU_PC_IM3D_RACE_VERTEX_BYTES, &sWorldDispatchAllocator, false);
+        const bool lbMenusHudReady = mIm3dBufferMenusAndHud.Prepare(KU_PC_IM3D_MENUS_COMMAND_BYTES, KU_PC_IM3D_MENUS_VERTEX_BYTES, &sWorldDispatchAllocator, false);
+        CGS_ASSERT(lbIm3dReady, "mIm3dRenderBuffer.Prepare");
+        CGS_ASSERT(lbIm3dDebugReady, "mIm3dDebugRenderBuffer.Prepare");
+        CGS_ASSERT(lbRacePositionReady, "mIm3dBufferRacePosition.Prepare");
+        CGS_ASSERT(lbMenusHudReady, "mIm3dBufferMenusAndHud.Prepare");
         mSingleBufferedDispatchFrame.Construct(KU_NUM_DISPATCH_LISTS,
                                                KU_PC_DISPATCH_BIN_BYTES,
                                                &sWorldDispatchAllocator);
@@ -1575,6 +1612,15 @@ void BrnRendererModule::Construct()
         mDoubleBufferedDispatchFrame.Construct(KU_NUM_DISPATCH_LISTS,
                                                KU_PC_GDL_DISPATCH_BIN_BYTES,
                                                &sWorldDispatchAllocator);
+        if (!DispatchStorageAvailablePC(&mSingleBufferedDispatchFrame)
+            || !DispatchStorageAvailablePC(&mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite())
+            || !DispatchStorageAvailablePC(&mDoubleBufferedDispatchFrame.GetDispatchFrameForRead()))
+        {
+            mbDispatchStorageFailedPC = true;
+            CgsDev::Log::WriteToLog("[renderer] dispatch command allocation failed; shutting down.\n");
+            CgsSystem::HardwareInit::RequestShutdown();
+            return;
+        }
 
         CgsGraphics::SetupBuiltinInterpreters(maInterpretFunctions);
         mpInterpreter = new CgsGraphics::DispatchPacketInterpreter(maInterpretFunctions, 4);
@@ -1584,6 +1630,13 @@ void BrnRendererModule::Construct()
         {
             mSecondMeshFramePC.Construct(KU_NUM_DISPATCH_LISTS,
                 KU_PC_DISPATCH_BIN_BYTES, &sWorldDispatchAllocator);
+            if (!DispatchStorageAvailablePC(&mSecondMeshFramePC))
+            {
+                mbDispatchStorageFailedPC = true;
+                CgsDev::Log::WriteToLog("[renderer] second mesh command allocation failed; shutting down.\n");
+                CgsSystem::HardwareInit::RequestShutdown();
+                return;
+            }
             maPreparedMeshFramesPC[0].mpFrame = &mSingleBufferedDispatchFrame;
             maPreparedMeshFramesPC[1].mpFrame = &mSecondMeshFramePC;
             mpMeshProducerInterpreterPC = new CgsGraphics::DispatchPacketInterpreter(maInterpretFunctions, 4);
@@ -2097,6 +2150,15 @@ void BrnRendererModule::SwapBuffers()
         mIm2dRenderBuffer.Clear();
         mu8PCMovieWriteFrame ^= 1u;
     }
+    // ARTIST823FC678 publishes these in the same joined frame as Im2d.
+    // Clear the following producer bank; dispatch reads the bank just frozen.
+    for (CgsGraphics::Im3dRenderBuffer* lpBuffer : {&mIm3dRenderBuffer,
+            &mIm3dDebugRenderBuffer, &mIm3dBufferRacePosition, &mIm3dBufferMenusAndHud})
+        if (lpBuffer->IsPreparedPC())
+        {
+            lpBuffer->Swap();
+            lpBuffer->Clear();
+        }
     // NOT behind the mpInterpreter early-out below. That gate is about the GDL ring; the effects
     // frames are a separate double buffer, and skipping their flip would freeze the internal slot on
     // whatever the first frame left -- so bloom would latch to frame 0's all-false frame forever.
@@ -2510,6 +2572,14 @@ bool BrnRendererModule::BuildDispatchLists(CgsGraphics::DispatchObjectContext* l
 void BrnRendererModule::PrepareMeshFramePC(u32 luBank, CgsGraphics::DispatchFrame* lpInput)
 {
     PreparedMeshFramePC& lrPrepared = maPreparedMeshFramesPC[luBank];
+    if (!DispatchStorageAvailablePC(lrPrepared.mpFrame) || !DispatchStorageAvailablePC(lpInput))
+    {
+        lrPrepared.mbReady = false;
+        mbDispatchStorageFailedPC = true;
+        CgsDev::Log::WriteToLog("[renderer] mesh preparation requires allocated command banks; shutting down.\n");
+        CgsSystem::HardwareInit::RequestShutdown();
+        return;
+    }
     const u64 luEpoch = renderengine::MeshPreparationPC::ResourceEpoch();
     if (lrPrepared.mbReady && lrPrepared.muResourceEpoch == luEpoch
         && lrPrepared.mbPreZ == mbRenderPreZ && lrPrepared.mbPreZAlpha == mbRenderPreZAlpha
@@ -5612,7 +5682,8 @@ void BrnRendererModule::Prepare2DFramePC()
     if (!mIm2dRenderBuffer.IsPreparedPC())
         return;
     if (BrnGui::gpActiveGuiModule != nullptr)
-        BrnGui::gpActiveGuiModule->Render(&mIm2dRenderBuffer);
+        BrnGui::gpActiveGuiModule->Render(&mIm2dRenderBuffer,
+            GetIm3dBufferRacePositionPC(), GetIm3dBufferMenusAndHudPC());
 
     PCMovieFrame& lrMovie = maPCMovieFrames[mu8PCMovieWriteFrame];
     lrMovie = PCMovieFrame{};
@@ -5639,7 +5710,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     Stage lRenderStage(RENDER_SETUP);
     // FLAG PC-platform leaf: missing host storage cannot produce a valid frame.
     // This also covers failure to create the allocator before Prepare is called.
-    if (!mIm2dRenderBuffer.IsPreparedPC() || !mIm2dDebugRenderBuffer.IsPreparedPC())
+    if (mbDispatchStorageFailedPC || !mIm2dRenderBuffer.IsPreparedPC() || !mIm2dDebugRenderBuffer.IsPreparedPC())
     {
         CgsDev::Log::WriteToLog("[renderer] 2D command storage unavailable; shutting down.\n");
         CgsSystem::HardwareInit::RequestShutdown();
@@ -5731,6 +5802,15 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             CgsDev::Log::WriteToLog("[postfx-composite] the three render-state factories are Constructed"
                                     " (deferred PC bring-up)\n");
         }
+    }
+    // ARTIST Construct8240A9F0 constructs the textured3D renderer. Native
+    // D3D9 program adoption needs the device, so defer only that construction.
+    if (!mbIm3dRendererConstructedPC && EnsureWorldDispatchAllocator())
+    {
+        mIm3dRenderer.Construct(&sWorldDispatchAllocator);
+        mbIm3dRendererConstructedPC = mIm3dRenderer.HasProgramsPC();
+        CGS_ASSERT(mbIm3dRendererConstructedPC, "mIm3dRenderer.Construct");
+        CGS_ASSERT(CgsGraphics::GetImWhiteTexturePC() != nullptr, "Immediate-mode white texture unavailable");
     }
 
     // ---- X360 Render:505-533 -- THE COLOUR-CUBE (3D LUT) TINT BLOCK. ---------------------
@@ -6645,6 +6725,13 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         // BeginRenderAntiAliased's untiled branch (0x823FFB90-0x823FFBD8) deliberately clears
         // nothing -- the previous frame's resolve is what left the surface clean. Drop it and the
         // scene's DEPTH is never cleared again.
+        // ARTIST8240D520..D538: world immediate buffers and RacePosition
+        // share the textured3D renderer before the scene resolve/post-fx.
+        if (mbRenderWorldImmediateMode && mbIm3dRendererConstructedPC)
+        {
+            mIm3dRenderBuffer.Dispatch(&mIm3dRenderer);
+            mIm3dBufferRacePosition.Dispatch(&mIm3dRenderer);
+        }
         ResolveMSAA(lfFrameWhiteLevel, luSceneStencilClearValue);
 
         // ==========================================================================================
@@ -6923,6 +7010,39 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         // [FLAG PC bring-up diagnostic] the sampled [postfx-fx] line -- six lines, 500 frames apart,
         // proving base frame -> Eval* -> BrnPostFx. Sits beside the [postfx-composite] diagnostics in
         // BrnPostFx.cpp. DELETE with the bring-up.
+        // FLAG PC-platform leaf: bounded observation of the actual internal
+        // camera constants and tint at the final-composite boundary. The first
+        // real slow-motion episode arms the same window as the frame capture.
+        // No camera, effect, binding or render-state value is changed.
+        {
+            static const bool sbRepairFrameDiag = std::getenv("BRN_REPAIR_FRAME_DIAG") != nullptr;
+            static u32 suRepairFrameReports = 0;
+            static u32 suRepairLastPresent = ~0u;
+            if (sbRepairFrameDiag && BrnDiag::gFilmLatch.muSlomoLatched != 0u &&
+                suRepairFrameReports < 900u)
+            {
+                const u32 luPresent = renderengine::GetDispatchPresentCountPC();
+                if (luPresent != suRepairLastPresent)
+                {
+                    suRepairLastPresent = luPresent;
+                    ++suRepairFrameReports;
+                    const BrnShaderConstantsFrame& lrFrame = maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
+                    const Vector3 lvEye = lrFrame.GetViewPosition();
+                    const Matrix44 lmVP = lrFrame.GetViewProjectionMatrix();
+                    char lacRepairFrame[768];
+                    std::snprintf(lacRepairFrame, sizeof(lacRepairFrame),
+                        "[repair-frame] present=%u postfx=%d allowed=%d tint=%.9g,%.9g,%.9g,%.9g eye=%.9g,%.9g,%.9g vp=%.9g,%.9g,%.9g,%.9g;%.9g,%.9g,%.9g,%.9g;%.9g,%.9g,%.9g,%.9g;%.9g,%.9g,%.9g,%.9g\n",
+                        luPresent, static_cast<int>(mbRenderPostFX), static_cast<int>(lbEffectsAllowed),
+                        lafTint2dColour[0], lafTint2dColour[1], lafTint2dColour[2], lafTint2dColour[3],
+                        lvEye.x, lvEye.y, lvEye.z,
+                        lmVP.xAxis.x, lmVP.xAxis.y, lmVP.xAxis.z, lmVP.xAxis.w,
+                        lmVP.yAxis.x, lmVP.yAxis.y, lmVP.yAxis.z, lmVP.yAxis.w,
+                        lmVP.zAxis.x, lmVP.zAxis.y, lmVP.zAxis.z, lmVP.zAxis.w,
+                        lmVP.wAxis.x, lmVP.wAxis.y, lmVP.wAxis.z, lmVP.wAxis.w);
+                    CgsDev::Log::WriteToLog(lacRepairFrame);
+                }
+            }
+        }
         BrnRendererLogPostFxEffectState();
 
         const s32 liBrightnessSetting = (lpDispatchThreadInputBuffer != 0)
@@ -7064,6 +7184,10 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // This is how BootLegal's Title_Screen02 movie reaches the screen. [GUI render path]
     if (BrnGui::gpActiveGuiModule != 0)
         BrnGui::gpActiveGuiModule->DispatchRenderBufferPC();
+
+    // ARTIST8240E048: menu/HUD3D follows GUI2D, before loading foreground.
+    if (mbRenderHudImmediateMode && mbIm3dRendererConstructedPC)
+        mIm3dBufferMenusAndHud.Dispatch(&mIm3dRenderer);
 
     // (gameplay-render passes here when reconstructed; gated off during the loading screen)
 

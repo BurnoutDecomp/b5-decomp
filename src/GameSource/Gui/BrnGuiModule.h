@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"      // CgsModule::ModuleSingleBuffered base
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"  // CgsGui::ViewIO Input/OutputBuffer (the per-frame bridge pair)
 #include "GameSource/Gui/BrnGuiMovieManager.h"                          // BrnGui::MovieManager (embedded)
+#include "GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.h"
 #include "GameSource/Gui/BrnGuiColourCalibrationScreen.h"               // BrnGui::ColourCalibrationScreen (embedded; DWARF BrnGuiModule.h:506)
 #include "GameSource/Gui/PFX/BrnGuiEffectsArbitrator.h"
 #include "SharedClasses/BrnSharedConstants.h"                 // BrnUpdateSet (the frame update set)                  // BrnGui::EffectsArbitrator (embedded; X360 gm+1546880)
@@ -126,7 +127,9 @@ namespace BrnGui
         // module-prepared byte (+949208); this PC drive owns its IO pair, gates on the
         // Apt bring-up, and receives the movie presentation surface as the argument.
         // Called from BrnRendererModule::Render (the PC render thread).
-        void Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer);
+        void Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer,
+                    CgsGraphics::Im3dRenderBuffer* lpRacePositionBuffer = nullptr,
+                    CgsGraphics::Im3dRenderBuffer* lpMenusAndHudBuffer = nullptr);
         // FLAG PC-platform leaf: separate the producer's publication from the
         // render thread's consumption of the previous completed GUI frame.
         void PublishRenderBufferPC();
@@ -312,6 +315,7 @@ namespace BrnGui
         // into AptRenderHandler::mpCustomRendererManager, the pointer the Apt custom-control
         // callback reads), and only then gate on the prepare result.
         CustomRendererManager mCustomRendererManager;   // X360 +311952
+        BrnReplays::GuiModuleSerialiser mGuiModuleSerialiser; // ARTIST gm+1629284
 
         // The view-module IO pair the per-frame bridge fills (the input buffer carries the
         // view-state events -- frame time step 26, the play-movie events 18, the load
