@@ -1845,44 +1845,10 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
 
     CopyScoringDataToOutput(mpOutputBuffer, lrTimerStatusInterface);
 
-    // ---- 2) TriggerQueryManager: ARM the trigger set -----------------------------------------
-    // X360 line 310 calls TriggerQueryManager::PreWorldUpdate @0x8239F5C8, whose FIRST statement
-    // is `UpdateTriggers(this, lpOutput, lpActiveRaceCarInterface)`. That is the ONLY writer of
-    // maActiveTriggers anywhere in the image -- the array StuntManager::OnPropHit walks -- so it
-    // is the leg this wave needs. Its siblings inside that function (SubmitTriggerQueries, the
-    // per-player-trigger fan-out that posts action 109 and calls ProcessPlayerTriggers, the
-    // killzone-action drain) walk Array<u16,32> members this tree's TriggerQueryManager slice does
-    // not model; parked, not faked.
-    // â“˜ IT RUNS AFTER ProcessGameEvents, so OnPropHit above walked the PREVIOUS frame's armed
-    // set. That is the console's own order and it is deliberate -- do not "fix" it.
-    mTriggerQueryManager.UpdateTriggers(mpOutputBuffer, &mLastActiveRaceCarInterface);
-    mTriggerQueryManager.SubmitTriggerQueries(mpOutputBuffer, &mLastActiveRaceCarInterface);
-    mTriggerQueryManager.CacheSoundQueryPositions(&mLastActiveRaceCarInterface);
-
-    // ---- 2b) TriggerQueryManager: FAN THE PLAYER'S TRIGGER HITS OUT --------------------------
-    // [bugwave 2026-08-23] THE SUPER-JUMP ROOT-CAUSE FIX. The park note directly above used to
-    // stop at UpdateTriggers and record "the per-player-trigger fan-out that posts action 109 and
-    // calls ProcessPlayerTriggers ... parked, not faked". That park is what made super jumps
-    // uncountable: ProcessPlayerTriggers is the ONLY caller of StuntManager::LatchJumpElement,
-    // which is the ONLY writer of mpLastJumpElement, which is the gate on StuntManager::
-    // UpdateJumps -- so with the park in place the jump state machine never ran, no game action
-    // 56 (OnJumpStart -> the jump camera) was ever posted, and ProcessStuntElement was never
-    // reached with lbIsJump == true, so the super-jump tally never moved.
-    // The leg is the console's own (X360 PreWorldUpdate @0x8239F5C8, 0x8239F714..0x8239F83C);
-    // see BrnTriggerQueryManager.cpp for the leg-by-leg map and for the ONE documented PC
-    // bring-up stand-in it carries (the producer of maLastPlayerTriggers, whose console producer
-    // -- the world TriggerEntityModule line-test chain -- is inert on this build).
-    // â“˜ ORDER IS THE CONSOLE'S: the fan-out runs AFTER UpdateTriggers (it reads the set
-    // UpdateTriggers just armed) and BEFORE StuntManager::Update (which consumes the latch it
-    // writes). Both halves of that sandwich are load-bearing -- do not reorder.
-    // ⭐ [drive-thru wave 2026-08-27] THE DriveThruManager ARGUMENT IS REAL NOW. The FLAG that
-    // stood here ("the argument is NULL ... DELETE-WHEN BrnDriveThruManager.cpp compiles and the
-    // sub-object is modelled") is paid on both counts: the TU compiles and GameStateModule embeds
-    // mDriveThruManager at the console's this+44240 position. The console passes exactly this
-    // sub-object (PreWorldUpdate @0x823A5328 -> `a1 + 44240`).
-    mTriggerQueryManager.PreWorldUpdatePlayerTriggersBringUp(
-        mpOutputBuffer, &mLastActiveRaceCarInterface, &mStuntManager,
-        &mDriveThruManager, GetVehicleList());
+    // ARTIST823A5328 calls the complete pre-world trigger pass here, after
+    // ProcessGameEvents and before StuntManager consumes its gameplay latches.
+    mTriggerQueryManager.PreWorldUpdate(mpPreWorldInputBuffer, mpOutputBuffer,
+        &mStuntManager, &mDriveThruManager, &mLastActiveRaceCarInterface, GetVehicleList());
 
     // [DIAG] NOT IN THE X360 BINARY. Rung 0 of the `[UI-gate]` ladder, one-shot on the first frame
     // the armed set is non-empty: how many armed regions are SMASH (generic-region sub-type 8) and
