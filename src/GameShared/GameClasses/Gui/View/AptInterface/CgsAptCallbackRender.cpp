@@ -1,3 +1,4 @@
+#include "SDKs/EATech/include/Apt/AptTextLayoutDiagnosticsPC.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCallbackRender.h"
 
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"            // AptAuxPointer::mpAptAuxInst (the singleton)
@@ -207,6 +208,22 @@ namespace CgsGui
         // The pooled CgsAptString's leading member IS the CgsGraphics::TextObject (same address).
         const CgsGraphics::TextObject* lpTextObject =
             reinterpret_cast<const CgsGraphics::TextObject*>(lpSlot);
+
+        if (AptTextLayoutDiagnosticsPC::SampleDraw(liZID))
+        {
+            const auto& transform = lrHandler.GetVertexTransform();
+            char line[768];
+            std::snprintf(line, sizeof(line),
+                "[apt-text-layout] draw id=%d caption='%s' origin=%.6f,%.6f,%.6f rightUp=%.6f,%.6f,%.6f,%.6f box=%.6f,%.6f,%.6f,%.6f align=%d font=%.6f currentFont=%.6f widthEm=%.6f alpha=%.6f",
+                liZID,AptTextLayoutDiagnosticsPC::Caption(AptTextLayoutDiagnosticsPC::Kind(liZID)),
+                transform.mOriginXYZ.x,transform.mOriginXYZ.y,transform.mOriginXYZ.z,
+                transform.mRightUp.x,transform.mRightUp.y,transform.mRightUp.z,transform.mRightUp.w,
+                lpTextObject->mv2TopLeft.mX,lpTextObject->mv2TopLeft.mY,
+                lpTextObject->mv2BottomRight.mX,lpTextObject->mv2BottomRight.mY,
+                static_cast<int>(lpTextObject->meAlignment),lpTextObject->mfFontHeight,
+                *lpTextObject->mpfCurrentFontHeight,lpTextObject->mfStringWidth,transform.mColourScale.w);
+            AptTextLayoutDiagnosticsPC::Emit(line);
+        }
 
         lrHandler.GetTextRenderer()->RenderStringBuffered(lpBuffer, *lpTextObject);
     }

@@ -556,20 +556,10 @@ int AptCIH::tick()
         }
         if (nFrame == nFrameCount)
         {
-            // Wrapped past the end: loop back to the start, then skip to the enterFrame
-            // stage (LABEL_27) -- NOT through queueFrameActions.
-            // FLAG (deliberate divergence, 2nd attempt 2026-07-04): the faithful console/
-            // XB1 wrap is jumpToFrame(0) (XB1 tick sub_14085D620 `call sub_1408501F0(0)`,
-            // replay + mergeState + frame-0 action re-queue). RESTORING it against the
-            // REAL native-8 drive bundles kills the process reproducibly a few ticks into
-            // composition (silent death mid-mkitem, no WER record -- 2x reproduced), so
-            // the wrap-replay chain still has an un-diagnosed defect on real-bundle data
-            // (suspects: the pseudo-list replay over clips whose imports are unresolved
-            // stubs, or the delay-release chain re-entered from mergeState during tick).
-            // Until that is pinned, the plain play-head reset stays: the next tick's
-            // frame-0 doFrameControls re-composes the loop content (same on-screen
-            // result for a LOOP; the replay-merge only matters for a mid-timeline SEEK).
-            pInst->mnGotoFrame = 0;
+            // XB1 14085D6C3..6C8 / ARTIST82B0BFB8: seek back to frame0 so
+            // its children and actions are restored along with the play-head.
+            // A plain counter reset leaves the final frame's children live.
+            jumpToFrame(0);
             goto label_27;
         }
         // Normal frame: fall through to the shared doFrameControls (LABEL_18/19).

@@ -1,6 +1,6 @@
 #include "SDKs/EATech/include/Apt/AptPseudoData.h"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82AD9910
+// Native XB1 sub_140826640, cross-reference ARTIST @0x82AD9910
 //   AptPseudoData_t::AptPseudoData_t(this, source, characterId, data)
 //
 // Behaviour-faithful to the X360 pseudocode:
@@ -11,7 +11,7 @@
 //     // optional fields, gated on the source's PlaceObject flag bits:
 //     this->mpMatrix         = (flags & 0x04) ? &source->maMatrix          : 0;
 //     this->mpColorTransform = (flags & 0x08) ? &source->maColorTransform  : 0;
-//     this->miClipActionValue= (flags & 0x80) ?  source->miClipActionValue : 0;
+//     this->mpClipActions   = (flags & 0x80) ? source->mpClipActions : 0;
 //     this->mfRatio          = (flags & 0x10) ?  source->mfRatio           : 0.0;
 //
 // The flag bits match the SWF/GFx PlaceObject2 tag layout
@@ -47,8 +47,8 @@ AptPseudoData_t::AptPseudoData_t(const AptPlaceObjectInfo_t* lpSource,
     mpColorTransform = (luxFlags & 0x08u)
                            ? const_cast<u8*>(lpBody->maColorTransform)
                            : nullptr;
-    // The console captured its 4-byte clip-actions value; the native-8 pointer
-    // does not fit and the slot is unread by the merge overlay -- see the header.
-    miClipActionValue = 0;
+    // XB1 14082667E..688: mov r8,[rdx+48h]; mov[rcx+18h],r8.
+    // Borrow the same resident authored handler block as initial placement.
+    mpClipActions = (luxFlags & 0x80u) ? lpBody->mpClipActions : nullptr;
     mfRatio           = (luxFlags & 0x10u) ? lpBody->mfRatio             : 0.0f;
 }

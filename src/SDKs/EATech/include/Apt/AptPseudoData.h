@@ -3,7 +3,7 @@
 // =====================================================================
 //  AptPseudoData.h  â€”  EA APT (ActionScript Player Technology) middleware
 //
-//  AptPseudoData_t is a small (28-byte) "snapshot" record that APT builds
+//  AptPseudoData_t is a native48-byte "snapshot" record that APT builds
 //  for a display-list entry while interpreting a PlaceObject-style command.
 //  It captures, by flag, the optional fields of a source place-object info
 //  record (matrix / colour-transform pointers, ratio, clip-action value)
@@ -11,7 +11,7 @@
 //
 //  NO DWARF exists for this class (X360-only; not present in the PS3
 //  DecFIGS dump nor in the EATech public Apt.h). All shape below is derived
-//  STRICTLY from the X360 binary pseudocode @ 0x82AD9910. Member names are
+//  from native XB1 sub_140826640, cross-referenced with X360 @0x82AD9910. Member names are
 //  inferred; the flag bit meanings match the SWF/GFx PlaceObject2 tag bits
 //  (0x04 HasMatrix, 0x08 HasColorTransform, 0x10 HasRatio, 0x80
 //  HasClipActions), which the capture logic matches exactly. See notes.
@@ -94,23 +94,19 @@ struct AptPlaceObjectInfo_t
     }
 };
 
+// Native XB1 sub_140826640 is the ABI authority for this runtime snapshot.
+// Four pointer-width captures, ratio/flags and two shorts; sub_1408265B0
+// allocates exactly48 bytes. Clip actions are borrowed from the resident movie.
 struct AptPseudoData_t
 {
-    // ---- layout (28 bytes; offsets verified against the X360 ctor) ----
-    void* mpData;             // [0x00] caller-supplied data context (ctor arg)
-    void* mpMatrix;           // [0x04] &source.maMatrix  if flag 0x04 set, else null
-    void* mpColorTransform;   // [0x08] &source.maColorTransform if 0x08 set, else null
-    // [0x0C] the console captured its 4-byte clip-actions VALUE here (flag 0x80);
-    // the native-8 record carries a POINTER instead, which this 4-byte slot cannot
-    // hold -- and the slot is UNREAD by the mergeState props-overlay pun (it lands
-    // on AptFramePlacementProps::mnReserved0C), so it stays 0 on the native-8
-    // path -- verified unread (the overlay pun lands it on a reserved slot);
-    // nothing consumes the console value.
-    s32   miClipActionValue;
-    f32   mfRatio;            // [0x10] source ratio         if 0x10 set, else 0.0
-    u32   muxFlags;           // [0x14] copy of source flag bits
-    s16   mi16CharacterId;    // [0x18] character id (ctor arg)
-    s16   mi16Depth;          // [0x1A] copy of source depth
+    void* mpData;             // XB1 +0x00 character/data context
+    void* mpMatrix;           // +0x08 source matrix address under flag4
+    void* mpColorTransform;   // +0x10 source colour address under flag8
+    void* mpClipActions;      // +0x18 full native pointer under flag80
+    f32   mfRatio;            // +0x20 source ratio under flag10
+    u32   muxFlags;           // +0x24 source flags
+    s16   mi16CharacterId;    // +0x28 created-on-frame/character identifier
+    s16   mi16Depth;          // +0x2A source clip depth
 
     // Constructed from a source place-object info record. Returns *this in
     // the X360 fastcall convention (modelled as a normal constructor).
@@ -118,3 +114,10 @@ struct AptPseudoData_t
                     s16                          li16CharacterId,
                     void*                        lpData);
 };
+
+static_assert(offsetof(AptPseudoData_t, mpClipActions) == 0x18, "XB1 pseudo clip actions@18");
+static_assert(offsetof(AptPseudoData_t, mfRatio) == 0x20, "XB1 pseudo ratio@20");
+static_assert(offsetof(AptPseudoData_t, muxFlags) == 0x24, "XB1 pseudo flags@24");
+static_assert(offsetof(AptPseudoData_t, mi16CharacterId) == 0x28, "XB1 pseudo ID@28");
+static_assert(offsetof(AptPseudoData_t, mi16Depth) == 0x2A, "XB1 pseudo clip depth@2A");
+static_assert(sizeof(AptPseudoData_t) == 48, "XB1 pseudo allocation is48 bytes");

@@ -56,16 +56,10 @@ struct AptDisplayListNode
 // ---------------------------------------------------------------------------
 struct AptCharacter;
 struct AptUint32CXForm;
-struct AptFramePlacementProps
-{
-    AptCharacter*    mpCharacter;        // [0] +0x00  character to place (null == keep existing)
-    float*           mpPositionMatrix;   // [1] +0x04  src 2D-affine (6 floats), copied when mnFlags bit2
-    AptUint32CXForm* mpColorTransform;   // [2] +0x08  src packed-ARGB colour, copied when mnFlags bit3
-    int32_t          mnReserved0C;       // [3] +0x0C
-    int32_t          mnReserved10;       // [4] +0x10
-    int32_t          mnFlags;            // [5] +0x14  bit2 = has matrix, bit3 = has colour
-    int16_t          mi16CharacterId;    //     +0x18  placed-char id (mergeState gate1: == node createdOnFrame)
-};
+// The merge properties ARE the native runtime pseudo snapshot. Use its owning
+// declaration so clip-pointer widening cannot make two overlapping shapes drift.
+#include "SDKs/EATech/include/Apt/AptPseudoData.h"
+using AptFramePlacementProps = AptPseudoData_t;
 
 struct AptDisplayList
 {
