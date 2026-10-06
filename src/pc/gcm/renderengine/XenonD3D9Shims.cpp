@@ -3556,9 +3556,248 @@ namespace renderengine
         return true;
     }
 
-    void ScratchProbe_AtDraw(IDirect3DDevice9* lpDevice, const u8* lpVertices,
-                             u32 luSourceStride, u32 luNumVertices)
+    // FLAG PC-platform leaf: read-only, default-off witness at the existing draw seam.
+    // BRN_SILL_NATIVE_PROBE=1 starts at present 9000; a larger value selects the first
+    // present. At most four records per known sill technique, 600 presents apart (12 total).
+    // SOURCE references below are the host bundle run, NOT current GPU VB/IB contents:
+    // retained buffers have not been bound by WorldGeometry_Submit at this point.
+    // The shader, declaration and constants, in contrast, are read from the device now.
+    void SillNativeProbe_AtDraw(IDirect3DDevice9* lpDevice, const u8* lpVertices,
+                                u32 luSourceStride, u32 luNumVertices,
+                                const u8* lpSourceIndices, bool lb32Bit,
+                                u32 luBaseVertex, u32 luStartIndex, u32 luIndexCount,
+                                bool lbRetained)
     {
+        static const char* const spcProbe = std::getenv("BRN_SILL_NATIVE_PROBE");
+        if (!spcProbe || !spcProbe[0] || spcProbe[0] == '0' || !lpDevice)
+            return;
+        static const u32 suFirstPresent = [] {
+            const unsigned long luValue = std::strtoul(spcProbe, nullptr, 10);
+            return luValue > 1u ? static_cast<u32>(luValue) : 9000u;
+        }();
+        LogOnce("sillarm", "[sill-native] ARMED: read-only native shader/decl/constants;"
+                          " CPU source references; GPU VB/IB unreadable at pre-submit; cap=12\n");
+        const u32 luPresent = renderengine::GetDispatchPresentCountPC();
+        if (luPresent < suFirstPresent || !spCurrentTechniqueName)
+            return;
+        const char* const lapcNames[3] = {
+            "ehicle_Opaque_PlasticMatt_Damaged", "ehicle_Opaque_PaintGloss_Textured_Damaged",
+            "ehicle_Opaque_Chrome_Damaged_Damaged"
+        };
+        const u32 lauProgramIds[3] = { 0x544574F9u, 0x274C49FBu, 0x21E0621Au };
+        u32 luTechnique = 3u;
+        for (u32 lu = 0; lu < 3u; ++lu)
+            if (std::strstr(spCurrentTechniqueName, lapcNames[lu])) luTechnique = lu;
+        if (luTechnique == 3u)
+            return;
+        static u32 sauRecords[3] = {};
+        static u32 sauLastPresent[3] = {};
+        static u32 suRecords = 0u;
+        if (suRecords >= 12u || sauRecords[luTechnique] >= 4u
+            || (sauRecords[luTechnique] && luPresent - sauLastPresent[luTechnique] < 600u))
+            return;
+
+        const bool lbSourceLayout = lpVertices && lpSourceIndices && luSourceStride
+            && luSourceStride == suLastDeclSourceStride
+            && su8LastDeclPositionType == D3DDECLTYPE_FLOAT3
+            && suLastDeclPositionSourceOffset <= luSourceStride
+            && 12u <= luSourceStride - suLastDeclPositionSourceOffset
+            && sau16LastDeclBlendOffset[0] <= luSourceStride
+            && 4u <= luSourceStride - sau16LastDeclBlendOffset[0]
+            && sau16LastDeclBlendOffset[1] <= luSourceStride
+            && 4u <= luSourceStride - sau16LastDeclBlendOffset[1]
+            && sau8LastDeclBlendType[0] == D3DDECLTYPE_UBYTE4
+            && sau8LastDeclBlendType[1] == D3DDECLTYPE_UBYTE4N;
+        const bool lbSourceRun = spIndexSource && luStartIndex <= spIndexSource->muIndexCount
+            && luIndexCount <= spIndexSource->muIndexCount - luStartIndex;
+        // One actually referenced source vertex for each row; only X/Y are read by these VSs.
+        u32 lauVertex[2] = { ~0u, ~0u };
+        u32 lauRunIndex[2] = { ~0u, ~0u };
+        u32 luBadIndices = 0u;
+        if (lbSourceLayout && lbSourceRun)
+        {
+            for (u32 lu = 0; lu < luIndexCount; ++lu)
+            {
+                u32 luIndex = 0u;
+                if (lb32Bit) std::memcpy(&luIndex, lpSourceIndices + size_t(lu) * 4u, 4u);
+                else
+                {
+                    u16 lu16Index;
+                    std::memcpy(&lu16Index, lpSourceIndices + size_t(lu) * 2u, 2u);
+                    luIndex = lu16Index;
+                }
+                if (spResetEnabled && luIndex == suResetIndex) continue;
+                if (luBaseVertex >= luNumVertices || luIndex >= luNumVertices - luBaseVertex)
+                {
+                    ++luBadIndices;
+                    continue;
+                }
+                const u32 luVertex = luBaseVertex + luIndex;
+                u32 lauRows[4]; f32 lafWeights[4];
+                ScratchProbe_ReadSkinPair(lpVertices + size_t(luVertex) * luSourceStride,
+                                          lauRows, lafWeights);
+                for (u32 luRow = 0; luRow < 2u; ++luRow)
+                    for (u32 luLane = 0; luLane < 2u; ++luLane)
+                        if (lauVertex[luRow] == ~0u && lauRows[luLane] == 104u + luRow
+                            && lafWeights[luLane] > 0.0f)
+                        {
+                            lauVertex[luRow] = luVertex;
+                            lauRunIndex[luRow] = lu;
+                        }
+            }
+            if (lauVertex[0] == ~0u && lauVertex[1] == ~0u && !luBadIndices)
+            {
+                LogOnce("sillabsent", "[sill-native] source run has no nonzero X/Y weight"
+                                     " on rows104/105; unmatched source, inconclusive\n");
+                return;
+            }
+        }
+
+        f32 lafPalette[128 * 4] = {}, lafWvp[16] = {}, lafWorld[16] = {};
+        const HRESULT lhrPalette = lpDevice->GetVertexShaderConstantF(0u, lafPalette, 128u);
+        const HRESULT lhrWvp = lpDevice->GetVertexShaderConstantF(140u, lafWvp, 4u);
+        const HRESULT lhrWorld = lpDevice->GetVertexShaderConstantF(148u, lafWorld, 4u);
+        f32 lfMaxPositive = 0.0f;
+        bool lbFinite = true;
+        for (u32 lu = 0; lu < 128u * 4u; ++lu)
+        {
+            if (!std::isfinite(lafPalette[lu])) lbFinite = false;
+            if (lu % 4u != 3u && lafPalette[lu] > lfMaxPositive) lfMaxPositive = lafPalette[lu];
+        }
+        // Successful pristine reads do not spend the late-deformation record budget.
+        if (SUCCEEDED(lhrPalette) && lbFinite && lfMaxPositive <= 0.0f) return;
+
+        IDirect3DVertexShader9* lpVs = nullptr;
+        IDirect3DVertexDeclaration9* lpDecl = nullptr;
+        const HRESULT lhrVs = lpDevice->GetVertexShader(&lpVs);
+        const HRESULT lhrDecl = lpDevice->GetVertexDeclaration(&lpDecl);
+        UINT luBytes = 0u;
+        HRESULT lhrCode = lpVs ? lpVs->GetFunction(nullptr, &luBytes) : E_FAIL;
+        u32 luFingerprint = 0u;
+        if (SUCCEEDED(lhrCode) && luBytes && luBytes <= 65536u)
+        {
+            std::vector<u8> laCode(luBytes);
+            const UINT luCapacity = luBytes;
+            lhrCode = lpVs->GetFunction(laCode.data(), &luBytes);
+            if (SUCCEEDED(lhrCode) && luBytes <= luCapacity)
+            {
+                luFingerprint = 2166136261u;
+                for (u32 lu = 0; lu < luBytes; ++lu)
+                    luFingerprint = (luFingerprint ^ laCode[lu]) * 16777619u;
+            }
+            else lhrCode = E_FAIL;
+        }
+        else if (SUCCEEDED(lhrCode)) lhrCode = E_FAIL;
+        // All three installed programs have this identical bytecode (SHA256020f4955...a65b3).
+        // The name identifies a candidate only; the native function must match independently.
+        const bool lbShaderMatch = SUCCEEDED(lhrVs) && SUCCEEDED(lhrCode) && lpVs
+            && lpVs == spRealVs && lpVs == spMeshVertexShader && sbRealProgramsBound
+            && luBytes == 1872u && luFingerprint == 0xE1623B6Bu;
+        D3DVERTEXELEMENT9 laElements[MAXD3DDECLLENGTH + 1] = {};
+        UINT luElements = MAXD3DDECLLENGTH + 1u;
+        HRESULT lhrElements = lpDecl ? lpDecl->GetDeclaration(laElements, &luElements) : E_FAIL;
+        bool lbDeclMatch = SUCCEEDED(lhrDecl) && SUCCEEDED(lhrElements) && lpDecl
+            && lpDecl == spMeshDeclaration && luElements <= MAXD3DDECLLENGTH + 1u;
+        const u32 lauSourceOffsets[3] = { suLastDeclPositionSourceOffset,
+            sau16LastDeclBlendOffset[0], sau16LastDeclBlendOffset[1] };
+        const u8 lauTypes[3] = { D3DDECLTYPE_FLOAT3, D3DDECLTYPE_UBYTE4, D3DDECLTYPE_UBYTE4N };
+        const u8 lauUsages[3] = { D3DDECLUSAGE_POSITION, D3DDECLUSAGE_BLENDINDICES,
+                                D3DDECLUSAGE_BLENDWEIGHT };
+        for (u32 luAttr = 0; luAttr < 3u; ++luAttr)
+        {
+            u32 luExpandedOffset = lauSourceOffsets[luAttr];
+            for (u32 lu = 0; lu < suVertexDec3nCount && lu < 16u; ++lu)
+                if (sau16VertexDec3nOffsets[lu] < lauSourceOffsets[luAttr]) luExpandedOffset += 8u;
+            bool lbFound = false;
+            for (u32 lu = 0; lu < luElements && lu < MAXD3DDECLLENGTH + 1u; ++lu)
+                if (laElements[lu].Usage == lauUsages[luAttr] && !laElements[lu].UsageIndex
+                    && laElements[lu].Stream == 0u && laElements[lu].Type == lauTypes[luAttr]
+                    && laElements[lu].Method == D3DDECLMETHOD_DEFAULT
+                    && laElements[lu].Offset == luExpandedOffset) lbFound = true;
+            lbDeclMatch = lbDeclMatch && lbFound;
+        }
+        for (u32 lu = 0; lu < 16u; ++lu)
+            if (!std::isfinite(lafWvp[lu]) || !std::isfinite(lafWorld[lu])) lbFinite = false;
+        const bool lbConstantsRead = SUCCEEDED(lhrPalette) && SUCCEEDED(lhrWvp) && SUCCEEDED(lhrWorld);
+        const bool lbQualified = lbSourceLayout && lbSourceRun && !luBadIndices
+            && (lauVertex[0] != ~0u || lauVertex[1] != ~0u)
+            && lbShaderMatch && lbDeclMatch && lbConstantsRead && lbFinite;
+        const u32 luRecord = ++suRecords;
+        ++sauRecords[luTechnique]; sauLastPresent[luTechnique] = luPresent;
+        char lacMsg[1024];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+            "[sill-native] record=%u present=%u status=%s tech='%s' candidateVs=%08X"
+            " boundVs=%p vsHr=%08X codeHr=%08X bytes=%u fnv1a32=%08X shaderMatch=%u"
+            " boundDecl=%p declHr=%08X elementsHr=%08X declMatch=%u"
+            " paletteHr=%08X wvpHr=%08X worldHr=%08X finite=%u maxPositiveXYZ=%.9g\n",
+            luRecord, luPresent, lbQualified ? "native-constants-decl/source-reference" : "INCONCLUSIVE",
+            spCurrentTechniqueName, lauProgramIds[luTechnique], lpVs, unsigned(lhrVs),
+            unsigned(lhrCode), luBytes, luFingerprint, unsigned(lbShaderMatch), lpDecl,
+            unsigned(lhrDecl), unsigned(lhrElements), unsigned(lbDeclMatch), unsigned(lhrPalette),
+            unsigned(lhrWvp), unsigned(lhrWorld), unsigned(lbFinite), lfMaxPositive);
+        CgsDev::Log::WriteToLog(lacMsg);
+        std::snprintf(lacMsg, sizeof(lacMsg),
+            "[sill-native] record=%u CPU-source vbHeader=%p vertices=%p stride=%u count=%u"
+            " ibHeader=%p originalRun=%p index32=%u baseVertex=%u startIndex=%u count=%u"
+            " layout=%u runBounds=%u badIndices=%u route=%s GPU-input-bytes=UNREADABLE-PRE-SUBMIT"
+            " decoder=POS:%u/%u IDX:%u/%u WGT:%u/%u expandedStride=%u\n",
+            luRecord, spVertexSource, lpVertices, luSourceStride, luNumVertices, spIndexSource,
+            lpSourceIndices, unsigned(lb32Bit), luBaseVertex, luStartIndex, luIndexCount,
+            unsigned(lbSourceLayout), unsigned(lbSourceRun), luBadIndices,
+            lbRetained ? "retained-pending" : "UP-pending", lauSourceOffsets[0], lauTypes[0],
+            lauSourceOffsets[1], lauTypes[1], lauSourceOffsets[2], lauTypes[2], suVertexStride);
+        CgsDev::Log::WriteToLog(lacMsg);
+        for (u32 lu = 0; SUCCEEDED(lhrElements) && lu < luElements && lu < MAXD3DDECLLENGTH + 1u; ++lu)
+        {
+            const D3DVERTEXELEMENT9& lrElem = laElements[lu];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[sill-native] record=%u nativeDecl[%u]=stream:%u offset:%u type:%u method:%u usage:%u index:%u\n",
+                luRecord, lu, lrElem.Stream, lrElem.Offset, lrElem.Type, lrElem.Method, lrElem.Usage, lrElem.UsageIndex);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+        for (u32 luRow = 0; luRow < 2u; ++luRow)
+        {
+            if (lauVertex[luRow] == ~0u) continue;
+            const u8* const lpVertex = lpVertices + size_t(lauVertex[luRow]) * luSourceStride;
+            u32 lauRows[4]; f32 lafWeights[4]; f32 lafPosition[3];
+            ScratchProbe_ReadSkinPair(lpVertex, lauRows, lafWeights);
+            std::memcpy(lafPosition, lpVertex + suLastDeclPositionSourceOffset, sizeof(lafPosition));
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[sill-native] record=%u CPU-reference row=%u runIndex=%u sourceVertex=%u"
+                " position=[%.9g,%.9g,%.9g] indices=[%u,%u,%u,%u] weights=[%.9g,%.9g,%.9g,%.9g]\n",
+                luRecord, 104u + luRow, lauRunIndex[luRow], lauVertex[luRow],
+                lafPosition[0], lafPosition[1], lafPosition[2], lauRows[0], lauRows[1], lauRows[2], lauRows[3],
+                lafWeights[0], lafWeights[1], lafWeights[2], lafWeights[3]);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+        // Exact native float32 reads; no CPU skin result is labelled as GPU output.
+        const f32* const lapfBlocks[3] = { lafPalette, lafWvp, lafWorld };
+        const u32 lauBases[3] = { 0u, 140u, 148u }, lauCounts[3] = { 128u, 4u, 4u };
+        const HRESULT lahrBlocks[3] = { lhrPalette, lhrWvp, lhrWorld };
+        for (u32 luBlock = 0; luBlock < 3u; ++luBlock)
+            for (u32 luRow = 0; SUCCEEDED(lahrBlocks[luBlock]) && luRow < lauCounts[luBlock]; ++luRow)
+            {
+                const f32* const lpRow = lapfBlocks[luBlock] + luRow * 4u;
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[sill-native] record=%u nativeC%u=[%.9g,%.9g,%.9g,%.9g]\n",
+                    luRecord, lauBases[luBlock] + luRow, lpRow[0], lpRow[1], lpRow[2], lpRow[3]);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        if (lpVs) lpVs->Release();
+        if (lpDecl) lpDecl->Release();
+        if (suRecords == 12u)
+            CgsDev::Log::WriteToLog("[sill-native] cap=12 reached; later draws unobserved\n");
+    }
+
+    void ScratchProbe_AtDraw(IDirect3DDevice9* lpDevice, const u8* lpVertices,
+                             u32 luSourceStride, u32 luNumVertices,
+                             const u8* lpSourceIndices, bool lb32Bit,
+                             u32 luBaseVertex, u32 luStartIndex, u32 luIndexCount,
+                             bool lbRetained)
+    {
+        SillNativeProbe_AtDraw(lpDevice, lpVertices, luSourceStride, luNumVertices,
+                               lpSourceIndices, lb32Bit, luBaseVertex, luStartIndex,
+                               luIndexCount, lbRetained);
         static const char* const spcProbe = std::getenv("BRN_SCRATCH_PROBE");
         if (spcProbe == nullptr || spcProbe[0] == '0' || lpDevice == nullptr)
             return;
@@ -4757,7 +4996,7 @@ namespace renderengine
             const char* lpcFast = std::getenv("BRN_DAMAGE_PROBE_FAST");
             if (lpcFast && lpcFast[0] == '0') return false;
             const char* const lapNames[] = {
-                "BRN_CRUMPLE_PROBE", "BRN_CRUMPLE_FORCE", "BRN_SCRATCH_PROBE",
+                "BRN_CRUMPLE_PROBE", "BRN_CRUMPLE_FORCE", "BRN_SCRATCH_PROBE", "BRN_SILL_NATIVE_PROBE",
                 "BRN_SCRATCH_FORCE", "BRN_GLASSFX_PROBE", "BRN_GLASSFX_FORCE"
             };
             for (const char* lpcName : lapNames)
@@ -4773,7 +5012,9 @@ namespace renderengine
             // [PROBE, env-gated] BRN_SCRATCH_PROBE -- the W lane of g_verletOffsets, per ROW and
             // per VERTEX, at this draw. Same placement and the same reason as the crumple probe.
             ScratchProbe_AtDraw(lpDevice, static_cast<const u8*>(lpVertexData),
-                                suVertexSourceStride, luNumVertices);
+                                suVertexSourceStride, luNumVertices,
+                                static_cast<const u8*>(lpIndexData) + size_t(luStartIndex) * luIndexSize,
+                                lb32Bit, luBaseVertexIndex, luStartIndex, luIndexCount, lbRetained);
             // [DIAG, env-gated] BRN_SCRATCH_FORCE=<0..1>. AFTER the probe, so the probe always
             // reports the value the SIMULATION published, never the forced one.
             ScratchForce_Apply(lpDevice);
