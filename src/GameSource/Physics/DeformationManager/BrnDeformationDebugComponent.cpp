@@ -768,11 +768,9 @@ namespace Deformation
         for ( s32 li = 0; li < 6; ++li ) { SetChangeCallback( lapCompressOrder[li], &OnCompressionChange, this ); }
 
         // ---- compression preset selector -------------------------------------------------------
-        miCompressPreset                   = E_COMPRESS_MAX_TOTAL;   // X360 *(this+104)=2 (the high option's index)
         maCompressPresetStrings[0].miValue = 0; maCompressPresetStrings[0].mpcName = "None";
         maCompressPresetStrings[1].miValue = 1; maCompressPresetStrings[1].mpcName = "Max drivetime";
         maCompressPresetStrings[2].miValue = 2; maCompressPresetStrings[2].mpcName = "Max total";
-        miCompressPreset                   = 0;                      // selected = None
         RegisterVariable( &miCompressPreset, KPC_GROUP_COMPRESS, "Preset" );
         SetRange( &miCompressPreset, 0, KI_NUM_COMPRESS_PRESETS );
         SetOptions( &miCompressPreset, maCompressPresetStrings );
