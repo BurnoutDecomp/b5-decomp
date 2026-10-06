@@ -1,13 +1,10 @@
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleOutputInterface.h"
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
-#include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"
 
 #include <cstddef>   // offsetof (layout asserts)
 #include <stdlib.h>  // getenv ([UI-gate] arming-timeline diag; same env guard as the wQ_04 rung)
 #include <cstring>   // std::memset (the 24-byte player-trigger action record)
-
-#include "GameSource/Math/BrnMathUtils.h"   // BrnMath::IsPointInsideBox (the player-trigger stand-in)
 
 #include "rw/math/vpu/vector3_operation.h"  // rw::math::vpu operator-/Dot/MagnitudeSquared (refresh-gate + entry-direction maths)
 
@@ -21,15 +18,7 @@
 #include "SharedClasses/Trigger/BrnKillzone.h"           // BrnTrigger::Killzone (trigger/region-id tables)
 #include "SharedClasses/Trigger/BrnRegion.h"             // BrnTrigger::BoxRegion (GetDimensions/GetPosition2D/ComputeDirection)
 
-// [stuntrace waveD D1] the light-region detection stand-in's data path: the loaded lane graph ->
-// its hulls -> their light-trigger boxes. Section must precede Hull (Hull embeds Section* arrays
-// whose element type it needs complete), the same include order BrnTrafficData.cpp uses.
-#include "SharedClasses/Traffic/BrnTrafficDataResourceType.h" // BrnTraffic::TrafficData (muNumHulls, GetHull)
-#include "SharedClasses/Traffic/BrnTrafficSection.h"          // Section / LaneRung (must precede BrnTrafficHull.h)
-#include "SharedClasses/Traffic/BrnTrafficHull.h"             // BrnTraffic::Hull (mpaLightTriggers, muNumLightTriggers)
-#include "SharedClasses/Traffic/BrnTrafficLightTrigger.h"     // BrnTraffic::LightTrigger + KU_LIGHT_TRIGGER_ID_OWNER_TAG
-#include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"  // BrnTraffic::KU_MAX_HULLS (the :211 assert bound)
-#include <cmath>                                             // std::fabs (per-lane abs of the box dimensions)
+#include <cmath>                                             // submitted look-ahead normalization
 
 #include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"          // BrnGameState::RoadRulesManager (OnRoadLimit/IsRoadLimitRegionValid)
 #include "GameSource/GameState/Offences/BrnDriveThruManager.h"           // BrnGameState::DriveThruManager (HandleDriveThru)
@@ -97,9 +86,6 @@ static const s32 KI_KILLZONE_ACTION_EVENT_SIZE = 264;
 // ----------------------------------------------------------------------------------------
 static const s32 KI_GAME_ACTION_PLAYER_TRIGGER       = 109;
 static const s32 KI_PLAYER_TRIGGER_ACTION_EVENT_SIZE = 24;
-
-// maLastPlayerTriggers / maLastFrameTriggers are Array<u16,32> (BrnTriggerQueryManager.h:173).
-static const u32 KU_MAX_PLAYER_TRIGGERS_PER_FRAME = 32u;
 
 // The 24-byte record itself. FLAG: its DWARF name/home is not recovered -- the console builds it
 // on the stack inside PreWorldUpdate and no consumer of action 109 is reconstructed in this tree
@@ -516,12 +502,8 @@ void TriggerQueryManager::ProcessPlayerTriggers(
                                                 lpVehicleList, lpOutput);
 
             // [DIAG] NOT IN THE X360 BINARY. ENTRY DETECTION, logged SEPARATELY from the effect.
-            // A drive-thru is a trigger-region crossing and this build's producer of
-            // maLastPlayerTriggers is a POINT test (see PreWorldUpdatePlayerTriggersBringUp's own
-            // stand-in FLAG), so on a frame-starved box the car can step clean over a volume. That
-            // failure and "the action did nothing" produce the identical symptom, so they must
-            // never share one log line [[diagnostics-that-lie]]. This rung answers ONLY "did the
-            // region fire"; whether the effect applied is a different rung entirely.
+            // This observes the swept-region hit reaching its gameplay handler;
+            // successful repair/reset is observed separately at its actual owner.
             if (CgsDev::Log::gpDebugPrint != 0)
             {
                 *CgsDev::Log::gpDebugPrint
@@ -618,450 +600,20 @@ void TriggerQueryManager::ProcessPlayerTriggers(
     }
 }
 
-// ============================================================================
-// [FLAG PC bring-up] NOT IN THE X360 BINARY -- the light-region box scan.
-//
-// [stuntrace waveD, agent D1] THIS STANDS IN FOR TriggerQueryManager::PostWorldUpdate
-// @0x82386BD8's OWNER-57 ARM, and for nothing else. What the console does there, verbatim:
-//
-//   0x82386CDC  stb  r18(0), 0x711(r27)   ; mbPlayerInTrafficLightRegion = false   \ EVERY frame,
-//   0x82386CE0  stw  r10(-1), 0x714(r27)  ; mPlayerCurrentTrafficLightId = -1      / before the walk
-//   ... then, for each 32-bit result word in the world's trigger LINE-TEST result queue
-//       (CgsModule::VariableEventQueue<1024,16>, filled by the TriggerEntityModule):
-//   0x82386F54  cmplwi r28, 0x39          ; owner byte == 57 -> a TRAFFIC-LIGHT trigger
-//                                         ;   (56 == a TriggerData region -> the OTHER arm)
-//   0x82386F5C  clrlwi r11, r25, 24 / beq ; ONLY when the result belongs to the PLAYER's car
-//   0x82386F68  stb  r23(1), 0x711(r27)   ; mbPlayerInTrafficLightRegion = true
-//   0x82386F74  insrwi r11, 0x39, 8,0     ; \ the TriggerId base-class pair, SetOwner then SetId:
-//   0x82386F80  insrwi r11, r29,  24,8    ; / mPlayerCurrentTrafficLightId = 0x39000000 | (id & 0xFFFFFF)
-//
-// So the console DERIVES BOTH MEMBERS FROM SCRATCH EVERY FRAME -- there is no latch to clear and
-// no "leave" event; "not in a region this frame" is just the top-of-function reset surviving.
-// This stand-in reproduces that shape exactly, and the only thing it replaces is WHERE the hit
-// comes from: instead of a line-test result queue it tests the player's position against the
-// loaded lane graph's light-trigger boxes directly.
-//
-// This point-test stand-in predates the sound-query reconstruction. The world
-// trigger pipeline now runs; SubmitTriggerQueries currently restores its sound
-// slice only. Traffic-light query submission/result handling still uses this
-// existing stand-in and has not been changed by the sound work.
-//
-// THE BOXES. BrnTraffic::TrafficEntityModule::ManageTriggers @0x82747518 is the console's sole
-// producer of owner-57 triggers: it walks every streamed-in hull, then every entry of that hull's
-// mpaLightTriggers (Hull +0x34, stride 32, count at Hull +0x0E), and registers each one with the
-// world as a box trigger whose id is `(hull << 8) | 0x39000000 | lightTriggerIndex`
-// (0x827477EC/F8/FC). This scan walks the SAME arrays and packs the SAME id, so the value it
-// latches is bit-identical to the one the console's queue would have carried.
-//
-// ⚠️ FULL EXTENTS, HALVED HERE. ManageTriggers passes abs(mDimensions) through unchanged and the
-// WORLD halves them -- TriggerEntityModule::ProcessAddTriggerEvents @0x822D9520..0x822D9554:
-// `vspltisw128 v126,1 ; vcsxwfp128 v127,v126,1` (== 0.5), `vmulfp128 v1,v0,v127`, then
-// rw::collision::BoxVolume::Initialize. BrnMath::IsPointInsideBox takes HALF extents, so the
-// `* 0.5f` below is what makes this box the same size as the console's. Dropping it would make
-// every junction twice as wide in each axis and fire the banner from the next street over.
-//
-// ⚠️ POINT TEST vs SWEPT LINE. The console line-tests the car's travel this frame; this is a point
-// test at the car's origin. A box thinner than one frame of travel could be tunnelled through --
-// but the shipped light triggers are 6..56 m by 12 m by 48..104 m (measured over all 443 records
-// in B5TRAFFIC.BNDL), so nothing here is close to that. Stated rather than hidden, exactly as the
-// sibling region stand-in below states it.
-//
-// ⚠️ FIRST HIT WINS. Overlapping approach boxes of the SAME junction all resolve through
-// Hull::mpaLightTriggerJunctionLookup to the SAME JunctionLogicBox, so which one is latched does
-// not change the junction that comes out; the console's own answer is "whichever result the queue
-// happened to hold last", which is no more principled. Documented so nobody reads the `break` as
-// a considered priority rule.
-//
-// COST: 443 boxes on this track, each one Y-rotation-only transform + a squared-distance reject,
-// with BrnMath::IsPointInsideBox reached only by survivors. Measured need is 443; there is no cap
-// and no cache, deliberately -- a cache would need invalidating on every track load and this is
-// code that exists to be deleted.
-//
-// DELETE-WHEN the real trigger line-test pipeline lands (TriggerEntityModule::PreSceneUpdate /
-// PostSceneUpdate / PrePhysicsUpdate + TriggerQueryManager::SubmitTriggerQueries) and
-// TriggerQueryManager::PostWorldUpdate @0x82386BD8 is mounted as the real producer: then delete
-// this function AND its call site in stage (0b) below, and the owner-57 arm is the console's
-// verbatim.
-// ============================================================================
-static bool FindLightTriggerContainingPoint(const BrnTraffic::TrafficData* lpTrafficData,
-                                            const Vector3&                 lrPoint,
-                                            u32&                           lruOutTriggerId)
+// ARTIST8239F5C8, DecFIGS h:107. Consume the preceding world query results.
+void TriggerQueryManager::PreWorldUpdate(
+    const GameStateModuleIO::PreWorldInputBuffer* /*lpInput*/,
+    GameStateModuleIO::OutputBuffer* lpOutput,
+    StuntManager* lpStuntManager,
+    DriveThruManager* lpDriveThruManager,
+    const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+    const BrnResource::VehicleList* lpVehicleList)
 {
-    for (u32 luHull = 0; luHull < lpTrafficData->muNumHulls; ++luHull)
-    {
-        const BrnTraffic::Hull* lpHull = lpTrafficData->GetHull(luHull);
-        if (lpHull == 0 || lpHull->mpaLightTriggers == 0)
-        {
-            continue;
-        }
-
-        // ManageTriggers' own loop bound (`lbz r11, 0xE(r26)` @0x8274787C).
-        const u32 luTriggerCount = lpHull->muNumLightTriggers;
-        for (u32 luTrigger = 0; luTrigger < luTriggerCount; ++luTrigger)
-        {
-            const BrnTraffic::LightTrigger& lrTrigger = lpHull->mpaLightTriggers[luTrigger];
-
-            // `vandc128 v0, v127, <0x80000000 splat>` @0x82747834 -- per-lane fabs, then the
-            // world's own 0.5 (see the banner) to reach the half extents IsPointInsideBox wants.
-            const Vector3 lDimensions = lrTrigger.GetDimensions();
-            const Vector3 lHalfExtents = { std::fabs(lDimensions.x) * 0.5f,
-                                           std::fabs(lDimensions.y) * 0.5f,
-                                           std::fabs(lDimensions.z) * 0.5f,
-                                           0.0f };
-
-            // ExpandPosPlusYRotToTransform(mPosPlusYRot) -- the console's own
-            // `bl BrnTraffic::ExpandPosPlusYRotToTransform` @0x82747800. Its translation row IS
-            // the packed lane, so Pos() is the box centre with no extra accessor.
-            const Matrix44Affine lTransform = lrTrigger.GetTransform();
-
-            // Conservative broadphase (NOT the console's -- it has none, the scene manager's
-            // spatial partition does this job). The sum of the three HALF extents is >= the box's
-            // bounding-sphere radius, so this can only over-accept; it exists to keep the
-            // seven-assert IsPointInsideBox off the other 442 boxes.
-            const Vector3 lCentre  = lTransform.Pos();
-            const f32 lfDeltaX = lCentre.x - lrPoint.x;
-            const f32 lfDeltaY = lCentre.y - lrPoint.y;
-            const f32 lfDeltaZ = lCentre.z - lrPoint.z;
-            const f32 lfDistSq = lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
-            const f32 lfRadius = lHalfExtents.x + lHalfExtents.y + lHalfExtents.z;
-            if (lfDistSq > (lfRadius * lfRadius))
-            {
-                continue;
-            }
-
-            if (BrnMath::IsPointInsideBox(lTransform, lrPoint, lHalfExtents))
-            {
-                // BrnTraffic::LightTriggerId::Set(luHull, luTrigger), inlined by the console at
-                // 0x827477EC..0x827477FC. Its two bounds asserts are baked at
-                // BrnTrafficLightTrigger.h:211/212 and are reproduced here because this code is
-                // the one that PACKS the handle -- the shipped data satisfies both (315 hulls,
-                // <= 16 triggers per hull), so a fire means the lane graph changed shape.
-                CGS_ASSERT(luHull < BrnTraffic::KU_MAX_HULLS, "luHull < KU_MAX_HULLS");
-                CGS_ASSERT(luTrigger < 256u, "luLightTriggerIndex < 256");
-
-                lruOutTriggerId = (luHull << 8) | BrnTraffic::KU_LIGHT_TRIGGER_ID_OWNER_TAG | luTrigger;
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-// ============================================================================
-// X360 0x8239F5C8 - BrnGameState::TriggerQueryManager::PreWorldUpdate, ITS PLAYER-TRIGGER
-// FAN-OUT LEG.  [bugwave 2026-08-23 -- THE SUPER-JUMP ROOT CAUSE]
-//
-// ROOT CAUSE THIS CLOSES, measured rather than argued. Before this landed,
-// `grep -rn ProcessPlayerTriggers b5-decomp/src` found the DEFINITION and nothing else: the
-// function had no caller anywhere in the tree. It is the ONLY thing in the image that calls
-// StuntManager::LatchJumpElement (console case 7 @0x8239C1F8), which is the ONLY writer of
-// StuntManager::mpLastJumpElement (+1544). StuntManager::Update runs UpdateJumps only under
-// `if (mpLastJumpElement)`, so on this build the ENTIRE jump state machine -- the take-off
-// gate, game action 56 (OnJumpStart, the camera request), game action 57 (ShowJumpName), the
-// 0.5 s landing settle and its ProcessStuntElement(lbIsJump=true) that increments the
-// super-jump tally -- never executed once. Both halves of the user report ("super jumps do not
-// get counted at all. camera is also not firing") hang off this one missing call.
-// The SMASH/BILLBOARD half of the same ladder survived because it enters through a completely
-// different door: RecordPropHitEvent -> ProcessGameEvents case 111 -> StuntManager::OnPropHit,
-// which walks maActiveTriggers directly and never touches ProcessPlayerTriggers.
-//
-// THE CONSOLE'S BODY, leg by leg (r29 == this):
-//   0x8239F630  UpdateTriggers(this, lpOutput, lpActiveRaceCarInterface)     [already mounted,
-//               in GameStateModule_gUI_00.cpp :: PreWorldUpdateStuntBringUp]
-//   0x8239F63C  SubmitTriggerQueries(this, lpOutput, lpActiveRaceCarInterface)  [PARKED, see (P1)]
-//   0x8239F650  the 8-slot loop caching each active car position into
-//               maActiveRaceCarPosLastFrame[] (this+1632)                       [PARKED, see (P2)]
-//   0x8239F714  THIS LEG: for i in [0, maLastPlayerTriggers.GetLength())
-//                   liRegionIndex = maLastPlayerTriggers.GetItem(i)
-//                   assert liRegionIndex < GetRegionCount()   (BrnTriggerData.h:624)
-//                   lpRegion = mpTriggerData->GetRegion(liRegionIndex)
-//                   record.mId          = (s64)lpRegion->GetId()         std  @+0x00 (lwz +0x24)
-//                   record.miRegionType = lpRegion->GetType()            stw  @+0x08 (lbz +0x2A)
-//                   if (miRegionType == 2)
-//                       record.miGenericType = generic->GetType()        stw  @+0x0C (lbz +0x36)
-//                   record.miRegionIndex = liRegionIndex                 stw  @+0x10 (lhz)
-//                   record.mbFirstFrame  =
-//                       (maLastFrameTriggers.FindFirstInstanceOf(liRegionIndex) == -1)
-//                                                                         stb  @+0x14
-//                   lpOutput->GetGameActionQueue()->AddEvent(&record, 109, 24)
-//                   ProcessPlayerTriggers(record.mbFirstFrame, lpActiveRaceCarInterface,
-//                                         lpRegion, lpOutput, lpStuntManager,
-//                                         lpDriveThruManager, lpVehicleList)
-//   0x8239F848  the maSoundActions drain -> game action 218 (32 bytes)          [PARKED, see (P3)]
-//   0x8239F8AC  maSoundActions count = 0;  maLastFrameTriggers count = 0;
-//   0x8239F8B8  maLastFrameTriggers.AppendArray(maLastPlayerTriggers);
-//   0x8239F8BC  maLastPlayerTriggers count = 0;
-//
-// THE ONE PC BRING-UP STAND-IN, NAMED. maLastPlayerTriggers (+1428) is written in exactly ONE
-// place in the whole X360 image: TriggerQueryManager::PostWorldUpdate @0x82386BD8, at
-// `short_32_::Append(this + 1428, &regionIndex)` inside its walk of the PostWorldInputBuffer's
-// TRIGGER LINE-TEST RESULT QUEUE (a VariableEventQueue<1024,16> of owner-56 line-test results
-// produced by the world's TriggerEntityModule). The world pipeline now runs for
-// sound queries; the gameplay-trigger query/result slice still uses this stand-in.
-// The stand-in fills maLastPlayerTriggers by testing the PLAYER'S WORLD POSITION against the
-// armed regions in maActiveTriggers, using the SAME two-stage broadphase + IsPointInsideBox
-// idiom StuntManager::OnPropHit @0x8236EE18 already uses against the same array. It is a POINT
-// test where the console runs a swept LINE test from the car, so a region thinner than one
-// frame of travel could be missed; jump regions are tens of metres deep, so this is sound for
-// the jump ladder and is stated rather than hidden.
-// DELETE-WHEN the TriggerEntityModule line-test chain lands and TriggerQueryManager::
-// PostWorldUpdate @0x82386BD8 becomes the real producer: then delete stage (0) below, mount
-// PostWorldUpdate, and this function is the console's leg verbatim.
-//
-// Sound positions and action218 delivery are reconstructed separately by
-// CacheSoundQueryPositions/PostSoundActions. This function preserves the existing
-// gameplay-trigger fan-out; it no longer stands in for any sound action producer.
-// ============================================================================
-void TriggerQueryManager::PreWorldUpdatePlayerTriggersBringUp(
-        GameStateModuleIO::OutputBuffer*            lpOutput,
-        const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
-        StuntManager*                               lpStuntManager,
-        DriveThruManager*                           lpDriveThruManager,
-        const BrnResource::VehicleList*             lpVehicleList)
-{
-    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");
-    CGS_ASSERT(lpActiveRaceCarInterface != 0, "lpActiveRaceCarInterface != NULL");
-    CGS_ASSERT(lpStuntManager != 0, "lpStuntManager != NULL");
-    if (lpOutput == 0 || lpActiveRaceCarInterface == 0 || lpStuntManager == 0)
-    {
-        return;
-    }
-
-    const BrnTrigger::TriggerData* lpTriggerData = mpTriggerData.operator->();
-    if (lpTriggerData == 0)
-    {
-        return;   // Triggers.dat not bound yet (Prepare has not reached E_TRIGGER_LOAD_DONE)
-    }
-
     CgsDev::PerfMonCpu::StartMonitor(gsiPreWorldUpdatePM);
-
-    // ------------------------------------------------------------------------------------
-    // (0) [FLAG PC bring-up] THE PRODUCER STAND-IN -- see the banner. NOT IN THE X360 BINARY.
-    //     Console equivalent: TriggerQueryManager::PostWorldUpdate @0x82386BD8's
-    //     `short_32_::Append(this + 1428, ...)` over the world trigger line-test results.
-    // ------------------------------------------------------------------------------------
-    if (lpActiveRaceCarInterface->IsPlayerCarActive())
-    {
-        const Vector3 lPlayerPosition = lpActiveRaceCarInterface->GetPlayerPosition();
-        const u32     luArmedCount    = maActiveTriggers.GetLength();
-
-        for (u32 luArmed = 0; luArmed < luArmedCount; ++luArmed)
-        {
-            // maLastPlayerTriggers is Array<u16,32>; Append past capacity fires the container's
-            // own assert. The console's producer has the same bound, so stop at it.
-            if (maLastPlayerTriggers.GetLength() >= KU_MAX_PLAYER_TRIGGERS_PER_FRAME)
-            {
-                break;
-            }
-
-            const u16 luRegionIndex = maActiveTriggers[luArmed];
-            const BrnTrigger::TriggerRegion* lpArmedRegion = lpTriggerData->GetRegion(luRegionIndex);
-            if (lpArmedRegion->GetType() != BrnTrigger::TriggerRegion::E_TYPE_GENERIC_REGION)
-            {
-                continue;
-            }
-
-            const BrnTrigger::BoxRegion* lpBoxRegion = lpArmedRegion->GetBoxRegion();
-
-            // Conservative broadphase (NOT the console's -- OnPropHit's `0.5 * largestExtent`
-            // radius is only sound for a roughly-cubic box, and a false NEGATIVE here would be
-            // exactly the silent-no-jump bug this function exists to fix). The sum of the three
-            // dimensions is >= the box's bounding-sphere radius under either reading of
-            // GetDimensions (full extent or half extent), so it can only over-accept.
-            const Vector3 lCentre  = lpBoxRegion->GetPosition();
-            const f32 lfDeltaX = lCentre.x - lPlayerPosition.x;
-            const f32 lfDeltaY = lCentre.y - lPlayerPosition.y;
-            const f32 lfDeltaZ = lCentre.z - lPlayerPosition.z;
-            const f32 lfDistSq = lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
-            const f32 lfRadius = lpBoxRegion->GetDimensionX()
-                               + lpBoxRegion->GetDimensionY()
-                               + lpBoxRegion->GetDimensionZ();
-            if (lfDistSq > (lfRadius * lfRadius))
-            {
-                continue;
-            }
-
-            const Vector3 lHalfExtents = lpBoxRegion->GetDimensions();
-
-            // [FLAG PC bring-up] DEGENERATE AUTHORED BOXES. The RETAIL TriggerData carries
-            // exactly three generic regions whose box dimensions are ALL NEGATIVE -- verified
-            // bit-for-bit in the X360 original (D:\bp-staging\x360-retail TRIGGERS.DAT), so
-            // this is authored data, not a transcode/reader defect:
-            //     region 2793  id 425555  sub 11 ROAD_LIMIT        (3078.6, 4.6, -1922.9)
-            //     region 3879  id 609215  sub 18 PICTURE_PARADISE  ( 475.1, 33.2,  1087.2)
-            //     region 3888  id 616364  sub 18 PICTURE_PARADISE  ( 680.1, 36.6,  1049.8)
-            // The console never hands these to BrnMath::IsPointInsideBox -- its only callers
-            // are StuntManager::OnPropHit (sub-types 8/12 only) and the ChallengeManager --
-            // so its `lBoxDimensions >= 0` asserts never see them. This stand-in is the one
-            // caller that walks EVERY armed generic region (the first is 69 u off the
-            // junkyard-exit route, hence the intermittent per-frame assert triplets once it
-            // armed). A negative extent can satisfy no slab test ("never inside"), which is
-            // also these regions' effective behaviour on the console, so skip them BEFORE
-            // the assert contract instead of feeding it authored-degenerate data.
-            if (lHalfExtents.x < 0.0f || lHalfExtents.y < 0.0f || lHalfExtents.z < 0.0f)
-            {
-                static bool sbDegenerateBoxLogged = false;
-                if (!sbDegenerateBoxLogged && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    sbDegenerateBoxLogged = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[TriggerQueryManager] armed region " << luRegionIndex
-                        << " id=" << static_cast<s32>(lpArmedRegion->GetId())
-                        << " has negative box dimensions (authored; see the degenerate-box"
-                           " banner) -- skipped\n";
-                }
-                continue;
-            }
-
-            const Matrix44Affine lBoxTransform = lpBoxRegion->ComputeTransform();
-
-            // ⭐⭐⭐ [gas-station wave 2026-08-28] THE FACTOR-OF-TWO IS PAID, and it was not a
-            // cosmetic one: it was making the car UNDRIVEABLE.
-            //
-            // The FLAG that stood here said `GetDimensions()` is UNSCALED, that the console's box
-            // dimensions are FULL extents, that BrnMath::IsPointInsideBox takes HALF extents, and
-            // that this stand-in therefore tested every armed generic region at TWICE its authored
-            // size in each axis (8x the volume) -- and then deferred the fix as too risky for a
-            // drive-by. MEASURED CONSEQUENCE, boot log of 2026-08-28 (scratch/flow_run/
-            // showtime_S7bb_realexe/BrnGame.log), one causal chain, five lines apart:
-            //     3901  [UI-gate] trig rebuild #1 pos=(3007.97,-2.54,-1945.17) armed=3
-            //     3902  [drivethru] ENTER type=0 id=250700     <- junkyard, at the EXIT position
-            //     3907  === CarSelectManager: EnterJunkyard:
-            //     3908  === CarSelectManager: Transition In [Start]
-            //     3933  HIDE_ONLINE: Removing race car 0 / Created race car 0
-            //     3948  [hud-reveal] GuiPlayerEngineEvent engineOn=0 (raw state 2 -> 0)
-            // i.e. the junkyard drive-thru fired ON THE JUNKYARD EXIT PLACEMENT, ProcessDriveThru's
-            // case-0 arm re-entered car select, that tore the player car down and rebuilt it, and
-            // the engine went off and never came back. The car then sat at the junkyard spawn with
-            // gear 0 for the rest of the run -- which is exactly the "-Drive does nothing" symptom
-            // that has been blamed on the harness twice. A gate that fires 8x too large does not
-            // merely over-report: here it re-entered a flow the player had just left.
-            //
-            // THE CONSOLE'S OWN ANSWER, from a reconstruction of the console's own asm rather than
-            // from reasoning: ChallengeManager::IsPointInTriggerRegion @0x82333368
-            // (BrnChallengeManager_wC_04.cpp:148) is the SAME predicate over the SAME armed set,
-            // and it passes `lpBoxRegion->GetDimensions() * 0.5f` -- and takes its bounding-sphere
-            // radius as `maxDimension * 0.5f` for the same reason. Corroborated upstream by
-            // TriggerEntityModule::ProcessAddTriggerEvents @0x822D9520..0x822D9554, which
-            // multiplies InAddBoxTriggerEvent::mDimensions by 0.5 (`vspltisw128 v126,1 ;
-            // vcsxwfp128 v127,v126,1 ; vmulfp128 v1,v0,v127`) before BoxVolume::Initialize. Two
-            // independent console sites agree: GetDimensions() is FULL extents, the predicate wants
-            // HALF. So this is not a tuning choice between two defensible readings -- one of the
-            // two in-tree callers was simply wrong, and it was this one.
-            //
-            // ✅ VERIFIED END TO END, same day, run scratch/flow_run/gas_r3_fresh (fresh profile,
-            // -Drive -Steer left -Teleport onto gas station 285279). The numbers, and they are
-            // arithmetic rather than judgement -- junkyard 250700 is centred (3007.889, -0.810,
-            // -1956.691) with authored dims (10, 5, 14), and the junkyard-exit placement puts the
-            // car at (3007.972, -3.210, -1945.167), i.e. 11.52 m away along Z:
-            //     authored half-extent Z = 7.0   -> 11.52 > 7.0    OUTSIDE  (correct)
-            //     dims taken as half-extents = 14.0 -> 11.52 < 14.0  INSIDE (the bug)
-            // The log carries exactly that, as one line:
-            //     [trig-box] region 3669 id=250700 genericType=0 dims=(10,5,14)
-            //                insideFull=1 insideHalf=0
-            // and then, for the first time on this build: NO "CarSelectManager: EnterJunkyard",
-            // ONE "GuiPlayerEngineEvent engineOn=1" with no engineOn=0 after it, and a car that
-            // drove out of the junkyard under its own throttle -- which is what armed the 8 m
-            // teleport that the whole gas-station measurement then hung off.
-            //
-            // ⚠️ THE JUMP LADDER IS THE THING TO RE-VERIFY (the deferred note's stated worry): jump
-            // regions shrink to their authored size here, so a jump the 2x box used to catch early
-            // is now caught at its real boundary. NOT YET RE-VERIFIED -- that run's route passed no
-            // E_TYPE_JUMP region at all, so it is silent on the question rather than reassuring
-            // about it. What it DOES say is that the whole population of verdict changes it saw was
-            // three regions -- the junkyard above and two type-18 PICTURE_PARADISE boxes (609120,
-            // 609131) -- and no genericType=7 among them. The `insideFull`/`insideHalf` witness
-            // below is what a jump-route run should be read against: every difference this change
-            // makes prints as one line, rather than being inferred from a missing event.
-            // The BROADPHASE above is deliberately left on the summed full dimensions: it can only
-            // over-accept, and over-accepting into an exact test is free.
-            const bool lbInsideAuthored =
-                BrnMath::IsPointInsideBox(lBoxTransform, lPlayerPosition, lHalfExtents * 0.5f);
-
-            // [DIAG] NOT IN THE X360 BINARY. THE ATTRIBUTION RUNG for the change above: it reports
-            // the OLD verdict alongside the new one, so a region that stops firing is never left to
-            // be inferred from silence -- the failure mode this file's own 'exitst' banner exists
-            // to stop. Prints only where the two verdicts DISAGREE (the whole population of
-            // behaviour changes), first N only.
-            {
-                const bool lbInsideDoubled =
-                    BrnMath::IsPointInsideBox(lBoxTransform, lPlayerPosition, lHalfExtents);
-                if (lbInsideDoubled != lbInsideAuthored)
-                {
-                    static s32 siExtentDiagLines = 0;
-                    const s32  KI_EXTENT_DIAG_FIRST_N = 16;
-                    if (siExtentDiagLines < KI_EXTENT_DIAG_FIRST_N && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        ++siExtentDiagLines;
-                        const BrnTrigger::GenericRegion* lpDiagGeneric =
-                            static_cast<const BrnTrigger::GenericRegion*>(lpArmedRegion);
-                        *CgsDev::Log::gpDebugPrint
-                            << "[trig-box] region " << luRegionIndex
-                            << " id=" << static_cast<u64>(lpArmedRegion->GetId())
-                            << " genericType=" << static_cast<s32>(lpDiagGeneric->GetType())
-                            << " dims=(" << lHalfExtents.x << "," << lHalfExtents.y
-                            << "," << lHalfExtents.z << ")"
-                            << " insideFull=" << (lbInsideDoubled ? 1 : 0)
-                            << " insideHalf=" << (lbInsideAuthored ? 1 : 0)
-                            << "  (authored-extent fix 2026-08-28)\n";
-                    }
-                }
-            }
-
-            if (lbInsideAuthored)
-            {
-                maLastPlayerTriggers.Append(luRegionIndex);
-            }
-        }
-    }
-
-    // ------------------------------------------------------------------------------------
-    // (0b) [FLAG PC bring-up] THE LIGHT-REGION STAND-IN -- NOT IN THE X360 BINARY.
-    //      Replaces TriggerQueryManager::PostWorldUpdate @0x82386BD8's OWNER-57 ARM (and only
-    //      that arm; the owner-56 arm's job is stage (0) above). Read the
-    //      FindLightTriggerContainingPoint banner before touching anything here.
-    //
-    //      Both members are RE-DERIVED FROM SCRATCH, exactly as the console re-derives them:
-    //      the reset pair is PostWorldUpdate's own `stb 0, 0x711` / `stw -1, 0x714`
-    //      (0x82386CDC/CE0), and "the player left the region" is nothing more than that reset
-    //      surviving the scan. There is no leave event to miss and no latch to age out.
-    //
-    //      PLAYER CAR ONLY. The console writes the pair only inside `if (v20)`, v20 being
-    //      "this line-test result's owner car index == the player's active race car index"
-    //      (@0x82386F5C) -- AI and traffic cars generate the same owner-57 results and must not
-    //      move the player's junction. IsPlayerCarActive() + GetPlayerPosition() is that gate.
-    //
-    //      DELETE-WHEN PostWorldUpdate @0x82386BD8 is mounted (see the helper's DELETE-WHEN).
-    // ------------------------------------------------------------------------------------
-    mbPlayerInTrafficLightRegion = false;                             // stb 0, 0x711(r27)
-    mPlayerCurrentTrafficLightId = static_cast<LightTriggerId>(-1);   // stw -1, 0x714(r27)
-
-    // The traffic-lane resource is bound by Prepare's LAST stage (BrnTriggerQueryManager_Prepare
-    // .cpp:253, the "[TriggerQueryManager] LOADED -- trigger=1 traffic=1" line) -- but the stage
-    // word is NOT a boundness proxy: Prepare assigns mpTrafficData and sets E_TRIGGER_LOAD_DONE
-    // UNCONDITIONALLY (its own diagnostic prints traffic= as HasMemoryResource() ? 1 : 0), and
-    // ResourcePtr::GetMemoryResource ASSERTS then RETURNS NULL on an unbound handle
-    // (CgsResourcePtr.h:246-251) -- the assert-is-not-a-guard class. So the pointer is
-    // null-tested too; a failed B5TRAFFIC resolve leaves the top-of-frame reset pair standing,
-    // which IS the console's "not in a region" state. (2026-08-26 verify catch.)
-    if (meTriggerLoadStage == E_TRIGGER_LOAD_DONE && lpActiveRaceCarInterface->IsPlayerCarActive())
-    {
-        const BrnTraffic::TrafficData* lpTrafficData = GetTrafficData();
-        const Vector3 lPlayerPosition = lpActiveRaceCarInterface->GetPlayerPosition();
-
-        u32 luTriggerId = 0;
-        if (lpTrafficData != 0 &&
-            FindLightTriggerContainingPoint(lpTrafficData, lPlayerPosition, luTriggerId))
-        {
-            mbPlayerInTrafficLightRegion = true;                      // stb 1, 0x711(r27)
-            // `insrwi r11, 0x39, 8,0` then `insrwi r11, r29, 24,8` -- SetOwner(57) then SetId(id24).
-            // The helper already returns the handle in exactly that shape; the mask/or pair is kept
-            // so the console's two stores stay legible at the site that performs them.
-            mPlayerCurrentTrafficLightId = static_cast<LightTriggerId>(
-                (luTriggerId & 0x00FFFFFFu) | BrnTraffic::KU_LIGHT_TRIGGER_ID_OWNER_TAG);
-        }
-    }
+    UpdateTriggers(lpOutput, lpActiveRaceCarInterface);
+    SubmitTriggerQueries(lpOutput, lpActiveRaceCarInterface);
+    CacheSoundQueryPositions(lpActiveRaceCarInterface);
+    const BrnTrigger::TriggerData* lpTriggerData = mpTriggerData.operator->();
 
     // [DIAG] NOT IN THE X360 BINARY. Edge-triggered enter/leave for the light region, with the
     // packed handle. This is THE rung that separates "the car is not standing in a junction box"
@@ -1354,54 +906,6 @@ void PackedIndex::SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex
 
 namespace BrnGameState
 {
-// FLAG PC-platform leaf: CPU scene-query fallback for the landmark part of the currently
-// disabled trigger line-test pipeline. Consume the same swept car positions as ARTIST
-// SubmitTriggerQueries (0x82392680), against the armed landmark boxes. Gameplay handling
-// remains RaceCarTriggersLandmark, as in PostWorldUpdate (0x82386BD8).
-void TriggerQueryManager::PostWorldUpdateLandmarksBringUp(
-    const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface, ModeManager* lpModeManager)
-{
-    lpModeManager->ClearModeStartRegion();
-    const BrnTrigger::TriggerData* lpData = mpTriggerData.operator->();
-    if (!lpData)
-        return;
-    const auto& lrCars = lpActiveRaceCarInterface->maCarsInTheRace;
-    for (s32 liCar = static_cast<s32>(lrCars.GetLength()) - 1; liCar >= 0; --liCar)
-    {
-        const auto& lrCar = lrCars.GetItem(liCar);
-        // Original query gate: exclude placement jumps of ten metres or more.
-        const Vector3 lv3Delta = lrCar.mPosition - lrCar.mPreviousPosition;
-        const f32 lfDistanceSq = lv3Delta.x * lv3Delta.x + lv3Delta.y * lv3Delta.y + lv3Delta.z * lv3Delta.z;
-        if (!(lfDistanceSq < 100.0f) || (lpModeManager->IsOnlineGameMode() && !lrCar.mbIsPlayer))
-            continue;
-        for (u32 luIndex = 0; luIndex < mLandmarkIndexArray.GetLength(); ++luIndex)
-        {
-            const LandmarkIndex lLandmark = mLandmarkIndexArray.GetItem(luIndex);
-            const BrnTrigger::TriggerRegion* lpRegion = lpData->GetRegion(static_cast<s32>(lLandmark));
-            const BrnTrigger::BoxRegion* lpBox = lpRegion->GetBoxRegion();
-            const Matrix44Affine lmBox = lpBox->ComputeTransform();
-            const Vector3 lv3Start = lrCar.mPreviousPosition - lmBox.wAxis;
-            const Vector3 lv3End = lrCar.mPosition - lmBox.wAxis;
-            const auto lToLocal = [&lmBox](const Vector3& lv3Point)
-            {
-                return Vector4{lv3Point.x * lmBox.xAxis.x + lv3Point.y * lmBox.xAxis.y + lv3Point.z * lmBox.xAxis.z,
-                    lv3Point.x * lmBox.yAxis.x + lv3Point.y * lmBox.yAxis.y + lv3Point.z * lmBox.yAxis.z,
-                    lv3Point.x * lmBox.zAxis.x + lv3Point.y * lmBox.zAxis.y + lv3Point.z * lmBox.zAxis.z, 0.0f};
-            };
-            const Vector3 lv3Half = lpBox->GetDimensions() * 0.5f;
-            CgsGeometric::AxisAlignedBox lBounds;
-            lBounds.mMin = Vector4{-lv3Half.x, -lv3Half.y, -lv3Half.z, 0.0f};
-            lBounds.mMax = Vector4{lv3Half.x, lv3Half.y, lv3Half.z, 0.0f};
-            if (CgsGeometric::TestLineStartEndAxisAlignedBox(lToLocal(lv3Start), lToLocal(lv3End), lBounds))
-                lpModeManager->RaceCarTriggersLandmark(lpActiveRaceCarInterface, lrCar.meGlobalRaceCarIndex,
-                    lrCar.meActiveRaceCarIndex, lLandmark, lrCar.mbIsPlayer);
-        }
-    }
-}
-}
-
-namespace BrnGameState
-{
 // ARTIST 82392680. The line query follows the cached race-car motion. Sound's
 // look-ahead is submitted on alternate eligible records, not alternate frames.
 void TriggerQueryManager::SubmitTriggerQueries(
@@ -1489,8 +993,14 @@ void TriggerQueryManager::CacheSoundQueryPositions(const RCEntityActiveRaceCarOu
     for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
     {
         const auto leCar = static_cast<EActiveRaceCarIndex>(liCar);
+        CGS_ASSERT(leCar >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+        CGS_ASSERT(leCar < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
         if (lpActiveRaceCarInterface->IsRaceCarActive(leCar))
             maActiveRaceCarPosLastFrame[liCar] = lpActiveRaceCarInterface->GetRaceCarState(leCar)->mTransform.Pos();
+        CGS_ASSERT(liCar + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
     }
 }
 
@@ -1550,13 +1060,16 @@ void TriggerQueryManager::CheckSoundActions(const RCEntityActiveRaceCarOutputInt
     }
 }
 
-// Sound legs of ARTIST PostWorldUpdate82386BD8. The gameplay/landmark legs
-// remain in the existing dispatchers; do not deliver those events twice here.
-void TriggerQueryManager::PostWorldUpdateSoundActions(
-    const GameStateModuleIO::PostWorldInputBuffer* lpInput, EActiveRaceCarIndex lePlayerCar)
+// ARTIST82386BD8. Gameplay and sound consume the same swept-volume results.
+// The query's global slot is bits0..7, active slot bits8..15; its owner is56.
+// A player hit is selected by active slot, not by the query-owner byte.
+void TriggerQueryManager::PostWorldUpdate(
+    const GameStateModuleIO::PostWorldInputBuffer* lpInput,
+    ModeManager* lpModeManager, EActiveRaceCarIndex lePlayerCar)
 {
     using GameStateModuleIO::SoundTriggerAction;
     using BrnWorld::TriggerEntityModuleIO::OutLineTestResultEvent;
+    CgsDev::PerfMonCpu::StartMonitor(gsiPostWorldUpdatePM);
     CGS_ASSERT(lpInput != NULL, "lpInput != NULL");
     const auto* lpTriggerResults = lpInput->GetTriggerEntityOutputInterface();
     CGS_ASSERT(lpTriggerResults != NULL, "lpTriggerResults != NULL");
@@ -1564,6 +1077,13 @@ void TriggerQueryManager::PostWorldUpdateSoundActions(
     CGS_ASSERT(lpTriggerResultQueue != NULL, "lpTriggerResultQueue != NULL");
     const auto* lpActiveRaceCarInterface = lpInput->GetActiveRaceCarOutputInterface();
     CGS_ASSERT(lpActiveRaceCarInterface != NULL, "lpActiveRaceCarInterface != NULL");
+    // 82386CD8..CEC: these are results for this frame, including an empty one.
+    lpModeManager->ClearModeStartRegion();
+    mbPlayerInTrafficLightRegion = false;
+    mPlayerCurrentTrafficLightId = static_cast<LightTriggerId>(-1);
+    mPlayerSigTakedownGroupID = 0;
+    mPlayerSuperJumpGroupID = 0;
+    mPlayerRoadLimitGroupID = 0;
     const CgsModule::Event* lpEvent = NULL;
     s32 liSize = 0;
     s32 liType = lpTriggerResultQueue->GetFirstEvent(&lpEvent, &liSize);
@@ -1579,12 +1099,19 @@ void TriggerQueryManager::PostWorldUpdateSoundActions(
                 const bool lbLookAhead = luQueryIndex == 999;
                 const auto leCar = lbLookAhead ? lePlayerCar
                     : static_cast<EActiveRaceCarIndex>((luQueryIndex >> 8) & 0xff);
-                if (lpActiveRaceCarInterface->IsRaceCarActive(leCar))
+                const bool lbPlayer = leCar == lePlayerCar;
+                const bool lbActive = lpActiveRaceCarInterface->IsRaceCarActive(leCar);
+                // Only the sound record needs a live entity. The assembly still
+                // handles ordinary gameplay results if that entity became inactive.
+                if (!lbLookAhead || lbActive)
                 {
                     SoundTriggerAction lAction;
-                    lAction.mQueryPos = lbLookAhead ? mPlayerLookAheadPos : maActiveRaceCarPosLastFrame[leCar];
-                    lAction.mEntityId = lpActiveRaceCarInterface->GetRaceCarState(leCar)->mEntityId;
-                    lAction.meResultType = lbLookAhead ? SoundTriggerAction::E_TYPE_AHEAD_OF_ENTITY : SoundTriggerAction::E_TYPE_AT_ENTITY;
+                    if (lbActive)
+                    {
+                        lAction.mQueryPos = lbLookAhead ? mPlayerLookAheadPos : maActiveRaceCarPosLastFrame[leCar];
+                        lAction.mEntityId = lpActiveRaceCarInterface->GetRaceCarState(leCar)->mEntityId;
+                        lAction.meResultType = lbLookAhead ? SoundTriggerAction::E_TYPE_AHEAD_OF_ENTITY : SoundTriggerAction::E_TYPE_AT_ENTITY;
+                    }
                     lAction.muActiveTriggers = 0;
                     const auto* lpTriggers = lpResult->GetTriggerIds();
                     for (s32 liTrigger = 0; liTrigger < lpResult->miNumTriggers; ++liTrigger)
@@ -1592,19 +1119,45 @@ void TriggerQueryManager::PostWorldUpdateSoundActions(
                         const u32 luTrigger = lpTriggers[liTrigger];
                         if ((luTrigger >> 24) == 56)
                         {
-                            const auto* lpRegion = mpTriggerData->GetRegion(luTrigger & 0x00ffffff);
+                            const u32 luRegionIndex = luTrigger & 0x00ffffff;
+                            const auto* lpRegion = mpTriggerData->GetRegion(luRegionIndex);
+                            if (!lbLookAhead && lbPlayer)
+                                maLastPlayerTriggers.Append(static_cast<u16>(luRegionIndex));
                             if (lpRegion->GetType() == BrnTrigger::TriggerRegion::E_TYPE_GENERIC_REGION)
                             {
                                 const auto* lpGeneric = static_cast<const BrnTrigger::GenericRegion*>(lpRegion);
                                 const u32 luBit = static_cast<u32>(lpGeneric->GetType()) - 19;
                                 if (luBit <= 12) lAction.muActiveTriggers |= 1u << luBit;
+                                if (!lbLookAhead && lbPlayer)
+                                {
+                                    const CgsID lGroup = lpGeneric->GetGroupId() != 0
+                                        ? lpGeneric->GetGroupId() : lpGeneric->GetId();
+                                    if (lpGeneric->GetType() == BrnTrigger::GenericRegion::E_TYPE_JUMP)
+                                        mPlayerSuperJumpGroupID = lGroup;
+                                    else if (lpGeneric->GetType() == BrnTrigger::GenericRegion::E_TYPE_ROAD_LIMIT)
+                                        mPlayerRoadLimitGroupID = lGroup;
+                                }
+                            }
+                            else if (!lbLookAhead && lpRegion->GetType() == BrnTrigger::TriggerRegion::E_TYPE_LANDMARK
+                                     && (!lpModeManager->IsOnlineGameMode() || lbPlayer))
+                            {
+                                lpModeManager->RaceCarTriggersLandmark(lpActiveRaceCarInterface,
+                                    static_cast<EGlobalRaceCarIndex>(luQueryIndex & 0xff), leCar,
+                                    static_cast<LandmarkIndex>(luRegionIndex), lbPlayer);
                             }
                         }
                         else if (!lbLookAhead)
+                        {
                             CGS_ASSERT((luTrigger >> 24) == 57, "Unknown trigger owner in line test result");
+                            if ((luTrigger >> 24) == 57 && lbPlayer)
+                            {
+                                mbPlayerInTrafficLightRegion = true;
+                                mPlayerCurrentTrafficLightId = static_cast<LightTriggerId>(luTrigger);
+                            }
+                        }
                     }
                     if (lbLookAhead) mCachedLookAheadSoundAction = lAction;
-                    maSoundActions.Append(lAction);
+                    if (lbActive) maSoundActions.Append(lAction);
                 }
             }
         }
@@ -1620,6 +1173,7 @@ void TriggerQueryManager::PostWorldUpdateSoundActions(
         mCachedLookAheadSoundAction.muActiveTriggers = 0;
     }
     CheckSoundActions(lpActiveRaceCarInterface);
+    CgsDev::PerfMonCpu::StopMonitor(gsiPostWorldUpdatePM);
 }
 
 }

@@ -74,9 +74,17 @@ namespace BrnTrafficIO
         decltype(M::mHullsToRemoveTriggersFor) mHullsToRemoveTriggersFor;
         decltype(M::mpData)                    mpData;
         decltype(M::mbDEBUGRunningWorstCase)   mbDEBUGRunningWorstCase;
+        using ActiveHullSet = decltype(M::mActiveHulls);
+        ActiveHullSet mActiveHulls, mActiveHullsForLocalPlayer;
+        decltype(M::maaRaceCarHulls) maaRaceCarHulls;
+        decltype(M::maPredictedHullChanges) maPredictedHullChanges;
+        EActiveRaceCarIndex meLocalPlayerIndex;
 
         const Hull* GetHull(u32 luIndex) const;
         void ManageTriggers(BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
+        void RefreshLocalHulls();
+        void ResetTriggerHulls();
+        void ConstructTriggerHulls();
     };
 }
 
@@ -197,8 +205,9 @@ int main()
     {
         const InAddBoxTriggerEvent& lr0 = *lapEvents[0];
         const InAddBoxTriggerEvent& lr1 = *lapEvents[1];
-        Check(lr0.mPackedQueryFlagsAndIndex == Id(5, 0) && lr1.mPackedQueryFlagsAndIndex == Id(5, 1)
-              && lr0.muTriggerType == 0xFFu && lr0.muSubType == 0xFFu && lr1.muTriggerType == 0xFFu && lr1.muSubType == 0xFFu,
+        Check(lr0.mTriggerID == Id(5, 0) && lr1.mTriggerID == Id(5, 1)
+              && lr0.miTriggerRegionType == -1 && lr0.miGenericRegionType == -1
+              && lr1.miTriggerRegionType == -1 && lr1.miGenericRegionType == -1,
               "the add event carries the id at +0x40 and 0xFF at +0x44/+0x45 (0x82747848 / `stb r24(-1)`)");
         Check(lr0.mDimensions.x == 6.0f && lr0.mDimensions.y == 12.0f && lr0.mDimensions.z == 104.0f
               && lr1.mDimensions.x == 56.0f && lr1.mDimensions.y == 12.0f && lr1.mDimensions.z == 48.0f,
@@ -235,6 +244,64 @@ int main()
     Check(Iface().mRemoveTriggerEventQueue.GetLength() == 0 && Iface().mAddTriggerEventQueue.GetLength() == 0
           && gAsserts == 0,
           "empty lists: no event, no assert");
+
+    // Drive the actual local-hull producer into the real volume event queue.
+    Fresh();
+    Fx().mActiveHulls.Insert(7); Fx().mActiveHullsForLocalPlayer.Insert(3);
+    Fx().mHullsToAddTriggersFor.Append(7); Fx().mHullsToRemoveTriggersFor.Append(3);
+    Fx().ConstructTriggerHulls();
+    Check(Fx().mActiveHulls.GetLength()==0 && Fx().mActiveHullsForLocalPlayer.GetLength()==0 &&
+          Fx().mHullsToAddTriggersFor.GetLength()==0 && Fx().mHullsToRemoveTriggersFor.GetLength()==0,
+          "Construct seeds all four hull counts before first Reset");
+    // Clear explicitly after the constructor assertion so the old-source
+    // control can continue through the independent transition tests safely.
+    Fx().mActiveHulls.Clear(); Fx().mActiveHullsForLocalPlayer.Clear();
+    Fx().mHullsToAddTriggersFor.Clear(); Fx().mHullsToRemoveTriggersFor.Clear();
+    for (auto& carHulls:Fx().maaRaceCarHulls) carHulls.Clear();
+    Fx().meLocalPlayerIndex=E_ACTIVE_RACE_CAR_INDEX_0;
+    Fx().maaRaceCarHulls[0].Append(3); Fx().maaRaceCarHulls[0].Append(5);
+    Fx().maaRaceCarHulls[1].Append(7);
+    Fx().RefreshLocalHulls();
+    Check(Fx().mHullsToAddTriggersFor.GetLength()==2 && Fx().mHullsToAddTriggersFor[0]==3 &&
+          Fx().mHullsToAddTriggersFor[1]==5, "new local hulls reach trigger-add queue in set order");
+    Check(!Fx().mHullsToAddTriggersFor.Contains(7), "remote-only hull does not register local light volumes");
+    Trigger(3,0,{10,12,48,0},1,0,1); Trigger(5,0,{10,12,48,0},2,0,1);
+    Trigger(5,1,{10,12,48,0},3,0,1);
+    Fx().ManageTriggers(&Out());
+    const s32 produced=AddEvents(lapEvents,laiTypes,laiSizes,8);
+    Check(produced==3 && lapEvents[0]->mTriggerID==Id(3,0) && lapEvents[1]->mTriggerID==Id(5,0) &&
+          lapEvents[2]->mTriggerID==Id(5,1), "hull change produces actual owner57 box events");
+    Fx().RefreshLocalHulls();
+    Check(Fx().mHullsToAddTriggersFor.GetLength()==0 && Fx().mHullsToRemoveTriggersFor.GetLength()==0,
+          "unchanged local set produces no duplicate registration");
+    Fx().mHullsToAddTriggersFor.Append(7);
+    Fx().maaRaceCarHulls[0].Clear(); Fx().maaRaceCarHulls[0].Append(5); Fx().maaRaceCarHulls[0].Append(2);
+    Fx().RefreshLocalHulls();
+    Check(Fx().mHullsToAddTriggersFor.GetLength()==2 && Fx().mHullsToAddTriggersFor[0]==7 &&
+          Fx().mHullsToAddTriggersFor[1]==2 && Fx().mHullsToRemoveTriggersFor.GetLength()==1 &&
+          Fx().mHullsToRemoveTriggersFor[0]==3, "set differences preserve already queued work");
+    Fx().mHullsToAddTriggersFor.Clear(); Fx().mHullsToRemoveTriggersFor.Clear();
+    Fx().meLocalPlayerIndex=E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    Fx().RefreshLocalHulls();
+    Check(Fx().mHullsToAddTriggersFor.GetLength()==0 && Fx().mHullsToRemoveTriggersFor.GetLength()==2 &&
+          Fx().mHullsToRemoveTriggersFor[0]==5 && Fx().mHullsToRemoveTriggersFor[1]==2,
+          "losing the local player removes its remaining hull volumes");
+    Fx().mActiveHullsForLocalPlayer.Clear(); Fx().mActiveHullsForLocalPlayer.Insert(3);
+    Fx().mActiveHullsForLocalPlayer.Insert(5); Fx().mHullsToAddTriggersFor.Append(7);
+    Fx().ResetTriggerHulls();
+    Check(Fx().mActiveHullsForLocalPlayer.GetLength()==0 && Fx().mHullsToAddTriggersFor.GetLength()==0 &&
+          Fx().mHullsToRemoveTriggersFor.GetLength()==2 && Fx().mHullsToRemoveTriggersFor[0]==3 &&
+          Fx().mHullsToRemoveTriggersFor[1]==5, "Reset retains old local hulls for removal before clearing them");
+    Iface().mAddTriggerEventQueue.Clear(); Iface().mRemoveTriggerEventQueue.Clear();
+    Fx().ManageTriggers(&Out());
+    Check(Iface().mAddTriggerEventQueue.GetLength()==0 && Iface().mRemoveTriggerEventQueue.GetLength()==3,
+          "Reset removal reaches actual scene-trigger event queue");
+    ::Array<u16,4> array; array.Construct(); array.Append(9);
+    ::Set<u16,3> set; set.Construct(); set.Insert(9); set.Insert(2);
+    array.AppendSet(set);
+    Check(array.GetLength()==3 && array[0]==9 && array[1]==9 && array[2]==2,
+          "AppendSet preserves existing entries and does not turn the array into a set");
+    Check(gAsserts==0, "complete hull-trigger lifecycle remains assertion free");
 
     std::printf("FxTraffic2ManageTriggers: %u checks, %u failures\n", gChecks, gFailures);
     return gFailures ? 1 : 0;

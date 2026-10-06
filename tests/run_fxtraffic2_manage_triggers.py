@@ -22,7 +22,7 @@ from fxgs_common import Tree, definition, body_or_empty, compile_and_run, report
 
 MODULE_CPP = "src/GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.cpp"
 FIXTURE = "TriggerFixture"
-NUMERIC_CHECKS = 9
+NUMERIC_CHECKS = 20
 
 
 def wiring(tree):
@@ -46,6 +46,30 @@ def numeric(tree):
              get_hull.replace("TrafficEntityModule::", FIXTURE + "::", 1),
              manage.replace("TrafficEntityModule::", FIXTURE + "::", 1),
              "}"]
+    recalc = definition(module, "void TrafficEntityModule::RecalculateActiveHulls(")
+    local_start = recalc.index('    const ActiveHullSet lPreviousLocalHulls =')
+    local_end = recalc.index('    // [T-anchor]', local_start)
+    local = recalc[local_start:local_end]
+    if '    ActiveHullSet lNewLocalHulls;' in recalc:
+        start = recalc.index('    ActiveHullSet lNewLocalHulls;')
+        tail = '    mHullsToRemoveTriggersFor.AppendSet(lOldLocalHulls);'
+        local += recalc[start:recalc.index(tail, start)+len(tail)]
+    reset = definition(module, 'void TrafficEntityModule::Reset()')
+    start = reset.index('    // ---- hulls ')
+    end = reset.index('    for (u32 luHull = 0;', start)
+    reset = reset[start:end]
+    # Strip only the old explanatory logger (its actual missing producer stays
+    # missing in the baseline); fixture tests the list semantics, not logging.
+    if 'LogMissingLeg_T1' in reset:
+        reset = reset[:reset.index('    {')]
+    construct = definition(module, 'void TrafficEntityModule::Construct()')
+    seed = '\n'.join(line for line in construct.splitlines() if any(
+        name+'.Clear();' in line for name in ('mActiveHullsForLocalPlayer','mActiveHulls',
+                                              'mHullsToAddTriggersFor','mHullsToRemoveTriggersFor')))
+    parts += ['namespace BrnTraffic {',
+              'void TriggerFixture::RefreshLocalHulls() {\n'+local+'\n}',
+              'void TriggerFixture::ResetTriggerHulls() {\n'+reset+'\n}',
+              'void TriggerFixture::ConstructTriggerHulls() {\n'+seed+'\n}', '}']
     return compile_and_run(Path(__file__).with_name("FxTraffic2ManageTriggers.cpp"), "manage_triggers.inc",
                            "\n".join(parts), "FxTraffic2ManageTriggers", extra_sources=[STRSTREAM_CPP])
 
