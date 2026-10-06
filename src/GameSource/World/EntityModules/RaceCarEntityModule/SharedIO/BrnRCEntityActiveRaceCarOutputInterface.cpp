@@ -158,12 +158,15 @@ void RCEntityActiveRaceCarOutputInterface::Clear()
 
     for (s32 luIndex = 0; luIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luIndex)
     {
+        maRivalIds[luIndex]                   = 0;                 // std 0, +0x2630 + 8*i
+        maCarModelIds[luIndex]                = 0;                 // std 0, +0x2670 + 8*i
         mau16ActiveRaceCarAISections[luIndex] = 0x7FFF;            // @+0x26F0
         mauActiveRaceCarColourIndex[luIndex]  = 0;                 // @+0x26B0
         maiActiveRaceCarPaintFinishIndex[luIndex] = 0;             // @+0x26D0
         maxRaceCarFlags[luIndex]              = 0;                 // @+0x2780 (sets rival/network bits clear)
         maGlobalRaceCarIndices[luIndex]       = E_GLOBAL_RACE_CAR_INDEX_0; // 0 @+0x2818
         mbHasCrashedIntoWater[luIndex]        = false;             // @+0x2810
+        maDeformationModelResourceHandles[luIndex].Clear();        // stw 0, +0x2864/+0x2868 + 8*i
         CGS_ASSERT(luIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT, "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
     }
 
