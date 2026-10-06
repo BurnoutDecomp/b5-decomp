@@ -7,6 +7,7 @@
 #include <algorithm> // std::clamp
 #include <cmath>     // std::sqrt, std::fabs
 #include <cstddef>   // offsetof
+#include <cstdio>    // opt-in Showtime input/force witness
 
 // BrnPhysics::Vehicle::RaceCarPhysics -- the two out-of-line ledger funcs owned by the
 // Vehicle-physics group (IsCrashingNormally @0x827E42B8, GetHeightAboveRoad @0x825B3998), PLUS the
@@ -439,7 +440,7 @@ namespace Vehicle
         // THE DROPPED +0x100 STORE, RESTORED (2026-08-24 showtime wave). The console splats
         // flt_82002138 = 0.01 into the assist envelope; the committed body left it to the {}
         // zero-init with a comment calling it "target/sensor scratch". It is neither scratch nor
-        // reader-less: UpdateTargetAssist maintains it every frame and multiplies its .y into
+        // reader-less: UpdateTargetAssist maintains it every frame and multiplies its .x into
         // the assist force's vertical correction. A 0.0 seed is NOT the identity here -- it
         // kills the vertical intercept pull until the first bounce re-seeds the envelope.
         mAssistStrength = Vector3{ 0.01f, 0.01f, 0.01f, 0.01f };   // +0x100 splat(flt_82002138)
@@ -1684,7 +1685,7 @@ namespace Vehicle
     //     bounce, else decay 0.01/s to a 0.001 floor -- all three splats' init writers decoded)
     //     and its .y scales the vertical intercept correction.
     //   * the assist force: direction = unit(toTarget) with .y replaced by
-    //     mAssistStrength.y * (ideal.y - vel.y); magnitude = min(dist * 4000, 14000)
+    //     mAssistStrength.x * (ideal.y - vel.y); magnitude = min(dist * 4000, 14000)
     //     (flt_82F2A31C / flt_82F2A320, the fsel @0x826202C4); fired only past 2.0 m
     //     (flt_82F2A324 -- the constant the old comment called an "alignment" gate); then the
     //     queued air rams are cleared (`std r31(0), 0x1158` @0x826202F0 == mUsedAirRams).
@@ -1724,7 +1725,7 @@ namespace Vehicle
             if (lbWitness)
             {
                 lWitness.miCurrentTargetId = MS.miCurrentTargetId;
-                lWitness.mfEnvelopeY       = MS.mAssistStrength.y;
+                lWitness.mfEnvelopeY       = MS.mAssistStrength.x;
                 NoteTargetAssist(lWitness);
             }
             return;
@@ -1801,9 +1802,10 @@ namespace Vehicle
                 Vector3 lvIdeal;
                 ComputeIdealVelocity(&lvIdeal, MS.maTargetPositions[liBest], lfSpeed2D);
 
-                // vertical correction: envelope.y * (ideal.y - vel.y) into the direction's .y
-                // (vrlimi128 v126, v0, 4, 3 @0x826202DC).
-                lvUnit.y = MS.mAssistStrength.y * (lvIdeal.y - GetLinearVelocity().y);
+                // 0x826202DC, raw 0x1BC407DC: mask 4 writes direction.y and
+                // rotate 3 takes product.x. The envelope is normally a splat,
+                // but the original lane selection is x even for unequal lanes.
+                lvUnit.y = MS.mAssistStrength.x * (lvIdeal.y - GetLinearVelocity().y);
 
                 // magnitude: min(dist * 4000, 14000) (the fsel pair @0x826202BC-C4).
                 f32 lfForce = lfDist * KF_ASSIST_FORCE_PER_METRE;
@@ -1827,7 +1829,7 @@ namespace Vehicle
             lWitness.miBest            = liBest;
             lWitness.miBestId          = (liBest >= 0) ? static_cast<s32>(MS.maTargetIds[liBest].muValue) : 0;
             lWitness.miCurrentTargetId = MS.miCurrentTargetId;
-            lWitness.mfEnvelopeY       = MS.mAssistStrength.y;
+            lWitness.mfEnvelopeY       = MS.mAssistStrength.x;
             s32 laiIds[8] = {};
             for (s32 liT = 0; liT < lWitness.miNumTargets && liT < 8; ++liT)
                 laiIds[liT] = static_cast<s32>(MS.maTargetIds[liT].muValue);
@@ -1918,6 +1920,45 @@ namespace Vehicle
     // (VehiclePhysics.h:1514) so it OVERRIDES the base slot +0x28 that UpdateCrashing
     // dispatches -- v1 (`vmr128 v121, v1` @0x8262EC08) is the dt, now consumed for real by the
     // impulse channels and the showtime chain.
+    // ARTIST 0x8262F368..0x8262F384 and the two lever gates at
+    // 0x8262F46C..0x8262F48C / 0x8262F5A0..0x8262F5C0 compare
+    // absolute XYZ lanes against FLT_EPSILON (w is replaced by x).
+    // A squared-magnitude test creates a larger dead band for small pad inputs.
+    static bool HasAftertouchImpulse(const Vector3& lrImpulse)
+    {
+        const f32 lfEpsilon = 1.1920928955078125e-07f;
+        return std::fabs(lrImpulse.x) > lfEpsilon
+            || std::fabs(lrImpulse.y) > lfEpsilon
+            || std::fabs(lrImpulse.z) > lfEpsilon;
+    }
+
+    // FLAG PC-platform leaf: bounded observation of the real Showtime control
+    // inputs and already-calculated forces; no game state consumes this cache.
+    static bool ShowtimeControlProbeChanged(const BrnPlayerDriverControls* lpControls)
+    {
+        static const bool sbEnabled = std::getenv("BRN_SHOWTIME_CONTROL_DIAG") != nullptr;
+        if (!sbEnabled || !CgsDev::Log::gpDebugPrint) return false;
+        static s32 siLines = 0;
+        if (siLines >= 96) return false;
+        const f32 lafValues[] = {lpControls->mfSteering,lpControls->mfForwardSteering,
+            lpControls->mfSpin,lpControls->mfRequestedGas,lpControls->mfBrake,
+            lpControls->mfAftertouchLevel,
+            lpControls->mbIsSteeringWheel ? 1.0f : 0.0f,
+            lpControls->mbBoostBounce ? 1.0f : 0.0f};
+        static f32 safPrevious[8] = {};
+        static bool sbHavePrevious = false;
+        bool lbChanged = !sbHavePrevious;
+        for (s32 liValue=0;liValue<8;++liValue)
+        {
+            lbChanged = lbChanged || lafValues[liValue] != safPrevious[liValue];
+            safPrevious[liValue] = lafValues[liValue];
+        }
+        sbHavePrevious = true;
+        if (lbChanged && ++siLines == 96)
+            CgsDev::Log::WriteToLog("[showtime-control] observation cap 96 reached\n");
+        return lbChanged;
+    }
+
     void RaceCarPhysics::UpdateAftertouch(const BrnPlayerDriverControls* lpControls,
                                           const Matrix44Affine* lpCameraMatrix,
                                           VecFloat lvfTimeStep,
@@ -2034,6 +2075,36 @@ namespace Vehicle
                 }
             }
 
+            const bool lbTraceControls = ShowtimeControlProbeChanged(lpControls);
+            if (lbTraceControls)
+            {
+                char lacControlLine[1024];
+                std::snprintf(lacControlLine,sizeof(lacControlLine),
+                    "[showtime-control] raw %.9g %.9g %.9g requested %.9g brake %.9g wheel %d button %d "
+                    "decoded %.9g %.9g %.9g enable %.9g dt %.9g air %d height %.9g valid %d "
+                    "cameraX %.9g %.9g %.9g cameraZ %.9g %.9g %.9g force %.9g %.9g %.9g\n",
+                    lpControls->mfSteering,lpControls->mfForwardSteering,lpControls->mfSpin,
+                    lpControls->mfRequestedGas,lpControls->mfBrake,
+                    lpControls->mbIsSteeringWheel?1:0,lpControls->mbBoostBounce?1:0,
+                    lfYaw,lfPitch,lfScalar,lfEnable,lvfTimeStep.x,mbHasAir?1:0,
+                    mAboveGroundTestResult.mfVerticalDistance,mAboveGroundTestResult.mbValid?1:0,
+                    lvCameraX.x,lvCameraX.y,lvCameraX.z,lvCameraZ.x,lvCameraZ.y,lvCameraZ.z,
+                    lvForce.x,lvForce.y,lvForce.z);
+                CgsDev::Log::WriteToLog(lacControlLine);
+                const auto& lrCameraX=lpCameraMatrix->xAxis;
+                const auto& lrCameraY=lpCameraMatrix->yAxis;
+                const auto& lrCameraZ=lpCameraMatrix->zAxis;
+                const auto& lrCameraPos=lpCameraMatrix->wAxis;
+                std::snprintf(lacControlLine,sizeof(lacControlLine),
+                    "[showtime-control-basis] x %.9g %.9g %.9g %.9g y %.9g %.9g %.9g %.9g "
+                    "z %.9g %.9g %.9g %.9g pos %.9g %.9g %.9g %.9g\n",
+                    lrCameraX.x,lrCameraX.y,lrCameraX.z,lrCameraX.w,
+                    lrCameraY.x,lrCameraY.y,lrCameraY.z,lrCameraY.w,
+                    lrCameraZ.x,lrCameraZ.y,lrCameraZ.z,lrCameraZ.w,
+                    lrCameraPos.x,lrCameraPos.y,lrCameraPos.z,lrCameraPos.w);
+                CgsDev::Log::WriteToLog(lacControlLine);
+            }
+
             if (vpu::MagnitudeSquared(lvForce) > 1.1920929e-07f)   // the FLT_EPSILON lane test
                 AddWorldSpaceForce(lvForce);                       // bl @0x8262F1FC
 
@@ -2057,7 +2128,7 @@ namespace Vehicle
             // worldUp * scalar * -2000 * dt * enable.
             Vector3 lvYawImpulse = vpu::Mult(
                 KV_WORLD_UP, lfScalar * KF_AT_ROLL_SCALAR * lvfTimeStep.x * lfEnable);
-            if (vpu::MagnitudeSquared(lvYawImpulse) > 1.1920929e-07f)
+            if (HasAftertouchImpulse(lvYawImpulse))
             {
                 if (lbAtGate)
                     gsAtGate.muYawAngImpulse++;
@@ -2074,8 +2145,16 @@ namespace Vehicle
                 const Vector3 lvArm = vpu::Mult(lvCameraX, KF_AT_LEVER_ARM);
                 const Vector3 lvAt  = (lfYaw > 0.0f) ? vpu::Add(mTransform.Pos(), lvArm)
                                                      : vpu::Subtract(mTransform.Pos(), lvArm);
-                if (vpu::MagnitudeSquared(lvImpulse) > 1.1920929e-07f)
+                if (HasAftertouchImpulse(lvImpulse))
                 {
+                    if (lbTraceControls)
+                    {
+                        char lacControlLine[256];
+                        std::snprintf(lacControlLine,sizeof(lacControlLine),
+                            "[showtime-control-roll] impulse %.9g %.9g %.9g point %.9g %.9g %.9g\n",
+                            lvImpulse.x,lvImpulse.y,lvImpulse.z,lvAt.x,lvAt.y,lvAt.z);
+                        CgsDev::Log::WriteToLog(lacControlLine);
+                    }
                     if (lbAtGate)
                         gsAtGate.muLeverRoll++;
                     AddLocalImpulse(lvImpulse, rw::physics::WORLD_SPACE,
@@ -2096,8 +2175,16 @@ namespace Vehicle
                 const Vector3 lvArm = vpu::Mult(lvCameraZ, KF_AT_LEVER_ARM);
                 const Vector3 lvAt  = (lfPitch > 0.0f) ? vpu::Add(mTransform.Pos(), lvArm)
                                                        : vpu::Subtract(mTransform.Pos(), lvArm);
-                if (vpu::MagnitudeSquared(lvImpulse) > 1.1920929e-07f)
+                if (HasAftertouchImpulse(lvImpulse))
                 {
+                    if (lbTraceControls)
+                    {
+                        char lacControlLine[256];
+                        std::snprintf(lacControlLine,sizeof(lacControlLine),
+                            "[showtime-control-pitch] impulse %.9g %.9g %.9g point %.9g %.9g %.9g\n",
+                            lvImpulse.x,lvImpulse.y,lvImpulse.z,lvAt.x,lvAt.y,lvAt.z);
+                        CgsDev::Log::WriteToLog(lacControlLine);
+                    }
                     if (lbAtGate)
                         gsAtGate.muLeverPitch++;
                     AddLocalImpulse(lvImpulse, rw::physics::WORLD_SPACE,
