@@ -3304,8 +3304,7 @@ void TrafficEntityModule::PredictHullChanges(const BrnTrafficIO::InputBuffer_Pos
 //     between mfDEBUGAvoidance_PassScore and miPerfMon_PreSceneUpdate, so it has no name.
 //   * the std::_Sort of mActiveHulls -- ::Set<T,N> has no Sort. Order-only: SetDifference is
 //     order-independent, so only the order FillNewHull visits hulls in changes.
-//   * mHullsToAddTriggersFor / mHullsToRemoveTriggersFor -- they need ::Array<T,N>::AppendSet,
-//     which CgsArray.h does not declare (it has AppendArray only).
+// The local-player hull differences also feed the trigger add/remove arrays.
 //
 // The per-old-hull HullRuntime::Release + free, the per-new-hull allocate + HullRuntime::Prepare,
 // the stop-line release walk after them (0x8274D4B0..0x8274D88C, crash parity FX-TRAFFICLIGHTS
@@ -3476,17 +3475,14 @@ void TrafficEntityModule::RecalculateActiveHulls(
         ++suAnchorSample;
     }
 
-    {
-        // GATE: the two Array<u16,72>::AppendSet calls @0x8274?? that feed
-        // mHullsToAddTriggersFor / mHullsToRemoveTriggersFor. BLOCKER: ::Array<T,N>::AppendSet
-        // is absent from CgsArray.h, which declares AppendArray only.
-        // DELETE-WHEN CgsArray.h grows AppendSet. Triggers are not on the round-1 driving path.
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "RecalculateActiveHulls trigger legs -- the two Array<u16,72>::AppendSet calls "
-            "feeding mHullsToAddTriggersFor / mHullsToRemoveTriggersFor need "
-            "::Array<T,N>::AppendSet, absent from CgsArray.h (it declares AppendArray only)");
-    }
+    // ARTIST8274CD08..CD44: only local-player hulls own light-trigger volumes.
+    // Accumulate until ManageTriggers drains the arrays in the next pre-scene.
+    ActiveHullSet lNewLocalHulls;
+    ActiveHullSet lOldLocalHulls;
+    lNewLocalHulls.SetDifference(mActiveHullsForLocalPlayer, lPreviousLocalHulls);
+    lOldLocalHulls.SetDifference(lPreviousLocalHulls, mActiveHullsForLocalPlayer);
+    mHullsToAddTriggersFor.AppendSet(lNewLocalHulls);
+    mHullsToRemoveTriggersFor.AppendSet(lOldLocalHulls);
 
     // ---- HullRuntime free, one per hull that left the set ---------------------------------
     // 0x8274?? .. `HullRuntime::Release(1176 * idx + this + 257216)` then the bit-array free
@@ -4930,19 +4926,14 @@ void TrafficEntityModule::Reset()
     }
 
     // ---- hulls ---------------------------------------------------------------------------
-    mActiveHulls.Clear();
-    mActiveHullsForLocalPlayer.Clear();
     mHullsToAddTriggersFor.Clear();
     mHullsToRemoveTriggersFor.Clear();
+    // ARTIST8272D31C..D34C: remember the old local volumes before clearing
+    // the active sets, so a reset removes their scene entities on the next pump.
+    mHullsToRemoveTriggersFor.AppendSet(mActiveHullsForLocalPlayer);
+    mActiveHulls.Clear();
+    mActiveHullsForLocalPlayer.Clear();
     maPredictedHullChanges.Clear();
-
-    {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "Reset leg mHullsToRemoveTriggersFor.AppendSet(mActiveHullsForLocalPlayer) -- "
-            "::Array<T,N>::AppendSet is absent from CgsArray.h (AppendArray only). The set "
-            "is empty at this point on every boot path, so the call is a no-op today");
-    }
 
     for (u32 luHull = 0; luHull < KU_MAX_HULLS; ++luHull)
     {
@@ -5423,6 +5414,12 @@ void TrafficEntityModule::Construct()
 
     // ---- the density seed (0x827413E0: stfsx flt_82001C98 -> this + 0x71810) -------------
     mfBaseDensityScale = 1.0f;
+
+    // ARTIST827409C8/D8/DC/E0 initializes these counts before the first Reset.
+    mActiveHullsForLocalPlayer.Clear();
+    mActiveHulls.Clear();
+    mHullsToAddTriggersFor.Clear();
+    mHullsToRemoveTriggersFor.Clear();
 
     ResetEventData();
     Reset();

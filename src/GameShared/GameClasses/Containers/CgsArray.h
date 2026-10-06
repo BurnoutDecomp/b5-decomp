@@ -5,6 +5,8 @@
 
 #include <cstdlib>   // std::qsort (Array<T,N>::QSort)
 
+template <typename T, u32 N> class Set;
+
 // Array<T, N> - a thin fixed-size array wrapper used across the Cgs containers
 // (e.g. StateLoadingHelper's request dirty list). The DecFIGS DWARF spells this
 // CgsContainers::Array<T,N> (matches the X360 manglings, e.g.
@@ -287,6 +289,18 @@ public:
         {
             Append(lrSource[luIndex]);
         }
+    }
+
+    // ARTIST8271B5A8 (u16,72), DecFIGS CgsArray.h:258. Preserve set encounter
+    // order and append to existing entries; the destination remains an Array.
+    template <u32 M>
+    void AppendSet(const Set<T, M>& lSet)
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        CGS_ASSERT(lSet.GetLength() + static_cast<u32>(miCount) <= N,
+                   "Array container out of space appending a set");
+        for (u32 luIndex = 0; luIndex < lSet.GetLength(); ++luIndex)
+            Append(lSet.GetItem(luIndex));
     }
 
     // In-place sort of the live elements via a caller-supplied C-style comparator (X360 used the

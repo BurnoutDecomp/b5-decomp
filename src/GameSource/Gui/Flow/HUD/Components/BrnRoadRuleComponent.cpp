@@ -2,8 +2,11 @@
 
 #include <cmath>                                                       // std::sqrt (the VMX rsqrt chain)
 #include <cstring>                                                     // strncpy / strlen (X360 inlined copies)
+#include <cstdlib>
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                // CgsCore::SPrintf
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"        // FormatCurrencyString
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface (OutputGuiEvent / GetLanguageManager)
@@ -168,6 +171,26 @@ namespace
         VecFloat lvfSplat;
         lvfSplat.x = lvfSplat.y = lvfSplat.z = lvfSplat.w = lfValue;
         return lvfSplat;
+    }
+
+    // FLAG PC diagnostic: read the live sign timeline and transform without
+    // advancing it or changing its placement. Called only by the opt-in probe.
+    void TraceRoadClipPC(const char* lpcRole, const BrnFlapt::MovieClipRef& lrRef)
+    {
+        const BrnFlapt::MovieClipInstance* lpClip = lrRef.mpMovieClipInst;
+        *CgsDev::Log::gpDebugPrint << "[road-plate-clip] role=" << lpcRole;
+        if (lpClip != 0)
+            *CgsDev::Log::gpDebugPrint << " name=" << (lpClip->mpcDEBUGName ? lpClip->mpcDEBUGName : "?")
+                << " frame=" << static_cast<s32>(lpClip->muCurrentFrame)
+                << " flags=" << static_cast<s32>(lpClip->mxFlags);
+        if (lrRef.mpTransform != 0)
+        {
+            const auto& lrTransform = *static_cast<const CgsGraphics::Im2dTransform*>(lrRef.mpTransform);
+            *CgsDev::Log::gpDebugPrint << " basis=" << lrTransform.mRightUp.x << ","
+                << lrTransform.mRightUp.y << "," << lrTransform.mRightUp.z << "," << lrTransform.mRightUp.w
+                << " origin=" << lrTransform.mOriginXYZ.x << "," << lrTransform.mOriginXYZ.y;
+        }
+        *CgsDev::Log::gpDebugPrint << "\n";
     }
 }
 
@@ -429,6 +452,26 @@ void RoadRuleComponent::Update(f32 lfTimeStep)
         RefreshBestData();
         RefreshSignColours();
         mePreviousActiveRule = meCurrentlyActiveRule;
+    }
+
+    // FLAG PC diagnostic: bounded actual-data witness for plate sizing/colour.
+    static const bool sbPlateTrace = (std::getenv("BRN_ROAD_PLATE_DIAG") != 0);
+    static u32 suPlateTicks = 0, suPlateRows = 0;
+    if (sbPlateTrace && CgsDev::Log::gpDebugPrint != 0 &&
+        (++suPlateTicks % 30u) == 0u && suPlateRows < 240u)
+    {
+        ++suPlateRows;
+        *CgsDev::Log::gpDebugPrint << "[road-plate] road=" << mCurrentRunningRoadID
+            << " transition=" << mTransitionData.mRoadId << " index=" << mTransitionData.miRoadIndex
+            << " state=" << static_cast<s32>(meCurrentSignState)
+            << " rule=" << static_cast<s32>(meCurrentlyActiveRule)
+            << " colour=" << static_cast<s32>(mRoadSign.GetSignColour())
+            << " bestTime=" << mTransitionData.maiBestValues[0]
+            << " leader=" << static_cast<s32>(mTransitionData.maeRoadRuleLeaderType[0]) << "\n";
+        TraceRoadClipPC("root", mAptRef);
+        TraceRoadClipPC("anim", mRoadSignAnimationsMC);
+        TraceRoadClipPC("positions", mSubComponentPositionsMC);
+        TraceRoadClipPC("sign", mRoadSign.GetMovieClipRef());
     }
 }
 
