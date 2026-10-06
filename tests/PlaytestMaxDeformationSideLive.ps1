@@ -61,7 +61,7 @@ $case.Checks+=@(
     @{Kind='Script';Name='original reference heading faces negative Z at maximum';Script={
         param($ctx)
         $pose=@($ctx.LogLines | Where-Object {$_ -match '^\[max-deform-pose\] phase callback '} | Select-Object -First 1)
-        if($pose.Count -ne 1 -or $pose[0] -notmatch ' at (?<x>\S+) (?<y>\S+) (?<z>\S+) linear '){return @{Pass=$false;Detail='missing maximum callback heading'}}
+        if($pose.Count -ne 1 -or $pose[0] -notmatch ' at (?<x>\S+) (?<y>\S+) (?<z>\S+) up '){return @{Pass=$false;Detail='missing maximum callback heading'}}
         $x=[double]::Parse($Matches.x,[cultureinfo]::InvariantCulture)
         $z=[double]::Parse($Matches.z,[cultureinfo]::InvariantCulture)
         @{Pass=([math]::Abs($x-0.092) -lt 0.01 -and $z -lt -0.99);Detail="At.x=$x, At.z=$z; original reference is positive X, negative Z"}
