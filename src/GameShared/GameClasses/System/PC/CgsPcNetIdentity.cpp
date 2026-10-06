@@ -1,7 +1,7 @@
 // ============================================================================
 // CgsPcNetIdentity.cpp -- the shared PC network identity (see CgsPcNetIdentity.h).
 //
-// [PC platform leaf] Host stand-in for the console's signed-in profile identity. Everything is
+// FLAG PC-platform leaf: host identity for the supported PC LAN service. Everything is
 // computed once, on first use, from the environment; the values cannot change inside a process.
 // ============================================================================
 
@@ -73,9 +73,11 @@ namespace
         std::memset(&lIdentity, 0, sizeof(lIdentity));
 
         const char* lpcLan = std::getenv("BP_LAN");
-        lIdentity.mbLan = (lpcLan != 0 && lpcLan[0] == '1' && lpcLan[1] == '\0');
+        lIdentity.mbLan = !(lpcLan != 0 && lpcLan[0] == '0' && lpcLan[1] == '\0');
 
-        // Persona: BP_LAN_NAME, else "Slot<n>" for a harness slot, else "Player".
+        // Persona: BP_LAN_NAME, else "Slot<n>" for a harness slot, else the local
+        // account name. LAN is a supported host service; normal menu entry must
+        // not depend on the test harness setting an environment variable.
         const char* lpcName = std::getenv("BP_LAN_NAME");
         if (lpcName != 0 && lpcName[0] != '\0')
         {
@@ -92,7 +94,9 @@ namespace
             }
             else
             {
-                std::strcpy(lIdentity.mac, "Player");
+                const char* lpcUser = std::getenv("USERNAME");
+                std::strncpy(lIdentity.mac,
+                    lpcUser != 0 && lpcUser[0] != '\0' ? lpcUser : "Player", KU_NAME_CAPACITY - 1u);
             }
         }
         lIdentity.mac[KU_NAME_CAPACITY - 1u] = '\0';
@@ -100,9 +104,19 @@ namespace
         const char* lpcXuid = std::getenv("BP_LAN_XUID");
         if (lpcXuid == 0 || !ParseXuid(lpcXuid, &lIdentity.mu64Xuid))
         {
-            lIdentity.mu64Xuid = KU64_XUID_BASE |
-                Fnv1a32(reinterpret_cast<const u8*>(lIdentity.mac),
-                        static_cast<u32>(std::strlen(lIdentity.mac)));
+            u32 luHash = Fnv1a32(reinterpret_cast<const u8*>(lIdentity.mac),
+                                static_cast<u32>(std::strlen(lIdentity.mac)));
+            // Two PCs may use the same local account/display name. Keep explicit
+            // personas' existing deterministic identity, but distinguish normal
+            // players by their host so LAN discovery cannot mistake a peer for self.
+            if (lpcName == 0 || lpcName[0] == '\0')
+            {
+                const char* lpcComputer = std::getenv("COMPUTERNAME");
+                if (lpcComputer != 0)
+                    for (; *lpcComputer != '\0'; ++lpcComputer)
+                        luHash = (luHash ^ static_cast<u8>(*lpcComputer)) * KU_FNV1A32_PRIME;
+            }
+            lIdentity.mu64Xuid = KU64_XUID_BASE | luHash;
         }
 
         u8 laXuidBytes[8];

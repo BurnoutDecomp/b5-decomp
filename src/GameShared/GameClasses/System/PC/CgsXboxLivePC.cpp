@@ -5,7 +5,8 @@
 // reconstruct. The callers declare them extern "C" in local blocks (one C name, so ONE
 // definition serves every declaration). Each returns the answer the console gives for:
 //   OFFLINE (default)  a profile signed in locally, no network service, no camera, no invites;
-//   LAN (BP_LAN=1)     the same profile "signed in to the service", with the shared PC identity
+//   LAN (default)      the local profile connected to the supported PC LAN service,
+//                      with the shared PC identity (BP_LAN=0 opts out).
 //                      (CgsPcNetIdentity.h) as its gamertag and XUID.
 // Win32 error codes used: 0 ERROR_SUCCESS, 18 ERROR_NO_MORE_FILES, 87 ERROR_INVALID_PARAMETER.
 // ============================================================================
@@ -254,8 +255,8 @@ extern "C" u32 XUserMuteListQuery(u32 /*luUserIndex*/, u64 /*luXuidRemoteTalker*
     return KU_ERROR_SUCCESS;
 }
 
-// [PC platform leaf] Sets a rich-presence / matchmaking context value; no-op, there is no
-// presence service on PC.
+// FLAG PC-platform leaf: Xbox profile presence is unavailable on the host;
+// the supported PC LAN backend maintains its local matchmaking/session context.
 extern "C" void XUserSetContext(u32 /*uUserIndex*/, u32 /*uContextId*/, u32 /*uContextValue*/)
 {
 }
