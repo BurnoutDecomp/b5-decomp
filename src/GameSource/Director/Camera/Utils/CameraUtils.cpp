@@ -1755,3 +1755,35 @@ bool TargetWillExceedRangeInXSecs(Vector3 lPosition, Vector3 lTarget, Vector3 lT
 }
 }
 }
+
+// ARTIST82222060. DecFIGS CameraUtils.cpp:298 and BrnDirectorUnity locals.
+// Matrix in r3, Vector3 by-value in v1, Vector2 output in r4; bool in r3.
+bool BrnDirector::Camera::Utils::ProjectWorldSpacePointToScreen(
+    const Matrix44& lViewProjMatrix, Vector3 lWorldSpacePosition, Vector2& lv2OutScreenSpacePosition)
+{
+    const auto& lx = lViewProjMatrix.xAxis;
+    const auto& ly = lViewProjMatrix.yAxis;
+    const auto& lz = lViewProjMatrix.zAxis;
+    const auto& lw = lViewProjMatrix.wAxis;
+    Vector4 lProjectedPoint = {
+        std::fma(lx.x,lWorldSpacePosition.x,lw.x),
+        std::fma(lx.y,lWorldSpacePosition.x,lw.y),
+        std::fma(lx.z,lWorldSpacePosition.x,lw.z),
+        std::fma(lx.w,lWorldSpacePosition.x,lw.w)};
+    lProjectedPoint = {
+        std::fma(ly.x,lWorldSpacePosition.y,lProjectedPoint.x),
+        std::fma(ly.y,lWorldSpacePosition.y,lProjectedPoint.y),
+        std::fma(ly.z,lWorldSpacePosition.y,lProjectedPoint.z),
+        std::fma(ly.w,lWorldSpacePosition.y,lProjectedPoint.w)};
+    lProjectedPoint = {
+        std::fma(lz.x,lWorldSpacePosition.z,lProjectedPoint.x),
+        std::fma(lz.y,lWorldSpacePosition.z,lProjectedPoint.y),
+        std::fma(lz.z,lWorldSpacePosition.z,lProjectedPoint.z),
+        std::fma(lz.w,lWorldSpacePosition.z,lProjectedPoint.w)};
+    if (!(lProjectedPoint.w > 0.01f)) //82002138, unordered also returns false
+        return false;
+    const f32 lfInvZ = 1.0f/lProjectedPoint.w; //fdivs, followed by separately-rounded mul
+    lv2OutScreenSpacePosition.x = lProjectedPoint.x*lfInvZ;
+    lv2OutScreenSpacePosition.y = lProjectedPoint.y*lfInvZ;
+    return true;
+}
