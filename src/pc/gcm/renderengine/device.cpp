@@ -560,9 +560,9 @@ float renderengine::DiagTextureMeanLuma(void* lpD3DBaseTexture)
 // FLAG PC-platform leaf: optional readback of the actual final-composite
 // source/bloom textures. A band already in source0 belongs to an earlier pass;
 // a clear source paired with a bad final BMP directs the audit to the composite.
-// Only reads native bindings/surfaces, at most128 paired presents. Defaults to
-// one in twenty configured BMP samples after present3000. Optional observation
-// start/cadence controls do not change any draw/state/filter/value.
+// Only reads native bindings/surfaces:30 paired presents by default, at most128
+// when explicitly requested. Samples one in twenty configured BMPs after
+// present3000. Observation start/cadence/cap do not change render behavior.
 void renderengine::DiagDumpPostFxSourcesPC()
 {
     static const bool sbEnabled = []() {
@@ -583,19 +583,26 @@ void renderengine::DiagDumpPostFxSourcesPC()
         return lpValue && lpEnd != lpValue && *lpEnd == '\0' && luValue > 0 && luValue <= 1000000u
             ? static_cast<u32>(luValue) : FrameDumpEvery() * 20u;
     }();
+    static const u32 suMaxSamples = []() {
+        const char* lpValue = std::getenv("BRN_POSTFX_SOURCE_MAX");
+        char* lpEnd = nullptr;
+        const unsigned long luValue = lpValue ? std::strtoul(lpValue, &lpEnd, 10) : 0;
+        return lpValue && lpEnd != lpValue && *lpEnd == '\0' && luValue > 0 && luValue <= 128u
+            ? static_cast<u32>(luValue) : 30u;
+    }();
     static const char* const spFrameDirectory = std::getenv("BRN_FRAME_DUMP");
     static u32 suAttempts = 0u;
     static u32 suLastPresent = ~0u;
     const u32 luPresent = GetDispatchPresentCountPC();
     if (!sbEnabled || !spFrameDirectory || !spFrameDirectory[0] || !gDevice || luPresent < suStartPresent
-        || suAttempts >= 128u || suLastPresent == luPresent
+        || suAttempts >= suMaxSamples || suLastPresent == luPresent
         || (luPresent % suCadence) != 0u)
         return;
     if (suAttempts == 0u)
     {
         char lacConfiguration[128];
         std::snprintf(lacConfiguration, sizeof(lacConfiguration),
-            "[postfx-source] observation start=%u every=%u cap=128\n", suStartPresent, suCadence);
+            "[postfx-source] observation start=%u every=%u cap=%u\n", suStartPresent, suCadence, suMaxSamples);
         CgsDev::Log::WriteToLog(lacConfiguration);
     }
     suLastPresent = luPresent;
