@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"
+#include "GameShared/GameClasses/System/PC/CgsResourcePoolBindingsPC.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "rw/rwcore_structs.h"                        // rw::IResourceAllocator / Resource (CreatePool test driver)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [5b TEST] trace
@@ -414,6 +415,10 @@ namespace CgsResource
     // Look up a created pool by id (null if absent).
     Pool* PoolModule::GetPool(s32 liPoolId)
     {
+        // FLAG PC-platform leaf: module-scheduled requests must see resources
+        // loaded by the synchronous GUI transport under their original pool id.
+        if (Pool* lpPool = PCPoolBindings::Find(liPoolId))
+            return lpPool;
         const s32 li = GetPoolIndex(liPoolId);
         return (li >= 0) ? &maPools[li] : 0;
     }
@@ -433,11 +438,11 @@ namespace CgsResource
         lResponse.mpResourceMemory = 0;
         lResponse.mpSourceEntry    = 0;
 
-        const s32 liPoolIndex = GetPoolIndex(lpRequest->miPoolId);
-        if (liPoolIndex >= 0)
+        Pool* lpPool = GetPool(lpRequest->miPoolId);
+        if (lpPool != nullptr)
         {
             s32 liIndex = -1;
-            Entry* lpEntry = maPools[liPoolIndex].FindResource(lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
+            Entry* lpEntry = lpPool->FindResource(lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
             if (lpEntry != 0)
             {
                 lResponse.mpResourceMemory = &lpEntry->mResource.m_baseResources[E_MEMTYPE_MAINMEMORY];

@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log::WriteToLog
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"       // CgsResource::Pool / Entry
+#include "GameShared/GameClasses/System/PC/CgsResourcePoolBindingsPC.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoader.h" // CgsResource::BundleLoader (the PC sync loader)
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h" // CgsResource::ResolveResourceType
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistration.h" // RegisterAllResourceTypes (AptDataHeaderType 0x1E)
@@ -122,6 +123,12 @@ namespace CgsGui
                 lOptions.miBankId               = 0;
                 lOptions.mbAllowDefragmentation = false;
                 s_AptStreamedBankPool.InitPool(&lOptions);
+                // ARTIST GuiModule::Prepare 0x82518F14 sets the streamed Apt
+                // pool to 9. ColourCalibrationScreen requests its texture from
+                // that same pool through GameData (0x8246AAC8), whereas this
+                // host loader uses private routing tags. Share the actual pool,
+                // including unload/refcount state, across those two transports.
+                CgsResource::PCPoolBindings::Publish(9, &s_AptStreamedBankPool);
                 s_bAptStreamedBankLive = true;
                 CgsDev::Log::WriteToLog("[GuiResourceModule] streamed-apt bank pool materialised.\n");
             }
