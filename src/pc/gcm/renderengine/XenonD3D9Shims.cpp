@@ -6523,7 +6523,7 @@ namespace
     const u32 KU_POSTFX_SOURCE_FILTER_LINEAR = 1u;
     const u32 KU_POSTFX_SOURCE_FILTER_ANISO  = 4u;
 
-    // [DIAG, mask-alpha] Raised by ApplyPostFxSourceSamplerState and by nothing else, so it is
+    // [DIAG, mask-alpha] Raised by PostFxSourceSampler_ApplyState and by nothing else, so it is
     // true on exactly the composite's own full-screen quad and false on the bloom down-sample and
     // the two Blur9 passes -- the discriminator the [mask-alpha] source read-back needs (see the
     // probe in the immediate-mode draw path). Consumed there, on every immediate draw.
@@ -6532,12 +6532,6 @@ namespace
     void ApplyPostFxSourceSamplerState(IDirect3DDevice9* lpDevice, u32 luUnit,
                                        u32 luMinMagFilterWord, u32 luMaxAnisotropy)
     {
-        // Only the composite's SOURCE bind identifies its draw. The native
-        // quarter-res overlay also applies this helper to auxiliary unit1,
-        // and uses a direct draw that never consumes the EndVertices latch.
-        if (luUnit == 0u)
-            gbPostFxSourceSamplerApplied = true;
-
         if (lpDevice == nullptr || luUnit >= KU_RAW_DEPTH_MAX_SAMPLER_UNITS)
             return;
 
@@ -8759,7 +8753,20 @@ void PostFxDepthSampler_ApplyState(u32 luUnit)
 // shared low-level setter still cannot apply a packed console sampler block.
 void PostFxSourceSampler_ApplyState(u32 luUnit, u32 luMinMagFilterWord, u32 luMaxAnisotropy)
 {
+    // Only the composite's SOURCE bind identifies its immediate draw. Bloom
+    // producers and the native quarter-res overlay also use the state applier.
+    if (luUnit == 0u)
+        gbPostFxSourceSamplerApplied = true;
     ApplyPostFxSourceSamplerState(Dev(), luUnit, luMinMagFilterWord, luMaxAnisotropy);
+}
+
+// FLAG PC-platform leaf: the bloom producers bind colour TextureStates whose
+// original filter is LINEAR and addressU/V is CLAMP (CgsRenderTarget defaults;
+// ARTIST Target::CreateColor 0x82403544..0x824035AC). The packed low-level setter
+// is still a no-op, so realize that sampler at every producer bind as well.
+void PostFxBloomSampler_ApplyState(u32 luUnit)
+{
+    ApplyPostFxSourceSamplerState(Dev(), luUnit, KU_POSTFX_SOURCE_FILTER_LINEAR, 1u);
 }
 
 // =============================================================================================

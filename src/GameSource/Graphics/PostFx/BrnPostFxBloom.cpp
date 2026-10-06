@@ -121,6 +121,10 @@ namespace
 
 namespace renderengine
 {
+    // FLAG PC-platform leaf: realize the original colour-target sampler; the
+    // native low-level TextureState setter does not apply its packed words.
+    void PostFxBloomSampler_ApplyState(u32 luUnit);
+
     // ---- THE SIX PC PROGRAM IMAGES ---------------------------------------------------------------
     // [FLAG PC-platform leaf: shader programs] The D3D9 counterparts of the six Xenos packages above,
     // wrapped as platform-4 ShaderProgramBuffer images by the bloom shader step
@@ -836,6 +840,7 @@ void BrnPostFxBloom::PrepareDownSampleBuffer(rw::graphics::postfx::RenderTarget*
     // 4-byte-pointer image (+0x20 array base, +0x0C into the first Target); reached BY NAME here, so
     // no guest offset survives to the host.
     shadow::Device::SetState(lpSourceRt->maColourTargets[0].mpTextureState, KU_SAMPLER_SOURCE);
+    renderengine::PostFxBloomSampler_ApplyState(KU_SAMPLER_SOURCE);
 
     // asm 0x82401C98-0x82401CB0: the vertex-descriptor bind, open-coded (compare off_83010958, set
     // the byte_83010A34 dirty flag, cache) == shadow::Device::SetVertexDescriptor.
@@ -918,6 +923,7 @@ void BrnPostFxBloom::Generate1PassBlurredBloomBuffer(rw::graphics::postfx::Rende
 
     // asm 0x8240203C-0x82402040 / 0x82402044-0x8240205C / 0x82402060.
     shadow::Device::SetState(lpWorkRt->maColourTargets[0].mpTextureState, KU_SAMPLER_SOURCE);
+    renderengine::PostFxBloomSampler_ApplyState(KU_SAMPLER_SOURCE);
     shadow::Device::SetVertexDescriptor(mpBloomVertexDescriptor);
     shadow::Device::FlushVertexProgramState();
 
@@ -1021,6 +1027,7 @@ void BrnPostFxBloom::Generate2PassBlurredBloomBuffer(rw::graphics::postfx::Rende
 
     // asm 0x82402570-0x82402574 / 0x82402578: sample the BLOOM target.
     shadow::Device::SetState(lpBloomRt->maColourTargets[0].mpTextureState, KU_SAMPLER_SOURCE);
+    renderengine::PostFxBloomSampler_ApplyState(KU_SAMPLER_SOURCE);
     shadow::Device::FlushVertexProgramState();
 
     // asm 0x8240257C-0x82402800: the quad, half-texel-offset by the target being SAMPLED.
@@ -1050,6 +1057,7 @@ void BrnPostFxBloom::Generate2PassBlurredBloomBuffer(rw::graphics::postfx::Rende
     // asm 0x824028B0-0x824028B4 / 0x824028B8: sample the WORK target this time. The pixel constants,
     // the programs and the vertex descriptor are NOT re-bound -- the console re-binds neither.
     shadow::Device::SetState(lpWorkRt->maColourTargets[0].mpTextureState, KU_SAMPLER_SOURCE);
+    renderengine::PostFxBloomSampler_ApplyState(KU_SAMPLER_SOURCE);
     shadow::Device::FlushVertexProgramState();
 
     // asm 0x824028BC-0x82402B14: the quad, half-texel-offset by lpWorkRt (`lwz r11, var_150` /
