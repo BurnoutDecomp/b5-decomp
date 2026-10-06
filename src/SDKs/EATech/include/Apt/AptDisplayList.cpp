@@ -412,7 +412,7 @@ AptCIH* AptDisplayList::AddToDisplayList(AptNativeHash* pParentHash, void** ppPl
     const int32_t nCharId =
         static_cast<const AptPlaceObjectInfo_t*>(ppPlacement[0])->GetBody()->mi32CharacterId;  // [c: dword 3]
     AptCharacter* const pPlacedChar =
-        static_cast<AptFramePlacementProps*>(ppPlacement[1])->mpCharacter;
+        static_cast<AptCharacter*>(static_cast<AptFramePlacementProps*>(ppPlacement[1])->mpData);
 
     bool bAnimSane = false;
     if (pAnim != nullptr)
@@ -485,7 +485,7 @@ AptCIH* AptDisplayList::ReplaceDisplyListItem(AptNativeHash* pParentHash, AptCIH
 {
     AptFramePlacementProps* const pProps = static_cast<AptFramePlacementProps*>(ppPlacement[1]);
 
-    if (pProps->mpCharacter != nullptr)
+    if (static_cast<AptCharacter*>(pProps->mpData) != nullptr)
     {
         // A new character is named: replace the existing node.
         removeObject(pExisting);
@@ -495,7 +495,7 @@ AptCIH* AptDisplayList::ReplaceDisplyListItem(AptNativeHash* pParentHash, AptCIH
             static_cast<const AptPlaceObjectInfo_t*>(ppPlacement[0])->GetBody()->mi32CharacterId;  // [c: +0xC]
         if (nCharId != -1)
         {
-            AptCharacter* const pPlacedChar = pProps->mpCharacter;
+            AptCharacter* const pPlacedChar = static_cast<AptCharacter*>(pProps->mpData);
             AptCharacter* const pOwnerChar =
                 const_cast<AptCharacter*>(pParentNode->GetCharacterInst()->GetRenderItem()->mpCharacter);
             AptCharacter* const pRootChar = pOwnerChar->mpFixupLink;
@@ -527,18 +527,18 @@ AptCIH* AptDisplayList::ReplaceDisplyListItem(AptNativeHash* pParentHash, AptCIH
     if (pExisting->GetASChanged())
         return nullptr;
 
-    if ((pProps->mnFlags & 0x8) != 0)   // bit3: copy colour transform
+    if ((pProps->muxFlags & 0x8) != 0)   // bit3: copy colour transform
     {
         AptCXForm* const pColor =
             pExisting->GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
-        pColor->AptUint32CXFormCopy(pProps->mpColorTransform);
+        pColor->AptUint32CXFormCopy(static_cast<const AptUint32CXForm*>(pProps->mpColorTransform));
     }
-    if ((pProps->mnFlags & 0x4) != 0)   // bit2: copy position matrix
+    if ((pProps->muxFlags & 0x4) != 0)   // bit2: copy position matrix
     {
         AptMatrix* const pPos =
             pExisting->GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
-        if (pProps->mpPositionMatrix != nullptr)
-            pPos->AptMatrixCopy(reinterpret_cast<const AptMatrix*>(pProps->mpPositionMatrix));
+        if (pProps->mpMatrix != nullptr)
+            pPos->AptMatrixCopy(reinterpret_cast<const AptMatrix*>(pProps->mpMatrix));
     }
     return nullptr;
 }
@@ -1057,17 +1057,17 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
                 continue;
             }
 
-            if (pProps->mpCharacter == nullptr)
+            if (static_cast<AptCharacter*>(pProps->mpData) == nullptr)
             {
                 // No new character: merge colour/position in place (never over an AS write).
                 if (!pNode->GetASChanged())
                 {
-                    if ((pProps->mnFlags & 0x8) != 0)
+                    if ((pProps->muxFlags & 0x8) != 0)
                         pInst->GetRenderItemWritable()->GetColorMatrixWritable()
-                            ->AptUint32CXFormCopy(pProps->mpColorTransform);
-                    if ((pProps->mnFlags & 0x4) != 0 && pProps->mpPositionMatrix != nullptr)
+                            ->AptUint32CXFormCopy(static_cast<const AptUint32CXForm*>(pProps->mpColorTransform));
+                    if ((pProps->muxFlags & 0x4) != 0 && pProps->mpMatrix != nullptr)
                         pInst->GetRenderItemWritable()->GetPositionMatrixWritable()
-                            ->AptMatrixCopy(reinterpret_cast<const AptMatrix*>(pProps->mpPositionMatrix));
+                            ->AptMatrixCopy(reinterpret_cast<const AptMatrix*>(pProps->mpMatrix));
                 }
                 pSrc  = pSrc->mpNext;
                 pNode = pNextExisting;
@@ -1077,8 +1077,8 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
             // A character IS named: merge in place only when it is the same character
             // already here (or the inst is an animation); else replace.
             const bool bSameChar =
-                (nTag == static_cast<uint32_t>(pProps->mpCharacter->mnType) &&
-                 pProps->mpCharacter == pRenderItem->mpCharacter && bGate1);
+                (nTag == static_cast<uint32_t>(static_cast<AptCharacter*>(pProps->mpData)->mnType) &&
+                 static_cast<AptCharacter*>(pProps->mpData) == pRenderItem->mpCharacter && bGate1);
             if (!(bSameChar || nTag == 9))
             {
                 pResult = ReplaceDisplyListItem(pParentHash, pNode,
@@ -1090,10 +1090,10 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
 
             if (!pNode->GetASChanged())
             {
-                if ((pProps->mnFlags & 0x8) != 0)
+                if ((pProps->muxFlags & 0x8) != 0)
                 {
                     pInst->GetRenderItemWritable()->GetColorMatrixWritable()
-                        ->AptUint32CXFormCopy(pProps->mpColorTransform);
+                        ->AptUint32CXFormCopy(static_cast<const AptUint32CXForm*>(pProps->mpColorTransform));
                 }
                 else
                 {
@@ -1105,9 +1105,9 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
                     pCX->scale.CopyFromFloatArray(kScaleId);
                     pCX->translate.CopyFromFloatArray(kTranslateId);
                 }
-                if ((pProps->mnFlags & 0x4) != 0 && pProps->mpPositionMatrix != nullptr)
+                if ((pProps->muxFlags & 0x4) != 0 && pProps->mpMatrix != nullptr)
                     pInst->GetRenderItemWritable()->GetPositionMatrixWritable()
-                        ->AptMatrixCopy(reinterpret_cast<const AptMatrix*>(pProps->mpPositionMatrix));
+                        ->AptMatrixCopy(reinterpret_cast<const AptMatrix*>(pProps->mpMatrix));
             }
             pSrc  = pSrc->mpNext;
             pNode = pNextExisting;
@@ -1266,12 +1266,10 @@ AptCIH* AptFramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, Apt
         }
     }
 
-    // The snapshot's clip-actions slot carries the console's captured 4-byte VALUE;
-    // on the native-8 path the AptPseudoData_t ctor leaves it 0 (the 8-byte pointer
-    // cannot be captured -- see AptPseudoData.h), so placeObject's placement-field
-    // store stays a no-op exactly as shipped.
-    const void* const pClipActions =
-        reinterpret_cast<const void*>(static_cast<intptr_t>(pProps->miClipActionValue));
+    // Native XB1 frame-placement twin1408555F0 at1408556EC reads the full
+    // snapshot+18 qword and forwards it to placeObjectNCXForm. The resident
+    // movie owns the block; snapshot destruction never releases that memory.
+    const void* const pClipActions = pProps->mpClipActions;
 
     AptCIH* const pPlaced = pThis->placeObjectNCXForm(
         /*pExistingNode*/ nullptr, pSrcNode->mnDepth,

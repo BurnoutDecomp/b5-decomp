@@ -1,3 +1,4 @@
+#include "SDKs/EATech/include/Apt/AptTextLayoutDiagnosticsPC.h"
 // ===========================================================================
 // EATech Apt -- AptCIH::EnsureStringAllocated: the deep dynamic-text build/layout
 // path. DECOMPILED from the X360 ARTIST.XEX (@0x82B06F08).
@@ -143,6 +144,9 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         static_cast<AptRenderItemDynamicText*>(GetCharacterInst()->GetRenderItemWritable())
             ->SetZID(0);
     }
+
+    // XB1 140836A79 reloads the current item after SetZID's writable-clone path.
+    pItem = static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItem());
 
     // The current text object slot on the movie's constant table. The console reads
     // the AptCharacterTextInst's render item TextFormat slot (v10+0x68 == mpTextFormat);
@@ -380,6 +384,21 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             {
                 SetProceduralProperty(0, (fTx + fItemWidth) - fParamsWidth, true);
             }
+        }
+
+        const intptr_t diagnosticID = reinterpret_cast<intptr_t>(hHandle);
+        if (AptTextLayoutDiagnosticsPC::SampleFold(diagnosticID))
+        {
+            const AptMatrix* matrix = GetPositionMatrixConst();
+            char line[768];
+            std::snprintf(line,sizeof(line),
+                "[apt-text-layout] fold id=%lld caption='%s' node=%p matrix=%.6f,%.6f,%.6f,%.6f,%.6f,%.6f itemBox=%.6f,%.6f,%.6f,%.6f paramsBox=%.6f,%.6f,%.6f,%.6f boxAlign=%d state=%u measured=%.6f,%.6f",
+                static_cast<long long>(diagnosticID),AptTextLayoutDiagnosticsPC::Caption(AptTextLayoutDiagnosticsPC::Kind(diagnosticID)),
+                static_cast<void*>(this),matrix->a,matrix->b,matrix->c,matrix->d,matrix->tx,matrix->ty,
+                pItem2->mBounds.fLeft,pItem2->mBounds.fTop,pItem2->mBounds.fRight,pItem2->mBounds.fBottom,
+                params.x0,params.y0,params.x1,params.y1,nBoxAlign2,pItem2->mStateFlags,
+                params.fTextWidth,params.fTextHeight);
+            AptTextLayoutDiagnosticsPC::Emit(line);
         }
 
         // ---- fold the measured layout back onto the render item (X360 LABEL_34) ----

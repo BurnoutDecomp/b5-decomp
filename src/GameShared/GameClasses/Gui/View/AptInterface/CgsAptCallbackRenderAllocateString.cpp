@@ -1,3 +1,4 @@
+#include "SDKs/EATech/include/Apt/AptTextLayoutDiagnosticsPC.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCallbackRender.h"  // AptCallbackRender::AllocateString + the AcquireStringSlot bridge
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptString.h"          // the REAL CgsGui::CgsAptString (text object) + Prepare
 
@@ -48,6 +49,25 @@ namespace CgsGui
             lpStringBuffer,
             static_cast<CgsAptString::ETextEffects>(liEffect),
             lfSizeScale);
+
+        // Default-off observation of the exact callback input/output, in their original local units.
+        if (AptTextLayoutDiagnosticsPC::Register(liZID,
+                reinterpret_cast<const char*>(lpAptString->mTextObject.mpUtf8String)))
+        {
+            const CgsGraphics::TextObject& text = lpAptString->mTextObject;
+            char line[768];
+            std::snprintf(line, sizeof(line),
+                "[apt-text-layout] alloc id=%d caption='%s' box=%.6f,%.6f,%.6f,%.6f align=%d boxAlign=%d flags=%u fontIn=%.6f textBox=%.6f,%.6f,%.6f,%.6f textAlign=%d font=%.6f widthEm=%.6f measured=%.6f,%.6f auto=%d wrap=%d multi=%d",
+                liZID, AptTextLayoutDiagnosticsPC::Caption(AptTextLayoutDiagnosticsPC::Kind(liZID)),
+                lpParameters->x0,lpParameters->y0,lpParameters->x1,lpParameters->y1,
+                static_cast<int>(lpParameters->eAlignment),static_cast<int>(lpParameters->eBoxAlignment),
+                lpParameters->eFlags,lpParameters->fFontHeight,
+                text.mv2TopLeft.mX,text.mv2TopLeft.mY,text.mv2BottomRight.mX,text.mv2BottomRight.mY,
+                static_cast<int>(text.meAlignment),text.mfFontHeight,text.mfStringWidth,
+                lpParameters->fTextWidth,lpParameters->fTextHeight,
+                static_cast<int>(text.mbAutosize),static_cast<int>(text.mbWordWrap),static_cast<int>(text.mbMultiLine));
+            AptTextLayoutDiagnosticsPC::Emit(line);
+        }
 
         // Return the x64 render-data handle (slotIndex + 1) the engine stores in mZID.
         return reinterpret_cast<AptAssetString>(static_cast<intptr_t>(liZID));

@@ -1,3 +1,4 @@
+#include "SDKs/EATech/include/Apt/AptTextLayoutDiagnosticsPC.h"
 // ===========================================================================
 // EATech Apt -- AptCIH member recognizers: the built-in MovieClip / TextField
 // property + method routes.   DECOMPILED from the X360 ARTIST.XEX:
@@ -346,6 +347,22 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
             {
                 if ((pText->mStateFlags & 4u) != 0)
                     pNode->EnsureStringAllocated(pNode->mpDisplayListParent);
+                // FLAG PC diagnostic: observe the exact cached/current getter inputs; no selection change.
+                const AptRenderItemDynamicText* diagnosticCurrent =
+                    static_cast<const AptRenderItemDynamicText*>(pInst->GetRenderItem());
+                if (AptTextLayoutDiagnosticsPC::SampleGetter(diagnosticCurrent->mZID))
+                {
+                    char line[768];
+                    std::snprintf(line,sizeof(line),
+                        "[apt-text-layout] getWidth id=%lld caption='%s' node=%p cached=%p current=%p cachedBoxAlign=%d currentBoxAlign=%d cachedWrap=%d currentWrap=%d measuredWidth=%.6f cachedRect=%.6f,%.6f currentRect=%.6f,%.6f cachedFlags=%u currentFlags=%u",
+                        static_cast<long long>(diagnosticCurrent->mZID),AptTextLayoutDiagnosticsPC::Caption(AptTextLayoutDiagnosticsPC::Kind(diagnosticCurrent->mZID)),
+                        static_cast<void*>(pNode),static_cast<const void*>(pText),static_cast<const void*>(diagnosticCurrent),
+                        pText->GetBoxAlignment(),diagnosticCurrent->GetBoxAlignment(),
+                        static_cast<int>(pText->GetWordWrap()),static_cast<int>(diagnosticCurrent->GetWordWrap()),pTextInst->mTextWidth,
+                        pText->mBounds.fLeft,pText->mBounds.fRight,diagnosticCurrent->mBounds.fLeft,diagnosticCurrent->mBounds.fRight,
+                        pText->mStateFlags,diagnosticCurrent->mStateFlags);
+                    AptTextLayoutDiagnosticsPC::Emit(line);
+                }
                 if ((pText->mFlagsAndBorderColor & 0x3C000000u) == 0x0C000000u || pText->GetWordWrap())
                 {
                     float afRect[4];
@@ -394,6 +411,21 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
                 const AptRenderItemDynamicText* const pText =
                     static_cast<const AptRenderItemDynamicText*>(pInst->mpRenderItem);
                 fValue += (pSprEntry->muMemberIndex == 1) ? pText->mBounds.fLeft : pText->mBounds.fTop;
+            }
+            if (pInst->GetTypeTag() == 2 && pSprEntry->muMemberIndex == 1)
+            {
+                const AptRenderItemDynamicText* current =
+                    static_cast<const AptRenderItemDynamicText*>(pInst->GetRenderItem());
+                if (AptTextLayoutDiagnosticsPC::SampleGetter(current->mZID))
+                {
+                    char line[512];
+                    std::snprintf(line,sizeof(line),
+                        "[apt-text-layout] getX id=%lld caption='%s' node=%p value=%.6f matrixTx=%.6f boxLeft=%.6f boxAlign=%d flags=%u",
+                        static_cast<long long>(current->mZID),AptTextLayoutDiagnosticsPC::Caption(AptTextLayoutDiagnosticsPC::Kind(current->mZID)),
+                        static_cast<void*>(pNode),fValue,current->GetPositionMatrixConst()->tx,current->mBounds.fLeft,
+                        current->GetBoxAlignment(),current->mStateFlags);
+                    AptTextLayoutDiagnosticsPC::Emit(line);
+                }
             }
             return AptFloat::Create(fValue);
         }

@@ -1068,7 +1068,25 @@ namespace CgsGui
                  siEventHudGetLogs < 200);
             if (lbEventHudProbe)
                 ++siEventHudGetLogs;
-            if (siGetLogs < 60 || lbLicenseProbe || lbEventHudProbe)
+            // FLAG PC-platform leaf: observe late map/prompt queries independently
+            // of the boot budget, under the same opt-in as the AS variable probe.
+            static const bool sbPromptProbe = []() {
+                const char* pEnv = std::getenv("BRN_APT_PROMPT_DIAG");
+                return pEnv != nullptr && pEnv[0] == '1';
+            }();
+            static s32 siPromptGetLogs = 0;
+            const bool lbPromptProbe = sbPromptProbe && lpacCompName != nullptr &&
+                // Map button animators have their own budget. Boot car-selection
+                // HelpItem and per-frame minimap queries must not spend it first.
+                std::strstr(lpacCompName, "ButtonsAnimation") != nullptr;
+            const bool lbPromptWithinBudget = lbPromptProbe && siPromptGetLogs < 1024;
+            if (lbPromptProbe && siPromptGetLogs <= 1024)
+            {
+                if (siPromptGetLogs == 1024)
+                    CgsDev::Log::WriteToLog("[apt-prompt] component query BUDGET EXHAUSTED; later silence is unobserved.\n");
+                ++siPromptGetLogs;
+            }
+            if (siGetLogs < 60 || lbLicenseProbe || lbEventHudProbe || lbPromptWithinBudget)
             {
                 ++siGetLogs;
                 char lacProbe[224];

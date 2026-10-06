@@ -32,6 +32,7 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
+#include "SDKs/EATech/include/Apt/AptPromptDiagnosticsPC.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
@@ -55,6 +56,8 @@ extern AptVarNotFoundCb gpAptVarNotFoundCb;
 AptValue* AptActionInterpreter::getVariable(AptValue* pScope, AptValue* pTarget,
     const EAStringC* pName, int nAllowSelf, int nSearchScopeChain, int nDirect)
 {
+    AptPromptDiagnosticsPC promptDiag("GET", pScope, pTarget, pName);
+
     // The scope is the pinned EmptyCIH placeholder -> the variable is undefined.
     // (console getVariable @0x82B03430 head: a2 == dword_8324D700. The old
     // never-assigned gpUndefinedCIH duplicate compared against null here, letting
@@ -85,6 +88,8 @@ AptValue* AptActionInterpreter::getVariable(AptValue* pScope, AptValue* pTarget,
         nKind = getContext(pScope, pTarget, pName, &pContext, &ctxName);   // homed path parser (AptActionInterpreterContext.cpp)
         pLeaf = &ctxName;
     }
+
+    promptDiag.SetContext(pContext);
 
     // The path resolved to just a context (no leaf name): return it (or undefined).
     if (pLeaf->IsEmpty())
@@ -130,5 +135,6 @@ AptValue* AptActionInterpreter::getVariable(AptValue* pScope, AptValue* pTarget,
             pFound = getVariable(pScope, 0, pName, nAllowSelf, 1, 0);
     }
 
+    promptDiag.SetValue(pFound);
     return pFound;
 }

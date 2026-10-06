@@ -21,6 +21,7 @@
 // ===========================================================================
 
 #include <new>   // placement new (the TextFormat copy-ctor into a pool block)
+#include "SDKs/EATech/include/Apt/AptTextLayoutDiagnosticsPC.h" // bounded, default-off help-label witness
 
 #include "SDKs/EATech/include/Apt/AptCIHNativeFunctionHelper.h"
 
@@ -248,6 +249,14 @@ extern AptActionInterpreter gAptActionInterpreter;   // dword_8324E760 (the AS V
 AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
 {
     AptCIH* const pNode = static_cast<AptCIH*>(pContext);
+    // FLAG PC diagnostic: observe only the two authored help-item labels. The
+    // native XB1 goto body14084A610 supplies the same receiver/hash/frame chain.
+    const char* diagnosticLabel = nullptr;
+    const AptMovie* diagnosticMovie = nullptr;
+    const AptCharacter* diagnosticCharacter = nullptr;
+    const AptValue* diagnosticHit = nullptr;
+    int diagnosticResolvedFrame = -1;
+    int diagnosticOldFrame = -1;
     if (nArgCount >= 1)
     {
         // The operand-stack top (the frame number or label).
@@ -284,7 +293,22 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
                     (pStr != nullptr && pLabels != nullptr)
                         ? pLabels->Lookup(*pStr->GetInternalString())
                         : nullptr;
-                nFrame = (pHit ? pHit->toInteger() : -1) + 1;
+                const int nLabelFrame = pHit ? pHit->toInteger() : -1;
+                nFrame = nLabelFrame + 1;
+                if (AptTextLayoutDiagnosticsPC::Enabled() && pStr != nullptr)
+                {
+                    const char* label = pStr->GetInternalString()->GetBuffer();
+                    if (std::strcmp(label, "IconOnLeft") == 0 || std::strcmp(label, "IconOnRight") == 0)
+                    {
+                        diagnosticLabel = label;
+                        diagnosticMovie = pMovie;
+                        diagnosticCharacter = pChar;
+                        diagnosticHit = pHit;
+                        diagnosticResolvedFrame = nLabelFrame;
+                        if (pInst->GetTypeTag() == 5u || pInst->GetTypeTag() == 9u)
+                            diagnosticOldFrame = static_cast<AptCharacterSpriteInstBase*>(pInst)->mnGotoFrame;
+                    }
+                }
             }
             else
             {
@@ -308,6 +332,32 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
                 if (bPlay)
                     pNode->SetDirtyState(true, true);
             }
+        }
+    }
+    if (diagnosticLabel != nullptr && CgsDev::Log::gpDebugPrint != nullptr)
+    {
+        static unsigned diagnosticRows = 0;
+        if (diagnosticRows < 64u)
+        {
+            ++diagnosticRows;
+            const AptCharacterInst* currentInst = pNode->GetCharacterInst();
+            const unsigned currentTag = currentInst->GetTypeTag();
+            const int currentFrame = (currentTag == 5u || currentTag == 9u)
+                ? static_cast<const AptCharacterSpriteInstBase*>(currentInst)->mnGotoFrame : -1;
+            const AptFile* file = diagnosticCharacter->mpAnimationFile;
+            char line[768];
+            std::snprintf(line,sizeof(line),
+                "[apt-text-seek] label='%s' receiver=%p name='%s' valueType=%d defined=%d instTag=%u character=%p charTag=%d root=%p file=%p movieName='%s' movie=%p frames=%d labelHash=%p hit=%p hitType=%d hitDefined=%d resolved=%d before=%d after=%d play=%d",
+                diagnosticLabel,static_cast<void*>(pNode),pNode->GetInstanceName().GetBuffer(),
+                static_cast<int>(pNode->getVtblIndex()),static_cast<int>(pNode->getIsDefined()),currentTag,
+                static_cast<const void*>(diagnosticCharacter),static_cast<int>(diagnosticCharacter->mnType),
+                static_cast<const void*>(diagnosticCharacter->mpFixupLink),static_cast<const void*>(file),
+                file ? file->mFileName.GetBuffer() : "",static_cast<const void*>(diagnosticMovie),diagnosticMovie->mnFrameCount,
+                static_cast<const void*>(diagnosticMovie->mpLabelHash),static_cast<const void*>(diagnosticHit),
+                diagnosticHit ? static_cast<int>(diagnosticHit->getVtblIndex()) : -1,
+                diagnosticHit ? static_cast<int>(diagnosticHit->getIsDefined()) : 0,
+                diagnosticResolvedFrame,diagnosticOldFrame,currentFrame,bPlay);
+            *CgsDev::Log::gpDebugPrint << line << "\n";
         }
     }
     return gpUndefinedValue;   // off_8324D814

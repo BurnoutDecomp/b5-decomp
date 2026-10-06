@@ -262,9 +262,8 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
                 // record's matrix/colour fields (`lea rcx,[rbx+14h]`-family) into the
                 // node's typed AptPseudoData_t snapshot -- NOT 4-byte field VALUES at
                 // console offsets (the prior transliteration corrupted the x64 node on
-                // any MOVE-record merge). clipActions (bit 0x80): the native-8 record
-                // carries a POINTER @body+0x40 that the console's 4-byte slot cannot
-                // hold and no pun consumer reads -- unchanged (see AptPseudoData.h FLAG).
+                // any MOVE-record merge). XB1 1408364E6..4FE also replaces the
+                // full clip-action pointer under bit80, retaining it when absent.
                 AptPseudoData_t* pData =
                     static_cast<AptPseudoCIH_t*>(pExisting)->mpPseudoData;
                 if (pData != nullptr)
@@ -273,6 +272,9 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
                         pData->mpMatrix = const_cast<char*>(pBody) + 0x0C;
                     if (nFlags & 0x08)
                         pData->mpColorTransform = const_cast<char*>(pBody) + 0x24;
+                    if (nFlags & 0x80)
+                        pData->mpClipActions =
+                            reinterpret_cast<const AptPlaceObjectBody_t*>(pBody)->mpClipActions;
                     if (nFlags & 0x10)
                         pData->mfRatio = CmdF32(pBody, 0x2C);   // serialized .apt move/morph ratio
                     pData->muxFlags |= static_cast<u32>(nFlags);
