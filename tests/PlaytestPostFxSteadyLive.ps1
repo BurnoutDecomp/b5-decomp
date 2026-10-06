@@ -18,7 +18,9 @@
         MaxSeconds = 65
         FrameEvery = 1
     }
-    DiagEnv = 'BRN_CAMERA_TRACE=1,BRN_SHADOW_PROBE=1,BRN_ENVMAP_STATS=1,BRN_FRAME_DUMP_ARM=0,BRN_FRAME_DUMP_START=6500,BRN_FRAME_DUMP_MAX=480,BRN_POSTFX_SOURCE_DUMP=1,BRN_POSTFX_SOURCE_START=6500,BRN_POSTFX_SOURCE_EVERY=5'
+    # This long temporal diagnostic explicitly retains its historical 480 final
+    # frames and 128 input pairs instead of inheriting the default cap of 30 pairs.
+    DiagEnv = 'BRN_CAMERA_TRACE=1,BRN_SHADOW_PROBE=1,BRN_ENVMAP_STATS=1,BRN_FRAME_DUMP_ARM=0,BRN_FRAME_DUMP_START=6500,BRN_FRAME_DUMP_MAX=480,BRN_POSTFX_SOURCE_DUMP=1,BRN_POSTFX_SOURCE_START=6500,BRN_POSTFX_SOURCE_EVERY=5,BRN_POSTFX_SOURCE_MAX=128'
     Checks = @(
         @{ Kind='NewAsserts'; Name='no new assertions' }
         @{ Kind='LogCount'; Name='no exceptions'; Pattern='\[EXCEPTION\]'; Max=0 }

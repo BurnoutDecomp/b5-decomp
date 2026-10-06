@@ -14,7 +14,7 @@ $case=@{
         AcceptGap=1.0
         Teleport='3040.7,-5.8,-1937.9,180'
         SteerScript='0:none,5:right25,7:none,10:left25,12:none,16:right25,18:none'
-        ThrottleScript='0:accel,20:brake+handbrake,23:handbrake'
+        ThrottleScript='0:accel'
         MaxSeconds=65
         FrameEvery=1
     }
@@ -57,6 +57,29 @@ if($Capture) {
             @{Pass=($rows.Count -eq 8);Detail="matched native scene pairs=$($rows.Count), requested8 at$($ctx.Case.NativeWidth)x$($ctx.Case.NativeHeight)"}
         }}
         @{Kind='LogCount';Name='bounded real bloom pairs';Pattern='^\[postfx-source\] present=\d+ unit=1 .*written=1 ';Min=8;Max=8}
+        @{Kind='Script';Name='camera translated during the actual source window';Script={
+            param($ctx)
+            $indices=@(for($i=0;$i -lt $ctx.LogLines.Count;++$i) {
+                if($ctx.LogLines[$i] -match '^\[postfx-source\] present=\d+ unit=0 .*written=1 ') {$i}
+            })
+            if($indices.Count -lt 2) {return @{Pass=$false;Detail='too few actual source captures to locate their camera window'}}
+            $begin=$indices[0]
+            while($begin -gt 0 -and $ctx.LogLines[$begin] -notmatch '^\[cam\] f=') {--$begin}
+            $poses=@(for($i=$begin;$i -le $indices[-1];++$i) {
+                if($ctx.LogLines[$i] -match '^\[cam\] f=\d+ pos=([^ ]+) ') {$Matches[1]}
+            })
+            $distance=0.0
+            if($poses.Count -ge 2) {
+                $first=$poses[0].Split(',');$last=$poses[-1].Split(',')
+                for($i=0;$i -lt 3;++$i) {
+                    $delta=[double]::Parse($last[$i],[System.Globalization.CultureInfo]::InvariantCulture)-
+                        [double]::Parse($first[$i],[System.Globalization.CultureInfo]::InvariantCulture)
+                    $distance+=$delta*$delta
+                }
+                $distance=[Math]::Sqrt($distance)
+            }
+            @{Pass=($poses.Count -ge 2 -and $distance -gt 0.02);Detail="camera samples=$($poses.Count), actual capture-window translation=${distance}m; visual result remains separate"}
+        }}
         @{Kind='Script';Name='final window remains explicitly bounded';Script={
             param($ctx)
             $frames=@(Get-ChildItem -LiteralPath $ctx.FrameDir -Filter 'bb_*.bmp' -File)
