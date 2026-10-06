@@ -426,12 +426,15 @@ namespace Deformation
         void AddContactsToPenetrationSolver(PenetrationSolver* lpSolver, DeformableObject* lpDefObjBase,
                                             s32 liWorldObjectIndex, s32 liObjectIndex) const;    // :553
 
-        EAbsorptionSets GetAbsorptionSet();                                                     // :556
+        // Header-inline read: CheckForDetachment8263ABF4 reads this+675C
+        // as the absorption profile (the same named member).
+        EAbsorptionSets GetAbsorptionSet() { return meAbsorptionSet; }                          // :556
         void ResetEntitySphereSize();                                                           // :560
         bool IsFrozen() const;                                                                  // :563
         void SetFrozen(bool lbFrozen);                                                          // :567
         void ResetCoolDown();                                                                   // :570
-        bool IsIKUpdateRequired() const;                                                        // :573
+        // Header-inline read: Update826495CC returns the byte at this+6729.
+        bool IsIKUpdateRequired() const { return mbIKUpdateRequired; }                          // :573
         void ClearStoredContacts();                                                             // :578
         void GetWheelTagPoints(Vector3* lpaOut) const;                                          // :583
         void VerifyPartIndicies(DetachedPartManager* lpPartMgr);                                // :589
@@ -529,10 +532,9 @@ namespace Deformation
         IKBodyPart&       GetIKPartDebug(s32 liIndex) { return maIKParts[liIndex]; }
         const IKBodyPart& GetIKPartDebug(s32 liIndex) const { return maIKParts[liIndex]; }
 
-        // Deformation sensor pool (asm rig+15120 base; DeformationSensor stride 0x1B0 == 432). The
-        // component's selected-sensor read seeds the index at +15 (the first 15 sensor slots are the
-        // reserved world/swept entries that precede the live grid in the X360 layout -- see asm
-        // `432*(liIndex+15)+rig`). DebugSensor takes the already-biased index.
+        // Sensor pool starts at rig+0x1950 (6480), stride0x1B0 (432).
+        // ARTIST825DF344..350 folds that base into432*(index+15)+rig;
+        // the named array access already supplies it, so use the unmodified index.
         DeformationSensor&       GetSensorDebug(s32 liIndex) { return maDeformationSensors[liIndex]; }
         const DeformationSensor& GetSensorDebug(s32 liIndex) const { return maDeformationSensors[liIndex]; }
 

@@ -171,8 +171,9 @@ namespace Deformation
             return;
         }
 
-        // The X360 seeds the sensor index at +15 (the reserved world/swept slots precede the live grid).
-        DeformationSensor& lrSensor = lpRig->GetSensorDebug( liSensor + 15 );
+        // ARTIST825DF344..350 forms rig+432*(index+15): 432*15 is the
+        // maDeformationSensors base0x1950, already represented by the named accessor.
+        DeformationSensor& lrSensor = lpRig->GetSensorDebug( liSensor );
         lpThis->mpSelectedSensor = &lrSensor;
 
         const Vector4& lvCentre = lrSensor.GetLocalSphereCentre();
