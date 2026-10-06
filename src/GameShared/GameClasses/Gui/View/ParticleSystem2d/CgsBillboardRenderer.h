@@ -24,7 +24,7 @@
 // record). The X360 guest object is ~0x204C bytes (mafUVTab dominates); the x64 sizeof differs and
 // is deliberately not pinned.
 
-namespace renderengine { class TextureState; class BlendState; class DepthStencilState; class RasterizerState; }
+namespace renderengine { class Texture; class TextureState; class BlendState; class DepthStencilState; class RasterizerState; }
 
 // The immediate-mode render buffer the draw submits through is used pointer-only in this header
 // (the full template lives in ImRenderBuffer/CgsImRenderBufferTemplate.h, pulled in by the .cpp).
@@ -38,6 +38,8 @@ namespace CgsGui
     extern const renderengine::BlendState*        gpGuiBlendStateStandard;       // dword_83010F20
     extern const renderengine::BlendState*        gpGuiBlendStateAdditive;       // dword_83010F24
     extern const renderengine::DepthStencilState* gpBillboardDepthStencilState;  // dword_83010F54
+    extern const renderengine::DepthStencilState* gpGuiDepthStencilStateZOn;     // dword_83010F48
+    extern renderengine::Texture* gpGuiWhiteTexture;                           // dword_83010F58
     extern const renderengine::RasterizerState*   gpGuiRasterizerStateCullNone;  // the state table's cull-none entry
     extern const CgsGraphics::Im2dTransform       gBillboardScreenTransform;     // unk_83011090
 

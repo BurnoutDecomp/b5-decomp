@@ -782,13 +782,14 @@ namespace CgsGui
             static_cast<CgsGui::AptIm2dRenderBuffer*>(lrRenderers.mpIm2dRenderBuffer);
         mImRenderers.mpReserved04                   = lrRenderers.mpReserved04;
         mImRenderers.mpIm3dRenderBufferUntex        = lrRenderers.mpIm3dRenderBufferUntex;
-        mImRenderers.mpIm3dRenderBufferRacePosition = lrRenderers.mpIm3dRenderBufferRacePosition;
-        mImRenderers.mpIm3dRenderBufferMenusAndHud  = lrRenderers.mpIm3dRenderBufferMenusAndHud;
+        mImRenderers.mpIm3dRenderBufferRacePosition =
+            static_cast<CgsGraphics::Im3dRenderBuffer*>(lrRenderers.mpIm3dRenderBufferRacePosition);
+        mImRenderers.mpIm3dRenderBufferMenusAndHud =
+            static_cast<CgsGraphics::Im3dRenderBuffer*>(lrRenderers.mpIm3dRenderBufferMenusAndHud);
 
-        // FLAG (deferred member): the guest assigns the input camera (set+0x20) into the
-        // module's embedded CgsGraphics::Camera at [c:+624] (Camera::operator=). The
-        // module's camera member is not modelled yet (see Construct's camera note); land
-        // the copy with the Camera lifecycle TU.
+        // ARTIST ViewModule::Render @0x82858810 copies the same frame's camera
+        // after its five renderer pointers, before the custom 3D components draw.
+        mImRenderers.mCamera = lrRenderers.mCamera;
 
         // Render-side time bookkeeping: the delta between the update-side accumulated
         // time (mfCurrentTime, advanced by Update) and the last render's view of it.

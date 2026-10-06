@@ -26,6 +26,7 @@
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"  // CgsModule::IOBuffer (1-byte FlagSet base)
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"      // CgsGui::GuiEventQueueBase<N,16>
+#include "GameShared/GameClasses/Graphics/CgsCamera.h"
 
 namespace CgsGui
 {
@@ -71,10 +72,7 @@ namespace ViewIO
     // ---- CgsGraphics::Camera value-image (foreign type; mirrors CgsGuiModuleIO.h) ----------
     // 368-byte alignas(16) span == the X360 CgsGraphics::Camera copy extent. Opaque storage so the
     // by-value Camera::operator= in SetImRenderers is reproduced without the un-homed Camera type.
-    struct alignas(16) CgsGraphicsCameraStorage
-    {
-        unsigned char maBytes[368];
-    };
+    using CgsGraphicsCameraStorage = CgsGraphics::Camera;
     static_assert(sizeof(CgsGraphicsCameraStorage) % 16 == 0, "Camera storage 16-byte multiple");
 
     // ---- ImRendererSet (foreign type; mirrors CgsGuiModuleIO.h) ----------------------------

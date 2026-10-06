@@ -35,6 +35,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"               // CgsGui::GuiEventQueueBase<N,16>
 #include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT (AddGuiOutEvent<T> inline)
+#include "GameShared/GameClasses/Graphics/CgsCamera.h"
 
 namespace CgsGui
 {
@@ -55,10 +56,9 @@ namespace CgsGuiModuleIO
     // 416-byte stack local. The copied extent (through +0x160==352, +4 == 356) rounded up to the
     // 16-byte Camera alignment is 368; modelled as a 368-byte alignas(16) span (honest size from
     // the X360 copy extent -- the inner field breakdown is the foreign home's, not modelled here).
-    struct alignas(16) CgsGraphicsCameraStorage
-    {
-        unsigned char maBytes[368];
-    };
+    // The complete camera home is available; retain the storage alias used by
+    // the IO API while giving it the original CgsGraphics::Camera value type.
+    using CgsGraphicsCameraStorage = CgsGraphics::Camera;
 
     // ---- ImRendererSet (foreign type) -----------------------------------------------------
     // FLAG: CgsGui::ImRendererSet has its own owning home (the original CgsGuiModuleIO.h pulled it

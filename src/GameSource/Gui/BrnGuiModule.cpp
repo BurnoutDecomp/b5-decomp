@@ -355,14 +355,6 @@ namespace
     bool                        s_bRenderBufferReady = false;
     bool                        s_bRenderBufferPublished = false;
 
-    // A non-null 3D-renderer sentinel so AptRenderHandler::Render's
-    // `mpImRenderers->mp3dRenderer != 0` assert passes. The Apt boot/title movies are
-    // 2D-only, so the 3D renderer is never dereferenced on this path; a sentinel keeps
-    // the assert quiet without dragging in the (out-of-scope) 3D render set.
-    // FLAG: sentinel only -- a real Im3dRenderBuffer is out of this slice's scope (the
-    // title movie draws 2D). If a 3D Apt path is ever exercised this must become real.
-    int s_i3dRendererSentinel = 0;
-
     // ---- the pending load-notification queue (the GuiResourceModule OUTPUT-BUFFER stand-in) ----
     // Every bundle the host's [PC IO] leaf loads queues one GuiEventLoadNotification per carried
     // resource here; GuiModule's frame bridge drains them into the view input buffer as view
@@ -719,7 +711,7 @@ namespace BrnGui
         }
 
         // ---- STEP 4: AptAux::Construct (the host callback table + render handler) -
-        // Build the ImRendererSet (slot0 = our render buffer, 3d slot = sentinel) and
+        // Build the ImRendererSet (3D buffers arrive from the frame renderer) and
         // hand it to AptAux::Construct, which seeds the render handler + installs the
         // gAptFuncs render-callback family (the engine's render dispatch reaches our
         // AptRenderHandler::Render through it).
@@ -734,7 +726,7 @@ namespace BrnGui
             lpImRenderers->mpReserved04                  = nullptr;
             lpImRenderers->mpIm3dRenderBufferUntex       = nullptr;
             lpImRenderers->mpIm3dRenderBufferRacePosition = nullptr;
-            lpImRenderers->mpIm3dRenderBufferMenusAndHud = &s_i3dRendererSentinel;
+            lpImRenderers->mpIm3dRenderBufferMenusAndHud = nullptr;
 
             // Bring the TEXT system up first (fonts + language + glyph batcher) so the
             // handler's text-layout inputs are live from the start. One-shot; device-gated.
@@ -1002,6 +994,7 @@ namespace BrnGui
         // AptRenderHandler::mpCustomRendererManager -- until this leg NOTHING in the PC
         // build instantiated it, so `_type='PlayerImage'` on the licence card (and every
         // other custom control) had nowhere to resolve to.
+        mGuiModuleSerialiser.Construct(); // ARTIST82518C4C, before manager Construct
         mCustomRendererManager.Construct();
 
         // ⭐ X360 GuiModule::Construct's LAST TWO ACTIONS, @0x82518D2C-54:
@@ -1333,7 +1326,7 @@ namespace BrnGui
             mCustomRendererManager.Prepare(mpGuiHeapAllocator, mpTextureAllocator);
         mbCustomRenderersPrepared = lbCustomRenderersPrepared;
         mViewModule.SetCustomRendererManager(&mCustomRendererManager, 10,
-                                             /*lpReplaySerialiser*/ 0);
+                                             &mGuiModuleSerialiser);
         (void)lbCustomRenderersPrepared;   // the console's `if (!v27) return 0;` -- see FLAG
         {
             char lacProbe[192];
@@ -1498,8 +1491,22 @@ namespace BrnGui
         // (ProcessIncomingLoadNotification case 16 -> AddFont) BEFORE the second
         // table is allowed to instantiate FLAPTHUD's text fields -- the original
         // fonts-before-FLApt ordering, by the console's own mechanism.
-        // (The language notification still rides the host bring-up's queue; it is
-        // drained after the font pump, ahead of the same view Update.)
+        // FLAG PC-platform leaf: language IO completed before font requests.
+        // Merge its queued notification first so LoadStringTable establishes the
+        // default font before the original custom-renderer font callbacks run.
+        mViewInputBuffer.LockForWrite();
+        {
+            CgsGui::GuiEventLoadNotification lNotification;
+            while (PopPendingAptLoadNotification(&lNotification))
+            {
+                mViewInputBuffer.GetViewStateQueue()
+                    .CgsModule::VariableEventQueue<65536, 16>::AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lNotification), 14,
+                        static_cast<s32>(sizeof(lNotification)));
+            }
+        }
+        mViewInputBuffer.UnlockForWrite();
+
         {
             const CgsGui::sResourceTuple kaFontResources[3] =
             {
@@ -1559,20 +1566,6 @@ namespace BrnGui
             CGS_ASSERT(lbFontsReady, "GUI locale fonts failed to load");
         }
 
-        // The host bring-up's remaining queued notification (the LANGUAGE string
-        // table) drains here, ahead of the same view Update.
-        mViewInputBuffer.LockForWrite();
-        {
-            CgsGui::GuiEventLoadNotification lNotification;
-            while (PopPendingAptLoadNotification(&lNotification))
-            {
-                mViewInputBuffer.GetViewStateQueue()
-                    .CgsModule::VariableEventQueue<65536, 16>::AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lNotification), 14,
-                        static_cast<s32>(sizeof(lNotification)));
-            }
-        }
-        mViewInputBuffer.UnlockForWrite();
         mViewModule.Update(0, 0, &mViewInputBuffer, &mViewOutputBuffer);
         BridgeFromViewToOutput();
         mViewInputBuffer.LockForWrite();
@@ -1909,6 +1902,15 @@ void GuiModule::Destruct()
             return;
 
         mpGuiEventInputBuffer->LockForRead();
+        // The view and its above-car renderers consume the director's camera,
+        // carried by the module input alongside the GUI events.
+        mViewInputBuffer.LockForRead();
+        CgsGui::ViewIO::ImRendererSet lViewRenderers = mViewInputBuffer.GetImRenderers();
+        mViewInputBuffer.UnlockForRead();
+        lViewRenderers.mCamera = mpGuiEventInputBuffer->GetImRenderers().mCamera;
+        mViewInputBuffer.LockForWrite();
+        mViewInputBuffer.SetImRenderers(lViewRenderers);
+        mViewInputBuffer.UnlockForWrite();
         const CgsModule::VariableEventQueue<32768, 16>* lpInQueue =
             static_cast<const CgsGui::CgsGuiModuleIO::InputBuffer*>(mpGuiEventInputBuffer)->GetGuiEvents();
 
@@ -1934,6 +1936,10 @@ void GuiModule::Destruct()
                     mModelOutputBuffer.UnlockForWrite();
                     break;
                 }
+
+                case 221:  // ARTIST 82528B28: the same bar size also gates HUD messages.
+                    mHudMessageDirector.SetBlackBarSize(*reinterpret_cast<const f32*>(lpEvent));
+                    break;
 
                 case 26:    // GuiEventTimeInfo -- the per-frame { delta, now } pair
                     // The cache LEADS with this pair and every GUI-side timer reads it
@@ -1979,6 +1985,8 @@ void GuiModule::Destruct()
                 case 199:   // [H3b] GuiEventUpdateSatNav -- the icon array (player position arm)
                 case 204:   // [H3b] the sat-nav event-filter pair (the ch40 mirror)
                 case 207:   // [H3b] GuiRaceCarInfoEvent -- the mRaceCarInfo SoA feed
+                case 208:   // Traffic score targets for AboveCarRenderer.
+                case 210:   // Visible overhead-sign score targets.
                 case 376:   // [H3b] GuiPlayerRaceCarIdEvent -- the player index pair (case-199 gate)
                 case 377:   // GuiPlayerCrashingStateChangeEvent -- the crash-bar state latch + the
                             // gameplay-HUD-active drop (RecEvent @0x8250F58C; was misfiled as 132)
@@ -1992,6 +2000,9 @@ void GuiModule::Destruct()
                 case 426:   // [road-rage] GuiRoadRageScoreUpdate -- THE TAKEDOWN COUNT (current/target)
                 case 203:   // [event-starts] GuiEventUpdateEventStarts -- THE EVENT-START TABLE
                 case 93:    // [A9] GuiEventPrepareForModeStart -- THE MODE-TYPE SEED (meGameModeType)
+                case 159:   // Pre-race messages and the in-event map colouring gate.
+                case 162:   // Clear the pre-race message count.
+                case 170:   // Landmark race list and its navigation tracker.
                 case 289:   // [results] GuiEventOfflinePostEvent -- THE OFFLINE RESULT RECORD
                 case 292:   // [results] post-event teardown (clears the record + suppress byte)
                 case 307:   // Medal totals and wins remaining on the licence.
@@ -3508,8 +3519,11 @@ void GuiModule::Destruct()
         mFreeburnChallengeManager.Update();
 
         // ---- 4. the flow ticks (each current state's PreUpdate/Update/PostUpdate) -----
-        mScreenFlow.Update();
+        // ARTIST82518570/80 registers HUD before Screen; UpdateObservers keeps
+        // that order. The outgoing HUD hides its minimap before the new map
+        // screen takes ownership and makes the shared icon bank visible.
         mHudFlow.Update();
+        mScreenFlow.Update();
         mOverlayFlow.Update();
         // ...then RESET each observer's per-frame queue, exactly as the always-available
         // manager's queue is reset above. The console's EventInterpreterModule fills an
@@ -3907,7 +3921,9 @@ void GuiModule::Destruct()
     // movie player's presentation surface (the console reaches it through the input
     // buffer's renderer set).
     // FLAG PC-ABI adapter: gates on the Apt bring-up (the console's prepared byte).
-    void GuiModule::Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer)
+    void GuiModule::Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer,
+                           CgsGraphics::Im3dRenderBuffer* lpRacePositionBuffer,
+                           CgsGraphics::Im3dRenderBuffer* lpMenusAndHudBuffer)
     {
         if (!IsRuntimeReady())
         {
@@ -3927,13 +3943,16 @@ void GuiModule::Destruct()
 
         // CgsGui::GuiModule::Render @0x8285AF38 core: publish the active renderer set
         // into the view input buffer. Slot 0 is the Apt Im2d command buffer the engine's
-        // render callbacks fill; the MenusAndHud 3D slot carries the host's non-null
-        // stand-in (AptRenderHandler::Render asserts it; the 2D-only boot path never
-        // dereferences it). The camera is FLAG-deferred with the ViewModule camera member.
+        // render callbacks fill; the two 3D buffers belong to the frame renderer.
+        // Preserve the camera the update input published.
         CgsGui::ViewIO::ImRendererSet lRendererSet = {};
         lRendererSet.mpIm2dRenderBuffer            = lpAptBuffer;
-        lRendererSet.mpIm3dRenderBufferMenusAndHud = &s_i3dRendererSentinel;
+        lRendererSet.mpIm3dRenderBufferRacePosition = lpRacePositionBuffer;
+        lRendererSet.mpIm3dRenderBufferMenusAndHud = lpMenusAndHudBuffer;
 
+        mViewInputBuffer.LockForRead();
+        lRendererSet.mCamera = mViewInputBuffer.GetImRenderers().mCamera;
+        mViewInputBuffer.UnlockForRead();
         mViewInputBuffer.LockForWrite();
         mViewInputBuffer.SetImRenderers(lRendererSet);
         mViewInputBuffer.UnlockForWrite();

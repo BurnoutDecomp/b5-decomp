@@ -11,6 +11,7 @@ namespace CgsDev { namespace Assert { struct AssertData; } }
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"   // CgsGraphics::Im2d
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer (canonical)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"  // CgsGraphics::Im3d / Im3dUntex / Im3dRenderBufferUntex -- the real types
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
 #include "GameSource/Game/BrnLoadingScreenRenderer.h"                // BrnGame::LoadingScreenRenderer
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"            // BrnGame::DispatchThreadInputBuffer (Render's input)
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // BrnShaderConstantsFrame
@@ -39,10 +40,6 @@ namespace CgsGraphics
 // CgsGraphics::Im2d is the real type (CgsIm2d.h) - the loading screen renders through it.
 
 class Im2dUntex
-{
-};
-
-class Im3dRenderBuffer
 {
 };
 
@@ -348,6 +345,12 @@ public:
     // FLAG PC-platform leaf: GUI/movie preparation happens at the joined frame
     // boundary; Render consumes commands and metadata published with that frame.
     void Prepare2DFramePC();
+    // FLAG PC-platform leaf: the original renderer output carries these buffers;
+    // the joined GUI producer can borrow their real allocated command banks.
+    CgsGraphics::Im3dRenderBuffer* GetIm3dBufferRacePositionPC()
+    { return mIm3dBufferRacePosition.IsPreparedPC() ? &mIm3dBufferRacePosition : nullptr; }
+    CgsGraphics::Im3dRenderBuffer* GetIm3dBufferMenusAndHudPC()
+    { return mIm3dBufferMenusAndHud.IsPreparedPC() ? &mIm3dBufferMenusAndHud : nullptr; }
     void PrepareDisplayPC();
     // FLAG PC-platform leaf: update-side CPU expansion; publication stays at
     // the joined GDL swap. BRN_MESH_PREPARE=0 retains render-side preparation.
@@ -730,6 +733,10 @@ private:
     CgsGraphics::Im2dUntex              mIm2dRendererUntex;
     CgsGraphics::Im3dRenderBuffer       mIm3dRenderBuffer;
     CgsGraphics::Im3d                   mIm3dRenderer;
+    // FLAG PC-platform leaf: native programs require the dispatch device to exist.
+    bool                               mbIm3dRendererConstructedPC = false;
+    // FLAG PC-platform leaf: failed command storage cannot be reset or rendered.
+    bool                               mbDispatchStorageFailedPC = false;
     CgsGraphics::Im3dRenderBufferUntex  mIm3dRenderBufferUntex;
     CgsGraphics::Im3dUntex              mIm3dRendererUntex;
     BrnGraphics::Im3dSkyDome            mIm3dRendererSkyDome;

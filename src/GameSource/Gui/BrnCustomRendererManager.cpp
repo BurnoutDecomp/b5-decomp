@@ -15,6 +15,7 @@ namespace BrnGui
 CustomRendererManager* CustomRendererManager::SetReplaySerialiser( void* lpReplaySerialiser )
 {
     mpReplaySerialiser = lpReplaySerialiser;
+    mAboveCarRenderer.SetReplaySerialiser(static_cast<BrnReplays::GuiModuleSerialiser*>(lpReplaySerialiser));
     return this;
 }
 

@@ -7,7 +7,10 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiFontCollection.h"
 #include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"
+#include "GameShared/GameClasses/Graphics/CgsCamera.h"
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"
+
+namespace CgsGraphics { class Im3dRenderBuffer; }
 
 // ============================================================================
 // b5-decomp/src/GameShared/GameClasses/Gui/View/CgsGuiViewModule.h
@@ -63,8 +66,11 @@ namespace CgsGui
         CgsGui::AptIm2dRenderBuffer* mpIm2dRenderBuffer;             // +0x00
         void* mpReserved04;                                          // +0x04 (kept across the post-render re-null)
         void* mpIm3dRenderBufferUntex;                               // +0x08
-        void* mpIm3dRenderBufferRacePosition;                        // +0x0C
-        void* mpIm3dRenderBufferMenusAndHud;                         // +0x10 (RenderInternal's 3D bracket target)
+        CgsGraphics::Im3dRenderBuffer* mpIm3dRenderBufferRacePosition; // +0x0C
+        CgsGraphics::Im3dRenderBuffer* mpIm3dRenderBufferMenusAndHud;  // +0x10
+        // ARTIST set+0x20, ViewModule+0x270. DecFIGS CgsCustomRenderer.h:68.
+        // Native pointer widening places it after the five pointer slots.
+        CgsGraphics::Camera mCamera;
     };
 
     // KI_NUM_MOVIE_LEVELS -- the assert "liLevel>=0 && liLevel < KI_NUM_MOVIE_LEVELS"

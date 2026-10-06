@@ -29,6 +29,7 @@
 // ============================================================================
 
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnInGameMessageRenderer.h"
+#include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 
 #include "GameSource/Gui/BrnGuiCache.h"                       // GuiCache (mode/road-rule/controller reads)
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h" // LanguageManager (FindString / GetDefaultFont / GetCurrentLanguage)
@@ -1444,6 +1445,11 @@ void InGameMessageRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet
     CgsGraphics::Im2dRenderBuffer* lpBuffer =
         lpAptBuffer;
 
+    // ARTIST82469DA8..DC8 owns one bracket around the complete ticker batch.
+    lrCmd.BeginRendering();
+    lrCmd.SetState(CgsGui::gpGuiRasterizerStateCullNone);
+    lrCmd.SetTexture(CgsGui::gpGuiWhiteTexture);
+
     // Publish the batch transform. The CONSOLE builds the canonical screen->NDC block
     // ({1/640, -1/360, -1, +1} + the aspect fold) because its GPU consumed NDC. The PC
     // dispatch walk (CgsImRenderBufferTemplate.cpp RENDER_PRIMITIVES) consumes
@@ -1672,5 +1678,7 @@ void InGameMessageRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet
             CGS_ASSERT(false, "Unhandled state in InGameMessageRenderer::Update\n");   // :1067
             break;
     }
+    lrCmd.SetState(CgsGui::gpGuiBlendStateStandard); // ARTIST8246A3EC
+    lrCmd.EndRendering();                          // ARTIST8246A3F4
 }
 }   // namespace BrnGui
