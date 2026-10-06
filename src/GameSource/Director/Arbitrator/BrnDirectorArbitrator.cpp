@@ -301,16 +301,15 @@ namespace BrnDirector
             mArbStateTestbed.Update(lrSharedInfo);
             mArbStateTestbed.ClearCycleCameraThisFrame();
 
-            // ⚠️ GATE: `if ( GetCurrentState() == <container +0x2F70> &&
-            //               (GetNormalCamera().mState_uFlags & 2) ) mbStartOfGame = false;`
-            //   -- the compare is against an embedded container sub-state at container
-            //   +0x2F70 whose EState identity is NOT pinned (the container models its states
-            //   by name, not by console offset, so the offset cannot be resolved to a slot).
-            //   Guessing it would be a "0 is a valid id, not none"-class mistake.
-            //   CONSEQUENCE: mbStartOfGame is never cleared here, so the epilogue keeps
-            //   clearing the camera's lookback flag bit every frame. Harmless (the bit starts
-            //   clear); it only means a start-of-game lookback request would be suppressed.
-            //   DELETE-WHEN: the container's per-state console offsets are mapped to EStates.
+            // ARTIST @0x8226AF3C..0x8226AF78: the first valid car-select camera
+            // ends the startup cover. ConstructAll @0x8224F088/0x8224F0B0 maps
+            // container+0x2F70 to pointer-table slot8, E_STATE_CAR_SELECT.
+            if (mStateContainer.GetCurrentState() ==
+                    mStateContainer.GetState(ArbitratorStateContainer::E_STATE_CAR_SELECT) &&
+                GetNormalCamera().GetState().IsFlagSet(Camera::CameraState::E_FLAG_VALID))
+            {
+                mbStartOfGame = false;
+            }
 
             lrCameraInOut = GetNormalCamera();
 
@@ -558,9 +557,8 @@ namespace BrnDirector
         }
 
         // ---- epilogue (X360 LABEL_64) ---------------------------------------------------
-        // While the arbitrator is still in its start-of-game window, force the camera's
-        // "lookback" state bit off. (`camera + 320` is Camera::mState_uFlags; the asm clears
-        // bit 1 through a 64-bit load/store pair -- reproduced as the named 32-bit field it is.)
+        // While startup has no valid car-select camera, clear E_FLAG_VALID so
+        // BridgeDirectorToGui covers the unprepared scene with black bars.
         if (mbStartOfGame)
         {
             lrCameraInOut.mState_uFlags &= ~2;

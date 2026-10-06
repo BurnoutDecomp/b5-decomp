@@ -385,7 +385,9 @@ void KeyAnimController::UpdateCameraFromICE(const ICE::ICETake& lrTake,
     // LETTERBOX is a gate, not an amount: any positive authored value raises the fixed
     // effect amount, anything else clears it.
     const f32 lfLetterbox = lrTake.GetValueFloat(E_ICE_LETTERBOX);
-    lrEffects.mfRaceEndEffectAmount = (lfLetterbox > 0.0f) ? KF_LETTERBOX_EFFECT_AMOUNT : 0.0f;
+    // ARTIST @0x8221E6F4 stores camera+0x110, effects+0xA8: the
+    // letterbox field. The independent race-end effect lives at effects+0x84.
+    lrEffects.mfBlackBarAmount = (lfLetterbox > 0.0f) ? KF_LETTERBOX_EFFECT_AMOUNT : 0.0f;
 
     // A take that swapped to a new sub-take this frame is a hard CUT.
     lpCamera->GetState().SetFlag(KU_CAMERA_FLAG_CUT, lrTake.IsNewSubTakeThisFrame());

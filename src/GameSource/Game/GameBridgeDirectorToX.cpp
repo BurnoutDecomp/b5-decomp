@@ -29,6 +29,7 @@
 #include "GameSource/Director/Camera/Camera.h"                                    // BrnDirector::Camera::Camera / CameraEffects
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"                   // BrnDirector::BackgroundEffectRequest
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                                // the 495..499 records
+#include "GameSource/Gui/Events/BrnGuiEventSetBlackBars.h"
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                       // [diag] CgsDev::Log::gpDebugPrint
 #include <cstring>
@@ -68,10 +69,45 @@ namespace BrnGame
             return;   // [PC] before the director is prepared this build has no camera output.
         const BrnDirector::Camera::CameraEffects& lrEffects = lpCamera->GetEffects();
 
+        // ARTIST @0x823DD6F4 and the SetCamera tail @0x823DDCA8: the GUI
+        // receives the director's complete graphics camera for 3D HUD projection.
+        CgsGraphics::Camera lGuiCamera;
+        lpCamera->CopyToCgsCamera(&lGuiCamera);
+
         // [FLAG] pseudocode 107..150: CopyToCgsCamera, the picture-paradise flag-14 edges
         // (GuiEventTogglePictureParadise + TrainingManager::OnTogglePictureParadise), the intro
         // rival-look trigger (GuiEventPreraceTrigger), output-interface bytes 12 / 13 (events
-        // 296 / 297) and GuiEventSetBlackBars -- not transcribed (no PC home for the types).
+        // 296 / 297) -- not transcribed (no PC home for the types).
+
+        // ARTIST @0x823DD854..0x823DD8AC: a valid camera supplies its black-bar
+        // amount (camera +0x110 == effects +0xA8); an invalid camera covers the
+        // entire screen. Event 221 is published every frame, including zero.
+        BrnGui::GuiEventSetBlackBars lBlackBars;
+        lBlackBars.lfSingleBarSize = lpCamera->mState.IsFlagSet(
+            BrnDirector::Camera::CameraState::E_FLAG_VALID)
+                ? lrEffects.mfBlackBarAmount : 1.0f;
+        // FLAG PC diagnostic: bounded witness of the exact console invalid-camera
+        // fallback, used to trace a producer that can otherwise cover the world.
+        if (std::getenv("BRN_BLACKBARS_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            static s32 siLastFlags = -1;
+            static f32 sfLastAmount = -1.0f;
+            static u32 suSamples = 0;
+            if (suSamples < 64 && (siLastFlags != lpCamera->mState_uFlags ||
+                                  sfLastAmount != lBlackBars.lfSingleBarSize))
+            {
+                ++suSamples;
+                siLastFlags = lpCamera->mState_uFlags;
+                sfLastAmount = lBlackBars.lfSingleBarSize;
+                *CgsDev::Log::gpDebugPrint << "[blackbars] director valid="
+                    << (lpCamera->mState.IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_VALID) ? 1 : 0)
+                    << " flags=" << lpCamera->mState_uFlags
+                    << " authored=" << lrEffects.mfBlackBarAmount
+                    << " published=" << lBlackBars.lfSingleBarSize
+                    << " behaviour=" << static_cast<u32>(lpCamera->mpDebugInfoBehaviour != 0) << "\n";
+            }
+        }
+        CgsGui::GuiModule::AddGuiEvent(lBlackBars, lpGuiInputBuffer);
 
         // pseudocode 151..152: the enumeration request -> 500.
         if (lpDirectorOutputBuffer->GetRequestHookEnumeration())
@@ -150,6 +186,8 @@ namespace BrnGame
         }
 
         // [FLAG] pseudocode 244..249: out+0x751 -> GuiEventDirectorSettings (GetDir()), then
-        // CgsGuiModuleIO::InputBuffer::SetCamera(guiIn, the CgsCamera copy) -- not transcribed.
+        // GuiEventDirectorSettings remains deferred; the graphics-camera handoff
+        // is the original final step.
+        lpGuiInputBuffer->SetCamera(lGuiCamera);
     }
 }

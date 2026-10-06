@@ -268,7 +268,8 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
 
     // ---- the VALID body ----
     SetCamera(mIceCam.GetProducedCamera());
-    GetNonConstCamera().GetEffects().mfRaceEndEffectAmount = KF_STUNT_RACE_END_EFFECT;
+    // ARTIST @0x82272834: moment+0x120 == camera+0x110 == effects+0xA8.
+    GetNonConstCamera().GetEffects().mfBlackBarAmount = KF_STUNT_RACE_END_EFFECT;
 
     // The stunt current flags: 7/15 by the crash-stunt latch, 19 always, and
     // flag 20 mirroring whether the camera's requested post-FX is the 2dFlash.
