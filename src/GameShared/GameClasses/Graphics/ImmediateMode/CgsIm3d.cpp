@@ -11,20 +11,15 @@
 //   CgsGraphics::ImRenderer<BasicColouredTexturedVertex>::SetProgram    @ 0x827DBC98
 //   CgsGraphics::ImRenderer<BasicColouredTexturedVertex>::EndRendering  @ 0x8227B830
 //   CgsGraphics::ImRenderer<BasicColouredTexturedVertex>::SetTransform  @ 0x8227B8A0
+//   default BeginRendering @0x8227B730; Render @0x824041B8
+//   two-matrix transform @0x827DC478
 //
 // This mirrors CgsIm3dZOnly.cpp (ImRenderer<PositionOnlyVertex>): the per-vertex-type member
 // bodies are defined out-of-class then the template is instantiated PER MEMBER (NOT a whole-struct
-// `template struct ImRenderer<...>`), because the rest of the template's API (BeginRendering /
-// Render / RenderStart / RenderEnd) is the PC 2D fold whose generic bodies live in CgsIm2d.cpp and
-// is NOT attested by the X360 ARTIST for this TU -- a whole-struct explicit instantiation would
-// force fabricated bodies for them (the wave-30 BasicColouredVertex lesson).
-//
-// The X360 BeginRendering (@0x8227B5E8, takes an s8 program index + drives the shadow-device
-// program binders) and Render (@0x824041B8, VMX vertex-pack + Xbox360 D3DDevice_BeginVertices /
-// D3DDevice_EndVertices extensions) are attested for this TU but are platform-D3D/VMX bodies whose
-// committed ImRenderer<V> template counterparts are the PC fold; their faithful reconstruction
-// needs unhomed Xbox360 D3D-extension intrinsics, so they are NOT bodied here (declaration-only,
-// not instantiated) rather than fabricated. The ImRenderBuffer<V> command-buffer members
+// `template struct ImRenderer<...>`). RenderStart/RenderEnd belong to the
+// command buffer, while this renderer packs source32-byte vertices into GPU24.
+// The separate signed-program BeginRendering overload remains out of this slice.
+// The ImRenderBuffer<V> command-buffer members
 // (Dispatch / Prepare / RenderEnd / SetBufferFullRewindT / SetState / Swap / Hand -- the ones whose
 // asserts cite CgsImRenderBuffer.h / CgsIm3dRenderBuffer.h) belong to a DIFFERENT template
 // instantiation and are not this ledger key's to home.
@@ -45,6 +40,10 @@
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the constant-resolve witness
 #include <cstdio>
+
+extern "C" void* D3DDevice_BeginVertices(void*, u32, u32, u32);
+extern "C" void D3DDevice_EndVertices(void*);
+extern "C" u32 D3DDevice_InsertFence(void*);
 
 // The converted PC program images for Im3d PROGRAM 0 (pc/gcm/renderengine/Im3dProgramsPC.cpp --
 // the PC stand-in for the two guest .data blobs unk_820D4090 / unk_820D41F0; see that file for
@@ -425,19 +424,91 @@ void* ImRenderer<V>::SetTransform(const void* lpTransform)
     return lpResult;
 }
 
-// Emit the five X360-attested ImRenderer<BasicColouredTexturedVertex> member bodies. We instantiate
+// ARTIST sub_8227B730 is the default-program BeginRendering overload.
+template <typename V>
+void ImRenderer<V>::BeginRendering()
+{
+    CGS_ASSERT(mapVertexProgramBuffer[0] != nullptr, "mapVertexProgramBuffer[ 0 ] != NULL");
+    CGS_ASSERT(mapPixelProgramBuffer[0] != nullptr, "mapPixelProgramBuffer[ 0 ] != NULL");
+    CGS_ASSERT(mgpActiveRenderer == nullptr, "mgpActiveRenderer == NULL");
+    mgpActiveRenderer = static_cast<ImRendererBase*>(this);
+    shadow::Device::ResetShadowing();
+    mi8CurrentProgram = 0;
+    shadow::DeviceSetVertexProgramInternal(mapVertexProgramBuffer[0]);
+    shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[0]);
+    shadow::Device::SetVertexDescriptor(
+        reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor));
+}
+
+// ARTIST824041B8 reads32-byte CPU records and writes24-byte GPU records:
+// source position.xyz, colour@16, uv@20/24; the Vector3 pad is not submitted.
+template <typename V>
+void ImRenderer<V>::Render(renderengine::PrimitiveType lePrimitiveType, const V* lpVertices, u32 luCount)
+{
+    CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this), "mgpActiveRenderer == this");
+    shadow::Device::FlushVertexProgramState();
+    CGS_ASSERT(lpVertices != nullptr, "lpVertices");
+    if (24u * luCount > 0x80000u)
+        D3DDevice_InsertFence(mgpDevice);
+    struct PackedVertex
+    {
+        Vector3F mPosition;
+        RGBA8 mColour;
+        Vector2F mUv;
+    };
+    static_assert(sizeof(PackedVertex) == 24, "ARTIST GPU vertex stride");
+    PackedVertex* lpOutput = static_cast<PackedVertex*>(D3DDevice_BeginVertices(
+        mgpDevice, static_cast<u32>(lePrimitiveType), luCount, sizeof(PackedVertex)));
+    if (lpOutput != nullptr)
+        for (u32 luVertex = 0; luVertex < luCount; ++luVertex)
+            lpOutput[luVertex] = {{lpVertices[luVertex].mv3Pos.x, lpVertices[luVertex].mv3Pos.y,
+                                   lpVertices[luVertex].mv3Pos.z}, lpVertices[luVertex].mv4Colour,
+                                  lpVertices[luVertex].mv2Tex0UV};
+    D3DDevice_EndVertices(mgpDevice);
+}
+
+// Emit the X360-attested ImRenderer<BasicColouredTexturedVertex> member bodies. We instantiate
 // the members INDIVIDUALLY rather than `template struct ImRenderer<BasicColouredTexturedVertex>`
-// because the rest of the template's API (BeginRendering / Render / RenderStart / RenderEnd) is the
-// PC 2D fold whose bodies live in CgsIm2d.cpp and is NOT attested by the X360 ARTIST for this TU --
-// a whole-struct explicit instantiation would force fabricated bodies for them (the wave-30 lesson;
-// mirrors CgsIm3dZOnly.cpp).
+// to keep the unrelated command-buffer and signed-program overloads separate.
 template void ImRenderer<BasicColouredTexturedVertex>::Construct(
     rw::IResourceAllocator*, const void* const*, const u32*, const void* const*, const u32*, s8);
 template s8 ImRenderer<BasicColouredTexturedVertex>::AddProgram(
     rw::IResourceAllocator*, const void*, u32, const void*, u32);
 template bool ImRenderer<BasicColouredTexturedVertex>::SetProgram(s8);
 template void ImRenderer<BasicColouredTexturedVertex>::EndRendering();
+template void ImRenderer<BasicColouredTexturedVertex>::BeginRendering();
+template void ImRenderer<BasicColouredTexturedVertex>::Render(
+    renderengine::PrimitiveType, const BasicColouredTexturedVertex*, u32);
 template void* ImRenderer<BasicColouredTexturedVertex>::SetTransform(const void*);
+
+template <typename V>
+void Im3dBase<V>::SetTransform(Matrix44 lTransform)
+{
+    mCurrentTransform = lTransform;
+    ImRenderer<V>::SetTransform(&mCurrentTransform);
+}
+
+// ARTIST827DC478: full4x4 model-to-world times view-projection, including
+// every row's W lane (the affine-only RenderWare overload is not this body).
+template <typename V>
+void Im3dBase<V>::SetTransform(Matrix44 lModelToWorld, Matrix44 lViewProjection)
+{
+    auto lRow = [&lViewProjection](const Vector4& a) -> Vector4 {
+        return {
+            ((a.x*lViewProjection.xAxis.x + a.y*lViewProjection.yAxis.x) + a.z*lViewProjection.zAxis.x) + a.w*lViewProjection.wAxis.x,
+            ((a.x*lViewProjection.xAxis.y + a.y*lViewProjection.yAxis.y) + a.z*lViewProjection.zAxis.y) + a.w*lViewProjection.wAxis.y,
+            ((a.x*lViewProjection.xAxis.z + a.y*lViewProjection.yAxis.z) + a.z*lViewProjection.zAxis.z) + a.w*lViewProjection.wAxis.z,
+            ((a.x*lViewProjection.xAxis.w + a.y*lViewProjection.yAxis.w) + a.z*lViewProjection.zAxis.w) + a.w*lViewProjection.wAxis.w};
+    };
+    Matrix44 lWvp;
+    lWvp.xAxis = lRow(lModelToWorld.xAxis);
+    lWvp.yAxis = lRow(lModelToWorld.yAxis);
+    lWvp.zAxis = lRow(lModelToWorld.zAxis);
+    lWvp.wAxis = lRow(lModelToWorld.wAxis);
+    SetTransform(lWvp);
+}
+template void Im3dBase<BasicColouredTexturedVertex>::SetTransform(Matrix44);
+template void Im3dBase<BasicColouredTexturedVertex>::SetTransform(Matrix44, Matrix44);
 
 // ---------------------------------------------------------------------------------------------------
 // Im3d::Construct  @ 0x827FC748  (289 instructions)

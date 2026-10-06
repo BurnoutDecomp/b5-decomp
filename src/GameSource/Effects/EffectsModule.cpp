@@ -1897,8 +1897,33 @@ void EffectsModule::UpdateActiveRaceCars(EActiveRaceCarIndex lePlayerIndex,
 
         if (lbModelChanged)
         {
+            // [DIAG] Log the real removed-car transition; observe the original
+            // Reset below rather than forcing an effects kill from the harness.
+            static const bool sbRetireWitness = []() {
+                const char* value = std::getenv("BRN_EFFECT_RETIRE_DIAG");
+                return value && value[0] == '1';
+            }();
+            static u32 suRetireWitness = 0;
+            const bool lbObserveRemoval = sbRetireWitness && lrData.GetID() != 0
+                && lModelId == 0 && suRetireWitness++ < 64u;
+            if (lbObserveRemoval)
+            {
+                char lacRetire[224];
+                std::snprintf(lacRetire, sizeof(lacRetire),
+                    "[effects-retire] model car=%u old=%016llX new=0000000000000000 loaded=%d t=%.6f\n",
+                    luCar, static_cast<unsigned long long>(lrData.GetID()), lbLoaded ? 1 : 0,
+                    static_cast<double>(mParticleModule.mRenderData.mfCurrentTime));
+                CgsDev::Log::WriteToLog(lacRetire);
+            }
             ParticleEffectHelper lResetHelper(mParticleModule);
             lrData.Reset(lResetHelper);
+            if (lbObserveRemoval)
+            {
+                char lacRetire[96];
+                std::snprintf(lacRetire, sizeof(lacRetire),
+                              "[effects-retire] reset-end car=%u\n", luCar);
+                CgsDev::Log::WriteToLog(lacRetire);
+            }
             if (!lbLoaded)
                 continue;
         }

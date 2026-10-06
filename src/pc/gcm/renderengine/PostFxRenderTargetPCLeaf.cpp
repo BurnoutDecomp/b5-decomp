@@ -1070,6 +1070,37 @@ namespace renderengine
         if (lpColour == nullptr)
             lpColour = AcquireNullColourSurface(lpState->muWidth, lpState->muHeight);
 
+        // FLAG PC-platform leaf: EDRAM resolves separate the console's write
+        // surface from its sampled texture. A native D3D9 colour target is a
+        // surface of that same texture, so exclude its parent from all pixel
+        // samplers before writing. Bloom remains on unit 1 after the preceding
+        // composite; the work/effects buffers can also remain on other units.
+        // Use the shared applier so both the texture and whole-unit cache keys
+        // lose the binding and the later read really rebinds it.
+        IDirect3DBaseTexture9* lpColourTexture = nullptr;
+        if (lpColour != nullptr && SUCCEEDED(lpColour->GetContainer(
+                __uuidof(IDirect3DBaseTexture9), reinterpret_cast<void**>(&lpColourTexture))))
+        {
+            for (u32 luUnit = 0; luUnit < 16u; ++luUnit)
+            {
+                IDirect3DBaseTexture9* lpSampledTexture = nullptr;
+                lpDevice->GetTexture(luUnit, &lpSampledTexture);
+                const bool lbAliasesColour = (lpSampledTexture == lpColourTexture);
+                if (lpSampledTexture != nullptr)
+                    lpSampledTexture->Release();
+                if (lbAliasesColour)
+                {
+                    // Native bindings can bypass the engine shadow (the PC
+                    // Im2d path does), and ResetShadowing can already leave
+                    // its key null. Clear the observed native alias directly,
+                    // then invalidate both cache keys unconditionally.
+                    lpDevice->SetTexture(luUnit, nullptr);
+                    shadow::Device::SetSamplerTextureShadow(luUnit, nullptr);
+                }
+            }
+            lpColourTexture->Release();
+        }
+
         // ⚠ A DEPTH TEXTURE CANNOT BE A SAMPLER SOURCE AND THE DEPTH-STENCIL TARGET AT THE SAME
         // TIME (added with the raw-depth ladder, 2026-08-15). D3D9 -- unlike D3D10+ -- does NOT
         // silently unbind the sampler for you: the write path keeps working while the SAMPLE
@@ -1078,12 +1109,11 @@ namespace renderengine
         // from one frame to the next, so the very next Begin() on that target would re-bind the
         // same texture's surface as the depth-stencil underneath it.
         //
-        // The unbind goes through shadow::Device::SetResource(nullptr, unit) rather than a raw
-        // SetTexture so the shadow CACHE is invalidated too. A raw unbind would leave
-        // mapTextureState[unit] still holding the composite's TextureState, and the next
-        // SetState(state, unit) would take its HIT path and skip the rebind -- the shader would
-        // then sample an unbound unit and nothing would report it. (This is the same class of
-        // bug as the gpLastRenderTargetState split-brain in ShadowPassPCLeaf.h's banner.)
+        // The claim is checked against the native binding by BoundUnitMask. As
+        // on the colour path above, that observed binding can coexist with a
+        // null engine key: cached SetResource(nullptr) would skip it. Clear
+        // the native unit and both engine keys unconditionally so a later
+        // TextureState cache hit cannot suppress the required source rebind.
         //
         // Costs nothing when no raw-depth texture is bound: the mask is zero and the loop does
         // not run. Only units that received a raw-depth texture are ever in it.
@@ -1095,7 +1125,8 @@ namespace renderengine
                 if ((luRawDepthUnits & (1u << luUnit)) != 0u)
                 {
                     luRawDepthUnits &= ~(1u << luUnit);
-                    shadow::Device::SetResource(nullptr, luUnit);
+                    lpDevice->SetTexture(luUnit, nullptr);
+                    shadow::Device::SetSamplerTextureShadow(luUnit, nullptr);
                 }
             }
         }

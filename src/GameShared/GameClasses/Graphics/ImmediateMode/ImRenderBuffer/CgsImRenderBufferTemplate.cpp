@@ -23,6 +23,7 @@
 #include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
 #include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
 #include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
+#include "pc/gcm/renderengine/ImWhiteTexturePCLeaf.h"
 
 #include "pc/gcm/renderengine/device.h"        // renderengine::gDevice, gDisplayWidth/Height (the existing PC D3D9 device)
 #include "pc/gcm/renderengine/texture.h"        // renderengine::Texture::mpD3DTexture
@@ -410,6 +411,12 @@ namespace CgsGraphics
     void ImRenderBuffer<V>::RenderEnd(renderengine::PrimitiveType lePrimitiveType,
                                       const V* lpVerticesFromRenderStart, u32 luNumVertices)
     {
+        // ARTIST827F8414..8498: close the reservation even when command
+        // append later overflows; the submitted source must be the reserved run.
+        CGS_ASSERT(miNumRendersStarted > 0, "Mismatched RenderEnd/RenderStart on ImRenderBuffer");
+        --miNumRendersStarted;
+        CGS_ASSERT(lpVerticesFromRenderStart != nullptr, "lpVerticesFromRenderStart");
+        CGS_ASSERT(mbInRenderBlock, "Command called outside of a BeginRendering/EndRendering block");
         const u32 luRecord = ImCommandRecord<ImCommandRenderPrimitives<V> >::KU_BYTES;  // 32
 
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
@@ -428,6 +435,7 @@ namespace CgsGraphics
         else
         {
             SetBufferFullRewindToLastEndRender();
+            CGS_ASSERT(mbFailGracefully, "ImRenderBuffer command buffer is full");
         }
     }
 
@@ -866,8 +874,8 @@ namespace CgsGraphics
         // Apt MASK sample coordinates (screen position mapped into the active mask's UV
         // space -- the CPU fold of the constants the PS3 case-0x12 uploads); stage 1 is
         // DISABLED outside a mask block, so the extra set is inert for unmasked draws.
-        struct DispatchScreenVertex { float x, y, z, rhw; u32 color; float u, v; float u2, v2; };
-        const unsigned long KU_DISPATCH_FVF = D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX2;
+        struct DispatchScreenVertex { float x, y, z, rhw; u32 color; float u, v; float u2, v2; float u3, v3; };
+        const unsigned long KU_DISPATCH_FVF = D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX3;
 
         // The engine works in a fixed 1280x720 logical space; map it onto the actual back buffer.
         const f32 KF_DISPATCH_LOGICAL_W = 1280.0f;
@@ -1159,40 +1167,17 @@ namespace CgsGraphics
         }
 
         // -------------------------------------------------------------------------------------
-        // [PC platform leaf] The 1x1 opaque-white raster that stands in for the immediate-mode
+        // [PC platform leaf] The shared4x4 opaque-white raster for the immediate-mode
         // state library's white texture (X360 dword_83010F58 == mgStateLibrary.mpTexture_White).
         // The console pushes it as a MASK whenever a caller wants "clip to this rect and shape
         // nothing"; BoostBarRenderer does it for the fire end cap, the boosting flame, the grow
-        // fireball and the tiled background. On this backend that global is a no-op, so the
-        // state initialises over a null raster -- and a null raster silently means "leave the
-        // PREVIOUS mask bound", which is not the console's behaviour at all.
+        // fireball and the tiled background. Banking and masks use the same native
+        // white texture home (ARTIST ConstructWhiteTexture827F1AE8).
         // -------------------------------------------------------------------------------------
         IDirect3DBaseTexture9* DispatchWhiteMaskTexture(IDirect3DDevice9* lpDevice)
         {
-            static IDirect3DTexture9* spWhite = nullptr;
-            static bool sbTried = false;
-            if (spWhite == nullptr && !sbTried)
-            {
-                sbTried = true;
-                if (SUCCEEDED(renderengine::TextureUploadPC::Create2D(lpDevice, 1, 1, 1,
-                                                      D3DFMT_A8R8G8B8, &spWhite)) &&
-                    spWhite != nullptr)
-                {
-                    D3DLOCKED_BOX lLock = {};
-                    if (SUCCEEDED(renderengine::TextureUploadPC::Lock(spWhite, 0, 0, 0, lLock)))
-                    {
-                        *static_cast<u32*>(lLock.pBits) = 0xFFFFFFFFu;
-                        if (FAILED(renderengine::TextureUploadPC::Unlock(spWhite, 0, 0)))
-                        { spWhite->Release(); spWhite = nullptr; }
-                    }
-                    else
-                    {
-                        spWhite->Release();
-                        spWhite = nullptr;
-                    }
-                }
-            }
-            return spWhite;
+            renderengine::Texture* lpWhite = renderengine::GetImmediateWhiteTexturePC(lpDevice);
+            return lpWhite ? lpWhite->mpD3DTexture : nullptr;
         }
 
         // -------------------------------------------------------------------------------------
@@ -1246,10 +1231,12 @@ namespace CgsGraphics
         const char* const KPC_BOOSTBAR_PS_SOURCE =
             "sampler2D gDiffuse : register(s0);\n"
             "sampler2D gMask    : register(s1);\n"
+            "sampler2D gMask1   : register(s2);\n"
+            "float4 gMaskUse   : register(c3);\n"
             "float4 gOuter : register(c0);\n"   // gv3OuterColour
             "float4 gInner : register(c1);\n"   // gv3InnerColour
             "float4 gShift : register(c2);\n"   // the interpolated colour shift (per-batch here)
-            "float4 main(float2 uv0 : TEXCOORD0, float2 uv1 : TEXCOORD1,\n"
+            "float4 main(float2 uv0 : TEXCOORD0, float2 uv1 : TEXCOORD1, float2 uv2 : TEXCOORD2,\n"
             "            float4 col : COLOR0) : COLOR\n"
             "{\n"
             "    float4 t = tex2D(gDiffuse, uv0);\n"
@@ -1258,7 +1245,8 @@ namespace CgsGraphics
             "    o.rgb = mix * col.rgb + gShift.rgb;\n"
             "    o.a   = t.a * col.a;\n"
             "#ifdef BOOSTBAR_MASKED\n"
-            "    o.a  *= tex2D(gMask, uv1).a;\n"
+            "    o.a  *= lerp(1.0, tex2D(gMask, uv1).a, gMaskUse.x);\n"
+            "    o.a  *= lerp(1.0, tex2D(gMask1, uv2).a, gMaskUse.y);\n"
             "#endif\n"
             "    return o;\n"
             "}\n";
@@ -1359,22 +1347,24 @@ namespace CgsGraphics
         // RENDER_PRIMITIVES fold computes from the same screen->maskUV map (the CPU fold of
         // the constant block), ALPHAOP = MODULATE(current, mask) with the colour passed
         // through -- the same observable pixel result as the console's masked program.
+        // ARTIST827F07C0: two masks, each retaining its own texture and UV transform.
+        struct MaskLayer
+        {
+            f32 mfX, mfY, mfInvW, mfInvH;
+            f32 mfU, mfV, mfDU, mfDV;
+            RECT mScissor;
+        };
+        MaskLayer laMasks[2] = {};
         int liMaskDepth = 0;
+        // FLAG PC diagnostic: retain the actual command sequence only when
+        // requested, to locate an unbalanced mask producer without hiding it.
+        static const bool sbMaskDiag = std::getenv("BRN_IM2D_MASK_DIAG") != nullptr;
+        u32 lauMaskDiagOps[32] = {};
+        s32 laiMaskDiagDepths[32] = {};
+        u32 lauMaskDiagInputs[32] = {};
+        u32 luMaskDiagCount = 0;
         bool lbMaskStageBound = false;
-        // The console's in-rect test as a scissor (see IM_CMD_PUSH_MASK): one rect per open
-        // mask, each intersected with the one enclosing it; the walk ends with the test off.
-        RECT laMaskScissor[4] = {};
         bool lbMaskScissorOn = false;
-        // ---- the boost-bar gradient program (SET_SHADER_PROGRAM 20 / PUSH_BOOST_BAR_COLOURS 21)
-        // The console's program 3 is the boost-bar gradient pixel shader: it shades the fire
-        // building blocks between an OUTER and an INNER colour (BoostBarRenderer pushes the
-        // meCurrentBoostType pair via opcode 21; ShowDebugScreen's 4x5 grid visualises it).
-        // The real program-3 formula is now RECOVERED from the ARTIST Xenos microcode and
-        // reproduced by a ps_2_0 compiled in DispatchBoostBarShader (see its banner):
-        //     rgb = (tex.R * gv3InnerColour + tex.G * gv3OuterColour) * vertexColour + shift
-        //     a   =  tex.A * vertexAlpha  [* the mask alpha while a mask is open]
-        // The 50/50 per-vertex mix below survives ONLY as the fallback for a box with no
-        // d3dcompiler DLL; it keeps the boost type's hue but has no per-pixel gradient.
         s8   li8LatchedProgram = 0;
         bool lbBoostPairLatched = false;
         f32  lfBoostTintR = 255.0f, lfBoostTintG = 255.0f, lfBoostTintB = 255.0f;
@@ -1383,8 +1373,7 @@ namespace CgsGraphics
         // [diag] BRN_CXFORM_TRACE: the texture currently bound on stage 0, so a traced batch
         // records whether it was MODULATEd by a texel or took its diffuse straight through.
         const void* lpTraceBoundTexture = nullptr;
-        f32 lfMaskX0 = 0.0f, lfMaskY0 = 0.0f, lfMaskInvW = 0.0f, lfMaskInvH = 0.0f;
-        f32 lfMaskU0 = 0.0f, lfMaskV0 = 0.0f, lfMaskDU = 0.0f, lfMaskDV = 0.0f;
+
 
         // BeginRendering's D3D state prologue (matches CgsIm2d.cpp's ImRenderer::BeginRendering):
         // no lighting, no depth, no cull, alpha-blend over the framebuffer, bilinear filtering, and
@@ -1422,6 +1411,15 @@ namespace CgsGraphics
         // combined FLAPT record (opcode 22); the latter must not be skipped.
         const auto lDispatchCommand = [&](const ImCommand* lpCommand)
         {
+            if (sbMaskDiag && (lpCommand->muType == IM_CMD_BEGIN_RENDERING ||
+                lpCommand->muType == IM_CMD_END_RENDERING || lpCommand->muType == IM_CMD_PUSH_MASK ||
+                lpCommand->muType == IM_CMD_PUSH_MASK_GEOMETRY || lpCommand->muType == IM_CMD_END_MASK))
+            {
+                const u32 luSlot = luMaskDiagCount++ % 32;
+                lauMaskDiagOps[luSlot] = lpCommand->muType;
+                laiMaskDiagDepths[luSlot] = liMaskDepth;
+                lauMaskDiagInputs[luSlot] = 0;
+            }
             switch (lpCommand->muType)
             {
             case IM_CMD_BEGIN_RENDERING:   // case 0
@@ -1438,6 +1436,8 @@ namespace CgsGraphics
                 lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
                 lpDevice->SetTextureStageState(2, D3DTSS_COLOROP, D3DTOP_DISABLE);
                 lpDevice->SetTextureStageState(2, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+                lpDevice->SetTextureStageState(3, D3DTSS_COLOROP, D3DTOP_DISABLE);
+                lpDevice->SetTextureStageState(3, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
                 break;
             case IM_CMD_END_RENDERING:     // case 1
                 break;
@@ -1574,223 +1574,124 @@ namespace CgsGraphics
                 break;
             }
 
-            case IM_CMD_PUSH_MASK:          // case 17 - Im2dRenderBuffer::PushMask (TextureState-bound)
-            case IM_CMD_PUSH_MASK_GEOMETRY: // case 18 - begin/refresh the pixel mask (PS3 case 0x12)
+            case IM_CMD_PUSH_MASK:
+            case IM_CMD_PUSH_MASK_GEOMETRY:
             {
-                // The two push opcodes carry the same {state, corner-run} record shape but a
-                // different +8 binding: 18 (the Apt DrawRenderingUnit Add op) stores a raw
-                // renderengine::Texture*, 17 (Im2dRenderBuffer::PushMask, the GUI/boost-bar
-                // SetMaskRect path) stores a resolved renderengine::TextureState* (the DWARF
-                // :191 record) that unwraps to its raster here -- exactly as the SET_STATE_
-                // TEXTURE case above unwraps the same state type.
-                ++liMaskDepth;
+                CGS_ASSERT(liMaskDepth < 2, "mu32NumMasks < V_IM2D_MAX_MASK_COUNT");
+                // FLAG PC-platform leaf: reject malformed streams before overrunning host slots.
+                if (liMaskDepth >= 2) break;
                 const Basic2dColouredTexturedVertex* lpCorners;
-                renderengine::Texture* lpMaskTexture;
-                // Non-null ONLY for opcode 17 -- opcode 18 (Apt) carries a raw Texture*.
-                const renderengine::TextureState* lpMaskState = nullptr;
+                renderengine::Texture* lpTexture;
+                const renderengine::TextureState* lpState = nullptr;
                 if (lpCommand->muType == IM_CMD_PUSH_MASK)
                 {
-                    const ImCommandPushMaskTextureState<V>* lpPush =
-                        static_cast<const ImCommandPushMaskTextureState<V>*>(lpCommand);
-                    lpCorners = reinterpret_cast<const Basic2dColouredTexturedVertex*>(
-                        lpPush->mpVertices);
-                    const renderengine::TextureState* lpState =
-                        reinterpret_cast<const renderengine::TextureState*>(lpPush->mpTextureState);
-                    lpMaskTexture = (lpState != nullptr) ? lpState->mpRaster : nullptr;
-                    lpMaskState   = lpState;
+                    const auto* lpPush = static_cast<const ImCommandPushMaskTextureState<V>*>(lpCommand);
+                    lpCorners = reinterpret_cast<const Basic2dColouredTexturedVertex*>(lpPush->mpVertices);
+                    lpState = reinterpret_cast<const renderengine::TextureState*>(lpPush->mpTextureState);
+                    lpTexture = lpState ? lpState->mpRaster : nullptr;
                 }
                 else
                 {
-                    const ImCommandPushMaskTexture<V>* lpPush =
-                        static_cast<const ImCommandPushMaskTexture<V>*>(lpCommand);
-                    lpCorners = reinterpret_cast<const Basic2dColouredTexturedVertex*>(
-                        lpPush->mpVertices);
-                    lpMaskTexture = lpPush->mpTexture;
+                    const auto* lpPush = static_cast<const ImCommandPushMaskTexture<V>*>(lpCommand);
+                    lpCorners = reinterpret_cast<const Basic2dColouredTexturedVertex*>(lpPush->mpVertices);
+                    lpTexture = lpPush->mpTexture;
                 }
-                // [PC platform leaf] The console's WHITE-TEXTURE mask. BoostBarRenderer's
-                // SetMaskRect(mpWhiteTextureState, ...) pushes the immediate-mode state
-                // library's white texture, which has no PC backing (InitResources builds that
-                // state over a null raster), and a null raster used to skip this whole block --
-                // which does NOT mean "no mask", it means "keep the PREVIOUS mask bound", i.e.
-                // the exact opposite of what the console does. On the console a white mask is
-                // alpha 1 inside the pushed rect and the sampler's border outside it, so it
-                // clips to the rect and shapes nothing. A 1x1 opaque-white raster under the
-                // same BORDER addressing reproduces that exactly.
-                IDirect3DBaseTexture9* lpMaskD3D =
-                    (lpMaskTexture != nullptr) ? lpMaskTexture->mpD3DTexture : nullptr;
-                const bool lbWhiteMask = (lpMaskD3D == nullptr);
-                if (lbWhiteMask)
-                    lpMaskD3D = DispatchWhiteMaskTexture(lpDevice);
-                if (lpCorners != nullptr && lpMaskD3D != nullptr)
+                IDirect3DBaseTexture9* lpMask = lpTexture ? lpTexture->mpD3DTexture : nullptr;
+                const bool lbWhite = lpMask == nullptr;
+                if (lbWhite) lpMask = DispatchWhiteMaskTexture(lpDevice);
+                if (sbMaskDiag)
+                    lauMaskDiagInputs[(luMaskDiagCount - 1) % 32] =
+                        (lpCorners ? 1u : 0u) | (lpMask ? 2u : 0u) | (lbWhite ? 4u : 0u);
+                if (!lpCorners || !lpMask) break;
+                MaskLayer& lrMask = laMasks[liMaskDepth];
+                const f32 lfDX = lpCorners[1].mv2Pos.x-lpCorners[0].mv2Pos.x;
+                const f32 lfDY = lpCorners[1].mv2Pos.y-lpCorners[0].mv2Pos.y;
+                lrMask.mfX = lpCorners[0].mv2Pos.x;
+                lrMask.mfY = lpCorners[0].mv2Pos.y;
+                lrMask.mfInvW = lfDX != 0.0f ? 1.0f/lfDX : 0.0f;
+                lrMask.mfInvH = lfDY != 0.0f ? 1.0f/lfDY : 0.0f;
+                lrMask.mfU = lbWhite ? 0.0f : lpCorners[0].mv2Tex0UV.x;
+                lrMask.mfV = lbWhite ? 0.0f : lpCorners[0].mv2Tex0UV.y;
+                lrMask.mfDU = lbWhite ? 1.0f : lpCorners[1].mv2Tex0UV.x-lrMask.mfU;
+                lrMask.mfDV = lbWhite ? 1.0f : lpCorners[1].mv2Tex0UV.y-lrMask.mfV;
+
+                const f32 lfX1 = lpCorners[1].mv2Pos.x, lfY1 = lpCorners[1].mv2Pos.y;
+                RECT& lrRect = lrMask.mScissor;
+                lrRect.left = static_cast<LONG>((lrMask.mfX < lfX1 ? lrMask.mfX : lfX1)*lfScaleX);
+                lrRect.top = static_cast<LONG>((lrMask.mfY < lfY1 ? lrMask.mfY : lfY1)*lfScaleY);
+                lrRect.right = static_cast<LONG>((lrMask.mfX > lfX1 ? lrMask.mfX : lfX1)*lfScaleX+0.999f);
+                lrRect.bottom = static_cast<LONG>((lrMask.mfY > lfY1 ? lrMask.mfY : lfY1)*lfScaleY+0.999f);
+                if (lrRect.left < 0) lrRect.left = 0;
+                if (lrRect.top < 0) lrRect.top = 0;
+                if (lrRect.right > renderengine::gDisplayWidth) lrRect.right = renderengine::gDisplayWidth;
+                if (lrRect.bottom > renderengine::gDisplayHeight) lrRect.bottom = renderengine::gDisplayHeight;
+                if (liMaskDepth)
                 {
-                    // The screen->maskUV map the PS3 constant fold encodes: reciprocals of the
-                    // corner extents + the corner UV range (a degenerate extent maps flat).
-                    const f32 lfDX = lpCorners[1].mv2Pos.x - lpCorners[0].mv2Pos.x;
-                    const f32 lfDY = lpCorners[1].mv2Pos.y - lpCorners[0].mv2Pos.y;
-                    lfMaskX0   = lpCorners[0].mv2Pos.x;
-                    lfMaskY0   = lpCorners[0].mv2Pos.y;
-                    lfMaskInvW = (lfDX != 0.0f) ? (1.0f / lfDX) : 0.0f;
-                    lfMaskInvH = (lfDY != 0.0f) ? (1.0f / lfDY) : 0.0f;
-                    lfMaskU0   = lpCorners[0].mv2Tex0UV.x;
-                    lfMaskV0   = lpCorners[0].mv2Tex0UV.y;
-                    lfMaskDU   = lpCorners[1].mv2Tex0UV.x - lpCorners[0].mv2Tex0UV.x;
-                    lfMaskDV   = lpCorners[1].mv2Tex0UV.y - lpCorners[0].mv2Tex0UV.y;
-
-                    // ⭐ THE CONSOLE'S IN-RECT TEST (issue #25: sat-nav icons overhang the map
-                    // rect). The masked Im2d pixel program (guest 0x820D39F8, quoted below) ANDs
-                    // each mask sample with `sge r4.xy, c255.xxxx, r4.xy` -- a test on the
-                    // rect-normalised POSITION in r4, a register SEPARATE from the mask sample
-                    // UVs in r3. So the console does two things at once: it samples the mask with
-                    // the bound state's address modes (WRAP tiles the boost bar's twenty-repeat
-                    // window, CLAMP stretches the map mask's edge texel) AND it discards every
-                    // pixel outside the pushed rect. Until 2026-08-29 a border-black sampler stood
-                    // in for the test; honouring the state's address modes (right for the sample)
-                    // dropped the test, and a sat-nav icon whose centre is inside the rect overhung
-                    // it by half its width (scratch/issue25_log.md, x up to 1.049 of the rect).
-                    // A position test is a scissor rect here: the pushed rect in back-buffer
-                    // pixels, intersected with the enclosing mask's (the console's second mask
-                    // slot multiplies in), off again when the outermost mask ends.
-                    {
-                        const f32 lfX1 = lpCorners[1].mv2Pos.x;
-                        const f32 lfY1 = lpCorners[1].mv2Pos.y;
-                        const f32 lfMinX = (lfMaskX0 < lfX1) ? lfMaskX0 : lfX1;
-                        const f32 lfMaxX = (lfMaskX0 < lfX1) ? lfX1 : lfMaskX0;
-                        const f32 lfMinY = (lfMaskY0 < lfY1) ? lfMaskY0 : lfY1;
-                        const f32 lfMaxY = (lfMaskY0 < lfY1) ? lfY1 : lfMaskY0;
-                        RECT lRect;
-                        lRect.left   = static_cast<LONG>(lfMinX * lfScaleX);
-                        lRect.top    = static_cast<LONG>(lfMinY * lfScaleY);
-                        lRect.right  = static_cast<LONG>(lfMaxX * lfScaleX + 0.999f);
-                        lRect.bottom = static_cast<LONG>(lfMaxY * lfScaleY + 0.999f);
-                        if (lRect.left < 0) lRect.left = 0;
-                        if (lRect.top  < 0) lRect.top  = 0;
-                        if (lRect.right  > static_cast<LONG>(renderengine::gDisplayWidth))  lRect.right  = static_cast<LONG>(renderengine::gDisplayWidth);
-                        if (lRect.bottom > static_cast<LONG>(renderengine::gDisplayHeight)) lRect.bottom = static_cast<LONG>(renderengine::gDisplayHeight);
-                        const int liSlot = (liMaskDepth < 4) ? liMaskDepth - 1 : 3;
-                        if (liMaskDepth > 1 && lbMaskScissorOn)
-                        {
-                            const RECT& lrOuter = laMaskScissor[(liMaskDepth - 1 < 4) ? liMaskDepth - 2 : 3];
-                            if (lRect.left   < lrOuter.left)   lRect.left   = lrOuter.left;
-                            if (lRect.top    < lrOuter.top)    lRect.top    = lrOuter.top;
-                            if (lRect.right  > lrOuter.right)  lRect.right  = lrOuter.right;
-                            if (lRect.bottom > lrOuter.bottom) lRect.bottom = lrOuter.bottom;
-                        }
-                        // D3D9 refuses an empty scissor: a degenerate mask keeps one pixel.
-                        if (lRect.right  <= lRect.left) lRect.right  = lRect.left + 1;
-                        if (lRect.bottom <= lRect.top)  lRect.bottom = lRect.top + 1;
-                        laMaskScissor[liSlot] = lRect;
-                        lpDevice->SetScissorRect(&lRect);
-                        lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
-                        lbMaskScissorOn = true;
-                    }
-
-                    // FLAG PC-platform leaf: the console tests the mask rectangle
-                    // independently of its texture UVs. Untextured Apt masks have
-                    // zero UVs; map their bounds over our opaque-white fallback.
-                    // POINT + BORDER implements the in-rect test without blending
-                    // the 1x1 white texel with its black border (LINEAR at UV 0,0
-                    // yields alpha 0.25, fading every otherwise opaque child).
-                    if (lbWhiteMask)
-                    {
-                        lfMaskU0 = lfMaskV0 = 0.0f;
-                        lfMaskDU = lfMaskDV = 1.0f;
-                    }
-
-                    // Stage 1 = the mask sample. ONE convention for both opcodes: the mask
-                    // multiplies ALPHA by the mask texture's ALPHA and leaves COLOUR alone.
-                    //
-                    // ⭐ RECOVERED FROM THE ARTIST ASM (2026-08-28), not inferred from assets.
-                    // The console's masked Im2d pixel shader (the "+1" sibling Im2d::SetProgram
-                    // @0x827F1820 selects while a mask is open) is the boost-bar masked program
-                    // at guest 0x820D39F8; its Xenos microcode disassembles to:
-                    //     tfetch r5.__w_, r3.xy, tf1      ; MaskSampler0 -> r5.z = mask0.ALPHA
-                    //     tfetch r5.___w, r3.zw, tf2      ; MaskSampler1 -> r5.w = mask1.ALPHA
-                    //     sge    r4.xy, c255.xxxx, r4.xy  ; the in-rect position test
-                    //     mul    r2.yz, r4.xy, r5.zw      ; factor = inRect * maskAlpha
-                    //     max    r0.xy, r2.yz, r5.xy      ; ...or 1 where gvMaskUseFlags is off
-                    //     muls   r0.x,  r0.xy             ; combine the two mask slots
-                    //     mul    export0.___w, r0.x, r2.x ; ALPHA *= the combined mask
-                    // export0.xyz is written by an earlier `mad` that never touches the mask.
-                    // So: alpha-modulate, colour untouched -- and the border-black sampler
-                    // below is the PC realisation of the `sge` in-rect test.
-                    //
-                    // ⛔ This case used to COLOUR-modulate for opcode 17, on the reading that
-                    // "the boost strip masks' ALPHA is identically ZERO". That measurement was
-                    // real but it was measuring a BROKEN ASSET: tools/assets/bundles/x360_tex.py
-                    // ported every fully-packed texture (min(w,h) <= 16 -- boostbarmask 256x8
-                    // among them) out of the wrong mip-tail slot, so the whole texture arrived
-                    // as zeros and its alpha only looked "identically zero". Ported correctly,
-                    // boostbarmask is RGB 255 everywhere with the shape in a 0..255 ALPHA ramp,
-                    // which a colour modulate cannot see at all. SatNavMask carries its shape
-                    // in BOTH channels, so it reads the same either way.
-                    lpDevice->SetTexture(1, lpMaskD3D);
-                    lpDevice->SetTextureStageState(1, D3DTSS_COLOROP,   D3DTOP_SELECTARG2);
-                    lpDevice->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
-                    lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP,   D3DTOP_MODULATE);
-                    lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
-                    lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG2, D3DTA_CURRENT);
-                    const DWORD luMaskFilter = lbWhiteMask ? D3DTEXF_POINT : D3DTEXF_LINEAR;
-                    renderengine::PCSetSamplerState(lpDevice, 1, D3DSAMP_MINFILTER, luMaskFilter);
-                    renderengine::PCSetSamplerState(lpDevice, 1, D3DSAMP_MAGFILTER, luMaskFilter);
-                    renderengine::PCSetSamplerState(lpDevice, 1, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
-                    // â­ [map-world 2026-08-29] THE MASK CROP. This pair used to be a hardcoded
-                    // D3DTADDRESS_BORDER/0 for BOTH opcodes -- a stand-in calibrated against the
-                    // boost-bar and sat-nav masks, whose masked draws happen to stay inside the
-                    // pushed rect so the border is never sampled. The main map does NOT: its
-                    // tile quads run past the mask rect, every one of those texels took the zero
-                    // border, and the Paradise City world was cropped to ~28% x 53% of the
-                    // published view rect (runs scratch/mainmenu_wave/mapworld_geo/_nomask/_mask
-                    // /_red: mask push removed -> the quad covers the whole screen, so the
-                    // geometry was never the bug). The console never had a hardcode here: the
-                    // mask's own renderengine::TextureState carries the address modes, and every
-                    // GUI mask state (CrashNavIconRenderer/MainMapRenderer CreateIconTextureState,
-                    // BrnSatNavRenderer, BoostBarRenderer's clamped slots) asks for mode 2 =
-                    // CLAMP on both axes -- edge texels stretch across the masked rect. So honour
-                    // the BOUND state instead. Two consequences, both faithful:
-                    //   * the map world now fills its view rect (clamp, as authored);
-                    //   * BoostBarRenderer::SetChainedInactiveMask, which pushes the WRAP-U
-                    //     background state with a U window of 0..20*width, finally TILES its
-                    //     twenty repeats instead of having repeats 2..20 erased by the border.
-                    // Opcode 18 (Apt PushMaskGeometry) has no TextureState to ask, so it keeps
-                    // the geometry-bounded border pair it was calibrated with.
-                    DWORD luMaskAddressU = static_cast<DWORD>(D3DTADDRESS_BORDER);
-                    DWORD luMaskAddressV = static_cast<DWORD>(D3DTADDRESS_BORDER);
-                    if (lpCommand->muType == IM_CMD_PUSH_MASK && !lbWhiteMask)
-                    {
-                        DispatchTextureStateAddressModes(lpMaskState,
-                                                         &luMaskAddressU, &luMaskAddressV);
-                    }
-                    renderengine::PCSetSamplerState(lpDevice, 1, D3DSAMP_ADDRESSU, luMaskAddressU);
-                    renderengine::PCSetSamplerState(lpDevice, 1, D3DSAMP_ADDRESSV, luMaskAddressV);
-                    renderengine::PCSetSamplerState(lpDevice, 1, D3DSAMP_BORDERCOLOR, 0x00000000u);
-                    lbMaskStageBound = true;
+                    const RECT& lrOuter = laMasks[liMaskDepth-1].mScissor;
+                    if (lrRect.left < lrOuter.left) lrRect.left = lrOuter.left;
+                    if (lrRect.top < lrOuter.top) lrRect.top = lrOuter.top;
+                    if (lrRect.right > lrOuter.right) lrRect.right = lrOuter.right;
+                    if (lrRect.bottom > lrOuter.bottom) lrRect.bottom = lrOuter.bottom;
                 }
+                if (lrRect.right < lrRect.left) lrRect.right = lrRect.left;
+                if (lrRect.bottom < lrRect.top) lrRect.bottom = lrRect.top;
+                ++liMaskDepth;
+                const DWORD luStage = static_cast<DWORD>(liMaskDepth);
+                lpDevice->SetScissorRect(&lrRect);
+                lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+                lbMaskScissorOn = lbMaskStageBound = true;
+                // ARTIST masked shader820D39F8 multiplies two alpha samples, preserving RGB.
+                lpDevice->SetTexture(luStage, lpMask);
+                lpDevice->SetTextureStageState(luStage, D3DTSS_TEXCOORDINDEX, luStage);
+                lpDevice->SetTextureStageState(luStage, D3DTSS_COLOROP, D3DTOP_SELECTARG2);
+                lpDevice->SetTextureStageState(luStage, D3DTSS_COLORARG2, D3DTA_CURRENT);
+                lpDevice->SetTextureStageState(luStage, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+                lpDevice->SetTextureStageState(luStage, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+                lpDevice->SetTextureStageState(luStage, D3DTSS_ALPHAARG2, D3DTA_CURRENT);
+                const DWORD luFilter = lbWhite ? D3DTEXF_POINT : D3DTEXF_LINEAR;
+                renderengine::PCSetSamplerState(lpDevice, luStage, D3DSAMP_MINFILTER, luFilter);
+                renderengine::PCSetSamplerState(lpDevice, luStage, D3DSAMP_MAGFILTER, luFilter);
+                renderengine::PCSetSamplerState(lpDevice, luStage, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+                DWORD luAddressU = D3DTADDRESS_BORDER, luAddressV = D3DTADDRESS_BORDER;
+                if (!lbWhite && lpState) DispatchTextureStateAddressModes(lpState, &luAddressU, &luAddressV);
+                renderengine::PCSetSamplerState(lpDevice, luStage, D3DSAMP_ADDRESSU, luAddressU);
+                renderengine::PCSetSamplerState(lpDevice, luStage, D3DSAMP_ADDRESSV, luAddressV);
+                renderengine::PCSetSamplerState(lpDevice, luStage, D3DSAMP_BORDERCOLOR, 0);
                 break;
             }
 
-            case IM_CMD_END_MASK:          // case 19 - end the pixel mask (PS3 case 0x13)
-                if (liMaskDepth > 0)
-                    --liMaskDepth;
-                if (lbMaskScissorOn)
+            case IM_CMD_END_MASK:
+            {
+                static u32 suMaskDiagFailures = 0;
+                if (sbMaskDiag && liMaskDepth <= 0 && suMaskDiagFailures++ < 3)
                 {
-                    if (liMaskDepth > 0)
+                    char lacMessage[192];
+                    std::snprintf(lacMessage, sizeof(lacMessage),
+                                  "[mask-command] underflow present=%u buffer=%p records=%u\n",
+                                  renderengine::guPresentCount, static_cast<const void*>(this), luMaskDiagCount);
+                    CgsDev::Log::WriteToLog(lacMessage);
+                    const u32 luFirst = luMaskDiagCount > 32 ? luMaskDiagCount - 32 : 0;
+                    for (u32 luIndex = luFirst; luIndex < luMaskDiagCount; ++luIndex)
                     {
-                        lpDevice->SetScissorRect(&laMaskScissor[(liMaskDepth < 4) ? liMaskDepth - 1 : 3]);
-                    }
-                    else
-                    {
-                        lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
-                        lbMaskScissorOn = false;
+                        const u32 luSlot = luIndex % 32;
+                        std::snprintf(lacMessage, sizeof(lacMessage),
+                                      "[mask-command] n=%u opcode=%u depthBefore=%d inputs=%u\n",
+                                      luIndex, lauMaskDiagOps[luSlot], laiMaskDiagDepths[luSlot], lauMaskDiagInputs[luSlot]);
+                        CgsDev::Log::WriteToLog(lacMessage);
                     }
                 }
-                if (liMaskDepth == 0 && lbMaskStageBound)
-                {
-                    lpDevice->SetTexture(1, nullptr);
-                    lpDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-                    lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
-                    lbMaskStageBound = false;
-                }
+                CGS_ASSERT(liMaskDepth > 0, "mu32NumMasks");
+                if (liMaskDepth <= 0) break;
+                const DWORD luStage = static_cast<DWORD>(liMaskDepth--);
+                lpDevice->SetTexture(luStage, nullptr);
+                lpDevice->SetTextureStageState(luStage, D3DTSS_COLOROP, D3DTOP_DISABLE);
+                lpDevice->SetTextureStageState(luStage, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+                lbMaskStageBound = lbMaskScissorOn = liMaskDepth > 0;
+                if (liMaskDepth) lpDevice->SetScissorRect(&laMasks[liMaskDepth-1].mScissor);
+                else lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
                 break;
+            }
+
 
             case IM_CMD_RENDER_PRIMITIVES: // case 2 - the actual draw
             {
@@ -1882,17 +1783,15 @@ namespace CgsGraphics
                     // active mask's screen->maskUV map (the CPU realisation of the constant
                     // block the PS3 case-0x12 uploads for the masked program). Inert (stage 1
                     // disabled) when no mask is active.
-                    if (lbMaskStageBound)
+                    saBatch[luIndex].u2 = saBatch[luIndex].v2 = 0.0f;
+                    saBatch[luIndex].u3 = saBatch[luIndex].v3 = 0.0f;
+                    for (s32 liMask = 0; liMask < liMaskDepth; ++liMask)
                     {
-                        saBatch[luIndex].u2 = lfMaskU0 +
-                            (lfScreenX - lfMaskX0) * lfMaskInvW * lfMaskDU;
-                        saBatch[luIndex].v2 = lfMaskV0 +
-                            (lfScreenY - lfMaskY0) * lfMaskInvH * lfMaskDV;
-                    }
-                    else
-                    {
-                        saBatch[luIndex].u2 = 0.0f;
-                        saBatch[luIndex].v2 = 0.0f;
+                        const MaskLayer& lrMask = laMasks[liMask];
+                        const f32 lfU = lrMask.mfU + (lfScreenX-lrMask.mfX)*lrMask.mfInvW*lrMask.mfDU;
+                        const f32 lfV = lrMask.mfV + (lfScreenY-lrMask.mfY)*lrMask.mfInvH*lrMask.mfDV;
+                        if (liMask == 0) { saBatch[luIndex].u2=lfU; saBatch[luIndex].v2=lfV; }
+                        else { saBatch[luIndex].u3=lfU; saBatch[luIndex].v3=lfV; }
                     }
                 }
 
@@ -2044,7 +1943,7 @@ namespace CgsGraphics
                 // stage must stay off.
                 const bool lbNeedShift = lbHaveTransform && lpBoostPs == nullptr &&
                     (lfColShiftR != 0.0f || lfColShiftG != 0.0f || lfColShiftB != 0.0f);
-                const DWORD luShiftStage = lbMaskStageBound ? 2u : 1u;
+                const DWORD luShiftStage = 1u + static_cast<DWORD>(liMaskDepth);
                 if (lpBoostPs != nullptr)
                 {
                     // c0 = gv3OuterColour, c1 = gv3InnerColour -- the console's own register
@@ -2056,6 +1955,9 @@ namespace CgsGraphics
                     renderengine::PCSetPixelShaderConstantF(lpDevice, 0, lafOuter, 1);
                     renderengine::PCSetPixelShaderConstantF(lpDevice, 1, lafInner, 1);
                     renderengine::PCSetPixelShaderConstantF(lpDevice, 2, lafShift, 1);
+                    const f32 lafMaskUse[4] = {liMaskDepth > 0 ? 1.0f : 0.0f,
+                                               liMaskDepth > 1 ? 1.0f : 0.0f, 0.0f, 0.0f};
+                    renderengine::PCSetPixelShaderConstantF(lpDevice, 3, lafMaskUse, 1);
                     renderengine::PCSetPixelShader(lpDevice, lpBoostPs);
                 }
                 if (lbNeedShift)
@@ -2227,18 +2129,33 @@ namespace CgsGraphics
     template void ImRenderBuffer<BasicColouredVertex>::SetBufferFullRewindToLastEndRender();
 
     // -------------------------------------------------------------------------
-    // CgsGraphics::BasicCo @0x827EF548 == ImRenderBuffer<Im3dVertex>::RenderStart (stride 32).
-    //
-    // BYTE-IDENTICAL to RenderStart @0x827EF748 (Basic) EXCEPT the vertex sub-allocation stride
-    // is 32 (`slwi r9, r28, 5`) instead of 20 -- the SAME templated RenderStart body specialised
-    // for the 32-byte 3D-text vertex. It reuses the generic template RenderStart defined in the
-    // header (assert miNumRendersStarted>=0, ++counter before the carve, carve sizeof(V)*count
-    // from the write buffer's vertex stream, and on overflow CGS_ASSERT(mbFailGracefully,
-    // "Failed to allocate  in ImRenderBuffer") then back the counter out). sizeof(Im3dVertex)==32
-    // reproduces the x32 stride exactly. Im3dVertex is DISTINCT from the committed 24-byte PACKED
-    // BasicColouredTexturedVertex the ImRenderer<V> path copies at 24*count, so a dedicated
-    // 32-byte Im3dVertex is used and RenderStart is instantiated PER MEMBER (the wave-30
-    // <BasicColouredVertex> lesson), never a blind whole-struct.
+    // ARTIST textured3D writers: Prepare82404308, Swap823F9470,
+    // Begin/End824593.., RenderEnd827F83F8, RenderStart827EF548.
+    // Source vertices are32bytes; CgsIm3d.cpp packs them to the24-byte GPU
+    // stream. Dispatch is the distinct virtual Im3dRenderBufferBase handler,
+    // and is deliberately not this template's screen-space dispatcher.
     // -------------------------------------------------------------------------
+    template void ImRenderBuffer<Im3dVertex>::Construct();
+    template bool ImRenderBuffer<Im3dVertex>::Prepare(u32, u32, rw::IResourceAllocator*, bool);
+    template void ImRenderBuffer<Im3dVertex>::Clear();
+    template void ImRenderBuffer<Im3dVertex>::Swap();
+    template bool ImRenderBuffer<Im3dVertex>::IsInARenderingBlock();
+    template Im3dVertex* ImRenderBuffer<Im3dVertex>::AllocVertices(u32);
+    template void ImRenderBuffer<Im3dVertex>::BeginRendering();
+    template void ImRenderBuffer<Im3dVertex>::EndRendering();
+    template void ImRenderBuffer<Im3dVertex>::Render(renderengine::PrimitiveType, const Im3dVertex*, u32);
+    template void ImRenderBuffer<Im3dVertex>::RenderFromStaticVertexBuffer(renderengine::PrimitiveType, const Im3dVertex*, u32);
     template Im3dVertex* ImRenderBuffer<Im3dVertex>::RenderStart(u32);
+    template void ImRenderBuffer<Im3dVertex>::RenderEnd(renderengine::PrimitiveType, const Im3dVertex*, u32);
+    template void ImRenderBuffer<Im3dVertex>::SetTexture(renderengine::Texture*);
+    template void ImRenderBuffer<Im3dVertex>::SetState(const renderengine::RasterizerState*);
+    template void ImRenderBuffer<Im3dVertex>::SetState(const renderengine::BlendState*);
+    template void ImRenderBuffer<Im3dVertex>::SetState(const renderengine::DepthStencilState*);
+    template void ImRenderBuffer<Im3dVertex>::SetState(const renderengine::TextureState*);
+    template void ImRenderBuffer<Im3dVertex>::SetTextureState(const renderengine::TextureState*);
+    template const ImCommand* ImRenderBuffer<Im3dVertex>::GetFirstCommand() const;
+    template const ImCommand* ImRenderBuffer<Im3dVertex>::GetNextCommand(const ImCommand*) const;
+    template void ImRenderBuffer<Im3dVertex>::SetBufferFullRewindToLastEndRender();
+    template bool ImRenderBuffer<Im3dVertex>::Release();
+    template void ImRenderBuffer<Im3dVertex>::Destruct();
 }

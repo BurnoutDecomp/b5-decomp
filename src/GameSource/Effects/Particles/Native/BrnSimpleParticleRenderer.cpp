@@ -16,6 +16,7 @@
 
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleRenderer.h"
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleArray.h"   // GetTexture, the diag counters
+#include "GameSource/Effects/Particles/Native/BrnNativeParticleVertex.h"  // canonical packed GPU stride
 #include "GameSource/Effects/Particles/Native/BrnIm3dSmokeRenderer.h"
 #include "GameSource/Effects/Particles/Native/BrnSimpleFxDiag.h"   // [diag] BRN_SIMPLEFX_DIAG
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
@@ -273,10 +274,9 @@ namespace Native
 
         // The stream. The console reads the stride out of the descriptor off_82FAB6A4's own element
         // table; that descriptor IS the 24-byte BasicColouredTexturedVertex stream the renderer
-        // declares (and NativeParticleVertex::VertexIterator::Write fills), so the stride is taken
-        // from the type -- the same substitution SparkRenderer::Dispatch documents as its FLAG (1).
-        const u32 luVertexStride =
-            static_cast<u32>(sizeof(CgsGraphics::BasicColouredTexturedVertex));   // 24
+        // declares (and NativeParticleVertex::VertexIterator::Write fills), so use its packed
+        // GPU stride. The separate BasicColouredTexturedVertex CPU record is32 bytes.
+        const u32 luVertexStride = NativeParticleVertex::GetStride();
         D3DDevice_SetStreamSource(gpD3DDevice, 0, lpVertexBuffer, 0, 0, 1);
         D3DDevice_SetStreamSource(gpD3DDevice, 0, lpVertexBuffer, 0, luVertexStride, 1);
 

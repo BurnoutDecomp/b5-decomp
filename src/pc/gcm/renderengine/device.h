@@ -11,6 +11,12 @@ namespace renderengine
 {
     extern bool gFullscreen;
     float DiagTextureMeanLuma(void* lpD3DBaseTexture);   // [DIAG] issue #30 (device.cpp)
+    // FLAG PC-platform leaf: render-owner-only observation of the existing
+    // dispatch counter that names captured frames; never call from update.
+    u32 GetDispatchPresentCountPC();
+    // Default-off observation of actual composite colour inputs, paired to
+    // the existing back-buffer capture number. Does not bind/change state.
+    void DiagDumpPostFxSourcesPC();
     extern s32 gDisplayWidth;
     extern s32 gDisplayHeight;
     extern s32 gAdapterIndex;

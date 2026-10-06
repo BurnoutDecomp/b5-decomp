@@ -42,6 +42,7 @@
 #include "pc/gcm/renderengine/WorldGeometryPCLeaf.h" // the RETAINED dispatch-path geometry mirrors
 #include "pc/gcm/renderengine/InstancedDrawPCLeaf.h"
 #include "pc/gcm/renderengine/InstancingPCLeaf.h"
+#include "pc/gcm/renderengine/LionDrawDiagPC.h"
 #include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsXboxConditionalRenderShims.h" // the predicated-draw externs homed at the bottom of this TU
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -5200,6 +5201,142 @@ namespace renderengine
     // twin. FLAG PC bring-up diagnostic, DELETE-WHEN-STABLE.
     void LionDrawSamplerProbe(char* lpcOut, size_t luCap);
 
+    // FLAG PC-platform leaf: selected material/actual uploaded vertices and
+    // constants at native draw, to distinguish producer corners from a later
+    // consumer mismatch. Reads only, default off; at most128 records.
+    static char sacLionDrawMaterial[64] = {};
+    static u32 suLionDrawFlags=0, suLionDrawShader=0, suLionDrawBlend=0;
+    static u32 suLionDrawTextureHash=0,suLionDrawMapIndex=~0u;
+    static u64 suLionDrawResourceId=0;
+    static const void* spLionDrawSourceEntry=nullptr;
+    static const void* spLionDrawExpectedNative=nullptr;
+    u32 FrameDumpEvery();
+    static const char* LionDrawDiagSelectionPC()
+    {
+        static const char* const selection=std::getenv("BRN_LION_DRAW_DIAG");
+        return selection;
+    }
+    bool LionDrawDiag_EnabledPC()
+    {
+        const char* selection=LionDrawDiagSelectionPC();
+        return selection && selection[0] && selection[0]!='0';
+    }
+    void LionDrawDiag_SetMaterialPC(const char* name,u32 flags,u32 shader,u32 blend,
+        u32 textureHash,u32 mapIndex,u64 resourceId,const void* sourceEntry,
+        const void* expectedNative)
+    {
+        const char* selection=LionDrawDiagSelectionPC();
+        if(!selection || !selection[0] || selection[0]=='0')return;
+        std::snprintf(sacLionDrawMaterial,sizeof(sacLionDrawMaterial),"%s",name?name:"<null>");
+        suLionDrawFlags=flags;suLionDrawShader=shader;suLionDrawBlend=blend;
+        suLionDrawTextureHash=textureHash;suLionDrawMapIndex=mapIndex;spLionDrawExpectedNative=expectedNative;
+        suLionDrawResourceId=resourceId;spLionDrawSourceEntry=sourceEntry;
+    }
+    // Observe only the part the native D3D frustum can rasterise. A quad may
+    // cross w=0 yet clip entirely outside the screen; projected corner span
+    // alone would select that quad ahead of the actual visible band.
+    static float LionDrawClippedSpanPC(const float clip[4][4])
+    {
+        float minX=1e30f,maxX=-1e30f,minY=1e30f,maxY=-1e30f;
+        const u32 triangles[2][3]={{0,1,2},{0,2,3}};
+        for(const auto& triangle:triangles)
+        {
+            float polygon[16][4]={},output[16][4]={};u32 n=3;
+            for(u32 i=0;i<3;++i)std::memcpy(polygon[i],clip[triangle[i]],16);
+            for(u32 plane=0;plane<6 && n;++plane)
+            {
+                u32 out=0;
+                const auto distance=[plane](const float* p) {
+                    return plane==0?p[0]+p[3]:plane==1?p[3]-p[0]:
+                        plane==2?p[1]+p[3]:plane==3?p[3]-p[1]:
+                        plane==4?p[2]:p[3]-p[2];
+                };
+                for(u32 i=0;i<n;++i)
+                {
+                    const float* a=polygon[i];const float* b=polygon[(i+1)%n];
+                    const float da=distance(a),db=distance(b);
+                    if(da>=0)std::memcpy(output[out++],a,16);
+                    if((da>=0)!=(db>=0))
+                    {
+                        const float t=da/(da-db);
+                        for(u32 c=0;c<4;++c)output[out][c]=a[c]+t*(b[c]-a[c]);
+                        ++out;
+                    }
+                }
+                n=out;std::memcpy(polygon,output,n*16u);
+            }
+            for(u32 i=0;i<n;++i)
+            {
+                if(polygon[i][3]<=0)continue;
+                const float x=polygon[i][0]/polygon[i][3],y=polygon[i][1]/polygon[i][3];
+                minX=std::fmin(minX,x);maxX=std::fmax(maxX,x);
+                minY=std::fmin(minY,y);maxY=std::fmax(maxY,y);
+            }
+        }
+        return maxX>=minX?std::fmax(maxX-minX,maxY-minY):0.0f;
+    }
+    static void LionDrawGeometryWitnessPC(IDirect3DDevice9* device,const u8* vertices,u32 count,u32 stride)
+    {
+        const char* selection=LionDrawDiagSelectionPC();
+        if(!selection || !selection[0] || selection[0]=='0' || stride!=36u || count<4u
+            || (selection[0]!='1' && std::strcmp(selection,sacLionDrawMaterial)!=0))return;
+        static u32 records=0,lastPresent=~0u;
+        const u32 present=GetDispatchPresentCountPC();
+        if(records>=128u || present==lastPresent || present%(FrameDumpEvery()*5u)!=0u)return;
+        IDirect3DVertexShader9* vs=nullptr;device->GetVertexShader(&vs);
+        UINT bytes=0;u32 vpReg=~0u;
+        if(vs && SUCCEEDED(vs->GetFunction(nullptr,&bytes)) && bytes>=8u && bytes<=65536u)
+        {
+            std::vector<DWORD> code((bytes+3u)/4u);
+            if(SUCCEEDED(vs->GetFunction(code.data(),&bytes)))
+                InstancingPC::Constant(code.data(),bytes/4u,"worldViewProj",4u,vpReg);
+        }
+        if(vs)vs->Release();
+        if(vpReg==~0u)return;
+        float vp[16]={};device->GetVertexShaderConstantF(vpReg,vp,4);
+        float bestScore=.5f,bestPos[4][4]={},bestClip[4][4]={};u32 best=~0u;
+        for(u32 q=0;q<count/4u;++q)
+        {
+            float pos[4][4],clip[4][4];
+            bool finite=true;
+            for(u32 v=0;v<4u;++v)
+            {
+                std::memcpy(pos[v],vertices+(q*4u+v)*stride,16);
+                for(u32 c=0;c<4u;++c)clip[v][c]=pos[v][0]*vp[c]+pos[v][1]*vp[4+c]+pos[v][2]*vp[8+c]+vp[12+c];
+                for(u32 c=0;c<4;++c)finite=finite&&std::isfinite(clip[v][c]);
+            }
+            const float score=finite?LionDrawClippedSpanPC(clip):1e30f;
+            if(score>bestScore){bestScore=score;best=q;std::memcpy(bestPos,pos,sizeof(pos));std::memcpy(bestClip,clip,sizeof(clip));}
+        }
+        if(best==~0u)return;
+        ++records;lastPresent=present;
+        DWORD z=0,zw=0,zf=0,clipping=0,cull=0,au=0,av=0,min=0,mag=0,mip=0,anis=0,maxMip=0,mipBias=0;
+        device->GetRenderState(D3DRS_ZENABLE,&z);device->GetRenderState(D3DRS_ZWRITEENABLE,&zw);device->GetRenderState(D3DRS_ZFUNC,&zf);
+        device->GetRenderState(D3DRS_CLIPPING,&clipping);device->GetRenderState(D3DRS_CULLMODE,&cull);
+        device->GetSamplerState(0,D3DSAMP_ADDRESSU,&au);device->GetSamplerState(0,D3DSAMP_ADDRESSV,&av);
+        device->GetSamplerState(0,D3DSAMP_MINFILTER,&min);device->GetSamplerState(0,D3DSAMP_MAGFILTER,&mag);
+        device->GetSamplerState(0,D3DSAMP_MIPFILTER,&mip);device->GetSamplerState(0,D3DSAMP_MAXANISOTROPY,&anis);
+        device->GetSamplerState(0,D3DSAMP_MAXMIPLEVEL,&maxMip);device->GetSamplerState(0,D3DSAMP_MIPMAPLODBIAS,&mipBias);
+        IDirect3DBaseTexture9* texture=nullptr;D3DSURFACE_DESC desc={};device->GetTexture(0,&texture);
+        if(texture && texture->GetType()==D3DRTYPE_TEXTURE)static_cast<IDirect3DTexture9*>(texture)->GetLevelDesc(0,&desc);
+        const void* actualNative=texture;
+        if(texture)texture->Release();
+        char msg[1800];
+        std::snprintf(msg,sizeof(msg),"[liondraw] present=%u material=%s flags=%X shader=%u blend=%u map=%u hash=%08X resource=%016llX entry=%p expected=%p native=%p tex=%ux%u/%X q=%u/%u score=%g z=%u/%u/%u clip=%u cull=%u sampler=%u/%u/%u/%u mip=%u anis=%u maxMip=%u bias=%08X "
+            "pos0=%g,%g,%g,%g pos1=%g,%g,%g,%g pos2=%g,%g,%g,%g pos3=%g,%g,%g,%g "
+            "clip0=%g,%g,%g,%g clip1=%g,%g,%g,%g clip2=%g,%g,%g,%g clip3=%g,%g,%g,%g "
+            "vp=%g,%g,%g,%g;%g,%g,%g,%g;%g,%g,%g,%g;%g,%g,%g,%g\n",
+            present,sacLionDrawMaterial,suLionDrawFlags,suLionDrawShader,suLionDrawBlend,suLionDrawMapIndex,suLionDrawTextureHash,
+            static_cast<unsigned long long>(suLionDrawResourceId),spLionDrawSourceEntry,spLionDrawExpectedNative,actualNative,
+            desc.Width,desc.Height,static_cast<u32>(desc.Format),best,count/4u,bestScore,z,zw,zf,clipping,cull,au,av,min,mag,mip,anis,maxMip,mipBias,
+            bestPos[0][0],bestPos[0][1],bestPos[0][2],bestPos[0][3],bestPos[1][0],bestPos[1][1],bestPos[1][2],bestPos[1][3],
+            bestPos[2][0],bestPos[2][1],bestPos[2][2],bestPos[2][3],bestPos[3][0],bestPos[3][1],bestPos[3][2],bestPos[3][3],
+            bestClip[0][0],bestClip[0][1],bestClip[0][2],bestClip[0][3],bestClip[1][0],bestClip[1][1],bestClip[1][2],bestClip[1][3],
+            bestClip[2][0],bestClip[2][1],bestClip[2][2],bestClip[2][3],bestClip[3][0],bestClip[3][1],bestClip[3][2],bestClip[3][3],
+            vp[0],vp[1],vp[2],vp[3],vp[4],vp[5],vp[6],vp[7],vp[8],vp[9],vp[10],vp[11],vp[12],vp[13],vp[14],vp[15]);
+        CgsDev::Log::WriteToLog(msg);
+    }
+
     void WorldDraw_NonIndexedUP(u32 luPrimTypeXenon, u32 luStartVertex, u32 luVertexCount)
     {
     renderengine::FrameProfile::DetailScope lDetailProfile(renderengine::FrameProfile::IMMEDIATE_DRAW);
@@ -5261,6 +5398,9 @@ namespace renderengine
 
         const u8* const lpRun = static_cast<const u8*>(lpVertexData)
                               + static_cast<size_t>(luStartVertex) * suVertexStride;
+
+        if(luPrimTypeXenon==KU_XENOS_QUADLIST)
+            LionDrawGeometryWitnessPC(lpDevice,lpRun,luVertexCount,suVertexStride);
 
         HRESULT lhrDraw = S_OK;
         UINT    luPrimsDrawn = 0;
@@ -6151,13 +6291,18 @@ namespace
     void ApplyPostFxSourceSamplerState(IDirect3DDevice9* lpDevice, u32 luUnit,
                                        u32 luMinMagFilterWord, u32 luMaxAnisotropy)
     {
-        gbPostFxSourceSamplerApplied = true;
+        // Only the composite's SOURCE bind identifies its draw. The native
+        // quarter-res overlay also applies this helper to auxiliary unit1,
+        // and uses a direct draw that never consumes the EndVertices latch.
+        if (luUnit == 0u)
+            gbPostFxSourceSamplerApplied = true;
 
         if (lpDevice == nullptr || luUnit >= KU_RAW_DEPTH_MAX_SAMPLER_UNITS)
             return;
 
         static bool sbCapsRead       = false;
-        static bool sbAnisoSupported = false;
+        static bool sbMinAnisoSupported = false;
+        static bool sbMagAnisoSupported = false;
         static u32  suDeviceMaxAniso = 1u;
         if (!sbCapsRead)
         {
@@ -6166,48 +6311,55 @@ namespace
             std::memset(&lCaps, 0, sizeof(lCaps));
             if (SUCCEEDED(lpDevice->GetDeviceCaps(&lCaps)))
             {
-                sbAnisoSupported =
-                    ((lCaps.TextureFilterCaps & D3DPTFILTERCAPS_MINFANISOTROPIC) != 0u) &&
-                    ((lCaps.TextureFilterCaps & D3DPTFILTERCAPS_MAGFANISOTROPIC) != 0u);
+                sbMinAnisoSupported =
+                    (lCaps.TextureFilterCaps & D3DPTFILTERCAPS_MINFANISOTROPIC) != 0u;
+                sbMagAnisoSupported =
+                    (lCaps.TextureFilterCaps & D3DPTFILTERCAPS_MAGFANISOTROPIC) != 0u;
                 suDeviceMaxAniso = (lCaps.MaxAnisotropy > 1u)
                                        ? static_cast<u32>(lCaps.MaxAnisotropy) : 1u;
             }
             char lacMsg[280];
             std::snprintf(lacMsg, sizeof(lacMsg),
                           "[postfx-mb] composite SOURCE sampler seam live: device anisotropic"
-                          " min+mag = %d, MaxAnisotropy = %u. The console's motion-blur samplers"
+                          " min = %d, mag = %d, MaxAnisotropy = %u. The console's motion-blur samplers"
                           " ask for 4x (E_QUALITY_CHEAP) and 16x (E_QUALITY_EXPENSIVE); with"
                           " anisotropy 1 the blur's single tex2Dgrad is a bilinear tap.\n",
-                          sbAnisoSupported ? 1 : 0, static_cast<unsigned>(suDeviceMaxAniso));
+                          sbMinAnisoSupported ? 1 : 0, sbMagAnisoSupported ? 1 : 0,
+                          static_cast<unsigned>(suDeviceMaxAniso));
             CgsDev::Log::WriteToLog(lacMsg);
         }
 
-        DWORD leFilter       = D3DTEXF_POINT;
+        DWORD leMinFilter    = D3DTEXF_POINT;
+        DWORD leMagFilter    = D3DTEXF_POINT;
         DWORD luAppliedAniso = 1u;
         if (luMinMagFilterWord == KU_POSTFX_SOURCE_FILTER_ANISO)
         {
-            if (sbAnisoSupported)
+            if (sbMinAnisoSupported)
             {
                 u32 luAniso = (luMaxAnisotropy < 1u) ? 1u : luMaxAnisotropy;
                 if (luAniso > suDeviceMaxAniso)
                     luAniso = suDeviceMaxAniso;
-                leFilter       = D3DTEXF_ANISOTROPIC;
+                // FLAG PC-platform leaf: the streak's tex2Dgrad footprint is
+                // minified anisotropically. Missing D3D9 MAG anisotropy must
+                // not disable the supported MIN filter and its 4x/16x budget.
+                leMinFilter    = D3DTEXF_ANISOTROPIC;
+                leMagFilter    = sbMagAnisoSupported ? D3DTEXF_ANISOTROPIC : D3DTEXF_LINEAR;
                 luAppliedAniso = static_cast<DWORD>(luAniso);
             }
             else
             {
                 // Construct's own pre-override words for this block (BrnPostFxShader.cpp
                 // :1335-1337): LINEAR min+mag, muConvolution = 1.
-                leFilter = D3DTEXF_LINEAR;
+                leMinFilter = leMagFilter = D3DTEXF_LINEAR;
             }
         }
         else if (luMinMagFilterWord == KU_POSTFX_SOURCE_FILTER_LINEAR)
         {
-            leFilter = D3DTEXF_LINEAR;
+            leMinFilter = leMagFilter = D3DTEXF_LINEAR;
         }
 
-        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER,     leFilter);
-        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAGFILTER,     leFilter);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER,     leMinFilter);
+        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAGFILTER,     leMagFilter);
         // NONE, and it is not a choice: the composite's source is a single-level render target,
         // so there is no mip chain to filter. The console's mip word (KU_SAMPLER_MIP_FILTER = 2)
         // is identical across all four of Construct's samplers (BrnPostFxShader.cpp:383), i.e. it
@@ -6337,6 +6489,7 @@ unsigned int D3DDevice_SetTexture(IDirect3DDevice9* /*lpDeviceArg*/, u32 luSampl
 // [DIAG] NOT IN THE X360 BINARY -- per-present submission counters for the black-frame watch
 // (issue #30): reset by device.cpp after every Present, printed in [black-frame] lines.
 extern "C++" { namespace renderengine { extern u32 guDiagDraws; extern u32 guDiagResolves; extern void* gpDiagLastResolveDest; extern u32 guDiagWorldDraws; } }   // C++ linkage: this file sits in an extern "C" region
+extern "C++" { namespace renderengine { void ImShaderConstants_Flush(); } }
 
 void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* /*lpDeviceArg*/,
                                    u32 lePrimitiveType,
@@ -6344,6 +6497,11 @@ void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* /*lpDeviceArg*/,
                                    u32 luMinVertexIndex,
                                    u32 luNumVertices)
 {
+    // FLAG PC-platform leaf: BeginShaderStates stages CPU rows. The console
+    // writes those rows into its command stream, so even writes after the mesh
+    // setup flush must reach this draw (debris uploads one transform array per
+    // batch). Publish here before the native geometry consumer reads them.
+    renderengine::ImShaderConstants_Flush();
     ++renderengine::guDiagDraws;   // [DIAG] issue #30 black-frame counters
     // Xenon signature: (PrimitiveType, BaseVertexIndex, StartIndex, IndexCount).
     renderengine::WorldDraw_IndexedUP(lePrimitiveType, luBaseVertexIndex,
@@ -6370,6 +6528,8 @@ void D3DDevice_DrawVertices(IDirect3DDevice9* /*lpDeviceArg*/,
                             u32 luStartVertex,
                             u32 luVertexCount)
 {
+    // FLAG PC-platform leaf: same staged-constant visibility as indexed draws.
+    renderengine::ImShaderConstants_Flush();
     ++renderengine::guDiagDraws;   // [DIAG] issue #30 black-frame counters
     renderengine::WorldDraw_NonIndexedUP(luPrimitiveType, luStartVertex, luVertexCount);
 }
@@ -8351,11 +8511,11 @@ void PostFxDepthSampler_ApplyState(u32 luUnit)
     ApplyRawDepthSamplerState(Dev(), luUnit);
 }
 
-// PostFxSourceSampler_ApplyState -- the post-fx composite's SOURCE unit (KU_SAMPLER_SOURCE == 0).
-// See ApplyPostFxSourceSamplerState's banner above. The only caller is BrnPostFxShader::Render,
-// immediately after `shadow::Device::SetState(lpSourceSampler, KU_SAMPLER_SOURCE)`, and it passes
-// the min/mag filter word and the MAX ANISOTROPY of the sampler object it just bound -- so all
-// three of Render's arms (motion blur / bilinear / point) land on the unit, not just the blur one.
+// PostFxSourceSampler_ApplyState -- the composite's source and auxiliary colour samplers.
+// BrnPostFxShader::Render calls after the original sampler binds: source0 uses
+// motion blur / bilinear / point, while bloom1 and DoF2 use LINEAR/CLAMP/1.
+// Every call passes the words of the original selected sampler, since the
+// shared low-level setter still cannot apply a packed console sampler block.
 void PostFxSourceSampler_ApplyState(u32 luUnit, u32 luMinMagFilterWord, u32 luMaxAnisotropy)
 {
     ApplyPostFxSourceSamplerState(Dev(), luUnit, luMinMagFilterWord, luMaxAnisotropy);

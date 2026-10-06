@@ -11,6 +11,7 @@
 #include "pc/gcm/renderengine/texture.h"                                        // renderengine::Texture
 #include "pc/gcm/renderengine/Xbox2SurfaceShims.h"                              // renderengine::gpD3DDevice
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                              // renderengine::PostFxSourceSampler_ApplyState
+#include "pc/gcm/renderengine/device.h"                                        // default-off native input observation
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"         // ResourceAllocatorCreate
 #include "rw/math/vpu/matrix44affine_operation.h"                               // vpu::Inverse(Matrix44Affine) / Mult(affine,affine)
 #include "rw/math/vpu/matrix44_operation.h"                                     // vpu::Mult(Matrix44Affine, Matrix44)
@@ -1850,8 +1851,14 @@ void BrnPostFxShader::Render(f32 lfWhiteLevel,
     // down-sampled, so filtering them is the point).
     shadow::Device::SetResource(lpBloomTexture, KU_SAMPLER_BLOOM);
     shadow::Device::SetState(static_cast<void*>(mpSamplerState_Linear), KU_SAMPLER_BLOOM);
+    // FLAG PC-platform leaf: the original sampler bind at8240988C..824098BC
+    // selects the same LINEAR/CLAMP block as source's bilinear arm. The native
+    // low-level setter is still inert, so re-apply its words even on cache hits.
+    renderengine::PostFxSourceSampler_ApplyState(KU_SAMPLER_BLOOM, KU_SAMPLER_FILTER_LINEAR, 1u);
     shadow::Device::SetResource(lpDofTexture, KU_SAMPLER_DOF);
     shadow::Device::SetState(static_cast<void*>(mpSamplerState_Linear), KU_SAMPLER_DOF);
+    // The original824098F0..82409920 bind selects that same sampler for DoF.
+    renderengine::PostFxSourceSampler_ApplyState(KU_SAMPLER_DOF, KU_SAMPLER_FILTER_LINEAR, 1u);
 
     // Units 3 and 4: the colour-cube volume and the scene depth, each bound as a whole TextureState
     // (texture + its own sampler) rather than as a texture/sampler pair.
@@ -1879,6 +1886,11 @@ void BrnPostFxShader::Render(f32 lfWhiteLevel,
 
     shadow::Device::SetVertexDescriptor(mpVertexDescriptor);
     shadow::Device::FlushVertexProgramState();
+
+    // Default-off observation at this exact composite bind. An auxiliary
+    // overlay sampler can leave the generic EndVertices probe latch raised,
+    // so that heuristic does not establish which input texture was sampled.
+    renderengine::DiagDumpPostFxSourcesPC();
 
     // ---- the quad -------------------------------------------------------------------------------
     // Four vertices in CLIP space, triangle-strip order (bottom-left, bottom-right, top-left,

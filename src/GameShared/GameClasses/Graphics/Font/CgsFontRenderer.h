@@ -119,6 +119,8 @@ namespace CgsGraphics
         // Render one text object's string into the given Im2d buffer. X360 0x82801998: stashes the
         // buffer, runs RenderStringInternal (Buffered), clears the buffer pointer.
         void RenderString(Im2dRenderBuffer* lpRenderBuffer, const TextObject& lrTextObject);
+        // ARTIST828019E8: the same glyph builder, widened into the 3D command buffer.
+        void RenderString(Im3dRenderBuffer* lpRenderBuffer, const TextObject& lrTextObject);
 
         // FLAG (PC fold; the faithful CONSOLE shape of this path): on the X360/PS3 the
         // `Im2dRenderBuffer` the Apt string-draw drives IS the buffered command buffer

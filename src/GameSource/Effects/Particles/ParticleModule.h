@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::SafeResourceHandle<T>
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                 // CgsNumeric::Random (mRandom, BY VALUE)
 #include "GameSource/Effects/Particles/Native/ParticleFramePC.h"
+#include "GameSource/Effects/Particles/Native/TrailFramePC.h"
 #include "SDKs/Packages/Lion/Final/Allocator/include/CoreAllocator/ITaggedAllocator.h" // EA::Allocator::ITaggedAllocator (IInternalAllocator's base)
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"   // CgsGraphics::Camera (ParticleRenderData::mCgsCamera, BY VALUE)
 #include "SharedClasses/Graphics/TextureNameMapResourceType.h"         // BrnParticle::TextureNameMap (mTextureNameMap handle target)
@@ -951,6 +952,7 @@ namespace BrnParticle
         void* mpSparkSpawnBuffer;                      // +0x2B7B0 (178096)
 
         Native::SimpleParticleFramePC mSimpleParticleFramePC;
+        Native::TrailFramePC mTrailFramePC;
         Native::ParticleRandomAccessPC mRandomAccessPC;
         template<class Draw> decltype(auto) DrawRandomPC(Draw lfDraw)
         {

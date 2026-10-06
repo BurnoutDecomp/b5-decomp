@@ -279,6 +279,55 @@ int main() {
         DWORD scissor = TRUE; device->GetRenderState(D3DRS_SCISSORTESTENABLE,&scissor);
         Check(scissor == FALSE, "PopMask clears clipping after the recorded block");
 
+        // The boost multiplier and fire-body masks occupy both original slots.
+        // Orthogonal alpha patterns distinguish real composition from intersected bounds.
+        IDirect3DTexture9* maskRasters[2] = {};
+        renderengine::Texture maskTextures[2] = {};
+        renderengine::TextureState maskStates[2] = {};
+        for (int maskIndex=0;maskIndex<2;++maskIndex) {
+            device->CreateTexture(2,2,1,0,D3DFMT_A8R8G8B8,D3DPOOL_MANAGED,&maskRasters[maskIndex],nullptr);
+            D3DLOCKED_RECT maskLock={};maskRasters[maskIndex]->LockRect(0,&maskLock,nullptr,0);
+            for(int y=0;y<2;++y)for(int x=0;x<2;++x)
+                reinterpret_cast<DWORD*>(static_cast<u8*>(maskLock.pBits)+y*maskLock.Pitch)[x]=
+                    ((maskIndex==0 ? x==1 : y==0)?0xff000000u:0u)|0x00ffffffu;
+            maskRasters[maskIndex]->UnlockRect(0);maskTextures[maskIndex].mpD3DTexture=maskRasters[maskIndex];
+            maskStates[maskIndex].mpRaster=&maskTextures[maskIndex];
+            const u32 clampAddress=2;
+            std::memcpy(maskStates[maskIndex].mauSamplerState,&clampAddress,4);
+            std::memcpy(maskStates[maskIndex].mauSamplerState+4,&clampAddress,4);
+        }
+        Basic2dColouredTexturedVertex nestedCorners[2]={};
+        nestedCorners[0].mv2Pos={320,180};nestedCorners[1].mv2Pos={960,540};
+        nestedCorners[1].mv2Tex0UV={1,1};
+        IDirect3DTexture9* weightRaster=nullptr;
+        device->CreateTexture(1,1,1,0,D3DFMT_A8R8G8B8,D3DPOOL_MANAGED,&weightRaster,nullptr);
+        D3DLOCKED_RECT weightLock={};weightRaster->LockRect(0,&weightLock,nullptr,0);
+        *static_cast<DWORD*>(weightLock.pBits)=0xffff0000u;weightRaster->UnlockRect(0);
+        renderengine::Texture weightTexture={};weightTexture.mpD3DTexture=weightRaster;
+        Basic2dColouredTexturedVertex whiteQuad[4];Quad(whiteQuad,320,180,960,540,{255,255,255,255});
+        for (int program=0;program<2;++program) {
+            buffer.BeginRendering();buffer.SetTexture(nullptr);buffer.Render(topology,background,4);
+            buffer.PushMask(&maskStates[0],nestedCorners);buffer.PushMask(&maskStates[1],nestedCorners);
+            if(program) {
+                buffer.SetProgram(3);buffer.PushBoostBarColours({0,0,1,0},{0,1,0,0});
+                buffer.SetTexture(&weightTexture);buffer.Render(topology,whiteQuad,4);
+            } else {buffer.SetTexture(nullptr);buffer.Render(topology,overlay,4);}
+            buffer.PopMask();buffer.PopMask();buffer.EndRendering();buffer.Swap();buffer.Clear();
+            device->BeginScene();buffer.Dispatch(&immediate);device->EndScene();
+            const auto twoMasks=Pixels(target);
+            Check(At(twoMasks,400,220)==0xff0000,"outer alpha mask survives nested push");
+            Check(At(twoMasks,880,220)==0x00ff00,"both masks admit shared opaque region");
+            Check(At(twoMasks,880,500)==0xff0000,"inner alpha mask combines with outer mask");
+            // Pop the inner mask and draw again under the retained outer texture/UVs.
+            buffer.BeginRendering();buffer.SetTexture(nullptr);buffer.Render(topology,background,4);
+            buffer.PushMask(&maskStates[0],nestedCorners);buffer.PushMask(&maskStates[1],nestedCorners);
+            buffer.PopMask();buffer.Render(topology,overlay,4);buffer.PopMask();buffer.EndRendering();
+            buffer.Swap();buffer.Clear();device->BeginScene();buffer.Dispatch(&immediate);device->EndScene();
+            const auto parentMask=Pixels(target);
+            Check(At(parentMask,400,220)==0xff0000&&At(parentMask,880,500)==0x00ff00,"PopMask restores parent alpha and coordinate transform");
+        }
+        weightRaster->Release();maskRasters[0]->Release();maskRasters[1]->Release();
+
         // The two batch flags are independent. A missing blend flag must keep
         // the explicitly selected additive state; a set bit must replace it.
         buffer.BeginRendering(); buffer.SetTexture(nullptr); buffer.Render(topology,background,4);

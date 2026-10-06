@@ -14,6 +14,7 @@
 
 #include <cstdio>   // [diag] snprintf (the first-draw witness)
 #include <cstdlib>  // [diag] getenv (the per-array draw witness, BRN_DEBRIS_DIAG)
+#include "pc/gcm/renderengine/GlassPixelDiagPC.h"
 #include <chrono>   // [diag] steady_clock (the per-array draw witness's us=)
 
 // The two shared render states the debris pass binds (ImmediateModePCLeaf.cpp), declared
@@ -412,6 +413,8 @@ namespace Native
         const bool lbDrawWitness = DebrisDrawWitnessArmed();                // [diag] ... and its clock
         const std::chrono::steady_clock::time_point lDrawWitnessStart =
             lbDrawWitness ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+        const bool lbGlassPixelReadback = leArrayId == eDebrisArray_Glass
+            && renderengine::GlassPixelDiag_BeginPC();
 
         for (const BrnDebrisArray::DebrisBucket* lpBucket = lpArray->Buckets();
              lpBucket != 0;
@@ -537,6 +540,10 @@ namespace Native
             }
             while (luParticle < luNumParticles);
         }
+
+        if (lbGlassPixelReadback)
+            renderengine::GlassPixelDiag_EndPC(luDrawnBatches,
+                renderengine::WorldDrawCallCount() - luD3DDrawsBefore);
 
         // [DIAG] BRN_DEBRIS_DIAG=1 -- NOT IN THE X360 BINARY. THE PER-ARRAY DRAW WITNESS, capped. d3d= is
         // renderengine::WorldDrawCallCount()'s delta across this array's batches: it counts the submissions D3D

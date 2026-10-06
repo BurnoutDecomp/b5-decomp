@@ -314,6 +314,8 @@ namespace Native
         // The two vertices' y difference is the quad's own tilt in metres across its 0.25 m
         // width; a quad in the road plane has |dy| <= the road's own slope over 0.25 m.
         // Rate-limited to one whole emitter every KU_QUAD_DIAG_PERIOD render calls.
+        // The emitter/type and laid/now timestamps distinguish a fixed segment from a
+        // recycled slot during a held-view fade capture; they do not alter draw inputs.
         // DELETE-WHEN-STABLE.
         static u32 suQuadDiagCall = 0u;
         const u32  KU_QUAD_DIAG_PERIOD = 120u;
@@ -395,10 +397,11 @@ namespace Native
                 // [DIAG] see the banner at lbQuadDiag. DELETE-WHEN-STABLE.
                 if (lbQuadDiag && !lbQuadDiagSpent)
                 {
-                    char lacQ[320];
+                    char lacQ[448];
                     std::snprintf(lacQ, sizeof(lacQ),
                         "[trailquad] e=%d/%d s=%d/%d seg=%.4f,%.4f,%.4f tan=%.4f,%.4f,%.4f "
-                        "vA=%.4f,%.4f,%.4f vB=%.4f,%.4f,%.4f tilt=%.4f age=%.3f str=%.3f\n",
+                        "vA=%.4f,%.4f,%.4f vB=%.4f,%.4f,%.4f tilt=%.4f age=%.3f str=%.3f "
+                        "type=%d emitter=%p laid=%.6f now=%.6f\n",
                         lnEmitter, lnEmitterCount, lnSegment, lnNumSegments,
                         static_cast<double>(lPosition.x), static_cast<double>(lPosition.y),
                         static_cast<double>(lPosition.z),
@@ -409,7 +412,10 @@ namespace Native
                         static_cast<double>(lEdgeB.x), static_cast<double>(lEdgeB.y),
                         static_cast<double>(lEdgeB.z),
                         static_cast<double>(lEdgeA.y - lEdgeB.y),
-                        static_cast<double>(lfAge), static_cast<double>(lfStrength));
+                        static_cast<double>(lfAge), static_cast<double>(lfStrength),
+                        static_cast<s32>(lu8TrailTypeID), static_cast<const void*>(lpEmitter),
+                        static_cast<double>(lpSegments->ReadSegmentTime(lnSegment)),
+                        static_cast<double>(lfNow));
                     CgsDev::Log::WriteToLog(lacQ);
                     if (lnSegment == lnNumSegments - 1)
                     {
