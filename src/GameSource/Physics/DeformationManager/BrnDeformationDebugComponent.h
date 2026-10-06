@@ -61,6 +61,10 @@ namespace Deformation
         // recompute its drive-time deformation limits.
         virtual void Update();
 
+        // FLAG PC-platform leaf: opt-in playtest stimulus invokes the original
+        // rig/preset callbacks and records the complete live deformation producer.
+        void RunMaxPresetProbePC(f32 lfTimeStep, bool lbPostUpdate);
+
         // X360 0x82606548. Draw the whole selected rig into the 3D debug renderer (sensors / tag
         // points / driven points / skinning offsets / connections / boxes / detached wheels), gated by
         // the per-feature render flags.

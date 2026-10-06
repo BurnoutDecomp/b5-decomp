@@ -4857,6 +4857,12 @@ namespace BrnGame
         // opposite of what a debug overlay is for, and exactly the state you are in when you
         // most want it.
         mDebugManager.Update(mGameTimer.GetRate() * mGameTimer.GetScaleCurrent());
+        // FLAG PC-platform leaf: opt-in maximum command at the original debug
+        // callback phase (ARTIST823CB598), before flow/vehicle physics updates.
+        static const bool sbMaxPresetProbePC = (std::getenv("BRN_PLAYTEST_MAX_DEFORM_AT") != nullptr);
+        if (sbMaxPresetProbePC)
+            BrnPhysics::Deformation::DeformationManager::RunMaxPresetProbePCDebugUpdate(
+                mGameTimer.GetRate() * mGameTimer.GetScaleCurrent());
         UpdateRequestDoStepFrame();
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_DebugManager);
 

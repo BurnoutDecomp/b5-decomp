@@ -38,6 +38,7 @@
 #include "SharedClasses/Physics/Deformation/BrnTagPointSpec.h"                                    // TagPointSpec (detach threshold / init pos)
 #include "SharedClasses/Physics/Deformation/BrnDeformationJointSpec.h"                            // DeformationJointSpec (DrawAxis basis)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"                     // VehiclePhysics, Wheel, EVehicleDrivenWheel
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"                              // Wheel (mu8State / mPosition)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"      // Debug3DImmediateRender draw API
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"                       // CgsGeometric::AxisAlignedBox
@@ -48,6 +49,13 @@
 #include "rw/math/vpu/vector3_operation.h"                                                        // Cross, Subtract, MagnitudeSquared
 
 #include <cmath>   // std::fabs
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameSource/Director/BrnDirectorHarness.h"
+
+namespace renderengine { extern u32 guPresentCount; }
 
 namespace BrnPhysics
 {
@@ -225,6 +233,162 @@ namespace Deformation
         if ( mpSelectedRig != nullptr && mpSelectedRig->GetDeformationSpec() != nullptr )
         {
             mpSelectedRig->CalculateDriveTimeLimitsDebug();
+        }
+    }
+
+    // FLAG PC-platform leaf: test-only control of the registered ARTIST debug
+    // callbacks. Disabled unless the case requests BRN_PLAYTEST_MAX_DEFORM_AT.
+    void DeformationDebugComponent::RunMaxPresetProbePC(f32 lfTimeStep, bool lbPostUpdate)
+    {
+        static const char* spcAt = std::getenv("BRN_PLAYTEST_MAX_DEFORM_AT");
+        if (!spcAt || !mpDeformationManager) return;
+        static f32 sfElapsed = 0.0f;
+        static bool sbFired = false;
+        static bool sbCallbackSampled = false;
+        static s32 siPostSamples = 0;
+        static const bool sbWaitForAwake = []()
+        {
+            const char* lpcWait = std::getenv("BRN_PLAYTEST_MAX_DEFORM_WAIT_AWAKE");
+            return lpcWait && lpcWait[0] != '0';
+        }();
+        static bool sbReadyLogged = false;
+        const s32 liPlayerModel = mpDeformationManager->GetPlayerModelIndex();
+        if (liPlayerModel < 0 || !mpDeformationManager->IsDeformableObjectActive(liPlayerModel)) return;
+        DeformableObject* lpPlayer = mpDeformationManager->GetPlayerCarModel();
+        if (!lpPlayer || !lpPlayer->GetDeformationSpec() || !lpPlayer->GetVehiclePhysics()) return;
+        if (!sbFired)
+        {
+            if (!BrnDirector::Harness::gbArbitratorInRoaming) return;
+            // The GameMain debug phase can run without a simulation step. Keep
+            // the test delay on simulation time, then dispatch next debug tick.
+            if (lbPostUpdate)
+            {
+                sfElapsed += lfTimeStep;
+                return;
+            }
+            if (sfElapsed < static_cast<f32>(std::atof(spcAt))) return;
+            // Optional stimulus rendezvous: observe ordinary vehicle state,
+            // leaving actual unfreezing to the normal input/physics path.
+            if (sbWaitForAwake)
+            {
+                if (!sbReadyLogged)
+                {
+                    char lacReady[160];
+                    std::snprintf(lacReady, sizeof(lacReady),
+                        "[max-deform-ready] present %u rig %d frozen %u natural-awake-wait=1\n",
+                        renderengine::guPresentCount, liPlayerModel,
+                        lpPlayer->GetVehiclePhysics()->IsFrozen() ? 1u : 0u);
+                    CgsDev::Log::WriteToLog(lacReady);
+                    sbReadyLogged = true;
+                }
+                if (lpPlayer->GetVehiclePhysics()->IsFrozen()) return;
+            }
+            for (s32 liRig = 0; liRig < 28; ++liRig)
+            {
+                if (mpDeformationManager->IsDeformableObjectActive(liRig) &&
+                    mpDeformationManager->GetDeformableObject(liRig) == lpPlayer)
+                {
+                    miSelectedRig = liRig;
+                    OnSelectedRigChange(&miSelectedRig, this);
+                    break;
+                }
+            }
+            if (mpSelectedRig != lpPlayer) return;
+            miCompressPreset = 2; //E_COMPRESS_MAX_TOTAL, the original registered selector
+            OnCompressionPresetChange(&miCompressPreset, this);
+            sbFired = true;
+        }
+        if (!sbFired || (lbPostUpdate && siPostSamples >= 8) || (!lbPostUpdate && sbCallbackSampled)) return;
+        if (!lbPostUpdate) sbCallbackSampled = true;
+        char lacLine[768];
+        const char* lpcPhase = lbPostUpdate ? "post" : "callback";
+        const StreamedDeformationSpec* lpSpec = lpPlayer->GetDeformationSpec();
+        auto* lpVehicle = lpPlayer->GetVehiclePhysics();
+        const auto& lrCOM = lpSpec->mCurrentCOMOffset;
+        const auto& lrMesh = lpSpec->mMeshOffset;
+        const auto& lrBodyCOM = lpVehicle->GetAttribs()->mBaseAttribs.mCOMOffset;
+        std::snprintf(lacLine, sizeof(lacLine),
+            "[max-deform] phase %s sample %d present %u rig %d entity %u preset %d "
+            "scales %.9g %.9g %.9g %.9g %.9g %.9g spec %u sensors %d tags %d driven %d ik %d "
+            "parts %d hinged %d COM %.9g %.9g %.9g mesh %.9g %.9g %.9g bodyCOM %.9g %.9g %.9g\n",
+            lpcPhase, siPostSamples, renderengine::guPresentCount, miSelectedRig,
+            lpPlayer->GetGlobalEntityId().muValue, miCompressPreset,
+            mfCompressRightSide,mfCompressLeftSide,mfCompressFloor,mfCompressRoof,mfCompressRear,mfCompressFront,
+            static_cast<u32>(lpSpec->mu8SpecID),lpSpec->GetNumDeformationSensors(),lpSpec->GetNumberOfTagPoints(),
+            lpSpec->GetNumberOfDrivenPoints(),lpSpec->GetNumberOfIKParts(),
+            lpPlayer->GetNumPhysicalParts(),lpPlayer->GetNumHingedParts(),
+            lrCOM.x,lrCOM.y,lrCOM.z,lrMesh.x,lrMesh.y,lrMesh.z,lrBodyCOM.x,lrBodyCOM.y,lrBodyCOM.z);
+        CgsDev::Log::WriteToLog(lacLine);
+        // Snapshot at the command/post phase itself. The general suspension
+        // observer stops when a car freezes, so its last velocity is not a
+        // current maximum-preset observation. This stays inside the same
+        // default-off harness and nine-observation bound; no engine reader.
+        const auto& lrPose = lpVehicle->GetTransform();
+        const auto lrLinear = lpVehicle->GetLinearVelocity();
+        const auto lrAngular = lpVehicle->GetAngularVelocity();
+        std::snprintf(lacLine, sizeof(lacLine),
+            "[max-deform-pose] phase %s sample %d present %u rig %d "
+            "pos %.9g %.9g %.9g at %.9g %.9g %.9g up %.9g %.9g %.9g "
+            "linear %.9g %.9g %.9g angular %.9g %.9g %.9g frozen %u ikReq %u debug %u absorption %d ground %u %u %u %u\n",
+            lpcPhase,siPostSamples,renderengine::guPresentCount,miSelectedRig,
+            lrPose.wAxis.x,lrPose.wAxis.y,lrPose.wAxis.z,
+            lrPose.zAxis.x,lrPose.zAxis.y,lrPose.zAxis.z,
+            lrPose.yAxis.x,lrPose.yAxis.y,lrPose.yAxis.z,
+            lrLinear.x,lrLinear.y,lrLinear.z,lrAngular.x,lrAngular.y,lrAngular.z,
+            lpVehicle->IsFrozen() ? 1u : 0u,
+            lpPlayer->IsIKUpdateRequired() ? 1u : 0u,kbAllowDeformationDebug ? 1u : 0u,
+            static_cast<s32>(lpPlayer->GetAbsorptionSet()),
+            lpVehicle->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(0)).GetRoadContact().mbIsOnGround ? 1u : 0u,
+            lpVehicle->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(1)).GetRoadContact().mbIsOnGround ? 1u : 0u,
+            lpVehicle->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(2)).GetRoadContact().mbIsOnGround ? 1u : 0u,
+            lpVehicle->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(3)).GetRoadContact().mbIsOnGround ? 1u : 0u);
+        CgsDev::Log::WriteToLog(lacLine);
+        if (!lbPostUpdate)
+        {
+            for (s32 liSensor=0;liSensor<lpSpec->GetNumDeformationSensors();++liSensor)
+            {
+                const auto& lrSensor=lpPlayer->GetSensorDebug(liSensor);
+                const auto& lrInitial=lrSensor.mpSpec->GetInitialOffset();
+                const auto& lrLocal=lrSensor.GetLocalSphereCentre();
+                f32 lafLimits[6];
+                for (s32 liAxis=0;liAxis<6;++liAxis)
+                    lafLimits[liAxis]=lrSensor.mpSpec->GetCompressionLimit(static_cast<ENextSensorDirection>(liAxis)).x;
+                std::snprintf(lacLine,sizeof(lacLine),
+                    "[max-deform-sensor] index %d rest %.9g %.9g %.9g limits %.9g %.9g %.9g %.9g %.9g %.9g local %.9g %.9g %.9g radius %.9g\n",
+                    liSensor,lrInitial.x,lrInitial.y,lrInitial.z,lafLimits[0],lafLimits[1],lafLimits[2],lafLimits[3],lafLimits[4],lafLimits[5],
+                    lrLocal.x,lrLocal.y,lrLocal.z,lrLocal.w);
+                CgsDev::Log::WriteToLog(lacLine);
+            }
+        }
+        if (lbPostUpdate)
+        {
+            const auto* lpRows=lpPlayer->GetOffset_ScratchArray();
+            for (s32 liRow=0;liRow<128;++liRow)
+            {
+                const auto& lrRow=lpRows[liRow];
+                std::snprintf(lacLine,sizeof(lacLine),"[max-deform-row] sample %d index %d value %.9g %.9g %.9g %.9g\n",
+                    siPostSamples,liRow,lrRow.x,lrRow.y,lrRow.z,lrRow.w);
+                CgsDev::Log::WriteToLog(lacLine);
+            }
+            for (s32 liPart=0;liPart<lpPlayer->GetNumIKPartsDebug();++liPart)
+            {
+                std::snprintf(lacLine,sizeof(lacLine),"[max-deform-part] sample %d index %d type %d state %d\n",
+                    siPostSamples,liPart,static_cast<s32>(lpPlayer->GetIKPartDebug(liPart).GetPartType()),
+                    static_cast<s32>(lpPlayer->GetPartState(liPart)));
+                CgsDev::Log::WriteToLog(lacLine);
+            }
+            for (s32 liWheel=0;liWheel<4;++liWheel)
+            {
+                const auto& lrWheel=lpVehicle->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(liWheel));
+                const auto lPose=lpVehicle->GetWheelsWorldTransfrom(static_cast<Vehicle::EVehicleDrivenWheel>(liWheel),false);
+                std::snprintf(lacLine,sizeof(lacLine),
+                    "[max-deform-wheel] sample %d index %d state %u local %.9g %.9g %.9g streamed %.9g %.9g %.9g world %.9g %.9g %.9g\n",
+                    siPostSamples,liWheel,static_cast<u32>(lrWheel.mu8State),lrWheel.mPosition.x,lrWheel.mPosition.y,lrWheel.mPosition.z,
+                    lrWheel.mStreamedPositionPlusTwistAmount.x,lrWheel.mStreamedPositionPlusTwistAmount.y,lrWheel.mStreamedPositionPlusTwistAmount.z,
+                    lPose.wAxis.x,lPose.wAxis.y,lPose.wAxis.z);
+                CgsDev::Log::WriteToLog(lacLine);
+            }
+            ++siPostSamples;
         }
     }
 

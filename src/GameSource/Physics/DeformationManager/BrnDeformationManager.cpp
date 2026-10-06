@@ -1,4 +1,5 @@
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"
+#include "GameSource/Physics/DeformationManager/BrnDeformationDebugComponent.h"
 
 // ============================================================================
 // BrnPhysics::Deformation::DeformationManager -- manager lifecycle + per-frame event
@@ -793,6 +794,13 @@ namespace Deformation
         CgsDev::PerfMonCpu::StopMonitor(miTotalDeformationPerfMon);
     }
 
+    // FLAG PC-platform leaf: test-only delivery after the original debug UI
+    // update (GameMain823CB598), before vehicle freezing/contact generation.
+    void DeformationManager::RunMaxPresetProbePCDebugUpdate(f32 lfTimeStep)
+    {
+        mDebugComponent.RunMaxPresetProbePC(lfTimeStep, false);
+    }
+
     void DeformationManager::Update(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
                                     CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput,
                                     const PhysicsModuleIO::InputBuffer* lpInputBuffer,
@@ -889,6 +897,8 @@ namespace Deformation
 
         CgsDev::PerfMonCpu::StopMonitor(miUpdatePerfMon);
         CgsDev::PerfMonCpu::StopMonitor(miTotalDeformationPerfMon);
+        if (miPlayerModelIndex >= 0 && mModelsAdded.IsBitSet(static_cast<u32>(miPlayerModelIndex)))
+            mDebugComponent.RunMaxPresetProbePC(lvfTimeStep.x, true);
     }
 
     // =============================================================================================
