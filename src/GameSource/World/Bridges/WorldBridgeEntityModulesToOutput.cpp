@@ -119,19 +119,8 @@ void BridgeEntityModulesToOutput_PrePhysics(
 // The tail forwards AddEvent's result in r3 as a register artifact; the logical return type
 // is void (DWARF unity :9723).
 //
-// [FLAG PARKED -- the overhead-sign GUI leg] Only the resource-request transfer is
-// reproduced. The second leg needs two types that have NO committed home:
-//   * BrnGui::GuiOverheadSignInfoEvent (the 1040-byte event and its
-//     VisibleOverheadSignArray typedef) -- absent from the tree; and
-//   * PropEntityIO::OutputBuffer_PreScene::mVisibleOverheadSignArray, which that buffer's
-//     home models as a 1-byte opaque VisibleOverheadSignArrayStorage, so there is nothing to
-//     AppendArray FROM.
-// Its producer is parked for the same reason: the overhead-sign refresh tail of
-// PropEntityModule::GenerateDispatchLists (@0x822FBE20, see BrnPropEntityModule_Render.cpp's
-// park list #3) is not reconstructed either, so the source array is empty on this build and
-// dropping the leg is the consistent observable. It is a HUD score-marker feature -- no prop
-// spawns or renders because of it. LAND IT WHEN: GuiOverheadSignInfoEvent gets a home and
-// OutputBuffer_PreScene::VisibleOverheadSignArrayStorage is retyped to the real array.
+// Both output legs are required. In particular, an empty sign list still publishes
+// a constructed event so the GUI never retains its pre-Construct array sentinel.
 // ----------------------------------------------------------------------------
 void BridgePropToOutput_PreScene(
     void* lpWorldModule,
@@ -151,6 +140,14 @@ void BridgePropToOutput_PreScene(
 
     lpOutputBuffer->GetResourceRequestResourceInterface()->mRequestQueue.Append<1024, 16>(
         reinterpret_cast<const CgsModule::VariableEventQueue<1024, 16>&>(*lpSourceInterface));
+
+    // ARTIST827AF2D8..308: publish a constructed array even when no sign is visible.
+    BrnGui::GuiOverheadSignInfoEvent lSigns;
+    lSigns.mVisibleOverheadSignArray.Construct();
+    lSigns.mVisibleOverheadSignArray.AppendArray(*lpPropOutput_PreScene->GetVisibleOverheadSignArray());
+    lpOutputBuffer->GetGuiEventQueue()->AddEvent(
+        reinterpret_cast<const CgsModule::Event*>(&lSigns),
+        lSigns.GetEventType(), static_cast<s32>(sizeof(lSigns)));
 
     // DIAGNOSTIC (prop-spawn wave 2026-08-12) -- NOT in the X360 binary, and NOT gated on
     // gxMessageFilterFlags, so a boot log always answers "did a prop resource request ever

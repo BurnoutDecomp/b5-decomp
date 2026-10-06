@@ -52,6 +52,9 @@ namespace Camera
 
 namespace Utils
 {
+    // ARTIST82222060; writes x/y only when homogeneous w exceeds0.01.
+    bool ProjectWorldSpacePointToScreen(const Matrix44& lViewProjection,
+        Vector3 lWorldPosition, Vector2& lvScreenPosition);
     // DWARF CameraUtils.h:59. A serialiser version tag (a single 32-bit count). Embedded
     // as the head member of every camera-utils Parameters block.
     struct VersionNumber
