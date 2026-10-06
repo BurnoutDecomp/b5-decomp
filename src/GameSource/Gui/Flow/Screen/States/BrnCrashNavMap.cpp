@@ -2640,11 +2640,9 @@ namespace BrnGui
 //                   FindClosestSnapIndex(Vector2*, u32) (h:119, @0x824168B8).
 //   BrnMapIconManager.h -- MapIconManager::GetSatNavIconPositions(Vector2*, s32*)
 //                   (h:165, @0x8250A708), now public.
-//   BrnMainMap.h -- an exposure for the single main-map world rect the X360 keeps at .data
-//                   0x82FB31F0 (written by MainMapComponent Construct / Prepare /
-//                   CalculatePositionedWorldRect, read by MoveCursor and by
-//                   RoadSignIconManager::SetupComponent; measured this wave,
-//                   scratchpad/waveJ/g07_rect.txt).
+//   BrnMapUtils.h -- MapTransform::GetWorldRect exposes the fixed city rectangle at
+//                   0x82FB31F0. MoveCursor loads this static rectangle directly;
+//                   MainMapComponent::mv4WorldRect is the separately moving view.
 //   BrnCrashNavPanel.h -- CrashNavPanel::SetRivalPanelData() (@0x8243AAC8), the
 //                   no-argument face one arm of UpdateMainMap needs.
 //
@@ -2843,15 +2841,10 @@ namespace BrnGui
                 // KF_PAN_Y_BORDER at both ends so the cursor never reaches the top/bottom
                 // edge of the map.
                 Vector3 lv3CursorWorldPos = MapTransform::DeviceToWorld(lv2CursorPosToMoveTo);
-                // The X360 reads the world rect as a PROCESS-WIDE quad: `lis/addi r11,
-                // flt_82FB31F0; lvx128 v0, r0, r11` @0x824BF2EC..0x824BF2FC -- an absolute
-                // .data address, not `this`. That global is written only by
-                // MainMapComponent::Construct/Prepare/CalculatePositionedWorldRect (see the
-                // FLAG in BrnMainMap.h), and on this screen the component that wrote it IS
-                // mMainMapComponent, whose DWARF instance member mv4WorldRect holds the same
-                // quad. So the console's global read is spelled here as the DWARF-attested
-                // instance accessor on that component; it is the same value, by name.
-                const Vector4 lv4WorldRect = mMainMapComponent.GetWorldRect();
+                // ARTIST 0x824BF2EC..0x824BF2FC loads absolute 0x82FB31F0, the fixed
+                // MapTransform::smv4WorldRect. The component's mv4WorldRect is
+                // the moving/zoomed view and cannot bound a pan across the city.
+                const Vector4 lv4WorldRect = MapTransform::GetWorldRect();
 
                 // Four `fsel`s, transcribed sign for sign (see the NaN note in the banner).
                 // fsel(a, b, c) == (a >= 0.0f) ? b : c.
