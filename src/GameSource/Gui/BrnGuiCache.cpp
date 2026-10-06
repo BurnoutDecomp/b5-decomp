@@ -152,6 +152,8 @@ namespace BrnGui
     {
         std::memset(this, 0, sizeof(GuiCache));
         mEventsCtorSentinel = -1;
+        mTrafficCarInfo.mScoreTargets.MarkUnconstructed();
+        mVisibleOverheadSignArray.MarkUnconstructed();
         // NOTE: the X360 ctor's -1 store at +3800 lands on the (now modelled)
         // mStateLoadingHelper.maRequestDirtyList count word -- the Array's
         // pre-Construct sentinel. The zero-fill above leaves it 0 (constructed-empty)
@@ -360,6 +362,7 @@ namespace BrnGui
         //  remains the documented partial this slice always was; these two are the pair the
         //  icon path reads.)
         mEventsCtorSentinel  = 0;   // X360 `*(v47 + 40532) = 0`  (mEvents / GetNumPresetEvents)
+        mPreRaceData.Construct();   // ARTIST Construct count+0x135D8.
         miProfileEventsCount = 0;   // X360 `*(v47 + 80724) = 0`  (GetNumProfileEvents)
 
         // ⭐⭐ [minimap blips, issue #9, 2026-09-07] THE SAT-NAV EVENT-FILTER SEED, and it was the
@@ -1243,6 +1246,22 @@ namespace BrnGui
 
         switch (liEventId)
         {
+        // ARTIST8250F154..F16C: copy all1744 bytes, then enter event colouring.
+        case 159:
+        {
+            mPreRaceData = *reinterpret_cast<const GuiEventPreRaceMessages*>(lpEvent);
+            mbInEventColouringGate = true;
+            // FLAG PC diagnostic: bounded witness of the original cache handoff.
+            static const bool sbPreRaceDiag = (getenv("BRN_SATNAV_DIAG") != 0);
+            static s32 siPreRaceRows = 0;
+            if (sbPreRaceDiag && siPreRaceRows++ < 8 && CgsDev::Log::gpDebugPrint != 0)
+                *CgsDev::Log::gpDebugPrint << "[cnav-prerace] cache159 messages="
+                    << mPreRaceData.miNumMessages << " inEvent=1\n";
+            break;
+        }
+        case 162:   // ARTIST8250F17C..F188: clear count, retain message rows.
+            mPreRaceData.miNumMessages = 0;
+            break;
         case 307: // GuiEventMedalUpdate; ARTIST 0x8250FEB8..0x8250FEF4.
         {
             const u16* lpMedals = reinterpret_cast<const u16*>(lpEvent);
@@ -1481,6 +1500,18 @@ namespace BrnGui
                     }
                 }
             }
+            break;
+
+        case 208:
+            // ARTIST 8250E4C4 copies 656 bytes to mTrafficCarInfo. The jump
+            // table subtracts four from the event id before indexing.
+            mTrafficCarInfo = *reinterpret_cast<const GuiTrafficCarInfoEvent*>(lpEvent);
+            break;
+
+        case 210:
+            // ARTIST 8250E4E4 copies the complete 1040-byte sign array.
+            mVisibleOverheadSignArray =
+                reinterpret_cast<const GuiOverheadSignInfoEvent*>(lpEvent)->mVisibleOverheadSignArray;
             break;
 
         case 207:
@@ -2002,6 +2033,22 @@ namespace BrnGui
         case 343:   // GuiEventRoadRuleChangeMode -> the active road rule (+44092, GetActiveRoadRule)
             meActiveRoadRule = reinterpret_cast<const GuiEventRoadRuleChangeMode*>(lpEvent)->meScoreType;
             break;
+        case 170:
+        {
+            const GuiEventSetAvailablePresetRaces* lpRaces =
+                reinterpret_cast<const GuiEventSetAvailablePresetRaces*>(lpEvent);
+            miNumPresetRaces = lpRaces->miNumPresetRaces;
+            CGS_ASSERT(miNumPresetRaces >= 0 && miNumPresetRaces <= 6,
+                       "miNumPresetRaces >= 0 && miNumPresetRaces <= KI_MAX_RACES_AT_LANDMARK");
+            // Only the live rows are copied. The original refresh reads row0 even at count0.
+            std::memcpy(maPresetRaces, lpRaces->maPresetRaces,
+                        static_cast<size_t>(miNumPresetRaces) * sizeof(PresetRace));
+            UpdateTrackerInfo(reinterpret_cast<const u16*>(
+                                  lpRaces->maPresetRaces[0].GetLandmarkIndexArray()),
+                              lpRaces->maPresetRaces[0].GetNumLandmarks());
+            break;
+        }
+
         case 169:
             // ADDITIVE (HUD H1 wave, 2026-08-25). X360 case 169 @0x8250DDF0 (h1_dump.txt):
             // three word copies of the GuiEventChangeDistrict record into the marker source
@@ -2027,35 +2074,24 @@ namespace BrnGui
         // ================================================================================
 
         case 492:
-            // X360 jpt_825101AC case 112 @0x82510540..0x8251060C -- GuiEventCurrentStatus.
-            // Store-for-store: latch the remaining-checkpoint count (+0x4F9C), then the
-            // distance-driven float (+0x13B94) and the 8-lane player-team table (+0xB808).
-            //
-            // ⛔ FLAG DEFERRED -- the landmark-TRACKER tail (@0x82510568..0x825105A0 and
-            // @0x825105D4..0x82510600). The console, when the count is > 0, maps each
-            // checkpoint index through the active-landmark u16 table at cache+0x5288 into a
-            // u16 scratch list at cache+0x4B9C, and then -- ONLY when meGameModeType ==
-            // E_MODE_ONLINE_BURNING_HOME_RUN (13) AND the count actually changed -- calls
-            // GuiCache::UpdateTrackerInfo(this, cache+0x4B9C, count). TWO things are still
-            // missing here: cache+0x4B9C (unmodelled, inside mPad_4B77) and the +0x5288 u16
-            // array (unmodelled, inside mPad_5287). ⭐ UpdateTrackerInfo itself is NO LONGER
-            // one of them -- it is bodied in BrnGuiCache_wJ_01.cpp and publishes to
-            // GuiTracker::RecEvent for real. All of it is dead outside mode 13, which is the ONLINE
-            // Burning Home Run -- unreachable from this wave's offline stunt-run target --
-            // so it is named rather than faked. Landing it is now just the header carve, and
-            // the arm below is where it plugs in.
-            {
-                const BrnGui::GuiEventCurrentStatus* lpStatus =
-                    reinterpret_cast<const BrnGui::GuiEventCurrentStatus*>(lpEvent);
-
-                miNumRemainingCheckpoints = lpStatus->miNumRemainingCheckpoints;   // stw +0x4F9C
-                // (the +0x4B9C landmark mapping loop would run here -- see the FLAG above)
-                mfDistanceDriven = lpStatus->mfDistanceDrivenInCurrentCar;         // stfsx +0x13B94
-                for (s32 liCar = 0; liCar < 8; ++liCar)                            // the 8-word ctr loop
-                    maCurrentPlayerTeam[liCar] = lpStatus->maePlayerTeam[liCar];   // -> +0xB808
-                // (the meGameModeType == 13 UpdateTrackerInfo call would run here)
-            }
+        {
+            // ARTIST 82510540..10600: map the remaining checkpoint indices in every
+            // mode; only a changed count in online Burning Home Run republishes the tracker.
+            const GuiEventCurrentStatus* lpStatus =
+                reinterpret_cast<const GuiEventCurrentStatus*>(lpEvent);
+            const bool lbCountChanged =
+                miNumRemainingCheckpoints != lpStatus->miNumRemainingCheckpoints;
+            miNumRemainingCheckpoints = lpStatus->miNumRemainingCheckpoints;
+            for (s32 liCheckpoint = 0; liCheckpoint < miNumRemainingCheckpoints; ++liCheckpoint)
+                maTargetLandmarkIndices[liCheckpoint] =
+                    mau16ActiveLandmarks[lpStatus->maiRemainingCheckpointIndexes[liCheckpoint]];
+            mfDistanceDriven = lpStatus->mfDistanceDrivenInCurrentCar;
+            for (s32 liCar = 0; liCar < 8; ++liCar)
+                maCurrentPlayerTeam[liCar] = lpStatus->maePlayerTeam[liCar];
+            if (meGameModeType == 13 && lbCountChanged)
+                UpdateTrackerInfo(maTargetLandmarkIndices, miNumRemainingCheckpoints);
             break;
+        }
 
         case 424:
             // X360 jpt_825101AC case 44 @0x82510780..0x82510884 -- GuiEventScoreUpdate.
@@ -2351,17 +2387,14 @@ namespace BrnGui
                            "miRoundIndex>=0 && uint32_t(miRoundIndex)<BrnGameState::GameStateModuleIO::"
                            "KU_MAX_ONLINE_ROUNDS_IN_MODE");        // cpp:2115 (`cmplwi r11, 0xA`)
 
-                // [FLAG deferred -- ONLINE ONLY, unreachable from this wave's offline stunt run]
-                // Three console legs of this tail are named rather than faked:
-                //   (a) `sub_82507070(this, &maOnlineGameModeOptions[round])` -- the GuiTracker
-                //       refresh: it walks the round's SpecificGameModeEventInterface events,
-                //       resolves each through GuiCache::GetLandmarkInfoFromIndex and posts the
-                //       3088-byte record to GuiTracker::RecEvent @0x82501D28.
-                //       ⭐ BOTH CALLEES ARE BODIED NOW (GetLandmarkInfoFromIndex and the
-                //       sub_82507070 twin, GuiCache::UpdateTrackerInfoFromOnlineEvent, in
-                //       BrnGuiCache_wJ_01.cpp; RecEvent in SatNav/BrnGuiTracker.cpp), so what
-                //       is still missing is only the CALL from this arm -- it stays deferred
-                //       with the rest of the online tail below, not for want of a body.
+                // ARTIST 8250EAE8..EB04 indexes the 44-byte round record.
+                typedef BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event
+                    OnlineModeEvent;
+                const OnlineModeEvent* lpOnlineGameModeOptions =
+                    reinterpret_cast<const OnlineModeEvent*>(maOnlineGameModeOptionsStorage);
+                UpdateTrackerInfoFromOnlineEvent(&lpOnlineGameModeOptions[miOnlineRoundIndex]);
+
+                // Remaining pre-existing online destination/lobby-reset recovery:
                 //   (b) the meGameModeType 10/11 arm: mEventDestinationLandmarkIndex <- the
                 //       round's first event index, then mEventDestinationDistrict <-
                 //       WorldDataController::GetLandmarkInfoFromIndex(...)+50, behind the
@@ -2393,16 +2426,9 @@ namespace BrnGui
                     mEventDestinationDistrict      = 18;      // stw +0x9F50 (E_DISTRICT_INVALID)
                     mEventDestinationLandmarkIndex = 0xFFFFu; // sth +0x9F4C (word_82F27F00)
                 }
-                // [FLAG deferred] `GuiCache::UpdateTrackerInfo(this, payload + 24, count)` --
-                // the SAME call the case-492 arm above already defers. It feeds the landmark
-                // TRACKER panel, not the event-info readout.
-                // ⭐ THE BLOCKER IS GONE: UpdateTrackerInfo is bodied (BrnGuiCache_wJ_01.cpp)
-                // and now publishes to GuiTracker::RecEvent for real, and payload+24 is this
-                // record's modelled mau16CheckpointLandmark. Wiring it here is one line --
-                // UpdateTrackerInfo(lpPrepare->mau16CheckpointLandmark,
-                //                   lpPrepare->mu8CheckpointCount) -- and it is left OUT only
-                // because it is a live behaviour change this TU's owner has not verified.
-                // DELETE-WHEN that line lands; this is its second call site.
+                // ARTIST 8250ECD8..ECE4 also publishes an empty tracker when count is zero.
+                UpdateTrackerInfo(lpPrepare->mau16CheckpointLandmark,
+                                  lpPrepare->mu8CheckpointCount);
             }
 
             miSatNavZoomLevel = 0;   // stw +0x803C -- both tails converge on this
@@ -3236,7 +3262,7 @@ namespace BrnGui
     {
         CGS_ASSERT(liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces,
                    "liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces");
-        return reinterpret_cast<const PresetRace*>(maPresetRacesStorage + 120 * liPresetRaceIndex);
+        return &maPresetRaces[liPresetRaceIndex];
     }
 
     // @ 0x824EC3C8 -- latch the map-icon manager pointer (v3[4120] = a2, i.e.
@@ -4862,14 +4888,18 @@ namespace BrnGui
         return 0;
     }
 
-    // @ 0x824497C0 -- the scoring-traffic CgsArray length (miScoringTrafficCount @0xA3D0).
-    // asm forms &maScoringTrafficDataStorage (@0xA150), then reads the count member 640
-    // bytes past it; the -1 sentinel means the array was used before Construct/Clear.
-    s32 GuiCache::GetScoringTrafficCount() const
+    // @0x824497C0: the original array count and its unconstructed sentinel.
+    u32 GuiCache::GetScoringTrafficCount() const
     {
-        CGS_ASSERT(miScoringTrafficCount != -1,
-                   "Array used before Construct/Clear was called");
-        return miScoringTrafficCount;
+        return mTrafficCarInfo.mScoreTargets.GetLength();
+    }
+
+    // @0x82450718: the 32-byte VehicleScoreData element, by its original type.
+    const BrnTraffic::BrnTrafficIO::VehicleScoreData* GuiCache::GetScoringTrafficData(u32 luIndex) const
+    {
+        CGS_ASSERT(luIndex < mTrafficCarInfo.mScoreTargets.GetLength(),
+                   "liIndex >= 0 && liIndex < mTrafficCarInfo.mScoreTargets.GetLength()");
+        return &mTrafficCarInfo.mScoreTargets.GetItem(luIndex);
     }
 }
 
@@ -4961,7 +4991,7 @@ namespace BrnGui
     const PreEventInfo* GuiCache::GetPreEventInfo(s32 liIndex) const
     {
         CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
-        CGS_ASSERT(liIndex < miNumMessages, "liIndex < mPreRaceData.miNumMessages");
-        return reinterpret_cast<const PreEventInfo*>(maPreEventInfoStorage[liIndex]);
+        CGS_ASSERT(liIndex < mPreRaceData.miNumMessages, "liIndex < mPreRaceData.miNumMessages");
+        return &mPreRaceData.mMessages[liIndex];
     }
 }

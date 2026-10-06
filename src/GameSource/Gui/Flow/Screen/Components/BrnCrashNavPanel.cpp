@@ -167,6 +167,15 @@ namespace BrnGui
     static const s32 KI_GAME_MODE_TYPE_NONE      = -1;
     static const s32 KI_GAME_MODE_TYPE_FREEBURN  = 15;
 
+    // ARTIST RecEvent @0x82442008..0x82442024 posts the one-byte
+    // rank-progress request as {1,437,12} on GUI-output channel 40.
+    // The payload is an unused signal byte, as in CrashNavDriverDetails.
+    struct RankProgressRequestPayload437
+    {
+        u8 muReserved;
+        s32 GetEventType() const { return 437; }
+    };
+
     // The apt view state the rival re-show arm of ChangeVisiblePanelState pushes
     // (X360 rodata @0x8243A79C).
     static const char KAC_TRANSITION_IN_RIVAL[] = "transInRival";
@@ -722,18 +731,14 @@ namespace BrnGui
         mpGuiCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:532
 
-        // ⛔ FLAG NOT REPRODUCED: the console follows the latch with a 16-byte outgoing
-        // record posted straight onto the state interface's queue --
-        //   `v17 = { 1, 437, 12 }; VariableEventQueue<65536,16>::AddEvent(si + 12, v17, 40, 16)`
-        // (@0x82442008..0x82442024) -- i.e. GUI-out X360 event id 437 with a single payload
-        // word of 1. It is the request whose answer arrives as the id-438 rank-progress
-        // response handled above. NO committed event type in the tree carries X360 id 437,
-        // and the DWARF id the `CgsGui::GuiEvent<N>` template would need is NOT derivable
-        // from this call site (the X360 and DWARF ids differ throughout -- see the
-        // "GuiEvent<450>; X360 id 455" precedent in BrnGuiEventTypeDefs.h). Inventing N
-        // would put a wrong id on the wire, so the post is left unreconstructed and
-        // recorded here. CONSEQUENCE on this build: the panel never asks for rank progress,
-        // so the id-438 arm above stays dormant and the event panel shows no ranks.
+        // The wrapper's template parameter is the output channel, not the wire
+        // event id. The assembly itself fixes id437 and payload size1. Its reply
+        // travels through the existing game event80/action181 -> GUI438 path.
+        RankProgressRequestPayload437 lRankRequest = {};
+        CgsGui::GuiEventWrapper<RankProgressRequestPayload437, 40> lRankRecord(lRankRequest);
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRankRecord),
+            lRankRecord.GetChannel(), static_cast<s32>(sizeof(lRankRecord)));
         return false;
     }
 

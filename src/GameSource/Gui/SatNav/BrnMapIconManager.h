@@ -364,6 +364,11 @@ namespace BrnGui
         // the latched player record.
         s32 GetSatNavIconStateForRival(const GuiEventUpdateSatNav::SatNavIconInfo* lpIcon);
 
+        // ARTIST824F4680 / DecFIGS h416: LARGE-map rival state, local-world
+        // membership, teams and freeburn-lobby colours.
+        MapIconBrnBase::IconState GetCrashNavIconStateForRival(
+            GuiEventUpdateSatNav::SatNavIconInfo* lpIcon);
+
         // @ 0x82502940 -- the small-mode icon alpha by x/z distance from the camera
         // lane: <850 -> 100, <=2150 -> 100 - 50*(d-850)/2150, else 50.
         static f32 CalculateAlpha(const Vector4& lv4IconPosition, const Vector4& lv4CameraPosition);

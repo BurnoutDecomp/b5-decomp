@@ -38,7 +38,7 @@
 // banner in BrnSatNavIcon.h for the element/0x90 split and its three X360 witnesses.
 //
 // NAMED GATES remaining (each one-shot logged at its site): the online-route
-// start/finish-point lookups and the LARGE-map rival naming arm.
+// start/finish-point lookups.
 //
 // All branch conditions and the compared constants come from the X360 asm/pseudocode; the
 // game-mode and icon-type literals are resolved to their canonical enumerators (DecFIGS
@@ -48,6 +48,7 @@
 #include "GameSource/Gui/BrnGuiCache.h"               // BrnGui::GuiCache accessors (drive-throughs / team / mode)
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // BrnGameState::GameStateModuleIO::EGameModeType
 #include "GameSource/BurnoutConstants.h"               // EActiveRaceCarIndex
+#include "GameShared/GameClasses/Core/CgsID.h"               // native CgsIDConvertToString
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // [H3c] CgsCore::SPrintf (the icon-name pass)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Message::gxMessageFilterFlags / CgsDev::Log::gpDebugPrint
@@ -691,6 +692,17 @@ void MapIconManager::Update()
 // count and re-runs the owner's icon pass so the components latch the hidden state.
 void MapIconManager::SetIconsVisible(bool lbVisible)
 {
+    // FLAG PC diagnostic: observe ownership during map/minimap transitions.
+    static const bool sbTraceVisibility = (getenv("BRN_SATNAV_DIAG") != 0);
+    static u32 suVisibilityRows = 0;
+    if (sbTraceVisibility && CgsDev::Log::gpDebugPrint != 0 &&
+        mbIconsVisible != lbVisible && suVisibilityRows < 128)
+    {
+        ++suVisibilityRows;
+        *CgsDev::Log::gpDebugPrint << "[cnav-visible] owner=" << static_cast<s32>(mOwnerId)
+            << " old=" << (mbIconsVisible ? 1 : 0) << " new=" << (lbVisible ? 1 : 0)
+            << " used=" << miNumUsedIcons << "\n";
+    }
     mbIconsVisible = lbVisible;   // +0xAA1E
     if (!lbVisible)
     {
@@ -965,6 +977,47 @@ s32 MapIconManager::GetSatNavIconStateForRival(const GuiEventUpdateSatNav::SatNa
         }
     }
     return liState;
+}
+
+// ARTIST824F4680. LARGE-map rivals deliberately have different team/colour
+// selection from the minimap helper; DecFIGS h416 supplies the exact signature.
+MapIconBrnBase::IconState MapIconManager::GetCrashNavIconStateForRival(
+    GuiEventUpdateSatNav::SatNavIconInfo* lpIcon)
+{
+    const s8 liType = lpIcon->GetIconTypeByte();
+    CGS_ASSERT(liType == SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL ||
+               liType == SatNavIconInfo::E_SATNAVICON_RIVAL,
+               "Unexpected sat nav icon type: ");   // ARTIST cpp2414
+    if (liType != SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL)
+        return MapIconBrnBase::E_ICONSTATE_RIVAL;
+
+    CGS_ASSERT(mpGuiCache != nullptr, "mpGuiCache");   // cpp2419
+    const EActiveRaceCarIndex leCar =
+        static_cast<EActiveRaceCarIndex>(lpIcon->GetActiveRaceCarIndex());
+    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer = nullptr;
+    for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
+    {
+        const auto* const lpCandidate = mpGuiCache->GetOnlinePlayerInfo(liPlayer);
+        if (lpCandidate->meActiveRaceCarIndex == leCar)
+        {
+            lpPlayer = lpCandidate;
+            break;
+        }
+    }
+    if (lpPlayer == nullptr || !lpPlayer->mbIsInLocalGameWorld)
+        return MapIconBrnBase::E_ICONSTATE_INVISIBLE;
+    if (mpGuiCache->GetCurrentOnlinePlayerTeam(leCar) == 2)
+        return MapIconBrnBase::E_ICONSTATE_RIVAL_BLUE;
+    if (mpGuiCache->GetCurrentOnlinePlayerTeam(leCar) == 1)
+        return MapIconBrnBase::E_ICONSTATE_RIVAL_RED;
+    if (!lpPlayer->mbMarkedMan)
+    {
+        const s32 liMode = mpGuiCache->GetGameMode();
+        if (liMode == 10 || liMode == 15)
+            return static_cast<MapIconBrnBase::IconState>(
+                KAE_LOBBY_COLOUR_TO_RIVAL_ICON[mpGuiCache->GetOnlinePlayerColourFromARCI(leCar)]);
+    }
+    return MapIconBrnBase::E_ICONSTATE_RIVAL;
 }
 
 // @ 0x82502738 -- append the current freeburn-challenge target icon. ONLINE free-burn
@@ -1382,7 +1435,7 @@ void MapIconManager::UpdateSatNavIcons()
                                      // checkpoint-stacking arms raise it.
 
         SatNavMapIcon& lrIcon = mSatNavMapIcons[liIcon + liExtraIcons].mIcon;
-        const SatNavIconInfo& lrRecord = mSatNavIconInfo[liIcon];
+        SatNavIconInfo& lrRecord = mSatNavIconInfo[liIcon];
 
         const s8 li8IconType = lrRecord.GetIconTypeByte();
         CGS_ASSERT(li8IconType >= 0, "leIconType >= 0");                       // BrnGuiEventTypeDefs.h:1911
@@ -1498,18 +1551,13 @@ void MapIconManager::UpdateSatNavIcons()
             {
                 if (meIconSizeMode != E_ICONSIZE_SMALL)
                 {
-                    // [UI-gate] the LARGE-map rival arm: GetCrashNavIconStateForRival +
-                    // the "CAR_%s" SetIconText naming -- big-map screens only, rides the
-                    // crash-nav slice. Rotation still lands (the X360 sets it before the
-                    // state); state stays invisible until the arm lands.
-                    static bool sbLoggedLargeRivalPark = false;
-                    if (!sbLoggedLargeRivalPark && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        sbLoggedLargeRivalPark = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[UI-gate] PARK: UpdateSatNavIcons LARGE-map rival arm "
-                               "(GetCrashNavIconStateForRival unreconstructed)\n";
-                    }
+                    liState = GetCrashNavIconStateForRival(&lrRecord);
+                    char lacCarId[32];
+                    char lacCarName[128];
+                    CgsIDConvertToString(lrRecord.GetCgsId(), lacCarId);
+                    lacCarId[31] = '\0';
+                    CgsCore::SPrintf(lacCarName, 127, "CAR_%s", lacCarId);
+                    lrIcon.SetIconText(lacCarName, true);
                     lrIcon.SetRotation(KF_PI - lrRecord.GetRotation());
                 }
                 else if (mbRotateSatNav)
@@ -1744,7 +1792,7 @@ void MapIconManager::UpdateSatNavIcons()
 //   * the body ends by posting GUI event 561 (the used count and the pool base).
 //
 // NAMED GATES (each one-shot logged, none silent): the two route start-point lookups and
-// the LARGE-map rival arm (GetCrashNavIconStateForRival has no body).
+// the online-route start-point lookup arms.
 void MapIconManager::UpdateCrashNavIcons()
 {
     typedef GuiEventUpdateSatNav::SatNavIconInfo SatNavIconInfo;
@@ -1822,7 +1870,7 @@ void MapIconManager::UpdateCrashNavIcons()
         lv2StackOffset.z = 0.0f; lv2StackOffset.w = 0.0f;
 
         CrashNavMapIcon&      lrIcon   = mCrashNavIcons[liIcon + liExtraIcons].mIcon;
-        const SatNavIconInfo& lrRecord = mSatNavIconInfo[liIcon];
+        SatNavIconInfo& lrRecord = mSatNavIconInfo[liIcon];
 
         const s8 li8IconType = lrRecord.GetIconTypeByte();
         CGS_ASSERT(li8IconType >= 0, "leIconType >= 0");                       // TypeDefs:1911
@@ -1907,18 +1955,13 @@ void MapIconManager::UpdateCrashNavIcons()
 
             if (meIconSizeMode != E_ICONSIZE_SMALL)
             {
-                // [UI-gate] the LARGE-map rival arm: GetCrashNavIconStateForRival
-                // @0x824F4680 plus the CgsIDConvertToString -> "CAR_%s" SetIconText
-                // naming. Both unreconstructed; the rotation still lands (the X360 sets
-                // it after the state), the state stays invisible until the arm lands.
-                static bool sbLoggedLargeRivalPark = false;
-                if (!sbLoggedLargeRivalPark && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    sbLoggedLargeRivalPark = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[UI-gate] PARK: UpdateCrashNavIcons LARGE-map rival arm "
-                           "(GetCrashNavIconStateForRival unreconstructed)\n";
-                }
+                liState = GetCrashNavIconStateForRival(&lrRecord);
+                char lacCarId[32];
+                char lacCarName[128];
+                CgsIDConvertToString(lrRecord.GetCgsId(), lacCarId);
+                lacCarId[31] = '\0';
+                CgsCore::SPrintf(lacCarName, 127, "CAR_%s", lacCarId);
+                lrIcon.SetIconText(lacCarName, true);
                 lrIcon.SetRotation(KF_PI - lrRecord.GetRotation());
             }
             else if (mbRotateSatNav)
@@ -2161,10 +2204,29 @@ void MapIconManager::UpdateCrashNavIcons()
         {
             static const bool sbCnavDiag = (getenv("BRN_SATNAV_DIAG") != 0);
             static s32 siPostTick = 0;
-            if (sbCnavDiag && CgsDev::Log::gpDebugPrint != 0 && (siPostTick++ % 120) == 0)
+            static s32 siBankRows = 0;
+            if (sbCnavDiag && CgsDev::Log::gpDebugPrint != 0 && (siPostTick++ % 120) == 0 && siBankRows++ < 128)
+            {
+                s32 liPlayers = 0, liRivals = 0, liDrive = 0, liStart = 0, liFinish = 0, liCustom = 0;
+                for (s32 li = 0; li < miMaxNumberIcons; ++li)
+                {
+                    const s32 liState = static_cast<s32>(mCrashNavIcons[li].mIcon.GetState());
+                    liPlayers += (liState >= 1 && liState <= 13) ? 1 : 0;
+                    liRivals += (liState >= 14 && liState <= 25) ? 1 : 0;
+                    liDrive += (liState >= 36 && liState <= 39) ? 1 : 0;
+                    liStart += liState == 48 ? 1 : 0;
+                    liFinish += liState == 49 ? 1 : 0;
+                    liCustom += (liState == 51 || liState == 52) ? 1 : 0;
+                }
+                *CgsDev::Log::gpDebugPrint << "[cnav-bank] player=" << liPlayers << " rivals=" << liRivals
+                    << " drive=" << liDrive << " start48=" << liStart << " finish49=" << liFinish
+                    << " custom=" << liCustom << " inEvent=" << (mpGuiCache->GetInEventColouringGate() ? 1 : 0) << "\n";
                 *CgsDev::Log::gpDebugPrint << "[cnav-diag] 561 post: icons=" << miNumUsedIcons
                     << " showingDriveThrus=" << (mbShowingDriveThrus ? 1 : 0)
-                    << " eventDisplayType=" << static_cast<s32>(meEventIconDisplayType) << "\n";
+                    << " eventDisplayType=" << static_cast<s32>(meEventIconDisplayType)
+                    << " visible=" << (mbIconsVisible ? 1 : 0)
+                    << " owner=" << static_cast<s32>(mOwnerId) << "\n";
+            }
         }
         mpStateInterface->GetOutputEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRecord),

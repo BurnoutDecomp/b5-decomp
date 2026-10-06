@@ -413,6 +413,20 @@ namespace BrnGui
         f32  mfIconFadeStartTime;                                 // h:475 X360 +0x34AC
         f32  mfIconFadeEndTime;                                   // h:476 X360 +0x34B0
 
+        // FLAG PC-platform leaf: this host presents several times between GUI
+        // updates. Keep the published input for those repeated presentations;
+        // RenderIcons still consumes its working records exactly as on ARTIST.
+        struct FrameInputPC
+        {
+            GuiEventSetHoveredEventIcon mHoveredEventIcon;
+            GuiEventMapCursorStatus mCursorStatus;
+            GuiEventMapIconStatus mIconStatus;
+            GuiEventRoadSignIconStatus mRoadSignStatus;
+        };
+        FrameInputPC mFrameInputPC;
+        bool mbFrameInputPCValid;
+        void RestoreFrameInputPC();
+
     public:
         // Never called; pins the pointer-invariant facts the X360 bodies depend on. These
         // are counts/strides, not byte offsets -- the offsets above legitimately differ on

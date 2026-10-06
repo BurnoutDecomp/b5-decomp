@@ -916,6 +916,76 @@ namespace
             return true;
         }
 
+        // ARTIST823EB14C..B300: all fly-by messages, then the original online tail.
+        case BrnGameState::GameStateModuleIO::E_ACTION_SET_LANDMARK_RACES:
+        {
+            const BrnGameState::GameStateModuleIO::SetLandmarkRacesAction* lpRaces =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::SetLandmarkRacesAction*>(lpAction);
+            BrnGui::GuiEventSetAvailablePresetRaces lEvent;
+            // ARTIST823EB56C..B590 copies count*120, then sets the signed GUI count.
+            std::memcpy(lEvent.maPresetRaces, lpRaces->maRaces,
+                        static_cast<size_t>(lpRaces->muNumRaces) * sizeof(BrnProgression::Race));
+            lEvent.miNumPresetRaces = static_cast<s32>(lpRaces->muNumRaces);
+            PushGuiEvent(lEvent, lpGuiInput);
+            return true;
+        }
+
+        case BrnGameState::GameStateModuleIO::E_ACTION_START_MODE_INTRO:
+        {
+            namespace GsmIO = BrnGameState::GameStateModuleIO;
+            const auto* lpIntro = reinterpret_cast<const GsmIO::StartModeIntroAction*>(lpAction);
+            BrnGui::GuiEventPreRaceMessages lMessages;
+            lMessages.Construct();
+            for (s32 liCar = 0; liCar < lpIntro->mFlybyData.miNumberOfCars; ++liCar)
+            {
+                // The original accessor is non-const; this bridge only reads its result.
+                const auto* lpRival = const_cast<GsmIO::FlybyData&>(lpIntro->mFlybyData)
+                    .GetFlybyRivalData(liCar);
+                switch (static_cast<s32>(lpRival->meMessageStyle))
+                {
+                case 0:
+                    lMessages.AddMessage(BrnGui::GuiEventPreRaceMessages::E_RELATIONSHIP_GOOD,
+                                         lpRival->mPlayerName.GetPlayerName());
+                    break;
+                case 1:
+                    lMessages.AddMessage(BrnGui::GuiEventPreRaceMessages::E_RELATIONSHIP_NEUTRAL,
+                                         lpRival->mPlayerName.GetPlayerName());
+                    break;
+                case 2:
+                    lMessages.AddMessage(BrnGui::GuiEventPreRaceMessages::E_RELATIONSHIP_BAD,
+                                         lpRival->mPlayerName.GetPlayerName());
+                    break;
+                default:
+                    CGS_ASSERT(false,"Invalid message type in BrnGameModule::TranslateGameActionsToGuiEvents");
+                    break;
+                }
+                for (s32 liString = 0; liString < lpRival->miNumberOfMessages; ++liString)
+                    lMessages.AddStringToMessage(liCar,liString,lpRival->maacMessageIDs[liString],
+                        lpRival->maiNumberOfParameters[liString],lpRival->maacMessageParameter[liString]);
+            }
+            PushGuiEvent(lMessages,lpGuiInput);   // GUI159, all1744 payload bytes, even count0.
+            if (IsOnlineLobbyOrShowtimeMode(static_cast<s32>(lpIntro->meGameMode)))
+            {
+                BrnGui::GuiOverlayWaitFinishRequest lWait;
+                lWait.Construct("CNOnlEntGame");
+                PushGuiEvent(lWait,lpGuiInput);
+                if (!lpIntro->mbFinishedOnlineLobbyMode)
+                {
+                    NetworkShowFreeBurnIntroWire279 lIntro;
+                    lIntro.maZero[0] = lpIntro->mbFinishedOnlineEvent ? 1 : 0;
+                    lIntro.maZero[1] = 1;
+                    PushGuiEvent(lIntro,lpGuiInput);
+                }
+            }
+            // FLAG PC diagnostic: bounded producer witness, disabled by default.
+            static const bool sbPreRaceDiag = (getenv("BRN_SATNAV_DIAG") != 0);
+            static s32 siPreRaceRows = 0;
+            if (sbPreRaceDiag && siPreRaceRows++ < 8 && CgsDev::Log::gpDebugPrint != 0)
+                *CgsDev::Log::gpDebugPrint << "[cnav-prerace] action29 -> gui159 messages="
+                    << lMessages.miNumMessages << " mode=" << static_cast<s32>(lpIntro->meGameMode) << "\n";
+            return true;
+        }
+
         // ---- 30  E_ACTION_STOP_MODE_INTRO (8 bytes) ----------------------------------------
         // ⭐⭐ THE OTHER HALF OF CASE 23: 23 puts the GUI INTO the event FSM's PRE_FLY_BY state,
         // and THIS arm is the only thing in the whole image that gets it back out again.

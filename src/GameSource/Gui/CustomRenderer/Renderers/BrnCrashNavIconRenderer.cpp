@@ -51,6 +51,7 @@
 #include "GameSource/Gui/View/BrnRoadSignIconManager.h"    // BrnGui::RoadSignIcon (RenderRoadSign's bank element -- reached through BrnMapIconManager.h too, named here because this TU dereferences it)
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"          // BrnGui::MapTransform
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"       // CgsGui::AptIm2dRenderBuffer
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h" // Im2dTransformToLogicalPC
 #include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"  // the shared GUI render states + screen transform
 #include <cmath>   // std::cos / std::sin (RotatateRect)
 
@@ -199,6 +200,7 @@ namespace
 // ---------------------------------------------------------------------------
 CrashNavIconRenderer::CrashNavIconRenderer()
 {
+    mbFrameInputPCValid = false;
     for (s32 li = 0; li < 5; ++li)
     {
         mBackgroundMaskTextureStateResource[li] = 0;   // +0x09C
@@ -222,6 +224,7 @@ CrashNavIconRenderer::CrashNavIconRenderer()
 void CrashNavIconRenderer::Construct()
 {
     CustomRenderComponentInterface::Construct();
+    mbFrameInputPCValid = false;
 
     mePrepareStage = E_PREPARESTAGE_START;   // stw 0, 0x54
     meReleaseStage = E_RELEASESTAGE_DONE;    // stw 1, 0x58 -- nothing to release yet
@@ -343,10 +346,12 @@ void CrashNavIconRenderer::Construct()
     mTextTransform.mOriginXYZ.y =  1.0f;
     mTextTransform.mOriginXYZ.z =  0.0f;
     mTextTransform.mOriginXYZ.w =  0.0f;
+    // 82463810/1C vperm masks CDA350/CDA3C0 then82463828 vsldoi8:
+    // {right.x,right.y,up.x,up.y} = {1/640,0,0,-1/360}.
     mTextTransform.mRightUp.x   = KF_SCREEN_TO_NDC_X;
-    mTextTransform.mRightUp.y   = KF_SCREEN_TO_NDC_Y;
+    mTextTransform.mRightUp.y   = 0.0f;
     mTextTransform.mRightUp.z   = 0.0f;
-    mTextTransform.mRightUp.w   = 0.0f;
+    mTextTransform.mRightUp.w   = KF_SCREEN_TO_NDC_Y;
     mTextTransform.mColourShift.SetZero();
     mTextTransform.mColourScale.x = 1.0f;
     mTextTransform.mColourScale.y = 1.0f;
@@ -448,6 +453,28 @@ CgsID CrashNavIconRenderer::GetID() const
 // ---------------------------------------------------------------------------
 void CrashNavIconRenderer::Update()
 {
+    // FLAG PC-platform leaf: the original empty update is the host's boundary
+    // between a newly published GUI frame and repeated presentations of it.
+    // The manager calls this after dispatching all this update's view events.
+    mFrameInputPC.mHoveredEventIcon = mHoveredEventIcon;
+    mFrameInputPC.mCursorStatus = mGuiEventMapCursorStatus;
+    mFrameInputPC.mIconStatus = mGuiEventMapIconStatus;
+    // The original Construct seeds only this record's pointer. Copy its object
+    // representation; the scale is read only when a real bank has been published.
+    std::memcpy(&mFrameInputPC.mRoadSignStatus, &mRoadSignIconStatus, sizeof(mRoadSignIconStatus));
+    mbFrameInputPCValid = true;
+}
+
+// FLAG PC-platform leaf: replay the same completed GUI input on render-only
+// presentations. The working records keep their original consume/clear stores.
+void CrashNavIconRenderer::RestoreFrameInputPC()
+{
+    if (!mbFrameInputPCValid)
+        return;
+    mHoveredEventIcon = mFrameInputPC.mHoveredEventIcon;
+    mGuiEventMapCursorStatus = mFrameInputPC.mCursorStatus;
+    mGuiEventMapIconStatus = mFrameInputPC.mIconStatus;
+    std::memcpy(&mRoadSignIconStatus, &mFrameInputPC.mRoadSignStatus, sizeof(mRoadSignIconStatus));
 }
 
 // ---------------------------------------------------------------------------
@@ -477,6 +504,7 @@ CgsGui::eCustomRenderLayer CrashNavIconRenderer::GetRenderLayer() const
 void CrashNavIconRenderer::SetRenderEnabled(bool lbRenderEnabled)
 {
     mbRenderEnabled = lbRenderEnabled;   // stb r4, 4(r3)
+    mbFrameInputPCValid = false;
 
     mHoveredEventIcon.mHoveredDriveThroughID = 0;   // std r11, 0x150
     mHoveredEventIcon.mHoveredPlayerID       = 0;   // std r11, 0x158
@@ -1113,63 +1141,35 @@ namespace
     }
 
     // -----------------------------------------------------------------------
-    // ⚠️ FLAG (values, not algorithm) -- .data floats the symbol export does not carry.
-    //
-    // RenderIcons reads FOUR two-entry (per ECrashNavIconType) half-extent tables at
-    // flt_82FB36F8 / flt_82FB3700 / flt_82FB3710 / flt_82FB3718 and scales each by
-    // 1/clamp(zoom,3500,5500). Their DWARF names are on the class
-    // (BrnCrashNavIconRenderer.h:353-356 / :364-367 -- KAF_ICON_HALFWIDTH_*,
-    // KAF_ICON_HALFHEIGHT_*, KAF_MINI_ICON_HALFWIDTH_*, KAF_MINI_ICON_HALFHEIGHT_*), and
-    // RenderEventIcon's own use pins which is which: the "use mini icon" arm takes
-    // (flt_82FB3718, flt_82FB3700) and the big arm takes (flt_82FB36F8, flt_82FB3710).
-    // ONLY the numeric contents are missing -- the whole 0x82FB36F0..0x82FB3728 block is
-    // written by cinit thunks that are not in the export set, and the tree has only the
-    // .i64, no readable image. (The four SIBLING lanes of that same block --
-    // 0x82FB36F0/3708/3720/3728 -- belong to BrnSatNavRenderer and WERE recovered in the
-    // H3b wave; ours are the interleaved four.)
-    //
-    // Carried over from BrnSatNavRenderer.cpp's recovered WORLDSIZE pair, on the same
-    // justification E1 used for the atlas geometry: the two renderers index THE SAME two
-    // icon atlases (texture ids 204/205) through the same 2-entry table and use the same
-    // "authored world size / zoom" idiom (the sat-nav's own SCREENSPACE pair is its
-    // no-zoom online path, which this renderer has no counterpart for). The mini pair is
-    // the half of it that the 32px mini cell is of the 64px icon cell.
-    // WORTH A DATA-DUMP FOLLOW-UP -- the produced on-screen icon SIZE is unverified for
-    // this build; the indexing/zoom algorithm is X360-proven.
+    // ARTIST CRT writers, found with findinit and read with ppcdis:
+    // 82C51C38: width = flt_82F25C14 * flt_82058954 (0.025 *3000).
+    // 82C51C70: height = flt_82F25BD4 *3000 (0.04444444552 *3000).
+    // 82C51CA8: mini width = flt_82F25BCC * flt_820550BC (0.0125 *2500).
+    // 82C51CE0: mini height = flt_82F25C34 *2500 (0.02222222276 *2500).
+    // Each writer uses fmuls and stores both atlas rows. Keep float expressions
+    // to preserve that rounding; the minimap's different extents do not apply.
     // -----------------------------------------------------------------------
-    const f32 KAF_ICON_HALFWIDTH      [CrashNavIconRenderer::E_CRASHNAVICON_NUM] = { 37.5f, 37.5f };           // flt_82FB36F8
-    const f32 KAF_ICON_HALFHEIGHT     [CrashNavIconRenderer::E_CRASHNAVICON_NUM] = { 55.555557f, 55.555557f }; // flt_82FB3710
-    const f32 KAF_MINI_ICON_HALFWIDTH [CrashNavIconRenderer::E_CRASHNAVICON_NUM] = { 18.75f, 18.75f };         // flt_82FB3718
-    const f32 KAF_MINI_ICON_HALFHEIGHT[CrashNavIconRenderer::E_CRASHNAVICON_NUM] = { 27.777779f, 27.777779f }; // flt_82FB3700
+    const f32 KAF_ICON_HALFWIDTH      [CrashNavIconRenderer::E_CRASHNAVICON_NUM] = { 0.025f *3000.0f, 0.025f *3000.0f }; // flt_82FB36F8
+    const f32 KAF_ICON_HALFHEIGHT     [CrashNavIconRenderer::E_CRASHNAVICON_NUM] = { 0.04444444552f *3000.0f, 0.04444444552f *3000.0f }; // flt_82FB3710
+    const f32 KAF_MINI_ICON_HALFWIDTH [CrashNavIconRenderer::E_CRASHNAVICON_NUM] = { 0.0125f *2500.0f, 0.0125f *2500.0f }; // flt_82FB3718
+    const f32 KAF_MINI_ICON_HALFHEIGHT[CrashNavIconRenderer::E_CRASHNAVICON_NUM] = { 0.02222222276f *2500.0f, 0.02222222276f *2500.0f }; // flt_82FB3700
 
-    // ⚠️ FLAG (values, not algorithm) -- the same .rdata gap, cluster flt_82F25BC8 /
-    // flt_82F25C48..flt_82F25C84. Each is named for the exact slot it fills; the
-    // arithmetic around every one of them is X360-verbatim.
-    //
-    //  * KU_ICON_BASE_COLOUR (dword_82F25BC8) -- the event-icon vertex colour word whose
-    //    LOW (alpha) byte RenderIcons rewrites, and only ever rewrites. Opaque white is
-    //    the only value under which the fade arithmetic below is the whole story.
-    //  * the cursor / drive-through half-extents are stated in NORMALISED screen units
-    //    (the space every quad in this TU is built in). RenderStartFinish's own recovered
-    //    pair is 32 device px on both axes, and these icons come off the SAME atlas page
-    //    at the same authored cell size, so 32/1280 and 32/720 are the derived pair --
-    //    and 0.025 / 0.044444446 are exactly two of the ratios BrnSatNavRenderer.cpp's
-    //    recovered cinit lanes are built from, which is corroboration, not proof.
-    //  * KF_PLAYER_ICON_PULSE_PERIOD (flt_82F25C84) is the period of the local-player
-    //    icon's halo pulse in seconds; 1.0 is a placeholder.
+    // Remaining packed colour and normalized geometry, measured in the image.
     const u32 KU_ICON_BASE_COLOUR              = 0xFFFFFFFFu;   // dword_82F25BC8
-    const f32 KF_CURSOR_HOVER_OFFSET_Y         = 0.0f;          // flt_82F25C58
-    const f32 KF_CURSOR_HOVER_OFFSET_X         = 0.0f;          // flt_82F25C5C
-    const f32 KF_CURSOR_HOVER_HALFHEIGHT       = 0.044444446f;  // flt_82F25C60
-    const f32 KF_CURSOR_HOVER_HALFWIDTH        = 0.025f;        // flt_82F25C64
-    const f32 KF_CURSOR_OFFSET_Y               = 0.0f;          // flt_82F25C48
-    const f32 KF_CURSOR_OFFSET_X               = 0.0f;          // flt_82F25C4C
-    const f32 KF_CURSOR_HALFHEIGHT             = 0.044444446f;  // flt_82F25C50
-    const f32 KF_CURSOR_HALFWIDTH              = 0.025f;        // flt_82F25C54
-    const f32 KF_DRIVETHROUGH_HOVER_LIFT       = 0.044444446f;  // flt_82F25C70
-    const f32 KF_DRIVETHROUGH_HALFHEIGHT       = 0.044444446f;  // flt_82F25C74
-    const f32 KF_DRIVETHROUGH_HALFWIDTH        = 0.025f;        // flt_82F25C78
-    const f32 KF_PLAYER_ICON_PULSE_PERIOD      = 1.0f;          // flt_82F25C84
+    // Read big-endian from the ARTIST image, 0x82F25C48..0x82F25C84.
+    // These are authored normalized extents/offsets, not a 32-pixel derivation.
+    const f32 KF_CURSOR_HOVER_OFFSET_Y         = 0.015f;       // 3C75C28F
+    const f32 KF_CURSOR_HOVER_OFFSET_X         = -0.007f;      // BBE56042
+    const f32 KF_CURSOR_HOVER_HALFHEIGHT       = 0.09f;        // 3DB851EC
+    const f32 KF_CURSOR_HOVER_HALFWIDTH        = 0.052f;       // 3D54FDF4
+    const f32 KF_CURSOR_OFFSET_Y               = 0.007f;       // 3BE56042
+    const f32 KF_CURSOR_OFFSET_X               = -0.0035f;     // BB656042
+    const f32 KF_CURSOR_HALFHEIGHT             = 0.045f;       // 3D3851EC
+    const f32 KF_CURSOR_HALFWIDTH              = 0.026f;       // 3CD4FDF4
+    const f32 KF_DRIVETHROUGH_HOVER_LIFT       = -0.02f;       // BCA3D70A
+    const f32 KF_DRIVETHROUGH_HALFHEIGHT       = 0.03f;        // 3CF5C28F
+    const f32 KF_DRIVETHROUGH_HALFWIDTH        = 0.0125f;      // 3C4CCCCD
+    const f32 KF_PLAYER_ICON_PULSE_PERIOD      = 1.15f;        // ARTIST82F25C84: 3F933333
 
     // -----------------------------------------------------------------------
     // RECOVERED function-local statics (their init arms are in the function bodies, so
@@ -2071,6 +2071,19 @@ void CrashNavIconRenderer::RenderRoadSigns(Im2dCommandBuffer* lpRenderBuffer)
 // ---------------------------------------------------------------------------
 void CrashNavIconRenderer::RenderStartFinish(Im2dCommandBuffer* lpRenderBuffer)
 {
+    // FLAG PC diagnostic: observe the original endpoint bank and exact quad
+    // coordinates, without changing selection, viewport, geometry or drawing.
+    static const bool sbEndpointDiag = (getenv("BRN_SATNAV_DIAG") != 0);
+    static u32 suEndpointTick = 0;
+    static u32 suEndpointSamples = 0;
+    const bool lbEndpointSample = sbEndpointDiag && CgsDev::Log::gpDebugPrint != 0 &&
+        suEndpointSamples < 64 && ((suEndpointTick++ % 120) == 0);
+    if (lbEndpointSample)
+    {
+        ++suEndpointSamples;
+        *CgsDev::Log::gpDebugPrint << "[cnav-endpoint] count=" << miStartFinishIconCount << "\n";
+    }
+
     for (s32 liIndex = 0; liIndex < miStartFinishIconCount; ++liIndex)
     {
         CrashNavMapIcon& lrIcon = mStartFinishIcons[liIndex];
@@ -2094,6 +2107,12 @@ void CrashNavIconRenderer::RenderStartFinish(Im2dCommandBuffer* lpRenderBuffer)
                           KF_DEVICE_TO_NORMALISED_Y;
         const f32 lfBottom = (lv2Position.y + KF_STARTFINISH_HALFHEIGHT + KF_STARTFINISH_OFFSET_Y) *
                              KF_DEVICE_TO_NORMALISED_Y;
+
+        if (lbEndpointSample)
+            *CgsDev::Log::gpDebugPrint << "[cnav-endpoint] icon=" << liIndex
+                << " state=" << static_cast<s32>(leState) << " position="
+                << lv2Position.x << "," << lv2Position.y << " rect="
+                << lfLeft << "," << lfTop << "," << lfRight << "," << lfBottom << "\n";
 
         RenderQuad(lpRenderBuffer,
                    MakeV2(lfLeft,  lfTop),      // TL
@@ -2129,6 +2148,19 @@ void CrashNavIconRenderer::RenderStartFinish(Im2dCommandBuffer* lpRenderBuffer)
 // ---------------------------------------------------------------------------
 void CrashNavIconRenderer::RenderRivals(Im2dCommandBuffer* lpRenderBuffer)
 {
+    // ARTIST @0x824654C8..0x82465518 copies these atlas cells into the
+    // two stack rects passed to RenderQuad. Row0 is atlas204; main is
+    // top-left+0x28 / bottom-right+0x28 (column5), halo is+0x38 (column7).
+    const Vector4 lv4PlayerUV = MakeV4(
+        mav2IconUvTopLeft[E_CRASHNAVICON_EVENT_NOTATTEMPTED][KI_PLAYER_ICON_INDEX].x,
+        mav2IconUvTopLeft[E_CRASHNAVICON_EVENT_NOTATTEMPTED][KI_PLAYER_ICON_INDEX].y,
+        mav2IconUvBottomRight[E_CRASHNAVICON_EVENT_NOTATTEMPTED][KI_PLAYER_ICON_INDEX].x,
+        mav2IconUvBottomRight[E_CRASHNAVICON_EVENT_NOTATTEMPTED][KI_PLAYER_ICON_INDEX].y);
+    const Vector4 lv4PlayerOverlayUV = MakeV4(
+        mav2IconUvTopLeft[E_CRASHNAVICON_EVENT_NOTATTEMPTED][KI_PLAYER_ICON_OVERLAY_INDEX].x,
+        mav2IconUvTopLeft[E_CRASHNAVICON_EVENT_NOTATTEMPTED][KI_PLAYER_ICON_OVERLAY_INDEX].y,
+        mav2IconUvBottomRight[E_CRASHNAVICON_EVENT_NOTATTEMPTED][KI_PLAYER_ICON_OVERLAY_INDEX].x,
+        mav2IconUvBottomRight[E_CRASHNAVICON_EVENT_NOTATTEMPTED][KI_PLAYER_ICON_OVERLAY_INDEX].y);
     for (s32 liIndex = 0; liIndex < miRivalIconsCount; ++liIndex)
     {
         CrashNavMapIcon& lrIcon = mRivalIcons[liIndex];
@@ -2139,8 +2171,9 @@ void CrashNavIconRenderer::RenderRivals(Im2dCommandBuffer* lpRenderBuffer)
         const f32 lfNow = mpGuiCache->GetTime();
 
         // ---- the shared hover latch, keyed on the hovered PLAYER id ----------------
-        if (static_cast<u32>(mHoveredEventIconLastFrame.mHoveredPlayerID) ==
-            static_cast<u32>(mHoveredEventIcon.mHoveredPlayerID))
+        // ARTIST824659B4..C0 loads both64-bit CgsIDs and compares cmpld.
+        if (mHoveredEventIconLastFrame.mHoveredPlayerID ==
+            mHoveredEventIcon.mHoveredPlayerID)
         {
             if (mfHoveredIconScaleEndTime < lfNow &&
                 mHoveredEventIconLastFrame.mHoveredPlayerID != 0)
@@ -2183,9 +2216,11 @@ void CrashNavIconRenderer::RenderRivals(Im2dCommandBuffer* lpRenderBuffer)
             else
             {
                 // The halo expands 1.0 -> 2.5 across the period...
-                const f32 lfT = Clamp01(1.0f -
+                // 82465B74..90 clamps the REMAINING fraction, then
+                // fnmsubs f0,f0,f22(1.5),f21(2.5): 1 ->2.5 over the pulse.
+                const f32 lfRemaining = Clamp01(
                     (mfPlayerIconPulseEndTime - lfNow) / KF_PLAYER_ICON_PULSE_PERIOD);
-                mfPlayerIconPulseScale = 2.5f - lfT * 1.5f;
+                mfPlayerIconPulseScale = 2.5f - lfRemaining * 1.5f;
             }
 
             // ...and fades out as it does (alpha = 2 - scale).
@@ -2206,18 +2241,13 @@ void CrashNavIconRenderer::RenderRivals(Im2dCommandBuffer* lpRenderBuffer)
             lv2TR.x *= KF_DEVICE_TO_NORMALISED_X;  lv2TR.y *= KF_DEVICE_TO_NORMALISED_Y;
             lv2BR.x *= KF_DEVICE_TO_NORMALISED_X;  lv2BR.y *= KF_DEVICE_TO_NORMALISED_Y;
 
-            // FLAG (UV): the console passes the halo's atlas rect on the stack, in the
-            // slot the export's argument list truncates. It is the SAME crash-nav icon
-            // page and the same cell as the icon quad below -- the two calls differ only
-            // in the vector register (v1) they hand the colour in -- so the full-cell
-            // rect is reproduced for both.
-            // ⭐ ATLAS CORRECTED 2026-08-29 (FIX2): the console loads `lwz r9, 0xF4(r29)`
-            // @0x82465C78 -- mapIconTextureStates[0], id 204 -- not +0x110 (id 206).
+            // ARTIST @0x82465C9C passes the column7 rect; atlas204 is
+            // selected by `lwz r9,0xF4(r29)` at0x82465C78.
             RenderQuad(lpRenderBuffer, lv2TL, lv2BL, lv2TR, lv2BR,
                        lv4HaloColour,
                        mapIconTextureStates[E_CRASHNAVICON_EVENT_NOTATTEMPTED],
                        CgsGui::gpGuiBlendStateStandard,
-                       MakeV4(0.0f, 0.0f, 1.0f, 1.0f));
+                       lv4PlayerOverlayUV);
         }
 
         // ---- the icon itself -------------------------------------------------------
@@ -2234,7 +2264,7 @@ void CrashNavIconRenderer::RenderRivals(Im2dCommandBuffer* lpRenderBuffer)
                    lv4MainColour,
                    mapIconTextureStates[E_CRASHNAVICON_EVENT_NOTATTEMPTED],
                    CgsGui::gpGuiBlendStateStandard,
-                   MakeV4(0.0f, 0.0f, 1.0f, 1.0f));
+                   lv4PlayerUV);
     }
 }
 
@@ -2612,6 +2642,8 @@ void CrashNavIconRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     if (lpRenderBuffer == 0 || mePrepareStage != E_PREPARESTAGE_DONE)
         return;
 
+    RestoreFrameInputPC();
+
     // [FLAG PC bring-up] THE NOT-YET-LATCHED WINDOW. The map screen can render one frame
     // before any GuiEventRenderMainMap (id 223) has reached RecvEvent, so mRenderMainMapEvent
     // is still the all-zero ctor record -- and RenderIcons' console assert
@@ -2880,8 +2912,10 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
     // unk_8305A950 is the same all-255 vector that helper already documents.
     const CgsGraphics::RGBA8 lTextRgba = PackVertexColour(lrv4SignColour);
     const CgsGraphics::RGBA   lTextColour =
-        (static_cast<u32>(lTextRgba.r) << 24) | (static_cast<u32>(lTextRgba.g) << 16) |
-        (static_cast<u32>(lTextRgba.b) << 8)  |  static_cast<u32>(lTextRgba.a);
+        // FLAG PC-platform leaf: TextRenderer stores this native word into RGBA8.
+        // Preserve ARTIST's byte order r,g,b,a on little-endian host memory.
+        (static_cast<u32>(lTextRgba.a) << 24) | (static_cast<u32>(lTextRgba.b) << 16) |
+        (static_cast<u32>(lTextRgba.g) << 8)  |  static_cast<u32>(lTextRgba.r);
 
     const f32 lfTextAnchorX = lv2Device.x + lfScale * lrSign.mvTextOffset.x;
     const f32 lfTextAnchorY = lv2Device.y + lfScale * lrSign.mvTextOffset.y;
@@ -2913,7 +2947,9 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
     if (mTextObject.mbAutosize)
         mTextObject.CalculateAutosizing();
 
-    lpRenderBuffer->SetTransform(mTextTransform);   // SetTransform(a14, this + 16)
+    // FLAG PC-platform leaf: this pointer is the shared base command stream,
+    // so explicitly cross its existing native NDC -> logical pixel boundary.
+    lpRenderBuffer->SetTransform(CgsGraphics::Im2dTransformToLogicalPC(mTextTransform));
     mpTextRenderer->RenderStringBuffered(lpRenderBuffer, mTextObject);
 
     // Line 1 -- LEFT-aligned at a bare anchor point. The console writes the SAME point into
