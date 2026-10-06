@@ -2776,9 +2776,17 @@ namespace BrnGame
             const bool lbJunkyardActive =
                 (lrMainDirector.GetGameState().meJunkyardState
                     != BrnDirector::GameState::E_JY_INACTIVE);
+            // FLAG PC-platform leaf: the paused CrashNav states publish a live
+            // director camera too. ARTIST 8226B398..3A4 ticks/copies state4's
+            // camera; 8226B3C0..3D4 copies state3's. Closing this host-only gate
+            // froze the world camera while the original trail/particle path
+            // kept consuming the moving paused camera (native run30).
+            const BrnDirector::Arbitrator::EState leArbitratorState =
+                lrMainDirector.GetArbitrator().GetState();
             const bool lbArbitratorRunning =
-                (lrMainDirector.GetArbitrator().GetState()
-                    == BrnDirector::Arbitrator::E_STATE_NORMAL);
+                leArbitratorState == BrnDirector::Arbitrator::E_STATE_NORMAL
+                || leArbitratorState == BrnDirector::Arbitrator::E_STATE_CRASH_NAV
+                || leArbitratorState == BrnDirector::Arbitrator::E_STATE_CRASH_NAV_ICE_CAMERAS;
             const bool lbDriving = lbFlybyRequested || lbJunkyardActive || lbArbitratorRunning;
 
             if (mbDirectorCameraLive != lbDriving)
@@ -2791,7 +2799,7 @@ namespace BrnGame
                         << (lbDriving ? "-> DIRECTOR" : "-> bring-up tour camera")
                         << " (flyby=" << (lbFlybyRequested ? 1 : 0)
                         << " junkyard=" << (lbJunkyardActive ? 1 : 0)
-                        << " arbNormal=" << (lbArbitratorRunning ? 1 : 0) << ")\n";
+                        << " arbState=" << static_cast<s32>(leArbitratorState) << ")\n";
                 }
             }
         }
