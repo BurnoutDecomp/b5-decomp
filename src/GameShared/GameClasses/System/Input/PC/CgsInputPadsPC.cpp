@@ -972,6 +972,8 @@ namespace
         // PC harness: option changes use the same actions as comma/period and pad left/right.
         case E_GAMEINPUTACTIONS_GUI_LEFT:  lpcEventName = "Local\\BurnoutPC_Input_OptionPrev"; break;
         case E_GAMEINPUTACTIONS_GUI_RIGHT: lpcEventName = "Local\\BurnoutPC_Input_OptionNext"; break;
+        case E_GAMEINPUTACTIONS_GUI_LTRIGGER: lpcEventName = "Local\\BurnoutPC_Input_GuiZoom"; break;
+        case E_GAMEINPUTACTIONS_GUI_RTRIGGER: lpcEventName = "Local\\BurnoutPC_Input_GuiInspect"; break;
         case E_GAMEINPUTACTIONS_GUI_START:  lpcEventName = "Local\\BurnoutPC_Input_Start";    break;
         // -- driving. These three ids are the rows BridgeControllerToWorld reads straight out
         //    of maActionInfo[] into PlayerVehicleControls (asm-attested: [0].mfValue ->
@@ -1101,6 +1103,12 @@ namespace
         E_HARNESSSTEERCHANNEL_RIGHT,
         E_HARNESSSTEERCHANNEL_FRAC25,
         E_HARNESSSTEERCHANNEL_FRAC50,
+        E_HARNESSSTEERCHANNEL_UP,
+        E_HARNESSSTEERCHANNEL_DOWN,
+        E_HARNESSSTEERCHANNEL_CAMERA_LEFT,
+        E_HARNESSSTEERCHANNEL_CAMERA_RIGHT,
+        E_HARNESSSTEERCHANNEL_CAMERA_UP,
+        E_HARNESSSTEERCHANNEL_CAMERA_DOWN,
         E_HARNESSSTEERCHANNEL_COUNT
     };
 
@@ -1128,6 +1136,12 @@ namespace
             "Local\\BurnoutPC_Input_SteerRight",
             "Local\\BurnoutPC_Input_SteerFrac25",
             "Local\\BurnoutPC_Input_SteerFrac50",
+            "Local\\BurnoutPC_Input_StickUp",
+            "Local\\BurnoutPC_Input_StickDown",
+            "Local\\BurnoutPC_Input_CameraLeft",
+            "Local\\BurnoutPC_Input_CameraRight",
+            "Local\\BurnoutPC_Input_CameraUp",
+            "Local\\BurnoutPC_Input_CameraDown",
         };
         static void* sapSteerEvents[E_HARNESSSTEERCHANNEL_COUNT] = {};
         if (sapSteerEvents[luChannel] == 0)
@@ -1151,6 +1165,44 @@ namespace
         if (HarnessSteerChannelHeld(E_HARNESSSTEERCHANNEL_FRAC50))
             lfDeflection -= KF_HARNESS_STEER_FRAC50;
         return lfDeflection;
+    }
+
+    // FLAG PC-platform leaf: optional held right-stick channels for observed
+    // camera runs. They share the background-harness gate and manual-reset
+    // lifetime, then deliver through the normal RX/RY pad fields. No held
+    // camera channel preserves the host axes exactly, including retail reads.
+    void ApplyHarnessCameraStick(f32& lfStickRX, f32& lfStickRY)
+    {
+        const bool lbLeft = HarnessSteerChannelHeld(E_HARNESSSTEERCHANNEL_CAMERA_LEFT);
+        const bool lbRight = HarnessSteerChannelHeld(E_HARNESSSTEERCHANNEL_CAMERA_RIGHT);
+        const bool lbUp = HarnessSteerChannelHeld(E_HARNESSSTEERCHANNEL_CAMERA_UP);
+        const bool lbDown = HarnessSteerChannelHeld(E_HARNESSSTEERCHANNEL_CAMERA_DOWN);
+        const bool lbHeld = lbLeft || lbRight || lbUp || lbDown;
+        if (lbHeld)
+        {
+            lfStickRX = ClampAxis(lfStickRX + (lbRight ? 1.0f : 0.0f) - (lbLeft ? 1.0f : 0.0f));
+            lfStickRY = ClampAxis(lfStickRY + (lbUp ? 1.0f : 0.0f) - (lbDown ? 1.0f : 0.0f));
+        }
+
+        // Bounded input observer; game code never reads this state. Include
+        // the release so a saved case can verify it stopped supplying axes.
+        static bool sbLastHeld = false;
+        static f32 sfLastX = 0.0f, sfLastY = 0.0f;
+        static u32 suLines = 0;
+        if ((lbHeld || sbLastHeld) && suLines < 64u &&
+            (lbHeld != sbLastHeld || lfStickRX != sfLastX || lfStickRY != sfLastY))
+        {
+            ++suLines;
+            char lacLine[180];
+            std::snprintf(lacLine, sizeof(lacLine),
+                "[harness-camera] axes %.9g %.9g held %u (left %u right %u up %u down %u)\n",
+                lfStickRX, lfStickRY, lbHeld ? 1u : 0u,
+                lbLeft ? 1u : 0u, lbRight ? 1u : 0u, lbUp ? 1u : 0u, lbDown ? 1u : 0u);
+            CgsDev::Log::WriteToLog(lacLine);
+        }
+        sbLastHeld = lbHeld;
+        sfLastX = lfStickRX;
+        sfLastY = lfStickRY;
     }
 }
 
@@ -1244,6 +1296,11 @@ namespace CgsInput
         // which is every run that predates them.
         const bool lbHarnessSteerLeft  = HarnessSteerChannelHeld(E_HARNESSSTEERCHANNEL_LEFT);
         const bool lbHarnessSteerRight = HarnessSteerChannelHeld(E_HARNESSSTEERCHANNEL_RIGHT);
+        // FLAG PC-platform leaf: test-only vertical left-stick channels permit
+        // actual map cursor navigation without global keyboard input. They use
+        // the same background-harness gate and do not supply throttle actions.
+        if (HarnessSteerChannelHeld(E_HARNESSSTEERCHANNEL_UP)) lfStickLY += 1.0f;
+        if (HarnessSteerChannelHeld(E_HARNESSSTEERCHANNEL_DOWN)) lfStickLY -= 1.0f;
         f32 lfHarnessDeflection = 0.0f;
         if (lbHarnessSteerLeft || lbHarnessSteerRight)
         {
@@ -1281,8 +1338,11 @@ namespace CgsInput
 
         lrPad.mfStickLX = ClampAxis(lfStickLX);                                        // E_PADAXIS_0_X
         lrPad.mfStickLY = ClampAxis(lfStickLY);                                        // E_PADAXIS_0_Y
-        lrPad.mfStickRX = lbXPad ? NormaliseThumb(lXState.Gamepad.sThumbRX) : 0.0f;     // E_PADAXIS_1_X
-        lrPad.mfStickRY = lbXPad ? NormaliseThumb(lXState.Gamepad.sThumbRY) : 0.0f;     // E_PADAXIS_1_Y
+        f32 lfStickRX = lbXPad ? NormaliseThumb(lXState.Gamepad.sThumbRX) : 0.0f;
+        f32 lfStickRY = lbXPad ? NormaliseThumb(lXState.Gamepad.sThumbRY) : 0.0f;
+        ApplyHarnessCameraStick(lfStickRX, lfStickRY);
+        lrPad.mfStickRX = lfStickRX;                                                // E_PADAXIS_1_X
+        lrPad.mfStickRY = lfStickRY;                                                // E_PADAXIS_1_Y
         lrPad.mfAxis10  = 0.0f;   // E_WHEELAXIS_STEERING -- wheel devices only
         lrPad.mfAxis14  = 0.0f;   // E_WHEELAXIS_PEDALS   -- wheel devices only
 
