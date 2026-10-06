@@ -4103,6 +4103,23 @@ namespace BrnGame
         // DELETE-WHEN: the gm+10092520 pair is identified and modelled.
         mEffectsModule.ParticleModuleRef().EndOfFrame(false);
 
+        // FLAG PC-platform leaf: rendering can run between 60 Hz GUI updates.
+        // Swap reconstructs the next write buffer, including its default post-fx
+        // enable byte. Republish the current display settings on every rendered
+        // frame so a zero-simulation-step frame does not hide the calibration
+        // card or restore effects. The handle remains a per-GUI-frame message;
+        // the renderer retains it while calibration is enabled, as in ARTIST.
+        {
+            DispatchThreadInputBuffer* lpDisplayBuffer =
+                mDispatchThreadInputBufferManager.GetWriteBuffer();
+            lpDisplayBuffer->LockForWrite();
+            lpDisplayBuffer->SetBrightness(miBrightness);
+            lpDisplayBuffer->SetContrast(miContrast);
+            lpDisplayBuffer->SetCalibrationUnfriendlyEnablePostFx(
+                mbEnableCalibrationUnfriendlyPostFx);
+            lpDisplayBuffer->UnlockForWrite();
+        }
+
         mDispatchThreadInputBufferManager.Swap();
 
         // ⭐⭐⭐ THE GUI END-OF-FRAME NOTIFY, restored 2026-09-07 -- the SIBLING of the
