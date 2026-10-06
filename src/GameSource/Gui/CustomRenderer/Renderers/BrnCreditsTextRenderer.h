@@ -1,137 +1,46 @@
-#ifndef BRN_CREDITS_TEXT_RENDERER_H
-#define BRN_CREDITS_TEXT_RENDERER_H
-
-#include "types.hpp"
-#include "BrnCommonTypes.h"                                             // Vector4 / CgsID
-#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h" // CgsGraphics::Im2dTransform
-#include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"       // CgsGraphics::TextObject / TextRenderer / Im2dRenderBuffer
-#include "GameShared/GameClasses/Fonts/CgsFont.h"                        // CgsResource::Font / SafeResourceHandle / CgsUtf8
-
-// BrnGui::CreditsTextRenderer - the custom GUI renderer that scrolls the end / replay
-// credits up the screen with a Y-based fade at top and bottom. It builds a paragraph
-// list from the localisation database (CREDITS_TITLE_%d / CREDITS_DETAIL_%d, or the
-// REPLAY_CREDITS_* keys), measures each paragraph with the font path, then each frame
-// scrolls the list and draws the in-view paragraphs through an Im2d render buffer using
-// two TextObjects (one styled for titles, one for detail body text).
-//
-// Reconstructed from the attested behaviour of eight member functions:
-//   CreditsTextRenderer::Construct
-//   CreditsTextRenderer::GetID
-//   CreditsTextRenderer::Prepare
-//   CreditsTextRenderer::SetTextRenderer
-//   CreditsTextRenderer::SetRenderEnabled
-//   CreditsTextRenderer::Update
-//   CreditsTextRenderer::RecalculateParagraphs
-//   CreditsTextRenderer::RenderComponent
-//
-// LAYOUT: members are declared by name in the order the original declarations give.
-// Byte offsets are NOT load-bearing on the 64-bit host (the console's pointers/handles
-// widen), so no raw-offset casts are used; the bodies access members by name. The console
-// offsets that pin the field order are noted in the comments. FLAG: the leading vtable
-// slot is modelled as an opaque pointer (this renderer derives from the GUI custom-render
-// base; only the members the eight bodied functions touch are needed here, so the base
-// is folded to its leading { vtable; bool mbRenderEnabled } shape rather than pulling in
-// the uncommitted CustomRenderComponentInterface dependency web).
-
-namespace CgsLanguage { class LanguageManager; }
+#pragma once
+#include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"
+#include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"
+#include "GameShared/GameClasses/Fonts/CgsFont.h"
 namespace renderengine { class TextureState; }
-
-namespace BrnGui
-{
-    // The immediate-renderer set passed to RenderComponent. The console reads the leading
-    // dword (the Im2d render buffer the credits draw into) and reaches the buffer's batch
-    // API at buffer+4 (on the PC fold Im2dRenderBuffer == Im2d, so that is the Im2d
-    // itself). Only the leading buffer pointer is in scope here.
-    struct ImRendererSet
-    {
-        CgsGraphics::Im2dRenderBuffer* mpIm2dRenderBuffer; // +0x00
+namespace BrnGui {
+class CreditsTextRenderer : public CgsGui::CustomRenderComponentInterface {
+public:
+    static const s32 KI_MAX_PARAGRAPHS = 500;
+    struct ParagraphInfo {
+        f32 mfHeight;
+        f32 mfPosition;
+        const CgsResource::CgsUtf8* mpText;
+        bool mbTitle;
     };
-
-    class CreditsTextRenderer
-    {
-    public:
-        // Paragraph-list capacity; the original names the constant KI_MAX_PARAGRAPHS.
-        static const s32 KI_MAX_PARAGRAPHS = 500;
-
-        // One scrolling paragraph: its rendered height, its scroll position, the localised
-        // text, and whether it is a title (vs. detail body); a type of the original's own.
-        // 16-byte stride (the Construct memset clears KI_MAX_PARAGRAPHS * 16 == 8000 bytes).
-        struct ParagraphInfo
-        {
-            f32                         mfHeight;   // +0x00
-            f32                         mfPosition; // +0x04
-            const CgsResource::CgsUtf8* mpText;     // +0x08
-            bool                        mbTitle;    // +0x0C
-        };
-
-        // E_CREDITS_TYPE (guest +0x20C4): which key set the paragraphs are built from. 0 =
-        // end credits (CREDITS_TITLE_%d / CREDITS_DETAIL_%d), 1 = replay credits
-        // (REPLAY_CREDITS_TITLE_%d / REPLAY_CREDITS_DETAIL_%d). Any other value asserts.
-        enum ECreditsType
-        {
-            E_CREDITS_TYPE_END    = 0,
-            E_CREDITS_TYPE_REPLAY = 1,
-        };
-
-        // Copy the default (invalid) font handle into both font handles, clear
-        // the credits type + the paragraph count, count the entries of a static name table,
-        // then zero the paragraph array.
-        void Construct();
-
-        // Store the supplied heap allocator and report success. (The two event/
-        // resource-allocator args the console ignores are kept for the GUI prepare signature.)
-        bool Prepare(rw::IResourceAllocator* lpHeapAllocator);
-
-        // The renderer id ("CREDITS").
-        CgsID GetID() const;
-
-        // Store the shared text renderer.
-        void SetTextRenderer(CgsGraphics::TextRenderer* lpTextRenderer);
-
-        // Store the enabled flag; when enabling, rebuild the paragraph list and
-        // reset the scroll/fade to their start values.
-        void SetRenderEnabled(bool lbRenderEnabled);
-
-        // Advance the scroll + fade-in while enabled, wrap the scroll once the
-        // last paragraph leaves the top, and clamp the fade to 1.0. Also rebuilds the screen
-        // transform from the credits text box (rotated + aspect-corrected).
-        void Update();
-
-        // Rebuild the paragraphs, then (if faded in) draw every in-view
-        // paragraph twice: once as a dropped/offset shadow pass and once as the main pass,
-        // each through TextRenderer::RenderStringFadingY so the top/bottom of the column fade.
-        void RenderComponent(ImRendererSet* lpRendererSet);
-
-    private:
-        // (Re)build the paragraph list from the localisation database: for each
-        // index look up the title + detail strings, measure their line counts/heights with the
-        // two TextObjects, and accumulate their scroll positions. Stops at the first missing
-        // pair (end credits) / after the fixed replay set.
-        void RecalculateParagraphs();
-
-        void*                                      mpVtable;                         // +0x00
-        bool                                       mbRenderEnabled;                  // +0x04 (base)
-        rw::IResourceAllocator*                    mpHeapAllocator;                  // +0x08
-        CgsGraphics::Im2dTransform                 mScreenTransform;                 // +0x10
-        CgsGraphics::TextRenderer*                 mpTextRenderer;                   // +0x50
-        CgsLanguage::LanguageManager*              mpLanguageManager;                // +0x54
-        CgsResource::SafeResourceHandle<CgsResource::Font> mpNormalFont;             // +0x58
-        CgsResource::SafeResourceHandle<CgsResource::Font> mpTitleFont;              // +0x60
-        s32                                        miNumStrings;                     // +0x68 (paragraph count)
-        ParagraphInfo                              maParagraphs[KI_MAX_PARAGRAPHS];  // +0x6C (KI_MAX_PARAGRAPHS * 16 == 8000)
-        CgsGraphics::TextObject                    mTitleTextObject;                 // +0x1FAC
-        CgsGraphics::TextObject                    mNormalTextObject;                // +0x2028
-        f32                                        mfScroll;                         // +0x20A4
-        f32                                        mfFade;                           // +0x20A8
-        ECreditsType                               meCreditsType;                    // +0x20C4
-        // Trailing background-mask state (the original names these
-        // mBackgroundMaskTextureStateResource / mpBackgroundMaskTextureState). Not touched
-        // by any of the eight bodied functions
-        // (the Prepare/Release/Destruct that set them are not exported in this TU); kept by
-        // name so the object is the right shape.
-        rw::Resource                               mBackgroundMaskTextureStateResource;
-        renderengine::TextureState*                mpBackgroundMaskTextureState;
-    };
+    enum ECreditsType { E_CREDITS_TYPE_END = 0, E_CREDITS_TYPE_REPLAY = 1 };
+    void Construct() override;
+    bool Prepare(CgsGui::GuiEventQueueSmall*, rw::IResourceAllocator*, rw::IResourceAllocator*) override;
+    void RecvEvent(const CgsModule::Event*, s32) override;
+    void Update() override;
+    CgsID GetID() const override;
+    s32 GetNumTextures() const override { return 1; } // ARTIST vtable820CF910 +28 ->82C296C8.
+    virtual void SetTextRenderer(CgsGraphics::TextRenderer*);
+    virtual void SetLanguageManager(CgsLanguage::LanguageManager*);
+    void SetRenderEnabled(bool) override;
+private:
+    void RenderComponent(CgsGui::ImRendererSet*) override;
+    void RecalculateParagraphs();
+    rw::IResourceAllocator* mpHeapAllocator;
+    CgsGraphics::Im2dTransform mScreenTransform;
+    CgsGraphics::TextRenderer* mpTextRenderer;
+    CgsLanguage::LanguageManager* mpLanguageManager;
+    CgsResource::SafeResourceHandle<CgsResource::Font> mpNormalFont;
+    CgsResource::SafeResourceHandle<CgsResource::Font> mpTitleFont;
+    s32 miNumStrings;
+    ParagraphInfo maParagraphs[KI_MAX_PARAGRAPHS];
+    CgsGraphics::TextObject mTitleTextObject;
+    CgsGraphics::TextObject mNormalTextObject;
+    f32 mfScroll;
+    f32 mfFade;
+    rw::Resource mBackgroundMaskTextureStateResource;
+    renderengine::TextureState* mpBackgroundMaskTextureState;
+    ECreditsType meCreditsType;
+};
 }
-
-#endif // BRN_CREDITS_TEXT_RENDERER_H
