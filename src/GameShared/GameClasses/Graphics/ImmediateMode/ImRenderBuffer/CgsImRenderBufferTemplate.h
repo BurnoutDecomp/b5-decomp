@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"  // renderengine::PrimitiveType / Texture / TextureState fwd-decls
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h"  // CgsGraphics::Basic2dColouredTexturedVertex
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredVertex.h"  // CgsGraphics::BasicColouredVertex
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"  // CgsGraphics::Im2dTransform (the SetTransform command payload)
 
 // =============================================================================
@@ -481,7 +482,7 @@ namespace CgsGraphics
         // ----- vertex sub-allocation -----
         V* AllocVertices(u32 luNumVertices);                                                 // @0x24DAE8
 
-    private:
+    protected:
         // Buffer-full handler: discard everything written since the last EndRender
         // and latch the "full" flag so the producer stops appending. @0x24DD54.
         void SetBufferFullRewindToLastEndRender();
@@ -522,17 +523,10 @@ namespace CgsGraphics
     // BasicColouredTexturedVertex): 16B pos + 4B RGBA8 + 8B UV + pad = 32-byte stride.
     // X360-attested stride from ImRenderBuffer<Im3dVertex>::RenderStart @0x827EF548 (slwi r28,5
     // == 32*luNumVertices). The name is DWARF-attested (CgsIm3d.h / CgsIm3dRenderBuffer.h
-    // PushMask signatures). It is DELIBERATELY NOT typedef'd to the committed 24-byte packed
-    // CgsGraphics::BasicColouredTexturedVertex -- that packed type is what the ImRenderer<V>
-    // path (CgsIm3d.cpp) copies at 24*count, and re-pointing it would break that attested
-    // stride. Only the STRIDE (x32) is asm-attested for THIS RenderStart instantiation; the
-    // DWARF field split (mv3Pos/mv4Colour/mv2Tex0UV) is not load-bearing for RenderStart (which
-    // uses only sizeof(V)), so a correctly-sized opaque 32-byte span is used to avoid pulling
-    // the vpu SIMD Vector3 dependency into this header (per the opaque-payload rule).
-    struct alignas(16) Im3dVertex
-    {
-        u8 mau8Opaque[32];   // 32-byte X360-attested vertex stride (DWARF field split not load-bearing here)
-    };
+    // PushMask signatures). This is the same typed32-byte CPU vertex as
+    // BasicColouredTexturedVertex; the immediate renderer packs a distinct24-byte
+    // GPU stream rather than copying CPU records at the GPU stride.
+    using Im3dVertex = BasicColouredTexturedVertex;
     static_assert(sizeof(Im3dVertex) == 32, "Im3dVertex stride is X360-attested at 32 bytes");
 
     // The 3D-text immediate buffer (Im3dRenderBuffer) the TextRenderer 3D path reserves runs

@@ -132,6 +132,10 @@ struct RendererFixture {
     BrnRendererMemory mAllocatedRenderTargets;
     Frame mSingleBufferedDispatchFrame;
     void* mpInterpreter=nullptr;
+    // Fixture lists are already sorted; production now reads the published
+    // mesh frame through these accessors after the parallel-frame refactor.
+    void WaitForMeshSortPC(u32) {}
+    Frame& GetMeshFrameForReadPC() { return mSingleBufferedDispatchFrame; }
     void Construct(){
 #include "shadow_cull_construct.inc"
     }

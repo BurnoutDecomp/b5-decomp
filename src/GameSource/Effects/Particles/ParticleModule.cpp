@@ -15,6 +15,7 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionEffect.h"        // cLionEffectInstance (the dispatch-thread twins)
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionBindings.h"      // cLionBindings accessors
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleLocator.h"   // the locator velocity override
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitterManager.h" // [diag] observe retired binding's live emitters
 #include "SDKs/Packages/Lion/Final/eauk_common/Maths/Matrix.h"                            // cMatrix (LocatorUpdate)
 
 // ============================================================================
@@ -167,6 +168,10 @@ namespace BrnParticle
         CGS_ASSERT((lpEffect->muFlags & LionEffect::EPPE_FLAG_KILL) == 0,
                    "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagKill ) == 0");
 
+        const u32 luWitnessHandle = lpEffect->muHandle;   // [diag] before Construct can clear fields
+        const u32 luWitnessHash = lpEffect->muNameHash;
+        const u32 luWitnessFlags = lpEffect->muFlags;
+
         if ((lpEffect->muFlags & LionEffect::EPPE_FLAG_CREATE) != 0)
         {
             lpEffect->Construct();
@@ -176,6 +181,20 @@ namespace BrnParticle
             lpEffect->muFlags |= (LionEffect::EPPE_FLAG_KILL | LionEffect::EPPE_FLAG_CHANGED);
         }
         lpEffect->muHandle = (lpEffect->muHandle + LionEffect::KU_HANDLE_INCREMENT) & LionEffect::KU_HANDLE_VALID_MASK;
+        static const bool sbRetireWitness = []() {
+            const char* value = std::getenv("BRN_EFFECT_RETIRE_DIAG");
+            return value && value[0] == '1';
+        }();
+        static u32 suRetireWitness = 0;
+        if (sbRetireWitness && suRetireWitness++ < 256u)
+        {
+            char lacRetire[224];
+            std::snprintf(lacRetire, sizeof(lacRetire),
+                "[effects-retire] stop handle=%08X next=%08X hash=%08X before=%04X after=%04X t=%.6f\n",
+                luWitnessHandle, lpEffect->muHandle, luWitnessHash, luWitnessFlags, lpEffect->muFlags,
+                static_cast<double>(mRenderData.mfCurrentTime));
+            CgsDev::Log::WriteToLog(lacRetire);
+        }
     }
 
     // =========================================================================
@@ -632,6 +651,41 @@ namespace BrnParticle
     }
 
 
+    namespace
+    {
+        // [DIAG] Observe the retired binding by address only after destruction.
+        // The used-list walk runs on its dispatch owner, never on the producer.
+        bool EffectRetireWitnessEnabled()
+        {
+            static const bool sbEnabled = []() {
+                const char* value = std::getenv("BRN_EFFECT_RETIRE_DIAG");
+                return value && value[0] == '1';
+            }();
+            return sbEnabled;
+        }
+        void EffectRetireDispatchWitness(const LionEffect& lrRecord,
+                                         const cLionBindings* lpBindings, const char* lpPhase)
+        {
+            if (!EffectRetireWitnessEnabled()) return;
+            static u32 suShots = 0;
+            if (suShots++ >= 512u) return;
+            u32 luBoundActive = 0;
+            const auto& lrManager = cParticleEmitterManager::Instance();
+            for (cParticleEmitter* lpEmitter = lrManager.GetpUsed(); lpEmitter != nullptr;
+                 lpEmitter = lpEmitter->GetNextEmitter())
+            {
+                if (lpEmitter->IsActive() && &lpEmitter->GetBindings() == lpBindings)
+                    ++luBoundActive;
+            }
+            char lacRetire[256];
+            std::snprintf(lacRetire, sizeof(lacRetire),
+                "[effects-retire] dispatch %s handle=%08X hash=%08X flags=%04X binding=%p activeForBinding=%u used=%u\n",
+                lpPhase, lrRecord.muHandle, lrRecord.muNameHash, lrRecord.muFlags,
+                static_cast<const void*>(lpBindings), luBoundActive, lrManager.GetUsedCount());
+            CgsDev::Log::WriteToLog(lacRetire);
+        }
+    }
+
     // =========================================================================
     // PreRenderUpdate  @0x82294760 -- THE PRODUCER, and the first half of the only route in
     // the program from a stamped playing-effect slot to a live Lion emitter.
@@ -797,6 +851,18 @@ namespace BrnParticle
 
         mbStalled = lbStalled;
         mTrailSystem.EndOfFrame();
+        // FLAG PC-platform leaf: update owns the live emitter lists and the
+        // timeout clock. Dispatch has joined here; publish independent trail
+        // records before the next update can move/reuse a strip or its owner.
+        // Present-only host frames carry an original zero simulation sum. They
+        // must not erase the last simulation frame's timeout interval: the next
+        // wheel step would otherwise detach every emitter before its second
+        // segment. The draw bank still receives the current camera/clock in
+        // BuildLionVertexBuffers; only the live producer cadence is retained.
+        if (mRenderData.mfCurrentTimeStep != 0.0f)
+            mTrailSystem.Update(mRenderData.mfCurrentTimeStep, mRenderData.mfCurrentTime,
+                                mRenderData.mCgsCamera.GetViewProjectionMatrix());
+        mTrailFramePC.Publish(mTrailSystem);
     }
 
     // =========================================================================
@@ -1037,9 +1103,14 @@ namespace BrnParticle
 
             if ((lrRecord.muFlags & LionEffect::EPPE_FLAG_KILL) != 0)
             {
+                const cLionBindings* const lpRetiredBindings =
+                    EffectRetireWitnessEnabled() && mapDispatchThreadLionEffects[luArrayIndex]
+                        ? &mapDispatchThreadLionEffects[luArrayIndex]->GetBindings() : nullptr;
+                EffectRetireDispatchWitness(lrRecord, lpRetiredBindings, "before");
                 cLionFX::EffectDestroy(mapDispatchThreadLionEffects[luArrayIndex]);
                 mapDispatchThreadLionEffects[luArrayIndex] = 0;
                 ++muDestroyedLionInstances;   // [lionhandoff]
+                EffectRetireDispatchWitness(lrRecord, lpRetiredBindings, "after");
                 continue;
             }
 
@@ -1604,9 +1675,9 @@ namespace BrnParticle
             // be wrong, and it is gone.
             // ⚠ mfCurrentTime is an ASSIGNMENT on the console (`stfsx f31, r31, 0x8E08`): the trail clock
             // HandleWheels stamps segments with.
-            mTrailSystem.Update(lpRenderData->mfCurrentTimeStep,   // `lfs f13, 0xC(r31)` at 0x8228AD10
-                                lpRenderData->mfCurrentTime,
-                                lrViewProjection);
+            // FLAG PC-platform leaf: the strip renderer consumes its published
+            // bank; its clock/matrix writes cannot race the next wheel update.
+            mTrailFramePC.Update(lpRenderData->mfCurrentTime, lrViewProjection);
 
             // ⭐⭐ THE LION SIMULATION. Every live emitter advances one frame here:
             // cLionFX::Update -> cParticleEmitterManager::Update -> cParticleEmitter::Update
@@ -1723,7 +1794,7 @@ namespace BrnParticle
         // ---- (flags & 0x20) -- eRenderDataFlagRenderTrails ----------------------------
         if ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagRenderTrails) != 0)
         {
-            mTrailSystem.Render(lfWhiteLevel);   // this + 38672 == +0x9710
+            mTrailFramePC.Render(lfWhiteLevel);
         }
 
         // ---- EndSimulateDebris @0x8227A1F0 -- unconditional, ahead of the debris pass -----

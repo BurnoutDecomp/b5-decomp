@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"   // IncrementUtf8Pointer
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (the buffered Apt string path)
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [FLAG PC witness] the BRN_FONT_DIAG [font] trace
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (RenderDropShadow's two console asserts)
 
@@ -159,6 +160,7 @@ namespace CgsGraphics
     {
         mpIm2dRenderBuffer      = 0;   // +0x00
         mpIm3dRenderBuffer      = 0;   // +0x04
+        mpBufferedRenderBuffer = nullptr;  // FLAG PC-platform leaf: native buffered2D transport.
         mauVertexCount[0]       = 0;   // +0x08
         mapaVertices[0]         = 0;   // +0x0C
         mabTempVerticesInUse[0] = false;   // +0x10
@@ -172,6 +174,16 @@ namespace CgsGraphics
         mpBufferedRenderBuffer = 0;   // (PC fold: guarantee the immediate path regardless of init)
         RenderStringInternal(lrTextObject, EImRenderingType_Buffered);
         mpIm2dRenderBuffer = 0;
+    }
+
+    // ARTIST828019E8: r4 is the real buffered3D renderer, r5 the TextObject.
+    void TextRenderer::RenderString(Im3dRenderBuffer* lpRenderBuffer, const TextObject& lrTextObject)
+    {
+        mpIm2dRenderBuffer = nullptr;
+        mpIm3dRenderBuffer = lpRenderBuffer;
+        mpBufferedRenderBuffer = nullptr;
+        RenderStringInternal(lrTextObject, EImRenderingType_Buffered);
+        mpIm3dRenderBuffer = nullptr;
     }
 
     // FLAG (PC fold; see the header note): the Apt string path -- the glyphs ride the SAME
@@ -527,11 +539,9 @@ namespace CgsGraphics
     // HIBYTE` chain is the big-endian byte-reverse the X360 needs, exactly as in the main pass
     // (0x828004C0..), and the PC keeps the packed RGBA as-is -- see lEmitVertex.
     //
-    // [FLAG PC bring-up] the Im3d (3D text) branch @0x827FD9A4 -- which allocates 32-byte
-    // Im3dVertex records straight off mpIm3dRenderBuffer (ImRenderBuffer<Im3dVertex>::RenderStart
-    // @0x827EF548) and uses its OWN offset pair flt_82F31014/18 = (0.03, 0.03) -- is not ported,
-    // matching RenderBufferRenderEnd's existing 3D park. Neither the Apt string path nor the
-    // debug-text path ever sets mpIm3dRenderBuffer. DELETE-WHEN: the 3D text path is brought up.
+    // The3D branch reserves32-byte records directly, using its original XY
+    // offsets .03/.03 and Z .001 (82F31014/18/1C); the main glyph run remains
+    // in2D scratch until RenderBufferRenderEnd widens it into the command bank.
     // -------------------------------------------------------------------------------------
     void TextRenderer::RenderDropShadow(const RGBA* lpDropShadowColour, EImRenderingType leType)
     {
@@ -543,7 +553,24 @@ namespace CgsGraphics
             return;
 
         if (mpIm3dRenderBuffer != 0)
-            return;   // [FLAG PC bring-up] 3D branch, see above.
+        {
+            // ARTIST827FDC90..FE040: reserve3D vertices directly. The main
+            // glyph run remains in the 2D scratch until RenderBufferRenderEnd.
+            Im3dVertex* const lpOut3d = mpIm3dRenderBuffer->RenderStart(luVertexCount);
+            if (lpOut3d == nullptr)
+                return;
+            CGS_ASSERT(luVertexCount < KU_MAX_VERTICES, "luVertexCount<KU_MAX_VERTICES");
+            for (u32 luI = 0; luI < luVertexCount; ++luI)
+            {
+                lpOut3d[luI].mv3Pos = {lpInVert[luI].mv2Pos.x + 0.03f,
+                                      lpInVert[luI].mv2Pos.y + 0.03f, 0.001f, 0.0f};
+                *reinterpret_cast<u32*>(&lpOut3d[luI].mv4Colour) = *lpDropShadowColour;
+                lpOut3d[luI].mv2Tex0UV = {lpInVert[luI].mv2Tex0UV.x, lpInVert[luI].mv2Tex0UV.y};
+            }
+            mpIm3dRenderBuffer->RenderEnd(static_cast<renderengine::PrimitiveType>(KU_PRIMITIVE_TRIANGLE_STRIP), lpOut3d, luVertexCount);
+            guFontDiagShadowVerts += luVertexCount;
+            return;
+        }
 
         Im2dVertex* const lpOutVert = RenderBufferRenderStart(luVertexCount, leType);
         if (lpOutVert == 0)
@@ -567,9 +594,8 @@ namespace CgsGraphics
     // --- Render-buffer helpers (faithful X360 ports). Each dispatches to whichever immediate buffer
     //     the TextRenderer holds: mpIm2dRenderBuffer for 2D text (the debug-text path), or
     //     mpIm3dRenderBuffer for 3D text. The X360 reaches the buffer methods at +4 (the render-buffer
-    //     subobject), exactly one buffer is set at a time, and leType must be Buffered (asserts elided
-    //     -- they would pull in CgsDev::Assert). The 3D branches are a follow-on: the 2D debug-text
-    //     path never sets mpIm3dRenderBuffer, and the 3D vertex widen needs the 3D buffer/vertex. ---
+    //     subobject), exactly one buffer is set at a time. The3D scratch/vertex
+    //     widening is distinct from the2D reservation, as in the original. ---
 
     // X360 0x827F7D80: reserve luVertexCount vertices and return the write pointer.
     TextRenderer::Im2dVertex* TextRenderer::RenderBufferRenderStart(u32 luVertexCount, EImRenderingType leType)
@@ -585,6 +611,8 @@ namespace CgsGraphics
         if (mpIm3dRenderBuffer != 0)
         {
             // 3D: hand back the temp-vertex scratch (filled as 2D, widened to 3D in RenderBufferRenderEnd).
+            CGS_ASSERT(luVertexCount < KU_MAX_VERTICES, "luNumVertices<KU_MAX_VERTICES");
+            CGS_ASSERT(!mabTempVerticesInUse[leType], "Cannot nest text renders in 3D");
             mabTempVerticesInUse[leType] = true;
             return maaTempVertices[leType];
         }
@@ -776,7 +804,8 @@ namespace CgsGraphics
 
         if (mpIm2dRenderBuffer != 0)
             mpIm2dRenderBuffer->SetState(lpTextureState);
-        // else if (mpIm3dRenderBuffer) -> 3D buffer SetState (follow-on, 3D text path)
+        else if (mpIm3dRenderBuffer != nullptr)
+            mpIm3dRenderBuffer->SetState(lpTextureState);
     }
 
     // X360 0x827FA988: submit luVertexCount vertices as one primitive of the given topology.
@@ -800,9 +829,23 @@ namespace CgsGraphics
         }
         if (mpIm3dRenderBuffer != 0)
         {
-            // 3D text path: widen each 2D vertex (pos.xy/colour/uv) to a 3D vertex (pos.xyz with z=0,
-            // colour, uv) and submit on the 3D buffer. [Follow-on -- VPU widen at X360 0x827FA9F8; the
-            // debug-2D path never reaches here.]
+            CGS_ASSERT(luVertexCount < KU_MAX_VERTICES, "luNumVertices<KU_MAX_VERTICES");
+            CGS_ASSERT(mabTempVerticesInUse[leType], "Temporary text vertices are not in use");
+            CGS_ASSERT(lpVertices == maaTempVertices[leType], "lpVertices == maaTempVertices[leType]");
+            Im3dVertex* const lpOut3d = mpIm3dRenderBuffer->RenderStart(luVertexCount);
+            // FLAG PC-platform leaf: allocation failure retains no drawable vertex run.
+            if (lpOut3d == nullptr)
+            {
+                mabTempVerticesInUse[leType] = false;
+                return;
+            }
+            for (u32 luI = 0; luI < luVertexCount; ++luI)
+            {
+                lpOut3d[luI].mv3Pos = {lpVertices[luI].mv2Pos.x, lpVertices[luI].mv2Pos.y, 0.0f, 0.0f};
+                lpOut3d[luI].mv4Colour = lpVertices[luI].mv4Colour;
+                lpOut3d[luI].mv2Tex0UV = {lpVertices[luI].mv2Tex0UV.x, lpVertices[luI].mv2Tex0UV.y};
+            }
+            mpIm3dRenderBuffer->RenderEnd(static_cast<renderengine::PrimitiveType>(luPrimitiveType), lpOut3d, luVertexCount);
             mabTempVerticesInUse[leType] = false;
         }
     }

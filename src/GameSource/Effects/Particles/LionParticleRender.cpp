@@ -27,6 +27,7 @@
 
 #include <cstdio>   // snprintf (the [texreg] / [lionmat] witnesses)
 #include <cstdlib>  // malloc -- CreateInternalMaterial allocates the blend state with it
+#include "pc/gcm/renderengine/LionDrawDiagPC.h"
 
 // D3DDevice_SetTexture -- the platform (Xbox 360 D3D) texture-bind entry point. X360 call:
 // D3DDevice_SetTexture(off_83271608, 0, texture, 0x80000000) -- (device, sampler, texture,
@@ -749,6 +750,23 @@ void LionParticleRender::SetMaterial(const cParticleMaterial* apMaterial)
     // The cache test and the two stores are the console's own, against the console's own storage
     // (asm 0x82289744 / 0x82289770 / 0x82289774 -- see the note where the private fork used to be).
     renderengine::Texture* lpTexture = FindTexture(apMaterial->mTextureHandle);
+    if(renderengine::LionDrawDiag_EnabledPC())
+    {
+        u32 luMapIndex=~0u;
+        const TextureNameMap* lpMap=mTextureNameMap.operator->();
+        if(lpMap)
+            for(u32 i=0;i<lpMap->GetEntryCount();++i)
+                if(lpMap->GetEntries()[i].muHashedLionTextureName==apMaterial->mTextureHandle)
+                {luMapIndex=i;break;}
+        const CgsResource::ResourceHandle* lpHandle=luMapIndex<KU_MAX_PARTICLE_TEXTURES
+            ? &saTextures[luMapIndex] : nullptr;
+        const u64 luResourceId=lpHandle && lpHandle->mpSourceEntry
+            ? lpHandle->GetResourceId().GetHash() : 0;
+        renderengine::LionDrawDiag_SetMaterialPC(apMaterial->mpTextureName.Get(),
+            apMaterial->mFlags,apMaterial->GetShaderType(),apMaterial->mBlendMode,
+            apMaterial->mTextureHandle,luMapIndex,luResourceId,
+            lpHandle?lpHandle->mpSourceEntry:nullptr,lpTexture?lpTexture->mpD3DTexture:nullptr);
+    }
     if (shadow::Device::GetSamplerTextureShadow(0u) != static_cast<void*>(lpTexture))
     {
         LionBindWitness("B", apMaterial->mTextureHandle, lpTexture, mTextureNameMap.operator->());

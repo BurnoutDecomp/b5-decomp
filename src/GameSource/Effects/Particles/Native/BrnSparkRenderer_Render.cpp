@@ -731,8 +731,9 @@ void SparkVertexBufferBuilder::BuildDispatchData(EffectsVertexBufferLocked* lpLo
 //      global is the spark stream descriptor and the stream IS
 //      CgsGraphics::BasicColouredTexturedVertex (FLOAT3 position, packed RGBA8, FLOAT2 UV --
 //      ImRenderer<BasicColouredTexturedVertex>::Construct declares exactly those three elements),
-//      so the number it reads is sizeof(BasicColouredTexturedVertex) == 24 by construction. It is
-//      taken from the type here rather than re-homing a second descriptor global, and
+//      so the number it reads is NativeParticleVertex::GetStride() == 24. The CPU
+//      BasicColouredTexturedVertex record is32 bytes; its iterator packs this24-byte stream.
+//      The native stream's stride is used rather than re-homing a second descriptor global, and
 //      NativeParticleVertex::VertexIterator::Write -- which is what filled the buffer -- writes
 //      those same 24 bytes.
 //  (2) THE SAMPLER. The library sampler object is not built on this build (ConstructOnceOnly
@@ -784,8 +785,7 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
     mpRenderer->BeginRendering();
     mpRenderer->SetTransform(&lViewProjectionMatrix);
 
-    const u32 luVertexStride =
-        static_cast<u32>(sizeof(CgsGraphics::BasicColouredTexturedVertex));   // 24 -- see FLAG (1)
+    const u32 luVertexStride = NativeParticleVertex::GetStride();   // packed GPU24, CPU record32
     D3DDevice_SetStreamSource(gpD3DDevice, 0, lpVertexBuffer, 0, 0, 1);
     D3DDevice_SetStreamSource(gpD3DDevice, 0, lpVertexBuffer, 0, luVertexStride, 1);
 

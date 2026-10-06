@@ -4,6 +4,7 @@
 #include "DisplayResizePCLeaf.h"
 #include "FrameProfilePCLeaf.h"
 #include "WorldGeometryPCLeaf.h"
+#include "pc/gcm/renderengine/TrailPixelDiagPC.h"
 
 #include <Windows.h>
 #include <d3d9.h>
@@ -449,6 +450,10 @@ namespace renderengine {
     static bool gbDispatchLastPresentBlackPC = false;
     u32 guPresentCount = 0;
     bool gbDiagLastPresentBlack = false;
+    u32 GetDispatchPresentCountPC()
+    {
+        return guDispatchPresentCountPC;
+    }
     // FLAG PC-platform leaf: publish after join so update-side diagnostics
     // never read counters while dispatch modifies the next present.
     void PublishPresentDiagnosticsPC()
@@ -550,6 +555,428 @@ float renderengine::DiagTextureMeanLuma(void* lpD3DBaseTexture)
     }
     spSys->UnlockRect();
     return static_cast<float>(luSum) / static_cast<float>(32u * 18u * 3u);
+}
+
+// FLAG PC-platform leaf: optional readback of the actual final-composite
+// source/bloom textures. A band already in source0 belongs to an earlier pass;
+// a clear source paired with a bad final BMP directs the audit to the composite.
+// Only reads native bindings/surfaces, at most128 paired presents. Defaults to
+// one in twenty configured BMP samples after present3000. Optional observation
+// start/cadence controls do not change any draw/state/filter/value.
+void renderengine::DiagDumpPostFxSourcesPC()
+{
+    static const bool sbEnabled = []() {
+        const char* lpValue = std::getenv("BRN_POSTFX_SOURCE_DUMP");
+        return lpValue && lpValue[0] == '1';
+    }();
+    static const u32 suStartPresent = []() {
+        const char* lpValue = std::getenv("BRN_POSTFX_SOURCE_START");
+        char* lpEnd = nullptr;
+        const unsigned long luValue = lpValue ? std::strtoul(lpValue, &lpEnd, 10) : 0;
+        return lpValue && lpEnd != lpValue && *lpEnd == '\0' && luValue <= 1000000u
+            ? static_cast<u32>(luValue) : 3000u;
+    }();
+    static const u32 suCadence = []() {
+        const char* lpValue = std::getenv("BRN_POSTFX_SOURCE_EVERY");
+        char* lpEnd = nullptr;
+        const unsigned long luValue = lpValue ? std::strtoul(lpValue, &lpEnd, 10) : 0;
+        return lpValue && lpEnd != lpValue && *lpEnd == '\0' && luValue > 0 && luValue <= 1000000u
+            ? static_cast<u32>(luValue) : FrameDumpEvery() * 20u;
+    }();
+    static const char* const spFrameDirectory = std::getenv("BRN_FRAME_DUMP");
+    static u32 suAttempts = 0u;
+    static u32 suLastPresent = ~0u;
+    const u32 luPresent = GetDispatchPresentCountPC();
+    if (!sbEnabled || !spFrameDirectory || !spFrameDirectory[0] || !gDevice || luPresent < suStartPresent
+        || suAttempts >= 128u || suLastPresent == luPresent
+        || (luPresent % suCadence) != 0u)
+        return;
+    if (suAttempts == 0u)
+    {
+        char lacConfiguration[128];
+        std::snprintf(lacConfiguration, sizeof(lacConfiguration),
+            "[postfx-source] observation start=%u every=%u cap=128\n", suStartPresent, suCadence);
+        CgsDev::Log::WriteToLog(lacConfiguration);
+    }
+    suLastPresent = luPresent;
+    ++suAttempts;
+    char lacDirectory[768];
+    const int liDirectoryLength = std::snprintf(lacDirectory, sizeof(lacDirectory),
+        "%s/inputs", spFrameDirectory);
+    if (liDirectoryLength <= 0 || liDirectoryLength >= static_cast<int>(sizeof(lacDirectory)))
+        return;
+    CreateDirectoryA(lacDirectory, nullptr); // caller's unique frame directory already exists
+
+    for (u32 luUnit = 0u; luUnit < 2u; ++luUnit)
+    {
+        IDirect3DBaseTexture9* lpTexture = nullptr;
+        IDirect3DSurface9 *lpSource = nullptr, *lpReadback = nullptr;
+        HRESULT lhr = gDevice->GetTexture(luUnit, &lpTexture);
+        D3DSURFACE_DESC lDesc = {};
+        if (SUCCEEDED(lhr) && lpTexture && lpTexture->GetType() == D3DRTYPE_TEXTURE)
+            lhr = static_cast<IDirect3DTexture9*>(lpTexture)->GetSurfaceLevel(0, &lpSource);
+        else
+            lhr = E_FAIL;
+        if (SUCCEEDED(lhr)) lhr = lpSource->GetDesc(&lDesc);
+        if (SUCCEEDED(lhr) && lDesc.Format != D3DFMT_A8R8G8B8
+            && lDesc.Format != D3DFMT_X8R8G8B8)
+            lhr = E_NOTIMPL; // no guessed encoding or GPU conversion of the evidence
+        if (SUCCEEDED(lhr))
+            lhr = gDevice->CreateOffscreenPlainSurface(lDesc.Width, lDesc.Height,
+                lDesc.Format, D3DPOOL_SYSTEMMEM, &lpReadback, nullptr);
+        if (SUCCEEDED(lhr)) lhr = gDevice->GetRenderTargetData(lpSource, lpReadback);
+        bool lbWritten = false;
+        D3DLOCKED_RECT lLock = {};
+        if (SUCCEEDED(lhr)) lhr = lpReadback->LockRect(&lLock, nullptr, D3DLOCK_READONLY);
+        if (SUCCEEDED(lhr))
+        {
+            char lacPath[850];
+            const int liLength = std::snprintf(lacPath, sizeof(lacPath), "%s/%s_%06u.bmp",
+                lacDirectory, luUnit == 0u ? "source" : "bloom", luPresent);
+            FILE* lpFile = liLength > 0 && liLength < static_cast<int>(sizeof(lacPath))
+                ? std::fopen(lacPath, "wb") : nullptr;
+            if (lpFile)
+            {
+                BITMAPFILEHEADER lFile = {};
+                BITMAPINFOHEADER lInfo = {};
+                lFile.bfType = 0x4d42;
+                lFile.bfOffBits = sizeof(lFile) + sizeof(lInfo);
+                lFile.bfSize = lFile.bfOffBits + lDesc.Width*lDesc.Height*4u;
+                lInfo.biSize = sizeof(lInfo);
+                lInfo.biWidth = lDesc.Width;
+                lInfo.biHeight = -static_cast<LONG>(lDesc.Height);
+                lInfo.biPlanes = 1;
+                lInfo.biBitCount = 32;
+                lInfo.biCompression = BI_RGB;
+                lInfo.biSizeImage = lDesc.Width*lDesc.Height*4u;
+                lbWritten = fwrite(&lFile, sizeof(lFile), 1, lpFile) == 1u
+                    && fwrite(&lInfo, sizeof(lInfo), 1, lpFile) == 1u;
+                for (u32 luRow = 0u; luRow < lDesc.Height && lbWritten; ++luRow)
+                    lbWritten = fwrite(static_cast<const u8*>(lLock.pBits) + luRow*lLock.Pitch,
+                        4u, lDesc.Width, lpFile) == lDesc.Width;
+                lbWritten = fclose(lpFile) == 0 && lbWritten;
+            }
+            lpReadback->UnlockRect();
+        }
+        char lacMessage[220];
+        std::snprintf(lacMessage, sizeof(lacMessage),
+            "[postfx-source] present=%u unit=%u size=%ux%u format=%u written=%u hr=%08X\n",
+            luPresent, luUnit, lDesc.Width, lDesc.Height, static_cast<u32>(lDesc.Format),
+            lbWritten ? 1u : 0u, static_cast<u32>(lhr));
+        CgsDev::Log::WriteToLog(lacMessage);
+        if (lpReadback) lpReadback->Release();
+        if (lpSource) lpSource->Release();
+        if (lpTexture) lpTexture->Release();
+    }
+}
+
+// FLAG PC-platform leaf: four bounded before/after native colour readbacks
+// identify pixels actually covered by the original glass-array draw. They do
+// not rebind a surface, shader, texture or state, and issue no additional draw.
+namespace renderengine
+{
+namespace
+{
+    IDirect3DSurface9* spGlassPixelTarget = nullptr;
+    IDirect3DSurface9* spGlassPixelBefore = nullptr;
+    D3DSURFACE_DESC sGlassPixelDesc = {};
+    u32 suGlassPixelAttempts = 0, suGlassPixelPresent = 0, suGlassPixelLastPresent = 0;
+    const char* GlassPixelDirectoryPC()
+    {
+        static const char* const directory = std::getenv("BRN_FRAME_DUMP");
+        return directory;
+    }
+    void ReleaseGlassPixelsPC()
+    {
+        if (spGlassPixelBefore) spGlassPixelBefore->Release();
+        if (spGlassPixelTarget) spGlassPixelTarget->Release();
+        spGlassPixelBefore = nullptr; spGlassPixelTarget = nullptr;
+    }
+    HRESULT ReadNativeColourTargetPC(IDirect3DSurface9* target, IDirect3DSurface9* readback,
+                                    const D3DSURFACE_DESC& desc)
+    {
+        if (desc.MultiSampleType == D3DMULTISAMPLE_NONE)
+            return gDevice->GetRenderTargetData(target,readback);
+        // Native colour resolve, same format/dimensions as the actual surface.
+        // The scratch RT is never bound or drawn into. This is the D3D9 MSAA
+        // copy path also used by the engine's normal Target::Resolve.
+        IDirect3DSurface9* resolved=nullptr;
+        HRESULT hr=gDevice->CreateRenderTarget(desc.Width,desc.Height,
+            desc.Format,D3DMULTISAMPLE_NONE,0,FALSE,&resolved,nullptr);
+        if (SUCCEEDED(hr)) hr=gDevice->StretchRect(target,nullptr,resolved,nullptr,D3DTEXF_NONE);
+        if (SUCCEEDED(hr)) hr=gDevice->GetRenderTargetData(resolved,readback);
+        if (resolved) resolved->Release(); return hr;
+    }
+    bool WriteNativeColourPixelsPC(const char* path, IDirect3DSurface9* surface,
+                                  const D3DSURFACE_DESC& desc)
+    {
+        D3DLOCKED_RECT lock = {};
+        if (FAILED(surface->LockRect(&lock, nullptr, D3DLOCK_READONLY))) return false;
+        FILE* file = std::fopen(path, "wb"); bool written = file != nullptr;
+        if (file)
+        {
+            BITMAPFILEHEADER header = {}; BITMAPINFOHEADER info = {};
+            header.bfType = 0x4d42; header.bfOffBits = sizeof(header)+sizeof(info);
+            header.bfSize = header.bfOffBits+desc.Width*desc.Height*4u;
+            info.biSize = sizeof(info); info.biWidth = desc.Width;
+            info.biHeight = -static_cast<LONG>(desc.Height); info.biPlanes = 1;
+            info.biBitCount = 32; info.biCompression = BI_RGB;
+            info.biSizeImage = desc.Width*desc.Height*4u;
+            written = fwrite(&header,sizeof(header),1,file)==1 && fwrite(&info,sizeof(info),1,file)==1;
+            for (u32 y=0;y<desc.Height && written;++y)
+                written = fwrite(static_cast<const u8*>(lock.pBits)+y*lock.Pitch,
+                    4u,desc.Width,file)==desc.Width;
+            written = fclose(file)==0 && written;
+        }
+        surface->UnlockRect(); return written;
+    }
+}
+bool GlassPixelDiag_BeginPC()
+{
+    static const bool enabled = []() {
+        const char* value=std::getenv("BRN_GLASS_PIXEL_DUMP"); return value && value[0]=='1';
+    }();
+    const char* directory=GlassPixelDirectoryPC(); const u32 present=GetDispatchPresentCountPC();
+    if (!enabled || !directory || !directory[0] || !gDevice || suGlassPixelAttempts>=4
+        || (suGlassPixelAttempts && present-suGlassPixelLastPresent<10u)) return false;
+    suGlassPixelPresent=present; suGlassPixelLastPresent=present; ++suGlassPixelAttempts;
+    ReleaseGlassPixelsPC();
+    HRESULT hr=gDevice->GetRenderTarget(0,&spGlassPixelTarget);
+    if (SUCCEEDED(hr)) hr=spGlassPixelTarget->GetDesc(&sGlassPixelDesc);
+    if (SUCCEEDED(hr) && sGlassPixelDesc.Format!=D3DFMT_A8R8G8B8
+        && sGlassPixelDesc.Format!=D3DFMT_X8R8G8B8) hr=E_NOTIMPL;
+    if (SUCCEEDED(hr)) hr=gDevice->CreateOffscreenPlainSurface(sGlassPixelDesc.Width,
+        sGlassPixelDesc.Height,sGlassPixelDesc.Format,D3DPOOL_SYSTEMMEM,&spGlassPixelBefore,nullptr);
+    if (SUCCEEDED(hr)) hr=ReadNativeColourTargetPC(spGlassPixelTarget,spGlassPixelBefore,sGlassPixelDesc);
+    if (FAILED(hr))
+    {
+        char message[256]; std::snprintf(message,sizeof(message),
+            "[glass-pixels] present=%u attempt=%u stage=before size=%ux%u format=%u msaa=%u written=0 hr=%08X\n",
+            present,suGlassPixelAttempts,sGlassPixelDesc.Width,sGlassPixelDesc.Height,
+            static_cast<u32>(sGlassPixelDesc.Format),static_cast<u32>(sGlassPixelDesc.MultiSampleType),static_cast<u32>(hr));
+        CgsDev::Log::WriteToLog(message); ReleaseGlassPixelsPC(); return false;
+    }
+    return true;
+}
+void GlassPixelDiag_EndPC(u32 batches,u64 acceptedDraws)
+{
+    if (!spGlassPixelBefore || !spGlassPixelTarget) return;
+    IDirect3DSurface9* target=nullptr; IDirect3DSurface9* after=nullptr;
+    HRESULT hr=gDevice->GetRenderTarget(0,&target);
+    if (SUCCEEDED(hr) && target!=spGlassPixelTarget) hr=E_UNEXPECTED;
+    if (SUCCEEDED(hr)) hr=gDevice->CreateOffscreenPlainSurface(sGlassPixelDesc.Width,
+        sGlassPixelDesc.Height,sGlassPixelDesc.Format,D3DPOOL_SYSTEMMEM,&after,nullptr);
+    if (SUCCEEDED(hr)) hr=ReadNativeColourTargetPC(target,after,sGlassPixelDesc);
+    bool beforeWritten=false,afterWritten=false;
+    u32 rgbChanged=0,alphaChanged=0,minX=~0u,minY=~0u,maxX=0,maxY=0;
+    if (SUCCEEDED(hr))
+    {
+        D3DLOCKED_RECT a={},b={};
+        hr=spGlassPixelBefore->LockRect(&a,nullptr,D3DLOCK_READONLY);
+        if (SUCCEEDED(hr))
+        {
+            hr=after->LockRect(&b,nullptr,D3DLOCK_READONLY);
+            if (SUCCEEDED(hr))
+            {
+                // Native A8/X8 RGB dwords; no guessed depth/half-float decoding.
+                for (u32 y=0;y<sGlassPixelDesc.Height;++y) for (u32 x=0;x<sGlassPixelDesc.Width;++x)
+                {
+                    u32 av,bv;
+                    std::memcpy(&av,static_cast<const u8*>(a.pBits)+y*a.Pitch+x*4u,4);
+                    std::memcpy(&bv,static_cast<const u8*>(b.pBits)+y*b.Pitch+x*4u,4);
+                    if ((av^bv)&0xffffffu)
+                    {
+                        ++rgbChanged;
+                        if (x<minX) minX=x; if (y<minY) minY=y;
+                        if (x>maxX) maxX=x; if (y>maxY) maxY=y;
+                    }
+                    alphaChanged+=((av^bv)&0xff000000u)!=0;
+                }
+                after->UnlockRect();
+            }
+            spGlassPixelBefore->UnlockRect();
+        }
+    }
+    if (SUCCEEDED(hr))
+    {
+        char directory[768],beforePath[850],afterPath[850];
+        const int n=std::snprintf(directory,sizeof(directory),"%s/glass",GlassPixelDirectoryPC());
+        if (n>0 && n<static_cast<int>(sizeof(directory)))
+        {
+            CreateDirectoryA(directory,nullptr);
+            const int na=std::snprintf(beforePath,sizeof(beforePath),"%s/before_%06u.bmp",directory,suGlassPixelPresent);
+            const int nb=std::snprintf(afterPath,sizeof(afterPath),"%s/after_%06u.bmp",directory,suGlassPixelPresent);
+            if (na>0 && na<static_cast<int>(sizeof(beforePath))) beforeWritten=WriteNativeColourPixelsPC(beforePath,spGlassPixelBefore,sGlassPixelDesc);
+            if (nb>0 && nb<static_cast<int>(sizeof(afterPath))) afterWritten=WriteNativeColourPixelsPC(afterPath,after,sGlassPixelDesc);
+        }
+    }
+    char message[384]; std::snprintf(message,sizeof(message),
+        "[glass-pixels] present=%u attempt=%u batches=%u accepted=%llu size=%ux%u format=%u msaa=%u resolved=%u written=%u/%u rgb=%u alpha=%u bbox=%u,%u,%u,%u hr=%08X\n",
+        suGlassPixelPresent,suGlassPixelAttempts,batches,static_cast<unsigned long long>(acceptedDraws),
+        sGlassPixelDesc.Width,sGlassPixelDesc.Height,static_cast<u32>(sGlassPixelDesc.Format),
+        static_cast<u32>(sGlassPixelDesc.MultiSampleType),sGlassPixelDesc.MultiSampleType!=D3DMULTISAMPLE_NONE?1u:0u,
+        beforeWritten?1u:0u,afterWritten?1u:0u,rgbChanged,alphaChanged,minX,minY,maxX,maxY,static_cast<u32>(hr));
+    CgsDev::Log::WriteToLog(message);
+    if (after) after->Release(); if (target) target->Release(); ReleaseGlassPixelsPC();
+}
+
+namespace
+{
+    IDirect3DSurface9* spTrailPixelTarget = nullptr;
+    IDirect3DSurface9* spTrailPixelBefore = nullptr;
+    D3DSURFACE_DESC sTrailPixelDesc = {};
+    D3DVIEWPORT9 sTrailPixelViewport = {};
+    TrailPixelClockPC sTrailPixelClock;
+    TrailPixelTrackPC sTrailPixelTrack;
+    TrailPixelRectPC sTrailPixelRect;
+    f32 sfTrailPixelTime = 0;
+    u32 suTrailPixelPresent = 0;
+    u32 suTrailPixelSubmitted = 0;
+    u64 suTrailPixelDraws = 0;
+
+    void ReleaseTrailPixelsPC()
+    {
+        if (spTrailPixelBefore) spTrailPixelBefore->Release();
+        if (spTrailPixelTarget) spTrailPixelTarget->Release();
+        spTrailPixelBefore = nullptr; spTrailPixelTarget = nullptr;
+    }
+}
+
+bool TrailPixelDiag_EnabledPC()
+{
+    static const bool enabled = []() {
+        const char* value = std::getenv("BRN_TRAIL_PIXEL_DUMP"); return value && value[0] == '1';
+    }();
+    return enabled;
+}
+
+bool TrailPixelDiag_BeginPC(f32 now, Matrix44::InParam matrix, const TrailPixelBatchPC* batches)
+{
+    static const f32 start = []() {
+        const char* value = std::getenv("BRN_TRAIL_PIXEL_START");
+        const f32 parsed = value ? static_cast<f32>(std::atof(value)) : 0.0f;
+        return std::isfinite(parsed) && parsed >= 0 ? parsed : 0.0f;
+    }();
+    const char* directory = GlassPixelDirectoryPC();
+    if (!TrailPixelDiag_EnabledPC() || !directory || !directory[0] || !gDevice
+        || !std::isfinite(now) || now < start || sTrailPixelClock.attempts >= 12
+        || (sTrailPixelClock.attempts && now-sTrailPixelClock.last < 1.0f)) return false;
+    ReleaseTrailPixelsPC(); sTrailPixelDesc = {};
+    HRESULT hr = gDevice->GetRenderTarget(0,&spTrailPixelTarget);
+    if (SUCCEEDED(hr)) hr = spTrailPixelTarget->GetDesc(&sTrailPixelDesc);
+    if (SUCCEEDED(hr) && sTrailPixelDesc.Format != D3DFMT_A8R8G8B8
+        && sTrailPixelDesc.Format != D3DFMT_X8R8G8B8) hr = E_NOTIMPL;
+    if (SUCCEEDED(hr)) hr = gDevice->GetViewport(&sTrailPixelViewport);
+    if (SUCCEEDED(hr))
+    {
+        sTrailPixelTrack.Observe(batches,matrix,sTrailPixelViewport.Width,sTrailPixelViewport.Height,now);
+        // Wait for a real in-view strip; after selecting it, retain its metadata
+        // and sample the unchanged empty pass too, even when it is expired.
+        if (!sTrailPixelTrack.selected) { ReleaseTrailPixelsPC(); return false; }
+        sTrailPixelRect = sTrailPixelTrack.Project(matrix,sTrailPixelViewport.Width,sTrailPixelViewport.Height);
+        sTrailPixelRect.left += sTrailPixelViewport.X; sTrailPixelRect.right += sTrailPixelViewport.X;
+        sTrailPixelRect.top += sTrailPixelViewport.Y; sTrailPixelRect.bottom += sTrailPixelViewport.Y;
+        if (sTrailPixelRect.right > sTrailPixelDesc.Width) sTrailPixelRect.right = sTrailPixelDesc.Width;
+        if (sTrailPixelRect.bottom > sTrailPixelDesc.Height) sTrailPixelRect.bottom = sTrailPixelDesc.Height;
+        sTrailPixelRect.valid = sTrailPixelRect.valid && sTrailPixelRect.right > sTrailPixelRect.left
+            && sTrailPixelRect.bottom > sTrailPixelRect.top;
+        hr = gDevice->CreateOffscreenPlainSurface(sTrailPixelDesc.Width,sTrailPixelDesc.Height,
+            sTrailPixelDesc.Format,D3DPOOL_SYSTEMMEM,&spTrailPixelBefore,nullptr);
+        if (SUCCEEDED(hr)) hr = ReadNativeColourTargetPC(spTrailPixelTarget,spTrailPixelBefore,sTrailPixelDesc);
+    }
+    sTrailPixelClock.Take(now,start); sfTrailPixelTime = now;
+    suTrailPixelPresent = GetDispatchPresentCountPC();
+    if (FAILED(hr))
+    {
+        char message[300]; std::snprintf(message,sizeof(message),
+            "[trail-pixels] present=%u attempt=%u now=%.6f stage=before size=%ux%u format=%u msaa=%u written=0 hr=%08X\n",
+            suTrailPixelPresent,sTrailPixelClock.attempts,double(now),sTrailPixelDesc.Width,sTrailPixelDesc.Height,
+            u32(sTrailPixelDesc.Format),u32(sTrailPixelDesc.MultiSampleType),u32(hr));
+        CgsDev::Log::WriteToLog(message); ReleaseTrailPixelsPC(); return false;
+    }
+    suTrailPixelDraws = WorldDrawCallCount();
+    // CPU submitted batches, not a native acceptance counter. Native RGB
+    // before/after differences establish writes by the original trail pass.
+    suTrailPixelSubmitted = BrnParticle::Native::TrailRenderer::guProbeDraws;
+    return true;
+}
+
+void TrailPixelDiag_EndPC()
+{
+    if (!spTrailPixelBefore || !spTrailPixelTarget) return;
+    const u64 accepted = WorldDrawCallCount()-suTrailPixelDraws;
+    const u32 submitted = BrnParticle::Native::TrailRenderer::guProbeDraws-suTrailPixelSubmitted;
+    IDirect3DSurface9* target = nullptr; IDirect3DSurface9* after = nullptr;
+    HRESULT hr = gDevice->GetRenderTarget(0,&target);
+    if (SUCCEEDED(hr) && target != spTrailPixelTarget) hr = E_UNEXPECTED;
+    D3DVIEWPORT9 viewport = {};
+    if (SUCCEEDED(hr)) hr = gDevice->GetViewport(&viewport);
+    if (SUCCEEDED(hr) && (viewport.X != sTrailPixelViewport.X || viewport.Y != sTrailPixelViewport.Y
+        || viewport.Width != sTrailPixelViewport.Width || viewport.Height != sTrailPixelViewport.Height
+        || viewport.MinZ != sTrailPixelViewport.MinZ || viewport.MaxZ != sTrailPixelViewport.MaxZ)) hr = E_UNEXPECTED;
+    if (SUCCEEDED(hr)) hr = gDevice->CreateOffscreenPlainSurface(sTrailPixelDesc.Width,sTrailPixelDesc.Height,
+        sTrailPixelDesc.Format,D3DPOOL_SYSTEMMEM,&after,nullptr);
+    if (SUCCEEDED(hr)) hr = ReadNativeColourTargetPC(target,after,sTrailPixelDesc);
+    TrailPixelDeltaPC delta;
+    if (SUCCEEDED(hr))
+    {
+        D3DLOCKED_RECT a = {}, b = {};
+        hr = spTrailPixelBefore->LockRect(&a,nullptr,D3DLOCK_READONLY);
+        if (SUCCEEDED(hr))
+        {
+            hr = after->LockRect(&b,nullptr,D3DLOCK_READONLY);
+            if (SUCCEEDED(hr))
+            {
+                for (u32 y = 0; y < sTrailPixelDesc.Height; ++y) for (u32 x = 0; x < sTrailPixelDesc.Width; ++x)
+                {
+                    u32 av, bv;
+                    std::memcpy(&av,static_cast<const u8*>(a.pBits)+y*a.Pitch+x*4u,4);
+                    std::memcpy(&bv,static_cast<const u8*>(b.pBits)+y*b.Pitch+x*4u,4);
+                    delta.Add(av,bv,x,y,sTrailPixelRect);
+                }
+                after->UnlockRect();
+            }
+            spTrailPixelBefore->UnlockRect();
+        }
+    }
+    bool beforeWritten = false, afterWritten = false;
+    if (SUCCEEDED(hr))
+    {
+        char directory[768], beforePath[850], afterPath[850];
+        const int n = std::snprintf(directory,sizeof(directory),"%s/trail",GlassPixelDirectoryPC());
+        if (n > 0 && n < static_cast<int>(sizeof(directory)))
+        {
+            CreateDirectoryA(directory,nullptr);
+            const int na = std::snprintf(beforePath,sizeof(beforePath),"%s/before_%06u.bmp",directory,suTrailPixelPresent);
+            const int nb = std::snprintf(afterPath,sizeof(afterPath),"%s/after_%06u.bmp",directory,suTrailPixelPresent);
+            if (na > 0 && na < static_cast<int>(sizeof(beforePath))) beforeWritten = WriteNativeColourPixelsPC(beforePath,spTrailPixelBefore,sTrailPixelDesc);
+            if (nb > 0 && nb < static_cast<int>(sizeof(afterPath))) afterWritten = WriteNativeColourPixelsPC(afterPath,after,sTrailPixelDesc);
+        }
+    }
+    const Vector3 a = sTrailPixelTrack.ends[0].mPosition.GetVector3();
+    const Vector3 b = sTrailPixelTrack.ends[1].mPosition.GetVector3();
+    const f32 laidA = sTrailPixelTrack.ends[0].mTangent.GetPlus();
+    const f32 laidB = sTrailPixelTrack.ends[1].mTangent.GetPlus();
+    char message[1000]; std::snprintf(message,sizeof(message),
+        "[trail-pixels] present=%u attempt=%u now=%.6f type=%d segment=%d active=%u matches=%u "
+        "a=%.6f,%.6f,%.6f b=%.6f,%.6f,%.6f laid=%.6f,%.6f lastAdded=%.6f elapsed=%.6f "
+        "expired=%u worldIndexedAccepted=%llu submitted=%u size=%ux%u format=%u msaa=%u resolved=%u viewport=%u,%u,%u,%u roiValid=%u roi=%u,%u,%u,%u "
+        "written=%u/%u rgb=%u alpha=%u roiRgb=%u roiMagnitude=%llu hr=%08X\n",
+        suTrailPixelPresent,sTrailPixelClock.attempts,double(sfTrailPixelTime),sTrailPixelTrack.type,sTrailPixelTrack.segment,
+        sTrailPixelTrack.active,sTrailPixelTrack.matches,double(a.x),double(a.y),double(a.z),double(b.x),double(b.y),double(b.z),
+        double(laidA),double(laidB),double(sTrailPixelTrack.lastAdded),double(sfTrailPixelTime-sTrailPixelTrack.lastAdded),
+        sfTrailPixelTime-sTrailPixelTrack.lastAdded > 10.0f ? 1u : 0u,static_cast<unsigned long long>(accepted),
+        submitted,
+        sTrailPixelDesc.Width,sTrailPixelDesc.Height,u32(sTrailPixelDesc.Format),u32(sTrailPixelDesc.MultiSampleType),
+        sTrailPixelDesc.MultiSampleType != D3DMULTISAMPLE_NONE ? 1u : 0u,
+        sTrailPixelViewport.X,sTrailPixelViewport.Y,sTrailPixelViewport.Width,sTrailPixelViewport.Height,
+        sTrailPixelRect.valid ? 1u : 0u,
+        sTrailPixelRect.left,sTrailPixelRect.top,sTrailPixelRect.right,sTrailPixelRect.bottom,
+        beforeWritten ? 1u : 0u,afterWritten ? 1u : 0u,delta.rgb,delta.alpha,delta.roiRgb,
+        static_cast<unsigned long long>(delta.roiMagnitude),u32(hr));
+    CgsDev::Log::WriteToLog(message);
+    if (after) after->Release(); if (target) target->Release(); ReleaseTrailPixelsPC();
+}
 }
 
 static void WatchBlackFramesIfRequested()
@@ -727,6 +1154,18 @@ static void DumpBackBufferIfRequested()
     {
         return;
     }
+
+    // FLAG PC-platform leaf: align a bounded consecutive final-frame window
+    // with optional source readbacks. Default0 retains the existing writer.
+    static const u32 suStartPresent = []() {
+        const char* lpValue = std::getenv("BRN_FRAME_DUMP_START");
+        char* lpEnd = nullptr;
+        const unsigned long luValue = lpValue ? std::strtoul(lpValue, &lpEnd, 10) : 0;
+        return lpValue && lpEnd != lpValue && *lpEnd == '\0' && luValue <= 1000000u
+            ? static_cast<u32>(luValue) : 0u;
+    }();
+    if (renderengine::guDispatchPresentCountPC < suStartPresent)
+        return;
 
     // [diag] BRN_FRAME_DUMP_ARM=1 -- HOLD the writer until the traffic swerve camera latches,
     // and BRN_FRAME_DUMP_MAX=<n> -- stop after n frames. Both default off, so an ordinary

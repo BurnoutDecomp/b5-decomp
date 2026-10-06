@@ -6,27 +6,26 @@
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"  // CgsGraphics::BasicColouredTexturedVertex (Im3d)
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // renderengine::ProgramVariableHandle
 
-// CgsGraphics::Im3d* - the untextured immediate-mode 3D render hierarchy. Mirrors the 2D
+// CgsGraphics::Im3d* - the immediate-mode 3D render hierarchy. Mirrors the 2D
 // fold in CgsIm2d.h: Im3dBase<V> adds the world transform on top of ImRenderer<V>, and
 // Im3dUntex specialises it for the position+colour vertex (BasicColouredVertex). Hierarchy
 // from the DecFIGS DWARF (CgsIm3d.h:56/199):
 //   Im3dUntex : Im3dBase<BasicColouredVertex> : ImRenderer<BasicColouredVertex> : ImRendererBase
+//   Im3d : Im3dBase<BasicColouredTexturedVertex> : ImRenderer<BasicColouredTexturedVertex>
 //
-// In-scope callers (BrnGui::ProgressBarRenderer::RenderQuadUntex @ 0x8245C828) only:
-//   - set the current transform (SetTransform(Matrix44)), and
-//   - submit a static vertex run (the inherited ImRenderer<V>::Render).
-// so only those two entry points are bodied/declared; the rest of the X360 Im3dBase API
-// (Construct, the program/state-handle table, the two-matrix SetTransform) is OMITTED as
-// uncommitted out-of-scope state. FLAG: minimal-slice immediate-3D hierarchy.
+// Textured3D publishes full one/two-matrix transforms; the legacy untextured
+// ProgressBar slice remains limited to its previously recovered members.
 namespace CgsGraphics
 {
     template <typename V>
     struct Im3dBase : public ImRenderer<V>
     {
+        using ImRenderer<V>::SetTransform;
         // DWARF CgsIm3d.h:74 -- install the world->view->proj transform used by the next
         // Render submissions. (The X360 takes the Matrix44 by value; the RenderQuadUntex
         // call passes the identity matrix.)
         void SetTransform(Matrix44 lTransform);
+        void SetTransform(Matrix44 lModelToWorld, Matrix44 lViewProjection);
 
         // DWARF CgsIm3d.h:85 -- the active transform the immediate batches are drawn with.
         Matrix44 mCurrentTransform;
@@ -50,7 +49,7 @@ namespace CgsGraphics
     // their own TUs. FLAG: SaveMaskShaderConstants / SetMaskPixelShaderState are declaration-only
     // (no X360 body attested for this key), and their parameter TYPES are width-only (4-byte,
     // no DecFIGS DWARF for this TU) -- modelled as opaque handles, not fabricated.
-    struct Im3d : public ImRenderer<BasicColouredTexturedVertex>
+    struct Im3d : public Im3dBase<BasicColouredTexturedVertex>
     {
         // V_IM3D_MAX_MASK_COUNT -- the mask-stack ceiling PushMask asserts against (X360 immediate
         // `cmplwi 2`). CgsIm3d.h:374 in the X360 source.
@@ -64,6 +63,9 @@ namespace CgsGraphics
         // through), and "gvMaskUseFlags" against program 1's vertex AND pixel buffers into the mask
         // handle at this+0x160.
         void Construct(rw::IResourceAllocator* lpAllocator);
+        // FLAG PC-platform leaf: program allocation/adoption can fail on the host.
+        bool HasProgramsPC() const
+        { return mapVertexProgramBuffer[0] != nullptr && mapPixelProgramBuffer[0] != nullptr; }
 
         // The "gvMaskUseFlags" handle Construct resolves (X360 this+0x160), consumed by the mask
         // pixel-shader state. Declared so Construct can reach it by name.

@@ -151,6 +151,7 @@ namespace Native
     // ------------------------------------------------------------------------
     struct TrailSystem
     {
+        friend class TrailFramePC;
         // :339 -- the per-type start/end colours (X360 .data flt_82CDAE78: every type
         // starts at {0,0,0,0.77} and ends at {0,0,0,0}); UpdateTrailType overwrites a
         // type's pair from the surface's visualfxsurface SkidMarkStart/EndColour.
