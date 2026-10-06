@@ -343,6 +343,19 @@ namespace Deformation
             lpVehicle->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(2)).GetRoadContact().mbIsOnGround ? 1u : 0u,
             lpVehicle->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(3)).GetRoadContact().mbIsOnGround ? 1u : 0u);
         CgsDev::Log::WriteToLog(lacLine);
+        // Same bounded read-only sample: record the live clamp input rather
+        // than substituting reconstructed bounds for runtime evidence.
+        const auto& lrBounds = lpVehicle->GetDeformableAABB();
+        const auto lGraphicsPose = lpVehicle->GetGraphicsVehicleTransform();
+        std::snprintf(lacLine, sizeof(lacLine),
+            "[max-deform-bounds] phase %s sample %d present %u rig %d "
+            "min %.9g %.9g %.9g max %.9g %.9g %.9g graphicsPos %.9g %.9g %.9g graphicsAt %.9g %.9g %.9g\n",
+            lpcPhase,siPostSamples,renderengine::guPresentCount,miSelectedRig,
+            lrBounds.mMin.x,lrBounds.mMin.y,lrBounds.mMin.z,
+            lrBounds.mMax.x,lrBounds.mMax.y,lrBounds.mMax.z,
+            lGraphicsPose.wAxis.x,lGraphicsPose.wAxis.y,lGraphicsPose.wAxis.z,
+            lGraphicsPose.zAxis.x,lGraphicsPose.zAxis.y,lGraphicsPose.zAxis.z);
+        CgsDev::Log::WriteToLog(lacLine);
         if (!lbPostUpdate)
         {
             for (s32 liSensor=0;liSensor<lpSpec->GetNumDeformationSensors();++liSensor)
