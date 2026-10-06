@@ -14,16 +14,6 @@
 // stride is not attested here, so the index arithmetic necessarily lives in the callee). A
 // not-yet-homed callee is satisfied by its declaration under cl /c; no body is needed.
 // ------------------------------------------------------------------------------------------
-namespace BrnTraffic
-{
-    // X360 @0x82450718 tail-calls this scoring-traffic CgsArray element accessor. The ledger
-    // truncates its symbol to "BrnTraffic::BrnTraf"; it is homed in the class:BrnTraffic
-    // scoring TU. It takes the array object base -- GuiCache::maScoringTrafficDataStorage
-    // (the mTrafficCarInfo.mScoreTargets CgsArray @0xA150) -- and the element index, and
-    // returns the addressed ScoringTrafficData. FLAG: exact symbol name unrecovered (truncated
-    // in the ledger).
-    const ScoringTrafficData* GetScoringTrafficDataElement(const u8* lpScoreTargetsArray, u32 luIndex);
-}
 
 namespace BrnGui
 {
@@ -48,18 +38,7 @@ namespace BrnGameState
 
 namespace BrnGui
 {
-    // @ 0x82450718 -- index the scoring-traffic array (mTrafficCarInfo.mScoreTargets @0xA150).
-    // The X360 forms &maScoringTrafficDataStorage, front-guards the CgsArray "used before
-    // Construct/Clear" sentinel (miScoringTrafficCount @0xA3D0 == -1) and the upper bound
-    // (luIndex < count), then tail-forwards (base, index) to the array's element accessor and
-    // returns its ScoringTrafficData*.
-    const BrnTraffic::ScoringTrafficData* GuiCache::GetScoringTrafficData(u32 luIndex) const
-    {
-        CGS_ASSERT(miScoringTrafficCount != -1, "Array used before Construct/Clear was called");
-        CGS_ASSERT(luIndex < static_cast<u32>(miScoringTrafficCount),
-                   "liIndex >= 0 && liIndex < mTrafficCarInfo.mScoreTargets.GetLength()");
-        return BrnTraffic::GetScoringTrafficDataElement(maScoringTrafficDataStorage, luIndex);
-    }
+    // GetScoringTrafficData @0x82450718 is now homed in mounted BrnGuiCache.cpp.
 
     // @ 0x8240FA88 -- GetEventDestinationLandmarkIndex: ⭐ MOVED OUT 2026-08-29 (wave J).
     // The body now lives in the MOUNTED GameSource/Gui/BrnGuiCache_wJ_01.cpp, where it

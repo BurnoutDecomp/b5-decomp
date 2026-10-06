@@ -1,4 +1,6 @@
 #pragma once
+#include "GameSource/Gui/Events/BrnGuiEventSetAvailablePresetRaces.h"
+#include "GameSource/Gui/Events/BrnGuiEventPreRaceMessages.h"
 #include "GameSource/Gui/Events/BrnGuiCrashEvents.h"
 #include "GameSource/Gui/Events/BrnGuiEventRacePositionInfo.h"
 
@@ -12,6 +14,7 @@
 #include "GameSource/Network/SharedIO/BrnBuddyInformation.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEvent<N> (12-byte event header)
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"   // GuiPFXHookEvent / ...StopEvent / ...Background... / GuiPFXHookEnumeration (495..501, RECOVERED 2026-09-17)
+#include "GameSource/Gui/Events/BrnGuiEventSetBlackBars.h"
 #include "GameShared/GameClasses/Core/CgsID.h"
 #include "GameSource/GameState/BrnCgsPlayerName.h"  // CgsNetwork::PlayerName (scoreboard request payloads)        // CgsID (GuiPlayerInfoResponse::mCarId)
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"  // BrnTraffic::VehicleClass / VehicleScoreCategory (GuiHitVehicleEvent)
@@ -304,7 +307,7 @@ namespace BrnGui
     static_assert(sizeof(GuiEventOnlineReceiveFriendInfo) == 672, "friend batch payload");
     struct GuiEventOnlineTimeout { u8 maData[4]; s32 GetEventType() const { return 108; } };  // id 108 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventPlayerReachedRoadRageTarget { u8 maData[1]; s32 GetEventType() const { return 168; } };  // id 168 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiEventPreRaceMessages : public CgsGui::GuiEvent<159> { u8 maPayload[1732]; };  // id 159 size 1744 (12B GuiEvent header + opaque payload)
+    // GuiEventPreRaceMessages159 is the canonical1744-byte raw payload above.
     struct GuiEventPrepareForInvite { u8 maData[1]; s32 GetEventType() const { return 128; } };  // id 128 size 1 (raw; size not GuiEvent-shaped)
     // [A9 mode-type arm 2026-08-27] GuiEventPrepareForModeStart (id 93) has been RECOVERED and
     // now lives in BrnGuiEventTypeDefs.h with its real flat wire shape (the opaque
@@ -379,8 +382,6 @@ namespace BrnGui
     struct GuiEventScoreboardResponseIndexEvent : public CgsGui::GuiEvent<117> { u8 maPayload[304]; };  // id 117 size 316 (12B GuiEvent header + opaque payload)
     struct GuiEventScoreboardResponseTableEvent : public CgsGui::GuiEvent<119> { u8 maPayload[2912]; };  // id 119 size 2924 (12B GuiEvent header + opaque payload)
     struct GuiEventScoreboardResponseVariationEvent : public CgsGui::GuiEvent<118> { u8 maPayload[2040]; };  // id 118 size 2052 (12B GuiEvent header + opaque payload)
-    struct GuiEventSetAvailablePresetRaces : public CgsGui::GuiEvent<170> { u8 maPayload[716]; };  // id 170 size 728 (12B GuiEvent header + opaque payload)
-    struct GuiEventSetBlackBars { u8 maData[4]; s32 GetEventType() const { return 221; } };  // id 221 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventShowFreeburnChallenge { u8 maData[8]; s32 GetEventType() const { return 582; } };  // id 582 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventShowHideHud { u8 maData[1]; s32 GetEventType() const { return 148; } };  // id 148 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventSpecificPresetRaces : public CgsGui::GuiEvent<194> { u8 maPayload[7692]; };  // id 194 size 7704 (12B GuiEvent header + opaque payload)

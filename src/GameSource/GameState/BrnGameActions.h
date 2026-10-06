@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "SharedClasses/Progression/BrnRace.h"
 #include "SharedClasses/StreetData/BrnChallengeData.h"
 #include "SharedClasses/StreetData/BrnStreetData.h"
 #include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h"
@@ -322,6 +323,8 @@ enum EGameActionType
     // (nothing posts through the tag yet) but it is the id the whole gameplay-arming chain
     // turns on: at a wrong value no consumer's case would ever match.
     E_ACTION_PREPARE_FOR_MODE           = 23,    // DWARF :29 gives 19 -- PS3 value (X360-attested 23)
+    // ARTIST SendSetLandmarkRacesAction82381DAC and Translate823EB56C: raw728 bytes.
+    E_ACTION_SET_LANDMARK_RACES          = 51,
     // [!!] VALUE CORRECTION 2026-08-26 (stuntrace waveB CLOSURE round) -- 40 -> 45, and THE
     // PRODUCER IS NOW LOCATED, so this is a PIN and no longer the "shift is an inference" park
     // the previous pass left here. Method: an exhaustive sweep of every `AddEvent` call site in
@@ -2743,6 +2746,16 @@ static_assert(sizeof(UpdatePlayerMedalsAction) == 8,
 // The console builds it on the stack from var_2B0 (the f32 at the record base) through var_56 and
 // posts &var_2B0 with size 604. The 592-byte FlybyData sits immediately after the f32, which is
 // what makes the record 4 + 592 + 4 + 3 == 603 -> 604 with one byte of tail padding.
+// DecFIGS BrnGameActions.h:1773/1774; ARTIST sender82381D7C..DB8.
+struct SetLandmarkRacesAction : public GameAction<E_ACTION_SET_LANDMARK_RACES>
+{
+    BrnProgression::Race maRaces[6];
+    u32 muNumRaces;
+};
+static_assert(sizeof(SetLandmarkRacesAction) == 728, "ARTIST action51 is 0x2D8 bytes");
+static_assert(offsetof(SetLandmarkRacesAction, muNumRaces) == 720,
+              "ARTIST action51 count is +0x2D0");
+
 struct StartModeIntroAction : public GameAction<E_ACTION_START_MODE_INTRO>
 {
     f32           mfDurationSeconds;         // +0x000  mode vtbl+32 GetIntroDurationSeconds()

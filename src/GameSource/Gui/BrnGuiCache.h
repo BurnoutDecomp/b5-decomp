@@ -52,7 +52,6 @@ namespace BrnGameState { namespace GameStateModuleIO { class SpecificGameModeEve
 // be taken by value and used as an array subscript below.
 namespace BrnGameState { enum ECurrentMedalTargetTime : s32; }
 namespace BrnNetwork { namespace BrnNetworkModuleIO { struct InGamePlayerStatusData; } } // GetOnlinePlayerInfo return (pointer only; home BrnNetworkModuleInGamePlayerStatusInterface.h)
-namespace BrnTraffic { struct ScoringTrafficData; } // GetScoringTrafficData return (pointer only; home BrnTraffic scoring TU) -- element of the maScoringTrafficData table
 // CgsNetwork::PlayerName is now a COMPLETE type (included above): it is the lead value member
 // of ReplayPlayerActive (the replay-player-active table entry) and the element returned by
 // GetSortedReplayPlayerActive. Home: GameSource/GameState/BrnCgsPlayerName.h.
@@ -88,8 +87,6 @@ namespace BrnGui
     // the inlined event-display helpers).
     struct PresetEvent;
     struct SatNavEventDisplayInfo;
-    struct PreEventInfo;   // opaque boundary record (GetPreEventInfo result; consumed by
-                           // OnlinePreEventMessages::Show -- pointer-only)
     // [p0 map-event wave, 2026-09-08] `PresetRace` IS `BrnProgression::Race` -- it is not an
     // un-homed record. The recovered declaration outline of every consumer spells the result
     // of GetPresetRace `const Race *` (CrashNavMapEvent::{SetTracker, SetEventData,
@@ -1179,9 +1176,13 @@ namespace BrnGui
 
         // --- road-rule / scoring-traffic / stunt / preset tables ---
         bool IsRoadRuleActive(s32 liRoadRuleType) const;   // X360 @0x82472E78 (maRoadRuleActiveByType @0xAC44, idx 0..1)
-        s32  GetScoringTrafficCount() const;               // X360 @0x824497C0 (miScoringTrafficCount @0xA3D0)
-        const BrnTraffic::ScoringTrafficData*
+        u32  GetScoringTrafficCount() const;               // X360 @0x824497C0, DWARF h:1211
+        const BrnTraffic::BrnTrafficIO::VehicleScoreData*
             GetScoringTrafficData(u32 luIndex) const;      // X360 @0x82450718 (maScoringTrafficData @0xA150)
+        const GuiOverheadSignInfoEvent::VisibleOverheadSignArray* GetVisibleOverheadSignArray() const
+        {
+            return &mVisibleOverheadSignArray;
+        }
         const StuntToDisplayInfo* GetStuntToDisplay(s32 liIndex) const; // X360 @0x8240F770 (maStuntToDisplay @0xAC5C)
         const PresetRace* GetPresetRace(s32 liPresetRaceIndex) const;   // X360 @0x824B2FE8 (maPresetRaces @0x4FB0, count miNumPresetRaces @0x5280)
 
@@ -1204,6 +1205,9 @@ namespace BrnGui
         void ClearReplayPlayerActive();                                            // X360 @0x824EEE28 (clears maReplayPlayersActive/maReplayARCRendered, mbReplayHasBeenSorted=0)
         void IncrementReplayPlayerActive(const char* lpcPlayerName, s32 liValue);  // X360 @0x824EEEC0 (maReplayPlayersActive lookup/append)
         void SortReplayPlayersActive();                                            // X360 @0x824F8C58 (qsort maReplayPlayersActive; sets mbReplayHasBeenSorted)
+        // ARTIST AboveCarRenderer::RenderReplayAboveCar reads the byte at141DC.
+        // Name recovered from its role; this extension is absent from DecFIGS.
+        bool GetRenderReplayPlayerNames() const { return mbRenderReplayPlayerNames; }
         static s32 _SortReplayPlayersActiveByCount(const void* lpA, const void* lpB); // X360 @0x824EF028 (qsort comparator on entry +0x18 count)
 
         // --- misc setters / sat-nav / car-unlock ---
@@ -1754,9 +1758,8 @@ namespace BrnGui
         // `lwz r11, 0x34(r30) ; ... ; stw r11, 0x4F9C(r31)`, then the SAME word is reloaded
         // as the bound of the landmark-tracker fill loop (@0x82510590) and passed as the
         // third argument to GuiCache::UpdateTrackerInfo (@0x825105F8). The store is
-        // UNCONDITIONAL; the loop and the UpdateTrackerInfo call that read it back are gated
-        // on meGameModeType == E_MODE_ONLINE_BURNING_HOME_RUN (13) and are FLAG-deferred in
-        // BrnGuiCache.cpp -- see the case-492 banner there.
+        // UNCONDITIONAL, as is the landmark mapping loop. Only the tracker publish is
+        // gated on mode 13 and a changed count (ARTIST 825105D4..10600).
         // No member is shifted (the pad simply loses its last 4 bytes).
         s32  miNumRemainingCheckpoints;                  // +0x4F9C (20380)
         // ADDITIVE CARVE (HUD H1 wave, 2026-08-25): the district-marker source words -- the
@@ -1774,7 +1777,7 @@ namespace BrnGui
         s32  meChangeDistrictDistrict;                   // +0x4FA4 (20388) BrnWorld::EDistrict
         u8   mu8ChangeDistrictConsumed;                  // +0x4FA8 (20392) 0 == fresh, 1 == consumed
         u8   maPad_4FA9[7];                              // +0x4FA9..+0x4FAF
-        u8   maPresetRacesStorage[6 * 120];              // +0x4FB0 (20400) PresetRace maPresetRaces[6] (stride 120; GetPresetRace @0x824B2FE8 -> 120*(idx+170)+this; element un-homed)
+        PresetRace maPresetRaces[6];                     // +0x4FB0, 120-byte canonical Race records (ARTIST8250E600)
         s32 miNumPresetRaces;                            // +0x5280 (21120) count of maPresetRaces (GetPresetRace bound)
         // [p0 map-event wave] ADDITIVE CARVE from the 2-byte pad -- the landmark the map
         // cursor is currently over. CrashNavMapEvent::HandleSelect reads this half-word and
@@ -2036,11 +2039,9 @@ namespace BrnGui
         bool maEventPositionValid[8];                    // +0xA140 (41280) validity gate for maEventPositionOfRaceCar / maRaceCarFinished
         u8  mPad_A148[8];                                // +0xA148..+0xA14F
         // ---- scoring-traffic CgsArray (mTrafficCarInfo.mScoreTargets) ----
-        u8  maScoringTrafficDataStorage[640];            // +0xA150 (41296) BrnTraffic::ScoringTrafficData[] (GetScoringTrafficData @0x82450718 forwards 41296; element sizeof un-attested)
-        s32 miScoringTrafficCount;                       // +0xA3D0 (41936) GetScoringTrafficCount @0x824497C0 (CgsArray count; ctor -1)
-        u8  mPad_A3D4[1036];                             // +0xA3D4..+0xA7DF
-        s32 miCtorSentinel_A7E0;                         // +0xA7E0 (42976) ctor writes -1 (CgsArray sentinel; sub-array un-homed)
-        u8  mPad_A7E4[24];                               // +0xA7E4..+0xA7FB
+        GuiTrafficCarInfoEvent mTrafficCarInfo;         // +0xA150, 656 bytes; count +0xA3D0
+        GuiOverheadSignInfoEvent::VisibleOverheadSignArray mVisibleOverheadSignArray; // +0xA3E0, 1040 bytes
+        u8 mPad_A7F0[12];                              // +0xA7F0..+0xA7FB
         // ---- online game-mode-options (round-indexed) ----
         s32 miOnlineRoundIndex;                          // +0xA7FC (43004) GetOnlineRoundIndex (GetOnlineLandmarkIndex @0x8240FB50), < KU_MAX_ONLINE_ROUNDS_IN_MODE
         // The +0xA800 span is the cached GuiEventNetworkGameParams PAYLOAD MIRROR:
@@ -2214,8 +2215,7 @@ namespace BrnGui
         //     (the prompt is deferred to E_STATE_PRODUCT_CODE_INPUT_PENDING while it is set).
         bool mbAutosaveIconVisible;                      // +0x12F09 (77577)
         // ---- mPreRaceData: fly-by pre-event messages (GetPreEventInfo @0x824827D8) ----
-        u8  maPreEventInfoStorage[3][580];               // +0x12F0C (77580) PreEventInfo maPreEventInfo[3] (stride 580)
-        s32 miNumMessages;                               // +0x135D8 (79320) mPreRaceData.miNumMessages (GetPreEventInfo bound)
+        GuiEventPreRaceMessages mPreRaceData;            // +0x12F0C: three580B rows, count+0x135D8
         // ---- mProfileEventState: offline profile-event CgsArray ----
         u8  mProfileEventStateStorage[1400];             // +0x135DC (79324) GetProfileEvent @0x82449880 forwards 79324; count is miProfileEventsCount @+1400
         s32 miProfileEventsCount;                         // +0x13B54 (80724) GetNumProfileEvents count / CgsArray sentinel (ctor -1)
@@ -2280,7 +2280,9 @@ namespace BrnGui
         // ---- replay slots / status interface / player tables ----
         s32 maReplayReelForSlot[6];                      // +0x13BA0 (80800) ReplayConvert... @0x824EEBE0 (4*(slot+20200)+this)
         s32 miReplaySlotsUsed;                           // +0x13BB8 (80824) ReplayConvert... bound
-        u8  mReplayStatusInterfaceStorage[1572];         // +0x13BBC (80828) BrnReplays::ReplayIO::StatusInterface (ReplayConvert forwards 80828; GetReel)
+        u8  mReplayStatusInterfaceStorage[1568];         // +0x13BBC (80828) ReplayConvert forwards this address; GetReel
+        bool mbRenderReplayPlayerNames;                 // +0x141DC (82396), RenderReplayAboveCar8245B3A0
+        u8  mPad_141DD[3];
         // 16 replay-player-active entries, stride 32 (lead CgsNetwork::PlayerName + value@+0x10 + count@+0x18).
         ReplayPlayerActive maReplayPlayersActive[16];    // +0x141E0 (82400) GetSortedReplayPlayerActive @0x824EEFA0 (32*(idx+2575)+this); qsort'd by muActiveCount
         bool maReplayARCRendered[8];                     // +0x143E0 (82912) IsReplayARCRendered @0x824EEDA8

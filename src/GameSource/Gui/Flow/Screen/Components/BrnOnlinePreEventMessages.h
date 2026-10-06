@@ -2,6 +2,7 @@
 #define BRN_ONLINE_PRE_EVENT_MESSAGES_H
 
 #include "types.hpp"
+#include "GameSource/Gui/Events/BrnGuiEventPreRaceMessages.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h" // CgsGui::GuiComponent
 
 // BrnGui::OnlinePreEventMessages - the screen component that shows the pre-event
@@ -19,7 +20,6 @@
 // offset is not load-bearing on the 64-bit host (member declared by name).
 
 namespace CgsGui { struct StateInterface; }
-namespace BrnGui { struct PreEventInfo; }   // pointer-only boundary (GuiCache::GetPreEventInfo result)
 
 namespace BrnGui
 {

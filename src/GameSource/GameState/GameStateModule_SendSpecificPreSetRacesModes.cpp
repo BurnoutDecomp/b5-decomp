@@ -384,4 +384,20 @@ void GameStateModule::SendSpecificPreSetRacesModesAction(
     }
 }
 
+// ARTIST82381CD8; DecFIGS BrnGameStateModule.h:766. All original asserts are non-gating.
+void GameStateModule::SendSetLandmarkRacesAction(GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    const LandmarkIndex lCurrentLandmarkIndex = mModeManager.GetPlayerCurrentLandmark();
+    CGS_ASSERT(static_cast<s32>(lCurrentLandmarkIndex) != -1,
+               "lCurrentLandmarkIndex != K_INVALID_LANDMARK");
+    CGS_ASSERT(static_cast<s32>(lCurrentLandmarkIndex) != -2,
+               "lCurrentLandmarkIndex != K_MULTIPLE_LANDMARKS");
+    GameStateModuleIO::SetLandmarkRacesAction lSlamAction;
+    lSlamAction.muNumRaces = mProgressionManager.GetRacesAtLandmark(
+        lSlamAction.maRaces, 6, lCurrentLandmarkIndex, true);
+    CGS_ASSERT(lSlamAction.muNumRaces > 0, "lSlamAction.muNumRaces > 0");
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSlamAction),
+                           GameStateModuleIO::E_ACTION_SET_LANDMARK_RACES, sizeof(lSlamAction));
+}
+
 } // namespace BrnGameState

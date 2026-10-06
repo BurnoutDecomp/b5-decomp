@@ -1380,7 +1380,7 @@ public:
     // (:1173). Callers: GameStateModule::SendSetLandmarkRacesAction @0x82381CD8 and
     // GameStateModule::ProcessGameEvents @0x823A0A18.
     u32 GetRacesAtLandmark(Race* lpaRacesOut, u32 luMaxRaces,
-                           BrnGameState::LandmarkIndex lLandmarkIndex) const;
+                           BrnGameState::LandmarkIndex lLandmarkIndex, bool lbIncludeCustomRaces) const;
 
     // X360 0x8236F928. True as soon as ONE preset race starts at lLandmarkIndex. Caller:
     // ModeManager::PlayerTriggersLandmark @0x82311A68.

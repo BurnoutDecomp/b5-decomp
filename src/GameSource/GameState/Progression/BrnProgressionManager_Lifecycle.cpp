@@ -728,13 +728,12 @@ void ProgressionManager::SetupRoamingSections()
 //   return luRaceCount
 //
 // The fourth DWARF parameter (`GetRacesAtLandmark(Race *, uint32_t, LandmarkIndex, bool) const`,
-// DWARF :297) is r7, and r7 is never read anywhere in the body -- it is dead in this build, so it
-// is left off this declaration rather than carried as a lie. The copy is a memberwise assignment
-// rather than the console's memcpy(120): Race's host size is the same 120 bytes, but assignment
-// is what stays correct if it ever is not.
+// DWARF :297) is r7, never read by this optimized ARTIST body. Preserve its declaration
+// shape and the callers' argument; it adds no filtering. memcpy retains every original120 byte.
 // --------------------------------------------------------------------------------------------
 u32 ProgressionManager::GetRacesAtLandmark(Race* lpaRacesOut, u32 luMaxRaces,
-                                           BrnGameState::LandmarkIndex lLandmarkIndex) const
+                                           BrnGameState::LandmarkIndex lLandmarkIndex,
+                                           bool /*lbIncludeCustomRaces*/) const
 {
     u32 luRaceCount = 0;
 
@@ -754,7 +753,7 @@ u32 ProgressionManager::GetRacesAtLandmark(Race* lpaRacesOut, u32 luMaxRaces,
             FireConsoleAssert("luRaceCount < luMaxRaces", 1173);
         }
 
-        lpaRacesOut[luRaceCount] = lrRace;
+        std::memcpy(&lpaRacesOut[luRaceCount], &lrRace, sizeof(Race));
         ++luRaceCount;
     }
 

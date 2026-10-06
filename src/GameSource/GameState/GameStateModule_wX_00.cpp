@@ -43,7 +43,13 @@ void GameStateModule::ProcessGameEventsLandmarkRouteRequestBringUp(
 
     while (lpEvent != 0)
     {
-        if (liType == GameStateModuleIO::E_EVENT_LANDMARK_ROUTE_REQUEST)
+        if (liType == GameStateModuleIO::E_EVENT_PLAYER_ENTERS_RACE_MAP ||
+            liType == GameStateModuleIO::E_EVENT_LANDMARK_RACES_REQUEST)
+        {
+            // Original ProcessGameEvents823A1894 handles both15/85 identically.
+            SendSetLandmarkRacesAction(lpActionQueue);
+        }
+        else if (liType == GameStateModuleIO::E_EVENT_LANDMARK_ROUTE_REQUEST)
         {
             SendRouteRequestAction(
                 reinterpret_cast<const GameStateModuleIO::LandmarkRouteRequestEvent*>(lpEvent),

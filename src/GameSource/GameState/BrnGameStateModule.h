@@ -1035,6 +1035,9 @@ public:
     // Body: GameStateModule_SendSetUpAllEventStarts.cpp (read its banner before touching this).
     void SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBuffer* lpOutput);
 
+    // ARTIST82381CD8; current-landmark races requested by ProcessGameEvents15/85.
+    void SendSetLandmarkRacesAction(GameStateModuleIO::GameActionQueue* lpActionQueue);
+
     // ⭐⭐ SendSpecificPreSetRacesModesAction -- THE MAP MENU PRESET-RACES PRODUCER, and the
     // only path in the shipped image to SpecificGameModeEventInterface::AddEvent.
     // For the requested event type, walks every light trigger of every TrafficData

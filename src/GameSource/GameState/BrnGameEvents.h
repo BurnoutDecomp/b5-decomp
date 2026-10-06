@@ -239,6 +239,8 @@ enum EGameEventType
     // SendRouteRequestAction (@0x823A18A4), case 174 asserts "lpRouteInfoEvent" (@0x823A4B20, line
     // 0x1148) and calls ModeManager::HandleCheckpointDistanceResponse. 174 is also the id
     // BridgeWorldToGameState posts (`li r5, 0xAE` @0x823E5538) -- same +6 as ACTIVE_FREEBURN above.
+    E_EVENT_PLAYER_ENTERS_RACE_MAP            = 15,  // ARTIST ProcessGameEvents823A1894
+    E_EVENT_LANDMARK_RACES_REQUEST            = 85,  // ARTIST; DecFIGS86
     E_EVENT_LANDMARK_ROUTE_REQUEST            = 84,  // X360 (PS3 85; ProcessGameEvents case 84)
     E_EVENT_MODE_MANAGER_ROUTE_INFO           = 174, // X360 (PS3 168; "lpRouteInfoEvent")
     // The rest of the freeburn-challenge block, at the same +5 shift (the ENDED..REQUEST run

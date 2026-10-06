@@ -1,3 +1,4 @@
+#include "GameSource/Gui/Events/BrnGuiEventSetAvailablePresetRaces.h"
 #include "GameSource/Gui/Events/BrnGuiEventRacePositionInfo.h"
 // BrnGuiEventTypeDefs.h
 // Home of the BrnGui GUI-event payload structs. This slice reconstructs ONLY
@@ -30,6 +31,7 @@
 // proven offsets. This is an honest layout boundary, not a fabricated one.
 
 #pragma once
+#include "GameSource/Gui/Events/BrnGuiEventPreRaceMessages.h"
 
 #include "GameSource/GameState/BrnGameActions.h"
 #include "types.hpp"                                   // u8/s8/u32 widths, f32
