@@ -76,13 +76,8 @@ void GameStateModule::PostWorldUpdate(CgsModule::IOBufferStack*                 
 
     if ((static_cast<u32>(lUpdateSet) & KU_UPDATE_SET_IN_GAME) != 0)
     {
-        // [FLAG PC bring-up] TriggerQueryManager::PostWorldUpdate(buffer, &mModeManager,
-        // GetPlayerActiveRaceCarIndex()) has no body on this build: its input, the trigger
-        // line-test results, has no producer. Its landmark leg stands in at its position, so
-        // checkpoints and finishes are credited once per frame (RaceCarTriggersLandmark).
-        mTriggerQueryManager.PostWorldUpdateSoundActions(lpPostWorldInputBuffer, GetPlayerActiveRaceCarIndex());
-        mTriggerQueryManager.PostWorldUpdateLandmarksBringUp(
-            lpPostWorldInputBuffer->GetActiveRaceCarOutputInterface(), &mModeManager);
+        mTriggerQueryManager.PostWorldUpdate(lpPostWorldInputBuffer, &mModeManager,
+                                            GetPlayerActiveRaceCarIndex());
     }
 
     ProcessContacts(lpPostWorldInputBuffer->GetContactSpyInterface());
