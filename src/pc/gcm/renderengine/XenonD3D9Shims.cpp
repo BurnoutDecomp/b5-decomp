@@ -53,6 +53,8 @@
 #include <d3d9.h>
 #include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
 #include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
+#include "pc/gcm/renderengine/TrailPausedDiagPC.h"
+#include "GameSource/Graphics/BrnShaderConstantsFrame.h"
 #include <cstring>
 #include <cstdio>
 #include <cstdarg>   // [diag] va_list (the stride-aware vertex dump below)
@@ -5977,6 +5979,77 @@ namespace
     UINT             suImVertsPrimCount  = 0;
     u32              suImVertsStride     = 0;
 
+    // FLAG PC-platform leaf: getter-only paused-trail witness, default off.
+    // Expected means original TrailRenderer source; native means current device
+    // constants at its unchanged original draw, never a planned binding.
+    renderengine::TrailPausedClockPC sTrailPausedClock;
+    f32 safTrailPausedExpected[16] = {};
+    u32 suTrailPausedExpectedPresent = ~0u;
+    bool TrailPausedDiagEnabledPC()
+    {
+        static const char* const spcValue = std::getenv("BRN_PAUSED_TRAIL_DIAG");
+        return spcValue && spcValue[0] && spcValue[0] != '0';
+    }
+    void TrailPausedDiag_AtDrawPC(IDirect3DDevice9* lpDevice)
+    {
+        if (!TrailPausedDiagEnabledPC() || !lpDevice || suImVertsStride != 28u) return;
+        const u32 luPresent = renderengine::GetDispatchPresentCountPC();
+        if (suTrailPausedExpectedPresent != luPresent || !sTrailPausedClock.Take(luPresent)) return;
+        f32 lafNative[16] = {};
+        const HRESULT lhrConstants = lpDevice->GetVertexShaderConstantF(0u, lafNative, 4u);
+        IDirect3DVertexShader9* lpVs = nullptr;
+        const HRESULT lhrVs = lpDevice->GetVertexShader(&lpVs);
+        UINT luCodeBytes = 0u;
+        const HRESULT lhrCode = lpVs ? lpVs->GetFunction(nullptr, &luCodeBytes) : E_FAIL;
+        f32 lafWorld[16] = {};
+        if (gbBrnWorldShaderConstantsFrameBringUpValid)
+        {
+            const Matrix44 lWorld = gBrnWorldShaderConstantsFrameBringUp.GetViewProjectionMatrix();
+            std::memcpy(lafWorld, &lWorld, sizeof(lafWorld));
+        }
+        f32 lfNativeSourceError = 0.0f, lfSourceWorldError = 0.0f;
+        bool lbFinite = true;
+        for (u32 lu = 0; lu < 16u; ++lu)
+        {
+            if (!std::isfinite(lafNative[lu]) || !std::isfinite(safTrailPausedExpected[lu])
+                || !std::isfinite(lafWorld[lu])) lbFinite = false;
+            lfNativeSourceError = std::fmax(lfNativeSourceError, std::fabs(lafNative[lu] - safTrailPausedExpected[lu]));
+            lfSourceWorldError = std::fmax(lfSourceWorldError, std::fabs(safTrailPausedExpected[lu] - lafWorld[lu]));
+        }
+        const bool lbRead = SUCCEEDED(lhrConstants) && SUCCEEDED(lhrVs) && lpVs
+            && SUCCEEDED(lhrCode) && luCodeBytes >= 8u && luCodeBytes <= 65536u
+            && gbBrnWorldShaderConstantsFrameBringUpValid && lbFinite;
+        f32 lafFirst[7]; std::memcpy(lafFirst, sauImVertsScratch, sizeof(lafFirst));
+        char lacMsg[1024];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+            "[paused-trail] record=%u present=%u status=%s now=%.9g heldPresents=%u"
+            " boundVs=%p vsHr=%08X codeHr=%08X codeBytes=%u constantsHr=%08X worldValid=%u finite=%u"
+            " nativeSourceMaxError=%.9g sourceWorldMaxError=%.9g prims=%u worldIndexedAccepted=%llu"
+            " first=[%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g]\n",
+            sTrailPausedClock.muRecords, luPresent, lbRead ? "observed" : "INCONCLUSIVE",
+            sTrailPausedClock.mfNow, luPresent - sTrailPausedClock.muHeldSince, lpVs,
+            unsigned(lhrVs), unsigned(lhrCode), luCodeBytes, unsigned(lhrConstants),
+            unsigned(gbBrnWorldShaderConstantsFrameBringUpValid), unsigned(lbFinite),
+            lfNativeSourceError, lfSourceWorldError, suImVertsPrimCount, static_cast<unsigned long long>(guWorldDrawCalls),
+            lafFirst[0], lafFirst[1], lafFirst[2], lafFirst[3], lafFirst[4], lafFirst[5], lafFirst[6]);
+        CgsDev::Log::WriteToLog(lacMsg);
+        for (u32 luRow = 0; luRow < 4u; ++luRow)
+        {
+            const u32 lu = luRow * 4u;
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[paused-trail] record=%u row=%u source=[%.9g,%.9g,%.9g,%.9g]"
+                " nativeReadable=%u native=[%.9g,%.9g,%.9g,%.9g] worldValid=%u world=[%.9g,%.9g,%.9g,%.9g]\n",
+                sTrailPausedClock.muRecords, luRow, safTrailPausedExpected[lu], safTrailPausedExpected[lu+1],
+                safTrailPausedExpected[lu+2], safTrailPausedExpected[lu+3], unsigned(SUCCEEDED(lhrConstants)),
+                lafNative[lu], lafNative[lu+1], lafNative[lu+2], lafNative[lu+3],
+                unsigned(gbBrnWorldShaderConstantsFrameBringUpValid), lafWorld[lu], lafWorld[lu+1], lafWorld[lu+2], lafWorld[lu+3]);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+        if (lpVs) lpVs->Release();
+        if (sTrailPausedClock.muRecords == 12u)
+            CgsDev::Log::WriteToLog("[paused-trail] cap=12 reached; later draws unobserved\n");
+    }
+
     // One flag per CAUSE, not per frame: the composite runs at 60 Hz, so a
     // per-call log line would be 3,600 lines a minute. (LogOnce above keys on a
     // string-literal ADDRESS, which is fine for its fixed messages but cannot
@@ -5987,6 +6060,15 @@ namespace
     bool sbImVertsReportedOrphan   = false;
     bool sbImVertsReportedPartial  = false;
     bool sbImVertsReportedType     = false;
+}
+
+void renderengine::TrailPausedDiag_ExpectedPC(f32 lfNow, const f32* lpfMatrix)
+{
+    if (!TrailPausedDiagEnabledPC() || !lpfMatrix) return;
+    const u32 luPresent = renderengine::GetDispatchPresentCountPC();
+    sTrailPausedClock.Observe(lfNow, luPresent);
+    std::memcpy(safTrailPausedExpected, lpfMatrix, sizeof(safTrailPausedExpected));
+    suTrailPausedExpectedPresent = luPresent;
 }
 
 // =============================================================================
@@ -6966,6 +7048,7 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
         return;   // the same silent early-out every sibling shim in this block takes
     }
 
+    TrailPausedDiag_AtDrawPC(lpDevice); // default-off, after original flush and before original draw
     const HRESULT lhrDraw = renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, seImVertsPrimitive, suImVertsPrimCount,
                                                       sauImVertsScratch, suImVertsStride);
 

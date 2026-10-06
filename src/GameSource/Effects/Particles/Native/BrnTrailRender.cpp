@@ -37,6 +37,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // [diag] CgsDev::Log::WriteToLog
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"       // [diag] BrnDiag::gFilmLatch (frames.csv NDC columns)
 #include "GameShared/GameClasses/Development/BrnDiagTrailHeight.h"     // [diag] BRN_TRAIL_HEIGHT_DIAG (issue #21)
+#include "pc/gcm/renderengine/TrailPausedDiagPC.h"                     // default-off paused camera witness
 
 #include <cstdio>   // [diag] snprintf (the [trailpass] transform probe)
 #include <cstdlib>  // [diag] getenv / atoi (the BRN_SKID_LOUD discriminator)
@@ -247,6 +248,7 @@ namespace Native
     // =========================================================================================
     void TrailRenderer::BeginRender(renderengine::Texture* lpTexture)
     {
+        renderengine::TrailPausedDiag_ExpectedPC(mfCurrentTime, &mViewProjectionMatrix.xAxis.x);
         mpRenderer->BeginRendering();                        // ImRenderer<SkidVertex>::BeginRendering @0x8227C1E8
         mpRenderer->SetTransform(mViewProjectionMatrix);     // BeginShaderStates(this+88) + 4 x stvx128
 
