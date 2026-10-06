@@ -8,6 +8,7 @@
 #include "pc/gcm/renderengine/texture.h"                              // renderengine::Texture2D create path (interim white "no texture")
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // [gateui r6] gpDebugPrint (the mask/text placement probes)
 #include <stdlib.h>                                                   // [gateui r6] getenv (BRN_PROP_DIAG)
+#include <cmath>
 
 // BrnFlapt::FlaptRenderer member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
 // This TU bodies the constructor, the shader-state accessor, the per-object render entry
@@ -387,10 +388,9 @@ void FlaptRenderer::Construct(FlaptRenderSet* lpImRenderSet, void* lpTextRendere
 // corner vertices as the mask rectangle through the render buffer's PushMask. Finally
 // bump the mesh tally for the active mask.
 //
-// The X360 transforms the two corners with VMX vmaddfp lane work; the operation it emits
-// for each corner is pos.x = mRightUp.x * mOriginXYZ.x + cornerX and pos.y = mRightUp.w *
-// mOriginXYZ.y + cornerY (the origin-bias product is shared by both corners). Reproduced
-// here verbatim as named-component math.
+// ARTIST8246FC68..FC80 uses vmaddfp D,A,B,C = A*C+B: diagonal scale times
+// each corner, plus origin. The mask corners are already in screen space when
+// written; they must not be transformed a second time by the PC command path.
 void FlaptRenderer::RenderMask(const Mesh* lpMesh, const FlaptFile* lpFile,
                                const FlaptFile::GuiTexture* lpTexture)
 {
@@ -423,46 +423,22 @@ void FlaptRenderer::RenderMask(const Mesh* lpMesh, const FlaptFile* lpFile,
 
     const CgsGraphics::Im2dTransform& lrTransform = maTransformStack.Peek();
 
-    // The origin-bias the X360 adds to each corner (a per-submission constant).
-    const f32 lfOriginBiasX = lrTransform.mRightUp.x * lrTransform.mOriginXYZ.x;
-    const f32 lfOriginBiasY = lrTransform.mRightUp.w * lrTransform.mOriginXYZ.y;
+    // FLAG PC-platform leaf: express the original NDC scale/origin in the
+    // shared command consumer's logical1280x720 coordinates, exactly once.
+    const CgsGraphics::Im2dTransform lLogical =
+        CgsGraphics::Im2dTransformToLogicalPC(lrTransform);
 
     CgsGraphics::Basic2dColouredTexturedVertex laMaskVerts[2];
 
-    laMaskVerts[0].mv2Pos.x   = lfOriginBiasX + lMinVert.mv2Pos.x;
-    laMaskVerts[0].mv2Pos.y   = lfOriginBiasY + lMinVert.mv2Pos.y;
+    laMaskVerts[0].mv2Pos.x   = std::fma(lLogical.mRightUp.x, lMinVert.mv2Pos.x, lLogical.mOriginXYZ.x);
+    laMaskVerts[0].mv2Pos.y   = std::fma(lLogical.mRightUp.w, lMinVert.mv2Pos.y, lLogical.mOriginXYZ.y);
     laMaskVerts[0].mv4Colour  = lMinVert.mv4Colour;
     laMaskVerts[0].mv2Tex0UV  = lMinVert.mv2Tex0UV;
 
-    laMaskVerts[1].mv2Pos.x   = lfOriginBiasX + lMaxVert.mv2Pos.x;
-    laMaskVerts[1].mv2Pos.y   = lfOriginBiasY + lMaxVert.mv2Pos.y;
+    laMaskVerts[1].mv2Pos.x   = std::fma(lLogical.mRightUp.x, lMaxVert.mv2Pos.x, lLogical.mOriginXYZ.x);
+    laMaskVerts[1].mv2Pos.y   = std::fma(lLogical.mRightUp.w, lMaxVert.mv2Pos.y, lLogical.mOriginXYZ.y);
     laMaskVerts[1].mv4Colour  = lMaxVert.mv4Colour;
     laMaskVerts[1].mv2Tex0UV  = lMaxVert.mv2Tex0UV;
-
-    // [gateui r6] FLAG PC-platform leaf: publish this mask mesh's own composed transform
-    // before the push. On the console the PushMask command is dispatched into a stream in
-    // which the transform is persistent GPU state, so the mask quad is transformed by the
-    // shader constants already resident; the PC fold has no resident GPU transform, so the
-    // state the mask corners must be folded through -- the transform the enclosing
-    // MovieClipInstance::Render walk pushed for this very mesh, i.e. the stack top read
-    // above -- is (re)published explicitly here. Without it Im2dBase::PushMask has no
-    // transform to fold and the mask degenerates to the mesh's raw local quad.
-    mpImRenderSet->mpIm2dRenderBuffer->SetTransform(lrTransform);
-
-    // FLAG PC-platform leaf: the shared native mask records contain logical
-    // screen corners. Fold the same composed transform as the mesh before
-    // recording; the old immediate backend did this fold at submission time.
-    const CgsGraphics::Im2dTransform lLogical =
-        CgsGraphics::Im2dTransformToLogicalPC(lrTransform);
-    for (u32 luCorner = 0; luCorner < 2; ++luCorner)
-    {
-        const f32 lfX = laMaskVerts[luCorner].mv2Pos.x;
-        const f32 lfY = laMaskVerts[luCorner].mv2Pos.y;
-        laMaskVerts[luCorner].mv2Pos.x = lLogical.mOriginXYZ.x
-            + lLogical.mRightUp.x * lfX + lLogical.mRightUp.z * lfY;
-        laMaskVerts[luCorner].mv2Pos.y = lLogical.mOriginXYZ.y
-            + lLogical.mRightUp.y * lfX + lLogical.mRightUp.w * lfY;
-    }
 
     mpImRenderSet->mpIm2dRenderBuffer->PushMask(
         const_cast<renderengine::Texture*>(lpTexture), laMaskVerts);
@@ -472,29 +448,27 @@ void FlaptRenderer::RenderMask(const Mesh* lpMesh, const FlaptFile* lpFile,
 }
 
 // ---- StartDrawingMask / PopMask ------------------------------------------
-// The open/close pair for the Flapt stencil-mask path (MovieClipInstance::Render brackets
-// a mask render layer with them; RenderMesh routes meshes to RenderMask while the mask bit
-// is set, and RenderMask tallies them). Reconstructed from the mask protocol rather than
-// each method's own disassembly: RenderMask's invariants ((mxFlags & 1) set, an open
-// mMaskMeshCounts entry it post-increments), the attested Stack<u16,2> call sites
-// (StartDrawingMask -> Push @0x8246E738; PopMask -> Peek @0x8246E8A8 then Pop @0x8246E7F8,
-// per CgsStackUnsignedShort2.cpp), and the render buffer's PushMask/PopMask command pair.
+// ARTIST StartDrawingMask8246FD20 / PopMask8246FE80. Each layer tallies the
+// number of mask meshes actually drawn; a disabled or transparent mask child
+// leaves its count zero and must emit no GPU pop.
 
 // StartDrawingMask : begin defining a mask shape. Flag the renderer into the mask path and
 // open a fresh mesh tally for this mask (RenderMask bumps it per mask mesh).
 void FlaptRenderer::StartDrawingMask()
 {
+    CGS_ASSERT((mxFlags & 1u) == 0, "Can't draw multiple masks simultaneously!");
+    CGS_ASSERT(mMaskMeshCounts.GetLength() != 2, "Run out of masks to add!");
     mxFlags |= 1u;
     mMaskMeshCounts.Push(static_cast<u16>(0));
 }
 
-// PopMask : close the innermost mask. Emit the render buffer's pop-mask command (on the PC
-// fold this disables the scissor region) and drop this mask's mesh tally. The mask bit has
-// already been cleared by the render walk once the shape's meshes were drawn.
+// 8246FF4C..FF8C: emit exactly the top layer's mesh count, then pop that tally.
+// The movie-clip walk has already cleared the mask-drawing flag.
 void FlaptRenderer::PopMask()
 {
-    CGS_ASSERT(!mMaskMeshCounts.IsEmpty(), "!mMaskMeshCounts.IsEmpty()");
-    mpImRenderSet->mpIm2dRenderBuffer->PopMask();
+    CGS_ASSERT(!mMaskMeshCounts.IsEmpty(), "Run out of masks to pop!");
+    for (u32 luMesh = 0; luMesh < mMaskMeshCounts.Peek(); ++luMesh)
+        mpImRenderSet->mpIm2dRenderBuffer->PopMask();
     mMaskMeshCounts.Pop();
 }
 
