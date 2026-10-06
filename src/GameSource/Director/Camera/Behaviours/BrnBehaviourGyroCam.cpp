@@ -63,7 +63,7 @@ void AttachmentTruck::Update(Vector3 lPosition, Vector3 lVelocity,
         if (!IsZero(lVelocity, 1.1920929e-7f))
         {
             const f32 speed = static_cast<f32>(mSpeed) - lrParams.mfInitialOffsetDist / lrParams.mfConvergenceTimeSecs;
-            const f32 ratio = std::min(1.25f, std::max(0.0f, speed / static_cast<f32>(mSpeed)));
+            const f32 ratio = std::min(1.0f, std::max(0.0f, speed / static_cast<f32>(mSpeed)));
             mSpeed = VecFloat(speed);
             mDesiredSpeedRatio = VecFloat(ratio);
             mPosition = lPosition + mDirection * lrParams.mfInitialOffsetDist;
@@ -100,7 +100,9 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
     const f32 speed = Magnitude(velocity);
     if (mpParameters->mbUseTruck || mbIsPlanted)
     {
-        const f32 dt = lrInfo.GetTimestep(Timestep::E_WORLD_NO_SLOMO);
+        // ARTIST @0x82245084 reads sharedInfo+0x580: Timestep::mafTimestep[0],
+        // E_WORLD. Trucking shares the subject's slow-motion world clock.
+        const f32 dt = lrInfo.GetTimestep(Timestep::E_WORLD);
         mAttachmentTruck.Update(target.Pos(), velocity, VecFloat(dt), mpParameters->mAttachmentTruckParams);
         target.Pos() = mAttachmentTruck.GetPosition();
     }
@@ -184,11 +186,22 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
     // FLAG PC diagnostic: measure produced poses, not just arbitrator state changes.
     static const bool trace = std::getenv("BRN_CAMERA_RIG_DIAG") != 0;
     static u32 lines = 0;
-    if (trace && lines++ < 64 && CgsDev::Log::gpDebugPrint)
+    static u32 truckingLines = 0;
+    // FLAG PC diagnostic: reserve a bounded quota for the clock-bearing branch;
+    // earlier non-trucking candidate poses must not consume all of its evidence.
+    const bool trucking = mpParameters->mbUseTruck || mbIsPlanted;
+    if (trace && (trucking ? truckingLines++ < 120 : lines++ < 240) && CgsDev::Log::gpDebugPrint)
         *CgsDev::Log::gpDebugPrint << "[camera-rig] gyro car=" << mAttachedTo.miRaceCarIndex
             << " eye=" << lrCamera.mTransform.Pos().x << "," << lrCamera.mTransform.Pos().y << "," << lrCamera.mTransform.Pos().z
             << " target=" << target.Pos().x << "," << target.Pos().y << "," << target.Pos().z
-            << " fov=" << lrCamera.mfFOV << " dt=" << dt << "\n";
+            << " fov=" << lrCamera.mfFOV << " dt=" << dt
+            << " car=" << vehicle.mRaceCarState.mTransform.Pos().x << ","
+            << vehicle.mRaceCarState.mTransform.Pos().y << "," << vehicle.mRaceCarState.mTransform.Pos().z
+            << " worldDt=" << lrInfo.GetTimestep(Timestep::E_WORLD)
+            << " noSlomoDt=" << lrInfo.GetTimestep(Timestep::E_WORLD_NO_SLOMO)
+            << " truck=" << (mpParameters->mbUseTruck ? 1 : 0)
+            << " planted=" << (mbIsPlanted ? 1 : 0)
+            << " speedSq=" << static_cast<f32>(rw::math::vpu::Dot(velocity, velocity)) << "\n";
     return true;
 }
 

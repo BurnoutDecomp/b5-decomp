@@ -84,6 +84,27 @@ namespace BrnGui
 // an LNK2001 the day SetBlackBarSize lands (round-1 verify NOTE-4).
 const f32 HudMessageDirector::KF_MINIMUM_BLACK_BAR_STOP_SIZE = 0.1f;
 
+// ARTIST @0x82511848. Incoming event 221 carries each bar's normalized height.
+void HudMessageDirector::SetBlackBarSize(f32 lfBlackBarSize)
+{
+    if (lfBlackBarSize < KF_MINIMUM_BLACK_BAR_STOP_SIZE)
+    {
+        if (!(mfBlackBarSize < KF_MINIMUM_BLACK_BAR_STOP_SIZE))
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+                *CgsDev::Log::gpDebugPrint << "HUD MSGS - D: MSG FILTER CLEARED : BLACK BARS ARE HIDDEN\n\n";
+            mbStopFlagBlackBar = false;
+        }
+    }
+    else if (mfBlackBarSize < KF_MINIMUM_BLACK_BAR_STOP_SIZE)
+    {
+        mbStopFlagBlackBar = true;
+        const u8 lu8Marker = 0;
+        mHudMessageQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8Marker), 156, 1);
+    }
+    mfBlackBarSize = lfBlackBarSize;
+}
+
 // ---- the two stop-flag exemption tables (DWARF h:124/:127) -------------------------
 // Both are .data blocks that are ZERO in the image and filled by their own dynamic
 // initialisers; the initialiser pseudocode gives the strings verbatim. Reproduced as

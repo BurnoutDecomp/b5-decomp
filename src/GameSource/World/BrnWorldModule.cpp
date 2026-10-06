@@ -5928,7 +5928,15 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     // WorldModule::Update then feeds mLastCameraInput.GetPosition() to
     // WorldEntityModule::PreSceneUpdate as the PVS query point. Reproduce exactly that
     // latch for the stand-in camera so the streamer's working set follows the view.
-    mLastCameraInput.mTransform.Pos() = lPvsPosition;
+    // ARTIST GenerateDispatchLists @0x827D1CE8 copies the entire camera.
+    // SetBringUpCameraOverride already stages all four director rows; retaining
+    // only Pos/At leaves identity Right/Up in the Physics camera latch.
+    // The director branch's PVS position is this same eye (XYZ). The synthetic
+    // camera keeps its existing independently selected streamer position.
+    if ( lbUseDirectorCamera )
+        mLastCameraInput.mTransform = lDirectorTransform;
+    else
+        mLastCameraInput.mTransform.Pos() = lPvsPosition;
 
     // ⭐ ...and the SAME latch for the two fields of that record the ENVIRONMENT consumer
     // reads. The console's latch is a whole-camera copy, so WorldModule::Update @0x827D63E8
@@ -5959,7 +5967,8 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         lForward.y *= lfInv;
         lForward.z *= lfInv;
     }
-    mLastCameraInput.mTransform.At() = lForward;   // the camera's view-direction row (+0x20)
+    if ( !lbUseDirectorCamera )
+        mLastCameraInput.mTransform.At() = lForward;   // synthetic view direction (+0x20)
 
     // ---- the projection scalars (needed before the camera is framed) --------
     // 60 degrees VERTICAL; the horizontal fov the camera caches is derived from it
@@ -6083,8 +6092,10 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     sBringUpCamera.maProjectionScalars[ 7 ] = lfNear;           // m_nearClipPlane
     sBringUpCamera.maProjectionScalars[ 8 ] = lfFar;            // m_farClipPlane
     {
-        const Vector3 lWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
-        sBringUpCamera.LookAt( lEye, lWorldUp, lLookAt );        // fills mView (+ the f64 basis)
+        // ARTIST Camera::CopyToCgsCamera8220AC48 passes transform.Up(), preserving roll.
+        const Vector3 lViewUp = lbUseDirectorCamera
+            ? lDirectorTransform.Up() : Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+        sBringUpCamera.LookAt( lEye, lViewUp, lLookAt );          // same eye/target and f64 view
     }
 
     // Perspective projection (left-handed, D3D depth 0..1), 60 degrees vertical.

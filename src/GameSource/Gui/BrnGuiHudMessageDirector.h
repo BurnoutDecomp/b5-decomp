@@ -123,6 +123,9 @@ namespace BrnGui
 
         // @ 0x8250C830 -- set the camera-sequence stop flag; when set, queue the stop event.
         void SetCameraSequenceFilter(bool lbShowing);
+        // @0x82511848: crossing the 0.1 bar threshold stops non-exempt HUD
+        // messages. Event 156 is emitted once on the rising edge.
+        void SetBlackBarSize(f32 lfBlackBarSize);
         // @ 0x824EBEF8 -- set the active controller (asserts non-null).
         void SetController(const BrnResource::HudMessageController* lpController);
         // @ 0x8250C8A8 -- begin the aggressor payback sequence; queue the stop event.

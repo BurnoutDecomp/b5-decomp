@@ -216,13 +216,18 @@ namespace BrnDirector
         // DELETE-WHEN: the crash-parity Showtime / director audit closes.
         const s32 KI_DIRECTOR_ACTION_DIAG_MAX_LINES = 400;
 
-        bool BrnDiag_DirectorActionDiagOn()
+        bool BrnDiag_DirectorActionDiagOn(s32 liActionType)
         {
             static const bool sbOn = (getenv("BRN_DIRECTOR_ACTION_DIAG") != 0);
-            static s32 siLines = 0;
-            if (!sbOn || CgsDev::Log::gpDebugPrint == 0 || siLines >= KI_DIRECTOR_ACTION_DIAG_MAX_LINES)
+            // FLAG PC-platform leaf: bounded per-action evidence, so frequent
+            // boot actions cannot consume Showtime140/144's observation budget.
+            static s32 saiLines[256] = {};
+            static s32 siOtherLines = 0;
+            s32& lriLines = liActionType >= 0 && liActionType < 256
+                ? saiLines[liActionType] : siOtherLines;
+            if (!sbOn || CgsDev::Log::gpDebugPrint == 0 || lriLines >= KI_DIRECTOR_ACTION_DIAG_MAX_LINES)
                 return false;
-            ++siLines;
+            ++lriLines;
             return true;
         }
 
@@ -2098,7 +2103,7 @@ namespace BrnDirector
                 maGameState.mfImpactTimeSloMoFactor = lrImpactTimeStart.mfTimestepMultiplier;      // +0x108
 
                 // [diag] BRN_DIRECTOR_ACTION_DIAG -- NOT IN THE X360 BINARY.
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "[director-action] 42 IMPACT_TIME_START -> mbImpactTimeActive "
@@ -2115,7 +2120,7 @@ namespace BrnDirector
             {
                 maGameState.mbImpactTimeActive = false;                                            // +0x105
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "[director-action] 43 IMPACT_TIME_END -> mbImpactTimeActive "
@@ -2146,7 +2151,7 @@ namespace BrnDirector
                 maGameState.mShowTimeInfo.mbEarntMultiplierThisFrame =
                     lrVehicleHit.miScoreMultiplierEarned > 0;                                      // +0x1EB
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "[director-action] 140 VEHICLE_HIT total " << lrVehicleHit.miTotalVehiclesCrashed
@@ -2181,7 +2186,7 @@ namespace BrnDirector
                 lrShowTime.mbVehicleImpactThisFrame =
                     lrJustBounced.mbOnCar && (lrJustBounced.mu8EventByte7 != 0);                   // +0x1E9
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "[director-action] 144 JUST_BOUNCED combo " << lrShowTime.miComboLevel
@@ -2200,7 +2205,7 @@ namespace BrnDirector
             {
                 maGameState.mShowTimeInfo.mbExtraSpinThisFrame = true;                             // +0x1EC
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint << "[director-action] 145 JUST_APPLIED_EXTRA_SPIN -> mbExtraSpinThisFrame 1\n";
                 }
@@ -2216,7 +2221,7 @@ namespace BrnDirector
                     *reinterpret_cast<const BrnGameState::GameStateModuleIO::ShowtimeIntroAction*>(lpacPayload);
                 maGameState.mShowTimeInfo.mbInIntro = lrShowtimeIntro.mbStart;                     // +0x1ED
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "[director-action] 146 SHOWTIME_INTRO_START -> mbInIntro "
@@ -2533,7 +2538,7 @@ namespace BrnDirector
                 maGameState.mbShouldResetPlayerCameraThisFrame =
                     (lpacPayload[offsetof(BrnGameState::GameStateModuleIO::ResetPlayerCarAction, muReserved0x42)] != 0);
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "[director-action] 0 RESET_PLAYER_CAR -> mbShouldResetPlayerCameraThisFrame "
@@ -2551,7 +2556,7 @@ namespace BrnDirector
                 maGameState.mbPlayerAndRivalImpactOccured = true;                                  // +0x1B1
                 maGameState.mbPlayerWonImpactAgainstRival = true;                                  // +0x1B2
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint << "[director-action] 53 PLAYER_HIT_RIVAL -> impact 1 won 1\n";
                 }
@@ -2562,7 +2567,7 @@ namespace BrnDirector
                 maGameState.mbPlayerAndRivalImpactOccured = true;                                  // +0x1B1
                 maGameState.mbPlayerWonImpactAgainstRival = false;                                 // +0x1B2
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint << "[director-action] 54 RIVAL_HIT_PLAYER -> impact 1 won 0\n";
                 }
@@ -2575,7 +2580,7 @@ namespace BrnDirector
             {
                 maGameState.mbPlayerCheckedTraffic = true;                                         // +0x1B3
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint << "[director-action] 107 ON_TRAFFIC_CHECKING -> mbPlayerCheckedTraffic 1\n";
                 }
@@ -2590,7 +2595,7 @@ namespace BrnDirector
             {
                 maGameState.mbIsShutdown = true;                                                   // +0xDC
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint << "[director-action] 120 SHUTDOWN -> mbIsShutdown 1\n";
                 }
@@ -2610,7 +2615,7 @@ namespace BrnDirector
                     *reinterpret_cast<const BrnGameState::StuntInfo*>(lpacPayload);
                 maGameState.mbPlayerPerformedStunt = lrStunt.miStuntMultiplier > 0;               // +0x1B5
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "[director-action] 132 HUD_MESSAGE_STUNT_PERFORMED multiplier " << lrStunt.miStuntMultiplier
@@ -2627,7 +2632,7 @@ namespace BrnDirector
             {
                 maGameState.mbTrainingPause = true;                                                // +0x1C2
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint << "[director-action] 150 GAME_TRAINING_PAUSE -> mbTrainingPause 1\n";
                 }
@@ -2637,7 +2642,7 @@ namespace BrnDirector
             {
                 maGameState.mbTrainingPause = false;                                               // +0x1C2
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint << "[director-action] 151 GAME_TRAINING_UNPAUSE -> mbTrainingPause 0\n";
                 }
@@ -2655,7 +2660,7 @@ namespace BrnDirector
                 maGameState.mbPaybackActive     = true;                                            // +0xF0
                 maGameState.meActivePaybackType = lrPayback.mePaybackType;                         // +0xF4
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "[director-action] 215 PAYBACK_ACTIVATED -> mbPaybackActive 1 meActivePaybackType "
@@ -2673,7 +2678,7 @@ namespace BrnDirector
                 maGameState.mbPaybackActive     = false;                                           // +0xF0
                 maGameState.meActivePaybackType = BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING;    // +0xF4 = 3
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint << "[director-action] 216 PAYBACK_OVER -> mbPaybackActive 0 meActivePaybackType 3\n";
                 }
@@ -2709,7 +2714,7 @@ namespace BrnDirector
                     }
                 }
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "[director-action] 218 SOUND_TRIGGER entity " << lrTrigger.mEntityId.muValue
@@ -2729,7 +2734,7 @@ namespace BrnDirector
                 maGameState.mbNewCarAdded                       = false;                          // +0x152
                 maGameState.mfCarAddedPresentationTimeRemaining = 0.0f;                           // +0x154
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint << "[director-action] 224 CAR_ADDITION_PRESENTATION_END -> mbNewCarAdded 0\n";
                 }
@@ -2801,7 +2806,7 @@ namespace BrnDirector
                         lpInput->GetGlobalRaceCarInterface()->GetActiveRaceCarIndex(lrAddition.meAddedCarGlobalIndex); // +0x158
                 }
 
-                if (BrnDiag_DirectorActionDiagOn())
+                if (BrnDiag_DirectorActionDiagOn(liActionType))
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "[director-action] 223 CAR_ADDITION_PRESENTATION_START camera "
