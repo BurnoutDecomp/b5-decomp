@@ -7636,10 +7636,10 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     // Landed 2026-08-11 (physics-return-path wave). It is the real producer of every active
     // car's pose; the bring-up pose publish below now only covers the slots the readback
     // holds back (see ReadUpdatedActiveRaceCarDataFromPhysics' mUsedRaceCars banner).
-    if( lpInput != 0 )
+    if( !lbSimPaused && lpInput != 0 )
     {
-        // (The console's read lock is taken at the top of this function, at its own slot --
-        // see the banner. It used to be taken here.)
+        // ARTIST 0x82307610 jumps to 0x823076C0 while paused. In particular,
+        // readback must not clear detached-part queues against empty physics output.
         ReadUpdatedActiveRaceCarDataFromPhysics( lpInput );
 
         // [FLAG PC bring-up] the pose STAND-IN. Until the vehicle manager populates
@@ -7666,44 +7666,11 @@ void RaceCarEntityModule::PostPhysicsUpdate(
                 // used to sit in the else-arm below is retired with the real producer.)
                 PublishRenderPoseWithoutPhysicsBringUp( lpActiveRaceCar, liCar );
             }
-            // ⭐⭐ THE REAL WHEEL POSE (wheel-transform wave 2026-08-13). Physics owns this
-            // slot: SimpleVehiclePhysics::GetWheelsWorldTransfrom @0x825D8878 is BODIED and
-            // WriteOutVehicleStats' four SetWheelTransform calls are UNPARKED, so
-            // ActiveRaceCar::UpdatePhysicsState has just copied REAL per-wheel world
-            // matrices (spin + steer + suspension) into mRenderParams.
-            //
-            // [FLAG PC bring-up] THE EXISTS FLAG ALONE is still stood in for, and the
-            // divergence is named: the console's writer of the render-side wheel exists is
-            // the DEFORMATION half of this very readback (L3 -> ActiveRaceCar::
-            // UpdateWheelPhysicsState @0x822B8738, from the deformation output's per-wheel
-            // on-ground bytes) -- RaceCarState::mabWheelExists (+0x446) has NO writer
-            // anywhere in the XEX (full 30,084-export store scan, 2026-08-13; only the copy
-            // ctor @0x8220A4C0 propagates it), so UpdatePhysicsState's copy of it is false
-            // by construction on both platforms. Until the deformation publish lands, force
-            // the four road wheels visible exactly as L3 would for an intact car.
-            // DELETE-WHEN L3 (the deformation-output wheel-state publish) lands.
-            else if( lpActiveRaceCar->IsActive() )
-            {
-                for( u32 luWheel = 0; luWheel < 4u; ++luWheel )
-                {
-                    lpActiveRaceCar->GetRenderParams()->SetWheelExists( luWheel, true );
-                }
-
-                static bool sbReportedWheelExistsSeam = false;
-                if( !sbReportedWheelExistsSeam && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    sbReportedWheelExistsSeam = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[FLAG PC bring-up] wheel EXISTS forced true for the four road "
-                           "wheels of physics-owned cars: the transforms are REAL "
-                           "(GetWheelsWorldTransfrom @0x825D8878 landed) but the exists "
-                           "byte's console producer is the parked deformation leg "
-                           "(UpdateWheelPhysicsState @0x822B8738). DELETE-WHEN L3 lands.\n";
-                }
-            }
+            // Physics-owned slots retain L3's real wheel transforms and existence
+            // bytes. UpdateWheelPhysicsState has already published them above.
         }
     }
-    else
+    else if( !lbSimPaused )
     {
         // [FLAG PC bring-up] no input buffer at all -> no readback is possible, so the
         // stand-in owns every active slot exactly as it did before this wave.
@@ -7876,6 +7843,46 @@ void RaceCarEntityModule::PostPhysicsUpdate(
         if( lpActiveRaceCar->IsActive() )
         {
             lpActiveRaceCar->LatchTickRenderPose();
+        }
+    }
+
+    // FLAG PC-platform leaf: opt-in damage publication witness for pause regressions.
+    // Hash the authoritative skin and part rows before per-render interpolation.
+    {
+        static const bool sbPauseDamageDiag = getenv( "BRN_PAUSE_DAMAGE_DIAG" ) != 0;
+        static bool sbPreviousPaused = false;
+        static u32 suDamageFrames = 0;
+        if( sbPauseDamageDiag && CgsDev::Log::gpDebugPrint != 0
+            && static_cast<u32>( mePlayerActiveRaceCarIndex ) < E_ACTIVE_RACE_CAR_INDEX_COUNT )
+        {
+            ActiveRaceCar* lpCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
+            if( lpCar->IsActive() && ( lbSimPaused != sbPreviousPaused || suDamageFrames++ % 60u == 0u ) )
+            {
+                const ActiveRaceCar::RenderParams* lpParams = lpCar->GetRenderParams();
+                const auto& lrParts = lpParams->GetDetachedPartQueue();
+                u32 luDetached = 0, luWheels = 0, luSkinHash = 2166136261u, luPartHash = 2166136261u;
+                const auto HashBytes = []( u32& lruHash, const void* lpData, size_t luSize ) {
+                    const u8* lpBytes = static_cast<const u8*>( lpData );
+                    for( size_t luByte = 0; luByte < luSize; ++luByte )
+                        lruHash = ( lruHash ^ lpBytes[luByte] ) * 16777619u;
+                };
+                HashBytes( luSkinHash, lpParams->GetVerletOffsets(),
+                           sizeof( Vector3Plus ) * KU_MAX_RACE_CAR_VERLET_POINTS );
+                for( s32 liPart = 0; liPart < lrParts.GetLength(); ++liPart )
+                {
+                    const DetachedPartRenderEvent& lrPart = lrParts.GetEvent( liPart );
+                    luDetached += !lrPart.mbIsAttached;
+                    HashBytes( luPartHash, &lrPart.miPartIndex, sizeof( lrPart.miPartIndex ) );
+                    HashBytes( luPartHash, &lrPart.mbIsAttached, sizeof( lrPart.mbIsAttached ) );
+                    HashBytes( luPartHash, &lrPart.mTransform, sizeof( lrPart.mTransform ) );
+                }
+                for( u32 luWheel = 0; luWheel < 4u; ++luWheel )
+                    luWheels |= static_cast<u32>( lpParams->GetWheelExists( luWheel ) ) << luWheel;
+                *CgsDev::Log::gpDebugPrint << "[pause-damage] paused " << ( lbSimPaused ? 1 : 0 )
+                    << " parts " << lrParts.GetLength() << " detached " << luDetached
+                    << " wheels " << luWheels << " skin " << luSkinHash << " poses " << luPartHash << "\n";
+            }
+            sbPreviousPaused = lbSimPaused;
         }
     }
 
