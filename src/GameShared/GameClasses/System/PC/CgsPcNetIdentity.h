@@ -13,11 +13,12 @@
 // so the name, XUID and ident agree byte for byte.
 //
 // Environment, read once on first use and cached for the life of the process:
-//   BP_LAN=1        LAN mode on (anything else, or unset: offline).
+//   BP_LAN=0        explicitly disable the PC LAN service (default: enabled).
 //   BP_LAN_NAME     persona, at most 15 characters (longer values are truncated).
-//                   Unset: "Slot<n>" from BRN_HARNESS_SLOT (CgsHarnessSlot.h), else "Player".
+//                   Unset: "Slot<n>" from BRN_HARNESS_SLOT, else USERNAME / "Player".
 //   BP_LAN_XUID     optional XUID override (hex, optional 0x prefix).
-//                   Unset or unparsable: 0x0009FFFF00000000 | FNV1a32(persona).
+//                   Unset or unparsable: 0x0009FFFF00000000 | FNV1a32(persona),
+//                   also salted by COMPUTERNAME for the default persona.
 // ============================================================================
 
 // Persona string, NUL-terminated, at most 15 characters. Never null, never empty.
@@ -30,5 +31,5 @@ u64 CgsPcNetIdentityXuid();
 // Never 0 (the login flow treats ident 0 as "no user").
 u32 CgsPcNetIdentityLobbyIdent();
 
-// True when BP_LAN=1.
+// True unless BP_LAN=0 explicitly disables the PC LAN service.
 bool CgsPcNetLanEnabled();
