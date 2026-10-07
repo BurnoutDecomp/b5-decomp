@@ -671,7 +671,7 @@ namespace BrnPhysics
 // DeformationManager::ProcessDebugResetDeformationModels sweep. All four arms are live: 97 (the
 // body-shop drive-thru repair) and, since 2026-09-23 (crash-parity FX-VMNET, G40-D2 / G43-D2),
 // 23 / 34 / 99 into VehicleManager::OnPrepareGameMode / OnStartGameMode / OnJunkYardDriveThru.
-// Only the pre-loop debug sweep still has no body in the tree and logs a named one-shot deferral.
+// The pre-loop sweep also handles pending deformation-menu resets when no game action is queued.
 // =================================================================================================
 
 
@@ -683,17 +683,6 @@ namespace BrnPhysics
         // +0x80 (written there by BrnDriveThruManager.cpp, PostShopAction).
         const u32 KU_EV_BODY_SHOP_ENTITY_ID = 128;
 
-        // One line per distinct deferral, ever. DELETE-WHEN: the debug reset sweep
-        // (DeformationManager::ProcessDebugResetDeformationModels) is reconstructed -- the three
-        // VehicleManager mode/junkyard methods it also covered landed 2026-09-23 (FX-VMNET).
-        void ReportDeferral(bool& lrbLogged, const char* lpcWhat)
-        {
-            if (lrbLogged || CgsDev::Log::gpDebugPrint == 0)
-                return;
-            lrbLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[postscene-action] DEFERRED: " << lpcWhat << " has no body in the tree [FLAG]\n";
-        }
     }
 
     void PhysicsModule::HandleGameActionsPostScene(
@@ -709,12 +698,10 @@ namespace BrnPhysics
         s32 liEventSize = 0;
         s32 liAction = lpGameActionQueue->GetFirstEvent(&lpEventData, &liEventSize);
 
-        // Unconditional, and it runs even when the queue is empty. Deferred: the debug-only
-        // "reset every live model" sweep is declared in BrnDeformationManager.h, defined nowhere.
-        {
-            static bool sbLogged = false;
-            ReportDeferral(sbLogged, "DeformationManager::ProcessDebugResetDeformationModels");
-        }
+        // ARTIST 825A70F8..825A7104 handles pending debug resets before the empty-queue
+        // test. A request from the deformation menu needs no game action to reach it.
+        mDeformationManager.ProcessDebugResetDeformationModels(
+            lpSimModuleInputBuffer, lpSceneInterface);
 
         while (lpEventData)
         {

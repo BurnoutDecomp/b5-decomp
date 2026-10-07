@@ -1079,5 +1079,28 @@ namespace Deformation
             VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f },
             static_cast<DeformationResetType>(-1), false, mRandom);
     }
+
+    // ARTIST 0x82641E50 (export hole; named by ResetDeformation's caller xref).
+    // The post-scene caller runs this sweep even when its game-action queue is empty.
+    void DeformationManager::ProcessDebugResetDeformationModels(
+            CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
+            CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface)
+    {
+        for (s32 liModelIndex = mModelsAdded.GetFirstNonZeroBit();
+             liModelIndex != -1;
+             liModelIndex = mModelsAdded.GetNextNonZeroBit(liModelIndex))
+        {
+            if (mpaModels[liModelIndex].ShouldResetDeformationNextUpdate())
+            {
+                mpaModels[liModelIndex].ResetDeformation(
+                    lpSimInput, lpSceneInterface, &mDetachedPartManager, &mDetachedWheelManager,
+                    VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f },
+                    static_cast<DeformationResetType>(0), false, mRandom);
+            }
+
+            // 0x82641F90..FA0 reloads the pool and clears the request after the call.
+            mpaModels[liModelIndex].ResetDeformationNextUpdate(false);
+        }
+    }
 }
 }
