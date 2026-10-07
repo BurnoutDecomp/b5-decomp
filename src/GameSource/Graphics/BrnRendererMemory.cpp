@@ -152,10 +152,10 @@ namespace
     const u32 KU_DEPTH_SURFACE_FORMAT = 0x2D200196u;
 
     // --- the fixed extents the pool's smaller targets are seeded with (X360 immediates) -------------
-    // Every one of these is a HARD-CODED immediate, not derived from the screen size. At the 1280x720
-    // front buffer the 320x180 ones happen to be a quarter of the screen on each axis, but nothing
-    // reads mu32ScreenWidth/mu32ScreenHeight, so a different display resolution leaves them alone.
-    // (CreateParticleBuffer is the exception: it really does halve the screen members.)
+    // These are the X360 immediates. The native PC branches in the three quarter-target creators
+    // follow TUB's screen/4 allocation; at 1280x720 they produce these same 320x180 extents.
+    // Fixed shadow/env-map targets keep their original dimensions. CreateParticleBuffer halves
+    // the screen members on both platforms.
     const u32 KU_WORK_BUFFER_WIDTH            = 320u;   // li 0x140 in CreateWorkBuffer @0x823F7148
     const u32 KU_WORK_BUFFER_HEIGHT           = 180u;   // li 0xB4
     const u32 KU_BLOOM_BUFFER_WIDTH           = 320u;   // li 0x140 in CreateBloomBuffer @0x823F7090
@@ -498,11 +498,13 @@ void BrnRendererMemory::PCResizeDisplay()
         return lpBuffer ? lpBuffer->GetRenderTarget() : nullptr;
     };
     CgsRenderTarget* const lapBuffers[] = {GetAntiAliasBuffer(), GetDownSampleBuffer(),
-                                          GetBackBuffer(), GetParticleBuffer()};
+        GetBackBuffer(), GetParticleBuffer(), GetBloomBuffer(), GetDepthOfFieldBuffer(), GetWorkBuffer()};
+    const u32 lauDivisors[] = {1u, 1u, 1u, 2u, 4u, 4u, 4u};
     for (auto* lpBuffer : lapBuffers)
         if (lpBuffer && !lpBuffer->GetRenderTarget()) return;
     if (!renderengine::PCResizeDisplayTargets(lpTarget(GetAntiAliasBuffer()),
-        lpTarget(GetDownSampleBuffer()), lpTarget(GetParticleBuffer()), luWidth, luHeight))
+        lpTarget(GetDownSampleBuffer()), lpTarget(GetParticleBuffer()), luWidth, luHeight,
+        lpTarget(GetBloomBuffer()), lpTarget(GetDepthOfFieldBuffer()), lpTarget(GetWorkBuffer())))
     {
         suFailedWidth = luWidth;
         suFailedHeight = luHeight;
@@ -512,11 +514,11 @@ void BrnRendererMemory::PCResizeDisplay()
     suFailedWidth = suFailedHeight = 0;
     mu32ScreenWidth = luWidth;
     mu32ScreenHeight = luHeight;
-    for (u32 luIndex = 0; luIndex < 4; ++luIndex)
+    for (u32 luIndex = 0; luIndex < 7; ++luIndex)
     {
         CgsRenderTarget* lpBuffer = lapBuffers[luIndex];
         if (!lpBuffer) continue;
-        const u32 luDivisor = luIndex == 3 ? 2 : 1;
+        const u32 luDivisor = lauDivisors[luIndex];
         lpBuffer->SetDimensions(luWidth / luDivisor, luHeight / luDivisor);
         if (auto* lpRenderTarget = lpBuffer->GetRenderTarget())
         {
@@ -891,7 +893,7 @@ void BrnRendererMemory::CreateDownSampleBuffer(rw::IResourceAllocator* lpAllocat
 }
 
 // 0x823F7148 -- build the WORK buffer: the small colour-only scratch target the post-fx chain
-// ping-pongs through, in pool slot 8 (E_RENDER_TARGET_WORK). Fixed 320x180 -- a quarter of 1280x720 on
+// ping-pongs through, in pool slot 8 (E_RENDER_TARGET_WORK). X360 fixes 320x180 -- a quarter of 1280x720 on
 // each axis, a sixteenth of the area -- so it is NOT sized from the screen like its siblings.
 //
 // It is the simplest helper in the pool: no depth surface, no multisampling, no tiling plan and no
@@ -905,7 +907,12 @@ void BrnRendererMemory::CreateWorkBuffer(rw::IResourceAllocator* lpAllocator)
     // one no-argument method -- see the split-setter banner in CgsRenderTarget.h).
     lpWorkBuffer->ClearColourTargetInUse();
 
+#if defined(_WIN32)
+    // FLAG PC-platform leaf: TUB work allocation 0x54479C..0x5447AB uses screen/4.
+    lpWorkBuffer->SetDimensions(mu32ScreenWidth / 4u, mu32ScreenHeight / 4u);
+#else
     lpWorkBuffer->SetDimensions(KU_WORK_BUFFER_WIDTH, KU_WORK_BUFFER_HEIGHT);
+#endif
     lpWorkBuffer->SetNumMipMaps(1);
     lpWorkBuffer->SetMultisampleFormat(0);
     lpWorkBuffer->SetUseDepthStencilAsTexture(false);
@@ -999,14 +1006,14 @@ void BrnRendererMemory::CreateEnvmapBuffer(rw::IResourceAllocator* lpAllocator)
     lpEnvMap->Construct(lpAllocator);
 }
 
-// 0x823F7090 -- build the BLOOM accumulation buffer: a fixed 320x180 colour-only target in pool
+// 0x823F7090 -- build the BLOOM accumulation buffer: an X360-fixed 320x180 colour-only target in pool
 // slot 6 (E_RENDER_TARGET_BLOOM). No depth surface, no MSAA, one mip, and the section count left at
 // the constructor's 1 (the X360 makes no store to mu8NumSections, exactly like CreateBackBuffer).
 //
 // THE DIMENSIONS ARE HARD-CODED IMMEDIATES, NOT DERIVED. `li r11, 0x140` / `li r9, 0xB4`
 // @0x823F70E8/0x823F70F4 -- 320x180. At the 1280x720 front buffer Construct passes they happen to be
 // a quarter of the screen in each axis, but nothing here reads mu32ScreenWidth/mu32ScreenHeight, so a
-// different display resolution leaves this buffer at 320x180. (CreateParticleBuffer, by contrast,
+// different display resolution leaves this X360 buffer at 320x180. (CreateParticleBuffer, by contrast,
 // really does derive its size from those members.)
 //
 // The colour section is marked in use with a SINGLE store (stb 1 -> record 0 +0x04 @0x823F7114): the
@@ -1026,7 +1033,12 @@ void BrnRendererMemory::CreateBloomBuffer(rw::IResourceAllocator* lpAllocator)
     // one no-argument method -- see the split-setter banner in CgsRenderTarget.h).
     lpBloom->ClearColourTargetInUse();
 
+#if defined(_WIN32)
+    // FLAG PC-platform leaf: TUB bloom allocation 0x54461C..0x54462B uses screen/4.
+    lpBloom->SetDimensions(mu32ScreenWidth / 4u, mu32ScreenHeight / 4u);
+#else
     lpBloom->SetDimensions(KU_BLOOM_BUFFER_WIDTH, KU_BLOOM_BUFFER_HEIGHT);
+#endif
     lpBloom->SetNumMipMaps(1);
     lpBloom->SetMultisampleFormat(0);
     lpBloom->SetUseDepthStencilAsTexture(false);
@@ -1061,7 +1073,7 @@ void BrnRendererMemory::CreateBloomBuffer(rw::IResourceAllocator* lpAllocator)
 // separate named constants (one per helper's own immediates) so that a later divergence in one does
 // not silently move the other.
 //
-// Everything else reads exactly as CreateBloomBuffer: hard-coded 320x180 (NOT screen-derived), colour
+// Everything else reads exactly as CreateBloomBuffer: X360 hard-codes 320x180, colour
 // section 0 marked in use with a single store (filter mode and mbUseDevice untouched -- see the
 // USE_DEVICE_FOR_WRITE note on CreateBloomBuffer), no depth surface, section count left at the
 // constructor's 1.
@@ -1071,7 +1083,12 @@ void BrnRendererMemory::CreateDepthOfFieldBuffer(rw::IResourceAllocator* lpAlloc
 
     lpDepthOfField->ClearColourTargetInUse();
 
+#if defined(_WIN32)
+    // FLAG PC-platform leaf: independently attested TUB DoF 0x54481C..0x54482B uses screen/4.
+    lpDepthOfField->SetDimensions(mu32ScreenWidth / 4u, mu32ScreenHeight / 4u);
+#else
     lpDepthOfField->SetDimensions(KU_DEPTH_OF_FIELD_BUFFER_WIDTH, KU_DEPTH_OF_FIELD_BUFFER_HEIGHT);
+#endif
     lpDepthOfField->SetNumMipMaps(1);
     lpDepthOfField->SetMultisampleFormat(0);
     lpDepthOfField->SetUseDepthStencilAsTexture(false);

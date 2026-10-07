@@ -1202,19 +1202,28 @@ namespace renderengine
     bool PCResizeDisplayTargets(rw::graphics::postfx::RenderTarget* lpScene,
                                 rw::graphics::postfx::RenderTarget* lpDownSample,
                                 rw::graphics::postfx::RenderTarget* lpParticle,
-                                u32 luWidth, u32 luHeight)
+                                u32 luWidth, u32 luHeight,
+                                rw::graphics::postfx::RenderTarget* lpBloom,
+                                rw::graphics::postfx::RenderTarget* lpDepthOfField,
+                                rw::graphics::postfx::RenderTarget* lpWork)
     {
         using rw::graphics::postfx::RenderTarget;
-        RenderTarget* const lapTargets[] = {lpScene, lpDownSample, lpParticle};
-        PCSurfaceResize laColour[3];
-        PCSurfaceResize laDepth[3];
-        for (u32 luIndex = 0; luIndex < 3; ++luIndex)
+        // FLAG PC-platform leaf: TUB's independent bloom/DoF/work creators
+        // (0x5445E0/0x5447E0/0x544760) use scene width/height >> 2. Prepare
+        // their colour-only surfaces in the same transaction as scene/depth.
+        RenderTarget* const lapTargets[] = {lpScene, lpDownSample, lpParticle,
+                                           lpBloom, lpDepthOfField, lpWork};
+        const u32 lauDivisors[] = {1u, 1u, 2u, 4u, 4u, 4u};
+        PCSurfaceResize laColour[6];
+        PCSurfaceResize laDepth[6];
+        for (u32 luIndex = 0; luIndex < 6; ++luIndex)
         {
             RenderTarget* lpTarget = lapTargets[luIndex];
             if (!lpTarget) continue;
             RenderTargetState* lpState = lpTarget->GetSectionRenderTargetState(0);
-            const u32 luDivisor = luIndex == 2 ? 2 : 1;
-            if (!lpState || !lpState->mpColourSurface || !lpState->mpDepthSurface
+            const u32 luDivisor = lauDivisors[luIndex];
+            if (!lpState || !lpState->mpColourSurface
+                || (luIndex < 3 && !lpState->mpDepthSurface)
                 || !laColour[luIndex].Prepare(Dev(), lpState->mpColourSurface,
                                               luWidth / luDivisor, luHeight / luDivisor)
                 || !laDepth[luIndex].Prepare(Dev(), lpState->mpDepthSurface,
@@ -1236,12 +1245,12 @@ namespace renderengine
         for (u32 luUnit = 0; luUnit < 16; ++luUnit) Dev()->SetTexture(luUnit, nullptr);
         shadow::Device::ResetShadowing();
         gpLastRenderTargetState = nullptr;
-        for (u32 luIndex = 0; luIndex < 3; ++luIndex)
+        for (u32 luIndex = 0; luIndex < 6; ++luIndex)
         {
             RenderTarget* lpTarget = lapTargets[luIndex];
             if (!lpTarget) continue;
             RenderTargetState* lpState = lpTarget->GetSectionRenderTargetState(0);
-            const u32 luDivisor = luIndex == 2 ? 2 : 1;
+            const u32 luDivisor = lauDivisors[luIndex];
             const u32 luTargetWidth = luWidth / luDivisor;
             const u32 luTargetHeight = luHeight / luDivisor;
             Texture* const lapTextures[] = {
@@ -1258,7 +1267,7 @@ namespace renderengine
                 lpTexture->muHeight = static_cast<u16>(luTargetHeight);
             }
             lpState->mpColourSurface->Release();
-            lpState->mpDepthSurface->Release();
+            if (lpState->mpDepthSurface) lpState->mpDepthSurface->Release();
             lpState->mpColourSurface = laColour[luIndex].mpSurface;
             lpState->mpDepthSurface = laDepth[luIndex].mpSurface;
             laColour[luIndex].mpSurface = laDepth[luIndex].mpSurface = nullptr;
