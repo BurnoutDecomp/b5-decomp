@@ -87,4 +87,24 @@ namespace BrnReplays
         mbSerialiseActive = false;
     }
 
+    // ARTIST 0x8264B8B8: every occupied slot is locked in increasing id order.
+    void ReplayModule::LockSerialisers()
+    {
+        for (s32 liSerialiser = 0; liSerialiser < KI_NUM_SERIALISERS; ++liSerialiser)
+        {
+            if (mapSerialisers[liSerialiser])
+                mapSerialisers[liSerialiser]->Lock();
+        }
+    }
+
+    // ARTIST 0x8264B910: release in the same increasing id order.
+    void ReplayModule::UnlockSerialisers()
+    {
+        for (s32 liSerialiser = 0; liSerialiser < KI_NUM_SERIALISERS; ++liSerialiser)
+        {
+            if (mapSerialisers[liSerialiser])
+                mapSerialisers[liSerialiser]->Unlock();
+        }
+    }
+
 }

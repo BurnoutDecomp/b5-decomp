@@ -105,6 +105,15 @@ namespace ReplayIO
     // ====================================================================================
     // InputBuffer_PreSim accessors (BrnReplayModuleIO.h:71-78).
     // ====================================================================================
+    // ARTIST 0x82652F08..0x82652F30. Construct the reused IO-stack allocation
+    // without clearing the pad payload that this constructor leaves unpublished.
+    void InputBuffer_PreSim::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mGameActionQueue.Construct();
+        mTimerStatusInterface.Clear();
+    }
+
     void InputBuffer_PreSim::_AssertLayout()
     {
         static_assert(offsetof(InputBuffer_PreSim, mGameActionQueue) == 0x0004,

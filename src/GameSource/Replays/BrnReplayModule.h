@@ -147,6 +147,11 @@ namespace BrnReplays
         bool* GetAutoStartFlagPtr()   { return &mbAutoStart; }
 
     private:
+        // ARTIST 0x8264B8B8 / 0x8264B910. Walk all eleven serialiser slots;
+        // present entries receive their original BaseSerialiser lock operation.
+        void LockSerialisers();
+        void UnlockSerialisers();
+
         // X360 sequence markers (offsets in the comments). The host ModuleSingleBuffered
         // base and the embedded real types host-inflate past their X360 byte spans, so the
         // members are declared in X360 ORDER (shape-faithful, not byte-exact); the fixed
