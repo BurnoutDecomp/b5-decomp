@@ -36,53 +36,17 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"               // CgsGui::GuiEventQueueBase<N,16>
 #include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT (AddGuiOutEvent<T> inline)
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"
+#include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h"
 
 namespace CgsGui
 {
 namespace CgsGuiModuleIO
 {
-    // ---- CgsGraphics::Camera (foreign type) -----------------------------------------------
-    // FLAG: CgsGraphics::Camera has its own owning home (ledger TU class:CgsGraphics::Camera:
-    // Camera @0x823C51D0, operator= @0x82218ED0, GetFrustum, SetFovHorizontal). It is NOT
-    // reconstructed here. The GUI InputBuffer embeds it by value inside its ImRendererSet, so it
-    // is modelled as correctly-aligned (alignas 16) opaque byte storage with the right size,
-    // exactly so the X360 member offsets (mRendererSet @+0x8020, the embedded camera @+0x8040 ==
-    // +0x20 into ImRendererSet) are reproduced. When the real CgsGraphics::Camera home lands this
-    // header should adopt the named type additively.
-    //
-    // SIZE: the X360 copy-ctor CgsGraphics::Camera::Camera @0x823C51D0 copies a leading 0xC0
-    // (192) bytes via 12 lvx128/stvx128 16-byte moves, then 4-byte stores out to *(this+352);
-    // the InputBuffer::SetImRenderers @0x823C86C0 temporary that receives a Camera copy is a
-    // 416-byte stack local. The copied extent (through +0x160==352, +4 == 356) rounded up to the
-    // 16-byte Camera alignment is 368; modelled as a 368-byte alignas(16) span (honest size from
-    // the X360 copy extent -- the inner field breakdown is the foreign home's, not modelled here).
-    // The complete camera home is available; retain the storage alias used by
-    // the IO API while giving it the original CgsGraphics::Camera value type.
+    // Original CgsGui::ImRendererSet comes from CgsCustomRenderer.h. Keep the
+    // historical IO spelling as an alias so every module/view consumer shares
+    // the same five native pointer fields and complete graphics-camera value.
+    using ImRendererSet = CgsGui::ImRendererSet;
     using CgsGraphicsCameraStorage = CgsGraphics::Camera;
-
-    // ---- ImRendererSet (foreign type) -----------------------------------------------------
-    // FLAG: CgsGui::ImRendererSet has its own owning home (the original CgsGuiModuleIO.h pulled it
-    // in via Gui/View/CustomRenderer/CgsCustomRenderer.h + the ImmediateMode render-buffer + camera
-    // headers). It is NOT reconstructed here; only the parts the X360 InputBuffer accessors touch
-    // are pinned:
-    //   - InputBuffer::SetImRenderers @0x823C86C0 byte-copies the leading 5 dwords (20 bytes,
-    //     +0x00..+0x13) of the source ImRendererSet into mRendererSet, then copies the source
-    //     camera (src+0x20) into the embedded mCamera and finally copies a stack temp into mCamera.
-    //   - InputBuffer::GetImRenderers @0x8284E3D8 returns &mRendererSet (this+0x8020).
-    //   - InputBuffer::SetCamera @0x823C5318 assigns into the embedded mCamera (this+0x8040).
-    // The 5 leading dwords are the render-buffer / custom-renderer / gui-cache pointers the
-    // original header declared (Im2dRenderBuffer*, Im3dRenderBuffer*, CustomRenderer*, GuiCache*,
-    // and one more bookkeeping word); their precise names belong to the ImRendererSet home, so
-    // they are modelled here as a 20-byte opaque head. The embedded CgsGraphics::Camera mCamera is
-    // alignas(16) and therefore lands at +0x20 (the 12 bytes +0x14..+0x1F are alignment padding),
-    // matching the X360 camera offset (mRendererSet@+0x8020 + 0x20 == +0x8040).
-    struct ImRendererSet
-    {
-        unsigned char            maRendererPtrs[20]; // +0x00..+0x13 (5 dwords copied by SetImRenderers)
-        // +0x14..+0x1F: alignment padding to the 16-byte boundary required by mCamera (alignas 16).
-        CgsGraphicsCameraStorage mCamera;            // +0x20 (X360 camera @ this+0x8040)
-    };
-    static_assert(sizeof(CgsGraphicsCameraStorage) % 16 == 0, "Camera storage 16-byte multiple");
 
     struct OutputBuffer : public CgsModule::IOBuffer
     {
@@ -204,7 +168,8 @@ namespace CgsGuiModuleIO
     // The X360 accessors pin: GetImRenderers @0x8284E3D8 returns this+0x8020 (== &mRendererSet);
     // SetCamera @0x823C5318 assigns into this+0x8040 (== &mRendererSet.mCamera, +0x20 into the set);
     // SetImRenderers @0x823C86C0 copies the 5-dword head into this+0x8020 then the camera into
-    // this+0x8040. mInputQueue is GuiEventQueueBase<32768,16> per the X360 InputBuffer::Construct
+    // this+0x8040 on the console; host pointer widening moves that interior camera.
+    // mInputQueue is GuiEventQueueBase<32768,16> per the X360 InputBuffer::Construct
     // (CgsGuiModuleIO.cpp) which Construct()s a VariableEventQueue<32768,16>.
     struct InputBuffer : public CgsModule::IOBuffer
     {
@@ -228,11 +193,7 @@ namespace CgsGuiModuleIO
         // X360 0x823C5318: write-lock (bit 3); assigns lrCamera into mRendererSet.mCamera
         // (this+0x8040). This is the single function owned by the CgsGuiModuleIO.h header TU.
         // Bodied in CgsGuiModuleIO_InputBuffer.cpp.
-        // NOTE: the original parameter type is CgsGraphics::Camera& (foreign home, not
-        // reconstructed); it is modelled here as a reference to the same opaque camera-storage
-        // type embedded in ImRendererSet so the X360 Camera::operator= call is reproduced by
-        // value-image without depending on the un-homed CgsGraphics::Camera definition.
-        void SetCamera(CgsGraphicsCameraStorage& lrCamera);
+        void SetCamera(CgsGraphics::Camera& lrCamera);
 
         // Byte-offset pins (compiled in CgsGuiModuleIO_InputBuffer.cpp).
         static void _AssertInputLayout();

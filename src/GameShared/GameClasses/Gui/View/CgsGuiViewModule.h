@@ -53,26 +53,6 @@ namespace ViewIO
 
 namespace CgsGui
 {
-    // The five renderer slots ViewModule::Render @0x82858810 copies in from the view
-    // input buffer each frame (and re-nulls after RenderInternal -- slot 1 excepted).
-    // Slot names are the X360 assert-attested field names ("lpViewInput->
-    // GetImRenderers().mpIm2dRenderBuffer" / "...mpIm3dRenderBufferUntex" /
-    // "...mpIm3dRenderBufferRacePosition" / "...mpIm3dRenderBufferMenusAndHud");
-    // slot 1 (+0x04) is never asserted/derefed by the render bodies (name unrecovered).
-    // The 3D buffers stay void* -- their ImRenderBuffer instantiations are not wired
-    // on the PC-minimal path yet (RenderInternal null-guards them).
-    struct ImRendererSet
-    {
-        CgsGui::AptIm2dRenderBuffer* mpIm2dRenderBuffer;             // +0x00
-        void* mpReserved04;                                          // +0x04 (kept across the post-render re-null)
-        void* mpIm3dRenderBufferUntex;                               // +0x08
-        CgsGraphics::Im3dRenderBuffer* mpIm3dRenderBufferRacePosition; // +0x0C
-        CgsGraphics::Im3dRenderBuffer* mpIm3dRenderBufferMenusAndHud;  // +0x10
-        // ARTIST set+0x20, ViewModule+0x270. DecFIGS CgsCustomRenderer.h:68.
-        // Native pointer widening places it after the five pointer slots.
-        CgsGraphics::Camera mCamera;
-    };
-
     // KI_NUM_MOVIE_LEVELS -- the assert "liLevel>=0 && liLevel < KI_NUM_MOVIE_LEVELS"
     // fires for liLevel > 8 (X360 `cmpwi r31,9; blt` -> valid range [0,8]), so the
     // count is 9. (Grounded: the asm range check, not a fabricated constant.)

@@ -778,14 +778,11 @@ namespace CgsGui
         // on the PC-minimal path (RenderInternal's 3D bracket is structurally gated on
         // their instantiations landing), so those three asserts return with that slice.
 
-        mImRenderers.mpIm2dRenderBuffer =
-            static_cast<CgsGui::AptIm2dRenderBuffer*>(lrRenderers.mpIm2dRenderBuffer);
-        mImRenderers.mpReserved04                   = lrRenderers.mpReserved04;
+        mImRenderers.mpIm2dRenderBuffer = lrRenderers.mpIm2dRenderBuffer;
+        mImRenderers.mpIm3dRenderBuffer            = lrRenderers.mpIm3dRenderBuffer;
         mImRenderers.mpIm3dRenderBufferUntex        = lrRenderers.mpIm3dRenderBufferUntex;
-        mImRenderers.mpIm3dRenderBufferRacePosition =
-            static_cast<CgsGraphics::Im3dRenderBuffer*>(lrRenderers.mpIm3dRenderBufferRacePosition);
-        mImRenderers.mpIm3dRenderBufferMenusAndHud =
-            static_cast<CgsGraphics::Im3dRenderBuffer*>(lrRenderers.mpIm3dRenderBufferMenusAndHud);
+        mImRenderers.mpIm3dRenderBufferRacePosition = lrRenderers.mpIm3dRenderBufferRacePosition;
+        mImRenderers.mpIm3dRenderBufferMenusAndHud = lrRenderers.mpIm3dRenderBufferMenusAndHud;
 
         // ARTIST ViewModule::Render @0x82858810 copies the same frame's camera
         // after its five renderer pointers, before the custom 3D components draw.

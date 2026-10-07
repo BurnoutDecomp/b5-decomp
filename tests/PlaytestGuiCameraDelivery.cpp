@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 #include <cstdio>
 #include <cstring>
+#include <cstdint>
 
 static unsigned guChecks, guFailures;
 namespace CgsDev { namespace Assert {
@@ -42,9 +43,10 @@ int main() {
     Check(lInput.mRendererSet.mCamera.mView.wAxis.x == 17.5f, "module input receives complete view transform");
     CgsGui::CgsGuiModuleIO::ImRendererSet lOther = {};
     lOther.mCamera.mView.wAxis.x = -100.0f;
-    lOther.maRendererPtrs[0] = 123;
+    lOther.mpIm2dRenderBuffer = reinterpret_cast<CgsGraphics::Im2dRenderBuffer*>(UINT64_C(0x123456780000007B));
     lInput.SetImRenderers(lOther);
-    Check(lInput.mRendererSet.mCamera.mView.wAxis.x == 17.5f && lInput.mRendererSet.maRendererPtrs[0] == 123,
+    Check(lInput.mRendererSet.mCamera.mView.wAxis.x == 17.5f
+          && lInput.mRendererSet.mpIm2dRenderBuffer == lOther.mpIm2dRenderBuffer,
           "module renderer-pointer publication preserves director camera");
     CgsGui::ViewIO::InputBuffer lViewInput;
     lViewInput.mxStatusFlags.Clear();

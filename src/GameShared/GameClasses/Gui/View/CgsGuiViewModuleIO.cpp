@@ -98,7 +98,7 @@ namespace ViewIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
 
         mRendererSet.mpIm2dRenderBuffer             = lrRenderers.mpIm2dRenderBuffer;
-        mRendererSet.mpReserved04                   = lrRenderers.mpReserved04;
+        mRendererSet.mpIm3dRenderBuffer            = lrRenderers.mpIm3dRenderBuffer;
         mRendererSet.mpIm3dRenderBufferUntex        = lrRenderers.mpIm3dRenderBufferUntex;
         mRendererSet.mpIm3dRenderBufferRacePosition = lrRenderers.mpIm3dRenderBufferRacePosition;
         mRendererSet.mpIm3dRenderBufferMenusAndHud  = lrRenderers.mpIm3dRenderBufferMenusAndHud;
