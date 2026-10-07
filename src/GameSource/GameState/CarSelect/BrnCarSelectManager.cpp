@@ -38,6 +38,17 @@ static const char* const KAC_CSM_FILE =
 static const char* const KAC_SPAWNLOC_FILE =
     "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\trigger\\BrnSpawnLocation.h";
 
+// [FLAG PC witness] BRN_CARSEL_DIAG=1 prints the action-69 lists this file posts (first 40). Read once.
+static bool IsCarSelDiagEnabled()
+{
+    static const bool sbEnabled = []()
+    {
+        const char* lpcValue = std::getenv("BRN_CARSEL_DIAG");
+        return lpcValue != 0 && lpcValue[0] != '\0' && lpcValue[0] != '0';
+    }();
+    return sbEnabled;
+}
+
 // ----------------------------------------------------------------------------
 // X360-baked tuning constants (the float rodata the bodies compare against). The DWARF declares the
 // named class-scope KF_* statics at BrnCarSelectManager.cpp:30-41; only the immediates the
@@ -495,16 +506,9 @@ void CarSelectManager::SaveChosenLiveryForCar(CgsID lCarId)
 // car-mod-screen action (76, 8B), make sure a desired car is selected, and hand the car's
 // derived colour-livery collection to the progression layer / the GUI.
 //
-// ⛔ HONEST PARTIAL -- the derived-livery collection. From `ConstructColourLiveryList` onwards
-// the console needs BrnDerivedCars.h (DerivedCarArray + ConstructColourLiveryList @0x82374F60 +
-// ProgressionManager::UnlockDerivedCarCollection @0x8237AD70 + DEBUG_PrintArray @0x8236ACE8,
-// ~600 X360 instructions) which is NOT reconstructed. What is missing, precisely: the derived
-// cars of the selected car are not unlocked here, and the 88-byte livery-list action (69) is not
-// posted when the car has more than one livery version. Everything up to and including the
-// car-mod-screen action IS the console's. This whole state is only reachable from the paint-shop
-// entry (EnterModification / Update case 4), i.e. off the "enter junkyard -> pick the one
-// unlocked car -> drive" path. It announces itself in the log when it is hit.
-// DELETE-WHEN BrnDerivedCars.h lands.
+// The derived-livery collection follows: the selected car's colour liveries are unlocked on the
+// profile and, when the car has more than one livery version, they are posted as game action 69
+// (CarSelectionRequestStreamingAction) so the world streams every version the paint screen can show.
 // ============================================================================
 void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
@@ -597,32 +601,41 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
         // Its own GetLength() != 0 assert (BrnDerivedCars.h:248) is the console's.
         lDerivedCars.DEBUG_PrintArray();
 
-        // ⛔ PARK -- THE LIVERY-LIST PUBLISH (game action 69, size 88). Still parked because it
-        // is a GUI record this lane does not own: the console builds it at 0x82387698..0x82387724
-        // and the layout IS recovered --
-        //     +0x00  CgsID  maCarIds[8]     one per entry, GetItem(i) in order
-        //     +0x40  s32    miCount         the number written
-        //     +0x44  u8     mab44[8]        zeroed per entry, then [0] overwritten with 5
-        //     +0x4C  u8     mab4C[8]        set to 1 per entry
-        // -- but the id has no enumerator in BrnGameActions.h and the DWARF name at the
-        // car-select band's +5 shift (X360 76 == DWARF 71 E_ACTION_CAR_SELECT_MODIFICATION_SCREEN
-        // pins that shift) would be DWARF 64 == E_ACTION_CAR_SELECTION_REQUEST_STREAMING, whose
-        // semantics do NOT obviously match an 88-byte livery list. Naming it on that alone would
-        // be a guess, and a wrongly-named action id is exactly the defect BrnGameActions.h's own
-        // 204/229 correction notes exist about. The UNLOCK half above -- what the player keeps --
-        // is landed; only the screen's list publish is missing.
-        // DELETE-WHEN action 69's consumer is identified (find the `case 69` arm of
-        // BrnGuiModule's TranslateGameActionsToGuiEvents) and the enumerator + record land in
-        // BrnGameActions.h.
-        if (CgsDev::Log::gpDebugPrint != 0 && lDerivedCars.GetLength() > 1)
+        // The livery-list publish: every version of the car, in the array's order, priority 1;
+        // entry 0 (the base car) carries the wait-for-streaming flags (5), the rest carry none.
+        if (lDerivedCars.GetLength() > 1)
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] CarSelectManager::StartCarModificationState: the "
-                   "livery-list publish (game action 69, 88 B) is NOT reconstructed -- the "
-                   "modification screen was not told about the "
-                << lDerivedCars.GetLength()
-                << " livery versions of car " << static_cast<u32>(mDesiredCarId)
-                << " (they ARE unlocked on the profile now).\n";
+            GameStateModuleIO::CarSelectionRequestStreamingAction lRequestAction = {};
+            lRequestAction.miCount = 0;
+            for (u32 luIndex = 0; luIndex < lDerivedCars.GetLength(); ++luIndex)
+            {
+                lRequestAction.maCars[luIndex]            = lDerivedCars.GetItem(luIndex);
+                lRequestAction.maiPriorities[luIndex]     = 1;
+                lRequestAction.mauExtraInfoFlags[luIndex] = 0;
+                ++lRequestAction.miCount;
+            }
+            lRequestAction.mauExtraInfoFlags[0] = 5;
+
+            if (IsCarSelDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+            {
+                static s32 siLines = 0;
+                if (siLines < 40)
+                {
+                    ++siLines;
+                    *CgsDev::Log::gpDebugPrint << "[FLAG PC witness] [carsel] livery action69 car="
+                                               << static_cast<u64>(mDesiredCarId)
+                                               << " count=" << lRequestAction.miCount << " ids:";
+                    for (s32 liEntry = 0; liEntry < lRequestAction.miCount; ++liEntry)
+                    {
+                        *CgsDev::Log::gpDebugPrint << " " << static_cast<u64>(lRequestAction.maCars[liEntry]);
+                    }
+                    *CgsDev::Log::gpDebugPrint << "\n";
+                }
+            }
+
+            AsActionQueue(lpActionQueue)->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequestAction),
+                GameStateModuleIO::E_ACTION_CAR_SELECTION_REQUEST_STREAMING, sizeof(lRequestAction));
         }
     }
 }
@@ -645,8 +658,7 @@ void CarSelectManager::StartCarSelectState(GameStateModuleIO::GameActionQueue* l
 
     if (meState == E_STATE_CAR_MODIFICATION)
     {
-        // X360: RequestStreamingForVehicleSelection(mpGameStateModule, mDesiredCarId, hi-word).
-        mpGameStateModule.Get()->RequestStreamingForVehicleSelection(mDesiredCarId);
+        mpGameStateModule.Get()->RequestStreamingForVehicleSelection(lpActionQueue, mDesiredCarId);
     }
 
     mfStateTimer = 0.0f;
@@ -1054,7 +1066,7 @@ void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameAction
     }
 
     if (!mbInCarModScreen)
-        mpGameStateModule.Get()->RequestStreamingForVehicleSelection(mDesiredCarId);
+        mpGameStateModule.Get()->RequestStreamingForVehicleSelection(lpActionQueue, mDesiredCarId);
 
     mfStateTimer = KF_TIMER_RESET;                  // 0.0
     meState      = E_STATE_STARTING_CHANGING_CAR;   // 7
@@ -1114,6 +1126,18 @@ void CarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQueue* 
     // state 8: wait for streaming to finish, then return to the prior screen.
     if (mbWaitingForStreaming)
         return;
+
+    if (IsCarSelDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+    {
+        static s32 siLines = 0;
+        if (siLines < 40)
+        {
+            ++siLines;
+            *CgsDev::Log::gpDebugPrint << "[FLAG PC witness] [carsel] car change done car=" << static_cast<u64>(mDesiredCarId)
+                                       << " modScreen=" << (mbInCarModScreen ? 1 : 0)
+                                       << " secondsSinceRequest=" << mfStateTimer << "\n";
+        }
+    }
 
     mfStateTimer = KF_TIMER_RESET;   // 0.0
     if (mbInCarModScreen)

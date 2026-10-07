@@ -50,12 +50,13 @@
 //  * WasComboRecentlyPerformed's validity flag derives from miCurrentScore (+0x10),
 //    NOT mfComboScore (the round-1 note was WRONG; fixed -- see method below). The
 //    third out-param is filled from mfRecentComboTime (+0x88), NOT mfPendingScoreTimer.
-//  * TidyStuntScore is declared+inline-bodied in BrnStuntModeScoring.h (its DWARF home
-//    for this TU family); OutputStuntsToDisplay calls it directly -- no local decl needed.
+//  * TidyStuntScore is declared in BrnStuntModeScoring.h and bodied below (its own
+//    out-of-line function on the console); OutputStuntsToDisplay and UpdateBufferedScore call it.
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h"
 #include "GameSource/GameState/BrnGameActions.h"        // GameStateModuleIO action types (TU family)
 #include "GameSource/GameState/BrnGameStateTypes.h"     // EStuntType, E_STUNT_TYPE_INVALID
+#include <cmath>                                        // std::floor (TidyStuntScore)
 // (no CGS_ASSERT in any recovered query body -- none of these X360 functions assert.)
 
 namespace BrnGameState
@@ -94,6 +95,28 @@ namespace BrnGameState
         // compares mfTimeSinceLastStunt against to END the combo (`if (v5 > flt_82CDB790)`),
         // so the HUD warning bar runs 0 -> 5 s and the combo drops exactly when it fills.
         const f32 KF_COMBO_WARNING_DISPLAY_SPAN   = 5.0f;    // flt_82CDB790 (0x40A00000)
+
+        // TidyStuntScore's pair. The award is the rodata 5.0; the reciprocal is a .bss float the
+        // static initialiser fills with 1.0f / 5.0f before the game runs.
+        const f32 KF_MIN_SCORE_AWARD            = 5.0f;
+        const f32 KF_MIN_SCORE_AWARD_RECIPROCAL = 1.0f / KF_MIN_SCORE_AWARD;
+    }
+
+    // ------------------------------------------------------------------------
+    // TidyStuntScore
+    // A score inside the +/- epsilon dead-band is returned untouched. Anything else is floored to
+    // a whole multiple of KF_MIN_SCORE_AWARD, and a result below one award is lifted to one award
+    // (the final select picks the award when `tidied - award` is negative or unordered).
+    // ------------------------------------------------------------------------
+    f32 TidyStuntScore(f32 lfScore)
+    {
+        if (lfScore <= KF_SCORE_EPSILON && lfScore >= -KF_SCORE_EPSILON)
+        {
+            return lfScore;
+        }
+
+        const f32 lfTidied = std::floor(lfScore * KF_MIN_SCORE_AWARD_RECIPROCAL) * KF_MIN_SCORE_AWARD;
+        return (lfTidied - KF_MIN_SCORE_AWARD >= 0.0f) ? lfTidied : KF_MIN_SCORE_AWARD;
     }
 
     // ------------------------------------------------------------------------

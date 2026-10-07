@@ -28,6 +28,7 @@
 #include "GameSource/Game/GameBridgeGameStateToX.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"               // BrnGui::GuiAutosaveRequestEvent (id 356)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                    // BrnGui::StuntType / GuiEventStunt*
 #include "GameSource/Gui/Events/BrnGuiEventRankProgressResponse.h" // GuiEventRankProgressResponse (case 181)
 #include "GameSource/Gui/Events/BrnGuiEventStatsResponse.h"        // GuiEventStatsResponse (case 180)
@@ -88,23 +89,8 @@ namespace
     static_assert(sizeof(TickerCustomMessageWire537) == 2072,
                   "X360 AddGuiEvent<GuiEventTickerCustomMessage> posts 2072 bytes (id 537)");
 
-    // =========================================================================
-    // [profile-save] the on-queue record of GUI event 356 (BrnGui::GuiAutosaveRequestEvent),
-    // TU-LOCAL for exactly the reason the 537 record above is: this TU cannot include
-    // BrnGuiDemangledEventTypes.h (the C2011 fork pair documented in the include banner).
-    // The identical TU-local record already exists in the sibling
-    // GameBridgeGameStateToX_EventFlowGuiEvents.cpp (AutosaveRequestWire356) for its case-37
-    // post; both are file-static in an anonymous namespace, so there is no ODR fork -- the
-    // canonical type stays BrnGuiDemangledEventTypes.h:56.
-    // Wire shape: AddGuiEvent<GuiAutosaveRequestEvent> @0x823D03E0 posts ONE byte (id 356,
-    // size 1) -- the console builds it with a single `stb` and never a GuiEvent header.
-    // =========================================================================
-    struct AutosaveRequestWire356
-    {
-        u8 mu8Flag;                             // +0x00 (the console's `stb` byte)
-        s32 GetEventType() const { return 356; }
-    };
-    static_assert(sizeof(AutosaveRequestWire356) == 1, "id 356 size 1");
+    // GUI event 356 is posted as one byte, id 356 size 1, through its canonical record.
+    static_assert(sizeof(BrnGui::GuiAutosaveRequestEvent) == 1, "id 356 size 1");
 
     // =========================================================================
     // [drive-thru wave 2026-08-29] The byte the BODY-SHOP drive-thru action (97) carries its
@@ -117,12 +103,10 @@ namespace
     const s32 KI_SHOP_ACTION_EFFECTIVE_BYTE = 0x85;
 
     // =========================================================================
-    // ⭐⭐⭐ [boost-ticker wave 2026-09-14] THE SIX BOOST-TICKER GUI WIRE RECORDS, TU-LOCAL for
-    // exactly the reason TickerCustomMessageWire537 and AutosaveRequestWire356 above are: this
-    // TU cannot include BrnGuiDemangledEventTypes.h (the C2011 fork pair documented in the
-    // include banner), and that header is where the canonical BrnGui::GuiNearMissEvent /
-    // GuiDriftingEvent / GuiSpinningEvent / GuiInAirEvent / GuiOncomingEvent /
-    // GuiTailgatingEvent / GuiTrafficCheckEvent live. Each record below is field-for-field its
+    // ⭐⭐⭐ [boost-ticker wave 2026-09-14] THE SIX BOOST-TICKER GUI WIRE RECORDS, TU-LOCAL. The
+    // canonical BrnGui::GuiNearMissEvent / GuiDriftingEvent / GuiSpinningEvent / GuiInAirEvent /
+    // GuiOncomingEvent / GuiTailgatingEvent / GuiTrafficCheckEvent live in
+    // BrnGuiDemangledEventTypes.h (now included above). Each record below is field-for-field its
     // canonical twin -- no fork of meaning, only of scope (file-static in an anonymous
     // namespace, so there is no ODR fork either).
     //
@@ -187,8 +171,8 @@ namespace
 
     // =========================================================================
     // [crash-parity 2026-09-22] the on-queue record of GUI event 374
-    // (BrnGui::GuiShutdownFinishedEvent), TU-LOCAL for the same reason as the records above:
-    // the canonical home is BrnGuiDemangledEventTypes.h:562, which this TU cannot include.
+    // (BrnGui::GuiShutdownFinishedEvent), TU-LOCAL like the records above; the canonical home
+    // is BrnGuiDemangledEventTypes.h.
     // Wire shape: AddGuiEvent<GuiShutdownFinishedEvent> @0x823D8A48 posts ONE byte
     // (`li r5, 0x176 ; li r6, 1` @0x823D8AE4..0x823D8AE8).
     // =========================================================================
@@ -201,7 +185,7 @@ namespace
 
     // [FX-FLOW 2026-09-24, G13-X5 remainder] the on-queue record of GUI event 373
     // (BrnGui::GuiShutdownEvent, DWARF BrnGuiEventTypeDefs.h:3618 {CgsID mVictimCarID}), TU-LOCAL
-    // beside its 374 sibling for the same include reason. Wire shape: AddGuiEvent<GuiShutdownEvent>
+    // beside its 374 sibling. Wire shape: AddGuiEvent<GuiShutdownEvent>
     // @0x823D8990 posts the 8-byte id (`li r6, 8 ; li r5, 0x175` @0x823D8A2C..0x823D8A30).
     struct ShutdownEventWire373
     {
@@ -211,8 +195,8 @@ namespace
     static_assert(sizeof(ShutdownEventWire373) == 8, "GUI 373 size 8");
 
     // [FX-FLOW 2026-09-24, G11-D1 remainder] the on-queue record of GUI event 421
-    // (BrnGui::GuiInEventNeckAndNeck, DWARF BrnGuiEventTypeDefs.h:5634: no members), TU-LOCAL for
-    // the same include reason (its home is BrnGuiDemangledEventTypes.h). Wire shape:
+    // (BrnGui::GuiInEventNeckAndNeck, no members), TU-LOCAL
+    // (its home is BrnGuiDemangledEventTypes.h). Wire shape:
     // AddGuiEvent<GuiInEventNeckAndNeck> @0x823D5688 posts ONE byte (`li r6, 1 ; li r5, 0x1A5`
     // @0x823D5724..0x823D5728); the translator's case 246 hands it a stack byte it never writes.
     struct NeckAndNeckEventWire421
@@ -238,8 +222,8 @@ namespace
                                    << " (car slot " << liCarIndex << ", value " << lfValue << ")\n";
     }
 
-    // The free-burn challenge GUI records the 152..160 arms post, TU-local for the same
-    // include reason (their canonical opaque homes are in BrnGuiDemangledEventTypes.h). Member
+    // The free-burn challenge GUI records the 152..160 arms post, TU-local (their canonical
+    // opaque homes are in BrnGuiDemangledEventTypes.h). Member
     // names are the original ones. Sizes are the console AddGuiEvent<T> sizes.
     struct OnlineTimeoutWire108
     {
@@ -523,8 +507,7 @@ namespace
             //   both arms: { miCurrentCount@+0x00 <- action+0x0C,
             //                miTotalCount  @+0x04 <- action+0x10,
             //                meStuntType   @+0x08 <- MapStuntEnumsFromGameplayToGui(action+0x08) }
-            //   both arms then post a 1-byte GuiAutosaveRequestEvent (356) built by
-            //   `stb r19` with r19 == 0 (@0x823EB874 / @0x823EB920 / @0x823EB968).
+            //   both arms then post a 1-byte GuiAutosaveRequestEvent (356) whose byte is 0.
             // The two events are identically shaped but distinct ids with distinct consumers:
             // 217 dispatches to HudMessageAnalyzer::HandleStuntInfo ("Billboards Smashed 12/45"),
             // 218 goes to the HUD boost-bar component.
@@ -538,21 +521,10 @@ namespace
                     MapStuntEnumsFromGameplayToGui(
                         static_cast<u32>(lpStunt->meStuntElementType));
 
-                // ⛔ [gateui] PARKED: the console builds a 1-byte GuiAutosaveRequestEvent ONCE
-                // at the head of this case (`stb r19, var_35D8` @0x823EB874, r19 == 0) and
-                // posts it from BOTH arms (@0x823EB920 / @0x823EB968), id 356 size 1
-                // (AddGuiEvent<GuiAutosaveRequestEvent> @0x823D03E0). Its only home is
-                // BrnGuiDemangledEventTypes.h:47, and this TU cannot include that header --
-                // see the C2011 fork pair documented at the include block above. Re-forking
-                // the type here is what broke this TU in the first place, so the post is
-                // dropped and named rather than faked.
-                // CONSEQUENCE: collecting a billboard/smash gate will not request a profile
-                // autosave. The HUD popup itself (the wave's proof) is unaffected.
-                // SHARED_HEADER_REQUEST (owner: the Gui lane) -- remove the
-                // GuiEventNetworkPlayerImage fork from
-                // GameSource/Gui/CustomRenderer/Renderers/BrnNetworkPlayerImageRenderer.h:75.
-                // Once that is gone this TU can include the demangled header and both arms
-                // become one extra `PushGuiEvent(lAutosaveRequest, lpGuiInput);`.
+                // The autosave request is built ONCE at the head of the case with a zero byte
+                // and posted from both presentation arms, after the stunt-info event.
+                BrnGui::GuiAutosaveRequestEvent lAutosaveRequest;
+                lAutosaveRequest.maData[0] = 0;
 
                 bool lbBoostBarPresentation;
                 switch (lpStunt->meCurrentGameMode)
@@ -592,6 +564,7 @@ namespace
                     lEvent.meStuntType    = leGuiStuntType;
                     liPostedGuiEventId    = lEvent.GetEventType();
                     PushGuiEvent(lEvent, lpGuiInput);
+                    PushGuiEvent(lAutosaveRequest, lpGuiInput);
                 }
                 else
                 {
@@ -601,8 +574,20 @@ namespace
                     lEvent.meStuntType    = leGuiStuntType;
                     liPostedGuiEventId    = lEvent.GetEventType();
                     PushGuiEvent(lEvent, lpGuiInput);
+                    PushGuiEvent(lAutosaveRequest, lpGuiInput);
                 }
-                // (the parked GuiAutosaveRequestEvent post would go here -- see above)
+
+                // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_DISCO_DIAG), first 16 lines.
+                static const bool sbDiscoDiag      = (getenv("BRN_DISCO_DIAG") != 0);
+                static s32        siDiscoLinesLeft = 16;
+                if (sbDiscoDiag && siDiscoLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    --siDiscoLinesLeft;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[disco] action 58 -> gui " << liPostedGuiEventId
+                        << " + gui 356 autosave request (type " << static_cast<s32>(leGuiStuntType)
+                        << " count " << lpStunt->miCurrentCount << "/" << lpStunt->miTotalCount << ")\n";
+                }
 
                 if ( sbPropDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
                 {
@@ -796,8 +781,8 @@ namespace
             // The banner above names this arm as the nearest sibling for whoever came next.
             case BrnGameState::GameStateModuleIO::E_ACTION_REQUEST_AUTOSAVE:
             {
-                AutosaveRequestWire356 lEvent;
-                lEvent.mu8Flag = *reinterpret_cast<const u8*>(lpAction);   // X360 `HIBYTE(v282) = *v7`
+                BrnGui::GuiAutosaveRequestEvent lEvent;
+                lEvent.maData[0] = *reinterpret_cast<const u8*>(lpAction);   // the action's own byte
                 PushGuiEvent(lEvent, lpGuiInput);
 
                 if ( sbPropDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
@@ -805,7 +790,7 @@ namespace
                     --siDiagLinesLeft;
                     *CgsDev::Log::gpDebugPrint
                         << "[profile-save] action 55 -> gui 356 (flag "
-                        << static_cast<s32>(lEvent.mu8Flag) << ")\n";
+                        << static_cast<s32>(lEvent.maData[0]) << ")\n";
                 }
                 break;
             }

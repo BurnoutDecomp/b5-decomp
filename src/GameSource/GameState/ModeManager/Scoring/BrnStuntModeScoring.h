@@ -82,27 +82,14 @@ namespace BrnGameState
 
     // ------------------------------------------------------------------------
     // TidyStuntScore -- free function the stunt scorer uses to "tidy" a raw stunt score into the
-    // clean (integer-valued) score it banks / displays. DWARF homes the DECLARATION in this TU
-    // (BrnStuntModeScoring.cpp:88: `extern float32_t TidyStuntScore(float32_t)`); the DEFINITION is
-    // a thin rw::math::fpu wrapper the build inlined into this TU (DecFIGS func map: dominant file
-    // SDKs/EATech/include/rw/math/fpu/scalar.h, inlined into BrnStuntModeScoring.cpp). It is called
+    // score it banks / displays. The declaration reference homes the DECLARATION in this TU
+    // (`extern float32_t TidyStuntScore(float32_t)`). It is called
     // by UpdateScores -> UpdateBufferedScore (0x8232C118, tidies mfComboScore before banking) and by
-    // OutputStuntsToDisplay (0x823211E8, tidies each surfaced category score). Because UpdateScore /
-    // UpdateScores / OutputStuntsToDisplay live in StuntModeScoring's own TU and call it, the
-    // declaration belongs in this home so every partial sees one prototype.
-    //
-    // We declare it here and give it a BEST-EFFORT inline body: round the raw score DOWN to an
-    // integer value (the call sites all cast the result to s32 / store it as the displayed score, and
-    // UpdateBufferedScore's sibling spin/roll counters use the X360 `vrfim` floor idiom). The exact
-    // X360 rounding (0x82312CD0) is UNRECOVERED -- magnitude not load-bearing for the embedder gate.
-    // FLAG: confirm the precise rounding (floor vs round-to-nearest vs clamp) against the asm when
-    // BrnStuntModeScoring.cpp's full TU is reconstructed; if it proves to be a shared rw::math helper
-    // it should be re-homed to its rw/math header and this inline removed.
-    inline f32 TidyStuntScore(f32 lfScore)
-    {
-        // Floor to an integer-valued score (best-effort; see FLAG above).
-        return static_cast<f32>(static_cast<s32>(lfScore));
-    }
+    // OutputStuntsToDisplay (tidies each surfaced category score). It is an
+    // out-of-line function of its own on the console; the body lives in
+    // BrnStuntModeScoring_Queries.cpp: a non-zero score is floored to a multiple of
+    // KF_MIN_SCORE_AWARD (5) and never drops below it.
+    f32 TidyStuntScore(f32 lfScore);
 
     // ------------------------------------------------------------------------
     // POD value types published by the stunt scorer.

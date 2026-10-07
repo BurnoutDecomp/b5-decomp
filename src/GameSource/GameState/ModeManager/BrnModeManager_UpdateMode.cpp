@@ -527,6 +527,38 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
         default:
             break;
         }
+
+        // [FLAG PC harness] BRN_LOSE_TIME_LIMIT=<seconds> -- NOT A CONSOLE PATH. Shortens the
+        // authored time limit of a Road Rage / Burning Route so a harness run reaches the console's
+        // own time-up loss (arm 14 below: E_ACTION_MODE_TIME_UP, the time-up outro, then
+        // PlayerFinishedMode timed out) inside one short run. Only the deadline moves; the loss path
+        // after it is untouched. A Burning Route keeps its medal-timer shape with all three medal
+        // times set to the lever, so its deadline is that plus the timer's own 10 s bronze grace.
+        // OFF unless the env var is set.
+        {
+            static const char* const spcLoseTimeLimit = getenv("BRN_LOSE_TIME_LIMIT");
+            const f32 lfLeverSeconds =
+                (spcLoseTimeLimit != NULL) ? static_cast<f32>(atof(spcLoseTimeLimit)) : 0.0f;
+            if (lfLeverSeconds > 0.0f)
+            {
+                if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ROAD_RAGE)
+                {
+                    mScoringSystem.SetTimeLimitSeconds(lfLeverSeconds);
+                }
+                else if (meCurrentGameModeType == GameStateModuleIO::E_MODE_BURNING_ROUTE)
+                {
+                    mScoringSystem.SetMedalModeTimer(lfLeverSeconds, lfLeverSeconds, lfLeverSeconds);
+                }
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[lose-diag] HARNESS TIME LIMIT (BRN_LOSE_TIME_LIMIT=" << lfLeverSeconds
+                        << ") mode type " << static_cast<s32>(meCurrentGameModeType)
+                        << " -- the authored limit is replaced; the time-up loss after it is the"
+                           " console's own path. [FLAG PC harness]\n";
+                }
+            }
+        }
     }
 
     // ---- (11) the show-results latch -------------------------------------------------------------
@@ -722,6 +754,48 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
                 // `mStartTime.GetSeconds() >= 0 && mEndTime.GetSeconds() >= 0` pair, de-inlined to
                 // the committed predicate (BrnScoringSystem_Timer.cpp:80).
             }
+        }
+    }
+
+    // [FLAG PC witness] BRN_LOSE_DIAG -- NOT IN THE CONSOLE. The game half of the event-end
+    // watchdog (issue #32): game event 26 (ResultsAccept) is the only way out of RESULTS, and
+    // nothing re-sends it, so a mode that sits in RESULTS this long has lost its results screen.
+    // Counted in updates (not sim time) so a paused sim still trips it. One line per RESULTS visit.
+    {
+        static const bool sbLoseDiag = (getenv("BRN_LOSE_DIAG") != 0);
+        static s32        siResultsUpdates = 0;
+        static s32        siStallLines     = 0;
+        // The idle-exit timers (ScoringSystem::DetectPlayerStationary, read by GameMode::ShouldExit)
+        // only tick while the +0x9503 streaming latch is clear; say once per event if it is not.
+        static const GameMode* spLatchReportedMode = nullptr;
+        if (sbLoseDiag && (mpCurrentGameMode != nullptr) && (spLatchReportedMode != mpCurrentGameMode) &&
+            (mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS) &&
+            (CgsDev::Log::gpDebugPrint != 0))
+        {
+            spLatchReportedMode = mpCurrentGameMode;
+            *CgsDev::Log::gpDebugPrint
+                << "[lose-diag] IN_PROGRESS mode type " << static_cast<s32>(meCurrentGameModeType)
+                << " streaming latch (+0x9503) " << (mbIsModePrepared ? 1 : 0)
+                << (mbIsModePrepared ? " -- DetectPlayerStationary is skipped, the idle exit cannot fire"
+                                     : "")
+                << " [FLAG PC witness]\n";
+        }
+        if (sbLoseDiag && (mpCurrentGameMode != nullptr) &&
+            (mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_RESULTS))
+        {
+            ++siResultsUpdates;
+            if ((siResultsUpdates == 1500) && (siStallLines++ < 8) && (CgsDev::Log::gpDebugPrint != 0))
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[lose-diag] STALL mode type " << static_cast<s32>(meCurrentGameModeType)
+                    << " held in E_GMS_RESULTS for " << siResultsUpdates
+                    << " updates with no game event 26 (ResultsAccept); simStep " << lfTimeStepSeconds
+                    << " paused " << (lbPaused ? 1 : 0) << " [FLAG PC witness]\n";
+            }
+        }
+        else
+        {
+            siResultsUpdates = 0;
         }
     }
 
