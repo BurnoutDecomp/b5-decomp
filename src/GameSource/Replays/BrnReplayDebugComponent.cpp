@@ -17,6 +17,7 @@
 // are de-optimised here into the named KU_/KF_ constants below.
 
 #include "GameSource/Replays/BrnReplayDebugComponent.h"
+#include "rw/rwcore_structs.h"
 #include "GameSource/Replays/BrnReplayModule.h"
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"   // live serialiser snapshot getters
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -105,7 +106,7 @@ namespace BrnReplays
     // ----------------------------------------------------------------------------
     void DebugComponent::Construct(ReplayModule* lpReplayModule, rw::IResourceAllocator* lpAllocator)
     {
-        CgsDev::DebugComponent::Construct();
+        // Original 82652990 calls the ICF-folded bare blr at 8284CB38.
 
         mpReplayModule    = lpReplayModule;
         mpAllocator       = lpAllocator;
@@ -115,42 +116,23 @@ namespace BrnReplays
         miWriteSlotsUsed  = 0;
         miWriteBufferUsed = 0;
 
-        // The X360 builds four allocator records here: one DebugSerialiserInfo ring
-        // (0x294 bytes) for the serialiser snapshots, and three DebugGraph rings
-        // (0x51C bytes) for the write-slots / write-buffer / read graphs. They are
-        // allocated through the resource allocator's vtable (lwz 0x10(allocator)).
-        // Modelled as the named members; the per-graph ring head is reset below.
-        mpSerialisers          = static_cast<DebugSerialiserInfo*>(nullptr);
-        mpWriteSlotsUsedGraph  = static_cast<DebugGraph*>(nullptr);
-        mpWriteBufferUsedGraph = static_cast<DebugGraph*>(nullptr);
-        mpReadGraph            = static_cast<DebugGraph*>(nullptr);
-
-        // X360 seeds each graph's ring header (capacity 256, head/tail/count = 0,
-        // mpData -> &samples). Done by OnActivate's ClearGraph too; kept faithful.
-        if (mpWriteSlotsUsedGraph)
+        // Four actual five-lane descriptors: console sizes 294 and three 51C,
+        // lane-zero alignment 16, remaining lanes {0,1}, null allocation name.
+        // sizeof widens only the canonical graph's native pointer metadata.
+        const auto Allocate = [lpAllocator](u32 luSize) -> void*
         {
-            mpWriteSlotsUsedGraph->mBuffer.miCapacity = DebugGraph::KI_NUM_SAMPLES;
-            mpWriteSlotsUsedGraph->mBuffer.mpData     = mpWriteSlotsUsedGraph->mBuffer.mafSamples;
-            mpWriteSlotsUsedGraph->mBuffer.miHead     = 0;
-            mpWriteSlotsUsedGraph->mBuffer.miTail     = 0;
-            mpWriteSlotsUsedGraph->mBuffer.miCount    = 0;
-        }
-        if (mpWriteBufferUsedGraph)
-        {
-            mpWriteBufferUsedGraph->mBuffer.miCapacity = DebugGraph::KI_NUM_SAMPLES;
-            mpWriteBufferUsedGraph->mBuffer.mpData     = mpWriteBufferUsedGraph->mBuffer.mafSamples;
-            mpWriteBufferUsedGraph->mBuffer.miHead     = 0;
-            mpWriteBufferUsedGraph->mBuffer.miTail     = 0;
-            mpWriteBufferUsedGraph->mBuffer.miCount    = 0;
-        }
-        if (mpReadGraph)
-        {
-            mpReadGraph->mBuffer.miCapacity = DebugGraph::KI_NUM_SAMPLES;
-            mpReadGraph->mBuffer.miHead     = 0;
-            mpReadGraph->mBuffer.miTail     = 0;
-            mpReadGraph->mBuffer.miCount    = 0;
-            mpReadGraph->mBuffer.mpData     = mpReadGraph->mBuffer.mafSamples;
-        }
+            rw::ResourceDescriptor lDescriptor;
+            lDescriptor.m_baseResourceDescriptors[0].m_size = luSize;
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+            return lpAllocator->DoAllocate(lDescriptor, nullptr).m_baseResources[0];
+        };
+        mpSerialisers = static_cast<DebugSerialiserInfo*>(Allocate(sizeof(DebugSerialiserInfo) * KI_NUM_SERIALISERS));
+        mpWriteSlotsUsedGraph = static_cast<DebugGraph*>(Allocate(sizeof(DebugGraph)));
+        mpWriteBufferUsedGraph = static_cast<DebugGraph*>(Allocate(sizeof(DebugGraph)));
+        mpReadGraph = static_cast<DebugGraph*>(Allocate(sizeof(DebugGraph)));
+        mpWriteSlotsUsedGraph->mBuffer.Construct();
+        mpWriteBufferUsedGraph->mBuffer.Construct();
+        mpReadGraph->mBuffer.Construct();
     }
 
     void DebugComponent::Destruct()
@@ -258,10 +240,10 @@ namespace BrnReplays
                                      Vector2f* lpv2Min, Vector2f* lpv2Max)
     {
         // off_82F2A56C state name table ("IDLE"/...), off_82F2A57C stage table ("CLOSED"/...).
-        static const char* const KAC_STATE_NAMES[E_STREAM_STATE_COUNT] =
-            { "IDLE", "RECORDING", "PLAYING" };
+        static const char* const KAC_STATE_NAMES[] =
+            { "IDLE", "RECORDING", "PLAYING", "RESTORING" };
         static const char* const KAC_STREAM_STAGE_NAMES[E_STREAM_STAGE_COUNT] =
-            { "CLOSED", "OPENING", "OPEN", "CLOSING", "ERROR" };
+            { "CLOSED", "OPENING", "OPEN", "HEADER", "CLOSING" };
 
         const f32 lfX = lrv2Pos.X() + KF_WINDOW_PAD;
         f32       lfY = lrv2Pos.Y() + KF_TEXT_SCALE_SMALL; // flt_82F2A640
@@ -436,13 +418,13 @@ namespace BrnReplays
                               lrv2Max.X() - lrv2Min.X(), lrv2Max.Y() - lrv2Min.Y(),
                               KU_COL_GRAPH_FILL);
 
-        const s32 liCount = lpGraph->mBuffer.miCount;        // graph+0x118
+        const s32 liCount = lpGraph->mBuffer.GetLength();    // graph+0x118
         if (lpRender && liCount > 0)
         {
             const f32 lfMin   = lpGraph->mfMin;              // graph+0x100
             const f32 lfRange = lpGraph->mfMax - lpGraph->mfMin; // (graph+0x104) - (graph+0x100)
             // X-axis denominator == ring capacity - 1 (graph+0x10C - 1), NOT count-1.
-            const f32 lfDenom = static_cast<f32>(lpGraph->mBuffer.miCapacity - 1);
+            const f32 lfDenom = static_cast<f32>(lpGraph->mBuffer.GetMaxLength() - 1);
 
             const f32 lfSpanX = lrv2Max.X() - 2.0f;          // (max.x - 2.0), origin added below
             const f32 lfSpanY = lrv2Max.Y() - 2.0f;          // (max.y - 2.0)
@@ -474,10 +456,14 @@ namespace BrnReplays
     }
 
     // ----------------------------------------------------------------------------
-    // ClearGraph @0x8264F708 (inlined in OnActivate) -- reset a graph's ring.
+    // ClearGraph is inlined in OnActivate 8264F9F8: clear name[0], min/max
+    // and the three ring cursors. Sample payload, pointer and capacity remain.
     // ----------------------------------------------------------------------------
     void DebugComponent::ClearGraph(DebugGraph* lpGraph)
     {
+        lpGraph->mfMin = 0.0f;
+        lpGraph->macName[0] = '\0';
+        lpGraph->mfMax = 0.0f;
         lpGraph->mBuffer.Clear();
     }
 
