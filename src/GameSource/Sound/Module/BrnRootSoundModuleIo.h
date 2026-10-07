@@ -603,10 +603,8 @@ namespace Io
     // RootSoundModule::Prepare consumes the real interface operations, replace each *Storage
     // with its committed typed member without moving anything. The forward-declared typedefs
     // give the accessor return types their DWARF names.
-    // FLAG(medium): mReplayRequestInterfaceStorage trailing width is NOT X360-attested (last
-    // member, nothing follows). Its START offset (+0x1824) IS attested by both replay
-    // accessors; the width 0x1010 mirrors sizeof RequestInterface<4096> (DWARF typedefs
-    // ReplayRequestInterface = RequestInterface, same default cap) but is provisional.
+    // The replay member is the canonical eleven-pointer RequestInterface. Its
+    // console width is 44 bytes; native pointer alignment and width apply on PC.
     //
     // The nested typedefs are PUBLIC because LogicOutputBuffer's members reference them
     // (RootOutputBuffer::AttribSysRequestInterface / ::SoundResourceRequestInterface).
@@ -651,7 +649,7 @@ namespace Io
         // (2026-08-25, faithful-audio-engine phase C1: the provisional RequestInterface<4096>
         // guess is RETIRED -- BridgeLogicToRoot @0x826EBF18 appends this member through
         // BrnReplays::ReplayIO::RequestInterface::Append @0x823A6868, and the 11-word
-        // (44-byte == sizeof) trailing clear at +0x1824 IS the 11 serialiser slots.)
+        // (44-byte on X360) trailing clear at +0x1824 IS the 11 serialiser slots.)
         typedef BrnReplays::ReplayIO::RequestInterface ReplayRequestInterface;  // BrnRootSoundModuleIo.h:56
 
         // BrnRootSoundModuleIo.h:284 (DWARF). X360 body @0x826AF448, reached from the
@@ -685,7 +683,8 @@ namespace Io
             lpAttribSysQueue->Construct();
             lpAttribSysQueue->Clear();
 
-            memset(mReplayRequestInterfaceStorage, 0, sizeof(mReplayRequestInterfaceStorage));   // the 11 serialiser slots
+            for (auto& lpSerialiser : mReplayRequestInterface.mapSerialisers)
+                lpSerialiser = nullptr;
         }
 
         // X360 ::G 0x823B8A68 (read-lock, DWARF :289) / ::GetReso 0x826951D0 (write-lock, DWARF :292)
@@ -710,28 +709,25 @@ namespace Io
         // Byte widths of each opaque interface span (derived from the attested X360 offsets).
         static const int KI_ResourceInterfaceBytes  = 0x1010; // +0x0004 .. +0x1014 (RequestInterface<4096>)
         static const int KI_AttribSysInterfaceBytes = 0x0810; // +0x1014 .. +0x1824 (AttribSysRequestInterface<2048>)
-        // +0x1824 .. the end: the replay RequestInterface, 11 serialiser pointer slots (44 bytes
-        // on the console, 6224 - 0x1824). The console Construct zeroes exactly those 11 slots.
-        // Host width: the slots are pointers, so the span is the host sizeof (88 bytes);
-        // RequestInterface::Append reads and writes all 11.
-        static const int KI_ReplayInterfaceBytes    = sizeof(ReplayRequestInterface);
 
         // IOBuffer base is a single status byte; u8 storage is 1-byte aligned, so the first
         // member sits at +0x04 with an explicit 3-byte gap.
         u8 maStatusPad[0x04 - sizeof(CgsModule::IOBuffer)];               // base end -> +0x0004
         u8 mResourceRequestInterfaceStorage[KI_ResourceInterfaceBytes];  // @ +0x0004 (0x1010 wide)
         u8 mAttribSysRequestInterfaceStorage[KI_AttribSysInterfaceBytes];// @ +0x1014 (0x0810 wide)
-        u8 mReplayRequestInterfaceStorage[KI_ReplayInterfaceBytes];      // @ +0x1824
+        // ARTIST 826AF490..4A8 clears eleven pointer slots. Keeping the console's
+        // 44-byte storage here lets Append read/write the next IO allocation on x64.
+        ReplayRequestInterface mReplayRequestInterface;                // X360 +0x1824
 
         static void _AssertLayout()
         {
-            // Only the 1-byte IOBuffer base + POD u8 storage precede each member (no host-wider
-            // pointers), so these X360 offsets are byte-faithful on the 64-bit gate.
+            // The byte-backed queues retain their offsets. The final pointer
+            // array follows native alignment and doubles in width on x64.
             static_assert(offsetof(RootOutputBuffer, mResourceRequestInterfaceStorage) == 0x0004,
                           "RootOutputBuffer.mResourceRequestInterface @ +0x04");
             static_assert(offsetof(RootOutputBuffer, mAttribSysRequestInterfaceStorage) == 0x1014,
                           "RootOutputBuffer.mAttribSysRequestInterface @ +0x1014");
-            static_assert(offsetof(RootOutputBuffer, mReplayRequestInterfaceStorage) == 0x1824,
+            static_assert(sizeof(void*) != 4 || offsetof(RootOutputBuffer, mReplayRequestInterface) == 0x1824,
                           "RootOutputBuffer.mReplayRequestInterface @ +0x1824");
         }
     };

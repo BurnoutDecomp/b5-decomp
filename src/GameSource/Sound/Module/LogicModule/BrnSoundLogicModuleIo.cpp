@@ -65,12 +65,12 @@ RootOutputBuffer::SoundResourceRequestInterface* LogicOutputBuffer::GetResourceR
 const RootOutputBuffer::ReplayRequestInterface* LogicOutputBuffer::GetReplayRequestInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const RootOutputBuffer::ReplayRequestInterface*>(&mReplayRequestInterfaceStorage);
+    return &mReplayRequestInterface;
 }
 RootOutputBuffer::ReplayRequestInterface* LogicOutputBuffer::GetReplayRequestInterface()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    return reinterpret_cast<RootOutputBuffer::ReplayRequestInterface*>(&mReplayRequestInterfaceStorage);
+    return &mReplayRequestInterface;
 }
 
 } // namespace Io

@@ -95,7 +95,8 @@ namespace Io
             lpAttribSysQueue->Construct();
             lpAttribSysQueue->Clear();
 
-            memset(mReplayRequestInterfaceStorage, 0, sizeof(mReplayRequestInterfaceStorage));   // the 11 serialiser slots
+            for (auto& lpSerialiser : mReplayRequestInterface.mapSerialisers)
+                lpSerialiser = nullptr;
         }
 
         // BrnSoundLogicModuleIo.h:65 / :73 (DWARF; own TU, declared-only here) --
@@ -129,24 +130,19 @@ namespace Io
         u8 mAttribSysRequestInterfaceStorage[KI_AttribSysInterfaceBytes]; // @ +0x04 FIRST (DWARF :81)
         u8 mResourceRequestInterfaceStorage[KI_ResourceInterfaceBytes];  // @ +0x814     (DWARF :82; start not independently attested)
 
-        // (phase C1): the +0x1824 trailing state is IDENTIFIED -- the 11-word clear
-        // zeroes the 11 serialiser slots of the replay request interface (44 ==
-        // sizeof(BrnReplays::ReplayIO::RequestInterface); 6224 == 0x1824 + 0x2C, the
-        // total-size closure), which BridgeLogicToRoot @0x826EBF18 appends into the
-        // root's own +0x1824 twin via RequestInterface::Append @0x823A6868. Kept as
-        // sized storage (the sibling discipline); the getters cast.
-        // Host width: the 11 slots are pointers, so the storage is the host sizeof
-        // (88 bytes); Append reads and writes all 11.
-        u8 mReplayRequestInterfaceStorage[sizeof(RootOutputBuffer::ReplayRequestInterface)]; // @ +0x1824
+        // ARTIST 826C9A70..88 clears the same eleven replay pointers that
+        // BridgeLogicToRoot appends into RootOutputBuffer. Native pointers need
+        // their full width and alignment when the IO stack reuses this buffer.
+        RootOutputBuffer::ReplayRequestInterface mReplayRequestInterface; // X360 +0x1824
 
         static void _AssertLayout()
         {
             static_assert(offsetof(LogicOutputBuffer, mAttribSysRequestInterfaceStorage) == 0x04,
                           "LogicOutputBuffer.mAttribSysRequestInterface @ +0x04");
-            static_assert(offsetof(LogicOutputBuffer, mReplayRequestInterfaceStorage) == 0x1824,
+            static_assert(sizeof(void*) != 4 || offsetof(LogicOutputBuffer, mReplayRequestInterface) == 0x1824,
                           "LogicOutputBuffer.mReplayRequestInterface @ +0x1824 (X360 Construct @0x826C9A28)");
-            static_assert(sizeof(LogicOutputBuffer) == 0x1824 + sizeof(RootOutputBuffer::ReplayRequestInterface),
-                          "LogicOutputBuffer ends with the replay request interface");
+            static_assert(sizeof(void*) != 4 || sizeof(LogicOutputBuffer) == 6224,
+                          "LogicOutputBuffer == 6224 (the X360 CreateIOBuffer Alloc literal @0x826DCD30)");
         }
     };
 
