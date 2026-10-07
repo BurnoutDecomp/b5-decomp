@@ -505,7 +505,7 @@ namespace Deformation
                                                CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
                                                EntityId lEntityId);
 
-        // :270. DEBUG: reset all deformation models.
+        // :270. Consume pending debug-reset requests on live deformation models.
         void ProcessDebugResetDeformationModels(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
                                                 CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface);
 
