@@ -80,6 +80,12 @@ namespace ReplayIO
         typedef CgsGui::GuiEventQueueSmall GuiEventQueue;   // == CgsModule::VariableEventQueue<4096,16>
         typedef BrnResource::GameDataIO::RequestInterface<1024> GameDataRequestInterface;
 
+        // ARTIST 82652F48: selective status reset and both real queue constructors.
+        // Reel names and queue payload bytes are retained in reused IO-stack storage.
+        void Construct();
+        // ARTIST destroy factory 823AE4F8 uses the shared IOBuffer-only destructor.
+        void Destruct();
+
         // X360 0x823BB080: read-lock (bit 4, "Not locked for reading", :103); returns
         // &mStatusInterface (this+4).
         const StatusInterface* GetStatusInterface() const;

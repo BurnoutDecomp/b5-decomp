@@ -64,6 +64,28 @@ namespace ReplayIO
     // OutputBuffer_PreSim accessors (BrnReplayModuleIO.h:107-115). Each reads the IOBuffer
     // lock byte and asserts the correct lock state, then returns the embedded member.
     // ====================================================================================
+    // ARTIST 82652F48..82652FD8, called by CreateIOBuffer at 823AE4DC.
+    // The inlined StatusInterface constructor clears used flags, not reel names.
+    void OutputBuffer_PreSim::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mStatusInterface.mxStatusFlags = 0;
+        for (s32 liReel = 0; liReel < 6; ++liReel)
+            mStatusInterface.maReels[liReel].mbUsed = false;
+        mStatusInterface.miCurrentRecordReel = -1;
+        mStatusInterface.miCurrentPlaybackReel = -1;
+        mStatusInterface.mfDebugHudAlpha = 0.0f; // original constant 82001CC0
+        mGameDataRequestInterface.Construct(); // Construct then original extra Clear
+        mGuiEventQueue.Construct();
+    }
+
+    // DestroyIOBuffer at 823AE4F8 calls the ICF-shared 822DC3D0 wrapper,
+    // whose only operation is IOBuffer::Destruct; queues are not destroyed.
+    void OutputBuffer_PreSim::Destruct()
+    {
+        CgsModule::IOBuffer::Destruct();
+    }
+
     void OutputBuffer_PreSim::_AssertLayout()
     {
         static_assert(offsetof(OutputBuffer_PreSim, mStatusInterface) == 0x0004,
