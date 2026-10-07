@@ -45,6 +45,37 @@ namespace CgsGui
 {
 namespace ModelIO
 {
+    // ARTIST 0x82857D80: construct the queues in load/resource/GUI/view order,
+    // then clear the same four queues in that order.
+    void OutputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mLoadNotifications.Construct();
+        mResourceRequestQueue.Construct();
+        mGuiOutEvents.Construct();
+        mViewOutEvents.Construct();
+        Clear();
+    }
+
+    // ARTIST 0x82852D50. The caller can retain its current read/write lock.
+    void OutputBuffer::Clear()
+    {
+        mLoadNotifications.Clear();
+        mResourceRequestQueue.Clear();
+        mGuiOutEvents.Clear();
+        mViewOutEvents.Clear();
+    }
+
+    // ARTIST 0x82857DF8: queue destruction precedes base destruction.
+    void OutputBuffer::Destruct()
+    {
+        mLoadNotifications.Destruct();
+        mResourceRequestQueue.Destruct();
+        mGuiOutEvents.Destruct();
+        mViewOutEvents.Destruct();
+        CgsModule::IOBuffer::Destruct();
+    }
+
     void OutputBuffer::_AssertLayout()
     {
         static_assert(offsetof(OutputBuffer, mResourceRequestQueue) == 0x00004, "mResourceRequestQueue @0x0004");
