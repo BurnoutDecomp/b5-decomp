@@ -1,4 +1,4 @@
-#include "types.hpp"
+#include "GameSource/Replays/Serialisers/BrnReplayGameModuleSerialiser.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   (BrnReplays::GameModuleSerialiser)
@@ -7,26 +7,13 @@
 //       return BrnReplays::BaseSerialiser::Construct(
 //                  this, 5, 0, 1024, 1024, "GameModule", 0);
 //
-// Leaf forwarder, mirror of the other replay serialisers: parameterises the
-// shared BaseSerialiser::Construct with stream id 5, 1 KiB buffers and the
-// "GameModule" channel name. BaseSerialiser lives in its own TU; declared here
-// for the compile-only gate.
+// Parameterises the real shared BaseSerialiser with channel id 5, 1 KiB stream
+// and static buffers, and the "GameModule" name. No local base/layout fork.
 
 namespace BrnReplays
 {
-    struct BaseSerialiser
+    void GameModuleSerialiser::Construct()
     {
-        int Construct(int nId, int nMode, int nBufferSize, int nMaxSize,
-                      const char* pName, int nFlag);
-    };
-
-    struct GameModuleSerialiser : BaseSerialiser
-    {
-        int Construct();
-    };
-
-    int GameModuleSerialiser::Construct()
-    {
-        return BaseSerialiser::Construct(5, 0, 1024, 1024, "GameModule", 0);
+        BaseSerialiser::Construct(5, 0, 1024, 1024, "GameModule", false);
     }
 }
