@@ -696,7 +696,8 @@ namespace BrnGui
 
     void MovieManager::Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer)
     {
-        if (meState == E_MOVIEMANAGERSTATE_PLAYING_MOVIE || meState == E_MOVIEMANAGERSTATE_STOP_MOVIE)
-            mMoviePlayer.Render(lpIm2dRenderBuffer);
+        // ARTIST 0x82511240 inlines this call after Update without a manager-state gate.
+        // MoviePlayer owns frame readiness and whether anything can be recorded.
+        mMoviePlayer.Render(lpIm2dRenderBuffer);
     }
 }
