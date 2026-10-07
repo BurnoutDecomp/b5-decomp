@@ -14,7 +14,7 @@
 // Member types + sizes from the DecFIGS DWARF (CgsEventInterpreterModuleIO.h) corroborated
 // by the X360 Construct/Destruct queue-template instantiations:
 //   InputBuffer.mGuiEvents      == GuiEventInputQueue  == VariableEventQueue<32768,16>
-//   OutputBuffer.mGuiOutEvents  == GuiEventQueue       == VariableEventQueue<16384,16>
+//   OutputBuffer.mGuiOutEvents  == GuiEventQueue       == VariableEventQueue<18432,16>
 //   OutputBuffer.mGuiOutResource== GuiEventQueueSmall  == VariableEventQueue<4096,16>
 //   OutputBuffer.mGuiOutView    == GuiEventQueueLarge  == VariableEventQueue<65536,16>
 namespace CgsGui
@@ -35,7 +35,8 @@ namespace EventInterpreterModuleIO
 
         void AddGuiEvent(const CgsModule::Event* lpEvent, s32 liEventId, s32 liEventSize);
 
-        const GuiEventInputQueue* GetEventQueue() const;
+        // ARTIST 0x8284FB48: a read lock is required even though the returned
+        // queue is mutable. Update appends its internal events through this handle.
         GuiEventInputQueue*       GetEventQueue();
 
     private:
@@ -45,7 +46,7 @@ namespace EventInterpreterModuleIO
 
     struct OutputBuffer : public CgsModule::IOBuffer
     {
-        typedef CgsModule::VariableEventQueue<16384, 16> GuiEventQueue;
+        typedef CgsModule::VariableEventQueue<18432, 16> GuiEventQueue;
         typedef CgsModule::VariableEventQueue<4096, 16>  GuiEventQueueSmall;
         typedef CgsModule::VariableEventQueue<65536, 16> GuiEventQueueLarge;
 
@@ -64,14 +65,9 @@ namespace EventInterpreterModuleIO
 
     private:
         u8                 maStatusPad[3];  // +0x01..+0x03
-        // FLAG: the X360 OutputBuffer getter return-offsets (GetResourceEventQueue @0x8284E5D0
-        // returns this+0x4814, GetViewEventQueue @0x8284E720 returns this+0x5824) prove
-        // mGuiOutEvents has sizeof 18448 -> its inline buffer is 18432, so the X360 type is
-        // VariableEventQueue<18432,16> (the same 18432-vs-16384 GUI-queue drift resolved with a
-        // FLAG in CgsGuiModuleIO.h / CgsGuiResourceModuleIO.h). Retype 16384 -> 18432 to make
-        // the +0x4814/+0x5824 member offsets exact. Left as 16384 here pending consolidation
-        // (non-additive committed-type change -- flagged, not applied).
-        GuiEventQueue      mGuiOutEvents;   // +0x04    (DWARF :123) -- X360 size 18432 (see FLAG)
+        // ARTIST getters and CreateIOBuffer<OutputBuffer> both attest these
+        // capacities. DecFIGS has the older 16384-byte first queue.
+        GuiEventQueue      mGuiOutEvents;   // +0x0004 (DWARF :123)
         GuiEventQueueSmall mGuiOutResource; // (DWARF :124)
         GuiEventQueueLarge mGuiOutView;     // (DWARF :125)
     };

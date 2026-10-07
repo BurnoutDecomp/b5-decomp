@@ -18,6 +18,28 @@ namespace CgsGui
 {
 namespace EventInterpreterModuleIO
 {
+    // Inlined in ARTIST CreateIOBuffer<InputBuffer> 0x8285A190..0x8285A1A8.
+    void InputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mGuiEvents.Construct();
+        mGuiEvents.Clear();
+    }
+
+    // ARTIST DestroyIOBuffer<InputBuffer> 0x82856840..0x82856844 calls only
+    // the base destructor. The input queue is not cleared or destroyed here.
+    void InputBuffer::Destruct()
+    {
+        CgsModule::IOBuffer::Destruct();
+    }
+
+    // ARTIST 0x8284FB48: read-locked mutable handle, used by interpreter Update.
+    InputBuffer::GuiEventInputQueue* InputBuffer::GetEventQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mGuiEvents;
+    }
+
     int InputBuffer::AddGuiEvents(const GuiEventInputQueue& lrEventQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
