@@ -13,13 +13,9 @@
 // printed by every assert in this TU ("..\\..\\..\\GameSource\\Replays/Stream/
 // BrnReplayDiskReadStream.cpp").
 //
-// SLICE NOTE: this reconstruction lands the seven ledger functions of the X360 ARTIST
-// TU (ReadBlock @0x8265CE08, ReadCallback @0x8265A670, CloseCallback @0x82650F98,
-// ResetStreamBlocks @0x8264D8C0, Service @0x82659D40, SetRange @0x82659EB8,
-// SubmitReadRequest @0x8264DA80). The remaining DiskReadStream methods (Construct, Open,
-// Close, OnOpen/OnRead/OnClose, OpenCallback, GetStatus, GetCurrentFilePriority, the
-// Start/StopAsyncReadInternal pair) are declared here and reconstructed in their own
-// ledger work; GROW this home additively -- do NOT fork it.
+// The read ring, service, read/close callbacks and completion/close bodies are
+// recovered in this canonical TU. Construct/Open/OnOpen/OpenCallback/GetStatus
+// remain separate lifecycle dependencies; grow this home without forking it.
 //
 // LAYOUT POLICY: member ORDER follows the X360 ARTIST asm offsets (and the DecFIGS
 // BrnReplayDiskReadStream.h DWARF where the two agree); widths are natural PC/x64 (a
@@ -46,6 +42,7 @@ namespace BrnReplays
         static const u32 KU_RSBFLAG_EMPTY   = 0; // slot free
         static const u32 KU_RSBFLAG_READING = 1; // async read in flight
         static const u32 KU_RSBFLAG_FULL    = 2; // slot holds readable data
+        static const u32 KU_RSBFLAG_EOF     = 4; // ARTIST OnRead marks a short/zero read
 
         // Stream lifecycle status (DWARF BrnReplayDiskReadStream.h:73).
         enum EStreamStatus
@@ -147,6 +144,7 @@ namespace BrnReplays
         // the pair into the two words here; this is the typed value itself.
         CgsFileSystem::Handle mHandle;                       // +0x140 open device file handle
         ReadStreamBlock maBlocks[KI_MAX_STREAM_BLOCKS];      // X360 +0x148 the ring
+        u64             muLastReadSize;                      // X360 +0x550; OnRead's full completion size
         s32             miOutputBlock;                       // X360 +0x558 next slot to consume
         bool            mbLockedForRead;                     // X360 +0x55C locked by a reader
         s64             miReadPosition;                      // X360 +0x560 playback read cursor
