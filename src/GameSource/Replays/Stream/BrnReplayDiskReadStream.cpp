@@ -1,12 +1,14 @@
 #include "GameSource/Replays/Stream/BrnReplayDiskReadStream.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h" // DeviceManager, GetDeviceManager
+#include <cstddef>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Control flow, the ring/loop arithmetic,
 // the status flags and every assert message are taken from the X360 asm; the DecFIGS
 // BrnReplayDiskReadStream.h DWARF supplies the member/enum names. See the header for the
-// field-order/offset map. Only the seven ledger functions of this TU are defined here.
+// field-order/offset map. Raw-image holes are cited at their recovered bodies.
 
 // --- Win32/X360 critical-section primitives (the lock embedded at object offset 0).
 //     Declared here exactly as the sibling GPUDiskWriteStream.cpp does; the real bodies
@@ -20,6 +22,129 @@ extern "C" void* XMemCpy(void* lpDest, const void* lpSrc, size_t luSize);
 
 namespace BrnReplays
 {
+    // ARTIST 82659E20..82659EB0 (raw image). Close is idempotent at the
+    // request boundary: the original emits a channel-one warning for repeats.
+    void DiskReadStream::Close()
+    {
+        RtlEnterCriticalSection(mMutex);
+        if (meStatus != E_STATUS_CLOSED && !mbWaitingToClose)
+        {
+            mbWaitingToClose = true;
+            Service();
+        }
+        else if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "WARNING: Attempt to close a stream that is already closed or closing - ignoring request\n";
+        }
+        RtlLeaveCriticalSection(mMutex);
+    }
+
+    // ARTIST 82653968..826539B4 (raw image). Closing uses the urgent file
+    // priority, not the current read priority; submission does not clear state.
+    bool DiskReadStream::SubmitCloseRequest()
+    {
+        CgsFileSystem::GetDeviceManager()->Close(mHandle, &DiskReadStream::CloseCallback,
+                                                this, miUrgentPriority);
+        ++miPendingOperationCount;
+        return true;
+    }
+
+    // ARTIST 8265A340. The handle is unused. Completion size stays 64-bit
+    // in the stream and is narrowed only when stored in the block's end cursor.
+    void DiskReadStream::OnRead(s32 liResult, CgsFileSystem::Handle /*lHandle*/,
+                                u64 luSize, void* lpContext)
+    {
+        RtlEnterCriticalSection(mMutex);
+        CGS_ASSERT(meStatus != E_STATUS_CLOSED, "Incorrect stream state\n");
+        CGS_ASSERT(miPendingOperationCount > 0,
+                   "Received file event with 0 pending operations\n");
+        ReadStreamBlock* lpBlock = static_cast<ReadStreamBlock*>(lpContext);
+        const ptrdiff_t liBlockIndex = lpBlock - maBlocks;
+        if (liBlockIndex < 0 || liBlockIndex >= KI_MAX_STREAM_BLOCKS)
+        {
+            CgsDev::Assert::BeginAssert();
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+            lMessage << "Stream block " << static_cast<s32>(liBlockIndex) << " is out of range\n";
+            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+        }
+        switch (liResult)
+        {
+        case -2:
+            meStatus = E_STATUS_ERROR;
+            if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+                *CgsDev::Log::gpDebugPrint << "Warning: read failed on: " << macFileName << "\n";
+            break;
+        case -1:
+            meStatus = E_STATUS_OPEN;
+            if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+                *CgsDev::Log::gpDebugPrint << "Warning: read cancelled on: " << macFileName << "\n";
+            break;
+        case 0:
+            muLastReadSize = luSize;
+            lpBlock->miDataEnd = static_cast<s32>(muLastReadSize);
+            lpBlock->muFlags = KU_RSBFLAG_FULL;
+            if (muLastReadSize != static_cast<u64>(static_cast<s64>(miBlockSize)))
+            {
+                CGS_ASSERT(muLastReadSize == 0, "Expected file to be multiple of block size\n");
+                lpBlock->muFlags |= KU_RSBFLAG_EOF;
+                miNextInputPosition = 0;
+            }
+            break;
+        default:
+            CgsDev::Assert::BeginAssert();
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+            lMessage << "Unhandled response: " << liResult << "\n";
+            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+            break;
+        }
+        --miPendingOperationCount;
+        --miInputRequestCount;
+        Service();
+        RtlLeaveCriticalSection(mMutex);
+    }
+
+    // ARTIST 82650D70. Failure still closes the stream; cancellation returns
+    // it to OPEN. An unhandled result asserts and retains the previous state.
+    void DiskReadStream::OnClose(s32 liResult, CgsFileSystem::Handle /*lHandle*/,
+                                 u64 /*luSize*/, void* /*lpContext*/)
+    {
+        RtlEnterCriticalSection(mMutex);
+        CGS_ASSERT(meStatus != E_STATUS_CLOSED, "Incorrect stream state\n");
+        CGS_ASSERT(miPendingOperationCount > 0,
+                   "Received stream event with 0 pending operations\n");
+        switch (liResult)
+        {
+        case -2:
+            if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+                *CgsDev::Log::gpDebugPrint << "WARNING: Close failed on: " << macFileName << "\n";
+            meStatus = E_STATUS_CLOSED;
+            break;
+        case -1:
+            if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+                *CgsDev::Log::gpDebugPrint << "WARNING: Close cancelled on: " << macFileName << "\n";
+            meStatus = E_STATUS_OPEN;
+            break;
+        case 0:
+            meStatus = E_STATUS_CLOSED;
+            break;
+        default:
+            CgsDev::Assert::BeginAssert();
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+            lMessage << "Unhandled response: " << liResult << "\n";
+            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+            break;
+        }
+        --miPendingOperationCount;
+        RtlLeaveCriticalSection(mMutex);
+    }
+
     // =====================================================================================
     // ResetStreamBlocks @ 0x8264D8C0 -- clear the ring and reset its cursors/counters.
     // =====================================================================================
