@@ -18,6 +18,16 @@
 
 namespace CgsGui
 {
+    // ARTIST 0x8284F430. The same sequence is inlined into GUI InputBuffer::Construct.
+    void ImRendererSet::Construct()
+    {
+        mCamera.Construct();
+        mpIm2dRenderBuffer = nullptr;
+        mpIm3dRenderBufferUntex = nullptr;
+        mpIm3dRenderBufferRacePosition = nullptr;
+        mpIm3dRenderBufferMenusAndHud = nullptr;
+    }
+
     // ---- GetRenderOutput @ 0x828476C0 -----------------------------------------------
     // The base refuses: a component that does not render to a texture must never be asked
     // for one. Both console asserts are reproduced verbatim (the null out-pointer check,

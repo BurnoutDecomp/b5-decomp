@@ -723,7 +723,7 @@ namespace BrnGui
             // publishes these same values -- and re-nulls it after RenderInternal).
             CgsGui::ImRendererSet* lpImRenderers = s_pViewModule->GetImRendererSet();
             lpImRenderers->mpIm2dRenderBuffer            = &s_AptRenderBuffer;
-            lpImRenderers->mpReserved04                  = nullptr;
+            lpImRenderers->mpIm3dRenderBuffer           = nullptr;
             lpImRenderers->mpIm3dRenderBufferUntex       = nullptr;
             lpImRenderers->mpIm3dRenderBufferRacePosition = nullptr;
             lpImRenderers->mpIm3dRenderBufferMenusAndHud = nullptr;

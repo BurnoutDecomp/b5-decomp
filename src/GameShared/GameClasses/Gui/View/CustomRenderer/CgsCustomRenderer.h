@@ -4,6 +4,8 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                          // typedef u64 CgsID (GetID return type)
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"  // CgsGui::GuiEventQueueSmall (the manager's mEventQueue)
+#include "GameShared/GameClasses/Graphics/CgsCamera.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h" // canonical Im3dRenderBufferUntex typedef
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsGui::CustomRenderComponentInterface::Construct        @ 0x828476B0
@@ -58,15 +60,26 @@ namespace rw           { struct IResourceAllocator; }   // struct: matches rwcor
 namespace renderengine { class  Texture; }
 namespace CgsModule    { struct Event; }
 namespace CgsGraphics  { struct TextRenderer; }         // struct: matches CgsAptRenderHandler.h
+namespace CgsGraphics  { struct Im2dRenderBuffer; class Im3dRenderBuffer; }
 namespace CgsLanguage  { class  LanguageManager; }
 
 namespace CgsGui
 {
-    // DWARF CgsCustomRenderer.h:55 -- the active renderer set passed to the render/
-    // texture-fetch slots. Declared `struct` to match the DWARF class-key (a `class`
-    // spelling mangles to a DIFFERENT MSVC symbol, so the key must be consistent
-    // tree-wide or the override silently fails to bind).
-    struct ImRendererSet;
+    // DWARF CgsCustomRenderer.h:55..68; ARTIST BridgeRendererToGui @0x823CD6B0
+    // publishes these five buffers in this order. The pointers widen naturally
+    // on the host; Camera stays a complete value after the pointer slots.
+    struct ImRendererSet
+    {
+        CgsGraphics::Im2dRenderBuffer* mpIm2dRenderBuffer;
+        CgsGraphics::Im3dRenderBuffer* mpIm3dRenderBuffer;
+        CgsGraphics::Im3dRenderBufferUntex* mpIm3dRenderBufferUntex;
+        CgsGraphics::Im3dRenderBuffer* mpIm3dRenderBufferRacePosition;
+        CgsGraphics::Im3dRenderBuffer* mpIm3dRenderBufferMenusAndHud;
+        CgsGraphics::Camera mCamera;
+
+        // ARTIST 0x8284F430: reset Camera and slots 0/2/3/4; slot 1 is retained.
+        void Construct();
+    };
 
     // DWARF CgsCustomRenderer.h:95
     enum eCustomRenderLayer
