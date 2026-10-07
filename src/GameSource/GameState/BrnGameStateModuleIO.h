@@ -315,7 +315,7 @@ namespace GameStateModuleIO
     // the showtime gate needs the real type, not a 16-byte blob.
     typedef CgsSystem::TimerRequestInterface OutputBufferTimerRequestInterface;
     struct OutputBufferFrameRateTypeReqInterface { u8 maOpaque[12]; };
-    struct OutputBufferGuiEventQueue             { u8 maOpaque[1008]; };
+    using OutputBufferGuiEventQueue = CgsModule::VariableEventQueue<18432, 16>;
 
     // ========================================================================
     // Minimal member types homed by the class:BrnGameState catch-all TU's remaining
@@ -826,7 +826,7 @@ namespace GameStateModuleIO
         // 1008-byte span here would have been the bug: a 1040-byte object viewed through a
         // 1008-byte blob, overlapping mGuiEventQueueStorage's first 32 bytes.
         GameStateToGuiInterface mGameStateToGuiInterface;                 // console +0x4450 (17488)
-        u8  mGuiEventQueueStorage[0x9050 - 0x4840];                       // GuiEventQueue                @ +18496 .. +0x9050
+        OutputBufferGuiEventQueue mGuiEventQueue;                       // console +18496 .. +0x9050
         // ⛔ CORRECTED 2026-08-01 (BridgeGameStateToWorld wave). These two members used to be
         //     TriggerManagementInputInterface mTriggerManagementInputInterface;   // 16-byte placeholder
         //     u8 mPostGuiEventQueueStorage[173180 - (0x9050 + sizeof(...))];      // 136220-byte blob
