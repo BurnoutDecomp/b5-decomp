@@ -154,13 +154,8 @@ int CRequestOpenSession::WriteOpenSessionRequest(const char* pcSKUName,
 
     if (bWriteHardwareID)            // cmpwi r25, 0
     {
-        // The X360 feeds Instance()'s result into GetHardwareAddress's dead leading
-        // argument (nUnused); Instance() is still invoked, and 0 is passed for the
-        // value the callee never reads (the committed convention, matching the
-        // sibling CRequestLocateService::WriteLocateServiceRequest).
         char* pcHardwareID = 0;
-        CMassiveSystem::Instance();
-        CMassiveSystem::GetHardwareAddress(0, &pcHardwareID);
+        CMassiveSystem::Instance()->GetHardwareAddress(&pcHardwareID);
 
         int lnLength;
         if (pcHardwareID && (lnLength = (int)std::strlen(pcHardwareID)) != 0)

@@ -21,24 +21,6 @@
 // [X] hazards H2: the 16 committed BrnModeManager.cpp bodies are CALLED, never re-implemented.
 //     This file calls SendModeResults (:347), HasPlayerWon (:187) and GetPlayersFinishPosition
 //     (bodied HERE -- it is agent 8's, listed in the H2 sheet only because HasPlayerWon calls it).
-//
-// [X][X] LINK FRONTIER THIS FILE INTRODUCES (added 2026-08-26, fix round -- it was previously
-//        unreported, which is why it is spelled out here rather than only in a report). Two callees
-//        below are DECLARE-ONLY tree-wide; each is an LNK2019 the moment this partfile mounts:
-//   1. ScoringSystem::HasBeatenRoadRageTarget()   -- declared in BrnScoringSystem.h (near
-//      HasTargetScoreBeenExceeded / GetOnlineFinishPosition; cited by neighbour rather than by line
-//      because that header is being edited concurrently this wave), NO definition
-//      anywhere in src/ and no link stub. Do not be fooled by
-//      BrnRoadRageModeScoringLinkStubs.cpp:175: that defines the DIFFERENT
-//      RoadRageModeScoring::HasBeatenRoadRageTarget (declared BrnRoadRageModeScoring.h:73).
-//      Call sites here: :299 (GetPlayersFinishPosition's road-rage arm) and :487
-//      (FinishCurrentMode's road-rage arm). Also called from BrnModeManager_UpdateMode.cpp:543/:584.
-//   2. CgsSystem::TimerRequestInterface::GetSimTimerRequests() -- declared
-//      CgsTimerRequestInterface.h:49-50 ("declaration-only here"), no definition. Call site :464
-//      (FinishCurrentMode's mode-2 SetTimestepMultiplier leg).
-//      A THIRD, ScoringSystem::GetPlayerModeTakedowns() (BrnScoringSystem.h:467, no definition),
-//      was called at :473 for a value that was immediately discarded; that call is now inside the
-//      parked block it belongs to, so it is no longer a live external from this file.
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 
@@ -471,16 +453,11 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
             //     lwz r9, 0(r10) / cmpw / ble / stw r11, 0(r10)
             // i.e. BrnProfile.h's `s32 miHighestNumberOfTakeDownsInRoadRage`, and
             //     if (liTakedowns > that) that = liTakedowns;
-            // BOTH blockers are gone: the Profile accessor pair the park requested now exists
-            // (BrnProfile.h:646/647), and ss+0x4B40 is reached through the scorer that OWNS it --
-            // ScoringSystem embeds mRoadRageModeScoring at ss+0x4B40 and its +0 member is
-            // miNumTakedownsAchieved (BrnRoadRageModeScoring.h:112), so GetRoadRageScoring()->
-            // GetNumTakedownsAchieved() (declared BrnRoadRageModeScoring.h:76, bodied by the
-            // RoadRageModeScoring TU -- agent B's BrnRoadRageModeScoring.cpp this wave, which
-            // replaces the old LinkStubs file) IS the console's load.
-            // ScoringSystem::GetPlayerModeTakedowns (the declare-only twin of that
-            // read, no definition tree-wide) is deliberately NOT used, for the LNK2019 the
-            // 2026-08-26 fix round already paid for once.
+            // The Profile side is the accessor pair at BrnProfile.h:646/647, and ss+0x4B40 is
+            // reached through the scorer that OWNS it -- ScoringSystem embeds
+            // mRoadRageModeScoring at ss+0x4B40 and its +0 member is miNumTakedownsAchieved
+            // (BrnRoadRageModeScoring.h:112), so GetRoadRageScoring()->GetNumTakedownsAchieved()
+            // (bodied in BrnRoadRageModeScoring.cpp) IS the console's load.
             // The console's SECOND read of ss+0x4B40, at 0x8234BBB4, is the HasBeatenRoadRageTarget
             // predicate below; this leg owns the first.
             {

@@ -84,8 +84,8 @@ namespace BrnNetwork
 //     AddMonitor(name, page, minimum, budget, libPerfTagged). r6 is never written
 //     in this function: on the PPC ABI the f1 budget argument consumes -- and
 //     SKIPS -- the r6 GPR slot, which is why Hex-Rays invents a phantom 6th
-//     argument here. Settled in CgsPerfMonCpu.h:96-109 off VehicleManager::
-//     Construct's thirty identically shaped calls. There is no parent-handle
+//     argument here. Settled off VehicleManager::Construct's thirty
+//     identically shaped calls. There is no parent-handle
 //     argument to supply.
 //   * Games vtable slot +0x00 is CgsNetwork::ServerInterfaceGamesX360::Construct
 //     @0x8287F738, a single-instruction `b ServerInterfaceGames::Construct`

@@ -107,6 +107,9 @@ class CMassiveAsset;
 
 class CMassiveZoneManager : public CRequestBuilder
 {
+    // CMassiveClientCore::ZoneManagerFind matches zones by mpcZoneName.
+    friend class CMassiveClientCore;
+
 public:
     // @ 0x82BD2968. Chains CRequestBuilder("CMassiveZoneManager"), installs this
     // class's vftable (off_82185780), default-constructs the four lists, and --
@@ -212,6 +215,9 @@ public:
     // (CMassiveAsset::Resume). Returns 1.
     int Resume();
 
+    // Suspends the builder's requests, every ad object (vftable slot +0x14) and every asset. Returns 1.
+    int Suspend();
+
     // @ 0x82BD2A88. Deletes every ad object, asset and order (a polymorphic
     // deleting-destructor dispatch through each element's vftable slot 0) and empties
     // the pre-subscriber queue (which is not element-owning). Returns 1.
@@ -239,8 +245,11 @@ public:
     // mPreSubscriberList directly on the X360 (GoToStart/GetCurrData/GoToNext on
     // zone+0x28, raw cursor read at zone+0x30) to spawn one slave per name-matching
     // queued subscriber; friendship keeps that a named-member walk rather than an
-    // offset poke. The audio/texture/video Dynamic siblings will need the same.
+    // offset poke. The audio/texture/video Dynamic siblings do the same.
     friend class CMassiveAdObjectModelDynamic;
+    friend class CMassiveAdObjectTextureDynamic;
+    friend class CMassiveAdObjectAudioDynamic;
+    friend class CMassiveAdObjectVideoDynamic;
 
 private:
     CMassiveList             mPreSubscriberList; // +0x28

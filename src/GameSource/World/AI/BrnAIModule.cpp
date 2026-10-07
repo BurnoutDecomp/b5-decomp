@@ -18,35 +18,14 @@
 // =================================================================================================
 // ⭐⭐⭐ WHY THIS FILE IS WHAT A CRASHED CAR HAS BEEN WAITING FOR
 // =================================================================================================
-// The crash exit lands `mbToBeResetOnTrack` on the RaceCar and everything below
-// ActiveRaceCar::RequestPlaceOnTrack is already real and live. The one missing capability is
-// "CHOOSE WHERE TO PUT THE CAR", and on the console that answer comes from BrnAI::
-// ResetOnTrackManager reading the AI road network. That manager is an EMBEDDED MEMBER of this
-// class, its ONLY constructor call site in the whole image is Prepare stage 3 below, and the AI
-// road network itself is loaded by LoadMapData -- stage 2 below. Until this file, ALL of
-// AIModule::{Construct, Prepare, Update, PostPhysicsUpdate, Release, Destruct} were quiet
-// boot-gate stubs in WorldLinkStubs.cpp, and the live log said so on every run
-// ("AIModule::Prepare: inert", "AIModule::Update: inert"). So:
-//   * AI.dat was never loaded and "WorldMapData" was never requested -- the road network simply
-//     did not exist in this build. (The DATA was always fine: build/game/AI.DAT is present and
-//     already ported, bnd2 platform byte @+8 == 4.)
-//   * the manager was never Constructed, so its section-data pointer was null and its AI-car
-//     pointer garbage. Bodying its ~4,750 instructions on top of that would have been
-//     [[valid-pointer-invalid-object]] -- it would have compiled, linked, booted and produced
-//     nothing, with no assert able to see it.
-// This file lands the LIFECYCLE, which is the precondition, not the manager.
+// The crash exit lands `mbToBeResetOnTrack` on the RaceCar, and "CHOOSE WHERE TO PUT THE CAR"
+// comes from BrnAI::ResetOnTrackManager reading the AI road network. That manager is an EMBEDDED
+// MEMBER of this class, its ONLY constructor call site in the whole image is Prepare stage 3
+// below, and the AI road network itself (AI.dat, "WorldMapData") is loaded by LoadMapData --
+// stage 2 below.
 //
-// ⚠️ WHAT IS DELIBERATELY *NOT* HERE -- read this before assuming the module is whole.
-// Construct's console body also constructs 35 AICars, 8 AIDrivers, the RouteRequestManager, the
-// AIDebugComponent, the RouteMapDebugComponent and a ContactSpyInterface, and registers six perf
-// monitors; Prepare's stage 4 runs AIDriver::Prepare over the 8 active race cars. Every one of
-// those is PARKED, individually flagged at its site, because each pulls in a subsystem whose own
-// TUs are unmounted. The consequence that matters, stated plainly:
-//     ⛔ ResetOnTrackManager IS CONSTRUCTED WITH A NULL AI-CAR ARRAY.
-// That is deliberate and it is the honest option: a null pointer fails loudly the moment anything
-// dereferences it, whereas handing it 35 default-initialised AICar objects would hand it garbage
-// that reads as data. Nothing dereferences it today (Update is still gated), and the AI-car array
-// is the first thing the NEXT slice must land.
+// ⚠️ What is still parked is flagged individually at its site (see the Construct banner): the
+// AIDebugComponent, the RouteMapDebugComponent, the six perf monitors and the ContactSpyInterface.
 // =================================================================================================
 
 namespace BrnAI
@@ -134,14 +113,10 @@ AIModule::AIModule()
 // ⚠️ [FLAG PC boot gate] PARKED, each for the same reason -- the owning TU is not mounted and the
 // member has no named home in this class's pad spine:
 //     * the AIDebugComponent seed block (+270908..+270948), its Construct(+271532) and Register
-//     * BrnAI::RouteRequestManager::Construct(+270952)
 //     * BrnAI::RouteMapDebugComponent::Construct(+321948)
-//     * the +294784 CgsNumeric::Random prime  (the AI drivers' shared PRNG; only stage 4's parked
-//       AIDriver::Prepare consumes it)
-//     * the six "AI Module, ..." perf monitors  (nothing starts/stops them while Update is gated)
-//     * (LANDED 2026-09-04: 35x AICar::Construct -- see the loop below; 8x AIDriver::Construct)
-//     * the +322400..+322435 flag block, +322040/+322044 and ContactSpyInterface::Construct(+322408)
-//       (PostPhysicsUpdate's target; PostPhysicsUpdate is still gated)
+//     * the six "AI Module, ..." perf monitors  (Update's StartMonitor/StopMonitor legs are parked
+//       with them)
+//     * +322040/+322044 and ContactSpyInterface::Construct(+322408)
 // =================================================================================================
 void AIModule::Construct()
 {
@@ -151,8 +126,7 @@ void AIModule::Construct()
     meLoadMapDataStage = E_LOADMAPDATA_REQUEST_BUNDLE;
     meReleaseStage     = E_RELEASESTAGE_DONE;
 
-    // [FLAG PC boot gate] the AIDebugComponent seed block + Register, and
-    // RouteRequestManager::Construct -- see the banner.
+    // [FLAG PC boot gate] the AIDebugComponent seed block + Register -- see the banner.
 
     mResourceReceiverQueue.Construct();
 
@@ -202,9 +176,7 @@ void AIModule::Construct()
     }
 
     // [FLAG PC boot gate] RouteMapDebugComponent::Construct, the six perf monitors and
-    // AIDebugComponent::Construct -- see the banner. (35x AICar::Construct landed 2026-09-04;
-    // the Random prime, RouteRequestManager::Construct, 8x AIDriver::Construct and the
-    // +322400 flag block land just below.)
+    // AIDebugComponent::Construct -- see the banner.
 
     // ⭐ The two player cursors. The console DOES store both here, and both are 0:
     //     0x82794D34  li   r30, 0                 (the only write to r30 in the whole body)
@@ -222,8 +194,7 @@ void AIModule::Construct()
     mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
     mePlayerGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_0;
 
-    // ⭐ 2026-09-03 (aiwave): the rest of the console Construct @0x82794D08 that now has named homes --
-    // the +322400..+322435 flag block (lane A1's member map), the +294784 Random prime,
+    // The rest of the console Construct: the +322400..+322435 flag block, the +294784 Random prime,
     // RouteRequestManager::Construct(+270952) and the 8x AIDriver::Construct.
     miLineUpdateTokenCounter = 0;
     muNumAggressiveCars      = 3;
@@ -263,9 +234,7 @@ void AIModule::Construct()
 //                           then the ICF-folded empty base Destruct
 //   0x8276E404..0x8276E40C  mContactSpyInterface.Construct()                      (this + 0x4EB68)
 //
-// ⛔ CORRECTED 2026-09-22 (crash parity G04-D7): this was a one-shot-logging stub in
-// WorldLinkStubs.cpp whose banner said it was "reached every frame by WorldModule::Update" -- it
-// is reached only at process teardown.
+// It is reached only at process teardown, never per frame.
 // =================================================================================================
 void AIModule::Destruct()
 {

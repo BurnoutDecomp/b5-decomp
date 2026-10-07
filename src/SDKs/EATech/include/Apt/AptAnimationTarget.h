@@ -63,6 +63,12 @@ struct AptAnimationTargetSet
     u16        mnCount;     // +0x00  live entries used this frame
     u16        mnCapacity;  // +0x02  slot count
     AptValue** mppSlots;    // +0x04  slot array (4*mnCapacity on console)
+
+    // add -- store pValue in the first free slot probing forward from count+1 (wrapping
+    // at capacity) and AddRef it; the count is advanced first.
+    void add(AptValue* pValue);
+    // remove -- find pValue, drop the count, Release it and null its slot. True iff found.
+    bool remove(AptValue* pValue);
 };
 
 // ---------------------------------------------------------------------------

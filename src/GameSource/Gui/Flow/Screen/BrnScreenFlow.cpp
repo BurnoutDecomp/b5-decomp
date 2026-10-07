@@ -55,6 +55,13 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnReplayLoading.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnReplayMain.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnReplayOutro.h"
+#include "GameSource/Gui/Flow/Screen/States/BrnNull.h"
+#include "GameSource/Gui/Flow/Screen/States/BrnOnlineTeamSelection.h"
+#include "GameSource/Gui/Flow/Screen/States/Replays/BrnReplayClips.h"
+#include "GameSource/Gui/Flow/Screen/States/Replays/BrnReplayClipsOnline.h"
+#include "GameSource/Gui/Flow/Screen/States/Replays/BrnReplayOptions.h"
+#include "GameSource/Gui/Flow/Screen/States/Replays/BrnReplayIntro.h"
+#include "GameSource/Gui/Flow/Screen/States/Replays/BrnReplayCredits.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnBrnDebug.h"
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h"
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnCompletedGame.h"
@@ -62,9 +69,6 @@
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineTrophyCarUnlock.h"
 #include "GameSource/Gui/Flow/PostEvent/States/Online/BrnOnlineInstantResults.h"
 #include "GameSource/Gui/Flow/PostEvent/States/Showtime/BrnShowtimeInstantResults.h"
-
-// Placeholders for the not-yet-reconstructed states (registered under their real ids).
-#include "GameSource/Gui/Flow/Screen/States/BrnScreenStatesLinkStubs.h"
 
 // ===========================================================================
 //  BrnGui::BrnScreenFlow -- reconstructed from BURNOUT_X360_ARTIST.XEX. The screen flow owns

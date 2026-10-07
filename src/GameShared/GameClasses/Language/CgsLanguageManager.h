@@ -211,9 +211,8 @@ namespace CgsLanguage
         bool FormatText(char* lpacBuffer, u32 luBufferSize, f32 lfValue,
                         ParameterFormatType leType);
 
-        // DWARF CgsLanguageManager.h:252 also declares a two-arg overload
-        // FormatAndAddText(const char*, const char*); the X360 ARTIST build emitted no
-        // body for it (never referenced), so it is declaration-only here.
+        // The two-arg overload: copy an existing id's text under a new id (body in
+        // CgsLanguageManager_wS34_00.cpp; the online game-options summary uses it).
         bool FormatAndAddText(const char* lpcStringId, const char* lpcSourceText);
 
         bool FormatAndAddText(const char* lpcStringId, const char* lpcSourceText,

@@ -219,4 +219,13 @@ int CRequestExitZone::CreateRequest(CRequestBuilder* pBuilder, const char* pcZon
     return 0;
 }
 
+
+// ---------------------------------------------------------------------------
+// CRequestExitZone::GetRequestURL
+// ---------------------------------------------------------------------------
+const char* CRequestExitZone::GetRequestURL()
+{
+    return "/adsrv/4/exitZone";
+}
+
 } // namespace MassiveAdClient3

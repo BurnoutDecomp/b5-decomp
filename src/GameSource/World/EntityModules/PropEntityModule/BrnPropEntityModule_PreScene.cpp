@@ -139,18 +139,14 @@
 //      It is a visual-only phase wrap; props spawn, render and smash without it. The same
 //      type blocks the corona tail of RenderPropAndCoronas (BrnPropEntityModule_Render.cpp:65).
 //
-// ---- STATE OF THE INPUT SIDE (this note also corrected 2026-08-19) ------------------
-// The 2026-08-12 note here said both producers of PropEntityIO::InputBuffer_PreScene were
-// "still inert gates in WorldLinkStubs.cpp". THAT IS NO LONGER TRUE -- both are real,
-// bodied and mounted:
-//   WorldModule::BridgeWorldModuleToPropModule_PreScene  @0x827AACF8
-//       -> GameSource/World/Bridges/WorldBridgeWorldModuleToPropModule.cpp:112
-//   WorldModule::BridgeRaceCarModuleToPropModule_PreScene @0x827A5510
-//       -> GameSource/World/Bridges/WorldBridgeRaceCarToPropModule.cpp:124
-// (both mounted at tools/build/build_game_exe.bat:1936/1937, both called from
-// BrnWorldModule.cpp:2033/2038). CreateIOBuffer<T> was likewise made console-faithful by
-// the 2026-08-15 perf wave, so T::Construct() now runs and miPlayerZoneNumber carries its
-// real sentinel rather than 0.
+// ---- STATE OF THE INPUT SIDE ---------------------------------------------------------
+// Both producers of PropEntityIO::InputBuffer_PreScene are bodied and mounted:
+//   WorldModule::BridgeWorldModuleToPropModule_PreScene
+//       -> GameSource/World/Bridges/WorldBridgeWorldModuleToPropModule.cpp
+//   WorldModule::BridgeRaceCarModuleToPropModule_PreScene
+//       -> GameSource/World/Bridges/WorldBridgeRaceCarToPropModule.cpp
+// (both called from BrnWorldModule.cpp). CreateIOBuffer<T> runs T::Construct(), so
+// miPlayerZoneNumber carries its real sentinel rather than 0.
 // ============================================================================
 
 #include "BrnPropEntityModule.h"

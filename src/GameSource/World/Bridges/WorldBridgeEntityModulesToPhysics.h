@@ -16,8 +16,7 @@
 //   * pre-scene   @0x827AADB8 -- race-car + prop pre-scene outputs,
 //   * pre-physics @0x827AAEC0 -- traffic + race-car + prop pre-physics outputs.
 // The leading lpWorldModule arg is the X360 r3 (the WorldModule `this`); neither
-// bridge dereferences it. Bodies are boot-gated in WorldLinkStubs.cpp until the
-// physics-input staging interfaces are homed.
+// bridge dereferences it. Bodies in WorldBridgeEntityModulesToPhysics.cpp.
 namespace WorldModule
 {
     // @ 0x827AADB8

@@ -33,24 +33,6 @@
 //     (1) mbModeIntroStarted gates StartModeIntro; (2) the GameMode latch bytes +174..+177 are
 //     cleared by the arm that consumes them; (3) miFramesUntilModeSwitchSend decrements to
 //     EXACTLY 0 to fire once.
-//
-// [X][X] LINK FRONTIER THIS FILE INTRODUCES (added 2026-08-26, fix round -- gate-green is not
-//        closeable). Two ScoringSystem members are CALLED here and have no definition anywhere in
-//        src/; both are LNK2019 the moment this partfile mounts:
-//   1. ScoringSystem::StartModeTimer(const CgsSystem::Time&)  -- declared in BrnScoringSystem.h,
-//      and BrnScoringSystem_Timer.cpp:54-56 explicitly lists it as DEFERRED ("no export, no inlined
-//      fragment recovered"). Call site: the timer-start latch below -- i.e. THE store that starts
-//      every mode's clock. Console is two stores into the ScoringSystem's first member.
-//   2. ScoringSystem::HasBeatenRoadRageTarget()  -- declared in BrnScoringSystem.h, no definition
-//      and no link stub (BrnRoadRageModeScoringLinkStubs.cpp:175 defines the DIFFERENT
-//      RoadRageModeScoring::HasBeatenRoadRageTarget). Two call sites in the road-rage / marked-man
-//      end-condition arms below. Also called from BrnModeManager_Finish.cpp.
-//   (Header line numbers are deliberately omitted: BrnScoringSystem.h is being edited concurrently
-//   this wave, so a line cite would go stale faster than the fact does.)
-// [!] A THIRD item the wave's batch-4 verdict listed under this heading is REFUTED, so do not
-//     chase it: ScoringSystem::GetCheckpointDistanceToFinish (BrnModeManager_TransmitCrash.cpp:204)
-//     IS defined -- BrnScoringSystem_Finish.cpp:75, complete with its two console asserts
-//     ("luCheckpointIndex < (uint32_t)KI_MAX_LANDMARKS_IN_MODE" and "Distance to finish not ready").
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 #include "GameSource/GameState/BrnGameStateModule.h"                    // GetTakedownManager (arm 13)
@@ -673,9 +655,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
 
     // ---- (15) THE STUNT-RACE END CONDITION (mode 7) -----------------------------------------------
     // This is the poll the whole stunt-races campaign hangs on: once the stunt scorer says the run
-    // is over, the player has finished the mode. (hazards H8: BrnBaselineLinkStubs.cpp's
-    // `StuntModeScoring::HasStuntModeEnded { return true; }` makes this fire on frame 1 until the
-    // per-symbol retire lands -- that is the stub, not this body.)
+    // is over, the player has finished the mode.
     if (meCurrentGameModeType == GameStateModuleIO::E_MODE_STUNT_ATTACK)
     {
         const bool lbModeIsOnline = (mpCurrentGameMode != nullptr) ? mpCurrentGameMode->IsOnline() : false;

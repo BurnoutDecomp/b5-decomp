@@ -49,10 +49,7 @@ namespace
 // does NOT go straight to CN_ACCT_MAN(123); the Lua reads
 //     Transition_8CN_SETTINGS_124CN_ENTER_ON()      then
 //     NextState_124CN_ENTER_ON: "ADVANCE" -> Transition_124CN_ENTER_ON_123CN_ACCT_MAN()
-// so this screen is the gate in front of the account-management tab. Until now its entry
-// was BrnScreenStatesDataLinkStubs.cpp's LogUnreconstructedState, which is what a live
-// run actually printed when the row was selected:
-//     [ScreenFlow] CrashNavEnterOnlineFull::OnEnter -- un-reconstructed state (FLAG).
+// so this screen is the gate in front of the account-management tab.
 void CrashNavEnterOnlineFull::OnEnter()
 {
     CrashNavEnterOnlineX360::OnEnter();

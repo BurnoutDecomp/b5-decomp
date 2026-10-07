@@ -60,6 +60,8 @@ const Name ParameterSchema::SK_TYPE_NAME("~ParameterSchema~");
 const Name SlotSchema::SK_TYPE_NAME("~SlotSchema~");
 const Name FeatureSchema::SK_TYPE_NAME("~FeatureSchema~");
 const Name VoiceSchema::SK_TYPE_NAME("~VoiceSchema~");
+const Name VoiceSpec::SK_TYPE_NAME("~VoiceSpec~");
+const Name ContentSpec::SK_TYPE_NAME("~ContentSpec~");
 
 // IEntityFixer::GetFixer @ 0x826809B0
 //

@@ -3,47 +3,6 @@
 //   SetupCategories @0x8248F838  (DWARF cpp:1277)
 //   SetupIndexes    @0x8248F8D8  (DWARF cpp:1299)
 //   SetupVariations @0x8248F998  (DWARF cpp:1330)
-//
-//
-// The committed leaf header BrnOnlineScoreboards.h is still the 29-line minimal version
-// (the GetResourcesToLoad inline plus the two resource statics). The wave-I spec's
-// full-shape class had not been applied when this partfile was written, and headers are
-// frozen for implementers, so none of the three bodies can be declared as members and none
-// of the eleven members / one static they touch exists. Measured with the repo's own
-// compile gate, not assumed.
-//
-// The complete, drop-in-ready partfile (single `namespace BrnGui { ... }`, one anonymous
-// namespace for the three filter-row selectors) lives at
-// with a banner naming the exact declaration lines that unblock it. Copy it over this file
-// once the spec's full-shape header lands; no edit is needed.
-//
-// EXACT DECLARATIONS THAT UNBLOCK IT (all inside
-// `struct BrnGui::OnlineScoreboards : public CgsGui::State`, private section -- every one
-// of them is already part of the spec's full-shape header):
-//     void SetupCategories();                       // @0x8248F838
-//     void SetupIndexes();                          // @0x8248F8D8
-//     void SetupVariations();                       // @0x8248F998
-//     static const char* KAPC_FILTER_TITLE_STRINGS[3];  // @0x82F2687C
-//     s32         miCurrentCategory;                // X360 +344
-//     s32         miMaxCategories;                  // X360 +348
-//     const char* mapcCategories[15];               // X360 +820
-//     s32         miCurrentIndex;                   // X360 +880
-//     s32         miMaxIndexes;                     // X360 +884
-//     const char* mapcIndexes[10];                  // X360 +1200
-//     s32         miCurrentVariation;               // X360 +1240
-//     s32         miMaxVariations;                  // X360 +1244
-//     const char* mapcVariations[66];               // X360 +3296
-//     bool        mbEventLeaderboard;               // X360 +3586
-//     MenuToggleGroupVarSize<3> mFilterToggleGroup; // X360 +3592  "filter_mc"
-// plus the member-type include BrnMenuToggleGroup.h.
-//
-// against a SHADOW copy of the header carrying only those declarations --
-// scratchpad/waveI/probeSB04/ (run_probe.py prints PROBE_STATUS=pass). The faithfulness
-// lint reports 0 new findings on it. No other declaration is needed.
-//
-// MenuToggleGroupVarSize<3>::GetSelectable() returns, and the home of the Selectable state
-// setters the X360 dispatches through the row vtable). Neither side of the
-// TypeDefs/Demangled hard collision is needed here -- this group posts no events.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineScoreboards.h"

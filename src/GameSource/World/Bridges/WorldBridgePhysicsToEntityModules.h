@@ -19,14 +19,10 @@
 //       sub_8279F8E0, PS3-inlined as a direct read of OutputBuffer +998192 -- into
 //       the AI post-physics input buffer at +4)
 //
-// RETYPED 2026-07-27 (world-drive wave): the previous slice of this header modelled
-// the physics/AI buffers with minimal by-name stand-in structs (PhysicsModuleOutputBuffer
-// / AIModuleInputBuffer_PostPhysics / PhysicsToAIPostPhysicsInterface) because the real
-// IO homes were not committed. They now are (BrnPhysicsModuleIO.h / BrnAIModuleIO.h),
-// so the declarations carry the REAL buffer types and the stand-ins are retired -- the
-// drive call sites in BrnWorldModule.cpp bind to these signatures. The five bodies are
-// boot-gated in WorldLinkStubs.cpp until the physics-output accessor band is homed
-// (the X360 data flow for the AI leg is recorded on that gate).
+// The declarations carry the REAL buffer types (BrnPhysicsModuleIO.h / BrnAIModuleIO.h);
+// the drive call sites in BrnWorldModule.cpp bind to these signatures. Bodies: race car
+// and traffic in WorldBridgePhysicsToEntityModules.cpp, prop in WorldBridgePropModule.cpp,
+// crash in WorldBridgeCrashInputs.cpp, AI in WorldBridgeAIModule.cpp.
 //
 // The leading lpWorldModule arg is the X360 r3 (the WorldModule `this`); none of
 // these bridges dereferences it.

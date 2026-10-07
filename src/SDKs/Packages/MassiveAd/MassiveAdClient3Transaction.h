@@ -7,14 +7,9 @@
 //
 // The transaction bodies are their own ledger TU(s); this header is the owning
 // home so the CNetworkManager TU can hold it by pointer and drive it BY NAME.
-// Only the surface CNetworkManager touches is modelled. It is polymorphic and
-// CNetworkManager calls three of its virtuals, plus destroys it:
-//   - vtable slot 0 (called on a freshly popped request, no args) -> OnRequestStarted
-//   - vtable slot 1 (called before the request block is sent, no args) -> BuildRequestBlock
-//   - vtable slot 2 (called with the received buffer + byte count) -> ProcessReceivedData;
-//         returns non-zero once the whole response has been consumed
-//   - destroyed by CNetworkManager (Initialize failure paths and ~CNetworkManager)
-//         through the heap hook -- reproduced as `delete`
+// It is polymorphic; CNetworkManager drives it through its three interface
+// virtuals (SetRequest on a freshly popped request, ProcessRequest before the
+// block is sent, ProcessResponse with each received chunk) and destroys it.
 //
 // FLAG (layout not asserted): on the X360 CNetworkManager::~CNetworkManager deletes
 // the transaction through a polymorphic subobject at transaction+0x0C (it forms
@@ -24,14 +19,11 @@
 // the transaction's own to home; here it is modelled as a single CMassiveBaseObject
 // subclass (so `delete` routes teardown through the MassiveAd heap hook, the
 // attested effect) with the three interface methods declared as virtuals. The
-// exact vtable slot ORDER / secondary-base offset is documented, not byte-asserted
-// (semantic parity). The whole object is a MassiveMalloc(68) block.
+// whole object is a MassiveMalloc(68) block.
 //
 // Per the naming convention the vendor SDK identifiers (the MassiveAdClient3
 // namespace and the CTransactionHTTP class name) are PRESERVED VERBATIM --
-// external middleware API, not project-owned code. The three virtual method names
-// are reconstructed from their call-site roles (the X360 renders them as indirect
-// vtable dispatches, not named symbols).
+// external middleware API, not project-owned code.
 // ===========================================================================
 
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3.h"
@@ -53,54 +45,24 @@ public:
     // see the layout FLAG above. @ 0x82BD8900. Body in the CTransactionHTTP TU.
     virtual ~CTransactionHTTP();
 
-    // Vtable slot invoked when a new request has just been popped for service
-    // (CNetworkManager::Tick, on the fresh mpCurrentRequest). Resets the
-    // transaction for the new request. Body in the CTransactionHTTP TU.
-    virtual void OnRequestStarted();
-
-    // Vtable slot invoked immediately before the request block is sent
-    // (CNetworkManager::Tick, sending state). Builds/frames the outgoing HTTP
-    // request. Body in the CTransactionHTTP TU.
-    virtual void BuildRequestBlock();
-
-    // Vtable slot invoked with each received chunk (CNetworkManager::Receive).
-    // Consumes nLength bytes of pData; returns non-zero once the whole response
-    // has been assembled (the manager then clears the in-flight request). Body in
-    // the CTransactionHTTP TU.
-    virtual int ProcessReceivedData(const void* pData, int nLength);
-
-    // -----------------------------------------------------------------------
-    // Concrete transaction bodies (this TU). These are the real X360 symbols the
-    // transaction exposes; on the X360 the three interface entry points above are
-    // vtable dispatches whose bodies ARE these methods (SetRequest is the
-    // "request started" slot, ProcessRequest the "build request block" slot, and
-    // ProcessResponse the "process received data" slot). The three guessed-name
-    // virtuals are retained UNCHANGED so the already-committed CNetworkManager
-    // consumer keeps its interface; these named methods carry the reconstructed
-    // bodies. They are declared non-virtual because the single-inheritance model
-    // above already supplies the consumer-facing vtable interface (the real object
-    // is a two-base MI shape -- see the header FLAG -- which is modelled here for
-    // semantic parity rather than byte-exact vtable order).
-    // -----------------------------------------------------------------------
-
     // @ 0x82BD9130. Binds pRequest as the in-flight request: on a fresh request it
     // (lazily) allocates the 1 KiB HTTP assembly buffer and Reset()s. A null
     // request clears mpRequest, logs, and returns -900; an unchanged request is a
     // no-op. Returns 0 on success.
-    int SetRequest(CRequestObject* pRequest);
+    virtual int SetRequest(CRequestObject* pRequest);
 
     // @ 0x82BD8980. Wraps the current request's wire block with the outgoing HTTP
     // request (request line + Host/Content-Length/Content-Type/User-Agent headers),
     // prepending the URL and the GET/POST method, exactly once per request. Returns
     // 0, or -900 when there is no request.
-    int ProcessRequest();
+    virtual int ProcessRequest();
 
     // @ 0x82BD9430. Consumes nLength bytes of received response data (pData). A
     // null/zero final call finalises the request (content-length check -> Complete
     // or Error); otherwise the data is routed to the header collector or the
     // chunked/unchunked body forwarders. Returns non-zero once the response is fully
     // processed.
-    int ProcessResponse(const void* pData, int nLength);
+    virtual int ProcessResponse(const void* pData, int nLength);
 
     // @ 0x82BD9288. Appends received bytes to the HTTP assembly buffer, detects the
     // end-of-headers CRLFCRLF, parses the headers, then forwards the body to the
@@ -133,9 +95,8 @@ public:
     // buffer exists yet. Returns 0 on success, -99 on failure.
     int ReallocateHTTPDataBuff(int nNewSize);
 
-    // Resets the transaction's per-request HTTP state. Separate ledger TU (its body
-    // is not in this slice); declared here -- CTransactionHTTP is its home -- because
-    // SetRequest / the forwarders / ProcessResponse all call it.
+    // Clears the per-request HTTP state: header/status/chunk flags and counters,
+    // and empties the assembly buffer (zero-filled, write cursor back at its start).
     void Reset();
 
 private:

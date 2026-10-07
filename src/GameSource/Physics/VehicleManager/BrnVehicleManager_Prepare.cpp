@@ -191,10 +191,8 @@ namespace Vehicle
     // leaves mePrepareStage at 3, so a second call re-enters case 3 and re-stamps the same two
     // bytes. Faithful; noted because it differs from its sibling FSM.
     //
-    // PrepareData is a named LINK STUB (WorldLinkStubs.cpp) -- see the declaration in
-    // BrnVehicleManager.h for the two measured reasons. It returns true there, which is what the
-    // console body always returns too, so the FSM's control flow is unchanged by the drop; what
-    // IS dropped is the per-car data build, and that is stated at the stub.
+    // PrepareData (BrnVehicleManager_PrepareData.cpp) always returns true, so the stage-1 arm
+    // never stalls.
     // ------------------------------------------------------------------------------------
     bool VehicleManager::Prepare(rw::IResourceAllocator* lpPhysicsAllocator,
                                  CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer)

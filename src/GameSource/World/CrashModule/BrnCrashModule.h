@@ -109,9 +109,8 @@ namespace BrnWorld
         // mark the two crash arrays unconstructed (count = -1). Called by WorldModule::WorldModule.
         CrashModule();
 
-        // ---- ADDITIVE (WorldModule::Update @0x827D63E8 / EntityModulePostPhysicsUpdate
-        //      @0x827D3F10; DWARF BrnCrashModule.h:297/:300). Declaration-only; bodies
-        //      gated in WorldLinkStubs.cpp until this module's own TU lands. ----
+        // ---- ADDITIVE (called from WorldModule::Update / EntityModulePostPhysicsUpdate).
+        //      Bodies in BrnCrashModule_RaceCarCrashes.cpp. ----
         void PreSceneUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
                              CgsModule::IOBufferStack* lpOutputBufferStack,
                              const CrashIO::InputBuffer_PreScene* lpInput,
@@ -123,12 +122,11 @@ namespace BrnWorld
                                 CrashIO::OutputBuffer_PostPhysics* lpOutput,
                                 BrnUpdateSet lUpdateSet );
 
-        // ---- LIFECYCLE, landed 2026-08-25 (crash exit). Bodies in BrnCrashModule_Lifecycle.cpp.
-        // Until this wave `mCrashModule.Construct()` in WorldModule::WorldModule resolved to the
-        // BASE CgsModule::ModuleSingleBuffered::Construct, because CrashModule::Construct was not
-        // declared here. That is why every tunable below read ZERO -- including mbClearUpEnabled,
-        // which gates TickCrashes -- and why landing the crash bodies alone could never have made
-        // a crash end. See the .cpp banner.
+        // ---- LIFECYCLE. Bodies in BrnCrashModule_Lifecycle.cpp. These overrides must stay
+        // declared here: without them `mCrashModule.Construct()` in WorldModule::WorldModule
+        // resolves to the BASE CgsModule::ModuleSingleBuffered::Construct, every tunable below
+        // reads ZERO -- including mbClearUpEnabled, which gates TickCrashes -- and no crash ever
+        // ends. See the .cpp banner.
         void Construct() override;   // 0x827CAA28
         bool Prepare() override;     // 0x827B16D8
         bool Release() override;     // 0x827B1780

@@ -192,7 +192,7 @@ void AboveCarRenderer::Construct()
     }
     mbTimeExtensionPending = false;
     miAboveCarRendererPM = -1;
-    miAboveCarRendererPM = CgsDev::PerfMonCpu::AddMonitor("AboveCarRenderer", 3, 0, 2.0, 0, 0);
+    miAboveCarRendererPM = CgsDev::PerfMonCpu::AddMonitor("AboveCarRenderer", CgsDev::E_PMP_3, false, 2.0f, false);
     CGS_ASSERT(miAboveCarRendererPM >= 0, "miAboveCarRendererPM >= 0");
 }
 

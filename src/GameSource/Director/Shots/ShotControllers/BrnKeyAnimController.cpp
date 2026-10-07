@@ -33,7 +33,7 @@
 
 // BrnDirectorResourceManager.h's header-inline GetKeyAnim / GetShakeTakes bodies dereference
 // the ICE wrapper, so its home has to be complete first (the same include pair every other
-// consumer of the manager uses -- see DirectorLinkStubs.cpp:49-50).
+// consumer of the manager uses).
 #include "GameSource/Director/BrnDirectorICEWrapper.h"
 #include "GameSource/Director/BrnDirectorResourceManager.h"    // DirectorResourceManager::GetKeyAnimFromGuid / GetIceResourceManager
 #include "GameSource/Director/Camera/Camera.h"                 // BrnDirector::Camera::Camera

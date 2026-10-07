@@ -155,11 +155,8 @@ namespace Utils
     //   the procedural value is the take arm's INPUT and has exactly one consumer, inside the
     //   arm. When a gate trips the console publishes nothing at all. Corrected 2026-08-02.
     //
-    // ⭐ ALL THREE OF ITS METHODS ARE NOW BODIED (2026-08-02, ICE-shake wave):
-    //   ::Construct -- COMPLETE, in Camera/Utils/BrnCameraShakeICEController.cpp. It used to
-    //     be an empty `{}` in Director/DirectorLinkStubs.cpp whose stated reason ("a real
-    //     console call whose body was never dumped") was FALSE: 0x8223EBF0 is a fully exported
-    //     186-line function. That stub was ARMED, not merely incomplete -- see below.
+    // ⭐ ALL THREE OF ITS METHODS ARE BODIED:
+    //   ::Construct -- COMPLETE, in Camera/Utils/BrnCameraShakeICEController.cpp.
     //   ::Update    -- HEAD + THE THREE GATES, arm flagged and made LOUD. Same TU.
     //   ::GetMatrix -- inline below.
     //

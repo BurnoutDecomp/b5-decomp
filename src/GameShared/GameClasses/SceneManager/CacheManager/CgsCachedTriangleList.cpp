@@ -10,21 +10,11 @@
 // ⭐⭐⭐ THE SHARED TRIANGLE CACHE'S BACKING-STORE ALLOCATION, reconstructed from
 // BURNOUT_X360_ARTIST.XEX:
 //     CgsSceneManager::CachedTriangleList::Prepare  @0x828BE520  (79 insns)
-// This replaces the WorldLinkStubs.cpp gate "CachedTriangleList::Prepare: inert", which is
-// DELETED with this TU.
 //
 // -------------------------------------------------------------------------------------------------
-// ⭐⭐ WHY THIS ONE MATTERS, and how it was found -- by RUNNING the path, not by reading it.
-// The triangle cache's 28 slots have been registered since the producer wave, but no slot had ever
-// been marked DIRTY, so `StartUpdateTriangleCaches` had never once allocated a fill command and
-// the destination pointer had never once been dereferenced. Forcing the console's own dev switch
-// `mbDEBUGForceAllDirty` for a single instrumented boot (fill-worker wave, 2026-08-10) produced 28
-// commands and fired a SHIPPED tripwire that had never executed in this project's history:
-//     ASSERT mpaTriangleCache != NULL   (CgsTriangleCacheManager.h:172)
-// i.e. the shared cache had NO BACKING STORE AT ALL, because this function was a boot gate that
-// returned `true` without allocating. ⇒ **a perfect fill worker would have written its triangles
-// through a null pointer.** This is the blocker UNDERNEATH the fill worker, and nothing had ever
-// surfaced it because the gate is only stale, not dead.
+// ⭐⭐ WHY THIS ONE MATTERS: this is the shared triangle cache's ONLY backing store. Without it
+// the first fill command trips the shipped `mpaTriangleCache != NULL` assert
+// (CgsTriangleCacheManager.h) and a fill worker would write its triangles through a null pointer.
 //
 // -------------------------------------------------------------------------------------------------
 // ⚠️ THE PARAMETER IS A BATCH COUNT, NOT A BYTE COUNT -- and a committed comment said otherwise.

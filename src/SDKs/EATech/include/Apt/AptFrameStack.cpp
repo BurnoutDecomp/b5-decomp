@@ -149,8 +149,7 @@ bool AptFrameStack::SetWhereExistsInScopeChain(const EAStringC& key, AptValue* p
 }
 
 // ===========================================================================
-// The interpreter-facing frame-stack glue (HOMED 2026-07-02, retiring the
-// AptRenderLinkStubs nulls).
+// The interpreter-facing frame-stack glue.
 // ===========================================================================
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"   // spFrameStack
 

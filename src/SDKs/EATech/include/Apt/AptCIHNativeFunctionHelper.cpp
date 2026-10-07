@@ -765,8 +765,7 @@ extern DOGMA_PoolManager* gpAptPseudoDataPool;   // off_8324D808
 // ---------------------------------------------------------------------------
 // TextFormat::copyTextFormatObj @0x82AE5820 (the X360 callee of get/setTextFormat)
 // overlays pSource's non-inherit fields onto the receiver in place -- the real
-// member, homed in AptTextFormat.cpp (was a {} link-stub that made every record
-// copy a no-op).
+// member, in AptTextFormat.cpp.
 // ---------------------------------------------------------------------------
 
 // ===========================================================================

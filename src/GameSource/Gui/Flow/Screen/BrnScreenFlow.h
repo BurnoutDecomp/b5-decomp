@@ -84,16 +84,15 @@ namespace BrnGui
     struct OnlineInstantResultsState;      // ../PostEvent/States/Online/BrnOnlineInstantResults.h
     struct ShowtimeInstantResultsState;    // ../PostEvent/States/Showtime/BrnShowtimeInstantResults.h
 
-    // -- not-yet-reconstructed screen states (placeholders in States/BrnScreenStatesLinkStubs.h)
-    struct NullState;
-    struct CrashNavMapMain;
-    struct OnlineGameRoomPlayerInfo;        // States/BrnOnlineGameRoomPlayerInfo.h
-    struct OnlineTeamSelection;
-    struct ReplayClips;
-    struct ReplayClipsOnline;
-    struct ReplayOptions;
-    struct ReplayIntro;
-    struct ReplayCredits;
+    struct NullState;                      // States/BrnNull.h
+    struct CrashNavMapMain;                // States/BrnCrashNavMapMain.h
+    struct OnlineGameRoomPlayerInfo;       // States/BrnOnlineGameRoomPlayerInfo.h
+    struct OnlineTeamSelection;            // States/BrnOnlineTeamSelection.h
+    struct ReplayClips;                    // States/Replays/BrnReplayClips.h
+    struct ReplayClipsOnline;              // States/Replays/BrnReplayClipsOnline.h
+    struct ReplayOptions;                  // States/Replays/BrnReplayOptions.h
+    struct ReplayIntro;                    // States/Replays/BrnReplayIntro.h
+    struct ReplayCredits;                  // States/Replays/BrnReplayCredits.h
 
     struct BrnScreenFlow : public BrnBaseFlow
     {
@@ -188,7 +187,7 @@ namespace BrnGui
         ReplayClipsOnline*             mpStateReplayClipsOnline;           // RE_CLIPS_ON   (4496)
         ReplayOptions*                 mpStateReplayOptions;               // RE_OPTIONS    (19320)
         ReplayLoading*                 mpStateReplayLoading;               // RE_LOADING    (64)
-        ReplayIntro*                   mpStateReplayIntro;                 // RE_INTRO      (72 alloc; see .cpp note)
+        ReplayIntro*                   mpStateReplayIntro;                 // RE_INTRO      (72)
         ReplayMain*                    mpStateReplayMain;                  // RE_MAIN       (1096)
         ReplayOutro*                   mpStateReplayOutro;                 // RE_OUT        (64)
         ReplayCredits*                 mpStateReplayCredits;               // RE_CREDITS    (72)

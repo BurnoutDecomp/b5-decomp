@@ -13,62 +13,18 @@
 // absorb them.
 //
 // =================================================================================================
-// ⭐⭐ THE NINTH GATE. The brief for this wave listed eight producer-side gates. There was a ninth,
-// and it sat on the CONSUMER side where nobody was looking: RaceCarEntityModule::PostSceneUpdate
-// was itself a boot gate (WorldLinkStubs.cpp:1035, "inert (body not reconstructed)"). So even with
-// the crash module perfectly wired, the RaceCarCrashCompleteEvent would have arrived in
-// InputBuffer_PostScene::mCrashInterface and been read by nobody, every frame, forever.
+// PostSceneUpdate's console body calls eight helpers, all bodied and called:
+// ProcessRaceCarCrashCompleteEvents, SendResetOnTrackRequests, CheckForResetOnTrackConditions,
+// UpdateTrafficAndRaceCarNearMisses, ProcessLeapedAndStompedCars, ProcessPowerParking and
+// PlaceOnTrackManager::PostSceneUpdate, the producer of the place-on-track line test.
 //
-// ⭐ PostSceneUpdate WAS LANDED AS A DELIBERATE SLICE AND IS NOW WHOLE. Its console body calls eight
-// helpers, and when this file landed SIX of them did not exist anywhere in this tree. All eight are
-// bodied and called now -- ProcessRaceCarCrashCompleteEvents, SendResetOnTrackRequests,
-// CheckForResetOnTrackConditions, (2026-09-11) UpdateTrafficAndRaceCarNearMisses, (2026-09-24,
-// CHAIN-STOMPEES) ProcessLeapedAndStompedCars, (2026-09-24, FX-SCENEMGR item 4)
-// ProcessPowerParking and (2026-09-24, FX-GEOMETRIC) PlaceOnTrackManager::PostSceneUpdate, the
-// producer of the place-on-track line test (its two Geometric kernels landed in b5 94bcd871).
-//
-// ⚠️⚠️ THE PARK THAT MATTERS, STATED PLAINLY: SendResetOnTrackRequests is the consumer of
-// RaceCar::mbToBeResetOnTrack. RaceCar::RequestResetOnTrack (BrnRaceCar.cpp:251, real and
-// committed) SETS that flag and NOTHING IN THIS TREE READS IT. ⇒ the branch of
-// ProcessRaceCarCrashCompleteEvents that goes through RequestResetOnTrack currently ends there.
-// ⭐ That branch is NOT the one a normal crash takes: it is entered only when the car is STILL
-// flagged mPhysicsState.mbCrashing at the moment the complete event lands. The other branch --
-// ActiveRaceCar::ResetAfterCrash -- is fully live, and it is the one that clears the wreck state.
-// Both are reproduced; which one fires is decided by the console's own test, not by this slice.
-//
-// ⭐ BOUNDARY MOVED 2026-08-26 (aimodule slice 1). The paragraph above still stands, but the
-// REASON it stands has changed and the old reason -- "the AI module lifecycle is an inert boot
-// gate" -- IS NOW FALSE. AI.dat loads, WorldMapData resolves and BrnAI::ResetOnTrackManager IS
-// Constructed against a real bound road network (measured on the boot log: version 12, 7639
-// sections, 136 reset pairs, 3273824 B). The remaining hole is the PUMP, in dependency order:
-//   (1) SendResetOnTrackRequests @0x822CE178 (57) -- this file's own park, still absent
-//   (2) the 35-entry AI-car array AIModule::Construct still parks. THIS IS THE REAL GATE ON
-//       THE WHOLE PUMP, not a later polish: ResetOnTrackManager::Update @0x8279A890
-//       dereferences GetAICar(mePlayerGlobalRaceCarIndex) at +2714 on its FIRST request, and
-//       AIModule::Prepare passes the manager a NULL array today (flagged at that site).
-//   (3) AIModule::Update @0x8279B478 + UpdateResetOnTrackManager @0x8279ABB0 -- still boot
-//       gates in WorldLinkStubs.cpp
-//   (4) ResetOnTrackManager::Update and its 32 siblings (~4,750 insns, one bodied)
-//   (5) ProcessResetOnTrackResultQueue @0x822F4580 (192)
-//
-// ⭐⭐ BOUNDARY MOVED AGAIN 2026-08-26 (aicar_reset wave). (2) and the reachable half of (4) ARE
-// LANDED: AIModule::maAICars[35] is a real member seeded to E_AI_CAR_STATE_INACTIVE and passed to
-// the manager's Construct, and ResetOnTrackManager::{Update, ProcessResetOnTrackRequest,
-// ComputeResetOnTrack, ComputeInitialCoordinatesStandard} are bodied. The manager can resolve a
-// request; nothing calls it. (1), (3) and (5) -- the PLUMBING -- remain.
-// ⛔ TWO BLOCKERS UNDER THE PLUMBING, MEASURED on a booted drive rather than inferred:
-//   * VehicleManager::GenerateAboveGroundLineTests @0x82633990 is ABSENT, so
-//     RaceCarState::mAboveGroundTestResult.mbValid is false every frame and no car ever enters
-//     the AI section system ([collision-tag] aboveGroundValid=0 on every sample).
-//   * RaceCarEntityModule::WriteUpdatedAIData @0x822D1FC8 is ABSENT, so
-//     AIModuleIO::RaceCarAIInterface::mbPlayerDataSet is never set -- and AIModule::Update
-//     @0x8279B478 wraps its WHOLE body in `if (GetRaceCarAIInterface()->mbPlayerDataSet)`.
-//     Landing (3) before that would be a body that provably never executes.
-// ⭐⭐ AND THE RECOVERY DOES NOT WAIT ON THE AI ROAD NETWORK. ActiveRaceCar::GetResetCoords
-// (landed 2026-08-26) has an EMPTY-RING arm at 0x822BF37C that returns the car's LIVE transform,
-// measured tracking the player on a drive run -- so once the pump runs, the manager's FAILURE
-// result already yields a usable pose. Every banner in this tree that said that path "would place
-// the car at the origin" was wrong; see BrnRaceCar.cpp::RequestResetOnTrack.
+// ProcessRaceCarCrashCompleteEvents has two branches, and which one fires is decided by the
+// console's own test. If the car is STILL flagged mPhysicsState.mbCrashing when the complete
+// event lands, it goes through RaceCar::RequestResetOnTrack, whose flag SendResetOnTrackRequests
+// reads and the reset-on-track pump carries (see BrnRaceCar.cpp::RequestResetOnTrack); a FAILURE
+// result from the manager still yields a usable pose through ActiveRaceCar::GetResetCoords's
+// empty-ring arm (the car's live transform). Otherwise ActiveRaceCar::ResetAfterCrash clears the
+// wreck state.
 // =================================================================================================
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"

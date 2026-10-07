@@ -2419,15 +2419,13 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     // base + its 0x40000-byte collision result region. The console literal is
     // 336896 == 74752 + 0x40000, and 74752 == 0x12400 is precisely the X360
     // sizeof(BaseCollisionGenerator).
-    // ⚠️⚠️ FIXED 2026-08-10 (cache-fill wave): the two byte literals are now a
-    // `sizeof`. THIS OBJECT IS CARVED AT RUNTIME, NOT DESERIALISED, so on x64 every
-    // one of its pointers widens (64 embedded CollisionBatch, each holding an
-    // EA::Jobs::Job, plus a 200-entry pointer array) and it is materially LARGER than
-    // 74752 bytes. Until this wave the generator was never Construct()ed or Prepare()d
-    // (both were WorldLinkStubs gates), so nothing had ever written past +74752 and the
-    // console offset was harmless; mounting the real Prepare -- which placement-
-    // constructs all 64 batches -- would have walked straight off the end of the object
-    // and into the result region it is about to hand the bump allocator.
+    // ⚠️⚠️ The generator's size is a `sizeof`, not the console byte literal. THIS
+    // OBJECT IS CARVED AT RUNTIME, NOT DESERIALISED, so on x64 every one of its
+    // pointers widens (64 embedded CollisionBatch, each holding an EA::Jobs::Job, plus
+    // a 200-entry pointer array) and it is materially LARGER than 74752 bytes. Its
+    // Prepare placement-constructs all 64 batches, so a console-sized carve would walk
+    // straight off the end of the object and into the result region it is about to
+    // hand the bump allocator.
     // (Standing rule: console size literals become `sizeof`, and a runtime-carved
     // struct's console byte offsets must never be pinned on the host.)
     const size_t lnCollisionGeneratorBytes =
@@ -2478,10 +2476,9 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
 
     // ---- player vehicle controls copy ---------------------------------------
-    // [FLAG PC boot gate] UpdateInputBuffer::GetPlayerVehicleControls is still the
-    // WorldLinkStubs read-lock stub (its producing module is boot-gated) and returns
-    // NULL; the faithful setter is an unguarded 60-byte memcpy, so skip the copy
-    // while the source is absent. Delete the guard when the real accessor lands.
+    // [FLAG PC] The null guard is host-only and now dead: UpdateInputBuffer::
+    // GetPlayerVehicleControls (BrnWorldModuleIO.cpp) returns the buffer's own member,
+    // never NULL. The console's setter is an unguarded 60-byte memcpy.
     {
         const BrnWorldIO::PlayerVehicleControls* lpControls =
             lpUpdateInputBuffer->GetPlayerVehicleControls();
@@ -3425,12 +3422,12 @@ ClassifyVehicleLOD( f32 lfDistance, const f32* lpafLODDistances )
 // CalculateVehicleLODs  @ 0x827C3778
 //
 // ⭐ THIS FUNCTION IS THE ONLY PER-FRAME WRITER OF ActiveRaceCar::RenderParams::mLOD.
-// While it was an inert stub in WorldLinkStubs.cpp every race car rendered at the
-// LOD that RenderParams::Reset seeds -- E_STATE_LOD_4, the coarsest of the five --
-// permanently, and every body part whose model carries only 2 or 3 states failed
-// DoesStateExist(4) and did not render at all. Reset's `4` is console-faithful (X360
-// Reset @0x822E6818 stores 4 into +5120): it is the deliberate "past every threshold"
-// fallback that THIS function is expected to lift off every frame.
+// Without it every race car renders at the LOD that RenderParams::Reset seeds --
+// E_STATE_LOD_4, the coarsest of the five -- permanently, and every body part whose
+// model carries only 2 or 3 states fails DoesStateExist(4) and does not render at all.
+// Reset's `4` is console-faithful (the console Reset stores 4 into +5120): it is the
+// deliberate "past every threshold" fallback that THIS function is expected to lift
+// off every frame.
 //
 // Shape (X360, read instruction for instruction):
 //   * both input arrays are length-checked through Array<>::GetLength (the two

@@ -14,15 +14,8 @@
 //   rw::core::filesys::Device::CheckForOptimalReadOp  @0x82BBED28
 //   rw::core::filesys::Device::GetInstance            @0x82BBEAC0
 //
-// The X360 EA::Thread::Mutex embedded at +0x18 / +0xB0 is, on the host, a Win32
-// CRITICAL_SECTION (the disassembly labels both fields "CriticalSection"); the homed
-// eathread_condition.cpp models the very same X360 mutex the same way. So:
-//   EA::Thread::Mutex::Mutex(p,0,1) -> InitializeCriticalSection
-//   EA::Thread::Mutex::Lock(p,&a)   -> EnterCriticalSection
-//   EA::Thread::Mutex::Unlock(p)    -> LeaveCriticalSection
-//   EA::Thread::Mutex::~Mutex(p)    -> DeleteCriticalSection   (the disasm's STUB calls)
-//
-// The two EA::Thread::Condition and the EA::Thread::Thread are the project's homed types.
+// The two EA::Thread::Mutex, the two EA::Thread::Condition and the EA::Thread::Thread are
+// the EAThread library's own types; every lock/wait passes kTimeoutNone (block forever).
 // =====================================================================================
 
 #include "SDKs/EATech/rwcore/filesys/device.h"
@@ -36,37 +29,21 @@ namespace rw
     {
         namespace filesys
         {
-            // X360 off_8327F078 -- the global filesys Manager. Owned by the (not-yet-homed)
-            // Manager TU; declared extern in device.h. A single definition is provided here
-            // so this TU links standalone; the Manager TU will own the real instance.
-            Manager* gpFileSysManager = nullptr;
-
-            namespace
-            {
-                // The X360 hands &dword_82181154 / &unk_82181154 -- the EAThread
-                // kTimeoutNone constant (0xFFFFFFFF == INFINITE) -- as the timeout pointer
-                // to Condition::Wait and as the spin/attributes pointer to Mutex::Lock. The
-                // homed Condition::Wait reads 0xFFFFFFFF as "block forever"; the host
-                // EnterCriticalSection ignores it. Modelled as a file-scope const whose
-                // address is handed to Wait, exactly as the asm hands &constant.
-                const u32 KU_TIMEOUT_NONE = 0xFFFFFFFFu;
-            }
-
             // -----------------------------------------------------------------------------
             // Device::Device @0x82BBE170
             //
             // Clears the registry link/flags/op-list, latches the external-thread bit
-            // (lbExternalThread & 1), constructs both mutexes and both conditions and the
+            // (luFlags & 1), constructs both mutexes and both conditions and the
             // (unstarted) worker thread, then stores the driver and zeroes the read budget.
             // The X360 ctor calls EA::Thread::Mutex::Mutex(p,0,1) / Condition(p,0,1) and an
             // inlined Thread() (the disasm names it VideoRenderable::~VideoRenderable, a
             // symbol alias for the single `stw 0` that is Thread's default ctor).
             // -----------------------------------------------------------------------------
-            Device::Device(DeviceDriver* lpDriver, bool lbExternalThread)
-                : mpNextRegistered(nullptr)   // *a1 = 0
+            Device::Device(DeviceDriver* lpDriver, unsigned int luFlags)
+                : mpNext(nullptr)              // *a1 = 0
                 , mbThreadRunning(0)           // *(a1+4) = 0
                 , mbStopRequested(0)           // *(a1+5) = 0
-                , mbExternalThread(lbExternalThread ? 1 : 0)  // *(a1+6) = a3 & 1
+                , mbExternalThread(static_cast<u8>(luFlags & 1))  // *(a1+6) = a3 & 1
                 , mWork(0, true)               // EA::Thread::Condition::Condition(a1+72, 0, 1)
                 , mCompletion(0, true)         // EA::Thread::Condition::Condition(a1+224, 0, 1)
                 , mpDriver(lpDriver)           // *(a1+320) = a2
@@ -76,10 +53,6 @@ namespace rw
                 mOpList.mpHead  = nullptr;
                 mOpList.mpTail  = nullptr;
                 mOpList.muCount = 0;
-
-                // EA::Thread::Mutex::Mutex(a1+24, 0, 1) and (a1+176, 0, 1).
-                ::InitializeCriticalSection(&mLock);
-                ::InitializeCriticalSection(&mCompletionLock);
             }
 
             // -----------------------------------------------------------------------------
@@ -100,24 +73,15 @@ namespace rw
                         mbStopRequested = 1;
                         mWork.Signal(false);            // Condition::Signal(a1+72, 0)
                         while (mbThreadRunning)
-                        {
-                            u32 luMs = 1;               // v9[0] = 1
-                            EA::Thread::ThreadSleep(&luMs);
-                        }
+                            EA::Thread::ThreadSleep(1);
                     }
-                    mpDriver->Close();                  // (*(driver+8))(driver)
+                    mpDriver->Restore();                // (*(driver+8))(driver)
                 }
 
                 mpDriver = nullptr;                     // *(a1+320) = 0
 
-                // Destroy in the X360 order: completion condition, completion mutex, worker
-                // thread, work condition, op-list mutex. The two embedded EA::Thread types
-                // run their destructors automatically; the mutexes are DeleteCriticalSection.
-                // (Member destructors fire in reverse-declaration order at scope exit, which
-                // is the inverse of this list -- the observable teardown is identical: every
-                // primitive is destroyed exactly once.)
-                ::DeleteCriticalSection(&mCompletionLock);
-                ::DeleteCriticalSection(&mLock);
+                // The conditions, the worker thread and the mutexes are torn down by their
+                // member destructors.
 
                 // Walk the residual op list, clearing each node's link until a null link is
                 // found (the X360 stops on the first node whose mpNext is already null).
@@ -137,7 +101,7 @@ namespace rw
                 mOpList.mpTail   = nullptr;   // *(a1+12) = 0
                 mOpList.mpHead   = nullptr;   // *(a1+8)  = 0
                 mOpList.muCount  = 0;         // *(a1+16) = 0
-                mpNextRegistered = nullptr;   // *a1      = 0
+                mpNext           = nullptr;   // *a1      = 0
             }
 
             // -----------------------------------------------------------------------------
@@ -150,7 +114,7 @@ namespace rw
             // -----------------------------------------------------------------------------
             int Device::Start()
             {
-                int liResult = mpDriver->Open();   // (*(driver+4))(driver)
+                int liResult = mpDriver->Init();   // (*(driver+4))(driver)
 
                 if (mbExternalThread)
                 {
@@ -167,10 +131,7 @@ namespace rw
                     mThread.Begin(&Device::ThreadEntry, this, lpParams, lpWrapper);
 
                     while (!mbThreadRunning)
-                    {
-                        u32 luMs = 1;              // v5 = 1
-                        EA::Thread::ThreadSleep(&luMs);
-                    }
+                        EA::Thread::ThreadSleep(1);
                     // result is the last ThreadSleep return in the asm; the function value is
                     // unused by every caller (InsertOp/Handle::Handle ignore it).
                     liResult = 0;
@@ -190,7 +151,7 @@ namespace rw
             // -----------------------------------------------------------------------------
             int Device::InsertOp(AsyncOp* lpOp)
             {
-                ::EnterCriticalSection(&mLock);     // Mutex::Lock(a1+24, &attrs)
+                mLock.Lock(EA::Thread::kTimeoutNone);
 
                 if (!mbThreadRunning)
                     Start();
@@ -198,7 +159,7 @@ namespace rw
                 AsyncOp* lpAfter = nullptr;         // v5
                 u64 lu64NewEnd = 0;                 // v6
                 if (lpOp->mbIsReadOp)
-                    lu64NewEnd = mpDriver->GetBlockSize(lpOp->mpStream->mpDriverKey) + lpOp->mu64Position;
+                    lu64NewEnd = mpDriver->QueryLocation(lpOp->mpStream->mpDriverKey) + lpOp->mu64Position;
 
                 for (AsyncOp* lpCur = mOpList.mpHead; lpCur; lpCur = lpCur->mpNext)
                 {
@@ -207,7 +168,7 @@ namespace rw
                             && gpFileSysManager->mbSortByPosition == 1
                             && lpOp->mbIsReadOp
                             && lpCur->mbIsReadOp
-                            && lu64NewEnd < mpDriver->GetBlockSize(lpCur->mpStream->mpDriverKey) + lpCur->mu64Position))
+                            && lu64NewEnd < mpDriver->QueryLocation(lpCur->mpStream->mpDriverKey) + lpCur->mu64Position))
                     {
                         break;
                     }
@@ -216,7 +177,7 @@ namespace rw
 
                 mOpList.InsertAfter(lpAfter, lpOp); // AsyncOp_::InsertAfter(a1+8, v5, a2)
 
-                ::LeaveCriticalSection(&mLock);     // Mutex::Unlock(v3)
+                mLock.Unlock();
                 return mWork.Signal(false);         // Condition::Signal(a1+72, 0)
             }
 
@@ -229,7 +190,7 @@ namespace rw
             // -----------------------------------------------------------------------------
             int Device::ChangeOpPriority(AsyncOp* lpOp, int liPriority)
             {
-                ::EnterCriticalSection(&mLock);     // Mutex::Lock(a1+24, &attrs)
+                mLock.Lock(EA::Thread::kTimeoutNone);
 
                 if (mOpList.Remove(lpOp, nullptr))  // AsyncOp_::Remove(a1+8, a2, 0)
                 {
@@ -237,8 +198,7 @@ namespace rw
                     InsertOp(lpOp);
                 }
 
-                ::LeaveCriticalSection(&mLock);     // Mutex::Unlock(v4)
-                return 0;                           // LeaveCriticalSection has no value
+                return mLock.Unlock();
             }
 
             // -----------------------------------------------------------------------------
@@ -256,9 +216,9 @@ namespace rw
 
                 if (lpOp->mbIsReadOp && gpFileSysManager->mbSortByPosition == 1)
                 {
-                    u32 luCost = mpDriver->GetBlockSize(lpOp->mpStream->mpDriverKey);  // v5
-                    u64 lu64Budget = mu64ReadBudget;                                   // v6
-                    u64 lu64End = static_cast<u64>(luCost) + lpChosen->mu64Position;   // v2
+                    u64 lu64Location = mpDriver->QueryLocation(lpOp->mpStream->mpDriverKey);  // v5
+                    u64 lu64Budget = mu64ReadBudget;                                          // v6
+                    u64 lu64End = lu64Location + lpChosen->mu64Position;                     // v2
 
                     if (lu64Budget && lu64End < lu64Budget)
                     {
@@ -269,7 +229,7 @@ namespace rw
 
                         while (lpCur && lpCur->mbIsReadOp && lpCur->miPriority == lpChosen->miPriority)
                         {
-                            lu64CandEnd = mpDriver->GetBlockSize(lpCur->mpStream->mpDriverKey) + lpCur->mu64Position;
+                            lu64CandEnd = mpDriver->QueryLocation(lpCur->mpStream->mpDriverKey) + lpCur->mu64Position;
                             if (mu64ReadBudget < lu64CandEnd)
                             {
                                 lbFound = true;
@@ -319,7 +279,7 @@ namespace rw
                 Device* lpThis = static_cast<Device*>(lpContext);
 
                 lpThis->mbThreadRunning = 1;               // *(a1+4) = 1
-                ::EnterCriticalSection(&lpThis->mLock);    // Mutex::Lock(a1+24)
+                lpThis->mLock.Lock(EA::Thread::kTimeoutNone);
 
                 do
                 {
@@ -343,30 +303,30 @@ namespace rw
                     if (lpOp)
                     {
                         AsyncOp* lpServe = lpThis->CheckForOptimalReadOp(lpOp);  // v5
-                        ::LeaveCriticalSection(&lpThis->mLock);                   // Mutex::Unlock(v2)
+                        lpThis->mLock.Unlock();
 
                         int liResult = lpServe->mpfnDoIo(lpServe);                // (*(v5+68))(v5)
                         if (liResult)
                         {
-                            ::EnterCriticalSection(&lpThis->mCompletionLock);     // Mutex::Lock(a1+176)
+                            lpThis->mCompletionLock.Lock(EA::Thread::kTimeoutNone);
                             CompletionCallback lpfnComplete = lpServe->mpfnComplete; // v7 = *(v5+24)
                             lpServe->miResult = liResult;                         // *(v5+4) = v6
                             ::MemoryBarrier();                                     // lwsync: publish before callback
                             lpfnComplete(lpServe);                                 // v7(v5)
                             lpThis->mCompletion.Signal(true);                      // Condition::Signal(a1+224, 1)
-                            ::LeaveCriticalSection(&lpThis->mCompletionLock);      // Mutex::Unlock(a1+176)
+                            lpThis->mCompletionLock.Unlock();
                         }
 
-                        ::EnterCriticalSection(&lpThis->mLock);                   // Mutex::Lock(v2)
+                        lpThis->mLock.Lock(EA::Thread::kTimeoutNone);
                     }
-                    else if (lpThis->mWork.Wait(&lpThis->mLock, &KU_TIMEOUT_NONE) != 0)
+                    else if (lpThis->mWork.Wait(&lpThis->mLock, EA::Thread::kTimeoutNone) != EA::Thread::Condition::kResultOK)
                     {
                         break;
                     }
                 }
                 while (!lpThis->mbStopRequested);          // while (!*(a1+5))
 
-                ::LeaveCriticalSection(&lpThis->mLock);    // Mutex::Unlock(v2)
+                lpThis->mLock.Unlock();
                 lpThis->mbThreadRunning = 0;               // *(a1+4) = 0
                 return 0;
             }
@@ -386,7 +346,7 @@ namespace rw
             //     its ':' so only "scheme:" survives.
             // Then the scheme is the text up to ':' (copied into a small stack buffer) and the
             // device list is walked, matching that scheme case-insensitively against each
-            // device's driver name (DeviceDriver::macName at +4).
+            // device's driver name (DeviceDriver::GetName, the name at +4).
             // -----------------------------------------------------------------------------
             Device* Device::GetInstance(const char* lpcPath, char* lpScratch)
             {
@@ -496,9 +456,9 @@ namespace rw
 
                 // Walk the registered-device list, comparing the scheme to each device's
                 // driver name case-insensitively.
-                for (Device* lpDev = gpFileSysManager->mpDeviceListHead; lpDev; lpDev = lpDev->mpNextRegistered)
+                for (Device* lpDev = gpFileSysManager->mDeviceList.mpHead; lpDev; lpDev = lpDev->mpNext)
                 {
-                    const char* lpcName = (lpDev->mpDriver) ? lpDev->mpDriver->macName : nullptr;  // v26 = v25[80]
+                    const char* lpcName = (lpDev->mpDriver) ? lpDev->mpDriver->GetName() : nullptr;  // v26 = v25[80]
                     if (!lpcName)
                         continue;
 
@@ -534,6 +494,28 @@ namespace rw
                 }
 
                 return lpMatch;
+            }
+
+            // -----------------------------------------------------------------------------
+            // Device::Wait
+            //
+            // Under the completion lock: until the op has a result (miResult, published
+            // with an lwsync by the worker) or the absolute timeout has passed, sleep on the
+            // completion condition. Returns the completion-lock Unlock result.
+            // -----------------------------------------------------------------------------
+            int Device::Wait(AsyncOp* lpOp, const EA::Thread::ThreadTime& lTimeoutAbsolute)
+            {
+                mCompletionLock.Lock(EA::Thread::kTimeoutNone);
+                for (;;)
+                {
+                    ::MemoryBarrier();                                  // lwsync
+                    if (lpOp->miResult != 0)
+                        break;
+                    if (!(EA::Thread::GetThreadTime() < lTimeoutAbsolute))
+                        break;
+                    mCompletion.Wait(&mCompletionLock, lTimeoutAbsolute);
+                }
+                return mCompletionLock.Unlock();
             }
 
             // -----------------------------------------------------------------------------

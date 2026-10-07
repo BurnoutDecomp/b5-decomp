@@ -20,12 +20,7 @@
 // InstancingMatrixArray shader constant is present), and caches three content hashes
 // plus the shader's parameter count.
 
-// The four helpers PostFixUp calls all have REAL committed homes; this TU used to carry
-// local `__debugbreak()` placeholders for them because nothing ever reached PostFixUp
-// while SHADERS.BNDL was unstaged (every technique's shader import came back null and the
-// boot gate below returned early). With the converted SHADERS.BNDL staged and
-// BrnGameModule::GamePrepare really loading it, PostFixUp runs for real -- so the
-// placeholders are gone and the real bodies are used:
+// The four helpers PostFixUp calls, and their homes:
 //   renderengine::BlendState::GetParameters               @0x82B60A50
 //       SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.cpp
 //   ::ShaderConstantsExternal::HasShaderConstant
@@ -263,10 +258,7 @@ namespace CgsResource
         // (The addis +0x10000 is discarded by the halfword store.) The stored value is the
         // technique's shader-PROFILE digit, which ShaderTechniqueResourceType::PostFixUp
         // @0x827EEBF0 stamps into that first byte during its strstr classification.
-        // [FLAG PC boot gate] that classification pass is still inert (see the WorldLinkStubs
-        // gate), so this reads the un-stamped first character of the technique name. Correct
-        // by construction the moment ShaderTechnique PostFixUp lands; no consumer of the
-        // profile field is reconstructed yet.
+        // No consumer of the profile field is reconstructed yet.
         const char* const lpcTechniqueName = PointerFromU32<const char>(lpuShader[37]);
         lpTechnique->mu16ShaderProfile = lpcTechniqueName
             ? static_cast<u16>(static_cast<s8>(*lpcTechniqueName) - 48)

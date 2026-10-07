@@ -3,51 +3,6 @@
 //   ShowTableEmpty @0x82486A08  (DWARF cpp:1390)
 //   SetupButtons   @0x82486A58  (DWARF cpp:1535)
 //   TriggerSound   @0x8249F710  (DWARF cpp:1418, assert cpp:1570)
-//
-//
-// The committed leaf header BrnOnlineScoreboards.h is still the 29-line minimal
-// Engine-cone-wave-19 version (the GetResourcesToLoad inline plus the two resource
-// statics). The wave-I spec's full-shape class had not been applied when this partfile was
-// written, and headers are frozen for implementers, so none of the three bodies can be
-// declared as members and none of the five members they touch exists. Measured with the
-// compile gate, not assumed: cl /c reports "ShowTableEmpty/SetupButtons/TriggerSound ist
-// kein Member von BrnGui::OnlineScoreboards" plus undeclared mbTableEmptyShowing,
-// mTableEmptyAnimator, mbUsingFilters, mButtonAnimator, mTable, mpStateInterface.
-//
-// The complete, drop-in-ready partfile (single `namespace BrnGui { ... }`, one anonymous
-// namespace, no duplicated constants) lives at
-// with a banner naming the exact declaration lines that unblock it. Copy it over this file
-// once the spec's full-shape header lands; no edit is needed.
-//
-// EXACT DECLARATIONS THAT UNBLOCK IT (all inside
-// `struct BrnGui::OnlineScoreboards : public CgsGui::State`, private section -- every one
-// of them is already part of the spec's full-shape header):
-//     void ShowTableEmpty(bool lbShow);            // @0x82486A08
-//     void SetupButtons();                         // @0x82486A58
-//     void TriggerSound(s32 leGameInputAction);    // @0x8249F710
-//     bool                      mbUsingFilters;      // X360 +3584
-//     LeaderboardTableComponent mTable;              // X360 +15376  "Table_mc"
-//     AnimationComponent        mButtonAnimator;     // X360 +20048  "ButtonPrompts_anim"
-//     AnimationComponent        mTableEmptyAnimator; // X360 +20188  "TableEmpty_anim"
-//     bool                      mbTableEmptyShowing; // X360 +20328
-// plus the two member-type includes (BrnAnimationComponent.h,
-// BrnLeaderboardTableComponent.h).
-//
-// against a SHADOW copy of the header carrying only those declarations --
-// scratchpad/waveI/probe00/ (run_probe.py prints PROBE_STATUS=pass). The faithfulness lint
-// reports 0 new findings on it. No other declaration is needed.
-//
-// CgsGuiStateInterface.h + CgsVariableEventQueue.h + BrnGuiEventTypeDefs.h. TypeDefs is the
-// side of the TypeDefs/Demangled hard collision this group needs (GuiAudioTriggerEvent);
-// the id-457 wire word is restored by a file-local view over it, as in the two committed
-// twins.
-//
-// LINK NOTE for the conductor: SetupButtons calls
-// LeaderboardTableComponent::GetRowsBefore/GetRowsAfter (declared in
-// BrnLeaderboardTableComponent.h, bodies owned by their own ledger TUs and defined nowhere
-// in the tree yet), GuiAudioTriggerEvent::Construct and
-// CgsGui::GuiComponent::AddOutputAptViewState. All are invisible to cl /c and may be
-// unresolved at link until those TUs land -- same as wave H.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineScoreboards.h"

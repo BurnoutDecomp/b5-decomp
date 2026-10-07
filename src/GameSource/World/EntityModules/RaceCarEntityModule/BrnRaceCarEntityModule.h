@@ -168,17 +168,17 @@ class RaceCarEntityModule
 public:
         // ---- ADDITIVE (attested by WorldModule::Construct @0x827CF540, which
         //      virtual-dispatches the fleet lifecycle) ----
-        // Declaration-only; the body lands with this module's own TU.
+        // Bodied in BrnRaceCarEntityModule.cpp.
         void Construct();
         // ---- ADDITIVE (attested by WorldModule::DestructWorld @0x827BD0F0) ----
-        // Declaration-only; the body lands with this module's own TU.
+        // Bodied in BrnRaceCarEntityModule_wS34_00.cpp.
         void Destruct();
         // ---- ADDITIVE (attested by WorldModule::ReleaseWorld @0x827BCE58) ----
-        // Declaration-only; the body lands with this module's own TU.
+        // Bodied in BrnRaceCarEntityModule_wS34_00.cpp.
         bool Release();
 
         // ---- ADDITIVE (WorldModule::EntityModulePrePhysicsUpdate @0x827BD5B8) ----
-        // Declaration-only; body with this module's own TU.
+        // Bodied in BrnRaceCarEntityModule.cpp.
         void PrePhysicsUpdate( RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
                                RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput,
                                BrnUpdateSet lUpdateSet );
@@ -263,15 +263,13 @@ public:
             RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput );
 
         // ---- ADDITIVE (WorldModule::EntityModulePreSceneUpdate @0x827BD1F0) ----
-        // Declaration-only; body gated in WorldLinkStubs.cpp until this module's
-        // own TU lands.
+        // Bodied in BrnRaceCarEntityModule.cpp.
         void PreSceneUpdate( RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
                              RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput,
                              BrnUpdateSet lUpdateSet );
 
         // ---- ADDITIVE (WorldModule::EntityModulePostPhysicsUpdate @0x827D3F10) ----
-        // Declaration-only; body gated in WorldLinkStubs.cpp until this module's
-        // own TU lands.
+        // Bodied in BrnRaceCarEntityModule.cpp.
         void PostPhysicsUpdate( RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
                                 RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput,
                                 BrnUpdateSet lUpdateSet );
@@ -1602,7 +1600,7 @@ private:
     // the lists stay empty and the bit reads false -- honest state, not a stub.
     NearMissManager mNearMissManager;
 
-    // ⭐⭐ X360 +0x18098 (98520). DWARF :351. ADDITIVE CARVE (boost-ticker wave 2026-09-14).
+    // ⭐⭐ +0x180D8 (98520), :351. ADDITIVE CARVE.
     // The console's PostPhysicsUpdate @0x82307538 ticks it at 0x82307... --
     // `AirTimeManager::Update(module + 98520, playerCar->GetPhysicsState(), mfTimeStep,
     // lpOutput->GetGameEventQueue())` -- inside the second sim-paused skip, right after the

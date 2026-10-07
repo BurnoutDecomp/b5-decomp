@@ -11,18 +11,9 @@
 // LoadProp @0x822F2EF0 needs, plus the three bookkeeping bodies PropEntitySerialiser calls
 // that share the same table and the same PropLoadedZoneRecord decode.
 //
-// [2026-08-18 UPDATE, wave Q round 2] Six of the ten functions this banner listed as
-// DECLARED-ONLY are now bodied in the sibling partfile
-// BrnReplayPropSerialiserFrame_wQ2_owner.cpp (IsPropAddedToScene @0x822CD818, IsCellActive
-// @0x822BBDA0, WriteProp @0x822BB528, WritePart @0x822BB718, GetPropTransform @0x822BB920,
-// GetPartTransform @0x822BBA18), and KeyFrameRead @0x826586B0 in
-// BrnReplayPropSerialiserFrame_wQ2_keyframe.cpp.
-//
-// STILL DECLARED-ONLY: Read @0x82653120, Write @0x82657FE0 and KeyFrameWrite (unnamed in the
-// IDA export). All three -- and KeyFrameRead -- still carry INERT BOOT GATES in
-// GameSource/World/WorldLinkStubs.cpp:3842-3900; see the report in
-// scratchpad/waveQ2/replays.owner.md for the KeyFrameRead collision the conductor must resolve
-// when it mounts the keyframe partfile.
+// The rest of the class is bodied further down this file (WriteProp, WritePart,
+// GetPropTransform, GetPartTransform, IsCellActive, IsPropAddedToScene, KeyFrameRead) and in
+// BrnReplayPropSerialiserFrame_serialise.cpp (Read, Write, KeyFrameWrite).
 //
 // The class declaration's real console home is BrnReplayPropEntitySerialiser.h (the X360
 // assert in SetPropAddedToScene @0x822BBC28 bakes

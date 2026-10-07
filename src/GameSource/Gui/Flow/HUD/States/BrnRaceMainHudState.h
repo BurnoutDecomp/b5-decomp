@@ -173,10 +173,6 @@ namespace BrnGui
         //     stw  r11, 0(r4)                      ; *lppResourceTuples = maResourcesToLoad
         //     lis  r11, dword_82F25F84@ha ; lwz r11, dword_82F25F84@l(r11)
         //     stw  r11, 0(r5)                      ; *lpuNumberOfResources = muNumResourcesToLoad
-        // Deliberately kept INLINE here rather than moved into BrnRaceMainHudState.cpp:
-        // BrnHudFlow.cpp is on the build and needs the vtable, and while this TU is
-        // unmounted an out-of-line body would add a fourth undefined symbol that
-        // BrnHudStatesLinkStubs.cpp does not carry (it stubs only OnEnter/OnLeave/Update).
         virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
                                         u32* lpuNumberOfResources) const
         {

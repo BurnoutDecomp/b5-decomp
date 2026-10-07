@@ -2,33 +2,25 @@
 
 #include "SDKs/Realmc/RealmcCore.h"  // RealmcCore::AllocateMem / FreeMemSize
 
+#include <new>  // placement new (each slot's SaveReq copy)
+
 // ===========================================================================
 // RealmcIface::SaveCheckParams -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
 // No leak source / no DWARF: SHAPE and BODY both come from the X360 asm (see
 // RealmcIfaceSaveCheckParams.h for the layout). Reproduced store-for-store /
 // branch-for-branch; the do/while loops are de-optimized to for-loops with the
-// identical bounds and side effects.
+// identical bounds and side effects. Each slot holds a SaveReq copy-constructed
+// in a block from the Realmc allocator (SaveReq's copy ctor, RealmcSaveReq.cpp).
 //
-// The per-slot SaveReq copy is the X360 sub_82B51DC0 -- SaveReq's copy
-// constructor, which is NOT homed in this tree (external/unknown in the ledger;
-// a distinct routine from SaveReq's 6-arg ctor @ 0x82B51D60). It is declared
-// below as an un-homed external helper so this TU reproduces the copy call
-// across the TU boundary WITHOUT fabricating that routine's body.  <<< FLAG
+// Host widths: the slot array holds host pointers, so it is sized and freed as
+// sizeof(SaveReq*) per slot (the console's 4); a SaveReq is 0x164 bytes on both.
 // ===========================================================================
 
 namespace RealmcIface
 {
 
-// ---------------------------------------------------------------------------
-// FLAG (un-homed dependency): the X360 SaveReq copy constructor, sub_82B51DC0.
-//   int *__fastcall sub_82B51DC0(_DWORD *Dst, _DWORD *Src)  -- copy-construct a
-//   356-byte SaveReq at Dst from the SaveReq at Src, returning Dst. Its body is
-//   not attested in this TU's asm; declared extern here (mirrors the
-//   RealmcCopyEntryContentParams boundary in RealmcSaveReq.h). Defined by the
-//   SaveReq TU when that copy ctor is homed.
-// ---------------------------------------------------------------------------
-SaveReq* RealmcCopySaveReq(void* pDst, const void* pSrc);
+static_assert(sizeof(SaveReq) == 0x164, "SaveReq is 0x164 bytes on the host too");
 
 // ---------------------------------------------------------------------------
 // SaveCheckParams::SaveCheckParams @ 0x82B51E38
@@ -49,15 +41,14 @@ SaveCheckParams::SaveCheckParams(s32 nCount, SaveReq* const* paSources)
     mppReqs = nullptr;                                            // +0x004
     if (nCount)
     {
-        mppReqs = static_cast<SaveReq**>(
-            RealmcCore::AllocateMem("SaveReq array", 4 * static_cast<std::size_t>(nCount)));
+        mppReqs = static_cast<SaveReq**>(RealmcCore::AllocateMem(
+            "SaveReq array", sizeof(SaveReq*) * static_cast<std::size_t>(nCount)));
     }
 
     for (s32 i = 0; i < mCount; ++i)
     {
-        void* pMem = RealmcCore::AllocateMem("SaveReq", 0x164);   // 356 bytes
-        mppReqs[i] = pMem ? RealmcCopySaveReq(pMem, paSources[i]) // sub_82B51DC0
-                          : nullptr;
+        void* pMem = RealmcCore::AllocateMem("SaveReq", sizeof(SaveReq));
+        mppReqs[i] = pMem ? new (pMem) SaveReq(*paSources[i]) : nullptr;
     }
 }
 
@@ -76,12 +67,12 @@ SaveCheckParams::~SaveCheckParams()
 {
     for (s32 i = 0; i < mCount; ++i)
     {
-        RealmcCore::FreeMemSize(mppReqs[i], 0x164);               // 356 bytes
+        RealmcCore::FreeMemSize(mppReqs[i], sizeof(SaveReq));
     }
 
     if (mppReqs)
     {
-        RealmcCore::FreeMemSize(mppReqs, 4 * static_cast<u32>(mCount));
+        RealmcCore::FreeMemSize(mppReqs, static_cast<u32>(sizeof(SaveReq*)) * static_cast<u32>(mCount));
     }
 }
 

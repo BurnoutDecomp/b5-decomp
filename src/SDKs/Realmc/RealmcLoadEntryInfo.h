@@ -7,9 +7,10 @@
 // and the RealmcCore primitives in RealmcCore.h).
 //
 // This header is the canonical OWNING home for the LoadEntryInfo struct and its
-// two reconstructed member functions:
+// three reconstructed member functions:
 //
 //     RealmcIface::LoadEntryInfo::LoadEntryInfo  @ 0x82B519E8   (default ctor)
+//     RealmcIface::LoadEntryInfo::LoadEntryInfo                 (name + two pairs)
 //     RealmcIface::LoadEntryInfo::operator=      @ 0x82B51A78   (copy assign)
 //
 // There is no Feb-2007 leak source and no DWARF for this TU, so the SHAPE below
@@ -27,9 +28,12 @@
 //                      opaque save-entry payload (file/slot identifiers, name,
 //                      etc.) the X360 moves wholesale, so they are modelled as a
 //                      raw byte block rather than fabricated named members.
-//   +0x20 .. +0x24     two opaque 32-bit words. The ctor zero-stores each
-//                      individually; operator= copies each individually (NOT via
-//                      the head memcpy). Opaque to this TU -> u32[2].
+//   +0x20 .. +0x24     a second { pointer, size } pair: the three-argument ctor
+//                      copies its first DataBuffer argument here word for word,
+//                      exactly as it copies the second one into +0x28/+0x2C. The
+//                      default ctor zero-stores each word; operator= copies each
+//                      individually (NOT via the head memcpy). Every caller passes
+//                      {0,0} and the Xenon file layer never reads it.
 //   +0x28              the entry's DATA-BUFFER pointer. Attested by the X360 asm:
 //                      RealmcIface::XenonUtil::ReadFileLayer2 loads *(entry+0x28)
 //                      and hands it to ReadFile as the read destination, and
@@ -49,7 +53,7 @@
 //   the +0x28 data pointer widens to 8 bytes (semantic parity by named members,
 //   not byte offsets).
 //
-// STORE ORDER (operator=, exact): the two opaque trailing words are copied FIRST
+// STORE ORDER (operator=, exact): the +0x20 pair is copied FIRST
 // (+0x20, +0x24), then the data pointer (+0x28) and the size (+0x2C), THEN the
 // 32-byte head is memcpy'd, THEN the +0x1F flag byte is zeroed last. Reproduced
 // verbatim in the .cpp.
@@ -68,23 +72,20 @@ public:
     // @ 0x82B519E8 -- zero the four trailing words and the leading head byte.
     LoadEntryInfo();
 
-    // @ 0x82B51A08 -- DECLARATION ONLY (wave B; body still owned by this SDK TU's
-    //                 remaining fan-out): build a record from an entry name plus two
-    //                 DataBuffer pairs. Grounded in its four CgsGui::SaveLoadSystem
-    //                 call sites (BootupStart @0x82855A60, LoadHandleConfirmLoad
-    //                 @0x82855EC0, Save @0x82856040, CreateRealmcMugshotLoadEntryInfo
-    //                 @0x828523D0): r4 = the name ("Mugshots" / the 32-byte macTitle
-    //                 head), r5 = a zeroed {0,0} pair, r6 = the { data, size } pair.
-    //                 FLAG: parameter roles from the call sites; pA's meaning is
-    //                 unrecovered (every caller passes {0,0}).
+    // Build a record from an entry name plus two DataBuffer pairs: pA lands in the
+    // +0x20 pair, pB in mpData/muDataSize; then the 32-byte name head is copied
+    // (and its +0x1F byte cleared) when pName is given, else only the leading
+    // head byte is cleared. Callers pass the name ("Mugshots" / the 32-byte
+    // macTitle head), a zeroed {0,0} pair, and the { data, size } pair.
     LoadEntryInfo(const char* pName, const DataBuffer* pA, const DataBuffer* pB);
 
-    // @ 0x82B51A78 -- copy the two opaque words, the data pointer and the size,
-    //                 then the 32-byte head, then clear the +0x1F flag byte.
+    // Copy the +0x20 pair, the data pointer and the size, then the 32-byte
+    // head, then clear the +0x1F flag byte.
     LoadEntryInfo& operator=(const LoadEntryInfo& rOther);
 
     std::uint8_t  maHead[0x20];     // +0x00  opaque head; +0x1F is a flag byte
-    std::uint32_t maTrailing[2];    // +0x20  two opaque 32-bit words
+    void*         mpAuxData;        // +0x20  first DataBuffer argument's pointer
+    std::uint32_t muAuxDataSize;    // +0x24  first DataBuffer argument's size
     void*         mpData;           // +0x28  data-buffer pointer (Read/WriteFile
                                     //         buffer + Crc32 input; asm-attested)
     std::uint32_t muDataSize;       // +0x2C  data byte count (asm-attested)

@@ -496,23 +496,15 @@ Vector3 EulerAnglesZXYFromMatrix44Affine(Matrix44Affine lIn, Vector3* lpLastAngl
 // ----------------------------------------------------------------------------
 // RotateMatrix44AffineByEulerAnglesZXY  @0x82204F98 / PS3 @0xA9780   (368 asm lines)
 //
-// BODIED 2026-08-02 (rotate-helper wave). It was DECLARATION-ONLY and it was the highest-
-// leverage symbol left in the chase-camera cluster: BehaviourGameplayExternal's
-// CalculateCameraTransform needs it twice and ApplyJumpEffects once, BrnCameraShake.cpp
-// cannot be mounted without it, and BrnPerlinShakeController / BrnBehaviourDebugFlyWorld /
-// BrnLooker already call it.
+// Callers: BehaviourGameplayExternal's CalculateCameraTransform (twice) and ApplyJumpEffects
+// (once), BrnCameraShake.cpp, and BrnPerlinShakeController / BrnBehaviourDebugFlyWorld /
+// BrnLooker.
 //
-// ⛔⛔ ITS COMMITTED BLOCKING REASON WAS STALE, AND IT IS THE SAME STALE SHAPE THIS FILE'S
-// OWN BANNER ALREADY WARNS ABOUT. DirectorLinkStubs.cpp said the body is "almost entirely an
-// inlined XMVectorSinCos minimax polynomial whose coefficient table has not been dumped".
-// The first clause is true and the second is true, AND NEITHER IS A REASON: the coefficients
-// are an implementation detail OF sin and cos, and de-optimising a console minimax to the
-// exact libm form is the standing convention of this very file -- already applied to
-// XMVectorASin and XMVectorATan inside EulerAnglesZXYFromMatrix44Affine directly above, and
-// to vrsqrtefp/vrefp in Normalize and OrthoNormalize3x3. There was never anything to
-// fabricate. (`ApplyPitchAboutPointRads @0x822183E0` is still on the banner's FLAG list
-// citing the SAME rodata range 82000BD0..82000C60 for the SAME reason -- re-read it before
-// trusting it.)
+// The console body is almost entirely an inlined XMVectorSinCos minimax polynomial. The
+// coefficients are an implementation detail OF sin and cos, and de-optimising a console
+// minimax to the exact libm form is the standing convention of this file -- already applied
+// to XMVectorASin and XMVectorATan inside EulerAnglesZXYFromMatrix44Affine directly above,
+// and to vrsqrtefp/vrefp in Normalize and OrthoNormalize3x3.
 //
 // WHAT THE ASM ACTUALLY IS, and how each claim below was settled:
 //

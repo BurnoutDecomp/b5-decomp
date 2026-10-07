@@ -241,7 +241,7 @@ const char* CollisionStateManager::GetTypeName() const
 //            MakeHash("~AemsFactory::SK_NAME~") (CRT thunk 0x82C65790), the collision splice
 //            bank on dword_83008404 / dword_83005F24 (the splicer factory / "CollisionSpliceBank");
 //            wait until all three are loaded; miCpuMonitor (+0x94) =
-//            PerfMonCpu::AddMonitor("Collisions", 14, 0, 1.0f, 0, 1) (0x826F8E00..0x826F8E20);
+//            PerfMonCpu::AddMonitor("Collisions", E_PMP_14, false, 1.0f, true);
 //   state 3: if (!StateManager::PrepareStates(3, 7, 0)) return 0;
 //   state 4: return 1;
 //
@@ -307,7 +307,7 @@ bool CollisionStateManager::Prepare()
             !lbSplicerBankLoaded)
             return false;
 
-        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor("Collisions", 14, 0, 1.0, 0, 1);  // 0x826F8E1C
+        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor("Collisions", CgsDev::E_PMP_14, false, 1.0f, true);
     }
         // fall through
     case E_PREPARE_STATES:

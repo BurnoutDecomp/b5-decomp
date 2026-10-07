@@ -1815,8 +1815,6 @@ void NFSMixMap::InitMainMapStates()
     ConnectMixMap();
 }
 
-// ---- RELOCATED HOME (2026-08-25, audio-faithfulness wave 2; from AptRenderLinkStubs.cpp,
-// a 2026-08-07 targeted-export placement artifact) ----
 // NFSMixMap::CreateMainMapState @0x82B49680 (targeted export 2026-08-07) -- build /
 // extend the per-state NFSMixMapState and wire its serialized state header, then run
 // the builder passes on the state copy for this object index:

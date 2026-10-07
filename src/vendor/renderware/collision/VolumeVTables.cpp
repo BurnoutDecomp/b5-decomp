@@ -432,10 +432,9 @@ const Volume::VTable gVolumeHandler_82F91740 =                  // type 1 SPHERE
     FoldedGetIntervalReturnsTrue,           // 82BAC980  ICF-folded `li r3,1 ; blr`
     SphereGetMaximumFeature,                // 82BA81B0  SphereVolume::GetMaximumFeature
     SphereCreateGPInstance,                 // 82BA8100  SphereVolume::CreateGPInstance
-    // ✅ UNPARKED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)). The wave-Q5 park read: a ray/sphere kernel
-    // around rwcSphereLineSegIntersect with two Newton-Raphson chains and a CR-bit predicate, whose only
-    // consumer, rw::collision::VolumeLineQuery, was a link stub. That consumer has a body since d6040b9f and
-    // the director camera's line tests reach it; the kernel is in LineSegIntersect.cpp.
+    // A ray/sphere kernel around rwcSphereLineSegIntersect with two Newton-Raphson chains and a CR-bit
+    // predicate (body in LineSegIntersect.cpp). Its consumer is rw::collision::VolumeLineQuery, which the
+    // director camera's line tests reach.
     SphereLineSegIntersect,                 // 82BA82C8  SphereVolume::LineSegIntersect
     FoldedReleaseEmptyBody,                  // 82AD5078  ICF-folded empty `blr`
     "SphereVolume",

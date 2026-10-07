@@ -1,6 +1,7 @@
 #include "SDKs/Realmc/RealmcEntryContentName.h"
 
 #include <cstring>  // std::memcpy / std::memset / std::strncpy
+#include <new>      // placement new (RealmcCopyEntryContentParams)
 
 // ===========================================================================
 // RealmcIface::EntryContentName -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -94,6 +95,33 @@ EntryContentName::EntryContentName(const void* pTitleSource,
     // (double)(__int64)nSizeSeed -> float -> * 2.8f -> truncate toward zero.
     const float lfScaled = static_cast<float>(static_cast<long long>(nSizeSeed)) * 2.8f;
     mnSize = static_cast<std::int32_t>(lfScaled);
+}
+
+// ---------------------------------------------------------------------------
+// EntryContentName::EntryContentName (copy)
+//
+// mnSize is copied first, then the title and the file name go through the same
+// SetTitle / SetFileName paths the value ctor uses (so the +0xFE word and the
+// +0x129 byte are re-terminated). muField130/muField134 are left alone.
+// ---------------------------------------------------------------------------
+EntryContentName::EntryContentName(const EntryContentName& rOther)
+{
+    mnSize = rOther.mnSize;
+    SetTitle(rOther.macTitle);
+    SetFileName(rOther.macFileName);
+}
+
+// ---------------------------------------------------------------------------
+// RealmcCopyEntryContentParams -- copy-construct the 0x138-byte params block at
+// pDst from the one at pSrc: the EntryContentName copy ctor above, then the two
+// trailing words +0x130 and +0x134. Callers: SaveReq's two ctors.
+// ---------------------------------------------------------------------------
+void RealmcCopyEntryContentParams(void* pDst, const void* pSrc)
+{
+    const EntryContentName& lrSrc = *static_cast<const EntryContentName*>(pSrc);
+    EntryContentName* lpDst = new (pDst) EntryContentName(lrSrc);
+    lpDst->muField130 = lrSrc.muField130;
+    lpDst->muField134 = lrSrc.muField134;
 }
 
 } // namespace RealmcIface

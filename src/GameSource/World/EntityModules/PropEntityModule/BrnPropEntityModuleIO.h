@@ -1130,10 +1130,8 @@ namespace PropEntityIO
             return &mRaceCarCrashCompleteEventQueue;
         }
 
-        // DWARF :513. DECLARATION ONLY -- no X360 out-of-line symbol and no decompiled fold
-        // exists for it (its producer, WorldModule::BridgeCrashModuleToPropModule_PostScene,
-        // is still the inert boot gate at WorldLinkStubs.cpp:2305), so writing a body would be
-        // invention. Declared so the bridge can be spelled against the real name when it lands.
+        // :513. Bodied in BrnPropEntityModuleIO_InputBuffer_PostScene.cpp; its caller is
+        // WorldModule::BridgeCrashModuleToPropModule_PostScene (WorldBridgePropModule.cpp).
         void AppendRaceCarCrashQueue(const RaceCarCrashCompleteEventQueue* lpQueue);
 
         static void _AssertLayout();

@@ -663,21 +663,11 @@ namespace CgsPhysics
     // X360-attested offsets and each has its const accessor bodied -- see
     // CgsPhysicsSimulationModuleIO.h. Landing a drain is now purely about the drain.
     //
-    // AND ABOVE ALL OF IT: BrnPhysics::PhysicsModule::Update @0x825B0640 is itself
-    // 1,999 instructions and is STILL A LINK STUB (GameSource/World/WorldLinkStubs.cpp,
-    // "PhysicsModule::Update: inert [FLAG PC boot gate]"). Its depth-1 closure is ~50
-    // functions / ~15,000 instructions, including BridgeContactsToSimulation 1,671,
-    // StartVehicleContactGeneration 1,229, FixUpVehicleContacts 1,067,
-    // UpdateVehiclePhysics 1,038, DeformationManager::Update 1,021,
-    // DoCrashPrediction 814.
-    //
-    // ⚠️⚠️ 2026-08-05 -- AND THAT STUB IS THE **ONLY** RUNTIME PATH TO THE TWO VIRTUALS.
-    // Verified this wave: Update/ProcessInput have EMPTY xref sets (pure vtable dispatch);
-    // the base no-arg ModuleSingleBuffered::Update() is "// Empty on purpose" and is not
-    // what these override (they are NEW virtuals with their own signatures, like Prepare);
-    // no module-manager pump reaches them. ⇒ Landing the two virtuals makes the chain
-    // LINK-complete but NOTHING EXECUTES until PhysicsModule::Update is reconstructed.
-    // "Witness an empty tick on a default run" is not achievable before that wave.
+    // ⚠️ BrnPhysics::PhysicsModule::Update (BrnPhysicsModuleUpdateFunctions.cpp) is the
+    // ONLY runtime path to the two virtuals: Update/ProcessInput have EMPTY xref sets (pure
+    // vtable dispatch); the base no-arg ModuleSingleBuffered::Update() is "// Empty on
+    // purpose" and is not what these override (they are NEW virtuals with their own
+    // signatures, like Prepare); no module-manager pump reaches them.
     //
     // ⭐⭐ 2026-08-06 -- THE GAME-SIDE GAP IS CLOSED. Every entry of the "UNBODIED" list that
     // stood here (the six output/closure functions + the two virtuals) is bodied in the
@@ -693,10 +683,6 @@ namespace CgsPhysics
     //     IOBuffer Lock/Unlock x4, IOBufferStack::Create/DestroyIOBuffer<T>,
     //     PairSet::ClearAll, Simulation::SimulationUpdate -- all pre-existing, all consumed
     //     by Update's body now.
-    //
-    // RUNNING TOTAL for "a car moves under its own physics": ~25,000 X360 instructions,
-    // VMX-heavy, plus RaceCarPhysics.cpp which is still unmounted. Consistent with
-    // [[vehicle-physics-is-the-wall]]'s 6-9 wave estimate; NOT a one-wave gap.
     // =================================================================================
     class PhysicsSimulationModule : public CgsModule::ModuleSingleBuffered
     {
@@ -778,10 +764,8 @@ namespace CgsPhysics
         // ⚠️ The SECOND IOBufferStack argument is accepted and NEVER READ (r5 is dead on
         // entry in the X360 body; only the first stack allocates the IslandGenerator).
         // Reconstructed as shipped -- flag, don't fix.
-        // ⚠️⚠️ STILL UNREACHED AT RUNTIME: the only console caller is
-        // BrnPhysics::PhysicsModule::Update @0x825B0640, the inert WorldLinkStubs boot-gate
-        // stub. Landing these makes the chain LINK-complete; nothing executes until that
-        // stub's ~15k-insn closure lands, and /OPT:REF strips this whole cluster meanwhile.
+        // The only console caller is BrnPhysics::PhysicsModule::Update
+        // (BrnPhysicsModuleUpdateFunctions.cpp).
         // =================================================================================
         virtual void Update(CgsModule::IOBufferStack* lpTempStack,
                             CgsModule::IOBufferStack* lpUnusedStack,

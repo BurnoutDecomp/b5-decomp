@@ -112,14 +112,8 @@ void NFSMixMaster::ProcessMixMap(float lfDeltaTime, int liCamState)
     m_pMainMixMap->ProcessMixMap(lfDeltaTime, liCamState); // vtable[2]
 }
 
-// ---- RELOCATED HOME (2026-08-25, audio-faithfulness wave 2; from AptRenderLinkStubs.cpp,
-// a 2026-08-07 targeted-export placement artifact) ----
-// NFSMixMaster::InitMixMap @0x82B45920 -- the asm is exported and decoded, and its
-// callee NFSMixMap::CreateMainMapState @0x82B49680 is now homed (below), but the
-// body still needs NFSMixMap::AllocateInputArrays @0x82B4A120 and InitMainMapStates
-// @0x82B4ABD0 (declared-only in NFSMixMap.hpp; bodies deferred in the NFSMix
-// cluster -- both now have per-address dossiers in the export dir), so a faithful
-// body here would still trade the stub for unresolved externals.
+// NFSMixMaster::InitMixMap -- build the main mix map. Its callees (InitMixMap,
+// CreateMainMapState, AllocateInputArrays, InitMainMapStates, ...) are in NFSMixMap.cpp.
 void NFSMixMaster::InitMixMap()
 {
     m_pMainMixMap->InitMixMap(m_pMainMixMapData, m_pMainMixMap);

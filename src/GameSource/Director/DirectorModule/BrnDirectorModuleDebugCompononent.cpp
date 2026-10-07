@@ -9,13 +9,9 @@
 //   - TakePanorama
 //   - (Destruct is declared in the original header but has no recovered body)
 //
-// OnActivate, RenderHUD, StartEditor and UpdatePanoramaScreenshots remain declaration-only
-// -- see the per-function BLOCKED comments in the header. All four reach into
-// BrnDirector::DirectorModule's still-unmodelled multi-megabyte layout
-// (BrnDirectorModule.h is constructor-only) by raw byte offset off mpDirectorModule, which
-// the project convention forbids reconstructing as a raw offset-cast; RenderHUD and
-// UpdatePanoramaScreenshots additionally involve heavy vector-unit matrix/quaternion math
-// with no recovered semantic names for their coefficient tables.
+// RenderHUD and UpdatePanoramaScreenshots are bodied in BrnDirectorModuleDebugCompononent_wS34_00.cpp.
+// OnActivate (stubbed in DirectorLinkStubs.cpp), StartEditor, SavePlaylists and LoadPlaylists
+// remain unbodied -- see the per-function BLOCKED comments in the header.
 // ============================================================================
 
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugCompononent.h"

@@ -868,9 +868,8 @@ bool Class::RemoveCollection(Collection* lpCollection)
 //   0x82808A4C  i = UpdateSearchLength(home, luIndex)          (r4 = home, r5 = slot)
 //   0x82808A5C  while (i < mTableSize) i = UpdateSearchLength(i, i)
 //   0x82808A78  return the removed collection
-// Landed 2026-09-03 with Attrib::Collection::~Collection @0x8280C3F8, whose
-// Class::RemoveCollection call is the only caller on the GC path (it was a
-// CGS_ASSERT(false) link stub in GameSource/World/WorldLinkStubs.cpp until then).
+// The only caller on the GC path is Attrib::Collection::~Collection's
+// Class::RemoveCollection call.
 Collection* CollectionHashMap::RemoveIndex(u32 luIndex)
 {
     if (luIndex >= mTableSize)

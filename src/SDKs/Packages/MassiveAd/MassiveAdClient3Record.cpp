@@ -36,14 +36,14 @@ namespace MassiveAdClient3
 // the (empty) members already are -- the explicit zero-init below mirrors the
 // X360 stores for the non-class field.
 // ---------------------------------------------------------------------------
-CMassiveRecord::CMassiveRecord(int nType, int nField14, int nField18)
+CMassiveRecord::CMassiveRecord(CMassiveAsset* pAsset, int nField14, int nField18)
     : CMassiveBaseObject("CMassiveRecord")
     , mnField14(nField14)        // this[5] = a3
     , mnField18(nField18)        // this[6] = a4
-    , mnType(nType)              // this[7] = a2
+    , mpAsset(pAsset)
     , mImpression0(2)            // CMassiveRecordImpression(this+0x20, 2)
     , mImpression1(1)            // CMassiveRecordImpression(this+0x80, 1)
-    , mnFieldE0(0)               // this[56] = 0
+    , mpCurrentImpression(0)
     , mInteractionRecords()      // this[57..60] = 0 (empty list)
 {
 }

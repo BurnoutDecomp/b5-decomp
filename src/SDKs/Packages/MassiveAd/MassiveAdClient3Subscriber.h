@@ -28,9 +28,9 @@
 // namespace and the class/method names are external middleware identifiers
 // PRESERVED VERBATIM (not the project mp/lf/KI_ scheme).
 //
-// Layout (X360-relative offsets, reproduced by NAME; the leading vftable pointer
-// is modelled by the virtual dtor, so absolute host offsets differ from the X360
-// 4-byte-pointer offsets and are not asserted):
+// Layout (console offsets, reproduced by NAME; the leading vftable pointer is the
+// three-slot callback table below, so absolute host offsets differ from the
+// console's 4-byte-pointer offsets and are not asserted):
 //   +0x00  vftable pointer            (off_8218478C; installed by the ctor)
 //   +0x04  mpcName                    (MassiveMalloc'd copy of the slot name)
 //   +0x08  mpAdObject                 (the attached CMassiveAdObject, or 0)
@@ -59,7 +59,18 @@ class CMassiveAdObjectSubscriber
     // CMassiveAdObjectModelDynamic::Initialize name-matches each queued subscriber's
     // private mpcName (+0x04) directly -- `CompareStrings(name, subscriber+0x04)`
     // @ 0x82BDEF4C -- the same attested pattern already granted to the zone manager.
+    // The audio/texture/video Dynamic siblings do the same.
     friend class CMassiveAdObjectModelDynamic;
+    friend class CMassiveAdObjectTextureDynamic;
+    friend class CMassiveAdObjectAudioDynamic;
+    friend class CMassiveAdObjectVideoDynamic;
+
+    // The ad placements link, notify and score their subscribers through these fields directly.
+    friend class CMassiveAdObject;
+    friend class CMassiveAdObjectTexture;
+    friend class CMassiveAdObjectAudio;
+    friend class CMassiveAdObjectVideo;
+    friend class CMassiveAdObjectModel;
 
 public:
     // @ 0x82BCE968. Copies the slot name, then -- when the client core and its
@@ -69,11 +80,21 @@ public:
     // no zone).
     CMassiveAdObjectSubscriber(const char* pcName);
 
-    // The X360 ctor installs this class's vftable (off_8218478C); modelled by a
-    // virtual destructor. No standalone dtor body is attested in this TU (the
-    // pooled owner, BrnMassive, drives teardown), so it is defined empty here to
-    // supply the polymorphic machinery the ctor's vftable store implies.
-    virtual ~CMassiveAdObjectSubscriber();
+    // Non-virtual: the class's vftable holds only the three download callbacks
+    // below. Re-installs this class's vftable, detaches from the attached ad object
+    // (or from the current zone's pre-subscriber queue) and frees the name copy.
+    ~CMassiveAdObjectSubscriber();
+
+    // ----- download callbacks (the vftable, in slot order) --------------------
+    // Slot 0: an ad download for this subscriber has started. Base: returns 1.
+    virtual int MediaDownload(int nAdvertId);
+
+    // Slot 1: the delivered asset is ready (body below).
+    virtual int MediaDownloadComplete(const void* pData, int nSize, unsigned int nMediaType,
+                                      int nAdvertId);
+
+    // Slot 2: per-tick hook. Base: empty.
+    virtual void Tick();
 
     // @ 0x82BCEB88. Records a viewed impression: clears then copies the 32-byte
     // impression block from pImpressionData into macImpression. A null argument is
@@ -93,12 +114,10 @@ public:
     // is attached.
     int GetCrexID();
 
-    // @ 0x82BCEC70. On a valid data buffer, derives the asset's file extension
-    // from nMediaType, builds the cache path "game:\<advertId>_<name><ext>", and
-    // writes the nSize-byte buffer to it through the MassiveAd file hooks. Always
-    // returns 1.
-    int MediaDownloadComplete(const void* pData, int nSize, unsigned int nMediaType,
-                              int nAdvertId);
+    // MediaDownloadComplete (slot 1, declared above): on a valid data buffer,
+    // derives the asset's file extension from nMediaType, builds the cache path
+    // "game:\<advertId>_<name><ext>", and writes the nSize-byte buffer to it
+    // through the MassiveAd file hooks. Always returns 1.
 
 private:
     char*             mpcName;                     // +0x04

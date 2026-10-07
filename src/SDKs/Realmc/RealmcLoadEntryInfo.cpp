@@ -1,4 +1,5 @@
 #include "SDKs/Realmc/RealmcLoadEntryInfo.h"
+#include "SDKs/Realmc/RealmcDataBuffer.h"  // DataBuffer { mpData, muSize } (the ctor's two pairs)
 
 #include <cstring>  // std::memcpy -- the X360 operator= body is literally a memcpy of
                     // the 32-byte head plus four individual word copies.
@@ -16,46 +17,55 @@ namespace RealmcIface
 // ---------------------------------------------------------------------------
 // LoadEntryInfo::LoadEntryInfo @ 0x82B519E8
 //
-//   li  r11, 0
-//   stw r11, 0x20(r3)   -> maTrailing[0] = 0
-//   stw r11, 0x24(r3)   -> maTrailing[1] = 0
-//   stw r11, 0x28(r3)   -> mpData        = 0
-//   stw r11, 0x2C(r3)   -> muDataSize    = 0
-//   stb r11, 0(r3)      -> maHead[0] = 0
-//   blr
-//
-// Zero the two opaque words, the data pointer and the size (in order), then zero
-// the leading head byte. The rest of the head is left as-is (the ctor only
+// Zero the +0x20 pair, the data pointer and the size (in that store order), then
+// zero the leading head byte. The rest of the head is left as-is (the ctor only
 // touches byte +0x00).
 // ---------------------------------------------------------------------------
 LoadEntryInfo::LoadEntryInfo()
 {
-    maTrailing[0] = 0;
-    maTrailing[1] = 0;
+    mpAuxData     = nullptr;
+    muAuxDataSize = 0;
     mpData        = nullptr;
     muDataSize    = 0;
     maHead[0]     = 0;
 }
 
 // ---------------------------------------------------------------------------
-// LoadEntryInfo::operator= @ 0x82B51A78
+// LoadEntryInfo::LoadEntryInfo (name + two pairs)
 //
-//   lwz r11, 0x20(r4) ; stw r11, 0x20(r31)   -> maTrailing[0] = rOther.maTrailing[0]
-//   lwz r11, 0x24(r4) ; stw r11, 0x24(r31)   -> maTrailing[1] = rOther.maTrailing[1]
-//   lwz r11, 0x28(r4) ; stw r11, 0x28(r31)   -> mpData        = rOther.mpData
-//   lwz r11, 0x2C(r4) ; stw r11, 0x2C(r31)   -> muDataSize    = rOther.muDataSize
-//   li  r5, 0x20 ; bl memcpy                 -> memcpy(this, rOther, 32)  (the head)
-//   li  r11, 0 ; stb r11, 0x1F(r31)          -> maHead[0x1F] = 0  (flag byte, last)
-//   return this
+// Store order: pA's two words into +0x20/+0x24, pB's two words into +0x28/+0x2C,
+// then, when pName is non-null, a 32-byte memcpy of the name into the head and a
+// zero store to +0x1F; with no name only the leading head byte is zeroed.
+// ---------------------------------------------------------------------------
+LoadEntryInfo::LoadEntryInfo(const char* pName, const DataBuffer* pA, const DataBuffer* pB)
+{
+    mpAuxData     = pA->mpData;
+    muAuxDataSize = pA->muSize;
+    mpData        = pB->mpData;
+    muDataSize    = pB->muSize;
+
+    if (pName)
+    {
+        std::memcpy(maHead, pName, 0x20);
+        maHead[0x1F] = 0;
+    }
+    else
+    {
+        maHead[0] = 0;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// LoadEntryInfo::operator=
 //
-// Store order is exact: the two opaque words, then the data pointer and the size
+// Store order is exact: the +0x20 pair, then the data pointer and the size
 // (individually), THEN the 32-byte head memcpy (Dst=this, Src=rOther, Size=0x20),
 // THEN the +0x1F byte is cleared last.
 // ---------------------------------------------------------------------------
 LoadEntryInfo& LoadEntryInfo::operator=(const LoadEntryInfo& rOther)
 {
-    maTrailing[0] = rOther.maTrailing[0];
-    maTrailing[1] = rOther.maTrailing[1];
+    mpAuxData     = rOther.mpAuxData;
+    muAuxDataSize = rOther.muAuxDataSize;
     mpData        = rOther.mpData;
     muDataSize    = rOther.muDataSize;
 

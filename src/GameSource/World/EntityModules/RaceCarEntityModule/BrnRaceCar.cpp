@@ -248,128 +248,27 @@ void RaceCar::RemoveFromWorld()
 // RequestResetOnTrack @ 0x822BEB28. Queues a reset-on-track request, unless one is
 // already pending or the attached active car is already due to be placed on track.
 //
-// ⭐⭐⭐ READ THIS FIRST -- 2026-08-26 (resetpump wave). EVERY "ABSENT" / "INERT boot gate" /
-// "still pins" CLAIM IN THE FOUR PARAGRAPHS BELOW IS HISTORY. THE WHOLE CHAIN IS LANDED AND A
-// REQUEST HAS TRAVERSED IT, MEASURED (runs rp_crash2 / rp_crash3, asserts=0, no AV):
-//     [resetpump] request SENT: global car 0 type 1        <- RCEM::SendResetOnTrackRequests
-//     [resetpump] request RECEIVED by the AI module        <- the two AI bridges
-//     [rot] request resolved: ... -> FAILURE (consumer uses GetResetCoords)
-//     [resetpump] RESULT applied: ... -> (3003.20, 2.51, -1653.75)
-//     [teleport] ResetActiveRaceCar RE-RESET car 0 -> road (...)   <- the car IS put back
-// and the car then drove about a kilometre. The FAILURE arm is the console's designed fallback,
-// not a hole: it is what routes the reset through THIS car's own GetResetCoords.
-// ⭐ AND THE ONE RUNG THAT STILL FAILED WHEN THAT WAS WRITTEN IS NOW CLOSED TOO (crashclear
-// wave, 2026-08-26): the crash STATE is cleared. The dispatch it referred to -- the
-// `!mbResetTransform` arm of VehicleManager::ProcessResetEvents @0x82617E00 -- is
-// VehiclePhysics::ClearCrashing @0x825D5450 (RaceCarPhysics vtable slot 1, probed off the
-// image), and it is landed and called by name. mbCrashing goes to 0 on the recovery and its
-// falling edge becomes GUI 377 LEAVE_CRASHED. See (P3) in
-// BrnVehicleManager_WriteOutVehicleStats.cpp for the working-out.
-// The paragraphs below are kept because their SHAPE of the chain, their instruction counts and
-// their working-out are still the best map of it; only their status verbs have expired.
-//
-// ⛔⛔ [HISTORY, 2026-08-25] NOTHING IN THIS TREE READS mbToBeResetOnTrack. MEASURED, and the
-// number the crash waves have been carrying ("~25 functions, ~2500 instructions") IS TOO SMALL BY
-// MORE THAN HALF, and names the wrong blocker. The real chain and its real cost:
-//
-//   RCEM::SendResetOnTrackRequests @0x822CE178 (57)   -- the only reader of this flag. Walks
-//       all 35 global race cars and, for each with muType != 3 && mbToBeResetOnTrack, pushes
-//       an AIModuleIO::ResetOnTrackRequest onto RaceCarEntityModuleIO::OutputBuffer_PostScene.
-//       Called ONLY from RCEM::PostSceneUpdate @0x822FE3F0. ABSENT.
-//   -> WorldModule::BridgeRaceCarModuleToAIModule_PostScene            -- INERT boot gate
-//   -> BrnAI::AIModule::Update @0x8279B478 (319)                       -- INERT boot gate
-//      -> AIModule::UpdateResetOnTrackManager @0x8279ABB0 (192)        -- ABSENT
-//         -> ResetOnTrackManager::Update @0x8279A890 (199) and 32 siblings
-//            (ProcessResetOnTrackRequest 279, ComputeResetOnTrack 134, ScanBackwards/Forwards
-//             AlongExtrapolatedRoute 284/230, UpdateResetOnTrackSectionUsingCurrentSection 299,
-//             AvoidObstacles 263, ComputeAISectionWidth 209, ConvertNodesToPositionAndDirection
-//             201, ComputeInitialCoordinatesStandard 219, ResetNearRoutelessPlayer 189,
-//             InterpolatePositionFromAngle 186, ...) -- 4,750 insns, ONE bodied (GetAICar).
-//   -> RCEM::ProcessResetOnTrackResultQueue @0x822F4580 (192), from PrePhysicsUpdate -- ABSENT
+// THE RESET-ON-TRACK CHAIN this request feeds (every rung is bodied):
+//   RCEM::SendResetOnTrackRequests -- the only reader of mbToBeResetOnTrack. Walks all 35
+//       global race cars and, for each with muType != 3 && mbToBeResetOnTrack, pushes an
+//       AIModuleIO::ResetOnTrackRequest onto RaceCarEntityModuleIO::OutputBuffer_PostScene.
+//       Called ONLY from RCEM::PostSceneUpdate.
+//   -> WorldModule::BridgeRaceCarModuleToAIModule_PostScene
+//   -> BrnAI::AIModule::Update -> AIModule::UpdateResetOnTrackManager
+//      -> ResetOnTrackManager::Update and its siblings (the geometry siblings are parked at
+//         their own sites)
+//   -> RCEM::ProcessResetOnTrackResultQueue, from PrePhysicsUpdate
 //   -> ActiveRaceCar::RequestPlaceOnTrack -> PlaceOnTrackManager -> RCEM::ResetActiveRaceCar
-//      -> VehicleInputInterface::ResetRaceCar -> the ResetVehicleEvent drain. ALL REAL, ALL LIVE.
-//   Direct closure, counted from the ARTIST export set: 37 functions / 5,307 instructions.
-//
-// ⭐⭐⭐ THE PARAGRAPH BELOW IS THE 2026-08-25 MEASUREMENT AND IT IS NOW HISTORY -- READ THIS
-//   FIRST. On 2026-08-26 (aimodule slice 1) the AI module lifecycle LANDED:
-//   AIModule::{Construct, Prepare, LoadMapData} are real bodies in
-//   GameSource/World/AI/BrnAIModule.cpp, AI.dat loads, "WorldMapData" resolves and
-//   BrnAI::ResetOnTrackManager IS Constructed against a bound road network -- measured on the
-//   boot log, with the control that could falsify it (AISectionsData::muVersion reads 12, the
-//   value KU_AI_SECTIONS_DATA_VERSION names, over 7639 sections and 3273824 B, which no
-//   garbage pointer produces). So "the AI module does not run at all" is FALSE from that date.
-//   ⛔ mbToBeResetOnTrack IS STILL READ BY NOBODY, and a heavy crash still pins: what remains
-//   is the REQUEST/RESULT PUMP above the lifecycle --
-//     SendResetOnTrackRequests @0x822CE178 (57)         [absent]
-//     the 35-entry AI-car array AIModule::Construct parks [⭐ LANDED 2026-08-26, aicar_reset]
-//     AIModule::Update / UpdateResetOnTrackManager       [still boot gates]
-//     ResetOnTrackManager::Update + 32 siblings          [⭐ Update / ProcessResetOnTrackRequest
-//         / ComputeResetOnTrack / ComputeInitialCoordinatesStandard LANDED 2026-08-26; the
-//         remaining 28 are the geometry, parked at their own sites]
-//     ProcessResetOnTrackResultQueue @0x822F4580 (192)   [absent]
-//   Everything the paragraph below says about the SHAPE of the chain still holds; only its
-//   claim about WHERE the break is has moved one rung up.
-//
-// ⭐⭐⭐ UPDATE 2026-08-26 (aicar_reset wave) -- AND ONE OF THE THINGS THIS FILE HAS BEEN
-//   REPEATING SINCE 2026-08-25 IS WRONG. See the SHORTCUT paragraph further down: it says
-//   GetResetCoords "would place the car at the origin". IT WOULD NOT. The asm has a second arm
-//   (0x822BF37C) for an EMPTY ring that hands out mPhysicsState.mTransform's {wAxis, zAxis} --
-//   the car's LIVE pose. MEASURED on a booted drive run: the ring is empty (depth 0) and
-//   GetResetCoords returns the player's own moving position, tracking it down the road.
-//   ⇒ the reset-on-track chain does NOT need the AI road network to produce a USABLE pose; it
-//   needs the pump to run so the FAILURE result reaches ProcessResetOnTrackResultQueue's
-//   GetResetCoords arm.
-//   ⛔ THE PUMP'S REMAINING BLOCKERS, MEASURED THIS WAVE (not inferred):
-//     * VehicleManager::GenerateAboveGroundLineTests @0x82633990 is ABSENT, so
-//       RaceCarState::mAboveGroundTestResult.mbValid is FALSE every frame
-//       ([collision-tag] aboveGroundValid=0 on every sample) -- which is why the newly landed
-//       UpdateRaceCarCollisionTagging never sets an AI section and the reset ring stays empty.
-//     * RaceCarEntityModule::WriteUpdatedAIData @0x822D1FC8 is ABSENT, so
-//       AIModuleIO::RaceCarAIInterface::mbPlayerDataSet is never set -- and AIModule::Update
-//       @0x8279B478 skips its ENTIRE body on `if (GetRaceCarAIInterface()->mbPlayerDataSet)`.
-//       Landing AIModule::Update without it would be a body that provably never runs.
-//
-// ⭐⭐ AND THE MANAGER IS NOT THE BLOCKER -- THE AI MODULE IS, BECAUSE IT DOES NOT RUN AT ALL.
-//   [SUPERSEDED 2026-08-26 -- see the block immediately above.]
-//   ResetOnTrackManager is an EMBEDDED MEMBER of AIModule at +286128, and its only constructor
-//   call site is AIModule::Prepare @0x82798070 stage 3:
-//       ResetOnTrackManager::Construct(module+286128, GetAISectionsData(), module+560)
-//   In this build AIModule::{Construct,Prepare,Update,PostPhysicsUpdate,Release,Destruct} are
-//   ALL quiet boot-gate stubs in WorldLinkStubs.cpp, and the live log says so every run
-//   ("AIModule::Prepare: inert", "AIModule::Update: inert"). So today the manager is never
-//   constructed, mpAISectionData is null, mpaAICars is garbage, and AIModule::Prepare's stage 2
-//   -- AIModule::LoadMapData @0x82795340 (167), which LoadBundle()s "AI.dat" and requests
-//   CgsResource::ID::HashString("WorldMapData") type 5 -- never runs, so the AI ROAD NETWORK
-//   THE WHOLE SUBSYSTEM QUERIES IS NEVER LOADED. (The DATA is fine: build/game/AI.DAT is present
-//   and already ported -- bnd2 platform byte @+8 == 4, 3.27 MB. The hole is entirely code.)
-//   ⚠️ [[hollow-shell-classes]] one level up, exactly like the CrashModule lifecycle defect of
-//   this same day: BrnAIModule.h models the module as 250 KB of opaque padding with NO named
-//   member for the stage machine (+294764), the route-map ready flag (+295896), the manager
-//   (+286128), the AI-car array (+560), the player index (+322044) or the resource receiver
-//   queue (+73708). Bodying the manager on top of that would be ~4,750 instructions that run
-//   against an unconstructed object -- [[valid-pointer-invalid-object]], and no assert can see
-//   it. THE MODULE LIFECYCLE + THE AIModuleIO BUFFER LAYOUTS COME FIRST.
-//   ⚠️ AIModuleIO::OutputBuffer is a 1-byte PLACEHOLDER on the host today; that is already why
-//   BridgeAIToEntityModules_PrePhysics is PARKED, and it is where the ResetOnTrackResult ring
-//   has to live. [[silent-drop-stubs]] + the un-gate-a-producer AV class apply in full.
-//
-// ⛔ THE SHORTCUT IS STILL REFUTED, RE-VERIFIED: ActiveRaceCar::GetResetCoords @0x822BF2D0
-//   reads mPrevTransforms, which this tree Constructs, Clear()s and NEVER WRITES
-//   (BrnPlaceOnTrackManager.cpp:325 flags it). Do not invent a reset position.
-//   ⚠️⚠️ RETRACTED 2026-08-26 (aicar_reset wave) -- HALF OF THIS IS FALSE AND IT COST FOUR WAVES.
-//   The first clause was true until this wave (mPrevTransforms is now WRITTEN, by
-//   ActiveRaceCar::UpdateResetTransform at RCEM::UpdateActiveRaceCarTransforms' console slot).
-//   The implied second clause -- that an unwritten ring makes GetResetCoords useless -- was
-//   NEVER true: the function has an explicit empty-ring arm at 0x822BF37C that returns
-//   mPhysicsState.mTransform's {wAxis, zAxis}. Using it is NOT inventing a reset position; it is
-//   calling the console's own function and getting the console's own answer.
-//   ⭐ THE LESSON, AND IT IS THE CAMPAIGN'S OWN: "X reads Y and Y is never written" is a claim
-//   about ONE BRANCH of X. Read the other branch before writing it down as a refutation --
-//   [[check your witness observes the right branch]].
-//
-// DELETE-WHEN the AI module runs its own lifecycle, AI.dat/WorldMapData loads, and a heavy
-// crash recovers. Until then crash ENTRY is disabled on the public path -- see the bring-up
-// flag banner in BrnVehicleManager.cpp::SetRaceCarCrashing.
+//      -> VehicleInputInterface::ResetRaceCar -> the ResetVehicleEvent drain.
+// A FAILURE result from the manager is the console's designed fallback, not a hole: it routes
+// the reset through THIS car's own ActiveRaceCar::GetResetCoords, whose empty-ring arm returns
+// mPhysicsState.mTransform's {wAxis, zAxis} -- the car's live pose. (mPrevTransforms is
+// written by ActiveRaceCar::UpdateResetTransform.) "X reads Y and Y is never written" is a
+// claim about ONE BRANCH of X; read the other branch before writing it down as a refutation.
+// The crash STATE is cleared on recovery by VehiclePhysics::ClearCrashing, the
+// `!mbResetTransform` arm of VehicleManager::ProcessResetEvents; mbCrashing goes to 0 and its
+// falling edge becomes GUI 377 LEAVE_CRASHED. See (P3) in
+// BrnVehicleManager_WriteOutVehicleStats.cpp.
 // Reference: scratchpad resetontrack_log.md.
 // ----------------------------------------------------------------------------
 void RaceCar::RequestResetOnTrack(f32 lfSpeed, BrnAI::EResetType leType, f32 lfDistance)

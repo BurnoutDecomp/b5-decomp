@@ -36,6 +36,17 @@ namespace BrnMassive
         return lePrevious;
     }
 
+    // Postfix increment for the Massive release-stage state machine: the same shape as the
+    // prepare-stage one above with the release enum and its DONE bound (3).
+    System360HWMassive::EReleaseStage operator++(System360HWMassive::EReleaseStage& reStage, int)
+    {
+        System360HWMassive::EReleaseStage lePrevious = reStage;
+        reStage = static_cast<System360HWMassive::EReleaseStage>(reStage + 1);
+        CGS_ASSERT(reStage <= System360HWMassive::E_RELEASESTAGE_DONE,
+                   "leEnumIndex <= System360HWMassive::E_RELEASESTAGE_DONE");
+        return lePrevious;
+    }
+
     // The single Massive heap global (X360 .data spHeapMalloc). Filled by
     // BrnHW::System360HW::PrepareMassiveMemory; consumed by the custom heap hooks below.
     CgsMemory::HeapMalloc* gpMassiveHeapMalloc = nullptr;
@@ -63,8 +74,8 @@ namespace
     // CMassiveClientCore::Shutdown timeout baked into the X360 asm (r4 = 0x2710).
     const unsigned int KU_MASSIVE_SHUTDOWN_TIMEOUT_MS = 10000;
 
-    // SMassiveClientInit::mnUnknown18, baked into the X360 asm (li r11, 0x2710).
-    const int KI_MASSIVE_INIT_FIELD18 = 10000;
+    // SMassiveClientInit::mnImpressionFlushInterval the title asks for (ms).
+    const unsigned int KU_MASSIVE_IMPRESSION_FLUSH_INTERVAL_MS = 10000;
 }
 
 namespace BrnMassive
@@ -140,11 +151,11 @@ namespace BrnMassive
             case 3:
             {
                 MassiveAdClient3::SMassiveClientInit lInit = {};
-                lInit.mpcApplicationName = "burnout_5_x360_na";
-                lInit.mpcVersion         = "1.0";
-                lInit.mnUnknown18        = KI_MASSIVE_INIT_FIELD18;
-                lInit.mpcUnknown1C       = "Shawn";
-                lInit.mpcUnknown20       = "None";
+                lInit.mpcSkuName                = "burnout_5_x360_na";
+                lInit.mpcSkuVersion             = "1.0";
+                lInit.mnImpressionFlushInterval = KU_MASSIVE_IMPRESSION_FLUSH_INTERVAL_MS;
+                lInit.mpcThirdPartyID           = "Shawn";
+                lInit.mpcThirdPartyService      = "None";
 
                 if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
                     *CgsDev::Log::gpDebugPrint << "[Massive] Initialising\n";
@@ -191,9 +202,8 @@ namespace BrnMassive
             case 1:
             case 2:
             {
-                MassiveAdClient3::CMassiveClientCore* lpCore =
-                    MassiveAdClient3::CMassiveClientCore::ExitZone("TEST1");
-                lpCore->FlushImpressions();
+                MassiveAdClient3::CMassiveClientCore::ExitZone("TEST1");
+                MassiveAdClient3::CMassiveClientCore::FlushImpressions();
 
                 if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
                     *CgsDev::Log::gpDebugPrint << "[Massive] Shutting Down\n";

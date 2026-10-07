@@ -3,10 +3,10 @@
 #include "types.hpp"
 
 #include "SDKs/EATech/rwcore/filesys/asyncop.h"          // AsyncOp / AsyncOpList / OpStream
-#include "SDKs/EATech/eathread/eathread_condition.h"      // EA::Thread::Condition
-#include "SDKs/EATech/eathread/BrnEAThreadX360.h"          // EA::Thread::Thread / ThreadParameters / ThreadSleep
-
-#include <windows.h>  // CRITICAL_SECTION -- the host mapping of the X360 EA::Thread::Mutex
+#include "SDKs/EATech/rwcore/filesys/list.h"             // detail::ListSingle (the registered-device list)
+#include "eathread/eathread_thread.h"                     // EA::Thread::Thread / ThreadParameters / ThreadSleep
+#include "eathread/eathread_mutex.h"                      // EA::Thread::Mutex
+#include "eathread/eathread_condition.h"                  // EA::Thread::Condition
 
 // =====================================================================================
 // rw::core::filesys::Device -- the RenderWare core filesystem device scheduler.
@@ -14,10 +14,7 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm is authoritative. No
 // reference source and no DecFIGS DWARF hints exist for this TU. Members are modelled by
 // name at the X360 offsets proven by the asm; the embedded threading primitives are the
-// project's homed EA::Thread types, with the X360 EA::Thread::Mutex modelled as a host
-// Win32 CRITICAL_SECTION exactly as the homed eathread_condition.cpp does for its own
-// unblock-lock (the X360 disassembly even labels the +0x18/+0xB0 fields "CriticalSection";
-// Lock/Unlock map to Enter/LeaveCriticalSection, ctor/dtor to Init/DeleteCriticalSection).
+// EAThread library's own types (two mutexes, two conditions, the worker thread).
 //
 //   rw::core::filesys::Device::Device                @0x82BBE170  (ctor)
 //   rw::core::filesys::Device::~Device               @0x82BBE208  (dtor)
@@ -38,55 +35,70 @@ namespace rw
         {
             class Device;  // the scheduler defined below; Manager links a list of these
 
-            // The device driver the scheduler dispatches through. The X360 object is
-            // { mpVTable @+0x00, char macName[] @+0x04 } -- exactly what the DeviceDriver
-            // ctor TU builds (devicedriver.cpp installs gDeviceDriverVTable at +0 and copies
-            // the scheme name into the inline buffer at +4). The Device scheduler reaches the
-            // driver only through three vtable slots plus the name:
-            //   vtable +0x04 (slot 1)  Open         : (*(driver+4))(driver)   -- bring it up
-            //   vtable +0x08 (slot 2)  Close        : (*(driver+8))(driver)   -- shut it down
-            //   vtable +0x28 (slot 10) GetBlockSize : (driver, key) -> u32 cost estimate
-            //   data   +0x04 macName                : scheme name (GetInstance matches it)
-            //
-            // The vtable is modelled as a named function-pointer table (NOT a C++ virtual
-            // class), so the on-disk { pointer-to-table, name } layout is reproduced exactly
-            // and every slot is called by name -- no raw `*(*driver+N)` offset arithmetic.
-            // The untouched slots are reserved entries so the touched ones sit at the
-            // observed indices.
-            class DeviceDriver;
-
-            struct DeviceDriverVTable
+            // The device driver a Device schedules IO onto: an abstract class whose
+            // concrete drivers (the platform file driver, the null driver, the game's own
+            // drivers) override the IO entry points. The base class supplies the defaults
+            // below; Open / Close / Read / Seek / GetSize are pure. Object layout:
+            // { vtable, mDeviceName }.
+            struct DeviceDriver
             {
-                void* mpfnSlot0;                                   // +0x00
-                int  (*mpfnOpen)(DeviceDriver* lpDriver);          // +0x04 (slot 1)
-                int  (*mpfnClose)(DeviceDriver* lpDriver);         // +0x08 (slot 2)
-                void* mapfnReserved0C[7];                          // +0x0C .. +0x24 (slots 3..9)
-                u32  (*mpfnGetBlockSize)(DeviceDriver* lpDriver, void* lpDriverKey); // +0x28 (slot 10)
-            };
+                // The record FindBegin / FindNext fill in.
+                struct FindData
+                {
+                    unsigned int mFlags;
+                    uint64_t     mCreationTime;
+                    uint64_t     mAccessTime;
+                    uint64_t     mModificationTime;
+                    uint64_t     mSize;
+                    char         mName[256];
+                };
 
-            class DeviceDriver
-            {
-            public:
-                // The ctor (devicedriver.cpp @0x82BBD548) installs gDeviceDriverVTable and
-                // copies pName into macName. Declared here so the type has one definition.
+                // devicedriver.cpp: copy pName into mDeviceName.
                 DeviceDriver(const char* pName);
 
-                // Named slot wrappers so the scheduler dispatches by name.
-                int Open()                       { return mpVTable->mpfnOpen(this); }
-                int Close()                      { return mpVTable->mpfnClose(this); }
-                u32 GetBlockSize(void* lpKey)    { return mpVTable->mpfnGetBlockSize(this, lpKey); }
+                virtual ~DeviceDriver() {}
 
-                const DeviceDriverVTable* mpVTable;   // +0x00
-                char                      macName[1];  // +0x04  scheme name
+                // Bring the driver up (Device::Start) / shut it down (~Device).
+                virtual bool Init() { return true; }
+                virtual void Restore() {}
+
+                // Open a file; returns the driver's open-file object (null on failure).
+                // *ppHandle may be set to an already-open Handle the file belongs to.
+                virtual void* Open(const char* pPath, unsigned int uFlags, Handle** ppHandle) = 0;
+                virtual void  Close(void* pFile) = 0;
+                virtual unsigned int Read(void* pFile, void* pBuffer, unsigned int uSize,
+                                          DeviceDriver* pDriver, void* pContext) = 0;
+                virtual unsigned int Write(void* pFile, const void* pBuffer, unsigned int uSize,
+                                           DeviceDriver* pDriver, void* pContext) { return 0; }
+                virtual uint64_t Seek(void* pFile, uint64_t uPosition, int iOrigin,
+                                      DeviceDriver* pDriver, void* pContext) = 0;
+                virtual uint64_t GetSize(void* pFile) = 0;
+                virtual bool     Resize(void* pFile, uint64_t uSize) { return false; }
+
+                // The on-media location of an open file; the scheduler sorts reads by it.
+                virtual uint64_t QueryLocation(void* pFile) { return 0; }
+                virtual unsigned int GetMaxReadSize() { return 0xFFFFFFFFu; }
+
+                virtual bool  Delete(const char* pPath) { return false; }
+                virtual bool  Move(const char* pFrom, const char* pTo) { return false; }
+                virtual void* FindBegin(const char* pPath, FindData* pData) { return nullptr; }
+                virtual bool  FindNext(void* pFind, FindData* pData) { return false; }
+                virtual bool  FindEnd(void* pFind) { return false; }
+                virtual bool  DirectoryCreate(const char* pPath) { return false; }
+                virtual bool  DirectoryRemove(const char* pPath) { return false; }
+
+                // The scheme name Device::GetInstance matches a path's "scheme:" against.
+                const char* GetName() const { return mDeviceName; }
+
+            protected:
+                char mDeviceName[16];
             };
 
             // The process-wide filesys Manager singleton (X360 off_8327F078). Homed by its
             // own TU (manager.cpp); the device scheduler/path-resolver read its fields by
             // name. The full 72-byte (0x48) X360 layout is reproduced in WORD order from the
             // Manager ctor/Init asm (every slot grounded by a store/load):
-            //   X360 +0x00 mpDeviceListHead  : head of the registered-Device list
-            //   X360 +0x04 mpListField1      : registered-list field (cleared by ctor/dtor)
-            //   X360 +0x08 mpListField2      : registered-list field (cleared by ctor/dtor)
+            //   +0x00 mDeviceList            : the registered-Device list (head/tail/count)
             //   X360 +0x0C mThreadParameters : params handed to EA::Thread::Thread::Begin
             //   X360 +0x24 miMaxReadSize     : per-read size ceiling, ctor-initialised to -1
             //                                   (read as an unsigned cap by AsyncOp::DoRead)
@@ -125,9 +137,7 @@ namespace rw
 
             struct Manager
             {
-                Device*                       mpDeviceListHead;   // X360 +0x00
-                void*                         mpListField1;        // X360 +0x04
-                void*                         mpListField2;        // X360 +0x08
+                detail::ListSingle<Device>    mDeviceList;         // +0x00
                 EA::Thread::ThreadParameters  mThreadParameters;   // X360 +0x0C
                 s32                           miMaxReadSize;       // X360 +0x24 (init -1; read-size ceiling)
                 Device*                       mpDefaultDevice;     // X360 +0x28
@@ -174,11 +184,13 @@ namespace rw
                 // @0x82BBF850 -- destroy + free the singleton and clear off_8327F078.
                 static void* DestroyInstance();
 
-                // RegisterDevice / UnregisterDevice (owned by their own not-yet-homed TUs):
-                // Init/dtor call them; declared so this TU compiles. RegisterDevice returns
-                // the Device it bound; UnregisterDevice drops the head device.
-                Device* RegisterDevice(const void* lpDeviceDesc, int liFlags);
-                int     UnregisterDevice();
+                // Build a Device for lpDriver and append it to the global manager's device
+                // list (luFlags bit 0: the device is pumped externally, no worker thread).
+                Device* RegisterDevice(DeviceDriver* lpDriver, unsigned int luFlags) const;
+
+                // Unlink lpDevice from the global manager's device list and destroy it.
+                // False if it was not registered.
+                bool    UnregisterDevice(Device* lpDevice) const;
             };
 
             // X360 off_8327F078 -- the global filesys Manager. Owned by manager.cpp;
@@ -196,8 +208,8 @@ namespace rw
             // The X360 object lays its members at fixed offsets (op list +0x08, op-list
             // mutex +0x18, work condition +0x48, worker thread +0xA8, completion mutex
             // +0xB0, completion condition +0xE0, driver +0x140, read budget +0x148). Those
-            // offsets are NOT reproduced here: the host EA::Thread::Condition / ::Thread and
-            // the host CRITICAL_SECTION have different sizes than the X360 primitives, and
+            // offsets are NOT reproduced here: the host EA::Thread::Mutex / ::Condition /
+            // ::Thread have different sizes than the console primitives, and
             // every access in this TU is by member NAME (never `this+N`), so the layout is
             // free to follow the host ABI. Member ORDER is preserved to mirror the X360
             // construction/destruction order.
@@ -206,8 +218,8 @@ namespace rw
             public:
                 // @0x82BBE170 -- wire up the empty op list, build the two mutexes and two
                 // conditions and the (unstarted) worker thread, latch the external-thread
-                // flag (lbExternalThread & 1) and the driver pointer.
-                Device(DeviceDriver* lpDriver, bool lbExternalThread);
+                // flag (luFlags & 1) and the driver pointer.
+                Device(DeviceDriver* lpDriver, unsigned int luFlags);
 
                 // @0x82BBE208 -- stop the worker (unless external), Close the driver, then
                 // tear down the conditions/thread/mutexes and drop the op list.
@@ -240,10 +252,9 @@ namespace rw
                 // Device* (or the default device when the resolved path has no scheme).
                 static Device* GetInstance(const char* lpcPath, char* lpScratch);
 
-                // Wait (owned by its own not-yet-homed TU): block until lpOp completes.
-                // The AsyncOp result accessors call it with an optional timeout pointer
-                // (the &kTimeoutNone constant). Declared so asyncop.cpp compiles.
-                int Wait(AsyncOp* lpOp, const void* lpTimeout = nullptr);
+                // Block under the completion lock until lpOp has a result or the absolute
+                // timeout has passed. Returns the completion-lock Unlock result.
+                int Wait(AsyncOp* lpOp, const EA::Thread::ThreadTime& lTimeoutAbsolute);
 
                 // Read accessor for the driver pointer; the AsyncOp DoIo callbacks hand the
                 // driver to the Stream IO vtable slots as an opaque argument.
@@ -255,16 +266,19 @@ namespace rw
                 bool IsExternalThread() const { return mbExternalThread != 0; }
 
             private:
-                Device*               mpNextRegistered;  // X360 +0x000 (Manager device-list link)
-                u8                    mbThreadRunning;    // X360 +0x004
-                u8                    mbStopRequested;    // X360 +0x005
-                u8                    mbExternalThread;   // X360 +0x006
-                AsyncOpList           mOpList;            // X360 +0x008 (head/tail/count)
-                CRITICAL_SECTION      mLock;              // X360 +0x018 (EA::Thread::Mutex)
-                EA::Thread::Condition mWork;              // X360 +0x048 ("work pending")
-                EA::Thread::Thread    mThread;            // X360 +0x0A8 (worker thread)
-                CRITICAL_SECTION      mCompletionLock;    // X360 +0x0B0 (EA::Thread::Mutex)
-                EA::Thread::Condition mCompletion;        // X360 +0x0E0 ("op completed")
+                friend struct detail::ListSingle<Device>;   // links through mpNext
+                friend struct Handle;                       // starts a search-path device
+
+                Device*               mpNext;             // +0x000 (Manager device-list link)
+                u8                    mbThreadRunning;    // +0x004
+                u8                    mbStopRequested;    // +0x005
+                u8                    mbExternalThread;   // +0x006
+                AsyncOpList           mOpList;            // +0x008 (head/tail/count)
+                EA::Thread::Mutex     mLock;              // +0x018
+                EA::Thread::Condition mWork;              // +0x048 ("work pending")
+                EA::Thread::Thread    mThread;            // +0x0A8 (worker thread)
+                EA::Thread::Mutex     mCompletionLock;    // +0x0B0
+                EA::Thread::Condition mCompletion;        // +0x0E0 ("op completed")
                 DeviceDriver*         mpDriver;           // X360 +0x140
                 u64                   mu64ReadBudget;     // X360 +0x148 (optimal-read budget)
             };

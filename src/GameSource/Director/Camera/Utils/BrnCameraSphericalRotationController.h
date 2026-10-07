@@ -30,14 +30,8 @@ namespace Utils
     // DWARF BrnCameraSphericalRotationController.h:57.
     struct CameraSphericalRotationController
     {
-        // ⭐ DWARF h:61 -- BODIED 2026-08-01 (orbit-camera wave), in this class's own .cpp.
-        // It used to be declaration-only here AND an EMPTY STUB in
-        // GameSource/Director/DirectorLinkStubs.cpp, whose justification ("nothing reads
-        // either one ... the only path that would dispatch it is gated") EXPIRED twice over:
-        // the post-scene behaviour pass was un-gated on 2026-08-01, and
-        // BehaviourRotateAboutVehicle::BecomeSimilarTo calls it on the live car-select path
-        // specifically to throw away accumulated stick state -- with the empty stub the stale
-        // rotation survived every re-seat.
+        // Bodied in this class's own .cpp. BehaviourRotateAboutVehicle::BecomeSimilarTo calls
+        // it on the live car-select path specifically to throw away accumulated stick state.
         void Construct();
 
         // ---- the query family (DWARF h:73..:103) ------------------------------------

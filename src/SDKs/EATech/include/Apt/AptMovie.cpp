@@ -119,7 +119,6 @@ extern AptCIH* AptGetAnimationAtLevel(int nLevel);                       // _Apt
 // key, r5=&pred, r6=&existing. The stub it bound to nulled every lookup, so a
 // jumpToFrame replay re-created every already-live pseudo node.)
 // AptPseudoDisplayList_Insert retired: the real member AptPseudoDisplayList::Insert is called directly.
-extern void  AptExecuteInitActionsGate(void* pAnim, void* pCIH, int nId);   // AptCharacterAnimation::ExecuteInitActions (FLAG deferred; see AptRenderLinkStubs.cpp)
 
 // sub_82B0AE08 @0x82B097D8's caller-side dispatcher (the place-command handler doFrameControls
 // invokes for each tag-3 record). HOMED below (2026-07-01) as AptDispatchPlaceCommand -- it reads
@@ -127,8 +126,7 @@ extern void  AptExecuteInitActionsGate(void* pAnim, void* pCIH, int nId);   // A
 static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void* pPlaceInfo, AptCIH* pParent);
 
 // sub_82AFD150 @0x82AFD150 -- the remove-command dispatcher (doFrameControls' tag-4 twin of
-// AptDispatchPlaceCommand). HOMED (2026-07-04; was an AptRenderLinkStubs no-op, which left every
-// timeline-removed element on screen -- the title menu items stacked their whole state band).
+// AptDispatchPlaceCommand).
 // X360 body (two calls, both already homed):
 //   AptDisplayListState::findInst(*a1, a2, 0, &prev, &match);   // r3=*list (the state), r4=depth
 //   AptDisplayList::removeObject(a1, match);
@@ -526,7 +524,7 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
                 const int32_t nId = CmdI32(reinterpret_cast<void*>(luBody), 0x08);   // serialized .apt place record: charId @body+0x08
 
                 // ---- place: run the placed character's init actions -----------
-                AptExecuteInitActionsGate(pAnim, pParent, nId);   // FLAG deferred: the real member runs away at boot frame 3 (init-action VM path incomplete) -- see AptRenderLinkStubs.cpp
+                pAnim->ExecuteInitActions(pParent, nId);
 
                 // Bind the placed character's animation file (native-8 named members): a
                 // placed char with no file yet takes the import-table entry matching its id,

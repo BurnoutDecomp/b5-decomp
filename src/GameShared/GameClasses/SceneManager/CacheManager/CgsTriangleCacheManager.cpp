@@ -42,12 +42,10 @@ namespace CgsSceneManager
     {
         CGS_ASSERT(lpAllocator != NULL, "lpAllocator != NULL");
 
-        // ⚠️ CORRECTED 2026-08-10 (fill-worker wave): this used to read "13112 bytes for the
-        // shared triangle cache backing store". 13112 is a BATCH COUNT, not a byte count --
-        // KU_MAX_CACHED_OBJECTS(298) * KU_TRIANGLE_BATCHES_PER_CACHED_OBJECT(44) -- and the callee's
-        // second instruction (`mulli r30, r31, 224` @0x828BE568) multiplies it by sizeof(Triangle4)
-        // to reach the real 2,937,088-byte arena. The callee is now a real body
-        // (CgsCachedTriangleList.cpp); it used to be a WorldLinkStubs gate that allocated nothing.
+        // ⚠️ 13112 is a BATCH COUNT, not a byte count --
+        // KU_MAX_CACHED_OBJECTS(298) * KU_TRIANGLE_BATCHES_PER_CACHED_OBJECT(44) -- and the callee
+        // (CgsCachedTriangleList.cpp) multiplies it by sizeof(Triangle4) to reach the real
+        // 2,937,088-byte arena.
         mTrianglesForCachedObjects.Prepare(lpAllocator,
                                            KU_MAX_CACHED_OBJECTS * KU_TRIANGLE_BATCHES_PER_CACHED_OBJECT);
 

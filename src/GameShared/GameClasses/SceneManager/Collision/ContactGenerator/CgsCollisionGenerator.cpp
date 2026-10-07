@@ -100,14 +100,12 @@ s32  BaseCollisionGenerator::_miStartJobsPerfMon    = 0;
 static const bool KB_OPTIMISED_BOX_TESTS_ENABLED = true;   // byte_82F310B0 == 0x01, measured
 
 // X360 0x828105F8. Register the shared "StartJobs" CPU perfmon exactly once (guarded by the
-// static latch). Only the two static side effects are grounded in the asm; the AddMonitor
-// call's parent-handle argument (r6) is an un-set live-in in this frame -- passed as -1 ("no
-// parent"), matching the identical SceneManagerModule perfmon call site.
+// static latch).
 void BaseCollisionGenerator::Construct()
 {
     if (!_mbInitializedPerfMons)
     {
-        _miStartJobsPerfMon = CgsDev::PerfMonCpu::AddMonitor("StartJobs", 12, 0, 10.0, -1, 1);
+        _miStartJobsPerfMon = CgsDev::PerfMonCpu::AddMonitor("StartJobs", CgsDev::E_PMP_12, false, 10.0f, true);
         _mbInitializedPerfMons = true;
     }
 }

@@ -185,11 +185,10 @@ private:
     char*  mpBackEnd;     // +0x20  page end     (deque iterator `last`)
     char** mppBackSlot;   // +0x24  owning slot  (deque iterator `node`)
 
-    // @ external (sub RealmcCore::allocator<,64>::DoReallocPt) -- grows the page-
-    // pointer array when DoPushBack runs out of back slots. Defined by the sibling
-    // Realmc allocator TU; declared here so DoPushBack can call it across the TU
-    // boundary. (Un-homed dependency -- see home_notes.)
-    void DoReallocPt(int nArg1, int nArg2);
+    // Grow or re-centre the page-pointer array so nAdditionalSlots more slots are
+    // free on one side (nSide == 0: front, else back), then reseat the front/back
+    // node, begin and end. DoPushBack calls it as (1, 1). Body: RealmcAllocator64.cpp.
+    void DoReallocPt(unsigned int nAdditionalSlots, int nSide);
 };
 
 } // namespace RealmcCore

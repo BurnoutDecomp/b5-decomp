@@ -1140,19 +1140,15 @@ namespace BrnWorld
     // non-finite. DELETE together with BrnWorldModule's IsFiniteMatrix44BringUp
     // tripwire; it is pure instrumentation and changes no console-attested value.
     //
-    // WHY IT EXISTS (2026-08-12, shadow-camera NaN wave): the whole
-    // BOUNDINGBOX path below executed for the first time in this project's
-    // history today, and 39 of 41 [shadow-prod] samples reported a non-finite
-    // cascade view-projection. The ladder below names the FIRST intermediate
-    // that stops being finite, so the next boot log says which stage to look at
-    // instead of "somewhere in the solve".
+    // WHY IT EXISTS: the ladder below names the FIRST intermediate of the
+    // BOUNDINGBOX path that stops being finite, so a boot log with a non-finite
+    // cascade view-projection says which stage to look at instead of
+    // "somewhere in the solve".
     //
     // The canary rung is the load-bearing one: ComputeBoundingBoxMatrix's
     // lFrustumPoints[8] is an uninitialised stack array that
-    // CgsGeometric::Frustum::CalcVertices is supposed to fill, and that callee
-    // is currently the INERT boot gate in GameSource/World/WorldLinkStubs.cpp
-    // (real body: X360 @0x82840DF8, not reconstructed). The probe therefore
-    // calls it a SECOND time on its own canary-filled scratch array -- a pure
+    // CgsGeometric::Frustum::CalcVertices (CgsFrustum.cpp) is supposed to fill.
+    // The probe therefore calls it a SECOND time on its own canary-filled scratch array -- a pure
     // out-parameter writer, so the extra call has no side effect and the real
     // array is left exactly as the shipping path leaves it. If the canary
     // survives, the callee wrote nothing and every number downstream is stack
@@ -2013,21 +2009,13 @@ namespace BrnWorld
         }
 
         // ---- 2. sub-frustum -> 8 world corners (0x827D9294..0x827D92BC) -----
-        // ⚠ ROOT CAUSE OF THE [shadow-prod] "cascade view-projection is not
-        // finite" WARN (39 of 41 samples, 2026-08-12) -- NOT MINE TO FIX.
         // lFrustumPoints below is an uninitialised stack array that
-        // CgsGeometric::Frustum::CalcVertices is supposed to fill with the eight
-        // sub-frustum corners. That function is NOT reconstructed: the linked
-        // definition is the inert boot gate in GameSource/World/WorldLinkStubs.cpp
-        // (an empty body + a one-shot log), so it writes nothing and the whole
-        // best-fit solve below runs on stack garbage. Garbage that happens to be
-        // finite and non-degenerate gives a finite view-projection (the two clean
-        // samples); anything else collapses the fitted box and the UNGUARDED
-        // reciprocals -- which the X360 has too, verified below -- produce inf/NaN.
-        // The fix is the real X360 body @0x82840DF8 in its own TU
-        // (GameShared/GameClasses/Geometric/Primitives/CgsFrustum.cpp); nothing in
-        // THIS file can honestly stand in for it. The [shadow-cam] probe's rung 0
-        // proves it at runtime.
+        // CgsGeometric::Frustum::CalcVertices (GameShared/GameClasses/Geometric/
+        // Primitives/CgsFrustum.cpp) fills with the eight sub-frustum corners. If it
+        // ever wrote nothing, the whole best-fit solve below would run on stack
+        // garbage, and the UNGUARDED reciprocals -- which the console has too,
+        // verified below -- would produce inf/NaN. The [shadow-cam] probe's rung 0
+        // checks it at runtime.
         const Matrix44& lWorldToLight = lTsmBBInfo.mWorldToLight;    // BrnShadowMap.cpp:1246
         CgsGraphics::CameraRwFrustum lRwFrustum;                     // BrnShadowMap.cpp:1248
         Vector4 lFrustumPoints[8];                                   // BrnShadowMap.cpp:1259

@@ -39,6 +39,7 @@
 #include "SDKs/EATech/include/Apt/AptNativeFunction.h"
 #include "SDKs/EATech/include/Apt/AptConstFile.h"
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"   // AptGetAnimationAtLevel (script-fn root-anim resolve)
+#include "SDKs/EATech/include/Apt/Apt.h"                  // gAptFuncs (pfnLoadVariables / pfnLoadVariablesNULL)
 
 // ---------------------------------------------------------------------------
 // AptInterp_GetNodeFrameContextHash (HOMED 2026-07-02, retiring the null
@@ -411,17 +412,10 @@ void AptActionInterpreter::valueToObject(AptValue* pScope, AptValue* pTarget,
 // SCOPE value -- the forwarder passed the interpreter pointer as the scope, which
 // mis-resolved every valueToObject path whose scope was not the interpreter.)
 
-// Host URL-variable fetch -- console indirect through dword_8324E84C (named-URL
-// fetch) / dword_8324E850 (default no-arg fetch); each returns the AptValue whose
-// string form is the downloaded "key=value&..." body. The host installs the fetch at
-// AptInit; modelled as a single named host boundary (a null pUrl selects the default
-// fetch). Body is the host-boundary link-stub in AptRenderLinkStubs.cpp; the parse
-// below is faithful either way.
-extern AptValue* AptApt_LoadVariablesFetch(const char* pUrl);   // dword_8324E84C / dword_8324E850
-
 // ---------------------------------------------------------------------------
 // AptActionInterpreter::loadVariables @0x82B07DF8 (X360) / 0xF54764 (PS3) -- AS
-// loadVariables: fetch the URL pURL through the host hook, render its body to a
+// loadVariables: fetch the URL pURL through the host user-function table
+// (pfnLoadVariables, or pfnLoadVariablesNULL with no URL), render its body to a
 // string, then parse it as a "key=value[&...]" sequence (urlDecode), storing each
 // pair as a variable on (pScope, pTarget) via setVariable. An empty/absent URL uses
 // the default no-arg fetch hook. Each emitted value is a fresh AptString seeded from
@@ -430,8 +424,8 @@ extern AptValue* AptApt_LoadVariablesFetch(const char* pUrl);   // dword_8324E84
 void AptActionInterpreter::loadVariables(AptValue* pScope, AptValue* pTarget, EAStringC* pURL)
 {
     AptActionInterpreter* const pInterp = this;
-    // console: v7 = a4 ? dword_8324E84C(a4->m_strText) : dword_8324E850().
-    AptValue* const pLoaded = AptApt_LoadVariablesFetch(pURL ? pURL->GetBuffer() : nullptr);   // host fetch boundary
+    AptValue* const pLoaded = pURL ? gAptFuncs.pfnLoadVariables(pURL->GetBuffer())
+                                   : gAptFuncs.pfnLoadVariablesNULL();
 
     EAStringC strBody;                                  // console v13 = &unk_82F72FF8 (empty)
     if (pLoaded)

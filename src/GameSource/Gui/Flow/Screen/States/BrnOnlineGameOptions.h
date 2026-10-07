@@ -58,8 +58,8 @@ namespace BrnGui
         static const s32 KI_MAX_HELP_BAR_ITEMS      = 3;   // DWARF h:244
 
         virtual void OnEnter();   // @0x8249C188 (this TU)
-        virtual void OnLeave();   // cpp:443 -- FOREIGN TU (ledger `reviewed`, defined nowhere yet)
-        virtual void Update();    // @0x824AF688 -- FOREIGN TU (ditto)
+        virtual void OnLeave();   // stub-wave partfile 00
+        virtual void Update();    // stub-wave partfile 00
 
     private:
         // ---- this TU's 22 functions -------------------------------------------------
@@ -85,10 +85,8 @@ namespace BrnGui
         void ShowLoadOptions();                                                 // @0x8248C878
         void TriggerSound(s32 leGameInputAction);                               // @0x8249CCF0
 
-        // ---- methods of THIS class owned by FOREIGN ledger TUs. All are ledger
-        //      `reviewed` but defined nowhere in the tree yet, so the screen will not
-        //      link until those TUs land. Declared for shape; deliberately NOT stubbed
-        //      (same treatment as the wave-H keystone).
+        // ---- the option table, the load-list input and the request/response handlers
+        //      (stub-wave partfile 00). ----
         void BuildGameOptions();                                                // @0x8248CA98
         void HandleControllerInputLoadOptions(const CgsModule::Event* lpEvent);  // @0x824A7E48
         void HandleCarInfoResponseEvent(const CgsModule::Event* lpEvent);

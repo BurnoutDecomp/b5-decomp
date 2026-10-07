@@ -9,9 +9,8 @@
 // a secondary yaw/pitch/roll) and exposes a live camera Tweaker binding so a dev
 // can nudge them on the pad and snap to the car's front/back/left/right.
 //
-// Bodied in the matching .cpp: Construct, Prepare, SetupTweaker, GetName and the four
-// LookAt* snap callbacks. Still declaration-only: Update (its vtable slot resolves through
-// DirectorLinkStubs.cpp until it is reconstructed) and SetParameters.
+// Bodied in the matching .cpp: Construct, Prepare, SetupTweaker, GetName, Update and the
+// four LookAt* snap callbacks. Still declaration-only: SetParameters.
 //
 // Member layout is attested member names + order, with byte offsets pinned by the
 // original build:

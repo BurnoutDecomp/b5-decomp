@@ -5,17 +5,16 @@
 //
 // VehicleManager::Prepare's stage-0/1 arm, and THE ONLY CALLER of
 // PhysicalTrafficManager::Prepare @0x8262CA48 -- which is the only seater of the three
-// traffic pools. It retires the WorldLinkStubs.cpp:543 `return true` gate.
+// traffic pools.
 //
 // EVERY OFFSET IS REACHED BY NAME. The X360 pseudocode for this function degenerates into
-// `_R28`/`_R31` inline asm with every store at a raw console byte offset, which is why the old
-// link-stub banner refused to write it from the pseudocode; the body below is derived from the
-// raw asm, with each store mapped onto the member BrnVehicleManager.h already documents at that
+// `_R28`/`_R31` inline asm with every store at a raw console byte offset; the body below is
+// derived from the raw asm, with each store mapped onto the member BrnVehicleManager.h already documents at that
 // console offset.
 //
 // SIGNATURE: DWARF BrnVehicleManager.h:824 spells `bool PrepareData(rw::LinearResourceAllocator*)`.
-// This tree's declaration (BrnVehicleManager.h:485) and the retiring link stub both carry the
-// BASE `rw::IResourceAllocator*`; that spelling is kept, because changing it changes the MSVC
+// This tree's declaration (BrnVehicleManager.h) carries the BASE `rw::IResourceAllocator*`;
+// that spelling is kept, because changing it changes the MSVC
 // mangle and turns a compile error into LNK2019/LNK2005.
 // ============================================================================
 

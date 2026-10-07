@@ -479,25 +479,6 @@ void TriggerQueryManager::ProcessPlayerTriggers(
             //     BrnGameState::DriveThruManager::HandleDriveThru(a7, a4, a3, a8, a5);
             //     //   a7 = lpDriveThruManager (this)   a4 = lpGenericRegion
             //     //   a3 = lpActiveRaceCarInterface    a8 = lpVehicleList   a5 = lpOutput
-            //
-            // ⚠️⚠️ THE PARK NOTE THAT STOOD HERE WAS STALE, AND IT WAS STALE IN BOTH OF ITS TWO
-            // MEASURED CLAIMS. Re-measured 2026-08-27 [[gates-are-stale-not-dead]]:
-            //  (1) "BrnDriveThruManager.cpp DOES NOT COMPILE". It does now, and the fix was TWO
-            //      LINES, not the multi-file job the note implied: BrnDriveThruManager.h was
-            //      missing `#include BrnGameStateSharedIO.h` (the home of the
-            //      GameStateModuleIO::GameActionQueue typedef its four signatures name -- the
-            //      header only ever forward-declared `struct OutputBuffer`), and
-            //      BrnDriveThruManager.cpp:403 needed `::EActiveRaceCarIndex` because
-            //      BrnGameState declares its own enum of that name. `selfcheck.py` now returns
-            //      STATUS=pass. Every other error in the note's list was a cascade of those two.
-            //  (2) "it drags the SIX bodiless training symbols ... None has a body or a link stub
-            //      anywhere in b5-decomp/src". FALSE since 2026-08-24, four days after the note was
-            //      written: the [tut-ticker] wave landed and MOUNTED BrnTrainingManager.cpp, which
-            //      bodies IsTipPending (:808), IsTipAllowedInGameMode (:685), GetTimeSinceLastTip
-            //      (:818), RequestTip (:824) and the GetProfile accessor, and BrnProfile.cpp:532
-            //      bodies HasPlayerSeenTrainingType. Zero of the six were still missing.
-            // The lesson is the project's own: ASK WHEN THE NOTE LAST RAN. This one cost the whole
-            // drive-thru chain a week for a missing `#include` and a missing `::`.
             lpDriveThruManager->HandleDriveThru(lpGenericRegion, lpActiveRaceCarInterface,
                                                 lpVehicleList, lpOutput);
 

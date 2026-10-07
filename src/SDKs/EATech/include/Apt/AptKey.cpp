@@ -30,6 +30,7 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"   // AptBoolean::Create (the true/false singletons)
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"  // mnInput (== X360 dword_8324E7A8) + the VM singleton
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"    // GetAStickLeft/GetAStickRight (the live analog snapshots)
+#include "SDKs/EATech/include/Apt/AptTarget.h"             // gpAptTarget (the director's listener set)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC keys
 #include "SDKs/EATech/Apt/AptKeyMembersIndex.h"            // KeyMembersIndex::in_word_set
 #include "SDKs/EATech/include/Apt/AptDefine.h"             // gpGCPoolManager
@@ -115,15 +116,6 @@ extern float gAptAnalogAxis1[];   // flt_8324E204 (axis1 view @+4 of the same re
 // index under (X360 unk_8324E614). Defined in AptGlobals.cpp ("controller").
 // ---------------------------------------------------------------------------
 extern const EAStringC gAptKeyControllerKey;   // unk_8324E614
-
-// ---------------------------------------------------------------------------
-// Registering a Key listener: addListener's X360 body reaches the current
-// target (off_8324E574 == gpAptTarget) and walks the director's mListenerSet to
-// add pListener iff it is not already registered. HOMED in
-// AptRenderLinkStubs.cpp over the real AptAnimationTargetSet (membership scan
-// @0x82ADC764 + the shared set `add` @0x82ADBCE0).
-// ---------------------------------------------------------------------------
-extern void AptKeyManagerAddListener(AptValue* pListener);
 
 // ---- the nine class-wide cached native-method singletons -------------------
 AptNativeFunction* AptKey::spMethod_isDown               = 0;   // off_8324E394
@@ -390,9 +382,9 @@ AptValue* AptKey::sMethod_getController()
 // Reads the listener value off the top of the native arg stack (only when called
 // with exactly one argument). It is registered only when it is a defined value of
 // a CIH-like type (the X360 tests `mbIsDefined` and value-type 12 (CIH) or 37
-// (CIHNone), and rejects a CIH whose flags carry the 0x60000000 marker). The
-// actual "add if not already present" walk over the director's listener set is
-// the homed AptKeyManagerAddListener (AptRenderLinkStubs.cpp).
+// (CIHNone), and rejects a CIH whose flags carry the 0x60000000 marker). It is
+// then added to the current target's director listener set unless that set
+// already holds it.
 // Always returns the AS undefined value.
 // ---------------------------------------------------------------------------
 AptValue* AptKey::sMethod_addListener(AptKey* /*pThis*/, int nArgCount)
@@ -419,7 +411,21 @@ AptValue* AptKey::sMethod_addListener(AptKey* /*pThis*/, int nArgCount)
                 bIsCIH && (static_cast<AptCIH*>(pListener)->mFlagsA & 0x6u) != 0;
 
             if (!bRejected)
-                AptKeyManagerAddListener(pListener);   // add iff not already present
+            {
+                AptAnimationTargetSet* const pSet =
+                    &gpAptTarget->GetAnimationTarget()->mListenerSet;
+                bool bPresent = false;
+                for (u32 lu = 0; lu < pSet->mnCapacity; ++lu)
+                {
+                    if (pSet->mppSlots[lu] == pListener)
+                    {
+                        bPresent = true;
+                        break;
+                    }
+                }
+                if (!bPresent)
+                    pSet->add(pListener);
+            }
         }
     }
 
@@ -500,15 +506,6 @@ AptValue* AptKey::sMethod_getAnalogTriggerInfo()
 }
 
 // ---------------------------------------------------------------------------
-// The sibling of AptKeyManagerAddListener -- remove pListener from the
-// director's listener set (off_8324E574 == gpAptTarget; the shared set `remove`
-// @0x82ADBC28: find the entry == pListener, Release it (vtbl[1]), null the
-// slot, decrement the count). HOMED in AptRenderLinkStubs.cpp over the real
-// AptAnimationTargetSet. Returns true iff it removed one.
-// ---------------------------------------------------------------------------
-extern bool AptKeyManagerRemoveListener(AptValue* pListener);
-
-// ---------------------------------------------------------------------------
 // sMethod_removeListener @ 0x82ADC??? (PS3 EXTERNAL DecFIGS 0xF303D8) -- unregister
 // a Key listener. DECOMPILED from the PS3 body, cross-checked vs the X360 listener-
 // vector `remove` helper (ARTIST 0x82ADBC28).
@@ -517,8 +514,8 @@ extern bool AptKeyManagerRemoveListener(AptValue* pListener);
 // top of the native arg stack; it is removed only when it carries the listener
 // marker bit (PS3 `*(value+4) & 0x8000000` -- the same packed value-flag word the
 // add path tests, here AptValue::mnValueData bit 27). The actual {count, array}
-// scan-find-Release-null-and-decrement runs in the homed
-// AptKeyManagerRemoveListener (AptRenderLinkStubs.cpp, see above).
+// scan-find-Release-null-and-decrement is the shared set remove
+// (AptAnimationTargetSet::remove) over the director's listener set.
 // Returns the AS true/false singleton (true iff a listener was removed; every early
 // bail returns false).
 // ---------------------------------------------------------------------------
@@ -535,9 +532,10 @@ AptValue* AptKey::sMethod_removeListener(AptKey* /*pThis*/, int nArgCount)
     if ((pListener->mnValueData & 0x8000000u) == 0)
         return AptBoolean::Create(false);
 
-    // The find-Release-null-decrement walk over the manager's listener vector. The
-    // manager/vector types are un-homed (see addListener); a miss returns false.
-    const bool bRemoved = AptKeyManagerRemoveListener(pListener);
+    // The find-Release-null-decrement walk over the director's listener set; a miss
+    // returns false.
+    const bool bRemoved =
+        gpAptTarget->GetAnimationTarget()->mListenerSet.remove(pListener);
     return AptBoolean::Create(bRemoved);
 }
 

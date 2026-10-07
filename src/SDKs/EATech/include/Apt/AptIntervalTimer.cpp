@@ -108,8 +108,7 @@ void* AptIntervalTimer::_vector_deleting_destructor_(AptIntervalTimer* pArray, c
 }
 
 // ===========================================================================
-// The interval-table impls (HOMED 2026-07-02, retiring the AptRenderLinkStubs
-// nulls). The entry layer (AptActionInterpreter::cbCallMethod_setInterval /
+// The interval-table impls. The entry layer (AptActionInterpreter::cbCallMethod_setInterval /
 // _clearInterval) reads the guard args; these do the table work.
 // ===========================================================================
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"       // the timer table owner

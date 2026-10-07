@@ -244,12 +244,8 @@ cParticleEmitterManager& cParticleEmitterManager::Instance()
 //     mpFree = apEmitter                           stw r31,0x14(r30)
 //     --mUsedCount (0x04)                          lwz/addi -1/stw 4(r30)
 //
-// ⭐ WHY IT WAS PARKED AND WHY THAT REASON IS GONE. LionRuntimeLinkStubs.cpp refused to body
-// this one on the grounds that "its DeInit is not bodied either -- a faithful UnRegister that
-// calls a trap is worse than the trap, because it does its list surgery FIRST and leaves the
-// pool half-modified when the trap fires". cParticleEmitter::DeInit @0x82913330 IS bodied
-// (ParticleEmitter.cpp), and has been; the note went stale. The hazard it describes is real and
-// is exactly why the check was worth redoing rather than trusting the comment.
+// ⚠️ It does its list surgery BEFORE cParticleEmitter::DeInit (ParticleEmitter.cpp), so DeInit
+// must never be a trap: one firing here would leave the pool half-modified.
 //
 // ⭐ THE UNLINK IS ATTEMPTED EVEN WHEN THE EMITTER IS NOT ON mpUsed, and the walk simply falls
 // off the end (0x829137B8 branches past the surgery to the DeInit). So an emitter that is

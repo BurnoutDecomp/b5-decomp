@@ -172,19 +172,10 @@ void CameraSphericalRotationController::Update(f32 lfTimestep, Vector2 lStick,
 // ============================================================================
 // CameraSphericalRotationController::Construct
 //
-// ⛔⛔ THIS WAS AN EMPTY STUB IN GameSource/Director/DirectorLinkStubs.cpp UNTIL 2026-08-01,
-// and BOTH halves of the note that justified it had expired:
-//   "the console INLINES it into each owner (so there is no standalone body to read...)"
-//       -- true, and NOT a reason to leave it empty: the inlining is the body. Three owners
-//          emit the identical ten stores, which is three independent transcriptions of it.
-//   "Nothing reads either one ... MainDirector::UpdateCameraBehavioursPostScene (the only
-//    path that would dispatch it) is gated."
-//       -- the post-scene behaviour pass was un-gated on 2026-08-01, and
-//          BehaviourRotateAboutVehicle::BecomeSimilarTo calls this on the LIVE car-select
-//          path for the express purpose of discarding accumulated stick state. With the
-//          empty stub the stale yaw/pitch survived every re-seat, and
-//          BehaviourRotateAboutVehicle::Construct left the whole controller at whatever the
-//          pool slot happened to hold.
+// The console INLINES this into each owner, so there is no standalone body; the inlining is
+// the body. Three owners emit the identical ten stores, which is three independent
+// transcriptions of it. BehaviourRotateAboutVehicle::BecomeSimilarTo calls it on the LIVE
+// car-select path to discard accumulated stick state.
 //
 // THE TEN STORES (identical in all three witnesses; displacements are controller-relative):
 //   BehaviourRotateAboutVehicle::Construct   @0x8222BF68..0x8222BF90  (behaviour +0x20)

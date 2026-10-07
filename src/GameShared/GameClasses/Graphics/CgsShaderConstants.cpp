@@ -44,10 +44,10 @@
 // NOT read the host-width members on a streamed block.
 // ============================================================================================
 // The single global runtime table (X360 `mShaderConstantTable` @ 0x830113D0, inside namespace
-// CgsGraphics). Its storage currently lives in GameSource/World/WorldLinkStubs.cpp; every
-// consumer (BrnRendererModule / BrnWorldModule / BrnShadowMap / CgsDispatcherCommands)
-// declares it exactly like this.
-namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }
+// CgsGraphics). This TU owns its storage: its static initialiser runs the ShaderConstantTable
+// constructor (the engine's eight constants). Every consumer (BrnRendererModule /
+// BrnWorldModule / BrnShadowMap / CgsDispatcherCommands) declares it extern.
+namespace CgsGraphics { ShaderConstantTable mShaderConstantTable; }
 
 namespace
 {

@@ -562,7 +562,7 @@ namespace
 
     // =============================================================================================
     // VehicleManager::EndVehicleTractionLineTests  @0x82633CD8  (68 insns)
-    // THE PRODUCER LIFETIME, CLOSED. Its link stub is DELETED as of 2026-08-11.
+    // THE PRODUCER LIFETIME, CLOSED.
     //
     // Wait on the dispatched job (null-guarded -- RunTractionLineTestJobs stores the dispatcher's
     // answer unconditionally and a null IS "nothing was dispatched"), close the stream, then hand

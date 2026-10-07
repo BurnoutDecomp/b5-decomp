@@ -49,14 +49,6 @@ namespace Playback
     // Object fold removed the clash that forced it, so the REAL Voice home is
     // included (CgsVoice.h also completes Content, which the handle tables and the
     // static AddContent use).
-    //
-    // GetR interned-name globals (X360 dword_83008650 / dword_830080A8): the words
-    // GetR compares/passes are interned Name hashes -- dword_83008650 is the
-    // TARGET FACTORY's name (the asm reads voice->mFactory.mName and compares) and
-    // dword_830080A8 is the named-slot Name handed to Voice::FindNamedSlot.
-    // Bodied in their owning data TUs.
-    extern const u32 gu32VoiceTypeTag;        // X360 dword_83008650 (a factory Name hash)
-    extern const u32 gu32NamedSlotSentinel;   // X360 dword_830080A8 (a slot Name hash)
 
     // DWARF CgsEnvironment.h:69 -- the per-stage CPU perf-monitor ids the
     // environment update registers. Construct (h:77) is its own ledger function.
@@ -114,7 +106,6 @@ namespace Playback
         void* operator new(size_t luSize, const EnvironmentSpec& lrSpec);
         void operator delete(void* lpMemory, rw::IResourceAllocator* lpAllocator);   // h:495
         void operator delete(void* lpMemory, const EnvironmentSpec& lrSpec);         // h:163
-        void operator delete(void* lpMemory);                                        // h:167
         void* Allocate(u32 lu32Size, u32 lu32Alignment, const char* lpcName);
         void Free(void* lpMemory);
         static Handle<Environment> Create(const EnvironmentSpec& lrSpec);

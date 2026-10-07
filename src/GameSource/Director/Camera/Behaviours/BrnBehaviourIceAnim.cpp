@@ -285,16 +285,6 @@ namespace Camera
 
 } // namespace BrnDirector
 
-// ============================================================================
-// RETIRED (2026-09-26, crash parity FX-LASTFIX): the local re-declaration
-//     namespace rw { namespace math { namespace vpu {
-//         Matrix44Affine SLerp(const Matrix44Affine&, const Matrix44Affine&, const f32* lpfAmount); }}}
-// that used to sit here is GONE, with its mounted link stub (DirectorLinkStubs.cpp GROUP D), which returned `lrTo`.
-// No such overload exists on the console: Update's `bl 0x82247354` goes to rw::math::vpu::SLerp @0x82216858, the
-// four-argument body in rw/math/vpu/matrix44affine_operation.h (the amount a splat in v1, the angle out in r6). With
-// the stub and an amount of 1.0f the heading space SNAPPED to the look-at every frame; the console eases it 20% a frame.
-// ============================================================================
-
 namespace BrnDirector
 {
 namespace Camera
@@ -441,7 +431,7 @@ static bool BrnDiag_TakeBudgetAllows(DiagTakeBudget& lrBudget, s32 liGuid)
 // 0..5, how many degrees mHeadingSpaceTransform's forward (its z row) is off the look-at's before and after the SLerp,
 // and the SLerp's own remaining angle (its angle out, angle - angle * 0.2). The console eases 20% a frame: on a frame
 // whose look-at moved, after == 0.8 x before (the arc arm; under 2 degrees the lerp arm is within a hair of it). The
-// old link stub made every after 0. The line budget is per take (DiagTakeBudget above). Reads only.
+// line budget is per take (DiagTakeBudget above). Reads only.
 struct HeadingEaseDiag
 {
     bool        mbOn;
@@ -938,8 +928,7 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     // ⭐ (2026-09-26, crash parity FX-LASTFIX) SLerp @0x82216858, `bl` at 0x82247354: r3 the sret (var_360), r4 = r29 =
     // &mHeadingSpaceTransform (this+0x610) -- FROM, r5 = CreateLookAt's sret -- TO, v1 = v127 = the 0.2 splat, r6 = r22 =
     // var_390 -- an angle-out slot Update never reads (the looker block re-uses var_390 as scratch). The four result rows
-    // go back into mHeadingSpaceTransform (0x82247360..0x8224737C). It used to call a pointer-amount overload whose
-    // mounted link stub returned `to`, with an amount of 1.0f: the space snapped to the look-at every frame.
+    // go back into mHeadingSpaceTransform.
     rw::math::vpu::Vector3 lUnusedAngle;
     BrnDiag_HeadingEaseBefore(mHeadingSpaceTransform, lLookAt);                            // [DIAG] NOT X360
     mHeadingSpaceTransform =

@@ -43,7 +43,6 @@ struct RenderableMesh
 
     // DWARF renderablemesh.h:83 -- per-mesh serialised vertex-descriptor block sizer, used by
     // CgsResource::RwRenderableResourceType::GetSerialisedResourceDescriptor (@0x828A9AB0).
-    // Distinct from the alignptr.cpp static GetResourceDescriptor. Declared here (wave44
-    // prerequisite); its body is homed in its own wave.
-    CgsResource::ResourceDescriptor GetResourceDescriptor(uint32_t luNumVertexBuffers, uint32_t luNumVertexDescriptors);
+    // Static: the caller passes only the two counts, no mesh pointer. Body in renderablemesh.cpp.
+    static CgsResource::ResourceDescriptor GetResourceDescriptor(uint32_t luNumVertexBuffers, uint32_t luNumVertexDescriptors);
 };

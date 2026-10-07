@@ -20,9 +20,7 @@
 // brightness toggle over it, publishes the live pair on every move (GUI event 545 --
 // the event BrnGame::BrnGameModule::BridgeGuiToGame has consumed since post-fx step 10)
 // and, on accept, writes the pair back into the options profile and requests a save.
-// It is the PRODUCER half of the calibration feature; before this TU landed only the
-// ctor existed and BrnScreenStatesDataLinkStubs.cpp carried inert OnEnter/OnLeave/Update
-// stubs, which is why the options brightness/contrast sliders could not move anything.
+// It is the PRODUCER half of the calibration feature.
 //
 // REACHABILITY (recovered from the shipped FSM, not assumed) -- build/game/FSM/
 // BRNSCREENFSM.BUNDLE: state 108 is "CN_COLOUR" (BrnScreenFlow.cpp:307 registers this
@@ -239,8 +237,10 @@ namespace BrnGui
 
     // ---- statics -------------------------------------------------------------------
 
-    // .rdata @0x82F27008 / count @0x82F27018 -- DEFINED IN BrnScreenStatesDataLinkStubs.cpp
-    // (that file's measured-table block), not here; the declaration lives in the header.
+    // The two apt packages this screen loads (read from the image).
+    const CgsGui::sResourceTuple CrashNavColourCalibrate::maResourcesToLoad[] =
+        { { 143, CgsGui::E_GUI_RESOURCETYPE_APT }, { 34, CgsGui::E_GUI_RESOURCETYPE_APT } };
+    const u32 CrashNavColourCalibrate::muNumResourcesToLoad = 2;
 
     // @0x820664C0 (.rdata, 2 entries) + the count word @0x820664C8. The two ids this
     // state registers for.

@@ -606,6 +606,16 @@ namespace BrnTrafficIO
     //   .h:262 R +63424  0x827A00B0      .h:263 W +63424  -- no body in the image (see below)
     // ========================================================================
 
+    // Run by CreateIOBuffer<OutputBuffer_PostScene>. TrafficAIInterface::Construct is inlined
+    // on the console (the +0x4020 halfword, the rival queue at +0x4020+0xB010 and the two array
+    // counts at +0x4020+0xB708 / +0xB794). mTrafficToRaceCarInterface_PostScene is not touched.
+    void OutputBuffer_PostScene::Construct()
+    {
+        CgsModule::IOBuffer::Construct();      // stb 1, 0(this)
+        mSceneCoarseQueryQueue.Construct();    // +4
+        mTrafficAIInterface.Construct();       // +0x4020
+    }
+
     // X360 0x82711118: write-lock; return &mSceneCoarseQueryQueue (this + 4, first member).
     OutputBuffer_PostScene::SceneCoarseQueryQueue* OutputBuffer_PostScene::GetSceneCoarseQueryQueue()
     {
@@ -943,25 +953,6 @@ namespace BrnTrafficIO
     // ========================================================================
     // The PRE-DISPATCH pair -- the traffic render seam. The header's pre-dispatch banner
     // carries the allocator/Construct/Clear attestation for both interiors.
-    //
-    // LINK BLOCKER -- READ BEFORE BUILDING THE EXE. GameSource/World/WorldLinkStubs.cpp still
-    // defines four gates that duplicate the bodies below:
-    //   BrnTrafficIO::InputBuffer_PreDispatch::Construct()
-    //   BrnTrafficIO::InputBuffer_PreDispatch::SetCameraPosition(rw::math::vpu::Vector3)
-    //   BrnTrafficIO::InputBuffer_PreDispatch::SetVisibleEntities(
-    //       const Array<CgsSceneManager::EntityId,650>&)
-    //   BrnTrafficIO::OutputBuffer_PreDispatch::Construct()
-    // Both TUs are mounted in tools/build/build_game_exe.bat (this file at :2032,
-    // WorldLinkStubs.cpp at :2168), so the exe link fails with four LNK2005s until the four gate
-    // DEFINITIONS are deleted outright. DELETE THIS BANNER WHEN they are gone. The per-TU
-    // `cl /c` gate cannot see duplicate definitions, so a green selfcheck here proves nothing
-    // about the link.
-    //
-    // BEHAVIOUR CHANGE on retirement, in both cases a correction: each Construct gate is
-    // `memset(this, 0, sizeof(*this))` and never calls CgsModule::IOBuffer::Construct, so every
-    // PreDispatch buffer so far has run with eStatusConstructed clear, a state the console cannot
-    // be in (@0x8275CEE8 and @0x8275CF28 both open with `stb 1, 0(r3)`). The gates also
-    // bulk-zero the element buffers where the real bodies write only the console's stores.
     // ========================================================================
 
     void InputBuffer_PreDispatch::_AssertLayout()

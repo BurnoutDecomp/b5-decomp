@@ -95,24 +95,12 @@
 // ===========================================================================
 
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3.h"
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3Crypto.h"
 
 namespace MassiveAdClient3
 {
 
 class CRequestBuilder;
-
-// ---------------------------------------------------------------------------
-// MassiveAd HMAC helper (separate TU).
-//
-// CalculateSHA1HMac(data, dataLength, key, keyLength) returns a freshly
-// MassiveMalloc'd 20-byte SHA1-HMAC digest (freed by the caller through the
-// MassiveAd heap hook), or null on failure. The X360 symbol demangles WITHOUT
-// the MassiveAdClient3 namespace, but it is declared inside the namespace here
-// so the whole vendor package stays self-contained (link-name fidelity is not a
-// gate for this reconstruction). Body lives in the MassiveAd crypto TU.
-// ---------------------------------------------------------------------------
-void* CalculateSHA1HMac(const void* pData, int nDataLength,
-                        const char* pcKey, int nKeyLength);
 
 // ---------------------------------------------------------------------------
 // MassiveAd wire byte-order hooks (FLAGGED).
@@ -195,7 +183,7 @@ public:
     // slice) so the existing request subclasses that do not name an endpoint stay
     // instantiable. Reproduced from the asm, not the pseudocode (which renders the
     // virtual as a direct call).
-    virtual const char* GetRequestURL();
+    virtual const char* GetRequestURL() = 0;
 
     // ----- lifecycle ------------------------------------------------------
 
@@ -230,15 +218,16 @@ public:
     void Cancel();
 
     // @ 0x82BD00E8. Tail-calls SetStatus(0x20).
-    int Suspend();
+    void Suspend();
 
     // @ 0x82BD00F0. Tail-calls SetStatus(0x10).
-    int Resume();
+    void Resume();
 
-    // Status setter shared by the lifecycle paths above. NOT part of this TU's
-    // ledger slice (separate dossier); declared here because Submit/Complete/
-    // Error/Cancel/Suspend/Resume all bl into it.
-    int SetStatus(int nStatus);
+    // Stores the status. Entering 0x300 (sending) stamps the send time into
+    // mnField38 and grows the wire buffer to mnField48 bytes when it is smaller
+    // (status 0x2000 on failure); 0x2000 (error) clears mnField38, 0x1000
+    // (complete) turns it into the round-trip time.
+    void SetStatus(int nStatus);
 
     // ----- status queries -------------------------------------------------
 

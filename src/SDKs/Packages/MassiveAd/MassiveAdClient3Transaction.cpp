@@ -18,9 +18,8 @@
 // The X360 renders the vendor logger (`STUB(level, name, fmt, ...)`) as the
 // already-homed MassiveLog(level, GetName(), fmt, ...) -- the +0x18 second
 // argument is the CMassiveBaseObject name (mpcName), i.e. GetName(). The heap is
-// reached through the MassiveMalloc / MassiveFree hooks, and the size-less /
-// sized vendor formatters are MassiveSprintf (sub_82C0CB70) / MassiveFormatString
-// (sub_82C10930).
+// reached through the MassiveMalloc / MassiveFree hooks; strings are built with
+// the C runtime sprintf and the sized MassiveFormatString.
 // ===========================================================================
 
 namespace MassiveAdClient3
@@ -404,7 +403,7 @@ int CTransactionHTTP::ProcessRequest()
 
         const char* lpcHostName =
             CNetworkManager::GetServerHostName(lpRequest->GetServerIndex());
-        MassiveSprintf(lacHost, "%s", lpcHostName);
+        std::sprintf(lacHost, "%s", lpcHostName);
         if (!strlen(lacHost))
         {
             int lacAddr[4];
@@ -414,7 +413,7 @@ int CTransactionHTTP::ProcessRequest()
 
         unsigned short lnPort =
             CNetworkManager::GetServerPortU16(mpRequest->GetServerIndex());
-        MassiveSprintf(lacHost, "%s:%d", lacHost, lnPort);
+        std::sprintf(lacHost, "%s:%d", lacHost, lnPort);
 
         if (MassiveFormatString(lacHeaders, 0x200,
                                 " HTTP/1.1\r\n"
@@ -504,6 +503,23 @@ int CTransactionHTTP::ProcessResponse(const void* pData, int nLength)
     if (mbChunked)
         return ForwardChunkedToRequest(pData, nLength);
     return ForwardUnChunkedToRequest(pData, nLength);
+}
+
+
+// ---------------------------------------------------------------------------
+// CTransactionHTTP::Reset
+// ---------------------------------------------------------------------------
+void CTransactionHTTP::Reset()
+{
+    mbHeadersComplete = 0;
+    mbStatusReceived = 0;
+    std::memset(mpHTTPBuffer, 0, mnHTTPCapacity);
+    mnHTTPUsed = 0;
+    mbChunked = 0;
+    mnChunkLength = 0;
+    mnChunkReceived = 0;
+    mpHTTPWritePos = mpHTTPBuffer;
+    mnContentLength = 0;
 }
 
 } // namespace MassiveAdClient3

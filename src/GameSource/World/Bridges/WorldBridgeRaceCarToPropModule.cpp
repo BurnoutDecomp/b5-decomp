@@ -12,21 +12,17 @@
 // The prop module's view of the CARS. PropEntityModule::PreSceneUpdate drives cell
 // activation, prop-physics wake-up and the hit/smash bookkeeping off the player's world
 // position, which car slot the player is, whether the player is crashing/wrecked, and the
-// eight per-car linear velocities. All of it arrives through this one bridge; while it was
-// an inert WorldLinkStubs gate the prop input buffer kept Construct's zeroes.
+// eight per-car linear velocities. All of it arrives through this one bridge; without it the
+// prop input buffer keeps Construct's zeroes.
 //
 // ---- DWARF home ------------------------------------------------------------
 // PS3 DecFIGS unity dump _compile/BrnWorldBridgesUnity.cpp:2717, whose scope hints name
 // WorldBridgeEntityModulesToEntityModules.cpp:138/147/149/152 -- that is the home TU, and
 // this function's declaration already lives in that TU's header (included above).
 //
-//   ⭐ FILE SPLIT, the WorldBridgeRaceCarToWorldModule.cpp precedent (2026-08-01):
-//   WorldBridgeEntityModulesToEntityModules.cpp IS NOT MOUNTED (three still-declaration-only
-//   IO accessors its two remaining bridges need). This bridge needs none of them, so it gets
-//   its own mountable TU. It is kept SEPARATE from its sibling
-//   WorldBridgeWorldModuleToPropModule.cpp deliberately: that one closes with zero
-//   unresolved externals and must be mountable on its own merits.
-//   DELETE-WHEN: those three accessors land and the parent TU can be mounted whole.
+//   ⭐ FILE SPLIT, the WorldBridgeRaceCarToWorldModule.cpp precedent: this body lives in its
+//   own TU, separate from its home. The home TU WorldBridgeEntityModulesToEntityModules.cpp is
+//   mounted now, so this body can be folded back into it.
 //
 // ---- The console body (0x827A5510..0x827A567C) -----------------------------
 // r4 = lpPropInputBuffer_PreScene (dest), r5 = lpRaceCarOutputBuffer_PreScene (src),

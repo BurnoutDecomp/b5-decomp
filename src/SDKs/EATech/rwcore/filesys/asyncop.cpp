@@ -1,18 +1,12 @@
 // =====================================================================================
-// rw::core::filesys -- async-op list (intrusive) + GetSize accessor.
+// rw::core::filesys -- the AsyncOp class + GetSize accessor.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm is authoritative. No
 // reference source and no DecFIGS DWARF hints exist for these TUs.
 //
-//   rw::core::filesys::AsyncOpList::InsertAfter @0x82BBDE70  (template <AsyncOp> inst)
-//   rw::core::filesys::AsyncOpList::Remove      @0x82BBDED0  (template <AsyncOp> inst)
 //   rw::core::filesys::GetSize                  @0x82BBD700
 //
-// The list head is { mpHead@+0, mpTail@+4, muCount@+8 }; nodes link forward via
-// AsyncOp::mpNext (node +0). The bodies are store-for-store ports of the pseudocode,
-// with the raw _DWORD word-indices resolved to named members:
-//   result/a1 -> AsyncOpList*   result[0]==mpHead  result[1]==mpTail  result[2]==muCount
-//   a3 -> the node being inserted               a2 -> the predecessor / target node
+// The op list's InsertAfter / Remove are the shared detail::ListSingle<T> members (list.h).
 // =====================================================================================
 
 #include "SDKs/EATech/rwcore/filesys/device.h"  // Device / Manager / Allocator (AsyncOp dispatches here)
@@ -34,114 +28,10 @@ namespace rw
             {
             }
 
-            // &unk_82181154 -- the kTimeoutNone constant the result accessors hand to
-            // Device::Wait as its timeout pointer (0xFFFFFFFF == block forever), mirroring
-            // the KU_TIMEOUT_NONE pattern in device.cpp.
-            static const u32 KU_TIMEOUT_NONE = 0xFFFFFFFFu;
-
             // GetSize @0x82BBD700:  ld r3, 0x18(r3); blr -- return the 64-bit size at +0x18.
             u64 GetSize(const AsyncOp* lpOp)
             {
                 return lpOp->mu64Size;
-            }
-
-            // InsertAfter @0x82BBDE70.
-            //   if (a2) { if (!a2->next) tail = a3; a3->next = a2->next; a2->next = a3; ++count; }
-            //   else    { a3->next = head; v3 = count; head = a3; count = v3 + 1;
-            //             if (!a3->next) tail = a3; }
-            AsyncOpList* AsyncOpList::InsertAfter(AsyncOp* lpAfter, AsyncOp* lpNode)
-            {
-                if (lpAfter)
-                {
-                    if (!lpAfter->mpNext)
-                        mpTail = lpNode;
-                    lpNode->mpNext = lpAfter->mpNext;
-                    lpAfter->mpNext = lpNode;
-                    ++muCount;
-                }
-                else
-                {
-                    lpNode->mpNext = mpHead;
-                    u32 luPrevCount = muCount;
-                    mpHead = lpNode;
-                    muCount = luPrevCount + 1;
-                    if (!lpNode->mpNext)
-                        mpTail = lpNode;
-                }
-                return this;
-            }
-
-            // Remove @0x82BBDED0.
-            // lpFrom (X360 r5/a3) is a PREDECESSOR NODE cursor, not a pointer-to-link: the
-            // walk follows lpFrom->mpNext (the asm's `*(r5)`) looking for lpNode. The head
-            // case (lpNode == mpHead) is handled separately against the head/tail fields.
-            //
-            //   r10 = mpHead;
-            //   if (lpNode != mpHead) {                       // 0x82BBDF1C
-            //       if (mpHead) {
-            //           if (!lpFrom) lpFrom = mpHead;          // start scan at head node
-            //           if (lpFrom->mpNext) {
-            //               while (lpFrom->mpNext && lpFrom->mpNext != lpNode)  // DF3C
-            //                   lpFrom = lpFrom->mpNext;
-            //               if (lpFrom->mpNext == lpNode) {    // DF58/DF64
-            //                   --muCount; result = 1;
-            //                   lpFrom->mpNext = lpNode->mpNext;   // DF7C/DF80
-            //                   if (lpNode == mpTail) mpTail = lpFrom;  // DF84/DF90
-            //               }
-            //           }
-            //       }
-            //   } else {                                      // lpNode == mpHead
-            //       result = 1; --muCount;
-            //       if (lpNode == mpTail) { mpTail = 0; mpHead = 0; }   // DF04/DF08
-            //       else mpHead = lpNode->mpNext;              // DF10/DF14
-            //   }
-            //   if (result) lpNode->mpNext = 0;               // DF9C
-            int AsyncOpList::Remove(AsyncOp* lpNode, AsyncOp* lpFrom)
-            {
-                int liResult = 0;
-
-                if (lpNode != mpHead)
-                {
-                    if (mpHead)
-                    {
-                        if (!lpFrom)
-                            lpFrom = mpHead;
-                        if (lpFrom->mpNext)
-                        {
-                            while (lpFrom->mpNext && lpFrom->mpNext != lpNode)
-                                lpFrom = lpFrom->mpNext;
-
-                            if (lpFrom->mpNext && lpFrom->mpNext == lpNode)
-                            {
-                                liResult = 1;
-                                --muCount;
-                                lpFrom->mpNext = lpNode->mpNext;
-                                if (lpNode == mpTail)
-                                    mpTail = lpFrom;
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    liResult = 1;
-                    AsyncOp* lpTail = mpTail;
-                    --muCount;
-                    if (lpNode == lpTail)
-                    {
-                        mpTail = nullptr;
-                        mpHead = nullptr;
-                    }
-                    else
-                    {
-                        mpHead = lpNode->mpNext;
-                    }
-                }
-
-                if (liResult)
-                    lpNode->mpNext = nullptr;
-
-                return liResult;
             }
 
             // =============================================================================
@@ -351,7 +241,7 @@ namespace rw
             //
             // Allocate a Handle (40 bytes), construct it from the path copy / position-hi /
             // device, free the path copy, then succeed (return 1) iff the handle opened
-            // (mbIsOpen); otherwise destroy the half-built handle and return -2.
+            // (mpFile); otherwise destroy the half-built handle and return -2.
             // -----------------------------------------------------------------------------
             s32 AsyncOp::DoOpen(AsyncOp* lpOp)
             {
@@ -372,7 +262,7 @@ namespace rw
                 gpFileSysAllocator->Free(lpOp->mpBuffer, 0);  // free the path copy (a1[12] == +0x30)
 
                 Handle* lpResult = reinterpret_cast<Handle*>(lpOp->mpStream);
-                if (lpResult->mbIsOpen)         // *(v4+8)
+                if (lpResult->mpFile)           // *(v4+8)
                     return 1;
                 if (lpResult)
                     HandleScalarDeletingDtor(lpResult, 1);
@@ -487,7 +377,7 @@ namespace rw
                 Device* lpDevice = mpDevice;             // *(a1+64)
                 if (lpDevice->IsExternalThread())        // *(v2+6)
                     lpDevice = gpFileSysManager->mpDefaultDevice; // *(off_8327F078+10)
-                lpDevice->Wait(this, &KU_TIMEOUT_NONE);  // &unk_82181154
+                lpDevice->Wait(this, EA::Thread::kTimeoutNone);
                 return mpStream;                         // *(a1+16)
             }
 
@@ -499,23 +389,25 @@ namespace rw
                 Device* lpDevice = mpDevice;             // *(a1+64)
                 if (lpDevice->IsExternalThread())
                     lpDevice = gpFileSysManager->mpDefaultDevice;
-                lpDevice->Wait(this, &KU_TIMEOUT_NONE);
+                lpDevice->Wait(this, EA::Thread::kTimeoutNone);
                 return mu64BytesDone;                    // *(a1+56)
             }
 
             // -----------------------------------------------------------------------------
-            // AsyncOp::GetStatus @0x82BBE058 -- if *lpbWantWait, block on the op; return the
-            // current result/status (miResult), publishing it with lwsync fences.
+            // AsyncOp::GetStatus -- unless the timeout is immediate, block on the
+            // op until it completes or the absolute timeout passes (the timeout is handed
+            // straight through to Device::Wait); return the current result/status
+            // (miResult), publishing it with lwsync fences.
             // -----------------------------------------------------------------------------
-            s32 AsyncOp::GetStatus(const s32* lpbWantWait)
+            s32 AsyncOp::GetStatus(const EA::Thread::ThreadTime& lTimeoutAbsolute)
             {
                 ::MemoryBarrier();          // lwsync
-                if (*lpbWantWait)
+                if (lTimeoutAbsolute != EA::Thread::kTimeoutImmediate)
                 {
                     Device* lpDevice = mpDevice;         // *(a1+64)
                     if (lpDevice->IsExternalThread())
                         lpDevice = gpFileSysManager->mpDefaultDevice;
-                    lpDevice->Wait(this);                // 2-arg form (default timeout)
+                    lpDevice->Wait(this, lTimeoutAbsolute);
                 }
                 ::MemoryBarrier();          // lwsync
                 return miResult;            // *(a1+4)

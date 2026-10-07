@@ -9,16 +9,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"          // gpDebugPrint / gxMessageFilterFlags (the PC vault-gate one-shot logs)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"   // Attrib::Database
 #include "SDKs/EA/GameTalk/GameTalk.h"                              // EA::GameTalk::GameTalkMessage accessors
-
-// Attrib::DecodeLiveLinkMessage lives in its own (not-yet-reconstructed) TU
-// (SDKs/.../AttribSys/runtime/common/attriblivelink.cpp, X360 0x8280FD10). It takes the
-// GameTalk "Update" key content (the r3 forwarded from GetKeyContent) and threads the edits
-// into the attribute database. Forward-declared here just far enough to link the address-of;
-// its body is owned elsewhere -- do not define it in this TU.
-namespace Attrib
-{
-    void DecodeLiveLinkMessage(const char* lpMessageContent);
-}
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attriblivelink.h" // Attrib::DecodeLiveLinkMessage
 
 namespace CgsAttribSys
 {

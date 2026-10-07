@@ -431,7 +431,7 @@ struct SlotSchema : public Entity
 // table by mu8SendCount.
 struct VoiceSpec : public Entity
 {
-    static const Name SK_TYPE_NAME;   // FLAG: definition DEFERRED.
+    static const Name SK_TYPE_NAME;
 
     // @ 0x82692398 / 0x82692498 / 0x82692598. Resolved-schema count forwarders
     // (assert mpVoiceSchema present + resolved). Bodied in CgsVoiceSpec.cpp.

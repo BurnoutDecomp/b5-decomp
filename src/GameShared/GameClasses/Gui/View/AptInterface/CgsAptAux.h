@@ -295,6 +295,7 @@ namespace CgsGui
         void      SendVariables(const char* lpacUrl, const char* lpacTarget,
                                 const char* lpacVariables, const char* lpacMethod, s32 liFlags);
         void      FsCommand(const char* lpacCommand, const char* lpacArgs);
+        AptValue* LoadVariables(const char* lpacUrl);
         AptValue* LoadVariablesNULL();
         s32       PointHitTest(f32 lfX, f32 lfY, AptAssetMoiveClip leClip);
         void      GetRealTimeClock(AptSysClock* lpSysClock, bool lbUseUtc);

@@ -20,16 +20,13 @@
 // BridgePhysicsModuleToCrashModule_PostPhysics starts at 0x827AB8B0) -- exactly 128 bytes,
 // 32 instructions, disassembled with capstone against the image bytes.
 //
-// ⭐ FILE SPLIT, same pattern and same reason as the sibling WorldBridgeRaceCarToWorldModule.cpp
-// (car-select hand-off wave): the DWARF home is the WorldBridgeInputToEntityModules.cpp unity
-// TU, but THAT TU IS NOT MOUNTED (its BridgeInputToEntityModules leg still needs entity-module
-// IO accessors that are declaration-only), so the copy that linked was the inert one-shot log
-// in WorldLinkStubs.cpp. This bridge is fully closed on its own, so it gets its own TU.
-// DELETE-WHEN: WorldBridgeInputToEntityModules.cpp can be mounted whole -- then fold this back.
+// ⭐ FILE SPLIT, same pattern as the sibling WorldBridgeRaceCarToWorldModule.cpp: the console's
+// home for this body is the WorldBridgeInputToEntityModules.cpp unity TU. That TU is mounted
+// too, so this body can be folded back into it.
 //
 // ⛔ WHAT THIS BRIDGE IS: the physics module's per-frame INPUT FEED. WorldModule::Update
-// @0x827D63E8 write-locks the physics input buffer and calls it once per frame; until now the
-// buffer was never written, so PhysicsModule::Update ran against a Construct-cleared input.
+// write-locks the physics input buffer and calls it once per frame; without it
+// PhysicsModule::Update runs against a Construct-cleared input.
 //
 // The whole console body is FOUR statements -- no branches, no loops, no asserts of its own
 // (every assert on this path lives inside the locked accessors it calls). Register trace:

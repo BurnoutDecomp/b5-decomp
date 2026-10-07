@@ -3,48 +3,6 @@
 //   SetupOptions                 @0x8248EB60  (the assert it fires is cpp:1387)
 //   SetupCommonCreateGameOptions @0x82490598
 //   SetupGameModeOptions         @0x82490630
-//
-//
-// The committed leaf header BrnOnlineGameOptions.h is still the MINIMAL pre-wave version
-// (the GetResourcesToLoad inline plus the two resource statics), and BrnCreateMatchOption.h
-// still carries the placeholder `{ u32 muWord0; u32 muWord1; }` element with no EOption
-// enum. The wave-I spec's §H1 class extension and §H2 element fix had not been applied when
-// this partfile was written, and headers are frozen for implementers, so none of the three
-// bodies can name maOptions / mpCommonOptions / miStartItem / mCreateGameToggles /
-// KAP_GAME_MODE_OPTION_DATA / KI_MAX_CREATE_GAME_OPTIONS / CreateMatchOption::EOption.
-// Measured with the compile gate, not assumed.
-//
-// The three complete bodies live at, each with a banner naming the exact declaration lines
-// that unblock it:
-// They concatenate into this file (single `namespace BrnGui { ... }`; the union of their
-// include sets is BrnOnlineGameOptions.h + CgsAssert.h, and the two anonymous-namespace
-// constants KI_MAX_TOGGLE_OPTIONS / KAC_EMPTY_STRING merge into one block) once §H1/§H2
-// land. All three were VERIFIED to compile clean against §H1/§H2 applied to a scratch
-// overlay copy of the two headers -- the real headers were not touched.
-//
-// ⭐ SPEC CORRECTION for the conductor -- wave-I spec trap 1 is OVERTURNED by the asm.
-// The spec predicted that SetupOptions builds each 64-bit toggle id as a console pack of
-// {name pointer << 32 | option} and that every consumer reads only the low word, so the
-// host build should drop the pointer half. There is no pack to drop. The asm at
-// 0x8248EBF8..0x8248EC14 is
-//     lwz r10, 0(r3) ; extsw r11, r28 ; stw r10, 0(r26) ; std r11, 0(r27)
-// -- the row's mpcName (r10) goes ONLY into the parallel const char* array, and the u64 id
-// (r11) is the row's meOption sign-extended, nothing more. Hex-Rays fused the independent
-// r10/r11 pair into one doubleword view (`HIDWORD(v16) = *Item; LODWORD(v16) = v12;`) and
-// the spec inherited that reading. The same `extsw` shapes the SetSelectableId argument at
-// 0x8248EC7C. No host-pointer-width accommodation is needed anywhere in this group.
-//
-// ⭐ SPEC TRAP 10 CONFIRMED. The blank-row SetupToggle argument order was read off the asm
-// at 0x8249070C..0x82490728 rather than reasoned:
-//     li r9,0 ; li r8,0 ; mr r7,""(unk_820046A7) ; li r6,1 ; li r5,0 ; mr r4,row
-// == (liIndex = row, liNumOptions = 0, lbActive = 1, lpacText = "", lppacOptions = 0,
-// lpu64Ids = 0) -- the corrected roles in BrnMenuToggleGroup.h, matching SetupOptions'
-// populated call. The spec's prediction holds.
-//
-// LINK NOTE for the conductor: SetupGameModeOptions READS the static member
-// KAP_GAME_MODE_OPTION_DATA. Its out-of-line DEFINITION is deliberately not written here --
-// every wave-I implementer writes a different partfile and two definitions would collide.
-// The same note is already on BrnOnlineGameOptions_wI_01.cpp.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"
@@ -231,7 +189,7 @@ namespace BrnGui
 // (.ida-exports/BURNOUT_X360_ARTIST.XEX/0x8248EB60.json, asm arbitrated over Hex-Rays).
 //
 // SetupOptions turns ONE option-group id into one populated row of the five-row create-game
-// toggle window. maOptions is the {name, option} table the foreign BuildGameOptions
+// toggle window. maOptions is the {name, option} table BuildGameOptions
 // @0x8248CA98 fills; a group is a title row whose meOption IS the group id, followed by its
 // value rows, ended by an E_OPTION_TERMINATOR row.
 //

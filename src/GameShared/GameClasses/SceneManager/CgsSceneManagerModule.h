@@ -437,12 +437,10 @@ namespace CgsSceneManager
         void RemoveAllOwnerVolumeInstances(u8 lu8Owner,
                                            OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput);
 
-        // ---- wave Q5 round 4 / cluster F1 (2026-08-19). Bodies in the console's own home,
-        // CgsSceneManagerBridgeFunctions.cpp (every assert in all three bakes that path).
+        // ---- Bodies in the console's own home, CgsSceneManagerBridgeFunctions.cpp (every
+        // assert in all three bakes that path).
         //
-        // RETYPED. All three previously declared BOTH parameters `SceneManagerIO::OutputBuffer*`,
-        // which is wrong for four of the six and is why UpdateContactGeneration's call sites
-        // (CgsSceneManagerModule.cpp:564-565, :585, :587) each carry a reinterpret_cast. The
+        // NOT both `SceneManagerIO::OutputBuffer*` -- that is wrong for four of the six. The
         // types below are the DWARF's (CgsSceneManagerModule.h:407-428 -- `(OutputBuffer*, const
         // OutputBuffer*)` / `(InputBuffer*, const OutputBuffer*)`) disambiguated by the accessor
         // each body actually calls:
@@ -455,11 +453,6 @@ namespace CgsSceneManager
         //     (OverlapCullingIO::OutputBuffer::GetContactQueue const, READ, :128)
         //   BridgeOverlapGenerationToOutputBuffer @0x828BA6A0 -> 0x828AFA50 (SceneManagerIO::
         //     OutputBuffer::GetOverlapPairsQueue, WRITE, :633) + 0x828B0428
-        //
-        // ⚠️ CONDUCTOR, ATOMIC: retyping these INVALIDATES the three WorldLinkStubs.cpp gate
-        // definitions (:2020/:2036/:2052 spell the old parameter pair -> C2511 once this header
-        // lands) and the three call sites' reinterpret_casts. Land the gate deletion + the
-        // call-site fix in the SAME commit as this header. Exact text: scratchpad/waveQ5/f1.owner.md.
         void BridgeOverlapGenerationToOverlapCulling(
             OverlapCullingIO::InputBuffer* lpOverlapCullingInputBuffer,
             const OverlapGenerationIO::OutputBuffer* lpOverlapGenerationOutputBuffer);

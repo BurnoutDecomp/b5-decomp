@@ -14,8 +14,8 @@
 // SHAPE and BODIES are both reconstructed from BURNOUT_X360_ARTIST.XEX (no leak
 // source / DecFIGS). Stores/branches are reproduced against the X360 disassembly;
 // see MassiveAdClient3Subscriber.h for the per-offset layout map. The class
-// installs its own X360 vftable (off_8218478C) over the object -- modelled by the
-// virtual destructor, so no vftable store is written by hand.
+// installs its own vftable (the three download callbacks) over the object; the
+// compiler emits that store, so none is written by hand.
 // ===========================================================================
 
 namespace MassiveAdClient3
@@ -24,7 +24,7 @@ namespace MassiveAdClient3
 // ---------------------------------------------------------------------------
 // CMassiveAdObjectSubscriber::CMassiveAdObjectSubscriber @ 0x82BCE968
 //
-// Store order (all over the fresh object, vftable installed by the virtual dtor):
+// Store order (all over the fresh object, after the compiler's vftable store):
 //   mpAdObject = 0; mnField10 = 0; mnField54 = 0; mpcName = 0; mnLastError = 0.
 // Then the guarded attach path, each early-out recording a negative error code:
 //   no client core            -> -200
@@ -85,62 +85,33 @@ CMassiveAdObjectSubscriber::CMassiveAdObjectSubscriber(const char* pcName)
 // ---------------------------------------------------------------------------
 // CMassiveAdObjectSubscriber::~CMassiveAdObjectSubscriber
 //
-// No standalone dtor body is attested for this class in the X360 ledger; the
-// vftable install the ctor performs is modelled by declaring the dtor virtual.
-// Defined empty (the pooled owner drives teardown).
+// Detach from the attached ad object, or -- when none is attached and a zone is
+// current -- from that zone's pre-subscriber queue, then free the name copy.
 // ---------------------------------------------------------------------------
 CMassiveAdObjectSubscriber::~CMassiveAdObjectSubscriber()
 {
-}
+    MassiveLog(5, "CMassiveAdObjectSubscriber", "*REMOVED MAO SUB: %s", mpcName);
 
-// ---------------------------------------------------------------------------
-// CMassiveAdObjectSubscriber::SetImpression @ 0x82BCEB88
-//
-// asm: if (a2) { r31 = this+0x14; memset(this+0x14, 0, 0x20);
-//                return memcpy(this+0x14, a2, 0x20); }
-//      return this;
-// A null argument leaves the live impression untouched and returns this; a valid
-// one clears then overwrites the 32-byte live record. The X360 leaves the memcpy
-// destination (the live buffer) / this in r3 across the two paths.
-// ---------------------------------------------------------------------------
-void* CMassiveAdObjectSubscriber::SetImpression(void* pImpressionData)
-{
-    if (pImpressionData)
-    {
-        std::memset(macImpression, 0, sizeof(macImpression));
-        return std::memcpy(macImpression, pImpressionData, sizeof(macImpression));
-    }
-    return this;
-}
-
-// ---------------------------------------------------------------------------
-// CMassiveAdObjectSubscriber::GetImpression @ 0x82BCEBE8
-//
-// asm: memcpy(this+0x34, this+0x14, 0x20);   // snapshot = live
-//      if (a2) memset(this+0x14, 0, 0x20);   // clear the live record
-//      return this+0x34;                     // the snapshot
-// bClear (a2) requests the live record be cleared after the snapshot is taken.
-// ---------------------------------------------------------------------------
-void* CMassiveAdObjectSubscriber::GetImpression(int bClear)
-{
-    std::memcpy(macImpressionSnapshot, macImpression, sizeof(macImpressionSnapshot));
-    if (bClear)
-        std::memset(macImpression, 0, sizeof(macImpression));
-    return macImpressionSnapshot;
-}
-
-// ---------------------------------------------------------------------------
-// CMassiveAdObjectSubscriber::GetInvElementID @ 0x82BCEC38
-//
-// asm: r11 = this->mpAdObject (+0x08); if (r11) return r11->[+0x48]; return 0;
-// Reads the delivered ad's inventory-element id from the attached ad object.
-// ---------------------------------------------------------------------------
-int CMassiveAdObjectSubscriber::GetInvElementID()
-{
     if (mpAdObject)
-        return mpAdObject->mnInvElementID;
-    return 0;
+    {
+        MassiveLog(5, "CMassiveAdObjectSubscriber", "Removing From MAO");
+        mpAdObject->SubscriberRemove(this);
+    }
+    else if (CMassiveClientCore::Instance() && CMassiveClientCore::Instance()->GetCurrentZone())
+    {
+        MassiveLog(5, "CMassiveAdObjectSubscriber", "Removing From ZoneManager (presub)");
+        CMassiveClientCore::Instance()->GetCurrentZone()->PreSubscriberRemove(this);
+    }
+
+    if (mpcName)
+    {
+        MassiveFree(mpcName);
+        mpcName = 0;
+    }
 }
+
+// MediaDownload / Tick / SetImpression / GetImpression / GetInvElementID: in
+// MassiveAdClient3Subscriber_wS34_00.cpp.
 
 // ---------------------------------------------------------------------------
 // CMassiveAdObjectSubscriber::GetCrexID @ 0x82BCEC58

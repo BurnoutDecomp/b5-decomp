@@ -12,11 +12,6 @@
 // director's owner byte, and the test is forwarded to the producer. DirectorModule::
 // ProcessSceneQueryResults @0x82239278 later hands each result back through the same office.
 //
-// ⭐ TYPED 2026-09-25 (FX-DIRECTOR2, the camera scene-query closure). The raw-void* slots
-// (mpPostOffice04..14) and the two free-function stand-ins (OutEventVolumeTestDeepest /
-// sub_8221CC98, stubbed in DirectorLinkStubs.cpp) are retired: the slots are the DWARF's typed
-// post-office pointers and the id minting is PostOffice<T,N>::AddPostBox.
-//
 // MEMBER ORDER (DWARF :162..:169, console offsets pinned by Clear @0x8221CD38 and the three tests):
 //   +0x00 mpSceneQueryInterface              the producer              (asserts h:188/:216/:316)
 //   +0x04 mpLineTestFinePostOffice           Clear: the specialised Clear (0x8221CC98)

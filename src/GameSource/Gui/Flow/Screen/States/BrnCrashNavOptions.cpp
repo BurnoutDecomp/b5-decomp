@@ -190,7 +190,7 @@ namespace BrnGui
         // X360 `li r8, -1 ; clrldi r8, r8, 32` -- Selectable::K_INVALID_ID.
         const u64 KU_INVALID_APT_ID = 0xFFFFFFFFull;
 
-        // The screen's one resource tuple is { id 0x8D, type 4 } (see the embed-check TU),
+        // The screen's one resource tuple is { id 0x8D, type 4 } (maResourcesToLoad below),
         // and UpdateLoading plays that same identifier's movie.
         const s32 KI_RESOURCE_ID_OPTIONS = 0x8D;
 
@@ -221,6 +221,11 @@ namespace BrnGui
             s32 miResult;     // +0x08 (1 == the positive answer)
         };
     }
+
+    // The options screen's apt package (read from the image).
+    const CgsGui::sResourceTuple CrashNavOptions::maResourcesToLoad[1] =
+        { { KI_RESOURCE_ID_OPTIONS, CgsGui::E_GUI_RESOURCETYPE_APT } };
+    const u32 CrashNavOptions::muNumResourcesToLoad = 1;
 
     // ---- CrashNavOptions @0x82508AA0 -----------------------------------------------
     // The X360 body is vptr installs plus the embedded components' own constructors, all

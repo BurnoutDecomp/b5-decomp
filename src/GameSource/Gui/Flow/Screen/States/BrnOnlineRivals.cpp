@@ -1,110 +1,213 @@
+// GameSource/Gui/Flow/Screen/States/BrnOnlineRivals.cpp
+//
+// BrnGui::OnlineRivals -- the online "rivals" screen (ON_RIVAL). The seven bodies, read off
+// the console asm:
+//
+//   OnEnter / OnLeave / Update                 the lifecycle
+//   CheckForCompletedLoads                     load ON_RIVAL, then wait for its components
+//   HandleGuiCacheEvent                        adopt the first cache offered
+//   HandleControllerInput(+SelectParams)       the back button leaves the screen
+
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineRivals.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface::PlayAptMovie
-#include "GameSource/Gui/BrnGuiCache.h"                                   // GuiCache::EnsureResourcesAreLoaded / AreAllAptComponentsInitialised
-
-// BrnGui::OnlineRivals -- reconstructed from BURNOUT_X360_ARTIST.XEX.
-//
-// This TU bodies three ledger functions (DWARF primary file
-// GameSource/Gui/Flow/Screen/States/BrnOnlineRivals.cpp):
-//   OnlineRivals::CheckForCompletedLoads          @0x824A05F0
-//   OnlineRivals::HandleControllerInput           @0x8248DD38
-//   OnlineRivals::HandleControllerInputSelectParams @0x82486D60
-// The remaining bodies (OnEnter/OnLeave/Update/HandleGuiCacheEvent) are their own ledger
-// functions, added later.
+#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStreamBase (unexpected-event log)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
+#include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
+#include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
+#include "GameSource/Input/GameInputActions.h"                            // EGameInputActions
 
 namespace BrnGui
 {
-    // X360 .rdata @0x8205F854 (unk_8205F854): the single resource tuple this screen streams.
-    // FLAG: tuple CONTENTS not decoded in this pass (only base addr + count 1 attested); a
-    // zero-initialised placeholder so CheckForCompletedLoads / GetResourcesToLoad link. The
-    // attested count (1) is load-bearing; the tuple contents are not.
-    const CgsGui::sResourceTuple OnlineRivals::maResourceTuplesToLoad[] = { {} };
-    const s32 OnlineRivals::miNumResourcesToLoad = 1;   // @0x8205F85C (dword_8205F85C)
+    // ================================================================================
+    //  Class statics (values read from the image)
+    // ================================================================================
 
-    // X360 .rdata @0x8205F83C (dword_8205F83C): the 5 gui-event ids OnEnter registers to
-    // observe. FLAG: element VALUES not decoded this pass (only base addr + count 5 attested);
-    // zeros are placeholders. The attested count (5) is load-bearing.
-    const s32 OnlineRivals::maiEventToObserve[] = { 0, 0, 0, 0, 0 };   // @0x8205F83C (5 entries)
-    const s32 OnlineRivals::miNumEventsObserved = 5;
+    // The events the screen observes: 14, apt ONLOAD, controller press, gui cache,
+    // disconnected.
+    const s32 OnlineRivals::maiEventToObserve[5] = { 14, 21, 6, 64, 44 };
+    const s32 OnlineRivals::miNumEventsObserved  = 5;
 
-    // The apt movie bound by CheckForCompletedLoads (X360 off_82F27BB0 = "ON_RIVAL", level 3).
-    static const char* const KPC_RIVALS_MOVIE_NAME = "ON_RIVAL";
-    static const s32         KI_RIVALS_MOVIE_LEVEL = 3;
+    // The one apt package the screen loads (ON_RIVAL).
+    const CgsGui::sResourceTuple OnlineRivals::maResourceTuplesToLoad[] =
+    {
+        { 180, CgsGui::E_GUI_RESOURCETYPE_APT }
+    };
+    const s32 OnlineRivals::miNumResourcesToLoad = 1;
 
-    // Controller-action sub-id that backs out of the screen (asm cmpwi 0x32).
-    static const s32 KI_ACTION_START = 50;
+    namespace
+    {
+        typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;   // mpInGuiEventQueue's real type
 
-    // @ 0x824A05F0 -- tick the resource/component load state machine (called by Update).
+        // The observed events Update dispatches on.
+        const s32 KI_EVENT_CONTROLLER_INPUT     = 6;
+        const s32 KI_EVENT_OBSERVED_NO_ARM_14   = 14;
+        const s32 KI_EVENT_APT_ONLOAD           = 21;   // observed, no arm
+        const s32 KI_EVENT_NETWORK_DISCONNECTED = 44;
+        const s32 KI_EVENT_GUI_CACHE            = 64;
+
+        // The movie CheckForCompletedLoads plays: the screen's own package.
+        const u32 KU_RIVALS_MOVIE_RESOURCE = 180;
+        const s32 KI_APT_MOVIE_LEVEL       = 3;
+        const char* const KPC_EMPTY_STRING = "";
+
+        const char KAC_GO_BACK_EVENT[] = "GO_BACK";
+
+        // ---- in-queue payload views (the queue hands out the header-stripped payload) ----
+        struct ControllerButtonPayload : public CgsModule::Event
+        {
+            s32 miPadId;      // +0x00
+            s32 miButtonId;   // +0x04 (the input action id)
+        };
+
+        struct GuiCachePayload : public CgsModule::Event
+        {
+            GuiCache* mpCache;   // +0x00
+        };
+    }
+
+    // ================================================================================
+    //  OnEnter
+    // ================================================================================
+    void OnlineRivals::OnEnter()
+    {
+        mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
+
+        meSubState = E_SUBSTATE_LOADING_SCREEN;
+        mpGuiCache = 0;
+    }
+
+    // ================================================================================
+    //  OnLeave
+    // ================================================================================
+    void OnlineRivals::OnLeave()
+    {
+        mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
+
+        // The console inlines StateInterface::PlayAptMovie here: the empty name at level 3
+        // clears the level.
+        mpStateInterface->PlayAptMovie(KPC_EMPTY_STRING, KI_APT_MOVIE_LEVEL);
+    }
+
+    // ================================================================================
+    //  Update
+    // ================================================================================
+    void OnlineRivals::Update()
+    {
+        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+             lpEvent != 0;
+             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            switch (liEventId)
+            {
+            case KI_EVENT_CONTROLLER_INPUT:
+                HandleControllerInput(lpEvent);
+                break;
+
+            case KI_EVENT_OBSERVED_NO_ARM_14:
+            case KI_EVENT_APT_ONLOAD:
+                break;
+
+            case KI_EVENT_NETWORK_DISCONNECTED:
+                SendStateEvent(KAC_GO_BACK_EVENT);
+                break;
+
+            case KI_EVENT_GUI_CACHE:
+                HandleGuiCacheEvent(lpEvent);
+                break;
+
+            default:
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "Unexpected event received : " << liEventId
+                        << " in "
+                        << "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineRivals.cpp"
+                        << " at line " << 131 << "\n";
+                }
+                break;
+            }
+        }
+
+        lpInQueue->Clear();
+
+        CheckForCompletedLoads();
+    }
+
+    // ================================================================================
+    //  CheckForCompletedLoads -- wait for the apt package, then for its components.
+    // ================================================================================
     void OnlineRivals::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
         if (meSubState == E_SUBSTATE_LOADING_SCREEN)
         {
-            // Stream this screen's one resource tuple; keep waiting until it is fully loaded.
-            if (!mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad,
-                                                      static_cast<u32>(miNumResourcesToLoad)))
-                return;
-
-            // Loaded: bind the "ON_RIVAL" apt movie at level 3 and advance to waiting on the
-            // apt components.
-            mpStateInterface->PlayAptMovie(KPC_RIVALS_MOVIE_NAME, KI_RIVALS_MOVIE_LEVEL);
-            meSubState = E_SUBSTATE_LOADING_COMPONENTS;
+            if (mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad,
+                                                     static_cast<u32>(miNumResourcesToLoad)))
+            {
+                mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_RIVALS_MOVIE_RESOURCE],
+                                               KI_APT_MOVIE_LEVEL);
+                meSubState = E_SUBSTATE_LOADING_COMPONENTS;
+            }
         }
         else if (meSubState == E_SUBSTATE_LOADING_COMPONENTS)
         {
-            if (mpGuiCache != NULL &&
-                mpGuiCache->AreAllAptComponentsInitialised(static_cast<GuiFlow>(0)))
+            // The console re-tests the cache after the assert (the assert does not stop).
+            if (mpGuiCache != 0 && mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
             {
                 meSubState = E_SUBSTATE_SELECTING_PARAMS;
             }
         }
     }
 
-    // @ 0x8248DD38 -- validate the controller-input event, then forward it to the param-
-    // select handler while the screen is in the param-selection substate.
-    void OnlineRivals::HandleControllerInput(const GuiEventControllerInputPressed* lpEvent)
+    // ================================================================================
+    //  HandleControllerInput -- only the parameter page takes input.
+    // ================================================================================
+    void OnlineRivals::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != NULL,
-                   "Invalid event sent to OnlineRivals::HandleControllerInput");
+        CGS_ASSERT(lpEvent != 0, "Invalid event sent to OnlineRivals::HandleControllerInput");
 
         if (meSubState == E_SUBSTATE_SELECTING_PARAMS)
+        {
             HandleControllerInputSelectParams(lpEvent);
+        }
     }
 
-    // @ 0x82486D60 -- act on a controller-action event during param selection.
-    void OnlineRivals::HandleControllerInputSelectParams(const GuiEventControllerInputPressed* lpEvent)
+    // ================================================================================
+    //  HandleControllerInputSelectParams -- cancel goes back.
+    // ================================================================================
+    void OnlineRivals::HandleControllerInputSelectParams(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != NULL,
+        CGS_ASSERT(lpEvent != 0,
                    "Invalid event sent to OnlineRivals::HandleControllerInputSelectParams");
 
-        // The action sub-id rides in the event's +4 payload word (same raw-offset idiom as
-        // BrnCredits.cpp). Sub-id 50 (KI_ACTION_START) backs out of the screen.
-        const s32 liAction =
-            *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpEvent) + 4);
-        if (liAction == KI_ACTION_START)
-            SendStateEvent("GO_BACK");
+        const ControllerButtonPayload* lpInput =
+            static_cast<const ControllerButtonPayload*>(lpEvent);
+        if (lpInput->miButtonId == E_GAMEINPUTACTIONS_GUI_CANCEL)
+        {
+            SendStateEvent(KAC_GO_BACK_EVENT);
+        }
     }
 
-    // @ 0x82486E18 -- latch the GuiCache carried by a GuiEventCache the first time one arrives;
-    // once set, mpGuiCache is never overwritten.
-    void OnlineRivals::HandleGuiCacheEvent(const GuiEventCache* lpEvent)
+    // ================================================================================
+    //  HandleGuiCacheEvent -- adopt the first cache offered.
+    // ================================================================================
+    void OnlineRivals::HandleGuiCacheEvent(const CgsModule::Event* lpEvent)
     {
-        // The event's carried cache rides in its leading word (the X360 asserts on *a2).
-        GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
-        CGS_ASSERT(lpCache != NULL, "Invalid cache in HandleGuiCacheEvent::Update");
+        const GuiCachePayload* lpPayload = static_cast<const GuiCachePayload*>(lpEvent);
 
-        if (mpGuiCache == NULL)
-            mpGuiCache = lpCache;
-    }
+        CGS_ASSERT(lpPayload->mpCache != 0, "Invalid cache in HandleGuiCacheEvent::Update");
 
-    // @ 0x82486D18 -- register this screen's observed events and reset the load state machine.
-    void OnlineRivals::OnEnter()
-    {
-        mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
-        meSubState = E_SUBSTATE_LOADING_SCREEN;   // +0x38
-        mpGuiCache = NULL;                         // +0x3C
+        if (mpGuiCache == 0)
+        {
+            mpGuiCache = lpPayload->mpCache;
+        }
     }
 }

@@ -72,11 +72,12 @@ namespace BrnGui
 
     // @ 0x824EEFA0 -- index the sorted replay-player-active table. Asserts the table has
     // been sorted (mbReplayHasBeenSorted == true @0x143E8) and luIndex < 16, then returns
-    // &maReplayPlayersActive[luIndex].mName (32*(luIndex+2575)+this == base+0x141E0+32*luIndex).
-    const CgsNetwork::PlayerName* GuiCache::GetSortedReplayPlayerActive(u32 luIndex) const
+    // &maReplayPlayersActive[luIndex] (32*(luIndex+2575)+this == base+0x141E0+32*luIndex);
+    // ReplayCredits::OnEnter reads both the name (+0x00) and the count (+0x18) off it.
+    const ReplayPlayerActive* GuiCache::GetSortedReplayPlayerActive(u32 luIndex) const
     {
         CGS_ASSERT(mbReplayHasBeenSorted == true, "mbReplayHasBeenSorted == true");
         CGS_ASSERT(luIndex < 16, "luIndex < 16");
-        return &maReplayPlayersActive[luIndex].mName;
+        return &maReplayPlayersActive[luIndex];
     }
 }

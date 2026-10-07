@@ -46,8 +46,30 @@ namespace BrnGui
             E_OPTION_VEHICLE_CHOICE_FREE  = 9,
             E_OPTION_VEHICLE_CHOICE_HOST  = 10,
             E_OPTION_VEHICLE_CLASS        = 11,  // class rows 12..17
+            // The value rows below carry the debug-info names, which sit one lower in the Dec-2007
+            // enum (the ARTIST enum has one more mode row ahead of E_OPTION_VEHICLE_CHOICE).
+            E_OPTION_VEHICLE_CLASS_1      = 12,
+            E_OPTION_VEHICLE_CLASS_2      = 13,
+            E_OPTION_VEHICLE_CLASS_3      = 14,
+            E_OPTION_VEHICLE_CLASS_4      = 15,
+            E_OPTION_VEHICLE_CLASS_5      = 16,
+            E_OPTION_VEHICLE_CLASS_6      = 17,
+            E_OPTION_VEHICLE_CLASS_7      = 18,
+            E_OPTION_VEHICLE_CLASS_8      = 19,
+            E_OPTION_VEHICLE_CLASS_9      = 20,
+            E_OPTION_VEHICLE_CLASS_10     = 21,
             E_OPTION_ROUNDS               = 22,  // rounds rows 24..33 (ROUNDS_n == n + 23)
             E_OPTION_ROUNDS_EVEN          = 23,
+            E_OPTION_ROUNDS_1             = 24,
+            E_OPTION_ROUNDS_2             = 25,
+            E_OPTION_ROUNDS_3             = 26,
+            E_OPTION_ROUNDS_4             = 27,
+            E_OPTION_ROUNDS_5             = 28,
+            E_OPTION_ROUNDS_6             = 29,
+            E_OPTION_ROUNDS_7             = 30,
+            E_OPTION_ROUNDS_8             = 31,
+            E_OPTION_ROUNDS_9             = 32,
+            E_OPTION_ROUNDS_10            = 33,
             E_OPTION_INFINITE_BOOST       = 34,
             E_OPTION_INFINITE_BOOST_ON    = 35,
             E_OPTION_INFINITE_BOOST_OFF   = 36,
@@ -58,9 +80,22 @@ namespace BrnGui
             E_OPTION_TRAFFIC_CHECKING_ON  = 41,
             E_OPTION_TRAFFIC_CHECKING_OFF = 42,
             E_OPTION_BOOST_TYPE           = 43,  // boost rows 44..47
+            E_OPTION_BOOST_TYPE_NORMAL    = 44,
+            E_OPTION_BOOST_TYPE_DANAGER   = 45,  // [sic] the debug-info spelling
+            E_OPTION_BOOST_TYPE_AGGRESSION = 46,
+            E_OPTION_BOOST_TYPE_STUNT     = 47,
+            E_OPTION_BOOST_TYPE_INFINITE  = 48,
             E_OPTION_RUNNER_CRASH_LIMIT   = 49,  // rows 50..54
+            E_OPTION_RUNNER_CRASH_LIMIT_1 = 50,
+            E_OPTION_RUNNER_CRASH_LIMIT_2 = 51,
+            E_OPTION_RUNNER_CRASH_LIMIT_3 = 52,
+            E_OPTION_RUNNER_CRASH_LIMIT_4 = 53,
+            E_OPTION_RUNNER_CRASH_LIMIT_5 = 54,
             E_OPTION_RUNNER_CRASH_LIMIT_NEVER = 55,
             E_OPTION_TIME_LIMIT           = 56,  // rows 57..59
+            E_OPTION_TIME_LIMIT_10        = 57,
+            E_OPTION_TIME_LIMIT_20        = 58,
+            E_OPTION_TIME_LIMIT_30        = 59,
             E_OPTION_TERMINATOR           = 60,  // every option-list walk stops here
             E_OPTION_COUNT                = 61,
         };

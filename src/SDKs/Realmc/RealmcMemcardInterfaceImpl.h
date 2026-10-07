@@ -10,7 +10,8 @@
 // the object faithfully -- the derivation, the four-argument constructor the X360
 // asm calls, and the interface overrides required to make the class concrete
 // (instantiable). The FULL 0x528-byte member layout and every method BODY are
-// owned by the impl's own (not-yet-homed) TU, which extends this header additively.
+// owned by the impl's own TU (RealmcMemcardInterfaceImpl.cpp, which so far holds
+// only CreateInstance and is not mounted), extending this header additively.
 // Nothing here fabricates that layout.
 //
 // CreateInstance's construction site (X360 asm @ 0x82B52CC8..0x82B52CD4):

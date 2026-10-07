@@ -1,7 +1,6 @@
 // ===================================================================================
 // BrnGui::OfflineTrophyCarUnlock -- the offline "trophy car unlocked" post-event state
-// (TRPHY_UNLOCK). GetResourcesToLoad is the header's inline; the resource table itself is
-// defined with the other screen-state tables in BrnScreenStatesDataLinkStubs.cpp.
+// (TRPHY_UNLOCK). GetResourcesToLoad is the header's inline; the resource table is below.
 //
 // THE PRESENTATION, in Update's order (EOfflineTrophyCarUnlockState):
 //   NONE                 -> the GuiCache pointer (GUI event 64) arrives: LOADINGRESOURCES
@@ -154,6 +153,13 @@ const s32 OfflineTrophyCarUnlock::maiEventToObserve[] =
     KI_EVENT_PROGRESSION_PROFILE,        // 350
 };
 const s32 OfflineTrophyCarUnlock::miNumEventsObserved = 6;
+
+// ---- resources ----------------------------------------------------------------------------
+// The four apt packages the screen loads (read from the image).
+const CgsGui::sResourceTuple OfflineTrophyCarUnlock::maResourcesToLoad[] =
+    { { 225, CgsGui::E_GUI_RESOURCETYPE_APT }, { 59, CgsGui::E_GUI_RESOURCETYPE_APT },
+      {  29, CgsGui::E_GUI_RESOURCETYPE_APT }, { 55, CgsGui::E_GUI_RESOURCETYPE_APT } };
+const u32 OfflineTrophyCarUnlock::muNumResourcesToLoad = 4;
 
 // ---- Construct ----------------------------------------------------------------------------
 // Assert the fsm pointer, run the base Construct, then zero the state word, the cache

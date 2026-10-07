@@ -25,6 +25,7 @@ namespace
     const u32 KU_ERROR_IO_INCOMPLETE     = 996u;
     const u32 KU_ERROR_IO_PENDING        = 997u;
     const u32 KU_ERROR_FUNCTION_FAILED   = 1627u;
+    const u32 KU_ERROR_NOT_FOUND         = 1168u;
 
     // Sign-in states: 0 not signed in, 1 signed in locally, 2 signed in to the service.
     const u32 KU_SIGNIN_STATE_LOCAL   = 1u;
@@ -292,6 +293,14 @@ extern "C" u32 XInviteSend(u32 /*luUserIndex*/, u32 /*luXuidCount*/, const u64* 
 extern "C" u32 XSetLaunchData(const void* /*lpLaunchData*/, u32 /*luLaunchDataSize*/)
 {
     return KU_ERROR_SUCCESS;
+}
+
+// FLAG PC-platform leaf: reads the data a previous title instance left for this launch (an
+// accepted invite reboots into the title with it). A PC launch never carries any: 1168
+// ERROR_NOT_FOUND with the buffer untouched (XSetLaunchData above keeps nothing).
+extern "C" u32 XGetLaunchData(void* /*lpBuffer*/, u32 /*luBufferSize*/)
+{
+    return KU_ERROR_NOT_FOUND;
 }
 
 // ---------------------------------------------------------------------------

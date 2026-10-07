@@ -47,7 +47,8 @@
 //
 // The concrete implementation is RealmcIface::MemcardInterfaceImpl (a 0x528-byte
 // object CreateInstance allocates and constructs); its full layout and method
-// bodies are owned by its own (not-yet-homed) TU -- see RealmcMemcardInterfaceImpl.h.
+// bodies are owned by its own TU, RealmcMemcardInterfaceImpl.cpp, which also holds
+// CreateInstance -- see RealmcMemcardInterfaceImpl.h.
 // ===========================================================================
 
 #include "SDKs/Realmc/RealmcLocale.h"   // RealmcCore::Locale::LocaleGetStrCallback

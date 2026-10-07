@@ -155,7 +155,6 @@ namespace SceneManagerIO
         // consumers pass it explicitly). The 3-arg slice above predates this overload.
         void AddEntity(CgsSceneManager::EntityId lEntityId, u32 luEntityTypeFlag,
                        Vector3 lCentre, f32 lfBoundingRadius);
-        void AddVolumeInstance(CgsSceneManager::EntityId lEntityId, const Matrix44Affine& lrTransform);
 
         // ---- the DWARF's own 64-bit ADD half of the collision pair -------------------------
         // ADDED 2026-08-18 (wave Q4, collision seam). Both are the DecFIGS DWARF's ONLY
@@ -175,13 +174,8 @@ namespace SceneManagerIO
         //     AddVolumeInstance @0x822CB650   (58 insns)
         //     AddForCollision   @0x822B1860   (91 insns)
         //
-        // ADDITIVE: the committed 2-arg AddVolumeInstance(EntityId, const Matrix44Affine&)
-        // above is a DIFFERENT overload (2 args vs 3) with its own mangled name, so its one
-        // caller -- BrnTriggerEntityModule.cpp:335 -- keeps binding to it unchanged and no
-        // LNK2005 is possible. That 2-arg form is a fitted signature the DWARF does not have,
-        // and its body is still the inert log-once gate at WorldLinkStubs.cpp:1983-1993; it
-        // cannot fill InEventAddVolumeInstance::mVolumeId (it has no VolumeId argument), which
-        // is why triggers post no usable volume instance today. Reported, not touched.
+        // This 3-arg form is the console's only AddVolumeInstance producer; there is no
+        // EntityId overload.
         void AddVolumeInstance(VolumeInstanceId lVolumeInstanceId, VolumeId lVolumeId,
                                const Matrix44Affine& lrTransform);
         void AddForCollision(VolumeInstanceId lVolumeInstanceId,

@@ -154,10 +154,10 @@ namespace CgsGraphics
         void Construct();
         // ADDITIVE overload (DWARF CgsCamera.h:66, X360 @0x827F0A08).
         void Construct(f32 lfFovHorizontal, f32 lfAspectRatio, f32 lfNearClipPlane, f32 lfFarClipPlane);
-        // ADDITIVE (WorldModule::Prepare @0x827D53B0 stage 1 clears the cached
-        // camera input). Declaration-only; body with the Camera TU. FLAG: no DWARF
-        // Clear() member and no identified X360 body -- referencing site not yet
-        // reconciled (see WorldLinkStubs.cpp).
+        // ADDITIVE, declaration-only (no body is defined). FLAG: the original header
+        // has no Clear() member and no console body was identified. WorldModule::Prepare's
+        // clear of the cached camera input resolves to BrnDirector::Camera::Camera::Clear
+        // (Director/Camera/Camera.cpp), not to this.
         void Clear();
         void Release();
         void LookAt(rw::math::vpu::Vector3 lEyePosition,

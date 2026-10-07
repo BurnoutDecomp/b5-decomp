@@ -112,12 +112,9 @@ namespace
 //
 // ⭐ THE ONE BRIDGE between the ICE take runtime and the loaded take dictionaries.
 // Every ICETake resolves its data through this virtual (ICETake::SetSubTake calls
-// vtable slot 0 with the guid still in r4). It used to be a `return 0` in
-// DirectorLinkStubs.cpp, justified because nothing could answer -- and with the ICE
-// take runtime now in the link and mpICEDictionaryList bound, that excuse is exactly
-// the one the RaceCarState::operator= incident taught us to distrust: a null return
-// here is a legal answer that every caller null-checks, so a take that IS resident
-// would simply never play, with no crash and no assert.
+// vtable slot 0 with the guid). Never stub it to `return 0`: a null return here is a
+// legal answer that every caller null-checks, so a take that IS resident would simply
+// never play, with no crash and no assert.
 //
 //     lwz r30, 4(r3)       ; ICEResourceMgr::mpResourceManager
 //     lwz r3,  0x220(r30)  ; mpICEDictionaryList          (DirectorResourceManager +544)
@@ -404,8 +401,7 @@ void DirectorResourceManager::LogShotGroupBankState() const
 // @0x8225CA08 -- BrnDirector::DirectorResourceManager::Prepare.
 //
 // The manager's staged resource bring-up, and the ONLY thing that ever fills the 65-slot
-// shot-group bank. Landed 2026-08-01; it was a `DirectorLinkStubs.cpp` `return true` until
-// then, which is why every slot sat as a null-collection default construction.
+// shot-group bank; without it every slot stays a null-collection default construction.
 //
 // SIGNATURE, from the one call site (DirectorModule::Prepare @0x82271374):
 //     r3 = &mDirectorResourceManager, r4 = the director OUTPUT buffer, r5 = the ICE wrapper.

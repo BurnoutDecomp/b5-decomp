@@ -573,18 +573,6 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
     // BrnPhysicsModuleUpdateFunctions.cpp. This staging line is now the ONLY thing standing
     // between the module and a zero-timestep frame, which makes it more load-bearing, not less.
     //
-    // ⛔ THE 2026-08-09 MEASUREMENT THAT GATED THIS LINE, AND WHAT ANSWERED IT.
-    // Staging it on the previous build produced 906 asserts per session and a boot that never
-    // reached the fly-by -- six distinct identities, every one inside PhysicsModule::Update.
-    // Both root causes behind those six are CLOSED as of this wave:
-    //   (a) the solver iteration count was zero because its ONLY producer in the image,
-    //       WorldModule::BridgeEntityModulesToPhysicsModule_PreScene @0x827AADB8, was an inert
-    //       link stub -- it is reconstructed now (Bridges/WorldBridgeEntityModulesToPhysics.cpp)
-    //       and calls SetSolverMaxIterations @0x8279F240. That was gates 2, 3 and 4.
-    //   (b) the write-lock/Construct family: the const accessor overloads the console actually
-    //       calls (VehicleManagerOutputBuffer @0x825A0FB0, PhysicsSimulationIO::OutputBuffer::
-    //       GetUpdateRigidBodyQueue @0x8259EFD0) and the missing
-    //       PhysicsModuleIO::OutputBuffer::Construct @0x825ABB10. That was gates 1, 5 and 6.
     // ⚠️ The vehicle CREATE path is still absent, so the module conducts over an empty body
     // set -- an empty tick is the expected, honest outcome, not a regression.
     lpWorldInput->LockForWrite();
@@ -785,23 +773,13 @@ bool LoadingScriptedState::LoadDirectorModule(
     //  @0x823ACBF8. That Construct also brings up the embedded RequestInterface<512> queue,
     //  which WorldMap::LoadData stages onto.)
 
-    // The X360 reads the allocator list out of the GameData OUTPUT buffer (read-locked by the
-    // caller) and passes it as DirectorModule::Prepare's second argument, which
-    // MainDirector::Prepare forwards straight to ICEWrapper::Prepare. The committed
-    // DirectorModule::Prepare signature still types that argument as the plain s32 the older
-    // recon named `liPrepareArg`; see the FLAG below.
+    // The console reads the allocator list out of the GameData OUTPUT buffer (read-locked by
+    // the caller) and passes it as DirectorModule::Prepare's second argument (not an s32
+    // replay token), which MainDirector::Prepare forwards straight to ICEWrapper::Prepare
+    // (BrnDirectorICEWrapperPrepare.cpp).
     const BrnResource::GameDataIO::AllocatorList* lpAllocatorList =
         lpGameDataOutputBuffer ? lpGameDataOutputBuffer->GetAllocatorList() : 0;
 
-    // ⭐ SIGNATURE DEBT PAID 2026-08-16 (boot audit F-P6-16). DirectorModule::Prepare's 2nd
-    // parameter IS the allocator list (X360 @0x823E74C0: `lwz r9,0x44(vtable);
-    // r5 = GetAllocatorList(...)`), not an s32 replay token. It had been typed s32 and
-    // called with a literal 0 while the real list sat right here, computed and thrown away
-    // with a `(void)` cast. The whole chain -- DirectorModule::Prepare ->
-    // MainDirector::Prepare -> ICEWrapper::Prepare -- is retyped, so the list now reaches
-    // its consumer. That consumer is still a DirectorLinkStubs no-op, so nothing observable
-    // changes today; what changes is that when the ICE wrapper IS bodied it receives the
-    // console's argument instead of a zero nobody would have questioned.
     const bool lbPrepared =
         lpGameModule->GetDirectorModule().Prepare(lpDirectorOutput, lpAllocatorList);
 

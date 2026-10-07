@@ -19,6 +19,7 @@ public:
     virtual ~GenericRwacSubmixVoice();
 
     virtual f32 GetCpuTicks();
+    virtual void DisplayVoiceCpu(f32* /*lpfX*/, f32* /*lpfY*/, f32 /*lfScale*/, bool /*lbDetail*/) {}
     virtual EProfileVoiceType GetProfileVoiceType();
     virtual void DoUpdate(System* apSystem, f32 af32DeltaTime);
     virtual bool DoConnectSend(u32 au32Index, SubmixVoice* apSubmix);

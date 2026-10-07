@@ -65,8 +65,7 @@ extern intptr_t gAptEmptyTextRenderDataZID;   // &unk_82F72DB0
 
 // ---------------------------------------------------------------------------
 // AptResolveTextFieldFontName -- the text field's AUTHORED font name, resolved via
-// its font id through the owning movie's character table (HOMED 2026-07-10,
-// retiring the AptRenderLinkStubs "" stub; original-source corroboration:
+// its font id through the owning movie's character table (original-source corroboration:
 // AptCIH::getTextFormat resolves texFormat->pFontName as
 //   pParentAnim->animation.apCharacters[text.nFontID]->font.szName
 // when the id is in range and the slot is a FONT character). The walk is the SAME

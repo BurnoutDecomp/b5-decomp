@@ -77,8 +77,6 @@ namespace CgsGraphics
     //                                            and GetLodDistance asserts against it)
     //   GetNumRenderables -> mu8NumRenderables  (lbz 0x10; GetRenderable's index bound)
     //   GetVersionNumber  -> mu8VersionNumber   (lbz 0x13)
-    // (They previously resolved to WorldLinkStubs "return 0" gates, which made every
-    // streamed instance fail RenderInstance's "Model in unit has no lods!" assert.)
     u32 Model::GetNumLods() const
     {
         return mu8NumStates;

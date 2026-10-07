@@ -647,9 +647,6 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
 //   DO NOT "correct" this to store the normalised vector: it would change nothing visible and
 //   would break parity. If a future reader of mNormalisedOffsetDir needs a unit vector, normalise
 //   AT THAT READER and note it there.
-//
-// ⚠️ mRotationController.Construct() IS AN EMPTY STUB TODAY (DirectorLinkStubs.cpp:522), and
-//   this call site is the first one on a LIVE path. See the note at the call below.
 // ============================================================================
 void BehaviourRotateAboutVehicle::BecomeSimilarTo(const Camera& lrSourceCamera,
                                                   const AllVehicleData& lrAllVehicleData)
@@ -716,15 +713,11 @@ void BehaviourRotateAboutVehicle::BecomeSimilarTo(const Camera& lrSourceCamera,
     }
 
     // ---- wipe the free-look rotation state ----------------------------------
-    // ✅ RESOLVED (this note used to read "SILENT-DROP STUB ON A LIVE PATH" and is retracted).
-    // CameraSphericalRotationController::Construct was an EMPTY body in
-    // GameSource/Director/DirectorLinkStubs.cpp; it was retired in the orbit-camera wave and now
-    // has its real ten-store body in its own home,
-    // Camera/Utils/BrnCameraSphericalRotationController.cpp:200 (see the retirement note in
-    // DirectorLinkStubs.cpp GROUP E). That matters HERE specifically: BecomeSimilarTo runs on a
+    // CameraSphericalRotationController::Construct (ten stores, in
+    // Camera/Utils/BrnCameraSphericalRotationController.cpp). BecomeSimilarTo runs on a
     // behaviour that has been live for many frames, and the whole point of these ten stores is to
     // throw away the accumulated stick yaw / pitch / lookback state so the re-seated orbit starts
-    // neutral. While the stub was empty the stale rotation survived every re-seat.
+    // neutral.
     mRotationController.Construct();   // stvx128 0,+0x20 / +0x30..+0x42 / +0x48 / +0x4C
 }
 

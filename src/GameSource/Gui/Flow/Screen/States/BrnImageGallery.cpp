@@ -28,6 +28,10 @@ namespace
     };
 }   // anonymous namespace
 
+// The fixed one-entry resource list: the gallery's apt package (read from the image).
+const CgsGui::sResourceTuple ImageGalleryState::KA_RESOURCES_TO_LOAD[1] =
+    { { 164, CgsGui::E_GUI_RESOURCETYPE_APT } };
+
 // ---- ImageGalleryState (ctor) @ 0x82500328 ----------------------------------
 // Compiler-emitted construction of the image-gallery flow state. The X360 writes the state
 // vtable (+0x000) then a long run of embedded sub-object vtable stores (the four category tabs,

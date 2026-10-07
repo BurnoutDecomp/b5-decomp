@@ -57,26 +57,6 @@
 //       would turn the FAILURE answers into SUCCESS answers (a road pose instead of the car's
 //       own last pose) -- an improvement, not a blocker.
 //
-// ---- 2026-08-25, superseded: ----------------------------------------------------------------
-// ⛔⛔ BUT THE MANAGER IS NOT THE BLOCKER. It is an EMBEDDED MEMBER of AIModule at +286128 and
-// its ONLY constructor call site is AIModule::Prepare @0x82798070 stage 3:
-//     ResetOnTrackManager::Construct(module+286128, GetAISectionsData(), module+560)
-// AIModule::{Construct,Prepare,Update,PostPhysicsUpdate,Release,Destruct} are ALL quiet boot-gate
-// stubs in WorldLinkStubs.cpp today, and the live log says so on every run ("AIModule::Prepare:
-// inert", "AIModule::Update: inert"). Consequences, all three measured:
-//   * this object is NEVER Constructed -- mpAISectionData is null, mpaAICars is garbage.
-//     Bodying methods on it is [[valid-pointer-invalid-object]]: no assert can see it.
-//   * AIModule::Prepare stage 2 (LoadMapData @0x82795340, 167 insns) LoadBundle()s "AI.dat" and
-//     requests HashString("WorldMapData") type 5 -- so THE AI ROAD NETWORK IS NEVER LOADED.
-//     The DATA is fine: build/game/AI.DAT is present and already ported (bnd2 platform byte
-//     @+8 == 4, 3.27 MB). The hole is entirely code.
-//   * AIModuleIO::OutputBuffer is a 1-byte placeholder on the host, which is already why
-//     WorldModule::BridgeAIToEntityModules_PrePhysics is PARKED -- and it is where the
-//     ResetOnTrackResult ring has to live.
-// ⇒ ORDER OF WORK: AIModule named members + lifecycle + the AIModuleIO buffer layouts (with
-//   real Construct overrides -- un-gating a producer into an unconstructed queue is how the
-//   crash-exit wave earned two access violations on the same day), THEN this class.
-// ---- end 2026-08-25 -------------------------------------------------------------------------
 // Reference: scratchpad resetontrack_log.md. OFFSET AUTHORITY = the X360 asm of GetAICar; member NAMES/TYPES/ORDER = DWARF
 // (references/DecFIGS/.../BrnResetOnTrackManager.h). Pinned layout:
 //   mResetOnTrackRequestQueue @0x000  Array<ResetOnTrackRequest,35u>  (35*16 + s32 miCount

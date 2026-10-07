@@ -7,12 +7,14 @@
 // device file name, and a derived size word. Sibling of RealmcIface::SaveReq
 // (RealmcSaveReq.h) and RealmcIface::CardData (RealmcCardData.h).
 //
-// This header is the canonical OWNING home for the three reconstructed
-// EntryContentName member functions:
+// This header is the canonical OWNING home for the four reconstructed
+// EntryContentName member functions (plus the params-block copy helper
+// RealmcCopyEntryContentParams, a friend):
 //
 //     RealmcIface::EntryContentName::SetTitle          @ 0x82B51AD8
 //     RealmcIface::EntryContentName::SetFileName       @ 0x82B51B28
 //     RealmcIface::EntryContentName::EntryContentName  @ 0x82B51C10  (ctor)
+//     RealmcIface::EntryContentName::EntryContentName                (copy ctor)
 //
 // There is no Feb-2007 leak source and no DWARF for this TU, so the SHAPE below
 // is reconstructed purely from the X360 pseudocode + asm. `Realmc` is a vendor
@@ -36,10 +38,9 @@
 //                          double, narrows to float, multiplies by the rodata
 //                          constant flt_8200C6B8 (IDA-decoded 2.8), then fctiwz
 //                          (round-toward-zero) + stfiwx stores the integer word.
-//   +0x130  muField130  -- a 32-bit word. NOT written by this TU's three
-//                          functions; the sibling copy helper (sub_82B51D10)
-//                          copies it. Modelled by name as the slot the copy path
-//                          touches; left untouched by the ctor (matching the asm).
+//   +0x130  muField130  -- a 32-bit word. Written only by the params-block
+//                          copy (RealmcCopyEntryContentParams); the value ctor
+//                          and the copy ctor leave it untouched (matching the asm).
 //   +0x134  muField134  -- a 32-bit word, same provenance as muField130.
 //
 // sizeof(EntryContentName) == 0x138 (312) bytes -- matching the 0x138-byte
@@ -73,6 +74,13 @@ public:
     //                 pFileNameSource is null, zero-store macFileName[0] only.
     //                 Returns this.
     EntryContentName* SetFileName(const char* pFileNameSource);
+
+    // Copy-construct: mnSize first, then SetTitle(rOther.macTitle) and
+    // SetFileName(rOther.macFileName). muField130/muField134 are NOT copied here;
+    // RealmcCopyEntryContentParams (the 0x138-byte block copy) copies them after.
+    EntryContentName(const EntryContentName& rOther);
+
+    friend void RealmcCopyEntryContentParams(void* pDst, const void* pSrc);
 
 private:
     std::uint8_t  macTitle[0x100];    // +0x000  256-byte title (word @ +0xFE zeroed)

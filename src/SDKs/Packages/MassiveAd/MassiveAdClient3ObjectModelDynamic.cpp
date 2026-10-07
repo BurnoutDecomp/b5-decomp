@@ -45,17 +45,13 @@ namespace MassiveAdClient3
 // so it is not initialised here. The vftable install is modelled by the virtual
 // dtor.
 // ---------------------------------------------------------------------------
-CMassiveAdObjectModelDynamic::CMassiveAdObjectModelDynamic(const char* pcName,
-                                                           int a3, int a6, int a7,
-                                                           int a8)
-    : CMassiveAdObject(pcName, a3, a7, a8)  // bl base ctor (name, a3, a7, a8)
-    , mnCurrentAssetID(0)                    // stw 0, 0x64
-    , muActiveAssetCount(0)                  // sth 0, 0x68
-    , mSlaveList()                           // stw 0, 0x6C..0x78 (empty list)
+CMassiveAdObjectModelDynamic::CMassiveAdObjectModelDynamic(const char* pcName, int nInvElementID,
+                                                           unsigned short /*uMinSize*/, int nRotationType,
+                                                           CMassiveZoneManager* pZone)
+    : CMassiveAdObjectModel(pcName, nInvElementID, static_cast<unsigned short>(muMinSize), nRotationType, pZone)
+    , mnCurrentAssetID(0)
+    , muActiveAssetCount(0)
 {
-    (void)a6;  // a6 (r6) is clobbered before the base chain and never used
-    // muField60 (+0x60) is preserved (loaded/masked/restored) across the base
-    // ctor, not set by this ctor -- see the header layout note.
 }
 
 // ---------------------------------------------------------------------------
@@ -94,14 +90,14 @@ CMassiveAdObjectModelDynamic::~CMassiveAdObjectModelDynamic()
 // Ticks each slave (slave vftable +0x0C) and returns the first non-zero result
 // (a stop/error code); 0 when every slave returned 0.
 // ---------------------------------------------------------------------------
-int CMassiveAdObjectModelDynamic::Tic()
+int CMassiveAdObjectModelDynamic::Tick()
 {
     mSlaveList.GoToStart();
     while (mSlaveList.GetCurrent())
     {
         CMassiveAdObject* pSlave =
             static_cast<CMassiveAdObject*>(mSlaveList.GetCurrData());
-        int nResult = pSlave->Tic();
+        int nResult = pSlave->Tick();
         if (nResult)
             return nResult;
         mSlaveList.GoToNext();
@@ -214,7 +210,7 @@ int CMassiveAdObjectModelDynamic::SetAssetExpired(int nAssetId)
 int CMassiveAdObjectModelDynamic::SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber)
 {
     if (!pSubscriber)
-        return SetLastError(-500, reinterpret_cast<const char*>(0)); // &unk_820046A7
+        return SetLastError(-500, "");
 
     CreateSlaveM(pSubscriber);
     return 0;

@@ -41,8 +41,13 @@ namespace Io
             E_LOAD_EVENT_PASSBY_MAP_UNLOAD  = 2,
         };
 
-        // BrnSoundRootSharedIO.h:71 -- own TU (declared-only here).
-        void Construct(eLoadEvent leEvent, u16 lu16Zone);
+        // BrnSoundRootSharedIO.h:71. In-class inline: both world-entity producers inline the
+        // two stores, and the console has no out-of-line copy.
+        void Construct(eLoadEvent leEvent, u16 lu16Zone)
+        {
+            meEvent  = leEvent;
+            mu16Zone = lu16Zone;
+        }
         // BrnSoundRootSharedIO.h:78/:85. The console inlines both one-field reads
         // into SoundWorldScene::Update.
         eLoadEvent GetEvent() const { return meEvent; }

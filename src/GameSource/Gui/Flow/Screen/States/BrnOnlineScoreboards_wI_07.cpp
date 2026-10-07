@@ -1,75 +1,6 @@
 // ===================================================================================
 // BrnGui::OnlineScoreboards -- wave-I partfile 07: the table-mode controller-input handler.
 //   HandleControllerInputPressedUsingTable  @0x824A9B78  (DWARF cpp:697, assert cpp:761)
-//
-//
-// The complete, drop-in-ready partfile lives at
-// with a banner naming the exact declaration lines that unblock it. Copy it over this file
-// once the header changes below land; no edit is needed.
-//
-// the compile gate, not assumed.
-//
-//  (1) GameSource/Gui/Flow/Screen/States/BrnOnlineScoreboards.h is still the 29-line minimal
-//      Engine-cone-wave-19 version (the GetResourcesToLoad inline plus the two resource
-//      statics); the wave-I spec's full-shape class has not been applied, so neither the
-//      method nor any member it touches exists. Needed (all private, all already part of the
-//      spec's full-shape header):
-//          void HandleControllerInputPressedUsingTable(const CgsModule::Event* lpEvent);  // @0x824A9B78
-//          void PageUp(bool lbMoveHighlight);    // @0x8249F820
-//          void PageDown(bool lbMoveHighlight);  // @0x8249F8A8
-//          void SetupButtons();                  // @0x82486A58
-//          s32                       miCurrentCategory;               // X360 +344
-//          s32                       miCurrentIndex;                  // X360 +880
-//          s32                       miCurrentVariation;              // X360 +1240
-//          s32                       miCurrentFilterHighlighted;      // X360 +3560
-//          CgsNetwork::PlayerName    mCurrentTargetScorePlayerName;   // X360 +3568
-//          bool                      mbUsingFilters;                  // X360 +3584
-//          bool                      mbEventLeaderboard;              // X360 +3586
-//          bool                      mbWaitingForTargetScoreResponse; // X360 +3587
-//          MenuToggleGroupVarSize<3> mFilterToggleGroup;              // X360 +3592
-//          LeaderboardTableComponent mTable;                          // X360 +15376
-//      plus the member-type includes CgsVariableEventQueue.h, BrnCgsPlayerName.h,
-//      BrnMenuToggleGroup.h and BrnLeaderboardTableComponent.h.
-//
-//  (2) GameSource/Gui/Flow/Screen/Components/BrnLeaderboardTableComponent.h is missing the one
-//      accessor this body calls twice. DWARF (BrnLeaderboardTableComponent.h:66 /
-//      BrnLeaderboardTableComponent.cpp:371) gives the shape verbatim -- the out-param is a
-//      PlayerName, NOT a char*, and the method is not const:
-//          void GetHighlightedGamertag(CgsNetwork::PlayerName* lpPlayerName);   // @0x82419208
-//      plus #include "GameSource/GameState/BrnCgsPlayerName.h" in that header.
-//
-//  (3+4) The two scoreboard REQUEST event types must MOVE from
-//      GameSource/Gui/BrnGuiDemangledEventTypes.h:335/336 into
-//      GameSource/Gui/BrnGuiEventTypeDefs.h with their real field shapes (the spec's cross-TU
-//      finding 1, resolved the way this repo already resolves every recovered payload -- the
-//      Demangled header keeps a "MOVED to BrnGuiEventTypeDefs.h ... Do not re-add it here"
-//      note, exactly as it does for GuiEventProgressionProfileData). Two reasons force the
-//      move rather than an in-place edit:
-//        (a) the current `: public CgsGui::GuiEvent<N>` + opaque-maPayload shells park our
-//            12-byte GuiEvent header exactly where the emitter writes real fields;
-//        (b) this TU cannot include the Demangled header at all -- the class header must
-//            include BrnMenuToggleGroup.h for the by-value MenuToggleGroupVarSize<3> member,
-//            that pulls BrnMenuToggle.h, and BrnMenuToggle.h includes BrnGuiEventTypeDefs.h;
-//            TypeDefs and Demangled hard-collide (measured: C2011 on GuiEventRunFsm and
-//            GuiAudioTriggerEvent). The DecFIGS DWARF names TypeDefs as their home anyway
-//            (BrnGuiEventTypeDefs.h:740 declares the gamercard event's one member
-//            `PlayerName mPlayerName`).
-//
-// against SHADOW copies of those four headers carrying only those additions --
-// scratchpad/waveI/probe_sb07/ (run_probe.py prints PROBE_STATUS=pass). The faithfulness lint
-// reports 0 new findings on it. No other declaration is needed.
-//
-// CgsGuiStateInterface.h + CgsVariableEventQueue.h + BrnGuiEventTypeDefs.h. TypeDefs is the
-// side of the TypeDefs/Demangled hard collision this TU is forced onto (see 3+4 above); the
-// dirtysdk comparator LobbyNameCmp is declared file-locally, as BrnChallengeHighScoreEntry.cpp
-// and BrnGuiCache_wB_11/12.cpp already do.
-//
-// LINK NOTE for the conductor: the body calls LeaderboardTableComponent::GetHighlight /
-// SetHighlight / GetRowsUsed / GetHighlightedGamertag (declared in
-// BrnLeaderboardTableComponent.h, bodies owned by their own ledger TUs and defined nowhere in
-// the tree yet), OnlineScoreboards::PageUp / PageDown / SetupButtons (wave-I groups 01 and 00,
-// tree). All are invisible to cl /c and may be unresolved at link until those TUs land --
-// same as wave H.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineScoreboards.h"
@@ -211,7 +142,7 @@ namespace BrnGui
                         lRequestEvScoreTarget.miScore           = mTable.GetHighlightedScore();
                         lRequestEvScoreTarget.mbIsCurrentTarget = false;
 
-                        mTable.GetHighlightedGamertag(lRequestEvScoreTarget.mPlayerName.macName);
+                        mTable.GetHighlightedGamertag(&lRequestEvScoreTarget.mPlayerName);
                         // ::-qualified: the X360 exports ONE plain global symbol for this
                         // (CgsStringUtils.h:21-27 says so, and its body home wraps the
                         // definition in extern "C"). Unqualified, the DirtySock file-scope
@@ -234,7 +165,7 @@ namespace BrnGui
                 // The whole record is the highlighted player's name; the table writes it
                 // straight into the request.
                 GuiEventScoreboardRequestGamercardEvent lRequestGamerCard;
-                mTable.GetHighlightedGamertag(lRequestGamerCard.mPlayerName.macName);
+                mTable.GetHighlightedGamertag(&lRequestGamerCard.mPlayerName);
                 mpStateInterface->OutputGuiEvent(lRequestGamerCard);
                 break;
             }

@@ -205,6 +205,7 @@ namespace CgsGui
         gAptFuncs.pfnGetExternVariable      = &AptCallbackVariable::GetExternVariable;
         gAptFuncs.pfnSendVariables          = &AptCallbackDeprecated::SendVariables;
         gAptFuncs.pfnCommand                = &AptCallbackDeprecated::FsCommand;
+        gAptFuncs.pfnLoadVariables          = &AptCallbackDeprecated::LoadVariables;
         gAptFuncs.pfnLoadVariablesNULL      = &AptCallbackDeprecated::LoadVariablesNULL;
         gAptFuncs.pfnPointHitTest           = &AptCallbackDeprecated::PointHitTest;
         gAptFuncs.pfnGetRealTimeClock       = &AptCallbackDeprecated::GetRealTimeClock;
@@ -213,7 +214,6 @@ namespace CgsGui
         // FLAG: the remaining gAptFuncs slots ConstructApt @0x5BA0F8 also installs --
         //   Debug       (pfnAssertFail -- its host body is not in the ARTIST export set)
         //   File        (pfnLoadAnimation / pfnFreeConstantTable)
-        //   Variable    (pfnLoadVariables)
         //   Custom      (pfnCustomControlUpdate / the Zid family -- pfnCustomControlRender
         //                IS installed now, see above)
         //   Deprecated  (pfnUninitializedVarAccess / pfnCustomSavedInputHandler /
@@ -710,6 +710,13 @@ namespace CgsGui
     void AptCallbackDeprecated::FsCommand(const char* /*lpacCommand*/, const char* /*lpacArgs*/)
     {
         CGS_ASSERT(false, "Command() has not been implemented but is being used, please implement before utilising.");
+    }
+
+    // CgsGui::AptCallbackDeprecated::LoadVariables (gAptFuncs pfnLoadVariables). Guarded not-yet-implemented.
+    AptValue* AptCallbackDeprecated::LoadVariables(const char* /*lpacUrl*/)
+    {
+        CGS_ASSERT(false, "LoadVariables() has not been implemented but is being used, please implement before utilising.");
+        return nullptr;
     }
 
     // X360 0x828497A0 (CgsGui::AptCallbackDeprecated::LoadVariablesNULL). Guarded not-yet-implemented.

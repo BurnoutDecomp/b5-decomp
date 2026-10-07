@@ -52,21 +52,29 @@
 // ----------------------------------------------------------------------------
 namespace BrnDirector
 {
-    // -- The three still-gated functions of the director's own CgsDev::DebugComponent page
-    //    ("Camera"); the rest of the page lives in
-    //    DirectorModule/BrnDirectorModuleDebugCompononent.cpp. These three index
-    //    DirectorModule regions this reconstruction does not model yet.
-    //    QUIET no-ops: the Camera page registers no variables and draws no overlay.
-    void DebugComponent::UpdatePanoramaScreenshots(Camera::Camera* lpCamera)
-    {
-        (void)lpCamera;
-    }
-
-    void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
-    {
-        (void)lpRender;
-    }
-
+    // -- The last still-gated function of the director's own CgsDev::DebugComponent page
+    //    ("Camera"); the rest of the page lives in DirectorModule/BrnDirectorModuleDebugCompononent*.cpp.
+    //    QUIET no-op: the Camera page registers no variables. OnActivate is the entry of the
+    //    director dev-tools closure (measured: ~240 console functions, ~19k instructions not in
+    //    the link). It takes the address of, or calls:
+    //      * BehaviourParameterBank::SaveParameters / LoadParameters -> the bank's
+    //        Serialise<TextFileWriteSerialiser> / <TextFileReadSerialiser> walks (five file
+    //        versions, ~48 named blocks, half of them inside the slice's reserved spans with
+    //        narrower-than-console Rig / Bystander types) and the per-type
+    //        Parameters::Serialise<TextFile*> family;
+    //      * Serialise<TestbedSetupSerialiser>: 27 blocks, five not modelled (HeliCam Default,
+    //        Rig Bonnet Low Right, Rig Front Q Bwd, Failsafe, Road Runner Default); the block
+    //        debug names come from Serialise<BehaviourParameterNamingSerialiser>, which the
+    //        bank's Construct stand-in does not run;
+    //      * SavePlaylists / LoadPlaylists -> SharedPlaylists::Serialise<TextFileWrite / Read /
+    //        DebugMenuSerialiser> (Utils/BrnICEMoviePlayerSerialise.cpp, unmounted);
+    //      * StartEditor -> ICEWrapper::EditorOn (BrnDirectorICEWrapper.cpp, unmounted);
+    //      * ArbStateTestbed::Deactivate / GenericActivateCam / RegisterIceAnimsWithDebugComponent:
+    //        the Arbitrator embeds a placeholder ArbStateTestbed (BrnDirectorArbitrator.h) that
+    //        clashes with the real class, whose TU needs Update (15 NewBehaviour<T> arms) and
+    //        Register/UnregisterParameters (the DebugMenuSerialiser family);
+    //      * about thirty tweakables in MainDirector, the arbitrator's states and the
+    //        DirectorResourceManager that are not named members yet.
     void DebugComponent::OnActivate() {}
 
     // -- RETIRED 2026-09-25 (FX-DIRECTOR2): the two scene-query post-office stand-ins

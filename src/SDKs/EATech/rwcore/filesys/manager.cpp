@@ -14,8 +14,9 @@
 //   rw::core::filesys::Manager::Init                    @0x82BBF0B8
 //   rw::core::filesys::Manager::SetSearchPath           @0x82BBEEC8
 //   rw::core::filesys::Manager::`scalar deleting dtor'  @0x82BBF5A0
+//   rw::core::filesys::Manager::RegisterDevice / UnregisterDevice
 //
-// The singleton lives at off_8327F078 (gpFileSysManager, defined in device.cpp); the
+// The singleton (gpFileSysManager) is defined here; the
 // filesys allocator lives at off_8327F07C (gpFileSysAllocator, defined in handle.cpp).
 // Every heap op goes through the allocator's vtable:
 //   Alloc  = (*(*alloc + 4))(alloc, size, "rw::core::filesystem::Manager::Allocate", 0, 4, 0)
@@ -38,6 +39,9 @@ namespace rw
             // (aRwCoreFilesyst). Reproduced verbatim from the asm string reference.
             static const char KAC_ALLOC_TAG[] = "rw::core::filesystem::Manager::Allocate";
 
+            // The global filesys Manager (null until CreateInstance).
+            Manager* gpFileSysManager = nullptr;
+
             // -----------------------------------------------------------------------------
             // Un-recoverable rodata referenced by Init (device descriptors + default search
             // path). The X360 addresses are known but their CONTENTS are not in any export,
@@ -49,8 +53,8 @@ namespace rw
             // -----------------------------------------------------------------------------
             namespace
             {
-                const void* const KP_DEFAULT_DEVICE_DESC = nullptr; // &dword_8327F098 (UNRECOVERED)
-                const void* const KAP_DEVICE_TABLE[1] = { nullptr };// off_82F91A3C.. (UNRECOVERED)
+                DeviceDriver* const KP_DEFAULT_DEVICE_DESC = nullptr;  // the default driver (UNRECOVERED)
+                DeviceDriver* const KAP_DEVICE_TABLE[1] = { nullptr }; // the static driver table (UNRECOVERED)
                 const char* const KPC_DEFAULT_SEARCH_PATH = nullptr;// &unk_821811B4   (UNRECOVERED)
             }
 
@@ -87,17 +91,15 @@ namespace rw
             // -----------------------------------------------------------------------------
             // Manager::Manager @0x82BBE418  (ctor)
             //
-            // Clear the registered-device list (mpDeviceListHead/mpListField1/mpListField2),
+            // Clear the registered-device list (mDeviceList head/tail/count),
             // default-construct the embedded ThreadParameters, then bump their priority by 2;
             // clear the Init-owned fields, seed the handle id to -1, and latch the search-
             // path capacity / scratch size from the config (config[0] / config[1]).
             // -----------------------------------------------------------------------------
             Manager::Manager(const FileSystemConfig* lpConfig)
-                : mpDeviceListHead(nullptr)   // *a1 = 0
-                , mpListField1(nullptr)        // a1[1] = 0
-                , mpListField2(nullptr)        // a1[2] = 0
+                // mDeviceList emptied in the body (a1[0..2] = 0).
                 // mThreadParameters default-constructed here (a1+3); priority bumped below.
-                , miMaxReadSize(-1)            // a1[9] = -1
+                : miMaxReadSize(-1)            // a1[9] = -1
                 , mpDefaultDevice(nullptr)     // a1[10] = 0
                 , mpScratchBuffer(nullptr)     // a1[11] = 0
                 , mpCurrentDir(nullptr)        // a1[12] = 0
@@ -107,6 +109,10 @@ namespace rw
                 , mbSortByPosition(0)          // a1[16] = 0
                 , muReserved44(0)              // a1[17] = 0
             {
+                mDeviceList.mpHead  = nullptr;   // *a1 = 0
+                mDeviceList.mpTail  = nullptr;   // a1[1] = 0
+                mDeviceList.muCount = 0;         // a1[2] = 0
+
                 // a1[5] += 2 -- bump the embedded ThreadParameters' priority by 2.
                 mThreadParameters.mnPriority = mThreadParameters.mnPriority + 2;
             }
@@ -203,8 +209,8 @@ namespace rw
                 // Register every entry in the static device table [off_82F91A3C, off_82F91A48).
                 // The table CONTENTS are UNRECOVERED; the placeholder has a single null entry
                 // so the loop shape (do/while v2 < end) is reproduced without fabricating data.
-                const void* const* lpEntry = KAP_DEVICE_TABLE;                       // v2
-                const void* const* lpEnd   = KAP_DEVICE_TABLE + 1;                   // off_82F91A48
+                DeviceDriver* const* lpEntry = KAP_DEVICE_TABLE;                     // v2
+                DeviceDriver* const* lpEnd   = KAP_DEVICE_TABLE + 1;                 // table end
                 do
                 {
                     RegisterDevice(*lpEntry, 0);
@@ -243,8 +249,8 @@ namespace rw
             //
             //   Free(mpSearchPathTable); mpSearchPathTable = 0;
             //   Free(mpScratchBuffer);   mpScratchBuffer   = 0;
-            //   while (mpDeviceListHead) UnregisterDevice();
-            //   mpDefaultDevice = 0; mpListField1 = 0; mpDeviceListHead = 0; mpListField2 = 0;
+            //   while (head) UnregisterDevice(head);
+            //   mpDefaultDevice = 0; tail = 0; head = 0; count = 0;
             // -----------------------------------------------------------------------------
             Manager::~Manager()
             {
@@ -253,13 +259,43 @@ namespace rw
                 gpFileSysAllocator->Free(mpScratchBuffer, 0);    // (*(*alloc+12))(alloc, a1[11], 0)
                 mpScratchBuffer = nullptr;                       // a1[11] = 0
 
-                while (mpDeviceListHead)
-                    UnregisterDevice();
+                while (mDeviceList.mpHead)
+                    UnregisterDevice(mDeviceList.mpHead);
 
-                mpDefaultDevice  = nullptr;   // a1[10] = 0
-                mpListField1     = nullptr;   // a1[1]  = 0
-                mpDeviceListHead = nullptr;   // *a1    = 0
-                mpListField2     = nullptr;   // a1[2]  = 0
+                mpDefaultDevice     = nullptr;   // a1[10] = 0
+                mDeviceList.mpTail  = nullptr;   // a1[1]  = 0
+                mDeviceList.mpHead  = nullptr;   // *a1    = 0
+                mDeviceList.muCount = 0;         // a1[2]  = 0
+            }
+
+            // -----------------------------------------------------------------------------
+            // Manager::RegisterDevice
+            //
+            // Allocate and construct a Device for lpDriver (luFlags bit 0 = externally
+            // pumped), then append it to the global manager's device list -- the list of
+            // gpFileSysManager, not `this` (the method is const).
+            // -----------------------------------------------------------------------------
+            Device* Manager::RegisterDevice(DeviceDriver* lpDriver, unsigned int luFlags) const
+            {
+                void* lpRaw = Allocate(sizeof(Device));
+                Device* lpDevice = lpRaw ? new (lpRaw) Device(lpDriver, luFlags) : nullptr;
+                gpFileSysManager->mDeviceList.Append(lpDevice);
+                return lpDevice;
+            }
+
+            // -----------------------------------------------------------------------------
+            // Manager::UnregisterDevice
+            //
+            // Unlink lpDevice from the global manager's device list; if it was registered,
+            // destroy it (scalar deleting destructor, freeing through the filesys allocator).
+            // -----------------------------------------------------------------------------
+            bool Manager::UnregisterDevice(Device* lpDevice) const
+            {
+                if (!gpFileSysManager->mDeviceList.Remove(lpDevice, nullptr))
+                    return false;
+                if (lpDevice)
+                    DeviceScalarDeletingDtor(lpDevice, 1);
+                return true;
             }
 
             // -----------------------------------------------------------------------------

@@ -55,6 +55,10 @@
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"   // gnCurrUpdateTick
 #include "SDKs/EATech/Apt/AptMath.h"                    // AptMath::ClipStackMakeUnit
 #include "SDKs/EATech/include/Apt/AptRenderManagerQueue.h"  // AptRenderManagerQueue::Clean
+#include "SDKs/EATech/include/Apt/Apt.h"                 // gAptFuncs.pfnFreeTexture (the deferred-release drain)
+#include "SDKs/EATech/Apt/AptInit.h"                    // AptUnresolveMutex
+#include "eathread/eathread_mutex.h"                    // EA::Thread::Mutex
+#include "eathread/eathread_storage.h"                  // EA::Thread::ThreadLocalStorage (gAptTargetTls)
 
 // The global render-manager teardown queue (X360 dword_8324E7D8) -- defined in AptGlobals.cpp.
 // sub_82AF3278 flushes it each render pass (it only holds cells deferred off the render thread,
@@ -70,26 +74,9 @@ extern int gnCurrRenderTickConsumed;   // dword_8324E524
 // unresolves release directly, so the drain is normally empty -- kept for the faithful shape.
 extern int   gAptDeferredReleaseCount;               // dword_8324E508
 extern void* gAptDeferredReleaseQueue;               // off_8324E2C8
-extern void  AptFreeFontUnit(void* pUnit);           // dword_8324E870 host thunk
-extern void* gAptUnresolveMutex;                     // unk_8324E728
-extern void* gAptUnresolveMutexName;                 // unk_82143270
-namespace EA { namespace Thread {
-    extern void Mutex_Lock(void* pMutex, void* pName);
-    extern void Mutex_Unlock(void* pMutex);
-} }
 
 // The render-thread current-target TLS mirror (unk_8324E814; the same object AptUpdate.cpp
-// stores through -- defined in AptRenderLinkStubs.cpp, single-threaded slot on the PC).
-namespace EA { namespace Thread {
-    class ThreadLocalStorage
-    {
-    public:
-        ThreadLocalStorage() : mTlsIndex(0) {}
-        bool  SetValue(const void* pData);
-        void* GetValue();
-        u32   mTlsIndex;
-    };
-} }
+// stores through -- defined in AptGlobals.cpp).
 extern EA::Thread::ThreadLocalStorage gAptTargetTls;
 
 #include <new>
@@ -526,15 +513,15 @@ static void AptRenderInternal(int nElapsedMs, int nLayerMask)
     // single-threaded PC unresolve releases directly, so the queue is normally empty.
     if (gAptDeferredReleaseCount != 0)
     {
-        EA::Thread::Mutex_Lock(gAptUnresolveMutex, gAptUnresolveMutexName);
+        AptUnresolveMutex().Lock();
         void** lppQueue = static_cast<void**>(gAptDeferredReleaseQueue);
         for (int liIndex = 0; liIndex < gAptDeferredReleaseCount; ++liIndex)
         {
-            AptFreeFontUnit(lppQueue[liIndex]);
+            gAptFuncs.pfnFreeTexture(lppQueue[liIndex]);
             lppQueue[liIndex] = nullptr;
         }
         gAptDeferredReleaseCount = 0;
-        EA::Thread::Mutex_Unlock(gAptUnresolveMutex);
+        AptUnresolveMutex().Unlock();
     }
 
     // Flush the render-manager teardown queue only when it holds deferred cells (the X360

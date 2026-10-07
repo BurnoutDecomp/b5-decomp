@@ -160,30 +160,20 @@ void BridgeEntityModulesToSceneModule_PreScene(
     InSceneUpdateInterface* lpScene = lpSceneInputBuffer->GetInSceneUpdateInterface();
 
     // ---- LEG 1/5: TRAFFIC (0x827AB570, `mr r3,r25 ; bl sub_8279FD58`) -------------------
-    // ⭐⭐ RESTORED 2026-08-19 (wave Q6 cluster C3). Wave Q5/F3 parked this leg after recovering
-    // sub_8279FD58 == BrnTrafficIO::OutputBuffer_PreScene::GetSceneInputInterface() const
-    // (read-lock `extrwi r11,r11,1,27`, baked BrnTrafficEntityModuleIO.h line 0xBA == 186,
-    // epilogue `addi r3,r28,0x10` == this+16) and finding that the in-tree buffer had NO member
-    // at +16 -- its first modelled member sat at +63424, which is INSIDE the scene interface's
-    // [16, 818784) span. That park named the fix and this wave did it in the buffer's own header:
+    // The getter is BrnTrafficIO::OutputBuffer_PreScene::GetSceneInputInterface() const
+    // (read-lock, baked BrnTrafficEntityModuleIO.h line 186, returns this+16).
     // mSceneInputInterface is the real InSceneUpdateInterface at +16 (X360-attested by
     // OutputBuffer_PreScene::Construct @0x82761790's `InSceneUpdateInterface::Construct(this+0x10)`
     // leg), the 544-byte traffic->race-car block follows at +818784 == 16 + 818768, and the
     // +63424 accessor 0x827A00B0 was re-homed to OutputBuffer_PostScene where its baked line
     // (262) says it belongs. Source and destination are the same type: no cast in this leg.
-    // STILL A NO-OP TODAY: TrafficEntityModule::PreSceneUpdate is a WorldLinkStubs gate, so
-    // nothing traffic-side stages into that interface yet -- but it is now a LIVE leg over a
-    // Constructed aggregate rather than a park, and it goes live with that module.
+    // Producer side: TrafficEntityModule::PreSceneUpdate (BrnTrafficEntityModule.cpp).
     lpScene->Append(*lpTrafficOutputBuffer_PreScene->GetSceneInputInterface());
 
     // ---- LEG 2/5: RACE CAR (0x827AB58C, `mr r3,r28 ; bl sub_8279D458`) ------------------
-    // ⭐ RESTORED 2026-08-19 (wave Q5 cluster F3). The FLAG that stood here claimed the
-    // race-car buffer either did not model a scene-input interface or had only a
-    // declaration-only accessor whose body was "not reconstructed", and that the module was
-    // "inert on this build". All three are now false: OutputBuffer_PreScene::mSceneInputInterface
-    // is the real InSceneUpdateInterface, it IS Constructed (X360 +142192 leg of
-    // OutputBuffer_PreScene::Construct), and the const read-lock accessor is bodied this
-    // cluster in BrnRaceCarEntityModuleIO.cpp from sub_8279D458's own asm.
+    // OutputBuffer_PreScene::mSceneInputInterface is the real InSceneUpdateInterface, it IS
+    // Constructed (the +142192 leg of OutputBuffer_PreScene::Construct), and the const
+    // read-lock accessor is bodied in BrnRaceCarEntityModuleIO.cpp.
     // ActiveRaceCar::RemoveFromScene posts into this copy of the interface, so the ghost-car
     // removals only reach the broad phase through this leg.
     lpScene->Append(*lpRaceCarOutputBuffer_PreScene->GetSceneInputInterface());
@@ -197,34 +187,26 @@ void BridgeEntityModulesToSceneModule_PreScene(
     lpScene->Append(*lpWorldEntityOutputBuffer_PreScene->GetSceneInputInterface());
 
     // ---- LEG 4/5: PROP (0x827AB5C4, `mr r3,r27 ; bl sub_827A18C8`) ---------------------
-    // ⭐ PROP LEG RESTORED 2026-08-12 (prop-BOOT wave, agent B8). The FLAG that stood here
-    // said the prop buffer had no reconstructed scene-input accessor and that "no prop is
-    // registered with the scene manager" -- both were true when it was written and both are
-    // now stale. PropZoneManager::LoadProp -> PropCellManager::AddPropToScene stages a real
-    // AddEntity/AddDynamicVolume per spawned prop into this very interface (the boot log's
-    // "PROPS-BOOT prop instances arrived: zone 52 -> LoadZone done" proves it runs), the
-    // interface is the real InSceneUpdateInterface now and is Constructed by
-    // OutputBuffer_PreScene::Construct, and its const read-lock getter is bodied.
-    // Dropping this leg is exactly why "[props-gdl] visible=0" -- nothing the prop module
-    // staged ever reached the broad phase, so the frustum query could never return a prop
-    // entity for the render list.
+    // PropZoneManager::LoadProp -> PropCellManager::AddPropToScene stages a real
+    // AddEntity/AddDynamicVolume per spawned prop into this very interface; the interface is
+    // the real InSceneUpdateInterface, Constructed by OutputBuffer_PreScene::Construct, and its
+    // const read-lock getter is bodied. Without this leg nothing the prop module stages
+    // reaches the broad phase, so the frustum query can never return a prop entity for the
+    // render list ("[props-gdl] visible=0").
     // (Cast dropped for the same reason as the world-entity leg: PropEntityIO::
     // OutputBuffer_PreScene::SceneInputInterfaceStorage is a typedef of the real aggregate,
     // BrnPropEntityModuleIO.h:211.)
     lpScene->Append(*lpPropOutputBuffer_PreScene->GetSceneInputInterface());
 
     // ---- LEG 5/5: TRIGGER (0x827AB5E0, `mr r3,r29 ; bl 0x827A31C8`) --------------------
-    // ⭐ RESTORED 2026-08-19 (wave Q5 cluster F3). Same stale FLAG as the race-car leg:
     // TriggerEntityModuleIO::OutputBuffer_PreScene::mSceneInputInterface is the real
     // aggregate (BrnTriggerEntityModuleIO.h:41 typedef), OutputBuffer_PreScene::Construct
-    // @0x822EED90 Constructs it (BrnTriggerEntityModuleIO.cpp:29, mounted), and the const
-    // read-lock accessor @0x827A31C8 has had a real body all along
-    // (BrnTriggerEntityModuleIO_Accessors.cpp:57, mounted) -- nothing was missing but the call.
-    // Producer: TriggerEntityModule::ProcessAddTriggerEvents @0x822D8F48 stages
+    // Constructs it (BrnTriggerEntityModuleIO.cpp:29), and the const read-lock accessor is
+    // bodied in BrnTriggerEntityModuleIO_Accessors.cpp.
+    // Producer: TriggerEntityModule::PreSceneUpdate -> ProcessAddTriggerEvents stages
     // AddDynamicVolume + AddEntity + AddVolumeInstance per trigger, bounded by
     // KU_MAX_TRIGGERS == 512 (well inside mAddEntityQueue's 5120 / mAddDynamicVolumeQueue's
-    // 1280). It is reached only once TriggerEntityModule::PreSceneUpdate stops being a
-    // WorldLinkStubs gate, so this leg is a no-op today and a live one the moment that lands.
+    // 1280).
     lpScene->Append(*lpTriggerOutputBuffer_PreScene->GetSceneInputInterface());
 }
 
@@ -232,13 +214,13 @@ void BridgeEntityModulesToSceneModule_PreScene(
 // entity): the position/radius updates the physics step produced, merged into the
 // same scene update input.
 //
-// ⭐⭐ THIS IS THE HOP THE PLAYER'S CAR REACHES THE BROAD PHASE THROUGH. Until 2026-08-19
-// every leg here was `(void)`, so ActiveRaceCar::AddToScene / AddToCollision /
-// RaceCarEntityModule::GenerateSceneUpdateEvents staged AddEntity / AddDynamicVolume /
-// AddVolumeInstance / AddForCollision / SetVolumeInstanceTransform into
-// RaceCarEntityModuleIO::OutputBuffer_PostPhysics::mSceneInputInterface every frame and
-// NOTHING ever appended them into SceneManagerIO::InputBuffer_Update -- the car had no
-// volume instance, so no car-vs-prop pair could ever exist however good the sweeper was.
+// ⭐⭐ THIS IS THE HOP THE PLAYER'S CAR REACHES THE BROAD PHASE THROUGH.
+// ActiveRaceCar::AddToScene / AddToCollision / RaceCarEntityModule::GenerateSceneUpdateEvents
+// stage AddEntity / AddDynamicVolume / AddVolumeInstance / AddForCollision /
+// SetVolumeInstanceTransform into RaceCarEntityModuleIO::OutputBuffer_PostPhysics::
+// mSceneInputInterface every frame, and only this bridge appends them into
+// SceneManagerIO::InputBuffer_Update -- without it the car has no volume instance, so no
+// car-vs-prop pair can exist however good the sweeper is.
 //
 // The four merges are at 0x827AB6C0 (traffic) / 0x827AB6DC (race car) / 0x827AB6F8 (prop) /
 // 0x827AB714 (world entity), each the same seven-instruction shape as the pre-scene bridge's,

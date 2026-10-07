@@ -704,9 +704,9 @@ void TrafficEntityModule::HandlePropModuleRequests(
 // (never touched), r6 lpInput, r7 lpOutput, r8 lUpdateSet with `clrlwi r29,r29,31` applied
 // immediately.
 //
-// SIGNATURE DIVERGENCE: DWARF :1094 spells the third parameter const. The committed
-// declaration is non-const and must stay so, since const changes the mangled name and orphans
-// the caller (BrnWorldModule.cpp:1714) and the WorldLinkStubs.cpp gate. Const is honoured
+// SIGNATURE DIVERGENCE: the console's declaration (:1094) spells the third parameter const. The
+// committed declaration is non-const and must stay so, since const changes the mangled name and
+// orphans the caller (BrnWorldModule.cpp). Const is honoured
 // internally: HandlePropModuleRequests takes the const pointer, which is also what picks the
 // const/read-lock GetPropToTrafficInterface @0x827113B8 the console calls.
 //
@@ -1424,12 +1424,11 @@ bool TrafficEntityModule::Prepare( BrnTrafficIO::OutputBuffer_Prepare* lpOutputB
     {
     case E_PREPARESTAGE_START:
     {
-        // 0x8274A5D4. [FLAG PC bring-up] safety net, NOT IN THE X360 BINARY: the console binds
-        // mReceiverQueue inside TrafficEntityModule::Construct @0x82740220, which does not run
-        // while its WorldLinkStubs.cpp gate is live, leaving mpBuffer null when the GameData
-        // reply arrives. This logs and self-heals instead of copying through null.
-        // DELETE WHEN: that Construct gate is retired and a boot proves the queue is bound
-        // before Prepare stage 0 runs.
+        // [FLAG PC bring-up] safety net, NOT IN THE CONSOLE BINARY: the console binds
+        // mReceiverQueue inside TrafficEntityModule::Construct, so an unbound queue here means
+        // Construct did not run and mpBuffer would be null when the GameData reply arrives.
+        // This logs and self-heals instead of copying through null.
+        // DELETE WHEN: a boot proves the queue is bound before Prepare stage 0 runs.
         if ( !ReceiverQueueBinding::IsBound( lrReceiverQueue ) )
         {
             lrReceiverQueue.Construct();
@@ -1442,8 +1441,8 @@ bool TrafficEntityModule::Prepare( BrnTrafficIO::OutputBuffer_Prepare* lpOutputB
                 sbLoggedReceiverQueueConstruct = true;
                 *CgsDev::Log::gpDebugPrint
                     << "[T1-traffic-leg] TrafficEntityModule::Prepare stage 0 found an UNBOUND "
-                       "mReceiverQueue -- TrafficEntityModule::Construct @0x82740220 did not run "
-                       "(its WorldLinkStubs.cpp gate is still live). Binding it here as a "
+                       "mReceiverQueue -- TrafficEntityModule::Construct did not run. "
+                       "Binding it here as a "
                        "safety net [FLAG PC bring-up]\n";
             }
         }
@@ -1483,8 +1482,7 @@ bool TrafficEntityModule::Prepare( BrnTrafficIO::OutputBuffer_Prepare* lpOutputB
         // and returns 1; zero calls CreateInputDataStructure through the vtable. This module
         // overrides neither Create*DataStructure, so with mbIsNewModule false the base
         // placeholder returns null and Prepare returns FALSE every frame, hanging the boot at
-        // WorldModule::Prepare's traffic stage. Construct only runs once its WorldLinkStubs.cpp
-        // gate (~:729) is retired, so retire that gate in the same build as this call.
+        // WorldModule::Prepare's traffic stage.
         if ( !CgsModule::ModuleSingleBuffered::Prepare() )
         {
             return false;                                // console: LABEL_22, `result = 0`
@@ -5577,14 +5575,6 @@ void TrafficEntityModule::GenerateSlamRecoveryEvents(
 // from the ship's 36-entry `xrefs_to` inventory for 0x8274A968. An xref list carries no order,
 // but the image does: where a leg's slot has been read out of the instruction stream it is
 // placed (see the output-producer run below); the rest stay named gates.
-//
-// MOUNT REQUIRED (conductor-owned; agents may not edit the build script). Add
-//   echo "%SRC%\GameSource\World\EntityModules\TrafficEntityModule\BrnTrafficEntityModule_wT1_02.cpp"
-// to tools/build/build_game_exe.bat after the _wT1_01.cpp mount. The inert gate that defined
-// this symbol in GameSource/World/WorldLinkStubs.cpp is deleted (it could not be retired
-// separately: BrnUpdateSet is a bare `typedef u16`, so the gate's spelling mangled identically
-// to this body's), so until the mount lands the exe link fails with LNK2019 on PreSceneUpdate.
-// The per-TU `cl /c` gate sees neither the mount nor a duplicate definition; only a link does.
 // ============================================================================
 
 

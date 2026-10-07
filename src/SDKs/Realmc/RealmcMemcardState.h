@@ -36,7 +36,7 @@
 
 #include <cstdint>
 
-#include "SDKs/EATech/eathread/eathread_mutex.h"  // EA::Thread::Mutex
+#include <eathread/eathread_mutex.h>              // EA::Thread::Mutex (the linked EAThread)
 #include "SDKs/Realmc/RealmcContainers.h"          // RealmcCore::IntVector (embedded task stack)
 #include "SDKs/Realmc/RealmcAllocator64.h"         // RealmcCore::Allocator64 (embedded start-waiting queue)
 #include "SDKs/Realmc/RealmcCore.h"                // RealmcCore::MessageFilter (the +0x50 filter)

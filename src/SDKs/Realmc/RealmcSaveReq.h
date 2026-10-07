@@ -6,10 +6,11 @@
 // BURNOUT_X360_ARTIST.XEX; sibling to RealmcIface::CardData in RealmcCardData.h
 // and the RealmcCore primitives in RealmcCore.h).
 //
-// This header is the canonical OWNING home for the SaveReq struct and its one
-// reconstructed member function:
+// This header is the canonical OWNING home for the SaveReq struct and its two
+// reconstructed member functions:
 //
 //     RealmcIface::SaveReq::SaveReq  @ 0x82B51D60   (ctor)
+//     RealmcIface::SaveReq::SaveReq                 (copy ctor)
 //
 // There is no Feb-2007 leak source and no DWARF for this TU, so the SHAPE below
 // is reconstructed purely from the X360 pseudocode + asm. `Realmc` is a vendor
@@ -46,9 +47,8 @@ namespace RealmcIface
 // The Realmc "entry content params" copy helper (X360 sub_82B51D10). It
 // copy-constructs the embedded params block at +0x20 from a source params
 // object (copying its EntryContentName title/filename plus two trailing words).
-// It is defined by the RealmcIface::EntryContentName TU; declared here so
-// SaveReq's ctor can invoke it across the TU boundary without reconstructing
-// that sibling type's body. (Un-homed dependency -- see home_notes.)
+// Body: RealmcEntryContentName.cpp (a friend of EntryContentName, whose layout
+// the 0x138-byte block is).
 // ---------------------------------------------------------------------------
 void RealmcCopyEntryContentParams(void* pDst, const void* pSrc);
 
@@ -63,6 +63,10 @@ public:
             std::uint32_t uField158,
             std::uint32_t uField15C,
             const std::uint32_t* pField160Source);
+
+    // Copy-construct: the params block through RealmcCopyEntryContentParams, the
+    // three trailing words, then the 32-byte head with maHead[0x1F] zeroed last.
+    SaveReq(const SaveReq& rOther);
 
     std::uint8_t  maHead[0x20];    // +0x000  32-byte head (last byte zeroed)
     std::uint8_t  maParams[0x138]; // +0x020  embedded entry-content params

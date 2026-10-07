@@ -37,7 +37,7 @@ namespace BrnGui
     // DWARF BrnOnlineScoreboards.h:46.
     struct OnlineScoreboards : public CgsGui::State
     {
-        // ---- EInternalState (DWARF h:82; the +60 machine the foreign Update drives) --
+        // ---- EInternalState (debug-info h:82; the +60 machine Update drives) ----------
         enum EInternalState
         {
             E_INTERNALSTATE_GETCACHE        = 0,
@@ -83,16 +83,13 @@ namespace BrnGui
         static const s32 KI_MAX_VARIATIONS          = 66;
         static const s32 KI_NUM_ALPHABETICAL_ROADS  = 64;
 
-        OnlineScoreboards();   // DWARF-attested; X360 body is compiler-synthesised (the
-                               // screen-flow pool ctor). Not one of this TU's 21 ledger
-                               // functions -- no definition here (OGRPI precedent).
+        OnlineScoreboards();   // member construction only.
 
         // ---- lifecycle virtuals (dumped vtable @0x820755F0) --------------------------
         virtual void Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm);   // @0x824866F0 cpp:123
         virtual void OnEnter();                                           // @0x8249F1D0 cpp:224
         virtual void OnLeave();                                           // @0x8249F3B0 cpp:383
-        // @0x824B05B0 cpp:285 -- the meInternalState machine. Body owned by a FOREIGN
-        // ledger TU (`reviewed` there; defined nowhere yet). Declared for the vtable.
+        // The meInternalState machine.
         virtual void Update();
 
         // @ 0x82508DA8 - hands the scoreboards screen's static resource list to the loader
@@ -128,18 +125,15 @@ namespace BrnGui
         void PageDown(bool lbMoveHighlight);                          // @0x8249F8A8 cpp:1503
         void SetupButtons();                                          // @0x82486A58 cpp:1535
 
-        // ---- methods of THIS class owned by FOREIGN ledger TUs (ledger `reviewed`
-        //      there, defined nowhere in the tree yet -- the wave-H phenomenon).
-        //      Declared so this TU's bodies can call them. DWARF params are typed event
-        //      pointers; the queue delivers header-stripped payloads (banner note). ----
-        void HandleCategoryList(const CgsModule::Event* lpEvent);     // cpp:1066
-        void HandleIndexList(const CgsModule::Event* lpEvent);        // cpp:1105
-        void HandleVariationList(const CgsModule::Event* lpEvent);    // cpp:1151
-        void HandleTableData(const CgsModule::Event* lpEvent);        // cpp:1217
-        void HandleControllerInputPressedUsingFilters(const CgsModule::Event* lpEvent); // cpp:774
+        // ---- the response handlers and the filter-mode input. debug-info params are typed
+        //      event pointers; the queue delivers header-stripped payloads (banner note). ----
+        void HandleCategoryList(const CgsModule::Event* lpEvent);
+        void HandleIndexList(const CgsModule::Event* lpEvent);
+        void HandleVariationList(const CgsModule::Event* lpEvent);
+        void HandleTableData(const CgsModule::Event* lpEvent);
+        void HandleControllerInputPressedUsingFilters(const CgsModule::Event* lpEvent);
 
-        // ---- statics (values in BrnOnlineScoreboards.cpp; maResourcesToLoad +
-        //      muNumResourcesToLoad are DEFINED in BrnScreenStatesDataLinkStubs.cpp) ---
+        // ---- statics (values in BrnOnlineScoreboards.cpp) ---------------------------
         static const s32 maiEventToObserve[12];             // cpp:31 @0x8205F648 (ARTIST 12; DWARF said 10)
         static const s32 miNumEventsObserved;               // cpp:47 == 12 (@0x8205F678)
         static const CgsGui::sResourceTuple maResourcesToLoad[];  // @ 0x8205F67C (unk_8205F67C, .rdata)

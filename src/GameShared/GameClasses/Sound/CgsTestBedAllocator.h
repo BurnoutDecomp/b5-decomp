@@ -39,7 +39,7 @@ namespace TestBed
             History();
 
             // CgsTestBedAllocator.h:121 - advance the ring head and return the slot to record into.
-            Entry& DoAllocate();
+            Entry& DoAllocate() { return maHistory[muCurrentPosition++ % KU_HISTORY_LENGTH]; }
 
             // CgsTestBedAllocator.h:128 - dump the ring entries that bracket a suspect address.
             void DumpAllPossibleDanglers(u8* lpAddress);
@@ -55,9 +55,9 @@ namespace TestBed
             static const uintptr_t SK_GUARD             = 1936946035;  // CgsTestBedAllocator.h:653 ('sdfm'/"GMFS")
             static const uintptr_t SK_GUARD_DEALLOCATED = 1920103026;  // CgsTestBedAllocator.h:654 ('dvfr'/"rfvd")
 
-            void Construct();   // CgsTestBedAllocator.h:657 - stamp SK_GUARD
-            bool IsValid();     // CgsTestBedAllocator.h:663 - true while == SK_GUARD
-            void Destruct();    // CgsTestBedAllocator.h:669 - stamp SK_GUARD_DEALLOCATED
+            void Construct() { muValue = SK_GUARD; }                  // CgsTestBedAllocator.h:657
+            bool IsValid()   { return muValue == SK_GUARD; }          // CgsTestBedAllocator.h:663
+            void Destruct()  { muValue = SK_GUARD_DEALLOCATED; }      // CgsTestBedAllocator.h:669
 
         private:
             uintptr_t muValue;  // CgsTestBedAllocator.h:676
@@ -70,15 +70,21 @@ namespace TestBed
             // CgsTestBedAllocator.h:691 - recover the Header that precedes a client pointer.
             Header& GetHeaderFromAddress(void* lpClientAddress);
             // CgsTestBedAllocator.h:697 - the trailing guard word.
-            Guard&  GetEndGuard();
+            Guard&  GetEndGuard()
+            {
+                return *reinterpret_cast<Guard*>(static_cast<u8*>(GetClientAddress()) + muSize);
+            }
             // CgsTestBedAllocator.h:703 - where the trailing name pointer lives.
-            const char** GetEndGuardName();
+            const char** GetEndGuardName()
+            {
+                return reinterpret_cast<const char**>(&GetEndGuard() + 1);
+            }
             // CgsTestBedAllocator.h:716 - validate this block's guards against the history.
             void SanityCheck(History& lrHistory, const char* lpcAllocatorName);
             // CgsTestBedAllocator.h:765 - log this block's details.
             void Dump(History& lrHistory);
             // CgsTestBedAllocator.h:774 - the user-visible pointer after the header.
-            void* GetClientAddress();
+            void* GetClientAddress() { return this + 1; }
 
             Header*     mpNext;        // CgsTestBedAllocator.h:681
             rw::Resource mResource;    // CgsTestBedAllocator.h:682

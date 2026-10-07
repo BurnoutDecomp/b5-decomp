@@ -1,10 +1,8 @@
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnVehicleManager_CrashState.cpp
 //
-// THE VEHICLE-MANAGER CRASH-STATE LEGS (wave 2026-09-03, lane P2a). Seven per-frame bodies that
-// stood as log-once boot gates in the conductor-gate and link-stub TUs -- both of those TUs are
-// gone -- plus the two callees that had no home in the tree. These are the only definitions
-// tree-wide (LNK2005 is the tripwire if a gate ever reappears).
+// THE VEHICLE-MANAGER CRASH-STATE LEGS. Seven per-frame bodies plus the two showtime-shunt
+// callees. These are the only definitions tree-wide.
 //
 //   VehicleManager::CheckState                      @0x825EADA8  (170)   DWARF h:977
 //   VehicleManager::UpdateFatalCrashFlags           @0x825EA970  (173)   DWARF h:932

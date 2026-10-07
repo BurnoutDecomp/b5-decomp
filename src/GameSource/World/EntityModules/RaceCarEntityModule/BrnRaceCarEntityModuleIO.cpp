@@ -71,10 +71,9 @@ InputBuffer_PreScene::GetAudioCarLoadedDataQueue() const
 }
 
 // X360 0x8279D308 (:176 W) -- MUTABLE per-car audio (un)load REPLY queue accessor. The
-// console body is the write-lock assert citing this header then `return a1 + 15456`. Added
-// with the reset-player-car wave: WorldModule::BridgeActionsToRaceCarModule @0x827ABF40 is
-// its only caller (it Appends the world input's own queue into this one), and that bridge
-// was an inert link stub until now, so nothing had ever needed the non-const overload.
+// console body is the write-lock assert citing this header then `return a1 + 15456`. Its only
+// caller is WorldModule::BridgeActionsToRaceCarModule (it Appends the world input's own queue
+// into this one).
 InputBuffer_PreScene::AudioCarLoadedDataQueue*
 InputBuffer_PreScene::GetAudioCarLoadedDataQueue()
 {
@@ -233,22 +232,13 @@ InputBuffer_PostScene::GetTrafficToRaceCarInterface_PreScene() const
 // ---- OutputBuffer_PostScene -------------------------------------------------
 
 // =================================================================================================
-// OutputBuffer_PostScene::Construct   X360 0x822EA678   -- RETIRES A memset BOOT GATE, AND THE
-// GATE WAS A LIVE DEFECT (resetpump wave 2026-08-26). MEASURED, run rp_crash1:
+// OutputBuffer_PostScene::Construct
 //
-//     [ASSERT 1] mpEvents != NULL (CgsBaseEventQueue.h:35)
-//       CgsDev::Assert::FireAssert
-//       BrnWorld::RaceCarEntityModule::SendResetOnTrackRequests      <- THE FIRST PRODUCER, EVER
-//       BrnWorld::RaceCarEntityModule::PostSceneUpdate
-//
-// i.e. the crash exit raised mbToBeResetOnTrack, SendResetOnTrackRequests read it and tried to
-// AddEvent a ResetOnTrackRequest -- into a queue whose mpEvents had never been pointed at its
-// inline storage, because WorldLinkStubs.cpp answered this buffer's Construct with
-// `memset(this, 0, sizeof(*this))`.
-// ⭐⭐ SEVENTH sighting of this exact shape in this buffer family, and the crash-exit wave's own
-// note was already written for it: A memset IS WORSE THAN NO STUB -- zeroing a queue is not
-// constructing it, and it LOOKS like initialisation. ⭐ AN UNCONSTRUCTED BUFFER IS INVISIBLE
-// UNTIL SOMETHING PUTS DATA IN IT: un-gating a producer CREATES the fault, it does not reveal it.
+// Every embedded queue must be really Constructed: RaceCarEntityModule::SendResetOnTrackRequests
+// AddEvents a ResetOnTrackRequest into this buffer, and a queue whose mpEvents was never pointed
+// at its inline storage fires `mpEvents != NULL` (CgsBaseEventQueue.h:35).
+// ⭐ A memset IS NOT A CONSTRUCT -- zeroing a queue is not constructing it, and it LOOKS like
+// initialisation. An unconstructed buffer is invisible until something puts data in it.
 //
 // Console body (r31 == this; the pseudocode types it float*, so the displacements below are the
 // float indices x4):
@@ -1218,21 +1208,12 @@ InputBuffer_PostPhysics::SetVehicleOutputInterface(const VehicleOutputInterface*
 
 // =================================================================================================
 // ⭐⭐ X360 0x822EA838 (47 insns, DWARF :510) -- InputBuffer_PostPhysics::Construct, PARTIAL SLICE.
-// Its base-only boot gate in WorldLinkStubs.cpp is RETIRED by the same commit (same treatment, and
-// for the same reason, as the InputBuffer_PrePhysics slice retired 2026-07-27).
 //
-// ⛔ WHY THIS HAD TO LAND WITH THE PUBLISH LEG, MEASURED NOT GUESSED. The gate ran only
-// `CgsModule::IOBuffer::Construct()`, so every event queue embedded in this buffer stayed
-// un-Constructed (mpEvents null, miMaxLength 0). That was invisible while
-// BridgePhysicsModuleToRaceCarModule_PostPhysics was inert. The moment that bridge went live the
-// FIRST boot run died here:
-//     [ASSERT] Base event queue overflow (CgsBaseEventQueue.h:122)
-//         BrnPhysics::Vehicle::VehicleManagerOutputInterface::operator=
-//         WorldModule::BridgePhysicsModuleToRaceCarModule_PostPhysics
-//     [EXCEPTION] EXCEPTION_ACCESS_VIOLATION writing 0x0 in memcpy <- the same operator=
-// -- because that operator= Clear()s and Append()s each destination queue, and Append into a
-// never-Constructed queue memcpy's through a null mpEvents. Same family as the
-// PhysicsModuleIO::OutputBuffer::Construct root cause (2026-08-10).
+// ⛔ Every event queue the publish leg writes must be Constructed here.
+// BridgePhysicsModuleToRaceCarModule_PostPhysics's VehicleManagerOutputInterface::operator=
+// Clear()s and Append()s each destination queue; an un-Constructed queue (mpEvents null,
+// miMaxLength 0) fires "Base event queue overflow" (CgsBaseEventQueue.h:122) and then AVs in
+// memcpy through the null mpEvents.
 //
 // The console body, decoded (r29 == this, r30 == this + 0x10 == &mVehicleOutputInterface):
 //   0x822EA854  stb 1, 0(this)                       -- IOBuffer::Construct

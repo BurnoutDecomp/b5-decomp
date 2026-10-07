@@ -3437,20 +3437,18 @@ namespace Props
 //     INFERENCE from the DWARF loop shape, not from this emission -- stated plainly because a
 //     later sweep must not "discover" the missing load and delete the indexing.
 //
-// ⚠️ LANDING-ORDER HAZARD, MEASURED 2026-08-18 (round 2) -- for the conductor, not a code change.
+// ⚠️ UNWRITTEN-COUNTER HAZARD (measured).
 //    Both loops in this file iterate on muNumberOfPropInstances (+0x88), and NOTHING WRITES IT.
 //    That is now measured rather than suspected: a scan of every BrnPhysics::Props::PropManager
 //    function in the ARTIST export set for a store to +0x88 or +0x98 returns ZERO hits, and in
 //    particular PropManager::Prepare @0x8260EE18 -- the only plausible initialiser, and now
 //    correctly addressed in BrnPropManager.h -- stores to exactly four `this` offsets (+0x80
 //    mUsedProps, +0x90 mUsedParts, +0x7C mpaPropInstances, +0x8C mpaPartInstances) and neither
-//    counter is among them. Prepare is ALSO still an inert boot gate (WorldLinkStubs.cpp:516),
-//    so on a real boot mpaPropInstances is null as well.
+//    counter is among them.
 //    Release is faithful either way (the X360 spins the same garbage count), but Destruct's loop
 //    is one the console emits ZERO instructions for, so an UNOPTIMISED host build gets a
 //    shutdown spin of up to 2^32 empty iterations that the console does not have. An optimised
-//    build deletes it (PropInstance::Destruct is `{}` inline). Sequence Prepare before anything
-//    calls PhysicsModule::Release/Destruct on a real boot.
+//    build deletes it (PropInstance::Destruct is `{}` inline).
 //
 // Sole caller: BrnPhysics::PhysicsModule::Release @0x8259C1C0.
 // =========================================================================================
@@ -3875,34 +3873,6 @@ void PropManager::ProcessRemovePartInstanceEvents(
 //   4. BrnPropManager.h -- the ClampAcceleration and ApplyAntiHerdingForce parameter NAMES were
 //      corrected to the DecFIGS DWARF's in round 2 (name-only; no type, order or count change).
 //      Declaration and the definitions below now agree spelling for spelling.
-//
-// ⛔⛔ LINK-LEVEL ITEM FOR THE CONDUCTOR -- REPORTED, NOT ACTED ON (AGENTS.md gotcha 7)
-//     A LOUD one-shot inert gate for ReadUpdatedBodies is committed at
-//         b5-decomp/src/GameSource/Physics/BrnPhysicsConductorGates.cpp:499
-//         BRN_CONDUCTOR_GATE("PropManager::ReadUpdatedBodies @0x82632918 (752)")
-//     with a byte-identical signature. The real body below is therefore a DUPLICATE AT LINK TIME
-//     (LNK2005) the moment this file is mounted. Gate retirement is conductor-only and must ship
-//     in the SAME commit that adds this file to tools/build/build_game_exe.bat. This lander did
-//     NOT delete it. ClampAcceleration and ApplyAntiHerdingForce have no gate or stub anywhere
-//     (re-grepped BrnPhysicsConductorGates.cpp and WorldLinkStubs.cpp this round).
-//
-// ⛔ THE LINK HOLE THIS FILE ACTUALLY REPORTS (re-grepped 2026-08-18, round-3 fix):
-//     CgsDev::DebugRender::DrawAxis(const f32*) -- declared CgsDebugRender.h:104 (that header's own
-//     banner marks it DECLARATION-ONLY), with NO definition in CgsDebugRender.cpp, in any other
-//     .cpp under the DebugSystem Render directory, or in WorldLinkStubs.cpp.
-//     PRE-EXISTING, not introduced here: BehaviourRig.cpp:189
-//     is the first caller and ReadUpdatedBodies' mbRenderCOM arm is the second. Alongside it,
-//     CgsDev::DebugInterface::GetRender resolves only to the inert-but-ASSERTING link stub at
-//     WorldLinkStubs.cpp:1605. Both sit on the same debug arm.
-//     ✅ NOT a hole any more (round-2 correction; the round-1/round-2 banner claimed these two were
-//     un-bodied and that was FALSE by the time this wave landed): PropManager::RemoveProp
-//     @0x8260F540 and PropManager::RemovePart @0x8260F988 are BODIED by the sibling round-2 part-file
-//     b5-decomp/src/GameSource/Physics/PropManager/PropManager_wQ2_04.cpp -- as
-//     `PropManager::RemoveProp` and `PropManager::RemovePart` in that file (cited by NAME, not by
-//     line: the line numbers this banner used to carry went stale the first time either file was
-//     edited). Mount that file alongside this one. Do NOT stub either -- a trap stub beside
-//     the real body is an LNK2005 that `cl /c` cannot see. Every other callee of all three bodies is
-//     homed (census below).
 //
 // ⚠️ CONSOLE-VALUE DISCIPLINE (AGENTS.md gotcha 1): not one console offset, stride or record size
 //    appears as a host value in any of the three bodies. Every field is reached by name or through
@@ -4697,22 +4667,15 @@ void PropManager::ApplyAntiHerdingForce( CgsPhysics::PhysicsSimulationIO::InputB
 //   0x825E5DF8 / 0x825E61F0       = BaseEventQueue<UpdatePropEvent>::AddEvent / ::Append -- committed
 //   0x825E3410                    = rw::physics::RigidBody::operator= -- committed
 //   0x8260F540 / 0x8260F988       = PropManager::RemoveProp / RemovePart -- ✅ BODIED, in the
-//                                   sibling round-2 part-file PropManager_wQ2_04.cpp (by NAME --
-//                                   `PropManager::RemoveProp` / `PropManager::RemovePart`).
-//                                   Mount that file with this one; do NOT stub them (a stub beside
-//                                   the real body is an invisible LNK2005). Round-2 correction: the
-//                                   earlier banner called this pair "the link hole this file
-//                                   reports", which was false the day it was written.
+//                                   same file, below.
 //   0x82627F00                    = PropManager::ClampAcceleration -- bodied ABOVE, in this file
 //   0x825DE798 / 0x825DE860       = PropPartInstance::SetPosition / SetLinearVelocity -- committed
 //   0x825DE370 / 0x825DE6C8 / 0x825DE5F8 = PropInstance::SetTransform / SetLinearVelocity /
 //                                   SetAngularVelocity -- committed
 //   0x82277C50                    = PropPhysicsDataHeader::GetType -- committed
 //   0x821F1F20 / 0x828226D8 / 0x8282BE40 = DebugInterface::DebugInterface / ::GetRender /
-//                                   DebugRender::DrawAxis -- the debug arm. ⛔ DrawAxis is
-//                                   DECLARATION-ONLY (CgsDebugRender.h:104) and ::GetRender resolves
-//                                   only to the asserting stub at WorldLinkStubs.cpp:1605: THAT is
-//                                   this file's link hole (pre-existing, see the banner).
+//                                   DebugRender::DrawAxis -- the debug arm. GetRender is bodied in
+//                                   CgsDebugInterface.cpp, DrawAxis(const f32*) in CgsDebugRender.cpp.
 //   0x82BBC4F0                    = rw::core::debug::detail::DebugCriticalSection::Leave -- its own
 //                                   real symbol (the export's xrefs_from names it), NOT an alias for
 //                                   ThreadSafeRelease. Round-2 correction: the earlier census
@@ -8599,21 +8562,9 @@ void PropManager::UpdateJointedProps( CgsPhysics::PhysicsSimulationIO::InputBuff
 //    member and EventQueue::AddEvent are public and homed, so nothing is blocked. The undeclared
 //    `AddCachedObject` helper is filed as a header request, not a blocker.
 //
-// LINK-LEVEL DUPLICATES -- `cl /c` cannot see these. Both entries this banner used to track are
-//    now closed: PropManager::Prepare's link stub was retired 2026-08-18 with the wave-Q4
-//    PropManager mount, and PropManager::OutputUpdatedProps's inert one-shot conductor gate has
-//    been deleted, so the body below is that symbol's only definition. This file is mounted and it
-//    links, which is the proof.
-//
-// ✅ EVERY CALLEE REACHED FROM THIS FILE HAS A BODY IN THE TREE (round-2 MUST_FIX, applied;
-//    re-grepped 2026-08-18). The earlier banner said `PropManager::AddPropToSim` @0x826274D8 was
-//    "declared with NO body anywhere in b5-decomp/src or b5-decomp/vendor" -- that was FALSE the day
-//    it was written: AddPropToSim is fully bodied by the sibling wave-Q round-2 lander at
-//    b5-decomp/src/GameSource/Physics/PropManager/PropManager_wQ2_05.cpp, with a signature matching
-//    this file's call site parameter for parameter. Do NOT add a trap stub for it beside that body
-//    (an LNK2005 `cl /c` cannot see), and do not hold this file's mount for it.
-//    Re-grepped 2026-08-19 for the newly landed body's own two callees, both REAL and both
-//    mounted:
+// ✅ EVERY CALLEE REACHED FROM THIS FILE HAS A BODY IN THE TREE. PropManager::AddPropToSim is
+//    bodied in this file, with a signature matching the call site parameter for parameter.
+//    PropManager::OutputUpdatedProps' two callees are both REAL and both mounted:
 //      * PhysicsModuleIO::OutputBuffer::GetPropManagerOutputInterface -- bodied at
 //        BrnPhysicsModuleIO_OutputBuffer.cpp:188 (write overload, X360 0x825C0DC8), MOUNTED.
 //      * Props::PropOutputInterface::AppendUpdatedProps -- bodied in
@@ -8698,10 +8649,8 @@ namespace Props
 // The DecFIGS DWARF declares `void PropManager::Prepare(rw::LinearResourceAllocator* lpPhysicsAllocator)`
 // (dwarfdump .../BrnPropManager.cpp, source :174) and the one real call site,
 // BrnPhysicsModule.cpp:369, already hands over a rw::LinearResourceAllocator*. The committed class
-// declaration takes the base rw::IResourceAllocator*, because narrowing it is a PAIR edit -- the
-// inert stub at WorldLinkStubs.cpp:516 spells `struct rw::IResourceAllocator *` and stops compiling
-// the moment the declaration alone changes. That file is not this partfile's to edit, so the
-// definition below matches the COMMITTED declaration and the narrowing stays conductor item C2.
+// declaration takes the base rw::IResourceAllocator*, and the definition below matches it; narrowing
+// is a PAIR edit (declaration + this definition together) that has not been made.
 // It is behaviour-neutral either way: the body only ever reaches the allocator through the virtual
 // DoAllocate slot, which both types share.
 //
@@ -9530,130 +9479,3 @@ namespace Props
 }
 }
 
-// ============================================================================
-// FOLDED FROM PropManager_wQ2_09.cpp (wave Q2) on 2026-09-15 by tools/work/fold_partfiles.py.
-// The partfile's own header follows verbatim (its address annotations are the
-// evidence trail); its bodies come after it.
-// ============================================================================
-// GameSource/Physics/PropManager/PropManager_wQ2_09.cpp
-//
-// BrnPhysics::Props::PropManager -- breakable-props wave (waveQ) ROUND 2, 2026-08-18.
-// Part-file of the TU GameSource/Unity/../Physics/PropManager/BrnPropManager.cpp.
-//
-//     GetPropInertia( const PropTypeData* )     @ 0x82612640  (289 insns)  -- NOT LANDED
-//     GetPartInertia( const PropPartTypeData* ) @ 0x82612AC8  (272 insns)  -- NOT LANDED
-//
-// ⛔ THIS FILE INTENTIONALLY CONTAINS NO BODIES. It is the SINGLE banner for this function
-// pair: the round-1 duplicate banner PropManager_wQ_04.cpp has since been DELETED by the
-// conductor (verified 2026-08-18: the directory holds only PropManager_wQ_01/_02/_03.cpp), so
-// there is no second, staler description of this blocker left to trust. That deletion was the
-// point -- wQ_04's BLOCKER 1a asked for a declaration that had already landed, and re-landing
-// its requested `s32 GetBBox(...)` spelling beside the real `RwBool` one would have forked a
-// non-virtual dispatcher.
-//
-// The complete, corrected reconstruction of BOTH bodies -- round-1 verify items applied, and
-// re-derived instruction by instruction against the raw ARTIST asm by the round-2 lander --
-// is parked at
-//
-//     scratchpad/waveQ2/parked/PropManager_09_GetPropInertia_GetPartInertia.cpp
-//
-// and it is the intended drop-in for THIS file the moment the single remaining blocker below
-// is cleared. It supersedes the round-1 park
-// (scratchpad/waveQ/parked/PropManager_04_GetPropInertia_GetPartInertia.cpp), whose banner
-// carries three claims that are now wrong: blocker 1a is closed; its instruction counts
-// ("~180"/"~170") are wrong (289/272, counted); and its W-lane note says "four instructions"
-// where it is one instruction (four BYTES).
-//
-// -----------------------------------------------------------------------------------------
-// BLOCKER 1a -- ⛔ CLOSED 2026-08-18. DO NOT RE-REQUEST IT.
-//   `rw::collision::Volume::GetBBox` now exists, non-virtual, at
-//   SDKs/EATech/rwcollision/volume_debug_access.h:257 --
-//       RwBool GetBBox(const Matrix44Affine*, RwBool, AABBox&) const
-//   dispatching through the rwcollision per-TYPE descriptor at `volume+0x40`, function pointer
-//   at descriptor+0x04 (NOT a C++ vptr; `sizeof(rw::collision::Volume) == 96` is asserted).
-//   ⚠️ The only file that still claimed this was missing (PropManager_wQ_04.cpp) has been
-//   deleted; note the landed signature's second parameter is `RwBool`, not the `s32` that stale
-//   banner requested -- do not land a second overload.
-//
-// BLOCKER 1b -- ⚠️ STILL OPEN (re-measured 2026-08-18), and it is now the ONLY thing between
-//   the parked bodies and the tree. `rw::collision::AABBox` cannot be NAMED as a complete type
-//   in any TU that also names the game's `Vector3`, because two definitions of
-//   `rw::math::vpu::Vector3` exist:
-//       vendor/renderware/include/rw/math/vpu/types.h:24   struct { float x,y,z,w; }
-//           <- what BrnCommonTypes.h pulls, i.e. what `Vector3` IS
-//       src/SDKs/EATech/include/rw/math/vpu/vector3.h:26   class  { VectorIntrinsic mV; }
-//           <- what vendor/renderware/collision/AABBox.hpp:4 pulls
-//   Both bodies declare TWO AABBox OBJECTS BY VALUE (the DWARF's own `lAccumulatedAABBox` and
-//   `lVolumeAABBox`, the second being the 32-byte out-parameter GetBBox writes), so an
-//   incomplete type is not enough and no include ordering avoids it.
-//   The same hazard is already recorded at BrnPropManager.cpp:149-157.
-//
-//   THE EXACT MISSING LINE: vendor/renderware/collision/AABBox.hpp:4-5
-//       #include "SDKs/EATech/include/rw/math/vpu/vector3.h"
-//       #include "SDKs/EATech/include/rw/math/vpu/matrix44.h"
-//   must both become the vendor POD home `#include "rw/math/vpu/types.h"`.
-//   ⚠️ BUT NOT ON ITS OWN -- THE BLAST RADIUS IS MEASURED, NOT ESTIMATED:
-//     * 14 files in the tree reach AABBox.hpp today (counted 2026-08-18 by grepping the whole of
-//       b5-decomp/src + vendor for the include; the 15th hit is this banner). They span
-//       the vendor/renderware/collision directory, SDKs/EATech/rwcollision/volume_debug_access.h,
-//       GameShared/GameClasses/SceneManager/CgsAABBoxBuilder.{h,cpp} and BrnPropManager.cpp.
-//     * The waveQ2 rwcollision owner RAN the swap and then REVERTED it (AABBox.hpp md5 restored):
-//       8 of the 11 TUs that compile AABBox.hpp fail, in THREE independent ways --
-//       `.mV.mafLane[i]` member access (AABBox.cpp 4 sites, AggregateVolume.cpp 2,
-//       ClusteredMeshQuery.cpp 2, VolumeBBoxQuery.cpp 4, CgsAABBoxBuilder.cpp 10), a missing 3-arg
-//       `Vector3(x,y,z)` ctor on the POD (Capsule/Cylinder/TriangleVolume), and a missing
-//       `VectorIntrinsic` (VolumeBBoxQuery.cpp:147). AggregateVolume.hpp ALSO pulls the EATech
-//       matrix44.h on its own, so the swap does not even remove the clash from the collision
-//       family: `Matrix44Affine`/`Mult` is a second duplicated pair and `VectorIntrinsic` a third.
-//       This is a vocabulary collapse, not an include swap.
-//   The costed work list is scratchpad/waveQ2/rwvol.owner.md §4.5 (six items; direction: the
-//   vendor POD survives, the EATech class migrates). ONE line item is outside rwcollision
-//   ownership and needs a separate owner grant:
-//   GameShared/GameClasses/SceneManager/CgsAABBoxBuilder.cpp (10 `.mV.mafLane` sites).
-//
-// -----------------------------------------------------------------------------------------
-// THE BLOCK IS EXACTLY THAT AND NOTHING ELSE -- both bounds MEASURED against the CURRENT tree
-// on 2026-08-18, with the probes regenerated from the parked file's own code section
-// (scratchpad/waveQ2/probe_wQ2_09/):
-//   * probe_land.cpp           (the parked code verbatim)                   -> STATUS=fail,
-//     FIRST diagnostic `C2011 "rw::math::vpu::Vector3": Typneudefinition`, and 109 error lines.
-//     ⚠️ THAT RUN BOUNDS NOTHING BY ITSELF (round-2 NIT -- the earlier banner argued from "of
-//     the 109 error lines, ZERO mention GetBBox or HACKShouldMoveComOffset"): the compile ABORTS
-//     at MSVC's error cap before it ever parses the bodies -- the log's last line is
-//     `fatal error C1003: Mehr als 100 Fehler gefunden` from vector3_type_inline.h(282) -- so the
-//     absence of those names proves only that the cap was hit. The upper bound comes from the
-//     podshim probe below (STATUS=pass), and more strongly from
-//     scratchpad/waveQ2/probe_verify_land_land-inertia/probe_post45.cpp, which compiles the parked
-//     code against a REAL repointed AABBox.hpp and also passes.
-//   * probe_land_podshim.cpp   (the same, with ONLY the AABBox.hpp include swapped for a
-//     probe-local `class AABBox { Vector3 mMin; Vector3 mMax; };` over the vendor POD)
-//                                                                            -> STATUS=pass.
-//     So every other declaration these bodies need is landed and binding today:
-//     Volume::GetBBox, PropTypeData::HACKShouldMoveComOffset, Matrix44Affine::SetIdentity,
-//     Get{NumberOfVolumes,CollisionVolume,Mass} on both records, K_LAMPOST_INERTIA_BOX.
-//   * probe_land_noaabbox.cpp  (the same, with the include simply deleted)  -> STATUS=fail
-//     with exactly the two `C2079 undefined class "rw::collision::AABBox"` and the C2664 they
-//     cause on GetBBox's third argument. Nothing else is missing.
-//
-// -----------------------------------------------------------------------------------------
-// LINK-LEVEL, so nobody mistakes a green gate for a working game (AGENTS gotcha 12):
-//   * There is NO inert boot gate and NO other definition of either function anywhere in
-//     b5-decomp (grepped src + vendor, .cpp/.h/.hpp): landing the parked file creates no
-//     LNK2005, and there is no gate for the conductor to retire.
-//   * `Volume::GetBBox` is an SDK HEADER INLINE with no X360 address -- it is not an export
-//     hole and must not be added to the ledger as a function. But the descriptors it
-//     dispatches through are LINK STUBS today: volume.cpp's `gVolumeVTable[1..6]` point at
-//     `gVolumeHandler_82F91*` symbols defined as single zero bytes in
-//     SDKs/EATech/AptRenderLinkStubs.cpp, and `Volume::InitializeVTable` binds to the inert
-//     gate at WorldLinkStubs.cpp:2573 rather than its real body (static/non-static mangling
-//     mismatch -- rwvol.owner.md §7.5). So even after 1b is cleared these two bodies will
-//     compile and link but NULL-DEREFERENCE at run time until real descriptors exist;
-//     `SphereVolume::GetBBox @0x82BA8020` and `BoxVolume::GetBBox @0x82BA9FC8` have no home
-//     in this tree at all. That is a separate TU of work, flagged here, not fixed here.
-//
-// ⚠️ LEDGER (unchanged from round 1, still true): progress/status.json carries
-//    `status: reviewed` for BOTH GetPropInertia and GetPartInertia while NEITHER is
-//    implemented -- coverage_check still lists both as missing. Do not count them toward any
-//    wave total and do not close this TU on that basis.
-
-// (No code. See the parked file named above.)

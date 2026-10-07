@@ -20,12 +20,11 @@
 // ============================================================================
 // GameSource/World/Bridges/WorldBridgeAIModule.cpp
 //
-// THE FIVE AI WORLD BRIDGES + THE AI POST-PHYSICS HOOK (aiwave lane A4, 2026-09-03).
+// THE FIVE AI WORLD BRIDGES + THE AI POST-PHYSICS HOOK.
 //
-// Until this partfile every hop between WorldModule::Update @0x827D63E8 and the AI module was a
-// one-shot-log stub in WorldLinkStubs.cpp: nothing the world produced reached BrnAI::AIModule
-// (no game actions, no timer, no player controls, no traffic view, no route requests) and
-// nothing the AI produced reached physics (driver controls) or the race-car module (the AI
+// Every hop between WorldModule::Update and the AI module: what the world produces reaches
+// BrnAI::AIModule here (game actions, timer, player controls, traffic view, route requests), and
+// what the AI produces reaches physics (driver controls) and the race-car module (the AI
 // race-car view). Six console bodies, each at its address:
 //
 //   WorldModule::BridgeInputToAIModule                     @0x827AB738  (WorldBridgeInputToAI.cpp:45)

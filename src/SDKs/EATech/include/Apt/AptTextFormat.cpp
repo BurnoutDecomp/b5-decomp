@@ -108,9 +108,7 @@ TextFormat::TextFormat(const TextFormat* pSource)
 // TextFormat::copyTextFormatObj @0x82AE5820 -- the SELECTIVE field overlay: each
 // of pSource's fields is copied only when it is NOT at its own inherit sentinel
 // (asm-verified per-field compares; original-source corroboration: the leak's
-// TextFormat::copyTextFormatObj is the same defined-only merge). Was the
-// TextFormat_copyTextFormatObj {} link-stub -- which made a no-op of every
-// get/setTextFormat record copy.
+// TextFormat::copyTextFormatObj is the same defined-only merge).
 // ---------------------------------------------------------------------------
 void TextFormat::copyTextFormatObj(const TextFormat* pSource)
 {

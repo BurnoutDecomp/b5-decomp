@@ -11,11 +11,7 @@
 // five-picker ColourMenuToggle, the "restore default paint" help item, two animation
 // components and the two online-only widgets.
 //
-// 2026-08-02 -- RECONSTRUCTED. Until this wave the class was a THREE-METHOD SHELL in
-// BrnScreenStatesLinkStubs (`struct CarSelectLivery : public CgsGui::State` with OnEnter /
-// OnLeave / Update and no members), i.e. the seventh instance of this campaign's worst defect
-// class: every FSM call resolved to a base default that did nothing, and the screen looked
-// alive. All 23 X360 bodies are here now, and the base is BrnGui::CarSelectMain -- proven by
+// All 23 console bodies are reconstructed, and the base is BrnGui::CarSelectMain -- proven by
 // the ctor's tail (it constructs the same sub-object chain CarSelectMain does) and by
 // Construct / OnEnter / OnLeave / Update / AppendAptComponents / SetupCar each opening with a
 // `bl BrnGui__CarSelectMain__<same name>`.

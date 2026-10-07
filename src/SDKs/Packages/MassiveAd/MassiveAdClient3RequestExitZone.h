@@ -65,6 +65,9 @@ public:
     // a fully parsed + verified response, else 0.
     int Parse() override;
 
+    // The exit-zone endpoint path.
+    const char* GetRequestURL() override;
+
     // @ 0x82BDC8A0. Called by CMassiveZoneManager::Tick. Rejects a null builder
     // or a null zone name (returns -1100); otherwise chains the base
     // CreateRequest(pBuilder, 256, 256), writes the exit-zone block, sets status

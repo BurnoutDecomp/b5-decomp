@@ -1,13 +1,15 @@
 // BrnGui::OnlineGameOptions -- static-member definitions (X360 rodata values, dumped in
 // wave I: scratchpad/waveI/ogo_rodata.txt / ogo_rodata2.txt).
-//
-// maResourceTuplesToLoad / miNumResourcesToLoad are deliberately NOT defined here -- they
-// are already defined in BrnScreenStatesDataLinkStubs.cpp, and a second definition would be
-// a link duplicate that cl /c cannot see.
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"
 
 namespace BrnGui
 {
+    // the create-match screen and the shared
+    // online frame.
+    const CgsGui::sResourceTuple OnlineGameOptions::maResourceTuplesToLoad[] =
+        { { 176, CgsGui::E_GUI_RESOURCETYPE_APT }, { 191, CgsGui::E_GUI_RESOURCETYPE_APT } };
+    const s32 OnlineGameOptions::miNumResourcesToLoad = 2;
+
     // @0x8205EFD4 -- the observed in-queue event set; @0x8205F000 == 11.
     const s32 OnlineGameOptions::maiEventToObserve[11] =
         { 14, 21, 6, 64, 244, 44, 50, 51, 213, 189, 412 };

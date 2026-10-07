@@ -101,8 +101,7 @@ namespace BrnGui
         void ShowNoGamesFoundInGame();                                            // @0x8248BE68 (BrnAnimationComponent.h TU)
 
         // ---- statics (values dumped this wave -> scratchpad/waveJ/ocm_rodata.txt;
-        //      definitions live in the .cpp except the two resource ones, which are already
-        //      defined in BrnScreenStatesDataLinkStubs.cpp) ---------------------------------
+        //      definitions live in the .cpp) -------------------------------------------------
         static const CgsGui::sResourceTuple maResourceTuplesToLoad[]; // @ 0x8205E77C == { { 175, E_GUI_RESOURCETYPE_APT } }
         static const s32                    miNumResourcesToLoad;     // @ 0x8205E784 == 1
 

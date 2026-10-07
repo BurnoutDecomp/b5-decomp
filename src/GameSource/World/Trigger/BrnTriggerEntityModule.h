@@ -97,9 +97,8 @@ namespace BrnWorld
                               TriggerEntityModuleIO::OutputBuffer_PostScene* lpOutput,
                               BrnUpdateSet lUpdateSet );
 
-        // ---- ADDITIVE (WorldModule::EntityModulePreSceneUpdate @0x827BD1F0,
-        //      X360 vtbl+64). Declaration-only; body gated in WorldLinkStubs.cpp
-        //      until this module's own TU lands. ----
+        // ---- ADDITIVE (WorldModule::EntityModulePreSceneUpdate, console vtbl+64).
+        //      Bodied in BrnTriggerEntityModule.cpp. ----
         void PreSceneUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
                              CgsModule::IOBufferStack* lpOutputBufferStack,
                              TriggerEntityModuleIO::InputBuffer_PreScene* lpInput,

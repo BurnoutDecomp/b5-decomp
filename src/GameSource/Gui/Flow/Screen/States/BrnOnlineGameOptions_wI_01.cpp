@@ -3,29 +3,6 @@
 //   GetSelectedGameMode @0x82485A88
 //   GetNumberOptions    @0x82485B08
 //   GetOptionIndex      @0x8248ED50
-//
-//
-// The committed leaf header BrnOnlineGameOptions.h is still the MINIMAL pre-wave version
-// (the GetResourcesToLoad inline plus the two resource statics), and BrnCreateMatchOption.h
-// still carries the placeholder `{ u32 muWord0; u32 muWord1; }` element with no EOption
-// enum. The wave-I spec's §H1 class extension and §H2 element fix had not been applied when
-// this partfile was written, and headers are frozen for implementers, so none of the three
-// bodies can name mGameOptions / maOptions / mpCommonOptions / KAP_GAME_MODE_OPTION_DATA /
-// CreateMatchOption::EOption. Measured with the compile gate, not assumed.
-//
-// The three complete bodies live at, each with a banner naming the exact declaration lines
-// that unblock it:
-// They concatenate into this file (single `namespace BrnGui { ... }`, include set =
-// BrnOnlineGameOptions.h + BrnCreateMatchOption.h) once §H1/§H2 land.
-//
-// LINK NOTE for the conductor: KAP_GAME_MODE_OPTION_DATA is a static member that
-// GetNumberOptions reads. Its out-of-line DEFINITION is deliberately not written here --
-// every wave-I implementer writes a different partfile and two definitions would collide.
-// Dumped values (scratchpad/waveI/ogo_rodata.txt lines 99..104):
-//   @0x82F26824 = { KAE_RACE_MODE_OPTIONS, KAE_ROAD_RAGE_MODE_OPTIONS,
-//                   KAE_BURNING_HOME_RUN_MODE_OPTIONS, KAE_DEFAULT_MODE_OPTIONS,
-//                   KAE_DEFAULT_MODE_OPTIONS, KAE_DEFAULT_MODE_OPTIONS }
-// which cross-checks exactly against GetSelectedGameMode's mode -> slot mapping.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"

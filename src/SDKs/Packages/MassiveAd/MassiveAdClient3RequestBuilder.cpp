@@ -3,6 +3,8 @@
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Request.h"
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestManager.h"
 
+#include <new>  // placement new (list-node construction over the heap hook)
+
 // ===========================================================================
 // MassiveAdClient3::CRequestBuilder -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -163,6 +165,22 @@ int CRequestBuilder::Resume()
     }
 
     return -696;  // -0x2B8
+}
+
+
+// ---------------------------------------------------------------------------
+// CRequestBuilder::AddToRequestCollection
+//
+// Links pRequest into the outstanding-request collection. 0, or -1000 when no
+// node could be appended (the node allocation failed).
+// ---------------------------------------------------------------------------
+int CRequestBuilder::AddToRequestCollection(CRequestObject* pRequest)
+{
+    void* lpNodeMemory = CMassiveListNode::operator new(sizeof(CMassiveListNode));
+    CMassiveListNode* lpNode = lpNodeMemory ? ::new (lpNodeMemory) CMassiveListNode(pRequest) : 0;
+    if (!mRequestList.Append(lpNode))
+        return -1000;
+    return 0;
 }
 
 } // namespace MassiveAdClient3

@@ -87,10 +87,8 @@ namespace core
     {
         System::Unlock(apSystem);
     }
-    // The 3-arg engine event entry (bodied with the phase-D Dac slice 2026-08-28;
-    // the BrnBaselineLinkStubs placeholder is retired): the console callers
-    // (Environment::StartDac @0x82680F50 / StopDac @0x82680FE8) `bl
-    // rw::audio::core::PlugIn::Event` -- the pass-through tail-vcall into the
+    // The 3-arg engine event entry: the console callers (Environment::StartDac /
+    // StopDac) `bl rw::audio::core::PlugIn::Event` -- the pass-through tail-vcall into the
     // plug-in's vt[1] (the Dac's EventEvent). The int arg rides as the console r5
     // (a param-block pointer for events 0..2; 0 for start/stop).
     void RwacPlugInEvent(PlugIn* apPlugIn, int aiEvent, int aiArg)
@@ -168,11 +166,6 @@ RwacLock::~RwacLock()
 
 namespace
 {
-    // The interned factory name (console dword_83008650, written at static-init by
-    // sub_82C654A8 = Name::MakeHash("~GenericRwacFactory::SK_NAME~")). Interned once
-    // here at static-init, exactly as the console does; GenericRwacFactorySkName()
-    // (BrnBaselineLinkStubs.cpp) interns the same literal -- one hash, one value.
-    const Name skRwacFactoryName("~GenericRwacFactory::SK_NAME~");
     const Name skWaveContentType(
         "~GenericRwacWaveContent::SK_WAVE_DATA_CONTENT_TYPE~");
     const Name skReverbIrContentType(
@@ -253,7 +246,7 @@ Handle<GenericRwacFactory> GenericRwacFactory::Create(Environment& arEnvironment
 // RwacLock guard, the complete plug-in/decoder registration pass.
 GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
                                        const GenericRwacFactorySpec& akrSpec)
-    : Factory(skRwacFactoryName, arEnvironment),
+    : Factory(SK_NAME, arEnvironment),
       mpSystem(akrSpec.mpSystem),
       mCommandQueue(),
       mpRegistry(0)
@@ -811,12 +804,41 @@ bool GenericRwacFactory::DoCreateContent(const ContentSpec& akrSpec,
 }
 
 // The per-factory registry accessor (CgsSoundPlaybackModule.h:99 -- the console
-// reads GenericRwacFactory+0x401C). REAL now; the BrnBaselineLinkStubs null shim
-// is retired with this body.
+// reads GenericRwacFactory+0x401C).
 Registry* GetRwacFactoryRegistry(Factory* lpRwacFactory)
 {
     return static_cast<GenericRwacFactory*>(lpRwacFactory)->GetRegistry();
 }
 
+const Name GenericRwacFactory::SK_NAME("~GenericRwacFactory::SK_NAME~");
+
+// Host accessor for the module-side callers (CgsSoundPlaybackModule.h), which read the
+// factory name without including this factory's header.
+const Name& GenericRwacFactorySkName()
+{
+    return GenericRwacFactory::SK_NAME;
+}
+
 } // namespace Playback
 } // namespace CgsSound
+
+namespace
+{
+    // CgsGenericRwacFactory.cpp:86. The submix plug-in slot the Snd9 system initialises onto.
+    rw::audio::core::PlugIn** sppSnd9InitSubmix = 0;
+}
+
+void HACK_SetSnd9InitSubmix(CgsSound::Playback::Handle<CgsSound::Playback::SubmixVoice> ahSubmix)
+{
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "HACK_SetSnd9InitSubmix() called using voice"
+                                   << ahSubmix->GetIdent()
+                                   << "\n";
+    }
+    sppSnd9InitSubmix = ahSubmix->GetSubmixAddress();
+
+    // The by-value handle's release.
+    if (ahSubmix.GetObject())
+        ahSubmix.GetObject()->Release();
+}

@@ -320,6 +320,14 @@ namespace BrnGui
         // PROFILE_LOADED arm mirrors that byte here). See the member's carve note.
         mbPlayIntroVideo = true;
 
+        // The console Construct's replay stores: the option bytes and the slot cursor (the
+        // info-visible, exporting and camera words take the zero-fill above).
+        miReplayCurrentSlot          = -1;
+        mbReplayDisplayHud           = true;
+        mbReplayExportMaximumQuality = true;
+        mbRenderReplayPlayerNames    = true;
+        mbReplayShowCredits          = true;
+
         // X360 0x82505860 mid-body (h1_dump2.txt): seed the district-marker source words --
         // district INVALID, county derived from it (== E_COUNTY_INVALID -> the "Anywhere"
         // icon), consumed byte clear. The clear consumed byte is what makes
@@ -3391,16 +3399,11 @@ namespace BrnGui
         CGS_ASSERT(liSlotIndex < 6, "liSlotIndex < BrnReplays::KI_MAX_REELS");
         CGS_ASSERT(liSlotIndex < miReplaySlotsUsed, "liSlotIndex < miReplaySlotsUsed");
 
-        const BrnReplays::ReplayIO::StatusInterface* lpStatus =
-            reinterpret_cast<const BrnReplays::ReplayIO::StatusInterface*>(mReplayStatusInterfaceStorage);
-
-        // The cached slot->reel entry is the X360 reel handle (a 32-bit word); compare it
-        // against each reel pointer StatusInterface::GetReel hands back (32-bit compare, as
-        // on the X360 target).
-        const s32 liReelForSlot = maReplayReelForSlot[liSlotIndex];
+        // The cached slot->reel entry is the reel's address; find the reel index whose
+        // StatusInterface::GetReel address matches it.
+        const BrnReplays::Reel* lpReelForSlot = maReplayReelForSlot[liSlotIndex];
         s32 liReelIndex = 0;
-        while (liReelForSlot
-               != static_cast<s32>(reinterpret_cast<std::uintptr_t>(lpStatus->GetReel(liReelIndex))))
+        while (lpReelForSlot != mReplayStatusInterface.GetReel(liReelIndex))
         {
             if (++liReelIndex >= 6)
             {
@@ -4909,9 +4912,8 @@ namespace BrnGui
 // evidence trail); its bodies come after it.
 // ============================================================================
 // BrnGuiCache_wS1.cpp -- the road-rule-shot slice's GuiCache leg (stunt-race UI wave,
-// 2026-08-27). Mounting BrnRoadRuleShotComponent.cpp -- so RaceMainHudState::OnEnter can
-// stop linking against the inert Construct scaffold in BrnHudStatesLinkStubs.cpp -- pulls
-// exactly two "bodies link from the GuiCache TU" rows onto the link closure:
+// 2026-08-27). Mounting BrnRoadRuleShotComponent.cpp pulls exactly two "bodies link from the
+// GuiCache TU" rows onto the link closure:
 //     GuiCache::GetRoadRuleShotOpponentARCI      (BrnGuiCache.h:791)
 //     GuiCache::GetRoadRuleShotCapturedLineGate  (BrnGuiCache.h:797)
 // Neither is an exported X360 function -- the console inlines both into their one reader,

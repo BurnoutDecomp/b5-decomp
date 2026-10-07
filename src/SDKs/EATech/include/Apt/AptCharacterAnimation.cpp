@@ -76,16 +76,13 @@ extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 // reached through AptCIH::GetRootAnimation (AptCIH.cpp), which owns the CIHNone/
 // type-0x25 level-0 fallback; the direct extern here is retired.)
 
-// The two host free hooks Unresolve routes released render/font units through
-// (X360 dword_8324E870 / dword_8324E87C == XB1 qword_14147AA60 / qword_14147AA78).
-// HOMED in AptRenderLinkStubs.cpp (PC-platform leaves there: the PC host installs no
-// unit-free callbacks). The console's off-thread deferral apparatus (VM thread id
+// Unresolve routes released shape rendering units and image textures back to the
+// host through gAptFuncs.pfnFreeRenderingUnit / pfnFreeTexture. The console's
+// off-thread deferral apparatus (VM thread id
 // dword_8324E500, the deferred-release queue off_8324E2C8/dword_8324E508 under
 // unk_8324E728) is owned by AptGlobals.cpp/AptInit.cpp/AptRenderWalk.cpp; the XB1
 // Unresolve twin (sub_140845200) frees directly on the single VM thread here, so
 // this TU no longer declares it.
-extern void AptFreeFontUnit(void* pUnit);        // dword_8324E870 host hook
-extern void AptFreeRenderingUnit(void* pUnit);   // dword_8324E87C host hook
 
 // gpAptTarget (off_8324E574) -- the current AS animation target; its import loader
 // is mpLoader [c:+0x1C] (AptTarget.h). The asm reads gpAptTarget[+0x1C].
@@ -1109,7 +1106,7 @@ void* AptCharacterAnimation::Unresolve(intptr_t nBase)
             {         // unit (+0x30), null the slot.
                 *reinterpret_cast<uint16_t*>(BlobAt(pc, 0x12)) &= ~0x8000u;
                 void** const ppUnit = reinterpret_cast<void**>(pc + 0x30);
-                AptFreeRenderingUnit(*ppUnit);        // qword_14147AA78 host hook
+                gAptFuncs.pfnFreeRenderingUnit(*ppUnit);
                 *ppUnit = nullptr;
                 result = nullptr;
                 break;
@@ -1145,7 +1142,7 @@ void* AptCharacterAnimation::Unresolve(intptr_t nBase)
                     // The XB1 queues the release on the VM thread (the
                     // qword_14147A0E0 ring) or calls the host free hook
                     // directly off-thread; single-threaded bring-up = direct.
-                    AptFreeFontUnit(*ppUnit);         // qword_14147AA60 host hook
+                    gAptFuncs.pfnFreeTexture(*ppUnit);
                 }
                 rFlags &= ~3u;
                 *ppUnit = nullptr;

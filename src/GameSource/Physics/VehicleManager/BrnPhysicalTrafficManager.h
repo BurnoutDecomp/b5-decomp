@@ -169,18 +169,13 @@
 //     can push the 16-aligned VecFloat array a whole slot out. So the derived X360 constant is
 //     robust to that choice and the host drift is not; re-measure the drift if the map is re-sized.
 //
-// (5) WHY THE CONSTRUCTOR @0x827E42E8 IS DEFINED INLINE IN THIS HEADER (2026-08-03). VehicleManager
-//     now embeds this class BY VALUE, VehicleManager is embedded by value in PhysicsModule, and
-//     PhysicsModule's constructor is MOUNTED -- so the implicit constructor chain references this
-//     symbol from mounted code. Its only definition was in BrnPhysicalTrafficManager.cpp, which is
-//     NOT mounted (finding (2)'s remaining ArticulatedJointPool fork makes mounting it a wave of its
-//     own), so the link failed with LNK2019.
-// THE REJECTED ALTERNATIVE was a link stub -- an empty
-//     `PhysicalTrafficManager::PhysicalTrafficManager() {}` in a stubs TU. That is the silent-drop
-//     failure class exactly: it links, it runs, and it leaves mpaTrafficDrivers / mpaTrafficVehicles
-//     / mpaSimpleVehiclePhysics / mpArticulatedJointCreateBuffer as uninitialised garbage that every
-//     later `!= NULL` check reads as "already allocated". Inlining keeps the real initialiser list,
-//     gives it exactly one definition, and cannot decay into an empty body later.
+// (5) THE CONSTRUCTOR IS DEFINED INLINE IN THIS HEADER. VehicleManager embeds this class BY
+//     VALUE, VehicleManager is embedded by value in PhysicsModule, and PhysicsModule's constructor
+//     is mounted -- so the implicit constructor chain references this symbol from mounted code.
+//     An empty body would leave mpaTrafficDrivers / mpaTrafficVehicles / mpaSimpleVehiclePhysics /
+//     mpArticulatedJointCreateBuffer as uninitialised garbage that every later `!= NULL` check
+//     reads as "already allocated". Inlining keeps the real initialiser list, gives it exactly one
+//     definition, and cannot decay into an empty body later.
 // ============================================================================================
 
 #include "types.hpp"
@@ -834,8 +829,8 @@ public:
     // SEATER of mpaTrafficDrivers / mpaTrafficVehicles / mpaSimpleVehiclePhysics. Body in
     // BrnPhysicalTrafficManager_Prepare.cpp; sole caller VehicleManager::PrepareData @0x82633568.
     // PARAM KEY: the DWARF spells the more-derived LinearResourceAllocator*, but this tree's one
-    // caller carries the BASE spelling (BrnVehicleManager.h:485 + the WorldLinkStubs.cpp:543 gate
-    // it retires) and the body only uses DoAllocate, which is the base's virtual. `struct` is the
+    // caller carries the BASE spelling (VehicleManager::PrepareData in BrnVehicleManager.h) and
+    // the body only uses DoAllocate, which is the base's virtual. `struct` is the
     // class-key rwcore_structs.h uses -- MSVC mangles struct vs class.
     bool Prepare(rw::IResourceAllocator* lpPhysicsAllocator);
 
@@ -844,7 +839,7 @@ public:
     // Reset every used vehicle's per-frame line-test latches: the four wheels' RoadContact /
     // traction flags and the body-origin down-ray result (SimpleVehiclePhysics::
     // ResetAboveGroundTestResult per body). Runs once per physics frame, before the traction
-    // line results are harvested. Landed 2026-09-07 (issue #14); it had been a parked no-op.
+    // line results are harvested.
     void ResetAboveGroundTestResults();
 
     // The two per-frame members the manager's conductor calls, both bodied:

@@ -4,6 +4,8 @@
 #include <cstring>  // strlen, strncpy
 #include <new>      // placement new (CLog::Initialize construction over operator new)
 
+#include <windows.h> // CreateThread, ResumeThread, CloseHandle (the console calls them directly)
+
 // ===========================================================================
 // MassiveAdClient3 -- CLog / CMassiveTime / CMassiveOrder / CAddressIndexPair /
 // CMassiveThread definition home.
@@ -75,7 +77,7 @@ int CLog::Initialize()
     // r3 = 0x14; CMassiveListNode::operator new(0x14) -- the X360 allocates the
     // CLog object through the list-node heap hook. Placement-new runs the base
     // ctor chain + vftable install that the X360 inlines here.
-    void* lpMemory = CMassiveListNode::operator new(static_cast<std::size_t>(0x14));
+    void* lpMemory = CMassiveListNode::operator new(sizeof(CLog));
     if (lpMemory)                                 // if (v1) { ...construct...; slot = v2; }
         gpLogInstance = new (lpMemory) CLog();
     else
@@ -111,6 +113,14 @@ CMassiveTime::CMassiveTime()
 // ---------------------------------------------------------------------------
 CMassiveTime::~CMassiveTime()
 {
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveTime::GetTimeLocal: the raw system tick.
+// ---------------------------------------------------------------------------
+long long CMassiveTime::GetTimeLocal()
+{
+    return CMassiveSystem::Instance()->GetSystemTime();
 }
 
 // ---------------------------------------------------------------------------
@@ -233,17 +243,16 @@ CMassiveThread::CMassiveThread()
 //
 // X360: v2 = mhThread (+0x14); rewrite the vftable (off_82186038);
 // CloseHandle(v2); chain ~CMassiveBaseObject. The close runs unconditionally
-// (the X360 passes the raw handle, including 0, to CloseHandle); routed here
-// through the MassiveCloseThreadHandle platform hook.
+// (the raw handle, including 0, goes to CloseHandle).
 // ---------------------------------------------------------------------------
 CMassiveThread::~CMassiveThread()
 {
-    MassiveCloseThreadHandle(mhThread);  // r3 = ld 0x14; bl CloseHandle
+    CloseHandle(mhThread);
     // ~CMassiveBaseObject() runs next (compiler-chained).
 }
 
 // ===========================================================================
-// CFlag -- a bare named CMassiveBaseObject.
+// CFlag -- a named CMassiveBaseObject carrying one 16-bit mnFlags word (+0x14).
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
@@ -252,8 +261,8 @@ CMassiveThread::~CMassiveThread()
 // The X360 has no standalone CFlag ctor symbol in this TU; the only recovered
 // CFlag function is the vector deleting destructor (0x82BCC758). The ctor is
 // modelled as a base-chaining ctor (the MassiveAd leaf objects are always built
-// with a name); the virtual dtor declaration installs CFlag's vftable
-// (off_82183CA0). No fields of its own.
+// with a name); the virtual dtor declaration installs CFlag's vftable. Its one
+// field, mnFlags (+0x14), is zeroed by the owner, not by this ctor.
 // ---------------------------------------------------------------------------
 CFlag::CFlag(const char* pcName)
     : CMassiveBaseObject(pcName)
@@ -268,10 +277,30 @@ CFlag::CFlag(const char* pcName)
 // CMassiveBaseObject::operator delete (conditional free); return this. The
 // vftable rewrite + base-dtor chain are the compiler-emitted virtual-dtor body;
 // the conditional free is the deleting-destructor thunk MSVC synthesises around
-// it. Nothing of CFlag's own is torn down (it has no fields).
+// it. Nothing of CFlag's own is torn down (its one field, mnFlags, is a plain u16).
 // ---------------------------------------------------------------------------
 CFlag::~CFlag()
 {
+}
+
+
+// ---------------------------------------------------------------------------
+// CMassiveThread::Create
+//
+// Starts pfnProc(pParam) on a new OS thread unless one is already held. 1 when
+// the thread was created and resumed, 0 otherwise.
+// ---------------------------------------------------------------------------
+int CMassiveThread::Create(MassiveThreadProc pfnProc, void* pParam)
+{
+    if (mhThread)
+        return 0;
+
+    DWORD luThreadId = 0;
+    mhThread = CreateThread(0, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(pfnProc), pParam, 0, &luThreadId);
+    if (!mhThread)
+        return 0;
+    ResumeThread(mhThread);
+    return 1;
 }
 
 } // namespace MassiveAdClient3

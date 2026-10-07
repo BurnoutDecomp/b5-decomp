@@ -950,9 +950,8 @@ namespace CgsSceneManager
     //     "Bad volume instance with index " << index).
     //     ⚠️ FAITHFUL: the console asserts and then CARRIES ON -- it dereferences the pointer
     //     four instructions later (0x828C242C/0x828C2430) with no branch around it. No
-    //     early-out is invented here. (Since wave Q5/A2 landed the real GetVolumeInstance
-    //     this only returns NULL for a genuinely unallocated slot; before A2 the
-    //     WorldLinkStubs body returned NULL for EVERY index.)
+    //     early-out is invented here. (GetVolumeInstance returns NULL only for a genuinely
+    //     unallocated slot.)
     //   * mfPadding (0x828C241C..0x828C2440): `lvx128` the 16-byte lane at VolumeInstance
     //     +0x40 from BOTH instances, `vsubfp` A-minus-B, `vmsum3fp128` with itself, keep
     //     lane 0. That is the SQUARED LENGTH of the difference of the two instances' 16-byte

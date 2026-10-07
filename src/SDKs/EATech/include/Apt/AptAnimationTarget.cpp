@@ -263,14 +263,13 @@ extern AptValue* gpAptNoneValue;   // off_8324D814
 // (sub_82AE16xx build the table, sub_82AE17xx free it). They take the set
 // sub-object + a u16 capacity; all three bodies are HOMED directly below.
 // ---------------------------------------------------------------------------
-// AptAnimationTargetSetConstruct @0x82AE1708 -- HOMED (was a link-stub): build the set's
+// AptAnimationTargetSetConstruct: build the set's
 // slot table. DECOMPILED FAITHFULLY from the X360 ARTIST.XEX:
 //   *(a1+2) = a2 (mnCapacity); if (a2) { mppSlots = Allocate(4*a2); mnCount = 0; memset(slots,0); }
 //   else { mnCount = 0; mppSlots = 0; }
 // x64 native-8 stride (settled; Phase-0 widening rule): mppSlots is a POINTER array the runtime indexes as AptValue**;
 // the console allocates 4*capacity (4-byte pointers), x64 needs sizeof(void*)*capacity so the
-// indexed slot writes (_addToSetCaches' AptListenerSlotList::add) stay in bounds. Without this
-// the set was never built (the stub), so _addToSetCaches over-read/overwrote uninitialised slots.
+// indexed slot writes (_addToSetCaches' AptListenerSlotList::add) stay in bounds.
 void AptAnimationTargetSetConstruct(AptAnimationTargetSet* pSet, u16 nCapacity)
 {
     pSet->mnCapacity = nCapacity;
@@ -289,8 +288,7 @@ void AptAnimationTargetSetConstruct(AptAnimationTargetSet* pSet, u16 nCapacity)
 }
 // ---------------------------------------------------------------------------
 // The set destructors sub_82AE1670 (listener set) / sub_82AE1780 (input set) --
-// HOMED 2026-07-10 (retiring the {} link-stubs, which leaked every slot ref +
-// the slot array at target teardown). The two console bodies are INSTRUCTION-
+// the two console bodies are INSTRUCTION-
 // IDENTICAL ICF twins: Release (vtbl[1]) each non-null slot -- early-out once
 // mnCount live entries have been dropped -- then Deallocate the slot array
 // (console 4*capacity; native-8 sizeof(void*)*capacity) back to the pseudo pool.
@@ -322,8 +320,59 @@ void AptAnimationTargetSetDestruct2(AptAnimationTargetSet* pSet)
 }
 
 // ---------------------------------------------------------------------------
-// AptAnimationTarget::AddToRemList @0x82AEE3F8 -- HOMED 2026-07-10 (retiring the
-// {} link-stub, which dropped every delay-released clip on the floor). Queue a
+// AptAnimationTargetSet::add -- the shared set add: count = count+1, probe forward from
+// slots[count] for the first free slot (wrapping at capacity), store the value and AddRef
+// it. The modulo probe is the committed sibling idiom (AptCIHMembers.cpp AddNodeToInputSet):
+// the same slot choice while count+1 < capacity, and in bounds where the console's raw
+// slots[capacity] read runs past the table.
+// ---------------------------------------------------------------------------
+void AptAnimationTargetSet::add(AptValue* pValue)
+{
+    const u32 luCap = mnCapacity;
+    if (luCap == 0)
+        return;                                            // un-built set: nothing to add into
+
+    const u16 nHead = static_cast<u16>(mnCount + 1u);
+    mnCount = nHead;                                       // stored before the probe
+    u32 luNext = static_cast<u32>(nHead) % luCap;
+    u32 luScanned = 0u;
+    while (luScanned < luCap && mppSlots[luNext] != nullptr)
+    {
+        luNext = (luNext + 1u) % luCap;                    // wrap at capacity
+        ++luScanned;
+    }
+    if (mppSlots[luNext] == nullptr)
+    {
+        mppSlots[luNext] = pValue;
+        pValue->AddRef();                                  // vtbl[0] tail-call
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AptAnimationTargetSet::remove -- the shared set remove: empty (count 0) -> false;
+// linear-scan the slots (bound = capacity) for pValue; on a hit decrement the count,
+// Release the slot's value and null the slot. True iff one was removed.
+// ---------------------------------------------------------------------------
+bool AptAnimationTargetSet::remove(AptValue* pValue)
+{
+    if (mnCount == 0)
+        return false;
+
+    const u32 luCap = mnCapacity;
+    u32 luIndex = 0;
+    while (luIndex < luCap && mppSlots[luIndex] != pValue)
+        ++luIndex;
+    if (luIndex >= luCap)
+        return false;                                      // not found
+
+    mnCount = static_cast<u16>(mnCount - 1);
+    mppSlots[luIndex]->Release();                          // vtbl[1]
+    mppSlots[luIndex] = nullptr;
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// AptAnimationTarget::AddToRemList -- queue a
 // CIH on the shared delayed-release table:
 //   * a node already queued (the InRemList flag, x64 mFlagsA bit 5) is a no-op;
 //   * a full table (size >= the table element count) flushes via CleanRemList;

@@ -23,8 +23,7 @@
 // i.e. EVERY virtual each of them declares -- and (c) CgsDev::DebugComponent::DebugComponent() plus
 // ScoringSystemDebugComponent's two overrides. GameStateModule embeds ModeManager by value and
 // BrnMain.cpp holds the game module in static storage, so that constructor IS emitted in the shipping
-// link -- this is already true today: BrnBaselineLinkStubs.cpp:97 exists precisely because
-// ModeManager::ModeManager() references ScoringSystem::ScoringSystem().
+// link (ModeManager::ModeManager() also references ScoringSystem::ScoringSystem()).
 // => THE CORE MOUNT (BrnGameMode.cpp + BrnOfflineGameMode.cpp + BrnOnlineGameMode.cpp + the fourteen
 //    concrete mode TUs + Hud/BrnHUDMessageLogic.cpp + Debug/BrnScoringSystemDebugComponent.cpp +
 //    CgsDebugComponent.cpp) MUST LAND IN THE SAME COMMIT AS THIS HEADER, or
@@ -38,7 +37,7 @@
 //     GameMode::GameMode(), GetName(), ShouldCountdownEnd() and Start(). All four have bodies:
 //     BrnGameMode.cpp:60, :570, :612, :557. So do the other twenty-two virtuals; the file defines
 //     all 26 slots plus the ctor (the amendment's shorter "defines only ..." list is stale).
-//     No LNK2019 remains from this lane, and no BrnBaselineLinkStubs.cpp entry is needed for it.
+//     No LNK2019 remains from this lane.
 //   * (a) GameMode+0xAC IS mbIsOnline, not mbConstructed -- CORRECT, and APPLIED. The member is
 //     spelled mbIsOnline at GameModes/BrnGameMode.h:373 (+172), IsOnline() returns it, and both
 //     writers are re-pointed (BrnOfflineGameMode.cpp:41 `mbIsOnline = false`,

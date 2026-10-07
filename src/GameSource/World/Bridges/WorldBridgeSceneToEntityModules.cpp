@@ -15,15 +15,8 @@
 // X360 tail returns the forwarded call's result as a register artifact -- the
 // logical return type is void.
 //
-// ---- wave Q5 cluster F2 (2026-08-19) ------------------------------------------------------
-// Two more of this TU's console bridges became landable once SceneManagerIO::OutputBuffer had
-// its potential-contact / overlap-pair seats (wave Q5 round 2).
-// ---- wave Q6 cluster C5 (2026-08-19) ------------------------------------------------------
-// BOTH are now LIVE: BridgeSceneContactsToTrafficModule_PrePhysics @0x827ABC50 (Q5) and
-// BridgeSceneContactsToRaceCarModule_PrePhysics @0x827ABBD0 (Q6 -- the typedef fork that parked
-// it is collapsed, see that body's banner). Every bridge this TU declares is therefore defined
-// here, and BOTH WorldLinkStubs.cpp gates must be gone in the same integration step or the
-// link is an LNK2005.
+// BridgeSceneContactsToPropModule_PrePhysics, also declared in this TU's header, is bodied in
+// WorldBridgePropModule.cpp.
 namespace WorldModule
 {
 // @ 0x827ABAC8
@@ -43,7 +36,6 @@ void BridgeSceneQueryResultsToRaceCarModule_PrePhysics(
 
 // =================================================================================================
 // ⭐ WorldModule::BridgeSceneContactsToRaceCarModule_PrePhysics  @ 0x827ABBD0  (32 insns)
-//    LANDED 2026-08-19 (wave Q6 cluster C5). Was PARKED on a typedef fork through wave Q5.
 //
 // ---- The console body (0x827ABBD0..0x827ABC4C), instruction for instruction ---------------
 //   prologue mr r30,r4 / mr r29,r5:
@@ -86,16 +78,12 @@ void BridgeSceneQueryResultsToRaceCarModule_PrePhysics(
 // InputBuffer_PrePhysics stays 212160 / align 16, before and after. The `alignas(16)` the
 // struct carried was redundant -- the element PotentialContact is itself alignas(16).
 //
-// ---- ⛔⛔ MANDATORY COMPANION EDIT -- THIS BODY IS A BOOT KILLER WITHOUT IT ⛔⛔ ------------
-// `BrnRaceCarEntityModuleIO.h` (READ-ONLY to this cluster; reported to the conductor) needs
-// ONE line added to RaceCarEntityModuleIO::InputBuffer_PrePhysics::Construct():
+// ---- ⛔⛔ THIS BODY DEPENDS ON THE QUEUE BEING CONSTRUCTED ⛔⛔ ---------------------------
+// RaceCarEntityModuleIO::InputBuffer_PrePhysics::Construct() (BrnRaceCarEntityModuleIO.h) runs
 //     mPotentialContactQueue.Construct();          // console: PotentialContact<2048>, +16
-// The console's own Construct @0x822EA6F0 does it -- that very call is already NAMED in the
-// comment directly above that method ("PotentialContact<2048>::Construct(+16)") -- but the PC
-// slice never made the call, because while nothing wrote the member it did not matter.
-// It matters now: SetPotentialContactQueue does Clear() + Append(), and Append memcpy's into
-// mpEvents. CreateIOBuffer<T> stopped zero-filling on 2026-08-15, so mpEvents is UNINITIALISED
-// GARBAGE, not NULL -- the 'mpEvents != NULL' tripwire is non-gating and would pass on garbage,
+// as the console's own Construct does. Do not drop it: SetPotentialContactQueue does
+// Clear() + Append(), and Append memcpy's into mpEvents. CreateIOBuffer<T> does not zero-fill,
+// so an un-Constructed mpEvents is UNINITIALISED GARBAGE, not NULL -- the 'mpEvents != NULL' tripwire is non-gating and would pass on garbage,
 // and the memcpy then writes up to 2048*80 bytes through it.
 // THIS IS NOT A HYPOTHESIS: the traffic twin hit exactly this on the wave Q5 round-3
 // integration and the fix is recorded in BrnTrafficEntityModuleIO.h:212-215 ("without it the
@@ -103,15 +91,13 @@ void BridgeSceneQueryResultsToRaceCarModule_PrePhysics(
 // PrePhysics ... died on 'mpEvents != NULL' inside SetOverlapPairsQueue -- the
 // never-Constructed-queue IO trap").
 //
-// ---- WHAT LANDING THIS BUYS, HONESTLY -----------------------------------------------------
-// The buffer's mPotentialContactQueue has been empty every frame since the module was mounted,
-// because this bridge was its ONLY producer. It is filled now. It is NOT yet consumed:
-// `InputBuffer_PrePhysics::GetPotentialContactQueue() const` (BrnRaceCarEntityModuleIO.h:547,
-// DWARF :412) is declaration-only in this tree -- no body, and no WorldLinkStubs gate standing
-// in for one -- so the first race-car reader will need that body written before it links. This
-// leg is the producer half, and only the producer half.
-// It is OFF the smashed-prop motion path (that runs through WorldBridgePropModule.cpp), so it
-// neither helps nor hinders wave Q6's headline goal.
+// ---- WHAT THIS BUYS, HONESTLY -------------------------------------------------------------
+// This bridge is the ONLY producer of the buffer's mPotentialContactQueue. It is NOT yet
+// consumed: `InputBuffer_PrePhysics::GetPotentialContactQueue() const`
+// (BrnRaceCarEntityModuleIO.h) is declaration-only in this tree -- no body -- so the first
+// race-car reader will need that body written before it links. This leg is the producer half,
+// and only the producer half.
+// It is OFF the smashed-prop motion path (that runs through WorldBridgePropModule.cpp).
 // =================================================================================================
 void BridgeSceneContactsToRaceCarModule_PrePhysics(
     void* lpWorldModule,

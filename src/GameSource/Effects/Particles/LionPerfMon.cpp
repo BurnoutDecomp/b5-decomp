@@ -17,7 +17,7 @@
 //          static int AddMonitor(const char*, int liColour, int liMin, double lfMax,
 //                                int liParent, int liFlags);
 //      and called it `AddMonitor(name, 21, 0, 100.0, liParent, 0)`. There is no such overload.
-//      CgsPerfMonCpu.h:104-115 already documents why: on the PPC ABI an f32/f64 argument consumes
+//      The real header has only the 5-arg form: on the PPC ABI an f32/f64 argument consumes
 //      an INTEGER register slot as well as an FP register, so the real five-argument call
 //      `AddMonitor(name, page, min, budget, tag)` is emitted as `r3, r4, r5, f1, r7` and **r6 is
 //      never written** -- Hex-Rays sees the hole and invents a sixth parameter for it. This body is
@@ -26,7 +26,7 @@
 //      (f31 is loaded once at 0x82279EB8 from flt_820049E0 == 100.0). So the console's arguments
 //      are page 21, min 0, budget 100.0f, tag 0 -- and the FIFTH is a literal 0, not `liParent`.
 //      The local re-declaration also spelled `class` where the real home spells `struct`, the exact
-//      kind-mismatch CgsPerfMonCpu.h:20-23 records as having produced an LNK2019 before. Both are
+//      kind-mismatch CgsPerfMonCpu.h's struct-kind note records as having produced an LNK2019. Both are
 //      gone: this TU now includes the real header, as AGENTS.md's "reconstruct includes, don't fake
 //      them" requires.
 //

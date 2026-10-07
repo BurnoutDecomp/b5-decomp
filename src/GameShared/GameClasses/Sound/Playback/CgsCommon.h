@@ -2,6 +2,7 @@
 #define CGS_SOUND_PLAYBACK_CGSCOMMON_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStreamBase (Name streaming)
 
 // CgsSound::Playback::Name - the sound-playback name-interning facility.
 //
@@ -72,6 +73,9 @@ public:
     // raw offset. Shape-only -- not a recon'd standalone TU.
     uintptr_t GetValue() const { return mHash; }
 
+    // CgsCommon.h:161. The interned string for this name ("" if never interned).
+    const char* GetCString() const { return HashTable::Retrieve(mHash); }
+
     // CgsCommon.h:247. Compute the interning hash of a C string and Store it.
     // STATIC despite the DWARF/mangling (its r3 is the char*, not a `this`).
     // FLAG (additive grow -- moved to PUBLIC): the sound-playback Module's
@@ -119,6 +123,10 @@ private:
         // discards it and re-loads its own. FLAG (see .cpp).
         static void Store(uintptr_t luHash, const char* lkpacName);
 
+        // CgsCommon.h:301. Look an interned hash up: its string, or "" when it was never
+        // stored. STATIC for the same reason as Store.
+        static const char* Retrieve(uintptr_t luHash);
+
     private:
         // CgsCommon.h:312-314. The static pool, defined in CgsCommon.cpp.
         //   sapHashNode   == dword_82FFB958  (bucket heads)
@@ -128,9 +136,12 @@ private:
         static HashNode  saNodes[2048];
         static u32       su32CurrentNode;
 
-        // Retrieve / Dump / Traverse (CgsCommon.h:301-309) DEFERRED. FLAG.
+        // Dump / Traverse (CgsCommon.h:304-309) DEFERRED. FLAG.
     };
 };
+
+// CgsCommon.h:389. Stream a Name as its hash (hex) followed by its interned string.
+CgsDev::StrStreamBase& operator<<(CgsDev::StrStreamBase& lrStream, const Name& lkrName);
 
 }
 }

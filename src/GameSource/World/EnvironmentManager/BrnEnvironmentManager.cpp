@@ -718,15 +718,15 @@ void EnvironmentManager::GenerateShaderConstants(
 
 
 // =============================================================================================
-// SKY WAVE (2026-07-29): the defaults + key-light + junkyard-override slice.
+// The defaults + key-light + junkyard-override slice.
 //
 //   Construct                    @ 0x827CA408
 //   CalcKeyLightDirection        @ 0x827B0638
 //   EnableJunkyardLightingSetup  @ 0x827B0F98
 //   DisableJunkyardLightingSetup @ 0x827B10E8
 //
-// All four were quiet no-op gates in WorldLinkStubs.cpp that FIRE at runtime. Every constant
-// below was dumped out of the ARTIST image with headless IDA 9.3 -- none is guessed. Their
+// All four FIRE at runtime. Every constant below was dumped out of the ARTIST image -- none
+// is guessed. Their
 // values are all readable as times of day and degrees, which is a good independent check:
 //   default time of day 46800 s = 13:00, junkyard 64800 s = 18:00, the time-of-day bounds
 //   28800..61200 s = 08:00..17:00, and the sun-elevation clamp 32400..57600 s = 09:00..16:00.
@@ -964,10 +964,9 @@ void EnvironmentManager::DisableJunkyardLightingSetup()
 // It does NOT write the six mbUse* bools, and it does not touch DoF / blur / 2d-tint --
 // those belong to the base (layer 0) and fx-events (layer 2) producers.
 //
-// PC NOTE (no deviation, stated for the reader): EnvironmentManager::Prepare and ::Update are
-// still inert gates in WorldLinkStubs.cpp and nothing else writes mBlendFrame, so on this build
-// every slot takes the "no keyframe" arm and the world layer contributes weight 0. That is the
-// console's own "environment settings not loaded" behaviour, not a stand-in.
+// mBlendFrame is written by EnvironmentManager::Update (SetupBlend / PerformBlend); while no
+// keyframe is set up every slot takes the "no keyframe" arm -- the console's own "environment
+// settings not loaded" behaviour.
 // mpDefTintData (+0x1194) is written ONLY by EnvironmentManager::Prepare @0x827D49A8
 // (`stw r3, 0x1194(r31)` at 0x827D4C10, the POINTER to the default rw::graphics::postfx::ColourCube
 // the ResourcePtr at +0x1174 instances); Construct @0x827CA408 does not touch it.
@@ -1620,7 +1619,7 @@ bool EnvironmentManager::SetupSeasonsBlend( BlendFrame& lrBlendFrame,
 
 
 // =============================================================================================
-// ENVSTREAM WAVE (2026-08-16): the environment manager's STREAMING half.
+// The environment manager's STREAMING half.
 //
 //   Prepare                    @ 0x827D49A8   (JSON)
 //   StreamIn                   @ 0x827D31E8   (JSON)
@@ -1647,11 +1646,11 @@ bool EnvironmentManager::SetupSeasonsBlend( BlendFrame& lrBlendFrame,
 //     produced yet, would hang WorldModule::Prepare stage 5 forever (= a black screen, no
 //     assert). Times the wait out, logs once, and lets the machine finish so the boot proceeds.
 //   * PCBringUpJunkyardFile -- stands in for rw::core::filesys::AsyncOp Open/GetStatus/Read/
-//     GetResultHandle/GetResultSize/Close, which Prepare stages 11..14 drive. That whole layer
-//     is a LINK STUB on this build (SDKs/EATech/AptRenderLinkStubs.cpp:535
-//     `Device* Device::GetInstance(...) { return nullptr; }`), and AsyncOp::Open @ asyncop.cpp:230
-//     dereferences the returned Device unconditionally -- so calling it is an immediate AV, not a
-//     degraded read. The four console stages are kept intact around a synchronous std::fopen.
+//     GetResultHandle/GetResultSize/Close, which Prepare stages 11..14 drive. That layer is not
+//     initialised on this build: nothing calls rw::core::filesys::Manager::CreateInstance, so
+//     gpFileSysManager stays null, and AsyncOp::Open -> Device::GetInstance (device.cpp)
+//     dereferences it unconditionally -- so calling it is an immediate AV, not a degraded read.
+//     The four console stages are kept intact around a synchronous std::fopen.
 // =============================================================================================
 
 namespace
@@ -1811,9 +1810,10 @@ namespace
     //     rw::core::filesys::GetSize @0x82BBD700 on that handle (stage 12's size assert)
     //     AsyncOp::Read           @0x82BC01D0   (stage 13)
     //     AsyncOp::GetResultSize  @0x82BBE118 + AsyncOp::Close @0x82BBFB48 (stage 14)
-    // rw::core::filesys is not wired on this build -- Device::GetInstance is a link stub that
-    // returns nullptr (SDKs/EATech/AptRenderLinkStubs.cpp) and AsyncOp::Open dereferences it, so
-    // the console call sequence AVs rather than degrading. The FOUR STAGES ARE KEPT; only the IO
+    // rw::core::filesys is not initialised on this build -- nothing calls
+    // rw::core::filesys::Manager::CreateInstance, so gpFileSysManager stays null and
+    // Device::GetInstance (reached from AsyncOp::Open) dereferences it, so the console call
+    // sequence AVs rather than degrading. The FOUR STAGES ARE KEPT; only the IO
     // primitive under them is replaced, and it writes nothing but the bytes of the real shipped
     // file (build/game/ENVIRONMENTSETTINGS/JUNKYARDLIGHTING.DAT, 738 B). The consumer,
     // EnvironmentManager::ReadJunkyardLightingData, is the REAL reconstruction.

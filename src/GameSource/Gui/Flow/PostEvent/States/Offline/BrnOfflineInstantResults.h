@@ -226,12 +226,10 @@ namespace BrnGui
         // @0x824C5C38 (59) -- does this event's finish roll the credits?
         bool WillShowCredits();
 
-        // ---- ⛔ NOT RECONSTRUCTED YET. Declared so the dispatch above can be written
-        //      faithfully; bodied as LOGGED stubs in BrnScreenStatesDataLinkStubs.cpp so the
-        //      gap prints in BrnGame.log instead of being a silent no-op. Instruction counts
-        //      are the X360 export's. NONE of them is on the path that puts the results movie
-        //      on screen -- that is Update's E_RESULTS_STATE_LOADING_RESOURCES arm, which runs
-        //      before any sub-state does.
+        // ---- the sub-state page handlers, bodied in BrnOfflineInstantResults.cpp.
+        //      Instruction counts are the console export's. NONE of them is on the path that
+        //      puts the results movie on screen -- that is Update's
+        //      E_RESULTS_STATE_LOADING_RESOURCES arm, which runs before any sub-state does.
         void SetupComponents();            // @0x824B3FF0 (492)  fills the result text/icons
         void HandleControllerInput(const void* lpInputEvent); // @0x824B3E00 (124)
         void UpdateEventResults();         // @0x824BE228 (184)

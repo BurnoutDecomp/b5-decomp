@@ -138,7 +138,7 @@ bool TrafficStateManager::Prepare()
         if ( !mEngineCsisInterface.IsLoaded() || !mHornCsisInterface.IsLoaded()
              || !mEngineAemsBank.IsLoaded() || !mHornAemsBank.IsLoaded() )
             return false;
-        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor( "Traffic Cars", 14, 0, 1.0, 0, 1 );
+        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor( "Traffic Cars", CgsDev::E_PMP_14, false, 1.0f, true );
         // fall through
     case E_PREPARE_STATES:
         mePrepareState = E_PREPARE_STATES;

@@ -1371,9 +1371,14 @@ bool AddAemsTimer()
 {
     if (gbAemsTimerAdded)
         return true;
-    if (rw::audio::core::TimerManager::AddTimer(
+    // The timer record is carved from the audio System's allocator, which the add-bank
+    // path only touches inside the System critical section.
+    rw::audio::core::System::Lock(off_83271928);
+    const int liResult = rw::audio::core::TimerManager::AddTimer(
             &off_83271928->mTimerManager, &gAemsTimerHandle,
-            &AemsTimerCallback, 0, "Aems Modules", 0, 0) != 0)
+            &AemsTimerCallback, 0, "Aems Modules", 0, 0);
+    rw::audio::core::System::Unlock(off_83271928);
+    if (liResult != 0)
         return false;
     gbAemsTimerAdded = true;
     return true;

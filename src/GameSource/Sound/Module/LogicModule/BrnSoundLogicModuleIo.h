@@ -135,7 +135,9 @@ namespace Io
         // total-size closure), which BridgeLogicToRoot @0x826EBF18 appends into the
         // root's own +0x1824 twin via RequestInterface::Append @0x823A6868. Kept as
         // sized storage (the sibling discipline); the getters cast.
-        u8 mReplayRequestInterfaceStorage[44];                           // @ +0x1824
+        // Host width: the 11 slots are pointers, so the storage is the host sizeof
+        // (88 bytes); Append reads and writes all 11.
+        u8 mReplayRequestInterfaceStorage[sizeof(RootOutputBuffer::ReplayRequestInterface)]; // @ +0x1824
 
         static void _AssertLayout()
         {
@@ -143,8 +145,8 @@ namespace Io
                           "LogicOutputBuffer.mAttribSysRequestInterface @ +0x04");
             static_assert(offsetof(LogicOutputBuffer, mReplayRequestInterfaceStorage) == 0x1824,
                           "LogicOutputBuffer.mReplayRequestInterface @ +0x1824 (X360 Construct @0x826C9A28)");
-            static_assert(sizeof(LogicOutputBuffer) == 6224,
-                          "LogicOutputBuffer == 6224 (the X360 CreateIOBuffer Alloc literal @0x826DCD30)");
+            static_assert(sizeof(LogicOutputBuffer) == 0x1824 + sizeof(RootOutputBuffer::ReplayRequestInterface),
+                          "LogicOutputBuffer ends with the replay request interface");
         }
     };
 

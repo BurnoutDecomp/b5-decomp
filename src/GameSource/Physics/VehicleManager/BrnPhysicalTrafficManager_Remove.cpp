@@ -25,14 +25,11 @@
 //       `clrlwi r11,r11,8 ; oris r11,r11,0xC00 ; sldi 32 ; or lo`   (0x825F2228 / 0x825F2C9C).
 // Both are built from the SAME entity word in the same three instructions apart. Do not unify them.
 //
-// THE OUTPUT OF SendCreateRemoveTrafficEvents IS INERT ON PURPOSE. Its two rigid-body queues
-// (VehicleOutputRequestInterface::mRequiredRigidBodiesQueue / mRemoveRigidBodyQueue) drain only
-// through WorldModule::BridgeVehicleManagerToSimulation_PostScene, a deliberately inert link stub
-// (WorldLinkStubs.cpp:2694): Burnout integrates its own vehicles (ExternalPhysicsBody +
-// ReadUpdatedBodies + IntegrateTransform), so a promoted traffic car reacts through the
-// VehicleManager-generated contacts, not through rw::physics. The posts still have to happen --
-// they are what CLEARS mAddedTrafficVehicles / mRemovedTrafficVehicles /
-// mMadeSimpleTrafficVehicles at the tail of this function.
+// THE TWO RIGID-BODY QUEUES SendCreateRemoveTrafficEvents POSTS
+// (VehicleOutputRequestInterface::mRequiredRigidBodiesQueue / mRemoveRigidBodyQueue) drain
+// through PhysicsModule::BridgeVehicleManagerToSimulation_PostScene into the simulation's
+// add/remove rigid-body queues. The posts are also what CLEARS mAddedTrafficVehicles /
+// mRemovedTrafficVehicles / mMadeSimpleTrafficVehicles at the tail of this function.
 //
 // No Feb-2007 source. ARTIST pseudocode + asm, DecFIGS DWARF for declaration shape.
 // =================================================================================================

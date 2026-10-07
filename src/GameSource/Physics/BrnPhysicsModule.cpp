@@ -22,14 +22,11 @@
 // ================================================================================================
 // BrnPhysics::PhysicsModule -- constructor (X360 @0x827E5400) + Construct (X360 @0x825AE308).
 //
-// Construct IS BODIED as of 2026-08-03 (task #123). It was a no-op stub in WorldLinkStubs.cpp
-// for the whole campaign, NOT because of link closure (that has been green since 54e1868d) but
-// because the class layout ended 26,012 bytes before the last store. BrnPhysicsModule.h is
-// re-seated now -- all five formerly-opaque sub-objects are real typed members and the trailing
-// state/perf-monitor block is modelled from the DWARF -- so every store below lands on a NAMED
-// member and every sub-Construct gets a properly-formed object instead of a raw offset into a
-// `u8[]`. See that header's banner for the derivation and BrnPhysicsModule_layout_check.cpp for
-// the gate.
+// The class layout in BrnPhysicsModule.h covers every store Construct makes: all five sub-objects
+// are real typed members and the trailing state/perf-monitor block is modelled, so every store
+// below lands on a NAMED member and every sub-Construct gets a properly-formed object instead of
+// a raw offset into a `u8[]`. See that header's banner for the derivation and
+// BrnPhysicsModule_layout_check.cpp for the gate.
 //
 // REACHABILITY: Construct is a virtual override reached at boot through the wired
 // WorldModule::Construct @0x827CF540 fleet cascade, so it is not /OPT:REF-able and it really runs.
@@ -259,9 +256,8 @@ namespace BrnPhysics
     // stage tail of WorldModule::Prepare @0x827D53B0 calls it with the physics input buffer the
     // world just filled (BridgePropModuleToPhysics_Prepare appended the prop module's
     // PropInputInterface, carrying the prop-physics data ResourceHandle PropEntityModule::Prepare
-    // posted). LANDED 2026-08-19 (wave Q5 round-3 integration; was a WorldLinkStubs boot gate --
-    // the first car-vs-prop contact died in PropManager::ProcessAddPropInstanceEvents because
-    // mpPhysicsData had never been bound):
+    // posted). Without it the first car-vs-prop contact dies in
+    // PropManager::ProcessAddPropInstanceEvents because mpPhysicsData is never bound:
     //   0x825A14C8  bl IOBuffer::LockForRead(lpInputBuffer)
     //   0x825A14D0  bl PhysicsModuleIO::InputBuffer::GetPropManagerInputInterface (const, 0x8259FDE0)
     //   0x825A14E0  bl PropManager::ProcessInputs_Prepare(this+407088 == &mPropManager, iface)
@@ -276,11 +272,9 @@ namespace BrnPhysics
 
     // PhysicsModule::Prepare -- X360 @0x825ADB68 (BrnPhysicsModule.cpp:192).
     //
-    // THE POINT OF THIS FUNCTION, for this campaign, IS STAGE 3. Until 2026-08-04 the whole
-    // body was a one-line `return true` stub in WorldLinkStubs.cpp, so the simulation module's own
-    // Prepare -- the ONLY assignment to CgsPhysics::PhysicsSimulationModule::mpSimulation anywhere
-    // in the tree -- was never called, and every reconstructed rw::physics solver object linked and
-    // was unreachable. Stage 3 is what closes that.
+    // STAGE 3 IS THE LOAD-BEARING ONE. The simulation module's own Prepare is the ONLY assignment
+    // to CgsPhysics::PhysicsSimulationModule::mpSimulation anywhere in the tree, so it is what makes
+    // every reconstructed rw::physics solver object reachable.
     //
     // A resumable ten-stage fall-through FSM over mePrepareStage. Each arm stamps its own stage
     // number FIRST (so a `false` return leaves the cursor exactly where the work stopped and the
@@ -292,11 +286,10 @@ namespace BrnPhysics
     // not an omission here: the stage exists in the enum and is reachable as a resume point, but no
     // code runs for it.
     //
-    // NOT REPRODUCED, DELIBERATELY AND VISIBLY -- three groups. None of them is reachable
-    // work today (each one's target subsystem is itself inert), but every one of them is a REAL
-    // console store or call and this comment is the whole record of that:
+    // NOT REPRODUCED, DELIBERATELY AND VISIBLY. These are REAL console stores and this comment is
+    // the whole record of them:
     //
-    //   (a) stage 4's fourteen `stw 0` after DeformationManager::Prepare succeeds, at X360
+    //   (a) stage 4's fourteen `stw 0` after DeformationManager::Prepare succeeds, at console
     //       +391032, +394248, +394424, +394888, +395160, +395624, +396080, +396208, +396220,
     //       +397032, +398648, +398984, +403000, +406848. They land inside mDeformationInput
     //       (+391024) and mDeformationOutput (+396096) -- the deformation IO queue counters --
@@ -305,24 +298,6 @@ namespace BrnPhysics
     //       interfaces are reconstructed. Harmless *only* because the module lives in
     //       zero-initialised storage and nothing has written those fields yet; the moment
     //       deformation IO goes live this becomes a real dropped clear.
-    //
-    //   (b) the three sibling sub-Prepares -- DeformationManager (stage 4), PropManager (stage 5)
-    //       and VehicleManager (stage 6). Each is a named LINK STUB in WorldLinkStubs.cpp, so the
-    //       drop is one greppable symbol per subsystem instead of one silent `return true` for
-    //       the whole module. DeformationManager::Prepare actually EXISTS (bodied in the unmounted
-    //       BrnDeformationManager.cpp); mounting that TU is its own closure job.
-    //
-    // (c) RETIRED 2026-08-19 (wave Q6 round 4) -- STAGE 8 IS LANDED IN FULL. This entry used
-    //       to read "PrepareWorldRigidBody is not reconstructed, so creating a multi-kilobyte IO
-    //       buffer on the stack purely to hand it to nothing would be pure risk for zero
-    //       observable". The objection was correct AND it expired the moment the function was
-    //       recovered: PrepareWorldRigidBody @0x825A9750 is bodied below, so the buffer now has a
-    //       consumer, and it is drained inside that same call (see its banner). What made this
-    //       urgent is that the hole was not inert -- mWorldEntityId stayed at K_INVALID_ENTITY_ID
-    //       (owner byte 0xFF), which is what made every prop-vs-world contact fail
-    //       ValidateSimulationContactTypes' `case 3` the first frame narrow-phase produced any.
-    // ONE STORE OF STAGE 8 IS STILL NOT REPRODUCED, and it is called out at its own site
-    //       below: `mDeformationManager.SetWorldBodyId( mWorldRigidBodyId )`.
     // ================================================================================================
     bool PhysicsModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
                                  CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -437,10 +412,8 @@ namespace BrnPhysics
             //     0x825ADE54  stdx r11, r30, 0x5F498   // +390296
             // +390296 lands 76,024 bytes into mDeformationManager (+314272), which
             // BrnDeformationManager.h:674 names `mWorldRigidBodyId` -- so this is
-            // `mDeformationManager.SetWorldBodyId( mWorldRigidBodyId )` (DWARF
-            // BrnDeformationManager.h:156). That setter was DECLARED-ONLY in this tree until
-            // this wave -- the one-line body it needs to stop being an LNK2019 was added to
-            // BrnDeformationManager.cpp with this store as its whole attestation.
+            // `mDeformationManager.SetWorldBodyId( mWorldRigidBodyId )`, whose one-line body in
+            // BrnDeformationManager.cpp has this store as its whole attestation.
             mDeformationManager.SetWorldBodyId( mWorldRigidBodyId );
 
             lpInputBufferStack->DestroyIOBuffer( &lpSimulationModuleInputBuffer );
@@ -648,7 +621,6 @@ namespace BrnPhysics
 
     // ================================================================================================
     // PhysicsModule::UpdateCachedPositions  @0x8259C370  (34 insns)
-    // Its WorldLinkStubs boot gate is DELETED.
     //
     // WHY IT MATTERS, and it is not the 34 instructions: this is the ONLY writer of a triangle-cache
     // slot's SPHERE CENTRE anywhere in the XEX. Until it runs, all 28 claimed slots sit at the WORLD
@@ -811,8 +783,7 @@ namespace BrnPhysics
 // =================================================================================================
 // PhysicsModule::UpdateNetworkCatchup  @0x825A1508  (37 insns)
 //
-// ADDED 2026-09-23 (crash-parity FX-VMNET, G44-D2), retiring the WorldLinkStubs.cpp boot gate that
-// stood for it (leaving both = LNK2005). WorldModule::Update reaches it every frame through
+// WorldModule::Update reaches it every frame through
 // WorldModule::UpdatePhysicsNetworkCatchup @0x827B06E0 (BrnWorldModule.cpp), with the physics INPUT
 // buffer unlocked (its pre-scene lock pair has closed and the pre-physics pair has not opened).
 //   0x825A1528  mVehicleManager.CheckState()

@@ -83,19 +83,6 @@
 // rotation product the asm actually evaluates.
 //
 // No asserts: neither body calls anything (`blr` is the only branch out).
-//
-// ------------------------------------------------------------------------------
-// CONDUCTOR -- GATE TO RETIRE (link-blocking, must land WITH this file)
-// ------------------------------------------------------------------------------
-// GameSource/Director/DirectorLinkStubs.cpp (mounted, build_game_exe.bat:3582)
-// still defines `BrnTrigger::BoxRegion::ComputeTransform` as an IDENTITY stub, and
-// its own comment says so ("BoxRegion::ComputeTransform below is STILL A STUB --
-// it is only reached on a hit, which could not happen before and now can").
-// Mounting this TU without deleting that block is LNK2005. The stub is also a live
-// wrong answer today for every reader that DOES reach it -- an unrotated unit box
-// at the world origin -- which is precisely the class of defect the same file's
-// banner already retired two of.
-// ------------------------------------------------------------------------------
 
 #include "SharedClasses/Trigger/BrnRegion.h"
 

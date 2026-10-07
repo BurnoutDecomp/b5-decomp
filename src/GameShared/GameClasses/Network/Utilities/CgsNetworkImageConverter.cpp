@@ -37,18 +37,17 @@ namespace CgsNetwork
 
     // ---- SetupPerfmons @ 0x82871860 -------------------------------------------------------------
     // Register the eight CPU perfmons the image pipeline brackets its regions with, then assert each
-    // handle came back valid (>= 0). The X360 passes colour 8, minimum 0, budget 1.0 ms, no parent,
-    // no flags to every AddMonitor (r6/parent is left at the call-site default, 0).
+    // handle came back valid (>= 0). Every monitor is page 8, minimum 0, budget 1.0 ms, unscaled.
     void NetworkImageConverter::SetupPerfmons()
     {
-        miConvertPM        = CgsDev::PerfMonCpu::AddMonitor("NIC - Convert",  8, 0, 1.0, 0, 0);
-        miCopyPM           = CgsDev::PerfMonCpu::AddMonitor("NIC - Copy",     8, 0, 1.0, 0, 0);
-        miResizePM         = CgsDev::PerfMonCpu::AddMonitor("NIC - Resize",   8, 0, 1.0, 0, 0);
-        miUnpackToBufferPM = CgsDev::PerfMonCpu::AddMonitor("NIC - Unpack",   8, 0, 1.0, 0, 0);
-        miXToRPM           = CgsDev::PerfMonCpu::AddMonitor("NIC - X8 to R5", 8, 0, 1.0, 0, 0);
-        miCompressPM       = CgsDev::PerfMonCpu::AddMonitor("DXT1 Compress",  8, 0, 1.0, 0, 0);
-        miUnpackToImage    = CgsDev::PerfMonCpu::AddMonitor("DXT1 Unpack",    8, 0, 1.0, 0, 0);
-        miPackToTexture    = CgsDev::PerfMonCpu::AddMonitor("DXT1 Pack",      8, 0, 1.0, 0, 0);
+        miConvertPM        = CgsDev::PerfMonCpu::AddMonitor("NIC - Convert",  CgsDev::E_PMP_8, false, 1.0f, false);
+        miCopyPM           = CgsDev::PerfMonCpu::AddMonitor("NIC - Copy",     CgsDev::E_PMP_8, false, 1.0f, false);
+        miResizePM         = CgsDev::PerfMonCpu::AddMonitor("NIC - Resize",   CgsDev::E_PMP_8, false, 1.0f, false);
+        miUnpackToBufferPM = CgsDev::PerfMonCpu::AddMonitor("NIC - Unpack",   CgsDev::E_PMP_8, false, 1.0f, false);
+        miXToRPM           = CgsDev::PerfMonCpu::AddMonitor("NIC - X8 to R5", CgsDev::E_PMP_8, false, 1.0f, false);
+        miCompressPM       = CgsDev::PerfMonCpu::AddMonitor("DXT1 Compress",  CgsDev::E_PMP_8, false, 1.0f, false);
+        miUnpackToImage    = CgsDev::PerfMonCpu::AddMonitor("DXT1 Unpack",    CgsDev::E_PMP_8, false, 1.0f, false);
+        miPackToTexture    = CgsDev::PerfMonCpu::AddMonitor("DXT1 Pack",      CgsDev::E_PMP_8, false, 1.0f, false);
 
         CGS_ASSERT(miConvertPM        >= 0, "miConvertPM >= 0");
         CGS_ASSERT(miCopyPM           >= 0, "miCopyPM >= 0");

@@ -5,14 +5,12 @@
 // ⭐ SLICE TU (big-five #2 wave, 2026-08-06): DeformationSensor::ValidateAndAddContact
 // @0x825E1788, MOVED VERBATIM out of BrnDeformationSensor.cpp -- it is the storage callee of
 // the mounted DeformationManager contact-bridge slice (ReadPotentialContact /
-// ReadPotentialVehicleWorldContact), and the sensor home TU's OTHER bodies carry link demands
-// of their own (AbsorptionTable / ImpulsePasser / PenetrationSolver), so the home stays
-// unmounted. The file-scope helpers this body uses (the sphere view, Dot3/Sub3, the 0.01
-// tolerance) are duplicated from the home TU's anonymous namespace -- internal linkage, no ODR
-// exposure. Fold back when the home mounts.
+// ReadPotentialVehicleWorldContact). The file-scope helpers this body uses (the sphere view,
+// Dot3/Sub3, the 0.01 tolerance) are duplicated from the home TU's anonymous namespace --
+// internal linkage, no ODR exposure. BrnDeformationSensor.cpp is mounted too, so folding this
+// body back is a plain move.
 //
-// Dead code today: the caller chain tops out at PhysicsModule::Update @0x825B0640, still a
-// link stub; /OPT:REF strips this. Mounted for closure enforcement.
+// The caller chain tops out at PhysicsModule::Update.
 // ============================================================================
 
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformationSensor.h"

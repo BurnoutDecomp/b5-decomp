@@ -6,38 +6,30 @@
 // ===========================================================================
 // BrnMassiveSubscriber - Burnout's MassiveAd per-surface ad subscriber.
 //
-// One is inline-pooled inside BrnMassive per active in-world ad surface. It
-// derives from the MassiveAd SDK subscriber (MassiveAdClient3::CMassiveAdObject-
-// Subscriber) and implements the client's download / impression callbacks. Each
-// callback logs its progress through the debug-print stream (gated on
-// CgsDev::Message::gxMessageFilterFlags) and advances the subscriber's state
-// machine at +0x90 (muState).
-//
-// Reconstructed from the X360 ARTIST.XEX (pseudocode + assembly). No Feb-2007
-// source and no DecFIGS DWARF for this TU; every constant / offset / branch /
-// rodata string below is taken verbatim from the assembly in the dossier.
+// One is inline-pooled inside BrnMassive per active in-world advert. It derives from
+// the MassiveAd SDK subscriber and implements the client's three download callbacks,
+// logging progress through the debug-print stream and advancing the download state
+// (miState: 0 idle, 1 downloading, 2 timed out, 3 ready). Reconstructed from the
+// console code (no debug-info declaration exists for this TU).
 // ===========================================================================
 
 namespace BrnMassive
 {
 
-// The downloaded-texture format the subscriber accepts (X360 asm: cmplwi 0x23).
-static const int KI_DXT1_FORMAT = 35;
+static_assert(sizeof(BrnMassiveSubscriber::ImpressionData) == 32,
+              "the impression record SetImpression copies is 32 bytes");
 
-// MassiveAd wraps a 52-byte header around the delivered texture payload; the
-// real image size is the delivered size minus this header (X360 asm: addi -0x34).
+// The texture format the replacement ad must arrive in (DXT1).
+static const unsigned int KU_DXT1_MEDIA_TYPE = 35;
+
+// MassiveAd wraps a 52-byte header around the delivered texture payload.
 static const int KI_MASSIVE_HEADER_SIZE = 52;
 
 // ---------------------------------------------------------------------------
-// BrnMassiveSubscriber @ 0x823AB6C8
-//
-// Construct the SDK subscriber and, when message logging is enabled, announce the
-// new subscriber and its zone name. The X360 stores the derived vtable
-// (off_820369E8) at +0x00; that store is reproduced automatically here by
-// constructing the polymorphic object. The subscriber's own fields are left
-// uninitialised - BrnMassive::CreateSubscriber sets them immediately after.
+// Construct the SDK subscriber for the zone and announce it.
 // ---------------------------------------------------------------------------
 BrnMassiveSubscriber::BrnMassiveSubscriber(const char* lpcZoneName)
+    : MassiveAdClient3::CMassiveAdObjectSubscriber(lpcZoneName)
 {
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
     {
@@ -55,49 +47,40 @@ BrnMassiveSubscriber::BrnMassiveSubscriber(const char* lpcZoneName)
 }
 
 // ---------------------------------------------------------------------------
-// MediaDownload @ 0x823AB778
-//
-// The MassiveAd client is starting to stream the ad texture for this subscriber.
-// Log the advertisement id and the expected payload size, mark the subscriber as
-// downloading (state 1) and reset its idle-frame counter. Always returns 1.
+// MediaDownload: the client has started streaming this subscriber's ad. Log it, mark
+// the subscriber downloading and restart its idle counter.
 // ---------------------------------------------------------------------------
-int BrnMassiveSubscriber::MediaDownload(int liAdvertId, int /*liArg3*/)
+int BrnMassiveSubscriber::MediaDownload(int liAdvertId)
 {
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
     {
         *CgsDev::Log::gpDebugPrint
-            << "[MASSIVE] Downloading Massive Advertisement ID:" << liAdvertId << "\n";
+            << "[MASSIVE] Downloading Massive Advertisement ID:" << static_cast<u32>(liAdvertId) << "\n";
     }
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
     {
-        *CgsDev::Log::gpDebugPrint << "[MASSIVE] Expected Size " << muField84 << "\n";
+        *CgsDev::Log::gpDebugPrint << "[MASSIVE] Expected Size " << muExpectedSize << "\n";
     }
 
-    muState = 1;        // +0x90 : downloading
-    muIdleFrames = 0;   // +0x88
+    miState      = 1;
+    muIdleFrames = 0;
     return 1;
 }
 
 // ---------------------------------------------------------------------------
-// MediaDownloadComplete @ 0x823AB858
-//
-// The MassiveAd client has finished delivering the ad texture. Validate the
-// delivery, and on success advance the subscriber to state 3 (ready) and cache
-// the delivered ad's ids. Returns 1 on success, 0 on any validation failure:
-//   * no delivered data                        (liDataValid == 0)
-//   * wrong texture format                      (liFormat != DXT1)
-//   * payload size != the expected size         (muField84)
-// The X360 asserts the replacement texture pointer (+0x8C) is non-null first.
+// MediaDownloadComplete: validate the delivered ad (present, DXT1, payload exactly the
+// replacement texture's size) and, on success, mark it ready and cache its ids.
+// Returns 1 on success, 0 on any validation failure.
 // ---------------------------------------------------------------------------
-int BrnMassiveSubscriber::MediaDownloadComplete(int liDataValid, int liDataSize,
-                                                int liFormat, int liAdvertId)
+int BrnMassiveSubscriber::MediaDownloadComplete(const void* lpData, int liDataSize,
+                                                unsigned int luMediaType, int liAdvertId)
 {
-    const int liPayloadSize = liDataSize - KI_MASSIVE_HEADER_SIZE;
+    const u32 luPayloadSize = static_cast<u32>(liDataSize - KI_MASSIVE_HEADER_SIZE);
 
-    CGS_ASSERT(muField8C != 0, "Invalid Pointer for Texture Data to be replaced by Massive");
+    CGS_ASSERT(mpTextureData != nullptr, "Invalid Pointer for Texture Data to be replaced by Massive");
 
-    if (liDataValid == 0)
+    if (lpData == nullptr)
     {
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
@@ -106,7 +89,7 @@ int BrnMassiveSubscriber::MediaDownloadComplete(int liDataValid, int liDataSize,
         return 0;
     }
 
-    if (liFormat != KI_DXT1_FORMAT)
+    if (luMediaType != KU_DXT1_MEDIA_TYPE)
     {
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
@@ -115,13 +98,13 @@ int BrnMassiveSubscriber::MediaDownloadComplete(int liDataValid, int liDataSize,
         return 0;
     }
 
-    if (muField84 != static_cast<u32>(liPayloadSize))
+    if (muExpectedSize != luPayloadSize)
     {
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
             *CgsDev::Log::gpDebugPrint
                 << "[MASSIVE] Invalid Data Size Delivered from Massive expected "
-                << muField84 << " received " << liPayloadSize << "\n";
+                << muExpectedSize << " received " << luPayloadSize << "\n";
         }
         return 0;
     }
@@ -129,54 +112,43 @@ int BrnMassiveSubscriber::MediaDownloadComplete(int liDataValid, int liDataSize,
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
     {
         *CgsDev::Log::gpDebugPrint
-            << "[MASSIVE] Download Complete for Massive Advertisement ID:" << liAdvertId << "\n";
+            << "[MASSIVE] Download Complete for Massive Advertisement ID:" << static_cast<u32>(liAdvertId) << "\n";
     }
 
-    muState = 3;                                                // +0x90 : ready
-    muField7C = static_cast<u32>(GetInvElementID());           // +0x7C
-    muField78 = static_cast<u32>(GetCrexID());                 // +0x78
+    miState        = 3;
+    miInvElementID = GetInvElementID();
+    muCrexID       = static_cast<u32>(GetCrexID());
     return 1;
 }
 
 // ---------------------------------------------------------------------------
-// SetImpressionData @ 0x823AB9E0
-//
-// Latch a fresh impression descriptor into the block at +0x58, but only when the
-// new descriptor supersedes the current one: either the new size is larger than
-// the stored size (+0x68), or an impression is already pending (mbField94). Latching
-// resets the impression accumulators (+0x58/+0x5C) and clears the pending flag.
-// Returns `this` (the X360 leaves r3 = this on every path).
+// SetImpressionData: latch a new impression description when the stored one is
+// superseded -- the new screen size is larger, or the stored one has already been
+// handed to the SDK by Tick. Latching restarts the accumulators.
 // ---------------------------------------------------------------------------
-int BrnMassiveSubscriber::SetImpressionData(u8 luFlags, f32 lfValue, int /*liArg4*/,
-                                            u32 luSize, u16 luWidth, u16 luHeight)
+void BrnMassiveSubscriber::SetImpressionData(bool lbInView, f32 lfAngle, u32 luScreenSize,
+                                             u16 luScreenWidth, u16 luScreenHeight)
 {
-    if (muField68 < luSize || mbField94 != 0)
+    if (mImpression.muScreenSize < luScreenSize || mbImpressionReported)
     {
-        mfField6C = lfValue;        // +0x6C
-        mbHasContent = luFlags;     // +0x60
-        muField68 = luSize;         // +0x68
-        muWidth = luWidth;          // +0x62
-        muHeight = luHeight;        // +0x64
-        muField5C = 0;              // +0x5C
-        muField58 = 0;              // +0x58
-        mbField94 = 0;              // +0x94
+        mImpression.mfAngle        = lfAngle;
+        mImpression.mbInView       = lbInView;
+        mImpression.muScreenSize   = luScreenSize;
+        mImpression.muScreenWidth  = luScreenWidth;
+        mImpression.muScreenHeight = luScreenHeight;
+        mImpression.muAccumulator1 = 0;
+        mImpression.muAccumulator0 = 0;
+        mbImpressionReported       = false;
     }
-
-    return reinterpret_cast<int>(this);
 }
 
 // ---------------------------------------------------------------------------
-// Tick @ 0x823ABA20
-//
-// Per-frame: hand the impression-data block (+0x58) to the SDK to record a viewed
-// impression, then flag that an impression is pending (mbField94). Returns the SDK
-// SetImpression result.
+// Tick: hand the impression record to the SDK and mark it reported.
 // ---------------------------------------------------------------------------
-int BrnMassiveSubscriber::Tick()
+void BrnMassiveSubscriber::Tick()
 {
-    int liResult = SetImpression(&muField58);   // &+0x58
-    mbField94 = 1;                               // +0x94
-    return liResult;
+    SetImpression(&mImpression);
+    mbImpressionReported = true;
 }
 
 } // namespace BrnMassive

@@ -862,15 +862,12 @@ void CrashPlayManager::SetBouncePromptNeeded( bool lbPromptNeeded,
 // =================================================================================================
 // OnCarCrash  @ 0x822C3280  -- the per-car-hit reward, and the recently-hit DEBOUNCE SET.
 //
-// (Landed 2026-08-29. It used to be a trap stub in WorldLinkStubs.cpp; that stub is now deleted.
-// The ledger files this function under GameShared/GameClasses/Containers/CgsRingBuffer.h because
-// its only callees are the inlined ring-buffer methods -- the same misfiling BoostStrategy::
-// UpdateChainExploits carries. Its real home is this .cpp: the DecFIGS dwarfdump declares the body
-// here, with `int32_t liCrashSetIndex` at BrnCrashPlayManager.cpp:689.)
+// (The ledger files this function under GameShared/GameClasses/Containers/CgsRingBuffer.h
+// because its only callees are the inlined ring-buffer methods -- the same misfiling BoostStrategy::
+// UpdateChainExploits carries. Its real home is this .cpp: the console's debug info declares the
+// body here, with `int32_t liCrashSetIndex` at BrnCrashPlayManager.cpp:689.)
 //
-// ⛔⛔ THE STUB'S OWN COMMENT WAS WRONG ON THE POINT IT WAS WRITTEN FOR. It said this function
-// "WOULD: push the hit vehicle into mRecentCrashSet, award the per-car boost, and set
-// mbTrafficStomp -- which is why the traffic-stomp air ram is currently unreachable". It sets
+// ⛔⛔ It does NOT award the per-car boost or set mbTrafficStomp: it sets
 // NEITHER mbTrafficStomp NOR mfBoostPercentage. The whole body is four stores wide and the asm is
 // unambiguous: the only fields it touches are mRecentCrashSet, mfAftertouchPower (+0x138) and
 // mfTimeSinceLastVehicleImpact (+0x120).

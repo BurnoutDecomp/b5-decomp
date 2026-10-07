@@ -190,5 +190,38 @@ uintptr_t Name::MakeHash(const char* lkpacName)
     return static_cast<uintptr_t>(luHash);
 }
 
+// =============================================================================
+// CgsSound::Playback::Name::HashTable::Retrieve
+//
+// Walk the hash's bucket BST (the same bucket fold and less/more order as Store) and
+// return the interned string, or the empty string when the hash was never stored.
+// =============================================================================
+const char* Name::HashTable::Retrieve(uintptr_t luHash)
+{
+    for (const HashNode* lpHashNode = sapHashNode[(luHash >> 1) & (KU_HASH_BUCKETS - 1)];
+         lpHashNode != 0;
+         lpHashNode = (luHash > lpHashNode->mHash) ? lpHashNode->mpMore : lpHashNode->mpLess)
+    {
+        if (luHash == lpHashNode->mHash)
+            return lpHashNode->mkpacName;
+    }
+    return "";
+}
+
+// =============================================================================
+// CgsSound::Playback::operator<<(StrStreamBase&, const Name&)
+//
+// The hash in hex, then " [" + the interned string (or "<NULLSTRING>") + "]".
+// =============================================================================
+CgsDev::StrStreamBase& operator<<(CgsDev::StrStreamBase& lrStream, const Name& lkrName)
+{
+    lrStream << reinterpret_cast<void*>(lkrName.GetValue());
+    const char* lpcName = lkrName.GetCString();
+    lrStream << " [";
+    lrStream << (lpcName ? lpcName : "<NULLSTRING>");
+    lrStream << "]";
+    return lrStream;
+}
+
 }
 }

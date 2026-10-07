@@ -16,30 +16,6 @@
 // result[6100] is +24400 meCursorMode, result[6179]/[6181]/[6183] are +24716 /
 // +24724 / +24732).
 //
-// ⭐ SUPERSEDES the pause-wave PARTIAL in BrnScreenStatesLinkStubs.cpp:72-200. That
-// partial got the pause right and said so honestly; everything it deliberately parked
-// is landed here:
-//   * `*(this+24928) = 1` (mbFirstUpdate) and `*(this+56) = 1` (meMapState =
-//     E_MAPSTATE_MAP) in OnEnter -- both land past sizeof(CgsGui::State) and were
-//     unwritable while the placeholder derived from State. With the real CrashNavMap
-//     base they are ordinary member stores.
-//   * OnLeave's CrashNavPanel::StoreSettings(mCrashNavPanel, false) + CrashNavMap::OnLeave.
-//   * Update's chain to CrashNavMap::Update (which is what actually dispatches
-//     controller input to HandleCrashNavInputPressed below -- the partial drained the
-//     in-queue itself because the base spine did not exist), the first-update cursor
-//     snap, and the in-event landmark re-latch.
-//   * SEVEN of the nine input arms: the partial implemented 45|50 only.
-//
-// ⛔ DELETE-WHEN, PER SYMBOL (all in the conductor-owned link-stub TU; they must go in
-// the SAME commit that mounts this file or the link is LNK2005):
-//   BrnScreenStatesLinkStubs.h  -- `struct CrashNavMapMain : public CgsGui::State`
-//                                  (the whole declaration, incl. its two static decls)
-//   BrnScreenStatesLinkStubs.cpp-- CrashNavMapMain::maiEventToObserve[19]
-//                                  CrashNavMapMain::miNumEventsObserved
-//                                  CrashNavMapMain::OnEnter
-//                                  CrashNavMapMain::OnLeave
-//                                  CrashNavMapMain::Update
-//
 // LINK-TIME EXTERNALS this TU needs and does not define (cl /c cannot see them;
 // reported, not fabricated). Every one of them is a real X360 body that belongs to a
 // TU this wave is mounting alongside:
@@ -254,7 +230,6 @@ namespace BrnGui
     // dword_82066358 -- the exact pointer both @0x824CCA0C and @0x824CCA98 hand to
     // (Un)RegisterForEvents with `li r5, 0x13`. Id 6 == KI_EVENT_CONTROLLER_INPUT_PRESSED
     // is first and is what makes the input map below reachable at all.
-    // MOVED HERE from BrnScreenStatesLinkStubs.cpp (pause wave) unchanged.
     // ---------------------------------------------------------------------------------
     const s32 CrashNavMapMain::maiEventToObserve[19] =
     {

@@ -493,6 +493,32 @@ int CMassiveZoneManager::Resume()
 }
 
 // ---------------------------------------------------------------------------
+// CMassiveZoneManager::Suspend: suspends the zone's own requests, every ad object
+// and every asset. Returns 1.
+// ---------------------------------------------------------------------------
+int CMassiveZoneManager::Suspend()
+{
+    CRequestBuilder::Suspend();
+
+    mAdObjectList.GoToStart();
+    while (mAdObjectList.GetCurrent())
+    {
+        CMassiveAdObject* lpObject = static_cast<CMassiveAdObject*>(mAdObjectList.GetCurrData());
+        lpObject->Suspend();
+        mAdObjectList.GoToNext();
+    }
+
+    mAssetList.GoToStart();
+    while (mAssetList.GetCurrent())
+    {
+        CMassiveAsset* lpAsset = static_cast<CMassiveAsset*>(mAssetList.GetCurrData());
+        lpAsset->Suspend();
+        mAssetList.GoToNext();
+    }
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
 // CMassiveZoneManager::CreateImpUpdateReque @ 0x82BD2E00
 //
 // Lazily allocates the zone's ONE pending CRequestImpressionUpdate. A live one
@@ -663,7 +689,7 @@ int CMassiveZoneManager::Tick()
         {
             CMassiveAdObject* lpObject =
                 static_cast<CMassiveAdObject*>(mAdObjectList.GetCurrData());
-            lpObject->Tic();  // (*(*CurrData + 0x0C))(CurrData)
+            lpObject->Tick();  // (*(*CurrData + 0x0C))(CurrData)
             mAdObjectList.GoToNext();
         }
         return 1;

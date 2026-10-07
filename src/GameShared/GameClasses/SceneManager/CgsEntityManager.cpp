@@ -35,13 +35,6 @@
 //   EntityManager::GetFirstEntityIndex           (DWARF h:216; pool scan @0x828CDA94)
 //   EntityManager::GetNextEntityIndex            (DWARF h:220; pool scan @0x828CDB64)
 //
-// ⚠️ TWO OF THESE RETIRE LIVE SILENT-WRONG STUBS, they are not "absences":
-//   GameSource/World/WorldLinkStubs.cpp:1789 GetVolumeInstanceIndexByID **returned 0**
-//     -- every caller resolved volume-instance index 0, a valid-looking answer, every
-//     frame; and :1806 GetVolumeInstance **returned NULL**. Both must be deleted by the
-//     conductor in the same integration step that mounts this file, or the link sees two
-//     definitions.
-//
 // Asm walk: the two ObjectPool Clear instantiations are real X360 symbols
 // (SceneManagerEntity<10000> at this+0, VolumeInstance<5048> at this+0x27600);
 // the two IndexedHashTable Clears are inlined bucket loops (541 bins @+0xE7840
@@ -73,11 +66,8 @@ namespace CgsSceneManager
 // the sole parameter is named lpVolumeManager against the sole pointer member
 // mpVolumeManager (h:248) -- that binding is the only reason the parameter exists.
 //
-// ⚠️ NOT CALLED ANYWHERE IN THE TREE TODAY. CgsSceneManagerModule.cpp's Construct
-// cascade never runs `mEntityManager.Construct(&mVolumeManager)`, so mpVolumeManager
-// is indeterminate the first time AddVolumeInstance dereferences it. That wiring is
-// one line in a file this cluster does not own -- reported to the conductor, not
-// papered over here with a defensive null-check the console does not have.
+// Called from SceneManagerModule::Construct's cascade (CgsSceneManagerModule.cpp:
+// `mEntityManager.Construct(&mVolumeManager)`).
 // ===========================================================================
 void EntityManager::Construct(VolumeManager* lpVolumeManager)
 {
@@ -140,9 +130,6 @@ VolumeInstanceId EntityManager::GetVolumeInstanceIdByIndex(s32 liIndex) const
 // returns node+8 == &element.mValue), then `lwz r3,0(r3)` -- the stored pool index.
 // The miss arm streams "Volume instance not found: " << id into the assert buffer and
 // returns -1 (`li r3,-1` @0x828CD568).
-//
-// ⚠️ RETIRES A LIVE CORRUPTION: WorldLinkStubs.cpp:1789 returned 0 here, i.e. it named
-// volume-instance slot 0 for every id in the game, on every frame.
 // ===========================================================================
 s32 EntityManager::GetVolumeInstanceIndexByID(VolumeInstanceId lVolumeInstanceId) const
 {
@@ -169,8 +156,6 @@ s32 EntityManager::GetVolumeInstanceIndexByID(VolumeInstanceId lVolumeInstanceId
 //     assert( liViIndex >= 0 );                            // bge @0x828B9F80
 //     if ( !mVolumeInstancePool.IsObjectAllocated(liViIndex) ) return NULL;
 //     return &mVolumeInstancePool[liViIndex];
-//
-// ⚠️ RETIRES WorldLinkStubs.cpp:1806, which returned NULL unconditionally.
 // ===========================================================================
 const VolumeInstance* EntityManager::GetVolumeInstance(s32 liViIndex) const
 {

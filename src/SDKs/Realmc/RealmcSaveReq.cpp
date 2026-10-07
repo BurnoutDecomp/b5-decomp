@@ -6,7 +6,7 @@
 // RealmcIface::SaveReq -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
 // No leak source / no DWARF: SHAPE and BODY both come from the X360 asm. See
-// RealmcSaveReq.h for the layout and the flagged external params-copy helper.
+// RealmcSaveReq.h for the layout and the params-copy helper.
 //
 // The 32-byte head copy length is pinned to sizeof(maHead) so the host build
 // stays self-consistent while reproducing the X360's 0x20-byte memcpy exactly.
@@ -44,6 +44,23 @@ SaveReq::SaveReq(const void* pHeadSource,
     muField160 = *pField160Source;                          // +0x160
     std::memcpy(maHead, pHeadSource, sizeof(maHead));       // memcpy(this, src, 32)
     maHead[0x1F] = 0;                                       // +0x1F
+}
+
+// ---------------------------------------------------------------------------
+// SaveReq::SaveReq (copy)
+//
+// Same store order as the six-argument ctor, every value taken from rOther:
+// the params block first, then muField158 / muField15C / muField160, then the
+// 32-byte head memcpy, then maHead[0x1F] = 0.
+// ---------------------------------------------------------------------------
+SaveReq::SaveReq(const SaveReq& rOther)
+{
+    RealmcCopyEntryContentParams(maParams, rOther.maParams);
+    muField158 = rOther.muField158;
+    muField15C = rOther.muField15C;
+    muField160 = rOther.muField160;
+    std::memcpy(maHead, rOther.maHead, sizeof(maHead));
+    maHead[0x1F] = 0;
 }
 
 } // namespace RealmcIface

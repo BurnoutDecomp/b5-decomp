@@ -185,11 +185,10 @@ namespace RaceCarEntityModuleIO
         // EventQueue<AudioCarDataLoadedEvent,16>::Construct(+15456) [== mAudioCarLoadedDataQueue]
         // and the eight-slot per-car clear.
         // PARTIAL SLICE: the three members whose committed types expose Construct/Clear run the
-        // REAL call; the rest belong to their own TUs [marked deviation]. This replaces the
-        // WorldLinkStubs base-only gate, which left both queues un-Constructed --
-        // RaceCarAudioStreamer::Update reads mAudioCarLoadedDataQueue every frame (it fired
-        // "mpEvents != NULL" + "Base event queue overflow"), and PreSceneUpdate reads the timer
-        // status interface for the frame's sim step.
+        // REAL call; the rest belong to their own TUs [marked deviation]. Both queues must be
+        // Constructed: RaceCarAudioStreamer::Update reads mAudioCarLoadedDataQueue every frame
+        // (an un-Constructed queue fires "mpEvents != NULL" + "Base event queue overflow"), and
+        // PreSceneUpdate reads the timer status interface for the frame's sim step.
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
@@ -418,8 +417,8 @@ namespace RaceCarEntityModuleIO
         // EventQueue<AudioCarDataLoadedEvent,16>::Construct(+1004120)
         // [== mAudioCarLoadedDataQueue] and the eight-slot per-car clear.
         // PARTIAL SLICE for the same reason as the InputBuffer twin above: the audio streamer
-        // appends its per-frame (un)load requests into this queue every frame and the base-only
-        // WorldLinkStubs gate left it un-Constructed. GROW as the other members' types land.
+        // appends its per-frame (un)load requests into this queue every frame, so it must be
+        // Constructed. GROW as the other members' types land.
         // ⭐⭐ REORDERED + COMPLETED 2026-08-15 (IO-buffer zero-fill removal audit). The body is
         // now in the console's own call order, and THE FOUR RCEntity*OutputInterface::Clear CALLS
         // THE BANNER ABOVE ALWAYS TRANSCRIBED ARE ACTUALLY MADE. They were listed and never
@@ -583,9 +582,9 @@ namespace RaceCarEntityModuleIO
         // TakedownEvent<8>::Construct(+208976), memset(scoring, 0, 2736), the eight-word
         // online-scoring block seeded to -1 and the two trailing flag bytes cleared.
         // PARTIAL SLICE: the members whose committed types expose Construct run the REAL
-        // call; the rest are covered by their own TUs [marked deviation]. This replaces the
-        // WorldLinkStubs base-only gate, which left mSceneResultQueue un-Constructed -- the
-        // scene->race-car pre-physics bridge Appends into it every frame.
+        // call; the rest are covered by their own TUs [marked deviation]. mSceneResultQueue
+        // must be Constructed: the scene->race-car pre-physics bridge Appends into it every
+        // frame.
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
@@ -620,12 +619,10 @@ namespace RaceCarEntityModuleIO
         }
         const PotentialContactQueue* GetPotentialContactQueue() const;                     // :412
         void                         SetPotentialContactQueue(const PotentialContactQueue*); // :413
-        // Bodied inline 2026-08-01 (drivable wave) alongside its non-const twin below: it
-        // was declaration-only, and PlaceOnTrackManager::PrePhysicsUpdate -- which takes the
-        // input buffer by const pointer, as the console signature does -- is its first caller.
+        // Caller: PlaceOnTrackManager::PrePhysicsUpdate, which takes the input buffer by const
+        // pointer, as the console signature does.
         const SceneResultQueue* GetSceneResultQueue() const { return &mSceneResultQueue; }  // :415
-        // Real accessor (was a WorldLinkStubs stub that returned NULL, which the
-        // scene->race-car pre-physics bridge then dereferenced). The member is committed.
+        // Caller: the scene->race-car pre-physics bridge.
         SceneResultQueue*       GetSceneResultQueue() { return &mSceneResultQueue; }      // :416
         const AIModuleResultInterface* GetAIModuleResultInterface() const;                // :418
         void                           SetAIModuleResultInterface(const AIModuleResultInterface*); // :419
@@ -676,12 +673,11 @@ namespace RaceCarEntityModuleIO
         //   VariableEventQueue<1536,16>::Construct + ::Clear (+149312)  [== mGameEventQueue]
         //   the 16-byte block at +149280 zeroed and the word at +149296 cleared
         //
-        // ⛔ WAS A BASE-ONLY BOOT GATE IN WorldLinkStubs.cpp AND IT WAS A LIVE DEFECT
-        // (drivable wave 2026-08-01). mVehicleInputInterface embeds fifteen EventQueues;
-        // none of them had mpEvents. MEASURED: the first ResetActiveRaceCar ->
-        // AddHandlingModel -> CreateRaceCar fired "mpEvents != NULL" + "Reached Max length"
-        // and the process died. PARTIAL SLICE: the members whose committed types expose
-        // Construct run the REAL call; the rest are an explicit list, not a silence.
+        // ⛔ mVehicleInputInterface embeds fifteen EventQueues and every one must be
+        // Constructed: without it the first ResetActiveRaceCar -> AddHandlingModel ->
+        // CreateRaceCar fires "mpEvents != NULL" + "Reached Max length" and the process dies.
+        // PARTIAL SLICE: the members whose committed types expose Construct run the REAL
+        // call; the rest are an explicit list, not a silence.
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
@@ -821,9 +817,9 @@ namespace RaceCarEntityModuleIO
         // RCEntity*OutputInterface::Clear calls, VariableEventQueue<1536,16>::Construct on the
         // game-event queue, an 11-word zero fill and VehicleInputInterface::Construct.
         // PARTIAL SLICE: only the request ring is brought up here -- it is the one this build
-        // actually writes (RaceCarEntityModule::SendStreamerEvents @0x82304F70 Appends the five
-        // component streamers' queues into it every frame, and the base-only WorldLinkStubs gate
-        // this replaces left it un-Constructed, which fired "Not Constructed" once per frame).
+        // actually writes (RaceCarEntityModule::SendStreamerEvents Appends the five component
+        // streamers' queues into it every frame; un-Constructed, it fires "Not Constructed"
+        // once per frame).
         // GROW as the other members' types land.
         // ⭐⭐ COMPLETED 2026-08-15 (IO-buffer zero-fill removal audit) -- the four
         // RCEntity*OutputInterface::Clear calls the banner above always transcribed are now
@@ -844,12 +840,10 @@ namespace RaceCarEntityModuleIO
             // "mAddEntityQueue too small" + "mpEvents != NULL" (the never-Constructed-queue
             // IO-buffer trap, third sighting in this family).
             mSceneInputInterface.Construct();                    // X360 +8224
-            // ⭐ ADDED 2026-08-02 (camera parameter-chain wave) -- the "NewVehicleEvent<50>::
-            // Construct" leg named in the X360 note above. The producer that writes it lands
-            // in this wave (RaceCarEntityModule's new-vehicle publish), and an unconstructed
-            // queue has mpEvents == NULL, which is what killed the process the last time an
-            // embedded queue in this family went un-Constructed (see the retired
-            // OutputBuffer_PrePhysics gate in WorldLinkStubs.cpp).
+            // The "NewVehicleEvent<50>::Construct" leg named in the console note above. Its
+            // producer is RaceCarEntityModule's new-vehicle publish, and an unconstructed
+            // queue has mpEvents == NULL, which kills the process (see the
+            // OutputBuffer_PrePhysics Construct note).
             mDirectorVehicleInputInterface.Construct();          // X360 +826992
             // ---- the four Clears, in the console's order (0x822EA8F8) ----
             mActiveRaceCarOutputInterface.Clear();               // X360 +827808
@@ -927,7 +921,7 @@ namespace RaceCarEntityModuleIO
         // X360 0x822D3710 -- IOBuffer status, Camera::Construct(+16),
         // VariableEventQueue<32768,16>::Construct(+368) [== mSceneResultQueue] and the four
         // trailing pointer slots cleared. PARTIAL SLICE: the camera bring-up belongs to the
-        // camera TU [marked deviation]. (Replaces the WorldLinkStubs base-only gate.)
+        // camera TU [marked deviation].
         void Construct()
         {
             CgsModule::IOBuffer::Construct();

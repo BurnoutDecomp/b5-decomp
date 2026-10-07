@@ -393,10 +393,8 @@ struct AptCIH : public AptValueGC
     bool ProcessMaskMatricies();   // @0x82AEDAE0
 
     // ProcessCustomControls -- the per-frame custom-control refresh pass AptUpdate
-    // @0x82B0DB68 installs into the second generalised-process slot (dword_8324E420)
-    // alongside ProcessTextInst / ProcessMaskMatricies. Its X360 body has no
-    // per-address export in the dump set yet; declared here for the AptUpdate slot
-    // install, no-op link-stub until it is exported + reconstructed.
+    // installs into the second generalised-process slot alongside ProcessTextInst /
+    // ProcessMaskMatricies. Body in AptCIHBehaviour.cpp.
     bool ProcessCustomControls();
 
     // CleanNativeFunctions @0x82AD6FB8 -- shutdown teardown: Release + null each of the

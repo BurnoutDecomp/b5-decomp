@@ -15,7 +15,7 @@
 //     SetMember additionally marks the object as class-bearing (SetHasClass) when
 //     the assigned member is the prototype key (__proto__ == StringPool::saConstant)
 //     and the object is _global (19) / a CIH (12) / tag 37.
-//   * EXTERN (type 11) -> the host extern-object interface (PC-platform leaf, see below).
+//   * EXTERN (type 11) -> the host extern-variable callbacks (gAptFuncs, see below).
 //   * otherwise / undefined operands -> GetMember pushes `undefined`.
 //
 // The member name is coerced from the key via AptValue::Get_ToString (string keys
@@ -30,13 +30,11 @@
 // slot (mpPendingReleaseValue, normally null) as the setVariable target, matching
 // the console (ctx+8).
 //
-// The host extern-object interface (AptVFT_Extern type 11): the console reads/
-// writes extern members through the host fn-ptr slots dword_8324E858 (get) /
-// dword_8324E854 (set), encapsulated as AptExtern_GetMember/SetMember -- PC-platform
-// leaves at their AptRenderLinkStubs.cpp definitions (no extern objects register on
-// the PC title path, so the un-installed slots answer null/no-op, matching the
-// console null fn-ptrs). The deferred-release drain on stack-empty is the homed
-// AptFlushDeferredReleases (AptGC.cpp).
+// The host extern-object interface (AptVFT_Extern type 11): extern members are read/
+// written through the host user-function table's pfnGetExternVariable /
+// pfnSetExternVariable slots (installed by CgsGui::AptAux::ConstructApt). The
+// deferred-release drain on stack-empty is the homed AptFlushDeferredReleases
+// (AptGC.cpp).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -50,13 +48,9 @@
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC
 #include "SDKs/EATech/include/Apt/AptCIH.h"                // AptCIH::GetCharacterInst (TypeOf CIH tag)
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"      // AptCharacterInst::GetTypeTag
+#include "SDKs/EATech/include/Apt/Apt.h"                   // gAptFuncs (pfnGet/SetExternVariable)
 
 #include <cstdint>
-
-// The host extern-object member hooks (console fn-ptr slots dword_8324E858 get /
-// dword_8324E854 set) -- PC-platform leaves, defined in AptRenderLinkStubs.cpp.
-extern AptValue* AptExtern_GetMember(const char* szName);                       // dword_8324E858
-extern void      AptExtern_SetMember(const char* szName, const char* szValue);  // dword_8324E854
 
 // Drain the deferred-release value vector (off_8324E51C) once the operand stack
 // empties -- homed in AptGC.cpp over the real gValuesToRelease vector.
@@ -102,8 +96,8 @@ void AptActionInterpreter::_FunctionAptActionGetMember(AptActionInterpreter* pIn
             AptString* pKeyStr = (eKey == AptVFT_StringValue)
                 ? reinterpret_cast<AptString*>(pKey)
                 : static_cast<AptString*>(static_cast<AptStringObject*>(pKey)->GetBoxedString());
-            AptValue* pElem = AptExtern_GetMember(
-                pKeyStr->GetInternalString()->GetBuffer());   // dword_8324E858 (host slot; leaf in AptRenderLinkStubs.cpp)
+            AptValue* pElem = gAptFuncs.pfnGetExternVariable(
+                pKeyStr->GetInternalString()->GetBuffer());
             pInterp->stackPopAndPush(2, pElem);
             return;
         }
@@ -180,8 +174,8 @@ void AptActionInterpreter::_FunctionAptActionSetMember(AptActionInterpreter* pIn
             AptString* pKeyStr = (pKey->getVtblIndex() == AptVFT_StringValue)
                 ? reinterpret_cast<AptString*>(pKey)
                 : static_cast<AptString*>(static_cast<AptStringObject*>(pKey)->GetBoxedString());
-            AptExtern_SetMember(pKeyStr->GetInternalString()->GetBuffer(),
-                                pValStr->GetBuffer());   // dword_8324E854 (host slot; leaf in AptRenderLinkStubs.cpp)
+            gAptFuncs.pfnSetExternVariable(pKeyStr->GetInternalString()->GetBuffer(),
+                                           pValStr->GetBuffer());
         }
         // else: not a settable target -> nothing stored (matches the console).
     }

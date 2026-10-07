@@ -44,9 +44,7 @@ public:
 
     // CleanUnreachable -- the PARTIAL sweep AptUpdate @0x82B0DB68 runs when the
     // zombies-dirty flag is raised (AptPartialGarbageCollection): mark the live
-    // value graph, release the unreachable values. Its X360 body has no
-    // per-address export in the dump set yet; declared for the AptUpdate call,
-    // body pending export + reconstruction (AptRenderLinkStubs.cpp meanwhile).
+    // value graph, release the unreachable values. Body in AptGC.cpp.
     static void CleanUnreachable();
 };
 

@@ -2,12 +2,8 @@
 // BrnGui::ShowtimeInstantResultsState  -- the post-event SHOWTIME instant-results screen
 //   TU: GameSource/Gui/Flow/PostEvent/States/Showtime/BrnShowtimeInstantResults.cpp
 //
-// ⭐⭐ WHY THIS TU EXISTS. A finished showtime session already TERMINATES correctly (measured
-// twice, on two builds, against a control that never terminates) -- and then it drew NOTHING,
-// because the state the terminator hands over to had three logging stubs where its lifecycle
-// should be. `ShowtimeInstantResultsState::OnEnter/OnLeave/Update` lived in
-// BrnScreenStatesDataLinkStubs.cpp and printed a line. This TU replaces them with the real
-// bodies, and the load-bearing one is Update's E_RESULTS_STATE_LOADING_RESOURCES arm:
+// ⭐⭐ A finished showtime session hands over to this state. The load-bearing body is Update's
+// E_RESULTS_STATE_LOADING_RESOURCES arm:
 //
 //     mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_RESULTS_MOVIE_RESOURCE], 3);
 //
@@ -193,9 +189,11 @@ namespace BrnGui
     }
 
     // ---- static resource list ---------------------------------------------------------------
-    // maResourcesToLoad @0x82F26BB8 / muNumResourcesToLoad @0x82F26BD0 are DEFINED in
-    // BrnScreenStatesDataLinkStubs.cpp beside the other screens' tables; they are declared in
-    // this class's header and not re-defined here.
+    // The three apt packages the results screen loads (read from the image).
+    const CgsGui::sResourceTuple ShowtimeInstantResultsState::maResourcesToLoad[] =
+        { { 217, CgsGui::E_GUI_RESOURCETYPE_APT }, { 70, CgsGui::E_GUI_RESOURCETYPE_APT },
+          {  55, CgsGui::E_GUI_RESOURCETYPE_APT } };
+    const u32 ShowtimeInstantResultsState::muNumResourcesToLoad = 3;
 
     // X360 .rdata durations (loaded by ResetStateTimer for the TOTALLING/SUMMARY/LEAVING cases).
     const f32 ShowtimeInstantResultsState::KF_TOTALLING_DURATION = 10.0f;   // cpp:33, flt_82065B68

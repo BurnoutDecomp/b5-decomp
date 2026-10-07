@@ -2,40 +2,6 @@
 // BrnGui::OnlineGameOptions -- wave-I partfile 06: the create-page presenter pair.
 //   SetupHelpBar          @0x82485C78  cpp:1936 / cpp:1995 (asserts)
 //   ShowGameOptionsScreen @0x8249C5C8
-//
-//
-// The committed leaf header BrnOnlineGameOptions.h is still the MINIMAL pre-wave version
-// (the GetResourcesToLoad inline plus the two resource statics), and BrnHelpBar.h still
-// carries only GetItemNameHash/GetAnimator. The wave-I spec's §H1 class extension and §H3
-// HelpBar declarations had not been applied when this partfile was written, and headers
-// are frozen for implementers, so neither body can name meSubState / mHelpBar /
-// mMenuOptions / mCreateGameToggles / mRouteInfoDisplay / the four animators / mTitleText /
-// mpGuiCache / miCurrentRound / the KPC_* animation-state tables, nor call
-// HelpBar::Clear / HelpBar::AppendHelpBarItem. Measured with the compile gate, not assumed.
-//
-// The complete partfile lives at, with a banner naming the exact declaration lines that
-// unblock it:
-// It is written as the finished contents of THIS file (one `namespace BrnGui { ... }`,
-// the spec §7 include set) and drops in verbatim once §H1/§H3 land -- delete this banner
-// and copy it over.
-//
-// stands in the §H1/§H3 declarations and #includes the real component headers compiles
-// them clean through the same cl /c gate (and a deliberately misspelled TextField::SetText
-// made that probe fail, so the probe genuinely compiles the bodies).
-//
-// SPEC CORRECTION for the conductor (measured): wave-I spec §3 says the help-bar pad-button
-// ids 4/5/6 "have no ButtonIconComponent::EPadButton home in the tree". They do --
-// GameSource/Gui/Flow/Shared/Components/BrnButtonIcon.h declares that enum, and 4/5/6 are
-// exactly E_PADBUTTON_SELECT / E_PADBUTTON_BACK / E_PADBUTTON_OPTION0, with the append
-// call's third argument 15 == E_PADBUTTON_INVISIBLE (the same {text, button, INVISIBLE}
-// shape BrnOnlineGameRoomPlayerInfo's HelpItem::SetItem call sites use -- so that third
-// file uses the real home; §H1's `HelpBarItem::meButton` could take the same type.
-//
-// LINK NOTE for the conductor: the two saved/received counters SetupHelpBar tests are
-// cache+76672 / +76676 loads onto that type's own public accessors,
-// OptionsDataProfile::GetNumCreatedOnlineGameOptions() / GetNumReceivedOnlineGameOptions().
-// Both are DECLARED there (h:212/213) and DEFINED NOWHERE in the tree yet -- cl /c cannot
-// see that, so it will surface only at link time.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"

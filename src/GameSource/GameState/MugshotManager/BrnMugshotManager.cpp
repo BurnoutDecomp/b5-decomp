@@ -195,17 +195,12 @@ void MugshotManager::OnRoundEnd(bool lbResetState)
 // the found record's status, and the final "status != NONE" result all match. The gate itself is
 // NOT why no mugshot has ever been witnessed.
 //
-// FLAG(host stand-in, NOT a divergence in this file): the gate can never pass on the host because
-// nothing seeds maCameraStatusData. UpdateCameraStatusData fills it from the network in-game
-// player-status interface and pads every slot past the player count to {INVALID, COUNT} -- and
-// that interface's GetNumPlayers is a baseline LINK STUB returning a literal 0 rather than its
-// miNumPlayers member (GameSource/BrnBaselineLinkStubs.cpp, not this lane's file), so all eight
-// slots are padded and no victim index can ever match. Landing the accessor is a one-line change
-// in a file this lane does not own; it is reported as a blocker, not edited here.
-// ⚠️ AND IT WOULD NOT BY ITSELF PRODUCE A MUGSHOT. Both of the consumer's capture arms are
-// online-only (online non-lobby, or a free-burn lobby), so on an OFFLINE forced takedown the
-// console issues no capture either -- [mugshot] silence on an offline run is structural, exactly
-// as [payback] silence is. The witness in the consumer now says which of the two it was.
+// maCameraStatusData is seeded only by UpdateCameraStatusData, which fills it from the network
+// in-game player-status interface and pads every slot past GetNumPlayers() to {INVALID, COUNT}.
+// ⚠️ Both of the consumer's capture arms are online-only (online non-lobby, or a free-burn
+// lobby), so on an OFFLINE forced takedown the console issues no capture either -- [mugshot]
+// silence on an offline run is structural, exactly as [payback] silence is. The witness in the
+// consumer says which of the two it was.
 // ---------------------------------------------------------------------------
 bool MugshotManager::DoesPlayerHaveACamera(::EActiveRaceCarIndex lePlayerRaceCarIndex)
 {

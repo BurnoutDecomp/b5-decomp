@@ -1,179 +1,387 @@
-// ===================================================================================
-// BrnGui::OnlineStats -- out-of-line bodies for the online-stats screen state.
-// Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
-//   HandleControllerInputPressed @0x82487670, HandleStatsData @0x82487728,
-//   OnEnter @0x82487470, OnLeave @0x824A18E8, UpdatePermanent @0x82492908,
-//   UpdateWFInit @0x82487608, UpdateGetCache @0x82492820, UpdateRunning @0x824A19C8.
-// (ClearExpectedComponent @0x82487590 is SKIPPED -- declared-only.)
-// ===================================================================================
+// GameSource/Gui/Flow/Screen/States/BrnOnlineStats.cpp
+//
+// BrnGui::OnlineStats -- the online-stats screen (ON_STATS). The eleven bodies, read off the
+// console asm:
+//
+//   OnEnter / OnLeave / Update          the lifecycle and the internal-state chain
+//   UpdateGetCache                      adopt the cache from the in-queue
+//   UpdateWFInit / ClearExpectedComponent
+//   UpdateSetupComponents               post the stats request (GUI 241)
+//   UpdateRunning                       the screen answers its own request with a fixed set
+//                                       of totals (GUI 242), then prints whatever 242 says
+//   UpdatePermanent                     disconnected (GUI 44) goes back
+//   HandleControllerInputPressed / HandleStatsData
+//
+// Out-queue records are the console's own wire records, posted on channel 40 through
+// GetOutputEventQueue()->AddEvent with host sizeof sizes.
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineStats.h"
 
+#include <cstddef>                                                        // offsetof (wire records)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
-#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsModule::Event
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> / GuiEventWrapper
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // VariableEventQueue<18432,16>
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue / AddEvent
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
+#include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
+#include "GameSource/Gui/Events/BrnGuiEventOnlineStatsResponse.h"         // GuiEventOnlineStatsResponse
+#include "GameSource/Input/GameInputActions.h"                            // EGameInputActions
 
 namespace BrnGui
 {
-    // ---- static out-of-line definitions -------------------------------------------
-    const s32 OnlineStats::maiEventToObserve[] = { 0, 0, 0, 0, 0, 0, 0 };   // @0x8205F9FC (7 entries; values not recovered)
-    const s32 OnlineStats::miNumEventsObserved = 7;
+    // ================================================================================
+    //  Class statics (values read from the image)
+    // ================================================================================
 
+    // The events the screen observes: 14, apt ONLOAD, controller press, disconnected, gui
+    // cache, the stats response, the stats request.
+    const s32 OnlineStats::maiEventToObserve[7] = { 14, 21, 6, 44, 64, 242, 241 };
+    const s32 OnlineStats::miNumEventsObserved  = 7;
+
+    // The one apt package the screen loads (ON_STATS).
     const CgsGui::sResourceTuple OnlineStats::maResourcesToLoad[] =
     {
-        { 0u, CgsGui::E_GUI_RESOURCETYPE_APT },   // FLAG: id unattested in scope
+        { 186, CgsGui::E_GUI_RESOURCETYPE_APT }
     };
     const u32 OnlineStats::muNumResourcesToLoad = 1;
 
-    const char* const OnlineStats::KAC_TEXTFIELD_NAME_TOTAL_GAMES     = "TotalGames_mc";
-    const char* const OnlineStats::KAC_TEXTFIELD_NAME_WIN_RATE        = "WinRate_mc";
-    const char* const OnlineStats::KAC_TEXTFIELD_NAME_TAKEDOWNS       = "Takedowns_mc";
-    const char* const OnlineStats::KAC_TEXTFIELD_NAME_RIVALS          = "Rivals_mc";
-    const char* const OnlineStats::KAC_TEXTFIELD_NAME_MUGSHOTS        = "Mugshots_mc";
-    const char* const OnlineStats::KAC_TEXTFIELD_NAME_DISCONNECT_RATE = "DisconnectRate_mc";
+    const char OnlineStats::KAC_TEXTFIELD_NAME_TOTAL_GAMES[14]     = "TotalGames_mc";
+    const char OnlineStats::KAC_TEXTFIELD_NAME_WIN_RATE[11]        = "WinRate_mc";
+    const char OnlineStats::KAC_TEXTFIELD_NAME_TAKEDOWNS[13]       = "Takedowns_mc";
+    const char OnlineStats::KAC_TEXTFIELD_NAME_RIVALS[10]          = "Rivals_mc";
+    const char OnlineStats::KAC_TEXTFIELD_NAME_MUGSHOTS[12]        = "Mugshots_mc";
+    const char OnlineStats::KAC_TEXTFIELD_NAME_DISCONNECT_RATE[18] = "DisconnectRate_mc";
 
-    // The state in-queue is an 18KB variable event queue (X360 VariableEventQueue<18432,16>),
-    // reached through the base State's mpInGuiEventQueue (the committed BrnCredits idiom).
-    typedef CgsModule::VariableEventQueue<18432, 16> OnlineStatsInQueue;
+    namespace
+    {
+        typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;   // mpInGuiEventQueue's real type
 
-    // ---- OnEnter @ 0x82487470 -----------------------------------------------------
+        const s32 KI_CHANNEL_GUI_OUT = 40;
+
+        const s32 KI_EVENT_CONTROLLER_INPUT     = 6;
+        const s32 KI_EVENT_NETWORK_DISCONNECTED = 44;
+        const s32 KI_EVENT_GUI_CACHE            = 64;
+        const s32 KI_EVENT_STATS_REQUEST        = 241;
+        const s32 KI_EVENT_STATS_RESPONSE       = 242;
+
+        // The movie the PLAYSWF step plays: the screen's own package.
+        const u32 KU_STATS_MOVIE_RESOURCE  = 186;
+        const s32 KI_APT_MOVIE_LEVEL       = 3;
+        const char* const KPC_EMPTY_STRING = "";
+
+        const char KAC_GO_BACK_EVENT[] = "GO_BACK";
+
+        // The totals the screen hands itself in answer to its own request.
+        const s32 KI_CANNED_TOTAL_GAMES     = 37;
+        const s32 KI_CANNED_WIN_RATE        = 42;
+        const s32 KI_CANNED_TAKEDOWNS       = 67;
+        const s32 KI_CANNED_RIVALS          = 41;
+        const s32 KI_CANNED_MUGSHOTS        = 15;
+        const s32 KI_CANNED_DISCONNECT_RATE = 7;
+
+        // HandleStatsData's number buffer.
+        const u32 KU_STAT_TEXT_LENGTH = 32;
+
+        // ---- in-queue payload views (the queue hands out the header-stripped payload) ----
+        struct ControllerButtonPayload : public CgsModule::Event
+        {
+            s32 miPadId;      // +0x00
+            s32 miButtonId;   // +0x04 (the input action id)
+        };
+
+        // The gui-cache event (the assert text names its field mpCachePointer).
+        struct GuiEventCachePayload : public CgsModule::Event
+        {
+            GuiCache* mpCachePointer;   // +0x00
+        };
+
+        // ---- out-queue wire records ------------------------------------------------------
+        // { 1, 241, 12, <one byte> }, channel 40, 16 bytes: the stats request. The console
+        // never writes the payload byte.
+        struct OnlineStatsRequestWire : public CgsGui::GuiEvent<241>
+        {
+            u8 muUnwrittenPayload;   // +0x0C
+
+            OnlineStatsRequestWire()
+                : CgsGui::GuiEvent<241>(
+                      static_cast<u32>(sizeof(u8)),
+                      static_cast<u32>(offsetof(OnlineStatsRequestWire, muUnwrittenPayload)))
+                , muUnwrittenPayload(0)
+            {
+            }
+        };
+
+        // { 24, 242, 12, the six totals }, channel 40, 36 bytes.
+        typedef CgsGui::GuiEventWrapper<GuiEventOnlineStatsResponse, 40> OnlineStatsResponseWire;
+
+        static_assert(sizeof(OnlineStatsRequestWire) == 16, "stats request record is 16 bytes");
+        static_assert(sizeof(OnlineStatsResponseWire) == 36, "stats response record is 36 bytes");
+    }
+
+    // ================================================================================
+    //  OnEnter
+    // ================================================================================
     void OnlineStats::OnEnter()
     {
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
-        meInternalState = E_INTERNALSTATE_GETCACHE;   // X360 +0x3C = 0
-        mpGuiCache      = NULL;                        // X360 +0x38 = 0
+        meInternalState = E_INTERNALSTATE_GETCACHE;
+        mpGuiCache      = 0;
 
-        mTotalGames.Construct(KAC_TEXTFIELD_NAME_TOTAL_GAMES, mpStateInterface, NULL);
-        mWinRate.Construct(KAC_TEXTFIELD_NAME_WIN_RATE, mpStateInterface, NULL);
-        mTakedowns.Construct(KAC_TEXTFIELD_NAME_TAKEDOWNS, mpStateInterface, NULL);
-        mRivals.Construct(KAC_TEXTFIELD_NAME_RIVALS, mpStateInterface, NULL);
-        mMugshots.Construct(KAC_TEXTFIELD_NAME_MUGSHOTS, mpStateInterface, NULL);
-        mDisconnectRate.Construct(KAC_TEXTFIELD_NAME_DISCONNECT_RATE, mpStateInterface, NULL);
+        mTotalGames.Construct(KAC_TEXTFIELD_NAME_TOTAL_GAMES, mpStateInterface, 0);
+        mWinRate.Construct(KAC_TEXTFIELD_NAME_WIN_RATE, mpStateInterface, 0);
+        mTakedowns.Construct(KAC_TEXTFIELD_NAME_TAKEDOWNS, mpStateInterface, 0);
+        mRivals.Construct(KAC_TEXTFIELD_NAME_RIVALS, mpStateInterface, 0);
+        mMugshots.Construct(KAC_TEXTFIELD_NAME_MUGSHOTS, mpStateInterface, 0);
+        mDisconnectRate.Construct(KAC_TEXTFIELD_NAME_DISCONNECT_RATE, mpStateInterface, 0);
     }
 
-    // ---- OnLeave @ 0x824A18E8 -----------------------------------------------------
+    // ================================================================================
+    //  OnLeave
+    // ================================================================================
     void OnlineStats::OnLeave()
     {
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
-        mpStateInterface->PlayAptMovie("", 3);
+
+        // The console inlines StateInterface::PlayAptMovie here: the empty name at level 3
+        // clears the level.
+        mpStateInterface->PlayAptMovie(KPC_EMPTY_STRING, KI_APT_MOVIE_LEVEL);
+
         ClearExpectedComponent();
     }
 
-    // ---- HandleControllerInputPressed @ 0x82487670 --------------------------------
-    void OnlineStats::HandleControllerInputPressed(const CgsGui::GuiEventControllerInputPressed* lpEvent)
+    // ================================================================================
+    //  Update -- each step stores its state on entry and drops into the next one once it
+    //  completes; the permanent handlers then run and the in-queue is cleared.
+    // ================================================================================
+    void OnlineStats::Update()
     {
-        CGS_ASSERT(lpEvent != NULL,
-                   "Invalid event sent to OnlineStats::HandleControllerInput");   // cpp:442
+        switch (meInternalState)
+        {
+        case E_INTERNALSTATE_GETCACHE:
+            UpdateGetCache();
+            // fall through
 
-        const s32 liAction =
-            *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpEvent) + 4);
-        if (liAction == KI_ACTION_START)
-            SendStateEvent("GO_BACK");
+        case E_INTERNALSTATE_LOADRESOURCES:
+            meInternalState = E_INTERNALSTATE_LOADRESOURCES;
+            if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+            {
+                break;
+            }
+            // fall through
+
+        case E_INTERNALSTATE_PLAYSWF:
+            meInternalState = E_INTERNALSTATE_PLAYSWF;
+            ClearExpectedComponent();
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_STATS_MOVIE_RESOURCE],
+                                           KI_APT_MOVIE_LEVEL);
+            // fall through
+
+        case E_INTERNALSTATE_WFINIT:
+            meInternalState = E_INTERNALSTATE_WFINIT;
+            if (!UpdateWFInit())
+            {
+                break;
+            }
+            // fall through
+
+        case E_INTERNALSTATE_SETUPCOMPONENTS:
+            UpdateSetupComponents();
+            // fall through
+
+        case E_INTERNALSTATE_RUNNING:
+            meInternalState = E_INTERNALSTATE_RUNNING;
+            UpdateRunning();
+            break;
+
+        case E_INTERNALSTATE_LEFT:
+            break;
+
+        default:
+            CGS_ASSERT(false, "Invalid internal state : ");
+            break;
+        }
+
+        UpdatePermanent();
+
+        reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue)->Clear();
     }
 
-    // ---- HandleStatsData @ 0x82487728 ---------------------------------------------
-    void OnlineStats::HandleStatsData(const GuiEventOnlineStatsResponse* lpEvent)
+    // ================================================================================
+    //  UpdateGetCache -- take the cache from the first gui-cache event in the in-queue.
+    // ================================================================================
+    void OnlineStats::UpdateGetCache()
     {
-        const s32* lpaiStats = reinterpret_cast<const s32*>(lpEvent);
+        CGS_ASSERT(0 == mpGuiCache, "NULL == mpGuiCache");
 
-        char lacBuffer[32];
+        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
 
-        CgsCore::SPrintf(lacBuffer, 32, "%d", lpaiStats[0]); lacBuffer[31] = 0; mTotalGames.SetText(lacBuffer);
-        CgsCore::SPrintf(lacBuffer, 32, "%d", lpaiStats[1]); lacBuffer[31] = 0; mWinRate.SetText(lacBuffer);
-        CgsCore::SPrintf(lacBuffer, 32, "%d", lpaiStats[2]); lacBuffer[31] = 0; mTakedowns.SetText(lacBuffer);
-        CgsCore::SPrintf(lacBuffer, 32, "%d", lpaiStats[3]); lacBuffer[31] = 0; mRivals.SetText(lacBuffer);
-        CgsCore::SPrintf(lacBuffer, 32, "%d", lpaiStats[4]); lacBuffer[31] = 0; mMugshots.SetText(lacBuffer);
-        CgsCore::SPrintf(lacBuffer, 32, "%d", lpaiStats[5]); lacBuffer[31] = 0; mDisconnectRate.SetText(lacBuffer);
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+             lpEvent != 0;
+             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            if (liEventId == KI_EVENT_GUI_CACHE)
+            {
+                const GuiEventCachePayload* lpCacheEvent =
+                    static_cast<const GuiEventCachePayload*>(lpEvent);
+                CGS_ASSERT(0 != lpCacheEvent->mpCachePointer,
+                           "NULL != lpCacheEvent->mpCachePointer");
+                mpGuiCache = lpCacheEvent->mpCachePointer;
+                break;
+            }
+        }
+
+        CGS_ASSERT(0 != mpGuiCache, "NULL != mpGuiCache");
     }
 
-    // ---- UpdateWFInit @ 0x82487608 ------------------------------------------------
+    // ================================================================================
+    //  UpdateWFInit -- wait for every expected apt component.
+    // ================================================================================
     bool OnlineStats::UpdateWFInit()
     {
-        // X360: leFlow arg is literal 0 (li r4,0), same idiom as OnlineRivals.
-        if (!mpGuiCache->AreAllAptComponentsInitialised(static_cast<GuiFlow>(0)))
+        if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
+        {
             return false;
+        }
 
         ClearExpectedComponent();
         return true;
     }
 
-    // ---- UpdatePermanent @ 0x82492908 ---------------------------------------------
-    void OnlineStats::UpdatePermanent()
+    // ================================================================================
+    //  UpdateSetupComponents -- ask for the stats.
+    // ================================================================================
+    void OnlineStats::UpdateSetupComponents()
     {
-        OnlineStatsInQueue* lpInQueue = reinterpret_cast<OnlineStatsInQueue*>(mpInGuiEventQueue);
-
-        const CgsModule::Event* lpEvent = NULL;
-        s32 liSize = 0;
-        s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
-        while (lpEvent != NULL)
-        {
-            if (liEventId == KI_EVENT_GO_BACK)
-                SendStateEvent("GO_BACK");
-
-            liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
-        }
+        const OnlineStatsRequestWire lRequest;
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
+            static_cast<s32>(sizeof(lRequest)));
     }
 
-    // ---- UpdateGetCache @ 0x82492820 ----------------------------------------------
-    void OnlineStats::UpdateGetCache()
-    {
-        CGS_ASSERT(mpGuiCache == NULL, "NULL == mpGuiCache");   // cpp:270
-
-        OnlineStatsInQueue* lpInQueue = reinterpret_cast<OnlineStatsInQueue*>(mpInGuiEventQueue);
-
-        const CgsModule::Event* lpEvent = NULL;
-        s32 liSize = 0;
-        s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
-
-        // Scan the in-queue for the cache-ready event (id 0x40); stop at the first one.
-        while (lpEvent != NULL && liEventId != KI_EVENT_CACHE_READY)
-            liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
-
-        if (lpEvent != NULL)
-        {
-            GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
-            CGS_ASSERT(lpCache != NULL, "NULL != lpCacheEvent->mpCachePointer");   // cpp:280
-            mpGuiCache = lpCache;   // X360 +0x38
-        }
-
-        CGS_ASSERT(mpGuiCache != NULL, "NULL != mpGuiCache");   // cpp:289
-    }
-
-    // ---- UpdateRunning @ 0x824A19C8 -----------------------------------------------
+    // ================================================================================
+    //  UpdateRunning
+    // ================================================================================
     void OnlineStats::UpdateRunning()
     {
-        OnlineStatsInQueue* lpInQueue = reinterpret_cast<OnlineStatsInQueue*>(mpInGuiEventQueue);
+        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
 
-        const CgsModule::Event* lpEvent = NULL;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
-        s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
-        while (lpEvent != NULL)
+        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+             lpEvent != 0;
+             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
-            switch (liEventId)
+            if (liEventId == KI_EVENT_CONTROLLER_INPUT)
             {
-                case KI_EVENT_CONTROLLER_INPUT_PRESSED:   // 6
-                    HandleControllerInputPressed(
-                        reinterpret_cast<const CgsGui::GuiEventControllerInputPressed*>(lpEvent));
-                    break;
-
-                case KI_EVENT_REQUEST_STATS:   // 0xF1 -- post the stats request on the output queue
-                {
-                    GuiEventOnlineStatsRequest lRequestEvent;
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lRequestEvent), 40, 36);
-                    break;
-                }
-
-                case KI_EVENT_STATS_RESPONSE:   // 0xF2
-                    HandleStatsData(reinterpret_cast<const GuiEventOnlineStatsResponse*>(lpEvent));
-                    break;
+                HandleControllerInputPressed(lpEvent);
             }
+            else if (liEventId == KI_EVENT_STATS_REQUEST)
+            {
+                // The request is answered here, with fixed totals.
+                GuiEventOnlineStatsResponse lResponse;
+                lResponse.miTotalGames     = KI_CANNED_TOTAL_GAMES;
+                lResponse.miWinRate        = KI_CANNED_WIN_RATE;
+                lResponse.miTakedowns      = KI_CANNED_TAKEDOWNS;
+                lResponse.miRivals         = KI_CANNED_RIVALS;
+                lResponse.miMugshots       = KI_CANNED_MUGSHOTS;
+                lResponse.miDisconnectRate = KI_CANNED_DISCONNECT_RATE;
 
-            liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+                const OnlineStatsResponseWire lResponseWire(lResponse);
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lResponseWire), KI_CHANNEL_GUI_OUT,
+                    static_cast<s32>(sizeof(lResponseWire)));
+            }
+            else if (liEventId == KI_EVENT_STATS_RESPONSE)
+            {
+                HandleStatsData(reinterpret_cast<const GuiEventOnlineStatsResponse*>(lpEvent));
+            }
         }
+    }
+
+    // ================================================================================
+    //  UpdatePermanent -- disconnected goes back.
+    // ================================================================================
+    void OnlineStats::UpdatePermanent()
+    {
+        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+             lpEvent != 0;
+             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            if (liEventId == KI_EVENT_NETWORK_DISCONNECTED)
+            {
+                SendStateEvent(KAC_GO_BACK_EVENT);
+            }
+        }
+    }
+
+    // ================================================================================
+    //  ClearExpectedComponent -- drop the cache's expected list and the local copy.
+    // ================================================================================
+    void OnlineStats::ClearExpectedComponent()
+    {
+        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+
+        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+
+        for (u32 luIndex = 0; luIndex < KU_MAX_INIT_COMPONENTS_NUM; ++luIndex)
+        {
+            mauExpectedComponentIds[luIndex] = 0;
+        }
+        muNumExpectedComponents = 0;
+    }
+
+    // ================================================================================
+    //  HandleControllerInputPressed -- cancel goes back.
+    // ================================================================================
+    void OnlineStats::HandleControllerInputPressed(const CgsModule::Event* lpEvent)
+    {
+        CGS_ASSERT(lpEvent != 0, "Invalid event sent to OnlineStats::HandleControllerInput");
+
+        const ControllerButtonPayload* lpInput =
+            static_cast<const ControllerButtonPayload*>(lpEvent);
+        if (lpInput->miButtonId == E_GAMEINPUTACTIONS_GUI_CANCEL)
+        {
+            SendStateEvent(KAC_GO_BACK_EVENT);
+        }
+    }
+
+    // ================================================================================
+    //  HandleStatsData -- print the six totals.
+    // ================================================================================
+    void OnlineStats::HandleStatsData(const GuiEventOnlineStatsResponse* lpStats)
+    {
+        char lacText[KU_STAT_TEXT_LENGTH];
+
+        CgsCore::SPrintf(lacText, KU_STAT_TEXT_LENGTH, "%d", lpStats->miTotalGames);
+        lacText[KU_STAT_TEXT_LENGTH - 1] = 0;
+        mTotalGames.SetText(lacText);
+
+        CgsCore::SPrintf(lacText, KU_STAT_TEXT_LENGTH, "%d", lpStats->miWinRate);
+        lacText[KU_STAT_TEXT_LENGTH - 1] = 0;
+        mWinRate.SetText(lacText);
+
+        CgsCore::SPrintf(lacText, KU_STAT_TEXT_LENGTH, "%d", lpStats->miTakedowns);
+        lacText[KU_STAT_TEXT_LENGTH - 1] = 0;
+        mTakedowns.SetText(lacText);
+
+        CgsCore::SPrintf(lacText, KU_STAT_TEXT_LENGTH, "%d", lpStats->miRivals);
+        lacText[KU_STAT_TEXT_LENGTH - 1] = 0;
+        mRivals.SetText(lacText);
+
+        CgsCore::SPrintf(lacText, KU_STAT_TEXT_LENGTH, "%d", lpStats->miMugshots);
+        lacText[KU_STAT_TEXT_LENGTH - 1] = 0;
+        mMugshots.SetText(lacText);
+
+        CgsCore::SPrintf(lacText, KU_STAT_TEXT_LENGTH, "%d", lpStats->miDisconnectRate);
+        lacText[KU_STAT_TEXT_LENGTH - 1] = 0;
+        mDisconnectRate.SetText(lacText);
     }
 }

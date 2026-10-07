@@ -23,6 +23,7 @@
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
 #include "SDKs/EATech/include/Apt/Apt.h"                      // AptUserFunctions -- the gAptFuncs link-notify slots
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // [aptlife] CgsDev::Log::WriteToLog
+#include "eathread/eathread_storage.h"                        // EA::Thread::ThreadLocalStorage (gAptTargetTls)
 #include <cstdio>                                             // [aptlife] snprintf
 
 // =====================================================================
@@ -59,10 +60,10 @@ int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nC
 // swap; the reconstructed C++ calls the named AptRenderItem members directly
 // (GetDepth()/SetDepth()/CopyRenderDataFrom()).
 
-// dword_8324D7F0 -- nonzero when the saved-input record/replay system is active
-// (gates Update's checkpoint logic). Defined in AptGlobals.cpp (0 = replay off,
+// The saved-input playback stream base -- non-null while a recorded session replays
+// (gates Update's checkpoint logic). Defined in AptGlobals.cpp (null = replay off,
 // the shipped default).
-extern int gbAptSavedInputActive;                              // dword_8324D7F0
+extern const unsigned char* gpAptSavedInputStream;
 
 // The host user-function table (X360 dword_8324E818). Defined once in CgsAptAux.cpp.
 // FireLinkNotifyCallbacks below reaches its +0x2C / +0x18 slots -- the two the X360
@@ -191,17 +192,9 @@ void AptLinker::Notify(AptFilePtr* pFile)
 //   reference). The saved-input debug arm (dword_8324D7F0 gate ->
 //   AptSavedInputCheckpoints::updateState(...)) records the link event for
 //   deterministic replay; the checkpoint recorder's updateState is un-homed, so
-//   that arm is FLAG'd (inactive at the boot default gbAptSavedInputActive == 0).
+//   that arm is FLAG'd (inactive at the boot default gpAptSavedInputStream == null).
 //   The caller's *pFile is consumed (zeroed + released), matching the asm tail.
 // ---------------------------------------------------------------------
-namespace EA { namespace Thread { class ThreadLocalStorage
-{
-public:
-    bool  SetValue(const void* pData);
-    void* GetValue();
-private:
-    unsigned int mTlsIndex;
-}; } }
 extern EA::Thread::ThreadLocalStorage gAptTargetTls;   // unk_8324E814
 
 void GlobalNotificationFunction(AptFilePtr* pFile)
@@ -216,7 +209,7 @@ void GlobalNotificationFunction(AptFilePtr* pFile)
     if (pTarget != nullptr && pTarget->mpLinker != nullptr)
         pTarget->mpLinker->Notify(&local);
 
-    if (gbAptSavedInputActive)
+    if (gpAptSavedInputStream)
     {
         // FLAG (un-homed saved-input recorder): the console records the link event
         // (AptSavedInputCheckpoints::updateState(gpAptSavedInputCheckpoints,
@@ -567,7 +560,7 @@ void AptLinker::Update()
 {
     gpAptTarget->mpLoader->Update();                                 // AptLoader::Update(off_8324E574->mpLoader)
 
-    if (gbAptSavedInputActive &&
+    if (gpAptSavedInputStream &&
         !AptSavedInputCheckpoints::CanLinkPendingFiles(*gpAptSavedInputCheckpoints))
         return;                                                      // gate: not all pending files ready
 
@@ -722,7 +715,7 @@ void AptLinker::Update()
             AptSharedPtrDelete(pFile);
     }
 
-    if (gbAptSavedInputActive)
+    if (gpAptSavedInputStream)
         AptSavedInputCheckpoints::AllLinked(*gpAptSavedInputCheckpoints);
 
     // ---- finish: if anything was pending, clear the vector + run actions ----
@@ -960,9 +953,7 @@ void FireLinkNotifyCallbacks(AptFile* pFile, AptCIH* pCIH)
 }
 
 // ---------------------------------------------------------------------
-// AptLinker::isFileImported @0x82AECC58 -- HOMED 2026-07-10 (retiring the
-// return-false link-stub, which made CancelPreloadedAnimation treat every
-// candidate as un-imported). For each thingy the linker tracks, hand its file a
+// AptLinker::isFileImported -- for each thingy the linker tracks, hand its file a
 // FRESH COUNTED COPY of the candidate (AptFile::isFileImported consumes its
 // argument each probe -- the console's per-iteration lwarx/stwcx IncRef); a hit
 // answers true. Either way the ORIGINAL candidate handle is consumed at exit

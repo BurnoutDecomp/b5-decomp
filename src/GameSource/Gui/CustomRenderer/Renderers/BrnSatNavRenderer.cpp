@@ -301,7 +301,7 @@ void SatNavRenderer::Construct()
     UpdateRendererTransform();
 
     miSatNavRendererPM = -1;                      // +0x187C (pre-seeded before AddMonitor)
-    miSatNavRendererPM = CgsDev::PerfMonCpu::AddMonitor("SatNavRenderer", 3, 0, 2.0, 0, 0);
+    miSatNavRendererPM = CgsDev::PerfMonCpu::AddMonitor("SatNavRenderer", CgsDev::E_PMP_3, false, 2.0f, false);
     if (miSatNavRendererPM < 0)
         FireSatNavAssert("miSatNavRendererPM >= 0", 226);
 }

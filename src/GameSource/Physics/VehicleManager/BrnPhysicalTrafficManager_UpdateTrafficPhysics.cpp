@@ -4,8 +4,7 @@
 //   BrnPhysics::Vehicle::PhysicalTrafficManager::UpdateTrafficPhysics @0x82644418 (259)
 //
 // The per-frame tick of every FULLY physical traffic body: install the driver's controls into
-// the body, then run the full-physics update. Sole caller VehicleManager::UpdateVehiclePhysics
-// This is its only definition tree-wide; the link stub it replaced is gone.
+// the body, then run the full-physics update. Sole caller VehicleManager::UpdateVehiclePhysics.
 //
 // The address was an .ida-exports HOLE (absent from progress/identity.json); the body was dumped
 // headless from a COPY of the ARTIST .i64. DWARF BrnPhysicalTrafficManager.h:152

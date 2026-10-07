@@ -98,13 +98,9 @@ namespace CgsGui
 namespace BrnGui
 {
     // =================================================================================
-    // ⭐⭐ DE-FORKED 2026-09-08 (p0 wave), at mount time exactly as the note here asked.
-    // BrnCrashNavMapEvent.cpp is now mounted and the CrashNavMapEvent placeholder is gone
-    // from BrnScreenStatesLinkStubs.{h,cpp}, so the header above is the SINGLE definition
-    // of both BrnGui::CrashNavMapEvent and this listener again. The file-local copy of
-    // `struct CrashNavMapEventKeyboardListener` that stood here is deleted; only its
-    // KeyboardClosed body stays, because the console folds that body into THIS TU (it
-    // calls CgsGui::ConvertWideCharToAsciiSafe).
+    // The header above is the single definition of both BrnGui::CrashNavMapEvent and
+    // this listener. Only the KeyboardClosed body lives here, because the console folds
+    // that body into THIS TU (it calls CgsGui::ConvertWideCharToAsciiSafe).
     // =================================================================================
     // @ 0x824C1820 -- mark the dialog closed; if a result was returned, flag new data and
     // copy it (up to 32 chars) into macKeyboardString. With no result, just clear mbNewData.

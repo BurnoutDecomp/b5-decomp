@@ -23,12 +23,9 @@ namespace BrnGameState
 {
 namespace
 {
-    // X360 perfmon monitor registration constants (Construct's two AddMonitor calls). Colour 5,
-    // 1.0 ms budget, libperf-tagged; the X360 leaves the parent-handle register (r6) unset -- it is
-    // an indeterminate "no parent" handle, modelled here as the invalid handle sentinel.
-    const s32    KI_RICH_PRESENCE_PM_COLOUR     = 5;
+    // Construct's two perfmon registrations: page 5, 1.0 ms budget, scaled.
+    const CgsDev::PerfMonCpuPage KE_RICH_PRESENCE_PM_PAGE = CgsDev::E_PMP_5;
     const f32    KF_RICH_PRESENCE_PM_BUDGET_MS  = 1.0f;
-    const s32    KI_RICH_PRESENCE_PM_NO_PARENT  = -1;
 
     // X360 sentinel stored into meSetLobbyType / meLobbyType to mark "no lobby type set yet". It sits
     // one past the last EGameModeType enumerator (E_MODE_COUNT == 17), i.e. an out-of-band invalid mode.
@@ -69,13 +66,11 @@ void RichPresenceManagerBase::Construct(GameStateModule* lpGameStateModule,
     SetCurrentPosition(1);
 
     miUpdatePM = CgsDev::PerfMonCpu::AddMonitor("Rich presence update",
-                                                KI_RICH_PRESENCE_PM_COLOUR, 0,
-                                                KF_RICH_PRESENCE_PM_BUDGET_MS,
-                                                KI_RICH_PRESENCE_PM_NO_PARENT, 1);
+                                                KE_RICH_PRESENCE_PM_PAGE, false,
+                                                KF_RICH_PRESENCE_PM_BUDGET_MS, true);
     miDistrictChangePM = CgsDev::PerfMonCpu::AddMonitor("District change",
-                                                        KI_RICH_PRESENCE_PM_COLOUR, 0,
-                                                        KF_RICH_PRESENCE_PM_BUDGET_MS,
-                                                        KI_RICH_PRESENCE_PM_NO_PARENT, 1);
+                                                        KE_RICH_PRESENCE_PM_PAGE, false,
+                                                        KF_RICH_PRESENCE_PM_BUDGET_MS, true);
 }
 
 // X360 0x8235A4C8. Re-seed all the cached / sentinel fields for a fresh round, then assert the four

@@ -803,8 +803,7 @@ void VehicleManager::HandleRaceCarTrafficCarPotentialContact(
         // against (0x826403D0..0x8264040C).
         if (Dot3(lvTrafficFromChecker, lCheckerTransform.zAxis) > -0.25f)
         {
-            // The two commit operands, computed exactly as the console does so the gate below is a
-            // one-line deletion:
+            // The two commit operands, computed exactly as the console does:
             //   aggressor = maRaceCarHandlingBodyIDs[checkOwner] >> 32 (the handle's entity word,
             //               `ldx r11, 8*(checkOwner+0x155C), this ; srdi 32` @0x82640454)
             //   victim    = the race car's GLOBAL entity word (var_184)
@@ -814,12 +813,6 @@ void VehicleManager::HandleRaceCarTrafficCarPotentialContact(
             ::EntityId lVictimID;
             lVictimID.muValue = luRaceCarGlobalWord;
 
-            // GATE DELETED 2026-08-25 (crash-entry wave S1). The gate's own DELETE-WHEN ("the
-            // crash-commit chain mounts") was DISCHARGED on 2026-08-24 by wave B3b: the 923-insn
-            // SetRaceCarCrashing is mounted in BrnVehicleManager.cpp and the link stub
-            // that had stood for it is gone. The gate text was simply stale (verified: the bat
-            // mounts BrnVehicleManager.cpp).
-            //
             // Argument order read from the image at 0x82640420..0x82640464 (this function is an
             // ARTIST export HOLE, so it was disassembled from the .i64 directly):
             //   addi r11,r11,0x155C ; rlwinm r5,r11,3 ; ldx r11,r5,r18 ; rldicl 32,32

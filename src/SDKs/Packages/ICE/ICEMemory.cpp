@@ -21,16 +21,12 @@ static const s32 KI_ICE_DEBUG_MEMORY_ALIGNMENT = 4;
 // zero-initialised .data/.bss slot). Declared extern in ICEMemory.hpp; this is its
 // definition, homed with the manager it points at.
 //
-// ⚠️ ITS ONE WRITER IS NOT LANDED. The X360 assigns it exactly once, in
-// BrnDirector::ICEWrapper::Prepare @0x8253DD90 (`dword_82FB62C0 = a1`, immediately
-// after ICEMemory::Construct + HeapMalloc::Prepare over the same object -- the
-// wrapper IS-A ICEMemory at offset 0). ICEWrapper::Prepare is still the
-// DirectorLinkStubs `return true` stub, so on this build the pointer stays null and
-// every EDIT-buffer path (ICETake::NewEditBuffer / FreeEditBuffer / PushUndo /
-// DiscardUndo / FlushUndo's free, ICEAuthor's take editor) would null-deref. None of
-// those runs at playback: SetDataPointers binds a resident, resource-owned take with
-// lbEdit=false and allocates nothing. DELETE-WHEN: BrnDirectorICEWrapper.cpp lands;
-// then this null is the real Construct-time value again rather than a latent trap.
+// Its one writer is BrnDirector::ICEWrapper::Prepare
+// (GameSource/Director/BrnDirectorICEWrapperPrepare.cpp), which assigns it exactly
+// once, immediately after ICEMemory::Construct + HeapMalloc::Prepare over the same
+// object. Until then it is null, so every EDIT-buffer path (ICETake::NewEditBuffer /
+// FreeEditBuffer / PushUndo / DiscardUndo / FlushUndo's free, ICEAuthor's take editor)
+// needs Prepare to have run.
 // ---------------------------------------------------------------------------
 ICEMemory* spICEMemory = 0;
 
