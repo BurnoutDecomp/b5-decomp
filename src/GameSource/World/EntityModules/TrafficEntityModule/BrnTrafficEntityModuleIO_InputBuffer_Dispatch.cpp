@@ -25,13 +25,16 @@ namespace BrnTrafficIO
 {
     void InputBuffer_Dispatch::_AssertLayout()
     {
-        // HOST layout, not the console's: all four tail slots are real 8-byte host pointers now
-        // (see the header's POINTER WIDTH note), so the block starts at the
-        // next 8-byte boundary after the 0x8014-byte opaque payload and steps by sizeof(void*).
-        // Transcribing the console's 0x8014/0x8018/0x801C/0x8020 here would re-assert exactly the
-        // 32-bit-word shape the widening removes.
-        static_assert(offsetof(InputBuffer_Dispatch, mpDispatchFrame) == 0x8018,
-                      "mpDispatchFrame @0x8018 (host: 0x8014 payload rounded up to pointer alignment)");
+        static_assert(sizeof(SceneResultQueue) == 32768 + 4 * sizeof(s32),
+                      "original pointer-free scene queue capacity and control words");
+        static_assert(offsetof(InputBuffer_Dispatch, mSceneResultQueue)
+                          == (sizeof(CgsModule::IOBuffer) + alignof(SceneResultQueue) - 1)
+                             / alignof(SceneResultQueue) * alignof(SceneResultQueue),
+                      "scene-result queue immediately follows the naturally aligned IO base");
+        static_assert(offsetof(InputBuffer_Dispatch, mpDispatchFrame)
+                          == (offsetof(InputBuffer_Dispatch, mSceneResultQueue) + sizeof(SceneResultQueue)
+                              + alignof(void*) - 1) / alignof(void*) * alignof(void*),
+                      "dispatch frame immediately follows the real queue at native pointer alignment");
         static_assert(offsetof(InputBuffer_Dispatch, mpBlobbyShadowBuffer)
                           == offsetof(InputBuffer_Dispatch, mpDispatchFrame) + sizeof(void*),
                       "mpBlobbyShadowBuffer immediately follows mpDispatchFrame");
@@ -57,14 +60,10 @@ namespace BrnTrafficIO
     // The four handle words are the ones TrafficEntityModule::GenerateDispatchLists reads
     // every frame; without this they hold the previous IO-stack tenant's bytes now that
     // CreateIOBuffer<T> default-initialises instead of value-initialising.
-    // [FLAG] the `VariableEventQueue<32768,16>::Construct(this+4)` leg is NOT emitted: that
-    // queue lives inside the documented opaque maPayloadAndPad span (see the header FLAG) and
-    // has no named member to reach. Nothing in this tree reads it -- the only accessor,
-    // GetSceneResultQueue, is still the inert WorldLinkStubs gate that returns NULL. Restore
-    // this call together with the member when that slice lands.
     void InputBuffer_Dispatch::Construct()
     {
         CgsModule::IOBuffer::Construct();      // stb 1, 0(this) @0x8275CF40
+        mSceneResultQueue.Construct();         // original call at 8275CF60
 
         // (the four console words at +0x8014..+0x8020 are the host pointers -- see the header's
         //  POINTER WIDTH note -- so they are nulled by name, not by offset)
@@ -72,6 +71,13 @@ namespace BrnTrafficIO
         mpBlobbyShadowBuffer        = 0;       // *(this+0x8018) = 0 @0x8275CF40
         mpCoronaSubmissionInterface = 0;       // *(this+0x801C) = 0 @0x8275CF40
         mpShadowMap                 = 0;       // *(this+0x8020) = 0 @0x8275CF40
+    }
+
+    // ARTIST 827BB138: write-lock assertion followed by the named queue address.
+    InputBuffer_Dispatch::SceneResultQueue* InputBuffer_Dispatch::GetSceneResultQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mSceneResultQueue;
     }
 
     // X360 0x827120D8 (asm-line :482) -- read-lock; return the dispatch frame (console word @this+0x8014).

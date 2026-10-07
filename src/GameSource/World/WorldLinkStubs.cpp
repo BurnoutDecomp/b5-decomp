@@ -224,22 +224,6 @@ void BrnSound::Module::Io::SoundWorldLoadEvent::Construct(
 }
 
 // -------------------------------------------------------------------------
-// BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch
-// -------------------------------------------------------------------------
-// Boot gate: reached every frame by WorldModule::Update; body not reconstructed. Quiet one-shot log, never a trap.
-class CgsModule::VariableEventQueue<32768,16> * BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch::GetSceneResultQueue()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch::GetSceneResultQueue: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
-
-// -------------------------------------------------------------------------
 // BrnTraffic::TrafficEntityModule
 // -------------------------------------------------------------------------
 // Boot gate: reached every frame by WorldModule::Update; body not reconstructed. Quiet one-shot log, never a trap.
