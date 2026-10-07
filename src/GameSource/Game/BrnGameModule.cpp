@@ -20,6 +20,7 @@
 #include <cstdlib>   // getenv / strtol -- BridgeGuiToGame's BRN_POSTFX_CALIBRATION_TEST hook
 #include <cstdio>    // snprintf -- BridgeGuiToGame's [calib] change line
 #include <cstddef>   // offsetof -- the 545/546 payload layout pins in BridgeGuiToGame
+#include "rw/math/vpu/matrix44affine_operation.h"
 
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h" // CgsInput::InputPadsPC (the PC pad-fill leaf)
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"       // [FX-RUMBLE3] CgsModule::IOHelper (DoUpdate_InputPreWorld's "InputPreWorld")
@@ -37,6 +38,9 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp" // DirectorIO::OutputBuffer::GetCameraOutput (DoUpdate_Sound)
 #include "GameSource/Replays/BrnReplayModuleIO.h"                            // ReplayIO::OutputBuffer_PreSim::GetStatusInterface (DoUpdate_Sound)
 #include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_OutputBuffer.h"     // EffectsIO::OutputBuffer (DoUpdate_Sound lock-only participant)
+#include "GameSource/World/BrnWorldModuleIO_DispatchInputBuffer.h"
+#include "GameSource/World/BrnWorldModuleIO_DispatchOutputBuffer.h"
+#include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_DispatchInputBuffer.h"
 #include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_InputBuffer.h"
 #include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h"   // AudioEffectsMessageQueue (the empty-queue construct in DoUpdate_Effects)      // EffectsIO::InputBuffer (DoUpdate_Effects / BridgeEntityToEffects)
 #include "GameSource/GameState/BrnGameStateModuleIO.h" // GameStateModuleIO::OutputBuffer (BridgeGameStateToDirector)
@@ -97,6 +101,7 @@ namespace BrnGame
         , mbDiskError(false)
         , mbSkipVideos(false)
         , mpReusableLoadingScreenAllocator(0)
+        , mbPrevStalled(false)
         , mbStalled(false)
         , mbRequestDoStepFrame(false)
         , mbRequestDoPlayFrame(false)
@@ -163,8 +168,7 @@ namespace BrnGame
         , mpWorldUpdateOutputBuffer(0)
         , mpEffectsOutputBuffer(0)
         , mpNetworkOutputBuffer(0)
-        , mbCurrentTickCameraValid(false)
-        , mbPreviousTickCameraValid(false)
+        , mbDispatchCameraPublished(false)
         , miInputModuleState(0)
         , miPlayer0ControllerPort(0)
         , miSecondaryControllerPort(0)
@@ -657,7 +661,7 @@ namespace BrnGame
         miGuiFsmStage      = 6;
         mbGuiPhaseComplete = false;
         mbGuiPreAccept     = false;
-        mbDirectorCameraLive   = false;
+        mbDispatchCameraPublished = false;
         mbPlayerCarCrashing    = false;
         mbWorldDataPrepared    = false;
         mbCarSelectionPublished = false;
@@ -1244,6 +1248,8 @@ namespace BrnGame
             lpEvent = lpNext;
         }
     }
+
+
 
     // The per-frame spines the in-game flow state drives (MainGameFlowStateInGame::
     // Update -> DoUpdate, ::Render -> DoDispatch). On the X360 these run the game
@@ -2533,6 +2539,11 @@ namespace BrnGame
         if (!mDirectorModule.IsPrepared())
             return;
 
+        // ARTIST DoUpdate_Director823E8E1C..2C skips the pre-GUI camera
+        // producer during the boot video. PostGuiUpdate still consumes GUI events.
+        if (!lbPostGui && (ConstructUpdateSetFromFsm() & 0x20) != 0)
+            return;
+
         BrnDirector::DirectorIO::InputBuffer* lpDirectorInput = 0;
         mpUpdateInputBufferStack->CreateIOBuffer(&lpDirectorInput, "Director");
         if (lpDirectorInput == 0)
@@ -2736,73 +2747,7 @@ namespace BrnGame
         //   ArbStateCarSelect::Update    -> the authored ICE camera movies from the "game intro"
         //                                   shot group ("606002")
         //
-        // ⚠️ WHAT SURVIVES, AND WHY. mbDirectorCameraLive is NOT part of the stand-in: it is the
-        // ONLY gate on DoDispatch's director->world camera handover (see DoDispatch). Deleting it
-        // with the rest would have taken the director's camera off the world entirely -- fly-by
-        // included -- so it stays, gated onto the states in which the director is actually
-        // placing a camera rather than re-publishing a stale one.
-        // [FLAG PC bring-up] the GATE is the deviation, not the camera. DELETE-WHEN DoDispatch's
-        // IO buffer set is real (the console routes the director camera unconditionally).
-        //
-        // ⭐⭐ WIDENED TO COVER DRIVING (2026-08-02, drive-handover wave) -- MEASURED, NOT
-        // ASSUMED. The two original terms were the fly-by request and
-        // `meJunkyardState != E_JY_INACTIVE`. The junkyard exit CLEARS meJunkyardState, so the
-        // gate closed on the exact frame the car was handed to the player: the director camera
-        // was live for the car-select screen and dead for driving, precisely inverted. Measured
-        // on the committed build (`DH_TRACE1`, plain + BRN_DIRECTOR_TRACE, 200 s):
-        //     f5160  arb 2  jy 0   eye (3010.878, -2.599, -1946.891)  fov 72.605   <- exiting
-        //     f5340  arb 2  jy 0   eye (3007.983, -2.310, -1939.326)  fov 90.395   <- chase cam
-        //     ... held to f11040, because nothing is driving the parked car ...
-        //     line 1311 of the same run: "world camera -> bring-up tour camera (flyby=0 junkyard=0)"
-        // fov 90.395088 is BehaviourGameplayExternal::Update's own signature value
-        // (2*atan(tan(80/2 deg) * 1.2) in degrees, the authored 80 widened by the boost/speed
-        // term), so the thing publishing post-handover IS the chase camera, at a real city
-        // position, not a stale latch left by the car-select shot.
-        //
-        // The added term is the ARBITRATOR's own outer state. E_STATE_NORMAL is the state in
-        // which Arbitrator::Update dispatches a live behaviour stack and copies its produced
-        // camera into lrCameraInOut every frame; in E_STATE_PREPARE (the boot value, trace f0)
-        // it publishes Camera::Construct's identity at the origin. That is exactly the
-        // "is the director placing a camera?" question this gate is asking, and it is a
-        // strictly WIDER condition than the two it joins (both measured with arb == 2), so it
-        // cannot close a window that used to be open.
-        // ⚠️ The origin guard in DoDispatch stays load-bearing regardless -- E_STATE_NORMAL is
-        // reached before the first behaviour actually places a camera.
-        // ------------------------------------------------------------------------------
-        if (!lbPostGui)
-        {
-            const BrnDirector::MainDirector& lrMainDirector = mDirectorModule.GetMainDirector();
-            const bool lbFlybyRequested = lrMainDirector.IsGameIntroFlybyActive();
-            const bool lbJunkyardActive =
-                (lrMainDirector.GetGameState().meJunkyardState
-                    != BrnDirector::GameState::E_JY_INACTIVE);
-            // FLAG PC-platform leaf: the paused CrashNav states publish a live
-            // director camera too. ARTIST 8226B398..3A4 ticks/copies state4's
-            // camera; 8226B3C0..3D4 copies state3's. Closing this host-only gate
-            // froze the world camera while the original trail/particle path
-            // kept consuming the moving paused camera (native run30).
-            const BrnDirector::Arbitrator::EState leArbitratorState =
-                lrMainDirector.GetArbitrator().GetState();
-            const bool lbArbitratorRunning =
-                leArbitratorState == BrnDirector::Arbitrator::E_STATE_NORMAL
-                || leArbitratorState == BrnDirector::Arbitrator::E_STATE_CRASH_NAV
-                || leArbitratorState == BrnDirector::Arbitrator::E_STATE_CRASH_NAV_ICE_CAMERAS;
-            const bool lbDriving = lbFlybyRequested || lbJunkyardActive || lbArbitratorRunning;
 
-            if (mbDirectorCameraLive != lbDriving)
-            {
-                mbDirectorCameraLive = lbDriving;
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[FLAG PC bring-up] world camera "
-                        << (lbDriving ? "-> DIRECTOR" : "-> bring-up tour camera")
-                        << " (flyby=" << (lbFlybyRequested ? 1 : 0)
-                        << " junkyard=" << (lbJunkyardActive ? 1 : 0)
-                        << " arbState=" << static_cast<s32>(leArbitratorState) << ")\n";
-                }
-            }
-        }
 
         if (!lbPostGui)
         {
@@ -2954,560 +2899,164 @@ namespace BrnGame
         mpUpdateInputBufferStack->DestroyIOBuffer(&lpDirectorInput);
     }
 
-    // @ 0x823DC458 -- the dispatch (render-feed) spine. The X360 body creates the
-    // world-dispatch + renderer IO buffer pairs, stages the director's camera into the
-    // renderer input, runs BrnRendererModule::Update (which publishes the game-side
-    // dispatch frame through RendererIO::OutputBuffer::SetDispatchFrame),
-    // BridgeRendererToWorld/ToGui/ToEffects, then WorldModule::GenerateFrustumQueries
-    // and WorldModule::GenerateDispatchLists, the effects dispatch and the debug render.
-    //
-    // [FLAG PC bring-up] Only the WORLD leg is driven here, and through the world
-    // module's bring-up producer rather than the X360 call: the director module
-    // publishes no camera, none of the four IO buffers is created on PC, and
-    // WorldModule::GenerateDispatchLists' frustum-test result comes from the scene
-    // manager's job path, which is still an inert gate. The GDL frame is taken
-    // straight from the renderer's write slot -- the exact expression
-    // BrnRendererModule::Update @0x82405E28 publishes, and the same one
-    // BrnRendererModule::Render walks after OnEndOfUpdateFrame's swap.
-    // Restore the real body when DoDispatch's IO set + the frustum query are live.
-    // ============================================================================
-    // ⚠️ FLAG PC QUALITY-OF-LIFE -- NOT X360 FUNCTIONS.
-    //
-    // LatchDispatchCamera / GetInterpolatedDispatchCamera
-    //
-    // WHY THEY EXIST. DoDispatch below reads the director's finished camera out of
-    // mpDirectorOutputBuffer and hands it to four consumers (the renderer's effects camera,
-    // the particle reprojection, the world producer's camera override, the junkyard lighting
-    // latch). That buffer is created and destroyed INSIDE GameMain's simulation sub-step
-    // loop, so it exists at Render time only because at least one sub-step ran that frame --
-    // which stopped being true when the simulation was decoupled from the render rate.
-    //
-    // Without a latch, a frame that runs no sub-step finds a null buffer, stages no camera,
-    // and the world module falls back to its bring-up tour camera for that one frame: a
-    // visible jump, several times a second.
-    //
-    // And the same latch is what buys the interpolation. Holding the last TWO ticks lets the
-    // frame render the blend of them rather than the newest one, so a 60 Hz camera reads as
-    // continuous motion however many frames are drawn between ticks. The cost is one Camera
-    // copy per sub-step (a 350-byte memberwise copy -- the X360-attested
-    // Camera::Camera(const Camera&) @0x821F3B88) and it is paid once per TICK, not per frame.
-    //
-    // In console-locked pacing the alpha pins at 1.0, BlendTransform short-circuits to the
-    // current tick, and this returns exactly the camera the buffer read used to return.
-    // ============================================================================
+    // PC retention extends the final completed substep's DirectorOutput lifetime
+    // across render frames with no substep. Completion is the frame boundary,
+    // including original branches that leave a default camera in the output.
     void BrnGameModule::LatchDispatchCamera()
     {
         if (mpDirectorOutputBuffer == 0)
             return;
 
         mpDirectorOutputBuffer->LockForRead();
-        const BrnDirector::Camera::Camera* lpCamera = mpDirectorOutputBuffer->GetCameraOutput();
-        if (lpCamera != 0)
-        {
-            // FLAG PC quality-of-life: the director's native cut flag also resets
-            // render interpolation. Blending across shots invents an intermediate
-            // camera for the render frames before the next simulation tick.
-            mbPreviousTickCameraValid = mbCurrentTickCameraValid
-                && !lpCamera->GetState().IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_NEW_THIS_FRAME);
-            if (mbPreviousTickCameraValid)
-                mPreviousTickCamera = mCurrentTickCamera;
-
-            mCurrentTickCamera       = *lpCamera;
-            {   // [cam-flags] BRN_CAM_INPUT_DIAG: the state flags as latched for dispatch.
-                static const bool sbCamDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
-                static u32 suCamDiagCalls = 0;
-                if (sbCamDiag && (suCamDiagCalls++ % 60u) == 0 && CgsDev::Log::gpDebugPrint != 0)
-                    *CgsDev::Log::gpDebugPrint << "[cam-flags] game tick flags " << mCurrentTickCamera.mState_uFlags << "\n";
-            }
-            mbCurrentTickCameraValid = true;
-        }
+        mDispatchCamera = *mpDirectorOutputBuffer->GetCameraOutput();
+        mbDispatchCameraPublished = true;
         mpDirectorOutputBuffer->UnlockForRead();
     }
 
-    const BrnDirector::Camera::Camera* BrnGameModule::GetInterpolatedDispatchCamera()
+    const BrnDirector::Camera::Camera* BrnGameModule::GetDispatchCamera() const
     {
-        if (!mbCurrentTickCameraValid)
-            return 0;
-
-        const f32 lfAlpha = CgsSystem::FrameInterpolation::GetAlpha();
-        if (!mbPreviousTickCameraValid || lfAlpha >= 1.0f)
-            return &mCurrentTickCamera;
-
-        // Everything that is not the pose is the CURRENT tick's: the state flag word (which
-        // carries the junkyard bit DoDispatch reads and the validity account), the shot
-        // reference, the depth-of-field band, the effects block. Those are discrete decisions,
-        // not quantities -- blending them would produce a camera that was never in any state.
-        // Only the two continuous quantities are blended.
-        mInterpolatedCamera = mCurrentTickCamera;
-        mInterpolatedCamera.SetTransform(
-            CgsSystem::FrameInterpolation::BlendTransform(mPreviousTickCamera.GetTransform(),
-                                                          mCurrentTickCamera.GetTransform(),
-                                                          lfAlpha));
-        mInterpolatedCamera.SetFOV(
-            CgsSystem::FrameInterpolation::BlendScalar(mPreviousTickCamera.GetFOV(),
-                                                       mCurrentTickCamera.GetFOV(),
-                                                       lfAlpha));
-        return &mInterpolatedCamera;
+        return mbDispatchCameraPublished ? &mDispatchCamera : 0;
     }
 
+    // ARTIST 823DC458: the original RendererIO -> WorldDispatch handoff.
     int BrnGameModule::DoDispatch()
     {
-        // ⚠️ FLAG PC quality-of-life: THIS FRAME'S CAMERA, blended between the last two
-        // simulation ticks. Null only before the first tick has published one, which is the
-        // same window in which the buffer read below used to return null.
-        const BrnDirector::Camera::Camera* const lpDispatchCamera = GetInterpolatedDispatchCamera();
-        // ---- stage the DIRECTOR's published camera for the world ------------------------
-        // The console does this through the renderer/world dispatch IO buffer set:
-        // DoDispatch fills RendererIO::InputBuffer's camera from the director output,
-        // BridgeRendererToWorld @0x823CDD20 hands it on, and the real
-        // WorldModule::GenerateDispatchLists latches it (`mLastCameraInput = *lpCameraInput`).
-        // None of those four buffers is created on this build, so the camera is handed over
-        // directly to the world module's bring-up producer instead.
-        //
-        // ⚠️ THE ORIGIN GUARD IS LOAD-BEARING, not defensive dressing. Until the director's
-        // arbitrator reaches a behaviour that actually places a camera, the published camera
-        // is Camera::Construct's default -- identity basis at (0,0,0). The world streamer
-        // takes the published eye as its PVS query point, and (0,0,0) is off the ground-plane
-        // zone map, so publishing it unloads every resident track unit and the city goes
-        // black. This campaign has hit that four times. So: only route a camera that is
-        // somewhere real.
-        // DELETE-WHEN: DoDispatch's IO buffer set is real (then this whole staging goes with
-        // GenerateDispatchListsBringUp).
-        // ⭐ ...and only while the DIRECTOR is the thing driving it (mbDirectorCameraLive, set
-        // in DoUpdate_Director for the frames in which the arbitrator is actually running a
-        // behaviour stack -- see the widening banner there). Outside that window the director
-        // publishes whatever its last state left -- a STATIC camera -- and routing that would
-        // freeze the world and stop the streamer turning over. Handing the world back to the
-        // tour camera keeps it alive over boot and loading.
-        // ⚠️ "The published eye did not change this frame" is NOT the same as "the camera is
-        // stale": with the chase camera live and the car parked, holding still is the correct
-        // output. Distinguish the two by what the arbitrator is doing, never by the value.
-        // ---- stage the DIRECTOR's published camera as the EFFECTS CAMERA INPUT ------------
-        // The console: `SetCameraInput(effectsDispatchInput, GetCameraOutput(directorOutput))`
-        // (DoDispatch @0x823DC458 line 103, the ONLY caller of SetCameraInput @0x823C9988).
-        // The record is what BrnEffects::EffectsModule::GenerateRenderRequests @0x8227FF10
-        // reads to decide, per frame, whether depth-of-field / B4 blur / motion blur are on
-        // and with what amounts. The EffectsIO dispatch buffer does not exist on this build,
-        // so the renderer's base-frame bring-up producer takes the copy directly.
-        // UNCONDITIONAL, like the console's call: the mbDirectorCameraLive / origin guards on
-        // the world hand-over below are world-STREAMER safety, and applying them here would
-        // freeze the effects record instead of letting the director turn effects off.
-        // DELETE-WHEN DoDispatch's IO buffer set is real (with the two hand-overs below).
-        // ⚠️ FLAG PC quality-of-life: the gate is the LATCHED camera, not the per-sub-step
-        // buffer, so this whole block still runs on a frame that ran no sub-step -- see the
-        // banner on LatchDispatchCamera. The buffer is still locked and read where a
-        // consumer needs something other than the camera out of it (the race-car state
-        // below), and that read keeps its own null guard.
-        mRenderModule.PCBringUpSetEffectsDebugSettings(mEffectsModule.GetPostFxDebugSettingsPC());
-        if (lpDispatchCamera != 0)
+        DispatchThreadInputBuffer* const lpDispatchInput =
+            mDispatchThreadInputBufferManager.GetWriteBuffer();
+        // ARTIST 823DC484..4A0 invokes the original effects PreRenderUpdate
+        // before even the resource-stall branch, through vtable slot 0x48.
+        mEffectsModule.PreRenderUpdate(lpDispatchInput);
+        lpDispatchInput->LockForWrite();
+        lpDispatchInput->SetIsStalled(mbStalled);
+        lpDispatchInput->UnlockForWrite();
+        if (mbStalled)
+            return 0;
+
+        // Original cadence uses the final completed substep. Native PC presents
+        // without a substep retain that same output, without pose interpolation.
+        if (mpDirectorOutputBuffer == 0 && GetDispatchCamera() == 0)
+            return 0;
+
+        BrnUpdateSet lUpdateSet = ConstructUpdateSetFromFsm();
+        CgsModule::IOHelper<BrnWorldIO::DispatchInputBuffer> lWorldInput(
+            mpUpdateInputBufferStack, "WorldDispatch");
+        CgsModule::IOHelper<BrnWorldIO::DispatchOutputBuffer> lWorldOutput(
+            mpUpdateOutputBufferStack, "WorldDispatch");
+        CgsModule::IOHelper<RendererIO::InputBuffer> lRendererInput(
+            mpUpdateInputBufferStack, "Render");
+        CgsModule::IOHelper<RendererIO::OutputBuffer> lRendererOutput(
+            mpUpdateOutputBufferStack, "Render");
+        CgsModule::IOHelper<BrnEffects::EffectsIO::DispatchInputBuffer> lEffectsInput(
+            mpUpdateInputBufferStack, "Effects");
+
+        RendererIO::InputBuffer* const lpRendererInput = lRendererInput;
+        RendererIO::OutputBuffer* const lpRendererOutput = lRendererOutput;
+        BrnWorldIO::DispatchInputBuffer* const lpWorldInput = lWorldInput;
+        BrnWorldIO::DispatchOutputBuffer* const lpWorldOutput = lWorldOutput;
+        BrnEffects::EffectsIO::DispatchInputBuffer* const lpEffectsInput = lEffectsInput;
+
+        lpRendererInput->LockForWrite();
+        if (mpDirectorOutputBuffer != 0)
+            mpDirectorOutputBuffer->LockForRead();
+        const BrnDirector::Camera::Camera* const lpCamera = mpDirectorOutputBuffer != 0
+            ? mpDirectorOutputBuffer->GetCameraOutput() : GetDispatchCamera();
+        lpRendererInput->SetBrnCamera(*lpCamera);
+        if (mpDirectorOutputBuffer != 0)
+            mpDirectorOutputBuffer->UnlockForRead();
+        lpRendererInput->UnlockForWrite();
+
+        if (mpDirectorOutputBuffer != 0)
+            mpDirectorOutputBuffer->LockForRead();
+        lpDispatchInput->LockForWrite();
+        const BrnDirector::Camera::CameraState& lrState = lpCamera->GetState();
+        lpDispatchInput->SetIsRenderingAtFullFrameRate(
+            lrState.IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_RACING_GAMEPLAY_CAMERA)
+            || lrState.IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_ROAD_FOLLOWING_CAM));
+        lpDispatchInput->UnlockForWrite();
+        if (mpDirectorOutputBuffer != 0)
+            mpDirectorOutputBuffer->UnlockForRead();
+
+        mRenderModule.Update(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                             lpRendererInput, lpRendererOutput);
+
+        // ARTIST 823DC670..700 locks all bridge destinations before reading
+        // the renderer output, and holds that source through world/effects work.
+        BrnResource::GameDataIO::InputBuffer* const lpGameDataInput =
+            BrnGameMainFlowController::GetScriptedLoadGameDataInput();
+        CgsGui::CgsGuiModuleIO::InputBuffer* const lpGuiRenderInput = mpGuiInputBuffer != 0
+            ? mpGuiInputBuffer : mGuiModule.GetCompletedRenderInputPC();
+        lpEffectsInput->LockForWrite();
+        lpWorldInput->LockForWrite();
+        if (lpGameDataInput != 0)
+            lpGameDataInput->LockForWrite();
+        lpRendererOutput->LockForRead();
+        // Zero-substep native presents retain actual completed GUI input.
+        // Refresh all five pointers from this dispatch's current renderer bank.
+        if (lpGuiRenderInput != 0)
+            lpGuiRenderInput->LockForWrite();
+        BridgeRendererToWorld(lpWorldInput, lpRendererOutput);
+        if (lpGuiRenderInput != 0)
+            BridgeRendererToGui(lpGuiRenderInput, lpRendererOutput);
+        BridgeRendererToEffects(lpEffectsInput, lpRendererOutput);
+        if (lpGameDataInput != 0)
+            lpGameDataInput->SetIm2dDebugRenderBuffer(lpRendererOutput->GetIm2dDebugRenderBuffer());
+        lpEffectsInput->UnlockForWrite();
+        lpWorldInput->UnlockForWrite();
+        if (lpGameDataInput != 0)
+            lpGameDataInput->UnlockForWrite();
+        if (lpGuiRenderInput != 0)
+            lpGuiRenderInput->UnlockForWrite();
+        if (mpGuiInputBuffer != 0)
+            mGuiModule.CaptureRenderInputPC(mpGuiInputBuffer);
+
+        lpWorldInput->LockForWrite();
+        lpWorldInput->SetDispatchThreadInputBuffer(lpDispatchInput);
+        lpWorldInput->UnlockForWrite();
+        lpEffectsInput->LockForWrite();
+        if (mpDirectorOutputBuffer != 0)
+            mpDirectorOutputBuffer->LockForRead();
+        lpEffectsInput->SetCameraInput(lpCamera);
+        lpEffectsInput->UnlockForWrite();
+        if (mpDirectorOutputBuffer != 0)
+            mpDirectorOutputBuffer->UnlockForRead();
+
+        BrnResource::GameDataIO::OutputBuffer* const lpGameDataOutput =
+            BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
+        if (lpGameDataOutput != 0)
         {
-            mRenderModule.PCBringUpSetCameraInput(lpDispatchCamera);
-
-            // ---- stage the PLAYER's RACE-CAR STATE as the EFFECTS TempRaceCarStateCache -------
-            // The console: BrnEffects::EffectsModule::Update @0x8229EC28, the SECOND
-            // `if (RCEntityActiveRaceCarOutputInterface::IsPlayerCarActive(v87))` block, copies
-            // four fields of the PLAYER's BrnPhysics::Vehicle::RaceCarState into the module's
-            // TempRaceCarStateCache, and GenerateRenderRequests @0x8227FF10 then copies the cache
-            // into the layer-0 BrnEffectsFrame:
-            //     v101 = GetPlayerActiveRaceCarIndex(v87);
-            //     _R3  = GetActiveRaceCarState(v87, v101);
-            //     lvx v0,(_R3+816)  / stvx v0,(this+180992)   -> mvLinearVelocity
-            //     lvx v0,(_R3+832)  / stvx v0,(this+181008)   -> mvAngularVelocity
-            //     this->field_2C320 = *(_R3 +  972);          -> mfSpeedMPH
-            //     this->field_2C324 = *(_R3 + 1044);          -> mfSteering
-            // The effects module is not on this build's list, but the INTERFACE IT READS IS LIVE
-            // HERE: BridgeWorldToDirector already takes the same object off the same buffer every
-            // update frame (GameBridgeWorldToX.cpp, `lpWorldOutput->GetActiveRaceCarOutputInterface()`).
-            // So the four members are staged into the renderer's base-frame producer through
-            // BrnRendererModule::PCBringUpSetRaceCarStateCache, and they are read BY NAME --
-            // mLinearVelocity / mAngularVelocity / mfSpeedMPH / mfSteering are the committed
-            // RaceCarState members at exactly the console's 816 / 832 / 972 / 1044
-            // (BrnVehicleEvents.h), so no displacement is formed here.
-            // THE GATE IS THE CONSOLE'S: nothing is staged unless the player car is active, which
-            // leaves the last staged values standing exactly as the module's cache does.
-            // ⚠ THE WORLD BUFFER IS READ-LOCKED SEPARATELY from the director one -- it is a
-            // different IO buffer with its own lock, and DoUpdate_Director takes it the same way
-            // (LockForRead / read / UnlockForRead) one leg earlier in the frame.
-            // DELETE-WHEN BrnEffects::EffectsModule is on the build list (this goes with
-            // PCBringUpSetCameraInput and the renderer's base-frame producer).
-            if (mpWorldUpdateOutputBuffer != 0)
-            {
-                mpWorldUpdateOutputBuffer->LockForRead();
-                const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
-                    lpActiveRaceCars =
-                        mpWorldUpdateOutputBuffer->GetActiveRaceCarOutputInterface();
-                if (lpActiveRaceCars != 0 && lpActiveRaceCars->IsPlayerCarActive())
-                {
-                    const BrnPhysics::Vehicle::RaceCarState* const lpPlayerState =
-                        lpActiveRaceCars->GetRaceCarState(
-                            lpActiveRaceCars->GetPlayerActiveRaceCarIndex());
-                    if (lpPlayerState != 0)
-                    {
-                        mRenderModule.PCBringUpSetRaceCarStateCache(
-                            lpPlayerState->mLinearVelocity,     // RaceCarState @816
-                            lpPlayerState->mAngularVelocity,    // RaceCarState @832
-                            lpPlayerState->mfSpeedMPH,          // RaceCarState @972
-                            lpPlayerState->mfSteering);         // RaceCarState @1044
-                    }
-                }
-                mpWorldUpdateOutputBuffer->UnlockForRead();
-            }
-
-            // ---- stage the DIRECTOR's published camera as the PARTICLE RENDER DATA ------------
-            // The console: BrnEffects::EffectsModule::Update @0x8229EC28 drives
-            // BrnParticle::ParticleModule::Update @0x822817D8 (the virtual at vtable+68) once per
-            // simulation sub-step, and EffectsModule::GenerateDispatchLists @0x82296668 drives
-            // ParticleModule::GenerateRenderRequests @0x82281BD8 once per frame, which memcpy's the
-            // module's record into DispatchThreadInputBuffer::mParticleRenderData. BOTH modules are
-            // now on this build's list and the real pair runs below -- the stand-in
-            // BrnParticle::PCBringUpProduceParticleRenderData is what covers the frames the real
-            // pair does NOT run on, and nothing else.
-            //
-            // ⭐ 2026-09-07: THE STAND-IN IS NOW GATED, NOT UNCONDITIONAL. Its own DELETE-WHEN is
-            // met (both TUs mounted, GenerateDispatchLists driven from here), but deleting it
-            // outright is NOT safe yet, and the reason is in two files this file does not own:
-            //
-            //   1. THE MOTION-BLUR GATE IS ARMED ONLY BY THIS CALL.
-            //      BrnRendererModule.cpp:~5437 hands MotionBlurState::Update a record only when
-            //      BrnParticle::PCBringUpParticleRenderDataProducedFor(buffer) is true, and that
-            //      latch is raised exclusively by RememberStampedBuffer() inside the stand-in
-            //      (ParticleModuleBringUp.cpp:448). The real producer -- EffectsModule::
-            //      GenerateDispatchLists -> ParticleModule::GenerateRenderRequests
-            //      (ParticleModule.cpp:306) -- publishes the record but never touches the latch.
-            //      Delete the stand-in and BrnRendererUpdatePostFxMotionBlur is fed NULL forever:
-            //      a silent regression of a live feature.
-            //   2. AN UNWRITTEN RECORD IS NOT A SKIPPED DRAW, IT IS A WILD CALL.
-            //      mParticleRenderData is EMBEDDED in the buffer, so there is no dangling pointer
-            //      to the record -- but DispatchThreadInputBuffer::Construct deliberately does not
-            //      clear it (faithfully; the console does not either) and CreateIOBuffer stopped
-            //      zero-filling in the 2026-08-15 perf wave, so before any producer runs the
-            //      payload is UNINITIALISED bytes. The three particle passes
-            //      (BeginParticleRenderJob / BuildLionVertexBuffers / RenderFullResParticles /
-            //      RenderQuarterResParticles) gate on `mpParticleModule != 0` and then CALL
-            //      THROUGH it, so a garbage non-zero first word is a jump into nowhere. The
-            //      stand-in leaves that word deterministically NULL, which is what makes the
-            //      renderer's null test a skipped draw rather than a crash.
-            //
-            // So: the stand-in runs on a frame ONLY when the real pair will not run on it, plus on
-            // the at-most-two frames needed to arm the per-instance latch for each of the two
-            // double-buffered instances. It can therefore never overwrite a record the real
-            // producer stamped and then leave it standing: on a latch-arming frame the real
-            // producer runs immediately afterwards, inside this same DoDispatch, and the renderer
-            // only ever reads after OnEndOfUpdateFrame's Swap.
-            // DELETE-WHEN the renderer's PCBringUpParticleRenderDataProducedFor gate goes (its own
-            // DELETE-WHEN, BrnRendererModule.cpp) -- then the record is written before any reader,
-            // as on the console, and this whole seam goes with ParticleModuleBringUp.cpp.
-            //
-            // THE THREE FLOATS ARE THE CONSOLE'S OWN THREE VIRTUAL-Update ARGUMENTS, read off the
-            // SIM timer exactly as EffectsModule::Update reads them from the effects input buffer's
-            // published TimerStatusInterface (its call site, pseudocode line 399:
-            //     v67 = simStatus.mfTimeStepMultiplier;                       // ts+32
-            //     v68 = simStatus.mbRunning ? (mfBaseTimeStep * mfTimeStepMultiplier) : 0.0f;
-            //     v73 = simStatus.mTime.miSeconds + simStatus.mTime.mfFraction;
-            //     (*(particleModule + 68))(particleModule, v68, v73, v67);
-            // i.e. f1 = the current time step, f2 = the absolute time, f3 = the multiplier).
-            // TimerStatusInterface::StoreTimers @0x828D7518 copies those four fields straight off
-            // CgsSystem::Timer (mfBaseTimeStep <- mfRate, mfTimeStepMultiplier <- mfScaleCurrent,
-            // mTime.miSeconds <- miAccumTicks, mTime.mfFraction <- mfAccumulator), so reading the
-            // LIVE mSimTimer here is the same value -- and it is what the two neighbouring bring-up
-            // seams in this file already do, for the reason spelt out on BridgeTimers: the published
-            // pair is only written once the director module reports prepared.
-            //
-            // THE BUFFER IS THE **WRITE** BUFFER. EngineUpdate's order is UpdateThread() (which runs
-            // GameMain -> the flow state's Render -> this function) -> OnEndOfUpdateFrame() (the
-            // manager Swap, which turns the buffer just written into the read buffer) ->
-            // DispatchThread() -> BrnRendererModule::Render(GetReadBuffer()). So writing
-            // GetWriteBuffer() here is what the renderer read-locks next. Writing GetReadBuffer()
-            // instead would be swapped away unread -- the symptom is `[postfx-mb] update=1` with
-            // wvpDelta exactly 0.
-            //
-            // NOT gated on mbDirectorCameraLive / the origin guard below: those are world-STREAMER
-            // safety, not camera validity, and the console's producer runs regardless of what the
-            // director is doing. A static camera simply produces a zero-velocity reprojection.
-            BrnGame::DispatchThreadInputBuffer* const lpDispatchWriteBuffer =
-                mDispatchThreadInputBufferManager.GetWriteBuffer();
-
-            // ---- mbIsRenderingAtFullFrameRate (FX-CRASHVFX, crash parity 2026-09-25) ------------
-            // The console: DoDispatch @0x823DC458, 0x823DC5C8..0x823DC630, under the dispatch
-            // buffer's write lock -- the director camera output's current flag set (`ld r11,
-            // 0x140(r3)`: CameraState +0x08, the 64-bit BitArray<30>) tested for bit 3 (`rlwinm
-            // r11,r11,0,0x1c,0x1c`, 0x8) and bit 27 (`rlwinm r11,r11,0,4,4`, 0x08000000), and the
-            // result stored at +0x99B0 (`stbx r11, r24, r10`, r10 = 0x99B0):
-            //     full rate = E_FLAG_RACING_GAMEPLAY_CAMERA (3) || E_FLAG_ROAD_FOLLOWING_CAM (27).
-            // Every other camera -- the crash, takedown and jump cameras among them -- renders at the
-            // REDUCED rate, and ParticleModule::GenerateRenderRequests turns that into
-            // eRenderDataFlagReducedFrameRate (0x40): debris then collides with the crash triangle
-            // cache and keeps its full lifetimes, buckets live 10 s, the crash CPU monitors run.
-            // The PC never wrote the flag (DispatchThreadInputBuffer::Construct's `true` stood for
-            // ever), so the particle module never left its normal-driving arm, even in a crash.
-            // Written here, BEFORE the stand-in and the real producer below (both read it), from
-            // this frame's camera, whose flag word is the current tick's (GetInterpolatedDispatchCamera
-            // blends only the pose) -- i.e. the director output the console reads.
-            {
-                const BrnDirector::Camera::CameraState& lrCameraState = lpDispatchCamera->GetState();
-                const bool lbFullFrameRate =
-                    lrCameraState.IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_RACING_GAMEPLAY_CAMERA)
-                    || lrCameraState.IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_ROAD_FOLLOWING_CAM);
-                lpDispatchWriteBuffer->LockForWrite();
-                lpDispatchWriteBuffer->SetIsRenderingAtFullFrameRate(lbFullFrameRate);
-                lpDispatchWriteBuffer->UnlockForWrite();
-            }
-
-            // The real pair's own gate, hoisted so the stand-in can ask whether it is about to run.
-            // mpUpdateInputBufferStack is set in Construct (:207) and never cleared, so in practice
-            // this is the effects module's prepare stage alone; it is spelt out because
-            // GenerateDispatchLists dereferences the stack to create its "Particles" input.
-            const bool lbRealProducerWillRun =
-                (mEffectsModule.GetPrepareStage() == BrnEffects::EffectsModule::E_PREPARESTAGE_DONE
-                 && mpUpdateInputBufferStack != 0);
-
-            // ...and the latch-arming exception: this buffer INSTANCE has never been stamped, so
-            // the renderer would not hand its record to MotionBlurState::Update even after the
-            // real producer fills it (reason 1 above). At most two frames, one per instance.
-            const bool lbNeedsLatchArming =
-                !BrnParticle::PCBringUpParticleRenderDataProducedFor(lpDispatchWriteBuffer);
-
-            if (!lbRealProducerWillRun || lbNeedsLatchArming)
-            {
-                const f32 lfSimTimeStep = mSimTimer.IsRunning()
-                    ? (mSimTimer.GetRate() * mSimTimer.GetScaleCurrent())
-                    : 0.0f;
-                const f32 lfSimTime = static_cast<f32>(mSimTimer.GetAccumTicks())
-                                    + mSimTimer.GetAccumulator();
-                BrnParticle::PCBringUpProduceParticleRenderData(
-                    lpDispatchWriteBuffer,
-                    lpDispatchCamera,
-                    lfSimTimeStep,
-                    lfSimTime,
-                    mSimTimer.GetScaleCurrent());
-            }
-
-            // [FLAG PC bring-up diagnostic] the retirement witness. Edge-triggered, so it costs one
-            // line per transition and says on which frame the stand-in stopped standing in. Read it
-            // with [trailpass]: "standin: RETIRED" followed by a [trailpass] line with trailBit=1
-            // is the pair that proves the real record is being stamped instead. DELETE with the
-            // stand-in.
-            {
-                static s32 siLastStandInState = -1;
-                const s32 liStandInState = (!lbRealProducerWillRun || lbNeedsLatchArming)
-                    ? (lbRealProducerWillRun ? 2 : 1)   // 2 = latch-arming only, 1 = covering
-                    : 0;                                 // 0 = retired, the real pair owns the record
-                if (liStandInState != siLastStandInState)
-                {
-                    siLastStandInState = liStandInState;
-                    char lacMsg[192];
-                    std::snprintf(lacMsg, sizeof(lacMsg),
-                                  "[postfx-mb] standin: %s (realProducer=%d latched=%d "
-                                  "effectsPrepare=%d)\n",
-                                  (liStandInState == 0) ? "RETIRED"
-                                      : ((liStandInState == 2) ? "LATCH-ARMING" : "COVERING"),
-                                  lbRealProducerWillRun ? 1 : 0,
-                                  lbNeedsLatchArming ? 0 : 1,
-                                  static_cast<int>(mEffectsModule.GetPrepareStage()));
-                    CgsDev::Log::WriteToLog(lacMsg);
-                }
-            }
-
-            // ---- THE REAL PRODUCER (tyre-mark wave, 2026-09-02; owns the record since -09-07) ----
-            // EffectsModule::GenerateDispatchLists @0x82296668 is the console's own once-per-frame
-            // producer: it fills the "Particles" dispatch input from the effects dispatch input,
-            // then calls ParticleModule::GenerateRenderRequests @0x82281BD8, which publishes the
-            // module's mRenderData into DispatchThreadInputBuffer::mParticleRenderData under that
-            // buffer's write lock. THAT record is the one that carries mpParticleModule (the module
-            // `this`, written by ParticleModule::Construct @0x82294220) -- the first word every
-            // particle pass in BrnRendererModule::Render tests and then calls through. The stand-in
-            // above deliberately leaves it NULL, which is why no particle pass -- tyre marks
-            // included -- can run off a stand-in record, whatever its muFlags say. (It does build a
-            // real muFlags word, trails bit and all, ParticleModuleBringUp.cpp:361; the earlier note
-            // here that said it wrote no flags was wrong. The flags are not the blocker; the module
-            // pointer is.)
-            //
-            // The record's own freshness comes from ParticleModule::Update
-            // (ParticleModule_Lifecycle.cpp:888), which EffectsModule::Update drives per sub-step
-            // (EffectsModule.cpp:1372) -- so this call publishes a record the sim already refreshed
-            // rather than sampling anything here.
-            //
-            // ORDER: the stand-in above runs first on the frames it runs at all, so on a
-            // latch-arming frame this call overwrites it within the same DoDispatch, before
-            // OnEndOfUpdateFrame's Swap makes the buffer readable. No reader ever observes the
-            // intermediate record.
-            //
-            // The second argument is the EFFECTS dispatch input, which does not exist on this build
-            // (BridgeRendererToEffects @0x823C1168 is not reconstructed) -- GenerateDispatchLists
-            // takes its documented null arm, which announces once and uses white level 1.0, the
-            // identity for the trail colour scale.
-            if (lbRealProducerWillRun)
-            {
-                mEffectsModule.GenerateDispatchLists(mpUpdateInputBufferStack, 0,
-                                                     lpDispatchWriteBuffer);
-            }
+            lpGameDataOutput->LockForRead();
+            if (*lpGameDataOutput->GetLiveUpdateStatus())
+                lUpdateSet &= static_cast<BrnUpdateSet>(~0x80u);
+            lpGameDataOutput->UnlockForRead();
         }
 
-        if (lpDispatchCamera != 0 && mbDirectorCameraLive)
-        {
-            const BrnDirector::Camera::Camera* const lpCamera = lpDispatchCamera;
-            {
-                const rw::math::vpu::Matrix44Affine& lrXform = lpCamera->GetTransform();
-                const f32 lfDistSq = lrXform.wAxis.x * lrXform.wAxis.x
-                                   + lrXform.wAxis.y * lrXform.wAxis.y
-                                   + lrXform.wAxis.z * lrXform.wAxis.z;
-                if (lfDistSq > 1.0f)
-                {
-                    // The third argument is the console's junkyard latch input. The real
-                    // GenerateDispatchLists @0x827D1CE8 reads it at BrnWorldModule.cpp:3757
-                    // as `lpDispatchInputBuffer->GetCameraInput()->IsInJunkyard()` -- the
-                    // camera BridgeRendererToWorld @0x823CDD20 put in the world dispatch
-                    // INPUT buffer (`SetCameraInput(a2, RendererIO::OutputBuffer::
-                    // GetBrnCamera(a3))`, its second-to-last call). That buffer set does not
-                    // exist on PC, and this IS that camera
-                    // (mpDirectorOutputBuffer->GetCameraOutput()), so the flag comes across
-                    // beside the transform. DELETE with the rest of this staging block.
-                    // ⭐ The fourth/fifth arguments are the SAME camera's time-of-day
-                    // REQUEST (mEffects.mbSetTimeOfDay / mEffects.mfTimeOfDay in HOURS).
-                    // The console carries them for free, inside the whole-record camera copy
-                    // the world dispatch input buffer makes; WorldModule::Update
-                    // @0x827D63E8 reads them off mLastCameraInput at 0x827D7CEC and stamps
-                    // EnvironmentManager::mfTimeOfDay with hours*60*60. On this build
-                    // mLastCameraInput is synthesised, so they come across explicitly beside
-                    // the transform, FOV and junkyard bit. The producer is
-                    // BrnDirector::ArbStateCarSelect::Update @0x8226F5D0 (the junkyard/DMV
-                    // camera: 16.5 h; the outro arms: 12.5 h).
-                    // DELETE with the rest of this staging block.
-                    mWorldModule.SetBringUpCameraOverride(
-                        lrXform, lpCamera->GetFOV(), lpCamera->IsInJunkyard(),
-                        lpCamera->GetEffects().IsTimeOfDaySet(),
-                        lpCamera->GetEffects().GetTimeOfDay(),
-                        lpCamera->mState_uFlags);
+        mWorldModule.GenerateFrustumQueries(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                                            lpWorldInput, lpWorldOutput, &lUpdateSet);
 
-                    static bool sbLoggedHandover = false;
-                    if (!sbLoggedHandover && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        sbLoggedHandover = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[FLAG PC bring-up] world camera HANDED OVER to the director: eye ("
-                            << lrXform.wAxis.x << ", " << lrXform.wAxis.y << ", "
-                            << lrXform.wAxis.z << ") fov " << lpCamera->GetFOV() << "\n";
-                    }
-                }
-            }
-        }
+        if (!mbSteppingFrames && lpGuiRenderInput != 0)
+            mGuiModule.Render(mGuiModule.GetViewInputBuffer(), lpGuiRenderInput, lpRendererOutput);
 
-        // ---- stage the RENDERER's four WORLD-layer effects frames for the world -----------
-        // The console does this through the same dispatch IO buffer set as the camera above:
-        // BrnRendererModule::Update @0x82405E28 line 110 publishes
-        // mEffectsArbitrator.GetExternalEffectsFrame(KU_EFFECTS_LAYER_WORLD, luSlot) into
-        // RendererIO::OutputBuffer, BridgeRendererToWorld @0x823CDD20 copies all four across
-        // with BrnWorldIO::DispatchInputBuffer::SetEffectsFrame @0x823B6BD8
-        // (GameBridgeRendererToX.cpp:50), and WorldModule::GenerateDispatchLists reads them
-        // back as GetEffectsFrame(0..3) for EnvironmentManager::GenerateEffects @0x827BE698.
-        // FOUR slots: kau8SlotsPerEffectsLayer[KU_EFFECTS_LAYER_WORLD] == 4 (byte_8203E110 =
-        // 01 04 02). The accessor returns null until the renderer's arbitrator is
-        // Constructed; the world producer checks all four before it calls GenerateEffects.
-        // DELETE-WHEN: DoDispatch's IO buffer set is real (this goes with the camera staging
-        // and GenerateDispatchListsBringUp).
-        mWorldModule.SetBringUpEffectsFrames(mRenderModule.GetWorldEffectsFrameBringUp(0),
-                                             mRenderModule.GetWorldEffectsFrameBringUp(1),
-                                             mRenderModule.GetWorldEffectsFrameBringUp(2),
-                                             mRenderModule.GetWorldEffectsFrameBringUp(3));
-        // X360 GuiModule::Render(renderOut) -> BrnGui::EffectsArbitrator::GenerateEffectFrameEvents
-        // @0x82503060: the screen-filter blend into the renderer's two FX-EVENTS frames. The
-        // RendererIO seat (BrnRendererModule::Update) is not live on this build, so the frames
-        // are handed across here, beside the world layer's. [FLAG PC bring-up] DELETE-WHEN the
-        // RendererIO buffers are real.
-        if (BrnGui::gpActiveGuiModule != 0 && BrnGui::gpActiveGuiModule->IsPrepared())
-        {
-            BrnGui::gpActiveGuiModule->GenerateEffectFrameEvents(
-                mRenderModule.GetFXEventsEffectsFrameBringUp(0),
-                mRenderModule.GetFXEventsEffectsFrameBringUp(1));
-        }
+        lpDispatchInput->LockForWrite();
+        lpDispatchInput->SetIsDiskError(mbDiskError);
+        lpDispatchInput->UnlockForWrite();
 
-        // ---- stage the DISPATCH-THREAD input buffer for the world's env-map arm ----------
-        // [FLAG PC bring-up] STANDS IN FOR BrnWorldIO::DispatchInputBuffer::
-        // SetDispatchThreadInputBuffer @0x823B5408, which the console's DoDispatch calls on
-        // the world dispatch input buffer; WorldModule::GenerateDispatchLists @0x827D1CE8
-        // reads it back (BrnWorldModule.cpp:3725) and writes the six per-face env-map
-        // rendered flags through it (:4018) for BrnRendererModule::Render's six-face loop.
-        // That IO buffer set does not exist on PC, so the pointer comes straight across.
-        //
-        // THE **WRITE** BUFFER, for exactly the reason spelt out on
-        // PCBringUpProduceParticleRenderData above: EngineUpdate runs UpdateThread() (this
-        // function) -> OnEndOfUpdateFrame() (the manager Swap, which turns the buffer just
-        // written into the read buffer) -> BrnRendererModule::Render(GetReadBuffer()). The
-        // producer's flags must land on the buffer the renderer read-locks NEXT.
-        // DELETE-WHEN: DoDispatch's IO buffer set is real (this goes with the camera and
-        // effects-frame staging above and GenerateDispatchListsBringUp).
-        mWorldModule.SetBringUpDispatchThreadInputBuffer(
-            mDispatchThreadInputBufferManager.GetWriteBuffer());
+        mWorldModule.GenerateDispatchLists(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                                           lpWorldInput, lpWorldOutput, &lUpdateSet);
+        mRenderModule.CompleteWorldDispatchFramePC((lUpdateSet & 0x80) != 0);
 
-        // ---- stage the CORONA SUBMISSION INTERFACE for the race-car lamp-flare producer -----
-        // [FLAG PC bring-up] STANDS IN FOR BrnRendererModule::Update @0x824060F0-108 ->
-        // RendererIO output -> GameBridgeRendererToX -> BrnWorldIO::DispatchInputBuffer ->
-        // InputBuffer_GenerateDispatchLists::SetCoronaSubmissionInterface @0x8279EBC8. Fetched
-        // FRESH every frame: it is &mSubmissionInterface[mu8SubmissionSwapIndex], the WRITE slot
-        // (StartOfFrame Cleared it above; OnEndOfUpdateFrame's Swap publishes it to Render).
-        // Never null; IsReady() is false until BrnCoronaManager::Construct runs (lazily, at the
-        // first renderable frame) and the producer checks that before it posts.
-        // DELETE-WHEN: DoDispatch's IO buffer set is real.
-        mWorldModule.SetBringUpCoronaSubmissionInterface(
-            mRenderModule.GetCoronaSubmissionInterfaceBringUp());
-
-        // ---- [FLAG PC bring-up] PARKED: the EFFECTS module's copy of the env-map -------
-        // NOT WIRED, DELIBERATELY, AND NOTHING IS MISSING BECAUSE OF IT. The console hands
-        // the environment-map texture to the particle/effects side one call further down
-        // DoDispatch than the world staging above:
-        //
-        //   BrnGame::BrnGameModule::BridgeRendererToEffects @0x823C1168
-        //       -- called ONCE, from DoDispatch @0x823DC458 (its whole xrefs_to list).
-        //          It copies the dispatch frame + the base/FX-events effects frames out of
-        //          RendererIO::OutputBuffer into the EFFECTS dispatch input buffer and ends
-        //          with the env-map hand-off:
-        //             `SetEnvironmentMap(a2, dword_83011AF4)`
-        //   BrnEffects::EffectsIO::DispatchInputBuffer::SetEnvironmentMap @0x823BAA98
-        //       -- write-lock assert (EffectsModuleIO.h:246) + one word store.
-        //   BrnEffects::EffectsIO::DispatchInputBuffer::GetEnvironmentMap @0x8227DF28
-        //       -- read-lock assert (EffectsModuleIO.h:247) + the matching load; its ONLY
-        //          xref is BrnEffects::EffectsModule::GenerateDispatchLists @0x82296668,
-        //          which forwards it into the particle dispatch input at particleIn+0x40,
-        //          from where ParticleModule::GenerateRenderRequests @0x82281BD8 copies it
-        //          into ParticleRenderData::mpEnvironmentMap (0x82281C38/0x82281C44).
-        //
-        // dword_83011AF4 is not renderer state we would have to invent: BrnRendererModule::
-        // Construct @0x8240A778 seeds it with `CgsRenderTarget::GetTexture(this->+0x244, 0)`
-        // (asm 0x8240BE80-0x8240BE98) -- the env-map render target's texture, i.e. exactly
-        // the object the reflections wave built (renderer pool slot 3).
-        //
-        // WHY IT IS PARKED -- both ends of the wire are absent, verified by grep, not by
-        // assumption:
-        //   $ grep -n "GameSource.Effects" tools/build/build_game_exe.bat
-        //   301:  echo "%SRC%\GameSource\Effects\Particles\ParticleModuleBringUp.cpp"
-        //     -> ParticleModuleBringUp.cpp is the ONLY GameSource\Effects file on the build
-        //        list. EffectsModule.cpp and BrnEffectsModuleIO_DispatchInputBuffer.cpp are
-        //        not on it, so neither the consumer (EffectsModule::GenerateDispatchLists)
-        //        nor the accessors are linked.
-        //   $ grep -rn "BridgeRendererToEffects" b5-decomp/src tools/build/build_game_exe.bat
-        //     -> (no output) -- the bridge itself is not reconstructed at all.
-        // and no BrnEffects::EffectsIO::DispatchInputBuffer is ever created on this build
-        // (the type has a committed header + accessor bodies, no instance) -- the same
-        // finding ParticleModuleBringUp.cpp's "FIVE FIELDS ARE BLOCKED" banner already
-        // records from the consumer end, where mpEnvironmentMap is one of the five and is
-        // read by nobody.
-        //
-        // So the missing item is not a value, it is TWO TRANSLATION UNITS. Writing a
-        // stand-in bridge here would create an effects dispatch input buffer that nothing
-        // reads, which is fabrication, not reconstruction.
-        // DELETE-WHEN: BrnEffects::EffectsModule.cpp + BrnEffectsModuleIO_DispatchInput-
-        // Buffer.cpp are on tools\build\build_game_exe.bat and EffectsModule::Generate-
-        // DispatchLists @0x82296668 drives the particle dispatch input. Then reconstruct
-        // BridgeRendererToEffects @0x823C1168 in full (it is four calls) rather than only
-        // its env-map tail, and retire the five BLOCKED fields in ParticleModuleBringUp.cpp
-        // in the same pass.
-        // --------------------------------------------------------------------------------
-
-        CgsGraphics::DispatchFrame* lpDispatchFrame = mRenderModule.GetDispatchFrameForWrite();
-        if (lpDispatchFrame != 0)
-        {
-            mWorldModule.GenerateDispatchListsBringUp(lpDispatchFrame);
-        }
+        lpWorldOutput->LockForRead();
+        lpEffectsInput->LockForWrite();
+        BridgeWorldToEffects_Dispatch(lpEffectsInput, lpWorldOutput);
+        lpEffectsInput->UnlockForWrite();
+        lpWorldOutput->UnlockForRead();
+        lpEffectsInput->LockForRead();
+        mEffectsModule.GenerateDispatchLists(mpUpdateInputBufferStack, lpEffectsInput,
+                                             lpDispatchInput);
+        lpEffectsInput->UnlockForRead();
+        DebugManagerRender(lpRendererOutput);
+        lpRendererOutput->UnlockForRead();
+        mRenderModule.CompleteCommandFramePC(lpDispatchInput,
+            BrnRendererModule::E_COMMAND_PRODUCER_WORLD_AND_EFFECTS);
         return 0;
     }
 
@@ -3980,12 +3529,6 @@ namespace BrnGame
                     lpRendererOut->LockForRead();
                     mpReusableLoadingScreenAllocator =
                         lpRendererOut->GetReusableLoadingScreenAllocator();
-                    // X360 GuiModule::Render(renderOut) -> EffectsArbitrator::GenerateEffectFrameEvents
-                    // @0x82503060: the GUI's post-FX hook blend fills the renderer's two FX-events
-                    // effects frames (published just above by RendererModule::Update; the
-                    // frame getters assert the read lock this bracket holds).
-                    if (BrnGui::gpActiveGuiModule != 0 && BrnGui::gpActiveGuiModule->IsPrepared())
-                        BrnGui::gpActiveGuiModule->GenerateEffectFrameEvents(lpRendererOut);
                     lpRendererOut->UnlockForRead();
                 }
                 if (lpRendererOut != 0) mpUpdateOutputBufferStack->DestroyIOBuffer(&lpRendererOut);
@@ -4056,60 +3599,14 @@ namespace BrnGame
         mRenderModule.StartOfFrame();    // the tail call (0x823A8BCC)
     }
 
-    // @ BrnGameModule.cpp:1275 - end-of-update-frame hook. The X360 body @0x823DBBA0 runs
-    // the render-metrics GameTalk report, the particle end-of-frame, the dispatch-buffer
-    // swap (inlined DispatchThreadInputBufferManager::Swap -- the written buffer becomes
-    // the read buffer and the new write buffer is re-Constructed), then the GUI/renderer
-    // end-of-frame + perfmon swap. The swap is the piece the boot path needs: it publishes
-    // this frame's loading-screen command to the dispatch side and clears the next write
-    // buffer's one-shot slot.
-    // ⛔⛔ THIS BANNER USED TO END "[gated] the metrics/particle/GUI end-of-frame notifies land
-    // with their subsystems." That gate went STALE and cost two player-visible defects: the
-    // PARTICLE notify (issue #17, c227a165) and the GUI notify (below). Both subsystems had
-    // landed long before; nothing re-read the line. Only the RENDER-METRICS GameTalk report is
-    // still out -- it needs EA::GameTalk, which this tree does not have.
-    // [[gates-are-stale-not-dead]]
-    //
-    // BrnRendererModule::EndOfFrame @0x823FFE28 is live now: its SwapBuffers @0x823FC678 advances
-    // the game-side dispatch-list ring so the frame the world modules filled this update becomes
-    // the frame BrnRendererModule::Render walks next (without it the read cursor never reaches the
-    // written slot and every world dispatch list reads empty).
+    // ARTIST 823DBBA0. This entry receives the IThreadClass subobject at
+    // GameModule+0x640 (ctor 827E5F68..70, vtable820D1498); its two stall
+    // bytes are the actual mbStalled and mbPrevStalled, after that base shift.
     void BrnGameModule::OnEndOfUpdateFrame()
     {
         renderengine::FrameProfile::Scope lFramePhaseProfile(renderengine::FrameProfile::UPDATE, renderengine::FrameProfile::UPDATE_PUBLISH);
-        // ⭐⭐⭐ THE PARTICLE END-OF-FRAME, restored 2026-09-07 (GitHub issue #17, "tyre marks
-        // appear in chunks"). The console runs it HERE, before the dispatch swap and before the
-        // GUI/renderer end-of-frame:
-        //     BrnParticle::ParticleModule::EndOfFrame(_R30 + 8883008, v6);   // @0x823DBBA0
-        //     ...DispatchThreadInputBufferManager::Swap (inlined)...
-        //     BrnGui::GuiModule::EndOfFrame(_R30 + 7250912);
-        //     BrnRendererModule::EndOfFrame(_R30 + 15808, v6, ...);
-        //
-        // This was the "[gated] the metrics/particle/GUI end-of-frame notifies land with their
-        // subsystems" line in the banner above -- and the particle subsystem landed some time
-        // ago, so the gate was STALE, not dead. [[gates-are-stale-not-dead]]
-        //
-        // ⭐ IT IS THE ONLY THING THAT CAN EVER END A TYRE MARK. ParticleModule::EndOfFrame tail-
-        // calls TrailSystem::EndOfFrame, which releases an emitter idle longer than its 10 s life
-        // back to the free stack and Detatch()es its wheel. Measured without it, over one 165 s
-        // run: the 96-emitter free pool went 95 -> 84 and NEVER ROSE (so a long session must
-        // eventually run it dry and stop every tyre mark for good), and because a wheel then keeps
-        // one emitter for ever, the trail renderer drew a single quad straight across every
-        // stretch the wheel travelled WITHOUT skidding -- 69.7 m across a 48.3 s pause in that
-        // one run. See the full banner on ParticleModule::EndOfFrame.
-        //
-        // ⚠ FLAG -- the argument. The console passes `v6 = *(gm+10092520) || *(gm+10092519)`, a
-        // game-module byte and its previous-frame copy, the same value it hands
-        // BrnRendererModule::EndOfFrame. It is NOT this class's mbStalled (that byte is
-        // gm+10094120, written by ResourceUpdateThread through the +1600-shifted thread `this`),
-        // and an image-wide scan finds NO writer of gm+10092520 in the export set, so the
-        // console's own data attests only the zero it is constructed with. It is passed false
-        // here rather than invented. Nothing reads the byte it latches -- not
-        // ParticleModule+0x8DF5's only two touchers in the image (Construct and EndOfFrame
-        // itself), and nothing in this tree -- and the trail release this call exists for is
-        // unconditional in the callee, so the argument cannot change what this fixes.
-        // DELETE-WHEN: the gm+10092520 pair is identified and modelled.
-        mEffectsModule.ParticleModuleRef().EndOfFrame(false);
+        const bool lbStalled = mbStalled || mbPrevStalled;
+        mEffectsModule.ParticleModuleRef().EndOfFrame(lbStalled);
 
         // FLAG PC-platform leaf: rendering can run between 60 Hz GUI updates.
         // Swap reconstructs the next write buffer, including its default post-fx
@@ -4144,11 +3641,18 @@ namespace BrnGame
         // from slot 1 and can never appear. Full derivation on the body in BrnGuiModule.cpp.
         mGuiModule.EndOfFrame();   // X360 @0x823DBBA0 calls it HERE, before mRenderModule's
 
-        // FLAG PC-platform leaf: native video uploads and GUI preparation run
-        // after the dispatch join. Publish them with the world's completed frame.
-        mRenderModule.Prepare2DFramePC();
-        mGuiModule.PublishRenderBufferPC();
-        mRenderModule.EndOfFrame();
+        const u64 luPreviousCommandGeneration = mRenderModule.GetPublishedCommandGenerationPC();
+        mRenderModule.EndOfFrame(lbStalled);
+        // FLAG PC-platform leaf: all draw snapshots follow the same completed
+        // producer generation. An extra presentation preserves the last command
+        // frame, while original control IO and trail EOF still run above.
+        if (mRenderModule.GetPublishedCommandGenerationPC() != luPreviousCommandGeneration)
+        {
+            if (const BrnParticle::ParticleModule::ParticleRenderData* lpParticleRecord =
+                mRenderModule.GetPublishedParticleRenderDataPC())
+                mEffectsModule.ParticleModuleRef().PublishRenderCommandsPC(*lpParticleRecord);
+        }
+        mbPrevStalled = mbStalled;
         renderengine::PublishPresentDiagnosticsPC();
     }
 
@@ -4462,58 +3966,24 @@ namespace BrnGame
         // The console dispatch thread hands the renderer the manager's READ buffer (the
         // frame the update side just published via OnEndOfUpdateFrame's swap).
         const DispatchThreadInputBuffer* lpRead = mDispatchThreadInputBufferManager.GetReadBuffer();
-        if (lpRead != nullptr)
-        {
-            lpRead->LockForRead();
-            const bool lbHasParticles = lpRead->GetParticleRenderData()->mpParticleModule != nullptr;
-            lpRead->UnlockForRead();
-            // FLAG PC-platform leaf: the module scheduler's dispatch callback
-            // runs here on the frozen input, before the renderer builds particles.
-            if (lbHasParticles)
-            {
-                renderengine::FrameProfile::Scope lEffectsProfile(renderengine::FrameProfile::DISPATCH_EFFECTS);
-                mEffectsModule.DispatchThreadUpdate(lpRead);
-            }
-        }
-        mRenderModule.Render(lpRead);
+        // ARTIST 823A8B70..88 supplies the real effects owner. Render invokes
+        // its original callback after GDL conversion/sorting on this control IO.
+        mRenderModule.Render(&mEffectsModule, lpRead);
     }
 
-    // Faithful port of X360 DebugManagerRender @0x823BCB88 (called from DoDispatch each dispatch
-    // pass). The console body, in order:
-    //   1. PerfMonCpu::AddPIXCounters();
-    //   2. read the two DEBUG render buffers off the RendererIO OUTPUT buffer parameter
-    //      (GetIm3d/Im2dDebugRenderBuffer);
-    //   3. GATE: bail unless the debug font handle (gm+0x99F150) differs from the NULL handle
-    //      pair (qword_82FAE900) AND both buffers are non-null -- this is why the console shows
-    //      NO build date / fps / memory until GamePrepare's font acquire lands (world prepare);
-    //   4. the fps state: current fps measured over the 3-frame stamp ring
-    //      (1 / (elapsed/freq * 1/3)), accumulated into the 60-second average window
-    //      (flt_82004C6C = 60.0) -> mfDebugFpsAverage;
-    //   5. under the debug critical section: RenderBuildInfo, RenderFrameRateColouredWithAverage
-    //      (current, average, green/red/yellow = 0xFF00FF00/0xFF0000FF/0xFF00FFFF, ramp 60..30
-    //      [flt_82004C6C/flt_82004F5C], "over last minute", highlight = 1 - t/30 clamped
-    //      [flt_82037210], gm+0x9A0B85), RenderMemory, then DebugManager::Render with the
-    //      view-projection at gm+0x6E9520 and the camera position recovered by inverting the
-    //      dispatch view matrix at gm+0x6E94A0.
-    //
-    // FLAG PC-platform leaf (parameter): the dispatch IO pair the console reads the buffers from
-    // is not created on this build (boot audit F-P2-4), so the gate's buffer half folds onto the
-    // renderer module's by-value members (the exact objects RendererModule::Update publishes into
-    // that pair -- never null once the module exists). The parameter returns when the pair lands.
-    // FLAG (deferred with the Debug3D path): the dispatch camera matrices (gm+0x6E94A0/0x6E9520)
-    // are not reconstructed; they feed only the 3D debug pass (RenderWorld), whose draw bodies are
-    // the Debug3D follow-on, so identity/zero stand in and the fold is inert.
-    // FLAG PC fold (the flush point): the console's trailing DebugManager::Render replays the
-    // queued prims into the debug Im2d BUFFER, which the GPU consumes later in the frame; on PC
-    // Im2dRenderBuffer IS the immediate renderer (CgsImRenderBuffer.h), so the replay must land
-    // between the scene and the present -- BrnRendererModule::Render's debug seam issues it there.
-    void BrnGameModule::DebugManagerRender()
+    // ARTIST 823BCB88. The caller holds fresh RendererIO output for read;
+    // all debug commands are recorded during the original producer phase.
+    void BrnGameModule::DebugManagerRender(RendererIO::OutputBuffer* lpRendererOutput)
     {
         CgsDev::PerfMonCpu::AddPIXCounters();
+        CgsGraphics::Im3dRenderBuffer* const lpIm3dDebug = lpRendererOutput->GetIm3dDebugRenderBuffer();
+        CgsGraphics::Im2dRenderBuffer* const lpIm2dDebug = lpRendererOutput->GetIm2dDebugRenderBuffer();
 
         // 3. the gate (@0x823BCBCC-C20): the debug font must have arrived (GamePrepare's id-5
         // acquire writes the pair; both words NULL = not yet).
         if (mDebugFont.mpResourceMemory == 0 && mDebugFont.mpSourceEntry == 0)
+            return;
+        if (lpIm3dDebug == nullptr || lpIm2dDebug == nullptr)
             return;
 
         // 4. the fps state (@0x823BCC24-D44).
@@ -4559,8 +4029,18 @@ namespace BrnGame
 
         lpDebugManager->RenderMemory();
 
-        // (the console's trailing DebugManager::Render is issued at the renderer's overlay point
-        // on this build -- see the FLAG PC fold above.)
+        // ARTIST 823BCD48..CF14 inlines the general affine inverse of the
+        // director module's actual graphics view, then records both debug banks.
+        const CgsGraphics::Camera& lrCamera = mDirectorModule.GetGraphicsCameraForDebug();
+        const Matrix44& lrView = lrCamera.mView;
+        Matrix44Affine lView;
+        lView.xAxis = Vector3{lrView.xAxis.x, lrView.xAxis.y, lrView.xAxis.z, lrView.xAxis.w};
+        lView.yAxis = Vector3{lrView.yAxis.x, lrView.yAxis.y, lrView.yAxis.z, lrView.yAxis.w};
+        lView.zAxis = Vector3{lrView.zAxis.x, lrView.zAxis.y, lrView.zAxis.z, lrView.zAxis.w};
+        lView.wAxis = Vector3{lrView.wAxis.x, lrView.wAxis.y, lrView.wAxis.z, lrView.wAxis.w};
+        const Matrix44Affine lInverseView = rw::math::vpu::Inverse(lView);
+        lpDebugManager->Render(lrCamera.GetViewProjectionMatrix(), lInverseView.wAxis,
+                               lpIm3dDebug, lpIm2dDebug);
 
         CgsDev::DebugManager::ThreadSafeRelease(lpDebugManager);
     }
@@ -5762,6 +5242,29 @@ namespace BrnGame
                     // The GUI->game out-event consumer (X360 0x823CB758): latch the flow
                     // commands (70/71, the loading screen 19/20, ...) the states posted.
                     BridgeGuiToGame(mGuiModule.GetGuiOutQueue());
+                    // Native caller boundary: retain the current loading GUI
+                    // Update timing until the authentic typed loading legs land.
+                    // Full dispatch owns its own original GUI Render later.
+                    bool lbRenderLoadingGui = false;
+                    if (leState == BrnGameMainFlowController::E_MGS_INITIAL_LOADING_SCREEN)
+                    {
+                        MainGameFlowStateInitialLoadingScreen* const lpInitialState =
+                            static_cast<MainGameFlowStateInitialLoadingScreen*>(mMainFlowStateMachine.GetState(leState));
+                        lbRenderLoadingGui = lpInitialState->meLoadingScreenStage
+                            > MainGameFlowStateInitialLoadingScreen::E_LOADINGSTAGE_GUIMODULE;
+                    }
+                    else if (leState >= BrnGameMainFlowController::E_MGS_CHECK_DISK_SPACE
+                             && leState <= BrnGameMainFlowController::E_MGS_COMPLETE_LOADING)
+                    {
+                        lbRenderLoadingGui = gBrnScriptedLoadStage != 8;
+                    }
+                    if (lbRenderLoadingGui)
+                    {
+                        LoadingScriptedState* const lpLoadingState =
+                            static_cast<LoadingScriptedState*>(mMainFlowStateMachine.GetState(leState));
+                        lpLoadingState->RenderGUI(mpGuiInputBuffer, mpGuiOutputBuffer,
+                            mpGuiModelOutputBuffer, mGuiModule.GetViewInputBuffer(), false);
+                    }
                 }
                 // ---- the DIRECTOR's post-GUI pass (X360 module-scheduler order) -----------
                 // It runs BridgeGuiToDirector over the SAME out-queue, so the queue must still
@@ -6255,12 +5758,6 @@ namespace BrnGame
         mRenderModule.EndMeshFramesPC();
         mThreadLayout.EndPC();
         mbFrameLayoutInitializedPC = false;
-    }
-
-    void BrnGameModule::PrepareDebugOverlayForDispatchPC()
-    {
-        mThreadLayout.WaitForUpdateCompletionPC();
-        DebugManagerRender();
     }
 
     void BrnGameModule::SynchronizeDispatchPC()

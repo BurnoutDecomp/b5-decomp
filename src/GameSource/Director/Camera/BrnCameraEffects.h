@@ -200,9 +200,9 @@ struct CameraEffects
     //   / outro arms. CARVED 2026-07-31 alongside mfTimeOfDay above.
     bool mbSetTimeOfDay;                          // +0xB9
 
-    // +0xBA .. +0xBB: trailing bytes (+0xBA zeroed; +0xBB the final pad). NOMINAL span;
-    //   pads the block to the X360-proven 0xBC stride.
-    u8  maReservedBA[0xBC - 0xBA];
+    // DWARF :330; ARTIST Renderer::Update 82405FA8..5FC8 reads +0xBA.
+    bool mbRequestingScreenshot;                  // +0xBA
+    u8   maReservedBB[1];                         // +0xBB final padding byte
 
     // The shake-request read accessors (DWARF: CameraEffects::GetShakeAmplitude is named
     // by the PerlinShakeController::Update hint; GetShakeFrequency by symmetry).

@@ -510,6 +510,11 @@ void Im3dBase<V>::SetTransform(Matrix44 lModelToWorld, Matrix44 lViewProjection)
 template void Im3dBase<BasicColouredTexturedVertex>::SetTransform(Matrix44);
 template void Im3dBase<BasicColouredTexturedVertex>::SetTransform(Matrix44, Matrix44);
 
+// ARTIST 827DC6D8 / 827DE4C0: the untextured renderer consumes the same
+// complete one-matrix or model-to-world/view-projection transform contract.
+template void Im3dBase<BasicColouredVertex>::SetTransform(Matrix44);
+template void Im3dBase<BasicColouredVertex>::SetTransform(Matrix44, Matrix44);
+
 // ---------------------------------------------------------------------------------------------------
 // Im3d::Construct  @ 0x827FC748  (289 instructions)
 //

@@ -127,6 +127,11 @@ namespace GameDataIO
         template <s32 N>
         bool AppendRequestInterface(const RequestInterface<N>& lrSourceInterface);
 
+        // Inlined in ARTIST DoDispatch 823DC6B4: the destination input is
+        // already write-locked while the renderer's debug buffer is published.
+        void SetIm2dDebugRenderBuffer(CgsGraphics::Im2dRenderBuffer* lpBuffer)
+        { mpDebug2dRenderBuffer = lpBuffer; }
+
     private:
         // DWARF h:123 -- lands at this+4 (after the 1-byte IOBuffer base padded to 4-byte queue
         // alignment) -- matching the asm's `return a1 + 4` in both GetRequestInterface overloads.

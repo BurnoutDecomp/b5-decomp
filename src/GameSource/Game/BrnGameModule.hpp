@@ -433,16 +433,14 @@ namespace BrnGame
 
         // The per-frame debug overlay drive (X360 @0x823BCB88, called from DoDispatch @0x823DC458):
         // gate on the debug font + the published debug render buffers, keep the fps ring/average,
-        // queue the build-info/fps/memory readouts, then DebugManager::Render. The console signature
-        // takes the RendererIO OUTPUT buffer; on this build the dispatch IO pair does not exist yet
-        // (boot audit F-P2-4) so the method reads the same state directly - see the body's FLAG.
-        void DebugManagerRender();
+        // queue the build-info/fps/memory readouts, then record through the
+        // fresh RendererIO output while the original caller holds its read lock.
+        void DebugManagerRender(RendererIO::OutputBuffer* lpRendererOutput);
 
         // IThreadClass implementation (the engine drives these on their threads).
         virtual void Update();                                      // ARTIST 0x823C5480
         void BeginFramesPC(bool lbAllowParallel);
         void EndFramesPC();
-        void PrepareDebugOverlayForDispatchPC();
         void SynchronizeDispatchPC();
         bool UpdateThread() override;
         void DispatchThread() override;                               // @ BrnGameModule.cpp:1221
@@ -475,6 +473,8 @@ namespace BrnGame
         // load gameTimer(gm+0x9A0AD4)/simTimer(gm+0x9A0AF0) fields [+0x10]*[+0xC]
         // (mfScaleCurrent * mfRate) straight off the module. Exposed BY NAME so the live
         // PC spine reads the same pair without a console byte offset.
+        const BrnShaderConstantsFrame* GetPublishedShaderConstantsFramePC() const
+        { return mRenderModule.GetPublishedShaderConstantsFramePC(); }
         const CgsSystem::Timer& GetGameTimer() const { return mGameTimer; }
         const CgsSystem::Timer& GetSimTimer() const  { return mSimTimer; }
 
@@ -491,20 +491,10 @@ namespace BrnGame
         void         CreateStaticIOBuffers();      // @ BrnGameModule.cpp:2497
         void         DestroyStaticIOBuffers();     // @ BrnGameModule.cpp:2515
 
-        // ---- ⚠️ FLAG PC quality-of-life: the dispatch camera latch --------------------
-        // NOT X360 functions. The renderer can now draw frames on which NO simulation
-        // sub-step ran (see mi8FrameRateMinSteps), and on such a frame the per-sub-step IO
-        // buffers DoDispatch used to read the camera out of do not exist -- they are created
-        // and destroyed inside the sub-step loop. So the director's published camera is
-        // latched into the game module at the end of every sub-step, one tick deep, and
-        // DoDispatch renders the blend of the last two.
-        //
-        // That is both halves of the same problem solved by one mechanism: it is what keeps
-        // a zero-step frame from falling back to the world module's tour camera (a visible
-        // jump), and it is what makes a 60 Hz camera read as continuous motion at 144 Hz.
-        // DELETE-WHEN: never, while the simulation is decoupled from the render rate.
+        // PC storage for the last completed director output when a render frame
+        // runs no simulation substep. The original camera itself is unchanged.
         void LatchDispatchCamera();
-        const BrnDirector::Camera::Camera* GetInterpolatedDispatchCamera();
+        const BrnDirector::Camera::Camera* GetDispatchCamera() const;
 
         // Debug step/play-frame callbacks (registered with the debug menu; the void* is the
         // game-module instance).
@@ -550,6 +540,12 @@ namespace BrnGame
         // DRAWRENDERABLE commands into. Home TU: GameBridgeRendererToX.cpp.
         void BridgeRendererToWorld(BrnWorldIO::DispatchInputBuffer* lpWorldDispatchInput,
                                    RendererIO::OutputBuffer* lpRendererOutput);
+        // ARTIST823C1168; caller holds output read/input write locks.
+        void BridgeRendererToEffects(BrnEffects::EffectsIO::DispatchInputBuffer* lpEffectsInput,
+                                     RendererIO::OutputBuffer* lpRendererOutput);
+        void BridgeRendererToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+                                 RendererIO::OutputBuffer* lpRendererOutput);
+
 
         // X360 0x823CD738 -- publish player-0 controller state into the GameState PreWorld input
         // buffer (+ merge the bind/unbind result queues). FLAG: ledger dest is
@@ -767,6 +763,9 @@ namespace BrnGame
         // This sub-step's GUI module OUTPUT buffer (same lifetime; the sound spine's
         // BridgeGuiToSound source -- faithful-audio-engine phase C4).
         CgsGui::CgsGuiModuleIO::OutputBuffer* GetGuiOutputBuffer() { return mpGuiOutputBuffer; }
+        CgsGui::ModelIO::OutputBuffer* GetGuiModelOutputBuffer() { return mpGuiModelOutputBuffer; }
+        CgsGui::ViewIO::InputBuffer* GetGuiViewInputBuffer() { return mpGuiViewInputBuffer; }
+        CgsSystem::Timer& GetGameTimer() { return mGameTimer; }
         // This sub-step's DIRECTOR OUTPUT buffer (CreateStaticIOBuffers lifetime; the console
         // holds it as the persistent member gm+0x9A0BDC and DoUpdate passes it into
         // DoUpdate_Sound's SetCameraInput leg -- phase C4b).
@@ -776,6 +775,8 @@ namespace BrnGame
         // on the loading path). The PC has no scheduler, so the loading-screen state reaches
         // it by name -- it is the same object at the same place in the module list.
         BrnGui::GuiModule& GetGuiModule() { return mGuiModule; }
+        BrnRendererModule& GetRenderModule() { return mRenderModule; }
+        bool GetIsDiskError() const { return mbDiskError; }
         // gm+0x9A0630 -- the allocator BrnRendererModule::Update lends us each GamePrepare
         // pass; the loading flow's world drive FreeAll's it and passes it to the world
         // virtual (boot audit F-P2-4 / F-P6-12). Null until the first not-done pass.
@@ -1035,7 +1036,8 @@ namespace BrnGame
         // [h:389-404: map-file reader, juice, mbHasGameTerminated - omitted]
         bool mbSimPaused;                                            // h:405
         bool mbDiskError;                                            // h:406
-        // [h:407-411: disk-error/controller/game-start/over/prev-stalled flags - omitted]
+        // [h:407-410: disk-error/controller/game-start/over flags - omitted]
+        bool mbPrevStalled;                                          // h:411
         bool mbStalled;                                              // h:412
         bool mbRequestDoStepFrame;                                   // h:413
         bool mbRequestDoPlayFrame;                                   // h:414
@@ -1123,16 +1125,10 @@ namespace BrnGame
         // it lives with the other per-sub-step buffers here, and exists only in the sub-steps
         // whose flow state runs that cascade (null otherwise).
         BrnNetwork::BrnNetworkModuleIO::OutputBuffer* mpNetworkOutputBuffer;
-        // ---- ⚠️ FLAG PC quality-of-life: the dispatch camera latch (no console members) ---
-        // The last two simulation ticks' worth of the director's published camera, plus the
-        // frame-local blend of them. See LatchDispatchCamera / GetInterpolatedDispatchCamera.
-        // Latched by value because the buffer they are read out of only lives for the
-        // sub-step that produced it.
-        BrnDirector::Camera::Camera mPreviousTickCamera;
-        BrnDirector::Camera::Camera mCurrentTickCamera;
-        BrnDirector::Camera::Camera mInterpolatedCamera;
-        bool                        mbCurrentTickCameraValid;
-        bool                        mbPreviousTickCameraValid;
+        // FLAG PC-platform leaf: by-value retention extends the completed camera
+        // output across zero-substep render frames after its IO-stack lifetime.
+        BrnDirector::Camera::Camera mDispatchCamera;
+        bool                        mbDispatchCameraPublished;
         // The double-buffered dispatch-thread input pair (X360 module +10097064): the update
         // side writes it (BridgeGuiToGame's loading-screen commands, IsStalled/IsDiskError,
         // brightness/contrast), OnEndOfUpdateFrame swaps it, and the dispatch/render side
@@ -1187,13 +1183,7 @@ namespace BrnGame
         // until the first pass runs.
         CgsMemory::LinearMalloc* mpReusableLoadingScreenAllocator;
         bool mbGuiPreAccept;            // @ +10094153 (command 71 -- resume-world-load)
-        // [FLAG PC bring-up] (no console member): true while the DIRECTOR is the thing driving
-        // the world camera -- i.e. from the frame the GUI's game-intro fly-by request reaches
-        // the director until the arbitrator has finished unwinding its attract states.
-        // DoDispatch routes the director's published camera to the world ONLY while this is
-        // set; outside it the bring-up tour camera keeps the world alive. Set in
-        // DoUpdate_Director. DELETE with GenerateDispatchListsBringUp.
-        bool mbDirectorCameraLive;
+
 
 
         // @ +10094132 (0x9A0634). The console's own latch, written as the FIRST statement of

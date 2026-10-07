@@ -36,6 +36,13 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
+
+extern "C" void* D3DDevice_BeginVertices(void*, u32, u32, u32);
+extern "C" void D3DDevice_EndVertices(void*);
+extern "C" u32 D3DDevice_InsertFence(void*);
+void* RenderEngineDeviceBeginShaderStates(void*, void**);
 
 namespace CgsGraphics
 {
@@ -308,5 +315,75 @@ template void ImRenderer<BasicColouredVertex>::Construct(
 template s8 ImRenderer<BasicColouredVertex>::AddProgram(
     rw::IResourceAllocator*, const void*, u32, const void*, u32);
 template bool ImRenderer<BasicColouredVertex>::SetProgram(s8);
+
+// ARTIST 827DC568 and 827DC668. The command-buffer dispatcher calls
+// these immediate renderer operations only after freezing its command bank.
+template <typename V>
+void ImRenderer<V>::BeginRendering()
+{
+    CGS_ASSERT(mapVertexProgramBuffer[0] != nullptr, "mapVertexProgramBuffer[ 0 ] != NULL");
+    CGS_ASSERT(mapPixelProgramBuffer[0] != nullptr, "mapPixelProgramBuffer[ 0 ] != NULL");
+    CGS_ASSERT(mgpActiveRenderer == nullptr, "mgpActiveRenderer == NULL");
+    mgpActiveRenderer = static_cast<ImRendererBase*>(this);
+    shadow::Device::ResetShadowing();
+    mi8CurrentProgram = 0;
+    shadow::DeviceSetVertexProgramInternal(mapVertexProgramBuffer[0]);
+    shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[0]);
+    shadow::Device::SetVertexDescriptor(
+        reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor));
+}
+
+template <typename V>
+void ImRenderer<V>::EndRendering()
+{
+    CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this), "mgpActiveRenderer == this");
+    mgpActiveRenderer = nullptr;
+}
+
+// ARTIST 827DFDA0..827DFEC8 (raw-image export hole): each 32-byte CPU
+// record supplies position.xyz and colour to a 16-byte GPU record.
+template <typename V>
+void ImRenderer<V>::Render(renderengine::PrimitiveType lePrimitiveType, const V* lpVertices, u32 luCount)
+{
+    CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this), "mgpActiveRenderer == this");
+    shadow::Device::FlushVertexProgramState();
+    CGS_ASSERT(lpVertices != nullptr, "lpVertices");
+    if (16u * luCount > 0x80000u)
+        D3DDevice_InsertFence(mgpDevice);
+    struct PackedVertex { Vector3F mPosition; RGBA8 mColour; };
+    static_assert(sizeof(PackedVertex) == 16, "ARTIST untextured GPU vertex stride");
+    // FLAG PC-platform leaf: the native BeginVertices call receives the
+    // primitive parameter that the console passes through DirectDraw state.
+    PackedVertex* lpOutput = static_cast<PackedVertex*>(D3DDevice_BeginVertices(
+        mgpDevice, static_cast<u32>(lePrimitiveType), luCount, sizeof(PackedVertex)));
+    if (lpOutput != nullptr)
+        for (u32 luVertex = 0; luVertex < luCount; ++luVertex)
+            lpOutput[luVertex] = {{lpVertices[luVertex].mv3Pos.x,
+                lpVertices[luVertex].mv3Pos.y, lpVertices[luVertex].mv3Pos.z},
+                lpVertices[luVertex].mv4Colour};
+    D3DDevice_EndVertices(mgpDevice);
+}
+
+// ARTIST 827DC6D8: four matrix rows are retained and written through the
+// current program's actual shader-state handle.
+template <typename V>
+void* ImRenderer<V>::SetTransform(const void* lpTransform)
+{
+    const u8* const lpSource = static_cast<const u8*>(lpTransform);
+    for (u32 luByte = 0; luByte < sizeof(mauTransform); ++luByte)
+        mauTransform[luByte] = lpSource[luByte];
+    void* lpShaderState = nullptr;
+    void* const lpResult = RenderEngineDeviceBeginShaderStates(
+        &maShaderStateBlocks[mi8CurrentProgram], &lpShaderState);
+    if (lpShaderState != nullptr)
+        for (u32 luByte = 0; luByte < sizeof(mauTransform); ++luByte)
+            static_cast<u8*>(lpShaderState)[luByte] = mauTransform[luByte];
+    return lpResult;
+}
+
+template void ImRenderer<BasicColouredVertex>::BeginRendering();
+template void ImRenderer<BasicColouredVertex>::EndRendering();
+template void ImRenderer<BasicColouredVertex>::Render(renderengine::PrimitiveType, const BasicColouredVertex*, u32);
+template void* ImRenderer<BasicColouredVertex>::SetTransform(const void*);
 
 } // namespace CgsGraphics

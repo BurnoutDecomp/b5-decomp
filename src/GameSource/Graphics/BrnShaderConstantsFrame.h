@@ -100,13 +100,9 @@ private:
     bool volatile  mbLockedForWriting;                     // @0x31C
 
 public:
-    // ADDITIVE (not X360 symbols). The frame's only producer is
-    // WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410 -- RECONSTRUCTED as of
-    // the env-manager go-live wave (2026-08-16) -- and the console opens/closes the write
-    // lock AROUND it, in BrnRendererModule::Update, which is not reconstructed. So the two
-    // PC callers of that producer (WorldModule::GenerateDispatchListsBringUp) and the sky
-    // bring-up publisher drive the lock by name rather than poking the flag.
-    // Delete when BrnRendererModule::Update lands.
+    // Named access to the original write flag: renderer Construct opens the
+    // external bank; SwapBuffers opens the new external bank and closes the
+    // published internal bank. The world writes the frame lent through RendererIO.
     void LockForWriting()   { mbLockedForWriting = true; }
     void UnlockForWriting() { mbLockedForWriting = false; }
 };
@@ -124,41 +120,3 @@ public:
 // ShadowStruct 0x40) all carry a pin like this one; this one did not.
 static_assert(sizeof(BrnShaderConstantsFrame) == 0x320,
               "BrnShaderConstantsFrame stride drift (X360 0x320 == 800; see the mulli sites above)");
-
-// [FLAG PC bring-up] The shader-constants frame the WORLD producer filled this dispatch
-// frame. Defined in BrnWorldModule.cpp, written by WorldModule::GenerateDispatchListsBringUp
-// through the REAL WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410, which on
-// the console writes it via lpDispatchInputBuffer->GetShaderConstantsFrame(). The renderer's
-// own maShaderConstantsFrames[] is private to BrnRendererModule and the dispatch IO buffer
-// set does not exist on PC, so this is the seam -- the same one gBrnSkyCameraBringUp
-// already crosses for the camera.
-//
-// It carries the LIVE sky gradient / cloud / key-light / fog set from the environment
-// manager. Since the step-10 `skyframe` wave BrnRendererModule::PublishSkyConstantsBringUp
-// IS a copy of this frame -- its hard-coded noon-keyframe set is deleted -- so half of the
-// old DELETE-WHEN is already met. What remains is the other half: the dispatch IO buffer set
-// becoming real, at which point BrnRendererModule::Update lends the world its own
-// maShaderConstantsFrames[external] through RendererIO::OutputBuffer::SetShaderConstantsFrame
-// @0x823FB608 exactly as the console does, and both this global and gBrnSkyCameraBringUp go.
-extern BrnShaderConstantsFrame gBrnWorldShaderConstantsFrameBringUp;
-extern bool                    gbBrnWorldShaderConstantsFrameBringUpValid;
-
-// [FLAG PC bring-up] The stand-in camera the world producer framed this frame.
-//
-// The console's WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410 fills the
-// renderer's BrnShaderConstantsFrame from the world module's own camera + the environment
-// manager's blended keyframe. Neither producer is live: the camera is
-// GenerateDispatchListsBringUp's stand-in and the environment settings are not converted
-// or streamed. So the one thing the renderer cannot derive for itself -- the view
-// projection the world was actually drawn with -- is handed across here, and the renderer
-// supplies the rest (BrnRendererModule::PublishSkyConstantsBringUp).
-//
-// DELETE together with GenerateDispatchListsBringUp / PublishSkyConstantsBringUp when the
-// real camera and EnvironmentManager::GenerateShaderConstants land.
-struct BrnSkyCameraBringUp
-{
-    Matrix44 mViewProjection;   // ROW-VECTOR convention, as everywhere in the dispatch path
-    Vector3  mViewPosition;     // the eye
-    bool     mbValid;
-};
-extern BrnSkyCameraBringUp gBrnSkyCameraBringUp;

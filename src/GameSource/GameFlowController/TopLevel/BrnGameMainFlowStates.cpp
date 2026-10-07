@@ -1,3 +1,5 @@
+#include "GameShared/GameClasses/Gui/CgsGuiShared.h"
+#include "GameSource/Graphics/BrnRendererModuleIO.h"
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
 
 #include <cstdio>   // std::snprintf (the load-stage witness strings below)
@@ -85,7 +87,56 @@ LoadingScriptedState::LoadingScriptedState()
 }
 void LoadingScriptedState::OnEnter() {}
 void LoadingScriptedState::OnLeave() {}
-void LoadingScriptedState::Render() {}
+void LoadingScriptedState::Render()
+{
+    // ARTIST 823E7998 is shared by all six loading-state Render slots.
+    if (gBrnScriptedLoadStage == 8)
+        BrnGame::GetMainGameModule()->DoDispatch();
+}
+
+// ARTIST 823CE098: original supplied-IO GUI command producer.
+void LoadingScriptedState::RenderGUI(
+    CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+    CgsGui::CgsGuiModuleIO::OutputBuffer* /*lpGuiOutput*/,
+    CgsGui::ModelIO::OutputBuffer* /*lpGuiModelOutput*/,
+    CgsGui::ViewIO::InputBuffer* lpGuiViewInput,
+    bool lbSkipGui)
+{
+    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    CgsModule::IOBufferStack* const lpInputStack = lpGameModule->GetUpdateInputBufferStack();
+    CgsModule::IOBufferStack* const lpOutputStack = lpGameModule->GetUpdateOutputBufferStack();
+    RendererIO::InputBuffer* lpRendererInput = 0;
+    RendererIO::OutputBuffer* lpRendererOutput = 0;
+    lpInputStack->CreateIOBuffer(&lpRendererInput, 0);
+    lpOutputStack->CreateIOBuffer(&lpRendererOutput, 0);
+
+    BrnGame::DispatchThreadInputBuffer* const lpDispatchInput =
+        lpGameModule->GetDispatchThreadInputBufferManager().GetWriteBuffer();
+    lpDispatchInput->LockForWrite();
+    lpDispatchInput->SetIsDiskError(lpGameModule->GetIsDiskError());
+    lpDispatchInput->UnlockForWrite();
+    lpGameModule->GetRenderModule().Update(lpInputStack, lpOutputStack,
+                                          lpRendererInput, lpRendererOutput);
+    if (!lbSkipGui)
+    {
+        CgsModule::LockBuffersForIO(lpGuiInput, lpRendererOutput);
+        lpGameModule->BridgeRendererToGui(lpGuiInput, lpRendererOutput);
+        CgsModule::UnlockBuffersForIO(lpGuiInput, lpRendererOutput);
+        lpGuiInput->LockForWrite();
+        CgsGraphics::Camera lGuiCamera = CgsGui::GetGuiCamera();
+        lpGuiInput->SetCamera(lGuiCamera);
+        lpGuiInput->UnlockForWrite();
+        lpGameModule->GetGuiModule().CaptureRenderInputPC(lpGuiInput);
+        lpRendererOutput->LockForRead();
+        lpGameModule->GetGuiModule().Render(lpGuiViewInput, lpGuiInput, lpRendererOutput);
+        lpRendererOutput->UnlockForRead();
+    }
+
+    lpInputStack->DestroyIOBuffer(&lpRendererInput);
+    lpOutputStack->DestroyIOBuffer(&lpRendererOutput);
+    lpGameModule->GetRenderModule().CompleteCommandFramePC(lpDispatchInput,
+        BrnRendererModule::E_COMMAND_PRODUCER_GUI);
+}
 // @ 0x823C6AB0 -- the base FinishLoading is a tail-call into the flow controller's
 // SendEvent(STATEEND); it is vtable-only (no static callers on either side). The PC body
 // was empty, so a dispatch through it silently did nothing (boot audit F-P6-19).
@@ -1725,7 +1776,7 @@ void MainGameFlowStateStartScreen::Update()
                 BrnGameMainFlowController::E_MGE_STATEEND);
     }
 }
-void MainGameFlowStateStartScreen::Render() {}
+void MainGameFlowStateStartScreen::Render() { LoadingScriptedState::Render(); }
 
 // --- MainGameFlowStateMarketingScreens (the boot-logo phase) -----------------------------
 // The logos themselves are owned by the GUI module's HUD flow (BF_VIDEOS / BrnGui::
@@ -1773,7 +1824,7 @@ void MainGameFlowStateMarketingScreens::Update()
     }
 }
 
-void MainGameFlowStateMarketingScreens::Render() {}
+void MainGameFlowStateMarketingScreens::Render() { LoadingScriptedState::Render(); }
 
 // --- MainGameFlowStateCheckDiskSpace ----------------------------------------------------
 // The scripted-load PARK flag (X360 byte_82FAE28E) lives here for historical reasons -- it
@@ -1814,7 +1865,7 @@ void MainGameFlowStateCheckDiskSpace::OnEnter()
 }
 void MainGameFlowStateCheckDiskSpace::OnLeave() {}
 // Update @ 0x823F2D28 lives in its DWARF home TU, BrnGameMainFlowCheckDiskSpace.cpp.
-void MainGameFlowStateCheckDiskSpace::Render() {}
+void MainGameFlowStateCheckDiskSpace::Render() { LoadingScriptedState::Render(); }
 
 // --- MainGameFlowStateMemoryCard (the profile / save-device phase) -----------------------
 MainGameFlowStateMemoryCard::MainGameFlowStateMemoryCard() {}
@@ -1867,7 +1918,7 @@ void MainGameFlowStateMemoryCard::Update()
             BrnGameMainFlowController::E_MGE_STATEEND);
     }
 }
-void MainGameFlowStateMemoryCard::Render() {}
+void MainGameFlowStateMemoryCard::Render() { LoadingScriptedState::Render(); }
 
 // --- MainGameFlowStateCompleteLoading (the post-title / compound-load phase) -------------
 MainGameFlowStateCompleteLoading::MainGameFlowStateCompleteLoading() : mbIsCollisionWorldPrepared(false) {}
@@ -1966,9 +2017,7 @@ void MainGameFlowStateCompleteLoading::Update()
 // the screen was carried entirely by whatever the previous state left behind.
 void MainGameFlowStateCompleteLoading::Render()
 {
-    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
-    if (lpGameModule != 0)
-        lpGameModule->DoDispatch();
+    LoadingScriptedState::Render();
 }
 
 MainGameFlowStateInGame::MainGameFlowStateInGame() {}

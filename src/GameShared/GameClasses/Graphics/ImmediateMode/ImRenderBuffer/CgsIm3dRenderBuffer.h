@@ -45,4 +45,10 @@ class Im3dRenderBuffer : public Im3dRenderBufferBase<BasicColouredTexturedVertex
 protected:
     bool HandleCommand(const ImCommand* lpCommand, Im3dBase<BasicColouredTexturedVertex>* lpRenderer) const override;
 };
+
+// DecFIGS CgsIm3dRenderBuffer.h:163; ARTIST Prepare 82409DAC and Swap
+// 823FC724 address this command buffer, independently of Im3dUntex.
+class Im3dRenderBufferUntex : public Im3dRenderBufferBase<BasicColouredVertex>
+{
+};
 }

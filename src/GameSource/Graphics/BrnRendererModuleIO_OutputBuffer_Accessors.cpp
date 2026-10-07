@@ -175,10 +175,10 @@ BrnCoronaManager::BrnSubmissionInterface* OutputBuffer::GetCoronaSubmissionInter
 }
 
 // X360 0x823B3650: read-lock handle to the embedded director camera (mutable address, this+80).
-BrnDirector::Camera::Camera* OutputBuffer::GetBrnCamera()
+const BrnDirector::Camera::Camera& OutputBuffer::GetBrnCamera() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-    return &mBrnCamera;
+    return mBrnCamera;
 }
 
 // X360 0x823B3FE0: read-lock handle to the embedded render switches (mutable address, this+432).
@@ -373,10 +373,10 @@ void InputBuffer::SetBrnCamera(const BrnDirector::Camera::Camera& lrCamera)
 
 // The read side, added 2026-08-17 with BrnRendererModule::Update (boot audit F-P2-4). Mirrors
 // the OutputBuffer's GetBrnCamera @0x823B3650: read-lock assert, then the embedded camera.
-const BrnDirector::Camera::Camera* InputBuffer::GetBrnCamera() const
+const BrnDirector::Camera::Camera& InputBuffer::GetBrnCamera() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-    return &mBrnCamera;
+    return mBrnCamera;
 }
 
 }   // namespace RendererIO
