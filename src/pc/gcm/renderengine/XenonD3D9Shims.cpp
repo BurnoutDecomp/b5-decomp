@@ -51,6 +51,7 @@
 
 #include <Windows.h>
 #include <d3d9.h>
+#include "GameSource/Game/BrnGameModule.hpp"
 #include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
 #include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
 #include "pc/gcm/renderengine/TrailPausedDiagPC.h"
@@ -6002,9 +6003,13 @@ namespace
         UINT luCodeBytes = 0u;
         const HRESULT lhrCode = lpVs ? lpVs->GetFunction(nullptr, &luCodeBytes) : E_FAIL;
         f32 lafWorld[16] = {};
-        if (gbBrnWorldShaderConstantsFrameBringUpValid)
+        const BrnGame::BrnGameModule* const lpGame = BrnGame::GetMainGameModule();
+        const BrnShaderConstantsFrame* const lpWorldFrame = lpGame
+            ? lpGame->GetPublishedShaderConstantsFramePC() : nullptr;
+        const bool lbWorldValid = lpWorldFrame != nullptr;
+        if (lbWorldValid)
         {
-            const Matrix44 lWorld = gBrnWorldShaderConstantsFrameBringUp.GetViewProjectionMatrix();
+            const Matrix44 lWorld = lpWorldFrame->GetViewProjectionMatrix();
             std::memcpy(lafWorld, &lWorld, sizeof(lafWorld));
         }
         f32 lfNativeSourceError = 0.0f, lfSourceWorldError = 0.0f;
@@ -6018,7 +6023,7 @@ namespace
         }
         const bool lbRead = SUCCEEDED(lhrConstants) && SUCCEEDED(lhrVs) && lpVs
             && SUCCEEDED(lhrCode) && luCodeBytes >= 8u && luCodeBytes <= 65536u
-            && gbBrnWorldShaderConstantsFrameBringUpValid && lbFinite;
+            && lbWorldValid && lbFinite;
         f32 lafFirst[7]; std::memcpy(lafFirst, sauImVertsScratch, sizeof(lafFirst));
         char lacMsg[1024];
         std::snprintf(lacMsg, sizeof(lacMsg),
@@ -6029,7 +6034,7 @@ namespace
             sTrailPausedClock.muRecords, luPresent, lbRead ? "observed" : "INCONCLUSIVE",
             sTrailPausedClock.mfNow, luPresent - sTrailPausedClock.muHeldSince, lpVs,
             unsigned(lhrVs), unsigned(lhrCode), luCodeBytes, unsigned(lhrConstants),
-            unsigned(gbBrnWorldShaderConstantsFrameBringUpValid), unsigned(lbFinite),
+            unsigned(lbWorldValid), unsigned(lbFinite),
             lfNativeSourceError, lfSourceWorldError, suImVertsPrimCount, static_cast<unsigned long long>(guWorldDrawCalls),
             lafFirst[0], lafFirst[1], lafFirst[2], lafFirst[3], lafFirst[4], lafFirst[5], lafFirst[6]);
         CgsDev::Log::WriteToLog(lacMsg);
@@ -6042,7 +6047,7 @@ namespace
                 sTrailPausedClock.muRecords, luRow, safTrailPausedExpected[lu], safTrailPausedExpected[lu+1],
                 safTrailPausedExpected[lu+2], safTrailPausedExpected[lu+3], unsigned(SUCCEEDED(lhrConstants)),
                 lafNative[lu], lafNative[lu+1], lafNative[lu+2], lafNative[lu+3],
-                unsigned(gbBrnWorldShaderConstantsFrameBringUpValid), lafWorld[lu], lafWorld[lu+1], lafWorld[lu+2], lafWorld[lu+3]);
+                unsigned(lbWorldValid), lafWorld[lu], lafWorld[lu+1], lafWorld[lu+2], lafWorld[lu+3]);
             CgsDev::Log::WriteToLog(lacMsg);
         }
         if (lpVs) lpVs->Release();

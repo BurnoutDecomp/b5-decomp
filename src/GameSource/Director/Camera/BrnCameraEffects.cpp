@@ -158,7 +158,7 @@ namespace Camera
         mfSimTimeScale            = 1.0f;               // stfs 1.0 @+0x9C
         mbHasStopHookNameString   = false;              // stb 0 @+0xB8
         mfShakeAmplitude          = 0.0f;               // stfs 0 @+0xAC
-        maReservedBA[0]           = 0;                  // stb 0 @+0xBA
+        mbRequestingScreenshot    = false;              // stb 0 @+0xBA
         mfShakeFrequency          = 1.0f;               // stfs 1.0 @+0xB0
         mStartHookNameString.mHookNameString[0] = '\0'; // stb 0 @+0x00
         mfBlackBarAmount          = 0.0f;               // stfs 0 @+0xA8

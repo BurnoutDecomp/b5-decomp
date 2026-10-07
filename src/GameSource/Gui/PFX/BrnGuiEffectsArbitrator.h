@@ -11,10 +11,10 @@
 
 namespace CgsGui
 {
-    namespace CgsGuiModuleIO { class InputBuffer; class OutputBuffer; }
-    namespace ModelIO        { class InputBuffer; class OutputBuffer; }
+    namespace CgsGuiModuleIO { struct InputBuffer; struct OutputBuffer; }
+    namespace ModelIO        { struct InputBuffer; struct OutputBuffer; }
 }
-namespace RendererIO { class OutputBuffer; }
+namespace RendererIO { struct OutputBuffer; }
 class BrnEffectsFrame;
 
 namespace BrnGui

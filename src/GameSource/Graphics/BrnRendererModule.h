@@ -5,6 +5,7 @@
 // Original ARTIST debug-tunable bloom scale, defined by BrnRendererModule.cpp.
 extern f32 gfBloomLuminanceScale;
 namespace CgsDev { namespace Assert { struct AssertData; } }
+namespace BrnEffects { class EffectsModule; }
 
 // Real loading-screen-path member types (Option B: these are reconstructed for real; the
 // off-path gameplay-render subsystems below remain opaque storage until reached).
@@ -341,10 +342,10 @@ public:
     // published (the console's own lpDispatchThreadInputBuffer). The loading-screen overlay path
     // is reconstructed; the gameplay-render path (shadows/world/cars/particles/post-fx) is
     // data-gated off during boot and reconstructed incrementally.
-    void Render(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
+    void Render(BrnEffects::EffectsModule* lpEffectsModule,
+                const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
     // FLAG PC-platform leaf: GUI/movie preparation happens at the joined frame
     // boundary; Render consumes commands and metadata published with that frame.
-    void Prepare2DFramePC();
     // FLAG PC-platform leaf: the original renderer output carries these buffers;
     // the joined GUI producer can borrow their real allocated command banks.
     CgsGraphics::Im3dRenderBuffer* GetIm3dBufferRacePositionPC()
@@ -373,7 +374,24 @@ public:
     void StartOfFrame();
 
     // End-of-update-frame (the console calls SwapBuffers from there).
-    void EndOfFrame();
+    void EndOfFrame(bool lbStalled);
+
+    // FLAG PC-platform leaf: native presentations may outnumber original
+    // command producers. Completion identifies a write-bank lifetime, never
+    // the contents or pose of a camera, world, effects, or GUI record.
+    enum ECommandProducerPC { E_COMMAND_PRODUCER_GUI, E_COMMAND_PRODUCER_WORLD_AND_EFFECTS };
+    void CompleteCommandFramePC(const BrnGame::DispatchThreadInputBuffer* lpInput,
+                                ECommandProducerPC leProducer);
+    u64 GetPublishedCommandGenerationPC() const
+    { return muPublishedCommandGenerationPC; }
+    const BrnParticle::ParticleModule::ParticleRenderData* GetPublishedParticleRenderDataPC() const
+    {
+        return muPublishedCommandGenerationPC != 0
+            && maCommandInputsPC[mu8ShaderConstantsFrameInternal].mbParticleRecordProduced
+            ? &maCommandInputsPC[mu8ShaderConstantsFrameInternal].mParticleRenderData : nullptr;
+    }
+    bool GetPublishedEnvMapFaceRenderPC(u32 luFace) const
+    { return maCommandInputsPC[mu8ShaderConstantsFrameInternal].mabEnvMapFaceRender[luFace]; }
 
     // BrnRendererModule::Update publishes exactly this expression
     // into RendererIO::OutputBuffer::SetDispatchFrame; the world side reads it
@@ -398,94 +416,15 @@ public:
     // drive. It is an embedded member on the console, not a pointer.
     CgsMemory::LinearMalloc* GetReusableLoadingScreenAllocator() { return &mReusableLoadingScreenAllocator; }
 
-    // [FLAG PC bring-up] Hand a WORLD-layer effects frame to the world module.
-    //
-    // STANDS IN FOR RendererIO::OutputBuffer::GetWorldEffectsFrame(luSlot), which
-    // BrnRendererModule::Update fills, per slot, with
-    // mEffectsArbitrator.GetExternalEffectsFrame(KU_EFFECTS_LAYER_WORLD, luSlot); the console then
-    // moves the pointer across in BridgeRendererToWorld (GameBridgeRendererToX.cpp) so
-    // WorldModule::GenerateDispatchLists can hand the four frames to
-    // EnvironmentManager::GenerateEffects. Neither Update nor the RendererIO buffers
-    // exist on this build (BrnGameModule.cpp), so the world side calls this instead.
-    //
-    // Returns nullptr until the arbitrator has been Constructed (it is built lazily on PC -- see
-    // EnsureEffectsArbitratorBringUp in BrnRendererModule.cpp), and the world side must treat a null
-    // as "no effects frame this frame" rather than dereferencing it.
-    // DELETE-WHEN the RendererIO buffers are created on PC and Update publishes for real.
-    BrnEffectsFrame* GetWorldEffectsFrameBringUp(u8 luSlot);
-    // [FLAG PC bring-up] the FX-EVENTS layer twin (two slots): the frames the GUI's
-    // BrnGui::EffectsArbitrator::GenerateEffectFrameEvents fills every dispatch. Same
-    // stand-in shape, staged from the same place. DELETE-WHEN the RendererIO buffers are real.
-    BrnEffectsFrame* GetFXEventsEffectsFrameBringUp(u8 luSlot);
-
-    // [FLAG PC bring-up] The corona SUBMISSION INTERFACE for the world's race-car producer
-    // (SubmitCoronasForRaceCar). On the console this crosses in the RendererIO output buffer:
-    // BrnRendererModule::Update calls SetCoronaSubmissionInterface, then
-    // GameBridgeRendererToX copies it into the WORLD dispatch input buffer, and the world's
-    // GenerateDispatchLists hands it to the race-car module's InputBuffer_GenerateDispatchLists.
-    // None of that IO buffer set exists on PC, so it comes straight across from here -- the same
-    // stand-in shape as GetWorldEffectsFrameBringUp above, staged from the same place
-    // (BrnGameModule::DoDispatch, immediately before GenerateDispatchListsBringUp).
-    // Returns &mSubmissionInterface[mu8SubmissionSwapIndex] -- the slot the producers WRITE this
-    // update frame (StartOfFrame Clears it, EndOfFrame's Swap publishes it to Render). It is
-    // never null, but IsReady() is false until the manager Constructs; the producer checks.
-    // DELETE-WHEN the RendererIO/BrnWorldIO dispatch buffer set is real on PC.
-    BrnCoronaManager::BrnSubmissionInterface* GetCoronaSubmissionInterfaceBringUp()
+    // Native publication metadata: only a completed original world producer
+    // supplies a readable sky/lighting frame to the PC render owner.
+    void CompleteWorldDispatchFramePC(bool lbWorldRendered)
+    { maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameExternal] = lbWorldRendered; }
+    const BrnShaderConstantsFrame* GetPublishedShaderConstantsFramePC() const
     {
-        return mCoronaManager.GetSubmissionInterface();
+        return maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameInternal]
+            ? &maShaderConstantsFrames[mu8ShaderConstantsFrameInternal] : 0;
     }
-
-    // [FLAG PC bring-up] Stage the DIRECTOR'S PUBLISHED CAMERA for the base-frame producer.
-    //
-    // STANDS IN FOR BrnEffects::EffectsIO::DispatchInputBuffer::SetCameraInput
-    // (declared in EffectsModuleIO.h as `void SetCameraInput(const Camera*)`), whose body is a
-    // "locked for writing" assert followed by one `BrnDirector::Camera::Camera::operator=` into
-    // the buffer's by-value `Camera mCameraInput` member (EffectsModuleIO.h, at +0x50).
-    // Its ONE caller in the image is BrnGameModule::DoDispatch, which takes the director output
-    // buffer's camera output and passes it straight to SetCameraInput on the effects dispatch
-    // input buffer.
-    // The record is then read by BrnEffects::EffectsModule::GenerateRenderRequests
-    // to decide, per frame, whether depth-of-field / B4 blur / motion blur are on
-    // and with what parameters. None of the EffectsIO buffers is created on this build, so the
-    // renderer's bring-up producer (PCBringUpProduceBaseEffectsFrame) reads a copy staged here
-    // instead. A null pointer is ignored (the record then keeps its last staged value, or the
-    // director's Camera::Construct defaults if nothing has ever been staged).
-    // DELETE-WHEN the EffectsIO dispatch buffer set is real on PC (this goes with the producer).
-    void PCBringUpSetCameraInput(const BrnDirector::Camera::Camera* lpCamera);
-    void PCBringUpSetEffectsDebugSettings(const BrnEffects::EffectsDebugPostFxSettingsPC& lrSettings)
-    { mPCEffectsDebugSettings = lrSettings; }
-
-    // [FLAG PC bring-up] PCBringUpSetRaceCarStateCache -- NOT a console function.
-    //
-    // STANDS IN FOR the player-car arm of BrnEffects::EffectsModule::Update, which
-    // is the ONLY writer of the effects module's TempRaceCarStateCache (declared in EffectsModule.h,
-    // module +0x2C280). Its four DYNAMIC fields are copied straight off the player's
-    // BrnPhysics::Vehicle::RaceCarState, reached through the world's
-    // RCEntityActiveRaceCarOutputInterface:
-    //     ask the interface for the player's active race-car index, then for that car's
-    //     RaceCarState, and copy four fields out of it into the cache:
-    //       state +0x330 -> cache mvLinearVelocity   (whole 16-byte lane)
-    //       state +0x340 -> cache mvAngularVelocity  (whole 16-byte lane)
-    //       state +0x3CC -> cache mfSpeedMPH
-    //       state +0x414 -> cache mfSteering
-    // (RaceCarState's committed members sit at exactly those four offsets --
-    // BrnVehicleEvents.h mLinearVelocity @816 / mAngularVelocity @832 / mfSpeedMPH @972 /
-    // mfSteering @1044 -- so the caller reads them BY NAME, never by displacement.)
-    // BrnEffects::EffectsModule::GenerateRenderRequests then copies the cache into
-    // the layer-0 BrnEffectsFrame (frame +0x1B0/+0x1C0/+0x1D0/+0x1D4), which is what
-    // PCBringUpProduceBaseEffectsFrame does with the values staged here.
-    // Neither the effects module nor its IO buffers exist on this build; the caller is
-    // BrnGameModule::DoDispatch, beside PCBringUpSetCameraInput, off the SAME world output
-    // interface the console's producer reads. Nothing is staged while the player car is not
-    // active (the console's whole block is inside `if (IsPlayerCarActive(...))`), so the last
-    // staged values stand -- exactly as the console's cache does.
-    // ⚠ The cache's two TRANSFORM fields are NOT staged and cannot be: nothing in the console image
-    // writes module +180864 / +180928 at all (see the BLOCKED banner in the producer).
-    // DELETE-WHEN BrnEffects::EffectsModule is on the build list and fills its own cache.
-    void PCBringUpSetRaceCarStateCache(Vector3::InParam lvLinearVelocity,
-                                       Vector3::InParam lvAngularVelocity,
-                                       f32 lfSpeedMPH,
-                                       f32 lfSteering);
 
 private:
     enum
@@ -681,26 +620,13 @@ private:
     // BrnRendererModule::Construct/Prepare, deferred to the first world frame because
     // both need a live D3D device.
     //
-    // PublishSkyConstantsBringUp is NOT a producer: on the console this frame is filled by
-    // the WORLD (WorldModule::SetupShaderConstantsBeforeRendering writes it in
-    // place, through the pointer BrnRendererModule::Update lends it via
-    // RendererIO::OutputBuffer::SetShaderConstantsFrame ->
-    // BridgeRendererToWorld -> DispatchInputBuffer::GetShaderConstantsFrame
-    // the accessor), and the renderer only reads it. So this function COPIES the live frame
-    // the real producer fills on PC -- gBrnWorldShaderConstantsFrameBringUp
-    // (BrnShaderConstantsFrame.h) -- into the renderer's own frame, and keeps only the
-    // camera half, which the dispatch IO buffer set would otherwise carry across.
-    // DELETE-WHEN that IO buffer set is real; see the banner over the definition.
     bool mbSkyDomeReady;
     bool mbSkyDomeTried;
     bool EnsureSkyDomeBringUp();
-    void PublishSkyConstantsBringUp(BrnShaderConstantsFrame* lpFrame);
 
     // [FLAG PC bring-up] Write the LAYER-0 (base) effects frame the console's effects module writes.
     // Stands in for BrnEffects::EffectsModule::GenerateRenderRequests (lines 40-120);
     // see the banner over the definition in BrnRendererModule.cpp for what it writes and why.
-    BrnEffects::EffectsDebugPostFxSettingsPC mPCEffectsDebugSettings;
-    void PCBringUpProduceBaseEffectsFrame();
 
     ERendererPrepareStage mePrepareStage;
     ERendererReleaseStage meReleaseStage;
@@ -715,20 +641,21 @@ private:
     BrnShaderConstantsFrame            maShaderConstantsFrames[2];
     // FLAG PC-platform leaf: validity travels with the frozen sky/lighting frame.
     bool                  maShaderConstantsFrameValidPC[2] = {};
+    u64                   muCommandGenerationPC = 0;
+    u64                   muCompletedCommandGenerationPC = 0;
+    u64                   muPublishedCommandGenerationPC = 0;
+    struct CommandFrameInputPC
+    {
+        BrnParticle::ParticleModule::ParticleRenderData mParticleRenderData;
+        bool mabEnvMapFaceRender[6];
+        bool mbParticleRecordProduced;
+    };
+    CommandFrameInputPC    maCommandInputsPC[2] = {};
     u8                    mu8ShaderConstantsFrameInternal;
     u8                    mu8ShaderConstantsFrameExternal;
     CgsGraphics::DispatchPacketInterpreter* mpInterpreter;
     void (*maInterpretFunctions[KU_NUM_INTERPRET_FUNCTIONS])(CgsGraphics::DispatchCommand*, CgsGraphics::DispatchFrame*, void*, f32);
     CgsGraphics::Im2dRenderBuffer       mIm2dRenderBuffer;
-    struct PCMovieFrame
-    {
-        bool mbManagerPresent = false;
-        bool mbPresenting = false;
-        bool mbQueued = false;
-        s32 miState = 0;
-    };
-    PCMovieFrame                      maPCMovieFrames[2];
-    u8                                mu8PCMovieWriteFrame = 0;
     CgsGraphics::Im2d                   mIm2dRenderer;
     CgsGraphics::Im2dUntex              mIm2dRendererUntex;
     CgsGraphics::Im3dRenderBuffer       mIm3dRenderBuffer;
@@ -970,7 +897,7 @@ inline BrnRendererModule::BrnRendererModule()
     mbIsInterlaced = false;
 
     mu8ShaderConstantsFrameInternal = 0;
-    mu8ShaderConstantsFrameExternal = 0;
+    mu8ShaderConstantsFrameExternal = 1;
     mpInterpreter = 0;
     for (u32 luIndex = 0; luIndex < KU_NUM_INTERPRET_FUNCTIONS; ++luIndex)
         maInterpretFunctions[luIndex] = 0;

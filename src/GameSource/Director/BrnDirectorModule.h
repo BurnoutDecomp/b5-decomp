@@ -188,6 +188,10 @@ public:
     // arbitrator onto the attract-mode (DJ fly-by) path -- without forming that offset.
     MainDirector& GetMainDirector() { return mMainDirector; }
 
+    // ARTIST DebugManagerRender 823BCD48..CF14 reads this exact graphics
+    // camera: GameModule+6E94A0 = DirectorModule+6B0B10 + mCgsCamera38990.
+    const CgsGraphics::Camera& GetGraphicsCameraForDebug() const { return mCgsCamera; }
+
     // ADDITIVE query: has the staged Prepare above finished? The console's module scheduler
     // only dispatches a module's per-frame entry points once its Prepare has reported true;
     // the PC drives the three passes by hand, so it needs to ask. (Driving Update before

@@ -12,6 +12,7 @@
 
 namespace CgsGraphics
 {
+    TextureScopeTable gTextureScopeTable;
     // -----------------------------------------------------------------------------
     // Honest reconstruction note for the name store:
     //

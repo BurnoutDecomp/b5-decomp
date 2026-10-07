@@ -30,6 +30,12 @@
 // GameSource/Game/BrnDispatchThreadInputBuffer.h.
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }
+namespace BrnGame { class BrnGameModule; }
+namespace CgsGui {
+namespace CgsGuiModuleIO { struct InputBuffer; struct OutputBuffer; }
+namespace ModelIO { struct OutputBuffer; }
+namespace ViewIO { struct InputBuffer; }
+}
 
 // The GameData per-frame IO payloads the scripted-load helpers thread through (pointer-only
 // here; the helper bodies include the real home, GameSource/Resource/BrnGameDataModuleIO.h).
@@ -97,6 +103,14 @@ struct LoadingScriptedState : public MainGameFlowState
     virtual void FinishLoading();   // vtable +16
 
 protected:
+    // Native host retains the existing loading Update timing pending typed migration.
+    friend class BrnGame::BrnGameModule;
+    // ARTIST 823CE098; original callers supply these real GUI IO buffers.
+    void RenderGUI(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+                   CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+                   CgsGui::ModelIO::OutputBuffer* lpGuiModelOutput,
+                   CgsGui::ViewIO::InputBuffer* lpGuiViewInput,
+                   bool lbSkipGui);
     // X360 0x823E75A8 (DWARF BrnGameMainFlowStates.h:58 / BrnLoadingScriptedState.cpp:733).
     // One frame of the sound-module load: create the Root sound IO buffer pair on the game
     // module's update IO stacks, drive RootSoundModule::Prepare (vtable +64) with the
@@ -184,6 +198,8 @@ protected:
 // --- leaves -----------------------------------------------------------------------------
 struct MainGameFlowStateInitialLoadingScreen : public LoadingScriptedState
 {
+    // Original own-stage GUI helper gate at the native caller boundary.
+    friend class BrnGame::BrnGameModule;
     enum ELoadingScreenStage
     {
         E_LOADINGSTAGE_START = 0,

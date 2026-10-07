@@ -107,7 +107,7 @@ namespace RendererIO
         // has this getter -- Update @0x82405EA4/EC8/FA8 calls it three times -- and it was the
         // one piece of the input buffer's surface missing here; only the setter had a
         // declaration, so nothing could read the camera back out.
-        const BrnDirector::Camera::Camera* GetBrnCamera() const;          // read-lock
+        const BrnDirector::Camera::Camera& GetBrnCamera() const;          // read-lock; DWARF const reference
 
     private:
         BrnDirector::Camera::Camera mBrnCamera;   // DWARF :150 (camera lands at this+0x10)
@@ -139,7 +139,7 @@ namespace RendererIO
         BrnBlobbyShadowManager::BrnBlobbyShadowBuffer*  GetBlobbyShadowBuffer() const;             // @ 0x823B3E90
         BrnCoronaManager::BrnSubmissionInterface*       GetCoronaSubmissionInterface() const;      // @ 0x823B3F38
         CgsMemory::LinearMalloc*                        GetReusableLoadingScreenAllocator() const; // @ 0x823B4088
-        BrnDirector::Camera::Camera*                    GetBrnCamera();                            // @ 0x823B3650 (read-lock)
+        const BrnDirector::Camera::Camera&              GetBrnCamera() const;                      // @ 0x823B3650 (read-lock)
         RenderSwitches*                                 GetRenderSwitches();                       // @ 0x823B3FE0 (read-lock)
         ExternallyVisiblePerformanceMonitors*           GetExternallyVisiblePerformanceMonitors(); // @ 0x823F6B38 (no lock guard)
 

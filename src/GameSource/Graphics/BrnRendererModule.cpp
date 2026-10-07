@@ -11,6 +11,7 @@
 #include "SDKs/EATech/eajobs/job_scheduler.h"
 #include "SDKs/EATech/eajobs/jobs.h"
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"           // CgsRenderTarget::GetDepthTexture (the s15 bind)
+#include "GameShared/GameClasses/Graphics/Dispatch/CgsTextureScopeTable.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device::SetResource (the global texture binds)
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                      // renderengine::PCSurfaceBracket_* (the scene-target bracket)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // CgsDev::DebugManager (debug HUD overlay)
@@ -23,7 +24,6 @@
 #include "GameSource/Director/Camera/Camera.h"            // BrnDirector::Camera::Camera -- the staged camera-input record
 #include "GameSource/Effects/Particles/ParticleModule.h"     // BrnParticle::ParticleModule::RenderFullResParticles (the full-res particle pass)
 #include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"  // [diag] BrnDiag::LogBoundSurfaces (the pass-boundary RT probe)
-#include "GameSource/Effects/Particles/ParticleModuleBringUp.h"  // BrnParticle::PCBringUpParticleRenderDataProduced (the motion-blur render-data latch)
 #include "pc/gcm/renderengine/renderstates.h"    // renderengine::TextureState::Parameters (the sampler-13 env-map state)
 
 // ---------------------------------------------------------------------------------------------
@@ -349,63 +349,6 @@ namespace
     const u32 KU_XENON_CLEAR_STENCIL = 0x20u;
 #endif  // BRN_ENVMAP_PASS_AVAILABLE
 
-    // --- [FLAG PC bring-up] the LAYER-0 base effects frame's shipped values -----------------------
-    // Every one of these is READ DATA, not a chosen number: the bloom five come from POSTFX vault
-    // asset "191270" (key C37BF4F3458A6DB5, class B632EC178CFDE613 "bloomasset", data at bin+0x1270
-    // in build/game/POSTFX/POSTFXVAULT.BIN, resource 0x627894D7) as BloomData::Construct @0x82678070
-    // reads it -- mfLuminance = data+20, mfThreshold = data+16, mv4Scale = data+0..16. Conductor
-    // extraction, scratch/postfx_step4_bloom/DATA_NOTE.md section 3. Consumed by
-    // PCBringUpProduceBaseEffectsFrame below.
-    const f32 KF_BASE_FRAME_BLOOM_LUMINANCE = 1.8f;
-    const f32 KF_BASE_FRAME_BLOOM_THRESHOLD = 0.655738f;
-    const f32 KF_BASE_FRAME_BLOOM_SCALE_R   = 0.954116f;
-    const f32 KF_BASE_FRAME_BLOOM_SCALE_G   = 0.947919f;
-    const f32 KF_BASE_FRAME_BLOOM_SCALE_B   = 0.886839f;
-    const f32 KF_BASE_FRAME_BLOOM_SCALE_A   = 1.0f;
-
-    // The weight the console's producer writes for an effect it enabled (`frame+8 = 1.0` etc.).
-    const f32 KF_BASE_FRAME_ENABLED_WEIGHT  = 1.0f;
-
-    // The original EffectsDebugComponent controls are staged at dispatch in
-    // mPCEffectsDebugSettings; the base-frame producer must not freeze their defaults.
-
-    // --- [FLAG PC bring-up] the B4-BLUR block: POSTFX vault asset "218901" ----------------------
-    // Read data, not chosen numbers, exactly like the bloom five above. The console does
-    // `BlurData::Construct(v51, hash64("218901"))` and memcpy's the 96-byte result into the frame.
-    // BlurData::Construct @0x826781C8 is nine loads, and the asm pins each one:
-    //   lvx data+0x30 -> blur+0x20 mv2BlendAmount     lfs data+0x48 -> blur+0x00 mfOpacity
-    //   lvx data+0x10 -> blur+0x30 mv2BlurAmount      lfs data+0x40 -> blur+0x04 mfVelocity
-    //   lvx data+0x20 -> blur+0x40 mv2BlendCentre     lfs data+0x44 -> blur+0x08 mfSharpness
-    //   lvx data+0x00 -> blur+0x50 mv2BlurCentre      lfs data+0x4C -> blur+0x0C mfNoise
-    //                                                 lfs data+0x50 -> blur+0x10 mfAngle
-    // The 112 decoded bytes of asset 218901 (b4blurasset, class EF9F6F047362D8CF, POSTFXVAULT.BIN
-    // bin+0x1290; conductor extraction, scratch/postfx_step6_producers/WAVE_NOTE.md):
-    //   +0x00 (0.5, 0.5, 0, 0)   +0x10 (1, 1, 0, 0)   +0x20 (0.5, 0, 0, 0)
-    //   +0x30 (1.3, 0.555, 0, 0) +0x40 (2.622951, 0.327869, 0.666, 0.007049)  +0x50 (0, 0, 0, 0)
-    // (the +0x60 row is past everything Construct reads and is therefore not modelled).
-    const f32 KF_BASE_FRAME_BLUR_OPACITY        = 0.666f;      // data +0x48
-    const f32 KF_BASE_FRAME_BLUR_VELOCITY       = 2.622951f;   // data +0x40
-    const f32 KF_BASE_FRAME_BLUR_SHARPNESS      = 0.32786879f; // data +0x44 == 0x3EA7DE6B bit-exact (rung-7 verifier: 0.327869f was 7 ULP off)
-    const f32 KF_BASE_FRAME_BLUR_NOISE          = 0.00704918f; // data +0x4C == 0x3BE6FCCF bit-exact (rung-7 verifier: 0.007049f was 387 ULP off)
-    const f32 KF_BASE_FRAME_BLUR_ANGLE          = 0.0f;        // data +0x50
-    const f32 KF_BASE_FRAME_BLUR_BLEND_AMOUNT_X = 1.3f;        // data +0x30 lane 0
-    const f32 KF_BASE_FRAME_BLUR_BLEND_AMOUNT_Y = 0.555f;      // data +0x30 lane 1
-    const f32 KF_BASE_FRAME_BLUR_BLUR_AMOUNT_X  = 1.0f;        // data +0x10 lane 0
-    const f32 KF_BASE_FRAME_BLUR_BLUR_AMOUNT_Y  = 1.0f;        // data +0x10 lane 1
-    const f32 KF_BASE_FRAME_BLUR_BLEND_CENTRE_X = 0.5f;        // data +0x20 lane 0
-    const f32 KF_BASE_FRAME_BLUR_BLEND_CENTRE_Y = 0.0f;        // data +0x20 lane 1
-    const f32 KF_BASE_FRAME_BLUR_BLUR_CENTRE_X  = 0.5f;        // data +0x00 lane 0
-    const f32 KF_BASE_FRAME_BLUR_BLUR_CENTRE_Y  = 0.5f;        // data +0x00 lane 1
-
-    // The camera-state flag index the effects module reads as "this is the racing gameplay camera".
-    // Derivation (see the producer's own note): EffectsModule::Update @0x8229EC28 stores
-    // `(*(CameraInput + 81) & 8) != 0` into the cache's mbIsGameCamera, CameraInput is typed
-    // `_DWORD*` there so +81 words == camera +0x144, the CameraState sub-object is at camera +0x138
-    // and its mCurrentFlags BitArray<30> at state +0x08 == camera +0x140, and BitArray masks with
-    // `(u64)1 << index` -- so on the big-endian console camera +0x144 is that qword's low half and
-    // mask 8 is bit index 3.
-    const u32 KU_CAMERA_STATE_FLAG_IS_RACING_GAMEPLAY = 3u;
-
 #if BRN_ENVMAP_PASS_AVAILABLE
     // The first of the six ENV-MAP mesh lists. Render @0x8240CCA4 forms the list id as
     // `addi r4, r29, 5` with r29 the face index, i.e. GetList(5 + face) -- lists 5..10. The world
@@ -416,207 +359,8 @@ namespace
     const u32 KU_ENV_MAP_FIRST_MESH_LIST = 5u;
 #endif  // BRN_ENVMAP_PASS_AVAILABLE
 
-    // --- [FLAG PC bring-up] the staged CAMERA INPUT RECORD ---------------------------------------
-    // STANDS IN FOR BrnEffects::EffectsIO::DispatchInputBuffer::mCameraInput (DWARF
-    // EffectsModuleIO.h:261, `Camera mCameraInput`, X360 buffer +0x50): a BY-VALUE copy of the
-    // director's published camera, written once per dispatch by SetCameraInput @0x823C9988 and read
-    // by GenerateRenderRequests @0x8227FF10. None of the EffectsIO buffers is created on this
-    // build, so the copy lives here and BrnRendererModule::PCBringUpSetCameraInput writes it.
-    // A COPY, not a pointer, because the console copies too: DoDispatch holds the director output
-    // buffer's read lock only across its own call, while the producer runs at StartOfFrame.
-    // NOT A SPLIT BRAIN, and the check was made rather than assumed: the owning TYPE *is*
-    // reconstructed (GameSource/Effects/SharedIO/BrnEffectsModuleIO_DispatchInputBuffer.{h,cpp},
-    // with the real SetCameraInput/GetCameraInput bodies and `BrnDirector::Camera::Camera
-    // mCameraInput` as a member) -- but that TU is not on the build list and no instance of it is
-    // ever created:
-    //   $ grep -c "BrnEffectsModuleIO" tools/build/build_game_exe.bat
-    //   0
-    //   $ grep -rn "EffectsIO::DispatchInputBuffer" b5-decomp/src --include=*.cpp \
-    //         | grep -v SharedIO/BrnEffectsModuleIO_DispatchInputBuffer.cpp
-    //   ...BrnEffectsModuleIO_DispatchInputBuffer_IOHelper.cpp:25: (the IOHelper ctor only)
-    // so there is no live storage to share. The signature of PCBringUpSetCameraInput is
-    // DELIBERATELY the buffer's own (`const BrnDirector::Camera::Camera*`), so when the EffectsIO
-    // set is created the swap to the real SetCameraInput/GetCameraInput is one line at each end.
-    // Routing through the real buffer TODAY was considered and rejected for this wave: its
-    // accessors assert on IOBuffer read/write locks, and adding lock discipline to the renderer's
-    // StartOfFrame is exactly the kind of change that costs the wave its "0 asserts" gate.
-    // LAZY Construct: until DoDispatch stages a camera the record must hold the DIRECTOR'S OWN
-    // defaults, which is exactly BrnDirector::Camera::Camera::Construct @0x82255E68 -- the same
-    // thing the console's buffer would hold before the first SetCameraInput. Doing it on first use
-    // keeps BrnRendererModule::Construct untouched.
-    // DELETE-WHEN the EffectsIO dispatch buffer set is real on PC.
-    BrnDirector::Camera::Camera gPCBringUpCameraInput;
-    bool                        gbPCBringUpCameraInputConstructed = false;
-    bool                        gbPCBringUpCameraInputStaged      = false;
-
-    BrnDirector::Camera::Camera& PCBringUpGetCameraInput()
-    {
-        if (!gbPCBringUpCameraInputConstructed)
-        {
-            gbPCBringUpCameraInputConstructed = true;
-            gPCBringUpCameraInput.Construct();
-        }
-        return gPCBringUpCameraInput;
-    }
-
-    // =============================================================================================
-    // [FLAG PC bring-up TEST HOOK -- OFF BY DEFAULT]  BRN_POSTFX_MASK_TEST=<cars>,<world>
-    //
-    // The cars-vs-world motion-blur MASK is only observable when the two amounts DIFFER, and the
-    // one blur requester reachable in today's boot does not differ: BehaviourRotateAboutVehicle
-    // (the car-select / showcase orbit) asks for RequestMotionBlur(1, 1) -- cars == world == 1.0
-    // (BrnBehaviourRotateAboutVehicle.cpp:509). Nine of the console's seventeen writers DO differ
-    // (0.0/0.2 for the bumper cam, 0.0/1.0 for the road runner, 0.25/1.0 for the tumble and
-    // bystander moments -- the drive-fx wave's enumeration), but every one of them is either
-    // unreconstructed or unmounted.
-    //
-    // So this overrides the STAGED CAMERA RECORD -- the one input
-    // PCBringUpWriteBaseEffectsFrame reads -- with the two amounts, and raises mbIsActive so the
-    // frame is a motion-blur frame even on a camera that asked for none. It writes ONLY the four
-    // members the console's own MotionBlurData::Set writes, through that same setter, so the
-    // clamp and the pad bytes behave exactly as they do on a real request.
-    //
-    // DELETE-WHEN a cars != world writer is reachable in the boot. The three cheapest are
-    // BrnArbStateCrashMode.cpp, BrnMomentTumbling.cpp and BrnMomentBystanderSeesAction.cpp: all
-    // three already carry a correct console-matching request and are simply not on
-    // tools/build/build_game_exe.bat (drive-fx REPORT section 6).
-    // =============================================================================================
-    void PCBringUpApplyMotionBlurMaskTestOverride(BrnDirector::Camera::Camera& lrCamera)
-    {
-        // -1 = not looked at yet, 0 = off, 1 = on. Read once: an environment variable cannot
-        // change under a running process and this is on the per-frame dispatch path.
-        static int  siMaskTest        = -1;
-        static f32  sfMaskTestCars    = 0.0f;
-        static f32  sfMaskTestWorld   = 0.0f;
-
-        if (siMaskTest < 0)
-        {
-            siMaskTest = 0;
-            char lacValue[64] = { 0 };
-            if (GetEnvironmentVariableA("BRN_POSTFX_MASK_TEST", lacValue, sizeof(lacValue)) > 0)
-            {
-                // <cars>,<world>; a semicolon is accepted for the same reason
-                // BRN_POSTFX_CALIBRATION_TEST accepts one (shells that eat commas).
-                for (u32 luChar = 0; luChar < sizeof(lacValue); ++luChar)
-                {
-                    if (lacValue[luChar] == ';')
-                        lacValue[luChar] = ',';
-                }
-                float lfCars  = 0.0f;
-                float lfWorld = 0.0f;
-                if (std::sscanf(lacValue, "%f,%f", &lfCars, &lfWorld) == 2)
-                {
-                    siMaskTest      = 1;
-                    sfMaskTestCars  = lfCars;
-                    sfMaskTestWorld = lfWorld;
-                    char lacMessage[160];
-                    std::snprintf(lacMessage, sizeof(lacMessage),
-                                  "[mask-alpha] BRN_POSTFX_MASK_TEST=%g,%g -> the staged camera"
-                                  " requests motion blur with cars != world\n",
-                                  static_cast<double>(lfCars), static_cast<double>(lfWorld));
-                    CgsDev::Log::WriteToLog(lacMessage);
-                }
-                else
-                {
-                    CgsDev::Log::WriteToLog(
-                        "[mask-alpha] BRN_POSTFX_MASK_TEST set but not parseable as"
-                        " <cars>,<world> -- ignored\n");
-                }
-            }
-        }
-
-        if (siMaskTest != 1)
-            return;
-
-        BrnDirector::Camera::MotionBlurData& lrBlur = lrCamera.GetEffects().mMotionBlurData;
-        lrBlur.Set(/*lbIsActive*/ true, lrBlur.IsExpensiveMotionBlur(),
-                   sfMaskTestCars, sfMaskTestWorld);
-    }
-
-    // --- [FLAG PC bring-up] the staged PLAYER RACE-CAR STATE ---------------------------------------
-    // The four DYNAMIC fields of the effects module's TempRaceCarStateCache (module +180992 /
-    // +181008 / +181024 / +181028), staged by BrnRendererModule::PCBringUpSetRaceCarStateCache off
-    // the world's RCEntityActiveRaceCarOutputInterface -- the same interface, and the same four
-    // RaceCarState members, that BrnEffects::EffectsModule::Update @0x8229EC28 reads to fill its
-    // own cache. See the declaration's banner in BrnRendererModule.h.
-    //
-    // ZERO-INITIALISED AND THAT IS THE CONSOLE'S OWN STARTING VALUE: the module's cache lives inside
-    // the statically zero-initialised game module and EffectsModule::Construct @0x8228FE98 does not
-    // touch it, so before the first player-car frame the console reads zeros here too.
-    // gbPCBringUpRaceCarStateStaged only drives the diagnostic line -- the producer writes the
-    // fields unconditionally, exactly as GenerateRenderRequests copies the cache unconditionally.
-    // DELETE-WHEN BrnEffects::EffectsModule fills its own cache.
-    Vector3 gvPCBringUpCacheLinearVelocity;
-    Vector3 gvPCBringUpCacheAngularVelocity;
-    f32     gfPCBringUpCacheSpeedMPH            = 0.0f;
-    f32     gfPCBringUpCacheSteering            = 0.0f;
-    bool    gbPCBringUpRaceCarStateStaged       = false;
-
-    // --- [FLAG PC bring-up diagnostic] the line that proves the camera-side producers -------------
-    // CHANGE-LATCHED, not purely periodic: these are event-driven producers (a director state has
-    // to request a blur), so a fixed sample would almost certainly miss the transition. Emits when
-    // any of the five bools flips, and every 900th call besides so a long steady state still shows
-    // its live values; capped at 24 lines so a flapping state cannot flood BrnGame.log.
-    // DELETE with the bring-up.
-    void PCBringUpLogBaseEffectsFrameCameraState(const BrnEffectsFrame& lrFrame,
-                                                 const BrnDirector::Camera::Camera& lrCamera)
-    {
-        static u32 suCalls         = 0u;
-        static u32 suPrints        = 0u;
-        static u32 suLastSignature = 0xFFFFFFFFu;
-
-        const u32 luCall = suCalls++;
-        const BrnDirector::Camera::MotionBlurData& lrBlur = lrFrame.GetMotionBlurData();
-
-        const u32 luSignature =
-              (lrFrame.GetUseDepthOfField()          ?  1u : 0u)
-            | (lrFrame.GetUseBlur()                  ?  2u : 0u)
-            | (lrBlur.IsActive()                     ?  4u : 0u)
-            | (lrBlur.IsExpensiveMotionBlur()        ?  8u : 0u)
-            | (lrFrame.GetIsRacingGameplayCamera()   ? 16u : 0u)
-            | (gbPCBringUpCameraInputStaged          ? 32u : 0u)
-            | (gbPCBringUpRaceCarStateStaged         ? 64u : 0u);
-        const bool lbChanged = (luSignature != suLastSignature);
-        suLastSignature = luSignature;
-
-        if ((!lbChanged && (luCall % 900u) != 0u) || suPrints >= 24u)
-            return;
-        if (CgsDev::Log::gpDebugPrint == 0)
-            return;
-        ++suPrints;
-
-        *CgsDev::Log::gpDebugPrint
-            << "[postfx-cam] produce " << static_cast<s32>(luCall)
-            << ": staged=" << (gbPCBringUpCameraInputStaged ? 1 : 0)
-            << " dof=" << (lrFrame.GetUseDepthOfField() ? 1 : 0)
-            << " amount=" << lrCamera.GetDepthOfField().GetBlurriness()
-            << " b4blur=" << (lrFrame.GetUseBlur() ? 1 : 0)
-            << " mb=" << (lrBlur.IsActive() ? 1 : 0)
-            << " hq=" << (lrBlur.IsExpensiveMotionBlur() ? 1 : 0)
-            << " cars=" << lrBlur.GetCarsBlendAmount()
-            << " world=" << lrBlur.GetWorldBlendAmount()
-            << " speed=" << lrFrame.GetSpeedMPH()
-            << " steer=" << lrFrame.GetSteering()
-            << " carstate=" << (gbPCBringUpRaceCarStateStaged ? 1 : 0)
-            << " gamecam=" << (lrFrame.GetIsRacingGameplayCamera() ? 1 : 0)
-            << "\n";
-    }
-
     u64  gu64LastMonitorTick = 0;
     bool gbMonitorTickValid  = false;
-
-    // [PC presentation leaf] the movie screen-ownership linger (see the movie block in
-    // Render): tick of the last frame the MovieManager's presentation cycle was active.
-    // ISSUE #30 (the screen blinks black for 250 ms every ~7 minutes): this stamp and its
-    // compare below were u32 -- the LOW WORD of a 10 MHz performance counter, which wraps
-    // every 429.5 s. (now - last) then re-enters [0, freq/4) for exactly 250 ms once per wrap,
-    // and the opaque movie underlay below was drawn over the whole frame for that window,
-    // first at (last logo's end + 429.5 s) and then every 429.5 s. Eight harness runs put the
-    // blink at 438.0 +/- 0.3 s of wall clock after the first present with the sim frame
-    // varying from 17401 to 30121. The console keeps this counter in 64 bits
-    // (GetSystemTimerBaseTime @0x828D75A0 returns the whole LARGE_INTEGER -- CgsTimeUtils.cpp).
-    u64  gu64LastMoviePresentTick = 0;
-    bool gbMoviePresentTickValid  = false;
 
     // Submit one solid-coloured quad (4-vertex triangle strip) through the Im2d, in 1280x720 logical px.
     void EmitColouredQuad(CgsGraphics::Im2d* lpIm2d, f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, CgsGraphics::RGBA8 lColour)
@@ -743,6 +487,8 @@ namespace
     const u32 KU_PC_IM2D_DEBUG_VERTEX_BYTES = 2u * 1024u * 1024u;
     const u32 KU_PC_IM3D_COMMAND_BYTES = 0x400u;
     const u32 KU_PC_IM3D_VERTEX_BYTES = 0x8000u;
+    const u32 KU_PC_IM3D_UNTEX_COMMAND_BYTES = 0x4000u;
+    const u32 KU_PC_IM3D_UNTEX_VERTEX_BYTES = 0x80000u;
     const u32 KU_PC_IM3D_DEBUG_COMMAND_BYTES = 0x100000u;
     const u32 KU_PC_IM3D_DEBUG_VERTEX_BYTES = 0x100000u;
     const u32 KU_PC_IM3D_RACE_COMMAND_BYTES = 0x20000u;
@@ -771,10 +517,11 @@ namespace
                               + 2u * (KU_PC_IM2D_DEBUG_COMMAND_BYTES + KU_PC_IM2D_DEBUG_VERTEX_BYTES) // modal banks
                               // Every prepared3D buffer shares this allocator.
                               + 2u * (KU_PC_IM3D_COMMAND_BYTES + KU_PC_IM3D_VERTEX_BYTES
+                                    + KU_PC_IM3D_UNTEX_COMMAND_BYTES + KU_PC_IM3D_UNTEX_VERTEX_BYTES
                                     + KU_PC_IM3D_DEBUG_COMMAND_BYTES + KU_PC_IM3D_DEBUG_VERTEX_BYTES
                                     + KU_PC_IM3D_RACE_COMMAND_BYTES + KU_PC_IM3D_RACE_VERTEX_BYTES
                                     + KU_PC_IM3D_MENUS_COMMAND_BYTES + KU_PC_IM3D_MENUS_VERTEX_BYTES)
-                              + 28u * 128u // four allocations per each of seven immediate buffers
+                              + 32u * 128u // four allocations per each of eight immediate buffers
                               + (4u * 4096u)   // per-bin align128(size)+128 slop + headroom
                               + (192u * 1024u); // + the small renderengine objects that share
                                                //   this allocator (the sky dome's four buffer
@@ -1106,79 +853,7 @@ namespace
     // ============================================================================================
     const f32 KF_CORONA_CAMERA_FOV_GATE = 0.1f;   // X360 flt_82004014 (DATA_DUMP.md)
 
-    void PCBringUpPublishCoronaCamera(BrnCoronaManager& lrCoronaManager,
-                                     const BrnShaderConstantsFrame& lrFrame)
-    {
-        const Matrix44 lrViewProjection = lrFrame.GetViewProjectionMatrix();
-        const Vector3 lViewPosition = lrFrame.GetViewPosition();
 
-        // |column 0| and |column 1| of the row-vector view-projection (see the banner).
-        const f32 lfOotHalfFovH = std::sqrt(lrViewProjection.xAxis.x * lrViewProjection.xAxis.x
-                                          + lrViewProjection.yAxis.x * lrViewProjection.yAxis.x
-                                          + lrViewProjection.zAxis.x * lrViewProjection.zAxis.x);
-        const f32 lfOotHalfFovV = std::sqrt(lrViewProjection.xAxis.y * lrViewProjection.xAxis.y
-                                          + lrViewProjection.yAxis.y * lrViewProjection.yAxis.y
-                                          + lrViewProjection.zAxis.y * lrViewProjection.zAxis.y);
-
-        // The console's own gate, expressed on the value this build actually has: mfFOV > 0.1f is
-        // "this camera has a real projection". A degenerate view-projection reads ootH == 0 here,
-        // which is the same refusal -- and it is the refusal that matters, because a zero scale
-        // would collapse every corona quad to a point and the frame would still "look fine"
-        // (AGENTS.md rule 9).
-        if (!(lfOotHalfFovH > KF_CORONA_CAMERA_FOV_GATE))
-            return;
-
-        const f32 lfClamped = (lfOotHalfFovH > 1.0f) ? lfOotHalfFovH : 1.0f;   // fsel max(ootH, 1)
-        Vector4 lvViewXyScale;
-        lvViewXyScale.x = lfClamped;
-        lvViewXyScale.y = (lfOotHalfFovV / lfOotHalfFovH) * lfClamped;
-        lvViewXyScale.z = 0.0f;
-        lvViewXyScale.w = 0.0f;
-
-        lrCoronaManager.PCBringUpSetRenderCamera(lrViewProjection,
-                                                  lViewPosition,
-                                                  lvViewXyScale);
-
-        {
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                // [DIAG corona-calib -- coronas step 2] the UNCLAMPED scalars and the field of
-                // view they imply, printed beside the published pair. This is the whole answer to
-                // "is viewXyScale.x == 1.0000 the console's fsel or a wrong matrix element read":
-                // BrnDirector::Camera::Camera::Construct seeds mfFOV = 90 (flt_82004F64) and
-                // mfAspectRatio = 16/9 (flt_82009A78 -- 1.77778, in this wave's DATA_DUMP), and
-                // CgsGraphics::Camera::SetFOV treats mfFOV as the HORIZONTAL fov
-                // (CgsCamera.cpp:420-433: maProjectionScalars[1] = 1/tan(fovH/2) and the VERTICAL
-                // fov is DERIVED from it through the aspect ratio). At 90 degrees horizontal
-                // 1/tan(45) is exactly 1.0, so the console's `fsel f0, f11, f0, 1.0` at
-                // BrnRendererModule::Update @0x82405F10-0x82405F20 is a no-op and viewXyScale
-                // reads (1.0, aspect) == (1.0000, 1.7778) on the console too.
-                // EXPECT: rawOotFovH ~= 1.000, fovH ~= 90.0, fovV ~= 58.7. A rawOotFovH that is
-                // NOT close to 1.0 while the clamped lane still prints 1.0000 is the failure this
-                // line exists to catch. DELETE-WHEN the corona calibration is signed off.
-                const f32 lfRadToDeg = 57.2957795f;
-                const f32 lfFovHDeg  = (lfOotHalfFovH > 0.0f)
-                                     ? 2.0f * std::atan(1.0f / lfOotHalfFovH) * lfRadToDeg : 0.0f;
-                const f32 lfFovVDeg  = (lfOotHalfFovV > 0.0f)
-                                     ? 2.0f * std::atan(1.0f / lfOotHalfFovV) * lfRadToDeg : 0.0f;
-                char lacMessage[288];
-                std::snprintf(lacMessage, sizeof(lacMessage),
-                              "[corona] camera published: eye=(%.2f %.2f %.2f)"
-                              " viewXyScale=(%.4f %.4f) = (max(ootH,1), (ootV/ootH)*max(ootH,1))"
-                              " | rawOotFovH=%.4f rawOotFovV=%.4f fovH=%.1f fovV=%.1f"
-                              " aspect=%.4f\n",
-                              lViewPosition.x,
-                              lViewPosition.y,
-                              lViewPosition.z,
-                              lvViewXyScale.x, lvViewXyScale.y,
-                              lfOotHalfFovH, lfOotHalfFovV, lfFovHDeg, lfFovVDeg,
-                              (lfOotHalfFovH > 0.0f) ? (lfOotHalfFovV / lfOotHalfFovH) : 0.0f);
-                CgsDev::Log::WriteToLog(lacMessage);
-            }
-        }
-    }
 
     // [PC bring-up] The POST-FX SCENE TARGETS, created the same lazy way and for the same reason.
     //
@@ -1348,6 +1023,12 @@ namespace
         }
 
         gpEnvMapTarget = lpTarget;
+        // ARTIST 8240BE80..9C registers EnvMap slot3's colour texture0.
+        // PC allocation occurs here on the D3D owner after the device exists.
+        CgsGraphics::gTextureScopeTable.SetTexture(
+            CgsGraphics::E_TEXTURE_PURPOSE_ENVIRONMENT_MAP,
+            lpTarget->GetRenderTarget()->GetTexture(0));
+
         return true;
     }
 
@@ -1437,6 +1118,8 @@ namespace
         // lpResourceMemory: the console passes &mEnvMapTextureStateResource, carved from the
         // graphics allocator; the PC Initialize ignores the argument (see deviation 1 above).
         *lppEnvMapTextureState = renderengine::TextureState::Initialize(0, &lParameters);
+        CgsGraphics::gTextureScopeTable.SetTextureState(
+            CgsGraphics::E_TEXTURE_PURPOSE_ENVIRONMENT_MAP, *lppEnvMapTextureState);
         return *lppEnvMapTextureState != 0;
     }
 
@@ -1499,6 +1182,7 @@ void BrnRendererModule::Construct()
     mIm2dDebugRenderBuffer.Construct();
     mIm2dAssertRenderBufferPC.Construct();
     mIm3dRenderBuffer.Construct();
+    mIm3dRenderBufferUntex.Construct();
     mIm3dDebugRenderBuffer.Construct();
     mIm3dBufferRacePosition.Construct();
     mIm3dBufferMenusAndHud.Construct();
@@ -1524,6 +1208,23 @@ void BrnRendererModule::Construct()
 
     maShaderConstantsFrames[0].Construct();
     maShaderConstantsFrames[1].Construct();
+    // ARTIST 8240A7E0..7FC: external1 starts writable, internal0 readable.
+    mu8ShaderConstantsFrameExternal = 1;
+    mu8ShaderConstantsFrameInternal = 0;
+    maShaderConstantsFrames[mu8ShaderConstantsFrameExternal].LockForWriting();
+    maShaderConstantsFrames[mu8ShaderConstantsFrameInternal].UnlockForWriting();
+    maShaderConstantsFrameValidPC[0] = false;
+    maShaderConstantsFrameValidPC[1] = false;
+
+    muCommandGenerationPC = 0;
+    muCompletedCommandGenerationPC = 0;
+    muPublishedCommandGenerationPC = 0;
+    // ARTIST 8240ACD0..ACDC: two empty blobby banks, internal0/external1.
+    mBlobbyShadowManager.maBuffers[0].miNumShadows = 0;
+    mBlobbyShadowManager.maBuffers[1].miNumShadows = 0;
+    mBlobbyShadowManager.mu8Internal = 0;
+    mBlobbyShadowManager.mu8External = 1;
+
 
     // ---- The display class (X360 Construct @0x8240A778, right after the stage seeds) ----
     //     renderengine::Device::Parameters::Initialize(&params, 4);   // 1280x720@60
@@ -1597,10 +1298,12 @@ void BrnRendererModule::Construct()
         // records, including RacePosition's128KiB commands/vertices. MenusHud
         // uses512 command bytes and static vertex runs (4-byte vertex bank).
         const bool lbIm3dReady = mIm3dRenderBuffer.Prepare(KU_PC_IM3D_COMMAND_BYTES, KU_PC_IM3D_VERTEX_BYTES, &sWorldDispatchAllocator, false);
+        const bool lbIm3dUntexReady = mIm3dRenderBufferUntex.Prepare(KU_PC_IM3D_UNTEX_COMMAND_BYTES, KU_PC_IM3D_UNTEX_VERTEX_BYTES, &sWorldDispatchAllocator, false);
         const bool lbIm3dDebugReady = mIm3dDebugRenderBuffer.Prepare(KU_PC_IM3D_DEBUG_COMMAND_BYTES, KU_PC_IM3D_DEBUG_VERTEX_BYTES, &sWorldDispatchAllocator, true);
         const bool lbRacePositionReady = mIm3dBufferRacePosition.Prepare(KU_PC_IM3D_RACE_COMMAND_BYTES, KU_PC_IM3D_RACE_VERTEX_BYTES, &sWorldDispatchAllocator, false);
         const bool lbMenusHudReady = mIm3dBufferMenusAndHud.Prepare(KU_PC_IM3D_MENUS_COMMAND_BYTES, KU_PC_IM3D_MENUS_VERTEX_BYTES, &sWorldDispatchAllocator, false);
         CGS_ASSERT(lbIm3dReady, "mIm3dRenderBuffer.Prepare");
+        CGS_ASSERT(lbIm3dUntexReady, "mIm3dRenderBufferUntex.Prepare");
         CGS_ASSERT(lbIm3dDebugReady, "mIm3dDebugRenderBuffer.Prepare");
         CGS_ASSERT(lbRacePositionReady, "mIm3dBufferRacePosition.Prepare");
         CGS_ASSERT(lbMenusHudReady, "mIm3dBufferMenusAndHud.Prepare");
@@ -1687,543 +1390,171 @@ CgsGraphics::DispatchFrame* BrnRendererModule::GetDispatchFrameForWrite()
     return &mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite();
 }
 
-// @ 0x823FC160 - BrnRendererModule::StartOfFrame.
-// X360 order: Reset the GDL write frame, rewind the seven immediate-mode render
-// buffers, ShaderConstantTable::BeginFrame on the GDL write bin, clear the 7x7
-// texture-scope scratch (unk_83011A8C), rewind the corona submission interface.
-// Reconstructed here: the two GDL halves (the parts whose subsystems exist).
-// FLAG [PC gate]: the im-buffer rewinds / texture-scope clear / corona rewind
-// land with CgsTextureScopeTable and the corona manager.
-//
-// THE EFFECTS ARBITRATOR IS NOT TOUCHED HERE, AND THAT IS THE BINARY, NOT AN OMISSION. The step-4
-// brief expected BrnGraphics::EffectsArbitrator::StartOfFrame to be inlined into this function. It
-// is not: the whole X360 body contains NO reference to a1 + 1152 (== this + 0x480 ==
-// mEffectsArbitrator). The only members it reaches are the GDL frame (+680), the seven im-render
-// buffers (+2828 / +4244 / +4756 / +5492 / +5532 / +5936 / +6040), the shader-constant table and the
-// corona pair (+14336 / +14640). Nor does such a function exist anywhere in the image:
-//     $ grep -rho "BrnGraphics::EffectsArbitrator::[A-Za-z0-9_]*" \
-//           .ida-exports/BURNOUT_X360_ARTIST.XEX/ | sort -u
-//     BrnGraphics::EffectsArbitrator::Construct
-//     BrnGraphics::EffectsArbitrator::Construct_DWORD
-//     BrnGraphics::EffectsArbitrator::EndOfFrame
-//     BrnGraphics::EffectsArbitrator::EndOfFrameint
-//     BrnGraphics::EffectsArbitrator::EvalTint
-//     BrnGraphics::EffectsArbitrator::EvalTintint
-// Three names, no StartOfFrame. The arbitrator's per-frame open IS its EndOfFrame (called from
-// SwapBuffers), which both flips the double buffer and re-Constructs the new write slot. So no
-// arbitrator call is added here.
+// FLAG PC-platform leaf: retain the actual completed command metadata with
+// the bank it describes. Control IO continues to rotate every presentation
+// for its one-shot loading/calibration/stall protocol.
+void BrnRendererModule::CompleteCommandFramePC(const BrnGame::DispatchThreadInputBuffer* lpInput,
+                                               ECommandProducerPC leProducer)
+{
+    lpInput->LockForRead();
+    CommandFrameInputPC& lrInput = maCommandInputsPC[mu8ShaderConstantsFrameExternal];
+    // RenderGUI has no world/particle producer and leaves those IO bytes
+    // untouched. Ownership follows the completed entry, never payload contents.
+    lrInput.mbParticleRecordProduced = leProducer == E_COMMAND_PRODUCER_WORLD_AND_EFFECTS;
+    if (lrInput.mbParticleRecordProduced)
+        lrInput.mParticleRenderData = *lpInput->GetParticleRenderData();
+    for (u32 luFace = 0; luFace < 6; ++luFace)
+        lrInput.mabEnvMapFaceRender[luFace] = leProducer == E_COMMAND_PRODUCER_WORLD_AND_EFFECTS
+            && lpInput->GetEnvMapFaceRender(luFace);
+    lpInput->UnlockForRead();
+    muCompletedCommandGenerationPC = muCommandGenerationPC;
+}
+
+// ARTIST 823FC160. A native presentation opens a write generation, but
+// only a completed command producer makes that generation publishable.
 void BrnRendererModule::StartOfFrame()
 {
-    // [FLAG PC bring-up] The layer-0 (base) effects frame's producer, at the earliest point of the
-    // renderer's own frame bracket -- see PCBringUpProduceBaseEffectsFrame's banner for why this is
-    // where the console's dispatch-thread producer maps to. Deliberately BEFORE the mpInterpreter
-    // early-out below: the effects frames have nothing to do with the GDL ring, and on a build where
-    // the ring never came up the post-fx composite still runs.
-    if (EnsureEffectsArbitratorBringUp(mEffectsArbitrator))
+    // FLAG PC-platform leaf: a resource stall can cancel an unpublished write
+    // generation. Discard its mutable effects/shader/shadow records before
+    // another producer reuses the same bank; the immutable read bank stays live.
+    if (muCompletedCommandGenerationPC != muPublishedCommandGenerationPC)
     {
-        PCBringUpProduceBaseEffectsFrame();
+        maShaderConstantsFrames[mu8ShaderConstantsFrameExternal].Construct();
+        maShaderConstantsFrames[mu8ShaderConstantsFrameExternal].LockForWriting();
+        if (sbEffectsArbitratorConstructed)
+        {
+            const u32 lauSlots[] = {
+                BrnGraphics::EffectLayerDefinition<BrnGraphics::E_EFLAYER_BASE>::KU_NUM_SLOTS,
+                BrnGraphics::EffectLayerDefinition<BrnGraphics::E_EFLAYER_WORLD>::KU_NUM_SLOTS,
+                BrnGraphics::EffectLayerDefinition<BrnGraphics::E_EFLAYER_FXEVENTS>::KU_NUM_SLOTS};
+            for (u8 luLayer = 0; luLayer < BrnGraphics::E_EFLAYER_CNT; ++luLayer)
+                for (u8 luSlot = 0; luSlot < lauSlots[luLayer]; ++luSlot)
+                    mEffectsArbitrator.GetExternalEffectsFrame(luLayer, luSlot)->Construct();
+        }
+        mBlobbyShadowManager.maBuffers[mBlobbyShadowManager.mu8External].miNumShadows = 0;
     }
+    ++muCommandGenerationPC;
+    muCompletedCommandGenerationPC = muPublishedCommandGenerationPC;
+    maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameExternal] = false;
 
-    // ---- THE CORONA REWIND (coronas step 1) ---------------------------------------------------
-    // The X360 body's LAST statement, @0x823FC160's tail:
-    //     v11 = (112 * *(this + 14640) + this + 14336 + 80);   // &mSubmissionInterface[swapIndex]
-    //     v11[2] = 0;  v11[1] = mpBuffer->mpData;  v11[3] = mpBuffer->muNumCoronas;
-    // -- i.e. BrnCoronaManager::Clear() on the CURRENT (write) interface, which is
-    // CoronaBuffer::Lock(Iterator&). 14336 == 0x3800 == mCoronaManager, 14640 == +0x130 ==
-    // mu8SubmissionSwapIndex, 112 == sizeof(BrnSubmissionInterface), 80 == +0x50 == the array base.
-    // The manager's own bring-up gate is elsewhere (Render); this is a no-op until it Constructs.
-    //
-    // ⚠ IT IS DELIBERATELY BEFORE THE mpInterpreter EARLY-OUT, for the reason the effects block
-    // above gives: the corona buffers are not the GDL ring, and a build where the ring never came up
-    // must still rewind the write cursor every frame or the very first producer to run would keep
-    // appending into a buffer that is never reset (it would hit the 512-corona assert in seconds).
+    EnsureEffectsArbitratorBringUp(mEffectsArbitrator);
+    if (mpInterpreter != nullptr)
+        mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite().Reset();
+
+    // Original seven write-buffer rewinds, in their original order.
+    if (mIm2dRenderBuffer.IsPreparedPC()) mIm2dRenderBuffer.Clear();
+    if (mIm3dRenderBuffer.IsPreparedPC()) mIm3dRenderBuffer.Clear();
+    if (mIm3dRenderBufferUntex.IsPreparedPC()) mIm3dRenderBufferUntex.Clear();
+    if (mIm3dDebugRenderBuffer.IsPreparedPC()) mIm3dDebugRenderBuffer.Clear();
+    if (mIm2dDebugRenderBuffer.IsPreparedPC()) mIm2dDebugRenderBuffer.Clear();
+    if (mIm3dBufferRacePosition.IsPreparedPC()) mIm3dBufferRacePosition.Clear();
+    if (mIm3dBufferMenusAndHud.IsPreparedPC()) mIm3dBufferMenusAndHud.Clear();
+
+    if (mpInterpreter != nullptr)
+        CgsGraphics::mShaderConstantTable.BeginFrame(
+            &mDoubleBufferedDispatchFrame.GetDispatchBinForWrite());
+    // ARTIST 823FC2D0..2F0 clears the cache word of all seven purposes.
+    for (auto& lrEntry : CgsGraphics::gTextureScopeTable.maEntries)
+        lrEntry.mClearState = 0;
     mCoronaManager.Clear();
-
-    if (mpInterpreter == 0)
-        return;   // Construct's allocator gate did not open -- no GDL ring.
-
-    mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite().Reset();
-    CgsGraphics::mShaderConstantTable.BeginFrame(
-        &mDoubleBufferedDispatchFrame.GetDispatchBinForWrite());
-    BeginMeshFramePC();
+    if (mpInterpreter != nullptr)
+        BeginMeshFramePC();
 }
 
-// ==================================================================================================
-// FLAG PC-platform leaf: PCBringUpProduceBaseEffectsFrame adapts the original
-// EffectsModule::GenerateRenderRequests @0x8227FF10 while the EffectsIO/RendererIO
-// dispatch path is incomplete. The EffectsModule and its debug component ARE live.
-// DoDispatch snapshots its debug controls alongside the director camera; StartOfFrame
-// writes the external base layer, which EndOfFrame publishes to the renderer.
-//
-// Original enable predicates (component offsets are X360 evidence only):
-//   bloom / vignette / tint / tint2d: component +181100 / +181101 / +181103 / +181104
-//   DOF: camera blurriness > 0 and component +181102
-//   radial blur: camera blur active OR (user settings AND motion blur enabled)
-// MotionBlurData uses the user values when requested, otherwise the camera values
-// gated by mbMotionBlur. Bloom, vignette and tint2d data/weights are written only
-// while their respective flags are enabled (0x8228004C..0x82280168).
-//
-// Asset and camera/cache evidence for the data blocks remains at each block below.
-// Remove this adapter when GenerateRenderRequests and the dispatch IO chain are live.
-// ==================================================================================================
-void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
-{
-    BrnEffectsFrame* const lpFrame = mEffectsArbitrator.GetExternalEffectsFrame(
-        static_cast<u8>(BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_BASE), 0u);
-    if (lpFrame == 0)
-        return;
-
-    // ==============================================================================================
-    // THE CAMERA INPUT RECORD -- GenerateRenderRequests line 39, `CameraInput =
-    // DispatchInputBuffer::GetCameraInput(a2)`. Its type is a BY-VALUE
-    // BrnDirector::Camera::Camera (DWARF EffectsModuleIO.h:261 `Camera mCameraInput`), and that is
-    // not an inference from the name: every raw displacement the producer reads off the record
-    // lands exactly on an existing named member of the tree's Camera (mEffects @+0x68, 0xBC bytes;
-    // mDepthOfField @+0x124, 0x14 bytes):
-    //   CameraInput +172 (0xAC) = mEffects.mMotionBlurData.mfCarsBlurAmount        (effects +0x44)
-    //   CameraInput +176 (0xB0) = mEffects.mMotionBlurData.mfWorldBlurAmount       (effects +0x48)
-    //   CameraInput +180 (0xB4) = mEffects.mMotionBlurData.mbIsActive              (effects +0x4C)
-    //   CameraInput +181 (0xB5) = mEffects.mMotionBlurData.mbIsExpensiveMotionBlur (effects +0x4D)
-    //   CameraInput +248 (0xF8) = mEffects.mfBloomThreshold                        (effects +0x90)
-    //   CameraInput +252 (0xFC) = mEffects.mfBloomLuminance                        (effects +0x94)
-    //   CameraInput +292..+308  = mDepthOfField's five floats, in member order (+0x124..+0x134)
-    // Seven displacements, seven exact member hits, nothing left over -- and SetCameraInput
-    // @0x823C9988 settles it independently: its whole body is one
-    // `BrnDirector::Camera::Camera::operator=(this + 0x50, lpCamera)`.
-    // ==============================================================================================
-    const BrnDirector::Camera::Camera&         lrCamera     = PCBringUpGetCameraInput();
-    const BrnDirector::Camera::CameraEffects&  lrCameraFx   = lrCamera.GetEffects();
-    const BrnDirector::Camera::MotionBlurData& lrCameraBlur = lrCameraFx.mMotionBlurData;
-    const BrnDirector::Camera::DepthOfField&   lrCameraDof  = lrCamera.GetDepthOfField();
-
-    // ---- the six bools (GenerateRenderRequests lines 40-56) --------------------------------------
-    // Four are the live debug component's enable flags; the two CAMERA-DRIVEN ones are:
-    //   v6  = mbMotionBlurEnableUserSettings && mbMotionBlur              (the debug override)
-    //   v9  = camera.mMotionBlurData.mbIsActive | v6      -> frame+3 mbUseBlur
-    //   v12 = (camera.mDepthOfField.mfBlurriness > 0) && mbDepthOfField
-    //                                                     -> frame+2 mbUseDepthOfField
-    // NOTE the asymmetry, and it IS the asm: mbUseBlur (the B4 radial/zoom blur) is gated on the
-    // CAMERA's motion-blur-active flag alone -- `v9 = *(CameraInput + 180) | v6`, no module term.
-    const bool lbMotionBlurUserOverride =
-        mPCEffectsDebugSettings.mbMotionBlurEnableUserSettings && mPCEffectsDebugSettings.mbMotionBlur;
-    const bool lbUseBlur         = lrCameraBlur.IsActive() || lbMotionBlurUserOverride;
-    const bool lbUseDepthOfField = (lrCameraDof.GetBlurriness() > 0.0f) && mPCEffectsDebugSettings.mbDepthOfField;
-
-    lpFrame->SetUseBloom(mPCEffectsDebugSettings.mbBloom);
-    lpFrame->SetUseVignette(mPCEffectsDebugSettings.mbVignette);
-    lpFrame->SetUseDepthOfField(lbUseDepthOfField);
-    lpFrame->SetUseBlur(lbUseBlur);
-    lpFrame->SetUseTint(mPCEffectsDebugSettings.mbTint);
-    lpFrame->SetUseTint2d(mPCEffectsDebugSettings.mbTint2d);
-
-    // ---- bloom: vault asset 191270, plus the camera's two ADDITIVE modifiers --------------------
-    // GenerateRenderRequests, immediately after BloomData::Construct:
-    //   *v47       = *(CameraInput + 252) + *v47;         // mfLuminance += mEffects.mfBloomLuminance
-    //   *(v47 + 1) = *(CameraInput + 248) + *(v47 + 1);   // mfThreshold += mEffects.mfBloomThreshold
-    // Both are 0.0f on a Constructed camera, so nothing changes today; the expression is the
-    // console's, landed so a director state that raises them reaches the frame.
-    if (mPCEffectsDebugSettings.mbBloom)
-    {
-        BrnEffects::BloomData lBloom;
-        lBloom.mfLuminance = KF_BASE_FRAME_BLOOM_LUMINANCE + lrCameraFx.GetBloomLuminanceModifier();
-        lBloom.mfThreshold = KF_BASE_FRAME_BLOOM_THRESHOLD + lrCameraFx.GetBloomThresholdModifier();
-        lBloom.mv4Scale    = Vector4{ KF_BASE_FRAME_BLOOM_SCALE_R, KF_BASE_FRAME_BLOOM_SCALE_G,
-                                      KF_BASE_FRAME_BLOOM_SCALE_B, KF_BASE_FRAME_BLOOM_SCALE_A };
-        lpFrame->SetBloomData(lBloom, KF_BASE_FRAME_ENABLED_WEIGHT);   // data + weight in one call (DWARF BrnEffectsFrame.h:71)
-    }
-
-    // ---- 2D tint: vault asset 374388 (all four lanes zero -- neutral) --------------------------
-    if (mPCEffectsDebugSettings.mbTint2d)
-    {
-        BrnEffects::TintData2d lTint2d;
-        lTint2d.mv4Colour.SetZero();
-        lpFrame->SetTintData2d(lTint2d, KF_BASE_FRAME_ENABLED_WEIGHT);
-    }
-
-    // ---- vignette: the console's own asset-keyed Construct, at the console's position ----------
-    //
-    // GenerateRenderRequests @0x8227FF10 lines 62-75:
-    //     if (mbVignette) {                                    // EffectsDebugComponent +181101
-    //         VignetteData::Construct(v50, &qword_82FAD0A0);    // qword = StringToKey("198102")
-    //         <10 x ld/std: v50 -> frame + 0x40>               // the 80-byte block
-    //         *(frame + 12) = 1.0f;                            // the weight
-    //     }
-    // The live debug flag gates both the use bit and this data/weight write,
-    // as in ARTIST 0x8228004C..0x8228005C.
-    //
-    // UNBLOCKED 2026-09-06 (bug-test lane `postfx`, BurnoutDecomp/b5-decomp#4). The FLAG that stood
-    // here said the vignetteasset DefaultDataArea bytes were "NOT ATTESTED BY ANYTHING WE HAVE", so
-    // the data block was left as BrnEffectsFrame::Construct seeded it -- VignetteData's kv4Def* /
-    // kv2Def* statics, the "environment disabled" fallback: outer colour (0.0549, 0.2078, 0.3765),
-    // amount (0.5, 0.6), centre (0.5, 0.7), sharpness 0.33. That is a REAL vignette, and with the
-    // world layer contributing weight 0 -- every frame before the environment timeline is up, i.e.
-    // the whole boot including the boot-up autosave prompt -- it is the ONLY vignette, so the
-    // composite multiplied the entire front-end picture by a dark blue gradient. That is the wash
-    // the bug report's screenshot shows behind the prompt.
-    //
-    // THE BYTES ARE NOW ATTESTED, AND THE ANSWER IS ZERO. The full chain is documented at the
-    // Construct body in SharedClasses/Graphics/BrnEffectsData.cpp: asset "198102" is in no shipped
-    // collection (POSTFXVAULT.BIN is the only vault with vignetteasset collections and its 84
-    // exports were enumerated -- 30 vignetteasset, none of them 198102, while bloom 191270, tint2d
-    // 374388 and b4blur 218901 ARE there), so the ctor falls through to
-    // Attrib::DefaultDataArea(0x50) @0x821F0048, whose block unk_82FA8880 is 0x1D48 bytes that are
-    // ALL ZERO in the image. Calling the real Construct reproduces that AND self-corrects the day a
-    // vault carrying 198102 loads: no constant is written here.
-    //
-    // THE WEIGHT stays the console's 1.0f, and it is very nearly a no-op. EffectsArbitrator::
-    // EvalVignette (sub_823F9DE0) SEEDS the out block with the base layer's VignetteData verbatim
-    // -- a ten-iteration `ld`/`std` loop over 80 bytes from `mapaEffectsFrames[0] + 496*internal +
-    // 0x40` (asm 0x823F9E08-0x823F9E30) -- before it looks at any weight, then folds layers 1..2 in
-    // with `VignetteData::SetToBlend(out, out, 1.0f - layerWeight, layerWeight, layerBlend)`
-    // (asm 0x823FA020-0x823FA034). So the base layer IS the seed and its residual weight is
-    // (1 - the other layers' sum). EvalBloom (sub_823F9AA8) has the same shape, which is why the
-    // bloom block above reaches BrnPostFx unchanged while the world layer is silent.
-    //
-    // The key is hashed ONCE, exactly as the console caches it: dword_82FAD0A8's bit 0 guards a
-    // one-shot `Attrib::StringToKey("198102") -> qword_82FAD0A0` (asm lines 56-61).
-    if (mPCEffectsDebugSettings.mbVignette)
-    {
-        static const u64 KU_BASE_FRAME_VIGNETTE_ASSET = Attrib::StringToKey("198102");
-
-        BrnEffects::VignetteData lVignette;
-        lVignette.Construct(KU_BASE_FRAME_VIGNETTE_ASSET);
-        // The frame API sets data + weight together (DWARF BrnEffectsFrame.h:76).
-        lpFrame->SetVignetteData(lVignette, KF_BASE_FRAME_ENABLED_WEIGHT);
-    }
-
-    // ---- depth of field: the camera's own focus band, five floats + weight 1.0 -------------------
-    // GenerateRenderRequests lines 132-146: a five-iteration WORD loop copying
-    // `*(CameraInput + 292..308)` into `frame + 144..160`, then `*(frame + 16) = 1.0f`. The source
-    // IS the camera's DepthOfField sub-object in member order; the destination IS
-    // BrnEffectsFrame::mDepthOfFieldData's five floats in member order. Five words only -- the 12
-    // trailing pad bytes of DepthOfFieldData are NOT written, so the local is seeded from the
-    // frame's current block rather than default-constructed.
-    if (lbUseDepthOfField)
-    {
-        BrnEffects::DepthOfFieldData lDof = lpFrame->GetDepthOfFieldData();
-        lDof.mfNearPlane   = lrCameraDof.GetFocusStartDistanceMeters();          // camera +292
-        lDof.mfFocalPlane  = lrCameraDof.GetPerfectFocusStartDistanceMeters();   // camera +296
-        lDof.mfFocalPlane2 = lrCameraDof.GetPerfectFocusEndDistanceMeters();     // camera +300
-        lDof.mfFarPlane    = lrCameraDof.GetFocusEndDistanceMeters();            // camera +304
-        lDof.mfDofAmount   = lrCameraDof.GetBlurriness();                        // camera +308
-        lpFrame->SetDepthOfFieldData(lDof, KF_BASE_FRAME_ENABLED_WEIGHT);
-    }
-
-    // ---- B4 blur: vault asset 218901, the whole 96-byte block + weight 1.0 -----------------------
-    // GenerateRenderRequests lines 160-166: `BlurData::Construct(v51, hash64("218901"))`, then
-    // `memcpy(frame + 176, v51, 96)` (the WHOLE BlurData) and `*(frame + 20) = 1.0f`. The console
-    // constructs the b4blurasset Attrib instance UNCONDITIONALLY one line earlier and destructs it
-    // at the end of the function; only the Construct+copy is inside the `if`. On PC the AttribSys
-    // read is replaced by the shipped values (the same choice the bloom arm already makes) -- see
-    // the KF_BASE_FRAME_BLUR_* block for the byte provenance and the field mapping.
-    if (lbUseBlur)
-    {
-        BrnEffects::BlurData lBlur = lpFrame->GetBlurData();
-        lBlur.mfOpacity        = KF_BASE_FRAME_BLUR_OPACITY;          // data +0x48
-        lBlur.mfVelocity       = KF_BASE_FRAME_BLUR_VELOCITY;         // data +0x40
-        lBlur.mfSharpness      = KF_BASE_FRAME_BLUR_SHARPNESS;        // data +0x44
-        lBlur.mfNoise          = KF_BASE_FRAME_BLUR_NOISE;            // data +0x4C
-        lBlur.mfAngle          = KF_BASE_FRAME_BLUR_ANGLE;            // data +0x50
-        lBlur.mv2BlendAmount.x = KF_BASE_FRAME_BLUR_BLEND_AMOUNT_X;   // data +0x30
-        lBlur.mv2BlendAmount.y = KF_BASE_FRAME_BLUR_BLEND_AMOUNT_Y;
-        lBlur.mv2BlendAmount.z = 0.0f;
-        lBlur.mv2BlendAmount.w = 0.0f;
-        lBlur.mv2BlurAmount.x  = KF_BASE_FRAME_BLUR_BLUR_AMOUNT_X;    // data +0x10
-        lBlur.mv2BlurAmount.y  = KF_BASE_FRAME_BLUR_BLUR_AMOUNT_Y;
-        lBlur.mv2BlurAmount.z  = 0.0f;
-        lBlur.mv2BlurAmount.w  = 0.0f;
-        lBlur.mv2BlendCentre.x = KF_BASE_FRAME_BLUR_BLEND_CENTRE_X;   // data +0x20
-        lBlur.mv2BlendCentre.y = KF_BASE_FRAME_BLUR_BLEND_CENTRE_Y;
-        lBlur.mv2BlendCentre.z = 0.0f;
-        lBlur.mv2BlendCentre.w = 0.0f;
-        lBlur.mv2BlurCentre.x  = KF_BASE_FRAME_BLUR_BLUR_CENTRE_X;    // data +0x00
-        lBlur.mv2BlurCentre.y  = KF_BASE_FRAME_BLUR_BLUR_CENTRE_Y;
-        lBlur.mv2BlurCentre.z  = 0.0f;
-        lBlur.mv2BlurCentre.w  = 0.0f;
-        lpFrame->SetBlurData(lBlur, KF_BASE_FRAME_ENABLED_WEIGHT);
-    }
-
-    // ---- motion blur: UNCONDITIONAL (GenerateRenderRequests lines 168-190) -----------------------
-    // The console builds a stack MotionBlurData with the type's own canonical setter and copies its
-    // three words into frame +0x1D8/+0x1DC/+0x1E0 whether or not anything is active -- so a frame
-    // that has just turned motion blur OFF really does write mbIsActive = false rather than leaving
-    // last frame's value standing. Two arms, selected by the debug override:
-    //   if (mbMotionBlurEnableUserSettings)
-    //       Set(mbMotionBlur, mbMotionBlurUserHighQuality,
-    //           mfMotionBlurUserAmountCars, mfMotionBlurUserAmountWorld)
-    //   else
-    //       Set(mbMotionBlur && camera.mMotionBlurData.mbIsActive,
-    //           camera.mMotionBlurData.mbIsExpensiveMotionBlur,
-    //           camera.mMotionBlurData.mfCarsBlurAmount,
-    //           camera.mMotionBlurData.mfWorldBlurAmount)
-    // MotionBlurData::Set @0x8220AED8 is `void Set(bool, bool, f32, f32)` -- flags first, and it
-    // clamps both amounts to [0,1] internally. This producer is its ONLY caller on the console too.
-    // The local is seeded from the frame so the two pad bytes Set does not write keep the frame's
-    // value instead of stack noise (the console's memcpy takes them off an uninitialised stack
-    // slot; nothing reads them).
-    {
-        BrnDirector::Camera::MotionBlurData lMotionBlur = lpFrame->GetMotionBlurData();
-        if (mPCEffectsDebugSettings.mbMotionBlurEnableUserSettings)
-        {
-            lMotionBlur.Set(mPCEffectsDebugSettings.mbMotionBlur,
-                            mPCEffectsDebugSettings.mbMotionBlurUserHighQuality,
-                            mPCEffectsDebugSettings.mfMotionBlurUserAmountCars,
-                            mPCEffectsDebugSettings.mfMotionBlurUserAmountWorld);
-        }
-        else
-        {
-            lMotionBlur.Set(mPCEffectsDebugSettings.mbMotionBlur && lrCameraBlur.IsActive(),
-                            lrCameraBlur.IsExpensiveMotionBlur(),
-                            lrCameraBlur.GetCarsBlendAmount(),
-                            lrCameraBlur.GetWorldBlendAmount());
-        }
-        lpFrame->SetMotionBlurData(lMotionBlur);
-    }
-
-    // ---- the "is this the racing gameplay camera" flag -------------------------------------------
-    // GenerateRenderRequests writes frame +0x1E4 from the effects module's own
-    // TempRaceCarStateCache.mbIsGameCamera (module +181032), and that cache field is filled in
-    // exactly ONE place -- BrnEffects::EffectsModule::Update @0x8229EC28, the player-car arm:
-    //     this->field_2C328 = (*(CameraInput + 81) & 8) != 0;
-    // CameraInput is typed `_DWORD*` at that site, so +81 words == +324 bytes == camera +0x144. The
-    // camera's CameraState is at +0x138 and its mCurrentFlags BitArray<30> at state +0x08 == camera
-    // +0x140; BitArray sets bits with `(u64)1 << index`, so on the big-endian console camera +0x144
-    // is that qword's LOW half and mask 8 is bit index 3. The same word and a sibling bit are read
-    // by BrnGameModule::DoDispatch @0x823DC458 lines 74-75 (`GetCameraOutput(...) + 324` tested
-    // against 8 and 0x8000000), which corroborates both the word and the addressing.
-    // The two-hop module path therefore collapses to a pure function of the record, which makes
-    // this the ONE TempRaceCarStateCache field the PC producer can reproduce faithfully.
-    lpFrame->SetIsRacingGameplayCamera(
-        lrCamera.GetState().IsFlagSet(KU_CAMERA_STATE_FLAG_IS_RACING_GAMEPLAY));
-
-    // ---- the four DYNAMIC TempRaceCarStateCache fields (GenerateRenderRequests lines 196-214) ----
-    // The console's producer copies them out of the effects module's own cache with four inline
-    // moves -- two 16-byte vector copies and two words:
-    //     lvx v0,(mod+180992) / stvx v0,(frame+432)     -> mLinearVelocity   (frame +0x1B0)
-    //     lvx v0,(mod+181008) / stvx v0,(frame+448)     -> mAngularVelocity  (frame +0x1C0)
-    //     *(frame + 464) = *(mod + 181024)              -> mfSpeedMPH        (frame +0x1D0)
-    //     *(frame + 468) = *(mod + 181028)              -> mfSteering        (frame +0x1D4)
-    // UNCONDITIONAL, like every other cache copy in that tail -- there is no "is the player car
-    // active" test HERE; the gate is on the CACHE FILL, one function away
-    // (EffectsModule::Update @0x8229EC28, inside `if (IsPlayerCarActive(...))`). Reproduced with the
-    // same split: the staging seam holds the gate, this write does not.
-    //
-    // ⭐ THE BLOCKER THAT USED TO STAND HERE IS CLOSED for these four (2026-08-16, drive-fx wave).
-    // It read "no PC source for the effects module's TempRaceCarStateCache". There is one, and it is
-    // the console's OWN source rather than a substitute: EffectsModule::Update reads the player's
-    // BrnPhysics::Vehicle::RaceCarState through
-    // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface, and that interface is
-    // LIVE on this build -- BrnGameModule::BridgeWorldToDirector already reads the same object every
-    // update frame (GameBridgeWorldToX.cpp:168, `lpWorldOutput->GetActiveRaceCarOutputInterface()`).
-    // So BrnGameModule::DoDispatch stages the same four members through
-    // PCBringUpSetRaceCarStateCache, beside the camera record it already stages, and they are
-    // written here. Same interface, same four members, same IsPlayerCarActive guard: this is a
-    // relocated producer, not an invented value.
-    lpFrame->SetLinearVelocity(gvPCBringUpCacheLinearVelocity);
-    lpFrame->SetAngularVelocity(gvPCBringUpCacheAngularVelocity);
-    lpFrame->SetSpeedMPH(gfPCBringUpCacheSpeedMPH);
-    lpFrame->SetSteering(gfPCBringUpCacheSteering);
-
-    // ==============================================================================================
-    // [FLAG BLOCKED: the effects module's TWO CACHE TRANSFORMS have no writer ANYWHERE]
-    //
-    // GenerateRenderRequests copies TWO more fields into the frame, and neither comes from the
-    // camera record -- both come from BrnEffects::EffectsModule::TempRaceCarStateCache
-    // mCarStateCache (DWARF EffectsModule.h:577, module +180864):
-    //     frame +0x130 mCarTransform     <- cache mCarTransform      (module +180864)
-    //     frame +0x170 mCameraTransform  <- cache mCameraTransform   (module +180928)
-    // The TRANSFORMS are a stronger statement than a missing PC source -- NOTHING IN THE IMAGE EVER
-    // WRITES THEM:
-    //     $ grep -rl "180928" .ida-exports/BURNOUT_X360_ARTIST.XEX/
-    //     .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8227FF10.json     (this producer -- the READ)
-    //     $ grep -rl "180864" .ida-exports/BURNOUT_X360_ARTIST.XEX/
-    //     .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8227FF10.json     (this producer -- the READ)
-    //     .ida-exports/BURNOUT_X360_ARTIST.XEX/0x823BC450.json     (an unrelated BrnNetworkModuleIO
-    //                                                               accessor, `return a1 + 180864`)
-    //     .ida-exports/BURNOUT_X360_ARTIST.XEX/0x825883F0.json     (unrelated)
-    //     .ida-exports/BURNOUT_X360_ARTIST.XEX/0x82593420.json     (unrelated)
-    // and EffectsModule::Construct @0x8228FE98 does not initialise the cache either, so even on
-    // retail those two frame transforms carry whatever the module allocation held.
-    //
-    // WHAT THE FRAME CARRIES INSTEAD, and it is measured rather than chosen: ZERO.
-    // BrnEffectsFrame::Construct @0x822791E8 (and the tree's copy) writes neither -- it stops after
-    // the tint2d block and the MotionBlurData::Construct tail -- so the frames keep their storage's
-    // initial bytes, and the storage is inside
-    //     $ grep -rn "static BrnGame::BrnGameModule" b5-decomp/src
-    //     b5-decomp/src/GameSource/Main/BrnMain.cpp:45:static BrnGame::BrnGameModule gGameModule;
-    // i.e. a statically zero-initialised object. NO CONSUMER IN THIS TREE READS EITHER OF THE
-    // FRAME'S TRANSFORMS:
-    //     $ grep -rn "GetCarTransform\|GetCameraTransform" b5-decomp/src/GameSource/Graphics
-    //     src/GameSource/Graphics/BrnShaderConstantsFrame.h:54:  Matrix44Affine GetCameraTransform()
-    // -- one hit, and it belongs to BrnShaderConstantsFrame (the renderer's own shading frame), not
-    // to BrnEffectsFrame. So leaving the two at the console's own uninitialised-equivalent costs
-    // nothing today.
-    // UNBLOCK is not possible from the image: it needs an attestation of what the console INTENDED
-    // to put there, and there is none.
-    // ==============================================================================================
-
-    PCBringUpLogBaseEffectsFrameCameraState(*lpFrame, lrCamera);
-}
-
-// [FLAG PC bring-up] see the declaration in BrnRendererModule.h. The PC stand-in for
-// BrnEffects::EffectsIO::DispatchInputBuffer::SetCameraInput @0x823C9988: one copy-assign of the
-// director's published camera into the staged record the producer reads on its next run. The
-// console's own body is that same single `Camera::operator=` behind a locked-for-writing assert;
-// there is no lock here because there is no IO buffer to lock.
-// DELETE-WHEN the EffectsIO dispatch buffer set is real on PC.
-void BrnRendererModule::PCBringUpSetCameraInput(const BrnDirector::Camera::Camera* lpCamera)
-{
-    if (lpCamera == 0)
-        return;   // [FLAG PC bring-up] the console cannot be handed a null here; DoDispatch can.
-    PCBringUpGetCameraInput() = *lpCamera;
-    // [FLAG PC bring-up TEST HOOK -- OFF BY DEFAULT] BRN_POSTFX_MASK_TEST -- see the banner on
-    // the definition. AFTER the copy, so it overrides whatever the director published; it is a
-    // no-op (one `int` test) when the variable is unset.
-    PCBringUpApplyMotionBlurMaskTestOverride(PCBringUpGetCameraInput());
-    gbPCBringUpCameraInputStaged = true;
-}
-
-// [FLAG PC bring-up] see the declaration in BrnRendererModule.h. The PC stand-in for the
-// TempRaceCarStateCache fill inside BrnEffects::EffectsModule::Update @0x8229EC28: four stores,
-// the console's own four, off the same RCEntityActiveRaceCarOutputInterface the console reads.
-// The console's `if (IsPlayerCarActive(...))` gate lives at the CALL SITE (BrnGameModule::
-// DoDispatch), which is where the console's gate is too -- so a frame with no player car leaves
-// the last staged values standing, exactly as the module's cache does.
-// DELETE-WHEN BrnEffects::EffectsModule is on the build list and fills its own cache.
-void BrnRendererModule::PCBringUpSetRaceCarStateCache(Vector3::InParam lvLinearVelocity,
-                                                      Vector3::InParam lvAngularVelocity,
-                                                      f32 lfSpeedMPH,
-                                                      f32 lfSteering)
-{
-    gvPCBringUpCacheLinearVelocity  = lvLinearVelocity;    // cache +180992 <- RaceCarState +816
-    gvPCBringUpCacheAngularVelocity = lvAngularVelocity;   // cache +181008 <- RaceCarState +832
-    gfPCBringUpCacheSpeedMPH        = lfSpeedMPH;          // cache +181024 <- RaceCarState +972
-    gfPCBringUpCacheSteering        = lfSteering;          // cache +181028 <- RaceCarState +1044
-    gbPCBringUpRaceCarStateStaged   = true;
-}
-
-// [FLAG PC bring-up] see the declaration in BrnRendererModule.h. Hands the world module the
-// arbitrator's EXTERNAL world-layer frame for the slot, or nullptr while the arbitrator has not been
-// Constructed. The world layer has FOUR slots (kau8SlotsPerEffectsLayer[1] == 4).
-BrnEffectsFrame* BrnRendererModule::GetWorldEffectsFrameBringUp(u8 luSlot)
-{
-    if (!EnsureEffectsArbitratorBringUp(mEffectsArbitrator))
-        return 0;
-    return mEffectsArbitrator.GetExternalEffectsFrame(
-        static_cast<u8>(BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_WORLD), luSlot);
-}
-
-// [FLAG PC bring-up] see the declaration. The FX-events layer has TWO slots
-// (kau8SlotsPerEffectsLayer[2] == 2) -- the GUI's current/menu pair.
-BrnEffectsFrame* BrnRendererModule::GetFXEventsEffectsFrameBringUp(u8 luSlot)
-{
-    if (!EnsureEffectsArbitratorBringUp(mEffectsArbitrator))
-        return 0;
-    return mEffectsArbitrator.GetExternalEffectsFrame(
-        static_cast<u8>(BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_FX_EVENTS), luSlot);
-}
-
-// @ 0x823FC678 - BrnRendererModule::SwapBuffers (called by EndOfFrame @0x823FFE28).
-// X360 order: the GDL ring Swap (vtable slot 4), two ShaderConstantTable
-// Destruct calls, EffectsArbitrator::EndOfFrame, the shader-constants frame
-// flip (+2768 <- +2769, +2769 <- 1 - old, BrnShaderConstantsFrame::Construct on
-// the new write slot and the two +1964 flags), the seven im-buffer Swaps and the
-// blobby-shadow / corona index flips.
-// Reconstructed here: the GDL Swap + the EFFECTS-ARBITRATOR FLIP + the shader-constants frame flip.
-// FLAG [PC gate]: the rest lands with those subsystems.
-//
-// THE ARBITRATOR FLIP IS AT THE CONSOLE'S POSITION IN THE ORDER, and the order is the point: the
-// X360 body @0x823FC678 runs
-//     (*(*(a1 + 680) + 16))(a1 + 680);                      <- the GDL ring Swap (vtable slot 4)
-//     ...Destruct(&mShaderConstantTable); ...Destruct(v2);   <- the two ShaderConstantTable Destructs
-//     BrnGraphics::EffectsArbitrator::EndOfFrame(a1 + 1152); <- HERE
-//     v3 = *(a1 + 2769); *(a1 + 2768) = v3; ...              <- the shader-constants frame flip
-// EndOfFrame promotes this frame's EXTERNAL slot to INTERNAL and re-Constructs the new external one,
-// so it must run AFTER every producer wrote (StartOfFrame / DoDispatch, both earlier in the update
-// frame) and BEFORE the next frame's Render reads. Moving it either side of the shader-constants
-// flip would be harmless today and wrong tomorrow; it is kept where the asm has it.
+// ARTIST 823FC678. All original banks publish together; the native generation
+// check preserves their last immutable frame across extra host presentations.
 void BrnRendererModule::SwapBuffers()
 {
-    if (mIm2dRenderBuffer.IsPreparedPC())
-    {
-        mIm2dRenderBuffer.Swap();
-        mIm2dRenderBuffer.Clear();
-        mu8PCMovieWriteFrame ^= 1u;
-    }
-    // ARTIST823FC678 publishes these in the same joined frame as Im2d.
-    // Clear the following producer bank; dispatch reads the bank just frozen.
-    for (CgsGraphics::Im3dRenderBuffer* lpBuffer : {&mIm3dRenderBuffer,
-            &mIm3dDebugRenderBuffer, &mIm3dBufferRacePosition, &mIm3dBufferMenusAndHud})
-        if (lpBuffer->IsPreparedPC())
-        {
-            lpBuffer->Swap();
-            lpBuffer->Clear();
-        }
-    // NOT behind the mpInterpreter early-out below. That gate is about the GDL ring; the effects
-    // frames are a separate double buffer, and skipping their flip would freeze the internal slot on
-    // whatever the first frame left -- so bloom would latch to frame 0's all-false frame forever.
-    if (sbEffectsArbitratorConstructed)
-    {
-        mEffectsArbitrator.EndOfFrame();
-    }
-
-    // ---- THE CORONA INDEX FLIP (coronas step 1) -----------------------------------------------
-    // The X360 body's LAST statement, @0x823FC678: `*(a1 + 14640) ^= 1u;` -- the whole of
-    // BrnCoronaManager::Swap(). It publishes the interface the producers just filled to Render (which
-    // reads mu8SubmissionSwapIndex ^ 1) and hands the other one to the next frame's Clear.
-    //
-    // ⚠ ALSO BEFORE THE mpInterpreter EARLY-OUT, and for a sharper reason than Clear's: if the flip
-    // were skipped on a ring-less build, Render would read the SAME slot the producers are writing
-    // and the batch count would be whatever the write cursor happened to hold mid-frame.
-    mCoronaManager.Swap();
-
-    if (mpInterpreter == 0)
+    // FLAG PC-platform leaf: no producer ran for this write generation, or
+    // this completed generation was already published. Rotating here would
+    // replace the last immutable command frame with a cleared producer bank.
+    if (muCompletedCommandGenerationPC != muCommandGenerationPC
+        || muPublishedCommandGenerationPC == muCompletedCommandGenerationPC)
         return;
 
-    // FLAG PC-platform leaf: bridge the world's native producer while both
-    // frame threads are joined. Every render pass consumes the internal slot;
-    // none may copy the live producer while the next update is writing it.
-    const bool lbShaderFrameValid = gBrnSkyCameraBringUp.mbValid
-        && gbBrnWorldShaderConstantsFrameBringUpValid;
-    maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameExternal] = lbShaderFrameValid;
-    if (lbShaderFrameValid)
-        PublishSkyConstantsBringUp(&maShaderConstantsFrames[mu8ShaderConstantsFrameExternal]);
-
-    PublishMeshFramePC();
-    mDoubleBufferedDispatchFrame.Swap();
+    if (mpInterpreter != nullptr)
+    {
+        PublishMeshFramePC();
+        mDoubleBufferedDispatchFrame.Swap();
+    }
+    // The two ICF-folded EndFrame calls at 823FC6AC/B0 have empty bodies.
+    if (sbEffectsArbitratorConstructed)
+        mEffectsArbitrator.EndOfFrame();
 
     mu8ShaderConstantsFrameInternal = mu8ShaderConstantsFrameExternal;
-    mu8ShaderConstantsFrameExternal =
-        static_cast<u8>(1u - mu8ShaderConstantsFrameInternal);
+    mu8ShaderConstantsFrameExternal = static_cast<u8>(1u - mu8ShaderConstantsFrameInternal);
     maShaderConstantsFrames[mu8ShaderConstantsFrameExternal].Construct();
+    maShaderConstantsFrames[mu8ShaderConstantsFrameExternal].LockForWriting();
+    maShaderConstantsFrames[mu8ShaderConstantsFrameInternal].UnlockForWriting();
+    maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameExternal] = false;
+
+    if (mIm2dRenderBuffer.IsPreparedPC()) mIm2dRenderBuffer.Swap();
+    if (mIm3dRenderBuffer.IsPreparedPC()) mIm3dRenderBuffer.Swap();
+    if (mIm3dRenderBufferUntex.IsPreparedPC()) mIm3dRenderBufferUntex.Swap();
+    if (mIm3dDebugRenderBuffer.IsPreparedPC()) mIm3dDebugRenderBuffer.Swap();
+    if (mIm2dDebugRenderBuffer.IsPreparedPC()) mIm2dDebugRenderBuffer.Swap();
+    if (mIm3dBufferRacePosition.IsPreparedPC()) mIm3dBufferRacePosition.Swap();
+    if (mIm3dBufferMenusAndHud.IsPreparedPC()) mIm3dBufferMenusAndHud.Swap();
+
+    // Original inlined BrnBlobbyShadowManager::Swap, 823FC748..770.
+    mBlobbyShadowManager.mu8Internal = mBlobbyShadowManager.mu8External;
+    mBlobbyShadowManager.mu8External = static_cast<u8>(1u - mBlobbyShadowManager.mu8Internal);
+    mBlobbyShadowManager.maBuffers[mBlobbyShadowManager.mu8External].miNumShadows = 0;
+    mCoronaManager.Swap();
+    muPublishedCommandGenerationPC = muCompletedCommandGenerationPC;
 }
 
-// @ 0x823FFE28 - BrnRendererModule::EndOfFrame, called from
-// BrnGame::BrnGameModule::OnEndOfUpdateFrame @0x823DBBA0.
-//
-// The X360 body takes a `freeze rendering` bool and runs a 3-state latch over
-// this+50548 / this+50552 that suppresses SwapBuffers while the freeze is held
-// (0 = running -> swap; 1 = entering, swap once the 2-frame counter expires;
-// 2 = frozen-but-still-swapping-once). It then consumes the this+50276 ->
-// this+50277 camera-cut edge Update sets. FLAG [PC gate]: neither the freeze
-// latch pair nor the camera-cut pair is in the PC member layout yet, and no PC
-// caller passes the bool -- this is the freeze=false path, which is the only one
-// the game runs outside the debug freeze-frame feature.
-void BrnRendererModule::EndOfFrame()
+// ARTIST 823FFE28. This is the real resource-stall synchronisation path,
+// followed by the screenshot-request handoff; it is not a debug-camera freeze.
+void BrnRendererModule::EndOfFrame(bool lbStalled)
 {
-    SwapBuffers();
+    if (lbStalled)
+    {
+        if (meFrameStallStage == E_FRAMESTALL_NOT_STALLED)
+        {
+            meFrameStallStage = E_FRAMESTALL_SYNCING_BUFFERS;
+            miFrameStallCountdown = 2;
+        }
+    }
+    else if (meFrameStallStage != E_FRAMESTALL_NOT_STALLED)
+    {
+        meFrameStallStage = E_FRAMESTALL_NOT_STALLED;
+        miFrameStallCountdown = 0;
+    }
+
+    if (meFrameStallStage == E_FRAMESTALL_NOT_STALLED)
+        SwapBuffers();
+    else if (meFrameStallStage == E_FRAMESTALL_SYNCING_BUFFERS)
+    {
+        if (--miFrameStallCountdown == 0)
+        {
+            meFrameStallStage = E_FRAMESTALL_STALLED;
+            SwapBuffers();
+        }
+    }
+    else if (static_cast<u32>(meFrameStallStage) < 3u)
+    {
+        meFrameStallStage = E_FRAMESTALL_STALLED;
+        SwapBuffers();
+    }
+
+    if (mbUpdateThreadTakeScreenshot)
+    {
+        mbUpdateThreadTakeScreenshot = false;
+        mbDispatchThreadTakeScreenshot = true;
+    }
 }
 
 namespace
 {
-    // ARTIST82FAEDD8/82FAEDD4/82FAEE00. The render owner publishes these before
+    // ARTIST 82FAEDD8/82FAEDD4/82FAEE00. The render owner publishes these before
     // submission and does not reclaim the bin until every conversion has joined.
     CgsGraphics::DispatchCommand* spObjectToMeshSharedMemory;
     u32 suObjectToMeshSharedBlockMax;
     alignas(128) u32 suObjectToMeshNextBlock;
 }
 
-// ARTIST823F5670: copy the job record, clear the job, then set code/data/name.
+// ARTIST 823F5670: copy the job record, clear the job, then set code/data/name.
 static void FillInObjectToMeshJobData(EA::Jobs::Job* lpOutJob,
                                      ObjectToMeshJobInfo* lpOutJobData,
                                      const ObjectToMeshJobInfo* lpInput)
@@ -2238,7 +1569,7 @@ static void FillInObjectToMeshJobData(EA::Jobs::Job* lpOutJob,
     lpOutJob->SetName("ObjectToMesh");
 }
 
-// ARTIST823F5748. World input list11 is partitioned on complete 128-object
+// ARTIST 823F5748. World input list11 is partitioned on complete 128-object
 // constant-refresh groups. Starting a worker at an arbitrary key loses inherited
 // constants; the four original partitions preserve those producer boundaries.
 void BrnRendererModule::CreateObjectToMeshJob(u32 luJobIndex,
@@ -2279,7 +1610,7 @@ void BrnRendererModule::CreateObjectToMeshJobPC(CgsGraphics::DispatchFrame* lpIn
     FillInObjectToMeshJobData(&maObjectToMeshJob[luJobIndex], &maObjectToMeshJobData[luJobIndex], &lInput);
 }
 
-// ARTIST823F5898. Both original switches82F2423C/D initialize to1. Keep the
+// ARTIST 823F5898. Both original switches82F2423C/D initialize to1. Keep the
 // serial fallback and dependency-chain controls for native comparisons.
 void BrnRendererModule::ConvertObjectsToMeshes(CgsGraphics::BufferedDispatchFrame* lpGdlFrames,
                                                CgsGraphics::DispatchFrame* lpMeshFrame,
@@ -2392,7 +1723,7 @@ void BrnRendererModule::ConvertObjectsToMeshesPC(CgsGraphics::DispatchFrame* lpI
     }
 }
 
-// ARTIST823F5EA0 / DecFIGS _FillInJobData(Job*,SortInfo*,DispatchList*).
+// ARTIST 823F5EA0 / DecFIGS _FillInJobData(Job*,SortInfo*,DispatchList*).
 static void FillInSortJobData(EA::Jobs::Job* lpOutJob, SortInfo* lpOutJobData,
                              CgsGraphics::DispatchList* lpDispatchList)
 {
@@ -2489,7 +1820,7 @@ namespace renderengine
     }
 }
 
-// ARTIST823F5F70 prepares sixteen jobs. Its default is the dependency chain;
+// ARTIST 823F5F70 prepares sixteen jobs. Its default is the dependency chain;
 // the optional wide branch submits independent jobs. Native frame banks retain
 // their own descriptors until their consumers or a rebuild join them.
 void BrnRendererModule::SortDispatchLists(CgsGraphics::DispatchFrame* lpMeshFrame)
@@ -2530,7 +1861,7 @@ void BrnRendererModule::InitializeDispatchContextPC(CgsGraphics::DispatchObjectC
     lpContext->miListIdBase       = 0;
     lpContext->mbPreZEnabled      = mbRenderPreZ;
     lpContext->mbPreZAlphaEnabled = mbRenderPreZAlpha;
-    // ARTIST8240C0FC..8240C130 copies the LINEAR threshold into context+E0.
+    // ARTIST 8240C0FC..8240C130 copies the LINEAR threshold into context+E0.
     // Interpret827FD62C..654 compares the mesh centre's clip w against it.
     // The near-only switch controls a separate global used by occlusion;
     // it neither squares nor overrides this object-to-mesh threshold.
@@ -3818,15 +3149,8 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
 // id in mGpuMonitors is 0 on this build because nothing calls PerfMonGpu::AddMonitor, so a bracket
 // here would time one monitor id shared with every other pass.
 //
-// ⚠ THE FRAME. The console reads the INTERNAL slot, and so does this. On PC that slot is filled by
-// the sky publisher: BrnRendererModule::PublishSkyConstantsBringUp writes
-// maShaderConstantsFrames[mu8ShaderConstantsFrameEXTERNAL] (RenderWorldPasses' sky block and the
-// env-map loop both call it), and SwapBuffers promotes external -> internal at the end of the
-// frame. So the internal frame carries the PREVIOUS frame's published constants -- which is the
-// console's own contract (its producer is Update, and SwapBuffers flips), not a PC deviation.
-// THE OWNER OF THAT WIRE IS PublishSkyConstantsBringUp; if it does not run, the internal frame is
-// the all-zero one BrnShaderConstantsFrame::Construct left and the block below REFUSES rather than
-// projecting the sun through a zero matrix (AGENTS.md rule 9). The refusal names the wire.
+// The world fills the original external bank through RendererIO; SwapBuffers
+// publishes that complete bank for this render owner to read.
 // =================================================================================================
 void BrnRendererModule::ComputeSunCoronaVisibility()
 {
@@ -3851,7 +3175,7 @@ void BrnRendererModule::ComputeSunCoronaVisibility()
             CgsDev::Log::WriteToLog(
                 "[suncorona] SKIPPED: the INTERNAL shader-constants frame carries no view"
                 " projection / key-light direction yet -- its producer is"
-                " PublishSkyConstantsBringUp (external slot) + SwapBuffers (external -> internal)\n");
+                " WorldModule::GenerateDispatchLists (external slot) + SwapBuffers (external -> internal)\n");
         }
         return;
     }
@@ -5013,10 +4337,10 @@ void BrnRendererEvalPostFxTint2dColour(const BrnGraphics::EffectsArbitrator* lpA
 // called from BrnGameModule::DoDispatch with the DIRECTOR's published camera and the SIM timer's
 // step / time / multiplier -- the same three floats the console's EffectsModule::Update reads off
 // the published TimerStatusInterface. BrnRendererModule.cpp now passes the READ-LOCKED
-// `lpDispatchThreadInputBuffer->GetParticleRenderData()`, gated on that producer having run.
+// `GetPublishedParticleRenderDataPC()`, gated on that producer having run.
 //
 // ⚠ THE OLD WARNING IS KEPT AS HISTORY, BECAUSE THE HAZARD IT NAMES IS STILL REAL: DO NOT WIRE THE
-// ACCESSOR UP WITHOUT A PRODUCER. Passing `lpDispatchThreadInputBuffer->GetParticleRenderData()`
+// ACCESSOR UP WITHOUT A PRODUCER. Passing `GetPublishedParticleRenderDataPC()`
 // unconditionally would hand this function UNINITIALISED memory before the first producer run:
 // neither DispatchThreadInputBuffer::Construct (faithfully -- the console does not clear that
 // payload either) nor CreateIOBuffer<T> (since the 2026-08-15 perf wave) zeroes it. A garbage view
@@ -5489,7 +4813,7 @@ void BrnRendererModule::PrepareAgain(renderengine::Texture* lpBlobbyShadow,
 
 // [FLAG PC bring-up] see BrnShaderConstantsFrame.h. Written by
 // WorldModule::GenerateDispatchListsBringUp once per dispatch frame.
-BrnSkyCameraBringUp gBrnSkyCameraBringUp = { {}, {}, false };
+
 
 bool BrnRendererModule::EnsureSkyDomeBringUp()
 {
@@ -5534,134 +4858,7 @@ bool BrnRendererModule::EnsureSkyDomeBringUp()
 // WorldModule; SwapBuffers makes it internal, and Render 0x8240D0FC reads that
 // internal slot. The native consumer now follows the same immutable-frame rule.
 // Keep the renderer framing and all six reflection matrices in the same copy.
-void BrnRendererModule::PublishSkyConstantsBringUp(BrnShaderConstantsFrame* lpFrame)
-{
-    if (lpFrame == 0)
-        return;
 
-    // Boot has no world frame until the first producer completes.
-    if (!gbBrnWorldShaderConstantsFrameBringUpValid)
-    {
-        static bool sbLoggedNoLiveFrame = false;
-        if (!sbLoggedNoLiveFrame && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedNoLiveFrame = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[sky] no live world shading frame yet - the sky constants are not published\n";
-        }
-        return;
-    }
-
-    const BrnShaderConstantsFrame& lrLiveFrame = gBrnWorldShaderConstantsFrameBringUp;
-
-    // The live frame is read UNLOCKED (the world's seam closes its write lock at
-    // BrnWorldModule.cpp:5540), which is what every lock-checked getter asserts.
-    const Vector3 lKeyLightDirection = lrLiveFrame.GetKeyLightDirection();
-    const Vector4 lTopColourDrk      = lrLiveFrame.GetTopColourDrk();
-    const f32     lfWhiteLevel       = lrLiveFrame.GetWhiteLevel();
-
-    lpFrame->LockForWriting();
-
-    // ---- the camera half: the renderer's own framing, unchanged ---------------------------
-    lpFrame->SetViewProjectionMatrix(gBrnSkyCameraBringUp.mViewProjection);
-    lpFrame->SetViewPosition(gBrnSkyCameraBringUp.mViewPosition);
-    // The transform is not a framing input for any pass this build runs; it is carried across
-    // so the frame is the world's frame in full rather than in part.
-    lpFrame->SetCameraTransform(lrLiveFrame.GetCameraTransform());
-
-    // ---- the environment half: the live environment manager's, member for member -----------
-    lpFrame->SetKeyLightDirection(lKeyLightDirection);
-    lpFrame->SetKeyLightColour(lrLiveFrame.GetKeyLightColour());
-    lpFrame->SetUnbiasedKeyLightDirection(lrLiveFrame.GetUnbiasedKeyLightDirection());
-    lpFrame->SetWhiteLevel(lfWhiteLevel);
-    lpFrame->SetGameTime(lrLiveFrame.GetGameTime());
-
-    // the sky gradient (the manager's blended ScatteringData)
-    lpFrame->SetTopColourDrk(lTopColourDrk);
-    lpFrame->SetHorColourPow(lrLiveFrame.GetHorColourPow());
-    lpFrame->SetSunColourPow(lrLiveFrame.GetSunColourPow());
-    lpFrame->SetHorBleedSclPow(lrLiveFrame.GetHorBleedSclPow());
-
-    // fog / scattering (the same four numbers as shader-constant slot 27, so the dome's
-    // horizon haze matches the city's)
-    lpFrame->SetFogScattering(lrLiveFrame.GetFogScattering());
-
-    // the clouds (the manager's blended CloudsData -- colours already at the white level,
-    // density already 1-negativeDensity, feather already 1/feathering)
-    lpFrame->SetCloudDarkColour0(lrLiveFrame.GetCloudDarkColour0());
-    lpFrame->SetCloudLiteColour0(lrLiveFrame.GetCloudLiteColour0());
-    lpFrame->SetCloudTextureScaleAndOffsets0(lrLiveFrame.GetCloudTextureScaleAndOffsets0());
-    lpFrame->SetCloudLayerOpacity(lrLiveFrame.GetCloudLayerOpacity());
-    lpFrame->SetCloudLayerDensity(lrLiveFrame.GetCloudLayerDensity());
-    lpFrame->SetCloudLayerInvFeather(lrLiveFrame.GetCloudLayerInvFeather());
-    lpFrame->SetCloudDistanceCurve(lrLiveFrame.GetCloudDistanceCurve());
-
-    // the ENV-MAP half (reflections step 1): the six per-face view-projections + the cube's eye.
-    // The console's producer writes them in WorldModule::GenerateDispatchLists @0x827D1CE8 through
-    // the two out-of-line setters whose ONLY caller is that function (SetEnvMapViewProjectionMatrix
-    // @0x827B00A8, SetEnvMapViewPosition @0x827B01E8 -- the call-site census is in this function's
-    // own banner above). Both accessors are lock-asserted: the getters assert the SOURCE frame is
-    // not write-locked (it is not -- the world's seam closes its lock at BrnWorldModule.cpp:5540)
-    // and the setters assert this one IS (it is -- LockForWriting above). Read the loop rather than
-    // six unrolled lines: E_FACE_NUM is the frame's own array bound and the setter asserts it.
-    for (u32 luFace = 0; luFace < static_cast<u32>(BrnGraphics::E_FACE_NUM); ++luFace)
-    {
-        const BrnGraphics::EEnvironmentMapFace leFace =
-            static_cast<BrnGraphics::EEnvironmentMapFace>(luFace);
-        lpFrame->SetEnvMapViewProjectionMatrix(leFace,
-                                               lrLiveFrame.GetEnvMapViewProjectionMatrix(leFace));
-    }
-    lpFrame->SetEnvMapViewPosition(lrLiveFrame.GetEnvMapViewPosition());
-
-    lpFrame->UnlockForWriting();
-
-    // [FLAG PC bring-up diagnostic] THE COHERENCE PROOF, and the only way to see the day move
-    // without a screenshot: the first published frame, then one line every 600 sky frames
-    // (~10 s at 60 fps, ~24 lines over a 240 s boot). The key light must read the same numbers
-    // as `[shadow-prod] keyLight` on the same frame -- that is the regression this closes --
-    // and the top-of-sky colour must drift as the timeline advances the hour.
-    // DELETE with the bring-up.
-    // [DIAG] NOT IN THE X360 BINARY -- BRN_ENV_DIAG=1 (issue #30): a published live frame whose
-    // white level is not positive or whose key light is not finite is named with the present
-    // count, so the black-frame watch's presents can be laid against the renderer's inputs.
-    {
-        static int siEnvDiag = -1;
-        if ( siEnvDiag < 0 )
-        {
-            const char* lpcEnv = std::getenv( "BRN_ENV_DIAG" );
-            siEnvDiag = ( lpcEnv != 0 && lpcEnv[0] != '\0' && lpcEnv[0] != '0' ) ? 1 : 0;
-        }
-        static u32 suBadPrinted = 0u;
-        const bool lbFiniteKey = ( lKeyLightDirection.x == lKeyLightDirection.x )
-                              && ( lKeyLightDirection.y == lKeyLightDirection.y )
-                              && ( lKeyLightDirection.z == lKeyLightDirection.z );
-        if ( siEnvDiag == 1 && CgsDev::Log::gpDebugPrint != 0 && suBadPrinted < 64u
-             && ( !( lfWhiteLevel > 0.0f ) || !lbFiniteKey ) )
-        {
-            ++suBadPrinted;
-            *CgsDev::Log::gpDebugPrint
-                << "[env-diag] publish present=" << renderengine::guPresentCount
-                << " whiteLevel=" << lfWhiteLevel << " keyLight=(" << lKeyLightDirection.x << ", "
-                << lKeyLightDirection.y << ", " << lKeyLightDirection.z << ") top=("
-                << lTopColourDrk.x << ", " << lTopColourDrk.y << ", " << lTopColourDrk.z << ")\n";
-        }
-    }
-    {
-        static u32 suSkyPublishCount = 0;
-        ++suSkyPublishCount;
-        if ((suSkyPublishCount == 1u || (suSkyPublishCount % 600u) == 0u)
-            && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[sky] key light from the live frame ("
-                << lKeyLightDirection.x << ", " << lKeyLightDirection.y << ", "
-                << lKeyLightDirection.z << ") [valid at renderer frame "
-                << static_cast<s32>(suSkyPublishCount) << "] top=("
-                << lTopColourDrk.x << ", " << lTopColourDrk.y << ", " << lTopColourDrk.z
-                << ") whiteLevel " << lfWhiteLevel << "\n";
-        }
-    }
-}
 
 // @ 0x8240BFA8 - BrnRendererModule::Render. Reconstructed from the X360 ARTIST build.
 //
@@ -5677,27 +4874,10 @@ void BrnRendererModule::PrepareDisplayPC()
         mAllocatedRenderTargets.PCResizeDisplay();
 }
 
-void BrnRendererModule::Prepare2DFramePC()
-{
-    if (!mIm2dRenderBuffer.IsPreparedPC())
-        return;
-    if (BrnGui::gpActiveGuiModule != nullptr)
-        BrnGui::gpActiveGuiModule->Render(&mIm2dRenderBuffer,
-            GetIm3dBufferRacePositionPC(), GetIm3dBufferMenusAndHudPC());
 
-    PCMovieFrame& lrMovie = maPCMovieFrames[mu8PCMovieWriteFrame];
-    lrMovie = PCMovieFrame{};
-    if (BrnGui::gpActiveMovieManager != nullptr)
-    {
-        lrMovie.mbManagerPresent = true;
-        lrMovie.mbPresenting = BrnGui::gpActiveMovieManager->IsMoviePresentationActive();
-        lrMovie.mbQueued = BrnGui::gpActiveMovieManager->IsMovieQueued();
-        lrMovie.miState = static_cast<s32>(BrnGui::gpActiveMovieManager->GetState());
-        BrnGui::gpActiveMovieManager->Render(&mIm2dRenderBuffer);
-    }
-}
 
-void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer)
+void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
+                               const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer)
 {
     // Finish unused/disabled-pass sorts as well, before this frame returns to
     // resource publication or shutdown. Individual passes join before reading.
@@ -5716,7 +4896,14 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         CgsSystem::HardwareInit::RequestShutdown();
         return;
     }
-    if (!renderengine::Device::FrameBegin())
+    // ARTIST 8240C340..398 draws only in the original stall stages 0 and 1.
+    // The native engine surface survives presentation. Suppressed frames must
+    // begin without the host FrameBegin clear, then still run the original
+    // loading-command, GDL and effects callback work before the draw gate.
+    const bool lbDrawFrame = meFrameStallStage == E_FRAMESTALL_NOT_STALLED
+        || meFrameStallStage == E_FRAMESTALL_SYNCING_BUFFERS;
+    if (!(lbDrawFrame ? renderengine::Device::FrameBegin()
+                      : renderengine::Device::FrameBeginNoClear()))
     {
         return;
     }
@@ -5735,20 +4922,6 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         mLoadingScreenRenderer.AddCommand(
             lpDispatchThreadInputBuffer->GetLoadingScreenCommand());
 
-    // The console holds the dispatch input buffer's READ LOCK for the whole frame: `mr r3, r26 /
-    // bl CgsModule::IOBuffer::LockForRead` @0x8240C38C, before the first world pass, and the matching
-    // UnlockForRead @0x8240E304 at the tail of Render (r26 = lpDispatchThreadInputBuffer, the same
-    // register the `lwzx r4, r26, 0x9990` GetLoadingScreenCommand read above uses). Every read-locked
-    // getter this function calls sits inside that window -- GetBrightness @0x8240DCC8 / GetContrast
-    // @0x8240DCFC for the composite, and the effects-frame reads -- and each asserts
-    // "Not locked for reading" outside it. The lock was missing here until the composite lit its
-    // first locked getter (2026-08-15); GetLoadingScreenCommand is an inline read with no assert,
-    // which is why nothing had noticed. (There is also a shorter first window, LockForRead
-    // @0x8240C1C4 / UnlockForRead @0x8240C220, around the console's tint-vector reads at
-    // 0x8240C1C8-0x8240C21C, which this build does not perform yet.)
-    if (lpDispatchThreadInputBuffer != 0)
-        lpDispatchThreadInputBuffer->LockForRead();
-
     // ---- X360 Render:389-396 -- the object->mesh expansion and the pass sorts. ------------
     // Hoisted up here (it used to live at the top of RenderWorldPasses) because the SHADOW
     // pass below consumes mesh lists 0..4 and, on the console, runs before the world passes.
@@ -5757,6 +4930,29 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     lRenderStage.Next(RENDER_BUILD_LISTS);
     const bool lbDispatchReady = BuildDispatchLists(&lDispatchContext);
     lRenderStage.Next(RENDER_SETUP);
+
+    // ARTIST 8240C31C..330: supplied owner, fresh control IO, after conversion
+    // and sorting, including stage 2. The control pair rotates independently
+    // of retained draw banks, so its events are consumed exactly once.
+    {
+        Scope lEffectsProfile(DISPATCH_EFFECTS);
+        lpEffectsModule->DispatchThreadUpdate(lpDispatchThreadInputBuffer);
+    }
+
+    // ARTIST 8240C388..38C begins the frame-long read window only after
+    // the effects callback has released its own read lock.
+    if (lpDispatchThreadInputBuffer != 0)
+        lpDispatchThreadInputBuffer->LockForRead();
+
+    // Original 8240C398 -> 8240E25C skips all draws, including the HUD tail.
+    if (!lbDrawFrame)
+    {
+        if (lpDispatchThreadInputBuffer != 0)
+            lpDispatchThreadInputBuffer->UnlockForRead();
+        lRenderStage.Next(RENDER_PRESENT);
+        renderengine::Device::ShowPixelBuffer();
+        return;
+    }
 
     // [PC bring-up] Realise the shadow-map render target. The console builds the whole
     // render-target pool in BrnRendererMemory::Construct during BrnRendererModule::Construct;
@@ -6263,7 +5459,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     //   * the PerfMonGpu / PerfMonCpu Start/Stop pairs (miEnvironmentMap gpu +51664, cpu +51528,
     //     per-face wait +51532) -- the whole of Render carries none of them on this build; see the
     //     BRN_GPU_PERFMON_AVAILABLE banner.
-    // The per-face sort rendezvous at ARTIST8240CBF8 is handled below by
+    // The per-face sort rendezvous at ARTIST 8240CBF8 is handled below by
     // WaitForMeshSortPC, using the descriptors belonging to this frame bank.
     // ============================================================================================
     lRenderStage.Next(RENDER_ENVMAP);
@@ -6338,7 +5534,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             // Begin, no dispatch, no sky, no resolve -- which is what makes the console's
             // three-faces-per-frame alternation (WorldModule::GenerateFrustumQueries :3486-3499)
             // cost three faces and not six.
-            if (!lpDispatchThreadInputBuffer->GetEnvMapFaceRender(luFace))
+            if (!GetPublishedEnvMapFaceRenderPC(luFace))
                 continue;
 
             labStatFaceRendered[luFace] = true;
@@ -6564,7 +5760,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         if (mbRenderParticles && lpDispatchThreadInputBuffer != 0)
         {
             const BrnParticle::ParticleModule::ParticleRenderData* lpPreRenderData =
-                lpDispatchThreadInputBuffer->GetParticleRenderData();
+                GetPublishedParticleRenderDataPC();
             if (lpPreRenderData != 0 && lpPreRenderData->mpParticleModule != 0)
             {
                 // ParticleModule::BeginParticleRenderJob @0x8228A7C0 -- the console calls it
@@ -6608,9 +5804,6 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         // anti-alias bracket did not open.)
         if (lbSceneBracketOpen && mbRenderCoronas && EnsureCoronaManagerBringUp(mCoronaManager))
         {
-            if (maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameInternal])
-                PCBringUpPublishCoronaCamera(mCoronaManager,
-                    maShaderConstantsFrames[mu8ShaderConstantsFrameInternal]);
             mCoronaManager.Render(lfFrameWhiteLevel);
         }
 
@@ -6659,7 +5852,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         if (lbSceneBracketOpen && mbRenderParticles && lpDispatchThreadInputBuffer != 0)
         {
             const BrnParticle::ParticleModule::ParticleRenderData* lpFullResRenderData =
-                lpDispatchThreadInputBuffer->GetParticleRenderData();
+                GetPublishedParticleRenderDataPC();
             if (lpFullResRenderData != 0 && lpFullResRenderData->mpParticleModule != 0
                 && lpDispatchThreadInputBuffer->GetCalibrationUnfriendlyEnablePostFx()
                 && !lpDispatchThreadInputBuffer->GetIsStalled())
@@ -6725,13 +5918,18 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         // BeginRenderAntiAliased's untiled branch (0x823FFB90-0x823FFBD8) deliberately clears
         // nothing -- the previous frame's resolve is what left the surface clean. Drop it and the
         // scene's DEPTH is never cleared again.
-        // ARTIST8240D520..D538: world immediate buffers and RacePosition
+        // ARTIST 8240D520..D538: world immediate buffers and RacePosition
         // share the textured3D renderer before the scene resolve/post-fx.
         if (mbRenderWorldImmediateMode && mbIm3dRendererConstructedPC)
         {
             mIm3dRenderBuffer.Dispatch(&mIm3dRenderer);
             mIm3dBufferRacePosition.Dispatch(&mIm3dRenderer);
         }
+        // ARTIST 8240D57C..D59C: debug3D follows world immediate mode,
+        // independently of its switch, before the scene resolve.
+        if (mbIm3dRendererConstructedPC
+            && (!mbDispatchThreadTakeScreenshot || mbCaptureOverlaysInScreenshot))
+            mIm3dDebugRenderBuffer.Dispatch(&mIm3dRenderer);
         ResolveMSAA(lfFrameWhiteLevel, luSceneStencilClearValue);
 
         // ==========================================================================================
@@ -6841,7 +6039,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             if (mbRenderParticles && lpDispatchThreadInputBuffer != 0)
             {
                 const BrnParticle::ParticleModule::ParticleRenderData* lpQuarterResRenderData =
-                    lpDispatchThreadInputBuffer->GetParticleRenderData();
+                    GetPublishedParticleRenderDataPC();
                 if (lpQuarterResRenderData != 0 && lpQuarterResRenderData->mpParticleModule != 0
                     && lpDispatchThreadInputBuffer->GetCalibrationUnfriendlyEnablePostFx()
                     && !lpDispatchThreadInputBuffer->GetIsStalled())
@@ -7000,9 +6198,9 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             // runs -- from then on the record is written before any reader, as on the console.
             const BrnParticle::ParticleModule::ParticleRenderData* lpParticleRenderData = 0;
             if (lpDispatchThreadInputBuffer != 0
-                && BrnParticle::PCBringUpParticleRenderDataProducedFor(lpDispatchThreadInputBuffer))
+                && maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameInternal])
             {
-                lpParticleRenderData = lpDispatchThreadInputBuffer->GetParticleRenderData();
+                lpParticleRenderData = GetPublishedParticleRenderDataPC();
             }
             (void)BrnRendererUpdatePostFxMotionBlur(lpEffectsArbitrator, lpParticleRenderData);
         }
@@ -7168,131 +6366,21 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         return;
     }
 
-    // Save/load background layer: in E_LSC_SHOWSAVELOADBG mode the loading screen renders
-    // BENEATH the GUI, so the SaveLoadComponent prompt draws over the dimmed loading art.
-    // Layer order is the console Render tail @0x8240BFA8: RenderBackground -> the GUI
-    // dispatch flush -> RenderForeground.
-    mLoadingScreenRenderer.RenderBackground(&mIm2dRenderer);
-
-    // GUI render drive (the Apt/view frame): the X360 render pass runs the GUI module's
-    // Render (BrnGui::GuiModule::Render @0x825146B8 -> CgsGui::GuiModule::Render
-    // @0x8285AF38 -> ViewModule::Render @0x82858810 -> RenderInternal @0x82858AF8 ->
-    // AptAux::Render -> the engine render walk), which fills the published Apt command
-    // buffer, then the PC dispatch leaf flushes it to D3D9 and the movie pass presents
-    // the active fullscreen video over it (UpdateAndRenderMovieManager, inside the GUI
-    // pass, exactly the console order). Clean no-op until the GUI module is prepared.
-    // This is how BootLegal's Title_Screen02 movie reaches the screen. [GUI render path]
-    if (BrnGui::gpActiveGuiModule != 0)
-        BrnGui::gpActiveGuiModule->DispatchRenderBufferPC();
-
-    // ARTIST8240E048: menu/HUD3D follows GUI2D, before loading foreground.
-    if (mbRenderHudImmediateMode && mbIm3dRendererConstructedPC)
-        mIm3dBufferMenusAndHud.Dispatch(&mIm3dRenderer);
-
-    // (gameplay-render passes here when reconstructed; gated off during the loading screen)
-
-    mLoadingScreenRenderer.RenderForeground(&mIm2dRenderer);
-
-    // Full-screen movie presentation. FLAG PC-platform: on the X360 the movie frame is
-    // drawn inside the GUI pass (UpdateAndRenderMovieManager) and the XMV presentation
-    // then owns the screen ABOVE the whole 2D frame -- the boot logos play over the
-    // still-latched loading screen (BootVideos @0x82478778 posts no hide; the first 20
-    // is BootLegal::OnEnter's). The PC FFmpeg substitute has no overlay plane, so its
-    // presentation quad draws here, after the loading-screen foreground, to reproduce
-    // that layering. The manager's Update stays in its real GUI-pass home.
-    const PCMovieFrame& lrMovie = maPCMovieFrames[mu8PCMovieWriteFrame ^ 1u];
-    if (lrMovie.mbManagerPresent)
+    // ARTIST 8240E000..E054: one HUD gate and the original command order.
+    // GUI and movie commands share the renderer-owned Im2d buffer.
+    if (mbRenderHudImmediateMode)
     {
-        // The XMV presentation owns the screen for the WHOLE video cycle, not just the
-        // frames a picture is up: the console shows BLACK between the boot logos (player
-        // teardown + the 10+10-frame memory-return delays before the next video is
-        // queued) and across each crossfade tail -- never the latched loading screen.
-        // The PC stand-in reproduces that ownership with an opaque black underlay while
-        // the manager's presentation cycle is active (IsMoviePresentationActive), held
-        // for a short linger past the cycle's end to cover the event-queue hops between
-        // one video's finish-report and the next play command (logo -> logo) or the
-        // title state's hide/589-overlay takeover (last logo -> BF_LEGAL).
-        // ⭐ [loading-fade seat 2026-08-27] THE FADE-OUT-INTO-THE-FIRST-VIDEO FIX. On the
-        // console the XMV presentation cannot own the screen the same frame the loading
-        // screen is told to hide: the video's start sits behind REAL async work (the
-        // VIDEODATA resource acquire off disc, the collision-world / car-pool invalidation
-        // round trips, the XMV spin-up), and the loading screen's 0.5s hide fade completes
-        // inside that gap -- fade to black, then the logo fades in. The PC fold loads and
-        // preps synchronously (measured: MoviePlayer.Prepare lands ONE LOG LINE after the
-        // hide command), so the ownership underlay + video quad below were burying the
-        // fade on its first frame -- the long-standing "loading screen doesn't fade out
-        // into the first video". The seat: presentation ownership is HELD while the
-        // loading screen's foreground hide fade is still in flight (mbVisible through the
-        // fade tail; save/load-background mode excluded), exactly the observable console
-        // ordering. The manager's Update/decode clock is untouched -- only the screen
-        // take-over waits.
-        const bool lbLoadingFadePending =
-            mLoadingScreenRenderer.IsForegroundHideFadePending();
-        const bool lbPresenting = !lbLoadingFadePending &&
-            lrMovie.mbPresenting;
-        const u64  lu64PresentNow  = CgsSystem::GetSystemTimerBaseTime64();
-        const u64  lu64PresentFreq = CgsSystem::GetSystemTimerFrequency64();
-        if (lbPresenting)
-        {
-            gu64LastMoviePresentTick = lu64PresentNow;
-            gbMoviePresentTickValid  = true;
-        }
-        const bool lbOwnsScreen = lbPresenting ||
-            (!lbLoadingFadePending &&
-             gbMoviePresentTickValid && lu64PresentFreq != 0u &&
-             (lu64PresentNow - gu64LastMoviePresentTick) < lu64PresentFreq / 4u);
-        // [diag] BRN_IM2D_TRACE: surface the underlay latch state on the same cadence as
-        // the Im2d draw trace (queued id + manager state + owns-screen).
-        {
-            static int siTrace = -1;
-            if (siTrace < 0)
-            {
-                char lacBuf[8];
-                siTrace = (GetEnvironmentVariableA("BRN_IM2D_TRACE", lacBuf, sizeof(lacBuf)) > 0) ? 1 : 0;
-            }
-            if (siTrace == 1 && (renderengine::guPresentCount % 60u) == 0u)
-            {
-                char lacMsg[160];
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                              "[MovieOwn] f=%u presenting=%d owns=%d queued=%d state=%d\n",
-                              renderengine::guPresentCount, lbPresenting ? 1 : 0, lbOwnsScreen ? 1 : 0,
-                              lrMovie.mbQueued ? 1 : 0, lrMovie.miState);
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
-        }
-        if (lbOwnsScreen)
-        {
-            const CgsGraphics::RGBA8 KC_MOVIE_BLACK = { 0, 0, 0, 255 };
-            mIm2dRenderer.BeginRendering();
-            mIm2dRenderer.SetState(static_cast<const CgsGraphics::BlendState*>(nullptr));
-            mIm2dRenderer.SetTexture(nullptr);   // untextured -> solid vertex colour
-            EmitColouredQuad(&mIm2dRenderer, 0.0f, 0.0f, 1280.0f, 720.0f, KC_MOVIE_BLACK);
-            mIm2dRenderer.EndRendering();
-        }
-        // The video frame quad holds with the ownership underlay -- see the fade seat above.
-        if (!lbLoadingFadePending && mIm2dRenderBuffer.IsPreparedPC())
-        {
-            mIm2dRenderBuffer.Dispatch(&mIm2dRenderer);
-        }
+        mLoadingScreenRenderer.RenderBackground(&mIm2dRenderer);
+        mIm2dRenderBuffer.Dispatch(&mIm2dRenderer);
+        if (mbIm3dRendererConstructedPC)
+            mIm3dBufferMenusAndHud.Dispatch(&mIm3dRenderer);
+        mLoadingScreenRenderer.RenderForeground(&mIm2dRenderer);
     }
 
-    if (BrnGame::BrnGameModule* lpGame = BrnGame::GetMainGameModule())
-        lpGame->PrepareDebugOverlayForDispatchPC();
-
-    // Record the debug primitives, then consume their frozen buffer above the
-    // foreground/movie layers. The 3D debug buffer remains on its existing path.
-    if (CgsDev::DebugManager* lpDebugManager = CgsDev::DebugManager::ThreadSafeAquire())
-    {
-        Matrix44 lViewProjection;
-        lViewProjection.SetIdentity();
-        Vector3 lCameraPosition;
-        lCameraPosition.SetZero();
-        lpDebugManager->Render(lViewProjection, lCameraPosition, &mIm3dDebugRenderBuffer, &mIm2dDebugRenderBuffer);
-        CgsDev::DebugManager::ThreadSafeRelease(lpDebugManager);
-        mIm2dDebugRenderBuffer.Swap();
-        mIm2dDebugRenderBuffer.Clear();
+    // ARTIST 8240E158..E190 consumes the already published debug bank.
+    if (mbRenderHudImmediateMode
+        && (!mbDispatchThreadTakeScreenshot || mbCaptureOverlaysInScreenshot))
         mIm2dDebugRenderBuffer.Dispatch(&mIm2dRenderer);
-    }
 
     // The three per-thread monitor squares (X360 RenderThreeThreadMonitors). The real per-thread
     // "running in real time" flags need the threading system (deferred), so they are derived here from
@@ -7390,21 +6478,36 @@ void BrnRendererModule::Update(CgsModule::IOBufferStack* /*lpUpdateInputStack*/,
 {
     CGS_ASSERT(lpOutput != 0, "lpOutput");   // X360 :0x11A7
     CGS_ASSERT(lpInput  != 0, "lpInput");    // X360 :0x11A8
-    if (lpInput == 0 || lpOutput == 0)
-        return;
 
     lpInput->LockForRead();
     lpOutput->LockForWrite();
 
     // @0x82405EA4-B0 -- the camera crosses first.
-    if (const BrnDirector::Camera::Camera* lpCamera = lpInput->GetBrnCamera())
     {
-        lpOutput->SetBrnCamera(*lpCamera);
+        const BrnDirector::Camera::Camera& lrCamera = lpInput->GetBrnCamera();
+        lpOutput->SetBrnCamera(lrCamera);
         // [cam-flags] BRN_CAM_INPUT_DIAG: the state flags as handed to the world dispatch.
         static const bool sbCamDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
         static u32 suCamDiagCalls = 0;
         if (sbCamDiag && (suCamDiagCalls++ % 60u) == 0 && CgsDev::Log::gpDebugPrint != 0)
-            *CgsDev::Log::gpDebugPrint << "[cam-flags] renderer output flags " << lpCamera->mState_uFlags << "\n";
+            *CgsDev::Log::gpDebugPrint << "[cam-flags] renderer output flags " << lrCamera.mState_uFlags << "\n";
+
+        // ARTIST 82405EC4..5FA0: only corona setup has the FOV > 0.1 gate.
+        // The renderer/world whole-camera copy above always occurs.
+        if (lrCamera.GetFOV() > 0.1f)
+        {
+            CgsGraphics::Camera lCamera;
+            lrCamera.CopyToCgsCamera(&lCamera);
+            const f32 lfOotHalfFovH = lCamera.maProjectionScalars[1];
+            const f32 lfOotHalfFovV = lCamera.maProjectionScalars[4];
+            const f32 lfClamped = lfOotHalfFovH >= 1.0f ? lfOotHalfFovH : 1.0f;
+            const Vector4 lViewXyScale = {
+                lfClamped, (lfOotHalfFovV / lfOotHalfFovH) * lfClamped, 0.0f, 0.0f };
+            mCoronaManager.GetSubmissionInterface()->SetCameraInfo(
+                lCamera.GetViewProjectionMatrix(), lrCamera.GetPosition(), lViewXyScale);
+        }
+        if (lrCamera.GetEffects().mbRequestingScreenshot)
+            mbUpdateThreadTakeScreenshot = true;
     }
 
     // @0x82405EBC-C0 -- THE LATCH SOURCE.  The console lends the ADDRESS of its embedded

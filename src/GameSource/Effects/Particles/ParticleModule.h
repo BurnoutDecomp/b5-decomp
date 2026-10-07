@@ -442,6 +442,9 @@ namespace BrnParticle
         void Update(f32 lfTimeStep, f32 lfTime, f32 lfTimeStepMultiplier, const BrnDirector::Camera::Camera* lpCamera);
         // X360 0x82294C30 -- the frame's end: latch mbStalled, then the trail system's buffer flip.
         void EndOfFrame(bool lbStalled);
+        // FLAG PC-platform leaf: immutable native draw snapshots publish at
+        // the same joined boundary as the renderer's completed command bank.
+        void PublishRenderCommandsPC(const ParticleRenderData& lrRenderData);
         // DWARF ParticleModule.h:309 `void StartOfFrame();` -- INLINE, with no body of its own in the image:
         // BrnGameModule::OnStartOfUpdateFrame @0x823A8BB0 inlines it through EffectsModule::StartOfFrame as ONE
         // store, `lfs f0, flt_82001CC0 (0.0) ; stfsx f0, r11, r9` with r9 = 0x88194C = the particle module's
@@ -953,6 +956,7 @@ namespace BrnParticle
 
         Native::SimpleParticleFramePC mSimpleParticleFramePC;
         Native::TrailFramePC mTrailFramePC;
+        u32 muTrailSystemUpdateFramePC = 0;
         Native::ParticleRandomAccessPC mRandomAccessPC;
         template<class Draw> decltype(auto) DrawRandomPC(Draw lfDraw)
         {

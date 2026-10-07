@@ -199,4 +199,12 @@ bool Im3dRenderBuffer::HandleCommand(const ImCommand* lpCommand, Im3dBase<BasicC
     return Im3dRenderBufferBase<BasicColouredTexturedVertex>::HandleCommand(lpCommand, lpRenderer);
 }
 template class Im3dRenderBufferBase<BasicColouredTexturedVertex>;
+
+// ARTIST 823FF0D8 / 827E1AF8: the untextured subclass uses the same
+// command set, through its own typed immediate renderer and vertex records.
+template void Im3dRenderBufferBase<BasicColouredVertex>::Dispatch(Im3dBase<BasicColouredVertex>*) const;
+template bool Im3dRenderBufferBase<BasicColouredVertex>::HandleCommand(const ImCommand*, Im3dBase<BasicColouredVertex>*) const;
+template void Im3dRenderBufferBase<BasicColouredVertex>::PostCommand3d(u32, const ImCommand*, u32);
+template void Im3dRenderBufferBase<BasicColouredVertex>::SetTransform(Matrix44::InParam);
+template void Im3dRenderBufferBase<BasicColouredVertex>::SetTransform(Matrix44::InParam, Matrix44::InParam);
 }

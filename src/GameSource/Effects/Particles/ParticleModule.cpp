@@ -847,21 +847,23 @@ namespace BrnParticle
     // =========================================================================
     void ParticleModule::EndOfFrame(bool lbStalled)
     {
-        mSimpleParticleFramePC.Publish(maSimpleParticles);
-
         mbStalled = lbStalled;
         mTrailSystem.EndOfFrame();
-        // FLAG PC-platform leaf: update owns the live emitter lists and the
-        // timeout clock. Dispatch has joined here; publish independent trail
-        // records before the next update can move/reuse a strip or its owner.
-        // Present-only host frames carry an original zero simulation sum. They
-        // must not erase the last simulation frame's timeout interval: the next
-        // wheel step would otherwise detach every emitter before its second
-        // segment. The draw bank still receives the current camera/clock in
-        // BuildLionVertexBuffers; only the live producer cadence is retained.
-        if (mRenderData.mfCurrentTimeStep != 0.0f)
-            mTrailSystem.Update(mRenderData.mfCurrentTimeStep, mRenderData.mfCurrentTime,
-                                mRenderData.mCgsCamera.GetViewProjectionMatrix());
+    }
+
+    void ParticleModule::PublishRenderCommandsPC(const ParticleRenderData& lrRenderData)
+    {
+        mSimpleParticleFramePC.Publish(maSimpleParticles);
+        // ARTIST BuildLionVertexBuffers 8228ACA8..AD48 updates the trail
+        // clock once per actual particle record, including a real zero step.
+        // FLAG PC-platform leaf: live timeout/emitter writes stay on the joined
+        // owner; the dispatch thread uses the independent published draw copy.
+        if (muTrailSystemUpdateFramePC != lrRenderData.muCurrentFrame)
+        {
+            muTrailSystemUpdateFramePC = lrRenderData.muCurrentFrame;
+            mTrailSystem.Update(lrRenderData.mfCurrentTimeStep, lrRenderData.mfCurrentTime,
+                                lrRenderData.mCgsCamera.GetViewProjectionMatrix());
+        }
         mTrailFramePC.Publish(mTrailSystem);
     }
 

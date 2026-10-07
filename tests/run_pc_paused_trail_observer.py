@@ -37,9 +37,17 @@ struct IDirect3DDevice9 {
     HRESULT GetVertexShader(IDirect3DVertexShader9** p) { ++gCalls;
         if(SUCCEEDED(shaderResult))*p=&vs;return shaderResult; }
 };
-struct WorldFrame { Matrix44 matrix;
-    Matrix44 GetViewProjectionMatrix() const { return matrix; } } gBrnWorldShaderConstantsFrameBringUp;
-bool gbBrnWorldShaderConstantsFrameBringUpValid=true;
+struct BrnShaderConstantsFrame { Matrix44 matrix;
+    Matrix44 GetViewProjectionMatrix() const { return matrix; } } gPublishedWorldFrame;
+bool gPublishedWorldFrameValid=true;
+namespace BrnGame {
+struct BrnGameModule {
+    const BrnShaderConstantsFrame* GetPublishedShaderConstantsFramePC() const {
+        return gPublishedWorldFrameValid ? &gPublishedWorldFrame : nullptr;
+    }
+} gGame;
+const BrnGameModule* GetMainGameModule() { return &gGame; }
+}
 u32 suImVertsStride=28,suImVertsPrimCount=4;
 u64 guWorldDrawCalls=123;
 f32 sauImVertsScratch[7]={3041.5f,-4.2f,-1973.8f,0,0,0.3f,0.77f};
@@ -48,10 +56,10 @@ int main(int argc,char** argv) {
     if(argc!=2)return 90;const std::string mode=argv[1];
     _putenv_s("BRN_PAUSED_TRAIL_DIAG",mode=="off"?"":"1");
     IDirect3DDevice9 d;f32 expected[16]={};
-    for(u32 i=0;i<16;++i)expected[i]=d.native[i]=gBrnWorldShaderConstantsFrameBringUp.matrix.ma[i]=float(i)+0.25f;
-    if(mode=="source_stale")gBrnWorldShaderConstantsFrameBringUp.matrix.ma[0]+=1;
+    for(u32 i=0;i<16;++i)expected[i]=d.native[i]=gPublishedWorldFrame.matrix.ma[i]=float(i)+0.25f;
+    if(mode=="source_stale")gPublishedWorldFrame.matrix.ma[0]+=1;
     if(mode=="native_overwrite")d.native[0]+=2;
-    if(mode=="world_invalid")gbBrnWorldShaderConstantsFrameBringUpValid=false;
+    if(mode=="world_invalid")gPublishedWorldFrameValid=false;
     if(mode=="read_fail")d.constantsResult=E_FAIL;
     if(mode=="vs_fail")d.shaderResult=E_FAIL;
     if(mode=="code_fail")d.vs.result=E_FAIL;

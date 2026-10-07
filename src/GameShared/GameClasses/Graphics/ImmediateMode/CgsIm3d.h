@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredVertex.h"  // CgsGraphics::BasicColouredVertex
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"  // CgsGraphics::BasicColouredTexturedVertex (Im3d)
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // renderengine::ProgramVariableHandle
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
 
 // CgsGraphics::Im3d* - the immediate-mode 3D render hierarchy. Mirrors the 2D
 // fold in CgsIm2d.h: Im3dBase<V> adds the world transform on top of ImRenderer<V>, and
@@ -92,11 +93,4 @@ namespace CgsGraphics
         u32 mu32NumMasks;
     };
 
-    // The untextured 3D render buffer the renderers feed. On the X360/PS3 this is a distinct
-    // double-buffered vertex buffer; on the PC target it folds onto the one Im3dUntex renderer
-    // (exactly as Im2dRenderBuffer folds onto Im2d in CgsImRenderBuffer.h). FLAG: a placeholder
-    // empty Im3dRenderBufferUntex still exists in GameSource/Graphics/BrnRendererModule.h (a
-    // forward-only opaque-storage stub for that off-path renderer module); this is the real
-    // typed home -- the two are never included in the same TU.
-    typedef Im3dUntex Im3dRenderBufferUntex;
 }

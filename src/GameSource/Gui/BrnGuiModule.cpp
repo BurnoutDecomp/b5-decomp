@@ -215,7 +215,7 @@ namespace
 
 // ============================================================================
 // THE APT BRING-UP (transplanted from the retired BrnGuiAptRuntime.cpp): the
-// GuiModule owns the Apt bring-up driver + the PC render buffer, exactly as the
+// GuiModule owns the Apt bring-up driver; render callbacks use the frame owner's buffers, as the
 // console GuiModule::Prepare owns the view/apt prepare chain. Every FLAG below
 // is carried over unchanged; the remaining stand-in is the [PC IO] language
 // string-table load (its console replacement, the CgsLanguage::Sku pump, is
@@ -232,11 +232,13 @@ namespace
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCallbackRender.h"   // AptCallbackRender::DrawString / DeallocateString + AptMaskRenderOperation
 
 // ---- the Apt host adaptor + render handler (the render bridge) --------------
-#include "GameShared/GameClasses/Gui/PC/CgsAptRenderBackendPC.h"             // DispatchAptIm2dRenderBufferPC (slice-5 step A)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"          // CgsGui::AptAux / AptAuxPointer
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"// CgsGui::AptImRendererSet / AptIm2dRenderBuffer
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"                // CgsGui::ViewModule (real Apt/text owner)
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                       // CgsGuiModuleIO::ImRendererSet
+#include "GameShared/GameClasses/Module/CgsModuleUtils.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameSource/Gui/BrnGuiPerfmons.h"
 
 // ---- the Apt engine leaves that ARE bodied (the bring-up drives these) ------
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                   // DOGMA_PoolManager
@@ -247,7 +249,7 @@ namespace
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"       // EAStringC (loader file name)
 #include "SDKs/EATech/include/Apt/AptLoader.h"                // AptLoader / GetTarget / AptFilePtr
 
-// ---- the D3D9 2D immediate render buffer the Apt rasteriser fills + we flush --
+// ---- the original 2D command-buffer types used by the Apt render callbacks ----
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (AptAux render-set only)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"  // CgsGraphics::Im2d (the PROVEN immediate render path)
 #include "pc/gcm/renderengine/texture.h"                      // renderengine::Texture (mesh texture binding -> mpD3DTexture)
@@ -343,17 +345,8 @@ namespace
     CgsGui::ViewModule* s_pViewModule = nullptr;
     CgsMemory::LinearMalloc* s_pFlaptLinear = nullptr;   // the FLApt instance allocator (GuiModule-owned)
 
-    // ---- the Apt render buffer the engine's render callbacks fill --------------
-    // AptRenderHandler::GetIm2dRendererType() returns mpImRenderers->mpIm2dRenderer
-    // (an AptIm2dRenderBuffer*), and AptRenderHandler::Render appends its draw
-    // commands to the buffer's ImRenderBuffer<V> base.
-    // We OWN that buffer here and flush it to D3D9 each frame via Dispatch() -- this is
-    // how Apt geometry would reach the screen. (Reuse note: this is the SAME
-    // ImRenderBuffer<Basic2dColouredTexturedVertex> family the loading screen + debug
-    // HUD draw through; the Dispatch() path is the fully-reconstructed PC D3D9 flush.)
-    CgsGui::AptIm2dRenderBuffer s_AptRenderBuffer;
-    bool                        s_bRenderBufferReady = false;
-    bool                        s_bRenderBufferPublished = false;
+    // Apt render callbacks retain the view's canonical renderer set. Each
+    // dispatch publishes the original main-renderer buffers into that set.
 
     // ---- the pending load-notification queue (the GuiResourceModule OUTPUT-BUFFER stand-in) ----
     // Every bundle the host's [PC IO] leaf loads queues one GuiEventLoadNotification per carried
@@ -399,8 +392,6 @@ namespace
     // -> AptLinker::Load / AptLinker::Update own the load + mount + unload, and the
     // PERSISTENTAPT component library stays a registered-data import library (the
     // GuiResourceModule's up-front bank), not a mounted movie.)
-    s32         s_iRenderFrame           = 0;       // render-walk per-frame trace counter
-    bool        s_bFlushProbed           = false;   // emitted the one-shot render-flush probe yet
 
     // PHASE 2: the per-slot movie pool backings + the host bundle-IO leaf (AptLoadMovieSlot)
     // are RETIRED -- every movie slot's bundle now loads through the real GuiResourceModule's
@@ -408,47 +399,6 @@ namespace
     // longer carves its own resident movie pools here.
 
     // The Apt-data resource type id (X360 0x1E == 30; CgsResource::AptDataHeaderType::GetTypeID).
-
-    // ---- a static-backed rw resource allocator for the Apt render buffer -------------------
-    // FLAG (PC bring-up): the RenderWare DEFAULT resource allocator's DoAllocate(256KB) returns
-    // null at Apt bring-up time (its heap has no room for the render buffer's 4x(256KB+128)
-    // streams -- verified at runtime: "DoAllocate(256KB)=0"), so the ImRenderBuffer's Prepare
-    // carve fails and BeginRendering AVs on the null command buffer. We back the Apt render
-    // buffer with a dedicated static bump pool instead (a small IResourceAllocator over BSS
-    // storage). This does NOT touch the ImRenderBuffer/Im2d/D3D9 leaf -- it only supplies the
-    // buffer's backing memory (the host owns the render-buffer's storage, exactly as the console
-    // does through its own render-heap). 2 MB covers the 4 streams with headroom.
-    // 4 MB (was 2 MB): the 128 KB carves were sized for the boot/title movies; the
-    // IN-GAME HUD walk plus the layer-2 custom renderers (the tutorial ticker's glyph
-    // strips) need larger streams -- see the Prepare call's sizing note.
-    const u32 KU_APT_RB_POOL_BYTES = 4u * 1024u * 1024u;
-    u8  s_aAptRenderBufferPool[KU_APT_RB_POOL_BYTES];
-
-    struct AptRenderBufferAllocator : public rw::IResourceAllocator
-    {
-        u32 muUsed = 0;
-
-        rw::Resource DoAllocate(const rw::ResourceDescriptor& lrDescriptor, const char* /*lpcName*/) override
-        {
-            rw::Resource lResult;
-            for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
-                lResult.m_baseResources[lu] = nullptr;
-
-            const u32 luSize  = lrDescriptor.m_baseResourceDescriptors[0].m_size;
-            u32       luAlign = lrDescriptor.m_baseResourceDescriptors[0].m_alignment;
-            if (luAlign < 1u) luAlign = 1u;
-
-            // Bump-align the cursor, then hand out [cursor, cursor+size) if it fits.
-            const u32 luOffset = (muUsed + luAlign - 1u) & ~(luAlign - 1u);
-            if (luOffset + luSize <= KU_APT_RB_POOL_BYTES)
-            {
-                lResult.m_baseResources[0] = &s_aAptRenderBufferPool[luOffset];
-                muUsed = luOffset + luSize;
-            }
-            return lResult;
-        }
-    };
-    AptRenderBufferAllocator s_AptRenderBufferAllocator;
 
     // ====================================================================================
     // FAITHFUL LOAD-PATH STATE.
@@ -514,7 +464,7 @@ namespace
     // CgsGui::AptAux::InitializeApt @0x82848E50 (CgsAptAux.cpp), which chains the homed
     // AptAllocatorInitialize/AptUpdateInitialize/AptRenderInitialize/AptCreateTargetInstance/
     // AptChangeTargetInstance (SDKs/EATech/Apt/AptInit.cpp). PrepareRuntime() below drives
-    // it after the (host-adaptor) render buffer + AptAux::Construct are up.
+    // it after AptAux::Construct has bound the canonical view renderer set.
 }
 
 
@@ -532,7 +482,6 @@ namespace BrnGui
     // fresh sprite/animation children dirty, so no host propagation pass is needed. See the
     // per-frame tick in UpdateRuntime.)
 
-    static bool IsRuntimeReady() { return s_bRuntimeReady; }
 
     // (AptLoadOneGuiFont RETIRED, slice 4a: the locale fonts load through the REAL
     // cache/module chain -- GuiModule::Prepare stage 13's font table {17,16},{18,16},
@@ -675,40 +624,11 @@ namespace BrnGui
         if (s_bRuntimeReady)
             return true;
         // Idempotent: each step is guarded by its own *Ready flag, so re-entry only runs
-        // the steps that have not yet succeeded (e.g. the render buffer waiting on the rw
-        // allocator). Log "begin" only on the first attempt to avoid per-frame spam.
+        // the preparation steps that have not yet succeeded. Log "begin" only on the
+        // first attempt to avoid per-frame spam.
         if (!s_bBringUpAttempted)
             CgsDev::Log::WriteToLog("[AptRT] bring-up: begin.\n");
         s_bBringUpAttempted = true;
-
-        // ---- STEP 3: the Apt render buffer (the D3D9 2D buffer the engine fills) --
-        // Construct + Prepare the ImRenderBuffer<V> that AptRenderHandler::Render
-        // appends to (and we flush via Dispatch each frame). Prepare carves its
-        // command + vertex storage from the RenderWare default resource allocator.
-        if (!s_bRenderBufferReady)
-        {
-            s_AptRenderBuffer.Construct();
-
-            // Back the render buffer with the dedicated static bump pool (the RW DEFAULT
-            // allocator's DoAllocate returns null at this bring-up point -- see the allocator
-            // note above). 512 KB command stream + 512 KB vertex stream per buffer (x2 = 4
-            // carves, 2 MB of the 4 MB pool). GROWN 2026-08-24 from 128 KB: that sizing was
-            // "generous for a single boot/title movie", but the IN-GAME HUD walk plus the
-            // layer-2 custom renderers (the tutorial ticker's glyph strips) overflowed it,
-            // and failGracefully's rewind DROPS every later append in the frame -- an
-            // invisible ticker with every diagnostic green (see the [tut-ticker] OVERFLOW
-            // rung in CgsImRenderBufferTemplate.cpp). failGracefully=true so an overflow
-            // still rewinds instead of asserting.
-            rw::IResourceAllocator* lpAllocator = &s_AptRenderBufferAllocator;
-            const bool lbOk = s_AptRenderBuffer.Prepare(
-                512u * 1024u, 512u * 1024u, lpAllocator, /*failGracefully*/ true);
-            s_bRenderBufferReady = lbOk;
-            char lacp[160];
-            std::snprintf(lacp, sizeof(lacp),
-                "[AptRT] step3 renderbuffer: Construct+Prepare %s (static pool, 512KB cmd / 512KB vtx, used=%u).\n",
-                lbOk ? "ok" : "FAILED", s_AptRenderBufferAllocator.muUsed);
-            CgsDev::Log::WriteToLog(lacp);
-        }
 
         // ---- STEP 4: AptAux::Construct (the host callback table + render handler) -
         // Build the ImRendererSet (3D buffers arrive from the frame renderer) and
@@ -717,17 +637,9 @@ namespace BrnGui
         // AptRenderHandler::Render through it).
         if (!s_bAuxReady)
         {
-            // Seed the view module's renderer set for the bring-up window (before the
-            // first frame; from then on the real ViewModule::Render @0x82858810 copies
-            // the set in from the view input buffer each frame -- GuiModule::Render
-            // publishes these same values -- and re-nulls it after RenderInternal).
-            CgsGui::ImRendererSet* lpImRenderers = s_pViewModule->GetImRendererSet();
-            lpImRenderers->mpIm2dRenderBuffer            = &s_AptRenderBuffer;
-            lpImRenderers->mpIm3dRenderBuffer           = nullptr;
-            lpImRenderers->mpIm3dRenderBufferUntex       = nullptr;
-            lpImRenderers->mpIm3dRenderBufferRacePosition = nullptr;
-            lpImRenderers->mpIm3dRenderBufferMenusAndHud = nullptr;
-
+            // ViewModule::Construct already gave AptAux the address of its own
+            // renderer set. Its original null slots remain until Render publishes
+            // the owner-supplied buffers; runtime preparation needs no private buffer.
             // Bring the TEXT system up first (fonts + language + glyph batcher) so the
             // handler's text-layout inputs are live from the start. One-shot; device-gated.
             AptBringUpTextSystem();
@@ -737,9 +649,9 @@ namespace BrnGui
 
             char lac[200];
             std::snprintf(lac, sizeof(lac),
-                "[AptRT] step4 aux: Construct done. singleton=%p im2d=%p (== &renderbuf %p)\n",
+                "[AptRT] step4 aux: Construct done. singleton=%p renderer-set=%p\n",
                 (void*)CgsGui::AptAuxPointer::mpAptAuxInst,
-                (void*)lpImRenderers->mpIm2dRenderBuffer, (void*)&s_AptRenderBuffer);
+                (void*)s_pViewModule->GetImRendererSet());
             CgsDev::Log::WriteToLog(lac);
         }
 
@@ -762,7 +674,7 @@ namespace BrnGui
             if (!s_bAuxReady)
             {
                 CgsDev::Log::WriteToLog("[AptRT] step5 InitializeApt: DEFERRED -- AptAux::Construct not done "
-                                        "(render buffer waiting on rw allocator).\n");
+                                        "(view construction not complete).\n");
             }
             else if (GetTarget() != nullptr)
             {
@@ -809,8 +721,8 @@ namespace BrnGui
             }
         }
 
-        // The runtime is "ready" (for channel-41 routing) once the allocator + render
-        // buffer + AptAux host are up (all done by/through InitializeApt + step 3/4). The
+        // The runtime is "ready" (for channel-41 routing) once the allocator and
+        // AptAux host are up through the original view preparation. The
         // target being live lets PlayMovie + the per-frame tick reach a real GetTarget().
         s_bRuntimeReady = s_bAllocatorReady && s_bAuxReady;
         CgsDev::Log::WriteToLog(s_bRuntimeReady
@@ -840,7 +752,7 @@ namespace BrnGui
     // its s_bMovieStopped layer gating) moved to the real chain -- GuiModule::Render ->
     // CgsGui::ViewModule::Render @0x82858810 -> RenderInternal @0x82858AF8 -> AptAux::Render
     // @0x82848FB8 -> AptRenderTarget @0x82AF4ED0 (every layer, the engine's consumed-tick
-    // bank). Only the DispatchRenderBuffer platform leaf below remains host-side.
+    // bank). The main renderer publishes and consumes the original Im2d bank.
     // -------------------------------------------------------------------------
 
     // RETIRED (2026-07-09, step 6): the component view-state/key-value bridge, the
@@ -848,29 +760,6 @@ namespace BrnGui
     // component framework drives the menu (onLoad -> BuildName -> RegisterComponent
     // -> AddNewAptComponent; per-frame AptAux::UpdateComponents -> AptCommunicator::
     // UpdateAllComponents -> the movie AS UpdateAll -> GetComponentData).
-
-    // FLAG PC-platform leaf: publish and consume the shared APT/FLAPT stream
-    // once, after both producers have appended their records in view order.
-    void GuiModule::PublishRenderBufferPC()
-    {
-        if (!s_bRenderBufferReady)
-            return;
-        CgsGui::PublishAptIm2dRenderBufferPC(&s_AptRenderBuffer);
-        s_bRenderBufferPublished = true;
-    }
-
-    void GuiModule::DispatchRenderBufferPC()
-    {
-        if (!s_bRenderBufferPublished)
-            return;
-
-        // The flush body is re-homed to the PC backend TU (slice 5 step A): the
-        // Swap -> Clear -> Dispatch consumption + its one-shot probe live in
-        // GameShared/GameClasses/Gui/PC/CgsAptRenderBackendPC.cpp.
-        CgsGui::DispatchAptIm2dRenderBufferPC(&s_AptRenderBuffer);
-        ++s_iRenderFrame;
-    }
-
 
     // Pop one queued load notification (the language string-table record). The
     // module bridge drains this ahead of the view Update. False when empty.
@@ -1015,6 +904,8 @@ namespace BrnGui
         mCustomRendererManager.SetFlaptRenderer(&mViewModule.GetFlaptManager()->mRenderer);
 
         mpGuiEventInputBuffer = 0;
+        mbRenderInputCompletedPC = false;
+        mCompletedRenderInputPC.Construct();
         mpOutputBuffer = 0;
         mpTextureAllocator = 0;   // filled by Prepare (X360 GuiModule::Prepare @0x82518DE0)
         mpGuiHeapAllocator = 0;   // [licence-icon] filled by Prepare (mGuiConfig row +311924, bank 31)
@@ -1290,7 +1181,7 @@ namespace BrnGui
         s_flaptLinear.SetAlignment(16);
 
         // Stand up the GUI-owned Apt runtime host (allocator + interpreter + AptAux host
-        // callback table + the render buffer) BEFORE the flow prepares, so the flow
+        // callback table) BEFORE the flow prepares, so the flow
         // states' access pointers can reach the AptAux singleton. Idempotent + defensive.
         // The host drives the REAL staged (virtual) ViewModule::Prepare, whose FLAPT
         // stage prepares the FlaptManager with this linear -- the console prepare shape
@@ -1676,6 +1567,7 @@ namespace BrnGui
 
     bool GuiModule::Release()
     {
+        mbRenderInputCompletedPC = false;
         mProfileManager.Release();   // detach the sign-in listener + release the SLS
         mScreenFlow.Release();       // staged: current state OnLeave + ScriptedFsm release
         mHudFlow.Release();
@@ -1705,6 +1597,7 @@ void GuiModule::ProfileAutosaveResultHandler::HandleProfileTaskResult()
 
 void GuiModule::Destruct()
     {
+        mbRenderInputCompletedPC = false;
         mMovieManager.Destruct();
         // X360 GuiModule::Destruct @0x82507690: ColourCalibrationScreen::Destruct is the LAST
         // sub-object destruct, immediately before the base CgsGui::GuiModule::Destruct.
@@ -1902,15 +1795,6 @@ void GuiModule::Destruct()
             return;
 
         mpGuiEventInputBuffer->LockForRead();
-        // The view and its above-car renderers consume the director's camera,
-        // carried by the module input alongside the GUI events.
-        mViewInputBuffer.LockForRead();
-        CgsGui::ViewIO::ImRendererSet lViewRenderers = mViewInputBuffer.GetImRenderers();
-        mViewInputBuffer.UnlockForRead();
-        lViewRenderers.mCamera = mpGuiEventInputBuffer->GetImRenderers().mCamera;
-        mViewInputBuffer.LockForWrite();
-        mViewInputBuffer.SetImRenderers(lViewRenderers);
-        mViewInputBuffer.UnlockForWrite();
         const CgsModule::VariableEventQueue<32768, 16>* lpInQueue =
             static_cast<const CgsGui::CgsGuiModuleIO::InputBuffer*>(mpGuiEventInputBuffer)->GetGuiEvents();
 
@@ -3912,65 +3796,57 @@ void GuiModule::Destruct()
         mCustomRendererManager.EndOfFrame();
     }
 
-    // The per-frame GUI render drive. X360 BrnGui::GuiModule::Render @0x825146B8 gates on
-    // the module-prepared byte (+949208), runs CgsGui::GuiModule::Render @0x8285AF38 --
-    // whose core copies the GUI input buffer's renderer set into the view input buffer
-    // (SetImRenderers) and calls ViewModule::Render @0x82858810 -- then
-    // UpdateAndRenderMovieManager (fullscreen movies present INSIDE this pass, over the
-    // view content) + the effects arbitrator (data-gated). lpIm2dRenderBuffer is the
-    // movie player's presentation surface (the console reaches it through the input
-    // buffer's renderer set).
-    // FLAG PC-ABI adapter: gates on the Apt bring-up (the console's prepared byte).
-    void GuiModule::Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer,
-                           CgsGraphics::Im3dRenderBuffer* lpRacePositionBuffer,
-                           CgsGraphics::Im3dRenderBuffer* lpMenusAndHudBuffer)
+    // ARTIST 0x825146B8 plus its CgsGui::GuiModule::Render core @0x8285AF38.
+    // That core is inlined here while the canonical base/model class hierarchy
+    // remains unrecovered; this preserves its operations without a proxy base.
+    // The scheduler supplies the real view/module inputs and renderer output.
+    // Preparation gates the entire original pass; no renderer pointer is selected here.
+    // Perfmon aliases: dword_82F2767C = miGuiModuleRender, dword_82F330B8 = miGuiRender.
+    void GuiModule::Render(CgsGui::ViewIO::InputBuffer* lpViewInput,
+                           CgsGui::CgsGuiModuleIO::InputBuffer* lpInput,
+                           RendererIO::OutputBuffer* lpRenderOutput)
     {
-        if (!IsRuntimeReady())
+        CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miGuiModuleRender);
+        CGS_ASSERT(lpInput != nullptr, "lpInput");
+        CGS_ASSERT(lpRenderOutput != nullptr, "lpRenderOutput");
+        if (mbPrepared)
         {
-            // The movie manager still presents while the apt runtime is warming up (the
-            // EA/Criterion logos play before the GUI view composes anything).
-            UpdateAndRenderMovieManager(lpIm2dRenderBuffer);
-            return;
+            CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miGuiRender);
+            // 0x823B6FE0/7060 carry these non-gating checks around the bridge.
+            CGS_ASSERT(lpViewInput != nullptr, "lpInputBuffer");
+            CGS_ASSERT(lpInput != nullptr, "lpOutputBuffer0");
+            CgsModule::LockBuffersForIO(lpViewInput, lpInput);
+            lpViewInput->SetImRenderers(lpInput->GetImRenderers());
+            CGS_ASSERT(lpViewInput != nullptr, "lpInputBuffer");
+            CGS_ASSERT(lpInput != nullptr, "lpOutputBuffer0");
+            CgsModule::UnlockBuffersForIO(lpViewInput, lpInput);
+            mViewModule.Render(lpViewInput);
+            CgsDev::PerfMonCpu::StopMonitor(GuiPerfmons::miGuiRender);
+
+            UpdateAndRenderMovieManager(lpViewInput);
+            mEffectsArbitrator.GenerateEffectFrameEvents(lpRenderOutput);
         }
+        CgsDev::PerfMonCpu::StopMonitor(GuiPerfmons::miGuiModuleRender);
+    }
 
-        CgsGui::AptIm2dRenderBuffer* lpAptBuffer =
-            s_bRenderBufferReady ? &s_AptRenderBuffer : nullptr;
-        if (lpAptBuffer == nullptr)
-        {
-            UpdateAndRenderMovieManager(lpIm2dRenderBuffer);
-            return;
-        }
+    // FLAG PC-platform leaf: retain the completed camera/input across a present
+    // with no new simulation step. The next dispatch refreshes its renderer set
+    // through the original bridge before Render consumes it.
+    void GuiModule::CaptureRenderInputPC(const CgsGui::CgsGuiModuleIO::InputBuffer* lpInput)
+    {
+        CGS_ASSERT(lpInput != nullptr, "lpInput");
+        CgsModule::LockBuffersForIO(&mCompletedRenderInputPC, lpInput);
+        const CgsGui::ImRendererSet& lrRenderers = lpInput->GetImRenderers();
+        CgsGraphics::Camera lCamera = lrRenderers.mCamera;
+        mCompletedRenderInputPC.SetCamera(lCamera);
+        mCompletedRenderInputPC.SetImRenderers(lrRenderers);
+        CgsModule::UnlockBuffersForIO(&mCompletedRenderInputPC, lpInput);
+        mbRenderInputCompletedPC = true;
+    }
 
-        // CgsGui::GuiModule::Render @0x8285AF38 core: publish the active renderer set
-        // into the view input buffer. Slot 0 is the Apt Im2d command buffer the engine's
-        // render callbacks fill; the two 3D buffers belong to the frame renderer.
-        // Preserve the camera the update input published.
-        CgsGui::ViewIO::ImRendererSet lRendererSet = {};
-        lRendererSet.mpIm2dRenderBuffer            = lpAptBuffer;
-        lRendererSet.mpIm3dRenderBufferRacePosition = lpRacePositionBuffer;
-        lRendererSet.mpIm3dRenderBufferMenusAndHud = lpMenusAndHudBuffer;
-
-        mViewInputBuffer.LockForRead();
-        lRendererSet.mCamera = mViewInputBuffer.GetImRenderers().mCamera;
-        mViewInputBuffer.UnlockForRead();
-        mViewInputBuffer.LockForWrite();
-        mViewInputBuffer.SetImRenderers(lRendererSet);
-        mViewInputBuffer.UnlockForWrite();
-
-        // The view module's render entry (Render @0x82858810 -> the RenderInternal
-        // virtual -> the black-screen clear + AptAux::Render -> the engine render walk
-        // -> FlaptManager::Render, all filling the published command buffer).
-        mViewModule.Render(&mViewInputBuffer);
-
-        // PC dispatch leaf: freeze + flush the filled Apt command buffer to D3D9 (the
-        // console render thread consumes the buffers via the custom-renderer-manager
-        // bracket RenderInternal notifies).
-        // Fullscreen movies present over the view content, inside this pass -- the X360
-        // Render's UpdateAndRenderMovieManager call (@0x825146B8). The states manage the
-        // loading screen around videos through the real protocol (BootLoading::OnLeave /
-        // PostTitleScreenLoad post StopAptLoadingMovie before playing and re-raise it
-        // after), so nothing else needs to hide for the video's duration.
-        UpdateAndRenderMovieManager(lpIm2dRenderBuffer);
+    CgsGui::CgsGuiModuleIO::InputBuffer* GuiModule::GetCompletedRenderInputPC()
+    {
+        return mbRenderInputCompletedPC ? &mCompletedRenderInputPC : nullptr;
     }
 
     // BridgeFromViewToOutput @0x8285DE10 -- an export hole, read with tools/re/ppcdis.py:
@@ -3993,19 +3869,16 @@ void GuiModule::Destruct()
     }
 
     // @ 0x82511240 -- pump the movie manager (the movie pass of the GUI render).
-    // FLAG PC-platform presentation split: the console body also calls
-    // MoviePlayer::Render here (through the view input buffer's renderer set, under the
-    // read lock) -- and the X360 XMV presentation then owns the screen ABOVE the whole
-    // 2D frame: the boot logos play over the still-latched loading screen (BootVideos
-    // @0x82478778 posts no hide; nothing does until BootLegal::OnEnter's 20). The PC
-    // FFmpeg substitute draws immediate D3D9 quads, so its call position IS its pixel
-    // order -- to reproduce the console's "video above everything" layering, the
-    // presentation draw runs at the renderer's frame tail (BrnRendererModule::Render,
-    // after the loading-screen foreground), not here.
-    void GuiModule::UpdateAndRenderMovieManager(CgsGraphics::Im2dRenderBuffer* /*lpIm2dRenderBuffer*/)
+    // ARTIST 0x82511240: movie update precedes the view-input read bracket.
+    // MoviePlayer::Render records into the same supplied Im2d command buffer.
+    void GuiModule::UpdateAndRenderMovieManager(CgsGui::ViewIO::InputBuffer* lpViewInput)
     {
         mMovieManager.Update();
+        lpViewInput->LockForRead();
+        mMovieManager.Render(lpViewInput->GetImRenderers().mpIm2dRenderBuffer);
+        lpViewInput->UnlockForRead();
     }
+
 }
 
 // ---- GetAlwaysAvailableComponentsManager (free accessor) ----------------------------

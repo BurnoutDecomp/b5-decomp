@@ -36,6 +36,7 @@ namespace CgsGraphics
     enum E_TexturePurpose
     {
         E_TEXTURE_PURPOSE_NONE = 0,
+        E_TEXTURE_PURPOSE_ENVIRONMENT_MAP = 4,
         E_MAX_TEXTURE_PURPOSES = 7
     };
 
@@ -60,6 +61,32 @@ namespace CgsGraphics
         // pointers + clear-state.
         char* AddTexturePurpose(u32 leTexturePurpose, const char* lpcName, s32 liScope);
 
+        // Original inlined stores in renderer Construct8240BE88..BEB8.
+        // Resource replacement invalidates the entry's cached scope state.
+        void SetTexture(E_TexturePurpose lePurpose, void* lpTexture)
+        {
+            TexturePurposeEntry& lrEntry = maEntries[lePurpose];
+            if (lrEntry.mpBoundResourceA != lpTexture)
+            {
+                lrEntry.mpBoundResourceA = lpTexture;
+                lrEntry.mClearState = 0;
+            }
+        }
+        void SetTextureState(E_TexturePurpose lePurpose, void* lpState)
+        {
+            TexturePurposeEntry& lrEntry = maEntries[lePurpose];
+            if (lrEntry.mpBoundResourceB != lpState)
+            {
+                lrEntry.mpBoundResourceB = lpState;
+                lrEntry.mClearState = 0;
+            }
+        }
+        void* GetTexture(E_TexturePurpose lePurpose) const
+        { return maEntries[lePurpose].mpBoundResourceA; }
+
         TexturePurposeEntry maEntries[E_MAX_TEXTURE_PURPOSES];
     };
+    // Original file-static registry at ARTIST83011A78. Named members widen
+    // its pointers for the native target; no console byte offsets are used.
+    extern TextureScopeTable gTextureScopeTable;
 }

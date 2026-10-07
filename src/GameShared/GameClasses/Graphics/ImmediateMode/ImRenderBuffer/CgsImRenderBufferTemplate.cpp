@@ -2110,11 +2110,10 @@ namespace CgsGraphics
     // belongs to an unhomed Im3dRenderBuffer subclass, not this template's own
     // fixed-function PC dispatch fold -- instantiating this file's Dispatch<V> for V=
     // BasicColouredVertex would silently substitute an unattested body. Likewise
-    // Clear/Construct/Release/Destruct/IsInARenderingBlock/AllocVertices/
-    // RenderFromStaticVertexBuffer/RenderStart/RenderEnd/SetTexture/SetProgram/
-    // SetTextureState/PushMaskGeometry/EndMask/GetFirstCommand/GetNextCommand are not
-    // X360-attested for <BasicColouredVertex> by this TU and are left uninstantiated
-    // (the wave-30 BasicColouredVertex lesson -- see the file-header note above).
+    // The original renderer's inlined construction/rewinds (8240A778,
+    // 823FC160) and untextured dispatcher 823FF0D8 also attest the shared
+    // Construct/Clear/command-reader bodies. Dispatch remains the distinct
+    // Im3dRenderBufferBase virtual-handler walk.
     // -------------------------------------------------------------------------
     template bool ImRenderBuffer<BasicColouredVertex>::Prepare(
         u32, u32, rw::IResourceAllocator*, bool);
@@ -2127,6 +2126,11 @@ namespace CgsGraphics
     template void ImRenderBuffer<BasicColouredVertex>::SetTransform(const Im2dTransform&);
     template void ImRenderBuffer<BasicColouredVertex>::Swap();
     template void ImRenderBuffer<BasicColouredVertex>::SetBufferFullRewindToLastEndRender();
+    template void ImRenderBuffer<BasicColouredVertex>::Construct();
+    template void ImRenderBuffer<BasicColouredVertex>::Clear();
+    template BasicColouredVertex* ImRenderBuffer<BasicColouredVertex>::AllocVertices(u32);
+    template const ImCommand* ImRenderBuffer<BasicColouredVertex>::GetFirstCommand() const;
+    template const ImCommand* ImRenderBuffer<BasicColouredVertex>::GetNextCommand(const ImCommand*) const;
 
     // -------------------------------------------------------------------------
     // ARTIST textured3D writers: Prepare82404308, Swap823F9470,
