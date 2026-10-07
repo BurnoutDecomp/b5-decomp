@@ -46,6 +46,10 @@ namespace BrnReplays
     class GPUDiskWriteStream
     {
     public:
+        // Inlined in ReplayModule's C++ constructor at 827E041C..0434.
+        // Relocator constructs its real contained Job; this initializes its lock.
+        GPUDiskWriteStream();
+
         // ---- block-record sizing (from Construct's loop trip-counts) ----
         static const s32 KI_NUM_GLOBAL_BLOCKS  = 192; // global block pool / free-list size
         static const s32 KI_PRIMARY_BLOCKS     = 32;  // primary ring slots
@@ -122,6 +126,10 @@ namespace BrnReplays
         // BrnReplays::ReplayModule::CloseReplayFiles.
         void Close();
 
+        // Original inline status load in ReplayModule::WaitForOpenReplayFiles
+        // 8264E8F8 (module+3F50 == stream+35D0); no pending-op predicate here.
+        s32 GetStatus() const { return miState; }
+
         // Per-frame pump: run the relocator (primary->secondary->tertiary copies),
         // reclaim drained blocks, and kick the disk write/close pipeline.
         void Dispatch();
@@ -174,9 +182,10 @@ namespace BrnReplays
         CgsMemory::Relocator   mRelocator;                            // +0x2180
         CgsMemory::RelocateOp  maRelocatorOps[KI_NUM_GLOBAL_BLOCKS];  // +0x2580
 
-        // Subsystem-wide lock (RTL_CRITICAL_SECTION, 28 bytes -> 32). The console enters and
-        // leaves this critical section directly; reached by name via maLock.
-        u8          maLock[32];            // +0x3180
+        // FLAG PC-platform leaf: these calls link to native ntdll.lib, whose
+        // Win64 CRITICAL_SECTION occupies 40 bytes and needs pointer alignment.
+        // The CPP checks the host type; the console's 32-byte storage is too small.
+        alignas(void*) u8 maLock[40];       // X360 +0x3180
 
         char        macFileName[256];      // +0x31A0  the stream file name (for asserts)
         s32         maGlobalBlockFreeList[KI_NUM_GLOBAL_BLOCKS]; // +0x32A0

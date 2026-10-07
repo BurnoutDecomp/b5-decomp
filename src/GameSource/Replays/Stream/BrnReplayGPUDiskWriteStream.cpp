@@ -1,6 +1,7 @@
 #include "GameSource/Replays/Stream/BrnReplayGPUDiskWriteStream.h"
 
 #include <cstring> // memcpy / memset
+#include <windows.h> // native ntdll critical-section storage contract
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h" // DeviceManager, GetDeviceManager
@@ -13,9 +14,17 @@
 //     the sibling CgsDeviceOperationPool.cpp does; the real bodies come from the platform. ---
 extern "C" void RtlEnterCriticalSection(void* lpCriticalSection);
 extern "C" void RtlLeaveCriticalSection(void* lpCriticalSection);
+extern "C" long RtlInitializeCriticalSection(void* lpCriticalSection);
 
 namespace BrnReplays
 {
+    GPUDiskWriteStream::GPUDiskWriteStream()
+    {
+        static_assert(sizeof(maLock) >= sizeof(CRITICAL_SECTION), "native stream lock storage");
+        static_assert(alignof(GPUDiskWriteStream) >= alignof(CRITICAL_SECTION), "native stream lock alignment");
+        RtlInitializeCriticalSection(maLock);
+    }
+
     // ---- file-scope debug toggles / state (three byte toggles and one state word). ----
     // The three byte toggles gate the normal write/transfer pipeline; the boot trace shows the
     // stream operating, so they default ENABLED. NOTE: their init values are NOT grounded --
