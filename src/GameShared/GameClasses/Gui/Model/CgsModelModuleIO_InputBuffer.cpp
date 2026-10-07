@@ -29,6 +29,24 @@ namespace CgsGui
 {
 namespace ModelIO
 {
+    // ARTIST 0x82857CD0: base status, both queue constructors, then both clears.
+    void InputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mGuiEvents.CgsModule::VariableEventQueue<32768, 16>::Construct();
+        mLoadRequests.CgsModule::VariableEventQueue<4096, 16>::Construct();
+        mGuiEvents.CgsModule::VariableEventQueue<32768, 16>::Clear();
+        mLoadRequests.CgsModule::VariableEventQueue<4096, 16>::Clear();
+    }
+
+    // ARTIST 0x82857D38: destroy both queues before the IOBuffer status.
+    void InputBuffer::Destruct()
+    {
+        mGuiEvents.CgsModule::VariableEventQueue<32768, 16>::Destruct();
+        mLoadRequests.CgsModule::VariableEventQueue<4096, 16>::Destruct();
+        CgsModule::IOBuffer::Destruct();
+    }
+
     void InputBuffer::_AssertLayout()
     {
         static_assert(offsetof(InputBuffer, mGuiEvents)    == 0x0004, "mGuiEvents @ +0x0004");

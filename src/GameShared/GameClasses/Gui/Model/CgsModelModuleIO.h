@@ -50,6 +50,12 @@ namespace ModelIO
         // source into it via VariableEventQueue<4096,16>::Append<18432,16>).
         typedef CgsModule::VariableEventQueue<4096, 16>  GuiNotificationQueue;
 
+        // ARTIST 0x82857D80 / 0x82852D50 / 0x82857DF8. The lifecycle covers
+        // all four queues; Clear preserves the IOBuffer status and locks.
+        void Construct();
+        void Clear();
+        void Destruct();
+
         // X360 0x8284F940: read-lock (bit 4) const handle to the GUI resource-request queue
         // (this+4). (CgsModelModuleIO.cpp:235 in the X360 build.)
         const GuiResourceRequestQueue* GetGuiResourceRequestQueue() const;
@@ -100,6 +106,11 @@ namespace ModelIO
         typedef CgsGui::GuiEventQueueBase<32768, 16> GuiEventInputQueue;
         // CgsModelModuleIO.h:91 -- the small load-request queue.
         typedef CgsGui::GuiEventQueueSmall           GuiEventQueueSmall;
+
+        // ARTIST 0x82857CD0 / 0x82857D38: the two queues have their own
+        // construction and destruction in addition to the IOBuffer base.
+        void Construct();
+        void Destruct();
 
         // CgsModelModuleIO.h:70 (DWARF, const overload). X360 0x8284F7F0: asserts this buffer
         // is locked-for-reading (status bit 4, "Not locked for reading\n"), returns the const
