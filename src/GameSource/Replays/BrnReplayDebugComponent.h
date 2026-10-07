@@ -29,8 +29,9 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"          // Vector2Template<float>
+#include "GameShared/GameClasses/Containers/CgsRingBuffer.h"
 
-namespace rw { class IResourceAllocator; }
+namespace rw { struct IResourceAllocator; }
 
 namespace BrnReplays
 {
@@ -80,55 +81,15 @@ namespace BrnReplays
         char macName[KI_MAX_NAME_LENGTH]; // @0x1C
     };
 
-    // DWARF: BrnReplayDebugComponent.h:76. A named float ring-buffer graph the
-    // overlay plots (write-slots-used / write-buffer-used / read). The X360 layout
-    // (OnActivate @0x8264F9F8 ClearGraph path + RenderGraph @0x8264F728):
-    //   +0x000 mafSamples[256]   ring storage (float)
-    //   +0x100 (256) mfMin       f32
-    //   +0x104 (260) mfMax       f32
-    //   +0x108 (264) mBuffer     FixedRingBuffer<float,256> head (mpData/muCapacity/...)
-    //   +0x110 (272) miHead      s32  (ring write cursor)
-    //   +0x114 (276) miTail      s32
-    //   +0x118 (280) miCount     s32  (RenderGraph reads +0x118 == sample count)
-    // OnActivate clears: mfMin=0, samples[0]=0, mfMax=0, miHead/miTail/miCount=0.
+    // DWARF BrnReplayDebugComponent.h:76, confirmed by constructor 82652978:
+    // name[256], min/max, then the canonical fixed ring (metadata before samples).
+    // ARTIST graph+108 holds its data pointer, +10C capacity, +110/+114/+118
+    // read/write/count and +11C the 256 samples. Native pointer width widens it.
     struct DebugGraph
     {
         static const s32 KI_NUM_SAMPLES = 256;
 
-        // A fixed-capacity float ring buffer (DWARF FixedRingBuffer<float32_t,256>).
-        // RenderGraph reads it through CgsContainers::RingBuffer<float>::operator[];
-        // it is modelled here with the named members the overlay touches.
-        struct GraphRingBuffer
-        {
-            f32  mafSamples[KI_NUM_SAMPLES]; // @+0x00 ring storage
-            f32  mfMin;                      // @+0x100 running min
-            f32  mfMax;                      // @+0x104 running max
-            void* mpData;                    // @+0x108 ring base ptr
-            s32  miCapacity;                 // @+0x10C
-            s32  miHead;                     // @+0x110 write cursor
-            s32  miTail;                     // @+0x114
-            s32  miCount;                    // @+0x118 live sample count
-
-            void Clear()
-            {
-                mfMin  = 0.0f;
-                mfMax  = 0.0f;
-                mafSamples[0] = 0.0f;
-                miHead  = 0;
-                miTail  = 0;
-                miCount = 0;
-            }
-
-            // CgsContainers::RingBuffer<float>::operator[] @0x8264E0A0 -- the ring
-            // read RenderGraph uses (NOT a linear index): it adds the ring head
-            // offset and wraps modulo capacity, so a wrapped ring reads oldest->
-            // newest in order. Returns mpData[(miHead + liIndex) % miCapacity].
-            f32 operator[](s32 liIndex) const
-            {
-                const f32* lpData = static_cast<const f32*>(mpData);
-                return lpData[(miHead + liIndex) % miCapacity];
-            }
-        };
+        typedef CgsContainers::FixedRingBuffer<f32, KI_NUM_SAMPLES> GraphRingBuffer;
 
         char            macName[KI_NUM_SAMPLES]; // DWARF: char[256] name
         f32             mfMin;                   // DWARF mfMin
