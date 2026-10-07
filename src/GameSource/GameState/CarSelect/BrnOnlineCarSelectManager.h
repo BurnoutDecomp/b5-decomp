@@ -67,6 +67,11 @@ struct OnlineCarSelectManager
     // Reference inline accessor; case 123 reads it (`ld` of +0x48) to hand the free-burn car back.
     CgsID GetFreeburnCarId() const { return mFreeburnCarId; }
 
+    // Reference inline accessors; GameStateModule::GetListOfPlayerSelectableVehicles reads both
+    // (`lwzx` of +0x68 and `lbzx` of +0x61).
+    s32  GetVehicleClassLimit() const    { return miVehicleClassLimit; }
+    bool GetHostChoiceAndNotHost() const { return mbHostChoiceAndNotHost; }
+
     // Leave online car select: reset the state words, post actions 76 / 77 / 7
     // and lift the car-select pause. Body in BrnOnlineCarSelectManager_wN3_01.cpp.
     void ExitOnlineCarSelect(GameStateModuleIO::GameActionQueue* lpActionQueue);

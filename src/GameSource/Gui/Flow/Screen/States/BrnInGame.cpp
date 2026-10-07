@@ -1,5 +1,6 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnInGame.h"
 #include <cstdlib>
+#include <cstring>   // std::strcmp (the BRN_LOSE_DIAG witness)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface / GuiEventNetworkSuspension / GuiEventPlayAptMovie
@@ -41,6 +42,17 @@ namespace BrnGui
 
     namespace
     {
+        // [FLAG PC witness] BRN_LOSE_DIAG -- NOT IN THE CONSOLE. The screen-flow half of the
+        // event-end watchdog (issue #32): which state event took the flow out of InGame, and
+        // whether GUI 291's "TO_OFF_POST"/"TO_ST_POST" survived to the end of the update that
+        // posted it. Opt-in, first 60 lines.
+        bool LoseDiagLine()
+        {
+            static const bool sbEnabled = (std::getenv("BRN_LOSE_DIAG") != 0);
+            static s32        siLines   = 0;
+            return sbEnabled && CgsDev::Log::gpDebugPrint != 0 && (siLines++ < 60);
+        }
+
         // ---- observed-event ids (roles from the Update dispatch / assert strings; the
         //      full 30-entry registered table is the static below) ----------------------
         const s32 KI_EVENT_CONTROLLER          = 6;    // controller action (sub-id @+4)
@@ -404,12 +416,23 @@ namespace BrnGui
         PostOverlayWaitFinishRequest(mpStateInterface, "OnCReturnOn");
         PostOverlayWaitFinishRequest(mpStateInterface, "OnHEnterOn");
         PostOverlayWaitFinishRequest(mpStateInterface, "OnCEnterOn");
+
+        if (LoseDiagLine())
+            *CgsDev::Log::gpDebugPrint << "[lose-diag] InGame entered [FLAG PC witness]\n";
     }
 
     // @ 0x824B8DE0
     void InGame::OnLeave()
     {
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
+
+        if (LoseDiagLine())
+        {
+            *CgsDev::Log::gpDebugPrint << "[lose-diag] InGame left via \"" << GetPendingEventName()
+                                       << "\" (gameMode "
+                                       << (mpGuiCache != 0 ? mpGuiCache->GetGameMode() : -2)
+                                       << ") [FLAG PC witness]\n";
+        }
     }
 
     // @ the ICF fold 0x825011B0 (== BrnGui::Video::GetResourcesToLoad): only the count
@@ -784,6 +807,8 @@ namespace BrnGui
 
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:275
 
+        const char* lpacPostEventStateEvent = 0;   // [FLAG PC witness] BRN_LOSE_DIAG only
+
         // ---- pass 2: the full dispatch ---------------------------------------------
         for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
              lpEvent != 0;
@@ -930,6 +955,29 @@ namespace BrnGui
                     liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
                     liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME;
                 SendStateEvent(lbShowtime ? "TO_ST_POST" : "TO_OFF_POST");
+                lpacPostEventStateEvent = lbShowtime ? "TO_ST_POST" : "TO_OFF_POST";
+
+                // [FLAG PC harness] BRN_LOSE_PAUSE_WITH_291=map|driver -- NOT A CONSOLE PATH.
+                // Replays a player's Back (map) or Start (driver details) press that reaches
+                // this state in the same update as GUI 291, through the console's own
+                // PauseGame. One-shot. OFF unless the env var is set.
+                {
+                    static const char* const spcPauseWith291 = std::getenv("BRN_LOSE_PAUSE_WITH_291");
+                    static bool              sbFired         = false;
+                    if (spcPauseWith291 != 0 && !sbFired)
+                    {
+                        sbFired = true;
+                        const bool lbDriverDetails = std::strcmp(spcPauseWith291, "driver") == 0;
+                        if (CgsDev::Log::gpDebugPrint != 0)
+                        {
+                            *CgsDev::Log::gpDebugPrint
+                                << "[lose-diag] HARNESS PAUSE WITH GUI 291 ("
+                                << (lbDriverDetails ? "driver" : "map")
+                                << ") -> InGame::PauseGame [FLAG PC harness]\n";
+                        }
+                        PauseGame(true, lbDriverDetails);
+                    }
+                }
                 break;
             }
 
@@ -1058,6 +1106,63 @@ namespace BrnGui
         // ---- the system guide forces the pause path ----------------------------------
         if (mbIsGuideVisible)
             PauseGame(false, false);
+
+        // ---- FLAG PC fix (issue #32), NOT IN THE CONSOLE: re-open a results screen that never
+        //      opened. GUI 291 is one-shot and only InGame observes it. If a pause request
+        //      (Back -> map, Start -> driver details) takes the screen flow out of InGame in the
+        //      update 291 arrives, or in the few updates between the finish and 291, the map /
+        //      driver-details state drops it, the results screen never opens, so no GUI 292 and
+        //      no game event 26 ever leave the GUI: the mode sits in RESULTS forever with the AI
+        //      driving the player's car (ShowModeResults' action 7). The console has the same
+        //      hole for a press landing before 291 (its pause gate does not look at the mode
+        //      state either). Recovery: while InGame is up, an offline (non-showtime) mode is
+        //      still running and the cache still holds that mode's un-dismissed results record
+        //      (GUI 289 sets it, the results screen's own GUI 292 clears it), send the transition
+        //      291 would have sent. The 60-update hold keeps clear of the normal exit, where
+        //      InGame comes back a frame or two before 292 has cleared the record.
+        {
+            static s32 siPendingResultsUpdates = 0;
+            const s32  liGameModeType          = mpGuiCache->GetGameMode();
+            const GuiEventOfflinePostEvent::OfflinePostEventData& lrResults =
+                mpGuiCache->GetOfflinePostEventData();
+            const bool lbResultsPending =
+                lpacPostEventStateEvent == 0 && !mpGuiCache->IsOnline() &&
+                liGameModeType > BrnGameState::GameStateModuleIO::E_MODE_NONE &&
+                liGameModeType < BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_COUNT &&
+                liGameModeType != BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME &&
+                lrResults.miPlayerFinishPosition > 0 &&
+                lrResults.meFinishedGameModeType == liGameModeType;
+            siPendingResultsUpdates = lbResultsPending ? siPendingResultsUpdates + 1 : 0;
+            if (siPendingResultsUpdates == 60)
+            {
+                siPendingResultsUpdates = 0;
+                ShutDownHudComponents();   // 291's HUD pause was spent while the flow was away
+                mpGuiCache->GetGuiTracker()->ClearTracker();
+                SendStateEvent("TO_OFF_POST");
+                if (LoseDiagLine())
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[lose-diag] RECOVERED: mode " << liGameModeType
+                        << " results record pending (finish position "
+                        << static_cast<s32>(lrResults.miPlayerFinishPosition)
+                        << ") with InGame up and no results screen -> \"TO_OFF_POST\" [FLAG PC fix]\n";
+                }
+            }
+        }
+
+        // [FLAG PC witness] BRN_LOSE_DIAG: State::SendStateEvent keeps only the LAST event of
+        // an update, so a later pause/map/driver-details request in the same update replaces
+        // the post-event transition and the results screen never opens.
+        if (lpacPostEventStateEvent != 0 && LoseDiagLine())
+        {
+            const bool lbKept = std::strcmp(GetPendingEventName(), lpacPostEventStateEvent) == 0;
+            *CgsDev::Log::gpDebugPrint
+                << (lbKept ? "[lose-diag] InGame GUI 291 -> \"" : "[lose-diag] DROPPED GUI 291: \"")
+                << lpacPostEventStateEvent
+                << (lbKept ? "\" pending" : "\" replaced in the same update by \"")
+                << (lbKept ? "" : GetPendingEventName())
+                << (lbKept ? "" : "\"") << " [FLAG PC witness]\n";
+        }
 
         lpInQueue->Clear();
     }

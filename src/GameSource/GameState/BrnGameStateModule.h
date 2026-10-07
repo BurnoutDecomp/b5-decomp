@@ -801,6 +801,13 @@ public:
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
         GameStateModuleIO::GameActionQueue* lpActionQueue);
 
+    // ProcessGameEvents, THE CASE-95 ARM -- "which district is this map position in?". The GUI
+    // asks with a world position (GUI event 195 -> game event 95); the arm answers with action 186,
+    // the WorldRegion of the district-map cell under that position.
+    void ProcessGameEventsRegionFromPositionBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue);
+
     // ⭐ [P1 sim-pause] X360 ProcessGameEvents @0x823A0A18, THE PAUSE FAMILY -- the four
     // arms that route pause-state events into RequestPause/RequestUnpause (same extraction
     // precedent as the case-111/113/115 arms above). Console arms, verbatim (p1_dump.txt):
@@ -1506,6 +1513,12 @@ public:
     void CheckForAllEventsBeingFound(BrnProgression::Profile* lpProfile,
                                      GameStateModuleIO::GameActionQueue* lpQueue);
 
+    // "Has the player now discovered every event of this mode type?" Called from the junction
+    // discovery arm of CheckIfPlayerIsAtJunctionWithAnEvent; posts action 203 when they have.
+    void CheckForAllEventsOfATypeFound(const BrnProgression::Profile* lpProfile,
+                                       GameStateModuleIO::GameActionQueue* lpQueue,
+                                       BrnProgression::RaceEventData::EModeType leModeType);
+
     // ------------------------------------------------------------------------
     // The BrnGameState::CarSelectManager (junkyard car-select) hooks. The junkyard FSM routes the
     // player-car snapshot / streaming / swap-broadcast / unpause hooks through the owning
@@ -1517,9 +1530,12 @@ public:
     // desired/current car id to detect a swap completing. Written by OnSpecialEventPlayerCarChange.
     CgsID GetActivePlayerCarId() const;
 
-    // X360 0x82382550. Kick the world to start streaming the vehicle-selection carousel around
-    // lCarId (posts the 88-byte "cars to stream" action 69).
-    void RequestStreamingForVehicleSelection(CgsID lCarId);
+    // Kick the world to start streaming the vehicle-selection carousel around lCarId (posts the
+    // "cars to stream" action 69 on lpActionQueue). Body in BrnGameStateModule_wG4_00.cpp.
+    void RequestStreamingForVehicleSelection(GameStateModuleIO::GameActionQueue* lpActionQueue, CgsID lCarId);
+
+    // Body in BrnGameStateModule_wG4_00.cpp. The console's array keeps its count word at +0x400, i.e. 128 elements.
+    void GetListOfPlayerSelectableVehicles(Array<CgsID, 128>& lrCars);
 
     // X360 0x8238FB40. Broadcast a special-event player-car change (the unlock-display / change-car
     // / start-of-game path uses it). ARG SHAPE RECOVERED FROM ASM: r3=this, r4=car id, r5=wheel id,

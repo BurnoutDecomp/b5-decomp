@@ -58,6 +58,7 @@
 #include "SharedClasses/DataLists/VehicleList.h"
 #include "SharedClasses/DataLists/VehicleListEntry.h"
 #include <cstring>   // strcmp / strstr (HandleAptTriggers' component-name matching)
+#include <cstdlib>   // getenv (the BRN_LOSE_DIAG witness)
 
 namespace BrnGui
 {
@@ -537,6 +538,31 @@ namespace BrnGui
     // -----------------------------------------------------------------------------------
     void InstantResultsState::Update()
     {
+        // [FLAG PC witness] BRN_LOSE_DIAG -- NOT IN THE CONSOLE. The results screen only reaches
+        // TriggerExitResults (GUI 292 -> game event 26) from the ACTIVE state; a load stage that
+        // never completes leaves the event in RESULTS with nothing on screen. One line per stage
+        // that holds for 900 updates.
+        {
+            static const bool sbLoseDiag = (std::getenv("BRN_LOSE_DIAG") != 0);
+            static s32        siStageUpdates = 0;
+            static s32        siLastStage    = -1;
+            static s32        siStuckLines   = 0;
+            if (sbLoseDiag)
+            {
+                siStageUpdates = (meCurrentState == siLastStage) ? siStageUpdates + 1 : 0;
+                siLastStage    = meCurrentState;
+                if (siStageUpdates == 900 && meCurrentState < E_RESULTS_STATE_ACTIVE &&
+                    siStuckLines++ < 8 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[lose-diag] STALL InstantResults load stage " << meCurrentState
+                        << " (0=unloaded 1=resources 2=components) for " << siStageUpdates
+                        << " updates; cache " << (mpGuiCache != 0 ? 1 : 0)
+                        << " icon " << mLargeIconResource.muId << " [FLAG PC witness]\n";
+                }
+            }
+        }
+
         switch (meCurrentState)
         {
         case E_RESULTS_STATE_INVALID:

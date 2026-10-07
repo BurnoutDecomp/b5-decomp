@@ -181,6 +181,98 @@ namespace BrnGameState
                 mfTimeDelayBeforeModeEnd -= lfDelta;
             }
         }
+
+        // [FLAG PC witness] [stunt23] THE ROLL-LIFECYCLE RUNG. NOT IN THE CONSOLE BINARY. Opt-in
+        // behind BRN_STUNT23_DIAG, line-capped. Read-only. One line whenever anything that decides
+        // whether an in-progress roll banks changes: airborne, the in-air rotation the scorer
+        // reads (zero vs not), the in-progress/combo flags, the in-progress and awesome type masks,
+        // the per-frame active set, the bank gate and the combo multiplier. A HELD line fires once
+        // per landing when the rotation is still live 90 frames after touchdown -- the issue #23
+        // symptom, stated as a fact about this frame rather than inferred from a missing bank.
+        // DELETE-WHEN issue #23 is closed.
+        {
+            static const bool sbDiag = (getenv("BRN_STUNT23_DIAG") != 0);
+            const EActiveRaceCarIndex lePlayer = lpRaceCar->GetPlayerActiveRaceCarIndex();
+            if (sbDiag && CgsDev::Log::gpDebugPrint != 0
+                && lePlayer != E_ACTIVE_RACE_CAR_INDEX_INVALID && lpRaceCar->IsPlayerCarActive())
+            {
+                static s32 siFrame = 0;
+                static s32 siLines = 0;
+                static s32 siLandFrame = -1;
+                static bool sbHeldSaid = false;
+                static u32 suLastKey = 0xFFFFFFFFu;
+                static u32 suLastTypes = 0xFFFFFFFFu;
+                static u32 suLastAwesome = 0xFFFFFFFFu;
+                static u32 suLastCurrent = 0xFFFFFFFFu;
+                static s32 siLastMult = -1;
+                const s32 KI_LINE_MAX = 3000;
+                ++siFrame;
+
+                const bool lbAir = lpRaceCar->IsPlayerInAir();
+                const Vector3 lvRot = lpRaceCar->GetCurrentInAirRotations(lePlayer);
+                const bool lbRot = !(rw::math::vpu::GetX(lvRot) == 0.0f && rw::math::vpu::GetY(lvRot) == 0.0f
+                                     && rw::math::vpu::GetZ(lvRot) == 0.0f);
+                const bool lbBank = ShouldBankScore();
+                const bool lbPending = HasAnyPendingScore();
+                const u32 luCurrent = GetCurrentStunts();
+                const u32 luKey = (lbAir ? 1u : 0u) | (lbRot ? 2u : 0u) | (mbStuntInProgress ? 4u : 0u)
+                                | (mbComboInProgress ? 8u : 0u) | (lbBank ? 16u : 0u) | (lbPending ? 32u : 0u)
+                                | (mbValidStunt ? 64u : 0u);
+
+                static bool sbWasAir = false;
+                if (sbWasAir && !lbAir) { siLandFrame = siFrame; sbHeldSaid = false; }
+                if (lbAir) { siLandFrame = -1; }
+                sbWasAir = lbAir;
+                const s32 liSinceLand = (siLandFrame >= 0) ? (siFrame - siLandFrame) : -1;
+
+                const BrnPhysics::Vehicle::RaceCarState* lpState = lpRaceCar->GetPlayerRaceCarState();
+                char lacWheels[10];
+                for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+                {
+                    lacWheels[liWheel]     = !lpState->mabWheelExists[liWheel] ? '-'
+                                           : (lpState->maWheels[liWheel].mbAttached ? 'A' : 'a');
+                    lacWheels[liWheel + 5] = lpState->maWheels[liWheel].mbHasTraction ? 'T' : 't';
+                }
+                lacWheels[4] = '/';
+                lacWheels[9] = '\0';
+
+                const bool lbChanged = luKey != suLastKey || muStuntTypesInProgress != suLastTypes
+                                    || muAwesomeStuntTypesInProgress != suLastAwesome
+                                    || luCurrent != suLastCurrent || miComboMultiplier != siLastMult;
+                const bool lbHeld = lbRot && !lbAir && liSinceLand >= 90 && !sbHeldSaid;
+                if ((lbChanged || lbHeld) && siLines < KI_LINE_MAX)
+                {
+                    ++siLines;
+                    if (lbHeld) { sbHeldSaid = true; }
+                    *CgsDev::Log::gpDebugPrint
+                        << (lbHeld ? "[stunt23] HELD f=" : "[stunt23] f=") << siFrame
+                        << " air=" << (lbAir ? 1 : 0)
+                        << " rot=" << rw::math::vpu::GetX(lvRot) << "," << rw::math::vpu::GetY(lvRot)
+                        << "," << rw::math::vpu::GetZ(lvRot)
+                        << " rollMax=" << rw::math::vpu::GetZ(mStuntRollInProgress)
+                        << " spinMax=" << rw::math::vpu::GetY(mStuntRollInProgress)
+                        << " inProg=" << (mbStuntInProgress ? 1 : 0)
+                        << " combo=" << (mbComboInProgress ? 1 : 0)
+                        << " valid=" << (mbValidStunt ? 1 : 0)
+                        << " types=" << static_cast<s32>(muStuntTypesInProgress)
+                        << " awe=" << static_cast<s32>(muAwesomeStuntTypesInProgress)
+                        << " cur=" << static_cast<s32>(luCurrent)
+                        << " bank=" << (lbBank ? 1 : 0)
+                        << " pend=" << (lbPending ? 1 : 0)
+                        << " pendT=" << mfPendingScoreTimer
+                        << " mult=" << miComboMultiplier
+                        << " comboScore=" << mfComboScore
+                        << " total=" << miCurrentScore
+                        << " sinceLand=" << liSinceLand
+                        << " wheels=" << lacWheels << "\n";
+                }
+                suLastKey = luKey;
+                suLastTypes = muStuntTypesInProgress;
+                suLastAwesome = muAwesomeStuntTypesInProgress;
+                suLastCurrent = luCurrent;
+                siLastMult = miComboMultiplier;
+            }
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -418,8 +510,8 @@ namespace BrnGameState
                 if (lfTimerAfter <= KF_ZERO)
                 {
                     // The pending window has elapsed: commit the buffered combo into mRecentStunt.
-                    mRecentStunt.miStuntScore     = 0;
-                    mRecentStunt.miStuntMultiplier = 0;
+                    // The record is re-seeded word by word; its score and multiplier words are
+                    // NOT cleared here (each banking arm below writes its own).
                     mRecentStunt.muFlatSpins      = 0;
                     mRecentStunt.muBarrelRolls    = 0;
                     mRecentStunt.muStuntTypes        = muStuntTypesInProgress;
@@ -508,6 +600,32 @@ namespace BrnGameState
                     // the Vector3 roll accumulator at this+0x40).
                     mfComboScore += mfPendingGuaranteedScore;
                     mfComboScore  = TidyStuntScore(mfComboScore);
+
+                    // [FLAG PC witness] [stunt23] THE BANK RUNG. NOT IN THE CONSOLE BINARY. Opt-in
+                    // behind BRN_STUNT23_DIAG, line-capped, read-only: the one frame a buffered
+                    // stunt is committed, with what it carried into the combo.
+                    // DELETE-WHEN issue #23 is closed.
+                    {
+                        static const bool sbDiag = (getenv("BRN_STUNT23_DIAG") != 0);
+                        static s32 siBankLines = 0;
+                        if (sbDiag && siBankLines < 400 && CgsDev::Log::gpDebugPrint != 0)
+                        {
+                            ++siBankLines;
+                            *CgsDev::Log::gpDebugPrint
+                                << "[stunt23] bank valid=" << (mbValidStunt ? 1 : 0)
+                                << " types=" << static_cast<s32>(mRecentStunt.muStuntTypes)
+                                << " awe=" << static_cast<s32>(mRecentStunt.muAwesomeStuntTypes)
+                                << " spins=" << static_cast<s32>(mRecentStunt.muFlatSpins)
+                                << " rolls=" << static_cast<s32>(mRecentStunt.muBarrelRolls)
+                                << " rollUnits=" << rw::math::vpu::GetZ(mStuntRollInProgress)
+                                << " spinUnits=" << rw::math::vpu::GetY(mStuntRollInProgress)
+                                << " recent=" << (mbRecentStunt ? 1 : 0)
+                                << " stuntScore=" << mRecentStunt.miStuntScore
+                                << " stuntMult=" << mRecentStunt.miStuntMultiplier
+                                << " comboMult=" << miComboMultiplier
+                                << " comboScore=" << mfComboScore << "\n";
+                        }
+                    }
 
                     muStuntTypesInProgress        = 0;
                     muAwesomeStuntTypesInProgress = 0;

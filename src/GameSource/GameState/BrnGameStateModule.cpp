@@ -2005,81 +2005,6 @@ void GameStateModule::OnPlayerCarChange(CgsID lCarId, CgsID lWheelId,
                       KI_ACTION_CAR_OPPONENT_SET, sizeof(laOpponentCarIds));
 }
 
-// --------------------------------------------------------------------------------------------
-// RequestStreamingForVehicleSelection (X360 0x82382550).
-//
-// ⛔ HONEST PARTIAL -- READ THIS BEFORE TRUSTING THE CALL SITES.
-//
-// The console body builds the junkyard carousel's PRE-STREAM window: it asks
-// GetListOfPlayerSelectableVehicles (X360 0x82376500) for the player's full selectable-car list
-// into an Array<CgsID,128>, finds lCarId in it (falling back to the car's PARENT id when lCarId is
-// a livery variant -- entry+0xE9 in {1,3,4}), then walks outward from that index collecting up to
-// KI_MAX_ACTIVE_RACE_CARS(8) neighbours with a per-entry direction tag, and posts the resulting
-// 88-byte action 69.
-//
-// WHAT IS REPRODUCED HERE: the lookup of the requested car, its livery->parent fallback, and both
-// of the console's asserts. WHAT IS NOT: the selectable-list build and the neighbour window,
-// because GetListOfPlayerSelectableVehicles is 183 instructions of its own and reaches four
-// GameStateModule members that are not modelled on this slice (+183860 / +183937 / +183944 -- the
-// online-event car-restriction state -- plus the profile car walk).
-//
-// WHY THIS IS NOT A SILENT DROP: (a) it logs, once per changed car, exactly what it did not send;
-// (b) NOTHING IN THIS BUILD CONSUMES ACTION 69 -- the console consumer is
-// RaceCarEntityModule::HandleSelectionRequestStreamingAction @0x822E9918, which is not
-// reconstructed (grep for it: the only hit in the tree is a comment). So today the only observable
-// difference between this and the full body is the log line.
-// DELETE-WHEN GetListOfPlayerSelectableVehicles lands (then the window build comes back with it).
-// --------------------------------------------------------------------------------------------
-void GameStateModule::RequestStreamingForVehicleSelection(CgsID lCarId)
-{
-    const BrnResource::VehicleList* lpVehicleList = mpVehicleList;
-    if (lpVehicleList == 0)
-    {
-        return;
-    }
-
-    CgsID lStreamCarId = lCarId;
-
-    const s32 liCurrentVehicleIndex = lpVehicleList->GetVehicleIndex(lCarId);
-    const BrnResource::VehicleListEntry* lpCurrentVehicleData =
-        (liCurrentVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liCurrentVehicleIndex);
-    if (lpCurrentVehicleData == 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpCurrentVehicleData != NULL", KAC_GSM_FILE, 7461);
-        CgsDev::Assert::EndAssert();
-    }
-    else
-    {
-        // A livery variant is not itself in the selectable list -- the console re-looks-up its
-        // parent (X360: entry+0xE9 in {1,3,4} -> use GetParentId()).
-        const u8 luLiveryType = lpCurrentVehicleData->GetLiveryType();
-        if (luLiveryType == 1 || luLiveryType == 3 || luLiveryType == 4)
-        {
-            if (lpCurrentVehicleData->GetParentId() == 0)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lpCurrentVehicleData->GetParentId() != kCGSID_NULL",
-                                           KAC_GSM_FILE, 7465);
-                CgsDev::Assert::EndAssert();
-            }
-            lStreamCarId = lpCurrentVehicleData->GetParentId();
-        }
-    }
-
-    static CgsID slLastLoggedCarId = 0;
-    if (slLastLoggedCarId != lStreamCarId && CgsDev::Log::gpDebugPrint != 0)
-    {
-        slLastLoggedCarId = lStreamCarId;
-        *CgsDev::Log::gpDebugPrint
-            << "[FLAG PC bring-up] RequestStreamingForVehicleSelection(" << static_cast<u32>(lStreamCarId)
-            << "): the 88-byte carousel pre-stream action (69) is NOT posted -- "
-               "GetListOfPlayerSelectableVehicles is not reconstructed. Nothing in this build "
-               "consumes action 69 either (HandleSelectionRequestStreamingAction is absent), so "
-               "no consumer is being starved today.\n";
-    }
-}
-
 // ============================================================================
 // FindPlayerScoringIndexForActiveRaceCar  @ 0x82363450
 //
@@ -2141,7 +2066,6 @@ GameStateModule::FindPlayerScoringIndexForActiveRaceCar(::EActiveRaceCarIndex le
 // On the console the one-shot runs in the first loading-scripted frame, before the MemoryCard Deserialise, so a
 // RETURNING profile's saved pose still wins; a new profile keeps the start pose (Profile::Construct @0x823708A8
 // seeds (0,0,0,0) / (1,0,0,0), and ProcessGameEvents case 110 re-runs Construct then this function).
-// [FLAG PC bring-up] step 7 stays DROPPED: ProgressionManager::OnDriveThru is not reconstructed.
 void GameStateModule::SendSetupPlayerCarEvent(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     const BrnTrigger::TriggerData* lpTriggerData = mTriggerQueryManager.GetTriggerData();
@@ -2198,6 +2122,9 @@ void GameStateModule::SendSetupPlayerCarEvent(GameStateModuleIO::GameActionQueue
 
     mCarSelectManager.EnterJunkyardAtStartOfGame(lpActionQueue, lJunkyardId, lCarModelId, lWheelId,
                                                 leScoringIndex, &mCachedCarSelectChangedAction);
+
+    // Step 7 -- the start junkyard counts as a found drive-thru; no queue, so no autosave post.
+    mProgressionManager.OnDriveThru(lJunkyardId, BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD, 0);
 
     // Step 8 -- X360 `li r11,1; stb r11, <this+0x38B72>`. Arm the "waiting to REALLY enter the
     // junkyard" latch that ProcessGameEvents case 78 tests.
