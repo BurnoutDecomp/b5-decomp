@@ -86,19 +86,19 @@ namespace BrnTrafficIO
     // (WorldModule::BridgeWorldModuleToEntityModules_Render @0x827ABE28) stores real pointers
     // into every one. Modelling them as u32 truncates a host pointer.
     //
-    // FLAG (opaque interior): the dispatch-list payload from base to +0x8014 is unrecovered and
-    // stays correctly-sized opaque storage, so the four fields keep the console's tail order. On
-    // the host the widened pointers put that block at 0x8018, which _AssertLayout pins as a HOST
-    // fact. Nothing serialises this buffer; it is a pure runtime IO object.
+    // The original scene-result queue precedes four host-width pointers.
+    // ARTIST 8275CF40 constructs that queue; 827BB138 returns it for writing.
+    // Its pointer-free storage keeps the original capacity on the native host.
     class InputBuffer_Dispatch : public CgsModule::IOBuffer
     {
     public:
+        typedef CgsModule::VariableEventQueue<32768, 16> SceneResultQueue;
         // X360 0x827120D8: read-lock; return the dispatch frame (console word @this+0x8014).
         CgsGraphics::DispatchFrame* GetDispatchFrame() const;
 
         // WorldModule::GenerateDispatchLists @0x827D1CE8 seeds the frustum result through this
         // pipe (X360 accessor sub_827BB138; VariableEventQueue<32768,16>, as the siblings are).
-        CgsModule::VariableEventQueue<32768, 16>* GetSceneResultQueue();
+        SceneResultQueue* GetSceneResultQueue();
         // X360 0x827A0EC0: write-lock; set the dispatch frame (console word @this+0x8014).
         void SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame);
         // X360 0x82712188 (Hex-Rays "G"): read-lock; return the blobby-shadow buffer (this+0x8018).
@@ -123,11 +123,7 @@ namespace BrnTrafficIO
         static void _AssertLayout();
 
     private:
-        // The IOBuffer base is one status byte; the four pointer slots sit contiguously at the
-        // tail (console +0x8014..+0x8020). The preceding dispatch-list payload is folded into
-        // opaque storage, and 0x8014 - 1 accounts for the base's status byte. On the host the
-        // widened pointers push the block to 0x8018..0x8030.
-        u8                                             maPayloadAndPad[0x8014 - 1];       // +0x0001..+0x8013 (status pad + payload)
+        SceneResultQueue                              mSceneResultQueue;                // DWARF :490, ARTIST +4
         CgsGraphics::DispatchFrame*                    mpDispatchFrame;                   // console +0x8014
         BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* mpBlobbyShadowBuffer;              // console +0x8018
         BrnCoronaManager::BrnSubmissionInterface*      mpCoronaSubmissionInterface;       // console +0x801C
