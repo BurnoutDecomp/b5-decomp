@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Graphics/CgsCamera.h"
 
 // CgsGui::GuiAccessPointers - the bundle of shared resources a GUI state reaches
 // through its StateInterface (apt/flapt data, the language manager, the gui cache,
@@ -104,5 +105,10 @@ namespace CgsGui
 
     // Returns the guest r3, which the body never rewrites -- i.e. the argument itself.
     int SetGuiCamera(s32 liCameraType);
+
+    // ARTIST 0x82857468 (export hole), DecFIGS CgsGuiShared.cpp:189. Returns
+    // the complete camera by value; the console caller supplies hidden result
+    // storage in r3, not an explicit camera parameter.
+    CgsGraphics::Camera GetGuiCamera();
 }
 

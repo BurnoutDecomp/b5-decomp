@@ -53,6 +53,48 @@ namespace CgsGui
         return liCameraType;
     }
 
+    // ARTIST 0x82857468..0x82857740, recovered from raw image instructions.
+    // Function-local initialization caches hold aspect 1.0 (8305F268), near
+    // 0.1 (8305F264, source 820E07D8), far 1000 (8305F260, source 820E07DC),
+    // and the LookAt vectors below. Their guard word is 8305F26C.
+    CgsGraphics::Camera GetGuiCamera()
+    {
+        static const f32 KF_GUI_ASPECT_RATIO = 1.0f; // 82001C98 -> 8305F268
+        static const f32 KF_GUI_NEAR_CLIP = 0.1f;    // 820E07D8 -> 8305F264
+        static const f32 KF_GUI_FAR_CLIP = 1000.0f;  // 820E07DC -> 8305F260
+        CgsGraphics::Camera lCamera;
+
+        switch (gCurrentGuiCamera)
+        {
+        case E_GUICAMERA_NORMAL:
+        {
+            lCamera.Construct(0.9f, KF_GUI_ASPECT_RATIO, KF_GUI_NEAR_CLIP, KF_GUI_FAR_CLIP); // 820E3E70
+            static const Vector3 sEye = {-0.4f, 0.0f, 2.0f, 0.0f};    // 8305F250; 82012EF8/82001D9C
+            static const Vector3 sUp = {0.0f, 1.0f, 0.0f, 0.0f};     // 8305F240; vector 82181510
+            static const Vector3 sTarget = {-0.08f, 0.0f, 0.0f, 0.0f}; // 8305F230; 8200D5B0
+            lCamera.LookAt(sEye, sUp, sTarget);
+            break;
+        }
+        case E_GUICAMERA_FULLSCREENMAP:
+        {
+            // DecFIGS names selector 0 ORTHO, but ARTIST calls the same perspective
+            // constructor with the narrow 0.02-radian FOV. No orthogonal setter runs.
+            lCamera.Construct(0.02f, KF_GUI_ASPECT_RATIO, KF_GUI_NEAR_CLIP, KF_GUI_FAR_CLIP); // 820E3E6C
+            static const Vector3 sEye = {0.0f, 0.0f, 100.0f, 0.0f}; // 8305F220; 820049E0
+            static const Vector3 sUp = {0.0f, 1.0f, 0.0f, 0.0f};   // 8305F210; vector 82181510
+            static const Vector3 sTarget = {0.0f, 0.0f, 0.0f, 0.0f}; // 8305F200
+            lCamera.LookAt(sEye, sUp, sTarget);
+            break;
+        }
+        default:
+            // The console asserts then returns its untouched result storage.
+            // It does not choose a different selector or construct a fallback camera.
+            CGS_ASSERT(false, "Bad GuiCamera type\n"); // 820E3E74, CgsGuiShared.cpp:233
+            break;
+        }
+        return lCamera;
+    }
+
     // Null every shared-resource pointer; the owners install each one as its
     // subsystem comes up (mpAptAux from the Apt bring-up, the flapt/cache/queue
     // pointers from their modules).
