@@ -421,7 +421,7 @@ const RootOutputBuffer::ReplayRequestInterface*
 RootOutputBuffer::GetReplayRequestInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const ReplayRequestInterface*>(&mReplayRequestInterfaceStorage);
+    return &mReplayRequestInterface;
 }
 
 // X360 0x82694A90 -- write-lock accessor for the SAME replay request interface @ +0x1824
@@ -430,7 +430,7 @@ RootOutputBuffer::ReplayRequestInterface*
 RootOutputBuffer::GetReplayRequestInterface()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    return reinterpret_cast<ReplayRequestInterface*>(&mReplayRequestInterfaceStorage);
+    return &mReplayRequestInterface;
 }
 
 } // namespace Io
