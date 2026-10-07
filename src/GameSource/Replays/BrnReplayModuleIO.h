@@ -122,6 +122,10 @@ namespace ReplayIO
         typedef CgsModule::VariableEventQueue<13312, 16>     GameActionQueue;  // BaseGameActionQueue<13312> base
         typedef CgsInput::InputIO::PadOutputInformation      InputPadInformation;
 
+        // ARTIST 0x82652F08: construct base and game-action queue, clear the timer
+        // snapshot. The pad-input payload is deliberately not touched.
+        void Construct();
+
         // X360 0x823C9A38: write-lock (bit 3, "Not locked for writing", :72); bulk-appends the
         // source game-action queue into mGameActionQueue (VariableEventQueue<13312,16>::
         // Append<13312,16>). Returns the Append result.
