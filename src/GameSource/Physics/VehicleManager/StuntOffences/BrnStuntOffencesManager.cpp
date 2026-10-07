@@ -66,6 +66,120 @@ namespace
 
 namespace BrnPhysics
 {
+    namespace
+    {
+        // ========================================================================================
+        // [stunt23] BARREL-ROLL LEVER -- PC harness only, NOT part of the game. Opt-in on
+        // BRN_STUNT23_ROLL=<roll rate, rad/s> (absent or 0 = off), optional
+        // BRN_STUNT23_ROLL_DEG=<minimum roll, degrees> (default 330).
+        //
+        // The ramps a script can reach launch the car at the take-off roll limit, which is not
+        // enough air for a full turn, so no scripted drive can produce the AWESOME barrel roll the
+        // multiplier counts. On every player take-off this lever holds the car's roll rate about
+        // its own forward axis at the commanded value, picking the direction that first rolls the
+        // car back through level, until it has turned through at least the minimum roll AND is
+        // upright again (up.y >= 0.9); then it removes the roll rate so the car lands on its
+        // wheels. It only ever writes the body's angular velocity; the console's own detection,
+        // scoring and HUD code then see an ordinary roll. A crash or a touchdown ends it early.
+        // ========================================================================================
+        void Stunt23RollLever(Vehicle::RaceCarPhysics* lpCar, u32 luCurrentRaceCarState)
+        {
+            static f32 sfRate = -1.0f;
+            static f32 sfMinRollDeg = 330.0f;
+            if (sfRate < 0.0f)
+            {
+                const char* lpcRate = getenv("BRN_STUNT23_ROLL");
+                sfRate = (lpcRate != 0) ? static_cast<f32>(std::atof(lpcRate)) : 0.0f;
+                if (!(sfRate > 0.0f)) { sfRate = 0.0f; }
+                const char* lpcDeg = getenv("BRN_STUNT23_ROLL_DEG");
+                if (lpcDeg != 0 && std::atof(lpcDeg) > 0.0) { sfMinRollDeg = static_cast<f32>(std::atof(lpcDeg)); }
+            }
+            if (sfRate <= 0.0f || lpCar == 0) { return; }
+
+            static bool sbActive = false;
+            static f32  sfSign = 1.0f;
+            static f32  sfPrevAngle = 0.0f;
+            static f32  sfTurned = 0.0f;
+            static s32  siFrames = 0;
+            static s32  siJump = 0;
+            static bool sbDirChecked = false;
+
+            const Matrix44Affine& lrT = lpCar->GetTransform();
+            const f32 lfAngle = static_cast<f32>(std::atan2(lrT.xAxis.y, lrT.yAxis.y));
+            const bool lbCrashing = lpCar->IsCrashing();
+
+            if ((luCurrentRaceCarState & E_CURRENT_CAR_STATE_JUST_TAKEN_OFF) != 0 && !lbCrashing)
+            {
+                sbActive = true;
+                sfSign = 1.0f;
+                sfPrevAngle = lfAngle;
+                sfTurned = 0.0f;
+                siFrames = 0;
+                sbDirChecked = false;
+                ++siJump;
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[stunt23] lever takeoff jump=" << siJump
+                        << " tiltDeg=" << (lfAngle * KF_RAD_TO_DEG)
+                        << " rate=" << sfRate << " minRollDeg=" << sfMinRollDeg << "\n";
+                }
+            }
+            if (!sbActive) { return; }
+
+            if (lbCrashing || (luCurrentRaceCarState & E_CURRENT_CAR_STATE_IN_THE_AIR_NOW) == 0)
+            {
+                sbActive = false;
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[stunt23] lever end jump=" << siJump << " reason="
+                        << (lbCrashing ? "crash" : "touchdown")
+                        << " turnedDeg=" << (sfTurned * KF_RAD_TO_DEG)
+                        << " frames=" << siFrames << "\n";
+                }
+                return;
+            }
+
+            // Turned so far, from the attitude angle (wrapped frame step).
+            f32 lfStep = lfAngle - sfPrevAngle;
+            if (lfStep > 3.1415927f)  { lfStep -= 6.2831855f; }
+            if (lfStep < -3.1415927f) { lfStep += 6.2831855f; }
+            sfPrevAngle = lfAngle;
+            if (siFrames > 0)
+            {
+                sfTurned += std::fabs(lfStep);
+                // After the first commanded frame, make the roll head back through level first.
+                if (!sbDirChecked && std::fabs(lfStep) > 0.001f)
+                {
+                    sbDirChecked = true;
+                    const f32 lfWanted = (sfPrevAngle - lfStep >= 0.0f) ? -1.0f : 1.0f;
+                    if ((lfStep > 0.0f ? 1.0f : -1.0f) != lfWanted) { sfSign = -sfSign; }
+                }
+            }
+            ++siFrames;
+
+            const Vector3 lvAt = lrT.zAxis;
+            const Vector3 lvOmega = lpCar->GetAngularVelocity();
+            const f32 lfRollRate = vpu::Dot(lvOmega, lvAt);
+            const bool lbDone = (sfTurned * KF_RAD_TO_DEG >= sfMinRollDeg && lrT.yAxis.y >= 0.9f)
+                             || siFrames > 180;
+            const f32 lfWantedRate = lbDone ? 0.0f : sfSign * sfRate;
+            lpCar->SetAngularVelocity(vpu::Add(lvOmega, vpu::Mult(lvAt, lfWantedRate - lfRollRate)));
+
+            if (lbDone)
+            {
+                sbActive = false;
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[stunt23] lever done jump=" << siJump
+                        << " turnedDeg=" << (sfTurned * KF_RAD_TO_DEG)
+                        << " frames=" << siFrames << " upy=" << lrT.yAxis.y << "\n";
+                }
+            }
+        }
+    }
 
     // ============================================================================================
     // @0x82642408  Update -- per-frame spine for the player's active car.
@@ -104,6 +218,7 @@ namespace BrnPhysics
                            lpUsedRaceCars, lfTimeStep);
 
             StuntProbe(lpCar, lfTimeStep);   // [stuntair] witness -- NOT X360; see its banner
+            Stunt23RollLever(lpCar, muCurrentRaceCarState);   // [stunt23] harness lever, off unless BRN_STUNT23_ROLL is set
         }
 
         OutputStuntsCompleted(lpGameEventQueue);

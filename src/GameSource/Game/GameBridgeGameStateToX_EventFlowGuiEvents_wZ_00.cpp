@@ -2,8 +2,8 @@
 // b5-decomp/src/GameSource/Game/GameBridgeGameStateToX_EventFlowGuiEvents_wZ_00.cpp
 //
 // The free-roam arms of BrnGame::BrnGameModule::TranslateGameActionsToGuiEvents: junkyard entry,
-// drive-thru discovery, refusals and closing, landmark areas, the super-jump name and failure, and
-// the sat-nav switch. Reached from the `default:` of TranslateEventFlowGameActionToGuiEvent
+// drive-thru discovery, refusals and closing, landmark areas, the super-jump name and failure, the
+// sat-nav switch, the event-discovery rewards and the district-of-a-position answer. Reached from the `default:` of TranslateEventFlowGameActionToGuiEvent
 // (GameBridgeGameStateToX_EventFlowGuiEvents.cpp); returns true when an arm consumed the action.
 //
 // Every GUI record posted here is the canonical type from BrnGuiDemangledEventTypes.h except the
@@ -70,6 +70,17 @@ namespace
     static_assert(sizeof(BrnGui::GuiEventDriveThruDiscovered) == 12,    "id 314 size 12");
     static_assert(sizeof(BrnGui::GuiEventSuperJumpFailed) == 1,         "id 549 size 1");
     static_assert(sizeof(BrnGui::GuiEventCantPaintCar) == 1,            "id 551 size 1");
+    static_assert(sizeof(BrnGui::GuiEventReturnDistrict) == 8,          "id 196 size 8");
+    static_assert(sizeof(BrnGui::GuiEventAllJunctionsDiscoveredOfType) == 4, "id 313 size 4");
+
+    // id 312 size 1 -- AddGuiEvent<CgsGui::GuiEvent<312>>. The arm posts a stack byte it never
+    // writes; the consumer (HudMessageAnalyzer case 312 -> "EvryEventJnc") reads only the id.
+    struct AllEventsDiscoveredWire312
+    {
+        u8 mu8Unused;                          // +0x00  never written by the arm
+        s32 GetEventType() const { return 312; }
+    };
+    static_assert(sizeof(AllEventsDiscoveredWire312) == 1, "id 312 size 1");
     static_assert(sizeof(BrnGui::GuiEventMustFixCarFirst) == 1,         "id 552 size 1");
 
     // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_FREEROAM_DIAG), one line per translated
@@ -249,6 +260,51 @@ bool TranslateFreeRoamGameActionToGuiEvent(
 
         static s32 siLinesLeft = 8;
         FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), 0, siLinesLeft);
+        return true;
+    }
+
+    // ---- 186  the REGION-FROM-POSITION answer (8 bytes) ---------------------------------------
+    // The WorldRegion {county, district} straight across into GuiEventReturnDistrict (id 196).
+    case 186:
+    {
+        BrnGui::GuiEventReturnDistrict lEvent;
+        std::memcpy(lEvent.maData, lpAction, sizeof(lEvent.maData));
+        PushGuiEvent(lEvent, lpGuiInput);
+
+        static s32 siLinesLeft = 8;
+        s32 liDistrict = 0;
+        std::memcpy(&liDistrict, lEvent.maData + 4, sizeof(liDistrict));
+        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), liDistrict, siLinesLeft);
+        return true;
+    }
+
+    // ---- 202  ALL events discovered (1 byte, unread) ------------------------------------------
+    // No load off the action: the bare CgsGui::GuiEvent<312> tag.
+    case BrnGameState::GameStateModuleIO::E_ACTION_ALL_EVENTS_DISCOVERED:
+    {
+        AllEventsDiscoveredWire312 lEvent;
+        lEvent.mu8Unused = 0;
+        PushGuiEvent(lEvent, lpGuiInput);
+
+        static s32 siLinesLeft = 8;
+        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), 0, siLinesLeft);
+        return true;
+    }
+
+    // ---- 203  ALL events of a type discovered (4 bytes) ---------------------------------------
+    // Null assert on the record, then its word (the runtime mode type) into
+    // GuiEventAllJunctionsDiscoveredOfType (id 313).
+    case 203:
+    {
+        CGS_ASSERT(lpAction != 0, "lpAllEventsDiscoveredOfTypeAction != NULL");
+        const s32 liGameModeType = *reinterpret_cast<const s32*>(lpAction);
+
+        BrnGui::GuiEventAllJunctionsDiscoveredOfType lEvent;
+        std::memcpy(lEvent.maData, &liGameModeType, sizeof(liGameModeType));
+        PushGuiEvent(lEvent, lpGuiInput);
+
+        static s32 siLinesLeft = 8;
+        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), liGameModeType, siLinesLeft);
         return true;
     }
 

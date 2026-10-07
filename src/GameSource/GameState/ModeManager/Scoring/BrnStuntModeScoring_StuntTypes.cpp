@@ -118,7 +118,7 @@ namespace BrnGameState
         const f32 KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_BOOST  = 120.0f;  // flt_82CDB738 : boost score rate (PS3 DWARF name)
 
         // Driving / reverse / handbrake (UpdateDrivingStunts).
-        // The reverse-gear cap is NEGATIVE (-25): the gate is `mfMaxSpeedMPH < -25.0f`, i.e. the
+        // The reverse-gear cap is NEGATIVE (-25): the gate is `mfSpeedMPH < -25.0f`, i.e. the
         // car must be travelling backwards faster than 25 mph, which is why the signed speed is
         // compared with `<` rather than a magnitude with `>`.
         const f32 KF_MIN_SPEED_FOR_REVERSING_STUNT             = -25.0f; // flt_82CDB7A4 : reverse-gear speed cap
@@ -155,8 +155,8 @@ namespace BrnGameState
     // (already-jumped-here) check; on landing it commits the spin/roll ratings.
     //
     // X360 control flow (asm at 0x8232C640):
-    //   lbStunting = IsPlayerInAir(player) && GetPlayerRaceCarState()->mfTimeInAir > 0.
-    //   if ( lbStunting && airTime > KF_STUNT_ATTACK_MIN_AIR_TIME && RegisterStunt() )
+    //   if ( IsPlayerInAir() && GetPlayerRaceCarState()->mfTimeInAir > KF_STUNT_ATTACK_MIN_AIR_TIME
+    //        && RegisterStunt() )
     //   {
     //       if ( !mbWasInAirLastFrame )            // takeoff edge -- once per jump
     //       {
@@ -187,15 +187,13 @@ namespace BrnGameState
 
         const EActiveRaceCarIndex lePlayerIndex =
             lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();
-        const RaceCarState* lpPlayerRC = lpActiveRaceCarInterface->GetPlayerRaceCarState();
 
-        // lbStunting: the player is airborne and has clocked some air time this frame.
-        const bool lbStunting =
-            lpActiveRaceCarInterface->IsPlayerInAir() && lpPlayerRC->mfTimeInAir > 0.0f;
-
-        const f32 lfAirTime = lpPlayerRC->mfTimeInAir;
-
-        if (lbStunting && lfAirTime > KF_STUNT_ATTACK_MIN_AIR_TIME && RegisterStunt())
+        // IsPlayerInAir() is the whole first gate (player index set and air time > 0); the
+        // player's RaceCarState is only fetched once it holds, so a car without a player index
+        // never reaches the asserting getter.
+        if (lpActiveRaceCarInterface->IsPlayerInAir()
+            && lpActiveRaceCarInterface->GetPlayerRaceCarState()->mfTimeInAir > KF_STUNT_ATTACK_MIN_AIR_TIME
+            && RegisterStunt())
         {
             if (!mbWasInAirLastFrame)
             {
@@ -341,9 +339,9 @@ namespace BrnGameState
     //
     // X360 control flow (asm at 0x8232CAE0):
     //   lpPlayerRC = GetPlayerRaceCarState();  CGS_ASSERT(lpPlayerRC, "lpPlayerRC")
-    //   if ( mbInitialDriftOngoing && !IsZero(lpPlayerRC->mfInProgressDriftTime) ) return false;
+    //   if ( mbInitialDriftOngoing && !IsZero(lpPlayerRC->mfTimeDrifting) ) return false;
     //   mbInitialDriftOngoing = false;
-    //   if ( lpPlayerRC->mfInProgressDriftTime <= KF_STUNT_ATTACK_MIN_DRIFT_TIME
+    //   if ( lpPlayerRC->mfTimeDrifting <= KF_STUNT_ATTACK_MIN_DRIFT_TIME
     //        || !RegisterStunt() ) return false;
     //   if ( (muStuntTypesInProgress & (1<<E_STUNT_TYPE_DRIFT)) == 0 )       // first drift frame
     //       UpdateScore(DRIFT, KF_STUNT_ATTACK_SCORE_PER_SECOND_DRIFTING * KF_STUNT_ATTACK_MIN_DRIFT_TIME)
@@ -355,7 +353,10 @@ namespace BrnGameState
         const RaceCarState* lpPlayerRC = lpActiveRaceCarInterface->GetPlayerRaceCarState();
         CGS_ASSERT(lpPlayerRC != NULL, "lpPlayerRC");
 
-        const f32 lfDriftTime = lpPlayerRC->mfInProgressDriftTime;
+        // The drift clock is RaceCarState::mfTimeDrifting (+0x400 of the state the getter returns),
+        // the physics' own drifting timer -- NOT mfInProgressDriftTime (+0x428), the
+        // stunt-offence copy the event record carries.
+        const f32 lfDriftTime = lpPlayerRC->mfTimeDrifting;
 
         if (mbInitialDriftOngoing)
         {
@@ -367,7 +368,8 @@ namespace BrnGameState
         }
         mbInitialDriftOngoing = false;
 
-        if (lpPlayerRC->mfInProgressDriftTime <= KF_STUNT_ATTACK_MIN_DRIFT_TIME || !RegisterStunt())
+        // `ble` skips on less-equal OR unordered, so only a clock strictly past the gate scores.
+        if (!(lpPlayerRC->mfTimeDrifting > KF_STUNT_ATTACK_MIN_DRIFT_TIME) || !RegisterStunt())
         {
             return false;
         }
@@ -507,7 +509,7 @@ namespace BrnGameState
     //
     // X360 control flow (asm at 0x8232CD70):
     //   lbReverse = GetPlayerActiveRaceCarIndex() != -1 && !<reverse-takeoff-block-flag>
-    //   if ( lbReverse && GetPlayerRaceCarState()->mfMaxSpeedMPH < KF_MIN_SPEED_FOR_REVERSING_STUNT
+    //   if ( lbReverse && GetPlayerRaceCarState()->mfSpeedMPH < KF_MIN_SPEED_FOR_REVERSING_STUNT
     //        && RegisterStunt() )
     //   {
     //       UpdateScore(REVERSE_DRIVING, KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_REVERSING * lfSimTimeStep)
@@ -527,7 +529,8 @@ namespace BrnGameState
     // X360 detail: the reverse predicate gates on the active player index being set AND a
     // per-car interface flag at the (player-indexed) RaceCarState block being clear -- reached
     // here via IsPlayerInReverseGear() (the named accessor that owns that test). The reverse
-    // speed cap reads the player RaceCarState's mfMaxSpeedMPH (@972, the X360 +972 load).
+    // speed cap reads the player RaceCarState's signed mfSpeedMPH (+972), not mfMaxSpeedMPH (+976):
+    // a maximum never goes below -25, so the reverse-driving stunt could never score.
     bool StuntModeScoring::UpdateDrivingStunts(f32 lfSimTimeStep,
                                                const ActiveRaceCarOutputInterface* lpActiveRaceCarInterface)
     {
@@ -536,18 +539,19 @@ namespace BrnGameState
         const bool lbInReverse =
             lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex() != -1
             && lpActiveRaceCarInterface->IsPlayerInReverseGear();
-        const RaceCarState* lpPlayerRC = lpActiveRaceCarInterface->GetPlayerRaceCarState();
 
+        // The player's RaceCarState is fetched inside each gate, as the console does.
         if (lbInReverse
-            && lpPlayerRC->mfMaxSpeedMPH < KF_MIN_SPEED_FOR_REVERSING_STUNT
+            && lpActiveRaceCarInterface->GetPlayerRaceCarState()->mfSpeedMPH < KF_MIN_SPEED_FOR_REVERSING_STUNT
             && RegisterStunt())
         {
             UpdateScore(KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_REVERSING * lfSimTimeStep,
                         E_STUNT_TYPE_REVERSE_DRIVING, true);
             lbResult = true;
         }
-        else if (lpActiveRaceCarInterface->GetPlayerRaceCarState()->mfInProgressHandbreakTurnAngle
-                     >= KF_HANDBRAKE_TURN_MIN_ANGLE
+        // `fcmpu` + `blt` skips the arm, so an unordered angle still qualifies: `!(a < min)`.
+        else if (!(lpActiveRaceCarInterface->GetPlayerRaceCarState()->mfInProgressHandbreakTurnAngle
+                       < KF_HANDBRAKE_TURN_MIN_ANGLE)
                  && RegisterStunt())
         {
             if ((muStuntTypesInProgress & (1u << E_STUNT_TYPE_HANDBRAKE_TURN)) != 0u)

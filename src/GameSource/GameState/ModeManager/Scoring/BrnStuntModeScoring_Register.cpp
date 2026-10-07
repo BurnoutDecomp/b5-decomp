@@ -307,13 +307,15 @@ void StuntModeScoring::UpdateStuntRating(EStuntType leStuntType, f32 lfA, f32 lf
 {
     CGS_ASSERT(mbStuntInProgress && mbComboInProgress, "mbStuntInProgress && mbComboInProgress");
 
-    if (lfA >= lfB)
+    // Both gates skip on `fcmpu` + `blt`, which is NOT taken when the compare is unordered, so a
+    // NaN measurement still promotes the stunt: written `!(a < b)`, not `a >= b`.
+    if (!(lfA < lfB))
     {
         // 0x82313140: oris 0x10 into the high half of the 32-bit word == OR 0x100000.
         muStuntTypesInProgress |= 0x100000u;
     }
 
-    if (lfA >= lfC)
+    if (!(lfA < lfC))
     {
         // 0x8231315C: oris 0x20 == OR 0x200000, plus (1 << leStuntType) into the awesome mask.
         muStuntTypesInProgress |= 0x200000u;

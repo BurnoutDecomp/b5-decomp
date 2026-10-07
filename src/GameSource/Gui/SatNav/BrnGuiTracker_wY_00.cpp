@@ -67,8 +67,9 @@ namespace BrnGui
         // positions in the trigger data's landmark list, 0 .. landmark count - 1). Every tracked
         // set the offline game publishes holds at most one landmark (all 120 offline events
         // carry 0 or 1 checkpoints), so no offline scenario ever owes a route leg;
-        // multi-landmark sets come from the online route screens. Once the trigger data is
-        // loaded and nothing is tracked, the hook publishes the two landmarks through the real
+        // multi-landmark sets come from the online route screens. Once the game is in free
+        // roam (trigger data loaded, gameplay HUD up, outside the junkyard) and nothing is
+        // tracked, the hook publishes the two landmarks through the real
         // GuiCache::UpdateTrackerInfo (the offline RefreshMapState publisher), which arms the
         // leg this Update then requests. Fires once per run.
         // UpdateTrackerInfo takes LandmarkIndex values, which are trigger-REGION indices (the
@@ -108,7 +109,22 @@ namespace BrnGui
                 return;
             }
             const WorldDataController* lpWorldData = lpGuiCache->GetWorldDataController();
-            if (lpWorldData == 0 || !lpWorldData->HasTriggerData())
+            if (lpWorldData == 0 || !lpWorldData->HasTriggerData() || lpGuiCache->IsInJunkyard())
+            {
+                return;
+            }
+            // The trigger data is ready during loading, long before the GUI -> game-state bridge
+            // first runs (BrnGameModule runs DoUpdate_GameStatePostWorld only in game), and a 494
+            // posted then is cleared at the head of the next GUI leg without ever becoming game
+            // event 84. So the hook waits for the free-roam HUD (FBurnMainHudState raises
+            // mbGameplayHudActive once the gameplay HUD is up, which is in game) and then
+            // ~2 s more of tracker updates.
+            if (!lpGuiCache->IsGameplayHudActive())
+            {
+                return;
+            }
+            static s32 siSettleCalls = 120;
+            if (--siSettleCalls > 0)
             {
                 return;
             }
@@ -128,11 +144,13 @@ namespace BrnGui
             }
 
             u16 lau16Landmarks[2];
+            Vector4 lav4Positions[2];
             for (s32 liEnd = 0; liEnd < 2; ++liEnd)
             {
                 GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
                 lpGuiCache->GetLandmarkInfoAtPositionInList(saiListPositions[liEnd], &lLandmarkInfo);
                 lau16Landmarks[liEnd] = static_cast<u16>(lLandmarkInfo.GetLandmarkIndexHalf());
+                lav4Positions[liEnd]  = lLandmarkInfo.GetPositionLane();
             }
 
             if (CgsDev::Log::gpDebugPrint != 0)
@@ -141,7 +159,9 @@ namespace BrnGui
                     << "[satnav] TEST HOOK list positions " << saiListPositions[0] << ","
                     << saiListPositions[1] << " publishes landmarks "
                     << static_cast<s32>(lau16Landmarks[0]) << ","
-                    << static_cast<s32>(lau16Landmarks[1]) << "\n";
+                    << static_cast<s32>(lau16Landmarks[1])
+                    << " at (" << lav4Positions[0].x << "," << lav4Positions[0].z << ") ("
+                    << lav4Positions[1].x << "," << lav4Positions[1].z << ")\n";
             }
             lpGuiCache->UpdateTrackerInfo(lau16Landmarks, 2);
         }
