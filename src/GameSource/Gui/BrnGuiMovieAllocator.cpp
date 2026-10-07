@@ -1,26 +1,66 @@
 #include "GameSource/Gui/BrnGuiMovieAllocator.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
-// ============================================================================
-// BrnGui::MovieAllocator -- the polymorphic rw::IResourceAllocator BrnGui::MovieManager
-// carves from the memory reclaimed while a boot/attract movie plays.
-//
-// Only the compiler-synthesised `scalar deleting destructor' (X360 @0x827DD408) is in this
-// batch. Reconstructed as the out-of-line defaulted virtual dtor: the host C++ ABI supplies
-// the vptr-rewrite (*this = off_8200F5B4) + conditional operator-delete the X360 thunk
-// open-coded, and the default body destructs the members in reverse order --
-// mGraphicsAllocator (LinearMalloc: trivial dtor, no-op), then mMainAllocator (HeapMalloc,
-// whose only non-trivial sub-object is the embedded EA::Allocator::GeneralAllocator at
-// +0xC), then the rw::IResourceAllocator base. That yields EXACTLY ONE ~GeneralAllocator
-// call on the sub-object at byte +0xC -- matching the asm's single `bl ~GeneralAllocator`
-// on this+0xC. The out-of-line body also anchors the MovieAllocator vtable in this TU (the
-// reason the X360 emitted the polymorphic-delete thunk here). Mirrors the committed sibling
-// BrnResource::DefaultLinearAllocator::~DefaultLinearAllocator.
-//
-// Construct/Prepare/Release/Destruct + the virtual DoAllocate/DoFree/DoFreeDisposable
-// overrides are DWARF-attested (BrnGuiMovieManager.cpp:998..1149) but NOT in this batch --
-// declared in the header, bodies land with their own TUs (GROW then, do NOT fork the type).
-// ============================================================================
 namespace BrnGui
 {
     MovieAllocator::~MovieAllocator() = default;
+
+    void MovieAllocator::Construct()
+    {
+        // ARTIST 824F95F0..95F4: only the contained linear allocator is reset.
+        mGraphicsAllocator.Construct();
+    }
+
+    // ARTIST 824F9780, DWARF: both five-lane arguments are passed by value.
+    bool MovieAllocator::Prepare(rw::Resource lResource, rw::ResourceDescriptor lDescriptor)
+    {
+        mMainAllocator.Construct(lResource.m_baseResources[0],
+            static_cast<s32>(lDescriptor.m_baseResourceDescriptors[0].m_size));
+        miMainAlignment = static_cast<s32>(lDescriptor.m_baseResourceDescriptors[0].m_alignment);
+        mGraphicsAllocator.Create(lResource.m_baseResources[2],
+            lDescriptor.m_baseResourceDescriptors[2].m_size);
+        mGraphicsAllocator.SetAlignment(lDescriptor.m_baseResourceDescriptors[2].m_alignment);
+        return true;
+    }
+
+    // The two original allocator teardowns are inlined at 82507BB4..BBC4.
+    bool MovieAllocator::Release()
+    {
+        mMainAllocator.Destruct();
+        mGraphicsAllocator.Destruct();
+        return true;
+    }
+
+    void MovieAllocator::Destruct()
+    {
+        Release();
+    }
+
+    // ARTIST 824F9808: zero all five lanes, then allocate main and graphics.
+    rw::Resource MovieAllocator::DoAllocate(const rw::ResourceDescriptor& lrDescriptor, const char*)
+    {
+        rw::Resource lResource;
+        if (lrDescriptor.m_baseResourceDescriptors[0].m_size != 0)
+            lResource.m_baseResources[0] = mMainAllocator.Malloc(
+                static_cast<s32>(lrDescriptor.m_baseResourceDescriptors[0].m_size), miMainAlignment);
+        if (lrDescriptor.m_baseResourceDescriptors[2].m_size != 0)
+            lResource.m_baseResources[2] = mGraphicsAllocator.Malloc(
+                lrDescriptor.m_baseResourceDescriptors[2].m_size);
+        return lResource;
+    }
+
+    // ARTIST 824F9898: individual frees affect only main memory. The graphics
+    // region, including movie texture storage, belongs to the enclosing arena.
+    void MovieAllocator::DoFree(const rw::Resource& lrResource)
+    {
+        CGS_ASSERT(lrResource.m_baseResources[2] == nullptr,
+                   "lResource.GetPhysicalMemoryResource() == NULL");
+        CGS_ASSERT(lrResource.m_baseResources[0] != nullptr, "lResource.GetMemoryResource()");
+        mMainAllocator.Free(lrResource.m_baseResources[0]);
+    }
+
+    void MovieAllocator::DoFreeDisposable(rw::Resource&)
+    {
+        CGS_ASSERT(false, "Not implemented"); // ARTIST 824F1900.
+    }
 }

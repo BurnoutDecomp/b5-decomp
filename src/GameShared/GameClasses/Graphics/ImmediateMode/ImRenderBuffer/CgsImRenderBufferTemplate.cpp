@@ -545,7 +545,7 @@ namespace CgsGraphics
             lpCommand->muType         = IM_CMD_SET_STATE_TEXTURE;            // 9
             lpCommand->muSize         = luRecord;
             mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
-            lpCommand->mpTextureState = reinterpret_cast<const TextureState*>(lpTextureState);
+            lpCommand->mpTextureState = lpTextureState;
         }
         else
         {
@@ -595,7 +595,7 @@ namespace CgsGraphics
             lpCommand->muType         = IM_CMD_SET_STATE_TEXTURE;            // 9
             lpCommand->muSize         = luRecord;
             mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
-            lpCommand->mpTextureState = reinterpret_cast<const TextureState*>(lpTextureState);
+            lpCommand->mpTextureState = lpTextureState;
         }
         else
         {
@@ -1485,8 +1485,7 @@ namespace CgsGraphics
             {
                 const ImCommandSetStateTexture* lpSet =
                     static_cast<const ImCommandSetStateTexture*>(lpCommand);
-                const renderengine::TextureState* lpState =
-                    reinterpret_cast<const renderengine::TextureState*>(lpSet->mpTextureState);
+                const renderengine::TextureState* lpState = lpSet->mpTextureState;
                 renderengine::Texture* lpTexture = (lpState != nullptr) ? lpState->mpRaster : nullptr;
                 lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
                 lpTraceBoundTexture = lpTexture;   // [diag]

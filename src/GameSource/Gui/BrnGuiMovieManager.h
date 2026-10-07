@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"          // CgsResource::Pool (holds VIDEOLIST.BUNDLE)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"             // CgsModule::Event, VariableEventQueue
 #include "GameSource/Gui/BrnGuiVideoEvents.h"                                // BrnGui::GuiEventPlayVideo/StopVideo (508/509)
+#include "GameSource/Gui/BrnGuiMovieAllocator.h"
 
 // BrnGui::MovieManager -- the GUI-side movie controller, reconstructed from the X360 ARTIST build:
 //   Construct        0x824F9598   Prepare       0x82514780   Update    0x82507A98
@@ -22,9 +23,9 @@
 // "acquire" is a synchronous Pool::FindResource(id). This is faithful to the bundle FORMAT +
 // per-resource fixup/import; only the IO is PC-shaped (marked).
 //
-// [STILL STUBBED -- marked per-call in the .cpp] collision-world + car-pool memory reclaim, the MovieAllocator
-// (Heap+Linear over a reserved block), and XMP/sound. Reconstructed as marked stubs so the state machine is
-// faithful + compiles; they gate console memory behaviour but not PC playback.
+// Collision-world/car-pool reclaim and asynchronous bundle acquisition remain
+// separate reconstruction debt. The real movie allocator/arena lifetime is restored;
+// its host backing is explicit and does not simulate reclaimed car-pool memory.
 namespace BrnGui
 {
     class MovieManager
@@ -196,8 +197,8 @@ namespace BrnGui
         void RequestValidationOfCollisionWorldState();
         void RequestInvalidationOfCarPool();            // [stub: car-pool memory reclaim]
         void RequestValidationOfCarPool();
-        bool PrepareMovieAllocator();                   // [stub: MovieAllocator Heap+Linear]
-        void DestroyMemoryResourceAndDescriptor();      // [stub: MovieAllocator]
+        bool PrepareMovieAllocator();
+        void DestroyMemoryResourceAndDescriptor();
 
         // ---- members (DecFIGS order; x64-laid-out, not the X360 32-bit offsets) ---------------------
         s32                      miMoveMemoryReleaseDelay;   // delay counter (Update states 9/10)
@@ -206,12 +207,13 @@ namespace BrnGui
         ECarPoolState            meCarPoolState;
         s32                      meLanguage;                 // CgsLanguage::ELanguage (0 = English)
         CgsGraphics::MoviePlayer mMoviePlayer;
+        rw::ResourceDescriptor   mDescriptor;
+        rw::Resource             mResourceAllocatorResource;
         uintptr_t                muFirstCollisionBlockAddress;
         u32                      muNumCollisionBlocks;
         CgsModule::VariableEventQueue<1024, 16> mReceiverQueue;
         VideoDefinition          mPlayingMovie;
         VideoDefinition          mQueuedMovie;
-        bool                     mbKeepMemoryWhenFinished;   // X360 +0xD55
         bool                     mbUsesXMPMusic;             // X360 +0xD56 [stub: XMP background music]
         CgsResource::ResourcePtr<CgsResource::VideoDataResource> mpVideoDataResource;
         // DecFIGS mCarPoolResource / mCarPoolResourceDescriptor -- the re-validated car-pool memory the GUI
@@ -220,6 +222,7 @@ namespace BrnGui
         CgsResource::Entry::ResourceDescriptor mCarPoolResourceDescriptor;
         char                     macMovieNameBuffer[256];    // "VIDEOS\<name>" (mapcBuffer)
         const char*              mpcLanguageCode;
+        MovieAllocator           mAllocator;
         bool                     mbStopVideoStraightAway;
 
         // [PC IO] VIDEOS\VIDEOLIST.BUNDLE lives here (loaded synchronously, like the debug font's pool); the
@@ -227,8 +230,6 @@ namespace BrnGui
         CgsResource::Pool        mMoviePool;
         void*                    mapPoolBacking[3];
         bool                     mbBundleLoaded;
-        // [omitted, stubbed: mDescriptor / mResourceAllocatorResource / mCarPoolResource /
-        //  mCarPoolResourceDescriptor / mAllocator(MovieAllocator) -- the memory-management objects]
     };
 
     // The movie manager currently owning the screen (the GUI HUD flow sets it). Movies present

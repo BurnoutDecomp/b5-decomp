@@ -317,33 +317,18 @@ namespace CgsGui
         renderengine::TextureState::Parameters lParams;
         BuildTextureStateParameters(&lParams, luTextureId, lbClampAddressing);
 
-        // Size the texture-state resource (the guest's GetResourceDescriptor + the descriptor the
-        // allocator consumes). renderengine::TextureState::GetResourceDescriptor writes a 10-word
-        // (5-entry {size,align}) descriptor.
-        u32 laDescriptor[10];
-        renderengine::TextureState::GetResourceDescriptor(laDescriptor);
-
-        // Allocate the backing resource through the RenderWare default allocator (the guest's
-        // rw::ResourceAllocatorRegistry::GetDefaultAllocator() then the allocator vtable slot
-        // DoAllocate). The descriptor's slot-0 {size, alignment} drives the carve.
+        // ARTIST 8285975C..798: allocate a Resource, then pass that same
+        // Resource object to Initialize. Its lane 0 owns the state storage.
         rw::IResourceAllocator* lpAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator();
         rw::ResourceDescriptor lAllocDescriptor;
-        lAllocDescriptor.m_baseResourceDescriptors[0].m_size      = laDescriptor[0];
-        lAllocDescriptor.m_baseResourceDescriptors[0].m_alignment = laDescriptor[1];
-        lAllocDescriptor.m_baseResourceDescriptors[1].m_size      = 0u;
-        lAllocDescriptor.m_baseResourceDescriptors[1].m_alignment = 1u;
-        lAllocDescriptor.m_baseResourceDescriptors[2].m_size      = 0u;
-        lAllocDescriptor.m_baseResourceDescriptors[2].m_alignment = 1u;
-        lAllocDescriptor.m_baseResourceDescriptors[3].m_size      = 0u;
-        lAllocDescriptor.m_baseResourceDescriptors[3].m_alignment = 1u;
+        renderengine::TextureState::GetResourceDescriptor(&lAllocDescriptor);
         rw::Resource lResource = lpAllocator->DoAllocate(lAllocDescriptor, nullptr);
 
         // Initialize the sampler+raster state in the carved memory (the guest's
         // renderengine::TextureState::Initialize). [PC: the committed Initialize keeps the sampler
         // config + bound raster for draw-time application instead of marshalling a Xenos GPU
         // descriptor -- see texturestate.cpp.]
-        renderengine::TextureState* lpState = renderengine::TextureState::Initialize(
-            reinterpret_cast<rw::Resource*>(lResource.m_baseResources[0]), &lParams);
+        renderengine::TextureState* lpState = renderengine::TextureState::Initialize(&lResource, &lParams);
 
         // Memoise it (the ordered insert into the bin key % 25).
         lrCache.InsertSorted(luTextureId, lpState);

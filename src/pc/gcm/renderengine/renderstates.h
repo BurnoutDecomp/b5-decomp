@@ -3,7 +3,7 @@
 #include "types.hpp"
 #include "pc/gcm/renderengine/VertexDescriptor.h"
 
-namespace rw { struct Resource; }   // TextureState::Initialize backing memory (rwcore_structs.h)
+namespace rw { struct Resource; struct ResourceDescriptor; }
 
 namespace renderengine
 {
@@ -222,6 +222,7 @@ public:
 
     // Size the texture-state resource (X360 0x82B635C8 builds the rw::BaseResourceDescriptors<5>).
     static void GetResourceDescriptor(u32* lpDescriptorOut);
+    static rw::ResourceDescriptor* GetResourceDescriptor(rw::ResourceDescriptor* lpDescriptorOut);
     // Create a texture state from the sampler parameters (X360 0x82B62720). [PC DIVERGENCE: stores
     // the config + raster for draw-time application instead of marshalling a Xenos GPU descriptor.]
     static TextureState* Initialize(rw::Resource* lpResourceMemory, const Parameters* lpParams);

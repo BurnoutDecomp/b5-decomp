@@ -1,8 +1,10 @@
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMoviePlayer.h"
+#include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMovieVideoRenderer.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"   // CgsGraphics::Im2d (Im2dRenderBuffer)
 #include "pc/gcm/renderengine/device.h"                              // renderengine::gDevice
 #include "pc/gcm/renderengine/texture.h"                             // renderengine::Texture
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <cstring>   // std::memcpy (strip-band recombine upload)
 
 extern "C" {
@@ -29,7 +31,7 @@ namespace CgsGraphics
 
     void MoviePlayer::Construct()
     {
-        mePlayerState = E_STOPPED;
+        mePlayerState = E_RW_MOVIE_PLAYER_NULL;  // ARTIST 827EA190/827EA1D8: store zero.
         mcMovieFileName[0] = 0;
         mbIsOkToPlay = false;
         mbIsLooped = false;
@@ -37,8 +39,8 @@ namespace CgsGraphics
 
         mfRectLeft = 0.0f;
         mfRectTop = 0.0f;
-        mfRectRight = 1280.0f;   // full logical screen
-        mfRectBottom = 720.0f;
+        mfRectRight = 1.0f;   // ARTIST 827EA1C4: unit-screen rectangle
+        mfRectBottom = 1.0f;
         miCrossfadeInFrames = 0;
         miCrossfadeOutFrames = 0;
 
@@ -59,7 +61,14 @@ namespace CgsGraphics
         mbHaveFrame = false;
         mbEof = false;
 
-        mpFrameTexture = 0;
+        mpAllocator = nullptr;
+        mRwVideoRendererResource = rw::Resource();
+        mpRwVideoRenderer = nullptr;
+        mpIm2dRenderBuffer = nullptr;
+        mbReadyToRender = false;
+        for (auto& lpTexture : mapNativeTextureOwnersPC) lpTexture = nullptr;
+        mbPausedPC = false;
+        miCurrentFrame = 0;
         muTexWidth = 0;
         muTexHeight = 0;
 
@@ -87,11 +96,17 @@ namespace CgsGraphics
         }
         mcMovieFileName[li] = 0;
         mbIsOkToPlay = false;
-        return lbPreload ? PrepareResources() : true;
+        // The native preload cannot allocate renderer resources before the
+        // original Prepare call supplies their real owner.
+        return lbPreload && mpAllocator != nullptr ? PrepareResources() : true;
     }
 
-    bool MoviePlayer::Prepare(const char* lpcLanguageCode)
+    bool MoviePlayer::Prepare(rw::IResourceAllocator* lpAllocator, const char* lpcMovieFileName,
+                              const char* lpcLanguageCode)
     {
+        ReleaseResources();
+        mpAllocator = lpAllocator;
+        SetMovieFile(lpcMovieFileName, false);
         (void)lpcLanguageCode;   // [follow-on] select the localized sound stream for this language
         return PrepareResources();
     }
@@ -104,7 +119,9 @@ namespace CgsGraphics
         mbFinished = false;
         mbEof = false;
         mbHaveFrame = false;
-        mePlayerState = E_STOPPED;
+        mePlayerState = E_RW_MOVIE_PLAYER_CONSTRUCTED;
+        mbReadyToRender = false;
+        mbPausedPC = false;
 
         if (mcMovieFileName[0] == 0)
         {
@@ -203,7 +220,14 @@ namespace CgsGraphics
             return false;
         }
 
+        if (!EnsureTexture(static_cast<u32>(mpVideoCtx->width),
+                           static_cast<u32>(mpVideoCtx->height * miVerticalStrips)))
+        {
+            ReleaseResources();
+            return false;
+        }
         mbIsOkToPlay = true;
+        mePlayerState = E_RW_MOVIE_PLAYER_PREPARED;
         CgsDev::Log::WriteToLog("[Movie] prepared ");
         CgsDev::Log::WriteToLog(mcMovieFileName);
         CgsDev::Log::WriteToLog("\n");
@@ -245,11 +269,13 @@ namespace CgsGraphics
         {
             avformat_close_input(&mpFormatCtx);
         }
-        if (mpFrameTexture != 0)
+        if (mpRwVideoRenderer != nullptr)
         {
-            renderengine::Texture::Destroy(mpFrameTexture);
-            delete mpFrameTexture;
-            mpFrameTexture = 0;
+            // ARTIST 827EF29C..2C0 frees the renderer resource, not its
+            // separately allocated texture/state resources in the movie arena.
+            mpAllocator->DoFree(mRwVideoRendererResource);
+            mRwVideoRendererResource = rw::Resource();
+            mpRwVideoRenderer = nullptr;
         }
         delete[] mpStripStaging;
         mpStripStaging = 0;
@@ -258,14 +284,36 @@ namespace CgsGraphics
         muTexHeight = 0;
         miVideoStream = -1;
         mbHaveFrame = false;
+        mbReadyToRender = false;
+        mePlayerState = E_RW_MOVIE_PLAYER_NULL;
     }
 
     bool MoviePlayer::Release()
     {
+        // ARTIST 827F7FC8..8034 stops playback and closes before resource
+        // release. FFmpeg's native close is synchronous; no fictitious frame
+        // delay or disk completion is inserted into the engine state machine.
+        if (mePlayerState == E_PLAYING)
+            Stop();
+        if (mePlayerState != E_RW_MOVIE_PLAYER_NULL)
+            mePlayerState = E_RW_MOVIE_PLAYER_CLOSING_FILE;
         ReleaseResources();
-        mePlayerState = E_STOPPED;
+        mpAllocator = nullptr; // ARTIST 827F8044: close releases the allocator association.
         mbIsOkToPlay = false;
         return true;
+    }
+
+    void MoviePlayer::RetireArenaTexturesPC()
+    {
+        // FLAG PC-platform leaf: COM image allocations are outside the arena.
+        // Retire them at that owner's real disposal/reconstruction boundary;
+        // the wrapper/state memory is released with the enclosing arena.
+        for (auto& lpTexture : mapNativeTextureOwnersPC)
+        {
+            if (lpTexture != nullptr)
+                renderengine::Texture::Destroy(lpTexture);
+            lpTexture = nullptr;
+        }
     }
 
     void MoviePlayer::Destruct()
@@ -283,6 +331,7 @@ namespace CgsGraphics
         mfLastElapsedSec = 0.0;
         mbFinished = false;
         mePlayerState = E_PLAYING;
+        mbPausedPC = false;
     }
 
     void MoviePlayer::Pause()
@@ -290,23 +339,25 @@ namespace CgsGraphics
         if (mePlayerState == E_PLAYING)
         {
             muPauseTick = CgsSystem::GetSystemTimerBaseTime();
-            mePlayerState = E_PAUSED;
+            mbPausedPC = true;
         }
     }
 
     void MoviePlayer::Unpause()
     {
-        if (mePlayerState == E_PAUSED)
+        if (mbPausedPC)
         {
             // Shift the start tick forward by the paused span so elapsed resumes where it stopped.
             muStartTick += (CgsSystem::GetSystemTimerBaseTime() - muPauseTick);
             mePlayerState = E_PLAYING;
+            mbPausedPC = false;
         }
     }
 
     void MoviePlayer::Stop()
     {
         mePlayerState = E_STOPPED;
+        miCurrentFrame = static_cast<s32>(mfDurationSec * mfFrameRate);
         mbFinished = true;
     }
 
@@ -430,49 +481,29 @@ namespace CgsGraphics
 
     bool MoviePlayer::EnsureTexture(u32 luWidth, u32 luHeight)
     {
-        if (mpFrameTexture != 0 && muTexWidth == luWidth && muTexHeight == luHeight)
-        {
-            return true;
-        }
-        if (renderengine::gDevice == 0)
-        {
+        if (mpRwVideoRenderer != nullptr)
+            return muTexWidth == luWidth && muTexHeight == luHeight;
+        CGS_ASSERT(mpAllocator != nullptr, "mpAllocator");
+        rw::ResourceDescriptor lDescriptor = MovieVideoRenderer::GetResourceDescriptor();
+        mRwVideoRendererResource = mpAllocator->DoAllocate(lDescriptor, nullptr);
+        if (mRwVideoRendererResource.m_baseResources[0] == nullptr)
             return false;
-        }
-        if (mpFrameTexture != 0)
+        mpRwVideoRenderer = MovieVideoRenderer::Initialize(mRwVideoRendererResource);
+        mpRwVideoRenderer->SetParentMoviePlayer(this);
+        mpRwVideoRenderer->Init(mpAllocator, luWidth, luHeight);
+        bool lbComplete = true;
+        for (u32 luSlot = 0; luSlot < MovieVideoRenderer::KU_NUM_TEXTURES; ++luSlot)
         {
-            renderengine::Texture::Destroy(mpFrameTexture);
-            delete mpFrameTexture;
-            mpFrameTexture = 0;
+            renderengine::Texture* lpTexture = mpRwVideoRenderer->maTextureInfoTypes[luSlot].mpTexture;
+            mapNativeTextureOwnersPC[luSlot] = lpTexture;
+            lbComplete &= lpTexture != nullptr && lpTexture->mpD3DTexture != nullptr
+                && mpRwVideoRenderer->maTextureInfoTypes[luSlot].mpTextureState != nullptr;
         }
-
-        renderengine::Texture* lpTexture = new renderengine::Texture();   // value-init: POD fields zeroed
-        renderengine::Texture::Parameters lParams = {};
-        lParams.miFormat = KI_D3DFMT_A8R8G8B8;
-        lParams.muWidth = luWidth;
-        lParams.muHeight = luHeight;
-        lParams.muDepth = 1u;
-        lParams.muNumLevels = 1u;
-        renderengine::Texture::Create(lpTexture, &lParams, 0);            // empty (uploaded each frame)
-        if (lpTexture->mpD3DTexture == 0)
-        {
-            delete lpTexture;
-            return false;
-        }
-        mpFrameTexture = lpTexture;
         muTexWidth = luWidth;
         muTexHeight = luHeight;
-
-        if (mpSws != 0)
-        {
-            sws_freeContext(mpSws);
-            mpSws = 0;
-        }
-        // sws always converts ONE coded strip (no vertical scale): the texture may be taller
-        // (miVerticalStrips bands), each filled by a separate decode in UploadFrame.
         mpSws = sws_getContext(mpVideoCtx->width, mpVideoCtx->height, mpVideoCtx->pix_fmt,
-                               mpVideoCtx->width, mpVideoCtx->height,
-                               AV_PIX_FMT_BGRA, SWS_BILINEAR, 0, 0, 0);
-        return mpSws != 0;
+            mpVideoCtx->width, mpVideoCtx->height, AV_PIX_FMT_BGRA, SWS_BILINEAR, nullptr, nullptr, nullptr);
+        return lbComplete && mpSws != nullptr;
     }
 
     void MoviePlayer::UploadFrame()
@@ -510,31 +541,17 @@ namespace CgsGraphics
             return;
         }
 
-        renderengine::Texture::LockInfo lLock;
-        renderengine::Texture::Lock(mpFrameTexture, 0, 0, 0, &lLock);
-        if (lLock.mpBits == 0)
-        {
-            return;
-        }
-        u8* lpTexBits = static_cast<u8*>(lLock.mpBits);
-        if (lLock.muPitch == luBufPitch)
-        {
-            std::memcpy(lpTexBits, mpStripStaging, luBufBytes);
-        }
-        else
-        {
-            for (u32 luRow = 0; luRow < luTexHeight; ++luRow)
-            {
-                std::memcpy(lpTexBits + luRow * lLock.muPitch,
-                            mpStripStaging + luRow * luBufPitch, luBufPitch);
-            }
-        }
-        renderengine::Texture::Unlock(mpFrameTexture, &lLock);
+        // Completed CPU codec output is published through the renderer's selected
+        // original texture slot during Render, not into the previous dispatch bank.
+        mbReadyToRender = true;
+        miCurrentFrame = miVerticalStrips > 1
+            ? static_cast<s32>(miStripsDecoded / miVerticalStrips - 1)
+            : static_cast<s32>(mfFramePtsSec * mfFrameRate);
     }
 
     void MoviePlayer::Update()
     {
-        if (mePlayerState != E_PLAYING || mbFinished || mpVideoCtx == 0)
+        if (mePlayerState != E_PLAYING || mbPausedPC || mbFinished || mpVideoCtx == 0)
         {
             return;
         }
@@ -595,36 +612,27 @@ namespace CgsGraphics
         return lfAlpha;
     }
 
-    // Present the held frame as a textured quad through the immediate-mode renderer -- the same Im2d path
-    // the loading screen + bitmap font draw through (RenderStart/RenderEnd a 4-vertex triangle strip),
-    // replacing the standalone D3D fullscreen quad. The faithful X360 Render builds a VideoRenderable.
+    // ARTIST 827FF110: latch the supplied buffer, then gate on PLAYING and the
+    // actual decoded-frame readiness before invoking the real movie renderer.
     void MoviePlayer::Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer)
     {
-        if (lpIm2dRenderBuffer == 0 || mpFrameTexture == 0 || mpFrameTexture->mpD3DTexture == 0)
-        {
+        mpIm2dRenderBuffer = lpIm2dRenderBuffer;
+        if (mePlayerState != E_PLAYING || !mbReadyToRender)
             return;
-        }
-
-        const f32 lfAlpha = ComputeCrossfadeAlpha(mfLastElapsedSec);
-        const RGBA8 lColour = { 255u, 255u, 255u, static_cast<u8>(lfAlpha * 255.0f) };
-
-        lpIm2dRenderBuffer->BeginRendering();
-        lpIm2dRenderBuffer->SetTexture(mpFrameTexture);
-        Basic2dColouredTexturedVertex* lpVtx = lpIm2dRenderBuffer->RenderStart(4u);
-        if (lpVtx != 0)
-        {
-            // Triangle strip: TL, TR, BL, BR.
-            lpVtx[0].mv2Pos.x = mfRectLeft;  lpVtx[0].mv2Pos.y = mfRectTop;
-            lpVtx[0].mv2Tex0UV.x = 0.0f;     lpVtx[0].mv2Tex0UV.y = 0.0f;  lpVtx[0].mv4Colour = lColour;
-            lpVtx[1].mv2Pos.x = mfRectRight; lpVtx[1].mv2Pos.y = mfRectTop;
-            lpVtx[1].mv2Tex0UV.x = 1.0f;     lpVtx[1].mv2Tex0UV.y = 0.0f;  lpVtx[1].mv4Colour = lColour;
-            lpVtx[2].mv2Pos.x = mfRectLeft;  lpVtx[2].mv2Pos.y = mfRectBottom;
-            lpVtx[2].mv2Tex0UV.x = 0.0f;     lpVtx[2].mv2Tex0UV.y = 1.0f;  lpVtx[2].mv4Colour = lColour;
-            lpVtx[3].mv2Pos.x = mfRectRight; lpVtx[3].mv2Pos.y = mfRectBottom;
-            lpVtx[3].mv2Tex0UV.x = 1.0f;     lpVtx[3].mv2Tex0UV.y = 1.0f;  lpVtx[3].mv4Colour = lColour;
-            lpIm2dRenderBuffer->RenderEnd(static_cast<renderengine::PrimitiveType>(KU_PRIMITIVE_TRIANGLE_STRIP),
-                                          lpVtx, 4u);
-        }
-        lpIm2dRenderBuffer->EndRendering();
+        CGS_ASSERT(mpIm2dRenderBuffer != nullptr, "mpIm2dRenderBuffer");
+        rw::movie::VideoRenderable lFrame;
+        lFrame.SetData(mpStripStaging, 0);
+        lFrame.SetSize(muTexWidth * muTexHeight * 4u, 0);
+        lFrame.SetStride(muTexWidth * 4u, 0);
+        lFrame.SetWidth(muTexWidth);
+        lFrame.SetHeight(muTexHeight);
+        lFrame.SetFormat(rw::movie::VideoRenderable::VIDEOFORMAT_ARGB32);
+        lFrame.SetFrameNumber(miCurrentFrame);
+        lFrame.SetNumBuffersUsed(1);
+        lFrame.SetReadyToRender(true);
+        // FLAG PC-platform leaf: the decoder has already combined the original
+        // three YUV strips into one native BGRA display frame. The owner still
+        // receives the real supplied payload and advances its original four slots.
+        mpRwVideoRenderer->Render(0, &lFrame, true);
     }
 }
