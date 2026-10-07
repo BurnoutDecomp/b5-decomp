@@ -28,6 +28,8 @@
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"                  // Attrib::FindCollection
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey
 #include "GameSource/Graphics/PostFx/BrnPostFx.h"                                  // msPostFx (the colour-cube seed)
+#include "SharedClasses/Graphics/BrnEffectsData.h"
+#include "GameSource/AttribSys/Generated/classes/b4blurasset.h"
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"                           // gBrnWorldShaderConstantsFrameBringUp -- the live world white level
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"                          // BrnGame::DispatchThreadInputBuffer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
@@ -2731,20 +2733,94 @@ void EffectsModule::DispatchThreadUpdate(const BrnGame::DispatchThreadInputBuffe
 
 
 // =============================================================================
-// GenerateRenderRequests  @0x8227FF10  (DWARF :1197) -- the post-fx effects frames.
-//   NOT RECONSTRUCTED: the base-frame / FX-events BrnEffectsFrame production (depth of
-//   field, B4 blur, motion blur, the colour-cube tint layers) that reads the effects
-//   dispatch input's camera and the TempRaceCarStateCache. The renderer's base-frame
-//   bring-up producer (BrnRendererModule::PCBringUpSetCameraInput /
-//   PCBringUpSetRaceCarStateCache, fed from BrnGameModule::DoDispatch) stands in for it
-//   on this build; the effects dispatch input it would read does not exist here either.
+// GenerateRenderRequests @0x8227FF10 (DWARF :1197). DoDispatch holds the
+// input read lock. This is the original base-effects producer; the renderer
+// lends its external effects frame through BridgeRendererToEffects.
 // =============================================================================
-void EffectsModule::GenerateRenderRequests(const EffectsIO::DispatchInputBuffer* /*lpDispatchInputBuffer*/)
+void EffectsModule::GenerateRenderRequests(const EffectsIO::DispatchInputBuffer* lpDispatchInputBuffer)
 {
-    static bool sbLogged = false;
-    LogNotReconstructed(sbLogged,
-        "EffectsModule::GenerateRenderRequests @0x8227FF10 (the post-fx effects frames; the renderer's "
-        "base-frame bring-up producer stands in)");
+    BrnEffectsFrame* const lpFrame = lpDispatchInputBuffer->GetBaseEffectsFrame();
+    const BrnDirector::Camera::Camera& lrCamera = *lpDispatchInputBuffer->GetCameraInput();
+    const BrnDirector::Camera::CameraEffects& lrCameraFx = lrCamera.GetEffects();
+    const BrnDirector::Camera::MotionBlurData& lrCameraBlur = lrCameraFx.mMotionBlurData;
+    const BrnDirector::Camera::DepthOfField& lrCameraDof = lrCamera.GetDepthOfField();
+    const EffectsDebugPostFxSettingsPC lDebug = mDebugComponent.GetPostFxSettingsPC();
+
+    const bool lbUseBlur = lrCameraBlur.IsActive()
+        || (lDebug.mbMotionBlurEnableUserSettings && lDebug.mbMotionBlur);
+    const bool lbUseDof = lrCameraDof.GetBlurriness() > 0.0f && lDebug.mbDepthOfField;
+    lpFrame->SetUseBloom(lDebug.mbBloom);
+    lpFrame->SetUseVignette(lDebug.mbVignette);
+    lpFrame->SetUseDepthOfField(lbUseDof);
+    lpFrame->SetUseBlur(lbUseBlur);
+    lpFrame->SetUseTint(lDebug.mbTint);
+    lpFrame->SetUseTint2d(lDebug.mbTint2d);
+
+    static const u64 KU_VIGNETTE_ASSET = Attrib::StringToKey("198102");
+    if (lDebug.mbVignette)
+    {
+        VignetteData lVignette;
+        lVignette.Construct(KU_VIGNETTE_ASSET);
+        lpFrame->SetVignetteData(lVignette, 1.0f);
+    }
+
+    static const u64 KU_BLOOM_ASSET = Attrib::StringToKey("191270");
+    if (lDebug.mbBloom)
+    {
+        BloomData lBloom;
+        lBloom.Construct(KU_BLOOM_ASSET);
+        lBloom.mfLuminance += lrCameraFx.GetBloomLuminanceModifier();
+        lBloom.mfThreshold += lrCameraFx.GetBloomThresholdModifier();
+        lpFrame->SetBloomData(lBloom, 1.0f);
+    }
+
+    static const u64 KU_TINT2D_ASSET = Attrib::StringToKey("374388");
+    if (lDebug.mbTint2d)
+    {
+        TintData2d lTint;
+        lTint.Construct(KU_TINT2D_ASSET);
+        lpFrame->SetTintData2d(lTint, 1.0f);
+    }
+
+    if (lbUseDof)
+    {
+        DepthOfFieldData lDof;
+        lDof.mfNearPlane = lrCameraDof.GetFocusStartDistanceMeters();
+        lDof.mfFocalPlane = lrCameraDof.GetPerfectFocusStartDistanceMeters();
+        lDof.mfFocalPlane2 = lrCameraDof.GetPerfectFocusEndDistanceMeters();
+        lDof.mfFarPlane = lrCameraDof.GetFocusEndDistanceMeters();
+        lDof.mfDofAmount = lrCameraDof.GetBlurriness();
+        lpFrame->SetDepthOfFieldData(lDof, 1.0f);
+    }
+
+    static const u64 KU_BLUR_ASSET = Attrib::StringToKey("218901");
+    // ARTIST82280218 constructs this attrib instance even when blur is off;
+    // its destructor is the function's final side effect (822803AC).
+    Attrib::Gen::b4blurasset lBlurAsset(KU_BLUR_ASSET, 0);
+    if (lbUseBlur)
+    {
+        BlurData lBlur;
+        lBlur.Construct(KU_BLUR_ASSET);
+        lpFrame->SetBlurData(lBlur, 1.0f);
+    }
+
+    BrnDirector::Camera::MotionBlurData lMotionBlur;
+    if (lDebug.mbMotionBlurEnableUserSettings)
+        lMotionBlur.Set(lDebug.mbMotionBlur, lDebug.mbMotionBlurUserHighQuality,
+                       lDebug.mfMotionBlurUserAmountCars, lDebug.mfMotionBlurUserAmountWorld);
+    else
+        lMotionBlur.Set(lDebug.mbMotionBlur && lrCameraBlur.IsActive(),
+                       lrCameraBlur.IsExpensiveMotionBlur(),
+                       lrCameraBlur.GetCarsBlendAmount(), lrCameraBlur.GetWorldBlendAmount());
+    lpFrame->SetMotionBlurData(lMotionBlur);
+
+    lpFrame->SetLinearVelocity(mCarStateCache.GetLinearVelocity());
+    lpFrame->SetAngularVelocity(mCarStateCache.GetAngularVelocity());
+    lpFrame->SetSpeedMPH(mCarStateCache.GetSpeedMPH());
+    lpFrame->SetSteering(mCarStateCache.GetSteering());
+    lpFrame->SetCarTransform(mCarStateCache.GetCarTransform());
+    lpFrame->SetIsRacingGameplayCamera(mCarStateCache.GetIsRacingGameplayCamera());
+    lpFrame->SetCameraTransform(mCarStateCache.GetCameraTransform());
 }
 
 // HandleCrashingTrail @0x82290D30 lives in THE CRASHING TRAIL region below (after HandleQADebugTests): it uses the
