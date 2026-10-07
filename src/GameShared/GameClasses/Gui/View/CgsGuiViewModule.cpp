@@ -110,10 +110,19 @@ namespace CgsGui
         CgsModule::ModuleSingleBuffered::Construct();
         mLanguageManager.Construct();
 
-        // ARTIST 0x828605D0..5F4 inlines ImRendererSet::Construct before
-        // AptAux retains its address: real camera defaults, null slots 0/2/3/4,
-        // and the original untouched slot 1.
-        mImRenderers.Construct();
+        // FLAG (deferred member): the guest also constructs an embedded
+        // CgsGraphics::Camera at [c:+624] via the outlined helper sub_827F94E8
+        // (Camera::Construct(flt_82F30FD4, flt_82F30FD8, 0.1f, 1000.0f) -- the display
+        // dimensions + near/far clip). CgsGraphics::Camera has no reconstructed
+        // Construct(f32,f32,f32,f32) body/declaration yet; add the mCamera member and
+        // this call when the Camera lifecycle TU lands.
+
+        // The guest zeroes render-set slots 0/2/3/4 (+592/+600/+604/+608) individually;
+        // slot 1 (+596) is left untouched.
+        mImRenderers.mpIm2dRenderBuffer = 0;
+        mImRenderers.mpIm3dRenderBufferUntex = 0;
+        mImRenderers.mpIm3dRenderBufferRacePosition = 0;
+        mImRenderers.mpIm3dRenderBufferMenusAndHud = 0;
         mTextRenderer.Construct();
 
         // The inlined FontCollection::Construct (the guest seeds the three slot pairs

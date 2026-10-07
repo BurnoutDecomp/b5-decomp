@@ -115,17 +115,25 @@ namespace BrnGui
         // scheduler has the module prepared.
         bool IsPrepared() const { return mbPrepared; }
 
-        // ARTIST 0x825146B8: forward the supplied complete renderer set, render
-        // the view, update/record movies, then post renderer effect-frame events.
-        virtual void Render(CgsGui::ViewIO::InputBuffer* lpViewInput,
-                    CgsGui::CgsGuiModuleIO::InputBuffer* lpInput,
-                    RendererIO::OutputBuffer* lpRenderOutput);
-        CgsGui::ViewIO::InputBuffer* GetViewInputBuffer() { return &mViewInputBuffer; }
-        // FLAG PC-platform leaf: keep the completed input after its sub-step IO
-        // stack is reclaimed. The owner runs BridgeRendererToGui on the selected
-        // input every dispatch, so all five current renderer pointers are refreshed.
-        void CaptureRenderInputPC(const CgsGui::CgsGuiModuleIO::InputBuffer* lpInput);
-        CgsGui::CgsGuiModuleIO::InputBuffer* GetCompletedRenderInputPC();
+        // The per-frame GUI render drive (X360 BrnGui::GuiModule::Render @0x825146B8 ->
+        // CgsGui::GuiModule::Render @0x8285AF38's core): publish the active renderer set
+        // into the view input buffer (SetImRenderers), run the view module's render entry
+        // (ViewModule::Render @0x82858810 -> the RenderInternal virtual -> AptAux::Render
+        // -> the engine render walk), then flush the filled Apt command buffer to D3D9
+        // (the host's PC dispatch leaf), then present the active fullscreen movie
+        // (UpdateAndRenderMovieManager @0x82511240) over the view content, exactly the
+        // console pass order. FLAG PC-ABI adapter: the console signature takes the
+        // scheduler's view/GUI IO buffers + the render output buffer and gates on the
+        // module-prepared byte (+949208); this PC drive owns its IO pair, gates on the
+        // Apt bring-up, and receives the movie presentation surface as the argument.
+        // Called from BrnRendererModule::Render (the PC render thread).
+        void Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer,
+                    CgsGraphics::Im3dRenderBuffer* lpRacePositionBuffer = nullptr,
+                    CgsGraphics::Im3dRenderBuffer* lpMenusAndHudBuffer = nullptr);
+        // FLAG PC-platform leaf: separate the producer's publication from the
+        // render thread's consumption of the previous completed GUI frame.
+        void PublishRenderBufferPC();
+        void DispatchRenderBufferPC();
 
         // ⭐⭐ THE GUI END-OF-FRAME NOTIFY. X360 BrnGui::GuiModule::EndOfFrame @0x824F1008 is
         // three instructions -- `addis r3,r3,5 ; addi r3,r3,-0x3D70 ; b CustomRendererManager::
@@ -141,7 +149,7 @@ namespace BrnGui
         void EndOfFrame();                                                    // 0x824F1008
 
         // @ 0x82511240 -- MovieManager::Update + the movie frame draw (the movie pass).
-        void UpdateAndRenderMovieManager(CgsGui::ViewIO::InputBuffer* lpViewInput);
+        void UpdateAndRenderMovieManager(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer);
         // BridgeFromViewToOutput @0x8285DE10 -- after the view module's Update, append its
         // own out-event queue (33 GuiEventLoadingScreenState lives there) onto the module out.
         void BridgeFromViewToOutput();
@@ -315,8 +323,6 @@ namespace BrnGui
         // the console fills these through the module scheduler's IO stacks.
         CgsGui::ViewIO::InputBuffer  mViewInputBuffer;
         CgsGui::ViewIO::OutputBuffer mViewOutputBuffer;
-        CgsGui::CgsGuiModuleIO::InputBuffer mCompletedRenderInputPC;
-        bool mbRenderInputCompletedPC = false;
         s64 miLastViewFrameMs;        // PC frame clock for the time-step event (FLAG: wall clock)
         MovieManager mMovieManager;   // X360 +301600 (drives the boot/attract videos)
 
@@ -350,8 +356,8 @@ namespace BrnGui
         // so Update owns the pump (see the seat note at the call).
         bool mbCustomRenderersPrepared;
         BrnUpdateSet muFrameUpdateSet;        // the scheduler's `a2` (see SetFrameUpdateSet)
-        // Apt runtime preparation lives in this module; the renderer owns the
-        // immediate command buffers supplied to the original Render entry.
+        // (AptRuntimeHost RETIRED: the Apt bring-up + PC render buffer live in
+        // BrnGuiModule.cpp's transplanted block -- the console GuiModule ownership.)
         // X360 gm+1546880 -- THE SCREEN-FILTER SYSTEM (BrnGuiEffectsArbitrator.h): the post-FX
         // hook blender the director's crash / wreck / stunt requests reach through GUI events
         // 495..500. Construct'd right before MovieManager::Construct (GuiModule::Construct
@@ -548,7 +554,7 @@ namespace BrnGui
     };
 
     // Renderer bridge, matching gpActiveMovieManager: GuiModule publishes itself while
-    // prepared; the game dispatcher drives the original supplied-IO GUI render chain.
+    // prepared; BrnRendererModule drives GuiModule::Render (the GUI render chain) through it.
     extern GuiModule* gpActiveGuiModule;
 
 }
