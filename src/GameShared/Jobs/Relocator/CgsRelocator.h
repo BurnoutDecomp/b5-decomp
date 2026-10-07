@@ -53,10 +53,10 @@ namespace CgsMemory
     class Relocator
     {
     public:
-        // EA::Jobs::Job has no default constructor, so the embedded job is named where it is
-        // declared; the name is the one Execute wires onto it anyway. Construct() is still
-        // what resets the engine, and every caller runs it.
-        Relocator() : mJob("Relocator") {}
+        // The implicit constructor forwards null to the contained Job in both
+        // ARTIST callers: ReplayModule 827E041C..042C and PoolModule
+        // 827E08AC..08BC. Execute supplies "Relocator" when the job is submitted.
+        Relocator() : mJob(nullptr) {}
 
         // Reset both running latches. Returns this (the console's copy-construct-style return).
         Relocator* Construct();
