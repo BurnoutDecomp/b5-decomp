@@ -15,8 +15,9 @@ namespace
 {
     // X360-attested sizes/offsets the bodied function relies on.
     static_assert(sizeof(StreamOffset) == 24, "X360 StreamOffset stride is 24 bytes");
-    static_assert(offsetof(StreamOffset, miFrameNumber) == 0x08, "miFrameNumber @0x08");
-    static_assert(offsetof(StreamOffset, miFrameCount)  == 0x0C, "miFrameCount @0x0C");
+    static_assert(offsetof(StreamOffset, miFrameNumber) == 0x00, "64-bit frame @0x00");
+    static_assert(offsetof(StreamOffset, miFileOffset)  == 0x08, "file byte offset @0x08");
+    static_assert(offsetof(StreamOffset, miFrunkSize)   == 0x0C, "frunk byte size @0x0C");
     static_assert(offsetof(StreamOffset, mxFlags)       == 0x14, "mxFlags @0x14");
     static_assert(offsetof(StreamHeader, miNumFrunks)   == 0x0C, "miNumFrunks @0x0C");
     static_assert(offsetof(StreamHeader, miFirstFrunk)  == 0x10, "miFirstFrunk @0x10");
@@ -44,21 +45,24 @@ int BrnReplayWriteStream_embed_check()
     lHeader.miFirstFrunk   = 0;
     lHeader.mpFrameOffsets = laOffsets;
 
-    // frunk 0: keyframe at frame 0 spanning 2 frames [0..1]
-    laOffsets[0].miFrameNumber = 0;
-    laOffsets[0].miFrameCount  = 2;
+    // Frunk 0 overwrites [0x20000,0x3FFFF]; frame ids are independent of disk ranges.
+    laOffsets[0].miFrameNumber = 0x100000001LL;
+    laOffsets[0].miFileOffset  = 0x20000;
+    laOffsets[0].miFrunkSize   = 0x20000;
     laOffsets[0].mxFlags       = BrnReplays::KU_FLAG_KEYFRAME;
-    // frunk 1: at frame 1 (inside frunk 0's covered range -> must be voided)
-    laOffsets[1].miFrameNumber = 1;
-    laOffsets[1].miFrameCount  = 1;
+    // Frunk 1's bytes are overwritten even though its frame number is different.
+    laOffsets[1].miFrameNumber = 0x200000001LL;
+    laOffsets[1].miFileOffset  = 0x30000;
+    laOffsets[1].miFrunkSize   = 0x10000;
     laOffsets[1].mxFlags       = 0;
-    // frunk 2: keyframe at frame 2 (just past the range -> survives)
-    laOffsets[2].miFrameNumber = 2;
-    laOffsets[2].miFrameCount  = 1;
+    // Frunk 2 begins just beyond the written disk range and survives.
+    laOffsets[2].miFrameNumber = 7;
+    laOffsets[2].miFileOffset  = 0x40000;
+    laOffsets[2].miFrunkSize   = 0x10000;
     laOffsets[2].mxFlags       = BrnReplays::KU_FLAG_KEYFRAME;
-    // frunk 3: at frame 3
-    laOffsets[3].miFrameNumber = 3;
-    laOffsets[3].miFrameCount  = 1;
+    laOffsets[3].miFrameNumber = 8;
+    laOffsets[3].miFileOffset  = 0x50000;
+    laOffsets[3].miFrunkSize   = 0x10000;
     laOffsets[3].mxFlags       = 0;
 
     TestWriteStream lStream(&lHeader);

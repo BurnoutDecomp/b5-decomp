@@ -2,15 +2,18 @@
 
 #include "GameSource/Replays/Stream/BrnReplayStreamHeader.h"
 #include "GameSource/Replays/BrnReplayShared.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (BrnReplays::WriteStream).
 //
 //   ResetStream            @ 0x8264D100
 //   InvalidateFrunksAhead  @ 0x8264D190
 //
-// When a frunk is (re)recorded at index liStartFrunk, any frunks that were already
-// in the stream for the frames it now covers are stale. This walks forward marking
-// those overlapped frunks VOID, then trims the leading edge of the live ring up to
+// When a frunk is written at index liStartFrunk, later frunks whose disk bytes
+// it overwrites are stale. This marks those overlapped frunks VOID, then trims
+// the leading edge of the live ring up to
 // the first surviving keyframe so playback resumes from a self-contained frame.
 
 namespace BrnReplays
@@ -63,22 +66,18 @@ namespace BrnReplays
         StreamHeader* lpHeader = mpStreamHeader;
         StreamOffset* lpOffsets = lpHeader->mpFrameOffsets;
 
-        // --- pass 1: void every later frunk whose frames the new frunk now owns ---
-        // The new frunk is only meaningful if it actually spans frames (frame count
-        // non-zero); the X360 body guards on exactly that before scanning forward.
-        if (lpOffsets[liStartFrunk].miFrameCount != 0)
+        // --- pass 1: void later frunks whose disk byte ranges are overwritten ---
+        if (lpOffsets[liStartFrunk].miFrunkSize != 0)
         {
-            const s32 liDataMin = lpOffsets[liStartFrunk].miFrameNumber;
+            const s32 liDataMin = lpOffsets[liStartFrunk].miFileOffset;
             const s32 liDataMax =
-                lpOffsets[liStartFrunk].miFrameCount + liDataMin - 1;
+                lpOffsets[liStartFrunk].miFrunkSize + liDataMin - 1;
 
             for (s32 liIndex = liStartFrunk + 1;
                  liIndex < lpHeader->miNumFrunks;
                  ++liIndex)
             {
-                // Frunks are ordered by frame; once one starts past the range the
-                // new frunk covers, nothing further overlaps.
-                if (lpOffsets[liIndex].miFrameNumber > liDataMax)
+                if (lpOffsets[liIndex].miFileOffset > liDataMax)
                     break;
 
                 lpOffsets[liIndex].mxFlags |= KU_FLAG_VOID;
@@ -112,5 +111,49 @@ namespace BrnReplays
             lpHeader->miFirstFrunk = liFrunkIndex % KI_MAX_FRUNKS;
             lpHeader->miNumFrunks -= liDropped;
         }
+    }
+
+    // ARTIST 8264D2D0..8264D50C. The replay rate is 60.0f at 82004C6C.
+    // 82F2A638 starts at one and prevents the original diagnostic recursion
+    // from reporting the same invalid range twice.
+    void WriteStream::ResetStartFrame(f32 lfHistorySeconds)
+    {
+        static bool sbReportOutOfRange = true;
+        const s32 liHistoryFrunks = static_cast<s32>(lfHistorySeconds * 60.0f);
+        if (mpStreamHeader->miNumFrunks <= liHistoryFrunks)
+            return;
+
+        const s32 liFirst = mpStreamHeader->miFirstFrunk;
+        s32 liNewFirst = liFirst;
+        const s32 liDropCount = mpStreamHeader->miNumFrunks - liHistoryFrunks;
+        for (s32 liIndex = liFirst; liIndex < liFirst + liDropCount; ++liIndex)
+        {
+            const s32 liSlot = liIndex % KI_MAX_FRUNKS;
+            const u16 luFlags = mpStreamHeader->mpFrameOffsets[liSlot].mxFlags;
+            if ((luFlags & KU_FLAG_KEYFRAME) != 0 && (luFlags & KU_FLAG_VOID) == 0)
+                liNewFirst = liSlot;
+        }
+        s32 liNewCount = mpStreamHeader->miNumFrunks + liFirst - liNewFirst;
+        if (liNewFirst < liFirst)
+            liNewCount -= KI_MAX_FRUNKS;
+        if (liNewCount < 0 || liNewCount > KI_MAX_FRUNKS)
+        {
+            if (!sbReportOutOfRange)
+                return;
+            if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+                *CgsDev::Log::gpDebugPrint << "New num frunks gone out of range: "
+                                         << liNewCount << " - re-calling function\n";
+            sbReportOutOfRange = false;
+            ResetStartFrame(lfHistorySeconds);
+            sbReportOutOfRange = true;
+            CgsDev::Assert::BeginAssert();
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+            lMessage << "New num frunks is out of range: " << liNewCount << "\n";
+            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+        }
+        mpStreamHeader->miNumFrunks = liNewCount;
+        mpStreamHeader->miFirstFrunk = liNewFirst;
     }
 }

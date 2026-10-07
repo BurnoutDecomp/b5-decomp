@@ -6,18 +6,14 @@
 // DWARF home: GameSource/Replays/Stream/BrnReplayWriteStream.h:48.
 //
 // MINIMAL SLICE created for the InvalidateFrunksAhead @0x8264D190 leaf. That function
-// touches only the StreamHeader pointer (mpStreamHeader), so this slice models the
-// leading members up to and including mpStreamHeader and leaves the rest of the class
-// (the intermediate buffer, the DiskWriteStream link, AddFrunk/StartNewStream/
-// PauseStream/ResetStartFrame, etc.) to the full WriteStream TU. GROW this home
+// touches only the StreamHeader pointer (mpStreamHeader). ResetStream and
+// ResetStartFrame now use the real allocator and index fields below; the
+// AddFrunk/StartNewStream/PauseStream path remains to be recovered. GROW this home
 // additively when that lands; do NOT fork it.
 //
 // X360 layout note (from InvalidateFrunksAhead asm): mpStreamHeader is read at
-// *(this + 0x1C). The leading mHeaderMalloc (a LinearMalloc allocator-state blob, no
-// recovered layout) therefore occupies the first 0x1C bytes. It is modelled as an
-// opaque sized placeholder so mpStreamHeader lands at its X360 offset; the bodied
-// function reaches mpStreamHeader BY NAME, so the placeholder's internals are
-// immaterial (no offset is asserted across it).
+// *(this + 0x1C). The leading mHeaderMalloc uses its canonical LinearMalloc
+// type. Console offsets document original ownership; native pointers widen.
 
 #include "types.hpp"
 #include "GameSource/Replays/Stream/BrnReplayStreamHeader.h"
@@ -40,10 +36,14 @@ namespace BrnReplays
         StreamHeader* ResetStream();
 
         // InvalidateFrunksAhead @ 0x8264D190. After a new frunk is added at liStartFrunk,
-        // mark every later frunk whose start frame falls within the new frunk's covered
-        // frame range as VOID (KU_FLAG_VOID), then advance miFirstFrunk past any leading
+        // mark later frunks whose disk bytes are overwritten as VOID (KU_FLAG_VOID),
+        // then advance miFirstFrunk past any leading
         // run of voided non-keyframe frunks (trimming them from the live ring).
         void InvalidateFrunksAhead(s32 liStartFrunk);
+
+        // ARTIST 8264D2D0 (raw image); retain the requested history beginning
+        // at an original live keyframe, using the authored 60-frunk rate.
+        void ResetStartFrame(f32 lfHistorySeconds);
 
     protected:
         // Construction lives in the full WriteStream TU; until then, derived test

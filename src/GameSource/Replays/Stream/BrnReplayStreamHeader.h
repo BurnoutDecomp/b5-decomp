@@ -19,21 +19,16 @@ namespace BrnReplays
 
     // DWARF: BrnReplayStreamHeader.h:45 -- one index entry per recorded frunk.
     //
-    // FLAG (X360 overrides DWARF on layout): the PS3 DWARF lays this out as
-    // {miFileOffset s32, miFrunkSize s32, miFrameNumber s16, mxFlags u16, mfFrameTime
-    // f32} == 16 bytes. The X360 InvalidateFrunksAhead @0x8264D190 indexes the
-    // mpFrameOffsets array with a 24-byte stride and reads: a full 32-bit frame
-    // number at +0x08, a 32-bit frame span at +0x0C (added to the frame number to
-    // get the last frame the frunk covers), and the u16 flags at +0x14. So on X360
-    // the entry is 24 bytes: miFrameNumber is widened to s32 and a 32-bit frame-span
-    // word sits where the PS3 layout kept mfFrameTime. The members below match the
-    // X360 stride/offsets; all access is BY NAME.
+    // ARTIST overrides the older PS3 layout. AddFrunk's writer 8265EE6C stores
+    // the full 64-bit frame at +0; 8265EE88/8265EFDC store the file byte offset
+    // and payload size at +8/+C. StartNewStream returns that same frame with
+    // ldx at 8265C29C and uses +8/+C for DiskReadStream's byte range. The old
+    // frame/count labels at +8/+C confused disk overwrite with frame overlap.
     struct StreamOffset
     {
-        s32 miFileOffset;  // @0x00 byte offset of the frunk payload within the stream file
-        s32 miFrunkSize;   // @0x04 frunk payload size in bytes
-        s32 miFrameNumber; // @0x08 first game frame this frunk represents (X360: s32; PS3 DWARF: s16)
-        s32 miFrameCount;  // @0x0C number of frames this frunk spans (X360 field; guard == "frunk is valid")
+        s64 miFrameNumber; // @0x00 original 64-bit game frame
+        s32 miFileOffset;  // @0x08 byte offset of the frunk payload within the stream file
+        s32 miFrunkSize;   // @0x0C frunk payload size in bytes
         f32 mfFrameTime;   // @0x10 game time of the frunk's first frame
         u16 mxFlags;       // @0x14 KU_FLAG_VOID / KU_FLAG_KEYFRAME bitfield
         u16 muPad;         // @0x16 (entry padded to a 24-byte stride on X360)
