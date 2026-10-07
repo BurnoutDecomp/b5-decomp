@@ -31,7 +31,10 @@ namespace renderengine
     bool PCResizeDisplayTargets(rw::graphics::postfx::RenderTarget* lpScene,
                                 rw::graphics::postfx::RenderTarget* lpDownSample,
                                 rw::graphics::postfx::RenderTarget* lpParticle,
-                                u32 luWidth, u32 luHeight);
+                                u32 luWidth, u32 luHeight,
+                                rw::graphics::postfx::RenderTarget* lpBloom = nullptr,
+                                rw::graphics::postfx::RenderTarget* lpDepthOfField = nullptr,
+                                rw::graphics::postfx::RenderTarget* lpWork = nullptr);
     class DepthStencilState;   // renderstates.h (the real 0x60-byte state object)
     class RenderTargetState;   // PostFxRenderTargetPCLeaf.cpp (the bound-surface descriptor)
 
