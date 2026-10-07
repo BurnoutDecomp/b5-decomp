@@ -39,24 +39,26 @@ namespace DirectorIO
 
     // ---- Construct ---------------------------------------------------------------------------
 
-    // The X360 CreateIOBuffer<OutputBuffer> instantiation runs the buffer's Construct after the
-    // stack alloc. That is the IOBuffer base status flag PLUS the embedded request queue's own
-    // Construct -- a VariableEventQueue asserts "Not Constructed" on its first AddEvent, and the
-    // IO stack hands back RE-USED memory, so an un-Constructed queue would also inherit the
-    // previous tenant's write position. CreateIOBuffer<T> runs T::Construct (2026-08-15) on the
-    // PC too, so the creation sites' explicit calls are now redundant second Constructs (kept
-    // only where a bring-up memset sits between the create and the call).
+    // ARTIST 0x8225C960: initialize each reused IO-stack payload. The embedded director
+    // camera is constructed at 0x8225C998..99C, independently of any later camera publication.
+    // Both request interfaces emit Construct followed by Clear, and the timer requests
+    // reset their flags with identity multipliers rather than zeroing the whole buffer.
     void OutputBuffer::Construct()
     {
         CgsModule::IOBuffer::Construct();
-        mResourceInterface.mRequestQueue.Construct();
-        // Same reason as mResourceInterface: DirectorResourceManager::Prepare posts a
-        // RegisterVault on this queue, and an un-Constructed VariableEventQueue asserts
-        // "Not Constructed" on its first AddEvent (and would inherit the previous IO-stack
-        // tenant's write position).
+        for (s32 liSerialiser = 0; liSerialiser < BrnReplays::ReplayIO::KI_MAX_SERIALISERS;
+             ++liSerialiser)
+        {
+            mReplayRequestInterface.mapSerialisers[liSerialiser] = nullptr;
+        }
+        mCameraOutput.Construct();
+        mResourceInterface.Construct();
+        mDirectorOutputInterface.Construct();
         mVaultRequestInterface.mRequestQueue.Construct();
-        mbRequestHookEnumeration  = false;
+        mVaultRequestInterface.mRequestQueue.Clear();
+        mTimerRequestInterface.Clear();
         mbDirectorSettingsChanged = false;
+        mbRequestHookEnumeration  = false;
     }
 
     // ---- read-lock-asserted getters ---------------------------------------------------------
@@ -79,14 +81,14 @@ namespace DirectorIO
     u8* OutputBuffer::GetDirectorOu()
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return mDirectorOutputInterface;
+        return reinterpret_cast<u8*>(&mDirectorOutputInterface);
     }
 
     // X360 0x823B2548: return &mReplayRequestInterface (this+0x724), read-lock asserted.
     u8* OutputBuffer::GetReplayRe()
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return mReplayRequestInterface;
+        return reinterpret_cast<u8*>(&mReplayRequestInterface);
     }
 
     // X360 0x823B3500: return &mTimerRequestInterface (this+0x500), read-lock asserted.
@@ -109,7 +111,7 @@ namespace DirectorIO
     u8* OutputBuffer::GetDirectorOutputIn()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return mDirectorOutputInterface;
+        return reinterpret_cast<u8*>(&mDirectorOutputInterface);
     }
 
     // The @0x0750 request byte (MainDirector::Update writes it, BridgeDirectorToGui reads it).
@@ -129,7 +131,7 @@ namespace DirectorIO
     u8* OutputBuffer::GetReplayRequestI()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return mReplayRequestInterface;
+        return reinterpret_cast<u8*>(&mReplayRequestInterface);
     }
 
     // X360 0x822078F0: return &mTimerRequestInterface (this+0x500). Tests the WRITE lock (bit 3).

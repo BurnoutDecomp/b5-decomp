@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"          // CgsModule::IOBuffer base + read/write lock-state queries
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"          // CgsGraphics::Camera (committed, sizeof 0x170, pointer-free)
 #include "GameSource/Director/Camera/Camera.h"                  // BrnDirector::Camera::Camera (committed; pointer members widen on x64)
+#include "GameSource/Director/SharedIO/BrnDirectorOutputInterface.h"
+#include "GameSource/Replays/BrnReplayRequestInterface.h"
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"  // GameDataIO::RequestInterface<512> (mResourceInterface)
 #include "GameShared/GameClasses/System/Timer/CgsTimerRequestInterface.h"      // CgsSystem::TimerRequestInterface (mTimerRequestInterface)
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h"      // AttribSysRequestInterface<512> (mVaultRequestInterface)
@@ -57,16 +59,9 @@
 // by-value BrnDirector camera pushes those members 16 bytes past their console offsets on the host.
 // Only offsets identical on BOTH targets are pinned: mCgsCamera @0x0010 (it precedes the widening
 // member) and sizeof(CgsGraphics::Camera)==0x0170 (that type is pointer-free and self-asserts its
-// own size). The trailing opaque interface spans are still sized RELATIONALLY from the console
-// offsets (next-minus-this): correct CONSOLE layout, reproduced additively, simply no longer
-// byte-pinnable once a widening member sits above them. Grow each into its real type when its home
-// is reconstructed.
-//
-// HONEST PLACEHOLDERS. The interface aggregates are modelled as correctly-SIZED, byte-addressable
-// opaque storage carrying their recovered names + offsets (a resource interface, the director-output
-// interface, a timer-request interface, the small director interface word, and the replay-request
-// interface). This preserves the exact console object layout the accessors index into while being
-// honest that the interiors are not yet known.
+// own size). ReplayIO::RequestInterface also widens: its eleven BaseSerialiser* slots occupy
+// 44 bytes on X360 and 88 on x64. The members behind it therefore follow the typed host layout,
+// never a raw console-offset span. Only the four-byte director profile remains opaque.
 //
 // NOTE. The read-side accessors assert the READ lock (status bit 4); the write-side accessors
 // (GetResour / GetDirectorOutputIn / GetTimerRequestInterfac / GetReplayRequestI, the +0x510
@@ -140,10 +135,8 @@ namespace DirectorIO
         // the host than the console offset. Parity is BY NAMED MEMBER, not by byte offset.
         BrnDirector::Camera::Camera mCameraOutput;               // @0x0180 (console)
 
-        // Trailing interface aggregates: HONEST opaque storage, sized RELATIONALLY from the console
-        // offsets (next-minus-this). Correct console layout; not host-byte-pinnable behind the
-        // widening camera above. Grow each into its real type additively when its home is
-        // reconstructed.
+        // Trailing interfaces use their canonical types; host placement follows the widening
+        // camera and replay pointer array rather than the console byte offsets in these notes.
         // @0x02E0 (console): GROWN to its REAL type (2026-07-29, DJ fly-by campaign).
         // Attested by LoadingScriptedState::LoadDirectorModule @0x823E74C0, which feeds this
         // exact member to BrnResource::GameDataIO::InputBuffer::AppendRequestInterface<512>
@@ -154,7 +147,7 @@ namespace DirectorIO
         // stride is the same (the queue is byte storage plus three s32 -- no pointer member),
         // so growing it does NOT move mDirectorOutputInterface or anything after it.
         BrnResource::GameDataIO::RequestInterface<512> mResourceInterface;   // @0x02E0 (console)
-        u8  mDirectorOutputInterface[0x0500 - 0x04F0];           // @0x04F0 (console)
+        BrnDirector::DirectorOutputInterface mDirectorOutputInterface; // @0x04F0 (console)
         // @0x0500 (console): GROWN to its REAL type (2026-08-01, Prepare wave). The console
         // stride to the next member is 0x510-0x500 == 16 == sizeof(CgsSystem::TimerRequests)*2,
         // which is exactly what CgsTimerRequestInterface.h declares (mGameTimer + mSimTimer,
@@ -167,10 +160,9 @@ namespace DirectorIO
         // 0x720-0x510 == 528 == 512 + the 16-byte VariableEventQueue header.
         CgsAttribSys::AttribSysIO::AttribSysRequestInterface<512> mVaultRequestInterface;  // @0x0510 (console)
         u8  mDirectorInterface[0x0724 - 0x0720];                 // @0x0720 (console) 4-byte word
-        u8  mReplayRequestInterface[4];                          // @0x0724 (console) 4-byte handle word
-        // @0x0728 .. @0x074F (console): unrecovered span between the replay handle and the two
-        // request bytes BridgeDirectorToGui @0x823DD5C0 reads (a3[1872] / a3[1873]).
-        u8  maReserved0728[0x0750 - 0x0728];
+        // Construct @0x8225C978..994 clears eleven serialiser pointer slots, exactly
+        // the 0x2C-byte console span from +0x724 to +0x750. Pointers widen on x64.
+        BrnReplays::ReplayIO::RequestInterface mReplayRequestInterface; // @0x0724 (console)
         // @0x0750 (console): "GUI, enumerate your post-FX hooks" -- MainDirector::Update
         // @0x82274070 stores its flag-tail latch here (`*(out + 1872) = *(this + 218166)`);
         // the bridge posts GUI event 500 while it is set.
