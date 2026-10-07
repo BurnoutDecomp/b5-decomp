@@ -66,6 +66,9 @@ namespace BrnReplays
     // DWARF: BrnReplayBaseSerialiser.h:51
     class BaseSerialiser
     {
+        // ReplayModule's original ClearSerialisers/playing paths update these
+        // exact named counters/modes/flags inline (8264E630, 826608A8).
+        friend class ReplayModule;
     public:
         // DWARF: BrnReplayBaseSerialiser.h:54. Serialiser mode state machine.
         enum EMode

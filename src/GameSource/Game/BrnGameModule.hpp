@@ -164,6 +164,7 @@ namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue
 namespace BrnEffects { namespace EffectsIO { struct InputBuffer; struct DispatchInputBuffer; } }
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"   // BrnSound::Module::RootSoundModule (real class)
 #include "GameSource/Replays/BrnReplayModule.h"   // BrnReplays::ReplayModule (real class -- was an ODR stub)
+#include "GameSource/Replays/Serialisers/BrnReplayGameModuleSerialiser.h"
 #include "GameSource/Network/BrnNetworkModule.h"
 
 namespace BrnGame
@@ -673,7 +674,36 @@ namespace BrnGame
         // 138/589/590 render modes). FLAG PC-ABI adapter: the console form reads the GUI
         // module OUTPUT buffer's out-event queue; the PC module publishes the same queue
         // via BrnGui::GuiModule::GetGuiOutQueue().
-        void BridgeGuiToGame(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue);
+        void BridgeGuiToGame(const CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue);
+        void BridgeGuiToGame(const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput);
+        void BridgeGuiToResource(BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+                                 const CgsGui::ModelIO::OutputBuffer* lpGuiModelOutput,
+                                 const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput);
+        void BridgeGameStateToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+                                  const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
+
+        // ARTIST 823F0758. All source buffers belong to this completed update.
+        void DoUpdate_GUI(CgsModule::IOBufferStack* lpInputBufferStack,
+                          CgsModule::IOBufferStack* lpOutputBufferStack,
+                          CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+                          CgsGui::ViewIO::InputBuffer* lpGuiViewInput,
+                          const CgsInput::InputIO::OutputBuffer* lpInputOutput,
+                          const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput,
+                          const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
+                          const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
+                          const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutput,
+                          CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+                          CgsGui::ModelIO::OutputBuffer* lpGuiModelOutput,
+                          BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutput,
+                          BrnEffects::EffectsIO::OutputBuffer* lpEffectsOutput,
+                          BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+                          const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput,
+                          BrnUpdateSet lUpdateSet, u32 liStartPressedPort);
+        void DoUpdate_ReplaysPreSim(CgsModule::IOBufferStack* lpInputBufferStack,
+                                    CgsModule::IOBufferStack* lpOutputBufferStack,
+                                    const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
+                                    BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutput,
+                                    BrnUpdateSet lUpdateSet);
 
         // ⭐ X360 0x823CBF70 -- the GUI->DIRECTOR out-event consumer. Walks the same GUI
         // out-event queue BridgeGuiToGame walks and raises the matching published flag on the
@@ -1133,6 +1163,7 @@ namespace BrnGame
         // side writes it (BridgeGuiToGame's loading-screen commands, IsStalled/IsDiskError,
         // brightness/contrast), OnEndOfUpdateFrame swaps it, and the dispatch/render side
         // reads it (BrnRendererModule::Render's per-frame AddCommand forward).
+        BrnReplays::GameModuleSerialiser mGameModuleSerialiser;      // h:525; ARTIST +0x9A10CC
         CgsSystem::ThreadLayout mThreadLayout;                        // h:530
         BrnGame::DispatchThreadInputBufferManager mDispatchThreadInputBufferManager; // h:531
         // FLAG PC-platform leaf: native initialization and reply pacing while

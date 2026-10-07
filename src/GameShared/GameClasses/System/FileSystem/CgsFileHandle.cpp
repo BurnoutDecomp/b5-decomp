@@ -7,6 +7,22 @@
 // constructed), so this mirrors with explicit Lock()/Unlock().
 namespace CgsFileSystem
 {
+    // Original inline copy in ReplayModule::WaitForOpenReplayFiles
+    // 8264E978..8264E988. Preserve the canonical host pointer and 32-bit id.
+    FileHandle& FileHandle::operator=(const FileHandle& lOtherHandle)
+    {
+        mpFileSystem = lOtherHandle.mpFileSystem;
+        muFileId = lOtherHandle.muFileId;
+        return *this;
+    }
+
+    // Original inline accessor at 8264E9C4..8264E9CC: the FileSystem method
+    // owns its real status/lock behavior; the value handle adds no guard.
+    FileState FileHandle::GetStatus() const
+    {
+        return mpFileSystem->GetStatus(muFileId);
+    }
+
     // @0x8264AEE0.
     bool FileHandle::Read(void* lpOutputBuffer, u64 luFilePosition, u64 lnSizeToRead)
     {

@@ -1,6 +1,7 @@
 #include "GameSource/Replays/Stream/BrnReplayStreamHeader.h"
 
 #include "GameSource/Replays/BrnReplayShared.h"
+#include <cstdint>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (BrnReplays::StreamHeader).
 //
@@ -15,6 +16,23 @@
 
 namespace BrnReplays
 {
+    void StreamHeader::FixDown()
+    {
+        if (mpFrameOffsets)
+        {
+            ChopOffTailFrames();
+            mpFrameOffsets = reinterpret_cast<StreamOffset*>(
+                reinterpret_cast<uintptr_t>(mpFrameOffsets) - reinterpret_cast<uintptr_t>(this));
+        }
+    }
+
+    void StreamHeader::FixUp()
+    {
+        if (mpFrameOffsets)
+            mpFrameOffsets = reinterpret_cast<StreamOffset*>(
+                reinterpret_cast<uintptr_t>(mpFrameOffsets) + reinterpret_cast<uintptr_t>(this));
+    }
+
     // @ 0x8264B270
     StreamHeader* StreamHeader::ChopOffTailFrames()
     {

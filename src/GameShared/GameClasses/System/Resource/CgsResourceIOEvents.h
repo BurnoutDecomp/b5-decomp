@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsSmallResource.h"     // SmallResourceDescriptor (Entry::ResourceDescriptor form)
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundle2.h"   // BundleV2 (struct) + nested ResourceEntry
 #include "GameShared/GameClasses/System/FileSystem/CgsReadStream.h"      // CgsFileSystem::ReadStream (ReadStreamEvent carries it by value)
+#include "GameShared/GameClasses/System/FileSystem/CgsFileHandle.h"
 
 namespace CgsModule { class BaseEventReceiverQueue; }   // referenced by pointer only
 namespace CgsResource { struct ResourceHandle; }        // AcquireResourceListRequest::mpHandles (by pointer)
@@ -119,6 +120,29 @@ namespace Events
         CgsModule::BaseEventReceiverQueue* mpUser;    // :945  (X360 +0)
         s32                                miEventId; // :946  (X360 +4)
     };
+
+    // DecFIGS CgsResourceIOEvents.h:1254. Replay CloseReplayFiles 8265F228
+    // builds {receiver,eventId,FileHandle}; ARTIST's handle is at +8, size16.
+    // Both receiver and FileHandle keep their canonical native pointer widths.
+    struct FileHandleEvent : public FileEvent
+    {
+        void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId,
+                       CgsFileSystem::FileHandle lFile)
+        {
+            FileEvent::Construct(lpUser, liEventId);
+            mFile = lFile;
+        }
+        CgsFileSystem::FileHandle GetFileHandle() const { return mFile; }
+        void SetFileHandle(CgsFileSystem::FileHandle lFile) { mFile = lFile; }
+
+    protected:
+        CgsFileSystem::FileHandle mFile;
+    };
+
+    // :1284/:1296. No extra payload fields. WaitForOpenReplayFiles 8264E8F8
+    // checks the inherited event id at +4 and copies the handle at +8.
+    struct CloseFileRequest : public FileHandleEvent {};
+    struct OpenFileResponse : public FileHandleEvent {};
 
     // DWARF CgsResourceIOEvents.h:972-1025 -- the request to open a streaming handle on a file
     // (the console 160-byte record the sound Module::DoOpenStream builds and posts, queue event

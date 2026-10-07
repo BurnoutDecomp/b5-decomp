@@ -69,6 +69,7 @@ namespace BrnReplays
         };
 
         // ---- lifecycle (reconstructed in their own TUs) ----
+        DiskReadStream();
         void         Construct();
         void         Open(const char* lpcFileName, void* lpBuffer, s32 liBufferSize);
         void         Close();
@@ -92,6 +93,7 @@ namespace BrnReplays
         static void CloseCallback(s32 liResult, CgsFileSystem::Handle lHandle, u64 luSize, void* lpContext);
 
     private:
+        friend class ReplayModule;
         // @0x8264D8C0. Clear every ring slot and reset the ring cursors/counters (only
         // legal while unlocked with no requests/ops outstanding).
         void ResetStreamBlocks();
@@ -127,8 +129,8 @@ namespace BrnReplays
         // mutex's first member). Modelled as an opaque blob reached by name -- same
         // pattern as the sibling GPUDiskWriteStream's lock; the real threading type lands
         // with the mutex layer.
-        u8              mMutex[40];                          // X360 +0x000
-        char            macFileName[256];                    // X360 +0x024 stream file name
+        alignas(void*) u8 mMutex[40];                        // native ntdll critical section
+        char            macFileName[256];                    // X360 +0x020 log base; Open's full path extent is separate pending evidence
         char*           mpBuffer;                            // X360 +0x124 ring backing store
         s32             miBufferSize;                        // X360 +0x128
         s32             miNumBlocks;                         // X360 +0x12C ring slot count in use
@@ -140,6 +142,7 @@ namespace BrnReplays
         // (lwz 0x134 / lwz 0x138), the names are inferred from that use.
         s32             miNormalPriority;                    // X360 +0x134 priority when buffered
         s32             miUrgentPriority;                    // X360 +0x138 priority when starved
+        s32             miField13C;                          // ARTIST Construct stores -1; original name not recovered
         // The compound device file handle {device, device-private handle}. The console packed
         // the pair into the two words here; this is the typed value itself.
         CgsFileSystem::Handle mHandle;                       // +0x140 open device file handle

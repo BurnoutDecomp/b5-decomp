@@ -17,6 +17,7 @@
 
 #include "types.hpp"
 #include "GameSource/Replays/Stream/BrnReplayStreamHeader.h"
+#include "GameSource/Replays/Stream/BrnReplayFrunkHeader.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // CgsMemory::LinearMalloc mHeaderMalloc
 
 namespace BrnReplays
@@ -24,7 +25,7 @@ namespace BrnReplays
     // The record-side disk sink. Reached BY POINTER only (mpStream is neither read nor
     // reset by the bodied functions in this slice), so an incomplete type suffices; the
     // full WriteStream TU owns its concrete home.
-    class DiskWriteStream;
+    class GPUDiskWriteStream;
 
     class WriteStream
     {
@@ -52,20 +53,21 @@ namespace BrnReplays
         void SetStreamHeaderForTest(StreamHeader* lpHeader) { mpStreamHeader = lpHeader; }
 
     private:
+        friend class ReplayModule;
         // Members recovered by ResetStream @0x8264D100 / InvalidateFrunksAhead
         // @0x8264D190; reached BY NAME (native layout, X360 byte offsets documentary).
         CgsMemory::LinearMalloc mHeaderMalloc;         // @0x00  header bump allocator (X360: 0x1C bytes)
         StreamHeader*           mpStreamHeader;        // @0x1C  the frunk index / stream header
+        FrunkHeader             mCurrentFrunkHeader;   // @0x20; AddFrunk 8265EEA8..B8
         s32                     miCurrentWriteIndex;   // @0x40  write cursor
         s32                     miStallCount;          // @0x44
         bool                    mbEnded;               // @0x48
         bool                    mbPaused;              // @0x49
         s32                     miNumFrunksAllocated;  // @0x4C
-        DiskWriteStream*        mpStream;              // @0x50  disk sink (NOT reset by ResetStream)
+        GPUDiskWriteStream*     mpStream;              // @0x50  ARTIST GPU disk sink (NOT reset by ResetStream)
         s32                     miFilePosition;        // @0x54
         s32                     miBufferPosition;      // @0x58
-        // ... remaining WriteStream tail (the 128 KiB intermediate buffer, ...) is NOT
-        //     modelled in this slice; the full WriteStream TU grows it. No offset is
-        //     asserted across these members.
+        // ARTIST's object ends at +0x5C; the intermediate bytes are shared
+        // storage, not an extra embedded buffer between the write/read streams.
     };
 }
