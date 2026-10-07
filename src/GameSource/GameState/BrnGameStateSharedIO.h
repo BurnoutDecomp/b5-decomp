@@ -799,6 +799,10 @@ namespace BrnGameState
             // Setter for +0x58 already exists above (SetOnlineRacePoints); add the matching getter
             // (UpdateCumulativeResults reads this slot).
             s32             GetOnlineFinishPositionScore() const   { return miOnlineFinishPositionScore; } // +0x58
+            s32             GetOnlineStandingsPosition() const     { return miOnlineStandingsPosition; }  // +0x5C
+            // ARTIST 823EF070 loads this original 32-bit slot into the online
+            // results record. Its gameplay name is not attested by DecFIGS.
+            u32             GetOnlinePostEventValueC0() const      { return muOnlinePostEventValueC0; }   // +0xC0
 
             EActiveRaceCarIndex GetEliminatorRaceCarIndex() const  { return meEliminatorRaceCarIndex; }   // +0x60
             void            SetEliminatorRaceCarIndex(EActiveRaceCarIndex leIndex) { meEliminatorRaceCarIndex = leIndex; } // +0x60
@@ -929,7 +933,8 @@ namespace BrnGameState
             CgsSystem::Time mTimeAsRunner;         // +0x84 (8)  time-as-runner (BHR gather lwz 0x84 / lfs 0x88)
             u8   maStorage8C[48];                  // +0x8C..+0xBC  (incl. chainable-stunt Time pairs region the ctor zeroes)
             bool mbCompletedBurningHomeRun;        // +0xBC      completed-burning-home-run flag (BHR gather lbz 0xBC)
-            u8   maStorageBD[7];                   // +0xBD..+0xC4
+            u8   maStorageBD[3];                   // +0xBD..+0xC0
+            u32  muOnlinePostEventValueC0;         // +0xC0 (ARTIST 823EF070 -> GUI online record +0x28; uninterpreted word)
             s32  miCumulativeCheckpoints;          // +0xC4      cumulative checkpoints (BHR gather lwz 0xC4)
             s32  miChainableScore;                 // +0xC8      GetChainableStuntMultipliers source
             s32  miChainableField;                 // +0xCC      GetChainableStuntMultipliers source
@@ -1021,6 +1026,7 @@ namespace BrnGameState
                 static_assert(offsetof(CarScoreData, mbDisconnected)              == 0x69, "CarScoreData::mbDisconnected offset");
                 static_assert(offsetof(CarScoreData, mTimeAsRunner)               == 0x84, "CarScoreData::mTimeAsRunner offset");
                 static_assert(offsetof(CarScoreData, mbCompletedBurningHomeRun)   == 0xBC, "CarScoreData::mbCompletedBurningHomeRun offset");
+                static_assert(offsetof(CarScoreData, muOnlinePostEventValueC0)    == 0xC0, "CarScoreData::online result value offset");
                 static_assert(offsetof(CarScoreData, miCumulativeCheckpoints)     == 0xC4, "CarScoreData::miCumulativeCheckpoints offset");
                 static_assert(offsetof(CarScoreData, miChainableScore)            == 0xC8, "CarScoreData::miChainableScore offset");
                 static_assert(offsetof(CarScoreData, miOnlineStuntScore)          == 0xD4, "CarScoreData::miOnlineStuntScore offset");
@@ -1079,6 +1085,9 @@ namespace BrnGameState
         struct ScoringOutputInterface
         {
             CarScoreData            maCarScoreData[8];          // :538  per-car score records (X360: memcpy 296B/car)
+            // ARTIST 823EECE8..ED40 indexes eight 64-bit checkpoint masks at
+            // scoring +0x940. They are an X360 addition absent from DecFIGS.
+            CarCheckpointData       maCarCheckpointData[8];     // +0x940..+0x980
             s32                     maiCumulativeScoreData[8];  // :539  (X360: CarData+76 per car; dst +0x980)
             s32                     maiNumRoadsRuled[8];        // :540  (dst +0x9A0 gap; not written by WriteDataToOutput)
             CgsID                   maCarIds[8];                // :541  (X360: CarData+37 per car, stored as QWORD; dst +0x9C0)
@@ -1148,6 +1157,16 @@ namespace BrnGameState
 
             void operator=(const ScoringOutputInterface&);      // :583 (declare-only)
         };
+
+        static_assert(sizeof(CarCheckpointData) == 8, "ARTIST per-car checkpoint mask width");
+        static_assert(offsetof(ScoringOutputInterface, maCarCheckpointData) == 0x940,
+                      "ARTIST checkpoint mask array offset");
+        static_assert(offsetof(ScoringOutputInterface, maiCumulativeScoreData) == 0x980,
+                      "ARTIST cumulative score array offset");
+        static_assert(offsetof(ScoringOutputInterface, meGameModeType) == 0xA3C,
+                      "ARTIST game mode sentinel offset");
+        static_assert(sizeof(ScoringOutputInterface) == 2736,
+                      "ARTIST complete scoring snapshot width");
 
         // Network output interface for the online-mode scoring results. Embedded BY VALUE in
         // RaceCarEntityModuleIO::InputBuffer_PrePhysics (mOnlineScoringInterface, IO header :446)

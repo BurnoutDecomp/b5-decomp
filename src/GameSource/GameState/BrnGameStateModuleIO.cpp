@@ -529,9 +529,6 @@ void OutputBuffer::Construct()
     //     VariableEventQueue<131072,16>::Construct(this + 36944)   // mgmt add queue
     //     InRemoveTriggerEvent<..,256>::Construct (this + 168032)  // mgmt remove queue
     //     VariableEventQueue<4096,16>::Construct  (this + 169068)  // trigger-query interface
-    mTriggerManagementInputInterface.GetAddTriggerEventQueue().Construct();
-    mTriggerManagementInputInterface.GetRemoveTriggerEventQueue().Construct();
-    mTriggerQueryInputInterface.Construct();
 
     // ⭐⭐ 2026-08-27 (stunt-races frontier round 2, defect D2): the console's
     //     GameStateToGuiInterface::Construct(this + 17488)
@@ -556,6 +553,12 @@ void OutputBuffer::Construct()
     // Constructed WITHOUT the write lock for the same reason the two queues above are: Construct
     // runs before anybody can lock the buffer.
     mGameStateToGuiInterface.Construct();
+    // ARTIST 823829E0..E4 constructs the real 18432-byte GUI event queue,
+    // followed by the trigger interfaces at 823829E8..2A18.
+    mGuiEventQueue.Construct();
+    mTriggerManagementInputInterface.GetAddTriggerEventQueue().Construct();
+    mTriggerManagementInputInterface.GetRemoveTriggerEventQueue().Construct();
+    mTriggerQueryInputInterface.Construct();
 
     //     this+173180 = 3 (EPaybackType); this+173184 = -1 (aggressor)
     //     Time::SetFloatVal(this + 173188, 0.0f)
@@ -573,6 +576,10 @@ void OutputBuffer::Construct()
 
     //     memset(this + 173240, 0, 2736)   // the scoring snapshot, console width
     std::memset(&mScoringOutputInterfaceStorage, 0, sizeof(mScoringOutputInterfaceStorage));
+    // ARTIST 82382AA0 stores -1 at scoring +0xA3C after the zero fill.
+    static_assert(sizeof(ScoringOutputInterface) == sizeof(mScoringOutputInterfaceStorage),
+                  "complete ARTIST scoring snapshot fits its existing storage exactly");
+    reinterpret_cast<ScoringOutputInterface*>(&mScoringOutputInterfaceStorage)->meGameModeType = E_MODE_NONE;
 
     //     8 x s32 = -1 from this+176008
     // 176008 - 175976 == 0x20 == OnlineScoringOutputInterface::maOnlineAwards, so the console's
@@ -606,20 +613,10 @@ void OutputBuffer::Construct()
     //   * DirtyTrickEvent<..,28>::Construct + GameStateToNetworkInterface::Clear (this + 16784)
     //     -- MADE, see the mGameStateToNetworkInterface.Construct() call above.
     //   * the two input bind/unbind request queues (this + 17324 / 17400),
-    //     VariableEventQueue<18432,16>::Construct (this + 18496) -- all still opaque.
-    //     ⚠️ THAT LAST ONE IS THE SAME TRAP D2 JUST PAID OFF, ONE MEMBER ALONG: the GUI event
-    //     queue at +18496 is handed out by GetGuiEventQueue() as OutputBufferGuiEventQueue, which
-    //     is still the `u8 maOpaque[1008]` PLACEHOLDER in the header, not the console's real
-    //     VariableEventQueue<18432,16>. Nothing can construct it until it is retyped, and a
-    //     VariableEventQueue that is only zero-filled fires "Not Constructed" on its first
-    //     AddEvent. Retype it BEFORE wiring any producer onto it.
+    //     -- the bind/unbind request queues remain opaque. The following
+    //     18432-byte GUI event queue is now typed and constructed above.
     //   * GameStateToGuiInterface::Construct (this + 17488) -- ⭐ MADE 2026-08-27 (defect D2),
     //     see the call above; it is no longer on this list.
-    //   * the console's `this+175860 = -1` seed inside the scoring snapshot (== scoring + 2620).
-    //     DELIBERATELY NOT REPRODUCED: the x64 ScoringOutputInterface layout is 2672 bytes against
-    //     the console's 2736, so console byte 2620 does not name a member here. Poking it would be
-    //     an offset hack over a type whose members ARE known -- when the field is identified from
-    //     the console layout map, write it BY NAME.
 }
 
 // X360 0x8231D4B8 - write-lock accessor for the game-action queue (this+0x04).
@@ -784,19 +781,15 @@ const RaceCarRaceDistanceInterface* OutputBuffer::GetRaceCarRaceDistanceInterfac
 // to UpdateInputBuffer::SetScoringInterface, so there is no callable symbol and no lock assert of
 // its own (the bridge holds the buffer's read lock across the whole call).
 //
-// ⚠️ THE STORAGE IS DELIBERATELY THE CONSOLE'S WIDTH, NOT sizeof(ScoringOutputInterface).
-// MEASURED on this x64 build: sizeof(ScoringOutputInterface) == 2672, against the console's
-// 2736-byte span (173240..175976, the width OutputBuffer::Construct memsets and the width
-// UpdateInputBuffer::SetScoringInterface memcpy's). Handing the world a pointer to a 2672-byte
-// object it will read 2736 bytes out of is a 64-byte over-read; keeping the console's span as
-// opaque storage and viewing it through the committed type makes the read in-bounds by
-// construction. Do NOT "tidy" this into a typed member until the world-side ScoringInterface
-// slice is sized off the same type.
+// The complete ScoringOutputInterface includes the eight X360 checkpoint masks
+// and occupies the console's full 2736-byte snapshot span.
+// Existing storage retains that exact span; every reader now sees the complete
+// named type, including the checkpoint array and original game mode field.
 const ScoringOutputInterface* OutputBuffer::GetScoringOutputInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    static_assert(sizeof(ScoringOutputInterface) <= (175976 - 173240),
-                  "ScoringOutputInterface must fit the console's +173240 span (2736 bytes)");
+    static_assert(sizeof(ScoringOutputInterface) == (175976 - 173240),
+                  "ScoringOutputInterface matches the console's 2736-byte span");
     return reinterpret_cast<const ScoringOutputInterface*>(&mScoringOutputInterfaceStorage);
 }
 
@@ -888,14 +881,14 @@ const OutputBufferFrameRateTypeReqInterface* OutputBuffer::GetFrameRateTypeReque
 OutputBufferGuiEventQueue* OutputBuffer::GetGuiEventQueue()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    return reinterpret_cast<OutputBufferGuiEventQueue*>(&mGuiEventQueueStorage);
+    return &mGuiEventQueue;
 }
 
 // X360 0x823B9A38 - read-lock accessor for the GUI event queue (this+18496).
 const OutputBufferGuiEventQueue* OutputBuffer::GetGuiEventQueue() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const OutputBufferGuiEventQueue*>(&mGuiEventQueueStorage);
+    return &mGuiEventQueue;
 }
 
 // X360 0x823B9E28 - read-lock getter for meActivePaybackType (this+173180).
