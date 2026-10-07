@@ -55,6 +55,22 @@ template<class Buffer> static void CheckBuffer()
                 Check(value == 0, "every serialiser slot is reset on reuse");
                 cleared = cleared && value == 0;
             }
+            // Snapshot the entire native interface as Append's consumer sees
+            // it. On the old byte-backed layout the enclosing Guarded object
+            // still contains these bytes, so the negative fixture can expose
+            // stale tail data without reading beyond its test allocation.
+            RequestInterface snapshot;
+            std::memcpy(&snapshot, requests, sizeof(snapshot));
+            RequestInterface fresh = {};
+            auto* freshSerialiser =
+                reinterpret_cast<BrnReplays::BaseSerialiser*>(storage.before);
+            fresh.mapSerialisers[10] = freshSerialiser;
+            const unsigned assertsBeforeMerge = asserts;
+            snapshot.Append(&fresh);
+            Check(asserts == assertsBeforeMerge,
+                  "reused sound IO does not falsely duplicate a fresh serialiser");
+            Check(snapshot.mapSerialisers[10] == freshSerialiser,
+                  "reused sound IO does not corrupt a fresh serialiser pointer");
             if (contained && aligned && cleared)
             {
                 RequestInterface source = {};
