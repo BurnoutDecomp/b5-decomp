@@ -29,6 +29,7 @@ DebugPrint* gpDebugPrint = &sink;
 } namespace Message { u64 gxMessageFilterFlags = 0; } }
 extern "C" void RtlEnterCriticalSection(void*) { ++enters; ++lockDepth; }
 extern "C" void RtlLeaveCriticalSection(void*) { ++leaves; --lockDepth; }
+extern "C" long RtlInitializeCriticalSection(void*) { return 0; } // observed OS boundary
 extern "C" void* XMemCpy(void* to,const void* from,size_t size) { return std::memcpy(to,from,size); }
 
 // The fixture records the native device API call; it does not run filesystem jobs.

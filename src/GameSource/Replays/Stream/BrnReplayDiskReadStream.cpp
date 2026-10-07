@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h" // DeviceManager, GetDeviceManager
 #include <cstddef>
+#include <windows.h>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Control flow, the ring/loop arithmetic,
 // the status flags and every assert message are taken from the X360 asm; the DecFIGS
@@ -16,12 +17,32 @@
 //     mMutex Lock/Unlock. ---
 extern "C" void RtlEnterCriticalSection(void* lpCriticalSection);
 extern "C" void RtlLeaveCriticalSection(void* lpCriticalSection);
+extern "C" long RtlInitializeCriticalSection(void* lpCriticalSection);
 
 // Xbox block copy the ARTIST asm calls for the delivered read data (semantically memcpy).
 extern "C" void* XMemCpy(void* lpDest, const void* lpSrc, size_t luSize);
 
 namespace BrnReplays
 {
+    // Inlined by ReplayModule's C++ constructor, 827E0438..043C.
+    DiskReadStream::DiskReadStream()
+    {
+        static_assert(sizeof(mMutex) >= sizeof(CRITICAL_SECTION), "native disk reader lock storage");
+        RtlInitializeCriticalSection(mMutex);
+    }
+
+    // Inlined in ReplayModule::Construct 82656E20. Retain fields that this
+    // expansion never writes; stream-open/reset owns their later initialization.
+    void DiskReadStream::Construct()
+    {
+        miField13C = -1;
+        meStatus = E_STATUS_CLOSED;
+        for (s32 liBlock = 0; liBlock < KI_MAX_STREAM_BLOCKS; ++liBlock)
+            maBlocks[liBlock].mpOwner = this;
+        miLoopStart = 0;
+        miLoopEnd = 0;
+    }
+
     // ARTIST 82659E20..82659EB0 (raw image). Close is idempotent at the
     // request boundary: the original emits a channel-one warning for repeats.
     void DiskReadStream::Close()

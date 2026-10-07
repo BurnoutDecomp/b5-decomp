@@ -147,5 +147,6 @@ int main()
     Check(asserts==beforeInvalid+1 && header.miFirstFrunk==0 && header.miNumFrunks==1801,
           "original invalid-range recursion asserts once and retains its non-gating publication");
     std::printf("ReplayReadStream: %u checks, %u failures\n",checks,failures);
+    DeleteCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(disk.mMutex));
     return failures ? 1 : 0;
 }

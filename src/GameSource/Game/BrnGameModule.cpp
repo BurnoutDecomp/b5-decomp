@@ -11,6 +11,10 @@
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [diag] BrnDiag::gFilmLatch (time-dilation capture arm)
 #include "SDKs/EA/GameTalk/GameTalk.h"               // EA::GameTalk::GameTalkMessage (RenderMetricsMessageHandler)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (GUI-out event 201) + GuiEventProgressionProfileData (350)
+#include "GameSource/Gui/BrnGuiPerfmons.h"
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
+#include "GameSource/Gui/Events/BrnGuiEventOnlinePostEvent.h"
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueueImpl.h"
 #include "GameSource/Game/GameBridgeGameStateToX.h"  // BrnGame::BridgeGameStateToGui_EventStatus (the GUI-leg status seam)
 #include "GameSource/GameState/Progression/BrnProfile.h" // BrnProgression::Profile (the action-193 payload's first word)
 
@@ -20,6 +24,7 @@
 #include <cstdlib>   // getenv / strtol -- BridgeGuiToGame's BRN_POSTFX_CALIBRATION_TEST hook
 #include <cstdio>    // snprintf -- BridgeGuiToGame's [calib] change line
 #include <cstddef>   // offsetof -- the 545/546 payload layout pins in BridgeGuiToGame
+#include <cmath>
 #include "rw/math/vpu/matrix44affine_operation.h"
 
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h" // CgsInput::InputPadsPC (the PC pad-fill leaf)
@@ -84,6 +89,12 @@ namespace BrnDiag
 
 namespace BrnGame
 {
+    namespace
+    {
+        void TranslateGuiInterfaceToGuiEvents(
+            CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+            const BrnGameState::GameStateModuleIO::GameStateToGuiInterface* lpGameToGuiInterface);
+    }
     // File-scope globals the X360 GameMain references:
     //   byte_82FAEB90  - the debug force-assert toggle (_lbForceAssert); fires a guarded
     //                    assert when set so a build can be forced to break into the assert path.
@@ -635,6 +646,9 @@ namespace BrnGame
         // module's Prepare (vtable+0x58) once per frame and only posts the two id-144 RunFsm
         // records when it finally reports done. That is now where ours runs.
 
+        // ARTIST 823CB1C8..1D0: actual game-module replay channel.
+        mGameModuleSerialiser.Construct();
+
         // ---- input bring-up (PC stand-in for the unreconstructed input setup pass) --------
         // The console input module's Prepare constructs its output buffer, scans the pads and
         // flips the module state to "ready / player-0 assigned"; none of that pass is
@@ -737,7 +751,7 @@ namespace BrnGame
     // consumers map the console's dispatch-buffer render states onto the renderer's
     // loading-screen signal; the quit-to-dash (86/87/89 -> XLaunchNewImage) and the
     // brightness/contrast forwards (545/546) are platform follow-ons.
-    void BrnGameModule::BridgeGuiToGame(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue)
+    void BrnGameModule::BridgeGuiToGame(const CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue)
     {
         // The calibration TEXTURE handle the console keeps as a FUNCTION LOCAL, re-seeded from
         // the null-handle sentinel on every call: @0x823CB764-0x823CB774
@@ -1249,7 +1263,386 @@ namespace BrnGame
         }
     }
 
+    void BrnGameModule::BridgeGuiToGame(const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput)
+    {
+        BridgeGuiToGame(lpGuiOutput->GetOutEventQueue());
+    }
 
+    // ARTIST 823EE710. The caller owns the GameData write lock and both GUI
+    // source read locks. Event 263 requests both lists; 417 requests wheels.
+    void BrnGameModule::BridgeGuiToResource(
+        BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+        const CgsGui::ModelIO::OutputBuffer* lpGuiModelOutput,
+        const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput)
+    {
+        lpGameDataInput->GetRequestInterface()->mRequestQueue.Append<2048, 16>(
+            *lpGuiModelOutput->GetGuiResourceRequestQueue());
+        const CgsGui::CgsGuiModuleIO::OutputBuffer::GuiEventQueue* const lpEvents =
+            lpGuiOutput->GetOutEventQueue();
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liType = lpEvents->GetFirstEvent(&lpEvent, &liSize);
+
+        BrnResource::GameDataIO::RequestInterface<256> lRequests;
+        lRequests.mRequestQueue.MarkUnconstructed();
+        lRequests.Construct();
+        struct ListRequestEvent : CgsModule::Event
+        {
+            CgsModule::BaseEventReceiverQueue* mpReceiverQueue;
+        };
+        while (lpEvent != 0)
+        {
+            switch (liType)
+            {
+            case 263:
+            {
+                const ListRequestEvent* const lpRequest =
+                    reinterpret_cast<const ListRequestEvent*>(lpEvent);
+                lRequests.GetVehicleList(lpRequest->mpReceiverQueue, 0);
+                lRequests.GetWheelList(lpRequest->mpReceiverQueue, 1);
+                break;
+            }
+            case 417:
+                lRequests.GetWheelList(
+                    reinterpret_cast<const ListRequestEvent*>(lpEvent)->mpReceiverQueue, 1);
+                break;
+            default:
+                break;
+            }
+            const CgsModule::Event* lpNext = 0;
+            liType = lpEvents->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+        lpGameDataInput->AppendRequestInterface<256>(lRequests);
+    }
+
+    // ARTIST 823EE880. The caller holds GUI input for write and game-state
+    // output for read. Preserve every original queue/interface transfer.
+    void BrnGameModule::BridgeGameStateToGui(
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
+    {
+        using namespace BrnGameState::GameStateModuleIO;
+        CGS_ASSERT(lpGuiInput != 0, "lpGuiInput");
+        CGS_ASSERT(lpGameStateOutput != 0, "lpGameStateOutput");
+        const ScoringOutputInterface* const lpScoring = lpGameStateOutput->GetScoringOutputInterface();
+        const OnlineScoringOutputInterface* const lpOnline = lpGameStateOutput->GetOnlineScoringOutputInterface();
+        CGS_ASSERT(lpScoring != 0, "lpScoringOutputInterface");
+        CGS_ASSERT(lpOnline != 0, "lpOnlScoringOutputInterface");
+        CGS_ASSERT(lpGuiInput->GetGuiEvents() != 0, "lpGuiInput->GetGuiEvents()");
+        CGS_ASSERT(lpGameStateOutput->GetGuiEventQueue() != 0, "lpGameStateOutput->GetGuiEventQueue()");
+        lpGuiInput->GetGuiEvents()->Append<18432, 16>(*lpGameStateOutput->GetGuiEventQueue());
+
+        BrnGui::GuiEventRaceDistanceRemaining lDistance;
+        for (s32 liCar = 0; liCar < 8; ++liCar)
+        {
+            if (lpScoring->mabValid[liCar] == 1)
+            {
+                const bool lbFreeBurn = lpScoring->meGameModeType == E_MODE_ONLINE_FREE_BURN_LOBBY
+                    || lpScoring->meGameModeType == E_MODE_ONLINE_SHOWTIME;
+                lDistance.mafDistanceToFinish[liCar] = lbFreeBurn
+                    ? static_cast<f32>(lpScoring->maiNumRoadsRuled[liCar])
+                    : lpScoring->maCarScoreData[liCar].GetDistanceToFinishLive();
+                lDistance.maCarId[liCar] = lpScoring->maCarIds[liCar];
+                lDistance.mabPlayerEliminated[liCar] = lpScoring->mabPlayerEliminated[liCar];
+                lDistance.mabValid[liCar] = true;
+                lDistance.maiOnlineStuntScore[liCar] = lpScoring->maCarScoreData[liCar].GetOnlineStuntScore();
+            }
+            else
+            {
+                lDistance.mafDistanceToFinish[liCar] = 0.0f;
+                lDistance.maCarId[liCar] = 0;
+                lDistance.mabPlayerEliminated[liCar] = false;
+                lDistance.mabValid[liCar] = false;
+                lDistance.maiOnlineStuntScore[liCar] = 0;
+            }
+        }
+        PushGuiEvent(lDistance, lpGuiInput);
+        const s32 liPlayer = static_cast<s32>(lpScoring->mePlayerRaceCarIndex);
+        BrnGui::GuiEventRaceDistanceToCheckpoint lCheckpointDistance;
+        lCheckpointDistance.mfDistanceToCheckpoint =
+            lpScoring->maCarScoreData[liPlayer].GetDistanceToNextCheckpointLive();
+        PushGuiEvent(lCheckpointDistance, lpGuiInput);
+
+        const CgsSystem::TimerStatus* const lpGameTimer = mTimerStatusInterface.GetGameTimerStatus();
+        CGS_ASSERT(lpGameTimer != 0, "mTimerStatusInterface.GetGameTimerStatus()");
+        const CgsSystem::Time lGameTime = lpGameTimer->GetTime();
+        BrnGui::GuiEventCurrentStatus lStatus;
+        // The ARTIST stack slot is reused from lDistance. Its unused checkpoint
+        // tail retains those bytes; preserve that reuse instead of zero filling.
+        std::memcpy(&lStatus, &lDistance, sizeof(lStatus));
+        lStatus.miGameTimeSeconds = lGameTime.GetSeconds();
+        lStatus.mfGameTimeFraction = lGameTime.GetFraction();
+        lStatus.mfGameTimeStep = lpGameTimer->GetCurrentTimeStep();
+        lStatus.mfDistanceToFinishLive = lpScoring->maCarScoreData[liPlayer].GetDistanceToFinishLive();
+        lStatus.mfDistanceDrivenInCurrentCar = lpScoring->mfDistanceDrivenInCurrentCar;
+        for (s32 liCar = 0; liCar < 8; ++liCar)
+            lStatus.maePlayerTeam[liCar] = static_cast<s32>(lpOnline->maePlayerTeam[liCar]);
+        s32 liRunner = -1;
+        if (lpScoring->meGameModeType == E_MODE_ONLINE_BURNING_HOME_RUN)
+        {
+            for (s32 liCar = 0; liCar < 8; ++liCar)
+            {
+                if (lpScoring->mabValid[liCar]
+                    && static_cast<s32>(lpOnline->maePlayerTeam[liCar]) == 2)
+                {
+                    liRunner = liCar;
+                    break;
+                }
+            }
+        }
+        if (liRunner == -1)
+            lStatus.miNumRemainingCheckpoints = 0;
+        else
+        {
+            CGS_ASSERT(8 > liRunner, "E_ACTIVE_RACE_CAR_INDEX_COUNT > leRunnerActiveRaceCarIndex");
+            CGS_ASSERT(0 <= liRunner, "E_ACTIVE_RACE_CAR_INDEX_0 <= leRunnerActiveRaceCarIndex");
+            lStatus.miNumRemainingCheckpoints = lpScoring->maCarCheckpointData[liRunner]
+                .GetAllRemainingCheckpointIndexes(lStatus.maiRemainingCheckpointIndexes);
+        }
+        PushGuiEvent(lStatus, lpGuiInput);
+
+        const EGameModeType leMode = lpScoring->meGameModeType;
+        if (leMode == E_MODE_OFFLINE_SHOWTIME || leMode == E_MODE_ONLINE_SHOWTIME || leMode != E_MODE_NONE)
+        {
+            BrnGui::GuiEventScoreUpdate lScore;
+            lScore.meCurrentMedalTarget = static_cast<s32>(lpScoring->meCurrentMedalTarget);
+            lScore.mfModeTime = lpScoring->mfModeTimeElapsed;
+            switch (leMode)
+            {
+            case E_MODE_ROAD_RAGE: case E_MODE_STUNT_ATTACK: case E_MODE_ONLINE_FUGITIVE:
+            case E_MODE_ONLINE_FREE_BURN: case E_MODE_ONLINE_MODE_END:
+                // ARTIST fsel selects zero for negative and NaN operands.
+                lScore.mfModeTime = lpScoring->mfModeTimeRemaining >= 0.0f
+                    ? lpScoring->mfModeTimeRemaining : 0.0f;
+                break;
+            default:
+                break;
+            }
+            lScore.mfCurrentTargetModeTime = lpScoring->mfCurrentTargetModeTime;
+            lScore.mfDistanceToNextCheckpoint =
+                lpScoring->maCarScoreData[liPlayer].GetDistanceToNextCheckpointLive();
+            lScore.mbTimerActive = lpScoring->mbTimerActive;
+            PushGuiEvent(lScore, lpGuiInput);
+            switch (leMode)
+            {
+            case E_MODE_OFFLINE_SHOWTIME: case E_MODE_ONLINE_SHOWTIME:
+            {
+                BrnGui::GuiCrashScoreUpdate lCrash;
+                lCrash.miCarsCrashed = lpScoring->miShowtimeCarsCrashed;
+                lCrash.miComboMultiplier = lpScoring->miShowtimeComboMultiplier;
+                lCrash.miScoreMultiplier = lpScoring->miShowtimeScoreMultiplier;
+                lCrash.mfDistanceTravelled = lpScoring->mfShowtimeDistanceTravelled;
+                PushGuiEvent(lCrash, lpGuiInput);
+                break;
+            }
+            case E_MODE_ROAD_RAGE:
+            {
+                BrnGui::GuiRoadRageScoreUpdate lRoadRage;
+                lRoadRage.miCurrentTakedowns = lpScoring->miRoadRageNumTakedowns;
+                lRoadRage.miTargetTakedowns = lpScoring->miRoadRageTakedownTarget;
+                PushGuiEvent(lRoadRage, lpGuiInput);
+                break;
+            }
+            case E_MODE_PURSUIT:
+                lpGuiInput->GetGuiEvents()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lpScoring->miPursuitCarDamageLeft), 432, 4);
+                break;
+            case E_MODE_STUNT_ATTACK: case E_MODE_TRAFFIC_ATTACK: case E_MODE_ONLINE_FUGITIVE:
+            case E_MODE_ONLINE_FREE_BURN: case E_MODE_ONLINE_MODE_END:
+            {
+                BrnGui::GuiAttackScoreUpdate lAttack;
+                lAttack.miCurrentScore = lpScoring->miCurrentScore;
+                lAttack.miTargetScore = lpScoring->miTargetScore;
+                lAttack.miComboScore = lpScoring->miComboScore;
+                lAttack.miComboMultiplier = lpScoring->miComboMultiplier;
+                lAttack.muCurrentStunts = lpScoring->muCurrentStunts;
+                lAttack.muAllStunts = lpScoring->muAllStunts;
+                lAttack.mfComboWarningTimeActive = lpScoring->mfComboWarningTimeActive;
+                lAttack.meStuntToDisplayType = static_cast<s32>(lpScoring->maStunts[0].meStuntType);
+                lAttack.miStuntToDisplayScore = lpScoring->maStunts[0].miStuntScore;
+                lAttack.mbComboWarningActive = lpScoring->mbComboWarningActive;
+                lAttack.mbComboInProgress = lpScoring->mbComboInProgress;
+                PushGuiEvent(lAttack, lpGuiInput);
+                break;
+            }
+            default:
+                break;
+            }
+        }
+
+        if (lpScoring->mbIsOnlineGameMode && lpScoring->miNumPlayersInGame > 0)
+        {
+            BrnGui::GuiEventOnlinePostEvent lOnlineEvent;
+            for (s32 liTeam = 0; liTeam < 9; ++liTeam)
+                lOnlineEvent.maHeader[liTeam] = lpScoring->maiTeamStuntScores[liTeam];
+            lOnlineEvent.maTail[0] = lpScoring->miNumPlayersInGame;
+            lOnlineEvent.maTail[1] = 0;
+            lOnlineEvent.maTail[2] = 0;
+            s32 liRecord = 0;
+            for (s32 liCar = 0; liCar < 8; ++liCar)
+            {
+                if (!lpScoring->mabValid[liCar])
+                    continue;
+                CarScoreData lCar;
+                lCar = lpScoring->maCarScoreData[liCar];
+                BrnGui::GuiEventOnlinePostEvent::Record& lrRecord = lOnlineEvent.maRecords[liRecord++];
+                lrRecord.miIndex = liCar;
+                lrRecord.mTime = lCar.GetFinishTime();
+                lrRecord.mfValue04 = lrRecord.mTime.GetFloatVal();
+                lrRecord.mfValue10 = lCar.GetDistanceToFinish();
+                lrRecord.muValue14 = lCar.GetOnlineStuntScore();
+                lrRecord.muValue18 = lCar.GetOnlineFinishPositionScore();
+                lrRecord.muValue1C = lCar.GetOnlineStandingsPosition();
+                lrRecord.muValue20 = lpScoring->maiCumulativeScoreData[liCar];
+                lrRecord.muValue24 = lCar.GetNumEliminations();
+                lrRecord.muValue28 = lCar.GetOnlinePostEventValueC0();
+                lrRecord.muValue30 = lCar.GetCumulativeCheckpoints();
+                lrRecord.mbFlag34 = lCar.GetTimedOut();
+                lrRecord.mbFlag35 = lCar.GetDisconnected();
+                lrRecord.mbFlag36 = static_cast<s32>(lCar.GetEliminatorRaceCarIndex()) != -1;
+                if (lrRecord.mfValue04 > 0.0f || lrRecord.mbFlag34 || lrRecord.mbFlag35)
+                    ++lOnlineEvent.maTail[1];
+                if (static_cast<s32>(lpOnline->maOnlineAwards[liCar]) != -1)
+                {
+                    BrnGui::GuiEventOnlinePostEvent::IndexTriplet& lrAward =
+                        lOnlineEvent.maIndexTriplets[lOnlineEvent.maTail[2]++];
+                    lrAward.miIndexA = static_cast<s32>(lpOnline->maOnlineAwards[liCar]);
+                    lrAward.miIndexB = liCar;
+                    lrAward.muValue08 = lpOnline->maiOnlineAwardVariables[liCar];
+                }
+            }
+            PushGuiEvent(lOnlineEvent, lpGuiInput);
+        }
+        if (lpGameStateOutput->GetSetUpAllEventStartsInterfaceIsValid())
+        {
+            const auto& lrStarts = lpGameStateOutput->GetSetUpAllEventStartsInterface();
+            lpGuiInput->GetGuiEvents()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lrStarts), 203, sizeof(lrStarts));
+        }
+        if (lpGameStateOutput->GetSpecificGameModeEventInterfaceIsValid())
+        {
+            const auto& lrPresets = lpGameStateOutput->GetSpecificGameModeEventInterface();
+            lpGuiInput->GetGuiEvents()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lrPresets), 194, sizeof(lrPresets));
+        }
+        TranslateGameActionsToGuiEvents(lpGuiInput, lpGameStateOutput);
+        CGS_ASSERT(lpGameStateOutput->GetTakedownEventOutputQueue() != 0,
+                   "lpGameStateOutput->GetTakedownEventOutputQueue()");
+        TranslateTakedownsToGuiEvents(lpGuiInput,
+            reinterpret_cast<const CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>*>(
+                lpGameStateOutput->GetTakedownEventOutputQueue()), liPlayer);
+        CGS_ASSERT(lpGameStateOutput->GetGameStateToGuiInterface() != 0,
+                   "lpGameStateOutput->GetGameStateToGuiInterface()");
+        TranslateGuiInterfaceToGuiEvents(lpGuiInput, lpGameStateOutput->GetGameStateToGuiInterface());
+        CgsGui::GuiEventTimeInfo lTimeInfo;
+        lTimeInfo.Set(lpGameTimer->GetCurrentTimeStep(), lGameTime.GetFloatVal());
+        lpGuiInput->GetGuiEvents()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lTimeInfo), 26, sizeof(lTimeInfo));
+    }
+
+    // ARTIST 823F0758; the final two arguments are the 16-bit update set
+    // and the START-pressed port. Effects output is not read by this body.
+    void BrnGameModule::DoUpdate_GUI(
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+        CgsGui::ViewIO::InputBuffer* lpGuiViewInput,
+        const CgsInput::InputIO::OutputBuffer* lpInputOutput,
+        const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput,
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
+        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
+        const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutput,
+        CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+        CgsGui::ModelIO::OutputBuffer* lpGuiModelOutput,
+        BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutput,
+        BrnEffects::EffectsIO::OutputBuffer* /*lpEffectsOutput*/,
+        BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+        const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput,
+        BrnUpdateSet lUpdateSet, u32 liStartPressedPort)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GUI);
+        CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miGuiModuleUpdate);
+        lpGuiOutput->Clear();
+        lpGuiModelOutput->Clear();
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GUI_Bridge);
+
+        CgsModule::LockBuffersForIO(lpGuiInput, lpInputOutput, lpGameStateOutput,
+                                    lpWorldOutput, lpReplayOutput, lpDirectorOutput);
+        BridgeWorldToGui(lpGuiInput, lpWorldOutput);
+        BridgeControllerToGui(lpGuiInput, lpInputOutput);
+        BridgeGameStateToGui(lpGuiInput, lpGameStateOutput);
+        BridgeDirectorToGui(lpGuiInput, lpDirectorOutput);
+        BridgeReplayToGui(lpGuiInput, lpReplayOutput);
+        lpNetworkOutput->LockForRead();
+        BridgeNetworkToGui(lpGuiInput, lpNetworkOutput);
+        lpNetworkOutput->UnlockForRead();
+
+        // DecFIGS names the original static local sfProgressCounter. ARTIST
+        // 823F088C..0908 increments it by 0.5 modulo 100; render-set bit 0x80
+        // publishes -1 without advancing that counter.
+        static f32 sfProgressCounter = 0.0f;
+        f32 lfProgress = -1.0f;
+        if ((lUpdateSet & 0x80) == 0)
+        {
+            sfProgressCounter = std::fmod(sfProgressCounter + 0.5f, 100.0f);
+            lfProgress = sfProgressCounter;
+        }
+        lpGuiInput->GetGuiEvents()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lfProgress), 225, sizeof(lfProgress));
+        if (liStartPressedPort != CgsInput::KU_NUMBER_OF_PADS)
+        {
+            lpGuiInput->GetGuiEvents()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&liStartPressedPort), 143,
+                sizeof(liStartPressedPort));
+        }
+        BridgeGameToGui(lpGuiInput);
+        CgsModule::UnlockBuffersForIO(lpGuiInput, lpInputOutput, lpGameStateOutput,
+                                      lpWorldOutput, lpReplayOutput, lpDirectorOutput);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GUI_Bridge);
+
+        lpGameDataInput->LockForWrite();
+        lpGameDataOutput->LockForRead();
+        if (!mbDiskError)
+        {
+            mGuiModule.Update(lUpdateSet, lpInputBufferStack, lpOutputBufferStack,
+                              lpGuiInput, lpGuiOutput, lpGuiModelOutput, lpGuiViewInput,
+                              lpGameDataInput, lpGameDataOutput, true);
+        }
+        lpGameDataOutput->UnlockForRead();
+        lpGameDataInput->UnlockForWrite();
+        lpGuiOutput->LockForRead();
+        BridgeGuiToGame(static_cast<const CgsGui::CgsGuiModuleIO::OutputBuffer*>(lpGuiOutput));
+        lpGuiOutput->UnlockForRead();
+        CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miGuiModuleUpdate);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GUI);
+    }
+
+    // ARTIST 823DD2A0. The output belongs to the real pre-simulation producer;
+    // the SIM TimerStatus snapshot is serialised through the original channel.
+    void BrnGameModule::DoUpdate_ReplaysPreSim(
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* /*lpOutputBufferStack*/,
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
+        BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutput,
+        BrnUpdateSet lUpdateSet)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Replay);
+        CgsModule::IOHelper<BrnReplays::ReplayIO::InputBuffer_PreSim> lReplayInput(
+            lpInputBufferStack, "ReplaysPreSim");
+        BrnReplays::ReplayIO::InputBuffer_PreSim* const lpReplayInput = lReplayInput;
+        CgsModule::LockBuffersForIO(lpReplayInput, lpGameStateOutput);
+        lpReplayInput->AppendGameActionQueue(lpGameStateOutput->GetGameActionQueue());
+        lpReplayInput->SetTimerStatusInterface(&mTimerStatusInterface);
+        CgsModule::UnlockBuffersForIO(lpReplayInput, lpGameStateOutput);
+        mReplayModule.Update_PreSim(lpReplayInput, lpReplayOutput, lUpdateSet);
+        mGameModuleSerialiser.Lock();
+        mGameModuleSerialiser.Serialise(mTimerStatusInterface.GetSimTimerStatus(), 24);
+        mGameModuleSerialiser.Unlock();
+        mGameModuleSerialiser.SetDataReady(true);
+        mGameModuleSerialiser.SetDataRestored(true);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Replay);
+    }
 
     // The per-frame spines the in-game flow state drives (MainGameFlowStateInGame::
     // Update -> DoUpdate, ::Render -> DoDispatch). On the X360 these run the game
@@ -4346,7 +4739,7 @@ namespace BrnGame
         // most want it.
         mDebugManager.Update(mGameTimer.GetRate() * mGameTimer.GetScaleCurrent());
         // FLAG PC-platform leaf: opt-in maximum command at the original debug
-        // callback phase (ARTIST823CB598), before flow/vehicle physics updates.
+        // callback phase (ARTIST 823CB598), before flow/vehicle physics updates.
         static const bool sbMaxPresetProbePC = (std::getenv("BRN_PLAYTEST_MAX_DEFORM_AT") != nullptr);
         if (sbMaxPresetProbePC)
             BrnPhysics::Deformation::DeformationManager::RunMaxPresetProbePCDebugUpdate(
@@ -4417,9 +4810,7 @@ namespace BrnGame
                 // console loads them: the update input/output buffer stacks and the input module's
                 // output buffer (the PC keeps that one as mPcInputOutputBuffer). The START-pressed port
                 // it returns feeds only the flagged pad scan (see the body), so it is not consumed here.
-                if ((leState == BrnGameMainFlowController::E_MGS_IN_GAME)
-                    || ((leState >= BrnGameMainFlowController::E_MGS_CHECK_DISK_SPACE)
-                        && (leState <= BrnGameMainFlowController::E_MGS_COMPLETE_LOADING)))
+                if (mpNetworkOutputBuffer != 0)
                 {
                     DoUpdate_InputPreWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
                                            &mPcInputOutputBuffer);
@@ -4847,7 +5238,7 @@ namespace BrnGame
                 // the input buffer.
                 // The source is read-locked and the GUI input buffer write-locked -- the console's
                 // own bracket for this bridge (its own assert names lpGuiInput->GetGuiEvents()).
-                if (!mbSteppingFrames && mpGuiInputBuffer != 0)
+                if (mpNetworkOutputBuffer != 0 && !mbSteppingFrames)
                 {
                     const BrnGameState::GameStateModuleIO::OutputBuffer* lpcGameStateOutput =
                         mGameStateModule.GetOutputBuffer();
@@ -4915,7 +5306,7 @@ namespace BrnGame
                 // ours ran it unconditionally, so single-stepping a frame also advanced the
                 // GUI a frame and the two were never actually in step. mbSteppingFrames is
                 // the PC's name for that byte.
-                if (!mbSteppingFrames)
+                if (mpNetworkOutputBuffer != 0 && !mbSteppingFrames)
                 {
                 // ⭐ CLEAR FIRST, 2026-08-16 (boot audit F-P3-8). DoUpdate_GUI @0x823F0758
                 // opens by clearing BOTH out buffers, then runs its bridges; we cleared the
@@ -4941,10 +5332,6 @@ namespace BrnGame
                             std::chrono::steady_clock::now().time_since_epoch()).count());
                     miLanguageCycleTimerLo   = static_cast<s32>(liNowMs / 1000);
                     mfLanguageCycleTimerFrac = static_cast<f32>(liNowMs % 1000) * 0.001f;
-
-                    mPcInputOutputBuffer.LockForWrite();
-                    CgsInput::InputPadsPC::UpdatePlayer0(&mPcInputOutputBuffer);
-                    mPcInputOutputBuffer.UnlockForWrite();
 
                     mPcInputOutputBuffer.LockForRead();
                     mpGuiInputBuffer->LockForWrite();
@@ -5242,29 +5629,6 @@ namespace BrnGame
                     // The GUI->game out-event consumer (X360 0x823CB758): latch the flow
                     // commands (70/71, the loading screen 19/20, ...) the states posted.
                     BridgeGuiToGame(mGuiModule.GetGuiOutQueue());
-                    // Native caller boundary: retain the current loading GUI
-                    // Update timing until the authentic typed loading legs land.
-                    // Full dispatch owns its own original GUI Render later.
-                    bool lbRenderLoadingGui = false;
-                    if (leState == BrnGameMainFlowController::E_MGS_INITIAL_LOADING_SCREEN)
-                    {
-                        MainGameFlowStateInitialLoadingScreen* const lpInitialState =
-                            static_cast<MainGameFlowStateInitialLoadingScreen*>(mMainFlowStateMachine.GetState(leState));
-                        lbRenderLoadingGui = lpInitialState->meLoadingScreenStage
-                            > MainGameFlowStateInitialLoadingScreen::E_LOADINGSTAGE_GUIMODULE;
-                    }
-                    else if (leState >= BrnGameMainFlowController::E_MGS_CHECK_DISK_SPACE
-                             && leState <= BrnGameMainFlowController::E_MGS_COMPLETE_LOADING)
-                    {
-                        lbRenderLoadingGui = gBrnScriptedLoadStage != 8;
-                    }
-                    if (lbRenderLoadingGui)
-                    {
-                        LoadingScriptedState* const lpLoadingState =
-                            static_cast<LoadingScriptedState*>(mMainFlowStateMachine.GetState(leState));
-                        lpLoadingState->RenderGUI(mpGuiInputBuffer, mpGuiOutputBuffer,
-                            mpGuiModelOutputBuffer, mGuiModule.GetViewInputBuffer(), false);
-                    }
                 }
                 // ---- the DIRECTOR's post-GUI pass (X360 module-scheduler order) -----------
                 // It runs BridgeGuiToDirector over the SAME out-queue, so the queue must still
@@ -5403,7 +5767,8 @@ namespace BrnGame
                 // burst started a frame late the same way. Game-state requests were not affected.
                 // It runs BEFORE the game-action retire below, which clears the game-state output's
                 // request slot this drains.
-                UpdateTimers();
+                if (mpNetworkOutputBuffer != 0)
+                    UpdateTimers();
 
                 // THE GAME-ACTION RETIRE (FLAG PC lifecycle, see the note above DoUpdate_Director's
                 // GUI block). On the console the game-state output buffer is re-Constructed every
@@ -5456,6 +5821,9 @@ namespace BrnGame
                     }
                 }
 
+                // The entire IO update is complete, including branches that
+                // intentionally leave the original constructed camera unchanged.
+                // Retain these actual bytes for later zero-substep PC presents.
                 LatchDispatchCamera();
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_EachUpdate);
 
@@ -5615,6 +5983,16 @@ namespace BrnGame
 
         mInputModule.PreWorldUpdate(lpInputBufferStack, lpOutputBufferStack,
                                     lpInputModulePreWorldInputBuffer, lpInputModuleOutput, !mbDiskError);
+
+        // FLAG PC-platform leaf: the native keyboard/XInput fill supplies the
+        // same output record as InputPads::Update, at its original pre-world
+        // producer phase. Every controller bridge below reads this tick.
+        if (!mbDiskError)
+        {
+            lpInputModuleOutput->LockForWrite();
+            CgsInput::InputPadsPC::UpdatePlayer0(lpInputModuleOutput);
+            lpInputModuleOutput->UnlockForWrite();
+        }
 
         // The console's START-pressed port: KU_NUMBER_OF_PADS (4) unless the scan below finds one.
         u32 liStartPressedPort = CgsInput::KU_NUMBER_OF_PADS;

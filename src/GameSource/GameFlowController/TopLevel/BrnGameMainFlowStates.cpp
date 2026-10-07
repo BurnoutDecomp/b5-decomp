@@ -1,5 +1,3 @@
-#include "GameShared/GameClasses/Gui/CgsGuiShared.h"
-#include "GameSource/Graphics/BrnRendererModuleIO.h"
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
 
 #include <cstdio>   // std::snprintf (the load-stage witness strings below)
@@ -23,6 +21,10 @@
 #include "GameShared/GameClasses/Module/CgsModuleUtils.h"   // CgsModule::LockBuffersForIO (the partial spine's network -> GUI bracket)
 #include "GameSource/Network/BrnNetworkModule.h"              // BrnNetwork::BrnNetworkModule::ProcessBeforeSimulation (the partial spine)
 #include "GameSource/Network/BrnNetworkModuleIO.h"            // BrnNetworkModuleIO::PreSimulationInputBuffer / OutputBuffer
+#include "GameSource/Graphics/BrnRendererModuleIO.h"
+#include "GameShared/GameClasses/Gui/CgsGuiShared.h"
+#include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"
+#include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
@@ -94,7 +96,8 @@ void LoadingScriptedState::Render()
         BrnGame::GetMainGameModule()->DoDispatch();
 }
 
-// ARTIST 823CE098: original supplied-IO GUI command producer.
+// ARTIST 823CE098. Renderer preparation and disk-error publication run even
+// when the original skip argument suppresses GUI rendering.
 void LoadingScriptedState::RenderGUI(
     CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
     CgsGui::CgsGuiModuleIO::OutputBuffer* /*lpGuiOutput*/,
@@ -720,9 +723,7 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
     // BridgeWorldToResource @0x823E5300 -- the streamer's request forward.
     if (lpGameDataInputBuffer != 0)
     {
-        // The X360 brackets the bridge with the standard destination-write /
-        // source-read pair; the GameData input's own accessors assert the write lock.
-        lpGameDataInputBuffer->LockForWrite();
+        // The flow caller holds the GameData write lock across this update.
         lpWorldOutput->LockForRead();
         const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputRead = lpWorldOutput;
         lpGameDataInputBuffer->AppendRequestInterface<4096>(
@@ -730,7 +731,6 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
         lpGameDataInputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
             lpWorldOutputRead->GetAttribSysVaultRequestInterface()->mRequestQueue);
         lpWorldOutput->UnlockForRead();
-        lpGameDataInputBuffer->UnlockForWrite();
     }
 
     if (lbOwnsOutputBuffer)
@@ -1029,8 +1029,15 @@ void LoadingScriptedState::Update()
             }
         }
 
-        s_GameDataOutput.UnlockForRead();
-        s_GameDataInput.UnlockForWrite();
+    }
+
+    u32 liStartPressedPort = CgsInput::KU_NUMBER_OF_PADS;
+    if (lbPartialSpine)
+    {
+        liStartPressedPort = lpGameModule->DoUpdate_InputPreWorld(
+            lpGameModule->GetUpdateInputBufferStack(),
+            lpGameModule->GetUpdateOutputBufferStack(),
+            lpGameModule->GetPcInputOutputBuffer());
     }
 
     // ---- the SOUND pre-update leg (X360 @0x823F2714 -- phase C4) ------------------------
@@ -1120,6 +1127,13 @@ void LoadingScriptedState::Update()
     if (lbPartialSpine)
     {
         lpGameModule->GetGameStateModule().PreWorldUpdateSetupPlayerCarBringUp();
+        CgsModule::LockBuffersForIO(lpGameModule->GetGuiInputBuffer(),
+                                    lpGameModule->GetGameStateModule().GetOutputBuffer());
+        lpGameModule->BridgeGameStateToGui(
+            lpGameModule->GetGuiInputBuffer(),
+            lpGameModule->GetGameStateModule().GetOutputBuffer());
+        CgsModule::UnlockBuffersForIO(lpGameModule->GetGuiInputBuffer(),
+                                      lpGameModule->GetGameStateModule().GetOutputBuffer());
     }
 
     {
@@ -1143,7 +1157,11 @@ void LoadingScriptedState::Update()
         // pre-update buffer threads through UpdateWorldModule to the staging site.
         if (gBrnScriptedLoadStage > 5)
         {
+            if (!lbPartialSpine)
+                s_GameDataInput.LockForWrite();
             UpdateWorldModule(&s_GameDataInput, lpSoundPreUpdateOutput);
+            if (!lbPartialSpine)
+                s_GameDataInput.UnlockForWrite();
         }
 
         // The GameData pump used to run here. It has MOVED to the frame level -- the game
@@ -1151,6 +1169,45 @@ void LoadingScriptedState::Update()
         // IThreadClass::ResourceUpdateThread @0x823BC9B8) -- so that EVERY flow state's staged
         // requests are serviced, not just this spine's. The X360's scripted-load spine
         // @0x823F22D8 does not pump the module either: the resource thread does, concurrently.
+    }
+
+    if (lbPartialSpine)
+    {
+        CgsGui::CgsGuiModuleIO::InputBuffer* const lpGuiInput = lpGameModule->GetGuiInputBuffer();
+        CgsGui::CgsGuiModuleIO::OutputBuffer* const lpGuiOutput = lpGameModule->GetGuiOutputBuffer();
+        CgsGui::ModelIO::OutputBuffer* const lpGuiModelOutput = lpGameModule->GetGuiModelOutputBuffer();
+        CgsInput::InputIO::OutputBuffer* const lpInputOutput = lpGameModule->GetPcInputOutputBuffer();
+
+        // ARTIST 823F2910..29E0. The partial spine updates the game timer,
+        // stages its time and START event, then invokes the typed GUI update.
+        lpGameModule->GetGameTimer().Update();
+        lpGuiInput->LockForWrite();
+        CgsGui::GuiEventTimeInfo lTimeInfo;
+        const CgsSystem::Timer& lrTimer = lpGameModule->GetGameTimer();
+        lTimeInfo.Set(lrTimer.GetRate() * lrTimer.GetScaleCurrent(),
+                      static_cast<f32>(lrTimer.GetAccumTicks()) + lrTimer.GetAccumulator());
+        lpGuiInput->GetGuiEvents()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lTimeInfo), 26, sizeof(lTimeInfo));
+        lpGuiInput->UnlockForWrite();
+        lpGuiOutput->Clear();
+        lpGuiModelOutput->Clear();
+        lpGuiInput->LockForWrite();
+        if (liStartPressedPort != CgsInput::KU_NUMBER_OF_PADS)
+        {
+            lpGuiInput->GetGuiEvents()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&liStartPressedPort), 143,
+                sizeof(liStartPressedPort));
+        }
+        lpGameModule->BridgeGameToGui(lpGuiInput);
+        lpInputOutput->LockForRead();
+        lpGameModule->BridgeControllerToGui(lpGuiInput, lpInputOutput);
+        lpInputOutput->UnlockForRead();
+        lpGuiInput->UnlockForWrite();
+        lpGameModule->GetGuiModule().Update(
+            lpGameModule->ConstructUpdateSetFromFsm(),
+            lpGameModule->GetUpdateInputBufferStack(), lpGameModule->GetUpdateOutputBufferStack(),
+            lpGuiInput, lpGuiOutput, lpGuiModelOutput, lpGameModule->GetGuiViewInputBuffer(),
+            &s_GameDataInput, &s_GameDataOutput, false);
     }
 
     // ---- the post-world SOUND legs (X360 @0x823F2A14-0x823F2B74 -- phase C4) ------------
@@ -1215,7 +1272,8 @@ void LoadingScriptedState::Update()
         // the same pair LoadSoundModule forwards during the prepare stages, now per
         // frame. Bracket: W(gameDataIn) + R(rootOut), the DriveWorldUpdateFrame idiom.
         {
-            s_GameDataInput.LockForWrite();
+            if (!lbPartialSpine)
+                s_GameDataInput.LockForWrite();
             lpSoundRootOutput->LockForRead();
             {
                 const BrnSound::Module::Io::RootOutputBuffer* lpSoundRootOutputRead = lpSoundRootOutput;
@@ -1225,8 +1283,29 @@ void LoadingScriptedState::Update()
                     lpSoundRootOutputRead->GetResourceRequestInterface()->mRequestQueue);
             }
             lpSoundRootOutput->UnlockForRead();
-            s_GameDataInput.UnlockForWrite();
+            if (!lbPartialSpine)
+                s_GameDataInput.UnlockForWrite();
         }
+    }
+
+    if (lbPartialSpine)
+    {
+        CgsGui::CgsGuiModuleIO::OutputBuffer* const lpGuiOutput = lpGameModule->GetGuiOutputBuffer();
+        CgsGui::ModelIO::OutputBuffer* const lpGuiModelOutput = lpGameModule->GetGuiModelOutputBuffer();
+        lpGuiModelOutput->LockForRead();
+        lpGuiOutput->LockForRead();
+        lpGameModule->BridgeGuiToResource(&s_GameDataInput, lpGuiModelOutput, lpGuiOutput);
+        lpGameModule->BridgeGuiToGame(
+            static_cast<const CgsGui::CgsGuiModuleIO::OutputBuffer*>(lpGuiOutput));
+        lpGuiOutput->UnlockForRead();
+        lpGuiModelOutput->UnlockForRead();
+        if (gBrnScriptedLoadStage != 8)
+        {
+            RenderGUI(lpGameModule->GetGuiInputBuffer(), lpGuiOutput, lpGuiModelOutput,
+                       lpGameModule->GetGuiViewInputBuffer(), false);
+        }
+        s_GameDataInput.UnlockForWrite();
+        s_GameDataOutput.UnlockForRead();
     }
 
     // ---- the sound trio teardown (X360 @0x823F2C88/0x823F2C98/0x823F2CA8) ---------------
@@ -1406,14 +1485,9 @@ namespace
     }
 }
 
-// @ 0x823EF688 - the real boot-load stage machine: load one engine module per stage
-// (Controller -> GUI -> Director -> Sound -> Network), then the GameDataModule prepare, then
-// FinishLoading. The X360 also creates the GUI IO buffers and renders + bridges the GUI each frame
-// while loading (RendererIO + BrnRendererModule::Update + BridgeGameToGui/BridgeGuiToResource/
-// BridgeGuiToGame + RenderGUI + GuiEventTimeInfo). That render/bridge loop needs the per-module IO
-// types (CgsGui::CgsGuiModuleIO / ViewIO / ModelIO / RendererIO) which aren't reconstructed yet, so
-// it is a [follow-on]; for now the GUI + MovieManager keep running through BrnGameModule's inline
-// hookup. The per-stage LoadXxxModule bodies are also [stubs] (interim dwell) until reconstructed.
+// ARTIST 823EF688. The loading state owns its GUI update/render leg. Stages
+// through the GUI load prepare only the renderer; later stages update the GUI
+// and render the freshly produced view before releasing the GameData pair.
 void MainGameFlowStateInitialLoadingScreen::Update()
 {
     // ⭐ THE PER-FRAME GAMEDATA IO BRACKET (X360 @0x823EF688, its first statements).
@@ -1427,6 +1501,11 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         BrnGameMainFlowController::GetScriptedLoadGameDataInput();
     BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
         BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
+    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    CgsGui::CgsGuiModuleIO::InputBuffer* const lpGuiInput = lpGameModule->GetGuiInputBuffer();
+    CgsGui::CgsGuiModuleIO::OutputBuffer* const lpGuiOutput = lpGameModule->GetGuiOutputBuffer();
+    CgsGui::ModelIO::OutputBuffer* const lpGuiModelOutput = lpGameModule->GetGuiModelOutputBuffer();
+    CgsGui::ViewIO::InputBuffer* const lpGuiViewInput = lpGameModule->GetGuiViewInputBuffer();
 
     // ⭐ GATED 2026-08-17 (boot audit F-P5-7). The old note claimed the console "re-posts the
     // show command every update tick". It does not: the `stw 1 -> +0x9990` lives in the
@@ -1435,9 +1514,6 @@ void MainGameFlowStateInitialLoadingScreen::Update()
     // command protocol, and GamePrepare's not-done tail publishes it as well (restored with
     // F-P2-4). Posting it unconditionally from here on every tick fought both of those for
     // the slot, on a one-shot word that each end-of-frame swap wipes.
-    if (meLoadingScreenStage <= E_LOADINGSTAGE_GUIMODULE)
-        GetDispatchWriteBuffer()->ShowLoadingScreen();
-
     // The debug manager updates every frame while loading (X360 gates this on stage > Controller).
     if (meLoadingScreenStage > E_LOADINGSTAGE_CONTROLLERMODULE)
     {
@@ -1652,35 +1728,50 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         break;
     }
 
-    // @0x823EFA48-6C -- the GUI-PRELOAD-DONE LATCH, run every frame right after
-    // BridgeGuiToGame:
-    //     if (!this->mbGuiPreloadDone && gm[0x9A0648]) this->mbGuiPreloadDone = 1;
-    // gm+0x9A0648 is the byte BridgeGuiToGame @0x823CB758 sets from GUI command 70 (the
-    // HUD flow's "phase complete"); on PC that is BrnGameModule::mbGuiPhaseComplete
-    // (+10094152), set by the same command in the same bridge. The member was WRITE-ONLY
-    // before this -- reset in Construct and never read -- so FinishLoading had nothing to
-    // gate on. It is a sticky latch: once set it stays set for the life of the state.
-    // The PC's BridgeGuiToGame runs later in the same sub-step (from GameMain rather than
-    // from this body), so the value read here is the previous sub-step's -- one sub-step of
-    // latency on a signal that is latched anyway.
-    if (!mbGuiPreloadDone)
+    if (meLoadingScreenStage <= E_LOADINGSTAGE_GUIMODULE)
     {
-        BrnGame::BrnGameModule* lpGameModuleForLatch = BrnGame::GetMainGameModule();
-        if (lpGameModuleForLatch != 0 && lpGameModuleForLatch->IsGuiPhaseComplete())
-        {
-            mbGuiPreloadDone = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "InitialLoadingScreen: GUI preload done (command 70) -- loading may finish\n";
-        }
+        CgsModule::IOHelper<RendererIO::InputBuffer> lpRendererInput(
+            lpGameModule->GetUpdateInputBufferStack(), "Render");
+        CgsModule::IOHelper<RendererIO::OutputBuffer> lpRendererOutput(
+            lpGameModule->GetUpdateOutputBufferStack(), "Render");
+        lpGameModule->GetRenderModule().Update(
+            lpGameModule->GetUpdateInputBufferStack(), lpGameModule->GetUpdateOutputBufferStack(),
+            lpRendererInput, lpRendererOutput);
+        GetDispatchWriteBuffer()->ShowLoadingScreen();
     }
-
-    // Close the frame's GameData IO bracket (X360 @0x823EF688's tail: UnlockForWrite(input),
-    // UnlockForRead(output), then the GUI IO buffer teardown). The resource pump takes its own
-    // locks, so it can only run once these are released -- see BrnGameModule's per-frame
-    // resource tick.
-    lpGameDataOutput->UnlockForRead();
+    else
+    {
+        // ARTIST 823EF960..FA98: time -> game bridge -> GUI update ->
+        // resource/game consumers -> phase latch -> RenderGUI.
+        lpGameModule->GetGameTimer().Update();
+        lpGuiInput->LockForWrite();
+        CgsGui::GuiEventTimeInfo lTimeInfo;
+        const CgsSystem::Timer& lrTimer = lpGameModule->GetGameTimer();
+        lTimeInfo.Set(lrTimer.GetRate() * lrTimer.GetScaleCurrent(),
+                      static_cast<f32>(lrTimer.GetAccumTicks()) + lrTimer.GetAccumulator());
+        lpGuiInput->GetGuiEvents()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lTimeInfo), 26, sizeof(lTimeInfo));
+        lpGuiInput->UnlockForWrite();
+        lpGuiInput->LockForWrite();
+        lpGameModule->BridgeGameToGui(lpGuiInput);
+        lpGuiInput->UnlockForWrite();
+        lpGameModule->GetGuiModule().Update(
+            static_cast<BrnUpdateSet>(64), lpGameModule->GetUpdateInputBufferStack(),
+            lpGameModule->GetUpdateOutputBufferStack(), lpGuiInput, lpGuiOutput,
+            lpGuiModelOutput, lpGuiViewInput, lpGameDataInput, lpGameDataOutput, false);
+        lpGuiModelOutput->LockForRead();
+        lpGuiOutput->LockForRead();
+        lpGameModule->BridgeGuiToResource(lpGameDataInput, lpGuiModelOutput, lpGuiOutput);
+        lpGameModule->BridgeGuiToGame(
+            static_cast<const CgsGui::CgsGuiModuleIO::OutputBuffer*>(lpGuiOutput));
+        if (!mbGuiPreloadDone && lpGameModule->IsGuiPhaseComplete())
+            mbGuiPreloadDone = true;
+        lpGuiOutput->UnlockForRead();
+        lpGuiModelOutput->UnlockForRead();
+        RenderGUI(lpGuiInput, lpGuiOutput, lpGuiModelOutput, lpGuiViewInput, false);
+    }
     lpGameDataInput->UnlockForWrite();
+    lpGameDataOutput->UnlockForRead();
 }
 
 // Advance to the next load stage + log it (the X360 stages are visible in BrnGame.log so the real
@@ -2062,5 +2153,7 @@ void DriveInGameWorldUpdate(BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpS
         }
     }
 
+    s_GameDataInput.LockForWrite();
     DriveWorldUpdateFrame(&s_GameDataInput, lUpdateSet, lpSoundPreUpdateOutput);
+    s_GameDataInput.UnlockForWrite();
 }

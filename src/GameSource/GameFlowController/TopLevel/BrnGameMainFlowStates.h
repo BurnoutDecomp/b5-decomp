@@ -31,11 +31,6 @@
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }
 namespace BrnGame { class BrnGameModule; }
-namespace CgsGui {
-namespace CgsGuiModuleIO { struct InputBuffer; struct OutputBuffer; }
-namespace ModelIO { struct OutputBuffer; }
-namespace ViewIO { struct InputBuffer; }
-}
 
 // The GameData per-frame IO payloads the scripted-load helpers thread through (pointer-only
 // here; the helper bodies include the real home, GameSource/Resource/BrnGameDataModuleIO.h).
@@ -44,6 +39,11 @@ namespace BrnResource { namespace GameDataIO { struct InputBuffer; struct Output
 // The sound pre-update payload the spine threads into the world drive for BridgeSoundToWorld
 // (pointer-only here; real home GameSource/Sound/Module/BrnRootSoundModuleIo.h).
 namespace BrnSound { namespace Module { namespace Io { struct RootPreUpdateOutputBuffer; } } }
+namespace CgsGui {
+namespace CgsGuiModuleIO { struct InputBuffer; struct OutputBuffer; }
+namespace ModelIO { struct OutputBuffer; }
+namespace ViewIO { struct InputBuffer; }
+}
 
 // The scripted world-load stage every loading-scripted state shares (defined in
 // BrnGameMainFlowStates.cpp). At 8 the load is done and a loading-scripted state's Update runs
@@ -103,7 +103,8 @@ struct LoadingScriptedState : public MainGameFlowState
     virtual void FinishLoading();   // vtable +16
 
 protected:
-    // Native host retains the existing loading Update timing pending typed migration.
+    // The native host retains the current loading producer timing while the
+    // authentic typed loading Update legs are recovered separately.
     friend class BrnGame::BrnGameModule;
     // ARTIST 823CE098; original callers supply these real GUI IO buffers.
     void RenderGUI(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
@@ -198,7 +199,7 @@ protected:
 // --- leaves -----------------------------------------------------------------------------
 struct MainGameFlowStateInitialLoadingScreen : public LoadingScriptedState
 {
-    // Original own-stage GUI helper gate at the native caller boundary.
+    // The native caller preserves the original own-stage RenderGUI gate.
     friend class BrnGame::BrnGameModule;
     enum ELoadingScreenStage
     {

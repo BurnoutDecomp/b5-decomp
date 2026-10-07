@@ -53,5 +53,10 @@ namespace BrnReplays
         // not a live keyframe, shrinking miNumFrunks. Defined in
         // BrnReplayStreamHeader.cpp. Called by ReplayModule::UpdateRecording_PreSim.
         StreamHeader* ChopOffTailFrames();
+
+        // Original inline serialized-pointer transforms: recording 82660630..4C
+        // and playback 826609A8..B8. The field is relative only in the file image.
+        void FixDown();
+        void FixUp();
     };
 }
