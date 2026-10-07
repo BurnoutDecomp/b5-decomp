@@ -38,6 +38,7 @@
 #include "SharedClasses/DataLists/VehicleListEntry.h"                     // BrnResource::VehicleListEntry
 
 #include <cstring>   // std::strncpy / std::memset
+#include <cstdlib>   // std::getenv (BRN_CARSEL_TAPSTEP)
 
 namespace BrnGui
 {
@@ -74,6 +75,20 @@ namespace BrnGui
 
         // The GuiAudioTriggerEvent action word TriggerSound posts (X360 `li r4, 7`).
         const s32 KI_AUDIO_ACTION_CAROUSEL = 7;
+
+        // [FLAG PC harness lever] BRN_CARSEL_TAPSTEP=1: a harness menu tap is ONE input update,
+        // and it reaches this screen as DOWN + RELEASED with no PRESSED in between, so the
+        // carousel never steps. With the lever on, a GUI_LEFT / GUI_RIGHT release that saw no
+        // press is replayed as the press, followed by the reset a d-pad release makes. Read once.
+        bool IsCarSelTapStepLever()
+        {
+            static const bool sbEnabled = []()
+            {
+                const char* lpcValue = std::getenv("BRN_CARSEL_TAPSTEP");
+                return lpcValue != 0 && lpcValue[0] != '\0' && lpcValue[0] != '0';
+            }();
+            return sbEnabled;
+        }
 
         // The audio trigger record's queued event id. ⓘ The committed
         // BrnGui::GuiAudioTriggerEvent models this SAME 100-byte record under id 201 (its
@@ -232,6 +247,24 @@ namespace BrnGui
         CGS_ASSERT(lpEvent != 0, "lpEvent");   // cpp:587
 
         CarSelectMain::HandleControllerInput(lpEvent, liEventKind);
+
+        // [FLAG PC harness lever] see IsCarSelTapStepLever.
+        if (liEventKind == KI_EVENT_CONTROLLER_RELEASED && IsCarSelTapStepLever())
+        {
+            const ControllerButtonPayload* lpTap = reinterpret_cast<const ControllerButtonPayload*>(lpEvent);
+            if (lpTap->miButtonId == KI_ACTION_CAROUSEL_NEXT && muCarouselControllerRightPressedRefCount == 0u)
+            {
+                HandleControllerInput(lpEvent, KI_EVENT_CONTROLLER_PRESSED);
+                muCarouselControllerRightPressedRefCount = 0u;
+                return;
+            }
+            if (lpTap->miButtonId == KI_ACTION_CAROUSEL_PREV && muCarouselControllerLeftPressedRefCount == 0u)
+            {
+                HandleControllerInput(lpEvent, KI_EVENT_CONTROLLER_PRESSED);
+                muCarouselControllerLeftPressedRefCount = 0u;
+                return;
+            }
+        }
 
         switch (liEventKind)
         {

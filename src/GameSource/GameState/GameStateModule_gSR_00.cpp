@@ -84,11 +84,29 @@
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h" // RaceCarState::mfSpeedMPH (@972)
+#include "GameShared/GameClasses/World/CgsWorldMap2D.h"                 // WorldMap2D::GetValue (the case-95 arm)
+#include "SharedClasses/World/BrnWorldRegion.h"                         // WorldRegion (the case-95 arm's answer)
+#include <cstring>                                                      // memcpy (the case-95 arm's position)
 
 namespace BrnGameState
 {
 namespace
 {
+
+// [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_DISCO_DIAG), first 32 lines: the discovery
+// reward checks and the case-95 region answer.
+void DiscoveryWitness(const char* lpcWhat, s32 liA, s32 liB, s32 liC, s32 liD)
+{
+    static const bool sbDiag      = (getenv("BRN_DISCO_DIAG") != 0);
+    static s32        siLinesLeft = 32;
+    if (!sbDiag || siLinesLeft <= 0 || CgsDev::Log::gpDebugPrint == 0)
+    {
+        return;
+    }
+    --siLinesLeft;
+    *CgsDev::Log::gpDebugPrint << "[disco] " << lpcWhat << " " << liA << " " << liB << " " << liC
+                               << " " << liD << "\n";
+}
 
 // --------------------------------------------------------------------------------------------
 // The EventJunction lookup both CheckIfPlayerIsAtJunctionWithAnEvent and StartModeAtLights
@@ -438,15 +456,12 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
                         GameStateModuleIO::E_ACTION_REQUEST_AUTOSAVE,
                         static_cast<s32>(sizeof(lu8AutoSavePayload)));
 
-                    // ⛔ [PARKED] the arm's last two calls, @0x823907B0..0x823907E8:
-                    //     CheckForAllEventsOfATypeFound(profile, queue, lpRaceEvent->GetMode());
-                    //     CheckForAllEventsBeingFound(profile, queue);
-                    // GameStateModule::CheckForAllEventsBeingFound @0x82382460 is DECLARE-ONLY in
-                    // this tree (BrnGameStateModule.h:1027, grown for the DriveThruManager TU and
-                    // never bodied) and CheckForAllEventsOfATypeFound @0x823822C8 has no
-                    // declaration at all. Both are "have you now found every event / every event
-                    // of this type" trophy checks; neither feeds the action-201 record. Landing
-                    // the calls would add two unresolved externals to a MOUNTED TU.
+                    // Every event of this mode type found? Then every event at all? Each post its
+                    // own reward action (203 / 202); the queue is re-fetched for each call.
+                    CheckForAllEventsOfATypeFound(
+                        lpProfile, lpOutput->GetGameActionQueue(),
+                        static_cast<BrnProgression::RaceEventData::EModeType>(lpRaceEvent->GetMode()));
+                    CheckForAllEventsBeingFound(lpProfile, lpOutput->GetGameActionQueue());
                 }
             }
         }
@@ -1450,6 +1465,79 @@ void GameStateModule::StartModeAtLights(const GameStateModuleIO::PreWorldInputBu
 }
 
 // ==============================================================================================
+// GameStateModule::CheckForAllEventsOfATypeFound
+//
+// "Has the player now discovered every event of THIS mode type?" Walk ProgressionData's event
+// junction table; for each junction whose offline event has the searched mode (RaceEventData
+// +0xEC), count it and, if the profile's event record at the SAME index has its DISCOVERED bit
+// set, count it found. The profile's event table is indexed by junction index here, through
+// Profile::GetEvent (whose bounds assert the console inlines at every matching junction).
+// When none is missing, post action 203 (E_ACTION_ALL_EVENTS_OF_TYPE_DISCOVERED) with one
+// word: ProgressionManager::GetEvent(mode), the runtime mode type the HUD names. The bridge turns
+// it into GUI 313, which HudMessageAnalyzer::HandleAllJunctionsOfTypeFound shows.
+// An empty junction table skips the loop and the assert and posts (0 found of 0).
+// ==============================================================================================
+void GameStateModule::CheckForAllEventsOfATypeFound(const BrnProgression::Profile* lpProfile,
+                                                    GameStateModuleIO::GameActionQueue* lpQueue,
+                                                    BrnProgression::RaceEventData::EModeType leModeType)
+{
+    u32 luEventCountForSearchingType      = 0;
+    u32 luEventFoundCountForSearchingType = 0;
+
+    const BrnProgression::ProgressionData* lpProgressionData =
+        mProgressionManager.GetProgressionData();
+    CGS_ASSERT(lpProgressionData != NULL, "lpProgressionData != NULL");
+    // [GUARD] the console dereferences the null table after the assert (this file's banner).
+    if (lpProgressionData == 0)
+    {
+        return;
+    }
+
+    const u32 luJunctionCount = lpProgressionData->GetEventJunctionCount();
+    if (luJunctionCount != 0)
+    {
+        for (u32 luIndex = 0; luIndex < lpProgressionData->GetEventJunctionCount(); ++luIndex)
+        {
+            const BrnProgression::EventJunction* lpJunction =
+                lpProgressionData->GetEventJunction(luIndex);
+            if (static_cast<s32>(lpJunction->GetOfflineEvent()->GetMode()) ==
+                static_cast<s32>(leModeType))
+            {
+                ++luEventCountForSearchingType;
+                if (lpProfile->GetEvent(luIndex)->IsFlagSet(
+                        BrnProgression::ProfileEvent::E_FLAG_DISCOVERED))
+                {
+                    ++luEventFoundCountForSearchingType;
+                }
+            }
+        }
+
+        CGS_ASSERT(luEventFoundCountForSearchingType <= luEventCountForSearchingType,
+                   "luEventFoundCountForSearchingType <= luEventCountForSearchingType");
+        DiscoveryWitness("all-of-type check (mode found total)", static_cast<s32>(leModeType),
+                         static_cast<s32>(luEventFoundCountForSearchingType),
+                         static_cast<s32>(luEventCountForSearchingType), 0);
+        if (luEventFoundCountForSearchingType < luEventCountForSearchingType)
+        {
+            return;
+        }
+    }
+
+    // Action 203, size 4 (E_ACTION_ALL_EVENTS_OF_TYPE_DISCOVERED); BrnGameActions.h does
+    // not enumerate it yet.
+    const s32 KI_ACTION_ALL_EVENTS_OF_TYPE_DISCOVERED = 203;
+    const s32 liGameModeType = mProgressionManager.GetEvent(static_cast<s32>(leModeType));
+    lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liGameModeType),
+                      KI_ACTION_ALL_EVENTS_OF_TYPE_DISCOVERED,
+                      static_cast<s32>(sizeof(liGameModeType)));
+
+    DiscoveryWitness("all-of-type POSTED action 203 (mode found total payload)",
+                     static_cast<s32>(leModeType),
+                     static_cast<s32>(luEventFoundCountForSearchingType),
+                     static_cast<s32>(luEventCountForSearchingType), liGameModeType);
+}
+
+// ==============================================================================================
 // GameStateModule::CheckForAllEventsBeingFound  (X360 0x82382460)
 //
 // ⭐ THE [PARKED] NOTE IN OnEventFinishUpdateProfile ABOVE IS PAID -- and this is not a
@@ -1515,11 +1603,76 @@ void GameStateModule::CheckForAllEventsBeingFound(BrnProgression::Profile* lpPro
     if (luIndex >= lpProfile->GetEventCount())
     {
         mAchievementManager.OnFindAllEvents();
+        DiscoveryWitness("all-events POSTED action 202 (index count)", -1, static_cast<s32>(luIndex),
+                         static_cast<s32>(lpProfile->GetEventCount()), -1);
 
         const u8 lu8Payload = 0;   // FLAG: the console hands AddEvent an uninitialised stack byte
         lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8Payload),
                           GameStateModuleIO::E_ACTION_ALL_EVENTS_DISCOVERED,
                           static_cast<s32>(sizeof(lu8Payload)));
+    }
+}
+
+// ==============================================================================================
+// GameStateModule::ProcessGameEventsRegionFromPositionBringUp -- ProcessGameEvents' CASE-95 ARM
+//
+// Game event 95 (RegionFromPositionRequestEvent { Vector3 mPosition }) asks which district
+// a world position lies in. The arm samples the district map (+0x3C090) with the position
+// flattened to (x, z) -- the console's permute replicates x into the two unread lanes -- maps an
+// off-map cell (255) to district 18 (E_DISTRICT_INVALID), builds the WorldRegion and answers with
+// action 186 (RegionFromPositionResponseAction { WorldRegion mWorldRegion }, 8 bytes).
+// The arm is extracted from the single dispatcher walk like the other ProcessGameEvents*BringUp
+// arms and must run before the merged queue is cleared.
+// ==============================================================================================
+void GameStateModule::ProcessGameEventsRegionFromPositionBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    // Event 95 (E_EVENT_REGION_FROM_POSITION_REQUEST) and action 186
+    // (E_ACTION_REGION_FROM_POSITION_RESPONSE); neither enum in this tree names them yet.
+    const s32 KI_EVENT_REGION_FROM_POSITION_REQUEST   = 95;
+    const s32 KI_ACTION_REGION_FROM_POSITION_RESPONSE = 186;
+
+    if (lpGameEventQueue == 0 || lpActionQueue == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        if (liType == KI_EVENT_REGION_FROM_POSITION_REQUEST)
+        {
+            Vector3 lPosition;
+            std::memcpy(&lPosition, lpEvent, sizeof(lPosition));   // RegionFromPositionRequestEvent::mPosition
+
+            Vector2 lFlatPosition;
+            lFlatPosition.x = lPosition.x;
+            lFlatPosition.y = lPosition.z;
+            lFlatPosition.z = lPosition.x;
+            lFlatPosition.w = lPosition.x;
+
+            u8 luDistrict = GetDistrictMap()->GetValue(lFlatPosition);
+            if (luDistrict == CgsWorld::KU_INVALID_WORLD_MAP_VALUE)
+            {
+                luDistrict = static_cast<u8>(BrnWorld::E_DISTRICT_INVALID);
+            }
+
+            BrnWorld::WorldRegion lWorldRegion;                     // RegionFromPositionResponseAction::mWorldRegion
+            lWorldRegion.Construct(static_cast<BrnWorld::EDistrict>(luDistrict));
+            lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWorldRegion),
+                                    KI_ACTION_REGION_FROM_POSITION_RESPONSE,
+                                    static_cast<s32>(sizeof(lWorldRegion)));
+
+            DiscoveryWitness("region-from-position", static_cast<s32>(luDistrict),
+                             static_cast<s32>(lWorldRegion.GetCounty()), 0, 0);
+        }
+
+        const CgsModule::Event* lpCurrent = lpEvent;
+        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
     }
 }
 

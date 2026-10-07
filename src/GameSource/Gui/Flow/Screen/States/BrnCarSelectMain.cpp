@@ -35,9 +35,36 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                   // GsmIO::ECarSelectType
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / AddEvent
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStreamBase (debug print)
+#include <cstdlib>                                                         // std::getenv (BRN_CARSEL_DIAG)
 
 namespace BrnGui
 {
+    namespace
+    {
+        // [FLAG PC witness] BRN_CARSEL_DIAG=1 traces the car-select screen's input and its
+        // car-selection trigger (first 80 lines). Read once.
+        bool IsCarSelGuiDiagEnabled()
+        {
+            static const bool sbEnabled = []()
+            {
+                const char* lpcValue = std::getenv("BRN_CARSEL_DIAG");
+                return lpcValue != 0 && lpcValue[0] != '\0' && lpcValue[0] != '0';
+            }();
+            return sbEnabled;
+        }
+
+        bool TakeCarSelGuiDiagLine()
+        {
+            static s32 siLines = 0;
+            if (!IsCarSelGuiDiagEnabled() || CgsDev::Log::gpDebugPrint == 0 || siLines >= 80)
+            {
+                return false;
+            }
+            ++siLines;
+            return true;
+        }
+    }
+
     // The car-select trigger event posted to the state interface out-queue (X360 buffer
     // {8, 415, 16} + the selected car id, published on channel 40 as 24 bytes). Modelled as a
     // GuiEvent<415> carrying the id so the AddEvent header/id/size match the asm exactly.
@@ -94,9 +121,17 @@ namespace BrnGui
     }
 
     // ---- HandleControllerInput @ 0x824B5410 ---------------------------------------
-    void CarSelectMain::HandleControllerInput(const CgsModule::Event* lpEvent, s32 /*liController*/)
+    void CarSelectMain::HandleControllerInput(const CgsModule::Event* lpEvent, s32 liController)
     {
         CGS_ASSERT(lpEvent != 0, "Invalid event in CarSelectMain::HandleControllerInput");  // cpp:535
+
+        if (lpEvent != 0 && liController != 8 && TakeCarSelGuiDiagLine())
+        {
+            // The input payload's leading words: pad id, then the game input action id.
+            const s32* lpaiWords = reinterpret_cast<const s32*>(lpEvent);
+            *CgsDev::Log::gpDebugPrint << "[FLAG PC witness] [carsel] gui input kind=" << liController
+                                       << " pad=" << lpaiWords[0] << " action=" << lpaiWords[1] << "\n";
+        }
     }
 
     // ---- UpdateGuiCache @ 0x824B54A8 ----------------------------------------------
@@ -187,6 +222,12 @@ namespace BrnGui
 
             GuiEventTriggerCarSelect lEvent(mCurrentSetupInfo.mCarId);
             mpStateInterface->GetOutputEventQueue()->AddEvent(&lEvent, 40, 24);
+
+            if (TakeCarSelGuiDiagLine())
+            {
+                *CgsDev::Log::gpDebugPrint << "[FLAG PC witness] [carsel] gui 415 select car="
+                                           << static_cast<u64>(mCurrentSetupInfo.mCarId) << "\n";
+            }
         }
     }
 
