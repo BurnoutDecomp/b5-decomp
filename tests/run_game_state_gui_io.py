@@ -16,13 +16,18 @@ parser.add_argument("--omit-mode", action="store_true")
 args = parser.parse_args()
 tree = Tree()
 source = tree.read("src/GameSource/GameState/BrnGameStateModuleIO.cpp")
+if args.omit_queue:
+    source = source.replace("    mGuiEventQueue.Construct();", "")
 construct = definition(source, "void OutputBuffer::Construct()")
-queue = "    mGuiEventQueue.Construct();"
+queue_start = construct.index("mGameStateToGuiInterface.Construct();")
+queue_start += len("mGameStateToGuiInterface.Construct();")
+queue_stop = construct.index(
+    "    mTriggerManagementInputInterface.GetAddTriggerEventQueue().Construct();",
+    queue_start)
+queue = construct[queue_start:queue_stop]
 start = construct.index("    std::memset(&mScoringOutputInterfaceStorage")
 stop = construct.index("    //     8 x s32 = -1", start)
 scoring = construct[start:stop]
-if args.omit_queue:
-    queue = ""
 if args.omit_mode:
     scoring = scoring.replace(
         "    reinterpret_cast<ScoringOutputInterface*>(&mScoringOutputInterfaceStorage)->meGameModeType = E_MODE_NONE;", "")
