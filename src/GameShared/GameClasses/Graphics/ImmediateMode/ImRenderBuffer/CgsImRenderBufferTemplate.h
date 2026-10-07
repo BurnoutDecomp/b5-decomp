@@ -223,7 +223,7 @@ namespace CgsGraphics
 
     struct ImCommandSetStateTexture : public ImCommand               // DWARF :131
     {
-        const TextureState* mpTextureState;                          // [c:0x08]
+        const renderengine::TextureState* mpTextureState;            // [c:0x08]
     };
 
     struct ImCommandSetStateSampler : public ImCommand               // DWARF :138

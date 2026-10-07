@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer
 #include "eathread/eathread_futex.h"                                          // EA::Thread::Futex (CRITICAL_SECTION-backed lock)
+#include "rw/rwcore_structs.h"
 
 // FFmpeg backend (PC decode substitution) -- forward-declared so this header stays light.
 struct AVFormatContext;
@@ -13,21 +14,15 @@ struct AVPacket;
 struct SwsContext;
 
 namespace renderengine { class Texture; }
+namespace BrnGui { class MovieManager; }
 
 namespace CgsGraphics
 {
-    // CgsGraphics::MoviePlayer -- the full-screen boot/front-end movie player. Interface + state machine
-    // reconstructed from the X360 ARTIST build (the EA-chunk + On2 VP6 architecture; DecFIGS
-    // GameShared/.../Graphics/MoviePlayer/CgsMoviePlayer.{h,cpp} for the method shape, and the DWARF
-    // dossier for the public surface). Driven SetMovieFile -> Prepare -> Play -> (Update per game
-    // tick / Render per frame) -> Release.
-    //
-    // [PC DECODE SUBSTITUTION] The X360 player streams an EA-chunk container through StreamDeviceDiskRead
-    // and decodes VP6 frames with the On2 VP6 SDK (xPB_INST), presenting YUV_BUFFER_CONFIG planes via
-    // rw::movie::VideoRenderable. Neither the On2 SDK nor the EA-chunk codec is a buildable PC library, so
-    // FFmpeg (libavformat ea/mov demux + libavcodec vp6/h264 decode + libswscale YUV->BGRA) stands in for
-    // the demux+decode step (the members below the marker). Everything above the marker -- the player
-    // interface, state machine, frame timing, crossfade, and the Im2d render path -- is faithful game code.
+    class MovieVideoRenderer;
+    // ARTIST player state ids, supplied Render entry and arena-backed renderer owner.
+    // FFmpeg replaces transport, On2 decode and conversion to a native BGRA frame.
+    // Existing wall-clock pacing/crossfade remain reconstruction debt; this repair
+    // does not claim the console's asynchronous file/decode pipeline is restored.
     class MoviePlayer
     {
     public:
@@ -43,22 +38,32 @@ namespace CgsGraphics
         // it (the X360 PrepareResources, which on console allocated chunk buffers + spun the decode job).
         // Release/Destruct tear the stream down. lbPreload prepares immediately instead of lazily at Play.
         bool SetMovieFile(const char* lpMovieFileName, bool lbPreload = false);
-        bool Prepare(const char* lpcLanguageCode = 0);
+        bool Prepare(rw::IResourceAllocator* lpAllocator, const char* lpcMovieFileName,
+                     const char* lpcLanguageCode = 0);
         bool Release();
         void Destruct();
 
         enum PlayerStateType
         {
-            E_STOPPED,
-            E_PLAYING,
-            E_PAUSED
+            E_RW_MOVIE_PLAYER_NULL = 0,
+            E_RW_MOVIE_PLAYER_CONSTRUCTED = 1,
+            E_RW_MOVIE_PLAYER_OPENING_FILE = 2,
+            E_RW_MOVIE_PLAYER_LOADING_VIDEO_STREAMS = 3,
+            E_RW_MOVIE_PLAYER_LOADING_FIRST_BUFFER = 4,
+            E_RW_MOVIE_PLAYER_INIT_DECODERS = 5,
+            E_RW_MOVIE_PLAYER_PREPARED = 6,
+            E_RW_MOVIE_PLAYER_PLAYING = 7,
+            E_RW_MOVIE_PLAYER_STOPPED = 8,
+            E_RW_MOVIE_PLAYER_CLOSING_FILE = 9,
+            E_RW_MOVIE_PLAYER_MAX = 10,
+            E_STOPPED = E_RW_MOVIE_PLAYER_STOPPED,
+            E_PLAYING = E_RW_MOVIE_PLAYER_PLAYING
         };
 
         PlayerStateType GetPlayerState() const { return mePlayerState; }
         bool            IsFinished() const     { return mbFinished; }
 
-        // Sub-rectangle to present into, in the engine's logical 1280x720 screen space (the Im2d
-        // convention). Defaults to the full screen.
+        // Original unit-screen rectangle; the shared screen transform maps it to the display.
         void SetRectangle(float fLeft, float fTop, float fRight, float fBottom);
         // Fade the quad in over the first liCrossfadeInFrames and out over the last liCrossfadeOutFrames
         // (0 = no fade). Frame->time uses the stream's frame rate.
@@ -72,7 +77,13 @@ namespace CgsGraphics
         void Update();                                                  // advance to the frame due now
         void Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer); // present the held frame via Im2d
 
+        // Native COM allocations follow the real manager arena's disposal or
+        // reconstruction. Decoder Release does not retire queued render owners.
+        void RetireArenaTexturesPC();
+
     private:
+        friend class MovieVideoRenderer;
+        friend class BrnGui::MovieManager;
         bool PrepareResources();                  // open the stream (FFmpeg) for mcMovieFileName
         void ReleaseResources();                  // free the stream + frame texture
         bool DecodeFrame();                       // [PC] pull one decoded frame into mpFrame (+ mfFramePtsSec)
@@ -81,7 +92,7 @@ namespace CgsGraphics
         void UploadFrame();                       // [PC] sws_scale mpFrame -> the renderengine texture
         f32  ComputeCrossfadeAlpha(f64 lfElapsedSec) const;
 
-        // ---- faithful player state ------------------------------------------------------
+        // ---- player state and original resource ownership ------------------------------------------------------
         // Per-player lock. The X360 ctor initializes a Win32 CRITICAL_SECTION at this slot
         // (RtlInitializeCriticalSection); the committed EA::Thread::Futex is that exact
         // CRITICAL_SECTION-backed mutex, reused BY NAME, so its ctor performs the init.
@@ -92,8 +103,13 @@ namespace CgsGraphics
         bool            mbIsOkToPlay;             // stream prepared, ready to Play
         bool            mbIsLooped;
         bool            mbFinished;
+        rw::IResourceAllocator* mpAllocator;
+        rw::Resource mRwVideoRendererResource;
+        MovieVideoRenderer* mpRwVideoRenderer;
+        Im2dRenderBuffer* mpIm2dRenderBuffer;
+        bool mbReadyToRender;
 
-        f32   mfRectLeft, mfRectTop, mfRectRight, mfRectBottom;   // logical 1280x720 px
+        f32   mfRectLeft, mfRectTop, mfRectRight, mfRectBottom;   // unit-screen rectangle
         s32   miCrossfadeInFrames, miCrossfadeOutFrames;
 
         u64   muStartTick;                        // playback start (CgsSystem timer ticks)
@@ -128,8 +144,12 @@ namespace CgsGraphics
         AVCodecContext*  mpStripCtx[3];           // one decoder per band chain ([0] == mpVideoCtx)
         u32              muPacketRoute;            // next demuxed video packet -> mpStripCtx[muPacketRoute%N]
 
-        // ---- frame texture (drawn through Im2d, the faithful render path) ---------------
-        renderengine::Texture* mpFrameTexture;    // current frame, D3DFMT_A8R8G8B8 (BGRA in memory)
+        // ---- native device-resource cleanup references ---------------------------------
+        // Cleanup references to the actual arena allocations, not another ring.
+        // The renderer metadata can be freed before the arena/device resources.
+        renderengine::Texture* mapNativeTextureOwnersPC[4];
+        bool mbPausedPC;
+        s32 miCurrentFrame;
         u32   muTexWidth, muTexHeight;
     };
 }

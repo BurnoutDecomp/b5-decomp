@@ -28,7 +28,7 @@ namespace BrnGui
         // `std` at VideoDefinition+0x10 -- it is one 64-bit CgsResource::ID, and the PC was
         // truncating it to u32 on the way in and back out again.
         u64  muVideoResourceId;            // +0x10 VideoDataResource id to load + play
-        f32  mafRectangle[4];              // left, top, right, bottom (logical 1280x720) -- X360 Vector4
+        f32  mafRectangle[4];              // unit-screen left, top, right, bottom -- X360 Vector4
         s32  miCrossfadeInFrames;
         s32  miCrossfadeOutFrames;
         bool mbPreload;
@@ -50,7 +50,7 @@ namespace BrnGui
             , mbDisableCustomSoundtracks(false)
         {
             mafRectangle[0] = 0.0f;    mafRectangle[1] = 0.0f;
-            mafRectangle[2] = 1280.0f; mafRectangle[3] = 720.0f;
+            mafRectangle[2] = 1.0f;    mafRectangle[3] = 1.0f; // ARTIST 824729DC..72A00.
         }
     };
 

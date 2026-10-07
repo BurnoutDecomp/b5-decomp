@@ -207,6 +207,32 @@ namespace renderengine
         return lpTexture;
     }
 
+    // FLAG PC-platform leaf: a D3D texture owns its image allocation. Preserve
+    // the supplied rw resource's ownership of the native Texture2D wrapper.
+    rw::ResourceDescriptor* Texture2D::GetResourceDescriptor(rw::ResourceDescriptor* lpOut,
+                                                            const Parameters*)
+    {
+        *lpOut = rw::ResourceDescriptor();
+        lpOut->m_baseResourceDescriptors[0].m_size = sizeof(Texture2D);
+        lpOut->m_baseResourceDescriptors[0].m_alignment = alignof(Texture2D);
+        return lpOut;
+    }
+
+    Texture2D* Texture2D::Initialize(rw::Resource* lpResource, const Parameters* lpParams)
+    {
+        void* lpMemory = lpResource ? lpResource->m_baseResources[0] : nullptr;
+        Texture2D* lpTexture = lpMemory ? new (lpMemory) Texture2D() : new Texture2D();
+        Texture::Parameters lParams = {};
+        lParams.meType = E_TYPE_2D;
+        lParams.muWidth = lpParams->muWidth;
+        lParams.muHeight = lpParams->muHeight;
+        lParams.muDepth = 1;
+        lParams.muNumLevels = lpParams->muNumLevels;
+        lParams.miFormat = static_cast<s32>(lpParams->muFormat);
+        Texture::Create(lpTexture, &lParams, nullptr);
+        return lpTexture;
+    }
+
     // ============================================================================================
     // [FLAG PC-platform leaf] THE VOLUME (3D) TEXTURE CASE, added by the post-fx step-10 tint wave.
     //

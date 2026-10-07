@@ -9,6 +9,8 @@
 
 #include <cstdlib>   // malloc / free
 #include <cstdio>    // snprintf (boot-video diagnostics)
+extern "C" void* XPhysicalAlloc(unsigned long, unsigned long, unsigned long, unsigned long);
+extern "C" void XPhysicalFree(void*);
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"   // ResolveResourceType
 
 // BrnGui::MovieManager -- faithful reconstruction from the X360 ARTIST build (Construct 0x824F9598,
@@ -146,7 +148,6 @@ namespace BrnGui
         miMoveMemoryReleaseDelay  = 0;
         muFirstCollisionBlockAddress = 0;
         muNumCollisionBlocks      = 0;
-        mbKeepMemoryWhenFinished  = false;
         mbUsesXMPMusic            = false;
         mbStopVideoStraightAway   = false;
         macMovieNameBuffer[0]     = 0;
@@ -171,6 +172,8 @@ namespace BrnGui
     {
         miMoveMemoryReleaseDelay = 0;
         mMoviePlayer.Construct();
+        mResourceAllocatorResource = rw::Resource();
+        mAllocator.Construct();
         if (MovieAudioPcLeafEnabled())
             g_movieAudio.Construct();       // [PC leaf, opt-in] EA-XMA movie/stream audio player
         g_acSoundStreamPath[0] = 0;
@@ -180,7 +183,6 @@ namespace BrnGui
         meCollisionWorldState = E_COLLISIONWORLDSTATE_VALID;
         meCarPoolState = E_CARPOOLSTATE_VALID;
         meLanguage = 0;                     // English
-        mbKeepMemoryWhenFinished = false;
         mbUsesXMPMusic = false;
         mbStopVideoStraightAway = false;
         macMovieNameBuffer[0] = 0;
@@ -303,7 +305,13 @@ namespace BrnGui
 
     bool MovieManager::Release()
     {
-        mMoviePlayer.Release();
+        if (!mMoviePlayer.Release())
+            return false;
+        if (mResourceAllocatorResource.m_baseResources[0] != nullptr)
+        {
+            mAllocator.Release();
+            DestroyMemoryResourceAndDescriptor();
+        }
         if (MovieAudioPcLeafEnabled())
             g_movieAudio.Release();        // [PC leaf, opt-in] free the decoded movie-audio buffer
         mPlayingMovie.Release();
@@ -321,6 +329,11 @@ namespace BrnGui
     void MovieManager::Destruct()
     {
         mMoviePlayer.Destruct();
+        if (mResourceAllocatorResource.m_baseResources[0] != nullptr)
+        {
+            mAllocator.Destruct();
+            DestroyMemoryResourceAndDescriptor();
+        }
         meState = E_MOVIEMANAGERSTATE_DESTRUCTED;
     }
 
@@ -441,9 +454,37 @@ namespace BrnGui
         }
     }
 
-    // [stub: MovieAllocator] X360 carves a Heap+Linear allocator from the freed memory for the movie.
-    bool MovieManager::PrepareMovieAllocator()                 { return true; }
-    void MovieManager::DestroyMemoryResourceAndDescriptor()    { }
+    bool MovieManager::PrepareMovieAllocator()
+    {
+        if (mResourceAllocatorResource.m_baseResources[0] == nullptr)
+        {
+            mDescriptor = rw::ResourceDescriptor();
+            // ARTIST 82507E48/7C: the main heap is sixteen MiB, aligned to 128.
+            mDescriptor.m_baseResourceDescriptors[0].m_size = 0x1000000;
+            mDescriptor.m_baseResourceDescriptors[0].m_alignment = 128;
+            // FLAG PC-platform leaf: native descriptor backing replaces the
+            // absent reclaimed car-pool region. D3D owns GPU image allocations;
+            // no graphics lane or completed car-pool reclaim is fabricated.
+            mResourceAllocatorResource.m_baseResources[0] =
+                XPhysicalAlloc(mDescriptor.m_baseResourceDescriptors[0].m_size,
+                    0xFFFFFFFFul, mDescriptor.m_baseResourceDescriptors[0].m_alignment, 4);
+            if (mResourceAllocatorResource.m_baseResources[0] == nullptr)
+                return false;
+        }
+        // Reconstructing the real retained arena is the other native GPU
+        // disposal boundary. Decoder release leaves these four owners intact.
+        mMoviePlayer.RetireArenaTexturesPC();
+        return mAllocator.Prepare(mResourceAllocatorResource, mDescriptor);
+    }
+
+    void MovieManager::DestroyMemoryResourceAndDescriptor()
+    {
+        CGS_ASSERT(mResourceAllocatorResource.m_baseResources[0] != nullptr,
+                   "mResourceAllocatorResource.GetMemoryResource()");
+        mMoviePlayer.RetireArenaTexturesPC();
+        XPhysicalFree(mResourceAllocatorResource.m_baseResources[0]);
+        mResourceAllocatorResource.m_baseResources[0] = nullptr;
+    }
 
     // PendingVideoDataResourceRequest (ARTIST @0x824F7808): the GuiModule polls this each PreWorldUpdate.
     // While in REQUESTING_MOVIEDATARESOURCE(14) it advances to WAITING_FOR_MOVIEDATARESOURCE(15), asserts a
@@ -564,8 +605,8 @@ namespace BrnGui
                 break;
             if (MovieAudioPcLeafEnabled())
                 g_movieAudio.Stop();       // [PC leaf, opt-in] the movie finished -> stop its sound stream
-            DestroyMemoryResourceAndDescriptor();   // [stub: MovieAllocator Heap+Linear destruct]
-            if (mbKeepMemoryWhenFinished)
+            mAllocator.Release(); // ARTIST 82507BB4..BBC4, not arena destruction.
+            if (mPlayingMovie.mbKeepMemoryWhenFinished) // original +0xD30 +0x25 == +0xD55.
             {
                 meState = E_MOVIEMANAGERSTATE_REPORTING_FINISHED;
             }
@@ -631,7 +672,10 @@ namespace BrnGui
             if (meCollisionWorldState == E_COLLISIONWORLDSTATE_INVALID &&
                 meCarPoolState == E_CARPOOLSTATE_INVALID)
             {
-                PrepareMovieAllocator();   // [stub]
+                const bool lbPrepared = PrepareMovieAllocator();
+                CGS_ASSERT(lbPrepared, "mAllocator.Prepare(mResourceAllocatorResource, mDescriptor)");
+                if (!lbPrepared)
+                    break;
                 QueueNextMovie();
                 meState = E_MOVIEMANAGERSTATE_PREPARING_MOVIE_PLAYER;
             }
@@ -639,7 +683,7 @@ namespace BrnGui
 
         case E_MOVIEMANAGERSTATE_PREPARING_MOVIE_PLAYER:
         {
-            const bool lbPrepared = mMoviePlayer.Prepare(mpcLanguageCode);
+            const bool lbPrepared = mMoviePlayer.Prepare(&mAllocator, macMovieNameBuffer, mpcLanguageCode);
             char lac[64];
             std::snprintf(lac, sizeof(lac), "[MovieManager] MoviePlayer.Prepare = %d\n", lbPrepared ? 1 : 0);
             CgsDev::Log::WriteToLog(lac);

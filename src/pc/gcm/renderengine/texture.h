@@ -8,7 +8,7 @@
 // lock/unlock upload path. Matches the renderengine resource-descriptor convention
 // used by renderstates.h.
 struct IDirect3DBaseTexture9;
-namespace rw { struct Resource; }   // backing resource memory for the rw-resource create path
+namespace rw { struct Resource; struct ResourceDescriptor; }
 
 namespace renderengine
 {
@@ -348,6 +348,12 @@ namespace renderengine
         static ResourceDescriptor* GetResourceDescriptor(ResourceDescriptor* lpDescriptorOut,
                                                          const Parameters* lpParams);
         static Texture2D* Initialize(const ResourceDescriptor* lpDescriptor, const Parameters* lpParams);
+
+        // Resource-backed form used by MovieVideoRenderer (ARTIST 827F8160/81E4).
+        // The native device owns image storage; the caller owns the wrapper.
+        static rw::ResourceDescriptor* GetResourceDescriptor(rw::ResourceDescriptor* lpOut,
+                                                             const Parameters* lpParams);
+        static Texture2D* Initialize(rw::Resource* lpResource, const Parameters* lpParams);
 
         // X360 Xbox2GetPhysicalMemorySize @0x82B610D8: lay out a GPU texture header for the
         // serialised descriptor and return its size (XGSetTextureHeader's HRESULT-sized result).

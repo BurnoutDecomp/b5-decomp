@@ -21,7 +21,7 @@
 // vtable; in the PC reconstruction it is installed implicitly by the virtual destructor.
 // =====================================================================================
 
-#include "types.hpp"
+#include "SDKs/EATech/rwmovie/ivideorenderer.h"
 
 namespace rw
 {
@@ -31,11 +31,6 @@ namespace rw
         // first object word (X360 off_820D5798 == this class's vtable). The virtual
         // destructor reinstalls that vtable word and runs no member teardown (the X360
         // ~IVideoRenderer body is just the implicit vtable store).
-        class IVideoRenderer
-        {
-        public:
-            virtual ~IVideoRenderer() {}
-        };
 
         // IVideoRenderer::`scalar deleting destructor' @0x827E9F00.
         //   ~IVideoRenderer(this);          // implicit vtable reinstall at +0

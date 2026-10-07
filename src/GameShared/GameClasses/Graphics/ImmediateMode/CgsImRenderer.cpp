@@ -255,15 +255,12 @@ const TextureState* ImRendererBase::ConstructDefaultTextureState(
     lParameters.mu8Field44 = 1;        // v10
     lParameters.mpTexture  = lpTexture;// v11 = a2
 
-    u32 lauDescriptor[12] = {};
-    renderengine::TextureState::GetResourceDescriptor(lauDescriptor);
-
-    rw::Resource* lpStateResource = nullptr;
-    ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-    lpAllocatorIf->Create(&lpStateResource, lpAllocatorIf, lauDescriptor, 0);
+    rw::ResourceDescriptor lDescriptor;
+    renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+    rw::Resource lStateResource = lpAllocator->DoAllocate(lDescriptor, nullptr);
 
     return reinterpret_cast<const TextureState*>(
-        renderengine::TextureState::Initialize(lpStateResource, &lParameters));
+        renderengine::TextureState::Initialize(&lStateResource, &lParameters));
 }
 
 // ---------------------------------------------------------------------------------------------------
