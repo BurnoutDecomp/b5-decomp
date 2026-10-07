@@ -1713,7 +1713,7 @@ namespace BrnGui
 //        li    r5,  1                      ; the tuple count
 //        addi  r4,  r11, unk_8205E77C@l
 //    which is exactly the committed two-arg declaration (BrnGuiCache.h:212). The count is
-//    written as miNumResourcesToLoad (== 1, BrnScreenStatesDataLinkStubs.cpp:167), never
+//    written as miNumResourcesToLoad (== 1), never
 //    as the console literal.
 //  * The return value is consumed as a BYTE (`clrlwi r11, r3, 24` @0x824A3500 and again at
 //    0x824A355C) -- both callees really do return bool, as declared.
@@ -2075,10 +2075,6 @@ namespace BrnGui
 // header, and nothing else in the tree defines them. When the conductor merges the wave
 // into the consolidated BrnOnlineCustomMatch.cpp these definitions move there -- this is
 // the one copy, so nothing needs dropping.
-//
-// maResourceTuplesToLoad / miNumResourcesToLoad are DELIBERATELY absent: they are already
-// defined in BrnScreenStatesDataLinkStubs.cpp:165 and redefining them would be a link-time
-// duplicate.
 
 // wave-J partfile (group 6)
 
@@ -2200,10 +2196,6 @@ namespace BrnGui
     //  this partfile is their only consumer in the wave. The class has no BrnOnlineCustomMatch.cpp
     //  yet; when the conductor merges the wave-J partfiles, these definitions belong in
     //  that file and must appear exactly once.
-    //
-    //  maResourceTuplesToLoad / miNumResourcesToLoad are DELIBERATELY absent -- they are
-    //  already defined in BrnScreenStatesDataLinkStubs.cpp:165 and redefining them here
-    //  would be a link-time duplicate.
     // ====================================================================================
 
     // @0x8205E758 -- the event ids this screen observes. 6 is controller-input-pressed,
@@ -2212,6 +2204,11 @@ namespace BrnGui
     // roles are not attested here, so they are left as plain data.
     const s32 OnlineCustomMatch::maiEventToObserve[8] = { 14, 21, 6, 64, 254, 50, 51, 44 };
     const s32 OnlineCustomMatch::miNumEventsObserved  = 8;   // @0x8205E778
+
+    // The search screen's apt package (read from the image).
+    const CgsGui::sResourceTuple OnlineCustomMatch::maResourceTuplesToLoad[] =
+        { { 175, CgsGui::E_GUI_RESOURCETYPE_APT } };
+    const s32 OnlineCustomMatch::miNumResourcesToLoad = 1;
 
     // @0x8205E788 onwards -- the apt component names the state constructs.
     const char OnlineCustomMatch::KAC_SEARCH_PARAMS_COMPONENT[12]           = "SearchParam";
@@ -2415,11 +2412,8 @@ namespace BrnGui
 //   OnlineCustomMatch::OnLeave  @0x824970D0  ( 63 insns)
 //   OnlineCustomMatch::Update   @0x824AC808  (246 insns)
 //
-// With these the class is complete (16 wave-J bodies + these two + OnEnter in _wJ_06), so
-// this partfile is what lets the six _wJ_ TUs mount and retires the three
-// BrnScreenStatesLinkStubs.cpp scaffolds (OnEnter / OnLeave / Update) that stood in for
-// the screen's vtable since 2026-08-03. Neither function has a DecFIGS scope (the PS3 unity
-// build compiled them into another unit), so everything below is read off the X360 ARTIST
+// With these the class is complete (16 wave-J bodies + these two + OnEnter in _wJ_06).
+// Neither function has a debug-info scope, so everything below is read off the console
 // assembly; the sibling partfiles' names are reused wherever the same store appears.
 //
 // ---- OnLeave @0x824970D0 -- store-for-store ----------------------------------------------

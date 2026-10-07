@@ -392,17 +392,17 @@ bool NetworkPlayer::Prepare(NetworkAdapter* lpNetworkAdapter,
     if (!s_bRegisteredPerfmons)
     {
         s_iNetworkPlayerSendMessagesTotalPM = CgsDev::PerfMonCpu::AddMonitor(
-            "NetworkPlayer - Total",      18, 0, 5.0, 0, 1);
+            "NetworkPlayer - Total",      CgsDev::E_PMP_18, false, 5.0f, true);
         s_iNetworkPlayerSendNewMessagesPM = CgsDev::PerfMonCpu::AddMonitor(
-            "NetworkPlayer - Send New",   18, 0, 5.0, 0, 1);
+            "NetworkPlayer - Send New",   CgsDev::E_PMP_18, false, 5.0f, true);
         s_iNetworkPlayerResendReliablePM = CgsDev::PerfMonCpu::AddMonitor(
-            "NetworkPlayer - Resend Rel", 18, 0, 5.0, 0, 1);
+            "NetworkPlayer - Resend Rel", CgsDev::E_PMP_18, false, 5.0f, true);
         s_iNetworkPlayerSendAcksAndNacksPM = CgsDev::PerfMonCpu::AddMonitor(
-            "NetworkPlayer - Acks+Nacks", 18, 0, 5.0, 0, 1);
+            "NetworkPlayer - Acks+Nacks", CgsDev::E_PMP_18, false, 5.0f, true);
         s_iNetworkPlayerPackMessagesPM = CgsDev::PerfMonCpu::AddMonitor(
-            "NetworkPlayer - Pack",       18, 0, 5.0, 0, 1);
+            "NetworkPlayer - Pack",       CgsDev::E_PMP_18, false, 5.0f, true);
         s_iNetworkPlayerSendToPM = CgsDev::PerfMonCpu::AddMonitor(
-            "NetworkPlayer - SendTo",     18, 0, 5.0, 0, 1);
+            "NetworkPlayer - SendTo",     CgsDev::E_PMP_18, false, 5.0f, true);
         s_bRegisteredPerfmons = true;
     }
 

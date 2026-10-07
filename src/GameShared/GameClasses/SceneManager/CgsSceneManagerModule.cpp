@@ -153,16 +153,13 @@ static const char* const KPC_SOURCE_FILE =
 namespace
 {
     // Register one perfmon monitor the first time we see it (handle still -1) and
-    // assert it registered. De-optimises the ~25 identical Construct blocks. The
-    // X360 6-arg AddMonitor(name, colour, minimum, budgetMs, parentHandle, flags);
-    // the parent handle was an uninitialised register at the X360 call sites (never
-    // a meaningful nest), so it is passed as -1 here.
+    // assert it registered. De-optimises the ~25 identical Construct blocks.
     inline void RegisterPerfMonOnce(s32& lriHandle, const char* lpcName, s32 liColour,
                                     f32 lfBudgetMs, s32 liFlags, const char* lpcAssertExpr)
     {
         if (lriHandle == -1)
         {
-            lriHandle = CgsDev::PerfMonCpu::AddMonitor(lpcName, liColour, 0, lfBudgetMs, -1, liFlags);
+            lriHandle = CgsDev::PerfMonCpu::AddMonitor(lpcName, static_cast<CgsDev::PerfMonCpuPage>(liColour), false, lfBudgetMs, liFlags != 0);
             CGS_ASSERT(lriHandle >= 0, lpcAssertExpr);
         }
     }
@@ -288,8 +285,8 @@ void SceneManagerModule::Construct()
 
     // The two "total CG setup" timers are registered unconditionally each Construct
     // (the X360 stores the handle straight into the member; not the lazy si* pattern).
-    miTimeInCachedContactGen    = CgsDev::PerfMonCpu::AddMonitor("Total cached CG setup", 4, 0, 10.0, -1, 1);
-    miTimeInNonCachedContactGen = CgsDev::PerfMonCpu::AddMonitor("Total non cached  CG setup", 4, 0, 10.0, -1, 1);
+    miTimeInCachedContactGen    = CgsDev::PerfMonCpu::AddMonitor("Total cached CG setup", CgsDev::E_PMP_4, false, 10.0f, true);
+    miTimeInNonCachedContactGen = CgsDev::PerfMonCpu::AddMonitor("Total non cached  CG setup", CgsDev::E_PMP_4, false, 10.0f, true);
 
     // X360: mSceneManagerDebugComponent.Construct(this); DebugComponent::Register(&it).
     // The debug component is modelled as an opaque tail member here (its home header does
@@ -464,10 +461,7 @@ bool SceneManagerModule::Prepare(SpatialPartitionConstructParams* lpConstructPar
 // ===========================================================================
 // SceneManagerModule::StartUpdateTriangleCache @ 0x828C73D8  (73 insns)
 //
-// The frame's whole triangle-collision front end, in the console's order. Landed
-// 2026-08-10 (spatial-partition wave) -- it was a WorldLinkStubs gate purely
-// because ONE of its seven callees did not exist: PolygonSoupListSpatialMap::
-// BuildSpacialPartition @0x82841740. Every other callee was already reconstructed.
+// The frame's whole triangle-collision front end, in the console's order.
 //
 // X360 body, statement for statement:
 //   assert(lpInputBufferStack  != NULL)                    CgsSceneManagerModule.cpp:573
@@ -1341,27 +1335,15 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
 // OverlapGenerationIO::OutputBuffer): nothing in this tree reads either from here.
 // UpdateContactGeneration creates its own generator OUTPUT buffer.
 //
-// ⭐ STEP 6 IS LIVE AS OF 2026-08-19 (wave Q5 / E1a) -- `mOverlapGenerator.Update(ogIn)`
-// (X360 0x828D4DBC..0x828D4DD0: the module vtable slot +0x44, called with the generator
-// input buffer in r4). It is the pass that REPLAYS the queues step 4 now fills --
-// ProcessAddBodyQueue / ProcessUpdateBodyQueue / ProcessRemoveBodyQueue /
-// ProcessForceNoPaddingQueue -> SceneSweeper::Add/Update/RemoveObject -- so without it the
-// events the drain queues would be destroyed unread at the end of this function and the
-// broad phase would still see nothing. It became callable only when cluster E2 retyped the
-// declaration this same round (it was `void Update()`, a no-argument placeholder that does
-// not exist on the console class and could not see the buffer).
+// ⭐ STEP 6 -- `mOverlapGenerator.Update(ogIn)` (the module vtable slot +0x44, called with
+// the generator input buffer; body in ContactGen/CgsOverlapGenerationModule.cpp). It is the
+// pass that REPLAYS the queues step 4 fills -- ProcessAddBodyQueue / ProcessUpdateBodyQueue /
+// ProcessRemoveBodyQueue / ProcessForceNoPaddingQueue -> SceneSweeper::Add/Update/RemoveObject
+// -- so without it the events the drain queues would be destroyed unread at the end of this
+// function and the broad phase would see nothing.
 //
-// ⚠️ CONDUCTOR, HARD LINK DEPENDENCY: the real body is
-// ContactGen/CgsOverlapGenerationModule.cpp:201 and that TU is NOT on build_game_exe.bat.
-// Mount it in the same commit as this file, and delete the now-orphaned no-argument gate
-// `void CgsSceneManager::OverlapGenerationModule::Update()` at WorldLinkStubs.cpp:1903-1918
-// (it no longer matches any declaration, so it is a compile error there, not just dead code).
-// Leave the Destruct gate above it alone -- that one still has no body anywhere.
-//
-// ⭐ STEP 7 IS LIVE AS OF 2026-08-11 (triangle-cache wiring wave). The note that used to
-// stand here -- "the triangle-cache publish (step 7) has no committed consumer" -- is
-// RETIRED: WorldModule::BridgeSceneQueryResultsToPhysics @0x827A8E88 and
-// BridgeSceneModuleToOutput @0x827A5700 are both bodied now and both read this seat.
+// ⭐ STEP 7's consumers are WorldModule::BridgeSceneQueryResultsToPhysics and
+// BridgeSceneModuleToOutput; both read this seat.
 // ===========================================================================
 bool SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStack,
                                      CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -1450,15 +1432,12 @@ bool SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStac
 // ===========================================================================
 // SceneManagerModule::ProcessSceneQueries @ 0x828D57D0  (X360 vtbl+68)
 //
-// ⭐ RECONSTRUCTED 2026-08-11 (triangle-cache wiring wave); RETIRES the inert boot gate
-// that stood at WorldLinkStubs.cpp:2350.
-//
 // THIS FUNCTION IS THE SOURCE OF THE ENTIRE TRIANGLE-CACHE CHAIN. Its last step is the
 // ONLY write of a TriangleCacheManager* into a TriangleCacheInterface that reaches the
 // physics module: every hop after it is an Append that ADOPTS an already-set pointer, so
-// while this body was inert the physics side read an interface whose mpTriangleCacheManager
-// had never been written -- the "mpTriangleCacheManager != NULL" assert plus the AV inside
-// GetTrianglesForCachedObject that the traction-line leg was dying on.
+// without it the physics side would read an interface whose mpTriangleCacheManager had
+// never been written ("mpTriangleCacheManager != NULL", then an AV inside
+// GetTrianglesForCachedObject on the traction-line leg).
 //
 // The X360 shell (CgsSceneManagerModule.cpp:806..), step for step:
 //   1. StartMonitor(dword_82F33ECC);
@@ -1868,17 +1847,11 @@ void SceneManagerModule::AddBody(OverlapGenerationIO::InputBuffer* lpOverlapGene
 // reduction every other reconstructed TU makes (and the reason the strings keep their
 // trailing space).
 //
-// PRE-CONDITION, MEASURED 2026-08-19 AND NOW SATISFIED: GetBBox dispatches through
-// rw::collision::gVolumeVTable[type]. Both halves of the rwcollision mount have landed --
-// rw::collision::Volume::InitializeVTable is static with a REAL body (its WorldLinkStubs
-// `return 0` gate was retired 2026-08-18, so the table is filled, not all-zero), and the
-// six descriptor records with their bound method slots live in
-// vendor/renderware/collision/VolumeVTables.cpp, which is MOUNTED at
-// tools/build/build_game_exe.bat:2092. Their getBBox slots are among the bound ones, so a
-// volume reaching this body no longer null-calls. (34 of the 40 image-bound method slots
-// across the six records are live; 2 are genuine image zeros and 6 are parked with
-// per-slot reasons -- see the banner in VolumeVTables.cpp.) A null guard the console does
-// not have would only hide breakage, so there is still none.
+// PRE-CONDITION: GetBBox dispatches through rw::collision::gVolumeVTable[type], which
+// rw::collision::Volume::InitializeVTable fills. The six descriptor records with their bound
+// method slots live in vendor/renderware/collision/VolumeVTables.cpp, and their getBBox slots
+// are among the bound ones (see that file's banner for the per-slot census). A null guard
+// the console does not have would only hide breakage, so there is none.
 // ===========================================================================
 void SceneManagerModule::ProcessAddForCollisionEvent(
     const SceneManagerIO::InEventAddForCollision& lrEvent,
@@ -3570,17 +3543,16 @@ namespace CgsSceneManager
 
     // =========================================================================================
     // THE NINE SIBLING HANDLERS -- LOUD TRAPS, each carrying its console address.
-    // (2026-09-24, FX-SCENEMGR: two of the nine are BODIES now -- ProcessLineTestFine @0x828CDCD0,
-    // whose producer is PlaceOnTrackManager::PostSceneUpdate (and the trigger module's line
-    // queries), and ProcessTriangleCollisionLineTests @0x828C6FB0. Their own banners say what is
-    // still a trap beneath them. The paragraph below describes the remaining seven.)
+    // (Two of the nine are BODIES -- ProcessLineTestFine, whose producer is
+    // PlaceOnTrackManager::PostSceneUpdate (and the trigger module's line queries), and
+    // ProcessTriangleCollisionLineTests. Their own banners say what is still a trap beneath
+    // them. The paragraph below describes the remaining seven.)
     //
-    // None of them has a producer on this build: the coarse queue's remaining record kinds come
-    // from the entity modules' SceneQueryInterface coarse tests (all still gated), and the fine
-    // LineFine / FastDS / SphereFast / VolumeDeepest / VolumeFine queues are fed by the
-    // race-car / traffic / trigger post-scene bridges, which are WorldLinkStubs gates. A trap
-    // here is therefore unreachable today and becomes the FIRST thing a future producer hits --
-    // which is the point: never a quiet "no result" for a query somebody asked.
+    // The coarse queue's remaining record kinds come from the entity modules' SceneQueryInterface
+    // coarse tests, and the fine LineFine / FastDS / SphereFast / VolumeDeepest / VolumeFine
+    // queues are fed by the race-car / traffic / trigger post-scene bridges. A trap here is the
+    // FIRST thing a producer hits -- which is the point: never a quiet "no result" for a query
+    // somebody asked.
     // =========================================================================================
     void SceneManagerModule::ProcessCoarseLineTest(SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer*)
     {
@@ -3596,7 +3568,6 @@ namespace CgsSceneManager
     }
     // =========================================================================================
     // ProcessLineTestFine @ 0x828CDCD0  (CgsSceneManagerBridgeFunctions.cpp:1048..:1134)
-    // RECONSTRUCTED 2026-09-24 (crash parity FX-SCENEMGR) -- this was the assert-false stub above.
     // The PS3 twin (DecFIGS 0xC99344) supplied the names and the assert texts.
     //
     // r3 = this, r4 = lpCollisionGenerator, r5 = lpTriCacheQueryBuffer, r6 = lpSpatialPartitionOut,

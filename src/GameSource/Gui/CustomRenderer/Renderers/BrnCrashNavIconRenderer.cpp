@@ -903,13 +903,6 @@ void CrashNavIconRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEven
 //
 //   GetIconInformation   @0x82456D80   RenderRoadSign      @0x82463E78
 //
-// ⭐ 2026-08-29 (FIX2): GetIconInformation and RenderRoadSign, which the first pass
-//    parked as "conductor link stubs blocked on unrecoverable data", are BODIED. Nothing
-//    in this TU needs a link stub any more. Every value that was called unrecoverable was
-//    read out of the raw image or out of the asm -- see the recovery notes on each
-//    function and on the KAPC_ROAD_IDS / KAV4_SIGN_PLATE_UV /
-//    KAU_EVENTMODE_TO_MINI_ICON_COLUMN tables below.
-//
 // ---------------------------------------------------------------------------
 // THE DRAW TARGET, and the SatNav-311 trap the brief names
 // ---------------------------------------------------------------------------

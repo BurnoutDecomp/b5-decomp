@@ -97,11 +97,8 @@ RCEntityActiveRaceCarOutputInterface::RCEntityActiveRaceCarOutputInterface(
 // only assignment site, BrnWorldIO::UpdateOutputBuffer::SetActiveRaceCarOutputInterface
 // @0x827A47A8, is a flat `XMemCpy(dst, src, 0x28F0)` == the whole 10480-byte object.
 //
-// ⚠️ WHY THIS EXISTS NOW: the declared-but-undefined operator= had been resolving from
-// WorldLinkStubs.cpp as an INERT one-shot log. `SetActiveRaceCarOutputInterface` therefore
-// compiled, ran every frame, and COPIED NOTHING -- a bridge that looks correct and silently
-// drops its payload. Retired here with the member-wise body (the same one the copy
-// constructor above uses; a byte-copy is not portable to the x64 layout).
+// The body is member-wise (the same one the copy constructor above uses); a byte-copy is not
+// portable to the x64 layout.
 // ============================================================================
 void RCEntityActiveRaceCarOutputInterface::operator=(
         const RCEntityActiveRaceCarOutputInterface& lrOther)
@@ -548,7 +545,6 @@ void RCEntityActiveRaceCarOutputInterface::AddCarToRace(BrnWorld::RaceCar* lpRac
 // WorldEntityModule::PreSceneUpdate @0x82302A08 (the PVS query picks the player
 // car's position when true, the simulated camera position when false), which is
 // why the world loading drive hits it before any car exists.
-// (Was a WorldLinkStubs assert trap.)
 // ============================================================================
 bool RCEntityActiveRaceCarOutputInterface::IsPlayerCarActive() const
 {
@@ -565,7 +561,6 @@ bool RCEntityActiveRaceCarOutputInterface::IsPlayerCarActive() const
 // X360 0x82277B10 -- IsRaceCarActive. Bounds-asserts the index then returns bit 0
 // of the per-car flag halfword (asm: `addi r11,idx,0x13C0; slwi 1; lhzx` == the
 // maxRaceCarFlags[idx] element at +0x2780, `clrlwi r3,r11,31` == & 1).
-// (Was a WorldLinkStubs assert trap.)
 // ============================================================================
 bool RCEntityActiveRaceCarOutputInterface::IsRaceCarActive(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
@@ -600,7 +595,6 @@ bool RCEntityActiveRaceCarOutputInterface::IsCarDisconnected(EActiveRaceCarIndex
 // &maRaceCarStates[idx] after the same two range asserts; the const form was
 // ICF-folded on the console so it has no own export). Read by
 // WorldEntityModule::PreSceneUpdate for the player car's PVS position/velocity.
-// (Was a WorldLinkStubs assert trap.)
 // ============================================================================
 const RCEntityActiveRaceCarOutputInterface::RaceCarState*
 RCEntityActiveRaceCarOutputInterface::GetRaceCarState(EActiveRaceCarIndex leActiveRaceCarIndex) const

@@ -56,7 +56,7 @@ static const CgsID KU_INVALID_CGS_ID = 0xFFFFFFFFFFFFFFFFull;
 //
 // [!] INITIALISER DIVERGENCE, DELIBERATE AND NARROW: the console's .bss starts both at 0 and
 // AddMonitor overwrites them during Construct. Here they start at -1, which is exactly what
-// PerfMonCpu::AddMonitor returns for "no monitor" (CgsPerfMonCpu.h:96), because on this build
+// PerfMonCpu::AddMonitor returns for "no monitor" (see AddMonitor in CgsPerfMonCpu.h), because on this build
 // Construct is NOT YET CALLED (see its banner) -- a 0 would make the first PreWorldUpdate bracket
 // monitor handle 0, i.e. silently attribute ModeManager time to whatever registered first.
 // Restore 0 only if Construct becomes the armed path AND that risk is gone.

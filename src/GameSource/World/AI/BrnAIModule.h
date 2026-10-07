@@ -22,13 +22,11 @@
 
 #include <eathread/eathread_rwmutex.h>
 
-// ⚠️ CLASS-KEY CORRECTED 2026-08-25 (aimodule wave): AllocatorList was forward-declared here
-// as a `struct`, but BrnGameDataAllocatorList.h defines it as a `class`. MSVC mangles the class
-// key into the parameter type (V vs U), so BrnAIModule.cpp emitted
-// ?Prepare@...PEAUAllocatorList... while every caller (compiled against the real header) asked
-// for ...PEAVAllocatorList... -- an LNK2019 the moment the body left WorldLinkStubs.cpp, where it
-// had always been compiled against the real header. A silent trap for any TU that only ever saw
-// this line.
+// ⚠️ CLASS KEY: BrnGameDataAllocatorList.h defines AllocatorList as a `class`, so it is
+// forward-declared as one here. MSVC mangles the class key into the parameter type (V vs U): a
+// `struct` here makes BrnAIModule.cpp emit ?Prepare@...PEAUAllocatorList... while every caller
+// (compiled against the real header) asks for ...PEAVAllocatorList... -- an LNK2019. A silent
+// trap for any TU that only ever saw this line.
 namespace BrnResource { namespace GameDataIO { template <int N> class AllocatorListT; class AllocatorList; } }
 
 namespace CgsModule { struct IOBufferStack; }
@@ -105,7 +103,7 @@ public:
         // X360 0x8276E380. Bodied in BrnAIModule.cpp (crash parity G04-D7); teardown-only.
         void Destruct() override;
         // ---- ADDITIVE (attested by WorldModule::ReleaseWorld @0x827BCE58) ----
-        // Still a boot gate in WorldLinkStubs.cpp -- see the note there.
+        // Bodied in BrnAIModule_wS34_00.cpp.
         bool Release() override;
 
         // X360 0x82798070 -- the 6-stage prepare machine. NOT the base's virtual Prepare()
@@ -114,9 +112,8 @@ public:
         bool Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
                       AIModuleIO::OutputBuffer* lpOutputBuffer );
 
-        // ---- ADDITIVE (WorldModule::Update @0x827D63E8; DWARF BrnAIModule.h
-        //      :232/:235). Declaration-only; bodies gated in WorldLinkStubs.cpp
-        //      until this module's own TU lands. ----
+        // ---- ADDITIVE (called from WorldModule::Update). Update is bodied in
+        //      BrnAIModule_ResetPump.cpp, PostPhysicsUpdate in WorldBridgeAIModule.cpp. ----
         void Update( CgsModule::IOBufferStack* lpInputBufferStack,
                      CgsModule::IOBufferStack* lpOutputBufferStack,
                      const AIModuleIO::InputBuffer* lpInputBuffer,
@@ -571,4 +568,5 @@ private:
 
 // Free post-increment over the AI prepare-stage enum (DWARF BrnAIModule.h:417). X360 0x82765A10.
 AIModule::EPrepareStage operator++(AIModule::EPrepareStage& leEnumIndex, int);
+AIModule::EReleaseStage operator++(AIModule::EReleaseStage& leEnumIndex, int);   // the release-stage twin
 }

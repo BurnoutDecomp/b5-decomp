@@ -7,24 +7,14 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                                // CGS_ASSERT
 
 // ==================================================================================================
-// The DeformationDebugComponent::Construct chain -- SPLIT OUT of BrnDeformationDebugComponent.cpp on
-// 2026-08-03 (task #116). BUILD-MECHANICS SPLIT ONLY: every body below was MOVED verbatim.
-//
-// == WHY THE SPLIT ==
-// BrnPhysics::PhysicsModule::Construct @0x825AE308 had been a LIVE EMPTY STUB in WorldLinkStubs.cpp;
-// un-stubbing it pulls in DeformationManager::Construct @0x82621510, whose first act is to construct
-// this component. BrnDeformationDebugComponent.cpp AS A WHOLE cannot be mounted: a MEASURED trial
-// link (task #116, M2) put it at 53 unresolved externals -- 25 from OnActivate, 12 from RenderWorld,
-// the rest from DrawDetachedWheels / CompressSelectedRig_MaxDrivetime / DetachPart / the point
-// callbacks. That is the debug-menu registration surface and the Debug3DImmediateRender draw API.
-//
-// ⭐ NOT ONE of those 53 was referenced from Construct, OnSelectedRigChange or OnSelectedSensorChange.
-// The construct chain needs nothing new -- which is why this split costs zero.
+// The DeformationDebugComponent::Construct chain -- SPLIT OUT of BrnDeformationDebugComponent.cpp.
+// BUILD-MECHANICS SPLIT ONLY: every body below was MOVED verbatim. PhysicsModule::Construct reaches
+// it through DeformationManager::Construct, whose first act is to construct this component.
 //
 // The two out-of-line accessors come along because OnSelectedSensorChange calls both and this file
 // was their only home.
 //
-// TO RE-MERGE: close the 53, mount BrnDeformationDebugComponent.cpp, move this text back.
+// BrnDeformationDebugComponent.cpp is mounted as well, so re-merging is a plain move of these bodies.
 // ==================================================================================================
 
 namespace BrnPhysics

@@ -1,193 +1,197 @@
 #pragma once
 
 // ===========================================================================
-// MassiveAdClient3::CMassiveClientCore -- minimal owning home (vendor
-// middleware).
+// MassiveAdClient3::CMassiveClientCore -- the MassiveAd client root (vendor middleware).
 //
-// The full CMassiveClientCore body (CMassiveClientCore ctor, RequestSessionOpen/
-// Close, RequestLocateService, SetIsPaused, ...) is a SEPARATE ledger TU. This
-// header only pins the surface the committed CRequestObject TU
-// (MassiveAdClient3Request.h/.cpp) is attested to touch, so the class can be
-// grown here later:
+// The process-wide client object the title drives: Initialize builds it (plus the
+// system / request-manager / network-manager singletons), Tick runs its session state
+// machine and the current zone, EnterZone / ExitZone / FlushImpressions manage the ad
+// zone, and Shutdown tears everything down (blocking, or on a CMassiveThread).
 //
-//   - Instance(): direct bl from CRequestObject::FinishBaseBlock @ 0x82BD04E8
-//   - GetTime(core): direct bl on the Instance() result; its 64-bit return
-//     (PPC std of r3) is the request timestamp appended to the wire buffer
+// The client core IS a CRequestBuilder: it owns the LocateService / OpenSession /
+// CloseSession requests and receives their completions through HandleResponse /
+// HandleError. The inherited CMassiveBaseObject valid dword (+0x10) doubles as the client
+// state:
+//    0 error              2 running (zone entered)   3 suspended
+//    4 shutting down      5 initialised              6 server asked for shutdown
+//    7 locate in flight   8 locate wanted            9 open-session in flight
+//   10 open-session wanted 11 / 12 MP create / join waiting on the session close
+//   13 session open, no zone entered yet            14 zone entered (-> 2)
+// (the zone manager also folds 13/15 -> 14 and writes 15; see CMassiveZoneManager).
 //
-// (BrnMassive.h forward-declares this same class and reaches the core through
-// game-side wrapper declarations; this vendor-side home is the class's owning
-// header.)
-//
-// ZONE-MANAGER SLICE (grown for CMassiveZoneManager::CreateImpUpdateReque
-// @ 0x82BD2E00 / HandleResponse @ 0x82BD3410 / Tick @ 0x82BD3130): the class is
-// now modelled with its ATTESTED base and first own member --
-//   - The X360 ctor @ 0x82BCD440 chains
-//     `CRequestBuilder::CRequestBuilder(this, "CMassiveClientCore")` and installs
-//     vftable off_821840B4, then overrides the builder's completion callbacks
-//     (HandleResponse @ 0x82BCE260 / HandleError @ 0x82BCD310, both in the
-//     ledger). So the client core IS a CRequestBuilder; the "client state" dword
-//     the zone layer reads at core+0x10 is the inherited CMassiveBaseObject
-//     valid/state dword (5 = initialised by the ctor; 4 = shutting down, gated
-//     by CreateImpUpdateReque; 13/15 -> 14 folded by the zone manager's
-//     HandleResponse; 15 stored by its Tick on a submitted enter-zone request).
-//   - The ctor's next construction is `CMassiveBenchmark(this + 0x28)` -- the
-//     first own member past the 0x28-byte X360 CRequestBuilder base. Tick reads
-//     the benchmark's three counters (core+0x3C/+0x40/+0x44 = benchmark
-//     +0x14/+0x18/+0x1C) as the bandwidth-usage triple for CRequestEnterZone/
-//     CRequestExitZone::CreateRequest, and AddBenchmarkData accumulates into it.
-//   - Members past +0x48 (critical section @ +0x48, time @ +0x80, the CFlag pair
-//     @ +0xA8/+0xC0, the zone list @ +0x114, the current-zone slot @ +0x124, ...)
-//     are NOT modelled yet -- nothing committed touches them by name; the full
-//     CMassiveClientCore TU recovers them. Growth stays additive.
+// Layout (console offsets; members are accessed by name, host sizes differ):
+//   +0x00  CRequestBuilder base (vftable, base object, request list, submit status)
+//   +0x28  mBenchmark            bandwidth samples of the zone session
+//   +0x48  mCriticalSection      "CMassiveClientCore"; every public entry TryEnter's it
+//   +0x80  mTime                 client clock (server time + local tick bias)
+//   +0xA8  mInternalFlags        CFlag: server configuration options (IsFlagSetInternal)
+//   +0xC0  mFlags                CFlag: the title's init flags (IsFlagSet)
+//   +0xD8  mnImpressionFlushInterval  ms between automatic flushes (0 = disabled)
+//   +0xE0  mnTimeLastFlush
+//   +0xE8  mnTimeTickLast
+//   +0xF0  mnTimeTickStart
+//   +0xF8  mpcSkuName / +0xFC mpcSkuVersion   (the init block's SKU strings)
+//   +0x100 mnField100            zeroed by the constructor
+//   +0x104 mZoneNameList         zone names the server published (char* payloads)
+//   +0x114 mZoneManagerList      CMassiveZoneManager payloads
+//   +0x124 mpCurrentZone
 // ===========================================================================
 
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestBuilder.h"
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Benchmark.h"
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3Objects.h"   // CMassiveTime, CFlag
+
+// The shutdown tick loop (a free function: it is also the shutdown thread's entry point).
+unsigned long ShutdownTick(void* pTimeoutMs);
 
 namespace MassiveAdClient3
 {
 
-// The client's ad-zone manager (its own ledger TU); GetCurrentZone returns the
-// active one. Pointer-only use here -- the owning home is
-// MassiveAdClient3ZoneManager.h.
 class CMassiveZoneManager;
 
-// Custom heap-hook function-pointer types installed via
-// CMassiveClientCore::SetCustomMemoryFunctions -- the game routes MassiveAd
-// allocations through its own heap (see BrnMassive::System360HWMassive::
-// BurnoutMassiveMalloc / BurnoutMassiveFree).
+// The title's heap hooks, installed by CMassiveClientCore::SetCustomMemoryFunctions.
 typedef void* (*TMassiveMallocFn)(unsigned int nSize);
 typedef void  (*TMassiveFreeFn)(void* pBlock);
 
-// Initialisation parameters passed BY POINTER to CMassiveClientCore::Initialize.
-// Reconstructed from the store offsets at the game's init call site
-// (BrnMassive::System360HWMassive::Prepare @ 0x823AB258, which builds this block on
-// the stack): a leading application-name / version pair, four zero-initialised
-// fields, an integer field set to 10000, and a trailing pair of string fields. Only
-// the application-name/version pair is name-attested; the remaining members are named
-// by offset (the vendor SDK's real field names are not recovered here).
+// Initialisation block passed by pointer to CMassiveClientCore::Initialize (the title
+// builds it on the stack, zero-filled, then sets the named fields).
 struct SMassiveClientInit
 {
-    const char* mpcApplicationName;  // +0x00  e.g. "burnout_5_x360_na"
-    const char* mpcVersion;          // +0x04  e.g. "1.0"
-    int         mnUnknown08;         // +0x08  zero-initialised
-    short       mnUnknown0C;         // +0x0C  zero-initialised (16-bit store)
-    short       mnUnknown0E;         // +0x0E  pad within the zeroed dword
-    int         mnUnknown10;         // +0x10  zero-initialised
-    int         mnUnknown14;         // +0x14  zero-initialised
-    int         mnUnknown18;         // +0x18  set to 10000 at the call site
-    const char* mpcUnknown1C;        // +0x1C  e.g. "Shawn"
-    const char* mpcUnknown20;        // +0x20  e.g. "None"
+    const char*    mpcSkuName;                 // +0x00  IsInitStructValid: non-empty, <= 256 chars
+    const char*    mpcSkuVersion;              // +0x04  same checks
+    const void*    mpPublicKey;                // +0x08  CRequestObject::SetPublicKey
+    unsigned short mnFlags;                    // +0x0C  OR-ed into the core's mFlags
+    unsigned short mnPad0E;                    // +0x0E
+    int            mnField10;                  // +0x10  zero-filled by the title; no client-core reader
+    int            mnField14;                  // +0x14  zero-filled by the title; no client-core reader
+    unsigned int   mnImpressionFlushInterval;  // +0x18  ms; 0 disables the automatic flush
+    const char*    mpcThirdPartyID;            // +0x1C  CRequestObject::SetThirdPartyID
+    const char*    mpcThirdPartyService;       // +0x20  CRequestObject::SetThirdPartyService
 };
 
 class CMassiveClientCore : public CRequestBuilder
 {
-    // CMassiveZoneManager::Tick @ 0x82BD3130 reads this core's embedded
-    // benchmark counters directly on the X360 (`lwz r6/r7/r10, 0x3C/0x40/0x44`
-    // off the Instance() result); friendship keeps that a named-member read.
-    // (The zone manager's reads/writes of the inherited base state dword at
-    // +0x10 are granted by the matching friendship on CMassiveBaseObject.)
+    // CMassiveZoneManager::Tick reads the embedded benchmark counters directly.
     friend class CMassiveZoneManager;
+    friend unsigned long ::ShutdownTick(void* pTimeoutMs);
 
 public:
-    // @ 0x82BCD440. Chains CRequestBuilder("CMassiveClientCore"), installs this
-    // class's vftable (off_821840B4), constructs the embedded benchmark /
-    // critical-section / time / flag members, registers itself as the singleton
-    // (off_8327F294 = this), then validates pInit (IsInitStructValid) and seeds
-    // the config fields -- state 5 on success, 0 on a bad init struct. Body in
-    // the CMassiveClientCore TU.
+    // Chains CRequestBuilder("CMassiveClientCore"), constructs the members, registers
+    // itself as the singleton, then validates pInit and copies its configuration: state 5
+    // on success, 0 on a bad init block.
     CMassiveClientCore(const SMassiveClientInit* pInit);
 
-    // @ 0x82BCD5D0 (slot 0; the vector deleting destructor @ 0x82BCE560 is the
-    // compiler-emitted thunk around it). Body in the CMassiveClientCore TU.
+    // Removes (and deletes) every zone manager and frees every zone name; the members and
+    // the base destruct after.
     virtual ~CMassiveClientCore();
 
-    // @ 0x82BCE260 (CRequestBuilder slot 1 override). Advances the client-core
-    // session state machine on a completed OpenSession/CloseSession/
-    // LocateService/Heartbeat request. Body in the CMassiveClientCore TU.
+    // CRequestBuilder slot 1: a LocateService / OpenSession / CloseSession request completed.
     int HandleResponse(CRequestObject* pRequest) override;
 
-    // @ 0x82BCD310 (CRequestBuilder slot 2 override). Records the failed
-    // request's error against the client core. Body in the CMassiveClientCore
-    // TU.
+    // CRequestBuilder slot 2: one of those requests failed (state -> 0).
     int HandleError(CRequestObject* pRequest, int nErrorCode) override;
 
-    // Direct bl target: returns the live client-core singleton. Body in the
-    // CMassiveClientCore TU.
+    // ----- process-wide entry points (static; they act on the singleton) ----------
+
+    // The live client core, or null.
     static CMassiveClientCore* Instance();
 
-    // Direct (non-virtual) bl target: the client clock, returned 64-bit (the
-    // X360 stores the result with std). Body in the CMassiveClientCore TU.
-    long long GetTime();
-
-    // Direct (non-virtual) bl target from CMassiveAsset::HandleResponse
-    // @ 0x82BDA418: on a completed asset download it records a benchmark sample
-    // on the live client-core singleton. The call site fixes the argument shape --
-    // a2 is the downloaded payload length (the request's mnDataLength, a 32-bit
-    // lwz) and a3 is the request's +0x38 field (an i64 ld, a timestamp/duration).
-    // Declared here (CMassiveClientCore is its home); body in the CMassiveClientCore
-    // TU.
-    void AddBenchmarkData(int nDataLength, long long nBenchmarkTime);
-
-    // Direct (non-virtual) bl target: the client's currently-active ad zone, or
-    // null when no zone is entered. Called on the Instance() result by
-    // CMassiveAdObjectSubscriber's constructor @ 0x82BCEA18 / 0x82BCEA58. Body in
-    // the CMassiveClientCore TU.
-    CMassiveZoneManager* GetCurrentZone();
-
-    // @ 0x82BCCCC8. Direct (non-virtual) bl target from CMassiveZoneManager::
-    // HandleResponse @ 0x82BD3410 (the exit-complete tail): unlinks pZoneManager
-    // from the core's zone list (clearing the current-zone slot when it matches)
-    // and DELETES it through its vftable slot 0; -300 when it was not listed.
-    // Body in the CMassiveClientCore TU.
-    int ZoneManagerRemove(CMassiveZoneManager* pZoneManager);
-
-    // @ 0x82BCCE68. Direct (non-virtual) bl target from CRequestOpenSession::Parse
-    // @ 0x82BD4E58 (the zone-name response field, wire tag 71), called on the
-    // Instance() result -- MEASURED at 0x82BD4F8C..0x82BD4F94, where r3 chains
-    // straight from the singleton getter into this member call. Registers
-    // pcZoneName in the core's zone-name list (X360 core+0x104) unless
-    // ZoneNameFind already knows it: strlen+1 MassiveMalloc copy, then a new
-    // CMassiveListNode appended via CMassiveList::Append. Returns 1 on append,
-    // 0 when already present or on a failed allocation (level-2 "ALLOCATION
-    // Failed for pName", SetLastError -99, zeroes the state dword at +0x10).
-    // Not a clipped phantom: 0x82BCCE68 has its own full body, and the export
-    // carries the sibling ZoneNameRemove under the same prefix.
-    // Body in the CMassiveClientCore TU.
-    int ZoneNameAdd(const char* pcZoneName);
-
-    // Install the game-supplied heap hooks. Static; body in its own ledger TU.
-    static void SetCustomMemoryFunctions(TMassiveMallocFn pfnMalloc, TMassiveFreeFn pfnFree);
-
-    // Create the client core from the init params; returns the new instance (null on
-    // failure). Static; body in its own ledger TU.
+    // Creates the client core and its system / request / network singletons. Returns the
+    // singleton (already-initialised: the existing one, with error -199).
     static CMassiveClientCore* Initialize(const SMassiveClientInit* pInit);
 
-    // Emit a client-core log line (printf-style, variadic). Static; body in its own TU.
+    // Begins shutdown: flushes, closes the session, then either ticks the shutdown out on
+    // this thread (bWait) or on a CMassiveThread. Returns 1 when started, 0 otherwise.
+    static int Shutdown(int bWait, unsigned int nTimeoutMs);
+
+    // Final teardown: network / request / system singletons, the shutdown thread, the core.
+    static int ShutdownComplete();
+
+    // One client tick: session state machine, network, current zone, automatic impression
+    // flush. bForce skips the minimum-interval check. Returns 1 when everything ticked.
+    static int Tick(int bForce);
+
+    // Pause / resume the current zone and the request queue (state 2 <-> 3).
+    static int SuspendAll();
+    static int ResumeAll();
+
+    // Enter / exit an ad zone by name. 1 on success.
+    static int EnterZone(const char* pcZoneName);
+    static int ExitZone(const char* pcZoneName);
+
+    // Report the current zone's impressions now. 1 when the zone reported.
+    static int FlushImpressions();
+
+    // printf-style client log line (formatted into a local buffer under the core lock).
     static void Log(int nLevel, const char* pcName, const char* pcFormat, ...);
 
-    // Enter an ad zone by name. Static; body in its own ledger TU.
-    static int EnterZone(const char* pcZone);
+    // Install the title's heap hooks (MassiveMalloc / MassiveFree).
+    static void SetCustomMemoryFunctions(TMassiveMallocFn pfnMalloc, TMassiveFreeFn pfnFree);
 
-    // Exit an ad zone by name. Static; body in its own ledger TU. Returns the live
-    // client core, which the game's Release path uses as the FlushImpressions receiver.
-    static CMassiveClientCore* ExitZone(const char* pcZone);
+    // Multiplayer sessions: create (returns the session GUID string, or null) / join by GUID.
+    static char* MPSessionCreate();
+    static int   MPSessionJoin(const char* pcGuid);
 
-    // Flush the queued ad impressions on this core. Body in its own ledger TU.
-    int FlushImpressions();
+    // ----- members ----------------------------------------------------------------
 
-    // Tear the client core down (nFlush flag, timeout in ms); returns non-zero on
-    // success. Static; body in its own ledger TU.
-    static int Shutdown(int nFlush, unsigned int nTimeoutMs);
+    // Checks the SKU name / version strings (non-empty, <= 256 chars).
+    int IsInitStructValid(const SMassiveClientInit* pInit);
+
+    // Zone-manager list: find by zone name / create + make current / unlink + delete.
+    CMassiveZoneManager* ZoneManagerFind(const char* pcZoneName);
+    int                  ZoneManagerAdd(const char* pcZoneName);
+    int                  ZoneManagerRemove(CMassiveZoneManager* pZoneManager);
+
+    // Zone-name list (names the OpenSession response published).
+    char* ZoneNameFind(const char* pcZoneName);
+    int   ZoneNameAdd(const char* pcZoneName);
+    int   ZoneNameRemove(const char* pcZoneName);
+
+    // Flag queries on mFlags / mInternalFlags.
+    int IsFlagSet(unsigned short nFlag);
+    int IsFlagSetInternal(unsigned short nFlag);
+
+    // Clock accessors.
+    long long GetTime();
+    long long GetTimeTickLast();
+    long long GetTimeTickStart();
+
+    // The current zone, or null.
+    CMassiveZoneManager* GetCurrentZone();
+
+    // A finished asset download's byte count + duration into the benchmark.
+    void AddBenchmarkData(int nDataLength, long long nBenchmarkTime);
+
+    // Session requests (create + submit); 0 or the failure code.
+    int RequestSessionOpen();
+    int RequestSessionClose();
+    int RequestLocateService();
+
+    // Acts on the pending session state at the top of Tick; non-zero on failure.
+    int HandleState();
 
 private:
-    // First own member past the CRequestBuilder base (X360 +0x28; the ctor
-    // constructs `CMassiveBenchmark(this + 0x28)` immediately after the base
-    // chain). Accumulates the zone session's bandwidth samples: AddBenchmarkData
-    // -> AddData(nDataLength, nBenchmarkTime), and CMassiveZoneManager::Tick
-    // reads the three counters (+0x3C/+0x40/+0x44 = mnTotalA/mnTotalB/mnCount)
-    // as the bandwidth-usage triple for the enter/exit-zone requests.
-    CMassiveBenchmark mBenchmark;  // +0x28
+    // The live client core (set by the constructor, cleared by ShutdownComplete).
+    static CMassiveClientCore* spInstance;
+
+    // The thread a non-waiting Shutdown ticks on (deleted by ShutdownComplete).
+    static CMassiveThread* spShutdownThread;
+
+    CMassiveBenchmark       mBenchmark;                 // +0x28
+    CMassiveCriticalSection mCriticalSection;           // +0x48
+    CMassiveTime            mTime;                      // +0x80
+    CFlag                   mInternalFlags;             // +0xA8
+    CFlag                   mFlags;                     // +0xC0
+    long long               mnImpressionFlushInterval;  // +0xD8
+    long long               mnTimeLastFlush;            // +0xE0
+    long long               mnTimeTickLast;             // +0xE8
+    long long               mnTimeTickStart;            // +0xF0
+    const char*             mpcSkuName;                 // +0xF8
+    const char*             mpcSkuVersion;              // +0xFC
+    int                     mnField100;                 // +0x100
+    CMassiveList            mZoneNameList;              // +0x104
+    CMassiveList            mZoneManagerList;           // +0x114
+    CMassiveZoneManager*    mpCurrentZone;              // +0x124
 };
 
 } // namespace MassiveAdClient3

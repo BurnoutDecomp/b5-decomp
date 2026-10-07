@@ -235,9 +235,9 @@ Handle<Voice> Environment::GetVoice(u32 au32Id)
 // named slot resolves and whose GenericRwacVoice plug-in table contains apPlugin.
 // Decoded by name:
 //   * the "type tag" check is `voice->mFactory.mName == dword_83008650` (the asm
-//     loads voice+8 -> factory, factory+8 -> mName) -- i.e. the voice belongs to a
-//     SPECIFIC factory, matched by interned name;
-//   * FindNamedSlot receives the interned Name at dword_830080A8 (one word built
+//     loads voice+8 -> factory, factory+8 -> mName) -- i.e. the voice belongs to
+//     the factory named GenericRwacFactory::SK_NAME;
+//   * FindNamedSlot receives PlayerVoice::SK_PLAYER_SLOT_NAME (one word built
 //     on the stack and passed by the non-trivial-class reference ABI) -- the real
 //     Voice::FindNamedSlot(Name) member.
 // Returns an acquired Voice handle to the first match, or an empty handle. The
@@ -258,11 +258,10 @@ Handle<Voice> Environment::GetRwacVoiceByPlugin(
         if (!lpVoice) { continue; }
 
         // Factory-name match (asm: voice+8 -> factory, +8 -> mName vs dword_83008650).
-        if (lpVoice->GetFactory().GetName() !=
-            Name(static_cast<uintptr_t>(gu32VoiceTypeTag))) { continue; }
+        if (lpVoice->GetFactory().GetName() != GenericRwacFactory::SK_NAME) { continue; }
 
         CGS_ASSERT(lpVoice, "mpObject");
-        if (lpVoice->FindNamedSlot(Name(static_cast<uintptr_t>(gu32NamedSlotSentinel))) == 0)
+        if (lpVoice->FindNamedSlot(PlayerVoice::SK_PLAYER_SLOT_NAME) == 0)
         {
             continue;
         }

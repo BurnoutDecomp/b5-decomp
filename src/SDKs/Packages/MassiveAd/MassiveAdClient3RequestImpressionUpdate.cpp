@@ -12,9 +12,7 @@
 // deleting destructor perform (off_82186F84) is modelled by the class virtuals,
 // so no vftable store is written by hand.
 //
-// Parse @ 0x82BD9DA8 is intentionally NOT defined here (BLOCKED): its body calls
-// an un-homed function (Hex-Rays `STUB(this, mpSignature, 20)`) and CRequest
-// Object::ReadRemoveSignature (un-attested in the base). See the header.
+// Parse is defined in MassiveAdClient3Request_wL_01.cpp.
 // ===========================================================================
 
 namespace MassiveAdClient3

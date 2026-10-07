@@ -95,7 +95,7 @@ void AptStringPool_ClearTemporaryPool();           // AptStringPool.cpp (== Stri
 // ---- EA::Thread (record the sim/render thread ids + the shared mutex) -------
 #include "eathread/eathread.h"                                  // EA::Thread::GetThreadId / ThreadId
 #include "eathread/eathread_mutex.h"                            // EA::Thread::Mutex (vendor)
-#include "SDKs/EATech/eathread/thread_local_storage.h"          // EA::Thread::ThreadLocalStorage (gAptTargetTls)
+#include "eathread/eathread_storage.h"                          // EA::Thread::ThreadLocalStorage (gAptTargetTls)
 
 // ===========================================================================
 // The Apt bring-up .data/.bss globals this TU owns (the X360 objects the init
@@ -108,6 +108,11 @@ void AptStringPool_ClearTemporaryPool();           // AptStringPool.cpp (== Stri
 // byte[64] (the interpreter's skip-trace flag at config +0x40) is addressable.
 unsigned int gAptCommonConfig[17] = { 0 };   // unk_82F733B8
 
+// The simulation thread id (pointer-sized EA::Thread::ThreadId). External: the AptValue
+// ctor compares it against the current thread. The RENDER id is owned by AptGlobals.cpp
+// (gAptRenderThreadId) since AptTarget.cpp and the AptValue release path read it there.
+EA::Thread::ThreadId gAptSimThreadId = EA::Thread::ThreadId();
+
 namespace
 {
     // ---- the once-only init guard (dword_8324E6E0) -------------------------
@@ -115,11 +120,6 @@ namespace
     // ---- the render / sim "initialized" latches ----------------------------
     int gbAptRenderInitDone = 0;   // dword_8324E510
     int gbAptUpdateInitDone = 0;   // dword_8324E50C
-
-    // ---- the sim thread id (dword_8324E500). EA::Thread::ThreadId is pointer-
-    //      sized. The RENDER id (dword_8324E504) is owned by AptGlobals.cpp
-    //      (gAptRenderThreadId) since AptTarget.cpp reads it there.
-    EA::Thread::ThreadId gAptSimThreadId = EA::Thread::ThreadId();   // dword_8324E500
 
     // ---- the render-item pointer pool (off_8324E2C8) -----------------------
     void* gpAptRenderItemPool = nullptr;   // off_8324E2C8
@@ -159,22 +159,6 @@ namespace
         return s_mutex;
     }
 
-    // ---- the deferred-release drain mutex (unk_8324E728) -------------------
-    // A SECOND vendor EA::Thread::Mutex, distinct from the update/render mutex
-    // above; AptRenderShutdown takes it to drain the render-item / deferred-
-    // release pool (off_8324E2C8 / dword_8324E508) -- the same lock the AS
-    // unresolve path uses. Same function-local-static shape as
-    // AptUpdateRenderMutex (init-order safe). FLAG PC-platform leaf: the console
-    // passes the raw MutexParameters name (unk_82143270); a default recursive
-    // vendor mutex is the same lock (threading primitive, not an engine method).
-    // (AptGlobals.cpp keeps a null `void* gAptUnresolveMutex` symbol placeholder;
-    // the functional object is modelled here, mirroring the render mutex.)
-    EA::Thread::Mutex& AptUnresolveMutex()
-    {
-        static EA::Thread::Mutex s_mutex;   // unk_8324E728
-        return s_mutex;
-    }
-
     // The DOGMA sized-free hook slot's signature is (void*, unsigned) while
     // DOGMA_FreeSized takes size_t; a thin adapter forwards it (x64: unsigned !=
     // size_t -- a straight fn-ptr assign would not type-check).
@@ -183,6 +167,18 @@ namespace
         DOGMA_FreeSized(pBlock, static_cast<size_t>(nBytes));
     }
 } // namespace
+
+// ---- the deferred-release drain mutex --------------------------------------
+// A SECOND vendor EA::Thread::Mutex, distinct from the update/render mutex above;
+// AptRenderShutdown and the render pass (AptRenderWalk.cpp) take it to drain the
+// render-item / deferred-release pool. Same function-local-static shape as
+// AptUpdateRenderMutex (init-order safe); the console's Lock passes the
+// kTimeoutNone constant, the vendor Lock() default.
+EA::Thread::Mutex& AptUnresolveMutex()
+{
+    static EA::Thread::Mutex s_mutex;
+    return s_mutex;
+}
 
 // The shared fixed-size pool handle (off_8324D808). Defined in AptGlobals.cpp.
 extern DOGMA_PoolManager* gpAptPseudoDataPool;   // off_8324D808
@@ -238,11 +234,8 @@ namespace AptMath { intptr_t ClipStackShutdown(); }
 int AptCommonShutdown();
 
 // The render-item / deferred-release pool count (dword_8324E508, homed in
-// AptGlobals.cpp) + the host font-free thunk (dword_8324E870, a member of the
-// gAptFuncs table, named beside the AS unresolve path in AptCharacterAnimation.cpp)
-// the shutdown drain calls on each pooled slot.
+// AptGlobals.cpp); the shutdown drain hands each pooled slot to gAptFuncs.pfnFreeTexture.
 extern int  gAptDeferredReleaseCount;       // dword_8324E508 (AptGlobals.cpp)
-extern void AptFreeFontUnit(void* pUnit);   // dword_8324E870 thunk
 
 // ===========================================================================
 // AptAllocatorInitialize @0x82ADD118 -- construct the Apt value pools + wire the
@@ -860,7 +853,7 @@ int AptValueShutdown()
 // AptUpdateShutdown) reach; declared here at the call site (the codebase pattern).
 // ---------------------------------------------------------------------------
 // The per-thread current-target TLS mirror (unk_8324E814); defined in
-// AptRenderLinkStubs.cpp. (Re-declared later in the AptUpdateTarget section; a
+// AptGlobals.cpp. (Re-declared later in the AptUpdateTarget section; a
 // redundant extern is harmless and keeps the shutdown bodies self-contained.)
 extern EA::Thread::ThreadLocalStorage gAptTargetTls;   // unk_8324E814
 
@@ -1033,7 +1026,7 @@ int AptRenderShutdown()
             void** const lppItems = static_cast<void**>(gpAptRenderItemPool);   // off_8324E2C8
             do
             {
-                AptFreeFontUnit(lppItems[liFreed]);   // dword_8324E870(*(off_8324E2C8 + v2))
+                gAptFuncs.pfnFreeTexture(lppItems[liFreed]);
                 lppItems[liFreed] = nullptr;          // *(off_8324E2C8 + v2) = 0
                 ++liFreed;
             }
@@ -1353,7 +1346,7 @@ int AptUpdateShutdown(int /*a1*/)
 // ===========================================================================
 
 // The per-thread current-target TLS mirror (unk_8324E814). Defined in
-// AptRenderLinkStubs.cpp; AptTarget.cpp publishes into the same slot.
+// AptGlobals.cpp; AptTarget.cpp publishes into the same slot.
 extern EA::Thread::ThreadLocalStorage gAptTargetTls;
 
 // AptUpdateTarget @0x82B0DE80 (the context swap around the per-frame AptUpdate

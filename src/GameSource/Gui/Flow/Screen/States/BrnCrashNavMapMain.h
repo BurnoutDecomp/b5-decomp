@@ -28,13 +28,6 @@
 //   X360 sizeof(CrashNavMapMain) == 24944 (24928 + the byte, rounded to the base's
 //   16-byte alignment) -- BrnScreenFlow::Prepare's state-size roster.
 //   The host layout is NAME-BASED; the offsets above are documentation.
-//
-// ⚠️ RE-PARENT, DO NOT FORK. A placeholder `struct CrashNavMapMain : public
-// CgsGui::State` lives in States/BrnScreenStatesLinkStubs.h with a PARTIAL
-// OnEnter/OnLeave/Update in the matching .cpp (the pause wave). That declaration and
-// those three bodies -- and the maiEventToObserve[19] table, which moves here -- must
-// be deleted in the SAME commit that mounts this TU; two surviving declarations of
-// BrnGui::CrashNavMapMain are an ODR fork. See the TU banner's DELETE-WHEN list.
 // ===================================================================================
 
 #include "types.hpp"
@@ -117,8 +110,8 @@ namespace BrnGui
         // ⚠️ X360-vs-DWARF DELTA, image wins: the DWARF declares
         // `const int32_t maiEventToObserve[18]` / `miNumEventsObserved = 18`. The ARTIST
         // build registers NINETEEN: OnEnter @0x824CCA0C and OnLeave @0x824CCA98 both pass
-        // dword_82066358 with `li r5, 0x13` (19). The extra id is real, the table is
-        // read out of .rdata, and it MOVES HERE from BrnScreenStatesLinkStubs.cpp.
+        // dword_82066358 with `li r5, 0x13` (19). The extra id is real and the table is
+        // read out of .rdata.
         static const s32 maiEventToObserve[19];
         static const s32 miNumEventsObserved;
 

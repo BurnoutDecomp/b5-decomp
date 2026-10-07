@@ -78,8 +78,7 @@ namespace Playback
         // (ADDITIVE home-grow, by-name): Registry::GetEntity<ContentSpec> compares a
         // slot's mTypeName against this per-type static Name (the X360 word
         // dword_830080B8). DECLARED here for the lookup; its interned DEFINITION lives
-        // with the ContentSpec/EntityFixer<ContentSpec> registration TU (DEFERRED),
-        // mirroring the other Entity subclasses in CgsDataStructures.h.
+        // in CgsDataStructures.cpp beside the other Entity subclasses' type names.
         static const Name SK_TYPE_NAME;
 
         // '|' path-zone separator (DWARF CgsDataStructures.h:1792 / :430).

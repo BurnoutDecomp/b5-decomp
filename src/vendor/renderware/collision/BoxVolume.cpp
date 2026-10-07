@@ -41,47 +41,20 @@
 //     value there and the two four-lane helpers below (RotateRow4 / TransformPoint4) are
 //     what those two bodies use. Dropping it would be a silent divergence.
 //
-// NOT LANDED (separate ledger rows, no body anywhere in the tree, listed so the next
-// owner does not re-derive that they are missing):
-//   rw::collision::BoxVolume::LineSegIntersect     @ 0x82BA9478
-//   rw::collision::SphereVolume::LineSegIntersect  @ 0x82BA82C8
-// They are the remaining descriptor slots for types 1 and 4; the four GetBBox/
-// GetBBoxDiag slots that scratchpad/waveQ2/rwvol.owner.md section 7 item (c) lists as
-// un-homed are all closed by this file.
-//
 // ---------------------------------------------------------------------------------------
-// GROWN 2026-08-19 (wave Q5 vtbind) -- four more bodies, so that the SPHERE and BOX
-// descriptor records in VolumeVTables.cpp can bind every slot the shipped image binds
-// except lineSegIntersect:
+// Four more bodies, so that the SPHERE and BOX descriptor records in VolumeVTables.cpp
+// can bind their slots:
 //
 //   rw::collision::SphereVolume::GetMaximumFeature @ 0x82BA81B0   (9 insns)
 //   rw::collision::BoxVolume::GetMaximumFeature    @ 0x82BA87F0   (9 insns)
 //   rw::collision::SphereVolume::CreateGPInstance  @ 0x82BA8100   (~40 insns)
 //   rw::collision::BoxVolume::CreateGPInstance     @ 0x82BA92E8   (~85 insns)
 //
-// STILL NOT LANDED, and WHY (parked with a reason, per AGENTS gotcha 8 -- raw asm dumped
-// to scratchpad/waveQ5/vtbind/asm/ so the next owner does not re-export it):
-//   rw::collision::SphereVolume::LineSegIntersect  @ 0x82BA82C8  136 insns. A full
-//       ray/sphere kernel around rwcSphereLineSegIntersect @0x82BA81D8 (which IS bodied,
-//       LineSegIntersect.cpp:700) plus TWO hand-written Newton-Raphson refinement chains
-//       (vrefp then two vnmsubfp/vmaddfp rounds for the 1/t reciprocal, and vrsqrtefp +
-//       two rounds for the normal's normalise) and a vcmpgtfp./mfocrf CR-bit predicate.
-//       Landing it faithfully is a body-sized job of its own, and NOTHING on the wave-Q5
-//       smash-gate path calls it: the volume line query is a different consumer
-//       (rw::collision::VolumeLineQuery, still a link stub in AptRenderLinkStubs.cpp).
-//   rw::collision::BoxVolume::LineSegIntersect     @ 0x82BA9478  723 insns -- the largest
-//       body in this directory after the cylinder SAT helper. Six slab/cap arms calling
-//       rwcSphereLineSegIntersect, rwcPlaneLineSegIntersect @0x82BA8818 (NO body in the
-//       tree -- a second, larger hole behind it) and rwcCylinderLineSegIntersect, with
-//       __savevmx_122 hand register allocation. Same "no caller on this path" argument.
-// Both descriptor slots are therefore left NULL in VolumeVTables.cpp with their X360
-// addresses named, which is an honest hole -- not a stub that returns a wrong answer.
-//
-// LANDED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)) -- the two parks above are closed: their consumer,
-// rw::collision::VolumeLineQuery::GetIntersections, has a body since d6040b9f, and the director camera's line
-// tests reach it. The two bodies (and rwcPlaneLineSegIntersect @0x82BA8818) are in LineSegIntersect.cpp, beside the
-// rwc* kernels they call, NOT here: this TU is compiled on its own by other tests (run_fxdirector2_scene_query links it
-// for SphereVolume::Initialize) and must not gain a link dependency on the line-test TU.
+// The two LineSegIntersect bodies (and rwcPlaneLineSegIntersect) are in LineSegIntersect.cpp,
+// beside the rwc* kernels they call, NOT here: this TU is compiled on its own by other tests
+// (run_fxdirector2_scene_query links it for SphereVolume::Initialize) and must not gain a link
+// dependency on the line-test TU. Their consumer is rw::collision::VolumeLineQuery::
+// GetIntersections, which the director camera's line tests reach.
 //   rw::collision::SphereVolume::LineSegIntersect  @ 0x82BA82C8
 //   rw::collision::BoxVolume::LineSegIntersect     @ 0x82BA9478
 // ===========================================================================
@@ -146,17 +119,14 @@ namespace
     // BrnPhysics::Props::FixableVolume::FixUp @0x828A87A0 (reads the enum here, writes
     // gVolumeVTable[enum] back) and FixDown @0x828A8830 (reverses it), so one FixUp()
     // call converts the record the day the slot can hold a host pointer.
-    // CONSEQUENCE (rewritten 2026-08-19 -- the previous text said this left consumers
-    // broken; it does not): the enum-in-+0x40 representation is the DESIGNED HOST FORM,
-    // not a shortfall. Every consumer that dispatches recovers the descriptor as
+    // CONSEQUENCE: the enum-in-+0x40 representation is the DESIGNED HOST FORM, not a
+    // shortfall. Every consumer that dispatches recovers the descriptor as
     // gVolumeVTable[enum] through the shared helper GetVolumeDescriptor
     // (CollisionVolume.hpp:450-453) -- VolumeBBoxQuery.cpp:83, VolumeQuery.cpp:178 and
     // PrimitiveIntersect.cpp:1259 each go through it. rw::collision::Volume::
-    // InitializeVTable is static, real and LIVE (SDKs/EATech/rwcollision/volume.cpp; its
-    // WorldLinkStubs `return 0` gate was retired 2026-08-18), so gVolumeVTable is filled,
-    // not all-zero: it holds the six descriptor records defined in
-    // vendor/renderware/collision/VolumeVTables.cpp, whose method slots are bound (34 of
-    // the 40 the image binds; 2 genuine image zeros, 6 parked with per-slot reasons).
+    // InitializeVTable (SDKs/EATech/rwcollision/volume.cpp) fills gVolumeVTable with the
+    // six descriptor records defined in vendor/renderware/collision/VolumeVTables.cpp,
+    // whose method slots are bound (see that file for the per-slot census).
     // No host-width promotion is required -- FixableVolume::FixUp/FixDown are the
     // console's validation half only, and the enum<->pointer swap is the identity here.
     void ConstructVolume(Volume& arVolume, EVolumeType aeType)

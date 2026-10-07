@@ -16,30 +16,12 @@
 // unresolved externals to close two. Same precedent as BrnCameraShakeUpdate.cpp and
 // BrnCameraTweakerConstruct.cpp.
 //
-// ⚠️⚠️ WHAT ::Construct RETIRES, AND WHY IT IS NOT COSMETIC.
-// Until this TU landed, `CameraShakeICEController::Construct` resolved to an EMPTY `{}` in
-// Director/DirectorLinkStubs.cpp (group E). Its committed justification was
-//   "unlike its neighbour it is a real (non-inlined) console call whose body was never dumped,
-//    so there is nothing to transcribe"
-// and that is FALSE: 0x8223EBF0 is a fully exported 186-line function in
-// .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8223EBF0.json, and the whole body is transcribed
-// below. That is the FOURTEENTH stale gate on this campaign, and the second in this class's
-// immediate neighbourhood (CameraSphericalRotationController::Construct was the previous one).
-// ⇒ WHEN A GATE NAMES A REASON, TEST THE REASON. "Never dumped" is a claim about the export
-//   set, and the export set is one `ls` away.
-//
-// ⭐⭐ AND THE STUB WAS ARMED, NOT MERELY INCOMPLETE. The second half of its own note --
-// "safe because the pools placement-new every behaviour with `new (slot) T()`, so the
-// sub-object starts zeroed" -- is exactly the danger. `Construct`'s real job is to set
-// mMatrix to the IDENTITY. Zero-initialised, mMatrix is the ALL-ZERO matrix, and
-// BehaviourGameplayExternal::Update multiplies GetMatrix()'s result into the camera transform
-// (it inlines the accessor as four `lvx128` off mBoostShake at 0x82241C70..0x82241C8C). An
-// all-zero matrix does not "do nothing" -- it ANNIHILATES the transform, collapsing the chase
-// camera to the origin with an empty basis. BehaviourGameplayExternal::Prepare already calls
-// mBoostShake.Construct() (BrnBehaviourGameplayExternal.cpp:260), so the zeroed matrix was
-// already sitting in the object, waiting for the one caller that reads it to land.
-// ⇒ this is the same shape as the RaceCarState::operator= silent-drop stub: a stub whose
-//   "not on the live path" excuse expires the instant that path lights up.
+// ⚠️⚠️ WHY ::Construct IS NOT COSMETIC. Its real job is to set mMatrix to the IDENTITY.
+// The pools placement-new every behaviour with `new (slot) T()`, so without it mMatrix is the
+// ALL-ZERO matrix, and BehaviourGameplayExternal::Update multiplies GetMatrix()'s result into
+// the camera transform. An all-zero matrix does not "do nothing" -- it ANNIHILATES the
+// transform, collapsing the chase camera to the origin with an empty basis.
+// BehaviourGameplayExternal::Prepare calls mBoostShake.Construct().
 // ============================================================================
 
 #include "GameSource/Director/Camera/Utils/BrnCameraShake.h"      // THE home for this class

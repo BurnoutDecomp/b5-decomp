@@ -108,8 +108,8 @@ CMassiveAdObject* CMassiveAdObjectModelDynamic::CreateSlaveM(
         ? ::new (lpSlaveMem) CMassiveAdObjectModel(
               mpcAdObjectName,  // lwz r4, 0x14(this)
               mnInvElementID,   // lwz r5, 0x48(this)
-              muField60,        // lwz r29, 0x60(this) -- the ctor applies the clrlwi mask
-              mnField38,        // lwz r6, 0x38(this)
+              static_cast<unsigned short>(muMinSize),
+              mnRotationType,
               0)                // li  r7, 0 (the slave takes no zone; the base ctor
                                 //            falls back to the current zone)
         : 0;

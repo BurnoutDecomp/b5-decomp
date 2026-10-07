@@ -3,6 +3,12 @@
 #include <cstdint>  // uintptr_t
 #include <cstring>  // strlen, strncpy, memset
 #include <ctime>    // tm, _localtime64, __time64_t
+#include <cctype>   // tolower
+#include <cstdio>   // fopen, fwrite, fflush, fclose
+
+// The console calls the Win32-subset kernel services (tick count, system time, critical
+// sections) directly; the PC build binds the same Win32 calls.
+#include <windows.h>
 
 // ===========================================================================
 // MassiveAdClient3 -- CMassiveBaseObject + CMassiveListNode.
@@ -286,6 +292,17 @@ CMassiveListNode* CMassiveList::GoToNext()
 }
 
 // ---------------------------------------------------------------------------
+// CMassiveList::Find: the first node (from the head) whose payload is pData, or 0.
+// ---------------------------------------------------------------------------
+CMassiveListNode* CMassiveList::Find(void* pData)
+{
+    CMassiveListNode* lpNode = mpHead;
+    while (lpNode && lpNode->mpOwner != pData)
+        lpNode = lpNode->mpNext;
+    return lpNode;
+}
+
+// ---------------------------------------------------------------------------
 // CMassiveList::GetCurrData @ 0x82BCF098
 //
 // Returns the payload pointer (mpOwner) of the node under the cursor, or 0.
@@ -389,7 +406,7 @@ CMassiveSystem* CMassiveSystem::Initialize()
     CMassiveSystem* lpInstance = gpMassiveSystemInstance;   // lwz r3, slot
     if (!lpInstance)                                         // bne -> skip
     {
-        lpInstance = static_cast<CMassiveSystem*>(MassiveMalloc(4)); // malloc(4)
+        lpInstance = static_cast<CMassiveSystem*>(MassiveMalloc(sizeof(CMassiveSystem)));
         if (lpInstance)
             lpInstance->mpcGuid = 0;                         // stw 0, 0(r3)
         else
@@ -427,16 +444,11 @@ int CMassiveSystem::Shutdown()
 }
 
 // ---------------------------------------------------------------------------
-// CMassiveSystem::GetSystemTime @ 0x82BD22E0
-//
-// Returns GetTickCount() (clrldi r3,r3,32 -> zero-extended DWORD). std::clock
-// here would be a different clock; the faithful source is the platform tick
-// counter. FLAG: GetTickCount is a Win32/X360 platform API -- declared below and
-// supplied by the platform layer.
+// CMassiveSystem::GetSystemTime: the millisecond tick count.
 // ---------------------------------------------------------------------------
 unsigned int CMassiveSystem::GetSystemTime()
 {
-    return MassiveGetTickCount();   // bl GetTickCount; clrldi r3,r3,32
+    return GetTickCount();
 }
 
 // ---------------------------------------------------------------------------
@@ -452,10 +464,10 @@ unsigned int CMassiveSystem::GetSystemTime()
 //   *(tm+0x00)=tm_sec  *(tm+0x04)=tm_min  *(tm+0x08)=tm_hour  *(tm+0x0C)=tm_mday
 //   *(tm+0x10)=tm_mon  *(tm+0x14)=tm_year
 // ---------------------------------------------------------------------------
-int CMassiveSystem::GetServerTimeFormatted(int /*nUnused*/, unsigned int nMilliseconds,
-                                           char* pcBuffer, unsigned int nCount)
+int CMassiveSystem::GetServerTimeFormatted(unsigned long long nMilliseconds, char* pcBuffer,
+                                           unsigned int nCount)
 {
-    __time64_t lnSeconds = static_cast<__time64_t>(nMilliseconds) / 1000; // divdu r30,1000
+    __time64_t lnSeconds = static_cast<__time64_t>(nMilliseconds / 1000);
     struct tm* lpTm = _localtime64(&lnSeconds);                           // localtime64
 
     if (lpTm)
@@ -468,12 +480,12 @@ int CMassiveSystem::GetServerTimeFormatted(int /*nUnused*/, unsigned int nMillis
                             lpTm->tm_mon + 1,       // r7 = *(tm+0x10)+1
                             lpTm->tm_mday);         // r8 = *(tm+0x0C)
 
-        unsigned int luMsRemainder = nMilliseconds - 1000u * (nMilliseconds / 1000u); // subf r9
+        unsigned int luMsRemainder = static_cast<unsigned int>(nMilliseconds % 1000);
         MassiveFormatString(lacTime, 0x20, "%.2d:%.2d:%.2d,%.3d",
                             lpTm->tm_hour,          // r6 = *(tm+0x08)
                             lpTm->tm_min,           // r7 = *(tm+0x04)
                             lpTm->tm_sec,           // r8 = *(tm+0x00)
-                            luMsRemainder);         // r9
+                            luMsRemainder);
 
         return MassiveFormatString(pcBuffer, nCount, "%s%s", lacDate, lacTime); // r6=date,r7=time
     }
@@ -486,11 +498,10 @@ int CMassiveSystem::GetServerTimeFormatted(int /*nUnused*/, unsigned int nMillis
 //
 // XNetGetTitleXnAddr -> XNADDR; on success allocate an 18-byte string into
 // *ppcOut, zero it, and format the 6 MAC bytes (abEnet, struct +0x0A..+0x0F) as
-// "%02X:%02X:%02X:%02X:%02X:%02X". Returns the XNetGetTitleXnAddr status (the
-// negative error is returned directly; on alloc failure the positive status is
-// returned without writing the string).
+// "%02X:%02X:%02X:%02X:%02X:%02X". Returns a negative XNetGetTitleXnAddr status
+// directly, 0 when the allocation fails, else the formatted length.
 // ---------------------------------------------------------------------------
-signed int CMassiveSystem::GetHardwareAddress(int /*nUnused*/, char** ppcOut)
+signed int CMassiveSystem::GetHardwareAddress(char** ppcOut)
 {
     MassiveXnAddr lXnAddr;  // var_40 (XNADDR scratch)
 
@@ -498,22 +509,52 @@ signed int CMassiveSystem::GetHardwareAddress(int /*nUnused*/, char** ppcOut)
     if (lnStatus < 0)                                    // blt -> return status
         return lnStatus;
 
-    char* lpcBuffer = static_cast<char*>(MassiveMalloc(0x12)); // malloc(18)
-    *ppcOut = lpcBuffer;                                       // stw r3, 0(r31)
-    if (!lpcBuffer)                                            // beq -> return status
-        return lnStatus;
+    char* lpcBuffer = static_cast<char*>(MassiveMalloc(0x12));
+    *ppcOut = lpcBuffer;
+    if (!lpcBuffer)
+        return 0;
 
     std::memset(lpcBuffer, 0, 0x12);                          // memset(...,0,18)
 
     // r6..r10 + a stacked 6th arg = abEnet[0..5] (struct +0x0A..+0x0F).
-    MassiveFormatString(*ppcOut, 0x11, "%02X:%02X:%02X:%02X:%02X:%02X",
+    return MassiveFormatString(*ppcOut, 0x11, "%02X:%02X:%02X:%02X:%02X:%02X",
                         lXnAddr.abEnet[0],   // var_36 (+0x0A)
                         lXnAddr.abEnet[1],   // var_35 (+0x0B)
                         lXnAddr.abEnet[2],   // var_34 (+0x0C)
                         lXnAddr.abEnet[3],   // var_33 (+0x0D)
                         lXnAddr.abEnet[4],   // var_32 (+0x0E)
                         lXnAddr.abEnet[5]);  // var_31 (+0x0F, stacked vararg)
-    return lnStatus;
+}
+
+// ---------------------------------------------------------------------------
+// MassiveAd file hooks: null-guarded forwards to the C runtime stream calls.
+// ---------------------------------------------------------------------------
+void* MassiveFileOpen(const char* pcFilename, const char* pcMode)
+{
+    if (!pcFilename)
+        return 0;
+    return std::fopen(pcFilename, pcMode);
+}
+
+void MassiveFileClose(void* pFile)
+{
+    if (!pFile)
+        return;
+    std::fclose(static_cast<std::FILE*>(pFile));
+}
+
+void MassiveFileFlush(void* pFile)
+{
+    if (!pFile)
+        return;
+    std::fflush(static_cast<std::FILE*>(pFile));
+}
+
+int MassiveFileWrite(const void* pData, unsigned int nElemSize, unsigned int nCount, void* pFile)
+{
+    if (!pFile)
+        return 0;
+    return static_cast<int>(std::fwrite(pData, nElemSize, nCount, static_cast<std::FILE*>(pFile)));
 }
 
 // ---------------------------------------------------------------------------
@@ -527,13 +568,7 @@ signed int CMassiveSystem::GetHardwareAddress(int /*nUnused*/, char** ppcOut)
 //   r3 = *ppcOut (buffer)         r4 = 0x25 (count)        r5 = "%8.8x-%I64d-%d"
 //   r6 = a1 (the char** address itself)        -> %8.8x  (hex of the slot ptr)
 //   r7 = TickCount (clrldi, zero-extended 64b) -> %I64d   (the tick counter)
-//   r8 = v17 * v16 (product of the two trailing SYSTEMTIME 16-bit words) -> %d
-// FLAG: %8.8x prints the host pointer value of `ppcOut`; on the 64-bit host this
-// is an 8-byte pointer truncated to 32 bits by %x, matching the X360's 32-bit
-// pointer width only in the low word. The two SYSTEMTIME words (v16 at the
-// 12-byte block +0x0C, v17 at +0x0E) are read back as the X360 stored them; the
-// product is reproduced verbatim. The observable contract is a per-call unique
-// GUID-shaped string of the form "%8.8x-%I64d-%d".
+//   r8 = wMilliseconds * wSecond of the system time               -> %d
 // ---------------------------------------------------------------------------
 int CMassiveSystem::CreateMassiveGuid(char** ppcOut)
 {
@@ -544,32 +579,30 @@ int CMassiveSystem::CreateMassiveGuid(char** ppcOut)
 
     std::memset(lpcBuffer, 0, 0x25);                           // memset(...,0,37)
 
-    // The X360 passes a SYSTEMTIME-shaped block to GetSystemTime (8 WORDs / 16
-    // bytes); IDA typed only the leading 12 bytes as v15 but reads v16/v17 from
-    // the last two WORDs (+0x0C/+0x0E), so the full 16-byte block is modelled.
-    unsigned char lacSystemTime[16];                           // v15 (GetSystemTime BYREF)
-    MassiveGetSystemTimeBlock(lacSystemTime);                  // GetSystemTime(v15)
-    unsigned int luTickCount = MassiveGetTickCount();          // GetTickCount() -> r3
+    SYSTEMTIME lSystemTime;
+    ::GetSystemTime(&lSystemTime);
+    unsigned int luTickCount = GetTickCount();
 
-    // v16 @ block+0x0C (var_14), v17 @ block+0x0E (var_12); both 16-bit.
-    unsigned short luWord16 = static_cast<unsigned short>(     // v16  (lhz var_14)
-        lacSystemTime[12] | (lacSystemTime[13] << 8));
-    unsigned short luWord17 = static_cast<unsigned short>(     // v17  (lhz var_12)
-        lacSystemTime[14] | (lacSystemTime[15] << 8));
-
-    unsigned int luProduct  = static_cast<unsigned int>(luWord17 * luWord16); // mullw r8,r9,r8
-
-    unsigned int luSlotAddr = static_cast<unsigned int>(           // r6 = a1 (low 32b of slot ptr)
-        reinterpret_cast<std::uintptr_t>(ppcOut));
+    // %8.8x takes the out-slot address (only its low 32 bits on the 64-bit host).
     return MassiveFormatString(*ppcOut, 0x25, "%8.8x-%I64d-%d",
-                               luSlotAddr,                          // %8.8x
-                               static_cast<long long>(luTickCount), // r7 = TickCount (%I64d)
-                               static_cast<int>(luProduct));        // r8 = v17*v16 (%d)
+                               static_cast<unsigned int>(reinterpret_cast<std::uintptr_t>(ppcOut)),
+                               static_cast<unsigned long long>(luTickCount),
+                               lSystemTime.wMilliseconds * lSystemTime.wSecond);
 }
 
 // ===========================================================================
 // CMassiveCriticalSection -- CMassiveBaseObject + one OS critical section.
 // ===========================================================================
+
+// FLAG PC-platform: the embedded section is the host CRITICAL_SECTION, kept in
+// opaque storage so the header does not pull <windows.h>.
+static_assert(sizeof(MassiveCriticalSectionStorage) >= sizeof(CRITICAL_SECTION),
+              "MassiveCriticalSectionStorage must hold a host CRITICAL_SECTION");
+
+CRITICAL_SECTION* CMassiveCriticalSection::GetOsCriticalSection()
+{
+    return reinterpret_cast<CRITICAL_SECTION*>(&mCriticalSection);
+}
 
 // ---------------------------------------------------------------------------
 // CMassiveCriticalSection::CMassiveCriticalSection @ 0x82BD2700
@@ -591,7 +624,7 @@ CMassiveCriticalSection::CMassiveCriticalSection(const char* pcSectionName)
     // *a1 = &off_821856B8 is the compiler-emitted vftable install for this
     // derived virtual-dtor class; nothing to write by hand.
 
-    MassiveInitializeCriticalSection(&mCriticalSection); // RtlInitializeCriticalSection(a1+5)
+    InitializeCriticalSection(GetOsCriticalSection());
 
     if (pcSectionName)                                   // if (a2)
     {
@@ -636,11 +669,26 @@ CMassiveCriticalSection::~CMassiveCriticalSection()
 // ---------------------------------------------------------------------------
 void CMassiveCriticalSection::Enter(const char* pcWho)
 {
-    MassiveEnterCriticalSection(&mCriticalSection);   // RtlEnterCriticalSection(a1+20)
+    EnterCriticalSection(GetOsCriticalSection());
     MassiveLog(7, GetName(),                          // r3 = 7, r4 = +0x0C (base name)
                "Try(blocking) succeeded on %s by %s",
                mpcSectionName,                        // r6 = +0x30 (section name)
                pcWho);                                // r7 = a2 (caller tag)
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveCriticalSection::TryEnter: non-blocking acquire; 1 when the section was
+// taken, 0 when another thread holds it (each outcome traced).
+// ---------------------------------------------------------------------------
+int CMassiveCriticalSection::TryEnter(const char* pcWho)
+{
+    if (!TryEnterCriticalSection(GetOsCriticalSection()))
+    {
+        MassiveLog(2, GetName(), "TryEnter failed on %s by %s", mpcSectionName, pcWho);
+        return 0;
+    }
+    MassiveLog(7, GetName(), "TryEnter succeeded on %s by %s", mpcSectionName, pcWho);
+    return 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -652,7 +700,7 @@ void CMassiveCriticalSection::Enter(const char* pcWho)
 // ---------------------------------------------------------------------------
 void CMassiveCriticalSection::Exit(const char* pcWho)
 {
-    MassiveLeaveCriticalSection(&mCriticalSection);   // RtlLeaveCriticalSection(a1+20)
+    LeaveCriticalSection(GetOsCriticalSection());
     MassiveLog(7, GetName(),                          // r3 = 7, r4 = +0x0C (base name)
                "Exit succeeded on %s by %s",
                mpcSectionName,                        // r6 = +0x30 (section name)
@@ -675,3 +723,22 @@ void* CMassiveCriticalSection::VectorDeletingDestructor(char bDelete)
 }
 
 } // namespace MassiveAdClient3
+
+int CompareStrings(const char* pcA, const char* pcB)
+{
+    if (!pcA || !pcB)
+        return -1;
+
+    unsigned short luLength = static_cast<unsigned short>(std::strlen(pcA));
+    if (luLength != std::strlen(pcB))
+        return -2;
+
+    char lacLowerA[128];
+    char lacLowerB[128];
+    for (unsigned short i = 0; i < luLength; ++i)
+    {
+        lacLowerA[i] = static_cast<char>(std::tolower(pcA[i]));
+        lacLowerB[i] = static_cast<char>(std::tolower(pcB[i]));
+    }
+    return std::strncmp(lacLowerA, lacLowerB, luLength);
+}

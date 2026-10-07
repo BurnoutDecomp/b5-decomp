@@ -6,13 +6,9 @@
 //
 //   WorldModule::BridgeSceneModuleToOutput  @ 0x827A5700   (32 insns)
 //
-// ⭐ RECONSTRUCTED 2026-08-11 (triangle-cache wiring wave); RETIRES the inert boot gate
-// that stood at WorldLinkStubs.cpp:3126.
-//
 // The world-output half of the triangle-cache handoff, and the ONLY caller of
 // BrnWorldIO::UpdateOutputBuffer::AppendTriangleCacheInterface @0x8279BAF8 in the whole
-// console image (xrefs_to of 0x8279BAF8 is exactly this one function) -- which is why that
-// already-landed member had no live caller before this file existed.
+// console image.
 //
 // Its sibling is WorldModule::BridgeSceneQueryResultsToPhysics @0x827A8E88
 // (WorldBridgeSceneToPhysics.cpp): the two run back to back inside the SAME

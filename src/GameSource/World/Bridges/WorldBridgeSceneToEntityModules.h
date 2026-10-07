@@ -27,16 +27,12 @@ namespace WorldModule
     // PHANTOMS (callers in EntityModulePostSceneUpdate @0x827C3C58):
     //   @0x827ABB50 traffic (3-buffer form), @0x827ABD30 trigger.
     //
-    // ---- STATUS 2026-08-19 (wave Q5 cluster F2, then wave Q6 cluster C5) ------------------
+    // ---- STATUS ---------------------------------------------------------------------------
     //   @0x827ABCB0 prop     BODIED -- WorldBridgePropModule.cpp (the split-out TU that owns
-    //                        all five prop bridges); its WorldLinkStubs gate is already retired.
+    //                        all five prop bridges).
     //   @0x827ABC50 traffic  BODIED -- WorldBridgeSceneToEntityModules.cpp (this header's TU).
-    //   @0x827ABBD0 race car BODIED (Q6 C5) -- WorldBridgeSceneToEntityModules.cpp. It was
-    //                        parked because the destination setter's parameter type was forked
-    //                        in BrnRaceCarEntityModuleIOQueues.h (a derived struct where the
-    //                        DWARF has a typedef); that fork is collapsed and the collapse is
-    //                        measured offset-neutral. ⛔ ITS LANDING REQUIRES the one-line
-    //                        `mPotentialContactQueue.Construct();` companion edit in
+    //   race car             BODIED -- WorldBridgeSceneToEntityModules.cpp. It depends on
+    //                        `mPotentialContactQueue.Construct();` in
     //                        RaceCarEntityModuleIO::InputBuffer_PrePhysics::Construct --
     //                        see the body's banner in the .cpp.
     void BridgeSceneQueryResultsToTrafficModule_PrePhysics(

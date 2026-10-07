@@ -41,7 +41,8 @@ void UpdateOutputBuffer::_AssertLayout()
 // (the two RCEntityActiveRaceCarOutputInterface Clears, TriggerEntity/DirectorVehicle/RaceCarGlobal/
 // VehicleManager/ContactSpy/TrafficNetwork/Crash/Deformation interfaces, the
 // AICarOutputInterface 35-slot {DIST_MAX, 0x7FFF} splat, and the StatusInterface
-// {0,0,0,1,1} seed whose setters are still WorldLinkStubs traps) are covered by the
+// {0,0,0,1,1} seed, which StatusInterface::Construct now carries but this body does not yet
+// call) are covered by the
 // leading zero-fill stand-in below [marked deviation] and listed here so each lands with
 // its type's own pass. The zero-fill starts at the first member (offset 16, pinned by
 // _AssertLayout) so the IOBuffer base/lock state is never touched.

@@ -181,26 +181,11 @@ s32 VolumeManager::GetVolumeIndexByID(VolumeId lVolumeId) const
 //    id, liIndex) (std id @+0, stw liIndex @+8), then mVolumeIdToIndex.Insert(element).
 // 8. return liIndex  (`mr r3,r31`).
 //
-// 🔴 LIVE PRE-CONDITION FOR STEP 2 -- NOT INTRODUCED HERE, AND IT WILL CRASH IF IGNORED.
-// GetBBox dispatches through the descriptor pointer the loader wrote into volume+0x40, and
-// on THIS PC build that pointer is NULL for every volume: BrnPhysics::Props::
-// FixableVolume::FixUp (GameShared/GameClasses/RenderWare/FixableVolume.cpp:42) stores
-// `rw::collision::gVolumeVTable[type]`, and gVolumeVTable is still all-zero because
-// SceneManagerModule::Construct calls the STATIC rw::collision::Volume::InitializeVTable
-// (declared CgsSceneManagerModule.cpp:48, called :191) while the real body in
-// SDKs/EATech/rwcollision/volume.cpp:103 is emitted NON-static -- a different mangled
-// symbol -- so the boot gate at WorldLinkStubs.cpp:2461-2474 (`return 0`) wins and the
-// table is never filled. AND the `static` fix alone is NOT enough: the six descriptors
-// volume.cpp:106-111 would install are the placeholder symbols
-// `gVolumeHandler_82F91*`, each defined as a SINGLE ZERO BYTE at
-// SDKs/EATech/AptRenderLinkStubs.cpp:608-613 -- so the table would go from all-null to
-// pointers-into-a-zero-byte, which still null-calls. (Wave Q2's rwvol owner found the
-// mangling half -- volume_debug_access.h:296-305; wave Q5's rwcollision owner re-verified
-// it and added the descriptor half -- scratchpad/waveQ5/rwcoll.owner.md s4.2.)
-// Until BOTH land, the FIRST prop volume that reaches AddDynamicVolume dies here.
-// Reported by the wave Q5 VolumeManager owner; NOT worked around in this body, because a
-// null guard the console does not have is new behaviour and would silently swallow a real
-// breakage.
+// PRE-CONDITION FOR STEP 2: GetBBox dispatches through rw::collision::gVolumeVTable[type]
+// (the type index FixableVolume::FixUp leaves at volume+0x40), which SceneManagerModule::
+// Construct fills through the static rw::collision::Volume::InitializeVTable from the six
+// descriptor records in vendor/renderware/collision/VolumeVTables.cpp. There is no null
+// guard: the console has none, and one would silently swallow a real breakage.
 // ---------------------------------------------------------------------------
 s32 VolumeManager::AddDynamicVolume(VolumeId lVolumeId,
                                     VolumeManagerVolume::VolumeTypeFlags lxVolumeTypeFlags,

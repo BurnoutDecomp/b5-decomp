@@ -2,9 +2,7 @@
 // b5-decomp/src/GameSource/GameState/ModeManager/Scoring/BrnRoadRageModeScoring.cpp
 // ============================================================================
 // BrnGameState::RoadRageModeScoring -- the offline Road Rage sub-scorer ScoringSystem
-// embeds by value at ss+0x4B40. This is the REAL TU for the type; it defines exactly the
-// fifteen symbols BrnRoadRageModeScoringLinkStubs.cpp used to carry, so the mount swap is
-// one-for-one (the two files must never be in one build -- LNK2005 on all fifteen).
+// embeds by value at ss+0x4B40. This is the REAL TU for the type.
 //
 // EVIDENCE MAP. Only ONE method has an out-of-line X360 symbol:
 //   IncrementPlayerNumTakedowns          X360 0x823445D0 (asm read end to end below).

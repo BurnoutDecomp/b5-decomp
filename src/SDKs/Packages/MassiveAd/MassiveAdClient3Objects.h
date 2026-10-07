@@ -77,7 +77,6 @@ namespace MassiveAdClient3
 //   MassiveCloseThreadHandle(handle) -> CloseHandle(handle)
 // ---------------------------------------------------------------------------
 typedef void* MassiveThreadHandle;
-void MassiveCloseThreadHandle(MassiveThreadHandle hThread);
 
 // One OS thread entry point: the routine CMassiveThread::Create spins up (the X360
 // passes MassiveAdClient3::DNS to it from CNetworkManager::ResolveAddresses).
@@ -126,6 +125,9 @@ private:
 // ---------------------------------------------------------------------------
 class CMassiveTime : public CMassiveBaseObject
 {
+    // The client core seeds both bias fields in place (server time + local tick).
+    friend class CMassiveClientCore;
+
 public:
     // @ 0x82BCC708. Chains the base ctor ("CMassiveTime"), installs this class's
     // vftable, and zeroes both 64-bit bias fields.
@@ -139,6 +141,9 @@ public:
     // (CMassiveSystem::GetSystemTime()). The X360 computes the (start - pause)
     // bias in 64-bit then adds the 32-bit system tick.
     long long GetTime();
+
+    // The live system tick alone (CMassiveSystem::GetSystemTime()), no bias.
+    long long GetTimeLocal();
 
 private:
     long long mnStartTime;  // +0x18 (std/ld; bias start)
@@ -167,6 +172,9 @@ class CMassiveOrder : public CMassiveBaseObject
     // the wire block (tag 19 -> mnNumber, tag 3 -> mnType) and reads mnNumber
     // back for its "Attached Asset(%d) to Order(%d)" log line.
     friend class CRequestEnterZone;
+
+    // The ad placement adds displayed time to the order (frequency capping).
+    friend class CMassiveAdObject;
 
 public:
     // @ 0x82BDEFA8. Chains the base ctor ("CMassiveOrder"), installs this
@@ -246,7 +254,7 @@ public:
     // declared here -- CMassiveThread is its home -- because CNetworkManager::
     // ResolveAddresses spins the DNS thread up through it (a direct bl in that TU's
     // asm).
-    void Create(MassiveThreadProc pfnProc, void* pParam);
+    int Create(MassiveThreadProc pfnProc, void* pParam);
 
 private:
     MassiveThreadHandle mhThread;  // +0x14 (OS thread HANDLE, 0 until started)
@@ -274,6 +282,11 @@ private:
 // ---------------------------------------------------------------------------
 class CFlag : public CMassiveBaseObject
 {
+    // The client core constructs its two flag objects inline and reads / ORs mnFlags.
+    friend class CMassiveClientCore;
+    // CNetworkManager::Initialize sizes its buffers from the client flags.
+    friend class CNetworkManager;
+
 public:
     // The X360 has no standalone CFlag ctor symbol in this TU; the recovered
     // function is the vector deleting destructor, which the virtual dtor models.
@@ -285,6 +298,9 @@ public:
     // (off_82183CA0) and chains the base dtor; the deleting-destructor thunk
     // frees via the base operator delete when its low bit is set. No own teardown.
     virtual ~CFlag();
+
+private:
+    unsigned short mnFlags;  // +0x14 (16-bit; zeroed by the owner, OR-ed with option bits)
 };
 
 } // namespace MassiveAdClient3

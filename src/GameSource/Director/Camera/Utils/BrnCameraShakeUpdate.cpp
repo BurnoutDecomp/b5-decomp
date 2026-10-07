@@ -9,23 +9,8 @@
 // `CameraShake::Parameters::Serialise<S>` explicit instantiations. Mounting that TU therefore
 // drags DebugMenuSerialiser / TextFileWriteSerialiser / TextFileReadSerialiser, whose
 // `Serialise(const char*, f32&)` are all out-of-line in TUs that are not on the build list --
-// so the whole-file mount opens three unresolved externals to close one. DirectorLinkStubs.cpp
-// said so in as many words ("Splitting Update into its own file would shed those"); this is
-// that split. Same precedent as BrnCameraTweakerConstruct.cpp.
-//
-// ⚠️⚠️ WHAT THIS RETIRES, AND WHY IT MATTERED. Until 2026-08-02 the link resolved
-// `CameraShake::Update` to an EMPTY `{}` in Director/DirectorLinkStubs.cpp -- a silent-drop
-// stub: it compiled, linked, ran, and threw away every shake in the game with nothing in the
-// build, the linker or a boot test to say so. Its own FLAG predicted that it would go
-// unnoticed the moment a non-zero blend arrived. Two of its three named blockers
-// (CgsNumeric::Random::RandomFloat / ::RandomVector) are bodied in
-// GameShared/GameClasses/Numeric/CgsRandom.cpp as of the same day, and the third
-// (Utils::RotateMatrix44AffineByEulerAnglesZXY) in Camera/Utils/CameraUtils.cpp. The stub is
-// gone.
-// ⭐ IT WAS RETIRED BEFORE ITS SECOND CALLER LANDED, DELIBERATELY.
-// BehaviourGameplayExternal::ApplyJumpEffects (bodied the same day) ends on a call to this
-// function, and BehaviourGameplayExternal::Update .cpp:505 will make another. Had the stub
-// still been standing when those landed, both camera shakes would have silently done nothing.
+// so the whole-file mount opens three unresolved externals to close one; this file is that
+// split. Same precedent as BrnCameraTweakerConstruct.cpp.
 // ============================================================================
 
 #include "GameSource/Director/Camera/Utils/BrnCameraShake.h"   // THE home: CameraShake + ::Parameters

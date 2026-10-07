@@ -209,7 +209,7 @@ bool AIVehicleStateManager::Prepare()
     case E_PREPARE_NONE:
     case E_PREPARE_RELEASED:
         mePrepareState = E_PREPARE_NONE;
-        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor( "AI Cars", 14, 0, 1.0, 0, 1 );
+        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor( "AI Cars", CgsDev::E_PMP_14, false, 1.0f, true );
         // fall through
     case E_PREPARE_BEGIN:
         mePrepareState = E_PREPARE_BEGIN;

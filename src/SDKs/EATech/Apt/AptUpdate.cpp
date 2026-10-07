@@ -21,6 +21,7 @@
 #include "types.hpp"
 
 #include <cstdio>   // snprintf (the input-recorder frame stamp, gated off by default)
+#include <cstring>  // memcpy / strlen (the saved-input stream reads)
 
 #include "SDKs/EATech/include/Apt/AptTarget.h"                    // AptTarget + gpAptTarget + the target API
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"           // TickIntervalTimers / RunActions / ProcessInputs + mDisplayList
@@ -33,11 +34,19 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"  // gValuesToRelease (deferred-release flush)
 #include "SDKs/EATech/include/Apt/AptGC.h"                        // AptGC::CleanUnreachable (the partial sweep)
 #include "SDKs/EATech/include/Apt/Apt.h"                          // AptUserFunctions (the gAptFuncs recorder-sink slots)
+#include "SDKs/EATech/include/Apt/AptSavedInputCheckpoints.h"     // CanContinueSavedInputs / Checkpoint (the replay gate)
+#include "SDKs/EATech/include/Apt/AptString/EAString.h"           // EAStringC (the replay checkpoint name)
+#include "eathread/eathread_storage.h"                            // EA::Thread::ThreadLocalStorage (gAptTargetTls)
 
 // ---- collaborator globals (all defined elsewhere; console addresses noted) ----------
 extern bool gbAptZombiesDirty;                  // byte_8324E38F (AptGC.cpp; raised by AptPartialGarbageCollection)
 extern int  gAptInputRecorderEnabled;           // dword_8324E518 (AptGlobals.cpp)
-extern int  gbAptSavedInputActive;              // dword_8324D7F0 (AptGlobals.cpp)
+// The saved-input playback stream (AptGlobals.cpp): base (non-null while replaying),
+// read cursor, byte size, and the replay frame counter.
+extern const unsigned char* gpAptSavedInputStream;
+extern const unsigned char* gpAptSavedInputCursor;
+extern int                  gnAptSavedInputStreamSize;
+extern unsigned int         gnAptSavedInputFrame;
 extern uint32_t gAptInputRecorderTag;           // dword_8324D820 (AptGlobals.cpp; advanced per banked frame)
 extern int  gnCurrUpdateTick;                   // dword_8324E520 (AptGlobals.cpp; the update-side tick bank)
 extern int  gnCurrRenderTickConsumed;           // dword_8324E524 (AptGlobals.cpp; the render-side consumed tick)
@@ -48,30 +57,14 @@ extern AptUserFunctions gAptFuncs;                          // dword_8324E818 (C
 
 // The three per-node generalised-process callback slots the update pass installs
 // around AptDisplayList::GeneralisedProcess (dword_8324E41C/420/424; defined in
-// AptRenderLinkStubs.cpp, read per node by AptCIH::GeneralisedProcess).
+// AptCIHBehaviour.cpp, read per node by AptCIH::GeneralisedProcess).
 extern unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*);    // dword_8324E41C
 extern unsigned int (*AptCIH_sCIHProcessCb1)(AptCIH*, AptCIH*, void*);   // dword_8324E420
 extern unsigned int (*AptCIH_sCIHProcessCb2)(AptCIH*, AptCIH*, void*);   // dword_8324E424
 
 // The animation-unresolve current-target TLS object (unk_8324E814; defined at global
-// scope in AptRenderLinkStubs.cpp -- single-threaded slot on the PC). The minimal
-// ThreadLocalStorage view matches the AptRenderLinkStubs.cpp home declaration.
-namespace EA { namespace Thread {
-    class ThreadLocalStorage
-    {
-    public:
-        ThreadLocalStorage() : mTlsIndex(0) {}
-        bool  SetValue(const void* pData);
-        void* GetValue();
-        u32   mTlsIndex;
-    };
-}}
+// scope in AptGlobals.cpp).
 extern EA::Thread::ThreadLocalStorage gAptTargetTls;
-
-// The saved-input REPLAY driver (sub_82B0D7E8, ~4.3KB): drains the recorded input
-// stream instead of live-ticking. Gated on gbAptSavedInputActive (boot default 0);
-// declared here, no-op link-stub in AptRenderLinkStubs.cpp until its own TU lands.
-void AptUpdateReplaySavedInputs(int nElapsedMs, int nDepthLayerMask);
 
 // The free-function adapters matching the process-callback slot signature; forward
 // to the node's member pass (same pattern as AptProcessTextInstCb in
@@ -220,6 +213,138 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
 }
 
 // ---------------------------------------------------------------------------
+// AptUpdateReplaySavedInputs -- the saved-input REPLAY driver: advance nFrames frames
+// of a recorded session instead of live-ticking. The stream is a run of records, each a
+// u32 frame stamp followed by a record whose first byte selects the kind:
+//   kind&3 < 2 : an input event word (stored byte-reversed by the recorder); the two
+//                stick-snapshot ids (501/502) carry a trailing 16-byte analog sample;
+//   kind&3 == 2: a checkpoint -- a NUL-terminated movie name padded to 4 bytes;
+//   kind&15 == 3 : a screen-grab marker; 7 : a u16-sized custom block for the host;
+//   11 : an analog sample.
+// Every record stamped at or before the current replay frame is fed, then one frame is
+// ticked; while a checkpoint movie is still loading, only the interval timers run (or the
+// linker is pumped). The end of the stream turns replay (and the recorder) off.
+// ---------------------------------------------------------------------------
+static u32 AptSavedInputReadU32(const unsigned char* pData)
+{
+    u32 nValue;
+    std::memcpy(&nValue, pData, sizeof(nValue));
+    return nValue;
+}
+
+static void AptUpdateReplaySavedInputs(int nFrames, int nDepthLayerMask)
+{
+    const unsigned int nTargetFrame = gnAptSavedInputFrame + static_cast<unsigned int>(nFrames);
+
+    while (gpAptSavedInputStream != nullptr && gnAptSavedInputFrame != nTargetFrame)
+    {
+        if (AptSavedInputCheckpoints::CanContinueSavedInputs(*gpAptSavedInputCheckpoints))
+        {
+            // Feed every record stamped at or before the current frame.
+            while (AptSavedInputReadU32(gpAptSavedInputCursor) <= gnAptSavedInputFrame)
+            {
+                gpAptSavedInputCursor += 4;                               // past the frame stamp
+                const unsigned char* const pRecord = gpAptSavedInputCursor;
+                const unsigned char nKind = pRecord[0];
+                AptAnimationTarget* const pAnim = gpAptTarget->mpAnimationTarget;
+
+                if ((nKind & 3u) < 2u)
+                {
+                    const u32 nStored = AptSavedInputReadU32(pRecord);
+                    const u32 nPacked = ((nStored & 0x000000FFu) << 24)
+                                      | ((nStored & 0x0000FF00u) << 8)
+                                      | ((nStored & 0x00FF0000u) >> 8)
+                                      | ((nStored & 0xFF000000u) >> 24);
+                    gpAptSavedInputCursor = pRecord + 4;
+                    if ((nPacked >> 17) - 501u <= 1u)
+                    {
+                        pAnim->AddAnalogInput(*reinterpret_cast<const AptAnimationTarget::AptAnalogInputEvent*>(
+                            gpAptSavedInputCursor));
+                        gpAptSavedInputCursor += sizeof(AptAnimationTarget::AptAnalogInputEvent);
+                    }
+                    else
+                    {
+                        pAnim->AddInput(static_cast<int>(nPacked));
+                    }
+                }
+                else if ((nKind & 3u) == 2u)
+                {
+                    const char* const pName = reinterpret_cast<const char*>(pRecord + 1);
+                    uintptr_t luNext = reinterpret_cast<uintptr_t>(pName) + std::strlen(pName) + 1u;
+                    if ((luNext & 3u) != 0u)
+                        luNext = (luNext + 4u) & ~static_cast<uintptr_t>(3u);
+                    gpAptSavedInputCursor = reinterpret_cast<const unsigned char*>(luNext);
+                    EAStringC name(pName);
+                    AptSavedInputCheckpoints::Checkpoint(*gpAptSavedInputCheckpoints, name);
+                }
+                else
+                {
+                    switch (nKind & 0xFu)
+                    {
+                        case 3u:   // screen-grab marker
+                            gpAptSavedInputCursor = pRecord + 4;
+                            if (!gAptInputRecorderEnabled)
+                            {
+                                char lacTag[96];
+                                std::snprintf(lacTag, sizeof(lacTag), "%06d", static_cast<int>(gnAptSavedInputFrame));
+                                gAptFuncs.pfnDebugSetScreenGrabPending(lacTag);
+                            }
+                            break;
+                        case 7u:   // custom block for the host handler
+                        {
+                            const u16 nSize = *reinterpret_cast<const u16*>(pRecord + 2);
+                            gpAptSavedInputCursor = pRecord + 4;
+                            if (gAptFuncs.pfnCustomSavedInputHandler)
+                                gAptFuncs.pfnCustomSavedInputHandler(
+                                    const_cast<unsigned char*>(gpAptSavedInputCursor), nSize);
+                            gpAptSavedInputCursor += nSize;
+                            break;
+                        }
+                        case 11u:  // analog sample
+                            pAnim->AddAnalogInput(*reinterpret_cast<const AptAnimationTarget::AptAnalogInputEvent*>(
+                                pRecord + 4));
+                            gpAptSavedInputCursor = pRecord + 4 + sizeof(AptAnimationTarget::AptAnalogInputEvent);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+        }
+        else if (static_cast<int>(AptSavedInputReadU32(gpAptSavedInputCursor) - gnAptSavedInputFrame) - 1 > 0)
+        {
+            // Waiting on a checkpoint load with frames still to go: keep the timers running.
+            gpAptTarget->mpAnimationTarget->TickIntervalTimers(16);
+        }
+
+        if (static_cast<int>(gpAptSavedInputCursor - gpAptSavedInputStream) >= gnAptSavedInputStreamSize)
+        {
+            // End of the stream: replay off, tell the host, stop recording.
+            gpAptSavedInputStream = nullptr;
+            gpAptSavedInputCursor = nullptr;
+            if (gAptFuncs.pfnPlaySavedInputsDone)
+                gAptFuncs.pfnPlaySavedInputsDone(true, nullptr);
+            if (gAptInputRecorderEnabled)
+                gAptInputRecorderEnabled = 0;
+            return;
+        }
+
+        AptCIH* const pRootNode = gpAptTarget->mpAnimationTarget->mDisplayList.mpHead->mpFirst;
+        if (!AptSavedInputCheckpoints::CanContinueSavedInputs(*gpAptSavedInputCheckpoints)
+            || pRootNode == nullptr
+            || (pRootNode->GetCharacterInst()->mTypeFlags & 0x3Fu) != 9u)   // x64 low-6-bit tag
+        {
+            gpAptTarget->mpLinker->Update();
+            return;
+        }
+
+        if (AptUpdateRunTargetFrames(1, nDepthLayerMask, 1024))
+            AptUpdateRecordFrame();
+        ++gnAptSavedInputFrame;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // AptUpdate @0x82B0DB68 -- the public per-frame entry for the CURRENT target.
 // Replay recorded inputs when the saved-input driver is active; otherwise run the
 // frame pacer over the live target (falling back to just pumping the linker when
@@ -230,7 +355,7 @@ void AptUpdate(int nElapsedMs, int nDepthLayerMask, int nMaxBankedFrames)
 {
     gAptTargetTls.SetValue(gpAptTarget);
 
-    if (gbAptSavedInputActive)
+    if (gpAptSavedInputStream)
     {
         AptUpdateReplaySavedInputs(nElapsedMs, nDepthLayerMask);
     }

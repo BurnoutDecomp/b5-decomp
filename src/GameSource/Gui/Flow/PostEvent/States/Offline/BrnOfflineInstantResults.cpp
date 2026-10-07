@@ -2,17 +2,9 @@
 // BrnGui::InstantResultsState  -- the offline post-event instant-results presentation state
 //   class:BrnGui::InstantResultsState
 //
-// ⭐⭐ WHY THIS FILE GREW: FINISHING AN OFFLINE EVENT PRODUCED NO PIXELS, AND THIS STATE WAS
-// THE REASON. The chain in front of it is whole end to end -- ModeManager::FinishCurrentMode
-// -> ShowModeResults posts game action 37 -> the bridge translates it to GUI 291 ->
-// InGame::Update case 291 -> SendStateEvent("TO_OFF_POST") -> the screen flow ENTERS THIS
-// STATE. It then hit `OnEnter() { LogUnreconstructedState(...); }` in
-// BrnScreenStatesDataLinkStubs.cpp and returned. Four run logs on disk end with exactly that
-// one line after the whole chain succeeds.
-//
-// ⛔ THE LEDGER CALLED ALL 32 OF THIS CLASS'S FUNCTIONS `reviewed` WHILE 28 HAD NO BODY. The
-// link did not catch it because three logging stubs satisfied it. `reviewed` is not evidence
-// a body exists; only the file is.
+// ⭐⭐ THE CHAIN IN FRONT OF THIS STATE: ModeManager::FinishCurrentMode -> ShowModeResults
+// posts game action 37 -> the bridge translates it to GUI 291 -> InGame::Update case 291 ->
+// SendStateEvent("TO_OFF_POST") -> the screen flow ENTERS THIS STATE.
 //
 // FUNCTIONS BODIED HERE (X360 addresses; instruction counts from the exports):
 //   InstantResultsState (ctor)     @0x825006D8 ( 56)   OnEnter        @0x824C3398 (357)

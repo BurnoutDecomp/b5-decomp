@@ -79,6 +79,11 @@ void* AptRenderInitialize(int a1);
 // EA::Thread::Mutex::Unlock result (X360 r3).
 int AptUpdateInitialize(unsigned int* a1, char a2);
 
+// The deferred-release drain mutex: AptRenderShutdown and the render
+// pass lock it around the render-item / deferred-release pool drain. Body in AptInit.cpp.
+namespace EA { namespace Thread { class Mutex; } }
+EA::Thread::Mutex& AptUnresolveMutex();
+
 // AptUpdateTarget @0x82B0DE80 / AptUpdate @0x82B0DB68 -- the per-frame drivers are
 // declared in AptTarget.h and homed in AptUpdate.cpp (the context swap + the frame
 // pacer). The former AptInit.cpp duplicate body is retired at the l2 merge.

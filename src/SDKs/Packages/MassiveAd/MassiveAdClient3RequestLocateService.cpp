@@ -102,13 +102,8 @@ int CRequestLocateService::WriteLocateServiceRequest(const char* pcSkuName,
     WriteString(pcSkuVersion, 0);
     MassiveLog(5, GetName(), "Writing SKU Version: %s", pcSkuVersion);
 
-    // The X360 feeds Instance()'s result into GetHardwareAddress's dead leading
-    // argument (nUnused); Instance() is still invoked for that side-effect, and 0
-    // is passed for the value the callee never reads (the committed convention,
-    // see MassiveAdClient3_embed_check.cpp).
     char* pcHardwareAddress = 0;
-    CMassiveSystem::Instance();
-    CMassiveSystem::GetHardwareAddress(0, &pcHardwareAddress);
+    CMassiveSystem::Instance()->GetHardwareAddress(&pcHardwareAddress);
 
     int lnLength;
     if (pcHardwareAddress && (lnLength = (int)std::strlen(pcHardwareAddress)) != 0)

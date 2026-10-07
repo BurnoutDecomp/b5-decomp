@@ -26,8 +26,8 @@
 
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                  // DOGMA_PoolManager::Allocate/Deallocate
 
-#include "SDKs/EATech/eathread/thread_local_storage.h"       // EA::Thread::ThreadLocalStorage
-#include "SDKs/EATech/eathread/BrnEAThreadX360.h"            // EA::Thread::GetThreadId / ThreadId
+#include "eathread/eathread_storage.h"                       // EA::Thread::ThreadLocalStorage
+#include "eathread/eathread.h"                               // EA::Thread::GetThreadId / ThreadId
 
 #include <new>   // placement new for the inline AptLinker sub-object
 
@@ -50,14 +50,14 @@ AptTarget* gpAptTarget        = nullptr;   // off_8324E574
 AptTarget* gpAptTargetTLS     = nullptr;   // off_8324E578
 
 // =====================================================================
-//  Sibling-owned callees/globals referenced below. Every one is HOMED now
-//  (AptGlobals.cpp / AptGC.cpp / AptRenderLinkStubs.cpp / AptLoader.cpp);
+//  Sibling-owned callees/globals referenced below, defined in
+//  AptGlobals.cpp / AptGC.cpp / AptAnimationTarget.cpp / AptLoader.cpp;
 //  declared extern here so this TU links against the single definitions.
 // =====================================================================
 
 // The EA TLS slot the Apt context pointer is mirrored into (X360 unk_8324E814).
 // Shutdown re-publishes the active target into it whenever it swaps the global
-// pointers. Defined in AptRenderLinkStubs.cpp (the host TLS shim).
+// pointers. Defined in AptGlobals.cpp.
 extern EA::Thread::ThreadLocalStorage gAptTargetTls;   // unk_8324E814
 
 // byte_8324E7C9 -- the "in a shutdown / on the owning thread" guard. Shutdown

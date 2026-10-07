@@ -30,6 +30,7 @@
 #include "SDKs/EATech/include/Apt/AptTarget.h"    // gpAptTarget->mpLinker (off_8324E574+0x20)
 #include "SDKs/EATech/include/Apt/AptLinker.h"    // AptLinker::isFileImported (the cancel-path probe)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"        // DOGMA_PoolManager::Allocate/Deallocate
+#include "SDKs/EATech/include/Apt/Apt.h"           // gAptFuncs.pfnFreeAnimation (the cancel path)
 
 #include "eathread/eathread_mutex.h"               // EA::Thread::Mutex
 
@@ -89,24 +90,18 @@ EA::Thread::Mutex MutexAptLoader;
 
 // ---------------------------------------------------------------------------
 // The async-stream / linker boundaries the X360 loader reaches through fn-ptr
-// slots / the AptLinker; routed here through named externs (not the literal
-// console offsets) so the x64 layout stays correct. All three are resolved:
+// slots / the AptLinker. Both are resolved:
 //
 //   AptLoaderStartAsyncLoad  (dword_8324E838) -- kick off the async .apt stream
 //        for a freshly-requested file: takes the file name buffer + the AptFile
 //        handle. Called from Update on the state 1 -> 2 transition. HOMED in
 //        BrnGuiAptRuntime.cpp (the PC host stream hook; loads synchronously and
 //        drives AptCompleteAnimationAsyncLoad).
-//   AptLoaderCancelAsyncLoad (dword_8324E83C) -- abort an in-flight stream
-//        (state 2 with a pending data block). Called from CancelPreloadedAnimation.
-//        Marked PC-platform leaf in AptRenderLinkStubs.cpp (the synchronous host
-//        loads leave nothing in flight to cancel).
 //   AptLinker::isFileImported is the real member (AptLinker.cpp) -- true when the
 //        candidate AptFile is still imported by any movie the linker tracks;
 //        CONSUMES the candidate handle.
 // ---------------------------------------------------------------------------
 extern void AptLoaderStartAsyncLoad(const char* pFileName, AptFilePtr* pFile);   // dword_8324E838
-extern void AptLoaderCancelAsyncLoad(void* pDataBlock);                          // dword_8324E83C
 
 // ---------------------------------------------------------------------------
 // FileNameCompare @0x7E3E94 -- case-insensitive, slash-normalised ('\' == '/')
@@ -658,9 +653,9 @@ void AptLoader::CancelPreloadedAnimation(const EAStringC& fileName)
         {
             if (nState == 2)
             {
-                // In-flight stream: abort it (only when a data block is pending).
+                // In-flight stream: hand its pending data block back to the host.
                 if (pFile->mpDataBlock)              // [c:+0x18]
-                    AptLoaderCancelAsyncLoad(pFile->mpDataBlock);   // dword_8324E83C (PC-platform leaf: synchronous host loads leave nothing in flight)
+                    gAptFuncs.pfnFreeAnimation(pFile->mpDataBlock);
             }
             else if (nState == 3 || nState == 4 || nState == 5)
             {

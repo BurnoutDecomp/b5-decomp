@@ -14,26 +14,21 @@
 // (WorldEntityModule::UpdateStream @0x822F9740 fills mPropInstancesNeededForZoneQueue and
 // writes miPlayerZoneNumber; OnWorldGraphicsLoadComplete @0x822D7828 /
 // OnWorldGraphicsUnloadBegin post into the two graphics queues). NOTHING ELSE carries them
-// across the module boundary -- this bridge is the only reader. While it was an inert
-// WorldLinkStubs gate the prop entity module's pre-scene input buffer saw an empty
-// PropInstancesNeededForZone queue every frame, so PropEntityModule::UpdateStreaming never
-// asked GameData for a single prop-instance bundle and no zone ever loaded.
+// across the module boundary -- this bridge is the only reader. Without it the prop entity
+// module's pre-scene input buffer sees an empty PropInstancesNeededForZone queue every frame,
+// so PropEntityModule::UpdateStreaming never asks GameData for a single prop-instance bundle
+// and no zone ever loads.
 //
 // ---- DWARF home ------------------------------------------------------------
 // The PS3 DecFIGS unity dump (_compile/BrnWorldBridgesUnity.cpp:3872) places this function
 // between BridgeRaceCarModuleToWorldModule_PreScene (WorldBridgeEntityModulesToEntityModules
 // .cpp:92) and BridgeCrashModuleToPropModule_PostScene (:163), so its home TU is
 // WorldBridgeEntityModulesToEntityModules.cpp and its declaration already lives in that TU's
-// header (included above). It is bodied in THIS file for one reason only:
+// header (included above).
 //
-//   ⭐ FILE SPLIT, exactly the WorldBridgeRaceCarToWorldModule.cpp precedent (2026-08-01).
-//   WorldBridgeEntityModulesToEntityModules.cpp IS NOT MOUNTED -- its two remaining bridges
-//   need three IO accessors that are still declaration-only (TriggerEntityModuleIO::
-//   InputBuffer_PreScene::GetInputInterface, BrnTrafficIO::OutputBuffer_PostScene::
-//   GetTrafficToRaceCarInterface_PostScene, BrnTrafficIO::OutputBuffer_PreScene::
-//   GetTriggerManagementInputInterface). This bridge needs NONE of them and closes with
-//   ZERO unresolved externals, so it gets its own mountable TU rather than waiting.
-//   DELETE-WHEN: those three accessors land and the parent TU can be mounted whole.
+//   ⭐ FILE SPLIT, the WorldBridgeRaceCarToWorldModule.cpp precedent: this body lives in its
+//   own TU, separate from its home. The home TU WorldBridgeEntityModulesToEntityModules.cpp is
+//   mounted now, so this body can be folded back into it.
 //
 // ---- The console body, instruction for instruction (0x827AACF8..0x827AAD74) ----
 //   r4 = lpPropInputBuffer_PreScene (dest), r5 = lpWorldOutputBuffer_PreScene (src);

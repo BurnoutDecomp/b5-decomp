@@ -15,7 +15,7 @@
 
 // BrnGui::LeaderboardTableComponent -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// Bodied here (7 ledger functions, DWARF primary file
+// Bodied here (8 ledger functions, debug-info primary file
 // GameSource/Gui/Flow/Screen/Components/BrnLeaderboardTableComponent.cpp):
 //   LeaderboardTableComponent::Construct            @0x824190B0
 //   LeaderboardTableComponent::SetupScoreboard      @0x8243BBD0
@@ -24,6 +24,7 @@
 //   LeaderboardTableComponent::LocaliseTextInCell   @0x82426938
 //   LeaderboardTableComponent::GetHighlightedScore  @0x82419368
 //   LeaderboardTableComponent::SetTargetGamertag    @0x82436580
+//   LeaderboardTableComponent::GetHighlightedGamertag
 
 namespace BrnGui
 {
@@ -350,5 +351,21 @@ namespace BrnGui
             miLocalPlayer = -1;
 
         DrawScoreboard();
+    }
+
+    // ------------------------------------------------------------ GetHighlightedGamertag
+    // The highlighted row's player name: find the first used column holding names, then
+    // build the name from that row's cell.
+    void LeaderboardTableComponent::GetHighlightedGamertag(CgsNetwork::PlayerName* lpPlayerName)
+    {
+        s32 liColumn = 0;
+        for (; liColumn < miColumnsUsed; ++liColumn)
+        {
+            if (mScoreboard.GetColumn(liColumn)->GetType() == BrnNetwork::ScoreboardColumn::E_DATATYPE_NAME)
+                break;
+        }
+        CGS_ASSERT(liColumn < miColumnsUsed, "liColumn < miColumnsUsed");
+
+        lpPlayerName->Construct(mScoreboard.GetRow(miHighlight)->GetData(liColumn));
     }
 }

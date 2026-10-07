@@ -685,7 +685,7 @@ namespace Io
             lpAttribSysQueue->Construct();
             lpAttribSysQueue->Clear();
 
-            memset(mReplayRequestInterfaceStorage, 0, KI_ReplayStateWordsCleared * sizeof(u32));
+            memset(mReplayRequestInterfaceStorage, 0, sizeof(mReplayRequestInterfaceStorage));   // the 11 serialiser slots
         }
 
         // X360 ::G 0x823B8A68 (read-lock, DWARF :289) / ::GetReso 0x826951D0 (write-lock, DWARF :292)
@@ -710,19 +710,18 @@ namespace Io
         // Byte widths of each opaque interface span (derived from the attested X360 offsets).
         static const int KI_ResourceInterfaceBytes  = 0x1010; // +0x0004 .. +0x1014 (RequestInterface<4096>)
         static const int KI_AttribSysInterfaceBytes = 0x0810; // +0x1014 .. +0x1824 (AttribSysRequestInterface<2048>)
-        static const int KI_ReplayInterfaceBytes    = 0x002C; // +0x1824 .. (sizeof BrnReplays::ReplayIO::RequestInterface -- the 11 slots; phase C1, width now attested)
-
-        // X360 @0x826AF448 zeroes exactly 11 words (44 bytes) from +0x1824 -- `v5 = 11; do
-        // *v4++ = 0; while (--v5);`. That run, not KI_ReplayInterfaceBytes, is the console's
-        // whole trailing-state clear (6224 - 0x1824 == 44).
-        static const int KI_ReplayStateWordsCleared = 11;
+        // +0x1824 .. the end: the replay RequestInterface, 11 serialiser pointer slots (44 bytes
+        // on the console, 6224 - 0x1824). The console Construct zeroes exactly those 11 slots.
+        // Host width: the slots are pointers, so the span is the host sizeof (88 bytes);
+        // RequestInterface::Append reads and writes all 11.
+        static const int KI_ReplayInterfaceBytes    = sizeof(ReplayRequestInterface);
 
         // IOBuffer base is a single status byte; u8 storage is 1-byte aligned, so the first
         // member sits at +0x04 with an explicit 3-byte gap.
         u8 maStatusPad[0x04 - sizeof(CgsModule::IOBuffer)];               // base end -> +0x0004
         u8 mResourceRequestInterfaceStorage[KI_ResourceInterfaceBytes];  // @ +0x0004 (0x1010 wide)
         u8 mAttribSysRequestInterfaceStorage[KI_AttribSysInterfaceBytes];// @ +0x1014 (0x0810 wide)
-        u8 mReplayRequestInterfaceStorage[KI_ReplayInterfaceBytes];      // @ +0x1824 (width provisional)
+        u8 mReplayRequestInterfaceStorage[KI_ReplayInterfaceBytes];      // @ +0x1824
 
         static void _AssertLayout()
         {

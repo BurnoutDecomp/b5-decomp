@@ -38,7 +38,7 @@
 //                       bl AptValueGC_PoolManager__GetFirstAptValue`.)
 // ---------------------------------------------------------------------------
 extern AptValueVector*         gpValuesToRelease;   // off_8324E51C (AptGlobals.cpp)
-extern int                     gbAptSavedInputActive;
+extern const unsigned char*    gpAptSavedInputStream;   // non-null while saved inputs replay
 
 // AptRegisterGlobalReferences @0x82AE38B8 -- the mark phase's global-holder pass
 // (every target's animation director + the Object.registerClass registry). HOMED in
@@ -223,8 +223,7 @@ void* AptUpdateZombieVector(char bClear)
 // AptFlushDeferredReleases -- the per-opcode / stack-empty deferred-release
 // drain the console inlines as ReleaseValues(off_8324E51C) at each call site (the
 // AS interpreter opcode handlers + the display-list teardown). Homed here as the
-// single de-inlined helper over the real gValuesToRelease vector, retiring the
-// AptRenderLinkStubs {} no-op that dropped every drain. Empty-vector safe.
+// single de-inlined helper over the real gValuesToRelease vector. Empty-vector safe.
 // ---------------------------------------------------------------------------
 void AptFlushDeferredReleases()
 {
@@ -243,24 +242,19 @@ void AptPartialGarbageCollection()
 }
 
 // ---------------------------------------------------------------------------
-// ⭐⭐ CleanUnreachable -- THE PARTIAL MARK/SWEEP, AND UNTIL NOW AN EMPTY BODY.
+// ⭐⭐ CleanUnreachable -- THE PARTIAL MARK/SWEEP.
 //
-// It sat in AptRenderLinkStubs.cpp as `void AptGC::CleanUnreachable() {}` behind
-// the note "No per-address export in the dump set" -- which was a NAME SEARCH
-// failing, not a hole in the image: AptUpdate @0x82B0DB68 calls it by name
-// (`bl AptGC__CleanUnreachable` @0x82B0DC48), and the PS3 EXTERNAL ELF carries the
-// whole body under ._ZN5AptGC16CleanUnreachableEv @0x7F19F0. Decompiled from that,
-// with the X360 call site and this file's already-homed CleanAll (@0x82AE4A40,
-// same primitives in the same order) as the cross-check.
+// AptUpdate calls it by name; the body is decompiled from the external ELF's
+// ._ZN5AptGC16CleanUnreachableEv, with the console call site and this file's CleanAll
+// (same primitives in the same order) as the cross-check.
 //
-// WHAT THE EMPTY BODY COST, MEASURED 2026-08-28: this is the ONLY thing that
-// reclaims an unreachable Apt value on a live frame, so NOTHING was ever collected.
-// Every AptCIH a screen's movie placed stayed allocated after the movie was
-// unmounted, which is why (a) re-entering the Driver Details pause screen filled
-// the AptCommunicator's hard 256-entry component table -- the registrations are
-// dropped by AptCIH::PreDestroy's pfnOnUnload hook, which only runs when the value
-// is actually destroyed -- and (b) a movie's AptFile never reached refcount 0, so
-// ~AptFile never ran and the loader kept handing out a stale "loaded" handle.
+// This is the ONLY thing that reclaims an unreachable Apt value on a live frame.
+// Without it every AptCIH a screen's movie placed stays allocated after the movie is
+// unmounted: (a) re-entering the Driver Details pause screen fills the
+// AptCommunicator's hard 256-entry component table -- the registrations are dropped
+// by AptCIH::PreDestroy's pfnOnUnload hook, which only runs when the value is
+// actually destroyed -- and (b) a movie's AptFile never reaches refcount 0, so
+// ~AptFile never runs and the loader keeps handing out a stale "loaded" handle.
 //
 // The PS3 body, phase for phase:
 //   1. gpValuesToRelease->ReleaseValues()                     -- drain the deferred vector
@@ -380,7 +374,7 @@ void AptGC::CleanUnreachable()
 // ---------------------------------------------------------------------------
 void AptFlushInputQueue()
 {
-    if (gbAptSavedInputActive != 0)
+    if (gpAptSavedInputStream != nullptr)
         return;
 
     AptAnimationTarget* pAnimationTarget =

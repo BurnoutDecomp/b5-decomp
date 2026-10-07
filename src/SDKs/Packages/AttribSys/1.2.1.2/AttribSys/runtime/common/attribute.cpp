@@ -126,10 +126,9 @@ namespace Attrib
     // (`addi r3,r9,0x18`) through the bounds-checked EASTL vector::operator[] and return
     // the stored TypeDesc* (`lwz r3,0(r3)`).
     //
-    // Landed 2026-09-03 with Attrib::Collection::~Collection @0x8280C3F8 -- Clear()'s
-    // phase-2 (class-layout) teardown is its live caller, and this was a CGS_ASSERT(false)
-    // link stub in GameSource/World/WorldLinkStubs.cpp until then. Members are reached by
-    // name off the committed x64 DatabasePrivate layout; the sibling Array::GetTypeDesc
+    // Attrib::Collection::~Collection -- Clear()'s phase-2 (class-layout) teardown -- is
+    // its live caller. Members are reached by name off the committed x64 DatabasePrivate
+    // layout; the sibling Array::GetTypeDesc
     // @0x828078B8 still walks the same fields by their console byte offsets.
     const TypeDesc* Node::GetTypeDesc() const
     {

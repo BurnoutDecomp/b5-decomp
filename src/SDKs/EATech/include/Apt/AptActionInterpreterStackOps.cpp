@@ -59,10 +59,10 @@
 
 extern AptValue* gpUndefinedValue;   // off_8324D814 (AptGlobals.cpp; wired at AptInit)
 
-// stackPushIndirect @0x7ECE34 is now a real member (homed in AptActionInterpreter.cpp):
-// it resolves AptVFT_Lookup (via the string-constant dictionary mpConstantPool) / AptVFT_Register
+// stackPushIndirect is a real member (in AptActionInterpreter.cpp): it resolves
+// AptVFT_Lookup (via the string-constant dictionary mpConstantPool) / AptVFT_Register
 // (via AptScriptFunctionBase::GetRegisterValue) values before pushing. _Push calls the
-// member directly; the old free-function shim (AptRenderLinkStubs.cpp) is retired.
+// member directly.
 
 // ---------------------------------------------------------------------------
 // _FunctionAptActionPop @0x7F33D0 (X360 @0x82ADDDE8) -- discard the top value, but

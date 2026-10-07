@@ -166,7 +166,6 @@ namespace WorldEntityIO
         // pinned by the X360 span: Construct @0x822D8BC8 runs
         // VariableEventQueue<32768,16>::Construct(this+8) and the shadow-map pointer
         // sits at this+0x8018 == 8 + sizeof(VariableEventQueue<32768,16>) (32784).
-        // (Was a declaration-only accessor whose WorldLinkStubs trap returned NULL.)
         SceneResultQueue* GetSceneResultQueue() { return &mSceneResultQueue; }
 
         // X360 0x822BAA08 (read-lock) / 0x827A2FC8 (write-lock); X360 this+4.

@@ -38,6 +38,7 @@
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"           // AptMatrix (identity)
 #include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"           // AptCXForm (null/identity)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"         // EAStringC (interned strings)
+#include "eathread/eathread_storage.h"                          // EA::Thread::ThreadLocalStorage (gAptTargetTls)
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"       // AptActionInterpreter (VM singletons)
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"// AptGCReleaseVector (gValuesToRelease)
 #include "SDKs/EATech/include/Apt/AptRenderManagerQueue.h"      // AptRenderManagerQueue (gAptRenderManagerQueue)
@@ -404,12 +405,18 @@ unsigned char gbAptRecorderGate      = 0;   // byte_82F733F7
 // 14. int / uint scalars.  0 (counters / ids / mode / tick start at zero).
 // ===========================================================================
 int gAptBoundingRectMode       = 0;
+// The saved-input playback stream (AptUpdate's replay driver): the stream base (non-null
+// while a recorded session replays), the read cursor, the stream byte size, and the replay
+// frame counter the record stamps are compared against.
+const unsigned char* gpAptSavedInputStream     = nullptr;
+const unsigned char* gpAptSavedInputCursor     = nullptr;
+int                  gnAptSavedInputStreamSize = 0;
+unsigned int         gnAptSavedInputFrame      = 0;
 int gAptDeferredReleaseCount    = 0;   // dword_8324E508
 intptr_t gAptEmptyTextRenderDataZID  = 0;   // pointer-width (matches the widened mZID)
 int gAptInputRecorderEnabled    = 0;   // dword_8324E518
 int gAptLookupPoolSize          = 0;   // dword_82F733EC
 int gAptVMThreadId              = 0;   // dword_8324E500
-int gbAptSavedInputActive       = 0;   // dword_8324D7F0 (int-typed flag)
 int gnAptActionFrameId          = 0;   // dword_8324E514
 // The "null input" context id queueClipEvents stamps on an enterFrame enqueue
 // (PS3 `gNullInput`, the 4th AddActionFront arg). FLAG: no writer found in the
@@ -429,8 +436,6 @@ int32_t gAptTimerMs = 0;
 
 uint32_t gAptInputRecorderTag    = 0;   // dword_8324D820
 uint32_t gAptKeyLastEvent        = 0;   // dword_8324E7A8
-uint32_t gnAptGCThreadId_Ctor    = 0;   // dword_8324E500
-uint32_t gnAptGCThreadId_Release = 0;   // dword_8324E504
 
 // (gAptParseArgHeapPtr + its /alternatename ODR bridge retired 2026-07-01: the "parse-arg
 //  scratch heap" bump pointer off_8324E3D0 IS AptScriptFunctionBase::spRegBlockCurrentFrameBase
@@ -447,8 +452,11 @@ AptTarget* gpCurrentAptTarget     = nullptr;   // off_8324E574
 //  object above -- the null void* "view" was a placeholder from before the VM was live.)
 void* gAptDeferredReleaseQueue = nullptr;   // off_8324E2C8
 void* gAptRenderThreadId       = nullptr;   // dword_8324E504 (EA::Thread::ThreadId == void*)
-void* gAptUnresolveMutex       = nullptr;   // unk_8324E728
-void* gAptUnresolveMutexName   = nullptr;   // unk_82143270
+
+// The current-target TLS mirror the update/render/unresolve passes publish into and
+// AptTarget::GetTarget reads back. Its dynamic initialiser runs the EAThread ctor
+// (TlsAlloc) and registers the TlsFree destructor, as on the console.
+EA::Thread::ThreadLocalStorage gAptTargetTls;
 
 // gpAptTarget (off_8324E574) is ALREADY defined as `AptTarget* gpAptTarget` in
 // AptTarget.cpp:49 -- so we do NOT redefine it.  But AptMovie.cpp:72 references it

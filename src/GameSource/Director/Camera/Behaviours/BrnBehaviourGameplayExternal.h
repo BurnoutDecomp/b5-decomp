@@ -306,22 +306,9 @@ public:
     //          -- BODIED 2026-08-02 in Camera/Utils/CameraUtils.cpp. It was the single
     //          highest-leverage item in the cluster and it unblocked helpers 6 and 8 AND the
     //          camera-shake mount.
-    //          ⭐⭐ AND ITS COMMITTED BLOCKING REASON WAS STALE -- exactly as the note that
-    //          used to sit here suspected. DirectorLinkStubs.cpp called it "an inlined
-    //          XMVectorSinCos minimax polynomial whose coefficient table has not been
-    //          dumped": both clauses true, neither a reason, because the coefficients are an
-    //          implementation detail OF sin and cos and this tree de-optimises console
-    //          minimaxes to libm as a matter of course. The real work WAS the composition
-    //          order, it took one pass, and it was settled by round-tripping the candidate
-    //          against the already-committed inverse (EulerAnglesZXYFromMatrix44Affine) --
-    //          which is exactly the free cross-check the old note pointed at. ⇒ WHEN A GATE
-    //          NAMES A REASON, TEST THE REASON.
-    //     ✅ Utils::CameraShake::Update(...) -- THE SILENT-DROP STUB IS RETIRED (2026-08-02).
-    //          Its real body was file-split into Camera/Utils/BrnCameraShakeUpdate.cpp and
-    //          that TU is now mounted; the empty `{}` in Director/DirectorLinkStubs.cpp is
-    //          gone. ApplyJumpEffects (bodied above) ends on a call to it and Update .cpp:505
-    //          makes another -- both of which would have silently done nothing had the stub
-    //          still been standing when they landed. It was killed FIRST, deliberately.
+    //     ✅ Utils::CameraShake::Update(...) -- bodied in Camera/Utils/BrnCameraShakeUpdate.cpp
+    //          (mounted). ApplyJumpEffects (bodied above) ends on a call to it and Update
+    //          .cpp:505 makes another.
     //     ✅ Utils::PositiveValueTendToLimit / Utils::TendToLimits(f32 x5) / Utils::SineLerp
     //          -- BODIED 2026-08-02 in Camera/Utils/CameraUtils.cpp. All three are
     //          ApplySlideyEffects' callees and NONE of them had a declaration anywhere in the
@@ -385,11 +372,9 @@ public:
     //     ✅ CgsDev::DebugRender::DrawBox / ::DrawLine -- the debug-render arm (.cpp:364/:370)
     //        is gated on `mbEnableDebugRender` (X360 `lbz r7, 0xB5E(r20)` @0x8224140C then
     //        `beq` over the WHOLE arm at 0x82241484), a member nothing on this build ever
-    //        raises. The arm is transcribed behind that gate and the two draws are bodied as
-    //        one-shot-logging link stubs beside the existing DrawCircle stub in
-    //        World/WorldLinkStubs.cpp. DrawLine's signature (RGBA first, then the two world
-    //        points in v1/v2) is asm-derived and matches the DrawSolidQuad shape already in
-    //        CgsDebugRender.h.
+    //        raises. The arm is transcribed behind that gate; both draws are bodied in
+    //        CgsDebugRender.cpp. DrawLine's signature (RGBA first, then the two world points)
+    //        is asm-derived and matches the DrawSolidQuad shape already in CgsDebugRender.h.
     //   ✅ Everything else in the `bl` set has a body and is mounted, verified the same way:
     //     the eight helpers, Camera::ValidateTransformWithDebugInfo / ::SetFOV (Camera.cpp),
     //     CameraState::SetFlag/::ClearFlag (BrnCameraState.cpp), Timestep::Get (header inline),

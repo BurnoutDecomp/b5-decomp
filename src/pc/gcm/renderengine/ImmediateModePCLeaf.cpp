@@ -15,10 +15,11 @@
 //   GameSource/Graphics/BrnSkyDomeManager.cpp
 // raise 67 distinct externals, 45 already provided; of the 22 left, 2 come from
 // mounting VertexDescriptorParameters.cpp + CgsRwVertexDescResourceType.cpp and
-// the remaining 20 are defined here. (Mounting the EXISTING VertexBuffer.cpp /
-// IndexBuffer.cpp / CgsImRenderer.cpp instead makes the closure WORSE -- they are
-// X360-shaped, drag XGSetVertexBufferHeader / XMemGetPageSize / XQueryMemoryProtect
-// and LNK2005 against the linked CgsIm2d.cpp.)
+// the remaining 20 are defined here. (VertexBuffer.cpp / IndexBuffer.cpp ARE mounted,
+// but their console-only halves -- the Xenon GPU-header Initialize / Lock / Release
+// bodies -- are compiled out on PC, so this leaf's buffer bodies are the only PC
+// definitions. Mounting the existing CgsImRenderer.cpp instead makes the closure
+// WORSE -- it LNK2005s against the linked CgsIm2d.cpp.)
 //
 // ---- THE FOUR PC MECHANISMS -------------------------------------------------
 //
@@ -1288,14 +1289,12 @@ namespace renderengine
 
     // =========================================================================
     // renderengine::VertexBuffer::Release(VertexBufferHeader*)
-    // X360 @0x82B62FF8 -- the other end of the Initialize above, homed HERE for the same
-    // reason VertexDescriptor::Release is: this leaf built the object, this leaf releases
-    // it. The console reconstruction (pc/gcm/renderengine/VertexBuffer.cpp) carries a Release
-    // too, but that TU also defines Initialize -- mounting it beside this leaf is a duplicate
-    // symbol -- and it drags seven Xenon-only shims (XGSetVertexBufferHeader, XMemGetPageSize,
-    // XQueryMemoryProtect, D3DResource_IsSet/Release/BlockUntilNotBusy,
-    // D3DDevice_InvalidateGpuCache) that have no D3D9 counterpart; the gate-flip link probe
-    // measured exactly those seven as its whole residue.
+    // The other end of the Initialize above, homed HERE for the same reason
+    // VertexDescriptor::Release is: this leaf built the object, this leaf releases it. The
+    // console body in pc/gcm/renderengine/VertexBuffer.cpp sits in that TU's console-only
+    // half, compiled out on PC: it drags seven Xenon-only shims (XGSetVertexBufferHeader,
+    // XMemGetPageSize, XQueryMemoryProtect, D3DResource_IsSet/Release/BlockUntilNotBusy,
+    // D3DDevice_InvalidateGpuCache) that have no D3D9 counterpart.
     //
     // Console shape kept store for store: `if (muCommon) { Destruct; [D3D release when bit
     // 0x100000]; keep the two low flag bits of the base address; zero muCommon; }` return the

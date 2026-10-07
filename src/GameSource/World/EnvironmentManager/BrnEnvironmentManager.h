@@ -83,9 +83,8 @@ public:
 
         // ---- ADDITIVE (attested by WorldModule::Update @0x827D63E8) ----
         // The per-frame environment tick: (player speed, the update output the
-        // fog/lighting outputs land in, the frame camera position). DWARF
-        // BrnEnvironmentManager.h:386; body gated in WorldLinkStubs.cpp until
-        // this module's own TU lands.
+        // fog/lighting outputs land in, the frame camera position).
+        // BrnEnvironmentManager.h:386; bodied in BrnEnvironmentManager.cpp.
         void Update( f32 lfPlayerSpeed, BrnWorldIO::UpdateOutputBuffer* lpOutput,
                      Vector3 lCameraPosition );
 

@@ -15,9 +15,7 @@
 // out-of-lines differently).
 //
 // PhysicsModule::Update @0x825B0640 (1,999 insns)
-// LANDS BELOW -- the WorldLinkStubs boot gate is DELETED and this TU is the real
-// per-frame physics conductor now. FixUpVehicleContacts' old "still a link stub"
-// caller note is retired by the same commit.
+// is bodied below: this TU is the per-frame physics conductor.
 // ============================================================================
 
 #include "GameSource/Physics/BrnPhysicsModule.h"
@@ -875,9 +873,6 @@ namespace BrnPhysics
             mDeformationManager.VerifyPartIndices();
             TrafficYStep("deform-postphys", mVehicleManager);
 
-            // ⭐ SEAMS RETIRED 2026-08-24 (deform-land wave, P1(b)): the output buffer's two
-            // deformation seats hold their real types, so the storage->real reinterpret_casts
-            // this block carried are gone.
             mDeformationManager.OutputData(
                 lpPhysicsModuleOutputBuffer->GetDeformationOutputInterfaceForEntityModules(),
                 lpPhysicsModuleOutputBuffer->GetDeformationOutputInterface());
@@ -996,14 +991,9 @@ namespace BrnPhysics
                 &mDeformationInput,
                 &mDeformationManager,
                 lfSimTimerTimeStep);
-            // ---- [wave4-B] stand-in RETIRED 2026-09-02 (takedown-chain wave, agent P) ----------
-            // A direct `mVehicleManager.GetPhysicalTrafficManager().DisposeOfNonCrashingTraffic()`
-            // stood here while ProcessContactSpies was a conductor gate, because that call is the
-            // ONLY producer of mUnusedPotentialTrafficQueue in the image and its console seat is
-            // the TAIL of ProcessContactSpies @0x82646E5C. ProcessContactSpies is REAL now
-            // (BrnVehicleManager_ProcessContactSpies.cpp) and makes that call itself, at the same
-            // frame position; a second call here would enqueue every potential-traffic slot TWICE
-            // per frame into an EventQueue<s8,50>. Do not re-add it.
+            // ProcessContactSpies makes the DisposeOfNonCrashingTraffic call itself, at its tail
+            // (the ONLY producer of mUnusedPotentialTrafficQueue); a second call here would enqueue
+            // every potential-traffic slot TWICE per frame into an EventQueue<s8,50>.
 
             mVehicleManager.UpdateFatalCrashFlags(
                 lpPhysicsModuleOutputBuffer->GetVehicleOutputInterface());
@@ -1029,25 +1019,21 @@ namespace BrnPhysics
 
     // =============================================================================================
     // PostSceneUpdate  @0x825ABC10  (278 insns; own asserts BrnPhysicsModuleUpdateFunctions.cpp
-    // :68..:71). LANDED 2026-08-10 (create-path wave) -- the WorldLinkStubs boot gate that stood
-    // at WorldLinkStubs.cpp:3529 since 2026-07-27 is DELETED.
+    // :68..:71).
     //
-    // WHY THIS FUNCTION AND NOT THE CREATE PATH. The campaign brief named
-    // VehicleManager::ProcessCreateEvents @0x82616770 as the head of the list. It is the only
-    // writer in the XEX that SETS a bit in mUsedRaceCars, so that is right about the destination --
-    // but `xrefs_to` on it is a ONE-element set (ProcessVehicleMaintenanceEvents), and `xrefs_to`
-    // on THAT is a one-element set: this function, which was a boot gate. The create body had no
-    // caller. Reachability first.
+    // THE ONLY ROAD TO THE CREATE PATH. VehicleManager::ProcessCreateEvents is the only writer
+    // in the XEX that SETS a bit in mUsedRaceCars; its one caller is
+    // ProcessVehicleMaintenanceEvents, and that one's one caller is this function.
     //
-    // Two consequences of this function going live are worth stating where the code is:
-    //   1. mVehicleManager.SetPlayerActiveRaceCarIndex STARTS BEING CALLED. Until today the
-    //      physics vehicle manager's mePlayerActiveRaceCarIndex was whatever Construct left it
-    //      (-1) forever, and the mounted UpdateVehiclePhysics indexes maRaceCarDrivers with it
-    //      UNGUARDED (`maRaceCarDrivers[mePlayerActiveRaceCarIndex].meDriverType`). This leg is
-    //      what the console uses to make that index valid.
+    // Two things worth stating where the code is:
+    //   1. mVehicleManager.SetPlayerActiveRaceCarIndex is called from here. Construct leaves the
+    //      physics vehicle manager's mePlayerActiveRaceCarIndex at -1, and the mounted
+    //      UpdateVehiclePhysics indexes maRaceCarDrivers with it UNGUARDED
+    //      (`maRaceCarDrivers[mePlayerActiveRaceCarIndex].meDriverType`). This leg is what the
+    //      console uses to make that index valid.
     //   2. mSimulationModule.ProcessInput runs here, on a Simulation buffer created and destroyed
-    //      inside this call. Its add-rigid-body queue is EMPTY, because the only thing that fills
-    //      it is BridgeVehicleManagerToSimulation_PostScene below -- deliberately still a gate.
+    //      inside this call. The only thing that fills its add-rigid-body queue is
+    //      BridgeVehicleManagerToSimulation_PostScene below.
     //
     // Console structure, statement for statement (asm 0x825ABC10..0x825AC060):
     //   StartMonitor(miPhysicsPreSceneUpdatePM)   [+433096, `addis r16,r30,7 ; addi -0x6438`]
@@ -1157,7 +1143,7 @@ namespace BrnPhysics
 
         lpPhysicsModuleOutputBuffer->UnlockForWrite();
 
-        // THE SIM FIREWALL -- a real body now, see its banner in BrnPhysicsModuleBridgeFunctions
+        // THE SIM FIREWALL -- see its banner in BrnPhysicsModuleBridgeFunctions
         // .cpp. The call and its lock bracket are the console's; the callee is the ONLY thing that
         // moves the vehicle manager's mRequiredRigidBodiesQueue into the simulation.
         lpPhysicsModuleOutputBuffer->LockForRead();
@@ -1176,10 +1162,6 @@ namespace BrnPhysics
         // assert(h:967); if (idx != -1) active = mbIsPlayerCarActive;` -- which is exactly the
         // inlined IsPlayerCarActive() (its assert IS the h:967 one). It does NOT go through the
         // "hasn't been set" getter (h:980) for this test: -1 is an expected value at this site.
-        // Fixed 2026-08-15: this used to call GetPlayerActiveRaceCarIndex() twice for the raw
-        // reads, whose own assert fires on -1 -- silent while the (PC-only) IO-buffer zero-fill
-        // made the index read 0, an assert storm (440/boot) the moment the interface was cleared
-        // to -1 as the console does and the producer bridge is still a PC gate.
         bool lbPlayerCarActive = false;
         {
             const PhysicsModuleIO::InputBuffer::RCEntityOutputInterfaceStorage* const lpRCEntity =
@@ -1298,8 +1280,7 @@ namespace BrnPhysics
     }
 
     // =============================================================================================
-    // GenerateSceneQueries @0x825A1428 (19 insns) -- the whole body, resetpump wave 2026-08-26.
-    // This retires a one-shot "inert" boot gate in WorldLinkStubs.cpp.
+    // GenerateSceneQueries (19 insns) -- the whole body.
     //
     //   0x825A1438  StartMonitor(*(this + 433124))          == miGenerateSceneQueriesPM  [PARKED]
     //   0x825A1448  assert(lpOutputBuffer != NULL)  "lpPhysicsModuleOutputBuffer != NULL"  (:195)

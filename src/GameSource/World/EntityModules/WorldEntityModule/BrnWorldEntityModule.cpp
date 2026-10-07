@@ -127,8 +127,8 @@ WorldEntityModule::Construct( void )
     mMassive.Construct();
     mbMassive3dDebug = false;
     mbMassiveDistanceLinesDebug = false;
-    miGenerateDispatchListsPM = 0;
-    miMassiveFrameCounter = 0;
+    miNumMassiveSubscribersCreated = 0;
+    mbMassiveSubscribersCreated = false;
     mfMassiveImpressionDebugDistance = 150.0f;
     mbMassiveGenerateImpressionData = true;
     mbDownloadMassiveTextures = true;
@@ -1916,7 +1916,9 @@ void
 WorldEntityModule::RenderInstance(
     CgsGraphics::Instance* lpInstance,
     bool lbShadow,
+    Matrix44::InParam lCameraViewProjection,
     Vector3::InParam lCameraPosition,
+    Vector3::InParam lCameraDirection,
     f32 lfScaledDistanceSq,
     s32 liList,
     s32 liSortLayer,
@@ -2070,7 +2072,8 @@ WorldEntityModule::RenderInstance(
     {
         if ( mbMassiveGenerateImpressionData )
         {
-            GenerateMassiveImpressionData( lpInstance, lCameraPosition );
+            GenerateMassiveImpressionData( lpInstance->mTransform, lCameraViewProjection, lpModel,
+                                           lCameraPosition, lCameraDirection );
         }
     }
 
@@ -2127,8 +2130,6 @@ WorldEntityModule::GenerateDispatchLists(
     s32 liPreZList,
     bool lbGenerateShadows )
 {
-    (void)lCameraViewProjection;
-    (void)lCameraDirection;
     (void)lbGenerateShadows;
 
     CGS_ASSERT( liPreZList < 256, "liPreZList < 256" );
@@ -2189,7 +2190,8 @@ WorldEntityModule::GenerateDispatchLists(
             }
 
             // The shadow loop's own AddToBin sends a literal 0xFF pre-Z byte.
-            RenderInstance( lpInstance, true, lCameraPosition, lfScaledDistanceSq,
+            RenderInstance( lpInstance, true, lCameraViewProjection, lCameraPosition, lCameraDirection,
+                            lfScaledDistanceSq,
                             liList, liSortLayer, liSortKey, 0xFFu,
                             lpDispatchFrame, lpShaderLodInfo );
         }
@@ -2227,7 +2229,8 @@ WorldEntityModule::GenerateDispatchLists(
             BackdropDiagNoteVisible( lEntityId.GetEntityIndex(), lEntityId.GetPartIndex(),
                                      lfScaledDistanceSq, true );
 
-            RenderInstance( lpInstance, false, lCameraPosition, lfScaledDistanceSq,
+            RenderInstance( lpInstance, false, lCameraViewProjection, lCameraPosition, lCameraDirection,
+                            lfScaledDistanceSq,
                             liList, liSortLayer, liSortKey, lu8PreZList,
                             lpDispatchFrame, lpShaderLodInfo );
         }

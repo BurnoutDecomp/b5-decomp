@@ -12,7 +12,7 @@
 // Per-frame: stage the world module's Update input buffer into the AI module's
 // input buffer, immediately before the AI update in WorldModule::Update
 // @0x827D63E8. The leading lpWorldModule arg is the X360 r3 (the WorldModule
-// `this`). Body boot-gated in WorldLinkStubs.cpp until the AI module IO is homed.
+// `this`). Body in WorldBridgeAIModule.cpp.
 namespace WorldModule
 {
     // @ 0x827AB738

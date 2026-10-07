@@ -184,11 +184,7 @@ namespace CgsNumeric
     }
 
     // ========================================================================
-    // THE TWO BOUNDED FLOAT DRAWS -- BODIED 2026-08-02 (rotate-helper wave).
-    //
-    // Both were declaration-only, and together they were two of the three named blockers on
-    // mounting BrnDirector::Camera::Utils::CameraShake::Update -- i.e. on retiring the empty
-    // `{}` that DirectorLinkStubs.cpp had been resolving that function to.
+    // THE TWO BOUNDED FLOAT DRAWS.
     //
     // ⚠️ NEITHER HAS AN X360 SYMBOL OF ITS OWN: the console inlines both at every call site,
     // so both are recovered from an inline expansion rather than from a standalone body. The

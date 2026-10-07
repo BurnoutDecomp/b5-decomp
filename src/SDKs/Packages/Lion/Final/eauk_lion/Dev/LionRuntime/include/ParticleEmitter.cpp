@@ -966,10 +966,8 @@ void cParticleEmitter::DeInit()
 // DWARF names the method, and the same pair appears again inside cParticleEmitterManager::
 // UnRegister(descriptor,...) @0x82914764 on its re-bind path).
 //
-// ⭐ IT LANDS NOW BECAUSE ITS CALLER CAN NOW RUN. This was a trap in LionRuntimeLinkStubs.cpp
-// under the reasoning that "nothing registers an emitter"; cLionEffectManager::EffectCreate
-// @0x829149E8 landing is exactly what changes that, and BindingsAttach reaches here on the
-// first effect the game starts.
+// Reached through cLionEffectManager::EffectCreate -> BindingsAttach on the first effect the
+// game starts.
 // ================================================================================================
 void cParticleEmitter::Bind(cLionBindings& arBindings)
 {
@@ -2564,8 +2562,6 @@ cParticleEmitter::EParticleBuildResult cParticleEmitter::ParticleBuild(
 //
 // ⭐⭐ THE HEAD OF THE LION SIMULATION. cParticleEmitterManager::Update @0x82915700 calls this
 // once per registered emitter per frame, and it is the only thing that advances an effect.
-// Until this landed the whole runtime was inert: emitters were created, linked onto the used
-// list, and never stepped -- which is exactly the state LionRuntimeLinkStubs.cpp described.
 //
 // WHAT IT DOES, store for store:
 //   1  age            m_age = (time - trigger->mTimeStart) * (1/3000)   -- seconds since the

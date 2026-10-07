@@ -125,6 +125,7 @@ namespace CgsGui
         // on the bound apt reference. Asserts the variable info, that the controller is
         // set up, and that the reference is valid.
         void SetObjectVariableBoolean(const char* lpacVariable, bool lbValue);
+        void SetObjectVariableFloat(const char* lpacVariable, f32 lfValue);
 
     private:
         // CgsAptObjectController.h:199 (DWARF) - apt extension hash-table sizing.

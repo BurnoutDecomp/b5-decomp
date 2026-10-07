@@ -2,6 +2,8 @@
 
 #include "SDKs/Realmc/RealmcCore.h"  // RealmcCore::allocator (tagged alloc) / g_pRealmcAllocator
 
+#include <cstring>  // std::memcpy / std::memmove (DoReallocPt slot copies)
+
 // ===========================================================================
 // RealmcCore::allocator<,64> -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -240,6 +242,74 @@ void* Allocator64::DoPushBack(const int* pValue)
     mpBackEnd   = lpNew + KU_PageBytes;
     mpBackCur   = lpNew;
     return lpPageRaw;
+}
+
+// ---------------------------------------------------------------------------
+// allocator<,64>::DoReallocPt -- grow or re-centre the page-pointer array so that
+// nAdditionalSlots more slots are free on one side (nSide == 0: the front, else
+// the back). DoPushBack calls it as (1, 1).
+//
+//   nUsed = (mppBackSlot - mppFrontSlot) + 1             -> live slots
+//   if (mnPageSlots > 2 * (nUsed + nAdditionalSlots))    -> unsigned compare
+//       re-centre in place: newFront = array + (mnPageSlots - (nUsed + add)) / 2
+//       (+ add when growing the front); copy the live slots there (forward copy
+//       when moving down, overlap-safe move otherwise)
+//   else
+//       newSlots = mnPageSlots + max(mnPageSlots, add) + 2  -> unsigned max
+//       allocate the new array through the tagged adaptor allocator, place the
+//       live slots at their old index (+ add when growing the front), copy them
+//       and free the old array (both only when it exists)
+//   reseat the front node/begin/end on newFront and the back node/begin/end on
+//   newFront + nUsed - 1; the two read/write cursors are left untouched.
+//
+// Host width: the array element is a char*, so byte spans are sizeof(char*) per
+// slot (the console's 4); the allocation and the free stay paired with DoInit and
+// ~Allocator64.
+// ---------------------------------------------------------------------------
+void Allocator64::DoReallocPt(unsigned int nAdditionalSlots, int nSide)
+{
+    const unsigned int luUsedSlots =
+        static_cast<unsigned int>(mppBackSlot - mppFrontSlot) + 1u;
+    const std::size_t luUsedBytes = sizeof(char*) * luUsedSlots;
+    const unsigned int luFrontGrowth = (nSide == 0) ? nAdditionalSlots : 0u;
+
+    char** lppNewFront;
+    const unsigned int luSlots = static_cast<unsigned int>(mnPageSlots);
+    if (luSlots > 2u * (luUsedSlots + nAdditionalSlots))
+    {
+        lppNewFront = mppPageArray
+                    + ((luSlots - (luUsedSlots + nAdditionalSlots)) >> 1)
+                    + luFrontGrowth;
+        if (lppNewFront < mppFrontSlot)
+            std::memcpy(lppNewFront, mppFrontSlot, luUsedBytes);
+        else
+            std::memmove(lppNewFront, mppFrontSlot, luUsedBytes);
+    }
+    else
+    {
+        const unsigned int luGrowth =
+            (luSlots < nAdditionalSlots) ? nAdditionalSlots : luSlots;
+        const unsigned int luNewSlots = luSlots + luGrowth + 2u;
+        char** lppNewArray = static_cast<char**>(
+            RealmcCore::allocator::allocate(sizeof(char*) * luNewSlots, 0));
+
+        lppNewFront = lppNewArray + (mppFrontSlot - mppPageArray) + luFrontGrowth;
+        if (mppPageArray)
+            std::memcpy(lppNewFront, mppFrontSlot, luUsedBytes);
+        if (mppPageArray)
+            g_pRealmcAllocator->Free(mppPageArray, sizeof(char*) * luSlots);
+
+        mppPageArray = lppNewArray;
+        mnPageSlots  = static_cast<int>(luNewSlots);
+    }
+
+    mppFrontSlot = lppNewFront;
+    mpFrontBegin = *lppNewFront;
+    mpFrontEnd   = *lppNewFront + KU_PageBytes;
+
+    mppBackSlot  = lppNewFront + luUsedSlots - 1;
+    mpBackBegin  = *mppBackSlot;
+    mpBackEnd    = *mppBackSlot + KU_PageBytes;
 }
 
 // ---------------------------------------------------------------------------

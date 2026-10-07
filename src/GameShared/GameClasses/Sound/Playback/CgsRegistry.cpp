@@ -332,5 +332,68 @@ Registry& Registry::operator+=(Registry& arOther)
     return *this;
 }
 
+// =============================================================================
+// Registry::Dump
+//
+// Debug TTY dump: one line per occupied slot (index, entity name, entity type), the
+// slot occupancy, then the data-blob usage. A slot whose value lies below the
+// registry itself still holds a fixed-down offset; it is rebased for the print and
+// the blob usage is then computed in the fixed-down (offset) form.
+// =============================================================================
+void Registry::Dump()
+{
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        *CgsDev::Log::gpDebugPrint << "Dumping Registry (" << static_cast<void*>(this) << ")\n";
+
+    bool lbFixedDown = false;
+    const Entity* const* lppEntity = GetFirstEntity();
+    for (u32 luI = 0; luI < mu32EntityCapacity; ++luI)
+    {
+        const Entity* lpEntity = lppEntity[luI];
+        if (lpEntity == 0)
+            continue;
+
+        if (reinterpret_cast<uintptr_t>(lpEntity) < reinterpret_cast<uintptr_t>(this))
+        {
+            lpEntity = reinterpret_cast<const Entity*>(
+                reinterpret_cast<uintptr_t>(this) + reinterpret_cast<uintptr_t>(lpEntity));
+            lbFixedDown = true;
+        }
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            const Name lName     = lpEntity->mName;
+            const Name lTypeName = lpEntity->mTypeName;
+            *CgsDev::Log::gpDebugPrint << "  " << luI << ": Name " << lName << " Type " << lTypeName << "\n";
+        }
+    }
+
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "Used " << mu32EntityCount << " of " << mu32EntityCapacity
+                                   << " entries\n";
+    }
+
+    const size_t luDataStartOffset = static_cast<size_t>(
+        reinterpret_cast<const u8*>(GetDataStart()) - reinterpret_cast<const u8*>(this));
+    if (lbFixedDown)
+    {
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "Used " << static_cast<u32>(reinterpret_cast<uintptr_t>(mpu8Data) - luDataStartOffset)
+                << " of " << static_cast<u32>(muDataSize)
+                << " bytes available space; Registry is fixed down\n";
+        }
+    }
+    else if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "Used " << static_cast<s32>(mpu8Data - GetDataStart())
+            << " of " << static_cast<u32>(muDataSize)
+            << " bytes available space\n";
+    }
+}
+
 }
 }

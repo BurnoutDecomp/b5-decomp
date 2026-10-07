@@ -272,8 +272,8 @@ namespace BrnWorld
                      rw::IResourceAllocator* lpPhysicsAllocator);
         // @0x822A92F8.
         bool Release() override;
-        // Declaration-only -- NOT EMITTED in the ARTIST image (no `PropEntityModule::Destruct`
-        // in the export; the compiler folded/elided it). Body parked rather than invented.
+        // Bodied in BrnPropEntityModule_wS34_00.cpp (a tail call into
+        // ModuleSingleBuffered::Destruct).
         void Destruct() override;
 
         // @0x822A90A0 / @0x822A9218. WorldModule::Construct registers the module's nested

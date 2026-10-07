@@ -1,6 +1,8 @@
 #pragma once
 
 #include "types.hpp"
+#include "SDKs/EATech/rwcore/filesys/list.h"   // detail::ListSingle (the op list)
+#include "eathread/eathread.h"                  // EA::Thread::ThreadTime (GetStatus / Device::Wait timeout)
 
 // rw::core::filesys -- async-op / handle primitives of the RenderWare core filesystem.
 //
@@ -8,8 +10,6 @@
 // reference source and no DecFIGS DWARF hints exist for these TUs. Members are modelled
 // by name at the observed X360 offsets (no raw-offset casts at the call sites).
 //
-//   rw::core::filesys::AsyncOpList::InsertAfter @0x82BBDE70
-//   rw::core::filesys::AsyncOpList::Remove      @0x82BBDED0
 //   rw::core::filesys::GetSize                  @0x82BBD700
 //   rw::core::filesys::Handle::~Handle          @0x82BBD6A0
 //   rw::core::filesys::Handle::~Handle (scalar deleting) @0x82BBDFA8
@@ -25,9 +25,9 @@ namespace rw
     {
         namespace filesys
         {
-            // Forward decl of the device a Handle binds to. Its vtable slot +0x10
-            // (5th entry) is the close/release method ~Handle invokes when open.
-            class DeviceBase;
+            // The device driver a Handle's file was opened through (device.h). ~Handle
+            // closes the file through it.
+            struct DeviceDriver;
 
             // The scheduler that owns the op-queue (homed in device.cpp). AsyncOp's
             // Open/Read/Write/Close hand the op to Device::InsertOp, and the result
@@ -65,12 +65,12 @@ namespace rw
 
             // The object AsyncOp::mpStream points at, as the Device scheduler sees it. The
             // scheduler only reads the word at +0x08 (`*(*(op+0x10)+8)`) -- the key it hands
-            // to the device driver's block-size vtable method. The full Stream object (the
+            // to the device driver's QueryLocation. The full Stream object (the
             // AsyncOp DoIo callbacks' richer view of the same bytes) is `Stream` below.
             struct OpStream
             {
                 u8    macReserved0[8]; // +0x00 .. +0x07
-                void* mpDriverKey;     // +0x08  key passed to DeviceDriver::GetBlockSize
+                void* mpDriverKey;     // +0x08  key passed to DeviceDriver::QueryLocation
             };
 
             // The op completion callback the scheduler fires once DoIo finishes.
@@ -199,7 +199,7 @@ namespace rw
                 // Blocking result accessors (@0x82BBE0C0 / @0x82BBE118 / @0x82BBE058).
                 void* GetResultHandle();
                 u64   GetResultSize();
-                s32   GetStatus(const s32* lpbWantWait);
+                s32   GetStatus(const EA::Thread::ThreadTime& lTimeoutAbsolute);
 
                 // SetPriority @0x82BBFD80 -- re-prioritise via Device::ChangeOpPriority.
                 s32 SetPriority(s32 liPriority);
@@ -208,64 +208,35 @@ namespace rw
             // GetSize @0x82BBD700:  ld r3, 0x18(r3)  -- return the 64-bit size at +0x18.
             u64 GetSize(const AsyncOp* lpOp);
 
-            // rw::core::filesys::IntrusiveList<AsyncOp> -- the singly-linked op list head.
-            //   +0x00 mpHead  : first node
-            //   +0x04 mpTail  : last node
-            //   +0x08 muCount : node count
-            // Nodes link forward via AsyncOp::mpNext (node+0). The TU id carries the
-            // trailing '>' of the template instantiation rw::core::filesys::...<AsyncOp>.
-            struct AsyncOpList
-            {
-                AsyncOp*  mpHead;   // +0x00
-                AsyncOp*  mpTail;   // +0x04
-                u32       muCount;  // +0x08
+            // The Device's priority-ordered op queue (nodes link through AsyncOp::mpNext).
+            typedef detail::ListSingle<AsyncOp> AsyncOpList;
 
-                // InsertAfter @0x82BBDE70: insert lpNode after lpAfter (after == null ->
-                // push front). Maintains mpTail when inserting at the end and bumps muCount.
-                AsyncOpList* InsertAfter(AsyncOp* lpAfter, AsyncOp* lpNode);
-
-                // Remove @0x82BBDED0: unlink lpNode. lpFrom is an optional predecessor node
-                // to start the forward scan from (null -> scan from mpHead). Returns 1 if
-                // removed (and clears lpNode->mpNext), 0 otherwise.
-                int Remove(AsyncOp* lpNode, AsyncOp* lpFrom);
-            };
-
-            // An open filesystem handle. Named fields at the X360 offsets:
-            //   +0x00 mField0
-            //   +0x04 mField1
-            //   +0x08 mbIsOpen : non-zero while bound to a live device handle
-            //   +0x0C mField3
-            //   +0x10 mpDevice : the owning device (its vtable +0x10 == close/release)
+            // An open filesystem handle (0x28 bytes on the console; DoOpen allocates it).
+            // Named fields at the console offsets:
+            //   +0x00 mField0        : cleared by ctor/dtor
+            //   +0x04 mpOwnerHandle  : this handle, or the handle the driver's Open linked
+            //                          the file to (its out-parameter)
+            //   +0x08 mpFile         : the driver's open-file object; null when the open failed
+            //   +0x0C mpDevice       : the Device the file was found on
+            //   +0x10 mpDriver       : that Device's driver (~Handle closes mpFile through it)
+            //   +0x18 mu64Size       : the file size the driver reported at open
+            //   +0x20 mu64Reserved20 : cleared by the ctor
             struct Handle
             {
-                // Handle::Handle (owned by the not-yet-homed Handle ctor TU): builds a
-                // handle from (storage, path, position-hi, device). Declared so DoOpen can
-                // construct one; the definition lives in the Handle TU.
-                Handle(const char* lpcPath, u32 luPositionHi, Device* lpDevice);
+                // Handle::Handle: open lpcPath through lpDevice's driver (walking
+                // the Manager's search paths when lpDevice is the default device).
+                Handle(const char* lpcPath, u32 luFlags, Device* lpDevice);
 
                 ~Handle();
 
-                u32         mField0;    // +0x00
-                u32         mField1;    // +0x04
-                u32         mbIsOpen;   // +0x08
-                u32         mField3;    // +0x0C
-                DeviceBase* mpDevice;   // +0x10
-                u64         mu64Size;   // +0x18  file size (Stream open/close callbacks
-                                        //         copy it into StreamState::mu64FileSize;
-                                        //         `ld 0x18(handle)` in the X360 asm)
-            };
-
-            // The device base the Handle releases through on close. Modelled as a single
-            // vtable with the close/release method at slot +0x10 (the 5th pointer), matching
-            // the X360 indirect call `(*(*mpDevice + 0x10))(mpDevice)` in ~Handle.
-            class DeviceBase
-            {
-            public:
-                virtual void Slot0() = 0;
-                virtual void Slot1() = 0;
-                virtual void Slot2() = 0;
-                virtual void Slot3() = 0;
-                virtual void Release() = 0;  // slot +0x10 (5th entry)
+                u32           mField0;         // +0x00
+                Handle*       mpOwnerHandle;   // +0x04
+                void*         mpFile;          // +0x08
+                Device*       mpDevice;        // +0x0C
+                DeviceDriver* mpDriver;        // +0x10
+                u64           mu64Size;        // +0x18  file size (Stream open/close callbacks
+                                               //         copy it into StreamState::mu64FileSize)
+                u64           mu64Reserved20;  // +0x20
             };
 
             // The process-wide filesys allocator (X360 off_8327F07C). The scalar deleting

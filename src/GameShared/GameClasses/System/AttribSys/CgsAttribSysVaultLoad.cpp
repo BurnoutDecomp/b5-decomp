@@ -5,18 +5,8 @@
 //   CgsAttribSys::VaultSlot::DoLoad           @ 0x8280E060
 //   CgsAttribSys::VaultSlot::DoUnload         @ 0x8280F1B8
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (attrib-sdk wave 2026-07-27).
-//
-// STAGED TU -- NOT in tools/build/build_game_exe.bat yet: WorldLinkStubs.cpp
-// still carries the link stubs for RegisterVault/UnregisterVault/DoLoad (and
-// for the Attrib SDK symbols these bodies pull). Mount order (one change set):
-//   1. delete the AttribSys stub cluster from WorldLinkStubs.cpp,
-//   2. add this TU + the Attrib SDK runtime TUs to the exe source list,
-//   3. flip CgsAttribSys::KB_PC_ATTRIB_SCHEMA_FILES (CgsAttribSysModule.h).
-// See the attrib-sdk wave log for the exact list. The bodies split naturally
-// into their home TUs (CgsAttribSysVaultArray.cpp / CgsAttribSysVaultSlot.cpp)
-// once the stubs are gone; they are kept together here so the stub deletion is
-// a single-file, single-step swap.
+// The bodies belong naturally to their home TUs (CgsAttribSysVaultArray.cpp /
+// CgsAttribSysVaultSlot.cpp); they are kept together in this one.
 // ===========================================================================
 
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultArray.h"

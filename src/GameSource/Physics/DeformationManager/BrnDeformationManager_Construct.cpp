@@ -3,30 +3,20 @@
 #include "GameSource/Physics/DeformationManager/BrnDeformationDebugComponent.h"  // complete type for the static mDebugComponent
 
 // ==================================================================================================
-// BrnPhysics::Deformation::DeformationManager::Construct -- SPLIT OUT of BrnDeformationManager.cpp
-// on 2026-08-03 (task #116). BUILD-MECHANICS SPLIT ONLY: the body and its banner comment were
-// MOVED verbatim, not retyped or re-derived. Same precedent as RaceCarPhysics_Construct.cpp /
-// TrafficPhysics_Construct.cpp / BrnVehicleManager_Construct.cpp.
+// BrnPhysics::Deformation::DeformationManager::Construct -- SPLIT OUT of BrnDeformationManager.cpp.
+// BUILD-MECHANICS SPLIT ONLY: the body and its banner comment were MOVED verbatim, not retyped or
+// re-derived. Same precedent as RaceCarPhysics_Construct.cpp / TrafficPhysics_Construct.cpp /
+// BrnVehicleManager_Construct.cpp. PhysicsModule::Construct calls it every boot.
 //
-// == WHY THE SPLIT ==
-// BrnPhysics::PhysicsModule::Construct @0x825AE308 calls this function, and PhysicsModule::Construct
-// was a LIVE EMPTY STUB in WorldLinkStubs.cpp -- a quiet no-op reached every boot. Un-stubbing it
-// needs this symbol linkable. BrnDeformationManager.cpp AS A WHOLE cannot be mounted: a MEASURED
-// trial link (task #116, M1) put it at 25 unresolved externals, of which 19 come from
-// Prepare / Release / Destruct / OutputData / ProcessEvents / the Process*Events family -- pool
-// allocation through the rw allocator, resource-handle resolution, the DetachedPartManager output
-// path and the DeformableObject ctor. /OPT:REF does not suppress LNK2019, so the whole TU's
-// reference graph is the cost.
-//
-// Construct's own share of that 25 was SIX symbols, all closed by BrnDeformationConstructShims.cpp:
+// Six of the symbols Construct needs are defined in BrnDeformationConstructShims.cpp:
 //     DetachedPartManager::Construct
 //     DeformationDebugComponent_Construct
 //     DeformableObject_ConstructUpdatePerformanceMonitors
 //     DeformableObject_ConstructUpdateIKAndLocatorsPerformanceMonitors
 //     DeformableObject_ConstructPostPhysicsPerformanceMonitors
-//     DeformationManager::mDebugComponent   (the static member had no definition anywhere)
+//     DeformationManager::mDebugComponent
 //
-// TO RE-MERGE: close the other 19, mount BrnDeformationManager.cpp, move this text back.
+// BrnDeformationManager.cpp is mounted as well, so re-merging is a plain move of this body and text.
 // ==================================================================================================
 
 namespace BrnPhysics
@@ -107,30 +97,27 @@ namespace Deformation
         miPlayerModelIndex       = -1;  // X360 *(this+76040) = -1
         miLastBodyToHaveIKUpdate = 0;   // X360 *(this+76672) = 0
 
-        // Register the CPU performance monitors in the X360 order. The X360 ARTIST build uses the
-        // 6-parameter AddMonitor form (name, colour=15, minimum=0, budget=10.0, parentHandle, flags=1);
-        // the parent-handle arg the X360 threaded is unrecovered per-call (register-allocated, no
-        // symbol) so the parent linkage is passed as the unparented root (-1). FLAG: parent handles
-        // unrecovered -- the registration order + names + colour/budget/flags are faithful.
-        miTotalDeformationPerfMon                                = CgsDev::PerfMonCpu::AddMonitor("Total deformation",            15, 0, 10.0, -1, 1);
-        miPostSceneUpdatePerfMon                                 = CgsDev::PerfMonCpu::AddMonitor("  Post scene update",          15, 0, 10.0, -1, 1);
-        miUpdateSensorDisplPerfMon                               = CgsDev::PerfMonCpu::AddMonitor("  Update sensor displ.",       15, 0, 10.0, -1, 1);
-        miUpdatePerfMon                                          = CgsDev::PerfMonCpu::AddMonitor("  Update",                     15, 0, 10.0, -1, 1);
-        miUpdateModelsPerfMon                                    = CgsDev::PerfMonCpu::AddMonitor("     Update models",           15, 0, 10.0, -1, 1);
+        // Register the CPU performance monitors in console order (page 15, minimum 0, budget
+        // 10.0 ms, scaled).
+        miTotalDeformationPerfMon                                = CgsDev::PerfMonCpu::AddMonitor("Total deformation",            CgsDev::E_PMP_15, false, 10.0f, true);
+        miPostSceneUpdatePerfMon                                 = CgsDev::PerfMonCpu::AddMonitor("  Post scene update",          CgsDev::E_PMP_15, false, 10.0f, true);
+        miUpdateSensorDisplPerfMon                               = CgsDev::PerfMonCpu::AddMonitor("  Update sensor displ.",       CgsDev::E_PMP_15, false, 10.0f, true);
+        miUpdatePerfMon                                          = CgsDev::PerfMonCpu::AddMonitor("  Update",                     CgsDev::E_PMP_15, false, 10.0f, true);
+        miUpdateModelsPerfMon                                    = CgsDev::PerfMonCpu::AddMonitor("     Update models",           CgsDev::E_PMP_15, false, 10.0f, true);
         DeformableObject_ConstructUpdatePerformanceMonitors();
-        miUpdateIkAndDetachingPerfMon                            = CgsDev::PerfMonCpu::AddMonitor("     Upd.IK & detaching",      15, 0, 10.0, -1, 1);
+        miUpdateIkAndDetachingPerfMon                            = CgsDev::PerfMonCpu::AddMonitor("     Upd.IK & detaching",      CgsDev::E_PMP_15, false, 10.0f, true);
         DeformableObject_ConstructUpdateIKAndLocatorsPerformanceMonitors();
-        miUpdateDetachedPartsPerfMon                             = CgsDev::PerfMonCpu::AddMonitor("    Update detached parts",    15, 0, 10.0, -1, 1);
-        miUpdateSkinnedJointsPerfMon                             = CgsDev::PerfMonCpu::AddMonitor("    Update skinned joints",    15, 0, 10.0, -1, 1);
-        miUpdatePostPhysicsPerfMon                               = CgsDev::PerfMonCpu::AddMonitor("  Post physics update",        15, 0, 10.0, -1, 1);
-        miPostPhysicsUpdateModelsPerfMon                         = CgsDev::PerfMonCpu::AddMonitor("     Update Models",           15, 0, 10.0, -1, 1);
+        miUpdateDetachedPartsPerfMon                             = CgsDev::PerfMonCpu::AddMonitor("    Update detached parts",    CgsDev::E_PMP_15, false, 10.0f, true);
+        miUpdateSkinnedJointsPerfMon                             = CgsDev::PerfMonCpu::AddMonitor("    Update skinned joints",    CgsDev::E_PMP_15, false, 10.0f, true);
+        miUpdatePostPhysicsPerfMon                               = CgsDev::PerfMonCpu::AddMonitor("  Post physics update",        CgsDev::E_PMP_15, false, 10.0f, true);
+        miPostPhysicsUpdateModelsPerfMon                         = CgsDev::PerfMonCpu::AddMonitor("     Update Models",           CgsDev::E_PMP_15, false, 10.0f, true);
         DeformableObject_ConstructPostPhysicsPerformanceMonitors();
-        miPostPhysicsUpdateDetachedPartsManPerfMon               = CgsDev::PerfMonCpu::AddMonitor("     Update Detached Parts Man", 15, 0, 10.0, -1, 1);
-        miPostPhysicsProcessJointSpiesPerfMon                    = CgsDev::PerfMonCpu::AddMonitor("     Process Joint Spies",     15, 0, 10.0, -1, 1);
-        miPostPhysicsUpdateAddContactsToPenSolverPerfMon         = CgsDev::PerfMonCpu::AddMonitor("       Add conts to PenSlvr",  15, 0, 10.0, -1, 1);
-        miPostPhysicsUpdateSolvePenetrationPerfMon               = CgsDev::PerfMonCpu::AddMonitor("       Solve Penetrations",    15, 0, 10.0, -1, 1);
-        miPostPhysicsUpdateReadTransformsFromPenSolverPerfMon    = CgsDev::PerfMonCpu::AddMonitor("       Read from Pen Solver",  15, 0, 10.0, -1, 1);
-        miFixUpRaceCarTrafficContact                             = CgsDev::PerfMonCpu::AddMonitor("Fixup RaceCar Traf contact",   15, 0, 10.0, -1, 1);
+        miPostPhysicsUpdateDetachedPartsManPerfMon               = CgsDev::PerfMonCpu::AddMonitor("     Update Detached Parts Man", CgsDev::E_PMP_15, false, 10.0f, true);
+        miPostPhysicsProcessJointSpiesPerfMon                    = CgsDev::PerfMonCpu::AddMonitor("     Process Joint Spies",     CgsDev::E_PMP_15, false, 10.0f, true);
+        miPostPhysicsUpdateAddContactsToPenSolverPerfMon         = CgsDev::PerfMonCpu::AddMonitor("       Add conts to PenSlvr",  CgsDev::E_PMP_15, false, 10.0f, true);
+        miPostPhysicsUpdateSolvePenetrationPerfMon               = CgsDev::PerfMonCpu::AddMonitor("       Solve Penetrations",    CgsDev::E_PMP_15, false, 10.0f, true);
+        miPostPhysicsUpdateReadTransformsFromPenSolverPerfMon    = CgsDev::PerfMonCpu::AddMonitor("       Read from Pen Solver",  CgsDev::E_PMP_15, false, 10.0f, true);
+        miFixUpRaceCarTrafficContact                             = CgsDev::PerfMonCpu::AddMonitor("Fixup RaceCar Traf contact",   CgsDev::E_PMP_15, false, 10.0f, true);
 
         // (X360: a one-shot file-static init guard `if (dword_82F2A338 == -1) dword_82F2A338 = 0;`
         // -- the debug component's registration latch. Modelled inside the debug component's own

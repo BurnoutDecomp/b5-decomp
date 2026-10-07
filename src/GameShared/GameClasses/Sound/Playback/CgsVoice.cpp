@@ -590,6 +590,12 @@ void Voice::Update(System* apSystem, f32 af32DeltaTime)
     }
 }
 
+// Base removal poll: done while the playback-state byte is non-zero.
+bool Voice::DoRemove()
+{
+    return mu8PlaybackState != E_PLAYBACK_STATE_INVALID;
+}
+
 // @ 0x826D7AB0. Compiler-synthesised `scalar deleting destructor' for Voice, expressed
 // as the plain virtual destructor. ~Voice() member/base teardown is compiler-generated;
 // the X360 custom-allocator tail (operator delete) folds into the host delete-expression

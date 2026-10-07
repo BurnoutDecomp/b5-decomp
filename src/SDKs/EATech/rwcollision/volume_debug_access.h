@@ -339,28 +339,16 @@ namespace rw
             // -----------------------------------------------------------------------
 
             // @ 0x82BB03A8 -- fills the 7-entry shared descriptor table (slot 0 stays null)
-            // and returns 1 (`li r3,1` at 0x82BB03B8, MEASURED -- the old `return 0` gate
-            // did not even match the console's return value).
+            // and returns 1 (MEASURED).
             //
-            // NOW `static`, as rwccore.h:1580-1581 / DWARF volume.h:1491 / the X360 body
-            // (which never touches `this`) all say, and as the tree's two other minimal
-            // forward declarations already spelled it:
-            // GameShared/GameClasses/SceneManager/CgsSceneManagerModule.cpp:48 (the ONLY
-            // caller, at :191) and GameSource/World/WorldLinkStubs.cpp:150.
+            // `static`, as rwccore.h:1580-1581 says and the console body (which never
+            // touches `this`) confirms. Static and non-static are DIFFERENT MANGLED
+            // SYMBOLS, so every declaration must agree; the only caller is
+            // SceneManagerModule::Construct (GameShared/GameClasses/SceneManager/
+            // CgsSceneManagerModule.cpp).
             //
-            // ⚠️⚠️ THIS CHANGE IS HALF OF ONE COMMIT. Static and non-static are DIFFERENT
-            // MANGLED SYMBOLS, so until the inert boot gate
-            // `int rw::collision::Volume::InitializeVTable() { return 0; }` in
-            // GameSource/World/WorldLinkStubs.cpp is DELETED (block
-            // :2414-2427 as of 2026-08-18 -- banner through closing brace), this
-            // declaration + volume.cpp's real body collide with it: LNK2005. The gate file
-            // is conductor-owned, so the delete is REPORTED, not done here (waveQ5 rwc3).
-            //
-            // WHAT IT BUYS: while the gate was live, the caller bound to `return 0`,
-            // volume.cpp's real body was dead, gVolumeVTable stayed ALL ZERO,
-            // FixableVolume::FixUp wrote NULL into every volume's +0x40 slot, and
-            // GetType()/GetBBox()/GetBBoxDiag() null-dereferenced. With the gate gone the
-            // table is filled with the six real descriptors defined in volume.cpp, so
+            // The six descriptors it installs are defined in
+            // vendor/renderware/collision/VolumeVTables.cpp; with the table filled,
             // GetType() returns the true VolumeType and FixUp/FixDown round-trip.
             static RwBool InitializeVTable();
 

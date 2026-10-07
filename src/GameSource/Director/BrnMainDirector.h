@@ -311,6 +311,22 @@ namespace BrnDirector
         // Exposed by name so the module never reaches into this class's storage.
         void SetDebugComponent(DebugComponent* lpDebugComponent) { mpDebugComponent = lpDebugComponent; }
 
+        // The camera debug snapshot the director debug page reads (its HUD prints every field;
+        // its menu registers the position and FOV as read-only tweakables). Field names and
+        // order are the debug-info's (DirectorModule::CameraDebugInfo).
+        struct CameraDebugInfo
+        {
+            f32     mfX;             // +0x00
+            f32     mfY;             // +0x04
+            f32     mfZ;             // +0x08
+            f32     mfFOV;           // +0x0C
+            f32     mfAspectRatio;   // +0x10
+            f32     mfNearClip;      // +0x14
+            Vector3 mAt;             // +0x20
+        };
+        CameraDebugInfo&       GetCameraDebugInfo()       { return mCameraDebugInfo; }
+        const CameraDebugInfo& GetCameraDebugInfo() const { return mCameraDebugInfo; }
+
     private:
         // ================================================================================
         // LAYOUT -- named members in CONSOLE ORDER, HOST-NATIVE sizes.
@@ -436,9 +452,13 @@ namespace BrnDirector
         //           FLAG: un-homed; named opaque span.
         u8 maRotationController[0x330A0 - 0x33070];
 
-        // +0x330A0 .. +0x33100  CameraSphericalRotationController (ArbStateSharedInfo +0x58).
+        // +0x330A0 .. +0x330D0  CameraSphericalRotationController (ArbStateSharedInfo +0x58).
         //           FLAG: un-homed; named opaque span.
-        u8 maSphericalRotationController[0x33100 - 0x330A0];
+        u8 maSphericalRotationController[0x330D0 - 0x330A0];
+
+        // +0x330D0 .. +0x33100  the camera debug snapshot (the debug page's HUD reads +0x00..+0x14
+        //           and +0x20..+0x28 of it).
+        CameraDebugInfo mCameraDebugInfo;
 
         // +0x33100  the "forced camera car" override index (Construct seeds -1; the
         //           live-player-car predicate and PreSceneQueryUpdate use it).

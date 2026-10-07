@@ -65,36 +65,11 @@ namespace MassiveAdClient3
 
 class CRequestBuilder;
 
-// ---------------------------------------------------------------------------
-// MassiveAd token PRNG (separate MassiveAd platform TU).
-//
-// MassivePRNG(tokenBuffer) fills the client session-token buffer (gacHMACKey,
-// byte_8327F2A0) with fresh pseudo-random bytes ahead of each open-session write.
-// Attested by the named `bl MassivePRNG` in WriteOpenSessionRequest's asm (r3 =
-// the token buffer). The X360 symbol demangles WITHOUT the MassiveAdClient3
-// namespace, but it is declared inside the namespace here so the whole vendor
-// package stays self-contained (link-name fidelity is not a gate). The X360 r3
-// return is discarded at the single call site; body lives in the MassiveAd
-// platform TU.
-// ---------------------------------------------------------------------------
-int MassivePRNG(char* pacTokenBuffer);
-
-// ---------------------------------------------------------------------------
-// MassiveAd MD5 helper (separate crypto TU).
-//
-// CalculateMD5Hash(data, dataLength) returns a freshly MassiveMalloc'd string
-// holding the MD5 digest of the input (owned by the wire-buffer copy WriteString
-// makes; the source hardware-id string is MassiveFree'd here), or null on
-// failure. Attested by the named `bl CalculateMD5Hash` in
-// WriteOpenSessionRequest's asm (r3 = the hardware-id string, r4 = its strlen).
-// Also declared -- identically -- by the sibling CRequestLocateService header
-// (its shared home); redeclared here so this TU is self-contained. Body lives in
-// the MassiveAd crypto TU.
-// ---------------------------------------------------------------------------
-char* CalculateMD5Hash(const void* pData, int nDataLength);
-
 class CRequestOpenSession : public CRequestObject
 {
+    // CMassiveClientCore::HandleResponse publishes the parsed player / session ids.
+    friend class CMassiveClientCore;
+
 public:
     // @ 0x82BD4D98. Chains CRequestObject(35, "RequestOpenSession"), installs this
     // class's vftable (off_82186064 -- modelled by the virtuals), and zeroes the

@@ -42,6 +42,9 @@ namespace BrnWorld
                     f32 lfSimTimerTimeStep,
                     GameEventQueue* lpEventQueue);
 
+        bool Release();    // inlined into RaceCarEntityModule::Release (BrnAirTimeManager_wS34_00.cpp)
+        void Destruct();   // inlined into RaceCarEntityModule::Destruct (BrnAirTimeManager_wS34_00.cpp)
+
     private:
         EAirManagerState meState;             // +0x0
         f32              mfTimeSinceLastAir;   // +0x4

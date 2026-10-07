@@ -244,7 +244,7 @@ bool PlayerVehicleStateManager::Prepare()
             if (!lpContent || !lpContent->IsCreated() || !lpContent->IsLoaded())
                 return false;
         }
-        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor("Player Car", 14, 0, 1.0, 0, 1);
+        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor("Player Car", CgsDev::E_PMP_14, false, 1.0f, true);
         // fall through
     }
     case E_PREPARE_STATES:

@@ -29,9 +29,7 @@ namespace WorldEntityIO
         // ---- methods (DWARF :41-:59) ----
         // ALL TWELVE ARE X360 HEADER-INLINES: none of them has an out-of-line symbol in the
         // ARTIST export set -- every caller's asm stores/loads the flag byte directly. So the
-        // bodies live here, matching the console. (They previously sat in WorldLinkStubs.cpp as
-        // five assert TRAPS, which would have fired the moment the world streamer published its
-        // per-frame status.)
+        // bodies live here, matching the console.
         //
         // Construct's seed is attested by the caller that inlines it,
         // OutputBuffer_PostPhysics::Construct @0x822EDFF0:

@@ -4,9 +4,7 @@
 
 // BrnGui::BrnDebug - the debug GUI screen state (DWARF home BrnBrnDebug.h:42). It
 // observes two GUI events while active. Virtual set from the DecFIGS DWARF, gated on
-// the X360 ledger: OnEnter/OnLeave are bodied in BrnBrnDebug.cpp (this TU); Update
-// (DWARF cpp:73, a separate ledger function) and GetResourcesToLoad (DWARF h:60) are
-// declaration-only here.
+// the console ledger; all four are bodied in BrnBrnDebug.cpp.
 namespace BrnGui
 {
     struct BrnDebug : public CgsGui::State

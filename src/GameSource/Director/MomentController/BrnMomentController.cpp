@@ -8,14 +8,6 @@
 //   BrnDirector::MomentController::NewMoment               @0x82255850 (DWARF BrnMomentController.cpp:118)
 //   BrnDirector::MomentController::Construct / Prepare / Destruct / UpdateAllMoments
 //
-// ⭐ 2026-09-24 (FX-DIRECTOR, the moment factory): NewMoment and MomentHandle::Prepare MOVED HERE from
-// the project-invented split TU BrnMomentControllerNewMoment.cpp (never mounted; deleted). The DWARF
-// homes both in this file, and it is mounted -- which retires DirectorLinkStubs.cpp's GROUP F stub,
-// the NewMoment that allocated nothing.
-//
-// (Release moved here earlier, on 2026-08-01, for the same reason: the DWARF homes it in this file
-// and BrnMomentSelector.cpp, which walks every handle, is mounted.)
-//
 // MomentDescription is a plain POD (no out-of-line member needs a body here); it is homed
 // purely by the header and instantiated through Array<MomentDescription,10> in its own TU.
 

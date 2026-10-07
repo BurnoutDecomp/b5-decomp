@@ -23,23 +23,14 @@
 // SceneManagerIO::TriangleCacheInterface accessors) was already reconstructed and is
 // what AddRaceCarTractionLineTests calls.
 //
-// ⭐⭐ REACHABILITY -- SUPERSEDED TWICE, so the whole history is here rather than a bare claim.
-// This banner used to say "the sole caller, SceneManagerModule::StartUpdateTriangleCache, is
-// still a link stub ... These four bodies therefore run ZERO times today." Both halves are now
-// false, and each was corrected by a measurement rather than by reading:
-//   * 2026-08-10 (spatial-partition wave): StartUpdateTriangleCache @0x828C73D8 got its real body
-//     in CgsSceneManagerModule.cpp, so all three Process* run EVERY FRAME.
-//   * 2026-08-10 (producer wave): `xrefs_to` showed each of them has a SECOND console caller --
-//     SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules @0x828D1F88 -- which the PC
-//     bridge did not wire. That is the caller the PREPARE path uses (the bridge runs these three
-//     only when its lbPrepare argument is set), and it is the one that drains
+// ⭐⭐ REACHABILITY. All three Process* have TWO console callers:
+//   * SceneManagerModule::StartUpdateTriangleCache (CgsSceneManagerModule.cpp), EVERY FRAME;
+//   * SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules -- the PREPARE path (the
+//     bridge runs these three only when its lbPrepare argument is set). It is the one that drains
 //     VehicleManager::PrepareTriangleCache's 28 InEventAddToCache out of a scene input buffer that
-//     is destroyed in the same call. Wired now.
-// RUNTIME-WITNESSED (2026-08-10): ProcessAddToCacheEvents claims 28 slots (8 race cars + 20
-// traffic) during WorldModule::Prepare's physics stage.
-// ⚠️⚠️ THE OLD TAIL OF THAT SENTENCE -- "`usedSlots=28` thereafter, every frame" -- IS RETIRED,
-// wave Q6 round 2. It was measured before the prop subsystem had any producer and it went stale in
-// the HELPFUL direction. PROPS CLAIM SLOTS TOO, and by name:
+//     is destroyed in the same call.
+// RUNTIME-WITNESSED: ProcessAddToCacheEvents claims 28 slots (8 race cars + 20 traffic) during
+// WorldModule::Prepare's physics stage. PROPS CLAIM SLOTS TOO, and by name:
 //   * BrnPhysics::Props::PropManager::ProcessAddPropInstanceEvents (PropManager_wQ2_06.cpp:560)
 //     posts one InEventAddToCache per whole prop at KI_PROP_CACHE_START_INDEX + slot (28..42);
 //   * ...::CreatePart (PropManager_wQ2_04.cpp:361) posts one per part at
@@ -52,9 +43,9 @@
 // is NOT statically re-derivable. It is now MEASURED at run time by the one-shot
 // `[Q6-tcache] first prop cache slot seated` line in ProcessAddToCacheEvents below -- read that,
 // do not inherit a number from this banner.
-// ⚠️ Nothing here fills the cache with TRIANGLES -- that is StartUpdateTriangleCaches @0x828BECF8
-// (bodied) + the PolygonSoupTesterJob fill path (still absent), and it only runs for slots marked
-// DIRTY, which needs the position half (PhysicsModule::UpdateCachedPositions, still gated).
+// ⚠️ Nothing here fills the cache with TRIANGLES -- that is StartUpdateTriangleCaches
+// (CgsTriangleCacheManager_Update.cpp) + the PolygonSoupTesterJob fill path, and it only runs for
+// slots marked DIRTY, which needs the position half (PhysicsModule::UpdateCachedPositions).
 //
 // ⭐⭐ WAVE Q6 ROUND 2 (2026-08-19) -- WHAT THE FOUR "Trying to remove unused triangle cache slot"
 // ASSERTS IN scratch/flow_run/20260819_115004/BrnGame.log:11541/:11558/:11575/:11592 ACTUALLY WERE.

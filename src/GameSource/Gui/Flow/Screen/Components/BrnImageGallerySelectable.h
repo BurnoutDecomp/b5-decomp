@@ -27,9 +27,10 @@ namespace BrnGui
         // @0x82419998 (this TU, DWARF cpp:112) -- re-push a just-loaded child's data.
         bool HandleLoadNotifications(const char* lpacComponentName);
 
-        // DWARF cpp:65 / h:99 / h:115 -- their own ledger functions / X360
-        // header-inlines not exported (declaration-only here).
+        // An empty override (this TU).
         virtual void Select();
+
+        // Header-inlines with no out-of-line copy (declaration-only here).
         void SetCategory(const char* lpacCategory);
         void SetCollected(s32 liCollected);
 

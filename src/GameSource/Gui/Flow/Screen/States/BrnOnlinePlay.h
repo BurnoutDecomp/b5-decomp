@@ -18,7 +18,7 @@
 //   mMainMenuComponent   (X360 +0xC8, main-menu, 7 rows)
 //   mPlayerStatsDisplay  (X360 +0x1188, the network player-stats panel)
 //   mPlayerStatsEvent    (X360 +0x2378, the local player's stats snapshot event)
-//   ...local-player display fields, meSubState, invite flags, cache, listener...
+//   ...meSubState, invite flags, cache, listener...
 //
 // Store-for-store from BURNOUT_X360_ARTIST.XEX for the reconstructed ledger
 // bodies (addresses in the .cpp). The GuiCache apt-component watcher calls go
@@ -29,7 +29,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"                   // CgsGui::State (base, DWARF-authoritative)
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"               // CgsGui::GuiComponent (news-animation carrier surface)
+#include "GameSource/Gui/Flow/Shared/Components/BrnAnimationComponent.h"          // BrnGui::AnimationComponent (embedded @+0x38)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"    // CgsGui::sResourceTuple
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuComponent.h"               // BrnGui::MenuComponent (embedded @+0xC8)
 #include "GameSource/Gui/Flow/Screen/Components/BrnGuiNetworkPlayerStats.h"       // BrnGui::GuiNetworkPlayerStats (embedded @+0x1188)
@@ -78,7 +78,7 @@ namespace BrnGui
         //   (OnEnter primes them); the recovered effect is base + member default-construction.
         OnlinePlay();
 
-        // @0x8249BC18 / @0x8249BDA8 / (Update declared-only) -- the FSM enter/leave/update
+        // The FSM enter/leave/update
         // virtuals. OnEnter registers the eight observed events, builds the news-animation +
         // player-stats + main-menu components, primes the local-player display block, creates
         // the XNotify listener and posts the screen's open events. OnLeave unregisters, posts
@@ -86,7 +86,7 @@ namespace BrnGui
         // closes the listener handle.
         virtual void OnEnter();
         virtual void OnLeave();
-        virtual void Update();   // declared-only in this slice (body links from another slice of this TU)
+        virtual void Update();
 
         // @0x82508C00 -- hand this screen's static resource list to the loader.
         virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
@@ -126,11 +126,18 @@ namespace BrnGui
         // menu / stats / news-animation apt components as expected with the cache watcher.
         void ShowMainMenuScreen();
 
-        // ---- declared-only (X360-attested; bodies are other slices of this TU) ---------
-        void ShowFriendsMenu();   // @0x8249C2xx (case '4'); body links from another slice
+        // Wait for the screen's resources, then for its apt components; on the second, finish
+        // the pending overlay waits, raise the disconnect / no-hard-disk overlays and show the menu.
+        void CheckForCompletedLoads();
+
+        // Latch a player-stats record (event 248) and, once the stats panel is loaded, show it.
+        void HandlePlayerStatsEvent(const CgsModule::Event* lpEvent);
+
+        // Open the guide's friends list, or ask the player to sign in first.
+        void ShowFriendsMenu();
 
         // ---- statics (X360 .rdata) ----------------------------------------------------
-        static const s32 KI_PLAYER_NAME_LENGTH = 16;   // macLocalPlayerName buffer (strncpy count)
+        static const s32 KI_PLAYER_NAME_LENGTH = 16;   // mPlayerStatsEvent.macPlayerName (strncpy count)
 
         // The eight GUI event ids this state observes (X360 dword_8205EF64, count 8). Shared by
         // OnEnter (RegisterForEvents) / OnLeave (UnRegisterForEvents). Values dumped from the
@@ -149,26 +156,13 @@ namespace BrnGui
         static const char* const KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTIONS_COUNT];// @0x82F26800
 
         // ---- data members (DWARF names + order; guest 32-bit offsets documentary) ------
-        // The "new news" transition animation component (DWARF BrnGui::AnimationComponent, X360
-        // +0x38). Its concrete class is not committed; this slice only reaches the GuiComponent
-        // base surface (the virtual Construct in OnEnter + GetName() in ShowMainMenuScreen), so it
-        // is modelled by its CgsGui::GuiComponent base -- the same carrier approach as the committed
-        // BrnGui::OnlineQuickCustomCreate sibling, but without redefining a BrnGui::AnimationComponent
-        // type (that type is defined locally in that sibling's header; redefining it here would be an
-        // ODR clash for any TU that includes both). GROW to the real AnimationComponent when it lands.
-        CgsGui::GuiComponent mNewNewsAnimation;   // X360 +0x38
-        MenuComponent        mMainMenuComponent;  // X360 +0xC8 (7 rows)
+        // The "new news" transition animation component (console +0x38).
+        AnimationComponent    mNewNewsAnimation;   // console +0x38
+        MenuComponent         mMainMenuComponent;  // console +0xC8 (7 rows)
         GuiNetworkPlayerStats mPlayerStatsDisplay; // X360 +0x1188 (the on-screen stats panel)
-        GuiEventNetworkPlayerStats mPlayerStatsEvent; // X360 +0x2378 (the local player's stats record)
-
-        // Local-player display block the X360 fills at +0x23FC/+0x2400/+0x2404 and hands to
-        // GuiNetworkPlayerStats::SetInfo. FLAG: the DecFIGS DWARF folds these into mPlayerStatsEvent's
-        // derived tail (miSlotIndex @event+0x88 / maDisplayData @event+0x8C); they are surfaced here as
-        // named state fields for the SetInfo call and to carry OnEnter's zero-inits. Behaviour matches
-        // the X360 store-for-store regardless of the attribution.
-        s32  miLocalPlayerImageIndex;             // X360 +0x23FC (OnEnter clears; unused by this slice)
-        s32  miLocalPlayerStatsValue;             // X360 +0x2400 (SetInfo "value" arg)
-        char macLocalPlayerName[KI_PLAYER_NAME_LENGTH]; // X360 +0x2404 (SetInfo "name" arg)
+        // The local player's stats record. OnEnter clears its player id / rank / name tail
+        // (+0x23FC / +0x2400 / +0x2404) and SetInfo shows its name and rank.
+        GuiEventNetworkPlayerStats mPlayerStatsEvent; // console +0x2378
 
         ESubState meSubState;                     // X360 +0x2414
         bool      mbInviteInProgress;             // X360 +0x2418 (mirrored from the cache)

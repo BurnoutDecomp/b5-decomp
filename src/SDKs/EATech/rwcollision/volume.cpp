@@ -33,28 +33,17 @@
 // home"). The local copy is gone; the two members are now declared in that header.
 //
 // ---------------------------------------------------------------------------------------
-// WHAT CHANGED 2026-08-18 (waveQ5 rwc3), and the TWO INTEGRATION EDITS IT REQUIRES
+// LINK FACTS
 // ---------------------------------------------------------------------------------------
-//  1. `InitializeVTable` is now STATIC (rwccore.h:1580-1581, DWARF volume.h:1491, and the
-//     X360 body never touches `this`; both other declarations in the tree -- the only
-//     caller at CgsSceneManagerModule.cpp:48/:191 and WorldLinkStubs.cpp:150 -- already
-//     spelled it static, so this body was DEAD and the caller bound to an inert gate).
-//     ⚠️ REQUIRES: delete the boot gate `int rw::collision::Volume::InitializeVTable()
-//     { return 0; }` in GameSource/World/WorldLinkStubs.cpp -- block :2414-2427 as of
-//     this date (banner through closing brace) -- IN THE SAME COMMIT, else LNK2005.
-//  2. `gVolumeVTable`'s element type is now the DWARF's `Volume::VTable*` instead of
-//     `void*`.  ⚠️ REQUIRES: GameShared/GameClasses/RenderWare/FixableVolume.cpp:20's
-//     private re-declaration `extern void* gVolumeVTable[7];` must become
-//     `extern Volume::VTable* gVolumeVTable[7];` (or, better, that file should include
-//     this header) IN THE SAME COMMIT. MEASURED with dumpbin: the two spellings mangle to
+//  1. `InitializeVTable` is STATIC (rwccore.h:1580-1581; the console body never touches
+//     `this`). Its only caller is SceneManagerModule::Construct (CgsSceneManagerModule.cpp).
+//  2. `gVolumeVTable`'s element type is `Volume::VTable*`, not `void*`. MEASURED with
+//     dumpbin: the two spellings mangle to
 //     ?gVolumeVTable@collision@rw@@3PAPEAXA and
-//     ?gVolumeVTable@collision@rw@@3PAPEAUVTable@Volume@12@A -- different symbols, so
-//     leaving :20 alone is an LNK2019 in FixableVolume.obj.
-//  3. The six `gVolumeHandler_82F91*` symbols became REAL `Volume::VTable` records instead
-//     of single zero bytes in SDKs/EATech/AptRenderLinkStubs.cpp (whose six stub lines were
-//     deleted in the same change -- both sides were the same owner's, so there was no window
-//     in which the tree carried both). They were defined HERE with null method slots on
-//     2026-08-18; the next block records where they went and why.
+//     ?gVolumeVTable@collision@rw@@3PAPEAUVTable@Volume@12@A -- different symbols, so a
+//     re-declaration must use this spelling (or include this header).
+//  3. The six per-type descriptors are REAL `Volume::VTable` records, defined in
+//     vendor/renderware/collision/VolumeVTables.cpp; the next block records why.
 //
 // ---------------------------------------------------------------------------------------
 // ⭐ WHAT CHANGED 2026-08-19 (wave Q5 vtbind): THE SIX DESCRIPTORS ARE BOUND, AND THEY MOVED.
@@ -76,10 +65,6 @@
 // SOLVED there by thin per-type adapters with the slot's exact signature -- there is no
 // function-pointer cast anywhere -- and (c) is closed: BoxVolume.cpp now carries all four
 // Box and all four Sphere bodies except the two LineSegIntersects.
-//
-// ⚠️ MOUNT: vendor/renderware/collision/VolumeVTables.cpp is a NEW TU and MUST be added to
-// tools/build/build_game_exe.bat in the same commit, in the wave-Q5 C1 collision block. If it
-// is missed, THIS TU's six references fail to resolve -- six LNK2019s, loud, not silent.
 //
 // ---------------------------------------------------------------------------------------
 // LINK FACTS still open, REPORTED not fixed:
@@ -153,8 +138,7 @@ namespace rw
         // banner).
         //
         // `extern const` because a namespace-scope `const` has INTERNAL linkage in C++; the
-        // keyword forces external linkage on both halves, exactly as the retired
-        // AptRenderLinkStubs.cpp stubs documented.
+        // keyword forces external linkage on both halves.
         //
         // The per-slot X360 addresses, the typeID/name/flags dump and the five parked slots
         // are all recorded at the records themselves in VolumeVTables.cpp -- deliberately not

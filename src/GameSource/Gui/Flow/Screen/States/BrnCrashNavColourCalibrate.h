@@ -12,13 +12,8 @@ namespace CgsModule { struct Event; }
 // CN_SETTINGS on "TO_COLOUR" and leaves back to it on "GO_BACK" (BRNSCREENFSM state 108;
 // see the reachability note in the .cpp).
 //
-// 2026-08-17 -- THE STATE WAS A CTOR-ONLY SHELL AND IS NOW FULLY BODIED. The previous
-// revision declared one member (`TextSelection mTextSelection`) and left OnEnter/OnLeave/
-// Update to the LogUnreconstructedState stubs in BrnScreenStatesDataLinkStubs.cpp; the
-// ledger nevertheless recorded the TU `done`. The real member set falls straight out of
-// OnEnter @0x824B82D0's own stores and is confirmed member-for-member, in order, by the
-// DecFIGS DWARF for this exact header
-// (references/DecFIGS/dwarfdump/GameSource/Gui/Flow/Screen/States/BrnCrashNavColourCalibrate.h).
+// The member set falls straight out of OnEnter's own stores and is confirmed
+// member-for-member, in order, by the debug info for this exact header.
 //
 // X360 layout (32-bit console offsets -- DOCUMENTARY ONLY; the x64 gate widens every
 // embedded pointer, so every access below is BY NAME):

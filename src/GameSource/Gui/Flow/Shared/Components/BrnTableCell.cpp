@@ -165,11 +165,10 @@ bool TableCell::SetLocalisedText(const char* lpacText,
 // FLAG link scaffold: EMPTY BODIES, NOT RECONSTRUCTIONS.
 // TableCell is polymorphic (its vptr at +0x00 is X360-attested, off_82071868), so defining
 // TableCell::TableCell() above makes MSVC emit the vtable here, and the vtable references
-// every virtual -- these two are the cost of that ctor, exactly as the CN_ENTER_ONLINE block
-// in BrnScreenStatesLinkStubs.cpp documents. There is NO evidence to reconstruct them from:
-// the class ledger has no Select/Update entry, the ARTIST export set has no
-// BrnGui::TableCell::Select or ::Update symbol, and nothing in this tree dispatches either
-// (the only Table consumer, BrnGui::OnlineCustomMatch, has no .cpp at all). On the console
+// every virtual -- these two are the cost of that ctor. There is NO evidence to reconstruct
+// them from: the class ledger has no Select/Update entry, the ARTIST export set has no
+// BrnGui::TableCell::Select or ::Update symbol, and nothing in this tree dispatches either.
+// On the console
 // the two slots are therefore either bodies IDA never named or the image-wide ICF `{}` fold;
 // that cannot be settled here because the decrypted XEX needed to read off_82071868 is not in
 // the working tree -- only the .i64 is.

@@ -263,10 +263,7 @@ CMassiveRecord* CMassiveAsset::RecordCreate(int nRecordId)
     void* lpRecordMem = CMassiveListNode::operator new(sizeof(CMassiveRecord)); // li r3, 0xF8
     CMassiveRecord* lpRecord = lpRecordMem
         ? ::new (lpRecordMem) CMassiveRecord(
-              // nType == the owning asset back-pointer (X360 stores `this`; the
-              // committed CMassiveRecord models the field as int -> truncating cast
-              // on the 64-bit host, lossless on the 32-bit X360).
-              static_cast<int>(reinterpret_cast<std::uintptr_t>(this)),
+              this,
               mnCrex,      // *(this + 0x40)
               nRecordId)   // a2
         : 0;
@@ -315,7 +312,7 @@ CMassiveRecord* CMassiveAsset::RecordFind(int nRecordId)
     void* lpRecordMem = CMassiveListNode::operator new(sizeof(CMassiveRecord)); // li r3, 0xF8
     CMassiveRecord* lpRecord = lpRecordMem
         ? ::new (lpRecordMem) CMassiveRecord(
-              static_cast<int>(reinterpret_cast<std::uintptr_t>(this)),
+              this,
               mnCrex,      // *(this + 0x40)
               nRecordId)   // a2
         : 0;
@@ -343,6 +340,15 @@ CMassiveRecord* CMassiveAsset::RecordFind(int nRecordId)
 int CMassiveAsset::Resume()
 {
     CRequestBuilder::Resume();
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveAsset::Suspend
+// ---------------------------------------------------------------------------
+int CMassiveAsset::Suspend()
+{
+    CRequestBuilder::Suspend();
     return 1;
 }
 

@@ -20,16 +20,8 @@
 //     MassiveAdClient3::CRequestImpressionUpdate::AddAudioReport         @ 0x82BD9960
 //     MassiveAdClient3::CRequestImpressionUpdate::AddInteractionR        @ 0x82BD9C28
 //     MassiveAdClient3::CRequestImpressionUpdate::Finish                 @ 0x82BD9D20
-//     MassiveAdClient3::CRequestImpressionUpdate::Parse                  @ 0x82BD9DA8 (BLOCKED)
 //
-// Parse @ 0x82BD9DA8 is NOT reconstructed here: its body issues a `bl STUB`
-// (Hex-Rays `STUB(this, mpSignature@+0x30, 20)`) to a function that is not homed
-// or even named in this TU's dossier, and it also calls CRequestObject::
-// ReadRemoveSignature, whose signature the committed base header deliberately
-// leaves undeclared as un-attested. The Parse override is DECLARED (so the class
-// stays concrete / instantiable and the compile gate is clean) but its body is
-// left for the ledger slice that homes those two collaborators. Reproducing the
-// STUB side-effect without a real symbol would be fabrication.
+// The Parse override is defined in MassiveAdClient3Request_wL_01.cpp.
 //
 // Per the naming convention the vendor SDK identifiers (the MassiveAdClient3
 // namespace and the CRequestImpressionUpdate class / its methods) are PRESERVED
@@ -77,8 +69,8 @@ public:
     // in this TU's ledger slice, so it is not marked `override`.
     virtual const char* GetRequestURL();
 
-    // @ 0x82BD9DA8 (BLOCKED -- see the file header). Vftable Parse override the
-    // response path dispatches; body lives in the ReadRemoveSignature/STUB slice.
+    // Vftable Parse override the response path dispatches (defined in
+    // MassiveAdClient3Request_wL_01.cpp).
     int Parse() override;
 
     // @ 0x82BD95A0 (NOT in the ledger/export set -- recovered from the shared

@@ -61,6 +61,7 @@
 #include "SharedClasses/World/BrnEnvironmentKeyframeResourceType.h"       // EnvironmentSettings::KeyframeResourceType (0x10012)
 #include "SharedClasses/World/BrnEnvironmentTimeLineResourceType.h"       // EnvironmentSettings::TimeLineResourceType (0x10013)
 #include "SharedClasses/World/BrnEnvironmentDictionaryResourceType.h"     // EnvironmentSettings::DictionaryResourceType (0x10014)
+#include "SharedClasses/Massive/Resources/MassiveLookupTableResourceType.h"   // CgsResource::MassiveLookupTableResourceType (0x1001A)
 #include "SharedClasses/Graphics/PlayerCarColoursResourceType.h"               // CgsResource::PlayerCarColoursResourceType (0x1001E)
 #include "SharedClasses/Progression/BrnProgressionResourceType.h"              // BrnProgression::ProgressionResourceType (0x1000E)
 #include "SharedClasses/Physics/Deformation/Resources/StreamedDeformationSpecResourceType.h" // BrnResource::StreamedDeformationSpecResourceType (0x1001C)
@@ -287,6 +288,10 @@ namespace CgsResource
         // entry[0].mpData 0x3388.
         static CgsContainers::DictionaryResourceType<ICE::ICETakeData> sICETakeDictionary; // 0x41 (65)
         TypeRegistry::Register(&sICETakeDictionary, "ICETakeDictionary");
+        // MASSIVETABLE.BIN's "MassiveTable" (0x1001A / 65562), registered just before
+        // PlayerCarColours. Unregistered, its item offset is never fixed up.
+        static MassiveLookupTableResourceType sMassiveLookupTable;   // 0x1001A (65562)
+        TypeRegistry::Register(&sMassiveLookupTable, "MassiveLookupTable");
         // ---- the player-car colour palette ----------------------------------------------------
         // PlayerCarColours (0x1001E / 65566), the second resource inside VEHICLELIST.BUNDLE.
         // Without a handler the "CarColours" acquire returns a null memory pointer and

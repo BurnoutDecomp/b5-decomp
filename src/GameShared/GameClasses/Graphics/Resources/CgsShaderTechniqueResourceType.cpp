@@ -282,6 +282,39 @@ namespace CgsResource
         return luBase + luTotal;
     }
 
+    // --- GetShaderConstantExternalSerialisedResourceDescriptorSize --------------------
+    // Size of one serialised external-constant block. Word +0x00 is the constant count and
+    // word +0x08 the array of NUL-terminated constant-name char*'s (the SerialisedExternal
+    // word view of CgsShaderConstants.cpp). The running total is seeded at 8*count and adds,
+    // per name, its length rounded up to a 4-byte boundary including the terminator; the
+    // returned value adds a further 4*count. Net = 12*count + Sum((strlen(name)+4)&~3).
+    // Raw-offset access is the DOCUMENTED serialised-blob exception.
+    uint32_t ShaderTechniqueResourceType::GetShaderConstantExternalSerialisedResourceDescriptorSize(
+        const ShaderConstantsExternal* lpBlock) const
+    {
+        const u32* const lpaWords = reinterpret_cast<const u32*>(lpBlock);
+        const u32 luNumConstants = lpaWords[0];                       // serialised blob: count @+0x00
+        u32 luTotal = 8u * luNumConstants;
+        if (luNumConstants)
+        {
+            const u32* lpaNames =
+                reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpaWords[2]));  // serialised blob: names @+0x08
+            u32 luRemaining = luNumConstants;
+            do
+            {
+                const char* lpName =
+                    reinterpret_cast<const char*>(static_cast<uintptr_t>(*lpaNames++));
+                const char* lpScan = lpName;
+                while (*lpScan++)
+                    ;
+                const u32 luLen = static_cast<u32>(lpScan - lpName - 1);   // strlen
+                --luRemaining;
+                luTotal += (luLen + 4u) & 0xFFFFFFFCu;                     // round up incl. NUL
+            } while (luRemaining);
+        }
+        return 4u * luNumConstants + luTotal;
+    }
+
     // --- GetShaderSamplersSerialisedResourceDescriptorSize @ 0x827E9C30 ---------------
     // Size of the serialised sampler table. The sampler COUNT is a signed byte @ blob+144
     // (X360 lbz+extsb) and the sampler-array pointer is @ blob+140. Each 8-byte sampler entry

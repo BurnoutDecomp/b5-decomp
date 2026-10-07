@@ -82,18 +82,9 @@ namespace Camera
     };
 
     // ------------------------------------------------------------------------
-    // ⭐⭐ BrnDirector::Camera::PlayerCrashInfo -- HOMED 2026-08-29 (crash-camera wave). The
-    // per-crash analysis record the world publishes to the director: what the player hit, how
-    // hard, and the two "this crash was special" verdicts.
-    //
-    // ⛔ IT WAS NEVER "un-homed". Three separate places in this tree record it as having NO
-    // layout -- DirectorLinkStubs.cpp's crash-camera remainder, BrnDirectorArbitrator.cpp's
-    // gated "BlackFade_Water" branch ("mpPlayerCrashInfo[+39] ... has no homed layout ... DO NOT
-    // run either arm on a guessed condition"), and BrnDirectorModuleIOInputBuffer.cpp's FLAG on
-    // the slot accessor. The DWARF has had it all along, at BrnPlayerInfo.h:112..:131 -- the
-    // searches missed it because it is `BrnDirector::Camera::PlayerCrashInfo` and every
-    // consumer forward-declares `BrnDirector::PlayerCrashInfo`: the SAME namespace fork that
-    // hid Camera::VehicleInfo from ArbStateSharedInfo::mpPlayerCar.
+    // ⭐⭐ BrnDirector::Camera::PlayerCrashInfo. The per-crash analysis record the world
+    // publishes to the director: what the player hit, how hard, and the two "this crash was
+    // special" verdicts.
     //
     // ⭐ TWO INDEPENDENT CONSUMERS CONFIRM THE MEMBER ORDER, and each one's gate now has a name:
     //   +0x26  mbWrecked   -- ArbStateCrashing::Update @0x8226BFB0 reads `*(crashInfo + 38)` to

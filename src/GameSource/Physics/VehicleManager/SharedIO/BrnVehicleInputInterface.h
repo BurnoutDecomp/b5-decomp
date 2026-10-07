@@ -181,27 +181,17 @@ namespace Vehicle
             mSetRaceCarCullingGroupEventQueue.AddEvent(lEvent);
         }
 
-        // @0x822E66A0 -- ADDED 2026-08-01 (drivable wave) AND IT WAS A LIVE DEFECT.
         // This interface embeds FIFTEEN EventQueues by value, every one of which needs its
-        // mpEvents pointed at its own inline storage. Nothing in the PC tree ever called
-        // this: RaceCarEntityModuleIO::OutputBuffer_PrePhysics::Construct was a base-only
-        // boot gate in WorldLinkStubs.cpp, and OutputBuffer_PreScene::Construct's partial
-        // slice did not name it either. MEASURED the first time a car reached
-        // ResetActiveRaceCar -> AddHandlingModel -> CreateRaceCar: the pair
+        // mpEvents pointed at its own inline storage; without this call the first post asserts
         //   [ASSERT 1] mpEvents != NULL              (CgsBaseEventQueue.h:35)
         //   [ASSERT 2] EventQueue::AddEvent - Reached Max length  (:36)
-        // followed by the process dying. Same family as the physics 1-byte game-action
-        // queue and the 256-byte race-car queue of the previous two waves: invisible only
-        // because nothing had ever posted into it.
-        //
-        // The console has TEN callers of this function; the two the PC tree can reach are
-        // added with it.
+        // and the process dies. The console has TEN callers of this function.
         void Construct();
 
         // Append the other interface's staged events onto this one (queue-merge).
         // ADDITIVE GROW: real X360 symbol (BrnPhysics::Vehicle::VehicleInputInterface::
-        // Append, called by WorldModule::BridgeCrashModuleToPhysicsModule @0x827AACEC);
-        // declaration-only (its own ledger function).
+        // Append, called by WorldModule::BridgeCrashModuleToPhysicsModule); body in
+        // BrnVehicleInputInterface.cpp.
         void Append(const VehicleInputInterface& lrOther);
 
         // @0x82592FD0: hand-written copy assignment (Clear()+Append() per queue).

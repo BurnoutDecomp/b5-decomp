@@ -64,20 +64,6 @@ namespace MassiveAdClient3
 class CRequestBuilder;
 
 // ---------------------------------------------------------------------------
-// MassiveAd MD5 helper (separate crypto TU).
-//
-// CalculateMD5Hash(data, dataLength) returns a freshly MassiveMalloc'd string
-// holding the MD5 digest of the input (freed elsewhere / owned by the wire
-// buffer copy WriteString makes), or null on failure. Attested by the named
-// `bl CalculateMD5Hash` in WriteLocateServiceRequest's asm (r3 = the hardware-id
-// string, r4 = its strlen). The X360 symbol demangles WITHOUT the
-// MassiveAdClient3 namespace, but it is declared inside the namespace here so the
-// whole vendor package stays self-contained (link-name fidelity is not a gate).
-// Body lives in the MassiveAd crypto TU (sibling of CalculateSHA1HMac).
-// ---------------------------------------------------------------------------
-char* CalculateMD5Hash(const void* pData, int nDataLength);
-
-// ---------------------------------------------------------------------------
 // CPortIndexPair -- an (index/type byte, server port u16) pair (vendor
 // middleware). A CMassiveBaseObject subclass Parse allocates through
 // CMassiveListNode::operator new and appends to CRequestLocateService's port
@@ -116,6 +102,7 @@ public:
 
     // The response port value (read from +0x16 for the trace line in Parse).
     unsigned short GetPort() const { return mnPort; }
+    char           GetType() const { return mbType; }
 
 private:
     char           mbType;  // +0x14 (3 zone / 4 media / 5 impression)
@@ -127,6 +114,9 @@ private:
 // ---------------------------------------------------------------------------
 class CRequestLocateService : public CRequestObject
 {
+    // CMassiveClientCore::HandleResponse applies the parsed server configuration fields.
+    friend class CMassiveClientCore;
+
 public:
     // @ 0x82BD3C58. Chains CRequestObject(17, "RequestLocateService"), installs
     // this class's vftable (off_82185A70 -- modelled by the virtuals), zeroes the

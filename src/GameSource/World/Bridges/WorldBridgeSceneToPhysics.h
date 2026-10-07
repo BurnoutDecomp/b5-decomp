@@ -13,7 +13,7 @@
 // manager processes the physics module's staged queries, the results and the
 // potential-contact pairs are fed back into the physics module's input buffer.
 // The leading lpWorldModule arg is the X360 r3 (the WorldModule `this`); neither
-// bridge dereferences it. Bodies boot-gated in WorldLinkStubs.cpp.
+// bridge dereferences it. Bodies in WorldBridgeSceneToPhysics.cpp.
 namespace WorldModule
 {
     // @ 0x827A8E88 -- scene query results -> physics input.

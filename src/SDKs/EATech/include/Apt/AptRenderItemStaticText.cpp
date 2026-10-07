@@ -26,8 +26,7 @@
 //   AptResolveTextFontCharacter : *(pFontOwner+0x20)[nFontIndex]  -> font character
 //   AptResolveFontGlyph         : *(pFontChar+0x18)[nGlyphIndex]  -> glyph shape character
 // ---------------------------------------------------------------------------
-// HOMED 2026-07-02 (retiring the AptRenderLinkStubs nulls). Native-8 forms of
-// the console reads (the offsets flatten through the def base):
+// Native-8 forms of the console reads (the offsets flatten through the def base):
 //   * TextFontCharacter: console `*(fontOwner+0x20)[i]` == root(+0x10 defbase)
 //     (+0x10 charTable) -- native: the def base at mpFixupLink +
 //     KU_AptEmbeddedMovieOff, then its typed mpCharacterTable[nFontIndex].

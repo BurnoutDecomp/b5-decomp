@@ -75,14 +75,10 @@ private:
     s32 miTotalFreedSoFar;   // CgsAttribSysModule.h:99
 };
 
-// [PC mount switch -- attrib-sdk wave 2026-07-27] true once the Attrib SDK
-// runtime cluster is LINKED into the exe (WorldLinkStubs' Attrib stubs deleted +
-// the SDK TUs added to the source list -- the wave log carries the exact list).
-// While false, GameDataModule::PrepareAttribSysSchemaResource keeps its PC boot
-// gate (no RegisterSchema push) so the real Vault machinery is never entered
-// through the still-stubbed SDK symbols. Flip to true as part of that ONE
-// mount change set; the LE schema pair (build/game/schema.vlt + schema.bin,
-// tools/assets/bundles/attribsys_schema_port.py) is already staged.
+// [PC mount switch] Gates GameDataModule::PrepareAttribSysSchemaResource's load of the
+// LE schema pair (build/game/schema.vlt + schema.bin,
+// tools/assets/bundles/attribsys_schema_port.py). True: the Attrib SDK runtime cluster
+// is linked into the exe.
 const bool KB_PC_ATTRIB_SCHEMA_FILES = true;
 
 class AttribSysModule : public CgsModule::ModuleSingleBuffered

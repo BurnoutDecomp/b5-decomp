@@ -124,8 +124,7 @@
 //   ->  queue.AddEvent<BrnAIDriverControls>(&record, E_DRIVER_TYPE_AI == 1)
 //   ->  WorldModule::BridgeAIModuleToPhysicsModule @0x827AAAA8 (the ONLY console caller of the
 //       read twin OutputBuffer::GetVehicleInterface @0x8279CA00) appends it into
-//       PhysicsModuleIO::InputBuffer::GetVehicleDriverInterface()   [HOST: a LinkStub at
-//       WorldLinkStubs.cpp:2315 -- the conductor's bridge to un-gate]
+//       PhysicsModuleIO::InputBuffer::GetVehicleDriverInterface()   [HOST: WorldBridgeAIModule.cpp]
 //   ->  VehicleManager::UpdateDrivers (BrnVehicleManager_UpdateDrivers.cpp) walks
 //       lpDriverInputInterface->GetUpdateDriverQueue(), case E_DRIVER_TYPE_AI ->
 //   ->  VehicleManager::UpdateAIDriver @0x825C5110 (BrnVehicleManager_DriverArms.cpp:266):

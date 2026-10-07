@@ -9,7 +9,7 @@
 
 namespace BrnGui {
 namespace {
-    // ARTIST 0x82F26918 / 0x8205FAD4; resource tuple remains in ScreenStatesDataLinkStubs.
+    // The player-count strings (read from the image).
     const char* KAPC_PLAYER_COUNTS[] = {"2", "3", "4", "5", "6", "7", "8"};
     template<class T> void Output(CgsGui::StateInterface* state, T& event)
     {
@@ -18,6 +18,11 @@ namespace {
     }
 }
 const s32 OnlineViewChallenges::maiEventToObserve[5] = {14, 21, 6, 64, 581};
+
+// The challenges screen's apt package (read from the image).
+const CgsGui::sResourceTuple OnlineViewChallenges::maResourceTuplesToLoad[] =
+    { { 187, CgsGui::E_GUI_RESOURCETYPE_APT } };
+const s32 OnlineViewChallenges::miNumResourcesToLoad = 1;
 
 // ARTIST compiler ctor 0x825005C0; native members own the original subobjects.
 OnlineViewChallenges::OnlineViewChallenges() : CgsGui::State() {}

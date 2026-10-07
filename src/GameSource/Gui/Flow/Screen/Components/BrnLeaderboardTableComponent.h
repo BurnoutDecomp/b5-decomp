@@ -6,6 +6,8 @@
 #include "GameSource/Network/Managers/BrnNetworkScoreboard.h"              // BrnNetwork::Scoreboard / ScoreboardColumn::EDataType (by-value member)
 #include "GameSource/Gui/Flow/Screen/Components/BrnLeaderboardColumnComponent.h"  // BrnGui::LeaderboardColumnComponent (by-value array)
 
+#include "GameSource/GameState/BrnCgsPlayerName.h"                        // CgsNetwork::PlayerName
+
 namespace BrnResource { struct VehicleList; }   // mpVehicleList (pointer only)
 
 // BrnGui::LeaderboardTableComponent - the online-results leaderboard table: it owns a
@@ -39,22 +41,20 @@ namespace BrnGui
         // @0x82436188 (this TU, DWARF cpp:147) -- push the whole table's apt view states.
         void DrawScoreboard();
 
-        // The following accessors are X360-attested (DWARF h:129/136/143/150/157) but are
-        // their own ledger functions -- declared here for the type home, bodied elsewhere.
-        void SetHighlight(s8 liHighlight);
-        s8   GetHighlight() const;
-        s8   GetRowsUsed() const;
-        s8   GetRowsBefore() const;
-        s8   GetRowsAfter() const;
+        // Header-inline accessors (debug-info h:129/136/143/150/157); the console inlines them at
+        // every call site (the online scoreboard screen's pagers and table input).
+        void SetHighlight(s8 liHighlight) { miHighlight = liHighlight; }
+        s8   GetHighlight() const         { return miHighlight; }
+        s8   GetRowsUsed() const          { return static_cast<s8>(miRowsUsed); }
+        s8   GetRowsBefore() const        { return mScoreboard.GetNumberBefore(); }
+        s8   GetRowsAfter() const         { return mScoreboard.GetNumberAfter(); }
 
         // @0x82419368 (this TU) -- return the value in the currently-highlighted row's first
         // score-bearing column (a number/time/currency data type), parsed as an integer.
         s32  GetHighlightedScore() const;
-        // @0x82419208 (foreign ledger TU) -- copy the highlighted row's name-column cell
-        // string into the caller's 16-byte buffer (walks the used columns for the name data
-        // type, asserting bounds); returns the buffer. Declared here for the type home; the
-        // body links from its own TU.
-        char* GetHighlightedGamertag(char* lpacPlayerName);
+        // build lpPlayerName from the highlighted row's name-column cell (walks
+        // the used columns for the name data type, asserting bounds). debug-info h:66 shape.
+        void GetHighlightedGamertag(CgsNetwork::PlayerName* lpPlayerName);
 
         // @0x82436580 (this TU) -- highlight the row whose name-column cell string-matches
         // lpacPlayerName (clearing the highlight when the name is empty, there is no name column,
@@ -74,10 +74,8 @@ namespace BrnGui
 
         // DWARF cpp:25 -- the column-name format template ("Column_%d").
         static const char KAC_COLUMN_NAME_TEMPLATE[10];
-        // DWARF cpp:26 -- the per-column position apt view-state names ("apt_Pos_<n>"). The
-        // .data pointer table (@0x82F252D8) holds load-time relocations, so only entry 0's
-        // string is directly attested by the IDA export; entries 1-9 are the indexed
-        // continuation of the pattern. FLAG: entries 1-9 inferred by index.
+        // The per-column position apt view-state names ("apt_Pos_<n>"); all
+        // ten entries of the .data pointer table read back from the image.
         static const char* const KAPC_COLUMN_STRINGS[KI_MAX_COLUMNS];
 
         LeaderboardColumnComponent  maColumns[KI_MAX_COLUMNS];  // +0x8C   DWARF h:93

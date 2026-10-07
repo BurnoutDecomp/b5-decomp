@@ -211,7 +211,7 @@ namespace Vehicle
     // ------------------------------------------------------------------------------------
     // VehicleManager::BridgeSimpleTrafficWithCarContactsToSimulation @0x825C83B0
     //
-    // BOOT GATE (conductor wave 2026-08-09; was a trap while Update was a link stub):
+    // BOOT GATE:
     // REACHED every frame by the landed BridgeContactsToSimulation. The REAL body (375
     // X360 asm lines / 9 callees; PS3 DecFIGS 0x70DB6C) is NOT reconstructed yet -- the
     // simple-traffic car contacts are DROPPED, one log line per boot says so.

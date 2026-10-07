@@ -103,6 +103,17 @@ class CMassiveAsset : public CRequestBuilder
     // zone manager owns the list the asset lives on.
     friend class CMassiveZoneManager;
 
+    // The ad placements read and update these fields directly while rotating assets and
+    // accumulating impressions.
+    friend class CMassiveAdObject;
+    friend class CMassiveAdObjectTexture;
+    friend class CMassiveAdObjectAudio;
+    friend class CMassiveAdObjectVideo;
+    friend class CMassiveAdObjectModel;
+
+    // The enter-zone parser attaches each parsed asset to its order.
+    friend class CRequestEnterZone;
+
 public:
     // @ 0x82BD9EE0. Chains CRequestBuilder("CMassiveAsset"), installs this class's
     // vftable (off_82186FE8 -- modelled by the virtuals), stores the asset
@@ -169,6 +180,9 @@ public:
     // @ 0x82BDA358. Resumes the base builder's outstanding requests (name-hides
     // CRequestBuilder::Resume) and returns 1.
     int Resume();
+
+    // Suspends the base builder's outstanding requests and returns 1.
+    int Suspend();
 
     // @ 0x82BDA188. Kicks off the asset's media download: short-circuits when the
     // asset is already downloading (state 19 / has a media buffer / non-zero ref

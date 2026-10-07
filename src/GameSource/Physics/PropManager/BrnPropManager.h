@@ -474,19 +474,16 @@ namespace Props
 
         static const s32 KI_MAX_DEBUG_WORLD_CONTACTS = 32;    // DWARF BrnPropManager.h:110
 
-        // ADDITIVE 2026-08-04 (task #135) -- the stage-5 arm of BrnPhysics::PhysicsModule::
-        // Prepare @0x825ADB68 (`bl` at 0x825ADDCC, result tested with a `bne` so the return is a
-        // bool). Its one argument is the physics resource allocator (bank 23). Declaration-only;
-        // the body is a named LINK STUB in WorldLinkStubs.cpp:516 until this manager's own
-        // prepare pass lands, so the drop is one greppable symbol rather than a silent
-        // `return true` for the whole physics module.
+        // The stage-5 arm of BrnPhysics::PhysicsModule::Prepare (result tested with a `bne`, so
+        // the return is a bool). Its one argument is the physics resource allocator (bank 23).
+        // Body in BrnPropManager.cpp.
         //
         // ⚠️ ADDRESS CORRECTED 2026-08-18 (round 2): this comment used to say "@0x82C08ED0".
         //    0x82C08ED0 is `__savegprlr_22`, the PPC register-save runtime helper -- it is the
         //    FIRST `bl` in Prepare's own prologue, not Prepare. The real address is
         //    **0x8260EE18** (126 instructions), confirmed by progress/identity.json and by its
         //    xrefs_to being exactly {PhysicsModule::Prepare @0x825ADB68}.
-        // MEASURED body shape (for whoever lands it): `std 0, 0x80(this)` + `std 0, 0x90(this)`
+        // MEASURED body shape: `std 0, 0x80(this)` + `std 0, 0x90(this)`
         //    (mUsedProps / mUsedParts cleared) -> DebugComponent::Register() -> two
         //    IResourceAllocator::Allocate calls through the allocator's vtable slot +0x10, one
         //    named "PropInstances" with size 0x690 == 15 * 112 and one named "PropPartInstances"
@@ -519,17 +516,9 @@ namespace Props
         //    BrnPhysicsModule.cpp:369 `mPropManager.Prepare(lpAllocatorList->
         //    GetRWLinearResourceAllocator(23))`, which already hands over a
         //    `rw::LinearResourceAllocator*` (BrnGameDataAllocatorList.h:60) -- so narrowing the
-        //    declaration to the DWARF type is a strict improvement AND a two-file edit: the gate
-        //    definition at WorldLinkStubs.cpp:516 spells `struct rw::IResourceAllocator *` and
-        //    would stop compiling the moment this line changes alone. WorldLinkStubs.cpp is not
-        //    this TU's to edit, so the pair is left for the conductor to land together.
-        //    (The parameter NAME is separable from the type and was corrected on its own in
-        //    round 3: DWARF BrnPropManager.cpp source :174 spells it `lpPhysicsAllocator`.
-        //    Name-only, so nothing moves. ⚠ The clause that used to sit here -- "and
-        //    WorldLinkStubs.cpp:516 spells the definition with no parameter name at all" --
-        //    is STALE: that link stub was RETIRED on 2026-08-18 with the wave-Q4 PropManager
-        //    mount and WorldLinkStubs.cpp:513 now carries only its tombstone. The narrowing
-        //    is therefore a SINGLE-file edit today, not the pair edit this block describes.)
+        //    declaration to that type is a strict improvement AND a two-place edit: this
+        //    declaration and the definition in BrnPropManager.cpp change together. (The
+        //    parameter NAME `lpPhysicsAllocator` already matches source :174.)
         bool Prepare( rw::IResourceAllocator* lpPhysicsAllocator );
 
         // ==========================================================================
@@ -537,13 +526,8 @@ namespace Props
         // prop legs). Signatures per the PS3 DecFIGS mangles (0x77F694 names
         // OutputUpdatedProps; the generation pair and ReadUpdatedBodies carry their
         // param lists in the same export set).
-        // ALL FOUR ARE REAL BODIES NOW, in mounted TUs, and no conductor gate is left for
-        // any of them:
-        //   * ReadUpdatedBodies    -- PropManager_wQ2_01.cpp
-        //   * OutputUpdatedProps   -- PropManager_wQ2_06.cpp
-        //   * Begin/EndPropWorldContactGeneration -- PropManager_wQ2_02.cpp. While that TU was
-        //     unmounted, prop and part rigid bodies got NO world collision and free-fell until
-        //     KVF_PROP_OUT_OF_WORLD_HEIGHT deleted them; it is mounted, so they no longer do.
+        // All four (ReadUpdatedBodies, OutputUpdatedProps, Begin/EndPropWorldContactGeneration)
+        // are bodied in BrnPropManager.cpp.
         // ==========================================================================
         void BeginPropWorldContactGeneration(
             const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,

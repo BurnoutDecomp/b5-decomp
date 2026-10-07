@@ -153,8 +153,7 @@ namespace BrnGame
         // @X360 +39360, the per-face env-map-rendered bytes @+39348).
         void SetCameraViewProjection( const Matrix44& lrViewProjection );
         // ---- the env-map face-render flags (reflections step 1, seam S2) ------------
-        // SetEnvMapFaceRender is BODIED in the .cpp as of 2026-08-17 (its
-        // WorldLinkStubs.cpp gate was deleted in the same change); GetEnvMapFaceRender
+        // SetEnvMapFaceRender is BODIED in the .cpp; GetEnvMapFaceRender
         // is the ADDITIVE read side the renderer's six-face loop needs -- the X360
         // reads the byte inline instead (BrnRendererModule::Render @0x8240BFA8 pseudocode
         // line 654, `v348[v95 + 39348]`), which is &mabEnvMapFaceRender[face].

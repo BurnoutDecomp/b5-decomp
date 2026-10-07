@@ -7,9 +7,8 @@
 // name (a null-terminated string, copied including its terminator) into the inline
 // name buffer beginning at offset 4.
 //
-// The DeviceDriver class itself is now defined once in device.h (the filesys Device
-// scheduler dispatches through the same { mpVTable@+0, macName@+4 } object), so this TU
-// no longer carries a private duplicate definition -- it just homes the constructor.
+// The DeviceDriver class itself is defined once in device.h; this TU homes the
+// constructor.
 //
 // The compiler-generated `vector deleting destructor` (0x82661060) is intentionally
 // omitted — it is a thunk (vtable install + conditional operator delete), not source.
@@ -20,14 +19,9 @@ namespace rw
     {
         namespace filesys
         {
-            // DeviceDriver vtable; defined with the class' out-of-line methods (other TU).
-            extern const DeviceDriverVTable gDeviceDriverVTable;
-
             DeviceDriver::DeviceDriver(const char* pName)
             {
-                mpVTable = &gDeviceDriverVTable;
-
-                char* lpDest = macName;
+                char* lpDest = mDeviceName;
                 const char* lpSrc = pName;
                 char lcCh;
                 do

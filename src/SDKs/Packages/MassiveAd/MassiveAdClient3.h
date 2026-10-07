@@ -60,6 +60,12 @@
 
 #include <cstddef>
 
+struct _RTL_CRITICAL_SECTION;
+
+// Case-insensitive equality of two names (each at most 128 characters): 0 when equal, -1 when
+// either is null, -2 when the lengths differ, else the strncmp of the lower-cased copies.
+int CompareStrings(const char* pcA, const char* pcB);
+
 namespace MassiveAdClient3
 {
 
@@ -70,14 +76,14 @@ namespace MassiveAdClient3
 // (function pointers in .data): MassiveMalloc (the `MassiveMalloc' @-relative
 // pointer at off_..., rendered by Hex-Rays as a `malloc' call through a pointer)
 // and off_82F91C18 (the matching `free'). They are the classic install-time
-// allocator hooks. Declared here and defined by the MassiveAd platform heap
-// layer (another TU); a forward declaration is all these objects need to
-// compile and link.
+// allocator hooks: two data pointers, initialised to the CRT malloc / free and
+// replaced by CMassiveClientCore::SetCustomMemoryFunctions (defined in
+// MassiveAdClient3ClientCore.cpp).
 //   MassiveMalloc(size) -> allocate `size` bytes
 //   MassiveFree(ptr)    -> free a block            (off_82F91C18)
 // ---------------------------------------------------------------------------
-void* MassiveMalloc(std::size_t nSize);
-void  MassiveFree(void* pBlock);
+extern void* (*MassiveMalloc)(unsigned int nSize);
+extern void  (*MassiveFree)(void* pBlock);
 
 // ---------------------------------------------------------------------------
 // MassiveAd file-I/O hooks (FLAGGED platform APIs).
@@ -107,9 +113,8 @@ void  MassiveFileClose(void* pFile);
 // Every MassiveAd identifier-building path (GUID, MAC address, server-time
 // string) routes through this single snprintf-style formatter: it writes at
 // most `nCount` bytes (NUL-terminated) into `pcBuffer` from a printf format and
-// varargs, and returns the formatted length. On the X360 it is a vendor wrapper
-// around the platform vsnprintf; declared here, defined by the MassiveAd
-// platform string layer (another TU). The leaf consumers below build small
+// varargs, and returns the formatted length. It is the CRT sprintf_s; defined in
+// MassiveAdClient3ClientCore.cpp. The leaf consumers below build small
 // fixed-size strings, so a vararg signature is the faithful shape.
 //   FLAG: the X360 passes %I64d (a 64-bit conversion) in a PPC register pair;
 //   the vararg packing below is reproduced from the Hex-Rays decode -- the
@@ -118,30 +123,7 @@ void  MassiveFileClose(void* pFile);
 //   from a blind compile and is flagged rather than asserted.
 int MassiveFormatString(char* pcBuffer, unsigned int nCount, const char* pcFormat, ...);
 
-// ---------------------------------------------------------------------------
-// MassiveAd unbounded string formatter (sub_82C0CB70).
-//
-// The size-less sibling of MassiveFormatString: a plain sprintf-style vendor
-// wrapper that writes a NUL-terminated printf-format string into pcBuffer and
-// returns the formatted length. CTransactionHTTP::ProcessRequest builds the Host
-// string ("%s" then "%s:%d") through it into a fixed stack buffer. Declared here,
-// defined by the MassiveAd platform string layer (another TU).
-// ---------------------------------------------------------------------------
-int MassiveSprintf(char* pcBuffer, const char* pcFormat, ...);
 
-// ---------------------------------------------------------------------------
-// MassiveAd platform clock hooks (FLAGGED platform APIs).
-//
-// On the X360 these are the Win32-style GetTickCount() and GetSystemTime():
-//   MassiveGetTickCount()        -> milliseconds since boot (the DWORD tick)
-//   MassiveGetSystemTimeBlock(p) -> fills the 16-byte SYSTEMTIME-shaped block p
-//                                   (the wall clock; only its trailing two 16-bit
-//                                    words are consumed by CreateMassiveGuid)
-// Declared here and supplied by the MassiveAd platform layer (another TU). FLAG:
-// these wrap OS time APIs, so they are external/platform, not project-owned.
-// ---------------------------------------------------------------------------
-unsigned int MassiveGetTickCount();
-void         MassiveGetSystemTimeBlock(unsigned char* pacSystemTime);
 
 // The default name handed to a CMassiveBaseObject constructed without (or with an
 // empty) name. The X360 reads it through the .data pointer off_82F91A94[0]; the
@@ -158,7 +140,8 @@ extern const char* gpcDefaultBaseObjectName;
 // object's base name (CMassiveBaseObject::mpcName, read from +0x0C), r5 = the
 // format string, then the variadic substitution arguments (the section name and
 // the "by whom" caller name). It is the classic MassiveAd verbose-logging sink.
-// Declared here and supplied by the MassiveAd logging layer (another TU). FLAG:
+// This build compiles the sink out: every call lands on one shared empty body
+// (defined in MassiveAdClient3ClientCore.cpp). FLAG:
 // this is an external/vendor variadic logging API, not project-owned code, so it
 // keeps a vendor-shaped signature rather than the project mp/lf scheme.
 //   MassiveLog(nLevel, pcName, pcFormat, ...) -> emit a formatted trace line
@@ -166,34 +149,19 @@ extern const char* gpcDefaultBaseObjectName;
 void MassiveLog(int nLevel, const char* pcName, const char* pcFormat, ...);
 
 // ---------------------------------------------------------------------------
-// MassiveAd critical-section platform hooks (FLAGGED platform APIs).
-//
-// On the X360 CMassiveCriticalSection wraps the Win32/NT critical-section kernel
-// APIs directly (RtlInitializeCriticalSection / RtlEnterCriticalSection /
-// RtlLeaveCriticalSection over a 28-byte RTL_CRITICAL_SECTION embedded in the
-// object at +0x14). The on-disk RTL_CRITICAL_SECTION width is platform-specific
-// (28 bytes on the 32-bit X360, wider on the 64-bit host), so the embedded
-// section is modelled by NAME as an opaque host-sized block and the hooks are
-// declared platform-side rather than asserting the X360 byte size on the host.
-// FLAG: these wrap the OS critical-section primitive -- external/platform, not
-// project-owned. Declared here, supplied by the MassiveAd platform layer.
-//   MassiveCriticalSectionStorage -- opaque storage for one OS critical section
-//   MassiveInitializeCriticalSection(p) -> RtlInitializeCriticalSection(p)
-//   MassiveEnterCriticalSection(p)      -> RtlEnterCriticalSection(p)
-//   MassiveLeaveCriticalSection(p)      -> RtlLeaveCriticalSection(p)
+// Storage for the OS critical section CMassiveCriticalSection embeds at +0x14.
+// The console RTL_CRITICAL_SECTION is 28 bytes; the host one is wider, so the
+// member is an opaque host-sized block the TU views as CRITICAL_SECTION.
 // ---------------------------------------------------------------------------
-struct MassiveCriticalSectionStorage
+struct alignas(8) MassiveCriticalSectionStorage
 {
     // Opaque OS critical-section storage. The X360 RTL_CRITICAL_SECTION is 28
     // bytes; a host-sized reservation (64 bytes covers the wider 64-bit Win32
     // CRITICAL_SECTION) keeps the wrapper self-contained without depending on
-    // <windows.h> here. Touched only by name via the platform hooks below.
+    // <windows.h> here.
     unsigned char abOpaque[64];
 };
 
-void MassiveInitializeCriticalSection(MassiveCriticalSectionStorage* pSection);
-void MassiveEnterCriticalSection(MassiveCriticalSectionStorage* pSection);
-void MassiveLeaveCriticalSection(MassiveCriticalSectionStorage* pSection);
 
 // ---------------------------------------------------------------------------
 // CMassiveBaseObject -- polymorphic base for MassiveAd client objects.
@@ -210,6 +178,7 @@ class CMassiveBaseObject
     // subobject, so the sibling zone manager gets friendship to keep those
     // attested cross-object accesses named-member reads, not offset hacks.
     friend class CMassiveZoneManager;
+    friend class CMassiveClientCore;  // core sets its own +0x04 and reads zone / network state and errors
 
 public:
     // @ 0x82BCEE90. Copies the supplied name (or the default name when the name
@@ -254,6 +223,10 @@ protected:
     // download state (`if ( *(this+0x10) == 19 )`, the "already downloading" band).
     // Exposes that field BY NAME to subclasses so they do not read it by offset.
     int GetValid() const { return mbIsValid; }
+
+    // Additive accessor (not its own console function): the ad placement's Tick hands
+    // its own last-error code (+0x04) on to subscribers that reported none.
+    int GetLastError() const { return mnLastError; }
 
     // Additive clear (FLAG: not its own X360 function). CNetworkManager::Tick
     // opens each tick by zeroing the base last-error dword at +0x04 directly
@@ -328,6 +301,9 @@ public:
     void* VectorDeletingDestructor(char bDelete);
 
 private:
+    // The embedded host critical section, viewed through its OS type.
+    _RTL_CRITICAL_SECTION* GetOsCriticalSection();
+
     MassiveCriticalSectionStorage mCriticalSection; // +0x14 (RTL_CRITICAL_SECTION)
     char*                         mpcSectionName;    // +0x30 (section-name copy, or 0)
 };
@@ -347,6 +323,14 @@ public:
 
     // @ 0x82BD3830. Allocates a node through the MassiveAd heap hook.
     static void* operator new(std::size_t nSize);
+
+    // Additive accessor (not its own console function): the asset-id rotation reads the
+    // cursor node's successor (+0x00) to decide between stepping on and wrapping.
+    CMassiveListNode* GetNext() const { return mpNext; }
+
+    // Additive accessor (not its own console function): the ad placements read the
+    // payload (+0x08) of the subscriber node they are handed.
+    void* GetOwner() const { return mpOwner; }
 
 private:
     // CMassiveList owns the intrusive links and walks them by name on the X360
@@ -399,6 +383,9 @@ public:
     // @ 0x82BCF070. Advances the cursor to the next node and returns it (0 when
     // the cursor was already past the end).
     CMassiveListNode* GoToNext();
+
+    // The first node whose payload is pData (0 when none); walks from the head.
+    CMassiveListNode* Find(void* pData);
 
     // @ 0x82BCF098. Returns the payload (mpOwner) of the node under the cursor,
     // or 0 when the cursor is null.
@@ -455,6 +442,8 @@ private:
 // ---------------------------------------------------------------------------
 class CMassiveSystem
 {
+    friend class CMassiveClientCore;  // the MP session paths read / create mpcGuid in place
+
 public:
     // @ 0x82BD25C0. Lazily allocates the singleton (MassiveMalloc(4), GUID
     // pointer zeroed) into the shared .data slot and returns it; a prior
@@ -473,21 +462,17 @@ public:
     // the X360 DWORD return).
     static unsigned int GetSystemTime();
 
-    // @ 0x82BD2308. Formats a server timestamp (Unix milliseconds in nMilliseconds)
-    // as "YYYY-MM-DD HH:MM:SS,mmm" via localtime64 into pcBuffer (capacity nCount);
-    // writes "Time Unavailable" when localtime64 fails. The X360 carries a dead
-    // leading argument (a1, unused by the asm) ahead of the timestamp; it is kept
-    // here as nUnused to preserve the call ABI. The ms remainder is computed from
-    // the same timestamp value, not a separate argument (the Hex-Rays a3 was
-    // register noise). Returns the formatted length.
-    static int GetServerTimeFormatted(int nUnused, unsigned int nMilliseconds,
-                                      char* pcBuffer, unsigned int nCount);
+    // Formats a 64-bit server timestamp (Unix milliseconds) as
+    // "YYYY-MM-DD HH:MM:SS,mmm" via localtime64 into pcBuffer (capacity nCount);
+    // writes "Time Unavailable" when localtime64 fails. Returns the formatted length.
+    int GetServerTimeFormatted(unsigned long long nMilliseconds, char* pcBuffer,
+                               unsigned int nCount);
 
     // @ 0x82BD23D0. Queries the title XNADDR (XNetGetTitleXnAddr) and formats the
     // 6-byte ethernet MAC into a freshly MassiveMalloc'd 18-byte string at *ppcOut
     // ("AA:BB:CC:DD:EE:FF"). Returns the XNetGetTitleXnAddr status (<0 on error,
     // also returned when the allocation fails).
-    static signed int GetHardwareAddress(int nUnused, char** ppcOut);
+    signed int GetHardwareAddress(char** ppcOut);
 
     // @ 0x82BD2628. Allocates a 37-byte buffer at *ppcOut and formats a
     // pseudo-GUID from the buffer address + tick counter + a SYSTEMTIME-derived

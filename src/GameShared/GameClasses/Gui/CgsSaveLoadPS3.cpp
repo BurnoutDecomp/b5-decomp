@@ -50,7 +50,7 @@
 
 // Xenon (X360) overlapped-result query. Not part of the host Win32 <Windows.h>; declared here as
 // the X360 shim the Update pump calls (returns the overlapped extended error, e.g. ERROR_IO_PENDING).
-// PC boundary definition lives in GameSource/BrnBaselineLinkStubs.cpp.
+// PC boundary definition lives in GameShared/GameClasses/System/PC/CgsXboxLivePC.cpp.
 extern "C" DWORD XGetOverlappedResult(void* lpOverlapped, DWORD* lpdwResult, BOOL bWait);
 
 namespace

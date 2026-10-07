@@ -70,8 +70,11 @@
 namespace CgsGraphics
 {
     struct Instance;       // pointer-only use here (backdrop instance walk)
+    struct Model;          // pointer-only use (the Massive impression pass)
     class DispatchFrame;   // pointer-only use (dispatch-list generation); class matches CgsDispatcher.h:211 (mangling)
 }
+
+namespace renderengine { class Texture; }   // pointer-only use (mapDynamicAdvertTextures)
 
 namespace CgsGeometric
 {
@@ -258,8 +261,15 @@ public:
     // ---- massive (in-game advertising) slice: bodied by its own class TU --
     bool PrepareMassive( WorldEntityIO::OutputBuffer_Prepare* lpOutputBuffer );
     void UpdateMassive( BrnUpdateSet lUpdateSet );
-    void GenerateMassiveImpressionData( CgsGraphics::Instance* lpInstance,
-                                        Vector3::InParam lCameraPosition );
+    void GenerateMassiveImpressionData( Matrix44Affine::InParam lTransform,
+                                        Matrix44::InParam lCameraViewProjection,
+                                        CgsGraphics::Model* lpModel,
+                                        Vector3::InParam lCameraPosition,
+                                        Vector3::InParam lCameraDirection );
+    void DEBUG_RenderAdvert( Matrix44Affine::InParam lTransform,
+                             Vector3::InParam lBoundingBoxMin, Vector3::InParam lBoundingBoxMax );
+    void DEBUG_RenderAdvertLineTest( f32 lfDistance, Vector3::InParam lAdvertPosition,
+                                     Vector3::InParam lCameraPosition, Vector3::InParam lCameraDirection );
 
     // DWARF cpp:134 -- the shared per-instance dispatch path (inlined by the
     // X360 into both GenerateDispatchLists loops; de-inlined here).
@@ -271,7 +281,9 @@ public:
     void RenderInstance(
         CgsGraphics::Instance* lpInstance,
         bool lbShadow,
+        Matrix44::InParam lCameraViewProjection,
         Vector3::InParam lCameraPosition,
+        Vector3::InParam lCameraDirection,
         f32 lfScaledDistanceSq,
         s32 liList,
         s32 liSortLayer,
@@ -415,8 +427,8 @@ private:
 
     // Massive debug block (X360 Construct debug registrations, "World/Massive").
     f32  mfMassiveImpressionDebugDistance;              // = 150.0f
-    s32  miGenerateDispatchListsPM;                     // :371
-    s32  miMassiveFrameCounter;                         // X360 +0x7140, zeroed at Construct
+    s32  miNumMassiveSubscribersCreated;                // UpdateMassive's creation cursor (0..9)
+    bool mbMassiveSubscribersCreated;                   // all nine subscribers exist
     bool mbMassiveGenerateImpressionData;               // = true  ("Massive Generate Impression Data")
     bool mbMassiveDistanceLinesDebug;                   // = false ("Massive Distance Lines Debug")
     bool mbMassive3dDebug;                              // = false ("Massive 3D Debug")
@@ -461,9 +473,10 @@ private:
     bool mbOverrideLodDistances;                        // :367
     s32  mauOverrideLodDistances[KI_NUM_LODS];          // :368
     s32  miEnvironmentMapLOD;                           // :369
+    s32  miGenerateDispatchListsPM;                     // :371
 
     // DWARF :373. Dynamic advert textures resolved by the Massive slice.
-    void* mapDynamicAdvertTextures[KU_MAX_NUM_DYNAMIC_ADVERTS];
+    renderengine::Texture* mapDynamicAdvertTextures[KU_MAX_NUM_DYNAMIC_ADVERTS];
 
     CgsContainers::FastBitArray<1024> mIsBackdropInstanceInScene; // :375
 

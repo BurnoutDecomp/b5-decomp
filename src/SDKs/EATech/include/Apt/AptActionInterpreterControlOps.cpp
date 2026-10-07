@@ -12,9 +12,8 @@
 // an already-string value untouched. Throw records the thrown value where runStream
 // observes it (the abort slot, mpAbortValue) and unwinds the run.
 //
-// Host boundary: AptHook_Trace -- the host debug-output sink (console
-// dword_8324E82C, a printf-style hook installed by the host); the trace TEXT is
-// faithful, the sink body is the host-side link-stub (AptRenderLinkStubs.cpp).
+// Host boundary: the trace text goes out through the host user-function table's
+// printf-style pfnDebugPrint slot (installed by CgsGui::AptAux::ConstructApt).
 // AptValue::Append_ToString (the value->string renderer) is homed in
 // AptValue/AptValueConvert.cpp (@0x82AF9668).
 //
@@ -29,16 +28,12 @@
 #include "SDKs/EATech/include/Apt/AptFrameStack.h"         // the active frame-stack value + mHash
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"         // AptNativeHash::Set (catch binding)
 #include "SDKs/EATech/include/Apt/AptCIH.h"                // ctx->mpCIH -> AptValue* upcast
+#include "SDKs/EATech/include/Apt/Apt.h"                   // gAptFuncs (pfnDebugPrint)
 
 #include <cstdint>
 
 // AptActionInterpreter::GetDictEntry (the null-guarded dictionary-slot fetch) is
 // declared in AptActionInterpreter.h.
-
-// The host debug sink (installed by the host; console dword_8324E82C): the trace
-// output function. printf-style; the one call site passes (fmt, message). Body is
-// the host-boundary link-stub in AptRenderLinkStubs.cpp.
-extern void AptHook_Trace(const char* szFormat, const char* szMessage);
 
 // ---------------------------------------------------------------------------
 // Trace @0x82AE9B60 (0x26) -- AS trace(value): emit value's string form.
@@ -49,7 +44,7 @@ void AptActionInterpreter::_FunctionAptActionTrace(AptActionInterpreter* pInterp
     AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
     EAStringC scratch;
     const EAStringC* pStr = AptValue::Get_ToString(pTop, &scratch);
-    AptHook_Trace("AptTrace: %s\n", pStr->GetBuffer());   // host debug sink (dword_8324E82C)
+    gAptFuncs.pfnDebugPrint("AptTrace: %s\n", pStr->GetBuffer());
     pInterp->stackPop();
 }
 

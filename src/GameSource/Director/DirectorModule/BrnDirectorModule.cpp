@@ -78,10 +78,6 @@ static inline CgsSceneManager::SceneManagerIO::SceneQueryInterface* lpProducerOf
 //   * the release-stage seed value is the literal 4 (asm-proven store), which is
 //     EReleaseStage::E_RELEASESTAGE_MANAGER, not E_RELEASESTAGE_DONE -- see the Release
 //     comment below for the same asm-literal-vs-DONE-enumerator observation.
-//   * the 6th AddMonitor argument (liParentHandle) is read from a register the asm
-//     never explicitly sets at two of the three call sites (a decompiler-visible
-//     uninitialised-local artifact on the X360 side); passed as 0 here (the
-//     conventional "no parent" sentinel for this API family).
 // ----------------------------------------------------------------------------
 void DirectorModule::Construct(f32 lfTime)
 {
@@ -92,10 +88,9 @@ void DirectorModule::Construct(f32 lfTime)
 
     mDebugComponent.Construct(this);
 
-    // FLAG: DirectorResourceManager::Construct() is currently a stub (see header FLAG);
-    // the X360's inlined event-queue init at this call site (module+584/600/604 = its own
-    // EventReceiverQueue<512,16>) is not reproduced -- its Prepare is a DirectorLinkStubs
-    // no-op that never touches the queue.
+    // The console inlines DirectorResourceManager::Construct here (its own
+    // EventReceiverQueue<512,16> init, the prepare stage, the list pointers); the call is
+    // that same body expressed by name.
     mDirectorResourceManager.Construct();
 
     // The X360 also inlines WorldMap::Construct here (module+2312/2328/2332 = the world
@@ -133,9 +128,9 @@ void DirectorModule::Construct(f32 lfTime)
     // 1.0f respectively (BrnMathUtils.cpp / BrnDirectorModuleDebugPrinter.cpp for
     // flt_82004014==0.1f; GameShared/.../CgsCamera.cpp for flt_82001C98==1.0f), not
     // decompiler guesses.
-    miPerfCount_PreSQUpdate  = CgsDev::PerfMonCpu::AddMonitor("Pre SQ Update",   13, 0, 0.1, 0, 1);
-    miPerfCount_MainUpdate   = CgsDev::PerfMonCpu::AddMonitor("Main Update",     13, 0, 1.0, 0, 1);
-    miPerfCount_PostGuiUpdate = CgsDev::PerfMonCpu::AddMonitor("Post Gui Update", 13, 0, 0.1, 0, 1);
+    miPerfCount_PreSQUpdate  = CgsDev::PerfMonCpu::AddMonitor("Pre SQ Update",   CgsDev::E_PMP_13, false, 0.1f, true);
+    miPerfCount_MainUpdate   = CgsDev::PerfMonCpu::AddMonitor("Main Update",     CgsDev::E_PMP_13, false, 1.0f, true);
+    miPerfCount_PostGuiUpdate = CgsDev::PerfMonCpu::AddMonitor("Post Gui Update", CgsDev::E_PMP_13, false, 0.1f, true);
 
     mbIsNewModule = true;   // this+0x004 (inherited CgsModule::Module member)
 }

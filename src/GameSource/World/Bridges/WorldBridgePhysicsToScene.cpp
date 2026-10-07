@@ -88,12 +88,10 @@ void BridgePhysicsSceneUpdateToScene(
 // `li r5, 6` to AddEvent<InEventLineTestNearest>; nothing but this switch ties 6 to the nearest
 // queue. Quoted as literals here, next to the producer's own constant name.
 //
-// ⛔ THIS BRIDGE WAS AN INERT WorldLinkStubs GATE UNTIL THIS WAVE, which is why every race car's
-// above-ground down-ray went unanswered: AboveGroundTestResult.mbValid stayed 0 on every frame
-// of every session and UpdateDriftState @0x8261F94C guard 8 killed every brake+steer drift on
-// the frame it was entered (134 of 134, measured last wave). The gate's comment said the
-// consumer was "itself gated inert" -- false since SceneManagerModule::ProcessSceneQueries became
-// real on 2026-08-11 (and its two passes land with this wave).
+// ⛔ Without this bridge every race car's above-ground down-ray goes unanswered:
+// AboveGroundTestResult.mbValid stays 0 on every frame and UpdateDriftState guard 8 kills every
+// brake+steer drift on the frame it is entered. The consumer is
+// SceneManagerModule::ProcessSceneQueries.
 // =============================================================================================
 void BridgePhysicsSceneQueriesToScene(
     void* lpWorldModule,

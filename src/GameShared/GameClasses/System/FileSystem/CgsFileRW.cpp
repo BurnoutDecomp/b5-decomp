@@ -33,8 +33,8 @@ namespace CgsFileSystem
     {
         // The X360 read a completed op's status with the "want-wait" flag pointing at a rodata
         // false (the op is already done inside a completion callback), so GetStatus never
-        // blocks. Modelled as a named no-wait flag.
-        const s32 KI_NO_WAIT = 0;
+        // blocks: the immediate timeout.
+        const EA::Thread::ThreadTime KI_NO_WAIT = EA::Thread::kTimeoutImmediate;
 
         // Build a formatted assert message via StrStream (as the X360 did with the shared assert
         // buffer) and fire it. Used for the asserts whose text embeds a runtime value.
@@ -162,7 +162,7 @@ namespace CgsFileSystem
         CGS_ASSERT(meFileState == E_FILESTATE_OPENING, "Incorrect file state\n");
         CGS_ASSERT(muPendingOperationCount != 0, "Received file event with 0 pending operations\n");
 
-        s32 liStatus = lpOp->GetStatus(&KI_NO_WAIT);
+        s32 liStatus = lpOp->GetStatus(KI_NO_WAIT);
         if (liStatus == -2)
         {
             mpHandle    = nullptr;
@@ -205,7 +205,7 @@ namespace CgsFileSystem
         CGS_ASSERT(meFileState != E_FILESTATE_CLOSED, "Incorrect file state\n");
         CGS_ASSERT(muPendingOperationCount != 0, "Received file event with 0 pending operations\n");
 
-        s32 liStatus = lpOp->GetStatus(&KI_NO_WAIT);
+        s32 liStatus = lpOp->GetStatus(KI_NO_WAIT);
         if (liStatus == -2)
         {
             meFileState = E_FILESTATE_ERROR;
@@ -239,7 +239,7 @@ namespace CgsFileSystem
         CGS_ASSERT(meFileState != E_FILESTATE_CLOSED, "Incorrect file state\n");
         CGS_ASSERT(muPendingOperationCount != 0, "Received file event with 0 pending operations\n");
 
-        s32 liStatus = lpOp->GetStatus(&KI_NO_WAIT);
+        s32 liStatus = lpOp->GetStatus(KI_NO_WAIT);
         if (liStatus == -2)
         {
             meFileState = E_FILESTATE_ERROR;
@@ -274,7 +274,7 @@ namespace CgsFileSystem
         CGS_ASSERT(meFileState != E_FILESTATE_CLOSED, "Incorrect file state\n");
         CGS_ASSERT(muPendingOperationCount != 0, "Received file event with 0 pending operations\n");
 
-        s32 liStatus = lpOp->GetStatus(&KI_NO_WAIT);
+        s32 liStatus = lpOp->GetStatus(KI_NO_WAIT);
         if (liStatus == -2)
         {
             meFileState = E_FILESTATE_ERROR;

@@ -6837,10 +6837,8 @@ void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* /*lpDeviceArg*/,
 // ignored for the same reason every sibling shim in this block ignores it (the live PC device is
 // whatever Dev() resolves at submit time).
 //
-// Homed HERE, not in LionRuntimeLinkStubs.cpp, because the geometry it draws is the fast-set
-// stash this TU owns -- the same reason D3DDevice_DrawIndexedVertices sits ten lines above. The
-// Lion holding pen previously carried a CGS_ASSERT(false) trap for it; the trap was correct while
-// the Lion dispatch pass was parked and is retired now that cParticleRender::Dispatch runs.
+// Homed HERE because the geometry it draws is the fast-set stash this TU owns -- the same
+// reason D3DDevice_DrawIndexedVertices sits ten lines above.
 //
 // CALLERS ON THIS BUILD: cParticleRender::Dispatch (Xenos QUADLIST, one call per particle batch)
 // and the three XCam video-output paths (Xenos TRIANGLESTRIP, 4 vertices).
@@ -11279,21 +11277,19 @@ namespace renderengine
 {
     // FLAG PC-platform leaf: the GPU buffers' physical-memory classification.
     //
-    // X360 IndexBuffer::Xbox2CheckPhysicalMemoryFlags @0x82B60818 / VertexBuffer's
-    // @0x82B61148 read the buffer's GPU base address, ask the Xenon kernel for that
-    // page's protection class (XQueryMemoryProtect) and set/clear the "system memory"
-    // bit 0x200000 in the D3DResource Common word accordingly. Those X360 bodies ARE
-    // reconstructed, in pc/gcm/renderengine/IndexBuffer.cpp and VertexBuffer.cpp -- but
-    // neither TU is on the exe source list (they pull the whole XGRAPHICS header-layout
-    // surface), and on this backend there is no Xenon physical page behind a buffer at
-    // all: the data lives in the resource pool's ordinary host allocation and the draw
-    // leaf reads it straight through DrawIndexedPrimitiveUP. So there is nothing to
-    // query and no flag to set, exactly as for renderengine::Texture::
-    // Xbox2CheckPhysicalMemoryFlags (texture.cpp, same X360 idiom, same PC verdict).
+    // On the console, IndexBuffer / VertexBuffer::Xbox2CheckPhysicalMemoryFlags read the
+    // buffer's GPU base address, ask the Xenon kernel for that page's protection class
+    // (XQueryMemoryProtect) and set/clear the "system memory" bit 0x200000 in the
+    // D3DResource Common word accordingly. On this backend there is no Xenon physical
+    // page behind a buffer at all: the data lives in the resource pool's ordinary host
+    // allocation and the draw leaf reads it straight through DrawIndexedPrimitiveUP. So
+    // there is nothing to query and no flag to set, exactly as for renderengine::Texture::
+    // Xbox2CheckPhysicalMemoryFlags (texture.cpp, same console idiom, same PC verdict).
     //
     // Called per mesh from CgsResource::RwRenderableResourceType::FixUpRenderableMesh.
-    // DELETE these two definitions if IndexBuffer.cpp / VertexBuffer.cpp ever join the
-    // source list -- they would then be LNK2005 duplicates of the X360 bodies.
+    // pc/gcm/renderengine/IndexBuffer.cpp and VertexBuffer.cpp are on the source list, but
+    // their console-only halves (which include the console Xbox2CheckPhysicalMemoryFlags
+    // bodies) are compiled out on PC, so these two are the only definitions the PC links.
     u32 IndexBuffer::Xbox2CheckPhysicalMemoryFlags(u32* /*lpHeaderDwords*/)
     {
         return 0u;

@@ -277,10 +277,10 @@ void AStar::Construct(const AISectionsData* lpAISectionsData)
 
     if (dword_82F3023C == -1)
     {
-        dword_82F3023C = CgsDev::PerfMonCpu::AddMonitor("A*", 7, 0, 3.0f, 0, 1);
+        dword_82F3023C = CgsDev::PerfMonCpu::AddMonitor("A*", CgsDev::E_PMP_7, false, 3.0f, true);
         dword_8300D530 = CgsDev::PerfMonCpu::AddMonitor("A* Extract best open node",
-                                                        7, 0, 2.0f, 0, 1);
-        dword_8300D534 = CgsDev::PerfMonCpu::AddMonitor("A* Find node", 7, 0, 2.0f, 0, 1);
+                                                        CgsDev::E_PMP_7, false, 2.0f, true);
+        dword_8300D534 = CgsDev::PerfMonCpu::AddMonitor("A* Find node", CgsDev::E_PMP_7, false, 2.0f, true);
     }
 }
 

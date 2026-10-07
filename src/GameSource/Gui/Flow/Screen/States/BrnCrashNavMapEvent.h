@@ -33,12 +33,6 @@
 //   X360 sizeof(CrashNavMapEvent) == 25104 (BrnScreenFlow::Prepare's state-size roster).
 //   The host layout is NAME-BASED; the offsets above are documentation.
 //
-// ⭐⭐ MOUNTED 2026-09-08 (p0 wave). The methods the previous pass reported BLOCKED are all
-// landed; every collaborator it named turned out to be homed or recoverable (the .cpp
-// banner costs each one). The `struct CrashNavMapEvent : public CgsGui::State` placeholder
-// in States/BrnScreenStatesLinkStubs.h and its three-body escape hatch in the matching .cpp
-// are DELETED in the same change -- this is now the only definition of the class.
-//
 // VTABLE (14 slots -- read straight out of the console image's own vtable data, so the
 // shape below is measured rather than inferred): +0x00 OnEnter, +0x04 OnLeave, +0x08
 // Update, +0x0C State::PreUpdate, +0x10 State::PostUpdate, +0x18 Construct, +0x20

@@ -23,7 +23,6 @@
 // ⭐ THE TRIANGLE CACHE'S FILL HALF, reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   CgsSceneManager::TriangleCacheManager::StartUpdateTriangleCaches @0x828BECF8 (278)
 //   CgsSceneManager::TriangleCacheManager::EndUpdateTriangleCaches   @0x828BF150 (475)
-// Both replace WorldLinkStubs.cpp gates, which are deleted with this TU.
 //
 // The pair is the WRITE half of the cache: Start carves a command stream out of the frame's
 // collision generator and posts one fill request per DIRTY cache slot; the job fills each slot's
@@ -34,110 +33,47 @@
 // SceneManagerIO::TriangleCacheInterface accessors) is CgsTriangleCacheManager.cpp.
 //
 // -------------------------------------------------------------------------------------------------
-// ⛔ REACHABILITY, stated plainly -- the two halves are NOT in the same state.
+// REACHABILITY.
 //
-//  * EndUpdateTriangleCaches IS ON THE LIVE PATH. SceneManagerModule::EndUpdateTriangleCache
-//    @0x828C7500 is a real body and WorldModule::Update calls it every frame
-//    (BrnWorldModule.cpp:2471). This body therefore RUNS, and takes its own opening null guard on
+//  * EndUpdateTriangleCaches: SceneManagerModule::EndUpdateTriangleCache is called by
+//    WorldModule::Update every frame. This body takes its own opening null guard on
 //    mpUpdateTriangleCacheStream -- exactly as the console does whenever a frame posted no fill.
 //
-//  * StartUpdateTriangleCaches IS NOW REACHED TOO -- ⭐ UPDATED 2026-08-10 (spatial-partition
-//    wave); the paragraph that used to sit here is superseded and two of its claims were wrong.
-//    Its sole caller SceneManagerModule::StartUpdateTriangleCache @0x828C73D8 is no longer a
-//    WorldLinkStubs gate: it has its real body in CgsSceneManagerModule.cpp, and the chain it
-//    needed first -- TriangleCollisionManager::Prepare, ProcessAddPolySoupListEvents
-//    @0x828B3160, and PolygonSoupListSpatialMap::BuildSpacialPartition @0x82841740 (2,255) --
-//    is all present and mounted. RUNTIME-WITNESSED entering this function every frame.
-//    ⚠️ TWO CORRECTIONS to what this banner used to assert:
-//      - "TriangleCollisionManager::Prepare @0x828D0C40" -- NO EXPORT LIVES AT 0x828D0C40
-//        (checked against all 30,084 X360 export JSONs). The real address is 0x828B2FF0 (91).
-//      - "Prepare is still a WorldLinkStubs gate ... BuildSpacialPartition absent from this
-//        tree" -- Prepare and ProcessAddPolySoupListEvents were in fact FULLY RECONSTRUCTED the
-//        whole time and merely UNMOUNTED; only BuildSpacialPartition was genuinely missing.
+//  * StartUpdateTriangleCaches: its sole caller is SceneManagerModule::StartUpdateTriangleCache
+//    (CgsSceneManagerModule.cpp), which first runs TriangleCollisionManager::
+//    ProcessAddPolySoupListEvents and, with it, PolygonSoupListSpatialMap::BuildSpacialPartition.
+//    The partition is built from the world-collision stage (LoadingScriptedState::
+//    LoadWorldCollision -> WorldModule::PrepareWorldCollision -> WorldEntityModule::
+//    PrepareWorldCollision/PrepareZoneCollision -> AddCollisionZoneToSceneManager); all 396
+//    "TRK_CLIL<n>" zone lists are acquired 20 per frame, and the last batch's rebuild flag reaches
+//    ProcessAddPolySoupListEvents.
 //
-//  * ⭐⭐ THE PARTITION IS NOW BUILT. SUPERSEDED 2026-08-10 (world-collision wave): the
-//    paragraph that used to sit here said the poly-soup registration was starved because the
-//    scripted boot spine deferred stage 7. Stage 7 is real now
-//    (LoadingScriptedState::LoadWorldCollision @0x823E73E0 -> WorldModule::PrepareWorldCollision
-//    @0x827C9478 -> WorldEntityModule::PrepareWorldCollision/PrepareZoneCollision ->
-//    AddCollisionZoneToSceneManager), WORLDCOL.BIN streams, all 396 "TRK_CLIL<n>" zone lists are
-//    acquired 20 per frame, and the last batch's rebuild flag reaches
-//    TriangleCollisionManager::ProcessAddPolySoupListEvents. RUNTIME-WITNESSED:
-//        Allocated 23645 leaf nodes, Used: 2183520, Free: 2104992
-//        Spacial map complete, Used: 2840336, Free: 1448176
-//        PROBE StartUpdateTriangleCaches: leafNodes=1 numLeafNodes=23645 usedSlots=0 slots=1
-//    (23,645 is exactly the shipped soup count the world support transcoder asserts over.)
-//    So the `GetLeafNodes() == NULL` early-out below is NO LONGER TAKEN, and the fill really
-//    opens each frame.
-//
-//  * ⭐⭐ THE SLOTS ARE NOW CLAIMED. SUPERSEDED 2026-08-10 (producer wave): the paragraph that
-//    used to sit here said `usedSlots` is 0 because nothing registers a cached object, and named
-//    PhysicsModule::UpdateCachedPositions as the leg. **That was the wrong half.** `usedSlots` is
-//    the popcount of mUsedCacheSlots, whose only setter is ProcessAddToCacheEvents draining
-//    mAddToCacheQueue -- and that queue is filled on the PREPARE path by
-//    VehicleManager::PrepareTriangleCache @0x82615BA0 (8 race cars) ->
-//    PhysicalTrafficManager::PrepareTriangleCache @0x825EE5A0 (20 traffic), both now bodied, both
-//    reached through VehicleManager::Prepare @0x8263C688 (its WorldLinkStubs gate deleted).
+//  * SLOT CLAIMS: `usedSlots` is the popcount of mUsedCacheSlots, whose only setter is
+//    ProcessAddToCacheEvents draining mAddToCacheQueue -- filled on the PREPARE path by
+//    VehicleManager::PrepareTriangleCache (8 race cars) -> PhysicalTrafficManager::
+//    PrepareTriangleCache (20 traffic), reached through VehicleManager::Prepare.
 //    UpdateCachedPositions fills a DIFFERENT queue whose consumer asserts the used bit is ALREADY
-//    set, so it could never have moved this number. RUNTIME-WITNESSED:
-//        PROBE bridge(lbPrepare=1): draining AddToCache=28 RemoveFromCache=0 UpdateCachedPosition=0
-//        PROBE StartUpdateTriangleCaches: usedSlots=28 dirtySlots=0 leafNodes=1 ...
+//    set, so it never moves this number.
 //    28 == KI_MAX_ACTIVE_RACE_CARS(8) + KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC(20).
 //
-//  * ⭐⭐⭐ THE ARENA EXISTS NOW. ADDED 2026-08-10 (fill-worker wave). Until this wave the shared
-//    triangle cache had NO BACKING STORE: CachedTriangleList::Prepare @0x828BE520 was a
-//    WorldLinkStubs gate that returned true without allocating, so mpaTriangleCache was NULL and
-//    all 298 slot windows indexed off a null base. Nothing had ever noticed because no slot had
-//    ever been DIRTY, so the loop below had never allocated a command and GetCachedTriangle had
-//    never been called. Forcing the console's own mbDEBUGForceAllDirty for one instrumented boot
-//    fired the shipped tripwire "mpaTriangleCache != NULL" (CgsTriangleCacheManager.h:172) 862
-//    times in 275 s. The real body is now in CgsCachedTriangleList.cpp and the console's own dev
-//    report confirms the size at runtime:
+//  * THE ARENA: the shared triangle cache's backing store is CachedTriangleList::Prepare
+//    (CgsCachedTriangleList.cpp); the console's own dev report confirms the size at runtime:
 //        CachedTriangleList: Total triangle cache requires 2937088 bytes    (== 13112 * 224)
-//    ⇒ **there is now somewhere to put the triangles.** That was the blocker UNDERNEATH the worker.
 //
-//  * ⛔⛔⛔ AND THE ORDER "fill the cache BEFORE creating a car" IS A CIRCULAR DEPENDENCY, not an
-//    ordering. Established this wave by enumerating the dirty-setters rather than reasoning:
-//    a slot is dirtied through exactly two doors. Door 1 is CacheSlot::UpdateCachedObject, reached
-//    only from an InEventUpdateCachedPosition, and `xrefs_to` on that queue's AddEvent @0x825E4768
-//    gives exactly FIVE producers -- PhysicalTrafficManager / DetachedPartManager /
-//    DetachedWheelManager / PropManager / VehicleManager ::UpdateTriangleCache -- and EVERY ONE is
-//    a loop over LIVE PHYSICS OBJECTS, of which this build has none. Door 2 is the dev switch
-//    mbDEBUGForceAllDirty below. There is no third.
+//  * DIRTY SLOTS: the loop below allocates a command only for a DIRTY slot, and a slot is dirtied
+//    through exactly two doors. Door 1 is CacheSlot::UpdateCachedObject, reached only from an
+//    InEventUpdateCachedPosition, and `xrefs_to` on that queue's AddEvent gives exactly FIVE
+//    producers -- PhysicalTrafficManager / DetachedPartManager / DetachedWheelManager /
+//    PropManager / VehicleManager ::UpdateTriangleCache -- and EVERY ONE is a loop over LIVE
+//    PHYSICS OBJECTS. Door 2 is the dev switch mbDEBUGForceAllDirty below. There is no third.
 //    ⇒ the triangle cache is filled AROUND live objects; it cannot be filled before one exists.
-//    ⭐ MITIGATING, and it is the cheap part: UpdateCachedObject dirties unconditionally while
-//    miNumCachedTriangleBatches == 0 (true for all 28 slots today), so the FIRST position event a
-//    car ever posts dirties its slot -- no distance threshold has to be crossed.
+//    UpdateCachedObject dirties unconditionally while miNumCachedTriangleBatches == 0, so the
+//    FIRST position event a car posts dirties its slot -- no distance threshold has to be crossed.
 //
-//  * ⚠️ AND `UpdateCachedPositions` @0x8259C370 CALLS THREE MANAGERS, NOT SIX -- read from the asm
-//    at 0x8259C3BC/CC/DC: VehicleManager::UpdateTriangleCache @0x82615C38, PropManager:: @0x826119A0
-//    and DeformationManager:: @0x826230E8. The other three are CALLEES (DeformationManager's 35
+//  * ⚠️ `UpdateCachedPositions` CALLS THREE MANAGERS, NOT SIX: VehicleManager::UpdateTriangleCache,
+//    PropManager:: and DeformationManager::. The other three are CALLEES (DeformationManager's 35
 //    instructions are a pure conductor onto DetachedPart + DetachedWheel; PhysicalTraffic hangs off
-//    the vehicle one). Three prior logs list them as six siblings. Its only console caller is
-//    WorldModule::Update @0x827D63E8 -- NOT PhysicsModule::Update.
-//
-//  * ⛔ WHAT STILL STARVES THE FILL, measured not guessed: every claimed slot is CLEAN
-//    (`dirtySlots=0`), and the loop below allocates a command only for a DIRTY slot. A slot is
-//    dirtied exclusively by CacheSlot::UpdateCachedObject, i.e. by an InEventUpdateCachedPosition,
-//    i.e. by PhysicsModule::UpdateCachedPositions @0x8259C370 (34, still a WorldLinkStubs gate) and
-//    the six per-manager UpdateTriangleCache bodies behind it (~1,063 insns across 7).
-//    ⭐ AND THOSE SEVEN WOULD POST NOTHING TODAY: VehicleManager::UpdateTriangleCache walks
-//    mUsedRaceCars, and the ONLY write to that bitset in this tree is
-//    BrnVehicleManager_Construct.cpp:212 `mUsedRaceCars.UnSetAll()` -- no SetBit exists anywhere.
-//    The console's setter is VehicleManager::ProcessCreateEvents @0x82616770 (1,067), absent.
-//    So the true ordering of the remaining work is: CREATE a car -> position it -> fill worker
-//    (PolygonSoupTesterJob + RunQuery, ~1,183 across 11, still an inert conductor gate).
-//    ⭐ UPDATED 2026-08-10 (create-path wave). ProcessCreateEvents is now DECLARED and REACHABLE --
-//    its caller chain is real (PhysicsModule::PostSceneUpdate @0x825ABC10 ->
-//    VehicleManager::ProcessVehicleMaintenanceEvents @0x8264AB38), and it is a named one-shot gate
-//    in BrnVehicleManager_MaintenanceEvents.cpp instead of a missing symbol. Two measured facts
-//    from that wave change what "CREATE a car" costs, and both live in that TU's banner:
-//      1. its INPUT queue is empty -- the create events die in the RaceCarEntityModule
-//         PrePhysics output because WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics
-//         @0x827AAEC0 (271) is still a WorldLinkStubs gate. That bridge, not the drain, is next.
-//      2. the bit itself is the fall: mUsedRaceCars also switches on the MOUNTED
-//         BrnVehicleManager_ReadUpdatedBodies.cpp gravity+integrate loop, so the traction chain
-//         must land before the create body, not after it.
+//    the vehicle one). Its only console caller is WorldModule::Update -- NOT PhysicsModule::Update.
 //
 // -------------------------------------------------------------------------------------------------
 // METHOD (standing discipline: read the ASM, not the pseudocode). Both Hex-Rays listings are

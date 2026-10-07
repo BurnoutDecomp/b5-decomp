@@ -17,6 +17,7 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"   // the deferred-release vector
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"              // mp__Proto__ (the MC parent-chain walk)
+#include "eathread/eathread.h"                                    // EA::Thread::GetThreadId / ThreadId
 
 #include <intrin.h>   // _InterlockedExchange (the Apt GC flag lock)
 
@@ -181,19 +182,13 @@ void AptValue::ForceDelete()
 //       gValuesToRelease) of the same console address; until the three off_8324E51C
 //       homes are unified this pointer stays null and the ctor/Release defer arms
 //       stay inert (out-of-cluster fix: AptGlobals.cpp + AptInit.cpp).
-//   gnAptGCThreadId_Ctor / gnAptGCThreadId_Release -- the captured GC thread ids
-//       the ctor (X360 dword_8324E500) and Release (X360 dword_8324E504) compare
-//       the current thread against. Distinct globals in the binary; kept distinct.
+//   gAptSimThreadId / gAptRenderThreadId -- the simulation / render thread ids
+//       (AptSetSimulationThreadID / AptSetRenderThreadID) the ctor and Release
+//       compare the current thread (EA::Thread::GetThreadId) against.
 // ---------------------------------------------------------------------------
 extern AptValueVector* gpValuesToRelease;   // off_8324E51C
-extern uint32_t        gnAptGCThreadId_Ctor;         // dword_8324E500
-extern uint32_t        gnAptGCThreadId_Release;      // dword_8324E504
-
-// AptCurrentThreadId -- the GC-thread guard's current-thread query. Defined in
-// AptRenderLinkStubs.cpp as a PC-platform leaf (single-threaded host: one thread
-// id, 0), so the GC-thread compares below resolve the same way the console's
-// single-sim-thread boot path does.
-extern uint32_t AptCurrentThreadId();
+extern EA::Thread::ThreadId gAptSimThreadId;      // AptInit.cpp
+extern void*                gAptRenderThreadId;   // AptGlobals.cpp (EA::Thread::ThreadId)
 
 
 // The active script "current target" MovieClips the parent-chain walk stops at
@@ -238,7 +233,7 @@ AptValue::AptValue(AptVirtualFunctionTable_Indices eType)
     {
         ClearReleaseAtEnd();   // X360 loc_82AE30C8
     }
-    else if (gnAptGCThreadId_Ctor == AptCurrentThreadId())
+    else if (gAptSimThreadId == EA::Thread::GetThreadId())
     {
         // On the GC thread: queue into the deferred-release vector if it has room
         // (X360 family-(B) layout: top(+4)=mnCapacity < capacity(+0)=mnTop); a full
@@ -366,7 +361,7 @@ void AptValue::Release()
         return;
 
     // ON the GC thread: tear down now. OFF the GC thread: try the deferred vector.
-    if (gnAptGCThreadId_Release == AptCurrentThreadId())
+    if (gAptRenderThreadId == EA::Thread::GetThreadId())
     {
         ForceDelete();                 // X360 beq cr6, loc_82AE32C0 -> slot +0x2C
         return;
@@ -402,10 +397,9 @@ void AptValue::Release()
 // ---------------------------------------------------------------------------
 int AptValue::isMCInParentChain() const
 {
-    // CORRECTED 2026-07-02 against the shipped asm: the walk is
+    // The walk (per the shipped asm) is
     // `hash = vtbl[2]() (GetNativeHashVirtual); node = hash->mp__Proto__ (+8)`
-    // -- NOT a "GetParent" virtual + raw +8 read (that shim was a
-    // reconstruction invention; retired from AptRenderLinkStubs).
+    // -- NOT a "GetParent" virtual + raw +8 read.
     AptValue* const lpTarget = gpAptCurrentTargetMC;   // X360 r31 = dword_8324D818
     AptValue* const lpRoot   = gpAptRootTargetMC;      // X360 r30 = dword_8324D830
 

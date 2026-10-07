@@ -5936,10 +5936,9 @@ void RaceCarEntityModule::PreSceneUpdate(
     }
 
     // ---- step 5: apply this frame's game actions ----------------------------
-    // ⭐ NEW (reset-player-car wave 2026-08-01). The console runs HandleGameActions here,
-    // before the per-slot passes, so a car spawned by an action is already in the world when
-    // the streaming sweep below looks at it. Its source queue only became non-empty this wave
-    // (WorldModule::BridgeActionsToRaceCarModule was an inert link stub).
+    // The console runs HandleGameActions here, before the per-slot passes, so a car spawned
+    // by an action is already in the world when the streaming sweep below looks at it. Its
+    // source queue is filled by WorldModule::BridgeActionsToRaceCarModule.
     HandleGameActions( lpInput, lpOutput );
 
     // ---- console step 7a: THE PER-SLOT PRE-SCENE PASS + THE INTRO COUNTDOWN (0x8230E288) ----
@@ -8019,8 +8018,7 @@ void RaceCarEntityModule::PostPhysicsUpdate(
 // ============================================================================
 // PrePhysicsUpdate  @ 0x82307160   (drivable wave 2026-08-01) -- PARTIAL SLICE.
 //
-// ⭐ THIS RETIRES A SILENT-DROP STUB (WorldLinkStubs.cpp:1374 -- a one-shot log that
-// dropped both buffers). It is the frame slot the whole place-on-track chain ends in.
+// ⭐ The frame slot the whole place-on-track chain ends in.
 //
 // The console body: assert the buffers + the player index, lock, then
 //   if (paused)  assert the takedown queue is empty
@@ -8030,10 +8028,8 @@ void RaceCarEntityModule::PostPhysicsUpdate(
 //   ⭐ mPlaceOnTrackManager.PrePhysicsUpdate(lpInput, lpOutput)
 //   the eight-slot AI-request sweep, unlock.
 //
-// REPRODUCED: the asserts, the locks, and the PlaceOnTrackManager call.
-// [FLAG PC bring-up] everything else is dropped, NOT paraphrased: every one of the nine
-// other calls reaches an un-homed manager interior (CrashPlayManager, BoostManager, the
-// takedown queues, the AI request interface).
+// REPRODUCED: the asserts, the locks and the calls listed above, each at its console slot,
+// except the eight-slot AI-request sweep [FLAG PC bring-up], which is not in the body.
 //
 // ⚠️ THE PLAYER-INDEX ASSERT (X360 :1726) IS THE CONSOLE'S OWN AND IT IS REACHABLE HERE,
 // which the console's own flow guarantees it is not. mePlayerActiveRaceCarIndex stays

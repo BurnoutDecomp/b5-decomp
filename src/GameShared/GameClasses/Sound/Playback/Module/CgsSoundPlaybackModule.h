@@ -99,15 +99,9 @@ namespace Playback
 Registry* GetRwacFactoryRegistry(Factory* lpRwacFactory);  // X360 +0x401C
 Registry* GetAemsFactoryRegistry(Factory* lpAemsFactory);  // X360 +0x60
 
-// FLAG (DEFER): GenericRwacFactory::SK_NAME -- the reserved factory name the
-// init-submix path asserts the request matches (the X360 compares lFactoryName
-// against dword_83008650). Returned by NAME; bodied in the GenericRwacFactory TU.
+// GenericRwacFactory::SK_NAME, by name -- the reserved factory name the init-submix
+// path asserts the request matches. Bodied in the GenericRwacFactory TU.
 const Name& GenericRwacFactorySkName();
-
-// FLAG (DEFER): the playback "Snd9 init submix" hack-hook the asm calls
-// HACK_SetSnd9InitSubmix on the E_COMMAND_VOICE_CREATE special path (slot name
-// == K_INIT_SND9_SUBMIX_IDENT, 0xFFFFFFF0). Declared-only.
-void HACK_SetSnd9InitSubmix(Handle<Voice>* lphVoice);
 
 // CgsCommon.h. K_INIT_SND9_SUBMIX_IDENT -- the reserved slot name that flags the
 // init-submix path in Module::C. The asm compares the requested slot name against

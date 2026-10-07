@@ -33,22 +33,10 @@ namespace
 namespace WorldModule
 {
 
-// ⭐⭐ THIS TU IS MOUNTED AS OF 2026-09-07 (traffic-to-trigger wave), and its two bridges are
-// now the ONLY definitions of their symbols in the link -- the inert copies in
-// GameSource/World/WorldLinkStubs.cpp were deleted in the same change. The three IO accessors
-// that held the mount up are all bodied:
-//   TriggerEntityModuleIO::InputBuffer_PreScene::GetInputInterface
-//       (BrnTriggerEntityModuleIO_Accessors.cpp / _QueueAccessors.cpp)
-//   BrnTrafficIO::OutputBuffer_PreScene::GetTriggerManagementInputInterface
-//       (BrnTrafficEntityModuleIO.cpp, X360 0x8279FE00 / 0x82710E78)
-//   BrnTrafficIO::OutputBuffer_PostScene::GetTrafficToRaceCarInterface_PostScene   <- the last one
-//       (BrnTrafficEntityModuleIO.cpp, X360 0x827A00B0; landed with this change)
-//
-// ⛔ MOVED OUT 2026-08-01 (car-select hand-off wave): BridgeRaceCarModuleToWorldModule_PreScene
-// @0x827A52B0 lives in its own TU, GameSource/World/Bridges/WorldBridgeRaceCarToWorldModule.cpp.
-// Now that this TU mounts, folding it back is possible -- but do it as the WorldModule METHOD it
-// now is, NOT as a namespace function, and only together with the build-list change that drops
-// the other TU.
+// ⛔ BridgeRaceCarModuleToWorldModule_PreScene lives in its own TU,
+// GameSource/World/Bridges/WorldBridgeRaceCarToWorldModule.cpp. Folding it back here is
+// possible -- but do it as the WorldModule METHOD it now is, NOT as a namespace function, and
+// only together with the build-list change that drops the other TU.
 //
 // ⛔ ITS X360-OFFSET CONSTANTS ARE DELETED WITH IT (2026-08-11). They read
 //   KU_WORLD_MODULE_PLAYER_ACTIVE_RACE_CAR_INDEX_OFFSET = 6167272 / ..._TYPE_ARRAY = 6167280,
@@ -139,7 +127,7 @@ void BridgeTrafficToTrigger_PreScene(
         else
         {
             // One-shot, so a run can tell "this bridge never executed" (no line at all, i.e.
-            // still the deleted WorldLinkStubs gate or an unmounted TU) apart from "it executed
+            // this TU is not in the link) apart from "it executed
             // and the traffic module had nothing queued". The latter is the EXPECTED state until
             // the traffic pre-scene producer that writes BrnTrafficIO::OutputBuffer_PreScene's
             // trigger-management interface lands: the non-const writer accessor (X360 0x82710E78)

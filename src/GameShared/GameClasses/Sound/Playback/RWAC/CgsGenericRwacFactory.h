@@ -100,6 +100,9 @@ struct GenericRwacFactorySpec
 class GenericRwacFactory : public Factory
 {
 public:
+    // The interned factory name ("~GenericRwacFactory::SK_NAME~"), interned at static init.
+    static const Name SK_NAME;
+
     // @ 0x826C7AD0. Resolve the spec's system (off_83271928 fallback + the
     // "lSpec.mpSystem" assert), size the carve (console 4*(entities+0x100F)+data+
     // strings; host sizeofs), allocate through the ENVIRONMENT's allocator with
@@ -151,5 +154,9 @@ private:
 
 } // namespace Playback
 } // namespace CgsSound
+
+// CgsGenericRwacFactory.cpp:89. Record the submix the Snd9 system initialises onto (its
+// submix plug-in slot); the handle's reference is released on return.
+void HACK_SetSnd9InitSubmix(CgsSound::Playback::Handle<CgsSound::Playback::SubmixVoice> ahSubmix);
 
 #endif // CGS_SOUND_PLAYBACK_RWAC_CGSGENERICRWACFACTORY_H

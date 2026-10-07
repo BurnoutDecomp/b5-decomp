@@ -7,16 +7,10 @@
 // Bodied here: BridgePhysicsModuleToRaceCarModule_PostPhysics @0x827AE9D0 and
 // BridgePhysicsModuleToTrafficModule_PostPhysics @0x827AB910 (banners at each body).
 //
-// GATE BridgePhysicsModuleToAIModule_PostPhysics @0x827A5680 -- not reconstructed; its boot
-// gate lives in WorldLinkStubs.cpp. DELETE-WHEN the body lands. Recovered flow:
-//   assert "lpAIModuleInputBuffer_PostPhysics != NULL" (:142) / "lpPhysicsModuleOutputBuffer
-//   != NULL" (:143); read-lock check on the physics output (bit 0x10,
-//   Physics/BrnPhysicsModuleIO.h:369); *(aiInput + 4) = *(physicsOutput + 0xF3CB0) -- the
-//   post-physics AI sub-interface's leading word (the `bl sub_8279F8E0` getter is that
-//   read-lock plus the read; the PS3 DecFIGS body @0xA2B84C inlines it).
-//
-// The prop @0x827AB998 and crash @0x827AB8B0 siblings are declaration-only: their bodies walk
-// physics-output sub-interfaces whose accessor band is not homed yet.
+// The three siblings are bodied elsewhere: BridgePhysicsModuleToAIModule_PostPhysics in
+// WorldBridgeAIModule.cpp, BridgePhysicsModuleToPropModule_PostPhysics in
+// WorldBridgePropModule.cpp, BridgePhysicsModuleToCrashModule_PostPhysics in
+// WorldBridgeCrashInputs.cpp.
 // ============================================================================
 
 #include "GameSource/World/Bridges/WorldBridgePhysicsToEntityModules.h"
@@ -57,13 +51,9 @@
 //   (BrnPhysicsModuleIO.h "FLAG (foreign types)") while the RaceCarEntityModuleIO setters take the
 //   real BrnPhysics::Deformation::* / OutputBuffer_PreScene::SceneInputInterface types -- bridging
 //   today is a 1-byte-onto-multi-KB copy. DELETE-WHEN those seats are promoted to their real types.
-// leg 6 (contact spy) LIVE 2026-08-27. Its recorded blocker -- "only the NON-const physics
-//   accessor exists in this tree" -- was STALE: the read-locked const twin @0x8279F8E0 is declared
-//   at BrnPhysicsModuleIO.h:178 and bodied at BrnPhysicsModuleIO_OutputBuffer.cpp:246, and the
-//   traffic bridge below has been calling it as its leg 4 all along. Mounting the copy does NOT
-//   by itself make the contact-spy ARM do anything: VehicleManager::ProcessContactSpies @0x82646C98
-//   is still a boot gate and all thirteen GameSource/Physics/ContactSpies/*.cpp are absent from the
-//   bat. This leg carries the handle; nothing fills it yet.
+// leg 6 (contact spy) LIVE. The read-locked const accessor is declared at
+//   BrnPhysicsModuleIO.h:178 and bodied in BrnPhysicsModuleIO_OutputBuffer.cpp; the traffic bridge
+//   below calls it as its leg 4.
 // =================================================================================================
 
 namespace WorldModule

@@ -334,8 +334,7 @@ AptValue* AptActionInterpreter::getObject(AptValue* pScope, AptValue* pTarget, c
 // AptNativeHash::mpPrototype/mp__Proto__ links); otherwise fall back to a type-tag
 // comparison (a defined Object value of the same value-type matches).
 // ---------------------------------------------------------------------------
-// AptActionInterpreter_InstanceOfChainWalk -- HOMED 2026-07-02 from the X360
-// isObjectOfType @0x82AEA5B8's object arm (retiring the return-0 link-stub).
+// AptActionInterpreter_InstanceOfChainWalk -- isObjectOfType's object arm.
 // The needle is pClass's prototype: GetNativeHashVirtual()->mpPrototype (+0xC;
 // the asm reads it unguarded -- the caller's is-object gate guarantees a hash).
 // Three arms:
@@ -466,8 +465,6 @@ void AptActionInterpreter::unEscape(EAStringC* pStr)
 // escape @0x82AEE008 -- the URL percent-ENCODER (the inverse of unEscape): every
 // byte that is not an ASCII alphanumeric is emitted as "%XX" (uppercase hex);
 // alphanumerics copy through.
-// Was the {} `escape` link-stub, which made the AS escape()
-// builtin an identity transform.
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::escape(EAStringC* pStr)
 {

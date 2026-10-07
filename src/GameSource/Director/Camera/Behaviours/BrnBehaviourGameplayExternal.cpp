@@ -211,16 +211,13 @@ void BehaviourGameplayExternal::Parameters::Set(const Source* lpSource)
 // mfTimeInJump (+0xB4C) and mfJumpFOV (+0xB58) are deliberately NOT stored here (the jump
 // machinery and Prepare own them) -- reproduced as-is, nothing extra is invented.
 //
-// FLAG (three sub-object Constructs NOT reproduced):
+// FLAG (sub-object Constructs):
 //   * mRotationController -- the console INLINES CameraSphericalRotationController::Construct
 //     here, and its tail stores (+72/+76) fall inside the controller's embedded SmoothMover,
-//     whose interior is not byte-mapped. Calling the (declaration-only) member instead of
-//     poking those offsets is the faithful shape; the member is invoked below and link-stubbed
-//     in DirectorLinkStubs.cpp until BrnCameraSphericalRotationController.cpp lands.
+//     whose interior is not byte-mapped. Calling the member (bodied in
+//     BrnCameraSphericalRotationController.cpp) instead of poking those offsets is the
+//     faithful shape.
 //   * mBoostShake -- Constructed by Prepare on the console, not by Construct. Reproduced.
-// Both of those sub-objects are unread today (Update is not transcribed) and the pool's
-// placement-new is `new (slot) T()`, i.e. value-initialisation, so they start zeroed anyway.
-// DELETE-WHEN: CameraSphericalRotationController::Construct is homed.
 //
 // ⭐ RESOLVED 2026-08-01 -- mCollisionPolicy USED TO BE A THIRD ENTRY IN THAT FLAG LIST.
 //   `CollisionPolicyAttachedToVehicle::Construct(this+0x50, 1)` @0x82224AB0 is a real call
@@ -1288,11 +1285,6 @@ void BehaviourGameplayExternal::ApplySlideyEffects(const Parameters& lrCameraAtt
 //         this+0xB40 -> mfWobbleScale          (0x8222555C; PS3 reads its own +0xB30, the
 //              constant -0x10 tail shift between the two builds)
 //
-// ⚠️⚠️ AND THIS IS THE CALL THAT MADE THE SHAKE STUB URGENT. `Utils::CameraShake::Update`
-//   had an empty `{}` in DirectorLinkStubs.cpp; the line above would have LINKED AND DONE
-//   NOTHING, invisibly. That stub is retired in this same commit (BrnCameraShake.cpp is now
-//   mounted) precisely so that this body is not the thing that quietly re-arms it.
-//
 // ⚠️ The first parameter is a `Camera&` and is handed straight to CameraShake::Update as a
 //   `Matrix44Affine&` (DecFIGS names the callee's parameter `lMatrixInOut`). That is legal
 //   because Camera::mTransform is at +0x00 -- there is a static_assert on exactly that in
@@ -1937,8 +1929,8 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         // .cpp:364..:375 -- THE DEBUG-RENDER ARM, gated on mbEnableDebugRender (X360
         // `lbz r7, 0xB5E` then `beq` over the whole arm). Nothing on this build raises that
         // member, so this never runs; it is transcribed rather than dropped so the two
-        // CgsDev::DebugRender entry points stay on the record. See WorldLinkStubs.cpp for
-        // their (one-shot-logging) stubs -- neither has a reconstructed body anywhere.
+        // CgsDev::DebugRender entry points stay on the record (both bodied in
+        // CgsDebugRender.cpp).
         if (mbEnableDebugRender)
         {
             CgsDev::DebugInterface lDebugInterface;

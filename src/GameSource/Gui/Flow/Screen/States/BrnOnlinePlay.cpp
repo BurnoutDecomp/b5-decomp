@@ -5,10 +5,9 @@
 //   HandleControllerInput       @0x824AD6A0   HandleControllerInputMainMenu @0x824A7488
 //   HandleGuiCacheEvent         @0x824858A0   CheckPrivileges         @0x82485968
 //   SelectOnlineMenuOption      @0x8249C090   ShowMainMenuOptions     @0x8249BF58
-//   ShowMainMenuScreen          @0x8249BE98
-// (Update / ShowFriendsMenu / CheckForCompletedLoads / HandlePlayerStatsEvent /
-//  Handle*Event / ShowFriendsSysUtil / sign-in sys-util machinery are declared-only --
-//  they link from other slices of this TU.)
+//   ShowMainMenuScreen   Update
+//   CheckForCompletedLoads   HandlePlayerStatsEvent
+//   ShowFriendsMenu
 //
 // The event-post / expected-component / cache-boundary wiring mirrors the committed
 // OnlineQuickCustomCreate / OnlineNews / OnlineMarkMan twins.
@@ -17,27 +16,106 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlinePlay.h"
 
 #include <cstddef>                                                        // offsetof (overlay wire)
+#include <cstring>                                                        // std::strncpy
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsModule::Event, GuiEventQueueLarge
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface, GuiEventNetworkSuspension
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"               // CgsSystem::HardwareInit::IsHardDiskAvailable
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache, GuiFlow
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiOverlayRequest, GuiEventActivateCrashNav
+#include "GameSource/Gui/BrnGuiOptionsDataProfile.h"                      // OptionsDataProfile::IsThereUnreadNews
 
-// The Xbox XNotify listener plumbing OnEnter/OnLeave key on. The XNotify* / CloseHandle
+// The Xbox XNotify listener plumbing OnEnter/OnLeave key on. The XNotify* / XUser* / XShow*
 // entry points are the Xbox 360 XDK C-API; declared extern "C" at file scope with plain
 // types (mirroring the committed BrnOnlineQuickCustomCreate precedent -- the Xbox HANDLE /
-// DWORD typedefs are NOT modelled in types.hpp).
+// DWORD typedefs are NOT modelled in types.hpp). CloseHandle comes from the Windows header
+// CgsHardwareInit.h includes.
 extern "C"
 {
     void* XNotifyCreateListener(unsigned long long luqwAreas);
-    int   CloseHandle(void* lhObject);
+    int   XNotifyGetNext(void* lhListener, unsigned long ludwMsgFilter,
+                         unsigned long* lpdwId, unsigned long* lpParam);
+    u32   XUserGetSigninState(u32 luUserIndex);
+    u32   XShowSigninUI(u32 luPanes, u32 luFlags);
+    u32   XShowFriendsUI(u32 luUserIndex);
 }
 
 namespace BrnGui
 {
 namespace
 {
+    // The state in-queue concrete type (GuiEventQueue is its pointer-only face).
+    typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
+
+    // The in-queue event ids Update routes.
+    const s32 KI_EVENT_CONTROLLER       = 6;
+    const s32 KI_EVENT_OVERLAY_COMPLETE = 189;
+    const s32 KI_EVENT_PLAYER_STATS     = 248;
+    const s32 KI_EVENT_GUI_CACHE        = 64;
+
+    // The GUI out-queue channel.
+    const s32 KI_CHANNEL_GUI_OUT = 40;
+
+    // XNotify ids and the sign-in state Update / ShowFriendsMenu test.
+    const unsigned long KU_XN_SYS_SIGNINCHANGED   = 9;
+    const unsigned long KU_XN_LIVE_INVITE_ACCEPTED = 0x2000002;
+    const u32 KU_SIGNIN_STATE_SIGNED_IN_TO_LIVE    = 2;
+    const u32 KU_SIGNIN_UI_PANES                   = 1;
+    const u32 KU_SIGNIN_UI_ONLINE_ENABLED          = 2;
+
+    // The disconnect reason that has its own popup.
+    const s32 KI_DISCONNECT_REASON_DEDICATED_POPUP = 19;
+
+    // Event 189 ("overlay complete") payload view: the compressed overlay id then how the
+    // overlay was left. The queue hands out the header-stripped payload.
+    struct GuiOverlayCompletePayload : public CgsModule::Event
+    {
+        CgsID                                mOverlayId;     // +0x00
+        GuiOverlayCompleteEvent::LeaveMethod meLeaveMethod;  // +0x08
+    };
+
+    // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
+    struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
+    {
+        GuiOverlayWaitFinishRequest mRequest;   // +0x10
+
+        GuiOverlayWaitFinishWire()
+            : CgsGui::GuiEvent<188>(
+                  static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)),
+                  static_cast<u32>(offsetof(GuiOverlayWaitFinishWire, mRequest)))
+        {
+        }
+    };
+
+    // { 4, 266, 12, <request> }, channel 40, 16 bytes: the news / terms-of-service request.
+    struct GuiEventNetworkNewsAndTOSWire : public CgsGui::GuiEvent<266>
+    {
+        u32 muEventType;   // +0x0C
+
+        explicit GuiEventNetworkNewsAndTOSWire(u32 luEventType)
+            : CgsGui::GuiEvent<266>(
+                  static_cast<u32>(sizeof(u32)),
+                  static_cast<u32>(offsetof(GuiEventNetworkNewsAndTOSWire, muEventType)))
+            , muEventType(luEventType)
+        {
+        }
+    };
+
+    // GuiEventNetworkNewsAndTOS::E_EVENT_TYPE_RELEASE.
+    const u32 KU_NEWS_AND_TOS_RELEASE = 6;
+
+    // The overlay waits CheckForCompletedLoads finishes once the screen is up.
+    const char* const KAPC_OVERLAYS_TO_FINISH[] =
+    {
+        "CNOnlLvgGame", "CNOnlEntGame", "CNOnlLchGame", "CNOnlLchGmH",
+        "OnHReturnOn",  "OnCReturnOn",  "OnHEnterOn",   "OnCEnterOn",
+    };
+
+    // The news transition's view states (unread news / none).
+    const char* const KPC_NEWS_VISIBLE   = "Visible";
+    const char* const KPC_NEWS_INVISIBLE = "Invisible";
+
     // OutputGuiEvent<BrnGui::GuiOverlayRequest>: both of this TU's call sites (@0x824A7698 /
     // @0x824A76D0) `bl` the SAME folded instantiation whose body is exported @0x82436BE0:
     //   memcpy(record+0x10, &request, 0x120); header {0x120=288, 0xB8=184, 0x10=16};
@@ -146,13 +224,11 @@ void OnlinePlay::OnEnter()
 
     meSubState = E_SUBSTATE_LOADING_SCREEN;   // +0x2414 = 0
 
-    // X360: strncpy(macLocalPlayerName, &unk_820046A7, 16) -- the source is the empty-name rodata
-    // sentinel, so the copy zero-fills the 16-byte name buffer.
-    for (s32 liByte = 0; liByte < KI_PLAYER_NAME_LENGTH; ++liByte)
-        macLocalPlayerName[liByte] = '\0';
+    // The copy source is the empty string, so the name buffer is zero-filled.
+    std::strncpy(mPlayerStatsEvent.macPlayerName, "", KI_PLAYER_NAME_LENGTH);
 
-    miLocalPlayerStatsValue = 0;   // +0x2400
-    miLocalPlayerImageIndex = 0;   // +0x23FC
+    mPlayerStatsEvent.miWorldRank = 0;   // +0x2400
+    mPlayerStatsEvent.mPlayerID   = 0;   // +0x23FC
     mpGuiCache              = 0;    // +0x241C
     mbInviteInProgress      = false;
     mbPerformingInvite      = false;
@@ -419,9 +495,9 @@ void OnlinePlay::ShowMainMenuOptions()
 
     // Show the local player's own record only once a name has been set.
     const BrnNetwork::NetworkPlayerStats* lpStats =
-        (macLocalPlayerName[0] != '\0') ? &mPlayerStatsEvent : NULL;
-    mPlayerStatsDisplay.SetInfo(macLocalPlayerName, miLocalPlayerStatsValue, lpStats,
-                                0, false, mpGuiCache);
+        (mPlayerStatsEvent.macPlayerName[0] != '\0') ? &mPlayerStatsEvent : NULL;
+    mPlayerStatsDisplay.SetInfo(mPlayerStatsEvent.macPlayerName, mPlayerStatsEvent.miWorldRank,
+                                lpStats, 0, false, mpGuiCache);
 
     // GuiEvent<259> { 1, 259, 12, payload=0 } -- channel 40, 16 bytes.
     CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue =
@@ -447,5 +523,201 @@ void OnlinePlay::ShowMainMenuScreen()
     mMainMenuComponent.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache);
     mPlayerStatsDisplay.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache);
     mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mNewNewsAnimation.GetName());
+}
+// ------------------------------------------------ Update
+void OnlinePlay::Update()
+{
+    StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+
+    const CgsModule::Event* lpEvent = 0;
+    s32 liEventSize = 0;
+    for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liEventSize); lpEvent != 0;
+         liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
+    {
+        switch (liEventId)
+        {
+            case KI_EVENT_CONTROLLER:
+                // No menu input while an invite is being set up or carried out.
+                if (!mbInviteInProgress && !mbPerformingInvite)
+                    HandleControllerInput(lpEvent);
+                break;
+
+            case 14:
+            case 21:
+            case 44:
+                break;
+
+            case KI_EVENT_GUI_CACHE:
+                HandleGuiCacheEvent(reinterpret_cast<const GuiEventCache*>(lpEvent));
+                break;
+
+            case KI_EVENT_OVERLAY_COMPLETE:
+            {
+                // The "start online?" question was answered: OK selects the highlighted option.
+                const EMainMenuOptions leOption =
+                    static_cast<EMainMenuOptions>(mMainMenuComponent.GetHighlightedIndex());
+                CGS_ASSERT(lpEvent != NULL, "lpOverlayCompleteEvent");
+
+                const GuiOverlayCompletePayload* lpComplete =
+                    static_cast<const GuiOverlayCompletePayload*>(lpEvent);
+                if (lpComplete->mOverlayId == CgsIDCompress("CNOnlStrtQn") &&
+                    lpComplete->meLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK)
+                {
+                    SelectOnlineMenuOption(leOption);
+                }
+                break;
+            }
+
+            case KI_EVENT_PLAYER_STATS:
+                HandlePlayerStatsEvent(lpEvent);
+                break;
+
+            case 493:
+                CGS_ASSERT(lpEvent != NULL, "lpEvent");
+                break;
+
+            default:
+                CGS_ASSERT(false, "Unexpected event received");
+                break;
+        }
+    }
+    lpInQueue->Clear();
+
+    CheckForCompletedLoads();
+    mMainMenuComponent.Update();
+    mPlayerStatsDisplay.Update();
+
+    // Waiting on the sign-in guide ShowFriendsMenu opened.
+    if (meSubState == E_SUBSTATE_WAIT_SIGN_IN_FINISH)
+    {
+        unsigned long luNotificationId    = 0;
+        unsigned long luNotificationParam = 0;
+        if (XNotifyGetNext(mpNotifyListenerHandle, 0, &luNotificationId, &luNotificationParam))
+        {
+            if (luNotificationId == KU_XN_SYS_SIGNINCHANGED)
+            {
+                if (luNotificationParam == 0)
+                {
+                    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+                    if (XUserGetSigninState(mpGuiCache->GetActiveControllerIndex()) ==
+                        KU_SIGNIN_STATE_SIGNED_IN_TO_LIVE)
+                    {
+                        XShowFriendsUI(mpGuiCache->GetActiveControllerIndex());
+                    }
+                    meSubState = E_SUBSTATE_MAIN;
+                }
+            }
+            else if (luNotificationId == KU_XN_LIVE_INVITE_ACCEPTED)
+            {
+                CGS_ASSERT(false, "Invite notification processed by Online main menu screen. "
+                                  "This could break cross game invites\n");
+            }
+        }
+    }
+}
+
+// ------------------------------------------------ CheckForCompletedLoads
+void OnlinePlay::CheckForCompletedLoads()
+{
+    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+
+    if (meSubState == E_SUBSTATE_LOADING_SCREEN)
+    {
+        if (mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad,
+                                                 static_cast<u32>(miNumResourcesToLoad)))
+        {
+            ShowMainMenuScreen();
+        }
+    }
+    else if (meSubState == E_SUBSTATE_LOADING_COMPONENTS)
+    {
+        if (mpGuiCache == NULL || !mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
+            return;
+
+        for (u32 luOverlay = 0;
+             luOverlay < sizeof(KAPC_OVERLAYS_TO_FINISH) / sizeof(KAPC_OVERLAYS_TO_FINISH[0]);
+             ++luOverlay)
+        {
+            GuiOverlayWaitFinishWire lWaitFinish;
+            lWaitFinish.mRequest.Construct(KAPC_OVERLAYS_TO_FINISH[luOverlay]);
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lWaitFinish), KI_CHANNEL_GUI_OUT,
+                static_cast<s32>(sizeof(lWaitFinish)));
+        }
+
+        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+        meSubState = E_SUBSTATE_MAIN;
+        mPlayerStatsDisplay.SetComponentLoaded();
+
+        mNewNewsAnimation.AddOutputAptViewState(
+            "apt_Transition",
+            mpGuiCache->GetOptionsDataProfile()->IsThereUnreadNews() ? KPC_NEWS_VISIBLE
+                                                                      : KPC_NEWS_INVISIBLE,
+            false);
+
+        // A lobby disconnect latched while away: show its popup now, then forget it.
+        const s32 liDisconnectReason = mpGuiCache->GetDoDisconnectPopupError();
+        if (liDisconnectReason != 0)
+        {
+            GuiOverlayRequestWire lRequest;
+            lRequest.mRequest.Construct(liDisconnectReason == KI_DISCONNECT_REASON_DEDICATED_POPUP
+                                            ? "CNLobbyDiscD"
+                                            : "CNLobbyDisc");
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
+                static_cast<s32>(sizeof(lRequest)));
+            mpGuiCache->SetDoDisconnectPopup(NULL);
+        }
+
+        if (!CgsSystem::HardwareInit::IsHardDiskAvailable())
+        {
+            GuiOverlayRequestWire lRequest;
+            lRequest.mRequest.Construct("OnReqHDD");
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
+                static_cast<s32>(sizeof(lRequest)));
+        }
+
+        ShowMainMenuOptions();
+
+        GuiEventNetworkNewsAndTOSWire lRelease(KU_NEWS_AND_TOS_RELEASE);
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRelease), KI_CHANNEL_GUI_OUT,
+            static_cast<s32>(sizeof(lRelease)));
+    }
+}
+
+// ------------------------------------------------ HandlePlayerStatsEvent
+void OnlinePlay::HandlePlayerStatsEvent(const CgsModule::Event* lpEvent)
+{
+    CGS_ASSERT(lpEvent != NULL, "Invalid event sent to OnlinePlay::HandlePlayerStatsEvent");
+
+    if (!CgsSystem::HardwareInit::IsHardDiskAvailable())
+        return;
+
+    mPlayerStatsEvent = *reinterpret_cast<const GuiEventNetworkPlayerStats*>(lpEvent);
+    if (mPlayerStatsDisplay.IsComponentLoaded())
+    {
+        mPlayerStatsDisplay.SetInfo(mPlayerStatsEvent.macPlayerName, mPlayerStatsEvent.miWorldRank,
+                                    &mPlayerStatsEvent, 0, false, mpGuiCache);
+    }
+}
+
+// ------------------------------------------------ ShowFriendsMenu
+void OnlinePlay::ShowFriendsMenu()
+{
+    if (mpGuiCache == NULL)
+        return;
+
+    if (XUserGetSigninState(mpGuiCache->GetActiveControllerIndex()) ==
+        KU_SIGNIN_STATE_SIGNED_IN_TO_LIVE)
+    {
+        XShowFriendsUI(mpGuiCache->GetActiveControllerIndex());
+    }
+    else
+    {
+        XShowSigninUI(KU_SIGNIN_UI_PANES, KU_SIGNIN_UI_ONLINE_ENABLED);
+        meSubState = E_SUBSTATE_WAIT_SIGN_IN_FINISH;
+    }
 }
 }   // namespace BrnGui

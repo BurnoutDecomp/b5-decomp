@@ -18,7 +18,8 @@
 //   OnlineLoadingPlayer::HandleLoadNotification     @0x82419DD0
 //   OnlineLoadingPlayer::AppendExpectedAptComponent @0x82419F68
 //   OnlineLoadingPlayer::Hide                       @0x82419FF8
-// (Show / Set* accessors are their own ledger functions and are OMITTED here.)
+// The Set* accessors are header-inlines (their only copies are inlined into
+// OnlineLoading::SetupPlayerList / UpdatePlayerList); Show has no console copy.
 //
 // Guest layout (base CgsGui::GuiComponent occupies +0x00..+0x8B):
 //   +0x8C mGamertag (TextField, 0x128), +0x1B4 mCameraIcon, +0x248 mCrownIcon,
@@ -26,6 +27,8 @@
 //   0x94), +0x498 meTeam, +0x49C mbCrowned, +0x49D mbGamertagSet, +0x49E mbVOIPActive.
 // Members carry embedded StateInterface* pointers that widen on the 64-bit host, so the
 // guest byte offsets past the base are NOT statically pinned (member access is by name).
+
+namespace BrnNetwork { struct LiveRevengeRelationship; }
 
 namespace BrnGui
 {
@@ -49,6 +52,74 @@ namespace BrnGui
 
         // @0x82419FF8 -- hide the row (push the "invisible" apt state).
         void Hide();
+
+        // The camera icon follows the connection every call.
+        void SetCameraConnected(bool lbConnected)
+        {
+            mCameraIcon.SetState(lbConnected ? "on" : "off");
+        }
+
+        // The crown icon only changes with the flag ("crown" is the state the load
+        // notification re-pushes).
+        void SetCrown(bool lbCrowned)
+        {
+            if (mbCrowned != lbCrowned)
+            {
+                mbCrowned = lbCrowned;
+                mCrownIcon.SetState(lbCrowned ? "crown" : "invisible");
+            }
+        }
+
+        // The gamertag is written once.
+        void SetGamertag(const char* lpacGamertag)
+        {
+            if (!mbGamertagSet)
+            {
+                mGamertag.SetLocalisedText(lpacGamertag, CgsLanguage::LanguageManager::E_FORMAT_TEXT);
+                mbGamertagSet = true;
+            }
+        }
+
+        // No relationship hides the icon. FLAG: the console's only copy passes none, so the
+        // relationship arm has no console body to follow.
+        void SetLiveRevenge(const BrnNetwork::LiveRevengeRelationship* lpRelationship)
+        {
+            if (lpRelationship == 0)
+            {
+                mLiveRevengeIcon.SetState("invisible");
+            }
+        }
+
+        // The team icon only changes with the team: red, blue, or hidden for anything else.
+        void SetTeam(BrnGameState::GameStateModuleIO::EPlayerTeam leTeam)
+        {
+            if (meTeam != leTeam)
+            {
+                meTeam = leTeam;
+                if (leTeam == BrnGameState::GameStateModuleIO::E_PLAYER_TEAM_RED_TEAM)
+                {
+                    mTeamIcon.SetState("red");
+                }
+                else if (leTeam == BrnGameState::GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM)
+                {
+                    mTeamIcon.SetState("blue");
+                }
+                else
+                {
+                    mTeamIcon.SetState("invisible");
+                }
+            }
+        }
+
+        // The VOIP icon only changes with the flag.
+        void SetVOIPActive(bool lbActive)
+        {
+            if (mbVOIPActive != lbActive)
+            {
+                mbVOIPActive = lbActive;
+                mVOIPIcon.SetState(lbActive ? "on" : "invisible");
+            }
+        }
 
     private:
         // File-scope apt-clip names for the children (DWARF KAC_* constants; the X360

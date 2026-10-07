@@ -10,6 +10,7 @@
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestHeartbeat.h"
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Transaction.h"
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Objects.h"
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestLocateService.h"
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3ClientCore.h"
 
 // ===========================================================================
@@ -34,11 +35,6 @@ namespace MassiveAdClient3
 // spNetworkManager -- the live singleton pointer (null before init / after shutdown).
 CNetworkManager* spNetworkManager = 0;
 
-// MassiveAdClient3::DNS -- the address-resolution thread entry point (its own
-// ledger TU). Forward-declared here because ResolveAddresses hands its address to
-// CMassiveThread::Create.
-unsigned long DNS(void* pParam);
-
 namespace
 {
 
@@ -53,9 +49,9 @@ namespace
 //   off_8327F370    gpDNSThread           -- the DNS-resolve thread object, or 0
 //   off_8327F378    gpServerArrayLock     -- guards gaServers, or 0
 // ---------------------------------------------------------------------------
-int                      gbDNSPending          = 0;
-int                      gnReceiveBufferSize    = 0;
-int                      gnSendBufferSize       = 0;
+int                      gbDNSPending          = 1;
+int                      gnReceiveBufferSize    = 0x2000;
+int                      gnSendBufferSize       = 0x2000;
 int                      gbDNSKillSignal        = 0;
 int                      gnServerArrayRefCount  = 0;
 CMassiveThread*          gpDNSThread            = 0;
@@ -70,7 +66,13 @@ struct SServerEntry
     unsigned int mnPort;      // dword_82F91AEC (u16 value in a dword slot)
     char*        mpcHostName; // dword_82F91AF0
 };
-SServerEntry gaServers[17] = {};
+// Every entry starts with no address, port 1000 and no host name (the image holds
+// sixteen initialised entries; the setters also accept index 16).
+SServerEntry gaServers[17] = {
+    { 0, 1000, 0 }, { 0, 1000, 0 }, { 0, 1000, 0 }, { 0, 1000, 0 }, { 0, 1000, 0 }, { 0, 1000, 0 },
+    { 0, 1000, 0 }, { 0, 1000, 0 }, { 0, 1000, 0 }, { 0, 1000, 0 }, { 0, 1000, 0 }, { 0, 1000, 0 },
+    { 0, 1000, 0 }, { 0, 1000, 0 }, { 0, 1000, 0 }, { 0, 1000, 0 }, { 0, 1000, 0 }
+};
 
 // &unk_820046A7 -- a shared client rodata byte the X360 passes both as an ignored
 // SetLastError format placeholder and as GetServerHostName's empty-host-name
@@ -147,10 +149,14 @@ CNetworkManager::~CNetworkManager()
 // ---------------------------------------------------------------------------
 // CNetworkManager::HandleResponse (slot 1)
 //
-// The CRequestBuilder request-complete override. Its body is not part of this TU's
-// ledger slice (separate CNetworkManager response TU); declared as an override so
-// the class is concrete. No body is written here (never invent one).
+// Same body as HandleError (the console folds both slots onto one function): drop
+// the pending heartbeat and remove the finished request from the collection.
 // ---------------------------------------------------------------------------
+int CNetworkManager::HandleResponse(CRequestObject* pRequest)
+{
+    mpHeartbeatRequest = 0;
+    return RemoveFromRequestCollect(pRequest);
+}
 
 // ---------------------------------------------------------------------------
 // CNetworkManager::HandleError @ 0x82BD14E8 (slot 2)
@@ -172,7 +178,7 @@ int CNetworkManager::HandleError(CRequestObject* pRequest, int /*nErrorCode*/)
 // and its transaction, size + allocate the receive buffer from the init flags, arm
 // DNS, and (optionally) resolve addresses. Every failure unwinds what it built.
 // ---------------------------------------------------------------------------
-CNetworkManager* CNetworkManager::Initialize(const SMassiveClientInit* pInit,
+CNetworkManager* CNetworkManager::Initialize(const CFlag* pFlags,
                                              void* pResolveParam)
 {
     if (spNetworkManager)                                  // lwz off_...; bne
@@ -181,7 +187,7 @@ CNetworkManager* CNetworkManager::Initialize(const SMassiveClientInit* pInit,
         return spNetworkManager;
     }
 
-    void* lpMemory = CMassiveListNode::operator new(176);  // li 0xB0; bl operator new
+    void* lpMemory = CMassiveListNode::operator new(sizeof(CNetworkManager));
     spNetworkManager = lpMemory ? ::new (lpMemory) CNetworkManager() : 0;
     if (!spNetworkManager)
     {
@@ -192,7 +198,7 @@ CNetworkManager* CNetworkManager::Initialize(const SMassiveClientInit* pInit,
     if (!gpServerArrayLock)                                // lwz off_8327F378; bne
     {
         MassiveLog(5, "CNetworkManager", "Lock for Server Address Array does not exist, creating it...");
-        void* lpLockMemory = CMassiveListNode::operator new(52);
+        void* lpLockMemory = CMassiveListNode::operator new(sizeof(CMassiveCriticalSection));
         gpServerArrayLock = lpLockMemory
                                 ? ::new (lpLockMemory) CMassiveCriticalSection("ServerAddressArray")
                                 : 0;
@@ -211,7 +217,7 @@ CNetworkManager* CNetworkManager::Initialize(const SMassiveClientInit* pInit,
                "Incrementing Server Array references. It now has %d references.",
                gnServerArrayRefCount);
 
-    void* lpTxMemory = CMassiveListNode::operator new(68); // li 0x44; bl operator new
+    void* lpTxMemory = CMassiveListNode::operator new(sizeof(CTransactionHTTP));
     spNetworkManager->mpTransaction = lpTxMemory ? ::new (lpTxMemory) CTransactionHTTP() : 0;
     if (!spNetworkManager->mpTransaction)                  // lwz 0x78; bne
     {
@@ -222,10 +228,10 @@ CNetworkManager* CNetworkManager::Initialize(const SMassiveClientInit* pInit,
     }
     MassiveLog(5, spNetworkManager->GetName(), "Successfully created transaction object");
 
-    // Buffer size from the init-flags field (@ +0x14; a bit-flags word -- the game
-    // passes 0, giving the 0x2000 default). 0x20 -> 16 KiB, 0x40 -> 4 KiB, else 8 KiB.
+    // Buffer size from the client flags (the title passes 0, giving the 0x2000
+    // default). 0x20 -> 16 KiB, 0x40 -> 4 KiB, else 8 KiB.
     int lnBufferSize;
-    int lnFlags = pInit->mnUnknown14;                      // lhz 0x14(init)
+    int lnFlags = pFlags->mnFlags;
     if (lnFlags & 0x20)                                    // rlwinm. bit 0x20
         lnBufferSize = 0x4000;
     else if (lnFlags & 0x40)                               // rlwinm. bit 0x40
@@ -474,7 +480,7 @@ int CNetworkManager::Receive()
         mpCurrentRequest->ResetDataBuffer();
     }
 
-    if (mpTransaction->ProcessReceivedData(mpReceiveBuffer, lnReceived))  // vtable[2]
+    if (mpTransaction->ProcessResponse(mpReceiveBuffer, lnReceived))
     {
         mpCurrentRequest = 0;                              // stw 0, 0x70
         mnSendOffset = 0;                                  // stw 0, 0x84
@@ -541,7 +547,7 @@ void CNetworkManager::Tick()
         mnSendOffset = 0;                                 // stw 0, 0x84
         mpCurrentRequest = spRequestManager->GetNextRequest();
         if (mpCurrentRequest)
-            mpTransaction->OnRequestStarted();            // vtable[0]
+            mpTransaction->SetRequest(mpCurrentRequest);
     }
 
     // Connection state machine.
@@ -633,7 +639,7 @@ void CNetworkManager::Tick()
         if (mpCurrentRequest)
         {
             mnIdleTimer = 0;                              // std 0, 0x48
-            mpTransaction->BuildRequestBlock();           // vtable[1]
+            mpTransaction->ProcessRequest();
             DetermineMaxBytes();
             Send(mpCurrentRequest->GetDataBuffer(), mpCurrentRequest->GetDataLength());
 
@@ -679,7 +685,7 @@ void CNetworkManager::CreateHeartbeat()
         return;
     }
 
-    void* lpMemory = CMassiveListNode::operator new(80);  // li 0x50; bl operator new
+    void* lpMemory = CMassiveListNode::operator new(sizeof(CRequestHeartbeat));
     mpHeartbeatRequest = lpMemory ? ::new (lpMemory) CRequestHeartbeat() : 0;
     if (mpHeartbeatRequest)                               // stw 0x74; bne
     {
@@ -749,7 +755,7 @@ int CNetworkManager::ResolveAddresses(void* pResolveParam)
 {
     if (!gpDNSThread && pResolveParam)                   // off_8327F370==0 && a2!=0
     {
-        void* lpMemory = CMassiveListNode::operator new(24);  // li 0x18; bl operator new
+        void* lpMemory = CMassiveListNode::operator new(sizeof(CMassiveThread));
         gpDNSThread = lpMemory ? ::new (lpMemory) CMassiveThread() : 0;
         if (gpDNSThread)                                 // stw off_8327F370; bne
         {
@@ -822,6 +828,23 @@ int CNetworkManager::GetServerAddressU32(unsigned int nIndex)
     int lnAddress = static_cast<int>(gaServers[nIndex].mnAddress);  // dword_82F91AE8[3*i]
     gpServerArrayLock->Exit("NetworkManager::GetServerAddressU32");
     return lnAddress;
+}
+
+// ---------------------------------------------------------------------------
+// CNetworkManager::GetServerPortU16
+// ---------------------------------------------------------------------------
+unsigned short CNetworkManager::GetServerPortU16(unsigned int nIndex)
+{
+    if (!gpServerArrayLock->TryEnter("NetworkManager::GetServerPortU16"))
+    {
+        MassiveLog(5, spNetworkManager->GetName(),
+                   "CNetworkManager(Static): Could not get access to server address/port array.");
+        return static_cast<unsigned short>(-1);
+    }
+
+    unsigned short lnPort = static_cast<unsigned short>(gaServers[nIndex].mnPort);
+    gpServerArrayLock->Exit("NetworkManager::GetServerPortU16");
+    return lnPort;
 }
 
 // ---------------------------------------------------------------------------
@@ -918,6 +941,244 @@ void CNetworkManager::SetServerPort(unsigned int nIndex, unsigned short nPort)
         MassiveLog(2, spNetworkManager->GetName(),
                    "CNetworkManager(Static): Can't set new port (%d) at index(%d).", nPort, nIndex);
     }
+}
+
+
+// ---------------------------------------------------------------------------
+// CNetworkManager::DetermineMaxBytes
+// ---------------------------------------------------------------------------
+int CNetworkManager::DetermineMaxBytes()
+{
+    float lfSeconds = static_cast<float>(static_cast<unsigned long long>(mnCurrentTime - mnLastTime)) * 0.001f;
+
+    if (mnState == E_CONN_SENDING)
+    {
+        if (!mnField28)
+        {
+            mnMaxBytes = gnSendBufferSize;
+            return 0;
+        }
+        mnMaxBytes = static_cast<int>(static_cast<float>(mnField28 << 10) * lfSeconds);
+        MassiveLog(7, spNetworkManager->GetName(), "BW Send Limit: %d bytes", mnMaxBytes);
+        return 0;
+    }
+
+    if (mnState == E_CONN_RECEIVING)
+    {
+        if (!mnField2A)
+        {
+            mnMaxBytes = gnReceiveBufferSize;
+            return 0;
+        }
+        mnMaxBytes = static_cast<int>(static_cast<float>(mnField2A << 10) * lfSeconds);
+        MassiveLog(7, spNetworkManager->GetName(), "BW Receive Limit: %d bytes", mnMaxBytes);
+        return 0;
+    }
+
+    return -793;
+}
+
+
+// ---------------------------------------------------------------------------
+// MassiveSetServerPorts
+// ---------------------------------------------------------------------------
+void MassiveSetServerPorts(CMassiveList* pPorts)
+{
+    pPorts->GoToStart();
+    while (pPorts->GetCurrent())
+    {
+        CPortIndexPair* lpPair = static_cast<CPortIndexPair*>(pPorts->GetCurrData());
+        CNetworkManager::SetServerPort(static_cast<unsigned char>(lpPair->GetType()), lpPair->GetPort());
+        pPorts->GoToNext();
+    }
+
+    pPorts->GoToStart();
+    while (pPorts->GetCurrent())
+    {
+        CMassiveBaseObject* lpPair = static_cast<CMassiveBaseObject*>(pPorts->GetCurrData());
+        if (lpPair)
+            delete lpPair;
+        pPorts->GoToNext();
+    }
+    pPorts->RemoveAll();
+    pPorts->~CMassiveList();
+    CMassiveBaseObject::operator delete(pPorts);
+}
+
+// ---------------------------------------------------------------------------
+// MassiveInet_ntop
+// ---------------------------------------------------------------------------
+char* MassiveInet_ntop(int /*nFamily*/, const void* pSrc, char* pcDst, int nSize)
+{
+    if (!pSrc || nSize < 16 || !pcDst)
+        return 0;
+
+    unsigned int luAddress = *static_cast<const unsigned int*>(pSrc);
+    MassiveFormatString(pcDst, nSize, "%d.%d.%d.%d", luAddress >> 24, (luAddress >> 16) & 0xFF,
+                        (luAddress >> 8) & 0xFF, luAddress & 0xFF);
+    return pcDst;
+}
+
+// ---------------------------------------------------------------------------
+// DNS
+//
+// The console service-info and title-server records the lookup reads (the
+// title-server record is 208 bytes).
+// ---------------------------------------------------------------------------
+namespace
+{
+
+struct XONLINE_SERVICE_INFO
+{
+    unsigned int   dwServiceID;
+    unsigned int   serviceIP;
+    unsigned short wServicePort;
+    unsigned short wReserved;
+};
+
+struct XTITLE_SERVER_INFO
+{
+    unsigned char inaServer[4];
+    unsigned int  dwFlags;
+    char          szServerInfo[200];
+};
+
+// The log channel name the lookup traces under.
+const char gcLspLogName[] = "X" "360 LSP";
+
+const unsigned int KU_MASSIVE_SERVICE_ID = 22;
+const unsigned int KU_MAX_TITLE_SERVERS  = 10;
+
+} // anonymous namespace
+
+} // namespace MassiveAdClient3
+
+// Console system-software calls (PC bodies: GameShared/GameClasses/System/PC).
+extern "C"
+{
+long XOnlineGetServiceInfo(unsigned int dwServiceID, void* pServiceInfo);
+long XTitleServerCreateEnumerator(const char* pszServerInfo, unsigned int cItem, unsigned int* pcbBuffer,
+                                  void** phEnum);
+unsigned int XEnumerate(void* hEnum, void* pvBuffer, unsigned int cbBuffer, unsigned int* pcItemsReturned,
+                        void* pOverlapped);
+long XNetRandom(unsigned char* pb, unsigned int cb);
+int XNetServerToInAddr(unsigned int ina, unsigned int dwServiceId, unsigned int* pina);
+__declspec(dllimport) int __stdcall CloseHandle(void* hObject);
+}
+
+namespace MassiveAdClient3
+{
+
+unsigned long DNS(void* pParam)
+{
+    MassiveLog(5, gcLspLogName, "Starting");
+    CNetworkManager::SetDNSPending();
+
+    if (pParam)
+    {
+        CMassiveList* lpAddresses = static_cast<CMassiveList*>(pParam);
+        lpAddresses->GoToStart();
+        while (lpAddresses->GetCurrent())
+        {
+            CMassiveBaseObject* lpPair = static_cast<CMassiveBaseObject*>(lpAddresses->GetCurrData());
+            if (lpPair)
+                delete lpPair;
+            lpAddresses->GoToNext();
+        }
+        lpAddresses->RemoveAll();
+        lpAddresses->~CMassiveList();
+        CMassiveBaseObject::operator delete(lpAddresses);
+    }
+
+    unsigned int lnServersReturned = 0;
+    unsigned int lnMassiveServers = 0;
+    void* lhEnum = reinterpret_cast<void*>(-1);
+    unsigned int lnBufferSize = 0;
+    XTITLE_SERVER_INFO laServers[KU_MAX_TITLE_SERVERS];
+    XTITLE_SERVER_INFO laMassiveServers[KU_MAX_TITLE_SERVERS];
+    XONLINE_SERVICE_INFO lServiceInfo;
+    std::memset(laServers, 0, sizeof(laServers));
+    std::memset(laMassiveServers, 0, sizeof(laMassiveServers));
+
+    long lnResult = XOnlineGetServiceInfo(KU_MASSIVE_SERVICE_ID, &lServiceInfo);
+    if (lnResult < 0)
+    {
+        MassiveLog(2, gcLspLogName, "XOnlineGetServiceInfo failed with 0x%0x.", lnResult);
+    }
+    else if ((lnResult = XTitleServerCreateEnumerator(0, KU_MAX_TITLE_SERVERS, &lnBufferSize, &lhEnum)) < 0)
+    {
+        MassiveLog(2, gcLspLogName, "XTitleServerCreateEnumerator failed with 0x%0x.", lnResult);
+    }
+    else if ((lnResult = static_cast<long>(
+                  XEnumerate(lhEnum, laServers, sizeof(laServers), &lnServersReturned, 0))) < 0)
+    {
+        MassiveLog(2, gcLspLogName, "XEnumerate failed with 0x%0x.", lnResult);
+        CloseHandle(lhEnum);
+    }
+    else
+    {
+        CloseHandle(lhEnum);
+        if (!lnServersReturned)
+        {
+            MassiveLog(2, gcLspLogName, "No servers were returned from XTitleServerCreateEnumerator.");
+        }
+        else
+        {
+            MassiveLog(5, gcLspLogName, "Found %d servers:", lnServersReturned);
+            for (unsigned int i = 0; i < lnServersReturned; ++i)
+            {
+                XTITLE_SERVER_INFO& lServer = laServers[i];
+                if (std::strstr(lServer.szServerInfo, "MASSIVE"))
+                {
+                    std::memcpy(&laMassiveServers[lnMassiveServers], &lServer, sizeof(XTITLE_SERVER_INFO));
+                    ++lnMassiveServers;
+                }
+                MassiveLog(5, gcLspLogName, "%d:\"%hs\" located at %d.%d.%d.%d", i, lServer.szServerInfo,
+                           lServer.inaServer[0], lServer.inaServer[1], lServer.inaServer[2],
+                           lServer.inaServer[3]);
+            }
+
+            if (!lnMassiveServers)
+            {
+                MassiveLog(2, gcLspLogName, "No MASSIVE SG's were returned from XTitleServerCreateEnumerator.");
+            }
+            else
+            {
+                MassiveLog(5, gcLspLogName, "Found %d Massive Servers:", lnMassiveServers);
+                for (unsigned int i = 0; i < lnMassiveServers; ++i)
+                {
+                    XTITLE_SERVER_INFO& lServer = laMassiveServers[i];
+                    MassiveLog(5, gcLspLogName, "%d:\"%hs\" located at %d.%d.%d.%d", i, lServer.szServerInfo,
+                               lServer.inaServer[0], lServer.inaServer[1], lServer.inaServer[2],
+                               lServer.inaServer[3]);
+                }
+
+                unsigned int luRandom;
+                XNetRandom(reinterpret_cast<unsigned char*>(&luRandom), sizeof(luRandom));
+                unsigned int luSelected = luRandom % lnMassiveServers;
+                MassiveLog(5, gcLspLogName, "Selected Server %d...", luSelected);
+                MassiveLog(5, gcLspLogName, "Getting secure address for Server %d...", luSelected);
+
+                unsigned int luServerAddress;
+                std::memcpy(&luServerAddress, laMassiveServers[luSelected].inaServer, sizeof(luServerAddress));
+                unsigned int luSecureAddress;
+                int lnError = XNetServerToInAddr(luServerAddress, KU_MASSIVE_SERVICE_ID, &luSecureAddress);
+                if (lnError)
+                {
+                    MassiveLog(2, gcLspLogName, "XNetServerToInAddr failed with %d.", lnError);
+                }
+                else
+                {
+                    for (unsigned int i = 0; i < 16; ++i)
+                        CNetworkManager::SetServerAddress(i, static_cast<int>(luSecureAddress), 0);
+                }
+            }
+        }
+    }
+
+    CNetworkManager::SetDNSFinished();
+    MassiveLog(5, gcLspLogName, "Exiting");
+    return 0;
 }
 
 } // namespace MassiveAdClient3

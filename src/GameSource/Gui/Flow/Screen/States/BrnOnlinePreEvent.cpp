@@ -1,200 +1,287 @@
-// ===================================================================================
-// BrnGui::OnlinePreEvent -- out-of-line bodies + statics for the online pre-event
-// ("ready up" / fly-by) screen state.
+// GameSource/Gui/Flow/Screen/States/BrnOnlinePreEvent.cpp
 //
-// Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
-//   OnEnter             @0x824872D8
-//   OnLeave             @0x824A0EB0
-//   UpdateGetCache      @0x824925C0
-//   UpdateLoadResources @0x824A0F40
-//   UpdatePermanent     @0x824A1020
-//   UpdateRunning       @0x82487360
+// BrnGui::OnlinePreEvent -- the online pre-event screen (ON_PRE_EVENT). The seven bodies,
+// read off the console asm:
 //
-// (Update / UpdateWFInit / HandleControllerInputPressed / HandleAptTriggers are declared
-//  in the header for the class shape; their bodies land with their own ledger slices.)
-// ===================================================================================
+//   OnEnter / OnLeave / Update      the lifecycle and the internal-state chain
+//   UpdateGetCache                  adopt the cache from the in-queue
+//   UpdateLoadResources             load ON_PRE_EVENT and play it
+//   UpdateRunning                   hide the current message once its time is up
+//   UpdatePermanent                 the fly-by event shows the next message; apt ONLOAD
+//                                   re-pushes text; a lost connection raises its overlay;
+//                                   GUI 164 advances
+//
+// Out-queue records are the console's own wire records, posted on channel 40 through
+// GetOutputEventQueue()->AddEvent with host sizeof sizes.
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlinePreEvent.h"
 
-#include <cfloat>   // FLT_MAX (idle-time sentinel)
-
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::VariableEventQueue / Event
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (register / play-apt / output)
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // GuiEventAptTriggerPayload
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue / AddEvent
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
-#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiOverlayRequest
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiOverlayRequest
+#include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
 
 namespace BrnGui
 {
-    // ---- statics (DWARF cpp:26-46; .rdata) ----------------------------------------
-    // The 6 event ids this state registers for (X360 @0x8205F978). Values not recovered
-    // from the .rdata blob; FLAG: zero-filled per the OnlineNews sibling precedent.
-    const s32 OnlinePreEvent::maiEventToObserve[6] = { 0, 0, 0, 0, 0, 0 };
+    // ================================================================================
+    //  Class statics (values read from the image)
+    // ================================================================================
+
+    // The events the screen observes: controller press, apt ONLOAD, disconnected, gui cache,
+    // advance (164) and the fly-by message (160).
+    const s32 OnlinePreEvent::maiEventToObserve[6] = { 6, 21, 44, 64, 164, 160 };
     const s32 OnlinePreEvent::miNumEventsObserved  = 6;
 
-    // The single apt resource the pre-event screen loads (X360 @0x8205F994, count 1).
+    // The one apt package the screen loads (ON_PRE_EVENT).
     const CgsGui::sResourceTuple OnlinePreEvent::maResourcesToLoad[] =
     {
-        { 0u, CgsGui::E_GUI_RESOURCETYPE_APT },   // FLAG: resource id unattested in scope
+        { 185, CgsGui::E_GUI_RESOURCETYPE_APT }
     };
     const u32 OnlinePreEvent::muNumResourcesToLoad = 1;
 
-    // The messages component name passed to GuiComponent::Construct (X360 aPreeventmessag).
     const char OnlinePreEvent::KAC_MESSAGES_COMPONENT_NAME[20] = "PreEventMessages_mc";
 
-    // Idle sentinel for mfTimeToRemove. Must exceed any GetTime() so UpdateRunning does not
-    // re-fire the hide once IsShowing() is cleared (X360 rodata flt_82001CC0). FLAG: exact
-    // rodata value not recovered; FLT_MAX is the control-flow-implied "no time scheduled".
-    const f32 OnlinePreEvent::KF_FLYBY_IDLE_TIME = FLT_MAX;
+    namespace
+    {
+        typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;   // mpInGuiEventQueue's real type
 
-    // The state's in-event queue (State +0x18) is the DWARF InputBuffer::GuiEventQueue, an
-    // incomplete alias for this concrete queue instantiation the X360 walks by name.
-    typedef CgsModule::VariableEventQueue<18432, 16> InGuiEventQueue;
+        const s32 KI_CHANNEL_GUI_OUT = 40;
 
-    // ---- OnEnter @ 0x824872D8 -----------------------------------------------------
+        const s32 KI_EVENT_APT_TRIGGER          = 21;
+        const s32 KI_EVENT_NETWORK_DISCONNECTED = 44;
+        const s32 KI_EVENT_GUI_CACHE            = 64;
+        const s32 KI_EVENT_PRE_EVENT_FLY_BY     = 160;
+        const s32 KI_EVENT_PRE_EVENT_ADVANCE    = 164;
+
+        // The movie UpdateLoadResources plays: the screen's own package.
+        const u32 KU_PRE_EVENT_MOVIE_RESOURCE = 185;
+        const s32 KI_APT_MOVIE_LEVEL          = 3;
+        const char* const KPC_EMPTY_STRING    = "";
+
+        // The overlay a lost connection raises.
+        const char KAC_LOST_CONNECTION_OVERLAY_ID[] = "OnLostConn";
+
+        const char KAC_ADVANCE_EVENT[] = "ADVANCE";
+
+        // ---- in-queue payload views (the queue hands out the header-stripped payload) ----
+        // The gui-cache event (the assert text names its field mpCachePointer).
+        struct GuiEventCachePayload : public CgsModule::Event
+        {
+            GuiCache* mpCachePointer;   // +0x00
+        };
+
+        // The fly-by event: how long the next message stays up.
+        struct FlyByPayload : public CgsModule::Event
+        {
+            f32 mfDisplayTime;   // +0x00
+        };
+
+        // ---- out-queue wire records ------------------------------------------------------
+        // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
+        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+        {
+            u32               muPad0C;    // +0x0C
+            GuiOverlayRequest mRequest;   // +0x10
+
+            GuiOverlayRequestWire()
+                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
+                , muPad0C(0)
+            {
+            }
+        };
+
+        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
+    }
+
+    // ================================================================================
+    //  OnEnter
+    // ================================================================================
     void OnlinePreEvent::OnEnter()
     {
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
-        mpGuiCache = NULL;   // +0x38 (cleared before the component is constructed)
-        mMessageComponent.Construct(KAC_MESSAGES_COMPONENT_NAME, mpStateInterface, NULL);
+        mpGuiCache = 0;
+        mMessageComponent.Construct(KAC_MESSAGES_COMPONENT_NAME, mpStateInterface, 0);
 
-        miCurrentFlyByIndex = 0;                          // +0x44C
-        meInternalState     = E_INTERNALSTATE_GETCACHE;   // +0x3C (0)
-        mfTimeToRemove      = KF_FLYBY_IDLE_TIME;          // +0x448
+        miCurrentFlyByIndex = 0;
+        meInternalState     = E_INTERNALSTATE_GETCACHE;
+        mfTimeToRemove      = 0.0f;
     }
 
-    // ---- OnLeave @ 0x824A0EB0 -----------------------------------------------------
+    // ================================================================================
+    //  OnLeave
+    // ================================================================================
     void OnlinePreEvent::OnLeave()
     {
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
-        // X360: an inlined PlayAptMovie (type-18 view-state event, level 3) whose movie name
-        // is the rodata string @0x820046A7. FLAG: that string is not recovered in this slice.
-        mpStateInterface->PlayAptMovie(/* FLAG: apt movie name @0x820046A7 not recovered */ "", 3);
+        // The console inlines StateInterface::PlayAptMovie here: the empty name at level 3
+        // clears the level.
+        mpStateInterface->PlayAptMovie(KPC_EMPTY_STRING, KI_APT_MOVIE_LEVEL);
 
-        meInternalState = E_INTERNALSTATE_LEFT;   // +0x3C (4)
+        meInternalState = E_INTERNALSTATE_LEFT;
     }
 
-    // ---- UpdateGetCache @ 0x824925C0 ----------------------------------------------
-    // Scan the in-event queue for the GuiCache event (type 64) and latch its carried cache
-    // pointer into mpGuiCache.
+    // ================================================================================
+    //  Update -- each step stores its state on entry and drops into the next one once it
+    //  completes; the permanent handlers then run and the in-queue is cleared.
+    // ================================================================================
+    void OnlinePreEvent::Update()
+    {
+        switch (meInternalState)
+        {
+        case E_INTERNALSTATE_GETCACHE:
+            UpdateGetCache();
+            // fall through
+
+        case E_INTERNALSTATE_LOADRESOURCES:
+            meInternalState = E_INTERNALSTATE_LOADRESOURCES;
+            if (!UpdateLoadResources())
+            {
+                break;
+            }
+            // fall through
+
+        case E_INTERNALSTATE_WFINIT:
+            meInternalState = E_INTERNALSTATE_WFINIT;
+            // fall through
+
+        case E_INTERNALSTATE_RUNNING:
+            meInternalState = E_INTERNALSTATE_RUNNING;
+            UpdateRunning();
+            break;
+
+        case E_INTERNALSTATE_LEFT:
+            break;
+
+        default:
+            CGS_ASSERT(false, "Invalid internal state : ");
+            break;
+        }
+
+        UpdatePermanent();
+
+        reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue)->Clear();
+    }
+
+    // ================================================================================
+    //  UpdateGetCache -- take the cache from the first gui-cache event in the in-queue.
+    // ================================================================================
     void OnlinePreEvent::UpdateGetCache()
     {
-        CGS_ASSERT(mpGuiCache == NULL, "NULL == mpGuiCache");
+        CGS_ASSERT(0 == mpGuiCache, "NULL == mpGuiCache");
 
-        InGuiEventQueue* lpInQueue = reinterpret_cast<InGuiEventQueue*>(mpInGuiEventQueue);
+        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
 
-        const CgsModule::Event* lpEvent = NULL;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
-        s32 liEventType = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
-
-        if (lpEvent != NULL)
+        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+             lpEvent != 0;
+             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
-            while (liEventType != 64)
+            if (liEventId == KI_EVENT_GUI_CACHE)
             {
-                liEventType = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
-                if (lpEvent == NULL)
-                    break;
-            }
-
-            if (lpEvent != NULL)
-            {
-                // The cache event carries the GuiCache pointer in its leading word.
-                GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
-                CGS_ASSERT(lpCache != NULL, "NULL != lpCacheEvent->mpCachePointer");
-                mpGuiCache = lpCache;
+                const GuiEventCachePayload* lpCacheEvent =
+                    static_cast<const GuiEventCachePayload*>(lpEvent);
+                CGS_ASSERT(0 != lpCacheEvent->mpCachePointer,
+                           "NULL != lpCacheEvent->mpCachePointer");
+                mpGuiCache = lpCacheEvent->mpCachePointer;
+                break;
             }
         }
 
-        CGS_ASSERT(mpGuiCache != NULL, "NULL != mpGuiCache");
+        CGS_ASSERT(0 != mpGuiCache, "NULL != mpGuiCache");
     }
 
-    // ---- UpdateLoadResources @ 0x824A0F40 -----------------------------------------
-    // Once the cache reports the pre-event resources loaded, play the "ON_PRE_EVENT" movie.
+    // ================================================================================
+    //  UpdateLoadResources -- load the package, then play it.
+    // ================================================================================
     bool OnlinePreEvent::UpdateLoadResources()
     {
-        CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
         if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        {
             return false;
+        }
 
-        mpStateInterface->PlayAptMovie("ON_PRE_EVENT", 3);
+        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_PRE_EVENT_MOVIE_RESOURCE],
+                                       KI_APT_MOVIE_LEVEL);
         return true;
     }
 
-    // ---- UpdatePermanent @ 0x824A1020 ---------------------------------------------
-    // Drain the in-event queue every frame, acting on the four handled event types.
-    void OnlinePreEvent::UpdatePermanent()
-    {
-        InGuiEventQueue* lpInQueue = reinterpret_cast<InGuiEventQueue*>(mpInGuiEventQueue);
-
-        const CgsModule::Event* lpEvent = NULL;
-        s32 liSize = 0;
-        s32 liEventType = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
-
-        while (lpEvent != NULL)
-        {
-            switch (liEventType)
-            {
-                case 21:   // apt-component load notification
-                {
-                    if (*reinterpret_cast<const s32*>(lpEvent) == 1)
-                    {
-                        const char* lpacComponentName = *reinterpret_cast<const char* const*>(
-                            reinterpret_cast<const u8*>(lpEvent) + 8);
-                        mMessageComponent.HandleLoadNotification(lpacComponentName);
-                    }
-                    break;
-                }
-                case 44:   // network connection lost
-                {
-                    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
-                    // X360 reads the cache byte @+0x4B4C (the committed online-start flag) to
-                    // gate the lost-connection overlay to an active online session.
-                    if (mpGuiCache->IsOnlineStartInProgress())
-                    {
-                        GuiOverlayRequest lOverlayRequest;
-                        lOverlayRequest.Construct("OnLostConn");
-                        mpStateInterface->OutputGuiEvent(lOverlayRequest);
-                    }
-                    break;
-                }
-                case 160:  // show the next timed fly-by message
-                {
-                    // Schedule the removal at (event display-time + now); GetTime() carries the
-                    // inlined "mfTimeNow != -FLT_MAX" assert (CgsGuiEventTypeDefs.h:250).
-                    const f32 lfDisplayTime = *reinterpret_cast<const f32*>(lpEvent);
-                    mfTimeToRemove = lfDisplayTime + mpGuiCache->GetTime();
-
-                    const PreEventInfo* lpInfo = mpGuiCache->GetPreEventInfo(miCurrentFlyByIndex);
-                    mMessageComponent.Show(lpInfo);
-                    break;
-                }
-                case 164:  // line-up finished -> advance the flow
-                {
-                    SendStateEvent("ADVANCE");
-                    break;
-                }
-                default:
-                    break;
-            }
-
-            liEventType = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
-        }
-    }
-
-    // ---- UpdateRunning @ 0x82487360 -----------------------------------------------
-    // Hide the current fly-by message once its scheduled removal time is reached.
+    // ================================================================================
+    //  UpdateRunning -- once the shown message's time is up, hide it and move on.
+    // ================================================================================
     void OnlinePreEvent::UpdateRunning()
     {
         if (mMessageComponent.IsShowing())
         {
-            if (mfTimeToRemove <= mpGuiCache->GetTime())
+            if (!(mfTimeToRemove > mpGuiCache->GetTime()))
             {
-                mfTimeToRemove = KF_FLYBY_IDLE_TIME;
+                mfTimeToRemove = 0.0f;
                 mMessageComponent.Hide();
                 ++miCurrentFlyByIndex;
+            }
+        }
+    }
+
+    // ================================================================================
+    //  UpdatePermanent
+    // ================================================================================
+    void OnlinePreEvent::UpdatePermanent()
+    {
+        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+             lpEvent != 0;
+             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            switch (liEventId)
+            {
+            case KI_EVENT_APT_TRIGGER:
+            {
+                const CgsGui::GuiEventAptTriggerPayload* lpTrigger =
+                    reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpEvent);
+                if (lpTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
+                {
+                    mMessageComponent.HandleLoadNotification(lpTrigger->mpacComponentName);
+                }
+                break;
+            }
+
+            case KI_EVENT_NETWORK_DISCONNECTED:
+                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                if (mpGuiCache->IsOnline())
+                {
+                    GuiOverlayRequestWire lLostConnectionOverlay;
+                    lLostConnectionOverlay.mRequest.Construct(KAC_LOST_CONNECTION_OVERLAY_ID);
+                    mpStateInterface->GetOutputEventQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lLostConnectionOverlay),
+                        KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lLostConnectionOverlay)));
+                }
+                break;
+
+            case KI_EVENT_PRE_EVENT_FLY_BY:
+            {
+                const FlyByPayload* lpFlyBy = static_cast<const FlyByPayload*>(lpEvent);
+                mfTimeToRemove = lpFlyBy->mfDisplayTime + mpGuiCache->GetTime();
+                mMessageComponent.Show(mpGuiCache->GetPreEventInfo(miCurrentFlyByIndex));
+                break;
+            }
+
+            case KI_EVENT_PRE_EVENT_ADVANCE:
+                SendStateEvent(KAC_ADVANCE_EVENT);
+                break;
+
+            default:
+                break;
             }
         }
     }

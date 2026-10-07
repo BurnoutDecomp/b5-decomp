@@ -10,10 +10,8 @@
 // drive a two-step START -> MANAGER -> DONE handshake over the stage enums (post-increment
 // asserts the stage never overruns DONE).
 //
-// MOUNTED 2026-09-25 (crash parity FX-FOLLOWUPS, item 2): this TU's Construct / Prepare replace the WorldLinkStubs
-// boot gates. Re-verified against ARTIST the same day: Construct @0x828B0BF0 MATCH (with b5 26802ef3's host
-// sizing), Prepare @0x828AA630 MATCH, Release @0x828AA730 DEFECT, fixed below (its START arm falls through into the
-// MANAGER arm). The four Compute* entry points are in CgsFineIntersectionTestModule_wSQ1.cpp.
+// Release's START arm falls through into the MANAGER arm. The four Compute* entry points are in
+// CgsFineIntersectionTestModule_wSQ1.cpp.
 
 #include "GameShared/GameClasses/SceneManager/FineIntersectionTestModule/CgsFineIntersectionTestModule.h"
 
@@ -202,11 +200,8 @@ bool FineIntersectionTestModule::Release()
 // Compute* narrow-phase queries -- ComputeLineTestFine @0x828C7D70, ComputeLineTestNearest
 // @0x828C8CC8, ComputeVolumeTestDeepest @0x828C90D0, ComputeVolumeTestFine @0x828C93C8.
 //
-// MOVED 2026-09-02 (scene-query wave 1) to CgsFineIntersectionTestModule_wSQ1.cpp, which is
-// MOUNTED (this TU is too since 2026-09-25; until then its Construct/Prepare were WorldLinkStubs boot gates). They
-// were EMPTY bodies here -- silent-drop stubs whose callers read an untouched result record as
-// "no hit" -- and are LOUD traps there until the rw::collision query objects they drive are
-// real on this host (VolumeLineQuery::GetIntersections is a link-stub). See that TU's banner.
+// They live in CgsFineIntersectionTestModule_wSQ1.cpp; that TU's banner says which arms are
+// still LOUD traps.
 // ---------------------------------------------------------------------------
 
 // Never called at runtime; pins the asm-attested member byte offsets.

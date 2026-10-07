@@ -58,7 +58,7 @@
 // Prediction" -> 433112; ...). A 21-way name<->offset agreement against a DWARF list this
 // project did not author, closed at BOTH ends by asm literals. That is a derivation.
 //
-// TWO CORRECTIONS TO THE NOTES THIS PASS REPLACED (both were repeated in WorldLinkStubs.cpp):
+// TWO NUMBERS THAT ARE EASY TO GET WRONG:
 //   (1) "the twenty-one perfmon handle ids" -- there are TWENTY-SEVEN PM members. 21 is how many
 //       Construct passes to AddMonitor; it zero-stores six more (miPropManagerPreScenePM ..
 //       miPropManagerApplyShockwavePM) without registering them. Sizing the block at 21 would
@@ -184,17 +184,14 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
 
     struct PhysicsModule : public CgsModule::ModuleSingleBuffered
     {
-        // ADDITIVE (WorldModule::UpdatePhysicsNetworkCatchup @0x827B06E0 forwards
-        // here -- X360 BrnPhysics::PhysicsModule::UpdateNetworkCatchup). Declaration-
-        // only; body with the physics module's own TU.
-        // RETYPED 2026-07-27 (world-drive wave): WorldModule::UpdatePhysicsNetworkCatchup
-        // @0x827B06E0 forwards the physics INPUT buffer + the frame update set.
+        // WorldModule::UpdatePhysicsNetworkCatchup forwards the physics INPUT buffer + the
+        // frame update set here. Body in BrnPhysicsModule.cpp.
         void UpdateNetworkCatchup( const PhysicsModuleIO::InputBuffer* lpInputBuffer,
                                    BrnUpdateSet lUpdateSet );
 
         // ---- ADDITIVE (WorldModule::Update @0x827D63E8; DWARF BrnPhysicsModule.h
-        //      :192..:201). Declaration-only; bodies gated in WorldLinkStubs.cpp
-        //      until the physics module's own TU lands. ----
+        //      :192..:201). UpdateCachedPositions is bodied in BrnPhysicsModule.cpp, the
+        //      other three in BrnPhysicsModuleUpdateFunctions.cpp. ----
         void UpdateCachedPositions( CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer );  // @0x8259C370
         void PostSceneUpdate( CgsModule::IOBufferStack* lpInputBufferStack,                                     // @0x825ABC10
                               CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -210,7 +207,7 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
                      BrnUpdateSet lUpdateSet );
 
         // ---- ADDITIVE (attested by WorldModule::Prepare @0x827D53B0 stage 4) ----
-        // Declaration-only; the body lands with the physics module's own TU.
+        // Body in BrnPhysicsModule.cpp.
         bool Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
                       CgsModule::IOBufferStack* lpOutputBufferStack,
                       CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,

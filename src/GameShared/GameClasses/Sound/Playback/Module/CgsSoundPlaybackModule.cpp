@@ -751,12 +751,12 @@ void Module::CreateVoice(Handle<Voice>* lphVoiceOut, u32 lu32SlotName,
 
     if (lu32SlotName == KU_INIT_SND9_SUBMIX_IDENT)
     {
-        CGS_ASSERT(lFactoryName == GenericRwacFactorySkName(),
+        CGS_ASSERT(lFactoryName == GenericRwacFactory::SK_NAME,
                    "GenericRwacFactory::SK_NAME == lFactoryName");
-        Handle<Voice> lhInitVoice(lhNewVoice.GetObject());
-        if (lhInitVoice.GetObject())
-            lhInitVoice.GetObject()->Acquire();
-        HACK_SetSnd9InitSubmix(&lhInitVoice);
+        SubmixVoice* lpInitVoice = static_cast<SubmixVoice*>(lhNewVoice.GetObject());
+        if (lpInitVoice)
+            lpInitVoice->Acquire();
+        ::HACK_SetSnd9InitSubmix(Handle<SubmixVoice>(lpInitVoice));
     }
 
     Voice* lpNewVoice = lhNewVoice.GetObject();

@@ -85,9 +85,8 @@ void RCEntityGlobalRaceCarOutputInterface::Clear()
 // SetRaceCarGlobalOutputInterface @0x827A4638, is a flat XMemCpy of the whole
 // 2416-byte object.
 //
-// ⚠️ It had been resolving from WorldLinkStubs.cpp as an INERT one-shot log, so the
-// world's global-race-car publish silently copied nothing. Member-wise here (a byte
-// copy is not portable to the x64 layout; the BitArray members carry their own).
+// Member-wise here (a byte copy is not portable to the x64 layout; the BitArray members
+// carry their own).
 // ============================================================================
 void RCEntityGlobalRaceCarOutputInterface::operator=(
         const RCEntityGlobalRaceCarOutputInterface& lrOther)

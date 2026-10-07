@@ -26,8 +26,7 @@
 //   VolumeManager::GetRwVolume          @ 0x828C5E68 (87)   [export hole, IDA-recovered]
 // ⚠️ The banner that stood here before wave Q5 attributed Prepare to 0x828CFFA8.
 // THAT WAS WRONG: 0x828CFFA8 is CgsSceneManager::SpatialPartitionManager::Prepare
-// (progress/identity.json). VolumeManager::Prepare is 0x828CFD38, which is also what
-// the WorldLinkStubs boot gate's own comment says. A committed address is a claim.
+// (progress/identity.json). A committed address is a claim.
 //
 // INLINING NOTE: the console defines the small accessors INSIDE the header (their baked
 // assert file is CgsVolumeManager.h -- GetRwVolume's two asserts are h:182/h:183), and the

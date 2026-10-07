@@ -1,9 +1,8 @@
 // ============================================================================
 // b5-decomp/src/GameSource/World/Bridges/WorldBridgePropModule.cpp
 //
-// THE FIVE PROP BRIDGES. Wave Q landed the world-side break pipeline
-// (PropEntityModule 22/22) and the physics-side PropManager, but every seam
-// between them was an inert gate in WorldLinkStubs.cpp. This TU bodies the five
+// THE FIVE PROP BRIDGES. The seams between the world-side break pipeline
+// (PropEntityModule) and the physics-side PropManager: this TU bodies the five
 // WorldModule bridges that carry data INTO (and one OUT OF) the prop entity
 // module:
 //
@@ -21,70 +20,21 @@
 // WorldBridgeEntityModulesToEntityModules.cpp, WorldBridgeAIToEntityModules.cpp) and each
 // of those TUs carries OTHER, still-unreconstructed bridges. Landing these five in their
 // homes would either mean editing four concurrently-owned TUs or waiting on bridges that
-// have nothing to do with props. This is exactly the split the two RETIRED prop bridges
-// already took (WorldBridgeWorldModuleToPropModule.cpp @0x827AACF8 and
-// WorldBridgeRaceCarToPropModule.cpp @0x827A5510, both 2026-08-12), and this file follows
-// their shape statement for statement.
+// have nothing to do with props. This is the same split the two other prop bridges take
+// (WorldBridgeWorldModuleToPropModule.cpp and WorldBridgeRaceCarToPropModule.cpp), and this
+// file follows their shape statement for statement.
 // DELETE-WHEN: the four home TUs become mountable whole; move each body back then.
 //
 // Their declarations already live in the four home HEADERS (included below) -- nothing
 // here re-declares anything.
 //
-// ---- LIVE vs PARKED (read this before believing the pipeline is closed) ----
-// TWO legs carry their full console payload today. The remaining three are PARKED on the SAME
-// root cause: the SOURCE buffer models the seat this bridge reads as opaque placeholder
-// storage, or has no member there at all. A parked leg logs once and does nothing -- it never
-// fabricates a transfer. Per-leg blockers are in each function's banner; the exact
-// declarations the conductor must land are collected in scratchpad/waveQ4/bridges.owner.md
-// and scratchpad/waveQ5/f2.owner.md.
+// ---- STATUS ----------------------------------------------------------------
+// All five legs carry their full console payload; each function's banner has its derivation.
 //
-//   LIVE   BridgePhysicsModuleToPropModule_PostPhysics -- ⭐⭐ BOTH LEGS, since 2026-08-19
-//          (wave Q6/A3). The updated-prop-queue leg was parked while
-//          PhysicsModuleIO::OutputBuffer modelled mPropManagerOutputInterface as 1-byte
-//          opaque storage; wave Q6 cluster A1 promoted that seat to the real
-//          BrnPhysics::Props::PropOutputInterface and made GetUpdatedProps() a header
-//          inline, so the leg is the console's two calls with no cast. See that
-//          function's banner.
-//   LIVE   BridgeSceneContactsToPropModule_PrePhysics -- ⭐ UNPARKED 2026-08-19 (wave Q5/F2).
-//          SceneManagerIO::OutputBuffer grew the real mPotentialContactQueue (+32800), the
-//          read-lock accessor @0x8279C098 and the console's own Construct in wave Q5 round 2,
-//          so the source seat this leg reads is a named member of the same type the
-//          destination Append takes. See that function's banner.
-//   PARKED BridgeCrashModuleToPropModule_PostScene -- BrnWorld::CrashModuleIO::
-//          OutputBuffer_PostScene is `u8 maDeferredPayload[16]` (BrnCrashModule.h:75).
-//   LIVE   BridgePropModuleToTrafficModule_PrePhysics -- ⭐ UNPARKED 2026-08-19 (wave Q6/C3).
-//          The TRAFFIC side's PropToTrafficInterface was a 1-byte `{ u8 muDUMMY; }`
-//          placeholder; it is the committed BrnWorld::PropEntityIO::PropToTrafficInterface
-//          now (BrnTrafficEntityModuleIO.h), and BrnTrafficIO::InputBuffer_PrePhysics::
-//          Construct grew the two queue legs the console's Construct @0x827615F8 runs at
-//          +0x30C60 / +0x30CEC. Smashed traffic lights reach the traffic system again.
-//   PARKED BridgeAIToEntityModules_PrePhysics -- sizeof(BrnAI::AIModuleIO::OutputBuffer) == 1
-//          on the host while its accessors return this+98128. See that function's banner:
-//          this park caught a live corruption that had already been written and compiled.
-//
-// ⚠️ THE MEASUREMENT THAT DECIDED THE PARKS -- run it before unparking anything, and before
-// adding any accessor to a buffer that has no named members. The host sizeof of each source
-// buffer, against the console offset the bridge reads:
-//
-//     PhysicsModuleIO::OutputBuffer          998224   contact spy @998192   IN BOUNDS  -> LIVE
-//     PhysicsModuleIO::OutputBuffer          998224   updated props @71792  in bounds, and the
-//                                                     seat is the REAL PropOutputInterface since
-//                                                     wave Q6/A1 -> ⭐ LIVE (row kept as the
-//                                                     record of what unparked it)
-//     SceneManagerIO::OutputBuffer            32800   contacts   @32800     OUT OF BOUNDS
-//                                                     -> ⭐ FIXED: the buffer is 201,824 B with
-//                                                     a NAMED mPotentialContactQueue since wave
-//                                                     Q5 round 2, so this row is LIVE now
-//     CrashModuleIO::OutputBuffer_PostScene      16   racecar iface @143824 OUT OF BOUNDS
-//     BrnAI::AIModuleIO::OutputBuffer             1   AI result  @98128     OUT OF BOUNDS
-//     BrnTrafficIO::InputBuffer_PrePhysics   199777+  prop->traffic @199776 in bounds, and the
-//                                                     seat is the REAL PropToTrafficInterface
-//                                                     since wave Q6/C3 -> ⭐ LIVE
-//
-// (probe: scratchpad/waveQ4/probe_bridges/probe_sizes.cpp + probe_ai_size.cpp. The remaining
-// out-of-bounds rows are not "missing accessors" -- they are buffers whose LIVE ALLOCATION is
-// smaller than the offset, because CgsIOBufferStack::CreateIOBuffer<T> allocates sizeof(T).
-// An accessor added over any of them returns a pointer into the next IO-stack tenant.)
+// ⚠️ Before adding any accessor to a buffer that has no named members, measure the host
+// sizeof of the source buffer against the console offset the bridge reads.
+// CgsIOBufferStack::CreateIOBuffer<T> allocates sizeof(T), so an accessor reading past a
+// placeholder's end returns a pointer into the next IO-stack tenant.
 //
 // ---- LOCKING --------------------------------------------------------------
 // Every caller brackets its buffers (BrnWorldModule.cpp:1679/1875/2141/2735 use
@@ -178,9 +128,9 @@ static void _AssertLayout()
 // dereferencing it. mpData arrives ONLY here: the physics module publishes its
 // ContactSpyData aggregate into PhysicsModuleIO::OutputBuffer::mContactSpyInterface
 // (PhysicsModule::BridgeSimulationToOutput @0x825B0448 calls SetData), and nothing else in
-// the XEX copies that handle into the prop module's post-physics input. While this bridge
-// was the inert gate at WorldLinkStubs.cpp:2725 the prop input kept Construct's NULL, so the
-// assert fired and the dereference AV'd on the very first frame the prop module ticked.
+// the XEX copies that handle into the prop module's post-physics input. Without it the prop
+// input keeps Construct's NULL, so the assert fires and the dereference AVs on the very first
+// frame the prop module ticks.
 //
 // ---- The console body, instruction for instruction (0x827AB998..0x827ABA38) ----
 //   r4 = lpPropInputBuffer_PostPhysics (dest), r5 = lpPhysicsModuleOutputBuffer (src);
@@ -394,18 +344,6 @@ void BridgeSceneContactsToPropModule_PrePhysics(
 // so the two bodies are byte-identical and ICF folded them; IDA kept one of the two names.
 // The declaration in WorldBridgeCrashToEntityModules.h (CrashModuleIO::OutputBuffer_PostScene)
 // is the correct one and is NOT changed here. Recorded because the raw symbol is misleading.
-//
-// ⛔ PARKED. BrnWorld::CrashModuleIO::OutputBuffer_PostScene is
-//    `struct { u8 maDeferredPayload[16]; }` (BrnCrashModule.h:75-78) -- a 16-byte placeholder
-//    with no members, no accessor, and no race-car output interface. The +0x231D0 seat and
-//    the RaceCarCrashCompleteEventQueue at its head are both unrecovered on the crash side.
-//    (The DESTINATION side is ready: PropEntityIO::InputBuffer_PostScene holds the real
-//    EventQueue<RaceCarCrashCompleteEvent,10> and declares AppendRaceCarCrashQueue -- whose
-//    own header comment already names THIS bridge as the reason it has no body yet.)
-//    COST OF THE PARK: a prop broken by a crashing car is not retired at crash-complete. It
-//    does not block the break.
-//    DELETE-WHEN: CrashModuleIO::OutputBuffer_PostScene gets a real layout. Exact text in
-//    bridges.owner.md.
 // =================================================================================================
 void BridgeCrashModuleToPropModule_PostScene(
     void* lpWorldModule,
@@ -414,8 +352,7 @@ void BridgeCrashModuleToPropModule_PostScene(
 {
     (void)lpWorldModule;   // X360 r3 -- overwritten at 0x827AAD88, never read
 
-    // ⭐ UNPARKED 2026-08-25 (crash exit). The park's premise is retired: the source type is not
-    // a 16-byte placeholder, it is CrashIO::OutputBuffer_PreScene -- the crash module's ONE
+    // The source type is CrashIO::OutputBuffer_PreScene -- the crash module's ONE
     // output buffer -- and its +0x231D0 RaceCarOutputInterface now names the real
     // EventQueue<RaceCarCrashCompleteEvent,10>. Full derivation in
     // Bridges/WorldBridgeCrashPostScene.cpp; the short version is that WorldModule::Update

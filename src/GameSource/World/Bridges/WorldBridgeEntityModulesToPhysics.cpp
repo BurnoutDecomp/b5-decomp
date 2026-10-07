@@ -127,17 +127,15 @@ void BridgeEntityModulesToPhysicsModule_PreScene(
 
 // ============================================================================================
 // @ 0x827AAEC0 -- THE PRE-PHYSICS LEG. Reconstructed call-for-call from the 271-instruction
-// X360 body (no export hole; asm + pseudocode both read). ⭐ NEW 2026-08-10; the
-// WorldLinkStubs boot gate is deleted in the same commit.
+// console body (no export hole; asm + pseudocode both read).
 //
 // ⭐⭐ WHY IT MATTERS: it is the ONLY thing in the image that moves a staged CreateRaceCarEvent
 // from the race-car entity module into the physics module. The producer chain
 //   PlaceOnTrackManager::PrePhysicsUpdate -> RaceCarEntityModule::ResetActiveRaceCar
 //     -> ActiveRaceCar::AddHandlingModel -> VehicleInputInterface::CreateRaceCar
-// stages into RaceCarEntityModuleIO::OutputBuffer_PrePhysics::mVehicleInputInterface, and the
-// previous wave MEASURED the consequence of this bridge being inert: the census it added at
-// VehicleManager::ProcessCreateEvents printed `CreateRaceCarEvent queue length = 0` at every
-// drain of a 275 s run. Step 5 below is what fills it.
+// stages into RaceCarEntityModuleIO::OutputBuffer_PrePhysics::mVehicleInputInterface; without
+// this bridge VehicleManager::ProcessCreateEvents drains a CreateRaceCarEvent queue of length 0
+// every frame. Step 5 below is what fills it.
 //
 // FRAME ORDER (BrnWorldModule.cpp, one WorldModule::Update): lpPhysicsInput is Constructed at
 // :2285, filled here at :2738, drained by mPhysicsModule.PostSceneUpdate at :2778 and destroyed

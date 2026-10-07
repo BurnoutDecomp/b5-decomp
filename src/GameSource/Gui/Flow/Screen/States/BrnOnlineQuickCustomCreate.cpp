@@ -1,274 +1,500 @@
-// ===================================================================================
-// BrnGui::OnlineQuickCustomCreate -- out-of-line bodies.
-// Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
-//   OnEnter @0x824A1420, OnLeave @0x824A1538, ProcessSelectedMenuOption @0x824873C8,
-//   UpdateLoadComponents @0x8248DEF0, UpdateLoadResources @0x824A17D8,
-//   UpdateRunning @0x824926A8, UpdatePermanent @0x82492728.
-// (HandleControllerInputPressed is declared-only -- linked from another slice.)
-// The drain-loop / expected-component / event-post wiring mirrors the committed
-// OnlineMarkMan / OnlineNews / ReplayMain twins.
-// ===================================================================================
+// GameSource/Gui/Flow/Screen/States/BrnOnlineQuickCustomCreate.cpp
+//
+// BrnGui::OnlineQuickCustomCreate -- the online main menu (ON_QK_CST_CR: quick / custom /
+// create match). The twelve bodies, read off the console asm:
+//
+//   OnEnter / OnLeave / Update          the lifecycle and the internal-state chain
+//   UpdateGetCache                      adopt the cache, flag the game options for reset
+//                                       and post the online ticker (GUI 537)
+//   UpdateLoadResources                 load ON_QMCMCM + its package, register components
+//   UpdateLoadComponents                fill the three menu rows
+//   UpdateRunning                       controller presses
+//   UpdatePermanent                     disconnected (GUI 44) latches the error and goes back
+//   HandleControllerInputPressed        up / down / select / back / friends
+//   ProcessSelectedMenuOption           the picked row's state event
+//   ShowFriendsMenu                     the guide's friends list (sign-in first if needed)
+//
+// Out-queue records are the console's own wire records, posted on channel 40 through
+// GetOutputEventQueue()->AddEvent with host sizeof sizes. The guide calls go through the
+// PC platform layer (CgsXboxLivePC.cpp).
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineQuickCustomCreate.h"
 
+#include <cstddef>                                                        // offsetof (wire records)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
-#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                        // CgsModule::Event, GuiEventQueueLarge
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (Register/PlayAptMovie/GetOutputEventQueue)
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // VariableEventQueue<18432,16>
-#include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache, GuiFlow
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> / GuiEventWrapper
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue / AddEvent
+#include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // GuiEventTickerCustomMessage / GuiEventTickerClearMessages
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiEventActivateCrashNav, GuiFlow
+#include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
+#include "GameSource/Input/GameInputActions.h"                            // EGameInputActions
 
-// The Xbox XNotify listener plumbing OnEnter/OnLeave key on. The XNotify* / CloseHandle entry
-// points are the Xbox 360 XDK C-API; declared extern "C" at file scope with plain types
-// (void* / int / unsigned long long), mirroring the committed BrnNetworkNotificationManagerX360
-// precedent -- the Xbox HANDLE / DWORD typedefs are NOT modelled in types.hpp.
+// The guide entry points (PC bodies in the platform layer, CgsXboxLivePC.cpp family).
 extern "C"
 {
     void* XNotifyCreateListener(unsigned long long luqwAreas);
+    int   XNotifyGetNext(void* lhListener, unsigned long ludwMsgFilter,
+                         unsigned long* lpdwId, unsigned long* lpParam);
     int   CloseHandle(void* lhObject);
+    u32   XUserGetSigninState(u32 luUserIndex);
+    u32   XShowSigninUI(u32 luPanes, u32 luFlags);
+    u32   XShowFriendsUI(u32 luUserIndex);
 }
 
 namespace BrnGui
 {
-namespace
-{
-    // The state IN-queue is an 18KB variable event queue (X360 VariableEventQueue<18432,16>),
-    // the same view ReplayMain / Credits cast mpInGuiEventQueue to.
-    typedef CgsModule::VariableEventQueue<18432, 16> InQueue;
+    // ================================================================================
+    //  Class statics (values read from the image)
+    // ================================================================================
 
-    // In-queue return codes / event ids the drain loops act on (X360 immediates).
-    const s32 KI_EVENT_RESULT_CONTROLLER_INPUT_PRESSED = 6;    // UpdateRunning: result == 6
-    const s32 KI_EVENT_RESULT_MENU_OPTION_SELECTED     = 44;   // UpdatePermanent: result == 0x2C
-    const s32 KI_EVENT_RESULT_FRIENDS_LIST_RESPONSE    = 493;  // UpdatePermanent: result == 0x1ED
+    // The events the screen observes: controller press, disconnected, gui cache, 493.
+    const s32 OnlineQuickCustomCreate::maiEventToObserve[4] = { 6, 44, 64, 493 };
+    const s32 OnlineQuickCustomCreate::miNumEventsObserved  = 4;
 
-    // FLAG boundaries: the GuiCache apt-component watcher LIST-CLEAR + the picked-option store the
-    // X360 reaches are not on the committed public APIs, so they are reached through this file-local
-    // boundary (same convention as BrnGui::OnlineMarkManCacheBoundary).
-    namespace OnlineQCCCacheBoundary
+    // ON_QMCMCM and the matchmaking package.
+    const CgsGui::sResourceTuple OnlineQuickCustomCreate::maResourcesToLoad[] =
     {
-        // X360 GuiCache::ClearExpectedAptComponentList(mpGuiCache, flow) (not on public API).
-        void ClearExpectedAptComponentList(GuiCache* /*lpCache*/, s32 /*liFlow*/) {}
-        // X360 *(mpGuiCache + 0x4B40) = picked menu option id (or 0 when the event has no payload).
-        void StoreSelectedMenuOption(GuiCache* /*lpCache*/, s32 /*liOption*/) {}
-        // X360 MenuComponent::AppendExpectedAptComponent(&mMainMenuComponent, flow, mpGuiCache):
-        // register each active menu row's apt component with the cache watcher. That MenuComponent
-        // method (@0x824E2DE0) is deferred (GuiCache::AppendExpectedAptComponent is not yet bodied),
-        // so it is reached through this boundary (same convention as ClearExpectedAptComponentList).
-        void AppendMenuExpectedAptComponents(MenuComponent* /*lpMenu*/, s32 /*liFlow*/,
-                                             GuiCache* /*lpCache*/) {}
-        // X360 sub_824F87C0(mpGuiCache, flow, lpacComponentName): register a single expected apt
-        // component (the "new news" transition component) by name with the cache watcher. The
-        // collaborator is un-homed in scope, so it is reached through this boundary.
-        void AppendExpectedAptComponentByName(GuiCache* /*lpCache*/, s32 /*liFlow*/,
-                                              const char* /*lpacName*/) {}
-    }
-}   // anonymous namespace
+        { 173, CgsGui::E_GUI_RESOURCETYPE_APT },
+        { 190, CgsGui::E_GUI_RESOURCETYPE_APT }
+    };
+    const u32 OnlineQuickCustomCreate::muNumResourcesToLoad = 2;
 
-// ---- statics -----------------------------------------------------------------
-// The four GUI event ids observed by this state (X360 dword_8205F9B4, count 4). FLAG: the id
-// VALUES are not attested in scope (only the base address + count of 4); placeholders so the state
-// links, adopted with the XEX-recovered ids when decoded.
-const s32 OnlineQuickCustomCreate::maiEventToObserve[] = { 0, 0, 0, 0 };   // @0x8205F9B4 (values not decoded)
-const s32 OnlineQuickCustomCreate::miNumEventsObserved = 4;
+    const char OnlineQuickCustomCreate::KAC_NEW_NEWS_ANIMATION_COMPONENT[18] = "NewNewsTransition";
+    const char OnlineQuickCustomCreate::KAC_MAIN_MENU_COMPONENT[9]           = "MenuItem";
 
-// The main-menu row localisation-key table (X360 off_82F268EC, 3 entries). Only the first
-// pointer's rodata is attested in scope; the other two are the sibling CUSTOM/CREATE keys.
-const char* const OnlineQuickCustomCreate::KAPC_MAIN_MENU_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
-{
-    "$ONLINE_MAIN_MENU_OPTION_QUICK_MATCH",   // @off_82F268EC (attested)
-    "$ONLINE_MAIN_MENU_OPTION_CUSTOM_MATCH",  // FLAG: sibling key, string unattested in scope
-    "$ONLINE_MAIN_MENU_OPTION_CREATE_MATCH",  // FLAG: sibling key, string unattested in scope
-};
-
-// The load-string apt-name key posted to the loader (X360 off_82F27B94).
-const char* const OnlineQuickCustomCreate::KAC_LOAD_STRING_APT_NAME = "ON_QMCMCM";   // @off_82F27B94
-
-// Picked-option -> state-event name table ProcessSelectedMenuOption walks (X360 off_82F268F8).
-const char* const OnlineQuickCustomCreate::KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
-{
-    "TO_QWK_MAT",     // [0] (X360-attested @0x82F268F8)
-    "TO_CUST_MAT",    // [1] (UNATTESTED placeholder)
-    "TO_CRT_MAT",     // [2] (UNATTESTED placeholder)
-};
-
-// The state's static resource list (X360 .rdata @0x8205F9C8; count 2). The two tuples' id + type
-// bytes are not attested in scope (only the base address + the count of 2); every sibling entry
-// is a single {apt-id, E_GUI_RESOURCETYPE_APT} tuple, reproduced with placeholder ids.
-const CgsGui::sResourceTuple OnlineQuickCustomCreate::maResourcesToLoad[] =
-{
-    { 0u, CgsGui::E_GUI_RESOURCETYPE_APT },   // FLAG: id unattested in scope
-    { 0u, CgsGui::E_GUI_RESOURCETYPE_APT },   // FLAG: id unattested in scope
-};
-const u32 OnlineQuickCustomCreate::muNumResourcesToLoad = 2u;
-
-// ------------------------------------------------ OnEnter @ 0x824A1420
-// Register the four observed GUI events, build the main-menu (3 rows) + "new news" transition
-// components, null-latch the cache into GetCache, post the two "open screen" apt/view-state events
-// onto the output queue and create the XNotify system listener.
-void OnlineQuickCustomCreate::OnEnter()
-{
-    mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
-
-    // Main-menu component: 3 rows, no parent name, apt-id 0xFFFFFFFF (X360 li -1 ; clrldi 32).
-    mMainMenuComponent.Construct("MenuItem", mpStateInterface, E_MAIN_MENU_OPTIONS_COUNT, 0,
-                                 0xFFFFFFFFull);
-    // "New news" transition component (virtual GuiComponent::Construct, no parent name).
-    mNewNewsAnimation.Construct("NewNewsTransition", mpStateInterface, 0);
-
-    mpGuiCache      = 0;                          // this+0x38
-    meInternalState = E_INTERNALSTATE_GETCACHE;   // this+0x3C = 0
-
-    CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue =
-        mpStateInterface->GetOutputEventQueue();
-
-    // Record 1: GuiEvent<191> { header0=8, type=191, header2=12, payload=0,0 } -- channel 40, 20 bytes.
-    u32 lauRecord1[5] = { 8u, 191u, 12u, 0u, 0u };
-    lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lauRecord1), 40, 20);
-
-    // Record 2: GuiEvent<148> { header0=1, type=148, header2=12, payload=0 } -- channel 40, 16 bytes.
-    u32 lauRecord2[4] = { 1u, 148u, 12u, 0u };
-    lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lauRecord2), 40, 16);
-
-    mpNotifyListenerHandle = XNotifyCreateListener(1);   // this+0x1190 (XNOTIFY_SYSTEM areas)
-}
-
-// ------------------------------------------------ OnLeave @ 0x824A1538
-// Unregister the observed events, post the teardown apt-movie + "close screen" view-state events,
-// clear the main-menu into the Left state, and close the XNotify listener handle.
-void OnlineQuickCustomCreate::OnLeave()
-{
-    mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
-
-    // Inlined GuiEventPlayAptMovie (type 18, channel 41, size 20): the movie name is the rodata
-    // sentinel &unk_820046A7 (reconstructed as ""), level 3.
-    mpStateInterface->PlayAptMovie("", 3);
-
-    meInternalState = E_INTERNALSTATE_LEFT;   // this+0x3C = 4
-    mMainMenuComponent.Clear();               // component vtable slot 6
-
-    // Record: GuiEvent<536> { header0=2, type=536, header2=12, payload=0 } -- channel 40, 16 bytes.
-    CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue =
-        mpStateInterface->GetOutputEventQueue();
-    u32 lauRecord[4] = { 2u, 536u, 12u, 0u };
-    lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lauRecord), 40, 16);
-
-    if (mpNotifyListenerHandle != 0)
+    const char* const OnlineQuickCustomCreate::KAPC_MAIN_MENU_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
     {
-        CloseHandle(mpNotifyListenerHandle);
-        mpNotifyListenerHandle = 0;
-    }
-}
+        "$ONLINE_MAIN_MENU_OPTION_QUICK_MATCH",
+        "$ONLINE_MAIN_MENU_OPTION_CUSTOM_MATCH",
+        "$ONLINE_MAIN_MENU_OPTION_CREATE_MATCH"
+    };
 
-// ------------------------------------------------ ProcessSelectedMenuOption @ 0x824873C8
-void OnlineQuickCustomCreate::ProcessSelectedMenuOption(EMainMenuOptions leOption)
-{
-    // Tail-call through the option -> state-event table (X360 lwzx + b SendStateEvent).
-    SendStateEvent(KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[leOption]);
-}
-
-// ------------------------------------------------ UpdateLoadResources @ 0x824A17D8
-// Wait for the screen's static resources to finish loading. Once loaded, post the load-string
-// apt movie ("ON_QMCMCM", level 3), clear + rebuild the expected-apt-component list (the menu rows
-// plus the "new news" transition component) and report done. Keep waiting otherwise.
-bool OnlineQuickCustomCreate::UpdateLoadResources()
-{
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:361 (non-gating)
-
-    if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+    const char* const OnlineQuickCustomCreate::KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
     {
-        return false;
-    }
+        "TO_QWK_MAT", "TO_CUST_MAT", "TO_GAME_OPT"
+    };
 
-    // Inlined GuiEventPlayAptMovie (type 18, channel 41, size 20): load the screen's apt movie.
-    mpStateInterface->PlayAptMovie(KAC_LOAD_STRING_APT_NAME, 3);
-
-    OnlineQCCCacheBoundary::ClearExpectedAptComponentList(mpGuiCache, 0);
-    OnlineQCCCacheBoundary::AppendMenuExpectedAptComponents(&mMainMenuComponent, 0, mpGuiCache);
-    OnlineQCCCacheBoundary::AppendExpectedAptComponentByName(mpGuiCache, 0,
-                                                             mNewNewsAnimation.GetName());
-    return true;
-}
-
-// ------------------------------------------------ UpdateLoadComponents @ 0x8248DEF0
-// Once the cache reports every expected apt component initialised (flow 0), finalise the
-// main-menu: clear the expected-component list, activate the three rows (SetupMenu(3, wrap)),
-// localise each row from KAPC_MAIN_MENU_TEXT, drive the "new news" transition component's
-// apt_Transition view to "Invisible", and report done. Otherwise keep waiting.
-bool OnlineQuickCustomCreate::UpdateLoadComponents()
-{
-    if (mpGuiCache == 0 || !mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
+    namespace
     {
-        return false;
-    }
+        typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;   // mpInGuiEventQueue's real type
 
-    OnlineQCCCacheBoundary::ClearExpectedAptComponentList(mpGuiCache, 0);
+        const s32 KI_CHANNEL_GUI_OUT = 40;
 
-    mMainMenuComponent.SetupMenu(E_MAIN_MENU_OPTIONS_COUNT, true);
-    for (s32 liRow = 0; liRow < E_MAIN_MENU_OPTIONS_COUNT; ++liRow)
-    {
-        mMainMenuComponent.SetText(liRow, KAPC_MAIN_MENU_TEXT[liRow]);
-    }
+        const s32 KI_EVENT_CONTROLLER_INPUT       = 6;
+        const s32 KI_EVENT_NETWORK_DISCONNECTED   = 44;
+        const s32 KI_EVENT_GUI_CACHE              = 64;
+        const s32 KI_EVENT_COLLISION_WORLD        = 493;
 
-    mNewNewsAnimation.AddOutputAptViewState("apt_Transition", "Invisible", false);
-    return true;
-}
+        // The movie UpdateLoadResources plays: the screen's own package.
+        const u32 KU_MAIN_MENU_MOVIE_RESOURCE = 173;
+        const s32 KI_APT_MOVIE_LEVEL          = 3;
+        const char* const KPC_EMPTY_STRING    = "";
 
-// ------------------------------------------------ UpdateRunning @ 0x824926A8
-// The RUNNING-state per-frame drain: forward every controller-input-pressed event (6) to
-// HandleControllerInputPressed.
-void OnlineQuickCustomCreate::UpdateRunning()
-{
-    InQueue* lpInQueue = reinterpret_cast<InQueue*>(mpInGuiEventQueue);
+        const u64 KU64_NO_APT_ID = 0xFFFFFFFFull;   // the menu's "no apt id" (32-bit -1, zero-extended)
 
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    s32 liResult = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        const char KAC_APT_TRANSITION_NAME[] = "apt_Transition";
+        const char KAC_INVISIBLE_STATE[]     = "Invisible";
 
-    while (lpEvent != 0)
-    {
-        if (liResult == KI_EVENT_RESULT_CONTROLLER_INPUT_PRESSED)
+        const char KAC_GO_BACK_EVENT[] = "GO_BACK";
+
+        // The ticker line, by the kind of online game being joined; ticker string type 2.
+        const char KAC_RANKED_TICKER_TEXT[]   = "ONLINE_RANKED_TICKER_TEXT";
+        const char KAC_FREEBURN_TICKER_TEXT[] = "ONLINE_FREEBURN_TICKER_TEXT";
+        const char KAC_UNRANKED_TICKER_TEXT[] = "ONLINE_UNRANKED_TICKER_TEXT";
+        const s32  KI_TICKER_STRING_TYPE      = 2;
+
+        // The guide: system notification areas, the sign-in states, the "UI closed" notice
+        // and the invite-accepted notice; the sign-in panel shows one pane, online-enabled
+        // profiles only.
+        const unsigned long long KU64_NOTIFY_AREA_SYSTEM = 1;
+        const u32 KU_SIGNIN_STATE_SIGNED_IN_TO_LIVE      = 2;
+        const unsigned long KU_NOTIFY_SYSTEM_UI          = 9;
+        const unsigned long KU_NOTIFY_LIVE_INVITE_ACCEPTED = 0x2000002;
+        const u32 KU_SIGNIN_UI_PANES                     = 1;
+        const u32 KU_SIGNIN_UI_ONLINE_ENABLED_ONLY       = 2;
+
+        // ---- in-queue payload views (the queue hands out the header-stripped payload) ----
+        struct ControllerButtonPayload : public CgsModule::Event
         {
-            HandleControllerInputPressed(lpEvent);
+            s32 miPadId;      // +0x00
+            s32 miButtonId;   // +0x04 (the input action id)
+        };
+
+        // The gui-cache event (the assert text names its field mpCachePointer).
+        struct GuiEventCachePayload : public CgsModule::Event
+        {
+            GuiCache* mpCachePointer;   // +0x00
+        };
+
+        // ---- out-queue wire records ------------------------------------------------------
+        // { 1, 148, 12, <show byte> }, channel 40, 16 bytes: show / hide the HUD.
+        struct GuiEventShowHideHudWire : public CgsGui::GuiEvent<148>
+        {
+            bool mbShowHud;   // +0x0C
+
+            explicit GuiEventShowHideHudWire(bool lbShowHud)
+                : CgsGui::GuiEvent<148>(
+                      static_cast<u32>(sizeof(bool)),
+                      static_cast<u32>(offsetof(GuiEventShowHideHudWire, mbShowHud)))
+                , mbShowHud(lbShowHud)
+            {
+            }
+        };
+
+        // { 2072, 537, 12, the ticker message }, channel 40, 2084 bytes.
+        typedef CgsGui::GuiEventWrapper<GuiEventTickerCustomMessage, 40> GuiEventTickerCustomMessageWire;
+        // { 2, 536, 12, <two zero bytes> }, channel 40, 16 bytes.
+        typedef CgsGui::GuiEventWrapper<GuiEventTickerClearMessages, 40> GuiEventTickerClearMessagesWire;
+
+        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
+        static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide-hud record is 16 bytes");
+        static_assert(sizeof(GuiEventTickerCustomMessageWire) == 2084, "ticker record is 2084 bytes");
+        static_assert(sizeof(GuiEventTickerClearMessagesWire) == 16, "ticker-clear record is 16 bytes");
+    }
+
+    // ================================================================================
+    //  OnEnter
+    // ================================================================================
+    void OnlineQuickCustomCreate::OnEnter()
+    {
+        mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
+
+        mMainMenuComponent.Construct(KAC_MAIN_MENU_COMPONENT, mpStateInterface,
+                                     E_MAIN_MENU_OPTIONS_COUNT, 0, KU64_NO_APT_ID);
+        mNewNewsAnimation.Construct(KAC_NEW_NEWS_ANIMATION_COMPONENT, mpStateInterface, 0);
+
+        mpGuiCache      = 0;
+        meInternalState = E_INTERNALSTATE_GETCACHE;
+
+        // The menu owns the screen: CrashNav down, HUD hidden.
+        GuiEventActivateCrashNav lDeactivateCrashNav(false);
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lDeactivateCrashNav), KI_CHANNEL_GUI_OUT,
+            static_cast<s32>(sizeof(lDeactivateCrashNav)));
+
+        const GuiEventShowHideHudWire lHideHud(false);
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lHideHud), KI_CHANNEL_GUI_OUT,
+            static_cast<s32>(sizeof(lHideHud)));
+
+        mhNotifyListener = XNotifyCreateListener(KU64_NOTIFY_AREA_SYSTEM);
+    }
+
+    // ================================================================================
+    //  OnLeave
+    // ================================================================================
+    void OnlineQuickCustomCreate::OnLeave()
+    {
+        mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
+
+        // The console inlines StateInterface::PlayAptMovie here: the empty name at level 3
+        // clears the level.
+        mpStateInterface->PlayAptMovie(KPC_EMPTY_STRING, KI_APT_MOVIE_LEVEL);
+
+        meInternalState = E_INTERNALSTATE_LEFT;
+        mMainMenuComponent.Clear();
+
+        GuiEventTickerClearMessages lClearTicker = {};
+        const GuiEventTickerClearMessagesWire lClearTickerWire(lClearTicker);
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lClearTickerWire), KI_CHANNEL_GUI_OUT,
+            static_cast<s32>(sizeof(lClearTickerWire)));
+
+        if (mhNotifyListener != 0)
+        {
+            CloseHandle(mhNotifyListener);
+            mhNotifyListener = 0;
+        }
+    }
+
+    // ================================================================================
+    //  Update -- each step stores its state on entry and drops into the next one once it
+    //  completes. The sign-in wait polls the guide. The permanent handlers then run, the
+    //  in-queue is cleared and the menu updates.
+    // ================================================================================
+    void OnlineQuickCustomCreate::Update()
+    {
+        switch (meInternalState)
+        {
+        case E_INTERNALSTATE_GETCACHE:
+            UpdateGetCache();
+            // fall through
+
+        case E_INTERNALSTATE_LOADSCREEN:
+            meInternalState = E_INTERNALSTATE_LOADSCREEN;
+            if (!UpdateLoadResources())
+            {
+                break;
+            }
+            // fall through
+
+        case E_INTERNALSTATE_LOADCOMPONENTS:
+            meInternalState = E_INTERNALSTATE_LOADCOMPONENTS;
+            if (!UpdateLoadComponents())
+            {
+                break;
+            }
+            // fall through
+
+        case E_INTERNALSTATE_RUNNING:
+            meInternalState = E_INTERNALSTATE_RUNNING;
+            UpdateRunning();
+            break;
+
+        case E_INTERNALSTATE_LEFT:
+            break;
+
+        case E_SUBSTATE_WAIT_SIGN_IN_FINISH:
+        {
+            unsigned long luNotificationId = 0;
+            unsigned long luNotificationParam = 0;
+            if (XNotifyGetNext(mhNotifyListener, 0, &luNotificationId, &luNotificationParam) != 0)
+            {
+                if (luNotificationId == KU_NOTIFY_SYSTEM_UI)
+                {
+                    // The sign-in panel closed: open the friends list if the profile is now
+                    // on the service, and go back to the menu either way.
+                    if (luNotificationParam == 0)
+                    {
+                        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                        if (XUserGetSigninState(static_cast<u32>(mpGuiCache->GetActiveControllerIndex())) ==
+                            KU_SIGNIN_STATE_SIGNED_IN_TO_LIVE)
+                        {
+                            XShowFriendsUI(static_cast<u32>(mpGuiCache->GetActiveControllerIndex()));
+                        }
+                        meInternalState = E_INTERNALSTATE_RUNNING;
+                    }
+                }
+                else if (luNotificationId == KU_NOTIFY_LIVE_INVITE_ACCEPTED)
+                {
+                    CGS_ASSERT(false, "Invite notification processed by Online main menu screen. "
+                                      "This could break cross game invites\n");
+                }
+            }
+            break;
         }
 
-        const CgsModule::Event* lpNextEvent = 0;
-        liResult = lpInQueue->GetNextEvent(lpEvent, &lpNextEvent, &liSize);
-        lpEvent  = lpNextEvent;
+        default:
+            CGS_ASSERT(false, "Invalid internal state : ");
+            break;
+        }
+
+        UpdatePermanent();
+
+        reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue)->Clear();
+
+        mMainMenuComponent.Update();
     }
-}
 
-// ------------------------------------------------ UpdatePermanent @ 0x82492728
-// Drained every frame regardless of internal state. On a menu-option-selected event (44), latch
-// the picked option id into the cache and send GO_BACK; on the friends-list response (493) with
-// no payload, fire the null-event assert.
-void OnlineQuickCustomCreate::UpdatePermanent()
-{
-    InQueue* lpInQueue = reinterpret_cast<InQueue*>(mpInGuiEventQueue);
-
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    s32 liResult = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
-
-    while (lpEvent != 0)
+    // ================================================================================
+    //  UpdateGetCache -- take the cache from the first gui-cache event in the in-queue,
+    //  flag the online game options for a reset and post the ticker line.
+    // ================================================================================
+    void OnlineQuickCustomCreate::UpdateGetCache()
     {
-        if (liResult == KI_EVENT_RESULT_MENU_OPTION_SELECTED)
+        CGS_ASSERT(0 == mpGuiCache, "NULL == mpGuiCache");
+
+        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+             lpEvent != 0;
+             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:543 (non-gating)
+            if (liEventId == KI_EVENT_GUI_CACHE)
+            {
+                const GuiEventCachePayload* lpCacheEvent =
+                    static_cast<const GuiEventCachePayload*>(lpEvent);
+                CGS_ASSERT(0 != lpCacheEvent->mpCachePointer,
+                           "NULL != lpCacheEvent->mpCachePointer");
 
-            const s32 liOption = (lpEvent != 0)
-                ? *reinterpret_cast<const s32*>(lpEvent)
-                : 0;
-            OnlineQCCCacheBoundary::StoreSelectedMenuOption(mpGuiCache, liOption);
+                mpGuiCache = lpCacheEvent->mpCachePointer;
+                mpGuiCache->SetResetOnlineGameOptions(true);
 
-            SendStateEvent("GO_BACK");
+                GuiEventTickerCustomMessage lTicker;
+                lTicker.Construct(true, false, true, false);
+
+                const char* lpacTickerText = KAC_UNRANKED_TICKER_TEXT;
+                if (mpGuiCache->GetDoJoinOnlineRankedGame())
+                {
+                    lpacTickerText = KAC_RANKED_TICKER_TEXT;
+                }
+                else if (mpGuiCache->GetDoJoinOnlineFreeburnGame())
+                {
+                    lpacTickerText = KAC_FREEBURN_TICKER_TEXT;
+                }
+                lTicker.AddString(lpacTickerText, KI_TICKER_STRING_TYPE);
+
+                const GuiEventTickerCustomMessageWire lTickerWire(lTicker);
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lTickerWire), KI_CHANNEL_GUI_OUT,
+                    static_cast<s32>(sizeof(lTickerWire)));
+                break;
+            }
         }
-        else if (liResult == KI_EVENT_RESULT_FRIENDS_LIST_RESPONSE && lpEvent == 0)
+
+        CGS_ASSERT(0 != mpGuiCache, "NULL != mpGuiCache");
+    }
+
+    // ================================================================================
+    //  UpdateLoadResources -- load the packages, play the menu and register its components.
+    // ================================================================================
+    bool OnlineQuickCustomCreate::UpdateLoadResources()
+    {
+        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+
+        if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
-            CGS_ASSERT(lpEvent != 0, "lpEvent");   // cpp:597 (non-gating)
+            return false;
         }
 
-        const CgsModule::Event* lpNextEvent = 0;
-        liResult = lpInQueue->GetNextEvent(lpEvent, &lpNextEvent, &liSize);
-        lpEvent  = lpNextEvent;
+        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_MAIN_MENU_MOVIE_RESOURCE],
+                                       KI_APT_MOVIE_LEVEL);
+
+        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+        mMainMenuComponent.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache);
+        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mNewNewsAnimation.GetName());
+        return true;
+    }
+
+    // ================================================================================
+    //  UpdateLoadComponents -- once every component is up, fill the three menu rows.
+    // ================================================================================
+    bool OnlineQuickCustomCreate::UpdateLoadComponents()
+    {
+        if (mpGuiCache == 0 || !mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
+        {
+            return false;
+        }
+
+        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+
+        mMainMenuComponent.SetupMenu(E_MAIN_MENU_OPTIONS_COUNT, true);
+        for (s32 liRow = 0; liRow < E_MAIN_MENU_OPTIONS_COUNT; ++liRow)
+        {
+            mMainMenuComponent.SetText(liRow, KAPC_MAIN_MENU_TEXT[liRow]);
+        }
+
+        mNewNewsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, KAC_INVISIBLE_STATE, false);
+        return true;
+    }
+
+    // ================================================================================
+    //  UpdateRunning -- controller presses.
+    // ================================================================================
+    void OnlineQuickCustomCreate::UpdateRunning()
+    {
+        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+             lpEvent != 0;
+             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            if (liEventId == KI_EVENT_CONTROLLER_INPUT)
+            {
+                HandleControllerInputPressed(lpEvent);
+            }
+        }
+    }
+
+    // ================================================================================
+    //  UpdatePermanent -- disconnected latches the error for the popup and goes back.
+    // ================================================================================
+    void OnlineQuickCustomCreate::UpdatePermanent()
+    {
+        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+             lpEvent != 0;
+             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            if (liEventId == KI_EVENT_NETWORK_DISCONNECTED)
+            {
+                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                mpGuiCache->SetDoDisconnectPopup(lpEvent);
+                SendStateEvent(KAC_GO_BACK_EVENT);
+            }
+            else if (liEventId == KI_EVENT_COLLISION_WORLD)
+            {
+                // The collision-world request handler, inlined: only its event assert remains.
+                CGS_ASSERT(lpEvent != 0, "lpEvent");
+            }
+        }
+    }
+
+    // ================================================================================
+    //  HandleControllerInputPressed -- only the running menu takes input.
+    // ================================================================================
+    void OnlineQuickCustomCreate::HandleControllerInputPressed(const CgsModule::Event* lpEvent)
+    {
+        if (meInternalState != E_INTERNALSTATE_RUNNING)
+        {
+            return;
+        }
+
+        const ControllerButtonPayload* lpInput = static_cast<const ControllerButtonPayload*>(lpEvent);
+        switch (lpInput->miButtonId)
+        {
+        case E_GAMEINPUTACTIONS_GUI_UP:
+            mMainMenuComponent.HighlightPrevious();
+            break;
+
+        case E_GAMEINPUTACTIONS_GUI_DOWN:
+            mMainMenuComponent.HighlightNext();
+            break;
+
+        case E_GAMEINPUTACTIONS_GUI_SELECT:
+            ProcessSelectedMenuOption(
+                static_cast<EMainMenuOptions>(mMainMenuComponent.GetHighlightedIndex()));
+            break;
+
+        case E_GAMEINPUTACTIONS_GUI_CANCEL:
+            SendStateEvent(KAC_GO_BACK_EVENT);
+            break;
+
+        case E_GAMEINPUTACTIONS_GUI_OPTION1:
+            ShowFriendsMenu();
+            break;
+
+        default:
+            break;
+        }
+    }
+
+    // ================================================================================
+    //  ProcessSelectedMenuOption -- the picked row's state event.
+    // ================================================================================
+    void OnlineQuickCustomCreate::ProcessSelectedMenuOption(EMainMenuOptions leOption)
+    {
+        SendStateEvent(KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[leOption]);
+    }
+
+    // ================================================================================
+    //  ShowFriendsMenu -- the friends list needs a profile on the service; without one the
+    //  sign-in panel goes up first and the sign-in wait takes over.
+    // ================================================================================
+    void OnlineQuickCustomCreate::ShowFriendsMenu()
+    {
+        if (mpGuiCache == 0)
+        {
+            return;
+        }
+
+        if (XUserGetSigninState(static_cast<u32>(mpGuiCache->GetActiveControllerIndex())) !=
+            KU_SIGNIN_STATE_SIGNED_IN_TO_LIVE)
+        {
+            XShowSigninUI(KU_SIGNIN_UI_PANES, KU_SIGNIN_UI_ONLINE_ENABLED_ONLY);
+            meInternalState = E_SUBSTATE_WAIT_SIGN_IN_FINISH;
+            return;
+        }
+
+        XShowFriendsUI(static_cast<u32>(mpGuiCache->GetActiveControllerIndex()));
     }
 }
-}   // namespace BrnGui

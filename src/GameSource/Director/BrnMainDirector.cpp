@@ -898,29 +898,15 @@ namespace BrnDirector
 
         f32 lfTimestep = lpTimerStatusInterface->GetGameTimerStatus()->GetCurrentTimeStep();
 
-        // ✅✅ THE QUIET GATE ON mfSimTimestep IS GONE (2026-08-28, crash-camera wave). It was
-        // STALE, and BOTH halves of its justification had stopped being true:
-        //
-        //   (1) "GetSimTimerStatus() is DECLARATION-ONLY". It is not, and has not been for a
-        //       while: CgsTimerStatusInterface.h:100-103 define all four accessors inline
-        //       (`{ return &mSimTimerStatus; }`), which is verbatim the recipe this gate's own
-        //       DELETE-WHEN asked for. Nobody came back to flip it -- the "gates are STALE, not
-        //       dead" class: ask when a gate's condition last held, not whether it reads true.
-        //   (2) "no committed state reads +0x60". EIGHT sites do, and seven of them are on the
-        //       crash path: ArbStateCrashMode reads mfSimTimestep for mfTiltChangeTime,
-        //       mfFlashTime, mfBlurInTime, mfBlurOutTime, mfCurrentBlur (twice) and
-        //       mfBordersTime; ArbStateOnlineRaceIntro reads it for mfTimeInState. Both states
-        //       are stubbed in DirectorLinkStubs.cpp today, which is the only reason the zero
-        //       has not shown up on screen.
-        //
-        // ⛔ WHY THIS MATTERED FOR THE CRASH CAMERA. Every crash-mode intro timer is a
-        // `mfXxxTime -= lrSharedInfo.mfSimTimestep` countdown. Published as a hard 0 they
-        // decrement by nothing, so the entry flash, the black borders, the motion-blur ramp and
-        // the camera tilt would each have hung at their seeded value FOREVER the moment
-        // BrnArbStateCrashMode.cpp was mounted -- a landmine sitting directly under this goal,
-        // with a green link, no assert, and a plausible-looking timer that simply never expires.
-        // It is the placeholder-identity class again: 0 is the identity of `+=`, not of `-=`
-        // against a deadline.
+        // ⛔ mfSimTimestep MUST BE THE REAL SIM STEP, never a placeholder 0. EIGHT sites read
+        // +0x60 and seven of them are on the crash path: ArbStateCrashMode reads mfSimTimestep
+        // for mfTiltChangeTime, mfFlashTime, mfBlurInTime, mfBlurOutTime, mfCurrentBlur (twice)
+        // and mfBordersTime; ArbStateOnlineRaceIntro reads it for mfTimeInState. Every
+        // crash-mode intro timer is a `mfXxxTime -= lrSharedInfo.mfSimTimestep` countdown.
+        // Published as a hard 0 they decrement by nothing, so the entry flash, the black
+        // borders, the motion-blur ramp and the camera tilt would each hang at their seeded
+        // value FOREVER, with a green link, no assert, and a plausible-looking timer that
+        // simply never expires: 0 is the identity of `+=`, not of `-=` against a deadline.
         //
         // The console reads `timer[+32] * timer[+28]`, which the committed layout above makes
         // exactly mSimTimerStatus.mfTimeStepMultiplier * mfBaseTimeStep -- i.e.

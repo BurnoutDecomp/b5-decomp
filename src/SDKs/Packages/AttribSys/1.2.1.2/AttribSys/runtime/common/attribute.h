@@ -119,6 +119,10 @@ namespace Attrib
         // inherited node, or the node's own pointer word) and indexes it.
         void* GetInternalPointer(u32 luIndex);
 
+        u64 GetType() const; // the node's 64-bit type key (header-inline originally; body in attriblivelink.cpp)
+
+        friend struct TweakableAttribute; // attriblivelink.cpp: the live-edit cursor reads mpData
+
     private:
         const Instance*   mpInstance;    // +0
         const Collection* mpCollection;  // +4

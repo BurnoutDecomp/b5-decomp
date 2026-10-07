@@ -3,33 +3,6 @@
 //   HandleControllerInput    @0x824AD758
 //   HandleInGameEvent        @0x8249C9D0
 //   HandleInGameFailedEvent  @0x8249CAE0
-//
-//
-// The committed leaf header BrnOnlineGameOptions.h is still the MINIMAL pre-wave version
-// (the GetResourcesToLoad inline plus the two resource statics). The wave-I spec's §H1
-// class extension had not been applied when this partfile was written, and headers are
-// frozen for implementers, so none of the three bodies can name themselves as members, nor
-// reach meSubState / ESubState / mpGuiCache / the two HandleControllerInput* callees.
-// HandleInGameFailedEvent additionally needs a second, SEPARATE header change: GuiCache's
-// mbOnlineStartPending (BrnGuiCache.h:759) is PRIVATE with no read accessor, so this class
-// needs the same `friend struct OnlineGameOptions;` grant the wave-C HudMessageAnalyzer and
-// wave-H OnlineGameRoomPlayerInfo keystones already hold. Measured with the compile gate
-// and a stand-in-class compile probe, not assumed.
-//
-// The three complete bodies live at, each with a banner naming the exact declaration lines
-// that unblock it:
-// They concatenate into this file (single `namespace BrnGui { ... }`) once §H1 and the
-// BrnGuiCache.h friendship land. MERGE NOTE: the InGameEvent and InGameFailedEvent files
-// each carry their own anonymous-namespace `const s32 KI_CHANNEL_GUI_OUT = 40;` -- keep
-// exactly one of the two on merge; the union of the three include sets is
-//   BrnOnlineGameOptions.h, CgsAssert.h, CgsGuiEvent.h, CgsGuiStateInterface.h,
-//   CgsVariableEventQueue.h, BrnGuiCache.h, BrnGuiOverlaysDirector.h.
-//
-// LINK NOTE for the conductor: HandleControllerInput dispatches to
-// HandleControllerInputCreateGame (@0x824A7878, wave-I group 09) and
-// HandleControllerInputLoadOptions (@0x824A7E48, FOREIGN -- ledger `reviewed` but defined
-// nowhere in the tree). Both are declaration-only at the moment, so the eventual link will
-// miss HandleControllerInputLoadOptions until its own TU lands.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"

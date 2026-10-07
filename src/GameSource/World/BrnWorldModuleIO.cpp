@@ -461,9 +461,7 @@ void UpdateInputBuffer::SetPlayerVehicleControls(const PlayerVehicleControls* lp
 }
 
 // The read twin (X360 read-lock accessor): the controls block Update copies into the
-// world spine. Homed here beside its writer (driving-input wave 2026-08-11; retires
-// the WorldLinkStubs inert null-return that kept every frame's copy skipped and the
-// player car deaf to input).
+// world spine. Homed here beside its writer.
 const PlayerVehicleControls* UpdateInputBuffer::GetPlayerVehicleControls() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");

@@ -105,8 +105,8 @@ namespace BrnDirector
 //    mAfterTouchCam. (Full ordered list recovered 2026-07-31; the offsets and keys in the
 //    table below are correct for all 65.)
 //
-// Construct() IS NOT A NO-OP. The `inline void Construct() {}` below is an empty stub, and
-//    Prepare switches on mePrepareStage, which nothing else initialises. The real Construct
+// Construct() IS NOT A NO-OP. Prepare switches on mePrepareStage, which nothing else
+//    initialises. The real Construct
 //    (DWARF BrnDirectorResourceManager.cpp:37) is fully inlined into
 //    DirectorModule::Construct @0x8225C590 and does:
 //        mReceiverQueue.miCapacity = 512; mReceiverQueue.mpBuffer = this + 24;
@@ -244,11 +244,9 @@ namespace BrnDirector
 //    "construction order is NOT declaration order" note are both exactly right.
 //    Independently, Instance::operator='s xref list is 65 call sites inside Prepare.
 // ============================================================================
-// ⭐⭐ STATUS 2026-08-01: **Prepare IS LANDED**. Body in BrnDirectorResourceManager.cpp;
-// the DirectorLinkStubs `return true` is deleted and the TU is in the exe source list.
-// Boot-verified: 0 asserts, all 65 slots BIND their collection (64/64 shotgroups +
-// mCameraDefaults, mGameIntroGroup("606002") included), the CameraVault registers as
-// AttribSys slot 0, and the loading flow still reaches the fly-by in ~52 s.
+// ⭐⭐ Prepare's body is in BrnDirectorResourceManager.cpp (mounted). Boot-verified: 0
+// asserts, all 65 slots BIND their collection (64/64 shotgroups + mCameraDefaults,
+// mGameIntroGroup("606002") included), the CameraVault registers as AttribSys slot 0, and the loading flow still reaches the fly-by in ~52 s.
 //
 // THREE THINGS HAD TO LAND WITH IT, none of them in this class:
 //   * GameDataModule::PrepareICEList @0x8266CEB0 (Prepare stage 11) -- the ONLY loader of
@@ -317,15 +315,14 @@ namespace BrnDirector
 //       BODY: the EventReceiverQueue drain + GameDataIO::RequestInterface<512>::
 //       {GetICEList,GetVehicleList,AcquireResource} + AttribSysRequestInterface<512>::
 //       RegisterVault plumbing, which is a different sub-system, plus the 101 asserts.
-//       Two things the shot-group wave had to fix on the way in, both of which any
-//       Prepare rewrite inherits:
+//       One thing the shot-group wave had to fix on the way in, which any Prepare
+//       rewrite inherits:
 //         * shotgroup / cameradefaults needed their (Collection*, owner) ELEMENT ctors
 //           -- the X360's sub_827DC838 / sub_827DC8C8 -- and the key ctors had to LOSE
 //           their default argument. A DirectorResourceManager is reached from the
 //           file-scope static gGameModule (BrnMain.cpp:43), so all 65 slot ctors run
 //           PRE-MAIN; if `shotgroup()` had stayed bound to the key ctor every slot would
 //           have called Attrib::FindCollection before Attrib::Database exists.
-//         * Construct() is no longer an empty stub (see the class below).
 //    x64 hazards for when it IS written: Attrib::Instance is 16 B on console and 32 B here,
 //       Attrib::RefSpec 20 -> 24, EventReceiverQueue<512,16> 536 -> 544. The 16-byte slot
 //       stride, the 568/1592 bounds, the +0x18/+0x20 reply-payload offsets and the 8-byte
@@ -391,11 +388,9 @@ public:
     // DWARF BrnDirectorResourceManager.h:40 / :46 -- the two GetShots() selectors.
     // (Namespace-scope on the console; nested here so they travel with the accessor.)
 
-    // ⭐ THE REAL Construct (DWARF BrnDirectorResourceManager.cpp:37). It is FULLY INLINED
-    // into DirectorModule::Construct @0x8225C590 on the console, which is why it had no
-    // out-of-line symbol and sat here as `inline void Construct() {}` for so long. That
-    // empty stub was NOT harmless: Prepare switches on mePrepareStage and nothing else
-    // initialises it, so Prepare would have switched on uninitialised memory.
+    // ⭐ THE REAL Construct. It is FULLY INLINED into DirectorModule::Construct on the
+    // console, which is why it has no out-of-line symbol. It is NOT optional: Prepare
+    // switches on mePrepareStage and nothing else initialises it.
     // The console does exactly:
     //     mReceiverQueue.miCapacity = 512; mReceiverQueue.mpBuffer = this + 24;
     //     mReceiverQueue.miAlignment = 16; BaseEventReceiverQueue::Clear(this);
@@ -418,7 +413,7 @@ public:
     // @0x822712D8 stage 2 calls
     //     BrnDirector::DirectorResourceManager::Prepare(this+584, a2, this+2896)
     // == Prepare( &mDirectorResourceManager, <the director OUTPUT buffer>, <the ICE wrapper> ).
-    // Body @0x8225CA08 -- LANDED 2026-08-01 in BrnDirectorResourceManager.cpp.
+    // Body in BrnDirectorResourceManager.cpp.
     bool Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, ICEWrapper* lpHACKIceWrapper);
 
     // @0x821F6948. ⚠️ MOVED OUT OF LINE 2026-07-31 (shot-group wave). These three used to
@@ -682,9 +677,7 @@ private:
 // DirectorModule::Construct @0x8225C590, where it reads `mICEResourceMgr.mpResourceManager
 // = this`. Defined out-of-class here only because DirectorResourceManager is incomplete at
 // the point ICEResourceMgr is declared.
-//
-// It became LINK-REQUIRED on 2026-07-31: DirectorResourceManager::Construct stopped being
-// an empty stub, and calling it is what surfaces this member.
+// DirectorResourceManager::Construct calls it.
 inline void ICEResourceMgr::Construct(DirectorResourceManager* lpResourceManager)
 {
     mpResourceManager = lpResourceManager;

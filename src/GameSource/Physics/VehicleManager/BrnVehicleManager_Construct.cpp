@@ -6,23 +6,13 @@
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"                      // K_INVALID_RIGID_BODY_ID (qword_82F2A3A8)
 
 // ==================================================================================================
-// BrnPhysics::Vehicle::VehicleManager::Construct -- SPLIT OUT of BrnVehicleManager.cpp on
+// BrnPhysics::Vehicle::VehicleManager::Construct -- SPLIT OUT of BrnVehicleManager.cpp.
 // BUILD-MECHANICS SPLIT ONLY: the body below, its recipe comment and the
 // twenty-nine file-scope perfmon handles it owns were MOVED verbatim, not retyped or re-derived.
-// Same precedent, same reason, as RaceCarPhysics_Construct.cpp / BrnSimpleVehiclePhysics_Construct.cpp
-// / TrafficPhysics_Construct.cpp.
+// Same precedent as RaceCarPhysics_Construct.cpp / BrnSimpleVehiclePhysics_Construct.cpp
+// / TrafficPhysics_Construct.cpp. Its only caller is BrnPhysics::PhysicsModule::Construct.
 //
-// == WHY THE SPLIT ==
-// BrnPhysics::PhysicsModule::Construct @0x825AE308 was a LIVE EMPTY STUB in WorldLinkStubs.cpp: a
-// quiet no-op that ran every boot, so NOTHING in the physics module was ever constructed. Its
-// callee VehicleManager::Construct @0x8263B7C8 is fully bodied -- but it lived in
-// BrnVehicleManager.cpp, and mounting THAT whole TU is a different and much larger job (the file
-// also holds HandleRaceCarRaceCarContact / ApplySlam / ApplyShunt / SetRaceCarCrashing, whose
-// declare-only callees are ~14 unresolved externals, and whose faithful bodies add three more).
-// /OPT:REF does not suppress LNK2019, so a mount's cost is the reference graph of the WHOLE TU.
-//
-// Construct's own closure is SIX functions (X360 xrefs_from of 0x8263B7C8), and after this split
-// every one of them is mounted:
+// Construct's own closure is SIX functions, and every one of them is mounted:
 //     CgsDev::PerfMonCpu::AddMonitor            CgsPerfMonCpu.cpp
 //     VehicleManagerDebugComponent::Construct   BrnVehicleManagerDebugComponent.cpp
 //     VehicleDriver::Construct                  BrnVehicleDriver.cpp
@@ -30,8 +20,8 @@
 //     PhysicalTrafficManager::Construct         BrnPhysicalTrafficManager.cpp
 //     StuntOffencesManager::Construct           BrnStuntOffencesManager_Construct.cpp
 //
-// TO RE-MERGE: land the ~14 declare-only callees of the contact chain, mount BrnVehicleManager.cpp,
-// then move this text back and delete the TU. Nothing here needs to change for that.
+// BrnVehicleManager.cpp is mounted as well, so re-merging is a plain move of this text back into
+// it, then deleting this TU.
 // ==================================================================================================
 
 namespace BrnPhysics

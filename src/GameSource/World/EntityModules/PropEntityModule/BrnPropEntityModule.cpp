@@ -2,12 +2,9 @@
 // b5-decomp/src/GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModule.cpp
 //
 // BrnWorld::PropEntityModule -- the LIFECYCLE half of the prop entity module.
-// Landed 2026-08-12 (prop-spawn wave, phase 2). Until this TU existed the module's
-// Construct was an EMPTY stub in WorldLinkStubs.cpp, which is why the shipped PC build
-// had zero props in the world: Construct is the only path to
-// PropZoneManager::Construct, and that is the only writer of
-// mauStartIndexOfZone[0..499] = KU_UNLOADED_ZONE. With the module zero-initialised
-// instead, IsZoneLoaded() answered "true" for every zone, so no zone ever streamed in.
+// Construct is the only path to PropZoneManager::Construct, and that is the only writer
+// of mauStartIndexOfZone[0..499] = KU_UNLOADED_ZONE. With the module zero-initialised
+// instead, IsZoneLoaded() answers "true" for every zone, so no zone ever streams in.
 //
 // Functions in this TU (X360 BURNOUT_X360_ARTIST.XEX):
 //   PropEntityModule::Construct                       @0x822FA068  (308 insns)
@@ -19,12 +16,7 @@
 //   PropEntityModule::CachePropGraphicsLists          @0x822DBF28  ( 57 insns)
 //   PropEntityModule::_AssertLayout                   (host tripwires; never called)
 //
-// PARKED (declared in the header, no body here):
-//   PropEntityModule::Destruct -- NOT EMITTED in the ARTIST image. There is no
-//     `BrnWorld::PropEntityModule::Destruct` symbol in the export at all (the DWARF
-//     declares one; the X360 compiler folded or elided it). Inventing a teardown order
-//     would be fabrication, so the declaration stands bodiless and the eventual link
-//     takes the WorldLinkStubs trap.
+// PropEntityModule::Destruct is bodied in BrnPropEntityModule_wS34_00.cpp.
 //
 // LAYOUT DISCIPLINE: not one console byte offset appears in the code below. Everything
 // is reached by named member / named accessor. The offset -> member mapping that made
@@ -3580,12 +3572,6 @@ namespace BrnWorld
     // potential-contact routing. WorldModule::EntityModulePrePhysicsUpdate
     // (BrnWorldModule.cpp:1688) calls it once per frame inside miPhysicsPropPrePhysicsUpdatePM.
     //
-    // PrePhysicsUpdate once had an inert boot gate in WorldLinkStubs.cpp whose parameter list was
-    // TOKEN-IDENTICAL to the definition below (`BrnUpdateSet` is `typedef u16`), i.e. the same
-    // mangled symbol twice and an LNK2005 that `cl /c` could not see and coverage_check did not
-    // scan for. That gate was deleted in the same change that mounted this file, so the body
-    // here is its only definition.
-    //
     // REGISTER -> PARAMETER MAP (prologue 0x82303054..0x82303064, measured):
     //   r3 -> r31 this | r4 UNUSED | r5 UNUSED | r6 -> r24 lpInput | r7 -> r23 lpOutput
     //   | r8 -> r30 lUpdateSet
@@ -4048,13 +4034,9 @@ namespace BrnWorld
 // ============================================================================
 // LINK-LEVEL FACTS THE CONDUCTOR NEEDS (gate-green != link-green, gotcha 12)
 // ============================================================================
-//  * PostPhysicsUpdate once had an inert boot gate in WorldLinkStubs.cpp; that gate was deleted
-//    in the same change that mounted this file, so the body here is its only definition.
-//    RecordPropPositions never had a gate anywhere (grepped the stub TUs).
 //  * MOUNTED, together with the set this file needs: wQ2_03 (ProcessContacts), wQ_06
 //    (UpdateProps) and wQ_01 (PrepareForReplay / RestoreFromReplay).
-//  * CALLEES: EVERY ONE IS BODY-PRESENT IN THE TREE -- re-grepped 2026-08-18, definition by
-//    definition (an earlier version of this block named two phantom blockers):
+//  * CALLEES: EVERY ONE IS BODY-PRESENT IN THE TREE:
 //      ProcessContacts                     PropEntityModule_wQ2_03.cpp:169
 //      UpdateProps                         PropEntityModule_wQ_06.cpp:117
 //      PrepareForReplay / RestoreFromReplay PropEntityModule_wQ_01.cpp:126 / :190
@@ -4074,7 +4056,6 @@ namespace BrnWorld
 //                                          BrnPropEntityModuleIO_InputBuffer_PostPhysics.cpp:87
 //    (SetDataReady / SetDataRestored / GetMode / SkipModuleSerialise / RequestPropProgression /
 //     PropPhysicsDataHeader::GetType / PropTypeData::GetNumberOfParts are header inlines.)
-//    The ONLY link obstacle is the WorldLinkStubs gate above, plus the mount set.
 //  * GetStaticLayout() RETURNS NULL ON THIS BUILD, and both bodies here dereference it
 //    UNCONDITIONALLY -- console-faithfully, so the fix is NOT to add a guard. BaseSerialiser
 //    ::Construct sets `mpStaticBuffer = 0` (BrnReplayBaseSerialiser.cpp:196, the only
@@ -4546,15 +4527,6 @@ namespace BrnWorld
 //      prop's index/id". MEASURED: ProcessContacts stores the STRIKING CAR's entity index
 //      there (0x822FAF5C `lwz r11, 4(r25)` == mEntityIdB, the car; `srwi r11,r11,10` then
 //      `stb`). Written faithfully below and flagged at the site.
-//
-// ---- LINK-LEVEL (AGENTS.md gotcha 7 + 12) ------------------------------------------------
-//   PostSceneUpdate once had an inert boot gate in WorldLinkStubs.cpp with the identical
-//   5-parameter signature (BrnUpdateSet is `typedef u16`, so the two mangled the same). Mount and
-//   retirement happened in one change -- the duplicate would have been invisible to `cl /c` and to
-//   coverage_check, which globs only this directory and so reports DUPLICATE(ODR) = 0. This file
-//   and the partfiles it links with are mounted.
-//   Neither ProcessContacts nor ProcessPotentialContactWithPart ever had a gate in either stub
-//   TU (re-grepped this pass).
 // ============================================================================
 
 
@@ -5236,12 +5208,6 @@ namespace BrnWorld
     //   module +0xD3340 mbCurrentlyOnline     module +0xD3344 mbPlayerWrecked
     //   module +0xD3210 mu8PlayerIndex        module +0xD3200 meStreamingMode
     //   lpInput +0x08   mRaceCarCrashCompleteEventQueue  (-> GetCrashEventQueue())
-    //
-    // ⚠️ LINK: WorldLinkStubs.cpp:1163 still carries the inert boot gate for this exact
-    // signature (re-confirmed 2026-08-18; block 1158-1172). Reported as a link duplicate; NOT
-    // retired by this lane (project rule: the conductor mounts this file and retires the gate
-    // together, then re-links). See the LINK-LEVEL block in this file's banner for the exact
-    // line range to delete and the marker to leave behind.
     // ========================================================================================
     void
     PropEntityModule::PostSceneUpdate( CgsModule::IOBufferStack* /*lpInputBufferStack*/,

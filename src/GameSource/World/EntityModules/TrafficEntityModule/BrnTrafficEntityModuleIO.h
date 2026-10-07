@@ -401,9 +401,9 @@ namespace BrnTrafficIO
     // X360 member offsets (from Construct @ 0x82761830 store displacements):
     //   +0      IOBuffer status flag (*a1 = 1)
     //   +4      mSceneCoarseQueryQueue  (VariableEventQueue<16384,16>::Construct(a1+4))
-    //   +16416  mTrafficAIInterface     (GetTrafficAIInterface returns a1+16416; count zeroed)
-    //   +61488  mTrafficToRaceCarInterface_PostScene (this trailing interface is the post-scene
-    //           traffic->race-car interface)
+    //   +16416  mTrafficAIInterface     (GetTrafficAIInterface returns a1+16416; its Construct is
+    //           inlined: count, rival queue at +61488, the two array counts)
+    //   +63424  mTrafficToRaceCarInterface_PostScene (read accessor; Construct does not touch it)
     //
     // mSceneCoarseQueryQueue is the SceneManager coarse-query input queue
     // (InputBuffer_Query::InSmCoarseQueryQueue == InCoarseQueryQueue<16384>, a
@@ -421,7 +421,7 @@ namespace BrnTrafficIO
         typedef CgsSceneManager::SceneManagerIO::SceneCoarseQueryQueue SceneCoarseQueryQueue;
 
         // DWARF :187 -- the trailing traffic->race-car post-scene interface. The DWARF spells
-        // it as a 1-byte placeholder (muDUMMY); the X360 zeroes it in Construct. Modelled as the
+        // it as a 1-byte placeholder (muDUMMY); Construct leaves it alone. Modelled as the
         // DWARF 1-byte struct (this TU only takes its address, never its interior).
         struct TrafficToRaceCarInterface_PostScene { u8 muDUMMY; };
 

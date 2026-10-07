@@ -107,11 +107,8 @@ namespace CgsSceneManager
 
         bool Release() override;                                                // .cpp:138 @ 0x828CB798
 
-        // DWARF-attested override with NO reconstructed body anywhere in the tree: the only
-        // definition is the WorldLinkStubs.cpp boot gate. Left declared (the DWARF lists it)
-        // and left gated -- retiring that gate without a body is an instant LNK2019, because
         // SceneManagerModule::Destruct @CgsSceneManagerModule.cpp:285 calls it.
-        void Destruct() override;                                               // .cpp:196 (NO BODY -- gate)
+        void Destruct() override;                                               // .cpp:196
 
         // ⭐ 2026-08-18 (wave Q5 cluster E2). WAS `void Update() override;` -- a placeholder
         // that does NOT exist on the console class. The DecFIGS DWARF lists exactly one

@@ -27,15 +27,12 @@
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"   // ShaderConstantTable
 #include "BrnCommonTypes.h"                                       // Vector2, Vector4
 
-// The global runtime shader-constant register (X360 symbol mShaderConstantTable, inside
-// namespace CgsGraphics; its storage is GameSource/World/WorldLinkStubs.cpp:162).
+// The global runtime shader-constant register (console symbol mShaderConstantTable, inside
+// namespace CgsGraphics; its storage is GameShared/GameClasses/Graphics/CgsShaderConstants.cpp).
 //
-// ⛔ THIS DECLARATION USED TO BE AT GLOBAL SCOPE, and that was a LATENT UNRESOLVED EXTERNAL,
-// not a style point: the definition is CgsGraphics::mShaderConstantTable, so `::
-// mShaderConstantTable` is a different mangled name that nothing defines. The TU compiled
-// clean for as long as it was unmounted -- `cl /c` cannot see it -- and would have taken the
-// shared link (and with it the exe, which a failed link deletes) on the first build that
-// mounted it. Fixed with the mount, 2026-09-06. Every other consumer
+// ⛔ It must be declared inside CgsGraphics, not at global scope: the definition is
+// CgsGraphics::mShaderConstantTable, so `::mShaderConstantTable` is a different mangled name
+// that nothing defines -- an unresolved external that `cl /c` cannot see. Every other consumer
 // (BrnRendererModule / BrnWorldModule / CgsDispatcherCommands / the two Traffic render TUs)
 // spells it exactly like this.
 namespace CgsGraphics { extern ::ShaderConstantTable mShaderConstantTable; }

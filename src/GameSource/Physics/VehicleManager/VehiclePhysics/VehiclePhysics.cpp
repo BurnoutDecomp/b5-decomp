@@ -7902,8 +7902,7 @@ namespace Vehicle
     //   3. assert mpAttribs != NULL (0x17A) / mpAttribs->IsValid() (0x17B)
     //   4. the AttribSys chase: burnoutcarasset(mpAttribs->mAttribsKey) ->
     //      handling RefSpec (data+0x158) -> physicsvehiclehandling -> checked copy @0x825BDB88
-    //      -> VehicleAttribs::SetupAttribs(handling)        [TRAP until its wave -- see the
-    //      link-stubs census; the re-stream is the one leg of this function not yet real]
+    //      -> VehicleAttribs::SetupAttribs(handling)
     //   5. mpAttribs->mBaseAttribs.mCOMOffset += mHandlingBodyOffset
     //   6. SimpleVehiclePhysics::SetAttributes(positions, radii)   (result discarded)
     //   7. mEngine.Prepare(&mpAttribs->mEngineAttribs) -- the X360 INLINES Engine::Prepare

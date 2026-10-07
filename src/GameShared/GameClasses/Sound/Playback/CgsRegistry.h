@@ -198,9 +198,7 @@ public:
         return au32Index < mu32EntityCapacity ? mapEntity[au32Index] : 0;
     }
 
-    // DWARF CgsRegistry.h:137 (header-inline on console). Debug-TTY dump of the
-    // table. FLAG (DEFER): declared-only -- bodied with the Registry slices
-    // (caller: Module::DumpRegistries @0x82694188).
+    // Debug-TTY dump of the table (caller: Module::DumpRegistries).
     void Dump();
 };
 

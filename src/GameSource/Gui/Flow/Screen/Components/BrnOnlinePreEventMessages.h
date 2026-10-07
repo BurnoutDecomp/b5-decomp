@@ -4,20 +4,13 @@
 #include "types.hpp"
 #include "GameSource/Gui/Events/BrnGuiEventPreRaceMessages.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h" // CgsGui::GuiComponent
+#include "GameSource/Gui/BrnGuiTextField.h"                         // BrnGui::TextField (by value)
 
-// BrnGui::OnlinePreEventMessages - the screen component that shows the pre-event
-// messages on the online "ready up" screen. It drives an apt movie's view-state, and
-// picks the key-frame to play based on the active game mode.
-//
-// Reconstructed from BURNOUT_X360_ARTIST.XEX:
-//   BrnGui::OnlinePreEventMessages::SelectScreenKeyFrameForGameMode @ 0x8241A010
-//
-// MINIMAL-SLICE class: only SelectScreenKeyFrameForGameMode is in scope. It derives
-// from CgsGui::GuiComponent (the call site invokes the base AddOutputAptViewState on
-// `this`) and adds the one member it reads -- the state-interface back-pointer it walks
-// to reach the gui cache and the active game-mode type. The rest of the component is
-// uncommitted and OMITTED. FLAG: minimal-slice class; the guest +0x88 state-interface
-// offset is not load-bearing on the 64-bit host (member declared by name).
+// BrnGui::OnlinePreEventMessages - the screen component that shows the pre-event fly-by
+// messages on the online pre-event screen: three localised text fields behind an apt
+// transition, keyed by the active game mode. The base derivation (CgsGui::GuiComponent),
+// the member names and order and the method set are the original declaration's; member
+// placement is the console's (the strings at +0x8C, 0x128 apart; the showing flag +0x404).
 
 namespace CgsGui { struct StateInterface; }
 
@@ -26,6 +19,18 @@ namespace BrnGui
     class OnlinePreEventMessages : public CgsGui::GuiComponent
     {
     public:
+        // Build the component and its three "string<N>_mc" text fields under it.
+        virtual void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
+                               const char* lpacParentName);
+
+        // Fill the strings from one fly-by entry and transition in (no-op while showing).
+        void Show(const PreEventInfo* lpInfo);
+        // Transition out (only while showing).
+        void Hide();
+        bool IsShowing() const { return mbIsShowing; }
+        // Re-push a just-loaded string's text; true when the name belongs to this component.
+        bool HandleLoadNotification(const char* lpacComponentName);
+
         // 0x8241A010 -- pick the apt view-state key-frame for the active game mode and push
         // it through the component's apt output. The online fugitive / free-burn / mode-end
         // modes (EGameModeType 12 / 14 / 17) use "anim1_StuntRun"; everything else "anim1".
@@ -34,23 +39,12 @@ namespace BrnGui
         // Show/Hide, which discard it).
         int SelectScreenKeyFrameForGameMode();
 
-        // ADDITIVE GROW (BrnOnlinePreEvent TU): the fly-by message API the online pre-event
-        // state drives. X360-attested by the call sites in BrnOnlinePreEvent.cpp:
-        //   Show                  <- UpdatePermanent case 160 (0x824A13F0)
-        //   Hide                  <- UpdateRunning          (0x824873A4)
-        //   HandleLoadNotification<- UpdatePermanent case 21 (0x824A139C)
-        //   IsShowing             <- UpdateRunning byte read (0x82487374)
-        // Declaration-only here; bodies link from the component's own TU. FLAG: signatures
-        // recovered from the caller asm (the messages component's full body is out of scope).
-        void Show(const PreEventInfo* lpInfo);
-        void Hide();
-        void HandleLoadNotification(const char* lpacComponentName);
-        bool IsShowing() const;
-
     private:
-        // Guest +0x88 (the asm names it via mpStateInterface): the GUI state-interface the
-        // component outputs through and walks to reach the access pointers / gui cache.
-        CgsGui::StateInterface* mpStateInterface;
+        static const s32  KI_NUM_MESSAGE_STRINGS = 3;
+        static const char KAC_STRING_TEXTFIELD_TEMPLATE[12];   // "string%d_mc"
+
+        TextField maString[KI_NUM_MESSAGE_STRINGS];   // +0x8C
+        bool      mbIsShowing;                        // +0x404
     };
 }
 

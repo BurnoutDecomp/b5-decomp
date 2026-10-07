@@ -37,24 +37,19 @@ namespace SceneManagerIO
 // DWARF-attested member set. Members not yet exercised keep their DWARF
 // names/types as honest placeholders.
 //
-// BODIES, and where they live (updated 2026-08-10, triangle-cache wave -- the
-// previous note here said "this TU's ledger holds exactly one function: Prepare",
-// which had already gone stale):
+// BODIES, and where they live:
 //   CgsTriangleCacheManager.cpp         Prepare @0x828BE738,
 //                                       GetTrianglesForCachedObject @0x82277790
 //   CgsTriangleCacheManager_Events.cpp  ProcessAddToCacheEvents @0x828B2C78,
 //                                       ProcessRemoveFromCacheEvents @0x828B2710,
 //                                       ProcessUpdateCachedPositionEvents @0x828BE898,
 //                                       CacheSlot::UpdateCachedObject @0x828BE660
-//   CgsTriangleCacheManager_Update.cpp  ⭐ 2026-08-10 (cache-fill wave) -- THE FILL HALF:
+//   CgsTriangleCacheManager_Update.cpp  THE FILL HALF:
 //                                       StartUpdateTriangleCaches @0x828BECF8 (278),
 //                                       EndUpdateTriangleCaches   @0x828BF150 (475).
-//                                       Both WorldLinkStubs gates are DELETED. End is on a
-//                                       LIVE path (SceneManagerModule::EndUpdateTriangleCache
-//                                       @0x828C7500 is real and WorldModule::Update calls it
-//                                       every frame); Start is still reached only through
-//                                       SceneManagerModule::StartUpdateTriangleCache, which
-//                                       remains gated -- see the note on Start below.
+//                                       Reached through SceneManagerModule::
+//                                       StartUpdateTriangleCache / EndUpdateTriangleCache
+//                                       (CgsSceneManagerModule.cpp).
 // ============================================================================
 
 namespace rw
@@ -249,7 +244,7 @@ namespace CgsSceneManager
                                         KU_MAX_CACHED_OBJECTS>& lrQueue);
 
         // ------------------------------------------------------------------
-        // ⭐ THE FILL HALF (bodies in CgsTriangleCacheManager_Update.cpp, 2026-08-10).
+        // ⭐ THE FILL HALF (bodies in CgsTriangleCacheManager_Update.cpp).
         // ------------------------------------------------------------------
 
         // @ X360 0x828BECF8 (278 insns). Open this frame's cache fill: carve a
@@ -263,13 +258,9 @@ namespace CgsSceneManager
         // the misspelling is AS-SHIPPED). The spatial-map type/constness is the PS3 DWARF's
         // (RunFillTriangleCacheStream takes `const PolygonSoupListSpatialMap*`).
         //
-        // ⛔ NOT REACHED TODAY, and the reason is NOT this function: its sole caller
-        // SceneManagerModule::StartUpdateTriangleCache @0x828C73D8 is still a WorldLinkStubs
-        // gate because the same caller must first run TriangleCollisionManager::
-        // ProcessAddPolySoupListEvents, whose own manager is un-prepared (
-        // TriangleCollisionManager::Prepare @0x828D0C40 is inert) and whose rebuild path
-        // needs PolygonSoupListSpatialMap::BuildSpacialPartition @0x82841740 (2,255 insns,
-        // absent). See the wave note in CgsTriangleCacheManager_Update.cpp.
+        // Sole caller: SceneManagerModule::StartUpdateTriangleCache (CgsSceneManagerModule.cpp),
+        // which first runs TriangleCollisionManager::ProcessAddPolySoupListEvents (and with it
+        // the PolygonSoupListSpatialMap::BuildSpacialPartition rebuild).
         void StartUpdateTriangleCaches(CgsCollision::BaseCollisionGenerator* lpCollisionGenerator,
                                        const CgsGeometric::PolygonSoupListSpatialMap* lpPolySoupListSpacialMap);
 

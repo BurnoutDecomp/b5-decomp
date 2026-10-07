@@ -152,8 +152,7 @@ AemsFactory::AemsFactory(Environment& arEnvironment, const AemsFactorySpec& akrS
 }
 
 // The per-factory registry accessor (CgsSoundPlaybackModule.h:100 -- the console
-// reads AemsFactory+0x60). REAL now; the BrnBaselineLinkStubs null shim is
-// retired with this body. The generic Factory* arrives as the Factory SUBOBJECT
+// reads AemsFactory+0x60). The generic Factory* arrives as the Factory SUBOBJECT
 // pointer (the environment table stores that, per the MI decode), so the cast
 // walks down through the real hierarchy.
 Registry* GetAemsFactoryRegistry(Factory* lpAemsFactory)

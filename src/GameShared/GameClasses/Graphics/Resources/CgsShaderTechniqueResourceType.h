@@ -40,7 +40,7 @@ public:
     void     PostFixUp(void* lpResource, const rw::Resource& lrResource) const override; // @0x827EEBF0
 
     // Non-virtual per-sub-block serialised-size helpers used by GetSerialisedResourceDescriptor.
-    // The Internal/External sizers are not part of this batch (declared only; bodied in their own wave).
+    // The Internal sizer is declared only (no body yet).
     uint32_t GetShaderConstantInternalSerialisedResourceDescriptorSize(ShaderConstantsInternal* lpBlock, uint32_t luBase) const;
     uint32_t GetShaderConstantExternalSerialisedResourceDescriptorSize(const ShaderConstantsExternal* lpBlock) const;
     uint32_t GetConstantHashTableSerialisedResourceDescriptorSize(const CgsGraphics::ShaderConstantHashTable* lpHashTable) const;   // @0x827E9D38

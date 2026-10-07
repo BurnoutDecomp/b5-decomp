@@ -1683,11 +1683,6 @@ namespace BrnGui
                     case 12:
                     case 14:
                     case 17:
-                        // ⚠️ A stunt-run crash hands off to CRASHEDSTNT, which is still a
-                        // stub in BrnHudStatesLinkStubs.cpp -- so on the stunt-race bring-up
-                        // path this transition currently lands nowhere. The console call is
-                        // kept EXACTLY as-is: the hole is in the destination state, not here,
-                        // and swapping in START_CRASH to "make it work" would hide it.
                         SendStateEvent("START_CSTNT");
                         break;
                     default:

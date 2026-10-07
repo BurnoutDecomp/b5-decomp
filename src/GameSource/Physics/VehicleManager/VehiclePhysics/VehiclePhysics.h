@@ -717,9 +717,8 @@ namespace Vehicle
         // matrix (saved r21), r6=controls (r22), r8=lbPlayerAftertouchForceAdditive (r24),
         // r9=lbShowtimeAllowed (r20), with the r7 slot (lbImpactTime) carried by the caller
         // (VehiclePhysics::Update @0x826414F8 `mr r7, r23`).
-        // in VehiclePhysics.cpp -- the 732-insn
-        // crash-state orchestrator, read line-by-line from the X360 asm; the LinkStubs trap is
-        // deleted in the same commit. lbImpactTime (the r7 slot) is DEAD in the body (never
+        // Bodied in VehiclePhysics.cpp -- the 732-insn crash-state orchestrator, read
+        // line-by-line from the console asm. lbImpactTime is DEAD in the body (never
         // read -- the first r7 mention is the block-local `li r7, 0x390`); it exists so the
         // caller's register map stays 1:1.
         void UpdateCrashing(f32 lfTimeStep, const rw::math::vpu::Matrix44Affine* lpCameraMatrix,

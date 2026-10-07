@@ -64,10 +64,8 @@ namespace BrnReplays
     // off a null base), right after the "mbPreviousFrameInitialized" tripwire that
     // CheckPreviousFrameCleared had already declined to set for the same reason.
     //
-    // The four record-side entry points below therefore no-op when the layout is absent.
-    // This costs nothing observable on this build: the replay RECORD path is already inert
-    // end-to-end (PropSerialiserFrame::Read / KeyFrameRead are parked in WorldLinkStubs, the
-    // frame interior is still a padding ladder), and every caller discards the result.
+    // The four record-side entry points below therefore no-op when the layout is absent;
+    // every caller discards the result.
     // RETIRE THIS GATE WHEN: the replay manager's serialiser buffer allocation lands and
     // mpStaticBuffer is real -- then these guards simply never fire.
     bool PropEntitySerialiser::HasStaticLayout()

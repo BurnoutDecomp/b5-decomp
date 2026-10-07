@@ -450,13 +450,6 @@ void SnapshotMixer::Update(float lfDeltaTime)
 
 } // namespace Nicotine
 
-// ============================================================================
-// RELOCATED HOME (2026-08-25, audio-faithfulness wave 2): these bodies were
-// reconstructed 2026-08-07 as a targeted export into SDKs/EATech/AptRenderLinkStubs.cpp
-// (an artifact of that export's file set) -- moved here to their natural TU to
-// retire the duplicate-definition hazard the stub-file placement guaranteed.
-// ============================================================================
-
 namespace Nicotine {
     // Nicotine::SnapshotMixer::InitSnapshots @0x82B47350 (targeted export 2026-08-07)
     // -- (re)build the per-channel ramp array + per-snapshot status array from the

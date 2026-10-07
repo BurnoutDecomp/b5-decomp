@@ -43,8 +43,7 @@ namespace BrnGui
     const s32 CrashNavTrax::maiEventToObserve[4] = { 6, 21, 64, 189 };
     const s32 CrashNavTrax::miNumEventsObserved  = 4;
 
-    // .rdata @0x82F27278 = { {0x91, 4}, {0x56, 4} }, count word @0x82F27288 = 2. The same
-    // pair BrnScreenStatesDataLinkStubs.cpp had independently read for this address.
+    // .rdata, read out of the image: { {0x91, 4}, {0x56, 4} }, count word = 2.
     const CgsGui::sResourceTuple CrashNavTrax::maResourcesToLoad[] =
     {
         { 145u, CgsGui::E_GUI_RESOURCETYPE_APT },

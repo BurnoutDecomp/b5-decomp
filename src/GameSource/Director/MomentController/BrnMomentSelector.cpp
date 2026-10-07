@@ -610,14 +610,11 @@ bool MomentSelector::AddMoment(Moment::EType meMomentType,
     return AddMoment(lDescription);
 }
 
-// SelectBestMomentWithExclusion --    NEW 2026-08-23
+// SelectBestMomentWithExclusion
 //
-// ⭐ THIS WAS A GROUP-F STUB IN DirectorLinkStubs.cpp UNTIL TODAY, AND THE STUB WAS
-// `return false` -- i.e. "no moment was selected", every frame, forever. It sits directly on
-// the cutaway path: ArbStateRoaming::Update's DRIVING arm calls SelectBestMoment(random)
-// (the header inline, which is just this with exclusion == -1) and the ONLY
-// writer of mbHasSelectedMoment is the body below. With the stub standing, even a correctly
-// allocated, valid, switchable jump moment could never be picked.
+// It sits directly on the cutaway path: ArbStateRoaming::Update's DRIVING arm calls
+// SelectBestMoment(random) (the header inline, which is just this with exclusion == -1) and
+// the ONLY writer of mbHasSelectedMoment is the body below.
 //
 // Signature attested by the console build: this, a CgsNumeric::Random&, and the excluded
 // slot (s32). The LRU arm moves the exclusion into the first argument slot before its

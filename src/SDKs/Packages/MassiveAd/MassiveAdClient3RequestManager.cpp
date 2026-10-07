@@ -84,7 +84,7 @@ CRequestManager* CRequestManager::Initialize()
     CRequestManager* lpInstance = spRequestManager;         // lwz r3, off_8327F368
     if (!lpInstance)                                        // bne -> skip
     {
-        void* lpMemory = CMassiveListNode::operator new(96); // li r3, 0x60; bl operator new
+        void* lpMemory = CMassiveListNode::operator new(sizeof(CRequestManager));
         lpInstance = lpMemory ? ::new (lpMemory) CRequestManager() // bl CRequestManager ctor
                               : 0;                            // li r3, 0
         spRequestManager = lpInstance;                        // stw r3, off_8327F368
@@ -167,7 +167,7 @@ int CRequestManager::SubmitRequest(CRequestObject* pRequest)
     if (!mCriticalSection.TryEnter("CRequestManager::PrepareForShutdown"))
         return -696;
 
-    void* lpMemory = CMassiveListNode::operator new(12); // li r3, 0xC; bl operator new
+    void* lpMemory = CMassiveListNode::operator new(sizeof(CMassiveListNode));
     CMassiveListNode* lpNode =
         lpMemory ? ::new (lpMemory) CMassiveListNode(pRequest) // bl CMassiveListNode ctor
                  : 0;                                          // li r4, 0
@@ -228,6 +228,22 @@ int CRequestManager::SuspendAll()
 
     mbSuspended = 1;                           // stw 1, 0x28
     mCriticalSection.Exit("CRequestManager::SuspendAll");
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// CRequestManager::ResumeAll
+//
+// Clear mbSuspended under the queue lock. Returns 0, or -696 when the lock could
+// not be taken.
+// ---------------------------------------------------------------------------
+int CRequestManager::ResumeAll()
+{
+    if (!mCriticalSection.TryEnter("CRequestManager::ResumeAll"))
+        return -696;
+
+    mbSuspended = 0;
+    mCriticalSection.Exit("CRequestManager::ResumeAll");
     return 0;
 }
 

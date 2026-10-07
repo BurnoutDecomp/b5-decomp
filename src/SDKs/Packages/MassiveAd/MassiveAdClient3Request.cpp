@@ -173,12 +173,14 @@ int CRequestObject::Complete()
 // ---------------------------------------------------------------------------
 int CRequestObject::Error(int nErrorCode)
 {
-    int lnResult = SetStatus(0x2000);
+    SetStatus(0x2000);
 
     if ((mnStatus & 0xF00000) == 0)
         return mpBuilder->HandleError(this, nErrorCode);  // builder vtable slot 2
 
-    return lnResult;
+    // A cancelled request returns whatever SetStatus left in the return register;
+    // no caller reads it.
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -209,14 +211,40 @@ void CRequestObject::Cancel()
 // CRequestObject::Suspend @ 0x82BD00E8 / Resume @ 0x82BD00F0
 // (both are bare tail-branches into SetStatus)
 // ---------------------------------------------------------------------------
-int CRequestObject::Suspend()
+void CRequestObject::Suspend()
 {
-    return SetStatus(0x20);
+    SetStatus(0x20);
 }
 
-int CRequestObject::Resume()
+void CRequestObject::Resume()
 {
-    return SetStatus(0x10);
+    SetStatus(0x10);
+}
+
+// ---------------------------------------------------------------------------
+// CRequestObject::SetStatus
+// ---------------------------------------------------------------------------
+void CRequestObject::SetStatus(int nStatus)
+{
+    mnStatus = nStatus;
+    if (nStatus == 0x300)
+    {
+        mnField38 = CMassiveClientCore::Instance()->GetTime();
+        if (mnField48 > mnBufferSize && ReAllocateDataBuffer(mnField48))
+        {
+            mnStatus = 0x2000;
+            SetLastError(-99, "ALLOCATION Failed, could not reallocate Request buffer, setting to error status.");
+        }
+    }
+
+    if (mnStatus == 0x2000)
+    {
+        mnField38 = 0;
+    }
+    else if (mnStatus == 0x1000)
+    {
+        mnField38 = CMassiveClientCore::Instance()->GetTime() - mnField38;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -480,6 +508,20 @@ unsigned int CRequestObject::ReadU32()
 //
 // (Hex-Rays lost the f1 return; the asm returns flt_82001CC0 (0.0f) on the
 //  bounds-failure path and the STUB-hooked extracted value otherwise.)
+// ---------------------------------------------------------------------------
+unsigned long long CRequestObject::ReadU64()
+{
+    if (!mpDataBuffer || mnBufferSize <= 0 || mnDataLength - mnPosition < 8)
+        return 0;
+
+    unsigned long long lnValue = 0;
+    std::memcpy(&lnValue, mpDataBuffer + mnPosition, 8);
+    mnPosition += 8;
+    return MassiveNetOrderU64(lnValue);
+}
+
+// ---------------------------------------------------------------------------
+// CRequestObject::ReadFloat
 // ---------------------------------------------------------------------------
 float CRequestObject::ReadFloat()
 {
@@ -846,6 +888,18 @@ void CRequestObject::ClearThirdPartyService()
     {
         MassiveFree(gpcThirdPartyService);
         gpcThirdPartyService = 0;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CRequestObject::ClearThirdPartyID
+// ---------------------------------------------------------------------------
+void CRequestObject::ClearThirdPartyID()
+{
+    if (gpcThirdPartyID)
+    {
+        MassiveFree(gpcThirdPartyID);
+        gpcThirdPartyID = 0;
     }
 }
 

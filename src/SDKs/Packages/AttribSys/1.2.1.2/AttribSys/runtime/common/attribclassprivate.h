@@ -41,6 +41,8 @@ namespace Attrib
         u16 mMaxCount;    // +0x14  element count (1 for scalars)
         u8  mFlags;       // +0x16  bit1 laid-out / bit3 ? / bit4 static / bit0 ?
         u8  mAlignment;   // +0x17  log2 alignment
+
+        bool operator<(const Definition& lrOther) const { return mKey < lrOther.mKey; } // key order (the definition lower_bound)
     };
 
     // The serialised ClassLoadData record (DWARF attribprivate.h:194, members

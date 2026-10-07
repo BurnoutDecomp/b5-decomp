@@ -18,12 +18,6 @@ namespace CgsGui { struct GuiEventAptTriggerPayload; }
 // presentation flow state. This is the screen a finished showtime session lands on, and it
 // is where the session's damage total, distance and score multiplier get counted up.
 //
-// ⭐⭐ THIS HEADER USED TO BE FOUR NAMED MEMBERS BURIED IN 0xB6C BYTES OF `mPad*`, AND ONLY
-// THREE OF THE CLASS'S NINETEEN FUNCTIONS EXISTED. OnEnter / OnLeave / Update were LOGGING
-// STUBS in BrnScreenStatesDataLinkStubs.cpp, so a finished showtime session terminated
-// correctly and then drew nothing at all -- the terminator handed over to a state that had
-// no body. That is the gap this header exists to close.
-//
 // HOW THE MEMBER LIST WAS RECOVERED (asm, not inference). The class has no exported
 // constructor in the ARTIST set, so the offline sibling's "read the ctor's vtable stores"
 // trick was unavailable. Instead every slot below is pinned by a load or a store in a

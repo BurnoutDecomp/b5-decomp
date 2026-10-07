@@ -10,13 +10,12 @@
 // can land today its own TU, and leave the rest of the class's home file where it is.
 // DELETE-WHEN: BrnDirectorICEWrapper.cpp joins the link -- then move this body into it.
 //
-// ⭐⭐ WHAT IT UNBLOCKS. Until 2026-08-01 this was `return true;` in DirectorLinkStubs.cpp.
-// Prepare's stage 0 is the ONLY caller of ICE::InitICEDescriptions() in the whole image, and
-// that function builds the per-channel element schedules (gaICEElementChannels) that
-// ICETake::SetParameter walks. Without it every schedule held miNumKeyElements == 0, the take
-// evaluator's element loops ran zero times, and mValues[] was never written -- so every ICE
-// camera element read 0 forever while the take itself loaded, bound, seeked and played
-// normally. See the retired stub's note in DirectorLinkStubs.cpp for the full symptom.
+// ⭐⭐ WHY IT MATTERS. Prepare's stage 0 is the ONLY caller of ICE::InitICEDescriptions() in
+// the whole image, and that function builds the per-channel element schedules
+// (gaICEElementChannels) that ICETake::SetParameter walks. Without it every schedule holds
+// miNumKeyElements == 0, the take evaluator's element loops run zero times, and mValues[] is
+// never written -- so every ICE camera element reads 0 forever while the take itself loads,
+// binds, seeks and plays normally.
 // ============================================================================
 
 #include "GameSource/Director/BrnDirectorICEWrapper.h"

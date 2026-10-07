@@ -96,6 +96,9 @@ public:
     // SetLastError result; otherwise returns the copied buffer.
     char* SetRequestURL(const char* pcURL);
 
+    // The asset URL this request downloads (the owned copy SetRequestURL made).
+    const char* GetRequestURL() override { return mpRequestURL; }
+
 private:
     char* mpRequestURL; // +0x50 (owned URL copy, or 0)
 };

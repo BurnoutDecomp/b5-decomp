@@ -167,6 +167,15 @@ bool OverlapGenerationModule::Release()
 }
 
 // ---------------------------------------------------------------------------------
+// Destruct (vtable slot 3) -- one instruction, a tail branch into the base Destruct
+// (identical-code-folded with PropEntityModule::Destruct).
+// ---------------------------------------------------------------------------------
+void OverlapGenerationModule::Destruct()
+{
+    CgsModule::ModuleSingleBuffered::Destruct();
+}
+
+// ---------------------------------------------------------------------------------
 // Update @ 0x828CB878 (39 insns, .cpp:215) -- the per-frame input replay.
 //
 // The whole body, store for store:

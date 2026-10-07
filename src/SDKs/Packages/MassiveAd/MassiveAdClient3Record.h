@@ -72,6 +72,8 @@ struct InteractionRecord
     unsigned short     GetField20() const { return msField20; }
 };
 
+class CMassiveAsset;
+
 class CMassiveRecord : public CMassiveBaseObject
 {
     // CMassiveAsset owns the record list this record lives on and drives its
@@ -81,6 +83,7 @@ class CMassiveRecord : public CMassiveBaseObject
     // Friendship keeps every one of those a named-member access rather than an
     // offset hack -- the same coupling the zone manager has with CMassiveAsset.
     friend class CMassiveAsset;
+    friend class CMassiveAdObject;
 
 public:
     // @ 0x82BDD6D0. Chains the base ctor ("CMassiveRecord"), installs this
@@ -89,7 +92,7 @@ public:
     // then index 1), and zeroes the trailing field + the (empty) interaction
     // list. Argument order matches the X360 ABI: a2=nType, a3=nField14,
     // a4=nField18.
-    CMassiveRecord(int nType, int nField14, int nField18);
+    CMassiveRecord(CMassiveAsset* pAsset, int nField14, int nField18);
 
     // The chained ~CMassiveRecord (called by the scalar deleting destructor
     // @ 0x82BDD828). It tears down the interaction records, then the embedded
@@ -124,10 +127,10 @@ public:
 private:
     int                      mnField14;            // +0x14 (a3)
     int                      mnField18;            // +0x18 (a4)
-    int                      mnType;               // +0x1C (a2)
+    CMassiveAsset*           mpAsset;              // +0x1C owning asset
     CMassiveRecordImpression mImpression0;         // +0x20 (ctor index 2)
     CMassiveRecordImpression mImpression1;         // +0x80 (ctor index 1)
-    int                      mnFieldE0;            // +0xE0 (0)
+    CMassiveRecordImpression* mpCurrentImpression; // +0xE0 impression being accumulated, or 0
     CMassiveList             mInteractionRecords;  // +0xE4 (head/tail/current/count)
 };
 

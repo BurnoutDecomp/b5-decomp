@@ -367,9 +367,8 @@ namespace Vehicle
         // is declared at the class that owns the arrays. DELETE-WHEN BrnWorld homes it.
         static const s32 KI_MAX_ACTIVE_RACE_CARS = 8;
 
-        // Construct -- BODIED in BrnVehicleManager_Construct.cpp (mounted). RE-MEASURED
-        // 2026-09-11: its only caller, BrnPhysics::PhysicsModule::Construct, is a real body in the
-        // mounted BrnPhysicsModule.cpp and has not been a link stub for waves. See the big recipe
+        // Construct -- BODIED in BrnVehicleManager_Construct.cpp (mounted). Its only caller is
+        // BrnPhysics::PhysicsModule::Construct (BrnPhysicsModule.cpp). See the big recipe
         // block further down in this header for the full shape and every default the tuning bank
         // seeds; the body was written straight off it.
         void Construct();
@@ -451,12 +450,8 @@ namespace Vehicle
         // the car's live transform -- but it is the difference between "put the car back where
         // it crashed" and "put it back on the last road pose it held".
         //
-        // ⭐ THE ROUND TRIP IS CLOSED -- RE-MEASURED 2026-09-11, and the note that used to sit
-        // here is retired. It read "THE ANSWER NEVER COMES BACK ... the SceneManager query
-        // pipeline is severed in five places (ProcessSceneQueries is a WorldLinkStubs stub,
-        // ProcessFineQueries / ProcessLineTestFine are absent, ComputeLineTestFine is an EMPTY
-        // body with no callers)". Four of those five have landed since, in the scene-query waves:
-        // ProcessSceneQueries is a real body in the mounted CgsSceneManagerModule.cpp, and
+        // ⭐ THE ROUND TRIP IS CLOSED. ProcessSceneQueries is a real body in the mounted
+        // CgsSceneManagerModule.cpp, and
         // ProcessFineQueries, ProcessFineQueriesDirectly and ProcessLineTestNearest -- the leg
         // THIS ray actually takes, because the down-ray is posted as a NEAREST line test -- are
         // real bodies in the mounted CgsSceneManagerModule_wSQ1.cpp, which carries the whole
@@ -465,9 +460,6 @@ namespace Vehicle
         // Still unreconstructed on the sibling FINE leg, which this producer does not use:
         // SceneManagerModule::ProcessLineTestFine and FineIntersectionTestModule::
         // ComputeLineTestFine are both loud traps in those two mounted TUs.
-        // ⭐ THE LESSON IS STILL WORTH KEEPING: "THE CONSUMER IS BODIED" IS NOT "THE QUESTION
-        // GETS ANSWERED". A round trip has three parts, and the middle one here is a different
-        // subsystem -- which is why this note was wrong for two waves in each direction in turn.
         // BODIED in the slice TU.
         void GenerateAboveGroundLineTests(
             BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestInterface);
@@ -562,8 +554,7 @@ namespace Vehicle
         // BrnPhysics::PhysicsModule::Prepare @0x825ADB68 (`bl` at 0x825ADDFC, result tested
         // with a `bne` so the return is a bool). Arguments are the physics resource allocator
         // (bank 23) and the scene input buffer PhysicsModule::Prepare was handed.
-        // in BrnVehicleManager_Prepare.cpp; the
-        // WorldLinkStubs gate is DELETED. A resumable three-stage fall-through FSM over
+        // Bodied in BrnVehicleManager_Prepare.cpp. A resumable three-stage fall-through FSM over
         // mePrepareStage: PrepareData -> PrepareTriangleCache -> done. Every store in its tail
         // arm is reached BY NAME (meReleaseStage +4, mn8RoundRobinControlWord +172464,
         // mbTrafficCheckingAllowed +172313 -- all three already mapped in this header).
@@ -574,12 +565,8 @@ namespace Vehicle
         // 8x VehiclePhysics::Construct + 8x { VehicleDriver::Prepare, VehiclePhysics::Construct,
         // Vehicle::DebugComponent::Construct }, then PhysicalTrafficManager::Prepare
         // @0x8262CA48, VehicleDriver::Prepare on the 9th (traffic) driver, and ~30 scalar seeds.
-        // BODIED in BrnVehicleManager_PrepareData.cpp (mounted). RE-MEASURED 2026-09-11: this note
-        // used to read "NOT RECONSTRUCTED -- a named LINK STUB in WorldLinkStubs.cpp", parked on
-        // its callee closure and on an unusable pseudocode view. Both blockers went away when the
-        // Prepare chain landed -- the callees are bodied and the stores are reached by name -- and
-        // WorldLinkStubs.cpp has not named this symbol since. It always returns 1 (there is no
-        // failure path in the body), which is why the FSM above could land ahead of it.
+        // BODIED in BrnVehicleManager_PrepareData.cpp (mounted). It always returns 1 (there is no
+        // failure path in the body).
         bool PrepareData( rw::IResourceAllocator* lpPhysicsAllocator );
 
         // X360 @0x82615BA0 (37 insns); home
@@ -643,9 +630,8 @@ namespace Vehicle
         // producers, walk the scene's overlap pairs (car-car pairs -> DoCarCarContactGeneration +
         // hinged-part pairs; part-vs-car / wheel-vs-car pairs -> the deformation pair builders),
         // run the per-car and per-traffic world contact generation, then kick the three collide
-        // stream jobs. Caller: PhysicsModule::Update @0x825B0640 is a REAL BODY
-        // (BrnPhysicsModuleUpdateFunctions.cpp, mounted) and drives this every non-catchup frame --
-        // it has NOT been a link stub since the 2026-08-09 conductor wave.
+        // stream jobs. Caller: PhysicsModule::Update (BrnPhysicsModuleUpdateFunctions.cpp), every
+        // non-catchup frame.
         void StartVehicleContactGeneration(
             const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
             const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>* lpOverlapPairs,
@@ -957,11 +943,9 @@ namespace Vehicle
         // BrnVehicleManager_TractionLineTests.cpp. A Burnout car does NOT rest on contacts --
         // contacts are the body-shell/crash path; it rests on TRACTION LINE TESTS, and this is the
         // producer lifecycle plus the race-car harvest that ends in Wheel::mRoadContact.mbIsOnGround.
-        // ALL FOUR ARE REACHED EVERY FRAME TODAY -- re-measured 2026-09-11. This block used to say
-        // they were unreached because their two callers were "gate-bodied" and "a link stub";
-        // StartVehicleTractionLineTests and EndVehicleTractionLineTests are both real bodies in
-        // the same mounted TU, they run as a matched pair every frame, and with the create drain
-        // landed the harvest has live cars to walk.
+        // ALL FOUR ARE REACHED EVERY FRAME: their two callers, StartVehicleTractionLineTests and
+        // EndVehicleTractionLineTests, are real bodies in the same mounted TU, they run as a
+        // matched pair every frame, and the harvest walks the live cars the create drain produces.
         // ==========================================================================================
 
         // @0x825B5098 (52 insns). Carve the traction-line command stream out of the contact
@@ -1850,7 +1834,7 @@ namespace Vehicle
         //        BrnPhysics::StuntOffencesManager::Construct
         //        BrnPhysics::Vehicle::PhysicalTrafficManager::Construct
         //    -- and both BODIES EXIST (BrnStuntOffencesManager.cpp / BrnPhysicalTrafficManager.cpp);
-        //    neither TU is in tools/build/build_game_exe.bat. Mounting the whole TU costs 15
+        //    neither TU was then in tools/build/build_game_exe.bat (both are now). Mounting the whole TU costs 15
         //    unresolved externals in total (the other 13 belong to the takedown chain that shares
         // this file -- see the note at the mount site in the build script for the list).
         //    ⇒ Construct IS blocked on link closure. It is blocked on TWO mount lines, not on
@@ -1867,8 +1851,7 @@ namespace Vehicle
         //    (then role-named "IsIgnoringPassedOnImpulses"; image-settled 2026-08-09 as
         //    VehiclePhysics::IsPlayerVehicleInShowtime, whose recovered default retires that
         //    trap). BOTH are closed today: SimpleVehiclePhysics::SetCrashing is a real body in the
-        //    mounted BrnSimpleVehiclePhysics.cpp and its vtable-closure gate is gone (re-measured
-        //    2026-09-11 -- this line claimed the gate still stood).
+        //    mounted BrnSimpleVehiclePhysics.cpp and its vtable-closure gate is gone.
         //
         // WHAT WAS STILL MISSING FOR `VehicleManager::Construct` @0x8263B7C8 -- MEASURED 2026-08-03,
         //    not estimated. The layout wave above mined this function for OFFSETS; this note records
@@ -1885,16 +1868,10 @@ namespace Vehicle
         //      PhysicalTrafficManager::Construct             @0x82636CA8  bodied
         //      StuntOffencesManager::Construct               @0x825E8C08  bodied
         //    plus __savegprlr_14 / __savefpr_22 / __restfpr_22 and the three CgsDev::Assert entries.
-        // THE SENTENCE THAT STOOD HERE -- "⇒ Construct is NOT blocked on link closure" --
-        //    IS FALSE; see CORRECTION 1 at the top of this block. "bodied" in the list above means
-        //    the body EXISTS SOMEWHERE IN THE TREE, and for two of the six the TU that holds it is
-        //    not mounted, so the symbol does not resolve. Construct WAS blocked on link closure, on
-        //    exactly two mount lines (BrnStuntOffencesManager.cpp, BrnPhysicalTrafficManager.cpp).
-        //    MEASURED with the linker 2026-08-03, not reasoned -- AND BOTH MOUNT LINES ARE IN THE
-        //    BAT TODAY (re-measured 2026-09-11), which is why Construct itself is bodied and
-        //    mounted. Its only caller, PhysicsModule::Construct, is likewise a real body in the
-        //    mounted BrnPhysicsModule.cpp; the "still a WorldLinkStubs stub for exactly two
-        //    reasons" that stood here named a stub that no longer exists.
+        //    All six resolve: the TUs holding them (including BrnStuntOffencesManager.cpp and
+        //    BrnPhysicalTrafficManager.cpp, see CORRECTION 1) are mounted, Construct itself is
+        //    bodied and mounted, and its only caller, PhysicsModule::Construct, is a real body in
+        //    the mounted BrnPhysicsModule.cpp.
         // BUT DO NOT STOP READING HERE. "Has a body" is not "can be called": three of those
         //    six sub-constructors take a `this` that VehicleManager cannot supply, because the
         //    member is an X360-sized opaque span and the real x64 class does not fit in it. The

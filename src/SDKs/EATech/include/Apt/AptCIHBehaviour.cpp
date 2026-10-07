@@ -1352,8 +1352,8 @@ bool AptCIH::ProcessTextInst()
 }
 
 // ---------------------------------------------------------------------------
-// The generalised-process callback slots (AptRenderLinkStubs.cpp) + the per-node
-// generalised process. The console AptUpdate driver (sub_82B0D608) installs
+// The generalised-process callback slots (defined with GeneralisedProcess below) + the
+// per-node generalised process. The console AptUpdate driver (sub_82B0D608) installs
 // AptCIH::ProcessTextInst / ProcessCustomControls / ProcessMaskMatricies into
 // dword_8324E41C/420/424 around AptDisplayList::GeneralisedProcess each frame; the
 // registered callbacks are invoked per node by AptCIH::GeneralisedProcess (above).
@@ -1466,8 +1466,7 @@ bool AptCIH::HasEvent(int nEventMask)
 // the cluster callee below (un-staged 2026-07-01).
 // ---------------------------------------------------------------------------
 
-// The clip-event record scan + enqueue (HOMED 2026-07-01 from the PS3 body @0x815BD0;
-// was the AptRenderLinkStubs return-0 stub). The sprite's registered handler list
+// The clip-event record scan + enqueue. The sprite's registered handler list
 // (mpClipEventHandlers == the placement's clipActions block) is scanned for records
 // whose mask matches; each match enqueues its action-stream SLOT ADDRESS onto the
 // director's deferred queue:
@@ -1693,14 +1692,15 @@ AptValue* AptCIH::queueClipEvents(int nEventMask, unsigned int nFrameId, int bDe
 
 // The Apt-runtime generalised-process state (console AptCIH::bEarlyReturn /
 // AptCIH::sCIHProcessCb[0..2] / AptCIH::nTreeDepth): the process gate flag, the up-to-three
-// registered per-node process callbacks, and the recursion-depth counter. Storage in
-// AptRenderLinkStubs.cpp; installed/swapped live per frame by the AptUpdate driver
-// (AptUpdate.cpp).
-extern bool AptCIH_sbGeneralisedProcessEarlyReturn;                                   // bEarlyReturn
-extern unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*);                 // sCIHProcessCb
-extern unsigned int (*AptCIH_sCIHProcessCb1)(AptCIH*, AptCIH*, void*);                // sCIHProcessCb1
-extern unsigned int (*AptCIH_sCIHProcessCb2)(AptCIH*, AptCIH*, void*);               // sCIHProcessCb2
-extern int AptCIH_snGeneralisedProcessTreeDepth;                                      // nTreeDepth
+// registered per-node process callbacks, and the recursion-depth counter. The callbacks are
+// installed/swapped live per frame by the AptUpdate driver (AptUpdate.cpp). The gate flag is
+// initialised data (1): nothing in the image ever clears it, so the early-return screen is
+// always armed.
+bool AptCIH_sbGeneralisedProcessEarlyReturn = true;                                    // bEarlyReturn
+unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*)  = nullptr;              // sCIHProcessCb
+unsigned int (*AptCIH_sCIHProcessCb1)(AptCIH*, AptCIH*, void*) = nullptr;              // sCIHProcessCb1
+unsigned int (*AptCIH_sCIHProcessCb2)(AptCIH*, AptCIH*, void*) = nullptr;              // sCIHProcessCb2
+int AptCIH_snGeneralisedProcessTreeDepth = 0;                                           // nTreeDepth
 
 unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
 {
@@ -1767,7 +1767,7 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
 // release flush / zombies-dirty raise), and the observable state teardown (the mask
 // unwiring + the char-inst swap/free) are ALL implemented inline below in the shipped
 // order; the director-table drain is the cluster callee AptClearCIHDrainQueuesAndZombie.
-// (The zombies-dirty consumer AptGC::CleanUnreachable is tracked in AptRenderLinkStubs.cpp.)
+// (The zombies-dirty consumer is AptGC::CleanUnreachable, in AptGC.cpp.)
 // ===========================================================================
 
 // ClearCIH's director-table drain (console sub_82ADBD50 + __::remove + the shared
@@ -1789,10 +1789,7 @@ extern void          (*gpAptZombieNotifyHook)(int bImmediate, int nReserved,
 extern AptValueVector* gpValuesToRelease;   // off_8324E51C
 extern AptCIH*         AptGetAnimationAtLevel(int nLevel);
 
-// AptClearCIHDrainQueuesAndZombie -- ClearCIH's director-table DRAIN
-// (HOMED 2026-07-02 from the X360 body @0x82AF6020; was the return-0 link-stub,
-// which left cleared nodes dangling in the director's sets/tables -- the bulk
-// removeObject path under mergeState walked them freed): remove the node from
+// AptClearCIHDrainQueuesAndZombie -- ClearCIH's director-table DRAIN: remove the node from
 // the director's input set (sub_82ADBD50) + listener set (__::remove), clear
 // the press/rollover event slots to the undefined singleton when they point at
 // it, and scrub it out of the shared new-instances table (Release + null the
@@ -2231,9 +2228,7 @@ AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
 // mnClipActionFlags custom-control bits and, for a classified control, keeps the
 // render item's descriptor strings fresh -- the strings AptRenderItemCustomControl::
 // Render hands to the host (gAptFuncs.pfnCustomControlRender -> CgsGui::
-// AptCallbackCustom::ControlRender -> BrnGui::CustomRendererManager). This body
-// was the ONE remaining stub in that chain ("return false" -- measured zero
-// ControlRender calls); everything downstream was already live.
+// AptCallbackCustom::ControlRender -> BrnGui::CustomRendererManager).
 //
 // Sources, in trust order:
 //   * the X360 body @0x82B07788 (207 asm lines, transcribed arm for arm),

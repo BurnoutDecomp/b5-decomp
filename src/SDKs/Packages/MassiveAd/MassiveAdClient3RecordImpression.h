@@ -50,6 +50,9 @@ namespace MassiveAdClient3
 
 class CMassiveRecordImpression : public CMassiveBaseObject
 {
+    // The ad placement accumulates its impressions into these fields directly.
+    friend class CMassiveAdObject;
+
 public:
     // @ 0x82BDD5E8. Chains the base ctor ("CMassiveRecordImpression"), installs
     // this class's vftable (off_82187B98 -- modelled by the virtual dtor), stores

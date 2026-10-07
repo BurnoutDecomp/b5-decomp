@@ -68,20 +68,31 @@ namespace MassiveAdClient3
 class CRequestObject;
 class CRequestHeartbeat;
 class CTransactionHTTP;
-struct SMassiveClientInit;
+class CFlag;
 
-// MassiveInet_ntop -- the MassiveAd client's inet_ntop shim: formats the network-
-// order address at pSrc into pcDst ("a.b.c.d"), writing at most nSize bytes.
-// Separate ledger TU (a vendor wrapper over the platform inet_ntop); declared here
-// because CNetworkManager's Connect / Disconnect / Tick format the connected /
-// target address for their trace lines.
+class CMassiveList;
+
+// Formats the 32-bit address value at pSrc as "a.b.c.d" (most significant octet
+// first) into pcDst; null when pSrc/pcDst is null or nSize < 16.
 char* MassiveInet_ntop(int nFamily, const void* pSrc, char* pcDst, int nSize);
+
+// Installs every CPortIndexPair of pPorts as a server port, then destroys the
+// pairs and the list itself.
+void MassiveSetServerPorts(CMassiveList* pPorts);
+
+// The address-resolution thread entry: destroys the CAddressIndexPair list it is
+// handed, then looks the Massive service gateway up through the console title-
+// server enumeration and installs its secure address for every server index.
+unsigned long DNS(void* pParam);
 
 // ---------------------------------------------------------------------------
 // CNetworkManager -- the client transport driver.
 // ---------------------------------------------------------------------------
 class CNetworkManager : public CRequestBuilder
 {
+    // The client core applies the server's heartbeat period to mnHeartbeatInterval.
+    friend class CMassiveClientCore;
+
 public:
     // The socket connection state machine (mnState). Reconstructed from the Tick
     // dispatch + the transitions in Connect / Disconnect / Send / Receive; the
@@ -121,10 +132,10 @@ public:
 
     // @ 0x82BD1638. Lazily creates the singleton, its process-wide server-array
     // lock (refcounted) and its transaction object, sizes + allocates the receive
-    // buffer from the init flags, arms DNS, and -- when pResolveParam is supplied --
+    // buffer from the client flags (the core's mFlags), arms DNS, and -- when pResolveParam is supplied --
     // kicks off address resolution. Returns the singleton, or null on any failure
     // (unwinding what it built).
-    static CNetworkManager* Initialize(const SMassiveClientInit* pInit,
+    static CNetworkManager* Initialize(const CFlag* pFlags,
                                        void* pResolveParam);
 
     // @ 0x82BD0D80. Destroys the singleton and the DNS thread, decrements the
@@ -215,18 +226,18 @@ public:
 
     // ----- collaborators homed in other TUs (declared, not defined here) ----
 
-    // The per-server port getter (mirror of GetServerAddressU32; separate ledger
-    // TU). Declared here -- CNetworkManager is its home -- because Connect / Tick
-    // bl into it. Returns the u16 port for server nIndex.
+    // The u16 port for server nIndex under the server-array lock (0xFFFF when
+    // the lock is busy).
     static unsigned short GetServerPortU16(unsigned int nIndex);
 
-    // Recomputes mnMaxBytes for the current tick's send/receive chunk (separate
-    // ledger TU). Declared here because Tick bl's it before Send / Receive.
-    void DetermineMaxBytes();
+    // Recomputes mnMaxBytes for this tick's send (state 3) or receive (state 4)
+    // chunk: the KB/s limit scaled by the elapsed tick time, or the whole socket
+    // buffer when no limit is set. -793 in any other state.
+    int DetermineMaxBytes();
 
 private:
-    unsigned short     mnField28;           // +0x28 (0; untouched after ctor)
-    unsigned short     mnField2A;           // +0x2A (0; untouched after ctor)
+    unsigned short     mnField28;           // +0x28 send limit, KB/s (0 = unlimited)
+    unsigned short     mnField2A;           // +0x2A receive limit, KB/s (0 = unlimited)
     int                mnMaxBytes;          // +0x2C
     void*              mpReceiveBuffer;     // +0x30
     long long          mnCurrentTime;       // +0x38

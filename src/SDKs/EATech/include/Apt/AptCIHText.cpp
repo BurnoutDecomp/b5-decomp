@@ -65,8 +65,7 @@ extern intptr_t gAptEmptyTextRenderDataZID;   // &unk_82F72DB0
 
 // ---------------------------------------------------------------------------
 // AptResolveTextFieldFontName -- the text field's AUTHORED font name, resolved via
-// its font id through the owning movie's character table (HOMED 2026-07-10,
-// retiring the AptRenderLinkStubs "" stub). The walk is the SAME
+// its font id through the owning movie's character table. The walk is the SAME
 // native-8 chain EnsureStringAllocated's draw path uses below: the field char's
 // mpFixupLink back-link -> the def base at +KU_AptEmbeddedMovieOff ->
 // mpCharacterTable[fontId] -> the type-3 font char's name pointer @+0x20

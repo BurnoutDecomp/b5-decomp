@@ -241,12 +241,12 @@ public:
           u32 au32Ident);
 
     virtual ~Voice();                                            // vtable 0x00
-    virtual f32   GetCpuTicks();                                 // vtable 0x04
-    virtual void  DisplayVoiceCpu(f32*, f32*, f32, bool);        // vtable 0x08
-    virtual EProfileVoiceType GetProfileVoiceType();            // vtable 0x0C
+    virtual f32   GetCpuTicks() = 0;                                 // vtable 0x04
+    virtual void  DisplayVoiceCpu(f32*, f32*, f32, bool) = 0;        // vtable 0x08
+    virtual EProfileVoiceType GetProfileVoiceType() = 0;            // vtable 0x0C
     virtual void  DoDispose();                                   // vtable 0x10
-    virtual void  DoUpdate(System* apSystem, f32 af32DeltaTime); // vtable 0x14
-    virtual bool  DoConnectSend(u32 au32Index, SubmixVoice* apSubmix); // vtable 0x18
+    virtual void  DoUpdate(System* apSystem, f32 af32DeltaTime) = 0; // vtable 0x14
+    virtual bool  DoConnectSend(u32 au32Index, SubmixVoice* apSubmix) = 0; // vtable 0x18
     virtual bool  DoRemove();                                    // vtable 0x1C
 
     // @ 0x826ACC90. Resolve akName to a Send, then DoConnectSend the submix handle.

@@ -145,15 +145,14 @@ void WorldModule::BridgeActionsToTrafficModule(
 
 // ============================================================================
 // @ 0x827ABF40 -- WorldBridgeToEntityModules.cpp:86/:87. The RACE-CAR leg of the
-// game-action fan-out, run by WorldModule::Update @0x827D63E8 in the pre-scene input
-// staging block (BrnWorldModule.cpp:2275, which has been calling an inert
-// WorldLinkStubs gate since the world-drive wave).
+// game-action fan-out, run by WorldModule::Update in the pre-scene input staging block
+// (BrnWorldModule.cpp).
 //
 // ⭐ THIS BRIDGE IS THE ONLY PRODUCER OF THE RACE-CAR MODULE'S GAME-ACTION QUEUE in the
 // whole image (0x8279D060, InputBuffer_PreScene::GetGameActionQueue, is called from here
 // and nowhere else). RaceCarEntityModule::HandleGameActions @0x8230BE08 drains that queue,
 // and its case 0 is HandleResetPlayerCarAction -- the record that places the player's car
-// at a junkyard spawn. Until this bridge was real, that queue could not be non-empty.
+// at a junkyard spawn. Without this bridge that queue is always empty.
 //
 // ⚠️ UNLIKE the physics/traffic/world-entity siblings above there is NO ALLOWLIST and no
 // per-event walk: the console Appends the WHOLE queue (the mangled callee at 0x827ABFC4 is

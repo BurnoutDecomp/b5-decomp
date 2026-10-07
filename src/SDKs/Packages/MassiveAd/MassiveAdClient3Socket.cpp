@@ -6,6 +6,7 @@
 // FLAGGED platform APIs supplied by <winsock2.h> on the PC target -- the same
 // direct calls the ARTIST asm makes, not routed through a Massive* hook.
 #include <winsock2.h>
+#include <cstring>
 
 // ===========================================================================
 // MassiveAdClient3::CMassiveSocket -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -152,6 +153,50 @@ int CMassiveSocket::Disconnect()
     }
 
     return 0;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveSocket::Connect
+//
+// Records the peer, opens a non-blocking TCP socket with the requested buffer
+// sizes and starts the connect. 1 when the connect is under way (or done), 0
+// when a socket is already open, socket creation failed, or the connect failed
+// with a hard error. FLAG PC-platform: the peer address and port are host-order
+// values; Winsock takes them in network order, which the big-endian console
+// stored them in natively.
+// ---------------------------------------------------------------------------
+int CMassiveSocket::Connect(unsigned int nAddress, unsigned short nPort, int nSendBufferSize,
+                            int nReceiveBufferSize)
+{
+    sockaddr_in lPeer;
+    lPeer.sin_family = AF_INET;
+    lPeer.sin_port = htons(nPort);
+    lPeer.sin_addr.s_addr = htonl(nAddress);
+    std::memset(lPeer.sin_zero, 0, sizeof(lPeer.sin_zero));
+
+    mnPeerAddress = nAddress;
+    mnPeerPort = nPort;
+    if (mnSocket != -1)
+        return 0;
+
+    mnSocket = static_cast<int>(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+    if (mnSocket == -1)
+        return 0;
+
+    u_long luNonBlocking = 1;
+    ioctlsocket(mnSocket, FIONBIO, &luNonBlocking);
+    setsockopt(mnSocket, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&nSendBufferSize), 4);
+    setsockopt(mnSocket, SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&nReceiveBufferSize), 4);
+
+    int lnSendBufferSize = 0;
+    int lnReceiveBufferSize = 0;
+    int lnOptionLength = 4;
+    getsockopt(mnSocket, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<char*>(&lnSendBufferSize), &lnOptionLength);
+    getsockopt(mnSocket, SOL_SOCKET, SO_RCVBUF, reinterpret_cast<char*>(&lnReceiveBufferSize), &lnOptionLength);
+
+    if (connect(mnSocket, reinterpret_cast<const sockaddr*>(&lPeer), sizeof(lPeer)) == -1 && ProcessError())
+        return 0;
+    return 1;
 }
 
 } // namespace MassiveAdClient3

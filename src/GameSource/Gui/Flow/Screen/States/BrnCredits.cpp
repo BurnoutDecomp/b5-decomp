@@ -82,6 +82,11 @@ namespace
 const s32 Credits::maiEventToObserve[] = { 6, 21 };
 const s32 Credits::miNumEventsObserved = 2;
 
+// The credits apt package (read from the image).
+const CgsGui::sResourceTuple Credits::maResourcesToLoad[] =
+    { { 154, CgsGui::E_GUI_RESOURCETYPE_APT } };
+const u32 Credits::muNumResourcesToLoad = 1;
+
 // @ 0x824CFA08
 void Credits::OnEnter()
 {

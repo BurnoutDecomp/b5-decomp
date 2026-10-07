@@ -69,7 +69,7 @@
 // The XDK sign-in query the profile row gates on (X360 `lwz r3, 0x4B38(cache) ; bl
 // XUserGetSigninState`). Declared locally, exactly as the sibling consumers do
 // (CgsGuideIntegration.cpp:18, CgsBuddyManagerDirtySockX360.cpp:34); the PC leaf lives
-// in GameSource/BrnBaselineLinkStubs.cpp and answers "not signed in".
+// in GameShared/GameClasses/System/PC/CgsXboxLivePC.cpp (1 == local user offline, 2 on LAN).
 extern "C" u32 XUserGetSigninState(u32 luUserIndex);
 
 namespace BrnGui
@@ -213,10 +213,8 @@ namespace BrnGui
             }
         };
 
-        // The one-shot gap log the two PARKED platform sites share. Same shape as
-        // BrnScreenStatesLinkStubs.cpp's LogUnreconstructedState: a gap that is invisible at
-        // runtime reads exactly like working code, which is the failure this project keeps
-        // paying for.
+        // The one-shot gap log the two PARKED platform sites share: a gap that is invisible
+        // at runtime reads exactly like working code.
         void LogParkedPlatformLeaf(const char* lpacSite, const char* lpacMissingLeaf)
         {
             char lac[192];
@@ -235,6 +233,11 @@ namespace BrnGui
         KI_EVENT_KEYBOARD_RESPONSE, KI_EVENT_493_CONSUMED
     };
     const s32 CrashNavSettings::miNumEventsObserved = 5;   // X360 `li r5, 5`
+
+    // The settings screen's apt package (read from the image).
+    const CgsGui::sResourceTuple CrashNavSettings::maResourceTuplesToLoad[] =
+        { { 139, CgsGui::E_GUI_RESOURCETYPE_APT } };
+    const s32 CrashNavSettings::miNumResourcesToLoad = 1;
 
     // ---- CrashNavProductCodeKeyboardListener::FillString @0x824B7A28 ---------------
     // Consume the latched keyboard result. The console clears the "closed" latch even when
@@ -256,11 +259,8 @@ namespace BrnGui
     // ---- OnEnter @0x824B7640 -------------------------------------------------------
     void CrashNavSettings::OnEnter()
     {
-        // ⭐⭐ REGISTER FIRST, and note WHY this single line is the whole defect: a state
-        // that observes nothing receives nothing, so every arm in Update and
-        // HandleControllerInput below is dead code without it. That is exactly how the
-        // shell version of this class soft-locked the game -- the same lesson
-        // CrashNavMapMain's partial already recorded (BrnScreenStatesLinkStubs.cpp).
+        // ⭐⭐ REGISTER FIRST: a state that observes nothing receives nothing, so every arm
+        // in Update and HandleControllerInput below is dead code without it.
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
         mMenuComponent.Construct(KAC_MENU_COMPONENT, mpStateInterface, KI_NUM_MENU_ITEMS,

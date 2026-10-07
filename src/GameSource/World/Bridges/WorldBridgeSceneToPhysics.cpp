@@ -10,15 +10,13 @@
 //   BridgeSceneQueryResultsToPhysics       @ 0x827A8E88   (88 insns)  [2026-08-11]
 //   BridgeScenePotentialContactsToPhysics  @ 0x827ABD80   (41 insns)  [2026-08-19, wave Q5/F2]
 //
-// ⭐ WHY THIS FILE EXISTS NOW (2026-08-11, triangle-cache wiring wave). The traction-line
-// leg was dying with "mpTriangleCacheManager != NULL" and then an AV inside
-// TriangleCacheManager::GetTrianglesForCachedObject the moment the create drain put a race
-// car in mUsedRaceCars. The cause was not the cache manager (it is live -- slots claimed,
-// Prepare reached) but the HANDOFF: the physics side reads
+// ⭐ WHY THIS FILE MATTERS: the triangle-cache HANDOFF. The physics side reads
 //   lpInputBuffer->GetVehicleInputInterface()->GetTriangleCacheInterface()
 // and the ONLY code in the whole program that ever writes that interface's manager pointer
-// is the tail of this bridge. It was an inert one-shot-log gate in WorldLinkStubs.cpp:3298,
-// so the pointer stayed NULL from boot.
+// is the tail of this bridge. Without it the pointer stays NULL from boot, and the
+// traction-line leg dies with "mpTriangleCacheManager != NULL" and then an AV inside
+// TriangleCacheManager::GetTrianglesForCachedObject the moment the create drain puts a race
+// car in mUsedRaceCars.
 //
 // Full console chain, by address:
 //   SceneManagerModule::ProcessSceneQueries @0x828D57D0   seeds the SCENE OUTPUT buffer
@@ -144,11 +142,10 @@ namespace WorldModule
     //
     // The PHYSICS half of the scene's broad-phase output: the potential-contact pairs the
     // overlap culler produced, and the raw overlap pairs the generator produced, handed to
-    // rw::physics through PhysicsModuleIO::InputBuffer. Its consumers are already real and
-    // mounted -- PhysicsModule::Update's PotentialContactInterface::SetConstQueue
-    // (BrnPhysicsModuleUpdateFunctions.cpp:304) reads mPotentialContactQueue and the two
-    // GetOverlapPairsQueue() sites at :343/:389 read mOverlapPairsQueue -- so while this
-    // bridge was the boot gate at WorldLinkStubs.cpp both queues read length 0 every frame.
+    // rw::physics through PhysicsModuleIO::InputBuffer. Its consumers: PhysicsModule::Update's
+    // PotentialContactInterface::SetConstQueue (BrnPhysicsModuleUpdateFunctions.cpp:304) reads
+    // mPotentialContactQueue and the two GetOverlapPairsQueue() sites at :343/:389 read
+    // mOverlapPairsQueue -- without this bridge both queues read length 0 every frame.
     //
     // ---- The console body (0x827ABD80..0x827ABE20), instruction for instruction ----------
     //   r4 = lpPhysicsModuleInputBuffer (dest), r5 = lpSceneModuleOutputBuffer (src);

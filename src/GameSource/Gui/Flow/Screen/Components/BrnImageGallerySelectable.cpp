@@ -9,12 +9,18 @@
 //   ImageGallerySelectable::Construct               @0x82419878
 //   ImageGallerySelectable::Update                  @0x82419910
 //   ImageGallerySelectable::HandleLoadNotifications @0x82419998
+//   ImageGallerySelectable::Select                  (empty; shares a folded body)
 
 namespace BrnGui
 {
 
 const char ImageGallerySelectable::KAC_CATEGORY_TEXT_NAME[12]  = "Category_mc";
 const char ImageGallerySelectable::KAC_COLLECTED_TEXT_NAME[13] = "Collected_mc";
+
+// The console's override is empty.
+void ImageGallerySelectable::Select()
+{
+}
 
 // @ 0x82419878 -- the component subobject first (this+0x18), then the selectable,
 // then the two text-field children: each Construct dispatched through the field's

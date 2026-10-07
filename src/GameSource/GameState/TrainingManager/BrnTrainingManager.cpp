@@ -48,7 +48,8 @@
 #include <cstdlib>   // getenv / atof -- [DIAG] only
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the BRN_SPEECH_DIAG witness only
 
-// The XDK signin probe (PC stub in BrnBaselineLinkStubs.cpp returns 0 == signed out).
+// The XDK signin probe (PC platform leaf in CgsXboxLivePC.cpp: 1 == signed in locally when
+// offline, 2 == signed in to the service on LAN).
 extern "C" u32 XUserGetSigninState(u32 luUserIndex);
 
 namespace BrnGameState
@@ -427,7 +428,7 @@ void TrainingManager::Update(GameStateModuleIO::GameActionQueue* lpGameActionQue
 
             // [FLAG PC deviation, named in the header] the console reads the controller
             // interface's user index off the PreWorldInputBuffer; the PC probes user 0
-            // against the stubbed XDK (0 == signed out) -- mbIsOnlinePossible stays false.
+            // (2 only on LAN, so mbIsOnlinePossible is false offline).
             const u32 luSigninState = XUserGetSigninState(0);
             mbIsOnlinePossible = (luSigninState == 2);
 

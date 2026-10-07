@@ -9,8 +9,7 @@
 //   FindCollection            @ 0x82808378   — resolve the collection for a (class, collection)
 //                                              key pair. BODY: attribsupport.cpp.
 //   FindCollectionWithDefault @ 0x82808400   — resolve the collection *with its default*.
-//                                              Declaration-only (no recovered body yet; the
-//                                              stub lives in GameSource/World/WorldLinkStubs.cpp).
+//                                              BODY: attribsupport.cpp.
 //
 // ⚠️ SIGNATURE CORRECTED (2026-07-31, asm-verified @0x82808378). This header previously
 // declared `FindCollection(int liKey, void* lpOwner = nullptr)` — a one-key resolve with an

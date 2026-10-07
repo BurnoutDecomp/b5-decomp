@@ -1,11 +1,14 @@
 // BrnGui::OnlineScoreboards -- static-member definitions (X360 rodata values, dumped:
-// scratchpad/waveI/scoreboards_rodata.txt). maResourcesToLoad / muNumResourcesToLoad are
-// deliberately NOT here -- they are already defined in BrnScreenStatesDataLinkStubs.cpp:221
-// (values verified identical: {182, E_GUI_RESOURCETYPE_APT}, count 1).
+// scratchpad/waveI/scoreboards_rodata.txt) and the constructor.
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineScoreboards.h"
 
 namespace BrnGui
 {
+    // the scoreboards screen.
+    const CgsGui::sResourceTuple OnlineScoreboards::maResourcesToLoad[] =
+        { { 182, CgsGui::E_GUI_RESOURCETYPE_APT } };
+    const u32 OnlineScoreboards::muNumResourcesToLoad = 1;
+
     // @0x8205F648 -- the observed in-queue event set (ARTIST count 12; Dec-07 DWARF said 10).
     // 14/21 resource-completion / apt ONLOAD (cache layer), 6 controller, 26 frame tick,
     // 44 network-disconnected, 64 gui-cache, 116..119 scoreboard responses, 122 target-score
@@ -28,4 +31,11 @@ namespace BrnGui
     // The table-request debounce armed by the variation-list response (the 0x3F000000
     // literal in UpdatePermanent's case 118).
     const f32 OnlineScoreboards::KF_DELAY_TO_REQUEST_TABLE = 0.5f;
+
+    // member construction only: the console body installs the state vtable,
+    // runs the filter group's constructor and installs the vtables of the table (and its ten
+    // columns), the loading icon and the two animators.
+    OnlineScoreboards::OnlineScoreboards()
+    {
+    }
 }

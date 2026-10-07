@@ -13,6 +13,7 @@
 #include "BrnCommonTypes.h"                        // Vector3 / Vector4 (event-position / camera accessors)
 #include "GameSource/GameState/BrnCgsPlayerName.h" // CgsNetwork::PlayerName (COMPLETE: value member of ReplayPlayerActive below)
 #include "GameSource/GameState/BrnGameStateTypes.h" // BrnGameState::LandmarkIndex (COMPLETE: 2-byte value member mCurrentLandmarkIndex below; header pulls only types.hpp)
+#include "GameSource/Replays/BrnReplayStatusInterface.h" // BrnReplays::ReplayIO::StatusInterface (by value: mReplayStatusInterface below; pulls only types.hpp + BrnReplayReels.h)
 // [gateui r4] CE-4: BrnGui::InGameMessagesQueue is a BY-VALUE member of the cache at
 // +0x4080 (see mInGameMessagesQueue), so the COMPLETE type is required here. No cycle:
 // that header pulls only types.hpp / BrnCommonTypes.h / BrnGameStateSharedIO.h /
@@ -53,8 +54,8 @@ namespace BrnGameState { namespace GameStateModuleIO { class SpecificGameModeEve
 namespace BrnGameState { enum ECurrentMedalTargetTime : s32; }
 namespace BrnNetwork { namespace BrnNetworkModuleIO { struct InGamePlayerStatusData; } } // GetOnlinePlayerInfo return (pointer only; home BrnNetworkModuleInGamePlayerStatusInterface.h)
 // CgsNetwork::PlayerName is now a COMPLETE type (included above): it is the lead value member
-// of ReplayPlayerActive (the replay-player-active table entry) and the element returned by
-// GetSortedReplayPlayerActive. Home: GameSource/GameState/BrnCgsPlayerName.h.
+// of ReplayPlayerActive (the replay-player-active table entry GetSortedReplayPlayerActive
+// returns). Home: GameSource/GameState/BrnCgsPlayerName.h.
 
 // [gateui] The HUD-message controller is BrnResource::HudMessageController
 // (SharedClasses/DataLists/BrnHudMessageController.h). It used to be forward-declared a
@@ -83,6 +84,14 @@ namespace BrnGui
     struct CrashNavEnterOnlineBase;  // friend of GuiCache (reads its wave-I-carved members by name)
     struct OnlineCustomMatch;        // friend of GuiCache (reads its ranked/unranked bytes by name)
     class  EventInfoComponent;       // friend of GuiCache (reads the id-428 stunt block by name)
+    struct ReplayClips;              // friends of GuiCache (the replay screens read and write
+    struct ReplayClipsOnline;        //   the replay slot/option members by name)
+    struct ReplayOptions;
+    struct ReplayIntro;
+    struct ReplayCredits;
+    struct OnlineTeamSelection;      // friend of GuiCache (reads the lobby mirror rows by name)
+    struct OnlineLoading;            // friend of GuiCache (reads the params mirror by name)
+    struct OnlineGameOptionsSummary; // friend of GuiCache (reads the params mirror by name)
     // Defined later in this header (minimal-slice records returned by GetPresetEvent /
     // the inlined event-display helpers).
     struct PresetEvent;
@@ -114,7 +123,7 @@ namespace BrnGui
     // 16 entries, stride 32). IncrementReplayPlayerActive @0x824EEEC0 appends/bumps entries;
     // ClearReplayPlayerActive @0x824EEE28 resets them; SortReplayPlayersActive @0x824F8C58
     // qsorts DESCENDING by muActiveCount; GetSortedReplayPlayerActive @0x824EEFA0 returns
-    // &entry.mName. Field offsets/types are X360-attested by those store-for-store bodies:
+    // &entry. Field offsets/types are console-attested by those store-for-store bodies:
     // the name is cleared/compared/constructed at +0x00, a 64-bit value slot is std'd at
     // +0x10, and the hit count is stw'd/lwz'd at +0x18.
     struct ReplayPlayerActive
@@ -1200,7 +1209,7 @@ namespace BrnGui
         // --- replay slot / player tables ---
         bool IsReplayARCRendered(EActiveRaceCarIndex leActiveRaceCarIndex) const;  // X360 @0x824EEDA8 (maReplayARCRendered @0x143C0)
         s32  ReplayConvertGuiSlotIndexToReelIndex(s32 liSlotIndex) const;          // X360 @0x824EEBE0 (maReplayReelForSlot @0x13BA0, miReplaySlotsUsed @0x13BB8)
-        const CgsNetwork::PlayerName*
+        const ReplayPlayerActive*
             GetSortedReplayPlayerActive(u32 luIndex) const;                        // X360 @0x824EEFA0 (maReplayPlayersActive @0x143A0, gated on mbReplayHasBeenSorted @0x143F8)
         void ClearReplayPlayerActive();                                            // X360 @0x824EEE28 (clears maReplayPlayersActive/maReplayARCRendered, mbReplayHasBeenSorted=0)
         void IncrementReplayPlayerActive(const char* lpcPlayerName, s32 liValue);  // X360 @0x824EEEC0 (maReplayPlayersActive lookup/append)
@@ -1208,6 +1217,10 @@ namespace BrnGui
         // ARTIST AboveCarRenderer::RenderReplayAboveCar reads the byte at141DC.
         // Name recovered from its role; this extension is absent from DecFIGS.
         bool GetRenderReplayPlayerNames() const { return mbRenderReplayPlayerNames; }
+        // Both names are the console's own: the replay screens' assert texts spell
+        // "mpGuiCache->IsReplayInfoVisible()" and "mpGuiCache->GetReplayNumberSlotsUsed()".
+        bool IsReplayInfoVisible() const      { return mbReplayInfoVisible; }   // +0x141D4
+        s32  GetReplayNumberSlotsUsed() const { return miReplaySlotsUsed; }     // +0x13BB8
         static s32 _SortReplayPlayersActiveByCount(const void* lpA, const void* lpB); // X360 @0x824EF028 (qsort comparator on entry +0x18 count)
 
         // --- misc setters / sat-nav / car-unlock ---
@@ -1391,6 +1404,10 @@ namespace BrnGui
         // accessors above.)
         friend struct OnlineCustomMatch;
         friend class BrnGui::FriendsListComponent;   // [friends wave]
+        // The online loading and game-options-summary screens hand the params mirror
+        // (+0xA800) to the route info as an inlined address.
+        friend struct OnlineLoading;
+        friend struct OnlineGameOptionsSummary;
 
         // [gateui] Same exposure rule for the HUD-message DIRECTOR: its
         // CheckMessageIsAvailable @0x824F2B28 inlines exactly two raw loads off the cache --
@@ -1417,6 +1434,18 @@ namespace BrnGui
         // GetCurrentComboInEvent / GetMultiplierInEvent / GetStuntToDisplay / GetTime).
         friend class BrnGui::EventInfoComponent;
         friend struct RaceMainHudState;
+
+        // Same exposure rule for the replay screens: they inline raw loads and stores of the
+        // replay slot cursor (+0x13B9C), the slot table (+0x13BA0), the status-interface
+        // flags (+0x13BBC) and the replay option bytes (+0x141D4..+0x141DE), and for the
+        // online team-selection screen's lobby mirror rows (+0xB640). No debug-info accessor
+        // rows exist for these console-only offsets.
+        friend struct ReplayClips;
+        friend struct ReplayClipsOnline;
+        friend struct ReplayOptions;
+        friend struct ReplayIntro;
+        friend struct ReplayCredits;
+        friend struct OnlineTeamSelection;
 
         // ===================================================================
         //  DATA LAYOUT -- named anchors at asm-proven `this+offset`, gaps
@@ -2276,13 +2305,31 @@ namespace BrnGui
         f32 mfDistanceDriven;                            // +0x13B94 (80788) GetDistanceDriven (OdometerComponent::Update @0x82424160)
         u8  mPad_13B98[2];                               // +0x13B98..+0x13B99
         bool mbAreRoadRulesAvailable;                    // +0x13B9A (RecEvent 350)
-        u8  mPad_13B9B[5];                               // +0x13B9B..+0x13B9F
+        u8  mPad_13B9B[1];                               // +0x13B9B
+        // The replay screens' slot cursor: ReplayClips/ReplayClipsOnline store the highlighted
+        // row on every menu move and -1 on the way out; ReplayOptions::PlayReel plays it.
+        // Construct seeds -1. FLAG: name inferred from those consumers.
+        s32 miReplayCurrentSlot;                         // +0x13B9C (80796)
         // ---- replay slots / status interface / player tables ----
-        s32 maReplayReelForSlot[6];                      // +0x13BA0 (80800) ReplayConvert... @0x824EEBE0 (4*(slot+20200)+this)
+        // Each slot holds the address of a used reel (ReplayConvert compares it against
+        // StatusInterface::GetReel; RefreshSlots hands it to MenuComponent::SetText as the
+        // reel's name, the Reel's leading macName).
+        const BrnReplays::Reel* maReplayReelForSlot[6];  // +0x13BA0 (80800) ReplayConvert... (4*(slot+20200)+this)
         s32 miReplaySlotsUsed;                           // +0x13BB8 (80824) ReplayConvert... bound
-        u8  mReplayStatusInterfaceStorage[1568];         // +0x13BBC (80828) ReplayConvert forwards this address; GetReel
+        BrnReplays::ReplayIO::StatusInterface mReplayStatusInterface; // +0x13BBC (80828) ReplayConvert walks its reels; the replay screens test its flags
+        // The replay option bytes. ReplayOptions::UpdateWFInit seeds its five toggles from
+        // them and PlayReel writes them back; Construct seeds D5/D6/DC/DE to 1 and the rest
+        // to 0. FLAG: names inferred from the toggle captions ($DISPLAY_REPLAY_HUD,
+        // $EXPORT_QUALITY, $CAMERA, $SHOW_CREDITS) and the "ReplayExOK" overlay.
+        bool mbReplayInfoVisible;                        // +0x141D4 (82388) IsReplayInfoVisible
+        bool mbReplayDisplayHud;                         // +0x141D5 (82389)
+        bool mbReplayExportMaximumQuality;               // +0x141D6 (82390)
+        u8  mPad_141D7[1];
+        s32 miReplayCamera;                              // +0x141D8 (82392)
         bool mbRenderReplayPlayerNames;                 // +0x141DC (82396), RenderReplayAboveCar8245B3A0
-        u8  mPad_141DD[3];
+        bool mbReplayExporting;                          // +0x141DD (82397)
+        bool mbReplayShowCredits;                        // +0x141DE (82398)
+        u8  mPad_141DF[1];
         // 16 replay-player-active entries, stride 32 (lead CgsNetwork::PlayerName + value@+0x10 + count@+0x18).
         ReplayPlayerActive maReplayPlayersActive[16];    // +0x141E0 (82400) GetSortedReplayPlayerActive @0x824EEFA0 (32*(idx+2575)+this); qsort'd by muActiveCount
         bool maReplayARCRendered[8];                     // +0x143E0 (82912) IsReplayARCRendered @0x824EEDA8

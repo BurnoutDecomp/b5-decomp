@@ -2571,11 +2571,10 @@ namespace CgsPhysics
     }
 
     // =====================================================================================
-    // THE UPDATE-SIDE CLOSURE + SPY EMITTERS + THE TWO VIRTUALS (2026-08-06).
-    // The whole game-side callee set of Update @0x828A74D0; with these, the module's DWARF
-    // virtual set is complete. ⚠️ NOTHING REACHES ANY OF THIS AT RUNTIME YET -- the only
-    // console caller of the two virtuals is BrnPhysics::PhysicsModule::Update @0x825B0640,
-    // still the inert WorldLinkStubs boot gate; /OPT:REF strips the cluster until it lands.
+    // THE UPDATE-SIDE CLOSURE + SPY EMITTERS + THE TWO VIRTUALS.
+    // The whole game-side callee set of Update; with these, the module's virtual set is
+    // complete. The only console caller of the two virtuals is
+    // BrnPhysics::PhysicsModule::Update (BrnPhysicsModuleUpdateFunctions.cpp).
     // =====================================================================================
 
     // The world-bounds clamp constants (DWARF .cpp:2350-2353 declares the group

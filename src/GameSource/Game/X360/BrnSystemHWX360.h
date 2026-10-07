@@ -88,10 +88,8 @@ namespace BrnMassive
     // (BrnSystemHWX360Massive.cpp @ 0x823A8958).
     System360HWMassive::EPrepareStage operator++(System360HWMassive::EPrepareStage& reStage, int);
 
-    // Postfix increment for the Massive release-stage state machine (sub_823A89B8 @
-    // 0x823A89B8). Its body -- and the verbatim rodata of its overflow assert -- are not
-    // in this TU's dossier, so it is left to its own ledger TU; declared here so Release()
-    // can advance the stage through the real call rather than a plain integer bump.
+    // Postfix increment for the Massive release-stage state machine (bodied in the Massive TU);
+    // Release() advances the stage through it.
     System360HWMassive::EReleaseStage operator++(System360HWMassive::EReleaseStage& reStage, int);
 
     // The Massive heap allocator: a single X360 .data global (spHeapMalloc) shared between

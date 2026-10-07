@@ -10,6 +10,12 @@
 
 namespace renderengine
 {
+#if defined(D_PLATFORM_X360)
+    // The Xenon GPU-header half (Initialize / Lock / Destruct / Release, and
+    // Xbox2CheckPhysicalMemoryFlags below) stamps, maps and frees Xenon GPU memory.
+    // FLAG PC-platform: the PC build takes these from its platform layer
+    // (ImmediateModePCLeaf.cpp, XenonD3D9Shims.cpp).
+
     // 0x82B62ED8 -- fill the GPU vertex-buffer header in place, then fix up its memory flags.
     VertexBufferHeader* VertexBuffer::Initialize(Wrapper* lpWrapper, const Parameters* lpParams,
                                                  int /*liArg3*/, int /*liArg4*/)
@@ -113,6 +119,7 @@ namespace renderengine
         }
         return lpResult;
     }
+#endif
 
     // 0x82B61130 -- read the serialised params back out (format @ +0x24 -> [0], size @ +0x20 -> [1]).
     VertexBufferHeader* VertexBuffer::GetParameters(VertexBufferHeader* lpBuffer, u32* lpParamsOut)
@@ -153,6 +160,7 @@ namespace renderengine
         return lpDescriptorOut;
     }
 
+#if defined(D_PLATFORM_X360)
     // 0x82B61148 -- set/clear the system-memory protection bit (0x200000) from the page protection.
     u32 VertexBuffer::Xbox2CheckPhysicalMemoryFlags(u32* lpHeaderDwords)
     {
@@ -175,4 +183,5 @@ namespace renderengine
         }
         return luResult;
     }
+#endif
 }

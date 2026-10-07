@@ -34,9 +34,9 @@ public:
     void Prepare(s32 liMaxNumVaults, CgsMemory::LinearMalloc* lpLinearAllocator);
 
     // @ 0x8280E978 -- register the request's vault into a slot (ref-count bump or
-    // VaultSlot::DoLoad; called from AttribSysModule::RegisterVault). Body deferred with
-    // the vault-load interior (GetFreeSlotIndex + the Attrib SDK runtime); the PC
-    // AttribSysModule gates the call while the schema is unloaded (link stub trap).
+    // VaultSlot::DoLoad; called from AttribSysModule::RegisterVault). Body in
+    // CgsAttribSysVaultLoad.cpp; the PC AttribSysModule skips the call while the schema
+    // is unloaded.
     void RegisterVault(AttribSysIO::RegisterVaultRequest* lpRegisterVaultRequest);
 
     // Drop the vault named by the request from the array (called from

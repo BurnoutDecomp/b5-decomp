@@ -171,11 +171,6 @@ Vector4* ShaderConstantTable::UpdateShaderChangeTableAndGetConstantDestination(u
 // the ENGINE owns. The remaining 27 are registered by BrnRendererModule::Construct
 // @0x8240A778 (the game-side set: view position, key light, fog, shadow map, the
 // per-vehicle blocks and the two irradiance quadrics).
-//
-// This was an empty stub in WorldLinkStubs.cpp, which left mu8NumUsedConstants at 0 --
-// so every SetShaderConstantData tripped "luIndex < mu8NumUsedConstants" and the
-// dispatch interpreter found a NULL constant-0 (world transform) on the first world
-// packet ("lpWorldMatrix != NULL").
 ShaderConstantTable::ShaderConstantTable()
 {
     mu8NumUsedConstants = 0;

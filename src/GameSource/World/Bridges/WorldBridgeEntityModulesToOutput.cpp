@@ -87,16 +87,14 @@ void BridgeEntityModulesToOutput_PrePhysics(
 
 // ----------------------------------------------------------------------------
 // BridgePropToOutput_PreScene  @ 0x827AF258   (47 instructions)
-//   ADDED 2026-08-12 (prop-spawn wave, agent B6) -- was an inert WorldLinkStubs gate.
 //
-// ⭐ WHY IT MATTERS: this is the PRE-SCENE half of the prop module's resource pipe. Its
-// Prepare-phase twin (BridgePropResourceRequestsToOutput_Prepare @0x827AF1D0, above) was
-// already real, but PropEntityModule::PreSceneUpdate -> UpdateStreaming is where the prop
-// streamer actually raises its GetPropInstances / prop-graphics requests, and it raises them
-// into the PRE-SCENE output buffer. With this bridge gated those requests were written every
-// frame and then thrown away when the buffer was recycled -- they never reached
-// UpdateOutputBuffer, so LoadingScriptedState::UpdateWorldModule / BridgeWorldToResource
-// never handed them to the GameData module and no prop bundle was ever loaded.
+// ⭐ WHY IT MATTERS: this is the PRE-SCENE half of the prop module's resource pipe (its
+// Prepare-phase twin is BridgePropResourceRequestsToOutput_Prepare, above).
+// PropEntityModule::PreSceneUpdate -> UpdateStreaming is where the prop streamer raises its
+// GetPropInstances / prop-graphics requests, into the PRE-SCENE output buffer. This bridge
+// carries them on to UpdateOutputBuffer, so LoadingScriptedState::UpdateWorldModule /
+// BridgeWorldToResource hand them to the GameData module. Without it those requests are thrown
+// away when the buffer is recycled and no prop bundle is ever loaded.
 //
 // The console body, statement for statement (asserts at the X360's own
 // ../World/Bridges/WorldBridgeEntityModulesToOutput.cpp:268/269, local at :273):

@@ -398,8 +398,7 @@ AptValue* AptValueGC_PoolManager::GetNextAptValue(AptValue* pCurrent)
 }
 
 // ===========================================================================
-// The two GC-pool introspection accessors (HOMED 2026-07-02, retiring the
-// AptRenderLinkStubs nulls -- the plan's Phase-1 GC-substrate list items).
+// The two GC-pool introspection accessors.
 //   * GetAllocatedCount: the live-allocation counter the DOGMA base maintains
 //     (mnItemsAllocated -- the X360 callers read *(pool + 0x28)).
 //   * GetAllAllocatedAptValues: the caller pairs the SAME pool walk CleanAll

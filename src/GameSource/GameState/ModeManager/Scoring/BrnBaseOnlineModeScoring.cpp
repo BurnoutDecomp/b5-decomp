@@ -261,14 +261,10 @@ void BaseOnlineModeScoring::CompareTimeAsRunner(CgsSystem::Time lTime1, CgsSyste
 // race-mode Update (BrnOnlineRaceModeScoring.cpp:18) and the road-rage-teams Update
 // (BrnOnlineRoadRageModeScoring.cpp:568) both forward to it verbatim.
 //
-// ⚠️ DELIBERATE DEVIATION FROM THE ROUND BRIEF, WITH EVIDENCE. The brief listed this symbol as
-// "a bodiless base virtual -- add it to the BrnBaselineLinkStubs.cpp bodiless list". Both halves
-// of that premise are refuted by the tree + the image: it is declared NON-virtual (the header's
-// own vtable map runs slots 0..9 and this is not one of them, BrnBaseOnlineModeScoring.h:69), and
-// it HAS a full standalone X360 export whose body is cheap and provable. An inert stub would have
-// left maePlayerTeams[] frozen at whatever ClearData seeded for every online team mode -- the
-// silent-zero failure mode this campaign has paid for repeatedly -- so the faithful body is
-// landed here, in the class's own declared home TU, instead.
+// ⚠️ NOT a virtual: the header's own vtable map runs slots 0..9 and this is not one of them
+// (BrnBaseOnlineModeScoring.h:69), and it has a full standalone console export. Never stub it:
+// an inert body would leave maePlayerTeams[] frozen at whatever ClearData seeded for every
+// online team mode.
 //
 // EVIDENCE (0x823219B8, dumped this session):
 //   * the entry assert is "lpScoringSystem" @ BrnBaseOnlineModeScoring.cpp:212;

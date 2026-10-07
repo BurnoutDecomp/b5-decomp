@@ -15,7 +15,8 @@
 // update (race car), plus the AI -> physics staging. Each is bracketed by the
 // AI-bridge CPU monitor (the X360 reads the monitor id straight out of the
 // WorldModule context at +6167720). The leading lpWorldModule arg is the X360 r3.
-// Bodies boot-gated in WorldLinkStubs.cpp until the AI module IO is homed.
+// Bodies: _PrePhysics in WorldBridgePropModule.cpp; _PostPhysics and
+// BridgeAIModuleToPhysicsModule in WorldBridgeAIModule.cpp.
 namespace WorldModule
 {
     // @ 0x827AD540

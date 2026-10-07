@@ -113,6 +113,9 @@ public:
     // the lock could not be taken.
     int SuspendAll();
 
+    // Clears mbSuspended under the queue lock. Returns 0, or -696 when the lock could not be taken.
+    int ResumeAll();
+
     // Additive accessor (FLAG: not its own X360 function): CRequestBuilder::
     // Suspend / Resume lock the manager's queue section (the X360 loads the
     // singleton pointer and adds 0x2C to reach it). Exposes the embedded section

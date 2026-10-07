@@ -569,16 +569,12 @@ void ScoringSystem::ClearData(bool lbResetCarData)
 // ============================================================================================
 // ScoringSystem::HasBeatenRoadRageTarget -- DWARF BrnScoringSystem.h:1180
 // ============================================================================================
-// [stuntrace waveB CLOSURE round, 2026-08-26] Bodied. It was DECLARE-ONLY tree-wide, and the
-// cross-seam audit found FOUR live call sites across TWO partfiles, not the two the fix-round
-// sheet listed: BrnModeManager_Finish.cpp:290 (GetPlayersFinishPosition's road-rage arm) and
-// :492 (FinishCurrentMode's road-rage arm), plus BrnModeManager_UpdateMode.cpp:540 and :581.
-// One missing body blocked both partfiles.
+// Called from BrnModeManager_Finish.cpp (GetPlayersFinishPosition's road-rage arm) and from the
+// road-rage / marked-man end-condition arms in BrnModeManager_UpdateMode.cpp.
 //
-// [!] NOT the same symbol as RoadRageModeScoring::HasBeatenRoadRageTarget
-// (BrnRoadRageModeScoring.h:108, bodied in BrnRoadRageModeScoringLinkStubs.cpp:175). That one is
-// on the SUB-SCORER; this one is on ScoringSystem and forwards to it. The audit flags the mix-up
-// explicitly because the stub file's presence makes the ScoringSystem symbol look bodied.
+// [!] NOT the same symbol as RoadRageModeScoring::HasBeatenRoadRageTarget (declared in
+// BrnRoadRageModeScoring.h, bodied in BrnRoadRageModeScoring.cpp). That one is on the
+// SUB-SCORER; this one is on ScoringSystem and forwards to it.
 //
 // X360: INLINED at every call site, so there is no standalone export to transcribe -- but the
 // inlining is unambiguous. ModeManager::FinishCurrentMode @0x8234B978, jumptable case 3
