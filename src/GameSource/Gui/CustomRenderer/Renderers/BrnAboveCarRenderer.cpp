@@ -9,6 +9,7 @@
 #include "GameSource/Replays/BrnReplayGuiModuleStaticLayout.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
@@ -18,6 +19,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 
 namespace BrnGui
@@ -599,8 +601,51 @@ void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
                 }
             }
         }
+        // FLAG PC witness: opt-in (BRN_SHOWTIME_DIAG) observation of the Showtime cash labels
+        // and banked scores around the two render calls, first 96 lines; nothing reads it back.
+        static const bool sbWitness = std::getenv("BRN_SHOWTIME_DIAG") != nullptr;
+        static s32 siWitnessLines = 96;
+        static s32 siWitnessFrames = 0;
+        static u32 suWitnessCountAfter = 0;
+        BankingScore laWitnessBefore[KI_MAX_BANKING_SCORES];
+        const u32 luWitnessBefore = sbWitness ? maBankingScores.GetLength() : 0;
+        for (u32 luIndex = 0; luIndex < luWitnessBefore; ++luIndex)
+            laWitnessBefore[luIndex] = maBankingScores.GetItem(luIndex);
         RenderTrafficCarScores(lpRendererSet);
         RenderBankingScores(lpRendererSet);
+        if (sbWitness && CgsDev::Log::gpDebugPrint)
+        {
+            const u32 luAfter = maBankingScores.GetLength();
+            if (luWitnessBefore > suWitnessCountAfter && siWitnessLines-- > 0)
+                *CgsDev::Log::gpDebugPrint << "[abovecar] bank add count=" << luWitnessBefore
+                    << " (was " << suWitnessCountAfter << ") scoringTraffic="
+                    << mpGuiCache->GetScoringTrafficCount() << "\n";
+            for (u32 luIndex = 0; luIndex < luWitnessBefore && luIndex < luAfter; ++luIndex)
+            {
+                const Vector3& lrWorld = laWitnessBefore[luIndex].mv3OriginalWorldSpacePosition;
+                const BankingScore& lrNow = maBankingScores.GetItem(luIndex);
+                if ((lrWorld.x != 0.0f || lrWorld.y != 0.0f || lrWorld.z != 0.0f) &&
+                    siWitnessLines-- > 0)
+                    *CgsDev::Log::gpDebugPrint << "[abovecar] bank start value="
+                        << (lrNow.miBaseScore + lrNow.miComboBonus) << " world=(" << lrWorld.x
+                        << "," << lrWorld.y << "," << lrWorld.z << ") screen=("
+                        << lrNow.mv2ScreenSpacePosition.x << "," << lrNow.mv2ScreenSpacePosition.y
+                        << ")\n";
+            }
+            if (luAfter < luWitnessBefore && siWitnessLines-- > 0)
+                *CgsDev::Log::gpDebugPrint << "[abovecar] bank arrive count=" << luAfter
+                    << " (was " << luWitnessBefore << ")\n";
+            suWitnessCountAfter = luAfter;
+            if ((siWitnessFrames++ % 300) == 0 && siWitnessLines-- > 0)
+            {
+                u32 luLabels = 0;
+                for (u32 luIndex = 0; luIndex < mpGuiCache->GetScoringTrafficCount(); ++luIndex)
+                    if (!mRecentCrashSet.IsBitSet(mpGuiCache->GetScoringTrafficData(luIndex)->muVehicleIndex))
+                        ++luLabels;
+                *CgsDev::Log::gpDebugPrint << "[abovecar] frame mode=" << mpGuiCache->GetGameMode()
+                    << " trafficLabels=" << luLabels << " banked=" << luAfter << "\n";
+            }
+        }
     }
     lpBuffer->SetState(CgsGui::gpGuiBlendStateStandard);
     lpBuffer->EndRendering();
