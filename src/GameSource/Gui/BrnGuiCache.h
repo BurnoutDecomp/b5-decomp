@@ -1352,6 +1352,9 @@ namespace BrnGui
         // `ld r5, 0x4AF8(cache)` is the attested whole-CgsID read this accessor names).
         CgsID GetLocalPlayerOriginalCarId() const                { return mLocalPlayerOriginalCarId; }
 
+        // ARTIST 0x825062C0; DecFIGS BrnGuiCache.h:623.
+        CgsID GetOriginalCarId(CgsID lCarId);
+
         // The district-marker source words (the +0x4FA0 carve): the X360 state reads the
         // three words raw off the cache (@0x8247B660 post-loop); these are the named PC
         // faces of those reads. The write-back goes through RecEvent(169).
@@ -1549,9 +1552,8 @@ namespace BrnGui
         // FBurnMainHudState::UpdateRunning case 311 @0x8247C270 reads it WHOLE
         // (`ld r5, 0x4AF8(cache)`) as JunctionInfoComponent::HandleJunctionChange's
         // lCurrentCarId (the burning-route "is this the player's route car" compare).
-        // FLAG: consumer-named; no PC producer yet (case 415 needs GetOriginalCarId,
-        // unreconstructed) -- reads kCGSID_NULL(0) on this build, so the mode-5 compare
-        // simply never matches. No member is shifted (8 + 8 == 16).
+        // Producer: RecEvent(415) resolves the GUI vehicle list through GetOriginalCarId.
+        // No member is shifted (8 + 8 == 16).
         CgsID mLocalPlayerOriginalCarId;                 // +0x4AF8 (19192)
         s32 mePlayerActiveRaceCarIndex;                  // +0x4B00 (19200) EActiveRaceCarIndex (DWARF h; HudMessageAnalyzer::HandleLiveRevengeUpdate @0x8251E2xx)
         // [gateui r3] ADDITIVE CARVE from the head of the former mPad_4B04[0x2C] -- the local

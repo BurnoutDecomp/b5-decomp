@@ -5042,6 +5042,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
 #if BRN_ANTIALIAS_BRACKET_AVAILABLE && BRN_POSTFX_COMPOSITE_AVAILABLE
     const bool lbTintBlendWillDrain =
         lbDispatchReady
+        && maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameInternal]
         && EnsurePostFxSceneTargets(mAllocatedRenderTargets, mbMultisampledBackbuffer)
         && PCBringUpPostFxCompositeWillRun(mAllocatedRenderTargets);
 #else
@@ -5314,7 +5315,11 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
     // function is value-latched on a file static and returns on a pointer compare when the targets
     // already exist.
     const bool lbSceneBracketOpen =
-        lbDispatchReady && EnsurePostFxSceneTargets(mAllocatedRenderTargets,
+        // FLAG PC-platform leaf: native presentation can precede the first
+        // published world camera/constants frame. An initialized empty mesh
+        // bank is not a scene; keep the host frame's black clear until then.
+        lbDispatchReady && maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameInternal]
+        && EnsurePostFxSceneTargets(mAllocatedRenderTargets,
                                                     mbMultisampledBackbuffer);
 
     // ---- the three arguments, all read rather than chosen -----------------------------------

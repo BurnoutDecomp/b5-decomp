@@ -1911,6 +1911,7 @@ void GuiModule::Destruct()
                 case 79:    // GuiEnteredJunkyard -- the in-junkyard byte
                 case 201:   // GuiEventHideDriveThru -- a closed drive-thru's map row hidden
                 case 375:   // GuiEventTrophyCarUnlock -- the award screen's unlock type and car
+                case 415:   // GuiChangeCarEvent -- current and original car ids for event icons
                     FreeRoamRouteWitness(liId, "cache");
                     // [H1 wave 2026-08-25] On the console EVERY module-input event reaches
                     // GuiCache::RecEvent (its ~180-case switch consumes what it wants);

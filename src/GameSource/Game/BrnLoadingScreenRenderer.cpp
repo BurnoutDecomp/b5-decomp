@@ -305,7 +305,8 @@ namespace BrnGame
         // backdrop the autosave prompt draws over. The bg ("black") fade completes by
         // KF_BLACK_FADE_POINT, while the foreground alpha only begins at
         // KF_ALPHA_FADE_POINT - so the background reveals from black first, then the
-        // spinner + text fade in. Element colours match the source: bg = (b,b,b,b);
+        // spinner + text fade in. ARTIST 823E7D98..823E7E58 retains alpha 255
+        // while inserting the three brightness bytes: bg = (b,b,b,255).
         // foreground = (b,b,b,fg) i.e. white once b==1, alpha-gated by the fg fade.
         const f32 lfFadeMax = mbRenderInBackground ? (KF_BLACK_FADE_POINT * 0.35f) : 1.0f;
         if (mbHiding)
@@ -324,7 +325,7 @@ namespace BrnGame
                                 ? ((mfFade - KF_ALPHA_FADE_POINT) / (1.0f - KF_ALPHA_FADE_POINT)) : 0.0f;
         const u8 luBlack = static_cast<u8>(lfBlackFade * 255.0f + 0.5f);
         const u8 luFgA   = static_cast<u8>(lfFGAlphaFade * 255.0f + 0.5f);
-        const RGBA8 lBgCol = { luBlack, luBlack, luBlack, luBlack };
+        const RGBA8 lBgCol = { luBlack, luBlack, luBlack, 255 };
         const RGBA8 lFgCol = { luBlack, luBlack, luBlack, luFgA };
         Vector2 laC[4];
 

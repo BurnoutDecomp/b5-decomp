@@ -393,6 +393,13 @@ void GameStateModule::ProcessGameEventsPropProgressionBringUp(
                     *CgsDev::Log::gpDebugPrint << "[propprog] event 109 (profile loaded) -> OnProfileLoaded\n";
                 }
             }
+            else if (liType == GameStateModuleIO::E_GUI_HAS_STARTED_GAME)
+            {
+                // ARTIST ProcessGameEvents case 78. On a menu load, 109
+                // above arms the entry in this same merged queue walk; the
+                // earlier setup-player leg had no pending entry to complete.
+                ProcessGameEventsReallyEnterJunkyardBringUp(lpActionQueue);
+            }
             else if (liType == GameStateModuleIO::E_EVENT_REQUEST_PROP_PROGRESSION)
             {
                 mbPropSystemNeedsProgression = true;   // case 112

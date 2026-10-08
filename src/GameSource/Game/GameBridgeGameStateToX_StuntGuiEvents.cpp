@@ -374,6 +374,32 @@ namespace
         {
             switch (liActionType)
             {
+            // ARTIST 0x823ED21C..0x823ED270: player-car change.
+            case 1:
+                CGS_ASSERT(*reinterpret_cast<const CgsID*>(lpAction) != 0,
+                           "lChangeCarEvent.mCarId != kCGSID_NULL");
+                lpGuiInput->GetGuiEvents()->AddEvent(lpAction, 415, sizeof(CgsID));
+                break;
+            // ARTIST 0x823ED278..0x823ED2CC: a car unlock is a separate
+            // notification; it must not replace the car currently being driven.
+            case 2:
+                CGS_ASSERT(*reinterpret_cast<const CgsID*>(lpAction) != 0,
+                           "lCarUnlockEvent.mCarId != kCGSID_NULL");
+                lpGuiInput->GetGuiEvents()->AddEvent(lpAction, 76, sizeof(CgsID));
+                break;
+            // ARTIST 0x823ED2D4..0x823ED328: a respawn also publishes the
+            // selected model from ResetPlayerCarAction+0x20.
+            case BrnGameState::GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR:
+            {
+                const auto& lrReset = *reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::ResetPlayerCarAction*>(lpAction);
+                CGS_ASSERT(lrReset.mCarModelId != 0,
+                           "lChangeCarEvent.mCarId != kCGSID_NULL");
+                lpGuiInput->GetGuiEvents()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lrReset.mCarModelId),
+                    415, sizeof(CgsID));
+                break;
+            }
             // ARTIST 0x823ED838-0x823ED84C: release the GUI's model-change wait.
             case 66:
                 lpGuiInput->GetGuiEvents()->AddEvent(lpAction, 565, sizeof(CgsID));
