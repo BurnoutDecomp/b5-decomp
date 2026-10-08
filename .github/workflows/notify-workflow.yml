@@ -1,6 +1,6 @@
 name: Notify workflow repo
 
-# Optional event-driven trigger for BP-Decomp_Workflow's "Reconcile status + submodule
+# Required event-driven trigger for BP-Decomp_Workflow's "Reconcile status + submodule
 # pointer" Action. On every push to dev, fire a repository_dispatch at the workflow repo
 # so it bumps its b5-decomp submodule pointer and regenerates progress/status.json from
 # the coordination server immediately — instead of waiting for the hourly schedule.
@@ -11,12 +11,16 @@ name: Notify workflow repo
 #      PAT, its resource owner must be BurnoutDecomp and it needs access to the
 #      workflow repo with repository Contents write permission.
 #   2. Add it to THIS repo's secrets as WORKFLOW_DISPATCH_TOKEN.
-# Without the secret the step is skipped, so this file is harmless until configured.
-# The workflow repo also runs hourly, so this is a latency optimization, not required.
+# Missing credentials fail visibly. The workflow repo's hourly repair is a fallback.
 
 on:
   push:
     branches: [dev]
+
+concurrency:
+  group: notify-workflow-dev
+  queue: max
+  cancel-in-progress: false
 
 jobs:
   dispatch:
@@ -25,14 +29,36 @@ jobs:
       GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
       WORKFLOW_REPO: ${{ github.repository_owner }}/BP-Decomp_Workflow
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: .github
+
       - name: Trigger reconcile in BP-Decomp_Workflow
-        if: ${{ env.GH_TOKEN != '' }}
+        env:
+          BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/${WORKFLOW_REPO}/dispatches" \
-            -f event_type=b5-decomp-push \
-            -F "client_payload[sha]=${GITHUB_SHA}"
-          echo "dispatched b5-decomp-push for ${GITHUB_SHA} (workflow repo will reconcile)"
+          test -n "$GH_TOKEN" || { echo 'WORKFLOW_DISPATCH_TOKEN is required'; exit 1; }
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ] ||
+             ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null ||
+             ! git merge-base --is-ancestor "$BEFORE" "$GITHUB_SHA"; then
+            # New branches and rewritten histories reconcile the current head.
+            commits="$GITHUB_SHA"
+          else
+            commits="$(git rev-list --reverse "$BEFORE..$GITHUB_SHA")"
+          fi
+          for sha in $commits; do
+            delivered=false
+            for attempt in 1 2 3; do
+              if gh api --method POST -H "Accept: application/vnd.github+json" \
+                "/repos/${WORKFLOW_REPO}/dispatches" -f event_type=b5-decomp-push \
+                -F "client_payload[sha]=$sha"; then
+                delivered=true; break
+              fi
+              sleep 5
+            done
+            test "$delivered" = true || exit 1
+            echo "dispatched b5-decomp-push for $sha"
+          done
