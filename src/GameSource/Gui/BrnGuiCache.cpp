@@ -39,6 +39,8 @@
 #include "SharedClasses/Trigger/BrnLandmark.h"                 // BrnTrigger::Landmark (COMPLETE: field reads)
 #include "GameSource/GameState/BrnGameStateTypes.h"          // BrnGameState::LandmarkIndex
 #include "SharedClasses/Progression/BrnRaceEventData.h"      // RaceEventData / CheckpointData
+#include "SharedClasses/DataLists/VehicleList.h"
+#include "SharedClasses/DataLists/VehicleListEntry.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. StateLoadingHelper tracks how many of
 // its watched resources are pending an unload. Increment/Decrement adjust the count
@@ -1247,6 +1249,27 @@ namespace BrnGui
         const s32 KI_NETWORK_LOBBY_PLAYER_LIST_SIZE = 456;
     }
 
+    // ARTIST 0x825062C0. Resolve at most two parent levels, as the console
+    // does for paint/livery variants, using the GUI's loaded vehicle list.
+    CgsID GuiCache::GetOriginalCarId(CgsID lCarId)
+    {
+        CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController != NULL");
+        if (mpWorldDataController == 0)
+            return lCarId;
+        const BrnResource::VehicleList* lpVehicleList = mpWorldDataController->GetVehicleList();
+        CGS_ASSERT(lpVehicleList != 0, "lpVehicleList != NULL");
+        const s32 liIndex = lpVehicleList->GetVehicleIndex(lCarId);
+        if (liIndex < 0)
+            return lCarId;
+        const BrnResource::VehicleListEntry* lpEntry = lpVehicleList->GetVehicleData(liIndex);
+        if (lpEntry == 0 || lpEntry->GetParentId() == 0)
+            return lCarId;
+        const CgsID lParentId = lpEntry->GetParentId();
+        const BrnResource::VehicleListEntry* lpParent = lpVehicleList->GetVehicleData(lParentId);
+        CGS_ASSERT(lpParent != 0, "lpParentVehicleListEntry != NULL");
+        return lpParent->GetParentId() != 0 ? lpParent->GetParentId() : lParentId;
+    }
+
     void GuiCache::RecEvent(const CgsModule::Event* lpEvent, s32 liEventId)
     {
         if (lpEvent == 0)
@@ -1254,6 +1277,20 @@ namespace BrnGui
 
         switch (liEventId)
         {
+        // ARTIST 0x82510E7C..0x82510EC0: player-car change, whole CgsID
+        // stores to both cache members consumed by the map and minimap.
+        case 415:
+        {
+            const CgsID lCarId = *reinterpret_cast<const CgsID*>(lpEvent);
+            CGS_ASSERT(lCarId != 0, "lpChangeCarEvent->mCarId != kCGSID_NULL");
+            mLocalPlayerCarId = lCarId;
+            mLocalPlayerOriginalCarId = GetOriginalCarId(lCarId);
+            // FLAG PC-platform witness: the whole car IDs reaching the map cache.
+            if (std::getenv("BRN_SATNAV_DIAG") && CgsDev::Log::gpDebugPrint)
+                *CgsDev::Log::gpDebugPrint << "[burn-route] cache car=" << static_cast<u64>(lCarId)
+                    << " original=" << static_cast<u64>(mLocalPlayerOriginalCarId) << "\n";
+            break;
+        }
         // ARTIST8250F154..F16C: copy all1744 bytes, then enter event colouring.
         case 159:
         {

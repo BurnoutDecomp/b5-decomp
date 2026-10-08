@@ -563,9 +563,12 @@ void SatNavRenderer::GetIconInformation(u32 luIndex, IconRendererSatNavIconInfo*
         lpInfo->meSatNavIconType = lbCompleted ? E_SATNAVICON_EVENT_COMPLETED
                                                : E_SATNAVICON_EVENT_NOTATTEMPTED;
 
-        // The X360 then overrides row 2 -> 0 when this is the cache's CURRENT online event (it
-        // compares two far GuiCache id members at +19192/+19196). Those members are not yet
-        // recovered on GuiCache, so the override is conservatively NOT applied. FLAG.
+        // ARTIST 0x82449C48..0x82449C68 compares the event's whole CgsID
+        // at +0x10 against cache+0x4AF8. Row zero identifies the current
+        // car's Burning Route and is also the preferred minimap edge marker.
+        if (luIconRow == 2 &&
+            lpEventInfo->GetSpecialEventCarId() == mpGuiCache->GetLocalPlayerOriginalCarId())
+            lpInfo->muEventTypeIndex = 0;
         break;
     }
 
@@ -860,9 +863,16 @@ void SatNavRenderer::RefreshSatNavIconInfo(s32 liEventId)
         lIcon.mv3Position.SetZero();   // deterministic; empty slot, never drawn in the icon loop
     }
 
-    // The X360 then overrides row 2 -> 0 when this event is the cache's current online event (it
-    // compares two far GuiCache id members at +19192/+19196). Those members are not yet recovered
-    // on GuiCache, so the override is conservatively NOT applied (matches GetIconInformation). FLAG.
+    // ARTIST 0x82445A14..0x82445A34: apply the same current-car Burning
+    // Route row as GetIconInformation, including a newly repaired car's route.
+    if (lIcon.muEventTypeIndex == 2 && lpRaceEventData != 0 &&
+        lpRaceEventData->GetSpecialEventCarId() == mpGuiCache->GetLocalPlayerOriginalCarId())
+        lIcon.muEventTypeIndex = 0;
+
+    // FLAG PC-platform witness: the row selected for a newly discovered route.
+    if (std::getenv("BRN_SATNAV_DIAG") && CgsDev::Log::gpDebugPrint)
+        *CgsDev::Log::gpDebugPrint << "[burn-route] refresh event=" << liEventId
+            << " row=" << lIcon.muEventTypeIndex << "\n";
 
     ++muNumberOfSatNavIcons;
 }
@@ -930,7 +940,7 @@ void SatNavRenderer::RenderIconsForSatNav(
     }
 
     u32  luClosestIconIndex = KU_MAX_SATNAV_ICONS; // 150 == "none"
-    u32  luFirstEmptyIcon   = KU_MAX_SATNAV_ICONS;
+    u32  luCurrentCarRouteIcon   = KU_MAX_SATNAV_ICONS;
     s32  liNumDrawn         = 0;
     f32  lfClosestDistSq    = 3.4028235e38f;        // FLT_MAX
     bool lbDrawClosest      = false;
@@ -945,14 +955,13 @@ void SatNavRenderer::RenderIconsForSatNav(
     {
         IconRendererSatNavIconInfo& lIcon = maCachedSatNavIcons[luIcon];
 
-        // An empty slot has BOTH muEventTypeIndex == 0 and meSatNavIconType == 0 (X360
-        // @0x8245FB40: lwz *(base+0x5C4)=muEventTypeIndex, then *(base+0x5C8)=meSatNavIconType).
-        // miEventId (+0x5C0) is NOT read here.
-        bool lbEmptySlot = false;
+        // Row 0 is the current car's Burning Route; its uncompleted icon gets
+        // priority even outside the view (ARTIST 8245FB40 checks row and type).
+        bool lbCurrentCarRoute = false;
         if (lIcon.muEventTypeIndex == 0 && lIcon.meSatNavIconType == E_SATNAVICON_EVENT_NOTATTEMPTED)
         {
-            luFirstEmptyIcon = luIcon;
-            lbEmptySlot      = true;
+            luCurrentCarRouteIcon = luIcon;
+            lbCurrentCarRoute      = true;
         }
 
         if (luIcon >= KU_MAX_SATNAV_ICONS)
@@ -974,7 +983,7 @@ void SatNavRenderer::RenderIconsForSatNav(
         lv2Transformed.x = (lv2Transformed.x - lv4ViewRect.x) / lfViewW;   // the asm's vrefp(w) product
         lv2Transformed.y = (lv2Transformed.y - lv4ViewRect.y) / lfViewH;
 
-        if (lbEmptySlot)
+        if (lbCurrentCarRoute)
             continue;
 
         // Per-icon-type half-extents for this display mode (X360 r6 -> f2=lfHalfWidth,
@@ -1020,20 +1029,20 @@ void SatNavRenderer::RenderIconsForSatNav(
     // Decide whether to draw a clamped "closest off-screen" marker.
     if (liNumDrawn != 0)
     {
-        if (luFirstEmptyIcon != KU_MAX_SATNAV_ICONS)
+        if (luCurrentCarRouteIcon != KU_MAX_SATNAV_ICONS)
         {
-            luClosestIconIndex = luFirstEmptyIcon;
+            luClosestIconIndex = luCurrentCarRouteIcon;
             lbDrawClosest      = true;
         }
     }
-    else if (luFirstEmptyIcon != KU_MAX_SATNAV_ICONS)
+    else if (luCurrentCarRouteIcon != KU_MAX_SATNAV_ICONS)
     {
-        luClosestIconIndex = luFirstEmptyIcon;
+        luClosestIconIndex = luCurrentCarRouteIcon;
         lbDrawClosest      = true;
     }
     else
     {
-        // Nothing drawn and no empty slot: draw the nearest off-screen icon if one was found.
+        // Nothing drawn and no current-car route: draw the nearest off-screen icon if one was found.
         lbDrawClosest = (lfClosestDistSq != 3.4028235e38f);
     }
 
@@ -1060,6 +1069,17 @@ void SatNavRenderer::RenderIconsForSatNav(
                   : (lfEventStartX > KF_ICON_CLAMP_MAX ? KF_ICON_CLAMP_MAX : lfEventStartX);
     lfEventStartY = lfEventStartY < KF_ICON_CLAMP_MIN ? KF_ICON_CLAMP_MIN
                   : (lfEventStartY > KF_ICON_CLAMP_MAX ? KF_ICON_CLAMP_MAX : lfEventStartY);
+
+    // FLAG PC-platform witness: bounded output of the actual edge-marker selection.
+    if (std::getenv("BRN_SATNAV_DIAG") && lClosest.muEventTypeIndex == 0
+        && CgsDev::Log::gpDebugPrint)
+    {
+        static u32 suRouteEdgeWitnesses = 0;
+        if (suRouteEdgeWitnesses++ < 8)
+            *CgsDev::Log::gpDebugPrint << "[burn-route] edge event=" << lClosest.miEventId
+                << " row=" << lClosest.muEventTypeIndex << " x=" << lfEventStartX
+                << " y=" << lfEventStartY << "\n";
+    }
 
     if (lfEventStartX >= KF_VISIBLE_MAX || lfEventStartX <= KF_VISIBLE_MIN ||
         lfEventStartY >= KF_VISIBLE_MAX || lfEventStartY <= KF_VISIBLE_MIN)

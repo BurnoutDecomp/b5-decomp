@@ -64,8 +64,19 @@ namespace
     };
     std::unordered_map<CgsGui::SaveLoadSystem*, PendingSavePC> sPendingSavesPC;
 
+    // FLAG PC-platform leaf: native reads complete synchronously, whereas the
+    // Realmc request reports completion through Update. Keep that scheduling
+    // contract so profile notifications precede the screen's return to game.
+    struct PendingLoadResultPC
+    {
+        CgsGui::SaveLoadTaskResultHandler* mpHandler;
+        CgsGui::ESaveLoadTaskResult meResult;
+    };
+    std::unordered_map<CgsGui::SaveLoadSystem*, PendingLoadResultPC> sPendingLoadResultsPC;
+
     void FinishPendingSavePC(CgsGui::SaveLoadSystem* lpSystem)
     {
+        sPendingLoadResultsPC.erase(lpSystem);
         const auto lIt = sPendingSavesPC.find(lpSystem);
         if (lIt == sPendingSavesPC.end()) return;
         CgsGui::SaveLoadPC::FinishWriteContainer(lIt->second.muTicket);
@@ -351,6 +362,15 @@ namespace CgsGui
     // interface if present.
     void SaveLoadSystem::Update()
     {
+        const auto lLoad = sPendingLoadResultsPC.find(this);
+        if (lLoad != sPendingLoadResultsPC.end())
+        {
+            const PendingLoadResultPC lResult = lLoad->second;
+            sPendingLoadResultsPC.erase(lLoad);
+            // The callback may start another task or release this owner.
+            lResult.mpHandler->HandleSaveLoadTaskResult(lResult.meResult);
+            return;
+        }
         if (mbAsyncOpState == 1)
         {
             const DWORD luResult = ::XGetOverlappedResult(maOverlapped, nullptr, FALSE);
@@ -888,7 +908,7 @@ namespace CgsGui
             // completion later reports the result. On PC the storage edge is the
             // CgsSaveLoadPC container: read it synchronously into the stored-data view the
             // Load starter captured (plus the mugshot blob into the mugshot buffer, the
-            // console's second load entry) and report the real outcome here. A missing,
+            // console's second load entry) and report the outcome from the next Update. A missing,
             // corrupt, or other-build container reports FAILURE -- the manager's no-save
             // path, exactly what the console's failed read reported.
             bool lbOk = false;
@@ -910,9 +930,9 @@ namespace CgsGui
             // completion -- as the sibling BootupStart leaf above does.
             Update();
 
-            reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
-                ->HandleSaveLoadTaskResult(lbOk ? E_SAVELOADTASKRESULT_SUCCESS
-                                                : E_SAVELOADTASKRESULT_FAILURE);
+            sPendingLoadResultsPC[this] = {
+                reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay),
+                lbOk ? E_SAVELOADTASKRESULT_SUCCESS : E_SAVELOADTASKRESULT_FAILURE };
             return;
         }
 

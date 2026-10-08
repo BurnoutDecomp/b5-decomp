@@ -5305,6 +5305,10 @@ namespace BrnGame
                                  /*lbSuspendEffects*/ false,
                                  ConstructUpdateSetFromFsm());
 
+                // ARTIST DoUpdate's sound leg follows the final camera publication
+                // and effects update. Complete the capture begun before world update.
+                FinishInGameSoundFramePC();
+
                 // ---- ADOPT THE SERIALISERS THE EFFECTS LEG JUST REGISTERED ----------------
                 // ReplayModule::StoreSerialisers @0x8264B600 is what hands every registered
                 // BaseSerialiser its stream and STATIC buffers out of the replay module's linear
@@ -5514,6 +5518,87 @@ namespace BrnGame
 
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_RenderAll);
         return false;
+    }
+
+    // FLAG PC-platform scheduling: the in-game state drives the world from
+    // GameMain's sub-step. Preserve ARTIST DoUpdate's pre-world sound capture
+    // (823F1300), but consume the frame after director/GUI/effects (823F19E8).
+    // A freshly constructed director output has an identity camera until then.
+    BrnSound::Module::Io::RootPreUpdateOutputBuffer* BrnGameModule::BeginInGameSoundFramePC()
+    {
+        BrnGameModule* lpGameModule = this;
+        CgsModule::IOBufferStack* lpOutputStack = lpGameModule->GetUpdateOutputBufferStack();
+        BrnSound::Module::Io::RootOutputBuffer*& lpSoundRootOutput = mpInGameSoundRootOutputPC;
+        BrnSound::Module::Io::RootPreUpdateOutputBuffer*& lpSoundPreUpdateOutput = mpInGameSoundPreUpdateOutputPC;
+        lpOutputStack->CreateIOBuffer<BrnSound::Module::Io::RootOutputBuffer>(
+            &lpSoundRootOutput, "Sound");
+        lpOutputStack->CreateIOBuffer<BrnSound::Module::Io::RootPreUpdateOutputBuffer>(
+            &lpSoundPreUpdateOutput, "SoundRootPreUpdateOutput");
+
+        if (lpSoundPreUpdateOutput != 0 && lpGameModule->GetGuiInputBuffer() != 0)
+        {
+            lpGameModule->DoPreUpdate_Sound(lpOutputStack, lpSoundPreUpdateOutput,
+                                            lpGameModule->GetGuiInputBuffer());
+        }
+
+        return lpSoundPreUpdateOutput;
+    }
+
+    void BrnGameModule::FinishInGameSoundFramePC()
+    {
+        BrnGameModule* lpGameModule = this;
+        auto* lpOutputStack = GetUpdateOutputBufferStack();
+        auto*& lpSoundRootOutput = mpInGameSoundRootOutputPC;
+        auto*& lpSoundPreUpdateOutput = mpInGameSoundPreUpdateOutputPC;
+        // The post-world sound leg (console @0x823F19E8): the full DoUpdate_Sound with the PC's
+        // live sources. Replay pre-sim + effects outputs are null until those modules are driven
+        // per-frame (FLAG'd inside the leg); the update set is the same FSM derivation the world
+        // drive uses.
+        if (lpSoundRootOutput != 0)
+        {
+            const BrnUpdateSet lUpdateSet = lpGameModule->ConstructUpdateSetFromFsm();
+            lpGameModule->DoUpdate_Sound(
+                lpGameModule->GetUpdateInputBufferStack(),
+                lpOutputStack,
+                lpGameModule->GetGameStateModule().GetOutputBuffer(),
+                lpGameModule->GetWorldUpdateOutputBuffer(),
+                lpGameModule->GetDirectorOutputBuffer(),
+                0,   // replays pre-sim output: module not driven per-frame on PC yet
+                lpSoundRootOutput,
+                lpGameModule->GetGuiOutputBuffer(),
+                0,   // effects output: module unmounted (lock-only participant on console)
+                lUpdateSet);
+
+            // The caller-side sound->resource forwards (console DoUpdate tail @0x823F1F08-34;
+            // the leg itself does NOT forward): the root output's AttribSys <2048> queue +
+            // <4096> request interface into the GameData input, under the standard
+            // W(gameDataIn)+R(rootOut) bracket -- the same pair the loading spine forwards.
+            BrnResource::GameDataIO::InputBuffer* lpGameDataInput =
+                BrnGameMainFlowController::GetScriptedLoadGameDataInput();
+            if (lpGameDataInput != 0)
+            {
+                lpGameDataInput->LockForWrite();
+                lpSoundRootOutput->LockForRead();
+                {
+                    const BrnSound::Module::Io::RootOutputBuffer* lpSoundRootOutputRead = lpSoundRootOutput;
+                    lpGameDataInput->GetAttribSysRequestInterface()->mRequestQueue.Append(
+                        lpSoundRootOutputRead->GetAttribSysRequestInterface()->mRequestQueue);
+                    lpGameDataInput->GetRequestInterface()->mRequestQueue.Append(
+                        lpSoundRootOutputRead->GetResourceRequestInterface()->mRequestQueue);
+                }
+                lpSoundRootOutput->UnlockForRead();
+                lpGameDataInput->UnlockForWrite();
+            }
+        }
+
+        // Teardown in reverse creation order (console @0x823F20E0 preUpdateOut ... @0x823F21B4 rootOut).
+        if (lpSoundPreUpdateOutput != 0)
+            lpOutputStack->DestroyIOBuffer<BrnSound::Module::Io::RootPreUpdateOutputBuffer>(
+                &lpSoundPreUpdateOutput);
+        if (lpSoundRootOutput != 0)
+            lpOutputStack->DestroyIOBuffer<BrnSound::Module::Io::RootOutputBuffer>(
+                &lpSoundRootOutput);
+
     }
 
     // @ BrnGameModule.cpp:2497 - allocate this sub-step's static GUI/director IO buffers from

@@ -1170,7 +1170,7 @@ void DriveThruManager::UnlockCarChallengeForCar(CgsID lRepairedCarID, GameStateM
                 1011);
             CgsDev::Assert::EndAssert();
         }
-        if (lpRaceEventData->GetUnlockCarId() == lRepairedCarID)   // RaceEventData word +0x14 == a2
+        if (lpRaceEventData->GetUnlockCarId() == lRepairedCarID)   // ARTIST 82386958: whole CgsID at +0x10
             break;
     }
     if (luEventJunctionIndex >= luEventJunctionCount)
@@ -1198,6 +1198,10 @@ void DriveThruManager::UnlockCarChallengeForCar(CgsID lRepairedCarID, GameStateM
     if (!lpProfileEvent->IsFound())   // ProfileEvent flag bit 0 (X360 lhz +4, bit0)
     {
         lpProfileEvent->SetFound(true);
+        // FLAG PC-platform witness: the original repair/discovery edge.
+        if (std::getenv("BRN_DRIVETHRU_DIAG") && CgsDev::Log::gpDebugPrint)
+            *CgsDev::Log::gpDebugPrint << "[burn-route] repair discovered event="
+                << lpEventJunction->GetID() << " car=" << static_cast<u64>(lRepairedCarID) << "\n";
 
         // ⭐⭐ THE OBJECT IS THE MANAGER, NOT THE PROFILE. @0x82386A40 `lwz r10, 0x950(r22)`
         // reloads mpProgressionManager and @0x82386A48..A50 does `lwz/addi/stw 0x244(r10)` --

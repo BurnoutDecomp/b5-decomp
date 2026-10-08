@@ -228,6 +228,9 @@ namespace BrnGame
         //   StopMonitor(miUT_SoundUpdate); StopMonitor(miUT_Sound);
         // The stack argument is the update-OUTPUT stack (only forwarded into PreUpdate,
         // which carves its "SoundLogicPreUpdateOutput" scratch from it).
+        BrnSound::Module::Io::RootPreUpdateOutputBuffer* BeginInGameSoundFramePC();
+        void FinishInGameSoundFramePC();
+
         void DoPreUpdate_Sound(CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
                                BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutputBuffer,
                                CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer);
@@ -1119,6 +1122,9 @@ namespace BrnGame
         // lock-only participant) DoUpdate_Sound. DoUpdate is a PC leaf here, so it lives with
         // the other per-sub-step buffers in CreateStaticIOBuffers.
         BrnEffects::EffectsIO::OutputBuffer*   mpEffectsOutputBuffer;
+        // PC scheduler-owned sound pair; begun before world, completed after effects.
+        BrnSound::Module::Io::RootOutputBuffer* mpInGameSoundRootOutputPC = nullptr;
+        BrnSound::Module::Io::RootPreUpdateOutputBuffer* mpInGameSoundPreUpdateOutputPC = nullptr;
         // [FLAG PC placement] this sub-step's network OUTPUT buffer. The console's DoUpdate
         // creates it second, right after the input output buffer, and threads it through
         // DoUpdate_NetworkPreSim, DoUpdate_GameStatePreWorld, DoUpdate_World and DoUpdate_GUI;
