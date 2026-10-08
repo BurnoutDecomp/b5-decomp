@@ -144,7 +144,7 @@ public:
         f32 mfFastDistance;                 // +0x34  "Fast Distance"
         f32 mfFastHeight;                   // +0x38  "Fast Height"
         f32 mfPitch;                        // +0x3C  "Pitch"
-        f32 mfFOV;                          // +0x40  <label unrecovered -- see .cpp FLAG>
+        f32 mfFOV;                          // +0x40  "FOV"
         f32 mfBlendFactorBlendFactor;       // +0x44  "Blend Factor Blend Factor"
         f32 mfMinimumBlendFactor;           // +0x48  "Minimum Blend Factor"
         f32 mfMaximumBlendFactor;           // +0x4C  "Maximum Blend Factor"

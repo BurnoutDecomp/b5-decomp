@@ -2,7 +2,13 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_DEBUG_MENU_SERIALISER_H
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"   // Vector3 (typedef rw::math::vpu::Vector3) -- the vec3 Serialise overload
+#include "BrnCommonTypes.h"   // Vector3 (the vec3 Serialise overload)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                    // CGS_ASSERT (ProcessFunction's unhandled-case arm)
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsFunction.h" // DebugUI::Function::DebugCallbackFunction
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugCompononent.h"    // complete BrnDirector::DebugComponent (the inline leaf bodies call it)
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"                            // Utils::VersionNumber / Utils::FOV (inline leaf bodies)
+
+#include <cstring>   // strlen (RemoveFromPath)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnDebugMenuSerialiser.h
@@ -11,108 +17,136 @@
 // camera-tunings/playlist Parameters tree INTO the in-game debug menu (add) or removes it
 // (remove). It walks the same Serialise<T> visitor protocol as the text-file serialisers,
 // but instead of reading/writing a file it registers each leaf field as a debug-menu
-// variable on a BrnDirector::DebugComponent (RegisterVariable / SetStep / ...), building the
-// menu path as it descends.
+// variable on a BrnDirector::DebugComponent, building the menu path as it descends.
 //
-// SHAPE authoritative from the DecFIGS DWARF
-//   (references/DecFIGS/dwarfdump/.../Serialisation.h:221):
-//       struct DebugMenuSerialiser {
-//           static const s32 KI_CHARBUFFERLENGTH = 64;   // :224
-//           enum EMode { E_MODE_ADD_TO_MENU=0, E_MODE_REMOVE_FROM_MENU=1 };  // :226
-//       private:
-//           static const s32            KI_PATHSTACKSIZE = 64;      // :448
-//           EMode                       meMode;                     // :450  +0x00
-//           u32                         muStackPos;                 // :451  +0x04
-//           char                        macPathStack[64];           // :452  +0x08
-//           BrnDirector::DebugComponent* mpDebugComponent;          // :454  +0x48
-//       };
-// The mpDebugComponent offset (+0x48) is X360-attested: DebugMenuSerialiser::Serialise
-// (@0x82219A50) loads it with `lwz r3, 0x48(r31)` before every SetStep call, which pins
-// meMode(+0x00)/muStackPos(+0x04)/macPathStack[64](+0x08..+0x47)/mpDebugComponent(+0x48).
+// The console declares all five camera serialisers in one header,
+// Camera/Behaviours/Serialisation.h (this tree splits the three file/menu ones into their own
+// headers; Serialisation.h includes all three and adds the testbed and naming serialisers).
 //
-// HOME for the class slice owned by this TU:
-//   - DebugMenuSerialiser::Serialise(const char*, Vector3&) @0x82219A50 (body in the .cpp).
-// The other visitor overloads (scalar/VersionNumber/FOV/playlist), Construct, AddToPath,
-// ProcessFunction and the Process<T> worker are separate TUs; the ones this slice can spell
-// with already-reconstructed parameter types are declared here (declaration-only) so callers
-// can drive them by name. The VersionNumber/FOV/SharedPlaylists/ICEMoviePlaylist overloads are
-// intentionally NOT declared in this minimal slice (they would pull in types this TU does not
-// need); add them when the DebugMenuSerialiser's own TU lands.
+// Layout (console member order and offsets):
+//     EMode                         meMode;              // +0x00
+//     u32                           muStackPos;          // +0x04
+//     char                          macPathStack[64];    // +0x08
+//     BrnDirector::DebugComponent*  mpDebugComponent;    // +0x48
+//
+// The leaf overloads the console always inlines into the Parameters walkers (scalar, version,
+// FOV, Construct, ProcessFunction, RemoveFromPath and the nested-block template) are inline
+// here; AddToPath, the vec3 overload and the four Process<T> instances are out-of-line in
+// BrnDebugMenuSerialiser.cpp, as on the console. The SharedPlaylists / ICEMoviePlaylist
+// overloads are bodied with the playlist serialisers (Utils/BrnICEMoviePlayerSerialise.cpp).
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
 {
-    // mpDebugComponent's target + the SetStep receiver. Pointer member here, so a forward
-    // declaration suffices for the header; the .cpp includes the full definition
-    // (BrnDirectorModuleDebugCompononent.h) to call the inherited CgsDev::DebugComponent::SetStep.
-    class DebugComponent;
+    struct SharedPlaylists;    // Utils/BrnICEMoviePlayer.h
+    struct ICEMoviePlaylist;   // Utils/BrnICEMoviePlayer.h
 
 namespace Camera
 {
 
-// The versioned-block tag (definition in CameraUtils.h). Forward-declared so the version leaf
-// overload below can take it by reference; in the debug-menu pass that overload is a no-op.
-namespace Utils { struct VersionNumber; }
-
 class DebugMenuSerialiser
 {
 public:
-    // Fixed label-buffer length (Serialisation.h:224).
+    // Fixed label-buffer length.
     static const s32 KI_CHARBUFFERLENGTH = 64;
 
-    // Serialisation.h:226. Whether this pass installs the fields into the debug menu or
-    // strips them back out (LoadPlaylists rebuilds the menu with REMOVE then ADD around the
-    // file read).
+    // Whether this pass installs the fields into the debug menu or strips them back out.
     enum EMode
     {
         E_MODE_ADD_TO_MENU      = 0,
         E_MODE_REMOVE_FROM_MENU = 1,
     };
 
-    // Serialisation.h:235. Bind the target debug component and the add/remove mode; resets the
-    // path stack (muStackPos = 0, macPathStack[0] = 0). Body is a separate TU; declared here so
-    // callers (e.g. the inlined DebugComponent::LoadPlaylists/SavePlaylists) drive it by name.
-    void Construct(BrnDirector::DebugComponent* lpDebugComponent, EMode leMode);
+    // Bind the target debug component and the add/remove mode, and empty the path stack.
+    // Always inlined (ArbStateTestbed::RegisterParameters builds the serialiser on its stack
+    // with exactly these four stores).
+    void Construct(BrnDirector::DebugComponent* lpDebugComponent, EMode leMode)
+    {
+        mpDebugComponent = lpDebugComponent;
+        meMode           = leMode;
+        muStackPos       = 0;
+        macPathStack[0]  = '\0';
+    }
 
-    // The per-leaf worker (X360 public member template `void Process<T>(const char*, T&)`,
-    // Serialisation.h:265). For the current EMode it either registers the field as a debug-menu
-    // variable under the current path or removes it. One instantiation per leaf type; the bodies
-    // are separate TUs (attested by the `bl Process<float>` call in Serialise). Declared here so
-    // the vec3 Serialise below can drive Process<float> by name.
-    template<class T> void Process(const char* lpcName, T& lrValue);
+    // Push "<lpacPath>/" onto the menu path stack. Out-of-line (BrnDebugMenuSerialiser.cpp).
+    void AddToPath(const char* lpacPath);
 
-    // Scalar leaf visitors -- the debug-menu counterparts of the text serialisers' scalar
-    // overloads. Declaration-only in this slice (bodies are separate TUs); declared so the
-    // Parameters::Serialise<DebugMenuSerialiser> walkers drive them by name.
-    void Serialise(const char* lpcName, f32& lrValue);
-    void Serialise(const char* lpcName, s32& lrValue);
-    void Serialise(const char* lpcName, u32& lrValue);
-    void Serialise(const char* lpcName, bool& lrValue);
+    // Register (ADD) or unregister (REMOVE) a debug-menu action under the current path. Always
+    // inlined (the playlist debug-menu builder's "New Movie" / "Remove Movie" entries).
+    void ProcessFunction(CgsDev::DebugUI::Function::DebugCallbackFunction lpfFunction,
+                         void* lpUserData, const char* lpcName)
+    {
+        if (meMode == E_MODE_ADD_TO_MENU)
+            mpDebugComponent->RegisterFunction(lpfFunction, lpUserData, macPathStack, lpcName);
+        else if (meMode == E_MODE_REMOVE_FROM_MENU)
+            mpDebugComponent->UnregisterFunction(lpfFunction, lpUserData);
+        else
+            CGS_ASSERT(false, "unhandled case");
+    }
 
-    // The block's leading version tag. In the debug-menu pass this is a NO-OP: a version tag is not
-    // exposed as an editable menu variable (the X360 Serialise<DebugMenuSerialiser> instances emit no
-    // Process/SetStep for it -- e.g. Looker::Parameters @0x822156E0 stores the tag then walks straight
-    // to the first float). Declared so the versioned Parameters visitors compile uniformly across all
-    // three serialisers. Body is a separate TU.
-    void Serialise(const char* lpcName, Utils::VersionNumber& lrValue);
+    // ---- leaf visitors ----------------------------------------------------------------
+    // f32: a menu float with a 0.01 adjust step.
+    void Serialise(const char* lpcName, f32& lrValue)
+    {
+        Process<float>(lpcName, lrValue);
+        mpDebugComponent->SetStep(&lrValue, KF_DEBUG_ADJUST_STEP);
+    }
 
-    // The vec3 leaf visitor -- DEFINED in BrnDebugMenuSerialiser.cpp @0x82219A50. Registers each
-    // component (x/y/z) as a debug-menu float (Process<float>) with a 0.01 adjust step (SetStep).
+    // s32 / u32 / bool: the plain menu variable, no step or range.
+    void Serialise(const char* lpcName, s32& lrValue)  { Process<int>(lpcName, lrValue); }
+    void Serialise(const char* lpcName, u32& lrValue)  { Process<unsigned int>(lpcName, lrValue); }
+    void Serialise(const char* lpcName, bool& lrValue) { Process<bool>(lpcName, lrValue); }
+
+    // The block's leading version tag is not an editable menu variable: the debug-menu walkers
+    // store the current version into the tag and emit nothing for it.
+    void Serialise(const char* /*lpcName*/, Utils::VersionNumber& /*lrValue*/) {}
+
+    // FOV: a menu float clamped to [1, 150] degrees.
+    void Serialise(const char* lpcName, Utils::FOV& lrValue)
+    {
+        Process<float>(lpcName, lrValue.mfFOV);
+        mpDebugComponent->SetRange(&lrValue.mfFOV, KF_FOV_MIN_DEGS, KF_FOV_MAX_DEGS);
+    }
+
+    // The vec3 leaf: x/y/z each as a menu float with the 0.01 step. Out-of-line
+    // (BrnDebugMenuSerialiser.cpp).
     void Serialise(const char* lpcName, Vector3& lrValue);
 
-    // The nested-block visitor template (X360: `void Serialise<T>(const char*, T&)`) -- the
-    // debug-menu counterpart of the text serialisers' nested-block overload. Its shared body
-    // (attested inlined into every nesting Parameters walker, e.g. CameraImpactEffect::Parameters::
-    // Serialise<DebugMenuSerialiser> @0x822327B0) pushes the section name onto the path stack
-    // (AddToPath), recurses into T's own Serialise (walking T's fields one level deeper), then pops
-    // the name back off. Declaration-only in this slice (the body + its explicit instantiations are
-    // the DebugMenuSerialiser's own TU); declared here so the nesting Parameters::Serialise<Debug
-    // MenuSerialiser> walkers can drive a sub-block section by name.
-    template<class T> void Serialise(const char* lpcName, T& lrParams);
+    // The playlist overloads. Bodies live with the playlist serialisers
+    // (Utils/BrnICEMoviePlayerSerialise.cpp).
+    void Serialise(const char* lpcName, SharedPlaylists& lrPlaylists);
+    void Serialise(const char* lpcName, ICEMoviePlaylist& lrPlaylist);
+
+    // The nested-block visitor: push the section name, walk T's own fields one level deeper,
+    // pop the name again. One shared body; the console emits it per T.
+    template<class T>
+    void Serialise(const char* lpcName, T& lrParams)
+    {
+        AddToPath(lpcName);
+        lrParams.Serialise(*this);
+        RemoveFromPath(lpcName);
+    }
+
+    // The per-leaf worker: ADD registers &lrValue as a menu variable under the current path,
+    // REMOVE strips it back out. Body + the four explicit instances (float / int / unsigned int
+    // / bool) in BrnDebugMenuSerialiser.cpp.
+    template<class T> void Process(const char* lpcName, T& lrValue);
 
 private:
-    // Path-stack capacity (Serialisation.h:448).
+    // Path-stack capacity.
     static const s32 KI_PATHSTACKSIZE = 64;
+
+    // The per-component adjust step and the FOV menu range.
+    static constexpr f32 KF_DEBUG_ADJUST_STEP = 0.01f;
+    static constexpr f32 KF_FOV_MIN_DEGS      = 1.0f;
+    static constexpr f32 KF_FOV_MAX_DEGS      = 150.0f;
+
+    // Pop "<lpcPath>/" back off the path stack. Always inlined into the nested-block visitor.
+    void RemoveFromPath(const char* lpcPath)
+    {
+        muStackPos -= static_cast<u32>(strlen(lpcPath)) + 1;
+        macPathStack[muStackPos] = '\0';
+    }
 
     EMode                        meMode;                          // +0x00  add vs remove
     u32                          muStackPos;                      // +0x04  current path length

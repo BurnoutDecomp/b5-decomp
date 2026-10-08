@@ -53,9 +53,7 @@ namespace BrnDirector
         const char* GetName() const override;
 
         // Registers every camera/testbed/crash debug variable and action with the debug
-        // menu. BLOCKED on the director dev-tools closure (the parameter-bank and playlist
-        // serialisers, the testbed state, the ICE editor entry); the exact list is on its
-        // stub in DirectorLinkStubs.cpp.
+        // menu. Bodied in BrnDirectorModuleDebugCompononent_wS34_02.cpp.
         void OnActivate() override;
 
     private:
@@ -70,10 +68,7 @@ namespace BrnDirector
         // SavePlaylists / LoadPlaylists fopen "d:\\playlists.txt" and run SharedPlaylists::
         // Serialise<TextFileWriteSerialiser | TextFileReadSerialiser | DebugMenuSerialiser>
         // over the arbitrator state container's mSharedPlaylists (DirectorModule +0x13BD0).
-        // BLOCKED: those Serialise instantiations live in the unmounted
-        // Utils/BrnICEMoviePlayerSerialise.cpp, whose closure (the DebugMenuSerialiser and
-        // TextFile*Serialiser scalar overloads, ICEMoviePlaylist::Serialise<S>) is not in the
-        // link. Declaration-only.
+        // Bodied in BrnDirectorModuleDebugCompononent_wS34_01.cpp.
         static void SavePlaylists(void* lpUserData);
         static void LoadPlaylists(void* lpUserData);
 
@@ -83,9 +78,12 @@ namespace BrnDirector
 
         // Creates a new ICE take named "New Take" (ICEAuthor::CreateNewTake on the director's
         // ICEWrapper author, guid -1) and hands it to ICEWrapper::EditorOn. Both are
-        // reachable by name through MainDirector::GetICEWrapper(). BLOCKED: EditorOn lives
-        // in the unmounted BrnDirectorICEWrapper.cpp. Declaration-only.
+        // reachable by name through MainDirector::GetICEWrapper(). Bodied in
+        // BrnDirectorModuleDebugCompononent_wS34_01.cpp.
         static void StartEditor(void* lpUserData);
+
+        // NEVER CALLED. Pins the byte layout OnActivate's registrations rely on.
+        static void _AssertLayout();
 
         // Attested order (see the class-level FLAG comment above): mpDirectorModule is this
         // class's first owned member, at +0xC, immediately after the CgsDev::DebugComponent

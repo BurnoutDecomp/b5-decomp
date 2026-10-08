@@ -17,6 +17,7 @@
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"         // Camera::Behaviour -- the pooled objects'
                                                                      //   BASE: every helper dispatch goes
                                                                      //   through its vtable
+#include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h"       // Utils::Tweaker (TweakerHelper::mTweaker)
 
 // ============================================================================
 // GameSource/Director/Camera/BrnBehaviourManager.h
@@ -73,6 +74,7 @@ class ArbitratorState;                 // CheckNoBehavioursAreAllocatedByState /
 class Moment;                          // BehaviourHelper debug owner
 class DirectorResourceManager;         // Prepare/Set/GetDirectorResourceManager
 struct DebugPrinter;                   // Update/SceneQuery debug printer arg
+class DebugComponent;                  // the director debug page (friend of BehaviourManager)
 // (BehaviourSharedInfo / BehaviourSharedPrepareReleaseInfo now come from the canonical
 //  Camera/Behaviours/Behaviour.h included above -- they live in BrnDirector::Camera, not
 //  BrnDirector, so the old BrnDirector-scope forward declaration here was a DIFFERENT
@@ -296,19 +298,11 @@ namespace Camera
                                           rw::math::vpu::Vector4> SmallBehaviourPool;
 
         // The single attached camera-tweaker slot (DWARF BrnBehaviourManager.h:353..:356).
-        // FLAG: mTweaker is the committed BrnDirector::Camera::Utils::Tweaker (BrnCameraTweaker.h),
-        //   but pulling that home in here collides with the minimal Tweaker fork that
-        //   BrnBehaviourIceAnim.h still defines (a separate pre-existing ODR fork, out of scope
-        //   for this layout wave). To keep the manager home self-contained and not drag that
-        //   collision into every consumer, the embedded tweaker is modelled here as an opaque
-        //   FLAGGED sized sub-object (size un-pinned placeholder; interior NEVER fabricated).
-        //   Replace with the committed Tweaker by value once the IceAnim Tweaker fork is
-        //   reconciled to the committed home.
         struct TweakerHelper
         {
             bool                 mbAttached;            // +0x00  slot occupied
             BehaviourHelperIndex mBehaviourHelperIndex; // the behaviour being tweaked
-            u8                   maTweakerOpaque[4];    // FLAG opaque: the live Tweaker (size un-pinned)
+            Utils::Tweaker       mTweaker;              // the live tweaker the behaviour maps onto
         };
 
         // --- manager API (DWARF BrnBehaviourManager.h:96..:378) -- DECLARATION-ONLY -----
@@ -478,8 +472,8 @@ namespace Camera
         // ⭐ RETYPED 2026-08-02 (camera parameter-chain wave) from OpaqueSub<0> to the real
         // BrnDirector::Camera::BehaviourParameterBank (DWARF :325). The bank now carries its
         // two gameplay-camera Parameters blocks + the latched car attribs key -- the three
-        // slots the whole chase/bumper camera chain turns on. It is still a SLICE of the
-        // console's ~40-block bank; see BrnBehaviourParameterBank.h. The other FLAGGED
+        // slots the whole chase/bumper camera chain turns on, and its record holds all 48
+        // named blocks; see BrnBehaviourParameterBank.h. The other FLAGGED
         // OpaqueSub<> members in this class are untouched.
         BehaviourParameterBank mBehaviourParameterBank;                                    // :325
 
@@ -516,6 +510,9 @@ namespace Camera
         // Out-of-line template body access.
         template <typename> friend class BehaviourHandle;
         friend void _BehaviourManagerAssertLayout();
+
+        // The director debug page registers mbDebugDisplayAllCameras.
+        friend class BrnDirector::DebugComponent;
     };
 
     // ------------------------------------------------------------------------

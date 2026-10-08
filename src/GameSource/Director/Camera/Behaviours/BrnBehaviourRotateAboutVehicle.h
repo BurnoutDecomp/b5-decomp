@@ -105,16 +105,10 @@ public:
     class Parameters : public Behaviour::Parameters
     {
     public:
-        // X360 visitor: `void Serialise<S>(S&)` for the camera-tunings serialiser S.
-        //
-        // FLAG: the text-serialise field-walk for this block is ATTESTED EMPTY. The X360
-        //   instantiation @0x82214D48 emits only the section-header label line + recursion-depth
-        //   accounting; it discards the parameter-block register (mr r5,r4 overwrites the params
-        //   ptr before FormatName) and makes NO `bl` to any inner field walker -- the compiler
-        //   inlined the inner visitor to nothing because it serialises zero fields to text.
-        //   ⚠️ That is a statement about the TEXT WRITER instantiation only. It is NOT evidence
-        //   that the block has no fields (it plainly has three); the fields are reached through
-        //   the two sub-blocks' own Serialise visitors, which the writer instantiation folded.
+        // The camera-tunings walk for serialiser S. It walks nothing: both the text-writer and the
+        // debug-menu block visitors emit only their section bookkeeping (header line / menu path
+        // push and pop), with no field and no nested sub-block, so the block's three fields are
+        // never saved, loaded or menu-tuned.
         template<class TSerialiser> void Serialise(TSerialiser& /*lrSerialiser*/) {}
 
         // ⭐ Parameters::Construct @0x821FB300 -- THE WHOLE BODY (2026-08-01).

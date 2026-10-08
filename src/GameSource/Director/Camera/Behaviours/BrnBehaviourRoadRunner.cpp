@@ -1176,16 +1176,13 @@ void BehaviourRoadRunner::SetupTweaker(Utils::Tweaker& /*lrTweaker*/)
 
 // ============================================================================
 // Parameters::Construct (BrnBehaviourRoadRunner.h:300) -- the base parameter head plus this
-// behaviour's own type tag.
-// FLAG: the road-runner behaviour-TYPE tag value is NOT attested (the block's serialise walk is
-// attested empty and Update never dereferences mpParameters, so no site compares the tag). The
-// base head is constructed and the tag deliberately left at the base default rather than
-// guessed.
-// DELETE-WHEN: a SetParameters assert quoting the tag is found for this behaviour.
+// behaviour's own type tag, 16 (the camera parameter bank's inlined copy stores it, and the
+// bank's serialiser dispatch routes tag 16 to this block type).
 // ============================================================================
 void BehaviourRoadRunner::Parameters::Construct()
 {
     Behaviour::Parameters::Construct();
+    mType = 16u;
 }
 
 } // namespace Camera

@@ -10,8 +10,8 @@
 //   - (Destruct is declared in the original header but has no recovered body)
 //
 // RenderHUD and UpdatePanoramaScreenshots are bodied in BrnDirectorModuleDebugCompononent_wS34_00.cpp.
-// OnActivate (stubbed in DirectorLinkStubs.cpp), StartEditor, SavePlaylists and LoadPlaylists
-// remain unbodied -- see the per-function BLOCKED comments in the header.
+// SavePlaylists, LoadPlaylists and StartEditor are bodied in BrnDirectorModuleDebugCompononent_wS34_01.cpp.
+// OnActivate is bodied in BrnDirectorModuleDebugCompononent_wS34_02.cpp.
 // ============================================================================
 
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugCompononent.h"

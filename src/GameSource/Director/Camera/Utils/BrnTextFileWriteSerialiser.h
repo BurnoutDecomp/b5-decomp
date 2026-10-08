@@ -3,36 +3,25 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3 (the vec3 leaf overload)
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (muRecursionDepth guard in Serialise<T>)
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the nesting-depth guard in Serialise<T>)
 
-#include <cstdio>   // std::FILE (the serialiser writes to a text file handle held by it)
+#include <cstdio>   // FILE / fprintf (the nested-block template writes its header line inline)
 
 // ============================================================================
 // GameSource/Director/Camera/Utils/BrnTextFileWriteSerialiser.h
 //
-// BrnDirector::Camera::TextFileWriteSerialiser -- the text-file WRITE serialiser the
-// camera-rig parameter system drives when saving tunings to a human-readable text file.
-// It is the write counterpart of TextFileReadSerialiser.
+// BrnDirector::Camera::TextFileWriteSerialiser -- the text-file WRITE serialiser the camera
+// tunings bank and the ICE playlists drive when saving a human-readable tunings file. Every
+// leaf writes one "<formatted-name> : <value>\n" line; nested blocks write a "<formatted-name>\n"
+// header line and indent their fields one level deeper (FormatName prefixes 4 underscores per
+// level and turns spaces into underscores).
 //
-// SHAPE authoritative from the DecFIGS DWARF
-//   (references/DecFIGS/dwarfdump/.../Serialisation.h:161):
-//       struct TextFileWriteSerialiser {
-//       private:
-//           uint32_t   muRecursionDepth;   // +0x00
-//           std::FILE* mpFile;             // +0x04
-//       public:  Construct(const char*); Destruct(); Serialise(...) overloads;
-//       private: void FormatName(char*, const char*);
-//       };
-// The +0x00 recursion-depth word and the FormatName store-for-store body are gated
-// against the X360 binary (FormatName @ 0x821F6128).
+// Layout (console member order):
+//     u32        muRecursionDepth;   // +0x00
+//     std::FILE* mpFile;             // +0x04
 //
-// HOME for the class slice owned by this TU:
-//   - TextFileWriteSerialiser::FormatName(char* dest, const char* src) @0x821F6128
-//     (writes 4*muRecursionDepth indent underscores into dest, then copies src with
-//      spaces replaced by underscores, NUL-terminating). Called by every
-//      Serialise<...> instance to build the per-field label.
-// The Construct/Destruct/Serialise overloads are separate TUs; declared here so they can
-// be called by name.
+// Bodies: Construct / Destruct / FormatName / every leaf overload / the vec3 overload are in
+// BrnTextFileWriteSerialiser.cpp; the nested-block template is inline below.
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
@@ -40,85 +29,64 @@ namespace BrnDirector
 namespace Camera
 {
 
-// The versioned-block tag (definition in CameraUtils.h). Forward-declared here so the version
-// leaf overload below can take it by reference without pulling the camera-utils header in.
-namespace Utils { struct VersionNumber; }
+// The versioned-block tag and the FOV wrapper (definitions in CameraUtils.h).
+namespace Utils { struct VersionNumber; struct FOV; }
 
 class TextFileWriteSerialiser
 {
 public:
-    // The per-field label builder. @0x821F6128.
-    //   lpcDest : output buffer (the caller's fixed stack label buffer)
-    //   lpcSrc  : the field name to format
-    // Writes (4 * muRecursionDepth) leading '_' indent characters, then copies lpcSrc
-    // into the buffer replacing every space (' ') with '_', and NUL-terminates. The
-    // recursion depth governs how deeply nested fields are indented in the text file.
-    void FormatName(char* lpcDest, const char* lpcSrc);
+    // Fixed label-buffer length.
+    static const s32 KI_CHARBUFFERLENGTH = 64;
 
-    // Open the destination text file `lpcFilename` (mode "w") and reset muRecursionDepth to 0.
-    // @Serialisation.h:634 (DWARF `void Construct(const char*)`). Body is a separate TU;
-    // declared here so callers can drive it by name -- e.g. BehaviourParameterBank::
-    // SaveParameters, which the X360 compiler inlines this into.
+    // Open `lpcFilename` for writing ("w") and reset the nesting depth. Inlined into
+    // BehaviourParameterBank::SaveParameters and DebugComponent::SavePlaylists on the console.
     void Construct(const char* lpcFilename);
 
-    // Assert the nesting fully unwound (CGS_ASSERT muRecursionDepth == 0 @Serialisation.h:643)
-    // and close mpFile. @Serialisation.h:641 (DWARF `void Destruct()`). Body is a separate TU;
-    // declared here for the same reason as Construct.
+    // Assert the nesting fully unwound, then close the file if it opened.
     void Destruct();
 
-    // Write a single named f32 field as one "<formatted-name> : <value>\n" text line. @0x82208878.
-    // If mpFile is open: build the indented/space-escaped label into a fixed stack buffer via
-    // FormatName, then fprintf it followed by the float value (promoted to double for the varargs
-    // "%f"). A no-op when the file failed to open.
-    void Serialise(const char* lpcName, f32& lrValue);
+    // ---- leaf writers: one "<formatted-name> : <value>\n" line each (no-op without a file) ----
+    void Serialise(const char* lpcName, f32& lrValue);                    // "%s : %f\n"
+    void Serialise(const char* lpcName, s32& lrValue);                    // "%s : %d\n"
+    void Serialise(const char* lpcName, u32& lrValue);                    // "%s : %d\n"
+    void Serialise(const char* lpcName, Utils::VersionNumber& lrValue);   // "%s : %d\n"
+    void Serialise(const char* lpcName, Utils::FOV& lrValue);             // "%s : %f\n"
+    void Serialise(const char* lpcName, bool& lrValue);                   // "%s : %d\n"
 
-    // Write a single named integer field as one "<formatted-name> : <value>\n" ("%s : %d\n") text
-    // line -- the s32/u32 counterparts of the f32 overload above. Always inlined by the X360
-    // compiler into the owning Parameters/playlist Serialise<TextFileWriteSerialiser> visitor
-    // bodies (e.g. the External-cam "Version Number (dont change)" field @0x8224D448, the playlist
-    // "Ignore this" movie-count @0x8224CBE8, and the SharedPlaylists "Playlists/Current playlist"
-    // index @0x82258C7C), so they carry no standalone ledger symbol; declared here so those
-    // visitors drive them by name. Body in the .cpp.
-    void Serialise(const char* lpcName, s32& lrValue);
-    void Serialise(const char* lpcName, u32& lrValue);
-
-    // Write a named bool field as one "<formatted-name> : <value>\n" ("%s : %d\n") line -- the flag
-    // is promoted to int for the "%d" varargs. Always inlined by the X360 compiler into the owning
-    // Parameters Serialise<TextFileWriteSerialiser> visitor (e.g. the camera-rig "Widescreen Only"
-    // field @0x82216160), so it carries no standalone ledger symbol; declared here so those visitors
-    // drive it by name. Body in the .cpp.
-    void Serialise(const char* lpcName, bool& lrValue);
-
-    // Write the block's leading version tag as one "<formatted-name> : <version>\n" ("%s : %d\n")
-    // line (the u32 inside VersionNumber). Inlined into each versioned Parameters visitor's
-    // Serialise<TextFileWriteSerialiser> body (e.g. Looker::Parameters @0x82216198). Kept a
-    // DISTINCT overload from the plain u32 form so the DebugMenuSerialiser counterpart can no-op it
-    // -- a version tag is not an editable debug-menu variable (the debug instances emit no leaf for
-    // it). Body is a separate TU.
-    void Serialise(const char* lpcName, Utils::VersionNumber& lrValue);
-
-    // Write a named Vector3 field -- the vec3 counterpart of the scalar overloads above
-    // (X360 sub_822089C0 @0x822089C0). Declared here so the camera-rig / behaviour Parameters
-    // Serialise<TextFileWriteSerialiser> visitors (e.g. Utils::CameraRig::Params @0x82216044) drive
-    // the vec3 fields by name; body is a separate TU.
+    // The vec3 leaf: three lines, labelled "<name>: x" / ": y" / ": z".
     void Serialise(const char* lpcName, Vector3& lrValue);
 
-    // The nested-block serialiser-visitor template (X360: `public: void Serialise<T>(const char*,
-    // T&)`). One shared body per instance: write the field's formatted section-header label line
-    // ("<formatted-name>\n"), bump muRecursionDepth (asserting it stays < KI_MAX_RECURSION_DEPTH),
-    // recurse into T's own Serialise (which walks T's fields, each nested one level deeper), then
-    // unwind the depth. The body lives in BrnTextFileWriteSerialiser.cpp with an explicit
-    // instantiation per behaviour/utility Parameters block the camera tunings bank saves. Each T
-    // supplies `template<class S> void Serialise(S&)` (attested as a separate X360 function).
-    template<class T> void Serialise(const char* lpcName, T& lrParams);
+    // The nested-block writer: the "<formatted-name>\n" header line, then T's own fields one
+    // nesting level deeper. One shared body; the console emits it per T.
+    template<class T>
+    void Serialise(const char* lpcName, T& lrParams)
+    {
+        if (mpFile != nullptr)
+        {
+            char lacBuffer[KI_CHARBUFFERLENGTH];
+            FormatName(lacBuffer, lpcName);
+            std::fprintf(mpFile, "%s\n", lacBuffer);
+        }
+
+        ++muRecursionDepth;
+        CGS_ASSERT(muRecursionDepth < KI_MAX_RECURSION_DEPTH,
+                   "muRecursionDepth < KI_MAX_RECURSION_DEPTH");
+
+        lrParams.Serialise(*this);
+
+        --muRecursionDepth;
+    }
 
 private:
-    u32        muRecursionDepth;   // +0x00 -- current nesting depth (indent = 4*depth)
-    std::FILE* mpFile;             // +0x04 -- the destination text file handle
+    // The per-field label builder: (4 * muRecursionDepth) leading '_' characters, then
+    // lpcSource with every space replaced by '_', NUL-terminated.
+    void FormatName(char* lpcDest, const char* lpcSource);
 
-    // Nesting cap (Serialisation.h:663 assert "muRecursionDepth < KI_MAX_RECURSION_DEPTH"): the
-    // X360 compares the post-increment depth against 8 (cmplwi r11,8 ; blt skip-assert).
+    // Nesting cap of the depth guard.
     static const u32 KI_MAX_RECURSION_DEPTH = 8u;
+
+    u32        muRecursionDepth;   // +0x00 -- current nesting depth (indent = 4 * depth)
+    std::FILE* mpFile;             // +0x04 -- the destination text file handle
 };
 
 } // namespace Camera

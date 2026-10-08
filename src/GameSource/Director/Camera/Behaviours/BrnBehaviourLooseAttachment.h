@@ -157,7 +157,7 @@ public:
         f32 mfPitch;                                     // +0x48  "Pitch"
         f32 mfHeight;                                    // +0x4C  "Height"
         f32 mfDistance;                                  // +0x50  "Distance"
-        f32 mfField54;                                   // +0x54  field label rodata unrecovered
+        f32 mfField54;                                   // +0x54  "FOV" (the walk's label)
                                                          //  The declaration reference names this slot
                                                          //        mfFOV, which the seeds corroborate: 90.0f by
                                                          //        default, 40.0f for the new-car-joined moment,

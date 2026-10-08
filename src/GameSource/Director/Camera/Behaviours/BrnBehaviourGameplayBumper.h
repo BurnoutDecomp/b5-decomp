@@ -91,7 +91,7 @@ public:
     public:
         // X360 visitor: `void Serialise<S>(S&)` -- walks this block into the camera-tunings
         // serialiser S (TextFile{Read,Write}Serialiser / DebugMenuSerialiser). Bodied in
-        // BrnBehaviourGameplayBumper.cpp.
+        // BrnBehaviourGameplayBumperParameters.cpp.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
         EBehaviourTypeGameplayBumper GetType() const
@@ -122,7 +122,7 @@ public:
         f32 mfPitchSpring;             // :116  +0x18  "Pitch Spring"      <- source[0x10]
         f32 mfYawSpring;               // :117  +0x1C  "Yaw Spring"        <- source[0x08]
         f32 mfRollSpring;              // :118  +0x20  "Roll Spring"       <- source[0x0C]
-        f32 mfFOV;                     // :120  +0x24  (label @0x820051C0) <- source[0x14]  (>0)
+        f32 mfFOV;                     // :120  +0x24  "FOV"               <- source[0x14]  (>0)
         f32 mfBodyRollScale;           // :122  +0x28  "Body Roll Scale"   <- source[0x1C]
         f32 mfBodyPitchScale;          // :123  +0x2C  "Body Pitch Scale"  <- source[0x20]
         f32 mfBoostFOV;                // :125  +0x30  "FOV during boost"  <- source[0x18]  (>0)

@@ -16,16 +16,10 @@
 
 #include "SDKs/Packages/ICE/ICEData.hpp"                                            // ICE::ICETake (GetCameraTake return)
 #include "SDKs/Packages/ICE/ICEAuthor.hpp"                                          // ICE::ICEAuthor (GetAuthor's base-identity view)
-#include "GameShared/GameClasses/Containers/CgsStack.h"                             // CgsContainers::KI_STACK_UNCONSTRUCTED (action-queue seed)
-#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"    // DebugManager::ThreadSafeAquire/Release
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // DebugInterface::Enable/DisableConsole
 
 namespace BrnDirector
 {
-
-// PARKED, missing declarations: ICEController::EditorOn, ICEController::SetState,
-// ICECameraMover::Construct, DebugInterface::EnableConsole, DebugInterface::DisableConsole
-// have no definition in the tree.
 
 // ---------------------------------------------------------------------------
 // EditorOn
@@ -37,24 +31,19 @@ namespace BrnDirector
 //   * drive the manager's embedded editor into take-edit mode on lpTakeData
 //     (ICEAuthor::EditorOn -- see the header's RETYPED note).
 //
-// The body is bracketed with a DebugInterface auto-acquire/critical-section release
-// (DebugInterface()/ThreadSafeRelease over the singleton DebugManager). The console
-// toggle is a DebugInterface member; expressed here as the established
-// thread-safe-acquire -> use -> release pattern (DebugComponent::Register's idiom).
+// The body is bracketed by an automatic DebugInterface (its constructor acquires the
+// singleton DebugManager, its destructor releases it).
 // ---------------------------------------------------------------------------
 void ICEWrapper::EditorOn(ICE::ICETakeData* lpTakeData)
 {
-    CgsDev::DebugManager*  lpDebugManager = CgsDev::DebugManager::ThreadSafeAquire();
-    CgsDev::DebugInterface lDebugInterface(lpDebugManager);
+    CgsDev::DebugInterface lDebugInterface;
     lDebugInterface.DisableConsole();
 
     // The editor takes over the camera, so stop any movie playback first.
     mICEManager.ClearPlaybackData();
 
     // Enter take-edit mode for the source take on the manager's embedded editor.
-    mICEManager.GetEditor().EditorOn(lpTakeData);
-
-    CgsDev::DebugManager::ThreadSafeRelease(lpDebugManager);
+    GetAuthor().EditorOn(lpTakeData);
 }
 
 // ---------------------------------------------------------------------------
@@ -73,21 +62,18 @@ void ICEWrapper::EditorOn(ICE::ICETakeData* lpTakeData)
 //   * if the editor is currently active (its menus are up), transition it back to
 //     state 2 -- the idle/play state the manager hands the camera back from.
 //
-// Reads the editor's menus-active count (> 0) and only then calls
-// ICEAuthor::SetState(editor, 2). Same auto-acquire/release bracket as EditorOn.
+// Reads the editor state (> OFF) and only then calls ICEAuthor::SetState(editor, 2). Same
+// automatic DebugInterface bracket as EditorOn.
 // ---------------------------------------------------------------------------
 void ICEWrapper::EditorOff()
 {
-    CgsDev::DebugManager*  lpDebugManager = CgsDev::DebugManager::ThreadSafeAquire();
-    CgsDev::DebugInterface lDebugInterface(lpDebugManager);
+    CgsDev::DebugInterface lDebugInterface;
     lDebugInterface.EnableConsole();
 
     // Only transition the editor out if it is currently active.
-    ICE::ICEController& lEditor = mICEManager.GetEditor();
-    if (lEditor.AreMenusActive())
-        lEditor.SetState(2);
-
-    CgsDev::DebugManager::ThreadSafeRelease(lpDebugManager);
+    ICE::ICEAuthor& lrAuthor = GetAuthor();
+    if (lrAuthor.miState > ICE::E_ICE_AUTHOR_STATE_OFF)
+        lrAuthor.SetState(ICE::E_ICE_AUTHOR_STATE_EXIT_CONFIRM);
 }
 
 // ---------------------------------------------------------------------------

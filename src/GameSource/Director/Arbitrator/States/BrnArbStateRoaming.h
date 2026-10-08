@@ -89,6 +89,13 @@ namespace BrnDirector
         // Destruct() genuinely is not in this TU's set; it keeps the base declaration.
 
     private:
+        // The debug page registers the picture-paradise and race-end-effect toggles and the idle delay.
+        friend class DebugComponent;
+
+        // ArbStateRoaming::KF_IDLE_TIME_BEFORE_PICTURE_PARADISE: the player-idle seconds before
+        // the showtime (Picture Paradise) entry. A writable tunable ("Pic Paradise Delay Secs").
+        static f32 KF_IDLE_TIME_BEFORE_PICTURE_PARADISE;
+
         // ---- private per-state helpers (DWARF BrnArbStateRoaming.h) ----------------------
         void ProcessPossibleFX(ArbStateSharedInfo& lrSharedInfo);           // @0x82234A00
         void ProcessPossibleStateChanges(ArbStateSharedInfo& lrSharedInfo); // @0x82219C58

@@ -328,6 +328,9 @@ namespace BrnDirector
         const CameraDebugInfo& GetCameraDebugInfo() const { return mCameraDebugInfo; }
 
     private:
+        // The director debug page registers the moment, debug-output and misc tweakables below.
+        friend class DebugComponent;
+
         // ================================================================================
         // LAYOUT -- named members in CONSOLE ORDER, HOST-NATIVE sizes.
         // The `// +0xNNNNN` comments are the X360 CONSOLE offsets that prove each member's
@@ -464,9 +467,11 @@ namespace BrnDirector
         //           live-player-car predicate and PreSceneQueryUpdate use it).
         s32 miForcedCameraCarIndex;
 
-        // +0x33104 .. +0x33108  two camera-car flag bytes Construct seeds (+0x33104 = 1,
-        //           +0x33105 = 0) -- roles not recovered. FLAG: named opaque span.
-        u8 maCameraCarFlags[0x33108 - 0x33104];
+        // +0x33104 / +0x33105  the debug page's "Show debug camera names" and "Assert no illegal
+        //           slomo usage" toggles (Construct seeds 1 / 0). +0x33106..+0x33107 padding.
+        bool mbShowDebugCameraNames;
+        bool mbDebugAssertNoIllegalSlomo;
+        u8   maPad33106[0x33108 - 0x33106];
 
         // +0x33108 .. +0x33768  BrnDirector::DebugLog (ArbStateSharedInfo +0x08). HOMED 2026-09-24
         //           (FX-DIRECTOR2): the type has lived in BrnDirectorModuleDebugPrinter.h all along;
@@ -565,12 +570,11 @@ namespace BrnDirector
         bool mbAllowHardStopMoment;
         bool mbShowAllCameraNames;
 
-        // +0x35430 .. +0x35450  the director's own flag/latch tail (the ICE-finished latch at
-        //           +0x3543C, the replaying latch at +0x3543D, the debug-print toggles at
-        //           +0x3543B, ...). Construct seeds fifteen of them. FLAG: only the roles of
-        //           the two latches Update/PreSceneQueryUpdate read are recovered; named
-        //           opaque span.
-        u8 maStateFlagTail[0x35450 - 0x35430];
+        // +0x35430 .. +0x35450  the director's own flag tail: one bool per EStateFlagTailByte
+        //           below (+0x00..+0x0F; Construct seeds fifteen of them), then storage no
+        //           reconstructed function reads. +0x3543C / +0x3543D are the debug page's "Zero
+        //           Timestep" / "Single Non-Zero Timestep" pair.
+        bool maStateFlagTail[0x35450 - 0x35430];
 
         // Byte ROLES inside maStateFlagTail that the event-state legs recovered. Indices are
         // byte offsets from the span's own base (+0x35430), which is how every other consumer
@@ -622,6 +626,9 @@ namespace BrnDirector
             // +0x3543C. DWARF DirectorModule::mbDebugZeroTimestep (:321): while set, UpdateMoments
             // hands the moments a zero game timestep (0x822502AC..0x822502BC). Construct seeds 0;
             // Update's tail raises it when it consumes mbDebugSingleTimestep (0x82275290..0x822752B0).
+            // The arbitrator and behaviour shared infos also carry zero steps while it is set and
+            // Update skips the ICE tick; PreSceneQueryUpdate drops it while mbDebugSingleTimestep
+            // is up, so a frozen director steps one frame per request.
             E_FLAG_TAIL_DEBUG_ZERO_TIMESTEP  = 0x0C,
             E_FLAG_TAIL_EVENT_END_REQUEST    = 0x0E,       // DWARF mbDebugTestFinishLines
             E_FLAG_TAIL_EVENT_END_FORCED     = 0x0F,       // DWARF mbDebugForceEventStateToActive

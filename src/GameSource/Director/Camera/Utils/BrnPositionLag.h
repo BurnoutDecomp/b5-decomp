@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "rw/math/vpu/types.h"                        // rw::math::vpu::Vector3 / Matrix44Affine
 #include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT (the Update mbConstructed assert)
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"   // Utils::VersionNumber (the block's version tag)
 
 // ============================================================================
 // GameSource/Director/Camera/Utils/BrnPositionLag.h
@@ -25,7 +26,7 @@
 //     +0x21  bool    mbConstructed         (Construct sets it; Update asserts it)
 //
 //   PositionLag::Parameters:
-//     +0x00  u32 muVersion                 (serialised version tag)
+//     +0x00  VersionNumber muVersion       (serialised version tag)
 //     +0x04  f32 mfXResponse               (per-axis ease rates: how fast the lag closes)
 //     +0x08  f32 mfYResponse
 //     +0x0C  f32 mfZResponse
@@ -54,7 +55,7 @@ public:
         // Reset to defaults. Body in BrnPositionLag.cpp.
         void Construct();
 
-        u32 muVersion;     // +0x00
+        VersionNumber muVersion;   // +0x00
         f32 mfXResponse;   // +0x04
         f32 mfYResponse;   // +0x08
         f32 mfZResponse;   // +0x0C

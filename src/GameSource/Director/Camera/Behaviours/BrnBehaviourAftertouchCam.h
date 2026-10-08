@@ -5,23 +5,33 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the SetParameters type assert)
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"  // Utils::CameraShake::Parameters (embedded "Shake Params" sub-block)
 #include "GameSource/AttribSys/Generated/classes/aftertouchcam.h" // Attrib::Gen::aftertouchcam (the adopted source shot)
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"         // the Camera::Behaviour base
+#include "GameSource/Director/Camera/BrnCollisionPolicy.h"           // CollisionPolicyAttachedToVehicle
+#include "GameSource/Director/Camera/Utils/BrnPositionLag.h"         // Utils::PositionLag
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"               // CgsNumeric::Random
+
+#include <cstddef>   // offsetof (the layout pins)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h
 //
 // BrnDirector::Camera::BehaviourAftertouchCam -- the "aftertouch cam" camera behaviour (the
-// slow-motion crash-aftertouch follow camera the testbed / behaviour-manager installs). HOME
-// for the BehaviourAftertouchCam class slice this TU bodies (SetParameters @0x821F3EA0 and the
-// GetCo* sub-object accessor @0x821FB588). The full behaviour (Construct/Prepare/Update and the
-// rest of the rig) and its Behaviour base land with their own TUs; this header models only the
-// members these two functions touch, BY NAME, at their asm-attested offsets.
+// slow-motion crash-aftertouch follow camera the testbed / behaviour-manager installs). It
+// derives the canonical Camera::Behaviour, so the behaviour manager can pool it and dispatch the
+// base's eight-slot vtable.
 //
-// ----------------------------------------------------------------------------
-// SetParameters @0x821F3EA0: asserts the supplied parameter block is an aftertouch-cam block
-//   (its type tag == eBehaviourAftertouchCam == 10), caches the block's first word at +0x10,
-//   and stores the pointer at +0x330.
-// GetCo* @0x821FB588: returns &this + 0x20 (a pointer to an embedded sub-object at +0x20);
-//   a single `addi r3, r3, 0x20; blr` -- no body, just the address of the member.
+// Layout (declaration order; console offsets, the host widens the base head and the pointer):
+//   +0x020 mCollisionPolicy   +0x270 mCurrentTargetPos   +0x280 mWorldSpaceNormalizedVectorFromCar
+//   +0x290 mDesiredWorldSpaceNormalizedVectorFromCar      +0x2A0 mCrashPoint
+//   +0x2B0 mPositionLag       +0x2E0 mRandom             +0x310 mShake
+//   +0x320 mfHeight  +0x324 mfDistance  +0x328 mfBlendFactor  +0x32C mfTimeSinceLastDecision
+//   +0x330 mpParameters       +0x334 mSourceShot         (console size 0x350)
+//
+// FLAG partial: SetupTweaker and GetName are this class's; Construct, Prepare, Update and
+//   GetCollisionPolicy (with the private AssignIfBetterRival / CalculateDesiredTargetPos) are not
+//   reconstructed yet and keep the base defaults (no collision policy, the camera is not driven).
+//   The collision-policy override returns &mCollisionPolicy, which only Construct seeds, so the
+//   two land together.
 // Parameters::Construct: the block's authored defaults, transcribed in full -- see it below.
 // ----------------------------------------------------------------------------
 
@@ -40,7 +50,7 @@ enum EBehaviourTypeAftertouchCam
     eBehaviourAftertouchCam = 10
 };
 
-class BehaviourAftertouchCam
+class BehaviourAftertouchCam : public Behaviour
 {
 public:
 
@@ -60,10 +70,8 @@ public:
     class Parameters
     {
     public:
-        // X360 visitor: `void Serialise<S>(S&)` -- walks this block's fields into the camera-tunings
-        // serialiser S (DebugMenu / TextFile{Read,Write}Serialiser); the per-instance body lives in
-        // BrnBehaviourAftertouchCamParameters.cpp. Declared so the serialiser's Serialise<Parameters>
-        // can drive it by name.
+        // Walk this block's fields into a camera serialiser (DebugMenu / TextFile{Read,Write}).
+        // Body + instantiations: BrnBehaviourAftertouchCamParameters.cpp.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
         EBehaviourTypeAftertouchCam GetType() const
@@ -94,7 +102,7 @@ public:
         f32 mfFastDistance;                 // +0x34  "Fast Distance"
         f32 mfFastHeight;                   // +0x38  "Fast Height"
         f32 mfPitch;                        // +0x3C  "Pitch"
-        f32 mfField40;                      // +0x40  <unk_820051C0> (field label unrecovered; see cpp)
+        f32 mfFOV;                          // +0x40  "FOV" (walked before "Pitch")
         f32 mfBlendFactorBlendFactor;       // +0x44  "Blend Factor Blend Factor"
         f32 mfMinimumBlendFactor;           // +0x48  "Minimum Blend Factor"
         f32 mfMaximumBlendFactor;           // +0x4C  "Maximum Blend Factor"
@@ -138,7 +146,7 @@ public:
             mfFastDistance                = 8.0f;
             mfFastHeight                  = 2.0f;
             mfPitch                       = 15.0f;
-            mfField40                     = 90.0f;
+            mfFOV                         = 90.0f;
             mfBlendFactorBlendFactor      = 0.01f;
             mfMinimumBlendFactor          = 0.001f;
             mfMaximumBlendFactor          = 0.01f;
@@ -153,76 +161,75 @@ public:
         }
     };
 
-    // FLAG: the +0x20 sub-object the GetCo* accessor exposes. The truncated dossier name
-    //   ("GetCo") and the single `addi r3, r3, 0x20; blr` body attest only that it returns the
-    //   address of an embedded member at +0x20; the member's concrete type lands with the full
-    //   behaviour TU. Modelled as an opaque embedded sub-object so the accessor returns a typed
-    //   pointer to it at the asm-attested offset.
-    class CoSubObject;
+    // ---- the Behaviour virtual interface (see the FLAG in the banner) ----------------------
+    // Reset the tweaker it is handed; the aftertouch cam maps nothing onto it.        (slot 6)
+    void SetupTweaker(Utils::Tweaker& lrTweaker) override;
 
-    // Return the address of the embedded sub-object at +0x20. @0x821FB588.
-    CoSubObject* GetCo();
+    //                                                                                  (slot 7)
+    const char* GetName() const override;
 
     // Adopt an aftertouch-cam parameter block: assert it carries the aftertouch-cam type tag,
-    // then cache its first word and store the pointer. @0x821F3EA0.
+    // then store the pointer. Declared over the derived Parameters, so it hides the base's pair.
     void SetParameters(const Parameters* lpParameters);
 
     // Adopt the authored shot this camera was created from. The behaviour factory builds a
     // generated aftertouchcam instance over the shot's reference spec and assigns it into the
-    // behaviour's own instance member at +0x334, immediately after SetParameters; the console
-    // reaches that member by displacement, so this setter's NAME is ours and its store is not.
+    // behaviour's own instance member, immediately after SetParameters.
     void SetSourceShot(const Attrib::Gen::aftertouchcam& lrShot)
     {
         mSourceShot = lrShot;
     }
 
 private:
+    CollisionPolicyAttachedToVehicle mCollisionPolicy;
+    Vector3                          mCurrentTargetPos;
+    Vector3                          mWorldSpaceNormalizedVectorFromCar;
+    Vector3                          mDesiredWorldSpaceNormalizedVectorFromCar;
+    Vector3                          mCrashPoint;
+    Utils::PositionLag               mPositionLag;
+    CgsNumeric::Random               mRandom;
+    Utils::CameraShake               mShake;
+    f32                              mfHeight;
+    f32                              mfDistance;
+    f32                              mfBlendFactor;
+    f32                              mfTimeSinceLastDecision;
+    const Parameters*                mpParameters;
 
-    // FLAG: only the members these two functions touch are modelled at their asm-attested
-    //   offsets; the rest of the aftertouch-cam rig lands with the full behaviour TU. Reserved
-    //   byte spans place them exactly. The vtable/base head occupies +0x00; the +0x20
-    //   sub-object GetCo* returns; the cached param word at +0x10; the param pointer at +0x330.
-    void*             mpVTable;                       // +0x00  behaviour vtable (opaque base head)
-    u8                maReserved04[0x10 - 0x04];      // +0x04 .. +0x0F (rig members not modelled here)
-    s32               mParamWord1;                    // +0x10  cached lpParameters->miParamWord1
-    u8                maReserved14[0x20 - 0x14];      // +0x14 .. +0x1F (rig members not modelled here)
-    u8                maCoSubObject[0x330 - 0x20];    // +0x20  sub-object GetCo* returns (opaque)
-    const Parameters* mpParameters;                   // +0x330  the adopted parameter block
+    // The authored shot this camera came into existence through.
+    Attrib::Gen::aftertouchcam       mSourceShot;
 
-    // The authored shot this camera came into existence through. Console +0x334, i.e.
-    // immediately after the parameter pointer -- it CANNOT be placed there here, because
-    // mpParameters above is a host pointer and so is twice the console's width. Parity is by
-    // named member, the same rule the parameter bank's tail blocks follow.
-    Attrib::Gen::aftertouchcam mSourceShot;           // console +0x334
+public:
+    // NEVER CALLED. Pins the member order the console layout fixes.
+    static void _AssertLayout()
+    {
+        typedef BehaviourAftertouchCam T;
+        static_assert(offsetof(T, mCollisionPolicy) < offsetof(T, mCurrentTargetPos) &&
+                      offsetof(T, mCurrentTargetPos) < offsetof(T, mCrashPoint) &&
+                      offsetof(T, mCrashPoint) < offsetof(T, mPositionLag) &&
+                      offsetof(T, mPositionLag) < offsetof(T, mRandom) &&
+                      offsetof(T, mRandom) < offsetof(T, mShake) &&
+                      offsetof(T, mShake) < offsetof(T, mfHeight) &&
+                      offsetof(T, mfTimeSinceLastDecision) < offsetof(T, mpParameters) &&
+                      offsetof(T, mpParameters) < offsetof(T, mSourceShot),
+                      "BehaviourAftertouchCam: members in console order");
+        static_assert(offsetof(T, mCrashPoint) - offsetof(T, mCurrentTargetPos) == 0x30 &&
+                      offsetof(T, mfHeight) - offsetof(T, mCrashPoint) == 0x80,
+                      "BehaviourAftertouchCam: the pointer-free run +0x270..+0x320 keeps the console spacing");
+    }
 };
 
 // ----------------------------------------------------------------------------
-// BrnDirector::Camera::BehaviourAftertouchCam::GetCo @0x821FB588
-//   addi r3, r3, 0x20        ; &this->maCoSubObject
-//   blr
-// ----------------------------------------------------------------------------
-inline BehaviourAftertouchCam::CoSubObject*
-BehaviourAftertouchCam::GetCo()
-{
-    return reinterpret_cast<CoSubObject*>(maCoSubObject);   // this + 0x20
-}
-
-// ----------------------------------------------------------------------------
-// BrnDirector::Camera::BehaviourAftertouchCam::SetParameters @0x821F3EA0
-//   lwz  r11, 0(r4)          ; lpParameters->meType
-//   cmplwi r11, 0xA          ; == eBehaviourAftertouchCam
-//   ... assert on mismatch ...
-//   lwz  r11, 4(r4)          ; lpParameters->miParamWord1
-//   stw  r4,  0x330(r3)      ; mpParameters = lpParameters
-//   stw  r11, 0x10(r3)       ; mParamWord1  = lpParameters->miParamWord1
+// SetParameters. The console also copies the block's +0x04 word into the base's debug-name slot;
+// that store is omitted here: the aftertouch-cam block is one of the host head forks (it does
+// not derive Behaviour::Parameters, so its +0x04 word is not a host name pointer). It feeds only
+// the tweaker and the debug printers.
 // ----------------------------------------------------------------------------
 inline void
 BehaviourAftertouchCam::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourAftertouchCam,
                "lpParameters->GetType() == eBehaviourAftertouchCam");
-    mpParameters = lpParameters;                   // stw r4,  0x330(this)
-    mParamWord1  = lpParameters->miParamWord1;      // lwz r11,4(lp); stw r11, 0x10(this)
+    mpParameters = lpParameters;
 }
 
 } // namespace Camera

@@ -109,10 +109,8 @@ const CgsResource::ID IceMovie::GetCgsID() const
     return mCgsID;
 }
 
-// ---- The three Serialise<S> visitor bodies with their instantiation sets, and
-//      ICEMoviePlaylist::DebugMenuNewMovie, live in the sibling TU
-//      BrnICEMoviePlayerSerialise.cpp. Merge them back into this one when the Camera
-//      serialiser TUs and the dev-menu registration callee are reconstructed.
+// ---- The three Serialise<S> visitor bodies with their instantiation sets, and the
+//      playlist's dev-menu members, live in the sibling TU BrnICEMoviePlayerSerialise.cpp.
 // ----------------------------------------------------------------------------
 // BrnDirector::ICEMoviePlaylist::Construct
 //

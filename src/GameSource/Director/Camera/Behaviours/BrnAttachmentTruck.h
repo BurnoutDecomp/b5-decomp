@@ -60,10 +60,8 @@ public:
     class Parameters
     {
     public:
-        // X360 visitor: `void Serialise<S>(S&)` -- walks this block's two f32 fields into the
-        // camera-tunings serialiser S (DebugMenuSerialiser / TextFileWriteSerialiser). The
-        // per-instance bodies live in BrnAttachmentTruck.cpp (ONE templated body + one explicit
-        // instantiation per S the X360 emits). Declared so the serialiser drives it by name.
+        // Walk this block's two f32 fields into a camera serialiser (DebugMenu /
+        // TextFile{Read,Write}). Body + instantiations: BrnAttachmentTruck.cpp.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
         f32 mfInitialOffsetDist;    // +0x00  "Initial offset dist."
