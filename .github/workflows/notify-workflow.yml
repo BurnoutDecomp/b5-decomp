@@ -1,9 +1,9 @@
 name: Notify workflow repo
 
 # Required event-driven trigger for BP-Decomp_Workflow's "Reconcile status + submodule
-# pointer" Action. On every push to dev, fire a repository_dispatch at the workflow repo
-# so it bumps its b5-decomp submodule pointer and regenerates progress/status.json from
-# the coordination server immediately — instead of waiting for the hourly schedule.
+# pointer" Action. Dispatch every newly pushed dev commit, oldest first. The queued
+# workflow audits committed source, reconciles the live ledger, publishes the durable
+# snapshot, and refreshes the dashboard. The hourly repair is a fallback.
 #
 # Setup (one-time):
 #   1. Create a fine-grained PAT (or classic token with `repo` scope) that can send
