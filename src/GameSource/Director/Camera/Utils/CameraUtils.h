@@ -295,6 +295,12 @@ namespace Utils
                                Vector3 lVelocity, f32 lfHorizontalFOV, f32 lfVerticalFOV,
                                f32* lpfTimeBeforeLeavingSecs);
 
+    // Will two points moving at constant velocity close on each other: true when the gap is
+    // shrinking along the line between them, with lfEstimatedTimeOut the time until they meet
+    // at that closing speed. The aftertouch camera's rival test. Body in CameraUtils.cpp.
+    bool PointsWillPassEachOther(Vector3 lPointA, Vector3 lVelocityA, Vector3 lPointB,
+                                 Vector3 lVelocityB, f32& lfEstimatedTimeOut);
+
     // ------------------------------------------------------------------------------------
     // The two range tests the bystander cam runs (DWARF CameraUtils.cpp:1376 / :1399). ADDED
     // 2026-09-24 (FX-DIRECTOR); bodies in CameraUtils.cpp, their DWARF home. Neither has an X360

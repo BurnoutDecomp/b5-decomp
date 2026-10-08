@@ -88,13 +88,14 @@ public:
     //   +0x9C 5.0   mfRotationSpeedDecreaseRate    +0xA0 20.0 mfMinRotationSpeed
     //   +0xA4 0.8   mfMinAttachAmount              +0xA8 7.0  mfBlurTime
     //   +0xAC 7.0   mfShakeTime
+    //
+    // The block derives Behaviour::Parameters (type tag + debug name); its GetType is the tag
+    // SetParameters asserts on (19). The offsets below are the console's (176-byte block); on the
+    // host the head's debug-name pointer is 8 bytes wide, so the derived members sit 8 bytes later.
     // ------------------------------------------------------------------------
-    class Parameters
+    class Parameters : public Behaviour::Parameters
     {
     public:
-        // The behaviour type tag SetParameters asserts on (asm: `cmplwi r11, 0x13` == 19).
-        s32 GetType() const { return meType; }
-
         // @0x821FB498 -- seed the block to its authored defaults. Body in the .cpp.
         void Construct();
 
@@ -103,10 +104,6 @@ public:
         // TextFileWriteSerialiser::Serialise<Parameters>'s odr-use inlines it away, matching the
         // degenerate instantiation asm (no inner field-walk call).
         template<class TSerialiser> void Serialise(TSerialiser& /*lrSerialiser*/) {}
-
-        // ---- Behaviour::Parameters base head ----
-        s32 meType;                                // +0x00  = eBehaviourSpirallingDeathcam (19)
-        s32 miBaseField04;                         // +0x04  base param word (cleared to 0)
 
         // ---- the embedded sub-blocks (DWARF :158 / :159) ----
         Utils::Looker::Parameters      mLookerParams;  // +0x08  (seeded by its own Construct)

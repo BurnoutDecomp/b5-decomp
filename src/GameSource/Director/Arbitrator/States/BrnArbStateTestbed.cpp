@@ -119,17 +119,13 @@ namespace BrnDirector
             {
                 RegisterParameters();
 
-                // FLAG host head fork: the AftertouchCam, AftertouchCrash, HeliCam, GyroCam,
-                //   Failsafe, LooseAttachment and SpirallingDeathcam blocks do not derive
-                //   Behaviour::Parameters on the host; they share only the +0x00 type tag, which
-                //   is all this switch reads.
                 switch (mpParameters->GetType())
                 {
                 case Camera::eBehaviourAftertouchCam:
                 {
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourAftertouchCam>(mAftertouch, this, 0, 1);
                     mAftertouch.GetBehaviour()->SetParameters(
-                        reinterpret_cast<const Camera::BehaviourAftertouchCam::Parameters*>(mpParameters));
+                        static_cast<const Camera::BehaviourAftertouchCam::Parameters*>(mpParameters));
                     const Attrib::Gen::aftertouchcam lAftertouchCam(
                         lrSharedInfo.mpDirectorResourceManager->GetAfterTouchCam(), 0);
                     mAftertouch.GetBehaviour()->SetSourceShot(lAftertouchCam);
@@ -140,7 +136,7 @@ namespace BrnDirector
                 case Camera::eBehaviourAftertouchCrash:
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourAftertouchCrash>(mAftertouchCrash, this, 0, 1);
                     mAftertouchCrash.GetBehaviour()->SetParameters(
-                        reinterpret_cast<const Camera::BehaviourAftertouchCrash::Parameters*>(mpParameters));
+                        static_cast<const Camera::BehaviourAftertouchCrash::Parameters*>(mpParameters));
                     mpCamera = &mAftertouchCrash.GetProducedCamera();
                     break;
 
@@ -155,7 +151,7 @@ namespace BrnDirector
                 case Camera::eBehaviourHeliCam:
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourHeliCam>(mHeliCam, this, 0, 1);
                     mHeliCam.GetBehaviour()->SetParameters(
-                        reinterpret_cast<const Camera::BehaviourHeliCam::Parameters*>(mpParameters));
+                        static_cast<const Camera::BehaviourHeliCam::Parameters*>(mpParameters));
                     mpCamera = &mHeliCam.GetProducedCamera();
                     break;
 
@@ -171,7 +167,7 @@ namespace BrnDirector
                 case Camera::eBehaviourGyroCam:
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourGyroCam>(mGyroCam, this, 0, 1);
                     mGyroCam.GetBehaviour()->SetParameters(
-                        reinterpret_cast<const Camera::BehaviourGyroCam::Parameters*>(mpParameters));
+                        static_cast<const Camera::BehaviourGyroCam::Parameters*>(mpParameters));
                     mpCamera = &mGyroCam.GetProducedCamera();
                     break;
 
@@ -185,7 +181,7 @@ namespace BrnDirector
                 case Camera::eBehaviourFailsafe:
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourFailsafe>(mFailsafe, this, 0, 1);
                     mFailsafe.GetBehaviour()->SetParameters(
-                        reinterpret_cast<const Camera::BehaviourFailsafe::Parameters*>(mpParameters));
+                        static_cast<const Camera::BehaviourFailsafe::Parameters*>(mpParameters));
                     mpCamera = &mFailsafe.GetProducedCamera();
                     break;
 
@@ -199,7 +195,7 @@ namespace BrnDirector
                 case Camera::eBehaviourLooseAttachment:
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourLooseAttachment>(mLooseAttachment, this, 0, 1);
                     mLooseAttachment.GetBehaviour()->SetParameters(
-                        reinterpret_cast<const Camera::BehaviourLooseAttachment::Parameters*>(mpParameters));
+                        static_cast<const Camera::BehaviourLooseAttachment::Parameters*>(mpParameters));
                     mLooseAttachment.GetBehaviour()->AttachTo(lrSharedInfo.mePlayerActiveRaceCarIndex);
                     mLooseAttachment.GetBehaviour()->GetImpactEffect().RegisterImpact(1.0f);
                     mpCamera = &mLooseAttachment.GetProducedCamera();
@@ -223,7 +219,7 @@ namespace BrnDirector
                 case Camera::BehaviourSpirallingDeathcam::eBehaviourSpirallingDeathcam:
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourSpirallingDeathcam>(mSpirallingDeathCam, this, 0, 1);
                     mSpirallingDeathCam.GetBehaviour()->SetParameters(
-                        reinterpret_cast<const Camera::BehaviourSpirallingDeathcam::Parameters*>(mpParameters));
+                        static_cast<const Camera::BehaviourSpirallingDeathcam::Parameters*>(mpParameters));
                     mSpirallingDeathCam.GetBehaviour()->Start();
                     mpCamera = &mSpirallingDeathCam.GetProducedCamera();
                     break;

@@ -18,15 +18,20 @@ namespace BrnDirector
 namespace Camera
 {
 
-// The block is pointer-free, so the host offsets are the console's.
-static_assert(offsetof(BehaviourGyroCam::Parameters, mShakeParams)                  == 0x08, "mShakeParams @ +0x08");
-static_assert(offsetof(BehaviourGyroCam::Parameters, mLookerParams)                 == 0x2C, "mLookerParams @ +0x2C");
-static_assert(offsetof(BehaviourGyroCam::Parameters, mAttachmentTruckParams)        == 0x90, "mAttachmentTruckParams @ +0x90");
-static_assert(offsetof(BehaviourGyroCam::Parameters, mfSlowDistance)                == 0x98, "mfSlowDistance @ +0x98");
-static_assert(offsetof(BehaviourGyroCam::Parameters, mfField_B0)                    == 0xB0, "mfField_B0 @ +0xB0");
-static_assert(offsetof(BehaviourGyroCam::Parameters, mfHeightDistanceVelocityRange) == 0xC4, "mfHeightDistanceVelocityRange @ +0xC4");
-static_assert(offsetof(BehaviourGyroCam::Parameters, mbUseTruck)                    == 0xC8, "mbUseTruck @ +0xC8");
-static_assert(offsetof(BehaviourGyroCam::Parameters, mbStickToGround)               == 0xCB, "mbStickToGround @ +0xCB");
+// The block derives Behaviour::Parameters, whose debug-name pointer is 8 bytes on the host: the
+// derived members start at the end of that head and keep the console spacing among themselves
+// (console offset - 0x08 from mShakeParams).
+typedef BehaviourGyroCam::Parameters GyroCamParameters;
+static_assert(offsetof(GyroCamParameters, mShakeParams) == sizeof(Behaviour::Parameters), "mShakeParams follows the head");
+static_assert(offsetof(GyroCamParameters, mLagParams)                    - offsetof(GyroCamParameters, mShakeParams) == 0x18 - 0x08, "mLagParams @ console +0x18");
+static_assert(offsetof(GyroCamParameters, mLookerParams)                 - offsetof(GyroCamParameters, mShakeParams) == 0x2C - 0x08, "mLookerParams @ console +0x2C");
+static_assert(offsetof(GyroCamParameters, mAttachmentTruckParams)        - offsetof(GyroCamParameters, mShakeParams) == 0x90 - 0x08, "mAttachmentTruckParams @ console +0x90");
+static_assert(offsetof(GyroCamParameters, mfSlowDistance)                - offsetof(GyroCamParameters, mShakeParams) == 0x98 - 0x08, "mfSlowDistance @ console +0x98");
+static_assert(offsetof(GyroCamParameters, mfField_B0)                    - offsetof(GyroCamParameters, mShakeParams) == 0xB0 - 0x08, "mfField_B0 @ console +0xB0");
+static_assert(offsetof(GyroCamParameters, mfHeightDistanceVelocityRange) - offsetof(GyroCamParameters, mShakeParams) == 0xC4 - 0x08, "mfHeightDistanceVelocityRange @ console +0xC4");
+static_assert(offsetof(GyroCamParameters, mbUseTruck)                    - offsetof(GyroCamParameters, mShakeParams) == 0xC8 - 0x08, "mbUseTruck @ console +0xC8");
+static_assert(offsetof(GyroCamParameters, mbStickToGround)               - offsetof(GyroCamParameters, mShakeParams) == 0xCB - 0x08, "mbStickToGround @ console +0xCB");
+static_assert(sizeof(GyroCamParameters) == 216, "host size (console 204: 8-byte head pointer)");
 
 template<class TSerialiser>
 void BehaviourGyroCam::Parameters::Serialise(TSerialiser& lrSerialiser)

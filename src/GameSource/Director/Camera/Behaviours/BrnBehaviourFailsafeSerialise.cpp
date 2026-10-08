@@ -17,13 +17,17 @@ namespace BrnDirector
 namespace Camera
 {
 
-// The block is pointer-free, so the host offsets are the console's.
-static_assert(offsetof(BehaviourFailsafe::Parameters, mShakeParams)    == 0x08, "mShakeParams @ +0x08");
-static_assert(offsetof(BehaviourFailsafe::Parameters, mLagParams)      == 0x18, "mLagParams @ +0x18");
-static_assert(offsetof(BehaviourFailsafe::Parameters, mLookerParams)   == 0x2C, "mLookerParams @ +0x2C");
-static_assert(offsetof(BehaviourFailsafe::Parameters, mfSlowDistance)  == 0x90, "mfSlowDistance @ +0x90");
-static_assert(offsetof(BehaviourFailsafe::Parameters, mfFOV)           == 0xA8, "mfFOV @ +0xA8");
-static_assert(offsetof(BehaviourFailsafe::Parameters, mbStickToGround) == 0xC0, "mbStickToGround @ +0xC0");
+// The block derives Behaviour::Parameters, whose debug-name pointer is 8 bytes on the host: the
+// derived members start at the end of that head and keep the console spacing among themselves
+// (console offset - 0x08 from mShakeParams).
+typedef BehaviourFailsafe::Parameters FailsafeParameters;
+static_assert(offsetof(FailsafeParameters, mShakeParams) == sizeof(Behaviour::Parameters), "mShakeParams follows the head");
+static_assert(offsetof(FailsafeParameters, mLagParams)      - offsetof(FailsafeParameters, mShakeParams) == 0x18 - 0x08, "mLagParams @ console +0x18");
+static_assert(offsetof(FailsafeParameters, mLookerParams)   - offsetof(FailsafeParameters, mShakeParams) == 0x2C - 0x08, "mLookerParams @ console +0x2C");
+static_assert(offsetof(FailsafeParameters, mfSlowDistance)  - offsetof(FailsafeParameters, mShakeParams) == 0x90 - 0x08, "mfSlowDistance @ console +0x90");
+static_assert(offsetof(FailsafeParameters, mfFOV)           - offsetof(FailsafeParameters, mShakeParams) == 0xA8 - 0x08, "mfFOV @ console +0xA8");
+static_assert(offsetof(FailsafeParameters, mbStickToGround) - offsetof(FailsafeParameters, mShakeParams) == 0xC0 - 0x08, "mbStickToGround @ console +0xC0");
+static_assert(sizeof(FailsafeParameters) == 208, "host size (console 196: 8-byte head pointer)");
 
 template<class TSerialiser>
 void BehaviourFailsafe::Parameters::Serialise(TSerialiser& lrSerialiser)

@@ -330,8 +330,8 @@ void BehaviourSpirallingDeathcam::SetParameters(const Parameters* lpParameters)
 // ----------------------------------------------------------------------------
 void BehaviourSpirallingDeathcam::Parameters::Construct()
 {
-    meType        = eBehaviourSpirallingDeathcam;   // stw 0x13, 0(this)
-    miBaseField04 = 0;                              // stw 0,    4(this)
+    Behaviour::Parameters::Construct();             // stw 0,    4(this)
+    mType = eBehaviourSpirallingDeathcam;           // stw 0x13, 0(this)
 
     mLookerParams.Construct();                      // bl Looker::Parameters::Construct(this+8)
     mShakeParams.Construct();                       // stfs 0.06 / 0.0 / 1.15 / 0.11 @+0x6C..+0x78

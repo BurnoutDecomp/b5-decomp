@@ -275,19 +275,22 @@ void BehaviourLooseAttachment::SetTarget(s32 leRaceCarIndex)
                "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars");
 }
 
-// Pin the field-walk offsets of the parameter block (host-pointer-width invariant -- the walked
-// region holds no pointers): the "Impact" sub-block at +0x2C and the loose-attachment tunables
-// at the +0x48..+0x60 offsets the write/read/menu assembly loads and stores.
-static_assert(offsetof(BehaviourLooseAttachment::Parameters, mPositionLagParams) == 0x08, "position-lag block @ +0x08");
-static_assert(offsetof(BehaviourLooseAttachment::Parameters, mShakeParams)       == 0x1C, "shake block @ +0x1C");
-static_assert(offsetof(BehaviourLooseAttachment::Parameters, mImpact)            == 0x2C, "Impact block @ +0x2C");
-static_assert(offsetof(BehaviourLooseAttachment::Parameters, mfPitch)            == 0x48, "Pitch @ +0x48");
-static_assert(offsetof(BehaviourLooseAttachment::Parameters, mfHeight)           == 0x4C, "Height @ +0x4C");
-static_assert(offsetof(BehaviourLooseAttachment::Parameters, mfDistance)         == 0x50, "Distance @ +0x50");
-static_assert(offsetof(BehaviourLooseAttachment::Parameters, mfField54)          == 0x54, "unk label field @ +0x54");
-static_assert(offsetof(BehaviourLooseAttachment::Parameters, mfDutch)            == 0x58, "Dutch @ +0x58");
-static_assert(offsetof(BehaviourLooseAttachment::Parameters, mfDetachLerpAmount) == 0x5C, "Detach Lerp Amount @ +0x5C");
-static_assert(offsetof(BehaviourLooseAttachment::Parameters, mbLookFromTarget)   == 0x60, "Look from target @ +0x60");
+// Pin the field-walk offsets of the parameter block: the derived members start right after the
+// Behaviour::Parameters head (8 bytes on the console, 16 on the host) and keep the console
+// spacing among themselves -- the "Impact" sub-block at console +0x2C and the loose-attachment
+// tunables at the +0x48..+0x60 offsets the write/read/menu assembly loads and stores.
+typedef BehaviourLooseAttachment::Parameters LooseAttachmentParameters;
+static_assert(offsetof(LooseAttachmentParameters, mPositionLagParams) == sizeof(Behaviour::Parameters), "position-lag block follows the head (console +0x08)");
+static_assert(offsetof(LooseAttachmentParameters, mShakeParams)       - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x1C - 0x08, "shake block @ console +0x1C");
+static_assert(offsetof(LooseAttachmentParameters, mImpact)            - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x2C - 0x08, "Impact block @ console +0x2C");
+static_assert(offsetof(LooseAttachmentParameters, mfPitch)            - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x48 - 0x08, "Pitch @ console +0x48");
+static_assert(offsetof(LooseAttachmentParameters, mfHeight)           - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x4C - 0x08, "Height @ console +0x4C");
+static_assert(offsetof(LooseAttachmentParameters, mfDistance)         - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x50 - 0x08, "Distance @ console +0x50");
+static_assert(offsetof(LooseAttachmentParameters, mfField54)          - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x54 - 0x08, "FOV @ console +0x54");
+static_assert(offsetof(LooseAttachmentParameters, mfDutch)            - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x58 - 0x08, "Dutch @ console +0x58");
+static_assert(offsetof(LooseAttachmentParameters, mfDetachLerpAmount) - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x5C - 0x08, "Detach Lerp Amount @ console +0x5C");
+static_assert(offsetof(LooseAttachmentParameters, mbLookFromTarget)   - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x60 - 0x08, "Look from target @ console +0x60");
+static_assert(sizeof(LooseAttachmentParameters) == 112, "host size (console 100: 8-byte head pointer)");
 
 } // namespace Camera
 } // namespace BrnDirector

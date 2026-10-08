@@ -114,28 +114,21 @@ class BehaviourGyroCam : public Behaviour
 {
 public:
 
-    // The gyro-cam parameter block (a behaviour parameter block with the gyro-cam type tag).
-    // GetType returns the tag SetParameters asserts on.
-    //
-    // ⚠️ THIS BLOCK IS DELIBERATELY **NOT** RE-BASED ONTO Behaviour::Parameters, unlike the
-    //   behaviour itself. Its head is a 4-byte type tag plus a 4-byte debug-name slot on the
-    //   console, and the parameter bank pins this record BYTE-EXACT at 204 bytes on a 204-byte
-    //   grid (BrnBehaviourParameterBank.h) while the serialiser pins its interior offsets
-    //   (+0x08 / +0x2C / +0x90 / +0x98). Deriving Behaviour::Parameters would widen the
-    //   debug-name slot to a real 8-byte pointer and shift every one of those pins.
+    // The gyro-cam parameter block: the Behaviour::Parameters head (type tag + debug name) plus
+    // the gyro-cam data. GetType returns the tag SetParameters asserts on.
     //
     // Serialised layout pinned store-for-store from the three Serialise<S> visitor bodies
-    //   (debug-menu, read, write): after the type-tag header
-    //   (meType/miParamWord1, NOT serialised) the block nests three sub-Parameters blocks -- the
-    //   shake tunings @+0x08 ("Shake Params"), the looker tunings @+0x2C ("Looker Params") and the
-    //   attachment-truck tunings @+0x90 ("Attachment truck") -- then twelve f32 tunables @+0x98..+0xC4
-    //   and four bool flags @+0xC8..+0xCB. Offsets are the a1+OFF displacements the DebugMenu asm
-    //   passes to Process<float>/Process<bool> and the read/write asm loads/stores. The whole block
-    //   is pointer-free (all sub-blocks are f32/bool/enum aggregates), so every offset is host-
-    //   pointer-width invariant and pinned by static_assert in BrnBehaviourGyroCamSerialise.cpp.
-    //   The +0x18..+0x2B span between the shake block and the looker block is the position-lag
-    //   block (mLagParams), which the walk does not visit.
-    class Parameters
+    //   (debug-menu, read, write): after the Behaviour::Parameters head (NOT serialised) the block
+    //   nests three sub-Parameters blocks -- the shake tunings @+0x08 ("Shake Params"), the looker
+    //   tunings @+0x2C ("Looker Params") and the attachment-truck tunings @+0x90 ("Attachment
+    //   truck") -- then twelve f32 tunables @+0x98..+0xC4 and four bool flags @+0xC8..+0xCB.
+    //   Offsets are the console's (204-byte block): the displacements the DebugMenu asm passes to
+    //   Process<float>/Process<bool> and the read/write asm loads/stores. On the host the head's
+    //   debug-name pointer is 8 bytes wide, so the derived members sit 8 bytes later and keep the
+    //   console spacing (pinned in BrnBehaviourGyroCamSerialise.cpp). The +0x18..+0x2B span
+    //   between the shake block and the looker block is the position-lag block (mLagParams),
+    //   which the walk does not visit.
+    class Parameters : public Behaviour::Parameters
     {
     public:
         // Walk this block's fields into a camera serialiser (DebugMenu / TextFile{Read,Write}).
@@ -146,8 +139,8 @@ public:
         // authored gyro entry in BehaviourParameterBank::Construct.
         void Construct()
         {
-            meType = eBehaviourGyroCam;
-            miParamWord1 = 0;
+            Behaviour::Parameters::Construct();
+            mType = eBehaviourGyroCam;
             mLookerParams.Construct();
             mShakeParams.Construct();
             mLagParams.Construct();
@@ -167,12 +160,8 @@ public:
 
         EBehaviourTypeGyroCam GetType() const
         {
-            return static_cast<EBehaviourTypeGyroCam>(meType);
+            return static_cast<EBehaviourTypeGyroCam>(mType);
         }
-
-        s32 meType;        // +0x00  the behaviour type tag (eBehaviour*)
-        s32 miParamWord1;  // +0x04  the block's debug-name slot (a 4-byte pointer on the console);
-                           //        cached into the behaviour's +0x10 word by SetParameters
 
         // --- embedded sub-blocks (all but mLagParams walked as nested named sections) ---
         Utils::CameraShake::Parameters mShakeParams;           // +0x08  "Shake Params"
@@ -220,8 +209,8 @@ public:
 
     // ---- non-virtual API -------------------------------------------------------------------
 
-    // Adopt a gyro-cam parameter block: assert it carries the gyro-cam type tag, cache its
-    // debug-name slot at +0x10, then store the pointer. NOT a virtual override:
+    // Adopt a gyro-cam parameter block: assert it carries the gyro-cam type tag, store the
+    // pointer and cache its debug name in the base's debug-name slot. NOT a virtual override:
     // it takes the DERIVED Parameters type, so it HIDES the base's non-virtual pair rather
     // than overriding anything.
     void SetParameters(const Parameters* lpParameters);
@@ -258,18 +247,6 @@ private:
     // ---- layout (declaration-reference member order; every offset asm-pinned -- see the
     //      file banner) ------------------------------------------------------------------
     const Parameters*                mpParameters;      // +0x014  Construct zeroes it; SetParameters stores it
-
-    // FLAG (home): the console packs the parameter block's +0x04 word into the BASE's +0x10
-    //   slot, which the original names `Behaviour::mpcDebugParametersName` (a `const char*`) --
-    //   i.e. the console line is `SetDebugParametersName(lpParameters->GetDebugName())`, exactly
-    //   as the re-based bumper cam spells it. It cannot be spelled that way HERE: this class's
-    //   Parameters block is pinned byte-exact at 204 bytes (see the note on Parameters above),
-    //   so its debug-name slot is a 4-byte word, and handing a 4-byte word to a `const char*`
-    //   setter would be an offset hack with teeth. The cached word therefore keeps a NAMED
-    //   member of its own (the x64 gate is semantic parity by named member, so the extra word
-    //   costs nothing) and the base field is left alone.
-    //   DELETE-WHEN: Parameters carries the typed Behaviour::Parameters head.
-    s32                              mParamWord1;       // +0x010  cached lpParameters->miParamWord1
 
     // The two policies GetCollisionPolicy hands back, BY NAME (the declaration reference's own
     // member names and types).
@@ -315,8 +292,6 @@ private:
 // BrnDirector::Camera::BehaviourGyroCam::Construct
 //   li   r5, 0 ; li r31, 1
 //   stb  r5, 8..0xC(r6) ; stw r5, 4(r6)                      ; the inlined Behaviour::Construct
-//   stw  r5, 0x10(r6)                                        ; the base's debug-name slot --
-//                                                              here mParamWord1 (see its FLAG)
 //   stw  r5, 0x14(r6)                                        ; mpParameters = 0
 //   ... ~40 stores across +0x20..+0x25F                      ; VisibilityCollisionPolicy::Construct,
 //                                                              inlined
@@ -331,7 +306,6 @@ inline void
 BehaviourGyroCam::Construct()
 {
     Behaviour::Construct();
-    mParamWord1 = 0;
     mpParameters = 0;
     mVisibilityCollisionPolicy.Construct();
     mVehicleAttachmentCollisionPolicy.Construct(false);
@@ -385,12 +359,8 @@ BehaviourGyroCam::GetName() const
 
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::BehaviourGyroCam::SetParameters
-//   lwz  r11, 0(r4)          ; lpParameters->meType
-//   cmplwi r11, 9            ; == eBehaviourGyroCam
-//   ... assert on mismatch ...
-//   lwz  r11, 4(r4)          ; lpParameters->miParamWord1 (the debug-name slot)
-//   stw  r4,  0x14(r3)       ; mpParameters = lpParameters
-//   stw  r11, 0x10(r3)       ; the behaviour's cached +0x10 word (see the mParamWord1 FLAG)
+//   Assert the block's tag is eBehaviourGyroCam (9), store the pointer (+0x14) and copy the
+//   block's debug name (+0x04) into the base's debug-name slot (+0x10).
 // ----------------------------------------------------------------------------
 inline void
 BehaviourGyroCam::SetParameters(const Parameters* lpParameters)
@@ -398,7 +368,7 @@ BehaviourGyroCam::SetParameters(const Parameters* lpParameters)
     CGS_ASSERT(lpParameters->GetType() == eBehaviourGyroCam,
                "lpParameters->GetType() == eBehaviourGyroCam");
     mpParameters = lpParameters;                 // stw r31, 0x14(this)
-    mParamWord1  = lpParameters->miParamWord1;   // lwz r11,4(lpParameters); stw r11, 0x10(this)
+    SetDebugParametersName(lpParameters->GetDebugName());
 }
 
 // ----------------------------------------------------------------------------
