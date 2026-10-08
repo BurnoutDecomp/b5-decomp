@@ -63,7 +63,10 @@ void AttachmentTruck::Update(Vector3 lPosition, Vector3 lVelocity,
         if (!IsZero(lVelocity, 1.1920929e-7f))
         {
             const f32 speed = static_cast<f32>(mSpeed) - lrParams.mfInitialOffsetDist / lrParams.mfConvergenceTimeSecs;
-            const f32 ratio = std::min(1.0f, std::max(0.0f, speed / static_cast<f32>(mSpeed)));
+            // The original clamps the ratio to [0, 1.25] (0.5 * 0.5 + 1.0, built from the splatted
+            // 1.0 and 0.5). Only a negative initial offset (the drive-by blocks, -4 m over 0.125 s)
+            // reaches the upper bound: that truck settles at 1.25x the car's speed and passes it.
+            const f32 ratio = std::min(1.25f, std::max(0.0f, speed / static_cast<f32>(mSpeed)));
             mSpeed = VecFloat(speed);
             mDesiredSpeedRatio = VecFloat(ratio);
             mPosition = lPosition + mDirection * lrParams.mfInitialOffsetDist;

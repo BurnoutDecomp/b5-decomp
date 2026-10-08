@@ -70,7 +70,7 @@ int main() {
     lInitial.Construct();
     Camera::AttachmentTruck::Parameters lNegativeOffset = { -10, 1 };
     lInitial.Update(Vector3{}, lvVelocity, BrnDirector::VecFloat(0), lNegativeOffset);
-    Check(static_cast<f32>(lInitial.mDesiredSpeedRatio) == 1.0f, "initial convergence ratio clamps at original unit maximum");
+    Check(static_cast<f32>(lInitial.mDesiredSpeedRatio) == 1.25f, "initial convergence ratio clamps at the original 1.25 maximum");
     std::printf("PlaytestCrashTruckClock: %u checks, %u failures\n", guChecks, guFailures);
     return guFailures ? 1 : 0;
 }
