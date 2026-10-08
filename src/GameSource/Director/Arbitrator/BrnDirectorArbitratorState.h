@@ -164,6 +164,9 @@ namespace BrnDirector
         // source build's +0x170/+0x171.
         Camera::Camera mCamera;          // +0x10
     private:
+        // The debug page registers the crashing state's mbDebugDisplayActive ("Show Crash Info").
+        friend class DebugComponent;
+
         bool mbDebugDisplayActive;   // +0x170 (console)
         bool mbCycleCameraThisFrame; // +0x171 (console)
     };

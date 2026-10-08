@@ -55,6 +55,9 @@ namespace BrnDirector
         // DebugLog::Print drives a DebugPrinter through the private ActualPrint path.
         friend struct DebugLog;
 
+        // The director debug page registers mbEnabled ("Enable ... Debug Output").
+        friend class DebugComponent;
+
         // X360 0x821F7108: seed mDebugPrinterInfo from the debug-UI Metrics + fixed palette,
         // and enable the printer.
         void Construct();

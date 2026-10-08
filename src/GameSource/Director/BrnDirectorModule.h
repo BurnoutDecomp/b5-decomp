@@ -208,6 +208,9 @@ public:
     bool IsPrepared() const { return mePrepareStage >= E_PREPARESTAGE_BEHAVIOUR_CONTROLLER; }
 
 private:
+    // The debug page's testbed ICE menus read the resource manager's testbed shot groups.
+    friend class DebugComponent;
+
     // ====================================================================
     //  DATA LAYOUT -- named members at asm-proven `this+offset` (X360 CONSOLE bytes),
     //  gaps reserved with explicit padding (AGENTS.md "LAYOUT RECOVERY WITH PADDING",

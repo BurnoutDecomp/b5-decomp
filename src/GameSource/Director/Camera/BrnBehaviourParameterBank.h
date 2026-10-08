@@ -14,6 +14,10 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h"    // BehaviourAftertouchCrash::Parameters
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"                   // BehaviourRig::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h" // BehaviourLooseAttachment::Parameters
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourHeliCam.h"         // BehaviourHeliCam::Parameters
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourFailsafe.h"        // BehaviourFailsafe::Parameters
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourRoadRunner.h"      // BehaviourRoadRunner::Parameters
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"                      // Utils::VersionNumber (the bank's version word)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
 
 // ============================================================================
@@ -29,21 +33,11 @@
 // bank +0x10 (see the RECORD MAP banner on that class). The shared-info pointer is bound to
 // it by MainDirector::BuildArbStateSharedInfo. There is no second copy anywhere.
 //
-// FLAG: MINIMAL SLICE. The full bank (every BehaviourXxx::Parameters sub-block, the
-//   BehaviourParameterBank wrapper + its serialiser) is a heavy cascade and has no
-//   reconstructed home of its own yet. This header models ONLY the one named accessor this
-//   build's online-car-select arbitrator state needs -- the "look around car" (rotate-about-
-//   vehicle) parameter block -- accessed BY NAME via its address. The recovered type
-//   information names the bank's earlier blocks but NOT this one (the rotate-about-vehicle
-//   params are a later addition), so the block's precise type is unrecoverable; it is
-//   modelled as a named opaque sub-object at the attested offset and only its address is
-//   taken (passed to BehaviourRotateAboutVehicle::SetParameters as an opaque parameter block).
-//   Replace with the real layout when the BehaviourParameterBank TU lands; the accessor NAME
-//   is stable.
-//
-//   X360 (ArbStateOnlineCarSelect::Prepare @0x82271020): the block sits at
-//   mpNamedParameters + 0x2334 (asm `addi r31, r11, 0x2334`); modelled here as the named
-//   member maLookAroundCarCamParameters at that offset and returned by address.
+// The record carries every one of the console's 48 named blocks (the console's member order). The ones
+// whose host type is console-sized (the four head blocks, the fourteen-block gyro run, the
+// failsafe block and the three loose-attachment blocks) sit at their console record offsets,
+// pinned below; the rest live, by name and in console order, in the host spill at the record's
+// end. Construct and the serialiser walks: BrnBehaviourParameterBank.cpp.
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
@@ -129,212 +123,9 @@ namespace BrnDirector
             return maLookAroundCarCamParameters;
         }
 
-        // ⭐ ADDED 2026-08-01 (junkyard-fire wave). The console builds this bank from
-        // BehaviourParameterBank::Construct @0x8223DC90, called by BehaviourManager::Construct
-        // @0x82251778 (the gate is marked in that body). Only the ONE block this slice models is
-        // seeded -- with the tag its own Parameters::Construct @0x821FB330 stores, so
-        // BehaviourRotateAboutVehicle::SetParameters' `GetType() == eBehaviourRotateAboutVehicle`
-        // tripwire passes. The un-modelled head is zeroed rather than left as pool garbage.
-        //
-        // ⭐⭐ THE BANK'S OWN FOUR RE-TUNES FOR THIS BLOCK LAND 2026-08-02 (framing wave), AND
-        // THEY RETIRE A WRONG PREMISE. The note that used to end this banner said "the authored
-        // tunings are NOT loaded", which read as *there is a data file we do not read*. There is
-        // no such file for this bank. BehaviourParameterBank::LoadParameters @0x82273268 opens
-        // "d:\\camera.txt" and has ZERO xrefs in the whole XEX -- it is the dev tweaker's
-        // reload, the mirror of SaveParameters. The console's authored tunings for this camera
-        // are COMPILED IN, in two places:
-        //   (a) BehaviourRotateAboutVehicle::Parameters::Construct @0x821FB300 -- its thirteen
-        //       re-tunes, which this tree already transcribed in full; and
-        //   (b) ⭐ FOUR MORE `stfs` in the BANK's Construct, applied to this block AFTER the
-        //       call, which nothing here reproduced. THOSE FOUR ARE THE FRAMING.
-        //
-        // The four, read straight off the asm (block base is bank+0x2344, so the displacements
-        // below are block-relative):
-        //   0x8223E6BC  stfs f25, 0x235C(r31)   -> +0x18  mfTargetSubjectXSize
-        //   0x8223E6C8  stfs f25, 0x2360(r31)   -> +0x1C  mfTargetSubjectYSize
-        //   0x8223E6B8  stfs f19, 0x2364(r31)   -> +0x20  mfTargetSubjectXScreenOffset
-        //   0x8223E6C4  stfs f0,  0x2368(r31)   -> +0x24  mfTargetSubjectYScreenOffset
-        // f25's last load is `lfs f25, flt_82004018` @0x8223E258, f19's is
-        // `lfs f19, flt_82004010` @0x8223E140, and f0 is loaded from flt_82009B70 at
-        // 0x8223E6C0 -- no other instruction in the function touches f19 or f25 in between.
-        // The three .rdata words (read with the recalibrated .id1 reader, NOT cam5_id1.py):
-        //   flt_82004018 = 0x3F400000 =  0.75f
-        //   flt_82004010 = 0x3E000000 =  0.125f
-        //   flt_82009B70 = 0xBE000000 = -0.125f
-        // Sanity-checked in the same read: the two words the neighbouring FixedCam block stores
-        // at bank+0x233C/+0x2340 come back as 70.0f and 10.0f, which is exactly what the
-        // pseudocode of the same function shows -- so the reader is calibrated on this region.
-        //
-        // ⛔ AND THE BLOCK GETS NOTHING ELSE. A scan of every store in Construct with a
-        // displacement inside [0x2344, 0x23C4) off r31 returns exactly these four, and no
-        // `addi` in the function forms an alias base into the block's interior. In particular
-        // +0x7C mfShakeBlending0to1 (bank+0x23C0) IS NOT WRITTEN -- see the note this retires in
-        // BrnBehaviourRotateAboutVehicle.cpp: the shake staying at 0 is the console's own shape
-        // for this camera, not something the authored bank was going to switch on.
-        //
-        // ⓘ COROBORATION FOR THE +0x2334 MODEL BELOW (still not proof, still flagged): the bank
-        // puts this block at bank+0x2344 while the arbitrator states reach it at
-        // mpNamedParameters+0x2334, and bank+0x10 is exactly where the bank's FIRST Parameters
-        // block starts (`addi r3, r31, 0x10` -> BehaviourAftertouchCam::Parameters::Construct).
-        // 0x10 + 0x2334 == 0x2344, so NamedParameters is very likely the bank's payload viewed
-        // from +0x10. bank+0x2334 itself holds a 16-byte {tag 15, 0, 70.0f, 10.0f} block --
-        // the FixedCam one the header's own accessor list already attributes there.
-        //
-        // [FLAG PC bring-up] this is still a ONE-BLOCK stand-in for the bank's own Construct:
-        // the other ~40 named blocks are neither placed nor seeded.
-        // DELETE-WHEN: the BehaviourParameterBank TU lands with the real bank layout.
-        void Construct()
-        {
-            for (u32 luByte = 0; luByte < sizeof(maReservedHead); ++luByte)
-            {
-                maReservedHead[luByte] = 0;
-            }
-
-            // ⭐ 2026-09-11: the record's first block, with its own authored Construct -- the
-            // bank's own first statement. Unlike the gyro blocks below it, this one is a real
-            // transcription, not a zero-and-tag stand-in: its per-block Construct is a
-            // straight-line run of constant stores and every one of them is reproduced.
-            mAftertouchCamDefault.Construct();
-
-            // ⭐ 2026-09-12: the two aftertouch-crash blocks, each with its own authored
-            // Construct -- a straight-line constant run, reproduced in full. Without them the
-            // crash-mode camera's SetParameters type-tag tripwire fires on the first crash and
-            // the whole rig runs off a zeroed block.
-            mAftertouchCrashParams.Construct();
-            mCrashDebugParams.Construct();
-
-            maLookAroundCarCamParameters.Construct();
-
-            // The bank's own four post-Construct re-tunes -- see the banner.
-            maLookAroundCarCamParameters.mLookerParams.mfTargetSubjectXSize         =  0.75f;
-            maLookAroundCarCamParameters.mLookerParams.mfTargetSubjectYSize         =  0.75f;
-            maLookAroundCarCamParameters.mLookerParams.mfTargetSubjectXScreenOffset =  0.125f;
-            maLookAroundCarCamParameters.mLookerParams.mfTargetSubjectYScreenOffset = -0.125f;
-
-            // ⭐ 2026-08-29: seed the deathcam block too, with its own attested Construct
-            // (@0x821FB498). Without this the block would be pool garbage and
-            // BehaviourSpirallingDeathcam::SetParameters' type-tag tripwire would fire on the
-            // first road-rage-totalled crash.
-            maSpirallingDeathcamParameters.Construct();
-
-            // ⭐ The three loose-attachment blocks. Each is seeded by calling the CLASS
-            // default seed, BehaviourLooseAttachment::Parameters::Construct -- itself a real
-            // attested constant run, transcribed in that class's own header -- which writes the
-            // type tag, so the three shutdown-takedown zoom beats meet a tagged block instead of
-            // pool garbage when BehaviourLooseAttachment::SetParameters runs its tripwire.
-            // [FLAG PC bring-up] the class default is NOT attested as these records' content.
-            // Each of the three is a separate named block in the bank, and whatever per-block
-            // re-tunes the bank's own Construct writes over the seed are NOT recovered -- the
-            // same gap the gyro blocks below carry, and the reason this is a stand-in rather
-            // than a transcription. Until the bank's Construct lands the beats run on the class
-            // defaults (mfPitch 5.0, mfDistance 4.0, mfField54 90.0, mfDetachLerpAmount 0.1).
-            // A per-record delta is the expected shape, not the exception: the state-owned
-            // block the non-beat loose-attachment take adopts is seeded by this same Construct
-            // and then re-tuned on three of those very fields at its own call site.
-            // DELETE-WHEN: the BehaviourParameterBank TU lands with the real bank Construct.
-            mLooseAttachmentTakedown1.Construct();
-            mLooseAttachmentTakedown2.Construct();
-            mLooseAttachmentTakedown3.Construct();
-
-            // ARTIST BehaviourParameterBank::Construct @8223DC90: defaults and authored overrides.
-            Camera::BehaviourGyroCam::Parameters* const lapGyro[] = {
-                &mGyroCamDefaultParams,
-                &mGyroCamTruckFront,
-                &mGyroCamLeft,
-                &mGyroCamRight,
-                &mGyroCamDefaultSideTruckingLeftParams,
-                &mGyroCamDefaultSideTruckingRightParams,
-                &mGyroCamFollow,
-                &mGyroCamAlwaysLowParams,
-                &mGyroCamTakedownParams,
-                &mGyroCamTakedownZoomedOutParams,
-                &mGyroCamHighParams,
-                &mGyroCamHelicamParams,
-                &mGyroCamDriveByLParams,
-                &mGyroCamDriveByRParams,
-            };
-            for (u32 luBlock = 0; luBlock < sizeof(lapGyro) / sizeof(lapGyro[0]); ++luBlock)
-            {
-                lapGyro[luBlock]->Construct();
-            }
-            mGyroCamDefaultParams.mLookerParams.mfTrackingTolerance = 0.1f;
-            mGyroCamDefaultParams.mShakeParams.mfWobbleCenteringFactor = 1.0f;
-            mGyroCamDefaultParams.mLookerParams.mbInitialiseToLookingAtTarget = true;
-            mGyroCamDefaultParams.mLookerParams.mbUseZoom = false;
-            mGyroCamDefaultParams.mfSlowDistance = 3.5f;
-            mGyroCamDefaultParams.mfSlowPitch = -4.0f;
-            mGyroCamDefaultSideTruckingLeftParams = mGyroCamDefaultParams;
-            mGyroCamDefaultSideTruckingLeftParams.mbUseTruck = true;
-            mGyroCamDefaultSideTruckingLeftParams.mbUseSideVector = true;
-            mGyroCamDefaultSideTruckingRightParams = mGyroCamDefaultSideTruckingLeftParams;
-            mGyroCamDefaultSideTruckingRightParams.mbInvertVector = true;
-            mGyroCamFollow = mGyroCamDefaultParams;
-            mGyroCamFollow.mbInvertVector = true;
-            mGyroCamAlwaysLowParams = mGyroCamDefaultParams;
-            mGyroCamAlwaysLowParams.mfSlowPitch = mGyroCamAlwaysLowParams.mfFastPitch = -4.0f;
-            mGyroCamAlwaysLowParams.mfSlowDistance = mGyroCamAlwaysLowParams.mfFastDistance = 9.0f;
-            mGyroCamAlwaysLowParams.mfSlowHeight = mGyroCamAlwaysLowParams.mfFastHeight = 0.2f;
-            mGyroCamTakedownParams.mLookerParams.mfTrackingTolerance = 0.1f;
-            mGyroCamTakedownParams.mShakeParams.mfWobbleCenteringFactor = 1.0f;
-            mGyroCamTakedownParams.mLookerParams.mbInitialiseToLookingAtTarget = true;
-            mGyroCamTakedownParams.mLookerParams.mbUseZoom = false;
-            mGyroCamTakedownParams.mShakeParams.mfXYShakeMagnitudeDegs = 0.15f;
-            mGyroCamTakedownParams.mShakeParams.mfZShakeMagnitudeDegs = 0.05f;
-            mGyroCamTakedownParams.mShakeParams.mfXYWobbleMagnitudeDegs = 4.0f;
-            mGyroCamTakedownParams.mbStickToGround = false;
-            mGyroCamTakedownParams.mfSlowDistance = 4.0f;
-            mGyroCamTakedownParams.mfFastDistance = 8.0f;
-            mGyroCamTakedownParams.mfSlowHeight = 1.0f;
-            mGyroCamTakedownParams.mfSlowPitch = -1.0f;
-            mGyroCamTakedownParams.mfFastHeight = 1.5f;
-            mGyroCamTakedownZoomedOutParams = mGyroCamTakedownParams;
-            mGyroCamTakedownZoomedOutParams.mfSlowDistance = 8.0f;
-            mGyroCamTakedownZoomedOutParams.mfFastDistance = 8.0f;
-            mGyroCamHighParams.mShakeParams.mfWobbleCenteringFactor = 1.0f;
-            mGyroCamHighParams.mLookerParams.mfTrackingTolerance = 0.1f;
-            mGyroCamHighParams.mLookerParams.mbInitialiseToLookingAtTarget = true;
-            mGyroCamHighParams.mLookerParams.mbUseZoom = false;
-            mGyroCamHighParams.mfSlowDistance = 9.0f;
-            mGyroCamHighParams.mfFastDistance = 18.0f;
-            mGyroCamHighParams.mfSlowHeight = mGyroCamHighParams.mfFastHeight = 5.0f;
-            mGyroCamHighParams.mbStickToGround = false;
-            mGyroCamHelicamParams.mLookerParams.mbInitialiseToLookingAtTarget = true;
-            mGyroCamHelicamParams.mLookerParams.mfTrackingTolerance = 0.1f;
-            mGyroCamHelicamParams.mLookerParams.mbUseZoom = false;
-            mGyroCamHelicamParams.mbStickToGround = false;
-            mGyroCamHelicamParams.mfSlowDistance = mGyroCamHelicamParams.mfFastDistance = 20.0f;
-            mGyroCamDriveByLParams = mGyroCamDefaultParams;
-            mGyroCamDriveByLParams.mAttachmentTruckParams.mfInitialOffsetDist = -4.0f;
-            mGyroCamDriveByLParams.mAttachmentTruckParams.mfConvergenceTimeSecs = 0.125f;
-            mGyroCamDriveByLParams.mbUseTruck = mGyroCamDriveByLParams.mbUseSideVector = true;
-            mGyroCamDriveByRParams = mGyroCamDriveByLParams;
-            mGyroCamDriveByRParams.mbInvertVector = true;
-            mGyroCamTruckFront = mGyroCamDefaultParams;
-            mGyroCamTruckFront.mAttachmentTruckParams.mfInitialOffsetDist = 7.5f;
-            mGyroCamTruckFront.mAttachmentTruckParams.mfConvergenceTimeSecs = 2.0f;
-            mGyroCamTruckFront.mbUseTruck = true;
-            mGyroCamLeft = mGyroCamDefaultParams;
-            mGyroCamLeft.mbUseSideVector = true;
-            mGyroCamRight = mGyroCamDefaultParams;
-            mGyroCamRight.mbUseSideVector = mGyroCamRight.mbInvertVector = true;
-
-            Camera::BehaviourLooseAttachment::Parameters* const beats[] = {
-                &mLooseAttachmentTakedown1, &mLooseAttachmentTakedown2, &mLooseAttachmentTakedown3};
-            for (u32 i = 0; i < 3; ++i)
-            {
-                auto& p = *beats[i];
-                p.mImpact.mShakeParams.mfXYShakeMagnitudeDegs = 0.1f;
-                p.mImpact.mShakeParams.mfXYWobbleMagnitudeDegs = 0.0f;
-                p.mImpact.mfShakeDecayFactor = 0.15f;
-                p.mImpact.mfShakeMagnitude = 45.0f;
-                p.mImpact.mfShakeFrequencyScale = 2.5f;
-                p.mfHeight = 0.25f;
-                p.mfDistance = i == 0 ? 6.0f : 5.0f;
-                p.mfField54 = i == 0 ? 90.0f : (i == 1 ? 60.0f : 40.0f);
-                p.mfDutch = 10.0f * (i + 1);
-                p.mbLookFromTarget = true;
-            }
-        }
+        // Seeds the record: the per-block Parameters::Construct calls and the authored re-tunes
+        // of BehaviourParameterBank::Construct. Body: BrnBehaviourParameterBank.cpp.
+        void Construct();
 
         // ⭐ ADDED 2026-08-29 (crash-camera wave). The spiralling-deathcam parameter block
         // ArbStateCrashing::Prepare @0x822655E8 hands to BehaviourSpirallingDeathcam::
@@ -416,7 +207,9 @@ namespace BrnDirector
         // is exactly 108 bytes, so the first of these starts right after it with no padding.
         Camera::BehaviourAftertouchCrash::Parameters mAftertouchCrashParams;   // +108
         Camera::BehaviourAftertouchCrash::Parameters mCrashDebugParams;        // +220
-        u8 maReservedHead[480 - 220 - sizeof(Camera::BehaviourAftertouchCrash::Parameters)];  // +332 (helicam block)
+        // The record's fourth head block, "HeliCam Default" in every bank walk. Pointer-free and
+        // 148 bytes on both builds, so it sits at its console offset and closes the head at +480.
+        Camera::BehaviourHeliCam::Parameters mHeliCamDefaultParams;           // +332
         Camera::BehaviourGyroCam::Parameters mGyroCamDefaultParams;                  // +480
         Camera::BehaviourGyroCam::Parameters mGyroCamTruckFront;                     // +684
         Camera::BehaviourGyroCam::Parameters mGyroCamLeft;                           // +888
@@ -442,7 +235,14 @@ namespace BrnDirector
         // of the record (the bystander / rig / failsafe / passenger / fixed
         // blocks) is not modelled here -- see the RECORD MAP in the BehaviourParameterBank
         // banner below for every one of their offsets.
-        u8                         maReserved0D08[8696 - 3336];      // +3336 .. +8695
+        // The console's bystander run (+3336, 7 x 156), rig run (+4432, 14 x 288) and passenger
+        // block (+8660, 36) occupy these spans; their host types carry an 8-byte debug-name
+        // pointer in the Behaviour::Parameters head and cannot fit the console strides, so those
+        // blocks live in the host spill at the end of this record (named, in console order).
+        // "Failsafe" is pointer-free and 196 bytes on both builds, so it sits at +8464.
+        u8                         maReserved0D08[8464 - 3336];      // +3336 .. +8463
+        Camera::BehaviourFailsafe::Parameters mFailsafe;             // +8464
+        u8                         maReserved2114[8696 - 8660];      // +8660 .. +8695 (passenger slot)
         // ⭐⭐ THE THREE LOOSE-ATTACHMENT BLOCKS, CARVED (takedown-camera wave), at their exact
         // record offsets. ShutdownTakedownPlayer::Update reaches each one off the shared
         // context's named-parameter record (`lwz` the record pointer, then an `addi` into it) and
@@ -465,6 +265,37 @@ namespace BrnDirector
         LookAroundCarCamParameters maLookAroundCarCamParameters;     // +0x2334
         Camera::BehaviourSpirallingDeathcam::Parameters
                                    maSpirallingDeathcamParameters;   // console +0x23B4 (see note)
+
+        // ---- HOST SPILL: the record's blocks whose host type cannot sit at its console offset ----
+        // Each block below is one of the console record's named members (its record offset in
+        // the comment), carried here BY NAME, in the console's member order, because its host
+        // type is wider than the console stride (8-byte debug-name pointer in the shared
+        // Behaviour::Parameters head). Every consumer reaches them by name; the bank walks visit
+        // them in the console's walk order regardless of where they sit on the host.
+        Camera::BehaviourBystanderCam::Parameters mBystanderJumpLeftParameters;        // record +3336
+        Camera::BehaviourBystanderCam::Parameters mBystanderJumpParameters2;           // record +3492
+        Camera::BehaviourBystanderCam::Parameters mBystanderJumpFromBehindParameters;  // record +3648
+        Camera::BehaviourBystanderCam::Parameters mBystanderCloseParameters;           // record +3804
+        Camera::BehaviourBystanderCam::Parameters mBystanderMediumParameters;          // record +3960
+        Camera::BehaviourBystanderCam::Parameters mBystanderFarParameters;             // record +4116
+        Camera::BehaviourBystanderCam::Parameters mBystanderFarTallParameters;         // record +4272
+        Camera::BehaviourRig::Parameters          mRigBonnetLowRight;                  // record +4432
+        Camera::BehaviourRig::Parameters          mRigRearQFwd;                        // record +4720
+        Camera::BehaviourRig::Parameters          mRigFrontQCuFwd;                     // record +5008
+        Camera::BehaviourRig::Parameters          mRigFrontQBwd;                       // record +5296
+        Camera::BehaviourRig::Parameters          mRigFrontRearview;                   // record +5584
+        Camera::BehaviourRig::Parameters          mRigBootViewFwd;                     // record +5872
+        Camera::BehaviourRig::Parameters          mRigFrontQLowBwd;                    // record +6160
+        Camera::BehaviourRig::Parameters          mRigRoofFwd;                         // record +6448
+        Camera::BehaviourRig::Parameters          mRigBootFwd;                         // record +6736
+        Camera::BehaviourRig::Parameters          mRigFrontQCuFwd2;                    // record +7024
+        Camera::BehaviourRig::Parameters          mRigUnderbelly;                      // record +7312
+        Camera::BehaviourRig::Parameters          mRigDropUnderbelly;                  // record +7600
+        Camera::BehaviourRig::Parameters          mRigDropFrontQCuFwd;                 // record +7888
+        Camera::BehaviourRig::Parameters          mRigDropBootViewFwd;                 // record +8176
+        Camera::BehaviourPassengerCam::Parameters mPassengerDefault;                   // record +8660
+        Camera::BehaviourFixedCam::Parameters     mFixedDefault;                       // record +8996
+        Camera::BehaviourRoadRunner::Parameters   mRoadRunnerDefault;                  // record +9316
     };
 
     // The grid the fourteen gyro placements rest on, ratcheted so a future widening of the gyro
@@ -480,6 +311,16 @@ namespace BrnDirector
                   "BehaviourAftertouchCam::Parameters is the record's 108-byte first block");
     static_assert(offsetof(NamedParameters, mAftertouchCamDefault) == 0,
                   "NamedParameters::mAftertouchCamDefault @ +0 (the record's first block)");
+    static_assert(sizeof(Camera::BehaviourHeliCam::Parameters) == 148,
+                  "BehaviourHeliCam::Parameters is the record's 148-byte fourth head block");
+    static_assert(offsetof(NamedParameters, mHeliCamDefaultParams) == 332,
+                  "NamedParameters::mHeliCamDefaultParams @ +332 (HeliCam Default)");
+    static_assert(sizeof(Camera::BehaviourFailsafe::Parameters) == 196,
+                  "BehaviourFailsafe::Parameters is the record's 196-byte failsafe block");
+    static_assert(offsetof(NamedParameters, mFailsafe) == 8464,
+                  "NamedParameters::mFailsafe @ +8464 (Failsafe)");
+    static_assert(offsetof(NamedParameters, maReserved2114) == 8660,
+                  "the failsafe block closes at +8660, the console passenger slot");
     static_assert(offsetof(NamedParameters, mGyroCamDefaultParams) == 480,
                   "NamedParameters::mGyroCamDefaultParams @ +480 (E_SUBTYPE_LEAD)");
     static_assert(offsetof(NamedParameters, mGyroCamTruckFront) == 684,
@@ -649,10 +490,9 @@ namespace BrnDirector
         // FLAG: the member NAME is ours (the console has no symbol for it); its offset, width
         // and role are all asm-attested.
         //
-        // [FLAG PC bring-up] THIS IS STILL A THREE-SLOT SLICE of a bank that holds ~40 named
-        // blocks. The other accessors below stay DECLARATION-ONLY and their blocks are not
-        // placed. x64 parity is BY NAMED MEMBER, so no reserved head is invented to reproduce
-        // +0x2480 -- the console displacements above are provenance only.
+        // Every one of the record's 48 named blocks is a member of mNamedParameters; x64 parity
+        // past the gyro run is BY NAMED MEMBER (see the record's host spill), so the console
+        // displacements above are provenance only.
         class BehaviourParameterBank
         {
         public:
@@ -677,117 +517,7 @@ namespace BrnDirector
             // are here so no PC consumer can read an indeterminate f32 in the window before
             // the first Set. Strict superset of the console's stores; remove if the bank ever
             // gets a zero-initialised home of its own.
-            void Construct()
-            {
-                // The named-parameter record at +0x10 -- the console's first statement in this
-                // function is the first block of this record. Seeding it here is what makes the
-                // bank the record's single owner: nothing outside constructs it any more.
-                // [FLAG, PC-only] the unmodelled head above it is zeroed for the same reason
-                // the two ZeroBlocks below are: no PC consumer may read indeterminate storage.
-                ZeroBlock(maReservedBankHead, sizeof(maReservedBankHead));
-                mNamedParameters.Construct();
-
-                ZeroBlock(&mGameplayExternalCameraParamsForCar,
-                          sizeof(mGameplayExternalCameraParamsForCar));
-                ZeroBlock(&mGameplayBumperCameraParamsForCar,
-                          sizeof(mGameplayBumperCameraParamsForCar));
-
-                mxGameplayCameraCarAttribsKey = 0;                       // std 0, 0x2480
-                mGameplayExternalCameraParamsForCar.Construct();         // over +0x2488
-                mGameplayBumperCameraParamsForCar.Construct();           // over +0x2538
-
-                // ⭐ 2026-09-24 (FX-DIRECTOR): THE FOUR BYSTANDER BLOCKS THIS BANK MODELS ARE
-                // CONSTRUCTED, no longer zeroed and tagged. The console runs
-                // BehaviourBystanderCam::Parameters::Construct @0x821F9A00 over all seven blocks of
-                // the record's bystander run (`bl 0x821F9A00` x7, 0x8223DE20..0x8223DE5C, bank
-                // +0xD18 stride 0x9C) and re-tunes each one later with constant stores
-                // (0x8223E150..0x8223E29C); the stores into the four modelled blocks follow, each
-                // constant read at its load site. Close is a COPY of Far taken AFTER Far's re-tunes
-                // (`memcpy(bank+0xEEC, bank+0x1024, 0x9C)` @0x8223E260) with its perceived distance
-                // cut to 4.0 (0x8223E268). With the zeroed blocks the crash bystander shot framed
-                // the car at perceived distance 0 and failed its range test at 0 m.
-                mBystanderJumpLeftParameters.Construct();          // slot 0, bank +0xD18
-                mBystanderJumpFromBehindParameters.Construct();    // slot 2, bank +0xE50
-                mBystanderCloseParameters.Construct();             // slot 3, bank +0xEEC
-                mBystanderFarParameters.Construct();               // slot 5, bank +0x1024
-
-                // slot 0 (0x8223E150..0x8223E1F8): planted at a fixed point in the car's own space.
-                mBystanderJumpLeftParameters.mLookerParams.mfTrackingTolerance        = 0.2f;     // +0x38 flt_82004744
-                mBystanderJumpLeftParameters.mLookerParams.mfTrackingSpeed            = 0.1f;     // +0x3C flt_82004014
-                mBystanderJumpLeftParameters.mLookerParams.mfDesiredPerceivedDistance = 5.0f;     // +0x4C flt_8200426C
-                mBystanderJumpLeftParameters.mLookerParams.mbUseZoom                  = false;    // +0x77 stb 0
-                mBystanderJumpLeftParameters.mfDistanceForFailKM                      = 0.0125f;  // +0x84 flt_82009B98
-                mBystanderJumpLeftParameters.mfTargetSpaceX                           = 2.0f;     // +0x88 flt_82001D9C
-                mBystanderJumpLeftParameters.mfTargetSpaceY                           = -2.0f;    // +0x8C flt_82006D70
-                mBystanderJumpLeftParameters.mfTargetSpaceZ                           = 4.0f;     // +0x90 flt_82004EF4
-                mBystanderJumpLeftParameters.mbUseTargetSpaceInsteadOfPositionFinder  = true;     // +0x98 stb 1
-                mBystanderJumpLeftParameters.mbUseRangeTesting                        = false;    // +0x99 stb 0
-
-                // slot 2 (0x8223E1B8..0x8223E1F8): the same, behind the car.
-                mBystanderJumpFromBehindParameters.mLookerParams.mfTrackingTolerance        = 0.2f;    // +0x38 flt_82004744
-                mBystanderJumpFromBehindParameters.mLookerParams.mfTrackingSpeed            = 0.1f;    // +0x3C flt_82004014
-                mBystanderJumpFromBehindParameters.mLookerParams.mfDesiredPerceivedDistance = 5.0f;    // +0x4C flt_8200426C
-                mBystanderJumpFromBehindParameters.mLookerParams.mbUseZoom                  = false;   // +0x77 stb 0
-                mBystanderJumpFromBehindParameters.mfDistanceForFailKM                      = 0.0125f; // +0x84 flt_82009B98
-                mBystanderJumpFromBehindParameters.mfTargetSpaceX                           = 1.1f;    // +0x88 flt_82004A1C
-                mBystanderJumpFromBehindParameters.mfTargetSpaceY                           = -0.78f;  // +0x8C flt_82009B94
-                mBystanderJumpFromBehindParameters.mfTargetSpaceZ                           = -3.31f;  // +0x90 flt_82009B90
-                mBystanderJumpFromBehindParameters.mbUseTargetSpaceInsteadOfPositionFinder  = true;    // +0x98 stb 1
-                mBystanderJumpFromBehindParameters.mbUseRangeTesting                        = false;   // +0x99 stb 0
-
-                // slot 5 (0x8223E220..0x8223E25C): a roadside position within 40 m, failing past 60 m.
-                mBystanderFarParameters.mLookerParams.mfTrackingTolerance              = 0.5f;    // +0x38 flt_82001DA0
-                mBystanderFarParameters.mLookerParams.mfMinFOVVelocity                 = 120.0f;  // +0x44 flt_82004A28
-                mBystanderFarParameters.mLookerParams.mfMaxFOVVelocity                 = 130.0f;  // +0x48 flt_8200544C
-                mBystanderFarParameters.mLookerParams.mfDesiredPerceivedDistance       = 8.0f;    // +0x4C flt_82004C88
-                mBystanderFarParameters.mLookerParams.mfToleranceForDistanceFromIdeal  = 20.0f;   // +0x54 flt_820054CC
-                mBystanderFarParameters.mLookerParams.mfToleranceForDistanceFromTarget = 0.1f;    // +0x58 flt_82004014
-                mBystanderFarParameters.mfVelocityInfluenceOnPosition                  = 0.75f;   // +0x7C flt_82004018
-                mBystanderFarParameters.mfMaxInitialDistanceKM                         = 0.04f;   // +0x80 flt_82009B88
-                mBystanderFarParameters.mfDistanceForFailKM                            = 0.06f;   // +0x84 flt_820047B8
-
-                // slot 3: Far, closer.
-                mBystanderCloseParameters = mBystanderFarParameters;                               // memcpy 0x9C @0x8223E260
-                mBystanderCloseParameters.mLookerParams.mfDesiredPerceivedDistance     = 4.0f;    // +0x4C flt_82004EF4
-
-                // ⭐ 2026-09-24 (FX-DIRECTOR): the passenger block is constructed too. The console inlines
-                // BehaviourPassengerCam::Parameters::Construct over it (0x8223DF08..0x8223DF54:
-                // type 7, name 0, the impact block's 0.06 / 0.0 / 1.15 / 0.11 / 0.05 / 15.0 / 5.0) and
-                // writes nothing else. Zeroed, its type tag read 0 and PassengerCam::SetParameters
-                // asserted the first time a passenger-sees-action moment went valid.
-                mPassengerDefault.Construct();                     // record +8660, bank +0x21E4
-
-                // ⭐ 2026-09-24 (FX-DIRECTOR): the fixed-cam block is no longer a zeroed stand-in. The
-                // console inlines BehaviourFixedCam::Parameters::Construct over it (0x8223DC90:
-                // +9016 = 0, +9020 = 70.0, +9012 = 15, +9024 = 10.0) and stores nothing else into it,
-                // so the class seed IS the block's content: FOV 70, max dutch 10. (The closing
-                // Serialise<BehaviourParameterNamingSerialiser> pass only names blocks for the debug
-                // menu; it is not reconstructed.) With a zeroed block the static-impact shot would
-                // assert "lfFOV > 0.0f" and render at FOV 0.
-                mFixedDefault.Construct();
-
-                // ⭐ 2026-09-12: the nine player-jumping RIG blocks (the two bystander ones are
-                // constructed above since 2026-09-24).
-                // ⚠ THE NINE RIG BLOCKS' TYPE TAGS ARE NOT SEEDED and cannot be from here:
-                // BehaviourRig::Parameters inherits the shared Behaviour::Parameters head,
-                // whose mType is protected, and the only thing that writes it is
-                // BehaviourRig::Parameters::Construct -- which lives in the unmounted
-                // BehaviourRig.cpp and sets it to 0 anyway (the console's authored tunings,
-                // tag included, come from the bank's own compiled-in Construct, which is not
-                // recovered). Nothing can reach these blocks yet either: the only consumer is
-                // MomentPlayerJumping::Prepare, whose TU is not in the link. Inert, not wrong.
-                // DELETE-WHEN: BehaviourRig.cpp is mounted, and Construct calls
-                // BehaviourRig::Parameters::Construct on each of the nine instead of zeroing.
-                ZeroBlock(&mRigRearQFwd,        sizeof(mRigRearQFwd));
-                ZeroBlock(&mRigFrontQCuFwd,     sizeof(mRigFrontQCuFwd));
-                ZeroBlock(&mRigBootViewFwd,     sizeof(mRigBootViewFwd));
-                ZeroBlock(&mRigRoofFwd,         sizeof(mRigRoofFwd));
-                ZeroBlock(&mRigFrontQCuFwd2,    sizeof(mRigFrontQCuFwd2));
-                ZeroBlock(&mRigUnderbelly,      sizeof(mRigUnderbelly));
-                ZeroBlock(&mRigDropUnderbelly,  sizeof(mRigDropUnderbelly));
-                ZeroBlock(&mRigDropFrontQCuFwd, sizeof(mRigDropFrontQCuFwd));
-                ZeroBlock(&mRigDropBootViewFwd, sizeof(mRigDropBootViewFwd));
-            }
+            void Construct();
 
             // The named-parameter record this bank owns, at bank +0x10. The arbitrator states
             // reach one block out of it through ArbStateSharedInfo::mpNamedParameters, which
@@ -851,7 +581,7 @@ namespace BrnDirector
             // 16-byte gap between them is exactly sizeof(BehaviourFixedCam::Parameters).
             const BehaviourFixedCam::Parameters& GetStaticCamImpactCamParams() const
             {
-                return mFixedDefault;
+                return mNamedParameters.mFixedDefault;
             }
 
             // The two bystander-sees-action camera blocks (MomentBystanderSeesAction::
@@ -863,11 +593,11 @@ namespace BrnDirector
             // corroboration that fixes the whole bystander run's stride.
             const BehaviourBystanderCam::Parameters& GetBystanderCamCloseMomentParams() const
             {
-                return mBystanderCloseParameters;
+                return mNamedParameters.mBystanderCloseParameters;
             }
             const BehaviourBystanderCam::Parameters& GetBystanderCamMomentParams() const
             {
-                return mBystanderFarParameters;
+                return mNamedParameters.mBystanderFarParameters;
             }
 
             // The passenger-sees-action camera block (MomentPassengerSeesAction::Update
@@ -875,7 +605,7 @@ namespace BrnDirector
             // Record +8660 is mPassengerDefault, constructed by Construct above (type 7).
             const BehaviourPassengerCam::Parameters& GetPassengerCamMomentParams() const
             {
-                return mPassengerDefault;
+                return mNamedParameters.mPassengerDefault;
             }
 
             // ⭐ THE PLAYER-JUMPING SHOT BLOCKS, CARVED 2026-09-12. These two were the last
@@ -910,44 +640,44 @@ namespace BrnDirector
             {
                 switch (liIndex)
                 {
-                case 1:  return mRigRearQFwd;
-                case 2:  return mRigFrontQCuFwd;
-                case 5:  return mRigBootViewFwd;
-                case 7:  return mRigRoofFwd;
-                case 9:  return mRigFrontQCuFwd2;
-                case 10: return mRigUnderbelly;
-                case 11: return mRigDropUnderbelly;
-                case 12: return mRigDropFrontQCuFwd;
-                case 13: return mRigDropBootViewFwd;
+                case 1:  return mNamedParameters.mRigRearQFwd;
+                case 2:  return mNamedParameters.mRigFrontQCuFwd;
+                case 5:  return mNamedParameters.mRigBootViewFwd;
+                case 7:  return mNamedParameters.mRigRoofFwd;
+                case 9:  return mNamedParameters.mRigFrontQCuFwd2;
+                case 10: return mNamedParameters.mRigUnderbelly;
+                case 11: return mNamedParameters.mRigDropUnderbelly;
+                case 12: return mNamedParameters.mRigDropFrontQCuFwd;
+                case 13: return mNamedParameters.mRigDropBootViewFwd;
                 default: break;
                 }
                 CGS_ASSERT(false, "GetPlayerJumpingRigShotParams: unmodelled rig slot");
-                return mRigRearQFwd;
+                return mNamedParameters.mRigRearQFwd;
             }
             const BehaviourBystanderCam::Parameters& GetPlayerJumpingBystanderShotParams(s32 liIndex) const
             {
                 switch (liIndex)
                 {
-                case 0: return mBystanderJumpLeftParameters;
-                case 2: return mBystanderJumpFromBehindParameters;
+                case 0: return mNamedParameters.mBystanderJumpLeftParameters;
+                case 2: return mNamedParameters.mBystanderJumpFromBehindParameters;
                 default: break;
                 }
                 CGS_ASSERT(false, "GetPlayerJumpingBystanderShotParams: unmodelled bystander slot");
-                return mBystanderJumpLeftParameters;
+                return mNamedParameters.mBystanderJumpLeftParameters;
             }
 
-            // X360 0x822732D0. Dumps the whole parameter bank to the debug text file
-            // "d:\\camera.txt". The X360 compiler inlines TextFileWriteSerialiser::
-            // Construct("d:\\camera.txt") (fopen "w", muRecursionDepth = 0) and Destruct()
-            // (CGS_ASSERT muRecursionDepth == 0; fclose) into this body; reconstructed as the
-            // three calls the source made. Lives in BrnBehaviourParameterBank.cpp.
-            void SaveParameters();
+            // The camera tweaker's two debug-menu actions (DebugCallbackFunction shape: the
+            // user data is the bank). SaveParameters writes the whole bank to "d:\\camera.txt"
+            // through TextFileWriteSerialiser; LoadParameters reads it back through
+            // TextFileReadSerialiser. Bodies: BrnBehaviourParameterBank.cpp.
+            static void SaveParameters(void* lpVoid);
+            static void LoadParameters(void* lpVoid);
 
-            // The bank's serialiser-visitor template: walks every named Parameters sub-block,
-            // handing each field to the supplied serialiser. Attested by the X360 mangled call
-            // in SaveParameters (`public: void Serialise<TextFileWriteSerialiser>(
-            // TextFileWriteSerialiser&)`). The per-instantiation bodies are separate (still-todo)
-            // TUs; declared here so SaveParameters can call it. T is deduced from the argument.
+            // The bank's serialiser-visitor template: stamps muVersion, then hands every named
+            // block of the record to SerialiseBehaviourParameters under its walk name. One
+            // generic body + one explicit instantiation per serialiser (TextFileRead /
+            // TextFileWrite / TestbedSetup / BehaviourParameterNaming):
+            // BrnBehaviourParameterBank.cpp.
             template<class T> void Serialise(T& lrSerialiser);
 
             // NEVER CALLED. Pins the record's placement inside this class -- a member
@@ -967,59 +697,17 @@ namespace BrnDirector
             }
 
             // ---- the record, by value at its attested offset ------------------------------
-            // The bank's leading sub-record. The 16 bytes ahead of it are the bank's own head
-            // (the version word and its pad up to the record's alignment); nothing in this
-            // slice reads them, so they are a named reserved span rather than typed members --
-            // but they are REAL bytes, so the record starts at +0x10 exactly as derived, and
-            // the offsetof ratchet below fails the build if that ever stops being true.
-            u8              maReservedBankHead[0x10];             // +0x0000 .. +0x000F
-            NamedParameters mNamedParameters;                     // +0x0010
+            // The bank's head is its version word (the bank walks stamp it with the current file
+            // version) and the pad up to the record's alignment; the offsetof ratchet below
+            // fails the build if the record ever stops starting at +0x10.
+            Utils::VersionNumber muVersion;                                         // +0x0000
+            u8                   maReservedBankHead[0x10 - sizeof(Utils::VersionNumber)];  // +0x0004 .. +0x000F
+            NamedParameters      mNamedParameters;                                  // +0x0010
 
             // ---- the three homed slots (see the banner for the pin) -----------------------
             u64                                   mxGameplayCameraCarAttribsKey;        // +0x2480
             BehaviourGameplayExternal::Parameters mGameplayExternalCameraParamsForCar;  // +0x2488
             BehaviourGameplayBumper::Parameters   mGameplayBumperCameraParamsForCar;    // +0x2538
-
-            // ---- the remaining moment camera blocks --------------------------------------
-            // On the console these live inside the bank's mNamedParameters sub-record, at the
-            // record offsets in the comments (bank offset == record offset + 0x10). The record
-            // IS modelled now (mNamedParameters above), but each of these four offsets falls
-            // inside one of its reserved spans, and carving them out would mean placing runs
-            // whose Parameters this tree models NARROWER than the console's (the bystander and
-            // rig strides) -- a type widening, not a span edit. So they stay where they are and
-            // parity is BY NAMED MEMBER, as for every other block in this slice: each block
-            // exists under its own record name, is seeded, and its one consumer reaches it
-            // through the accessor above. They are not a second copy of anything the record
-            // holds -- the record does not model these four slots at all. (The helicam block
-            // that used to head this list is gone: the gyro run IS placed now, so
-            // GetGyroCamMomentParams returns the record's own slot 11.)
-            // DELETE-WHEN: the bystander / passenger / fixed runs are placed inside
-            // mNamedParameters; then these members go and the accessors return record blocks.
-            BehaviourBystanderCam::Parameters mBystanderCloseParameters;   // record +3804
-            BehaviourBystanderCam::Parameters mBystanderFarParameters;     // record +4116
-            BehaviourPassengerCam::Parameters mPassengerDefault;           // record +8660
-            BehaviourFixedCam::Parameters     mFixedDefault;               // record +8996
-
-            // ---- the eleven player-jumping shot blocks (2026-09-12) ----------------------
-            // Same by-name posture, same reason: they are the bystander run's slots 0 and 2
-            // and the rig run's slots 1/2/5/7/9/10 (attached) + 11/12/13 (dropped), and both
-            // runs are modelled NARROWER here than the console's 156 / 288 strides, so they
-            // cannot be placed inside mNamedParameters without widening two types. Each block
-            // exists under the record's own name for that slot, is seeded by Construct below,
-            // and its one consumer (MomentPlayerJumping::Prepare) reaches it through the two
-            // indexed accessors above. The record offsets in the comments are provenance.
-            // DELETE-WHEN: the rig and bystander runs are placed inside mNamedParameters.
-            BehaviourBystanderCam::Parameters mBystanderJumpLeftParameters;       // record +3336
-            BehaviourBystanderCam::Parameters mBystanderJumpFromBehindParameters; // record +3648
-            BehaviourRig::Parameters          mRigRearQFwd;                       // record +4720
-            BehaviourRig::Parameters          mRigFrontQCuFwd;                    // record +5008
-            BehaviourRig::Parameters          mRigBootViewFwd;                    // record +5872
-            BehaviourRig::Parameters          mRigRoofFwd;                        // record +6448
-            BehaviourRig::Parameters          mRigFrontQCuFwd2;                   // record +7024
-            BehaviourRig::Parameters          mRigUnderbelly;                     // record +7312
-            BehaviourRig::Parameters          mRigDropUnderbelly;                 // record +7600
-            BehaviourRig::Parameters          mRigDropFrontQCuFwd;                // record +7888
-            BehaviourRig::Parameters          mRigDropBootViewFwd;                // record +8176
         };
 
         // NEVER CALLED. The record is the one part of this slice whose bank offset is
@@ -1029,6 +717,8 @@ namespace BrnDirector
         // re-basing every consumer's arithmetic.
         inline void BehaviourParameterBank::_AssertBankLayout()
         {
+            static_assert(offsetof(BehaviourParameterBank, muVersion) == 0x0,
+                          "BehaviourParameterBank::muVersion @ bank +0x0");
             static_assert(offsetof(BehaviourParameterBank, mNamedParameters) == 0x10,
                           "BehaviourParameterBank::mNamedParameters @ bank +0x10");
         }

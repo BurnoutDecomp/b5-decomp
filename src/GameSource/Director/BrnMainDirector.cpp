@@ -596,6 +596,10 @@ namespace BrnDirector
         mICESceneSpace.zAxis.SetZero();
         mICESceneSpace.wAxis.SetZero();
 
+        // The debug page's camera-name and slomo-assert toggles (+0x33105 / +0x33104).
+        mbDebugAssertNoIllegalSlomo = false;
+        mbShowDebugCameraNames      = true;
+
         // The forced-camera-car override starts at the -1 "none" sentinel (+0x33100).
         miForcedCameraCarIndex = -1;
 
@@ -913,10 +917,12 @@ namespace BrnDirector
         // GetSimTimerStatus()->GetCurrentTimeStep(). Reached BY NAME, no offset arithmetic.
         f32 lfSimTimestep = lpTimerStatusInterface->GetSimTimerStatus()->GetCurrentTimeStep();
 
-        // ⚠️ GATE: `if ( maStateFlagTail[+0x3543C] ) { lfTimestep = 0; lfSimTimestep = 0; }`
-        //   -- the ICE-owns-the-frame latch lives in the un-homed flag tail. CONSEQUENCE: the
-        //   arbitrator keeps advancing its timers during an ICE take instead of freezing them.
-        //   DELETE-WHEN: the MainDirector flag tail is named.
+        // The debug page's "Zero Timestep" freezes both steps.
+        if (maStateFlagTail[E_FLAG_TAIL_DEBUG_ZERO_TIMESTEP])
+        {
+            lfTimestep    = 0.0f;
+            lfSimTimestep = 0.0f;
+        }
 
         const BrnDirector::Camera::VehicleInfo* lpRaceCars = lpInput->GetRaceCarInfo();
         const BrnDirector::Camera::VehicleInfo* lpPlayerCar =
@@ -1032,10 +1038,7 @@ namespace BrnDirector
     // ⭐ EVERY STEP OF THE GUARDED BODY NOW RUNS (2026-09-24, FX-DIRECTOR2 landed the last one,
     // CrashAnalyser::Update). What is still deferred lives INSIDE the callees and is flagged there:
     // VehicleTracker's score copy. (AllVehicleData::Update is the console's whole body since
-    // 2026-09-25 -- the traffic array and the team words now arrive.) The one step NOT reproduced
-    // is the debug-tweakable latch clear at the top (mbDebugSingleTimestep -> mbDebugZeroTimestep,
-    // both seeded 0 by Construct at 0x8225B9DC / 0x8225B9C8, `li r31, 0` @0x8225B484, and inert on
-    // retail).
+    // 2026-09-25 -- the traffic array and the team words now arrive.)
     //
     // ⚠️ THE CONSOLE'S SECOND TEST is reproduced: `usedRaceCars.IsBitSet(playerCarIndex)`.
     // GetLivePlayerCarIndex already folds it in (see the header), so the guard below IS both
@@ -1045,9 +1048,10 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     void MainDirector::PreSceneQueryUpdate(const DirectorInputOutput* lpIO)
     {
-        // ⚠️ GATE (debug only): `if (+0x3543D) stbx 0 -> +0x3543C` @0x8225BA24..0x8225BA40 --
-        // maStateFlagTail[E_FLAG_TAIL_DEBUG_SINGLE_TIMESTEP] clearing
-        // maStateFlagTail[E_FLAG_TAIL_DEBUG_ZERO_TIMESTEP]. Not reproduced here.
+        // The debug page's single-step request lets this frame run with real timesteps; Update's
+        // tail freezes the director again.
+        if (maStateFlagTail[E_FLAG_TAIL_DEBUG_SINGLE_TIMESTEP])
+            maStateFlagTail[E_FLAG_TAIL_DEBUG_ZERO_TIMESTEP] = false;
 
         const s32 liPlayerCarIndex = GetLivePlayerCarIndex(lpIO);
         if (liPlayerCarIndex == -1)
@@ -3033,7 +3037,7 @@ namespace BrnDirector
         const bool lbGameTimerRunning = lpGameTimer->IsRunning();
         (void)lbGameTimerRunning;
 
-        const f32 lfGameTimestep = lpGameTimer->GetCurrentTimeStep();   // [+8] * [+4]
+        f32 lfGameTimestep = lpGameTimer->GetCurrentTimeStep();         // [+8] * [+4]
 
         f32 lfWorldTimestep       = 0.0f;
         f32 lfWorldNoSlomoTimestep = 0.0f;
@@ -3043,8 +3047,13 @@ namespace BrnDirector
             lfWorldNoSlomoTimestep = lpSimTimer->GetBaseTimeStep();     // [+28]
         }
 
-        // ⚠️ GATE: `if (maStateFlagTail[+0x35400]) { all three = 0; }` -- the ICE-owns-the-frame
-        // latch lives in the un-homed flag tail (same gate BuildArbStateSharedInfo documents).
+        // The debug page's "Zero Timestep" freezes all three steps.
+        if (maStateFlagTail[E_FLAG_TAIL_DEBUG_ZERO_TIMESTEP])
+        {
+            lfGameTimestep         = 0.0f;
+            lfWorldTimestep        = 0.0f;
+            lfWorldNoSlomoTimestep = 0.0f;
+        }
 
         lSharedInfo.mTimestep.Set(BrnDirector::VecFloat(lfGameTimestep),
                                   BrnDirector::VecFloat(lfWorldTimestep),
@@ -3361,7 +3370,7 @@ namespace BrnDirector
     //         DebugLog::Print / DebugLog::Update                  // lines 260-265
     //         UpdateCameraBehavioursPostScene( lpIO, playerIdx );  // line 266
     //         UpdateMoments( lpIO, playerIdx );                    // line 267
-    //         if ( !<ICE-owns-frame latch> ) UpdateICE( ... );     // lines 268-269
+    //         if ( !mbDebugZeroTimestep ) UpdateICE( ... );       // lines 268-269
     //         ⭐ UpdateArbitrator( lpIO, lCamera, playerIdx );      // line 270
     //         <~550 lines of VMX AllVehicleData debug-render, the camera-interpolation
     //          controller (LIVE since 2026-09-25, CC-14), the effect-hook registration
@@ -3616,13 +3625,12 @@ namespace BrnDirector
         // read of uninitialised stack.
         //
         // `_R30 + 211168` is maGameState + 0x100 == GameState::mbCanUseSlomo (Construct seeds
-        // it to 1, so slomo IS permitted by default); `_R30 + 0x33105` is the second of the two
-        // camera-car flag bytes, whose role is recovered HERE for the first time: it is the
-        // "assert if a slomo request survives into a no-slomo frame" dev flag, and Construct
+        // it to 1, so slomo IS permitted by default). +0x33105 is mbDebugAssertNoIllegalSlomo, the
+        // debug page's "assert if a slomo request survives into a no-slomo frame" toggle; Construct
         // seeds it to 0, so the assert is off in retail.
         if (!maGameState.mbCanUseSlomo)
         {
-            CGS_ASSERT(!(maCameraCarFlags[1] != 0 && lCamera.GetEffects().mfSimTimeScale != 1.0f),
+            CGS_ASSERT(!(mbDebugAssertNoIllegalSlomo && lCamera.GetEffects().mfSimTimeScale != 1.0f),
                        "Trying to use slomo when not allowed");
             lCamera.GetEffects().mfSimTimeScale = 1.0f;
         }

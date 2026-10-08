@@ -31,8 +31,8 @@
 // InterpolateFrom (player), the playlist build-and-query set (ICEMoviePlaylist::
 // Construct / InsertMovieBefore / GetMovieCount and SharedPlaylists::Construct /
 // GetPausePlaylist) and GetCgsID (IceMovie) all land in BrnICEMoviePlayer.cpp, which is
-// MOUNTED. The three Serialise<S> visitors and DebugMenuNewMovie are split off into
-// BrnICEMoviePlayerSerialise.cpp, which is not (see its banner). The rest of the
+// MOUNTED. The three Serialise<S> visitors and the playlist's dev-menu members are split off
+// into BrnICEMoviePlayerSerialise.cpp (also mounted). The rest of the
 // recovered method set is DECLARATION-ONLY here (each lands a body with its own ledger
 // TU; the per-TU `cl /c` gate does not link, so declarations suffice).
 //
@@ -209,8 +209,10 @@ struct ICEMoviePlaylist
     IceMovie&                  GetMovie(s32 liIndex);
     const char*                DebugGetMovieName(s32 liIndex) const;
     DebugMenuRemoveData        GetRemoveData(s32 liMovie);
-    void                       DebugMenuRemoveMovie(void* lpRemoveData);
-    void                       DebugMenuNewMovie(void* lpContext);   // body in BrnICEMoviePlayer.cpp
+    // Dev-menu actions (DebugCallbackFunction shape): the user data is the remove-data slot /
+    // the playlist. Bodies in BrnICEMoviePlayerSerialise.cpp.
+    static void                DebugMenuRemoveMovie(void* lpRemoveData);
+    static void                DebugMenuNewMovie(void* lpPlaylist);
     const CgsContainers::ObjectPool<DebugMenuRemoveData, 20, s32>& GetDebugMenuRemoveDataPool() const;
     void                       SetDebugComponent(DebugComponent* lpDebugComponent);
     s32&                       GetDebugMenuNewMovieIndex();

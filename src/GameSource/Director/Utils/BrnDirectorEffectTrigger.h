@@ -37,16 +37,15 @@ namespace BrnDirector
         // in order:
         //   assert lpcName != NULL
         //   assert strlen(lpcName) <= 0x20
-        //   a third assert belongs to the bounded-copy helper it uses, not to this function
-        //     ("String <x> is too long. Buffer size = 32, string length = N"); it fires at
-        //     strlen >= 0x20, one tighter than the second, and is folded into the same
-        //     CGS_ASSERT here rather than fabricating the StrStream message.
+        //   the bounded-copy helper's own assert (buffer size 32, so it fires at strlen >= 0x20,
+        //     one tighter than the second; its streamed message is collapsed to a plain string)
         //   a plain strcpy including the NUL.
         void Set(const char* lpcName)
         {
             CGS_ASSERT(lpcName != NULL, "lpcName != NULL");                              // 1st
             CGS_ASSERT(strlen(lpcName) <= BrnGui::KI_MAX_PFX_ID_LENGTH,
                        "strlen(lpcName) <= BrnGui::KI_MAX_PFX_ID_LENGTH");               // 2nd
+            CGS_ASSERT(strlen(lpcName) < 32, "String is too long. Buffer size = 32");    // 3rd
             strcpy(mHookNameString, lpcName);
         }
 

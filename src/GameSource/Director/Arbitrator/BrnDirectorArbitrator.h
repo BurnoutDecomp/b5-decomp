@@ -7,6 +7,7 @@
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h" // ArbitratorStateContainer (mStateContainer by value)
 #include "GameSource/Director/Arbitrator/States/BrnArbStateCrashNav.h"      // BrnDirector::ArbStateCrashNav (real layout, by value)
 #include "GameSource/Director/Arbitrator/States/BrnArbStateAttractMode.h"   // BrnDirector::ArbStateAttractMode (real layout, by value)
+#include "GameSource/Director/Arbitrator/States/BrnArbStateTestbed.h"       // BrnDirector::ArbStateTestbed (real layout, by value)
 #include "GameSource/Director/Camera/BrnSharedCameraContainer.h"            // BrnDirector::SharedCameraContainer (by value)
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"                    // BrnDirector::Camera::BehaviourHandle<> / BehaviourManager / BehaviourHelperIndex
 
@@ -42,8 +43,9 @@
 //   `mArbStateAttractMode.Update(...)` bound the ArbitratorState base and the road-runner
 //   fly-by camera did not exist. The two placeholders that remain (below) are NOT on that path.
 //
-// FLAG: ArbStateRenderMetrics / ArbStateTestbed still have no reconstructed home TU --
-//   declared here as minimal ArbitratorState subclasses (same convention the container uses
+// ArbStateTestbed is its real class (States/BrnArbStateTestbed.h, #included above).
+// FLAG: ArbStateRenderMetrics still has no reconstructed home TU --
+//   declared here as a minimal ArbitratorState subclass (same convention the container uses
 //   for its not-yet-homed states) purely so the Arbitrator can embed them by value and
 //   dispatch their virtual Construct() / Update() / Release(). GROW each into its real layout
 //   (additively) when its own TU lands; this TU never touches their per-state members by name.
@@ -73,8 +75,7 @@ namespace BrnDirector
     // Each is a distinct ArbitratorState subtype embedded by value in the Arbitrator; the
     // arbitrator constructs each (vtable slot 0) and the special-state Update paths dispatch
     // their virtuals. The real layouts / overrides land with each state's own TU.
-    // FLAG: minimal placeholder homes (by-name parity; this TU touches no per-state member).
-    class ArbStateTestbed      : public ArbitratorState {};
+    // FLAG: minimal placeholder home (by-name parity; this TU touches no per-state member).
     class ArbStateRenderMetrics: public ArbitratorState {};
 
     class Arbitrator
@@ -146,6 +147,10 @@ namespace BrnDirector
         // The shared-camera container the gameplay cameras live in. (BrnDirectorArbitrator.h:98)
         SharedCameraContainer& GetSharedCameras() { return mSharedCameraContainer; }
 
+        // The embedded state container (+0x310); the debug component's playlist actions reach
+        // its shared playlists through it.
+        ArbitratorStateContainer& GetStateContainer() { return mStateContainer; }
+
         // GROWN for DirectorDevTools::GameTalkMsgHandler (@0x822095A0): the GameTalk
         // Start/StopRenderMetrics commands poke the render-metrics request pair
         // (X360 arbitrator +0x44FE / +0x44FF) directly.
@@ -162,6 +167,9 @@ namespace BrnDirector
         EState GetState() const                     { return meState; }
 
     private:
+        // The debug page registers the testbed and the attract / render-metrics requests.
+        friend class DebugComponent;
+
         // The currently-driving "normal" gameplay camera (the container's selected state's
         // camera). (BrnDirectorArbitrator.h:150) @0x821F5BD8 (class TU; body in the .cpp).
         const Camera::Camera& GetNormalCamera() const;

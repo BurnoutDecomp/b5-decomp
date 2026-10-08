@@ -307,6 +307,9 @@ namespace BrnDirector
         // (the same call the eight sibling states made).
 
     private:
+        // The debug page registers the two takedown-camera debug toggles.
+        friend class DebugComponent;
+
         // FLAG: no asm body recovered for PickNewTakedownType in this TU's ledger set, and no
         // recovered code calls it -- Prepare picks the player straight off the game state.
         // Declaration-only (declaration reference home BrnArbStateTakedown.cpp).

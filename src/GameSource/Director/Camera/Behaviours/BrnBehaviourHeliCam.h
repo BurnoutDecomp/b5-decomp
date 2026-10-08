@@ -6,22 +6,25 @@
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"        // Utils::VersionNumber (the +0x7C tag)
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"  // Utils::CameraShake::Parameters (mShakeParams @+0x08)
 #include "GameSource/Director/Camera/Utils/BrnLooker.h"          // Utils::Looker::Parameters (mLookerParams @+0x18)
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"     // the Camera::Behaviour base
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"           // CgsNumeric::Random (mRandom)
+
+#include <cstddef>   // offsetof (the layout pins)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourHeliCam.h
 //
 // BrnDirector::Camera::BehaviourHeliCam -- the "helicopter cam" camera behaviour: a high,
 // distant tracking camera that orbits/follows the tracked car as if shot from a circling
-// helicopter (used by scripted moments and the arbitrator testbed). HOME for the
-// BehaviourHeliCam class slice this TU bodies (the SetParameters inline). The full behaviour
-// (Construct/Prepare/Update and the rest of the rig) and its Behaviour base land with their
-// own TUs; this header models only the slice SetParameters needs, BY NAME.
+// helicopter (used by scripted moments and the arbitrator testbed). It derives the canonical
+// Camera::Behaviour: the behaviour manager pools it and drives it through the base's eight-slot
+// vtable (Construct, Prepare, Update, SetupTweaker and GetName are this class's; the other three
+// slots keep the base defaults). The bodies are in BrnBehaviourHeliCam.cpp.
 //
-// ----------------------------------------------------------------------------
-// The ONLY function homed here is SetParameters @0x821F3AA0: it asserts the supplied parameter
-// block is a heli-cam block (its type tag == eBehaviourHeliCam == 6) then caches the block's
-// +0x04 word at +0x10 and stores the block pointer at +0xE0. The members below are the minimal
-// named scaffolding that inline needs to compile.
+// Layout (declaration order; console offsets, the host widens the base head and the pointer):
+//   +0x020 mTransform   +0x060 mLooker   +0x080 mPosition   +0x090 mTarget   +0x0A0 mVelocity
+//   +0x0B0 mRandom      +0x0E0 mpParameters                 +0x0E4 mCameraShake
+//   +0x0F4 mbCalculatePosition                              (console size 0x100)
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
@@ -39,7 +42,7 @@ enum EBehaviourTypeHeliCam
     eBehaviourHeliCam = 6
 };
 
-class BehaviourHeliCam
+class BehaviourHeliCam : public Behaviour
 {
 public:
 
@@ -54,7 +57,7 @@ public:
     //   +0x08 mShakeParams   (CameraShake::Parameters, 0x10 bytes -> ends +0x18)  "Shake Parameters"
     //   +0x18 mLookerParams  (Looker::Parameters, 0x64 bytes -> ends +0x7C)       "Looker Parameters"
     //   +0x7C muVersion      (VersionNumber; stamped = 2)         "Version Number (dont change)"
-    //   +0x80 mfFOV          (Process<float>(a1+128); SetRange 1..150; label @0x820051C0 unrecovered)
+    //   +0x80 mFOV           (Utils::FOV; Process<float>; SetRange 1..150) "FOV"
     //   +0x84 mfHeight              "Height (KM)"              (SetStep 0.01)
     //   +0x88 mfInitialDistanceX    "Initial Distance X (KM)"  (SetStep 0.01)
     //   +0x8C mfInitialDistanceZ    "Initial Distance Z (KM)"  (SetStep 0.01)
@@ -71,6 +74,8 @@ public:
         // explicit instantiations live in BrnBehaviourHeliCamSerialise.cpp.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
+        void Construct();   // the parameter bank's seed; body: BrnBehaviourHeliCam_wS34_05.cpp
+
         EBehaviourTypeHeliCam GetType() const
         {
             return static_cast<EBehaviourTypeHeliCam>(meType);
@@ -81,46 +86,79 @@ public:
         Utils::CameraShake::Parameters  mShakeParams;       // +0x08  "Shake Parameters"  (v1 + v2)
         Utils::Looker::Parameters       mLookerParams;      // +0x18  "Looker Parameters" (v2 only)
         Utils::VersionNumber            muVersion;          // +0x7C  version tag (code version = 2)
-        f32                             mfFOV;              // +0x80  <unk_820051C0> field (range 1..150)
+        Utils::FOV                      mFOV;               // +0x80  "FOV" (debug-menu range 1..150)
         f32                             mfHeight;           // +0x84  "Height (KM)"
         f32                             mfInitialDistanceX; // +0x88  "Initial Distance X (KM)"
         f32                             mfInitialDistanceZ; // +0x8C  "Initial Distance Z (KM)"
         f32                             mfVelocityMPS;      // +0x90  "Velocity MPS"
     };
 
-    // Adopt a heli-cam parameter block: assert it carries the heli-cam type tag, then cache its
-    // first word and store the pointer. @0x821F3AA0.
+    // ---- the Behaviour virtual interface ---------------------------------------------------
+    // Seed the base head, the shake, the looker and the random ring.                   (slot 0)
+    void Construct() override;
+
+    // Reset the rig to the identity and arm the position seed for the next Update.    (slot 1)
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;
+
+    // Seed the position off the player car once, fly it along the velocity, look at the car and
+    // shake. Always returns true.                                                      (slot 2)
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;
+
+    // Reset the tweaker it is handed; the heli cam maps nothing onto it.              (slot 6)
+    void SetupTweaker(Utils::Tweaker& lrTweaker) override;
+
+    //                                                                                  (slot 7)
+    const char* GetName() const override;
+
+    // Adopt a heli-cam parameter block: assert it carries the heli-cam type tag, then store the
+    // pointer. Declared over the derived Parameters, so it hides the base's pair.
     void SetParameters(const Parameters* lpParameters);
 
 private:
+    Matrix44Affine           mTransform;           // the rig's own look transform
+    Utils::Looker            mLooker;
+    Vector3                  mPosition;            // the flying camera position
+    Vector3                  mTarget;              // the player car position the flight started from
+    Vector3                  mVelocity;            // the flight velocity (world units per second)
+    CgsNumeric::Random       mRandom;
+    const Parameters*        mpParameters;
+    Utils::CameraShake       mCameraShake;
+    bool                     mbCalculatePosition;  // seed the position on the next Update
 
-    // FLAG: only the members SetParameters writes are modelled at their asm-attested offsets;
-    //   the rest of the heli-cam rig lands with the full behaviour TU. The vtable/base head
-    //   occupies +0x00; the cached param word is at +0x10 (stw r11, 0x10(this)) and the param
-    //   pointer is at +0xE0 (stw r31, 0xE0(this)). Reserved byte spans place them exactly.
-    void*             mpVTable;                       // +0x00  behaviour vtable (opaque base head)
-    u8                maReserved04[0x10 - 0x04];      // +0x04 .. +0x0F (rig members not modelled here)
-    s32               mParamWord1;                    // +0x10  cached lpParameters->miParamWord1
-    u8                maReserved14[0xE0 - 0x14];      // +0x14 .. +0xDF (rig members not modelled here)
-    const Parameters* mpParameters;                   // +0xE0  the adopted parameter block
+public:
+    // NEVER CALLED. Pins the member order the console layout fixes.
+    static void _AssertLayout()
+    {
+        typedef BehaviourHeliCam T;
+        static_assert(offsetof(T, mTransform) < offsetof(T, mLooker) &&
+                      offsetof(T, mLooker) < offsetof(T, mPosition) &&
+                      offsetof(T, mPosition) < offsetof(T, mTarget) &&
+                      offsetof(T, mTarget) < offsetof(T, mVelocity) &&
+                      offsetof(T, mVelocity) < offsetof(T, mRandom) &&
+                      offsetof(T, mRandom) < offsetof(T, mpParameters) &&
+                      offsetof(T, mpParameters) < offsetof(T, mCameraShake) &&
+                      offsetof(T, mCameraShake) < offsetof(T, mbCalculatePosition),
+                      "BehaviourHeliCam: members in console order");
+        static_assert(offsetof(T, mLooker) - offsetof(T, mTransform) == 0x40 &&
+                      offsetof(T, mPosition) - offsetof(T, mLooker) == 0x20 &&
+                      offsetof(T, mRandom) - offsetof(T, mPosition) == 0x30 &&
+                      offsetof(T, mpParameters) - offsetof(T, mRandom) == 0x30,
+                      "BehaviourHeliCam: the pointer-free run +0x20..+0xE0 keeps the console spacing");
+    }
 };
 
 // ----------------------------------------------------------------------------
-// BrnDirector::Camera::BehaviourHeliCam::SetParameters @0x821F3AA0
-//   lwz  r11, 0(r4)         ; lpParameters->meType
-//   cmplwi r11, 6           ; == eBehaviourHeliCam
-//   ... assert on mismatch ...
-//   lwz  r11, 4(r4)         ; lpParameters->miParamWord1
-//   stw  r4,  0xE0(r3)      ; mpParameters = lpParameters
-//   stw  r11, 0x10(r3)      ; mParamWord1  = lpParameters->miParamWord1
+// SetParameters. The console also copies the block's +0x04 word into the base's debug-name slot;
+// that store is omitted here: the heli-cam block is one of the host head forks (it does not
+// derive Behaviour::Parameters, so its +0x04 word is not a host name pointer). It feeds only the
+// tweaker and the debug printers.
 // ----------------------------------------------------------------------------
 inline void
 BehaviourHeliCam::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourHeliCam,
                "lpParameters->GetType() == eBehaviourHeliCam");
-    mpParameters = lpParameters;                   // stw r4,  0xE0(this)
-    mParamWord1  = lpParameters->miParamWord1;      // lwz r11,4(lp); stw r11, 0x10(this)
+    mpParameters = lpParameters;
 }
 
 } // namespace Camera

@@ -74,7 +74,7 @@ namespace BrnDirector
         // wants THREE MINUTES. With the placeholder in place, the moment this ladder started
         // running the arbitrator would have dived into Picture Paradise instead of handing off
         // to the junkyard / car-select state.
-        const f32 KF_IDLE_TIME_BEFORE_PICTURE_PARADISE = 180.0f;  // flt_82CDA494
+        // (Defined below as the class's writable ArbStateRoaming::KF_IDLE_TIME_BEFORE_PICTURE_PARADISE.)
 
         // Construct's three establishing-shot candidate weights: ONE register (f31) loaded once
         // from flt_82001DA0 and reused for all three records. Read 2026-08-01.
@@ -86,6 +86,9 @@ namespace BrnDirector
         const f32 KF_IMPACT_SHAKE_FADE_TIME = 1.0f;         // flt_82CDAD88
         const f32 KF_NORMAL_SHAKE_FADE_TIME = 1.0f;         // flt_82CDAD84
     }
+
+    // The showtime idle threshold (see above); the debug page tunes it as "Pic Paradise Delay Secs".
+    f32 ArbStateRoaming::KF_IDLE_TIME_BEFORE_PICTURE_PARADISE = 180.0f;
 
     // ------------------------------------------------------------------------
     // Construct @0x82259C00 -- build the camera, zero the per-state flags/timers, and seed the

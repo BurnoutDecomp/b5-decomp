@@ -133,26 +133,13 @@ public:
     //   passes to Process<float>/Process<bool> and the read/write asm loads/stores. The whole block
     //   is pointer-free (all sub-blocks are f32/bool/enum aggregates), so every offset is host-
     //   pointer-width invariant and pinned by static_assert in BrnBehaviourGyroCamSerialise.cpp.
-    //   The +0x18..+0x2B span between the shake block and the looker block is un-serialised rig
-    //   state (reserved here).
-    //
-    // The three embedded sub-blocks are modelled as size-exact 4-byte-aligned raw storage. Their
-    //   canonical types -- Utils::CameraShake::Parameters (16B), Utils::Looker::Parameters (100B) and
-    //   AttachmentTruck::Parameters (8B) -- live in the heavyweight BehaviourRig.h / BrnLooker.h /
-    //   BrnAttachmentTruck.h; pulling those into this widely-included behaviour header would drag
-    //   BehaviourRig.h's inline Tweaker slice into the behaviour-manager TUs that already include the
-    //   canonical BrnCameraTweaker.h and ODR-clash. The visitor body in BrnBehaviourGyroCamSerialise
-    //   .cpp reinterpret_casts each storage span to its canonical sub-Parameters type BY NAME before
-    //   walking it -- faithful to the console which passes a1+8 / a1+0x2C / a1+0x90 straight to each
-    //   sub-block's Serialise as that typed pointer. u32 storage guarantees the 4-byte alignment
-    //   the casts need.
+    //   The +0x18..+0x2B span between the shake block and the looker block is the position-lag
+    //   block (mLagParams), which the walk does not visit.
     class Parameters
     {
     public:
-        // console visitor: `void Serialise<S>(S&)` -- walks this block's fields into the camera-tunings
-        // serialiser S (DebugMenuSerialiser / TextFile{Read,Write}Serialiser); the per-instance body
-        // is BrnBehaviourGyroCamSerialise.cpp (ONE templated body + one explicit instantiation per S).
-        // Declared so the serialiser's Serialise<Parameters> can drive it by name.
+        // Walk this block's fields into a camera serialiser (DebugMenu / TextFile{Read,Write}).
+        // Body + instantiations: BrnBehaviourGyroCamSerialise.cpp.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
         // ARTIST 821FA010. These defaults are also the starting point for every
@@ -187,12 +174,11 @@ public:
         s32 miParamWord1;  // +0x04  the block's debug-name slot (a 4-byte pointer on the console);
                            //        cached into the behaviour's +0x10 word by SetParameters
 
-        // --- embedded serialised sub-blocks: size-exact 4-byte-aligned raw storage, cast to the
-        //     canonical sub-Parameters type in the .cpp (walked as nested named sections) ---
-        Utils::CameraShake::Parameters mShakeParams;
-        Utils::PositionLag::Parameters mLagParams;
-        Utils::Looker::Parameters mLookerParams;
-        AttachmentTruck::Parameters mAttachmentTruckParams;
+        // --- embedded sub-blocks (all but mLagParams walked as nested named sections) ---
+        Utils::CameraShake::Parameters mShakeParams;           // +0x08  "Shake Params"
+        Utils::PositionLag::Parameters mLagParams;             // +0x18  (not walked)
+        Utils::Looker::Parameters mLookerParams;               // +0x2C  "Looker Params"
+        AttachmentTruck::Parameters mAttachmentTruckParams;    // +0x90  "Attachment truck"
 
         // --- f32 tunables (debug-menu SetStep 0.01) ---
         f32  mfSlowDistance;                 // +0x98  "Slow Distance"
@@ -201,9 +187,8 @@ public:
         f32  mfFastDistance;                 // +0xA4  "Fast Distance"
         f32  mfFastHeight;                   // +0xA8  "Fast Height"
         f32  mfFastPitch;                    // +0xAC  "Fast Pitch"
-        f32  mfField_B0;                     // +0xB0  label unrecovered (the declaration
-                                             //        reference names this slot mfFOV; the
-                                             //        debug-menu label string is not recovered)
+        f32  mfField_B0;                     // +0xB0  "FOV" (the declaration reference names
+                                             //        this slot mfFOV)
         f32  mfBlendFactorBlendFactor;       // +0xB4  "Blend Factor Blend Factor"
         f32  mfMinimumBlendFactor;           // +0xB8  "Minimum Blend Factor"
         f32  mfMaximumBlendFactor;           // +0xBC  "Maximum Blend Factor"

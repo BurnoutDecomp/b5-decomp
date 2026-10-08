@@ -137,6 +137,9 @@ namespace BrnDirector
         const SharedPlaylists& GetSharedPlaylists() const { return mSharedPlaylists; }
 
     private:
+        // The debug page registers per-state tweakables.
+        friend class DebugComponent;
+
         // Embedded BY VALUE, in the DWARF member order (which is the source build's
         // memory order). The pointer table indexes these by EState, NOT by declaration
         // order (e.g. DriveThru is EState 0 but is declared near the end).

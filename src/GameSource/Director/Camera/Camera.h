@@ -62,15 +62,11 @@ namespace BrnDirector
             // Static data members the camera's near-clip selection reads. GetNearClipDistance
             // returns KF_SMALL_NEAR_CLIP_DISTANCE when the camera-state "small near clip"
             // flag (mState_uFlags & 0x10000) is set, else KF_DEFAULT_NEAR_CLIP_DISTANCE.
-            // FLAG (un-recovered rodata): the X360 leaf floats (flt_82CDA55C /
-            // flt_82CDA560 / the far-clip constant) are NOT in any available rodata dump,
-            // so their VALUES are not reconstructed here. They are defined in Camera.cpp
-            // with a flagged placeholder (see the FLAG there) -- the SELECTION logic in
-            // GetNearClipDistance is fully X360-attested; only the two leaf magnitudes are
-            // unknown. Do NOT treat the placeholder magnitudes as ground truth.
-            static const f32 KF_SMALL_NEAR_CLIP_DISTANCE;    // Camera.h:200 (flt_82CDA55C)
-            static const f32 KF_DEFAULT_NEAR_CLIP_DISTANCE;  // Camera.h:201 (flt_82CDA560)
-            static const f32 KF_DEFAULT_FAR_CLIP_DISTANCE;   // Camera.h:202
+            // Writable data, not constants: the director debug page tunes all three ("Clipping").
+            // Values: Camera.cpp.
+            static f32 KF_SMALL_NEAR_CLIP_DISTANCE;
+            static f32 KF_DEFAULT_NEAR_CLIP_DISTANCE;
+            static f32 KF_DEFAULT_FAR_CLIP_DISTANCE;
             // DWARF Camera.h:185 -- the per-frame "which shot is selected" record.
             struct ShotSelectionInfo
             {

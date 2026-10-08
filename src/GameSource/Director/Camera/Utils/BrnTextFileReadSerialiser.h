@@ -3,22 +3,23 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3 (the vec3 leaf overload)
-#include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (the label buffer)
 
-#include <cstdio>   // FILE (the serialiser reads from a text file handle held by the caller)
+#include <cstdio>   // FILE / fscanf (the nested-block template reads its header line inline)
 
 // ============================================================================
 // GameSource/Director/Camera/Utils/BrnTextFileReadSerialiser.h
 //
-// BrnDirector::Camera::TextFileReadSerialiser -- the text-file READ serialiser the camera-rig
-// parameter system drives when loading a vec3 parameter from a human-readable tunings file. It
-// builds a per-component label ("<name>" + a component suffix) into a fixed stack buffer through
-// a CgsDev::StrStream sink, then asks a per-component reader (Serialise<0/1/2>) to parse that
-// labelled value out of the file into the matching float.
+// BrnDirector::Camera::TextFileReadSerialiser -- the text-file READ serialiser the camera
+// tunings bank and the ICE playlists drive when loading a human-readable tunings file
+// ("d:\\camera.txt" / the playlist file). The read counterpart of TextFileWriteSerialiser:
+// every leaf consumes one "<label> : <value>\n" line, ignoring the label (only the value is
+// used; the walk order is what matches lines to fields).
 //
-// HOME for the class slice owned by this TU:
-//   - TextFileReadSerialiser::Serialise(FILE**, const char* name, f32* pVec3) @0x82219AE0
-//     (the dispatcher: builds the x/y/z labels and forwards to the three per-component readers)
+// Layout: one word, the wrapped FILE* (every reader loads it as `*this`).
+//
+// Bodies: Construct / Destruct / every leaf overload / the vec3 overload / the per-component
+// reader template are in BrnTextFileReadSerialiser.cpp; the nested-block template is inline
+// below (the console emits it per T).
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
@@ -26,86 +27,57 @@ namespace BrnDirector
 namespace Camera
 {
 
-// The versioned-block tag (definition in CameraUtils.h). Forward-declared here so the version
-// leaf overload below can take it by reference without pulling the camera-utils header in.
-namespace Utils { struct VersionNumber; }
+// The versioned-block tag and the FOV wrapper (definitions in CameraUtils.h).
+namespace Utils { struct VersionNumber; struct FOV; }
 
-// The text-file read serialiser. The X360 object built on the stack lays out exactly like
-// CgsDev::StrStream (vtable@0, mePrintMode@4, mpcBuffer@8, miBufferSize@0xC, then a 0x40-byte
-// label buffer), so the label-building part of Serialise reuses CgsDev::StrStream by value over
-// a caller-supplied buffer. The leading construction phase the asm renders as
-// BasePriorityQueue::Clear(&this) is the base-subobject reset that precedes installing the
-// StrStream sink vtable; it clears the same head bytes the StrStream ctor then re-initialises.
 class TextFileReadSerialiser
 {
 public:
-    // Read a vec3 parameter named `lpcName` from the text file `*lppFile` into `lpfVec3` (the
-    // three components in order). @0x82219AE0. For each component i in {0,1,2}: reset the label
-    // buffer, stream the name (substituting "<NULLSTRING>" for null), stream the component
-    // suffix, then call the per-component reader Serialise<i>. Returns the result of the last
-    // (z) reader.
-    int Serialise(FILE** lppFile, const char* lpcName, f32* lpfVec3);
+    // Fixed label-buffer length.
+    static const s32 KI_CHARBUFFERLENGTH = 64;
 
-    // Read a single named scalar field back from the wrapped text file: consume one
-    // "<label> : <value>\n" line, parsing the value into lrValue (leaving it unchanged when the
-    // file is closed or the "%f"/"%d" is absent -- the current value is the fscanf default). The
-    // f32 form uses "%s : %f\n"; the s32/u32 forms use "%s : %d\n". These are the READ counterparts
-    // of the write serialiser's scalar overloads; the X360 always inlines them into the owning
-    // Parameters/playlist Serialise<TextFileReadSerialiser> visitor bodies (e.g. the bumper-cam
-    // float walk @0x82202B50, the External-cam version+float reads @0x822312E8, the playlist
-    // movie-count @0x8224CDE8, the SharedPlaylists current-playlist index @0x82258D54), so they
-    // carry no standalone ledger symbol. The name arg is unused on read (only the value line is
-    // consumed). Bodies in the .cpp.
-    void Serialise(const char* lpcName, f32& lrValue);
-    void Serialise(const char* lpcName, s32& lrValue);
-    void Serialise(const char* lpcName, u32& lrValue);
+    // Open `lpcFilename` for reading ("r"). Inlined into BehaviourParameterBank::LoadParameters
+    // and DebugComponent::LoadPlaylists on the console.
+    void Construct(const char* lpcFilename);
 
-    // Read a named bool field back: consume one "<label> : <value>\n" ("%s : %d\n") line and store
-    // (value != 0). Always inlined into the owning Parameters Serialise<TextFileReadSerialiser>
-    // visitor (e.g. the camera-rig "Widescreen Only" field @0x82232D68), so it carries no standalone
-    // ledger symbol; declared here so those visitors drive it by name. Body in the .cpp.
-    void Serialise(const char* lpcName, bool& lrValue);
+    // Close the file if it opened.
+    void Destruct();
 
-    // Read the block's leading version tag ("%s : %d\n") into the u32 inside VersionNumber -- the
-    // read counterpart of the write serialiser's VersionNumber overload. Inlined into each versioned
-    // Parameters visitor (e.g. Looker::Parameters @0x822030E8), where the read-back tag then drives
-    // the code/data version-mismatch assert. Kept a DISTINCT overload from the plain u32 form so the
-    // DebugMenuSerialiser counterpart can no-op it. Body is a separate TU.
-    void Serialise(const char* lpcName, Utils::VersionNumber& lrValue);
+    // ---- leaf readers: one "<label> : <value>\n" line each, read straight into the field ----
+    void Serialise(const char* lpcName, f32& lrValue);                    // "%s : %f\n"
+    void Serialise(const char* lpcName, u32& lrValue);                    // "%s : %d\n"
+    void Serialise(const char* lpcName, s32& lrValue);                    // "%s : %d\n"
+    void Serialise(const char* lpcName, bool& lrValue);                   // "%s : %d\n", stored as != 0
+    void Serialise(const char* lpcName, Utils::VersionNumber& lrValue);   // "%s : %d\n" into the tag
+    void Serialise(const char* lpcName, Utils::FOV& lrValue);             // "%s : %f\n" into the FOV
 
-    // Read a named Vector3 field back (member-visitor form). The X360 compiler inlines this member
-    // straight into the owning Parameters Serialise<TextFileReadSerialiser> visitor as a direct call
-    // to the vec3 dispatcher above -- Serialise(FILE**, const char*, f32*) @0x82219AE0, the SAME
-    // function, modelled there with the file handle passed explicitly. Declared here in member form
-    // so the camera-rig / behaviour Parameters visitors (e.g. Utils::CameraRig::Params @0x82232CCC)
-    // drive the vec3 fields uniformly by name; body is a separate TU.
+    // The vec3 leaf: builds "<name>: x" / ": y" / ": z" labels and hands each component to the
+    // per-component reader below.
     void Serialise(const char* lpcName, Vector3& lrValue);
 
-    // The nested-block reader-visitor template (X360: `FILE* Serialise<T>(const char*, T&)`). One
-    // shared body per instance: consume+discard the field's section-header label line, then recurse
-    // into T's own Serialise (which reads T's fields back). The X360 compiler folded the header-line
-    // read + the field reads together for some leaf blocks (AttachmentTruck/FixedCam); the source is
-    // this de-inlined delegating form. Body + explicit instantiations live in the .cpp; each T
-    // supplies `template<class S> void Serialise(S&)` (attested as a separate X360 function).
-    template<class T> void Serialise(const char* lpcName, T& lrParams);
+    // The per-component reader: one "<label> : <float>\n" line into lane INDEX (0/1/2 == x/y/z)
+    // of lrVector, the other lanes untouched. The console's argument is a
+    // rw::math::vpu::VecFloatRef<INDEX> -- a lane reference into the vector -- which this
+    // tree's rw::math::vpu vocabulary does not model; the reference is spelled as the vector
+    // it refers into plus the lane template argument. Body + the three instances in the .cpp.
+    template<s32 INDEX>
+    void Serialise(const char* lpcName, Vector3& lrVector);
 
-    // The per-component vec-float reader (X360 Serialise<0/1/2> @0x82213BA0/0x82213C30/0x82213CC0).
-    // The source form is `Serialise<INDEX>(const char*, rw::math::vpu::VecFloatRef<INDEX>)` -- a
-    // single-lane accessor over the destination vector; the X360 lowers the VecFloatRef to the raw
-    // vector pointer it wraps (the reader loads `*lppVec`, then VMX load/insert/stores lane INDEX).
-    // Reconstructed at that lowered level (semantic parity, matching the vec3 dispatcher's own f32**
-    // model) so this TU does not have to pull the EATech VecFloatRef vocabulary in alongside the
-    // game's rw:: aggregate types (they are separate reconstructions of the same namespace and would
-    // clash). Reads one "<label> : <float>" line into lane INDEX of `*lppVec`, preserving the others.
-    // Body + explicit instantiations (INDEX 0/1/2 == X/Y/Z) live in the .cpp.
-    template<int INDEX>
-    FILE* Serialise(const char* lpcLabel, f32** lppVec);
+    // The nested-block reader: consume the section-header line the writer emitted, then read
+    // T's own fields. One shared body; the console emits it per T.
+    template<class T>
+    void Serialise(const char* /*lpcName*/, T& lrParams)
+    {
+        if (mpFile != nullptr)
+        {
+            char lacBuffer[KI_CHARBUFFERLENGTH];   // the header token, read and discarded
+            std::fscanf(mpFile, "%s\n", lacBuffer);
+        }
+        lrParams.Serialise(*this);
+    }
 
 private:
-    // The source text file handle the read serialiser wraps. The X360 passes the serialiser BY
-    // POINTER and every reader loads the handle as `*this` (lwz r3,0(r3)); i.e. the object IS a
-    // FILE holder. (The vec3 dispatcher above is reconstructed with the handle passed explicitly.)
-    FILE* mpFile;
+    std::FILE* mpFile;   // +0x00
 };
 
 } // namespace Camera

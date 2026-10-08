@@ -66,9 +66,9 @@ namespace Camera
 // ShadowMap::CalculateShadowMapCameras hands to ComputeBoundingBoxMatrix, so a 0.0 far clip
 // behind the 0.15 near clip produced a degenerate cascade view volume.
 // (The sky wave's 5665 is the world's live far plane, published elsewhere -- not this default.)
-const f32 Camera::KF_SMALL_NEAR_CLIP_DISTANCE   = 0.1f;   // flt_82CDA55C (.id1-recovered)
-const f32 Camera::KF_DEFAULT_NEAR_CLIP_DISTANCE = 0.15f;  // flt_82CDA560 (.id1-recovered)
-const f32 Camera::KF_DEFAULT_FAR_CLIP_DISTANCE  = 10000.0f;  // flt_82CDA564 (.i64-recovered)
+f32 Camera::KF_SMALL_NEAR_CLIP_DISTANCE   = 0.1f;
+f32 Camera::KF_DEFAULT_NEAR_CLIP_DISTANCE = 0.15f;
+f32 Camera::KF_DEFAULT_FAR_CLIP_DISTANCE  = 10000.0f;
 
 // Pointer-size-independent facts the X360 asm pins (these hold on the x64 gate too).
 // CameraEffects has no pointer members, so its 0xBC stride -- the gap the Construct asm
@@ -701,24 +701,9 @@ f32 Camera::GetLodZoomFactor() const
 // manager; the TU compiled STATUS=pass and was deleted. No new code lands in Camera.cpp --
 // the 6 bodies live in the committed inline Prepare, this entry records that they now resolve.)
 //
-// DECLARATION-ONLY + FLAGGED (16 funcs). Each below is STILL un-bodyable WITHOUT fabricating
+// DECLARATION-ONLY + FLAGGED (12 funcs). Each below is STILL un-bodyable WITHOUT fabricating
 // an un-homed owner-class layout, raw-offset-poking a committed/opaque aggregate, or homing an
-// un-recovered free function / un-reconciled manager overload. Per the anti-fabrication rule
-// they are left un-bodied:
-//
-//   -- BehaviourHandle<T>::AttachTweaker glue (mpManager->AttachTweaker(muAllocationKey) on a
-//      KEY, not the declared private AttachTweaker(BehaviourHelperIndex) on a helper word; the
-//      glue also reaches the OPAQUE mTweakerHelper interior). STILL un-bodyable: adding a
-//      key-based manager overload collides with BehaviourHelperIndex's implicit s32 conversion
-//      (ambiguity) on a shared committed header other TUs consume -- deferred until the manager
-//      tweaker overload set is reconciled. NOT a missing type; a shared-header overload hazard:
-//        BehaviourDebugFl @0x82213AD0   BehaviourDebugOr @0x82213998   BehaviourFixedCa @0x82212970
-//
-//   -- BehaviourHandle<T>::SetUpdatesDuringPause glue (mpManager->SetBehaviourUpdatesDuringPause
-//      (muAllocationKey, bool) -- the 2-arg (key,bool) form, not the declared
-//      (BehaviourHelperIndex,bool) overload). Same shared-header overload-ambiguity hazard as
-//      AttachTweaker above; deferred until reconciled:
-//        BehaviourGamepla @0x82212360
+// un-recovered free function. Per the anti-fabrication rule they are left un-bodied:
 //
 //   -- internal Array<T,N> bounds/PushBack machinery over un-homed element types (raw 24*i /
 //      4*i / 29*i strides into containers whose element layout is this glue's own concern):
@@ -744,8 +729,8 @@ f32 Camera::GetLodZoomFactor() const
 //          fields (+287/+288/+104/+137 on `this`, +3383/+3316 on a second un-homed object).
 //
 // Replace each FLAGGED entry with a real body when its owner family is homed: the behaviour
-// subclasses (Behaviours/*), the un-homed free resolvers (BrnDirec / BrnDirector::Cam /
-// HookNameStringWrapper), and the BehaviourManager's 2-arg private tweaker / pause overloads.
+// subclasses (Behaviours/*) and the un-homed free resolvers (BrnDirec / BrnDirector::Cam /
+// HookNameStringWrapper).
 // ============================================================================
 
 } // namespace Camera

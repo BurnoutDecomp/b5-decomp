@@ -193,6 +193,9 @@ private:
     // of the image in the .cpp.
     static f32 sfMinSpeedBelowMaxMPHForNormalCrash;
     static f32 sfMinSpeedBelowMaxMPHForHighSpeedCrash;
+
+    // The director debug page registers both ("Crash Thresholds").
+    friend class DebugComponent;
 };
 
 

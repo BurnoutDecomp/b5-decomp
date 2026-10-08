@@ -61,6 +61,8 @@
 
 namespace BrnDirector
 {
+class DebugComponent;   // the director debug page (friend of BehaviourGameplayExternal)
+
 namespace Camera
 {
 
@@ -738,6 +740,9 @@ private:
     bool mbEnableDebugRender;       // :157 +0xB5E
     bool mbEnableBoostEffects;      // :158 +0xB5F
     bool mbJumping;                 // :160 +0xB60
+
+    // The director debug page registers mbEnableDebugRender / mbEnableBoostEffects.
+    friend class BrnDirector::DebugComponent;
 };
 
 } // namespace Camera

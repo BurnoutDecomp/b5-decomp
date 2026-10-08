@@ -62,6 +62,9 @@ namespace BrnDirector
         // override added here).
 
     private:
+        // The debug page registers mbAllowCloseup ("Allow Showtime closeups").
+        friend class DebugComponent;
+
         // ---- private per-state helper ----------------------------------------------------
         // Drive the slow-mo "close-up" while one is active: ramp the behaviour's close-up
         // blend and pick the time-dilation the camera requests.
