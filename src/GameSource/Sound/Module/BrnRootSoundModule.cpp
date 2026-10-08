@@ -118,8 +118,9 @@ namespace Module
     // The Csis mutex callbacks the RWAC stage installs into mpSystem's lock hooks
     // (+0x40/+0x44/+0x3C). Bodied 2026-08-25, faithful-audio-engine phase A4:
     //   MutexLockFn @0x82682A20:     bl CsisMutexLock ; ++dword_82FFB818
-    //   MutexUnlockFn (ICF-folded on X360; PS3 0x8D0570 installs it @ +0x44):
-    //                                bl CsisMutexUnlock ; --dword_82FFB818
+    //   MutexUnlockFn (X360 Prepare installs it at +0x44; its standalone
+    //   export is absent): DecFIGS 0x822B78 stores the decremented count
+    //   at 0x822B90 BEFORE calling CsisMutexUnlock at 0x822B94.
     //   MutexIsLockedFn @0x82682A68: return dword_82FFB818 > 0
     void RootSoundModule::MutexLockFn()
     {
@@ -128,8 +129,8 @@ namespace Module
     }
     void RootSoundModule::MutexUnlockFn()
     {
-        rw::audio::core::CsisMutexUnlock();
         --msiMutexLockCount;
+        rw::audio::core::CsisMutexUnlock();
     }
     bool RootSoundModule::MutexIsLockedFn()
     {
