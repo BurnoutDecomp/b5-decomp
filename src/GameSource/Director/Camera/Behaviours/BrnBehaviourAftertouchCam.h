@@ -16,9 +16,14 @@
 // GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h
 //
 // BrnDirector::Camera::BehaviourAftertouchCam -- the "aftertouch cam" camera behaviour (the
-// slow-motion crash-aftertouch follow camera the testbed / behaviour-manager installs). It
-// derives the canonical Camera::Behaviour, so the behaviour manager can pool it and dispatch the
-// base's eight-slot vtable.
+// crash-aftertouch follow camera the testbed / behaviour-manager installs from an aftertouchcam
+// shot). It frames the lagged player car from the side away from a target point -- the rival car
+// it is most likely to hit, re-chosen every mfTimeBetweenDecisions -- at a height and distance
+// eased by the car's speed between the shot's slow and fast values, pitched by the shot's pitch
+// and steered toward the car's travel by how much the aftertouch input agrees with it. It derives
+// the canonical Camera::Behaviour, so the behaviour manager can pool it and dispatch the base's
+// eight-slot vtable; it overrides slots 0, 1, 2, 5, 6 and 7 (bodies in
+// BrnBehaviourAftertouchCam.cpp).
 //
 // Layout (declaration order; console offsets, the host widens the base head and the pointer):
 //   +0x020 mCollisionPolicy   +0x270 mCurrentTargetPos   +0x280 mWorldSpaceNormalizedVectorFromCar
@@ -27,11 +32,6 @@
 //   +0x320 mfHeight  +0x324 mfDistance  +0x328 mfBlendFactor  +0x32C mfTimeSinceLastDecision
 //   +0x330 mpParameters       +0x334 mSourceShot         (console size 0x350)
 //
-// FLAG partial: SetupTweaker and GetName are this class's; Construct, Prepare, Update and
-//   GetCollisionPolicy (with the private AssignIfBetterRival / CalculateDesiredTargetPos) are not
-//   reconstructed yet and keep the base defaults (no collision policy, the camera is not driven).
-//   The collision-policy override returns &mCollisionPolicy, which only Construct seeds, so the
-//   two land together.
 // Parameters::Construct: the block's authored defaults, transcribed in full -- see it below.
 // ----------------------------------------------------------------------------
 
@@ -54,20 +54,17 @@ class BehaviourAftertouchCam : public Behaviour
 {
 public:
 
-    // The aftertouch-cam parameter block: a type tag in its leading word plus behaviour-specific
-    // data. GetType returns the tag SetParameters asserts on.
+    // The aftertouch-cam parameter block: the Behaviour::Parameters head (type tag + debug name)
+    // plus behaviour-specific data. GetType returns the tag SetParameters asserts on.
     //
-    // Layout pinned from the Parameters::Serialise<S> field-walk asm (the three visitors at
-    // 0x8224C530 / 0x8224E458 / 0x822321B0): each Process<float>/fscanf/fprintf displacement off
-    // the block pointer names an f32 slot; the leading `CameraShake::Parameters::Serialise(a1+8, a2)`
-    // recursion names an embedded CameraShake::Parameters at +0x08 (the "Shake Params" sub-section).
-    // meType(+0x00)/miParamWord1(+0x04) are the pre-existing behaviour header words SetParameters
-    // reads. All three visitors walk the SAME field sequence in the SAME order, so the offsets below
-    // are authoritative. The block's WIDTH and the slots the visitors skip come from the second
-    // witness, Parameters::Construct below: the parameter bank calls it on this block and then
-    // constructs the next block 108 bytes further on, and Construct itself seeds every word in
-    // the +0x1C..+0x28 and +0x58..+0x68 runs that no visitor walks.
-    class Parameters
+    // Member names and order are the declaration reference's; the console offsets in the
+    // comments come from the three Parameters::Serialise<S> field walks (each displacement off
+    // the block pointer names an f32 slot; the leading shake recursion sits at +0x08) and from
+    // Parameters::Construct, which seeds every word from +0x00 to +0x68 except the lag block's
+    // version word. The console block is 108 bytes; on the host the head's debug-name pointer is
+    // 8 bytes wide, so the derived members sit 8 bytes later and keep the console spacing among
+    // themselves (pinned in BrnBehaviourAftertouchCamParameters.cpp).
+    class Parameters : public Behaviour::Parameters
     {
     public:
         // Walk this block's fields into a camera serialiser (DebugMenu / TextFile{Read,Write}).
@@ -76,75 +73,59 @@ public:
 
         EBehaviourTypeAftertouchCam GetType() const
         {
-            return static_cast<EBehaviourTypeAftertouchCam>(meType);
+            return static_cast<EBehaviourTypeAftertouchCam>(mType);
         }
 
-        s32 meType;        // +0x00  the behaviour type tag (eBehaviour*)
-        s32 miParamWord1;  // +0x04  first behaviour-specific word
+        // "Shake Params", walked first by every visitor.
+        Utils::CameraShake::Parameters mShakeParams;   // console +0x08 .. +0x17
+        // Not walked; Construct seeds its four response/smoothing words.
+        Utils::PositionLag::Parameters mLagParams;     // console +0x18 .. +0x2B
 
-        // +0x08  embedded shake post-process tunings; walked first as the "Shake Params"
-        //   sub-section (CameraShake::Parameters::Serialise(a1+8, a2) in every visitor).
-        Utils::CameraShake::Parameters mShakeParams;   // +0x08 .. +0x18 (four f32)
+        f32 mfMinDistance;                              // console +0x2C  "Slow Distance"
+        f32 mfMinHeight;                                // console +0x30  "Slow Height"
+        f32 mfMaxDistance;                              // console +0x34  "Fast Distance"
+        f32 mfMaxHeight;                                // console +0x38  "Fast Height"
+        f32 mfPitch;                                    // console +0x3C  "Pitch"
+        f32 mfFOV;                                      // console +0x40  "FOV" (walked before "Pitch")
+        f32 mfBlendFactorBlendFactor;                   // console +0x44  "Blend Factor Blend Factor"
+        f32 mfMinimumBlendFactor;                       // console +0x48  "Minimum Blend Factor"
+        f32 mfMaximumBlendFactor;                       // console +0x4C  "Maximum Blend Factor"
+        f32 mfHeightDistanceBlendFactor;                // console +0x50  "Height Distance Blend Factor"
+        f32 mfHeightDistanceVelocityRange;              // console +0x54  "Height Distance Velocity Range"
 
-        // +0x18 .. +0x2C  aftertouch-cam members that none of the three Serialise<S> instances
-        //   walk. Construct below DOES seed four of the five words, so they are named slots
-        //   rather than one reserved span; +0x18 is the only word nothing in this class
-        //   writes or reads. FLAG: the four names are ours (no label survives for them);
-        //   their offsets and their seeded values are attested.
-        u8  maReserved18[4];                // +0x18  (never written, never walked)
-        f32 mfField1C;                      // +0x1C
-        f32 mfField20;                      // +0x20
-        f32 mfField24;                      // +0x24
-        f32 mfField28;                      // +0x28
-
-        f32 mfSlowDistance;                 // +0x2C  "Slow Distance"
-        f32 mfSlowHeight;                   // +0x30  "Slow Height"
-        f32 mfFastDistance;                 // +0x34  "Fast Distance"
-        f32 mfFastHeight;                   // +0x38  "Fast Height"
-        f32 mfPitch;                        // +0x3C  "Pitch"
-        f32 mfFOV;                          // +0x40  "FOV" (walked before "Pitch")
-        f32 mfBlendFactorBlendFactor;       // +0x44  "Blend Factor Blend Factor"
-        f32 mfMinimumBlendFactor;           // +0x48  "Minimum Blend Factor"
-        f32 mfMaximumBlendFactor;           // +0x4C  "Maximum Blend Factor"
-        f32 mfHeightDistanceBlendFactor;    // +0x50  "Height Distance Blend Factor"
-        f32 mfHeightDistanceVelocityRange;  // +0x54  "Height Distance Velocity Range"
-
-        // +0x58 .. +0x6C  the block's tail. Like the +0x1C..+0x28 run above, none of the
-        //   three Serialise<S> instances walk these, but Construct seeds every one of them,
-        //   so they are named slots at their attested offsets. The block is 108 bytes: the
-        //   parameter bank places the next block (an aftertouch-crash one) immediately after
-        //   it, which is what fixes the size. FLAG: the five names are ours.
-        f32 mfField58;                      // +0x58
-        f32 mfField5C;                      // +0x5C
-        f32 mfField60;                      // +0x60
-        f32 mfField64;                      // +0x64
-        f32 mfField68;                      // +0x68
+        // The rival-selection tail: not walked, every word seeded by Construct.
+        f32 mfTimeToRivalImpactUncertaintyPadding;      // console +0x58
+        f32 mfMaximumDistanceForConsiderationOfRivals;  // console +0x5C
+        f32 mfTimingSimilarityThreshold;                // console +0x60
+        f32 mfDistanceSimilarityThreshold;              // console +0x64
+        f32 mfTimeBetweenDecisions;                     // console +0x68
 
         // ------------------------------------------------------------------
         // Parameters::Construct -- the block's authored defaults, store for store.
         //
         // The parameter bank's own Construct calls this on its FIRST named block; it is a
-        // straight-line run of constant stores with no control flow, so the transcription is
-        // complete rather than a slice. The four shake words are the shared
-        // CameraShake::Parameters seed, spelled as the call the compiler inlined there.
+        // straight-line run of constant stores with no control flow. The head is the
+        // Behaviour::Parameters seed plus the tag; the four shake words are the shared
+        // CameraShake::Parameters seed, spelled as the call the compiler inlined there; the lag
+        // block gets its four response/smoothing words and its version word is left alone.
         // Field order below follows the block's offsets, not the emitted store order.
         // ------------------------------------------------------------------
         void Construct()
         {
-            meType       = eBehaviourAftertouchCam;   // the tag SetParameters asserts on
-            miParamWord1 = 0;
+            Behaviour::Parameters::Construct();       // stw 0, +0x04
+            mType = eBehaviourAftertouchCam;          // the tag SetParameters asserts on
 
-            mShakeParams.Construct();                 // +0x08 .. +0x14
+            mShakeParams.Construct();                 // console +0x08 .. +0x14
 
-            mfField1C = 1.0f;
-            mfField20 = 1.0f;
-            mfField24 = 1.0f;
-            mfField28 = 0.5f;
+            mLagParams.mfXResponse = 1.0f;            // console +0x1C
+            mLagParams.mfYResponse = 1.0f;            // console +0x20
+            mLagParams.mfZResponse = 1.0f;            // console +0x24
+            mLagParams.mfSmoothing = 0.5f;            // console +0x28
 
-            mfSlowDistance                = 4.0f;
-            mfSlowHeight                  = 1.75f;
-            mfFastDistance                = 8.0f;
-            mfFastHeight                  = 2.0f;
+            mfMinDistance                 = 4.0f;
+            mfMinHeight                   = 1.75f;
+            mfMaxDistance                 = 8.0f;
+            mfMaxHeight                   = 2.0f;
             mfPitch                       = 15.0f;
             mfFOV                         = 90.0f;
             mfBlendFactorBlendFactor      = 0.01f;
@@ -153,15 +134,28 @@ public:
             mfHeightDistanceBlendFactor   = 0.1f;
             mfHeightDistanceVelocityRange = 30.0f;
 
-            mfField58 = 1.0f;
-            mfField5C = 91.666664f;
-            mfField60 = 0.5f;
-            mfField64 = 10.0f;
-            mfField68 = 1.0f;
+            mfTimeToRivalImpactUncertaintyPadding     = 1.0f;
+            mfMaximumDistanceForConsiderationOfRivals = 91.666664f;
+            mfTimingSimilarityThreshold               = 0.5f;
+            mfDistanceSimilarityThreshold             = 10.0f;
+            mfTimeBetweenDecisions                    = 1.0f;
         }
     };
 
-    // ---- the Behaviour virtual interface (see the FLAG in the banner) ----------------------
+    // ---- the Behaviour virtual interface -----------------------------------------------------
+    // Seed a freshly pooled instance (policy, position lag, random stream, shake).    (slot 0)
+    void Construct() override;
+
+    // Drop the prepared latch (Update re-seeds on its first frame) and start from the block's
+    // fast height / distance and minimum blend factor. Always true.                    (slot 1)
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;
+
+    // Frame the lagged player car away from the chosen target and publish the camera. (slot 2)
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo) override;
+
+    // The vehicle-attached policy Construct seeded.                                    (slot 5)
+    CollisionPolicy* GetCollisionPolicy() override;
+
     // Reset the tweaker it is handed; the aftertouch cam maps nothing onto it.        (slot 6)
     void SetupTweaker(Utils::Tweaker& lrTweaker) override;
 
@@ -169,7 +163,8 @@ public:
     const char* GetName() const override;
 
     // Adopt an aftertouch-cam parameter block: assert it carries the aftertouch-cam type tag,
-    // then store the pointer. Declared over the derived Parameters, so it hides the base's pair.
+    // store the pointer and take the block's debug name. Declared over the derived Parameters, so
+    // it hides the base's pair.
     void SetParameters(const Parameters* lpParameters);
 
     // Adopt the authored shot this camera was created from. The behaviour factory builds a
@@ -181,6 +176,30 @@ public:
     }
 
 private:
+    // The best rival found so far by one CalculateDesiredTargetPos sweep (console layout:
+    // mbWillPass +0x00, mfTimeToPassing +0x04, mbWillPassIfHeadingAdjusted +0x08,
+    // mfTimeToPassingIfHeadingAdjusted +0x0C, mfDotWithCurrentHeading +0x10, mfDistance +0x14,
+    // mPosition +0x20, mbIsValid +0x30). Only mbIsValid is initialised before the sweep.
+    struct AftertouchRival
+    {
+        bool    mbWillPass;                         // closing on the player within the crash time
+        f32     mfTimeToPassing;
+        bool    mbWillPassIfHeadingAdjusted;        // would close if the player's speed carried it
+        f32     mfTimeToPassingIfHeadingAdjusted;
+        f32     mfDotWithCurrentHeading;            // rival-to-player against the camera direction
+        f32     mfDistance;                         // rival to player
+        Vector3 mPosition;
+        bool    mbIsValid;
+    };
+
+    // Weigh rival luRivalToConsiderForBest against the best so far and take it when it is better.
+    void AssignIfBetterRival(const BehaviourSharedInfo& lrSharedInfo,
+                             AftertouchRival& lCurrentBestRivalInOut, u32 luRivalToConsiderForBest);
+
+    // The best rival's position, or lCurrentTargetPos when no race car qualifies; choosing a
+    // rival restarts the decision clock.
+    Vector3 CalculateDesiredTargetPos(const BehaviourSharedInfo& lrSharedInfo, Vector3 lCurrentTargetPos);
+
     CollisionPolicyAttachedToVehicle mCollisionPolicy;
     Vector3                          mCurrentTargetPos;
     Vector3                          mWorldSpaceNormalizedVectorFromCar;
@@ -219,10 +238,8 @@ public:
 };
 
 // ----------------------------------------------------------------------------
-// SetParameters. The console also copies the block's +0x04 word into the base's debug-name slot;
-// that store is omitted here: the aftertouch-cam block is one of the host head forks (it does
-// not derive Behaviour::Parameters, so its +0x04 word is not a host name pointer). It feeds only
-// the tweaker and the debug printers.
+// SetParameters: the type assert, the pointer, then the block's debug name into the base's
+// debug-parameters name (it feeds the tweaker and the debug printers).
 // ----------------------------------------------------------------------------
 inline void
 BehaviourAftertouchCam::SetParameters(const Parameters* lpParameters)
@@ -230,6 +247,7 @@ BehaviourAftertouchCam::SetParameters(const Parameters* lpParameters)
     CGS_ASSERT(lpParameters->GetType() == eBehaviourAftertouchCam,
                "lpParameters->GetType() == eBehaviourAftertouchCam");
     mpParameters = lpParameters;
+    SetDebugParametersName(lpParameters->GetDebugName());
 }
 
 } // namespace Camera

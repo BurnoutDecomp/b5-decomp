@@ -10,8 +10,8 @@ namespace Camera
 
 void BehaviourHeliCam::Parameters::Construct()
 {
-    miParamWord1 = 0;
-    meType       = eBehaviourHeliCam;
+    Behaviour::Parameters::Construct();
+    mType = eBehaviourHeliCam;
 
     mShakeParams.Construct();
     mShakeParams.mfZShakeMagnitudeDegs   = 0.0f;

@@ -67,9 +67,7 @@ void NamedParameters::Construct()
     mRigDropFrontQCuFwd.Construct();
     mRigDropBootViewFwd.Construct();
 
-    // The failsafe block gets only its head: the type tag and a cleared +0x04 word.
-    mFailsafe.miParamWord1 = 0;
-    mFailsafe.meType       = Camera::eBehaviourFailsafe;
+    mFailsafe.Construct();
 
     mPassengerDefault.Construct();
 
@@ -304,8 +302,6 @@ namespace Camera
 // BehaviourParameterBank::Serialise<T> -- stamp the current file version, hand the version word
 // to the serialiser (a read replaces it with the file's), then walk the block list that version
 // carries. A serialiser whose version leaf is a no-op (testbed, naming) always walks version 5.
-// FLAG host head fork: the seven pointer-free block types are passed through the +0x00 type tag
-// they share with Behaviour::Parameters.
 // ----------------------------------------------------------------------------
 template<class T>
 void BehaviourParameterBank::Serialise(T& lrSerialiser)
@@ -317,14 +313,14 @@ void BehaviourParameterBank::Serialise(T& lrSerialiser)
     switch (muVersion.muVersion)
     {
     case 1:
-        SerialiseBehaviourParameters("Aftertouch", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mAftertouchCamDefault), lrSerialiser);
-        SerialiseBehaviourParameters("Aftertouch Crash", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mAftertouchCrashParams), lrSerialiser);
-        SerialiseBehaviourParameters("HeliCam Default", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mHeliCamDefaultParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Default", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDefaultParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Always Low", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamAlwaysLowParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Takedown", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamTakedownParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam High", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamHighParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Helicam", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamHelicamParams), lrSerialiser);
+        SerialiseBehaviourParameters("Aftertouch", mNamedParameters.mAftertouchCamDefault, lrSerialiser);
+        SerialiseBehaviourParameters("Aftertouch Crash", mNamedParameters.mAftertouchCrashParams, lrSerialiser);
+        SerialiseBehaviourParameters("HeliCam Default", mNamedParameters.mHeliCamDefaultParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Default", mNamedParameters.mGyroCamDefaultParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Always Low", mNamedParameters.mGyroCamAlwaysLowParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Takedown", mNamedParameters.mGyroCamTakedownParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam High", mNamedParameters.mGyroCamHighParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Helicam", mNamedParameters.mGyroCamHelicamParams, lrSerialiser);
         SerialiseBehaviourParameters("Bystander Jump", mNamedParameters.mBystanderJumpLeftParameters, lrSerialiser);
         SerialiseBehaviourParameters("Bystander Close", mNamedParameters.mBystanderCloseParameters, lrSerialiser);
         SerialiseBehaviourParameters("Bystander Medium", mNamedParameters.mBystanderMediumParameters, lrSerialiser);
@@ -341,24 +337,24 @@ void BehaviourParameterBank::Serialise(T& lrSerialiser)
         SerialiseBehaviourParameters("Rig Boot Fwd", mNamedParameters.mRigBootFwd, lrSerialiser);
         SerialiseBehaviourParameters("Rig Front Q Cu Fwd 2", mNamedParameters.mRigFrontQCuFwd2, lrSerialiser);
         SerialiseBehaviourParameters("Rig Underbelly", mNamedParameters.mRigUnderbelly, lrSerialiser);
-        SerialiseBehaviourParameters("Failsafe", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mFailsafe), lrSerialiser);
+        SerialiseBehaviourParameters("Failsafe", mNamedParameters.mFailsafe, lrSerialiser);
         SerialiseBehaviourParameters("Passenger", mNamedParameters.mPassengerDefault, lrSerialiser);
-        SerialiseBehaviourParameters("Loose Attachment Takedown1", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mLooseAttachmentTakedown1), lrSerialiser);
-        SerialiseBehaviourParameters("Loose Attachment Takedown2", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mLooseAttachmentTakedown2), lrSerialiser);
-        SerialiseBehaviourParameters("Loose Attachment Takedown3", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mLooseAttachmentTakedown3), lrSerialiser);
+        SerialiseBehaviourParameters("Loose Attachment Takedown1", mNamedParameters.mLooseAttachmentTakedown1, lrSerialiser);
+        SerialiseBehaviourParameters("Loose Attachment Takedown2", mNamedParameters.mLooseAttachmentTakedown2, lrSerialiser);
+        SerialiseBehaviourParameters("Loose Attachment Takedown3", mNamedParameters.mLooseAttachmentTakedown3, lrSerialiser);
         break;
     case 2:
-        SerialiseBehaviourParameters("Aftertouch", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mAftertouchCamDefault), lrSerialiser);
-        SerialiseBehaviourParameters("Aftertouch Crash", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mAftertouchCrashParams), lrSerialiser);
-        SerialiseBehaviourParameters("HeliCam Default", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mHeliCamDefaultParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Default", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDefaultParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Default Truck Left", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDefaultSideTruckingLeftParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Default Truck Right", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDefaultSideTruckingRightParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Follow", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamFollow), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Always Low", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamAlwaysLowParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Takedown", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamTakedownParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam High", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamHighParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Helicam", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamHelicamParams), lrSerialiser);
+        SerialiseBehaviourParameters("Aftertouch", mNamedParameters.mAftertouchCamDefault, lrSerialiser);
+        SerialiseBehaviourParameters("Aftertouch Crash", mNamedParameters.mAftertouchCrashParams, lrSerialiser);
+        SerialiseBehaviourParameters("HeliCam Default", mNamedParameters.mHeliCamDefaultParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Default", mNamedParameters.mGyroCamDefaultParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Default Truck Left", mNamedParameters.mGyroCamDefaultSideTruckingLeftParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Default Truck Right", mNamedParameters.mGyroCamDefaultSideTruckingRightParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Follow", mNamedParameters.mGyroCamFollow, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Always Low", mNamedParameters.mGyroCamAlwaysLowParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Takedown", mNamedParameters.mGyroCamTakedownParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam High", mNamedParameters.mGyroCamHighParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Helicam", mNamedParameters.mGyroCamHelicamParams, lrSerialiser);
         SerialiseBehaviourParameters("Bystander Jump Left", mNamedParameters.mBystanderJumpLeftParameters, lrSerialiser);
         SerialiseBehaviourParameters("Bystander Jump2", mNamedParameters.mBystanderJumpParameters2, lrSerialiser);
         SerialiseBehaviourParameters("Bystander Jump From Behind", mNamedParameters.mBystanderJumpFromBehindParameters, lrSerialiser);
@@ -380,28 +376,28 @@ void BehaviourParameterBank::Serialise(T& lrSerialiser)
         SerialiseBehaviourParameters("Rig Drop Underbelly", mNamedParameters.mRigDropUnderbelly, lrSerialiser);
         SerialiseBehaviourParameters("Rig Drop Front Q Cu Fwd", mNamedParameters.mRigDropFrontQCuFwd, lrSerialiser);
         SerialiseBehaviourParameters("Rig Drop Boot Q Cu Fwd", mNamedParameters.mRigDropBootViewFwd, lrSerialiser);
-        SerialiseBehaviourParameters("Failsafe", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mFailsafe), lrSerialiser);
+        SerialiseBehaviourParameters("Failsafe", mNamedParameters.mFailsafe, lrSerialiser);
         SerialiseBehaviourParameters("Passenger", mNamedParameters.mPassengerDefault, lrSerialiser);
-        SerialiseBehaviourParameters("Loose Attachment Takedown1", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mLooseAttachmentTakedown1), lrSerialiser);
-        SerialiseBehaviourParameters("Loose Attachment Takedown2", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mLooseAttachmentTakedown2), lrSerialiser);
-        SerialiseBehaviourParameters("Loose Attachment Takedown3", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mLooseAttachmentTakedown3), lrSerialiser);
+        SerialiseBehaviourParameters("Loose Attachment Takedown1", mNamedParameters.mLooseAttachmentTakedown1, lrSerialiser);
+        SerialiseBehaviourParameters("Loose Attachment Takedown2", mNamedParameters.mLooseAttachmentTakedown2, lrSerialiser);
+        SerialiseBehaviourParameters("Loose Attachment Takedown3", mNamedParameters.mLooseAttachmentTakedown3, lrSerialiser);
         SerialiseBehaviourParameters("Fixed Cam Default", mNamedParameters.mFixedDefault, lrSerialiser);
         break;
     case 3:
-        SerialiseBehaviourParameters("Aftertouch", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mAftertouchCamDefault), lrSerialiser);
-        SerialiseBehaviourParameters("Aftertouch Crash", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mAftertouchCrashParams), lrSerialiser);
-        SerialiseBehaviourParameters("HeliCam Default", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mHeliCamDefaultParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Default", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDefaultParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Truck Front", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamTruckFront), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Left", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamLeft), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Right", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamRight), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Truck Left", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDefaultSideTruckingLeftParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Truck Right", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDefaultSideTruckingRightParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Follow", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamFollow), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Always Low", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamAlwaysLowParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Takedown", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamTakedownParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam High", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamHighParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Helicam", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamHelicamParams), lrSerialiser);
+        SerialiseBehaviourParameters("Aftertouch", mNamedParameters.mAftertouchCamDefault, lrSerialiser);
+        SerialiseBehaviourParameters("Aftertouch Crash", mNamedParameters.mAftertouchCrashParams, lrSerialiser);
+        SerialiseBehaviourParameters("HeliCam Default", mNamedParameters.mHeliCamDefaultParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Default", mNamedParameters.mGyroCamDefaultParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Truck Front", mNamedParameters.mGyroCamTruckFront, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Left", mNamedParameters.mGyroCamLeft, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Right", mNamedParameters.mGyroCamRight, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Truck Left", mNamedParameters.mGyroCamDefaultSideTruckingLeftParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Truck Right", mNamedParameters.mGyroCamDefaultSideTruckingRightParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Follow", mNamedParameters.mGyroCamFollow, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Always Low", mNamedParameters.mGyroCamAlwaysLowParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Takedown", mNamedParameters.mGyroCamTakedownParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam High", mNamedParameters.mGyroCamHighParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Helicam", mNamedParameters.mGyroCamHelicamParams, lrSerialiser);
         SerialiseBehaviourParameters("Bystander Jump Left", mNamedParameters.mBystanderJumpLeftParameters, lrSerialiser);
         SerialiseBehaviourParameters("Bystander Jump2", mNamedParameters.mBystanderJumpParameters2, lrSerialiser);
         SerialiseBehaviourParameters("Bystander Jump From Behind", mNamedParameters.mBystanderJumpFromBehindParameters, lrSerialiser);
@@ -423,29 +419,29 @@ void BehaviourParameterBank::Serialise(T& lrSerialiser)
         SerialiseBehaviourParameters("Rig Drop Underbelly", mNamedParameters.mRigDropUnderbelly, lrSerialiser);
         SerialiseBehaviourParameters("Rig Drop Front Q Cu Fwd", mNamedParameters.mRigDropFrontQCuFwd, lrSerialiser);
         SerialiseBehaviourParameters("Rig Drop Boot Q Cu Fwd", mNamedParameters.mRigDropBootViewFwd, lrSerialiser);
-        SerialiseBehaviourParameters("Failsafe", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mFailsafe), lrSerialiser);
+        SerialiseBehaviourParameters("Failsafe", mNamedParameters.mFailsafe, lrSerialiser);
         SerialiseBehaviourParameters("Passenger", mNamedParameters.mPassengerDefault, lrSerialiser);
-        SerialiseBehaviourParameters("Loose Attachment Takedown1", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mLooseAttachmentTakedown1), lrSerialiser);
-        SerialiseBehaviourParameters("Loose Attachment Takedown2", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mLooseAttachmentTakedown2), lrSerialiser);
-        SerialiseBehaviourParameters("Loose Attachment Takedown3", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mLooseAttachmentTakedown3), lrSerialiser);
+        SerialiseBehaviourParameters("Loose Attachment Takedown1", mNamedParameters.mLooseAttachmentTakedown1, lrSerialiser);
+        SerialiseBehaviourParameters("Loose Attachment Takedown2", mNamedParameters.mLooseAttachmentTakedown2, lrSerialiser);
+        SerialiseBehaviourParameters("Loose Attachment Takedown3", mNamedParameters.mLooseAttachmentTakedown3, lrSerialiser);
         SerialiseBehaviourParameters("Fixed Cam Default", mNamedParameters.mFixedDefault, lrSerialiser);
         break;
     case 4:
-        SerialiseBehaviourParameters("Aftertouch", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mAftertouchCamDefault), lrSerialiser);
-        SerialiseBehaviourParameters("Aftertouch Crash", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mAftertouchCrashParams), lrSerialiser);
-        SerialiseBehaviourParameters("Crash Debug", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mCrashDebugParams), lrSerialiser);
-        SerialiseBehaviourParameters("HeliCam Default", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mHeliCamDefaultParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Default", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDefaultParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Truck Front", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamTruckFront), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Left", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamLeft), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Right", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamRight), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Truck Left", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDefaultSideTruckingLeftParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Truck Right", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDefaultSideTruckingRightParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Follow", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamFollow), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Always Low", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamAlwaysLowParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Takedown", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamTakedownParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam High", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamHighParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Helicam", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamHelicamParams), lrSerialiser);
+        SerialiseBehaviourParameters("Aftertouch", mNamedParameters.mAftertouchCamDefault, lrSerialiser);
+        SerialiseBehaviourParameters("Aftertouch Crash", mNamedParameters.mAftertouchCrashParams, lrSerialiser);
+        SerialiseBehaviourParameters("Crash Debug", mNamedParameters.mCrashDebugParams, lrSerialiser);
+        SerialiseBehaviourParameters("HeliCam Default", mNamedParameters.mHeliCamDefaultParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Default", mNamedParameters.mGyroCamDefaultParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Truck Front", mNamedParameters.mGyroCamTruckFront, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Left", mNamedParameters.mGyroCamLeft, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Right", mNamedParameters.mGyroCamRight, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Truck Left", mNamedParameters.mGyroCamDefaultSideTruckingLeftParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Truck Right", mNamedParameters.mGyroCamDefaultSideTruckingRightParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Follow", mNamedParameters.mGyroCamFollow, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Always Low", mNamedParameters.mGyroCamAlwaysLowParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Takedown", mNamedParameters.mGyroCamTakedownParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam High", mNamedParameters.mGyroCamHighParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Helicam", mNamedParameters.mGyroCamHelicamParams, lrSerialiser);
         SerialiseBehaviourParameters("Bystander Jump Left", mNamedParameters.mBystanderJumpLeftParameters, lrSerialiser);
         SerialiseBehaviourParameters("Bystander Jump2", mNamedParameters.mBystanderJumpParameters2, lrSerialiser);
         SerialiseBehaviourParameters("Bystander Jump From Behind", mNamedParameters.mBystanderJumpFromBehindParameters, lrSerialiser);
@@ -467,40 +463,40 @@ void BehaviourParameterBank::Serialise(T& lrSerialiser)
         SerialiseBehaviourParameters("Rig Drop Underbelly", mNamedParameters.mRigDropUnderbelly, lrSerialiser);
         SerialiseBehaviourParameters("Rig Drop Front Q Cu Fwd", mNamedParameters.mRigDropFrontQCuFwd, lrSerialiser);
         SerialiseBehaviourParameters("Rig Drop Boot Q Cu Fwd", mNamedParameters.mRigDropBootViewFwd, lrSerialiser);
-        SerialiseBehaviourParameters("Failsafe", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mFailsafe), lrSerialiser);
+        SerialiseBehaviourParameters("Failsafe", mNamedParameters.mFailsafe, lrSerialiser);
         SerialiseBehaviourParameters("Passenger", mNamedParameters.mPassengerDefault, lrSerialiser);
-        SerialiseBehaviourParameters("Loose Attachment Takedown1", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mLooseAttachmentTakedown1), lrSerialiser);
-        SerialiseBehaviourParameters("Loose Attachment Takedown2", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mLooseAttachmentTakedown2), lrSerialiser);
-        SerialiseBehaviourParameters("Loose Attachment Takedown3", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mLooseAttachmentTakedown3), lrSerialiser);
+        SerialiseBehaviourParameters("Loose Attachment Takedown1", mNamedParameters.mLooseAttachmentTakedown1, lrSerialiser);
+        SerialiseBehaviourParameters("Loose Attachment Takedown2", mNamedParameters.mLooseAttachmentTakedown2, lrSerialiser);
+        SerialiseBehaviourParameters("Loose Attachment Takedown3", mNamedParameters.mLooseAttachmentTakedown3, lrSerialiser);
         SerialiseBehaviourParameters("Fixed Cam Default", mNamedParameters.mFixedDefault, lrSerialiser);
         break;
     case 5:
-        SerialiseBehaviourParameters("Aftertouch", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mAftertouchCamDefault), lrSerialiser);
-        SerialiseBehaviourParameters("Aftertouch Crash", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mAftertouchCrashParams), lrSerialiser);
-        SerialiseBehaviourParameters("Crash Debug", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mCrashDebugParams), lrSerialiser);
-        SerialiseBehaviourParameters("HeliCam Default", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mHeliCamDefaultParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Default", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDefaultParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Truck Front", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamTruckFront), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Truck Left", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDefaultSideTruckingLeftParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Truck Right", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDefaultSideTruckingRightParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Follow", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamFollow), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Always Low", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamAlwaysLowParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Takedown", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamTakedownParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Takedown Zoomed Out", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamTakedownZoomedOutParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam High", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamHighParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam Helicam", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamHelicamParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam DriveBy L", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDriveByLParams), lrSerialiser);
-        SerialiseBehaviourParameters("GyroCam DriveBy R", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mGyroCamDriveByRParams), lrSerialiser);
+        SerialiseBehaviourParameters("Aftertouch", mNamedParameters.mAftertouchCamDefault, lrSerialiser);
+        SerialiseBehaviourParameters("Aftertouch Crash", mNamedParameters.mAftertouchCrashParams, lrSerialiser);
+        SerialiseBehaviourParameters("Crash Debug", mNamedParameters.mCrashDebugParams, lrSerialiser);
+        SerialiseBehaviourParameters("HeliCam Default", mNamedParameters.mHeliCamDefaultParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Default", mNamedParameters.mGyroCamDefaultParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Truck Front", mNamedParameters.mGyroCamTruckFront, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Truck Left", mNamedParameters.mGyroCamDefaultSideTruckingLeftParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Truck Right", mNamedParameters.mGyroCamDefaultSideTruckingRightParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Follow", mNamedParameters.mGyroCamFollow, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Always Low", mNamedParameters.mGyroCamAlwaysLowParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Takedown", mNamedParameters.mGyroCamTakedownParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Takedown Zoomed Out", mNamedParameters.mGyroCamTakedownZoomedOutParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam High", mNamedParameters.mGyroCamHighParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam Helicam", mNamedParameters.mGyroCamHelicamParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam DriveBy L", mNamedParameters.mGyroCamDriveByLParams, lrSerialiser);
+        SerialiseBehaviourParameters("GyroCam DriveBy R", mNamedParameters.mGyroCamDriveByRParams, lrSerialiser);
         SerialiseBehaviourParameters("Bystander Close", mNamedParameters.mBystanderCloseParameters, lrSerialiser);
         SerialiseBehaviourParameters("Bystander Far", mNamedParameters.mBystanderFarParameters, lrSerialiser);
         SerialiseBehaviourParameters("Rig Bonnet Low Right", mNamedParameters.mRigBonnetLowRight, lrSerialiser);
         SerialiseBehaviourParameters("Rig Rear Q Fwd", mNamedParameters.mRigRearQFwd, lrSerialiser);
         SerialiseBehaviourParameters("Rig Front Q Cu Fwd", mNamedParameters.mRigFrontQCuFwd, lrSerialiser);
         SerialiseBehaviourParameters("Rig Front Q Bwd", mNamedParameters.mRigFrontQBwd, lrSerialiser);
-        SerialiseBehaviourParameters("Failsafe", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.mFailsafe), lrSerialiser);
+        SerialiseBehaviourParameters("Failsafe", mNamedParameters.mFailsafe, lrSerialiser);
         SerialiseBehaviourParameters("Fixed Cam Default", mNamedParameters.mFixedDefault, lrSerialiser);
         SerialiseBehaviourParameters("Rotate About Vehicle Default", mNamedParameters.maLookAroundCarCamParameters, lrSerialiser);
-        SerialiseBehaviourParameters("Spiralling Deathcam Default", reinterpret_cast<Behaviour::Parameters&>(mNamedParameters.maSpirallingDeathcamParameters), lrSerialiser);
+        SerialiseBehaviourParameters("Spiralling Deathcam Default", mNamedParameters.maSpirallingDeathcamParameters, lrSerialiser);
         SerialiseBehaviourParameters("Road Runner Default", mNamedParameters.mRoadRunnerDefault, lrSerialiser);
         break;
     default:
@@ -509,9 +505,8 @@ void BehaviourParameterBank::Serialise(T& lrSerialiser)
 }
 
 // ----------------------------------------------------------------------------
-// TestbedSetupSerialiser / BehaviourParameterNamingSerialiser visitors.
-// FLAG host head fork: a pointer-free block has no host debug name, so neither serialiser
-// touches one (the console registers / names every block).
+// TestbedSetupSerialiser / BehaviourParameterNamingSerialiser visitors: register the block's
+// testbed activation under its debug name / give the block its walk name.
 // ----------------------------------------------------------------------------
 template<class T>
 void TestbedSetupSerialiser::Serialise(const char* /*lpcName*/, T& lrParams)
@@ -526,26 +521,9 @@ void BehaviourParameterNamingSerialiser::Serialise(const char* lpcName, T& lrPar
     lrParams.SetDebugName(lpcName);
 }
 
-template<> void TestbedSetupSerialiser::Serialise(const char*, BehaviourAftertouchCam::Parameters&) {}
-template<> void TestbedSetupSerialiser::Serialise(const char*, BehaviourAftertouchCrash::Parameters&) {}
-template<> void TestbedSetupSerialiser::Serialise(const char*, BehaviourHeliCam::Parameters&) {}
-template<> void TestbedSetupSerialiser::Serialise(const char*, BehaviourGyroCam::Parameters&) {}
-template<> void TestbedSetupSerialiser::Serialise(const char*, BehaviourFailsafe::Parameters&) {}
-template<> void TestbedSetupSerialiser::Serialise(const char*, BehaviourLooseAttachment::Parameters&) {}
-template<> void TestbedSetupSerialiser::Serialise(const char*, BehaviourSpirallingDeathcam::Parameters&) {}
-
-template<> void BehaviourParameterNamingSerialiser::Serialise(const char*, BehaviourAftertouchCam::Parameters&) {}
-template<> void BehaviourParameterNamingSerialiser::Serialise(const char*, BehaviourAftertouchCrash::Parameters&) {}
-template<> void BehaviourParameterNamingSerialiser::Serialise(const char*, BehaviourHeliCam::Parameters&) {}
-template<> void BehaviourParameterNamingSerialiser::Serialise(const char*, BehaviourGyroCam::Parameters&) {}
-template<> void BehaviourParameterNamingSerialiser::Serialise(const char*, BehaviourFailsafe::Parameters&) {}
-template<> void BehaviourParameterNamingSerialiser::Serialise(const char*, BehaviourLooseAttachment::Parameters&) {}
-template<> void BehaviourParameterNamingSerialiser::Serialise(const char*, BehaviourSpirallingDeathcam::Parameters&) {}
-
 // ----------------------------------------------------------------------------
 // SerialiseBehaviourParameters<TSerialiser> -- dispatch one bank block on its type tag to
 // lrSerialiser.Serialise(lpcName, <the block as its concrete Parameters type>).
-// FLAG host head fork: the seven pointer-free types are cast back from the shared +0x00 tag.
 // ----------------------------------------------------------------------------
 template<class TSerialiser>
 void SerialiseBehaviourParameters(const char* lpcName, Behaviour::Parameters& lrParameters,
@@ -566,25 +544,25 @@ void SerialiseBehaviourParameters(const char* lpcName, Behaviour::Parameters& lr
         lrSerialiser.Serialise(lpcName, static_cast<BehaviourBystanderCam::Parameters&>(lrParameters));
         break;
     case eBehaviourHeliCam:
-        lrSerialiser.Serialise(lpcName, reinterpret_cast<BehaviourHeliCam::Parameters&>(lrParameters));
+        lrSerialiser.Serialise(lpcName, static_cast<BehaviourHeliCam::Parameters&>(lrParameters));
         break;
     case eBehaviourPassengerCam:
         lrSerialiser.Serialise(lpcName, static_cast<BehaviourPassengerCam::Parameters&>(lrParameters));
         break;
     case eBehaviourGyroCam:
-        lrSerialiser.Serialise(lpcName, reinterpret_cast<BehaviourGyroCam::Parameters&>(lrParameters));
+        lrSerialiser.Serialise(lpcName, static_cast<BehaviourGyroCam::Parameters&>(lrParameters));
         break;
     case eBehaviourAftertouchCam:
-        lrSerialiser.Serialise(lpcName, reinterpret_cast<BehaviourAftertouchCam::Parameters&>(lrParameters));
+        lrSerialiser.Serialise(lpcName, static_cast<BehaviourAftertouchCam::Parameters&>(lrParameters));
         break;
     case eBehaviourAftertouchCrash:
-        lrSerialiser.Serialise(lpcName, reinterpret_cast<BehaviourAftertouchCrash::Parameters&>(lrParameters));
+        lrSerialiser.Serialise(lpcName, static_cast<BehaviourAftertouchCrash::Parameters&>(lrParameters));
         break;
     case eBehaviourFailsafe:
-        lrSerialiser.Serialise(lpcName, reinterpret_cast<BehaviourFailsafe::Parameters&>(lrParameters));
+        lrSerialiser.Serialise(lpcName, static_cast<BehaviourFailsafe::Parameters&>(lrParameters));
         break;
     case eBehaviourLooseAttachment:
-        lrSerialiser.Serialise(lpcName, reinterpret_cast<BehaviourLooseAttachment::Parameters&>(lrParameters));
+        lrSerialiser.Serialise(lpcName, static_cast<BehaviourLooseAttachment::Parameters&>(lrParameters));
         break;
     case eBehaviourFixedCam:
         lrSerialiser.Serialise(lpcName, static_cast<BehaviourFixedCam::Parameters&>(lrParameters));
@@ -593,7 +571,7 @@ void SerialiseBehaviourParameters(const char* lpcName, Behaviour::Parameters& lr
         lrSerialiser.Serialise(lpcName, static_cast<BehaviourRotateAboutVehicle::Parameters&>(lrParameters));
         break;
     case BehaviourSpirallingDeathcam::eBehaviourSpirallingDeathcam:
-        lrSerialiser.Serialise(lpcName, reinterpret_cast<BehaviourSpirallingDeathcam::Parameters&>(lrParameters));
+        lrSerialiser.Serialise(lpcName, static_cast<BehaviourSpirallingDeathcam::Parameters&>(lrParameters));
         break;
     case 16:   // eBehaviourRoadRunner
         lrSerialiser.Serialise(lpcName, static_cast<BehaviourRoadRunner::Parameters&>(lrParameters));

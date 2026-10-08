@@ -37,6 +37,22 @@ namespace Gen
         // attribute block, which is a RefSpec. Same guard order and the same class constant
         // as the sibling above, so the two agree.
         aftertouchcam(const Attrib::RefSpec& lrRefSpec, void* lpOwner);
+
+        // The collection this instance resolved (mpCollection != 0); the aftertouch camera
+        // asserts it before every Update.
+        using Instance::IsValid;
+
+        // The generated per-attribute reads over the resolved 24-byte layout block (the
+        // debug-info accessor names). The offsets are the ones BehaviourAftertouchCam::Update
+        // reads: the pitch in degrees at +0x00, the slow/fast height pair at +0x04 / +0x0C,
+        // the slow/fast distance pair at +0x08 / +0x10 (each eased by speed from the first of
+        // its pair to the second), and the FOV it publishes at +0x14.
+        f32 Pitch() const       { return reinterpret_cast<const f32*>(GetLayoutPointer())[0]; }
+        f32 MinHeight() const   { return reinterpret_cast<const f32*>(GetLayoutPointer())[1]; }
+        f32 MinDistance() const { return reinterpret_cast<const f32*>(GetLayoutPointer())[2]; }
+        f32 MaxHeight() const   { return reinterpret_cast<const f32*>(GetLayoutPointer())[3]; }
+        f32 MaxDistance() const { return reinterpret_cast<const f32*>(GetLayoutPointer())[4]; }
+        f32 FOV() const         { return reinterpret_cast<const f32*>(GetLayoutPointer())[5]; }
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::aftertouchcam,

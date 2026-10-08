@@ -46,8 +46,8 @@ class BehaviourHeliCam : public Behaviour
 {
 public:
 
-    // The heli-cam parameter block: a type tag in its leading word plus behaviour-specific
-    // data. GetType returns the tag SetParameters asserts on.
+    // The heli-cam parameter block: the Behaviour::Parameters head (type tag + debug name) plus
+    // behaviour-specific data. GetType returns the tag SetParameters asserts on.
     //
     // ------------------------------------------------------------------------
     // Full field-walk layout, pinned from the three Parameters::Serialise<S> instances
@@ -64,9 +64,11 @@ public:
     //   +0x90 mfVelocityMPS         "Velocity MPS"             (SetStep 0.01)
     // The mShakeParams/mLookerParams/muVersion nested types are reused BY NAME from their homes
     // (CameraShake in BehaviourRig.h, Looker in BrnLooker.h, VersionNumber in CameraUtils.h) so the
-    // 0x08/0x18/0x7C offsets follow from their real sizes, not hand-inserted padding.
+    // 0x08/0x18/0x7C offsets follow from their real sizes, not hand-inserted padding. The offsets
+    // above are the console's (148-byte block); on the host the head's debug-name pointer is 8
+    // bytes wide, so the derived members sit 8 bytes later and keep the console spacing.
     // ------------------------------------------------------------------------
-    class Parameters
+    class Parameters : public Behaviour::Parameters
     {
     public:
         // X360 visitor: `void Serialise<S>(S&)` -- walks this block's fields into the camera-tunings
@@ -78,11 +80,9 @@ public:
 
         EBehaviourTypeHeliCam GetType() const
         {
-            return static_cast<EBehaviourTypeHeliCam>(meType);
+            return static_cast<EBehaviourTypeHeliCam>(mType);
         }
 
-        s32                             meType;             // +0x00  the behaviour type tag (eBehaviour*)
-        s32                             miParamWord1;       // +0x04  first behaviour-specific word
         Utils::CameraShake::Parameters  mShakeParams;       // +0x08  "Shake Parameters"  (v1 + v2)
         Utils::Looker::Parameters       mLookerParams;      // +0x18  "Looker Parameters" (v2 only)
         Utils::VersionNumber            muVersion;          // +0x7C  version tag (code version = 2)
@@ -148,10 +148,8 @@ public:
 };
 
 // ----------------------------------------------------------------------------
-// SetParameters. The console also copies the block's +0x04 word into the base's debug-name slot;
-// that store is omitted here: the heli-cam block is one of the host head forks (it does not
-// derive Behaviour::Parameters, so its +0x04 word is not a host name pointer). It feeds only the
-// tweaker and the debug printers.
+// SetParameters: assert the tag, store the pointer, and cache the block's debug name in the
+// base's debug-name slot.
 // ----------------------------------------------------------------------------
 inline void
 BehaviourHeliCam::SetParameters(const Parameters* lpParameters)
@@ -159,6 +157,7 @@ BehaviourHeliCam::SetParameters(const Parameters* lpParameters)
     CGS_ASSERT(lpParameters->GetType() == eBehaviourHeliCam,
                "lpParameters->GetType() == eBehaviourHeliCam");
     mpParameters = lpParameters;
+    SetDebugParametersName(lpParameters->GetDebugName());
 }
 
 } // namespace Camera

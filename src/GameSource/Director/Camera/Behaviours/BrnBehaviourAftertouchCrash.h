@@ -99,14 +99,11 @@ class BehaviourAftertouchCrash : public Behaviour
 {
 public:
 
-    // The aftertouch-crash parameter block: a type tag in its leading word plus behaviour-specific
-    // data. GetType returns the tag SetParameters asserts on.
-    //
-    // PARK: this block cannot derive Behaviour::Parameters (which is what the recovered
-    //   declaration has) until the parameter-bank lane re-expresses BrnBehaviourParameterBank.h's
-    //   stride pin, and the reserved span it sizes, as
-    //   sizeof(Camera::BehaviourAftertouchCrash::Parameters) instead of a console literal.
-    class Parameters
+    // The aftertouch-crash parameter block: the Behaviour::Parameters head (type tag + debug name)
+    // plus behaviour-specific data. GetType returns the tag SetParameters asserts on. The console
+    // block is 112 bytes; on the host the head's debug-name pointer is 8 bytes wide, so the
+    // derived members sit 8 bytes later and keep the console spacing among themselves.
+    class Parameters : public Behaviour::Parameters
     {
     public:
         // Console visitor: `void Serialise<S>(S&)` -- walks this block's fields into the camera-tunings
@@ -117,11 +114,8 @@ public:
 
         EBehaviourTypeAftertouchCrash GetType() const
         {
-            return static_cast<EBehaviourTypeAftertouchCrash>(meType);
+            return static_cast<EBehaviourTypeAftertouchCrash>(mType);
         }
-
-        s32 meType;        // +0x00  the behaviour type tag (eBehaviour*)
-        s32 miParamWord1;  // +0x04  first behaviour-specific word
 
         // The shake post-process tunings sub-block ("Shake Params" section) the field-walk visitor
         // recurses into first (DebugMenu AddToPath+recurse, write, read
@@ -166,23 +160,25 @@ public:
         void Construct();
 
         // Never called, but every pin below is a static_assert: the compiler evaluates them while
-        // it compiles this body, so the serialised-field offsets are enforced at build time.
-        // Every field here precedes any pointer member, so these offsets are host-pointer-width
-        // invariant and can be pinned absolutely.
+        // it compiles this body. The derived members start right after the Behaviour::Parameters
+        // head (8 bytes on the console, 16 on the host) and keep the console spacing among
+        // themselves, so each pin is the console offset less the console head.
         static void _AssertLayout()
         {
-            static_assert(offsetof(Parameters, mShakeParams) == 0x08,
-                          "mShakeParams @ +0x08");
-            static_assert(offsetof(Parameters, mfSlowDistance) == 0x2C,
-                          "mfSlowDistance @ +0x2C");
-            static_assert(offsetof(Parameters, mfPitch) == 0x3C,
-                          "mfPitch @ +0x3C");
-            static_assert(offsetof(Parameters, mfFOV) == 0x40,
-                          "mfFOV @ +0x40");
-            static_assert(offsetof(Parameters, mfHeightDistanceVelocityRange) == 0x58,
-                          "mfHeightDistanceVelocityRange @ +0x58");
-            static_assert(offsetof(Parameters, mfTimeBetweenDecisions) == 0x6C,
-                          "mfTimeBetweenDecisions @ +0x6C");
+            static_assert(offsetof(Parameters, mShakeParams) == sizeof(Behaviour::Parameters),
+                          "mShakeParams follows the head (console +0x08)");
+            static_assert(offsetof(Parameters, mfSlowDistance) - offsetof(Parameters, mShakeParams) == 0x2C - 0x08,
+                          "mfSlowDistance @ console +0x2C");
+            static_assert(offsetof(Parameters, mfPitch) - offsetof(Parameters, mShakeParams) == 0x3C - 0x08,
+                          "mfPitch @ console +0x3C");
+            static_assert(offsetof(Parameters, mfFOV) - offsetof(Parameters, mShakeParams) == 0x40 - 0x08,
+                          "mfFOV @ console +0x40");
+            static_assert(offsetof(Parameters, mfHeightDistanceVelocityRange) - offsetof(Parameters, mShakeParams) == 0x58 - 0x08,
+                          "mfHeightDistanceVelocityRange @ console +0x58");
+            static_assert(offsetof(Parameters, mfTimeBetweenDecisions) - offsetof(Parameters, mShakeParams) == 0x6C - 0x08,
+                          "mfTimeBetweenDecisions @ console +0x6C");
+            static_assert(sizeof(Parameters) == 120,
+                          "host size (console 112: 8-byte head pointer)");
         }
     };
 
@@ -432,8 +428,8 @@ private:
 inline void
 BehaviourAftertouchCrash::Parameters::Construct()
 {
-    meType       = eBehaviourAftertouchCrash;   // stw 13, +0x00
-    miParamWord1 = 0;                           // stw 0,  +0x04
+    Behaviour::Parameters::Construct();         // stw 0,  +0x04
+    mType = eBehaviourAftertouchCrash;          // stw 13, +0x00
 
     // The shake sub-block's four words are exactly its own Construct's seed.
     mShakeParams.Construct();                   // +0x08 .. +0x17
@@ -473,11 +469,6 @@ BehaviourAftertouchCrash::Parameters::Construct()
 //   lwz    r11, 4(r4)        ; the parameter block's second word
 //   stw    r4,  +0x3D8(r3)   ; mpParameters = lpParameters
 //   stw    r11, +0x10(r3)    ; the BASE's mpcDebugParametersName
-//
-// PARK: the second store is the base's SetDebugParametersName(lpParameters->GetDebugName()), and
-//   restoring it needs the Parameters PARK above (the parameter-bank stride pin) closed first.
-//   Omitted rather than forged through the s32 word -- it feeds only the tweaker and the debug
-//   printers, so nothing on the live camera path reads it.
 // ----------------------------------------------------------------------------
 inline void
 BehaviourAftertouchCrash::SetParameters(const Parameters* lpParameters)
@@ -485,6 +476,7 @@ BehaviourAftertouchCrash::SetParameters(const Parameters* lpParameters)
     CGS_ASSERT(lpParameters->GetType() == eBehaviourAftertouchCrash,
                "lpParameters->GetType() == eBehaviourAftertouchCrash");
     mpParameters = lpParameters;                   // stw r4, +0x3D8(this)
+    SetDebugParametersName(lpParameters->GetDebugName());
 }
 
 } // namespace Camera

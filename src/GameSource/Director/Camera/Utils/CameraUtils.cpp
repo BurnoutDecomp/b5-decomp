@@ -8,6 +8,7 @@
 
 #include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"   // LineTestNearestPostBox (ResolveLineTestNearest...)
 #include "SDKs/XboxMath/XMVectorSinCos.h"                        // XboxMath::XMVectorSinCos (ApplyPitchAboutPointRads)
+#include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"       // ConsoleVpu::Dot3 / fused lanes (PointsWillPassEachOther)
 
 #include <cmath>   // std::atan / std::acos / std::asin / std::sin / std::cos / std::fabs /
                    //   std::copysign
@@ -1433,6 +1434,54 @@ bool PointWillLeaveFrustrum(const Matrix44Affine& lTransform, Vector3 lPoint,
     if (vel.y > 0.0f) yTime = (height - point.y) / vel.y;
     else if (vel.y < 0.0f) yTime = (-height - point.y) / vel.y;
     *lpfTimeBeforeLeavingSecs = std::fmin(xTime, yTime);
+    return true;
+}
+
+// ----------------------------------------------------------------------------
+// PointsWillPassEachOther -- called by BehaviourAftertouchCam::AssignIfBetterRival.
+// The relative velocity A - B and the gap B - A (vsubfp each), then:
+//   the gap is not closing (Dot(gap, relative velocity) > 0 fails, NaN included) -> false;
+//   |gap|^2 (vmsum3fp128, rule 1), the vrsqrtefp estimate refined by two Newton steps
+//   (e2 = e * e ; h = e * 0.5 ; r = -(|gap|^2 * e2 - 1) fused ; e = h * r + e fused), the unit gap
+//   (gap * e, vmulfp) and the length (|gap|^2 * e, vsel to 0 for a zero gap);
+//   the closing speed Dot(relative velocity, unit gap) (vmsum3fp128) not above 1e-5 (NaN included)
+//   -> false; else the time out is length / closing speed (fdivs) -> true.
+// FLAG (model, rule 5): the hardware estimate is taken as the correctly rounded 1 / sqrt(x).
+// ----------------------------------------------------------------------------
+bool PointsWillPassEachOther(Vector3 lPointA, Vector3 lVelocityA, Vector3 lPointB,
+                             Vector3 lVelocityB, f32& lfEstimatedTimeOut)
+{
+    const f32 KF_MIN_CLOSING_SPEED = 9.99999975e-06f;   // 0x3727C5AC
+
+    const Vector3 lRelativeVelocity = { lVelocityA.x - lVelocityB.x, lVelocityA.y - lVelocityB.y,
+                                        lVelocityA.z - lVelocityB.z, lVelocityA.w - lVelocityB.w };
+    const Vector3 lGap = { lPointB.x - lPointA.x, lPointB.y - lPointA.y,
+                           lPointB.z - lPointA.z, lPointB.w - lPointA.w };
+
+    if (!(ConsoleVpu::Dot3(lGap, lRelativeVelocity) > 0.0f))
+    {
+        return false;
+    }
+
+    const f32 lfGapSquared = ConsoleVpu::Dot3(lGap, lGap);
+    f32 lfEstimate = static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfGapSquared)));
+    for (s32 liStep = 0; liStep < 2; ++liStep)
+    {
+        const f32 lfEstimateSquared = lfEstimate * lfEstimate;
+        const f32 lfHalfEstimate    = lfEstimate * 0.5f;
+        const f32 lfResidual = ConsoleVpu::NegativeMultiplySubtract(lfGapSquared, lfEstimateSquared, 1.0f);
+        lfEstimate = ConsoleVpu::MultiplyAdd(lfHalfEstimate, lfResidual, lfEstimate);
+    }
+    const Vector3 lDirection = { lGap.x * lfEstimate, lGap.y * lfEstimate, lGap.z * lfEstimate, lGap.w * lfEstimate };
+    const f32 lfDistance = (lfGapSquared == 0.0f) ? 0.0f : lfGapSquared * lfEstimate;
+
+    const f32 lfClosingSpeed = ConsoleVpu::Dot3(lRelativeVelocity, lDirection);
+    if (!(lfClosingSpeed > KF_MIN_CLOSING_SPEED))
+    {
+        return false;
+    }
+
+    lfEstimatedTimeOut = lfDistance / lfClosingSpeed;
     return true;
 }
 

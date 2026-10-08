@@ -33,11 +33,11 @@
 // bank +0x10 (see the RECORD MAP banner on that class). The shared-info pointer is bound to
 // it by MainDirector::BuildArbStateSharedInfo. There is no second copy anywhere.
 //
-// The record carries every one of the console's 48 named blocks (the console's member order). The ones
-// whose host type is console-sized (the four head blocks, the fourteen-block gyro run, the
-// failsafe block and the three loose-attachment blocks) sit at their console record offsets,
-// pinned below; the rest live, by name and in console order, in the host spill at the record's
-// end. Construct and the serialiser walks: BrnBehaviourParameterBank.cpp.
+// The record carries every one of the console's 48 named blocks, in the console's member order.
+// Every block derives Behaviour::Parameters, whose debug-name pointer is 8 bytes on the host, so
+// no block sits at its console record offset: the console offsets are in the comments, and the
+// pins below are host sizeof/offsetof. Every consumer reaches a block by name. Construct and the
+// serialiser walks: BrnBehaviourParameterBank.cpp.
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
@@ -127,247 +127,171 @@ namespace BrnDirector
         // of BehaviourParameterBank::Construct. Body: BrnBehaviourParameterBank.cpp.
         void Construct();
 
-        // ⭐ ADDED 2026-08-29 (crash-camera wave). The spiralling-deathcam parameter block
-        // ArbStateCrashing::Prepare @0x822655E8 hands to BehaviourSpirallingDeathcam::
-        // SetParameters: `lwz r11, 0x1C(sharedInfo)` (mpNamedParameters) then
-        // `addi r29, r11, 0x23B4`. It is the console's block at NamedParameters +0x23B4, i.e.
-        // 0x80 past the look-around block above.
-        //
-        // ⚠️ IT IS DELIBERATELY *NOT* PLACED AT +0x23B4 HERE, and that is not sloppiness.
-        // This reconstruction's LookAroundCarCamParameters is 136 bytes (0x88) against the
-        // console block's 0x80 -- the Looker::Parameters slice inside it is modelled wider than
-        // the console's -- so the two blocks cannot both sit at their console offsets in one
-        // struct without forking a type. Parity here is BY NAMED MEMBER (the same rule the
-        // arbitrator state container states for its embedded states): the block exists, it is
-        // named, it is seeded, and the ONE consumer reaches it through the accessor. The
-        // +0x23B4 above is provenance.
+        // The spiralling-deathcam parameter block ArbStateCrashing::Prepare hands to
+        // BehaviourSpirallingDeathcam::SetParameters (the console's record +0x23B4, 0x80 past the
+        // look-around block).
         const Camera::BehaviourSpirallingDeathcam::Parameters& GetSpirallingDeathcamParameters() const
         {
             return maSpirallingDeathcamParameters;
         }
 
-        // ⭐⭐ THE FOURTEEN GYRO BLOCKS, PLACED AT THEIR EXACT RECORD OFFSETS. Slots 0..6 came
-        // from MomentTumbling; slots 7..13 close the run (takedown-camera wave) and carry the
-        // two blocks the takedown arbitrator states adopt. MomentTumbling::SetGyroCamParameters
-        // picks one of six of these by Parameters::ESubType and hands it to
-        // BehaviourGyroCam::SetParameters:
-        //     E_SUBTYPE_LEAD           -> +480   mGyroCamDefaultParams
-        //     E_SUBTYPE_TRUCKING_FRONT -> +684   mGyroCamTruckFront
-        //     E_SUBTYPE_SIDE           -> +888   mGyroCamLeft
-        //     E_SUBTYPE_TRUCKING_SIDE  -> +1296 / +1500  (the left/right alternation)
-        //     E_SUBTYPE_FOLLOW         -> +1704  mGyroCamFollow
-        // The six reads sit on an exact 204-byte grid == sizeof(BehaviourGyroCam::Parameters),
-        // with one unread slot at +1092 between them, so the span is a run of consecutive
-        // same-typed blocks and the names above are the record's own, in order. The semantics
-        // corroborate the grid independently: the TRUCKING_FRONT subtype lands on the block
-        // named TruckFront, and the TRUCKING_SIDE subtype's two-way alternation lands on the
-        // pair named SideTruckingLeft / SideTruckingRight.
-        //
-        // ⭐ SLOTS 7..13, ADDED IN THE TAKEDOWN-CAMERA WAVE, ON THE SAME GRID AND WITH TWO
-        // MORE INDEPENDENT CONSUMERS. Three takedown-player Prepare bodies read a gyro block
-        // straight off ArbStateSharedInfo::mpNamedParameters (`lwz r11, +0x1C(sharedInfo)`
-        // then an `addi` into the record) and hand it to BehaviourGyroCam::SetParameters:
-        //     B3ClassicTakedownPlayer::Prepare        +0x840 == +2112
-        //     DestructionPathTakedownPlayer::Prepare  +0x1E0 == +480, then +0x840 == +2112
-        //     DriveByTakedownPlayer::Prepare          +0xB70 == +2928, twice
-        // (2112 - 480) / 204 == 8 and (2928 - 480) / 204 == 12 exactly, so both land on the
-        // grid with no remainder, at slots 8 and 12. The recovered type information's member
-        // list for this record names the fourteen blocks in order, and slot 8 is
-        // mGyroCamTakedownParams while slot 12 is mGyroCamDriveByLParams -- the takedown
-        // states landing on the block named Takedown and the drive-by takedown landing on the
-        // block named DriveBy is the same kind of semantic corroboration the subtype names
-        // gave the first half. It also lands slot 11 on mGyroCamHelicamParams, which is
-        // exactly the block this file already attributed to record +2724 from the hit-traffic
-        // moment's own displacement -- a fourth consumer agreeing with the grid.
-        //
-        // ⓘ DriveByTakedownPlayer reads the SAME block for both of its behaviours; the
-        // record's mGyroCamDriveByRParams (slot 13) has no reader in this build.
-        //
-        // Placing them at their real offsets costs nothing -- this reconstruction's gyro
-        // Parameters is byte-exact (static_asserted below) -- so unlike the two by-name blocks
-        // at the tail, these are BYTE-FAITHFUL, and the +0x2334 block below keeps its offset.
-        // ⭐ THE RECORD'S FIRST BLOCK, CARVED 2026-09-11. The bank's own Construct opens by
-        // constructing an aftertouch-cam block at record +0, and the behaviour factory hands
-        // that same address to BehaviourAftertouchCam::SetParameters when an authored
-        // aftertouchcam shot comes in -- so this is a named block, not head padding. The four
-        // head blocks are {aftertouch-cam, aftertouch-crash, aftertouch-crash, helicam} at
-        // record +0 / +108 / +220 / +332, each pinned by the bank Construct's own per-block
-        // call, and together they are the 480 bytes the gyro run starts after. Only the first
-        // is carved here (it is the only one with a consumer in this tree); the other three
-        // stay inside the reserved remainder below, which is sized so the gyro run cannot
-        // move whatever this block's reconstruction weighs.
-        Camera::BehaviourAftertouchCam::Parameters mAftertouchCamDefault;   // +0
-
-        // ⭐ THE TWO AFTERTOUCH-CRASH BLOCKS, CARVED 2026-09-12 (crash-mode wave).
-        // ArbStateCrashMode::Prepare hands the FIRST of them to
-        // BehaviourAftertouchCrash::SetParameters (the console reaches it as bank +0x7C, i.e.
-        // record +108, the bank's record starting at bank +0x10). The names are this record's
-        // own; the 112-byte stride between them is sizeof the crash Parameters block, which its
-        // own Construct pins by writing every word out to +0x6C. The aftertouch-cam block above
-        // is exactly 108 bytes, so the first of these starts right after it with no padding.
-        Camera::BehaviourAftertouchCrash::Parameters mAftertouchCrashParams;   // +108
-        Camera::BehaviourAftertouchCrash::Parameters mCrashDebugParams;        // +220
-        // The record's fourth head block, "HeliCam Default" in every bank walk. Pointer-free and
-        // 148 bytes on both builds, so it sits at its console offset and closes the head at +480.
-        Camera::BehaviourHeliCam::Parameters mHeliCamDefaultParams;           // +332
-        Camera::BehaviourGyroCam::Parameters mGyroCamDefaultParams;                  // +480
-        Camera::BehaviourGyroCam::Parameters mGyroCamTruckFront;                     // +684
-        Camera::BehaviourGyroCam::Parameters mGyroCamLeft;                           // +888
-        Camera::BehaviourGyroCam::Parameters mGyroCamRight;                          // +1092
-        Camera::BehaviourGyroCam::Parameters mGyroCamDefaultSideTruckingLeftParams;  // +1296
-        Camera::BehaviourGyroCam::Parameters mGyroCamDefaultSideTruckingRightParams; // +1500
-        Camera::BehaviourGyroCam::Parameters mGyroCamFollow;                         // +1704
-        // ⭐ THE RUN'S SECOND HALF, CARVED (takedown-camera wave). Slots 7..13 complete the
-        // fourteen-block gyro run at +480 .. +3336, all seven on the same 204-byte grid and
-        // all seven named by the recovered type information, in the record's own order. Two of
-        // them have attested consumers (see the accessors above); the other five are carried
-        // because a run is only byte-faithful as a whole, and because slot 11 is the helicam
-        // block the bank used to model as a separate by-name member.
-        Camera::BehaviourGyroCam::Parameters mGyroCamAlwaysLowParams;                // +1908
-        Camera::BehaviourGyroCam::Parameters mGyroCamTakedownParams;                 // +2112
-        Camera::BehaviourGyroCam::Parameters mGyroCamTakedownZoomedOutParams;        // +2316
-        Camera::BehaviourGyroCam::Parameters mGyroCamHighParams;                     // +2520
-        Camera::BehaviourGyroCam::Parameters mGyroCamHelicamParams;                  // +2724
-        Camera::BehaviourGyroCam::Parameters mGyroCamDriveByLParams;                 // +2928
-        Camera::BehaviourGyroCam::Parameters mGyroCamDriveByRParams;                 // +3132
-        // The remaining reserved span carries the addressed block to the attested +0x2334 (it
-        // lands at +9016 rather than +9012 -- see the note under the asserts below). The rest
-        // of the record (the bystander / rig / failsafe / passenger / fixed
-        // blocks) is not modelled here -- see the RECORD MAP in the BehaviourParameterBank
-        // banner below for every one of their offsets.
-        // The console's bystander run (+3336, 7 x 156), rig run (+4432, 14 x 288) and passenger
-        // block (+8660, 36) occupy these spans; their host types carry an 8-byte debug-name
-        // pointer in the Behaviour::Parameters head and cannot fit the console strides, so those
-        // blocks live in the host spill at the end of this record (named, in console order).
-        // "Failsafe" is pointer-free and 196 bytes on both builds, so it sits at +8464.
-        u8                         maReserved0D08[8464 - 3336];      // +3336 .. +8463
-        Camera::BehaviourFailsafe::Parameters mFailsafe;             // +8464
-        u8                         maReserved2114[8696 - 8660];      // +8660 .. +8695 (passenger slot)
-        // ⭐⭐ THE THREE LOOSE-ATTACHMENT BLOCKS, CARVED (takedown-camera wave), at their exact
-        // record offsets. ShutdownTakedownPlayer::Update reaches each one off the shared
-        // context's named-parameter record (`lwz` the record pointer, then an `addi` into it) and
-        // hands it to BehaviourLooseAttachment::SetParameters:
-        //     beat 1  record +8696
-        //     beat 2  record +8796
-        //     beat 3  record +8896
-        // 100 apart, and 100 is exactly sizeof(BehaviourLooseAttachment::Parameters) (asserted
-        // below), so the three sit on their own exact grid. THE RUN CLOSES WITH NO SLACK at both
-        // ends, which is what makes the placement forced rather than fitted: the RECORD MAP below
-        // already puts mPassengerDefault at +8660 and mFixedDefault at +8996 from four unrelated
-        // consumers, and 8896 + 100 == 8996 exactly. The names are the record's own, in order --
-        // the recovered type information lists exactly three consecutive
-        // BehaviourLooseAttachment::Parameters members between mPassengerDefault and
-        // mFixedDefault, which is the same count the bank serialiser's walk order gives.
-        Camera::BehaviourLooseAttachment::Parameters mLooseAttachmentTakedown1;  // +8696
-        Camera::BehaviourLooseAttachment::Parameters mLooseAttachmentTakedown2;  // +8796
-        Camera::BehaviourLooseAttachment::Parameters mLooseAttachmentTakedown3;  // +8896
-        u8                         maReserved22C4[0x2334 - 8996];    // +8996 .. +0x2333 (mFixedDefault)
-        LookAroundCarCamParameters maLookAroundCarCamParameters;     // +0x2334
-        Camera::BehaviourSpirallingDeathcam::Parameters
-                                   maSpirallingDeathcamParameters;   // console +0x23B4 (see note)
-
-        // ---- HOST SPILL: the record's blocks whose host type cannot sit at its console offset ----
-        // Each block below is one of the console record's named members (its record offset in
-        // the comment), carried here BY NAME, in the console's member order, because its host
-        // type is wider than the console stride (8-byte debug-name pointer in the shared
-        // Behaviour::Parameters head). Every consumer reaches them by name; the bank walks visit
-        // them in the console's walk order regardless of where they sit on the host.
-        Camera::BehaviourBystanderCam::Parameters mBystanderJumpLeftParameters;        // record +3336
-        Camera::BehaviourBystanderCam::Parameters mBystanderJumpParameters2;           // record +3492
-        Camera::BehaviourBystanderCam::Parameters mBystanderJumpFromBehindParameters;  // record +3648
-        Camera::BehaviourBystanderCam::Parameters mBystanderCloseParameters;           // record +3804
-        Camera::BehaviourBystanderCam::Parameters mBystanderMediumParameters;          // record +3960
-        Camera::BehaviourBystanderCam::Parameters mBystanderFarParameters;             // record +4116
-        Camera::BehaviourBystanderCam::Parameters mBystanderFarTallParameters;         // record +4272
-        Camera::BehaviourRig::Parameters          mRigBonnetLowRight;                  // record +4432
-        Camera::BehaviourRig::Parameters          mRigRearQFwd;                        // record +4720
-        Camera::BehaviourRig::Parameters          mRigFrontQCuFwd;                     // record +5008
-        Camera::BehaviourRig::Parameters          mRigFrontQBwd;                       // record +5296
-        Camera::BehaviourRig::Parameters          mRigFrontRearview;                   // record +5584
-        Camera::BehaviourRig::Parameters          mRigBootViewFwd;                     // record +5872
-        Camera::BehaviourRig::Parameters          mRigFrontQLowBwd;                    // record +6160
-        Camera::BehaviourRig::Parameters          mRigRoofFwd;                         // record +6448
-        Camera::BehaviourRig::Parameters          mRigBootFwd;                         // record +6736
-        Camera::BehaviourRig::Parameters          mRigFrontQCuFwd2;                    // record +7024
-        Camera::BehaviourRig::Parameters          mRigUnderbelly;                      // record +7312
-        Camera::BehaviourRig::Parameters          mRigDropUnderbelly;                  // record +7600
-        Camera::BehaviourRig::Parameters          mRigDropFrontQCuFwd;                 // record +7888
-        Camera::BehaviourRig::Parameters          mRigDropBootViewFwd;                 // record +8176
-        Camera::BehaviourPassengerCam::Parameters mPassengerDefault;                   // record +8660
-        Camera::BehaviourFixedCam::Parameters     mFixedDefault;                       // record +8996
-        Camera::BehaviourRoadRunner::Parameters   mRoadRunnerDefault;                  // record +9316
+        // ---- THE RECORD, in the console's member order ------------------------------------
+        // Each comment is the block's console record offset (bank offset = record + 0x10). The
+        // console record is a run of same-typed blocks:
+        //   4 head blocks | 14 gyro | 7 bystander | 14 rig | failsafe | passenger |
+        //   3 loose-attachment | fixed | rotate-about-vehicle | deathcam | road-runner
+        // and its consumers' displacements land on those offsets (see the RECORD MAP on
+        // BehaviourParameterBank below): MomentTumbling's six gyro reads sit on the gyro block's
+        // 204-byte console stride, the three shutdown-takedown beats on the loose-attachment
+        // block's 100-byte stride. On the host every block is wider by its head's debug-name
+        // pointer (and its alignment), so the offsets are provenance and every reader goes
+        // through the member name.
+        Camera::BehaviourAftertouchCam::Parameters      mAftertouchCamDefault;                   // console +0  "Aftertouch"
+        Camera::BehaviourAftertouchCrash::Parameters    mAftertouchCrashParams;                  // console +108  "Aftertouch Crash"
+        Camera::BehaviourAftertouchCrash::Parameters    mCrashDebugParams;                       // console +220  "Crash Debug"
+        Camera::BehaviourHeliCam::Parameters            mHeliCamDefaultParams;                   // console +332  "HeliCam Default"
+        Camera::BehaviourGyroCam::Parameters            mGyroCamDefaultParams;                   // console +480  E_SUBTYPE_LEAD
+        Camera::BehaviourGyroCam::Parameters            mGyroCamTruckFront;                      // console +684  E_SUBTYPE_TRUCKING_FRONT
+        Camera::BehaviourGyroCam::Parameters            mGyroCamLeft;                            // console +888  E_SUBTYPE_SIDE
+        Camera::BehaviourGyroCam::Parameters            mGyroCamRight;                           // console +1092
+        Camera::BehaviourGyroCam::Parameters            mGyroCamDefaultSideTruckingLeftParams;   // console +1296  E_SUBTYPE_TRUCKING_SIDE
+        Camera::BehaviourGyroCam::Parameters            mGyroCamDefaultSideTruckingRightParams;  // console +1500  E_SUBTYPE_TRUCKING_SIDE
+        Camera::BehaviourGyroCam::Parameters            mGyroCamFollow;                          // console +1704  E_SUBTYPE_FOLLOW
+        Camera::BehaviourGyroCam::Parameters            mGyroCamAlwaysLowParams;                 // console +1908
+        Camera::BehaviourGyroCam::Parameters            mGyroCamTakedownParams;                  // console +2112  the takedown states
+        Camera::BehaviourGyroCam::Parameters            mGyroCamTakedownZoomedOutParams;         // console +2316
+        Camera::BehaviourGyroCam::Parameters            mGyroCamHighParams;                      // console +2520
+        Camera::BehaviourGyroCam::Parameters            mGyroCamHelicamParams;                   // console +2724  the hit-traffic moment
+        Camera::BehaviourGyroCam::Parameters            mGyroCamDriveByLParams;                  // console +2928  the drive-by takedown
+        Camera::BehaviourGyroCam::Parameters            mGyroCamDriveByRParams;                  // console +3132  no reader
+        Camera::BehaviourBystanderCam::Parameters       mBystanderJumpLeftParameters;            // console +3336
+        Camera::BehaviourBystanderCam::Parameters       mBystanderJumpParameters2;               // console +3492
+        Camera::BehaviourBystanderCam::Parameters       mBystanderJumpFromBehindParameters;      // console +3648
+        Camera::BehaviourBystanderCam::Parameters       mBystanderCloseParameters;               // console +3804
+        Camera::BehaviourBystanderCam::Parameters       mBystanderMediumParameters;              // console +3960
+        Camera::BehaviourBystanderCam::Parameters       mBystanderFarParameters;                 // console +4116
+        Camera::BehaviourBystanderCam::Parameters       mBystanderFarTallParameters;             // console +4272
+        Camera::BehaviourRig::Parameters                mRigBonnetLowRight;                      // console +4432
+        Camera::BehaviourRig::Parameters                mRigRearQFwd;                            // console +4720
+        Camera::BehaviourRig::Parameters                mRigFrontQCuFwd;                         // console +5008
+        Camera::BehaviourRig::Parameters                mRigFrontQBwd;                           // console +5296
+        Camera::BehaviourRig::Parameters                mRigFrontRearview;                       // console +5584
+        Camera::BehaviourRig::Parameters                mRigBootViewFwd;                         // console +5872
+        Camera::BehaviourRig::Parameters                mRigFrontQLowBwd;                        // console +6160
+        Camera::BehaviourRig::Parameters                mRigRoofFwd;                             // console +6448
+        Camera::BehaviourRig::Parameters                mRigBootFwd;                             // console +6736
+        Camera::BehaviourRig::Parameters                mRigFrontQCuFwd2;                        // console +7024
+        Camera::BehaviourRig::Parameters                mRigUnderbelly;                          // console +7312
+        Camera::BehaviourRig::Parameters                mRigDropUnderbelly;                      // console +7600
+        Camera::BehaviourRig::Parameters                mRigDropFrontQCuFwd;                     // console +7888
+        Camera::BehaviourRig::Parameters                mRigDropBootViewFwd;                     // console +8176  walk name "Rig Drop Boot Q Cu Fwd"
+        Camera::BehaviourFailsafe::Parameters           mFailsafe;                               // console +8464
+        Camera::BehaviourPassengerCam::Parameters       mPassengerDefault;                       // console +8660
+        Camera::BehaviourLooseAttachment::Parameters    mLooseAttachmentTakedown1;               // console +8696  shutdown-takedown beat 1
+        Camera::BehaviourLooseAttachment::Parameters    mLooseAttachmentTakedown2;               // console +8796  beat 2
+        Camera::BehaviourLooseAttachment::Parameters    mLooseAttachmentTakedown3;               // console +8896  beat 3
+        Camera::BehaviourFixedCam::Parameters           mFixedDefault;                           // console +8996
+        LookAroundCarCamParameters                      maLookAroundCarCamParameters;            // console +9012  +0x2334
+        Camera::BehaviourSpirallingDeathcam::Parameters maSpirallingDeathcamParameters;          // console +9140  +0x23B4
+        Camera::BehaviourRoadRunner::Parameters         mRoadRunnerDefault;                      // console +9316
     };
 
-    // The grid the fourteen gyro placements rest on, ratcheted so a future widening of the gyro
-    // parameter block cannot silently slide them off their attested offsets.
-    static_assert(sizeof(Camera::BehaviourGyroCam::Parameters) == 204,
-                  "BehaviourGyroCam::Parameters is the 204-byte grid the tumbling blocks sit on");
+    // Host sizes of the seven block types that carry a tail after the head (each is its console
+    // size plus the head's 4 extra pointer bytes, rounded up to the type's 8-byte alignment).
+    static_assert(sizeof(Camera::BehaviourAftertouchCam::Parameters) == 120, "aftertouch-cam block (console 108)");
+    static_assert(sizeof(Camera::BehaviourAftertouchCrash::Parameters) == 120, "aftertouch-crash block (console 112)");
+    static_assert(sizeof(Camera::BehaviourHeliCam::Parameters) == 160, "helicam block (console 148)");
+    static_assert(sizeof(Camera::BehaviourGyroCam::Parameters) == 216, "gyro block (console 204)");
+    static_assert(sizeof(Camera::BehaviourFailsafe::Parameters) == 208, "failsafe block (console 196)");
+    static_assert(sizeof(Camera::BehaviourLooseAttachment::Parameters) == 112, "loose-attachment block (console 100)");
+    static_assert(sizeof(Camera::BehaviourSpirallingDeathcam::Parameters) == 184, "deathcam block (console 176)");
 
-    // The 112-byte stride the record's two aftertouch-crash head blocks sit on (record +108 and
-    // +220). Ratcheted so a future widening of that block cannot slide either off its offset.
-    static_assert(sizeof(Camera::BehaviourAftertouchCrash::Parameters) == 112,
-                  "BehaviourAftertouchCrash::Parameters is the 112-byte head-run stride");
-    static_assert(sizeof(Camera::BehaviourAftertouchCam::Parameters) == 108,
-                  "BehaviourAftertouchCam::Parameters is the record's 108-byte first block");
-    static_assert(offsetof(NamedParameters, mAftertouchCamDefault) == 0,
-                  "NamedParameters::mAftertouchCamDefault @ +0 (the record's first block)");
-    static_assert(sizeof(Camera::BehaviourHeliCam::Parameters) == 148,
-                  "BehaviourHeliCam::Parameters is the record's 148-byte fourth head block");
-    static_assert(offsetof(NamedParameters, mHeliCamDefaultParams) == 332,
-                  "NamedParameters::mHeliCamDefaultParams @ +332 (HeliCam Default)");
-    static_assert(sizeof(Camera::BehaviourFailsafe::Parameters) == 196,
-                  "BehaviourFailsafe::Parameters is the record's 196-byte failsafe block");
-    static_assert(offsetof(NamedParameters, mFailsafe) == 8464,
-                  "NamedParameters::mFailsafe @ +8464 (Failsafe)");
-    static_assert(offsetof(NamedParameters, maReserved2114) == 8660,
-                  "the failsafe block closes at +8660, the console passenger slot");
-    static_assert(offsetof(NamedParameters, mGyroCamDefaultParams) == 480,
-                  "NamedParameters::mGyroCamDefaultParams @ +480 (E_SUBTYPE_LEAD)");
-    static_assert(offsetof(NamedParameters, mGyroCamTruckFront) == 684,
-                  "NamedParameters::mGyroCamTruckFront @ +684 (E_SUBTYPE_TRUCKING_FRONT)");
-    static_assert(offsetof(NamedParameters, mGyroCamLeft) == 888,
-                  "NamedParameters::mGyroCamLeft @ +888 (E_SUBTYPE_SIDE)");
-    static_assert(offsetof(NamedParameters, mGyroCamDefaultSideTruckingLeftParams) == 1296,
-                  "NamedParameters::mGyroCamDefaultSideTruckingLeftParams @ +1296");
-    static_assert(offsetof(NamedParameters, mGyroCamDefaultSideTruckingRightParams) == 1500,
-                  "NamedParameters::mGyroCamDefaultSideTruckingRightParams @ +1500");
-    static_assert(offsetof(NamedParameters, mGyroCamFollow) == 1704,
-                  "NamedParameters::mGyroCamFollow @ +1704 (E_SUBTYPE_FOLLOW)");
-    static_assert(offsetof(NamedParameters, mGyroCamAlwaysLowParams) == 1908,
-                  "NamedParameters::mGyroCamAlwaysLowParams @ +1908 (gyro slot 7)");
-    static_assert(offsetof(NamedParameters, mGyroCamTakedownParams) == 2112,
-                  "NamedParameters::mGyroCamTakedownParams @ +2112 (the takedown states' block)");
-    static_assert(offsetof(NamedParameters, mGyroCamTakedownZoomedOutParams) == 2316,
-                  "NamedParameters::mGyroCamTakedownZoomedOutParams @ +2316 (gyro slot 9)");
-    static_assert(offsetof(NamedParameters, mGyroCamHighParams) == 2520,
-                  "NamedParameters::mGyroCamHighParams @ +2520 (gyro slot 10)");
-    static_assert(offsetof(NamedParameters, mGyroCamHelicamParams) == 2724,
-                  "NamedParameters::mGyroCamHelicamParams @ +2724 (the hit-traffic moment's block)");
-    static_assert(offsetof(NamedParameters, mGyroCamDriveByLParams) == 2928,
-                  "NamedParameters::mGyroCamDriveByLParams @ +2928 (the drive-by takedown's block)");
-    static_assert(offsetof(NamedParameters, mGyroCamDriveByRParams) == 3132,
-                  "NamedParameters::mGyroCamDriveByRParams @ +3132 (gyro slot 13, no reader)");
-    static_assert(offsetof(NamedParameters, maReserved0D08) == 3336,
-                  "the gyro run closes at +3336, where the bystander run starts");
-    // The 100-byte grid the three loose-attachment placements rest on, ratcheted so a future
-    // widening of that block cannot silently slide them off their attested offsets.
-    static_assert(sizeof(Camera::BehaviourLooseAttachment::Parameters) == 100,
-                  "BehaviourLooseAttachment::Parameters is the 100-byte loose-attachment stride");
-    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown1) == 8696,
-                  "NamedParameters::mLooseAttachmentTakedown1 @ +8696 (shutdown-takedown beat 1)");
-    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown2) == 8796,
-                  "NamedParameters::mLooseAttachmentTakedown2 @ +8796 (shutdown-takedown beat 2)");
-    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown3) == 8896,
-                  "NamedParameters::mLooseAttachmentTakedown3 @ +8896 (shutdown-takedown beat 3)");
-    static_assert(offsetof(NamedParameters, maReserved22C4) == 8996,
-                  "the loose-attachment run closes at +8996, where mFixedDefault starts");
-    // ⓘ The look-around block below the gyro run is NOT asserted, because on this host it
-    // does not land on its console offset and never has: BehaviourRotateAboutVehicle::
-    // Parameters inherits the Behaviour::Parameters head, whose debug-name POINTER is 8 bytes
-    // here against the console build's 4, so the type is 8-aligned and the block sits at
-    // +9016 rather than +9012. That is the project's ordinary host-pointer-width divergence,
-    // and it is why the two tail blocks are by-name rather than placed. The gyro blocks above
-    // are pointer-free, which is what lets them be byte-exact.
+    // The record's member order is the console's: every block starts after the previous one.
+    static_assert(offsetof(NamedParameters, mAftertouchCamDefault) == 0, "the record opens with the aftertouch-cam block");
+    static_assert(offsetof(NamedParameters, mAftertouchCamDefault) < offsetof(NamedParameters, mAftertouchCrashParams), "console +0 before +108");
+    static_assert(offsetof(NamedParameters, mAftertouchCrashParams) < offsetof(NamedParameters, mCrashDebugParams), "console +108 before +220");
+    static_assert(offsetof(NamedParameters, mCrashDebugParams) < offsetof(NamedParameters, mHeliCamDefaultParams), "console +220 before +332");
+    static_assert(offsetof(NamedParameters, mHeliCamDefaultParams) < offsetof(NamedParameters, mGyroCamDefaultParams), "console +332 before +480");
+    static_assert(offsetof(NamedParameters, mGyroCamDefaultParams) < offsetof(NamedParameters, mGyroCamTruckFront), "console +480 before +684");
+    static_assert(offsetof(NamedParameters, mGyroCamTruckFront) < offsetof(NamedParameters, mGyroCamLeft), "console +684 before +888");
+    static_assert(offsetof(NamedParameters, mGyroCamLeft) < offsetof(NamedParameters, mGyroCamRight), "console +888 before +1092");
+    static_assert(offsetof(NamedParameters, mGyroCamRight) < offsetof(NamedParameters, mGyroCamDefaultSideTruckingLeftParams), "console +1092 before +1296");
+    static_assert(offsetof(NamedParameters, mGyroCamDefaultSideTruckingLeftParams) < offsetof(NamedParameters, mGyroCamDefaultSideTruckingRightParams), "console +1296 before +1500");
+    static_assert(offsetof(NamedParameters, mGyroCamDefaultSideTruckingRightParams) < offsetof(NamedParameters, mGyroCamFollow), "console +1500 before +1704");
+    static_assert(offsetof(NamedParameters, mGyroCamFollow) < offsetof(NamedParameters, mGyroCamAlwaysLowParams), "console +1704 before +1908");
+    static_assert(offsetof(NamedParameters, mGyroCamAlwaysLowParams) < offsetof(NamedParameters, mGyroCamTakedownParams), "console +1908 before +2112");
+    static_assert(offsetof(NamedParameters, mGyroCamTakedownParams) < offsetof(NamedParameters, mGyroCamTakedownZoomedOutParams), "console +2112 before +2316");
+    static_assert(offsetof(NamedParameters, mGyroCamTakedownZoomedOutParams) < offsetof(NamedParameters, mGyroCamHighParams), "console +2316 before +2520");
+    static_assert(offsetof(NamedParameters, mGyroCamHighParams) < offsetof(NamedParameters, mGyroCamHelicamParams), "console +2520 before +2724");
+    static_assert(offsetof(NamedParameters, mGyroCamHelicamParams) < offsetof(NamedParameters, mGyroCamDriveByLParams), "console +2724 before +2928");
+    static_assert(offsetof(NamedParameters, mGyroCamDriveByLParams) < offsetof(NamedParameters, mGyroCamDriveByRParams), "console +2928 before +3132");
+    static_assert(offsetof(NamedParameters, mGyroCamDriveByRParams) < offsetof(NamedParameters, mBystanderJumpLeftParameters), "console +3132 before +3336");
+    static_assert(offsetof(NamedParameters, mBystanderJumpLeftParameters) < offsetof(NamedParameters, mBystanderJumpParameters2), "console +3336 before +3492");
+    static_assert(offsetof(NamedParameters, mBystanderJumpParameters2) < offsetof(NamedParameters, mBystanderJumpFromBehindParameters), "console +3492 before +3648");
+    static_assert(offsetof(NamedParameters, mBystanderJumpFromBehindParameters) < offsetof(NamedParameters, mBystanderCloseParameters), "console +3648 before +3804");
+    static_assert(offsetof(NamedParameters, mBystanderCloseParameters) < offsetof(NamedParameters, mBystanderMediumParameters), "console +3804 before +3960");
+    static_assert(offsetof(NamedParameters, mBystanderMediumParameters) < offsetof(NamedParameters, mBystanderFarParameters), "console +3960 before +4116");
+    static_assert(offsetof(NamedParameters, mBystanderFarParameters) < offsetof(NamedParameters, mBystanderFarTallParameters), "console +4116 before +4272");
+    static_assert(offsetof(NamedParameters, mBystanderFarTallParameters) < offsetof(NamedParameters, mRigBonnetLowRight), "console +4272 before +4432");
+    static_assert(offsetof(NamedParameters, mRigBonnetLowRight) < offsetof(NamedParameters, mRigRearQFwd), "console +4432 before +4720");
+    static_assert(offsetof(NamedParameters, mRigRearQFwd) < offsetof(NamedParameters, mRigFrontQCuFwd), "console +4720 before +5008");
+    static_assert(offsetof(NamedParameters, mRigFrontQCuFwd) < offsetof(NamedParameters, mRigFrontQBwd), "console +5008 before +5296");
+    static_assert(offsetof(NamedParameters, mRigFrontQBwd) < offsetof(NamedParameters, mRigFrontRearview), "console +5296 before +5584");
+    static_assert(offsetof(NamedParameters, mRigFrontRearview) < offsetof(NamedParameters, mRigBootViewFwd), "console +5584 before +5872");
+    static_assert(offsetof(NamedParameters, mRigBootViewFwd) < offsetof(NamedParameters, mRigFrontQLowBwd), "console +5872 before +6160");
+    static_assert(offsetof(NamedParameters, mRigFrontQLowBwd) < offsetof(NamedParameters, mRigRoofFwd), "console +6160 before +6448");
+    static_assert(offsetof(NamedParameters, mRigRoofFwd) < offsetof(NamedParameters, mRigBootFwd), "console +6448 before +6736");
+    static_assert(offsetof(NamedParameters, mRigBootFwd) < offsetof(NamedParameters, mRigFrontQCuFwd2), "console +6736 before +7024");
+    static_assert(offsetof(NamedParameters, mRigFrontQCuFwd2) < offsetof(NamedParameters, mRigUnderbelly), "console +7024 before +7312");
+    static_assert(offsetof(NamedParameters, mRigUnderbelly) < offsetof(NamedParameters, mRigDropUnderbelly), "console +7312 before +7600");
+    static_assert(offsetof(NamedParameters, mRigDropUnderbelly) < offsetof(NamedParameters, mRigDropFrontQCuFwd), "console +7600 before +7888");
+    static_assert(offsetof(NamedParameters, mRigDropFrontQCuFwd) < offsetof(NamedParameters, mRigDropBootViewFwd), "console +7888 before +8176");
+    static_assert(offsetof(NamedParameters, mRigDropBootViewFwd) < offsetof(NamedParameters, mFailsafe), "console +8176 before +8464");
+    static_assert(offsetof(NamedParameters, mFailsafe) < offsetof(NamedParameters, mPassengerDefault), "console +8464 before +8660");
+    static_assert(offsetof(NamedParameters, mPassengerDefault) < offsetof(NamedParameters, mLooseAttachmentTakedown1), "console +8660 before +8696");
+    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown1) < offsetof(NamedParameters, mLooseAttachmentTakedown2), "console +8696 before +8796");
+    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown2) < offsetof(NamedParameters, mLooseAttachmentTakedown3), "console +8796 before +8896");
+    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown3) < offsetof(NamedParameters, mFixedDefault), "console +8896 before +8996");
+    static_assert(offsetof(NamedParameters, mFixedDefault) < offsetof(NamedParameters, maLookAroundCarCamParameters), "console +8996 before +9012");
+    static_assert(offsetof(NamedParameters, maLookAroundCarCamParameters) < offsetof(NamedParameters, maSpirallingDeathcamParameters), "console +9012 before +9140");
+    static_assert(offsetof(NamedParameters, maSpirallingDeathcamParameters) < offsetof(NamedParameters, mRoadRunnerDefault), "console +9140 before +9316");
+    // A same-typed run is contiguous on the host as on the console: the next block of a run starts
+    // one host sizeof further on (console strides 112 / 204 / 156 / 288 / 100).
+    static_assert(offsetof(NamedParameters, mCrashDebugParams) == offsetof(NamedParameters, mAftertouchCrashParams) + sizeof(Camera::BehaviourAftertouchCrash::Parameters), "console +220");
+    static_assert(offsetof(NamedParameters, mGyroCamTruckFront) == offsetof(NamedParameters, mGyroCamDefaultParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +684");
+    static_assert(offsetof(NamedParameters, mGyroCamLeft) == offsetof(NamedParameters, mGyroCamTruckFront) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +888");
+    static_assert(offsetof(NamedParameters, mGyroCamRight) == offsetof(NamedParameters, mGyroCamLeft) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +1092");
+    static_assert(offsetof(NamedParameters, mGyroCamDefaultSideTruckingLeftParams) == offsetof(NamedParameters, mGyroCamRight) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +1296");
+    static_assert(offsetof(NamedParameters, mGyroCamDefaultSideTruckingRightParams) == offsetof(NamedParameters, mGyroCamDefaultSideTruckingLeftParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +1500");
+    static_assert(offsetof(NamedParameters, mGyroCamFollow) == offsetof(NamedParameters, mGyroCamDefaultSideTruckingRightParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +1704");
+    static_assert(offsetof(NamedParameters, mGyroCamAlwaysLowParams) == offsetof(NamedParameters, mGyroCamFollow) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +1908");
+    static_assert(offsetof(NamedParameters, mGyroCamTakedownParams) == offsetof(NamedParameters, mGyroCamAlwaysLowParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +2112");
+    static_assert(offsetof(NamedParameters, mGyroCamTakedownZoomedOutParams) == offsetof(NamedParameters, mGyroCamTakedownParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +2316");
+    static_assert(offsetof(NamedParameters, mGyroCamHighParams) == offsetof(NamedParameters, mGyroCamTakedownZoomedOutParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +2520");
+    static_assert(offsetof(NamedParameters, mGyroCamHelicamParams) == offsetof(NamedParameters, mGyroCamHighParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +2724");
+    static_assert(offsetof(NamedParameters, mGyroCamDriveByLParams) == offsetof(NamedParameters, mGyroCamHelicamParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +2928");
+    static_assert(offsetof(NamedParameters, mGyroCamDriveByRParams) == offsetof(NamedParameters, mGyroCamDriveByLParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +3132");
+    static_assert(offsetof(NamedParameters, mBystanderJumpParameters2) == offsetof(NamedParameters, mBystanderJumpLeftParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters), "console +3492");
+    static_assert(offsetof(NamedParameters, mBystanderJumpFromBehindParameters) == offsetof(NamedParameters, mBystanderJumpParameters2) + sizeof(Camera::BehaviourBystanderCam::Parameters), "console +3648");
+    static_assert(offsetof(NamedParameters, mBystanderCloseParameters) == offsetof(NamedParameters, mBystanderJumpFromBehindParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters), "console +3804");
+    static_assert(offsetof(NamedParameters, mBystanderMediumParameters) == offsetof(NamedParameters, mBystanderCloseParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters), "console +3960");
+    static_assert(offsetof(NamedParameters, mBystanderFarParameters) == offsetof(NamedParameters, mBystanderMediumParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters), "console +4116");
+    static_assert(offsetof(NamedParameters, mBystanderFarTallParameters) == offsetof(NamedParameters, mBystanderFarParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters), "console +4272");
+    static_assert(offsetof(NamedParameters, mRigRearQFwd) == offsetof(NamedParameters, mRigBonnetLowRight) + sizeof(Camera::BehaviourRig::Parameters), "console +4720");
+    static_assert(offsetof(NamedParameters, mRigFrontQCuFwd) == offsetof(NamedParameters, mRigRearQFwd) + sizeof(Camera::BehaviourRig::Parameters), "console +5008");
+    static_assert(offsetof(NamedParameters, mRigFrontQBwd) == offsetof(NamedParameters, mRigFrontQCuFwd) + sizeof(Camera::BehaviourRig::Parameters), "console +5296");
+    static_assert(offsetof(NamedParameters, mRigFrontRearview) == offsetof(NamedParameters, mRigFrontQBwd) + sizeof(Camera::BehaviourRig::Parameters), "console +5584");
+    static_assert(offsetof(NamedParameters, mRigBootViewFwd) == offsetof(NamedParameters, mRigFrontRearview) + sizeof(Camera::BehaviourRig::Parameters), "console +5872");
+    static_assert(offsetof(NamedParameters, mRigFrontQLowBwd) == offsetof(NamedParameters, mRigBootViewFwd) + sizeof(Camera::BehaviourRig::Parameters), "console +6160");
+    static_assert(offsetof(NamedParameters, mRigRoofFwd) == offsetof(NamedParameters, mRigFrontQLowBwd) + sizeof(Camera::BehaviourRig::Parameters), "console +6448");
+    static_assert(offsetof(NamedParameters, mRigBootFwd) == offsetof(NamedParameters, mRigRoofFwd) + sizeof(Camera::BehaviourRig::Parameters), "console +6736");
+    static_assert(offsetof(NamedParameters, mRigFrontQCuFwd2) == offsetof(NamedParameters, mRigBootFwd) + sizeof(Camera::BehaviourRig::Parameters), "console +7024");
+    static_assert(offsetof(NamedParameters, mRigUnderbelly) == offsetof(NamedParameters, mRigFrontQCuFwd2) + sizeof(Camera::BehaviourRig::Parameters), "console +7312");
+    static_assert(offsetof(NamedParameters, mRigDropUnderbelly) == offsetof(NamedParameters, mRigUnderbelly) + sizeof(Camera::BehaviourRig::Parameters), "console +7600");
+    static_assert(offsetof(NamedParameters, mRigDropFrontQCuFwd) == offsetof(NamedParameters, mRigDropUnderbelly) + sizeof(Camera::BehaviourRig::Parameters), "console +7888");
+    static_assert(offsetof(NamedParameters, mRigDropBootViewFwd) == offsetof(NamedParameters, mRigDropFrontQCuFwd) + sizeof(Camera::BehaviourRig::Parameters), "console +8176");
+    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown2) == offsetof(NamedParameters, mLooseAttachmentTakedown1) + sizeof(Camera::BehaviourLooseAttachment::Parameters), "console +8796");
+    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown3) == offsetof(NamedParameters, mLooseAttachmentTakedown2) + sizeof(Camera::BehaviourLooseAttachment::Parameters), "console +8896");
 
     namespace Camera
     {
@@ -453,14 +377,10 @@ namespace BrnDirector
         // is deleted, and BuildArbStateSharedInfo publishes &bank.mNamedParameters. One
         // object, seeded once, by this bank's own Construct as the console does it.
         //
-        // ⓘ HOST WIDTH INSIDE THE RECORD. Every record offset above is byte-exact through the
-        // gyro run; below it the reconstruction runs 4 bytes long, because the shared
-        // Behaviour::Parameters head carries a debug-name POINTER that is 8 bytes wide on this
-        // host against the console's 4, so the rotate-about-vehicle ("look around") block
-        // lands at record +9016 rather than the console's +9012 and the record ends past
-        // +9328. That is the project's ordinary host-pointer-width divergence and it predates
-        // the record's move into this class; it is why the two tail blocks are reached by name
-        // and why bank +0x2480 and below stay provenance rather than placements.
+        // ⓘ HOST WIDTH INSIDE THE RECORD. Every block's Behaviour::Parameters head carries a
+        // debug-name POINTER that is 8 bytes wide on this host against the console's 4, so every
+        // block is wider than its console stride and the record offsets above (and bank +0x2480
+        // and below) are provenance rather than placements; every reader goes by member name.
         //
         // ⭐⭐ THE TWO GAMEPLAY BLOCKS + THE LATCHED CAR KEY ARE HOMED AS OF 2026-08-02
         // (camera parameter-chain wave). They are the three slots the whole chase/bumper
@@ -491,8 +411,7 @@ namespace BrnDirector
         // and role are all asm-attested.
         //
         // Every one of the record's 48 named blocks is a member of mNamedParameters; x64 parity
-        // past the gyro run is BY NAMED MEMBER (see the record's host spill), so the console
-        // displacements above are provenance only.
+        // is BY NAMED MEMBER, so the console displacements above are provenance only.
         class BehaviourParameterBank
         {
         public:
@@ -562,9 +481,8 @@ namespace BrnDirector
 
             // The gyro-cam block the hit-traffic moment binds (MomentHitTraffic::Update
             // hands manager+77796 == record +2724 to BehaviourGyroCam::SetParameters).
-            // Record +2724 is gyro slot 11 == mGyroCamHelicamParams, and the record now
-            // places the whole fourteen-block gyro run, so this returns the record's own
-            // block rather than a second by-name copy of it.
+            // Record +2724 is gyro slot 11 == mGyroCamHelicamParams, so this returns the
+            // record's own block.
             const BehaviourGyroCam::Parameters& GetGyroCamMomentParams() const
             {
                 return mNamedParameters.mGyroCamHelicamParams;
@@ -612,9 +530,8 @@ namespace BrnDirector
             // moment camera accessors left declaration-only: they are INDEXED, and this class
             // models blocks by name rather than as the record's arrays. They are bodied now
             // as a switch over the RECORD SLOT INDEX, and the eleven blocks the jump moment
-            // names are real members below (the same by-name parity the four blocks above
-            // have -- placing the runs at their record offsets is still impossible here, see
-            // the members' own note).
+            // names are real members of the record (the same by-name parity the four blocks
+            // above have).
             //
             // The index base the call sites used WAS off by one, and is corrected in the same
             // change. The eleven attested manager displacements are
@@ -710,11 +627,10 @@ namespace BrnDirector
             BehaviourGameplayBumper::Parameters   mGameplayBumperCameraParamsForCar;    // +0x2538
         };
 
-        // NEVER CALLED. The record is the one part of this slice whose bank offset is
-        // byte-exact, and the whole derivation in the banner rests on it: every attested
+        // NEVER CALLED. The record's start is the one bank offset that holds on the host as on
+        // the console, and the whole derivation in the banner rests on it: every attested
         // displacement in the tree is `record offset + 0x10`. If a future edit puts a member
-        // ahead of the record, or widens the head, the build fails here instead of quietly
-        // re-basing every consumer's arithmetic.
+        // ahead of the record, or widens the head, the build fails here.
         inline void BehaviourParameterBank::_AssertBankLayout()
         {
             static_assert(offsetof(BehaviourParameterBank, muVersion) == 0x0,

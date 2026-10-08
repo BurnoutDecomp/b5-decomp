@@ -106,22 +106,18 @@ class BehaviourLooseAttachment : public Behaviour
 {
 public:
 
-    // The loose-attachment parameter block: a type tag in its leading word plus behaviour-
-    // specific data. GetType returns the tag SetParameters asserts on.
+    // The loose-attachment parameter block: the Behaviour::Parameters head (type tag + debug
+    // name) plus behaviour-specific data. GetType returns the tag SetParameters asserts on.
     //
     // The field-walk region (the embedded "Impact" sub-block + the loose-attachment tunables) is
     // pinned store-for-store from the three Serialise<S> visitor bodies (write, read and
     // debug-menu): a by-value CameraImpactEffect::Parameters sub-block at +0x2C (walked as the
     // nested "Impact" section) followed by the loose-attachment f32/bool tunables at the
-    // +0x48..+0x60 displacements the write/read/menu assembly loads and stores. No pointers in
-    // the walked region, so the offsets are host-pointer-width invariant (pinned in the .cpp).
-    //
-    // PARK: this block cannot derive Behaviour::Parameters (which is what the recovered
-    //   declaration has) until the parameter-bank lane re-expresses BrnBehaviourParameterBank.h's
-    //   100-byte stride pin as sizeof(Camera::BehaviourLooseAttachment::Parameters) instead of a
-    //   console literal -- deriving it would widen the head by the debug-name pointer and move
-    //   every authored block in the bank.
-    class Parameters
+    // +0x48..+0x60 displacements the write/read/menu assembly loads and stores. Those are the
+    // console offsets (100-byte block); on the host the head's debug-name pointer is 8 bytes
+    // wide, so the derived members sit 8 bytes later and keep the console spacing (pinned in the
+    // .cpp).
+    class Parameters : public Behaviour::Parameters
     {
     public:
         // Console visitor: `void Serialise<S>(S&)` -- walks this block's fields into the
@@ -140,11 +136,8 @@ public:
 
         EBehaviourTypeLooseAttachment GetType() const
         {
-            return static_cast<EBehaviourTypeLooseAttachment>(meType);
+            return static_cast<EBehaviourTypeLooseAttachment>(mType);
         }
-
-        s32 meType;        // +0x00  the behaviour type tag (eBehaviour*)
-        s32 miParamWord1;  // +0x04  first behaviour-specific word
 
         // +0x08..+0x2B is two by-value sub-blocks, not opaque bytes: the behaviour's Update
         // hands &(params +0x08) to PositionLag::Update and &(params +0x1C) to CameraShake::
@@ -333,8 +326,8 @@ private:
 inline void
 BehaviourLooseAttachment::Parameters::Construct()
 {
-    meType       = eBehaviourLooseAttachment;   // stw 11, +0x00
-    miParamWord1 = 0;                           // stw 0,  +0x04
+    Behaviour::Parameters::Construct();         // stw 0,  +0x04
+    mType = eBehaviourLooseAttachment;          // stw 11, +0x00
 
     // +0x08 mPositionLagParams -- the PositionLag::Parameters seed. muVersion (+0x08) is NOT
     // written, exactly as PositionLag::Parameters::Construct leaves it (the serialiser stamps it).
@@ -375,12 +368,6 @@ BehaviourLooseAttachment::Parameters::Construct()
 //   lwz    r11, 4(r4)        ; the parameter block's second word
 //   stw    r4,  +0x324(r3)   ; mpParameters = lpParameters
 //   stw    r11, +0x010(r3)   ; the BASE's mpcDebugParametersName
-//
-// PARK: the second store is the base's SetDebugParametersName(lpParameters->GetDebugName()),
-//   and restoring it needs the Parameters PARK above (the parameter-bank stride pin) closed
-//   first -- the block's second word only becomes a `const char*` once it derives
-//   Behaviour::Parameters. Omitted rather than forged through the s32 word -- it feeds only the
-//   tweaker and the debug printers, so nothing on the live camera path reads it.
 // ----------------------------------------------------------------------------
 inline void
 BehaviourLooseAttachment::SetParameters(const Parameters* lpParameters)
@@ -388,6 +375,7 @@ BehaviourLooseAttachment::SetParameters(const Parameters* lpParameters)
     CGS_ASSERT(lpParameters->GetType() == eBehaviourLooseAttachment,
                "lpParameters->GetType() == eBehaviourLooseAttachment");
     mpParameters = lpParameters;               // stw r4, +0x324(this)
+    SetDebugParametersName(lpParameters->GetDebugName());
 }
 
 } // namespace Camera
