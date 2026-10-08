@@ -163,12 +163,10 @@ namespace Module
 
         // The Csis mutex callbacks the RWAC stage installs into mpSystem (+0x3C/+0x40/+0x44):
         //   MutexLockFn     0x82682A20  { rw::audio::core::CsisMutexLock();   ++msiMutexLockCount; }
-        //   MutexUnlockFn   (ICF-folded on X360; PS3 0x8D0570 installs it @ +0x44)
-        //                   { rw::audio::core::CsisMutexUnlock(); --msiMutexLockCount; }
+        //   MutexUnlockFn   (X360 hook; DecFIGS 0x822B78 preserves the store order)
+        //                   { --msiMutexLockCount; rw::audio::core::CsisMutexUnlock(); }
         //   MutexIsLockedFn 0x82682A68  { return msiMutexLockCount > 0; }
-        // Static (plain function pointers are stored into the C callback slots). [gated: the
-        // rw::audio::core CsisMutex entry points land with the RWAC stage; declared for shape,
-        // no bodies yet -- nothing references them until the RWAC stage is real.]
+        // Static: plain function pointers are installed in the RWAC callback slots.
         static void MutexLockFn();
         static void MutexUnlockFn();
         static bool MutexIsLockedFn();
