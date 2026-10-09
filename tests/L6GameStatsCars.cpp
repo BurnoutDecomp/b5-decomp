@@ -89,6 +89,7 @@ namespace BrnResource
     public:
         VehicleListEntry maEntries[16];
         s32 miCount = 0;
+        bool mbBrokenEntry = false;
         s32 GetVehicleIndex(CgsID lId) const
         {
             for (s32 li = 0; li < miCount; ++li)
@@ -96,7 +97,7 @@ namespace BrnResource
                     return li;
             return -1;
         }
-        const VehicleListEntry* GetVehicleData(s32 liIndex) const { return &maEntries[liIndex]; }
+        const VehicleListEntry* GetVehicleData(s32 liIndex) const { return mbBrokenEntry ? nullptr : &maEntries[liIndex]; }
     };
 }
 
@@ -287,6 +288,36 @@ int main()
         for (s32 li = 0; li < 70; ++li)  AddCar(P, 204, CarData::E_UNLOCK_TYPE_GOLD_SILVER);
         CheckInt(P.miCarCount, 241, "the slot-0 mix holds 241 cars");
         CheckInt(RunCarsCollected(sManager), 70, "CARS_COLLECTED on the owner's slot-0 mix (the PC showed 171)");
+    }
+
+    // Imported profile: the three Nascar DLC ids exist in VEHICLELIST_V1, but
+    // are absent from the loaded ARTIST catalogue. Stats must retain the save
+    // and count available cars without opening an assert overlay.
+    {
+        static ProgressionManager manager;
+        static BrnResource::VehicleList list;
+        manager.mpVehicleList = &list;
+        MakeEntry(list.maEntries[0], 301, 0x41, 0, 0);
+        list.miCount = 1;
+        AddCar(manager.mProfile, 301, CarData::E_UNLOCK_TYPE_GIFT);
+        const CgsID ids[] = {0xA566038412870000ULL,0xA56603809D848000ULL,0xA5660380A39F0000ULL};
+        for (CgsID id : ids) AddCar(manager.mProfile,id,CarData::E_UNLOCK_TYPE_GIFT);
+        CarData before[4];
+        std::memcpy(before,manager.mProfile.GetCarData(0),sizeof(before));
+        const unsigned assertsBefore = gAsserts;
+        CheckInt(RunCarsCollected(manager),1,"unavailable imported cars do not inflate the current catalogue's owned count");
+        Check(gAsserts==assertsBefore,"unavailable imported car ids do not assert during a stats query");
+        Check(manager.mProfile.miCarCount==4 && std::memcmp(before,manager.mProfile.GetCarData(0),sizeof(before))==0,
+              "stats query preserves every imported profile car byte");
+        CheckInt(RunCarsCollected(manager),1,"repeated stats query keeps the available car count");
+        Check(gAsserts==assertsBefore,"reopening driver details does not repeat unsupported-id asserts");
+        MakeEntry(list.maEntries[1],ids[0],0x41,0,0);
+        list.miCount=2;
+        CheckInt(RunCarsCollected(manager),2,"a retained car counts as soon as its catalogue entry is available");
+        const unsigned beforeBroken = gAsserts;
+        list.mbBrokenEntry=true;
+        CheckInt(RunCarsCollected(manager),0,"a registered null entry is still rejected");
+        Check(gAsserts==beforeBroken+2,"registered entries with missing data retain their original assertions");
     }
 
     // ---- 3) the rest of the record, against the console's store list --------------------------------

@@ -1,6 +1,6 @@
 #pragma once
 
-// FLAG PC-platform leaf: INI access to the original ARTIST graphics tweakables.
+// FLAG PC-platform leaf: INI access to ARTIST tweakables and native quality options.
 // Load once before module Construct; consumers seed the existing engine state.
 #include "types.hpp"
 #include <Windows.h>
@@ -37,6 +37,9 @@ namespace renderengine
         s32 miEnvironmentMapLod = 2;
         bool mbTrafficShadows = false;
         s32 miAnisotropicFiltering = 1;
+        s32 miShadowResolutionScale = 1;
+        f32 mfShadowDistance = 120.0f;
+        f32 mfShadowSlopeBias = 0.0f;
         s32 miWorldLodOverrideDistance = 0;
         s32 miPropLodOverrideDistance = 0;
         VehicleLodPresetPC meVehicleLodPreset = E_VEHICLE_LOD_DEFAULT;
@@ -115,6 +118,9 @@ namespace renderengine
         lrSettings.mbTrafficShadows = ReadGraphicsIntPC(lpcPath, "TrafficShadows", 0, 0, 1) != 0;
         const s32 liAnisotropy = ReadGraphicsIntPC(lpcPath, "AnisotropicFiltering", 1, 1, 16);
         lrSettings.miAnisotropicFiltering = (liAnisotropy & (liAnisotropy - 1)) == 0 ? liAnisotropy : 1;
+        lrSettings.miShadowResolutionScale = ReadGraphicsIntPC(lpcPath, "ShadowResolutionScale", 1, 1, 2);
+        lrSettings.mfShadowDistance = ReadGraphicsFloatPC(lpcPath, "ShadowDistance", 120.0f, 30.0f, 500.0f);
+        lrSettings.mfShadowSlopeBias = ReadGraphicsFloatPC(lpcPath, "ShadowSlopeBias", 0.0f, 0.0f, 4.0f);
         lrSettings.miWorldLodOverrideDistance = ReadGraphicsIntPC(lpcPath, "WorldLODOverrideDistance", 0, 0, 10000);
         lrSettings.miPropLodOverrideDistance = ReadGraphicsIntPC(lpcPath, "PropLODOverrideDistance", 0, 0, 10000);
 
@@ -160,6 +166,12 @@ namespace renderengine
         WritePrivateProfileStringA("Graphics", "TrafficShadows", lrSettings.mbTrafficShadows ? "1" : "0", lpcPath);
         std::snprintf(lacValue, sizeof(lacValue), "%d", lrSettings.miAnisotropicFiltering);
         WritePrivateProfileStringA("Graphics", "AnisotropicFiltering", lacValue, lpcPath);
+        std::snprintf(lacValue, sizeof(lacValue), "%d", lrSettings.miShadowResolutionScale);
+        WritePrivateProfileStringA("Graphics", "ShadowResolutionScale", lacValue, lpcPath);
+        std::snprintf(lacValue, sizeof(lacValue), "%.9g", lrSettings.mfShadowDistance);
+        WritePrivateProfileStringA("Graphics", "ShadowDistance", lacValue, lpcPath);
+        std::snprintf(lacValue, sizeof(lacValue), "%.9g", lrSettings.mfShadowSlopeBias);
+        WritePrivateProfileStringA("Graphics", "ShadowSlopeBias", lacValue, lpcPath);
         std::snprintf(lacValue, sizeof(lacValue), "%d", lrSettings.miWorldLodOverrideDistance);
         WritePrivateProfileStringA("Graphics", "WorldLODOverrideDistance", lacValue, lpcPath);
         std::snprintf(lacValue, sizeof(lacValue), "%d", lrSettings.miPropLodOverrideDistance);

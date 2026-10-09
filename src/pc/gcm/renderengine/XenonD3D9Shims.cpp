@@ -54,6 +54,7 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
 #include "pc/gcm/renderengine/WorldTextureFilteringPCLeaf.h"
+#include "pc/gcm/renderengine/ShadowQualityPCLeaf.h"
 #include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
 #include "pc/gcm/renderengine/TrailPausedDiagPC.h"
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"
@@ -890,9 +891,9 @@ namespace
     // WorldDraw_IndexedUP and renderengine::WorldDrawCallCount below.
     u64         guWorldDrawCalls = 0;
 
-    // True between ShadowPass_BeginScope/EndScope: the caster draws of the shadow-map pass.
-    // Read only by the env-gated cull/depth-bias experiment in WorldDraw_IndexedUP.
+    // Caster scope for alpha coverage, native slope bias and diagnostic overrides.
     bool        sbShadowPassActive = false;
+    u32         suRasterSlopeBiasBasePC = 0u;
 
     // True for the length of PCStampMotionBlurMask's full-screen quads (the motion-blur mask's
     // PC carrier, at the bottom of this file). It is an input to the alpha-to-coverage
@@ -8228,8 +8229,10 @@ void D3DDevice_SetRenderState_DepthBias(IDirect3DDevice9*, u32 luFloatAsDword)
 void D3DDevice_SetRenderState_SlopeScaleDepthBias(IDirect3DDevice9*, u32 luFloatAsDword)
 {
     IDirect3DDevice9* lpDevice = Dev();
+    suRasterSlopeBiasBasePC = luFloatAsDword;
     if (lpDevice != nullptr)
-        lpDevice->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, luFloatAsDword);
+        lpDevice->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS,
+            renderengine::ShadowSlopeBiasForPassPC(luFloatAsDword, sbShadowPassActive));
 }
 void D3DDevice_SetRenderState_MultiSampleAntiAlias(IDirect3DDevice9*, u32 luValue)
 {
@@ -8413,6 +8416,8 @@ void PCSurfaceBracket_Save()
     // The bracket already delimits exactly the shadow-map pass, so it is also what marks the
     // caster draws for the env-gated cull/depth-bias experiment in WorldDraw_IndexedUP.
     sbShadowPassActive = true;
+    if (GetGraphicsSettingsPC().mfShadowSlopeBias != 0.0f)
+        D3DDevice_SetRenderState_SlopeScaleDepthBias(lpDevice, suRasterSlopeBiasBasePC);
 
     // ...and it is what keeps alpha-to-coverage OUT OF THE SHADOW MAP. The cascades render
     // the same alpha-tested foliage into a single-sampled depth atlas, and NO vendor document
@@ -8433,6 +8438,8 @@ void PCSurfaceBracket_Restore()
         return;
     sbSurfacesSaved    = false;
     sbShadowPassActive = false;
+    if (GetGraphicsSettingsPC().mfShadowSlopeBias != 0.0f)
+        D3DDevice_SetRenderState_SlopeScaleDepthBias(lpDevice, suRasterSlopeBiasBasePC);
 
     if (lpDevice != nullptr)
     {
@@ -8758,6 +8765,17 @@ void ShadowSampler_ApplyState(u32 luUnit)
     renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXMIPLEVEL, 0u);
     renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXANISOTROPY, 1u);
     renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_SRGBTEXTURE, FALSE);
+}
+
+// FLAG PC-platform leaf: native atlas dimensions are bounded by the adapter.
+ShadowAtlasSizePC ChooseShadowAtlasSizePC(IDirect3DDevice9* lpDevice, u32 luRequested)
+{
+    u32 luScale = luRequested == 2u ? 2u : 1u;
+    D3DCAPS9 lCaps = {};
+    if (!lpDevice || FAILED(lpDevice->GetDeviceCaps(&lCaps)) ||
+        lCaps.MaxTextureWidth < 1280u * luScale || lCaps.MaxTextureHeight < 1920u * luScale)
+        luScale = 1u;
+    return {1280u * luScale, 1920u * luScale, luScale};
 }
 
 // =============================================================================

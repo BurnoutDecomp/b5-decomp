@@ -9,6 +9,7 @@
 #include <cstring>
 #include <vector>
 #include "pc/gcm/renderengine/renderstates.h"
+#include "pc/gcm/renderengine/ShadowQualityPCLeaf.h"
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"
 #include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"
 #include "GameSource/Graphics/BrnShadowMapRenderManager.h"
@@ -17,6 +18,8 @@
 
 extern "C" { __declspec(dllexport) DWORD NvOptimusEnablement=1;
              __declspec(dllexport) int AmdPowerXpressRequestHighPerformance=1; }
+static bool sbShadowPassActive=false;
+static u32 suRasterSlopeBiasBasePC=0;
 static int checks, failures, nativeBinds;
 static void Check(bool ok,const char* text){++checks;if(!ok){++failures;std::printf("FAIL %s\n",text);}}
 static std::vector<void*> allocations;

@@ -163,11 +163,12 @@ void LoadConfig()
         BrnWorld::KA_VEHICLE_QUALITY_LOD_DISTANCE[luLod] = lrGraphics.mafVehicleLodDistances[luLod];
     char lacGraphicsLog[384];
     std::snprintf(lacGraphicsLog, sizeof(lacGraphicsLog),
-        "[graphics] bloom=%.9g envmapLOD=%d trafficShadows=%d worldLOD=%d propLOD=%d vehicleLOD=%s aaRequest=%d anisoRequest=%d\n",
+        "[graphics] bloom=%.9g envmapLOD=%d trafficShadows=%d worldLOD=%d propLOD=%d vehicleLOD=%s aaRequest=%d anisoRequest=%d shadowScale=%d shadowDistance=%.9g shadowSlopeBias=%.9g\n",
         lrGraphics.mfBloomLuminanceScale, lrGraphics.miEnvironmentMapLod,
         lrGraphics.mbTrafficShadows ? 1 : 0, lrGraphics.miWorldLodOverrideDistance,
         lrGraphics.miPropLodOverrideDistance, renderengine::VehicleLodPresetNamePC(lrGraphics.meVehicleLodPreset),
-        renderengine::gAntiAliasing, lrGraphics.miAnisotropicFiltering);
+        renderengine::gAntiAliasing, lrGraphics.miAnisotropicFiltering,
+        lrGraphics.miShadowResolutionScale, lrGraphics.mfShadowDistance, lrGraphics.mfShadowSlopeBias);
     CgsDev::Log::WriteToLog(lacGraphicsLog);
 
     // The alpha-to-coverage off switch (rung 9); 0/1, anything else clamped to 1 because

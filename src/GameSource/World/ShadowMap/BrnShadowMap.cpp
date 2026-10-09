@@ -1,5 +1,6 @@
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"
 #include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
+#include "pc/gcm/renderengine/ShadowQualityPCLeaf.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"            // CgsCore::SnPrintf (Construct's per-CSM debug paths)
@@ -235,6 +236,26 @@ namespace BrnWorld
         mfShadowFadeToValue           = KF_SHADOWMAP_FADE_TO_VALUE;   // stfs 0x1518
         mfVariableBiasMin             = KF_VARIABLE_BIAS_MIN;         // stw 0x3F028F5C -> 0x1520
         mfBiasFrustumLength           = KF_BIAS_FRUSTUM_LENGTH;       // stfs 0x1524
+
+        // FLAG PC-platform leaf: expose the existing three cascade ranges.
+        // Keep their proportions and fade range; extend light-space depth only
+        // when a longer view range would exceed the original padding.
+        const f32 lfDistance = renderengine::GetGraphicsSettingsPC().mfShadowDistance;
+        const f32 lfDistanceScale = lfDistance / 120.0f;
+        for (u32 luMap = 0; luMap < KU_NUM_SHADOW_MAPS; ++luMap)
+        {
+            maTsmBBInfo[luMap].mfNearClip *= lfDistanceScale;
+            maTsmBBInfo[luMap].mfFarClip *= lfDistanceScale;
+        }
+        mfFadeStartDistance *= lfDistanceScale;
+        if (lfDistance > 120.0f) mfShadowMapFarPlane += lfDistance - 120.0f;
+        char lacShadowQuality[224];
+        CgsCore::SnPrintf(lacShadowQuality, sizeof(lacShadowQuality)-1,
+            "[shadow-quality] distance=%.9g near=%.9g,%.9g,%.9g far=%.9g,%.9g,%.9g fade=%.9g lightFar=%.9g\n",
+            lfDistance,maTsmBBInfo[0].mfNearClip,maTsmBBInfo[1].mfNearClip,maTsmBBInfo[2].mfNearClip,
+            maTsmBBInfo[0].mfFarClip,maTsmBBInfo[1].mfFarClip,maTsmBBInfo[2].mfFarClip,
+            mfFadeStartDistance,mfShadowMapFarPlane);
+        CgsDev::Log::WriteToLog(lacShadowQuality);
 
         // ---- debug-variable registration (0x827B46CC..0x827B4938) -----------
         // The automatic DebugInterface handle = the inlined DebugManager
@@ -1655,8 +1676,11 @@ namespace BrnWorld
             {
                 laMatrices[luMap] = gShadowDisabledConstantMatrix;
             }
-            laMatrices[luMap].wAxis.x += gShadowConstantRowOffset.x;   // vaddfp on the w row
-            laMatrices[luMap].wAxis.y += gShadowConstantRowOffset.y;
+            // FLAG PC-platform leaf: preserve the authored half-texel offset
+            // in texels when the native atlas resolution changes.
+            const f32 lfAtlasScale = static_cast<f32>(renderengine::ShadowAtlasScalePC().load(std::memory_order_relaxed));
+            laMatrices[luMap].wAxis.x += gShadowConstantRowOffset.x / lfAtlasScale;
+            laMatrices[luMap].wAxis.y += gShadowConstantRowOffset.y / lfAtlasScale;
             laMatrices[luMap].wAxis.z += gShadowConstantRowOffset.z;
             laMatrices[luMap].wAxis.w += gShadowConstantRowOffset.w;
         }
