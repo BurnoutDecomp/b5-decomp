@@ -855,6 +855,31 @@ namespace BrnWorld
                     {
                         CgsResource::ResourcePtr<PropZoneData> lZoneData( lpAssetEvent->mHandle );
 
+                        // FLAG PC-platform leaf: native asynchronous acquires can
+                        // complete without a resident resource (PoolModule returns
+                        // NULLResourceHandle on a miss). Leave this zone unloaded
+                        // and clear its pending request, so the normal streaming
+                        // path retries while its world graphics remain resident.
+                        // The console assumes the acquire succeeded here.
+                        if ( !lZoneData.HasMemoryResource() )
+                        {
+                            mabWaitingForInstances.UnSetBit( luZone );
+                            if ( CgsDev::Log::gpDebugPrint != 0 )
+                            {
+                                static u32 suMissingInstanceReports = 0;
+                                if ( suMissingInstanceReports < 8 )
+                                {
+                                    ++suMissingInstanceReports;
+                                    *CgsDev::Log::gpDebugPrint
+                                        << "[props-stream] prop instances unavailable for zone "
+                                        << luZone << "; leaving zone unloaded for streaming retry\n";
+                                }
+                            }
+                            liEventType = mReceiverQueue.GetNextEvent(
+                                lpEventData, &lpEventData, &liEventSize );
+                            continue;
+                        }
+
                         if ( !mbResourceSystemStalled )
                         {
                             CGS_ASSERT( luZone == lZoneData->GetZoneId(),
