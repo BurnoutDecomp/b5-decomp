@@ -66,6 +66,12 @@ face and uses the props' current transforms. These controls do not change textur
 resolution, streaming or material reflectivity. They do not add traffic or rivals
 to the reflection pass. Vehicle paint and glass sample the same player-centered cube.
 
+The native cube projection includes D3D9 pixel-centre alignment. Shadow receivers
+use the main camera's depth for cascade selection and fading, while reflection
+geometry keeps each cube face's projection. The shader converter and executable
+must be updated together for the receiver correction: rebuild the executable and
+run `build shaders --install` when updating an existing data folder.
+
 ```ini
 [Debug]
 ; All six faces each frame (original default).
@@ -175,6 +181,7 @@ python b5-decomp/tests/run_pc_debug_ini.py
 python b5-decomp/tests/run_pc_prop_reflection_lod.py
 python b5-decomp/tests/run_pc_world_reflection_distance.py
 python b5-decomp/tests/run_pc_reflection_orientation.py
+python b5-decomp/tests/run_pc_reflection_shadows.py
 python b5-decomp/tests/run_pc_graphics_settings.py
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/tests/run_case.ps1 -Case b5-decomp/tests/PCDebugIniLive.ps1 -Slot 9
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/tests/run_case.ps1 -Case b5-decomp/tests/PCReflectionDistanceLive.ps1 -Slot 9
@@ -183,3 +190,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/tests/run_case.ps1 -Ca
 The native case uses a private slot and profile fixture. It checks initial registry
 overrides, actual prop capture LODs and later console edits without startup reapplication.
 Set `BRN_TEST_PROP_REFLECTION_LOD=2` for the missing-prop-option default case.
+
+`PCReflectionShadowsLive.ps1` parks the car, orbits the camera, and saves bounded
+real cube faces beside its game captures. Run it in a private slot; optionally set
+`BRN_TEST_REFLECTION_PROFILE` to an existing profile fixture. `BRN_ENVMAP_DUMP=1`
+uses that run's `cube` directory; an explicit directory also works. The passive
+capture is capped at 24 sets of six faces. The pixel probe records evidence for
+inspection; the shadow GPU regression supplies the old-path failure control.
+Set `BRN_TEST_REFLECTION_CAR=PSPCHRO` to select the chrome test model through
+the existing harness car-swap path without changing the source profile.

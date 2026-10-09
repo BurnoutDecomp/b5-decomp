@@ -2165,6 +2165,69 @@ namespace postfx
         // face luFace of the cube -- the D3D9 spelling of Xbox2ResolveTo(..., destSlice = face).
         HRESULT lhr = lpDevice->StretchRect(lpRecord->mpScratch, nullptr, lpFaceSurface, nullptr,
                                             D3DTEXF_NONE);
+        // FLAG PC-platform leaf: bounded, opt-in pixels from the actual resolved
+        // cube for reflection seam/shadow investigations. The directory is supplied
+        // by the harness; no captures or GPU readbacks occur in ordinary runs.
+        static const char* spcCubeDump = [] {
+            const char* lpcValue = std::getenv("BRN_ENVMAP_DUMP");
+            if (lpcValue && std::strcmp(lpcValue, "1") == 0)
+            {
+                const char* lpcFrames = std::getenv("BRN_FRAME_DUMP");
+                if (!lpcFrames || !lpcFrames[0]) return static_cast<const char*>(nullptr);
+                static char sacPath[MAX_PATH];
+                const int liLength = std::snprintf(sacPath, sizeof(sacPath), "%s/../cube", lpcFrames);
+                return liLength > 0 && liLength < static_cast<int>(sizeof(sacPath))
+                    ? static_cast<const char*>(sacPath) : nullptr;
+            }
+            return lpcValue;
+        }();
+        if (spcCubeDump && spcCubeDump[0] && SUCCEEDED(lhr))
+        {
+            static u32 sauFrame[6] = {};
+            const u32 luFrame = sauFrame[luFace]++;
+            static const u32 suStart = [] {
+                const char* lpcValue = std::getenv("BRN_ENVMAP_DUMP_START");
+                return lpcValue ? static_cast<u32>(std::strtoul(lpcValue, nullptr, 10)) : 1000u;
+            }();
+            if (luFrame >= suStart && luFrame < suStart + 24u * 180u && (luFrame - suStart) % 180u == 0u)
+            {
+                IDirect3DSurface9* lpRead = nullptr;
+                const u32 luEdge = lpRecord->muEdge;
+                if (SUCCEEDED(lpDevice->CreateOffscreenPlainSurface(luEdge, luEdge, D3DFMT_A8R8G8B8,
+                        D3DPOOL_SYSTEMMEM, &lpRead, nullptr)))
+                {
+                    D3DLOCKED_RECT lLock;
+                    if (SUCCEEDED(lpDevice->GetRenderTargetData(lpFaceSurface, lpRead)) &&
+                        SUCCEEDED(lpRead->LockRect(&lLock, nullptr, D3DLOCK_READONLY)))
+                    {
+                        char lacPath[MAX_PATH];
+                        const int liLength = std::snprintf(lacPath, sizeof(lacPath), "%s/cube_%06u_%u.bmp",
+                            spcCubeDump, luFrame, luFace);
+                        FILE* lpFile = nullptr;
+                        if (liLength > 0 && liLength < static_cast<int>(sizeof(lacPath)))
+                            lpFile = std::fopen(lacPath, "wb");
+                        if (lpFile)
+                        {
+                            BITMAPFILEHEADER lFile = {};
+                            BITMAPINFOHEADER lInfo = {};
+                            lFile.bfType = 0x4D42; lFile.bfOffBits = sizeof(lFile) + sizeof(lInfo);
+                            lFile.bfSize = lFile.bfOffBits + luEdge * luEdge * 4u;
+                            lInfo.biSize = sizeof(lInfo); lInfo.biWidth = luEdge;
+                            lInfo.biHeight = -static_cast<LONG>(luEdge);
+                            lInfo.biPlanes = 1; lInfo.biBitCount = 32; lInfo.biCompression = BI_RGB;
+                            std::fwrite(&lFile, sizeof(lFile), 1, lpFile);
+                            std::fwrite(&lInfo, sizeof(lInfo), 1, lpFile);
+                            for (u32 luRow = 0; luRow < luEdge; ++luRow)
+                                std::fwrite(static_cast<const u8*>(lLock.pBits) + luRow * lLock.Pitch,
+                                    luEdge * 4u, 1, lpFile);
+                            std::fclose(lpFile);
+                        }
+                        lpRead->UnlockRect();
+                    }
+                    lpRead->Release();
+                }
+            }
+        }
         if (EnvMapDebugFaceColours() && SUCCEEDED(lhr))
         {
             // THE ORIENTATION PROBE, ADDITIVE (verify F2, cubeleaf run 2: a synthetic whole-face

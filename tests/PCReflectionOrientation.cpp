@@ -191,16 +191,16 @@ int main()
         {
             const u32 luC=3-luA-luB;
             f32 lafD1[4]={},lafD2[4]={};
-            lafD1[luA]=lfA*1.01f;lafD1[luB]=lfB;lafD1[luC]=lfAlong;
-            lafD2[luA]=lfA;lafD2[luB]=lfB*1.01f;lafD2[luC]=lfAlong;
+            lafD1[luA]=lfA*1.00001f;lafD1[luB]=lfB;lafD1[luC]=lfAlong;
+            lafD2[luA]=lfA;lafD2[luB]=lfB*1.00001f;lafD2[luC]=lfAlong;
             const DWORD lP1=lSample(lafD1),lP2=lSample(lafD2);
             const u32 luEdge=Difference(lP1,lP2);
             if(luEdge>luWorstEdge)luWorstEdge=luEdge;
-            Check(luEdge<=4,"adjacent faces sample continuous world field");
-            const DWORD lExpected=Colour(lafD1[0]*10/1.01f,lafD1[1]*10/1.01f,lafD1[2]*10/1.01f);
+            Check(luEdge<=1,"adjacent faces meet without a pixel-centre seam");
+            const DWORD lExpected=Colour(lafD1[0]*10/1.00001f,lafD1[1]*10/1.00001f,lafD1[2]*10/1.00001f);
             const u32 luField=Difference(lP1,lExpected);
             if(luField>luWorstField)luWorstField=luField;
-            Check(luField<=4,"native cube lookup returns correct world direction");
+            Check(luField<=1,"native cube lookup returns the texel-aligned world direction");
         }
     }
     renderengine::EnvironmentMapDrawDistancePC()=0;
