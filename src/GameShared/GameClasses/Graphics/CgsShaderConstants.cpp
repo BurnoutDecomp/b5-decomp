@@ -696,7 +696,7 @@ u32 ShaderConstantsCPU::GetSizeOf(u32 luCurrentSize) const
 
     if (luNum != 0)
     {
-        const char* const* lppName = reinterpret_cast<const char* const*>(mppacNames);
+        const CgsGraphics::Ptr32<const char>* lppName = mppacNames.Get();
         u32 luRemaining = luNum;
         do
         {

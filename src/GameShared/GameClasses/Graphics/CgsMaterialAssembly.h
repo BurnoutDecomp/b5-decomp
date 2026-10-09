@@ -12,6 +12,8 @@ namespace renderengine { class Texture; }
 // The material resource-type handler drives the streamed-material fix-up and calls the private
 // FixupAnimatedMaterial as part of PostFixUp (X360 0x828A83F0); grant it access.
 namespace CgsResource { class MaterialResourceType; }
+struct ShaderConstantsInternal;
+struct ShaderConstantsCPU;
 
 // CgsGraphics::MaterialAssembly @ CgsMaterialAssembly.h:54 (DecFIGS DWARF). A draw-time
 // material: an array of MaterialTechnique* (one per technique / LOD slot), the texture
@@ -25,8 +27,6 @@ namespace CgsGraphics
     // the array, so the element types stay incomplete here.
     struct MaterialTechnique;
     struct Sampler;
-    struct ShaderConstantsInternal;
-    struct ShaderConstantsCPU;
     struct Texture;
 
     // *** ON-DISC LAYOUT (world-pixels wave 2026-07-28) ***
@@ -64,6 +64,11 @@ namespace CgsGraphics
 
         u32 GetNameHash() const { return muNameHash; }
         u8  GetLength() const   { return mu8NumMaterials; }
+
+        // Inlined reads at ARTIST 827E9748 and 827F3A40/827F68EC.
+        const ShaderConstantsInternal* GetVertexShaderConstants() const
+        { return mpVertexShaderConstants; }
+        ShaderConstantsCPU* GetCPUShaderConstants() const { return mpCPUShaderConstants; }
 
         // UsesTexture: true if this assembly samples lpTexture in any technique stage.
         // Declaration recovered from the DecFIGS DWARF (CgsMaterialAssembly.h:96,

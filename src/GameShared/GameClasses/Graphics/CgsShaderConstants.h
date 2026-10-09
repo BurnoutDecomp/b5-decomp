@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Graphics/CgsSerialisedPtr.h"
 #include "BrnCommonTypes.h"               // Vector2/Vector3/Vector3Plus/Vector4/Matrix44/Matrix44Affine aliases
 #include "rw/math/vpu/types.h"            // rw::math::vpu::Vector4 (qualified member type)
 
@@ -43,6 +44,8 @@ struct ShaderConstantHandle;
 
 namespace CgsGraphics
 {
+    struct MaterialAssembly;
+    struct MaterialTechnique;
     // Pointer-only here (BeginFrame stores it, the bin functions take a separate header
     // pointer). Forward-declared to keep the heavy dispatch-pipeline header out of scope.
     class DispatchBin;
@@ -301,14 +304,15 @@ struct ShaderConstantsInternal
     // CgsShaderConstants.h:904
     u32 muNumConstantsInstances;                                  // word 0 (offset 0x00) - element count
     // CgsShaderConstants.h:905
-    u32* mpauConstantsInstanceSize;                               // word 1 (offset 0x04) - per-instance sizes
+    CgsGraphics::Ptr32<u32> mpauConstantsInstanceSize;             // word 1 (offset 0x04) - per-instance sizes
     // CgsShaderConstants.h:906
-    u32** mppaConstantsInstanceData;                              // word 2 (offset 0x08) - relocated; each element relocated too
+    CgsGraphics::Ptr32<CgsGraphics::Ptr32<u32>> mppaConstantsInstanceData; // word 2 (offset 0x08)
     // CgsShaderConstants.h:907
-    u32* mpauNamesHash;                                           // word 3 (offset 0x0C) - per-instance name hashes
+    CgsGraphics::Ptr32<u32> mpauNamesHash;                         // word 3 (offset 0x0C) - per-instance name hashes
     // CgsShaderConstants.h:912
-    renderengine::ProgramVariableHandle* mpaProgramStateHandles;  // word 4 (offset 0x10) - per-instance program handles
+    CgsGraphics::Ptr32<renderengine::ProgramVariableHandle> mpaProgramStateHandles; // word 4 (offset 0x10)
 };
+static_assert(sizeof(ShaderConstantsInternal) == 20, "Serialized internal constants");
 
 // CgsShaderConstants.h:1044 (DWARF)
 // The CPU-side ("material animation") constant block. Unlike External/Internal this is
@@ -326,14 +330,19 @@ struct ShaderConstantsCPU
     bool GetValue(const char* lpName, Vector4& lrOutValue) const;
     u32  GetSizeOf(u32 luCurrentSize) const;
     bool ShouldSerialise() const;
+    // Inlined in ARTIST 827FBB70..88 and 827F3A40..74 / 827F68EC..6920.
+    void SetCPUShader(ICPUShader* lpShader, const CgsGraphics::MaterialAssembly* lpMaterial);
+    void Dispatch(f32 lfTime, const CgsGraphics::MaterialAssembly* lpMaterial,
+                  CgsGraphics::MaterialTechnique* lpTechnique) const;
 
     // ---- console-faithful member layout (DWARF CgsShaderConstants.h:1047-1050) ----
     // CgsShaderConstants.h:1047
-    ICPUShader*  mpCPUShader;                 // word 0 (offset 0x00) - producing CPU shader (nulled by FixUp)
+    CgsGraphics::Ptr32<ICPUShader> mpCPUShader; // word 0 (offset 0x00)
     // CgsShaderConstants.h:1048
     u32          muNumConstantsInstances;     // word 1 (offset 0x04) - element count
     // CgsShaderConstants.h:1049
-    u32**        mppaConstantsInstanceData;   // word 2 (offset 0x08) - per-instance data (relocated; each element relocated too)
+    CgsGraphics::Ptr32<CgsGraphics::Ptr32<u32>> mppaConstantsInstanceData; // word 2 (offset 0x08)
     // CgsShaderConstants.h:1050
-    const char** mppacNames;                  // word 3 (offset 0x0C) - name array (relocated; each name relocated too)
+    CgsGraphics::Ptr32<CgsGraphics::Ptr32<const char>> mppacNames; // word 3 (offset 0x0C)
 };
+static_assert(sizeof(ShaderConstantsCPU) == 16, "Serialized CPU constants");
