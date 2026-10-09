@@ -1,4 +1,4 @@
-"""Interleaved render-only frames must not erase the wheel strip timeout step."""
+"""Actual command publication must preserve drawable strips between wheel updates."""
 import argparse
 import os
 from pathlib import Path
@@ -6,16 +6,17 @@ from fxgs_common import Tree, definition, compile_and_run, report, REPO
 
 os.environ.pop("NoDefaultCurrentDirectoryInExePath", None)
 parser = argparse.ArgumentParser()
+parser.add_argument("--rev", help="test that revision's production publication bodies")
 parser.add_argument("--zero-step-control", action="store_true")
 parser.add_argument("--double-clock-control", action="store_true",
     help="hypothesis control: inject retained-step accumulation into real EndOfFrame")
 args = parser.parse_args()
-tree=Tree(None)
+tree=Tree(args.rev)
 module=tree.read("src/GameSource/Effects/Particles/ParticleModule.cpp")
-body=definition(module,"void ParticleModule::EndOfFrame(")
-body=body.replace("ParticleModule::EndOfFrame", "Publication::EndOfFrame",1)
+body="\n".join(definition(module,signature).replace("ParticleModule::", "Publication::",1)
+    for signature in ("void ParticleModule::EndOfFrame(", "void ParticleModule::PublishRenderCommandsPC("))
 if args.zero_step_control:
-    body=body.replace("        if (mRenderData.mfCurrentTimeStep != 0.0f)\n", "")
+    body=body.replace("            if (lrRenderData.mfCurrentTimeStep != 0.0f)\n", "")
 native=tree.read("src/GameSource/Effects/Particles/Native/BrnTrailSystem.cpp")
 if args.double_clock_control:
     original=definition(native,"void TrailSystem::EndOfFrame(")

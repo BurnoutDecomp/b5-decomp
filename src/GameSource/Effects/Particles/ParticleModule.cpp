@@ -854,14 +854,20 @@ namespace BrnParticle
     void ParticleModule::PublishRenderCommandsPC(const ParticleRenderData& lrRenderData)
     {
         mSimpleParticleFramePC.Publish(maSimpleParticles);
-        // ARTIST BuildLionVertexBuffers 8228ACA8..AD48 updates the trail
-        // clock once per actual particle record, including a real zero step.
-        // FLAG PC-platform leaf: live timeout/emitter writes stay on the joined
-        // owner; the dispatch thread uses the independent published draw copy.
+        // FLAG PC-platform leaf: command frames can publish between the host's
+        // fixed simulation steps. Preserve the last wheel-update interval for
+        // AddTrailSegment's original now > last + step*1.5 timeout
+        // (ARTIST 8228C3B8..3EC); a zero-step presentation must not break every
+        // wheel strip before its second segment. The particle record keeps its
+        // zero step, and the absolute clock/camera still follow every new record
+        // (BuildLionVertexBuffers 8228ACA8..AD48), including paused records.
+        // Live emitter writes stay on the joined owner; dispatch draws its copy.
         if (muTrailSystemUpdateFramePC != lrRenderData.muCurrentFrame)
         {
             muTrailSystemUpdateFramePC = lrRenderData.muCurrentFrame;
-            mTrailSystem.Update(lrRenderData.mfCurrentTimeStep, lrRenderData.mfCurrentTime,
+            if (lrRenderData.mfCurrentTimeStep != 0.0f)
+                mfTrailSystemTimeStepPC = lrRenderData.mfCurrentTimeStep;
+            mTrailSystem.Update(mfTrailSystemTimeStepPC, lrRenderData.mfCurrentTime,
                                 lrRenderData.mCgsCamera.GetViewProjectionMatrix());
         }
         mTrailFramePC.Publish(mTrailSystem);
