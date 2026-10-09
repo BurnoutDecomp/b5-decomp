@@ -106,6 +106,7 @@
 #include "GameSource/World/BrnEntityTypes.h"                              // E_ENTITYTYPE_PROP
 #include "GameSource/World/BrnShaderLodInfo.h"                            // ShaderLodInfo
 #include "pc/gcm/renderengine/PropReflectionPCLeaf.h"
+#include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"                      // BrnWorld::ShadowMap
 
 #include "SharedClasses/Physics/Props/BrnPropGraphicsList.h"              // PropGraphics / PropPartGraphics
@@ -219,6 +220,13 @@ PropEntityModule::RenderModel(
     {
         lfCullDistance = static_cast< f32 >( mauOverrideLodDistances[ luLastLod ] );
     }
+    const f32 lfAuthoredCullDistance = lfCullDistance;
+    if ( lbRenderingEnvironmentMap )
+    {
+        // FLAG PC-platform leaf: extend only the reflection cutoff; preserve the
+        // normal-view and shadow distances, including the original debug overrides.
+        lfCullDistance = renderengine::ExtendEnvironmentMapDrawDistancePC( lfCullDistance );
+    }
     if ( lfScaledDistanceSq >= lfCullDistance * lfCullDistance )
     {
         return false;
@@ -285,6 +293,9 @@ PropEntityModule::RenderModel(
     else
     {
         renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_PROP_ENVMAP, lpModel, leLodState);
+        if (renderengine::GraphicsDiagnosticsEnabledPC() &&
+            lfScaledDistanceSq >= lfAuthoredCullDistance * lfAuthoredCullDistance)
+            ++renderengine::GetGraphicsDiagnosticsPC().muPropEnvExtended;
     }
 
     // ---- instanced models go to the collector, not to a draw ----------------

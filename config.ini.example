@@ -34,6 +34,9 @@ Environment/Bloom luminance scale=1
 World/LODs/Environment Map LOD=2
 ; Props in reflections: 0 = highest detail, 1 = intermediate, 2 = original.
 World/LODs/Prop Environment Map LOD=2
+; Reflection draw distance in metres, 0..10000. 0 = authored distances.
+; Positive values extend world objects, props and capture frusta to at least this range.
+World/LODs/Environment Map Draw Distance=0
 World/ShadowMap/Cast shadows from traffic=false
 World/LODs/OverrideDistances=false
 World/LODs/LOD0Distance=300
