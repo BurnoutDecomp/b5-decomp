@@ -5,46 +5,36 @@
 // Layout from the DecFIGS DWARF (CgsMaterialAssembly.h:54).
 
 #include "GameShared/GameClasses/Graphics/CgsMaterialAssembly.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/CgsMaterialAnimation.h"
+#include <cstdlib>
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // the one-shot boot-gate log
 
 namespace CgsGraphics
 {
-    // ------------------------------------------------------------------------
-    // FixupAnimatedMaterial @ 0x827FBA00
-    //
-    // Called by MaterialResourceType::PostFixUp @0x828A83B8 for every streamed
-    // material. The X360 body opens with an early-out on the CPU-shader-constant
-    // block: `v2 = *(this + 24); if (v2) { ... }` -- with no mpCPUShaderConstants
-    // there is nothing to animate and the function returns immediately. That
-    // branch is reproduced faithfully here and covers the overwhelming majority
-    // of materials (the world-data porter wave measured 3 CPU-block materials
-    // out of 176+ in a representative track unit).
-    //
-    // PARTIAL: the animated path itself (the three ShaderConstantsCPU::GetValue
-    // lookups of the off_82F30F4C/50/54 constant names, the VMX lane assembly
-    // into the 12-float scratch, and the guarded one-time off_83011B50 table
-    // init) is NOT reconstructed -- a VMX block whose rodata constant NAMES are
-    // absent from the exported .rdata. Materials that DO carry a CPU block log
-    // once and are left un-animated rather than faulting the sim (PostFixUp runs
-    // during streaming, so an assert here would block the load).
-    // ------------------------------------------------------------------------
+    // ARTIST 827FBA00..BB90: absent constants default to zero; duration zero
+    // leaves a material static. Otherwise select the original CPU shader, mark
+    // every technique animated, and attach it to the serialized CPU block.
     void MaterialAssembly::FixupAnimatedMaterial()
     {
-        if (mpCPUShaderConstants == 0)
-        {
-            return;   // X360: the `if (v2)` early-out
-        }
+        if (!mpCPUShaderConstants.Get()) return;
 
-        static bool s_bLogged = false;
-        if (!s_bLogged)
-        {
-            s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "MaterialAssembly::FixupAnimatedMaterial: "
-                                             "animated CPU-constant path deferred -- "
-                                             "material left un-animated [FLAG PC boot gate]\n";
-        }
+        Vector4 lValue;
+        const f32 lfDuration = mpCPUShaderConstants->GetValue("AnimDuration", lValue) ? lValue.x : 0.0f;
+        const f32 lfStepsU = mpCPUShaderConstants->GetValue("AnimNumberOfFramesU", lValue) ? lValue.x : 0.0f;
+        const f32 lfStepsV = mpCPUShaderConstants->GetValue("AnimNumberOfFramesV", lValue) ? lValue.x : 0.0f;
+        ICPUShader* lpShader = MaterialAnimationFactory::Instance().Create(lfDuration, lfStepsU, lfStepsV);
+        if (!lpShader) return;
+
+        for (u32 luIndex = 0; luIndex < mu8NumMaterials; ++luIndex)
+            mappMaterials[luIndex]->mu16StateFlags |= 6u;
+        mpCPUShaderConstants->SetCPUShader(lpShader, this);
+
+        // Passive load-time witness; does not change authored animation values.
+        const char* lpDiag = std::getenv("BRN_MATERIAL_ANIM_DIAG");
+        if (lpDiag && lpDiag[0] && lpDiag[0] != '0')
+            *CgsDev::Log::gpDebugPrint << "[material-anim] attach material=" << muNameHash
+                << " duration=" << lfDuration << " framesU=" << lfStepsU << " framesV=" << lfStepsV << "\n";
     }
     // GetMaterial @ 0x827E6720. Bounds-checks luIndex against mu8NumMaterials (the asm
     // reads the byte at offset 8) and returns mappMaterials[luIndex]:

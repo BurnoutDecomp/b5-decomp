@@ -52,6 +52,7 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"      // shadow::Device (the GPU flush leaf)
 #include "GameShared/GameClasses/Graphics/CgsMaterialAssembly.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/CgsMaterialAnimation.h"
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"            // ShaderConstantTable
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // the one-shot bring-up gates
@@ -1222,7 +1223,7 @@ DispatchCommand* DispatchList::DispatchAllObjectToMesh(DispatchPacketInterpreter
 // (BeginQueries/conditional render) stays with the occlusion reconstruction --
 // the PC occlusion switches default OFF.
 // =============================================================================
-s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* /*lpInterpreter*/,
+s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
                                     DispatchObjectContext* /*lpContext*/,
                                     u32 luFirst, s32 liCount)
 {
@@ -1287,6 +1288,12 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* /*lpInterpreter*/
         // these on every mesh, right after the technique-change block).
         shadow::Device::SetMeshObjectConstantsPC(
             lpTechnique, reinterpret_cast<void* const*>(lppConstScratch), false);
+
+        // ARTIST 827F3A40..74: dispatch the CPU shader on EVERY mesh, even
+        // when the material technique is still cached from the preceding draw.
+        if (const ShaderConstantsCPU* lpCPU = lpAssembly->GetCPUShaderConstants())
+            lpCPU->Dispatch(lpInterpreter->GetTime(), lpAssembly,
+                            lpAssembly->GetMaterial(luTechnique));
 
         // [PC bring-up shim] the per-object WVP carried in the command
         // (payload qwords 1..4) feeds the fallback-shader transform.
@@ -1396,7 +1403,7 @@ void DispatchList::DispatchAllMeshesZOnly(DispatchPacketInterpreter* lpInterpret
 // identical to the colour walk's.
 // =============================================================================
 void DrawRenderableMeshZOnly::Interpret(DispatchCommand* lpCommand, DispatchFrame* /*lpFrame*/,
-                                        void* /*lpUserData*/, f32 /*lfTime*/)
+                                        void* /*lpUserData*/, f32 lfTime)
 {
     u32* const lpPacket = reinterpret_cast<u32*>(lpCommand);
     CGS_ASSERT(CommandIdOf(lpPacket[0]) == DispatchCommand::E_DRAWRENDERABLEMESHZONLY,
@@ -1440,6 +1447,10 @@ void DrawRenderableMeshZOnly::Interpret(DispatchCommand* lpCommand, DispatchFram
 
     shadow::Device::SetMeshObjectConstantsPC(
         lpTechnique, reinterpret_cast<void* const*>(lppConstScratch), true);
+
+    // ARTIST 827F68EC..6920: the same animation time/UV offset in depth passes.
+    if (const ShaderConstantsCPU* lpCPU = lpAssembly->GetCPUShaderConstants())
+        lpCPU->Dispatch(lfTime, lpAssembly, lpAssembly->GetMaterial(luTechnique));
 
     // [PC bring-up shim] the per-object WVP carried in the command (payload qwords 1..4).
     shadow::Device::SetObjectTransformPC(reinterpret_cast<const f32*>(&lpPacket[8]));

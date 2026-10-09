@@ -4936,6 +4936,12 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         return;
     }
 
+    // ARTIST 8240C4B0..C4C4: conversion uses time zero, then ALL mesh draw
+    // passes use the completed shader frame's game time (+0x314). Publish it
+    // after the draw gate so retained/stalled command banks keep their clock.
+    if (mpInterpreter != nullptr)
+        mpInterpreter->SetTime(maShaderConstantsFrames[mu8ShaderConstantsFrameInternal].GetGameTime());
+
     // [PC bring-up] Realise the shadow-map render target. The console builds the whole
     // render-target pool in BrnRendererMemory::Construct during BrnRendererModule::Construct;
     // that pool is not linkable on this build (see the BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE
