@@ -31,7 +31,7 @@ STATS_CPP = "src/GameSource/GameState/Progression/BrnProgressionManager_GameStat
 RECORD_CPP = "src/GameSource/GameState/SharedIO/BrnGameActionData.cpp"
 ENTRY_CPP = "src/SharedClasses/DataLists/VehicleListEntry.cpp"
 BODY = "void ProgressionManager::GetGameStats("
-NUMERIC_CHECKS = 52
+NUMERIC_CHECKS = 60
 
 
 class DirTree(Tree):

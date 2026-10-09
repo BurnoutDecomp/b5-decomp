@@ -14,6 +14,9 @@ shadows, world/prop LOD distances, and vehicle LOD presets.
 | `EnvironmentMapLOD` | `2` | World detail in car reflections: `0` highest, `1` intermediate, `2` original. Requires `[Settings] EnvironmentMap=1`. |
 | `TrafficShadows` | `0` | Set `1` to include traffic in the shadow-map pass. |
 | `AnisotropicFiltering` | `1` | World texture filtering: `1` preserves original trilinear filtering; `2`, `4`, `8`, or `16` improve detail on surfaces viewed at shallow angles. Clamped to the device's supported level. |
+| `ShadowResolutionScale` | `1` | `1`: original 1280×1920 atlas (1280×640 per cascade). `2`: 2560×3840 (2560×1280 per cascade), when supported by the adapter. |
+| `ShadowDistance` | `120` | Shadow view distance in metres, from 30 to 500. Scales all three cascade ranges and the fade distance together. |
+| `ShadowSlopeBias` | `0` | Extra native caster slope bias, from 0 to 4. `1` reduces striped self-shadowing from comparison filtering; `0` retains the original material bias. |
 | `WorldLODOverrideDistance` | `0` | `0` uses the model's original distances. Positive values enable the distance override and set the three bands to value × 1, 2, 3. Example bases: `3000` for extended distances, `1` for short distances. |
 | `PropLODOverrideDistance` | `0` | Same override for props. Example bases: `3000` for extended distances, `50` for short distances. |
 | `VehicleLODPreset` | `Default` | `Default`, `Potato`, `Low`, `Medium`, `High`, `Ultra`, or `Custom`; names are case-insensitive. Applies to the original vehicle quality table, used by both race cars and traffic. |
@@ -28,6 +31,19 @@ filtering independently of the mesh LOD settings. It preserves authored mipmaps
 and their original LOD biases; it does not force full-resolution textures at every
 distance. Missing or invalid values use `1`. Cube reflections, shadow maps and
 post-processing samplers keep their own filtering.
+
+For sharper shadows and reduced striping, try `ShadowResolutionScale=2` and
+`ShadowSlopeBias=1`. Shadow resolution is independent of display resolution.
+The larger atlas uses about 38 MiB of depth storage instead of about 9 MiB;
+unsupported dimensions fall back to the original atlas. The original atlas
+layout, cascade aspect ratios and shader programs are retained, with the
+half-texel sampling offset adjusted to the actual atlas size.
+
+Increasing `ShadowDistance` spreads the same shadow texels over a larger area,
+so it can reduce nearby detail. It uses the existing cascade fitting and only
+includes geometry available to the original streaming and visibility paths.
+Higher slope bias can move shadow edges away from their casters, so use the
+smallest value that removes visible striping. These options require a restart.
 
 The vehicle presets use these LOD switch distances:
 

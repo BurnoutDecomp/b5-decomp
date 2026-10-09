@@ -10,6 +10,7 @@ namespace renderengine { extern u32 guDiagComposites; }   // [DIAG] issue #30 pe
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // renderengine::ProgramBuffer
 #include "GameSource/Resource/BrnResourceAllocator.h"          // BrnResource::Allocators::GetGlobalGraphicsAllocator
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"              // renderengine::PCBringUpClearRenderTargetState
+#include "pc/gcm/renderengine/ShadowQualityPCLeaf.h"
 #include "pc/gcm/renderengine/Im2dBlitProgramsPC.h"           // the four authored PC blit program images
 #include "pc/gcm/renderengine/VertexDescriptor.h"             // renderengine::VertexDescriptor(+Data)
 #include "pc/gcm/renderengine/renderstates.h"                 // renderengine::TextureState
@@ -362,7 +363,10 @@ void BrnRendererMemory::PCBringUpCreateShadowMapBufferOnly(rw::IResourceAllocato
 
     // FLAG PC bring-up: the COMBINED extent + one section (see above). The console's
     // CreateShadowmapBuffer @0x823F6D98 sets (1280, 1920/3) and three sections.
-    lpShadowMap->SetDimensions(KU_SHADOW_MAP_WIDTH, KU_SHADOW_MAP_COMBINED_HEIGHT);
+    const auto lSize = renderengine::ChooseShadowAtlasSizePC(renderengine::gDevice,
+        static_cast<u32>(renderengine::GetGraphicsSettingsPC().miShadowResolutionScale));
+    renderengine::ShadowAtlasScalePC().store(lSize.muScale, std::memory_order_relaxed);
+    lpShadowMap->SetDimensions(lSize.muWidth, lSize.muHeight);
     lpShadowMap->SetNumSections(1);
 
     lpShadowMap->SetNumMipMaps(1);

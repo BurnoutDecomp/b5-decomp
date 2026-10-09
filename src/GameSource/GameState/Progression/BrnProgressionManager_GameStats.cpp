@@ -211,8 +211,24 @@ void ProgressionManager::GetGameStats(GsmIO::GameStats*                 lpGameSt
             }
 
             const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex(lpCarData->GetId());
+            // FLAG PC-platform leaf: imported profiles may retain later/DLC
+            // cars absent from the currently loaded ARTIST catalogue. Keep
+            // those save records intact and count only available entries.
+            // A valid index with missing data still asserts below.
+            if (liVehicleIndex < 0)
+            {
+                static u32 suUnavailableCarReports = 0;
+                if (suUnavailableCarReports < 16u && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    ++suUnavailableCarReports;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[stats] imported profile car absent from loaded catalogue id="
+                        << lpCarData->GetId() << " -- retained; excluded from owned count\n";
+                }
+                continue;
+            }
             const BrnResource::VehicleListEntry* lpVehicleData =
-                (liVehicleIndex < 0) ? 0 : mpVehicleList->GetVehicleData(liVehicleIndex);
+                mpVehicleList->GetVehicleData(liVehicleIndex);
             if (lpVehicleData == 0)
             {
                 CgsDev::Assert::BeginAssert();

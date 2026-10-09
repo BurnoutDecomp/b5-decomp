@@ -27,6 +27,12 @@ EnvironmentMapLOD=2
 TrafficShadows=0
 ; World texture filtering: 1 = original trilinear, 2/4/8/16 = anisotropic.
 AnisotropicFiltering=1
+; 1 = original 1280x1920 atlas, 2 = 2560x3840 (three vertical cascades).
+ShadowResolutionScale=1
+; Shadow view distance in metres, 30..500. Original: 120.
+ShadowDistance=120
+; Extra native caster slope bias, 0..4. Use 1 to reduce striped self-shadows.
+ShadowSlopeBias=0
 ; 0 = original asset LODs. Extended-distance example: 3000 for both.
 ; Short-distance examples: 1 for world, 50 for props. Bands use distance * 1/2/3.
 WorldLODOverrideDistance=0
