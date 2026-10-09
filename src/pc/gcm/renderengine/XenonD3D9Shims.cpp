@@ -53,6 +53,7 @@
 #include <d3d9.h>
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
+#include "pc/gcm/renderengine/WorldTextureFilteringPCLeaf.h"
 #include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
 #include "pc/gcm/renderengine/TrailPausedDiagPC.h"
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"
@@ -1697,11 +1698,9 @@ namespace renderengine
         renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSU, luAddrU);
         renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSV, luAddrV);
         renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSW, luAddrW);
-        // Every shipped world block says LINEAR/LINEAR/LINEAR with MaxAnisotropy = MAX_1_1;
-        // keep the set this path already applied.
-        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-        renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+        // Default 1 reproduces the shipped trilinear world blocks; higher
+        // settings improve grazing texture footprints on the native device.
+        renderengine::ApplyWorldTextureFilteringPC(lpDevice, luUnit, lbCubeRaster);
         // D3DSAMP_MIPMAPLODBIAS takes the float's BIT PATTERN as its DWORD.
         DWORD luBiasBits;
         std::memcpy(&luBiasBits, &lfLodBias, sizeof(luBiasBits));

@@ -150,7 +150,11 @@ struct TrafficShadowSelector {
     bool GetRenderTrafficNearOnly() const{return nearOnly;}
 };
 struct TrafficFog {float x,y,z,w;};
-struct TrafficCamera {int id=17;};
+struct TrafficCamera {
+    int id=17;
+    TrafficFog GetPosition() const { return {}; }
+    TrafficFog GetDirection() const { return {}; }
+};
 struct TrafficModuleFixture {
     Frame* frame=nullptr;
     int calls=0;
@@ -168,6 +172,7 @@ struct TrafficProducerFixture {
     TrafficShadowSelector mShadowMap;
     TrafficModuleFixture mTrafficEntityModule;
     TrafficCamera mLastCameraInput;
+    struct { bool mbRenderTraffic=true; } switches;
     Frame* frame=nullptr;
     void Produce(u32 luCascade)
     {
@@ -175,6 +180,10 @@ struct TrafficProducerFixture {
         Frame* lpDispatchFrame=frame;
         int sTrafficDispatchInput=0;
         struct {int maTrafficRenderInfos=0;} sTrafficRenderInfos;
+        auto* lpTrafficDispatchInput=&sTrafficDispatchInput;
+        auto* lpTrafficRenderInfos=&sTrafficRenderInfos;
+        auto* lpCameraInput=&mLastCameraInput;
+        auto* lpSwitches=&switches;
         TrafficFog lEye{},lForward{};
 #include "shadow_traffic_caster.inc"
     }
@@ -239,6 +248,11 @@ int main()
     Check(producer.mTrafficEntityModule.calls==3&&producer.frame->entries[2].trafficRecords==1&&
           producer.frame->entries[3].trafficRecords==1&&producer.frame->entries[4].trafficRecords==1,
           "original unrestricted traffic policy uses cascade+2 list routing");
+#if TEST_TRAFFIC_RENDER_SWITCH
+    producer.switches.mbRenderTraffic=false;producer.mTrafficEntityModule.calls=0;
+    producer.Produce(0);
+    Check(producer.mTrafficEntityModule.calls==0,"current production caster path respects the traffic render switch");
+#endif
     trafficMode=false;
     shadow::Device::SetState(CgsRasterizerStateFactory::GetState(0));
     renderer.mShadowMapRenderManager.mbForceFrontFaceCull=true;

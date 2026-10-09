@@ -1280,6 +1280,8 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
             }
 
             lpDispatchList->Submit( 0, lpDispatchFrame->GetBin().EndPacket() );
+            if (lbShadowPass && renderengine::GraphicsDiagnosticsEnabledPC())
+                ++renderengine::GetGraphicsDiagnosticsPC().muTrafficShadowRecords;
         }
     }
 
@@ -1581,6 +1583,8 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
                             0xFFu, 0u, liInstanceCount, 0u );
 
                         lpWheelList->Submit( 0, lpDispatchFrame->GetBin().EndPacket() );
+                        if (lbShadowPass && renderengine::GraphicsDiagnosticsEnabledPC())
+                            ++renderengine::GetGraphicsDiagnosticsPC().muTrafficShadowRecords;
                     }
                 }
             }

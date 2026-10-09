@@ -36,6 +36,7 @@ namespace renderengine
         f32 mfBloomLuminanceScale = 1.0f;
         s32 miEnvironmentMapLod = 2;
         bool mbTrafficShadows = false;
+        s32 miAnisotropicFiltering = 1;
         s32 miWorldLodOverrideDistance = 0;
         s32 miPropLodOverrideDistance = 0;
         VehicleLodPresetPC meVehicleLodPreset = E_VEHICLE_LOD_DEFAULT;
@@ -112,6 +113,8 @@ namespace renderengine
         lrSettings.mfBloomLuminanceScale = ReadGraphicsFloatPC(lpcPath, "BloomLuminanceScale", 1.0f, 0.0f, 10.0f);
         lrSettings.miEnvironmentMapLod = ReadGraphicsIntPC(lpcPath, "EnvironmentMapLOD", 2, 0, 2);
         lrSettings.mbTrafficShadows = ReadGraphicsIntPC(lpcPath, "TrafficShadows", 0, 0, 1) != 0;
+        const s32 liAnisotropy = ReadGraphicsIntPC(lpcPath, "AnisotropicFiltering", 1, 1, 16);
+        lrSettings.miAnisotropicFiltering = (liAnisotropy & (liAnisotropy - 1)) == 0 ? liAnisotropy : 1;
         lrSettings.miWorldLodOverrideDistance = ReadGraphicsIntPC(lpcPath, "WorldLODOverrideDistance", 0, 0, 10000);
         lrSettings.miPropLodOverrideDistance = ReadGraphicsIntPC(lpcPath, "PropLODOverrideDistance", 0, 0, 10000);
 
@@ -155,6 +158,8 @@ namespace renderengine
         std::snprintf(lacValue, sizeof(lacValue), "%d", lrSettings.miEnvironmentMapLod);
         WritePrivateProfileStringA("Graphics", "EnvironmentMapLOD", lacValue, lpcPath);
         WritePrivateProfileStringA("Graphics", "TrafficShadows", lrSettings.mbTrafficShadows ? "1" : "0", lpcPath);
+        std::snprintf(lacValue, sizeof(lacValue), "%d", lrSettings.miAnisotropicFiltering);
+        WritePrivateProfileStringA("Graphics", "AnisotropicFiltering", lacValue, lpcPath);
         std::snprintf(lacValue, sizeof(lacValue), "%d", lrSettings.miWorldLodOverrideDistance);
         WritePrivateProfileStringA("Graphics", "WorldLODOverrideDistance", lacValue, lpcPath);
         std::snprintf(lacValue, sizeof(lacValue), "%d", lrSettings.miPropLodOverrideDistance);

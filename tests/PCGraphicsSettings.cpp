@@ -52,6 +52,7 @@ static void ConfigChecks()
           "missing graphics section preserves console defaults");
     Check(lrGraphics.miWorldLodOverrideDistance == 0 && lrGraphics.miPropLodOverrideDistance == 0,
           "absent overrides use asset LOD distances");
+    Check(lrGraphics.miAnisotropicFiltering == 1, "missing filtering option preserves original trilinear sampling");
     bool lbOverride = false;
     s32 laiDistances[3] = {300,600,900};
     lrGraphics.ApplyLodOverride(0, lbOverride, laiDistances);
@@ -81,6 +82,7 @@ static void ConfigChecks()
               "original strict LOD boundary remains intact");
     }
     Set("BloomLuminanceScale","0.3"); Set("EnvironmentMapLOD","0"); Set("TrafficShadows","1");
+    Set("AnisotropicFiltering","16");
     Set("WorldLODOverrideDistance","3000"); Set("PropLODOverrideDistance","3000");
     WritePrivateProfileStringA("Settings","AntiAliasing","8",gacTestIni);
     LoadConfig();
@@ -108,6 +110,7 @@ static void ConfigChecks()
     CheckTable(kafCustom);
     Check(gfBloomLuminanceScale == 0.3f && lrGraphics.mbTrafficShadows && lrGraphics.miEnvironmentMapLod == 0,
           "graphics values survive normal save/reload");
+    Check(lrGraphics.miAnisotropicFiltering == 16, "texture filtering survives normal save/reload");
     Check(renderengine::gAntiAliasing == 8 && MultisampleOverrideSampleCount() == 8, "8x AA persists through real LoadConfig and SaveConfig");
     GetPrivateProfileStringA("Unrelated","Keep","",lacValue,sizeof(lacValue),gacTestIni);
     Check(std::strcmp(lacValue,"yes") == 0, "save retains unrelated INI data");
@@ -119,6 +122,11 @@ static void ConfigChecks()
         Check(gfBloomLuminanceScale == 1.0f, "invalid bloom value uses original default");
     }
     Set("EnvironmentMapLOD","3"); Set("TrafficShadows","-1");
+    for (const char* lpcInvalid : {"0", "3", "17", "NaN", "16garbage", ""})
+    {
+        Set("AnisotropicFiltering", lpcInvalid); LoadConfig();
+        Check(lrGraphics.miAnisotropicFiltering == 1, "invalid anisotropy falls back to original filtering");
+    }
     Set("WorldLODOverrideDistance","3000.5"); Set("PropLODOverrideDistance","999999999999999999999");
     Set("VehicleLODPreset","unknown"); LoadConfig();
     Check(lrGraphics.miEnvironmentMapLod == 2 && !lrGraphics.mbTrafficShadows &&
