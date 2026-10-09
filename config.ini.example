@@ -1,4 +1,4 @@
-; Copy the settings you want into config.ini beside Burnout_PC.exe, then restart.
+; Copy selected settings into config.ini beside Burnout_PC.exe, then restart.
 [Display]
 Width=1280
 Height=720
@@ -9,39 +9,44 @@ DecoupleSimulation=1
 
 [Settings]
 ; 0 = console default (2x scene MSAA), 1 = off, 2/4/8 = requested samples.
-; Unsupported counts fall back to the highest lower count supported by colour and depth.
 AntiAliasing=0
 AlphaToCoverage=1
 EnvironmentMap=1
-EnvironmentMap30Hz=1
 Coronas=1
 SunCorona=1
 
 [Graphics]
-; Native graphics settings. See docs/PC_GRAPHICS.md for details.
-; Bloom strength: 1 = original, 0.3 = reduced, 0 = no bloom contribution.
-BloomLuminanceScale=1
-; Reflection world LOD: 0 = highest detail, 1 = medium, 2 = original.
-EnvironmentMapLOD=2
-; Traffic shadows: 0 = off, 1 = on.
-TrafficShadows=0
-; World texture filtering: 1 = original trilinear, 2/4/8/16 = anisotropic.
+; Native options with no equivalent registered engine control.
 AnisotropicFiltering=1
-; 1 = original 1280x1920 atlas, 2 = 2560x3840 (three vertical cascades).
+; 1 = 1280x1920 atlas, 2 = 2560x3840 when supported by the adapter.
 ShadowResolutionScale=1
-; Shadow view distance in metres, 30..500. Original: 120.
+; Shadow view distance in metres, 30..500; original: 120.
 ShadowDistance=120
-; Extra native caster slope bias, 0..4. Use 1 to reduce striped self-shadows.
+; Extra native caster slope bias, 0..4; try 1 for striped self-shadows.
 ShadowSlopeBias=0
-; 0 = original asset LODs. Extended-distance example: 3000 for both.
-; Short-distance examples: 1 for world, 50 for props. Bands use distance * 1/2/3.
-WorldLODOverrideDistance=0
-PropLODOverrideDistance=0
-; Default, Potato, Low, Medium, High, Ultra, Custom (case-insensitive).
-VehicleLODPreset=Default
-; Only read with VehicleLODPreset=Custom. Distances must be nondecreasing.
-VehicleLOD0Distance=10
-VehicleLOD1Distance=22
-VehicleLOD2Distance=35
-VehicleLOD3Distance=50
-VehicleLOD4Distance=70
+
+[Debug]
+; Any registered writable scalar: full debug menu path/name=value.
+; Paths are case-insensitive; / and backslash separators are equivalent.
+; Initial values apply once after registration. Menu edits remain live.
+; The following examples preserve the original engine defaults.
+Environment/Bloom luminance scale=1
+World/LODs/Environment Map LOD=2
+; Props in reflections: 0 = highest detail, 1 = intermediate, 2 = original.
+World/LODs/Prop Environment Map LOD=2
+World/ShadowMap/Cast shadows from traffic=false
+World/LODs/OverrideDistances=false
+World/LODs/LOD0Distance=300
+World/LODs/LOD1Distance=600
+World/LODs/LOD2Distance=900
+World/LODs/OverridePropDistances=false
+World/LODs/PropLOD0Distance=100
+World/LODs/PropLOD1Distance=200
+World/LODs/PropLOD2Distance=300
+Graphics/Vehicles.../LODs.../Quality LOD 0=10
+Graphics/Vehicles.../LODs.../Quality LOD 1=22
+Graphics/Vehicles.../LODs.../Quality LOD 2=35
+Graphics/Vehicles.../LODs.../Quality LOD 3=50
+Graphics/Vehicles.../LODs.../Quality LOD 4=70
+; false = all six faces per frame; true = alternate two groups of three faces.
+World Module/Graphics/Render environment map at 30hz=false

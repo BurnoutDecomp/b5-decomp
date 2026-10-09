@@ -3389,26 +3389,8 @@ struct BrnRendererPostFxFrameBytes
 // result is unused.)
 // ==================================================================================================
 
-// --------------------------------------------------------------------------------------------------
-// The two bloom scale globals (X360 gfBloomLuminanceScale @0x82F307E0 == 1.0f,
-// gfBloomThresholdScale @0x82F307E4 == 1.0f -- conductor idat dump, scratch/postfx_step4_bloom/
-// DATA_NOTE.md section 2).
-//
-// THEY ARE GLOBALS, NOT CONSTANTS, and they are homed here rather than folded to 1.0f because the
-// image proves they are tweakables: BrnWorld::EnvironmentSettings::EnvironmentManager::Construct
-// @0x827CA408 takes the ADDRESS of each (`lis r11, gfBloomLuminanceScale@ha` / `addi r29, r11,
-// gfBloomLuminanceScale@l` @0x827CA87C-0x827CA884, and the same pair for gfBloomThresholdScale
-// @0x827CA8D0-0x827CA8D8 and gfSpecularScale @0x827CA914) and registers it with the debug component
-// alongside gfSpecularScale. Those two functions are the ONLY references in the whole export set:
-//   $ grep -rl "gfBloomThresholdScale\|gfBloomLuminanceScale" .ida-exports/BURNOUT_X360_ARTIST.XEX/
-//   .ida-exports/BURNOUT_X360_ARTIST.XEX/0x827CA408.json   <- EnvironmentManager::Construct (address-of)
-//   .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8240BFA8.json   <- BrnRendererModule::Render     (the reads below)
-// so this block is their only READER, no other translation unit in the tree names them, and there is
-// no split-brain in homing them here. WHEN the environment manager's debug registration is
-// reconstructed, declare `extern f32 gfBloomLuminanceScale;` there rather than minting a second copy.
-// --------------------------------------------------------------------------------------------------
-f32 gfBloomLuminanceScale = 1.0f;   // X360 0x82F307E0
-f32 gfBloomThresholdScale = 1.0f;   // X360 0x82F307E4
+// The original bloom scale globals are defined and debug-registered in
+// EnvironmentManager, their DWARF home. Render reads them through BrnRendererModule.h.
 
 namespace
 {
@@ -5505,8 +5487,8 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         // 2026-08-17 (VSync off, all six faces): loop=1614..1999 us/frame, begin+clear=9,
         // dispatch=1558..1941, sky=35, end+resolve=11, meshes/frame=883..1130 -- i.e. the pass is
         // DRAW-BOUND at ~1.7 us/mesh (the D3D9 runtime floor), not a per-face waste; the producer's
-        // own share is ~40 us (gShadowPerf). That measurement is why the PC defaults to the console's
-        // half-per-frame schedule (renderengine::gEnvironmentMap30Hz, device.h). The line prints only
+        // own share is ~40 us (gShadowPerf). The registered world refresh control can select
+        // the original half schedule; its default remains all six faces. The line prints only
         // with BRN_ENVMAP_PERF=1 (the two QueryPerformanceCounter calls per face stay -- they are
         // cheaper than the log gate they feed). DELETE-WHEN a batching draw path lands.
         struct EnvMapPerf { double mfBegin, mfDispatch, mfSky, mfEnd, mfLoop; u32 muFaces, muMeshes, muFrames; };

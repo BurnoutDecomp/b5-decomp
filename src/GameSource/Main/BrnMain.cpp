@@ -10,6 +10,7 @@
 
 #include "pc/gcm/renderengine/device.h"
 #include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
+#include "pc/DebugIniPCLeaf.h"
 #include "GameSource/Graphics/BrnRendererModule.h"
 #include "GameSource/World/BrnWorldModule.h"
 #include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
@@ -153,20 +154,14 @@ void LoadConfig()
     if (liAntiAliasing > 16) liAntiAliasing = 16;
     renderengine::gAntiAliasing = liAntiAliasing;
 
-    // FLAG PC-platform leaf: configure the original graphics controls through the INI.
-    // These are the original writable globals; all per-module settings are applied
-    // by Construct, after this load. Vehicle presets set the QUALITY table.
+    // FLAG PC-platform leaf: native quality options and startup overrides for
+    // the engine's registered debug controls. Registration applies the latter.
     renderengine::LoadGraphicsSettingsPC(lacPath);
+    CgsDev::DebugUI::LoadDebugIniPC(lacPath);
     const renderengine::GraphicsSettingsPC& lrGraphics = renderengine::GetGraphicsSettingsPC();
-    gfBloomLuminanceScale = lrGraphics.mfBloomLuminanceScale;
-    for (u32 luLod = 0; luLod < 5u; ++luLod)
-        BrnWorld::KA_VEHICLE_QUALITY_LOD_DISTANCE[luLod] = lrGraphics.mafVehicleLodDistances[luLod];
-    char lacGraphicsLog[384];
+    char lacGraphicsLog[256];
     std::snprintf(lacGraphicsLog, sizeof(lacGraphicsLog),
-        "[graphics] bloom=%.9g envmapLOD=%d trafficShadows=%d worldLOD=%d propLOD=%d vehicleLOD=%s aaRequest=%d anisoRequest=%d shadowScale=%d shadowDistance=%.9g shadowSlopeBias=%.9g\n",
-        lrGraphics.mfBloomLuminanceScale, lrGraphics.miEnvironmentMapLod,
-        lrGraphics.mbTrafficShadows ? 1 : 0, lrGraphics.miWorldLodOverrideDistance,
-        lrGraphics.miPropLodOverrideDistance, renderengine::VehicleLodPresetNamePC(lrGraphics.meVehicleLodPreset),
+        "[graphics] aaRequest=%d anisoRequest=%d shadowScale=%d shadowDistance=%.9g shadowSlopeBias=%.9g\n",
         renderengine::gAntiAliasing, lrGraphics.miAnisotropicFiltering,
         lrGraphics.miShadowResolutionScale, lrGraphics.mfShadowDistance, lrGraphics.mfShadowSlopeBias);
     CgsDev::Log::WriteToLog(lacGraphicsLog);
@@ -184,12 +179,6 @@ void LoadConfig()
     const s32 liEnvironmentMap =
         GetPrivateProfileIntA("Settings", "EnvironmentMap", renderengine::gEnvironmentMap, lacPath);
     renderengine::gEnvironmentMap = (liEnvironmentMap == 0) ? 0 : 1;
-
-    // The env-map REFRESH SCHEDULE (reflections step 2): 1 = three faces per frame (PC default, a
-    // documented perf deviation -- see device.h), 0 = the console's all six every frame. 0/1 only.
-    const s32 liEnvironmentMap30Hz =
-        GetPrivateProfileIntA("Settings", "EnvironmentMap30Hz", renderengine::gEnvironmentMap30Hz, lacPath);
-    renderengine::gEnvironmentMap30Hz = (liEnvironmentMap30Hz == 0) ? 0 : 1;
 
     // The corona (light-flare) pass off switch (coronas step 1); 0/1, clamped the same way and for
     // the same reason as its neighbours. It SEEDS BrnRendererModule::mbRenderCoronas on the first
@@ -248,13 +237,12 @@ void SaveConfig()
     WritePrivateProfileStringA("Settings", "AlphaToCoverage", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gEnvironmentMap);
     WritePrivateProfileStringA("Settings", "EnvironmentMap", lacValue, lacPath);
-    std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gEnvironmentMap30Hz);
-    WritePrivateProfileStringA("Settings", "EnvironmentMap30Hz", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gCoronas);
     WritePrivateProfileStringA("Settings", "Coronas", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gSunCorona);
     WritePrivateProfileStringA("Settings", "SunCorona", lacValue, lacPath);
     renderengine::SaveGraphicsSettingsPC(lacPath);
+    CgsDev::DebugUI::ReportUnmatchedDebugIniPC();
 #endif
 }
 

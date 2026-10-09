@@ -5,20 +5,17 @@
 #include <cstring>
 #include <initializer_list>
 #include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
+#include "pc/DebugIniPCLeaf.h"
 
 namespace renderengine {
     bool gFullscreen = false;
     s32 gDisplayWidth = 640, gDisplayHeight = 360, gAdapterIndex = 0, gVSync = 1;
     s32 gAntiAliasing = 0, gAlphaToCoverage = 1, gEnvironmentMap = 1;
-    s32 gEnvironmentMap30Hz = 1, gCoronas = 1, gSunCorona = 1;
+    s32 gCoronas = 1, gSunCorona = 1;
     IDirect3DDevice9* gDevice = nullptr;
 }
 namespace BrnGame { bool gbDecoupleSimulationFromRenderRate = true; }
-namespace BrnWorld { f32 KA_VEHICLE_QUALITY_LOD_DISTANCE[5] = {10,22,35,50,70}; }
-namespace CgsGraphics { struct Model { enum State { E_STATE_LOD_0, E_STATE_LOD_1, E_STATE_LOD_2, E_STATE_LOD_3, E_STATE_LOD_4 }; }; }
 namespace CgsDev { namespace Log { void WriteToLog(const char* lpcText) { std::printf("%s", lpcText); } } }
-f32 gfBloomLuminanceScale = 1.0f;
-static const u32 KU_NUM_VEHICLE_LODS = 5;
 static char gacTestDirectory[MAX_PATH];
 static char gacTestIni[MAX_PATH];
 static IDirect3DDevice9* Dev() { return renderengine::gDevice; }
@@ -38,121 +35,48 @@ static void Set(const char* lpcKey, const char* lpcValue)
 {
     WritePrivateProfileStringA("Graphics", lpcKey, lpcValue, gacTestIni);
 }
-static void CheckTable(const float* lpafExpected)
-{
-    for (u32 luLod = 0; luLod < 5u; ++luLod)
-        Check(BrnWorld::KA_VEHICLE_QUALITY_LOD_DISTANCE[luLod] == lpafExpected[luLod], "exact vehicle LOD distance reaches engine global");
-}
-
 static void ConfigChecks()
 {
     LoadConfig();
     const auto& lrGraphics = renderengine::GetGraphicsSettingsPC();
-    Check(gfBloomLuminanceScale == 1.0f && lrGraphics.miEnvironmentMapLod == 2 && !lrGraphics.mbTrafficShadows,
-          "missing graphics section preserves console defaults");
-    Check(lrGraphics.miWorldLodOverrideDistance == 0 && lrGraphics.miPropLodOverrideDistance == 0,
-          "absent overrides use asset LOD distances");
-    Check(lrGraphics.miAnisotropicFiltering == 1, "missing filtering option preserves original trilinear sampling");
+    Check(lrGraphics.miAnisotropicFiltering == 1, "absent filtering retains original sampler choice");
     Check(lrGraphics.miShadowResolutionScale==1 && lrGraphics.mfShadowDistance==120.0f && lrGraphics.mfShadowSlopeBias==0.0f,
-          "missing shadow options preserve original quality and range");
-    bool lbOverride = false;
-    s32 laiDistances[3] = {300,600,900};
-    lrGraphics.ApplyLodOverride(0, lbOverride, laiDistances);
-    Check(!lbOverride && laiDistances[0] == 300 && laiDistances[2] == 900, "default does not enable distance overrides");
-
-    // Reference float32 bit patterns, decoded independently of production's decimal tables.
-    // High's LOD3/4 distances are 150/210.
-    const u32 kaauExpectedBits[6][5] =
-    {
-        {0x41200000,0x41b00000,0x420c0000,0x42480000,0x428c0000},
-        {0x3f800000,0x40000000,0x40800000,0x40c00000,0x41200000},
-        {0x40a00000,0x41300000,0x41880000,0x41c80000,0x420c0000},
-        {0x41a00000,0x42300000,0x428c0000,0x42c80000,0x430c0000},
-        {0x41f00000,0x42840000,0x42d20000,0x43160000,0x43520000},
-        {0x42480000,0x42dc0000,0x432f0000,0x437a0000,0x43af0000}
-    };
-    float kaafExpected[6][5];
-    std::memcpy(kaafExpected,kaauExpectedBits,sizeof(kaafExpected));
-    const char* kapcPresets[6] = {"Default","Potato","Low","medium","High","Ultra"};
-    for (u32 luPreset = 0; luPreset < 6u; ++luPreset)
-    {
-        Set("VehicleLODPreset", kapcPresets[luPreset]); LoadConfig(); CheckTable(kaafExpected[luPreset]);
-        const float lfBoundary = kaafExpected[luPreset][0];
-        Check(ClassifyVehicleLOD(lfBoundary - 0.25f, BrnWorld::KA_VEHICLE_QUALITY_LOD_DISTANCE) == CgsGraphics::Model::E_STATE_LOD_0,
-              "selected preset keeps LOD0 up to its distance");
-        Check(ClassifyVehicleLOD(lfBoundary, BrnWorld::KA_VEHICLE_QUALITY_LOD_DISTANCE) == CgsGraphics::Model::E_STATE_LOD_1,
-              "original strict LOD boundary remains intact");
-    }
-    Set("BloomLuminanceScale","0.3"); Set("EnvironmentMapLOD","0"); Set("TrafficShadows","1");
-    Set("AnisotropicFiltering","16");
-    Set("ShadowResolutionScale","2");Set("ShadowDistance","240");Set("ShadowSlopeBias","1");
-    Set("WorldLODOverrideDistance","3000"); Set("PropLODOverrideDistance","3000");
-    WritePrivateProfileStringA("Settings","AntiAliasing","8",gacTestIni);
+          "absent native shadow controls preserve original settings");
+    Set("AnisotropicFiltering","16"); Set("ShadowResolutionScale","2");
+    Set("ShadowDistance","240"); Set("ShadowSlopeBias","1");
+    WritePrivateProfileStringA("Debug","Environment/Bloom luminance scale","0.3",gacTestIni);
+    WritePrivateProfileStringA("Other","KeepMe","yes",gacTestIni);
     LoadConfig();
-    Check(gfBloomLuminanceScale == 0.3f && lrGraphics.miEnvironmentMapLod == 0 && lrGraphics.mbTrafficShadows,
-          "configured bloom/reflection/shadow settings reach native state");
-    lrGraphics.ApplyLodOverride(lrGraphics.miWorldLodOverrideDistance, lbOverride, laiDistances);
-    Check(lbOverride && laiDistances[0] == 3000 && laiDistances[1] == 6000 && laiDistances[2] == 9000,
-          "extended world LOD override uses all three multiplied bands");
-    lrGraphics.ApplyLodOverride(lrGraphics.miPropLodOverrideDistance, lbOverride, laiDistances);
-    Check(lbOverride && laiDistances[0] == 3000 && laiDistances[2] == 9000, "extended prop LOD distance bands");
-    Set("WorldLODOverrideDistance","1"); Set("PropLODOverrideDistance","50"); LoadConfig();
-    lrGraphics.ApplyLodOverride(lrGraphics.miWorldLodOverrideDistance, lbOverride, laiDistances);
-    Check(laiDistances[0] == 1 && laiDistances[2] == 3, "short world LOD distance bands");
-    lrGraphics.ApplyLodOverride(lrGraphics.miPropLodOverrideDistance, lbOverride, laiDistances);
-    Check(laiDistances[0] == 50 && laiDistances[2] == 150, "short prop LOD distance bands");
-    Set("VehicleLOD0Distance","12.5"); Set("VehicleLODPreset","Default"); LoadConfig(); SaveConfig();
-    CheckTable(kaafExpected[0]);
-    char lacValue[128];
-    GetPrivateProfileStringA("Graphics","VehicleLOD0Distance","",lacValue,sizeof(lacValue),gacTestIni);
-    Check(std::strcmp(lacValue,"12.5") == 0, "named presets preserve inactive custom values");
-    Set("VehicleLODPreset","Custom"); LoadConfig();
-    const float kafCustom[5] = {12.5f,22,35,50,70}; CheckTable(kafCustom);
-    WritePrivateProfileStringA("Unrelated","Keep","yes",gacTestIni);
-    SaveConfig(); renderengine::GetGraphicsSettingsPC() = renderengine::GraphicsSettingsPC(); LoadConfig();
-    CheckTable(kafCustom);
-    Check(gfBloomLuminanceScale == 0.3f && lrGraphics.mbTrafficShadows && lrGraphics.miEnvironmentMapLod == 0,
-          "graphics values survive normal save/reload");
-    Check(lrGraphics.miAnisotropicFiltering == 16, "texture filtering survives normal save/reload");
-    Check(lrGraphics.miShadowResolutionScale==2 && lrGraphics.mfShadowDistance==240.0f && lrGraphics.mfShadowSlopeBias==1.0f,
-          "shadow resolution, distance and slope bias survive normal save/reload");
-    Check(renderengine::gAntiAliasing == 8 && MultisampleOverrideSampleCount() == 8, "8x AA persists through real LoadConfig and SaveConfig");
-    GetPrivateProfileStringA("Unrelated","Keep","",lacValue,sizeof(lacValue),gacTestIni);
-    Check(std::strcmp(lacValue,"yes") == 0, "save retains unrelated INI data");
-    Set("VehicleLOD1Distance","1"); LoadConfig(); CheckTable(kaafExpected[0]);
-    Check(lrGraphics.meVehicleLodPreset == renderengine::E_VEHICLE_LOD_DEFAULT, "decreasing custom table is rejected");
-    for (const char* lpcInvalid : {"NaN","inf","-1","11","0.3garbage",""})
+    Check(lrGraphics.miAnisotropicFiltering==16 && lrGraphics.miShadowResolutionScale==2 &&
+          lrGraphics.mfShadowDistance==240 && lrGraphics.mfShadowSlopeBias==1,
+          "native controls still load while engine controls are generic");
+    renderengine::gFullscreen=true; SaveFullscreenConfigPC();
+    SaveConfig(); renderengine::GetGraphicsSettingsPC()=renderengine::GraphicsSettingsPC(); LoadConfig();
+    Check(lrGraphics.miAnisotropicFiltering==16 && lrGraphics.miShadowResolutionScale==2 &&
+          lrGraphics.mfShadowDistance==240 && lrGraphics.mfShadowSlopeBias==1,
+          "native settings round-trip");
+    char lacText[128];
+    GetPrivateProfileStringA("Debug","Environment/Bloom luminance scale","",lacText,sizeof(lacText),gacTestIni);
+    Check(std::strcmp(lacText,"0.3")==0,"shutdown preserves the requested generic initial value");
+    GetPrivateProfileStringA("Other","KeepMe","",lacText,sizeof(lacText),gacTestIni);
+    Check(std::strcmp(lacText,"yes")==0,"unrelated sections survive saving");
+    Check(GetPrivateProfileIntA("Display","Fullscreen",0,gacTestIni)==1,"fullscreen persistence is retained");
+    for (const char* p : {"BloomLuminanceScale","EnvironmentMapLOD","TrafficShadows",
+                          "WorldLODOverrideDistance","PropLODOverrideDistance","VehicleLODPreset"})
     {
-        Set("BloomLuminanceScale",lpcInvalid); LoadConfig();
-        Check(gfBloomLuminanceScale == 1.0f, "invalid bloom value uses original default");
+        GetPrivateProfileStringA("Graphics",p,"absent",lacText,sizeof(lacText),gacTestIni);
+        Check(std::strcmp(lacText,"absent")==0,"removed dedicated keys are not regenerated by SaveConfig");
     }
-    Set("EnvironmentMapLOD","3"); Set("TrafficShadows","-1");
-    for(const char* invalid : {"0","3","NaN","2.0","2garbage",""})
-    {
-        Set("ShadowResolutionScale",invalid);LoadConfig();
-        Check(lrGraphics.miShadowResolutionScale==1,"invalid shadow scale uses original atlas");
-    }
-    for(const char* invalid : {"0","29.9","500.1","NaN","inf","120garbage",""})
-    {
-        Set("ShadowDistance",invalid);LoadConfig();
-        Check(lrGraphics.mfShadowDistance==120.0f,"invalid shadow distance uses original range");
-    }
-    for(const char* invalid : {"-1","4.1","NaN","inf","1garbage",""})
-    {
-        Set("ShadowSlopeBias",invalid);LoadConfig();
-        Check(lrGraphics.mfShadowSlopeBias==0.0f,"invalid shadow bias preserves authored rasterizer state");
-    }
-    for (const char* lpcInvalid : {"0", "3", "17", "NaN", "16garbage", ""})
-    {
-        Set("AnisotropicFiltering", lpcInvalid); LoadConfig();
-        Check(lrGraphics.miAnisotropicFiltering == 1, "invalid anisotropy falls back to original filtering");
-    }
-    Set("WorldLODOverrideDistance","3000.5"); Set("PropLODOverrideDistance","999999999999999999999");
-    Set("VehicleLODPreset","unknown"); LoadConfig();
-    Check(lrGraphics.miEnvironmentMapLod == 2 && !lrGraphics.mbTrafficShadows &&
-          lrGraphics.miWorldLodOverrideDistance == 0 && lrGraphics.miPropLodOverrideDistance == 0,
-          "invalid integers cannot wrap or accidentally enable graphics changes");
-    CheckTable(kaafExpected[0]);
+    GetPrivateProfileStringA("Settings","EnvironmentMap30Hz","absent",lacText,sizeof(lacText),gacTestIni);
+    Check(std::strcmp(lacText,"absent")==0,"obsolete refresh global is not written back");
+    for (const char* p : {"0","3","17","NaN","16garbage",""})
+    { Set("AnisotropicFiltering",p); LoadConfig(); Check(lrGraphics.miAnisotropicFiltering==1,"invalid anisotropy uses original filtering"); }
+    for (const char* p : {"0","3","2oops","99999999999999999",""})
+    { Set("ShadowResolutionScale",p); LoadConfig(); Check(lrGraphics.miShadowResolutionScale==1,"invalid atlas scale preserves original dimensions"); }
+    for (const char* p : {"NaN","inf","29","501","120oops",""})
+    { Set("ShadowDistance",p); LoadConfig(); Check(lrGraphics.mfShadowDistance==120,"invalid distance preserves original cascade ranges"); }
+    for (const char* p : {"NaN","inf","-0.1","4.1","1oops",""})
+    { Set("ShadowSlopeBias",p); LoadConfig(); Check(lrGraphics.mfShadowSlopeBias==0,"invalid slope option preserves material bias"); }
 }
 
 static void NativeAA()

@@ -45,6 +45,9 @@ namespace CgsDev
             void Construct(const DebugManagerConstructParameters* lpParameters);
             void Destruct();
 
+            // FLAG PC-platform leaf: apply queued startup values after registration metadata.
+            void ApplyIniOverridesPC();
+
             void RegisterVariable(f32* lpfValue, const char* lpcGroup, const char* lpcName);
             void RegisterVariable(s32* lpiValue, const char* lpcGroup, const char* lpcName);
             void RegisterVariable(u32* lpuValue, const char* lpcGroup, const char* lpcName);

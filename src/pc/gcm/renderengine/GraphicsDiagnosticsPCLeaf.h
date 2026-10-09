@@ -9,7 +9,8 @@
 namespace renderengine
 {
     enum GraphicsModelCategoryPC { E_GRAPHICS_WORLD, E_GRAPHICS_PROP, E_GRAPHICS_ENVMAP,
-                                  E_GRAPHICS_TRAFFIC, E_GRAPHICS_RACECAR, E_GRAPHICS_MODEL_CATEGORIES };
+                                  E_GRAPHICS_TRAFFIC, E_GRAPHICS_RACECAR, E_GRAPHICS_PROP_ENVMAP,
+                                  E_GRAPHICS_MODEL_CATEGORIES };
     struct GraphicsDiagnosticsPC
     {
         u32 mauLods[E_GRAPHICS_MODEL_CATEGORIES][5] = {};
@@ -70,6 +71,11 @@ namespace renderengine
             lrDiag.mauDistinctModels[0],lrDiag.mauDistinctModels[1],lrDiag.mauDistinctModels[2],
             lrDiag.mauDistinctModels[3],lrDiag.mauDistinctModels[4],
             lrDiag.muEnvConsidered,lrDiag.muEnvMissing,lrDiag.muEnvCulled,lrDiag.muTrafficShadowRecords);
+        CgsDev::Log::WriteToLog(lacMessage);
+        std::snprintf(lacMessage, sizeof(lacMessage),
+            "[graphics-prop-reflection] frame=%u lods=%u/%u/%u distinct=%u\n", suFrames,
+            lrDiag.mauLods[E_GRAPHICS_PROP_ENVMAP][0], lrDiag.mauLods[E_GRAPHICS_PROP_ENVMAP][1],
+            lrDiag.mauLods[E_GRAPHICS_PROP_ENVMAP][2], lrDiag.mauDistinctModels[E_GRAPHICS_PROP_ENVMAP]);
         CgsDev::Log::WriteToLog(lacMessage);
     }
 }
