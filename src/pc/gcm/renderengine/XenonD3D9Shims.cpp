@@ -55,6 +55,7 @@
 #include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
 #include "pc/gcm/renderengine/WorldTextureFilteringPCLeaf.h"
 #include "pc/gcm/renderengine/ShadowQualityPCLeaf.h"
+#include "pc/gcm/renderengine/ShadowReceiverPCLeaf.h"
 #include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
 #include "pc/gcm/renderengine/TrailPausedDiagPC.h"
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"
@@ -1529,6 +1530,16 @@ namespace renderengine
         spRealPs            = lrpPs;
         suRealVsInputMask   = VertexShaderInputMask(lpVertexPayload);
         sbRealVsHasWorld    = VertexProgramHasWorldMatrix(lpVertexPayload);
+        // FLAG PC-platform leaf: the native shadow-depth input is separate from
+        // face clip coordinates. Older programs retain their complete register set.
+        static std::unordered_map<const void*, bool> sShadowReceiverPrograms;
+        auto lReceiver = sShadowReceiverPrograms.find(lpVertexPayload);
+        if (lReceiver == sShadowReceiverPrograms.end())
+            lReceiver = sShadowReceiverPrograms.emplace(lpVertexPayload,
+                ProgramDeclaresFloat4Constant(lpVertexPayload, "ShadowMap_ViewDepthPC")).first;
+        if (lReceiver->second)
+            renderengine::PCSetVertexShaderConstantF(lpDevice,
+                KU_SHADOW_RECEIVER_DEPTH_REGISTER_PC, &ShadowReceiverViewDepthPC().x, 1u);
         sbRealProgramsBound = true;
         LogOnce("realok", "[WorldShader] REAL per-technique programs bound (SHADERS.BNDL)\n");
         return true;
