@@ -25,6 +25,8 @@ BloomLuminanceScale=1
 EnvironmentMapLOD=2
 ; Traffic shadows: 0 = off, 1 = on.
 TrafficShadows=0
+; World texture filtering: 1 = original trilinear, 2/4/8/16 = anisotropic.
+AnisotropicFiltering=1
 ; 0 = original asset LODs. Extended-distance example: 3000 for both.
 ; Short-distance examples: 1 for world, 50 for props. Bands use distance * 1/2/3.
 WorldLODOverrideDistance=0

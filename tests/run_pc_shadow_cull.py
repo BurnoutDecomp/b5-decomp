@@ -48,10 +48,17 @@ if args.invert_group:
     loop = loop.replace('if (liSlot == 0)', 'if (liSlot != 0)')
 construct = definition(renderer, 'void BrnRendererModule::Construct(')
 construct_call = re.search(r'mShadowMapRenderManager\.Construct\([^;]+;', construct).group()
-producer = definition(tree.read('src/GameSource/World/BrnWorldModule.cpp'),
-                      'WorldModule::GenerateDispatchListsBringUp(')
-traffic_gate = re.search(r'const bool lbTraffic = mShadowMap\.GetRenderTrafficIntoShadowMap\(\).*?;', producer, re.S)
-traffic = (traffic_gate.group() + '\n' + definition(producer, 'if (lbTraffic)\n')) if traffic_gate else '// No traffic caster leg in this source revision.\n'
+world = tree.read('src/GameSource/World/BrnWorldModule.cpp')
+if 'WorldModule::GenerateDispatchListsBringUp(' in world:
+    producer = definition(world, 'WorldModule::GenerateDispatchListsBringUp(')
+    traffic_gate = re.search(r'const bool lbTraffic = mShadowMap\.GetRenderTrafficIntoShadowMap\(\).*?;', producer, re.S)
+    traffic = (traffic_gate.group() + '\n' + definition(producer, 'if (lbTraffic)\n')) if traffic_gate else '// No traffic caster leg in this source revision.\n'
+else:
+    producer = definition(world, 'WorldModule::GenerateShadowMapDispatchLists(')
+    traffic_gate = re.search(r'const bool lbTraffic\s*= mShadowMap\.GetRenderTrafficIntoShadowMap\(\).*?;', producer, re.S)
+    start = producer.rfind('        if ( lbTraffic )')
+    traffic = traffic_gate.group() + '\n' + definition(producer[start:], 'if ( lbTraffic )')
+traffic = '#define TEST_TRAFFIC_RENDER_SWITCH %d\n' % ('lpSwitches->mbRenderTraffic' in traffic) + traffic
 technique = definition(tree.read('src/GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h'),
                        'struct MaterialTechniqueView') + ';'
 shadow = {

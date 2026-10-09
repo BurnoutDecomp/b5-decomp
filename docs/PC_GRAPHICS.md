@@ -13,6 +13,7 @@ shadows, world/prop LOD distances, and vehicle LOD presets.
 | `BloomLuminanceScale` | `1` | Bloom luminance multiplier. `0.3` reduces its contribution; `0` removes it. Accepts finite values from 0 to 10. |
 | `EnvironmentMapLOD` | `2` | World detail in car reflections: `0` highest, `1` intermediate, `2` original. Requires `[Settings] EnvironmentMap=1`. |
 | `TrafficShadows` | `0` | Set `1` to include traffic in the shadow-map pass. |
+| `AnisotropicFiltering` | `1` | World texture filtering: `1` preserves original trilinear filtering; `2`, `4`, `8`, or `16` improve detail on surfaces viewed at shallow angles. Clamped to the device's supported level. |
 | `WorldLODOverrideDistance` | `0` | `0` uses the model's original distances. Positive values enable the distance override and set the three bands to value × 1, 2, 3. Example bases: `3000` for extended distances, `1` for short distances. |
 | `PropLODOverrideDistance` | `0` | Same override for props. Example bases: `3000` for extended distances, `50` for short distances. |
 | `VehicleLODPreset` | `Default` | `Default`, `Potato`, `Low`, `Medium`, `High`, `Ultra`, or `Custom`; names are case-insensitive. Applies to the original vehicle quality table, used by both race cars and traffic. |
@@ -21,6 +22,12 @@ World/prop base distances accept integers from 0 to 10000. Higher detail general
 costs more rendering time. These overrides affect LOD selection within the
 original streaming, visibility and available-model limits; they do not load the
 whole island or create missing high-detail models.
+
+For sharper roads, use `[Graphics] AnisotropicFiltering=16`. This controls texture
+filtering independently of the mesh LOD settings. It preserves authored mipmaps
+and their original LOD biases; it does not force full-resolution textures at every
+distance. Missing or invalid values use `1`. Cube reflections, shadow maps and
+post-processing samplers keep their own filtering.
 
 The vehicle presets use these LOD switch distances:
 
@@ -51,7 +58,7 @@ LOD, matching the original engine's fallback.
 `EnvironmentMapLOD` selects world meshes drawn into reflections. It does not
 increase the reflection texture resolution, which remains 128×128 per cube face,
 or change the reflective properties of the car's materials. Traffic shadows use
-the original near-only policy and are visible around nearby traffic.
+the original cascade passes, including the near traffic caster list.
 
 Vehicle paint, body panels and window glass sample the same dynamic reflection
 cube. Props use their current world transforms, including during motion, and the

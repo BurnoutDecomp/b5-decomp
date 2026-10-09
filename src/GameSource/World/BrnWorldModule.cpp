@@ -156,20 +156,12 @@ static CgsGraphics::Camera gDispatchCamera;
 
 
 
-// The world dispatch/sort list ids the X360 passes in registers to the world
-// module's dispatch feed (dropped by the decompiler at the call site).
-//
-// CORRECTED (world-pixels wave 2026-07-28) against the renderer's list map and a
-// live run. `liList` is the GDL OBJECT list RenderInstance submits the
-// DRAWRENDERABLE packet into (ConvertObjectsToMeshes expands object lists 0..12);
-// `liSortLayer` / `liSortKey` are the DESTINATION MESH list ids DrawRenderable::
-// Interpret routes each expanded mesh to -- opaque and transparent respectively.
-// The old 19/20 were the CAR opaque/transparent mesh lists, and a boot with the
-// producer live proved it: the world's 187 expanded meshes landed in mesh list 19.
-// The X360 world pass is list 11 opaque / 15 transparent / 21 pre-Z (renderer
-// Render @0x8240BFA8: mbRenderWorldOpaque walks 11, mbRenderWorldTransparent 15,
-// mbRenderPreZ 21, mbRenderCarsOpaque 19, mbRenderCarsTransparent 20).
-static const s32 KI_WORLD_OPAQUE_LIST = 2;    // GDL object list
+// ARTIST GenerateDispatchLists @827D28C8..28F4: r9=11 (object list),
+// r10=11 (opaque mesh list), stack=15 (transparent), stack=21 (pre-Z).
+// Object list 2 belongs to near traffic casters. Sharing it with the main
+// world pass skips the traffic list's initial full constant snapshot, leaving
+// its body meshes with the main camera until the next 128-object refresh.
+static const s32 KI_WORLD_OBJECT_LIST = 11;  // GDL object list
 static const s32 KI_WORLD_SORT_LAYER  = 11;   // -> mesh list: WORLD OPAQUE
 static const s32 KI_WORLD_SORT_KEY    = 15;   // -> mesh list: WORLD TRANSPARENT
 static const s32 KI_WORLD_PREZ_LIST   = 21;   // -> mesh list: PRE-Z
@@ -3886,6 +3878,7 @@ WorldModule::GenerateDispatchLists(
     const BrnUpdateSet* lpUpdateSet )
 {
     using namespace CgsDev;
+    renderengine::BeginGraphicsDiagnosticsPC();
 
     CGS_ASSERT( lpInputBufferStack != 0, "lpInputBufferStack != NULL" );
     CGS_ASSERT( lpOutputBufferStack != 0, "lpOutputBufferStack != NULL" );
@@ -4181,7 +4174,7 @@ WorldModule::GenerateDispatchLists(
             lpWorldDispatchInput, lpFilteredEntityData->maWorldEntityIds,
             gDispatchCamera.GetViewProjectionMatrix(), gDispatchCamera.GetPosition(),
             gDispatchCamera.GetDirection(), lfLodZoomFactor, &mShaderLodInfo,
-            KI_WORLD_OPAQUE_LIST, KI_WORLD_SORT_LAYER, KI_WORLD_SORT_KEY,
+            KI_WORLD_OBJECT_LIST, KI_WORLD_SORT_LAYER, KI_WORLD_SORT_KEY,
             KI_WORLD_PREZ_LIST, false );
         PerfMonCpu::StopMonitor( miGenerateDispatchListsPM );
     }
@@ -4326,6 +4319,7 @@ WorldModule::GenerateDispatchLists(
     lpDispatchThreadInputBuffer->UnlockForWrite();
 
     lpInputBufferStack->DestroyIOBuffer( &lpWorldDispatchInput );
+    renderengine::EndGraphicsDiagnosticsPC();
 }
 
 
