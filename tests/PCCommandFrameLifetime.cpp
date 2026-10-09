@@ -149,14 +149,15 @@ struct ParticleSnapshotOwner {
     using ParticleRenderData = BrnParticle::ParticleModule::ParticleRenderData;
     struct SimpleSnapshot { unsigned publishes = 0; void Publish(unsigned) { ++publishes; } } mSimpleParticleFramePC;
     struct TrailSystem {
-        unsigned ends = 0, updates = 0; float step = -1, time = -1;
+        unsigned ends = 0, updates = 0; float mfCurrentTimeStep = 0, time = -1;
         Matrix44 view = {};
         void EndOfFrame() { ++ends; }
-        void Update(float dt, float t, Matrix44::InParam vp) { ++updates; step = dt; time = t; view = vp; }
+        void Update(float dt, float t, Matrix44::InParam vp) { ++updates; mfCurrentTimeStep = dt; time = t; view = vp; }
     } mTrailSystem;
     struct TrailSnapshot { unsigned publishes = 0; void Publish(TrailSystem&) { ++publishes; } } mTrailFramePC;
     unsigned maSimpleParticles = 0;
     u32 muTrailSystemUpdateFramePC = 0;
+    f32 mfTrailSystemTimeStepPC = 0.0f;
     bool mbStalled = false;
     void EndOfFrame(bool);
     void PublishRenderCommandsPC(const ParticleRenderData&);
@@ -259,8 +260,10 @@ int main() {
     Check(p.mbStalled && p.mTrailSystem.ends == 1 && p.mTrailSystem.updates == 1, "original particle EOF and completed snapshot publication remain distinct");
     p.EndOfFrame(false); p.PublishRenderCommandsPC(data);
     Check(!p.mbStalled && p.mTrailSystem.ends == 2 && p.mTrailSystem.updates == 1, "original particle record guard suppresses duplicate clock application");
-    data.muCurrentFrame = 2; data.mfCurrentTimeStep = 0; p.PublishRenderCommandsPC(data);
-    Check(p.mTrailSystem.updates == 2 && p.mTrailSystem.step == 0, "a real new particle record preserves its zero step verbatim");
+    data.muCurrentFrame = 2; data.mfCurrentTimeStep = 0; data.mfCurrentTime = 4; p.PublishRenderCommandsPC(data);
+    Check(p.mTrailSystem.updates == 2 && p.mTrailSystem.mfCurrentTimeStep == .25f
+        && p.mTrailSystem.time == 4 && data.mfCurrentTimeStep == 0,
+        "a zero-step record preserves wheel cadence, its absolute clock and its original particle step");
     // Same once-allocated zero storage as the real saDispatchMem control pair.
     // Construct never manufactures a ParticleRenderData/default camera writer.
     static BrnGame::DispatchThreadInputBuffer control[2];

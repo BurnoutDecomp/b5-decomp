@@ -17,7 +17,9 @@ void TrailRenderer::Construct(CgsMemory::HeapMalloc*,BrnGraphics::Im3dSkidsRende
 void TrailRenderer::Update(f32 now,Matrix44::InParam matrix){mfCurrentTime=now;mViewProjectionMatrix=matrix;}
 } }
 namespace BrnParticle {
-// This fixture seats the original EndOfFrame body on its actual trail objects.
+// This fixture seats the original EndOfFrame and actual command publication
+// bodies on real trail objects. Both simulation and zero-step command frames
+// publish, as they do on the uncapped host.
 // Unrelated simple-particle publication is an inert boundary; draw is not run.
 struct Publication {
     struct SimplePublication {void Publish(int) {}} mSimpleParticleFramePC;
@@ -25,8 +27,20 @@ struct Publication {
     bool mbStalled=false;
     Native::TrailSystem mTrailSystem;
     Native::TrailFramePC mTrailFramePC;
-    struct Record {f32 mfCurrentTimeStep=0,mfCurrentTime=0; CgsGraphics::Camera mCgsCamera;} mRenderData;
+    struct ParticleRenderData {
+        f32 mfCurrentTimeStep=0,mfCurrentTime=0;
+        u32 muCurrentFrame=0;
+        CgsGraphics::Camera mCgsCamera;
+    } mRenderData;
+    u32 muTrailSystemUpdateFramePC=0;
+    f32 mfTrailSystemTimeStepPC=0;
     void EndOfFrame(bool);
+    void PublishRenderCommandsPC(const ParticleRenderData&);
+    void PublishFrame() {
+        ++mRenderData.muCurrentFrame;
+        EndOfFrame(false);
+        PublishRenderCommandsPC(mRenderData);
+    }
 };
 }
 #include "trail_cadence.inc"
@@ -43,7 +57,7 @@ int main()
     TrailEmitterData wheel; wheel.Prepare();
     frame.mRenderData.mfCurrentTime=30.f;
     frame.mRenderData.mfCurrentTimeStep=1.f/60;
-    frame.EndOfFrame(false);
+    frame.PublishFrame();
     // Two extra present-only frames between fixed60Hz wheel updates, as the
     // shipped165fps host does. The update frame's own sum is correctly zero.
     for (int step=0;step<12;++step) {
@@ -51,9 +65,9 @@ int main()
         frame.mTrailSystem.AddTrailSegment(&wheel,{float(step),0,0,0},{0,1,0,0},0,.7f,now);
         frame.mRenderData.mfCurrentTime=now;
         frame.mRenderData.mfCurrentTimeStep=1.f/60;
-        frame.EndOfFrame(false);
+        frame.PublishFrame();
         frame.mRenderData.mfCurrentTimeStep=0;
-        frame.EndOfFrame(false); frame.EndOfFrame(false);
+        frame.PublishFrame(); frame.PublishFrame();
     }
     Check(frame.mTrailSystem.maActiveEmitters[0].GetSize()==1,"one continuous emitter survives render-only frames");
     Check(wheel.mpTrailEmitter && wheel.mpTrailEmitter->mn8NumSegments>=2,"real strip has at least two segments for rendering");
@@ -61,19 +75,23 @@ int main()
           "published snapshot contains drawable geometry");
     Check(frame.mTrailSystem.mfCurrentTimeStep==1.f/60,"last simulation step remains the timeout interval");
     Check(frame.mRenderData.mfCurrentTimeStep==0,"render-only ParticleRenderData retains its original zero step");
-    const f32 laid=frame.mTrailFramePC.maActive[0][0]->mpCurrentSegments->ReadSegmentTime(0);
+    const auto* published = frame.mTrailFramePC.maCounts[0] > 0 ? frame.mTrailFramePC.maActive[0][0] : nullptr;
+    const f32 laid=published ? published->mpCurrentSegments->ReadSegmentTime(0) : -1.f;
     Check(std::abs(laid-(30.f+1.f/60))<1.e-5f,"strip origin retains its original timestamp");
-    const f32 lastAdded=wheel.mpTrailEmitter->mrTimeLastSegmentAdded;
+    const f32 lastAdded=wheel.mpTrailEmitter ? wheel.mpTrailEmitter->mrTimeLastSegmentAdded : -1.f;
     frame.mRenderData.mfCurrentTime=lastAdded+9.95f;
     frame.mRenderData.mfCurrentTimeStep=1.f/60;
-    frame.EndOfFrame(false);
+    frame.PublishFrame();
     frame.mRenderData.mfCurrentTimeStep=0;
     const f32 heldTime=frame.mRenderData.mfCurrentTime;
     // More than ten seconds' worth of presents with no simulation progress:
     // retaining the timeout step must never turn these calls into clock ticks.
     for(int present=0;present<720;++present)
     {
-        frame.EndOfFrame(false);
+        if (present % 120 == 0)
+            frame.PublishFrame();
+        else
+            frame.EndOfFrame(false); // no command producer: keep the read bank
         frame.mTrailFramePC.Update(heldTime,frame.mRenderData.mCgsCamera.mViewProjection);
     }
     Check(frame.mTrailSystem.mfCurrentTime==heldTime,"render-only publication never adds retained step to live absolute clock");
@@ -83,9 +101,9 @@ int main()
     for (int step=0;step<610;++step){
         frame.mRenderData.mfCurrentTime+=1.f/60;
         frame.mRenderData.mfCurrentTimeStep=1.f/60;
-        frame.EndOfFrame(false);
+        frame.PublishFrame();
         frame.mRenderData.mfCurrentTimeStep=0;
-        frame.EndOfFrame(false);
+        frame.PublishFrame();
     }
     Check(frame.mTrailSystem.maActiveEmitters[0].GetSize()==0,"original ten-second expiry returns all inactive emitters");
     Check(wheel.mpTrailEmitter==nullptr,"original expiry detaches the wheel owner");

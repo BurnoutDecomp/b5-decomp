@@ -957,6 +957,7 @@ namespace BrnParticle
         Native::SimpleParticleFramePC mSimpleParticleFramePC;
         Native::TrailFramePC mTrailFramePC;
         u32 muTrailSystemUpdateFramePC = 0;
+        f32 mfTrailSystemTimeStepPC = 0.0f;
         Native::ParticleRandomAccessPC mRandomAccessPC;
         template<class Draw> decltype(auto) DrawRandomPC(Draw lfDraw)
         {
