@@ -69,8 +69,9 @@ to the reflection pass. Vehicle paint and glass sample the same player-centered 
 The native cube projection includes D3D9 pixel-centre alignment. Shadow receivers
 use the main camera's depth for cascade selection and fading, while reflection
 geometry keeps each cube face's projection. The shader converter and executable
-must be updated together for the receiver correction: rebuild the executable and
-run `build shaders --install` when updating an existing data folder.
+are both needed to enable the receiver correction: rebuild the executable and
+run `build shaders --install` when updating an existing data folder. Older
+executables keep the original receiver path when the new camera input is absent.
 
 ```ini
 [Debug]

@@ -81,6 +81,18 @@ int main()
     spDevice->SetPixelShaderConstantF(KU_PS_ShadowMap_Constants,KAF_SPLITS,1);
     spDevice->SetPixelShaderConstantF(KU_PS_ShadowMap_Constants2,KAF_CONSTANTS2,1);
     const Vertex KAV_QUAD[]={{-1,-1,.5f,1},{-1,1,.5f,1},{1,-1,.5f,1},{1,1,.5f,1}};
+    auto SampleReceiver=[&]()
+    {
+        BindReceiverDepth(KAU_VS_CODE);
+        Require(spDevice->BeginScene(),"begin receiver");
+        Require(spDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP,2,KAV_QUAD,sizeof(Vertex)),"receiver draw");
+        Require(spDevice->EndScene(),"end receiver");
+        Require(spDevice->GetRenderTargetData(lpTarget,lpRead),"receiver readback");
+        D3DLOCKED_RECT lLock={};Require(lpRead->LockRect(&lLock,nullptr,D3DLOCK_READONLY),"receiver lock");
+        const u8 luValue=*(static_cast<const u8*>(lLock.pBits)+8*lLock.Pitch+8*4);
+        lpRead->UnlockRect();
+        return luValue;
+    };
     // Same stationary receiver, viewed through different capture-face depths and
     // three main-camera positions. The sampled cascade must follow the atlas camera.
     for(f32 lfMainDepth:{6.f,20.f,50.f})
@@ -95,17 +107,14 @@ int main()
         {
             const f32 lafFace[]={lfFaceDepth,0,0,0};
             spDevice->SetVertexShaderConstantF(201u,lafFace,1);
-            BindReceiverDepth(KAU_VS_CODE);
-            Require(spDevice->BeginScene(),"begin receiver");
-            Require(spDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP,2,KAV_QUAD,sizeof(Vertex)),"receiver draw");
-            Require(spDevice->EndScene(),"end receiver");
-            Require(spDevice->GetRenderTargetData(lpTarget,lpRead),"receiver readback");
-            D3DLOCKED_RECT lLock={};Require(lpRead->LockRect(&lLock,nullptr,D3DLOCK_READONLY),"receiver lock");
-            const u8 luValue=*(static_cast<const u8*>(lLock.pBits)+8*lLock.Pitch+8*4);
-            lpRead->UnlockRect();
+            const u8 luValue=SampleReceiver();
             Check(lfMainDepth==20.f ? luValue>250 : luValue<5,"reflected shadow uses atlas-camera cascade for every face depth");
         }
     }
+    ShadowReceiverViewDepthPC()={0,0,0,0};
+    const f32 KAF_LEGACY_FACE[]={20,0,0,0};
+    spDevice->SetVertexShaderConstantF(201u,KAF_LEGACY_FACE,1);
+    Check(SampleReceiver()>250,"an unpublished camera input preserves legacy receiver behavior");
     const f32 KAF_SENTINEL[]={7,8,9,10};
     spDevice->SetVertexShaderConstantF(255,KAF_SENTINEL,1);
     const DWORD KAU_OLD_VERTEX[]={D3DVS_VERSION(3,0),0x0000ffff};
