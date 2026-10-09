@@ -105,6 +105,7 @@
 
 #include "GameSource/World/BrnEntityTypes.h"                              // E_ENTITYTYPE_PROP
 #include "GameSource/World/BrnShaderLodInfo.h"                            // ShaderLodInfo
+#include "pc/gcm/renderengine/PropReflectionPCLeaf.h"
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"                      // BrnWorld::ShadowMap
 
 #include "SharedClasses/Physics/Props/BrnPropGraphicsList.h"              // PropGraphics / PropPartGraphics
@@ -238,12 +239,16 @@ PropEntityModule::RenderModel(
     }
     else if ( lbRenderingEnvironmentMap )
     {
-        // The env-map pass draws LOD 2 or nothing at all.
-        if ( !lpModel->DoesStateExist( CgsGraphics::Model::E_STATE_LOD_2 ) )
+        // FLAG PC-platform leaf: the original fixed LOD2 can be selected through
+        // the real debug registry. Invalid script values retain original detail.
+        const s32 liRequested = renderengine::PropEnvironmentMapLodPC();
+        const auto leReflectionLod = static_cast<CgsGraphics::Model::State>(
+            liRequested >= 0 && liRequested <= 2 ? liRequested : 2);
+        if ( !lpModel->DoesStateExist( leReflectionLod ) )
         {
             return false;
         }
-        leLodState = CgsGraphics::Model::E_STATE_LOD_2;
+        leLodState = leReflectionLod;
     }
     else
     {
@@ -276,6 +281,10 @@ PropEntityModule::RenderModel(
     if (!lbRenderingEnvironmentMap)
     {
         renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_PROP, lpModel, leLodState);
+    }
+    else
+    {
+        renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_PROP_ENVMAP, lpModel, leLodState);
     }
 
     // ---- instanced models go to the collector, not to a draw ----------------

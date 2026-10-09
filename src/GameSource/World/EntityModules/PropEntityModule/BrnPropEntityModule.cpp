@@ -24,7 +24,9 @@
 // ============================================================================
 
 #include "BrnPropEntityModule.h"
-#include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
+#include "pc/gcm/renderengine/PropReflectionPCLeaf.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 
 #include "BrnPropEntityModuleIO.h"                       // PropEntityIO::OutputBuffer_Prepare
 #include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
@@ -288,27 +290,28 @@ namespace BrnWorld
             mauOverrideLodDistances[li8Lod] = 100 * (li8Lod + 1);
         }
 
-        // FLAG PC-platform leaf: configure the original LOD distance override base.
-        const renderengine::GraphicsSettingsPC& lrGraphics = renderengine::GetGraphicsSettingsPC();
-        lrGraphics.ApplyLodOverride(lrGraphics.miPropLodOverrideDistance,
-                                  mbOverrideLodDistances, mauOverrideLodDistances);
-
-        // PARK -- the tail of the X360 body (0x822FA38C..0x822FA52C) takes the global
-        // CgsDebugManager critical section and registers eight MODULE-level debug
-        // variables with it:
-        //     "World"      / "Draw prop bounding spheres" -> &mbDrawBoundingSpheres
-        //     "World/LODs" / "Override Prop LOD"          -> &mbOverrideLod
-        //     "World/LODs" / "Prop LOD number"            -> &miLodOverrideValue, limits 0..15
-        //     "World/LODs" / "OverridePropDistances"      -> &mbOverrideLodDistances
-        //     "World/LODs" / "PropLOD%dDistance"          -> &mauOverrideLodDistances[0..2],
-        //                                                    each with limits 1..10000
-        // These go through CgsDebugManager's own RegisterVariable / SetLimits entry points
-        // (X360 sub_8282E400 / sub_8282E3B8 / sub_8282F910), which are NOT declared on the
-        // committed CgsDebugManager (it exposes only GetInstance()). Adding them is that
-        // class's lane, not this one, and the block is dev-menu-only -- it has no gameplay
-        // effect and cannot affect prop spawning. Restore it when CgsDebugManager grows
-        // the API. (The member INITIALISERS the block is interleaved with are all above;
-        // only the registration calls are parked.)
+        // ARTIST @0x822FA38C..0x822FA52C: the original module-level controls.
+        // sub_8282E400/8282E3B8/8282F910 are the DebugInterface bool/int/range wrappers.
+        {
+            CgsDev::DebugInterface lDebugInterface;
+            lDebugInterface.RegisterVariable(&mbDrawBoundingSpheres, "World", "Draw prop bounding spheres");
+            lDebugInterface.RegisterVariable(&mbOverrideLod, "World/LODs", "Override Prop LOD");
+            lDebugInterface.RegisterVariable(&miLodOverrideValue, "World/LODs", "Prop LOD number");
+            lDebugInterface.SetRange(&miLodOverrideValue, 0, 15);
+            lDebugInterface.RegisterVariable(&mbOverrideLodDistances, "World/LODs", "OverridePropDistances");
+            static const char* const kapcDistances[KI_NUM_LODS] =
+                { "PropLOD0Distance", "PropLOD1Distance", "PropLOD2Distance" };
+            for (s32 liLod = 0; liLod < KI_NUM_LODS; ++liLod)
+            {
+                lDebugInterface.RegisterVariable(&mauOverrideLodDistances[liLod], "World/LODs", kapcDistances[liLod]);
+                lDebugInterface.SetRange(&mauOverrideLodDistances[liLod], 1, 10000);
+            }
+            // FLAG PC-platform leaf: expose prop capture detail through the same
+            // registry, without adding another dedicated INI field or state copy.
+            lDebugInterface.RegisterVariable(&renderengine::PropEnvironmentMapLodPC(),
+                "World/LODs", "Prop Environment Map LOD");
+            lDebugInterface.SetRange(&renderengine::PropEnvironmentMapLodPC(), 0, 2);
+        }
 
         // ⭐ UNPARKED 2026-08-12 (conductor). `stb r21(1), 4(r31)` -- the one-byte flag at
         // +4, set true right before the perf/debug tail -- is `mbIsNewModule`, and refusing

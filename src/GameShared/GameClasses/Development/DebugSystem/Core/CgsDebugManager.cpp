@@ -1,4 +1,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "pc/DebugIniPCLeaf.h"
 
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // DebugComponent (mbActive/OnRegister/DebugUISectionCallback/RenderHUD)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"      // GetUI().GetVariableManager()/GetFunctionManager()
@@ -272,6 +274,13 @@ namespace CgsDev
     // X360 0x82834390. Active components tick first, then the UI consumes this frame's input.
     void DebugManager::Update(f32 lfDeltaTime)
     {
+        // FLAG PC-platform leaf: registrations outside a DebugInterface scope
+        // are complete by the next debug update. Keep menu edits authoritative.
+        if (DebugUI::PendingDebugIniCountPC(&GetUI().GetVariableManager()) != 0u)
+        {
+            DebugManager* lpManager = ThreadSafeAquire();
+            ThreadSafeRelease(lpManager);
+        }
         for (DebugComponent* lpComponent = mComponentList.GetFirst();
              lpComponent;
              lpComponent = mComponentList.GetNext(lpComponent))
@@ -289,6 +298,7 @@ namespace CgsDev
     {
         CGS_ASSERT(mpInstance, "mpInstance");
         gDebugManagerSection.Enter();
+        ++DebugUI::DebugIniRegistrationDepthPC();
         return mpInstance;
     }
 
@@ -296,6 +306,12 @@ namespace CgsDev
     // calls Leave before the assert), then assert the released pointer is the live singleton.
     void DebugManager::ThreadSafeRelease(DebugManager* lpDebugManager)
     {
+        // FLAG PC-platform leaf: the outer scope owns the complete registration
+        // batch, including options, ranges and callbacks attached after the value.
+        u32& lruDepth = DebugUI::DebugIniRegistrationDepthPC();
+        if (lruDepth == 1u && lpDebugManager == mpInstance && mpInstance->mpUI)
+            mpInstance->GetUI().GetVariableManager().ApplyIniOverridesPC();
+        if (lruDepth != 0u) --lruDepth;
         gDebugManagerSection.Leave();
         CGS_ASSERT(lpDebugManager == mpInstance, "lpDebugManager == mpInstance");
     }
@@ -367,6 +383,12 @@ namespace CgsDev
             GetUI().GetFunctionManager().RegisterFunction(&DebugComponent::DebugUISectionCallback, lpComponent, lpcPath, lpcName);
 
         lpComponent->OnRegister();
+
+        // FLAG PC-platform leaf: materialize a lazy component only when the INI
+        // names one of its controls. No debug action/function is executed.
+        char lacIniPath[256];
+        lpComponent->GetComponentPath(lacIniPath, sizeof(lacIniPath));
+        if (DebugUI::DebugIniNeedsComponentPC(lacIniPath)) ActivateComponent(lpComponent);
     }
 
     // X360 0x8282E1E0. Register a "simple" component: a single bool row wired to its mbActive flag.
@@ -387,6 +409,11 @@ namespace CgsDev
         GetUI().GetVariableManager().RegisterVariable(DebugUI::Variant(&lpComponent->mbActive), lpcPath, lpcName);
 
         lpComponent->OnRegister();
+        // FLAG PC-platform leaf: simple components may register child controls
+        // on activation too; use the same configured-prefix rule as full pages.
+        char lacIniPath[256];
+        lpComponent->GetComponentPath(lacIniPath, sizeof(lacIniPath));
+        if (DebugUI::DebugIniNeedsComponentPC(lacIniPath)) ActivateComponent(lpComponent);
     }
 
     // ARTIST 0x828320F0. A full component starts life as a function row. Its first activation
@@ -401,6 +428,9 @@ namespace CgsDev
         // re-activating an already-active component is a no-op (it must NOT fire OnActivate again).
         if (lpComponent->IsActive())
             return;
+        // FLAG PC-platform leaf: defer initial values until OnActivate has
+        // attached every variable's metadata, including its change callback.
+        DebugInterface lIniRegistration;
         lpComponent->mbActive = true;
         lpComponent->OnActivate();
 

@@ -4,6 +4,7 @@
 #include "types.hpp"
 // Original ARTIST debug-tunable bloom scale, defined by BrnRendererModule.cpp.
 extern f32 gfBloomLuminanceScale;
+extern f32 gfBloomThresholdScale;
 namespace CgsDev { namespace Assert { struct AssertData; } }
 namespace BrnEffects { class EffectsModule; }
 

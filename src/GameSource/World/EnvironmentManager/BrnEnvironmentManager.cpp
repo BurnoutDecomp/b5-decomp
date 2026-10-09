@@ -14,6 +14,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"  // AcquireResourceRequest/Response
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"        // CgsResource::ID::HashString
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                  // CgsCore::SPrintf
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 
 #include <cmath>     // sqrtf / std::cos / std::sin
 #include <cstdio>    // std::snprintf (bring-up diagnostic) / fopen / fscanf / fclose (the console's d:\Season.txt override)
@@ -302,15 +303,12 @@ void EnvironmentManager::BeginRelease()
 // so homing it here creates no split-brain. Value 1.0f in the shipped image (conductor idat dump,
 // also recorded in BrnWorldModule.cpp:4290).
 //
-// FLAG (not fixed here, out of this group's scope): gfBloomLuminanceScale / gfBloomThresholdScale
-// are ALREADY defined in GameSource/Graphics/BrnRendererModule.cpp, whose own banner calls that a
-// provisional home ("WHEN the environment manager's debug registration is reconstructed, declare
-// `extern f32 ...` there rather than minting a second copy"). The DWARF above says their real home
-// is this file. They are NOT moved here now because that file is on the build list and a second
-// definition would be an LNK2005; the move belongs with EnvironmentManager::Construct's debug-
-// variable registration.
+// Bloom scales are homed here with their original debug registrations. Their
+// recovered 1.0 defaults are also attested in scratch/postfx_step4_bloom/DATA_NOTE.md.
 // ---------------------------------------------------------------------------------------------
 f32 gfSpecularScale = 1.0f;   // X360 0x82F307E8
+f32 gfBloomLuminanceScale = 1.0f;   // X360 0x82F307E0; DWARF BrnEnvironmentManager.cpp:37
+f32 gfBloomThresholdScale = 1.0f;   // X360 0x82F307E4; DWARF BrnEnvironmentManager.cpp:38
 
 namespace BrnWorld
 {
@@ -732,11 +730,9 @@ void EnvironmentManager::GenerateShaderConstants(
 //   28800..61200 s = 08:00..17:00, and the sun-elevation clamp 32400..57600 s = 09:00..16:00.
 // =============================================================================================
 
-// @ 0x827CA408. Seed every default. The X360 also registers five CgsDev debug variables at
-// the end ("Override season", "Season to use", "Keyframe to use", "HDR white level",
-// "Bloom luminance scale", under the "Environment" group) through a stack DebugInterface.
-// FLAG PC-platform leaf: the CgsDev::DebugInterface registration surface is not reconstructed, so
-// the debug-variable registrations are omitted; every field they bind is still seeded below.
+// @ 0x827CA408. Seed the defaults and register the complete scalar Environment controls.
+// Season/keyframe controls remain parked with SetupBlend's dependent dynamic-range
+// registration; exposing them before that path is restored permits invalid timeline indices.
 void EnvironmentManager::Construct()
 {
     // ⭐ CORRECTED 2026-08-16 (envstream). Both of these blocks were hand-rolled against the
@@ -829,6 +825,21 @@ void EnvironmentManager::Construct()
     mCloud0Disp.y = 0.0f;
     mCloud0Disp.z = 0.0f;
     mCloud0Disp.w = 0.0f;
+
+    // ARTIST @0x827CA7DC..0x827CA94C; register the actual engine values.
+    CgsDev::DebugInterface lDebugInterface;
+    lDebugInterface.RegisterVariable(&mfWhiteLevel, "Environment", "HDR white level");
+    lDebugInterface.SetRange(&mfWhiteLevel, 0.025f, 1.0f);
+    lDebugInterface.SetStep(&mfWhiteLevel, 0.025f);
+    lDebugInterface.RegisterVariable(&gfBloomLuminanceScale, "Environment", "Bloom luminance scale");
+    lDebugInterface.RegisterVariable(&gfBloomThresholdScale, "Environment", "Bloom threshold scale");
+    lDebugInterface.RegisterVariable(&gfSpecularScale, "Environment", "Specular scale");
+    lDebugInterface.SetRange(&gfBloomLuminanceScale, 0.0f, 5.0f);
+    lDebugInterface.SetRange(&gfBloomThresholdScale, 0.0f, 5.0f);
+    lDebugInterface.SetRange(&gfSpecularScale, 0.0f, 5.0f);
+    lDebugInterface.SetStep(&gfBloomLuminanceScale, 0.1f);
+    lDebugInterface.SetStep(&gfBloomThresholdScale, 0.1f);
+    lDebugInterface.SetStep(&gfSpecularScale, 0.1f);
 }
 
 // @ 0x827B0638. The world-space key-light (sun) direction for this frame.

@@ -30,6 +30,7 @@
 // ============================================================================
 #include <ctime>   // [DIAG culling wave] clock() for the producer-fps readout
 #include "pc/gcm/renderengine/GraphicsDiagnosticsPCLeaf.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "pc/gcm/renderengine/EnvironmentMapPCLeaf.h"
 #include <chrono>  // [DIAG shadow-perf wave] steady_clock for the per-phase producer timers
 #include <cstdlib>                                                // getenv/atof (the BRN_WORLD_CAMDIST bring-up diagnostic)
@@ -114,12 +115,14 @@ namespace renderengine { extern s32 gDisplayWidth; extern s32 gDisplayHeight; }
 // renderer's face pass and this producer's env-map arm (::GenerateDispatchLists :4003) --
 // so the producer reads the same seed the renderer does; verify finding F5 (envproducer):
 // with the knob off, the six queries and dispatch legs must not run either.
-namespace renderengine { extern s32 gEnvironmentMap; extern s32 gEnvironmentMap30Hz; }
+namespace renderengine { extern s32 gEnvironmentMap; }
 
 namespace renderengine { extern u32 guPresentCount; extern bool gbDiagLastPresentBlack; }   // [DIAG] issue #30 (device.cpp)
 
 namespace BrnWorld
 {
+
+static void RegisterVehicleLodDebugVariablesPC();
 
 // qword_8300E9B8: X360 static initializer @0x82C6A9D8 hashes this exact text;
 // WorldModule::Prepare loads the resulting 64-bit key at @0x827D5B6C.
@@ -544,6 +547,8 @@ WorldModule::Construct( const BrnGame::BrnCpuMonitors& lrCpuMonitors )
     // mShaderLodInfo (DWARF pins it at +6175760); mLastCameraInput (+6167744)
     // is NOT touched by the X360 Construct.
     mShaderLodInfo.Construct();
+
+    RegisterVehicleLodDebugVariablesPC();
 
     mbIsInJunkyard = false;                         // X360 +6175808
 
@@ -3371,6 +3376,33 @@ bool sbUseDynamicLods    = true;   // X360 byte_82F307DC  (initialised data, shi
 bool sbUseFixedLods      = false;  // X360 byte_8300E114  (zero-init segment)
 bool sbUseAggressiveLods = false;  // X360 byte_8300E115  (zero-init segment)
 s32  siFixedVehicleLod   = 0;      // X360 dword_8300E118 (zero-init segment, range [0,4])
+
+// FLAG PC-platform leaf: the original race-car debug component is not mounted.
+// Expose its original LOD globals directly, using the ARTIST @0x822C2538
+// group/name/range/step registrations, so INI and menu edits share those globals.
+static void RegisterVehicleLodDebugVariablesPC()
+{
+    CgsDev::DebugInterface lDebugInterface;
+    const char* lpcGroup = "Graphics/Vehicles.../LODs...";
+    lDebugInterface.RegisterVariable(&sbUseDynamicLods, lpcGroup, "Use Dynamic LODs");
+    lDebugInterface.RegisterVariable(&sbUseFixedLods, lpcGroup, "Use Fixed LODs");
+    lDebugInterface.RegisterVariable(&sbUseAggressiveLods, lpcGroup, "Use Aggressive LODs");
+    lDebugInterface.RegisterVariable(&siFixedVehicleLod, lpcGroup, "Vehicle LOD");
+    lDebugInterface.SetRange(&siFixedVehicleLod, 0, 4);
+    static const char* const kapcQuality[5] =
+        { "Quality LOD 0", "Quality LOD 1", "Quality LOD 2", "Quality LOD 3", "Quality LOD 4" };
+    static const char* const kapcAggressive[5] =
+        { "Aggressive LOD 0", "Aggressive LOD 1", "Aggressive LOD 2", "Aggressive LOD 3", "Aggressive LOD 4" };
+    for (u32 luLod = 0; luLod < KU_NUM_VEHICLE_LODS; ++luLod)
+    {
+        lDebugInterface.RegisterVariable(&KA_VEHICLE_QUALITY_LOD_DISTANCE[luLod], lpcGroup, kapcQuality[luLod]);
+        lDebugInterface.RegisterVariable(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[luLod], lpcGroup, kapcAggressive[luLod]);
+        lDebugInterface.SetRange(&KA_VEHICLE_QUALITY_LOD_DISTANCE[luLod], 0.0f, 300.0f);
+        lDebugInterface.SetRange(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[luLod], 0.0f, 300.0f);
+        lDebugInterface.SetStep(&KA_VEHICLE_QUALITY_LOD_DISTANCE[luLod], 1.0f);
+        lDebugInterface.SetStep(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[luLod], 1.0f);
+    }
+}
 
 // The crowding-metric blend constants (X360 flt_82004744 / flt_820CC1CC, loaded by
 // the `fsubs f13,f31,f0` + `fmuls f0,f13,f0` pair @0x827C3930..0x827C3938).

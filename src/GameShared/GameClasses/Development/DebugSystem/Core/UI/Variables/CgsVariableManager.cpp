@@ -9,6 +9,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                         // CGS_ASSERT
 
 #include <string.h>
+#include "pc/DebugIniPCLeaf.h"
 
 // CgsDev::DebugUI::VariableManager::RegisterVariable - the shared core every typed RegisterVariable
 // overload (and DebugComponent, as a friend) funnels into. X360 0x82829A80: resolve the menu path,
@@ -29,6 +30,7 @@ namespace CgsDev
         // variable gets one menu row); the metadata pool has its own size field.
         void VariableManager::Construct(const DebugManagerConstructParameters* lpParameters)
         {
+            ForgetDebugIniPC(this);
             rw::IResourceAllocator* lpAllocator = lpParameters->mpRwAllocator;
 
             mVariablePool.Construct(lpParameters->miVariablePoolSize, lpAllocator);
@@ -42,7 +44,41 @@ namespace CgsDev
 
         // X360 CgsVariableManager.cpp:86 is empty: the debug allocator owns the pool backing and is
         // torn down wholesale, so the manager has nothing to release per-pool.
-        void VariableManager::Destruct() {}
+        void VariableManager::Destruct() { ForgetDebugIniPC(this); }
+
+        // FLAG PC-platform leaf: write the registry's real typed value and use
+        // its normal change callback. Remove each pending row before callbacks
+        // can unregister another row or register a new component.
+        void VariableManager::ApplyIniOverridesPC()
+        {
+            if (DebugIniApplyingPC()) return;
+            DebugIniApplyingPC() = true;
+            const std::size_t luCount = PendingDebugIniCountPC(this);
+            for (std::size_t luIndex = 0; luIndex < luCount; ++luIndex)
+            {
+                DebugIniPendingPC lPending;
+                if (!TakePendingDebugIniPC(this, lPending)) break;
+                Variable* lpVariable = lPending.mpVariable;
+                Variant lValue;
+                if (!PrepareDebugIniValuePC(*lpVariable, lPending.mValue, lValue))
+                {
+                    DebugIniLogPC("rejected", lPending.mPath, lPending.mValue);
+                    continue;
+                }
+                Variant& lrTarget = lpVariable->GetValue();
+                switch (lrTarget.meType)
+                {
+                case Variant::E_TYPE_PTR_FLOAT: *lrTarget.mValue.mpfFloat = lValue.mValue.mfFloat; break;
+                case Variant::E_TYPE_PTR_INT32: *lrTarget.mValue.mpiInt32 = lValue.mValue.miInt32; break;
+                case Variant::E_TYPE_PTR_UINT32: *lrTarget.mValue.mpuUInt32 = lValue.mValue.muUInt32; break;
+                case Variant::E_TYPE_PTR_BOOL: *lrTarget.mValue.mpbBool = lValue.mValue.mbBool; break;
+                default: break;
+                }
+                lpVariable->OnChange();
+                DebugIniLogPC("applied", lPending.mPath, lPending.mValue);
+            }
+            DebugIniApplyingPC() = false;
+        }
 
         void VariableManager::RegisterVariable(const Variant& lrVariant, const char* lpcPath, const char* lpcName)
         {
@@ -68,6 +104,7 @@ namespace CgsDev
             lpMenu->AddMenuItem(lpMenuItem);
             lpVariable->Prepare(lrVariant, lpcName);
             lpMenuItem->Prepare(lpVariable);
+            QueueDebugIniPC(this, lpVariable, lpcPath, lpcName);
         }
 
         Variable* VariableManager::FindVariable(void* lpValue)
@@ -265,6 +302,7 @@ namespace CgsDev
         {
             Variable* v = FindVariable(lpValue);
             if (!v) return;
+            ForgetDebugIniPC(this, v);
             MenuItemVariable* item = FindMenuItem(v);
             if (item)
             {
