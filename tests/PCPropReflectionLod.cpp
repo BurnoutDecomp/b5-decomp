@@ -3,6 +3,7 @@
 #include <initializer_list>
 #include "types.hpp"
 #include "pc/gcm/renderengine/PropReflectionPCLeaf.h"
+#include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
 static int giChecks=0,giFailures=0;
 static void Check(bool b,const char* s){++giChecks;if(!b){++giFailures;std::printf("FAIL %s\n",s);}}
 #define CGS_ASSERT(b,s) Check(!!(b),s)
@@ -40,7 +41,7 @@ static Constants mShaderConstantTable;
 }
 namespace renderengine {
 enum GraphicsModelCategoryPC{E_GRAPHICS_PROP,E_GRAPHICS_PROP_ENVMAP};
-struct Diagnostics {u32 muPropBase=0;};
+struct Diagnostics {u32 muPropBase=0,muPropEnvExtended=0;};
 static bool GraphicsDiagnosticsEnabledPC(){return false;}
 static Diagnostics&GetGraphicsDiagnosticsPC(){static Diagnostics d;return d;}
 static void RecordGraphicsModelPC(GraphicsModelCategoryPC,const CgsGraphics::Model*,u32){}
@@ -77,6 +78,16 @@ int main()
  Check(draw(false,true,{15,0,0})&&giDrawState==1&&guTechnique==9&&gbZOnly&&giOpaque==giTransparent,
        "shadow selection and depth-only packet routing stay original");
  Check(!draw(true,false,{101,0,0}),"reflection LOD cannot bypass the original distance cull");
+ renderengine::EnvironmentMapDrawDistancePC()=150;
+ Check(draw(true,false,{101,0,0})&&giDrawState==0,"extended distance reaches reflected prop draw packets with the requested LOD");
+ Check(!draw(false,false,{101,0,0})&&!draw(false,true,{101,0,0}),"extended reflections preserve main-view and shadow prop culls");
+ Check(!draw(true,false,{150,0,0}),"extended prop distance keeps the original exclusive cutoff");
+ lModel.mbInstanced=true;
+ Check(draw(true,false,{101,0,0})&&giInstanceState==0,"extended distance reaches the reflected instance collector");
+ lModel.mbInstanced=false;lModule.mbOverrideLodDistances=true;
+ Check(draw(true,false,{200,0,0}),"longer original prop override distances are retained");
+ lModule.mbOverrideLodDistances=false;renderengine::EnvironmentMapDrawDistancePC()=0;
+ Check(!draw(true,false,{101,0,0}),"restoring zero immediately restores the original prop cutoff");
  for(s32 i:{-1,3,100}){renderengine::PropEnvironmentMapLodPC()=i;Check(draw(true,false)&&giDrawState==2,"invalid script LOD falls back to original state");}
  lModule.mbOverrideLod=true;lModule.miLodOverrideValue=1;renderengine::PropEnvironmentMapLodPC()=0;
  Check(draw(true,false)&&giDrawState==1,"original forced prop LOD retains its higher precedence");

@@ -23,6 +23,7 @@
 
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModule.h"
 #include "pc/gcm/renderengine/GraphicsDiagnosticsPCLeaf.h"
+#include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
@@ -189,6 +190,14 @@ WorldEntityModule::Construct( void )
         lDebugInterface.RegisterVariable( &mbOverrideLodDistances, "World/LODs", "OverrideDistances" );
         lDebugInterface.RegisterVariable( &miEnvironmentMapLOD, "World/LODs", "Environment Map LOD" );
         lDebugInterface.SetRange( &miEnvironmentMapLOD, 0, 2 );
+
+        // FLAG PC-platform leaf: extend reflection culling through the same debug
+        // registry as reflection detail, without changing the main-view distances.
+        lDebugInterface.RegisterVariable( &renderengine::EnvironmentMapDrawDistancePC(),
+            "World/LODs", "Environment Map Draw Distance" );
+        lDebugInterface.SetRange( &renderengine::EnvironmentMapDrawDistancePC(), 0.0f,
+            renderengine::KF_MAX_ENVIRONMENT_MAP_DRAW_DISTANCE_PC );
+        lDebugInterface.SetStep( &renderengine::EnvironmentMapDrawDistancePC(), 25.0f );
 
         lDebugInterface.RegisterVariable( &mauOverrideLodDistances[0], "World/LODs", "LOD0Distance" );
         lDebugInterface.RegisterVariable( &mauOverrideLodDistances[1], "World/LODs", "LOD1Distance" );
@@ -2376,7 +2385,10 @@ WorldEntityModule::GenerateDispatchListsForEnvironmentMap(
             continue;
         }
 
-        const f32 lfLodDistance = lpModel->GetLodDistance( liEnvironmentMapLOD );
+        const f32 lfAuthoredDistance = lpModel->GetLodDistance( liEnvironmentMapLOD );
+        // FLAG PC-platform leaf: retain the authored cutoff unless an extended
+        // reflection distance is requested. Reflection LOD selection stays separate.
+        const f32 lfLodDistance = renderengine::ExtendEnvironmentMapDrawDistancePC( lfAuthoredDistance );
         if ( lfDistanceSq >= lfLodDistance * lfLodDistance )
         {
             if (renderengine::GraphicsDiagnosticsEnabledPC())
@@ -2387,6 +2399,8 @@ WorldEntityModule::GenerateDispatchListsForEnvironmentMap(
         const Renderable* lpRenderable =
             lpModel->GetRenderable( static_cast<CgsGraphics::Model::State>( liEnvironmentMapLOD ) );
         renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_ENVMAP, lpModel, liEnvironmentMapLOD);
+        if (renderengine::GraphicsDiagnosticsEnabledPC() && lfDistanceSq >= lfAuthoredDistance * lfAuthoredDistance)
+            ++renderengine::GetGraphicsDiagnosticsPC().muEnvExtended;
         CGS_ASSERT( lpRenderable, "Missing renderable in a model" );
         CGS_ASSERT( lpDispatchFrame, "lpDispatchFrame" );
 

@@ -2,6 +2,7 @@
 #include "types.hpp"
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Add
 #include "pc/gcm/renderengine/EnvironmentMapPCLeaf.h"
+#include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnGraphics::EnvironmentMap::Construct @ 0x827B40D0
@@ -210,6 +211,11 @@ namespace BrnGraphics
     {
         mCameraPosition = lCameraPosition;
 
+        // FLAG PC-platform leaf: extend the actual capture/query frusta with the
+        // reflection cutoff. Recompute from the original far plane so live edits
+        // back to zero restore the original range on all six faces.
+        const f32 lfFarClipPlane = renderengine::ExtendEnvironmentMapDrawDistancePC( KF_ENVMAP_FAR_CLIP_PLANE );
+
         for (u32 luEnvMapFace = 0; luEnvMapFace < E_FACE_NUM; ++luEnvMapFace)
         {
             const rw::math::vpu::Vector3 lTargetPosition =
@@ -226,9 +232,10 @@ namespace BrnGraphics
             // compensation for LookAt's original cross(dir,up) horizontal basis.
             // Ordinary projection alone fixed the antipodal faces but left each
             // face mirrored, producing discontinuities at cube boundaries.
-            // The PC leaf keeps view/scalar/query data original. Both sky far-clip
+            // Both sky far-clip
             // rebuilds reapply it, and BeginRenderEnvironmentMapFace uses the
             // original CULL FRONT state for the resulting screen winding.
+            maEnvMapCameras[luEnvMapFace].SetFarClipPlane(lfFarClipPlane);
             renderengine::SetEnvironmentMapProjectionPC(maEnvMapCameras[luEnvMapFace]);
         }
     }

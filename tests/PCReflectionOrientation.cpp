@@ -11,6 +11,7 @@
 #include "GameSource/World/EnvironmentMap/BrnEnvironmentMap.h"
 #include "rw/math/vpu/vector3_operation.h"
 #include "pc/gcm/renderengine/EnvironmentMapPCLeaf.h"
+#include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
 #include "pc/gcm/renderengine/renderstates.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"
@@ -119,11 +120,34 @@ int main()
     lpCode->Release();if(lpErrors)lpErrors->Release();
     BrnGraphics::EnvironmentMap lEnv={};
     lEnv.Prepare();
+    // Exercise the real camera query planes and projection at a distance beyond
+    // the original 75 m range, including a live reset after a positive override.
+    for (f32 lfDistance : {0.0f,500.0f,0.0f})
+    {
+        renderengine::EnvironmentMapDrawDistancePC()=lfDistance;
+        lEnv.Update({0,0,0,0});
+        for (u32 luFace=0;luFace<6;++luFace)
+        {
+            const CgsGraphics::Camera& lrCamera=lEnv.maEnvMapCameras[luFace];
+            CgsGraphics::CameraRwFrustum lFrustum;
+            lrCamera.GetFrustumPerspective(lFrustum,false);
+            const auto& lrDirection=BrnGraphics::KAV_ENV_MAP_LOOK_DIRECTIONS[luFace];
+            const auto& lrFar=lFrustum.maPlanes[1];
+            const f32 lfFarSide=200.f*(lrFar.x*lrDirection.x+lrFar.y*lrDirection.y+lrFar.z*lrDirection.z)-lrFar.w;
+            Check((lfFarSide>=0)==(lfDistance>0),"actual reflection query far plane responds to extension and reset");
+            const auto& lrVp=lrCamera.GetViewProjectionMatrix();
+            const f32 lfZ=200.f*(lrDirection.x*lrVp.xAxis.z+lrDirection.y*lrVp.yAxis.z+lrDirection.z*lrVp.zAxis.z)+lrVp.wAxis.z;
+            const f32 lfW=200.f*(lrDirection.x*lrVp.xAxis.w+lrDirection.y*lrVp.yAxis.w+lrDirection.z*lrVp.zAxis.w)+lrVp.wAxis.w;
+            Check((lfZ>=0 && lfZ<=lfW)==(lfDistance>0),"actual reflection projection includes distant geometry only when extended");
+        }
+    }
     u32 luWorstEdge=0,luWorstField=0;
-    for (u32 luCameraPass=0;luCameraPass<3;++luCameraPass)
+    for (f32 lfDistance : {0.0f,500.0f})
+    for (u32 luCameraPass=0;luCameraPass<=KU_SKY_PROJECTIONS;++luCameraPass)
     for (bool lbPassCull : {false,true})
     for (const rw::math::vpu::Vector3 lEye : { rw::math::vpu::Vector3{0,0,0,0}, rw::math::vpu::Vector3{37,11,-22,0} })
     {
+        renderengine::EnvironmentMapDrawDistancePC()=lfDistance;
         lEnv.Update(lEye);
         lpDevice->SetTexture(13,nullptr);
         lpDevice->SetPixelShader(nullptr);
@@ -137,8 +161,7 @@ int main()
             Require(lpCube->GetCubeMapSurface(static_cast<D3DCUBEMAP_FACES>(luFace),0,&lpFace),"cube face");
             Require(lpDevice->SetRenderTarget(0,lpFace),"bind face");
             CgsGraphics::Camera lCamera=lEnv.maEnvMapCameras[luFace];
-            if(luCameraPass==1)SkyProjection0(lCamera);
-            if(luCameraPass==2)SkyProjection1(lCamera);
+            if(luCameraPass>0)SkyProjection(luCameraPass-1,lCamera);
             const auto& lrMatrix=lCamera.GetViewProjectionMatrix();
             static_assert(sizeof(lrMatrix)==sizeof(D3DMATRIX),"native matrix extent");
             D3DMATRIX lProjection;std::memcpy(&lProjection,&lrMatrix,sizeof(lProjection));
@@ -180,6 +203,7 @@ int main()
             Check(luField<=4,"native cube lookup returns correct world direction");
         }
     }
+    renderengine::EnvironmentMapDrawDistancePC()=0;
     lpDevice->SetTexture(13,nullptr);lpPs->Release();lpRead->Release();lpSample->Release();lpCube->Release();
     lpDevice->Release();lpApi->Release();DestroyWindow(lWindow);
     for(void* lpMemory : saAllocations)std::free(lpMemory);

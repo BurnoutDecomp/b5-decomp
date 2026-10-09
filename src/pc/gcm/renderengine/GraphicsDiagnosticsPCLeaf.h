@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Graphics/CgsModel.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
 #include <cstdio>
 #include <cstdlib>
 
@@ -17,6 +18,7 @@ namespace renderengine
         u32 mauDistinctModels[E_GRAPHICS_MODEL_CATEGORIES] = {};
         u32 muWorldBase = 0, muPropBase = 0, muEnvLod = 2;
         u32 muEnvConsidered = 0, muEnvMissing = 0, muEnvCulled = 0;
+        u32 muEnvExtended = 0, muPropEnvExtended = 0;
         u32 muTrafficShadowRecords = 0;
     };
     inline bool GraphicsDiagnosticsEnabledPC()
@@ -71,6 +73,10 @@ namespace renderengine
             lrDiag.mauDistinctModels[0],lrDiag.mauDistinctModels[1],lrDiag.mauDistinctModels[2],
             lrDiag.mauDistinctModels[3],lrDiag.mauDistinctModels[4],
             lrDiag.muEnvConsidered,lrDiag.muEnvMissing,lrDiag.muEnvCulled,lrDiag.muTrafficShadowRecords);
+        CgsDev::Log::WriteToLog(lacMessage);
+        std::snprintf(lacMessage, sizeof(lacMessage),
+            "[graphics-reflection-distance] frame=%u distance=%.9g worldExtended=%u propExtended=%u\n",
+            suFrames, EnvironmentMapDrawDistancePC(), lrDiag.muEnvExtended, lrDiag.muPropEnvExtended);
         CgsDev::Log::WriteToLog(lacMessage);
         std::snprintf(lacMessage, sizeof(lacMessage),
             "[graphics-prop-reflection] frame=%u lods=%u/%u/%u distinct=%u\n", suFrames,

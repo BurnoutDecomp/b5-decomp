@@ -19,10 +19,12 @@ envmap = tree.read('src/GameSource/World/EnvironmentMap/BrnEnvironmentMap.cpp')
 world = tree.read('src/GameSource/World/BrnWorldModule.cpp')
 renderer = tree.read('src/GameSource/Graphics/BrnRendererModule.cpp')
 shims = tree.read('src/pc/gcm/renderengine/XenonD3D9Shims.cpp')
-methods = 'namespace CgsGraphics {\n' + '\n'.join(definition(camera, sig) for sig in (
+methods = 'namespace CgsGraphics {\n' + definition(camera, 'namespace\n    {') + '\n'
+methods += '\n'.join(definition(camera, sig) for sig in (
     'void Camera::LookAt(', 'void Camera::SetFovHorizontal(',
     'void Camera::UpdatePerspectiveProjectionMatrix(', 'void Camera::UpdateViewProjectionMatrix(',
-    'void Camera::Release()', 'Camera::Camera(const Camera&', 'Camera& Camera::operator=(')) + '\n}\n'
+    'void Camera::Release()', 'Camera::Camera(const Camera&', 'Camera& Camera::operator=(',
+    'void Camera::GetFrustumPerspective(CameraRwFrustum&')) + '\n}\n'
 tables = '\n'.join(re.search(r'static const rw::math::vpu::Vector3 ' + name + r'\[E_FACE_NUM\].*?;',
                             envmap, re.S).group() for name in (
     'KAV_ENV_MAP_LOOK_DIRECTIONS', 'KAV_ENV_MAP_UP_DIRECTIONS'))
@@ -32,9 +34,12 @@ methods += '\n'.join(definition(envmap, sig) for sig in (
     'bool EnvironmentMap::Prepare(', 'void EnvironmentMap::Update(')) + '\n}\n'
 sky_setups = re.findall(r'lFaceCamera\.SetFarClipPlane\( 10000\.0f \);[^\n]*\n'
                        r'(?:\s*renderengine::SetEnvironmentMapProjectionPC\(lFaceCamera\);\n)?', world)
-assert len(sky_setups) == 2, 'Both original and PC producer sky projection rebuilds must be covered'
+assert sky_setups, 'The production sky projection rebuild must be covered'
+methods += '\nconstexpr u32 KU_SKY_PROJECTIONS = %du;\n' % len(sky_setups)
+methods += '\nvoid SkyProjection(u32 luIndex, CgsGraphics::Camera& lFaceCamera) {\nswitch (luIndex) {\n'
 for index, setup in enumerate(sky_setups):
-    methods += '\nvoid SkyProjection%d(CgsGraphics::Camera& lFaceCamera) {\n%s\n}\n' % (index, setup)
+    methods += 'case %d: {\n%s\nbreak;\n}\n' % (index, setup)
+methods += '}\n}\n'
 begin = definition(renderer, 'void BrnRendererModule::BeginRenderEnvironmentMapFace(')
 cull = re.search(r'E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_\w+', begin).group()
 methods += '\nconstexpr auto KE_REFLECTION_CULL = ' + cull + ';\n'

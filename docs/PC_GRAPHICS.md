@@ -45,7 +45,23 @@ selects **prop and detached prop-part** detail using the same 0/1/2 values. Miss
 prop configuration preserves LOD2. The original `Override Prop LOD` control has
 higher precedence if enabled. Models lacking the selected LOD are still skipped.
 
-Both controls require `[Settings] EnvironmentMap=1`. The cube remains 128 x 128 per
+`World/LODs/Environment Map Draw Distance` extends reflection visibility independently
+of detail. It accepts 0..10000 metres; **0 (default)** preserves the authored cutoffs
+and the original 75 m capture frusta. A positive value extends world-object and prop
+cutoffs, plus all six capture/query frusta, to at least that distance. Existing
+longer authored or prop override distances are retained. Main-view and shadow
+distances are unaffected. The control can also be changed live in the debug menu.
+
+```ini
+[Debug]
+World/LODs/Environment Map Draw Distance=3000
+```
+
+Larger distances draw more loaded geometry into each reflection face and can cost
+performance. Streaming and models missing the selected reflection LOD still limit
+what can appear.
+
+Reflection controls require `[Settings] EnvironmentMap=1`. The cube remains 128 x 128 per
 face and uses the props' current transforms. These controls do not change texture
 resolution, streaming or material reflectivity. They do not add traffic or rivals
 to the reflection pass. Vehicle paint and glass sample the same player-centered cube.
@@ -157,8 +173,11 @@ From the workflow checkout:
 ```powershell
 python b5-decomp/tests/run_pc_debug_ini.py
 python b5-decomp/tests/run_pc_prop_reflection_lod.py
+python b5-decomp/tests/run_pc_world_reflection_distance.py
+python b5-decomp/tests/run_pc_reflection_orientation.py
 python b5-decomp/tests/run_pc_graphics_settings.py
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/tests/run_case.ps1 -Case b5-decomp/tests/PCDebugIniLive.ps1 -Slot 9
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/tests/run_case.ps1 -Case b5-decomp/tests/PCReflectionDistanceLive.ps1 -Slot 9
 ```
 
 The native case uses a private slot and profile fixture. It checks initial registry
