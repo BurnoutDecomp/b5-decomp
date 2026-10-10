@@ -122,17 +122,17 @@ namespace renderengine
 
     // The depth/stencil clear parameter block the third Clear overload below takes by reference.
     // It has ONE definition in this tree and it is not here: renderengine::ClearDepthStencilParameters
-    // in pc/gcm/renderengine/ShadowPassPCLeaf.h, where it was hoisted to namespace scope so that
+    // in pc/gcm/renderengine/ShadowPass.h, where it was hoisted to namespace scope so that
     // DeviceClearDepthStencil could have a satisfiable decorated name. Reference-only use here, so a
     // forward declaration is the documented cascade-avoidance exception rather than an include (this
-    // header is pulled in by ~20 TUs; ShadowPassPCLeaf.h is not).
+    // header is pulled in by ~20 TUs; ShadowPass.h is not).
     struct ClearDepthStencilParameters;
 
     // Which colour target(s) Clear touches. DWARF nests this as
     // renderengine::RenderTargetState::TargetID (source
     // SDKs/EATech/include/ps3/gcm/renderengine/states.h:216). It is declared at namespace scope HERE,
     // not in that class, only because RenderTargetState has no header home in this tree yet -- its
-    // definition is TU-local in PostFxRenderTargetPCLeaf.cpp. Nothing else in the tree declares this
+    // definition is TU-local in PostFxRenderTarget.cpp. Nothing else in the tree declares this
     // enum, so this is its one home; MOVE it into the class the day that header exists.
     //
     // *** THE VALUES ARE X360's, AND THEY DIFFER FROM THE DWARF's. *** The PS3 DWARF numbers this
@@ -141,7 +141,7 @@ namespace renderengine
     // 4 -> 0xF, 0 -> 0x1, 1 -> 0x2, 2 -> 0x4, 3 -> 0x8, and there is no case 5. 0xF is exactly the OR
     // of the other four, which identifies the ladder as the Xenon D3DCLEAR_TARGET0..TARGET3 bits and
     // their union D3DCLEAR_TARGET -- the ZBUFFER (0x10) and STENCIL (0x20) bits never appear on any
-    // path. The tree models the same Xenon bit set independently at ImmediateModePCLeaf.cpp:466-468.
+    // path. The tree models the same Xenon bit set independently at ImmediateMode.cpp:466-468.
     // So on X360 the value 4 means ALL FOUR COLOUR TARGETS, not depth/stencil. Importing the DWARF
     // numbering would turn BrnRendererModule::BeginQuarterResBuffer's colour clear into a depth clear
     // and make the BlitDepth two lines later redundant.
@@ -183,7 +183,7 @@ namespace renderengine
         // COLOUR ONLY: the body never sets D3DCLEAR_ZBUFFER or D3DCLEAR_STENCIL on any path; the
         // depth/stencil clear is a separate overload, DWARF source device.h:1530 (dwarfdump file line
         // 1138), `void Clear(const ClearDepthStencilParameters &);` -- whose PC counterpart already
-        // exists as DeviceClearDepthStencil in ImmediateModePCLeaf.cpp.
+        // exists as DeviceClearDepthStencil in ImmediateMode.cpp.
         //
         // TWO parameters, not the five Hex-Rays prints. `Clear(const D3DVECTOR4*, int, int, int,
         // DWORD)` is the PPC float-ABI artefact this project has documented once already (see

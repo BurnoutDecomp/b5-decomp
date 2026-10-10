@@ -68,7 +68,7 @@
 // pixel program). Those bytes are not in this tree and cannot be bound by the PC backend even if they
 // were -- renderengine::ProgramBuffer::GetResourceDescriptor / ::Initialize both route through
 // XGGetMicrocodeShaderParts, whose PC stub returns 0 WITHOUT writing *lpParts
-// (ImmediateModePCLeaf.cpp:626-646).
+// (ImmediateMode.cpp:626-646).
 //
 // The previous revision declared each blob as a SINGLE `const u8 = 0` and passed 288 / 416 as its
 // size. That is not an honest placeholder: it hands the program factory a one-byte object and a

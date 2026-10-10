@@ -40,7 +40,7 @@
 // and the rectangles are successive GPU passes over the same surface -- NOT bands of a taller one,
 // which is why the target keeps ONE section.
 //
-// ⚠️ NONE OF THIS SURVIVES ON PC. pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp honours no EDRAM
+// ⚠️ NONE OF THIS SURVIVES ON PC. pc/gcm/renderengine/PostFxRenderTarget.cpp honours no EDRAM
 // base, tile index, hierarchical-Z or compression base ("they describe hardware that does not exist
 // here"), and D3D9 has no predicated tiling. The plans are reproduced because they are what the
 // binary reads; the PC path uses only the multisample format and the full extent.

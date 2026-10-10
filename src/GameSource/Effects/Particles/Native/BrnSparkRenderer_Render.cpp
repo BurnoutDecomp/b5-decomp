@@ -41,7 +41,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"           // ImRendererBase::mgpActiveRenderer
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"  // the 24-byte stride
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"              // shadow::Device
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                                  // LionParticleSampler_ApplyState
+#include "pc/gcm/renderengine/ShadowPass.h"                                  // LionParticleSampler_ApplyState
 #include <cstring>   // memcpy -- the host-endian-explicit vertex colour word
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"   // [diag] BRN_FRAME_DUMP_ARM=spark
 
@@ -64,7 +64,7 @@ extern "C"
                               const void* lpTexture, u32 luFlags);
 }
 
-// The three shared-library render states Dispatch binds (ImmediateModePCLeaf.cpp), declared
+// The three shared-library render states Dispatch binds (ImmediateMode.cpp), declared
 // `extern void*` exactly as BrnTrailRender.cpp / BrnSkyDomeManager.cpp declare theirs.
 extern void* gpImAdditiveBlendState;        // X360 dword_83010F24  mpBlendState_Additive
 extern void* gpSkyDomeRasterizerState;      // X360 dword_83010F3C  mpRasterizerState_CullNone
@@ -163,7 +163,7 @@ namespace
     // COMMITTED VERSION OF THIS FUNCTION DID EXACTLY THAT. The reversal is an ENDIAN SWAP, not a
     // channel swizzle: what the element needs is a MEMORY IMAGE of R,G,B,A at increasing addresses,
     // because the declaration reads it as UBYTE4N (element word 0x014C86; see the derivation in
-    // pc/gcm/renderengine/ImmediateModePCLeaf.cpp:212).
+    // pc/gcm/renderengine/ImmediateMode.cpp:212).
     //     packed word (a<<24)|(b<<16)|(g<<8)|r
     //       on BIG-endian X360  -> memory [A][B][G][R]; the console's reversal makes it [R][G][B][A]
     //       on LITTLE-endian PC -> memory [R][G][B][A] ALREADY; re-applying the reversal makes it

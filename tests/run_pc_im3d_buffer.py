@@ -45,7 +45,15 @@ for sig in ("void TextRenderer::Construct()", "TextRenderer::Im2dVertex* TextRen
             "void TextRenderer::RenderBufferSetTextureState(", "void TextRenderer::RenderBufferRenderEnd(",
             "void TextRenderer::RenderDropShadow("):
     methods += definition(font, sig) + "\n"
+untextured = tree.read("src/GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3dUntex.cpp")
+methods += "template<>\n" + definition(untextured, "void ImRenderer<V>::Render(").replace(
+    "ImRenderer<V>", "ImRenderer<BasicColouredVertex>").replace("const V*", "const BasicColouredVertex*") + "\n"
 methods += """
+template void ImRenderer<BasicColouredVertex>::BeginRendering();
+template void ImRenderer<BasicColouredVertex>::EndRendering();
+template void ImRenderer<BasicColouredVertex>::Render(renderengine::PrimitiveType,const BasicColouredVertex*,u32);
+template void Im3dBase<BasicColouredVertex>::SetTransform(Matrix44);
+template void Im3dBase<BasicColouredVertex>::SetTransform(Matrix44,Matrix44);
 template void ImRenderer<BasicColouredTexturedVertex>::BeginRendering();
 template void ImRenderer<BasicColouredTexturedVertex>::EndRendering();
 template void ImRenderer<BasicColouredTexturedVertex>::Render(renderengine::PrimitiveType,const BasicColouredTexturedVertex*,u32);

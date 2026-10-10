@@ -1,9 +1,9 @@
-#include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
-#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
-#include "pc/gcm/renderengine/PackedNormalPCLeaf.h"
-#include "pc/gcm/renderengine/IndexRangePCLeaf.h"
+#include "pc/gcm/renderengine/TextureUpload.h"
+#include "pc/gcm/renderengine/GeometryBindings.h"
+#include "pc/gcm/renderengine/PackedNormal.h"
+#include "pc/gcm/renderengine/IndexRange.h"
 // =============================================================================
-// WorldGeometryPCLeaf.cpp  (pc/gcm/renderengine)
+// WorldGeometry.cpp  (pc/gcm/renderengine)
 //
 // FLAG PC-platform leaf: RETAINED D3D9 MIRRORS OF THE STATIC WORLD GEOMETRY.
 // The full rationale is in the header banner. In one paragraph: on the console the
@@ -29,11 +29,11 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"  // [diag] BrnDiag::LogBoundSurfaces
-#include "pc/gcm/renderengine/WorldGeometryPCLeaf.h"
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
-#include "pc/gcm/renderengine/GeometryBufferPoolD3D9PCLeaf.h"
-#include "pc/gcm/renderengine/GeometryEntryReferencesPCLeaf.h"
-#include "pc/gcm/renderengine/GeometryAssociativeFrontCachePCLeaf.h"
+#include "pc/gcm/renderengine/WorldGeometry.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
+#include "pc/gcm/renderengine/GeometryBufferPoolD3D9.h"
+#include "pc/gcm/renderengine/GeometryEntryReferences.h"
+#include "pc/gcm/renderengine/GeometryAssociativeFrontCache.h"
 #include "pc/gcm/renderengine/device.h"                    // renderengine::gDevice
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::WriteToLog
 

@@ -15,7 +15,7 @@
 #include "GameShared/GameClasses/System/CgsHarnessSlot.h"   // BRN_HARNESS_SLOT name suffix (parallel harness slots)
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device (FrameBegin/ShowPixelBuffer) + <Windows.h>
 #include "GameSource/Game/BrnGameModule.hpp"
-#include "pc/gcm/renderengine/AssertFramePCLeaf.h"
+#include "pc/gcm/renderengine/AssertFrame.h"
 #undef DrawText                            // <Windows.h> (via device.h) #defines DrawText -> DrawTextA; keep our method name
 
 #include <cstdio>    // snprintf (the X360 used CgsCore::SPrintf)

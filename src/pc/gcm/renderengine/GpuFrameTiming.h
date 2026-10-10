@@ -1,7 +1,7 @@
 #pragma once
 
 #include <d3d9.h>
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 
 // FLAG PC-platform leaf: optional D3D9 timestamp attribution. Results describe
 // elapsed GPU-timeline spans (which can include starvation), not GPU busy time.

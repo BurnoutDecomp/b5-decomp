@@ -1,5 +1,5 @@
-#include "pc/gcm/renderengine/GpuFrameTimingPCLeaf.h"
-#include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
+#include "pc/gcm/renderengine/GpuFrameTiming.h"
+#include "pc/gcm/renderengine/WindowPresentation.h"
 #include <vector>
 #include <cstdio>
 #include <cmath>

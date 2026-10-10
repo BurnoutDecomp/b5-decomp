@@ -25,7 +25,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"    // ImRendererBase::mgpActiveRenderer
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"  // the 24-byte stride
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"      // shadow::Device
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                           // LionParticleSampler_ApplyState
+#include "pc/gcm/renderengine/ShadowPass.h"                           // LionParticleSampler_ApplyState
 
 #include <cstdio>    // [diag] snprintf
 #include <cstdlib>   // malloc
@@ -43,7 +43,7 @@ extern "C"
                                 u32 luStartVertex, u32 luVertexCount);
 }
 
-// The shared-library rasteriser and depth-stencil states Dispatch binds (ImmediateModePCLeaf.cpp).
+// The shared-library rasteriser and depth-stencil states Dispatch binds (ImmediateMode.cpp).
 extern void* gpSkyDomeRasterizerState;      // X360 dword_83010F3C  mpRasterizerState_CullNone
 extern void* gpSkyDomeDepthStencilState;    // X360 dword_83010F4C  mpDepthStencilState_ZBufferOnWriteOff
 void ImDeviceSetRasterizerState(void* lpState);

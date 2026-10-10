@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/RenderWare/PS3/CgsRwVertexDescResourceTypePS3.h"
 #include "pc/gcm/renderengine/renderstates.h"   // renderengine::VertexDescriptor[::Parameters]
 #include "rw/rwcore_structs.h"                   // rw::BaseResourceDescriptors<5>
-#include "pc/gcm/renderengine/WorldGeometryPCLeaf.h"
+#include "pc/gcm/renderengine/WorldGeometry.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX

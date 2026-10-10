@@ -1,6 +1,6 @@
 #pragma once
 
-#include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
+#include "pc/gcm/renderengine/GraphicsSettings.h"
 #include <cstring>
 #include <atomic>
 struct IDirect3DDevice9;

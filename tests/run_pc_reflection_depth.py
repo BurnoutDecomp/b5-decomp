@@ -15,8 +15,8 @@ parser.add_argument('--rev', help='b5 source revision for the regression control
 args = parser.parse_args()
 tree = Tree(args.rev)
 shims = tree.read('src/pc/gcm/renderengine/XenonD3D9Shims.cpp')
-immediate = tree.read('src/pc/gcm/renderengine/ImmediateModePCLeaf.cpp')
-target = tree.read('src/pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp')
+immediate = tree.read('src/pc/gcm/renderengine/ImmediateMode.cpp')
+target = tree.read('src/pc/gcm/renderengine/PostFxRenderTarget.cpp')
 sky = re.search(r'ImDepthStencilState sSkyDomeEnvMapDepthStencilState\s*=\s*\{[^}]+\};', immediate).group()
 methods = '\n'.join(definition(shims, sig) for sig in (
     'inline DWORD XenonCompareToD3D9(', 'void D3DDevice_SetViewportF(',
@@ -35,7 +35,7 @@ methods += 'IDirect3DDevice9* const lpDevice = Dev();\n' + begin[start:end] + '\
 methods += '\nnamespace renderengine {\n' + definition(target, 'class RenderTargetState\n') + ';\n}\n'
 methods += definition(target, 'void Device::SetState(const RenderTargetState*').replace(
     'void Device::SetState(', 'void renderengine::Device::SetState(')
-depth_header = 'src/pc/gcm/renderengine/DepthRangePCLeaf.h'
+depth_header = 'src/pc/gcm/renderengine/DepthRange.h'
 result = compile_and_run(Path(__file__).with_name('PCReflectionDepth.cpp'),
     'reflection_depth.inc', methods, 'PCReflectionDepth',
     shadow={depth_header: tree.read(depth_header) or '#pragma once\n'},

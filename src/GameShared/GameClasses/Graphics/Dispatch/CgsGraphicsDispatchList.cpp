@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <algorithm>   // std::sort (ARTIST RadixSortJob::Execute uses std::_Sort)
 #include <cstdint>     // uintptr_t (128-byte alignment of the flat key array)
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 
 // =============================================================================
 // CgsGraphicsDispatchList.cpp

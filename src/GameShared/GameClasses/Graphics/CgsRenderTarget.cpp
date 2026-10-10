@@ -32,7 +32,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT (BeginAssert/FireAssert/EndAssert)
 #include "pc/gcm/renderengine/device.h"                     // renderengine::Device::SetState + gpD3DDevice
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"          // renderengine::gpLastRenderTargetState (the shared X360 dword_83010A30)
+#include "pc/gcm/renderengine/ShadowPass.h"          // renderengine::gpLastRenderTargetState (the shared X360 dword_83010A30)
 
 // X360 (Xenon) D3D9 viewport / scissor entry points. These are platform externals (XDK intrinsics);
 // declared with their X360 ABI so the body compiles store-for-store against the same calls the image
@@ -78,7 +78,7 @@ namespace
     // "the shadow-map state is installed" and SetRenderTargetState below skipped its bind on every
     // frame after the first, sending the shadow cascades into the BACK BUFFER.
     // There is now ONE definition, renderengine::gpLastRenderTargetState (declared in
-    // pc/gcm/renderengine/ShadowPassPCLeaf.h, defined in PostFxRenderTargetPCLeaf.cpp beside the
+    // pc/gcm/renderengine/ShadowPass.h, defined in PostFxRenderTarget.cpp beside the
     // only Device::SetState that writes it), and PCSurfaceBracket_Restore invalidates it.
 
     // NOTE (2026-08-12): the default render-target state (X360 dword_83271614) used to be defined
@@ -87,7 +87,7 @@ namespace
     // the postfx header declares. Both file-local copies were dead by construction: nothing outside
     // their own TU could ever assign to them, so the fallback below always fell back to null.
     // The single canonical definition now lives with the rest of the postfx render-target surface
-    // (pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp) and is reached through the header's
+    // (pc/gcm/renderengine/PostFxRenderTarget.cpp) and is reached through the header's
     // declaration, rw::graphics::postfx::gpDefaultRenderTargetState.
 }
 

@@ -24,8 +24,8 @@
 // ============================================================================
 
 #include "BrnPropEntityModule.h"
-#include "pc/gcm/renderengine/PropReflectionPCLeaf.h"
-#include "pc/gcm/renderengine/ReflectionLodDebugPCLeaf.h"
+#include "pc/gcm/renderengine/reflections/PropReflection.h"
+#include "pc/gcm/renderengine/reflections/ReflectionLodDebug.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 

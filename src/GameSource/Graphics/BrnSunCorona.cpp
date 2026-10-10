@@ -46,7 +46,7 @@
 //     The console's four programs are executable-embedded Xenos microcode (&unk_8203E118 204 B,
 //     &unk_8203E208 524 B, &unk_8203E438 240 B, &unk_8203E528 464 B) and cannot run on D3D9. PC
 //     adopts an authored quartet through renderengine::ProgramBufferPC_Adopt (programbuffer.h:123,
-//     body ImmediateModePCLeaf.cpp:833). The console GetResourceDescriptor/Initialize route is NOT
+//     body ImmediateMode.cpp:833). The console GetResourceDescriptor/Initialize route is NOT
 //     kept as a fallback: on this backend both bodies call XGGetMicrocodeShaderParts, whose PC stub
 //     returns 0 WITHOUT writing *lpParts, and then read that uninitialised block -- a crash, not a
 //     gap (CgsIm3dSkyDome.cpp's own banner).
@@ -78,12 +78,12 @@
 // `typedef renderengine::VertexIterator2<VertexTypeFloat3, VertexTypeFloat2>
 //  BrnSunCoronaVertexIterator` (DecFIGS BrnSunCorona.cpp:29). THREE INDEPENDENT WITNESSES.
 //
-// Both format words are ALREADY in both PC mapping tables (ImmediateModePCLeaf.cpp:182/183,
+// Both format words are ALREADY in both PC mapping tables (ImmediateMode.cpp:182/183,
 // XenonD3D9Shims.cpp:323/324), so unlike the corona pair's 0x014C86 there is no missing case:
-//     $ grep -n "0x2C23A5\|0x2A23B9" b5-decomp/src/pc/gcm/renderengine/ImmediateModePCLeaf.cpp \
+//     $ grep -n "0x2C23A5\|0x2A23B9" b5-decomp/src/pc/gcm/renderengine/ImmediateMode.cpp \
 //                                   b5-decomp/src/pc/gcm/renderengine/XenonD3D9Shims.cpp
-//     ImmediateModePCLeaf.cpp:182:  case 0x2C23A5: *lpu8Type = D3DDECLTYPE_FLOAT2; *lpuWidth = 8;
-//     ImmediateModePCLeaf.cpp:183:  case 0x2A23B9: *lpu8Type = D3DDECLTYPE_FLOAT3; *lpuWidth = 12;
+//     ImmediateMode.cpp:182:  case 0x2C23A5: *lpu8Type = D3DDECLTYPE_FLOAT2; *lpuWidth = 8;
+//     ImmediateMode.cpp:183:  case 0x2A23B9: *lpu8Type = D3DDECLTYPE_FLOAT3; *lpuWidth = 12;
 //     XenonD3D9Shims.cpp:323:       case 0x2C23A5: *lpu8Type = D3DDECLTYPE_FLOAT2; return true;
 //     XenonD3D9Shims.cpp:324:       case 0x2A23B9: *lpu8Type = D3DDECLTYPE_FLOAT3; return true;
 //
@@ -214,7 +214,7 @@ namespace
 // row and return the write cursor (X360 r3 @0x822768D0). The SHARED declaration-only spelling this
 // tree standardised on: the same line appears at CgsIm2dUntex.cpp:82, CgsIm2dColTex.cpp:91,
 // CgsIm3d.cpp:91, CgsIm3dSkyDome.cpp:113, CgsIm3dZOnly.cpp:70, BrnIm3d.cpp:118 and
-// rwgcoronarenderer.cpp; the ONE definition is pc/gcm/renderengine/ImmediateModePCLeaf.cpp:729
+// rwgcoronarenderer.cpp; the ONE definition is pc/gcm/renderengine/ImmediateMode.cpp:729
 // (mounted, build_game_exe.bat:316).
 void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
 
@@ -700,7 +700,7 @@ void BrnSunCorona::GenerateOcclusionBuffer(CgsRenderTarget* lpOcclusionRt,
 // the quarter-res particle buffer BrnRendererModule::BeginQuarterResBuffer @0x82408C38 opened),
 // and the only CgsRenderTarget call it makes is that trailing End on the OCCLUSION target. On this
 // backend CgsRenderTarget::End is RenderTarget::End(true) -> Resolve, and Resolve is a DOCUMENTED
-// NO-OP (PostFxRenderTargetPCLeaf.cpp: on PC the rendered surface IS the sampled texture, there is
+// NO-OP (PostFxRenderTarget.cpp: on PC the rendered surface IS the sampled texture, there is
 // nothing to copy), so reproducing it costs nothing and drops nothing.
 // =================================================================================================
 void BrnSunCorona::RenderOccludedFlare(CgsRenderTarget* lpOcclusionRt,

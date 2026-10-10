@@ -10,7 +10,7 @@ parser.add_argument('--ignore-generation',action='store_true')
 parser.add_argument('--stale-clear',action='store_true')
 args=parser.parse_args()
 os.environ.pop('NoDefaultCurrentDirectoryInExePath',None)
-source=Tree().read('src/pc/gcm/renderengine/GeometryAssociativeFrontCachePCLeaf.h')
+source=Tree().read('src/pc/gcm/renderengine/GeometryAssociativeFrontCache.h')
 if args.ignore_identity:
     source=source.replace('if (lEqual(lrEntry)) return &lrEntry;', 'return &lrEntry;')
 if args.ignore_generation:

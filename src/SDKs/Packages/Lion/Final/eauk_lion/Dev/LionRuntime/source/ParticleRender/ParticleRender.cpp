@@ -61,7 +61,7 @@
 #include "GameSource/Effects/Particles/LionParticleRender.h"    // BrnParticle::LionParticleRender
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // the one-shot EmitterCubeRender announcement
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"   // shadow::Device
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                 // renderengine::LionParticleSampler_ApplyState
+#include "pc/gcm/renderengine/ShadowPass.h"                 // renderengine::LionParticleSampler_ApplyState
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 
 #include <cstddef>   // offsetof (the layout pins at the foot of this file)

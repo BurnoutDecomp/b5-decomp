@@ -59,7 +59,7 @@
 
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSweptSphere.h"  // the swept kernel below
-#include "pc/geometric/SweptSphereSIMDPCLeaf.h"
+#include "pc/geometric/SweptSphereSIMD.h"
 
 #include <cmath>     // std::sqrt (the vrsqrtefp lowering)
 #include <cstring>   // std::memcpy (mask lane bit patterns)

@@ -10,7 +10,7 @@ p.add_argument('--no-service', action='store_true')
 p.add_argument('--no-messages', action='store_true')
 a = p.parse_args()
 t = Tree()
-source = t.read('src/pc/gcm/renderengine/MeshJobOwnerWaitPCLeaf.h')
+source = t.read('src/pc/gcm/renderengine/MeshJobOwnerWait.h')
 if a.no_service:
     source = source.replace('CgsDev::Assert::ServiceWorkerAssertsWhileWaitingPC();', '(void)0;')
 if a.no_messages:

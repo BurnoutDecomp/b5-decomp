@@ -12,9 +12,9 @@
 #include <vector>
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "pc/gcm/renderengine/DispatchSortJobsPCLeaf.h"
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
-#include "pc/gcm/renderengine/MeshJobOwnerWaitPCLeaf.h"
+#include "pc/gcm/renderengine/DispatchSortJobs.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
+#include "pc/gcm/renderengine/MeshJobOwnerWait.h"
 #include "SDKs/EATech/eajobs/job_thread_parameters.h"
 #include "SDKs/EATech/eajobs/jobs.h"
 

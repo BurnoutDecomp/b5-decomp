@@ -4,7 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include "pc/gcm/renderengine/WorldTextureFilteringPCLeaf.h"
+#include "pc/gcm/renderengine/WorldTextureFiltering.h"
 #include "world_texture_filtering.inc"
 
 extern "C" { __declspec(dllexport) DWORD NvOptimusEnablement = 1;

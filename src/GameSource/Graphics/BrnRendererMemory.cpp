@@ -1,4 +1,4 @@
-#include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
+#include "pc/gcm/renderengine/WindowPresentation.h"
 #include "GameSource/Graphics/BrnRendererMemory.h"
 
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"  // CgsRenderTarget (+ serialise-side setters)
@@ -9,8 +9,8 @@ namespace renderengine { extern u32 guDiagComposites; }   // [DIAG] issue #30 pe
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"  // postfx::RenderTarget + gpDefaultRenderTargetState
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // renderengine::ProgramBuffer
 #include "GameSource/Resource/BrnResourceAllocator.h"          // BrnResource::Allocators::GetGlobalGraphicsAllocator
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"              // renderengine::PCBringUpClearRenderTargetState
-#include "pc/gcm/renderengine/ShadowQualityPCLeaf.h"
+#include "pc/gcm/renderengine/ShadowPass.h"              // renderengine::PCBringUpClearRenderTargetState
+#include "pc/gcm/renderengine/ShadowQuality.h"
 #include "pc/gcm/renderengine/Im2dBlitProgramsPC.h"           // the four authored PC blit program images
 #include "pc/gcm/renderengine/VertexDescriptor.h"             // renderengine::VertexDescriptor(+Data)
 #include "pc/gcm/renderengine/renderstates.h"                 // renderengine::TextureState
@@ -110,7 +110,7 @@ namespace renderengine
 
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- open one shader-constant
 // row and return the write cursor (X360 r3 @0x822768D0). The SHARED declaration-only spelling this
-// tree standardised on; the ONE definition is pc/gcm/renderengine/ImmediateModePCLeaf.cpp:729.
+// tree standardised on; the ONE definition is pc/gcm/renderengine/ImmediateMode.cpp:729.
 void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
 
 // The Xenon immediate-vertex ring intrinsics (defined for PC in
@@ -196,7 +196,7 @@ namespace
     // 32 (& 0xFFFFFFE0 @0x823F72B8). Hard-coding 16 for all three would silently halve the particle
     // buffer's depth base.
     //
-    // NONE OF IT SURVIVES ON PC: PostFxRenderTargetPCLeaf.cpp honours no EDRAM base, tile index,
+    // NONE OF IT SURVIVES ON PC: PostFxRenderTarget.cpp honours no EDRAM base, tile index,
     // hierarchical-Z or compression-base field ("they describe hardware that does not exist here"), so
     // the number travels through Construct and is then ignored. It is reproduced because it is what the
     // binary computes, not because the D3D9 path needs it.
@@ -381,7 +381,7 @@ void BrnRendererMemory::PCBringUpCreateShadowMapBufferOnly(rw::IResourceAllocato
 
     // Realise the post-fx render target (CgsRenderTarget::Construct, the first virtual). On PC that
     // reaches rw::graphics::postfx::RenderTarget::Initialize in
-    // pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp, which creates the D3D9 depth texture.
+    // pc/gcm/renderengine/PostFxRenderTarget.cpp, which creates the D3D9 depth texture.
     lpShadowMap->Construct(lpAllocator);
 }
 
@@ -641,7 +641,7 @@ void BrnRendererMemory::PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator
     // over the rectangle that copy is handed, and its depth is never written at all.
     //
     // DELETE WITH THE BRING-UP, when a frame-top clear exists again -- see the banner on
-    // renderengine::PCBringUpClearRenderTargetState in pc/gcm/renderengine/ShadowPassPCLeaf.h,
+    // renderengine::PCBringUpClearRenderTargetState in pc/gcm/renderengine/ShadowPass.h,
     // which also carries the attestation for every value the clear writes.
     CgsRenderTarget* const lpDownSampleBuffer = GetDownSampleBuffer();
     CgsRenderTarget* const lpAntiAliasBuffer  = GetAntiAliasBuffer();
@@ -694,7 +694,7 @@ void BrnRendererMemory::PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator
 //  (2) It must NOT run twice. CreateEnvmapBuffer `new`s a CgsRenderTarget and publishes it into the
 //      slot BEFORE describing it, so a second call would leak the first target AND hand the renderer
 //      a different object than the one sampler 13 was bound to. The early return is that guard.
-//  (3) It does NOT disturb the shadow-map latch in PostFxRenderTargetPCLeaf.cpp. That leaf picks the
+//  (3) It does NOT disturb the shadow-map latch in PostFxRenderTarget.cpp. That leaf picks the
 //      COMPARE depth ladder only for a target whose colour mode is NONE (its own banner, ~:225: "the
 //      SHADOW MAP is the only pool target with colour mode NONE that still resolves its depth to a
 //      texture"). CreateEnvmapBuffer marks colour section 0 in use, so this target's colour mode is
@@ -762,7 +762,7 @@ void BrnRendererMemory::PCBringUpCreateSunCoronaBuffer(rw::IResourceAllocator* l
 // (1) THE mbUseDevice BIT IS THE WHOLE GAME. Every helper here marks colour section 0 in use with a
 //     SINGLE store and leaves mbUseDevice clear. CgsRenderTarget::Construct turns mbUseDevice into
 //     eRenderTarget_USE_DEVICE_FOR_WRITE instead of eRenderTarget_CREATE, and
-//     PostFxRenderTargetPCLeaf.cpp creates a colour TEXTURE only for eRenderTarget_CREATE. So routing
+//     PostFxRenderTarget.cpp creates a colour TEXTURE only for eRenderTarget_CREATE. So routing
 //     any of these through a fused "set in use" setter that also sets use-device would make the target
 //     render into the device back buffer instead of owning a surface -- i.e. it would look like the
 //     post-fx chain doing nothing, with no error anywhere. That is why CgsRenderTarget's granular
@@ -1023,7 +1023,7 @@ void BrnRendererMemory::CreateEnvmapBuffer(rw::IResourceAllocator* lpAllocator)
 // The colour section is marked in use with a SINGLE store (stb 1 -> record 0 +0x04 @0x823F7114): the
 // filter mode keeps the surface constructor's 1 and mbUseDevice stays CLEARED by the loop above. That
 // is not cosmetic -- CgsRenderTarget::Construct turns mbUseDevice into eRenderTarget_USE_DEVICE_FOR_WRITE
-// instead of eRenderTarget_CREATE, and PostFxRenderTargetPCLeaf.cpp:584 creates a colour texture ONLY
+// instead of eRenderTarget_CREATE, and PostFxRenderTarget.cpp:584 creates a colour texture ONLY
 // for eRenderTarget_CREATE. Routing this through CreateBackBuffer's composite SetColourTargetInUse
 // would therefore make the bloom buffer render into the device back buffer instead of its own surface.
 //
@@ -1482,7 +1482,7 @@ bool BrnRendererMemory::PCBringUpParticleCompositeChainReady() const
 //      drawn through D3DDevice_BeginVertices with an explicit descriptor and arrives in NDC. That
 //      also makes the console's transform load and gOffsetXYZ/gRightUp dead.
 //  (2) mpBlitTextureState is not built. The source render target already owns a depth TextureState
-//      over the very texture the console's per-call state would wrap (PostFxRenderTargetPCLeaf.cpp
+//      over the very texture the console's per-call state would wrap (PostFxRenderTarget.cpp
 //      builds it from mDepthTarget's hi-Z-else-depth texture), and on this backend a TextureState's
 //      sampler words are stored, not applied -- so a second object over the same raster would
 //      differ in nothing and would have to be carved every frame.
@@ -1548,7 +1548,7 @@ void BrnRendererMemory::BlitDepth(CgsGraphics::Im2d& /*lIm2d*/, CgsRenderTarget*
 // pushes depth-stencil slot 1 (ZOFF_ZALL_ZWRITEOFF), rasteriser slot 2 (CullModeNone) and blend
 // slot 0 (Opaque_Modulate_NoAlphaTest_DestRGBA) immediately before calling it.
 //
-// ⚠ THE TWO PC DEVIATIONS ARE IN Im2dCompositeBlit_ApplyRopState (ShadowPassPCLeaf.h) AND IN THE
+// ⚠ THE TWO PC DEVIATIONS ARE IN Im2dCompositeBlit_ApplyRopState (ShadowPass.h) AND IN THE
 // PIXEL PROGRAM (brn_im2dblit.fx). In one sentence each: the scene term moves onto the D3D9 blend
 // unit because a texture cannot be sampled while it is the bound render target on this backend, so
 // BaseSampler and gQuincunxOffsets are not used and the two SCENE taps' 0.5 average is dropped;

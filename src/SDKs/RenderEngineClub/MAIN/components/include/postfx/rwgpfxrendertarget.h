@@ -161,7 +161,7 @@ namespace postfx
         // So the index rides the SLICE for a cube and the Y OFFSET for an atlas; it is NOT
         // "only used in the >1 arm", which is what an earlier read of the pseudocode concluded.
         //
-        // PC translation, defined in pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp (the MOUNTED
+        // PC translation, defined in pc/gcm/renderengine/PostFxRenderTarget.cpp (the MOUNTED
         // leaf -- the faithful console sibling rwgpfxrendertarget.cpp is not on the link):
         // StretchRect the target's scratch colour surface into GetCubeMapSurface(luFace, 0) of its
         // IDirect3DCubeTexture9. For every NON-cube target it is the same documented no-op
@@ -270,7 +270,7 @@ namespace postfx
         // cannot overlap once pointers widen, and CreateStates proves which one it is (it binds
         // mDepthTarget's hi-Z-else-depth texture into the state it stores there). Reaching the
         // depth state by NAME through this accessor is what stops a caller binding scene colour
-        // to SamplerDepth. Defined in pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp.
+        // to SamplerDepth. Defined in pc/gcm/renderengine/PostFxRenderTarget.cpp.
         renderengine::TextureState* GetDepthTextureState();
 
         // The per-section D3D surface state to bind (Device::SetState). luSection selects the
@@ -336,7 +336,7 @@ namespace postfx
         // pixel-buffer / texture / texture-state / hi-Z fields. RenderTarget::CreateStates
         // @0x82403A18-0x82403B44 settles it: the state stored here binds mDepthTarget's hi-Z-else-
         // depth texture, and it is built ONLY when Parameters::mbUseDepthStencilAsTexture is set.
-        // PostFxRenderTargetPCLeaf.cpp therefore points BOTH host members at the one state object
+        // PostFxRenderTarget.cpp therefore points BOTH host members at the one state object
         // and new callers should use GetDepthTextureState(). RENAME PENDING: this member and its
         // one reader (BrnPostFx.cpp:813, the SamplerDepth argument) belong to the post-fx TU.
         renderengine::TextureState*      mpColourTextureState; // +0x8C  == mDepthTarget.mpTextureState

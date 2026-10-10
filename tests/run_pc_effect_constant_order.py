@@ -14,7 +14,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--rev")
 args = parser.parse_args()
 tree = Tree(args.rev)
-stage = tree.read("src/pc/gcm/renderengine/ImmediateModePCLeaf.cpp")
+stage = tree.read("src/pc/gcm/renderengine/ImmediateMode.cpp")
 start = stage.index("    const u32 KU_MAX_STAGED_ROWS")
 end = stage.index(";", stage.index("    f32       safDiscardRow", start)) + 1
 methods = stage[start:end] + "\n"

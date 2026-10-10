@@ -46,7 +46,7 @@ namespace renderengine
 
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- the same minimal extern
 // surface BrnIm3d.cpp / BrnSunCorona.cpp / BrnPostFxBloom.cpp declare (defined in
-// ImmediateModePCLeaf.cpp). Returns the staged row the caller copies the constant into.
+// ImmediateMode.cpp). Returns the staged row the caller copies the constant into.
 void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
 
 namespace BrnGraphics

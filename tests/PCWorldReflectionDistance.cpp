@@ -1,8 +1,8 @@
 // Observe packets emitted by the production world reflection dispatch body.
 #include <cstdio>
 #include "types.hpp"
-#include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
-#include "pc/gcm/renderengine/ReflectionLodPCLeaf.h"
+#include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
+#include "pc/gcm/renderengine/reflections/ReflectionLod.h"
 
 static u32 suChecks = 0, suFailures = 0;
 static void Check(bool lbResult, const char* lpcName)

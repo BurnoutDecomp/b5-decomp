@@ -3,8 +3,8 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Graphics/CgsModel.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-#include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
-#include "pc/gcm/renderengine/ReflectionLodPCLeaf.h"
+#include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
+#include "pc/gcm/renderengine/reflections/ReflectionLod.h"
 #include <cstdio>
 #include <cstdlib>
 

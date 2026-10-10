@@ -1,4 +1,4 @@
-#include "pc/gcm/renderengine/WorldGeometryPCLeaf.cpp"
+#include "pc/gcm/renderengine/WorldGeometry.cpp"
 #include <algorithm>
 #include <random>
 

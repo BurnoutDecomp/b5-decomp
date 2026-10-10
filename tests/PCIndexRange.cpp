@@ -1,6 +1,6 @@
 #define NOMINMAX
 #include <Windows.h>
-#include "pc/gcm/renderengine/IndexRangePCLeaf.h"
+#include "pc/gcm/renderengine/IndexRange.h"
 #include <cstdio>
 #include <vector>
 #include <limits>

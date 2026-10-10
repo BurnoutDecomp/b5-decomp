@@ -35,7 +35,7 @@
 // lifecycle spine (Prepare's base -> ResourceModule::Prepare core). The rw-allocator-gated
 // bring-up (CreateBanks/CreatePools/CreateAllocators), the DLC/AttribSys/HUD/popup prepare
 // stages, Construct, Update, Destruct and the ProcessXxxRequest handlers are DEFERRED.
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 
 namespace BrnResource
 {

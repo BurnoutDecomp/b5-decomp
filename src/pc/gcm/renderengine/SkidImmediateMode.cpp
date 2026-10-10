@@ -1,9 +1,9 @@
 // ============================================================================
-// pc/gcm/renderengine/SkidImmediateModePCLeaf.cpp
+// pc/gcm/renderengine/SkidImmediateMode.cpp
 //
 // [PC platform leaf] The two Xenon-only symbols the SKID (tyre-mark) immediate-mode
 // draw declares and that no project TU defines. Same role and same rationale as the
-// sibling ImmediateModePCLeaf.cpp does for the sky dome -- this one is deliberately
+// sibling ImmediateMode.cpp does for the sky dome -- this one is deliberately
 // separate so the sky wave's leaf stays its own change.
 //
 // The draw in question is CgsGraphics::ImRenderer<BrnGraphics::SkidVertex>::Render

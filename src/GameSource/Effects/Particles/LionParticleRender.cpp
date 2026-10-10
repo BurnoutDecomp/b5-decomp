@@ -374,7 +374,7 @@ U32 LionParticleRender::CreateInternalMaterial(const cParticleMaterial* apMateri
 
     // asm 0x82280D38..0x82280D44. The template is ImRendererBase's shared alpha-blend state.
     // ⚠ FLAG PC-platform: the state library is not built on this backend
-    // (ImRendererBase::ConstructOnceOnly is an empty PC leaf, ImmediateModePCLeaf.cpp), so this
+    // (ImRendererBase::ConstructOnceOnly is an empty PC leaf, ImmediateMode.cpp), so this
     // word reads null and the console's unconditional read would fault. Skipping it is provably
     // inert and NOT a default-shaped guess: ConstructBlendState(6, 7, 0) produces byte for byte
     // the block DefaultConstructBlendParameters just wrote (the derivation is over that

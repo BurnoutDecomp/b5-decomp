@@ -41,7 +41,7 @@ public:
     // 0x44+4*N), which means every field below has a known destination and therefore a known
     // meaning -- see the per-field destination comments. The placeholder names (muState4,
     // muState8, ...) are kept ONLY because three consumers already spell them that way
-    // (CgsDepthStencilStateFactory.cpp, CgsImRenderer.cpp, ImmediateModePCLeaf.cpp); renaming
+    // (CgsDepthStencilStateFactory.cpp, CgsImRenderer.cpp, ImmediateMode.cpp); renaming
     // them is a follow-up that has to land together with those files.
     struct Parameters
     {

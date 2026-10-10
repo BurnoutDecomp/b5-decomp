@@ -12,12 +12,12 @@
 #include <vector>
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h"
 #include "GameShared/Jobs/ObjectToMesh/ObjectToMeshJob.h"
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 #include "SDKs/EATech/eajobs/job.h"
 #include "SDKs/EATech/eajobs/job_scheduler.h"
 #include "SDKs/EATech/eajobs/job_thread_parameters.h"
 #include "SDKs/EATech/eajobs/jobs.h"
-#include "pc/gcm/renderengine/MeshJobOwnerWaitPCLeaf.h"
+#include "pc/gcm/renderengine/MeshJobOwnerWait.h"
 
 static int checks, failures;
 static std::atomic<int> badConstants{0}, active{0}, peak{0};

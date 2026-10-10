@@ -22,7 +22,7 @@ reference = source[source.index('namespace CgsGraphics'):]
 reference, guards = re.subn(r'(?ms)^#if defined\(_M_X64\).*?^#endif\s*\n', '', reference)
 assert guards == 2
 reference = reference.replace('namespace CgsGraphics', 'namespace CgsGraphics { namespace Reference', 1) + '\n}\n'
-header = 'src/pc/geometric/PackedOobbSIMDPCLeaf.h'
+header = 'src/pc/geometric/PackedOobbSIMD.h'
 simd = Tree().read(header)
 if args.skip_normalization:
     needle = 'q = _mm_mul_ps(q, _mm_shuffle_ps(inverse, inverse, 0));'

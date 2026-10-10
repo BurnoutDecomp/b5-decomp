@@ -1,5 +1,5 @@
 // =============================================================================
-// ImmediateModePCLeaf.cpp  (pc/gcm/renderengine)
+// ImmediateMode.cpp  (pc/gcm/renderengine)
 //
 // [PC platform leaf] The home for the renderengine / immediate-mode symbols the
 // IMMEDIATE-MODE 3D path (the sky dome) declares and that no project TU defines.
@@ -60,11 +60,11 @@
 // =============================================================================
 
 #include "types.hpp"
-#include "pc/gcm/renderengine/DepthRangePCLeaf.h"
+#include "pc/gcm/renderengine/DepthRange.h"
 
 #include <Windows.h>
 #include <d3d9.h>
-#include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
+#include "pc/gcm/renderengine/ShaderConstantCache.h"
 #include <cstring>
 #include <cstdio>
 
@@ -75,7 +75,7 @@
 #include "pc/gcm/renderengine/Xbox2VertexBufferShims.h"
 #include "pc/gcm/renderengine/texture.h"
 #include "pc/gcm/renderengine/renderstates.h"                                  // renderengine::DepthStencilState
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                              // the shadow-pass leaf surface
+#include "pc/gcm/renderengine/ShadowPass.h"                              // the shadow-pass leaf surface
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"       // CgsGraphics::ImRendererBase
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"          // shadow::Device
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -608,7 +608,7 @@ void ImDeviceSetDepthStencilState(void* lpState)
 // all 23 words on every call.
 //
 // ⚠️ WHY THE BODY STILL FORCE-APPLIES. Making that switch is the ONLY live per-frame behaviour change
-// this pass would make in the linked boot exe (ImmediateModePCLeaf.cpp is mounted,
+// this pass would make in the linked boot exe (ImmediateMode.cpp is mounted,
 // build_game_exe.bat:214), and it lands on the shadow path -- gpShadowDepthStencilState is a
 // renderengine::DepthStencilState*, so BrnShadowMapRenderManager.cpp:70/102/131 bind through exactly
 // this typed overload. Today the apply is unconditional; forwarding makes it SKIP whenever the cached

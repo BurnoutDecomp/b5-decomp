@@ -58,7 +58,7 @@ namespace postfx
     // ⚠ REWRITTEN ONTO PfxHelper::CreateProgram. The committed body open-coded the console's
     // GetResourceDescriptor -> DoAllocate -> ProgramBuffer::Initialize route, which on the PC backend
     // is a CRASH, not a gap: both of those vendor bodies call XGGetMicrocodeShaderParts, whose PC
-    // stub returns 0 without writing *lpParts (ImmediateModePCLeaf.cpp:626-646). Routing through
+    // stub returns 0 without writing *lpParts (ImmediateMode.cpp:626-646). Routing through
     // CreateProgram puts this site behind the same single gate as every other post-fx program (which
     // also tries a PC image first via ProgramBufferPC_Adopt), and the console's own parameter shape
     // -- shader type 1, the blob, its size, the caller's allocator -- is exactly CreateProgram's

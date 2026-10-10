@@ -113,7 +113,7 @@ namespace renderengine
         static u32  Xbox2CreateConstantTable(const void* lpFunction, void* lpDestTable, u32* lpTotalSize);
     };
 
-    // [PC platform leaf -- pc/gcm/renderengine/ImmediateModePCLeaf.cpp]
+    // [PC platform leaf -- pc/gcm/renderengine/ImmediateMode.cpp]
     // Adopt a pre-built platform-4 ShaderProgramBuffer image (the form
     // tools/assets/shaders/shader_transcode.py::build_pc_program_buffer emits) as a live
     // ProgramBufferData: copy it into low-4GB memory and rebase the variable descriptors'

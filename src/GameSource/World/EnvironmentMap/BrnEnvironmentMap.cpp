@@ -1,8 +1,8 @@
 #include "GameSource/World/EnvironmentMap/BrnEnvironmentMap.h"
 #include "types.hpp"
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Add
-#include "pc/gcm/renderengine/EnvironmentMapPCLeaf.h"
-#include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
+#include "pc/gcm/renderengine/reflections/EnvironmentMap.h"
+#include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnGraphics::EnvironmentMap::Construct @ 0x827B40D0

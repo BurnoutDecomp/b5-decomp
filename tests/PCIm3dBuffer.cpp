@@ -12,7 +12,7 @@
 #include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"
 #include "pc/gcm/renderengine/device.h"
 #include "pc/gcm/renderengine/texture.h"
-#include "pc/gcm/renderengine/ImWhiteTexturePCLeaf.h"
+#include "pc/gcm/renderengine/ImWhiteTexture.h"
 
 namespace renderengine {
 IDirect3DDevice9* gDevice = nullptr;

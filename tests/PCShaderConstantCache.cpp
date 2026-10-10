@@ -1,5 +1,5 @@
-#include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
-#include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
+#include "pc/gcm/renderengine/ShaderConstantCache.h"
+#include "pc/gcm/renderengine/SamplerStateCache.h"
 #include <cstdio>
 #include <cstring>
 

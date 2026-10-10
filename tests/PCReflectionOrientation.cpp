@@ -10,8 +10,8 @@
 #include <vector>
 #include "GameSource/World/EnvironmentMap/BrnEnvironmentMap.h"
 #include "rw/math/vpu/vector3_operation.h"
-#include "pc/gcm/renderengine/EnvironmentMapPCLeaf.h"
-#include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
+#include "pc/gcm/renderengine/reflections/EnvironmentMap.h"
+#include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
 #include "pc/gcm/renderengine/renderstates.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"

@@ -13,25 +13,25 @@ if a.unaligned:os.environ['BRN_GEOMETRY_ALIGN_STRIDE']='0'
 else:os.environ.pop('BRN_GEOMETRY_ALIGN_STRIDE',None)
 shadow={}
 if a.skip_draw_record:
-    path='src/pc/gcm/renderengine/WorldGeometryPCLeaf.cpp';text=Tree().read(path)
+    path='src/pc/gcm/renderengine/WorldGeometry.cpp';text=Tree().read(path)
     before='    const GeometryFrontCacheEntry lEntry{suGeometryGeneration, lVertexKey, lIndexKey, *lpOutDraw};';assert text.count(before)==1
     shadow[path]=text.replace(before,before.replace('*lpOutDraw','WorldGeometryDraw{}'))
 if a.skip_release_retirement:
-    path='src/pc/gcm/renderengine/WorldGeometryPCLeaf.cpp';text=shadow.get(path,Tree().read(path))
+    path='src/pc/gcm/renderengine/WorldGeometry.cpp';text=shadow.get(path,Tree().read(path))
     before=definition(text,'void WorldGeometry_ReleaseAll()');assert before.count('RetireFrontCache();')==1
     shadow[path]=text.replace(before,before.replace('RetireFrontCache();',''))
 if a.skip_up_invalidation:
-    path='src/pc/gcm/renderengine/GeometryBindingsPCLeaf.h';text=Tree().read(path)
+    path='src/pc/gcm/renderengine/GeometryBindings.h';text=Tree().read(path)
     for indexed in ('false','true'):
         before=f'gCache.InvalidateUP(lpDevice, {indexed});';assert text.count(before)==1
         text=text.replace(before,'')
     shadow[path]=text
 if a.skip_assert_invalidation:
-    path='src/pc/gcm/renderengine/AssertFramePCLeaf.h';text=Tree().read(path)
+    path='src/pc/gcm/renderengine/AssertFrame.h';text=Tree().read(path)
     before='GeometryBindingsPC::gCache.Invalidate();';assert text.count(before)==1
     shadow[path]=text.replace(before,'')
 if a.truncate_pool_index:
-    path='src/pc/gcm/renderengine/WorldGeometryPCLeaf.cpp';text=shadow.get(path,Tree().read(path))
+    path='src/pc/gcm/renderengine/WorldGeometry.cpp';text=shadow.get(path,Tree().read(path))
     before='lpOutDraw->muIndexStart     = lrIndex.muIndexStart;';assert text.count(before)==1
     shadow[path]=text.replace(before,'lpOutDraw->muIndexStart     = static_cast<u16>(lrIndex.muIndexStart);')
 here=Path(__file__).resolve().parent

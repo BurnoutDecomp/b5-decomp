@@ -167,7 +167,7 @@
 #define BRNAI_TRAFFICAI_ENTITY_ACCESSORS_PRESENT 1   // flipped 2026-09-03: the accessors are inline in BrnTrafficAIInterfaces.h
 #endif
 
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 #ifdef AddMonitor
 #undef AddMonitor
 #endif

@@ -10,7 +10,7 @@
 #include "GameShared/GameClasses/Gui/PC/CgsAptRenderBackendPC.h"
 #include "pc/gcm/renderengine/device.h"
 #include "pc/gcm/renderengine/texture.h"
-#include "pc/gcm/renderengine/AssertFramePCLeaf.h"
+#include "pc/gcm/renderengine/AssertFrame.h"
 
 namespace renderengine {
 IDirect3DDevice9* gDevice = nullptr;

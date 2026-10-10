@@ -27,7 +27,7 @@ names = ['Construct', 'InitPool', 'InitManagementData',
          'DeleteMemoryForEntry', 'ReAllocateMemoryForEntry', 'DeleteEntry',
          'CreateBatchEntrySlots', 'BuildAllocRequestForEntry', 'ExecuteBatchAllocation',
          'ExecuteBatchAllocations', 'MergeBatchAllocations']
-code = '#include "pc/gcm/renderengine/MeshPreparationPCLeaf.h"\nnamespace CgsResource {\n' + definition(pool, 'u32 GetManagementHashLength(') + '\n'
+code = '#include "pc/gcm/renderengine/MeshPreparation.h"\nnamespace CgsResource {\n' + definition(pool, 'u32 GetManagementHashLength(') + '\n'
 for name in names:
     signature = next(line.strip() for line in pool.splitlines()
                      if f'Pool::{name}(' in line and not line.strip().startswith('//'))

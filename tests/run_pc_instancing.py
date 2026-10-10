@@ -9,7 +9,7 @@ parser.add_argument('--explicit-operands-only',action='store_true',help='negativ
 args=parser.parse_args()
 shadow={}
 if args.uniform_matrix or args.explicit_operands_only:
-    path='src/pc/gcm/renderengine/InstancingPCLeaf.h'
+    path='src/pc/gcm/renderengine/Instancing.h'
     source=Tree().read(path)
     if args.uniform_matrix:
         before='matrices + static_cast<unsigned>(matrixIndex) * 16'

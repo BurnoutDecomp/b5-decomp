@@ -1,11 +1,11 @@
 #include <algorithm>
-#include "pc/gcm/renderengine/MeshJobOwnerWaitPCLeaf.h"
-#include "pc/gcm/renderengine/ShadowReceiverPCLeaf.h"
+#include "pc/gcm/renderengine/MeshJobOwnerWait.h"
+#include "pc/gcm/renderengine/ShadowReceiver.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertProbePC.h"
 #include "GameSource/Graphics/BrnRendererModule.h"
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
-#include "pc/gcm/renderengine/MeshPreparationPCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
+#include "pc/gcm/renderengine/MeshPreparation.h"
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // optional repair-frame observation
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
@@ -14,7 +14,7 @@
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"           // CgsRenderTarget::GetDepthTexture (the s15 bind)
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsTextureScopeTable.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device::SetResource (the global texture binds)
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                      // renderengine::PCSurfaceBracket_* (the scene-target bracket)
+#include "pc/gcm/renderengine/ShadowPass.h"                      // renderengine::PCSurfaceBracket_* (the scene-target bracket)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // CgsDev::DebugManager (debug HUD overlay)
 #include "GameSource/Gui/BrnGuiModule.h"         // BrnGui::gpActiveGuiModule (the GUI render drive)
 #include "GameSource/Graphics/BrnEffectsArbitrator.h"      // BrnGraphics::EffectsArbitrator
@@ -39,7 +39,7 @@
 // RenderTarget::Initialize, renderengine::Device::SetState(const RenderTargetState*)) was
 // declared everywhere and defined nowhere. The console's own version of that layer is EDRAM-based
 // and has no PC counterpart, so it is now realised as a Direct3D 9 bring-up leaf:
-//     pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp
+//     pc/gcm/renderengine/PostFxRenderTarget.cpp
 // which creates a real depth-sampleable INTZ texture (1280x1920, the 1x3 cascade atlas) and binds
 // it as the depth-stencil surface. All four TUs are in tools/build/build_game_exe.bat and the
 // closure was proved with dumpbin over the linked object set, NOT with the compile gate --
@@ -343,7 +343,7 @@ namespace
     // The XENON D3DCLEAR_* bits. NOT PC Direct3D 9's: the console reserves bits 0..3 for its four
     // colour targets and puts ZBUFFER at 0x10 / STENCIL at 0x20, which is why the clear word is 0x30
     // and not 0x6. The same two constants are already modelled twice in this tree -- once in
-    // ShadowPassPCLeaf.h's ClearDepthStencilParameters banner and once in ImmediateModePCLeaf.cpp's
+    // ShadowPass.h's ClearDepthStencilParameters banner and once in ImmediateMode.cpp's
     // DeviceClearDepthStencil, which translates them -- so these are named here rather than spelled
     // as a literal 0x30 that a reader would have to re-derive.
     const u32 KU_XENON_CLEAR_ZBUFFER = 0x10u;
@@ -902,7 +902,7 @@ namespace
         // lpTarget->GetRenderTarget()->GetSectionRenderTargetState(0) with no test on either result,
         // and that is FAITHFUL -- the X360 asm has no null test there either, because on the console
         // the pool cannot fail. On PC it can: rw::graphics::postfx::RenderTarget::Initialize returns
-        // nullptr when CarveZeroed fails (PostFxRenderTargetPCLeaf.cpp), and CgsRenderTarget::Construct
+        // nullptr when CarveZeroed fails (PostFxRenderTarget.cpp), and CgsRenderTarget::Construct
         // stores that straight through. So a failed allocation would turn a degraded frame into a
         // null-pointer crash inside a console-faithful body.
         //
@@ -942,7 +942,7 @@ namespace
     // (verify F3, envface: the E_TYPE_CUBE test below is renderengine::Texture::GetType, which on this
     // backend reports the CREATE-TIME dimension the leaf recorded in the raster header -- a metadata
     // test, not an IDirect3DBaseTexture9::GetType() query. The object's real D3DRTYPE is printed by
-    // the side that created it: PostFxRenderTargetPCLeaf.cpp's `[envmap-rt] cube ...` line. Read
+    // the side that created it: PostFxRenderTarget.cpp's `[envmap-rt] cube ...` line. Read
     // BOTH lines off the boot log; this one alone proves extent + object + requested dimension.)
     // for an off-screen target. This function REFUSES -- once, loudly, latched so it never retries --
     // when the leaf hands back anything other than a non-degenerate CUBE colour texture, because a
@@ -2069,7 +2069,7 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
     // and put them back after the last cascade. The console does not need this -- its
     // BeginRenderAntiAliased (Render:725) rebinds the scene target after this pass and the env-map
     // pass -- but on PC renderengine::Device::FrameBegin bound the back buffer before Render
-    // started and nothing else ever rebinds it. See ShadowPassPCLeaf.h.
+    // started and nothing else ever rebinds it. See ShadowPass.h.
     renderengine::PCSurfaceBracket_Save();
 
     // [FLAG PC bring-up probe] draw-call snapshot for the [shadow-fetch] line below.
@@ -2082,7 +2082,7 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
                                                      &mAllocatedRenderTargets);
 
         // [FLAG PC bring-up probe] bracket this cascade's draws in an occlusion query. See
-        // ShadowPassPCLeaf.h -- this is the ground truth for "is the map being written".
+        // ShadowPass.h -- this is the ground truth for "is the map being written".
         // Issued AFTER the clear so the clear's own fill is not counted.
         const u64 luDrawCallsBeforeCascade = renderengine::WorldDrawCallCount();
         renderengine::ShadowProbe_Begin(static_cast<u32>(liCascade));
@@ -2327,7 +2327,7 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
 //   clearParams = { flags 0x30, depth, stencil 0 }: `li r11, 0x30 / stw r11, var_70` @0x823F63F0-
 //     0x823F6404 and `stw r28(0), var_68` @0x823F6410. 0x30 is the XENON D3DCLEAR mask
 //     ZBUFFER(0x10) | STENCIL(0x20) -- the same word, with the same meaning, that the shadow pass
-//     already builds (ShadowPassPCLeaf.h's ClearDepthStencilParameters banner).
+//     already builds (ShadowPass.h's ClearDepthStencilParameters banner).
 //   depth      = 0.0f, AND THE TWO-STEP IS THE PROOF: the console stores flt_82001C98 == 1.0f into
 //     var_6C at 0x823F6420 -- before the asserts, i.e. the struct's default construction, which is
 //     exactly what the shadow pass's own {0x30, 1.0f, 0} block is -- and then OVERWRITES it with
@@ -2604,8 +2604,8 @@ namespace
     // CgsRenderTarget::SetRenderTargetState; the X360 asm does not, and rung 1 arbitrates.)
     //
     // THE CACHE WORD IS X360 dword_83010A30 and it is reached at its ONE canonical host home,
-    // renderengine::gpLastRenderTargetState (declared ShadowPassPCLeaf.h:52, defined
-    // PostFxRenderTargetPCLeaf.cpp:463) -- the same variable CgsRenderTarget::SetRenderTargetState*
+    // renderengine::gpLastRenderTargetState (declared ShadowPass.h:52, defined
+    // PostFxRenderTarget.cpp:463) -- the same variable CgsRenderTarget::SetRenderTargetState*
     // and rw::graphics::postfx::RenderTarget::Begin read. No second copy is minted here. (There IS a
     // pre-existing second host home for that word, shadow::Device::muMisc30, which has a WRITE and no
     // readers; it is recorded as an open defect in REPORT.md and is deliberately NOT touched by this
@@ -2778,7 +2778,7 @@ namespace
         // ORDER IS LOAD-BEARING. BeginRendering re-enables alpha blending and SetTexture sets the
         // stage ops to MODULATE, so PCSceneBlit_Begin has to run AFTER both or its opaque
         // texture-only state is immediately overwritten and the quad draws with the scene's alpha
-        // (which BeginRenderAntiAliased clears to 0) -- i.e. invisible. See ShadowPassPCLeaf.h.
+        // (which BeginRenderAntiAliased clears to 0) -- i.e. invisible. See ShadowPass.h.
         lpIm2d->BeginRendering();
         lpIm2d->SetTexture(lpSceneTexture);
         renderengine::PCSceneBlit_Begin();
@@ -3290,7 +3290,7 @@ void BrnRendererModule::BeginQuarterResBuffer()
 //
 // ⚠ Resolve IS CALLED and IS A NO-OP HERE, deliberately. On the Xenos it copies the EDRAM tile back
 // over the sampleable texture BlitComposite just read; on PC that texture IS the surface
-// (PostFxRenderTargetPCLeaf.cpp's Resolve() banner), so there is nothing to copy. It is reproduced
+// (PostFxRenderTarget.cpp's Resolve() banner), so there is nothing to copy. It is reproduced
 // rather than dropped so the call graph still matches and the day a backend needs it, it is there.
 //
 // ⚠ THE PERFMON BRACKET IS NOT REPRODUCED (this file's banner at :250).
@@ -5134,7 +5134,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         //
         // LIVE since the render-target wave (2026-08-12): GetShadowMapBuffer and GetDepthTexture
         // now have a target behind them (EnsureShadowMapTarget above builds it on the first
-        // frame with a device, and PostFxRenderTargetPCLeaf.cpp creates the D3D9 depth texture).
+        // frame with a device, and PostFxRenderTarget.cpp creates the D3D9 depth texture).
         // GetRenderTarget() being non-null is still the gate -- a device-less or
         // depth-texture-less machine leaves sampler 15 unbound rather than binding garbage.
 #if BRN_SHADOW_MAP_TARGET_AVAILABLE
@@ -5149,7 +5149,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
             // it CACHES -- once the texture pointer stops changing it makes no D3D call at all,
             // so a sampler state set inside it would be applied once and then never refreshed.
             // Applying it here, unconditionally, every frame is the honest stand-in until
-            // Construct's TextureState pair lands. See ShadowPassPCLeaf.h.
+            // Construct's TextureState pair lands. See ShadowPass.h.
             renderengine::ShadowSampler_ApplyState(15u);
         }
 #endif
@@ -5387,7 +5387,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
     // whose first candidate is D3DFMT_D24X8 -- no stencil bits -- so the PC D3DDevice_Resolve strips
     // D3DCLEAR_STENCIL from its clear", which was true only while the target was single-sampled.
     // A MULTISAMPLED scene target takes the MSAA depth ladder instead, whose first candidate is
-    // D3DFMT_D24S8 (PostFxRenderTargetPCLeaf.cpp KAE_MSAA_DEPTH_FORMATS[0], chosen because the
+    // D3DFMT_D24S8 (PostFxRenderTarget.cpp KAE_MSAA_DEPTH_FORMATS[0], chosen because the
     // build's own auto depth-stencil and the RESZ destination are both D24S8 layouts), so the
     // bound depth DOES carry stencil and TilingClearFlagsForBoundSurfaces keeps D3DCLEAR_STENCIL.
     // The value is still 0 on this build (no motion-blur event posts one), and clearing stencil to
@@ -5424,7 +5424,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
     //     bracket also raises `sbShadowPassActive` (XenonD3D9Shims.cpp), which changes the cull and
     //     depth-bias behaviour of WorldDraw_IndexedUP, and it parks sampler 15. Both are shadow-pass
     //     semantics; borrowing them for the env map would be a fabricated convention.
-    //   * ShadowPassPCLeaf.h's four-part deletion condition for that bracket ends "(4) NOTHING
+    //   * ShadowPass.h's four-part deletion condition for that bracket ends "(4) NOTHING
     //     BETWEEN THIS PASS AND THAT CALL MAY DRAW WITHOUT BINDING ITS OWN TARGET. On the console the
     //     env-map pass sits in that gap and binds its own; on PC, verify it." This IS that
     //     verification: the pass binds its own target, and it only runs when the rebind will follow.

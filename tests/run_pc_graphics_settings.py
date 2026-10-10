@@ -7,7 +7,7 @@ from fxgs_common import Tree, definition, compile_and_run, report
 HERE = Path(__file__).resolve().parent
 tree = Tree()
 main = tree.read('src/GameSource/Main/BrnMain.cpp')
-leaf = tree.read('src/pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp')
+leaf = tree.read('src/pc/gcm/renderengine/PostFxRenderTarget.cpp')
 code = '\n'.join(definition(main, signature) for signature in (
     'void LoadConfig(', 'void SaveFullscreenConfigPC(', 'void SaveConfig('))
 code += '\n' + definition(leaf, 'struct MultisampleChoice\n') + ';\n'

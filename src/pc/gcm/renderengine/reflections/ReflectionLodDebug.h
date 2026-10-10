@@ -1,6 +1,6 @@
 #pragma once
 
-#include "pc/gcm/renderengine/ReflectionLodPCLeaf.h"
+#include "pc/gcm/renderengine/reflections/ReflectionLod.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 
 namespace renderengine

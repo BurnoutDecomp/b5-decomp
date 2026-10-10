@@ -4,7 +4,7 @@
 #include "SDKs/EATech/eajobs/job_scheduler.h"                 // EA::Jobs::JobScheduler::AddJobs
 #include "SDKs/EATech/eajobs/job_types.h"                     // EA::Jobs::JOB_ENVIRONMENT_LOCAL
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
-#include "pc/gcm/renderengine/MeshJobOwnerWaitPCLeaf.h"
+#include "pc/gcm/renderengine/MeshJobOwnerWait.h"
 
 
 #include <cstring>   // std::memcpy (models the X360 memcpy intrinsic)

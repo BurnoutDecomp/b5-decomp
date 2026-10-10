@@ -5,7 +5,7 @@
 #include <cstddef>   // size_t (the eviction hook's byte count)
 
 // =============================================================================
-// WorldGeometryPCLeaf.h -- the RETAINED world-geometry surface (PC leaf).
+// WorldGeometry.h -- the RETAINED world-geometry surface (PC leaf).
 //
 // FLAG PC-platform leaf: THE CONSOLE HAS NO EQUIVALENT OF THIS FILE.
 // On the Xbox 360 the serialised IndexBuffer/VertexBuffer headers a bundle carries
@@ -95,7 +95,7 @@ namespace renderengine
     // Called ~3,800 times a frame, so a repeat draw of an already-mirrored mesh answers out
     // of a direct-mapped front cache and never touches the retained maps at all; the plans
     // are still validated in full, so the fast path can only return the same mirrors the
-    // lookup would have. See the front-cache section in WorldGeometryPCLeaf.cpp.
+    // lookup would have. See the front-cache section in WorldGeometry.cpp.
     EWorldGeometryPrepare WorldGeometry_Prepare(const WorldGeometryVertexPlan& lrVertexPlan,
                                                 const WorldGeometryIndexPlan& lrIndexPlan,
                                                 WorldGeometryDraw* lpOutDraw);

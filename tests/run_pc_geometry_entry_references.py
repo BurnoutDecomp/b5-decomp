@@ -9,7 +9,7 @@ parser.add_argument('--ignore-generation', action='store_true')
 parser.add_argument('--wrap-generation', action='store_true')
 args = parser.parse_args()
 os.environ.pop('NoDefaultCurrentDirectoryInExePath', None)
-path = 'src/pc/gcm/renderengine/GeometryEntryReferencesPCLeaf.h'
+path = 'src/pc/gcm/renderengine/GeometryEntryReferences.h'
 source = Tree().read(path)
 if args.ignore_generation:
     old = 'lrSlot.muGeneration == (luToken >> 32)'

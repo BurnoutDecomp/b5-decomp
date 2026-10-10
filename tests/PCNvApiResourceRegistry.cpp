@@ -7,7 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
-#include "pc/gcm/renderengine/NvApiResourceRegistryPCLeaf.h"
+#include "pc/gcm/renderengine/NvApiResourceRegistry.h"
 using u32 = std::uint32_t;
 extern "C" { __declspec(dllexport) DWORD NvOptimusEnablement = 1;
              __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1; }

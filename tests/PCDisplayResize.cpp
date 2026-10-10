@@ -3,9 +3,9 @@
 #include <cstdio>
 #include <initializer_list>
 #include "pc/gcm/renderengine/device.h"
-#include "pc/gcm/renderengine/DisplayResizePCLeaf.h"
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"
-#include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
+#include "pc/gcm/renderengine/DisplayResize.h"
+#include "pc/gcm/renderengine/ShadowPass.h"
+#include "pc/gcm/renderengine/WindowPresentation.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"
 #include "GameSource/Graphics/BrnRendererMemory.h"

@@ -9,8 +9,8 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [gateui r7] the exit-path diagnostics
 #include "GameShared/GameClasses/System/CgsHarnessSlot.h"    // BRN_HARNESS_SLOT name suffix
 #include "pc/gcm/renderengine/device.h"
-#include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
-#include "pc/input/XInputPollingPCLeaf.h"
+#include "pc/gcm/renderengine/WindowPresentation.h"
+#include "pc/input/XInputPolling.h"
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 #include "SDKs/EATech/eajobs/jobs.h"
 #include "SDKs/EATech/eajobs/job_scheduler.h"

@@ -17,9 +17,9 @@ code = '\n'.join(definition(main, signature) for signature in (
 code += '\n' + '\n'.join(definition(source, signature) for signature in (
     'static LRESULT CALLBACK windowProc(', 'static bool RegisterDeviceNotif(',
     'static void DisableSystemBackdrop(', 'static HWND CreateGameWindow('))
-headers = ['src/pc/gcm/renderengine/WindowPresentationPCLeaf.h',
-           'src/pc/gcm/renderengine/GraphicsSettingsPCLeaf.h',
-           'src/pc/gcm/renderengine/DisplayResizePCLeaf.h',
+headers = ['src/pc/gcm/renderengine/WindowPresentation.h',
+           'src/pc/gcm/renderengine/GraphicsSettings.h',
+           'src/pc/gcm/renderengine/DisplayResize.h',
            'src/GameSource/Graphics/BrnAntiAliasTiling.h']
 numeric = compile_and_run(HERE / 'PCFullscreen.cpp', 'pc_fullscreen_window.inc', code, 'PCFullscreen',
                           shadow={header:read(header) for header in headers}, extra_flags='d3d9.lib user32.lib shell32.lib')

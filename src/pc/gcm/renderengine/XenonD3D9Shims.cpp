@@ -1,9 +1,9 @@
-#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
-#include "pc/gcm/renderengine/DepthOnlyPCLeaf.h"
-#include "pc/gcm/renderengine/DepthRangePCLeaf.h"
-#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
-#include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
-#include "pc/gcm/renderengine/NvApiResourceRegistryPCLeaf.h"
+#include "pc/gcm/renderengine/ShaderBindings.h"
+#include "pc/gcm/renderengine/DepthOnly.h"
+#include "pc/gcm/renderengine/DepthRange.h"
+#include "pc/gcm/renderengine/GeometryBindings.h"
+#include "pc/gcm/renderengine/TextureUpload.h"
+#include "pc/gcm/renderengine/NvApiResourceRegistry.h"
 // =============================================================================
 // XenonD3D9Shims.cpp  (pc/gcm/renderengine)
 //
@@ -38,12 +38,12 @@
 #include "pc/gcm/renderengine/IndexBuffer.h"      // renderengine::IndexBuffer  (Xbox2CheckPhysicalMemoryFlags leaf)
 #include "pc/gcm/renderengine/VertexBuffer.h"     // renderengine::VertexBuffer (Xbox2CheckPhysicalMemoryFlags leaf)
 #include "pc/gcm/renderengine/texture.h"          // renderengine::Texture::mpD3DTexture (world sampler bind)
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h" // renderengine::PCSurfaceBracket_* (homed at the bottom of this TU)
-#include "pc/gcm/renderengine/WorldGeometryPCLeaf.h" // the RETAINED dispatch-path geometry mirrors
-#include "pc/gcm/renderengine/InstancedDrawPCLeaf.h"
-#include "pc/gcm/renderengine/InstancingPCLeaf.h"
+#include "pc/gcm/renderengine/ShadowPass.h" // renderengine::PCSurfaceBracket_* (homed at the bottom of this TU)
+#include "pc/gcm/renderengine/WorldGeometry.h" // the RETAINED dispatch-path geometry mirrors
+#include "pc/gcm/renderengine/InstancedDraw.h"
+#include "pc/gcm/renderengine/Instancing.h"
 #include "pc/gcm/renderengine/LionDrawDiagPC.h"
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsXboxConditionalRenderShims.h" // the predicated-draw externs homed at the bottom of this TU
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h" // [diag] BrnDiag::LogBoundSurfaces (homed in this TU)
@@ -52,11 +52,11 @@
 #include <Windows.h>
 #include <d3d9.h>
 #include "GameSource/Game/BrnGameModule.hpp"
-#include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
-#include "pc/gcm/renderengine/WorldTextureFilteringPCLeaf.h"
-#include "pc/gcm/renderengine/ShadowQualityPCLeaf.h"
-#include "pc/gcm/renderengine/ShadowReceiverPCLeaf.h"
-#include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
+#include "pc/gcm/renderengine/SamplerStateCache.h"
+#include "pc/gcm/renderengine/WorldTextureFiltering.h"
+#include "pc/gcm/renderengine/ShadowQuality.h"
+#include "pc/gcm/renderengine/ShadowReceiver.h"
+#include "pc/gcm/renderengine/ShaderConstantCache.h"
 #include "pc/gcm/renderengine/TrailPausedDiagPC.h"
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"
 #include <cstring>
@@ -202,7 +202,7 @@ namespace
     //   false = the DISPATCH publisher (WorldVd32_GetDeclaration + WorldDraw_SetVertexSource,
     //           i.e. shadow::Device::SetMeshBuffersPC). Its buffers are the bundle's own
     //           STATIC serialised geometry, so the draw goes through the retained D3D9
-    //           mirrors in WorldGeometryPCLeaf.cpp.
+    //           mirrors in WorldGeometry.cpp.
     //   true  = the Xenon FAST-SET publisher (D3DDevice_SetStreamSource ->
     //           WorldDraw_SetVertexSourceRaw): sky dome, immediate mode, particles,
     //           MeshHelper. That geometry is rewritten every frame, so it stays on the
@@ -218,7 +218,7 @@ namespace
     // data, so unsupported packed normals are expanded into FLOAT3 records here
     // without touching the converted world bundle or the native AMD/Intel path.
     // (FAST-SET path only -- the dispatch path bakes the same expansion once per
-    // buffer at mirror-creation time instead; see WorldGeometryPCLeaf.cpp.)
+    // buffer at mirror-creation time instead; see WorldGeometry.cpp.)
     std::vector<u8> sVertexFormatScratch;
 
     // ---- Xenos primitive reset ----------------------------------------------
@@ -242,7 +242,7 @@ namespace
     // This scratch now serves the FAST-SET path only, where the run really is rebuilt
     // every frame and there is nothing to retain. The DISPATCH path bakes the identical
     // expansion into a device index buffer ONCE per (buffer, run, primitive state) --
-    // see WorldGeometryPCLeaf.cpp. The old "no cache, a cache would go stale when a
+    // see WorldGeometry.cpp. The old "no cache, a cache would go stale when a
     // track unit is streamed out" note was the right worry and the wrong conclusion:
     // going stale is exactly what the resource pool's free path tells the mirror cache
     // about (CgsResource::Pool::FreeMemoryForResource ->
@@ -1116,7 +1116,7 @@ namespace
     // ...BUT A LIVE QUERY IS ONLY AS FRESH AS THE LAST RECONCILE, so every WRITER of an input
     // must reconcile. The verify round (2026-08-16) found the one that did not: the BOUND COLOUR
     // TARGET. Every engine render-target bind funnels through renderengine::Device::SetState
-    // (PostFxRenderTargetPCLeaf.cpp -- the single writer of the surfaces, reached from
+    // (PostFxRenderTarget.cpp -- the single writer of the surfaces, reached from
     // CgsRenderTarget::SetRenderTargetState{,InvertDepth} and rw::graphics::postfx::
     // RenderTarget::Begin), and it did not reconcile; the sample-count gate was enforced only
     // whenever one of the OTHER call sites happened to fire. Three accidents made that harmless
@@ -1129,7 +1129,7 @@ namespace
     // test is the trigger, the post-fx quads do not use it) but the AMD path is deliberately not
     // alpha-test-gated, so an 'A2M1' could stand across it -- exactly the single-sample dither
     // AlphaCoverageTargetIsMultisampled exists to prevent. CLOSED: Device::SetState now calls
-    // PCAlphaCoverage_Reconcile() (exported below, declared in ShadowPassPCLeaf.h beside the
+    // PCAlphaCoverage_Reconcile() (exported below, declared in ShadowPass.h beside the
     // bracket's own two) as its last statement, so the derivation is complete BY CONSTRUCTION.
     // No recursion: the reconciler reads the target (GetRenderTarget) and never binds one, and
     // the bracket / the blit rebind raw, not through SetState.
@@ -1371,8 +1371,8 @@ namespace
 namespace renderengine
 {
     // The exported face of AlphaCoverage_Reconcile for the ONE input writer that lives in
-    // another TU: renderengine::Device::SetState (PostFxRenderTargetPCLeaf.cpp), the single
-    // binder of colour slot 0. Declared in ShadowPassPCLeaf.h beside PCSurfaceBracket_Save/
+    // another TU: renderengine::Device::SetState (PostFxRenderTarget.cpp), the single
+    // binder of colour slot 0. Declared in ShadowPass.h beside PCSurfaceBracket_Save/
     // Restore. See the derivation banner above for why every input writer must reconcile.
     void PCAlphaCoverage_Reconcile()
     {
@@ -4536,7 +4536,7 @@ namespace renderengine
         // memory, so those buffers are mirrored once into device buffers (including the
         // DEC3N expansion and the primitive-reset strip re-cut, neither of which D3D9 can do
         // at fetch time) and drawn with SetStreamSource/SetIndices/DrawIndexedPrimitive.
-        // See WorldGeometryPCLeaf.cpp. The FAST-SET publisher's runs are rebuilt every frame
+        // See WorldGeometry.cpp. The FAST-SET publisher's runs are rebuilt every frame
         // and stay on DrawIndexedPrimitiveUP below, which is exactly what UP is for.
         WorldGeometryDraw lRetained;
         std::memset(&lRetained, 0, sizeof(lRetained));
@@ -6374,7 +6374,7 @@ void D3DDevice_SetStreamSource(IDirect3DDevice9* /*lpDeviceArg*/, u32 luStreamNu
 // last user left on it -- and D3D9's own default for an untouched unit is POINT/POINT/NONE with
 // ADDRESS = WRAP.
 //
-// THAT MATTERS THE MOMENT A DEPTH TEXTURE IS BOUND. PostFxRenderTargetPCLeaf.cpp now gives every
+// THAT MATTERS THE MOMENT A DEPTH TEXTURE IS BOUND. PostFxRenderTarget.cpp now gives every
 // sampled post-fx target a RAW-depth format (INTZ / DF24 / DF16) so the composite's DoF and
 // motion-blur permutations, and rwgpfxdof, can read depth VALUES. Those fetches must be POINT
 // (averaging two depths yields a depth that is at neither surface -- haloes on every silhouette)
@@ -6416,7 +6416,7 @@ namespace
     // Which sampler units are currently holding a raw-depth texture. Read by
     // renderengine::PostFxDepthSampler_BoundUnitMask so a target that is about to bind its depth
     // texture as the DEPTH-STENCIL SURFACE can unbind it from the samplers first (D3D9 does not
-    // do that for you -- see renderengine::Device::SetState in PostFxRenderTargetPCLeaf.cpp).
+    // do that for you -- see renderengine::Device::SetState in PostFxRenderTarget.cpp).
     u32 guRawDepthSamplerUnits = 0u;
 
     bool IsRawDepthFormat(D3DFORMAT leFormat)
@@ -7025,7 +7025,7 @@ void* D3DDevice_BeginVertices(void* /*lpDeviceArg*/, u32 luPrimitiveType,
 // STREAM 0, THE DOCUMENTED SIDE EFFECT. DrawPrimitiveUP resets the stream-0 source binding (and
 // its stride) to the user-pointer data it just consumed. When this was written no TU in
 // b5-decomp/src called IDirect3DDevice9::SetStreamSource; SINCE THEN the retained world
-// vertex/index path does (WorldGeometryPCLeaf.cpp:810-817 SetStreamSource / SetIndices /
+// vertex/index path does (WorldGeometry.cpp:810-817 SetStreamSource / SetIndices /
 // DrawIndexedPrimitive straight on the device) -- and it RE-BINDS stream 0 and the indices on
 // every submit, so a reset here still costs nothing (nothing caches a stream-0 binding across
 // draws; shadowingdevice.cpp's FlushVertexProgramState re-issues every stream source per flush).
@@ -7981,7 +7981,7 @@ void D3DDevice_SetRenderState_BlendFactor(IDirect3DDevice9*, u32 luValue)
 // ⚠ THE BANNER THAT USED TO BE HERE WAS FALSE IN BOTH HALVES. It claimed "the world
 // pass runs unmultisampled, where alpha-to-mask is a no-op on the console too". The
 // console world pass is multisampled (that is what EDRAM tiling is FOR), and since
-// rung 8 the PC scene target is too (PostFxRenderTargetPCLeaf.cpp honours
+// rung 8 the PC scene target is too (PostFxRenderTarget.cpp honours
 // mn32MultiSampleFormat; BrnRendererModule::mbMultisampledBackbuffer is the console's
 // constant TRUE). Nothing in the tree still says "unmultisampled" -- see the report.
 //
@@ -8359,14 +8359,14 @@ void D3DDevice_SetScissorRect(void* /*lpDeviceArg*/, const void* lpRect)
 // existence: its definition is compiled out behind BRN_ANTIALIAS_BRACKET_AVAILABLE (six symbols it
 // calls are undefined in the linked object set), the render-target pool must actually hold slots 0
 // and 4, and Render must gate the call on EnsurePostFxSceneTargets(). The full four-part condition
-// is on the declarations in ShadowPassPCLeaf.h. Deleting this today would swap a working bracket
+// is on the declarations in ShadowPass.h. Deleting this today would swap a working bracket
 // for a null deref and re-open the measured bug recorded at the gpLastRenderTargetState line below.
 //
 // ONE THING TO CARRY ACROSS WHEN IT DOES GO, stated with its evidence separated:
 //   FACT -- BeginRenderAntiAliased sets no viewport and no scissor. It issues no
 //   D3DDevice_SetViewportF and no D3DDevice_SetScissorRect anywhere in 0x823FFA18-0x823FFBD8, and
 //   the bind it does perform (renderengine::Device::SetState, the PC body of which is
-//   PostFxRenderTargetPCLeaf.cpp:465-485) touches only SetRenderTarget / SetDepthStencilSurface.
+//   PostFxRenderTarget.cpp:465-485) touches only SetRenderTarget / SetDepthStencilSurface.
 //   So a PC scene pass opened by that function alone inherits the previous pass's viewport --
 //   i.e. whatever this bracket currently restores.
 //   INTERPRETATION, from the documented Xenon tiling model and NOT recovered from this image
@@ -8498,7 +8498,7 @@ void PCSurfaceBracket_Restore()
     // The console needs no such invalidation because its counterpart of this restore is
     // BeginRenderAntiAliased, which rebinds THROUGH Device::SetState and keeps the shadow in
     // step. DELETE this line together with the bracket -- gated on the definitions, the pool and
-    // Render's call (the four-part condition on the declarations in ShadowPassPCLeaf.h), NOT on
+    // Render's call (the four-part condition on the declarations in ShadowPass.h), NOT on
     // BeginRenderAntiAliased merely existing, which it does as of 2026-08-13. Its rebind is a
     // compare-and-SKIP against this very shadow, so a stale "the shadow-map state is installed"
     // value differs from the anti-alias state and the bind still happens -- which is what makes the
@@ -8518,7 +8518,7 @@ void PCSurfaceBracket_Restore()
 // =============================================================================
 // FLAG PC bring-up: the SCENE-TARGET PRESENT BLIT's device state.
 //
-// See the banner on PCSceneBlit_Begin/_End in ShadowPassPCLeaf.h for WHAT this is and what
+// See the banner on PCSceneBlit_Begin/_End in ShadowPass.h for WHAT this is and what
 // retires it (BrnPostFx::Render @0x8240A468 -- the real composite, a later wave). Short form:
 // once BrnRendererModule.cpp's BRN_ANTIALIAS_BRACKET_AVAILABLE is 1 the world renders
 // off-screen, and one full-screen textured quad through the existing Im2d path puts it back on
@@ -8742,7 +8742,7 @@ void PCSceneBlit_End()
 
 // =============================================================================
 // FLAG PC-platform leaf: the SHADOW-MAP sampler state (see the SAMPLE SEMANTICS SEAM
-// banner in ShadowPassPCLeaf.h).
+// banner in ShadowPass.h).
 //
 // The console binds sampler 15 through sub_8227D158 -- the shadow cache's TEXTURE STATE
 // path -- which installs a renderengine::TextureState carrying the filter, the address
@@ -8962,7 +8962,7 @@ void LionParticleSampler_ApplyState(u32 luUnit)
 
 // =============================================================================================
 // FLAG PC-platform leaf: THE COMPOSITE BLIT'S ROP STATE. See the banner on the declaration in
-// ShadowPassPCLeaf.h -- the scene term of BrnRendererMemory::BlitComposite @0x82406A68 is
+// ShadowPass.h -- the scene term of BrnRendererMemory::BlitComposite @0x82406A68 is
 // re-associated onto the blend unit because D3D9 cannot sample the bound render target, and the
 // alpha lane is left alone because this backend carries the motion-blur mask there.
 // =============================================================================================
@@ -9345,7 +9345,7 @@ bool ShadowProbe_TextureBound(u32 luUnit)
 //    settle it on PC evidence. THE PC EVIDENCE SETTLES IT: IDirect3DDevice9::SetRenderTarget
 //    resets the viewport to the full extent of the new render target, and the bind
 //    BeginRenderAntiAliased performs -- renderengine::Device::SetState, PC body at
-//    PostFxRenderTargetPCLeaf.cpp:465-486 -- calls exactly that. So by the time BeginTiling would
+//    PostFxRenderTarget.cpp:465-486 -- calls exactly that. So by the time BeginTiling would
 //    run, the viewport already IS the whole scene target; there is nothing for this leaf to owe
 //    the DRAWS that follow. (The clear's own bracket above is a different question: it is not
 //    setting a viewport for anything to render with, it is stopping leftover state from eating a
@@ -9355,7 +9355,7 @@ bool ShadowProbe_TextureBound(u32 luUnit)
 //    ALL-OR-NOTHING: ask for D3DCLEAR_STENCIL on a depth surface with no stencil bits and the
 //    call fails and clears NOTHING -- including the depth. The scene target's depth surface is
 //    picked by a format ladder whose FIRST and most likely candidate is D3DFMT_D24X8, which has
-//    NO STENCIL (PostFxRenderTargetPCLeaf.cpp:230-237). So the stencil bit is added only when the
+//    NO STENCIL (PostFxRenderTarget.cpp:230-237). So the stencil bit is added only when the
 //    bound depth surface's format actually carries stencil, and a failed Clear is retried without
 //    it and then logged. Getting this wrong would leave depth uncleared every frame with no error
 //    anywhere -- the exact silent-failure shape this project keeps paying for.
@@ -9481,7 +9481,7 @@ namespace
     // Does this depth format carry stencil bits? See the D3DCLEAR_STENCIL note in the banner: a
     // stencil clear requested against a stencil-less surface makes Clear fail ENTIRELY, taking the
     // depth clear down with it. The formats listed are the ones this build can actually end up
-    // with, and since 2026-08-15 there are TWO ladders in PostFxRenderTargetPCLeaf.cpp: the
+    // with, and since 2026-08-15 there are TWO ladders in PostFxRenderTarget.cpp: the
     // COMPARE ladder (the shadow map) tries D24X8, D16, INTZ, DF24, DF16 and the RAW-VALUE ladder
     // (every sampled post-fx target) tries INTZ, DF24, DF16; both fall back to a plain D24S8
     // depth-stencil surface, and the device's own auto depth-stencil is D24S8 (device.cpp:95).
@@ -9859,7 +9859,7 @@ namespace
     // NOTHING ELSE IS TOUCHED. DrawPrimitiveUP resets the stream-0 binding, which costs nothing
     // here -- but NOT for the reason the D3DDevice_EndVertices banner gives. That banner's "no TU
     // in b5-decomp/src calls IDirect3DDevice9::SetStreamSource at all" WENT STALE with the
-    // retained world vertex/index buffers: WorldGeometryPCLeaf.cpp:810-817 calls SetStreamSource /
+    // retained world vertex/index buffers: WorldGeometry.cpp:810-817 calls SetStreamSource /
     // SetIndices / DrawIndexedPrimitive straight on the device. It costs nothing because NOTHING
     // CACHES a stream-0 binding across draws -- WorldGeometry_Submit re-binds stream 0 and the
     // indices on every submit, and shadowingdevice.cpp's FlushVertexProgramState re-issues every
@@ -10245,7 +10245,7 @@ void D3DDevice_BeginTiling(void* /*lpDevice*/, u32 /*luFlags*/, u32 luCount,
     // They do, and nothing here has to set them: BeginRenderAntiAliased binds the anti-alias
     // buffer immediately before this call, that bind runs rw::graphics::postfx::RenderTarget::
     // Begin, and Begin sets the viewport AND the scissor to the target's full muWidth x muHeight
-    // (PostFxRenderTargetPCLeaf.cpp). Setting one here would be inventing a console behaviour --
+    // (PostFxRenderTarget.cpp). Setting one here would be inventing a console behaviour --
     // the console's viewport came from the tiling pass itself, which does not exist on PC.
     // The two shipped rects also partition the surface EXACTLY ({0,0,1280,384} + {0,384,1280,720};
     // rect 1's top IS rect 0's bottom, BrnAntiAliasTiling.h), so the clear above leaves no band at
@@ -10517,7 +10517,7 @@ int D3DDevice_Resolve(void* /*lpDevice*/, u32 luFlags, const void* lpSourceRect,
                         // no stretch. Both conditions are load-bearing on a multisampled source:
                         // D3D9 refuses to stretch one and refuses to filter one. The formats match
                         // too -- the anti-alias colour section and the down-sample colour section
-                        // are both A8R8G8B8 (PostFxRenderTargetPCLeaf.cpp creates both).
+                        // are both A8R8G8B8 (PostFxRenderTarget.cpp creates both).
                         const bool lbSourceIsMultisampled =
                             TilingSurfaceIsMultisampled(lpBoundColour);
 
@@ -10728,7 +10728,7 @@ int D3DDevice_Resolve(void* /*lpDevice*/, u32 luFlags, const void* lpSourceRect,
 //
 // TWO HONEST LIMITS, both reported rather than hidden:
 //   (1) NO STENCIL, NO DISCRIMINATION. The scene target's depth format is picked by a ladder
-//       (PostFxRenderTargetPCLeaf.cpp): the MULTISAMPLED path takes D3DFMT_D24S8 first, so the
+//       (PostFxRenderTarget.cpp): the MULTISAMPLED path takes D3DFMT_D24S8 first, so the
 //       stencil is real; the single-sampled path takes the COMPARE ladder, whose first
 //       candidate D3DFMT_D24X8 has NO stencil bits -- and there the console's force-stencil
 //       write is already a no-op too. When the bound depth carries no stencil this writes the
@@ -11086,9 +11086,9 @@ void PCStampMotionBlurMask(u32 luCarsBlurStencil, u32 luWorldBlurStencil)
 // created has been cleared by nothing at all.
 //
 // D3D9 leaves a freshly created D3DPOOL_DEFAULT render-target texture and depth texture
-// UNDEFINED, and nothing at creation writes them: in PostFxRenderTargetPCLeaf.cpp the colour
+// UNDEFINED, and nothing at creation writes them: in PostFxRenderTarget.cpp the colour
 // texture (:586-592) and the depth texture (:229-237) are created and handed straight out --
-// `grep -n "Clear(\|ColorFill" pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp` returns
+// `grep -n "Clear(\|ColorFill" pc/gcm/renderengine/PostFxRenderTarget.cpp` returns
 // NOTHING (run this round). So without this call the bracket's first frame renders the world
 // into undefined colour over undefined depth, and that frame is copied and PRESENTED. The
 // depth half is the worse one: undefined depth can reject every pixel of the world, which on
@@ -11125,7 +11125,7 @@ void PCStampMotionBlurMask(u32 luCarsBlurStencil, u32 luWorldBlurStencil)
 // EnsurePostFxSceneTargets -- i.e. just after Device::FrameBegin cleared the back buffer to
 // that same black -- and its two callers hand it the two CREATE-mode scene targets, which own
 // their own surfaces and are never the swap chain. If the colour texture failed to create, the
-// [postfx-rt] line at PostFxRenderTargetPCLeaf.cpp already reports `colourTexture=NULL` at that
+// [postfx-rt] line at PostFxRenderTarget.cpp already reports `colourTexture=NULL` at that
 // same moment; this function does not re-report it.
 //
 // DELETE IT when a frame-TOP clear exists again -- the multisampled path's D3DDevice_BeginTiling

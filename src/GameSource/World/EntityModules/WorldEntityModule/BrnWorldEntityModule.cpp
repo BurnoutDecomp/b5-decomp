@@ -22,9 +22,9 @@
 // =============================================================================
 
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModule.h"
-#include "pc/gcm/renderengine/GraphicsDiagnosticsPCLeaf.h"
-#include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
-#include "pc/gcm/renderengine/ReflectionLodDebugPCLeaf.h"
+#include "pc/gcm/renderengine/GraphicsDiagnostics.h"
+#include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
+#include "pc/gcm/renderengine/reflections/ReflectionLodDebug.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"

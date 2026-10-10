@@ -17,7 +17,9 @@ a = p.parse_args()
 t = Tree()
 renderer = t.read('src/GameSource/Graphics/BrnRendererModule.cpp')
 header = t.read('src/GameSource/Graphics/BrnRendererModule.h')
-code = ''
+code = ('namespace CgsDev::Log { void WriteToLog(const char*) {} }\n'
+        'namespace CgsSystem { struct HardwareInit { static void RequestShutdown() { std::abort(); } }; }\n')
+code += definition(renderer, 'bool DispatchStorageAvailablePC(') + '\n'
 for sig in ['void BrnRendererModule::InitializeDispatchContextPC(',
             'bool BrnRendererModule::BuildDispatchLists(',
             'void BrnRendererModule::PrepareMeshFramePC(',

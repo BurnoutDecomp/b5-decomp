@@ -10,7 +10,7 @@
 #include <cstdlib>   // malloc / free
 #include <cstring>   // memcpy
 
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 
 namespace CgsResource
 {

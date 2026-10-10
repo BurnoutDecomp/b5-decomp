@@ -9,7 +9,7 @@
 #include <cstring>
 #include <vector>
 #include "pc/gcm/renderengine/renderstates.h"
-#include "pc/gcm/renderengine/ShadowQualityPCLeaf.h"
+#include "pc/gcm/renderengine/ShadowQuality.h"
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"
 #include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"
 #include "GameSource/Graphics/BrnShadowMapRenderManager.h"

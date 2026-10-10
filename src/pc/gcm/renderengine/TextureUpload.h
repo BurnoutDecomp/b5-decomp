@@ -2,8 +2,8 @@
 
 #include <d3d9.h>
 #include <new>
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
-#include "pc/gcm/renderengine/TextureStagingCachePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
+#include "pc/gcm/renderengine/TextureStagingCache.h"
 
 // FLAG PC-platform leaf: D3D9Ex has no MANAGED pool. Keep a SYSTEMMEM upload
 // texture attached to the DEFAULT texture through COM private data. This keeps

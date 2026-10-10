@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/RenderWare/CgsRwRasterResourceType.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "pc/gcm/renderengine/TextureResourcePCLeaf.h"
+#include "pc/gcm/renderengine/TextureResource.h"
 
 static unsigned suHeapFrees, suAssertions;
 static Texture* spExpectedClearedHeader;

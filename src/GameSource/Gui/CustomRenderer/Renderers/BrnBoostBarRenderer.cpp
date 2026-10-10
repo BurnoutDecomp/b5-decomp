@@ -590,7 +590,7 @@ Vector3 BoostBarRenderer::GetOuterBoostBarColour()
 //   mpGlowTextureState          <- cache id 12                   U=2
 // [FLAG PC fold] the white texture: the console reads the immediate-mode state library's
 // white texture global (X360 dword_83010F58 == mgStateLibrary.mpTexture_White). That library
-// is a documented no-op on this backend (ImmediateModePCLeaf.cpp ConstructOnceOnly), so the
+// is a documented no-op on this backend (ImmediateMode.cpp ConstructOnceOnly), so the
 // white slot initialises over a null texture.
 // ⚠️ CORRECTED 2026-08-28. The old justification here -- "the render paths guard it (the PC
 // Apt dispatch draws untextured records as solid colour, which IS what a white-texture quad

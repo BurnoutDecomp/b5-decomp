@@ -2,9 +2,9 @@
 
 #include <Windows.h>
 #include <d3d9.h>
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
-#include "pc/gcm/renderengine/GpuFrameTimingPCLeaf.h"
-#include "pc/gcm/renderengine/FlipSwapChainPCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
+#include "pc/gcm/renderengine/GpuFrameTiming.h"
+#include "pc/gcm/renderengine/FlipSwapChain.h"
 
 // FLAG PC-platform leaf: owner-requested F11 borderless fullscreen and 16:9
 // presentation. The console owns its display; Windows window placement and

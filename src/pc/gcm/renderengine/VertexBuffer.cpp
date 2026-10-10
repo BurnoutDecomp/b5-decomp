@@ -14,7 +14,7 @@ namespace renderengine
     // The Xenon GPU-header half (Initialize / Lock / Destruct / Release, and
     // Xbox2CheckPhysicalMemoryFlags below) stamps, maps and frees Xenon GPU memory.
     // FLAG PC-platform: the PC build takes these from its platform layer
-    // (ImmediateModePCLeaf.cpp, XenonD3D9Shims.cpp).
+    // (ImmediateMode.cpp, XenonD3D9Shims.cpp).
 
     // 0x82B62ED8 -- fill the GPU vertex-buffer header in place, then fix up its memory flags.
     VertexBufferHeader* VertexBuffer::Initialize(Wrapper* lpWrapper, const Parameters* lpParams,

@@ -9,11 +9,11 @@
 #include <cstdlib>   // std::exit (the TUB save-dir failure path)
 
 #include "pc/gcm/renderengine/device.h"
-#include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
-#include "pc/DebugIniPCLeaf.h"
+#include "pc/gcm/renderengine/GraphicsSettings.h"
+#include "pc/debug/DebugIni.h"
 #include "GameSource/Graphics/BrnRendererModule.h"
 #include "GameSource/World/BrnWorldModule.h"
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"

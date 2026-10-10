@@ -7,8 +7,8 @@
 #include <cstdlib>
 #include <initializer_list>
 #include "pc/gcm/renderengine/device.h"
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"
-#include "pc/gcm/renderengine/DepthRangePCLeaf.h"
+#include "pc/gcm/renderengine/ShadowPass.h"
+#include "pc/gcm/renderengine/DepthRange.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 
 static IDirect3DDevice9* spDevice;
@@ -22,6 +22,7 @@ namespace renderengine {
     void PCAlphaCoverage_Reconcile() {}
 }
 void* shadow::Device::SetResource(void*, u32) { return nullptr; }
+void shadow::Device::SetSamplerTextureShadow(u32, void*) {}
 #include "reflection_depth.inc"
 
 static void Check(bool lbResult, const char* lpcName)

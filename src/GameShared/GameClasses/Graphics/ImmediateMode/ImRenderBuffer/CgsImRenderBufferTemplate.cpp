@@ -1,5 +1,5 @@
-#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
-#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
+#include "pc/gcm/renderengine/ShaderBindings.h"
+#include "pc/gcm/renderengine/GeometryBindings.h"
 // =============================================================================
 // CgsGraphics::ImRenderBuffer<V> - method bodies, faithfully decompiled from the
 // PS3 External ELF dossiers for the <Basic2dColouredTexturedVertex> instantiation
@@ -20,10 +20,10 @@
 // <Windows.h> + <d3d9.h> must be brought in first, before that guarded include runs.
 #include <Windows.h>                            // full Win32 (LPMSG / winuser) for <d3d9.h>
 #include <d3d9.h>
-#include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
-#include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
-#include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
-#include "pc/gcm/renderengine/ImWhiteTexturePCLeaf.h"
+#include "pc/gcm/renderengine/TextureUpload.h"
+#include "pc/gcm/renderengine/SamplerStateCache.h"
+#include "pc/gcm/renderengine/ShaderConstantCache.h"
+#include "pc/gcm/renderengine/ImWhiteTexture.h"
 
 #include "pc/gcm/renderengine/device.h"        // renderengine::gDevice, gDisplayWidth/Height (the existing PC D3D9 device)
 #include "pc/gcm/renderengine/texture.h"        // renderengine::Texture::mpD3DTexture

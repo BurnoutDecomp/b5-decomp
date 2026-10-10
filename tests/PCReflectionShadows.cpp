@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <unordered_map>
-#include "pc/gcm/renderengine/ShadowReceiverPCLeaf.h"
+#include "pc/gcm/renderengine/ShadowReceiver.h"
 #include "pc_reflection_shadow_programs.inc"
 
 static IDirect3DDevice9* spDevice;

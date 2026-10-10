@@ -1,7 +1,7 @@
 #pragma once
 
-#include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
-#include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
+#include "pc/gcm/renderengine/GraphicsSettings.h"
+#include "pc/gcm/renderengine/SamplerStateCache.h"
 
 namespace renderengine
 {

@@ -25,7 +25,7 @@
 //
 // Usage (the sky dome's / corona's exact shape -- the adopt call is the
 // CONSUMER's, not a wrapper in the leaf; ProgramBufferPC_Adopt is
-// programbuffer.h:123, body ImmediateModePCLeaf.cpp:833, and its third argument
+// programbuffer.h:123, body ImmediateMode.cpp:833, and its third argument
 // is 0 = vertex, 1 = pixel):
 //
 //     renderengine::ProgramBufferData* lpVs = renderengine::ProgramBufferPC_Adopt(

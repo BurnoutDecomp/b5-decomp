@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
-#include "pc/gcm/renderengine/InstancedDrawPCLeaf.h"
-#include "pc/gcm/renderengine/DepthOnlyPCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
+#include "pc/gcm/renderengine/InstancedDraw.h"
+#include "pc/gcm/renderengine/DepthOnly.h"
 #include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"
 
 #include <cstddef>
@@ -151,7 +151,7 @@ namespace renderengine
     // lpSamplerBlock is that TextureState's own 32-byte sampler block (the object's +0x00, which
     // the console's sub_827E8950 reads field by field); null when the caller has no state.
     bool  WorldShader_BindTextureUnit(u32 luUnit, const void* lpRaster, const void* lpSamplerBlock);
-    // [PC leaf, pc/gcm/renderengine/ImmediateModePCLeaf.cpp] Drain the immediate-mode
+    // [PC leaf, pc/gcm/renderengine/ImmediateMode.cpp] Drain the immediate-mode
     // shader-constant rows staged by RenderEngineDeviceBeginShaderStates.
     void  ImShaderConstants_Flush();
     // The draw stash the D3DDevice_* shims fill (index/vertex source for the UP draw path).
@@ -1037,7 +1037,7 @@ namespace shadow
     // AddShaderTechniqueConstantsToDispatchBin in the order [A][C][B][D].
     //
     // FLAG PC-platform leaf: Xenos constant-memory writes go through the shared
-    // ShaderConstantCachePCLeaf before Set{Vertex,Pixel}ShaderConstantF. Every
+    // ShaderConstantCache before Set{Vertex,Pixel}ShaderConstantF. Every
     // listed constant is offered here, but unchanged register values are skipped
     // at the native boundary. Value comparison also catches PC sources mutated
     // in place, unlike the console's latest-push-buffer-pointer comparison.

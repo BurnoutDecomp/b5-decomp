@@ -1,10 +1,10 @@
 #pragma once
 
 #include <d3d9.h>
-#include "pc/gcm/renderengine/GpuFrameTimingPCLeaf.h"
-#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
-#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
-#include "pc/gcm/renderengine/NvApiResourceRegistryPCLeaf.h"
+#include "pc/gcm/renderengine/GpuFrameTiming.h"
+#include "pc/gcm/renderengine/GeometryBindings.h"
+#include "pc/gcm/renderengine/ShaderBindings.h"
+#include "pc/gcm/renderengine/NvApiResourceRegistry.h"
 
 // FLAG PC-platform leaf: primary D3D9Ex flip output. ResetEx must execute on the
 // device-creation thread, between joined engine frames. A failed reset is rolled

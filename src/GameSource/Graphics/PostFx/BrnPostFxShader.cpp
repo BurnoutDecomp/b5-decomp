@@ -10,7 +10,7 @@
 #include "pc/gcm/renderengine/VertexDescriptor.h"                               // VertexDescriptor / VertexDescriptorData
 #include "pc/gcm/renderengine/texture.h"                                        // renderengine::Texture
 #include "pc/gcm/renderengine/Xbox2SurfaceShims.h"                              // renderengine::gpD3DDevice
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                              // renderengine::PostFxSourceSampler_ApplyState
+#include "pc/gcm/renderengine/ShadowPass.h"                              // renderengine::PostFxSourceSampler_ApplyState
 #include "pc/gcm/renderengine/device.h"                                        // default-off native input observation
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"         // ResourceAllocatorCreate
 #include "rw/math/vpu/matrix44affine_operation.h"                               // vpu::Inverse(Matrix44Affine) / Mult(affine,affine)
@@ -413,7 +413,7 @@ namespace renderengine
     // SIGNATURES ARE COPIED VERBATIM FROM samplerstate.cpp. MSVC mangles the parameter type into the
     // function's decorated name, so a copy of this struct in an anonymous namespace -- or an
     // Initialize spelled over `SamplerState*` instead of `SamplerStateData*` -- produces a symbol NO
-    // TU CAN EVER DEFINE. That is the exact defect ShadowPassPCLeaf.h exists to document; it was
+    // TU CAN EVER DEFINE. That is the exact defect ShadowPass.h exists to document; it was
     // caught here by dumping this object's undefined externals rather than by reading.
     //
     // ⚠ THREE OF THE FIELD NAMES BELOW ARE WRONG, and the evidence is in Construct. samplerstate.cpp
@@ -706,13 +706,13 @@ void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
         // XGGetMicrocodeShaderParts, whose PC stub returns 0 WITHOUT writing *lpParts; both then read
         // that uninitialised ProgramMicrocodeParts for the microcode size and hand a 64-bit function
         // pointer truncated into the u32 muFunction to Xbox2CreateConstantTable
-        // (ImmediateModePCLeaf.cpp:626-646 states this outright).
+        // (ImmediateMode.cpp:626-646 states this outright).
         //
         // When the supplied binary already IS a converted platform-4 ShaderProgramBuffer -- which is
         // exactly what the sibling shader step's permutation-0 pair is -- there is nothing for
         // Initialize to build: the image carries the shader type at +0, the variable count at +4, the
         // microcode size at +8, the D3D9 SM3 bytecode at +0x14 and the ProgramVariableDescriptor table
-        // after it. ProgramBufferPC_Adopt (programbuffer.h:123, body ImmediateModePCLeaf.cpp:647)
+        // after it. ProgramBufferPC_Adopt (programbuffer.h:123, body ImmediateMode.cpp:647)
         // validates that shape, copies the image into the low-4GB arena and rebases the descriptors'
         // name offsets from FILE offsets to absolute addresses, so GetVariableHandleByName below works
         // unchanged. A non-PC binary returns null and falls through to the console path untouched.
@@ -923,7 +923,7 @@ void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
 // console does.
 //
 // A slot built by ProgramBufferPC_Adopt owns NOTHING THE ALLOCATOR EVER ISSUED. The adopted image is
-// carved from the PC leaf's own low-4GB arena (ImmediateModePCLeaf.cpp:148 ArenaAlloc), a BUMP
+// carved from the PC leaf's own low-4GB arena (ImmediateMode.cpp:148 ArenaAlloc), a BUMP
 // allocator with no free function at all -- grep the leaf: ArenaAlloc and ArenaAddress exist, there is
 // no ArenaFree, and `suArenaUsed` only ever advances. So:
 //   * DoFree MUST NOT be called on an adopted slot. The default DoFree in rwcore_structs.h is an inline
@@ -1011,9 +1011,9 @@ void BrnPostFxShader::Shader::Destruct(rw::IResourceAllocator* lpAllocator)
 //     that goes through `addi r11, r11, 0x78|0x178` then `slwi r11, r11, 4`. Byte 1 is never read.
 //   * shadowingdevice.cpp:1035 does `WorldShaderConstants_Set(lbPixel, lpHandle[0], lpSource,
 //     lpHandle[3])` over the same 4-byte handle, with the same lane note above it.
-//   * ImmediateModePCLeaf.cpp:564 stages `lpHandle->mu8RegisterSet` as the register index, and
+//   * ImmediateMode.cpp:564 stages `lpHandle->mu8RegisterSet` as the register index, and
 //     BrnIm3d.cpp:349 reads `maStateHandles[9].mu8RegisterSet` as a SAMPLER UNIT.
-//   * ImmediateModePCLeaf.cpp:51-56 says why the PC agrees with the console here even though the
+//   * ImmediateMode.cpp:51-56 says why the PC agrees with the console here even though the
 //     X360 field NAMES read backwards: the transcoder writes each descriptor as
 //     `<I B B B B  nameOffset, regIdx, typeByte, regCount, 0>` and GetVariableHandleByName copies
 //     +4 -> handle byte 0 and +5 -> handle byte 1, so on PC byte 1 is the DATA TYPE.
@@ -1039,7 +1039,7 @@ void BrnPostFxShader::Shader::SetProgram(const rw::math::vpu::Vector4* lpaVertex
     // pixel loop branches on the handle's program-type byte (`lbz r11, -1(r7)`, byte 2) to pick the
     // vertex constant base (0x78) or the pixel base (0x178); the vertex loop hands the whole handle to
     // renderengine::Device::BeginShaderStates, whose PC leaf reads the same byte
-    // (ImmediateModePCLeaf.cpp:566, `mbPixel = (lpHandle->mu8ShaderType != 0)`). A name resolved out
+    // (ImmediateMode.cpp:566, `mbPixel = (lpHandle->mu8ShaderType != 0)`). A name resolved out
     // of the VERTEX program buffer carries type 0 and a PIXEL one carries non-zero, so in practice
     // the vertex loop always takes the vertex bank -- deriving it rather than hard-coding `false`
     // costs nothing and keeps the two loops honest about where the bank actually comes from.
@@ -1744,7 +1744,7 @@ void BrnPostFxShader::Render(f32 lfWhiteLevel,
     // WHAT REPLACES IT IS NARROWER AND STILL HARD: a slot whose programs are NULL is not drawn. That
     // is not a hypothetical -- Shader::Construct leaves a slot empty when it is handed a null pair,
     // and renderengine::ProgramBufferPC_Adopt returns null for any image that fails its shape check
-    // (ImmediateModePCLeaf.cpp:671-690), so a truncated or mis-sized array in the generated leaf
+    // (ImmediateMode.cpp:671-690), so a truncated or mis-sized array in the generated leaf
     // lands here rather than in the rasteriser. SetProgram on an empty slot binds NO program at all,
     // which on D3D9 leaves whatever the previous draw installed -- the quad would then rasterise
     // through a foreign shader and write a garbage frame with no error anywhere. Reporting once and
