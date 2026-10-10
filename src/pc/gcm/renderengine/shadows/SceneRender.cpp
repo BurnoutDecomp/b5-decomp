@@ -6,6 +6,7 @@
 #include "pc/gcm/renderengine/shadows/RenderContext.h"
 #include "pc/gcm/renderengine/DepthRange.h"
 #include "pc/gcm/renderengine/device.h"
+#include "pc/gcm/renderengine/StateBlockRestore.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstdio>
@@ -29,6 +30,8 @@ namespace CgsPC::Shadows
         const auto* lpCamera = Reflections::GetShadowCamera(luCascade);
         auto* lpDevice = renderengine::gDevice;
         if (!lpCamera || !lpDevice) return;
+        const f32 lfDistance = Debris().GetDrawDistance(NormalDistance());
+        if (!Reflections::ParticleCapture::HasDebrisShadow(*lpData, lfDistance)) return;
         IDirect3DStateBlock9* lpSaved = nullptr;
         if (FAILED(lpDevice->CreateStateBlock(D3DSBT_ALL, &lpSaved))) return;
         const auto leLogicalDepth = renderengine::DepthRangePC::GetState(lpDevice).meLogicalCompare;
@@ -38,9 +41,9 @@ namespace CgsPC::Shadows
         sbDrawingDebris = true;
         lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
         const u32 luCount = Reflections::ParticleCapture::RenderDebrisShadow(*lpData, *lpCamera,
-            Debris().GetDrawDistance(NormalDistance()));
+            lfDistance);
         sbDrawingDebris = false;
-        lpSaved->Apply(); lpSaved->Release();
+        renderengine::RestoreStateBlockPC(lpSaved); lpSaved->Release();
         renderengine::DepthRangePC::GetState(lpDevice).meLogicalCompare = leLogicalDepth;
         shadow::Device::ResetShadowing();
         static const bool sbTrace = std::getenv("BRN_SMALL_SHADOW_TRACE") != nullptr;

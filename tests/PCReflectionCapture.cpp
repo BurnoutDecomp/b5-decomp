@@ -7,6 +7,7 @@
 #include "pc/gcm/renderengine/DepthRange.h"
 #include "pc/gcm/renderengine/reflections/GlassCapture.h"
 #include "pc/gcm/renderengine/reflections/LightSubmission.h"
+#include "pc/gcm/renderengine/StateBlockRestore.h"
 static u32 suChecks = 0, suFailures = 0;
 static void Check(bool lbPass, const char* lpcName)
 { ++suChecks; if (!lbPass) { ++suFailures; std::printf("FAIL %s\n", lpcName); } }
@@ -112,6 +113,53 @@ int main()
     CgsPC::Shadows::sbDrawingDebris=false;
     Check(CgsPC::Shadows::ColourMask(15)==15 && CgsPC::Shadows::DepthWrite(FALSE)==FALSE,
         "debris shadow policy does not alter normal particle drawing");
+
+    // A temporary shadow draw populates the caches, then restores a different
+    // hardware state. A repeated later request must reach D3D rather than skip.
+    IDirect3DVertexBuffer9 *lpVbA=nullptr,*lpVbB=nullptr;
+    IDirect3DIndexBuffer9 *lpIbA=nullptr,*lpIbB=nullptr;
+    IDirect3DVertexDeclaration9 *lpDeclA=nullptr,*lpDeclB=nullptr;
+    Require(lpDevice->CreateVertexBuffer(64,0,0,D3DPOOL_MANAGED,&lpVbA,nullptr),"baseline vertices");
+    Require(lpDevice->CreateVertexBuffer(64,0,0,D3DPOOL_MANAGED,&lpVbB,nullptr),"temporary vertices");
+    Require(lpDevice->CreateIndexBuffer(16,0,D3DFMT_INDEX16,D3DPOOL_MANAGED,&lpIbA,nullptr),"baseline indices");
+    Require(lpDevice->CreateIndexBuffer(16,0,D3DFMT_INDEX16,D3DPOOL_MANAGED,&lpIbB,nullptr),"temporary indices");
+    D3DVERTEXELEMENT9 laDeclA[]={{0,0,D3DDECLTYPE_FLOAT3,D3DDECLMETHOD_DEFAULT,D3DDECLUSAGE_POSITION,0},D3DDECL_END()};
+    D3DVERTEXELEMENT9 laDeclB[]={{0,0,D3DDECLTYPE_FLOAT4,D3DDECLMETHOD_DEFAULT,D3DDECLUSAGE_POSITION,0},D3DDECL_END()};
+    Require(lpDevice->CreateVertexDeclaration(laDeclA,&lpDeclA),"baseline declaration");
+    Require(lpDevice->CreateVertexDeclaration(laDeclB,&lpDeclB),"temporary declaration");
+    const float lafA[]={1,2,3,4},lafB[]={5,6,7,8};
+    renderengine::PCSetVertexShaderConstantF(lpDevice,0,lafA,1);
+    renderengine::PCSetPixelShaderConstantF(lpDevice,0,lafA,1);
+    renderengine::PCSetSamplerState(lpDevice,0,D3DSAMP_ADDRESSU,D3DTADDRESS_CLAMP);
+    renderengine::GeometryBindingsPC::gCache.BindVertex(lpDevice,lpVbA,0,16);
+    renderengine::GeometryBindingsPC::gCache.BindIndex(lpDevice,lpIbA);
+    renderengine::PCSetVertexDeclaration(lpDevice,lpDeclA);
+    IDirect3DStateBlock9* lpSavedState=nullptr;
+    Require(lpDevice->CreateStateBlock(D3DSBT_ALL,&lpSavedState),"temporary pass state block");
+    renderengine::PCSetVertexShaderConstantF(lpDevice,0,lafB,1);
+    renderengine::PCSetPixelShaderConstantF(lpDevice,0,lafB,1);
+    renderengine::PCSetSamplerState(lpDevice,0,D3DSAMP_ADDRESSU,D3DTADDRESS_WRAP);
+    renderengine::GeometryBindingsPC::gCache.BindVertex(lpDevice,lpVbB,0,16);
+    renderengine::GeometryBindingsPC::gCache.BindIndex(lpDevice,lpIbB);
+    renderengine::PCSetVertexDeclaration(lpDevice,lpDeclB);
+    Require(renderengine::RestoreStateBlockPC(lpSavedState),"restore temporary pass");lpSavedState->Release();
+    float lafActual[4]={};DWORD luAddress=0;
+    renderengine::PCSetVertexShaderConstantF(lpDevice,0,lafB,1);lpDevice->GetVertexShaderConstantF(0,lafActual,1);
+    Check(std::memcmp(lafActual,lafB,sizeof(lafB))==0,"vehicle vertex constants rebind after native state restoration");
+    renderengine::PCSetPixelShaderConstantF(lpDevice,0,lafB,1);lpDevice->GetPixelShaderConstantF(0,lafActual,1);
+    Check(std::memcmp(lafActual,lafB,sizeof(lafB))==0,"vehicle pixel constants rebind after native state restoration");
+    renderengine::PCSetSamplerState(lpDevice,0,D3DSAMP_ADDRESSU,D3DTADDRESS_WRAP);lpDevice->GetSamplerState(0,D3DSAMP_ADDRESSU,&luAddress);
+    Check(luAddress==D3DTADDRESS_WRAP,"vehicle sampler state rebinds after native state restoration");
+    IDirect3DVertexBuffer9* lpActualVb=nullptr;UINT luOffset=0,luStride=0;
+    renderengine::GeometryBindingsPC::gCache.BindVertex(lpDevice,lpVbB,0,16);lpDevice->GetStreamSource(0,&lpActualVb,&luOffset,&luStride);
+    Check(lpActualVb==lpVbB,"vehicle vertices rebind after native state restoration");if(lpActualVb)lpActualVb->Release();
+    IDirect3DIndexBuffer9* lpActualIb=nullptr;
+    renderengine::GeometryBindingsPC::gCache.BindIndex(lpDevice,lpIbB);lpDevice->GetIndices(&lpActualIb);
+    Check(lpActualIb==lpIbB,"vehicle indices rebind after native state restoration");if(lpActualIb)lpActualIb->Release();
+    IDirect3DVertexDeclaration9* lpActualDecl=nullptr;
+    renderengine::PCSetVertexDeclaration(lpDevice,lpDeclB);lpDevice->GetVertexDeclaration(&lpActualDecl);
+    Check(lpActualDecl==lpDeclB,"vehicle declaration rebinds after native state restoration");if(lpActualDecl)lpActualDecl->Release();
+    lpVbA->Release();lpVbB->Release();lpIbA->Release();lpIbB->Release();lpDeclA->Release();lpDeclB->Release();
 
     auto* lpLow=static_cast<u8*>(VirtualAlloc(reinterpret_cast<void*>(0x18000000),65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
     if(!lpLow || reinterpret_cast<uintptr_t>(lpLow)>0xffffffffu)return 2;
