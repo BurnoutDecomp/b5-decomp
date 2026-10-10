@@ -49,6 +49,26 @@ Trc::Trc(const Trc& rOther)
 }
 
 // ---------------------------------------------------------------------------
+// Trc::Trc (value constructor)
+//
+//   miMessageId = iMessageId
+//   mMessage    = String16(Locale::GetString(iMessageId), allocator())
+//   for each option k in 0..3: miCode = 0, mText = the empty string
+//   _SetMsgOptions(iPackedCodes)
+//
+// The id is stored before the localizer runs. The localizer call passes a zero
+// second argument, the same call shape _SetMsgOptions uses per option code. The
+// option count gets no store here; _SetMsgOptions zeroes it before appending.
+// ---------------------------------------------------------------------------
+Trc::Trc(int iMessageId, int iPackedCodes)
+    : miMessageId(iMessageId)
+    , mMessage(reinterpret_cast<const char16_t*>(Locale::GetString(iMessageId)), allocator())
+    // maOptions[] default-constructed: each miCode 0, each mText the empty string.
+{
+    _SetMsgOptions(iPackedCodes);
+}
+
+// ---------------------------------------------------------------------------
 // Trc::~Trc @ 0x82B555D8
 //
 //   for each option k in 3..0: free option[k].mText if it owns a buffer
@@ -145,18 +165,15 @@ MessageTrc::~MessageTrc()
 }
 
 // ---------------------------------------------------------------------------
-// MessageTrc::Apply @ 0x82C44CF8
+// MessageTrc::Apply (Message vtable +8)
 //
-//   return pTarget->DisplayTrcMessage(pThis);   // pTarget->vtable[+0x48](pTarget, pThis)
-//
-// A static double-dispatch thunk: the X360 takes the message in r3 and the target
-// in r4, swaps them so the target becomes `this`, loads the target's vtable and
-// tail-calls its slot +0x48 (18) with (target, message). Mirrors
-// RealmcCore::Message::Apply, only the dispatched slot differs (+0x48 vs +0x54).
+// Swap the two arguments so the processor becomes `this` and tail-call its slot
+// +0x48 with the message: the MessageTrc handler. Mirrors Message::Apply, only
+// the dispatched slot differs (+0x48 vs +0x54).
 // ---------------------------------------------------------------------------
-int MessageTrc::Apply(MessageTrc* pThis, IRealmcTrcTarget* pTarget)
+void MessageTrc::Apply(IMessageProcessor* pProcessor)
 {
-    return pTarget->DisplayTrcMessage(pThis);
+    pProcessor->ProcessMessage(this);
 }
 
 } // namespace RealmcCore

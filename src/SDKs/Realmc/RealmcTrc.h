@@ -63,6 +63,14 @@ struct TrcMessageOption
 class Trc
 {
 public:
+    // The value constructor the bootup / save / load tasks and
+    // XenonRunnableTask::SelectDevice build their messages with: store the
+    // message id, construct the main message text from Locale::GetString(id),
+    // default-construct the four options (code 0, the empty string), then
+    // _SetMsgOptions(iPackedCodes). The option count is left to _SetMsgOptions,
+    // which zeroes it first.
+    Trc(int iMessageId, int iPackedCodes);
+
     // @ 0x82C465C0 -- copy construct: copy miMessageId and miNumOptions verbatim,
     //                 RangeInitialize mMessage from the source range, and copy each
     //                 of the four options (code + a self-guarded range-assign of the
@@ -81,6 +89,10 @@ public:
     //                 whose text is Locale::GetString(code). The X360 leaves the last
     //                 helper's result in r3; there is no meaningful return (a setter).
     void _SetMsgOptions(int nPackedCodes);
+
+    // The number of active options (read by RealmcIface::XenonMessageFilter's
+    // MessageTrc handler).
+    int GetNumOptions() const { return miNumOptions; }
 
 private:
     int              miMessageId;    // +0x00
@@ -104,9 +116,9 @@ private:
 //     RealmcCore::MessageTrc::MessageTrc   @ 0x82C467D0  (value ctor)
 //     RealmcCore::MessageTrc::~MessageTrc  @ 0x82C46428
 //
-// LAYOUT (from the ctor/dtor store offsets; Message base == vtable + lock = 8 B):
-//   +0x00  vtable pointer (Message base off_821BA2CC then final off_821BA37C)
-//   +0x04  muLock   -- inherited from Message; atomically zeroed in the ctor
+// LAYOUT (from the ctor/dtor store offsets; Message base == vtable + count = 8 B):
+//   +0x00  vtable pointer
+//   +0x04  miRefCount -- inherited from Message; atomically zeroed in the ctor
 //   +0x08  mTrc     -- the embedded Trc payload (copy-constructed from the ctor's
 //                      Trc argument at a1+2 == this+8; ends at +0x70 on X360)
 //   +0x70  miValue  -- the ctor's third argument, stored verbatim (a1[28] = a3).
@@ -115,32 +127,6 @@ private:
 // (Message widens to 16 B of members on the 64-bit host, so the byte spans widen
 //  but the member set is identical -- semantic parity by NAME, not byte offset.)
 // ===========================================================================
-
-class MessageTrc;
-
-// ---------------------------------------------------------------------------
-// IRealmcTrcTarget -- the object MessageTrc::Apply() dispatches into. Its vtable
-// slot +0x48 (18) accepts the MessageTrc and handles the TCR message. The padding
-// virtuals below pin the dispatched method to byte offset 0x48 (slot 18 for 4-byte
-// X360 pointers: slot 0 == dtor at +0x00, so the 17 reserved slots fill +0x04 ..
-// +0x44 and DisplayTrcMessage lands at +0x48). Mirrors the RealmcCore::Message /
-// RealmcIface::MessageShowAutosaveIcon dispatch-target idiom, only the slot differs.
-// ---------------------------------------------------------------------------
-class IRealmcTrcTarget
-{
-public:
-    virtual ~IRealmcTrcTarget() {}                   // +0x00
-    virtual void Reserved01() = 0;  virtual void Reserved02() = 0;  // +0x04 +0x08
-    virtual void Reserved03() = 0;  virtual void Reserved04() = 0;  // +0x0C +0x10
-    virtual void Reserved05() = 0;  virtual void Reserved06() = 0;  // +0x14 +0x18
-    virtual void Reserved07() = 0;  virtual void Reserved08() = 0;  // +0x1C +0x20
-    virtual void Reserved09() = 0;  virtual void Reserved10() = 0;  // +0x24 +0x28
-    virtual void Reserved11() = 0;  virtual void Reserved12() = 0;  // +0x2C +0x30
-    virtual void Reserved13() = 0;  virtual void Reserved14() = 0;  // +0x34 +0x38
-    virtual void Reserved15() = 0;  virtual void Reserved16() = 0;  // +0x3C +0x40
-    virtual void Reserved17() = 0;                                  // +0x44
-    virtual int  DisplayTrcMessage(MessageTrc* pMessage) = 0;       // +0x48
-};
 
 // ---------------------------------------------------------------------------
 // RealmcCore::MessageTrc
@@ -162,12 +148,12 @@ public:
     //                 this+8), then the Message base dtor restores the base vtable.
     ~MessageTrc() override;
 
-    // @ 0x82C44CF8 -- dispatch this message onto pTarget via pTarget's vtable slot
-    //                 +0x48 (18): pTarget->DisplayTrcMessage(pThis).
-    //
-    // IDA lists (a1 = pThis, a2 = pTarget); the asm swaps r3/r4 so the target is
-    // `this` for the dispatch (mirrors RealmcCore::Message::Apply @ 0x82C44C08).
-    static int Apply(MessageTrc* pThis, IRealmcTrcTarget* pTarget);
+    // Message vtable +8 -- pProcessor->ProcessMessage(this), the processor's
+    //                       +0x48 slot (the MessageTrc handler).
+    void Apply(IMessageProcessor* pProcessor) override;
+
+    // The embedded TCR message (read by the MessageTrc handlers).
+    const Trc& GetTrc() const { return mTrc; }
 
 private:
     Trc mTrc;      // +0x08  embedded TCR-message payload (copy-constructed)

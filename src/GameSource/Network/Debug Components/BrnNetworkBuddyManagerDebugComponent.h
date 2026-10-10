@@ -67,6 +67,10 @@ namespace BrnNetwork
     protected:
         const char* GetName() const override;   // @ 0x825856F0 -> "Buddies"
 
+        // Register the buddy actions + selection indices with the debug menu and, on first
+        // activation, carve the outgoing event queue from the debug allocator.
+        void OnActivate() override;
+
     private:
         // ---- static debug-menu action callbacks (registered with the debug menu; lpData is this) ----
         // Each posts one network-IN event onto mpEventQueue (event tag + byte size are X360-authoritative,

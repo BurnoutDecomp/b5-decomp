@@ -31,20 +31,44 @@
 // accessed BY NAME and absolute offsets are NOT static_asserted (same rule as the
 // sibling BrnNetwork::*ManagerX360 homes).
 //
-// BLOCKED FRONTIER (declaration-only here; NOT reconstructed -- see the .cpp banner):
-//   * GetAchievementsFromX360Api / WriteAchievements pivot on the X360 rodata table
-//     unk_8202B068, an achievement-dwId <-> local-bit-index dispatch table whose
-//     bytes AND length (bounded by the "leEnumIndex <= E_IMAGE_GALLERY_TYPE_COUNT"
-//     end-marker string) are unrecoverable. Guessing that table would corrupt the
-//     Xbox-Live achievement ids, so both are BLOCKED, not fabricated.
-//   * Update needs the un-homed GameStateModule::GetControllerToGameStateInterface()
-//     and its returned interface's +0xD8 signed-in-user-index member; BLOCKED.
+// The per-frame pump: Update tracks the active controller's user index, and while that
+// user is signed in and no asynchronous call is in flight, first downloads the user's
+// earnt achievements (GetAchievementsFromX360Api: enumerate, then map each earnt
+// achievement id back to its local bit through KAU_ACHIEVEMENT_IDS), then writes up to
+// three queued achievements per call (WriteAchievements). The system calls go through the
+// PC platform layer (CgsXboxLivePC*.cpp).
 // ----------------------------------------------------------------------------
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"            // CgsContainers::BitArray<N>
 #include "GameShared/GameClasses/System/CgsXOverlapped.h"            // CgsSystem::CgsXOverlapped
 #include "GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h" // base + EAchievement
+
+// ---------------------------------------------------------------------------
+// The two system-software achievement records the manager hands the enumerate / write
+// calls (console layouts: details 36 bytes -- id, three string pointers, image id, cred,
+// achieved FILETIME, flags; write record 8 bytes -- user index, achievement id). The
+// string pointers are host pointers here; nothing on the host reads them.
+// ---------------------------------------------------------------------------
+struct XACHIEVEMENT_DETAILS
+{
+    u32       dwId;               // console +0x00
+    wchar_t*  pwszLabel;          // console +0x04
+    wchar_t*  pwszDescription;    // console +0x08
+    wchar_t*  pwszUnachieved;     // console +0x0C
+    u32       dwImageId;          // console +0x10
+    u32       dwCred;             // console +0x14
+    u32       dwAchievedLow;      // console +0x18 (ftAchieved.dwLowDateTime)
+    u32       dwAchievedHigh;     // console +0x1C (ftAchieved.dwHighDateTime)
+    u32       dwFlags;            // console +0x20
+};
+
+struct XUSER_ACHIEVEMENT
+{
+    u32 dwUserIndex;              // +0x00
+    u32 dwAchievementId;          // +0x04
+};
+static_assert(sizeof(XUSER_ACHIEVEMENT) == 8, "XUSER_ACHIEVEMENT is 8 bytes");
 
 namespace BrnGameState
 {
@@ -65,6 +89,8 @@ class AchievementManagerX360 : public AchievementManagerBase
 public:
     // The number of achievements the X360 SKU tracks (every bounds compare is `>= 0x32`).
     static const u32 KU_NUM_ACHIEVEMENTS = 50;
+    // At most this many achievements go into one system write (the write-record count).
+    static const u32 KU_MAX_ACHIEVEMENTS_PER_WRITE = 3;
 
     // ===== X360 lifecycle (hide the base's platform-neutral Prepare/Release) =====
 
@@ -78,21 +104,21 @@ public:
     // re-construct the overlapped. Returns true.
     bool Release();
 
-    // ===== BLOCKED (declaration-only; see .cpp banner + header BLOCKED note) =====
+    // ===== the per-frame achievement pump =====
 
-    // X360 0x823967C0 (called by GameStateModule::PreWorldUpdate). Per-frame pump.
-    // BLOCKED: depends on the un-homed GameStateModule::GetControllerToGameStateInterface()
-    // + its +0xD8 user-index member, and drives the two table-gated pumps below.
-    u32 Update(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
-               GameStateModuleIO::OutputBuffer* lpOutput);
+    // Called by GameStateModule::PreWorldUpdate. Adopt the active
+    // controller's user index (a change resets the pump to idle); while that user is signed
+    // in and nothing is in flight, download the earnt set once, then write queued ids.
+    void Update(const GameStateModuleIO::PreWorldInputBuffer* lpPreWorldInputBuffer,
+                GameStateModuleIO::OutputBuffer* lpOutputBuffer);
 
-    // X360 0x8238C990. BLOCKED: parses the XEnumerate result against the unrecoverable
-    // unk_8202B068 achievement-id dispatch table.
-    bool GetAchievementsFromX360Api(GameStateModuleIO::OutputBuffer* lpOutput);
+    // Start (state 0) or poll (state 1) the achievement enumeration; when it
+    // completes, rebuild mAchievementsEarnt from the achieved entries and report true (state 2).
+    bool GetAchievementsFromX360Api(GameStateModuleIO::OutputBuffer* lpOutputBuffer);
 
-    // X360 0x8238CEA0. BLOCKED: fills XUSER_ACHIEVEMENT.dwAchievementId from the
-    // unrecoverable unk_8202B068 table before XUserWriteAchievements.
-    u32 WriteAchievements(GameStateModuleIO::OutputBuffer* lpOutput);
+    // Move up to three queued achievements into the write records, mark
+    // them earnt, post their telemetry and the new earnt count, and start the system write.
+    void WriteAchievements(GameStateModuleIO::OutputBuffer* lpOutputBuffer);
 
 protected:
     // ===== the two base pure virtuals, realised over the bit sets (X360-attested) =====
@@ -114,13 +140,11 @@ private:
     void*                                        mhEnumerator;         // +0x34 (HANDLE)
     CgsSystem::CgsXOverlapped                    mOverLapped;          // +0x38 (28 bytes)
 
-    // FLAG: scratch buffers touched ONLY by the BLOCKED enumerate/write pumps. Sizes
-    // are X360-asm-attested (details stride 36 == 9 dwords from +0x54; the write buffer
-    // begins at +0x75C == +0x54 + 50*36). Modelled as opaque storage so the layout is
-    // documented; do NOT access these until GetAchievementsFromX360Api / WriteAchievements
-    // are unblocked (the unk_8202B068 id table is recovered).
-    u8 maAchievementDetails[KU_NUM_ACHIEVEMENTS * 36]; // +0x54  (XACHIEVEMENT_DETAILS[50])
-    u8 maAchievementsToWrite[KU_NUM_ACHIEVEMENTS * 8]; // +0x75C (XUSER_ACHIEVEMENT[50])
+    // Enumerate / write scratch (console: the details from +0x54 at a 36-byte stride, the write
+    // records from +0x75C == +0x54 + 50 * 36; three of them, so the manager ends at +0x774 and
+    // the module's road-rules manager follows at the next 8-byte boundary).
+    XACHIEVEMENT_DETAILS maAchievementDetails[KU_NUM_ACHIEVEMENTS];            // +0x54
+    XUSER_ACHIEVEMENT    maAchievementsToWrite[KU_MAX_ACHIEVEMENTS_PER_WRITE]; // +0x75C
 };
 
 }

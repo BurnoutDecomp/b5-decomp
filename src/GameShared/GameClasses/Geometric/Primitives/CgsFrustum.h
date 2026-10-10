@@ -61,6 +61,16 @@ namespace CgsGeometric
         // half-space of all 8 stored planes (SoA per-plane signed-distance test).
         bool IsSphereInFrustum(const Sphere& lrSphere) const;
 
+        // The point common to three planes (declared
+        // `bool IntersectionOf3Planes(Plane, Plane, Plane, Vector3 &) const;`). Each plane is
+        // (N.xyz, D) with dot3(N, p) == D. Returns false, leaving lIntersectionPointOut untouched,
+        // when |N0 . (N1 x N2)| is below 0.001; otherwise writes the Cramer solution and returns
+        // true. Callers: DebugRender / DebugRenderCustomPlanes. Body in CgsFrustum.cpp.
+        bool IntersectionOf3Planes(rw::collision::Plane lPlane0,
+                                   rw::collision::Plane lPlane1,
+                                   rw::collision::Plane lPlane2,
+                                   Vector3&             lIntersectionPointOut) const;
+
         // CgsFrustum.h:159 (DWARF). 8 swizzled plane lanes = 128 bytes.
         Vector4 maSwizzledPlanes[8];
 

@@ -30,9 +30,16 @@ namespace BrnGui
         // An empty override (this TU).
         virtual void Select();
 
-        // Header-inlines with no out-of-line copy (declaration-only here).
-        void SetCategory(const char* lpacCategory);
-        void SetCollected(s32 liCollected);
+        // Header-inlines with no out-of-line copy (the gallery state's OnEnter and
+        // SetupCountForCategory carry them inline).
+        void SetCategory(const char* lpacCategory) { mCategoryText.SetText(lpacCategory); }
+        void SetCollected(s32 liCollected)
+        {
+            mCollectedText.SetLocalisedText("LINEUP_COLLECTED",
+                                            CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP,
+                                            liCollected,
+                                            CgsLanguage::LanguageManager::E_FORMAT_INTEGER);
+        }
 
     private:
         // DWARF cpp:23/:24 -- the child clip names.

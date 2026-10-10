@@ -387,11 +387,10 @@ void RoadRageMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
     const GameStateModuleIO::TimerStatusInterface* lpTimerStatus = lpInput->GetTimerStatusInterface();
     if (GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS)
     {
-        // 0x823448F8..0x82344908 `lfs 0x1C(r4) * lfs 0x20(r4)` -- maEntries[1].mfValue04 *
-        // maEntries[1].mfValue08, the same per-frame delta pair StuntAttackMode::PreWorldUpdate
-        // reads (FLAG there too: positional names until TimerStatusInterface::Entry is named).
+        // The words at +0x1C and +0x20 of the interface: the sim timer status's base step *
+        // multiplier, the same per-frame delta StuntAttackMode::PreWorldUpdate reads.
         // The console recomputes the product for the second call (rematerialisation); one value.
-        const f32 lfDeltaTime = lpTimerStatus->maEntries[1].mfValue08 * lpTimerStatus->maEntries[1].mfValue04;
+        const f32 lfDeltaTime = lpTimerStatus->GetSimTimerStatus()->GetCurrentTimeStep();
 
         // 0x823448FC `addi r5, r29, 0x4B40` == &lpScoringSystem->mRoadRageModeScoring.
         UpdateMaxActiveCars(lfDeltaTime, lpScoringSystem->GetRoadRageScoring());

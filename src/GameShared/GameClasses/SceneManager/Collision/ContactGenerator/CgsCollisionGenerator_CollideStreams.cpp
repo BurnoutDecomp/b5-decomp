@@ -100,7 +100,7 @@ namespace CgsCollision
 
         // The shared Create* body (the three console functions are byte-identical bar assert
         // line numbers; both assert messages are the X360 rodata verbatim, same pair the landed
-        // CreateStreamProducer / CreateLineWithTriangleListStream carry). Carve the producer and
+        // CreateFillTriangleCacheStream / CreateLineWithTriangleListStream carry). Carve the producer and
         // ONE command buffer out of the result allocator at 128-byte alignment, no result lane.
         CgsMemory::SimpleDataStreamProducer* CreateCollideStreamProducer(
             CgsMemory::LinearMalloc& lrAllocator, s32 liMaxCommands, s32 liCommandSize)
@@ -413,14 +413,8 @@ namespace CgsCollision
     // =============================================================================================
     // RunCollideSphereListWithSphereListStream @0x82811C00 (80) — desc type 8
     // (-> ExecuteSphereListWithSphereListStream). No debug reader on this one; per-batch perfmon
-    // bracket like the swept twin.
-    // ⚠️ BANNER CORRECTED 2026-08-19 (wave Q7, cluster `carcar`) — it used to read "Dead at
-    // runtime this wave: its poster (AddSphereListWithSphereListToStream @0x828119F0, the car-car
-    // leg) is not reconstructed, so the stream always carries zero commands and this returns null
-    // at the top." That is NO LONGER TRUE and a stale banner of exactly that shape is this
-    // campaign's most repeated defect: the poster is REAL above, and VehicleManager::
-    // DoCarCarContactGeneration @0x8261BB38 posts through it once per overlapping car pair per
-    // frame, so this dispatcher now runs whenever two cars overlap.
+    // bracket like the swept twin. Its poster is AddSphereListWithSphereListToStream above, fed
+    // once per overlapping car pair per frame by VehicleManager::DoCarCarContactGeneration.
     // =============================================================================================
     EA::Jobs::Job*
     BaseCollisionGenerator::RunCollideSphereListWithSphereListStream(

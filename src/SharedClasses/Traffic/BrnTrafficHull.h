@@ -74,6 +74,9 @@ struct Hull
     // &mpaSections[luIndex] (stride 48, from the asm index math).
     inline const Section* GetSection(u32 luIndex) const;
 
+    // Console-inlined, with its own range assert; returns &mpaSectionSpans[luIndex].
+    inline const SectionSpan* GetSectionSpan(u32 luIndex) const;
+
     // Console-inlined (asm 0x8222A804..0x8222A814: `lwz r9, 0x18(hull)` then
     // `add r28, lpSection->muRungOffset << 2, r9`); DWARF names it in
     // BrnBehaviourRoadRunner.cpp's MoveAlongTrafficLane{Forwards,Backwards}. The
@@ -142,6 +145,12 @@ inline const Section* Hull::GetSection(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < muNumSections, "luIndex < muNumSections");
     return &mpaSections[luIndex];
+}
+
+inline const SectionSpan* Hull::GetSectionSpan(u32 luIndex) const
+{
+    CGS_ASSERT(luIndex < muNumSectionSpans, "luIndex < muNumSectionSpans");
+    return &mpaSectionSpans[luIndex];
 }
 
 inline const f32* Hull::GetRungLengthsForSection(const Section* lpSection) const

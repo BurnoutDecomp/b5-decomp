@@ -1,8 +1,6 @@
-// Explicit instantiation of CgsLocklessQueue<u32>.
-// Callers: BrnGameState::RichPresenceManagerX360 (SetContext, PresenceThread,
-//          CreatePresenceThread, SetRichPresenceState, SetCurrentPosition, SetDistrict).
-// The queue stores 32-bit Xbox Live rich-presence context IDs.
-// X360: *>::  @ 0x82369160 (the push instantiation forced here)
+// Explicit instantiation of CgsContainers::LocklessQueue over a 32-bit payload, so the generic
+// Post / Pop / Lock / Unlock bodies compile on their own. The game's one instantiation (the rich
+// presence manager's context-pointer queues) is generated where it is used.
 #include "GameShared/GameClasses/Containers/CgsLocklessQueue.h"
 
-template class CgsLocklessQueue<u32>;
+template struct CgsContainers::LocklessQueue<u32>;

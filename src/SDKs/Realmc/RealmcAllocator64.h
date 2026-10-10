@@ -72,9 +72,16 @@
 namespace RealmcCore
 {
 
+class IRunnableTask;  // the element type (home: SDKs/Realmc/RealmcCore.h)
+
 class Allocator64
 {
 public:
+    // The element the deque stores: MemcardState's start-waiting queue holds
+    // task objects. Console elements are 4-byte pointers; on the host they are
+    // host pointers, and every page keeps the console's 64 elements.
+    typedef IRunnableTask* Element;
+
     // @ 0x82C45B48 (export-truncated symbol `Rea`) -- the deque constructor: zero
     //   every member, then seat the page ring via DoInit(nByteCapacity). MEASURED:
     //   ten `stw r11(=0)` at +0x00..+0x24 (the member init-list), then
@@ -127,8 +134,11 @@ public:
     //   Body home: RealmcAllocator64.cpp.
     ~Allocator64();
 
-    static const std::size_t KU_PageBytes  = 0x100;  // 256-byte page
-    static const std::size_t KU_ElementLog = 6;       // a2 >> 6 == a2 / 64
+    // One page holds 64 elements (256 bytes of 4-byte console elements); the
+    // byte size follows the host element width.
+    static const std::size_t KU_PageElements = 64;
+    static const std::size_t KU_PageBytes    = KU_PageElements * sizeof(Element);
+    static const std::size_t KU_ElementLog   = 6;   // n >> 6 == n / 64 elements per page
 
     // @ 0x82C455C0 -- size the page-pointer array to max((nByteCapacity>>6)+3, 8)
     //                 slots, allocate it, pre-allocate (nByteCapacity>>6)+1 pages
@@ -144,12 +154,12 @@ public:
     //                 (or this, when there was no page to free).
     void* DoPopFront();
 
-    // @ 0x82C45A80 -- push the dword *pValue at the back: grow the page array
+    // Push the element *pValue at the back: grow the page array
     //                 (DoReallocPt) when the back slot has reached capacity,
-    //                 allocate a fresh 256-byte page into the next slot, write
+    //                 allocate a fresh page into the next slot, write
     //                 the value at the current back cursor, then advance the back
     //                 slot/begin/cur/end onto the new page. Returns the new page.
-    void* DoPushBack(const int* pValue);
+    void* DoPushBack(const Element* pValue);
 
     // @ 0x82C453C8 -- free every non-null page pointer in the half-open array
     //                 range [ppBegin, ppEnd) through the backend (256 bytes each).
@@ -158,20 +168,20 @@ public:
     // ---- element-level helpers de-inlined from RealmcCore::MemcardState ----
     // These reproduce the deque front-dequeue / back-enqueue the X360 folded
     // inline into MemcardState::GetWaitingToStartTask / PutInStartWaitingQueue.
-    // They operate on 4-byte (int) elements -- the same element model DoPushBack
+    // They operate on Element (task pointer) values -- the same element model DoPushBack
     // commits to -- and defer to DoPopFront / DoPushBack at a page boundary. They
     // are NOT their own X360 functions; homing them here keeps MemcardState free
     // of raw offset access into this deque.
 
-    // Front-dequeue one element (X360 GetWaitingToStartTask): 0 when empty (the
-    //   front cursor has met the back cursor), else read the front int and advance
+    // Front-dequeue one element (MemcardState::GetWaitingToStartTask): null when
+    //   empty (the front cursor has met the back cursor), else read the front element and advance
     //   the front cursor, freeing the exhausted page via DoPopFront at a boundary.
-    int PopFront();
+    Element PopFront();
 
     // Back-enqueue one element (X360 PutInStartWaitingQueue): write iValue at the
     //   back cursor and advance it, allocating a fresh page via DoPushBack when the
     //   current page is full.
-    void PushBack(int iValue);
+    void PushBack(Element pValue);
 
 private:
     char** mppPageArray;  // +0x00

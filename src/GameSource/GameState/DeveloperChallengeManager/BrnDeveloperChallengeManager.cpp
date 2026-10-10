@@ -578,13 +578,12 @@ void DeveloperChallengeManager::PreWorldUpdate(GameStateModuleIO::PreWorldInputB
     CGS_ASSERT(lpPreWorldInputBuffer->GetTimerStatusInterface() != nullptr,
                "lpPreWorldInputBuffer->GetTimerStatusInterface()");
 
-    // Current race time = (s32 whole) + (f32 fraction) from the sim-timer entry of the timer status.
-    // FLAG: the X360 reads the int at TimerStatusInterface+0x28 and the f32 at +0x2C; those land in
-    // the second TimerStatusInterface::Entry (entry[1] base +0x18 -> miWord10 @+0x28, mfValue14 @+0x2C).
+    // Current race time = (s32 whole) + (f32 fraction) of the sim timer status's time (the int at
+    // TimerStatusInterface+0x28 and the f32 at +0x2C: the sim block at +0x18, its mTime at +0x10).
     const GameStateModuleIO::TimerStatusInterface* lpTimerStatus =
         lpPreWorldInputBuffer->GetTimerStatusInterface();
-    mlfCurrentRaceTime = static_cast<f32>(lpTimerStatus->maEntries[1].miWord10)
-                       + lpTimerStatus->maEntries[1].mfValue14;
+    const CgsSystem::Time lSimTime = lpTimerStatus->GetSimTimerStatus()->GetTime();
+    mlfCurrentRaceTime = static_cast<f32>(lSimTime.GetSeconds()) + lSimTime.GetFraction();
 
     // The X360 guards the publish + age-out behind the developer-challenges-enabled debug flag
     // (byte_82FFA7F1, a .bss byte whose init-time writer is not recovered -- a zero in the image is

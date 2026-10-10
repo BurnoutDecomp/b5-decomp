@@ -81,6 +81,8 @@ namespace CgsGraphics
         mpStripCtx[1] = 0;
         mpStripCtx[2] = 0;
         muPacketRoute = 0;
+
+        mbDecodingFrame = false;   // no decodes queued (console Construct)
     }
 
     bool MoviePlayer::SetMovieFile(const char* lpMovieFileName, bool lbPreload)

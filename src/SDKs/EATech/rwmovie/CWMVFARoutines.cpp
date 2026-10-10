@@ -18,23 +18,7 @@
 
 #include "types.hpp"
 
-class CWMVFARoutines
-{
-public:
-    // Mean of a 4x4 block of int32 samples -> *lpMeanOut (sum 16, >>4).
-    int calcMean4x4(u32* lpMeanOut, int liSampleBase, int liColumn, int liRowStride);
-
-    // Four adjacent 4x4 block-means -> lpMeanOut[0..3].
-    int calcMean4x4x4(u32* lpMeanOut, int liSampleBase, int liColumn, int liRowStride);
-
-    // Mean of an 8x8 block of byte samples -> *lpMeanOut (sum 64, >>6). Not yet verified.
-    unsigned char* calcMean8x8B(u8* lpMeanOut, int liSampleBase, int liColumn, int liRowStride);
-
-    // Two per-row gradient sums over an 8-row column strip. Not yet verified.
-    int calcGradient8x1B(u32* lpaGradientA, u32* lpaGradientB,
-                         int liRowA4, int liRowA5, int liRowA6,
-                         int liColOffset, int liColStride);
-};
+#include "CWMVFARoutines.h"
 
 // Human form of the asm's branchless abs (srawi/xor/subf) used by the SAD accumulators.
 static inline int liAbs32(int liValue)

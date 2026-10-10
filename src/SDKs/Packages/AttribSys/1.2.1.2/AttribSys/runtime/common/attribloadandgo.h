@@ -135,6 +135,22 @@ namespace Attrib
         void Export(const TypeID& lrType, const ExportID& lrExport,
                     void* lpData, unsigned int luSize);
 
+        // Drop the live data bound to export lrExport: when the id is
+        // registered, its export DataBlock is reset to {NULL, 0, kind 0}.
+        // Called by DatabaseExportPolicy::Deinitialize.
+        void ClearExport(const ExportID& lrExport);
+
+        // The export slot holding lExport, or ~0u when the id is not registered.
+        // A linear scan of the registered ids; the console inlines it into
+        // ClearExport.
+        unsigned int FindExportID(ExportID lExport) const
+        {
+            unsigned int luIndex = 0;
+            while (luIndex < mNumExports && mExportIDs[luIndex] != lExport)
+                ++luIndex;
+            return (luIndex < mNumExports) ? luIndex : 0xFFFFFFFFu;
+        }
+
         // --------------------------------------------------------------------
         // Serialised container views (the .vlt chunk stream the ctor walks
         // @0x8280A2E8). All fields are the LE-ported on-disk shape (32-bit

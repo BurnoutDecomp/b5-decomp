@@ -132,9 +132,9 @@ namespace CgsGui
         bool StopPriorityEventBlocking(EventObserver* lpEventObserver);
         bool UnregisterPriorityEvent(EventObserver* lpEventObserver, s32 liEventType);
 
-    private:
         // The override mask carried by a priority registration: which event ids this entry
         // suppresses while it is the active priority owner. @ 0x8284E870 (sMapEntry ctor).
+        // Public so the override map's member specialisations can name it.
         struct sMapEntry
         {
             CgsContainers::BitArray<KI_MAX_EVENTS_PER_OBSERVER> mOverriddenEventListBitArray;
@@ -155,6 +155,7 @@ namespace CgsGui
             }
         };
 
+    private:
         // A plain observer slot: the observer plus the bitset of events it subscribes to,
         // plus the two inline priority records ProcessInEvents fills and re-publishes.
         struct ObjectEventObserver
@@ -227,6 +228,12 @@ namespace CgsGui
                            "Cannot register for invalid events");
                 return mEventListBitArray.IsBitSet(static_cast<u32>(liEventType));
             }
+
+            // Subscribe to liEventType and file its override mask in the next pool element.
+            // Bodies in the .cpp (beside the map's sorted-insert specialisation).
+            void RegisterForEvent(s32 liEventType, const s32* lpaEventTypeOverrides,
+                                  u32& lruOverrideCount);
+            void UnRegisterForEvent(s32 liEventType);
         };
 
         // ----- private helpers (X360 bodies in this TU) ---------------------------------

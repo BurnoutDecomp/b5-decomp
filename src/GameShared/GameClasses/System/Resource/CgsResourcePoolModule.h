@@ -21,6 +21,7 @@ namespace CgsMemory { namespace MemoryIO { struct InputBuffer; struct CreateReso
 namespace CgsResource { namespace PoolIO { struct OutputBuffer; } }   // SendCreatePoolMemoryRequest target
 namespace CgsResource { namespace Events { struct AcquireResourceRequest; } }   // DoAcquireResourceRequest
 namespace CgsResource { namespace Events { struct AcquireResourceListRequest; } } // DoAcquireResourceListRequest
+namespace CgsResource { namespace Events { struct InvalidatePoolRequest; struct ValidatePoolRequest; struct DeletePoolRequest; } }
 // Defrag distribution/relocation records (pointer members only; full layouts live in the deferred
 // defrag subsystem -- forward-declared to avoid a transitive cascade for pointer-only storage).
 namespace CgsResource { using RelocationEntry = CgsMemory::RelocateOp; }
@@ -217,6 +218,14 @@ namespace CgsResource
         // @ 0x828D81D0 -- DeletePool response handler (asserts on failure result).
         void DoDeletePoolRequest(const void* lpResponse);
 
+        // CgsPoolModule.h (bodies in CgsPoolModule.cpp). Invalidate a
+        // pool (reply with its memory + descriptor and whether it was free), validate it again
+        // (only while the module is idle), and reset a pool then ask the memory module to
+        // destroy its bank.
+        void DoInvalidatePoolRequest(const Events::InvalidatePoolRequest* lpRequest, PoolIO::OutputBuffer* lpOutput);
+        void DoValidatePoolRequest(const Events::ValidatePoolRequest* lpRequest, PoolIO::OutputBuffer* lpOutput);
+        void SendDeletePoolMemoryRequest(const Events::DeletePoolRequest* lpRequest, PoolIO::OutputBuffer* lpOutput);
+
         // @ 0x828E2F88 -- select the pool and arm ordinary or live-update allocation.
         bool AllocateResourceList(u64 luId, s32 liPoolId, const void* lpEntries, s32 liNumEntries,
                                   bool* lpNeeds, void* lpResources, bool lbLiveUpdateReplace, bool lbAllowFailiure);
@@ -228,7 +237,7 @@ namespace CgsResource
         EPoolPrepareStage mePoolPrepareStage;        // +0x1A2C (a1[1675])
         EPoolReleaseStage mePoolReleaseStage;        // +0x1A30 (a1[1676])
         Pool              maPools[KI_MAX_POOLS];      // +0x1A38 the 128 resource pools (464B X360 stride)
-        CgsModule::EventReceiverQueue<16384, 16> mReceiverQueue; // +0x158C4 (a1[22033]) create/delete-pool events (DWARF CgsPoolModule.h:217)
+        CgsModule::EventReceiverQueue<16384, 16> mReceiverQueue; // +0x15844 (a1[22033]) create/delete-pool events (CgsPoolModule.h)
         ScratchPool       mScratchPool;              // +0x198C0 (a1+104576) defrag staging (Construct'd; InitPool deferred)
         AllocListSet      mAllocListSet;             // +0x19B00; DWARF CgsPoolModule.h:198
         s32               mProcessState;             // +0x19B30 defrag/alloc state machine (0..6)

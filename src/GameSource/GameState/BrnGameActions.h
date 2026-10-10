@@ -8,6 +8,7 @@
 #include "BrnCommonTypes.h"                                  // Vector3, CgsID, EntityId
 #include "GameSource/BurnoutConstants.h"                     // EActiveRaceCarIndex
 #include "GameSource/GameState/BrnGameStateSharedIO.h"       // EPlayerScoringIndex, EPlayerTeam
+#include "GameSource/GameState/SharedIO/BrnGameActionData.h" // PlayerInfo (PlayerInfoResponseAction)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"  // BrnNetwork::NetworkPlayerID
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"  // BrnGameState::GameModeParams (PrepareForModeAction payload)
 #include "GameShared/GameClasses/Containers/CgsArray.h"      // Array<T, N> (SetUpAllDriveThrusAction::maDriveThrus)
@@ -111,6 +112,15 @@ enum EGameActionType
     E_ACTION_SOUND_TRIGGER              = 218,   // DWARF 210 (+8 X360); size 32  BAND
     E_ACTION_ONLINE_PLAYER_ADDED        = 219,   // DWARF 211 (+8 X360); size 40  BAND
     E_ACTION_SETUP_NETWORK_CAR          = 5,     // DWARF BrnGameActions.h (was placeholder 221)
+    // The car-select / profile-car answers ProcessGameEvents posts; each value and size is the
+    // id/size pair at its post, the names are the debug-info ones at the band's shift.
+    E_ACTION_CAR_SELECTION_CHANGED      = 64,    // debug info 59;  size 64, case 78
+    E_ACTION_CAR_SELECTION_CHANGED_ONLINE = 67,  // debug info 62;  size 8, OnlineCarSelectManager::SpawnInStartCar
+    E_ACTION_PLAYER_CAR_COLOUR_RESPONSE = 81,    // debug info 76;  size 8, case 6
+    E_ACTION_PLAYER_INFO_RESPONSE       = 182,   // debug info 174; size 64, case 81
+    E_ACTION_UNLOCKED_LIVERY_RESPONSE   = 183,   // debug info 175; size 72, case 82
+    E_ACTION_CAR_SELECTION_RESPONSE     = 184,   // debug info 176; size 1072, case 88
+    E_ACTION_SET_LOADING_STATE          = 191,   // debug info 183; size 1, ProcessStreamingCompleteEvent / FinishStreaming
     E_ACTION_ONLINE_PLAYER_REMOVED      = 220,   // DWARF 212 (+8 X360); size 8   BAND
     // [!!] VALUE CORRECTION 2026-08-26 (stuntrace waveB CLOSURE round) -- 221 -> 229, and this is
     // the FIFTH id of the same species as the four the closure round was chartered to settle. It
@@ -174,6 +184,14 @@ enum EGameActionType
     // the correction is call-site-free -- but the producer this wave adds would have posted 173 and
     // the consumer it adds would never have heard it.
     E_ACTION_RANK_INFO_RESPONSE         = 181,   // DWARF :183 gives 173 (+8 X360); size 36
+    // The rest of the GUI data-request answers, in the same +8 band against the debug-info ids;
+    // each value and size is the id/size pair at its ProcessGameEvents (or SendAllRivalryData) post.
+    E_ACTION_LANDMARK_VARIABLE_INFO_RESPONSE = 185,   // debug info 177; size 128, case 89
+    E_ACTION_REGION_FROM_POSITION_RESPONSE   = 186,   // debug info 178; size 8, case 95
+    E_ACTION_UPDATE_GUI_ROUTE                = 187,   // debug info 179; size 1, case 117
+    E_ACTION_ALL_RIVALRY_DATA_RESPONSE       = 188,   // debug info 180; size 1288, SendAllRivalryData
+    E_ACTION_ONE_RIVALRY_DATA_RESPONSE       = 189,   // debug info 181; size 32, case 102
+    E_ACTION_NETWORK_COLLECTABLE             = 237,   // debug info 229; size 16, case 135
     E_ACTION_EVENT_STATE_RESPONSE       = 179,   // DWARF 171 (+8 X360); size 1404 == Array<BrnProgression::ProfileEvent,175>
                                                  //   (the DISCOVERED events; ProcessGameEvents case 77 -> GUI event 556)
     // ⭐⭐ [pause-stats wave 2026-08-29] THE GAME-STATS RESPONSE -- 181's immediate sibling, and
@@ -443,6 +461,13 @@ enum EGameActionType
     E_ACTION_VEHICLE_HIT                = 140,   // DWARF 132 (+8 X360); size 36 BAND
     E_ACTION_ENTER_NEW_ROAD             = 141,   // DWARF 133 (+8 X360); size 1  BAND
     E_ACTION_SHOWTIME_UPDATE            = 142,   // DWARF 134 (+8 X360); size 12 BAND
+    // ProcessGameEvents' group-5 arms and two of their callees post these. Each value is the
+    // producer's AddEvent immediate; the name is the reference enumerator at the band's shift.
+    E_ACTION_STOP_MODE_SPLASH           = 32,    // reference 28  (+4); size 1, case 22
+    E_ACTION_PROMPT_DO_INVITE           = 91,    // reference 86  (+5); size 1, case 57
+    E_ACTION_PREPARED_FOR_INVITE        = 94,    // reference 89  (+5); size 4, cases 59 / 60
+    E_ACTION_INVITE_COMPLETE            = 96,    // reference 91  (+5); size 1, case 62
+    E_ACTION_SET_BOOST                  = 170,   // reference 162 (+8); size 20, SwitchBurningHomeRunRunner
     E_ACTION_JUST_BOUNCED               = 144,   // DWARF 136 (+8 X360); size 48 BAND
 
     // [FX-SHOWTIME2 2026-09-24] THE TWO SHOWTIME ACTIONS GameStateModule::UpdateShowtimeMode
@@ -474,6 +499,22 @@ enum EGameActionType
     // The PS3 DWARF enumerator is also 15 (BrnGameActions.h:25), i.e. no X360 shift here --
     // consistent with every other sub-53 slot in this enum.
     E_ACTION_COMPLETED_STUNT            = 15,    // DWARF BrnGameActions.h:25 (X360-attested)
+    // ---- The six actions ProcessGameEvents_Group3 posts that had no enumerator. Each value is the
+    // id the arm posts, with its posted size; the name is the debug-info enumerator the value's band
+    // shift lands on, and every record size matches that enumerator's record:
+    //   119 size 1   case 37  (+5, the PLAYER_INVULNERABLE / SHUTDOWN_FINISHED band; also the id
+    //                          OnlineCarSelectManager posts as KI_ACTION_PLAYER_RESET_ON_TRACK)
+    //   124 size 8   case 75  (+5)
+    //   135 size 32  case 44  (+8, the VEHICLE_LEAPT / ENTER_NEW_ROAD band)
+    //   136 size 4   case 45  (+8)
+    //   178 size 12  case 76  (+8, the NEAR_MISS..TAILGATING band)
+    //   261 size 1   case 41  (+7, the HUD_MESSAGE_ROAD_RAGE_TIME_EXTENSION seat)
+    E_ACTION_PLAYER_RESET_ON_TRACK              = 119,   // debug info 114 (+5); size 1
+    E_ACTION_CRASH_COMBO                        = 124,   // debug info 119 (+5); size 8
+    E_ACTION_TRIGGER_CRASH_BREAKER              = 135,   // debug info 127 (+8); size 32
+    E_ACTION_CANCEL_CRASH_BREAKER               = 136,   // debug info 128 (+8); size 4
+    E_ACTION_AFTERTOUCH                         = 178,   // debug info 170 (+8); size 12
+    E_ACTION_HUD_MESSAGE_PLAYER_CAN_SKIP_CRASH  = 261,   // debug info 254 (+7); size 1
     // DWARF BrnGameActions.h:26, same value on the X360: EffectsModule::HandleGameActions
     // @0x82296FD8 handles it as `case 16` -- `(payload & 0x80) == 0x80 && payload[+28] != -1`
     // then the "Cannot find the RaceCarInterface" / "Invalid RaceCarIndex" asserts at
@@ -1272,7 +1313,7 @@ static_assert(offsetof(AddRivalCarAction, mu8RivalIndex)      == 0xA2, "record +
 //     li r6, 0x30 (48) ; li r5, 0x90 (144)
 //
 // ⭐⭐⭐ [FX-SHOWTIME2 2026-09-24] THE HEAD IS RECOVERED AND THE PRODUCER IS LANDED
-// (GameStateModule::ProcessGameEventsShowtimeBounceBringUp, GameStateModule_gUI_00.cpp). The arm also
+// (ProcessGameEvents' case-52 arm, GameStateModule_ProcessGameEvents_wBT_05.cpp). The arm also
 // copies the event's contact point whole -- `li r11, 0x10 ; lvx128 v0, r25, r11 ; stvx128 v0, r0, rec`
 // @0x823A3DE4..0x823A3DF0 -- so +0x00 is DWARF's `Vector3 mContactPoint` (:3446), and the id is read
 // (`li r5, 0x90`), so the record now carries its GameAction<E_ACTION_JUST_BOUNCED> tag like its
@@ -1715,6 +1756,63 @@ static_assert(offsetof(SetupNetworkCarAction, mfBaseDeformationAmount) == 0x38,
 static_assert(sizeof(SetupNetworkCarAction) == 0x40,
               "ProcessGameEvents posts action 5 with size 0x40 (li r6, 0x40 @0x823A1878)");
 
+// Action 81: the colour and paint finish the profile stores for a car (case 6 fills it through
+// GetCarColourAndPalette's two out-parameters, palette word first like action 79).
+struct PlayerCarColourResponseAction : public GameAction<E_ACTION_PLAYER_CAR_COLOUR_RESPONSE>
+{
+    u32 muPaletteIndex;   // +0x00
+    u32 muColourIndex;    // +0x04
+};
+static_assert(sizeof(PlayerCarColourResponseAction) == 8, "posted with size 8");
+
+// Action 182: the player's name, car and car count for the GUI, and whether that car carries
+// damage (case 81).
+struct PlayerInfoResponseAction : public GameAction<E_ACTION_PLAYER_INFO_RESPONSE>
+{
+    PlayerInfo mPlayerInfo;      // +0x00
+    bool       mbIsCarDamaged;   // +0x38
+};
+static_assert(offsetof(PlayerInfoResponseAction, mbIsCarDamaged) == 0x38 &&
+              sizeof(PlayerInfoResponseAction) == 64, "posted with size 64, damage byte at +0x38");
+
+// Action 183: the members of a car's colour-livery family the player may pick (case 82).
+struct UnlockedLiveryResponseAction : public GameAction<E_ACTION_UNLOCKED_LIVERY_RESPONSE>
+{
+    Array<CgsID, 8> maCars;   // +0x00, count word at +0x40
+};
+static_assert(sizeof(UnlockedLiveryResponseAction) == 72, "posted with size 72");
+
+// Action 184: the selectable cars with a driven bit and a wrecked bit each, and the profile's
+// car maximum (case 88).
+struct CarSelectionResponseAction : public GameAction<E_ACTION_CAR_SELECTION_RESPONSE>
+{
+    static const u32 KU_MAX_CARS_IN_RESPONSE_ACTION = 128;
+
+    Array<CgsID, KU_MAX_CARS_IN_RESPONSE_ACTION>              maCars;                  // +0x000, count +0x400
+    CgsContainers::BitArray<KU_MAX_CARS_IN_RESPONSE_ACTION>  mHasBeenDrivenBitArray;  // +0x408
+    CgsContainers::BitArray<KU_MAX_CARS_IN_RESPONSE_ACTION>  mWreckedArray;           // +0x418
+    s32                                                      miMaxAvailableCars;      // +0x428
+};
+static_assert(offsetof(CarSelectionResponseAction, mHasBeenDrivenBitArray) == 0x408 &&
+              offsetof(CarSelectionResponseAction, mWreckedArray) == 0x418 &&
+              offsetof(CarSelectionResponseAction, miMaxAvailableCars) == 0x428 &&
+              sizeof(CarSelectionResponseAction) == 1072, "posted with size 1072");
+
+// Action 191: loading starts or stops (ProcessStreamingCompleteEvent and FinishStreaming post
+// false).
+struct SetLoadingStateAction : public GameAction<E_ACTION_SET_LOADING_STATE>
+{
+    bool mbStartLoading;   // +0x00
+};
+static_assert(sizeof(SetLoadingStateAction) == 1, "posted with size 1");
+
+// Action 67: the online car select spawned the player in this car.
+struct CarSelectionChangedOnlineAction : public GameAction<E_ACTION_CAR_SELECTION_CHANGED_ONLINE>
+{
+    CgsID mCarId;   // +0x00
+};
+static_assert(sizeof(CarSelectionChangedOnlineAction) == 8, "posted with size 8");
+
 // X360 0x823551F0 (SetPlayerScoringIndex). Layout per the Feb-2007 partial source (this X360 build).
 struct OnlinePlayerAddedAction : public GameAction<E_ACTION_ONLINE_PLAYER_ADDED>
 {
@@ -1735,6 +1833,10 @@ struct OnlinePlayerAddedAction : public GameAction<E_ACTION_ONLINE_PLAYER_ADDED>
 };
 static_assert(sizeof(OnlinePlayerAddedAction) == 0x28,
               "ProcessGameEvents posts action 219 with size 0x28");
+
+// Action 235, no payload: ProcessGameEvents case 17 posts one byte when a lobby start follows a
+// player join.
+typedef GameAction<E_ACTION_START_GAME_THROUGH_PLAYER_JOIN> StartGameThroughPlayerJoinAction;
 
 // X360 0x82355258 (SetActiveRaceCarIndex). Minimal slice: only the member the body touches.
 struct OnlinePlayerRemovedAction : public GameAction<E_ACTION_ONLINE_PLAYER_REMOVED>
@@ -1767,6 +1869,101 @@ struct RankInfoResponseAction : public GameAction<E_ACTION_RANK_INFO_RESPONSE>
     void SetProgressionRankEventWins(s32 liOfflineRaceRankWins, s32 liRoadRageRankWins,
                                      s32 liStuntAttackRankWins, s32 liMarkedManRankWins);
 };
+
+// ---- the GUI data-request answers ProcessGameEvents_Group4 and SendAllRivalryData post --------
+// Names and member types are the debug info's; each layout is the one its post writes.
+
+// Action 186 (case 95): the region the asked-for position lies in.
+struct RegionFromPositionResponseAction : public GameAction<E_ACTION_REGION_FROM_POSITION_RESPONSE>
+{
+    BrnWorld::WorldRegion mWorldRegion;   // 0x00
+};
+static_assert(sizeof(RegionFromPositionResponseAction) == 8, "case 95 posts action 186 with size 8");
+
+// Action 187 (case 117): the player's route changed. No payload; posted as one byte.
+struct UpdateGuiRouteAction : public GameAction<E_ACTION_UPDATE_GUI_ROUTE> {};
+
+// Actions 122 / 123 (cases 107 / 108): the award sequence starts / ends. No payload; one byte.
+struct AwardSequenceStartAction : public GameAction<E_ACTION_AWARD_SEQUENCE_START> {};
+struct AwardSequenceEndAction : public GameAction<E_ACTION_AWARD_SEQUENCE_END> {};
+
+// Action 188 (SendAllRivalryData): every rival of the progression data, its car, and whether the
+// player has met it yet. The member order is the post's own: the three arrays lead (+0x000,
+// +0x200, +0x400) and the returned count follows at +0x500, where the debug info lists it first.
+struct RivalryOverviewAction : public GameAction<E_ACTION_ALL_RIVALRY_DATA_RESPONSE>
+{
+    enum ERivalryStage
+    {
+        E_RIVALRY_STAGE_UNKNOWN = 0,
+        E_RIVALRY_STAGE_DRIVER  = 1,
+        E_RIVALRY_STAGE_RIVAL   = 2,
+        E_RIVALRY_STAGE_TARGET  = 3,
+        E_RIVALRY_STAGE_WRECKED = 4,
+        E_RIVALRY_STAGE_INVALID = 5,
+        E_RIVALRY_STAGE_COUNT   = 6
+    };
+
+    static const s32 KI_MAX_RIVALS = 64;
+
+    CgsID         mRivalIDs[KI_MAX_RIVALS];        // 0x000
+    CgsID         mRivalCarIDs[KI_MAX_RIVALS];     // 0x200
+    ERivalryStage mRivalryStatus[KI_MAX_RIVALS];   // 0x400
+    s32           miRivalsReturned;                // 0x500
+};
+static_assert(sizeof(RivalryOverviewAction) == 1288, "SendAllRivalryData posts action 188 with size 1288");
+
+// Action 189 (case 102): one rival in depth.
+struct RivalryOneInDepthAction : public GameAction<E_ACTION_ONE_RIVALRY_DATA_RESPONSE>
+{
+    CgsID             mId;                // 0x00
+    CgsID             mCarId;             // 0x08
+    BrnWorld::ECounty meCountyIndex;      // 0x10
+    s32               miRaceWins;         // 0x14
+    s8                miProgressStatus;   // 0x18
+};
+static_assert(sizeof(RivalryOneInDepthAction) == 32, "case 102 posts action 189 with size 32");
+
+// Action 237 (case 135): a remote player collected a stunt element the local player has not.
+struct OnlineNetworkPlayerCollectableAction : public GameAction<E_ACTION_NETWORK_COLLECTABLE>
+{
+    CgsID                       mID;               // 0x00
+    BrnNetwork::NetworkPlayerID mNetworkPlayerID;  // 0x08
+    StuntElementType            meType;            // 0x0C
+};
+static_assert(sizeof(OnlineNetworkPlayerCollectableAction) == 16, "case 135 posts action 237 with size 16");
+
+// Three console-only answers: ids 288, 240 and 241 fill gaps of the debug-info enum and have no
+// name anywhere, so each record is named after what it carries and keeps its id beside it.
+
+// Id 288 (case 104): the target score stored for an event, and the name of its holder.
+struct TargetEventDataResponse
+{
+    static const s32 KI_GAME_ACTION_TYPE = 288;
+
+    CgsID                  mEventId;      // 0x00
+    s32                    miScore;       // 0x08
+    CgsNetwork::PlayerName mPlayerName;   // 0x0C
+};
+static_assert(sizeof(TargetEventDataResponse) == 32, "case 104 posts action 288 with size 32");
+
+// Id 240 (case 152): the holder of the target score just stored or removed, and which it was.
+struct TargetEventScoreChangedResponse
+{
+    static const s32 KI_GAME_ACTION_TYPE = 240;
+
+    CgsNetwork::PlayerName mPlayerName;   // 0x00
+    bool                   mbRemoved;     // 0x10
+};
+static_assert(sizeof(TargetEventScoreChangedResponse) == 17, "case 152 posts action 240 with size 17");
+
+// Id 241 (case 153): the holder of an event's target score, for a downloaded scoreboard.
+struct DldScoreboardResponse
+{
+    static const s32 KI_GAME_ACTION_TYPE = 241;
+
+    CgsNetwork::PlayerName mPlayerName;   // 0x00
+};
+static_assert(sizeof(DldScoreboardResponse) == 16, "case 153 posts action 241 with size 16");
 
 // X360 element of Array<TrophyUnlockAction,12> @ 0x8235E1F0 / ::Erase @ 0x8235E318. DWARF
 // BrnGameActions.h:2438; 16-byte stride. GameAction<T> base carries only a static type tag (no
@@ -2262,6 +2459,56 @@ struct ShowtimeUpdateAction : public GameAction<E_ACTION_SHOWTIME_UPDATE>
     s32                         miShowtimeScore;        // +0x08
 };
 
+// ---- the records ProcessGameEvents' group-5 arms (and the Burning Home Run runner switch) post.
+//      The empty ones go out as one byte the producer never writes.
+typedef GameAction<E_ACTION_STOP_MODE_SPLASH> StopModeSplashAction;   // case 22, size 1
+
+// Ask the GUI for an autosave; the forced flag bypasses the autosave throttle.
+struct RequestAutoSaveAction : public GameAction<E_ACTION_REQUEST_AUTOSAVE>
+{
+    bool mbForceAutosave;   // +0x00
+};
+static_assert(sizeof(RequestAutoSaveAction) == 1, "action 55 is posted with size 1");
+
+// An invite arrived while a mode is running (or the user has to change): ask the player first.
+struct PromptDoInviteAction : public GameAction<E_ACTION_PROMPT_DO_INVITE> {};
+static_assert(sizeof(PromptDoInviteAction) == 1, "action 91 is posted with size 1");
+
+struct UpdatePrepareForInviteAction : public GameAction<E_ACTION_UPDATE_PREPARE_FOR_INVITE> {};
+static_assert(sizeof(UpdatePrepareForInviteAction) == 1, "action 93 is posted with size 1");
+
+// A module is ready for the invite. The value is EModulePreparedForInvite (0 game state, 1 network),
+// held as the word the invite manager reads.
+struct PreparedForInviteAction : public GameAction<E_ACTION_PREPARED_FOR_INVITE>
+{
+    s32 meModulePreparedForInvite;   // +0x00
+};
+static_assert(sizeof(PreparedForInviteAction) == 4, "action 94 is posted with size 4");
+
+struct InviteCompleteAction : public GameAction<E_ACTION_INVITE_COMPLETE>
+{
+    bool mbSuccess;   // +0x00
+};
+static_assert(sizeof(InviteCompleteAction) == 1, "action 96 is posted with size 1");
+
+// Set a car's boost. mxFlags says which of the three values apply. The console record carries
+// mfBoostAmount at +0x08 and the infinite-boost byte last (the reference order puts the bool
+// second); the stores of OnlineBurningHomeRunMode::SwitchBurningHomeRunRunner pin all five.
+struct SetBoostAction : public GameAction<E_ACTION_SET_BOOST>
+{
+    static const s32 KX_SET_INFINITE_BOOST_FLAG = 1;
+    static const s32 KX_SET_BOOST_AMOUNT        = 2;
+    static const s32 KX_SET_BOOST_SEGMENTS      = 4;
+
+    ::EActiveRaceCarIndex meRaceCarIndex;    // +0x00
+    s32                   mxFlags;           // +0x04
+    f32                   mfBoostAmount;     // +0x08
+    s32                   miBoostSegments;   // +0x0C
+    bool                  mbInfiniteBoost;   // +0x10
+};
+static_assert(sizeof(SetBoostAction) == 20, "action 170 is posted with size 20");
+static_assert(offsetof(SetBoostAction, mbInfiniteBoost) == 0x10, "infinite-boost byte at +0x10");
+
 // Action 144 (JustBouncedAction) is NOT re-declared here: it already had a home further up in
 // this file -- the CrashPlayManager::OnBounce slice -- and that record was GROWN in place with
 // this wave's producer store map instead of being forked. See its banner for the two-consumer
@@ -2582,6 +2829,79 @@ static_assert(offsetof(CompletedStuntAction, miCompletedBarrelRolls) == 0x18,
               "barrel-roll COUNT at +0x18 (UpdateStuntBoost lwz+extsw 0x18(r30)) -- not the DWARF's bool");
 static_assert(offsetof(CompletedStuntAction, mbSuccessfulLanding) == 0x1C,
               "landing flag at +0x1C (ProcessGameEvents stb @0x823A1994)");
+
+// ===== The records ProcessGameEvents_Group3 posts =====
+// Each is the stack image the arm builds and posts; member names and order are the debug info's
+// (BrnGameActions.h line per member), sizes are the posted sizes.
+
+// Action 16, 32 bytes (case 120). The debug info stops after mfInProgressDriftDistance; the posted
+// record carries two more words, which the arm fills from the event's convoy block: the leg
+// distance of the player's convoy entry (0.0 when the player is not in a convoy) and the active
+// race-car index of the car one place ahead of it (-1 when there is none). EffectsModule's
+// case 16 reads the pair as the slip-stream blend and the car in front. FLAG: the two tail names
+// are taken from the producer's source fields and the consumer's use.
+struct InProgressStuntAction : public GameAction<E_ACTION_INPROGRESS_STUNT>
+{
+    u32 muStuntActionInProgress;          // +0x00
+    f32 mfInProgressBarrelRollAngle;      // +0x04
+    f32 mfInProgressAirSpinAngle;         // +0x08
+    f32 mfInProgressHandbreakTurnAngle;   // +0x0C
+    f32 mfInProgressDriftTime;            // +0x10
+    f32 mfInProgressDriftDistance;        // +0x14
+    f32 mfConvoyLegDistance;              // +0x18 FLAG name (console-only member)
+    s32 miCarInFrontIndex;                // +0x1C FLAG name (console-only member)
+};
+static_assert(sizeof(InProgressStuntAction) == 32, "action 16 is posted with size 32");
+static_assert(offsetof(InProgressStuntAction, mfConvoyLegDistance) == 0x18, "action 16 leg distance at +0x18");
+static_assert(offsetof(InProgressStuntAction, miCarInFrontIndex)   == 0x1C, "action 16 car in front at +0x1C");
+
+// Action 119, 1 byte (case 37): the player car was reset onto the track. No members.
+struct PlayerResetOnTrackAction : public GameAction<E_ACTION_PLAYER_RESET_ON_TRACK> {};
+
+// Action 261, 1 byte (case 41): the HUD may offer the crash skip. No members.
+struct HUDMessagePlayerCanSkipCrashAction : public GameAction<E_ACTION_HUD_MESSAGE_PLAYER_CAN_SKIP_CRASH> {};
+
+// Action 135, 32 bytes (case 44): the crash-breaker request, copied word for word from the event.
+struct TriggerCrashBreakerAction : public GameAction<E_ACTION_TRIGGER_CRASH_BREAKER>
+{
+    Vector3             mPosition;          // +0x00
+    EActiveRaceCarIndex meRaceCarIndex;     // +0x10
+    f32                 mfNormMagnitude;    // +0x14
+    f32                 mfTimeUntilStart;   // +0x18
+    f32                 mfDurationTime;     // +0x1C
+};
+static_assert(sizeof(TriggerCrashBreakerAction) == 32, "action 135 is posted with size 32");
+
+// Action 136, 4 bytes (case 45).
+struct CancelCrashBreakerAction : public GameAction<E_ACTION_CANCEL_CRASH_BREAKER>
+{
+    EActiveRaceCarIndex meRaceCarIndex;   // +0x00
+};
+
+// Action 124, 8 bytes (case 75). meEntryType is BrnWorld::EComboEntryType, stored as s32 like the
+// event it is copied from.
+struct CrashComboAction : public GameAction<E_ACTION_CRASH_COMBO>
+{
+    s32 meEntryType;   // +0x00
+    f32 mfValue;       // +0x04
+};
+
+// Action 178, 12 bytes (case 76).
+struct AftertouchAction : public GameAction<E_ACTION_AFTERTOUCH>
+{
+    EActiveRaceCarIndex meRaceCarIndex;         // +0x00
+    f32                 mfForwardAftertouch;    // +0x04
+    f32                 mfSidewaysAftertouch;   // +0x08
+};
+
+// Action 139, 1 byte (case 47). No members.
+struct VehicleLeaptAction : public GameAction<E_ACTION_VEHICLE_LEAPT> {};
+
+// Action 141, 1 byte (case 48).
+struct EnterNewRoadAction : public GameAction<E_ACTION_ENTER_NEW_ROAD>
+{
+    bool mbIsJunction;   // +0x00
+};
 
 // ARTIST HandleGameActions case 198 reads type/+0x14, boost/+0x0C and
 // control/+0x08 before calling HandleCarStatsUpdate @0x822A4700. DecFIGS

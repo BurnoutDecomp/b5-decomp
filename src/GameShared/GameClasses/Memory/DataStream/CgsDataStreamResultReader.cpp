@@ -1,7 +1,9 @@
 #include "GameShared/GameClasses/Memory/DataStream/CgsDataStreamResultReader.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (End's users-connected assert)
 
+#include <atomic>   // std::atomic_thread_fence (End's closing lwsync)
 #include <cstring>  // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
 
 namespace CgsMemory
@@ -107,5 +109,32 @@ namespace CgsMemory
         }
         ++miNextResult;                             // ++*(this+36)
         return E_READ_SUCCESS;                      // result = 0
+    }
+
+    // Closes the read pass: must be streaming, and every producer user must have
+    // disconnected. Latches the packed result count (low 24 bits of the status word)
+    // as the readable record count, clears the streaming flag, then fences so the
+    // reader's ReadResult pass observes the latched state.
+    void DataStreamResultReader::End()
+    {
+        CGS_ASSERT(mbStreaming, "Not streaming\n");
+
+        const u64 luStatus     = mEncodedStatus.GetValue();
+        const u32 luNumResults = static_cast<u32>(luStatus & KU_NUM_RESULTS_MASK);
+        const u32 luNumUsers   = static_cast<u32>((luStatus >> KU_NUM_USERS_BIT) & KU_NUM_USERS_MAX);
+        if (luNumUsers != 0)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Attempted to end stream while " << static_cast<s32>(luNumUsers) << " users connected\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessage,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\DataStream/CgsDataStreamResultReader.cpp", 143);
+            CgsDev::Assert::EndAssert();
+        }
+
+        miNumResultsAtEnd = static_cast<s32>(luNumResults);   // *(this+40)
+        mbStreaming       = false;                            // *(this+32) = 0
+        std::atomic_thread_fence(std::memory_order_acq_rel);  // lwsync
     }
 }

@@ -2,21 +2,32 @@
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
+#include "GameSource/Gui/Flow/Shared/Components/BrnMenuComponent.h"   // BrnGui::MenuComponent (mPauseOptions)
 
-// BrnGui::OnlinePause - the online pause screen state. This leaf header carries the
-// class shape and the one inline resource accessor attributed to the header (the single
-// ledger function for this TU). The pause-options menu component, GUI cache, sub-state
-// machine and all out-of-line virtual/handler machinery (OnEnter/OnLeave/Update,
-// CheckForCompletedLoads, HandleControllerInput, HandleOverlayComplete) are reconstructed
-// with the class:BrnGui::OnlinePause TU. Layout/virtuals and the CgsGui::State
-// derivation are from the DecFIGS DWARF (BrnOnlinePause.h).
+namespace CgsModule { struct Event; }
+
+// BrnGui::OnlinePause - the online pause screen state: a three-row menu (continue, quit the
+// game, the debug finish-round row) shown over the running online game. The CgsGui::State
+// derivation, the sub-state enum, the members and the virtual layout follow BrnOnlinePause.h.
+// Bodies in BrnOnlinePause.cpp, apart from the inline resource accessor.
 namespace BrnGui
 {
+    class GuiCache;
+
     struct OnlinePause : public CgsGui::State
     {
-        // @ 0x82500678 - hands the online-pause screen's static resource list to the
-        // loader (X360: *r4 = &maResourceTuplesToLoad; *r5 = (u32)miNumResourcesToLoad,
-        // count = 1).
+        enum ESubState
+        {
+            E_SUBSTATE_LOADING_SCREEN     = 0,
+            E_SUBSTATE_LOADING_COMPONENTS = 1,
+            E_SUBSTATE_PROMPT             = 2,
+        };
+
+        virtual void OnEnter();
+        virtual void OnLeave();
+        virtual void Update();
+
+        // Hands the online-pause screen's static resource list (one APT package) to the loader.
         virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
                                         u32* lpuNumberOfResources) const
         {
@@ -25,7 +36,24 @@ namespace BrnGui
         }
 
     private:
-        static const CgsGui::sResourceTuple maResourceTuplesToLoad[]; // @ 0x8205EF4C (unk_8205EF4C, .rdata)
-        static const s32                    miNumResourcesToLoad;     // @ 0x8205EF54 (dword_8205EF54, .rdata) == 1
+        // Load the screen, then the menu's apt components, then dress the menu.
+        void CheckForCompletedLoads();
+        // A controller action: move / pick in the menu, or back out.
+        void HandleControllerInput(const CgsModule::Event* lpEvent);
+        // The quit-confirmation overlay closed.
+        void HandleOverlayComplete(const CgsModule::Event* lpOverlayCompleteEvent);
+
+        static const CgsGui::sResourceTuple maResourceTuplesToLoad[];
+        static const s32                    miNumResourcesToLoad;
+        static const s32                    maiEventToObserve[6];
+        static const s32                    miNumEventsObserved;
+
+        static const s32         KI_NUM_COMPONENTS_TO_LOAD = 3;
+        static const char        KAC_PAUSE_OPTIONS_COMPONENT[7];
+        static const char* const KAPC_PAUSE_OPTION_STRING_IDS[KI_NUM_COMPONENTS_TO_LOAD];
+
+        MenuComponent mPauseOptions;   // console +0x38
+        GuiCache*     mpGuiCache;      // console +0x10F8
+        ESubState     meSubState;      // console +0x10FC
     };
 }

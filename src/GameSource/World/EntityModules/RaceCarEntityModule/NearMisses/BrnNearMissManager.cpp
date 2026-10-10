@@ -53,6 +53,23 @@ namespace
 // console rodata float (the earlier revision names it NearMissManager::KF_NEAR_MISS_CHAIN_TIME = 5.0f).
 const f32 BrnWorld::NearMissManager::KF_NEAR_MISS_CHAIN_TIME = 5.0f;
 
+// BrnWorld::NearMissManager::Prepare. No out-of-line copy: the body is emitted
+// inside RaceCarEntityModule::Prepare right after BoostManager::Prepare, as the fourteen count
+// words of the two sub-objects stored 0 (traffic +0x1C..+0x144, race car +0x158..+0x268), then
+// mfSpeed / mfNearMissTimeout = 0.0f, miNearMissCount = 0 and the two flags (+0x26D, +0x26C)
+// cleared. The call site does not test the result.
+bool BrnWorld::NearMissManager::Prepare()
+{
+    mTrafficNearMissData.Prepare();
+    mRaceCarNearMissData.Prepare();
+    mfSpeed               = 0.0f;
+    mfNearMissTimeout     = 0.0f;
+    miNearMissCount       = 0;
+    mbCrashing            = false;
+    mbFailedNearMissChain = false;
+    return true;
+}
+
 // BrnWorld::NearMissManager::HasThereBeenARecentNearMiss @ 0x822CD2E8. Reconstructed from
 // BURNOUT_X360_ARTIST.XEX. True iff either the traffic-vehicle near-miss list or the race-car
 // near-miss list currently holds a remembered vehicle.

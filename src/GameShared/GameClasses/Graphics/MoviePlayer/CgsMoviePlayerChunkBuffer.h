@@ -46,6 +46,10 @@ namespace CgsGraphics
         EacChunkDef* GetChunkDef(u32 luIndex);
         // GetChunkData @ 0x827EA0A0: pointer to chunk luIndex's payload (past the 8-byte header).
         void*        GetChunkData(u32 luIndex);
+        // CgsMoviePlayer.h -- the 4-character tag of chunk luIndex.
+        char*        GetChunkId(u32 luIndex) { return GetChunkDef(luIndex)->id; }
+        // CgsMoviePlayer.h -- chunk luIndex as read, header included (no read-state checks).
+        void*        GetChunk(u32 luIndex) { return mpcBuffer + mauChunkOffsets[luIndex]; }
     };
 
     // MoviePlayerCoreAllocator @ CgsMoviePlayer.h:113. An EA::Allocator::ICoreAllocator

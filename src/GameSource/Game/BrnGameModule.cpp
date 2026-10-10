@@ -665,9 +665,6 @@ namespace BrnGame
         mbPlayerCarCrashing    = false;
         mbWorldDataPrepared    = false;
         mbCarSelectionPublished = false;
-        mbCarSelectActivatePending  = false;
-        maiPendingCarSelectActivate[0] = 0;
-        maiPendingCarSelectActivate[1] = 0;
     }
 
     // @ 0x823DCA10 -- the game->GUI flow-FSM bridge (see BrnGameModule.hpp). Posts each
@@ -906,37 +903,6 @@ namespace BrnGame
                         // request now, exactly as the console's producer is.
                         mbCarSelectionPublished = false;
                         break;
-                    case 192:
-                    {
-                        // ⭐⭐ THE CAR-SELECT ACTIVATE RECORD -- the GUI half of the junkyard
-                        // handover. { 8, 192, 12, action, carSelectType }, 20 bytes on channel
-                        // 40, posted by CarSelectVehicle::Update (action 0 == start),
-                        // CarSelectLivery::Update (action 1 == enter modification) and
-                        // CarSelectMain::ExitCarSelection (action 4 == exit the junkyard).
-                        //
-                        // The console routes it BridgeGuiToGameState @0x823DDB78 case 192 ->
-                        // game event 94 (8 bytes: the same two words, in the same order) ->
-                        // ProcessGameEvents case 94. GameBridgeGUIToX.cpp already reconstructs
-                        // that translation faithfully, but it has no caller and its sink
-                        // (GameStateModuleIO::PostWorldInput) has no definition, so this walk --
-                        // which is already over the very same out-queue -- performs the SAME
-                        // decode and calls the extracted case-94 arm directly.
-                        // [FLAG PC bring-up] DELETE-WHEN BridgeGuiToGameState has a caller and
-                        // ProcessGameEvents drains a real post-world input buffer.
-                        // ⚠️ LATCHED, NOT DISPATCHED HERE. This walk runs inside the GUI phase;
-                        // the game-state module's output buffer belongs to the SIM spine and is
-                        // only written under its own Lock/Unlock bracket there. The request is
-                        // therefore handed to the same sub-step leg that already ticks the
-                        // CarSelectManager (see the E_MGS_IN_GAME block in DoUpdate), which is
-                        // also the console's ordering: ProcessGameEvents runs inside
-                        // PreWorldUpdate, not inside the GUI update.
-                        maiPendingCarSelectActivate[0] =
-                            static_cast<s32>(reinterpret_cast<const u32*>(lpuPayload)[0]); // action
-                        maiPendingCarSelectActivate[1] =
-                            static_cast<s32>(reinterpret_cast<const u32*>(lpuPayload)[1]); // type
-                        mbCarSelectActivatePending = true;
-                        break;
-                    }
                     case 86: case 87: case 89:
                         // Quit-to-dash (X360: XGetLaunchData + XLaunchNewImage). [FLAG PC
                         // platform: no dash relaunch; logged so the request is visible.]
@@ -2740,7 +2706,7 @@ namespace BrnGame
         // Its DELETE-WHEN ("ArbStateCarSelect + BehaviourIceAnim + the game-intro shot group are
         // real") is met, and the last link -- something that actually makes the director's
         // meJunkyardState non-zero so the roaming ladder hands over to ArbStateCarSelect -- landed
-        // with GameStateModule::ProcessGameEventsReallyEnterJunkyardBringUp. The console's own
+        // with ProcessGameEvents' case-78 arm (CarSelectManager::ReallyEnterJunkyardAtStartOfGame). The console's own
         // chain now runs end to end:
         //   BridgeGuiToDirector 477 -> InputBuffer::mbStartGameIntroFlyby
         //   MainDirector::PostGuiUpdate  -> GameState::mbGameIntroFlybyActive = true
@@ -4614,7 +4580,7 @@ namespace BrnGame
                             //
                             // ⛔⛔ WHAT THAT COST (measured, issue #24 runs 1 and 2). Every game mode
                             // takes its per-frame delta from
-                            //   lpInput->GetTimerStatusInterface()->maEntries[1].mfValue08 * .mfValue04
+                            //   lpInput->GetTimerStatusInterface()->GetSimTimerStatus()->GetCurrentTimeStep()
                             // so that product was exactly 0.0f and every MODE clock stood still.
                             // In MARKED MAN that pins SurvivorMode::PreWorldUpdate @0x8234D188's
                             // mfRampTimer at 0, so liOpponentCount == 0 == miBroadcastOpponentCount
@@ -4626,35 +4592,9 @@ namespace BrnGame
                             // with DecideToAttack called ZERO times. RoadRageMode::UpdateHiddenRivals
                             // (BrnRoadRageMode.cpp:394) and StuntAttackMode read the same pair and
                             // were frozen the same way.
-                            //
-                            // The two declarations are a padding fork of one another (CgsSystem's
-                            // {miFrameCount, mfBaseTimeStep, mfTimeStepMultiplier, mbRunning, Time}
-                            // vs GameStateModuleIO's {miWord00, mfValue04, mfValue08, mbFlag0C,
-                            // miWord10, mfValue14}), so the console's raw 48-byte copy is spelled
-                            // out BY NAME here instead of reinterpret_cast. Entry 0 is the GAME
-                            // timer and entry 1 the SIM timer -- the order
-                            // TimerStatusInterface::StoreTimers @0x828D7518 writes them in.
                             {
-                                BrnGameState::GameStateModuleIO::TimerStatusInterface lTimerStatus;
-                                const CgsSystem::TimerStatus* const lapSource[2] =
-                                {
-                                    mTimerStatusInterface.GetGameTimerStatus(),
-                                    mTimerStatusInterface.GetSimTimerStatus()
-                                };
-                                for (s32 liEntry = 0; liEntry < 2; ++liEntry)
-                                {
-                                    const CgsSystem::TimerStatus* const lpSource = lapSource[liEntry];
-                                    BrnGameState::GameStateModuleIO::TimerStatusInterface::Entry& lrDest =
-                                        lTimerStatus.maEntries[liEntry];
-                                    lrDest.miWord00  = lpSource->GetFrameCount();
-                                    lrDest.mfValue04 = lpSource->GetBaseTimeStep();
-                                    lrDest.mfValue08 = lpSource->GetTimeStepMultiplier();
-                                    lrDest.mbFlag0C  = lpSource->IsRunning() ? 1u : 0u;
-                                    lrDest.miWord10  = lpSource->GetTime().GetSeconds();
-                                    lrDest.mfValue14 = lpSource->GetTime().GetFraction();
-                                }
                                 lpGsPreWorld->LockForWrite();
-                                lpGsPreWorld->SetTimerStatusInterface(&lTimerStatus);
+                                lpGsPreWorld->SetTimerStatusInterface(&mTimerStatusInterface);
                                 lpGsPreWorld->UnlockForWrite();
                             }
                         }
@@ -4668,49 +4608,17 @@ namespace BrnGame
                     // ActiveRaceCar::UpdateEngineState refused to crank -- A RETURNING PLAYER
                     // COULD NOT DRIVE AT ALL (measured, scratch/flow_run/eng_b2_probe: 74 s of
                     // held throttle, engine state 0 for every tick).
-                    // The leg now drains the console's own event 78 out of the carry queue that
-                    // BridgeGuiToGameState (called further down this same DoUpdate) fills from
-                    // BrnGui::InGame::OnEnter's command 145. Every rung of that bridge exists and
-                    // is plumbed; the stand-in was justified by a measurement that read
-                    // BrnGameMainFlowInGameState::OnEnter instead of BrnGui::InGame::OnEnter (see
-                    // the retraction in BrnGameStateModule.h's case-78 banner).
+                    // The entry is now completed by ProcessGameEvents' case-78 arm (inside the
+                    // pre-world pump below), on the console's own event 78, which
+                    // BridgeGuiToGameState (called further down this same DoUpdate) fills into the
+                    // carry queue from BrnGui::InGame::OnEnter's command 145.
                     mGameStateModule.PreWorldUpdateSetupPlayerCarBringUp();
-
-                    // ⭐⭐ THE CAR-SELECT LEG (X360 PreWorldUpdate @0x823A5904..0x823A5958), in
-                    // the console's own body order: the one-shot entry leg above, then the
-                    // per-sub-step CarSelectManager tick. It is the whole image's only caller of
-                    // CarSelectManager::Update, and therefore the only thing that ever ENDS the
-                    // junkyard transition-in and moves GameState::meJunkyardState off
-                    // E_JY_INTRO_NO_CARS. The gate lives inside (mJunkyardId != null), exactly
-                    // as the console's does.
-                    // ⚠️ THE TIMESTEP IS THE GAME TIMER'S, NOT THE SIM TIMER'S: the console
-                    // latches `TimerStatusInterface::maEntries[0].mfValue04 * .mfValue08`
-                    // @0x823A54D8, and StoreTimers writes entry 0 from mGameTimer. Read off the
-                    // LIVE timer for the same reason the DJ/road-time leg below does -- nothing
-                    // on this build stages a GameStateModuleIO::PreWorldInputBuffer.
-                    // ⭐ THE GUI -> GAME-STATE CAR-SELECT LEG. BridgeGuiToGame's channel-40 walk
-                    // latched a GUI out-event 192 (GuiEventActivateCarSelect) during the GUI
-                    // phase; hand it to the extracted ProcessGameEvents case-94 arm here, where
-                    // the game-state module owns its output buffer -- which is also where the
-                    // console runs ProcessGameEvents (inside PreWorldUpdate @0x823A58B8). Serviced
-                    // BEFORE the CarSelectManager tick so an ExitJunkyard lands in the same
-                    // sub-step's Update, exactly as the console's body order does.
-                    // [FLAG PC bring-up] DELETE-WHEN BridgeGuiToGameState has a caller.
-                    if (mbCarSelectActivatePending)
-                    {
-                        mbCarSelectActivatePending = false;
-                        mGameStateModule.ProcessGameEventsActivateCarSelectBringUp(
-                            maiPendingCarSelectActivate[0], maiPendingCarSelectActivate[1]);
-                    }
-
-                    mGameStateModule.PreWorldUpdateCarSelectBringUp(
-                        mGameTimer.GetRate() * mGameTimer.GetScaleCurrent());
 
                     // ⭐⭐ THE CONTROLLER-ACTIVE PUBLISH (X360 PreWorldUpdate @0x823A5328, the
                     // store just before the case-193 AddEvent). It MUST run before
                     // lpState->Update() below, because that is the leg that drives the world and
                     // therefore BridgeGameStateToWorld, which reads the flag back out at :1022 --
-                    // the same reason the two legs above run here.
+                    // the same reason the leg above runs here.
                     // ⚠️ WITHOUT IT NOTHING CAN DRIVE: ProcessPlayerVehicleInput zero-fills the
                     // whole BrnPlayerDriverControls record while the flag is false. See the
                     // header banner for the measurement.
@@ -4718,7 +4626,7 @@ namespace BrnGame
                     // PreWorldUpdate on every frame; this runs only inside E_MGS_IN_GAME, which
                     // is a strict subset (the flag's only consumer is the race-car module, which
                     // needs an attached player car anyway). It inherits the ordering gate the
-                    // two legs above already stand behind rather than adding a second one.
+                    // leg above already stands behind rather than adding a second one.
                     mGameStateModule.PreWorldUpdatePublishControllerActiveBringUp();
 
                     // ⭐⭐ [gateui] THE STUNT-COLLECTIBLE PRE-WORLD PASS (X360
@@ -4729,15 +4637,14 @@ namespace BrnGame
                     // game actions). See BrnGameStateModule.h for the leg-by-leg map and the two
                     // named reductions.
                     // ⚠️ THE TIMESTEP IS THE GAME TIMER'S, NOT THE SIM TIMER'S -- the console
-                    // latches TimerStatusInterface::maEntries[0].mfValue04 * .mfValue08
+                    // latches the game timer status's base step * multiplier
                     // @0x823A54D8, and StoreTimers writes entry 0 from mGameTimer. Read off the
-                    // LIVE timer for the same reason the CarSelect leg two calls up does:
-                    // nothing on this build stages a GameStateModuleIO::PreWorldInputBuffer.
+                    // LIVE timer (the frame's own mTimerStatusInterface snapshot).
                     // ⭐⭐⭐ [D4 stuntrace WAVE D] THE SAME CALL, NOW THE WHOLE PRE-WORLD PUMP.
                     // The callee has grown from three stunt-chain legs to the console's own
                     // PreWorldUpdate @0x823A5328 body order for every piece that exists on this
-                    // build: the ProcessGameEvents arms (now including case 20 = StartGameMode and
-                    // cases 24/25/26/27 = the intro/results exits), ModeManager::PreWorldUpdate via
+                    // build: GameStateModule::ProcessGameEvents and the CarSelectManager tick after
+                    // it, ModeManager::PreWorldUpdate via
                     // the EmmPreWorldUpdate hop (#86), the trigger legs (#93),
                     // CheckIfPlayerIsAtJunctionWithAnEvent (#96), DetectModeStarts (#98) and
                     // StuntManager::Update (#103). See the callee for the leg-by-leg map.
@@ -4777,7 +4684,7 @@ namespace BrnGame
                     // ⭐ [P1 sim-pause] THE PAUSE CONSUMER (X360 DoUpdate_GameStatePreWorld
                     // @0x823EE0E8 tail: `CheckGameActions(gm, gameStateOutputBuffer)` runs
                     // right after GameStateModule::PreWorldUpdate, in the same not-video
-                    // branch). The pre-world pump above (ProcessGameEventsPauseBringUp inside
+                    // branch). The pre-world pump above (ProcessGameEvents' pause family inside
                     // PreWorldUpdateStuntBringUp) posts actions 86/87 via RequestPause/
                     // RequestUnpause; this drains them and stops/starts the sim timer.
                     // Narrowed to E_MGS_IN_GAME with the rest of the leg (the producers all

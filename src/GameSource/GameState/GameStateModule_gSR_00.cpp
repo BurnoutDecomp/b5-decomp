@@ -980,17 +980,13 @@ void GameStateModule::DetectModeStarts(const GameStateModuleIO::PreWorldInputBuf
     {
         // @0x8239A56C..0x8239A588. The console's own expression, computed first so that the
         // moment PreWorldInputBuffer::SetTimerStatusInterface gets a producer this reverts to the
-        // real value with no edit. maEntries[0] is the GAME timer status; mfValue04/mfValue08 are
-        // CgsSystem::TimerStatus::mfBaseTimeStep / mfTimeStepMultiplier (the local
-        // GameStateModuleIO::TimerStatusInterface is a padding-fork of CgsSystem's -- same 24-byte
-        // TimerStatus pair, different declaration; not unified here, it is not this wave's file).
+        // real value with no edit: the GAME timer status's mfBaseTimeStep * mfTimeStepMultiplier.
         f32 lfShowtimeTimestep = 0.0f;
         const GameStateModuleIO::TimerStatusInterface* const lpTimerStatus =
             lpInput->GetTimerStatusInterface();
         if (lpTimerStatus != 0)
         {
-            lfShowtimeTimestep =
-                lpTimerStatus->maEntries[0].mfValue04 * lpTimerStatus->maEntries[0].mfValue08;
+            lfShowtimeTimestep = lpTimerStatus->GetGameTimerStatus()->GetCurrentTimeStep();
         }
         // [FLAG PC bring-up] nothing on this build calls PreWorldInputBuffer::SetTimerStatusInterface
         // (grep: the definition exists, the call does not), and GameStateModule::Construct value-
@@ -1610,69 +1606,6 @@ void GameStateModule::CheckForAllEventsBeingFound(BrnProgression::Profile* lpPro
         lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8Payload),
                           GameStateModuleIO::E_ACTION_ALL_EVENTS_DISCOVERED,
                           static_cast<s32>(sizeof(lu8Payload)));
-    }
-}
-
-// ==============================================================================================
-// GameStateModule::ProcessGameEventsRegionFromPositionBringUp -- ProcessGameEvents' CASE-95 ARM
-//
-// Game event 95 (RegionFromPositionRequestEvent { Vector3 mPosition }) asks which district
-// a world position lies in. The arm samples the district map (+0x3C090) with the position
-// flattened to (x, z) -- the console's permute replicates x into the two unread lanes -- maps an
-// off-map cell (255) to district 18 (E_DISTRICT_INVALID), builds the WorldRegion and answers with
-// action 186 (RegionFromPositionResponseAction { WorldRegion mWorldRegion }, 8 bytes).
-// The arm is extracted from the single dispatcher walk like the other ProcessGameEvents*BringUp
-// arms and must run before the merged queue is cleared.
-// ==============================================================================================
-void GameStateModule::ProcessGameEventsRegionFromPositionBringUp(
-        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
-        GameStateModuleIO::GameActionQueue* lpActionQueue)
-{
-    // Event 95 (E_EVENT_REGION_FROM_POSITION_REQUEST) and action 186
-    // (E_ACTION_REGION_FROM_POSITION_RESPONSE); neither enum in this tree names them yet.
-    const s32 KI_EVENT_REGION_FROM_POSITION_REQUEST   = 95;
-    const s32 KI_ACTION_REGION_FROM_POSITION_RESPONSE = 186;
-
-    if (lpGameEventQueue == 0 || lpActionQueue == 0)
-    {
-        return;
-    }
-
-    const CgsModule::Event* lpEvent = 0;
-    s32                     liSize  = 0;
-    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
-
-    while (lpEvent != 0)
-    {
-        if (liType == KI_EVENT_REGION_FROM_POSITION_REQUEST)
-        {
-            Vector3 lPosition;
-            std::memcpy(&lPosition, lpEvent, sizeof(lPosition));   // RegionFromPositionRequestEvent::mPosition
-
-            Vector2 lFlatPosition;
-            lFlatPosition.x = lPosition.x;
-            lFlatPosition.y = lPosition.z;
-            lFlatPosition.z = lPosition.x;
-            lFlatPosition.w = lPosition.x;
-
-            u8 luDistrict = GetDistrictMap()->GetValue(lFlatPosition);
-            if (luDistrict == CgsWorld::KU_INVALID_WORLD_MAP_VALUE)
-            {
-                luDistrict = static_cast<u8>(BrnWorld::E_DISTRICT_INVALID);
-            }
-
-            BrnWorld::WorldRegion lWorldRegion;                     // RegionFromPositionResponseAction::mWorldRegion
-            lWorldRegion.Construct(static_cast<BrnWorld::EDistrict>(luDistrict));
-            lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWorldRegion),
-                                    KI_ACTION_REGION_FROM_POSITION_RESPONSE,
-                                    static_cast<s32>(sizeof(lWorldRegion)));
-
-            DiscoveryWitness("region-from-position", static_cast<s32>(luDistrict),
-                             static_cast<s32>(lWorldRegion.GetCounty()), 0, 0);
-        }
-
-        const CgsModule::Event* lpCurrent = lpEvent;
-        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
     }
 }
 

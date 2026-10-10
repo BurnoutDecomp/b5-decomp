@@ -5,6 +5,8 @@
 #include "BrnCommonTypes.h"                             // Matrix44Affine (the CoM transforms)
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT (the lpStatic tripwires)
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h" // BrnReplays::BaseSerialiser
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::VariableEventQueue<13312,16> (mGameActionQueue)
+#include <stddef.h>                                     // offsetof (layout asserts)
 
 // ============================================================================
 // GameSource/Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.h
@@ -28,7 +30,8 @@ namespace BrnReplays
     // The 24320-byte bridge snapshot the static buffer holds (spans pinned by the
     // Write serialise list + the getter offsets; the per-vehicle info record and
     // the trailing blocks stay opaque -- their field surfaces belong to the
-    // bridge's own TUs).
+    // bridge's own TUs). The game-action queue between the vehicle infos and the
+    // crash block is streamed by SerialiseGameActionQueue (+0x2790, 13312+16 bytes).
     struct DirectorBridgeSerialiserStaticLayout
     {
         s8 muActivePlayerIndex;              // +0x0000 (serialised, 1; SIGNED -- the getters extsb the -1 sentinel)
@@ -37,6 +40,7 @@ namespace BrnReplays
         u8 mabVehicleActive[8];              // +0x0003 (serialised, 8)
         u8 maPad000B[0x10 - 0x0B];           // +0x000B .. +0x000F
         u8 maVehicleInfos[8][1264];          // +0x0010 (serialised, 10112; opaque records)
+        CgsModule::VariableEventQueue<13312, 16> mGameActionQueue;   // +0x2790 (SerialiseGameActionQueue)
         u8 maBlock5BA0[48];                  // +0x5BA0 (serialised, 48; role not recovered)
         Matrix44Affine maCentreOfMassTransforms[8];   // +0x5BD0 (serialised, 512)
         u8 maPlayerData[296];                // +0x5DD0 (serialised, 296; the truncated-symbol block)
@@ -44,6 +48,9 @@ namespace BrnReplays
         u8 maPad5EF9[3];                     // +0x5EF9 .. +0x5EFB
         u8 maBlock5EFC[4];                   // +0x5EFC (serialised, 4)
     };
+    static_assert(offsetof(DirectorBridgeSerialiserStaticLayout, mGameActionQueue) == 0x2790, "game action queue seat");
+    static_assert(offsetof(DirectorBridgeSerialiserStaticLayout, maCentreOfMassTransforms) == 0x5BD0, "centre-of-mass seat");
+    static_assert(sizeof(DirectorBridgeSerialiserStaticLayout) == 24320, "bridge snapshot size");
 
     class DirectorBridgeSerialiser : public BaseSerialiser
     {
@@ -53,9 +60,9 @@ namespace BrnReplays
         // (3), the 0x8000 buffer pair and the channel name.
         s32 Construct();
 
-        // Own ledger functions (declaration-only): the static-buffer view with its
-        // size/null tripwires, and the game-action-queue stream step both Read and
-        // Write chain after the ten spans (@0x82657724 / @0x82657450 call sites).
+        // The static-buffer view with its size tripwire, and the game-action-queue
+        // stream step both Read and Write chain after the ten spans (both bodied in
+        // the .cpp).
         DirectorBridgeSerialiserStaticLayout* GetStaticLayout();
         void SerialiseGameActionQueue();
 

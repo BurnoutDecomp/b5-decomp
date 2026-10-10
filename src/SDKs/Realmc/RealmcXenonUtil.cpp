@@ -44,7 +44,8 @@ extern "C"
                          DWORD dwContentFlags, DWORD* pdwDisposition, DWORD* pdwLicenseMask,
                          void* pOverlapped);
     DWORD XShowDeviceSelectorUI(DWORD dwUserIndex, DWORD dwContentType, DWORD dwContentFlags,
-                                const void* pBytesRequested, DWORD* pdwDeviceID, void* pOverlapped);
+                                unsigned long long uliBytesRequested, DWORD* pdwDeviceID,
+                                void* pOverlapped);
     DWORD XGetOverlappedExtendedError(void* pOverlapped);
     int   XNotifyGetNext(HANDLE hNotification, DWORD dwMsgFilter, DWORD* pdwId, ULONG_PTR* pParam);
     s32   XUserGetSigninState(u32 dwUserIndex);
@@ -208,7 +209,7 @@ int XenonUtil::DeviceSelectorUpdate(State* lpState)
 // DeviceSelectorShow @ 0x82B53CA8 -- run the device-selector UI, poll it to
 // completion, then latch the chosen device's data into State::mCardData.
 // ---------------------------------------------------------------------------
-int XenonUtil::DeviceSelectorShow(State* lpState, const void* lpBytesRequested, int liMode)
+int XenonUtil::DeviceSelectorShow(State* lpState, u64 luBytesRequested, int liMode)
 {
     int liResult = CheckState(lpState);
     if (liResult != 0)
@@ -224,7 +225,7 @@ int XenonUtil::DeviceSelectorShow(State* lpState, const void* lpBytesRequested, 
     do
     {
         luShow = XShowDeviceSelectorUI(sDwUserIndex, dwContentType, lpState->muContentFlags,
-                                       lpBytesRequested, &luDeviceId, &lpState->mOverlapped);
+                                       luBytesRequested, &luDeviceId, &lpState->mOverlapped);
     } while (!lpState->mbCancel && luShow != 997);
 
     // Pump it to completion (Update returns != 15) or until cancelled.

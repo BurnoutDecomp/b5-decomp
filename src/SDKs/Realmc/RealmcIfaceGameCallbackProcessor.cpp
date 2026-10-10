@@ -5,7 +5,7 @@
 //
 // No leak source / no DWARF: both SHAPE and BODY come from the X360 pseudocode +
 // asm. See RealmcIfaceGameCallbackProcessor.h for the layout, the base
-// (RealmcCore::IRealmcMessageFilter), and the FLAG notes.
+// (RealmcCore::IMessageProcessor), and the FLAG notes.
 //
 // Bodied here:
 //   GameCallbackProcessor::GameCallbackProcessor @0x82B54968
@@ -55,10 +55,10 @@ GameCallbackProcessor::GameCallbackProcessor(void* pContext, RealmcCore::Message
 // message is reset, matching the X360's explicit ~ResponsePtr ahead of the rebind.
 // The rebind is modelled exactly as RealmcCore::MessageFilter::FilterMessage does:
 // build a temporary MessagePtr over the empty message and assign it (operator=
-// releases the old held message and AddRefs the empty one). r3 on exit == &maMessage
-// (operator='s returned *this).
+// releases the old held message and AddRefs the empty one). Nothing reads the
+// handler's result.
 // ---------------------------------------------------------------------------
-RealmcCore::MessagePtr& GameCallbackProcessor::ProcessMessage(RealmcCore::Response* pResponse)
+void GameCallbackProcessor::ProcessMessage(RealmcCore::Response* pResponse)
 {
     {
         // Wrap the incoming response (AddRef) on the stack and post the
@@ -67,9 +67,8 @@ RealmcCore::MessagePtr& GameCallbackProcessor::ProcessMessage(RealmcCore::Respon
         mpQueue->PostResponse(maMessage, lResponse);
     }   // ~ResponsePtr here (Release) -- matches the X360 ordering
 
-    // Reset the held message back to the shared empty message and return it.
-    RealmcCore::MessagePtr lEmpty(RealmcCore::MessagePtr::EMPTY_MESSAGE());
-    return maMessage = lEmpty;
+    // Reset the held message back to the shared empty message.
+    maMessage = RealmcCore::MessagePtr::EMPTY_MESSAGE();
 }
 
 // ---------------------------------------------------------------------------

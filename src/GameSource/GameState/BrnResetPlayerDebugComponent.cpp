@@ -16,7 +16,13 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h"
 
-#include <cstring>   // strncmp
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"           // DebugUI::IsVisible
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+
+#include <cstring>   // strncmp, memcpy
+
+int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The "Reset Player Car" debug menu
 // (BrnGameState::ResetPlayerDebugComponent). It builds five menu lists off the loaded track +
@@ -86,6 +92,97 @@ namespace BrnGameState
     const char* ResetPlayerDebugComponent::GetName() const
     {
         return "Reset Player Car";
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // RenderHUD
+    //
+    // The car-info panel reads three fields VehicleListEntry has no accessor for yet: the gameplay
+    // flags word (+0x94: bit 0 race vehicle, bit 4 trailer) and the four player-stat bytes (+0x98:
+    // boost, speed, control, strength) of the embedded VehicleListEntryGamePlayData. The entry is the
+    // serialised VehicleList record, so they are read out of its leading opaque span by memcpy, the
+    // same way VehicleListEntry.cpp reads its own fields.
+    // ------------------------------------------------------------------------------------------------
+    namespace
+    {
+        enum EPlayerStats
+        {
+            E_PLAYERSTATS_BOOST    = 0,
+            E_PLAYERSTATS_SPEED    = 1,
+            E_PLAYERSTATS_CONTROL  = 2,
+            E_PLAYERSTATS_STRENGTH = 3,
+        };
+
+        const u32 KU_GAMEPLAY_FLAGS_OFFSET = 0x94;
+        const u32 KU_GAMEPLAY_STATS_OFFSET = 0x98;
+        const u32 KU_FLAG_RACE_VEHICLE     = 1u << 0;
+        const u32 KU_FLAG_TRAILER          = 1u << 4;
+
+        u32 GetGamePlayFlags(const BrnResource::VehicleListEntry* lpVehicle)
+        {
+            u32 luFlags = 0;
+            std::memcpy(&luFlags, &lpVehicle->maPad0[KU_GAMEPLAY_FLAGS_OFFSET], sizeof(luFlags));
+            return luFlags;
+        }
+
+        s32 GetGamePlayStat(const BrnResource::VehicleListEntry* lpVehicle, EPlayerStats leStat)
+        {
+            return lpVehicle->maPad0[KU_GAMEPLAY_STATS_OFFSET + leStat];
+        }
+    }
+
+    void ResetPlayerDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
+    {
+        static const f32  KF_X          = 400.0f;
+        static const f32  KF_TEXT_SCALE = 20.0f;
+        static const u32  KU_COLOUR     = 0xFF0000FFu;
+
+        if (!GetUI().IsVisible() || !mbShowCarInfo)
+        {
+            return;
+        }
+
+        char lacText[256];
+        CgsDev::StrStream lStream(lacText, sizeof(lacText));
+
+        const BrnResource::VehicleListEntry* lpVehicle =
+            mpGameStateModule->GetVehicleList()->GetVehicleData(miCurrentCarIndex);
+
+        lStream.Reset();
+        lStream << "Vehicle name: " << lpVehicle->GetName();
+        MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 200.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+
+        char lacIdText[16];
+        CgsIDUnCompress(lpVehicle->GetId(), lacIdText);
+        lStream.Reset();
+        lStream << "Vehicle id: " << lacIdText;
+        MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 225.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+
+        lStream.Reset();
+        lStream << "Default wheel name: " << lpVehicle->GetDefaultWheelName();
+        if (mpGameStateModule->GetWheelList()->FindWheelIndexFromName(lpVehicle->GetDefaultWheelName()) == -1)
+        {
+            lStream << " - WHEEL NOT FOUND IN GAME";
+        }
+        MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 250.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+
+        lStream.Reset();
+        lStream << "Is race vehicle: " << ((GetGamePlayFlags(lpVehicle) & KU_FLAG_RACE_VEHICLE) != 0);
+        MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 275.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+
+        lStream.Reset();
+        lStream << "Is trailer: " << ((GetGamePlayFlags(lpVehicle) & KU_FLAG_TRAILER) != 0);
+        MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 300.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+
+        if ((GetGamePlayFlags(lpVehicle) & KU_FLAG_RACE_VEHICLE) != 0)
+        {
+            lStream.Reset();
+            lStream << "Boost: "       << GetGamePlayStat(lpVehicle, E_PLAYERSTATS_BOOST)
+                    << ", Speed: "     << GetGamePlayStat(lpVehicle, E_PLAYERSTATS_SPEED)
+                    << ", Control: "   << GetGamePlayStat(lpVehicle, E_PLAYERSTATS_CONTROL)
+                    << ", Strength: "  << GetGamePlayStat(lpVehicle, E_PLAYERSTATS_STRENGTH);
+            MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 325.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+        }
     }
 
     // ------------------------------------------------------------------------------------------------

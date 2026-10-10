@@ -721,5 +721,26 @@ void BehaviourRotateAboutVehicle::BecomeSimilarTo(const Camera& lrSourceCamera,
     mRotationController.Construct();   // stvx128 0,+0x20 / +0x30..+0x42 / +0x48 / +0x4C
 }
 
+// ----------------------------------------------------------------------------
+// SetParameters(const Behaviour::Parameters*) -- this class's own virtual slot 8. The whole
+// function: the tag-18 tripwire (quoting this .cpp, line 299), then the single store into
+// mpParameters (+0x374). Distinct from the typed header overload, which quotes the .h.
+// ----------------------------------------------------------------------------
+void BehaviourRotateAboutVehicle::SetParameters(const Behaviour::Parameters* lpParameters)
+{
+    CGS_ASSERT(lpParameters->GetType() == 18u,
+               "lpParameters->GetType() == eBehaviourRotateAboutVehicle");   // .cpp:299
+
+    mpParameters = static_cast<const Parameters*>(lpParameters);
+}
+
+// ----------------------------------------------------------------------------
+// GetParameters -- this class's own virtual slot 9: one load of mpParameters (+0x374), returned.
+// ----------------------------------------------------------------------------
+const Behaviour::Parameters* BehaviourRotateAboutVehicle::GetParameters() const
+{
+    return mpParameters;
+}
+
 } // namespace Camera
 } // namespace BrnDirector

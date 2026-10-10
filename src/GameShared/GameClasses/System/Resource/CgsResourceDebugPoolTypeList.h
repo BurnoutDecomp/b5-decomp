@@ -23,6 +23,18 @@
 //     descriptor[0] = { m_size = 0, m_alignment = 1 }.
 namespace CgsResource
 {
+    // How the type list groups its rows (the resource debug component's "Type List Mode" option).
+    enum EPoolTypeListMode
+    {
+        E_POOLTYPELISTMODE_RAW        = 0,
+        E_POOLTYPELISTMODE_PROGRAMMER = 1,
+        E_POOLTYPELISTMODE_ARTIST     = 2,
+        E_POOLTYPELISTMODE_COUNT      = 3,
+    };
+
+    // Display names of the EPoolTypeListMode values: "Raw", "Detailed", "Summary".
+    extern const char* KAPC_POOLTYPELISTMODENAMES[E_POOLTYPELISTMODE_COUNT];
+
     class DebugPoolTypeList
     {
     public:

@@ -160,7 +160,7 @@ AABBox AA(const ClusteredMesh* lpMesh, u32 auClusterIndex, u32 auUnitOffset)
     const u8* lpMeshBytes = reinterpret_cast<const u8*>(lpMesh);
 
     // r10 = mesh + (*(mesh+0x34))[clusterIndex]
-    const u8* lpCluster = lpMeshBytes + lpMesh->mpuClusterOffsets[auClusterIndex];
+    const u8* lpCluster = lpMeshBytes + lpMesh->GetClusterOffsets()[auClusterIndex];
 
     // r11 = cluster + 16*(lhz(cluster+4) + 1) + unitOffset -- the unit record
     // sits past the header row and the muUnitCount 16-byte vertex-block rows.

@@ -423,6 +423,18 @@ void Attrib::Vault::Export(const TypeID& lrType, const ExportID& lrExport,
     mExportData[luIndex].Set(lpData, luSize, lu8Kind);
 }
 
+// ClearExport. Reset the export DataBlock registered under lrExport.
+// FindExportID is inlined (a linear scan of mExportIDs, ~0 on a miss) and so is
+// DataBlock::Set(NULL, 0, 0): the console still formats the 24-bit size-limit
+// message into the assert buffer, then clears the payload pointer, the 24-bit
+// size and the kind byte. An id that is not registered leaves the vault untouched.
+void Attrib::Vault::ClearExport(const ExportID& lrExport)
+{
+    const unsigned int luIndex = FindExportID(lrExport);
+    if (luIndex < mNumExports)
+        mExportData[luIndex].Set(NULL, 0, 0);
+}
+
 // ExportManager ctor (inlined by the X360 into Database::GetExportPolicies
 // @0x8280DC70): reserve a fixed policy table. The reserve>254 guard's message is
 // SPrintf'd into the assert buffer at the X360 site before the check.

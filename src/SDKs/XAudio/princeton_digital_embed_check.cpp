@@ -24,8 +24,8 @@ void touch_allpass()
     Allpass a{};
     a.mFeedbackGain = 0.5f;
     a.mFeedforwardGain = -0.5f;
-    a.muIndex = 0;
-    f32 io[256] = {};
+    a.mLine.muIndex = 0;
+    f32 io[257] = {};
     a.preprocess(io);
     gSink += io[0] + a.mState;
 }
@@ -37,7 +37,7 @@ void touch_threetap()
     t.mGainA = 0.5f;
     t.mGainB = 0.25f;
     t.mGainC = 0.1f;
-    t.muIndex = 0;
+    t.mLine.muIndex = 0;
     f32 in[256] = {};
     f32 outA[257] = {};
     f32 outB[257] = {};
@@ -52,7 +52,7 @@ void touch_vardelay()
     v.mMix = 0.0f;
     v.mTapNew = 4;
     v.mTapNew2 = 2;
-    v.mTapOld = 3;
+    v.mLine.muIndex = 3;
     f32 in[256] = {};
     f32 out[257] = {};
     v.preprocess(in, out);
@@ -103,10 +103,18 @@ extern "C" int princeton_digital_embed_check_main()
     stereo_room_t<f32>::properties_t props;
     gSink += props.f13 + static_cast<f32>(props.a0) + props.f18 + props.f19;
 
-    stereo_room_t<f32> room;
-    room.wet_dry_mix_set(75.0f);
-    room.input_mode_set(2);
-    gSink += room.mWetDryMix + static_cast<f32>(room.mInputMode);
+    stereo_room_t<f32> *room = new stereo_room_t<f32>();
+    room->wet_dry_mix_set(75.0f);
+    room->input_mode_set(2);
+    room->properties_set(props);
+    f32 inL[256] = {};
+    f32 inR[256] = {};
+    f32 outs[5][256] = {};
+    f32 *ins[2] = { inL, inR };
+    f32 *outPtrs[5] = { outs[0], outs[1], outs[2], outs[3], outs[4] };
+    room->process(ins, outPtrs);
+    gSink += room->mWetDryMix + static_cast<f32>(room->mInputMode) + outs[0][0];
+    delete room;
 
     return static_cast<int>(gSink);
 }

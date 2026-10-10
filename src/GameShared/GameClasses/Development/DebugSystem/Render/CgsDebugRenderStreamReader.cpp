@@ -1,10 +1,16 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRenderStreamReader.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (buffer-allocation guard)
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"         // DebugManager::ThreadSafeAquire/Release
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"  // DebugInterface::GetRender
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"        // DebugRender queues
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRenderCommon.h"  // Internal::DebugStreamInput
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                               // gpDebugPrint (bad-id warning)
 
 // CgsDev::DebugRenderStreamReader. Reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   Construct(IResourceAllocator*, liMaxCommands, liDataBufferSize) @ 0x82820CE8
 //   Begin                                                           @ 0x82817718
+//   End
 
 namespace CgsDev
 {
@@ -48,5 +54,43 @@ namespace CgsDev
     void DebugRenderStreamReader::Begin()
     {
         mInput.Begin();
+    }
+
+    // Take the debug manager, close the read pass, and drain every result: each entry whose id
+    // is a debug-draw event (0..24) is re-queued, with its own size, onto the buffered renderer's
+    // 2D queue (mbIs2D) or world queue; any other id is reported under message filter bit 0.
+    // Releasing the manager last.
+    void DebugRenderStreamReader::End()
+    {
+        const s32 KI_NUM_DEBUG_EVENT_IDS = 25;
+
+        DebugManager* lpDebugManager = DebugManager::ThreadSafeAquire();
+        mInput.End();
+
+        Internal::DebugStreamInput lInput;
+        while (mInput.ReadResult(&lInput) == CgsMemory::DataStreamResultReader::E_READ_SUCCESS)
+        {
+            for (s32 liEntry = 0; liEntry < lInput.miNumEntries; ++liEntry)
+            {
+                const Internal::DebugStreamInputEntry& lrEntry = lInput.mEntries[liEntry];
+                if (lrEntry.miEventId >= KI_NUM_DEBUG_EVENT_IDS || lrEntry.miEventId < 0)
+                {
+                    if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    {
+                        *Log::gpDebugPrint << "Warning, invalid event id at index " << liEntry
+                                           << ", id: " << lrEntry.miEventId << "\n";
+                    }
+                    continue;
+                }
+
+                DebugRender& lrRender = DebugInterface(lpDebugManager).GetRender();
+                CgsModule::VariableEventQueue<16384, 16>& lrQueue =
+                    lrEntry.mbIs2D ? lrRender.m2DQueue : lrRender.m3DQueue;
+                lrQueue.AddEventSafe(static_cast<const CgsModule::Event*>(lrEntry.mpEventData),
+                                     lrEntry.miEventId, lrEntry.miEventSize);
+            }
+        }
+
+        DebugManager::ThreadSafeRelease(lpDebugManager);
     }
 }

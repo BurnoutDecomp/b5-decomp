@@ -321,6 +321,26 @@ void BehaviourSpirallingDeathcam::SetParameters(const Parameters* lpParameters)
 }
 
 // ----------------------------------------------------------------------------
+// SetParameters(const Behaviour::Parameters*) -- this class's own virtual slot 8. The tag-19
+// tripwire (quoting this .cpp, line 254), then the store into mpParameters (+0x2D0). The same
+// shape as the typed overload above, but a separate function with its own assert site.
+// ----------------------------------------------------------------------------
+void BehaviourSpirallingDeathcam::SetParameters(const Behaviour::Parameters* lpParameters)
+{
+    CGS_ASSERT(lpParameters->GetType() == eBehaviourSpirallingDeathcam,
+               "lpParameters->GetType() == eBehaviourSpirallingDeathcam");   // .cpp:254
+    mpParameters = static_cast<const Parameters*>(lpParameters);
+}
+
+// ----------------------------------------------------------------------------
+// GetParameters -- this class's own virtual slot 9: one load of mpParameters (+0x2D0), returned.
+// ----------------------------------------------------------------------------
+const Behaviour::Parameters* BehaviourSpirallingDeathcam::GetParameters() const
+{
+    return mpParameters;
+}
+
+// ----------------------------------------------------------------------------
 // BrnDirector::Camera::BehaviourSpirallingDeathcam::Parameters::Construct @0x821FB498
 //
 // Seed the authored block to its defaults. Store order in the asm is scheduler-shuffled; the

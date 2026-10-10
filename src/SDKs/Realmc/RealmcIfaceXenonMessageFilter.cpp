@@ -1,35 +1,45 @@
 #include "SDKs/Realmc/RealmcIfaceXenonMessageFilter.h"
 
-#include <new>   // placement new -- reproduces the X360 `Response::Response(Mem, value)`
+#include <new>   // placement new -- the console constructs each Response in place
 
 // ===========================================================================
 // RealmcIface::XenonMessageFilter -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// No leak source / no DWARF: both SHAPE and BODY come from the X360 pseudocode +
-// asm. See RealmcIfaceXenonMessageFilter.h for the layout, the base
-// (RealmcCore::MessageFilter), and the FLAG notes.
-//
-// Bodied here:
-//   XenonMessageFilter::XenonMessageFilter          @0x82B54BE0
-//   XenonMessageFilter::ProcessMessage              @0x82B54C38
-//   XenonMessageFilter::Reset                       @0x82B54C28
-//   XenonMessageFilter::`vector deleting destructor`@0x82B54D20
-//     (compiler-generated from the virtual dtor + the class operator delete)
+// Both SHAPE and BODY come from the console
+// pseudocode + asm. See RealmcIfaceXenonMessageFilter.h for the layout, the
+// vtable and the FLAG notes.
 // ===========================================================================
 
 namespace RealmcIface
 {
 
+namespace
+{
+
+// The answer every handler below builds, inlined at each site on the console:
+// AllocateMem(null, 12); construct Response(iValue) there when the allocation
+// succeeded (null otherwise); wrap it in a stack ResponsePtr; assign that into
+// maResponse (MessagePtr::operator=); the stack ResponsePtr is torn down.
+void AnswerWith(RealmcCore::ResponsePtr& rHeld, int iValue)
+{
+    void* const lpMem = RealmcCore::AllocateMem(nullptr, sizeof(RealmcCore::Response));
+    RealmcCore::Response* const lpResponse =
+        lpMem ? new (lpMem) RealmcCore::Response(iValue) : nullptr;
+    const RealmcCore::ResponsePtr lAnswer(lpResponse);
+    rHeld = lAnswer;
+}
+
+// The hidden-message bits the MessageClear handler tests.
+const std::uint32_t KU_HIDDEN_MESSAGE_BIT_0200 = 0x200;
+const std::uint32_t KU_HIDDEN_MESSAGE_BIT_2000 = 0x2000;
+
+} // namespace
+
 // ---------------------------------------------------------------------------
-// XenonMessageFilter::XenonMessageFilter @ 0x82B54BE0
+// XenonMessageFilter::XenonMessageFilter
 //
-//   bl   RealmcCore::MessageFilter::MessageFilter   -> base ctor (forwards the handler)
-//   stw  off_82148728, 0(this)                      -> final XenonMessageFilter vtable
-//   stb  r10(0), 0x10(this)                          -> mbState = 0
-//
-// The vtable store at +0 is MSVC's derived-ctor prologue (emitted by the compiler
-// here). The handler forwarded to the base is the RealmcCore::MemcardState the
-// filter later queries via GetAutosaveState.
+// MessageFilter(pMemcardState); store the XenonMessageFilter vtable; clear the
+// state byte at +0x10.
 // ---------------------------------------------------------------------------
 XenonMessageFilter::XenonMessageFilter(RealmcCore::MemcardState* pMemcardState)
     : RealmcCore::MessageFilter(pMemcardState),
@@ -38,66 +48,78 @@ XenonMessageFilter::XenonMessageFilter(RealmcCore::MemcardState* pMemcardState)
 }
 
 // ---------------------------------------------------------------------------
-// XenonMessageFilter::ProcessMessage @ 0x82B54C38
+// XenonMessageFilter::ProcessMessage(MessageClear*) -- processor slot +0x44
 //
-//   lwz  r3, 4(this) ; bl MemcardState::GetAutosaveState -> mpHandler->GetAutosaveState()
-//   clrlwi r11, r3, 24 ; cmplwi 1 ; bne exit            -> gate on autosave == 1 (active)
-//   lwz  r11, 0x1C(msg)                                  -> incoming message's result word
-//   cmplwi 1 -> value 1 branch ; cmplwi 2 -> value 2 branch ; else exit
-//     li r4, 0xC ; li r3, 0 ; bl AllocateMem             -> Mem = AllocateMem(nullptr, 12)
-//     (Mem ? li r4, value ; bl Response::Response : 0)    -> new(Mem) Response((void*)value)
-//     bl ResponsePtr::ResponsePtr                         -> ResponsePtr lRp(response)
-//     addi r3, this, 8 ; bl MessagePtr::operator=         -> maMessage = lRp
-//     bl ResponsePtr::~ResponsePtr                        -> ~lRp
+//   if (state->GetMainTask() == 2) {
+//     if (state->GetCurrentTask() == 16)                   answer 1
+//     else if (state->GetCurrentTask() == 2 && !mbState)   answer 1
+//   }
+//   if (state->GetMainTask() == 8  && (state->GetHiddenMessages() & 0x200))   answer 1
+//   if (state->GetMainTask() == 16 && (state->GetHiddenMessages() & 0x2000))  answer 1
 //
-// The held MessagePtr slot at this+8 is the inherited MessageFilter::maMessage. The
-// X360 builds a RealmcCore::ResponsePtr over the Response and assigns it straight
-// into that MessagePtr: ResponsePtr and MessagePtr are layout-identical smart
-// pointers that share the same refcount teardown (ResponsePtr::~ResponsePtr tail-
-// branches into MessagePtr::~MessagePtr), so the assignment rebinds maMessage to the
-// Response through the shared RefCount machinery. That type-pun is reproduced below
-// with a reference reinterpret_cast -- exactly what the binary does. The two value
-// branches (1 / 2) are kept separate to mirror the asm's two distinct blocks.
-// Returns the autosave state (the function's dominant return; the matched branch's
-// register leftover from ~ResponsePtr is a compiler artifact, not a real result).
+// The message itself is not read. Every query goes back to the MemcardState
+// (each takes its lock), in the console's order.
 // ---------------------------------------------------------------------------
-bool XenonMessageFilter::ProcessMessage(void* pMessage)
+void XenonMessageFilter::ProcessMessage(RealmcCore::MessageClear* /*pMessage*/)
 {
-    const bool lbAutosaveActive = static_cast<RealmcCore::MemcardState*>(mpHandler)->GetAutosaveState();
-    if (lbAutosaveActive)
+    RealmcCore::MemcardState* const lpState = static_cast<RealmcCore::MemcardState*>(mpHandler);
+
+    if (lpState->GetMainTask() == 2)
     {
-        // FLAG: the incoming message type is un-homed; its result/status word lives
-        // at the attested byte offset +0x1C and selects the response value (1 or 2).
-        const int liResult = *reinterpret_cast<const int*>(static_cast<const u8*>(pMessage) + 0x1C);
-
-        if (liResult == 1)
+        if (lpState->GetCurrentTask() == 16)
         {
-            void* lpMem = RealmcCore::AllocateMem(nullptr, 12);
-            RealmcCore::Response* lpResponse =
-                lpMem ? new (lpMem) RealmcCore::Response(reinterpret_cast<void*>(1)) : nullptr;
-
-            RealmcCore::ResponsePtr lResponse(lpResponse);
-            // maMessage = lResponse (type-punned: ResponsePtr storage passed to MessagePtr::operator=).
-            maMessage = reinterpret_cast<const RealmcCore::MessagePtr&>(lResponse);
-        }   // ~lResponse here (Release) -- matches the X360 ~ResponsePtr ordering
-        else if (liResult == 2)
+            AnswerWith(maResponse, 1);
+        }
+        else if (lpState->GetCurrentTask() == 2 && !mbState)
         {
-            void* lpMem = RealmcCore::AllocateMem(nullptr, 12);
-            RealmcCore::Response* lpResponse =
-                lpMem ? new (lpMem) RealmcCore::Response(reinterpret_cast<void*>(2)) : nullptr;
-
-            RealmcCore::ResponsePtr lResponse(lpResponse);
-            maMessage = reinterpret_cast<const RealmcCore::MessagePtr&>(lResponse);
-        }   // ~lResponse here (Release)
+            AnswerWith(maResponse, 1);
+        }
     }
 
-    return lbAutosaveActive;
+    if (lpState->GetMainTask() == 8 &&
+        (lpState->GetHiddenMessages() & KU_HIDDEN_MESSAGE_BIT_0200) != 0)
+    {
+        AnswerWith(maResponse, 1);
+    }
+
+    if (lpState->GetMainTask() == 16 &&
+        (lpState->GetHiddenMessages() & KU_HIDDEN_MESSAGE_BIT_2000) != 0)
+    {
+        AnswerWith(maResponse, 1);
+    }
 }
 
 // ---------------------------------------------------------------------------
-// XenonMessageFilter::Reset @ 0x82B54C28
+// XenonMessageFilter::ProcessMessage(MessageTrc*) -- processor slot +0x48
 //
-//   li  r11, 0 ; stb r11, 0x10(this)  -> mbState = 0
+//   if (state->GetAutosaveState() == 1) {           (the returned byte compared to 1)
+//     n = message's Trc option count                 (the word at message +0x1C)
+//     if (n == 1)      answer 1
+//     else if (n == 2) answer 2
+//   }
+// ---------------------------------------------------------------------------
+void XenonMessageFilter::ProcessMessage(RealmcCore::MessageTrc* pMessage)
+{
+    RealmcCore::MemcardState* const lpState = static_cast<RealmcCore::MemcardState*>(mpHandler);
+
+    if (lpState->GetAutosaveState())
+    {
+        const int liNumOptions = pMessage->GetTrc().GetNumOptions();
+        if (liNumOptions == 1)
+        {
+            AnswerWith(maResponse, 1);
+        }
+        else if (liNumOptions == 2)
+        {
+            AnswerWith(maResponse, 2);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// XenonMessageFilter::Reset -- MessageFilter slot +0x5C
+//
+// Store 0 to the state byte at +0x10.
 // ---------------------------------------------------------------------------
 void XenonMessageFilter::Reset()
 {
@@ -105,19 +127,11 @@ void XenonMessageFilter::Reset()
 }
 
 // ---------------------------------------------------------------------------
-// XenonMessageFilter::~XenonMessageFilter @ 0x82B54D20 (backs the `vector deleting
-// destructor')
+// XenonMessageFilter::~XenonMessageFilter
 //
-//   stw  off_82148728, 0(this)                         -> (re)install the final vtable
-//   bl   RealmcCore::MessageFilter::~MessageFilter     -> base teardown (Release maMessage,
-//                                                         restore off_82148660)
-//   (a2 & 1) ? li r4, 0x14 ; bl RealmcCore::FreeMemSize : --  -> free 20 bytes if delete flag set
-//
-// All real teardown lives in the MessageFilter base dtor (destroying the embedded
-// MessagePtr); this override's own body is empty. The vtable install + base dtor
-// call + the sized free are the compiler-generated `vector deleting destructor'
-// (the virtual dtor + the class operator delete), reproduced by the empty body
-// plus operator delete in the header.
+// Reinstall the XenonMessageFilter vtable and run ~MessageFilter; the vector
+// deleting destructor then frees 20 bytes through FreeMemSize when its delete
+// flag is set. The body is empty: the base dtor does the teardown.
 // ---------------------------------------------------------------------------
 XenonMessageFilter::~XenonMessageFilter()
 {

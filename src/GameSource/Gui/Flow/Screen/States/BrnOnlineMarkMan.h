@@ -3,28 +3,26 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"                 // CgsGui::State (base, DWARF-authoritative)
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"  // CgsGui::sResourceTuple
 #include "GameSource/Gui/BrnGuiCache.h"                                         // BrnGui::GuiCache
+#include "GameSource/Gui/BrnGuiTextField.h"                                     // BrnGui::TextField (mTimeField)
+#include "GameSource/Gui/Flow/Shared/Components/BrnIcon.h"                      // BrnGui::IconComponent (mTimeFieldIcon)
 
 // ============================================================================
 // GameSource/Gui/Flow/Screen/States/BrnOnlineMarkMan.h
 //
-// BrnGui::OnlineMarkMan - the online "mark man" (fugitive/marked-player) screen
-// state. MINIMAL SLICE: this header carries the class shape around the two
-// expected-component helpers recovered here (SetExpectedComponent @0x82483AC0,
-// ClearExpectedComponent @0x82483BA8). The state's OnEnter/OnLeave/Update FSM
-// interior and its SetExpectedAptComponentList / UpdateWFInit callers land with
-// the BrnOnlineMarkMan.cpp TU -- GROW in place.
+// BrnGui::OnlineMarkMan - the online "mark man" screen state: the waiting screen shown while
+// the marked player is being chosen, with a countdown text field and its icon.
 //
 // Layout + member names + method shapes are DWARF-AUTHORITATIVE (DecFIGS
 // BrnOnlineMarkMan.h): OnlineMarkMan : public CgsGui::State; members in order --
 // mpGuiCache (X360 +0x38), meInternalState (+0x3C), mauExpectedComponentIds[9]
-// (+0x40), muNumExpectedComponents (+0x64), then the trailing embedded components
-// (held as a reserved span here). Both expected-component helpers are DWARF-PRIVATE.
+// (+0x40), muNumExpectedComponents (+0x64), mTimeField (+0x68), mTimeFieldIcon (+0x190).
+// Both expected-component helpers and the per-internal-state updates are private there.
 //
 // The GuiCache watcher entry the X360 reaches (ClearExpectedAptComponentList) is
-// NOT on the committed BrnGui::GuiCache public API, so it is declared as a free
-// boundary helper taking the cache pointer + flow (mirrors BootLegalCacheBoundary::
-// ClearExpectedAptComponentList); its body links from the GuiCache boundary TU.
+// declared as a free boundary helper taking the cache pointer + flow (mirrors
+// BootLegalCacheBoundary::ClearExpectedAptComponentList).
 // ============================================================================
 
 namespace BrnGui
@@ -55,19 +53,43 @@ namespace BrnGui
         // DWARF BrnOnlineMarkMan.h:94 -- the expected-component list bound.
         static const u32 KU_MAX_INIT_COMPONENTS_NUM = 9;
 
+        virtual void OnEnter();
+        virtual void OnLeave();
+        virtual void Update();
+
+        // Hand out the screen's one-APT resource list.
+        virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
+                                        u32* lpuNumberOfResources) const
+        {
+            *lppResourceTuples    = maResourcesToLoad;
+            *lpuNumberOfResources = muNumResourcesToLoad;
+        }
+
     private:
         // --- recovered members (DWARF names + order; guest 32-bit offsets in comments) ---
         BrnGui::GuiCache* mpGuiCache;                                        // X360 +0x38
         InternalState     meInternalState;                                  // X360 +0x3C
         u32               mauExpectedComponentIds[KU_MAX_INIT_COMPONENTS_NUM]; // X360 +0x40 (x9)
         u32               muNumExpectedComponents;                          // X360 +0x64
-        // DWARF trailing embedded components: mTimeField (BrnGui::TextField) @+0x68,
-        // mTimeFieldIcon (BrnGui::IconComponent) after it. Those component types are not
-        // committed yet and this slice never touches them, so they are held as a reserved
-        // span (FLAG). GROW to the named members when TextField / IconComponent land.
-        u8                maReservedTrailingComponents[8];                  // FLAG span (nominal)
+        TextField         mTimeField;                                       // console +0x68 "TimeCounter_mc"
+        IconComponent     mTimeFieldIcon;                                   // console +0x190 "TimeCounterIcon_mc"
 
-        // --- recovered here (DWARF-private) ---------------------------------------------
+        // The screen's one APT package, and the five input events it listens on.
+        static const CgsGui::sResourceTuple maResourcesToLoad[1];
+        static const u32                    muNumResourcesToLoad;
+        static const s32                    maiEventToObserve[5];
+        static const s32                    miNumEventsObserved;
+
+        // --- the per-internal-state updates Update() steps through (bodies in the .cpp) ---
+        void UpdateGetCache();
+        bool UpdateLoadResources();
+        bool UpdateWFInit();
+        void UpdateSetup();
+        bool UpdateSyncing();
+        void UpdatePermanent();
+
+        void SetExpectedAptComponentList();
+
         // NOTE: DWARF declares SetExpectedComponent as returning void, but the X360 asm
         // computes the name hash into r3 and tail-returns it; the committed byte-identical
         // twin (BrnGui::RaceMainHudState::SetExpectedComponent) is homed returning u32.

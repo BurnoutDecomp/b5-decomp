@@ -78,7 +78,22 @@ namespace BrnGui
         // classify a menu row (its own ledger function, declaration only).
         EMenuItemType GetMenuItemType(s32 liItemIndex) const;
 
+        // Copy a preset event's route (start trigger, checkpoints, counties) into the current
+        // round. Body in the .cpp.
+        void SetRouteFromPresetEvent(s32 liPresetEventID);
+
     private:
+        // Pick a random online landmark (checkpoint) / finish point for the given checkpoint row
+        // of liRoundNumber, in leCounty (E_COUNTY_COUNT == anywhere), and return its landmark;
+        // -1 when nothing qualifies. Bodies in the .cpp.
+        BrnGameState::LandmarkIndex GenerateRandomLandmark(s32 liRoundNumber, s32 liCheckpointItem,
+                                                           BrnWorld::ECounty leCounty);
+        BrnGameState::LandmarkIndex GenerateRandomFinishPoint(s32 liRoundNumber, s32 liCheckpointItem,
+                                                              BrnWorld::ECounty leCounty);
+        // Pick a random event start in leCounty far enough from the first checkpoint and return
+        // its traffic-light trigger id (the LightTriggerId handle); -1 when nothing qualifies.
+        u32 GenerateRandomStartPoint(s32 liRoundNumber, BrnWorld::ECounty leCounty);
+
         // ---- data members (debug-info order; console offsets documentary) --------------------
         CheckpointData     maCheckpointData[KI_MAX_CHECKPOINTS];   // +0x008C
         MenuComponent      mMenuOptions;                           // +0x0730

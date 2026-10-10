@@ -59,6 +59,10 @@ namespace BrnGui
                      CgsMemory::LinearMalloc* lpLinearMalloc,
                      ProfileManager* lpProfileManager);
 
+        // Dev dump of every pool state's name and size plus the pool total, one line each through
+        // BrnBaseFlow::PrintSingleSize (Prepare dispatches it before carving the pool).
+        virtual void PrintStateSizes();
+
     private:
         // The 14-state pool, in BrnHudFlow::Prepare build order (X360 flow+0x1024C..+0x10280).
         BootPreload*          mpPreload;               // BF_PRELOAD

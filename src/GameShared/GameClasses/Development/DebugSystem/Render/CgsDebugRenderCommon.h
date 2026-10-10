@@ -339,5 +339,25 @@ namespace CgsDev
         static_assert(sizeof(CInEventDrawCylinder)   == 0x20, "CInEventDrawCylinder must be 32 bytes");
         static_assert(sizeof(CInEventDrawCapsule)    == 0x20, "CInEventDrawCapsule must be 32 bytes");
         static_assert(sizeof(CInEventDrawTriangle)   == 0x28, "CInEventDrawTriangle must be 40 bytes");
+
+        // One debug-draw command handed across a data stream: the event image, its size and id,
+        // and which of the buffered renderer's queues (2D or world) it belongs to. 16 bytes on
+        // the console (event pointer +0x00, size +0x04, id +0x08, 2D flag +0x0C).
+        struct DebugStreamInputEntry
+        {
+            void* mpEventData;
+            s32   miEventSize;
+            s32   miEventId;
+            bool  mbIs2D;
+        };
+
+        // One stream result: up to KI_ENTRIES_PER_INPUT commands and the count in use.
+        struct DebugStreamInput
+        {
+            static const s32 KI_ENTRIES_PER_INPUT = 15;
+
+            DebugStreamInputEntry mEntries[KI_ENTRIES_PER_INPUT];
+            s32                   miNumEntries;
+        };
     }
 }

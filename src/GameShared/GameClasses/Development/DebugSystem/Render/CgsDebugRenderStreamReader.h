@@ -11,8 +11,8 @@
 // read pass over mInput.
 //
 // X360 homes (DecFIGS DWARF / asm): Construct(IResourceAllocator*, liMaxCommands, liDataBufferSize)
-// @ 0x82820CE8, Begin @ 0x82817718. The remaining Construct overloads / Destruct / End are declared
-// only (not reconstructed in this pass).
+// and Begin. End closes the read pass and replays every streamed command into the debug
+// manager's buffered renderer. The remaining Construct overloads and Destruct are declared only.
 
 namespace CgsMemory { class LinearMalloc; class HeapMalloc; }
 
@@ -30,13 +30,16 @@ namespace CgsDev
         // 0x82817718 - open a read pass over the underlying result reader.
         void Begin();
 
-        // Declared-only (not reconstructed in this pass).
+        // Close the read pass, then (holding the debug manager) replay each streamed command into
+        // the buffered renderer's 2D or world queue; an out-of-range event id is logged and dropped.
+        void End();
+
+        // Declared only.
         void Construct(Internal::DebugStreamInput* lpCommandBuffer, s32 liCommandBufferLength,
                        void* lpDataBuffer, s32 liDataBufferSize);
         void Construct(CgsMemory::LinearMalloc* lpAllocator, s32 liMaxCommands, s32 liDataBufferSize);
         void Construct(CgsMemory::HeapMalloc* lpAllocator, s32 liMaxCommands, s32 liDataBufferSize);
         void Destruct();
-        void End();
 
         // Commands per 256-byte page / page stride (X360: v5 = (liMaxCommands + 14) / 15, page = 256).
         static const s32 KI_COMMANDS_PER_PAGE = 15;

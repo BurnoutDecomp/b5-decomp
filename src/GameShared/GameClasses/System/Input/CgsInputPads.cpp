@@ -416,6 +416,41 @@ namespace CgsInput
     }
 
     // ------------------------------------------------------------------------------------------------
+    // UnBindPlayer (CgsInputPads.h).
+    //   player > 3 (cmplwi, unsigned): "Player out of bounds. 0 <= " << player << " < " << 4  -> 1
+    //   player not bound:              "Player is already unbound"                          -> 2
+    //   else maPlayers[player] = {unbound, -1}, maiPortToPlayer[its port] = -1                   -> 0
+    // Console caller: InputModule::ProcessUnbindRequestQueue (the InputPostWorld unbind chain).
+    // ------------------------------------------------------------------------------------------------
+    EUnbindResult InputPads::UnBindPlayer(s32 liPlayer)
+    {
+        if (static_cast<u32>(liPlayer) > KU_NUMBER_OF_PADS - 1)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Player out of bounds. 0 <= " << liPlayer << " < " << static_cast<s32>(KU_NUMBER_OF_PADS) << "\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessage,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputPads.cpp", 479);
+            CgsDev::Assert::EndAssert();
+            return E_UNBINDRESULTINVALIDPLAYER;
+        }
+
+        InputPlayer& lrPlayer = maPlayers[liPlayer];
+        if (!lrPlayer.mbBound)
+        {
+            CGS_ASSERT(false, "Player is already unbound");
+            return E_UNBINDRESULTPLAYERNOTBOUND;
+        }
+
+        const s32 liPort = lrPlayer.miPort;
+        lrPlayer.mbBound = false;
+        lrPlayer.miPort  = -1;
+        maiPortToPlayer[liPort] = -1;
+        return E_UNBINDRESULTOK;
+    }
+
+    // ------------------------------------------------------------------------------------------------
     // DWARF CgsInputPads.cpp:688 -- UpdateRumble, as InputModule::ProcessRumbleRequests @0x828FFE50
     // inlines it (0x829000C4..0x829000F0): the three flag stores in the console's order (+0x10D0 pause,
     // +0x10D2 wheel force feedback, +0x10D1 enable), then UpdatePadRumble(port, maPorts[port] (the

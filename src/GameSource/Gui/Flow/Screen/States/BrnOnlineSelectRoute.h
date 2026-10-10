@@ -56,6 +56,10 @@ namespace BrnGui
         }
 
     private:
+        // Pop the "route too short" overlay with the current route length and the minimum.
+        // Body in the .cpp.
+        void DisplayTooShortRouteMessage();
+
         static const CgsGui::sResourceTuple maResourceTuplesToLoad[]; // (.rdata)
         static const s32                    miNumResourcesToLoad;     // (.rdata) == 2
 

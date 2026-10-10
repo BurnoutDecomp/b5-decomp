@@ -10,6 +10,11 @@
 namespace BrnGui
 {
 
+// The console's override is empty.
+void ImageGalleryCarouselSelectable::Select()
+{
+}
+
 // @ 0x82419A40 -- the component subobject first (this+0x18), then the selectable.
 void ImageGalleryCarouselSelectable::Construct(const char* lpacName,
                                                CgsGui::StateInterface* lpStateInterface,

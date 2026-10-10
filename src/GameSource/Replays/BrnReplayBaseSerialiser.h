@@ -231,7 +231,10 @@ namespace BrnReplays
     protected:
         // SetMode @ 0x8264B0F8. Private in the leak; protected here so the embed
         // check and (future) construction path can drive the mode while it stays
-        // off the public surface.
+        // off the public surface. The replay module drives every serialiser's mode
+        // (ReplayModule::UpdateRestoring_PostSim calls it directly, and reads
+        // mbDataRestored, which has no getter).
+        friend class ReplayModule;
         void SetMode(EMode leMode);
 
     protected:

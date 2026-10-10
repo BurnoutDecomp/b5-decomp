@@ -237,6 +237,7 @@ struct MugshotInfo
 class Profile
 {
 public:
+    friend struct ProgressionDebugComponent;   // the progression debug HUD / win cheats read the profile directly
     // The persisted profile-format version Construct stamps (X360 Construct stores 28 at +0).
     static const s32 KI_NAME_LENGTH               = 32;
     static const s32 KI_MAX_RIVAL_COUNT           = 64;
@@ -298,6 +299,9 @@ public:
                     CgsSystem::DateAndTime lDateTaken, s32 leWorldRegion);
     s32  GetNumMugshots(s32 leMugshotType);
     s32  GetNumAllMugshots();
+    // Debug-info accessors, inlined into ProgressionManager::OnMugshotSent (+117992 increment, then read).
+    void OnMugshotSent()            { ++miNumMugshotsSent; }
+    s32  GetNumMugshotsSent() const { return miNumMugshotsSent; }
 
     // ADDITIVE GROW (declare-only) for the BrnGameStateImageManagerBase TU. The image-gallery
     // manager queries / mutates the persisted mugshot records through these (X360-asm-attested):
@@ -703,6 +707,7 @@ public:
     // DWARF's EnableFlags / ClearFlags / IsFlagSet(E_FLAG_DISCOVERED) under invented names.
     ProfileEvent* FindProfileEventByRaceEventId(CgsID lEventId);
 
+    const char*     GetName() const { return macName; }   // inline everywhere it is read (+4)
     s32             GetCarCount() const;
     const CarData*  GetCarData(s32 liIndex) const;
           CarData*  GetCarData(s32 liIndex);

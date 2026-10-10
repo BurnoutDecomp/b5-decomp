@@ -518,6 +518,11 @@ void CarSelectManager::StreamingFinished(CgsID lActiveCarZeroId, GameStateModule
             *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: StreamingFinished\n";
 
         const bool lbWasExiting = (meState == E_STATE_EXITING);
+        // [DIAG] harness witness, not console code: flow_run promotes the run to DRIVING on it.
+        if (lbWasExiting && mbWaitingForStreaming && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "CarSelectManager: streaming complete -- signalling StreamingFinished for the junkyard exit." << "\n";
+        }
         mbWaitingForStreaming = false;   // X360 *(this + 0x58) = 0
 
         if (lbWasExiting && mfStateTimer >= 2.0f /*flt_82001D9C*/)

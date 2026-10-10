@@ -69,7 +69,7 @@ namespace BrnGameState
             E_PREPARE_INVITE_SUBSTATE_COUNT                            = 5,
         };
 
-        // ---- public lifecycle / per-frame API (declared-only here; bodied by other slices) ----
+        // ---- public lifecycle / per-frame API (Update is bodied in this TU; the rest elsewhere) ----
         void Construct();
         bool Prepare();
         bool Release();
@@ -86,7 +86,7 @@ namespace BrnGameState
         // ---- private helpers ----
         void CheckPreparedForInvite();                                            // 0x82363F78 (this TU)
         void ProcessGameStateActions(GameStateModuleIO::GameActionQueue* lpGameActionQueue); // 0x8236DA50 (this TU)
-        void SetModulePreparedForInvite(const CgsModule::Event* lpAction);        // own slice
+        void SetModulePreparedForInvite(const CgsModule::Event* lpAction);        // (this TU)
         void UpdatePrepareForInvite();                                            // 0x823980B0 (this TU)
         void UnbindExistingController();                                          // own slice
         void ProcessUnbindResults();                                              // 0x82391E88 (this TU)

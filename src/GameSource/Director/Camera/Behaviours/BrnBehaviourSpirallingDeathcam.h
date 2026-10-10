@@ -52,9 +52,10 @@
 // VTABLE (DWARF): Construct @0x8222C088, Prepare(info) @0x821FB3F8, Update @0x8224A528,
 // GetCollisionPolicy (cpp:225, ICF-folded: `addi r3, r3, 0x20`), GetName @0x821FB600. No
 // X360 export exists for SetupTweaker (cpp:266) -- the base default stands and it is flagged
-// in the .cpp. The DWARF also lists virtual Get/SetParameters(Behaviour::Parameters*); the PC
-// base holds NO slot for that pair (see Behaviour.h), so the typed SetParameters below hides
-// the base's non-virtual one, exactly as the sibling behaviours do.
+// in the .cpp. The class also has its own virtual Get/SetParameters(Behaviour::Parameters*)
+// pair in slots 9 and 8 of its ten-word table; the base holds no slot for that pair (see
+// Behaviour.h), so it is introduced here, and the typed SetParameters below is a separate
+// overload with its own tripwire.
 // ----------------------------------------------------------------------------
 namespace BrnDirector
 {
@@ -170,7 +171,12 @@ public:
     // Adopt an authored parameter block. @0x821F5680: assert the block's type tag, then store
     // the pointer (console +0x2D0). Hides Behaviour::SetParameters (no base slot; see banner).
     void SetParameters(const Parameters* lpParameters);
-    const Parameters* GetParameters() const { return mpParameters; }                // cpp:238
+
+    // ---- this class's OWN virtuals (slots 8 and 9; not base overrides) ----
+    // Slot 8: the tag-19 tripwire quoting this behaviour's .cpp (line 254), then the store into
+    // mpParameters (+0x2D0). Slot 9: one load of mpParameters, returned. Bodied in the .cpp.
+    virtual void                         SetParameters(const Behaviour::Parameters* lpParameters);
+    virtual const Behaviour::Parameters* GetParameters() const;
 
     // Has this activation already been started (DWARF h:96). ArbStateCrashing::Update gates its
     // Start() call on exactly this byte (`lbz r11, 0x2F4(behaviour)`).

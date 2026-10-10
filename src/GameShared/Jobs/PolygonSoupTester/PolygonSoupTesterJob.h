@@ -18,9 +18,10 @@
 //   PolygonSoupTesterJob::AllocateMemory                  @0x82916B98  (99)
 //   PolygonSoupTesterJob::RunBoxQuery                     @0x82916D28  (46)
 //   PolygonSoupTesterJob::LoadPrimitive                   @0x82916AB8   (8)
-// Declared-only (the other two Execute arms; named boot gates in the .cpp):
+// The streamed line arm (descriptor type 4): ExecuteLineTest, the four LineTest* workers
+// (only the nearest single-sided one has a body on the console) and RunLineQuery.
+// Declared-only (the synchronous fill arm; a named boot gate in the .cpp):
 //   PolygonSoupTesterJob::ExecuteFillTriangleCache        @0x82915AE0 (170)
-//   PolygonSoupTesterJob::ExecuteLineTest                 @0x82916340 (159)
 //
 // ─── LAYOUT ──────────────────────────────────────────────────────────────────
 // Every offset below is read out of the bodies, never guessed:
@@ -47,8 +48,10 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"      // Sphere (by value, the query)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"   // Triangle4 (the fill destination)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h" // AxisAlignedBox (the derived query box)
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithPolySoupListJobDesc.h" // the line arm's StreamCommand
 
-namespace CgsGeometric { struct PolygonSoupListSpatialMap; }
+namespace CgsGeometric { struct PolygonSoupListSpatialMap; struct Line; }
+namespace CgsMemory { struct SimpleDataStreamConsumer; }
 namespace CgsSceneManager { namespace CgsCollision { struct CollisionJobDescription; } }
 
 struct PolygonSoupTesterJob
@@ -99,11 +102,38 @@ struct PolygonSoupTesterJob
     // DMA fetch of the primitive; on a shared-memory host it is the pointer itself.
     void LoadPrimitive(const void* lpvSource, const void** lppvOut);
 
-    // The other two Execute arms. NOT reconstructed this wave (the fill-cache arm is
-    // the synchronous twin of the stream arm, the line arm is the traction-line leg);
-    // both are named boot gates in the .cpp, not silent returns.
+    // The synchronous fill arm (descriptor type 2). Nothing posts a type-2 descriptor, and
+    // FillTriangleCacheJobDesc does not yet type its destination member as the Triangle4
+    // array this arm hands FillTriangleCache; a named boot gate in the .cpp.
     void ExecuteFillTriangleCache();
+
+    // ExecuteLineTest -- the streamed line arm (descriptor type 4). Latch the map, bind a
+    // consumer to the descriptor's stream, carve one 128-byte command slot, then drain the
+    // stream through the LineTest* worker the descriptor's two flags pick.
     void ExecuteLineTest();
+
+    // The four per-command workers: (consumer, result index, map, command). Only the
+    // nearest single-sided one does anything on the console; the other three are empty.
+    typedef CgsSceneManager::CgsCollision::LineWithPolySoupStreamJobDesc::StreamCommand LineStreamCommand;
+    void LineTestSS(CgsMemory::SimpleDataStreamConsumer* lpConsumer, u32 luResultIndex,
+                    const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
+                    const LineStreamCommand* lpCommand);
+    void LineTestDS(CgsMemory::SimpleDataStreamConsumer* lpConsumer, u32 luResultIndex,
+                    const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
+                    const LineStreamCommand* lpCommand);
+    void LineTestNearestSS(CgsMemory::SimpleDataStreamConsumer* lpConsumer, u32 luResultIndex,
+                           const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
+                           const LineStreamCommand* lpCommand);
+    void LineTestNearestDS(CgsMemory::SimpleDataStreamConsumer* lpConsumer, u32 luResultIndex,
+                           const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
+                           const LineStreamCommand* lpCommand);
+
+    // RunLineQuery -- RunBoxQuery's segment twin: the same two scoped-by-the-caller 4 KB
+    // ping/pong buffers and the call-scoped node cache, over the map's job-side segment query.
+    void RunLineQuery(const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
+                      const CgsGeometric::Line&                      lrLine,
+                      u16**                                          lppaOutResults,
+                      s32*                                           lpiOutNumResults);
 
     // --- members ------------------------------------------------------------
     u8   mauUnattested00[0x10];                       // X360 +0x00      [UNATTESTED]

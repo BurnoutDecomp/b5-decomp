@@ -59,6 +59,7 @@ namespace BrnResource
     class GameDataModule : public CgsModule::ModuleSingleBuffered
     {
     public:
+        void DebugReportPools(CgsResource::PoolModule::FPoolReportCallback lpfCallback, void* lpUserData);
         enum EPrepareStage
         {
             E_PREPARE_START = 0, E_PREPARE_BASE = 1, E_PREPARE_RESOURCE = 2, E_PREPARE_BANKS = 3,

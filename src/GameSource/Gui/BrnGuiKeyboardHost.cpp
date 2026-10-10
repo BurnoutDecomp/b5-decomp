@@ -7,6 +7,8 @@
 
 #include "GameSource/Gui/BrnGuiKeyboardHost.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Gui/CgsSaveLoad.h"  // CgsGui::ConvertWideCharToAsciiSafe
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 
 namespace BrnGui
 {
@@ -29,6 +31,28 @@ s32 KeyboardHost::Release()
     CGS_ASSERT( mpGuiKeyboard != 0, "mpGuiKeyboard" );
     mpGuiKeyboard = 0;
     return 1;
+}
+
+// The keyboard reported back: a null result is a cancel; otherwise narrow the UTF-16 text
+// into a 1024-byte buffer and log it. Both lines are gated on message filter bit 0.
+void KeyboardHost::KeyboardClosed(const CgsGui::CgsUtf16* lpResultText)
+{
+    if (lpResultText == 0)
+    {
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "GuiKeyboard - cancelled\n";
+        }
+        return;
+    }
+
+    char lacText[1024];
+    // CgsUtf16 and the host's wchar_t are the same 16-bit code unit.
+    CgsGui::ConvertWideCharToAsciiSafe(lacText, reinterpret_cast<const wchar_t*>(lpResultText), sizeof(lacText));
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "GuiKeyboard - entered text: \"" << lacText << "\"\n";
+    }
 }
 
 } // namespace BrnGui

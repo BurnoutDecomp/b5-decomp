@@ -58,6 +58,14 @@ public:
     // Static utility -- takes the XOVERLAPPED by pointer, does not touch *this*.
     static const char* GetResultString(PXOVERLAPPED lpOverlapped);
 
+    // Header inline (the achievement manager's assert names it): the asynchronous call is still
+    // running while XGetOverlappedResult answers 997 (pending) or 996 (incomplete).
+    bool IsOperationInProgress()
+    {
+        const u32 luResult = XGetOverlappedResult(&mOverlapped, 0, 0);
+        return luResult == 997u || luResult == 996u;
+    }
+
 private:
     XOVERLAPPED mOverlapped;  // 0x00, 28 bytes -- the only member the TU touches
 };

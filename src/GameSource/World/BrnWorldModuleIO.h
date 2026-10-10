@@ -251,6 +251,8 @@ namespace BrnWorldIO
         // @0x823AD5F8 (which also gives the X360 sizeof: 322560) and recovered by headless
         // IDA over the ARTIST database.
         void Construct();   // X360 0x827C9E90
+        // The IOBufferStack DestroyIOBuffer<T> path runs it (body BrnWorldModuleIO_wBT_01.cpp).
+        void Destruct();
 
         // ---- AI race-route-request queue (consumed by WorldModule::BridgeInputToAIModule) ----
         const RaceRouteRequestQueue* GetRaceRouteRequestQueue() const;                           // :255 R (0x827A3510, "Upda")

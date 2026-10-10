@@ -75,7 +75,7 @@ namespace CgsCollision
     struct FillTriangleCacheStreamJobDesc : public CollisionJobDescription
     {
         // One posted fill request. sizeof == 32, which is not inferred: the factory
-        // BaseCollisionGenerator::CreateStreamProducer @0x828109F8 hands
+        // BaseCollisionGenerator::CreateFillTriangleCacheStream hands
         // SimpleDataStreamProducer::GetRequiredBufferSizes a command size of 0x20
         // (`li r4, 0x20` @0x82810ACC) and a result size of 0x10 (`li r6, 0x10` @0x82810AC4).
         //
@@ -98,7 +98,7 @@ namespace CgsCollision
         // sizeof == 16 (the producer's result size, above). ⚠️ The two READ fields only span the
         // first 8 bytes; the trailing 8 are named as UNREAD rather than as padding, and are
         // carried explicitly because 16 is the record's contract with the producer (the stream
-        // strides by miAlignedResultSize, but the SIZE is what CreateStreamProducer declared).
+        // strides by miAlignedResultSize, but the SIZE is what CreateFillTriangleCacheStream declared).
         // Measured, not assumed: a first cut of this struct came out 8 bytes and the wave's
         // runtime probe printed `sizeofStreamResult=8` -- caught and corrected.
         struct StreamResult
@@ -112,13 +112,13 @@ namespace CgsCollision
         const CgsGeometric::PolygonSoupListSpatialMap* mpSpatialMap;     // X360 +0x00
         CgsMemory::SimpleDataStreamProducer*           mpStreamProducer; // X360 +0x04
 
-        // GetSpacialMap @0x82916F78 (11) / GetStreamProducer @0x82916FA8 (11). Both are the
-        // ICF-folded "return this" shim + one load (`bl <identity> ; lwz r3, 0(r3)` and
-        // `... ; lwz r3, 4(r3)`); the misspelling of "Spacial" is the console's own, kept so a
-        // future name-join lands. Called by ExecuteFillTriangleCacheStream and, for the map,
+        // The two accessors the tester job reads the descriptor through. Names and constness are
+        // the class declaration's. On the console each is
+        // the private GetData() "return this" shim followed by one load: +0x00 for the map and
+        // +0x04 for the producer. Called by ExecuteFillTriangleCacheStream and, for the map,
         // again by FillTriangleCache.
-        const CgsGeometric::PolygonSoupListSpatialMap* GetSpacialMap() const { return mpSpatialMap; }
-        CgsMemory::SimpleDataStreamProducer* GetStreamProducer() const { return mpStreamProducer; }
+        const CgsGeometric::PolygonSoupListSpatialMap* GetSpatialMapPointer() const { return mpSpatialMap; }
+        CgsMemory::SimpleDataStreamProducer* GetDataStreamProducer() { return mpStreamProducer; }
 
         // Prepare -- PS3 DWARF
         //   _ZN15CgsSceneManager12CgsCollision30FillTriangleCacheStreamJobDesc7PrepareE

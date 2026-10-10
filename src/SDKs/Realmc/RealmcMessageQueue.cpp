@@ -3,34 +3,20 @@
 // ===========================================================================
 // RealmcCore::MessageQueue -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// Only the three functions that touch the list-head sentinels + the EA::Thread
-// primitives are homed here; the five list-NODE functions (GetMessage,
-// PostResponse, SendMessage, _ExtractResponse, _WaitForResponse) are BLOCKED
-// pending the un-homed RealmcCore::allocator_ node allocate/erase TU -- see the
-// header banner for the full rationale.
+// The list nodes go through RealmcCore::MessageList / ResponseList
+// (RealmcContainers.cpp); the locking and waking through the linked EAThread
+// Mutex / Condition. See the header banner for the layout and the flow.
 // ===========================================================================
 
 namespace RealmcCore
 {
 
 // ---------------------------------------------------------------------------
-// MessageQueue::MessageQueue @ 0x82C47168
+// MessageQueue::MessageQueue
 //
-//   stw 0,0(r31) ; stw 0,4(r31) ; stw r31,0(r31) ; stw r31,4(r31)
-//                                              -> mMessageList: next = prev = self
-//   stw 0,0(r11) ; stw 0,4(r11) ; stw r11,0(r11) ; stw r11,4(r11)  (r11 = this+0xC)
-//                                              -> mResponseList: next = prev = self
-//   stb 0,0x18(r31) ; stb 0,0x19(r31)          -> mbInitialized = mbShuttingDown = 0
-//   EA::Thread::Mutex::Mutex(this+0x20, 0, 0)  -> mMutex(nullptr, /*default*/false)
-//   EA::Thread::Condition::Condition(this+0x50, 0, 0)
-//                                              -> mCondition(nullptr, /*init*/false)
-//   li r11, 0x1770 ; stw r11, 0xB0(r31)        -> miWaitTimeoutMs = 6000
-//
-// The two self-referential list stores are RealmcListHead's default ctor (the
-// eastl::list empty-init); the compiler's zero-then-self double store collapses
-// to the single self-init here. The mutex/condition are built WITHOUT auto-init
-// (the (params=null, flag=false) ctor form), matching the two-phase pattern where
-// Initialize() Init's them.
+// Both lists start empty (sentinel next/prev pointing at itself), both flags
+// clear, the mutex and condition are constructed with (null parameters, no
+// default init) -- Initialize() Init's them -- and the wait timeout is 6000ms.
 // ---------------------------------------------------------------------------
 MessageQueue::MessageQueue()
     : mbInitialized(false)
@@ -39,22 +25,20 @@ MessageQueue::MessageQueue()
     , mCondition(nullptr, false)
     , miWaitTimeoutMs(6000)
 {
-    // mMessageList / mResponseList self-initialise to the empty (self-referential)
-    // state via RealmcListHead's default ctor.
+    // mMessageList / mResponseList self-initialise to the empty state through
+    // their own constructors.
 }
 
 // ---------------------------------------------------------------------------
-// MessageQueue::Initialize @ 0x82C44C50
+// MessageQueue::Initialize
 //
-//   if (!*(this+0x18)) {                        -> if not already initialised
-//     if (a2 >= 0) *(this+0xB0) = a2            -> latch caller timeout when valid
-//     EA::Thread::ConditionParameters(v4, 1, 0) -> intraProcess=true, name=null
-//     EA::Thread::Condition::Init(this+0x50, v4)
-//     EA::Thread::MutexParameters(v5, 1, 0)     -> intraProcess=true, name=null
-//     EA::Thread::Mutex::Init(this+0x20, v5)
-//     *(this+0x18) = 1                          -> mbInitialized = true
+//   if (!mbInitialized) {
+//     if (iTimeoutMs >= 0) miWaitTimeoutMs = iTimeoutMs
+//     mCondition.Init(ConditionParameters(intraProcess = true, name = null))
+//     mMutex.Init(MutexParameters(intraProcess = true, name = null))
+//     mbInitialized = true
 //   }
-//   return 0;
+//   return 0
 // ---------------------------------------------------------------------------
 int MessageQueue::Initialize(int iTimeoutMs)
 {
@@ -77,36 +61,25 @@ int MessageQueue::Initialize(int iTimeoutMs)
 }
 
 // ---------------------------------------------------------------------------
-// MessageQueue::ShutDown @ 0x82C45000
+// MessageQueue::ShutDown
 //
-//   if (*(this+0x18)) {                         -> only if initialised
-//     Mutex::Lock(this+0x20, &kTimeoutNone)
-//     *(this+0x19) = 1                          -> mbShuttingDown = true
-//     Mutex::Unlock(this+0x20)
-//     Condition::Signal(this+0x50, 1)           -> broadcast: wake the worker
-//     v2 = 10
-//     while (*(this+0x18)) {                     -> while still 'initialised'
-//       if (v2-- <= 0) break                     -> give up after 10 iterations
-//       Mutex::Lock(this+0x20, &kTimeoutNone)
-//       *(this+0x18) = (cntlzw(sentinel - responseList.next) & 0x20) == 0
-//                                                -> mbInitialized = !responseList.empty
-//       Mutex::Unlock(this+0x20)
-//       v5 = 10 ; EA::Thread::ThreadSleep(&v5)   -> 10ms yield
-//     }
+//   if (mbInitialized) {
+//     lock ; mbShuttingDown = true ; unlock
+//     mCondition.Signal(broadcast)
+//     up to 10 times, while mbInitialized:
+//       lock ; mbInitialized = !mResponseList.empty() ; unlock ; sleep 10ms
 //   }
-//   return 0;
+//   return 0
 //
-// The branchless X360 flag recompute is a "is the response list non-empty" test:
-// ShutDown keeps mbInitialized set (and keeps sleeping) until the worker has
-// drained every queued response, then falls out and returns. The Mutex::Lock
-// second argument (&unk_821BA1E4) is the kTimeoutNone ThreadTime reference the
-// committed Mutex::Lock default supplies -- reproduced by the no-argument Lock().
+// The console recomputes the flag branchlessly as "response list non-empty":
+// ShutDown keeps mbInitialized set (and keeps sleeping) until the waiters have
+// drained every queued response, then falls out.
 // ---------------------------------------------------------------------------
 int MessageQueue::ShutDown()
 {
     if (mbInitialized)
     {
-        mMutex.Lock();                 // Lock(kTimeoutNone)
+        mMutex.Lock();
         mbShuttingDown = true;
         mMutex.Unlock();
 
@@ -121,14 +94,169 @@ int MessageQueue::ShutDown()
             }
 
             mMutex.Lock();
-            mbInitialized = !mResponseList.IsEmpty();
+            mbInitialized = !mResponseList.empty();
             mMutex.Unlock();
 
-            u32 luSleepMs = 10;
-            EA::Thread::ThreadSleep(&luSleepMs);
+            EA::Thread::ThreadSleep(10);
         }
     }
     return 0;
+}
+
+// ---------------------------------------------------------------------------
+// MessageQueue::GetMessage
+//
+//   result = copy of the empty-message holder          (AddRef)
+//   lock
+//   if (!mMessageList.empty()) {
+//     result = front node's MessagePtr                  (operator=)
+//     mMessageList.DoErase(front node)
+//   }
+//   unlock ; return result
+// ---------------------------------------------------------------------------
+MessagePtr MessageQueue::GetMessage()
+{
+    MessagePtr lMessage(MessagePtr::EMPTY_MESSAGE());
+
+    mMutex.Lock();
+    if (!mMessageList.empty())
+    {
+        MessageListNode* const lpFront = mMessageList.front();
+        lMessage = lpFront->maValue;
+        mMessageList.DoErase(lpFront);
+    }
+    mMutex.Unlock();
+
+    return lMessage;
+}
+
+// ---------------------------------------------------------------------------
+// MessageQueue::PostResponse
+//
+//   lock
+//   pair = { copy of rMessage, copy of rResponse }      (two AddRefs)
+//   mResponseList.push_back(pair)                       (DoCreateNode + link at the back)
+//   ~pair                                               (two Releases)
+//   unlock
+//   mCondition.Signal(broadcast)
+//   return 0
+// ---------------------------------------------------------------------------
+int MessageQueue::PostResponse(MessagePtr& rMessage, ResponsePtr& rResponse)
+{
+    mMutex.Lock();
+    {
+        const MessageResponsePair lPair = { rMessage, rResponse };
+        mResponseList.push_back(lPair);
+    }
+    mMutex.Unlock();
+
+    mCondition.Signal(true);       // broadcast
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// MessageQueue::SendMessage
+//
+//   lock
+//   if (!mbShuttingDown)
+//     mMessageList.push_back(rMessage)                  (DoCreateNode + link at the back)
+//   unlock
+//   return _WaitForResponse(rMessage)
+// ---------------------------------------------------------------------------
+ResponsePtr MessageQueue::SendMessage(const MessagePtr& rMessage)
+{
+    mMutex.Lock();
+    if (!mbShuttingDown)
+    {
+        mMessageList.push_back(rMessage);
+    }
+    mMutex.Unlock();
+
+    return _WaitForResponse(rMessage);
+}
+
+// ---------------------------------------------------------------------------
+// MessageQueue::_ExtractResponse
+//
+//   key = copy of rMessage                              (the find_if predicate,
+//                                                        message_equal, by value)
+//   it = find_if(mResponseList, entry.first's message == key's message)
+//   ~key
+//   if (it == end) return false
+//   rResponse = it->second                              (operator=)
+//   mResponseList.erase(it)
+//   return true
+// ---------------------------------------------------------------------------
+bool MessageQueue::_ExtractResponse(const MessagePtr& rMessage, ResponsePtr& rResponse)
+{
+    MessageListNodeBase* const lpEnd = mResponseList.end();
+    MessageListNodeBase* lpNode = mResponseList.begin();
+    {
+        const MessagePtr lKey(rMessage);
+        while (lpNode != lpEnd &&
+               static_cast<ResponseListNode*>(lpNode)->maValue.first.Get() != lKey.Get())
+        {
+            lpNode = lpNode->mpNext;
+        }
+    }
+
+    if (lpNode == lpEnd)
+        return false;
+
+    rResponse = static_cast<ResponseListNode*>(lpNode)->maValue.second;
+    mResponseList.erase(lpNode);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// MessageQueue::_WaitForResponse
+//
+//   result = copy of the empty-response holder ; found = false
+//   lock
+//   while (!mbShuttingDown && !found) {
+//     if (!mResponseList.empty() && !mbShuttingDown && _ExtractResponse(rMessage, result))
+//       found = true
+//     if (!mbShuttingDown && !mResponseList.empty())
+//       mCondition.Signal(broadcast)                    (other waiters' responses)
+//     if (!found && mCondition.Wait(&mMutex, GetThreadTime() + miWaitTimeoutMs) times out)
+//       mbShuttingDown = true
+//   }
+//   unlock ; return result
+//
+// The console's Condition::Wait reports a timeout as -1 (its semaphore's timeout
+// code); the linked EAThread Condition reports it as kResultTimeout.
+// ---------------------------------------------------------------------------
+ResponsePtr MessageQueue::_WaitForResponse(const MessagePtr& rMessage)
+{
+    ResponsePtr lResponse(ResponsePtr::EMPTY_RESPONSE());
+    bool lbFound = false;
+
+    mMutex.Lock();
+    while (!mbShuttingDown)
+    {
+        if (lbFound)
+            break;
+
+        if (!mResponseList.empty() && !mbShuttingDown)
+        {
+            if (_ExtractResponse(rMessage, lResponse))
+                lbFound = true;
+        }
+
+        if (!mbShuttingDown && !mResponseList.empty())
+            mCondition.Signal(true);
+
+        if (!lbFound)
+        {
+            const EA::Thread::ThreadTime ltDeadline =
+                EA::Thread::GetThreadTime() + static_cast<EA::Thread::ThreadTime>(miWaitTimeoutMs);
+            if (mCondition.Wait(&mMutex, ltDeadline) == EA::Thread::Condition::kResultTimeout)
+                mbShuttingDown = true;
+        }
+    }
+    mMutex.Unlock();
+
+    return lResponse;
 }
 
 } // namespace RealmcCore

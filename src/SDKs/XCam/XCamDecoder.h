@@ -136,6 +136,7 @@ public:
     // is its own TU, declared here (its canonical home) so consumers compile.
     int Shutdown();
 
+    friend class CRemoteConsole;  // the owning console reads mbSequenceHeaderDecoded
 private:
     u32                 muDecodeCount;           // +0x000
     WMVDEC*             mpDecoder;               // +0x004

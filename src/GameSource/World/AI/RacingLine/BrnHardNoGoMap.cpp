@@ -18,11 +18,11 @@
 //                          (`lbz 0x98(sectionData)` == map+0x48); bodied in the header.
 //   the Get/Set trivial accessors -- bodied in the header.
 //
+// DEBUG RENDER
+//   Render and RenderHNGSquare (the latter has no export of its own; its body was read out of
+//   the image). Render's only caller is RacingLineGenerator::RenderHardNoGoMap.
+//
 // PARKS (declared in the header, deliberately NOT bodied here)
-//   [FLAG PC bring-up] HardNoGoMap::Render @0x82783740 -- debug render (walks
-//     MapSquareOccupiedFast + GetSquareCentre + RenderHNGSquare). Presentation-only on this
-//     host per the wave rule on Render*/Draw* bodies. DELETE-WHEN a PC debug-render lane
-//     brings up RacingLineGenerator::RenderHardNoGoMap @0x82790278.
 //   [FLAG PC bring-up] MoveTargetToLegalPosition, GetNearestEdges, IsSquareOccupied,
 //     FindNearestSpaceForTarget, CheckForContinuedSpreading, FindSpaceForTarget,
 //     ConvertInterpToPosition, IsInRange, MapSquareOccupied(f32,f32), SetMapSquare(f32,f32)
@@ -33,10 +33,6 @@
 //     GetPointFarAhead} and SteeringFan::IncludeHardNoGo, all of which are covered above).
 //     Declared-only so the DWARF surface is recorded; DELETE-WHEN a caller that inlines one
 //     of them is decompiled and the block can be read out of its asm.
-//   [FLAG PC bring-up] RenderHNGSquare (DWARF :234) is not even declared: it is
-//     debug-render-only AND its `RGBA` parameter has no single canonical home in this tree
-//     (three different `typedef u32 RGBA` live in three namespaces). DELETE-WHEN the debug
-//     render lane lands with an agreed RGBA home.
 //
 // THE PSEUDOCODE LIES IN THREE PLACES (all resolved against the asm):
 //   * 0x82768858 is MapSquareOccupied(int32_t, int32_t), NOT the (f32, f32) overload: its two
@@ -53,6 +49,9 @@
 #include "GameSource/World/AI/BrnAIBoundaryLine.h"     // BrnAI::BoundaryLine (16-byte packed 2D segment)
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
 #include "rw/math/vpu/vector2_operation.h"             // rw::math::vpu::Magnitude (2-lane)
+#include "rw/math/vpu/vector3_operation.h"             // rw::math::vpu::Magnitude / operator- (Render)
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"   // CgsDev::DebugInterface
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"         // CgsDev::DebugRender
 
 #include <cmath>                                       // fabsf
 
@@ -78,6 +77,22 @@ namespace
     const f32 KF_HNG_ROW_STEP      = 0.14285715f;   // flt_82013AB4
     const f32 KF_HNG_COLUMN_STEP   = 0.032258064f;  // flt_820C6658
     const f32 KF_EPSILON           = 1.1920929e-07f;// flt_820C3B70
+
+    // Render's two range gates (rodata 60.0f and 30.0f): nothing is drawn for a section whose
+    // centre square is further than the first from the viewer, nor a square run whose top-left
+    // corner is further than the second.
+    const f32 KF_HNG_RENDER_SECTION_RANGE = 60.0f;
+    const f32 KF_HNG_RENDER_SQUARE_RANGE  = 30.0f;
+
+    // Render's colours (0xAARRGGBB): each square run is black with its start row * 15 in blue;
+    // the square under the viewer is green.
+    const CgsDev::RGBA KRGBA_HNG_SQUARE_BASE  = 0xFF000000u;
+    const s32          KI_HNG_ROW_BLUE_STEP   = 15;
+    const CgsDev::RGBA KRGBA_HNG_VIEWER_SQUARE = 0xFF00FF00u;
+
+    // RenderHNGSquare's edge colours: the section's right edge blue, its left edge green.
+    const CgsDev::RGBA KRGBA_HNG_RIGHT_EDGE = 0xFF0000FFu;
+    const CgsDev::RGBA KRGBA_HNG_LEFT_EDGE  = 0xFF00FF00u;
 
     // GetHNGInterpXY's binary search: `li r11, 5` @0x82777BAC, seeded at t = 0.5 with a
     // 0.25 step (vcfsx v13, 1, 1 == 0.5; v12 = 0.5 * 0.5) that halves every pass.
@@ -364,7 +379,7 @@ f32 HardNoGoMap::SectionLength(f32 lfInterp)
 // scanning UP from column 0 the first free square's TOP-RIGHT corner is the lRightEdge, and
 // scanning DOWN from column 31 the first free square's TOP-LEFT corner is the lLeftEdge (so
 // column 0 is the world-right side of the road). When a side finds no free square at all it
-// falls back to the extreme column, which is what keeps the pair usable on a fully-blocked row.
+// falls back to the extreme column, which is what keeps the pair usable on a fully-occupied row.
 //
 // MapSquareOccupied (not ...Fast) is deliberate: it reports OUT OF RANGE as occupied, so the
 // two scans terminate on their own bounds.
@@ -445,7 +460,7 @@ f32 HardNoGoMap::GetEstimatedRoadWidth(f32 lfHeightInterp)
 // @0x82777D60
 // Occupancy of the square lPos falls in, plus how far (in map-width units) the nearest square
 // of the OPPOSITE occupancy is. The row word is INVERTED when the query square is occupied, so
-// one search finds "nearest free" and "nearest blocked" alike; a mask that starts as the two
+// one search finds "nearest free" and "nearest occupied" alike; a mask that starts as the two
 // immediate neighbours of the query bit is then grown one ring per step until it hits a set
 // bit. A row with nothing to find (all bits set after the optional inversion) reports 1.0.
 //
@@ -821,5 +836,103 @@ void HardNoGoMap::ConvertInterpToIndex(f32 lfInterpX, f32 lfInterpY, s32& liWidt
     {
         liHeight = 0;
     }
+}
+
+// ================================================================================================
+// Debug render
+// ================================================================================================
+
+// The grid around lPosition (its y is the height everything is drawn at). Each column is walked
+// from row 0: an occupied square whose top-left corner is in range starts a run, the run extends
+// over the occupied squares after it, and the whole run is drawn as one RenderHNGSquare tinted by
+// its start row. Then, when lPosition maps inside the patch, the square it falls in is drawn green.
+// A NaN interpolant counts as inside, as the console's compares do.
+void HardNoGoMap::Render(Vector3 lPosition)
+{
+    CGS_ASSERT(mbReady, "Hard No Go Secton not ready for rendering\n");
+
+    const f32 lfHeight = lPosition.y;
+
+    const Vector3 lCentre = GetSquareCentre(static_cast<u32>(KI_HNG_MAP_WIDTH / 2),
+                                            static_cast<u32>(KI_HNG_MAP_HEIGHT / 2), lfHeight);
+    if (vpu::Magnitude(lCentre - lPosition) > KF_HNG_RENDER_SECTION_RANGE)
+    {
+        return;
+    }
+
+    for (s32 liWidth = 0; liWidth < KI_HNG_MAP_WIDTH; ++liWidth)
+    {
+        for (s32 liHeight = 0; liHeight < KI_HNG_MAP_HEIGHT; ++liHeight)
+        {
+            if (!MapSquareOccupiedFast(liWidth, liHeight))
+            {
+                continue;
+            }
+
+            const Vector3 lTopLeft =
+                GetSquareTopLeft(static_cast<u32>(liWidth), static_cast<u32>(liHeight), lfHeight);
+            if (vpu::Magnitude(lTopLeft - lPosition) > KF_HNG_RENDER_SQUARE_RANGE)
+            {
+                continue;
+            }
+
+            s32 liEndHeight = liHeight + 1;
+            while (liEndHeight < KI_HNG_MAP_HEIGHT && MapSquareOccupiedFast(liWidth, liEndHeight))
+            {
+                ++liEndHeight;
+            }
+
+            const CgsDev::RGBA lColour =
+                KRGBA_HNG_SQUARE_BASE | static_cast<u8>(liHeight * KI_HNG_ROW_BLUE_STEP);
+            RenderHNGSquare(liWidth, liHeight, liEndHeight, lfHeight, lColour);
+
+            liHeight = liEndHeight - 1;
+        }
+    }
+
+    // The map plane is world (x, z).
+    f32 lfInterpX = 0.0f;
+    f32 lfInterpY = 0.0f;
+    GetHNGInterpXY(Vector2{ lPosition.x, lPosition.z, 0.0f, 0.0f }, lfInterpX, lfInterpY);
+
+    const bool lbInsideMap = !(lfInterpX < 0.0f) && !(lfInterpX > 1.0f)
+                          && !(lfInterpY < 0.0f) && !(lfInterpY > 1.0f);
+    if (lbInsideMap)
+    {
+        s32 liWidth  = 0;
+        s32 liHeight = 0;
+        ConvertInterpToIndex(lfInterpX, lfInterpY, liWidth, liHeight);
+        RenderHNGSquare(liWidth, liHeight, liHeight + 1, lfHeight, KRGBA_HNG_VIEWER_SQUARE);
+    }
+}
+
+// One solid quad over the squares [liStartHeight, liEndHeight) of column liWidth (its corners are
+// the top-left corners of the bounding columns and rows), then the section's right edge (current
+// to previous right corner) and left edge, all at world height lfHeight.
+void HardNoGoMap::RenderHNGSquare(s32 liWidth, s32 liStartHeight, s32 liEndHeight, f32 lfHeight,
+                                  CgsDev::RGBA lColour)
+{
+    const u32 luLeft  = static_cast<u32>(liWidth);
+    const u32 luRight = static_cast<u32>(liWidth + 1);
+
+    const Vector3 lEndLeft    = GetSquareTopLeft(luLeft,  static_cast<u32>(liEndHeight),   lfHeight);
+    const Vector3 lEndRight   = GetSquareTopLeft(luRight, static_cast<u32>(liEndHeight),   lfHeight);
+    const Vector3 lStartRight = GetSquareTopLeft(luRight, static_cast<u32>(liStartHeight), lfHeight);
+    const Vector3 lStartLeft  = GetSquareTopLeft(luLeft,  static_cast<u32>(liStartHeight), lfHeight);
+
+    CgsDev::DebugInterface lDebugInterface;
+    lDebugInterface.GetRender().DrawSolidQuad(lEndLeft, lEndRight, lStartRight, lStartLeft, lColour);
+
+    const Vector2 lCurrentLeft   = GetCurrentLeft();
+    const Vector2 lCurrentRight  = GetCurrentRight();
+    const Vector2 lPreviousLeft  = GetPreviousLeft();
+    const Vector2 lPreviousRight = GetPreviousRight();
+
+    lDebugInterface.GetRender().DrawLine(Vector3{ lCurrentRight.x,  lfHeight, lCurrentRight.y,  0.0f },
+                                         Vector3{ lPreviousRight.x, lfHeight, lPreviousRight.y, 0.0f },
+                                         KRGBA_HNG_RIGHT_EDGE);
+    lDebugInterface.GetRender().DrawLine(Vector3{ lCurrentLeft.x,   lfHeight, lCurrentLeft.y,   0.0f },
+                                         Vector3{ lPreviousLeft.x,  lfHeight, lPreviousLeft.y,  0.0f },
+                                         KRGBA_HNG_LEFT_EDGE);
 }
 }

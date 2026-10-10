@@ -7,36 +7,16 @@
 // ProStreet-08 rwaudio PDB entry exist for this type. See FastFirEngine.h for the byte-exact
 // layout and the per-function X360 addresses.
 //
-// RECONSTRUCTED HERE (grounded store-for-store in the disassembly):
-//   FastFirEngine_ctor   @0x82B68120   clear the running-state slots
-//   FastFirEngine_dtor   @0x82B6E758   free the scratch block + the FFT context
-//   Reset                @0x82B6E7C0   dtor's frees, plus zero the running state
-//   SetChannels          @0x82B68150   record the two channel counts
-//   Configure            @0x82B6F048   size + carve the one scratch block, alloc the FFT
-//   Filter               @0x82B6D068   the per-frame partition/FFT/MAC/IFFT/overlap-add driver
-//
-// THREE ledger functions in this TU are only DECLARED (bodies omitted, not stubbed):
-//   * MultiplyAccumulateComplex @0x82B684C0 -- a hand-written VMX complex MAC kernel: its
-//       body is entirely `vperm`/`vmulfp128`/`vmaddfp` driven by permute-control vectors
-//       loaded from un-recovered rodata (unk_83271C80/90/A0/B0) and cached under a bitmask
-//       into dword_83271CC0. The permute tables are not in the dossier, so a faithful
-//       reconstruction is impossible -- BLOCKED rather than guessed.
-//   * LoadDistributionCalc @0x82B682A0 -- fills the per-pass LoadRecord table from a float
-//       cost model. Its Hex-Rays output is flagged "local variable allocation has failed,
-//       the output may be wrong!" and tangles an __int64/double greedy accumulator over
-//       rodata coefficients (flt_8214AFB4/B8/BC) whose exact values are NOT expanded in this
-//       function's dossier. A wrong distribution silently corrupts Filter's per-pass counts,
-//       so the body is BLOCKED.
-//   * EstimateLoad @0x82B68168 -- a CPU-cost estimate that multiplies four un-attested rodata
-//       float coefficients (flt_8214AFB4/B8/BC, dbl_82047D50) not expanded in its dossier;
-//       BLOCKED rather than fabricated.
-// The bodied functions below reference the three only through their declarations, so this TU
-// compiles under the per-TU gate.
+// Members: the constructor and destructor, Reset, SetChannels, Configure, Filter (the
+// per-frame partition/FFT/MAC/IFFT driver), LoadDistributionCalc (the per-pass work
+// split), MultiplyAccumulateComplex (the complex MAC kernel, hand-written VMX on the
+// console) and EstimateLoad (the CPU-cost model ReverbIR1 budgets with).
 // =====================================================================================
 
 #include "rw/audio/core/FastFirEngine.h"
 #include "rw/audio/core/PlugIn.h" // rw::audio::core::System (the shared allocator @+0x14)
 
+#include <cmath>   // std::fma / std::log (the cost model, the VMX fused lanes)
 #include <cstring> // memset / memcpy (the X360 XMemSet / XMemCpy)
 
 namespace rw
@@ -60,40 +40,52 @@ inline void *XMemCpy(void *dst, const void *src, u32 bytes) { return std::memcpy
 
 // flt_8214AED0 == 100.0f -- Configure scales the partition-overlap ratio into a percentage.
 const f32 KF_HUNDRED = 100.0f;
+
+// The cost model's rodata (LoadDistributionCalc / EstimateLoad / MultiplyAccumulateComplex),
+// dumped from the image.
+const f32 KF_ONE = 1.0f;
+const f32 KF_ZERO = 0.0f;
+const f32 KF_HALF = 0.5f;
+const f32 KF_PERCENT = 0.01f;          // 0x3C23D70A
+const f32 KF_FFT_COST = 25.15f;        // 0x41C93333 -- per channel per (N log2 N)
+const f32 KF_MAC_COST = 19.22f;        // 0x4199C28F -- per complex MAC sample
+const f32 KF_OVERLAP_COST = 50.09f;    // 0x42485C29 -- per output channel per sample
+const f64 KD_TWO = 2.0;                // the log base of EstimateLoad's log2
+
+// Complex bins the MAC kernel processes per step (one 128-byte frequency group).
+const s32 KI_MAC_BINS_PER_STEP = 16;
 } // namespace
 
 // -------------------------------------------------------------------------------------
-// FastFirEngine::FastFirEngine @0x82B68120 -- clear only the running-state / handle slots the
-// asm writes (the sizing/pointer members are set later by Configure). Store order matches.
+// FastFirEngine::FastFirEngine -- clear only the running-state / handle slots the console
+// writes (the sizing/pointer members are set later by Configure). Store order matches.
 // -------------------------------------------------------------------------------------
-FastFirEngine *FastFirEngine::FastFirEngine_ctor(FastFirEngine *self)
+FastFirEngine::FastFirEngine()
 {
-    self->mpFft = nullptr;    // stw 0 @ +0x6C
-    self->miField70 = 0;      // stw 0 @ +0x70
-    self->mpBuffer = nullptr; // stw 0 @ +0x00
-    self->miCurPass = 0;      // stw 0 @ +0x5C
-    self->miWriteBlock = 0;   // stw 0 @ +0x30
-    self->miPingA = 0;        // stw 0 @ +0x64
-    self->miPingB = 0;        // stw 0 @ +0x68
-    self->miFftDone = 0;      // stw 0 @ +0x80
-    self->miMacDone = 0;      // stw 0 @ +0x84
-    self->miIfftDone = 0;     // stw 0 @ +0x88
-    return self;
+    mpFft = nullptr;    // +0x6C
+    miField70 = 0;      // +0x70
+    mpBuffer = nullptr; // +0x00
+    miCurPass = 0;      // +0x5C
+    miWriteBlock = 0;   // +0x30
+    miPingA = 0;        // +0x64
+    miPingB = 0;        // +0x68
+    miFftDone = 0;      // +0x80
+    miMacDone = 0;      // +0x84
+    miIfftDone = 0;     // +0x88
 }
 
 // -------------------------------------------------------------------------------------
-// FastFirEngine::~FastFirEngine @0x82B6E758 -- release the scratch block through the System
-// allocator and free the FFT context. (Unlike Reset it does not null the slots or clear the
-// running state -- it is the teardown path from ReverbIR1's scalar-deleting destructor.)
+// FastFirEngine::~FastFirEngine -- release the scratch block through the System allocator
+// and free the FFT context. Unlike Reset it neither nulls the slots nor clears the running
+// state; it is the teardown path of ReverbIR1's deleting destructor.
 // -------------------------------------------------------------------------------------
-void *FastFirEngine::FastFirEngine_dtor(FastFirEngine *self)
+FastFirEngine::~FastFirEngine()
 {
-    if (self->mpBuffer)
-        System::Free(off_83271928, self->mpBuffer, nullptr); // allocator->Free(buf, 0)
+    if (mpBuffer)
+        System::Free(off_83271928, mpBuffer, nullptr); // allocator->Free(buf, 0)
 
-    if (self->mpFft)
-        return FFT_Free(&self->mpFft);
-    return &self->mpFft; // asm returns r3 = &mpFft when the handle is already null
+    if (mpFft)
+        FFT_Free(&mpFft);
 }
 
 // -------------------------------------------------------------------------------------
@@ -205,7 +197,9 @@ int FastFirEngine::Configure(FastFirEngine *self, s32 channels, s32 blockSize, s
     const u32 totalBytes = static_cast<u32>(
         2 * (6 * numPasses + inFreqBytes) + convBytes + outPartBytes + impFreqBytes); // v48
 
-    void *buffer = System::Alloc(off_83271928, totalBytes, "Reverb IR Buffer", 16, 1);
+    // Straight to the System allocator's aligned Alloc (flags 1, align 16, offset 0); the
+    // console does not go through System::Alloc here.
+    void *buffer = off_83271928->mpAllocator->Alloc(totalBytes, "Reverb IR Buffer", 1, 16, 0);
     self->mpBuffer = buffer;
     XMemSet(buffer, 0, totalBytes);
 
@@ -349,7 +343,7 @@ void *FastFirEngine::Filter(FastFirEngine *self, ChannelNode *inNode, ChannelNod
                           + (self->miInputChannels * blockIdx + outCh) * self->miField4C;
                 }
 
-                result = MultiplyAccumulateComplex(self, pFreq, pImp, pAcc);
+                MultiplyAccumulateComplex(self, pFreq, pImp, pAcc);
             }
         }
         self->miMacDone += self->mpDist[self->miCurPass].miMacCount;
@@ -418,6 +412,158 @@ void *FastFirEngine::Filter(FastFirEngine *self, ChannelNode *inNode, ChannelNod
     }
 
     return result;
+}
+
+// -------------------------------------------------------------------------------------
+// FastFirEngine::LoadDistributionCalc -- split the frame's work across the miNumPasses
+// sub-passes. Costs are in forward-FFT units: a forward or inverse FFT costs 1, the
+// overlap-add costs outCh * 50.09 / ((log2 N - 1) * 25.15), and each MAC costs the share
+// macTotal / numBlocks of macTotal = (1 - overlap%/100) * numBlocks * outCh * 19.22 /
+// ((log2 N - 1) * 25.15). Each pass takes remaining / passesLeft, then greedily assigns the
+// forward FFTs, then the MACs, then the inverse FFTs while at least half the next item's
+// cost is left in its budget; whatever it did not spend carries over. The last pass picks up
+// any inverse FFTs still unassigned. The counts accumulate onto the table Configure zeroed.
+// (The comparisons keep the console's NaN behaviour.)
+// -------------------------------------------------------------------------------------
+void FastFirEngine::LoadDistributionCalc(FastFirEngine *self, s32 sizeLog2, s32 numBlocks)
+{
+    const f32 lfOutCh = static_cast<f32>(self->miOutputChannels);
+    const f32 lfNumBlocks = static_cast<f32>(numBlocks);
+    const f32 lfFftUnit = static_cast<f32>(sizeLog2 - 1) * KF_FFT_COST;
+    const f32 lfDryShare = std::fma(-self->mfField60, KF_PERCENT, KF_ONE); // fnmsubs
+
+    const f32 lfOverlapCost = (lfOutCh * KF_OVERLAP_COST) / lfFftUnit;
+    const f32 lfMacTotal = ((lfDryShare * lfNumBlocks) * lfOutCh * KF_MAC_COST) / lfFftUnit;
+    const f32 lfMacCost = lfMacTotal / lfNumBlocks;
+    f32 lfRemaining =
+        ((lfOverlapCost + static_cast<f32>(self->miInputChannels)) + lfOutCh) + lfMacTotal;
+
+    s32 liFftAssigned = 0;
+    s32 liMacAssigned = 0;
+    s32 liIfftAssigned = 0;
+    f32 lfNextCost = KF_ONE;
+
+    for (s32 liPass = 0; liPass < self->miNumPasses; ++liPass)
+    {
+        LoadRecord &lrRecord = self->mpDist[liPass];
+        const f32 lfBudget = lfRemaining / static_cast<f32>(self->miNumPasses - liPass);
+        f32 lfLeft = lfBudget;
+
+        if (!(lfBudget < lfNextCost * KF_HALF))
+        {
+            do
+            {
+                if (liFftAssigned < self->miInputChannels)
+                {
+                    ++liFftAssigned;
+                    lfLeft = lfLeft - KF_ONE;
+                    ++lrRecord.miFftCount;
+                    if (!(liFftAssigned < self->miInputChannels))
+                        lfNextCost = lfMacCost;
+                }
+                else if (liMacAssigned < numBlocks)
+                {
+                    ++liMacAssigned;
+                    lfLeft = lfLeft - lfMacCost;
+                    ++lrRecord.miMacCount;
+                    if (!(liMacAssigned < numBlocks))
+                        lfNextCost = KF_ONE;
+                }
+                else if (liIfftAssigned < self->miOutputChannels)
+                {
+                    ++liIfftAssigned;
+                    lfLeft = lfLeft - KF_ONE;
+                    ++lrRecord.miIfftCount;
+                }
+                else
+                {
+                    lfLeft = KF_ZERO;
+                }
+            } while (lfLeft >= lfNextCost * KF_HALF);
+        }
+
+        lfRemaining = lfRemaining - (lfBudget - lfLeft);
+
+        if (liPass == self->miNumPasses - 1 && liIfftAssigned < self->miOutputChannels)
+        {
+            LoadRecord &lrLast = self->mpDist[self->miNumPasses - 1];
+            lrLast.miIfftCount = lrLast.miIfftCount - liIfftAssigned + self->miOutputChannels;
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------
+// FastFirEngine::MultiplyAccumulateComplex -- acc[k] += (imp[k] * scale) * freq[k] over
+// complex bins, 16 bins per step, miField44 / 32 steps (signed division).
+//
+// The console kernel loads eight 16-byte vectors of each stream per step, widens the
+// 16-bit impulse halves (vupkhsh / vupklsh + vcfsx), scales them by the splatted 1/imp[0]
+// (fdivs), splits real and imaginary lanes with two cached vperm controls, multiplies, and
+// re-interleaves with two more before the accumulate. Every lane runs the same operations,
+// so the per-bin form below is bit-exact with it:
+//   re = Ir*Fr - Ii*Fi          (two vmulfp128, one vsubfp)
+//   im = fma(Ir, Fi, Ii*Fr)     (vmulfp128 then a fused vmaddfp)
+//   acc += {re, im}             (vaddfp)
+// The four permute controls (00010203 08090A0B 10111213 18191A1B: even lanes;
+// 04050607 0C0D0E0F 14151617 1C1D1E1F: odd lanes; and the two merges back) are built from
+// immediates and cached in function statics under a bit mask; as index arithmetic they
+// need no table. The dcbt prefetches are cache hints only.
+// -------------------------------------------------------------------------------------
+void FastFirEngine::MultiplyAccumulateComplex(FastFirEngine *self, f32 *pFreq, s16 *pImpulse,
+                                              f32 *pAcc)
+{
+    const f32 lfScale = KF_ONE / static_cast<f32>(pImpulse[0]);
+    const s16 *lpBins = pImpulse + 8; // the bins start 16 bytes into the partition
+
+    for (s32 liStep = self->miField44 / 32; liStep > 0; --liStep)
+    {
+        for (s32 liBin = 0; liBin < KI_MAC_BINS_PER_STEP; ++liBin)
+        {
+            const f32 lfIr = static_cast<f32>(lpBins[2 * liBin]) * lfScale;
+            const f32 lfIi = static_cast<f32>(lpBins[2 * liBin + 1]) * lfScale;
+            const f32 lfFr = pFreq[2 * liBin];
+            const f32 lfFi = pFreq[2 * liBin + 1];
+
+            const f32 lfRe = lfIr * lfFr - lfIi * lfFi;
+            const f32 lfIm = std::fma(lfIr, lfFi, lfIi * lfFr);
+            pAcc[2 * liBin] = lfRe + pAcc[2 * liBin];
+            pAcc[2 * liBin + 1] = lfIm + pAcc[2 * liBin + 1];
+        }
+        lpBins += 2 * KI_MAC_BINS_PER_STEP;
+        pFreq += 2 * KI_MAC_BINS_PER_STEP;
+        pAcc += 2 * KI_MAC_BINS_PER_STEP;
+    }
+}
+
+// -------------------------------------------------------------------------------------
+// FastFirEngine::EstimateLoad -- with N = blockSize:
+//   fftUnit = (N * log(N)) / log(2)                      (N log2 N, the double CRT log)
+//   cost    = outCh*N*50.09 + outCh*fftUnit*25.15
+//           + ((impulseSamples/N)*macLen*outCh)*19.22 + inCh*fftUnit*25.15
+//   return cost / (N / frameLen)                          (integer passes)
+// The three weighted terms accumulate through fused multiply-adds in the order written
+// in the body. The compiler's divide-by-zero / overflow traps on frameLen are expressed by
+// the division.
+// -------------------------------------------------------------------------------------
+f32 FastFirEngine::EstimateLoad(FastFirEngine *self, s32 macLen, s32 blockSize,
+                                s32 impulseSamples, s32 frameLen)
+{
+    const f32 lfN = static_cast<f32>(blockSize);
+    const f32 lfNLogN = lfN * static_cast<f32>(std::log(static_cast<f64>(lfN)));
+    const f32 lfFftUnit = lfNLogN / static_cast<f32>(std::log(KD_TWO));
+    const s32 liPasses = blockSize / frameLen;
+
+    const f32 lfOutCh = static_cast<f32>(self->miOutputChannels);
+    const f32 lfInCh = static_cast<f32>(self->miInputChannels);
+
+    const f32 lfInFft = (lfInCh * lfFftUnit) * KF_FFT_COST;
+    const f32 lfMacs = ((static_cast<f32>(impulseSamples) / lfN) * static_cast<f32>(macLen))
+                     * lfOutCh;
+
+    f32 lfCost = std::fma(lfMacs, KF_MAC_COST, lfInFft);
+    lfCost = std::fma(lfOutCh * lfFftUnit, KF_FFT_COST, lfCost);
+    lfCost = std::fma(lfOutCh * lfN, KF_OVERLAP_COST, lfCost);
+    return lfCost / static_cast<f32>(liPasses);
 }
 
 } // namespace core

@@ -240,6 +240,15 @@ namespace CgsNetwork
         }
     }
 
+    // ---- ClearPixels (header inline on the console, reference CgsNetworkTexture.h) ----------
+    // Zero the whole pixel buffer: assert there is one, then clear GetTextureSize() bytes (the
+    // XMemSet GameStateImageManagerBase::Prepare expands after each texture's Prepare).
+    void NetworkTexture::ClearPixels()
+    {
+        CGS_ASSERT(mpcTexture, "mpcTexture");
+        std::memset(mpcTexture, 0, static_cast<size_t>(GetTextureSize()));
+    }
+
     // ---- CopyPixelData @ 0x8287E890 ------------------------------------------------------------
     // Copy externally-supplied pixels into this texture's buffer. Asserts the incoming size and
     // format match this texture's, then copies liDataSizeInBytes bytes into mpcTexture.

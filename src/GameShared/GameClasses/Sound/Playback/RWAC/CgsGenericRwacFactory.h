@@ -145,7 +145,7 @@ private:
                                         GenericRwacVoice& arVoiceOut);
     void HandlePluginEvent(u32 au32CommandCount,
                            const uintptr_t* apuCommandWords);
-    const GenericRwacFeatureImplementation& GetFeatureImplementation(Name aName) const;
+    const GenericRwacFeatureImplementation& GetFeatureImplementation(Name aName);
 
     rw::audio::core::System* mpSystem;                    // console +0x10
     RwacCommandQueue mCommandQueue;                       // console +0x14

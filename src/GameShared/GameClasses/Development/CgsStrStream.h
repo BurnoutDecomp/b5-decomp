@@ -33,6 +33,7 @@ namespace CgsDev
         StrStreamBase& operator<<(f32 lfValue);
         StrStreamBase& operator<<(void* lpValue);
         StrStreamBase& operator<<(PrintMode leMode);
+        StrStreamBase& operator<<(bool lbValue);   // streams "true" / "false" through the sink
 
         // 0x82817720 - render a printf-style format into a 256-byte stack buffer and forward the
         // result to the virtual char* sink (the X360 StrStreamBase::AppendFormat). The X360 asserts

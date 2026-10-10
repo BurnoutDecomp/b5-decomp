@@ -33,14 +33,13 @@ namespace core
 
 // -------------------------------------------------------------------------------------
 // The real-FFT service the engine convolves through. These are free functions in
-// rw::audio::core with their own (not-yet-reconstructed) home TU; declared here because
-// Configure / Filter / Reset / the destructor call them. Signatures grounded in the
-// FastFirEngine asm:
-//   FFT_Alloc(sizeLog2, flag, &handle)          bl @0x82B6F2A0 (r3=log2, r4=0, r5=&handle)
-//   FFT_Init(handle)                            bl @0x82B6F2A8 (r3=handle)
-//   FFT_Free(&handle)                           bl @0x82B6E818 / @0x82B6E7A8 (r3=&handle)
-//   FFT_ForwardReal(handle, buffer)             bl @0x82B6D178 (r3=handle, r4=buffer)
-//   FFT_InverseReal(handle, buffer)             bl @0x82B6D370 (r3=handle, r4=buffer)
+// rw::audio::core with their own home TU; declared here because Configure / Filter / Reset /
+// the destructor call them. Signatures grounded in the FastFirEngine call sites:
+//   FFT_Alloc(sizeLog2, flag, &handle)
+//   FFT_Init(handle)
+//   FFT_Free(&handle)
+//   FFT_ForwardReal(handle, buffer)
+//   FFT_InverseReal(handle, buffer)
 // -------------------------------------------------------------------------------------
 void  FFT_Alloc(s32 sizeLog2, char flag, void **outHandle);
 void  FFT_Init(void *handle);
@@ -74,8 +73,11 @@ public:
     };
 
     // ---- ctor / dtor / lifecycle ----
-    static FastFirEngine *FastFirEngine_ctor(FastFirEngine *self); // @0x82B68120
-    static void          *FastFirEngine_dtor(FastFirEngine *self); // @0x82B6E758
+    // Clears the running-state and handle slots only; Configure sizes everything else.
+    // (ReverbIR1::CreateInstance constructs the engine embedded in the plug-in.)
+    FastFirEngine();
+    // Frees the scratch block and the FFT context (ReverbIR1's deleting destructor).
+    ~FastFirEngine();
     static FastFirEngine *Reset(FastFirEngine *self);              // @0x82B6E7C0
 
     // Record the input/output channel counts (@+0x74 / @+0x78); returns 1. @0x82B68150.
@@ -95,19 +97,25 @@ public:
     static void *Filter(FastFirEngine *self, ChannelNode *inNode, ChannelNode *outNode);
 
     // Fill the miNumPasses LoadRecord table so the per-frame FFT/MAC/IFFT cost is spread
-    // evenly across the sub-passes. @0x82B682A0. DECLARED ONLY -- see FastFirEngine.cpp for
-    // why the body is BLOCKED (garbled decompiler output over an un-attested float formula).
-    static FastFirEngine *LoadDistributionCalc(FastFirEngine *self, s32 sizeLog2, s32 numBlocks);
+    // evenly across the sub-passes: a greedy walk over the forward FFTs, then the MACs, then
+    // the inverse FFTs, each pass taking a share of the remaining cost (in forward-FFT units)
+    // proportional to the passes left. Called by Configure.
+    static void LoadDistributionCalc(FastFirEngine *self, s32 sizeLog2, s32 numBlocks);
 
-    // The VMX complex multiply-accumulate over one partition (out += impulse (x) freq).
-    // @0x82B684C0. DECLARED ONLY -- the body is a hand-written VMX `vperm`/`vmaddfp` kernel
-    // driven by un-recovered permute-control rodata; BLOCKED (see FastFirEngine.cpp).
-    static void *MultiplyAccumulateComplex(FastFirEngine *self, f32 *pFreq, s16 *pImpulse,
-                                           f32 *pAcc);
+    // The complex multiply-accumulate over one partition: pAcc += (pImpulse * scale) (x)
+    // pFreq, 16 complex bins per step over miField44 / 32 steps, where the impulse partition
+    // is 16-bit fixed point whose first word holds the divisor of its scale (1 / word) and
+    // whose bins start 16 bytes in. Hand-written VMX on the console; the per-bin arithmetic
+    // is reproduced exactly (see FastFirEngine.cpp).
+    static void MultiplyAccumulateComplex(FastFirEngine *self, f32 *pFreq, s16 *pImpulse,
+                                          f32 *pAcc);
 
-    // Estimate the CPU load of a given block/partition configuration. @0x82B68168.
-    // DECLARED ONLY -- reads un-attested rodata float coefficients; BLOCKED.
-    static float EstimateLoad(FastFirEngine *self, s32 a2, s32 a3, s32 a4, u32 a5);
+    // Estimate the CPU load of a block/partition configuration from the engine's channel
+    // counts (ReverbIR1::ApplyReverbHandler uses it to budget the reverb). The result is
+    // the per-pass cost: forward FFTs, inverse FFTs, MACs and the overlap-add, weighted by
+    // the per-operation weights held in rodata, divided by blockSize / frameLen passes.
+    static f32 EstimateLoad(FastFirEngine *self, s32 macLen, s32 blockSize, s32 impulseSamples,
+                            s32 frameLen);
 
     // ---- layout (X360 offsets are documentary; access by name) ----
     void *mpBuffer;           // +0x00  the one allocated scratch block (partition storage)

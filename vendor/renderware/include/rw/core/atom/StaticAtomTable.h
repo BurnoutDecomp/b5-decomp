@@ -14,6 +14,8 @@
 //     rw::core::atom::StaticAtomTable::Register          @ 0x82C47900
 //     rw::core::atom::StaticAtomTable::FindID            @ 0x82C47A40
 //     rw::core::atom::StaticAtomTable::At                @ 0x82C47B88
+// plus the auto-id Register(const char*) overload and the id->string At(AtomID)
+// accessor the runtime atom fix-up callbacks inline.
 //
 // LAYOUT (pinned from the X360 member offsets; the object is a thin handle that
 // holds one pointer to its data block, dereferenced as `*this` at the head of
@@ -31,6 +33,7 @@
 //                                          ;   0xFFFF marks an empty slot
 //     +0x10  uint16_t  muHashSlotCount     ; number of hash slots (the probe modulus)
 //     +0x12  uint16_t  muFreeSlots         ; remaining insert capacity (Register --)
+//     +0x14  uint16_t  muNextAvailableID   ; auto-id Register probe start
 //
 // All four members are integer/byte code (lwz/lhz/lbz/sth/stb/stw + divwu); no
 // VMX. The hash is rw::RwHash32String seeded with the 32-bit FNV-1a offset basis
@@ -57,6 +60,7 @@ public:
         uint16_t* mpHashSlots;         // +0x0C
         uint16_t  muHashSlotCount;     // +0x10
         uint16_t  muFreeSlots;         // +0x12
+        uint16_t  muNextAvailableID;   // +0x14 first id the auto-id Register probes
     };
 
     // Empty-slot sentinel stored in mpHashSlots (the X360 0xFFFF compare).
@@ -75,6 +79,21 @@ public:
     // (X360 @ 0x82C47900.)
     void Register(const char* lpcKey, uint32_t luAtomId);
 
+    // Intern a key under the next free atom id and return its id. A key that is
+    // already interned returns its existing id; otherwise the id slots are probed
+    // upward from muNextAvailableID for the first one whose string offset is
+    // still 0xFFFFFFFF, the key is registered there and muNextAvailableID moves
+    // one past it.
+    uint16_t Register(const char* lpcKey);
+
+    // The interned string of atom luAtomId: string pool base + its id->offset
+    // entry. No range or presence check, matching the inlined console reads.
+    const char* At(uint16_t luAtomId) const
+    {
+        return reinterpret_cast<const char*>(mpData->mpStringPoolBase +
+                                             mpData->mpIdToOffset[luAtomId]);
+    }
+
     // Look up `lpcKey`: linear-probe from the hash slot. On a hit, write the
     // matching atom id through lpuOutId and return true; on a full-cycle miss or
     // an empty slot, write that slot's content through lpuOutId and return false.
@@ -88,6 +107,11 @@ public:
 private:
     Data* mpData;  // +0
 };
+
+// The process-wide atom table the runtime atom fix-up callbacks
+// (rw::core::arena::DefaultRuntimeAtomFixup / DefaultRuntimeUnfixRefixAtoms)
+// intern into and read from.
+extern StaticAtomTable globalAtomTable;
 
 }  // namespace atom
 }  // namespace core

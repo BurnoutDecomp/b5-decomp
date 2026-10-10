@@ -31,7 +31,7 @@ void ExerciseOnlineFlybyManager(OnlineFlybyManagerEmbed& lEmbed)
     lManager.CalculateMarkedManRivalryRating(&lRating);
     lManager.CalculatePointsLeaderRating(&lRating);
 
-    const u8* lpName = lManager.GetRivalName(lRating.mPlayerID);
+    const CgsNetwork::PlayerName* lpName = lManager.GetRivalName(lRating.mPlayerID);
     (void)lpName;
 
     volatile s32 liOngoing = lManager.GetOngoingStat(

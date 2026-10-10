@@ -401,14 +401,11 @@ void StuntAttackMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
     }
 
     // 0x82345014..0x82345038. The console calls PreWorldInputBuffer::GetTimerStatusInterface
-    // (0x8231CE28) and reads the SECOND 0x18-byte entry: `lfs f13, 0x20(r11)` and
-    // `lfs f12, 0x1C(r11)` are maEntries[1].mfValue08 and maEntries[1].mfValue04
-    // (0x1C == 0x18 + 0x04, 0x20 == 0x18 + 0x08), then `fmadds f0, f13, f12, f0`.
-    // FLAG: this tree's TimerStatusInterface::Entry members are still positional names
-    // (miWord00/mfValue04/mfValue08/...) -- the PAIR is the console's per-frame timer delta times
-    // its scale; when that record is properly named, rename here too.
+    // and reads the SIM timer status (the second 0x18-byte block): the words at +0x20 and +0x1C are
+    // its mfTimeStepMultiplier and mfBaseTimeStep (0x1C == 0x18 + 0x04, 0x20 == 0x18 + 0x08),
+    // multiplied and added to the countdown in one fused step.
     const GameStateModuleIO::TimerStatusInterface* lpTimerStatus = lpInput->GetTimerStatusInterface();
-    mfCountdownTimer += lpTimerStatus->maEntries[1].mfValue08 * lpTimerStatus->maEntries[1].mfValue04;
+    mfCountdownTimer += lpTimerStatus->GetSimTimerStatus()->GetCurrentTimeStep();
 
     // 0x8234503C..0x823450C4 (first GetPlayerDirection + normalise + dot).
     // The console flattens the car's forward vector onto the XZ plane, normalises it, and dots it

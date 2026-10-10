@@ -45,9 +45,31 @@ namespace collision
 // from (a2+0x10) and the box-max row from (a2+0x20). Those two 16-byte rows are
 // added here at the asm-attested offsets; the three header words above are
 // unchanged (same offsets/widths) so existing BBoxQuery code is unaffected.
+//
+// The node records (kdtree.h) and the branch-node array word are named for
+// the clustered-mesh line walk FineIntersectionTestModule::ComputeLineTestFine inlines: a
+// child reference is {m_content, m_index} -- m_content 0xFFFFFFFF marks a BRANCH child whose
+// m_index is a branch-node index, anything else is a LEAF child holding m_content entries from
+// entry m_index on -- and a branch node splits its axis at m_extents[0] (the low child's upper
+// bound) / m_extents[1] (the high child's lower bound).
 struct KdTree
 {
-    u32 muReserved0;      // +0x00  not read by the BBoxQuery ctor
+    struct NodeRef
+    {
+        u32 muContent;    // +0x00  m_content
+        u32 muIndex;      // +0x04  m_index
+    };
+
+    struct BranchNode
+    {
+        u32     muParent;        // +0x00  m_parent
+        u32     muAxis;          // +0x04  m_axis (0 x, 1 y, 2 z)
+        NodeRef maChildRefs[2];  // +0x08  m_childRefs
+        f32     mafExtents[2];   // +0x18  m_extents
+    };
+
+    u32 muBranchNodes;    // +0x00  m_branchNodes (BranchNode*), a console-width word (the
+                          //        serialised tree resolves through the low-4 GB convention)
     u32 muNumBranchNodes; // +0x04  nonzero => interior nodes exist
     u32 muLeafNodeIndex;  // +0x08  seeds the cursor for a leaf-only tree
     u32 muReserved0C;     // +0x0C  unread padding (aligns mBoxMin to +0x10)

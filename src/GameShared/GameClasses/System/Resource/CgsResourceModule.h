@@ -7,7 +7,8 @@
 #include "GameShared/GameClasses/Memory/CgsMemoryModule.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"
 #include "GameShared/GameClasses/Containers/CgsIndexedPool.h"
-#include "rw/rwcore_structs.h"                                       // rw::IResourceAllocator (DebugComponentParams)
+#include "rw/rwcore_structs.h"                                       // rw::IResourceAllocator
+#include "GameShared/GameClasses/System/Resource/CgsResourceDebugComponent.h"  // embedded mDebugComponent + DebugComponentParams
 
 // CgsResource::ResourceModule - the resource-streaming engine: the container module that owns
 // and orchestrates the four resource sub-modules (BundleLoaderModule, PoolModule, MemoryModule,
@@ -29,16 +30,6 @@
 // (rw allocator middleware) as inert marked stubs.
 namespace CgsResource
 {
-    // Minimal placeholder for the embedded resource debug component (real type
-    // CgsResource::DebugComponent : CgsDev::DebugComponent - reached only via Register() here;
-    // embedded by value so it is kept light to avoid the debug-UI include cascade).
-    class DebugComponent
-    {
-    public:
-        void Construct();
-        void Register();
-    };
-
     struct DiskLayout;   // forward (ResourceModule::InitOptions holds a pointer only)
     namespace PoolIO { struct OutputBuffer; struct InputBuffer; }   // shuttle buffers
     namespace ResourceIO { struct InputBuffer; }                    // the module's request input
@@ -50,19 +41,6 @@ namespace CgsResource
         struct OpenWriteStreamRequest;
         struct CloseWriteStreamRequest;
     }
-
-    // CgsResource::DebugComponentParams (DWARF CgsResourceDebugComponent.h:57) - the debug-component
-    // bring-up params carried in ResourceModule::InitOptions. The X360 callback signature is
-    // void(*)(renderengine::Texture*, Vector2, Vector2, void*, bool, bool); modelled as a generic
-    // function pointer to avoid the renderengine/Vector2 include cascade (a pointer either way, so the
-    // layout is faithful). ConstructResourceModule fills: callback=TextureRenderCallback,
-    // userData=the GameDataModule, debugAllocator=Allocators::mpInternalDebugAllocator.
-    struct DebugComponentParams
-    {
-        void*                   mpTextureRenderCallback;   // :59 (DebugTextureRenderCallback)
-        void*                   mpTextureRenderUserData;   // :60
-        rw::IResourceAllocator* mpDebugAllocator;          // :61
-    };
 
     class ResourceModule : public CgsModule::ModuleSingleBuffered
     {
@@ -177,7 +155,7 @@ namespace CgsResource
         PoolModule                mPoolModule;          // +0x2C500 (a1+45280)
         CgsMemory::MemoryModule   mMemoryModule;        // +0x46580 (a1+72032)
         CgsFileSystem::FileSystem mFileSystem;          // +0x4684C (a1+72204)
-        DebugComponent            mDebugComponent;      // +0x14B96 ... (a1+84806)
+        DebugComponent            mDebugComponent;      // +0x52D18 (a1+84806)
         PendingFileResponse       maPendingFileResponses[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
         s8                        maiPendingFileResponseFreeIndices[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
         CgsContainers::IndexedPool<PendingFileResponse,

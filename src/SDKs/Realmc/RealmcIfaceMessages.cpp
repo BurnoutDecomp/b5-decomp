@@ -1,19 +1,21 @@
 #include "SDKs/Realmc/RealmcIfaceMessages.h"
 
-// RealmcIface::MessageBootupDone -- reconstructed from BURNOUT_X360_ARTIST.XEX.
-//
-// Bodied here (2 ledger functions, class:RealmcIface::MessageBootupDone):
-//   MessageBootupDone::Apply @0x82B55220
-//   MessageBootupDone::`scalar deleting destructor` @0x82B55240 (compiler-generated
-//   from the virtual dtor + the class operator delete in the header)
+// ===========================================================================
+// RealmcIface::MessageBootupDone -- reconstructed from the console image. See RealmcIfaceMessages.h.
+// ===========================================================================
 
 namespace RealmcIface
 {
 
-// @ 0x82B55220 -- forward into the handler's vtable slot 15 (`lwz 0x3C(vtbl)`).
-int MessageBootupDone::Apply(IRealmcIfaceHandler* lpHandler)
+// ---------------------------------------------------------------------------
+// MessageBootupDone::Apply (Message vtable +8)
+//
+// Swap the two arguments so the processor becomes `this`, load the processor's
+// vtable slot +0x3C and tail-call it with the message.
+// ---------------------------------------------------------------------------
+void MessageBootupDone::Apply(RealmcCore::IMessageProcessor* pProcessor)
 {
-    return lpHandler->OnBootupDone(this);
+    pProcessor->ProcessMessage(this);
 }
 
-}
+} // namespace RealmcIface

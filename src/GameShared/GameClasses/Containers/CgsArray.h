@@ -22,14 +22,22 @@ template <typename T, u32 N> class Set;
 // -1 ("Array used before Construct/Clear was called") and set to a real length by
 // Construct/Clear. Element access (Ge) bounds-checks the index against this count.
 // The count member is appended *after* the element buffer to match that on-disk shape.
-// Existing thin users that only declare an Array<> member (BrnGuiCache) are unaffected:
-// this only adds a trailing field and accessors, it does not change how they use it.
+// The default constructor writes the -1 sentinel, so every owner must Construct/Clear its
+// arrays before use, exactly as on the console.
 template <typename T, u32 N>
 class Array
 {
 public:
     static const u32 KU_SIZE          = N;
     static const s32 KI_UNCONSTRUCTED = -1; // sentinel before Construct/Clear has run
+
+    // Default constructor: default-constructs the N inline elements (a vector-construct over
+    // the element buffer) and stores the KI_UNCONSTRUCTED(-1) sentinel into the count word.
+    // Owners whose constructors are inlined show it as a bare `stw -1` into the count; the
+    // out-of-line copy is the Array<Array<BehaviourHelperIndex,28>,28> instantiation built by
+    // BehaviourManager::BehaviourManager (inner arrays: elements then count +0x70 = -1, per
+    // element; outer count +0xCB0 = -1 last).
+    Array() : miCount(KI_UNCONSTRUCTED) {}
 
     // Checked indexed accessor (X360 Array<T,N>::operator[]). The X360 body asserts the
     // array was Construct/Clear'd (miCount != the -1 sentinel) then bounds-checks the index

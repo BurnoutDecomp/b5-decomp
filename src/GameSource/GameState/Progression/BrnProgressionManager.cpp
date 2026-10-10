@@ -99,11 +99,9 @@ ProgressionManager::ProgressionManager()
     // ⚠️⚠️ [drive-thru wave 2026-08-27] THE TROPHY QUEUE MUST BE CLEARED HERE, and this is a
     // HOST-ONLY initialisation site, not an invented behaviour. The console clears it in
     // ProgressionManager::Construct @0x8237A5F8 (`*(a1 + 133320) = 0`, the count word) -- but
-    // that Construct is NOT reconstructed, and Array<T,N> has no default constructor, so on the
-    // host miCount would start as stack garbage. That is not inert: Append's own
-    // "Array used before Construct/Clear was called" guard tests miCount != -1, which garbage
-    // passes, and the next line writes maElements[garbage]. [[valid-pointer-invalid-object]] --
-    // the guard is satisfied by a value that is not a count.
+    // that Construct is NOT reconstructed, and Array<T,N>'s default constructor leaves miCount at
+    // the -1 sentinel, so without this the first Append fires "Array used before Construct/Clear
+    // was called".
     // ⭐ MOVE-WHEN ProgressionManager::Construct lands; this Clear belongs there.
     mQueueOfTrophyCarUnLocks.Clear();
 
@@ -659,7 +657,7 @@ bool ProgressionManager::AreRoadRulesAvailable() const
 // (the X360 jump table). Unknown index asserts and returns -1.
 // Constants are the X360 li immediates: 0->0, 1->3, 2->7, 3->8, 4->5, 5->4.
 // ------------------------------------------------------------------------------------
-s32 ProgressionManager::GetEvent(s32 liGameType) const
+s32 ProgressionManager::GetEvent(s32 liGameType)
 {
     switch (liGameType)
     {

@@ -29,9 +29,11 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusInterface (embedded @ +0x2CC8)
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface (OutputBuffer +0x9050, embedded by value)
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h" // GameStateToGuiInterface (OutputBuffer +0x4450, embedded by value -- see its member's ⚠️)
+#include "GameSource/GameState/SharedIO/BrnGameStateModuleInputIOInterfaces.h" // GameStateToControllerInterface (OutputBuffer +0x43AC, embedded by value)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"      // SetUpAllEventStartsInterface (OutputBuffer console +176368, embedded by value)
 #include "GameShared/GameClasses/System/Timer/CgsTimerRequestInterface.h" // CgsSystem::TimerRequestInterface (OutputBuffer +16420) -- see the typedef below
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"          // CgsSystem::Time (mGameModeElapsedTime, DWARF BrnGameStateModuleIO.h:351)
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface (PreWorldInputBuffer +0x04)
 // The PostWorldInputBuffer members, each embedded by value as its real type (see the struct).
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"        // VehicleOutputInterface (+0x220), VehicleManagerOutputInterface::RaceCarCrashEventQueue (+0x10)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"                      // ContactSpyInterface (+0x6E30)
@@ -211,24 +213,9 @@ namespace GameStateModuleIO
         u32 mStatus1E4;               // +0x1E4
     };
 
-    // Timer-status payload embedded at PreWorldInputBuffer +0x04 (0x30 bytes == two 0x18-byte
-    // entries). SetTimerStatusInterface (X360 0x823B8D08) copies both entries field-for-field from
-    // the input source; the read-locked Get accessor returns it. Each entry is {s32, f32, f32, u8,
-    // s32, f32}; the X360 build copies entry[0] then entry[1] (this+0x04, this+0x1C).
-    struct TimerStatusInterface
-    {
-        struct Entry
-        {
-            s32 miWord00;   // +0x00
-            f32 mfValue04;  // +0x04
-            f32 mfValue08;  // +0x08
-            u8  mbFlag0C;   // +0x0C
-            u8  maPad0x0D[0x10 - 0x0D];
-            s32 miWord10;   // +0x10
-            f32 mfValue14;  // +0x14
-        };
-        Entry maEntries[2];  // 2 * 0x18 == 0x30 bytes
-    };
+    // Timer-status payload embedded at PreWorldInputBuffer +0x04: the system timer snapshot
+    // itself (0x30 bytes, game block then sim block), imported by typedef.
+    typedef CgsSystem::TimerStatusInterface TimerStatusInterface;
     // PostWorldInputBuffer +0x220: the physics module's per-race-car snapshot bundle
     // (BrnPhysics::Vehicle's struct). This alias replaces a local incomplete class of the same
     // name that no TU could ever define.
@@ -360,10 +347,9 @@ namespace GameStateModuleIO
     // (X360 0x8238ECF8), and RemoveTrigger is grown onto it there.
     typedef BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface TriggerManagementInputInterface;
 
-    // OutputBuffer +0x43AC. DWARF (:293, :344): the game-state-to-controller output interface
-    // (GameStateToControllerInterface). Write-locked by GameStateInviteManager::Update.
-    // Modelled minimally as a named opaque payload; swap for the real interface when it is homed.
-    struct GameStateToControllerInterface { u8 maOpaque[16]; };
+    // OutputBuffer +0x43AC: GameStateToControllerInterface, complete in
+    // SharedIO/BrnGameStateModuleInputIOInterfaces.h (included above). Write-locked by
+    // GameStateInviteManager::Update.
 
     // ------------------------------------------------------------------------
     // Container element types for the two generic-container catch-all funcs.
@@ -402,6 +388,8 @@ namespace GameStateModuleIO
         // constructs every embedded queue and clears the player-status and player-results
         // interfaces. Body in the .cpp.
         void Construct();
+        // DestroyIOBuffer<PreWorldInputBuffer> runs this before the buffer is freed. Body in the .cpp.
+        void Destruct();
 
         // X360 0x823632F8 (read-lock; "Not locked for reading", line 377)
         const ControllerInput*                GetControllerInput() const;
@@ -434,6 +422,10 @@ namespace GameStateModuleIO
         // UpdateCameraStatusData reads each player's active-race-car slot + camera status off it.
         // Body lands with the GameStateModuleIO TU (mirrors the other read-locked &member getters).
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* GetPlayerStatusInterface() const;
+        // Read-lock accessor ("Not locked for reading", line 143) for the controller-to-game-state
+        // interface (console this+0x2BE8). Readers: AchievementManagerX360::Update,
+        // RichPresenceManagerBase::Update, TrainingManager::Update, GameStateModule::PreWorldUpdate.
+        const ControllerToGameStateInterface* GetControllerToGameStateInterface() const;
 
         // ---- this TU's 5 functions ----
         // X360 0x8231CE28 (read-lock; "Not locked for reading", line 133) -- read-side accessor for
@@ -464,18 +456,14 @@ namespace GameStateModuleIO
         u8  maPadAfterGameEventQueue[(0x660 - 0x4C) - sizeof(GameEventQueue)];
         TakedownEventInputQueueType mTakedownEventInputQueue;          // @ +0x0660 (0x150 bytes, host == console)
         NetworkToGameStateInterface mNetworkToGameStateInterface;      // @ +0x07B0 (real type; console span 0x2438, host span larger -- see below)
-        // The console region +0x7B0..+0x2CC8 (0x2518) is this interface (0x2438) followed by the
-        // 0xE0-byte ControllerToGameStateInterface at +0x2BE8. On the host the interface's five
-        // queue headers each carry a pointer, so it is a few bytes wider and the pad below is
-        // that much narrower; +0x2CC8 stays pinned (asserted in _AssertLayout).
-        u8  maPadToPlayerStatus[0x2CC8 - (0x7B0 + sizeof(NetworkToGameStateInterface))]; // -> +0x2CC8
-        BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface mPlayerStatusInterface; // @ +0x2CC8
-        // mPlayerStatusInterface (0x9F0 bytes) ends flush at +0x36B8, so the gap to the next
-        // member is ZERO -- no padding array here (a u8[0] is ill-formed under MSVC /permissive-).
-        // The +0x36B8 offset of mNetworkPlayerResultsInterface is independently pinned by the
-        // static_assert in _AssertLayout(), which guards this flush fit.
-        NetworkPlayerResultsInterface mNetworkPlayerResultsInterface;  // @ +0x36B8 (PlayerResultsInterface, 224B)
-        bool                          mbInvitesOpen;                   // @ +0x3798
+        // HOST LAYOUT: everything up to here sits at its console offset. The network interface's
+        // five queue headers and the controller interface's two each carry a pointer, so from the
+        // controller interface on the host drifts a few bytes later than the console; the console
+        // offsets stay in the comments and every member is reached by name.
+        ControllerToGameStateInterface mControllerToGameStateInterface; // console +0x2BE8 (0xE0 bytes)
+        BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface mPlayerStatusInterface; // console +0x2CC8
+        NetworkPlayerResultsInterface mNetworkPlayerResultsInterface;  // console +0x36B8 (PlayerResultsInterface, 224B)
+        bool                          mbInvitesOpen;                   // console +0x3798
 
         // Compile-time offset guards (private members -> assert from a member-fn context).
         static void _AssertLayout()
@@ -491,9 +479,7 @@ namespace GameStateModuleIO
             static_assert(offsetof(PreWorldInputBuffer, mGameEventQueue)                == 0x4C,   "GameEventQueue @ +0x4C");
             static_assert(offsetof(PreWorldInputBuffer, mTakedownEventInputQueue)       == 0x660,  "TakedownEventInputQueue @ +0x660");
             static_assert(sizeof(TakedownEventInputQueueType)                           == 0x150,  "TakedownEventInputQueue spans +0x660..+0x7B0");
-            static_assert(offsetof(PreWorldInputBuffer, mPlayerStatusInterface)         == 0x2CC8, "mPlayerStatusInterface @ +0x2CC8");
-            static_assert(offsetof(PreWorldInputBuffer, mNetworkPlayerResultsInterface) == 0x36B8, "mNetworkPlayerResultsInterface @ +0x36B8");
-            static_assert(offsetof(PreWorldInputBuffer, mbInvitesOpen)                  == 0x3798, "mbInvitesOpen @ +0x3798");
+            static_assert(offsetof(PreWorldInputBuffer, mNetworkToGameStateInterface)   == 0x7B0,  "NetworkToGameStateInterface @ +0x7B0");
         }
     };
 
@@ -625,6 +611,8 @@ namespace GameStateModuleIO
         // X360 0x82382940. Raises the base status byte and constructs every embedded queue /
         // interface. Body (with the console's full construct list, verbatim) in the .cpp.
         void Construct();
+        // DestroyIOBuffer<OutputBuffer> runs this before the buffer is freed. Body in the .cpp.
+        void Destruct();
 
         // ---- GameStateModuleIO TU accessors ----
         // X360 0x8231D4B8 (write-lock; "Not locked for writing", line 266)
@@ -799,7 +787,7 @@ namespace GameStateModuleIO
         // and its Clear are on the console's construct list); host size pinned to the seat
         // width above in _AssertLayout.
         BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface mGameStateToNetworkInterface; // console +0x4190 (16784)
-        GameStateToControllerInterface mGameStateToControllerInterface;   // console +0x43AC (17324, named opaque)
+        GameStateToControllerInterface mGameStateToControllerInterface;   // console +0x43AC (17324; bind + unbind request queues)
         u8  maPadToGameStateToGui[0x4450 - (0x43AC + sizeof(GameStateToControllerInterface))]; // -> +0x4450
         // ⭐ 2026-08-27 (stunt-races frontier round 2, defect D2): was
         //     u8 mGameStateToGuiInterfaceStorage[0x4840 - 0x4450];

@@ -60,6 +60,21 @@ namespace CgsResource
         return true;
     }
 
+    // Assert. Undo Prepare: once prepared, every allocation must have been returned (the
+    // used list is back to the single whole-heap free block); both lists are emptied over the
+    // node array, which stays owned by the overhead allocator.
+    bool Heap::Release()
+    {
+        if (mbPrepared)
+        {
+            mbPrepared = false;
+            CGS_ASSERT(mUsedNodes.GetCount() == 1, "mUsedNodes.CountElements() == 1");
+            mUsedNodes.Init(mpNodes, 0);
+            mUnusedNodes.Init(mpNodes, 0);
+        }
+        return true;
+    }
+
     // 0x828F4568 - recycle a node struct from the free-node pool (mUnusedNodes) and fill its
     // HeapEntry. The X360 inlines the list pull + a debug-name-length assert; here the pull is
     // the decompiled IndexedLinkedList::RemoveHead and the (debug-only) name assert is omitted.

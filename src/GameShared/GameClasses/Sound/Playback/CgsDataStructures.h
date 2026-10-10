@@ -270,14 +270,17 @@ struct ContentClass : public Entity
     static const Name SK_TYPE_NAME;   // FLAG: definition DEFERRED.
 };
 
-// CgsDataStructures.h (DWARF). The generic-RWAC "feature implementation" entity. FLAG:
-// MINIMAL home-grow -- an Entity subclass carrying only its interned type-name, added so
-// Registry::GetEntity<GenericRwacFeatureImplementation> (the X360 word dword_83008368)
-// can key on it. The full feature-implementation surface is DEFERRED to its own RWAC TU;
-// only SK_TYPE_NAME is load-bearing for the registry lookup. Definition DEFERRED (lives
-// with the GenericRwacFeatureImplementation registration TU).
+template <typename T> struct EntityFixer;
+
+// CgsGenericRwacDataStructures.h. The generic-RWAC "feature implementation"
+// entity: a feature-schema name plus three trailing tables (plug-in infos, parameter
+// maps, slot maps) laid out after the fixed head. SK_TYPE_NAME and the fixer instance
+// are defined in CgsGenericRwacFactory.cpp; the fixer's Unresolve clears the resolved
+// plug-in handles through the private table accessor, hence the friend.
 struct GenericRwacFeatureImplementation : public Entity
 {
+    friend struct EntityFixer<GenericRwacFeatureImplementation>;
+
     struct PluginInfo
     {
         u32   mGuid;
@@ -553,6 +556,8 @@ template <> void EntityFixer<FeatureSchema>::DoUnresolve(Entity&) const;
 template <> void EntityFixer<FeatureSchema>::DoResolve(Entity&, const Registry&) const;
 template <> void EntityFixer<FeatureSchema>::DoFixUp(Entity&) const;
 template <> void EntityFixer<FeatureSchema>::DoFixDown(Entity&) const;
+
+template <> void EntityFixer<GenericRwacFeatureImplementation>::DoUnresolve(Entity&) const;
 
 template <> void EntityFixer<VoiceSchema>::DoUnresolve(Entity&) const;
 template <> void EntityFixer<VoiceSchema>::DoResolve(Entity&, const Registry&) const;

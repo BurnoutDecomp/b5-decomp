@@ -5,6 +5,7 @@
 #include "GameSource/Gui/BrnGuiCache.h"                                 // GuiCache (UpdateStreaming's unload/ensure pair)
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"    // CgsResource::LuaCodeResource (PrepareLua)
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"               // CgsMemory::HeapMalloc (PrepareLua)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"             // gpDebugPrint / gxMessageFilterFlags (PrintSingleSize)
 
 // BrnGui::BrnBaseFlow::SetInEventQueue, reconstructed from BURNOUT_X360_ARTIST.XEX
 // @ 0x827E28A8 (semantic parity, not byte match).
@@ -23,6 +24,17 @@
 
 namespace BrnGui
 {
+    // BrnBaseFlow.h -- accumulate the size first (whatever the filter), then print the line.
+    void BrnBaseFlow::PrintSingleSize(const char* lpcName, s32 liSize, s32* lpiTotal)
+    {
+        *lpiTotal += liSize;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+        {
+            *CgsDev::Log::gpDebugPrint << (lpcName ? lpcName : "<NULLSTRING>") << " : " << liSize
+                                       << " : " << *lpiTotal << "\n";
+        }
+    }
+
     void BrnBaseFlow::SetInEventQueue(InputBuffer::GuiEventQueue* lpInEventQueue)
     {
         CGS_ASSERT(lpInEventQueue != 0, "lpInEventQueue");

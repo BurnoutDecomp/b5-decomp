@@ -38,19 +38,19 @@ namespace BrnGui
             lrRecord.muValue28 = 0;      // +0x28  (stw r30=0)
         }
 
-        // X360 second loop: r3+0x1E8 anchor (== maIndexTriplets[0].miIndexB), stride 0x0C,
-        // 6 reps. Per triplet writes {miIndexA = -1, miIndexB = -1, muValue08 = 0}.
-        for (s32 li = 0; li < KI_NUM_INDEX_TRIPLETS; ++li)
+        // Second loop: anchored at +0x1E8 (== maOnlineAwards[0].mePlayerActiveRaceCarIndex),
+        // stride 0x0C, 6 reps. Per award writes {id = -1, car = -1, variable = 0}.
+        for (s32 li = 0; li < KI_NUM_ONLINE_AWARDS; ++li)
         {
-            maIndexTriplets[li].miIndexA  = -1;  // +0x00  (stw r28=-1, -4(r11))
-            maIndexTriplets[li].miIndexB  = -1;  // +0x04  (stw r28=-1, 0(r11))
-            maIndexTriplets[li].muValue08 = 0;   // +0x08  (stw r30=0, 4(r11))
+            maOnlineAwards[li].meOnlineAwardID            = -1;  // +0x00
+            maOnlineAwards[li].mePlayerActiveRaceCarIndex = -1;  // +0x04
+            maOnlineAwards[li].miAwardVariable            = 0;   // +0x08
         }
 
-        // Three tail words (X360 +0x22C/+0x230/+0x234, zeroed up-front in the prologue).
-        maTail[0] = 0;  // +0x22C
-        maTail[1] = 0;  // +0x230
-        maTail[2] = 0;  // +0x234
+        // The three counts (+0x22C/+0x230/+0x234, zeroed up-front in the prologue).
+        miNumPlayersInEvent       = 0;  // +0x22C
+        miNumPlayersFinishedEvent = 0;  // +0x230
+        miNumAwardsGiven          = 0;  // +0x234
     }
 
     // @0x82489D28
@@ -59,7 +59,7 @@ namespace BrnGui
     {
         // The X360 body is a flat member-wise copy of the whole 0x238-byte object. A
         // default member-wise copy of every field (the 9-word header, the eight 56-byte
-        // records, the six 12-byte triplets and the three tail words) reproduces exactly
+        // records, the six awards and the three counts) reproduces exactly
         // the load/store run the binary emits.
         for (s32 li = 0; li < 9; ++li)            // header +0x00..+0x20
         {
@@ -71,14 +71,14 @@ namespace BrnGui
             maRecords[li] = lrOther.maRecords[li];
         }
 
-        for (s32 li = 0; li < KI_NUM_INDEX_TRIPLETS; ++li) // triplets +0x1E4..+0x22B
+        for (s32 li = 0; li < KI_NUM_ONLINE_AWARDS; ++li)  // awards +0x1E4..+0x22B
         {
-            maIndexTriplets[li] = lrOther.maIndexTriplets[li];
+            maOnlineAwards[li] = lrOther.maOnlineAwards[li];
         }
 
-        maTail[0] = lrOther.maTail[0];   // +0x22C
-        maTail[1] = lrOther.maTail[1];   // +0x230
-        maTail[2] = lrOther.maTail[2];   // +0x234
+        miNumPlayersInEvent       = lrOther.miNumPlayersInEvent;        // +0x22C
+        miNumPlayersFinishedEvent = lrOther.miNumPlayersFinishedEvent;  // +0x230
+        miNumAwardsGiven          = lrOther.miNumAwardsGiven;           // +0x234
 
         return *this;
     }

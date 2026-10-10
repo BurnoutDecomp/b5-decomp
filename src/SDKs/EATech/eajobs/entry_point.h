@@ -70,6 +70,9 @@ namespace Jobs
 
         // entry_point.h:58 -- store the affinity mask (X360 0x82BC98B0 writes +20).
         void SetAffinity(JobAffinity leAffinity);
+        // entry_point.h/129 -- whether a SleepOn may block on this job.
+        void SetAllowSleepOn(bool lbAllowSleepOn) { mAllowSleepOn = lbAllowSleepOn; }
+        bool GetAllowSleepOn() const { return mAllowSleepOn; }
 
         // ⭐ ADDED 2026-08-10 (fill-worker wave 2). Job::SetCodeRecycle forwards here, and
         // both X360 call sites resolve to the ICF-folded empty function at 0x82AD5078

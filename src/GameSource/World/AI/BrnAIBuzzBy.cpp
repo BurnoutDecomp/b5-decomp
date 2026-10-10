@@ -19,6 +19,9 @@
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Dot / MagnitudeSquared / Magnitude / Normalize / operator-
 #include "rw/math/fpu/scalar_operation.h"    // rw::math::fpu::KF_IS_ZERO_TOLERANCE (FLT_EPSILON, flt_820C3B70)
 #include <cmath>                             // std::fabs (MaintainAheadOrBehind's console IsZero)
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                          // CgsDev::SimpleStrStream (DrawBuzzTimer)
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"     // DebugRender::Draw2DText
 
 namespace BrnAI
 {
@@ -169,7 +172,6 @@ namespace BrnAI
     // ResetOnTrackRequest::Construct is inlined with the race car index 0 (`li r11, 0 ; stw r11,
     // 0(r3)` in both arms; the PS3 twin 0x9CE738 / 0x9CE7F4 stores the same 0) -- the caller reads
     // only +4 / +8 / +0xC.
-    // [FX-AIBUZZ 2026-09-24: was declaration-only, and PlaceRaceCarOnLoad parked on it]
     // ------------------------------------------------------------------------
     void BuzzBy::MaintainAheadOrBehind(AIModuleIO::ResetOnTrackRequest* lpRequest,
                                        Vector3 lPosition, Vector3 lDirection, Vector3 lPlayerPosition,
@@ -500,6 +502,40 @@ namespace BrnAI
         mpResetOnTrackManager = lpResetOnTrackManager;
         mbResetBuzzTimers     = true;
         ClearCarsAwaitingCollection();
+    }
+
+    // ------------------------------------------------------------------------
+    // DrawBuzzTimer
+    // While free roaming: the cars-awaiting-collection count with the whole seconds of free-roam
+    // time on one line and the active buzz-list size under it; in a game mode or the junkyard just
+    // a note saying so.
+    // ------------------------------------------------------------------------
+    void BuzzBy::DrawBuzzTimer()
+    {
+        static const f32  KF_X          = 80.0f;
+        static const f32  KF_TEXT_SCALE = 16.0f;
+        static const u32  KU_COLOUR     = 0xFF8080C8u;
+        static const u32  KU_LIST_COLOUR = 0xFFC88080u;
+
+        CgsDev::SimpleStrStream lStream;
+        CgsDev::DebugInterface  lDebugInterface;
+        lStream.Reset();
+
+        if (mbIsInGameMode || mbIsInJunkyard)
+        {
+            lStream << "In game mode or JYard";
+            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), KF_X, 80.0f, KF_TEXT_SCALE, KU_COLOUR);
+        }
+        else
+        {
+            lStream << miCarsAwaitingCollection << " for collection, ";
+            lStream << "Free burn time " << static_cast<s32>(mfTimeInFreeRoam);
+            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), KF_X, 80.0f, KF_TEXT_SCALE, KU_COLOUR);
+
+            lStream.Reset();
+            lStream << "Num cars in buzz list " << miNumActiveCars;
+            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), KF_X, 100.0f, KF_TEXT_SCALE, KU_LIST_COLOUR);
+        }
     }
 
 }

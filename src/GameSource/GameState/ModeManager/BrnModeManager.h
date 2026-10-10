@@ -167,6 +167,8 @@ namespace GameStateModuleIO
 
     // Case 140's event record (BrnGameEvents.h); used by pointer only here.
     struct OnlineNewHostEvent;
+    // Case 155's event record (BrnGameEvents.h); used by pointer only here.
+    struct BurningHomeRunSwitchRunnerEvent;
 }
 
 // ===================================================================================================
@@ -339,6 +341,17 @@ public:
     void SetupCheckpointDistricts(GameModeParams* lpGameModeParams);                                        // DWARF :561 / X360 0x823296F0
     void ResultsAccept();                                                                                   // DWARF :262 / X360 0x82311858
     void FinishOfflineModeIntro();                                                                          // DWARF :274 / X360 0x823119B0
+    void FinishedSplashScreen();
+    void FinishedMapPan();
+    void MarkedManLoaded(GameStateModuleIO::GameActionQueue* lpGameActionQueue);
+    void RemoteRaceCarHitsCheckpoint(BrnNetwork::NetworkPlayerID lNetworkPlayerID, s32 liCheckpointIndex);
+    void HandleBurningHomeRunRunnerSwitch(const GameStateModuleIO::BurningHomeRunSwitchRunnerEvent* lpEvent,
+                                          GameStateModuleIO::OutputBuffer*                         lpOutputBuffer);
+    // Debug info BrnModeManager.h. Inlined into ProcessGameEvents case 145: one store of 1 to
+    // ModeManager+0x9504, the byte this class names mbDistanceToFinishLineTransmitted.
+    void LeftOnlinePostEvent() { mbDistanceToFinishLineTransmitted = true; }
+    // Debug-info accessor; OnlineBurningHomeRunMode::SwitchBurningHomeRunRunner asserts it non-null.
+    HUDMessageLogic* GetHUDMessageLogic() { return &mHUDMessageLogic; }
 
     // ===============================================================================================
     // INTRO / PLAY / FINISH  (agents 5, 6, 8)
@@ -394,6 +407,7 @@ public:
 
     GameStateModuleIO::EGameModeType GetCurrentGameModeType() const { return meCurrentGameModeType; }
     const GameMode* GetCurrentGameMode() const                      { return mpCurrentGameMode; }
+    GameMode*       GetCurrentGameMode()                            { return mpCurrentGameMode; }
 
     // DWARF :522 -- the embedded current-mode parameter block. HEADER INLINE on the X360: every
     // reader folds it to `ldx this+0x8BE0` (== &mCurrentGameModeParams + muFlags @0x860), e.g.
@@ -427,6 +441,7 @@ public:
     // readers outside the class.
     EActiveRaceCarIndex  GetPlayerActiveRaceCarIndex() const { return mePlayerActiveRaceCarIndex; }
     GameStateModule*     GetGameStateModule();                            // asserts "mpGameStateModule"
+    TriggerQueryManager* GetTriggerQueryManager() const { return mpTriggerQueryManager; }
     BrnProgression::ProgressionManager* GetProgressionManager() const;    // returns mpProgressionManager (+0x6D5C)
     const NetworkRoundManager*          GetNetworkRoundManager() const;   // returns mpNetworkRoundManager (+0x6D64)
     // A one-instruction forward to the embedded ChallengeManager (+0x6E00); ProcessGameEvents'
@@ -464,6 +479,8 @@ public:
     {
         mChallengeManager.OutputFreeburnChallengeEveryPlayerStatusEvent(lpActionQueue);
     }
+    // ProcessGameEvents case 79 counts the completed challenges straight on the embedded member.
+    ChallengeManager* GetChallengeManager() { return &mChallengeManager; }
     // Cases 171 / 172.
     void HandleSuccessUpdateEvent(const CgsSystem::TimerStatusInterface* lpTimerStatusInterface,
                                   const GameStateModuleIO::FburnChallengeSuccessUpdateEvent* lpEvent);

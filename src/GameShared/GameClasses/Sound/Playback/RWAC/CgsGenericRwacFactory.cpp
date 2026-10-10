@@ -114,6 +114,21 @@ namespace
         sGenericRwacFeatureImplementationFixer;
 }
 
+// CgsGenericRwacDataStructures.h. Unresolving a feature implementation drops
+// every resolved plug-in handle (they are runtime registry handles, meaningless
+// once the entity moves); AddRegistry resolves them again by GUID.
+template <>
+void EntityFixer<GenericRwacFeatureImplementation>::DoUnresolve(Entity& arEntity) const
+{
+    CGS_ASSERT(arEntity.mTypeName == GenericRwacFeatureImplementation::SK_TYPE_NAME,
+               "GenericRwacFeatureImplementation::SK_TYPE_NAME == lEntity.GetTypeName()");
+
+    GenericRwacFeatureImplementation& lrFeature =
+        static_cast<GenericRwacFeatureImplementation&>(arEntity);
+    for (u32 luI = 0; luI < lrFeature.GetPluginInfoCount(); ++luI)
+        lrFeature.GetPluginInfoAddress(luI)->mHandle = 0;
+}
+
 void GenericRwacFeatureImplementation::ResolvePluginInfoHandle(
     u32 au32Index, rw::audio::core::PlugInRegistry* apRegistry) const
 {
@@ -340,12 +355,15 @@ void GenericRwacFactory::AddRegistry(Registry& arRegistry)
     *mpRegistry += arRegistry;
 }
 
+// CgsGenericRwacFactory.h. Look the feature implementation up in the factory
+// registry by name; a miss fires the streamed "Rwac Factory: Can't find
+// implementation for <name>" assert (CgsGenericRwacFactory.h).
 const GenericRwacFeatureImplementation&
-GenericRwacFactory::GetFeatureImplementation(Name aName) const
+GenericRwacFactory::GetFeatureImplementation(Name aName)
 {
     const GenericRwacFeatureImplementation* lpImplementation =
         mpRegistry->GetEntity<GenericRwacFeatureImplementation>(aName);
-    CGS_ASSERT(lpImplementation != 0, "lpFeatureImplementation");
+    CGS_ASSERT(lpImplementation != 0, "Rwac Factory: Can't find implementation for ");
     return *lpImplementation;
 }
 

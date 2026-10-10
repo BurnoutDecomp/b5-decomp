@@ -345,7 +345,21 @@ namespace BrnGui
         f32 mfDistanceToCheckpoint;       // +0x00
         s32 GetEventType() const { return 240; }
     };
-    struct GuiEventRequestCollisionWorldEvent { u8 maData[4]; s32 GetEventType() const { return 493; } };  // id 493 size 4 (raw; size not GuiEvent-shaped)
+    // id 493 size 4: the GUI's collision-world request (BrnGuiEventTypeDefs.h). The
+    // payload is the request kind; BrnGameModule::BridgeGuiToWorld switches on it.
+    struct GuiEventRequestCollisionWorldEvent
+    {
+        enum EEventType
+        {
+            E_COLLISON_WORLD_INVALIDATE  = 0,
+            E_COLLISON_WORLD_VALIDATE    = 1,
+            E_COLLISON_WORLD_INVALIDATED = 2,
+            E_COLLISON_WORLD_VALIDATED   = 3,
+            E_COLLISON_WORLD_COUNT       = 4,
+        };
+        EEventType meEventType;   // payload +0x00
+        s32 GetEventType() const { return 493; }
+    };
     struct GuiEventReturnDistrict { u8 maData[8]; s32 GetEventType() const { return 196; } };  // id 196 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventRivalInfoResponse : public CgsGui::GuiEvent<444> { u8 maPayload[20]; };  // id 444 size 32 (12B GuiEvent header + opaque payload)
     struct GuiEventRivalryFullInfoResponse : public CgsGui::GuiEvent<442> { u8 maPayload[676]; };  // id 442 size 688 (12B GuiEvent header + opaque payload)

@@ -100,6 +100,9 @@ namespace CgsInput
         // returns E_BINDRESULTINVALIDPLAYER / INVALIDPORT past 3, OK when the player already holds
         // this port, PLAYERALREADYBOUND / PORTALREADYBOUND on a conflict, else records both sides.
         EBindResult BindPlayerToPort(s32 liPlayer, s32 liPort);
+        // CgsInputPads.h. Release a player's port: INVALIDPLAYER past 3, PLAYERNOTBOUND
+        // when it holds none, else clear both sides of the bind and return OK.
+        EUnbindResult UnBindPlayer(s32 liPlayer);
 
         // DWARF CgsInputPads.h:125 (cpp :688, local `int32_t liPort`). No out-of-line copy on the
         // X360: InputModule::ProcessRumbleRequests @0x828FFE50 inlines it at 0x829000C4..0x829000F0 --

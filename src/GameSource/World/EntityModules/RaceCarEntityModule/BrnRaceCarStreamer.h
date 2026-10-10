@@ -69,6 +69,8 @@ namespace RaceCarEntityModuleIO
 
 class RaceCarStreamer
 {
+    friend struct RaceCarEntityModuleDebugComponent;   // the streaming-state HUD reads the per-slot arrays
+
 public:
     // The streamed resource pointer aliases (Feb-2007 typedefs; DWARF uses the
     // expanded ResourcePtr<...> forms, identical type).

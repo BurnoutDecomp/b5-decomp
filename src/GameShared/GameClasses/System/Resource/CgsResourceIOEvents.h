@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsSmallResource.h"     // SmallResourceDescriptor (Entry::ResourceDescriptor form)
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundle2.h"   // BundleV2 (struct) + nested ResourceEntry
 #include "GameShared/GameClasses/System/FileSystem/CgsReadStream.h"      // CgsFileSystem::ReadStream (ReadStreamEvent carries it by value)
+#include "GameShared/GameClasses/System/FileSystem/CgsFileHandle.h"      // CgsFileSystem::FileHandle (FileHandleEvent carries it by value)
 
 namespace CgsModule { class BaseEventReceiverQueue; }   // referenced by pointer only
 namespace CgsResource { struct ResourceHandle; }        // AcquireResourceListRequest::mpHandles (by pointer)
@@ -120,6 +121,22 @@ namespace Events
         s32                                miEventId; // :946  (X360 +4)
     };
 
+    // CgsResourceIOEvents.h -- a file IO event that carries a file-system handle.
+    struct FileHandleEvent : public FileEvent
+    {
+        CgsFileSystem::FileHandle GetFileHandle() const { return mFile; }
+        void SetFileHandle(const CgsFileSystem::FileHandle& lFile) { mFile = lFile; }
+
+    protected:
+        CgsFileSystem::FileHandle mFile;   //   (console +8)
+    };
+
+    // CgsResourceIOEvents.h -- the reply to an open-file request (queue event id 20 on
+    // the requester's receiver queue); miEventId is the requester's own id for the open.
+    struct OpenFileResponse : public FileHandleEvent
+    {
+    };
+
     // DWARF CgsResourceIOEvents.h:972-1025 -- the request to open a streaming handle on a file
     // (the console 160-byte record the sound Module::DoOpenStream builds and posts, queue event
     // type 16). SetFileName @ 0x82680278 copies a NUL-terminated path into the inline
@@ -215,6 +232,45 @@ namespace Events
         CgsModule::BaseEventReceiverQueue* mpUser;   // +0
         s32                                miEventId; // +4
         s32                                miPoolId;  // +8
+    };
+
+    // CgsResourceIOEvents.h -- the pool-lifecycle requests that carry nothing past the
+    // PoolEvent header (requester, event id, pool id), and the validate reply that echoes it.
+    struct DeletePoolRequest : public PoolEvent {};
+    struct InvalidatePoolRequest : public PoolEvent {};
+    struct ValidatePoolRequest : public PoolEvent {};
+    struct ValidatePoolResponse : public PoolEvent {};
+
+    // CgsResourceIOEvents.h -- the invalidate reply: the pool's backing memory and
+    // its descriptor (handed back so the caller can reuse the bank), and whether the pool could
+    // be invalidated (IN_USE while any resource slot is still live).
+    struct InvalidatePoolResponse : public PoolEvent
+    {
+        enum EResult
+        {
+            E_RESULT_SUCCESS = 0,
+            E_RESULT_IN_USE  = 1,
+            E_RESULT_COUNT   = 2,
+        };
+
+
+        void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId, s32 liPoolId, EResult leResult,
+                       const SmallResource& lrResource, const SmallResourceDescriptor& lrDescriptor)
+        {
+            mpUser      = lpUser;
+            miEventId   = liEventId;
+            miPoolId    = liPoolId;
+            mResource   = lrResource;
+            mDescriptor = lrDescriptor;
+            meResult    = leResult;
+        }
+        const SmallResource&           GetResource() const   { return mResource; }
+        const SmallResourceDescriptor& GetDescriptor() const { return mDescriptor; }
+        EResult                        GetResult() const     { return meResult; }
+
+        SmallResource           mResource;     //   (console +0x0C)
+        SmallResourceDescriptor mDescriptor;   //   (console +0x18)
+        EResult                 meResult;      //   (console +0x30)
     };
 
     // CgsResourceIOEvents.h:266 -- the request to create a resource pool. The queued

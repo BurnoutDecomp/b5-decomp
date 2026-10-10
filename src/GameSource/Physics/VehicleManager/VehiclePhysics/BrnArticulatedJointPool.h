@@ -57,7 +57,7 @@
 //     0x825D8490  GetIndexOfOtherHalf                304 bytes   BODIED (wave G12, folded partfile)
 //     0x826009C8  CreateJoint                       1632 bytes   not bodied  (also an export HOLE:
 //                                                                absent from progress/identity.json)
-//     0x82601028  RemoveBrokenJointsFromSimulation   920 bytes   not bodied
+//                 RemoveBrokenJointsFromSimulation   920 bytes   BODIED
 // The class declares NO virtuals (the DWARF lists none and the console never seats a vptr), so an
 // unbodied method here cannot decay into a silent base default -- it is a hard LNK2019 the day
 // something calls it. That is the difference between this and a hollow shell.
@@ -105,6 +105,10 @@ namespace Vehicle
         // buffer, carrying its packed id, and free its pool slot. The one caller is
         // PhysicalTrafficManager::RemoveTrafficVehicle's articulated arm (0x8261CFBC).
         void RemoveJoint(ArticulatedJointCreateBuffer* lpJointWorkingBuffer, s32 liJointIndex);
+
+        // . Remove every joint flagged broken this frame (RemoveJoint each, ascending),
+        // then clear the broken set. Called by PhysicalTrafficManager::ProcessCreateEvents.
+        void RemoveBrokenJointsFromSimulation(ArticulatedJointCreateBuffer* lpJointWorkingBuffer);
 
         // @0x826013C0 (DWARF :104). Drain one frame's batched joint create/remove requests out of
         // the working buffer and onto the simulation request interface.

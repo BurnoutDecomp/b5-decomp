@@ -167,7 +167,7 @@ void* Allocator64::DoInit(unsigned int nByteCapacity)
     mppBackSlot = lppBack;
     mpBackBegin = *lppBack;
     mpBackEnd   = *lppBack + KU_PageBytes;
-    mpBackCur   = *lppBack + ((nByteCapacity & 0x3Fu) << 2);    // (a2 & 0x3F) << 2
+    mpBackCur   = *lppBack + (nByteCapacity & 0x3Fu) * sizeof(Element);  // element index within the page
 
     return lpLastResult;
 }
@@ -221,9 +221,9 @@ void* Allocator64::DoPopFront()
 // index compare; on the host char*[] pointer subtraction already yields slots, so
 // no /4 is needed. Returns the freshly allocated page (X360 returns r3).
 // ---------------------------------------------------------------------------
-void* Allocator64::DoPushBack(const int* pValue)
+void* Allocator64::DoPushBack(const Element* pValue)
 {
-    const int liValue = *pValue;                       // v3 = *a2
+    Element const lpValue = *pValue;                       // v3 = *a2
 
     if ((mppBackSlot - mppPageArray) + 1 >= mnPageSlots)
         DoReallocPt(1, 1);
@@ -234,7 +234,7 @@ void* Allocator64::DoPushBack(const int* pValue)
     mppBackSlot[1] = lpPage;                            // *(mppBackSlot + 4) = page
 
     if (mpBackCur)
-        *reinterpret_cast<int*>(mpBackCur) = liValue;   // *mpBackCur = v3
+        *reinterpret_cast<Element*>(mpBackCur) = lpValue;   // write at the back cursor
 
     ++mppBackSlot;                                      // mppBackSlot += 1 slot
     char* lpNew = *mppBackSlot;                         // v7 = *mppBackSlot
@@ -342,21 +342,21 @@ void Allocator64::DoFreeSubar(char** ppBegin, char** ppEnd)
 //
 // mpFrontCur (X360 +0x08) is the live front read cursor; mpFrontEnd (+0x10) is
 // one past the current front page; mpBackCur (+0x18) is the back write cursor,
-// so front == back means the deque is empty. The value/advance width is a 4-byte
-// int -- the same element model DoPushBack writes.
+// so front == back means the deque is empty. The value/advance width is one
+// Element (a task pointer) -- the same element model DoPushBack writes.
 // ---------------------------------------------------------------------------
-int Allocator64::PopFront()
+Allocator64::Element Allocator64::PopFront()
 {
     if (mpFrontCur == mpBackCur)
-        return 0;
+        return nullptr;
 
-    const int iValue = *reinterpret_cast<const int*>(mpFrontCur);
-    char* lpNext = mpFrontCur + sizeof(int);
+    Element const lpValue = *reinterpret_cast<const Element*>(mpFrontCur);
+    char* lpNext = mpFrontCur + sizeof(Element);
     if (lpNext == mpFrontEnd)
         DoPopFront();
     else
         mpFrontCur = lpNext;
-    return iValue;
+    return lpValue;
 }
 
 // ---------------------------------------------------------------------------
@@ -372,18 +372,18 @@ int Allocator64::PopFront()
 // handed to DoPushBack (which stages a fresh page), otherwise the cursor advances
 // and the value is written at the old slot (matching the X360 store order).
 // ---------------------------------------------------------------------------
-void Allocator64::PushBack(int iValue)
+void Allocator64::PushBack(Element pValue)
 {
     char* lpCur = mpBackCur;
-    if (lpCur + sizeof(int) == mpBackEnd)
+    if (lpCur + sizeof(Element) == mpBackEnd)
     {
-        DoPushBack(&iValue);
+        DoPushBack(&pValue);
     }
     else
     {
-        mpBackCur = lpCur + sizeof(int);
+        mpBackCur = lpCur + sizeof(Element);
         if (lpCur)
-            *reinterpret_cast<int*>(lpCur) = iValue;
+            *reinterpret_cast<Element*>(lpCur) = pValue;
     }
 }
 

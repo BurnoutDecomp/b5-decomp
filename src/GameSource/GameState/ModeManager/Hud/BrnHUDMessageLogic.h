@@ -29,6 +29,8 @@
 // stunt-run tracker scalars at +0x1D0..+0x1E8; the team-change bit set at +0x240); the
 // member run below preserves that ordering -- queue first, then the tracker scalars,
 // then the bit set -- so the by-name accesses in the .cpp mirror the X360 store-for-store.
+namespace BrnPhysics { namespace Vehicle { struct VehicleOutputInterface; } }   // GenerateOnlineTeamChangeMessages (by pointer)
+
 namespace BrnGameState
 {
 class HUDMessageLogic
@@ -71,6 +73,9 @@ public:
         E_HUD_MESSAGE_STUNT_PERFORMED       = 132,  // 0x84   the banked StuntInfo record
         E_HUD_MESSAGE_COMBO_PERFORMED       = 133,  // 0x85   combo timer + score + validity
         E_HUD_MESSAGE_STUNT_TIME_UP         = 134,  // 0x86   1 byte, no payload
+
+        // GenerateOnlineTeamChangeMessages: the car that changed team, 4 bytes.
+        E_HUD_MESSAGE_ONLINE_TEAM_CHANGE    = 254,  // 0xFE
     };
 
     // ------------------------------------------------------------------------
@@ -254,6 +259,11 @@ public:
     // Record that the given active-race-car has changed team this round (drives a HUD
     // team-change notification elsewhere). X360 0x8231E498.
     void OnlineTeamChange(EActiveRaceCarIndex leActiveRaceCarIndex);
+
+    // Announce every recorded team change (one 4-byte car-index record each) and drop its flag,
+    // while the local player's car is not crashing. The tail of PostWorldUpdate's online arms.
+    void GenerateOnlineTeamChangeMessages(const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
+                                          EActiveRaceCarIndex lePlayerActiveRaceCarIndex);
 
 private:
     friend class ModeManager; // ARTIST inlined finish/checkpoint notification setters.

@@ -42,11 +42,10 @@
 // PC target the pointer members widen; size is not byte-matched, per the project's
 // semantic-parity rule.)
 //
-// CheckCardTask is CONCRETE: it overrides the four task virtuals XenonRunnableTask
-// leaves pure (RefCount::OnUnreferenced + IRunnableTask::OnTaskComplete / OnTaskRun
-// / GetTaskType). Those override BODIES live in their own (not-yet-homed) TUs; they
-// are declared here so the class is instantiable and its final vtable off_821487D0
-// is well-formed, exactly as MemcardInterfaceImpl.h declares its interface overrides.
+// CheckCardTask is CONCRETE. Its vtable (dumped) is [deleting destructor,
+// RefCount::Unreferenced, the shared empty function at +0x08 and +0x0C, and at
+// +0x10 a shared two-instruction function that returns 1]: both task bodies are
+// empty and the task type is 1.
 // ===========================================================================
 
 #include "types.hpp"
@@ -58,11 +57,11 @@ namespace RealmcIface
 class CheckCardTask : public XenonRunnableTask
 {
 public:
-    // @ 0x82B55178 -- run the XenonRunnableTask base ctor with (pContext,
+    // Run the XenonRunnableTask base ctor with (pMessageQueue,
     //                 pMemcardState, pState), store the three own words at
     //                 +0x14 / +0x18 / +0x1C, then MSVC installs the final
     //                 CheckCardTask vtable off_821487D0.
-    CheckCardTask(void* pContext, RealmcCore::MemcardState* pMemcardState,
+    CheckCardTask(RealmcCore::MessageQueue* pMessageQueue, RealmcCore::MemcardState* pMemcardState,
                   XenonUtil::State* pState,
                   void* pField14, u32 uField18, u32 uField1C);
 
@@ -76,14 +75,10 @@ public:
         RealmcCore::FreeMemSize(lpBlock, static_cast<u32>(luSize));
     }
 
-    // Overrides of the four task virtuals XenonRunnableTask leaves pure -- declared
-    // here so the class is concrete/instantiable (their final vtable slots point
-    // into off_821487D0). BODIES are owned by their own not-yet-homed TUs; this TU
-    // homes only the ctor + the deleting dtor above.
-    void OnUnreferenced() override;   // slot +0x04 (RefCount)
-    void OnTaskComplete() override;   // slot +0x08 (IRunnableTask)
-    void OnTaskRun() override;        // slot +0x0C (IRunnableTask)
-    int  GetTaskType() override;      // slot +0x10 (IRunnableTask)
+    // The task virtuals (slot +0x04 RefCount::Unreferenced and slot +0x08, the
+    // empty IRunnableTask body, are inherited unchanged).
+    void OnTaskRun() override {}             // slot +0x0C: the shared empty function
+    int  GetTaskType() override { return 1; } // slot +0x10: returns 1
 
 private:
     void* mpField14;  // +0x14 (ctor arg 4; FLAG role/type unrecovered -- pointer word)

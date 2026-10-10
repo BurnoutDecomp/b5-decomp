@@ -1,130 +1,159 @@
 // ============================================================================
 // GameSource/Gui/Flow/Screen/States/BrnImageGallery.h
 //
-// BrnGui::ImageGalleryState - the mugshot/takedown image-gallery GUI screen
-// state (DWARF home BrnImageGallery.h:53, base CgsGui::State). MINIMAL SLICE:
-// this header carries the class shape around the four exported inline bodies
-// (resource list / expected-component registration / GuiCache init poll /
-// middle-image hide) PLUS the out-of-line ledger surface bodied in
-// BrnImageGallery.cpp (ctor / GetCurrentCategory / ClearExpectedComponent /
-// SetExpectedComponent / GetGsmIOCategoryFromGuiEnum). The state's huge interior
-// (30-slot carousel-overview array, text fields, animators, PlayerName) is not
-// yet recovered; reserved spans keep the X360 ORDER, access is BY NAME.
-// X360 offsets in comments (mpGuiCache +56, mauExpectedComponentIds +64 (x7)
-// with its count +92, the four category tabs +104 stride 760, the
-// mCategorySelectableGroup highlighted-index byte +3309, the three carousel
-// items +7780 stride 736).
+// BrnGui::ImageGalleryState - the mugshot/takedown image-gallery GUI screen state
+// (base CgsGui::State). Four category tabs across the top, a 20-slot overview
+// strip, a three-image carousel (left / middle / right) with arrow animators, the
+// who / where / when text of the middle image and the image counters. The image
+// data lives in the game state's image manager; the screen talks to it through the
+// gallery request / collected-count / collected-data / image-info GUI events.
 //
-// DWARF-authoritative (references/DecFIGS/dwarfdump/.../BrnImageGallery.h):
-//   member  mauExpectedComponentIds (NOT ...Hashes) : h:99 uint32_t[7]
-//   SetExpectedComponent(const char*) -> void       : h:282 (r3 hash is dead)
-//   GetCurrentCategory() -> EGuiImageCategories      : h:324 (non-const)
-//   GetGsmIOCategoryFromGuiEnum(EGuiImageCategories)
-//       -> GameStateModuleIO::EImageGalleryType      : cpp:1176 (dossier name truncated)
+// Layout: member names and order from the class's member list, element counts and
+// placement from the console asm (console offsets in the comments; the host widens
+// every pointer, so access is by name only). The console carries 20 overview
+// selectables: the ctor's vtable loop, OnEnter's construct loop, UpdateSetup's
+// enable loop and the collected-data bit walk all stop at 20, and the collected-data
+// bit array asserts against 20 bits.
 // ============================================================================
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                               // CGS_ASSERT (the expected-count tripwire)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                               // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"                  // CgsGui::State (base)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"   // CgsGui::sResourceTuple
-#include "GameSource/GameState/BrnGameStateSharedIO.h"                           // BrnGameState::GameStateModuleIO::EImageGalleryType
-#include "GameSource/Gui/BrnGuiCache.h"                                          // BrnGui::GuiCache (expected-component list)
-#include "GameSource/Gui/Flow/Screen/Components/BrnImageGallerySelectable.h"     // ImageGallerySelectable (the 4 category tabs) + GetName (GuiComponent base)
-#include "GameSource/Gui/Flow/Screen/Components/BrnImageGalleryCarouselItem.h"   // ImageGalleryCarouselItem (the 3 carousel slots) + EGuiImageCategories fwd
+#include "GameSource/GameState/BrnCgsPlayerName.h"                               // CgsNetwork::PlayerName (mSelectedPlayerName)
+#include "GameSource/GameState/BrnGameStateSharedIO.h"                           // GameStateModuleIO::EImageGalleryType / EImageGalleryRequest
+#include "GameSource/Gui/BrnGuiCache.h"                                          // BrnGui::GuiCache
+#include "GameSource/Gui/BrnGuiShared.h"                                         // BrnGui::EGuiImageCategories
+#include "GameSource/Gui/BrnGuiTextField.h"                                      // BrnGui::TextField
+#include "GameSource/Input/GameInputActions.h"                                   // EGameInputActions (TriggerSound)
+#include "GameSource/Gui/Flow/Shared/Components/BrnAnimationComponent.h"         // BrnGui::AnimationComponent
+#include "GameSource/Gui/Flow/Shared/Components/BrnSelectableGroup.h"            // BrnGui::SelectableGroup
+#include "GameSource/Gui/Flow/Screen/Components/BrnImageGallerySelectable.h"     // ImageGallerySelectable (the 4 category tabs)
+#include "GameSource/Gui/Flow/Screen/Components/BrnImageGalleryCarouselSelectable.h" // ImageGalleryCarouselSelectable (the overview strip)
+#include "GameSource/Gui/Flow/Screen/Components/BrnImageGalleryCarouselItem.h"   // ImageGalleryCarouselItem (the 3 carousel slots)
+
+namespace CgsModule { struct Event; }
 
 namespace BrnGui
 {
     class ImageGalleryState : public CgsGui::State
     {
     public:
-        // DWARF h:98 -- the expected-component list bound (the h:284 assert).
-        static const u32 KU_MAX_INIT_COMPONENTS_NUM = 7;
+        // The screen's own sequencer (meInternalState).
+        enum InternalState
+        {
+            E_INTERNALSTATE_LOADRESOURCES = 0,
+            E_INTERNALSTATE_WFINIT        = 1,
+            E_INTERNALSTATE_SETUP         = 2,
+            E_INTERNALSTATE_RUNNING       = 3,
+            E_INTERNALSTATE_LEFT          = 4,
+            E_INTERNALSTATE_COUNT         = 5,
+        };
 
-        // @0x82500328 (BrnImageGallery.cpp) -- compiler-emitted ctor: State base +
-        // the embedded GUI sub-objects (per-slot vtable stores handled by their ctors).
+        // The expected-component list bound.
+        static const u32 KU_MAX_INIT_COMPONENTS_NUM = 7;
+        // The overview strip / per-category image capacity (see the file banner).
+        static const s32 KI_MAX_IMAGES = 20;
+
+        // Compiler-emitted ctor: State base + the embedded GUI sub-objects.
         ImageGalleryState();
 
-        // @0x82500480 (this TU) -- hand out the gallery's one-APT resource list
-        // (the XEX .rodata tuple @0x8205E608: id 0xA4, E_GUI_RESOURCETYPE_APT).
+        virtual void OnEnter();
+        virtual void OnLeave();
+        virtual void Update();
+
+        // Hand out the gallery's one-APT resource list.
         virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
                                         u32* lpuNumberOfResources) const
         {
-            *lppResourceTuples    = KA_RESOURCES_TO_LOAD;
-            *lpuNumberOfResources = 1;
+            *lppResourceTuples    = maResourcesToLoad;
+            *lpuNumberOfResources = muNumResourcesToLoad;
         }
-
-        // @0x82484720 (this TU; assert cites BrnImageGallery.cpp:1057) -- rebuild the
-        // expected-component list from the FOUR CATEGORY TABS and hand it to the cache
-        // (flow layer 0). SetExpectedComponent @0x82482BD8 takes a component NAME string,
-        // so each tab is registered by its GuiComponent name.
-        void SetExpectedAptComponentList()
-        {
-            ClearExpectedComponent();
-            for (s32 liSlot = 0; liSlot < 4; ++liSlot)
-            {
-                SetExpectedComponent(maCategorySelectable[liSlot].GetName());
-            }
-            CGS_ASSERT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM,
-                       "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM");   // cpp:1057 (non-gating)
-            mpGuiCache->SetExpectedAptComponentList(E_GUIFLOW_SCREEN, mauExpectedComponentIds,
-                                                    muNumExpectedComponents);
-        }
-
-        // @0x824846B8 (this TU) -- the per-frame init poll: once the cache reports
-        // every expected component initialised (flow layer 0), clear the list and
-        // report done.
-        bool UpdateWFInit()
-        {
-            if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
-            {
-                return false;
-            }
-            ClearExpectedComponent();
-            return true;
-        }
-
-        // @0x82484930 (this TU) -- drop the MIDDLE carousel item ("CarouselItemMid_mc",
-        // maCarouselItems[1]) to the current category's invisible frame.
-        void HideMiddleImage()
-        {
-            maCarouselItems[1].AddOutputAptViewState("apt_state",
-                                                     KAPC_CATEGORY_INVISIBLE_FRAMES[GetCurrentCategory()],
-                                                     false);
-        }
-
-        // Own ledger functions (BrnImageGallery.cpp TU) -- declaration-only here.
-        // Signatures/return-types are DWARF-authoritative (see file banner).
-        EGuiImageCategories GetCurrentCategory();                    // @0x82482D40 (h:324, non-const)
-        void                ClearExpectedComponent();               // @0x82482CC0 (h:299)
-        void                SetExpectedComponent(const char* lpacComponentName);   // @0x82482BD8 (h:282, -> void)
-        BrnGameState::GameStateModuleIO::EImageGalleryType
-            GetGsmIOCategoryFromGuiEnum(EGuiImageCategories leImageCategory);      // @0x824847A0 (cpp:1176)
 
     private:
-        // The per-category invisible frame labels (XEX .data @0x82F25350:
-        // takedown/mugshot/rulebreaker/finish; definition in the embed-check cpp).
-        static const char* const KAPC_CATEGORY_INVISIBLE_FRAMES[4];
-        // The one-entry APT resource list (XEX .rodata @0x8205E608).
-        static const CgsGui::sResourceTuple KA_RESOURCES_TO_LOAD[1];
+        // The per-state steps Update runs.
+        bool UpdateLoadResources();
+        bool UpdateWFInit();
+        void UpdateSetup();
+        void UpdateRunning();
+        void UpdatePermanent();
 
-        // FLAG: reserved spans = state interior not yet recovered (the slice keeps
-        // the X360 ORDER; PC offsets differ). The base CgsGui::State occupies the head.
-        u8 maReservedToCache[8];                       // X360 up to +56 (post-base interior; span nominal)
-        GuiCache* mpGuiCache;                          // X360 +56  (DWARF h:91)
-        u32 mauExpectedComponentIds[KU_MAX_INIT_COMPONENTS_NUM];   // X360 +64 (x7) (DWARF h:99)
-        u32 muNumExpectedComponents;                   // X360 +92  (DWARF h:100)
-        u8  maReserved96to104[104 - 96];               // X360 [+96, +104) (miCurrentlySelectedCarouselItem @+96, DWARF h:102)
-        // The four category tabs (X360 +104, stride 760 -- DWARF h:105).
-        ImageGallerySelectable maCategorySelectable[4];
-        // FLAG: mCategorySelectableGroup (DWARF h:106, BrnGui::SelectableGroup) interior
-        // not recovered; only its highlighted-index byte @+3309 is attested
-        // (GetCurrentCategory reads mCategorySelectableGroup.GetHighlightedIndex() as a
-        // signed byte here).
-        u8  maReservedToGroupIndex[3309 - (104 + 4 * 760)];  // X360 [+3144, +3309)
-        u8  muHighlightedCategoryIndex;                 // X360 +3309 (mCategorySelectableGroup.GetHighlightedIndex())
-        u8  maReservedGroupToCarousel[7780 - 3310];     // X360 [+3310, +7780)
-        // The three carousel items (X360 +7780, stride 736 -- DWARF h:117 maCarouselItems[3]).
-        ImageGalleryCarouselItem maCarouselItems[3];
+        // The expected apt-component list handed to the cache.
+        void SetExpectedComponent(const char* lpacComponentName);
+        void SetExpectedAptComponentList();
+        void ClearExpectedComponent();
+
+        // In-queue handlers. The queue hands out the header-stripped payload, so each
+        // takes the raw event pointer.
+        void HandleControllerInputPressed(const CgsModule::Event* lpEvent);
+        void HandleLoadNotification(const char* lpacComponentName);
+        void HandleOverlayComplete(const CgsModule::Event* lpOverlayCompleteEvent);
+        void HandleImageInfoEvent(const CgsModule::Event* lpEvent);
+        void HandleCollectedDataEvent(const CgsModule::Event* lpEvent);
+
+        EGuiImageCategories GetCurrentCategory();
+        void RefreshCarousel(BrnGameState::GameStateModuleIO::EImageGalleryRequest leRequest);
+        BrnGameState::GameStateModuleIO::EImageGalleryType
+            GetGsmIOCategoryFromGuiEnum(EGuiImageCategories leImageCategory);
+        EGuiImageCategories
+            GetGuiCategoryFromGsmIOEnum(BrnGameState::GameStateModuleIO::EImageGalleryType leImageGalleryType);
+        void SetupCountForCategory(EGuiImageCategories leCategory, s32 liCount);
+        void SetupButtons();
+        void TriggerSound(EGameInputActions leAction);
+        void HideMiddleImage();
+        void HideRightImage();
+
+        // Pointer-free layout facts (never called).
+        static void _AssertLayout();
+
+        // ---- statics --------------------------------------------------------------------
+        static const s32                    maiEventToObserve[8];
+        static const s32                    miNumEventsObserved;
+        static const CgsGui::sResourceTuple maResourcesToLoad[1];
+        static const u32                    muNumResourcesToLoad;
+        static const char* const            KAPC_MENU_TITLES[4];
+        static const char                   KAC_CAROUSEL_ANIMATOR_NAME[23];
+        static const char                   KAC_CAROUSEL_ITEM_LEFT_NAME[20];
+        static const char                   KAC_CAROUSEL_ITEM_MIDDLE_NAME[19];
+        static const char                   KAC_CAROUSEL_ITEM_RIGHT_NAME[21];
+        static const char                   KAC_CAROUSEL_LEFT_ARROW_ANIMATOR_NAME[15];
+        static const char                   KAC_CAROUSEL_RIGHT_ARROW_ANIMATOR_NAME[16];
+        static const char                   KAC_WHO_TEXT[11];
+        static const char                   KAC_WHERE_TEXT[13];
+        static const char                   KAC_WHEN_TEXT[12];
+        static const char                   KAC_IMAGE_INFO_ANIMATOR_NAME[15];
+        static const char                   KAC_CURRENT_IMAGE_TEXT[11];
+        static const char                   KAC_TOTAL_IMAGE_TEXT[11];
+        static const char                   KAC_BUTTON_ANIMATOR_NAME[13];
+
+        // ---- members (console offsets) ----------------------------------------------------
+        GuiCache*                      mpGuiCache;                                    // +56
+        InternalState                  meInternalState;                               // +60
+        u32                            mauExpectedComponentIds[KU_MAX_INIT_COMPONENTS_NUM]; // +64
+        u32                            muNumExpectedComponents;                       // +92
+        s32                            miCurrentlySelectedCarouselItem;               // +96
+        ImageGallerySelectable         maCategorySelectable[4];                       // +104   (stride 760)
+        SelectableGroup                mCategorySelectableGroup;                      // +3144
+        ImageGalleryCarouselSelectable maCarouselOverviewSelectable[KI_MAX_IMAGES];   // +3712  (stride 168)
+        SelectableGroup                mCarouselOverviewSelectableGroup;              // +7072
+        AnimationComponent             mCarouselAnimator;                             // +7640
+        ImageGalleryCarouselItem       maCarouselItems[3];                            // +7780  (stride 736)
+        AnimationComponent             mCarouselLeftArrowAnimator;                    // +9988
+        AnimationComponent             mCarouselRightArrowAnimator;                   // +10128
+        s32                            miRequestsLeftPending;                         // +10268
+        TextField                      mWhoText;                                      // +10272
+        TextField                      mWhereText;                                    // +10568
+        TextField                      mWhenText;                                     // +10864
+        bool                           mbIsCurrentLocked;                             // +11160
+        s32                            maiPhotoCountPerCategory[4];                   // +11164
+        AnimationComponent             mImageInfoAnimator;                            // +11180
+        TextField                      mCurrentImageText;                             // +11320
+        TextField                      mTotalImageText;                               // +11616
+        AnimationComponent             mButtonAnimator;                               // +11912
+        CgsNetwork::PlayerName         mSelectedPlayerName;                           // +12052
+        bool                           mbSelectedImageValid;                          // +12068
+        bool                           mbPendingSnapShotRequest;                      // +12069
+        s8                             miSnapShotDelayCounter;                        // +12070
     };
 }

@@ -128,6 +128,7 @@ namespace CgsSceneManager
         // ADDED 2026-08-19 (wave Q5 / E1a): the culling-group leg's own element type. Its
         // home is CgsSceneManagerIO_SceneUpdate.h; a reference parameter needs only this.
         struct InEventSetVolumeInstanceCullingGroup;
+        struct InEventAddVolumeInstanceForCaching;
     }
     struct VolumeInstanceId;   // CgsVolumeInstanceId.h (by-value parameter of UpdateCollisionBody -- see note there)
 
@@ -228,7 +229,7 @@ namespace CgsSceneManager
                                          SceneManagerIO::OutputBuffer* lpSceneOutputBuffer );
         void ProcessLineTestFine( CgsCollision::BaseCollisionGenerator*, SceneManagerIO::TriCacheQueryBuffer*,
                                   SpatialPartitionIO::OutputBuffer*, const SceneManagerIO::InEventLineTestFine*,
-                                  SceneManagerIO::OutputBuffer*, FineIntersectionTestIO::OutputBuffer* );                 // @0x828CDCD0 TRAP
+                                  SceneManagerIO::OutputBuffer*, FineIntersectionTestIO::OutputBuffer* );
         // @ 0x828D38C0 -- the nearest line test (world-only short-cut / octree + fine module / world race).
         void ProcessLineTestNearest( CgsCollision::BaseCollisionGenerator* lpCollisionGenerator,
                                      SceneManagerIO::TriCacheQueryBuffer* lpTriCacheQueryBuffer,
@@ -237,19 +238,19 @@ namespace CgsSceneManager
                                      SceneManagerIO::OutputBuffer* lpSceneOutputBuffer );
         void ProcessLineTestFastDoubleSided( CgsCollision::BaseCollisionGenerator*, SceneManagerIO::TriCacheQueryBuffer*,
                                              SpatialPartitionIO::OutputBuffer*, const SceneManagerIO::InEventLineTestFastDoubleSided*,
-                                             SceneManagerIO::OutputBuffer* );                                              // @0x828D3DB0 TRAP
+                                             SceneManagerIO::OutputBuffer* );
         void ProcessSphereTestFast( CgsCollision::BaseCollisionGenerator*, SceneManagerIO::TriCacheQueryBuffer*,
                                     const SceneManagerIO::InEventSphereTestFast*, SpatialPartitionIO::OutputBuffer*,
-                                    SceneManagerIO::OutputBuffer* );                                                       // @0x828D4090 TRAP
+                                    SceneManagerIO::OutputBuffer* );                                                       // body in CgsSceneManagerModule_wBT_01.cpp
         void ProcessVolumeTestDeepest( CgsCollision::BaseCollisionGenerator*, SceneManagerIO::TriCacheQueryBuffer*,
                                        const SceneManagerIO::InEventVolumeTestDeepest*, SpatialPartitionIO::OutputBuffer*,
-                                       SceneManagerIO::OutputBuffer* );                                                    // @0x828D4460 TRAP
+                                       SceneManagerIO::OutputBuffer* );
         void ProcessFineVolumeTest( const SceneManagerIO::InEventVolumeTestFine*, SpatialPartitionIO::OutputBuffer*,
-                                    SceneManagerIO::OutputBuffer*, FineIntersectionTestIO::OutputBuffer* );                // @0x828CE328 TRAP
+                                    SceneManagerIO::OutputBuffer*, FineIntersectionTestIO::OutputBuffer* );
         void ProcessTriangleCollisionLineTests( CgsCollision::BaseCollisionGenerator*,
                                                 CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionLineTest, 256>*,
-                                                SceneManagerIO::OutputBuffer* );                                           // @0x828C6FB0 TRAP (when non-empty)
-        // @ 0x828D4880 -- the world line tests, synchronously (< 100) or via jobs (>= 100, TRAP).
+                                                SceneManagerIO::OutputBuffer* );
+        // The world line tests, synchronously (< 100) or through the poly-soup tester jobs (>= 100).
         void ProcessTriangleCollisionLineTestNearests( CgsCollision::BaseCollisionGenerator*,
                                                        CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionLineTestNearest, 256>*,
                                                        SceneManagerIO::OutputBuffer* );
@@ -412,6 +413,7 @@ namespace CgsSceneManager
                                             OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput);
         void ProcessForceNoPaddingEvent(const SceneManagerIO::InEventForceNoPadding& lrEvent,
                                         OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput);
+        void ProcessAddVolumeInstanceForCachingEvent(const SceneManagerIO::InEventAddVolumeInstanceForCaching& lrEvent);
         // @ 0x828C7528 (.cpp:1223; export hole, headless-IDA dump in scratchpad/waveQ5/q5_out*.json)
         //   -- re-post a body's world AABBox + padding to the overlap generator's UpdateBody
         //   queue. DWARF: (int32_t liVolumeInstanceIndex, VolumeInstanceId, InputBuffer*).
@@ -477,6 +479,9 @@ namespace CgsSceneManager
             bool lbPrepare);
 
     private:
+        // The debug component draws straight out of the entity and volume managers.
+        friend class SceneManagerDebugComponent;
+
         // ---- members (DWARF order; offsets pinned to the X360 asm in comments) ----
         SceneQueryId maFrustumTestJobQueryIds[KU_MAX_FRUSTUM_TEST_JOB_QUERIES];  // X360 +0x228
 

@@ -196,6 +196,39 @@ void StaticAtomTable::Register(const char* lpcKey, uint32_t luAtomId)
     --mpData->muFreeSlots;
 }
 
+// ---------------------------------------------------------------------------
+// Register (auto-id overload)
+//
+//   if (FindID(key, &id)) return id                        ; already interned
+//   id = mpData->muNextAvailableID                          (lhz +0x14)
+//   while (mpData->mpIdToOffset[id] != 0xFFFFFFFF) ++id     ; 16-bit wrap
+//   Register(key, id)
+//   mpData->muNextAvailableID = id + 1                      (sth +0x14)
+//   return id
+// ---------------------------------------------------------------------------
+uint16_t StaticAtomTable::Register(const char* lpcKey)
+{
+    uint16_t luId;
+    if (FindID(lpcKey, &luId))
+    {
+        return luId;
+    }
+
+    luId = mpData->muNextAvailableID;
+    while (mpData->mpIdToOffset[luId] != 0xFFFFFFFFu)
+    {
+        luId = static_cast<uint16_t>(luId + 1);
+    }
+
+    Register(lpcKey, luId);
+    mpData->muNextAvailableID = static_cast<uint16_t>(luId + 1);
+    return luId;
+}
+
+// The process-wide atom table (a handle whose data block is installed at
+// runtime; null until then).
+StaticAtomTable globalAtomTable;
+
 }  // namespace atom
 }  // namespace core
 }  // namespace rw

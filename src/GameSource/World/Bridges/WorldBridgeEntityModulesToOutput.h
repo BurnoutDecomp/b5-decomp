@@ -117,6 +117,15 @@ namespace WorldModule
         BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
         const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpRaceCarOutput_PostPhysics);
 
+    // The race-car POST-PHYSICS resource-request flush: appends the race-car module's
+    // PostPhysics resource-request ring into the world resource-request interface, inside
+    // the world module's race-car bridge CPU monitor. Called from
+    // BridgeEntityModulesToOutput_PostPhysics. lpWorldModule is the BrnWorld::WorldModule.
+    void BridgeRaceCarResourceRequestsToOutput(
+        void* lpWorldModule,
+        BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
+        const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpRaceCarOutputBuffer_PostPhysics);
+
     // @ 0x827AF318
     void BridgeRaceCarEntityInfoToOutput_PreScene(
         void* lpWorldModule,

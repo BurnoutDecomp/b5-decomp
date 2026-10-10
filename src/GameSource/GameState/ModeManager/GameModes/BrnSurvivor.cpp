@@ -99,7 +99,7 @@ void SurvivorMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
     bool lbPaused, const ScoringSystem* lpScoringSystem)
 {
     const GameStateModuleIO::TimerStatusInterface* lpTimer = lpInput->GetTimerStatusInterface();
-    const f32 lfTimeStep = lpTimer->maEntries[1].mfValue08 * lpTimer->maEntries[1].mfValue04;
+    const f32 lfTimeStep = lpTimer->GetSimTimerStatus()->GetCurrentTimeStep();
     // The ramp test is `bge` past the add: an unordered compare skips it, as `<` does.
     if (GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS && mfRampTimer < mfMaxRampTimer)
         mfRampTimer += lfTimeStep;
@@ -148,8 +148,8 @@ void SurvivorMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
                     << "[mm-pre] call " << siDiagCalls
                     << " state " << GetCurrentState()
                     << " dt " << lfTimeStep
-                    << " rate " << lpTimer->maEntries[1].mfValue04
-                    << " scale " << lpTimer->maEntries[1].mfValue08
+                    << " rate " << lpTimer->GetSimTimerStatus()->GetBaseTimeStep()
+                    << " scale " << lpTimer->GetSimTimerStatus()->GetTimeStepMultiplier()
                     << " ramp " << mfRampTimer << "/" << mfMaxRampTimer
                     << " maxOpp " << miMaxOpponentCount
                     << " distToFinish "

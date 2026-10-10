@@ -14,6 +14,7 @@
 //   Construct   @ 0x8286A0D0
 //   Begin       @ 0x828681D8
 //   ReadResult  @ 0x82868418
+//   End
 //
 // Layout is X360-authoritative (verified against the pseudocode this->[n]
 // member accesses): mEncodedStatus@0 (8B), mpcResultBuffer@8, miResultBufferSize@12,
@@ -66,9 +67,9 @@ namespace CgsMemory
         void Begin();
         EReadResultStatus ReadResult(void* lpBuffer);
 
-        // Declared-only (not reconstructed in this TU pass).
-        void Destruct();
         void End();
+        // Declared-only (their own ledger functions).
+        void Destruct();
         s32  GetResultSize() const;
 
     private:

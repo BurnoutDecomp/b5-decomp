@@ -70,7 +70,8 @@ public:
     // @0x82796A08  3D world overlays: gates each per-car/route/section/portal/chevron draw on its
     // toggle (and forces the speed-calc/personality/buzz sub-toggles on when the states table is on).
     virtual void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay);
-    // 2D HUD: the AI-car state tables / drifting debug. Bodied in its own TU (DWARF :385).
+    // 2D HUD: the section under the player car, the drifting debug, the AI-car state table and
+    // the buzz-by timer, each behind its toggle.
     virtual void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay);
 
 protected:
@@ -130,17 +131,18 @@ private:
     // (r3 is the driver base, no `this`), not this member void(void*) form -- adjust the decl then.
     void DeactiveateDriversCallback(void* lpUserData);
 
-    // ---- declared-only here: bodied in their own TUs (DWARF surface) ----
+    // ---- the HUD state table and the per-car read-outs (bodied in this TU) ----
     void DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDisplay);
     void DrawAIStatesOnCar(CgsDev::Debug3DImmediateRender* lpDisplay);
+    void DrawDriftingDebug(CgsDev::Debug2DImmediateRender* lpDisplay);
+    void StateTableBegin();
+    void StateTableNextColumn();
+    // ---- declared-only here: bodied in their own TUs (declaration surface) ----
     void DrawAIRacingLines(CgsDev::Debug3DImmediateRender* lpDisplay) const;
     void DrawDirectDrivingVector(CgsDev::Debug3DImmediateRender* lpDisplay) const;
     void DrawNearbyVehicles(CgsDev::Debug3DImmediateRender* lpDisplay) const;
     void DrawHNGMap() const;
     void DrawFinishDebugData(CgsDev::Debug3DImmediateRender* lpDisplay) const;
-    void DrawDriftingDebug(CgsDev::Debug2DImmediateRender* lpDisplay);
-    void StateTableBegin();
-    void StateTableNextColumn();
 
     // ---- members (names/types from the DecFIGS DWARF :233-293) ----
     AIModule*       mpAIModule;                         // :233

@@ -140,6 +140,8 @@ namespace BrnGui
         // SelectableGroup::Update's own `muFlags ^= KU_FLAG_QUERIED`.
         bool IsQueried() const     { return (muFlags & KU_FLAG_QUERIED) != 0; }
         void ClearQueriedFlag()    { muFlags = static_cast<u8>(muFlags ^ KU_FLAG_QUERIED); }
+        // ImageGalleryState::HandleCollectedDataEvent ORs the bit in on its overview group.
+        void SetDirty()            { muFlags = static_cast<u8>(muFlags | KU_FLAG_QUERIED); }
 
     private:
         // The shared body of the four Selectable flag setters: no-op (returning false) when

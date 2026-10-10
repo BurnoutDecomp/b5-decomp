@@ -20,6 +20,8 @@
 // BrnGuiFlaptComponent.h / BrnFlaptTextFieldRef.h / BrnHudMessageController.h, and none of
 // them (transitively) includes BrnGuiCache.h.
 #include "GameSource/Gui/Flow/HUD/Components/BrnInGameMessagesComponent.h" // BrnGui::InGameMessagesQueue (by value)
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"   // CgsNumeric::Random (by value: mRandom)
+#include "GameSource/Gui/Events/BrnGuiEventOnlinePostEvent.h" // BrnGui::GuiEventOnlinePostEvent (by value: mOnlinePostEventData)
 
 // [friends wave] forward declaration for the +0xB868 branch-mirror friendship
 namespace BrnGui { class FriendsListComponent; }
@@ -33,6 +35,7 @@ namespace CgsGui { struct ObjectController; struct GuiEventAptTriggerPayload; cl
 // only; home GameShared/GameClasses/Gui/CgsGuideIntegration.h).
 namespace CgsGui { class SystemUserProfile; }
 namespace CgsGui { namespace ModelIO { struct InputBuffer; } }
+namespace CgsDev { struct StrStream; }            // StateLoadingHelper::AppendResourceInfo arg (by reference)
 namespace BrnResource { class ChallengeList; } // GetFreeburnChallengeList return (pointer only)
 namespace BrnGui { struct WorldDataController; }  // GetWorldDataController return (pointer only)
 namespace BrnProgression { struct ProfileEvent; } // GetProfileEvent return (pointer only)
@@ -261,6 +264,9 @@ namespace BrnGui
         void IncrementUnloadPending();
         void DecrementUnloadPending();
 
+        // Stream one watched resource's "state - type - name" line (the cache status dump).
+        void AppendResourceInfo(u32 luIndex, CgsDev::StrStream& lStream);
+
     private:
         // X360 ARTIST value: 237 (the 0xED bound + 237-entry walk in EnsureResourceIsLoaded
         // @0x824FDA28 / EnsureResourcesAreLoaded @0x824FDD20 / IncrementUnloadPending
@@ -357,6 +363,8 @@ namespace BrnGui
         f32 GetTime() const;
         f32 GetTimeStep() const;
         bool IsLoadingScreenVisible() const { return mbIsLoadingScreenVisible; }
+        // BrnGuiCache.h -- the GUI's shared random generator (+0x13B60), header inline.
+        CgsNumeric::Random* GetRandomNumberGenerator() { return &mRandom; }
 
         // DWARF: BrnGuiCache.h:206 -- register a single apt component (by its name hash) as
         // "expected" on the given GUI flow layer, so the cache waits for it to finish
@@ -530,6 +538,9 @@ namespace BrnGui
         // reads off it are exposed (by name) via PresetEvent below.
         const PresetEvent*   GetPresetEvent(s32 liIndex) const;
         s32                  GetNumPresetEvents() const;
+        // The preset event whose event id is liEventID (asserts when there is none).
+        const BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event*
+            GetPresetEventFromEventID(s32 liEventID) const;
 
         // The PRODUCER of that list, and of the online finish-point bitmask. Adopts a whole
         // SpecificGameModeEventInterface by value (the payload is copied over
@@ -865,6 +876,7 @@ namespace BrnGui
         void SetOnlineMatchUnranked(bool lbUnranked) { mbOnlineMatchUnranked = lbUnranked; } // +0x4B52
         void SetOnlineStartPending(bool lbPending)   { mbOnlineStartPending = lbPending; }   // +0x4B53
         bool IsOnlineStartPending() const     { return mbOnlineStartPending; }      // +0x4B53 (19283) CrashNavEnterOnlineBase Handle{Disconnected,OverlayComplete}Event lbz
+        void SetImageExportInProgress(bool lbInProgress) { mbImageExportInProgress = lbInProgress; } // +0x4B5B
         // The reference-named accessors of the same +0x4B4C..+0x4B52 bytes (the reference member run is
         // mbIsOnline, mbIsPreparingForInvite, mbIsStartingGameDueToPlayerJoin,
         // mbIsPerformInviteReceived, mbIsConnectedToNetwork, mbDoJoinOnlineRankedGame,
@@ -1180,11 +1192,15 @@ namespace BrnGui
 
         // --- online player state tables (ARCI-indexed, @0xB84C..) ---
         bool GetOnlinePlayerDisconnected(EActiveRaceCarIndex leActiveRaceCarIndex) const;  // X360 @0x8240F988 (maOnlinePlayerDisconnected @0xB84C)
+        // The last online post-event record (RecEvent 318 copies it in, the
+        // mode-start arm clears it). Inlined at every read: OnlineYouWin::UpdateWFWinResult /
+        // HasAnyoneTimedOut and OnlineInstantResultsState::CheckForCompletedLoads.
+        const GuiEventOnlinePostEvent* GetOnlinePostEventData() const { return &mOnlinePostEventData; }
         bool GetOnlinePlayerInCarSelect(EActiveRaceCarIndex leActiveRaceCarIndex) const;   // X360 @0x824436D0 (maOnlinePlayerInCarSelect @0xB854)
         bool IsOnlinePlayerEliminated(EActiveRaceCarIndex leActiveRaceCarIndex) const;     // X360 @0x8240FA08 (maOnlinePlayerEliminated @0xB85C)
 
         // --- road-rule / scoring-traffic / stunt / preset tables ---
-        bool IsRoadRuleActive(s32 liRoadRuleType) const;   // X360 @0x82472E78 (maRoadRuleActiveByType @0xAC44, idx 0..1)
+        bool IsRoadRuleActive(s32 liRoadRuleType) const;   // mabRoadRulesActive +0xAC44, idx 0..1
         u32  GetScoringTrafficCount() const;               // X360 @0x824497C0, DWARF h:1211
         const BrnTraffic::BrnTrafficIO::VehicleScoreData*
             GetScoringTrafficData(u32 luIndex) const;      // X360 @0x82450718 (maScoringTrafficData @0xA150)
@@ -1420,6 +1436,7 @@ namespace BrnGui
         // miGameFlowState is one of the X360-only consumer-carved words with no DWARF
         // accessor row -- the same situation, and the same answer, as the analyzer above.
         friend struct HudMessageDirector;
+        friend struct SatNavDebugComponent; // the zoom readout reads miPlayerSpeedMph inline.
         friend struct CrashedHudState; // ARTIST crash-state read at cache +0x4B30.
         friend struct CrashedStuntHudState; // ARTIST last combo score/multiplier at +0x9FD4/+0x9FD8.
 
@@ -1709,7 +1726,7 @@ namespace BrnGui
         bool mbGameplayHudReadyC;                        // +0x4B58 (19288) FLAG consumer-named (see +0x4B54)
         bool mbFreeBurnInputDisabled;                    // +0x4B59 (19289) gates ALL freeburn controller handling
         bool mbOnlineEventCompleted;                     // +0x4B5A (19290) set when the online event ends; HandleGuiCacheEvent consumes it (ClearTracker + "TO_ST_POST" when meGameModeType==16), then clears it
-        u8   mPad_4B5B[1];                               // +0x4B5B
+        bool mbImageExportInProgress;                    // +0x4B5B (19291) cleared by ImageGalleryState::HandleOverlayComplete when the export overlay closes
         // ADDITIVE CARVE ([stuntrace wS2] wave, 2026-08-27) from the HEAD of the former
         // mPad_4B5B[0x15] -- the payback "award available" trio RaceMainHudState::UpdateWFInit
         // @0x82480200 reads as one group (asm @0x824805FC..0x82480620):
@@ -2106,18 +2123,22 @@ namespace BrnGui
         // first entry, then clears it. FLAG: consumer-named -- the producer side is not
         // yet reconstructed.
         bool mbOnlineGameOptionsChanged;                 // +0xA9E0 (43488)
-        u8  mPad_A9E1[79];                               // +0xA9E1..+0xAA2F
-        // ctor field-inits a stride-56 SoA of 8 lanes (one per ARCI): int@+0, float@+4 each
-        // (ctor @0x827E05B8 writes +43568..+43964). FLAG: only the +0/+4 words are attested
-        // (the 48-byte tail is reserved); semantic of the pair is unrecovered.
-        struct PerRacerPair_AA30 { s32 miField_00; f32 mfField_04; u8 mPad_08[48]; }; // 56 bytes
-        PerRacerPair_AA30 maPerRacerData_AA30[8];        // +0xAA30 (43568) ctor-initialised per-racer numeric pairs
-        u8  mPad_AC10[72];                               // +0xAC10..+0xAC37
-        bool mabRoadRulesActive[2];                      // +0xAC38 (DWARF h; precedes meActiveRoadRule)
-        u8  mPad_AC3A[2];                                // +0xAC3A..+0xAC3B
+        u8  mPad_A9E1[3];                                // +0xA9E1..+0xA9E3
+        // Written only by RecEvent 317 (a straight 8-word copy of the record).
+        GuiEventOnlineEventFinishingOrder mOnlineFinishingOrder; // +0xA9E4 (43492), 32 bytes
+        // 0x238 bytes (+0xAA04..+0xAC3B). RecEvent 318 assigns it (operator=),
+        // the mode-start arm (event 93) Clear()s it, and the constructor default-constructs
+        // the eight records' CgsSystem::Time members (the int/float pairs it writes at
+        // +0xAA30 + 56*i). Readers go through GetOnlinePostEventData(): miNumPlayersInEvent
+        // lands at +0xAC30, miNumPlayersFinishedEvent at +0xAC34, miNumAwardsGiven at +0xAC38.
+        GuiEventOnlinePostEvent mOnlinePostEventData;    // +0xAA04 (43524)
         s32 meActiveRoadRule;                            // +0xAC3C (44092) BrnGameState::EActiveRoadRule (PlayerPositionSingle::RenderValue gate @0x824220B4)
         s32 meRoadRuleScoreMode;                         // +0xAC40 (44096) GuiEventSetRoadRuleScoreMode::ERoadPanelModes
-        bool maRoadRuleActiveByType[2];                  // +0xAC44 (44100) IsRoadRuleActive @0x82472E78 (idx 0..1, score type)
+        // The original declaration order lists mabRoadRulesActive before meActiveRoadRule; on
+        // the console the post-event record runs right up to +0xAC3C and the two flags sit
+        // here, after meRoadRuleScoreMode (IsRoadRuleActive and the RecEvent road-rule
+        // begin/end arms all address +0xAC44).
+        bool mabRoadRulesActive[2];                      // +0xAC44 (44100) IsRoadRuleActive (idx 0..1, score type)
         u8  mPad_AC46[2];                                // +0xAC46..+0xAC47
         // ---- road-rule-shot block (RoadRuleShotComponent::Snap @0x82415620) ----
         s32 meRoadRuleShotOpponentARCI;                  // +0xAC48 (44104) GetRoadRuleShotOpponentARCI (DWARF h:1817)
@@ -2295,7 +2316,13 @@ namespace BrnGui
         //         never shows the colour-select screen);
         //   CLEAR by CarSelectLivery::OnLeave @0x824D6C30 and GuiCache::Construct.
         bool mbCarSelectTransitionAlreadyShown;          // +0x13B5E (80734)
-        u8  mPad_13B5F[49];                              // +0x13B5F..+0x13B8F
+        u8  mPad_13B5F[1];                               // +0x13B5F
+        // +0x13B60 (80736). Reference BrnGuiCache.h `Random mRandom`, carved from the old
+        // mPad_13B5F[49] (1 + 48 == 49; Random is 0x30 bytes, 16-aligned, and the host offset
+        // here is 16-aligned too, so no member moves). Reader: OnlineInstantResultsState::
+        // FillOutTicker draws each award string with RandomInt through GetRandomNumberGenerator.
+        // GuiCache::Construct seeds it on the console (an inlined SetSeed-style refill).
+        CgsNumeric::Random mRandom;                      // +0x13B60
         // +0x13B90 (80784). Carved out of the old mPad_13B5F[53] span (49 + 1 + 3 == 53, so no
         // member is shifted). DWARF BrnGuiCache.h:1895 `bool mbIsLoadingScreenVisible` -- the
         // member immediately before mfDistanceDrivenInCurrentCar (h:1898 == +0x13B94 below),

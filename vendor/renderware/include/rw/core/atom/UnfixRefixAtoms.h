@@ -4,7 +4,8 @@
 
 // ===========================================================================
 // rw::core::atom::UnfixRefixAtoms -- a polymorphic RenderWare core "atom" helper
-// whose only X360-emitted member is its (vector) deleting destructor.
+// whose only emitted body is its (vector) deleting destructor; its two At
+// lookups are pure.
 //
 // OWNING HOME for:
 //     rw::core::atom::UnfixRefixAtoms::`vector deleting destructor'  @ 0x82BA7E20
@@ -38,6 +39,15 @@ public:
     // +0 (off_8217FFE8) and conditionally frees; the destructor body itself is
     // empty.
     virtual ~UnfixRefixAtoms();
+
+protected:
+    // The two atom lookups an unfix/refix pass calls, both pure in this base
+    // (its vtable holds _purecall in slots 1 and 2) and implemented by
+    // rw::core::arena::DefaultRuntimeUnfixRefixAtoms. Declared in source order;
+    // MSVC emits overloaded virtuals in reverse, which puts the name->id lookup
+    // in slot 1 and the id->name lookup in slot 2, as the console vtable has them.
+    virtual const char* At(const void* lpBase, uint16_t luAtomId) const = 0;
+    virtual uint16_t At(const void* lpBase, const char* lpcName) const = 0;
 };
 
 } // namespace atom

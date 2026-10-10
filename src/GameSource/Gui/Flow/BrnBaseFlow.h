@@ -84,6 +84,10 @@ namespace BrnGui
         // @ 0x824FFD48 -- preload the resources the current (and next reachable) states need.
         void UpdateStreaming(s32 liStateIndex, EStreamingMode meStreamingMode);
 
+        // BrnBaseFlow.h -- add liSize to *lpiTotal, then (message filter bit 0)
+        // log "<name> : <size> : <running total>". The flows' PrintStateSizes go through it.
+        void PrintSingleSize(const char* lpcName, s32 liSize, s32* lpiTotal);
+
         CgsGui::StateMachine mStateMachine;        // BrnBaseFlow.h:128 (X360 +0x10020)
         ReleaseStage         mReleaseStage;        // BrnBaseFlow.h:129
         GuiCache*            mpGuiCache;           // BrnBaseFlow.h:130

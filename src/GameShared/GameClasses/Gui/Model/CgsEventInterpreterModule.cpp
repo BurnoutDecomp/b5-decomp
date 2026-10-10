@@ -19,9 +19,22 @@
 //
 // Behaviour + member offsets are read off the X360 assembly; the nested-observer inline
 // helpers and signature shapes come from the DecFIGS DWARF and the Feb-2007 partial source.
-// The other module methods (Construct/Destruct/PreWorldUpdate/Update/Add*/Register*/etc.) are
-// declared in the header but bodied in their own TUs; their declarations resolve the callees
-// this TU references.
+// RegisterForEvent / UnRegisterForEvent / RegisterPriorityEvent and the priority observer's
+// own Register/UnRegister pair are bodied at the end of this file. The other module methods
+// (Construct/Destruct/PreWorldUpdate/Update/Add*/etc.) are declared in the header but bodied in
+// their own TUs; their declarations resolve the callees this TU references.
+
+// The override map's Insert is the sorted-bin insert and its Remove asserts on a miss; both are
+// member specialisations defined in CgsHashTable_EventInterpreterModule_sMapEntry7.cpp, declared
+// here before the priority observer's Register/UnRegister use them.
+namespace CgsContainers
+{
+    template<>
+    void HashTable<int, CgsGui::EventInterpreterModule::sMapEntry, 7u>::Insert(
+        HashTable<int, CgsGui::EventInterpreterModule::sMapEntry, 7u>::Element* lpElement);
+    template<>
+    void HashTable<int, CgsGui::EventInterpreterModule::sMapEntry, 7u>::Remove(int lKey);
+}
 
 namespace CgsGui
 {
@@ -563,6 +576,140 @@ void EventInterpreterModule::ProcessOutEvents(OutputBuffer* lpOutput, bool lbIsP
     }
 
     lStagingQueue.Destruct();
+}
+
+// ---------------------------------------------------------------------------------------
+// PriorityObjectEventObserver::RegisterForEvent
+// Subscribe to liEventType, build the override mask from the caller's override list, stamp
+// {liEventType, mask} into the next pool element and sorted-insert it into the override map.
+// The pool only grows here; UnRegisterForEvent shrinks the count without compacting it.
+// ---------------------------------------------------------------------------------------
+void EventInterpreterModule::PriorityObjectEventObserver::RegisterForEvent(
+    s32 liEventType, const s32* lpaEventTypeOverrides, u32& lruOverrideCount)
+{
+    CGS_ASSERT((liEventType > E_GUI_INVALID) && (liEventType <= KI_MAX_EVENTS_PER_OBSERVER),
+               "Cannot register for invalid events");
+    mEventListBitArray.SetBit(static_cast<u32>(liEventType));
+
+    const sMapEntry lMapEntry(lpaEventTypeOverrides, lruOverrideCount);
+
+    CGS_ASSERT(muHashElementPoolCount < KU_MAX_HASH_ELEMENTS,
+               "muHashElementPoolCount < KU_MAX_HASH_ELEMENTS");
+    maHashElementPool[muHashElementPoolCount].Set(liEventType, lMapEntry);
+    mEventOverrideHashTable.Insert(&maHashElementPool[muHashElementPoolCount]);
+    ++muHashElementPoolCount;
+}
+
+// ---------------------------------------------------------------------------------------
+// PriorityObjectEventObserver::UnRegisterForEvent
+// Drop the subscription bit, remove liEventType's entry from the override map and count the
+// pool element back down.
+// ---------------------------------------------------------------------------------------
+void EventInterpreterModule::PriorityObjectEventObserver::UnRegisterForEvent(s32 liEventType)
+{
+    CGS_ASSERT((liEventType > E_GUI_INVALID) && (liEventType <= KI_MAX_EVENTS_PER_OBSERVER),
+               "Cannot register for invalid events");
+    mEventListBitArray.UnSetBit(static_cast<u32>(liEventType));
+
+    CGS_ASSERT(muHashElementPoolCount > 0, "muHashElementPoolCount > 0");
+    mEventOverrideHashTable.Remove(liEventType);
+    --muHashElementPoolCount;
+}
+
+// ---------------------------------------------------------------------------------------
+// RegisterForEvent
+// Find (or claim the next free) plain slot for lpEventObserver and set liEventType in its
+// subscription bits. A new slot takes the observer pointer only; its bits are whatever the slot
+// last held. Fails (false) when all KI_MAX_OBSERVERS slots are taken.
+// ---------------------------------------------------------------------------------------
+bool EventInterpreterModule::RegisterForEvent(EventObserver* lpEventObserver, s32 liEventType)
+{
+    ObjectEventObserver* lpObjectEventObserver = 0;
+    FindObserverInEventObserverList(lpEventObserver, &lpObjectEventObserver);
+
+    if (lpObjectEventObserver == 0)
+    {
+        if (mnNumberEventObservers >= KI_MAX_OBSERVERS)
+        {
+            CGS_ASSERT(false, "Trying to register too many objects in: ");
+            return false;
+        }
+
+        lpObjectEventObserver = &maEventObservers[mnNumberEventObservers];
+        lpObjectEventObserver->mpObserver = lpEventObserver;
+        ++mnNumberEventObservers;
+    }
+
+    lpObjectEventObserver->RegisterForEvent(liEventType);
+    CGS_ASSERT(mnNumberEventObservers <= KI_MAX_OBSERVERS,
+               "mnNumberEventObservers <= KI_MAX_OBSERVERS");
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------
+// UnRegisterForEvent
+// Clear liEventType from lpEventObserver's plain slot, and from its priority slot too when that
+// slot holds the event. Asserts (and does nothing) if the observer was never registered.
+// ---------------------------------------------------------------------------------------
+void EventInterpreterModule::UnRegisterForEvent(EventObserver* lpEventObserver, s32 liEventType)
+{
+    ObjectEventObserver* lpObjectEventObserver = 0;
+    FindObserverInEventObserverList(lpEventObserver, &lpObjectEventObserver);
+
+    if (lpObjectEventObserver == 0)
+    {
+        CGS_ASSERT(false,
+            "Trying to remove an object as an observer when object is not in observer list: ");
+        return;
+    }
+
+    lpObjectEventObserver->UnRegisterForEvent(liEventType);
+
+    PriorityObjectEventObserver* lpPriorityObserver = 0;
+    FindPriorityObserverInEventObserverList(lpEventObserver, &lpPriorityObserver);
+    if (lpPriorityObserver != 0 && lpPriorityObserver->IsRegisteredForEvent(liEventType))
+    {
+        lpPriorityObserver->UnRegisterForEvent(liEventType);
+    }
+}
+
+// ---------------------------------------------------------------------------------------
+// RegisterPriorityEvent
+// Only an observer that already owns a plain slot may take a priority registration. Find (or
+// claim the next free) priority slot for it and register liEventType with its override list.
+// Fails (false) for an unregistered observer or when all priority slots are taken.
+// ---------------------------------------------------------------------------------------
+bool EventInterpreterModule::RegisterPriorityEvent(EventObserver* lpEventObserver, s32 liEventType,
+                                                   const s32* lpaEventOverrides, u32 luOverrideCount)
+{
+    CGS_ASSERT(lpEventObserver != 0, "lpEventObserver != NULL");
+
+    ObjectEventObserver* lpObjectEventObserver = 0;
+    FindObserverInEventObserverList(lpEventObserver, &lpObjectEventObserver);
+    if (lpObjectEventObserver == 0 || lpObjectEventObserver->mpObserver != lpEventObserver)
+    {
+        return false;
+    }
+
+    PriorityObjectEventObserver* lpPriorityObserver = 0;
+    FindPriorityObserverInEventObserverList(lpEventObserver, &lpPriorityObserver);
+    if (lpPriorityObserver == 0)
+    {
+        if (mnNumberPriorityEventObservers >= KI_MAX_OBSERVERS)
+        {
+            CGS_ASSERT(false, "Trying to register too many objects in: ");
+            return false;
+        }
+
+        lpPriorityObserver = &maPriorityEventObservers[mnNumberPriorityEventObservers];
+        lpPriorityObserver->mpObserver = lpEventObserver;
+        ++mnNumberPriorityEventObservers;
+    }
+
+    lpPriorityObserver->RegisterForEvent(liEventType, lpaEventOverrides, luOverrideCount);
+    CGS_ASSERT(mnNumberPriorityEventObservers <= KI_MAX_OBSERVERS,
+               "mnNumberPriorityEventObservers <= KI_MAX_OBSERVERS");
+    return true;
 }
 
 }

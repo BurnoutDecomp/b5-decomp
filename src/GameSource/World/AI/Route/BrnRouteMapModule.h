@@ -89,6 +89,8 @@ public:
     // for ever.)
     void MarkAsNewModule() { mbIsNewModule = true; }
 
+    friend class RouteMapDebugComponent;   // DrawAStarInMap reads mAStar directly
+
 private:
     // X360 0x8278C2E0 (DWARF BrnRouteMapModule.cpp:171). One A* step for the race route: on a
     // fresh request Prepare the search + push the block list, then Compute one iteration; when

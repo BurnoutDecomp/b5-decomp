@@ -18,8 +18,9 @@
 // not load-bearing for members reached BY NAME. The two far GuiModule offsets the position-update
 // path writes (the sat-nav renderer at +0x4D2E0 and its tint colour at +0x4D2E8) are NOT in this
 // slice's modelled GuiModule layout; they are reached through the KU_OFF_* constants below (the
-// established GuiModule KU_OFF pattern). FLAG: those two offsets + the shared viewport-rect global
-// are data-fidelity-limited (uncommitted GuiModule/renderer layout + un-exported symbol).
+// established GuiModule KU_OFF pattern). FLAG: those two offsets are data-fidelity-limited
+// (uncommitted GuiModule/renderer layout). The live sat-nav viewport rect is
+// BrnGui::MapTransform's smv4SatNavViewRect.
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                                       // Vector4
@@ -27,12 +28,12 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                  // CgsModule::VariableEventQueue / Event
 
 namespace CgsDev { struct Debug2DImmediateRender; }
+namespace CgsGui { namespace CgsGuiModuleIO { struct InputBuffer; } }
 
 namespace BrnGui
 {
     class GuiModule;
     class SatNavRenderer;
-    struct InputBuffer;   // GUI-model input buffer fed by Update (out-of-batch state path)
 
     // Byte image of the five sat-nav debug toggles posted by SatNavStateCallback (event type 200,
     // 5 bytes). CgsModule::Event is an empty base (no vptr) so macToggles sits at offset 0. Field
@@ -47,11 +48,14 @@ namespace BrnGui
     struct SatNavDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        // Bind the GUI module, clear the toggles, seed alpha 90 and the rect from the live
+        // sat-nav viewport rect.
         void Construct(GuiModule* lpGuiModule);
         void Destruct();
 
-        // BrnGuiSatNavDebugComponent.cpp:177 -- feed the input queue to the GUI model each frame.
-        void Update(InputBuffer* lpInputBuffer);
+        // Per frame: republish the tuned view band, refresh the zoom readout, then hand the
+        // queued toggle events to the GUI module's input buffer.
+        void Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuffer);
 
         // @ 0x824F7F28 -- draw the SatNav rect outline when mbDrawSatNavOutline is set.
         void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
@@ -97,10 +101,4 @@ namespace BrnGui
     // The renderer sits at +0x4D2E0; its leading mMapQuadColour (packed RGBA) is at +0x4D2E8 (renderer+8).
     static const u32 KU_OFF_SATNAV_RENDERER    = 0x4D2E0;
     static const u32 KU_OFF_SATNAV_ICON_COLOUR = 0x4D2E8;
-
-    // Shared sat-nav viewport-rect descriptor (X360 unk_82FB36A0, a Vector4: {TL.x, TL.y, BR.x, BR.y}).
-    // TriggerSatNavPositionUpdate (and RenderHUD) is the write side; SatNavRenderer::UpdateRendererTransform
-    // reads it. FLAG: not in the symbol export -- declared extern here; the sibling BrnSatNavRenderer.cpp
-    // leaves it unmodelled, so no TU defines it (per-TU compile gate, not linked).
-    extern Vector4 gv4SatNavViewportRect;
 }

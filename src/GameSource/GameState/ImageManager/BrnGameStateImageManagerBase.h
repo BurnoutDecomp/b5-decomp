@@ -109,8 +109,7 @@ struct ImageGalleryCountRequestEvent
     GameStateModuleIO::EImageGalleryType meImageGalleryImageType; // +0x00 (validated < COUNT(5))
 };
 
-// Read by HandleImageGalleryDataRequest (X360 0x8238..). Declared-only; this sink has no body in
-// this TU's function set.
+// Read by HandleImageGalleryDataRequest: the gallery type whose image bits are wanted.
 struct ImageGalleryDataRequestEvent
 {
     GameStateModuleIO::EImageGalleryType meImageGalleryImageType; // +0x00
@@ -181,7 +180,7 @@ public:
     // X360 0x82385E78. UI asked how many mugshots of a given gallery type exist.
     void HandleImageGalleryCountRequest(const ImageGalleryCountRequestEvent* lpImageGalleryCountReqEvent,
                                         GameStateModuleIO::OutputBuffer* lpOutput);
-    // DWARF :117. UI asked for the per-gallery image data. Declared-only (no body in this TU set).
+    // UI asked for the per-gallery image data -> reply with the live-image bits.
     void HandleImageGalleryDataRequest(const ImageGalleryDataRequestEvent* lpImageGalleryDataReqEvent,
                                        GameStateModuleIO::OutputBuffer* lpOutput);
     // X360 0x82357C68. The world region changed -> remember the current region.
@@ -196,8 +195,7 @@ protected:
                                                 s32 liImageIndex);
 
     // DWARF :164. The export-request handler is VIRTUAL (HandleImageGalleryRequest dispatches the
-    // export case through vtable[0]). The base body is reconstructed in another TU (it is not in
-    // this TU's function set); declared virtual here so the vtable slot exists.
+    // export case through vtable[0]). The base body is empty (BrnGameStateImageManagerBase_wBT_01.cpp).
     virtual void ProcessExportRequest(const ImageGalleryRequestEvent* lpImageGalleryReqEvent,
                                       GameStateModuleIO::OutputBuffer* lpOutput);
 
@@ -208,7 +206,7 @@ private:
                               const CgsModule::EventQueue<TakedownEvent, 8>* lpTakedownEventQueue);
     // X360 0x82383F90. Service pending image-load requests; publish each loaded slot to the UI.
     void UpdateNewImageRequests(GameStateModuleIO::OutputBuffer* lpOutput);
-    // DWARF :140. Re-publish the per-slot render state. Declared-only (no body in this TU set).
+    // Re-publish the per-slot render state.
     void UpdateImagesToRender(GameStateModuleIO::OutputBuffer* lpOutput);
     // DWARF :143. Declared-only (no body in this TU set).
     bool IsImageSaveSlotAvailable();

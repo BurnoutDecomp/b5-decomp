@@ -14,20 +14,14 @@ namespace RealmcIface
 {
 
 // ---------------------------------------------------------------------------
-// MessageShowAutosaveIcon::Apply @ 0x82B552A0
+// MessageShowAutosaveIcon::Apply (Message vtable +8)
 //
-//   mr r11, r4 ; mr r4, r3 ; mr r3, r11   -> swap: r3 = pTarget, r4 = pThis
-//   lwz r10, 0(r11) ; lwz r11, 0x40(r10)  -> pTarget vtable slot +0x40 (16)
-//   mtctr r11 ; bctr                       -> tail-call (pTarget, pThis)
-//
-// i.e. pTarget->ShowAutosaveIcon(pThis). IDA's signature lists (a1=pThis,
-// a2=pTarget); the asm swaps them so the *target* is `this` for the dispatch,
-// exactly like RealmcCore::Message::Apply.
+// Swap the two arguments so the processor becomes `this`, load the processor's
+// vtable slot +0x40 and tail-call it with the message.
 // ---------------------------------------------------------------------------
-int MessageShowAutosaveIcon::Apply(MessageShowAutosaveIcon* pThis,
-                                   IRealmcAutosaveTarget* pTarget)
+void MessageShowAutosaveIcon::Apply(RealmcCore::IMessageProcessor* pProcessor)
 {
-    return pTarget->ShowAutosaveIcon(pThis);
+    pProcessor->ProcessMessage(this);
 }
 
 } // namespace RealmcIface

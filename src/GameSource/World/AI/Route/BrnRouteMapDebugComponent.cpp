@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                       // CgsDev::SimpleStrStream
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                           // CgsCore::SPrintf (DrawPortalIds)
+#include "GameSource/World/AI/Route/BrnAStar.h"                                   // BrnAI::AStar / AStarNodePool (DrawAStarInMap)
 
 // BrnAI::RouteMapDebugComponent -- the AI route/section-map debug overlay. Reconstructed from the
 // X360 ARTIST build (function addresses cited per method) cross-checked against the DecFIGS DWARF
@@ -385,6 +386,184 @@ void RouteMapDebugComponent::DrawPortalIds(CgsDev::Debug3DImmediateRender* lpDis
         CgsCore::SPrintf(acText, 20, "%d", luSection);
         lpDisplay->DrawText(lv3Portal, acText, 16.0f);
     }
+}
+
+// ====================================================================================================
+// ToMapCoords
+// ----------------------------------------------------------------------------------------------------
+// World to minimap: scale then offset. A 3D point maps its ground-plane (x, z).
+// ====================================================================================================
+Vector2 RouteMapDebugComponent::ToMapCoords(Vector2 lv2World) const
+{
+    Vector2 lv2Map;
+    lv2Map.x = lv2World.x * mfMapScale + mfMapOffsetX;
+    lv2Map.y = lv2World.y * mfMapScale + mfMapOffsetY;
+    lv2Map.z = 0.0f;
+    lv2Map.w = 0.0f;
+    return lv2Map;
+}
+
+Vector2 RouteMapDebugComponent::ToMapCoords(Vector3 lv3World) const
+{
+    Vector2 lv2Map;
+    lv2Map.x = lv3World.x * mfMapScale + mfMapOffsetX;
+    lv2Map.y = lv3World.z * mfMapScale + mfMapOffsetY;
+    lv2Map.z = 0.0f;
+    lv2Map.w = 0.0f;
+    return lv2Map;
+}
+
+// ====================================================================================================
+// DrawRouteInMap
+// ----------------------------------------------------------------------------------------------------
+// One minimap segment between each consecutive pair of route nodes.
+// ====================================================================================================
+void RouteMapDebugComponent::DrawRouteInMap(CgsDev::Debug2DImmediateRender* lpDisplay, const Route* lpRoute,
+                                            RGBA lColour) const
+{
+    for (s32 liNode = 0; liNode < lpRoute->GetNodeCount() - 1; )
+    {
+        const RouteNode* lpFrom = lpRoute->GetNode(liNode);
+        Vector2 lv2From;
+        lv2From.x = lpFrom->GetX();
+        lv2From.y = lpFrom->GetY();
+        lv2From.z = 0.0f;
+        lv2From.w = 0.0f;
+
+        ++liNode;
+        const RouteNode* lpTo = lpRoute->GetNode(liNode);
+        Vector2 lv2To;
+        lv2To.x = lpTo->GetX();
+        lv2To.y = lpTo->GetY();
+        lv2To.z = 0.0f;
+        lv2To.w = 0.0f;
+
+        lpDisplay->DrawLine(ToMapCoords(lv2From), ToMapCoords(lv2To), lColour);
+    }
+}
+
+// ====================================================================================================
+// DrawAStarInMap
+// ----------------------------------------------------------------------------------------------------
+// The route-map module's A* search state: every live node as a point (green while open), a text line
+// with the open count, the per-bucket and total closed counts, the cost weight, iteration count,
+// distance heuristic and the block-section ids, and an X over each block section.
+// The heuristic test checks Euclidean on its own before the else-if chain over the others, so a
+// Euclidean search prints "EuclideanUnknown".
+// ====================================================================================================
+void RouteMapDebugComponent::DrawAStarInMap(CgsDev::Debug2DImmediateRender* lpDisplay) const
+{
+    static const f32  KF_NODE_POINT_SIZE    = 2.0f;
+    static const RGBA KU_OPEN_NODE_COLOUR   = 0xFF00FF00u;
+    static const RGBA KU_CLOSED_NODE_COLOUR = 0xFF0000C8u;
+    static const f32  KF_BLOCK_X_SIZE       = 5.0f;
+    static const RGBA KU_BLOCK_X_COLOUR     = 0xFF0000FFu;
+
+    AStar&         lrAStar     = mpRouteMapModule->mAStar;
+    AStarNodePool& lrNodePool  = lrAStar.mAStarNodePool;
+    s32            liNodeTotal = 0;
+
+    CgsDev::SimpleStrStream lStream;
+    lStream << "Open nodes: " << static_cast<s32>(lrNodePool.muOpenNodeCount) << ", Closed nodes: ( ";
+
+    for (u32 luPartition = 0; luPartition < AStarNodePool::KU_PARTITION_COUNT; ++luPartition)
+    {
+        const u32 luFirstNode = luPartition * AStarNodePool::KU_MAX_PARTITION_NODES;
+        liNodeTotal += lrNodePool.mauNodeCount[luPartition];
+        lStream << static_cast<s32>(lrNodePool.mauNodeCount[luPartition]) << " ";
+
+        for (s32 liNode = 0; liNode < lrNodePool.mauNodeCount[luPartition]; ++liNode)
+        {
+            const AStarNode* lpNode = lrNodePool.GetNode(static_cast<u16>(luFirstNode + liNode));
+            const AStarVector2 lPosition = lpNode->GetPosition();
+
+            Vector2 lv2Position;
+            lv2Position.x = lPosition.X();
+            lv2Position.y = lPosition.Y();
+            lv2Position.z = 0.0f;
+            lv2Position.w = 0.0f;
+
+            DrawPoint(lpDisplay, ToMapCoords(lv2Position), KF_NODE_POINT_SIZE,
+                      lpNode->IsOpen() ? KU_OPEN_NODE_COLOUR : KU_CLOSED_NODE_COLOUR);
+        }
+    }
+
+    lStream << ")" << liNodeTotal;
+    lStream << ", Cost weight: " << lrAStar.mfCostWeight;
+    lStream << ", Iteration count: " << lrAStar.miIterationCount;
+    lStream << ", Distance function: ";
+
+    if (lrAStar.mpDistanceFunction == &AStar::EuclideanDistance)
+    {
+        lStream << "Euclidean";
+    }
+
+    if (lrAStar.mpDistanceFunction == &AStar::EuclideanDistanceXBiased)
+    {
+        lStream << "EuclideanXBiased";
+    }
+    else if (lrAStar.mpDistanceFunction == &AStar::EuclideanDistanceYBiased)
+    {
+        lStream << "EuclideanYBiased";
+    }
+    else if (lrAStar.mpDistanceFunction == &AStar::DiagonalDistance)
+    {
+        lStream << "Diagonal";
+    }
+    else
+    {
+        lStream << "Unknown";
+    }
+
+    lStream << ", Block sections : " << lrAStar.miBlockSectionCount << " (";
+
+    for (s32 liBlock = 0; liBlock < lrAStar.miBlockSectionCount; ++liBlock)
+    {
+        const u32 luBlockSectionId = lrAStar.maBlockSectionIds[liBlock];
+        CgsDev::StrStreamBase& lrStream = lStream;
+        lrStream << luBlockSectionId << " ";
+
+        for (s32 liSection = 0; liSection < static_cast<u16>(mpAISectionsData->muNumSections); ++liSection)
+        {
+            if (mpAISectionsData->GetAISection(liSection)->mId == luBlockSectionId)
+            {
+                const Vector3 lv3Middle = mpAISectionsData->GetAISection(liSection)->GetMiddle();
+                DrawX(lpDisplay, ToMapCoords(lv3Middle), KF_BLOCK_X_SIZE, KU_BLOCK_X_COLOUR);
+                break;
+            }
+        }
+    }
+
+    lStream << ")";
+    MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f, 70.0f, 16.0f, 0xFFFFFFFFu, false);
+}
+
+// ====================================================================================================
+// DrawAISectionInfo
+// ----------------------------------------------------------------------------------------------------
+// A circle on the minimap at the chosen section's middle and a line with its index, id, the link
+// section of each portal and its world middle.
+// ====================================================================================================
+void RouteMapDebugComponent::DrawAISectionInfo(CgsDev::Debug2DImmediateRender* lpDisplay, u16 luSectionIndex)
+{
+    const AISection* lpSection = mpAISectionsData->GetAISection(luSectionIndex);
+
+    CgsDev::SimpleStrStream lStream;
+    lpDisplay->DrawCircle(ToMapCoords(lpSection->GetMiddle()), 2.0f, 5, 0xFFFFFFFFu);
+
+    lStream << "Index: " << static_cast<s32>(luSectionIndex) << ", ID: " << lpSection->mId << ", Links: ";
+
+    for (s32 liPortal = 0; liPortal < lpSection->mu8NumPortals; ++liPortal)
+    {
+        const Portal* lpPortal = lpSection->GetPortal(static_cast<u8>(liPortal));
+        lStream << static_cast<s32>(lpPortal->GetLinkSectionIndex()) << " ";
+    }
+
+    lStream << ", Position: ";
+    const Vector3 lv3Middle = lpSection->GetMiddle();
+    lStream.AppendFormat("(%f, %f, %f)", lv3Middle.x, lv3Middle.y, lv3Middle.z);
+
+    MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f, 100.0f, 16.0f, 0xFFFFFFFFu, false);
 }
 
 // ----------------------------------------------------------------------------------------------------

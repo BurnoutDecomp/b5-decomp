@@ -6,7 +6,7 @@
 // The EASTL container instantiations that the X360 build parameterises on the
 // custom `RealmcCore::allocator` (RealmcCore.h). IDA lumps every member of these
 // instances under one mangled prefix (`RealmcCore::allocator<...>`), so this TU
-// is a grab-bag of THREE distinct containers, homed together here because they
+// is a grab-bag of FOUR distinct containers, homed together here because they
 // share the one allocator backend and no other file owns them:
 //
 //   * String16 == eastl::basic_string<char16_t, RealmcCore::allocator>
@@ -19,6 +19,11 @@
 //   * IntVector == eastl::vector<int, RealmcCore::allocator>
 //         RealmcCore::allocator<>::DoInsertValue    @ 0x82C46DE8
 //         RealmcCore::allocator<>::reserve          @ 0x82C470C8
+//
+// plus the members whose export names are cut short: the String16 C-string
+// constructor, assign and append; MessageList::DoCreateNode; and the
+// ResponseList (list of pair<MessagePtr, ResponsePtr>) DoClear / DoErase /
+// erase.
 //
 // These are the container bodies the Wave-2 RealmcCore::MessageQueue TU blocked
 // on (its list nodes route through MessageList::DoClear / DoErase). There is no
@@ -92,19 +97,46 @@ public:
     // member that is copy-constructed from another (the Trc mMessage member).
     String16(const char16_t* pFirst, const char16_t* pLast);
 
+    // C-string constructor (eastl::basic_string(const value_type*, const
+    // allocator_type&)): zero the three pointers, copy the allocator (an empty
+    // body), then RangeInitialize over [pString, pString + length), where the
+    // length is a char16 scan to the terminating zero. Used by the card-label
+    // read (XenonRunnableTask), the Trc value constructor and the task bodies.
+    String16(const char16_t* pString, const allocator& rAllocator);
+
+    // Copy constructor (eastl::basic_string(const basic_string&)): a fresh buffer
+    // through RangeInitialize over rOther's range, never a shared one.
+    String16(const String16& rOther)
+        : mpAllocatorName(nullptr)
+    {
+        RangeInitialize(rOther.mpBegin, rOther.mpEnd);
+    }
+
+    // Copy assignment (the inlined basic_string operator=): assign(other's
+    // range) unless rOther is this string.
+    String16& operator=(const String16& rOther)
+    {
+        if (&rOther != this)
+            assign(rOther.mpBegin, rOther.mpEnd);
+        return *this;
+    }
+
     // Free the owned heap buffer when the string holds one -- capacity > 1 char16
     // AND begin is a real allocation (not the empty singleton / null). Matches the
     // X360 inlined ~String16: v5 = (capEnd - begin) >> 1; if (v5 > 1 && begin) free.
     ~String16();
 
-    // @ 0x82B579E8 (owned by its own String16 TU) -- assign the [pFirst, pLast)
-    // char16 range over the current contents (reusing or reallocating storage),
-    // returning mpBegin. Declared here so the cross-TU callers (the Trc copy ctor
-    // and RealmcCore::Trc::_SetMsgOptions) compile against it; the body is not part
-    // of this TU and is not yet reconstructed anywhere in the tree -- it is the one
-    // genuine unresolved external this header declares. (IntVector::DoRealloc below
-    // is NOT such a case: it is defined in RealmcContainers.cpp.)
-    char16_t* assign(const char16_t* pFirst, const char16_t* pLast);
+    // Assign the [pFirst, pLast) char16 range over the current contents: when it
+    // fits in the current length, copy it down and erase the tail; otherwise copy
+    // the first length() chars and append the rest. Returns *this. Called by the
+    // Trc copy constructor, RealmcCore::Trc::_SetMsgOptions and operator=.
+    String16& assign(const char16_t* pFirst, const char16_t* pLast);
+
+    // Append the [pFirst, pLast) char16 range. When the result outgrows the
+    // capacity, reallocate to max(capacity > 8 ? 2 * capacity : 8, newLength) + 1
+    // chars, move the old contents and the range across and free the old buffer;
+    // otherwise copy in place behind the current end. Returns *this.
+    String16& append(const char16_t* pFirst, const char16_t* pLast);
 
     // Range accessors so owners can hand [Begin(), End()) to RangeInitialize / assign
     // without touching the private pointer words.
@@ -138,6 +170,32 @@ struct MessageListNode : MessageListNodeBase
 class MessageList
 {
 public:
+    // The empty list: sentinel next/prev pointing at itself (the eastl::list
+    // default constructor, inlined into the MessageQueue ctor).
+    MessageList() : mpAllocatorName(nullptr)
+    {
+        mSentinel.mpNext = &mSentinel;
+        mSentinel.mpPrev = &mSentinel;
+    }
+
+    bool empty() const { return mSentinel.mpNext == &mSentinel; }
+
+    // The first node (only meaningful when the list is not empty).
+    MessageListNode* front() const { return static_cast<MessageListNode*>(mSentinel.mpNext); }
+
+    // eastl::list::push_back, inlined at its MessageQueue::SendMessage call site:
+    // DoCreateNode(rValue), then link the node in front of the sentinel
+    // (node.next = sentinel, node.prev = sentinel.prev, old back.next = node,
+    // sentinel.prev = node). The console links the node without a null check.
+    void push_back(const MessagePtr& rValue)
+    {
+        MessageListNode* const lpNode = DoCreateNode(rValue);
+        lpNode->mpNext = &mSentinel;
+        lpNode->mpPrev = mSentinel.mpPrev;
+        mSentinel.mpPrev->mpNext = lpNode;
+        mSentinel.mpPrev = lpNode;
+    }
+
     // @ 0x82C46770 -- walk from the first node to the sentinel, destroy each
     //                 node's MessagePtr and free the node (16 bytes on X360) via
     //                 the backend. Backs MessageQueue::~MessageQueue's list teardown.
@@ -147,6 +205,82 @@ public:
     //                 the node (16 bytes on X360) via the backend. The list `this`
     //                 is unused (the node self-links), matching the X360 asm.
     void DoErase(MessageListNode* pNode);
+
+    // Allocate a node through the backend (the "RealmcCore::allocator" tag,
+    // flags 0) and, when the allocation succeeded, copy-construct rValue into
+    // it: the new MessagePtr AddRefs the held message. Returns the node (null
+    // when the backend failed). Called by MessageQueue::SendMessage.
+    MessageListNode* DoCreateNode(const MessagePtr& rValue);
+
+private:
+    MessageListNodeBase mSentinel;        // +0x00 {next, prev} (self-referential when empty)
+    const char*         mpAllocatorName;  // +0x08 (stateless allocator name word)
+};
+
+// ---------------------------------------------------------------------------
+// ResponseList -- eastl::list<eastl::pair<RealmcCore::MessagePtr,
+// RealmcCore::ResponsePtr>, RealmcCore::allocator>: MessageQueue's response
+// list. Same circular sentinel shape as MessageList; each node is a 24-byte
+// (console) {next, prev, pair} with the MessagePtr at +0x08 and the ResponsePtr
+// at +0x10.
+// ---------------------------------------------------------------------------
+struct MessageResponsePair
+{
+    MessagePtr  first;   // +0x00 (node +0x08)
+    ResponsePtr second;  // +0x08 (node +0x10)
+};
+
+struct ResponseListNode : MessageListNodeBase
+{
+    MessageResponsePair maValue;  // +0x08
+};
+
+class ResponseList
+{
+public:
+    // The empty list (see MessageList's constructor).
+    ResponseList() : mpAllocatorName(nullptr)
+    {
+        mSentinel.mpNext = &mSentinel;
+        mSentinel.mpPrev = &mSentinel;
+    }
+
+    bool empty() const { return mSentinel.mpNext == &mSentinel; }
+
+    // Iterator ends for the MessageQueue's find over the entries.
+    MessageListNodeBase* begin() { return mSentinel.mpNext; }
+    MessageListNodeBase* end()   { return &mSentinel; }
+
+    // Allocate a node through the backend (the "RealmcCore::allocator" tag,
+    // flags 0) and, when the allocation succeeded, copy-construct rValue into
+    // it (both smart pointers AddRef their objects). Returns the node (null when
+    // the backend failed). Called by MessageQueue::PostResponse.
+    ResponseListNode* DoCreateNode(const MessageResponsePair& rValue);
+
+    // eastl::list::push_back, inlined at its MessageQueue::PostResponse call
+    // site: DoCreateNode(rValue), then link the node in front of the sentinel.
+    void push_back(const MessageResponsePair& rValue)
+    {
+        ResponseListNode* const lpNode = DoCreateNode(rValue);
+        lpNode->mpNext = &mSentinel;
+        lpNode->mpPrev = mSentinel.mpPrev;
+        mSentinel.mpPrev->mpNext = lpNode;
+        mSentinel.mpPrev = lpNode;
+    }
+
+    // Walk from the first node to the sentinel; for each node read the next
+    // link, destroy the pair (ResponsePtr, then MessagePtr) and free the node
+    // through the backend. Backs MessageQueue::~MessageQueue's list teardown.
+    void DoClear();
+
+    // Unlink pNode, destroy its pair (ResponsePtr, then MessagePtr) and free it
+    // through the backend. The list `this` is not read.
+    void DoErase(ResponseListNode* pNode);
+
+    // eastl::list::erase(iterator): step the position to the next node, erase
+    // the node behind it, and return the advanced position. Called by
+    // MessageQueue::_ExtractResponse.
+    MessageListNodeBase* erase(MessageListNodeBase* pPosition);
 
 private:
     MessageListNodeBase mSentinel;        // +0x00 {next, prev} (self-referential when empty)

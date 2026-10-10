@@ -77,6 +77,18 @@ namespace CgsGeometric
                             const Vector3& lTriangleNormal, const VecFloat& lTriangleOffset);
         };
     }
+
+    // Clip one box edge (lLineStartVertex -> lLineEndVertex) against the triangle prism of
+    // lTriangleData. Declared as
+    //     extern MaskScalar ClipBoxEdgeAgainstTriangle(const TriangleData &, const BoxVertexData &,
+    //                                                  const BoxVertexData &, Vector3 &)
+    // Writes the edge's crossing point with the triangle plane to lPoint (always), and returns
+    // all-ones when that point lies inside the triangle's three side walls, the edge is not
+    // parallel to the plane, and the crossing parameter is in [0,1]. Body in CgsTriangleBox.cpp.
+    rw::math::vpu::MaskScalar ClipBoxEdgeAgainstTriangle(const BT::TriangleData&  lTriangleData,
+                                                         const BT::BoxVertexData& lLineStartVertex,
+                                                         const BT::BoxVertexData& lLineEndVertex,
+                                                         Vector3&                 lPoint);
 }
 
 #endif // CGS_TRIANGLE_BOX_H

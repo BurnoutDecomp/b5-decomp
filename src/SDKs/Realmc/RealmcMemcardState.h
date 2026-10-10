@@ -6,7 +6,7 @@
 // RealmcCore::MemcardState -- the memory-card task state machine. It serialises
 // (behind one EA::Thread::Mutex) the small pile of state the async card worker
 // tracks: the current autosave/monitor flags, a LIFO stack of running task-type
-// ids (`main` = bottom, `current` = top), a FIFO queue of task ids waiting to
+// ids (`main` = bottom, `current` = top), a FIFO queue of tasks waiting to
 // start, two pending-message bitmask words, and the RealmcCore::MessageFilter the
 // card interface installs. RealmcCore::IRunnableTask (the XenonRunnableTask family)
 // dispatches into these entry points to report Start/Stop and to drive the
@@ -26,7 +26,7 @@
 //   +0x04  mbAutosaveState    bool  (byte)         -- Get/SetAutosaveState.
 //   +0x08  miMonitorState     int                  -- Get/SetMonitorState.
 //   +0x0C  maTaskStack        IntVector (vector<int>) -- running task-type stack.
-//   +0x1C  maStartWaitingQueue Allocator64 (deque<int>) -- tasks waiting to start.
+//   +0x1C  maStartWaitingQueue Allocator64 (deque of IRunnableTask*) -- tasks waiting to start.
 //   +0x48  muMessageSet       uint32  -- pending "set" message bitmask.
 //   +0x4C  muMessageClear     uint32  -- pending "clear" message bitmask.
 //   +0x50  mpMessageFilter    MessageFilter*       -- the installed message filter
@@ -86,11 +86,20 @@ public:
     //   pending in at most one direction.
     int SetMessage(int iMode, int iMask);
 
+    // Read the hidden-message mask (+0x48, the word SetMessage mode 1 sets)
+    //   under the lock. RealmcIface::XenonMessageFilter's MessageClear handler
+    //   tests it.
+    std::uint32_t GetHiddenMessages();
+
     // @ 0x82C44FA8 -- install pNewFilter as the message filter (+0x50), deleting
     //   the previously installed one (its vtable slot +0 deleting destructor).
     //   Returns the previous filter pointer (the X360 returns the deleting-dtor
     //   result, i.e. the old block).
     MessageFilter* SetMessageFilter(MessageFilter* pNewFilter);
+
+    // The installed message filter (+0x50), read unlocked by name where the
+    // console's IRunnableTask::SendMessage / operator() load the field directly.
+    MessageFilter* GetMessageFilter() const { return mpMessageFilter; }
 
     // @ 0x82C45288 -- the `main' (bottom-of-stack) running task, or 0 when idle.
     int GetMainTask();
@@ -111,13 +120,14 @@ public:
     //   iStopTaskType is accepted for the call site but ignored by the body.
     int StopAndStartTask(int iStopTaskType, int iStartTaskType);
 
-    // @ 0x82C46528 -- dequeue and return the next task waiting to start (front of
-    //   the FIFO), or 0 when the queue is empty.
-    int GetWaitingToStartTask();
+    // Dequeue and return the next task object waiting to start (front of the
+    //   FIFO), or null when the queue is empty. IRunnableTask::operator() runs
+    //   each one it gets and then Releases it.
+    IRunnableTask* GetWaitingToStartTask();
 
-    // @ 0x82C468B8 -- enqueue iTask at the back of the start-waiting FIFO when it
-    //   is non-zero. Returns the Unlock result.
-    int PutInStartWaitingQueue(int iTask);
+    // Enqueue pTask at the back of the start-waiting FIFO when it is non-null.
+    //   Returns the Unlock result.
+    int PutInStartWaitingQueue(IRunnableTask* pTask);
 
 private:
     EA::Thread::Mutex* mpMutex;             // +0x00

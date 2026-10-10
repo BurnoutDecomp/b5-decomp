@@ -3,10 +3,9 @@
 // ===========================================================================
 // RealmcIface::GameCallbackProcessor -- a Realmc save/load interface object that
 // posts a response back onto the cross-thread request/response MessageQueue and
-// resets its held message. It derives the abstract Realmc message-filter base
-// RealmcCore::IRealmcMessageFilter (shared base vtable off_82148660; own final
-// vtable off_821486B8) and embeds a RealmcCore::MessagePtr -- the same
-// base + embedded-MessagePtr shape RealmcCore::MessageFilter uses, mirrored here.
+// resets its held message. It derives the shared Realmc message processor
+// RealmcCore::IMessageProcessor (as RealmcCore::MessageFilter does) and embeds a
+// RealmcCore::MessagePtr.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (no Feb-2007 leak source, no DWARF).
 // `Realmc` is a vendor library boundary, so its identifiers (RealmcIface,
@@ -20,7 +19,7 @@
 //        (compiler-generated from the virtual dtor + the class operator delete)
 //
 // LAYOUT (from the ctor stores @0x82B54968 + the deleting-dtor free size = 20):
-//   +0x00  vtable pointer  (base IRealmcMessageFilter off_82148660 then the final
+//   +0x00  vtable pointer  (base IMessageProcessor then the final
 //                           GameCallbackProcessor vtable off_821486B8 -- MSVC's
 //                           base-then-final derived-ctor sequence; the dtor
 //                           installs off_821486B8 then restores off_82148660)
@@ -42,20 +41,21 @@
 // ===========================================================================
 
 #include "types.hpp"
-#include "SDKs/Realmc/RealmcCore.h"           // IRealmcMessageFilter base, MessagePtr, ResponsePtr, Response, FreeMemSize
+#include "SDKs/Realmc/RealmcCore.h"           // IMessageProcessor base, MessagePtr, ResponsePtr, Response, FreeMemSize
 #include "SDKs/Realmc/RealmcMessageQueue.h"   // RealmcCore::MessageQueue (+ its PostResponse decl)
 
 namespace RealmcIface
 {
 
 // ---------------------------------------------------------------------------
-// RealmcIface::GameCallbackProcessor -- derives the abstract filter base
-// RealmcCore::IRealmcMessageFilter (base vtable off_82148660). ProcessMessage is
-// this class's own virtual (a new slot after the inherited dtor); it is not one of
-// the base's un-homed filter slots, so declaring it here does not disturb the
-// committed RealmcCore::MessageFilter, which shares the same base.
+// RealmcIface::GameCallbackProcessor -- the game-thread RealmcCore::IMessageProcessor
+// the interface's update loop applies every queued message to. ProcessMessage
+// (Response*) is its override of the processor's +0x50 slot. Its handlers for
+// the other message types drive the game-side callback object at +4 and are not
+// declared here, so on the host the class stays abstract (no host code
+// constructs one).
 // ---------------------------------------------------------------------------
-class GameCallbackProcessor : public RealmcCore::IRealmcMessageFilter
+class GameCallbackProcessor : public RealmcCore::IMessageProcessor
 {
 public:
     // @ 0x82B54968 -- store mpContext (+4) and mpQueue (+8), install the final
@@ -68,12 +68,9 @@ public:
     // @ 0x82B54388 -- wrap the incoming response in a stack ResponsePtr (AddRef),
     //                 post the (held message, response) pair onto mpQueue, tear the
     //                 stack ResponsePtr down (Release), then rebind the held
-    //                 MessagePtr to the empty message and return it. The X360 leaves
-    //                 the rebound MessagePtr (== operator='s `*this`) in r3.
-    //                 FLAG: the parameter (r4, an incoming RealmcCore::Response*) is
-    //                 grounded from the ResponsePtr ctor's AddRef of *(r4+4) but its
-    //                 role/name and the MessagePtr& return are inferred from the asm.
-    virtual RealmcCore::MessagePtr& ProcessMessage(RealmcCore::Response* pResponse);
+    //                 MessagePtr to the empty message. This is the processor's
+    //                 +0x50 slot, the one Response::Apply dispatches into.
+    void ProcessMessage(RealmcCore::Response* pResponse) override;
 
     // @ 0x82B54340 -- the embedded MessagePtr member's destructor (Release the held
     //                 message + null it) runs as the member is destroyed; the vtable
@@ -81,7 +78,7 @@ public:
     //                 the X360 `vector deleting destructor' @0x82B549B8, which frees
     //                 20 bytes (sizeof) when the delete flag bit0 is set -- the
     //                 virtual dtor + the class operator delete reproduce it.
-    virtual ~GameCallbackProcessor();
+    ~GameCallbackProcessor() override;
 
     static void operator delete(void* lpBlock, size_t luSize)
     {

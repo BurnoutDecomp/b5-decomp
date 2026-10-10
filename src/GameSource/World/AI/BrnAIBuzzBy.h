@@ -108,6 +108,8 @@ namespace BrnAI
 
         void RequestResetBuzzTimers()      { mbResetBuzzTimers = true; }
 
+        friend class AIDebugComponent;   // the AI state table prints each car's buzz frequency
+
     private:
         void ChooseAheadOrBehind(AIModuleIO::ResetOnTrackRequest* lpRequest, f32 lfPlayerSpeed,
                                  EGlobalRaceCarIndex leGlobalRaceCarToTeleport);

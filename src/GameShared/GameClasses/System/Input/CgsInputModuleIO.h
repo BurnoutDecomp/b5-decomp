@@ -89,13 +89,6 @@ namespace InputIO
     // WheelFFSpring) are left to each buffer's own full-reconstruction TU.
     // ------------------------------------------------------------------------
 
-    // PadMapping is not committed yet (its full layout drags in the un-homed ActionMapping[34]).
-    // PostWorldInputBuffer only returns a pointer to its EventQueue<PadMapping,7>, so an incomplete
-    // forward declaration suffices for the pointer-typed accessor and the member is held as raw
-    // aligned storage of the correct width-anchor (it is the last modelled member, so its exact
-    // size does not move any touched member). Promote to the real type when PadMapping lands.
-    struct PadMapping;
-
     // ---- PostWorldInputBuffer (DWARF CgsInputModuleIO.h:776) ----------------
     //   GetBindRequestQueue() const -> X360 0x828E6A88, read-lock,  this+4
     //   GetPadMappingQueue()  const -> X360 0x828E6BD8, read-lock,  this+156
@@ -105,45 +98,37 @@ namespace InputIO
     {
         typedef CgsModule::EventQueue<BaseInputEvent, 8> BindRequestQueue;    // 76B
         typedef CgsModule::EventQueue<BaseInputEvent, 8> UnBindRequestQueue;  // 76B
-        typedef CgsModule::EventQueue<PadMapping,     7> PadMappingQueue;
+        // Four slots on this build: PostWorldInputBuffer::Construct runs
+        // EventQueue<PadMapping,4>::Construct on this queue (the original header's 7 is the other platform's count).
+        typedef CgsModule::EventQueue<PadMapping,     4> PadMappingQueue;
 
         const BindRequestQueue*   GetBindRequestQueue() const;   // 0x828E6A88
-        const UnBindRequestQueue* GetUnBindRequestQueue() const; // declared-only
+        const UnBindRequestQueue* GetUnBindRequestQueue() const; // read-lock, this+80
         const PadMappingQueue*    GetPadMappingQueue() const;    // 0x828E6BD8
 
-        // Write-side request accessors the game-state->controller bridge posts into (the two-word
-        // bind request carries {action, pad}; the unbind request carries a single word). Attested
-        // by the X360 callsites in BrnGameModule::BridgeGameStateToController (0x823C0AE8): the bind
-        // path calls PostBindRequest(word0, word1), the unbind path PostUnbindRequest(word0).
-        void PostBindRequest(s32 liWord0, s32 liWord1);          // declared-only (asm-attested)
-        void PostUnbindRequest(s32 liWord0);                     // declared-only (asm-attested)
+        // Write-locked request posts. A bind request is the
+        // {player, port} pair, an unbind request the player with port 0; a mapping request
+        // copies the caller's action-mapping table for the given port (-1 == every pad).
+        void PostBindRequest(s32 liPlayer, s32 liPort);
+        void PostUnbindRequest(s32 liPlayer);
+        void PostMappingRequest(const ActionMapping* lpMapping, s32 liPortId);
 
         // X360 0x828E6C80 - read-lock accessor returning the published wheel FFB spring (this+632).
         const CgsInput::Device::WheelFFSpring* GetWheelFFSpring() const;      // 0x828E6C80
         // X360 0x823B0F80 - write-lock accessor that copies a WheelFFSpring into the buffer (this+632).
         void SetWheelFFSpring(const CgsInput::Device::WheelFFSpring& lSpring); // 0x823B0F80
 
-        // X360 member offsets are this+4 / +80 / +156 / +632 (the WheelFFSpring at +632 = 0x278). The
-        // PC model's byte offsets differ from the X360's because BaseEventQueue::mpEvents is a pointer:
-        // 4 bytes on the 32-bit X360, 8 on PC x64 -- so each queue is wider here (80B vs the X360's 76B,
-        // align 8 vs 4) and the trailing members sit a few bytes later. These buffers are engine-internal
-        // (allocated/exchanged via CgsModule::IOBufferStack, never serialised), so the load-bearing
-        // contract is the typed member each accessor returns under the asserted lock direction, NOT a
-        // byte-exact offset (which the pointer-width difference makes unattainable without an ABI hack).
-        // The gap below is therefore sized from the preceding PC layout so the wheel-spring member keeps
-        // the X360-mandated relative position (after the three queues, ahead of the untouched tail).
+        // Console member offsets are this+4 / +80 / +156 / +632 (the WheelFFSpring at +632 = 0x278:
+        // 156 + 12 + 4 * 116). The PC model's byte offsets differ because BaseEventQueue::mpEvents is a
+        // pointer (4 bytes on the console, 8 on x64), so each queue is wider here. These buffers are
+        // engine-internal (allocated/exchanged via CgsModule::IOBufferStack, never serialised), so the
+        // contract is the typed member each accessor returns under the asserted lock direction, in the
+        // console's member order.
     private:
         BindRequestQueue   mBindRequestQueue;    // X360 this+4
         UnBindRequestQueue mUnBindRequestQueue;  // X360 this+80
-        // PadMappingQueue mPadMappingQueue -- raw storage (PadMapping un-homed via this struct's
-        // forward decl; X360 this+156).
-        u8                 mPadMappingQueueStorage[12 + 7 * (sizeof(BaseInputEvent) + 4)]; // 96B
-        // Unmodelled span: the remaining PadMapping/output members this slice does not touch. Sized so
-        // the struct keeps the X360 632-byte stride from the buffer head to the wheel-spring member,
-        // measured off the PC preceding-member sizes (queues are 8-byte-pointer-wider here).
-        u8                 maGapToWheelFFSpring[632 - (8 + 2 * sizeof(BindRequestQueue)
-                                                          + (12 + 7 * (sizeof(BaseInputEvent) + 4)))];
-        CgsInput::Device::WheelFFSpring mWheelFFSpring; // X360 this+632 (=0x278); PC offset documented above
+        PadMappingQueue    mPadMappingQueue;     // console this+156
+        CgsInput::Device::WheelFFSpring mWheelFFSpring; // console this+632 (=0x278)
     };
 
     // ------------------------------------------------------------------------

@@ -27,6 +27,7 @@
 //   Snd9::AemsStandardSamplePlayer::Unpause                   @ 0x82B720D8
 //   Snd9::AemsStandardSamplePlayer::SetInput                  @ 0x82B71D10
 //   Snd9::AemsStandardSamplePlayer::SetAzimuth                @ 0x82B71E98
+//   Snd9::AemsStandardSamplePlayer::GetOutputs
 //
 // INHERITANCE (inferred, well-grounded): the class is created through the
 // Snd9::IAemsSamplePlayerFactory-derived Snd9::AemsStandardSamplePlayerFactory
@@ -42,7 +43,7 @@
 // widths so only member ORDER is load-bearing (no offset asserts on the
 // pointer-bearing tail -- same rule sndaems.h / sndhal.h use).
 //
-// FLAG (CROSS-TU / BLOCKED methods declared here for vtable shape, NOT defined):
+// FLAG (methods declared here for vtable shape, NOT defined in this TU):
 //   * ~AemsStandardSamplePlayer -- the ledger's `vector deleting destructor'
 //     @ 0x82B72380 stores off_820AB14C, which is
 //     CgsSound::Playback::AemsRWSamplePlayer's vtable (see the done
@@ -51,9 +52,6 @@
 //     (reconstructing it here would install the wrong vtable). Declared virtual so the
 //     base's virtual dtor slot is satisfied; its real definition is not in this TU.
 //   * Pause -- its own (not-yet-done) TU.
-//   * GetOutputs -- BLOCKED (its body calls the un-homed rw::audio::core::PlugIn-family
-//     attribute-query sub_82B6A8E0 @ 0x82B6A8E0, whose class home and prototype are
-//     not recovered). Declared here for the vtable slot; defined when that callee is homed.
 // ============================================================================
 
 namespace rw
@@ -93,7 +91,7 @@ struct AemsStandardSamplePlayer : public Snd9::IAemsSamplePlayer
     virtual void Unpause();                                       // @ 0x82B720D8
     virtual void SetInput(InputSelector aeSelector, int aiValue); // @ 0x82B71D10
     virtual void SetAzimuth(int aiAzimuth, int* apLegacyAzimuths); // @ 0x82B71E98
-    virtual void GetOutputs(int aiNumOutputs, int* apValues);     // @ 0x82B71F20 -- BLOCKED
+    virtual void GetOutputs(int aiNumOutputs, int* apValues);     // vtable slot 5
 
     // ---- layout (X360 offsets documentary; x64 widths, by-name access) ----
     rw::audio::core::Voice*  mpVoice;                        // +0x04  main mixing voice

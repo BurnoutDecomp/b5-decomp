@@ -148,6 +148,9 @@ namespace CgsDev
         void Dispatch3D(Debug3DImmediateRender* lpRenderer, bool lbClear);
 
     private:
+        // The stream reader replays streamed commands straight into the two queues.
+        friend class DebugRenderStreamReader;
+
         // X360 queue pair (Construct @0x828332C0 constructs +0x4010 [2D] then +0 [3D]; the ctor
         // zeroes each queue's flag byte). The 3D queue's dispatch path is the Debug3D follow-on.
         CgsModule::VariableEventQueue<16384, 16> m3DQueue;   // +0x0000 - world-space (3D) events

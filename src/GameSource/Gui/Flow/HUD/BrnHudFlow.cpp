@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"            // CgsMemory::LinearMalloc
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateMachine.h"// CgsGui::StateMachine
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"       // CgsGui::State
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"            // gpDebugPrint / gxMessageFilterFlags (PrintStateSizes)
 
 // The 14 HUD-flow states (the pool BrnHudFlow::Prepare builds).
 #include "GameSource/Gui/Flow/HUD/States/BrnBootPreload.h"
@@ -65,6 +66,45 @@ void BrnHudFlow::Update()
     BrnBaseFlow::Update();
 }
 
+// Dev dump: a rule, the flow name, a rule, one PrintSingleSize line per pool state in build order,
+// a rule, the "TOTAL : " line, a rule. Each rule/title/total line is gated on message filter bit 0
+// on its own; the per-state lines are gated inside PrintSingleSize. The sizes are the states'
+// sizeof, as the console's are.
+void BrnHudFlow::PrintStateSizes()
+{
+    const char* const KAC_RULE = "-------------------------------\n";
+    s32 liTotal = 0;
+
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << KAC_RULE;
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << "BrnHudFlow\n";
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << KAC_RULE;
+
+    PrintSingleSize("BootPreload",          sizeof(BootPreload),          &liTotal);
+    PrintSingleSize("BootVideos",           sizeof(BootVideos),           &liTotal);
+    PrintSingleSize("BootLegal",            sizeof(BootLegal),            &liTotal);
+    PrintSingleSize("BootAttract",          sizeof(BootAttract),          &liTotal);
+    PrintSingleSize("PostTitleScreenLoad",  sizeof(PostTitleScreenLoad),  &liTotal);
+    PrintSingleSize("BootProfile",          sizeof(BootProfile),          &liTotal);
+    PrintSingleSize("BootLoading",          sizeof(BootLoading),          &liTotal);
+    PrintSingleSize("RaceMainHudState",     sizeof(RaceMainHudState),     &liTotal);
+    PrintSingleSize("FBurnMainHudState",    sizeof(FBurnMainHudState),    &liTotal);
+    PrintSingleSize("PausedHudState",       sizeof(PausedHudState),       &liTotal);
+    PrintSingleSize("CrashedHudState",      sizeof(CrashedHudState),      &liTotal);
+    PrintSingleSize("CrashedStuntHudState", sizeof(CrashedStuntHudState), &liTotal);
+    PrintSingleSize("IdleHudState",         sizeof(IdleHudState),         &liTotal);
+    PrintSingleSize("PreRaceFlyByState",    sizeof(PreRaceFlyByState),    &liTotal);
+
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << KAC_RULE;
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << "TOTAL : " << liTotal << "\n";
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << KAC_RULE;
+}
+
 // @ 0x8251A620 -- base prepare, then build + install the 14-state HUD pool.
 bool BrnHudFlow::Prepare(CgsGui::GuiAccessPointers* lpAccessPointers,
                          rw::IResourceAllocator* lpAllocator,
@@ -74,13 +114,9 @@ bool BrnHudFlow::Prepare(CgsGui::GuiAccessPointers* lpAccessPointers,
     // Base flow prepare: stash access pointers/allocator + wire the state machine's StateInterface.
     BrnBaseFlow::Prepare(lpAccessPointers, lpAllocator);
 
-    // FLAG: the X360 makes a self virtual call `this->vtable[6](this)` immediately after
-    // SetStateInterface (0x8251A650). In BrnHudFlow's own vtable slot 6 *is* this 4-arg Prepare
-    // (the 2-arg base Prepare sits at slot 3), so taken literally it is infinite self-recursion --
-    // an IDA artifact of the dual-Prepare-overload vtable, not a real call (EventObserver::Prepare
-    // does not re-vtable the object, confirmed @0x8284FBF0). Construct (which brings up the embedded
-    // StateMachine/LuaState/cache) is sequenced by the controller before Prepare, so omitting it
-    // drops no initialisation. Substance follows: build the 14-state pool and install it.
+    // The console's virtual call right after SetStateInterface is the PrintStateSizes dump (the
+    // same slot BrnScreenFlow::Prepare and BrnOverlayFlow::Prepare dispatch at that point).
+    PrintStateSizes();
 
     CgsGui::StateMachine& lStateMachine = GetStateMachine();
 

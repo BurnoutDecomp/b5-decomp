@@ -105,7 +105,14 @@ namespace BrnGameState
         int32_t GetMaxStuntCount();                                             // :118 (own TU)
         int32_t GetMaxStuntElementCountByCounty(StuntElementType, BrnWorld::ECounty); // :123 (own TU)
         int32_t GetMaxSignatureTDCount();                                       // :126 (own TU)
-        void    ClearActiveJump();                                              // :129 (own TU)
+        // . Header inline: no out-of-line copy exists; every caller carries the two stores
+        // (UpdateJumps' crash-abandon path, which the debug info shows calling it, and
+        // ProcessGameEvents' player-reset-on-track arm).
+        void    ClearActiveJump()
+        {
+            mpLastJumpElement = 0;
+            mbJumpActive      = false;
+        }
         void    CompleteAllJumps();                                             // :132 (own TU)
         void    CompleteAllStunts();                                            // :135 (own TU)
         void    CompleteAllSmashes();                                           // :138 (own TU)

@@ -471,4 +471,90 @@ void ActiveRaceCar::RenderParams::DEBUG_OverrideScratchAmount(f32 lfScratchAmoun
     }
 }
 
+// ----------------------------------------------------------------------------
+// Copy assignment
+// ----------------------------------------------------------------------------
+
+// Copies every member by name. Called by RaceCarEntityModule::UpdateOutputInterfaces (the
+// per-car output snapshot) and by BrnReplays::RaceCarSerialiserFrame::operator= (once per
+// replay car slot). The console copies the vector members with 16-byte block moves, the
+// 24-entry tag-type array with a word loop and the scalars field by field; the pad byte
+// after mu8RenderDamageFlags is not copied.
+//
+// The detached-part queue is NOT copied as raw bytes: its inlined EventQueue assignment
+// leaves this queue's buffer pointer and capacity alone, empties it, and appends the
+// source's live events into its own inline storage.
+ActiveRaceCar::RenderParams& ActiveRaceCar::RenderParams::operator=(const RenderParams& lrOther)
+{
+    mBodyTransform = lrOther.mBodyTransform;
+    for (u32 luIndex = 0; luIndex < KU_MAX_RACE_CAR_VERLET_POINTS; ++luIndex)
+    {
+        maVerletOffsets[luIndex] = lrOther.maVerletOffsets[luIndex];
+    }
+    for (u32 luWheel = 0; luWheel < 6; ++luWheel)
+    {
+        mWheelTransforms[luWheel] = lrOther.mWheelTransforms[luWheel];
+    }
+    for (u32 luWheel = 0; luWheel < 6; ++luWheel)
+    {
+        mWheelScaleTransforms[luWheel] = lrOther.mWheelScaleTransforms[luWheel];
+    }
+    for (u32 luAxle = 0; luAxle < 4; ++luAxle)
+    {
+        maAxlePositions[luAxle] = lrOther.maAxlePositions[luAxle];
+    }
+    mPaintColour       = lrOther.mPaintColour;
+    mPearlescentColour = lrOther.mPearlescentColour;
+    for (u32 luLocator = 0; luLocator < 24; ++luLocator)
+    {
+        maLightLocatorPos[luLocator] = lrOther.maLightLocatorPos[luLocator];
+    }
+    for (u32 luLocator = 0; luLocator < 24; ++luLocator)
+    {
+        maLightLocatorType[luLocator] = lrOther.maLightLocatorType[luLocator];
+    }
+    for (u32 luWheel = 0; luWheel < 6; ++luWheel)
+    {
+        mabWheelExists[luWheel] = lrOther.mabWheelExists[luWheel];
+    }
+    miNumLightLocators = lrOther.miNumLightLocators;
+    for (u32 luWheel = 0; luWheel < 4; ++luWheel)
+    {
+        mafWheelAngularVelocities[luWheel] = lrOther.mafWheelAngularVelocities[luWheel];
+    }
+    mfDeformationSquared = lrOther.mfDeformationSquared;
+    mBodyPartVisibility  = lrOther.mBodyPartVisibility;
+
+    maDetachedParts.Clear();
+    maDetachedParts.Append(lrOther.maDetachedParts);
+
+    mLOD                         = lrOther.mLOD;
+    mbDamaged                    = lrOther.mbDamaged;
+    mbCrashing                   = lrOther.mbCrashing;
+    mbIsEngineOff                = lrOther.mbIsEngineOff;
+    mbIsBraking                  = lrOther.mbIsBraking;
+    mbIsReversing                = lrOther.mbIsReversing;
+    mbIsIndicatingLeft           = lrOther.mbIsIndicatingLeft;
+    mbIsIndicatingRight          = lrOther.mbIsIndicatingRight;
+    mbIsHidden                   = lrOther.mbIsHidden;
+    mfLightOpacityFlipFlop       = lrOther.mfLightOpacityFlipFlop;
+    mfLightSwitchTimeOut         = lrOther.mfLightSwitchTimeOut;
+    mbBluesAndTwosCanSwitchState = lrOther.mbBluesAndTwosCanSwitchState;
+    mbBluesAndTwosActive         = lrOther.mbBluesAndTwosActive;
+    mu8RenderDamageFlags         = lrOther.mu8RenderDamageFlags;
+    for (u32 luPane = 0; luPane < 8; ++luPane)
+    {
+        mafCrackedGlassFractureAmount[luPane] = lrOther.mafCrackedGlassFractureAmount[luPane];
+    }
+    for (u32 luPane = 0; luPane < 8; ++luPane)
+    {
+        mafCrackedGlassEqualisationFactor[luPane] = lrOther.mafCrackedGlassEqualisationFactor[luPane];
+    }
+    for (u32 luPane = 0; luPane < 8; ++luPane)
+    {
+        mavCrackedGlassScaleFactors[luPane] = lrOther.mavCrackedGlassScaleFactors[luPane];
+    }
+    return *this;
+}
+
 } // namespace BrnWorld

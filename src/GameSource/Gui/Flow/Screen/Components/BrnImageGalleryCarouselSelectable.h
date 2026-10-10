@@ -23,10 +23,19 @@ namespace BrnGui
         // matching apt state.
         virtual void Update();
 
-        // DWARF cpp:61 / h:86 -- their own ledger functions (declaration-only /
-        // trivial inline).
+        // The console's override is empty (its vtable slot is a shared empty body).
         virtual void Select();
-        void SetUsed(bool lbUsed) { mbUsed = lbUsed; }
+
+        // Header-inline (HandleCollectedDataEvent carries it): a change of the used flag
+        // dirties the selectable so its next Update re-pushes the apt state.
+        void SetUsed(bool lbUsed)
+        {
+            if (mbUsed != lbUsed)
+            {
+                mbUsed = lbUsed;
+                SetDirty();
+            }
+        }
 
     private:
         bool mbUsed;   // DWARF h:69 (X360 +0xA4)

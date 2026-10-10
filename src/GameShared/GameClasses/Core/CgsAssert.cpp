@@ -2,6 +2,7 @@
 #undef DrawText
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint (the assert print stream)
 #include "rw/core/debug/DebugCriticalSection.h"   // the canonical wrapper (this TU shares its home)
 #include <atomic>
 #include <cstring>
@@ -17,6 +18,14 @@
 
 namespace CgsDev
 {
+namespace Log
+{
+    // The stream PrintStringed writes to. The console aims it at its own
+    // LogOutput (gAssertPrint), whose sink is the debug output; every log sink in this tree is
+    // the unified game log, which is what the debug-print stream writes, so it is that stream.
+    StrStreamBase* gpAssertPrint = gpDebugPrint;
+}
+
 namespace Assert
 {
     static rw::core::debug::detail::DebugCriticalSection gAssertMutex = { 0 };
@@ -252,6 +261,19 @@ namespace Assert
             gAssertManager.HandleAssert(lpcExpression, lpcFile, liLine);
         // __debugbreak();   // commented out per request - asserts log to file and continue
         return 0;
+    }
+
+    // The job-side assert report: one line on the assert print stream,
+    // "CGSASSERT : <file>:<line> <message>", with "<NULLSTRING>" for a null file or message.
+    // The console never reads lpcFunction.
+    void PrintStringed(const char* lpcFile, const char* lpcFunction, const int liLine, const char* lpcMessage)
+    {
+        (void)lpcFunction;
+        StrStreamBase& lrStream = *Log::gpAssertPrint;
+        lrStream << "CGSASSERT : ";
+        lrStream << (lpcFile ? lpcFile : "<NULLSTRING>");
+        lrStream << ":";
+        lrStream << static_cast<s32>(liLine) << " " << (lpcMessage ? lpcMessage : "<NULLSTRING>") << "\n";
     }
 }
 }

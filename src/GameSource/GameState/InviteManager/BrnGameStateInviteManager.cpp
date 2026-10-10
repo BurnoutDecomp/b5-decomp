@@ -10,6 +10,7 @@
 //   ProcessUnbindResults     0x82391E88  -- drain the unbind-result queue (advance / fail on result)
 //   RenderDebugText          0x82357DA8  -- draw a line of on-screen debug text for the invite UI
 //   UpdatePrepareForInvite   0x823980B0  -- the prepare-for-invite sub-state machine tick
+// plus SetModulePreparedForInvite (mark a module ready) and Update (the per-frame invite step).
 //
 // Members are accessed BY NAME against the layout pinned in the header. The two debug
 // "invalid index" / "unknown state" assert tripwires preserve the X360 Begin/Fire/End assert
@@ -32,11 +33,8 @@ namespace BrnGameState
 
     // Invite-overlay debug text style. KF_INVITE_MANAGER_TEXT_SIZE is the X360 immediate
     // value (flt_8202AC78 == 26.0f) passed as the Draw2DText scale; the colour is the
-    // X360 data-resident packed RGBA (dword_82CDBA34) used as the text colour.
-    // FLAG: the exact RGBA byte value of KU_INVITE_MANAGER_TEXT_COLOUR is a data global
-    //       (dword_82CDBA34) not present in this TU's pseudocode; modelled as opaque white
-    //       (0xFFFFFFFF) -- it only affects the on-screen colour of dev-only invite text.
-    static const CgsDev::RGBA KU_INVITE_MANAGER_TEXT_COLOUR = 0xFFFFFFFFu;
+    // data-resident packed RGBA used as the text colour (the image holds 0xFF0000FF).
+    static const CgsDev::RGBA KU_INVITE_MANAGER_TEXT_COLOUR = 0xFF0000FFu;
     static const f32          KF_INVITE_MANAGER_TEXT_SIZE   = 26.0f;
 
     // The two re-bind controller-event player indices (DWARF :41/:42). The unbind request
@@ -48,6 +46,24 @@ namespace BrnGameState
     // The verbatim X360-baked assert source path for this file (preserved exactly).
     static const char* const KAC_INVITE_MANAGER_FILE =
         "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/InviteManager/BrnGameStateInviteManager.cpp";
+
+    // Update's on-screen status lines: text and position (rodata pairs 614.8,64 / 606.35,64).
+    static const Vector2 KV2_PREPARING_INVITE_TEXT_POSITION  = { 614.8f, 64.0f, 0.0f, 0.0f };
+    static const Vector2 KV2_PERFORMING_INVITE_TEXT_POSITION = { 606.35f, 64.0f, 0.0f, 0.0f };
+
+    // The ids Update posts: the game action that hands the invite to the other modules (reference
+    // E_ACTION_START_PREPARE_FOR_INVITE 87, +5 on the console) and the two game events this
+    // manager queues for the game state (reference E_EVENT_UPDATE_PREPARE_FOR_INVITE 60 and
+    // E_EVENT_PERFORM_INVITE 62, one below on the console like E_EVENT_PREPARED_FOR_INVITE).
+    static const s32 KI_ACTION_START_PREPARE_FOR_INVITE = 92;
+    static const s32 KI_EVENT_UPDATE_PREPARE_FOR_INVITE = 59;
+    static const s32 KI_EVENT_PERFORM_INVITE            = 61;
+
+    // The record a module posts (action 94) when it is ready for the invite: which module.
+    struct PreparedForInviteAction
+    {
+        u32 meModulePreparedForInvite;   // +0x00, the module's bit in mModulePreparedBitArray
+    };
 
     // ========================================================================
     // CheckPreparedForInvite @ 0x82363F78
@@ -267,5 +283,96 @@ namespace BrnGameState
                 break;
             }
         }
+    }
+
+    // ========================================================================
+    // SetModulePreparedForInvite
+    //
+    // A module reported ready for the invite: set its bit in the prepared-bit array.
+    // ========================================================================
+    void GameStateInviteManager::SetModulePreparedForInvite(const CgsModule::Event* lpAction)
+    {
+        const PreparedForInviteAction* lpPreparedForInviteAction =
+            reinterpret_cast<const PreparedForInviteAction*>(lpAction);
+        CGS_ASSERT(lpPreparedForInviteAction, "lpPreparedForInviteAction");
+
+        mModulePreparedBitArray.SetBit(lpPreparedForInviteAction->meModulePreparedForInvite);
+    }
+
+    // ========================================================================
+    // Update
+    //
+    // Once per game-state frame: clear this frame's game events, take the module-ready / cancel
+    // actions, and step the invite:
+    //   START_INVITE         -> post the invite parameters to the other modules, PREPARE_FOR_INVITE
+    //   PREPARE_FOR_INVITE   -> status text, the update-prepare event, the controller re-bind step
+    //                           and the all-modules-ready check
+    //   START_PERFORM_INVITE -> queue the perform-invite event with the parameters, PERFORM_INVITE
+    //   PERFORM_INVITE       -> status text
+    //   COUNT                -> nothing (cancelled)
+    // then hand this frame's controller bind / unbind requests to the output buffer and clear them.
+    // ========================================================================
+    void GameStateInviteManager::Update(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
+                                        GameStateModuleIO::GameActionQueue* lpGameActionQueue)
+    {
+        mGameEventQueue.Clear();
+        ProcessGameStateActions(lpGameActionQueue);
+
+        switch (meInviteState)
+        {
+            case E_INVITE_STATE_START_INVITE:
+            {
+                const BrnNetwork::BrnNetworkModuleIO::InviteOrJoinParams lParams = mInviteOrJoinParams;
+                lpOutputBuffer->GetGameActionQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lParams),
+                    KI_ACTION_START_PREPARE_FOR_INVITE, sizeof(lParams));
+                meInviteState = E_INVITE_STATE_PREPARE_FOR_INVITE;
+                break;
+            }
+
+            case E_INVITE_STATE_PREPARE_FOR_INVITE:
+            {
+                RenderDebugText("Preparing Invite", KV2_PREPARING_INVITE_TEXT_POSITION);
+                // A one-byte event the console posts without writing its payload.
+                const u8 lu8UpdatePrepareForInvite = 0;
+                mGameEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8UpdatePrepareForInvite),
+                                         KI_EVENT_UPDATE_PREPARE_FOR_INVITE, sizeof(lu8UpdatePrepareForInvite));
+                UpdatePrepareForInvite();
+                CheckPreparedForInvite();
+                break;
+            }
+
+            case E_INVITE_STATE_START_PERFORM_INVITE:
+            {
+                const BrnNetwork::BrnNetworkModuleIO::InviteOrJoinParams lParams = mInviteOrJoinParams;
+                mGameEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lParams),
+                                         KI_EVENT_PERFORM_INVITE, sizeof(lParams));
+                meInviteState = E_INVITE_STATE_PERFORM_INVITE;
+                break;
+            }
+
+            case E_INVITE_STATE_PERFORM_INVITE:
+                RenderDebugText("Performing Invite", KV2_PERFORMING_INVITE_TEXT_POSITION);
+                break;
+
+            case E_INVITE_STATE_COUNT:
+                break;
+
+            default:
+            {
+                char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                lStrStream << "Unknown state in GameStateInviteManager: " << static_cast<s32>(meInviteState) << "\n";
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), KAC_INVITE_MANAGER_FILE, 209);
+                CgsDev::Assert::EndAssert();
+                break;
+            }
+        }
+
+        lpOutputBuffer->GetGameStateToControllerInterface()->GetBindRequestQueue()->Append(mOutputBindRequestQueue);
+        lpOutputBuffer->GetGameStateToControllerInterface()->GetUnBindRequestQueue()->Append(mOutputUnBindRequestQueue);
+        mOutputBindRequestQueue.Clear();
+        mOutputUnBindRequestQueue.Clear();
     }
 }

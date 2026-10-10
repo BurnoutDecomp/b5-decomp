@@ -5,22 +5,25 @@
 // It derives from RealmcCore::IRunnableTask and holds a pointer to the shared
 // XenonUtil::State the platform helpers operate on. No leak source / no DWARF:
 // SHAPE and BODIES both come from the X360 pseudocode + asm. See
-// RealmcXenonRunnableTask.h for the class layout and the two functions
-// (SelectDevice, GetCa) left BLOCKED pending their un-homed collaborators.
+// RealmcXenonRunnableTask.h for the class layout.
 // ===========================================================================
 
 #include "SDKs/Realmc/RealmcXenonRunnableTask.h"
+#include "SDKs/Realmc/RealmcTrc.h"   // RealmcCore::Trc / MessageTrc (SelectDevice's TCR message)
+
+#include <new>   // placement new -- the MessageTrc is constructed in backend memory
 
 namespace RealmcIface
 {
 
 // ---------------------------------------------------------------------------
-// XenonRunnableTask ctor @ 0x82B57698 -- IRunnableTask(pContext, pMemcardState);
+// XenonRunnableTask ctor -- IRunnableTask(pMessageQueue, pMemcardState);
 // mpState = pState; then MSVC installs the final XenonRunnableTask vtable.
 // ---------------------------------------------------------------------------
-XenonRunnableTask::XenonRunnableTask(void* pContext, RealmcCore::MemcardState* pMemcardState,
+XenonRunnableTask::XenonRunnableTask(RealmcCore::MessageQueue* pMessageQueue,
+                                     RealmcCore::MemcardState* pMemcardState,
                                      XenonUtil::State* pState)
-    : RealmcCore::IRunnableTask(pContext, pMemcardState)
+    : RealmcCore::IRunnableTask(pMessageQueue, pMemcardState)
     , mpState(pState)   // stw r30, 0x10(r31)
 {
 }
@@ -50,6 +53,176 @@ int XenonRunnableTask::VerifyActiveCard()
 
     mpState->mCardData = CardData::Empty();
     return 7;
+}
+
+// The active card block is the XDK device record (XDEVICE_DATA): DeviceID +0x00,
+// DeviceType +0x04, ulDeviceBytes +0x08, ulDeviceFreeBytes +0x10, then the wide
+// friendly name at +0x18 (27 WCHARs, zero-terminated; 80 bytes with the tail
+// pad). CardDataBlock keeps everything after the DeviceID word as an opaque
+// payload, so the name starts 0x14 bytes into that payload.
+static const unsigned int KU_FRIENDLY_NAME_PAYLOAD_OFFSET = 0x18 - 0x04;
+
+static const char16_t* GetDeviceFriendlyName(const CardDataBlock& rBlock)
+{
+    return reinterpret_cast<const char16_t*>(&rBlock.maPayload[KU_FRIENDLY_NAME_PAYLOAD_OFFSET]);
+}
+
+// ---------------------------------------------------------------------------
+// GetCardName
+//
+//   result = basic_string(allocator("EASTL basic_string"))       (empty)
+//   if (mpState->mCardData.maCurrent DeviceID != 0) {
+//     temp = basic_string(friendly name, allocator("EASTL basic_string"))
+//     if (&temp != &result) result.assign(temp.begin, temp.end)  (operator=)
+//     temp destroyed (frees an owned buffer)
+//   }
+//   return result                                                (hidden result slot)
+// ---------------------------------------------------------------------------
+RealmcCore::String16 XenonRunnableTask::GetCardName()
+{
+    RealmcCore::String16 lName;
+    if (mpState->mCardData.maCurrent.muState != 0)
+    {
+        lName = RealmcCore::String16(GetDeviceFriendlyName(mpState->mCardData.maCurrent),
+                                     RealmcCore::allocator());
+    }
+    return lName;
+}
+
+// The values SelectDevice works with.
+static const int   KI_SELECT_NOT_SIGNED_IN   = 13;     // CheckState / DeviceSelectorShow: no user
+static const int   KI_SELECT_CANCELLED       = 14;     // DeviceSelectorShow / UpdateDeviceInfo
+static const int   KI_RESULT_NOT_SIGNED_IN   = 5;      // SelectDevice results
+static const int   KI_RESULT_CANCELLED       = 7;
+static const int   KI_RESULT_DEVICE_ERROR    = 1;
+static const int   KI_RESULT_DEVICE_CANCELLED = 8;
+static const int   KI_TRC_CARD_GONE_ID       = 0x18;   // the TCR message id sent when the card vanished
+static const int   KI_TRC_CARD_GONE_OPTIONS  = 0x405;  // its packed option codes (5, then 4)
+static const int   KI_TRC_MESSAGE_VALUE      = 7;      // MessageTrc's third ctor argument
+static const int   KI_TRC_RESPONSE_CANCEL    = 1;      // the response value that cancels
+static const DWORD KU_SELECT_CONTENT_FLAGS   = 0x200;  // the selector flags forced while choosing
+
+// ---------------------------------------------------------------------------
+// XenonRunnableTask::SelectDevice
+//
+//   result = 0 ; cardGone = false
+//   if (CheckState(state) == 13) return 5
+//   if (state->card != Empty && CardExists(state->card) != 0)  -> card = Empty, cardGone = true
+//   savedFlags = state->contentFlags
+//   if (!keepActiveCard) { state->card = Empty ; state->contentFlags = 0x200 }
+//   if (state->card == Empty) loop {
+//     if (cardGone) {
+//       trc = Trc(0x18, 0x405)
+//       msg = AllocateMem(null, sizeof MessageTrc) ? new MessageTrc(trc, 7) : null
+//       response = SendMessage(MessagePtr(msg), null)
+//       ~response ; ~MessagePtr
+//       if (response value == 1) { result = 7 ; ~trc ; break }
+//       state->contentFlags = 0x200 ; ~trc
+//     }
+//     r = DeviceSelectorShow(state, (s64)bytesRequested, mode)
+//     if (r == 13) { result = 5 ; break }
+//     if (r == 14) { result = 7 ; break }
+//     state->+0xB1 = 1
+//     if (state->card != Empty) { state->deviceMounted = 1 ; state->+0xDA = 0 }
+//     else if (state->deviceMounted) {
+//       prev = state->card.PreviousState()
+//       if (CardExists(prev) == 0) state->card = prev
+//     }
+//     if (!(state->card == Empty)) break
+//   }
+//   state->contentFlags = savedFlags
+//   u = UpdateDeviceInfo(state)
+//   if (u != 0) result = (u == 14) ? 8 : 1
+//   return result
+//
+// CardExists returns 0 when the device is present. The cardGone test is
+// re-evaluated on every pass, so once set, every pass sends the message first.
+// ---------------------------------------------------------------------------
+int XenonRunnableTask::SelectDevice(int liMode, bool lbKeepActiveCard, int liBytesRequested)
+{
+    int liResult = 0;
+    bool lbCardGone = false;
+
+    if (XenonUtil::CheckState(mpState) == KI_SELECT_NOT_SIGNED_IN)
+        return KI_RESULT_NOT_SIGNED_IN;
+
+    if (mpState->mCardData != CardData::Empty() &&
+        XenonUtil::CardExists(&mpState->mCardData.maCurrent.muState) != 0)
+    {
+        mpState->mCardData = CardData::Empty();
+        lbCardGone = true;
+    }
+
+    const DWORD luSavedContentFlags = mpState->muContentFlags;
+    if (!lbKeepActiveCard)
+    {
+        mpState->mCardData = CardData::Empty();
+        mpState->muContentFlags = KU_SELECT_CONTENT_FLAGS;
+    }
+
+    if (mpState->mCardData == CardData::Empty())
+    {
+        for (;;)
+        {
+            if (lbCardGone)
+            {
+                RealmcCore::Trc lTrc(KI_TRC_CARD_GONE_ID, KI_TRC_CARD_GONE_OPTIONS);
+
+                void* const lpMem = RealmcCore::AllocateMem(nullptr, sizeof(RealmcCore::MessageTrc));
+                RealmcCore::MessageTrc* const lpMessage =
+                    lpMem ? new (lpMem) RealmcCore::MessageTrc(lTrc, KI_TRC_MESSAGE_VALUE) : nullptr;
+
+                bool lbCancel;
+                {
+                    const RealmcCore::MessagePtr lMessage(lpMessage);
+                    const RealmcCore::ResponsePtr lResponse = SendMessage(lMessage, nullptr);
+                    lbCancel = (lResponse.GetValue() == KI_TRC_RESPONSE_CANCEL);
+                }   // ~ResponsePtr, then ~MessagePtr
+
+                if (lbCancel)
+                {
+                    liResult = KI_RESULT_CANCELLED;
+                    break;   // ~Trc
+                }
+                mpState->muContentFlags = KU_SELECT_CONTENT_FLAGS;
+            }   // ~Trc
+
+            const int liSelect = XenonUtil::DeviceSelectorShow(
+                mpState, static_cast<u64>(static_cast<s64>(liBytesRequested)), liMode);
+            if (liSelect == KI_SELECT_NOT_SIGNED_IN)
+            {
+                liResult = KI_RESULT_NOT_SIGNED_IN;
+                break;
+            }
+            if (liSelect == KI_SELECT_CANCELLED)
+            {
+                liResult = KI_RESULT_CANCELLED;
+                break;
+            }
+
+            mpState->mbFieldB1 = 1;
+            if (mpState->mCardData != CardData::Empty())
+            {
+                mpState->mbDeviceMounted = 1;
+                mpState->mbFieldDA = 0;
+            }
+            else if (mpState->mbDeviceMounted)
+            {
+                const CardData lPrevious = mpState->mCardData.PreviousState();
+                if (XenonUtil::CardExists(&lPrevious.maCurrent.muState) == 0)
+                    mpState->mCardData = lPrevious;
+            }
+
+            if (!(mpState->mCardData == CardData::Empty()))
+                break;
+        }
+    }
+
+    mpState->muContentFlags = luSavedContentFlags;
+    const int liUpdate = XenonUtil::UpdateDeviceInfo(mpState);
+    if (liUpdate != 0)
+        liResult = (liUpdate == KI_SELECT_CANCELLED) ? KI_RESULT_DEVICE_CANCELLED : KI_RESULT_DEVICE_ERROR;
+    return liResult;
 }
 
 } // namespace RealmcIface
