@@ -8,10 +8,9 @@
 // CgsDev::DebugUI::ErrorWindow - X360 Render (0x8282EF10) / Update (0x828306F0).
 //
 // Reconstructed store-for-store from the X360 asm. The shared palette colour + the screen metrics
-// live in the DebugUI singleton and, following the committed Console.cpp convention, are reached by
-// named accessor (GetUI().GetPalette()/GetMetrics()) rather than the X360 raw offsets
-// (*(DebugUI+0x50)=mColourErrorWindow, *(DebugUI+0x5C)=Metrics.mfTextSize (Metrics base = +0x5C),
-// *(DebugUI+0x94)=Metrics.mfErrorWindowBorder).
+// live in the DebugUI singleton and are reached through named accessors. Construct @0x8282FA74
+// places Palette at UI+0x18: UI+0x50 is mColourErrorText, UI+0x54 is mColourErrorWindow.
+// Metrics begins at UI+0x5C; UI+0x94 is mfErrorWindowBorder.
 
 namespace CgsDev
 {
@@ -78,8 +77,8 @@ namespace CgsDev
             const f32 lfIntensity = (255.0f - lfMagnitude) >= 0.0f ? lfMagnitude : 255.0f;
             const f32 lfScale     = lfIntensity * (1.0f / 255.0f);
 
-            // Both the box fill and the frame draw with the pulse-scaled error-window colour.
-            const RGBA lPulseColour = ScalePulseColour(lrPalette.mColourErrorWindow, lfScale);
+            // ARTIST 0x8282EF88 reads UI+0x50 (error text) for the pulsing frame.
+            const RGBA lPulseColour = ScalePulseColour(lrPalette.mColourErrorText, lfScale);
 
             // Window geometry (mfX/mfY/mfWidth/mfHeight are private on the base -> public getters).
             const f32 lfX      = GetX();
@@ -87,8 +86,8 @@ namespace CgsDev
             const f32 lfWidth  = GetWidth();
             const f32 lfHeight = GetHeight();
 
-            // Fill: origin (mfX,mfY), size (mfWidth,mfHeight).
-            lpRender->DrawBox(lfX, lfY, lfWidth, lfHeight, lPulseColour);
+            // DrawBox receives UI+0x54 in r4 @0x8282EF8C, independently of the pulse.
+            lpRender->DrawBox(lfX, lfY, lfWidth, lfHeight, lrPalette.mColourErrorWindow);
 
             // Frame (X360 sub_8281C960 == DrawFrame 6-arg): rect + pulse colour + the metric border.
             lpRender->DrawFrame(lfX,
@@ -99,14 +98,14 @@ namespace CgsDev
                                 lrMetrics.mfErrorWindowBorder);
 
             // Wrapped error text, inset from the top by the error-window border, drawn at the palette
-            // error-window colour (UNSCALED) and text size, centred (lfAlign = 0.5).
+            // error-text colour (UI+0x50 @0x8282F094, unscaled), centred (lfAlign = 0.5).
             lpRender->DrawTextInBox(mpcErrorMessage,
                                     lfX,
                                     lfY + lrMetrics.mfErrorWindowBorder,
                                     lfX + lfWidth,
                                     lfY + lfHeight,
                                     lrMetrics.mfTextSize,
-                                    lrPalette.mColourErrorWindow,
+                                    lrPalette.mColourErrorText,
                                     0.5f);
         }
 
