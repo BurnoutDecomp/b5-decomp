@@ -273,7 +273,7 @@ void HudMessageAnalyzer::TriggerNewRoadRulesHighScoreMessage()
     //     (`0x8251EFC4 cmpwi r11,1`) -- there is no `> 0` branch anywhere on this path.
     // So a count of 0 (or negative) reaching here fires "RRYouRuleX" with the parameter 0:
     // another player took the local player's LAST ruled road. Round 2 carried an extra
-    // `&& miNumRoadsNowRuled > 0` conjunct here, which silently DROPPED that console
+    // `&& miNumRoadsNowRuled > 0` conjunct here, which removed that console
     // branch; it is removed. Do not re-add it, and if this tail is ever de-inlined into the
     // requested TriggerRoadsRuledMessage() helper, the helper must NOT carry the `> 0` test
     // -- it belongs to copy 1's call site only.
