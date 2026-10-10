@@ -6,8 +6,10 @@
 #include <cstring>
 #include <vector>
 #include <unordered_map>
-#include "pc/gcm/renderengine/DepthOnlyPCLeaf.h"
-#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
+#include "pc/gcm/renderengine/DepthOnly.h"
+#include "pc/gcm/renderengine/ShaderBindings.h"
+#include "pc/gcm/renderengine/ShaderConstantCache.h"
+#include "pc/gcm/renderengine/ShadowReceiver.h"
 #include "pc/gcm/renderengine/renderstates.h"
 #include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"
 #include "depth_technique.inc"

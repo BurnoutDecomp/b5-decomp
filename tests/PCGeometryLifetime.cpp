@@ -1,4 +1,4 @@
-#include "pc/gcm/renderengine/WorldGeometryPCLeaf.cpp"
+#include "pc/gcm/renderengine/WorldGeometry.cpp"
 
 namespace renderengine {
     IDirect3DDevice9* gDevice = nullptr;

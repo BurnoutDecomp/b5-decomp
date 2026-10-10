@@ -55,7 +55,7 @@ namespace renderengine
 
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- the same minimal extern
 // surface BrnIm3dSkidsRenderer.cpp / BrnIm3d.cpp / BrnPostFxBloom.cpp declare (defined in
-// ImmediateModePCLeaf.cpp). Returns the staged row the caller copies the constant into.
+// ImmediateMode.cpp). Returns the staged row the caller copies the constant into.
 void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
 
 // The Lion-blend particle vertex format (BrnLionBlendVertex.h). Only its NAME is needed here -- the
@@ -113,7 +113,7 @@ namespace
     // / mpVertexDescriptor / mbVertexProgramStateDirty, all three inside the off_83010950 block
     // (shadowingdevice.h:234/:242/:245). CgsIm3dSkyDome.cpp made exactly this mistake and the sky
     // PC leaf already recorded the correction and the binder for it
-    // (ImmediateModePCLeaf.cpp -- "This is the missing binder").
+    // (ImmediateMode.cpp -- "This is the missing binder").
     //
     // WHAT IT COST, MEASURED. Duplicating them meant this renderer compared against ITS copy and
     // updated ITS copy, and NEVER called shadow::Device::SetVertexDescriptor -- so
@@ -386,7 +386,7 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
     // ⛔ THIS FILE USED TO WRITE 0 INTO ALL THREE. That is not a no-op: it replaces both
     // sentinels with a real value, so every one of the three elements would have declared
     // D3DDECLUSAGE_POSITION index 0 -- three positions, no colour, no uv. It is the same defect
-    // ImmediateModePCLeaf.cpp records for the post-fx composite quad ("drew NOTHING with
+    // ImmediateMode.cpp records for the post-fx composite quad ("drew NOTHING with
     // hr == S_OK"), and the working sibling (BrnSkidVertex.cpp's ImRenderer<SkidVertex>::
     // Construct) writes only the four attested lanes. Do not re-add them.
     renderengine::VertexDescriptor::Parameters lParameters;

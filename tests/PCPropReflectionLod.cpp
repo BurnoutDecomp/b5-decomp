@@ -2,9 +2,9 @@
 #include <cstdio>
 #include <initializer_list>
 #include "types.hpp"
-#include "pc/gcm/renderengine/PropReflectionPCLeaf.h"
-#include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
-#include "pc/gcm/renderengine/ReflectionLodPCLeaf.h"
+#include "pc/gcm/renderengine/reflections/PropReflection.h"
+#include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
+#include "pc/gcm/renderengine/reflections/ReflectionLod.h"
 static int giChecks=0,giFailures=0;
 static void Check(bool b,const char* s){++giChecks;if(!b){++giFailures;std::printf("FAIL %s\n",s);}}
 #define CGS_ASSERT(b,s) Check(!!(b),s)

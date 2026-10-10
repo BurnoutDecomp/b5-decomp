@@ -3,7 +3,7 @@
 #include <d3d9.h>
 #include <climits>
 #include <cstdlib>
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 
 // FLAG PC-platform leaf: pooled native buffers can serve many console meshes.
 // Avoid rebinding the same native stream/index buffer. The engine still emits

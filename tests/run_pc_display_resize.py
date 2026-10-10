@@ -14,7 +14,7 @@ parser.add_argument('--rev')
 args = parser.parse_args()
 HERE = Path(__file__).resolve().parent
 tree = Tree(args.rev)
-leaf = tree.read('src/pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp')
+leaf = tree.read('src/pc/gcm/renderengine/PostFxRenderTarget.cpp')
 resize = definition(leaf, 'bool PCResizeDisplayTargets(')
 memory = tree.read('src/GameSource/Graphics/BrnRendererMemory.cpp')
 device = tree.read('src/pc/gcm/renderengine/device.cpp')
@@ -35,7 +35,7 @@ code += definition(memory, 'void BrnRendererMemory::PCResizeDisplay(') + '\n'
 for name in ('CreateBloomBuffer', 'CreateDepthOfFieldBuffer', 'CreateWorkBuffer'):
     code += definition(memory, f'void BrnRendererMemory::{name}(') + '\n'
 code = '#define PC_QUARTER_TARGETS ' + str(int('lpBloom' in resize.split('{',1)[0])) + '\n' + code
-header = 'src/pc/gcm/renderengine/ShadowPassPCLeaf.h'
+header = 'src/pc/gcm/renderengine/ShadowPass.h'
 numeric = compile_and_run(HERE / 'PCDisplayResize.cpp', 'pc_display_resize.inc', code,
                           'PCDisplayResize', extra_flags='d3d9.lib user32.lib',
                           shadow={header: tree.read(header)})

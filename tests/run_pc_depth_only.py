@@ -41,6 +41,7 @@ if args.alpha_uses_depth_shader:
     assert mesh.count(old) == 1
     mesh = mesh.replace(old, 'lbZOnly, 0u)')
 native = '\n'.join(definition(shims, signature) for signature in (
+    'bool ProgramDeclaresFloat4Constant(',
     'inline bool LooksLikeD3D9Bytecode(', 'inline DWORD XenonCompareToD3D9(', 'void D3DDevice_SetPixelShader(',
     'void D3DDevice_SetRenderState_ColorWriteEnable(',
     'void D3DDevice_SetRenderState_AlphaTestEnable(',

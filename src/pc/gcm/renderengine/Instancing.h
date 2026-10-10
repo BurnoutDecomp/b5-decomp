@@ -1,5 +1,5 @@
 #pragma once
-#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
+#include "pc/gcm/renderengine/ShaderBindings.h"
 
 // FLAG PC-platform leaf: D3D9 instance streams replace Xenos manual vertex
 // fetch. The original shader arithmetic is retained; only the source of the

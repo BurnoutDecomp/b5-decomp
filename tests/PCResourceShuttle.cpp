@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"
 #include "GameShared/GameClasses/Containers/CgsIndexedPool.h"
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 
 static int checks,failures,assertions;
 static std::vector<int> order;

@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include <limits>
-#include "pc/DebugIniPCLeaf.h"
+#include "pc/debug/DebugIni.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsVariableManager.h"
 
 static int giChecks = 0, giFailures = 0;

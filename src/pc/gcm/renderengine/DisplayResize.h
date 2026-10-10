@@ -1,10 +1,10 @@
 #pragma once
-#include "pc/gcm/renderengine/DepthRangePCLeaf.h"
+#include "pc/gcm/renderengine/DepthRange.h"
 
 #include <Windows.h>
 #include <d3d9.h>
 #include <utility>
-#include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
+#include "pc/gcm/renderengine/TextureUpload.h"
 
 // FLAG PC-platform leaf: prepare replacement D3D9 surfaces without Reset(), so
 // a window resize preserves the loaded world's textures, buffers and shaders.

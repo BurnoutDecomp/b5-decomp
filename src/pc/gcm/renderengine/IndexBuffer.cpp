@@ -32,7 +32,7 @@ namespace renderengine
 #if defined(D_PLATFORM_X360)
     // The Xenon GPU-header half below (Initialize / Lock / Xbox2CheckPhysicalMemoryFlags) stamps
     // and queries Xenon physical memory. FLAG PC-platform: the PC build takes these from its
-    // platform layer (ImmediateModePCLeaf.cpp, XenonD3D9Shims.cpp).
+    // platform layer (ImmediateMode.cpp, XenonD3D9Shims.cpp).
 
     // 0x82B62100 -- fill the GPU index-buffer header in place, then fix up its memory flags.
     IndexBufferHeader* IndexBuffer::Initialize(IndexBufferWrapper* lpWrapper, const IndexBufferParameters* lpParams)

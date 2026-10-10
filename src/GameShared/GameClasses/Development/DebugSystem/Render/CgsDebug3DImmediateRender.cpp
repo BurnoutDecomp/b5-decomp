@@ -1,5 +1,5 @@
-#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
-#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
+#include "pc/gcm/renderengine/ShaderBindings.h"
+#include "pc/gcm/renderengine/GeometryBindings.h"
 #if !defined(D_PLATFORM_X360)
 // The RenderWare headers define NOUSER before including Windows headers.  D3D9 still
 // requires winuser's LPMSG, so establish the complete Win32/D3D declarations first.

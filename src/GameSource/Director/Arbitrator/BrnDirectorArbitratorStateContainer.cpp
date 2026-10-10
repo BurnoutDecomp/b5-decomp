@@ -4,7 +4,7 @@
 #include <cstdlib>                                          // [diag] getenv
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "types.hpp"
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnDirector::ArbitratorStateContainer::ConstructAll @ 0x8224F020

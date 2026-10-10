@@ -12,8 +12,8 @@ parser.add_argument('--skip-fvf-invalidation', action='store_true')
 parser.add_argument('--skip-assert-invalidation', action='store_true')
 args = parser.parse_args()
 tree = Tree()
-binding = 'src/pc/gcm/renderengine/ShaderBindingsPCLeaf.h'
-modal = 'src/pc/gcm/renderengine/AssertFramePCLeaf.h'
+binding = 'src/pc/gcm/renderengine/ShaderBindings.h'
+modal = 'src/pc/gcm/renderengine/AssertFrame.h'
 headers = {binding: tree.read(binding), modal: tree.read(modal)}
 if args.skip_fvf_invalidation:
     needle = '            mDeclaration = {};\n            return lpDevice->SetFVF(luFvf);'
@@ -25,7 +25,7 @@ if args.skip_assert_invalidation:
     headers[modal] = headers[modal].replace(needle, '')
 writers = [
     'src/pc/gcm/renderengine/XenonD3D9Shims.cpp',
-    'src/pc/gcm/renderengine/InstancingPCLeaf.h',
+    'src/pc/gcm/renderengine/Instancing.h',
     'src/GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.cpp',
     'src/GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.cpp',
     'src/GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.cpp',

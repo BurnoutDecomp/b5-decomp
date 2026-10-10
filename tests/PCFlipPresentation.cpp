@@ -6,8 +6,8 @@
 #include <cstdio>
 template<class T> HRESULT InspectAndPresent(T& flip);
 static HRESULT InspectAndPresentLegacy(IDirect3DSwapChain9* chain, HWND window);
-#include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
-#include "pc/gcm/renderengine/DisplayResizePCLeaf.h"
+#include "pc/gcm/renderengine/WindowPresentation.h"
+#include "pc/gcm/renderengine/DisplayResize.h"
 static int checks,failures;
 static void Check(bool good,const char* label){++checks;if(!good){++failures;std::printf("FAIL %s\n",label);}}
 struct ResetDevice

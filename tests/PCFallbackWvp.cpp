@@ -4,9 +4,9 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
-#include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
-#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
-#include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
+#include "pc/gcm/renderengine/ShaderConstantCache.h"
+#include "pc/gcm/renderengine/ShaderBindings.h"
+#include "pc/gcm/renderengine/SamplerStateCache.h"
 using u32=unsigned;using u64=unsigned long long;using f32=float;
 extern "C" { __declspec(dllexport) DWORD NvOptimusEnablement=1;
              __declspec(dllexport) int AmdPowerXpressRequestHighPerformance=1; }

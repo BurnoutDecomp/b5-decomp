@@ -1,4 +1,4 @@
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 #include "GameShared/GameClasses/Core/CgsAssertProbePC.h"
 #ifdef AddMonitor
 #undef AddMonitor

@@ -29,9 +29,9 @@
 //              blocked, to be bodied once their sub-module/IO deps are homed.
 // ============================================================================
 #include <ctime>   // [DIAG culling wave] clock() for the producer-fps readout
-#include "pc/gcm/renderengine/GraphicsDiagnosticsPCLeaf.h"
+#include "pc/gcm/renderengine/GraphicsDiagnostics.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
-#include "pc/gcm/renderengine/EnvironmentMapPCLeaf.h"
+#include "pc/gcm/renderengine/reflections/EnvironmentMap.h"
 #include <chrono>  // [DIAG shadow-perf wave] steady_clock for the per-phase producer timers
 #include <cstdlib>                                                // getenv/atof (the BRN_WORLD_CAMDIST bring-up diagnostic)
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"   // CgsGraphics::ShaderConstantTable

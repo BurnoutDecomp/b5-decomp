@@ -35,14 +35,14 @@
 //         pc/gcm/renderengine/VertexDescriptor.h:76/83/85
 //           Parameters::Parameters()                -> VertexDescriptorParameters.cpp:23   bat:314
 //           GetResourceDescriptor(void*, const P*)  -> CgsRwVertexDescResourceType.cpp:91  bat:315
-//           Initialize(rw::Resource*, const P*)     -> ImmediateModePCLeaf.cpp:926         bat:316
+//           Initialize(rw::Resource*, const P*)     -> ImmediateMode.cpp:926         bat:316
 //     ...and the console GetResourceDescriptor/Initialize route for the two PROGRAMS is not used at
 //     all on PC (see 2), so those two externals are not even referenced any more.
 //
 //  2. THE MICROCODE WALL IS CROSSED THE WAY THE SKY DOME CROSSED IT. The console's two corona
 //     programs are executable-embedded Xenos microcode (&unk_8200F1B8, 228 B pixel; &unk_8200F2A0,
 //     788 B vertex) and cannot run on D3D9 (AGENTS.md rule 2). PC adopts an authored pair through
-//     renderengine::ProgramBufferPC_Adopt (programbuffer.h:123, body ImmediateModePCLeaf.cpp:833),
+//     renderengine::ProgramBufferPC_Adopt (programbuffer.h:123, body ImmediateMode.cpp:833),
 //     exactly as CgsIm3dSkyDome.cpp:159/162 does for the sky's pair. The console
 //     ProgramBuffer::GetResourceDescriptor/Initialize route is NOT kept as a fallback here: on this
 //     backend both bodies call XGGetMicrocodeShaderParts, whose PC stub returns 0 WITHOUT writing
@@ -72,16 +72,16 @@
 //    2 |   0    | 0x1A23A6    | D3DDECLTYPE_FLOAT4  |  16 |     6       | TEXCOORD 0
 //    3 |   0    | 0x14C86     | (UBYTE4N -- see 5) |   4 |     4       | COLOR    0
 //
-// with the offset lane left at the ctor's auto-pack sentinel, so ImmediateModePCLeaf's
+// with the offset lane left at the ctor's auto-pack sentinel, so ImmediateMode's
 // VertexDescriptor::Initialize packs them at 0 / 16 / 28 / 44 -- a 48-BYTE VERTEX, which is exactly
 // the stride the console passes to D3DDevice_BeginVertices (`li r?, 48` in Dispatch @0x82404F30) and
 // exactly the DWARF's VertexIterator4<VertexTypeFloat4, VertexTypeFloat3, VertexTypeFloat4,
 // VertexTypePS3Color>. Three independent witnesses, one format.
 //
-//  5. FORMAT WORD 0x14C86 IS NOT IN ImmediateModePCLeaf's MapVertexFormat TABLE. Without it the
+//  5. FORMAT WORD 0x14C86 IS NOT IN ImmediateMode's MapVertexFormat TABLE. Without it the
 //     COLOUR element is dropped ("unknown vertex format code - element dropped") and every corona
 //     draws with an undefined COLOR0 -- i.e. no distance fade and no per-light tint, with nothing
-//     erroring. The mapping is added in a companion edit to ImmediateModePCLeaf.cpp; five committed
+//     erroring. The mapping is added in a companion edit to ImmediateMode.cpp; five committed
 //     TUs already annotate that word as the immediate-mode UBYTE4N colour element
 //     (CgsIm2dUntex.cpp:69, CgsIm2dColTex.cpp:77/80, CgsIm3d.cpp:77/80, CgsIm3dUntex.cpp:72/74,
 //     BrnLionBlendIm3d.cpp:71), so the identification is the tree's own, not this file's.
@@ -317,7 +317,7 @@ namespace
 // row and return the write cursor (X360 r3 @0x822768D0). The SHARED declaration-only spelling this
 // tree standardised on: the same line appears at CgsIm2dUntex.cpp:82, CgsIm2dColTex.cpp:91,
 // CgsIm3d.cpp:91, CgsIm3dSkyDome.cpp:113, CgsIm3dZOnly.cpp:70 and BrnIm3d.cpp:118, and the ONE
-// definition is pc/gcm/renderengine/ImmediateModePCLeaf.cpp:729 (mounted, build_game_exe.bat:316).
+// definition is pc/gcm/renderengine/ImmediateMode.cpp:729 (mounted, build_game_exe.bat:316).
 void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
 
 // The Xenon immediate-vertex ring intrinsics (defined for PC in
@@ -367,7 +367,7 @@ namespace renderengine
     // (:106) before s_vertexProgram (:107). The order here is the asm's: pixel first.)
     //
     // PC: the two programs are ADOPTED (see banner item 2) and the allocator is therefore unused for
-    // them. It is still used for nothing else either -- ImmediateModePCLeaf's
+    // them. It is still used for nothing else either -- ImmediateMode's
     // VertexDescriptor::Initialize carves the descriptor from its own arena and documents why
     // (the x64 VertexDescriptorData is 0x124 bytes while the console sizer returns 50). The
     // parameter is kept because it is the DWARF signature and because the console route returns the
@@ -545,7 +545,7 @@ namespace renderengine
 
         // The three constant publications. RenderEngineDeviceBeginShaderStates hands back the row to
         // write into and the console advances its cursor by the constant's size between calls; on
-        // this backend each call returns its OWN staged row (ImmediateModePCLeaf.cpp:729), so the
+        // this backend each call returns its OWN staged row (ImmediateMode.cpp:729), so the
         // console's cursor arithmetic is a no-op here and is not reproduced -- the rows are written
         // where the call says to write them. shadow::Device::FlushVertexProgramState (issued by
         // Dispatch, below) is the drain, which is the same point in the frame the console's

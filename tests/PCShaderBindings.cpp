@@ -4,8 +4,8 @@
 #include <d3dcompiler.h>
 #include <cstdio>
 #include <cstring>
-#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
-#include "pc/gcm/renderengine/AssertFramePCLeaf.h"
+#include "pc/gcm/renderengine/ShaderBindings.h"
+#include "pc/gcm/renderengine/AssertFrame.h"
 
 extern "C" { __declspec(dllexport) DWORD NvOptimusEnablement = 1;
              __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1; }

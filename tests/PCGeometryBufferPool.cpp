@@ -1,4 +1,4 @@
-#include "pc/gcm/renderengine/GeometryBufferPoolPCLeaf.h"
+#include "pc/gcm/renderengine/GeometryBufferPool.h"
 #include <memory>
 #include <cstring>
 #include <cstdio>

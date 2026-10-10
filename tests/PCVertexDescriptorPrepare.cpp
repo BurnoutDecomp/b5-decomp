@@ -7,8 +7,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include "types.hpp"
-#include "pc/gcm/renderengine/InstancedDrawPCLeaf.h"
-#include "pc/gcm/renderengine/InstancingPCLeaf.h"
+#include "pc/gcm/renderengine/InstancedDraw.h"
+#include "pc/gcm/renderengine/Instancing.h"
 
 namespace CgsDev { namespace Log { void WriteToLog(const char*) {} } }
 namespace renderengine {

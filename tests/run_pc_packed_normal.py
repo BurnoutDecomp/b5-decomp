@@ -11,11 +11,11 @@ os.environ.pop('NoDefaultCurrentDirectoryInExePath',None)
 os.environ['BRN_GEOMETRY_NORMAL_LUT']='0' if a.scalar else '1'
 os.environ['BRN_NORMAL_BENCH']='1' if a.benchmark else ''
 if not a.benchmark:os.environ.pop('BRN_NORMAL_BENCH',None)
-tree=Tree();text=tree.read('src/pc/gcm/renderengine/WorldGeometryPCLeaf.cpp')
+tree=Tree();text=tree.read('src/pc/gcm/renderengine/WorldGeometry.cpp')
 source='template<bool TB_USE_LOOKUP>\n'+definition(text,'__declspec(noinline) void BakePackedVertexData(')+'\n'+definition(text,'void BakeVertexData(')
 shadow={}
 if a.bad_clamp:
-    path='src/pc/gcm/renderengine/PackedNormalPCLeaf.h'
+    path='src/pc/gcm/renderengine/PackedNormal.h'
     text=tree.read(path);needle='liValue <= -512 ? -1.0f :'
     assert text.count(needle)==1;shadow[path]=text.replace(needle,'false ? -1.0f :')
 result=compile_and_run(Path(__file__).with_name('PCPackedNormal.cpp'),'pc_packed_normal.inc',source,'PCPackedNormal',shadow=shadow)

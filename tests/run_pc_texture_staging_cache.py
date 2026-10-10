@@ -9,7 +9,7 @@ os.environ['BRN_TEXTURE_STAGING_CACHE'] = '1'
 parser = argparse.ArgumentParser()
 parser.add_argument('--ignore-format', action='store_true')
 args = parser.parse_args()
-source = Tree().read('src/pc/gcm/renderengine/TextureStagingCachePCLeaf.h')
+source = Tree().read('src/pc/gcm/renderengine/TextureStagingCache.h')
 if args.ignore_format:
     needle = '&& meFormat == lrOther.meFormat'
     assert source.count(needle) == 1

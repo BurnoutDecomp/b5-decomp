@@ -166,7 +166,7 @@ namespace renderengine
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- open one 16-byte
 // shader-constant row and return the write cursor. The shared decl-only surface every committed
 // immediate-mode TU already uses (CgsIm2dColTex.cpp:91, CgsIm2dUntex.cpp:82, CgsIm3d.cpp:91,
-// BrnIm3d.cpp:118); DEFINED in the mounted pc/gcm/renderengine/ImmediateModePCLeaf.cpp:543. There is
+// BrnIm3d.cpp:118); DEFINED in the mounted pc/gcm/renderengine/ImmediateMode.cpp:543. There is
 // no header for this seam, which is why each consumer declares it.
 void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
 
@@ -309,7 +309,7 @@ namespace
     // All six bloom programs (the arrays at the top of this file) are XENOS MICROCODE packages and
     // can never be bound on D3D9: the console route -- ProgramBuffer::GetResourceDescriptor ->
     // allocator -> ProgramBuffer::Initialize -- goes through XGGetMicrocodeShaderParts, whose PC stub
-    // returns 0 WITHOUT writing *lpParts (ImmediateModePCLeaf.cpp:626-646), and whatever those slots
+    // returns 0 WITHOUT writing *lpParts (ImmediateMode.cpp:626-646), and whatever those slots
     // would end up holding is not a D3D9 program.
     //
     // SINCE THE BLOOM SHADER WAVE (2026-08-15) ALL SIX HAVE A PC COUNTERPART:
@@ -484,7 +484,7 @@ renderengine::ProgramBufferData* BrnPostFxBloom::CreateProgram(
     // program goes through. The six embedded blobs at the top of this file are Xenos microcode; the
     // console route below -- ProgramBuffer::GetResourceDescriptor -> allocator ->
     // ProgramBuffer::Initialize -- reaches XGGetMicrocodeShaderParts, whose PC stub returns 0 WITHOUT
-    // writing *lpParts (ImmediateModePCLeaf.cpp:626-646), and the body then feeds a truncated 64-bit
+    // writing *lpParts (ImmediateMode.cpp:626-646), and the body then feeds a truncated 64-bit
     // pointer to Xbox2CreateConstantTable: a crash. So since the bloom shader wave (2026-08-15) the
     // six call sites in Construct hand this function the PC ShaderProgramBuffer IMAGES from the
     // generated leaf, and the adopt below takes them: ProgramBufferPC_Adopt validates the D3D9 SM3
@@ -517,7 +517,7 @@ renderengine::ProgramBufferData* BrnPostFxBloom::CreateProgram(
     // [FLAG PC bring-up] THE CONSOLE ROUTE IS UNREACHABLE ON THIS BACKEND, BY CONSTRUCTION. With the
     // gate ON, an adopt that FAILS (a caller handing console bytes, a corrupt image) used to fall
     // through into the block below, which XGGetMicrocodeShaderParts' PC stub turns into a crash
-    // (ImmediateModePCLeaf.cpp:626-646). The rung-5 verifier flagged that as silent-until-crash, so a
+    // (ImmediateMode.cpp:626-646). The rung-5 verifier flagged that as silent-until-crash, so a
     // failed adopt now leaves the slot HONESTLY EMPTY (null program -> the six CGS_ASSERTs in
     // Construct name the slot; the passes' own gates keep them from drawing) and reports once. The
     // console body stays on the page below as the fallthrough it can never take here.

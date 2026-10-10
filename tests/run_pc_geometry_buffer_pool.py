@@ -8,7 +8,7 @@ p.add_argument('--keep-stale-prefix',action='store_true')
 p.add_argument('--skip-equal-range',action='store_true')
 a=p.parse_args()
 shadow={}
-path='src/pc/gcm/renderengine/GeometryBufferPoolPCLeaf.h'
+path='src/pc/gcm/renderengine/GeometryBufferPool.h'
 text=Tree().read(path)
 if a.ignore_alignment:
     before='16ull / std::gcd(16u, luAlignment) * luAlignment;';assert text.count(before)==1

@@ -1,9 +1,9 @@
-#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
+#include "pc/gcm/renderengine/GeometryBindings.h"
 #include "device.h"
-#include "WindowPresentationPCLeaf.h"
-#include "DisplayResizePCLeaf.h"
-#include "FrameProfilePCLeaf.h"
-#include "WorldGeometryPCLeaf.h"
+#include "WindowPresentation.h"
+#include "DisplayResize.h"
+#include "FrameProfile.h"
+#include "WorldGeometry.h"
 #include "pc/gcm/renderengine/TrailPixelDiagPC.h"
 
 #include <Windows.h>
@@ -11,15 +11,15 @@
 #include <d3d9on12.h>
 #undef DrawText
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"
-#include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
-#include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
-#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
+#include "pc/gcm/renderengine/SamplerStateCache.h"
+#include "pc/gcm/renderengine/ShaderConstantCache.h"
+#include "pc/gcm/renderengine/ShaderBindings.h"
 #include <cstring>
 #include <cstdio>   // [diag] BRN_FRAME_DUMP back-buffer BMP writer
 #include <cstdlib>  // [diag] atoi -- BRN_FRAME_DUMP_EVERY period override
 #include <string.h> // [diag] _stricmp -- BRN_FRAME_DUMP_ARM mode select (MSVC canonical)
 
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"   // PCInstallDefaultRenderTargetState
+#include "pc/gcm/renderengine/ShadowPass.h"   // PCInstallDefaultRenderTargetState
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [diag] Device::Start failure paths
 #include "GameSource/Jobs/Traffic/BrnTrafficSwerveWatch.h"  // [diag] BRN_FRAME_DUMP_ARM
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [diag] BRN_FRAME_DUMP_ARM=slomo
@@ -62,7 +62,7 @@ s32  renderengine::gAspectRatioIndex = 0;
 // then :261), so the file value is what survives.
 //
 // THE VALUES, as the PC render-target leaf reads them
-// (renderengine::RenderTarget::Initialize, pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp):
+// (renderengine::RenderTarget::Initialize, pc/gcm/renderengine/PostFxRenderTarget.cpp):
 //     0  -- USE THE CONSOLE'S OWN MULTISAMPLE FORMAT (the default, and what the shipped X360 build
 //           does): the anti-alias buffer's format comes from BrnGraphics::KMSAA_TILING_PLAN, i.e.
 //           format 1 == D3DMULTISAMPLE_2_SAMPLES. No other pool target is multisampled.

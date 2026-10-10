@@ -1,5 +1,5 @@
 // Production takedown consumers run against controlled vehicle/boost state.
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"

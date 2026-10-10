@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Geometric/Intersection/CgsTriangleSphere.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSweptSphere.h"
-#include "pc/geometric/SweptSphereSIMDPCLeaf.h"
+#include "pc/geometric/SweptSphereSIMD.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>

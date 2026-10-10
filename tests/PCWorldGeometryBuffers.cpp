@@ -1,5 +1,5 @@
-#include "pc/gcm/renderengine/WorldGeometryPCLeaf.cpp"
-#include "pc/gcm/renderengine/AssertFramePCLeaf.h"
+#include "pc/gcm/renderengine/WorldGeometry.cpp"
+#include "pc/gcm/renderengine/AssertFrame.h"
 #include <d3dcompiler.h>
 
 namespace renderengine {

@@ -1,6 +1,6 @@
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"
-#include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
-#include "pc/gcm/renderengine/ShadowQualityPCLeaf.h"
+#include "pc/gcm/renderengine/GraphicsSettings.h"
+#include "pc/gcm/renderengine/ShadowQuality.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"            // CgsCore::SnPrintf (Construct's per-CSM debug paths)

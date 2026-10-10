@@ -5,8 +5,8 @@
 #include <cstring>
 #include <cmath>
 #include <vector>
-#include "pc/gcm/renderengine/InstancingPCLeaf.h"
-#include "pc/gcm/renderengine/InstancedDrawPCLeaf.h"
+#include "pc/gcm/renderengine/Instancing.h"
+#include "pc/gcm/renderengine/InstancedDraw.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h"

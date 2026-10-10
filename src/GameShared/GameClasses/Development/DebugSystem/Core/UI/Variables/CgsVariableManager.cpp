@@ -9,7 +9,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                         // CGS_ASSERT
 
 #include <string.h>
-#include "pc/DebugIniPCLeaf.h"
+#include "pc/debug/DebugIni.h"
 
 // CgsDev::DebugUI::VariableManager::RegisterVariable - the shared core every typed RegisterVariable
 // overload (and DebugComponent, as a friend) funnels into. X360 0x82829A80: resolve the menu path,

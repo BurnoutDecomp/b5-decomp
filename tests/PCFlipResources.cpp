@@ -6,7 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include "pc/gcm/renderengine/texture.h"
-#include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
+#include "pc/gcm/renderengine/TextureUpload.h"
 
 extern "C" { __declspec(dllexport) DWORD NvOptimusEnablement=1;
              __declspec(dllexport) int AmdPowerXpressRequestHighPerformance=1; }

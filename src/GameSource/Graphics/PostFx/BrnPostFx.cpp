@@ -1,5 +1,5 @@
 #include "GameSource/Graphics/PostFx/BrnPostFx.h"
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 
 #include <new>                                                                  // placement new (the carved effects)
 #include <cstdio>                                                               // std::snprintf (the seam's sampled diag)

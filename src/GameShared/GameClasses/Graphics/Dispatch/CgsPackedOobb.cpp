@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsPackedOobb.h"
-#include "pc/geometric/PackedOobbSIMDPCLeaf.h"
+#include "pc/geometric/PackedOobbSIMD.h"
 
 #include <cmath>
 #include <cstring>   // memcpy (the bit-pattern reads below)

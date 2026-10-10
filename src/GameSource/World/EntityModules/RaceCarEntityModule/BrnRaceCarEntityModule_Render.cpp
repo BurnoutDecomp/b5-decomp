@@ -76,7 +76,7 @@
 // ============================================================================
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
-#include "pc/gcm/renderengine/GraphicsDiagnosticsPCLeaf.h"
+#include "pc/gcm/renderengine/GraphicsDiagnostics.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h" // InputBuffer_GenerateDispatchLists
 
 #include "GameShared/GameClasses/Graphics/CgsModel.h"                    // CgsGraphics::Model / Renderable

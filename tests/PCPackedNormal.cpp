@@ -4,9 +4,9 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
-#include "pc/gcm/renderengine/WorldGeometryPCLeaf.h"
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
-#include "pc/gcm/renderengine/PackedNormalPCLeaf.h"
+#include "pc/gcm/renderengine/WorldGeometry.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
+#include "pc/gcm/renderengine/PackedNormal.h"
 namespace renderengine {
 #include "pc_packed_normal.inc"
 }

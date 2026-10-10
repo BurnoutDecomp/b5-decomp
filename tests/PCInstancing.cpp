@@ -4,8 +4,8 @@
 #include <cstdio>
 #include <vector>
 #include <cstring>
-#include "pc/gcm/renderengine/InstancingPCLeaf.h"
-#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
+#include "pc/gcm/renderengine/Instancing.h"
+#include "pc/gcm/renderengine/GeometryBindings.h"
 
 static int checks, failures;
 static void Check(bool ok, const char* text) { ++checks; if (!ok) { ++failures; std::printf("FAIL %s\n", text); } }

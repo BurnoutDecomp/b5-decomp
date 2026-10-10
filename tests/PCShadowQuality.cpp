@@ -4,7 +4,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include "pc/gcm/renderengine/ShadowQualityPCLeaf.h"
+#include "pc/gcm/renderengine/ShadowQuality.h"
+#include "pc/gcm/renderengine/ShadowReceiver.h"
 #include "pc_shadow_quality_program.inc"
 
 extern "C" { __declspec(dllexport) DWORD NvOptimusEnablement=1;

@@ -155,7 +155,7 @@ struct Resource
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"
 
 #include "GameShared/Jobs/RadixSort/RadixSort.h"
-#include "pc/gcm/renderengine/DispatchSortJobsPCLeaf.h"
+#include "pc/gcm/renderengine/DispatchSortJobs.h"
 
 // DispatchObjectContext / DispatchList are the real CgsGraphics types now
 // (CgsDispatcherCommands.h / CgsDispatcher.h, included above).

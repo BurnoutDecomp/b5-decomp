@@ -11,7 +11,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"       // ResourcePtr<ResourceIdList>
 #include "GameShared/GameClasses/System/Resource/CgsResourceIdListResourceType.h"
 #include <new>
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 
 // Original pool manager lifecycle and native storage. The resource-list
 // dispatch is integrated separately from construction of its working state.

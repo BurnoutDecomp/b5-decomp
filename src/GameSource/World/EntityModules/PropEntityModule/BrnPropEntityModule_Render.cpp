@@ -100,14 +100,14 @@
 // ============================================================================
 
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModule.h"
-#include "pc/gcm/renderengine/GraphicsDiagnosticsPCLeaf.h"
+#include "pc/gcm/renderengine/GraphicsDiagnostics.h"
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
 
 #include "GameSource/World/BrnEntityTypes.h"                              // E_ENTITYTYPE_PROP
 #include "GameSource/World/BrnShaderLodInfo.h"                            // ShaderLodInfo
-#include "pc/gcm/renderengine/PropReflectionPCLeaf.h"
-#include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
-#include "pc/gcm/renderengine/ReflectionLodPCLeaf.h"
+#include "pc/gcm/renderengine/reflections/PropReflection.h"
+#include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
+#include "pc/gcm/renderengine/reflections/ReflectionLod.h"
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"                      // BrnWorld::ShadowMap
 
 #include "SharedClasses/Physics/Props/BrnPropGraphicsList.h"              // PropGraphics / PropPartGraphics

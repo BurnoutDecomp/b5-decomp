@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h"
 #include "GameShared/GameClasses/System/Input/CgsInputPads.h"   // CgsInput::InputPads / DeviceX360Pad (UpdatePadDevices)
-#include "pc/input/XInputPollingPCLeaf.h"
+#include "pc/input/XInputPolling.h"
 
 #include <cstring>   // std::memset
 #include <cstdlib>   // std::getenv (the harness focus-gate bypass)

@@ -4,7 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "pc/gcm/renderengine/device.h"
-#include "pc/gcm/renderengine/DepthRangePCLeaf.h"
+#include "pc/gcm/renderengine/DepthRange.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 

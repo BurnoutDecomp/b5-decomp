@@ -23,7 +23,7 @@
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- open a shader-constant row
 // run for a handle and return the write cursor (X360 r3). The shared decl-only surface every
 // immediate-mode TU declares (CgsIm2dColTex.cpp:91, BrnIm3d.cpp:118, BrnPostFxBloom.cpp:134);
-// DEFINED in the mounted pc/gcm/renderengine/ImmediateModePCLeaf.cpp:543. No header owns it.
+// DEFINED in the mounted pc/gcm/renderengine/ImmediateMode.cpp:543. No header owns it.
 void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
 
 // The Xbox 360 immediate-vertex ring. Declared exactly as CgsIm2dUntex.cpp:102-104,
@@ -63,7 +63,7 @@ extern "C" void  D3DDevice_EndVertices(D3DDevice* lpDevice);
 // debugger's two, DepthOfField's and Vignette's -- is built from a compiled-shader package embedded
 // in the guest image and handed to renderengine::ProgramBuffer::Initialize, which calls
 // XGGetMicrocodeShaderParts. The PC stub of that entry point returns 0 WITHOUT writing *lpParts
-// (ImmediateModePCLeaf.cpp:626-646), so the console route then reads an uninitialised
+// (ImmediateMode.cpp:626-646), so the console route then reads an uninitialised
 // ProgramMicrocodeParts for the microcode size and feeds a truncated 64-bit function pointer to
 // Xbox2CreateConstantTable -- a crash, not a cosmetic gap.
 //
@@ -240,7 +240,7 @@ namespace postfx
     //       fallthrough, not a replacement. Same shape as BrnPostFxShader::Shader::Construct.
     //   (b) REFUSE THE CONSOLE ROUTE WHEN THERE IS NO IMAGE. ProgramBuffer::Initialize (and
     //       GetResourceDescriptor before it) call XGGetMicrocodeShaderParts, whose PC stub returns 0
-    //       WITHOUT writing *lpParts (ImmediateModePCLeaf.cpp:626-646); the body then reads that
+    //       WITHOUT writing *lpParts (ImmediateMode.cpp:626-646); the body then reads that
     //       uninitialised block for the microcode size and hands a truncated 64-bit function pointer
     //       to Xbox2CreateConstantTable. That is a crash, so the honest answer is a null program and
     //       one report line -- never a program built from bytes that are not there.

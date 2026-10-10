@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "rw/math/vpu/matrix44_operation.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
-#include "pc/gcm/renderengine/ImWhiteTexturePCLeaf.h"
+#include "pc/gcm/renderengine/ImWhiteTexture.h"
 #include <cstring>
 
 void ImDeviceSetBlendState(void*);

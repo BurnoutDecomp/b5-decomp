@@ -1,10 +1,10 @@
 #pragma once
 #include <Windows.h>
 #include <d3d9.h>
-#include "pc/gcm/renderengine/ShaderConstantCachePCLeaf.h"
-#include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
-#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
-#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
+#include "pc/gcm/renderengine/ShaderConstantCache.h"
+#include "pc/gcm/renderengine/SamplerStateCache.h"
+#include "pc/gcm/renderengine/GeometryBindings.h"
+#include "pc/gcm/renderengine/ShaderBindings.h"
 
 namespace renderengine
 {

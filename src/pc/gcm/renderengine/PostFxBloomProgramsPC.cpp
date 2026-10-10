@@ -85,7 +85,7 @@
 // VERTEX DECLARATION. All three pairs share the descriptor
 // BrnPostFxBloom::Construct builds -- element 0 format 0x2A23B9 (FLOAT3),
 // elementType 1 -> POSITION0; element 1 format 0x2C23A5 (FLOAT2), elementType
-// 6 -> TEXCOORD0 (the kauVertexFormatDefaults table, ImmediateModePCLeaf.cpp).
+// 6 -> TEXCOORD0 (the kauVertexFormatDefaults table, ImmediateMode.cpp).
 // That is byte-identical to the Parameters block BrnPostFxShader::Construct
 // builds for the composite, whose PC pair draws through it today; the vertex
 // programs below declare exactly `float3 POSITION` + `float2 TEXCOORD0` and

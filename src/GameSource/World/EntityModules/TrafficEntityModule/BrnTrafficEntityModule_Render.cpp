@@ -48,7 +48,7 @@
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
-#include "pc/gcm/renderengine/GraphicsDiagnosticsPCLeaf.h"
+#include "pc/gcm/renderengine/GraphicsDiagnostics.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
 
 #include "GameShared/GameClasses/Graphics/CgsModel.h"                       // Model / Renderable / State

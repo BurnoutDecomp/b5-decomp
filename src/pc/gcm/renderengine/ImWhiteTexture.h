@@ -2,7 +2,7 @@
 #include <d3d9.h>
 #include <mutex>
 #include "pc/gcm/renderengine/texture.h"
-#include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
+#include "pc/gcm/renderengine/TextureUpload.h"
 
 namespace renderengine {
 // FLAG PC-platform leaf: native storage for ARTIST ConstructWhiteTexture

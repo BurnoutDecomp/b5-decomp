@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h" // RenderTarget::mDepthTarget.Resolve()
 #include "pc/gcm/renderengine/Xbox2SurfaceShims.h"                  // renderengine::gpD3DDevice
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                   // gpShadowDepthStencilState,
+#include "pc/gcm/renderengine/ShadowPass.h"                   // gpShadowDepthStencilState,
                                                                     // ImDeviceSetDepthStencilState,
                                                                     // DeviceClearDepthStencil
 
@@ -28,7 +28,7 @@ namespace
     // reaches a mangled name. (The clear descriptor that used to sit here did NOT -- it was the
     // parameter type of an external-linkage function, which made that function's decorated name
     // unique to this object file and therefore unsatisfiable by any other TU. It now lives at
-    // namespace scope in ShadowPassPCLeaf.h as renderengine::ClearDepthStencilParameters.)
+    // namespace scope in ShadowPass.h as renderengine::ClearDepthStencilParameters.)
     struct ViewportF   { f32 mfX, mfY, mfWidth, mfHeight, mfMinZ, mfMaxZ; u32 mu32Pad; };
     // The integer scissor rectangle D3DDevice_SetScissorRect consumes.
     struct ScissorRect { s32 miLeft, miTop, miRight, miBottom; };

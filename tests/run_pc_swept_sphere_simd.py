@@ -18,7 +18,7 @@ start=reference.index('#if defined(_M_X64)')
 end=reference.index('#endif',start)+len('#endif')
 reference=reference[:start]+reference[end:]
 reference=reference.replace('namespace CgsGeometric','namespace CgsGeometric { namespace Reference',1)+'\n}\n'
-header='src/pc/geometric/SweptSphereSIMDPCLeaf.h'
+header='src/pc/geometric/SweptSphereSIMD.h'
 text=Tree().read(header)
 if args.drop_valid_mask:
     needle='_mm_and_ps(lbAccept.v, Load(lTriangles.mValidMasks).v)'

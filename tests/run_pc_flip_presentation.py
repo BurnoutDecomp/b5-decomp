@@ -2,7 +2,7 @@ import argparse,os
 from pathlib import Path
 from fxgs_common import Tree,compile_and_run,report
 os.environ.pop('NoDefaultCurrentDirectoryInExePath',None)
-path='src/pc/gcm/renderengine/WindowPresentationPCLeaf.h'
+path='src/pc/gcm/renderengine/WindowPresentation.h'
 source=Tree().read(path)
 p=argparse.ArgumentParser();p.add_argument('--no-flip-filter',action='store_true');a=p.parse_args()
 if a.no_flip_filter:

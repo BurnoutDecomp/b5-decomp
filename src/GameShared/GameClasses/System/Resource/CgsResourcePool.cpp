@@ -7,14 +7,14 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceScratchPool.h"
 #include <cstring>
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
-#include "pc/gcm/renderengine/TextureResourcePCLeaf.h"
-#include "pc/gcm/renderengine/MeshPreparationPCLeaf.h"
+#include "pc/gcm/renderengine/TextureResource.h"
+#include "pc/gcm/renderengine/MeshPreparation.h"
 
 #include <cstdint>   // uintptr_t (the Heap allocation owner is the slot index)
 #include <cstddef>   // size_t (the PC-leaf free notification below)
 
 // FLAG PC-platform leaf (HOST-SIDE NOTIFICATION, console body otherwise unchanged).
-// Homed in pc/gcm/renderengine/WorldGeometryPCLeaf.cpp; declared here rather than
+// Homed in pc/gcm/renderengine/WorldGeometry.cpp; declared here rather than
 // #included so a console TU does not pull a d3d9 header in (the same pattern
 // BrnRendererModule.cpp uses for the other renderengine leaf hooks).
 //
@@ -652,7 +652,7 @@ namespace CgsResource
                                                      //  ⚠ when it lands: a defrag MOVE relocates a resource
                                                      //  without FreeMemoryForResource, so it must also notify
                                                      //  renderengine::WorldGeometry_OnResourceMemoryFreed for
-                                                     //  the OLD range -- see WorldGeometryPCLeaf.h.)
+                                                     //  the OLD range -- see WorldGeometry.h.)
 
         mResource   = lpOptions->mResource;
         mDescriptor = lpOptions->mDescriptor;

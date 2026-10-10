@@ -300,7 +300,7 @@ void ImRenderer<V>::BeginRendering()
     // ⭐⭐ ONE CACHE, NOT ONE PER INSTANTIATION. The X360 shadow-caches the live vertex
     // program in dword_8301095C -- ONE word for the whole module -- and shadow::Device
     // already models it by name as mpVertexProgramShadow (shadowingdevice.h:269; the
-    // ImmediateModePCLeaf.cpp banner at DeviceSetVertexDescriptor makes the same point for
+    // ImmediateMode.cpp banner at DeviceSetVertexDescriptor makes the same point for
     // its two neighbours, and CgsImRenderer.h records four more host words that had to be
     // deleted for the same reason). A function-local `static ProgramBuffer* spgLastVertexProgram`
     // inside a TEMPLATE body is one object PER INSTANTIATION, so every vertex type got its own
@@ -328,7 +328,7 @@ void ImRenderer<V>::BeginRendering()
     //
     // ⭐⭐ ONE CACHE, NOT ONE PER INSTANTIATION -- the same defect as the vertex-program shadow
     // just above, and this half is the one that actually cost the pixels. off_83010958 is
-    // shadow::Device::mpVertexDescriptor (shadowingdevice.h; the ImmediateModePCLeaf.cpp banner
+    // shadow::Device::mpVertexDescriptor (shadowingdevice.h; the ImmediateMode.cpp banner
     // at DeviceSetVertexDescriptor spells out that these three words are the device's own and
     // that modelling them TU-locally once left the sky's flush dereferencing null). A
     // function-local static inside a TEMPLATE body is one object per instantiation, so it said
@@ -363,7 +363,7 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     // ⭐⭐ ONE CACHE, NOT ONE PER INSTANTIATION. The X360 shadow-caches the live vertex
     // program in dword_8301095C -- ONE word for the whole module -- and shadow::Device
     // already models it by name as mpVertexProgramShadow (shadowingdevice.h:269; the
-    // ImmediateModePCLeaf.cpp banner at DeviceSetVertexDescriptor makes the same point for
+    // ImmediateMode.cpp banner at DeviceSetVertexDescriptor makes the same point for
     // its two neighbours, and CgsImRenderer.h records four more host words that had to be
     // deleted for the same reason). A function-local `static ProgramBuffer* spgLastVertexProgram`
     // inside a TEMPLATE body is one object PER INSTANTIATION, so every vertex type got its own

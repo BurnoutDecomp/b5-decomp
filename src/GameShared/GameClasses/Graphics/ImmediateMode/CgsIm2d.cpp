@@ -1,5 +1,5 @@
-#include "pc/gcm/renderengine/ShaderBindingsPCLeaf.h"
-#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
+#include "pc/gcm/renderengine/ShaderBindings.h"
+#include "pc/gcm/renderengine/GeometryBindings.h"
 // <d3d9.h> needs winuser (LPMSG), but a transitive include below (rw/core/debug/DebugCriticalSection.h
 // via the renderengine/Im2d chain) defines NOUSER/NOGDI ahead of its own <windows.h>, which strips
 // winuser. Bring the full <Windows.h> in FIRST so LPMSG is defined before any NOUSER guard runs --
@@ -13,7 +13,7 @@
 #include "pc/gcm/renderengine/renderstates.h"  // TextureState::mpRaster (SetState(TextureState*))
 
 #include <d3d9.h>
-#include "pc/gcm/renderengine/SamplerStateCachePCLeaf.h"
+#include "pc/gcm/renderengine/SamplerStateCache.h"
 #include <cstdio>   // [diag] BRN_IM2D_TRACE line formatting
 
 // PC / D3D9 implementation of the CgsGraphics immediate-mode 2D renderer. The X360/PS3

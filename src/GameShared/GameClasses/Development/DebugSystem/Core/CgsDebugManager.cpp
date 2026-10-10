@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
-#include "pc/DebugIniPCLeaf.h"
+#include "pc/debug/DebugIni.h"
 
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // DebugComponent (mbActive/OnRegister/DebugUISectionCallback/RenderHUD)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"      // GetUI().GetVariableManager()/GetFunctionManager()

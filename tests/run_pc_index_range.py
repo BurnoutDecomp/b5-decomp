@@ -8,7 +8,7 @@ p.add_argument('--truncate-wide',action='store_true')
 p.add_argument('--ignore-tail',action='store_true')
 p.add_argument('--overread-tail',action='store_true')
 a=p.parse_args()
-path='src/pc/gcm/renderengine/IndexRangePCLeaf.h'
+path='src/pc/gcm/renderengine/IndexRange.h'
 source=Tree().read(path)
 if a.truncate_wide:
     needle='std::memcpy(&ltValue, lpBytes + lu * sizeof(T), sizeof(T));'

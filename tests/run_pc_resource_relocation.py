@@ -11,7 +11,7 @@ base='src/GameShared/GameClasses/'
 resource=base+'System/Resource/'
 tree=Tree()
 pool=tree.read(resource+'CgsResourcePool.cpp')
-code='#include "pc/gcm/renderengine/MeshPreparationPCLeaf.h"\nnamespace CgsResource { namespace {\nbool sabLoggedPoolFull[64] = {};\ns32 siDefragDebugFrame=0;\n'
+code='#include "pc/gcm/renderengine/MeshPreparation.h"\nnamespace CgsResource { namespace {\nbool sabLoggedPoolFull[64] = {};\ns32 siDefragDebugFrame=0;\n'
 for signature in ['u32 GetManagementHashLength(', 's32 GetRelocationRWMemoryType(',
                   'void RetireRelocatedResourcePC(', 'void WriteScratchImportPC(']:
     code+=definition(pool,signature)+'\n'
@@ -40,11 +40,9 @@ for signature in ['static u64 PackHandleQword(', 'static EntryPoint MakeDefaultE
                   'void Job::Clear(', 'Job::Job(const char* lpcName)', 'Job::~Job(', 'void Job::SetData(',
                   'bool Job::IsDone(', 'void Job::WaitOn(', 'void Job::SetCode(', 'void Job::SetName(']:
     job_code+=definition(jobs,signature)+'\n'
-# Retain the synchronous fixture's allocator boundary.
-# Real dependency buckets remain empty in this direct-dispatch integration.
-leaves=tree.read('src/SDKs/EATech/AptRenderLinkStubs.cpp')
-job_code+='\n} namespace Allocator {\n'
-job_code+=definition(leaves,'ICoreAllocator* ICoreAllocator::GetDefaultAllocator()')+'\n} }\n'
+# Dependency buckets are empty; the Jobs allocator is installed by SetAllocator.
+# This integration does not need the removed Apt default-allocator shim.
+job_code+='\n} }\n'
 numeric=compile_and_run(Path(__file__).with_name('PCResourceRelocation.cpp'),
     'pc_resource_relocation.inc',code,'PCResourceRelocation',extra_flags='/Gy',
     extra_files={'pc_resource_heap.inc':tree.read(resource+'CgsResourceHeap.cpp'),

@@ -1,5 +1,5 @@
 // =============================================================================
-// PostFxRenderTargetPCLeaf.cpp  (pc/gcm/renderengine)
+// PostFxRenderTarget.cpp  (pc/gcm/renderengine)
 //
 // [PC platform leaf] The Direct3D 9 realisation of the post-fx RENDER-TARGET
 // surface -- the layer underneath CgsRenderTarget that the shadow-map pass needs
@@ -16,7 +16,7 @@
 // SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxrendertarget.cpp,
 // which is deliberately NOT in the link (it would drag the whole Xbox2* /
 // PixelBuffer / TextureState EDRAM surface with it). This file is its PC sibling,
-// in the established style of SkyDomeProgramsPC.cpp / ImmediateModePCLeaf.cpp /
+// in the established style of SkyDomeProgramsPC.cpp / ImmediateMode.cpp /
 // XenonD3D9Shims.cpp: the MINIMUM of the same declared surface, over D3D9, so the
 // finished shadow pass has a real depth-sampleable target to render into.
 //
@@ -60,15 +60,15 @@
 #include <d3d9.h>
 
 #include "types.hpp"
-#include "pc/gcm/renderengine/DepthRangePCLeaf.h"
+#include "pc/gcm/renderengine/DepthRange.h"
 
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"
 #include "pc/gcm/renderengine/device.h"                  // renderengine::gDevice / gD3D9 / Device::SetState
-#include "pc/gcm/renderengine/DisplayResizePCLeaf.h"
-#include "pc/gcm/renderengine/NvApiResourceRegistryPCLeaf.h"
+#include "pc/gcm/renderengine/DisplayResize.h"
+#include "pc/gcm/renderengine/NvApiResourceRegistry.h"
 #include "pc/gcm/renderengine/texture.h"                 // renderengine::Texture (mpD3DTexture)
 #include "pc/gcm/renderengine/renderstates.h"            // renderengine::TextureState (the colour sampler states)
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"        // renderengine::ShadowDepthFormat* (homed below)
+#include "pc/gcm/renderengine/ShadowPass.h"        // renderengine::ShadowDepthFormat* (homed below)
 #include "rw/rwcore_structs.h"                           // rw::IResourceAllocator / Resource / ResourceDescriptor
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device::SetResource (the sampler-shadow-aware unbind)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::WriteToLog ([shadow-rt] diagnostic)
@@ -1033,7 +1033,7 @@ namespace
     u32  guCreatedSections        = 1u;
 }
 
-// The two accessors ShadowPassPCLeaf.h declares (see the SAMPLE SEMANTICS SEAM banner there):
+// The two accessors ShadowPass.h declares (see the SAMPLE SEMANTICS SEAM banner there):
 // which depth format the shadow target actually got, and whether that format's fetch COMPARES.
 // They read the same two file statics Initialize wrote, so no state is duplicated.
 namespace renderengine
@@ -1055,7 +1055,7 @@ namespace renderengine
 namespace renderengine
 {
     // X360 dword_83010A30 -- THE single "last state installed" shadow (see the banner in
-    // ShadowPassPCLeaf.h for why it lives here and why it MUST be shared).
+    // ShadowPass.h for why it lives here and why it MUST be shared).
     const RenderTargetState* gpLastRenderTargetState = nullptr;
 
     void Device::SetState(const RenderTargetState* lpState)
@@ -1147,7 +1147,7 @@ namespace renderengine
     }
 
     // =========================================================================
-    // [PC-platform leaf] PCInstallDefaultRenderTargetState -- see ShadowPassPCLeaf.h.
+    // [PC-platform leaf] PCInstallDefaultRenderTargetState -- see ShadowPass.h.
     //
     // Captured ONCE, immediately after CreateDevice, while the swap chain's back buffer and
     // the auto depth-stencil are exactly what the device has bound: GetRenderTarget(0) /
@@ -1660,7 +1660,7 @@ namespace postfx
                 //  (b) NOTHING IN THE TREE READS ANY TARGET'S DEPTH TEXTURE BY NAME:
                 //        $ grep -rn "GetDepthStencilTexture\|GetDepthTextureState" b5-decomp/src --include=*.cpp
                 //        GameShared/GameClasses/Graphics/CgsRenderTarget.cpp:285:    return mpRenderTarget->GetDepthStencilTexture();
-                //        pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp:1542 (the definition)
+                //        pc/gcm/renderengine/PostFxRenderTarget.cpp:1542 (the definition)
                 //      -- i.e. one forwarder with no callers of its own, and the definition. The
                 //      env-map accessor envface added is GetEnvMapBuffer(); nothing SAMPLES the
                 //      depth (envface's EnsureEnvMapTarget reads GetDepthStencilTexture() only to
@@ -1958,7 +1958,7 @@ namespace postfx
     // X360 shadow dword_83010A30, not a private copy. The device would keep whatever was really
     // bound while the shadow said "nothing", and the next Begin with the true state would compare
     // equal to nothing and re-bind correctly only by luck. That is the split-brain shape
-    // ShadowPassPCLeaf.h's banner exists to warn about, so clamp to section 0 instead.
+    // ShadowPass.h's banner exists to warn about, so clamp to section 0 instead.
     //
     // IT IS UNREACHABLE TODAY, which is why a guard is the right size of answer. The env-map pass
     // never calls Begin on the cube target: BrnRendererModule::BeginRenderEnvironmentMapFace goes
@@ -1999,7 +1999,7 @@ namespace postfx
             }
         }
 
-        // The SHARED shadow (X360 dword_83010A30), not a private copy -- see ShadowPassPCLeaf.h.
+        // The SHARED shadow (X360 dword_83010A30), not a private copy -- see ShadowPass.h.
         if (renderengine::gpLastRenderTargetState != lpState)
         {
             renderengine::Device::SetState(lpState);

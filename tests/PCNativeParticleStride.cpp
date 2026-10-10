@@ -8,7 +8,7 @@
 #include <vector>
 #include "types.hpp"
 #include "pc/gcm/renderengine/VertexDescriptor.h"
-#include "pc/gcm/renderengine/GeometryBindingsPCLeaf.h"
+#include "pc/gcm/renderengine/GeometryBindings.h"
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"
 #include "GameSource/Effects/Particles/Native/BrnNativeParticleVertex.h"
 

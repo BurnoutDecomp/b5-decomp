@@ -44,7 +44,7 @@
 #include "rw/math/vpu/vector3_operation.h"                             // rw::math::vpu::{operator+,operator*}
 
 // The immediate-mode state library's three trail states, built by CgsGraphics::ImRendererBase::
-// ConstructOnceOnly @0x827F1C20 (read out of its asm -- the ImmediateModePCLeaf.cpp note that
+// ConstructOnceOnly @0x827F1C20 (read out of its asm -- the ImmediateMode.cpp note that
 // dword_83010F4C's initialiser "was never recovered" is stale):
 //   dword_83010F4C = ConstructDepthStencilState(alloc, test=1, write=0, func=3 LESSEQUAL)
 //   dword_83010F20 = ConstructBlendState(alloc, 6, 7, 0)   -- the standard alpha blend
@@ -54,7 +54,7 @@
 // same PC objects the sky dome binds (gpSkyDomeDepthStencilState IS dword_83010F4C,
 // gpSkyDomeRasterizerState IS dword_83010F3C) plus the standard alpha blend
 // (gpImStandardAlphaBlendState IS dword_83010F20) -- all three defined by
-// ImmediateModePCLeaf.cpp and declared `extern void*` here exactly as BrnSkyDomeManager.cpp
+// ImmediateMode.cpp and declared `extern void*` here exactly as BrnSkyDomeManager.cpp
 // does, bound through the same three PC leaf appliers.
 extern void* gpSkyDomeDepthStencilState;   // dword_83010F4C
 extern void* gpImStandardAlphaBlendState;  // dword_83010F20
@@ -64,7 +64,7 @@ void ImDeviceSetBlendState(void* lpState);
 void ImDeviceSetRasterizerState(void* lpState);
 
 // [DIAG] NOT IN THE X360 BINARY -- the two override state objects the BRN_SKID_LOUD discriminator
-// binds instead of the two above (ImmediateModePCLeaf.cpp). DELETE-WHEN-STABLE.
+// binds instead of the two above (ImmediateMode.cpp). DELETE-WHEN-STABLE.
 extern void* gpDiagSkidNoDepthState;
 extern void* gpDiagSkidNoBlendState;
 

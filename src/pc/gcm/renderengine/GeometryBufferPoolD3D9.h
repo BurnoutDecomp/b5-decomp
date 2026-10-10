@@ -1,7 +1,7 @@
 #pragma once
 
-#include "pc/gcm/renderengine/GeometryBufferPoolPCLeaf.h"
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/GeometryBufferPool.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 #include <d3d9.h>
 #include <cstring>
 

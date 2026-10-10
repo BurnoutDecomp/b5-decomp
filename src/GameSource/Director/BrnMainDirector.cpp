@@ -38,7 +38,7 @@
 // ============================================================================
 
 #include "GameSource/Director/BrnMainDirector.h"
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"          // Camera::CollisionPolicySharedInfo (the scene-query pair)
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                  // BrnGui::GuiPFXHookEnumeration (the 501 record PostGuiUpdate consumes)
 

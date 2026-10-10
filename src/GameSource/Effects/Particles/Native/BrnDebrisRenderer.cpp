@@ -10,14 +10,14 @@
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
 #include "pc/gcm/renderengine/renderstates.h"                       // renderengine::MeshHelper
 #include "pc/gcm/renderengine/device.h"                             // renderengine::Device (the Dispatch<> tag)
-#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                   // LionParticleSampler_ApplyState
+#include "pc/gcm/renderengine/ShadowPass.h"                   // LionParticleSampler_ApplyState
 
 #include <cstdio>   // [diag] snprintf (the first-draw witness)
 #include <cstdlib>  // [diag] getenv (the per-array draw witness, BRN_DEBRIS_DIAG)
 #include "pc/gcm/renderengine/GlassPixelDiagPC.h"
 #include <chrono>   // [diag] steady_clock (the per-array draw witness's us=)
 
-// The two shared render states the debris pass binds (ImmediateModePCLeaf.cpp), declared
+// The two shared render states the debris pass binds (ImmediateMode.cpp), declared
 // `extern void*` exactly as BrnSparkRenderer_Render.cpp / BrnTrailRender.cpp declare theirs.
 extern void* gpImDebrisRasterizerState;      // dword_83010F44  cull BACK
 extern void* gpImDebrisDepthStencilState;    // dword_83010F48  Z test + Z write, LESSEQUAL

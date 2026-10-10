@@ -28,7 +28,7 @@ methods = 'namespace renderengine {\n' + definition(native, 'void WorldShaderCon
 methods += 'namespace shadow {\n' + definition(device, 'void Device::DrawInstancedMeshPC(') + '\n}\n'
 shadow = {}
 if args.matrix_zero:
-    path = 'src/pc/gcm/renderengine/InstancedDrawPCLeaf.h'
+    path = 'src/pc/gcm/renderengine/InstancedDraw.h'
     header = tree.read(path)
     before = 'mpMatrices + static_cast<u32>(selected) * 16'
     assert header.count(before) == 1

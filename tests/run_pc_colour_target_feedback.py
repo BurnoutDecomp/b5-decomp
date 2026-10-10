@@ -16,7 +16,7 @@ parser.add_argument("--cached-unbind", action="store_true", help="reproduce the 
 parser.add_argument("--cached-depth-unbind", action="store_true", help="reproduce only the raw-depth null-shadow defect")
 args = parser.parse_args()
 tree = Tree(args.rev)
-source = tree.read("src/pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp")
+source = tree.read("src/pc/gcm/renderengine/PostFxRenderTarget.cpp")
 methods = "namespace renderengine {\n" + definition(source, "class RenderTargetState\n") + ";\n}\n"
 methods += definition(source, "void Device::SetState(const RenderTargetState*").replace(
     "void Device::SetState(", "void renderengine::Device::SetState(")

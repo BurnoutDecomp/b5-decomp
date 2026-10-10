@@ -5,10 +5,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include "pc/gcm/renderengine/WindowPresentationPCLeaf.h"
-#include "pc/gcm/renderengine/DisplayResizePCLeaf.h"
+#include "pc/gcm/renderengine/WindowPresentation.h"
+#include "pc/gcm/renderengine/DisplayResize.h"
 #include "GameSource/Graphics/BrnAntiAliasTiling.h"
-#include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
+#include "pc/gcm/renderengine/GraphicsSettings.h"
+#include "pc/input/XInputPolling.h"
 float gfBloomLuminanceScale = 1.0f;
 namespace BrnWorld { float KA_VEHICLE_QUALITY_LOD_DISTANCE[5] = {10,22,35,50,70}; }
 namespace renderengine {
@@ -23,6 +24,8 @@ static const char* windowClassName = "BurnoutFullscreenStartupRegression";
 static const char* windowName = "Fullscreen startup regression";
 struct NullLog { template<class T> NullLog& operator<<(const T&) { return *this; } };
 namespace CgsDev { namespace Log { NullLog* gpDebugPrint = nullptr; void WriteToLog(const char*) {} } }
+// Config registry and pad polling have their own production regressions.
+namespace CgsDev::DebugUI { void LoadDebugIniPC(const char*) {} void ReportUnmatchedDebugIniPC() {} }
 namespace CgsSystem { struct HardwareInit { static void RequestShutdown() {} }; }
 #include "pc_fullscreen_window.inc"
 static int checks, failures;

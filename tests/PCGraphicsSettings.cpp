@@ -4,8 +4,8 @@
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
-#include "pc/gcm/renderengine/GraphicsSettingsPCLeaf.h"
-#include "pc/DebugIniPCLeaf.h"
+#include "pc/gcm/renderengine/GraphicsSettings.h"
+#include "pc/debug/DebugIni.h"
 
 namespace renderengine {
     bool gFullscreen = false;

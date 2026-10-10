@@ -1,5 +1,5 @@
 // =============================================================================
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 #include "GameShared/Jobs/ObjectToMesh/ObjectToMeshJob.h"
 // CgsDispatcherCommands.cpp  (GameShared/GameClasses/Graphics/Dispatch)
 //
@@ -45,7 +45,7 @@
 // =============================================================================
 
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h"
-#include "pc/gcm/renderengine/InstancedDrawPCLeaf.h"
+#include "pc/gcm/renderengine/InstancedDraw.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"        // DispatchBin / DispatchFrame / DispatchList
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsOcclusionCullManager.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/Renderable.h"

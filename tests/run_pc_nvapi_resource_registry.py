@@ -9,7 +9,7 @@ p = argparse.ArgumentParser()
 p.add_argument('--untracked-overflow', action='store_true')
 a = p.parse_args()
 t = Tree()
-path = 'src/pc/gcm/renderengine/NvApiResourceRegistryPCLeaf.h'
+path = 'src/pc/gcm/renderengine/NvApiResourceRegistry.h'
 source = t.read(path)
 if a.untracked_overflow:
     source = source.replace('            maResources.push_back(lpResource);',
@@ -21,9 +21,9 @@ end = shim.index('    // Returns true when the NVAPI path RAN', start)
 resolve = shim[start:end] + definition(shim, 'bool TilingResolveDepthViaNvApi(')
 pixels = t.read('tests/PCFlipResources.cpp')
 sampler = definition(pixels, 'static ID3DBlob* Compile(') + '\n' + definition(pixels, 'struct Sampler') + ';\n'
-resize = code_only(definition(t.read('src/pc/gcm/renderengine/PostFxRenderTargetPCLeaf.cpp'),
+resize = code_only(definition(t.read('src/pc/gcm/renderengine/PostFxRenderTarget.cpp'),
     'bool PCResizeDisplayTargets('))
-flip = code_only(t.read('src/pc/gcm/renderengine/FlipSwapChainPCLeaf.h'))
+flip = code_only(t.read('src/pc/gcm/renderengine/FlipSwapChain.h'))
 wiring = [
     ('target replacement retires registrations before releasing owners',
      0 <= resize.find('gNvApiDepthResourcesPC.Clear()') < resize.find('Device::ResizeDisplay(')

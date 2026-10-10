@@ -13,7 +13,7 @@ parser.add_argument('--drop-new-camera-marker', action='store_true')
 parser.add_argument('--non-atomic-cycle-failures', action='store_true')
 parser.add_argument('--drop-processor-group', action='store_true')
 args = parser.parse_args()
-source = Tree().read('src/pc/gcm/renderengine/FrameProfilePCLeaf.h')
+source = Tree().read('src/pc/gcm/renderengine/FrameProfile.h')
 if args.drop_processor_group:
     needle = '(static_cast<unsigned>(lProcessor.Group) << 8) | lProcessor.Number'
     assert source.count(needle) == 1

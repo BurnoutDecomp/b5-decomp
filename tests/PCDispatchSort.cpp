@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h"
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
 #include <algorithm>
 #include <array>
 #include <cmath>

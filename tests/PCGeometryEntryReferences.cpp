@@ -1,4 +1,4 @@
-#include "pc/gcm/renderengine/GeometryEntryReferencesPCLeaf.h"
+#include "pc/gcm/renderengine/GeometryEntryReferences.h"
 #include <cstdio>
 #include <unordered_map>
 #include <vector>

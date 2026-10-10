@@ -300,7 +300,7 @@ public:
         //            Initialize). The program pointer IS an allocator block and Destruct hands it back
         //            through IResourceAllocator::DoFree, exactly as the X360 does.
         //   true  -> renderengine::ProgramBufferPC_Adopt. The image lives in the PC leaf's bump arena
-        //            (ImmediateModePCLeaf.cpp ArenaAlloc, which has no free), so the allocator never
+        //            (ImmediateMode.cpp ArenaAlloc, which has no free), so the allocator never
         //            issued it and DoFree MUST NOT see it -- a concrete rw::LinearResourceAllocator
         //            would free a block it never carved. Documented leak-on-destruct of a boot-lifetime
         //            object; the full ownership story is the banner on Shader::Destruct.

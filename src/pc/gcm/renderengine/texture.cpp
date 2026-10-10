@@ -4,14 +4,14 @@
 #include "rw/rwcore_structs.h"   // rw::Resource (the rw-resource Initialize overload's memory block)
 
 #include <d3d9.h>
-#include "pc/gcm/renderengine/TextureUploadPCLeaf.h"
+#include "pc/gcm/renderengine/TextureUpload.h"
 #include <cstring>   // memcpy
 #include <cstdio>    // snprintf
 #include <cstddef>   // offsetof
 #include <new>       // placement new (build the texture object into rw resource memory)
 #include <mutex>
 #include <unordered_map>
-#include "pc/gcm/renderengine/TextureResourcePCLeaf.h"
+#include "pc/gcm/renderengine/TextureResource.h"
 
 namespace renderengine
 {

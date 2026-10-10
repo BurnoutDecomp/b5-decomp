@@ -45,7 +45,7 @@ cull = re.search(r'E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_\w+', begin).gro
 methods += '\nconstexpr auto KE_REFLECTION_CULL = ' + cull + ';\n'
 methods += '\n' + '\n'.join(definition(shims, sig) for sig in (
     'inline DWORD XenonCullToD3D9(', 'void D3DDevice_SetRenderState_CullMode('))
-leaf = 'src/pc/gcm/renderengine/EnvironmentMapPCLeaf.h'
+leaf = 'src/pc/gcm/renderengine/reflections/EnvironmentMap.h'
 try:
     leaf_source = tree.read(leaf)
 except FileNotFoundError:

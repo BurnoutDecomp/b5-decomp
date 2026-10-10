@@ -8,8 +8,8 @@
 #include <cstring>
 #include <thread>
 #include <vector>
-#include "pc/gcm/renderengine/FrameProfilePCLeaf.h"
-#include "pc/gcm/renderengine/MeshPreparationPCLeaf.h"
+#include "pc/gcm/renderengine/FrameProfile.h"
+#include "pc/gcm/renderengine/MeshPreparation.h"
 using u32 = std::uint32_t;
 using u64 = std::uint64_t;
 using f32 = float;
@@ -34,6 +34,8 @@ struct DispatchFrame {
     bool* pendingSort = nullptr;
     std::vector<int> objects;
     std::vector<Mesh> meshes;
+    DispatchFrame& GetBin() { return *this; }
+    void* GetBase() { return this; }
     void Reset() { if (pendingSort && *pendingSort) ++resetWhileSorting; objects.clear(); meshes.clear(); }
 };
 struct BufferedDispatchFrame {
@@ -66,6 +68,7 @@ struct BrnRendererModule {
     CgsGraphics::DispatchPacketInterpreter* mpInterpreter = &consumer;
     CgsGraphics::DispatchPacketInterpreter* mpMeshProducerInterpreterPC = &producer;
     bool mbRenderPreZ = true, mbRenderPreZAlpha = false;
+    bool mbDispatchStorageFailedPC = false;
     float mfPreZDistanceThreshold = 200;
     unsigned muMeshReadFramePC = 0;
     #include "pc_mesh_preparation_state.inc"
