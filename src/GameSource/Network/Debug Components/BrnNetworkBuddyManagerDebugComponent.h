@@ -65,6 +65,8 @@ namespace BrnNetwork
         // class; they are not reconstructed here.
 
     protected:
+        // ARTIST vtable 820CE3C4, slot +0x10 -> 827DBBE0.
+        const char* GetPath() const override { return "Network"; }
         const char* GetName() const override;   // @ 0x825856F0 -> "Buddies"
 
         // Register the buddy actions + selection indices with the debug menu and, on first

@@ -43,10 +43,11 @@ namespace CgsNetwork
 
         // Debug-menu option labels for the "Measurement Type" enum variable (the console's
         // .rdata StringList[2]).
-        const CgsDev::DebugUI::StringList KA_AVERAGE_TYPES[2] =
+        const CgsDev::DebugUI::StringList KA_AVERAGE_TYPES[3] =
         {
             { CompressionAndEncryptionUtils::E_AVERAGE_TYPE_INSTANT, "Average Over Last Second" },
             { CompressionAndEncryptionUtils::E_AVERAGE_TYPE_RUNNING, "Maximum Over Second"      },
+            { 0, nullptr },
         };
     }
 

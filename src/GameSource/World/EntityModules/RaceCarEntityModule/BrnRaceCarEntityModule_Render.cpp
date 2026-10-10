@@ -94,6 +94,8 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint
 
 #include <cmath>   // powf / sqrtf
+#include "pc/gcm/renderengine/reflections/SceneSettings.h"
+#include "pc/gcm/renderengine/reflections/GlassCapture.h"
 #include <stdlib.h> // getenv / atoi ([deform-upload] control, host-side diagnostic only)
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable; bodied
@@ -773,7 +775,12 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                 continue;
             }
 
-            if ( !lpModel->DoesStateExist( leLOD ) )
+            // FLAG PC-platform leaf: cube captures select detail without changing RenderParams.
+            const s32 liPartLod = CgsPC::Reflections::IsVehicleCapture()
+                ? CgsPC::Reflections::SelectVehicleLod(CgsPC::Reflections::VehicleSettings(), lpModel, lfCameraDistance * lfCameraDistance)
+                : static_cast<s32>(leLOD);
+            const auto lePartLOD = static_cast<CgsGraphics::Model::State>(liPartLod);
+            if ( liPartLod < 0 || !lpModel->DoesStateExist( lePartLOD ) )
             {
                 continue;
             }
@@ -855,7 +862,7 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                 lu8Technique = lbShadowPass ? 2u : 1u;
             }
 
-            const CgsGraphics::Renderable* lpRenderable = lpModel->GetRenderable( leLOD );
+            const CgsGraphics::Renderable* lpRenderable = lpModel->GetRenderable( lePartLOD );
             if (!lbShadowPass)
                 renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_RACECAR, lpModel, leLOD);
             CGS_ASSERT( lpRenderable != 0, "Missing renderable in a model" );
@@ -866,6 +873,12 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
             // Bind the part's world matrix for this draw's shader constants.
             CgsGraphics::mShaderConstantTable.SetShaderConstantData( 0, lPartWorldMatrix );
 
+            if (CgsPC::Reflections::IsVehicleCapture())
+            {
+                CgsPC::Reflections::SubmitVehiclePart(lpModel, liPartLod, lfCameraDistance * lfCameraDistance,
+                    *lpDispatchFrame, liObjectList, liOpaqueMeshList, lu8Technique, lpRenderParams->GetRenderDamageFlag());
+                continue;
+            }
             const bool lbFirstInList = ( lpDispatchList->GetCount() & 0x7F ) == 0;
 
             lpDispatchFrame->GetBin().BeginPacket();
@@ -1126,7 +1139,8 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // `addi r24, r24, 0x10` per ITERATION (not per drawn pane), so it is indexed by the
     // loop counter.
     // ========================================================================
-    if ( lbRenderAttachedGeometry )
+    if ( lbRenderAttachedGeometry && (!CgsPC::Reflections::IsVehicleCapture()
+        || CgsPC::Reflections::Glass().IsVisible(lfCameraDistance * lfCameraDistance, CgsPC::Reflections::sfVehicleDrawDistance)) )
     {
         const ActiveRaceCar::RenderParams::DetachedPartRenderQueue& lrGlassDetachedParts =
             lpRenderParams->GetDetachedPartQueue();
@@ -1243,7 +1257,9 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
             // follow ("State does not exist" at :400, the null renderable at :403) are
             // GetRenderable's own. It never consults the car's LOD.
             const CgsGraphics::Model* const lpGlassModel = lpPart->GetModel();
-            if ( lpGlassModel == 0 || !lpGlassModel->DoesStateExist( CgsGraphics::Model::E_STATE_LOD_0 ) )
+            const s32 liGlassLod = CgsPC::Reflections::IsVehicleCapture() && lpGlassModel
+                ? CgsPC::Reflections::SelectVehicleLod(CgsPC::Reflections::Glass(), lpGlassModel, lfCameraDistance * lfCameraDistance) : 0;
+            if ( lpGlassModel == 0 || liGlassLod < 0 || !lpGlassModel->DoesStateExist( static_cast<CgsGraphics::Model::State>(liGlassLod) ) )
             {
                 ++luNoModel;
                 continue;   // [PC guard] the console asserts instead; a missing state here
@@ -1251,7 +1267,7 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
             }
 
             const CgsGraphics::Renderable* const lpGlassRenderable =
-                lpGlassModel->GetRenderable( CgsGraphics::Model::E_STATE_LOD_0 );
+                lpGlassModel->GetRenderable( static_cast<CgsGraphics::Model::State>(liGlassLod) );
             CGS_ASSERT( lpGlassRenderable != 0, "lpRenderable" );
             CGS_ASSERT( !lpGlassModel->GetFlag(
                             CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER ),
@@ -1286,8 +1302,8 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                 // @0x822D0EC8..0x822D0F28: opaque + transparent, zOnly = 0.
                 CgsGraphics::DrawRenderable::AddToBin(
                     lpGlassRenderable, lpDispatchFrame, lbGlassFirstInList,
-                    static_cast< s8 >( liOpaqueMeshList ),
-                    static_cast< s8 >( liTransparentMeshList ),
+                    static_cast< s8 >( CgsPC::Reflections::IsVehicleCapture() ? CgsPC::Reflections::GlassMeshList() : liOpaqueMeshList ),
+                    static_cast< s8 >( CgsPC::Reflections::IsVehicleCapture() ? CgsPC::Reflections::GlassMeshList() : liTransparentMeshList ),
                     1, lu8GlassTechnique, false,
                     0xFFu, 0u, 0, 0u );
             }
@@ -1375,7 +1391,9 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     //   4..8 SUBMITTED with 1..5 instances
     s32 liWheelDiagCode = 0;
 
-    if ( mbRenderWheels && lbRenderAttachedGeometry && lpWheelGraphics->HasMemoryResource() )
+    if ( mbRenderWheels && lbRenderAttachedGeometry && lpWheelGraphics->HasMemoryResource()
+         && (!CgsPC::Reflections::IsVehicleCapture()
+             || CgsPC::Reflections::Wheels().IsVisible(lfCameraDistance * lfCameraDistance, CgsPC::Reflections::sfVehicleDrawDistance)) )
     {
         // [FLAG PC boot gate] `HasMemoryResource()` is NOT console. The console reaches
         // this block only for a car whose whole resource set is in (its own
@@ -1395,6 +1413,9 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
 
         // The wheels never draw at LOD 0: `if (v231 <= 1) v231 = 1`.
         CgsGraphics::Model::State leWheelLOD = lpRenderParams->GetLOD();
+        if (CgsPC::Reflections::IsVehicleCapture() && lpWheelModel)
+            leWheelLOD = static_cast<CgsGraphics::Model::State>(CgsPC::Reflections::SelectVehicleLod(CgsPC::Reflections::Wheels(),
+                lpWheelModel, lfCameraDistance * lfCameraDistance));
         if ( leWheelLOD <= CgsGraphics::Model::E_STATE_LOD_1 )
         {
             leWheelLOD = CgsGraphics::Model::E_STATE_LOD_1;
@@ -2020,11 +2041,15 @@ RaceCarEntityModule::GenerateDispatchLists(
         {
             ActiveRaceCar& lrActiveRaceCar = maActiveRaceCars[ liCar ];
 
+            // FLAG PC-platform leaf: the cube belongs to the player; do not capture its shell.
+            if (lbEnvironmentMapPass && mePlayerActiveRaceCarIndex == static_cast<EActiveRaceCarIndex>(liCar))
+                continue;
+
             if ( !lrActiveRaceCar.IsActive() )
             {
                 continue;
             }
-            if ( !lrActiveRaceCar.ShouldRenderThisFrame() )
+            if ( !lrActiveRaceCar.ShouldRenderThisFrame() && !lbEnvironmentMapPass )
             {
                 continue;
             }
@@ -2065,6 +2090,8 @@ RaceCarEntityModule::GenerateDispatchLists(
             const f32 lfDeltaZ   = lvCameraPosition.z - lCarTransform.wAxis.z;
             const f32 lfLengthSq = lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
             const f32 lfDistance = ( lfLengthSq != 0.0f ) ? sqrtf( lfLengthSq ) : 0.0f;
+            if (lbEnvironmentMapPass && !CgsPC::Reflections::Rivals().IsVisible(lfLengthSq, CgsPC::Reflections::sfVehicleDrawDistance))
+                continue;
 
             // The console COPIES both ResourcePtrs into stack locals here
             // (BaseResourcePtr::CreateFromHandle) and unlinks them from the resource's
@@ -2103,6 +2130,8 @@ RaceCarEntityModule::GenerateDispatchLists(
                            lfDistance,
                            lvFogScattering,
                            lvFogColourPlusWhiteLevel );
+
+            if (lbEnvironmentMapPass) continue; // the face has its own light feed; never post into the main view
 
             // ==============================================================
             // THE SHADOW-PASS GATE -- console @0x822E7E50-0x822E7E58, RECOVERED

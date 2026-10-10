@@ -1,4 +1,5 @@
 // Production prop RenderModel selection and packet routing with observable draw sinks.
+#define NOMINMAX
 #include <cstdio>
 #include <initializer_list>
 #include "types.hpp"
@@ -17,15 +18,15 @@ struct Matrix44Affine { Vector3 mPosition; const Vector3& Pos() const {return mP
 } } }
 using namespace rw::math::vpu;
 namespace CgsGraphics {
-struct Renderable { s32 miState; int mBoundingSphere=0; };
+struct Renderable { s32 miState; struct {f32 w=1;} mBoundingSphere; };
 struct Model {
  enum State {E_STATE_LOD_0,E_STATE_LOD_1,E_STATE_LOD_2,E_STATE_COUNT=16};
  enum {E_FLAG_MODEL_USES_INSTANCE_SHADER=1,KU_OBJECTS_PER_JOB_BLOCK=128};
- bool mabExists[3]={true,true,true}; bool mbInstanced=false;
+ bool mabExists[3]={true,true,true}; bool mbInstanced=false; u32 muNumLods=3;
  Renderable maRenderables[3]={{0},{1},{2}};
- u32 GetNumLods() const {return 3;}
- f32 GetLodDistance(u32 i) const {static f32 d[3]={10,20,100};return d[i];}
- bool DoesStateExist(State s) const {return s>=0 && s<3 && mabExists[s];}
+ u32 GetNumLods() const {return muNumLods;}
+ f32 GetLodDistance(u32 i) const {Check(i<muNumLods,"authored LOD access stays within the model's actual state count");static f32 d[3]={10,20,100};return i<muNumLods?d[i]:0;}
+ bool DoesStateExist(State s) const {return s>=0 && u32(s)<muNumLods && mabExists[s];}
  bool GetFlag(int) const {return mbInstanced;}
  const Renderable* GetRenderable(State s) const {return &maRenderables[s];}
 };
@@ -50,12 +51,13 @@ static void RecordGraphicsModelPC(GraphicsModelCategoryPC,const CgsGraphics::Mod
 namespace BrnWorld {
 using namespace CgsGraphics;
 enum{E_TECHNIQUE_ZONLY=9};
-struct ShaderLodInfo {u8 GetEnvMapTechnique()const{return 7;}u8 GetLodTechnique(int,const Matrix44Affine&,const Vector3&)const{return 3;}};
+struct ShaderLodInfo {u8 GetEnvMapTechnique()const{return 7;}template<class Bounds>u8 GetLodTechnique(const Bounds&,const Matrix44Affine&,const Vector3&)const{return 3;}};
 struct PropEntityModule {
  bool mbOverrideLod=false,mbOverrideLodDistances=false;s32 miLodOverrideValue=0; s32 mauOverrideLodDistances[3]={100,200,300};
  bool RenderModel(Model*,const Matrix44Affine*,DispatchFrame*,Matrix44::InParam,Vector3::InParam,f32,s32,s32,s32,bool,bool,const ShaderLodInfo*);
 };
 }
+#include "pc/gcm/renderengine/shadows/SceneSettings.h"
 #include "pc_prop_reflection_lod.inc"
 int main()
 {
@@ -138,5 +140,29 @@ int main()
  renderengine::EnvironmentMapDrawDistancePC()=0;lrSettings=renderengine::EnvironmentMapLodSettingsPC();
  Check(draw(true,false,{1,0,0})&&giDrawState==2&&!draw(true,false,{101,0,0}),
        "resetting prop mode restores fixed LOD2 and the original cutoff");
+ auto& lrSmall=CgsPC::Shadows::SmallObjects();
+ lrSmall.mbEnabled=true;lrSmall.miDistanceMode=CgsPC::Reflections::E_DISTANCE_RELATIVE;
+ lrSmall.mfDrawDistanceScale=.5f;renderengine::GetGraphicsSettingsPC().mfShadowDistance=120;
+ Check(draw(false,true,{59,0,0}) && !draw(false,true,{60,0,0}),
+       "small-caster cutoff follows half the live shadow distance with the original exclusive boundary");
+ renderengine::GetGraphicsSettingsPC().mfShadowDistance=300;
+ Check(draw(false,true,{125,0,0}) && gbZOnly && guTechnique==9,
+       "raising shadow distance extends small-object depth packets without colour geometry");
+ Check(!draw(false,false,{125,0,0}) && !draw(true,false,{125,0,0}),
+       "small-object shadows cannot extend main-view or reflection visibility");
+ for(auto& lrRenderable:lModel.maRenderables) lrRenderable.mBoundingSphere.w=3;
+ Check(!draw(false,true,{125,0,0}),"larger props retain the original shadow policy");
+ for(auto& lrRenderable:lModel.maRenderables) lrRenderable.mBoundingSphere.w=1;
+ lrSmall.miDistanceMode=CgsPC::Reflections::E_DISTANCE_FIXED;lrSmall.mfDrawDistance=80;
+ Check(draw(false,true,{79,0,0}) && !draw(false,true,{80,0,0}),"small-object fixed cutoff is independent from the main shadow distance");
+ lrSmall.mbEnabled=false;
+ Check(!draw(false,true,{125,0,0}),"disabling the override restores original caster distances");
+ lrSmall.mbEnabled=true;lModule.mbOverrideLodDistances=false;
+ for(u32 count:{1u,2u}){
+  lModel.muNumLods=count;
+  Check(draw(false,true,{5,0,0})&&giDrawState==0,"single/two-LOD small props submit valid near shadow packets");
+  Check(draw(false,true,{79,0,0})&&u32(giDrawState)<count,"small shadow extension falls back to an existing sparse model state");
+ }
+ lModel.muNumLods=3;lrSmall.mbEnabled=false;
  std::printf("PCPropReflectionLod: %d checks, %d failures\n",giChecks,giFailures);return giFailures?1:0;
 }

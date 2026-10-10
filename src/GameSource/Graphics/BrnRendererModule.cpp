@@ -1,6 +1,10 @@
 #include <algorithm>
 #include "pc/gcm/renderengine/MeshJobOwnerWait.h"
 #include "pc/gcm/renderengine/ShadowReceiver.h"
+#include "pc/gcm/renderengine/reflections/SceneSettings.h"
+#include "pc/gcm/renderengine/reflections/SceneRender.h"
+#include "pc/gcm/renderengine/shadows/SceneRender.h"
+#include "pc/gcm/renderengine/reflections/CubeHistory.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertProbePC.h"
 #include "GameSource/Graphics/BrnRendererModule.h"
@@ -478,7 +482,7 @@ namespace
     // constant scratch + sort arrays all live in the frame bin).
     const u32 KU_PC_DISPATCH_BIN_BYTES     = 12u * 1024u * 1024u;
     const u32 KU_PC_GDL_DISPATCH_BIN_BYTES = 8u * 1024u * 1024u;
-    const u32 KU_NUM_DISPATCH_LISTS        = 25u;   // X360 Construct: GetList ids 0..24
+    const u32 KU_NUM_DISPATCH_LISTS        = 31u;   // FLAG PC-platform leaf: six transparent vehicle reflection lists after X360 ids 0..24
     // FLAG PC-platform leaf: native pointers enlarge 2D commands. The GUI's
     // existing 512 KiB streams bound the main buffer; debug retains ARTIST's
     // 2 MiB vertex stream and doubles its 80 KiB command budget for x64.
@@ -1477,6 +1481,7 @@ void BrnRendererModule::SwapBuffers()
     {
         PublishMeshFramePC();
         mDoubleBufferedDispatchFrame.Swap();
+        CgsPC::Reflections::PublishSceneFrame();
     }
     // The two ICF-folded EndFrame calls at 823FC6AC/B0 have empty bodies.
     if (sbEffectsArbitratorConstructed)
@@ -1601,7 +1606,7 @@ void BrnRendererModule::CreateObjectToMeshJobPC(CgsGraphics::DispatchFrame* lpIn
     lInput.mpDispatchObjectContext = &maObjectToMeshJobContext[luJobIndex];
     lInput.mpDispatchListInput = lpInput;
     lInput.mpaDispatchListOutputArray = mapaObjectToMeshJobOutputDispatchLists[luJobIndex];
-    lInput.muDispatchListOutputCount = 25u;
+    lInput.muDispatchListOutputCount = KU_NUM_DISPATCH_LISTS;
     lInput.mpDispatchBinMasterAddress = lpInterpreter->GetSingleBufferedDispatchFrame()->GetBin().GetBase();
     lInput.muSharedMemoryStartAddress = reinterpret_cast<uintptr_t>(spObjectToMeshSharedMemory);
     lInput.mpSharedMemoryBlockNextFreeAtomic = &suObjectToMeshNextBlock;
@@ -1650,7 +1655,7 @@ void BrnRendererModule::ConvertObjectsToMeshesPC(CgsGraphics::DispatchFrame* lpI
         {
             lrBin.Align(128u);
             mapaObjectToMeshJobOutputDispatchLists[luJob] = static_cast<DispatchList*>(
-                lrBin.AllocateMemoryFast((25u * sizeof(DispatchList) + 15u) / 16u));
+                lrBin.AllocateMemoryFast((KU_NUM_DISPATCH_LISTS * sizeof(DispatchList) + 15u) / 16u));
         }
         lrBin.Align(128u);
         const u32 luAvailable = lrBin.GetSizeQwords() - lrBin.GetUsedQwords();
@@ -1694,7 +1699,7 @@ void BrnRendererModule::ConvertObjectsToMeshesPC(CgsGraphics::DispatchFrame* lpI
             + static_cast<size_t>(luBlocksUsed) * DispatchBin::KU_BLOCK_SIZE_IN_QUAD_WORDS);
         for (u32 luJob = 0; luJob < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++luJob)
         {
-            for (u32 luList = 0; luList < 25u; ++luList)
+            for (u32 luList = 0; luList < KU_NUM_DISPATCH_LISTS; ++luList)
             {
                 DispatchList& lrOutput = mapaObjectToMeshJobOutputDispatchLists[luJob][luList];
                 lrOutput.ReconnectChainBlocks();
@@ -1834,6 +1839,10 @@ void BrnRendererModule::SortDispatchLists(CgsGraphics::DispatchFrame* lpMeshFram
         const char* lpcValue = std::getenv("BRN_SORT_JOBS_WIDE");
         return lpcValue && lpcValue[0] == '1';
     }();
+    // FLAG PC-platform leaf: these six lists have no console job descriptors.
+    // Sort them before publishing the frame, for both native job schedules.
+    for (u32 luFace = 0; luFace < 6; ++luFace)
+        lpMeshFrame->GetList(25u + luFace)->SortForDispatch();
     if (sbJobs)
     {
         renderengine::FrameProfile::Scope lSortProfile(renderengine::FrameProfile::DISPATCH_SORT);
@@ -1991,7 +2000,8 @@ void BrnRendererModule::EndMeshFramesPC()
 // Each of the five lists joins its sort job before consumption. The front/back
 // helpers bracket the corresponding rasterizer state just as on the console.
 // =============================================================================
-void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext* lpContext)
+void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext* lpContext,
+    const BrnParticle::ParticleModule::ParticleRenderData* lpParticleData)
 {
     using namespace CgsGraphics;
 
@@ -2049,7 +2059,7 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
         }
     }
 
-    if (luTotalShadowRecords == 0u)
+    if (luTotalShadowRecords == 0u && !CgsPC::Shadows::HasDebris(lpParticleData))
         return;
 
 #if !BRN_SHADOW_MAP_TARGET_AVAILABLE
@@ -2111,6 +2121,7 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
                 mShadowMapRenderManager.EndBackFaceCullRender();
         }
 
+        CgsPC::Shadows::RenderDebris(static_cast<u32>(liCascade), lpParticleData);
         renderengine::ShadowProbe_End(static_cast<u32>(liCascade));
         lauCascadeDrawCalls[liCascade] =
             static_cast<u32>(renderengine::WorldDrawCallCount() - luDrawCallsBeforeCascade);
@@ -4563,14 +4574,14 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
         if ((!sbLoggedLists || luCarOpaque != suLastCarOpaque) && CgsDev::Log::gpDebugPrint != 0)
         {
             u32 luTotal = 0;
-            for (u32 luList = 0; luList < 25u; ++luList)
+            for (u32 luList = 0; luList < KU_NUM_DISPATCH_LISTS; ++luList)
                 luTotal += GetMeshFrameForReadPC().GetList(luList)->GetCount();
             if (luTotal != 0)
             {
                 sbLoggedLists = true;
                 suLastCarOpaque = luCarOpaque;
                 *CgsDev::Log::gpDebugPrint << "[FLAG PC bring-up] MESH lists:";
-                for (u32 luList = 0; luList < 25u; ++luList)
+                for (u32 luList = 0; luList < KU_NUM_DISPATCH_LISTS; ++luList)
                 {
                     const u32 luCount = GetMeshFrameForReadPC().GetList(luList)->GetCount();
                     if (luCount != 0)
@@ -5269,13 +5280,20 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
 #endif  // BRN_ENVMAP_PASS_AVAILABLE
     }
 
+    // FLAG PC-platform leaf: additional effect passes obey the original main-view
+    // particle switches and consume the completed command bank, never rotating control IO.
+    const auto* lpSceneParticleDataPC = mbRenderParticles && lpDispatchThreadInputBuffer
+        && lpDispatchThreadInputBuffer->GetCalibrationUnfriendlyEnablePostFx()
+        && !lpDispatchThreadInputBuffer->GetIsStalled()
+        ? GetPublishedParticleRenderDataPC() : nullptr;
+
     // ---- X360 Render:545-640 -- THE SHADOW-MAP PASS. -------------------------------------
     // Before RenderWorldPasses and before anything binds the scene target, exactly as the
     // console orders it. Gated on mRenderSwitches.mbRenderShadows.
     if (lbDispatchReady)
     {
         lRenderStage.Next(RENDER_SHADOWS);
-        RenderShadowMapPasses(&lDispatchContext);
+        RenderShadowMapPasses(&lDispatchContext, lpSceneParticleDataPC);
         lRenderStage.Next(RENDER_SETUP);
     }
 
@@ -5463,6 +5481,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
     // WaitForMeshSortPC, using the descriptors belonging to this frame bank.
     // ============================================================================================
     lRenderStage.Next(RENDER_ENVMAP);
+    bool lbParticlesPreparedForCube = false;
     if (mRenderSwitches.mbRenderEnvmap && lbSceneBracketOpen
         && lpDispatchThreadInputBuffer != 0
         && EnsureEnvMapTarget(mAllocatedRenderTargets))
@@ -5525,6 +5544,15 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         u32  lauStatFaceMeshes[BrnGraphics::E_FACE_NUM]   = {};
         static u32 sxEnvMapEverRendered = 0u;   // bit f = face f rendered at least once, ever
         static u32 suEnvMapBeginCount   = 0u;   // total BeginRenderEnvironmentMapFace calls
+        lbParticlesPreparedForCube = CgsPC::Reflections::ParticleCapture::Prepare(lpSceneParticleDataPC);
+        const bool lbCubeCoronas = mbRenderCoronas && CgsPC::Reflections::Lights().mbEnabled
+            && EnsureCoronaManagerBringUp(mCoronaManager);
+
+        if ((CgsPC::Reflections::Traffic().mbEnabled || CgsPC::Reflections::Rivals().mbEnabled)
+            && mpEnvMapTextureState && mpEnvMapTextureState->mpRaster)
+            CgsPC::Reflections::GetCubeHistory().Begin(renderengine::gDevice,
+                mpEnvMapTextureState->mpRaster->mpD3DTexture, sxEnvMapEverRendered == 0x3Fu
+                    && CgsPC::Reflections::GetCubeHistory().IsSource(mpEnvMapTextureState->mpRaster->mpD3DTexture));
 
         for (u32 luFace = 0; luFace < BrnGraphics::E_FACE_NUM; ++luFace)
         {
@@ -5587,6 +5615,9 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
             }
 
             LARGE_INTEGER lT3; QueryPerformanceCounter(&lT3);
+            CgsPC::Reflections::RenderSceneExtras(luFace, mCoronaManager, lbCubeCoronas, mbRenderCarsTransparent,
+                lpSceneParticleDataPC,
+                lfFrameWhiteLevel, GetMeshFrameForReadPC().GetList(25u + luFace), mpInterpreter, &lDispatchContext);
             EndRenderEnvironmentMapFace(luFace);
             LARGE_INTEGER lT4; QueryPerformanceCounter(&lT4);
             sEnvMapPerf.mfBegin    += static_cast<double>(lT1.QuadPart - lT0.QuadPart) * lfUsPerTick;
@@ -5709,6 +5740,8 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
 
         if (lbUnparkSampler13)
         {
+            if (CgsPC::Reflections::GetCubeHistory().End())
+                shadow::Device::SetSamplerTextureShadow(13u, nullptr);
             shadow::Device::SetResource(mpEnvMapTextureState->mpRaster, 13u);
         }
         renderengine::SetShadowReceiverReflectionPC(false);
@@ -5772,7 +5805,8 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
                 // the batches RenderFullResParticles replays. Landed 2026-09-06 with the spark
                 // family; before that this call had nothing to drive.
                 lpPreRenderData->mpParticleModule->BeginParticleRenderJob(lpPreRenderData);
-                lpPreRenderData->mpParticleModule->BuildLionVertexBuffers(lpPreRenderData);
+                if (!lbParticlesPreparedForCube)
+                    lpPreRenderData->mpParticleModule->BuildLionVertexBuffers(lpPreRenderData);
             }
         }
 

@@ -1,4 +1,5 @@
 #include "GameSource/Graphics/BrnCoronaManager.h"
+#include "pc/gcm/renderengine/reflections/LightSubmission.h"
 
 #include <cstdio>   // snprintf (the one-shot bring-up lines)
 
@@ -114,17 +115,20 @@ void BrnCoronaManager::BrnSubmissionInterface::AddCorona(const Vector3& lvPositi
                                                            f32 lfScale, f32 lfOpacity,
                                                            const BrnCoronaTypeParams& lCoronaTypeParams)
 {
+    if (!CgsPC::Reflections::AcceptLight(this, lvPosition,
+        mBufferIterator.GetNumCoronasWritten(), KI_MAX_CORONAS, kfNoFadeDistanceSqrd)) return;
     const Vector3 lvDelta = rw::math::vpu::operator-(lvPosition, mCameraPosition);
 
     // Back-face cull: only submit the corona when it faces toward the camera.
     if (rw::math::vpu::Dot(lvDelta, lvDirection) < 0.0f)
     {
         const f32 lfDistSqr = rw::math::vpu::MagnitudeSquared(lvDelta);
+        const f32 lfFadeDistSqr = CgsPC::Reflections::LightFadeDistanceSquared(this, lfDistSqr, kfNoFadeDistanceSqrd);
 
         f32 lfAlphaScale = 1.0f;
-        if (lfDistSqr > kfCoronaFadeDistance)
+        if (lfFadeDistSqr > kfCoronaFadeDistance)
         {
-            lfAlphaScale = 1.0f - ((lfDistSqr - kfCoronaFadeDistance) / (kfNoFadeDistanceSqrd - kfCoronaFadeDistance));
+            lfAlphaScale = 1.0f - ((lfFadeDistSqr - kfCoronaFadeDistance) / (kfNoFadeDistanceSqrd - kfCoronaFadeDistance));
             if (lfAlphaScale < 0.0f)
                 lfAlphaScale = 0.0f;
         }

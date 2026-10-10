@@ -62,6 +62,7 @@ namespace CgsGraphics { class DispatchFrame; }
 // (BrnWorld::ShadowMap is a `struct` -- BrnShadowMap.h:65; never forward-declare it
 //  as `class` here, the class key is part of the MSVC mangling.)
 namespace BrnWorld { struct ShadowMap; }
+namespace CgsPC::Reflections { struct LightCapture; }
 
 
 namespace CgsResource { struct ResourceHandle; }
@@ -164,6 +165,7 @@ struct RaceCarNeedsHidingEventRecord
 class RaceCarEntityModule
 {
     friend class WorldDebugComponent;
+    friend struct CgsPC::Reflections::LightCapture;
     friend struct RaceCarEntityModuleDebugComponent;   // reads the module's debug switches/members directly
 
 public:

@@ -346,3 +346,5 @@ struct ShaderConstantsCPU
     CgsGraphics::Ptr32<CgsGraphics::Ptr32<const char>> mppacNames; // word 3 (offset 0x0C)
 };
 static_assert(sizeof(ShaderConstantsCPU) == 16, "Serialized CPU constants");
+
+namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }

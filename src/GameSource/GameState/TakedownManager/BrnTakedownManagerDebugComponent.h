@@ -34,6 +34,8 @@ namespace BrnGameState
 
     protected:
         const char* GetName() const override;   // @ 0x823596C8
+        // ARTIST vtable 0x820CDDAC, slot +0x10: original menu hierarchy.
+        const char* GetPath() const override { return "Gameplay"; }
         void        OnActivate() override;       // @ 0x82366378
 
     private:

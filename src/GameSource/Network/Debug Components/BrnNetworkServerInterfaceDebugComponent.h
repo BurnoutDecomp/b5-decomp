@@ -68,6 +68,8 @@ namespace BrnNetwork
 
     protected:
         const char* GetName() const override;   // @ 0x82585798
+        // ARTIST vtable 0x820CE4AC, slot +0x10: original menu hierarchy.
+        const char* GetPath() const override { return "Network"; }
         void        OnActivate() override;       // @ 0x8258AD10
 
         // @0x82594AC0 -- the connApi connection-status HUD table (called by RenderHUD).

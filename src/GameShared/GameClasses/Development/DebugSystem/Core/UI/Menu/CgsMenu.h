@@ -27,6 +27,9 @@ namespace CgsDev
             virtual void    Update(f32 lfTimeStep, InputEvent leEvent);
             virtual void    Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY, bool lbSelected, f32 lfItemWidth);
             virtual void    ComputeSize();
+            // ARTIST vtable 820DC354 +0x0C -> 827E2F38 (false):
+            // hierarchy rows are not actions when deciding which windows to keep.
+            bool IsUseful() const override { return false; }
             virtual void    GetDisplayName(char* lpcBuffer, s32 liBufferLen) const;
             virtual Window* OpenAsWindow();
 

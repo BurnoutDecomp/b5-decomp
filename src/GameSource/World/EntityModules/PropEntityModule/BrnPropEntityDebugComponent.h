@@ -79,6 +79,8 @@ namespace BrnWorld
     protected:
         // GetName 0x822A9740 -- "Prop Entity Module".
         virtual const char* GetName() const;
+        // ARTIST vtable 0x820CDD18, slot +0x10: original menu hierarchy.
+        const char* GetPath() const override { return "Physics"; }
         // OnActivate 0x822C52C8 -- register the render flags, cell-grid zoom, the module's
         // override tuning + online/progression flags, and the "Reset props" action with the
         // debug menu.

@@ -13,6 +13,7 @@
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
+#include "pc/debug/TrafficControls.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
@@ -1584,6 +1585,9 @@ bool TrafficEntityModule::Prepare( BrnTrafficIO::OutputBuffer_Prepare* lpOutputB
 
     case E_PREPARESTAGE_DEBUG:
     {
+        // FLAG PC-platform leaf: the original debug overlay is incomplete;
+        // register its supported scalar controls through the native UI adapter.
+        CgsPC::Debug::TrafficControls::Attach(*this);
         // 0x8274A8A0..0x8274A918, PARTIAL. The second half is plain member seeding and is
         // landed below; only the debug-allocator half is gated, on a missing wire.
         //

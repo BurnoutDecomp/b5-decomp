@@ -45,6 +45,7 @@
 // the remaining 79 methods.
 // ============================================================================
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
+#include "pc/debug/RaceCarControls.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "SharedClasses/Progression/BrnTrainingTypes.h"   // BrnProgression::ETrainingType
 
@@ -691,9 +692,10 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
         // the bool it returns is not tested (crash parity FX-SCENEMGR item 4, 2026-09-24).
         // [FLAG PC bring-up] the other inlined scalar resets the console runs between the two
         // calls (on +0x180D8 / +0x180E8: the air-time and traffic-check seats) and the three
-        // DebugComponent::Register calls after it (+0x180F0, +0x17E50, +0x17CF0) stay
-        // unreproduced here, as before.
+        // diagnostic storage at +0x180F0/+0x17E50 remains incomplete. The recovered
+        // Race Car Entity component (+0x17CF0) is registered below with PC ownership.
         mPowerParkingManager.Prepare();
+        CgsPC::Debug::AttachRaceCarControls(*this);
         mePrepareStage = 0;
     // fall through
     case 1:

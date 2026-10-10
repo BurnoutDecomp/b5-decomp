@@ -33,6 +33,8 @@ namespace BrnWorld
 
     protected:
         const char* GetName() const override;   // @ 0x822A8FF8
+        // ARTIST vtable 0x820CDD3C, slot +0x10: original menu hierarchy.
+        const char* GetPath() const override { return "Triggers"; }
         void        OnActivate() override;        // @ 0x822A9018
 
     private:

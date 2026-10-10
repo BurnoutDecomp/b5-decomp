@@ -14,6 +14,7 @@
 // forwards with lbCentred false), so the bodies call that overload directly.
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleDebugComponent.h"
+#include "pc/debug/RaceCarControls.h"
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"   // module, ActiveRaceCar, RaceCarStreamer
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
@@ -192,16 +193,17 @@ void RaceCarEntityModuleDebugComponent::OnActivate()
     RegisterVariable(&mbRenderCarDamageState,       "Render car damage state");
     RegisterVariable(&mbRenderCarSreamingState,     "Render car streaming state");
     RegisterVariable(&mbRenderLastResetInfo,        "Show place on track info");
+    // FLAG PC-platform leaf: the place-on-track diagnostic producers are not
+    // connected to this native owner yet. Do not display stale trace data.
+    SetReadOnly(&mbRenderLastResetInfo, true);
     RegisterVariable(&mbRenderPlayerResetPositions, "Show player reset positions");
     RegisterVariable(&mbShowAverageSpeed,           "Show average speed");
     RegisterFunction(ResetAverageSpeedCallback, this, "Reset average speed");
     RegisterVariable(&lpModule->mbSixaxisSteeringEnabled, "SIXAXIS steering");
     RegisterVariable(&mbShowEngineState,            "Show player engine state");
     RegisterVariable(&mbTrafficRelatedData,         "Traffic Related");
-    RegisterFunction(AirRamAddNew, this, "Apply Ram");
-
-    RegisterVariable(&mMag, "Magnitude");
-    SetRange(&mMag, 0.0f, KF_MAGNITUDE_MAX);
+    // FLAG PC-platform leaf: Apply Ram only sets mbAirRam; its runtime consumer
+    // is absent. Its action and otherwise unused Magnitude input stay unavailable.
 
     RegisterVariable(&lpModule->mbDisplayPlayerCarPosition, "Show Player Car Position");
     RegisterVariable(&mbRenderCurrentDistrict,              "Render current district");
@@ -283,6 +285,8 @@ void RaceCarEntityModuleDebugComponent::OnActivate()
 
     // ---- vehicle LODs ----
     const char* lpcLods = "Graphics/Vehicles.../LODs...";
+    if (CgsPC::Debug::BeginVehicleLodRegistration())
+    {
     RegisterVariable(&sbUseDynamicLods,    lpcLods, "Use Dynamic LODs");
     RegisterVariable(&sbUseFixedLods,      lpcLods, "Use Fixed LODs");
     RegisterVariable(&sbUseAggressiveLods, lpcLods, "Use Aggressive LODs");
@@ -297,6 +301,7 @@ void RaceCarEntityModuleDebugComponent::OnActivate()
     RegisterVariable(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[2], lpcLods, "Aggressive LOD 2");
     RegisterVariable(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[3], lpcLods, "Aggressive LOD 3");
     RegisterVariable(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[4], lpcLods, "Aggressive LOD 4");
+    }
     SetRange(&siFixedVehicleLod, 0, KI_MAX_FIXED_VEHICLE_LOD);
     for (s32 liLod = 0; liLod < 5; ++liLod)
     {
@@ -322,6 +327,9 @@ void RaceCarEntityModuleDebugComponent::OnActivate()
     SetStep(&lpModule->mfResetOnWaterHeight, KF_RESET_ON_WATER_HEIGHT_STEP);
 
     RegisterVariable(&mbForceOnlineFreeburnSpawnPosition, "Force Online Freeburn Spawn Position");
+    // FLAG PC-platform leaf: the two mode-arming readers still use a constant
+    // false until the original diagnostic owner is integrated there.
+    SetReadOnly(&mbForceOnlineFreeburnSpawnPosition, true);
 }
 
 // ================================================================================================

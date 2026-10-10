@@ -38,6 +38,8 @@
 
 namespace renderengine { class Texture; }
 
+namespace CgsPC::Reflections { struct ParticleCapture; }
+
 namespace BrnParticle
 {
     class BrnVFXMeshCollection;   // resource type held by mMeshCollection
@@ -96,6 +98,7 @@ namespace Native
 
     class BrnDebrisArray
     {
+        friend struct CgsPC::Reflections::ParticleCapture;
     public:
         // BrnParticle::Native::BrnDebrisArray::DebrisBucket -- one fixed-capacity bucket of
         // debris particles (DWARF BrnDebrisRenderer.h:111). The intrusive list links live in

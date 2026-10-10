@@ -27,6 +27,8 @@ namespace BrnNetwork
 
     protected:
         const char* GetName() const override;   // @ 0x82586588 -> "Event Scores"
+        // ARTIST vtable 0x820CE1AC, slot +0x10: original menu hierarchy.
+        const char* GetPath() const override { return "Network"; }
         void        OnActivate() override;       // @ 0x82591E98
 
     private:

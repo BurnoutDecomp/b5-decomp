@@ -32,6 +32,9 @@
 #include "pc/gcm/renderengine/GraphicsDiagnostics.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "pc/gcm/renderengine/reflections/EnvironmentMap.h"
+#include "pc/gcm/renderengine/reflections/SceneCapture.h"
+#include "pc/gcm/renderengine/reflections/SceneSettings.h"
+#include "pc/gcm/renderengine/reflections/SceneRender.h"
 #include <chrono>  // [DIAG shadow-perf wave] steady_clock for the per-phase producer timers
 #include <cstdlib>                                                // getenv/atof (the BRN_WORLD_CAMDIST bring-up diagnostic)
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"   // CgsGraphics::ShaderConstantTable
@@ -72,6 +75,7 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h" // the frame collision generator Update carves
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/World/BrnWorldModule.h"
+#include "pc/debug/RaceCarControls.h"
 
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"   // CgsSystem::TimerStatus{,Interface} -- WorldModule::Update stages the environment frame delta
 
@@ -3377,11 +3381,12 @@ bool sbUseFixedLods      = false;  // X360 byte_8300E114  (zero-init segment)
 bool sbUseAggressiveLods = false;  // X360 byte_8300E115  (zero-init segment)
 s32  siFixedVehicleLod   = 0;      // X360 dword_8300E118 (zero-init segment, range [0,4])
 
-// FLAG PC-platform leaf: the original race-car debug component is not mounted.
-// Expose its original LOD globals directly, using the ARTIST @0x822C2538
-// group/name/range/step registrations, so INI and menu edits share those globals.
+// FLAG PC-platform leaf: expose the original LOD globals before component
+// activation, so early INI and menu edits share the ARTIST registrations. The
+// recovered component uses the same registration guard to avoid duplicate rows.
 static void RegisterVehicleLodDebugVariablesPC()
 {
+    if (!CgsPC::Debug::BeginVehicleLodRegistration()) return;
     CgsDev::DebugInterface lDebugInterface;
     const char* lpcGroup = "Graphics/Vehicles.../LODs...";
     lDebugInterface.RegisterVariable(&sbUseDynamicLods, lpcGroup, "Use Dynamic LODs");
@@ -3550,6 +3555,8 @@ WorldModule::CalculateVehicleLODs(
         lafLODDistances[ luIndex ] =
             ( lfQuality + ( lfAggressive - lfQuality ) * lfAlpha ) * lfZoomFactor;
     }
+
+    CgsPC::Reflections::SetVehicleLodDistances(lafLODDistances);
 
     // ---- publish ------------------------------------------------------------
     if ( sbUseFixedLods )
@@ -3970,6 +3977,7 @@ WorldModule::GenerateDispatchLists(
     BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch* lpTrafficPreDispatchInput = 0;
     BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch* lpTrafficRenderInfos = 0;
 
+    CgsPC::Reflections::BeginSceneFrame();
     lpInputBufferStack->CreateIOBuffer( &lpWorldDispatchInput, "WorldEntity" );
     lpInputBufferStack->CreateIOBuffer( &lpTrafficDispatchInput, "TrafficDispatch" );
     lpInputBufferStack->CreateIOBuffer( &lpPropDispatchInput, "PropDispatch" );
@@ -3988,6 +3996,7 @@ WorldModule::GenerateDispatchLists(
     // @0x8284CB38 -- see the CgsCamera.cpp banner).
     gDispatchCamera.Construct();
     lpCameraInput->CopyToCgsCamera( &gDispatchCamera );
+    CgsPC::Reflections::sfParticleNormalDistance = gDispatchCamera.maProjectionScalars[8];
     lpDispatchThreadInputBuffer->SetCameraViewProjection(
         gDispatchCamera.GetViewProjectionMatrix() );
 
@@ -4257,6 +4266,7 @@ WorldModule::GenerateDispatchLists(
             lpFilteredEntityData->Clear();
 
             CgsGraphics::Camera lFaceCamera = mEnvironmentMap.maEnvMapCameras[ liFace ];
+            CgsPC::Reflections::LightCapture::BeginFace(static_cast<u32>(liFace), lFaceCamera);
 
             PerfMonCpu::StartMonitor( miFrustumTestFilterPM );
             FilterFrustumTestResults( lpFrustumTestResult,
@@ -4288,6 +4298,8 @@ WorldModule::GenerateDispatchLists(
                 lpWorldDispatchInput, lpFilteredEntityData->maWorldEntityIds,
                 lFaceCamera.GetViewProjectionMatrix(), gDispatchCamera.GetPosition(),
                 &mShaderLodInfo, 5 + liFace, 5 + liFace, 5 + liFace );
+            CgsPC::Reflections::WorldCapture::SubmitBackdrops(mWorldEntityModule,
+                lpDispatchInputBuffer->GetDispatchFrame(), lFaceCamera, mShaderLodInfo, 5 + liFace);
             PerfMonCpu::StopMonitor( miGenerateDispatchListsPM );
 
             PerfMonCpu::StartMonitor( miPropGenerateDispListClearPM );
@@ -4298,6 +4310,22 @@ WorldModule::GenerateDispatchLists(
                 // rendering the environment map, and no coronas on it.
                 1.0f, &mShaderLodInfo, 5 + liFace, 5 + liFace, 5 + liFace, true, false );
             PerfMonCpu::StopMonitor( miPropGenerateDispListClearPM );
+
+            // FLAG PC-platform leaf: optional vehicle feeds use this face's view
+            // and query results; they never mutate the main-camera LOD/history.
+            if (CgsPC::Reflections::Rivals().mbEnabled && lpDispatchInputBuffer->GetRenderSwitches()->mbRenderRaceCars)
+            {
+                CgsPC::Reflections::VehicleScope lScope(CgsPC::Reflections::E_CAPTURE_RIVALS, 5 + liFace);
+                mRaceCarEntityModule.GenerateDispatchLists(lpRaceCarDispatchInput,
+                    lpFilteredEntityData->maRaceCarEntityIds, 5 + liFace, 5 + liFace, 5 + liFace,
+                    true, lvFogScattering, lvFogColourPlusWhiteLevel, lFaceCamera.GetPosition());
+            }
+            if (lpDispatchInputBuffer->GetRenderSwitches()->mbRenderTraffic)
+                CgsPC::Reflections::TrafficCapture::Submit(mTrafficEntityModule,
+                    lpFilteredEntityData->maTrafficEntityIds, lpTrafficDispatchInput,
+                    lFaceCamera, lvFogScattering, lvFogColourPlusWhiteLevel, 5 + liFace);
+            CgsPC::Reflections::LightCapture::SubmitRaceCars(static_cast<u32>(liFace), mRaceCarEntityModule);
+            CgsPC::Reflections::LightCapture::SubmitTrafficSignals(static_cast<u32>(liFace), mTrafficEntityModule);
 
             // Refresh the face camera's projection for the renderer (far 10000)
             // and record its view-projection for the env-map resolve -- ON THE
@@ -4400,6 +4428,7 @@ WorldModule::GenerateShadowMapDispatchLists(
         lpFilteredEntityData->Clear();
 
         const CgsGraphics::Camera* lpCascadeCamera = mShadowMap.GetCascadeCamera( luCascade );
+        CgsPC::Reflections::SetShadowCamera(luCascade, *lpCascadeCamera);
 
         // Per-module gates for this cascade (the near-only policies restrict
         // race cars / traffic / props to cascade 0).

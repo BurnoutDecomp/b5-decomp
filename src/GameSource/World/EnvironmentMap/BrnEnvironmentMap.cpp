@@ -2,6 +2,7 @@
 #include "types.hpp"
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Add
 #include "pc/gcm/renderengine/reflections/EnvironmentMap.h"
+#include "pc/gcm/renderengine/reflections/SceneSettings.h"
 #include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -214,7 +215,8 @@ namespace BrnGraphics
         // FLAG PC-platform leaf: extend the actual capture/query frusta with the
         // reflection cutoff. Recompute from the original far plane so live edits
         // back to zero restore the original range on all six faces.
-        const f32 lfFarClipPlane = renderengine::ExtendEnvironmentMapDrawDistancePC( KF_ENVMAP_FAR_CLIP_PLANE );
+        const f32 lfFarClipPlane = CgsPC::Reflections::CaptureDistance(
+            renderengine::ExtendEnvironmentMapDrawDistancePC( KF_ENVMAP_FAR_CLIP_PLANE ));
 
         for (u32 luEnvMapFace = 0; luEnvMapFace < E_FACE_NUM; ++luEnvMapFace)
         {

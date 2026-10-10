@@ -245,6 +245,10 @@ namespace CgsDev
         {
             mbVisible = true;
             mErrorWindow.Prepare(lpcMessage);
+            // FLAG PC-platform leaf: an unavailable native debug section can
+            // be opened while another window has focus. Route dismissal to its
+            // modal explanation instead of leaving it behind the command window.
+            SetActiveWindow(&mErrorWindow);
         }
 
         void DebugUI::SetMetrics(const Metrics& lrMetrics)
