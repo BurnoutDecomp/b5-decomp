@@ -15,6 +15,8 @@ static void LogOnce(const char*,const char*) {}
 namespace renderengine {
 static void PCSetVertexShaderConstantF(IDirect3DDevice9* lpDevice,u32 luFirst,const f32* lpfValue,u32 luCount)
 { lpDevice->SetVertexShaderConstantF(luFirst,lpfValue,luCount); }
+static void PCSetPixelShaderConstantF(IDirect3DDevice9* lpDevice,u32 luFirst,const f32* lpfValue,u32 luCount)
+{ lpDevice->SetPixelShaderConstantF(luFirst,lpfValue,luCount); }
 }
 using namespace renderengine;
 #include "pc_reflection_shadows.inc"
@@ -80,10 +82,14 @@ int main()
     spDevice->SetVertexShaderConstantF(KU_VS_ShadowMap_WorldToLight,lafMatrices,12);
     spDevice->SetPixelShaderConstantF(KU_PS_ShadowMap_Constants,KAF_SPLITS,1);
     spDevice->SetPixelShaderConstantF(KU_PS_ShadowMap_Constants2,KAF_CONSTANTS2,1);
+    spDevice->SetVertexShaderConstantF(KU_VS_ShadowMap_Constants,KAF_SPLITS,1);
+    spDevice->SetVertexShaderConstantF(KU_VS_ShadowMap_Constants2,KAF_CONSTANTS2,1);
+    const f32 KAF_FIRST_PAIR[]={0,1,10.5f,0};
+    spDevice->SetVertexShaderConstantF(KU_VS_ShadowMap_ObjectCsmSelect,KAF_FIRST_PAIR,1);
     const Vertex KAV_QUAD[]={{-1,-1,.5f,1},{-1,1,.5f,1},{1,-1,.5f,1},{1,1,.5f,1}};
     auto SampleReceiver=[&]()
     {
-        BindReceiverDepth(KAU_VS_CODE);
+        BindReceiverDepth(KAU_VS_CODE,KAU_PS_CODE);
         Require(spDevice->BeginScene(),"begin receiver");
         Require(spDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP,2,KAV_QUAD,sizeof(Vertex)),"receiver draw");
         Require(spDevice->EndScene(),"end receiver");
@@ -95,7 +101,7 @@ int main()
     };
     // Same stationary receiver, viewed through different capture-face depths and
     // three main-camera positions. The sampled cascade must follow the atlas camera.
-    for(f32 lfMainDepth:{6.f,20.f,50.f})
+    if(KU_RECEIVER_KIND==3) for(f32 lfMainDepth:{6.f,20.f,50.f})
     {
         Matrix44 lMainVp;
         lMainVp.SetIdentity();lMainVp.xAxis.w=0;lMainVp.yAxis.w=0;
@@ -114,13 +120,69 @@ int main()
     ShadowReceiverViewDepthPC()={0,0,0,0};
     const f32 KAF_LEGACY_FACE[]={20,0,0,0};
     spDevice->SetVertexShaderConstantF(201u,KAF_LEGACY_FACE,1);
-    Check(SampleReceiver()>250,"an unpublished camera input preserves legacy receiver behavior");
+    const f32 KAF_UNPUBLISHED_POINT[]={0,0,0,1};
+    spDevice->SetVertexShaderConstantF(KU_VS_TestWorld,KAF_UNPUBLISHED_POINT,1);
+    if(KU_RECEIVER_KIND!=7) Check(SampleReceiver()>250,"an unpublished camera input preserves legacy receiver behavior");
     const f32 KAF_SENTINEL[]={7,8,9,10};
     spDevice->SetVertexShaderConstantF(255,KAF_SENTINEL,1);
+    spDevice->SetPixelShaderConstantF(223,KAF_SENTINEL,1);
     const DWORD KAU_OLD_VERTEX[]={D3DVS_VERSION(3,0),0x0000ffff};
-    BindReceiverDepth(KAU_OLD_VERTEX);
+    const DWORD KAU_OLD_PIXEL[]={D3DPS_VERSION(3,0),0x0000ffff};
+    BindReceiverDepth(KAU_OLD_VERTEX,KAU_OLD_PIXEL);
     f32 lafPreserved[4]={};spDevice->GetVertexShaderConstantF(255,lafPreserved,1);
     Check(std::memcmp(KAF_SENTINEL,lafPreserved,sizeof(lafPreserved))==0,"unmodified shaders keep their own c255 value");
+    spDevice->GetPixelShaderConstantF(223,lafPreserved,1);
+    Check(std::memcmp(KAF_SENTINEL,lafPreserved,sizeof(lafPreserved))==0,"unmodified shaders keep their own c223 value");
+
+    Matrix44 lCoverageVp;
+    lCoverageVp.SetIdentity();lCoverageVp.xAxis.w=0;lCoverageVp.yAxis.w=0;
+    lCoverageVp.zAxis.w=1;lCoverageVp.wAxis.w=6.f;
+    SetShadowReceiverCameraPC(lCoverageVp);
+    const f32 KAF_POINT_ORIGIN[]={0,0,0,1};
+    spDevice->SetVertexShaderConstantF(KU_VS_TestWorld,KAF_POINT_ORIGIN,1);
+    auto Positions=[&](f32 u0,f32 v0,f32 u1,f32 v1,f32 u2,f32 v2,f32 z=.5f)
+    {
+        const f32 lafU[]={u0,u1,u2},lafV[]={v0,v1,v2};
+        for(u32 i=0;i<3;++i) {
+            lafMatrices[16*i+12]=lafU[i];lafMatrices[16*i+13]=lafV[i];
+            lafMatrices[16*i+14]=z;
+        }
+        spDevice->SetVertexShaderConstantF(KU_VS_ShadowMap_WorldToLight,lafMatrices,12);
+    };
+    ConfigureReceiverBounds(true);
+    Positions(.5f,.9f,.5f,.5f,.5f,5.f/6.f);
+    Check(SampleReceiver()>250,"reflection falls back to a covering cascade instead of reading a foreign tile");
+    Positions(1.2f,1.f/6.f,-.2f,.5f,.5f,1.5f);
+    Check(SampleReceiver()>250,"receivers outside every cascade do not inherit clamped edge shadows");
+    Positions(.5f,1.f/6.f,.5f,.5f,.5f,5.f/6.f,1.5f);
+    Check(SampleReceiver()>250,"receivers beyond the atlas depth range do not cast false shadows");
+    Positions(.5f,1.f/6.f,.5f,.5f,.5f,5.f/6.f);
+    Check(SampleReceiver()<250,"valid near-cascade shadows remain visible in reflections");
+    Positions(1.2f,1.f/6.f,-.2f,.5f,.5f,5.f/6.f);
+    if(KU_RECEIVER_KIND==3 || KU_RECEIVER_KIND==7)
+        Check(SampleReceiver()<5,"a covering far cascade retains its real shadow");
+    ConfigureReceiverBounds(false);
+    Positions(.5f,.9f,.5f,.5f,.5f,5.f/6.f);
+    Check(SampleReceiver()<250,"the ordinary camera retains its existing receiver path");
+    ConfigureReceiverBounds(true);
+    spDevice->SetSamplerState(15,D3DSAMP_MINFILTER,D3DTEXF_LINEAR);
+    spDevice->SetSamplerState(15,D3DSAMP_MAGFILTER,D3DTEXF_LINEAR);
+    Positions(.5f,1.f/3.f+.1f/192.f,.5f,.5f,.5f,5.f/6.f);
+    Check(SampleReceiver()>250,"hardware PCF at a cascade edge cannot fetch a neighbouring tile");
+    if(KU_RECEIVER_KIND>=4 && KU_RECEIVER_KIND<=6)
+    {
+        const f32 KAF_SECOND_PAIR[]={1,2,34,0},KAF_SECOND_POINT[]={0,0,0,50};
+        spDevice->SetVertexShaderConstantF(KU_VS_ShadowMap_ObjectCsmSelect,KAF_SECOND_PAIR,1);
+        spDevice->SetVertexShaderConstantF(KU_VS_TestWorld,KAF_SECOND_POINT,1);
+        lCoverageVp.wAxis.w=20.f;SetShadowReceiverCameraPC(lCoverageVp);
+        Positions(.5f,1.f/6.f,.5f,.5f,.5f,5.f/6.f);
+        Check(SampleReceiver()>250,"the selected second pair retains its original split and valid middle-cascade result");
+        Positions(.5f,1.f/6.f,.5f,1.5f,.5f,5.f/6.f);
+        Check(SampleReceiver()<5,"the selected second pair falls back to the actual far tile");
+        ConfigureReceiverBounds(false);
+        Positions(.5f,1.f/6.f,.5f,.5f,.5f,5.f/6.f);
+        Check(SampleReceiver()>250,"the main camera retains the second pair's original split");
+    }
     spDevice->SetTexture(15,nullptr);lpPs->Release();lpVs->Release();lpRead->Release();lpTarget->Release();
     lpColour->Release();lpDepth->Release();lpAtlas->Release();spDevice->Release();lpApi->Release();DestroyWindow(lWindow);
     std::printf("PCReflectionShadows: %u checks, %u failures\n",suChecks,suFailures);

@@ -200,3 +200,21 @@ capture is capped at 24 sets of six faces. The pixel probe records evidence for
 inspection; the shadow GPU regression supplies the old-path failure control.
 Set `BRN_TEST_REFLECTION_CAR=PSPCHRO` to select the chrome test model through
 the existing harness car-swap path without changing the source profile.
+Set `BRN_TEST_REFLECTION_TELEPORT=1993.5,11.1,-600.0,90` for the downtown
+building-shadow reproduction.
+
+Native reflection receivers also check the selected cascade's own atlas tile
+and depth range. When a main-camera cascade does not cover a reflected surface,
+they try the larger available cascade before discarding that shadow lookup.
+The hardware PCF footprint stays within its tile. Fully uncovered surfaces keep
+their ordinary material lighting; the shared atlas cannot supply shadows there.
+This prevents unrelated atlas tiles and clamped edges from drawing extra shadows
+as the camera moves. The ordinary camera retains its existing sampling path.
+
+The matching native SM3 pixel programs opt into `ShadowMap_ReflectionPC` at
+reserved c223. Only declaring programs receive that input. Zero preserves the
+original sampling path with older executables. Selected two-cascade vertex/pixel
+pairs carry the first cascade in the split's sign, retaining the absolute split
+for the original distance comparison. Install the full generated bundle so both
+stages match. The GPU regression covers all seven receiver variants, valid
+shadows, invalid coverage, tile borders, selected pairs and legacy registers.

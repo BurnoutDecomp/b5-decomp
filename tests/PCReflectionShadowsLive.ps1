@@ -7,7 +7,7 @@ $case=@{
     Run=@{
         Drive=$true; DriveDelay=0; ThrottleScript='0:handbrake'; MotionProbe=$true
         SkipIntro=$true; AcceptGap=1.0; MaxSeconds=75; FrameEvery=240
-        Teleport='762.2,0.7,-2235.5,259'
+        Teleport=$(if($env:BRN_TEST_REFLECTION_TELEPORT){$env:BRN_TEST_REFLECTION_TELEPORT}else{'762.2,0.7,-2235.5,259'})
         MenuScript='timeout:65;wait:CarSelectManager: Exit state is finished;sleep:8;hold:CameraLeft:1.2;sleep:3;hold:CameraRight:2.4;sleep:3;hold:CameraLeft:1.2;sleep:4;hold:CameraRight:1.2;sleep:3;hold:CameraLeft:1.2;sleep:8'
     }
     DiagEnv=('BRN_FRAME_DUMP_START=3500,BRN_FRAME_DUMP_MAX=35,BRN_ENVMAP_DUMP_START=1000,BRN_ENVMAP_DUMP=1' +

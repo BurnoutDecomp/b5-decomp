@@ -1540,6 +1540,14 @@ namespace renderengine
         if (lReceiver->second)
             renderengine::PCSetVertexShaderConstantF(lpDevice,
                 KU_SHADOW_RECEIVER_DEPTH_REGISTER_PC, &ShadowReceiverViewDepthPC().x, 1u);
+        static std::unordered_map<const void*, bool> sShadowReceiverPixelPrograms;
+        auto lPixelReceiver = sShadowReceiverPixelPrograms.find(lpPixelPayload);
+        if (lPixelReceiver == sShadowReceiverPixelPrograms.end())
+            lPixelReceiver = sShadowReceiverPixelPrograms.emplace(lpPixelPayload,
+                ProgramDeclaresFloat4Constant(lpPixelPayload, "ShadowMap_ReflectionPC")).first;
+        if (lPixelReceiver->second)
+            renderengine::PCSetPixelShaderConstantF(lpDevice,
+                KU_SHADOW_RECEIVER_BOUNDS_REGISTER_PC, &ShadowReceiverReflectionPC().x, 1u);
         sbRealProgramsBound = true;
         LogOnce("realok", "[WorldShader] REAL per-technique programs bound (SHADERS.BNDL)\n");
         return true;
@@ -8766,6 +8774,18 @@ void ShadowSampler_ApplyState(u32 luUnit)
         return;
 
     const DWORD leFilter = ShadowDepthFormatIsHardwareCompare() ? D3DTEXF_LINEAR : D3DTEXF_POINT;
+
+    // FLAG PC-platform leaf: PCF coverage uses the actual native atlas texel
+    // size, including resolution scaling or an adapter-imposed size fallback.
+    IDirect3DBaseTexture9* lpAtlas = nullptr;
+    if (SUCCEEDED(lpDevice->GetTexture(luUnit, &lpAtlas)) && lpAtlas != nullptr)
+    {
+        D3DSURFACE_DESC lDescription = {};
+        if (lpAtlas->GetType() == D3DRTYPE_TEXTURE &&
+            SUCCEEDED(static_cast<IDirect3DTexture9*>(lpAtlas)->GetLevelDesc(0, &lDescription)))
+            SetShadowReceiverAtlasSizePC(lDescription.Width, lDescription.Height);
+        lpAtlas->Release();
+    }
 
     renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER,   leFilter);
     renderengine::PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAGFILTER,   leFilter);
