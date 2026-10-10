@@ -45,6 +45,51 @@ selects **prop and detached prop-part** detail using the same 0/1/2 values. Miss
 prop configuration preserves LOD2. The original `Override Prop LOD` control has
 higher precedence if enabled. Models lacking the selected LOD are still skipped.
 
+Reflection transitions are optional and independent for world geometry and props.
+The new controls default to **Fixed**: with no reflection overrides the game still
+captures at **75 metres with fixed LOD2**, preserving the original behavior.
+Existing explicit fixed-LOD and draw-distance settings remain effective.
+
+Each category has the following controls under `World/Reflections/World` or
+`World/Reflections/Props`:
+
+| Control | Default | Behavior |
+|---|---|---|
+| `LOD mode` | `Fixed` | `Fixed` (0), `Relative` (1), or `Custom` (2) |
+| `LOD distance scale` | `0.5` | Relative distance multiplier, 0.001..10 |
+| `LOD0 distance` | `50` | Custom LOD0-to-LOD1 transition in metres |
+| `LOD1 distance` | `100` | Custom LOD1-to-LOD2 transition in metres |
+
+**Relative** reads that category's current normal-view distances on every dispatch:
+world follows `OverrideDistances`/`LOD0Distance`/`LOD1Distance`; props follow
+`OverridePropDistances`/`PropLOD0Distance`/`PropLOD1Distance`. When the respective
+override is off, each model's authored distances supply the baseline. The scale
+multiplies metres before the squared-distance comparison. World and prop scales
+are separate, and later menu or console distance edits take effect immediately.
+
+**Custom** takes its two absolute distances instead of the scaled normal distances.
+LOD0 and LOD1 include their upper boundaries; LOD2 continues to the separate draw
+cutoff. An out-of-order second threshold is treated as equal to the first. Distance
+modes use an available coarser mesh when a state is missing, or the coarsest available
+finer mesh when no coarser state exists. Fixed mode retains the original missing-state
+skip. The original forced prop LOD override retains its higher precedence in all modes.
+
+```ini
+[Debug]
+World/Reflections/World/LOD mode=Relative
+World/Reflections/World/LOD distance scale=0.5
+World/Reflections/Props/LOD mode=Relative
+World/Reflections/Props/LOD distance scale=0.25
+```
+
+Detail transitions do not scale the final draw cutoff or capture frusta. In distance
+modes the world cutoff uses the model's last LOD distance (or its active normal-world
+distance override); props retain their existing last-LOD cutoff. The reflection draw
+distance extension below remains independent. Large normal-view overrides may need
+a much smaller reflection scale: 3000/6000 metre transitions at 0.05 become 150/300
+metres. The default 75 metre capture still limits visibility until explicitly extended.
+These options do not add backdrops, traffic or rivals to reflections.
+
 `World/LODs/Environment Map Draw Distance` extends reflection visibility independently
 of detail. It accepts 0..10000 metres; **0 (default)** preserves the authored cutoffs
 and the original 75 m capture frusta. A positive value extends world-object and prop
@@ -186,11 +231,23 @@ python b5-decomp/tests/run_pc_reflection_shadows.py
 python b5-decomp/tests/run_pc_graphics_settings.py
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/tests/run_case.ps1 -Case b5-decomp/tests/PCDebugIniLive.ps1 -Slot 9
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/tests/run_case.ps1 -Case b5-decomp/tests/PCReflectionDistanceLive.ps1 -Slot 9
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/tests/run_case.ps1 -Case b5-decomp/tests/PCReflectionLodLive.ps1 -Slot 9
 ```
 
 The native case uses a private slot and profile fixture. It checks initial registry
 overrides, actual prop capture LODs and later console edits without startup reapplication.
 Set `BRN_TEST_PROP_REFLECTION_LOD=2` for the missing-prop-option default case.
+
+`PCReflectionLodLive.ps1` first checks absent settings and fixed LOD2. Set
+`BRN_TEST_REFLECTION_LOD_MODE=Relative` to run the opt-in variant: independent
+world/prop startup scales, actual mesh submissions, then live Custom and Fixed
+mode edits. For example, in PowerShell:
+
+```powershell
+$env:BRN_TEST_REFLECTION_LOD_MODE = 'Relative'
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/tests/run_case.ps1 -Case b5-decomp/tests/PCReflectionLodLive.ps1 -Slot 9
+Remove-Item Env:BRN_TEST_REFLECTION_LOD_MODE
+```
 
 `PCReflectionShadowsLive.ps1` parks the car, orbits the camera, and saves bounded
 real cube faces beside its game captures. Run it in a private slot; optionally set

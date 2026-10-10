@@ -25,6 +25,7 @@
 
 #include "BrnPropEntityModule.h"
 #include "pc/gcm/renderengine/PropReflectionPCLeaf.h"
+#include "pc/gcm/renderengine/ReflectionLodDebugPCLeaf.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 
@@ -311,6 +312,8 @@ namespace BrnWorld
             lDebugInterface.RegisterVariable(&renderengine::PropEnvironmentMapLodPC(),
                 "World/LODs", "Prop Environment Map LOD");
             lDebugInterface.SetRange(&renderengine::PropEnvironmentMapLodPC(), 0, 2);
+            renderengine::RegisterEnvironmentMapLodSettingsPC(lDebugInterface,
+                renderengine::PropEnvironmentMapLodSettingsPC(), "World/Reflections/Props");
         }
 
         // ⭐ UNPARKED 2026-08-12 (conductor). `stb r21(1), 4(r31)` -- the one-byte flag at
