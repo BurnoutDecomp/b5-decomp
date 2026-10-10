@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "pc/debug/DebugIni.h"
+#include "pc/debug/ComponentActivation.h"
+#include "pc/debug/ComponentCapabilities.h"
 
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // DebugComponent (mbActive/OnRegister/DebugUISectionCallback/RenderHUD)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"      // GetUI().GetVariableManager()/GetFunctionManager()
@@ -19,6 +21,7 @@
 
 #include <cstdio>    // snprintf (RenderMemory/RenderAssert formatting; the X360 used CgsCore::SPrintf)
 #include <cstring>   // strlen (the fps stack-string asserts)
+#include <cstdlib>
 
 // Forward-declared so RenderMemory can read the available-memory figure without pulling
 // Windows.h into this TU (defined in CgsTimeUtils.cpp).
@@ -453,9 +456,22 @@ namespace CgsDev
         lpComponent->GetComponentPath(lacCompletePath, sizeof(lacCompletePath));
         DebugUI::Menu* lpComponentVariablePath =
             GetUI().GetMenuManager().GetMenuFromPath(lacCompletePath, nullptr);
-        // FLAG PC-platform leaf: incomplete components must retain their row
-        // and explain the unavailable section, rather than disappearing on use.
-        if (!lpComponentVariablePath)
+        // FLAG PC-platform leaf: passive, opt-in witness shared with the UI-key harness.
+        if (std::getenv("BRN_DEBUG_UI_TRACE"))
+        {
+            char lacTrace[384];
+            std::snprintf(lacTrace, sizeof(lacTrace),
+                "[debug-component] path=\"%s\" request=%s controls=%d\n", lacCompletePath,
+                CgsPC::Debug::sbComponentMenuRequest ? "menu" : "engine",
+                lpComponentVariablePath ? 1 : 0);
+            Log::WriteToLog(lacTrace);
+        }
+        // FLAG PC-platform leaf: explain an unavailable page only for an explicit
+        // menu/command request. A valid HUD-only component (Network Version Display)
+        // has no menu controls; engine activation must retain ARTIST's active state
+        // and one-shot action retirement without opening a modal during gameplay.
+        if (!lpComponentVariablePath && CgsPC::Debug::sbComponentMenuRequest
+            && !CgsPC::Debug::HasHudWithoutMenu(lpComponent))
         {
             lpComponent->mbActive = false;
             GetUI().ShowErrorMessage("This debug section has no available controls in this build.");

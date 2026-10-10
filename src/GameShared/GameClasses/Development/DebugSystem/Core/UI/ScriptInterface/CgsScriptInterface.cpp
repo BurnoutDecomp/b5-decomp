@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/ScriptInterface/CgsScriptInterface.h"
+#include "pc/debug/ComponentActivation.h"
 
 #include <string.h>   // _stricmp, strstr, strchr, strncpy, memcpy, strlen
 #include <stdlib.h>   // atoi
@@ -415,6 +416,7 @@ namespace CgsDev
             if (!lpComponent || lpComponent->IsActive())
                 return false;
 
+            CgsPC::Debug::ComponentMenuRequest lMenuRequest;
             lManager.ActivateComponent(lpComponent);
             return true;
         }
@@ -432,6 +434,7 @@ namespace CgsDev
                 lpThis->OutputMessage("Component not found");
                 return;
             }
+            CgsPC::Debug::ComponentMenuRequest lMenuRequest;
             if (!lpComponent->IsActive())
                 lpManager->ActivateComponent(lpComponent);
         }

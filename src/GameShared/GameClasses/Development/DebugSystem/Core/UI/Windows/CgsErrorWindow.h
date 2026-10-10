@@ -14,7 +14,7 @@
 // ErrorWindow fields: mpcErrorMessage @ +36 (the *(a1+0x24) read in Render/DrawTextInBox) and mfPulse @
 // +40 (the *(a1+0x28) fabs in Render and the *(this+0x28) sweep in Update).
 //
-// NOTE: Render reads a shared palette colour (mColourErrorWindow) + two metrics (mfTextSize,
+// NOTE: Render reads the separate mColourErrorText/mColourErrorWindow palette colours and metrics (mfTextSize,
 // mfErrorWindowBorder) from the DebugUI singleton, reached by named GetUI().GetPalette()/GetMetrics()
 // accessors (the committed Console.cpp convention), plus the renderer DrawFrame(6-arg)/DrawTextInBox(8-arg).
 

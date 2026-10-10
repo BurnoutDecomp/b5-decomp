@@ -21,7 +21,12 @@ or console-only platform services.
   selection retains the parent window, including parents containing only submenus;
   Back closes the child and returns focus to its parent.
 - Unavailable sections retain their entry, stay inactive, and show a dismissible
-  modal explanation. An empty activation no longer silently deletes its row.
+  modal explanation when explicitly requested through the menu or console.
+  Network login's Version Display legitimately registers no controls. Its
+  recovered HUD accepts both engine-driven and explicit menu/console activation
+  without opening an unavailable-page modal.
+  Error dialogs use ARTIST's separate background and text colours; the frame
+  pulses the text colour. The previous shared-colour mapping drew black on black.
 - Added native pool headroom for the additional reflection/shadow controls.
 - Restored nine supported traffic scalar controls through `pc/debug/TrafficControls.h`.
   They bind the live traffic fields used by existing update/render code: traffic off,
@@ -52,6 +57,8 @@ reference images alone do not establish a different screen-coordinate origin.
 | Game State | Only a small callback slice, including Toggle Showtime, is homed; the full component lifecycle/menu/HUD is missing. |
 | Gui / LanguageManager | The main GUI debug component has singleton and callback slices, but lacks its complete activation/lifecycle; language debug activation is also absent. Correct hierarchy does not reconstruct those controls. |
 | Replays | The debug component lifecycle and controls are incomplete alongside partial replay support. |
+| Vehicle Manager | Its data layout, construction and selected contact-record helpers exist, but the original `OnActivate` menu registration and complete diagnostic render overrides are absent. |
+| Physical traffic | Its debug fields, construction and identity exist; the original `OnActivate` registration and diagnostic drawing overrides are absent. |
 | Race-car air ram / forced online spawn / last reset trace | Apply Ram has no runtime consumer, so its action and Magnitude input are omitted. Mode arming still uses constant `false` for the forced-spawn switch. Place-on-track line/intersection producers are not connected to the native component owner. Forced spawn and last-reset trace controls are read-only until these dependencies are reconstructed. |
 | Traffic pressure system | Its debug field is initialized but has no reconstructed runtime reader. The no-op checkbox is omitted. |
 | Traffic drawing / air rams / kill-zone actions | Several diagnostic draw helpers, action paths and the fuzzy-logic diagnostic allocation remain missing. The native scalar adapter does not expose those unsupported actions. |
@@ -86,3 +93,15 @@ reopening. This pass does not establish recovery from that device failure.
 The palette and hierarchy evidence comes from ARTIST data/vtables, not tuning the
 menu to the reference image by eye. Build/test evidence and the vtable extraction
 are retained under the workflow's `scratch/PC_SUPPORT_1010/` run directory.
+
+The automatic-dialog follow-up has a production-body regression: before repair,
+16/35 checks pass; after repair, 41/41 pass, including six added checks for explicit
+HUD-only activation. It covers engine activation while the
+UI is hidden or visible, one-shot retirement, unavailable-page retry, both console
+command forms, normal menu opening, thread/nested request isolation and error
+colours/dismissal. The parent-menu regression remains 5/5. Assembly and the
+supplied screenshots/log are retained in `scratch/DEBUG_ERROR_1010/`.
+The final 2,947-TU shipping build links with zero warnings/errors. The private-slot
+live check passes 6/6: both named pages display readable text, Back dismisses each,
+and the debug UI closes cleanly. The supplied main save and INI remain unchanged.
+This checks menu behavior and the activation regression; it is not a driving soak.
