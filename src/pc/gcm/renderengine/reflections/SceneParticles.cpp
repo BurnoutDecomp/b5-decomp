@@ -193,12 +193,6 @@ namespace CgsPC::Reflections
         lSimpleBatches.Construct(); lSimpleBatches.Clear();
         u32 luPreSimpleCount = 0;
 
-        if ((lrData.muFlags & ParticleModule::ParticleRenderData::eRenderDataFlagRenderTrails) != 0)
-        {
-            lrParticles.mTrailFramePC.Update(lrData.mfCurrentTime, lCamera.GetViewProjectionMatrix());
-            lrParticles.mTrailFramePC.Render(lrData.mfWhiteLevel);
-            lrParticles.mTrailFramePC.Update(lrData.mfCurrentTime, lrData.mCgsCamera.GetViewProjectionMatrix());
-        }
         if ((lrData.muFlags & ParticleModule::ParticleRenderData::eRenderDataFlagRenderDebris) != 0)
         {
             lrParticles.mDebrisRenderer.BeginRender(lCamera.GetViewProjectionMatrix(), lrData.mvSunDirection,
@@ -268,5 +262,20 @@ namespace CgsPC::Reflections
                 luPreSimpleCount, static_cast<u32>(lSimpleBatches.GetCount()) - luPreSimpleCount, nullptr,
                 lCamera.maProjectionScalars[7], lCamera.maProjectionScalars[8], false);
         return luBytes;
+    }
+
+    // FLAG PC-platform leaf: the published tyre/skid strips are dynamic road
+    // decals. Their capture policy is independent of the other particle types.
+    u32 DecalCapture::Render(const BrnParticle::ParticleModule::ParticleRenderData& lrData,
+        const CgsGraphics::Camera& lrCamera)
+    {
+        if (!lrData.mpParticleModule || lrData.mbPlayingEffectsSuspendedPC
+            || !(lrData.muFlags & BrnParticle::ParticleModule::ParticleRenderData::eRenderDataFlagRenderTrails)) return 0;
+        auto& lrTrails = lrData.mpParticleModule->mTrailFramePC;
+        const u32 luBefore = BrnParticle::Native::TrailRenderer::guProbeDraws;
+        lrTrails.Update(lrData.mfCurrentTime, lrCamera.GetViewProjectionMatrix());
+        lrTrails.Render(lrData.mfWhiteLevel);
+        lrTrails.Update(lrData.mfCurrentTime, lrData.mCgsCamera.GetViewProjectionMatrix());
+        return BrnParticle::Native::TrailRenderer::guProbeDraws - luBefore;
     }
 }

@@ -50,6 +50,23 @@ int main()
         Check(!lbOtherThread, "capture scope does not leak into another thread");
     }
     Check(!IsVehicleCapture(), "main view policy resumes after capture");
+    {
+        VehicleScope lScope(E_CAPTURE_PLAYER_WHEELS);
+        Check(IsPlayerWheelCapture() && &WheelSettings()==&PlayerWheels(),
+            "player wheels use an independent policy while the shell is excluded");
+        PlayerWheels().mbEnabled=true;PlayerWheels().miDistanceMode=E_DISTANCE_RELATIVE;
+        PlayerWheels().mfDrawDistanceScale=0.5f;
+        Check(PlayerWheels().IsVisible(20*20,40) && !Rivals().mbEnabled,
+            "player wheels can be captured with rival capture disabled");
+        PlayerWheels()={};
+    }
+    Check(!IsPlayerWheelCapture() && &WheelSettings()==&Wheels(),
+        "player-wheel policy does not leak into other passes");
+    Decals().mbEnabled=true;Decals().miDistanceMode=E_DISTANCE_RELATIVE;Decals().mfDrawDistanceScale=0.25f;
+    sfParticleNormalDistance=800;
+    Check(!Particles().mbEnabled && Decals().GetDrawDistance(sfParticleNormalDistance)==200
+        && CaptureDistance(75)==200,"decals have an independent relative capture radius");
+    Decals()={};sfParticleNormalDistance=10000;
 
     Model lModel;
     ObjectSettings lRelative;

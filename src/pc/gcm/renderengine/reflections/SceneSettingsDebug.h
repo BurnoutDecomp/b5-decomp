@@ -35,8 +35,11 @@ namespace CgsPC::Reflections
         RegisterObjectSettings(lrDebug, Traffic(), "World/Reflections/Traffic", true);
         RegisterObjectSettings(lrDebug, Rivals(), "World/Reflections/Rivals", true);
         RegisterObjectSettings(lrDebug, Wheels(), "World/Reflections/Wheels", true);
+        RegisterObjectSettings(lrDebug, PlayerWheels(), "World/Reflections/Player wheels", true);
         RegisterObjectSettings(lrDebug, Glass(), "World/Reflections/Glass", true);
         RegisterObjectSettings(lrDebug, Lights(), "World/Reflections/Lights", false);
         RegisterObjectSettings(lrDebug, Particles(), "World/Reflections/Particles", false);
+        lrDebug.RegisterVariable(&IncludePlayerParticles(), "World/Reflections/Particles", "Include player effects");
+        RegisterObjectSettings(lrDebug, Decals(), "World/Reflections/Decals", false);
     }
 }

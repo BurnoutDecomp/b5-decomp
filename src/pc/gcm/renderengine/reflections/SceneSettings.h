@@ -89,6 +89,13 @@ namespace CgsPC::Reflections
     inline ObjectSettings& Lights() { static ObjectSettings sSettings; return sSettings; }
     inline ObjectSettings& Particles() { static ObjectSettings sSettings; return sSettings; }
     inline ObjectSettings& Glass() { static ObjectSettings sSettings; return sSettings; }
+    inline ObjectSettings& Decals() { static ObjectSettings sSettings; return sSettings; }
+    inline ObjectSettings& PlayerWheels()
+    {
+        static ObjectSettings sSettings = [] { ObjectSettings lSettings; lSettings.miFixedLod = 1; return lSettings; }();
+        return sSettings;
+    }
+    inline bool& IncludePlayerParticles() { static bool sbEnabled = true; return sbEnabled; }
 
     // Published by the normal vehicle LOD calculation before face generation.
     // Reflection detail follows its live quality/aggressive blend and zoom.
@@ -105,12 +112,14 @@ namespace CgsPC::Reflections
         if (Backdrops().mbEnabled) lfDistance = (std::max)(lfDistance, Backdrops().GetDrawDistance(10000.0f));
         if (Traffic().mbEnabled) lfDistance = (std::max)(lfDistance, Traffic().GetDrawDistance(sfTrafficNormalDistance));
         if (Rivals().mbEnabled) lfDistance = (std::max)(lfDistance, Rivals().GetDrawDistance(NormalVehicleDistance()));
+        if (PlayerWheels().mbEnabled) lfDistance = (std::max)(lfDistance, PlayerWheels().GetDrawDistance(NormalVehicleDistance()));
         if (Lights().mbEnabled) lfDistance = (std::max)(lfDistance, Lights().GetDrawDistance(250.0f));
         if (Particles().mbEnabled) lfDistance = (std::max)(lfDistance, Particles().GetDrawDistance(sfParticleNormalDistance));
+        if (Decals().mbEnabled) lfDistance = (std::max)(lfDistance, Decals().GetDrawDistance(sfParticleNormalDistance));
         return lfDistance;
     }
 
-    enum CaptureCategory { E_CAPTURE_NONE, E_CAPTURE_TRAFFIC, E_CAPTURE_RIVALS };
+    enum CaptureCategory { E_CAPTURE_NONE, E_CAPTURE_TRAFFIC, E_CAPTURE_RIVALS, E_CAPTURE_PLAYER_WHEELS };
     inline thread_local CaptureCategory seCaptureCategory = E_CAPTURE_NONE;
     inline thread_local f32 sfVehicleDrawDistance = 50.0f;
     inline thread_local s32 siVehicleFaceList = 5;
@@ -130,6 +139,8 @@ namespace CgsPC::Reflections
         s32 miPreviousList;
     };
     inline bool IsVehicleCapture() { return seCaptureCategory != E_CAPTURE_NONE; }
+    inline bool IsPlayerWheelCapture() { return seCaptureCategory == E_CAPTURE_PLAYER_WHEELS; }
+    inline const ObjectSettings& WheelSettings() { return IsPlayerWheelCapture() ? PlayerWheels() : Wheels(); }
     inline const ObjectSettings& VehicleSettings() { return seCaptureCategory == E_CAPTURE_TRAFFIC ? Traffic() : Rivals(); }
     inline s32 GlassMeshList() { return 25 + siVehicleFaceList - 5; }
     template<class ModelType>

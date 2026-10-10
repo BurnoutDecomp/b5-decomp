@@ -44,6 +44,7 @@
 // ============================================================================
 
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRender/ParticleRender.h"
+#include "pc/gcm/renderengine/reflections/RenderContext.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleMaterial.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitter.h"          // the emitter + the three simulation helpers
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitterManager.h"   // the live-emitter list Render walks
@@ -745,7 +746,7 @@ void cParticleRender::EmitterRender(const EffectsVertexBufferLocked& arVertexBuf
         const_cast<EffectsVertexBufferLocked&>(arVertexBuffer)
             .BeginBatch(lVertexIterator, lBatch, luVertexStride);
 
-        const bool lbDrawThisWorld = (apEmitter->GetBindings().GetWorldIndex() == 0);
+        const bool lbDrawThisWorld = CgsPC::Reflections::AcceptParticleWorld(apEmitter->GetBindings().GetWorldIndex());
 
         if (lpBucket->HasMatrices())
         {

@@ -4,6 +4,7 @@
 #include "pc/gcm/renderengine/reflections/SceneSettings.h"
 #include "pc/gcm/renderengine/reflections/LightSubmission.h"
 #include "pc/gcm/renderengine/reflections/RenderContext.h"
+#include "pc/gcm/renderengine/reflections/ClipDistance.h"
 #include "pc/gcm/renderengine/DepthRange.h"
 #include "pc/gcm/renderengine/StateBlockRestore.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
@@ -106,7 +107,8 @@ namespace CgsPC::Reflections
     {
         FaceData& lrFace = ReadFace(luFace);
         if (!lrFace.mbValid || ((!lbRenderCoronas || !Lights().mbEnabled)
-            && (!lpParticleData || !Particles().mbEnabled) && (!lbRenderGlass || !Glass().mbEnabled))) return;
+            && (!lpParticleData || (!Particles().mbEnabled && !Decals().mbEnabled))
+            && (!lbRenderGlass || !Glass().mbEnabled))) return;
         IDirect3DDevice9* lpDevice = renderengine::gDevice;
         if (!lpDevice) return;
         // FLAG PC-platform leaf: glass and immediate effects can change shader,
@@ -147,37 +149,30 @@ namespace CgsPC::Reflections
                 }
             }
             u32 luParticleBytes = 0;
+            u32 luDecalDraws = 0;
+            if (Decals().mbEnabled && lpParticleData && lpParticleData->mpParticleModule)
+            {
+                const f32 lfDistance = Decals().GetDrawDistance(lpParticleData->mCgsCamera.maProjectionScalars[8]);
+                luDecalDraws = RenderWithinDistance(lpDevice, lrFace.mCamera, lfDistance, [&] {
+                    return DecalCapture::Render(*lpParticleData, lrFace.mCamera);
+                });
+            }
             if (Particles().mbEnabled && lpParticleData && lpParticleData->mpParticleModule)
             {
                 const f32 lfDistance = Particles().GetDrawDistance(lpParticleData->mCgsCamera.maProjectionScalars[8]);
-                if (lfDistance > lrFace.mCamera.maProjectionScalars[7])
-                {
-                    DWORD luClipMask = 0;
-                    f32 lafOldPlane[4] = {};
-                    lpDevice->GetRenderState(D3DRS_CLIPPLANEENABLE, &luClipMask);
-                    lpDevice->GetClipPlane(0, lafOldPlane);
-                    const auto& lrProjection = lrFace.mCamera.mProjection;
-                    const f32 lfClipZ = (lfDistance * lrProjection.zAxis.z + lrProjection.wAxis.z)
-                        / (lfDistance * lrProjection.zAxis.w + lrProjection.wAxis.w);
-                    const f32 lafCutoff[4] = {0, 0, -1, lfClipZ};
-                    lpDevice->SetClipPlane(0, lafCutoff);
-                    suExtrasClipMask = 1u;
-                    lpDevice->SetRenderState(D3DRS_CLIPPLANEENABLE, luClipMask | 1u);
-                    luParticleBytes = ParticleCapture::Render(luFace, *lpParticleData->mpParticleModule, *lpParticleData, lrFace.mCamera);
-                    suExtrasClipMask = 0;
-                    lpDevice->SetClipPlane(0, lafOldPlane);
-                    lpDevice->SetRenderState(D3DRS_CLIPPLANEENABLE, luClipMask);
-                }
+                luParticleBytes = RenderWithinDistance(lpDevice, lrFace.mCamera, lfDistance, [&] {
+                    return ParticleCapture::Render(luFace, *lpParticleData->mpParticleModule, *lpParticleData, lrFace.mCamera);
+                });
             }
             static const bool sbTrace = std::getenv("BRN_REFLECTION_SCENE_TRACE") != nullptr;
             static u32 sauWitnesses[6] = {};
-            const u32 luWitness = (luGlass ? 1u : 0u) | (luLights ? 2u : 0u) | (luParticleBytes ? 4u : 0u);
+            const u32 luWitness = (luGlass ? 1u : 0u) | (luLights ? 2u : 0u) | (luParticleBytes ? 4u : 0u) | (luDecalDraws ? 8u : 0u);
             if (sbTrace && !(sauWitnesses[luFace] & (1u << luWitness)))
             {
                 sauWitnesses[luFace] |= 1u << luWitness;
                 char lacTrace[192];
-                std::snprintf(lacTrace, sizeof(lacTrace), "[reflection-scene] face=%u glassMeshes=%u coronas=%u particleBytes=%u\n",
-                    luFace, luGlass, luLights, luParticleBytes);
+                std::snprintf(lacTrace, sizeof(lacTrace), "[reflection-scene] face=%u glassMeshes=%u coronas=%u particleBytes=%u decalDraws=%u\n",
+                    luFace, luGlass, luLights, luParticleBytes, luDecalDraws);
                 CgsDev::Log::WriteToLog(lacTrace);
             }
         }

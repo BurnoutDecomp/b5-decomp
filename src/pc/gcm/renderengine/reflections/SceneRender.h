@@ -39,4 +39,9 @@ namespace CgsPC::Reflections
         static u32 RenderDebrisShadow(const BrnParticle::ParticleModule::ParticleRenderData& lrData,
             const CgsGraphics::Camera& lrCamera, f32 lfDistance);
     };
+    struct DecalCapture
+    {
+        static u32 Render(const BrnParticle::ParticleModule::ParticleRenderData& lrData,
+            const CgsGraphics::Camera& lrCamera);
+    };
 }

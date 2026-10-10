@@ -1,5 +1,6 @@
 #pragma once
 #include <d3d9.h>
+#include "pc/gcm/renderengine/reflections/SceneSettings.h"
 
 namespace CgsPC::Reflections
 {
@@ -28,4 +29,10 @@ namespace CgsPC::Reflections
     }
     inline DWORD ResolveExtrasClipMask(DWORD luMask)
     { return sbDrawingExtras ? luMask | suExtrasClipMask : luMask; }
+    inline bool AcceptParticleWorld(u32 luWorldIndex)
+    {
+        // FLAG PC-platform leaf: world 1 hides player effects from a bumper
+        // camera; it does not hide that player's boost/exhaust from its cube.
+        return luWorldIndex == 0 || (luWorldIndex == 1 && sbDrawingExtras && IncludePlayerParticles());
+    }
 }

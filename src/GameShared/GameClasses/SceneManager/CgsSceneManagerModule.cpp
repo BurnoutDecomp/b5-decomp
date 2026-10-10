@@ -20,6 +20,7 @@
 // ===========================================================================
 
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModule.h"
+#include "pc/scene/FrustumResults.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
@@ -1675,6 +1676,9 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
         u32 luOffset      = 0;
         u32 luNumResults  = 0;
         const u32 luNumBatches = lpResults->GetNumBatches();
+        auto* lpLegacyResults = lpSceneOutputBuffer->GetSceneQueryResultsQueueForWrite();
+        auto& lrNativeResults = CgsPC::Scene::BeginFrustumResults(lpLegacyResults);
+        bool lbLegacySpace = true;
 
         for (u32 luBatch = 0; luBatch < luNumBatches; ++luBatch)
         {
@@ -1691,12 +1695,13 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
 
             SceneManagerIO::OutCoarseQueryResult* lpEvent =
                 static_cast<SceneManagerIO::OutCoarseQueryResult*>(
-                    lpSceneOutputBuffer->GetSceneQueryResultsQueueForWrite()->AllocateEventSafe(
+                    lrNativeResults.AllocateEventSafe(
                         SceneManagerIO::OutCoarseQueryResult::KI_EVENT_TYPE,
                         static_cast<s32>(4 * (luNumResults + 3))));
             if (lpEvent == NULL)
             {
-                break;   // the results ring is full for this frame
+                CGS_ASSERT(lpEvent, "Native frustum result capacity exceeded");
+                break;
             }
 
             lpEvent->mQueryId              = lQueryId;
@@ -1714,6 +1719,11 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
 
                 lpIds[luResult] = lId;
             }
+            // Preserve the original queue for existing readers. Native world
+            // dispatch reads the complete frame, including batches beyond 32 KB.
+            if (lbLegacySpace)
+                lbLegacySpace = lpLegacyResults->AddEventSafe(lpEvent,
+                    SceneManagerIO::OutCoarseQueryResult::KI_EVENT_TYPE, static_cast<s32>(4 * (luNumResults + 3)));
         }
     }
 

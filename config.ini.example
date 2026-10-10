@@ -132,3 +132,19 @@ World/ShadowMap/Solid debris/Draw distance=60
 World/ShadowMap/Small objects/Maximum radius=2
 World/ShadowMap/Small objects/LOD mode=Relative
 World/ShadowMap/Small objects/LOD distance scale=1
+
+; Native player-wheel, decal and player-effect reflections
+World/Reflections/Player wheels/Enabled=true
+World/Reflections/Player wheels/Draw distance mode=Relative
+World/Reflections/Player wheels/Draw distance scale=0.5
+World/Reflections/Player wheels/Draw distance=100
+World/Reflections/Player wheels/LOD mode=Relative
+World/Reflections/Player wheels/LOD distance scale=0.5
+World/Reflections/Player wheels/Fixed LOD=1
+World/Reflections/Player wheels/LOD0 distance=10
+World/Reflections/Player wheels/LOD1 distance=22
+World/Reflections/Decals/Enabled=true
+World/Reflections/Decals/Draw distance mode=Relative
+World/Reflections/Decals/Draw distance scale=0.5
+World/Reflections/Decals/Draw distance=100
+World/Reflections/Particles/Include player effects=true
