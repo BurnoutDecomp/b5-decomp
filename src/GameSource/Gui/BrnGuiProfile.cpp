@@ -221,7 +221,7 @@ namespace
 
     // The live DLC1 options block (X360 GuiCache+76776, right after the live
     // OptionsDataProfile at +47224) is now a named GuiCache member with an accessor, so
-    // this boundary shim only forwards -- the prior null-returning leaf silently skipped
+    // this boundary shim only forwards -- the prior null-returning leaf skipped
     // the stored-segment refresh, leaving the segment's version word at 0.
     const OptionsDataProfileDLC1* GuiCache_GetOptionsDataProfileDLC1(GuiCache* lpGuiCache)
     {

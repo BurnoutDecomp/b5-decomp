@@ -563,7 +563,7 @@ void EventInfoComponent::PrepareComponentsForGameMode()
 
         // Note the console re-reads the OUT ref's instance word (`lwz r11, 0(r30)`)
         // rather than testing the returned bool. Same answer, but transcribed as
-        // written -- a missing field is silently skipped, never asserted, here.
+        // written -- a missing field is skipped without an assert here.
         if (maTextField[liTextField].mpTextFieldInstance != 0)
         {
             maTextField[liTextField].SetText(KAC_EMPTY_STRING, false);

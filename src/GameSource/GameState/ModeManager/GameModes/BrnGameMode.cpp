@@ -800,8 +800,8 @@ bool GameMode::HasTimedIntro() const
 
 // Slot 10 (vtbl+40). Folded leaf 0x8284CB38 (`blr`) -- base empty. ModeManager::PostWorldUpdate
 // @0x8234A9E0 drives it (`(*(**(a1+3480)+40))(*(a1+3480))`). Overridden by RoadRageMode
-// (0x823160A0) and SurvivorMode (0x82316398); neither body is reconstructed yet, so those two
-// modes currently inherit this no-op -- a documented behaviour gap, not a slot error.
+// and SurvivorMode (both overrides are absent from the tree, so those modes run this base);
+// the base body itself is empty on the console.
 void GameMode::OnPlayerInShortCut()
 {
 }

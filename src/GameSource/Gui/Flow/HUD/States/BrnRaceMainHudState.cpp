@@ -1740,7 +1740,7 @@ namespace BrnGui
                 // {2,536,12}+{0,1} wire on CHANNEL 40 (`li r5, 0x28 ; li r6, 0x10`), NOT the
                 // raw 2-byte GuiEventTickerClearMessages through OutputGuiEvent (which
                 // direct-passes and would land 2 bytes on channel 536 -- a record the ticker
-                // consumer never sees, so clears would silently drop and challenge lines
+                // consumer never sees, so clears would be lost and challenge lines
                 // would accumulate). TU-local wire struct per the partfile precedent
                 // (wS4's GuiTickerClearWire536 / BrnRaceMainHudState.cpp's GuiEvent536).
                 if (mbFreeburnChallengeTicker)                              // both gate on +0x167
