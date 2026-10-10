@@ -259,7 +259,8 @@ namespace CgsPC::Reflections
         }
         if (static_cast<u32>(lSimpleBatches.GetCount()) > luPreSimpleCount)
             lrParticles.mSimpleParticleRenderer.Dispatch(lrBuffers.mSimple.GetBuffer(), lSimpleBatches,
-                luPreSimpleCount, static_cast<u32>(lSimpleBatches.GetCount()) - luPreSimpleCount, nullptr,
+                // Dispatch takes [first, last), not a first index and batch count.
+                luPreSimpleCount, static_cast<u32>(lSimpleBatches.GetCount()), nullptr,
                 lCamera.maProjectionScalars[7], lCamera.maProjectionScalars[8], false);
         return luBytes;
     }

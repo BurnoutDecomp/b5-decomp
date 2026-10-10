@@ -51,3 +51,18 @@ from executable `a0a0f75c1ec0`, using the main reflection settings. The player's
 wheels are visible in its reflections; the exact reported line remains inconclusive.
 Evidence is in `scratch/CHROME_SEAM_1010`. Main save, INI and executable hashes
 are unchanged. No mesh, shader or production-renderer change was made for this line.
+
+## Road Rage reflection-particle assert
+
+The reflection caller passed the post-effects batch count as `Dispatch`'s ending
+index. For example, four pre-effects batches and two post-effects batches requested
+`[4,2)` instead of `[4,6)`, causing the supplied `luFirstBatch < luLastBatch`
+assert. Other combinations silently skipped effects. The caller now supplies the
+full batch-array count as the exclusive end, matching ARTIST and the main-view
+caller. The original renderer assertions and pre-effects/sparks/post-effects order
+are retained. A production-caller regression covers every face, empty groups,
+relative group sizes and allocation/ownership gates. No gameplay reproduction
+was attempted; evidence is in `scratch/PARTICLE_RANGE_1011/`.
+The corrected caller passes 796/796 checks (original caller: 562/796), and the
+particle-shadow regression remains 31/31. The 2,947-TU shipping build links with
+zero warnings/errors. Independent review and the faithfulness gate pass.
