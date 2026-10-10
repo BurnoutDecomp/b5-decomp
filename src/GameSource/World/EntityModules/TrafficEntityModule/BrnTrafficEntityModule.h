@@ -107,6 +107,9 @@ namespace BrnGameState { namespace GameStateModuleIO { struct PrepareForModeActi
 // buffers, so every .cpp that calls the two sees the complete type.
 namespace BrnWorld { namespace CrashIO { struct TrafficInputInterface; } }
 
+namespace CgsPC::Reflections { struct TrafficCapture; }
+namespace CgsPC::Debug { struct TrafficControls; }
+
 namespace BrnTraffic
 {
     // Pointer-only in the driving-traffic declarations below; real home
@@ -425,6 +428,8 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
     // sub-object sits at offset 0.
     class TrafficEntityModule : public CgsModule::ModuleSingleBuffered
     {
+        friend struct CgsPC::Reflections::TrafficCapture;
+    friend struct CgsPC::Debug::TrafficControls;
     public:
         // --- DWARF-attested nested enums (:486-:559) ------------------------------------
 

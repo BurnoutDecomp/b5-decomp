@@ -547,9 +547,9 @@ void ImDeviceSetBlendState(void* lpState)
     // alpha test OFF" diagnostic cannot fire from here: the request published is FALSE.
     lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE, lpBlend->mbAlphaTestEnable);
     D3DDevice_SetRenderState_AlphaToMaskEnable(lpDevice, lpBlend->mbAlphaToMaskEnable ? 1u : 0u);
-    lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE,
+    lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE, CgsPC::Shadows::ColourMask(
                              D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN
-                             | D3DCOLORWRITEENABLE_BLUE | D3DCOLORWRITEENABLE_ALPHA);
+                             | D3DCOLORWRITEENABLE_BLUE | D3DCOLORWRITEENABLE_ALPHA));
 }
 
 void ImDeviceSetRasterizerState(void* lpState)
@@ -558,18 +558,18 @@ void ImDeviceSetRasterizerState(void* lpState)
     if (lpDevice == nullptr || lpState == nullptr)
         return;
     const ImRasterizerState* const lpRaster = static_cast<const ImRasterizerState*>(lpState);
-    lpDevice->SetRenderState(D3DRS_CULLMODE, lpRaster->meCullMode);
+    lpDevice->SetRenderState(D3DRS_CULLMODE, CgsPC::Shadows::sbDrawingDebris ? D3DCULL_NONE : CgsPC::Reflections::ResolveExtrasCull(static_cast<D3DCULL>(lpRaster->meCullMode)));
     lpDevice->SetRenderState(D3DRS_FILLMODE, lpRaster->meFillMode);
-    lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+    lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, CgsPC::Shadows::sbDrawingDebris ? TRUE : FALSE);
     // ⚠ The three states a WORLD technique's rasteriser state can leave behind that would
     // silently annihilate this pass. The sky dome sits at the far end of the depth range
     // (a 9500-unit dome under a 12000-unit far plane lands at ndc z ~0.99999), so ANY
     // residual depth bias pushes it past 1.0 and every fragment fails the depth test --
     // an S_OK draw that produces no pixels. Same for a leftover user clip plane.
     const DWORD KU_FLOAT_ZERO = 0u;   // 0.0f as a DWORD, which is how D3D9 takes these
-    lpDevice->SetRenderState(D3DRS_DEPTHBIAS, KU_FLOAT_ZERO);
-    lpDevice->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, KU_FLOAT_ZERO);
-    lpDevice->SetRenderState(D3DRS_CLIPPLANEENABLE, 0u);
+    lpDevice->SetRenderState(D3DRS_DEPTHBIAS, CgsPC::Shadows::sbDrawingDebris ? CgsPC::Shadows::suDepthBias : KU_FLOAT_ZERO);
+    lpDevice->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, CgsPC::Shadows::sbDrawingDebris ? CgsPC::Shadows::suSlopeBias : KU_FLOAT_ZERO);
+    lpDevice->SetRenderState(D3DRS_CLIPPLANEENABLE, CgsPC::Reflections::ResolveExtrasClipMask(0u));
 }
 
 void ImDeviceSetDepthStencilState(void* lpState)
@@ -580,7 +580,8 @@ void ImDeviceSetDepthStencilState(void* lpState)
     const ImDepthStencilState* const lpDepth = static_cast<const ImDepthStencilState*>(lpState);
     lpDevice->SetRenderState(D3DRS_ZENABLE,
                              lpDepth->mbDepthTestEnable ? D3DZB_TRUE : D3DZB_FALSE);
-    lpDevice->SetRenderState(D3DRS_ZWRITEENABLE, lpDepth->mbDepthWriteEnable);
+    lpDevice->SetRenderState(D3DRS_ZWRITEENABLE,
+        CgsPC::Shadows::DepthWrite(CgsPC::Reflections::ResolveExtrasDepthWrite(lpDepth->mbDepthWriteEnable)));
     renderengine::DepthRangePC::SetDepthFunction(lpDevice,
         static_cast<D3DCMPFUNC>(lpDepth->meDepthFunction));
     lpDevice->SetRenderState(D3DRS_STENCILENABLE, FALSE);

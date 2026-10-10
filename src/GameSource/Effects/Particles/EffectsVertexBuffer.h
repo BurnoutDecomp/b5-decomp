@@ -117,7 +117,8 @@ public:
                                         EffectsVertexBufferBatch&    lInOutBatch,
                                         u32                          luVertexStride);
 
-    u32 GetBytesUsed() const;
+    u32 GetBytesUsed() const
+    { return static_cast<u32>(mpLockedBufferCurrentAddress - mpLockedBufferBaseAddress); }
     u32 GetBytesFree() const;
 };
 

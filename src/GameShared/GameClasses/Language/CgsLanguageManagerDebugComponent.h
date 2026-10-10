@@ -50,6 +50,8 @@ namespace CgsLanguage
 
     protected:
         const char* GetName() const override;   // @ 0x82860A58 -> "LanguageManager"
+        // ARTIST vtable 0x820CE2C0, slot +0x10: original menu hierarchy.
+        const char* GetPath() const override { return "Gui"; }
 
     private:
         // Draw a "<label><value>" pair at (lfX, lrY) - label, then value just past the label's width -

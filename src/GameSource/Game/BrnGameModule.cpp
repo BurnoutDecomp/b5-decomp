@@ -288,6 +288,10 @@ namespace BrnGame
             lParams.miVariablePoolSize         = 400;   // 0x190
             lParams.miVariableMetadataPoolSize = 500;   // 0x1F4
             lParams.miConsoleLineCount         = 15;    // 0xF
+            // FLAG PC-platform leaf: reserve space for the opt-in reflection
+            // and small-caster controls in addition to the original UI pools.
+            lParams.miVariablePoolSize         += 128;
+            lParams.miVariableMetadataPoolSize += 256;
             // [FLAG] mpRwAllocator stays null: Allocators::mpInternalDebugAllocator is the
             // absent allocator layer (F-P0-1), and the debug pools' backing still comes from
             // the global heap, which ignores it.

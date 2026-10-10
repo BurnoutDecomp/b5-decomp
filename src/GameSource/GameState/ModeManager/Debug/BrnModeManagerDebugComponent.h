@@ -25,6 +25,8 @@ namespace BrnGameState
 
     protected:
         const char* GetName() const override;          // @ BrnModeManagerDebugComponent.cpp:231
+        // ARTIST vtable 0x820CDDEC, slot +0x10: original menu hierarchy.
+        const char* GetPath() const override { return "Gameplay"; }
         void        OnActivate() override;             // @ BrnModeManagerDebugComponent.cpp:243
         void        RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override; // X360 0x8231EC30
 

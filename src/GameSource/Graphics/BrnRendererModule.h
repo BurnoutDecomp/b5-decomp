@@ -606,7 +606,8 @@ private:
     // The three shadow-map cascades, gated on
     // mRenderSwitches.mbRenderShadows. Each cascade brackets its mesh-list walks with
     // ShadowMapRenderManager::Begin/EndRenderShadowMap; the lists are {0,2} / {1,3} / {4}.
-    void RenderShadowMapPasses(CgsGraphics::DispatchObjectContext* lpContext);
+    void RenderShadowMapPasses(CgsGraphics::DispatchObjectContext* lpContext,
+        const BrnParticle::ParticleModule::ParticleRenderData* lpParticleData);
 
     // -- measure how much of the sun is occluded, once per frame. Reads the INTERNAL
     // shader-constants frame for the view projection, the eye and the unbiased key-light

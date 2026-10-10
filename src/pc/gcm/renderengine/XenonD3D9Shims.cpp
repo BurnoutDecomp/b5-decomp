@@ -4,6 +4,7 @@
 #include "pc/gcm/renderengine/GeometryBindings.h"
 #include "pc/gcm/renderengine/TextureUpload.h"
 #include "pc/gcm/renderengine/NvApiResourceRegistry.h"
+#include "pc/gcm/renderengine/reflections/CubeHistory.h"
 // =============================================================================
 // XenonD3D9Shims.cpp  (pc/gcm/renderengine)
 //
@@ -1772,7 +1773,7 @@ namespace renderengine
         if (lpD3DTexture == nullptr)
             return false;
 
-        lpDevice->SetTexture(luUnit, lpD3DTexture);
+        lpDevice->SetTexture(luUnit, CgsPC::Reflections::ResolveCaptureTexture(lpD3DTexture));
         // The real sampler descriptor comes from the TextureState's 32-byte sampler block; see
         // ApplyWorldSamplerBlock's banner above for what the console's own setter reads out of it
         // and what the 39,021 shipped blocks say.
@@ -1902,7 +1903,7 @@ namespace renderengine
                     CgsDev::Log::WriteToLog(lacMsg);
                 }
             }
-            lpDevice->SetTexture(lu16Unit, lpD3DTexture);
+            lpDevice->SetTexture(lu16Unit, CgsPC::Reflections::ResolveCaptureTexture(lpD3DTexture));
             // The sampler descriptor is this TextureState's own 32-byte block at +0x00 --
             // ApplyWorldSamplerBlock reads the address modes and the mip LOD bias out of it
             // exactly as the console's sub_827E8950 does.
@@ -1916,7 +1917,7 @@ namespace renderengine
             // numbers, and clobbering s0 would break a technique whose s0 is something else.
             if (!lbBoundAny && lu16Unit != 0 && !sbRealProgramsBound)
             {
-                lpDevice->SetTexture(0, lpD3DTexture);
+                lpDevice->SetTexture(0, CgsPC::Reflections::ResolveCaptureTexture(lpD3DTexture));
                 ApplyWorldSamplerBlock(lpDevice, 0u, lpState,
                                        Texture::GetType(lpTexture) == Texture::E_TYPE_CUBE);
             }
@@ -6734,7 +6735,7 @@ unsigned int D3DDevice_SetTexture(IDirect3DDevice9* /*lpDeviceArg*/, u32 luSampl
     IDirect3DBaseTexture9* lpD3DTexture = nullptr;
     if (lpTexture != nullptr)
         lpD3DTexture = static_cast<const renderengine::Texture*>(lpTexture)->mpD3DTexture;
-    const HRESULT lhr = lpDevice->SetTexture(luSampler, lpD3DTexture);
+    const HRESULT lhr = lpDevice->SetTexture(luSampler, CgsPC::Reflections::ResolveCaptureTexture(lpD3DTexture));
 
     // A VOLUME texture is the post-fx colour-cube LUT and needs LINEAR/CLAMP on its unit, for the
     // same reason and by the same mechanism as the raw-depth case below (see both banners).
@@ -7916,7 +7917,7 @@ void D3DDevice_SetRenderState_ColorWriteEnable(IDirect3DDevice9*, u32 luValue)
 
     IDirect3DDevice9* lpDevice = Dev();
     if (lpDevice != nullptr)
-        lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE, luValue);
+        lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE, CgsPC::Shadows::ColourMask(luValue));
 }
 // FLAG PC-platform leaf: render targets 1..3. The world pass has a single colour
 // target, and D3D9's D3DRS_COLORWRITEENABLE1..3 only apply with multiple render
@@ -8118,7 +8119,8 @@ void D3DDevice_SetRenderState_ZWriteEnable(IDirect3DDevice9*, u32 luValue)
 {
     IDirect3DDevice9* lpDevice = Dev();
     if (lpDevice != nullptr)
-        lpDevice->SetRenderState(D3DRS_ZWRITEENABLE, luValue != 0);
+        lpDevice->SetRenderState(D3DRS_ZWRITEENABLE,
+            CgsPC::Shadows::DepthWrite(CgsPC::Reflections::ResolveExtrasDepthWrite(luValue != 0)));
 }
 void D3DDevice_SetRenderState_ZFunc(IDirect3DDevice9*, u32 luValue)
 {
@@ -8224,7 +8226,7 @@ void D3DDevice_SetRenderState_CullMode(IDirect3DDevice9*, u32 luValue)
 {
     IDirect3DDevice9* lpDevice = Dev();
     if (lpDevice != nullptr)
-        lpDevice->SetRenderState(D3DRS_CULLMODE, XenonCullToD3D9(luValue));
+        lpDevice->SetRenderState(D3DRS_CULLMODE, CgsPC::Reflections::ResolveExtrasCull(static_cast<D3DCULL>(XenonCullToD3D9(luValue))));
 }
 void D3DDevice_SetRenderState_FillMode(IDirect3DDevice9*, u32 luValue)
 {

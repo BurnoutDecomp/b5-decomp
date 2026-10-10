@@ -67,6 +67,8 @@
 #include "GameSource/AttribSys/Generated/classes/surfacelist.h"
 #include "GameSource/AttribSys/Generated/classes/surface.h"
 
+namespace CgsPC::Reflections { struct WorldCapture; }
+
 namespace CgsGraphics
 {
     struct Instance;       // pointer-only use here (backdrop instance walk)
@@ -93,6 +95,7 @@ static const s32 KU_MAX_NUM_DYNAMIC_ADVERTS            = 128;
 
 class WorldEntityModule : public CgsModule::ModuleSingleBuffered
 {
+    friend struct CgsPC::Reflections::WorldCapture;
 public:
     // DWARF BrnWorldEntityModule.h:75. (The X360 Prepare body no longer visits
     // E_PREPARESTAGE_COLLISION -- world collision moved to the validate protocol

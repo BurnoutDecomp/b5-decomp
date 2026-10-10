@@ -52,8 +52,8 @@ namespace CgsDev
             0xFF804020u, // mColourCaption
             0xFFFFFFFFu, // mColourCaptionText
             0xFFC08000u, // mColourActiveCaption
-            0xFFFFFFFFu, // mColourHighlight
-            0xC0FF0000u, // mColourHighlightText
+            0xFFFFFFC0u, // mColourHighlight (ARTIST 82F32E38)
+            0xFF000000u, // mColourHighlightText (ARTIST 82F32E3C)
             0xFF808080u, // mColourDisabled
             0xFF404040u, // mColourDisabledText
             0xFFC0FFFFu, // mColourPinned

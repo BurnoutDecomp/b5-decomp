@@ -27,6 +27,8 @@ namespace BrnMassive
 
     protected:
         const char* GetName() const override;
+        // ARTIST vtable 0x820CDF40, slot +0x10: original menu hierarchy.
+        const char* GetPath() const override { return "World"; }
         void        OnActivate() override;
 
     private:

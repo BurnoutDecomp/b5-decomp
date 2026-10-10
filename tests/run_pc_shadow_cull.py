@@ -39,7 +39,9 @@ mapping = re.search(r'static const s32 KAI_CASCADE_LISTS.*?;', render, re.S).gro
 # Exact production loop, including the bracket calls and the empty second slot.
 first = render.index('    const u64 luDrawCallsBeforePass')
 last = render.index('    renderengine::PCSurfaceBracket_Restore();', first)
-loop = mapping + '\n' + render[first:last]
+admission_first = render.index('    u32 lauCascadeCounts')
+admission_last = render.index('#if !BRN_SHADOW_MAP_TARGET_AVAILABLE', admission_first)
+loop = mapping + '\n' + render[admission_first:admission_last] + render[first:last]
 if args.omit_brackets:
     for name in ('BeginFrontFaceCullRender', 'EndFrontFaceCullRender', 'BeginBackFaceCullRender', 'EndBackFaceCullRender'):
         loop = loop.replace('mShadowMapRenderManager.' + name + '();', '(void)0;')

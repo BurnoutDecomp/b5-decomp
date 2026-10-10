@@ -5,6 +5,7 @@
 #include "pc/gcm/renderengine/GeometryBindings.h"
 #include "pc/gcm/renderengine/ShaderBindings.h"
 #include "pc/gcm/renderengine/NvApiResourceRegistry.h"
+#include "pc/gcm/renderengine/reflections/CubeHistory.h"
 
 // FLAG PC-platform leaf: primary D3D9Ex flip output. ResetEx must execute on the
 // device-creation thread, between joined engine frames. A failed reset is rolled
@@ -50,6 +51,7 @@ namespace renderengine
             // The next frame re-registers retained resources if needed. Do not
             // reset/release resources whose NVAPI retirement failed.
             if(!gNvApiDepthResourcesPC.Clear())return E_FAIL;
+            CgsPC::Reflections::GetCubeHistory().Release();
             GpuFrameTimingPC::DeviceReset();
             GeometryBindingsPC::gCache.Invalidate();
             gPCShaderBindingCache.Invalidate();

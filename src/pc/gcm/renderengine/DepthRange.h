@@ -5,6 +5,8 @@
 // shader clip positions stay unchanged; depth ordering is mathematically equivalent.
 #include <d3d9.h>
 #include <algorithm>
+#include "pc/gcm/renderengine/reflections/RenderContext.h"
+#include "pc/gcm/renderengine/shadows/RenderContext.h"
 
 namespace renderengine { namespace DepthRangePC
 {
@@ -44,7 +46,8 @@ namespace renderengine { namespace DepthRangePC
     {
         State& lrState = GetState(lpDevice);
         lrState.meLogicalCompare = leCompare;
-        lpDevice->SetRenderState(D3DRS_ZFUNC, NativeCompare(leCompare, lrState.mbInverted));
+        lpDevice->SetRenderState(D3DRS_ZFUNC,
+            CgsPC::Shadows::DepthFunction(CgsPC::Reflections::ResolveExtrasDepth(NativeCompare(leCompare, lrState.mbInverted))));
     }
     inline HRESULT SetRenderTarget(IDirect3DDevice9* lpDevice, DWORD luIndex,
                                     IDirect3DSurface9* lpSurface)

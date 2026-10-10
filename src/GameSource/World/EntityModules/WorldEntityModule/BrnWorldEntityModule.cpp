@@ -25,6 +25,7 @@
 #include "pc/gcm/renderengine/GraphicsDiagnostics.h"
 #include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
 #include "pc/gcm/renderengine/reflections/ReflectionLodDebug.h"
+#include "pc/gcm/renderengine/reflections/SceneSettingsDebug.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
@@ -194,6 +195,7 @@ WorldEntityModule::Construct( void )
 
         renderengine::RegisterEnvironmentMapLodSettingsPC(lDebugInterface,
             renderengine::WorldEnvironmentMapLodSettingsPC(), "World/Reflections/World");
+        CgsPC::Reflections::RegisterSceneSettings(lDebugInterface);
 
         // FLAG PC-platform leaf: extend reflection culling through the same debug
         // registry as reflection detail, without changing the main-view distances.
@@ -2377,6 +2379,15 @@ WorldEntityModule::GenerateDispatchListsForEnvironmentMap(
 
         const f32 lfDistanceSq =
             rw::math::vpu::MagnitudeSquared( lCameraPosition - lpInstance->mTransform.Pos() );
+
+        // FLAG PC-platform leaf: the optional backdrop shell has its own resident
+        // feed and distance policy. Keep detailed world meshes inside its LOD2 radius.
+        if (CgsPC::Reflections::Backdrops().mbEnabled)
+        {
+            const f32 lfWorldRadius = renderengine::ExtendEnvironmentMapDrawDistancePC(75.0f);
+            if (lEntityId.GetPartIndex() >= lpList->muNumInstances || lfDistanceSq > lfWorldRadius * lfWorldRadius)
+                continue;
+        }
 
         CgsGraphics::Model* lpModel = lpInstance->mpModel;
         CGS_ASSERT( lpModel, "lpModel" );

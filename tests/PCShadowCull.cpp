@@ -10,6 +10,13 @@
 #include <vector>
 #include "pc/gcm/renderengine/renderstates.h"
 #include "pc/gcm/renderengine/ShadowQuality.h"
+#include "pc/gcm/renderengine/reflections/RenderContext.h"
+static bool sbDebrisEligible=false;
+static int siDebrisDispatches=0;
+namespace CgsPC::Shadows {
+static bool HasDebris(const void* lpData){return lpData&&sbDebrisEligible;}
+static void RenderDebris(u32, const void* lpData){if(HasDebris(lpData))++siDebrisDispatches;}
+}
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"
 #include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"
 #include "GameSource/Graphics/BrnShadowMapRenderManager.h"
@@ -49,6 +56,7 @@ void WorldDraw_SetPrimitiveReset(bool enabled,u32 index)
 static u64 WorldDrawCallCount(){return drawCalls;}
 static void ShadowProbe_Begin(u32){}
 static void ShadowProbe_End(u32){}
+static bool ShadowProbe_Enabled(){return false;}
 }
 namespace shadow {
 struct Device {
@@ -105,7 +113,7 @@ void BrnGraphics::ShadowMapRenderManager::EndRenderShadowMap(s32 index,BrnRender
 }
 struct List {
     int index;
-    int trafficRecords=0;
+    int trafficRecords=1;
     int GetCount() const {return trafficRecords;}
     void DispatchAllMeshesZOnly(void*,void*)
     {
@@ -138,11 +146,12 @@ struct RendererFixture {
     // Fixture lists are already sorted; production now reads the published
     // mesh frame through these accessors after the parallel-frame refactor.
     void WaitForMeshSortPC(u32) {}
+    const void* GetPublishedParticleRenderDataPC() const { return nullptr; }
     Frame& GetMeshFrameForReadPC() { return mSingleBufferedDispatchFrame; }
     void Construct(){
 #include "shadow_cull_construct.inc"
     }
-    void Render(void* lpContext){
+    void Render(void* lpContext,const void* lpParticleData=nullptr){
 #include "shadow_cull_loop.inc"
     }
 };
@@ -256,6 +265,16 @@ int main()
     producer.Produce(0);
     Check(producer.mTrafficEntityModule.calls==0,"current production caster path respects the traffic render switch");
 #endif
+    for(auto& entry:producer.frame->entries)entry.trafficRecords=0;
+    begins.clear();ends.clear();renderer.Render(nullptr);
+    Check(begins.empty()&&ends.empty(),"empty original lists without eligible debris skip the atlas pass");
+    sbDebrisEligible=true;int lParticleData=0;
+    renderer.Render(nullptr,&lParticleData);
+    Check(begins==std::vector<int>({0,1,2})&&ends==begins&&siDebrisDispatches==3,
+        "debris-only input admits and resolves all original cascades with no unrelated caster records");
+    begins.clear();ends.clear();renderer.Render(nullptr);
+    Check(begins.empty()&&ends.empty(),"disabled or unavailable particle payload cannot admit a debris-only shadow pass");
+    sbDebrisEligible=false;
     trafficMode=false;
     shadow::Device::SetState(CgsRasterizerStateFactory::GetState(0));
     renderer.mShadowMapRenderManager.mbForceFrontFaceCull=true;

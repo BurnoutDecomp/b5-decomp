@@ -1,4 +1,5 @@
 #include "GameSource/Effects/Particles/ParticleModule.h"
+#include "pc/gcm/renderengine/reflections/SceneRender.h"
 #include "GameSource/Effects/Particles/Native/BrnSimpleFxDiag.h"   // [diag] BRN_SIMPLEFX_DIAG
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include <cstddef>                                   // offsetof
@@ -854,6 +855,7 @@ namespace BrnParticle
     void ParticleModule::PublishRenderCommandsPC(const ParticleRenderData& lrRenderData)
     {
         mSimpleParticleFramePC.Publish(maSimpleParticles);
+        CgsPC::Reflections::ParticleCapture::Publish(*this);
         // FLAG PC-platform leaf: command frames can publish between the host's
         // fixed simulation steps. Preserve the last wheel-update interval for
         // AddTrailSegment's original now > last + step*1.5 timeout

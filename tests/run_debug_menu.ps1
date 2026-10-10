@@ -1,6 +1,7 @@
 # Drive the real debug controller through named keys, with the existing game harness.
 # Requires this repo inside BP-Decomp_Workflow and a built executable + game data.
-param([string]$OutDir = '', [int]$MaxSeconds = 180, [switch]$Effects, [switch]$Entries, [switch]$ResetPlayer, [switch]$Wheels)
+param([string]$OutDir = '', [int]$MaxSeconds = 180, [switch]$Effects, [switch]$Entries, [switch]$Controls, [switch]$Unavailable, [switch]$ResetPlayer, [switch]$Wheels)
+if ($Controls -and !$PSBoundParameters.ContainsKey('MaxSeconds')) { $MaxSeconds = 300 }
 if ($Wheels) {
     $ResetPlayer = $true
     if (!$PSBoundParameters.ContainsKey('MaxSeconds')) { $MaxSeconds = 360 }
@@ -31,11 +32,13 @@ function Tap-Key([int]$Key, [bool]$Shift = $false, [bool]$Control = $false) {
     if ($Control) { $keys[17].Set() | Out-Null }
     Start-Sleep -Milliseconds 20
     $keys[$Key].Set() | Out-Null
-    Start-Sleep -Milliseconds 60
+    # Named test events are level sampled by the game. The broader Controls
+    # scenario opens new material/font paths, so span a loading frame hitch.
+    Start-Sleep -Milliseconds $(if ($Controls -or $Unavailable) { 150 } else { 60 })
     $keys[$Key].Reset() | Out-Null
     $keys[16].Reset() | Out-Null
     $keys[17].Reset() | Out-Null
-    Start-Sleep -Milliseconds 60
+    Start-Sleep -Milliseconds $(if ($Controls -or $Unavailable) { 100 } else { 60 })
 }
 function Type-Text([string]$Text) {
     foreach ($c in $Text.ToCharArray()) {
@@ -194,6 +197,53 @@ try {
         Start-Sleep -Seconds 8
         Snapshot 'reset-changed'
         Write-Output "Reset Player Car regression: PASS ($model, $out)"
+        return
+    }
+    if ($Controls -or $Unavailable) {
+        Tap-Key 192
+        if (!$Unavailable) {
+        foreach ($component in @('Traffic', 'Race Car Entity', 'Network/PlayerManager', 'Network/Buddies', 'World/PVS',
+            'Physics/Prop Manager', 'Triggers/Trigger Entities', 'Gameplay/TakedownManager')) {
+            Command ('component "' + $component + '"')
+        }
+        Command 'set "Traffic/Global speed multiplier" 1.25'
+        Command 'set "Traffic/Stop traffic moving" TRUE'
+        Command 'set "Network/PlayerManager/Measurement Type" "Maximum Over Second"'
+        Command 'increment "Network/PlayerManager/Measurement Type"'
+        Command 'decrement "Network/PlayerManager/Measurement Type"'
+        $state = Save-State 'supported-controls'
+        $lodRows = [regex]::Matches($state, '(?m)^SET "/(?:Race Car Entity/)?Graphics/Vehicles\.\.\./LODs\.\.\./[^"]+"').Count
+        if ($lodRows -ne 14) { throw "Vehicle LOD activation produced $lodRows rows instead of 14 shared controls." }
+        foreach ($component in @('Race Car Entity', 'Network/Buddies')) {
+            if ($state -notmatch ('(?m)^COMPONENT "/?' + [regex]::Escape($component) + '"')) {
+                throw "The supported $component section failed to activate."
+            }
+        }
+        if ($state -notmatch 'SET "/Traffic/Global speed multiplier" "1.250"' -or
+            $state -notmatch 'SET "/Traffic/Stop traffic moving" "TRUE"' -or
+            $state -notmatch 'SET "/Network/PlayerManager/Measurement Type" "Average Over Last Second"') {
+            throw 'Supported traffic controls or the terminated network option list failed.'
+        }
+        Command 'set "Traffic/Stop traffic moving" FALSE'
+        Command 'set "Traffic/Global speed multiplier" 1'
+        Command 'bind F12 *WINDOW /Traffic 84 101'
+        Tap-Key 192
+        Tap-Key 123
+        Snapshot 'traffic-controls'
+        Tap-Key 192
+        }
+        Command 'component "Sound Module/Sound"'
+        Snapshot 'unavailable-section'
+        Tap-Key 27
+        $state = Save-State 'unavailable-not-active'
+        if ($state -match 'COMPONENT "Sound Module/Sound"') { throw 'An unavailable component became active.' }
+        # Its callback must remain registered, so a second attempt still explains
+        # the unavailable section instead of deleting the row.
+        Command 'component "Sound Module/Sound"'
+        Tap-Key 27
+        Check-Game
+        $scenario = if ($Unavailable) { 'Debug unavailable-section' } else { 'Supported debug controls' }
+        Write-Output "$scenario regression: PASS ($out)"
         return
     }
     if ($Entries) {

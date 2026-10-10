@@ -73,6 +73,8 @@ namespace Props
     protected:
         // 0x825BADD0 -- returns "Prop Manager".
         const char* GetName() const override;
+        // ARTIST vtable 0x820CDF60, slot +0x10: original menu hierarchy.
+        const char* GetPath() const override { return "Physics"; }
 
         // 0x825E3628.
         void OnActivate() override;

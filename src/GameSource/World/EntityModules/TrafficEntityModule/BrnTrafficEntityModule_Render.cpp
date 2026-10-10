@@ -66,6 +66,8 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                // CgsSceneManager::EntityId
 #include "rw/math/vpu/matrix44affine_operation.h"                           // Mult / MakeRotationX/Y/Z / Inverse / TransformPoint
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"                     // CgsGraphics::Camera (RenderTrafficLightCoronas)
+#include "pc/gcm/renderengine/reflections/SceneSettings.h"
+#include "pc/gcm/renderengine/reflections/GlassCapture.h"
 #include "SharedClasses/Traffic/BrnTrafficPvs.h"                           // Pvs::GetHullIndexForPoint / ForIndices (the same)
 
 #include <cmath>    // powf / sqrtf
@@ -1220,7 +1222,13 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
             {
                 continue;
             }
-            if ( !lpModel->DoesStateExist( lLOD ) )
+            // FLAG PC-platform leaf: reflect the existing body mesh with an independent LOD.
+            const s32 liPartLod = CgsPC::Reflections::IsVehicleCapture()
+                ? CgsPC::Reflections::SelectVehicleLod(CgsPC::Reflections::Traffic(), lpModel,
+                    rw::math::vpu::MagnitudeSquared(lCameraPosition - lBodyTransform.Pos()))
+                : static_cast<s32>(lLOD);
+            const auto lePartLod = static_cast<CgsGraphics::Model::State>(liPartLod);
+            if ( liPartLod < 0 || !lpModel->DoesStateExist( lePartLod ) )
             {
                 continue;
             }
@@ -1234,7 +1242,7 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
                 rw::math::vpu::Mult( lpGraphicsSpec->GetPartLocators()[ luPartIdx ],
                                      lBodyRollTransform );
 
-            const CgsGraphics::Renderable* lpRenderable = lpModel->GetRenderable( lLOD );
+            const CgsGraphics::Renderable* lpRenderable = lpModel->GetRenderable( lePartLod );
             if (!lbShadowPass)
                 renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_TRAFFIC, lpModel, lLOD);
             CGS_ASSERT( lpRenderable != 0, "Missing renderable in a model" );
@@ -1255,6 +1263,13 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
             // `sub_822B33B8(&mShaderConstantTable, 0, ...)` at pseudocode :1501/:1675).
             CgsGraphics::mShaderConstantTable.SetShaderConstantData( 0, lPartWorldMatrix );
 
+            if (CgsPC::Reflections::IsVehicleCapture())
+            {
+                CgsPC::Reflections::SubmitVehiclePart(lpModel, liPartLod,
+                    rw::math::vpu::MagnitudeSquared(lCameraPosition - lBodyTransform.Pos()),
+                    *lpDispatchFrame, liModelOnlyDisplayList, liOpaqueList, lu8Technique, 0);
+                continue;
+            }
             const bool lbFirstInList = ( lpDispatchList->GetCount() & 0x7F ) == 0;
 
             lpDispatchFrame->GetBin().BeginPacket();
@@ -1307,7 +1322,10 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     }
 
 
-    if ( lrPhysicsSpecPtr.HasMemoryResource() && lpWheelModel != 0 )
+    if ( lrPhysicsSpecPtr.HasMemoryResource() && lpWheelModel != 0
+         && (!CgsPC::Reflections::IsVehicleCapture()
+             || CgsPC::Reflections::Wheels().IsVisible(
+                 rw::math::vpu::MagnitudeSquared(lCameraPosition - lBodyTransform.Pos()), CgsPC::Reflections::sfVehicleDrawDistance)) )
     {
         const BrnPhysics::Deformation::StreamedDeformationSpec* lpPhysicsSpec =
             lrPhysicsSpecPtr.operator->();
@@ -1316,6 +1334,9 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
         // `if (a42 <= 1) v440 = 1` at pseudocode :636 -- the SAME floor, applied to the LOD
         // the caller passed, and it is the value the whole wheel block uses.
         CgsGraphics::Model::State leWheelLOD = lLOD;
+        if (CgsPC::Reflections::IsVehicleCapture())
+            leWheelLOD = static_cast<CgsGraphics::Model::State>(CgsPC::Reflections::SelectVehicleLod(CgsPC::Reflections::Wheels(),
+                lpWheelModel, rw::math::vpu::MagnitudeSquared(lCameraPosition - lBodyTransform.Pos())));
         if ( leWheelLOD <= CgsGraphics::Model::E_STATE_LOD_1 )
         {
             leWheelLOD = CgsGraphics::Model::E_STATE_LOD_1;

@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
 #include "pc/gcm/renderengine/reflections/ReflectionLod.h"
+#include "pc/gcm/renderengine/reflections/SceneSettings.h"
 
 static u32 suChecks = 0, suFailures = 0;
 static void Check(bool lbResult, const char* lpcName)
@@ -42,8 +43,9 @@ struct Model
     f32 GetLodDistance(u32 luState) const { static const f32 KAF_DISTANCES[] = {10,20,100}; return KAF_DISTANCES[luState]; }
     const Renderable* GetRenderable(State leState) const { return &maRenderables[leState]; }
 };
-struct Instance { Model* mpModel; Matrix44Affine mTransform; };
-struct InstanceList { Instance* mpInstance; Instance* GetInstance(u32) const { return mpInstance; } };
+struct Instance { Model* mpModel; Matrix44Affine mTransform; f32 mfMaxDrawDistanceSq = 10000.0f * 10000.0f; };
+struct InstanceList { Instance* mpInstance; u32 muNumInstances = 1, muArraySize = 1;
+    Instance* GetInstance(u32 luIndex) const { return mpInstance + luIndex; } };
 struct DispatchBin { void BeginPacket() {} const void* EndPacket() { return this; } };
 struct DispatchList { u32 muCount = 0; u32 GetCount() const { return muCount; } void Submit(u32,const void*) { ++muCount; } };
 struct DispatchFrame { DispatchBin mBin; DispatchList maLists[16];
@@ -88,9 +90,11 @@ struct WorldEntityModule
 {
     static const s32 KI_NUM_LODS = 3;
     s32 miEnvironmentMapLOD = 0;
+    s32 miCurrentBackdropZoneId = -1;
     bool mbOverrideLodDistances = false;
     s32 mauOverrideLodDistances[3] = {300,600,900};
-    struct Streamer { InstanceList* mpList; InstanceList* GetInstanceList(u32) { return mpList; } } mWorldGraphicsStreamer;
+    struct Streamer { InstanceList* mpList; s32 GetIndexFromId(s32 liId) const { return liId < 0 ? -1 : 0; }
+        InstanceList* GetInstanceList(u32) { return mpList; } } mWorldGraphicsStreamer;
     void GenerateDispatchListsForEnvironmentMap(const WorldEntityIO::InputBuffer_GenerateDispatchLists*,
         const Array<CgsSceneManager::EntityId,4500u>&, Matrix44::InParam, Vector3::InParam,
         const ShaderLodInfo*, s32, s32, s32);

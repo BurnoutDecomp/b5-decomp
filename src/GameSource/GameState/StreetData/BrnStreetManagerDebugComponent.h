@@ -86,6 +86,8 @@ namespace BrnGameState
     protected:
         // Menu label (X360 0x823175F0). Overrides CgsDev::DebugComponent::GetName.
         const char* GetName() const override;
+        // ARTIST vtable 0x820CDEAC, slot +0x10: original menu hierarchy.
+        const char* GetPath() const override { return "Gameplay"; }
 
         // Registers this component's tweakables + actions with the debug menu (X360 0x8234A718).
         void OnActivate() override;

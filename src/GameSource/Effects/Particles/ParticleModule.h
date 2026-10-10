@@ -82,6 +82,8 @@ namespace BrnParticle { namespace ParticleIO { struct DispatchInputBuffer; } }  
 
 namespace BrnParticle
 {
+    cTime LionTimeFromSeconds(f32 afSeconds);
+    rw::math::vpu::Matrix44Affine RowCopyToAffine(const rw::math::vpu::Matrix44& arMatrix);
     // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Counters the spark probe prints.
     extern u32 gauSparkTestSpawnCalls;
     extern u32 gauSparkPrepareCount;

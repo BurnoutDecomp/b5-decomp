@@ -97,6 +97,9 @@ namespace CgsNetwork
         };
 
     protected:
+        // ARTIST vtable 820CE35C: +0x0C -> 827DBBD0, +0x10 -> 827DBBE0.
+        const char* GetName() const override { return "PlayerManager"; }
+        const char* GetPath() const override { return "Network"; }
         // @0x8287F278 -- register the debug-menu surface (not yet homed).
         virtual void OnActivate();
 

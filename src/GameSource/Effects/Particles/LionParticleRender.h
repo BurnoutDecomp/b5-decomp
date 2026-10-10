@@ -47,10 +47,13 @@ namespace renderengine { class Texture; class TextureState; }
 
 namespace BrnGraphics { class LionBlendRenderer; }
 
+namespace CgsPC::Reflections { struct ParticleCapture; }
+
 namespace BrnParticle
 {
     class LionParticleRender : public iParticleRender
     {
+        friend struct CgsPC::Reflections::ParticleCapture;
     public:
         LionParticleRender();
         virtual ~LionParticleRender() {}

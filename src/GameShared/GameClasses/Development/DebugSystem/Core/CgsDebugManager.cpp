@@ -453,6 +453,14 @@ namespace CgsDev
         lpComponent->GetComponentPath(lacCompletePath, sizeof(lacCompletePath));
         DebugUI::Menu* lpComponentVariablePath =
             GetUI().GetMenuManager().GetMenuFromPath(lacCompletePath, nullptr);
+        // FLAG PC-platform leaf: incomplete components must retain their row
+        // and explain the unavailable section, rather than disappearing on use.
+        if (!lpComponentVariablePath)
+        {
+            lpComponent->mbActive = false;
+            GetUI().ShowErrorMessage("This debug section has no available controls in this build.");
+            return;
+        }
         if (lpComponentVariablePath)
         {
             DebugUI::Function* lpFunction = GetUI().GetFunctionManager().FindFunction(

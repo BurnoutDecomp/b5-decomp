@@ -40,6 +40,8 @@ namespace renderengine { class Texture; class TextureState; }
 // Layout is the DecFIGS DWARF struct outline (references/DecFIGS/dwarfdump/GameSource/Graphics/
 // BrnCoronaManager.h + .../coronas/rwgcorona.h + rwgcoronabuffer.h), gated on the X360 asm.
 
+namespace CgsPC::Reflections { struct LightCapture; }
+
 namespace renderengine
 {
 // ---- renderengine::Corona -- THE 64-BYTE CORONA RECORD (DWARF rwgcorona.h:12-18) ---------------
@@ -212,12 +214,14 @@ private:
 // (mCoronaManager, X360 renderer+0x3800).
 class BrnCoronaManager
 {
+    friend struct CgsPC::Reflections::LightCapture;
 public:
     // BrnCoronaManager.h:102 (DWARF) -- the per-frame corona submission front-end handed out to
     // world/race-car/prop renderers (BrnRendererModule::GetCoronaSubmissionInterface,
     // RendererIO::GetCoronaSubmissionInterface). Writes land in mpBuffer via mBufferIterator.
     class BrnSubmissionInterface
     {
+        friend struct CgsPC::Reflections::LightCapture;
     public:
         // BrnCoronaManager.h:147 -- a CoronaBuffer::Iterator with a convenience accessor for the
         // running write count (used by the AddCorona/AddPropCorona KI_MAX_CORONAS assert and, in
