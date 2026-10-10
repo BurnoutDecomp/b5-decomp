@@ -37,6 +37,16 @@ World/LODs/Prop Environment Map LOD=2
 ; Reflection draw distance in metres, 0..10000. 0 = authored distances.
 ; Positive values extend world objects, props and capture frusta to at least this range.
 World/LODs/Environment Map Draw Distance=0
+; Optional reflection transitions. Fixed (default) retains LOD2 and the 75 m capture.
+; Relative follows each category's normal LOD distances; Custom uses the metre values below.
+World/Reflections/World/LOD mode=Fixed
+World/Reflections/World/LOD distance scale=0.5
+World/Reflections/World/LOD0 distance=50
+World/Reflections/World/LOD1 distance=100
+World/Reflections/Props/LOD mode=Fixed
+World/Reflections/Props/LOD distance scale=0.5
+World/Reflections/Props/LOD0 distance=50
+World/Reflections/Props/LOD1 distance=100
 World/ShadowMap/Cast shadows from traffic=false
 World/LODs/OverrideDistances=false
 World/LODs/LOD0Distance=300

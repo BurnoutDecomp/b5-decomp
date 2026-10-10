@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Graphics/CgsModel.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
+#include "pc/gcm/renderengine/ReflectionLodPCLeaf.h"
 #include <cstdio>
 #include <cstdlib>
 
@@ -82,6 +83,15 @@ namespace renderengine
             "[graphics-prop-reflection] frame=%u lods=%u/%u/%u distinct=%u\n", suFrames,
             lrDiag.mauLods[E_GRAPHICS_PROP_ENVMAP][0], lrDiag.mauLods[E_GRAPHICS_PROP_ENVMAP][1],
             lrDiag.mauLods[E_GRAPHICS_PROP_ENVMAP][2], lrDiag.mauDistinctModels[E_GRAPHICS_PROP_ENVMAP]);
+        CgsDev::Log::WriteToLog(lacMessage);
+        const auto& lrWorldLod = WorldEnvironmentMapLodSettingsPC();
+        const auto& lrPropLod = PropEnvironmentMapLodSettingsPC();
+        std::snprintf(lacMessage, sizeof(lacMessage),
+            "[graphics-reflection-lod] frame=%u worldMode=%d propMode=%d worldScale=%.9g propScale=%.9g"
+            " world=%u/%u/%u prop=%u/%u/%u\n", suFrames,
+            lrWorldLod.miMode, lrPropLod.miMode, lrWorldLod.mfDistanceScale, lrPropLod.mfDistanceScale,
+            lrDiag.mauLods[E_GRAPHICS_ENVMAP][0], lrDiag.mauLods[E_GRAPHICS_ENVMAP][1], lrDiag.mauLods[E_GRAPHICS_ENVMAP][2],
+            lrDiag.mauLods[E_GRAPHICS_PROP_ENVMAP][0], lrDiag.mauLods[E_GRAPHICS_PROP_ENVMAP][1], lrDiag.mauLods[E_GRAPHICS_PROP_ENVMAP][2]);
         CgsDev::Log::WriteToLog(lacMessage);
     }
 }

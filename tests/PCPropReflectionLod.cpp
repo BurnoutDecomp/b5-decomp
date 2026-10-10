@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "pc/gcm/renderengine/PropReflectionPCLeaf.h"
 #include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
+#include "pc/gcm/renderengine/ReflectionLodPCLeaf.h"
 static int giChecks=0,giFailures=0;
 static void Check(bool b,const char* s){++giChecks;if(!b){++giFailures;std::printf("FAIL %s\n",s);}}
 #define CGS_ASSERT(b,s) Check(!!(b),s)
@@ -91,5 +92,51 @@ int main()
  for(s32 i:{-1,3,100}){renderengine::PropEnvironmentMapLodPC()=i;Check(draw(true,false)&&giDrawState==2,"invalid script LOD falls back to original state");}
  lModule.mbOverrideLod=true;lModule.miLodOverrideValue=1;renderengine::PropEnvironmentMapLodPC()=0;
  Check(draw(true,false)&&giDrawState==1,"original forced prop LOD retains its higher precedence");
+ lModule.mbOverrideLod=false;renderengine::PropEnvironmentMapLodPC()=2;
+ auto& lrSettings=renderengine::PropEnvironmentMapLodSettingsPC();
+ Check(!lrSettings.IsDistanceBased(),"new prop reflection distance policy is disabled by default");
+ Check(draw(true,false,{1,0,0})&&giDrawState==2&&draw(true,false,{70,0,0})&&giDrawState==2,
+       "untuned prop reflections stay fixed LOD2 at near and far positions");
+ lrSettings.miMode=renderengine::E_ENVIRONMENT_MAP_LOD_RELATIVE;
+ Check(draw(true,false,{5,0,0})&&giDrawState==0&&draw(true,false,{5.1f,0,0})&&giDrawState==1,
+       "relative prop LOD0 boundary uses half the authored distance in metres");
+ Check(draw(true,false,{10,0,0})&&giDrawState==1&&draw(true,false,{10.1f,0,0})&&giDrawState==2,
+       "relative props transition to LOD2 after the scaled authored LOD1 distance");
+ Check(draw(true,false,{99,0,0})&&!draw(true,false,{100,0,0}),"prop relative scale leaves the final cull independent");
+ lModule.mbOverrideLodDistances=true;
+ lModule.mauOverrideLodDistances[0]=40;lModule.mauOverrideLodDistances[1]=80;lModule.mauOverrideLodDistances[2]=120;
+ Check(draw(true,false,{15,0,0})&&giDrawState==0&&draw(true,false,{30,0,0})&&giDrawState==1
+       &&draw(true,false,{50,0,0})&&giDrawState==2,"relative prop policy follows the active prop distance overrides");
+ renderengine::WorldEnvironmentMapLodSettingsPC().miMode=renderengine::E_ENVIRONMENT_MAP_LOD_RELATIVE;
+ renderengine::WorldEnvironmentMapLodSettingsPC().mfDistanceScale=10;
+ Check(draw(true,false,{30,0,0})&&giDrawState==1,"world reflection scale cannot change prop selection");
+ lModule.mauOverrideLodDistances[0]=80;lModule.mauOverrideLodDistances[1]=160;
+ Check(draw(true,false,{30,0,0})&&giDrawState==0,"live prop distance changes move relative transitions immediately");
+ lrSettings.mfDistanceScale=0.25f;
+ Check(draw(true,false,{30,0,0})&&giDrawState==1,"live prop reflection scale changes move transitions immediately");
+ lrSettings.miMode=renderengine::E_ENVIRONMENT_MAP_LOD_CUSTOM;
+ lrSettings.mafTransitionDistances[0]=3;lrSettings.mafTransitionDistances[1]=6;
+ Check(draw(true,false,{3,0,0})&&giDrawState==0&&draw(true,false,{4,0,0})&&giDrawState==1
+       &&draw(true,false,{7,0,0})&&giDrawState==2,"custom prop distances take precedence over scaled main-view distances");
+ lModel.mabExists[1]=false;
+ Check(draw(true,false,{4,0,0})&&giDrawState==2,"adaptive props use a coarser available mesh for missing LOD1");
+ lModel.mabExists[2]=false;
+ Check(draw(true,false,{7,0,0})&&giDrawState==0,"adaptive props retain a finer mesh when coarser states are absent");
+ lModel.mabExists[0]=false;
+ Check(!draw(true,false,{4,0,0}),"adaptive props with no available state never emit an invalid packet");
+ lModel.mabExists[0]=lModel.mabExists[1]=lModel.mabExists[2]=true;
+ lModel.mbInstanced=true;
+ Check(draw(true,false,{4,0,0})&&giInstanceState==1,"instanced props use the same adaptive policy");
+ lModel.mbInstanced=false;lModule.mbOverrideLodDistances=false;
+ Check(draw(false,false,{15,0,0})&&giDrawState==1&&draw(false,true,{15,0,0})&&giDrawState==1&&gbZOnly,
+       "adaptive reflection settings leave main-view and shadow LOD selection unchanged");
+ lModule.mbOverrideLod=true;lModule.miLodOverrideValue=0;
+ Check(draw(true,false,{7,0,0})&&giDrawState==0,"original forced prop LOD still takes precedence over adaptive reflections");
+ lModule.mbOverrideLod=false;renderengine::EnvironmentMapDrawDistancePC()=150;
+ Check(draw(true,false,{125,0,0})&&giDrawState==2&&!draw(true,false,{150,0,0}),
+       "adaptive prop LOD2 survives to the independent extended cutoff");
+ renderengine::EnvironmentMapDrawDistancePC()=0;lrSettings=renderengine::EnvironmentMapLodSettingsPC();
+ Check(draw(true,false,{1,0,0})&&giDrawState==2&&!draw(true,false,{101,0,0}),
+       "resetting prop mode restores fixed LOD2 and the original cutoff");
  std::printf("PCPropReflectionLod: %d checks, %d failures\n",giChecks,giFailures);return giFailures?1:0;
 }

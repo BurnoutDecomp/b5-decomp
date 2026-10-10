@@ -107,6 +107,7 @@
 #include "GameSource/World/BrnShaderLodInfo.h"                            // ShaderLodInfo
 #include "pc/gcm/renderengine/PropReflectionPCLeaf.h"
 #include "pc/gcm/renderengine/ReflectionDistancePCLeaf.h"
+#include "pc/gcm/renderengine/ReflectionLodPCLeaf.h"
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"                      // BrnWorld::ShadowMap
 
 #include "SharedClasses/Physics/Props/BrnPropGraphicsList.h"              // PropGraphics / PropPartGraphics
@@ -249,7 +250,11 @@ PropEntityModule::RenderModel(
     {
         // FLAG PC-platform leaf: the original fixed LOD2 can be selected through
         // the real debug registry. Invalid script values retain original detail.
-        const s32 liRequested = renderengine::PropEnvironmentMapLodPC();
+        const auto& lrReflectionLod = renderengine::PropEnvironmentMapLodSettingsPC();
+        const s32 liRequested = lrReflectionLod.IsDistanceBased()
+            ? renderengine::SelectEnvironmentMapLodPC(lpModel, lfScaledDistanceSq, lrReflectionLod,
+                mbOverrideLodDistances, mauOverrideLodDistances) : renderengine::PropEnvironmentMapLodPC();
+        if (liRequested < 0 && lrReflectionLod.IsDistanceBased()) return false;
         const auto leReflectionLod = static_cast<CgsGraphics::Model::State>(
             liRequested >= 0 && liRequested <= 2 ? liRequested : 2);
         if ( !lpModel->DoesStateExist( leReflectionLod ) )
