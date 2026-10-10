@@ -115,3 +115,12 @@ The deterministic crash run passes all seven capture/caster checks: opaque debri
 reaches all three cascades, reflected particle vertices are produced, and the run
 has zero asserts, exceptions or arena exhaustion. Caster counts establish the
 submission path; a separate image comparison is needed to judge shadow appearance.
+
+Temporary reflection effects and debris-shadow draws restore the full native GPU
+state and invalidate the constant, sampler, geometry and shader-binding caches.
+Restoring the device without invalidating those caches could make later vehicle
+draws skip required bindings. Empty debris passes now return before changing state.
+The native regression reproduced six failures before the repair and passes all
+37 checks afterward; the 2,947-TU shipping build and link pass. The reporter also
+confirmed the Annihilator is stable in the rebuilt game. Driving-specific
+verification remains separate from that junkyard check.

@@ -5,6 +5,7 @@
 #include "pc/gcm/renderengine/reflections/LightSubmission.h"
 #include "pc/gcm/renderengine/reflections/RenderContext.h"
 #include "pc/gcm/renderengine/DepthRange.h"
+#include "pc/gcm/renderengine/StateBlockRestore.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
@@ -108,11 +109,12 @@ namespace CgsPC::Reflections
             && (!lpParticleData || !Particles().mbEnabled) && (!lbRenderGlass || !Glass().mbEnabled))) return;
         IDirect3DDevice9* lpDevice = renderengine::gDevice;
         if (!lpDevice) return;
-        DWORD luDepthFunction = 0, luDepthWrite = 0, luCull = 0;
-        lpDevice->GetRenderState(D3DRS_ZFUNC, &luDepthFunction);
-        lpDevice->GetRenderState(D3DRS_ZWRITEENABLE, &luDepthWrite);
-        lpDevice->GetRenderState(D3DRS_CULLMODE, &luCull);
-        const auto leLogicalDepth = renderengine::DepthRangePC::GetState(lpDevice).meLogicalCompare;
+        // FLAG PC-platform leaf: glass and immediate effects can change shader,
+        // stream, sampler, blend and stencil state as well as depth/cull. Restore
+        // the complete face state before subsequent geometry or the main view.
+        IDirect3DStateBlock9* lpSaved = nullptr;
+        if (FAILED(lpDevice->CreateStateBlock(D3DSBT_ALL, &lpSaved))) return;
+        const auto lDepthState = renderengine::DepthRangePC::GetState(lpDevice);
         u32 luGlass = 0, luLights = 0;
         {
             ExtrasScope lScope;
@@ -179,10 +181,9 @@ namespace CgsPC::Reflections
                 CgsDev::Log::WriteToLog(lacTrace);
             }
         }
-        renderengine::DepthRangePC::GetState(lpDevice).meLogicalCompare = leLogicalDepth;
-        lpDevice->SetRenderState(D3DRS_ZFUNC, luDepthFunction);
-        lpDevice->SetRenderState(D3DRS_ZWRITEENABLE, luDepthWrite);
-        lpDevice->SetRenderState(D3DRS_CULLMODE, luCull);
+        renderengine::RestoreStateBlockPC(lpSaved);
+        lpSaved->Release();
+        renderengine::DepthRangePC::GetState(lpDevice) = lDepthState;
         shadow::Device::ResetShadowing();
     }
 }
