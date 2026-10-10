@@ -8,12 +8,14 @@
 #include "GameShared/GameClasses/Containers/CgsRingBuffer.h"  // CgsContainers::FixedRingBuffer<u16,8> mRecentlyHitPropSet
 
 // --- crash-mode event / interface parameter types (pointer-only in the decls below) ---
-// These belong to other (not-yet-homed in this scope) TUs; CrashModeScoring names them only by
-// pointer, so a forward declaration keeps the keystone's by-value embed leak-free. The handlers
-// that must DEREFERENCE one of these are bodied to what compiles and FLAGGED in the .cpp.
+// The three game events the handlers take; their home is GameSource/GameState/BrnGameEvents.h.
+// CrashModeScoring names them only by pointer, so a forward declaration keeps the keystone's
+// by-value embed leak-free.
+namespace BrnGameState { namespace GameStateModuleIO {
 struct CrashComboItemEvent;
 struct TriggerCrashBreakerEvent;
 struct PickupEvent;
+} }
 
 // [showtime-score 2026-08-29] DealWithShowtimeStunt names its argument by pointer only, so a
 // forward declaration keeps BrnGameActions.h out of this keystone header (the by-value embed
@@ -52,6 +54,10 @@ namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRace
 // BrnGameState::KI_MAX_RECENTLY_HIT_CARS (BrnCrashModeScoring.h:44).
 namespace BrnGameState
 {
+// BrnCrashModeScoring.h. The overhead-sign bonus: DealWithHitOverheadSign adds it to the base
+// score and ProcessGameEvents' overhead-sign arm reports it in action 128.
+const s32 KI_SCORE_BONUS_PER_OVERHEAD_SIGN = 10000;
+
 // The crash-score debug overlay is embedded as CrashModeScoring's first member and reads its private
 // scoring state directly (BrnCrashModeScoring.h:215); declared here for the friend grant below.
 class CrashScoreDebugComponent;
@@ -123,13 +129,13 @@ struct CrashModeScoring
     // that are NOT yet homed in this scope are forward-declared (pointer-only) so the keystone's
     // by-value embed stays leak-free; the handlers that must DEREFERENCE such a type are bodied
     // to what compiles and FLAGGED in the .cpp.
-    void DealWithComboItem(const CrashComboItemEvent* lpComboItemEvent);            // X360 0x82312918
-    void DealWithCrashbreakerRequest(const TriggerCrashBreakerEvent* lpEvent);      // X360 0x82320EB8
+    void DealWithComboItem(const GameStateModuleIO::CrashComboItemEvent* lpComboItemEvent);
+    void DealWithCrashbreakerRequest(const GameStateModuleIO::TriggerCrashBreakerEvent* lpEvent);
     void DealWithHitProp(u16 luPropIndex, u8 luPropFlags);                          // X360 0x82320DC8
     bool DealWithHitTrafficCar(EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex,
                                EntityId lEntityIdA, EntityId lEntityIdB,
                                u16* lpOutVictimIndex);                              // X360 0x82338558
-    void DealWithPickup(const PickupEvent* lpPickupEvent);                          // X360 0x82312970
+    void DealWithPickup(const GameStateModuleIO::PickupEvent* lpPickupEvent);
     void DealWithScoreForVehicleClass(u16 luTrafficEntityIndex,
                                       BrnTraffic::VehicleClass leVehicleClass,
                                       CgsID lVehicleTypeID,

@@ -119,6 +119,17 @@ namespace BrnGameState
     }
 
     // ------------------------------------------------------------------------
+    // Debug-info BrnScoringSystem.h. The player hit a rival car with this impact type.
+    // Empty on the console: ProcessGameEvents' vehicle-impact arm calls it with the scoring
+    // system and the impact type, and the call lands on the one shared empty function body
+    // the linker folded every empty function into.
+    // ------------------------------------------------------------------------
+    void ScoringSystem::OnPlayerHitsRival(BrnPhysics::Vehicle::EImpactType leImpactType)
+    {
+        (void)leImpactType;
+    }
+
+    // ------------------------------------------------------------------------
     // X360 0x8231F198. Record a car crossing the finish line for one lap. Reads the car's
     // current completed-lap count, turns the elapsed-since-start time into THIS lap's split
     // (by subtracting every previously banked lap split), banks the split into maaLapTimes,

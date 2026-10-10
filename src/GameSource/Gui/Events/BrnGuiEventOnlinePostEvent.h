@@ -9,7 +9,9 @@
 // a small fixed header, an array of eight per-result records (each holding a result
 // time and a block of scalar/flag fields -- the screen's name/time table cells are
 // populated from these by OnlineInstantResultsState::PopulateNameAndTimeTableCells),
-// a block of six 12-byte index triplets, and a three-word tail.
+// the six awards handed out (maOnlineAwards: award id, the awarded car, the award's
+// variable -- OnlineInstantResultsState::FillOutTicker reads them), and the three counts
+// (players in the event, players who finished, awards given).
 //
 // Layout proven store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   * Clear     @0x82481EA0 - zero/seed loop. r3+0x28 anchor (== record[0]+4),
@@ -18,14 +20,14 @@
 //                f32@+0x10 = 0, words@+0x18/+0x1C/+0x20/+0x24/+0x28 = 0 and
 //                bytes@+0x34/+0x35/+0x36 = 0 (it leaves +0x14/+0x2C/+0x30 untouched).
 //                Then a second loop (r3+0x1E8 anchor, stride 0x0C, 6 reps) writes each
-//                triplet {-1, -1, 0}, and finally zeroes the three tail words
+//                award {-1, -1, 0}, and finally zeroes the three counts
 //                @+0x22C/+0x230/+0x234.
 //   * operator= @0x82489D28 - member-wise copy of the whole 0x238-byte object: the
 //                9-word header (+0x00..+0x20), the eight 56-byte records (anchors
 //                +0x24, +0x5C, +0x94, +0xCC, +0x104, +0x13C, +0x174, +0x1AC; each copied
 //                word@0, f32@4, word@8, f32@0xC, f32@0x10, words@0x14..0x30,
-//                bytes@0x34/0x35/0x36), the six 12-byte triplets (+0x1E4, +0x1F0, +0x1FC,
-//                +0x208, +0x214, +0x220) and the three tail words (+0x22C/+0x230/+0x234).
+//                bytes@0x34/0x35/0x36), the six 12-byte awards (+0x1E4, +0x1F0, +0x1FC,
+//                +0x208, +0x214, +0x220) and the three counts (+0x22C/+0x230/+0x234).
 //
 // The records' inner field roles beyond width/offset are not recovered from the asm;
 // fields are named by their observed width/role (the +0x08 CgsSystem::Time is the result
@@ -42,8 +44,8 @@ namespace BrnGui
     {
         // Number of per-result records (X360 Clear loop = 8 reps, stride 0x38).
         static const s32 KI_NUM_RECORDS = 8;
-        // Number of 12-byte index triplets (X360 Clear second loop = 6 reps, stride 0x0C).
-        static const s32 KI_NUM_INDEX_TRIPLETS = 6;
+        // Number of awards (maOnlineAwards[6]; Clear's second loop = 6 reps, stride 0x0C).
+        static const s32 KI_NUM_ONLINE_AWARDS = 6;
 
         // AddGuiEvent<GuiEventOnlinePostEvent> @0x823D1240 -> AddEvent(&event, 318, 568).
         s32 GetEventType() const { return 318; }
@@ -71,13 +73,13 @@ namespace BrnGui
             u8              mPad37;         // +0x37  pad to the 0x38 stride
         };
 
-        // One 12-byte index triplet (X360 second Clear loop / the six +0x1E4.. blocks in
-        // operator=). Clear seeds {-1, -1, 0}.
-        struct IndexTriplet
+        // One award (OnlineAward, BrnGuiEventTypeDefs.h; the six +0x1E4.. blocks
+        // in operator=). Clear seeds {-1, -1, 0}.
+        struct OnlineAward
         {
-            s32 miIndexA;   // +0x00  (Clear -> -1)
-            s32 miIndexB;   // +0x04  (Clear -> -1)
-            u32 muValue08;  // +0x08  (Clear -> 0)
+            s32 meOnlineAwardID;              // +0x00  BrnGameState::EOnlineAwardID (Clear -> -1, none)
+            s32 mePlayerActiveRaceCarIndex;   // +0x04  EActiveRaceCarIndex of the winner (Clear -> -1)
+            s32 miAwardVariable;              // +0x08  the award's count/value (Clear -> 0)
         };
 
         // 9-word header (X360 +0x00..+0x20). Not touched by Clear; copied by
@@ -88,15 +90,16 @@ namespace BrnGui
 
         Record      maRecords[KI_NUM_RECORDS];          // +0x24 .. +0x1E3 (8 * 0x38)
 
-        IndexTriplet maIndexTriplets[KI_NUM_INDEX_TRIPLETS]; // +0x1E4 .. +0x22B (6 * 0x0C)
+        OnlineAward maOnlineAwards[KI_NUM_ONLINE_AWARDS];   // +0x1E4 .. +0x22B (6 * 0x0C)
 
-        // Three-word tail zeroed by Clear (X360 +0x22C/+0x230/+0x234) and copied by
-        // operator=. Roles not recovered; modelled as the three words the binary moves.
-        u32         maTail[3];                          // +0x22C .. +0x237
+        // BrnGuiEventTypeDefs.h, zeroed by Clear and copied by operator=.
+        s32         miNumPlayersInEvent;                // +0x22C
+        s32         miNumPlayersFinishedEvent;          // +0x230
+        s32         miNumAwardsGiven;                   // +0x234
 
         // @0x82481EA0 - zero/seed the event: per record set index = -1, the two floats and
-        // the result time to 0 and the scalar/flag tail to 0; seed each index triplet to
-        // {-1, -1, 0}; zero the three tail words.
+        // the result time to 0 and the scalar/flag tail to 0; seed each award to
+        // {-1, -1, 0}; zero the three counts.
         void Clear();
 
         // @0x82489D28 - member-wise copy assignment of the whole 0x238-byte object.
@@ -106,8 +109,8 @@ namespace BrnGui
     // Layout pins from the X360 store/copy sequence (object is 0x238 bytes).
     static_assert(sizeof(GuiEventOnlinePostEvent::Record) == 0x38,
                   "GuiEventOnlinePostEvent::Record must be 56 bytes (X360 stride 0x38)");
-    static_assert(sizeof(GuiEventOnlinePostEvent::IndexTriplet) == 0x0C,
-                  "GuiEventOnlinePostEvent::IndexTriplet must be 12 bytes (X360 stride 0x0C)");
+    static_assert(sizeof(GuiEventOnlinePostEvent::OnlineAward) == 0x0C,
+                  "GuiEventOnlinePostEvent::OnlineAward must be 12 bytes (console stride 0x0C)");
     static_assert(sizeof(GuiEventOnlinePostEvent) == 0x238,
                   "GuiEventOnlinePostEvent must be 0x238 bytes (X360 layout)");
 }

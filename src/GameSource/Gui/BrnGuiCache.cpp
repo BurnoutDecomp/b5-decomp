@@ -908,6 +908,66 @@ namespace BrnGui
         lrWatch.muNumberOfComponentsToWatch = 0;
     }
 
+    // Stream one watched resource for the cache status dump: its load state, "\t-\t", its
+    // resource type, " - ", then its identifier (or "<NULLSTRING>"). The type names follow the
+    // console's own resource-type numbering, which carries an APT_MANUAL_LOADING at 5 and so
+    // runs one ahead of CgsGui::ResourceRequestTypes from there on; the HD/SD bundle pairs print
+    // as one name and the two flash-apt bundles (8, 9) print "Unknown".
+    void StateLoadingHelper::AppendResourceInfo(u32 luIndex, CgsDev::StrStream& lStream)
+    {
+        const ResourceInfo& lrResource = maResources[luIndex];
+
+        switch (lrResource.meState)
+        {
+            case E_STATE_UNLOADED:         lStream << "UNLOADED";         break;
+            case E_STATE_LOAD_REQUESTED:   lStream << "LOAD_REQUESTED";   break;
+            case E_STATE_LOADING:          lStream << "LOADING";          break;
+            case E_STATE_LOAD_CANCELLED:   lStream << "LOAD_CANCELLED";   break;
+            case E_STATE_LOADED:           lStream << "LOADED";           break;
+            case E_STATE_UNLOAD_REQUESTED: lStream << "UNLOAD_REQUESTED"; break;
+            case E_STATE_UNLOADING:        lStream << "UNLOADING";        break;
+            case E_STATE_UNLOAD_CANCELLED: lStream << "UNLOAD_CANCELLED"; break;
+            default:                       lStream << "Unknown";          break;
+        }
+
+        lStream << "\t-\t";
+
+        switch (static_cast<s32>(lrResource.meType))
+        {
+            case 0:                  lStream << "START";                     break;
+            case 1: case 14: case 15: lStream << "BUNDLE";                   break;
+            case 2: case 3:          lStream << "APT_BUNDLE";                break;
+            case 4:                  lStream << "APT";                       break;
+            case 5:                  lStream << "APT_MANUAL_LOADING";        break;
+            case 6:                  lStream << "APT_LOADING_SCREEN";        break;
+            case 7:                  lStream << "APT_PERSISTENT";            break;
+            case 10:                 lStream << "FLAPT_PERSISTENT";          break;
+            case 11:                 lStream << "TEXTURE";                   break;
+            case 12:                 lStream << "LOCALISED_TEXT";            break;
+            case 13:                 lStream << "LOCALISED_TEXT_BUNDLE";     break;
+            case 16:                 lStream << "FONTDATA";                  break;
+            case 17:                 lStream << "FSM_BUNDLE";                break;
+            case 18:                 lStream << "FSM";                       break;
+            case 19:                 lStream << "PFX_BUNDLE";                break;
+            case 20:                 lStream << "PFX";                       break;
+            case 21:                 lStream << "PFX_COLOURCUBE_DICTIONARY"; break;
+            case 22:                 lStream << "PFX_COLOURCUBE";            break;
+            case 23:                 lStream << "DONE";                      break;
+            default:                 lStream << "Unknown";                   break;
+        }
+
+        lStream << " - ";
+
+        if (gGuiResourceIdentifier[luIndex] != 0)
+        {
+            lStream << gGuiResourceIdentifier[luIndex];
+        }
+        else
+        {
+            lStream << "<NULLSTRING>";
+        }
+    }
+
     // @ 0x824F85D8 -- register one component name hash as "expected" on the flow
     // layer. The three X360 asserts are non-gating (the append always runs): the
     // flow-range stream (cpp:784, folded static as above), the capacity check
@@ -2016,6 +2076,28 @@ namespace BrnGui
             mfDistanceToCheckpoint = *reinterpret_cast<const f32*>(lpEvent);   // stfsx +0xA010
             break;
 
+        // GUI 317 GuiEventOnlineEventFinishingOrder: keep the finishing order, then (log
+        // filter bit 0) print the eight car indices on one line.
+        case 317:
+        {
+            mOnlineFinishingOrder = *reinterpret_cast<const GuiEventOnlineEventFinishingOrder*>(lpEvent);
+            for (s32 liPosition = 0; liPosition < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liPosition)
+            {
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
+                    *CgsDev::Log::gpDebugPrint
+                        << static_cast<s32>(mOnlineFinishingOrder.maeActiveRaceCarIndexForFinishPosition[liPosition])
+                        << " ";
+            }
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
+                *CgsDev::Log::gpDebugPrint << "\n";
+            break;
+        }
+
+        // GUI 318 GuiEventOnlinePostEvent: keep the whole post-event record.
+        case 318:
+            mOnlinePostEventData = *reinterpret_cast<const GuiEventOnlinePostEvent*>(lpEvent);
+            break;
+
         // GUI 320: an online showtime event (mode 16) has completed.
         case 320:
             if (meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
@@ -2070,10 +2152,10 @@ namespace BrnGui
                 reinterpret_cast<const GuiEventSetRoadRuleScoreMode*>(lpEvent)->meNewRoadRuleScoreMode;
             break;
         case 335:   // GuiEventRoadRuleBegin -> that score type's rule is running (+44100)
-            maRoadRuleActiveByType[reinterpret_cast<const GuiEventRoadRuleBegin*>(lpEvent)->meRuleType] = true;
+            mabRoadRulesActive[reinterpret_cast<const GuiEventRoadRuleBegin*>(lpEvent)->meRuleType] = true;
             break;
         case 336:   // GuiEventRoadRuleEnd -> that score type's rule is over
-            maRoadRuleActiveByType[reinterpret_cast<const GuiEventRoadRuleEnd*>(lpEvent)->meRuleType] = false;
+            mabRoadRulesActive[reinterpret_cast<const GuiEventRoadRuleEnd*>(lpEvent)->meRuleType] = false;
             break;
         case 343:   // GuiEventRoadRuleChangeMode -> the active road rule (+44092, GetActiveRoadRule)
             meActiveRoadRule = reinterpret_cast<const GuiEventRoadRuleChangeMode*>(lpEvent)->meScoreType;
@@ -2383,17 +2465,8 @@ namespace BrnGui
             miTakedownTarget          = lpPrepare->mi8RoadRageThreshold;       // extsb + stwx +0x9FC0
             miOpponentsInEvent        = static_cast<s8>(lpPrepare->mu8CarCount); // stbx +0x9F44
 
-            // [FLAG deferred] @0x8250E990 `bl BrnGui::GuiEventOnlinePostEvent::Clear` on
-            // `this + 43524` (== cache +0xAA04) -- the cache's embedded online-post-event
-            // record, reset at every mode start. NOT called here because the record has no
-            // named member on this class yet AND the committed carve of that region is in
-            // conflict with it: BrnGuiEventOnlinePostEvent.h pins Clear's 8-record loop at
-            // `r3 + 0x24` (stride 0x38), which from +0xAA04 puts record[0] at +0xAA28, while
-            // BrnGuiCache.h carries `PerRacerPair_AA30 maPerRacerData_AA30[8]` (the SAME
-            // 8 x 0x38 shape, ctor-inferred) at +0xAA30 -- eight bytes apart. Two models of
-            // one array; arbitrating them is a header carve of its own and nothing on the
-            // offline stunt path reads either. Naming it rather than faking a member.
-            // DELETE-WHEN the +0xAA04 GuiEventOnlinePostEvent embed is arbitrated.
+            // Every mode start forgets the previous online post-event record.
+            mOnlinePostEventData.Clear();
 
             mbOnlineTimeoutPending      = false;                     // stbx +0x13B5C (r24 == 0)
             mbEventPreparedForModeStart = true;                      // stbx +0xA014 (r20 == 1)
@@ -5001,14 +5074,14 @@ namespace BrnGui
 
 namespace BrnGui
 {
-    // @ 0x82472E78 -- maRoadRuleActiveByType[liRoadRuleType] (@0xAC44, idx 0..1). The X360
+    // mabRoadRulesActive[liRoadRuleType] (+0xAC44, idx 0..1). The console
     // brackets the read with two debug asserts (>= 0 and < E_SCORE_TYPE_COUNT == 2), each
     // building an "Invalid score type : <n>" message that the no-op assert discards.
     bool GuiCache::IsRoadRuleActive(s32 liRoadRuleType) const
     {
         CGS_ASSERT(liRoadRuleType >= 0, "Invalid score type");
         CGS_ASSERT(liRoadRuleType < 2, "Invalid score type");
-        return maRoadRuleActiveByType[liRoadRuleType];
+        return mabRoadRulesActive[liRoadRuleType];
     }
 
     // @ 0x82472FD0 -- bump the sat-nav zoom level (miSatNavZoomLevel @0x803C / result[8207]),

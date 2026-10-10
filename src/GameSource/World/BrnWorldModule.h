@@ -455,6 +455,7 @@ namespace BrnWorld
         //      +6167272) as its "is there a local player car at all" gate before consulting
         //      maeCarControls[event->miVehicleID] == E_CAR_CONTROL_AI_MODULE. ----
         EActiveRaceCarIndex GetLocalPlayerActiveRaceCarIndex() const { return meLocalPlayerActiveRaceCarIndex; }
+        const BrnGame::BrnCpuMonitors& GetGlobalCpuMonitors() const { return mGlobalCpuMonitors; }
 
     private:
         // [PC HARNESS, NOT X360] BRN_AI_DRIVES_PLAYER=1: once the player's slot is attached and its

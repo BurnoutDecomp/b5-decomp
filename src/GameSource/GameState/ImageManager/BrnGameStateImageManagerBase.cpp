@@ -36,7 +36,8 @@ namespace BrnGameState
 namespace
 {
     // --- X360-attested AddEvent type immediates (see file header) -------------------------------
-    const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
+    const s32 KI_EVENT_IMAGE_TO_RENDER   = 289; // per-slot render record (texture, slot index)
+const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
     const s32 KI_EVENT_GALLERY_COUNT     = 291; // 8-byte  count reply
     const s32 KI_EVENT_LOAD_COMPLETE     = 292; // 16-byte load-complete bitfield
     const s32 KI_EVENT_EMPTY_SLOT        = 293; // 1-byte  empty/abort marker
@@ -154,75 +155,6 @@ namespace
 }
 
 // ---------------------------------------------------------------------------
-// Construct -- X360 0x8236D720. Cache the progression manager and clear every slot.
-// ---------------------------------------------------------------------------
-void GameStateImageManagerBase::Construct(BrnProgression::ProgressionManager* lpProgression)
-{
-    CGS_ASSERT(lpProgression != nullptr, "lpProgression");
-
-    mpProgression       = lpProgression;        // this+0xB8
-    miMugshotToSaveIndex = 0;                    // this+0xAC
-    maImageLoadRequests.Clear();                 // this+0x80 count word -> 0
-    mbLoadInProgress    = false;                 // this+0xBC
-    mImagesToRenderBitArray.UnSetAll();          // this+0xB0 (std 0)
-
-    // this+0x84: maLoadedImagesToSlotMapping[i] = 0; this+0x90: maiImagesLockedForSave[i] = -1.
-    for (s32 liIndex = 0; liIndex < KI_NUM_PICTURES; ++liIndex)
-    {
-        maLoadedImagesToSlotMapping[liIndex] = 0;
-        maiImagesLockedForSave[liIndex]      = -1;
-    }
-
-    // this+0x08: construct each gallery mugshot texture.
-    for (s32 liIndex = 0; liIndex < KI_NUM_PICTURES; ++liIndex)
-    {
-        maImageGalleryMugshots[liIndex].Construct();
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Destruct -- X360 0x8236D7E0. Destruct each texture and re-clear every slot.
-// ---------------------------------------------------------------------------
-void GameStateImageManagerBase::Destruct()
-{
-    for (s32 liIndex = 0; liIndex < KI_NUM_PICTURES; ++liIndex)
-    {
-        maImageGalleryMugshots[liIndex].Destruct();
-    }
-
-    for (s32 liIndex = 0; liIndex < KI_NUM_PICTURES; ++liIndex)
-    {
-        maLoadedImagesToSlotMapping[liIndex] = 0;
-        maiImagesLockedForSave[liIndex]      = -1;
-    }
-
-    miMugshotToSaveIndex = 0;
-    mImagesToRenderBitArray.UnSetAll();
-    mbLoadInProgress     = false;
-    maImageLoadRequests.Clear();
-    mpProgression        = nullptr;
-}
-
-// ---------------------------------------------------------------------------
-// Prepare -- X360 0x8236D858. Allocate + zero the three gallery mugshot textures.
-// (X360 immediates: 160x120, format 438304850.)
-// ---------------------------------------------------------------------------
-bool GameStateImageManagerBase::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc)
-{
-    for (s32 liIndex = 0; liIndex < KI_NUM_PICTURES; ++liIndex)
-    {
-        CgsNetwork::NetworkTexture& lTexture = maImageGalleryMugshots[liIndex];
-        lTexture.Prepare(lpHeapMalloc, 160, 120,
-                         static_cast<renderengine::PixelFormat>(438304850));
-        CGS_ASSERT(lTexture.GetTexture() != nullptr, "mpcTexture");
-        lTexture.ClearPixels();
-    }
-
-    mImagesToRenderBitArray.UnSetAll(); // this+0xB0 = 0
-    return true;
-}
-
-// ---------------------------------------------------------------------------
 // Release -- X360 0x8236D918. Release the three gallery mugshot textures.
 // ---------------------------------------------------------------------------
 bool GameStateImageManagerBase::Release()
@@ -328,6 +260,60 @@ void GameStateImageManagerBase::HandleImageGalleryCountRequest(const ImageGaller
 
     AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lReply), KI_EVENT_GALLERY_COUNT, (s32)sizeof(lReply));
+}
+
+// ---------------------------------------------------------------------------
+// HandleImageGalleryDataRequest -- the UI asked which images of a gallery type exist. Reply with
+// the type-292 record: the gallery type and one bit per mugshot index the profile holds.
+// ---------------------------------------------------------------------------
+void GameStateImageManagerBase::HandleImageGalleryDataRequest(const ImageGalleryDataRequestEvent* lpImageGalleryDataReqEvent,
+                                                              GameStateModuleIO::OutputBuffer* lpOutput)
+{
+    CGS_ASSERT(lpImageGalleryDataReqEvent != nullptr, "lpImageGalleryDataReqEvent");
+    CGS_ASSERT(lpImageGalleryDataReqEvent->meImageGalleryImageType < GameStateModuleIO::E_IMAGE_GALLERY_TYPE_COUNT,
+               "lpImageGalleryDataReqEvent->meImageGalleryImageType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");
+
+    LoadCompleteEvent lImageData;
+    lImageData.meImageGalleryType = lpImageGalleryDataReqEvent->meImageGalleryImageType;
+    lImageData.miPad04            = 0;
+    lImageData.mu64LiveBits       = 0;
+
+    CGS_ASSERT(mpProgression != nullptr, "mpProgression");
+    const s32 liNumMugshots = mpProgression->GetProfile()->GetNumMugshots(lpImageGalleryDataReqEvent->meImageGalleryImageType);
+    for (s32 liMugshotIndex = 0; liMugshotIndex < liNumMugshots; ++liMugshotIndex)
+    {
+        CGS_ASSERT(liMugshotIndex < 20, "Index is out of range (max bits: 20)");
+        lImageData.mu64LiveBits |= (static_cast<u64>(1) << (liMugshotIndex & 0x3F));
+    }
+
+    AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
+        reinterpret_cast<const CgsModule::Event*>(&lImageData), KI_EVENT_LOAD_COMPLETE, (s32)sizeof(lImageData));
+}
+
+// ---------------------------------------------------------------------------
+// UpdateImagesToRender -- every frame, one type-289 record per gallery slot: the slot's mugshot
+// texture when its render bit is set (null otherwise) and the slot index.
+// ---------------------------------------------------------------------------
+void GameStateImageManagerBase::UpdateImagesToRender(GameStateModuleIO::OutputBuffer* lpOutput)
+{
+    struct ImageToRenderEvent
+    {
+        CgsNetwork::NetworkTexture* mpTexture;     // +0x00 (null when the slot is not rendered)
+        s32                         miSlotIndex;   // +0x04
+    };
+
+    for (s32 liSlotIndex = 0; liSlotIndex < KI_NUM_PICTURES; ++liSlotIndex)
+    {
+        ImageToRenderEvent lImageToRender;
+        lImageToRender.mpTexture   = mImagesToRenderBitArray.IsBitSet(static_cast<u32>(liSlotIndex))
+                                         ? &maImageGalleryMugshots[liSlotIndex]
+                                         : nullptr;
+        lImageToRender.miSlotIndex = liSlotIndex;
+
+        AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lImageToRender), KI_EVENT_IMAGE_TO_RENDER,
+            (s32)sizeof(lImageToRender));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -525,6 +511,28 @@ void GameStateImageManagerBase::HandleImageGalleryRequest(const ImageGalleryRequ
         default:
             break;
     }
+}
+
+// ---------------------------------------------------------------------------
+// ProcessNewImageRequest. Queue a load of the requested image into its gallery slot; with
+// the queue full the oldest request is dropped first.
+// ---------------------------------------------------------------------------
+void GameStateImageManagerBase::ProcessNewImageRequest(const ImageGalleryRequestEvent* lpImageGalleryReqEvent)
+{
+    CGS_ASSERT(lpImageGalleryReqEvent, "lpImageGalleryReqEvent");
+    CGS_ASSERT(GameStateModuleIO::E_IMAGE_GALLERY_REQUEST_NEW_IMAGES == lpImageGalleryReqEvent->meImageGalleryRequest,
+               "GsmIO::E_IMAGE_GALLERY_REQUEST_NEW_IMAGES == lpImageGalleryReqEvent->meImageGalleryRequest");
+
+    ImageLoadRequest lImageLoadRequest;
+    lImageLoadRequest.meImageGalleryImageType = lpImageGalleryReqEvent->meImageGalleryImageType;
+    lImageLoadRequest.miImageIndex            = lpImageGalleryReqEvent->miImageIndex;
+    lImageLoadRequest.miSlotIndex             = lpImageGalleryReqEvent->miSlotIndex;
+
+    if (maImageLoadRequests.GetLength() == static_cast<u32>(KI_NUM_PICTURES))
+    {
+        maImageLoadRequests.Erase(0);
+    }
+    maImageLoadRequests.Append(lImageLoadRequest);
 }
 
 // ---------------------------------------------------------------------------

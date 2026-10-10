@@ -81,6 +81,9 @@ namespace Jobs
         void SetCodeRecycle(EntryPoint::CodeRecycle leRecycle);
         // job.h:99  -- attach the job's data block (X360 0x82BC9978 stores it in mParams).
         void SetData(void* lpvData, size_t luSize);
+        // job.h/182 -- forward to the entry point's SleepOn permission.
+        bool GetAllowSleepOn() const { return mEntryPoint.GetAllowSleepOn(); }
+        void SetAllowSleepOn(bool lbAllowSleepOn) { mEntryPoint.SetAllowSleepOn(lbAllowSleepOn); }
 
         // job.h:60 -- declare that THIS job depends on rOther firing eTrigger before it
         // may run; records the edge on both sides. X360 0x82BCB280.

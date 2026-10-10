@@ -13,7 +13,7 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitiveListWithTriangleListStreamJobDesc.h" // the type-12 descriptor + its StreamCommand
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitivePairListJobDesc.h" // the type-10 descriptor (CollidePrimitivePairList)
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSweptSphereListWithTriangleListJobDesc.h" // the type-13 descriptor (CollideSweptSphereListWithTriangleList)
-#include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h"        // SimpleDataStreamProducer (CreateStreamProducer)
+#include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h"        // SimpleDataStreamProducer (CreateFillTriangleCacheStream)
 #include "SDKs/EATech/eajobs/job.h"                                                       // EA::Jobs::Job (AllocateJob)
 #include "SDKs/EATech/eajobs/job_types.h"                                                 // EA::Jobs::Param (the inline dispatch)
 
@@ -42,27 +42,12 @@ void ContactGeneratorEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA
 // DWARF. The batch ring is 64 wide on X360 (KU16_MAX_NUM_BATCHES); mabUsedBatches[i] tracks
 // which of the 64 embedded jobs is in flight.
 //
-// NOT reconstructed here (blocked): the CollideLine*/TestLine* VMX kernels (0x82812AE0,
-// 0x828131C0 CollideLineAgainstPolySoupListNea, 0x82813978 TestLineAgainstPolySoupListDouble)
-// -- large hand-written VMX pipelines that need the un-homed
-// CgsGeometric::IntersectLinePolygonSoupNearestSingleSided, the PolygonSoupListSpatialMap query
-// path and permute-table constants (vpermwi128 0x4B/0x87, sub_82843E98).
+// The synchronous line drivers (CollideLineAgainstPolySoupList, CollideLineAgainstPolySoupList-
+// Nearest, TestLineAgainstPolySoupListDoubleSided) are in the folded scene-query section at the
+// end of this file.
 //
-// ⭐⭐ STALE-BLOCKED PARAGRAPH RETIRED 2026-08-14 (walls leg 1). This banner used to list the
-// Run*/Add*/PrepareNewPrimitiveTestResultsLi family as blocked on (a) the JobScheduler singleton,
-// (b) the un-exported job entry symbols, (c) an "un-homed descriptor variant" and (d)
-// "un-attested CollisionResultList header fields". Every one of those blockers had already
-// fallen by the time it was re-read: (a) the CgsLooseOctree.cpp:997 inline-dispatch precedent
-// (used by both dispatchers in CgsCollisionGenerator_LineStream.cpp since 2026-08-10/11),
-// (b) ContactGeneratorEntry is homed in GameShared/Jobs/ContactGenerator/, (c) the descriptor
-// "variant" is the per-family StreamCommand/Data the DWARF names verbatim, and (d) the DWARF
-// names every CollisionResultList field (CgsCollisionResultList.h:163-169). The family is REAL
-// in CgsCollisionGenerator_CollideStreams.cpp.
-//
-// ⭐⭐ AND THE LAST GATE OF THAT FAMILY IS GONE TOO (2026-08-19, wave Q7 cluster `pairlist`). The
-// sentence that used to close the paragraph above -- "only CollidePrimitivePairList keeps a gate
-// (CgsCollisionGenerator_StreamStubs.cpp)" -- is retired: that body is BELOW, and the gate file it
-// named now holds no definition at all (banner-only; reported for UNMOUNT, bat:1001).
+// The streamed Run*/Add*/Create* family is in CgsCollisionGenerator_CollideStreams.cpp and
+// CgsCollisionGenerator_LineStream.cpp; the synchronous primitive legs are below.
 
 namespace CgsSceneManager
 {
@@ -208,9 +193,9 @@ EA::Jobs::Job* BaseCollisionGenerator::AllocateJob()
     return lpJob;
 }
 
-// X360 0x828109F8 (ledger identity "Crea" -- IDA-truncated; reconstructed under its descriptive
-// name). Carve a SimpleDataStreamProducer and its command + result buffers out of the result
-// allocator at 128-byte alignment, size the two buffers with the producer's own requirement
+// CreateFillTriangleCacheStream (the declaration's name; the console symbol is truncated to
+// "Crea"). Carve a SimpleDataStreamProducer and its command + result buffers out of
+// the result allocator at 128-byte alignment, size the two buffers with the producer's own requirement
 // helper, construct the producer over them, then restore the allocator alignment. The stream
 // carries fixed-geometry commands (32-byte command records, 16-byte result records), so the
 // command/result counts both come from liMaxCommands (r4). The two allocation-failure asserts
@@ -218,7 +203,7 @@ EA::Jobs::Job* BaseCollisionGenerator::AllocateJob()
 // messages are string literals here, matching this file's CGS_ASSERT convention. The
 // GetRequiredBufferSizes result-size out-slot is a single u32 on X360 (the frame reserved three
 // words but only the first is read).
-CgsMemory::SimpleDataStreamProducer* BaseCollisionGenerator::CreateStreamProducer(s32 liMaxCommands)
+CgsMemory::SimpleDataStreamProducer* BaseCollisionGenerator::CreateFillTriangleCacheStream(s32 liMaxCommands)
 {
     const size_t lnSavedAlignment = mCollisionResultsAllocator.GetAlignment();
     mCollisionResultsAllocator.SetAlignment(128);
@@ -1101,6 +1086,106 @@ namespace CgsCollision
         // 0x82813930..0x82813960: mu16NumResults = (1.0 >= best t). The one write of the count.
         lpList->mu16NumResults = (1.0f >= lpBest->mLineParam.x) ? 1 : 0;
 
+        return static_cast<u16>(liResultListIndex);
+    }
+
+    // =============================================================================================
+    // TestLineAgainstPolySoupListDoubleSided -- the YES/NO twin of the function above. Its
+    // instruction stream is the Nearest driver's with the per-leaf body swapped:
+    //   * the same "Invalid line\n" assert (its own line), PrepareNewPrimitiveTestResultsList
+    //     (1, tagA, tagB), and the same {2,2,2,2} seed stored to the single record's +0x50 lane;
+    //   * the same 20 m split (400.0 > |end - start|^2). Short arm: the min/max box of the two end
+    //     points, RunQuery(box), the six-lane xyz leaf overlap. Long arm: RunQuery(line), then
+    //     TestLineStartEndAxisAlignedBox inlined whole (the Nearest long arm's sequence instruction
+    //     for instruction, register allocation aside);
+    //   * per surviving leaf: CgsGeometric::TestLinePolygonSoupDoubleSided(*leaf.mpPolygonSoup,
+    //     start, end) and `vcmpeqfp128.` of its mask against zero -- the first soup that answers
+    //     yes stores 1 to the list's count and returns;
+    //   * no hit anywhere: the count is stored as 0. No result record is written on either path.
+    // =============================================================================================
+    u16 BaseCollisionGenerator::TestLineAgainstPolySoupListDoubleSided(
+        const CgsGeometric::Line&                 lrLine,
+        CgsGeometric::PolygonSoupListSpatialMap*  lpPolySoupListSpacialMap,
+        u32                                       lu32UserTagA,
+        u16                                       lu16UserTagB)
+    {
+        CGS_ASSERT(lrLine.IsValid(), "Invalid line\n");
+
+        const s32 liResultListIndex = PrepareNewPrimitiveTestResultsList(1, lu32UserTagA, lu16UserTagB);
+
+        CollisionResultList* lpList = mapCollisionResultLists[static_cast<u16>(liResultListIndex)];
+        CgsGeometric::PolySoupLineNearestResult* lpRecord =
+            reinterpret_cast<CgsGeometric::PolySoupLineNearestResult*>(lpList->mpResults);
+        lpRecord->mLineParam.x = KF_LINE_PARAM_NO_HIT;
+        lpRecord->mLineParam.y = KF_LINE_PARAM_NO_HIT;
+        lpRecord->mLineParam.z = KF_LINE_PARAM_NO_HIT;
+        lpRecord->mLineParam.w = KF_LINE_PARAM_NO_HIT;
+
+        const Vector3& lrStart = reinterpret_cast<const Vector3&>(lrLine.mStart);
+        const Vector3& lrEnd   = reinterpret_cast<const Vector3&>(lrLine.mEnd);
+
+        const f32 lfDx = lrEnd.x - lrStart.x;
+        const f32 lfDy = lrEnd.y - lrStart.y;
+        const f32 lfDz = lrEnd.z - lrStart.z;
+        const f32 lfLengthSq = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
+
+        if (KF_SHORT_LINE_LENGTH_SQ > lfLengthSq)
+        {
+            CgsGeometric::AxisAlignedBox lBox;
+            lBox.mMin.x = VmxMinFp(lrStart.x, lrEnd.x);
+            lBox.mMin.y = VmxMinFp(lrStart.y, lrEnd.y);
+            lBox.mMin.z = VmxMinFp(lrStart.z, lrEnd.z);
+            lBox.mMin.w = VmxMinFp(lrStart.w, lrEnd.w);
+            lBox.mMax.x = VmxMaxFp(lrStart.x, lrEnd.x);
+            lBox.mMax.y = VmxMaxFp(lrStart.y, lrEnd.y);
+            lBox.mMax.z = VmxMaxFp(lrStart.z, lrEnd.z);
+            lBox.mMax.w = VmxMaxFp(lrStart.w, lrEnd.w);
+
+            const s32 liNumLeaves = lpPolySoupListSpacialMap->RunQuery(lBox);
+
+            for (s32 liLeaf = 0; liLeaf < liNumLeaves; ++liLeaf)
+            {
+                const CgsGeometric::PolygonSoupLeafNode& lrLeaf =
+                    lpPolySoupListSpacialMap->GetLeafNodes()[lpPolySoupListSpacialMap->GetOutputQueryBuffer()[liLeaf]];
+
+                if (!LeafOverlapsBoxXYZ(lrLeaf.mBox, lBox))
+                {
+                    continue;
+                }
+
+                if (CgsGeometric::TestLinePolygonSoupDoubleSided(*lrLeaf.mpPolygonSoup, lrStart, lrEnd).GetBool())
+                {
+                    lpList->SetNumResults(1);
+                    return static_cast<u16>(liResultListIndex);
+                }
+            }
+        }
+        else
+        {
+            const s32 liNumLeaves = lpPolySoupListSpacialMap->RunQuery(lrLine);
+
+            const Vector4 lLineStart = { lrStart.x, lrStart.y, lrStart.z, lrStart.w };
+            const Vector4 lLineEnd   = { lrEnd.x,   lrEnd.y,   lrEnd.z,   lrEnd.w };
+
+            for (s32 liLeaf = 0; liLeaf < liNumLeaves; ++liLeaf)
+            {
+                const CgsGeometric::PolygonSoupLeafNode& lrLeaf =
+                    lpPolySoupListSpacialMap->GetLeafNodes()[lpPolySoupListSpacialMap->GetOutputQueryBuffer()[liLeaf]];
+
+                if (!CgsGeometric::TestLineStartEndAxisAlignedBox(lLineStart, lLineEnd, lrLeaf.mBox))
+                {
+                    continue;
+                }
+
+                if (CgsGeometric::TestLinePolygonSoupDoubleSided(*lrLeaf.mpPolygonSoup, lrStart, lrEnd).GetBool())
+                {
+                    lpList->SetNumResults(1);
+                    return static_cast<u16>(liResultListIndex);
+                }
+            }
+        }
+
+        lpList->SetNumResults(0);
         return static_cast<u16>(liResultListIndex);
     }
 

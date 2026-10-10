@@ -45,6 +45,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector2 / Vector3 / Vector4 (rw::math::vpu aliases)
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"   // CgsDev::RGBA (RenderHNGSquare)
 
 // DWARF BrnHardNoGoMap.h:24 -- one map row word. int32_t, not uint32_t (see the note above).
 typedef s32 MapData;
@@ -88,8 +89,8 @@ public:
     // (`li 0x80000001` stored over 8 words from map+0x20, then `stb 1, 0x48`).
     void ClearMap();
 
-    // :58 @0x82783740 -- debug render of the whole grid (walks MapSquareOccupiedFast +
-    // GetSquareCentre + RenderHNGSquare). PARKED: presentation-only on this host.
+    //  -- debug render of the grid around lPosition: every run of occupied squares in a
+    // column within range is drawn as one RenderHNGSquare, then the square lPosition falls in.
     void Render(Vector3 lPosition);
 
     // :61 -- NO IDA export (inlined; e.g. RacingLineGenerator::SpreadHNGBackOneStep
@@ -178,10 +179,12 @@ private:
     // :207 @0x827687D0 -- interpolants -> clamped integer grid indices.
     void ConvertInterpToIndex(f32 lfInterpX, f32 lfInterpY, s32& liWidth, s32& liHeight);
 
+    //  -- debug render of the squares [liStartHeight, liEndHeight) of column liWidth as one
+    // solid quad in lColour, plus the section's two side edges at world height lfHeight.
+    void RenderHNGSquare(s32 liWidth, s32 liStartHeight, s32 liEndHeight, f32 lfHeight, CgsDev::RGBA lColour);
+
     // :158 / :186 / :212 / :220 / :226 -- NO IDA export, not reached by any recovered
     // caller. [FLAG PC bring-up] declared-only; see the banner in the .cpp.
-    // (:234 RenderHNGSquare(s32, s32, s32, f32, RGBA) is deliberately NOT declared -- it is
-    //  debug-render-only AND its RGBA parameter has no single canonical home in this tree.)
     bool    MapSquareOccupied(f32 lfInterpX, f32 lfInterpY);
     void    SetMapSquare(f32 lfInterpX, f32 lfInterpY);
     bool    IsInRange(f32 lfInterpX, f32 lfInterpY);

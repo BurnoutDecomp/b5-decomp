@@ -560,28 +560,15 @@ void GameStateModule::OnModeEnd(bool lbResetState)
 // Without it the payback manager's timer copy never left Construct's Clear(): its aggressor timer
 // never advanced and the OnRoundStart / OnRoundEnd reseed read frame count 0; and the dirty-trick
 // button never reached the aggressor FSM.
-//
-// THE TIMER TYPE. The buffer's block is GameStateModuleIO::TimerStatusInterface, this tree's
-// padding fork of CgsSystem::TimerStatusInterface (BrnGameStateModuleIO.h; BrnGameModule.cpp's
-// publish banner): the same 48 bytes -- two {frame count, base step, multiplier, running, time}
-// runs -- under a second declaration. The DWARF types the buffer member and SetTimerInterface's
-// parameter as the one CgsSystem type, and CgsSystem::TimerStatus keeps its members private, so the
-// block is handed over AS that type (a re-type of the same object, pinned by the size assert) and
-// copied by the real TimerStatusInterface::operator=, exactly the member-wise copy the console
-// inlines. DELETE-WHEN the fork is retired in favour of the CgsSystem type.
 // ==============================================================================================
 void GameStateModule::CopyInputDataToPaybackManager(
         const GameStateModuleIO::PreWorldInputBuffer* lpPreWorldInputBuffer)
 {
-    static_assert(sizeof(GameStateModuleIO::TimerStatusInterface) == sizeof(CgsSystem::TimerStatusInterface),
-                  "the pre-world timer block and CgsSystem::TimerStatusInterface are one 48-byte object");
-
     // Embedded by value on the console (this + 0x570, used with no test); a pointer on this build,
     // never null here (see OnModeEnd above: set from `new` in GameStateModule::Construct's
     // ConstructTakedownBringUp, cleared only by Destruct) -- the one caller is the pre-world tick.
 
-    mpPaybackManager->SetTimerInterface(reinterpret_cast<const CgsSystem::TimerStatusInterface*>(
-        lpPreWorldInputBuffer->GetTimerStatusInterface()));
+    mpPaybackManager->SetTimerInterface(lpPreWorldInputBuffer->GetTimerStatusInterface());
     mpPaybackManager->SetDirtyTrickButtonState(
         lpPreWorldInputBuffer->GetControllerInput()->mbDirtyTrickPressed);
 
@@ -589,14 +576,14 @@ void GameStateModule::CopyInputDataToPaybackManager(
     // timer arrives: the witness that the copy is dispatched and carries a live frame count.
     static const bool sbPaybackDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
     static bool       sbReported    = false;
-    const GameStateModuleIO::TimerStatusInterface::Entry& lrGameTimer =
-        lpPreWorldInputBuffer->GetTimerStatusInterface()->maEntries[0];
-    if (sbPaybackDiag && !sbReported && lrGameTimer.miWord00 != 0 && CgsDev::Log::gpDebugPrint != 0)
+    const CgsSystem::TimerStatus* const lpGameTimer =
+        lpPreWorldInputBuffer->GetTimerStatusInterface()->GetGameTimerStatus();
+    if (sbPaybackDiag && !sbReported && lpGameTimer->GetFrameCount() != 0 && CgsDev::Log::gpDebugPrint != 0)
     {
         sbReported = true;
         *CgsDev::Log::gpDebugPrint
-            << "[payback] CopyInputDataToPaybackManager: game timer frame " << lrGameTimer.miWord00
-            << " step " << lrGameTimer.mfValue04 * lrGameTimer.mfValue08 << " -> PaybackManager\n";
+            << "[payback] CopyInputDataToPaybackManager: game timer frame " << lpGameTimer->GetFrameCount()
+            << " step " << lpGameTimer->GetCurrentTimeStep() << " -> PaybackManager\n";
     }
 }
 

@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "rw/rwcore_structs.h"   // rw::Resource, rw::ResourceDescriptor
 #include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h"   // KX_FILTER_* (memory-check print)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT (LinearResourceAllocator queries)
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }   // GetGameDataGeneralAllocator return type
 
@@ -61,6 +62,40 @@ class DefaultLinearAllocator : public rw::IResourceAllocator
 public:
     ~DefaultLinearAllocator() override;
 };
+
+// The named game-side wrapper over an rw::LinearResourceAllocator (the GlobalGraphics,
+// GlobalResource, MemFile and EmbeddedTexture allocators of Allocators). SLICE: the two members
+// and the three inline queries the renderer's memory report reads; Construct, the remaining
+// queries and the DoAllocate / DoFree / DoFreeDisposable overrides grow here with the Allocators TU.
+class LinearResourceAllocator : public rw::IResourceAllocator
+{
+public:
+    rw::ResourceDescriptor GetCapacity() const;
+    rw::ResourceDescriptor GetCurrentUsage() const;
+    const rw::Resource&    GetLinearHeapBase() const;
+
+private:
+    rw::LinearResourceAllocator* mpLinearAllocator;
+    const char*                  mpcName;
+};
+
+inline rw::ResourceDescriptor LinearResourceAllocator::GetCapacity() const
+{
+    CGS_ASSERT(mpLinearAllocator, "No linear allocator\n");
+    return mpLinearAllocator->GetCapacity();
+}
+
+inline rw::ResourceDescriptor LinearResourceAllocator::GetCurrentUsage() const
+{
+    CGS_ASSERT(mpLinearAllocator, "No linear allocator\n");
+    return mpLinearAllocator->GetCurrentUsage();
+}
+
+inline const rw::Resource& LinearResourceAllocator::GetLinearHeapBase() const
+{
+    CGS_ASSERT(mpLinearAllocator, "No linear allocator\n");
+    return mpLinearAllocator->GetLinearHeapBase();
+}
 
 // Accessor for the global debug allocator (asserts the backing allocator exists).
 // X360: returns &Allocators::mGlobalDebugAllocator. DECLARATION-ONLY here.

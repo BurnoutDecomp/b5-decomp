@@ -91,21 +91,19 @@ bool CardData::operator!=(const CardData& rOther) const
 // ---------------------------------------------------------------------------
 // CardData::PreviousState @ 0x82B532C8
 //
-//   li r5, 0xA0 ; mr r31, r3 ; mr r30, r4 ; bl memcpy
-//                                              -> memcpy(this, rSource, 160)
-//   addi r4, r30, 0x50 ; li r5, 0x50 ; mr r3, r31 ; bl memcpy
-//                                              -> memcpy(this, rSource+80, 80)
-//   return this
+//   memcpy(result, this, 160)          -> both blocks
+//   memcpy(result, this + 80, 80)      -> result.current = this->previous
+//   return result
 //
-// Copy the whole source object (both blocks), then overwrite our current block
-// with the source's PREVIOUS block -- i.e. roll *this back to the source's
-// previous state.
+// A by-value getter: the hidden result slot comes first and the object second
+// (its only caller, XenonRunnableTask::SelectDevice, passes a stack CardData as
+// the result and the active card data as the object).
 // ---------------------------------------------------------------------------
-CardData& CardData::PreviousState(const CardData& rSource)
+CardData CardData::PreviousState() const
 {
-    std::memcpy(this, &rSource, sizeof(CardData));                   // this <- rSource (160)
-    std::memcpy(&maCurrent, &rSource.maPrevious, sizeof(CardDataBlock)); // this <- rSource+80 (80)
-    return *this;
+    CardData lResult(*this);          // result <- this (both blocks, 160)
+    lResult.maCurrent = maPrevious;   // result.current <- this->previous (80)
+    return lResult;
 }
 
 // ---------------------------------------------------------------------------

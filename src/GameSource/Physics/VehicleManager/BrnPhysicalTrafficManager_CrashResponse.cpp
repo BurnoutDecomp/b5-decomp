@@ -257,7 +257,6 @@ void PhysicalTrafficManager::PhysicallyCrashTrafficCar(
 //   0x826370A0       PhysicallyCrashTrafficCar
 //   0x826370B0       AddCrashedTrafficEvent(VolumeInstanceId((u64)globalTrafficId << 32), crasher)
 //   0x8263715C       the 32-byte game event (type 63) onto VehicleOutputInterface's queue
-//   0x826371C0       the articulated other-half recursion -- GATED, see below
 // -------------------------------------------------------------------------------------------
 void PhysicalTrafficManager::SetTrafficVehicleCrashing(
     EntityId lTrafficEntityID, EntityId lCrasherEntityID,
@@ -354,10 +353,16 @@ void PhysicalTrafficManager::SetTrafficVehicleCrashing(
             << "\n";
     }
 
-    // GATE: PhysicalTrafficManager::SetTrafficVehicleCrashing @0x826371C0 -- the articulated
-    // other-half recursion. Blocker: ArticulatedJointPool::GetIndexOfOtherHalf @0x825D8490 has no
-    // body (BrnArticulatedJointPool.h:57). DELETE-WHEN the trailer wave lands it.
-    (void)lpVehicle->HasNonBrokenJoint();
+    // An articulated car crashes as one: the other half of the joint takes the same response.
+    // The CRASHING early-out at the top ends the recursion when it comes back to this half.
+    if (lpVehicle->HasNonBrokenJoint())
+    {
+        const s32 liOtherHalfIndex = mArticulatedJointPool.GetIndexOfOtherHalf(
+            lpVehicle->miJointIndex, static_cast<s32>(lpVehicle->GetArticulatedVehicleType()));
+        SetTrafficVehicleCrashing(GetPhysicsEntityId(liOtherHalfIndex), lCrasherEntityID,
+                                  lpManagerOutputInterface, lpVehicleOutputInterface,
+                                  lpDeformationInterface);
+    }
 }
 
 // -------------------------------------------------------------------------------------------
@@ -376,9 +381,6 @@ void PhysicalTrafficManager::SetTrafficVehicleChecked(
     BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
     Vector3 lContactPointOnTraffic)
 {
-    (void)lpVehicleOutputInterface;
-    (void)lpDeformationInterface;
-
     CGS_ASSERT(EntityOwnerOf(lTrafficEntityID) == 2u,
                "EntityOwnerOf(lTrafficEntityID) == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
     const u16 lu16TrafficIndex = EntityIndexOf(lTrafficEntityID);
@@ -394,10 +396,18 @@ void PhysicalTrafficManager::SetTrafficVehicleChecked(
     CGS_ASSERT(lu16TrafficIndex < 20u, "luIndex < NUMBITS");   // CgsBitArray.h:241
     mPotentialTrafficVehicles.UnSetBit(lu16TrafficIndex);
 
-    // GATE: PhysicalTrafficManager::SetTrafficVehicleChecked @0x8262D8B8 -- the articulated
-    // other-half recursion. Blocker: ArticulatedJointPool::GetIndexOfOtherHalf @0x825D8490 unbodied.
-    // DELETE-WHEN the trailer wave lands it.
-    (void)lpVehicle->HasNonBrokenJoint();
+    // An articulated car is checked as one: the other half of the joint takes the same response
+    // first (same crasher, race car, interfaces and contact point). Unlike the slammed and
+    // crashing responses there is no state early-out in front of this call.
+    if (lpVehicle->HasNonBrokenJoint())
+    {
+        const s32 liOtherHalfIndex = mArticulatedJointPool.GetIndexOfOtherHalf(
+            lpVehicle->miJointIndex, static_cast<s32>(lpVehicle->GetArticulatedVehicleType()));
+        SetTrafficVehicleChecked(GetPhysicsEntityId(liOtherHalfIndex), lCrasherEntityID,
+                                 lpRaceCarPhysics, lpManagerOutputInterface,
+                                 lpVehicleOutputInterface, lpDeformationInterface,
+                                 lContactPointOnTraffic);
+    }
 
     const TrafficPhysics* const lpFull = lpVehicle->GetFullTrafficPhysics();
     const f32 lfSteeringSide = SteeringSideSignum(*lpRaceCarPhysics, *lpFull);
@@ -457,10 +467,8 @@ void PhysicalTrafficManager::SetTrafficVehicleSlammed(
     BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
     Vector3 lContactPointOnTraffic, VecFloat lvfSlamMagnitude)
 {
-    (void)lpVehicleOutputInterface;
-    (void)lpDeformationInterface;
-    (void)lContactPointOnTraffic;   // asm: v126 is saved on entry and only replayed into the
-                                    // gated articulated recursion below.
+    // The vehicle output / deformation interfaces and the contact point are only forwarded to
+    // the articulated other-half recursion below.
 
     CGS_ASSERT(EntityOwnerOf(lTrafficEntityID) == 2u,
                "EntityOwnerOf(lTrafficEntityID) == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
@@ -476,10 +484,17 @@ void PhysicalTrafficManager::SetTrafficVehicleSlammed(
     CGS_ASSERT(lu16TrafficIndex < 20u, "luIndex < NUMBITS");   // CgsBitArray.h:241
     mPotentialTrafficVehicles.UnSetBit(lu16TrafficIndex);
 
-    // GATE: PhysicalTrafficManager::SetTrafficVehicleSlammed @0x825EFF3C -- the articulated
-    // other-half recursion. Blocker: ArticulatedJointPool::GetIndexOfOtherHalf @0x825D8490 unbodied.
-    // DELETE-WHEN the trailer wave lands it.
-    (void)lpVehicle->HasNonBrokenJoint();
+    // An articulated car is slammed as one: the other half of the joint takes the same response
+    // first. The POTENTIAL early-out at the top ends the recursion when it comes back here.
+    if (lpVehicle->HasNonBrokenJoint())
+    {
+        const s32 liOtherHalfIndex = mArticulatedJointPool.GetIndexOfOtherHalf(
+            lpVehicle->miJointIndex, static_cast<s32>(lpVehicle->GetArticulatedVehicleType()));
+        SetTrafficVehicleSlammed(GetPhysicsEntityId(liOtherHalfIndex), lCrasherEntityID,
+                                 lpRaceCarPhysics, lpManagerOutputInterface,
+                                 lpVehicleOutputInterface, lpDeformationInterface,
+                                 lContactPointOnTraffic, lvfSlamMagnitude);
+    }
 
     const TrafficPhysics* const lpFull = lpVehicle->GetFullTrafficPhysics();
     const f32 lfSteeringSide = SteeringSideSignum(*lpRaceCarPhysics, *lpFull);

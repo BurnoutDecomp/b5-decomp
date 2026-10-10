@@ -45,12 +45,6 @@ struct BufferedNewHighScore     { u8 maBlob[32]; };  // X360 stride 32 (provisio
 // that used to live here has been removed; the Array<ImageLoadRequest,3> explicit-instantiation TU
 // (Array_ImageLoadRequest_3.cpp) now reaches the real nested type through this include (mirroring
 // the DeveloperChallengeManager / StuntModeScoringOnline promotions above).
-class OnlineFlybyManager
-{
-public:
-    enum ENewRivalryCompare     : s32 { E_NEW_RIVALRY_COMPARE_DEFAULT = 0 };     // provisional
-    enum EOngoingRivalryCompare : s32 { E_ONGOING_RIVALRY_COMPARE_DEFAULT = 0 }; // provisional
-};
 
 // NOTE: BrnGameState::StuntModeScoringOnline (and its nested MultiplierData element type) is now FULLY
 // homed in BrnStuntModeScoringOnline.h -- the online stunt scorer's own TU. The provisional

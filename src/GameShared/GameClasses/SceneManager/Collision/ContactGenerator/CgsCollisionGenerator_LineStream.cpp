@@ -15,7 +15,7 @@
 // ⚠️ NEITHER FUNCTION CARRIES AN IDA SYMBOL, AND THE TWO ABSENCES ARE DIFFERENT KINDS.
 //  * Create is exported as the unnamed `sub_82810B98`. Identity is not guessed: its two asserts
 //    are `CgsCollisionGenerator.cpp` :533 "Failed to allocate stream producer\n" and :550
-//    "Failed to allocate stream buffers\n" (the same pair CreateStreamProducer @0x828109F8 carries
+//    "Failed to allocate stream buffers\n" (the same pair CreateFillTriangleCacheStream carries
 //    at its own lines), its only caller is VehicleManager::DoVehicleTractionLineAllocations, and
 //    its result is stored straight into mpTractionLineStreamProducer.
 //  * Run @0x82810E80 is a GENUINE export-set hole -- the export dir goes 0x82810D38
@@ -49,6 +49,8 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsFillTriangleCacheStreamJobDesc.h" // the descriptor RunFillTriangleCacheStream prepares
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithTriangleListStreamJobDesc.h" // the descriptor RunLineWithTriangleListStream prepares
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithPolySoupListJobDesc.h" // the descriptor RunCollideLineAgainstPolySoupStream prepares
+#include "GameShared/GameClasses/Geometric/Intersection/CgsPolygonSoupTests.h"   // PolySoupLineNearestResult (the stream's 112-byte record)
 
 // The polygon-soup tester job entry every fill batch is wired to
 // (GameShared/Jobs/PolygonSoupTester/PolygonSoupTester.cpp; X360 rodata PolygonSoupTesterEntry).
@@ -82,7 +84,7 @@ namespace CgsCollision
     static const s32 KI_LINE_STREAM_RESULT_SIZE  = 192;
 
     // X360 0x82810B98 (`sub_82810B98`; CgsCollisionGenerator.cpp :533/:550).
-    // Structurally identical to CreateStreamProducer @0x828109F8 -- carve the producer and its two
+    // Structurally identical to CreateFillTriangleCacheStream -- carve the producer and its two
     // backing buffers out of the collision-result bump allocator at 128-byte alignment, size the
     // buffers with the producer's own requirement helper, construct the producer over them, and
     // restore the allocator's previous alignment -- differing only in the record geometry above.
@@ -359,6 +361,128 @@ namespace CgsCollision
                                    EA::Jobs::Param());
         }
 
+        return lpParentJob;
+    }
+
+    // =============================================================================================
+    // CreateCollideLineAgainstPolySoupStream (the declaration's name; the console function
+    // carries no symbol, its one caller is SceneManagerModule::
+    // ProcessTriangleCollisionLineTestNearests and its two asserts are this file's pair at
+    // ). The CreateLineWithTriangleListStream shape with the line-vs-soup record
+    // geometry: one 32-byte command per line (a literal 0x20), and per line a result block of a
+    // 16-byte header plus liMaxResultsPerLine 112-byte line-hit records (`mulli 0x70 ; addi 0x10`).
+    // Both are data-layout sizes the host shares with the console (the command is a two-lane line,
+    // the record is the 112-byte IntersectLinePolygonSoupResult), so they are written as such.
+    // =============================================================================================
+    CgsMemory::SimpleDataStreamProducer*
+    BaseCollisionGenerator::CreateCollideLineAgainstPolySoupStream(s32 liMaxCommands,
+                                                                   s32 liMaxResultsPerLine)
+    {
+        const s32 KI_LINE_POLYSOUP_COMMAND_SIZE       = 32;
+        const s32 KI_LINE_POLYSOUP_RESULT_HEADER_SIZE = 16;
+        const s32 liResultSize = liMaxResultsPerLine * static_cast<s32>(sizeof(CgsGeometric::PolySoupLineNearestResult))
+                               + KI_LINE_POLYSOUP_RESULT_HEADER_SIZE;
+
+        const size_t lnSavedAlignment = mCollisionResultsAllocator.GetAlignment();
+        mCollisionResultsAllocator.SetAlignment(128);
+
+        CgsMemory::SimpleDataStreamProducer* lpProducer =
+            static_cast<CgsMemory::SimpleDataStreamProducer*>(
+                mCollisionResultsAllocator.Malloc(sizeof(CgsMemory::SimpleDataStreamProducer)));
+        CGS_ASSERT(lpProducer != nullptr, "Failed to allocate stream producer\n");
+
+        u32 luCommandBufferSize = 0;
+        u32 luResultBufferSize  = 0;
+        CgsMemory::SimpleDataStreamProducer::GetRequiredBufferSizes(
+            liMaxCommands, KI_LINE_POLYSOUP_COMMAND_SIZE,
+            liMaxCommands, liResultSize,
+            &luCommandBufferSize, &luResultBufferSize);
+
+        void* lpCommandBuffer = mCollisionResultsAllocator.Malloc(luCommandBufferSize);
+        void* lpResultBuffer  = mCollisionResultsAllocator.Malloc(luResultBufferSize);
+        CGS_ASSERT(lpCommandBuffer != nullptr && lpResultBuffer != nullptr,
+                   "Failed to allocate stream buffers\n");
+
+        lpProducer->Construct(liMaxCommands, KI_LINE_POLYSOUP_COMMAND_SIZE, lpCommandBuffer,
+                              liMaxCommands, liResultSize, lpResultBuffer);
+
+        mCollisionResultsAllocator.SetAlignment(lnSavedAlignment);
+        return lpProducer;
+    }
+
+    // =============================================================================================
+    // RunCollideLineAgainstPolySoupStream (the declaration's name and arguments). The
+    // RunFillTriangleCacheStream dispatcher shape with three differences, all read off the console
+    // body:
+    //   * the descriptor is LineWithPolySoupStreamJobDesc (type 4): map, stream, per-line result
+    //     capacity and the two test flags (CgsLineWithPolySoupListJobDesc.h);
+    //   * after each batch is wired its mabUsedBatches flag is CLEARED (`stbx` of zero) -- this
+    //     caller waits for the whole tree itself, so the ring slot is free again on return;
+    //   * after the StartJobs-bracketed AddTree (and the scheduler's optional WakeThreads) it
+    //     WAITS on the parent job (`Job::WaitOn(0, 0, -1)`) before returning it.
+    // An empty stream returns null before anything is allocated; at most three batches.
+    //
+    // FLAG PC-platform leaf: the dispatch, and only the dispatch -- the same replacement as the
+    // two dispatchers above (no JobScheduler exists on this build, so AddTree and WakeThreads are
+    // replaced by running each batch's entry point inline). The WaitOn is kept: a job that was
+    // never submitted has no backend, so it returns at once.
+    // =============================================================================================
+    EA::Jobs::Job*
+    BaseCollisionGenerator::RunCollideLineAgainstPolySoupStream(
+        const CgsGeometric::PolygonSoupListSpatialMap* lpPolySoupListSpacialMap,
+        CgsMemory::SimpleDataStreamProducer*           lpStream,
+        s32                                            liMaxResultsPerLine,
+        bool                                           lbTestNearest,
+        bool                                           lbTestDoubleSided)
+    {
+        if (lpStream->GetNumCommands() == 0)
+        {
+            return 0;
+        }
+
+        const s32 KI_MAX_LINE_POLYSOUP_BATCHES = 3;
+
+        s32 liNumBatches = lpStream->GetNumCommands();
+        if (liNumBatches > KI_MAX_LINE_POLYSOUP_BATCHES)
+        {
+            liNumBatches = KI_MAX_LINE_POLYSOUP_BATCHES;
+        }
+
+        EA::Jobs::Job* lpParentJob = AllocateJob();
+
+        for (s32 liBatch = 0; liBatch < liNumBatches; ++liBatch)
+        {
+            const u16 lu16BatchIndex = CreateNewBatch();
+            CollisionBatch& lrBatch = maCollisionBatches[lu16BatchIndex];
+
+            LineWithPolySoupStreamJobDesc* lpDesc =
+                reinterpret_cast<LineWithPolySoupStreamJobDesc*>(lrBatch.GetJobDescription().GetBuffer());
+            lpDesc->Prepare(lpPolySoupListSpacialMap, lpStream, liMaxResultsPerLine,
+                            lbTestNearest, lbTestDoubleSided);
+
+            EA::Jobs::Job* lpJob = lrBatch.GetJob();
+            lpJob->Clear();
+            lpJob->SetName("CollisionBatch");
+            lpJob->SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+                           reinterpret_cast<const void*>(&PolygonSoupTesterEntry), 0);
+            lpJob->SetData(lpDesc,
+                           static_cast<int>(CollisionJobDescriptionStorage::KU_CONSOLE_BYTES));
+            lpJob->SetCodeRecycle(EA::Jobs::EntryPoint::CODE_RECYCLE_ON);
+            lpParentJob->DependsOn(*lpJob, EA::Jobs::Event::EVENT_WHEN_JOB_END);
+
+            mabUsedBatches[lu16BatchIndex] = false;
+
+            // ---- FLAG PC-platform leaf: run the job body here ----
+            PolygonSoupTesterEntry(EA::Jobs::Param(static_cast<void*>(lpDesc)),
+                                   EA::Jobs::Param(static_cast<void*>(lpDesc)),
+                                   EA::Jobs::Param(),
+                                   EA::Jobs::Param());
+        }
+
+        CgsDev::PerfMonCpu::StartMonitor(_miStartJobsPerfMon);
+        CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);
+
+        lpParentJob->WaitOn(0, 0, -1);
         return lpParentJob;
     }
 }

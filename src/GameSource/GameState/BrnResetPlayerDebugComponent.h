@@ -23,8 +23,8 @@
 // (Construct/Destruct... GetName/OnActivate, the teleport/change-car actions + their menu callbacks,
 // the car-filter/selection change handlers) are declared here. The DWARF additionally lists
 // OnRegister/RenderHUD/TeleportCar/OnChangeCarSelection methods; OnChangeCarSelection is reached by
-// the attested OnChangeCarFilter/...SelectionCallback path and is declared, while the render/register
-// surface that the X360 ledger does not attest for this class is left out of this pass.
+// the attested OnChangeCarFilter/...SelectionCallback path and is declared, RenderHUD (the "show car
+// info" panel) is declared, and OnRegister, which the ledger does not attest, is left out.
 
 namespace BrnGameState
 {
@@ -46,6 +46,11 @@ namespace BrnGameState
         // off the loaded track + vehicle/wheel resources and register the variables + action callbacks
         // with the debug UI.
         void OnActivate() override;
+
+    public:
+        // While the debug UI is up and "show car info" is set: name, id, default wheel, the race /
+        // trailer flags and (race vehicles only) the four player stats of the selected car.
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
 
     private:
         // ---- action callbacks (registered with the debug menu) -------------------------------------

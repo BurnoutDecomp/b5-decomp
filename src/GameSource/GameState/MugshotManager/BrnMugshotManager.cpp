@@ -682,11 +682,11 @@ void MugshotManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInpu
     ProcessTakedownEvents(lpInput, lpOutput, lpTakedownEventQueue, leGameModeType);
     CheckForSuccessfulPayback(lpInput, lpOutput);
 
-    // Advance both timers by the frame's delta-time (timer[1] * timer[2] in the console read: the
-    // PreWorldInputBuffer timer-status payload words at +0x04/+0x08); -1.0f means "freshly armed",
-    // which seeds the timer at 0.0f without advancing.
+    // Advance both timers by the frame's delta-time (the game timer status's base step *
+    // multiplier, the words at +0x04/+0x08); -1.0f means "freshly armed", which seeds the timer at
+    // 0.0f without advancing.
     const GameStateModuleIO::TimerStatusInterface* lpTimer = lpInput->GetTimerStatusInterface();
-    const f32 lfDeltaTime = lpTimer->maEntries[0].mfValue04 * lpTimer->maEntries[0].mfValue08;
+    const f32 lfDeltaTime = lpTimer->GetGameTimerStatus()->GetCurrentTimeStep();
 
     if (mfMugshotShowTimer == -1.0f)
         mfMugshotShowTimer = 0.0f;
@@ -856,8 +856,7 @@ void MugshotManager::ChangeState(EMugshotShowState leNewShowState)
 
 void MugshotManager::UpdateFSMTimers(const GameStateModuleIO::TimerStatusInterface* lpTimerStatusInterface)
 {
-    const f32 lfDeltaTime =
-        lpTimerStatusInterface->maEntries[0].mfValue04 * lpTimerStatusInterface->maEntries[0].mfValue08;
+    const f32 lfDeltaTime = lpTimerStatusInterface->GetGameTimerStatus()->GetCurrentTimeStep();
     if (mfMugshotShowTimer == -1.0f)
         mfMugshotShowTimer = 0.0f;
     else

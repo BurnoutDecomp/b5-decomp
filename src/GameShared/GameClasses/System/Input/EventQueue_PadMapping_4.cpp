@@ -3,12 +3,11 @@
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// PadMapping event-queue instantiations. The input module enqueues 116-byte
-// PadMapping records (the X360 element stride; see CgsInputTypes.h) into two
-// fixed-capacity queues: a 4-slot queue (PostWorldInputBuffer's pad-mapping queue
-// is the 7-slot variant; the module also carries this 4-slot instance) constructed
-// by EventQueue<PadMapping,4>::Construct, and the appends go through the shared
-// BaseEventQueue<PadMapping>::AddEvent body.
+// PadMapping event-queue instantiations. PostWorldInputBuffer::PostMappingRequest
+// enqueues 116-byte PadMapping records (the console element stride; see CgsInputTypes.h)
+// into the buffer's 4-slot pad-mapping queue, constructed by
+// EventQueue<PadMapping,4>::Construct (its only caller is PostWorldInputBuffer::Construct);
+// the appends go through the shared BaseEventQueue<PadMapping>::AddEvent body.
 
 // CgsInput::InputIO::PadMapping,4>::Construct @ 0x828F2D00
 //   Fixed-capacity (4) event-queue instantiation: points the base queue at its inline

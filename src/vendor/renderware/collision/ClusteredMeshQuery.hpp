@@ -5,6 +5,7 @@
 #include "vendor/renderware/collision/FeatureEdge.hpp"        // Vec4
 #include "vendor/renderware/collision/LineSegIntersect.hpp"   // VolumeLineSegIntersectResult
 #include "vendor/renderware/collision/TriangleVolume.hpp"     // rw::collision::TriangleVolume (real home)
+#include "vendor/renderware/collision/ClusteredMesh.hpp"      // rw::collision::ClusteredMesh
 
 // ===========================================================================
 // rw::collision clustered-mesh query helpers -- the free functions of the
@@ -24,20 +25,6 @@ namespace rw
 {
 namespace collision
 {
-
-// ---------------------------------------------------------------------------
-// Minimal view of rw::collision::ClusteredMesh -- ONLY the two members
-// AA @ 0x82BB17E0 reads are named (everything before +0x34 is the vtable +
-// Aggregate/Procedural base this function never touches). Console offsets in
-// the comments are the X360 ones the asm attests; the pointer member widens
-// on x64 per the usual convention.
-// ---------------------------------------------------------------------------
-struct ClusteredMesh
-{
-    u32        mauReserved0[13];               // +0x00..+0x33  not read here
-    const u32* mpuClusterOffsets;              // +0x34  per-cluster byte offset from `this`
-    f32        mfVertexCompressionGranularity; // +0x38  metres per compressed integer step
-};
 
 // @ 0x82BB17E0 -- decompress the 3 (triangle) or 4 (quad, unit-flags nibble
 // == 2) vertices of the unit at auUnitOffset inside cluster auClusterIndex

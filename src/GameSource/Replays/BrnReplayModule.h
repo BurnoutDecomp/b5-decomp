@@ -55,8 +55,15 @@
 #include "GameSource/Replays/Stream/BrnReplayGPUDiskWriteStream.h"   // BrnReplays::GPUDiskWriteStream (embedded @ +0x980)
 #include "GameShared/GameClasses/Memory/DataStream/CgsDataStreamCommandPoster.h" // CgsMemory::DataStreamCommandPoster (embedded @ +0x5A80)
 #include "eathread/eathread_futex.h"                                 // EA::Thread::Futex (CRITICAL_SECTION-backed; its ctor does RtlInitializeCriticalSection)
+#include "GameSource/Replays/Stream/BrnReplayDiskReadStream.h"       // BrnReplays::DiskReadStream (embedded @ +0x3F80)
+#include "GameSource/Replays/BrnReplayDebugComponent.h"              // BrnReplays::DebugComponent (embedded @ +0x6264)
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"     // mGameEventCache
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // mGameDataReceiverQueue
+#include "GameShared/GameClasses/System/FileSystem/CgsFileHandle.h"  // CgsFileSystem::FileHandle (mHeaderFile)
+#include "SharedClasses/BrnSharedConstants.h"                         // BrnUpdateSet (UpdateRestoring_PostSim)
 
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // Prepare's argument
+namespace BrnReplays { namespace ReplayIO { struct InputBuffer_PostSim; struct OutputBuffer_PostSim; } }
 namespace CgsMemory { class LinearMalloc; }                               // mpLinearMalloc
 
 namespace BrnReplays
@@ -102,6 +109,25 @@ namespace BrnReplays
         static const s32 KI_REPLAY_LINEAR_BANK = 48;
 
         ReplayModule();
+
+        // BrnReplayModule.h.
+        typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
+        typedef CgsModule::EventReceiverQueue<1024, 16> GameDataReceiverQueue;
+
+        // Vtable slot 3 : tear down the debug component and the game-event cache,
+        // then the module base.
+        void Destruct() override;
+
+        // . Drain the game-data receiver queue for the header file's open response,
+        // then report whether the replay files are open: a primary stream (read or write) open
+        // and the header file open. Clears the queue once they are.
+        bool WaitForOpenReplayFiles();
+
+        // . Once every live serialiser has restored its data: go idle, post the
+        // LeaveReplay game event, and switch every serialiser back to idle.
+        void UpdateRestoring_PostSim(const ReplayIO::InputBuffer_PostSim* lpInputBuffer,
+                                     ReplayIO::OutputBuffer_PostSim* lpOutputBuffer,
+                                     BrnUpdateSet lUpdateSet);
 
         // X360 0x8265D1B0. Dispatch the GPU disk write stream (BrnGameModule::DispatchThread).
         void Update_Dispatch();
@@ -170,8 +196,7 @@ namespace BrnReplays
         EStreamState         meState;                 // @0x230
         EStreamStage         meStreamStage;           // @0x234
         u8                   maPad238[0x23C - 0x238];  // @0x238
-        bool                 mbFlag23C;                // @0x23C  (ctor stores 0)
-        u8                   maPad23D[0x84C - 0x23D];  // @0x23D
+        GameEventQueue       mGameEventCache;          // @0x23C..@0x84C (; ctor marks it unconstructed)
         BaseSerialiser*      mapSerialisers[KI_NUM_SERIALISERS]; // @0x84C..@0x874 (11 ptrs)
         // @0x878 (2168): the module's LINEAR allocator -- ReplayModule::Prepare @0x82652768
         // takes it from the game-data allocator list (`GetLinearAllocator(list, 48)`, then
@@ -186,7 +211,9 @@ namespace BrnReplays
         u8                   maPad8C8[0x8E0 - 0x8C8];  // @0x8C8
         ReadStream*          mpReadStream;             // @0x8E0
         s32                  miReadBlockStart;         // @0x8E4
-        u8                   maPad8E8[0x980 - 0x8E8];  // @0x8E8
+        u8                   maPad8E8[0x930 - 0x8E8];  // @0x8E8
+        CgsFileSystem::FileHandle mHeaderFile;         // @0x930  the replay header file
+        u8                   maPad938[0x980 - 0x938];  // @0x938
 
         // ------------------------------------------------------------------------
         // From here on the embedded REAL types (GPUDiskWriteStream / Futex /
@@ -206,10 +233,16 @@ namespace BrnReplays
         // FLAG: PLACEHOLDER. EA::Jobs::Job @ +0x2B10 (X360 stride 0x350). Sub-ctor DEFERRED.
         u8                   maJob2B10Placeholder[0x350]; // @0x2B10
 
-        // @0x3B00 (15104) / @0x3F80 (16256): the two RtlInitializeCriticalSection'd locks
-        // (each committed EA::Thread::Futex ctor performs that init).
+        // @0x3B00 (15104): an RtlInitializeCriticalSection'd lock (the committed
+        // EA::Thread::Futex ctor performs that init).
         EA::Thread::Futex    mLockA;                   // @0x3B00
-        EA::Thread::Futex    mLockB;                   // @0x3F80
+
+        // @0x3F80 (16256): the primary disk read stream ; its inlined ctor is the
+        // console's second RtlInitializeCriticalSection (the stream's mutex is at offset 0).
+        // WaitForOpenReplayFiles reads its status (+0x588) and pending-op count (+0x58C).
+        DiskReadStream       mPrimaryDiskReadStream;   // @0x3F80
+        // @0x4518: the game-data receiver queue  the file opens reply into.
+        GameDataReceiverQueue mGameDataReceiverQueue;  // @0x4518
 
         // FLAG: PLACEHOLDER. 4 x EA::Jobs::Job @ +0x4940 (stride 0x350; ctor loops
         // i=3..0 Job::Job(v,0), v += 0x350). Sub-ctors DEFERRED.
@@ -234,9 +267,9 @@ namespace BrnReplays
         bool                 mbStartActionReplay;      // @0x5C44 (23620)
         bool                 mbAutoStart;              // @0x5C45 (23621) -- Enable auto-start
 
-        // @0x6264 (25188): the ctor stamps a contained-interface vtable here
-        // (off_820CE890). FLAG: the owning interface type / its vtable are not
-        // reconstructed; the slot is left null in the ctor.
-        void*                mpTailInterfaceVTable;    // @0x6264
+        // @0x6264 (25188): the replay debug component ; the ctor's vtable stamp
+        // here is its inlined construction (its vtable carries DebugComponent::RenderHUD /
+        // GetName / OnActivate).
+        DebugComponent       mDebugComponent;          // @0x6264
     };
 }

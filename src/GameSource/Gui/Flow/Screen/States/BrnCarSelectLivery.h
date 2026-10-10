@@ -59,11 +59,6 @@
 //     defeating the console's own `!= 0` assert and access-violating downstream. Every such
 //     site in this class therefore tests mCarSelector.miHighlightedIndex > -1 first, the same
 //     emptiness contract BrnCarSelectVehicle.h documents.
-//   * CarSelectManager::UpdateExitStreamingBringUp is a FLAGGED STAND-IN for
-//     GameStateModule::ProcessStreamingCompleteEvent @0x82390200 -- the only caller of
-//     StreamingFinished, hence the only thing that clears the mbWaitingForStreaming latch
-//     ExitJunkyard sets. Retire it when the real one lands or UpdateExitState returns early
-//     for ever.
 // ===================================================================================
 
 #include "types.hpp"

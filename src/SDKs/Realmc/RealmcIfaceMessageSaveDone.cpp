@@ -17,19 +17,14 @@ namespace RealmcIface
 {
 
 // ---------------------------------------------------------------------------
-// MessageSaveDone::Apply @ 0x82B56088
+// MessageSaveDone::Apply (Message vtable +8)
 //
-//   mr r11,r4 ; mr r4,r3 ; mr r3,r11        -> swap: r3 = pTarget, r4 = pThis
-//   lwz r10,0(r11) ; lwz r11,0x34(r10)      -> pTarget vtable slot +0x34 (13)
-//   mtctr r11 ; bctr                        -> tail-call (pTarget, pThis)
-//
-// i.e. pTarget->OnSaveDone(this). As a non-static member the message is already
-// `this` (r3) and the target arrives in r4, so no explicit swap is needed to
-// express the same dispatch as the pseudocode `(*(*a2 + 52))(a2, a1)`.
+// Swap the two arguments so the processor becomes `this`, load the processor's
+// vtable slot +0x34 and tail-call it with the message.
 // ---------------------------------------------------------------------------
-int MessageSaveDone::Apply(IRealmcSaveDoneTarget* pTarget)
+void MessageSaveDone::Apply(RealmcCore::IMessageProcessor* pProcessor)
 {
-    return pTarget->OnSaveDone(this);
+    pProcessor->ProcessMessage(this);
 }
 
 } // namespace RealmcIface

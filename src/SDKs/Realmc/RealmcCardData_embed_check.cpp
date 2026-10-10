@@ -15,7 +15,7 @@ void RealmcCardDataEmbedCheck()
     b = a;                          // operator=
     (void)(a == b);                 // operator==
     (void)(a != b);                 // operator!=
-    a.PreviousState(b);             // PreviousState
+    a = b.PreviousState();          // PreviousState
     CardData& e = CardData::Empty();// Empty (static singleton)
     (void)e;
 }

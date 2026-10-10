@@ -98,6 +98,20 @@ namespace BrnGameState
             E_CAR_SELECT_TYPE_COUNT              = 3,
         };
 
+        // The car-select step the GUI asks for (CarSelectStateChangedEvent::meState). Values are
+        // the ones ProcessGameEvents' car-select-state arm switches on: MODEL starts the model
+        // carousel, LIVERY enters modification, WAIT_FOR_HOST and ACCEPT_CAR are online only, EXIT
+        // leaves.
+        enum ECarSelectState
+        {
+            E_CAR_SELECT_STATE_MODEL         = 0,
+            E_CAR_SELECT_STATE_LIVERY        = 1,
+            E_CAR_SELECT_STATE_WAIT_FOR_HOST = 2,
+            E_CAR_SELECT_STATE_ACCEPT_CAR    = 3,
+            E_CAR_SELECT_STATE_EXIT          = 4,
+            E_CAR_SELECT_STATE_COUNT         = 5,
+        };
+
         // ADDITIVE GROW (BrnMugshotManager TU): the photo/"mugshot" image-type enum. DWARF
         // BrnGameStateSharedIO.h:529 (== BrnGameStateImageManagerBase.h:1153). The MugshotManager
         // stores E_IMAGE_TYPE_COUNT (6) as the cleared meCaptureMugshotType / meShowMugshotType and
@@ -803,6 +817,8 @@ namespace BrnGameState
             // ARTIST 823EF070 loads this original 32-bit slot into the online
             // results record. Its gameplay name is not attested by DecFIGS.
             u32             GetOnlinePostEventValueC0() const      { return muOnlinePostEventValueC0; }   // +0xC0
+            // ModeManager::HandleBurningHomeRunRunnerSwitch zeroes it for both runners (`stw 0, 0xC0`).
+            void            SetOnlinePostEventValueC0(u32 luValue) { muOnlinePostEventValueC0 = luValue; } // +0xC0
 
             EActiveRaceCarIndex GetEliminatorRaceCarIndex() const  { return meEliminatorRaceCarIndex; }   // +0x60
             void            SetEliminatorRaceCarIndex(EActiveRaceCarIndex leIndex) { meEliminatorRaceCarIndex = leIndex; } // +0x60

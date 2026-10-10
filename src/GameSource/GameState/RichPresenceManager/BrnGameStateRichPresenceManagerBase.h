@@ -19,18 +19,16 @@
 // meOldRankedStatus@0x30, meOldDistrict@0x34, mePendingDistrict@0x38, mbPlayerIsInLobby@0x3C,
 // miUserID@0x40, miUpdatePM@0x44, miDistrictChangePM@0x48).
 //
-// SCOPE of THIS TU's .cpp: Construct / Prepare / SetGameTypeParameters / SetPositionParameter /
-// SetRankedParameter / SetRoundParameter have full bodies here. Every other declared method (the
-// public Release / Destruct / Update / GameParametersChanged / LocalPlayerLeftLobby / OnDistrictChange,
-// the eight pure-virtual Set* presence writers, GetUserID, and the private ChangeDistrict /
-// EGameModeTypeToERichPresenceState) is DECLARE-ONLY -- its body lands with its own TU in a later wave.
-// The setters are declared virtual so this TU's bodies dispatch through the real vtable slots (proven
-// by the X360 vtable indices: SetCurrentRound@+4, SetTotalRounds@+8, SetCurrentPosition@+0xC,
-// SetRankedStatus@+0x14 -- matching the DWARF virtual declaration order).
-//
-// The file-scope KE_GAME_MODES_TO_RICH_PRESENCE_STATES[] table and KF_TIME_BETWEEN_UPDATES the DWARF
-// places in this source are consumed only by EGameModeTypeToERichPresenceState / Update (other TUs);
-// they are NOT defined here to avoid a duplicate definition -- their owning TU defines them.
+// SCOPE of THIS TU's .cpp: Construct / Prepare / Update / SetGameTypeParameters /
+// SetPositionParameter / SetRankedParameter / SetRoundParameter / ChangeDistrict /
+// EGameModeTypeToERichPresenceState / GameParametersChanged / LocalPlayerLeftLobby /
+// OnDistrictChange have bodies here, with the KE_GAME_MODES_TO_RICH_PRESENCE_STATES table Update
+// reads through EGameModeTypeToERichPresenceState. Release / Destruct are declared for their own TUs.
+// The eight Set* presence writers are virtual (console vtable indices: SetRichPresenceState@+0,
+// SetCurrentRound@+4, SetTotalRounds@+8, SetCurrentPosition@+0xC, SetLobbyType@+0x10,
+// SetRankedStatus@+0x14, SetDistrict@+0x18, SetNumberPlayers@+0x1C -- the reference virtual
+// declaration order); the platform manager (RichPresenceManagerX360) overrides
+// all eight.
 
 #include "types.hpp"
 
@@ -39,9 +37,9 @@
 
 namespace BrnGameState
 {
-// The declare-only Update names the two IO buffers BY POINTER only; forward-declare them here (real
-// home BrnGameStateModuleIO.h) so this base does not pull the heavy module-IO header in. The owning
-// Update TU includes that header to deref them.
+// Update names the two IO buffers BY POINTER only; forward-declare them here (real home
+// BrnGameStateModuleIO.h) so this base does not pull the heavy module-IO header in. The .cpp
+// includes that header to deref them.
 namespace GameStateModuleIO { struct PreWorldInputBuffer; struct OutputBuffer; }
 
 // Pointer-only collaborators -- forward declarations keep their heavy headers out of this home; the
@@ -103,30 +101,35 @@ public:
     // collaborators are present; always returns true.
     bool Prepare();                                                                      // .cpp:124 / 0x8235A4C8
 
-    // ----- declare-only (bodies in their own TUs) -----
-    bool Release();                                                                      // .cpp:158
-    void Destruct();                                                                     // .cpp:185
+    // Called by GameStateModule::PreWorldUpdate. Adopt the active controller's
+    // user, then push the player count, the presence state (mode / road rules / free-burn lobby),
+    // the per-mode parameters and a pending district change.
     void Update(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
                 GameStateModuleIO::OutputBuffer* lpOutput);                              // .cpp:362
+
+    // Lobby / district state pushed by GameStateModule::ProcessGameEvents (bodied in the .cpp).
     void LocalPlayerLeftLobby();                                                         // .h:253
     void GameParametersChanged(GameStateModuleIO::EGameModeType leGameMode, bool lbIsRanked); // .cpp:490
     void OnDistrictChange(BrnWorld::EDistrict leDistrict);                                // .h:260
 
-    s32  GetUserID();                                                                    // .h:246
+    // ----- declared for their own TUs -----
+    bool Release();                                                                      // .cpp:158
+    void Destruct();                                                                     // .cpp:185
+
+    s32  GetUserID() { return miUserID; }                                                // .h:246
 
 protected:
-    // ===== per-field presence writers (virtual; the derived platform manager implements them) =====
+    // ===== per-field presence writers (pure virtual; the derived platform manager implements them --
+    // the console image carries the eight RichPresenceManagerX360 overrides and no base body) =====
     // DWARF virtual order (vtable slots +0..+0x1C) -- this TU dispatches the bodied funcs through them.
-    // Declared (not pure) so the platform-derived manager and the SetNumberPlayers body (which the
-    // DWARF places at .cpp:531) land in their own TUs without forcing this base abstract here.
-    virtual void SetRichPresenceState(ERichPresenceStates leState);                      // .h:142  vtbl+0x00
-    virtual void SetCurrentRound(s32 liRound);                                           // .h:147  vtbl+0x04
-    virtual void SetTotalRounds(s32 liTotalRounds);                                      // .h:152  vtbl+0x08
-    virtual void SetCurrentPosition(s32 liPosition);                                     // .h:157  vtbl+0x0C
-    virtual void SetLobbyType(ERichPresenceStates leLobbyState);                         // .h:162  vtbl+0x10
-    virtual void SetRankedStatus(EGameRankedType leRanked);                              // .h:167  vtbl+0x14
-    virtual void SetDistrict(BrnWorld::EDistrict leDistrict);                            // .h:171  vtbl+0x18
-    virtual void SetNumberPlayers(s32 liNumberPlayers);                                  // .cpp:531 vtbl+0x1C
+    virtual void SetRichPresenceState(ERichPresenceStates leState) = 0;                      // .h:142  vtbl+0x00
+    virtual void SetCurrentRound(s32 liRound) = 0;                                           // .h:147  vtbl+0x04
+    virtual void SetTotalRounds(s32 liTotalRounds) = 0;                                      // .h:152  vtbl+0x08
+    virtual void SetCurrentPosition(s32 liPosition) = 0;                                     // .h:157  vtbl+0x0C
+    virtual void SetLobbyType(ERichPresenceStates leLobbyState) = 0;                         // .h:162  vtbl+0x10
+    virtual void SetRankedStatus(EGameRankedType leRanked) = 0;                              // .h:167  vtbl+0x14
+    virtual void SetDistrict(BrnWorld::EDistrict leDistrict) = 0;                            // .h:171  vtbl+0x18
+    virtual void SetNumberPlayers(s32 liNumberPlayers) = 0;                                  // vtbl+0x1C
 
 private:
     // ===== internal per-field update helpers (this TU) =====
@@ -140,8 +143,10 @@ private:
     // X360 0x8235A798. Push the ranked/unranked status if it changed.
     bool SetRankedParameter();                                                           // .cpp:334 / 0x8235A798
 
-    // ----- declare-only (bodies in their own TUs) -----
+    // Push the pending district if it differs from the last one pushed
+    // (timed under the district-change monitor). Returns true if it was pushed.
     bool ChangeDistrict();                                                               // .cpp:513
+    // EGameModeType -> presence state through KE_GAME_MODES_TO_RICH_PRESENCE_STATES.
     ERichPresenceStates EGameModeTypeToERichPresenceState(GameStateModuleIO::EGameModeType leGameMode); // .cpp:455
 
     // ===== data members (DWARF declared order + types; X360 offsets in comments) =====

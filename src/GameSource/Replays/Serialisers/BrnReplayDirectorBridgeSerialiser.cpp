@@ -5,9 +5,10 @@
 // DE-FORKED onto the real header home; its file-local BaseSerialiser fork is
 // retired.)
 //
-// Bodied here (3 of the TU's ledger functions; the six getters are inline in
+// Bodied here (4 of the TU's ledger functions; the six getters are inline in
 // the header, matching the original's h:193.. placement):
 //   Construct @0x8264C498   Read @0x82657478   Write @0x82657210
+//   SerialiseGameActionQueue   GetStaticLayout
 //
 // Read and Write stream the SAME ten snapshot spans (the Write order below);
 // Read adds the mode-skip ladder up front (the batch-11 DirectorSerialiser
@@ -81,6 +82,39 @@ void DirectorBridgeSerialiser::Read()
     }
 
     BaseSerialiser::Unlock();
+}
+
+// . The static buffer must hold the whole 24320-byte snapshot (non-gating
+// tripwire); hands back the buffer as the layout.
+DirectorBridgeSerialiserStaticLayout* DirectorBridgeSerialiser::GetStaticLayout()
+{
+    CGS_ASSERT(miStaticBufferSize >= static_cast<s32>(sizeof(DirectorBridgeSerialiserStaticLayout)),
+               "Static buffer size is too small\n");
+    return reinterpret_cast<DirectorBridgeSerialiserStaticLayout*>(mpStaticBuffer);
+}
+
+// . The game-action queue rides the stream as a packed variable queue:
+// any recording mode writes it; a playing mode that is not stalled rebuilds it
+// (Construct, then pop every event back in). Stalled-playing and the other
+// modes leave the snapshot's queue untouched.
+void DirectorBridgeSerialiser::SerialiseGameActionQueue()
+{
+    DirectorBridgeSerialiserStaticLayout* lpStaticLayout = GetStaticLayout();
+
+    if (IsRecording())
+    {
+        WriteVariableQueue(&lpStaticLayout->mGameActionQueue);
+    }
+    else if (IsPlaying())
+    {
+        const EMode leMode = GetMode();
+        const bool lbStalled = (leMode == E_MODE_RECORDING_STALLED || leMode == E_MODE_PLAYING_STALLED);
+        if (!lbStalled)
+        {
+            lpStaticLayout->mGameActionQueue.Construct();
+            ReadVariableQueue(&lpStaticLayout->mGameActionQueue);
+        }
+    }
 }
 
 // @ 0x82657210 -- lock, resolve, stream the same ten spans (only the null

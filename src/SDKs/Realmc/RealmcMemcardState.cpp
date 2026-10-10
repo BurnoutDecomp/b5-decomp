@@ -157,6 +157,16 @@ int MemcardState::SetMessage(int iMode, int iMask)
     return mpMutex->Unlock();
 }
 
+// Read the hidden-message mask under the lock: lock, load +0x48, unlock,
+//   return the loaded word.
+std::uint32_t MemcardState::GetHiddenMessages()
+{
+    mpMutex->Lock();
+    const std::uint32_t luMask = muMessageSet;
+    mpMutex->Unlock();
+    return luMask;
+}
+
 // @ 0x82C44FA8 -- install a new message filter, deleting the previous one.
 //   Not lock-guarded in the X360 (it runs at construction time). The deleting
 //   destructor (vtable slot +0 with the delete flag) is reproduced by `delete`;
@@ -214,21 +224,21 @@ int MemcardState::StopAndStartTask(int /*iStopTaskType*/, int iStartTaskType)
     return mpMutex->Unlock();
 }
 
-// @ 0x82C46528 -- dequeue the next task waiting to start (front of the FIFO).
-int MemcardState::GetWaitingToStartTask()
+// Dequeue the next task waiting to start (front of the FIFO), under the lock.
+IRunnableTask* MemcardState::GetWaitingToStartTask()
 {
     mpMutex->Lock();
-    const int iTask = maStartWaitingQueue.PopFront();
+    IRunnableTask* const pTask = maStartWaitingQueue.PopFront();
     mpMutex->Unlock();
-    return iTask;
+    return pTask;
 }
 
-// @ 0x82C468B8 -- enqueue iTask at the back of the start-waiting FIFO when set.
-int MemcardState::PutInStartWaitingQueue(int iTask)
+// Enqueue pTask at the back of the start-waiting FIFO when set, under the lock.
+int MemcardState::PutInStartWaitingQueue(IRunnableTask* pTask)
 {
     mpMutex->Lock();
-    if (iTask)
-        maStartWaitingQueue.PushBack(iTask);
+    if (pTask)
+        maStartWaitingQueue.PushBack(pTask);
     return mpMutex->Unlock();
 }
 

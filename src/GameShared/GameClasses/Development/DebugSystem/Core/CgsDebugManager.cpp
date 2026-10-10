@@ -78,24 +78,39 @@ namespace CgsDev
         // asserted under it, CgsDebugManager.cpp:559/582).
         const u32 KU_STACK_STRING_LENGTH = 48;
 
-        // X360 CgsDev::_InterpolateColour: per-channel lerp between two packed RGBA colours (t in 0..1;
-        // RGBA8 packed as 0xAABBGGRR, so each byte is one channel).
-        u32 InterpolateColour(u32 luColour0, u32 luColour1, f32 lfT)
+        // rw::math::fpu::Clamp<float> as the console emits it (two fsel steps): anything not above
+        // the minimum becomes the minimum, then anything not at or below the maximum becomes the
+        // maximum -- so a NaN input comes out as the maximum.
+        inline f32 ClampChannel(f32 lfValue, f32 lfMin, f32 lfMax)
         {
-            if (lfT < 0.0f) lfT = 0.0f;
-            if (lfT > 1.0f) lfT = 1.0f;
-            u32 luResult = 0;
-            for (s32 liByte = 0; liByte < 4; ++liByte)
-            {
-                const s32 liShift = liByte * 8;
-                const f32 lfC0 = static_cast<f32>((luColour0 >> liShift) & 0xFFu);
-                const f32 lfC1 = static_cast<f32>((luColour1 >> liShift) & 0xFFu);
-                const u32 luC  = static_cast<u32>(lfC0 + (lfC1 - lfC0) * lfT + 0.5f) & 0xFFu;
-                luResult |= (luC << liShift);
-            }
-            return luResult;
+            const f32 lfLow = (lfValue <= lfMin) ? lfMin : lfValue;
+            return (lfMax - lfLow >= 0.0f) ? lfLow : lfMax;
         }
+    }
 
+    // Lerp the RGB of two packed colours (0xAARRGGBB) by lfInLerp,
+    // clamped to [0,1]; each channel is clamped to [0,255] and truncated. The result is always
+    // opaque: the console builds it through RGBA(r, g, b) and its default alpha of 255, so neither
+    // input alpha is read.
+    u32 _InterpolateColour(const u32& lColour0, const u32& lColour1, f32 lfInLerp)
+    {
+        const f32 lfLerp = ClampChannel(lfInLerp, 0.0f, 1.0f);
+
+        const f32 lfLowR  = static_cast<f32>((lColour0 >> 16) & 0xFFu);
+        const f32 lfLowG  = static_cast<f32>((lColour0 >> 8) & 0xFFu);
+        const f32 lfLowB  = static_cast<f32>(lColour0 & 0xFFu);
+        const f32 lfHighR = static_cast<f32>((lColour1 >> 16) & 0xFFu);
+        const f32 lfHighG = static_cast<f32>((lColour1 >> 8) & 0xFFu);
+        const f32 lfHighB = static_cast<f32>(lColour1 & 0xFFu);
+
+        const f32 lfOutR = ClampChannel((lfHighR - lfLowR) * lfLerp + lfLowR, 0.0f, 255.0f);
+        const f32 lfOutG = ClampChannel((lfHighG - lfLowG) * lfLerp + lfLowG, 0.0f, 255.0f);
+        const f32 lfOutB = ClampChannel((lfHighB - lfLowB) * lfLerp + lfLowB, 0.0f, 255.0f);
+
+        const u32 luRed   = static_cast<u32>(static_cast<s32>(lfOutR)) & 0xFFu;
+        const u32 luGreen = static_cast<u32>(static_cast<s32>(lfOutG)) & 0xFFu;
+        const u32 luBlue  = static_cast<u32>(static_cast<s32>(lfOutB)) & 0xFFu;
+        return 0xFF000000u | (luRed << 16) | (luGreen << 8) | luBlue;
     }
 
     // X360 CgsDebugManager.cpp:113 DebugManagerConstructParameters::DEFAULT - the built-in debug
@@ -502,8 +517,8 @@ namespace CgsDev
 
         // 1. the current frame rate.
         const u32 luColour = (lfFramerate >= lfMidpoint)
-            ? InterpolateColour(lMidColour, lHighColour, (lfFramerate - lfMidpoint) / lfRange)
-            : InterpolateColour(lLowColour, lMidColour, (lfFramerate - lfLowFramerate) / lfRange);
+            ? _InterpolateColour(lMidColour, lHighColour, (lfFramerate - lfMidpoint) / lfRange)
+            : _InterpolateColour(lLowColour, lMidColour, (lfFramerate - lfLowFramerate) / lfRange);
 
         char lacFramerate[KU_STACK_STRING_LENGTH];
         CgsCore::SPrintf(lacFramerate, KU_STACK_STRING_LENGTH,
@@ -516,8 +531,8 @@ namespace CgsDev
 
         // 2. the average, one line below.
         const u32 luAverageColour = (lfAverageFramerate >= lfMidpoint)
-            ? InterpolateColour(lMidColour, lHighColour, (lfAverageFramerate - lfMidpoint) / lfRange)
-            : InterpolateColour(lLowColour, lMidColour, (lfAverageFramerate - lfLowFramerate) / lfRange);
+            ? _InterpolateColour(lMidColour, lHighColour, (lfAverageFramerate - lfMidpoint) / lfRange)
+            : _InterpolateColour(lLowColour, lMidColour, (lfAverageFramerate - lfLowFramerate) / lfRange);
 
         CgsCore::SPrintf(lacFramerate, KU_STACK_STRING_LENGTH, "%d fps %s",
                          static_cast<s32>(lfAverageFramerate + 0.5f), lpcAverageText);

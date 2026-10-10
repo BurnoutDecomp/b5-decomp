@@ -682,13 +682,17 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
         // establishes the selected B5 strategy before the first physics frame.
         mBoostManager.Prepare();
 
+        // The inlined NearMissManager::Prepare on +0x17E68 (its fourteen list counts, three
+        // scalars and two flags zeroed).
+        mNearMissManager.Prepare();
+
         // 0x82303FE8 `addi r3, r3, -0x7DB0` (module + 0x18250) ; 0x82304048 bl
         // PowerParkingManager::Prepare -- clears the scorer and registers its debug component;
         // the bool it returns is not tested (crash parity FX-SCENEMGR item 4, 2026-09-24).
-        // [FLAG PC bring-up] the inlined scalar resets the console runs between the two calls
-        // (0x82303FBC..0x82304044 on +0x17E68 / +0x180D8 / +0x180E8: the near-miss, air-time and
-        // traffic-check seats) and the three DebugComponent::Register calls after it (+0x180F0,
-        // +0x17E50, +0x17CF0) stay unreproduced here, as before.
+        // [FLAG PC bring-up] the other inlined scalar resets the console runs between the two
+        // calls (on +0x180D8 / +0x180E8: the air-time and traffic-check seats) and the three
+        // DebugComponent::Register calls after it (+0x180F0, +0x17E50, +0x17CF0) stay
+        // unreproduced here, as before.
         mPowerParkingManager.Prepare();
         mePrepareStage = 0;
     // fall through

@@ -57,6 +57,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // the one-shot bring-up gates
 #include "BrnCommonTypes.h"                                                // Vector4 / Matrix44
+#include "rw/math/vpu/vector4_operation.h"                              // Splat / lane-wise * and +
 
 #include <cstring>   // memcpy
 #include <cmath>     // [DIAG] std::sqrt (BRN_OOBB_DIAG, issue #26)
@@ -326,30 +327,35 @@ struct DispatchObjectContext_JobState
     uintptr_t luOffsetToMainMemory;
 };
 
+} // namespace CgsGraphics
+
 // =============================================================================
-// ShaderConstantsExternal::AddToDispatchBinFromStatePointers  @ 0x827E93B8
+// ShaderConstantsExternal::AddToDispatchBinFromStatePointers
 // Gather each listed constant's CURRENT pointer from the object context's
-// constant shadow into the scratch pointer array, advancing the write cursor.
-// The block is the serialised {muNumConstants @+0, mpaSourceIndices @+4} pair of
-// a ShaderTechnique (32-bit LE image on PC after the flip port).
+// constant shadow into the scratch pointer array and advance the caller's write
+// cursor past them. lpDest (the end of the caller's reservation) is returned
+// unchanged; the caller closes the allocation with it.
+// The block is the serialised {muNumConstantsInstances @+0, instance-index array
+// @+4} words of a ShaderTechnique (32-bit image, low-4GB fix-up convention).
 // =============================================================================
-static Vector4** ShaderConstantsExternal_GatherFromContext(
-        const u32* lpBlock, const DispatchObjectContext* lpContext, Vector4** lppCursor)
+Vector4* ShaderConstantsExternal::AddToDispatchBinFromStatePointers(
+        CgsGraphics::DispatchObjectContext* lpContext, Vector4* lpDest,
+        Vector4**& lrpStatePointers) const
 {
-    const u32 luNumConstants = lpBlock[0];
-    if (luNumConstants != 0)
+    const u32* const lpBlock = reinterpret_cast<const u32*>(this);
+    const u32* const lpaSourceIndices =
+        reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpBlock[1]));
+    for (u32 luIndex = 0; luIndex < lpBlock[0]; ++luIndex)
     {
-        // mpaSourceIndices: u32 slot in the 32-bit image (low-4GB fix-up convention).
-        const u32* lpaSourceIndices =
-            reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpBlock[1]));
-        for (u32 luIndex = 0; luIndex < luNumConstants; ++luIndex)
-        {
-            lppCursor[luIndex] = const_cast<Vector4*>(reinterpret_cast<const Vector4*>(
-                lpContext->mapConstantData[lpaSourceIndices[luIndex]]));
-        }
+        lrpStatePointers[luIndex] = const_cast<Vector4*>(reinterpret_cast<const Vector4*>(
+            lpContext->mapConstantData[lpaSourceIndices[luIndex]]));
     }
-    return lppCursor + luNumConstants;
+    lrpStatePointers += lpBlock[0];
+    return lpDest;
 }
+
+namespace CgsGraphics
+{
 
 // =============================================================================
 // AddShaderTechniqueConstantsToDispatchBin  @ 0x827F9FB8
@@ -395,16 +401,15 @@ Vector4** AddShaderTechniqueConstantsToDispatchBin(DispatchBin* lpBin,
     CGS_ASSERT(lppScratch != 0, "lMemoryForShaderConstantsVoid != NULL");
 
     Vector4** lppCursor = lppScratch;
-    lppCursor = ShaderConstantsExternal_GatherFromContext(lpBlkA, lpContext, lppCursor);
+    Vector4*  lpDest    = reinterpret_cast<Vector4*>(lppScratch) + luQwords;
+    lpDest = reinterpret_cast<const ShaderConstantsExternal*>(lpBlkA)->AddToDispatchBinFromStatePointers(lpContext, lpDest, lppCursor);
     if (!lbZOnly)
-        lppCursor = ShaderConstantsExternal_GatherFromContext(lpBlkC, lpContext, lppCursor);
-    lppCursor = ShaderConstantsExternal_GatherFromContext(lpBlkB, lpContext, lppCursor);
+        lpDest = reinterpret_cast<const ShaderConstantsExternal*>(lpBlkC)->AddToDispatchBinFromStatePointers(lpContext, lpDest, lppCursor);
+    lpDest = reinterpret_cast<const ShaderConstantsExternal*>(lpBlkB)->AddToDispatchBinFromStatePointers(lpContext, lpDest, lppCursor);
     if (!lbZOnly)
-        lppCursor = ShaderConstantsExternal_GatherFromContext(lpBlkD, lpContext, lppCursor);
+        lpDest = reinterpret_cast<const ShaderConstantsExternal*>(lpBlkD)->AddToDispatchBinFromStatePointers(lpContext, lpDest, lppCursor);
 
-    const u32 luUsedQwords = static_cast<u32>(
-        (reinterpret_cast<u8*>(lppCursor) - reinterpret_cast<u8*>(lppScratch) + 15u) >> 4);
-    lpBin->EndAllocateMemory(luUsedQwords);
+    lpBin->EndAllocateMemory(static_cast<u32>(lpDest - reinterpret_cast<Vector4*>(lppScratch)));
     return lppScratch;
 }
 
@@ -562,8 +567,32 @@ bool DrawRenderableMeshZOnly::AddToBin(const RenderableMesh* lpMesh, DispatchBin
                                lu8InstanceCount, true, &sIdentity);
 }
 
+namespace
+{
+    // The table slot of the world matrix (ShaderConstantTable::E_WORLD_MATRIX; the console
+    // compares the technique's first object vertex constant against zero).
+    const u32 KU_SHADER_CONSTANT_WORLD_MATRIX = 0;
+
+    // One output row of the row-vector product lrRow * lrMatrix, accumulated the way the
+    // console's vmulfp / vmaddfp chain does: x term first, then y, z and w added on.
+    rw::math::vpu::Vector4 TransformRow(const rw::math::vpu::Vector4& lrRow,
+                                        const rw::math::vpu::Matrix44& lrMatrix)
+    {
+        rw::math::vpu::Vector4 lvResult = rw::math::vpu::Splat(lrRow.x) * lrMatrix.xAxis;
+        lvResult = rw::math::vpu::Splat(lrRow.y) * lrMatrix.yAxis + lvResult;
+        lvResult = rw::math::vpu::Splat(lrRow.z) * lrMatrix.zAxis + lvResult;
+        lvResult = rw::math::vpu::Splat(lrRow.w) * lrMatrix.wAxis + lvResult;
+        return lvResult;
+    }
+}
+
 // =============================================================================
-// CgsGraphics::DrawRenderableMesh::InterpretOcclusionQuery  @ 0x827EE550
+// CgsGraphics::DrawRenderableMesh::InterpretOcclusionQuery
+// The occlusion-query pass's mesh interpreter (DispatchList::DispatchAllMeshOcclusionQueries).
+// An instanced mesh, or one under the index-count threshold, is accepted as visible without a
+// query. Otherwise the mesh's world matrix -- the first object vertex constant of its
+// technique, which the assert pins to the table's world-matrix slot -- is multiplied by the
+// occlusion manager's view-projection, and the mesh's packed box is rendered as the occludee.
 // =============================================================================
 void DrawRenderableMesh::InterpretOcclusionQuery(DispatchCommand* lpCommand, f32 /*lfTime*/)
 {
@@ -576,21 +605,53 @@ void DrawRenderableMesh::InterpretOcclusionQuery(DispatchCommand* lpCommand, f32
 
     const RenderableMesh* lpMesh =
         reinterpret_cast<const RenderableMesh*>(ReadCommandPointer(&lpWords[2]));
-    const bool lbForceVisible = (lpMesh->mu8Flags & 0x01u) != 0;   // X360 mesh byte +0x25 bit
-    const u32  luIndexCount   = lpMesh->mDrawIndexedParameters.muNumVertices;
+    // [x64] the shader-constant scratch pointer is payload qword 0 (console word 3).
+    Vector4** lppConstScratch = reinterpret_cast<Vector4**>(ReadCommandPointer(&lpWords[4]));
 
-    if (lbForceVisible || luIndexCount < suOcclusionCullIndexCountThreshold)
+    if (lpMesh->mu8InstanceCount != 0
+        || lpMesh->mDrawIndexedParameters.muNumVertices < suOcclusionCullIndexCountThreshold)
     {
         spOcclusionCullManager->TrivialAcceptOccludeeBoundingBox();
         return;
     }
 
-    // The X360 then transforms the mesh PackedOobb by the command's world*view-
-    // projection matrix and renders the occludee box into the GPU occlusion
-    // query (OcclusionCullManager::RenderOccludeeBoundingBox). The occlusion
-    // pass is gated OFF on the PC bring-up (mbOcclusionCull* default false), so
-    // the render path stays a loud trap until reconstructed.
-    CGS_ASSERT(false, "InterpretOcclusionQuery render path not yet reconstructed (VMX transform)");
+    // The command's technique, clamped to the last technique the mesh and its assembly share.
+    const MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly;
+    s32 liLastTechnique = lpAssembly->GetLength();
+    if (lpMesh->mu8NumVertexDescriptors < liLastTechnique)
+        liLastTechnique = lpMesh->mu8NumVertexDescriptors;
+    --liLastTechnique;
+    s32 liTechnique = static_cast<s32>(lpWords[1]);
+    if (liLastTechnique < liTechnique)
+        liTechnique = liLastTechnique;
+
+    const MaterialTechnique* lpMaterial = lpAssembly->GetMaterial(static_cast<u32>(liTechnique));
+    CGS_ASSERT(lpMaterial, "lpMaterial");
+
+    // *lpMaterial (+0x00 u32 slot) is the ShaderTechnique image; its external object vertex
+    // constants are the serialised {count, instance-index array} block at +0x1C.
+    const u32  luShaderTechnique = *reinterpret_cast<const u32*>(lpMaterial);
+    const u32* lpObjectVertexConstants =
+        reinterpret_cast<const u32*>(static_cast<uintptr_t>(luShaderTechnique) + 0x1C);
+    const u32* lpaConstantsInstanceData =
+        reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpObjectVertexConstants[1]));
+    CGS_ASSERT(lpaConstantsInstanceData[0] == KU_SHADER_CONSTANT_WORLD_MATRIX,
+               "lpMaterial->GetShaderTechnique()->GetExternalObjectVertexShaderConstants()"
+               ".mppaConstantsInstanceData[0] == ShaderConstantTable::E_WORLD_MATRIX");
+
+    const rw::math::vpu::Matrix44& lrWorld =
+        *reinterpret_cast<const rw::math::vpu::Matrix44*>(lppConstScratch[0]);
+    const rw::math::vpu::Matrix44& lrViewProjection = spOcclusionCullManager->mViewProjectionMatrix;
+
+    rw::math::vpu::Matrix44 lWorldViewProjection;
+    lWorldViewProjection.xAxis = TransformRow(lrWorld.xAxis, lrViewProjection);
+    lWorldViewProjection.yAxis = TransformRow(lrWorld.yAxis, lrViewProjection);
+    lWorldViewProjection.zAxis = TransformRow(lrWorld.zAxis, lrViewProjection);
+    lWorldViewProjection.wAxis = TransformRow(lrWorld.wAxis, lrViewProjection);
+
+    rw::math::vpu::Matrix44 lOccludeeBox;
+    lpMesh->mPackedBoundingBox.ToMatrix(lOccludeeBox);
+    spOcclusionCullManager->RenderOccludeeBoundingBox(&lWorldViewProjection, lOccludeeBox);
 }
 
 // =============================================================================

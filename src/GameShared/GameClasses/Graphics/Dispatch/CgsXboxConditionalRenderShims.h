@@ -25,4 +25,10 @@ namespace CgsGraphics
 
     // End the predicated draw region. (X360 D3DDevice_EndConditionalRendering(pDevice).)
     void D3DDevice_EndConditionalRendering(void* lpDevice);
+
+    // Open / close a GPU survey (an occlusion count) keyed on `luIdentifier`; the draws between
+    // them are what is counted. (Console signatures: D3DDevice_BeginConditionalSurvey(pDevice,
+    // Identifier, Flags) / D3DDevice_EndConditionalSurvey(pDevice, Flags).)
+    void D3DDevice_BeginConditionalSurvey(void* lpDevice, u32 luIdentifier, u32 luFlags);
+    void D3DDevice_EndConditionalSurvey(void* lpDevice, u32 luFlags);
 }

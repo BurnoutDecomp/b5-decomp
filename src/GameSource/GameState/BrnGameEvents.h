@@ -10,6 +10,8 @@
 #include "SharedClasses/StreetData/BrnStreetData.h"          // BrnStreetData::ChallengeIndex (road-rules events)
 #include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h" // BrnStreetData::ChallengeHighScoreEntry (PB-recv event)
 #include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h" // BrnGameState::BurnoutSkillzData (NewRemoteBurnoutSkillzEvent)
+#include "GameSource/GameState/SharedIO/BrnTargetEventScore.h" // GameStateModuleIO::TargetEventScore (TargetEventScoreEvent)
+#include "GameShared/GameClasses/Containers/CgsArray.h"      // Array<s64,15> (UploadedModeScoresEvent)
 
 // Owning header for the BrnGameState::GameStateModuleIO GameEvent<> family slices reconstructed
 // by the GameMode/ModeManager leaf batch. Minimal slices: only members the reconstructed bodies
@@ -145,8 +147,8 @@ enum EGameEventType
     // PRODUCER: BrnGui::CrashNavDriverDetails::UpdateInitSetup @0x824CF038 posts
     // GuiEventStatsRequest (GUI event 435) in the same latch that posts 437, and
     // BridgeGuiToGameState's case 435 emits this 1-byte signal event.
-    // CONSUMER: GameStateModule::ProcessGameEventsGameStatsRequestBringUp (this tree's
-    // extraction of case 79), which answers with game action 180 -> GUI event 436.
+    // CONSUMER: GameStateModule::ProcessGameEvents case 79, which answers with game action
+    // 180 -> GUI event 436.
     E_EVENT_GAME_STATS_REQUEST      = 79,    // X360 case 79 @0x823A2D18 (PS3 DWARF 80)
     // ⭐⭐ [driver-details pause wave 2026-08-28] THE RANK-PROGRESS QUERY. Same region, same
     // NON-uniform -1 drift the block above documents, and here the drift is pinned by THREE
@@ -164,8 +166,8 @@ enum EGameEventType
     // PRODUCER: BrnGui::CrashNavDriverDetails::UpdateInitSetup @0x824CF038 posts
     // GuiEventRankProgressRequest (GUI event 437) when it latches the cache, and
     // BridgeGuiToGameState's case 437 emits this 1-byte signal event.
-    // CONSUMER: GameStateModule::ProcessGameEventsRankInfoRequestBringUp (this tree's extraction
-    // of case 80), which answers with game action 181 -> GUI event 438.
+    // CONSUMER: GameStateModule::ProcessGameEvents case 80, which answers with game action
+    // 181 -> GUI event 438.
     E_EVENT_RANK_INFO_REQUEST       = 80,    // X360 case 80 @0x823A2D54 (PS3 DWARF 81)
     // Freeburn-challenge events (PS3-DWARF values; used as template tags -- the X360
     // discriminants ChallengeManager::ProcessEvent actually switches on are the raw
@@ -267,6 +269,96 @@ enum EGameEventType
     E_EVENT_ONLINE_ROAD_RULES_UPLOADED       = 131,
     E_EVENT_ONLINE_ROAD_RULES_DOWNLOADED     = 132,
     E_EVENT_ONLINE_ROAD_RULES_CONNECT_INFO   = 133,
+    // The remaining ids of the console's 176-entry ProcessGameEvents jump table. Names are the
+    // debug-info enumerators; values are the console's. The two enums align with a fixed shift per
+    // band, pinned by the attested ids on either side of each band: 0..26 equal, 27..63 and 66..103
+    // one below the reference, 105..141 equal, 144..151 two above, 155..166 five above, 168..174
+    // six above (64/65 are the near-miss pair above).
+    // Ids 104, 142, 143, 152, 153, 154 and 175 have no reference enumerator and stay unnamed here.
+    E_EVENT_SETUP_PLAYER_CAR                       = 0,
+    E_EVENT_CHANGE_RANK_NUMBER                     = 3,
+    E_EVENT_GAME_START                             = 8,
+    E_EVENT_CONTROLLER_DISCONNECTED                = 10,
+    E_EVENT_CONFIG_CONTROLLER                      = 11,
+    E_EVENT_RIVAL_UPDATE_REQUESTED                 = 12,
+    E_EVENT_PLAYER_CAR_PLACED_ON_TRACK             = 13,
+    E_EVENT_LOADING_SCREEN_LOADED                  = 14,
+    E_EVENT_FINISH_NETWORK_ROUND                   = 19,
+    E_EVENT_PLAYER_ACCEPTED_MODE                   = 20,
+    E_EVENT_MARKED_MAN_LOADED                      = 21,
+    E_EVENT_FINISHED_SPLASH                        = 23,
+    E_EVENT_FINISHED_MAP_PAN                       = 24,
+    E_EVENT_GUI_FINISHED_OFFLINE_PRE_EVENT         = 25,
+    E_EVENT_RESULTS_FINISHED                       = 26,
+    E_EVENT_REQUEST_SPECIFIC_PRESET_RACES          = 28,
+    E_EVENT_PREPARE_FOR_ONLINE                     = 29,
+    E_EVENT_LAP_COMPLETE                           = 30,
+    E_EVENT_PAYBACK_TRIGGERABLE                    = 34,
+    E_EVENT_PLAYER_RESET_ON_TRACK                  = 37,
+    E_EVENT_RACE_CAR_DRIVING_IN_CRASH              = 38,
+    E_EVENT_PLAYER_IN_SHORT_CUT                    = 39,
+    E_EVENT_RACE_CAR_NEEDS_HIDING                  = 40,
+    E_EVENT_PLAYER_CAN_SKIP_CRASH                  = 41,
+    E_EVENT_TRAINING_PAUSE_STATE_CHANGED           = 43,
+    E_EVENT_TRIGGER_CRASH_BREAKER                  = 44,
+    E_EVENT_CANCEL_CRASH_BREAKER                   = 45,
+    E_EVENT_PICKUP                                 = 46,
+    E_EVENT_VEHICLE_LEAPT                          = 47,
+    E_EVENT_ENTER_NEW_ROAD                         = 48,
+    E_EVENT_SHOWTIME_UPDATE                        = 49,
+    E_EVENT_SHOWTIME_MODE_SWITCH                   = 50,
+    E_EVENT_SHOWTIME_BOUNCE_PROMPT                 = 51,
+    E_EVENT_START_OFFLINE_GAME_MODE                = 56,
+    E_EVENT_REQUEST_INVITE                         = 57,
+    E_EVENT_PREPARE_FOR_INVITE                     = 58,
+    E_EVENT_UPDATE_PREPARE_FOR_INVITE              = 59,
+    E_EVENT_PERFORM_INVITE                         = 61,
+    E_EVENT_INVITE_COMPLETE                        = 62,
+    E_EVENT_VEHICLE_CRASHED                        = 63,
+    E_EVENT_CRASH_COMBO_ITEM                       = 75,
+    E_EVENT_AFTERTOUCH                             = 76,
+    E_EVENT_PLAYER_INFO_REQUEST                    = 81,
+    E_EVENT_CAR_UNLOCK_TICKER_CLOSED               = 83,
+    E_EVENT_CAR_PERSISTENT_INFO_REQUEST            = 86,
+    E_EVENT_CAR_VARIABLE_INFO_REQUEST              = 87,
+    E_EVENT_CAR_SELECTION_REQUEST                  = 88,
+    E_EVENT_LANDMARK_VARIABLE_INFO_REQUEST         = 89,
+    E_EVENT_ADD_CUSTOM_RACE                        = 90,
+    E_EVENT_UPDATE_CUSTOM_RACE                     = 91,
+    E_EVENT_REMOVE_CUSTOM_RACE                     = 92,
+    E_EVENT_CARSELECT_STATE_CHANGED                = 94,
+    E_EVENT_REGION_FROM_POSITION_REQUEST           = 95,
+    E_EVENT_ALL_RIVALRY_DATA_REQUEST               = 101,
+    E_EVENT_ONE_RIVALRY_DATA_REQUEST               = 102,
+    E_EVENT_REQUEST_CAR_UNLOCK_EVENT               = 105,
+    E_CAR_CONTROL_CHANGE_REQUEST                   = 106,
+    E_EVENT_GUI_AWARD_SEQUENCE_START               = 107,
+    E_EVENT_GUI_AWARD_SEQUENCE_END                 = 108,
+    E_EVENT_RESET_PROFILE_REQUEST                  = 110,
+    E_EVENT_GAME_TRAINING_REQUEST                  = 113,
+    E_EVENT_CHECK_FOR_COMPLETION                   = 114,
+    E_EVENT_REQUEST_FREE_ROAM_TRACKER              = 116,
+    E_EVENT_ONLINE_GAME_LAUNCHED                   = 126,
+    E_EVENT_ONLINE_PLAYER_CHANGED_CAR              = 134,
+    E_EVENT_ONLINE_COLLECTABLE                     = 135,
+    E_EVENT_ONLINE_IMAGE_RECEIVED                  = 136,
+    E_EVENT_ONLINE_CAPTURE_WINNER_PHOTO_FINISH     = 137,
+    E_EVENT_ONLINE_IMAGE_SEND_ABORTED              = 138,
+    E_EVENT_REMOTE_PLAYER_TRIGGERED_CHECKPOINT     = 141,
+    E_EVENT_ONLINE_RIVAL_COUNT                     = 144,
+    E_EVENT_LEFT_ONLINE_POST_EVENT                 = 145,
+    E_EVENT_ONLINE_CAUGHT_FEVER                    = 146,
+    E_EVENT_ONLINE_MUGSHOT_SENT                    = 147,
+    E_EVENT_ONLINE_CREATED_CUSTOM_ROUTE            = 148,
+    E_EVENT_RIVAL_SHUTDOWN_DISPLAY_FINSHED         = 149,
+    E_EVENT_INSTANT_FREEBURN                       = 151,
+    E_EVENT_BURNING_HOME_RUN_SWITCHED_RUNNER       = 155,
+    E_EVENT_IMAGE_TO_SAVE                          = 156,
+    E_EVENT_IMAGE_FILES_SAVED                      = 157,
+    E_EVENT_IMAGE_GALLERY_REQUEST                  = 158,
+    E_EVENT_IMAGE_GALLERY_COUNT_REQUEST            = 159,
+    E_EVENT_IMAGE_GALLERY_DATA_REQUEST             = 160,
+    E_EVENT_IMAGE_FILES_LOADED                     = 161,
 };
 
 template <EGameEventType T>
@@ -310,6 +402,34 @@ struct PlayerCarColourRequestEvent : public GameEvent<E_EVENT_PLAYER_CAR_COLOUR_
 struct UnlockedLiveryRequest : public GameEvent<E_EVENT_UNLOCKED_LIVERY_REQUEST>
 {
     CgsID mCgsID;
+};
+
+// Put the player's car at a pose with a given car and wheel (ProcessGameEvents case 0 copies
+// the pose into the reset action and reads the two ids at +0x20 / +0x28).
+struct SetupPlayerCarEvent : public GameEvent<E_EVENT_SETUP_PLAYER_CAR>
+{
+    Vector3 mPosition;      // +0x00
+    Vector3 mDirection;     // +0x10
+    CgsID   mCarModelId;    // +0x20
+    CgsID   mWheelModelId;  // +0x28
+};
+static_assert(offsetof(SetupPlayerCarEvent, mCarModelId) == 0x20 &&
+              offsetof(SetupPlayerCarEvent, mWheelModelId) == 0x28,
+              "case 0 reads the car id at +0x20 and the wheel id at +0x28");
+
+// The GUI moved the car select to another step (case 94 reads the step at +0 and the car-select
+// type at +4).
+struct CarSelectStateChangedEvent : public GameEvent<E_EVENT_CARSELECT_STATE_CHANGED>
+{
+    ECarSelectState meState;          // +0x00
+    ECarSelectType  meCarSelectType;  // +0x04
+};
+static_assert(sizeof(CarSelectStateChangedEvent) == 8, "two words: step, car-select type");
+
+// Add a car to the profile as a sponsor car (case 105 reads the id at +0).
+struct RequestCarUnlockEvent : public GameEvent<E_EVENT_REQUEST_CAR_UNLOCK_EVENT>
+{
+    CgsID mCarModelId;   // +0x00
 };
 
 // X360 element of EventQueue<HitOverheadSignEvent,100> (DWARF BrnGameEvents.h:429). Single byte.
@@ -373,6 +493,12 @@ static_assert(sizeof(RecordPropHitEvent) == 32, "RecordPropHitEvent is the Appen
 // the whole payload: "somebody wants the prop-progression census re-sent"). Homed here so owner
 // `bridge` can name it on the world->GameState prop leg without forking a second declaration.
 struct RequestPropProgression : public GameEvent<E_EVENT_REQUEST_PROP_PROGRESSION>
+{
+};
+
+// BrnGameEvents.h -- the replay module's "left the replay" signal. Empty: the
+// restoring pass posts it with size 1 once every serialiser has restored.
+struct LeaveReplayEvent : public GameEvent<E_EVENT_LEAVE_REPLAY>
 {
 };
 
@@ -515,6 +641,33 @@ struct OnlineNewHostEvent : public GameEvent<E_EVENT_ONLINE_NEW_HOST>
     bool mbIsFirstHost;            // +0x01
 };
 static_assert(sizeof(OnlineNewHostEvent) == 2, "posted as 2 bytes");
+
+// Case 126: the online game launched. The arm tests mbSuccessfulLaunch (+5) and hands the class
+// limit (+0) and the host-choice byte (+4) to OnlineCarSelectManager::EnterOnlineCarSelect.
+struct OnlineGameLaunchedEvent : public GameEvent<E_EVENT_ONLINE_GAME_LAUNCHED>
+{
+    s32  miVehicleClassLimit;         // +0x00
+    bool mbHostChoiceCarAndNotHost;   // +0x04
+    bool mbSuccessfulLaunch;          // +0x05
+};
+static_assert(offsetof(OnlineGameLaunchedEvent, mbHostChoiceCarAndNotHost) == 0x04, "host-choice byte at +0x04");
+static_assert(offsetof(OnlineGameLaunchedEvent, mbSuccessfulLaunch)        == 0x05, "launch byte at +0x05");
+
+// Case 20: the player accepted a mode. The members are the reference build's; their placement is
+// the one the case-20 arm reads: the count byte at +0x4C, the run it passes as AddCheckpoint's
+// landmark argument at +0x08 and the run it passes as the AI-section argument at +0x2C, which
+// leaves exactly the 4-byte mode word at +0x28.
+struct PlayerAcceptedModeEvent : public GameEvent<E_EVENT_PLAYER_ACCEPTED_MODE>
+{
+    CgsID         mRaceId;                       // +0x00
+    LandmarkIndex maLandmarkIndices[16];         // +0x08
+    EGameModeType meModeType;                    // +0x28
+    u16           mauLandmarkSectionIds[16];     // +0x2C
+    u8            muNumLandmarks;                // +0x4C
+};
+static_assert(offsetof(PlayerAcceptedModeEvent, maLandmarkIndices)     == 0x08, "landmark run at +0x08");
+static_assert(offsetof(PlayerAcceptedModeEvent, mauLandmarkSectionIds) == 0x2C, "section run at +0x2C");
+static_assert(offsetof(PlayerAcceptedModeEvent, muNumLandmarks)        == 0x4C, "count byte at +0x4C");
 
 // ===== Freeburn-challenge selection / remote events (cases 162..164, 168..170) =====
 
@@ -662,6 +815,112 @@ struct FburnChallengeSuccessEvent : public GameEvent<E_EVENT_FREEBURN_CHALLENGE_
 struct BuddyRemovedEvent : public GameEvent<E_EVENT_BUDDY_REMOVED>
 {
     CgsNetwork::PlayerName mRemovedBuddyName;   // 0x00 (16B)
+};
+
+// ===== GUI data-request payloads (GameStateModule::ProcessGameEvents_Group4) =====
+// Names and types are the debug info's; every offset is the one the ProcessGameEvents arm loads.
+
+// The GUI asks for the preset race that starts at one landmark (`lhz` of +0x00).
+struct LandmarkInfoRequestEvent : public GameEvent<E_EVENT_LANDMARK_VARIABLE_INFO_REQUEST>
+{
+    LandmarkIndex mLandmarkIndex;   // 0x00
+};
+
+// The GUI asks which district a world position lies in (one 16-byte vector load of +0x00).
+struct RegionFromPositionRequestEvent : public GameEvent<E_EVENT_REGION_FROM_POSITION_REQUEST>
+{
+    Vector3 mPosition;   // 0x00
+};
+
+// The GUI asks for one road's rule data (0 == the road the player is on).
+struct RoadRulesDataRequestEvent : public GameEvent<E_EVENT_ROAD_RULE_DATA_REQUEST>
+{
+    CgsID mRoadId;   // 0x00
+};
+
+// The GUI turns road-rule switching on or off (one byte).
+struct RoadRuleInteractionChangeEvent : public GameEvent<E_EVENT_ROAD_RULE_INTERACTION_CHANGE>
+{
+    bool mbSwitchRoadRulesEnabled;   // 0x00
+};
+
+// The GUI switches the road rules between their offline and online flavour (one byte).
+struct RoadRuleModeSwitchEvent : public GameEvent<E_EVENT_ROAD_RULE_MODE_SWITCH>
+{
+    bool mbIsOnline;   // 0x00
+};
+
+// The GUI asks for one rival's details.
+struct RivalriesOneDataRequestEvent : public GameEvent<E_EVENT_ONE_RIVALRY_DATA_REQUEST>
+{
+    CgsID mRivalID;   // 0x00
+};
+
+// The GUI picks the road rule to play (`lwz` of +0x00, compared unsigned against 1 and 3).
+struct GUISwitchRoadRuleStateEvent : public GameEvent<E_EVENT_GUI_SWITCHES_ROAD_RULE_STATE>
+{
+    enum ERoadRuleState
+    {
+        E_ROAD_RULE_STATE_OFF   = 0,
+        E_ROAD_RULE_STATE_TIME  = 1,
+        E_ROAD_RULE_STATE_CRASH = 2,
+        E_ROAD_RULE_STATE_COUNT = 3
+    };
+
+    ERoadRuleState meRoadRuleState;   // 0x00
+};
+
+// The GUI gives the player's car to the player (true) or takes it away (one byte).
+struct CarControlChangeRequestEvent : public GameEvent<E_CAR_CONTROL_CHANGE_REQUEST>
+{
+    bool mbPlayerShouldHaveControl;   // 0x00
+};
+
+// A remote player collected a stunt element (`ld` +0x00, `lwz` +0x08 and +0x0C).
+struct OnlineNetworkPlayerCollectableEvent : public GameEvent<E_EVENT_ONLINE_COLLECTABLE>
+{
+    CgsID                       mID;               // 0x00
+    BrnNetwork::NetworkPlayerID mNetworkPlayerID;  // 0x08
+    StuntElementType            meType;            // 0x0C
+};
+
+// The front end starts (true) or leaves an instant free-burn (one byte).
+struct InstantFreeburnEvent : public GameEvent<E_EVENT_INSTANT_FREEBURN>
+{
+    bool mbIsDoingInstantFreeburn;   // 0x00
+};
+
+// The next four are console-only ids (104, 152, 153, 175) with no name in the image or the debug
+// info, so they carry no GameEvent<> tag. Each struct is named after the local the arm asserts on.
+
+// Id 104 ("lpEventDataRequest"): the GUI asks for the target score stored for one event.
+struct EventDataRequestEvent
+{
+    CgsID mEventId;   // 0x00
+};
+
+// Id 152 ("lpTargetEventScore"): a target score to store for an event, or to remove. The first
+// 24 bytes are the record head Profile::SetTargetEventScore takes by value; its first bytes are
+// the target holder's name, which the arm hands to CgsNetwork::PlayerName::Construct.
+struct TargetEventScoreEvent
+{
+    TargetEventScore::OpaqueHead mHead;      // 0x00
+    CgsID                        mEventId;   // 0x18
+    s32                          miScore;    // 0x20
+    bool                         mbRemove;   // 0x24  true: remove the event's target score
+};
+
+// Id 153 ("lpDldScoreboardEvent"): a downloaded scoreboard names the event whose target holder
+// the GUI shows.
+struct DldScoreboardEvent
+{
+    CgsID mEventId;   // 0x00
+};
+
+// Id 175 ("lpUploadedModeScoresEvent"): the events whose pending score uploads completed.
+struct UploadedModeScoresEvent
+{
+    Array<s64, 15> maEventIds;   // 0x00 (count word at +0x78)
 };
 
 // GUI requests the score breakdown for one road (DWARF :2063).
@@ -824,6 +1083,78 @@ struct VehicleImpactEvent : public GameEvent<E_EVENT_VEHICLE_IMPACT>
     s32 meVictimActiveRaceCarIndex;    // 0x08 (:1329, EActiveRaceCarIndex)
 };
 
+// ---- The crash / pickup / training payloads ProcessGameEvents_Group3 reads. Member names and
+// types are the debug info's (BrnGameEvents.h line per member); every offset is the arm's own load.
+
+// A race car drove into a crash (id 38). The arm copies the index into action 10.
+struct RaceCarDrivingInCrashEvent : public GameEvent<E_EVENT_RACE_CAR_DRIVING_IN_CRASH>
+{
+    EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00
+};
+
+// Start a crash breaker (id 44, 32 bytes). The arm copies the whole record into action 135 and
+// hands it to CrashModeScoring::DealWithCrashbreakerRequest, which reads mfTimeUntilStart.
+struct TriggerCrashBreakerEvent : public GameEvent<E_EVENT_TRIGGER_CRASH_BREAKER>
+{
+    Vector3             mPosition;          // +0x00
+    EActiveRaceCarIndex meRaceCarIndex;     // +0x10
+    f32                 mfNormMagnitude;    // +0x14
+    f32                 mfTimeUntilStart;   // +0x18
+    f32                 mfDurationTime;     // +0x1C
+};
+static_assert(offsetof(TriggerCrashBreakerEvent, meRaceCarIndex)   == 0x10, "event 44 race car index at +0x10");
+static_assert(offsetof(TriggerCrashBreakerEvent, mfTimeUntilStart) == 0x18, "event 44 start delay at +0x18");
+static_assert(sizeof(TriggerCrashBreakerEvent) == 32, "event 44 is 32 bytes");
+
+// Cancel a crash breaker (id 45). The arm copies the index into action 136.
+struct CancelCrashBreakerEvent : public GameEvent<E_EVENT_CANCEL_CRASH_BREAKER>
+{
+    EActiveRaceCarIndex meRaceCarIndex;   // +0x00
+};
+
+// A crash-mode pickup was collected (id 46); CrashModeScoring::DealWithPickup takes it.
+struct PickupEvent : public GameEvent<E_EVENT_PICKUP>
+{
+    EActiveRaceCarIndex meRaceCarIndex;   // +0x00
+};
+
+// Cars leapt over in a crash (id 47, 4 bytes); CrashModeScoring::DealWithVehicleLeaping adds the
+// count to its running total.
+struct VehicleLeaptEvent : public GameEvent<E_EVENT_VEHICLE_LEAPT>
+{
+    s32 miVehicleLeaptCount;   // +0x00
+};
+
+// The crashing car reached a new road (id 48, 1 byte). The arm copies the flag into action 141.
+struct EnterNewRoadEvent : public GameEvent<E_EVENT_ENTER_NEW_ROAD>
+{
+    bool mbIsJunction;   // +0x00
+};
+
+// One crash-combo entry (id 75). The arm copies both words into action 124 and bumps the crash
+// scorer's stunt count. meEntryType is BrnWorld::EComboEntryType, stored as s32 (the enum has no
+// home in this tree yet).
+struct CrashComboItemEvent : public GameEvent<E_EVENT_CRASH_COMBO_ITEM>
+{
+    s32 meEntryType;   // +0x00
+    f32 mfValue;       // +0x04
+};
+
+// Aftertouch input on a crashing car (id 76). The arm copies the three words into action 178.
+struct AftertouchEvent : public GameEvent<E_EVENT_AFTERTOUCH>
+{
+    EActiveRaceCarIndex meRaceCarIndex;         // +0x00
+    f32                 mfForwardAftertouch;    // +0x04
+    f32                 mfSidewaysAftertouch;   // +0x08
+};
+
+// A training tip was asked for (id 113); the arm hands the type to TrainingManager::RequestTraining.
+// meTrainingType is BrnProgression::ETrainingType, stored as s32.
+struct RequestGameTrainingEvent : public GameEvent<E_EVENT_GAME_TRAINING_REQUEST>
+{
+    s32 meTrainingType;   // +0x00
+};
+
 // [FX-SHOWTIME2 2026-09-24] The showtime bounce report (X360 id 52, 32 bytes). DWARF
 // BrnGameEvents.h:2782-2790 gives the seven members, their order and their names.
 // PRODUCER VehicleManager::ProcessAftertouchEvents @0x82633DE8: RaceCarPhysics::GetRecentBounce
@@ -920,7 +1251,8 @@ struct ActiveFburnChallengeEvent : public GameEvent<E_EVENT_ACTIVE_FREEBURN_CHAL
 // @ (0x44 + K - 1), where K == the type-22/23 action's GetTargetValue(1) (the action's
 // 1-BASED stunt-run slot; ChallengeListEntryAction+0x38). So mafStuntRunScores[K-1] sits
 // at +0x04 and mabStuntRunScored[K-1] at +0x44. The [12] extents are the largest that fit
-// the attested neighbours (scores < +0x34 tail region, flags < +0x50) -- FLAGGED.
+// the attested neighbours (scores < +0x34 tail region, flags < +0x50) -- FLAGGED. On the
+// in-progress event the scores stop at +0x24, where the convoy leg distances start.
 struct CompletedStuntEvent : public GameEvent<E_EVENT_COMPLETED_STUNT>
 {
     u32  muStuntActionComplete;        // 0x00 (:499; completed-stunt-kind bit mask: 0x1 barrel
@@ -954,9 +1286,10 @@ struct InProgressStuntEvent : public GameEvent<E_EVENT_INPROGRESS_STUNT>
     u32  muStuntActionInProgress;      // 0x00 (:526; in-progress bit mask: 0x1 barrel roll,
                                        //       0x2 flatspin, 0x20 air, 0x40 air distance,
                                        //       0x80 convoy/stunt-run)
-    f32  mafStuntRunScores[12];        // 0x04..0x33 FLAG: X360-only (same 1-based slot block)
-    u8   maReserved0x34[0x10];         // 0x34..0x43 (mirrors OnStuntElementCompleteAction's
-                                       //       maConvoyLegDistances region; unread here -- pad)
+    f32  mafStuntRunScores[8];         // 0x04..0x23 FLAG: console-only (same 1-based slot block; the
+                                       //       convoy distances below bound it to eight)
+    f32  maConvoyLegDistances[8];      // 0x24..0x43 ProcessGameEvents case 120 reads the player's
+                                       //       entry (same offsets as OnStuntElementCompleteAction's)
     s32  maConvoyMemberARCIs[8];       // 0x44..0x63 FLAG: X360-only (walked player-by-player;
                                        //       same offsets as OnStuntElementCompleteAction's
                                        //       maConvoyMemberIds)
@@ -964,12 +1297,19 @@ struct InProgressStuntEvent : public GameEvent<E_EVENT_INPROGRESS_STUNT>
     f32  mfInProgressBarrelRollAngle;  // 0x68 (:528; radians -- consumer converts to whole rolls,
                                        //       feeds BARREL_ROLL(9)/(10))
     f32  mfInProgressAirSpinAngle;     // 0x6C (:529; radians, feeds FLATSPIN(1)/(2))
-    u8   maReserved0x70[0xC];          // 0x70..0x7B
+    f32  mfInProgressHandbreakTurnAngle; // 0x70 (; case 120 copies 0x68..0x78 into action 16)
+    f32  mfInProgressDriftTime;        // 0x74
+    f32  mfInProgressDriftDistance;    // 0x78
     f32  mfTimeInAir;                  // 0x7C (:533; feeds AIR(15))
     f32  mfDistanceInAir;              // 0x80 (:534; feeds AIR_DISTANCE(16))
     u8   maReserved0x84[0xC];          // 0x84..0x8F
     bool mbInReverse;                  // 0x90 (:535; selects the _REVERSE twin skill)
 };
+static_assert(offsetof(InProgressStuntEvent, maConvoyLegDistances)        == 0x24, "case 120 reads the leg distances at +0x24");
+static_assert(offsetof(InProgressStuntEvent, maConvoyMemberARCIs)         == 0x44, "convoy members at +0x44");
+static_assert(offsetof(InProgressStuntEvent, miConvoyMemberCount)         == 0x64, "convoy count at +0x64");
+static_assert(offsetof(InProgressStuntEvent, mfInProgressBarrelRollAngle) == 0x68, "case 120 copies +0x68..+0x78");
+static_assert(offsetof(InProgressStuntEvent, mfTimeInAir)                 == 0x7C, "air time at +0x7C");
 
 // ============================================================================================
 // [!!] [stuntrace waveB CLOSURE round, 2026-08-26] PlayerFinishedModeEvent -- RE-HOMED HERE.
@@ -1069,5 +1409,134 @@ struct ModeManagerRouteInfoEvent : public GameEvent<E_EVENT_MODE_MANAGER_ROUTE_I
 };
 static_assert(offsetof(ModeManagerRouteInfoEvent, mfRouteDistance) == 0x04, "distance at +4 (lfs f1, 4(r27) @0x8231E75C)");
 static_assert(sizeof(ModeManagerRouteInfoEvent) == 8, "posted with size 8 (li r6, 8 @0x823E5534)");
+
+// ---- the mode-flow / pause / showtime / invite / online records ProcessGameEvents' group-5 arms
+//      read. Names from the debug info (BrnGameEvents.h); offsets from the arms' loads.
+
+// A controller was unplugged (true) or plugged back in (false): pause / unpause the sim.
+struct ControllerDisconnectedEvent : public GameEvent<E_EVENT_CONTROLLER_DISCONNECTED>
+{
+    bool mbDisconnected;   // +0x00
+};
+static_assert(sizeof(ControllerDisconnectedEvent) == 1, "one byte, read with lbz 0");
+
+// The map menu asks for the preset races of one game mode.
+struct RequestSpecificPreSetRaces : public GameEvent<E_EVENT_REQUEST_SPECIFIC_PRESET_RACES>
+{
+    EGameModeType meRequiredGameMode;   // +0x00
+};
+static_assert(sizeof(RequestSpecificPreSetRaces) == 4, "one word, read with lwz 0");
+
+// The player paused (mbActivated) or resumed. The two stall flags ride along into RequestPause.
+struct PlayerPauseStateChangedEvent : public GameEvent<E_EVENT_PLAYER_PAUSE_STATE_CHANGED>
+{
+    bool mbActivated;    // +0x00
+    bool mbStalled;      // +0x01
+    bool mbWasStalled;   // +0x02
+};
+static_assert(sizeof(PlayerPauseStateChangedEvent) == 3, "three bytes, read with lbz 0/1/2");
+
+// A training tip opened (mbActivated) or closed.
+struct TrainingPauseStateChangedEvent : public GameEvent<E_EVENT_TRAINING_PAUSE_STATE_CHANGED>
+{
+    bool mbActivated;   // +0x00
+};
+
+// The crash-navigation map opened or closed.
+struct CrashNavStateChangedEvent : public GameEvent<E_EVENT_CRASHNAV_STATE_CHANGED>
+{
+    bool mbActivated;   // +0x00
+};
+
+// A player's running showtime score.
+struct ShowtimeUpdateEvent : public GameEvent<E_EVENT_SHOWTIME_UPDATE>
+{
+    BrnNetwork::NetworkPlayerID mPlayerID;         // +0x00
+    s32                         miShowtimeScore;   // +0x04
+};
+static_assert(offsetof(ShowtimeUpdateEvent, miShowtimeScore) == 0x04, "score read with lwz 4");
+
+// A player entered or left showtime, with the score it finished on.
+struct ShowtimeModeSwitchEvent : public GameEvent<E_EVENT_SHOWTIME_MODE_SWITCH>
+{
+    BrnNetwork::NetworkPlayerID mPlayerID;            // +0x00
+    s32                         miFinalScore;         // +0x04
+    bool                        mbEnteringShowtime;   // +0x08
+};
+static_assert(offsetof(ShowtimeModeSwitchEvent, mbEnteringShowtime) == 0x08, "flag read with lbz 8");
+
+// The crash player wants (or no longer wants) the bounce prompt on screen.
+struct ShowtimeBouncePromptEvent : public GameEvent<E_EVENT_SHOWTIME_BOUNCE_PROMPT>
+{
+    bool mbPromptNeeded;   // +0x00
+};
+
+// An invite or join request with its 0x9C-byte parameter block.
+struct RequestInviteEvent : public GameEvent<E_EVENT_REQUEST_INVITE>
+{
+    BrnNetwork::BrnNetworkModuleIO::InviteOrJoinParams mInviteParams;   // +0x00
+};
+static_assert(sizeof(RequestInviteEvent) == 0x9C, "the arm copies 0x9C bytes");
+
+// The invite manager is ready: carry the invite out.
+struct PerformInviteEvent : public GameEvent<E_EVENT_PERFORM_INVITE>
+{
+    BrnNetwork::BrnNetworkModuleIO::InviteOrJoinParams mInviteParams;   // +0x00
+};
+static_assert(sizeof(PerformInviteEvent) == 0x9C, "the arm copies 0x9C bytes");
+
+// The invite finished, successfully or not.
+struct InviteCompleteEvent : public GameEvent<E_EVENT_INVITE_COMPLETE>
+{
+    bool mbSuccess;   // +0x00
+};
+
+// A remote player's car went through a checkpoint of the current online mode.
+struct RemotePlayerTriggeredCheckpoint : public GameEvent<E_EVENT_REMOTE_PLAYER_TRIGGERED_CHECKPOINT>
+{
+    BrnNetwork::NetworkPlayerID mNetworkPlayerID;     // +0x00
+    s32                         miCheckpointIndex;    // +0x04
+};
+static_assert(offsetof(RemotePlayerTriggeredCheckpoint, miCheckpointIndex) == 0x04, "index read with lwz 4");
+
+// How many rivals the online session has added.
+struct OnlineRivalCount : public GameEvent<E_EVENT_ONLINE_RIVAL_COUNT>
+{
+    s32 miRivalCount;   // +0x00
+};
+
+// Burning Home Run: the runner role moved to another player.
+struct BurningHomeRunSwitchRunnerEvent : public GameEvent<E_EVENT_BURNING_HOME_RUN_SWITCHED_RUNNER>
+{
+    BrnNetwork::NetworkPlayerID mNewRunnerPlayerID;   // +0x00
+};
+
+// Ids 142, 143 and 154 have no enumerator: no name for them exists. Their records are the network
+// bridge's copies of the network OUT records 47 (StuntScoreUpdated), 34 (StuntMultiplier) and 21
+// (TeamSelection), and the structs are named after those.
+// Id 142: a remote player's online stunt score.
+struct StuntScoreUpdatedEvent
+{
+    BrnNetwork::NetworkPlayerID mNetworkPlayerID;   // +0x00
+    s32                         miStuntScore;       // +0x04
+};
+static_assert(sizeof(StuntScoreUpdatedEvent) == 8, "posted with size 8");
+
+// Id 143: a remote player's stunt multiplier.
+struct StuntMultiplierEvent
+{
+    s64                         mi64MultiplierData;   // +0x00
+    s32                         miStuntMultiplier;    // +0x08
+    BrnNetwork::NetworkPlayerID mNetworkPlayerID;     // +0x0C
+};
+static_assert(sizeof(StuntMultiplierEvent) == 16, "posted with size 16");
+static_assert(offsetof(StuntMultiplierEvent, mNetworkPlayerID) == 0x0C, "player read with lwz 0xC");
+
+// Id 154: the host's team for each active race car.
+struct TeamSelectionEvent
+{
+    EPlayerTeam maePlayerTeam[E_ACTIVE_RACE_CAR_INDEX_COUNT];   // +0x00, one word per car
+};
+static_assert(sizeof(TeamSelectionEvent) == 32, "posted with size 32");
 }
 }

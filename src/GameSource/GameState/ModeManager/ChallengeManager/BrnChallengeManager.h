@@ -342,6 +342,8 @@ namespace BrnGameState
         friend class ChallengeManagerDebugComponent;
         // The game-room screen's ShouldShowButton reads mbChallengesAreAllOnePlayer / TwoPlayer directly.
         friend struct BrnGui::OnlineGameRoomPlayerInfo;
+        // GameStateModule::ProcessGameEvents (case 79) calls CountCompletedChallenges directly.
+        friend class GameStateModule;
 
         // ---------------- private helpers (DWARF :459-:727) ----------------
         // Both bodied in the .cpp (GetChallengeFromID beside GetChallengeIndex).

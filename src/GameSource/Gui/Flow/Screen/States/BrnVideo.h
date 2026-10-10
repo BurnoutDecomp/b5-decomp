@@ -3,24 +3,43 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
 
-// BrnGui::Video - the screen "video" flow state. This leaf header carries the class shape
-// and the one inline resource accessor attributed to the header (the single ledger
-// function for this TU). The screen / video-playback wiring and the out-of-line state and
-// virtual machinery (OnEnter / OnLeave / Update / HandleControllerInput) are reconstructed
-// with the class:BrnGui::Video TU. The base derivation (CgsGui::State) and the virtual
-// layout are from the DecFIGS DWARF (BrnVideo.h).
+namespace CgsModule { struct Event; }
+
+// BrnGui::Video - the screen "video" flow state (FMV_VIDEO): plays the Criterion movie, lets
+// the player skip it, and goes back when it finishes. Bodies in BrnVideo.cpp, apart from the
+// inline resource accessor.
 namespace BrnGui
 {
     struct Video : public CgsGui::State
     {
-        // @ 0x825011B0 - this state loads no GUI resources of its own: the X360 body only
-        // stores zero into the count out-param (r5) and never touches the tuple pointer
-        // (r4). Mirror that exactly - leave *lppResourceTuples untouched.
+        enum ESubState
+        {
+            E_SUBSTATE_ENTERED       = 0,
+            E_SUBSTATE_VIDEO_PLAYING = 1,
+            E_SUBSTATE_COUNT         = 2,
+        };
+
+        virtual void OnEnter();
+        virtual void OnLeave();
+        virtual void Update();
+
+        // This state loads no GUI resources of its own: only the count out-param is written
+        // (zero); the tuple pointer is left untouched.
         virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
                                         u32* lpuNumberOfResources) const
         {
             (void)lppResourceTuples;
             *lpuNumberOfResources = 0;
         }
+
+    private:
+        // A controller action while the movie plays: the skip action stops it.
+        void HandleControllerInput(const CgsModule::Event* lpEvent);
+
+        // The two input channels this state listens on: controller actions and video finished.
+        static const s32 maiEventToObserve[2];
+        static const s32 miNumEventsObserved;
+
+        ESubState meSubState;   // console +0x38
     };
 }

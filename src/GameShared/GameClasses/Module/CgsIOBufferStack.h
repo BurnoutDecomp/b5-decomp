@@ -131,5 +131,9 @@ namespace CgsModule
 
         void* Alloc(u32 luSize, const char* lpcDebugName);
         bool  Free(void* lpMemory, u32 luSize);
+
+        // Log the stack's usage counters (current / high-water / allocation count) between two
+        // rules, each line gated on message filter bit 0 (an allocation debug aid).
+        void DebugPrintStack();
     };
 }

@@ -164,21 +164,12 @@ void Module::Construct(s32 li32PoolId)
 //      CPU monitors; release cursor = 2 (via the raw bump + the .h:500 assert).
 //   4 (DONE): release cursor = 0; return true.
 //
-// FLAG [the AEMS keystone -- stage 3's factory block is DEFERRED]: the console
-// creates the three factories through GenericRwacFactory::Create @0x826C7AD0
-// (spec {mpSystem=off_83271928, 128 entities, 32384 data} -- carve
-// 4*(entities+4111)+sizes through the ENVIRONMENT's allocator, assert
-// "lSpec.mpSystem" h:906), AemsFactory::Create @0x826DAC28 (spec
-// {Handle<RwacFactory>, 128, 32384}; carve 4*(entities+354)+sizes; its refcount
-// rides at +8 -- the AemsRWSampleFactory base) and SplicerFactory::Create
-// @0x826DB130 (carve 4*(entities+448)+sizes), asserting mhRwacFactory /
-// mhAemsFactory / mhSplicerFactory (cpp:196/:207/:219). NONE of the three
-// factory ctors is reconstructed, AemsFactory does not derive Factory on the
-// host yet (the ledgered keystone), and the mounted factory TUs must not gain
-// unresolved ctor externals -- so the block is documented here and the handles
-// stay null until that slice lands. The off_82FFBA0C interface-global publish
-// (`= &this->+0x228 sub-object`) lands with the same slice (its consumer is the
-// SndPlayer1 side).
+// Stage 3 creates the three factories through GenericRwacFactory::Create
+// (spec {default RWAC system, 128 entities, 32384 data}), AemsFactory::Create and
+// SplicerFactory::Create (each spec carrying the RWAC factory, 128, 32384), all
+// carved from the environment's allocator, asserting mhRwacFactory /
+// mhAemsFactory / mhSplicerFactory, then publishes the
+// module's stream-provider sub-object (+0x228) to the stream-provider global.
 // ---------------------------------------------------------------------------
 bool Module::Prepare(rw::IResourceAllocator* apAllocator,
                      CgsMemory::LinearMalloc* apLinearMalloc)
@@ -210,12 +201,13 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
         lSpec.mRegistrySpec.muDataSize        = 388608;  // SKU_MAIN_REGISTRY_DATA_SIZE (h:350)
         lSpec.mRegistrySpec.muStringTableSize = 0;
 
+        // Assign the created handle (operator= takes a reference and drops the old
+        // one), then release the temporary's reference the way its destructor does
+        // on the console: the member is left owning exactly one reference.
         Handle<Environment> lhEnvironment = Environment::Create(lSpec);
-        if (mhEnvironment.GetObject())
-            mhEnvironment.GetObject()->Release();
-        mhEnvironment.SetObject(lhEnvironment.GetObject());
-        // (the transient handle's reference transfers to the member; the console
-        // releases the temp after the assign -- net one owned reference)
+        mhEnvironment = lhEnvironment;
+        if (lhEnvironment.GetObject())
+            lhEnvironment.GetObject()->Release();
         CGS_ASSERT(mhEnvironment.GetObject() != 0, "mhEnvironment");
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
@@ -237,10 +229,9 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
         // {off_83271928, 128 entities, 32384 data, 0 strings} built at
         // @0x826E92B8-D8 (the by-value r5:r6 packing); the returned temp handle
         // is assigned into +0x225C and asserted (cpp:196 "mhRwacFactory").
-        // Interim plain-store Handle model: the create's explicit Acquire IS the
-        // member's owned ref, so no temp-release is emitted beside the store
-        // (the console's temp Object::Release balances ITS real-ref-model
-        // assign; emitting it here would drop the only ref).
+        // operator= takes the member's reference; the temporary's reference is
+        // then released as its console destructor does (the same pattern for all
+        // three factories).
         {
             GenericRwacFactorySpec lRwacSpec;
             lRwacSpec.mpSystem            = GetDefaultRwacSystem();
@@ -250,16 +241,16 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
             Handle<GenericRwacFactory> lhRwacFactory =
                 GenericRwacFactory::Create(*mhEnvironment, lRwacSpec);
             mhRwacFactory = Handle<Factory>(lhRwacFactory.GetObject());
+            if (lhRwacFactory.GetObject())
+                lhRwacFactory.GetObject()->Release();
             CGS_ASSERT(!!mhRwacFactory, "mhRwacFactory");
         }
         // [2/3] AEMS -- REAL (AemsFactory::Create @0x826DAC28, cascade slice 2):
         // spec {the RWAC handle, 128, 32384, 0} passed by reference; the temp
         // assigned into +0x2260 and asserted (cpp:207). The console releases the
-        // temp through the IAems vtable +4 slot and then the spec's RWAC handle
-        // -- both releases balance real-ref-model acquires the interim
-        // plain-store Handle model manages beside the stores instead (the
-        // create's Acquire = the member ref; the ctor's own retain of the RWAC
-        // pointer stands on its own).
+        // temp through the IAems vtable +4 slot and then the spec's RWAC handle;
+        // the spec here carries a raw pointer (no reference taken, none dropped),
+        // and the ctor's own retain of the RWAC pointer stands on its own.
         {
             AemsFactorySpec lAemsSpec;
             lAemsSpec.mpRwacFactory       = mhRwacFactory.GetObject();
@@ -269,13 +260,14 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
             Handle<AemsFactory> lhAemsFactory =
                 AemsFactory::Create(*mhEnvironment, lAemsSpec);
             mhAemsFactory = Handle<Factory>(lhAemsFactory.GetObject());
+            if (lhAemsFactory.GetObject())
+                lhAemsFactory.GetObject()->Release();
             CGS_ASSERT(!!mhAemsFactory, "mhAemsFactory");
         }
         // [3/3] SPLICER -- REAL (SplicerFactory::Create @0x826DB130, cascade
         // slice 3): spec {the RWAC handle, 128, 32384, 0}; the temp assigned
         // into +0x2264 and asserted (cpp:219). The console then releases the
-        // temp and the spec's RWAC handle (the interim plain-store model manages
-        // both refs beside the stores, the [1/3]-[2/3] precedent), and finally
+        // temp and the spec's RWAC handle (the [1/3]-[2/3] precedent), and finally
         // PUBLISHES the module's IStreamProvider sub-object (+0x228) to the
         // off_82FFBA0C interface global -- the SndPlayer1_CgsStreamMod side's
         // stream-provider hook.
@@ -288,6 +280,8 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
             Handle<SplicerFactory> lhSplicerFactory =
                 SplicerFactory::Create(*mhEnvironment, lSplicerSpec);
             mhSplicerFactory = Handle<Factory>(lhSplicerFactory.GetObject());
+            if (lhSplicerFactory.GetObject())
+                lhSplicerFactory.GetObject()->Release();
             CGS_ASSERT(!!mhSplicerFactory, "mhSplicerFactory");
 
             off_82FFBA0C = static_cast<IStreamProvider*>(this);
@@ -395,26 +389,18 @@ bool Module::Release()
         meReleaseStage++;
         // fall through
     case 2:
-        // Null-assign the three factory handles (the console's Handle null-assign
-        // helpers @0x826A76A8 family: drop the owned reference, then store null).
-        if (mhRwacFactory.GetObject())
-            mhRwacFactory.GetObject()->Release();
-        mhRwacFactory.SetObject(0);
-        if (mhAemsFactory.GetObject())
-            mhAemsFactory.GetObject()->Release();
-        mhAemsFactory.SetObject(0);
-        if (mhSplicerFactory.GetObject())
-            mhSplicerFactory.GetObject()->Release();
-        mhSplicerFactory.SetObject(0);
+        // Null-assign the three factory handles through Handle::operator= (drops
+        // the owned reference, then stores null).
+        mhRwacFactory    = Handle<Factory>();
+        mhAemsFactory    = Handle<Factory>();
+        mhSplicerFactory = Handle<Factory>();
         meReleaseStage++;
         // fall through
     case 3:
         // Snapshot the main allocator BEFORE dropping the environment handle (the
         // stream-buffer frees below need it once the environment is gone).
         lpMainAllocator = GetEnvironment()->GetAllocator();
-        if (mhEnvironment.GetObject())
-            mhEnvironment.GetObject()->Release();
-        mhEnvironment.SetObject(0);
+        mhEnvironment = Handle<Environment>();
         meReleaseStage++;
         // fall through
     case 4:

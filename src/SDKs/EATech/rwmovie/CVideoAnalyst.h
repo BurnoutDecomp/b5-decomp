@@ -75,6 +75,7 @@ public:
     // resets the count first. Returns this.
     CVideoAnalyst* setTemporal(s32 iIndex, s32 iValue);
 
+    friend class CWMVideoPerceptionModel;  // the derived model reads these members inline
 private:
     s32                 miMacroBlockArea;      // +0x04
     s32                 miMacroBlockAreaHalf;  // +0x08

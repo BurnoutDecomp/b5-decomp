@@ -103,6 +103,10 @@ namespace Vehicle
         bool RenderWallContacts() const   { return mbRenderWallContacts; }    // +597 :194
         bool RenderGroundContacts() const { return mbRenderGroundContacts; }  // +598 :195
 
+        // The slam / shunt read-outs (and, with the slam render gate, the two-car contact
+        // diagram) for the last recorded race-car impact.
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+
     protected:
         // @0x825B5D80: the debug-menu display name.
         //   lis r11,aVehicleManager@ha ; addi r3,r11,aVehicleManager@l "Vehicle Manager" ; blr
@@ -112,6 +116,17 @@ namespace Vehicle
         // Never called -- exists only so offsetof() can see the private members below (offsetof on
         // a private member needs member-function context). The gate FAILS if any pin moves.
         static void _AssertLayout();
+
+        // The two car diagrams (player car red, other car green) top-right of the screen and the
+        // other car's contact angle under them.
+        void RenderContact(CgsDev::Debug2DImmediateRender* lpRender) const;
+
+        // A top-down 40x80 car body with four wheels; optionally the contact point inside it and
+        // the closing / car velocity lines ending at its centre (x across, z along the car).
+        void RenderCarDiagram(CgsDev::Debug2DImmediateRender* lpRender, const rw::math::vpu::Vector2& lrPosition,
+                              CgsDev::RGBA lColour, const rw::math::vpu::Vector3* lpContactPosition,
+                              const rw::math::vpu::Vector3* lpClosingVelocity,
+                              const rw::math::vpu::Vector3* lpCarVelocity) const;
 
         // DWARF :169 / :171. Both are 4 in the console build.
         static const s32 KI_CONTACT_DISPLAY_SECONDS  = 4;

@@ -3,8 +3,10 @@
 #include "GameSource/World/AI/SharedIO/BrnAIModuleIO_OutputBuffer.h"
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToOutput.h"
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"                    // PhysicsModuleIO::OutputBuffer::GetContactSpyInterface (BridgePhysicsToOutput leg 2)
+#include "GameSource/World/BrnWorldModule.h"                         // BrnWorld::WorldModule::GetGlobalCpuMonitors (BridgeRaceCarResourceRequestsToOutput)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu::StartMonitor / StopMonitor
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"      // CgsModule::VariableEventQueue<N,16>
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // gpDebugPrint (PROPS-BOOT one-shot)
 #include "GameSource/GameState/BrnGameEvents.h"                       // E_EVENT_RECORD_PROP_HIT (111)
@@ -48,6 +50,30 @@ void BridgeRaceCarResourceRequestsToOutput_Prepare(
 
     lpWorldOutput->GetResourceRequestResourceInterface()->mRequestQueue.Append<8192, 16>(
         reinterpret_cast<const CgsModule::VariableEventQueue<8192, 16>&>(*lpSourceInterface));
+}
+
+// BridgeRaceCarResourceRequestsToOutput (asserts at). The PostPhysics race-car
+// output hands back its resource-request interface (the read-locked const accessor), whose
+// embedded VariableEventQueue<8192,16> is appended into the world's
+// VariableEventQueue<4096,16>, bracketed by the world module's race-car bridge CPU monitor
+// (WorldModule+6167720 == mGlobalCpuMonitors.miUT_RaceCar_Bridge, +0x90 into the block).
+void BridgeRaceCarResourceRequestsToOutput(
+    void* lpWorldModule,
+    BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
+    const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpRaceCarOutputBuffer_PostPhysics)
+{
+    CGS_ASSERT(lpWorldOutput != 0, "lpWorldOutput != NULL");
+    CGS_ASSERT(lpRaceCarOutputBuffer_PostPhysics != 0, "lpRaceCarOutputBuffer_PostPhysics != NULL");
+
+    const BrnGame::BrnCpuMonitors& lrCpuMonitors =
+        static_cast<const BrnWorld::WorldModule*>(lpWorldModule)->GetGlobalCpuMonitors();
+
+    CgsDev::PerfMonCpu::StartMonitor(lrCpuMonitors.miUT_RaceCar_Bridge);
+
+    const auto* lpSourceInterface = lpRaceCarOutputBuffer_PostPhysics->GetResourceRequestInterface();
+    lpWorldOutput->GetResourceRequestResourceInterface()->mRequestQueue.Append(lpSourceInterface->mRequestQueue);
+
+    CgsDev::PerfMonCpu::StopMonitor(lrCpuMonitors.miUT_RaceCar_Bridge);
 }
 
 // @ 0x827AF1D0
@@ -298,13 +324,11 @@ void BridgeEntityModulesToOutput_PostPhysics(
     // buffer over. RaceCarEntityModule::PostPhysicsUpdate -> SendStreamerEvents @0x82304F70
     // has just drained the five component streamers' rings into this buffer's request
     // interface; without this append they never reach the GameData module and no VEH_
-    // bundle is ever requested. (Part of the console's
-    // BridgeRaceCarEntityInfoToOutput_PostPhysics leg, whose other transfers -- the
-    // scene/game-event/network queues -- still reach un-homed interiors and stay dropped.)
+    // bundle is ever requested. On the console this is leg 1, its own function
+    // BridgeRaceCarResourceRequestsToOutput (bodied above).
     if (lpRaceCarOutput_PostPhysics != 0)
     {
-        lpOutputBuffer->GetResourceRequestResourceInterface()->mRequestQueue.Append(
-            lpRaceCarOutput_PostPhysics->GetResourceRequestInterface()->mRequestQueue);
+        BridgeRaceCarResourceRequestsToOutput(lpWorldModule, lpOutputBuffer, lpRaceCarOutput_PostPhysics);
 
         // ⭐ THE NEW-VEHICLE QUEUE TRANSFER (added 2026-08-02, camera parameter-chain wave).
         // X360-attested by the xref set: BrnWorldIO::UpdateOutputBuffer::

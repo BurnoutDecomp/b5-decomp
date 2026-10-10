@@ -203,6 +203,9 @@ struct LinearResourceAllocator : IResourceAllocator {  // sizeof = 176 on the x6
     void  Initialize(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
     void* Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment);
     void  Free(void* lpBlock);
+    const Resource& GetLinearHeapBase() const;
+    ResourceDescriptor GetCapacity() const;
+    ResourceDescriptor GetCurrentUsage() const;
 
     // The vtable's DoAllocate slot ([6] +48, ?DoAllocate@LinearResourceAllocator@rw@@MEAA...
     // -- the override the PDB vtable dump above proves): carve one Resource matching the

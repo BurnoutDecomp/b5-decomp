@@ -59,6 +59,9 @@
 
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSweptSphere.h"  // the swept kernel below
+#include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle.h"     // CgsGeometric::Triangle (IntersectTriangleSweptSphere)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT (IntersectTriangleSweptSphere)
+#include "rw/math/vpu/vector3_operation.h"                               // rw::math::vpu::IsValid(Vector3)
 #include "pc/geometric/SweptSphereSIMD.h"
 
 #include <cmath>     // std::sqrt (the vrsqrtefp lowering)
@@ -296,7 +299,7 @@ namespace CgsGeometric
 //     (h0 -/+ r) / -dot(D,N) give [tEnter,tExit] clamped to [0,1]; a sweep parallel to the
 //     plane is [0,1] if |h0| < r and rejected otherwise;
 //   * FACE contact: at tEnter the sphere cuts a circle of radius^2 = r^2 - h(tEnter)^2 in
-//     the plane. Intersect2DCircleWithTriangle gives the closest point on the triangle and
+//     the plane. Intersect2DCircleWithTriangleSOA gives the closest point on the triangle and
 //     whether the circle reaches it;
 //   * EDGE/VERTEX contact: for each of the three (vertex, outgoing edge) pairs, solve the
 //     swept-circle quadratic for the vertex and for the edge's perpendicular component, keep
@@ -356,7 +359,7 @@ namespace CgsGeometric
         // C's Voronoi region falls through to "no face contact" here and is picked up by the
         // VERTEX SWEEP in the caller instead, which does test all three vertices.
         // -------------------------------------------------------------------------------------
-        bool Intersect2DCircleWithTriangle(SweptPlanePoint2 lCentre, f32 lfRadiusSq,
+        bool Intersect2DCircleWithTriangleSOA(SweptPlanePoint2 lCentre, f32 lfRadiusSq,
                                            SweptPlanePoint2 lA, SweptPlanePoint2 lB,
                                            SweptPlanePoint2 lC,
                                            SweptPlanePoint2 lDirAB, SweptPlanePoint2 lDirBC,
@@ -631,7 +634,7 @@ namespace CgsGeometric
 
             SweptPlanePoint2 lFacePoint = { 0.0f, 0.0f };
             const bool lbFaceHit =
-                Intersect2DCircleWithTriangle(lCircleCentre, lfCircleRadiusSq,
+                Intersect2DCircleWithTriangleSOA(lCircleCentre, lfCircleRadiusSq,
                                               laVertex[0], laVertex[1], laVertex[2],
                                               laDir[0], laDir[1], laDir[2],
                                               lafLen[0], lafLen[1], lafLen[2],
@@ -803,5 +806,554 @@ namespace CgsGeometric
         }
 
         return lResult;
+    }
+}
+
+// =============================================================================================
+// The SINGLE-triangle swept kernel:
+//   CgsGeometric::IntersectTriangleSweptSphere   (1171 instructions; the last 780 follow its twelve IsValid asserts)
+//   CgsGeometric::Intersect2DCircleWithTriangle  (150, straight-line VMX)
+// One caller: TriangleCollisionDebugComponent::TestPolySoupSweptSphereCollision.
+//
+// The algorithm is the four-wide kernel's (the banner above), written per triangle in AoS
+// form, and the instruction stream decides every difference from that kernel:
+//   * the 2D circle test DOES take vertex C as a candidate (the SOA function above does not),
+//     and its compares are `!(d > best)`;
+//   * no facing test on the contact normal: the result is the slab clip and the hit masks;
+//   * the edge sweeps keep the vertex unless it is LATER than the edge (`!(v > e)`), and of
+//     the three pairs a later one wins a tie;
+//   * the triangle normal output is the unit normal on all four lanes; the contact normal is
+//     computed from the contact point carrying the w lane the caller's TriangleContactPoint
+//     held on entry (the console writes the point back with that w, then derives both
+//     normals from the stored vector, and only then puts the contact time in the w lanes).
+// Local names are the declaration's; the inlined helpers SolveSweptCircleEquation,
+// IsBetween0And1, Intersect2DSweptCircleWithVertexAndEdge, Transform3DTo2D /
+// Transform3DVectorTo2D and NormalizeReturnMagnitude are file-local functions below.
+//
+// HOW IT WAS CHECKED: every VMX128 operand was read from its raw instruction word (39 printed
+// vA fields corrected, the fused forms' operand roles per their encodings), the corrected
+// stream was executed on float32 lanes by a small interpreter, and this lowering was compared
+// with it on 3,500 random sweeps (aimed, planar, parallel to the plane, exactly parallel,
+// zero length, collinear triangles, non-zero w lanes): no hit-mask differences; the only value
+// differences are rejected sweeps parallel to the plane to within a float ulp, where the
+// slab times divide by a dot product of ~1e-8 whose sign the rounding decides.
+// PC LOWERING, as for the four-wide kernel: vrefp / vrsqrtefp with their Newton-Raphson
+// steps are a divide / 1/sqrt, the fused multiply-adds a multiply then an add, EXCEPT the
+// cross products, whose fused subtract is std::fma (it decides the normal of a nearly
+// degenerate triangle).
+// =============================================================================================
+
+namespace CgsGeometric
+{
+    namespace
+    {
+        // vminfp / vmaxfp: a NaN operand gives a NaN (the first operand's when both are), and
+        // equal operands of opposite sign order -0 below +0.
+        inline f32 SweptVmxMin(f32 lfA, f32 lfB)
+        {
+            if (lfA != lfA) return lfA;
+            if (lfB != lfB) return lfB;
+            if (lfA == lfB) return std::signbit(lfA) ? lfA : lfB;
+            return (lfA < lfB) ? lfA : lfB;
+        }
+        inline f32 SweptVmxMax(f32 lfA, f32 lfB)
+        {
+            if (lfA != lfA) return lfA;
+            if (lfB != lfB) return lfB;
+            if (lfA == lfB) return std::signbit(lfA) ? lfB : lfA;
+            return (lfA > lfB) ? lfA : lfB;
+        }
+
+        inline rw::math::vpu::MaskScalar SweptMask(bool lbValue)
+        {
+            rw::math::vpu::MaskScalar lMask;
+            const u32 luLane = lbValue ? 0xFFFFFFFFu : 0u;
+            std::memcpy(&lMask.x, &luLane, sizeof(u32));
+            std::memcpy(&lMask.y, &luLane, sizeof(u32));
+            std::memcpy(&lMask.z, &luLane, sizeof(u32));
+            std::memcpy(&lMask.w, &luLane, sizeof(u32));
+            return lMask;
+        }
+
+        // A 2D point as the console builds it: `vperm` of two splatted dot products with the
+        // (A.w0, B.w1, A.w0, A.w0) control vector, so z and w repeat x.
+        inline Vector2 SweptPlanePoint(f32 lfX, f32 lfY)
+        {
+            Vector2 lPoint;
+            lPoint.x = lfX;
+            lPoint.y = lfY;
+            lPoint.z = lfX;
+            lPoint.w = lfX;
+            return lPoint;
+        }
+
+        // The x+y dot of two 2D vectors (vmulfp128, then splat x + splat y).
+        inline f32 SweptDot2(const Vector2& lrA, const Vector2& lrB)
+        {
+            return (lrA.x * lrB.x) + (lrA.y * lrB.y);
+        }
+
+        inline f32 SweptDot3(const Vector3& lrA, const Vector3& lrB)
+        {
+            return ((lrA.x * lrB.x) + (lrA.y * lrB.y)) + (lrA.z * lrB.z);
+        }
+
+        // Normalize on all four lanes: vmsum3fp128 + vrsqrtefp + two Newton-Raphson steps.
+        inline Vector3 SweptNormalize(const Vector3& lrV)
+        {
+            const f32 lfInverseLength = 1.0f / std::sqrt(SweptDot3(lrV, lrV));
+            Vector3 lResult;
+            lResult.x = lrV.x * lfInverseLength;
+            lResult.y = lrV.y * lfInverseLength;
+            lResult.z = lrV.z * lfInverseLength;
+            lResult.w = lrV.w * lfInverseLength;
+            return lResult;
+        }
+
+        // a x b by the yzx-permute idiom, on all four lanes (the permute keeps w in w): one
+        // rounded product (vmulfp128), then the other subtracted FUSED (vnmsubfp), which is
+        // std::fma. The fused form is kept because it decides the normal of a nearly
+        // degenerate triangle, where the two products cancel.
+        inline Vector3 SweptCross(const Vector3& lrA, const Vector3& lrB)
+        {
+            Vector3 lResult;
+            lResult.x = std::fma(-lrA.z, lrB.y, lrA.y * lrB.z);
+            lResult.y = std::fma(-lrA.x, lrB.z, lrA.z * lrB.x);
+            lResult.z = std::fma(-lrA.y, lrB.x, lrA.x * lrB.y);
+            lResult.w = std::fma(-lrA.w, lrB.w, lrA.w * lrB.w);
+            return lResult;
+        }
+
+        // Transform3DTo2D / Transform3DVectorTo2D (the declaration's names; both inlined).
+        inline Vector2 SweptTransform3DTo2D(const Vector3& lrBasisOrigin, const Vector3& lrBasisX,
+                                            const Vector3& lrBasisY, const Vector3& lrPoint)
+        {
+            Vector3 lOffset;
+            lOffset.x = lrPoint.x - lrBasisOrigin.x;
+            lOffset.y = lrPoint.y - lrBasisOrigin.y;
+            lOffset.z = lrPoint.z - lrBasisOrigin.z;
+            lOffset.w = lrPoint.w - lrBasisOrigin.w;
+            return SweptPlanePoint(SweptDot3(lOffset, lrBasisX), SweptDot3(lOffset, lrBasisY));
+        }
+        inline Vector2 SweptTransform3DVectorTo2D(const Vector3& lrBasisX, const Vector3& lrBasisY,
+                                                  const Vector3& lrVector)
+        {
+            return SweptPlanePoint(SweptDot3(lrVector, lrBasisX), SweptDot3(lrVector, lrBasisY));
+        }
+
+        // NormalizeReturnMagnitude(Vector2): direction = v * rsqrt(|v|^2) on all lanes (no zero
+        // guard), magnitude = |v|^2 * rsqrt(|v|^2), selected to 0 when |v|^2 == 0.
+        inline f32 SweptNormalizeReturnMagnitude(const Vector2& lrV, Vector2& lrDirection)
+        {
+            const f32 lfLengthSq      = SweptDot2(lrV, lrV);
+            const f32 lfInverseLength = 1.0f / std::sqrt(lfLengthSq);
+            lrDirection.x = lrV.x * lfInverseLength;
+            lrDirection.y = lrV.y * lfInverseLength;
+            lrDirection.z = lrV.z * lfInverseLength;
+            lrDirection.w = lrV.w * lfInverseLength;
+            return (lfLengthSq == 0.0f) ? 0.0f : (lfLengthSq * lfInverseLength);
+        }
+
+        // SolveSweptCircleEquation: a t^2 + b t + c = 0 with
+        // a = |V|^2 + R1, b = 2 (P.V) + R2, c = |P|^2 + R3. Returns the smaller root
+        // (`vminfp` of the + root and the - root, in that order) and reports a and the
+        // discriminant for the caller's validity mask. The square root is disc * rsqrt(disc),
+        // selected to 0 when disc == 0.
+        inline f32 SweptSolveCircleEquation(const Vector2& lrP, const Vector2& lrV,
+                                            f32 lfR1, f32 lfR2, f32 lfR3,
+                                            f32& lrfA, f32& lrfDiscriminant)
+        {
+            const f32 lfA = SweptDot2(lrV, lrV) + lfR1;
+            const f32 lfB = (2.0f * SweptDot2(lrP, lrV)) + lfR2;
+            const f32 lfC = SweptDot2(lrP, lrP) + lfR3;
+
+            lrfA            = lfA;
+            lrfDiscriminant = (lfB * lfB) - ((4.0f * lfA) * lfC);
+
+            const f32 lfInverseTwoA = 1.0f / (2.0f * lfA);
+            const f32 lfRoot = (lrfDiscriminant == 0.0f)
+                             ? 0.0f
+                             : (lrfDiscriminant * (1.0f / std::sqrt(lrfDiscriminant)));
+            const f32 lfMinusB = -1.0f * lfB;
+            return SweptVmxMin((lfMinusB + lfRoot) * lfInverseTwoA, (lfMinusB - lfRoot) * lfInverseTwoA);
+        }
+
+        // IsBetween0And1: (t >= 0) & !(t > 1).
+        inline bool SweptIsBetween0And1(f32 lfValue)
+        {
+            return (lfValue >= 0.0f) && !(lfValue > 1.0f);
+        }
+
+        // Intersect2DSweptCircleWithVertexAndEdge, inlined three times. The vertex sweep solves for P = circle - vertex; the edge sweep for
+        // the components of P and of the translation perpendicular to the edge, and is kept only
+        // when the contact's projection on the edge lies in [0, |edge|]. Each solution is carried
+        // as 2.0 when it is not valid; the vertex wins unless it is later than the edge.
+        // Returns lGotVertexSolution | lGotEdgeSolution.
+        inline bool SweptCircleWithVertexAndEdge(const Vector2& lrCirclePos, const Vector2& lrCircleTranslation,
+                                                 f32 lfR1, f32 lfR2, f32 lfR3,
+                                                 const Vector2& lrVertex, const Vector2& lrEdgeDir,
+                                                 f32 lfEdgeMagnitude, f32& lrfOutT, Vector2& lrOutPosition)
+        {
+            const f32 KF_NO_SOLUTION = 2.0f;
+
+            Vector2 lOffset;
+            lOffset.x = lrCirclePos.x - lrVertex.x;
+            lOffset.y = lrCirclePos.y - lrVertex.y;
+            lOffset.z = lrCirclePos.z - lrVertex.z;
+            lOffset.w = lrCirclePos.w - lrVertex.w;
+
+            f32 lfVertexA = 0.0f, lfVertexDiscriminant = 0.0f;
+            const f32 lfVertexT = SweptSolveCircleEquation(lOffset, lrCircleTranslation, lfR1, lfR2, lfR3,
+                                                           lfVertexA, lfVertexDiscriminant);
+            const bool lbGotVertexSolution = !(lfVertexA == 0.0f) && (lfVertexDiscriminant >= 0.0f)
+                                          && SweptIsBetween0And1(lfVertexT);
+
+            const f32 lfOffsetAlong      = SweptDot2(lOffset, lrEdgeDir);
+            const f32 lfTranslationAlong = SweptDot2(lrCircleTranslation, lrEdgeDir);
+            Vector2 lOffsetPerp, lTranslationPerp;
+            lOffsetPerp.x      = lOffset.x - (lrEdgeDir.x * lfOffsetAlong);
+            lOffsetPerp.y      = lOffset.y - (lrEdgeDir.y * lfOffsetAlong);
+            lOffsetPerp.z      = lOffset.z - (lrEdgeDir.z * lfOffsetAlong);
+            lOffsetPerp.w      = lOffset.w - (lrEdgeDir.w * lfOffsetAlong);
+            lTranslationPerp.x = lrCircleTranslation.x - (lrEdgeDir.x * lfTranslationAlong);
+            lTranslationPerp.y = lrCircleTranslation.y - (lrEdgeDir.y * lfTranslationAlong);
+            lTranslationPerp.z = lrCircleTranslation.z - (lrEdgeDir.z * lfTranslationAlong);
+            lTranslationPerp.w = lrCircleTranslation.w - (lrEdgeDir.w * lfTranslationAlong);
+
+            f32 lfEdgeA = 0.0f, lfEdgeDiscriminant = 0.0f;
+            const f32 lfEdgeT = SweptSolveCircleEquation(lOffsetPerp, lTranslationPerp, lfR1, lfR2, lfR3,
+                                                         lfEdgeA, lfEdgeDiscriminant);
+
+            Vector2 lEdgeSolutionOffset;
+            lEdgeSolutionOffset.x = (lrCircleTranslation.x * lfEdgeT) + lOffset.x;
+            lEdgeSolutionOffset.y = (lrCircleTranslation.y * lfEdgeT) + lOffset.y;
+            lEdgeSolutionOffset.z = (lrCircleTranslation.z * lfEdgeT) + lOffset.z;
+            lEdgeSolutionOffset.w = (lrCircleTranslation.w * lfEdgeT) + lOffset.w;
+            const f32 lfEdgeSolutionParam = SweptDot2(lEdgeSolutionOffset, lrEdgeDir);
+
+            const bool lbEdgeSolutionIR = (lfEdgeSolutionParam >= 0.0f) && !(lfEdgeSolutionParam > lfEdgeMagnitude);
+            const bool lbGotEdgeSolution = !(lfEdgeA == 0.0f) && (lfEdgeDiscriminant >= 0.0f)
+                                        && SweptIsBetween0And1(lfEdgeT) && lbEdgeSolutionIR;
+
+            const f32 lfVertexSolution = lbGotVertexSolution ? lfVertexT : KF_NO_SOLUTION;
+            const f32 lfEdgeSolution   = lbGotEdgeSolution   ? lfEdgeT   : KF_NO_SOLUTION;
+            const bool lbPickVertex    = !(lfVertexSolution > lfEdgeSolution);
+
+            lrfOutT = lbPickVertex ? lfVertexSolution : lfEdgeSolution;
+            if (lbPickVertex)
+            {
+                lrOutPosition = lrVertex;
+            }
+            else
+            {
+                lrOutPosition.x = (lrEdgeDir.x * lfEdgeSolutionParam) + lrVertex.x;
+                lrOutPosition.y = (lrEdgeDir.y * lfEdgeSolutionParam) + lrVertex.y;
+                lrOutPosition.z = (lrEdgeDir.z * lfEdgeSolutionParam) + lrVertex.z;
+                lrOutPosition.w = (lrEdgeDir.w * lfEdgeSolutionParam) + lrVertex.w;
+            }
+            return lbGotVertexSolution || lbGotEdgeSolution;
+        }
+    }
+
+    rw::math::vpu::MaskScalar Intersect2DCircleWithTriangle(const Vector2&  lCentre,
+                                                            const VecFloat& lRadiusSquared,
+                                                            const Vector2&  lVert0,
+                                                            const Vector2&  lVert1,
+                                                            const Vector2&  lVert2,
+                                                            const Vector2&  lEdge01Dir,
+                                                            const Vector2&  lEdge12Dir,
+                                                            const Vector2&  lEdge20Dir,
+                                                            const VecFloat& lfEdge01Magnitude,
+                                                            const VecFloat& lfEdge12Magnitude,
+                                                            const VecFloat& lfEdge20Magnitude,
+                                                            Vector2&        lIntersectPoint)
+    {
+        const Vector2* lapVertex[3]  = { &lVert0, &lVert1, &lVert2 };
+        const Vector2* lapEdgeDir[3] = { &lEdge01Dir, &lEdge12Dir, &lEdge20Dir };
+        const f32      lafEdgeMagnitude[3] = { lfEdge01Magnitude.x, lfEdge12Magnitude.x, lfEdge20Magnitude.x };
+
+        bool lbInside = true;
+        f32  lafProjection[3];
+        bool labBehind[3];
+        Vector2 laOffset[3];
+        for (s32 liEdge = 0; liEdge < 3; ++liEdge)
+        {
+            const Vector2& lrVertex = *lapVertex[liEdge];
+            const Vector2& lrDir    = *lapEdgeDir[liEdge];
+
+            // The winding test: the centre lies left of every directed edge.
+            const f32 lfSide = (lrDir.x * (lrVertex.y - lCentre.y)) - (lrDir.y * (lrVertex.x - lCentre.x));
+            lbInside = lbInside && (lfSide >= 0.0f);
+
+            laOffset[liEdge].x = lCentre.x - lrVertex.x;
+            laOffset[liEdge].y = lCentre.y - lrVertex.y;
+            laOffset[liEdge].z = lCentre.z - lrVertex.z;
+            laOffset[liEdge].w = lCentre.w - lrVertex.w;
+            lafProjection[liEdge] = SweptDot2(laOffset[liEdge], lrDir);
+            labBehind[liEdge]     = !(lafProjection[liEdge] > 0.0f);
+        }
+
+        // Candidates in the console's order -- the three vertices, then the three edges -- each
+        // taken when it is not farther than the best so far (`!(d > best)`, the first best being
+        // the squared radius) and its own gate holds.
+        f32     lfBest  = lRadiusSquared.x;
+        bool    lbFound = false;
+        Vector2 lPoint  = lCentre;
+
+        for (s32 liVertex = 0; liVertex < 3; ++liVertex)
+        {
+            const f32 lfDistanceSq = SweptDot2(laOffset[liVertex], laOffset[liVertex]);
+            if (!(lfDistanceSq > lfBest) && labBehind[liVertex])
+            {
+                lfBest  = lfDistanceSq;
+                lPoint  = *lapVertex[liVertex];
+                lbFound = true;
+            }
+        }
+
+        for (s32 liEdge = 0; liEdge < 3; ++liEdge)
+        {
+            const Vector2& lrVertex = *lapVertex[liEdge];
+            const Vector2& lrDir    = *lapEdgeDir[liEdge];
+            const f32      lfProj   = lafProjection[liEdge];
+
+            Vector2 lPerp;
+            lPerp.x = laOffset[liEdge].x - (lrDir.x * lfProj);
+            lPerp.y = laOffset[liEdge].y - (lrDir.y * lfProj);
+            const f32 lfDistanceSq = SweptDot2(lPerp, lPerp);
+
+            const bool lbOnSegment = !(labBehind[liEdge] || (lfProj >= lafEdgeMagnitude[liEdge]));
+            if (!(lfDistanceSq > lfBest) && lbOnSegment)
+            {
+                lfBest   = lfDistanceSq;
+                lPoint.x = (lrDir.x * lfProj) + lrVertex.x;
+                lPoint.y = (lrDir.y * lfProj) + lrVertex.y;
+                lPoint.z = (lrDir.z * lfProj) + lrVertex.z;
+                lPoint.w = (lrDir.w * lfProj) + lrVertex.w;
+                lbFound  = true;
+            }
+        }
+
+        if (lbInside)
+        {
+            lPoint = lCentre;
+        }
+        lIntersectPoint = lPoint;
+        return SweptMask(lbFound || lbInside);
+    }
+
+    const rw::math::vpu::MaskScalar IntersectTriangleSweptSphere(const SweptSphere& lSphere,
+                                                                 const Triangle&    lTriangle,
+                                                                 Vector3&           lOutContactNormal,
+                                                                 Vector3&           lOutTriangleNormal,
+                                                                 Vector3Plus&       lOutSphereContactPoint,
+                                                                 Vector3Plus&       lOutTriangleContactPoint)
+    {
+        const f32 KF_NO_SOLUTION = 2.0f;
+
+        // ---- unpack ----------------------------------------------------------------------------
+        const Vector3 lTriVert0 = lTriangle.Get(0);
+        const Vector3 lTriVert1 = lTriangle.Get(1);
+        const Vector3 lTriVert2 = lTriangle.Get(2);
+
+        const Vector3Plus lPositionAndRadius  = lSphere.GetPositionAndRadius();
+        const Vector3Plus lDirectionAndLength = lSphere.GetDirectionAndLength();
+        const Vector3     lSpherePos          = { lPositionAndRadius.x, lPositionAndRadius.y,
+                                                  lPositionAndRadius.z, lPositionAndRadius.w };
+        const Vector3     lSphereDir          = { lDirectionAndLength.x, lDirectionAndLength.y,
+                                                  lDirectionAndLength.z, lDirectionAndLength.w };
+        const f32         lfSphereRad         = lPositionAndRadius.w;
+        const f32         lfSphereLength      = lDirectionAndLength.w;
+        Vector3 lSphereTranslation;
+        lSphereTranslation.x = lDirectionAndLength.x * lfSphereLength;
+        lSphereTranslation.y = lDirectionAndLength.y * lfSphereLength;
+        lSphereTranslation.z = lDirectionAndLength.z * lfSphereLength;
+        lSphereTranslation.w = lDirectionAndLength.w * lfSphereLength;
+
+        CGS_ASSERT(rw::math::vpu::IsValid(lTriVert0), "IsValid(lTriVert0)");
+        CGS_ASSERT(rw::math::vpu::IsValid(lTriVert1), "IsValid(lTriVert1)");
+        CGS_ASSERT(rw::math::vpu::IsValid(lTriVert2), "IsValid(lTriVert2)");
+        CGS_ASSERT(rw::math::vpu::IsValid(lSpherePos), "IsValid(lSpherePos)");
+        CGS_ASSERT(lfSphereRad == lfSphereRad, "IsValid(lSphereRad)");
+        CGS_ASSERT(rw::math::vpu::IsValid(lSphereDir), "IsValid(lSphereDir)");
+        CGS_ASSERT(lfSphereLength == lfSphereLength, "IsValid(lSphereLength)");
+        CGS_ASSERT(rw::math::vpu::IsValid(lSphereTranslation), "IsValid(lSphereTranslation)");
+
+        // ---- the triangle's plane and the in-plane basis ----------------------------------------
+        const Vector3 lEdge01 = lTriangle.CalcEdge01();
+        const Vector3 lEdge12 = lTriangle.CalcEdge12();
+        CGS_ASSERT(rw::math::vpu::IsValid(lEdge01), "IsValid(lEdge01)");
+        CGS_ASSERT(rw::math::vpu::IsValid(lEdge12), "IsValid(lEdge12)");
+
+        const Vector3 lTriangleNormal = SweptNormalize(SweptCross(lEdge01, lEdge12));
+        CGS_ASSERT(rw::math::vpu::IsValid(lTriangleNormal), "IsValid(lTriangleNormal)");
+
+        const f32 lfPlaneOffset = SweptDot3(lTriangleNormal, lTriVert0);
+        CGS_ASSERT(lfPlaneOffset == lfPlaneOffset, "IsValid(lfPlaneOffset)");
+
+        const Vector3& lBasisOrigin = lTriVert0;
+        const Vector3  lBasisX      = SweptNormalize(lEdge01);
+        const Vector3  lBasisY      = SweptNormalize(SweptCross(lBasisX, lTriangleNormal));
+
+        // ---- clip the sweep to the slab of half-thickness r about the plane ---------------------
+        const f32 lfProjectTranslationOntoPlaneNormal = SweptDot3(lSphereTranslation, lTriangleNormal);
+        const f32 lfPosPlaneOffset = SweptDot3(lSpherePos, lTriangleNormal) - lfPlaneOffset;
+
+        // Both times divide by MINUS the translation's normal component (the `vxor` with the sign
+        // splat, then `vrefp` + two Newton-Raphson steps).
+        const f32 lfInverseApproach = 1.0f / (-lfProjectTranslationOntoPlaneNormal);
+        const f32 lfFaceCollisionT0 = lfInverseApproach * (lfPosPlaneOffset - lfSphereRad);
+        const f32 lfFaceCollisionT1 = lfInverseApproach * (lfPosPlaneOffset + lfSphereRad);
+
+        const bool lbMovingParallel = (lfProjectTranslationOntoPlaneNormal == 0.0f);
+        const f32  lfT0 = lbMovingParallel ? 0.0f
+                                           : SweptVmxMax(SweptVmxMin(lfFaceCollisionT0, lfFaceCollisionT1), 0.0f);
+        const f32  lfT1 = lbMovingParallel ? 1.0f
+                                           : SweptVmxMin(SweptVmxMax(lfFaceCollisionT0, lfFaceCollisionT1), 1.0f);
+
+        const f32  lfAbsPosPlaneOffset = std::fabs(lfPosPlaneOffset);
+        const bool lbFailedParallel    = (lfAbsPosPlaneOffset >= lfSphereRad) && lbMovingParallel;
+        const bool lbFailedNoneParallel = ((lfT0 >= 1.0f) || !(lfT1 > 0.0f)) && !lbMovingParallel;
+        const bool lbFailed            = lbFailedParallel || lbFailedNoneParallel;
+
+        // ---- everything in the plane's 2D frame, origin at vertex 0 -----------------------------
+        const Vector2 l2DTriangleV0 = SweptPlanePoint(0.0f, 0.0f);
+        const Vector2 l2DTriangleV1 = SweptTransform3DTo2D(lBasisOrigin, lBasisX, lBasisY, lTriVert1);
+        const Vector2 l2DTriangleV2 = SweptTransform3DTo2D(lBasisOrigin, lBasisX, lBasisY, lTriVert2);
+        const Vector2 l2DCirclePos  = SweptTransform3DTo2D(lBasisOrigin, lBasisX, lBasisY, lSpherePos);
+        const Vector2 l2DCircleTranslation = SweptTransform3DVectorTo2D(lBasisX, lBasisY, lSphereTranslation);
+
+        Vector2 l2DEdge01, l2DEdge12, l2DEdge20;
+        l2DEdge01.x = l2DTriangleV1.x - l2DTriangleV0.x;  l2DEdge01.y = l2DTriangleV1.y - l2DTriangleV0.y;
+        l2DEdge01.z = l2DTriangleV1.z - l2DTriangleV0.z;  l2DEdge01.w = l2DTriangleV1.w - l2DTriangleV0.w;
+        l2DEdge12.x = l2DTriangleV2.x - l2DTriangleV1.x;  l2DEdge12.y = l2DTriangleV2.y - l2DTriangleV1.y;
+        l2DEdge12.z = l2DTriangleV2.z - l2DTriangleV1.z;  l2DEdge12.w = l2DTriangleV2.w - l2DTriangleV1.w;
+        l2DEdge20.x = l2DTriangleV0.x - l2DTriangleV2.x;  l2DEdge20.y = l2DTriangleV0.y - l2DTriangleV2.y;
+        l2DEdge20.z = l2DTriangleV0.z - l2DTriangleV2.z;  l2DEdge20.w = l2DTriangleV0.w - l2DTriangleV2.w;
+
+        Vector2 l2DEdge01Dir, l2DEdge12Dir, l2DEdge20Dir;
+        const f32 lfEdge01Magnitude = SweptNormalizeReturnMagnitude(l2DEdge01, l2DEdge01Dir);
+        const f32 lfEdge12Magnitude = SweptNormalizeReturnMagnitude(l2DEdge12, l2DEdge12Dir);
+        const f32 lfEdge20Magnitude = SweptNormalizeReturnMagnitude(l2DEdge20, l2DEdge20Dir);
+
+        // ---- the FACE test at the slab entry time --------------------------------------------------
+        Vector3 lSpherePosAtT0;
+        lSpherePosAtT0.x = (lSphereTranslation.x * lfT0) + lPositionAndRadius.x;
+        lSpherePosAtT0.y = (lSphereTranslation.y * lfT0) + lPositionAndRadius.y;
+        lSpherePosAtT0.z = (lSphereTranslation.z * lfT0) + lPositionAndRadius.z;
+        lSpherePosAtT0.w = (lSphereTranslation.w * lfT0) + lPositionAndRadius.w;
+
+        const f32 lfHeightAtT0 = SweptDot3(lSpherePosAtT0, lTriangleNormal) - lfPlaneOffset;
+        VecFloat lRadiusSquaredAtT0;
+        lRadiusSquaredAtT0.x = (lfSphereRad * lfSphereRad) - (lfHeightAtT0 * lfHeightAtT0);
+        lRadiusSquaredAtT0.y = lRadiusSquaredAtT0.x;
+        lRadiusSquaredAtT0.z = lRadiusSquaredAtT0.x;
+        lRadiusSquaredAtT0.w = lRadiusSquaredAtT0.x;
+
+        const Vector2 l2DCirclePosAtT0 = SweptTransform3DTo2D(lBasisOrigin, lBasisX, lBasisY, lSpherePosAtT0);
+
+        VecFloat lEdge01Magnitude, lEdge12Magnitude, lEdge20Magnitude;
+        lEdge01Magnitude.x = lEdge01Magnitude.y = lEdge01Magnitude.z = lEdge01Magnitude.w = lfEdge01Magnitude;
+        lEdge12Magnitude.x = lEdge12Magnitude.y = lEdge12Magnitude.z = lEdge12Magnitude.w = lfEdge12Magnitude;
+        lEdge20Magnitude.x = lEdge20Magnitude.y = lEdge20Magnitude.z = lEdge20Magnitude.w = lfEdge20Magnitude;
+
+        Vector2 l2DResultAtT0;
+        const bool lbResultValidAtT0 = Intersect2DCircleWithTriangle(
+            l2DCirclePosAtT0, lRadiusSquaredAtT0,
+            l2DTriangleV0, l2DTriangleV1, l2DTriangleV2,
+            l2DEdge01Dir, l2DEdge12Dir, l2DEdge20Dir,
+            lEdge01Magnitude, lEdge12Magnitude, lEdge20Magnitude,
+            l2DResultAtT0).GetBool();
+
+        // ---- the three (vertex, edge) sweeps ------------------------------------------------------
+        const f32 lfVDotN       = lfProjectTranslationOntoPlaneNormal;
+        const f32 lfPDotNMinusK = lfPosPlaneOffset;
+        const f32 lfR1 = lfVDotN * lfVDotN;
+        const f32 lfR2 = (2.0f * lfPDotNMinusK) * lfVDotN;
+        const f32 lfR3 = (lfPDotNMinusK * lfPDotNMinusK) - (lfSphereRad * lfSphereRad);
+
+        f32 lfEdge01T, lfEdge12T, lfEdge20T;
+        Vector2 lEdge01P, lEdge12P, lEdge20P;
+        const bool lbEdge01Mask = SweptCircleWithVertexAndEdge(l2DCirclePos, l2DCircleTranslation, lfR1, lfR2, lfR3,
+                                                               l2DTriangleV0, l2DEdge01Dir, lfEdge01Magnitude,
+                                                               lfEdge01T, lEdge01P);
+        const bool lbEdge12Mask = SweptCircleWithVertexAndEdge(l2DCirclePos, l2DCircleTranslation, lfR1, lfR2, lfR3,
+                                                               l2DTriangleV1, l2DEdge12Dir, lfEdge12Magnitude,
+                                                               lfEdge12T, lEdge12P);
+        const bool lbEdge20Mask = SweptCircleWithVertexAndEdge(l2DCirclePos, l2DCircleTranslation, lfR1, lfR2, lfR3,
+                                                               l2DTriangleV2, l2DEdge20Dir, lfEdge20Magnitude,
+                                                               lfEdge20T, lEdge20P);
+
+        // The earliest of the three; a later pair wins a tie (`!(later > earlier)`).
+        const f32 lfMaskedEdge01T = lbEdge01Mask ? lfEdge01T : KF_NO_SOLUTION;
+        const f32 lfMaskedEdge12T = lbEdge12Mask ? lfEdge12T : KF_NO_SOLUTION;
+        const f32 lfMaskedEdge20T = lbEdge20Mask ? lfEdge20T : KF_NO_SOLUTION;
+
+        const bool lPickEdge12 = !(lfMaskedEdge12T > lfMaskedEdge01T);
+        f32     lfEdgeResultT = lPickEdge12 ? lfMaskedEdge12T : lfMaskedEdge01T;
+        Vector2 lEdgeResultP  = lPickEdge12 ? lEdge12P : lEdge01P;
+
+        const bool lPickEdge20 = !(lfMaskedEdge20T > lfEdgeResultT);
+        lfEdgeResultT = lPickEdge20 ? lfMaskedEdge20T : lfEdgeResultT;
+        lEdgeResultP  = lPickEdge20 ? lEdge20P : lEdgeResultP;
+
+        // The face contact wins outright when it is valid.
+        const f32     lfResultT = lbResultValidAtT0 ? lfT0 : lfEdgeResultT;
+        const Vector2 lResultP  = lbResultValidAtT0 ? l2DResultAtT0 : lEdgeResultP;
+
+        const bool lPassed = !lbFailed && (lbResultValidAtT0 || lbEdge01Mask || lbEdge12Mask || lbEdge20Mask);
+
+        // ---- outputs -------------------------------------------------------------------------------
+        lOutTriangleNormal = lTriangleNormal;
+
+        // Transform2DTo3D: (BasisX * p.x + BasisY * p.y) + origin. The console stores it with the
+        // w lane the caller's TriangleContactPoint already held, and computes both normals from
+        // that vector before the w lane is replaced by the contact time.
+        Vector3 lTriangleContactPoint;
+        lTriangleContactPoint.x = ((lBasisX.x * lResultP.x) + (lBasisY.x * lResultP.y)) + lBasisOrigin.x;
+        lTriangleContactPoint.y = ((lBasisX.y * lResultP.x) + (lBasisY.y * lResultP.y)) + lBasisOrigin.y;
+        lTriangleContactPoint.z = ((lBasisX.z * lResultP.x) + (lBasisY.z * lResultP.y)) + lBasisOrigin.z;
+        lTriangleContactPoint.w = lOutTriangleContactPoint.w;
+
+        Vector3 lToContact;
+        lToContact.x = lTriangleContactPoint.x - lPositionAndRadius.x;
+        lToContact.y = lTriangleContactPoint.y - lPositionAndRadius.y;
+        lToContact.z = lTriangleContactPoint.z - lPositionAndRadius.z;
+        lToContact.w = lTriangleContactPoint.w - lPositionAndRadius.w;
+        const Vector3 lSphereNormalIfPenetration = SweptNormalize(lToContact);
+
+        Vector3 lSphereContactPointIfPenetration;
+        lSphereContactPointIfPenetration.x = (lSphereNormalIfPenetration.x * lfSphereRad) + lPositionAndRadius.x;
+        lSphereContactPointIfPenetration.y = (lSphereNormalIfPenetration.y * lfSphereRad) + lPositionAndRadius.y;
+        lSphereContactPointIfPenetration.z = (lSphereNormalIfPenetration.z * lfSphereRad) + lPositionAndRadius.z;
+
+        Vector3 lSphereContactPointIfFuture;
+        lSphereContactPointIfFuture.x = lTriangleContactPoint.x - (lSphereTranslation.x * lfResultT);
+        lSphereContactPointIfFuture.y = lTriangleContactPoint.y - (lSphereTranslation.y * lfResultT);
+        lSphereContactPointIfFuture.z = lTriangleContactPoint.z - (lSphereTranslation.z * lfResultT);
+        lSphereContactPointIfFuture.w = lTriangleContactPoint.w - (lSphereTranslation.w * lfResultT);
+
+        Vector3 lToFuture;
+        lToFuture.x = lSphereContactPointIfFuture.x - lPositionAndRadius.x;
+        lToFuture.y = lSphereContactPointIfFuture.y - lPositionAndRadius.y;
+        lToFuture.z = lSphereContactPointIfFuture.z - lPositionAndRadius.z;
+        lToFuture.w = lSphereContactPointIfFuture.w - lPositionAndRadius.w;
+        const Vector3 lSphereNormalIfFuture = SweptNormalize(lToFuture);
+
+        lOutContactNormal = lbResultValidAtT0 ? lSphereNormalIfPenetration : lSphereNormalIfFuture;
+
+        const Vector3& lrSphereContactPoint = lbResultValidAtT0 ? lSphereContactPointIfPenetration
+                                                                : lSphereContactPointIfFuture;
+        lOutSphereContactPoint.x = lrSphereContactPoint.x;
+        lOutSphereContactPoint.y = lrSphereContactPoint.y;
+        lOutSphereContactPoint.z = lrSphereContactPoint.z;
+        lOutSphereContactPoint.w = lfResultT;
+
+        lOutTriangleContactPoint.x = lTriangleContactPoint.x;
+        lOutTriangleContactPoint.y = lTriangleContactPoint.y;
+        lOutTriangleContactPoint.z = lTriangleContactPoint.z;
+        lOutTriangleContactPoint.w = lfResultT;
+
+        return SweptMask(lPassed);
     }
 }

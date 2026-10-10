@@ -9,6 +9,7 @@
 //   Snd9::AemsStandardSamplePlayer::Unpause                   @ 0x82B720D8
 //   Snd9::AemsStandardSamplePlayer::SetInput                  @ 0x82B71D10
 //   Snd9::AemsStandardSamplePlayer::SetAzimuth                @ 0x82B71E98
+//   Snd9::AemsStandardSamplePlayer::GetOutputs
 //
 // The `_savegprlr_NN` / `_restgprlr_NN` calls in the pseudocode are the compiler's
 // register save/restore prologue/epilogue helpers -- not source-level calls -- so
@@ -20,15 +21,15 @@
 // pure-virtuals return void); the Hex-Rays "int __fastcall ... return result" is the
 // PPC r3 pass-through artefact and is dropped.
 //
-// NOT in this TU (see the header): ~AemsStandardSamplePlayer (BLOCKED -- mis-attributed
-// AemsRWSamplePlayer thunk), Pause (own TU), GetOutputs (BLOCKED -- un-homed callee
-// sub_82B6A8E0).
+// NOT in this TU (see the header): ~AemsStandardSamplePlayer (the ledger's deleting
+// destructor address belongs to AemsRWSamplePlayer), Pause (own TU).
 // ============================================================================
 
 #include "SDKs/EATech/include/snd/sndaemssampleplayer.h"
 
 #include "rw/audio/core/Voice.h"  // rw::audio::core::Voice::Release
 #include "rw/audio/core/PlugIn.h" // rw::audio::core::PlugIn::SetAttribute, System::Free
+#include "rw/audio/core/plugins/SndPlayer1.h" // SndPlayer1 sample-position attribute
 
 // The shared rwaudio System singleton (off_83271928). Defined/owned by the System
 // sub-system TU; declared here as the target of System::Free. Same declaration form
@@ -43,6 +44,8 @@ namespace Snd9
 static const f32 KF_PITCH_SCALE = 0.00024414062f;
 //   flt_820AA8F8: level (vol/dry/wet) input scale (0.000030518509 == 1/32767, s16 norm).
 static const f32 KF_LEVEL_SCALE = 0.000030518509f;
+//   Seconds -> milliseconds for the GetOutputs time values (rodata double 1000.0).
+static const double KD_MILLISECONDS_PER_SECOND = 1000.0;
 //   flt_820AD9B0: azimuth-unit scale applied to each (legacyAzimuth + delta) & 0xFFFF
 //   before it is handed to the Pan2D stage (0.0054931641 == 180/32768).
 static const f32 KF_AZIMUTH_SCALE = 0.0054931641f;
@@ -200,6 +203,63 @@ void AemsStandardSamplePlayer::SetAzimuth(int aiAzimuth, int* apLegacyAzimuths)
             mpPan2D[luVoice], 0, static_cast<f32>(luAzimuth) * KF_AZIMUTH_SCALE);
         ++lpAzimuth;
     }
+}
+
+// ----------------------------------------------------------------------------
+// Snd9::AemsStandardSamplePlayer::GetOutputs
+//
+// Output 0 is "still playing", output 1 the remaining time and output 2 the elapsed
+// time, both in milliseconds. Every requested output starts at 0 and stays there once
+// the main voice or any panner voice (multi-voice players only) has been expelled
+// (voice state 2). Until the sample player's current request handle (attribute 0)
+// reaches the start threshold nothing has played: elapsed is 0 and the whole sample
+// length remains. After that the elapsed time is the player's sample-position
+// attribute. The player's own sample-length attribute is read alongside but the
+// remaining time is taken from the length cached at play time.
+// ----------------------------------------------------------------------------
+void AemsStandardSamplePlayer::GetOutputs(int aiNumOutputs, int* apValues)
+{
+    for (int liOutput = 0; liOutput < aiNumOutputs; ++liOutput)
+    {
+        apValues[liOutput] = 0;
+    }
+
+    if (mpVoice->mucState == 2)
+    {
+        return;
+    }
+    if (muNumVoices > 1u)
+    {
+        for (u32 luVoice = 0; luVoice < muNumVoices; ++luVoice)
+        {
+            if (mpPannerVoice[luVoice]->mucState == 2)
+            {
+                return;
+            }
+        }
+    }
+
+    apValues[0] = 1;
+
+    f32 lfCurrentRequest;
+    rw::audio::core::PlugIn::GetAttribute(mpSndPlayer, 0, &lfCurrentRequest);
+
+    double ldRemaining;
+    if (lfCurrentRequest < mfStartThreshold)
+    {
+        apValues[2] = 0;
+        ldRemaining = mdSampleLength;
+    }
+    else
+    {
+        const rw::audio::core::SndPlayer1* lpSndPlayer =
+            static_cast<const rw::audio::core::SndPlayer1*>(mpSndPlayer);
+        const double ldPosition = lpSndPlayer->GetSamplePositionAttribute();
+        lpSndPlayer->GetSampleLengthAttribute();
+        apValues[2] = static_cast<int>(ldPosition * KD_MILLISECONDS_PER_SECOND);
+        ldRemaining = mdSampleLength - ldPosition;
+    }
+    apValues[1] = static_cast<int>(ldRemaining * KD_MILLISECONDS_PER_SECOND);
 }
 
 } // namespace Snd9

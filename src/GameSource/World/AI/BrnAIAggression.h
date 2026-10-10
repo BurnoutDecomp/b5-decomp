@@ -202,6 +202,8 @@ namespace BrnAI
         bool IsSuitableForAggressionFlag() const { return mbIsSuitableForAggression; }
         bool IsSpeedMatchingType() const         { return meSpeedMatchType != ESpeedMatch_Disabled; }
 
+        friend class AIDebugComponent;   // the AI debug overlay reads the attack pair / speed match
+
     private:
         // mRandom is a STATIC member in the DWARF (extern/shared across instances), so it
         // contributes nothing to the per-instance layout below.

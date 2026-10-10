@@ -135,4 +135,43 @@ namespace CgsGeometric
                                             const Vector3&             lLineEnd,
                                             PolySoupLineNearestResult* lpResultBuffer,
                                             s32                        liMaxResults);
+
+    // ------------------------------------------------------------------------------------------
+    // The DOUBLE-SIDED yes/no line-vs-soup family under BaseCollisionGenerator::
+    // TestLineAgainstPolySoupListDoubleSided. Bodies in CgsPolygonSoupTests.cpp.
+    // ------------------------------------------------------------------------------------------
+
+    // One triangle, one segment, either face. Declared as
+    //     extern MaskScalar IntersectLinePolySoupTriangleDoubleSided(Vector3, Vector3, Vector3,
+    //                                                                Vector3, Vector3, VecFloat &)
+    // Plane-crossing parameter t = ((V0-S).N) / ((E-S).N) with N the UNIT normal of
+    // (V1-V0) x (V2-V1); the hit point must lie on the same side of all three unit edge planes
+    // (eXY x N) or on the outside of all three; t in [0,1]; (E-S).N != 0. No facing test. t is
+    // written splatted to lrParam whether or not the triangle is hit.
+    rw::math::vpu::MaskScalar IntersectLinePolySoupTriangleDoubleSided(const Vector3& lVertex0,
+                                                                       const Vector3& lVertex1,
+                                                                       const Vector3& lVertex2,
+                                                                       const Vector3& lLineStart,
+                                                                       const Vector3& lLineEnd,
+                                                                       VecFloat&      lrParam);
+
+    // Four triangles (lane k = triangle k of the three arrays), one segment: the single-triangle
+    // kernel above called once per lane, in lane order, each lane's mask gathered into the result.
+    // Lowered like IntersectLinePolySoupTriangleSingleSided4: bit k of the return is lane k, and
+    // lane k's t goes to lafOutT[k] (the console writes it splatted to the k'th out slot).
+    u32 IntersectLinePolySoupTriangleDoubleSided4(const Vector3  laV0[4],
+                                                  const Vector3  laV1[4],
+                                                  const Vector3  laV2[4],
+                                                  const Vector3& lLineStart,
+                                                  const Vector3& lLineEnd,
+                                                  f32            lafOutT[4]);
+
+    // Does the segment cross ANY triangle of one soup, from either side? Declared as
+    //     extern MaskScalar TestLinePolygonSoupDoubleSided(PolygonSoupArg, Vector3, Vector3)
+    // The soup walk of the single-sided family (quad pairs, the odd quad, triangle quartets, the
+    // odd triangles) over the double-sided 4-wide kernel, returning at the first hit lane. Returns
+    // every lane all-ones on a hit and every lane zero otherwise.
+    rw::math::vpu::MaskScalar TestLinePolygonSoupDoubleSided(const PolygonSoup& lPolygonSoup,
+                                                             const Vector3&     lLineStart,
+                                                             const Vector3&     lLineEnd);
 }

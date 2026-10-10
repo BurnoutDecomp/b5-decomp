@@ -4,7 +4,8 @@
 
 // ===========================================================================
 // rw::core::atom::FixupAtoms -- a polymorphic RenderWare core "atom" helper
-// whose only X360-emitted member is its (vector) deleting destructor.
+// whose only emitted body is its (vector) deleting destructor; its one other
+// virtual, At(name), is pure.
 //
 // OWNING HOME for:
 //     rw::core::atom::FixupAtoms::`vector deleting destructor'  @ 0x82BA7DD8
@@ -33,6 +34,11 @@ public:
     // @ 0x82BA7DD8 (deleting-destructor thunk). The thunk restores the vtable at
     // +0 and conditionally frees; the destructor body itself is empty.
     virtual ~FixupAtoms();
+
+    // Slot 1: map an atom name to the atom id the fixed-up data should carry.
+    // Pure in this base (its vtable slot holds _purecall); implemented by
+    // rw::core::arena::DefaultRuntimeAtomFixup.
+    virtual uint16_t At(const char* lpcName) = 0;
 };
 
 } // namespace atom

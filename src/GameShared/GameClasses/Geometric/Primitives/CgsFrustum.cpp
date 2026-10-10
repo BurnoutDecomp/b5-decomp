@@ -2,6 +2,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"   // CgsGraphics::CameraRwFrustum (SetFromRwFrustum source)
 
+#include <cmath>   // std::fabs / std::fma (IntersectionOf3Planes)
+
 // ============================================================================
 // CgsGeometric::Frustum -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -46,7 +48,7 @@
 //
 // Both draw the frustum through the 3D debug renderer (CgsDev::DebugRender::
 // DrawQuad / DrawArrow / DrawLine), whose declarations/arg shapes are not homed,
-// and they call the still-unwritten sibling IntersectionOf3Planes @0x828415E8 and
+// and they call the sibling IntersectionOf3Planes (bodied below) and
 // the un-pinned rw::collision::Plane accessors (GetNormal / GetDistance).
 //
 // ⚠ RETRACTED 2026-08-12 -- the banner here used to list SetFromRwFrustum
@@ -496,5 +498,66 @@ namespace CgsGeometric
         // @0x82840DF8 transpose.
         static_assert(PlaneLeft == 0 && PlaneTop == 1 && PlaneRight == 2, "batch 0 lane order");
         static_assert(PlaneBottom == 3 && PlaneFar == 4 && PlaneNear == 5, "batch 0/1 lane order");
+    }
+
+    // ------------------------------------------------------------------------
+    // Frustum::IntersectionOf3Planes (86 instructions). `this` is not read; the
+    // three planes arrive by value in general registers (two doublewords each,
+    // spilled and reloaded as vectors), followed by the out reference.
+    //   N1 x N2 by the yzx-permute idiom (`vpermwi128 0x63` x2, vmulfp128,
+    //   vnmsubfp, `vpermwi128 0x63`); det = vmsum3fp128(N0, N1 x N2);
+    //   `vandc` against the sign-bit splat is |det|, and `vcmpgtfp.` of the
+    //   epsilon splat against it returns 0 before anything is stored;
+    //   then N0 x N1 and N2 x N0 the same way, each D splatted from its plane's
+    //   w word, and
+    //       p = ((N2 x N0) * D1 + (N1 x N2) * D0 + (N0 x N1) * D2) * (1 / det)
+    //   in that accumulation order (vmulfp128, vmaddfp, vmaddfp), the reciprocal
+    //   `vrefp` + two Newton-Raphson steps; stvx128 to the out reference; return 1.
+    // The epsilon is a 16-byte splat in .bss written at static-init time by a CRT
+    // thunk from the rodata float 0x3A83126F (0.001f); the image holds zero there.
+    // A NaN determinant fails the epsilon compare and is solved (NaN point, true),
+    // as on the console. PC LOWERING: the refined reciprocal is a divide; the fused
+    // multiply-subtracts of the crosses and the two fused multiply-adds of the sum are
+    // std::fma, because a nearly singular triple (|det| just above the epsilon) is decided
+    // by their single rounding. Compared with an interpreter of the instruction stream on
+    // 1,000 random plane triples (a sixth of them nearly singular): identical results.
+    // ------------------------------------------------------------------------
+    bool Frustum::IntersectionOf3Planes(rw::collision::Plane lPlane0,
+                                        rw::collision::Plane lPlane1,
+                                        rw::collision::Plane lPlane2,
+                                        Vector3&             lIntersectionPointOut) const
+    {
+        const f32 KF_MIN_PLANE_TRIPLE_DETERMINANT = 0.001f;
+
+        // a x b on all four lanes: one rounded product (vmulfp128), the other subtracted fused
+        // (vnmsubfp); the yzx permute keeps w in w, so w is the fused residue of a.w*b.w.
+        struct PlaneCross { f32 x, y, z, w; };
+        const auto Cross = [](const rw::collision::Plane& lrA, const rw::collision::Plane& lrB)
+        {
+            PlaneCross lResult;
+            lResult.x = std::fma(-lrA.z, lrB.y, lrA.y * lrB.z);
+            lResult.y = std::fma(-lrA.x, lrB.z, lrA.z * lrB.x);
+            lResult.z = std::fma(-lrA.y, lrB.x, lrA.x * lrB.y);
+            lResult.w = std::fma(-lrA.w, lrB.w, lrA.w * lrB.w);
+            return lResult;
+        };
+
+        const PlaneCross l12 = Cross(lPlane1, lPlane2);
+        const f32 lfDeterminant = lPlane0.x * l12.x + lPlane0.y * l12.y + lPlane0.z * l12.z;
+
+        if (KF_MIN_PLANE_TRIPLE_DETERMINANT > std::fabs(lfDeterminant))
+        {
+            return false;
+        }
+
+        const PlaneCross l01 = Cross(lPlane0, lPlane1);
+        const PlaneCross l20 = Cross(lPlane2, lPlane0);
+        const f32 lfInverseDeterminant = 1.0f / lfDeterminant;
+
+        lIntersectionPointOut.x = std::fma(l01.x, lPlane2.w, std::fma(l12.x, lPlane0.w, l20.x * lPlane1.w)) * lfInverseDeterminant;
+        lIntersectionPointOut.y = std::fma(l01.y, lPlane2.w, std::fma(l12.y, lPlane0.w, l20.y * lPlane1.w)) * lfInverseDeterminant;
+        lIntersectionPointOut.z = std::fma(l01.z, lPlane2.w, std::fma(l12.z, lPlane0.w, l20.z * lPlane1.w)) * lfInverseDeterminant;
+        lIntersectionPointOut.w = std::fma(l01.w, lPlane2.w, std::fma(l12.w, lPlane0.w, l20.w * lPlane1.w)) * lfInverseDeterminant;
+        return true;
     }
 }

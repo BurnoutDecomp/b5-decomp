@@ -145,37 +145,24 @@ bool FineIntersectionTestModule::Prepare(EntityManager* lpEntityManager, VolumeM
 }
 
 // ---------------------------------------------------------------------------
-// Release @ 0x828AA730
+// Release
 //
-// Mirror handshake over meReleaseStage. Entry stage 0 (START): run the manager-release
-// teardown then advance START->MANAGER. Entry stage 1 (MANAGER): advance MANAGER->DONE.
-// Entry stage 2 (DONE): drop straight through. Any other value asserts. On completion the
-// prepare stage is reset to START and the function returns true.
-//
-// NOTE: the X360 START branch invokes helper sub_828AA338(&meReleaseStage, 0) — an
-// external, not-yet-reconstructed teardown that operates on the release stage word. Its
-// behavior is not grounded, so it is intentionally NOT modelled here beyond the stage
-// transition the surrounding asm makes observable. (Flagged in stubs_needed.)
-//
-// CORRECTED 2026-09-25 (crash parity FX-FOLLOWUPS, re-derived from ARTIST): sub_828AA338 is NOT a teardown. It is
-// the out-of-line operator++(EFineIntersectionTestReleaseStage&, int) of CgsFineIntersectionTestModule.h:138:
-// `lwz old, 0(r3) ; addi new, old, 1 ; cmpwi new, 2 ; stw new ; ble` -> "leEnumIndex <= FineIntersectionTestModule::
-// E_FINE_INTERSECTION_RELEASE_DONE" (0x820F2DD8, li r5, 0x8A = :138), return old; the second argument is unused.
-// And the START arm (0x828AA790..0x828AA798) FALLS THROUGH into the MANAGER arm (0x828AA79C..0x828AA7CC, the same
-// increment inlined), so one Release from START runs START -> MANAGER -> DONE, as Prepare does. DONE goes straight
-// to 0x828AA7D0 (mePrepareStage = START, return 1); >= 3 unsigned asserts "Unrecognised release state" (:162) and
-// returns 0. The body stopped at MANAGER from START: the two added lines in the START arm are the fall-through.
+// Mirror handshake over meReleaseStage. The stage word advances through the enum's
+// post-increment operator, which asserts the stage never passes RELEASE_DONE. From START
+// the function advances START -> MANAGER and then falls into the MANAGER arm, so one call
+// from START ends at DONE (the same shape as Prepare). From MANAGER it advances to DONE.
+// DONE drops straight through. Any value of 3 or more asserts "Unrecognised release state"
+// and returns false. On completion the prepare stage is reset to START and the function
+// returns true.
 // ---------------------------------------------------------------------------
 bool FineIntersectionTestModule::Release()
 {
     if (meReleaseStage == E_FINE_INTERSECTION_RELEASE_START)
     {
-        // sub_828AA338(&meReleaseStage, 0): unreconstructed manager-release teardown.
-        // (CORRECTED 2026-09-25: sub_828AA338 IS this increment and its :138 assert -- see the note above.)
         meReleaseStage++;  // START -> MANAGER
         CGS_ASSERT(meReleaseStage <= E_FINE_INTERSECTION_RELEASE_DONE,
                    "leEnumIndex <= FineIntersectionTestModule::E_FINE_INTERSECTION_RELEASE_DONE");
-        // ADDED 2026-09-25: the fall-through into the MANAGER arm (0x828AA79C), START -> MANAGER -> DONE.
+        // falls into the MANAGER arm
         meReleaseStage++;  // MANAGER -> DONE
         CGS_ASSERT(meReleaseStage <= E_FINE_INTERSECTION_RELEASE_DONE,
                    "leEnumIndex <= FineIntersectionTestModule::E_FINE_INTERSECTION_RELEASE_DONE");
@@ -200,8 +187,7 @@ bool FineIntersectionTestModule::Release()
 // Compute* narrow-phase queries -- ComputeLineTestFine @0x828C7D70, ComputeLineTestNearest
 // @0x828C8CC8, ComputeVolumeTestDeepest @0x828C90D0, ComputeVolumeTestFine @0x828C93C8.
 //
-// They live in CgsFineIntersectionTestModule_wSQ1.cpp; that TU's banner says which arms are
-// still LOUD traps.
+// They live in CgsFineIntersectionTestModule_wSQ1.cpp.
 // ---------------------------------------------------------------------------
 
 // Never called at runtime; pins the asm-attested member byte offsets.

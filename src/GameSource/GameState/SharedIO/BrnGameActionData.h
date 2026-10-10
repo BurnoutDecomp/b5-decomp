@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // CgsID (u64)
+#include "SharedClasses/Progression/BrnRace.h"   // BrnProgression::Race (LandmarkVariableInfo)
 
 // Owning header for the BrnGameState::GameStateModuleIO value-record types reconstructed by the
 // GameMode/ModeManager leaf batch: PlayerInfo (X360 0x82355038) and GameStats (0x82354F38).
@@ -186,5 +187,26 @@ private:
 // `li r5, 0xB4 / li r6, 0x160` -- action 180, exactly 352 bytes.
 static_assert(sizeof(GameStats) == 352,
               "X360 ProcessGameEvents case 79 posts GameStats as 0x160 bytes");
+
+// One landmark's variable info for the GUI: the preset race that starts there and the number of
+// custom races. ProcessGameEvents case 89 builds it inline (a 120-byte copy of the race, then 0
+// into the count) and posts it as action 185, 128 bytes.
+struct LandmarkVariableInfo
+{
+public:
+    void Construct(const BrnProgression::Race* lpPresetRace, s32 liCustomRaceCount)
+    {
+        mPresetRace        = *lpPresetRace;
+        miCustomRaceCount  = liCustomRaceCount;
+    }
+
+    const BrnProgression::Race* GetPresetRace() const { return &mPresetRace; }
+    s32 GetCustomRaceCount() const                    { return miCustomRaceCount; }
+
+private:
+    BrnProgression::Race mPresetRace;          // +0x00 (120 bytes)
+    s32                  miCustomRaceCount;    // +0x78
+};
+static_assert(sizeof(LandmarkVariableInfo) == 128, "case 89 posts action 185 with size 128");
 }
 }

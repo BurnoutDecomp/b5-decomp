@@ -188,28 +188,26 @@ public:
     //   @0x8222BEDC proves the member at +0x50 is the CollisionPolicyAttachedToVehicle.
     CollisionPolicyAttachedToVehicle* GetCollisionPolicy() override { return &mCollisionPolicy; }
 
-    // ⭐ GetName @0x821FB488 -- vtable slot 9. Three instructions: return the literal.
+    // ⭐ GetName -- vtable slot 7. Three instructions: return the literal.
     const char* GetName() const override { return "BehaviourRotateAboutVehicle"; }
 
-    // ⛔⛔ THREE DWARF VIRTUALS ARE DELIBERATELY *NOT* DECLARED HERE -- READ BEFORE ADDING THEM.
-    //   The DWARF lists `Prepare` (cpp:118), `GetParameters` (cpp:284) and
-    //   `SetupTweaker` (cpp:312) as virtual overrides of this class, but NONE of the three
-    //   appears anywhere in the X360 ARTIST export -- not under its own symbol and not under
-    //   the 50-char truncation that swallowed GetCollisionPolicy's name (there is exactly one
-    //   such truncated entry for this class, and Construct proves it is the +0x50 accessor).
-    //   Per AGENTS.md's DWARF rule ("DWARF supplies names/types; the X360 ledger decides what
-    //   exists"), a DWARF method absent from the X360 ledger is not declared, and a body may
-    //   never be invented.
-    //   ⚠️ STATE THE COST PLAINLY, because it is the same shape as the defect this wave fixed:
-    //   with them undeclared, `Behaviour::Prepare` (`return true;`, and note it does NOT call
-    //   SetPrepared), `Behaviour::GetParameters` (`return 0;`) and `Behaviour::SetupTweaker`
-    //   run instead. Nothing on the live car-select path is known to read them -- Update
-    //   latches its own first-frame state through the base's `mbIsPrepared`, and the other two
-    //   are debug/tweaker paths -- but that is an ASSUMPTION, and this campaign has now had it
-    //   go stale four times.
-    //   DELETE-WHEN: the three functions are located in the X360 image (they are ICF-fold
-    //   candidates -- a `return true;` Prepare folds onto any identical sibling), or a
-    //   PS3/DecFIGS body is admitted as the authority for them.
+    // ---- this class's OWN virtuals (slots 8 and 9 of its ten-word table) ---------------------
+    // Not base overrides: the base declares no virtual Get/SetParameters (see Behaviour.h), so
+    // this pair introduces two new slots after the base's eight, in this order. The console's
+    // table for this class holds the virtual setter in slot 8 (tag-18 tripwire quoting this
+    // behaviour's .cpp, line 299, then the single +0x374 store) and the getter in slot 9
+    // (one load of mpParameters, returned). Bodied in the .cpp.
+    virtual void                         SetParameters(const Behaviour::Parameters* lpParameters);
+    virtual const Behaviour::Parameters* GetParameters() const;
+
+    // The other two virtuals the class shape lists, Prepare and SetupTweaker, are NOT declared
+    // here. Both ARE in this class's console table, as identical-code folds: slot 1 is the
+    // three-instruction body this tree homes as BehaviourSpirallingDeathcam::Prepare (clear the base's
+    // prepared byte, return true) and slot 6 is the body homed as
+    // BehaviourIceAnim::SetupTweaker (tail-call Tweaker::Construct). Until they are declared,
+    // Behaviour::Prepare (`return true;`, leaves mbIsPrepared alone) and
+    // Behaviour::SetupTweaker run instead. Construct already clears mbIsPrepared, so the
+    // first-frame seed in Update still runs once per allocation; the tweaker path is debug only.
 
     // ⭐ SetParameters @0x821F55B8 -- the TYPED, NON-VIRTUAL overload (DWARF h:148); bodied
     // inline at the bottom of this file.
@@ -223,9 +221,8 @@ public:
     //   all three call sites (ArbStateTestbed::Update @0x8226B638,
     //   ArbStateCarSelect::Prepare @0x8226EFA0, ArbStateOnlineCarSelect::Prepare @0x82271020)
     //   show the same single store.
-    // ⚠️ The DWARF ALSO lists a virtual `SetParameters(const Behaviour::Parameters*)`
-    //   (cpp:297). That one is in the not-declared set above: @0x821F55B8 is provably the
-    //   typed h:148 overload, because its assert cites BrnBehaviourRotateAboutVehicle.h:150.
+    // ⚠️ This typed overload is distinct from the virtual slot-8 setter above: its assert
+    //   cites BrnBehaviourRotateAboutVehicle.h, the virtual one's cites the.cpp.
     void SetParameters(const Parameters* lpParameters);
 
     // The camera this behaviour produced this frame. The arbitrator states copy it into their

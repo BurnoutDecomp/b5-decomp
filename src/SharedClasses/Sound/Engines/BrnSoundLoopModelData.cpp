@@ -1,4 +1,5 @@
 #include "SharedClasses/Sound/Engines/BrnSoundLoopModelData.h"
+#include "GameSource/Sound/BrnDebugComponent.h"   // BrnSound::Debug::DebugComponent::mLogCombined (DebugDumpContentsToTty)
 
 // =============================================================================
 // BrnSound::Vehicles::Engines loop-model relocation walkers — out-of-line bodies.
@@ -123,6 +124,28 @@ int LoopModelData::FixDown(int liBase)
         mpaPartials = RebaseDown(mpaPartials, liBase);
     }
     return static_cast<int>(reinterpret_cast<intptr_t>(this)); // X360 returns `this` (r3); the resource-type wrapper discards it
+}
+
+// One line per graph point, partial by partial, graph by graph, on the sound code's shared
+// log stream (unfiltered -- the stream's installed children decide where it goes).
+void LoopModelData::DebugDumpContentsToTty()
+{
+    CgsDev::StrStreamBase& lrTty = BrnSound::Debug::DebugComponent::mLogCombined;
+
+    for (u32 i = 0; i < muNumOfPartials; ++i)
+    {
+        const Partial& lrPartial = mpaPartials[i];
+        for (u32 j = 0; j < lrPartial.mu8NumOfGraphs; ++j)
+        {
+            const Graph& lrGraph = lrPartial.mpaGraphs[j];
+            for (u32 k = 0; k < lrGraph.mu8NumOfPoints; ++k)
+            {
+                const Point& lrPoint = lrGraph.mpaPoints[k];
+                lrTty << "[" << i << "][" << j << "][" << k << "] \t(" << lrPoint.mfXpos << ", \t"
+                      << lrPoint.mfYpos << " )\n";
+            }
+        }
+    }
 }
 
 } // namespace Engines

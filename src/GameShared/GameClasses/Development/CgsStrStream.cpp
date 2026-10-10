@@ -93,6 +93,11 @@ namespace CgsDev
         return *this;
     }
 
+    StrStreamBase& StrStreamBase::operator<<(bool lbValue)
+    {
+        return *this << (lbValue ? "true" : "false");
+    }
+
     // 0x82817720 - render a printf-style format into a 256-byte stack buffer (X360 `v18[288]`,
     // formatted with vsnprintf capped at 256) and forward it to the virtual char* sink. The X360
     // guards that the formatted length did not exceed the destination (CgsStringUtils copy guard:
@@ -190,8 +195,14 @@ namespace CgsDev
         return StrStreamBase::operator<<(liValue);
     }
 
+    // Decimal mode prints two decimals; the hex modes take the base formatting.
     StrStreamBase& SimpleStrStream::operator<<(f32 lfValue)
     {
+        if (GetPrintModePC() == E_PRINTMODE_DECIMAL)
+        {
+            AppendFormat("%.02f", static_cast<double>(lfValue));
+            return *this;
+        }
         return StrStreamBase::operator<<(lfValue);
     }
 }

@@ -46,6 +46,7 @@ namespace CgsGraphics
         void SetState(const ProgramBuffer* lpVertexProgram, const ProgramBuffer* lpPixelProgram);
         // Bind a renderengine texture state (the bitmap font's atlas) for the text path's submission.
         void SetState(const renderengine::TextureState* lpTextureState);
+        void SetState(const renderengine::TextureState* lpTextureState, u32 luStage);
 
         void SetTexture(renderengine::Texture* lpTexture);
         void SetTexture(renderengine::Texture* lpTexture, u32 luStage);

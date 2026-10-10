@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // CgsMemory::LinearMalloc
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // WriteToLog
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"   // CgsResource::Events::OpenFileResponse
+#include "GameSource/GameState/BrnGameEvents.h"                            // LeaveReplayEvent / E_EVENT_LEAVE_REPLAY
 #include <cstdio>   // snprintf
 
 // ============================================================================
@@ -15,23 +17,24 @@
 //   * ReplayModule::ReplayModule         (runs on every boot)
 //   * ReplayModule::Update_Dispatch
 //   * ReplayModule::WaitForSerialiseJobs
+//   * ReplayModule::Destruct / WaitForOpenReplayFiles / UpdateRestoring_PostSim
 //
 // CONSTRUCTOR, store for store as the console performs it:
 //   the ModuleSingleBuffered base vtable, then the derived ReplayModule vtable
 //   RWMutex construction on the base input buffer's mutex   (+0x10)
 //   RWMutex construction on the base output buffer's mutex  (+0x118)
-//   mbFlag23C             = 0                               (+0x23C)
+//   mGameEventCache marked unconstructed (byte 0)           (+0x23C)
 //   Job construction on the embedded jobs at +0x2B10, at +0x4940 (four of them,
 //     stride +0x350) and at +0x5680
-//   critical-section init on mLockA (+0x3B00) and on mLockB (+0x3F80)
-//   mpTailInterfaceVTable = the trailing contained-interface vtable (+0x6264)
+//   critical-section init on mLockA (+0x3B00) and on mPrimaryDiskReadStream (+0x3F80)
+//   mDebugComponent's vtable (+0x6264) -- its inlined construction
 //
 // In human C++ the two vtable writes + the two RWMutex constructions are the
 // ModuleSingleBuffered base sub-object's own construction, and the two
 // critical-section inits are the EA::Thread::Futex members' own ctors (the committed
 // Futex is exactly that CRITICAL_SECTION-backed lock, reused by name, so its ctor
-// performs the init -- same pattern as CgsGraphics::MoviePlayer). This body therefore
-// reproduces only the trailing scalar stores past the base.
+// performs the init -- same pattern as CgsGraphics::MoviePlayer; the read stream's own ctor does
+// the second). This body therefore reproduces only the trailing stores past the base.
 //
 // FLAG -- DEFERRED sub-construction. The console ctor chains EA::Jobs::Job::Job(.,0) on
 // each embedded job (+0x2B10, the four at +0x4940, and the +0x5680 serialise job).
@@ -42,9 +45,6 @@
 // their real types. Every scalar store the ctor makes IS reproduced by name.
 // ============================================================================
 
-// The trailing contained-interface vtable is not reconstructed, so the ctor leaves
-// mpTailInterfaceVTable null (FLAGGED above).
-
 namespace BrnReplays
 {
     ReplayModule::ReplayModule()
@@ -53,15 +53,100 @@ namespace BrnReplays
         mpLinearMalloc = 0;   // ReplayModule::Prepare acquires it (+0x878)
 
         // Base (ModuleSingleBuffered: both vtables + the two RWMutexes) and the
-        // embedded mGpuWriteStream / mLockA / mLockB / mCommandPoster construct
-        // automatically before this body. mLockA / mLockB's Futex ctors perform the
-        // two critical-section inits the console ctor makes at +0x3B00 / +0x3F80.
+        // embedded mGpuWriteStream / mLockA / mPrimaryDiskReadStream / mCommandPoster /
+        // mDebugComponent construct automatically before this body. mLockA's Futex ctor and
+        // the read stream's ctor perform the two critical-section inits the console ctor makes
+        // at +0x3B00 / +0x3F80.
 
-        mbFlag23C = false;            // the console stores 0 at +0x23C
+        mGameEventCache.MarkUnconstructed();   // the console stores 0 at +0x23C
 
         // Embedded jobs (+0x2B10, the four at +0x4940, +0x5680) sub-construction DEFERRED.
+    }
 
-        mpTailInterfaceVTable = nullptr;  // the console stamps the vtable here (FLAGGED).
+    // Vtable slot 3. The debug component's teardown, the game-event cache's, then the module
+    // base's.
+    void ReplayModule::Destruct()
+    {
+        mDebugComponent.Destruct();
+        mGameEventCache.Destruct();
+        CgsModule::ModuleSingleBuffered::Destruct();
+    }
+
+    // Callers: UpdateRecording_PreSim / UpdatePlaying_PreSim. Every queued OpenFileResponse
+    // (receiver event 20) with request id 0 is the header file's open; adopt its handle. The files
+    // count as open when a primary stream is open (the read stream with no operation pending,
+    // or the GPU write stream) and the header file is open; the queue is then cleared.
+    bool ReplayModule::WaitForOpenReplayFiles()
+    {
+        static const s32 KI_OPEN_FILE_RESPONSE   = 20;
+        static const s32 KI_HEADER_FILE_EVENT_ID = 0;
+
+        if (mGameDataReceiverQueue.GetLength() < 1)
+            return false;
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liEventSize = 0;
+        s32 liEventId = mGameDataReceiverQueue.GetFirstEvent(&lpEvent, &liEventSize);
+        while (liEventId != -1)
+        {
+            if (liEventId == KI_OPEN_FILE_RESPONSE)
+            {
+                const CgsResource::Events::OpenFileResponse* lpResponse =
+                    reinterpret_cast<const CgsResource::Events::OpenFileResponse*>(lpEvent);
+                if (lpResponse->GetEventId() == KI_HEADER_FILE_EVENT_ID)
+                    mHeaderFile = lpResponse->GetFileHandle();
+            }
+            liEventId = mGameDataReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liEventSize);
+        }
+
+        const bool lbPrimaryStreamOpen =
+            mPrimaryDiskReadStream.GetStatus() == DiskReadStream::E_STATUS_OPEN ||
+            mGpuWriteStream.GetStatus() == GPUDiskWriteStream::KI_STATE_OPEN;
+        if (!lbPrimaryStreamOpen)
+            return false;
+
+        if (mHeaderFile.GetStatus() != CgsFileSystem::E_FILESTATE_OPEN)
+            return false;
+
+        mGameDataReceiverQueue.Clear();
+        return true;
+    }
+
+    // Caller: Update_PostSim. The buffers and update set are not read on this path.
+    void ReplayModule::UpdateRestoring_PostSim(const ReplayIO::InputBuffer_PostSim* /*lpInputBuffer*/,
+                                               ReplayIO::OutputBuffer_PostSim* /*lpOutputBuffer*/,
+                                               BrnUpdateSet /*lUpdateSet*/)
+    {
+        bool lbAllRestored = true;
+        for (s32 liIndex = 0; liIndex < KI_NUM_SERIALISERS; ++liIndex)
+        {
+            if (mapSerialisers[liIndex] != 0 && !mapSerialisers[liIndex]->mbDataRestored)
+            {
+                lbAllRestored = false;
+                break;
+            }
+        }
+
+        if (lbAllRestored)
+        {
+            meState = E_STREAM_STATE_IDLE;
+
+            const BrnGameState::GameStateModuleIO::LeaveReplayEvent lEvent =
+                BrnGameState::GameStateModuleIO::LeaveReplayEvent();
+            mGameEventCache.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent),
+                                     BrnGameState::GameStateModuleIO::E_EVENT_LEAVE_REPLAY,
+                                     static_cast<s32>(sizeof(lEvent)));
+
+            for (s32 liIndex = 0; liIndex < KI_NUM_SERIALISERS; ++liIndex)
+            {
+                if (mapSerialisers[liIndex] != 0)
+                {
+                    mapSerialisers[liIndex]->Lock();
+                    mapSerialisers[liIndex]->SetMode(BaseSerialiser::E_MODE_IDLE);
+                    mapSerialisers[liIndex]->Unlock();
+                }
+            }
+        }
     }
 
     // Tail-call the GPU disk write stream's Dispatch: the console branches straight into

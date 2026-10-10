@@ -86,6 +86,24 @@ namespace CgsModule
         return lpResult;
     }
 
+    void IOBufferStack::DebugPrintStack()
+    {
+        const char* const KAC_RULE = "-------------------------------------\n";
+
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << KAC_RULE;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "----STACK INFO\n";
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Allocated:          " << muAllocated << "\n";
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Max Allocated:      " << muMaxAllocated << "\n";
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Total Allocations:  " << muNumAllocated << "\n";
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << KAC_RULE;
+    }
+
     bool IOBufferStack::Free(void* lpMemory, u32 luSize)
     {
         // LIFO pop: the active top buffer is freed first. Rewind the bump pointer to the

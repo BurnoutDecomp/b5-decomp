@@ -35,6 +35,7 @@ namespace Assert
     int   BeginAssert();
     int   FireAssert(const char* lpcExpression, const char* lpcFile, int liLine);
     void* EndAssert();
+    void  PrintStringed(const char* lpcFile, const char* lpcFunction, const int liLine, const char* lpcMessage);
 
     // FLAG PC-platform leaf: assertions coordinate before taking the assert
     // mutex. Foreign workers publish captured failures for the joined owner.

@@ -63,12 +63,16 @@ namespace BrnGame
         s32 LUACBDeactivateDebugComponent(lua_State* lpLua);
 
     private:
-        // --- private helpers (DWARF, bodied in other TUs) ---
-        void PerfMonCpuReportCallback(const CgsDev::PerfMonCpuMonitorData& lrData, void* lpUserData);
-        void PerfMonGpuReportCallback(const CgsDev::PerfMonGpuMonitorData& lrData, void* lpUserData);
-        void PoolReportCallback(const CgsResource::PoolStats& lrStats, void* lpUserData);
+        // The three gamestate-dump report visitors take the record first and the log stream as
+        // the user data; they have no `this`.
+        static void PerfMonCpuReportCallback(const CgsDev::PerfMonCpuMonitorData& lrData, void* lpUserData);
+        static void PerfMonGpuReportCallback(const CgsDev::PerfMonGpuMonitorData& lrData, void* lpUserData);
+        static void PoolReportCallback(const CgsResource::PoolStats& lrStats, void* lpUserData);
+        // Write the gamestate XML capture (build, capture time, cpu/gpu monitors, pools) to
+        // lpcName (default "gamestate.xml") under the FOPEN directory, while in game.
         void DumpGameState(const char* lpcName);
         bool IsInGame();
+        // --- other private helpers (bodied in other TUs) ---
         void GetCurrentGameState();
         void* LuaAllocator(void* lpUserData, void* lpPtr, size_t luOldSize, size_t luNewSize);
         const char* ScriptReader(lua_State* lpLua, void* lpUserData, size_t* lpuSize);

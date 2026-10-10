@@ -48,7 +48,8 @@
 #include "BrnCommonTypes.h"                                            // Vector3 / Vector4 / VecFloat
 
 #include <cstring>   // std::memcpy (mask bit-pattern construction)
-#include <cmath>     // std::sqrt (the sphere/triangle normal)
+#include <cmath>     // std::sqrt (the sphere/triangle normal), std::fma / std::isfinite (the line family)
+#include <limits>    // std::numeric_limits (the line family's refined reciprocals)
 
 namespace CgsGeometric
 {
@@ -972,5 +973,246 @@ namespace CgsGeometric
         }
 
         return SphereSoupAnswer(false);   // 0x82845B40
+    }
+
+    // ============================================================================
+    // The DOUBLE-SIDED yes/no line-vs-soup family:
+    //   IntersectLinePolySoupTriangleDoubleSided   (112, straight-line VMX)
+    //   IntersectLinePolySoupTriangleDoubleSided4  (58, four calls of the above)
+    //   TestLinePolygonSoupDoubleSided             (326, the soup walk)
+    // under BaseCollisionGenerator::TestLineAgainstPolySoupListDoubleSided.
+    //
+    // The single-triangle kernel, read off its instruction stream (inputs: the three
+    // vertices, the segment's start S and end E, and the t out slot):
+    //   e01 = V1-V0, e12 = V2-V1, e20 = V0-V2 (three vsubfp);
+    //   N   = normalize(e01 x e12): the yzx-permute cross (`vpermwi128 0x63` x2,
+    //         vmulfp128, vnmsubfp, `vpermwi128 0x63`), vmsum3fp128, vrsqrtefp + two
+    //         Newton-Raphson steps (0.5 = `vcfsx 1,1`), a multiply;
+    //   oXY = normalize(eXY x N) for the three edges, the same idiom each;
+    //   denom = E.N - S.N, num = V0.N - S.N, t = num * refine(vrefp(denom)) (two
+    //         Newton-Raphson steps), stored splatted to the out slot;
+    //   P = (E-S)*t + S; fXY = (P - VX).oXY; cXY = (0 >= fXY);
+    //   hit = ((c01&c12&c20) | (!c01&!c12&!c20)) & !(denom == 0) & (t >= 0) & !(t > 1).
+    // There is no facing term: that is the whole difference from the single-sided
+    // kernel (which also leaves its normal and edge vectors unnormalised). The
+    // normalisations are kept, because they decide the degenerate cases: a zero-length
+    // normal or edge vector makes 0 * (1/sqrt(0)) a NaN, and every compare against a
+    // NaN is false.
+    //
+    // PC LOWERING: vrefp + 2 NR is a divide and vrsqrtefp + 2 NR is 1/sqrt, except where the
+    // estimate is infinite or zero (a zero, infinite or underflowing input): there the first
+    // Newton-Raphson step multiplies 0 by infinity and the console's answer is a NaN, which
+    // LineSoupRefined* reproduce. The cross products keep their fused subtract (std::fma):
+    // it decides the normal of a nearly degenerate triangle, where the two products cancel.
+    // The compares are in the console's orientation. The single-triangle kernel was compared
+    // with an interpreter of its instruction stream on 1,000 random triangle/segment pairs (a
+    // third of them collinear): identical masks and parameters.
+    // ============================================================================
+    namespace
+    {
+        inline rw::math::vpu::MaskScalar LineSoupMask(bool lbHit)
+        {
+            rw::math::vpu::MaskScalar lMask;
+            const u32 luLane = lbHit ? 0xFFFFFFFFu : 0u;
+            std::memcpy(&lMask.x, &luLane, sizeof(u32));
+            std::memcpy(&lMask.y, &luLane, sizeof(u32));
+            std::memcpy(&lMask.z, &luLane, sizeof(u32));
+            std::memcpy(&lMask.w, &luLane, sizeof(u32));
+            return lMask;
+        }
+
+        // vrefp / vrsqrtefp followed by two Newton-Raphson steps (see the banner).
+        inline f32 LineSoupRefinedReciprocal(f32 lfValue)
+        {
+            const f32 lfResult = 1.0f / lfValue;
+            return (std::isfinite(lfResult) && lfResult != 0.0f) ? lfResult : std::numeric_limits<f32>::quiet_NaN();
+        }
+        inline f32 LineSoupRefinedReciprocalSqrt(f32 lfValue)
+        {
+            const f32 lfResult = 1.0f / std::sqrt(lfValue);
+            return (std::isfinite(lfResult) && lfResult != 0.0f) ? lfResult : std::numeric_limits<f32>::quiet_NaN();
+        }
+
+        // a x b by the yzx-permute idiom (one rounded product, the other subtracted fused),
+        // then scaled by its refined reciprocal length (vmsum3fp128 + vrsqrtefp + 2 NR).
+        inline void LineSoupUnitCross(f32 lfAx, f32 lfAy, f32 lfAz,
+                                      f32 lfBx, f32 lfBy, f32 lfBz,
+                                      f32& lrfOutX, f32& lrfOutY, f32& lrfOutZ)
+        {
+            const f32 lfCx = std::fma(-lfAz, lfBy, lfAy * lfBz);
+            const f32 lfCy = std::fma(-lfAx, lfBz, lfAz * lfBx);
+            const f32 lfCz = std::fma(-lfAy, lfBx, lfAx * lfBy);
+            const f32 lfInverseLength = LineSoupRefinedReciprocalSqrt(lfCx * lfCx + lfCy * lfCy + lfCz * lfCz);
+            lrfOutX = lfCx * lfInverseLength;
+            lrfOutY = lfCy * lfInverseLength;
+            lrfOutZ = lfCz * lfInverseLength;
+        }
+    }
+
+    rw::math::vpu::MaskScalar IntersectLinePolySoupTriangleDoubleSided(const Vector3& lVertex0,
+                                                                       const Vector3& lVertex1,
+                                                                       const Vector3& lVertex2,
+                                                                       const Vector3& lLineStart,
+                                                                       const Vector3& lLineEnd,
+                                                                       VecFloat&      lrParam)
+    {
+        const f32 lfE01x = lVertex1.x - lVertex0.x, lfE01y = lVertex1.y - lVertex0.y, lfE01z = lVertex1.z - lVertex0.z;
+        const f32 lfE12x = lVertex2.x - lVertex1.x, lfE12y = lVertex2.y - lVertex1.y, lfE12z = lVertex2.z - lVertex1.z;
+        const f32 lfE20x = lVertex0.x - lVertex2.x, lfE20y = lVertex0.y - lVertex2.y, lfE20z = lVertex0.z - lVertex2.z;
+
+        f32 lfNx, lfNy, lfNz;
+        LineSoupUnitCross(lfE01x, lfE01y, lfE01z, lfE12x, lfE12y, lfE12z, lfNx, lfNy, lfNz);
+
+        f32 lfO01x, lfO01y, lfO01z;
+        f32 lfO12x, lfO12y, lfO12z;
+        f32 lfO20x, lfO20y, lfO20z;
+        LineSoupUnitCross(lfE01x, lfE01y, lfE01z, lfNx, lfNy, lfNz, lfO01x, lfO01y, lfO01z);
+        LineSoupUnitCross(lfE12x, lfE12y, lfE12z, lfNx, lfNy, lfNz, lfO12x, lfO12y, lfO12z);
+        LineSoupUnitCross(lfE20x, lfE20y, lfE20z, lfNx, lfNy, lfNz, lfO20x, lfO20y, lfO20z);
+
+        const f32 lfDotS  = lLineStart.x * lfNx + lLineStart.y * lfNy + lLineStart.z * lfNz;
+        const f32 lfDotE  = lLineEnd.x * lfNx + lLineEnd.y * lfNy + lLineEnd.z * lfNz;
+        const f32 lfDotV0 = lVertex0.x * lfNx + lVertex0.y * lfNy + lVertex0.z * lfNz;
+        const f32 lfDenom = lfDotE - lfDotS;
+        const f32 lfNum   = lfDotV0 - lfDotS;
+        const f32 lfT     = LineSoupRefinedReciprocal(lfDenom) * lfNum;
+
+        lrParam.x = lfT;
+        lrParam.y = lfT;
+        lrParam.z = lfT;
+        lrParam.w = lfT;
+
+        const f32 lfPx = (lLineEnd.x - lLineStart.x) * lfT + lLineStart.x;
+        const f32 lfPy = (lLineEnd.y - lLineStart.y) * lfT + lLineStart.y;
+        const f32 lfPz = (lLineEnd.z - lLineStart.z) * lfT + lLineStart.z;
+
+        const f32 lfF01 = (lfPx - lVertex0.x) * lfO01x + (lfPy - lVertex0.y) * lfO01y + (lfPz - lVertex0.z) * lfO01z;
+        const f32 lfF12 = (lfPx - lVertex1.x) * lfO12x + (lfPy - lVertex1.y) * lfO12y + (lfPz - lVertex1.z) * lfO12z;
+        const f32 lfF20 = (lfPx - lVertex2.x) * lfO20x + (lfPy - lVertex2.y) * lfO20y + (lfPz - lVertex2.z) * lfO20z;
+
+        const bool lbC01 = (0.0f >= lfF01);
+        const bool lbC12 = (0.0f >= lfF12);
+        const bool lbC20 = (0.0f >= lfF20);
+        const bool lbInside = (lbC01 && lbC12 && lbC20) || (!lbC01 && !lbC12 && !lbC20);
+
+        const bool lbDenomNonZero = !(lfDenom == 0.0f);
+        const bool lbTIn = (lfT >= 0.0f) && !(lfT > 1.0f);
+
+        return LineSoupMask(lbInside && lbDenomNonZero && lbTIn);
+    }
+
+    u32 IntersectLinePolySoupTriangleDoubleSided4(const Vector3  laV0[4],
+                                                  const Vector3  laV1[4],
+                                                  const Vector3  laV2[4],
+                                                  const Vector3& lLineStart,
+                                                  const Vector3& lLineEnd,
+                                                  f32            lafOutT[4])
+    {
+        u32 lu32HitMask = 0;
+        for (s32 liLane = 0; liLane < 4; ++liLane)
+        {
+            VecFloat lParam;
+            if (IntersectLinePolySoupTriangleDoubleSided(laV0[liLane], laV1[liLane], laV2[liLane],
+                                                         lLineStart, lLineEnd, lParam).GetBool())
+            {
+                lu32HitMask |= (1u << liLane);
+            }
+            lafOutT[liLane] = lParam.x;
+        }
+        return lu32HitMask;
+    }
+
+    // TestLinePolygonSoupDoubleSided. The counts are the all-hits sibling's (the triangle
+    // count a u8 difference, `subf ; clrlwi 24`); the triangle lanes of each batch are the
+    // single-sided family's: a quad pair is (A0,A1,A2) (A3,A2,A1) (B0,B1,B2) (B3,B2,B1),
+    // the odd quad fills lanes 0/1 (2/3 duplicate them and are not read), a quartet is lane
+    // k = poly k, an odd triangle fills every lane and only lane 0 is read. Lanes are read
+    // in order (`vspltw k ; vcmpeqfp128.` against zero) and the first hit returns the
+    // all-ones mask; the walk falling through returns zero.
+    rw::math::vpu::MaskScalar TestLinePolygonSoupDoubleSided(const PolygonSoup& lPolygonSoup,
+                                                             const Vector3&     lLineStart,
+                                                             const Vector3&     lLineEnd)
+    {
+        const u8  lu8NumQuads         = lPolygonSoup.mu8NumQuads;
+        const u8  lu8NumTriangles     = static_cast<u8>(lPolygonSoup.mu8NumPolygons - lPolygonSoup.mu8NumQuads);
+        const u16 lu16NumQuadPairs    = static_cast<u16>(lu8NumQuads >> 1);
+        const u16 lu16NumOddQuads     = static_cast<u16>(lu8NumQuads - 2u * lu16NumQuadPairs);
+        const u16 lu16NumQuartets     = static_cast<u16>(lu8NumTriangles >> 2);
+        const u16 lu16NumOddTriangles = static_cast<u16>(lu8NumTriangles - 4u * lu16NumQuartets);
+
+        alignas(16) Vector3 laVertices[KI_MAX_POLYGON_SOUP_VERTICES];
+        UnpackPolygonSoupVertices(laVertices, lPolygonSoup);
+
+        const PolygonSoupPoly* lpPoly =
+            reinterpret_cast<const PolygonSoupPoly*>(lPolygonSoup.GetPolygon(0));
+
+        Vector3 laV0[4], laV1[4], laV2[4];
+        f32     lafT[4];
+
+        for (u16 lu16Pair = 0; lu16Pair < lu16NumQuadPairs; ++lu16Pair, lpPoly += 2)
+        {
+            const u8* lpau8A = lpPoly[0].mau8VertexIndex;
+            const u8* lpau8B = lpPoly[1].mau8VertexIndex;
+
+            laV0[0] = laVertices[lpau8A[0]]; laV1[0] = laVertices[lpau8A[1]]; laV2[0] = laVertices[lpau8A[2]];
+            laV0[1] = laVertices[lpau8A[3]]; laV1[1] = laVertices[lpau8A[2]]; laV2[1] = laVertices[lpau8A[1]];
+            laV0[2] = laVertices[lpau8B[0]]; laV1[2] = laVertices[lpau8B[1]]; laV2[2] = laVertices[lpau8B[2]];
+            laV0[3] = laVertices[lpau8B[3]]; laV1[3] = laVertices[lpau8B[2]]; laV2[3] = laVertices[lpau8B[1]];
+
+            if (IntersectLinePolySoupTriangleDoubleSided4(laV0, laV1, laV2, lLineStart, lLineEnd, lafT) != 0)
+            {
+                return LineSoupMask(true);
+            }
+        }
+
+        if (lu16NumOddQuads != 0)
+        {
+            const u8* lpau8A = lpPoly->mau8VertexIndex;
+            ++lpPoly;
+
+            laV0[0] = laVertices[lpau8A[0]]; laV1[0] = laVertices[lpau8A[1]]; laV2[0] = laVertices[lpau8A[2]];
+            laV0[1] = laVertices[lpau8A[3]]; laV1[1] = laVertices[lpau8A[2]]; laV2[1] = laVertices[lpau8A[1]];
+            laV0[2] = laV0[0]; laV1[2] = laV1[0]; laV2[2] = laV2[0];
+            laV0[3] = laV0[1]; laV1[3] = laV1[1]; laV2[3] = laV2[1];
+
+            if ((IntersectLinePolySoupTriangleDoubleSided4(laV0, laV1, laV2, lLineStart, lLineEnd, lafT) & 3u) != 0)
+            {
+                return LineSoupMask(true);
+            }
+        }
+
+        for (u16 lu16Quartet = 0; lu16Quartet < lu16NumQuartets; ++lu16Quartet, lpPoly += 4)
+        {
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                const u8* lpau8T = lpPoly[liLane].mau8VertexIndex;
+                laV0[liLane] = laVertices[lpau8T[0]];
+                laV1[liLane] = laVertices[lpau8T[1]];
+                laV2[liLane] = laVertices[lpau8T[2]];
+            }
+
+            if (IntersectLinePolySoupTriangleDoubleSided4(laV0, laV1, laV2, lLineStart, lLineEnd, lafT) != 0)
+            {
+                return LineSoupMask(true);
+            }
+        }
+
+        for (u16 lu16Odd = 0; lu16Odd < lu16NumOddTriangles; ++lu16Odd, ++lpPoly)
+        {
+            const u8* lpau8T = lpPoly->mau8VertexIndex;
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                laV0[liLane] = laVertices[lpau8T[0]];
+                laV1[liLane] = laVertices[lpau8T[1]];
+                laV2[liLane] = laVertices[lpau8T[2]];
+            }
+
+            if ((IntersectLinePolySoupTriangleDoubleSided4(laV0, laV1, laV2, lLineStart, lLineEnd, lafT) & 1u) != 0)
+            {
+                return LineSoupMask(true);
+            }
+        }
+
+        return LineSoupMask(false);
     }
 }

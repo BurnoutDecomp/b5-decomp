@@ -3,6 +3,11 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // DrawFrame
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnSatNavRenderer.h"                       // SatNavRenderer::UpdateRendererTransform
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                           // CGS_ASSERT
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                                       // CgsGuiModuleIO::InputBuffer (Update)
+#include "GameShared/GameClasses/Module/CgsModuleUtils.h"                                    // Lock/UnlockBuffersForIO (Update)
+#include "GameSource/Gui/BrnGuiModule.h"                                                     // GuiModule::mGuiCache (Update)
+#include "GameSource/Gui/SatNav/BrnSatNavComponent.h"                                        // SatNavComponent::GetViewDistance (Update)
+#include "SharedClasses/Gui/SatNav/BrnMapUtils.h"                                            // MapTransform (the live sat-nav viewport rect)
 
 // BrnGui::SatNavDebugComponent -- the sat-nav (mini-map) debug component bodies. OnActivate wires
 // every editable to the debug menu; the change callbacks re-publish the state / rectangle to the
@@ -16,6 +21,10 @@ namespace BrnGui
     extern f32 kfSatNavMaxViewDistance;
     extern f32 kfSatNavMinViewDistance;
     extern f32 kfSatNavMaxSpeedMph;
+    // The sat nav's lerp band, the runtime copies of the view band above that Update republishes
+    // every frame (same owner).
+    extern f32 kfSatNavMaxViewLerp;
+    extern f32 kfSatNavMinViewLerp;
 
     namespace
     {
@@ -36,6 +45,53 @@ namespace BrnGui
     const char* SatNavDebugComponent::GetName() const
     {
         return "Sat Nav";
+    }
+
+    // The base Construct, the module binding, the input queue, every toggle off, alpha 90, and the
+    // four rect corners copied out of the live sat-nav viewport rect.
+    void SatNavDebugComponent::Construct(GuiModule* lpGuiModule)
+    {
+        CGS_ASSERT(lpGuiModule != 0, "Invalid Gui module passed to SatNavDebugComponent::Construct");
+
+        CgsDev::DebugComponent::Construct();
+        mpGuiModule = lpGuiModule;
+        mInputQueue.Construct();
+
+        mbRivalFovFreeBurn          = false;
+        mbRivalFovRace              = false;
+        mbViewTrajectory            = false;
+        mbRotateSatNav              = false;
+        mbShowOffLineRivalsOnSatNav = false;
+        mbDrawSatNavOutline         = false;
+
+        miSatNavAlpha = 90;
+
+        const Vector4& lrv4Rect = MapTransform::GetSatNavViewRect();
+        mfSatNavTopLeftX     = lrv4Rect.x;
+        mfSatNavTopLeftY     = lrv4Rect.y;
+        mfSatNavBottomRightX = lrv4Rect.z;
+        mfSatNavBottomRightY = lrv4Rect.w;
+    }
+
+    // Republish the (debug-tunable) view band as the lerp band, read the current view distance
+    // for the player's speed and zoom level into the read-only readout, then append the queued
+    // toggle events to the GUI module's input events and clear the local queue.
+    void SatNavDebugComponent::Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuffer)
+    {
+        kfSatNavMinViewLerp = kfSatNavMinViewDistance;
+        kfSatNavMaxViewLerp = kfSatNavMaxViewDistance;
+
+        const GuiCache& lrGuiCache = mpGuiModule->mGuiCache;
+        mfCurrentZoomValue = SatNavComponent::GetViewDistance(
+            static_cast<f32>(lrGuiCache.miPlayerSpeedMph), lrGuiCache.GetSatNavZoomLevel());
+
+        CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer");
+        CgsModule::LockBuffersForIO(lpInputBuffer);
+        lpInputBuffer->GetGuiEvents()->Append(mInputQueue);
+        CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer");
+        CgsModule::UnlockBuffersForIO(lpInputBuffer);
+
+        mInputQueue.Clear();
     }
 
     // =============================================================================================
@@ -100,8 +156,8 @@ namespace BrnGui
     // RenderHUD  @ 0x824F7F28
     //
     // When the "Show Sat Nav Rect outline" toggle is on, draw the SatNav rect as a 2-pixel frame. The
-    // X360 reads the shared normalised rect vector (gv4SatNavViewportRect, written by the position
-    // path), scales the X lanes by the virtual-screen width (1280) and the Y lanes by the height (720),
+    // live normalised sat-nav viewport rect (written by the position path) is read, the X lanes
+    // scaled by the virtual-screen width (1280) and the Y lanes by the height (720),
     // and tail-calls DrawFrame(x0,y0,x1,y1,colour,border). (The X360 does the four scalings as a VMX
     // splat/multiply cascade; reproduced here as the equivalent per-corner scalar arithmetic.)
     //
@@ -115,10 +171,11 @@ namespace BrnGui
             return;
         }
 
-        const f32 lfX0 = gv4SatNavViewportRect.x * KF_SATNAV_HUD_WIDTH;   // TopLeftX     * 1280
-        const f32 lfY0 = gv4SatNavViewportRect.y * KF_SATNAV_HUD_HEIGHT;  // TopLeftY     *  720
-        const f32 lfX1 = gv4SatNavViewportRect.z * KF_SATNAV_HUD_WIDTH;   // BottomRightX * 1280
-        const f32 lfY1 = gv4SatNavViewportRect.w * KF_SATNAV_HUD_HEIGHT;  // BottomRightY *  720
+        const Vector4& lrv4Rect = MapTransform::GetSatNavViewRect();
+        const f32 lfX0 = lrv4Rect.x * KF_SATNAV_HUD_WIDTH;   // TopLeftX     * 1280
+        const f32 lfY0 = lrv4Rect.y * KF_SATNAV_HUD_HEIGHT;  // TopLeftY     *  720
+        const f32 lfX1 = lrv4Rect.z * KF_SATNAV_HUD_WIDTH;   // BottomRightX * 1280
+        const f32 lfY1 = lrv4Rect.w * KF_SATNAV_HUD_HEIGHT;  // BottomRightY *  720
 
         lpRender->DrawFrame( lfX0, lfY0, lfX1, lfY1, 0xFFFFFFFFu, KF_SATNAV_OUTLINE_BORDER );
     }
@@ -171,10 +228,8 @@ namespace BrnGui
     // space transform from it, then repacks the rectangle's tint colour (RGB white, A = alpha*2.55).
     //
     // FLAGS:
-    //  - gv4SatNavViewportRect is the shared sat-nav viewport-rect descriptor (X360 unk_82FB36A0, a
-    //    Vector4). This is the WRITE side; BrnGui::SatNavRenderer::UpdateRendererTransform reads it.
-    //    The X360 does a single aligned Vector4 store; the four scalar stores below are the
-    //    semantically identical PC form.
+    //  - The rect goes to the live sat-nav viewport rect (MapTransform::SetSatNavRect, one aligned
+    //    Vector4 store); BrnGui::SatNavRenderer::UpdateRendererTransform reads it.
     //  - The sat-nav renderer (X360 mpGuiModule+0x4D2E0) and its map-quad tint colour (mpGuiModule+
     //    0x4D2E8 == renderer+8) live in a part of the GuiModule layout this slice does not model by
     //    name; they are reached through the X360-attested byte offsets below.
@@ -182,10 +237,12 @@ namespace BrnGui
     void SatNavDebugComponent::TriggerSatNavPositionUpdate()
     {
         // Republish the sat-nav viewport rectangle (a single aligned Vector4 store on the X360).
-        gv4SatNavViewportRect.x = mfSatNavTopLeftX;
-        gv4SatNavViewportRect.y = mfSatNavTopLeftY;
-        gv4SatNavViewportRect.z = mfSatNavBottomRightX;
-        gv4SatNavViewportRect.w = mfSatNavBottomRightY;
+        Vector4 lv4Rect;
+        lv4Rect.x = mfSatNavTopLeftX;
+        lv4Rect.y = mfSatNavTopLeftY;
+        lv4Rect.z = mfSatNavBottomRightX;
+        lv4Rect.w = mfSatNavBottomRightY;
+        MapTransform::SetSatNavRect(lv4Rect);
 
         CGS_ASSERT(miSatNavAlpha <= 100, "miSatNavAlpha <= 100");   // BrnGuiSatNavDebugComponent.cpp:264
 

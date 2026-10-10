@@ -21,14 +21,19 @@
 //     the 12-byte BaseEventQueue header rounds up to the element's 16-byte alignment
 //     (12 -> 16), so maEvents lives at +0x10 (the element is alignas(16)).
 //
-// LAYOUT: no field-level DWARF is recovered in any decompiled TU's scope (Construct does
-// not read the element interior; Append block-copies it whole). Only the 48-byte size /
-// 16-byte alignment is load-bearing, so the payload is modelled as an OPAQUE byte span at
-// the X360-attested stride -- field names are NOT fabricated (HARD RULE 3). Mirrors the
-// committed sibling line-test home CgsSceneManagerIO_EventLineTest.h (distinctly-named
-// empty base + leaf element) and the EventAddDynamicVolume opaque-blob home.
+// LAYOUT: the member names and types are the declaration's (CgsSceneManagerIO_FineQuery.h,
+// six members); the offsets are the ones its consumer
+// SceneManagerModule::ProcessSphereTestFast loads: the sphere lane (centre xyz, radius in w)
+// +0x00, the query id +0x10, the entity-type flags +0x14, the exclude entity +0x18, the
+// exclusion mode +0x1C and the volume-type flags byte +0x20. Same shape as the line-test
+// elements in CgsSceneManagerIO_EventLineTest.h, whose EExclusionMode it shares.
 
 #include "types.hpp"
+#include <cstddef>                                                    // offsetof (the pins)
+#include "BrnCommonTypes.h"                                           // Vector3Plus (16-byte SIMD lane)
+#include "GameShared/GameClasses/SceneManager/CgsSceneQueryId.h"      // SceneQueryId
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"          // EntityId
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTest.h"   // EExclusionMode
 
 namespace CgsSceneManager
 {
@@ -39,11 +44,23 @@ namespace SceneManagerIO
     // with the bases defined by the other per-element queue homes.
     struct EventBaseSphereTestFast {};
 
-    // EventQueue<InEventSphereTestFast, N> element. 16-byte aligned, X360-attested stride
-    // 48 (0x30) -- opaque payload, no field layout recovered in scope.
+    // EventQueue<InEventSphereTestFast, N> element. 16-byte aligned, stride 48 (0x30).
     struct alignas(16) InEventSphereTestFast : public EventBaseSphereTestFast
     {
-        u8 macOpaquePayload[48]; // +0x00  opaque (X360-attested 48-byte stride)
+        Vector3Plus    mSpherePosPlusRadius; //  +0x00  centre xyz, radius in w
+        SceneQueryId   mQueryId;             //  +0x10
+        u32            mx32EntityTypeFlags;  //  +0x14
+        EntityId       mExcludeEntityId;     //  +0x18
+        EExclusionMode meExclusionMode;      //  +0x1C
+        u8             mxVolumeTypeFlags;    //  +0x20
     };
+
+    static_assert(offsetof(InEventSphereTestFast, mQueryId)            == 0x10, "query id +0x10");
+    static_assert(offsetof(InEventSphereTestFast, mx32EntityTypeFlags) == 0x14, "entity-type flags +0x14");
+    static_assert(offsetof(InEventSphereTestFast, mExcludeEntityId)    == 0x18, "exclude entity +0x18");
+    static_assert(offsetof(InEventSphereTestFast, meExclusionMode)     == 0x1C, "exclusion mode +0x1C");
+    static_assert(offsetof(InEventSphereTestFast, mxVolumeTypeFlags)   == 0x20, "volume-type flags +0x20");
+    static_assert(sizeof(InEventSphereTestFast)  == 0x30, "Append strides 0x30");
+    static_assert(alignof(InEventSphereTestFast) == 16,   "maEvents at +0x10");
 }
 }

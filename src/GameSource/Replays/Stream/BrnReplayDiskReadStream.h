@@ -29,6 +29,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"      // DeviceManager, Handle
 
+// Platform critical-section init (declared exactly as the sibling stream TUs do).
+extern "C" long RtlInitializeCriticalSection(void* lpCriticalSection);
+
 namespace BrnReplays
 {
     class DiskReadStream
@@ -68,11 +71,23 @@ namespace BrnReplays
             DiskReadStream* mpOwner;      // +0x18 owning stream (set in Construct)
         };
 
+        // The owning ReplayModule's constructor inlines this: initialise the stream's critical
+        // section (RtlInitializeCriticalSection on the mutex at object offset 0).
+        DiskReadStream() { RtlInitializeCriticalSection(mMutex); }
+
         // ---- lifecycle (reconstructed in their own TUs) ----
         void         Construct();
         void         Open(const char* lpcFileName, void* lpBuffer, s32 liBufferSize);
         void         Close();
-        EStreamStatus GetStatus() const;
+
+        // Header-inline (no out-of-line copy exists). The stream reports its lifecycle status
+        // only once no device operation is outstanding; while one is, it is still opening. Every
+        // console caller (ReplayModule::WaitForOpenReplayFiles / CloseReplayFiles) folds this into
+        // `miPendingOperationCount <= 0 && meStatus == E_STATUS_OPEN`.
+        EStreamStatus GetStatus() const
+        {
+            return (miPendingOperationCount > 0) ? E_STATUS_OPENING : meStatus;
+        }
 
         // @0x8265CE08. Try to satisfy a read of liDataSize bytes starting at file
         // position liFilePosition (both multiples of the block size) out of the buffered
@@ -127,7 +142,7 @@ namespace BrnReplays
         // mutex's first member). Modelled as an opaque blob reached by name -- same
         // pattern as the sibling GPUDiskWriteStream's lock; the real threading type lands
         // with the mutex layer.
-        u8              mMutex[40];                          // X360 +0x000
+        alignas(void*) u8 mMutex[40];                        // +0x000
         char            macFileName[256];                    // X360 +0x024 stream file name
         char*           mpBuffer;                            // X360 +0x124 ring backing store
         s32             miBufferSize;                        // X360 +0x128

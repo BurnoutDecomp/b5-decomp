@@ -96,12 +96,43 @@ namespace CgsCollision
         // 16-byte lanes), r5 = PolygonSoupListSpatialMap* -- NOT const: the short-line arm calls
         // the map's RunQuery @0x82843A80, which DecFIGS mangles _ZN (non-const `this`; it
         // publishes into mpOutputQueryBuffer / miLastQueryResultCount) -- r6 = u32 tagA,
-        // r7 = u16 tagB. Defined in CgsCollisionGenerator_wSQ1.cpp (scene-query wave 1; the
-        // short-line arm bodied in wave 1b, the 20 m+ arm is a loud trap).
+        // then tagB (u16). Defined in CgsCollisionGenerator.cpp (both length arms).
         u16 CollideLineAgainstPolySoupListNearest(const CgsGeometric::Line& lrLine,
                                                   CgsGeometric::PolygonSoupListSpatialMap* lpPolySoupListSpacialMap,
                                                   u32 lu32UserTagA,
                                                   u16 lu16UserTagB);
+
+        // The double-sided YES/NO line test against the static world, the Nearest test's twin.
+        // Declared as
+        //     uint16_t TestLineAgainstPolySoupListDoubleSided(const Line *, const
+        //                                                     PolygonSoupListSpatialMap *, uint32_t, uint16_t);
+        // Claims a one-result list (its +0x50 lane seeded to 2.0 like the Nearest twin), walks the
+        // same leaves the Nearest twin walks and stops at the first soup
+        // CgsGeometric::TestLinePolygonSoupDoubleSided reports a hit in: the list's count is 1 on a
+        // hit and 0 otherwise, and no result record is written. Same parameter spelling as the
+        // Nearest twin (a NON-const map, because RunQuery publishes into it). Caller:
+        // SceneManagerModule::ProcessLineTestFastDoubleSided. Body in CgsCollisionGenerator.cpp.
+        u16 TestLineAgainstPolySoupListDoubleSided(const CgsGeometric::Line& lrLine,
+                                                   CgsGeometric::PolygonSoupListSpatialMap* lpPolySoupListSpacialMap,
+                                                   u32 lu32UserTagA,
+                                                   u16 lu16UserTagB);
+
+        // The STREAMED line-vs-static-world pair, declared as
+        //     CgsMemory::SimpleDataStreamProducer * CreateCollideLineAgainstPolySoupStream(int32_t, int32_t);
+        //     EA::Jobs::Job * RunCollideLineAgainstPolySoupStream(const PolygonSoupListSpatialMap *,
+        //                         CgsMemory::SimpleDataStreamProducer *, int32_t, bool, bool);
+        // Create sizes one 32-byte command per line and one result block of 16 + 112 * N bytes
+        // per line (N = liMaxResultsPerLine). Run fans the stream out over at most three
+        // PolygonSoupTester batches (descriptor type 4, LineWithPolySoupStreamJobDesc) and waits
+        // for them before returning. Caller: SceneManagerModule::ProcessTriangleCollisionLineTest-
+        // Nearests. Bodies in CgsCollisionGenerator.cpp.
+        CgsMemory::SimpleDataStreamProducer* CreateCollideLineAgainstPolySoupStream(s32 liMaxCommands,
+                                                                                   s32 liMaxResultsPerLine);
+        EA::Jobs::Job* RunCollideLineAgainstPolySoupStream(const CgsGeometric::PolygonSoupListSpatialMap* lpPolySoupListSpacialMap,
+                                                           CgsMemory::SimpleDataStreamProducer*           lpStream,
+                                                           s32                                            liMaxResultsPerLine,
+                                                           bool                                           lbTestNearest,
+                                                           bool                                           lbTestDoubleSided);
 
         // @ 0x82812AE0 (439 insns) -- the ALL-HITS twin of the one above (crash parity FX-SCENEMGR,
         // 2026-09-24). DWARF CgsCollisionGenerator.h (DecFIGS 0xB0C17C):
@@ -167,12 +198,13 @@ namespace CgsCollision
         // ==========================================================================================
         u16 GetNumUsedResultLists() const { return mu16NumUsedResultLists; }   // DWARF h:298
 
-        // Allocate + construct a SimpleDataStreamProducer for a streamed collision pass out of
-        // the result allocator (128-byte aligned, alignment saved/restored around the burst).
-        // X360 0x828109F8 (ledger identity "Crea" -- the IDA symbol is truncated; this is the
-        // producer-factory it names). Sizes both the command and result buffers via
+        // The triangle-cache fill stream's factory (declared
+        // `CgsMemory::SimpleDataStreamProducer * CreateFillTriangleCacheStream(int32_t)`; its one
+        // caller is TriangleCacheManager::StartUpdateTriangleCaches). Allocates + constructs a
+        // SimpleDataStreamProducer out of the result allocator (128-byte aligned, alignment
+        // saved/restored around the burst), sizing both buffers via
         // SimpleDataStreamProducer::GetRequiredBufferSizes before constructing.
-        CgsMemory::SimpleDataStreamProducer* CreateStreamProducer(s32 liMaxCommands);
+        CgsMemory::SimpleDataStreamProducer* CreateFillTriangleCacheStream(s32 liMaxCommands);
 
         // ==========================================================================================
         // ⭐ ADDED 2026-08-06 (big-five #2, contact-generation wave): the collide-stream family
@@ -464,8 +496,8 @@ namespace CgsCollision
         // shape, not an absence:
         //   * Create @0x82810B98 is exported as the unnamed `sub_82810B98`; identity is pinned by
         //     its two asserts (CgsCollisionGenerator.cpp :533 "Failed to allocate stream producer\n"
-        //     / :550 "Failed to allocate stream buffers\n" -- the same pair CreateStreamProducer
-        //     @0x828109F8 carries at other lines) and by its single caller/consumer seat.
+        // "Failed to allocate stream buffers\n" -- the same pair
+        //     CreateFillTriangleCacheStream carries at other lines) and by its single caller/consumer seat.
         //   * Run @0x82810E80 is a GENUINE export-set hole: the export dir jumps from
         //     RunFillTriangleCacheStream @0x82810D38 (ends 0x82810E7C) straight to 0x82810FE8.
         //     The address is proved by DECODING the `bl` word at the call site
@@ -489,8 +521,8 @@ namespace CgsCollision
 
         // ==========================================================================================
         // ⭐ ADDED 2026-08-10 (cache-fill wave): the TRIANGLE-CACHE FILL stream dispatcher, the
-        // Run* half TriangleCacheManager::StartUpdateTriangleCaches @0x828BF130 calls (its Create*
-        // half is the general CreateStreamProducer above, which that same function calls with 298).
+        // Run* half TriangleCacheManager::StartUpdateTriangleCaches calls (its Create* half is
+        // CreateFillTriangleCacheStream above, which that same function calls with 298).
         //
         // Signature is DWARF-SETTLED, not read off the call site alone -- the PS3 mangle
         //   _ZN15CgsSceneManager12CgsCollision22BaseCollisionGenerator26RunFillTriangleCacheStreamE
@@ -498,14 +530,9 @@ namespace CgsCollision
         // gives (const PolygonSoupListSpatialMap*, SimpleDataStreamProducer*), matching the X360
         // call site's r4/r5 exactly.
         //
-        // ⛔ BODY NOT RECONSTRUCTED -- named boot gate, same precedent and same reason as
-        // RunLineWithTriangleListStream above. Its 82 instructions are the familiar dispatcher
-        // shape (AllocateJob / per batch { CreateNewBatch, Job::Clear, EntryPoint::SetName,
-        // SetCode(<entry>), SetData, DependsOn } / JobScheduler::AddTree), but what it installs is
-        // a JOB ENTRY POINT whose worker is absent from this tree. Writing the dispatcher without
-        // the worker would hand EndUpdateTriangleCaches a stream of zero-batch results, i.e.
-        // "every cached object has no triangles" -- the silent-drop shape, indistinguishable from
-        // a working empty cache.
+        // Body in CgsCollisionGenerator_LineStream.cpp: the familiar dispatcher shape (AllocateJob /
+        // per batch { CreateNewBatch, Job::Clear, EntryPoint::SetName, SetCode(<entry>), SetData,
+        // DependsOn } / JobScheduler::AddTree) over the PolygonSoupTester worker family below.
         //
         // ⭐ THE WORKER FAMILY, RE-COSTED 2026-08-10 (fill-worker wave) from the X360 export JSONs
         // -- machine-counted, and the previously-published list was missing the half that does the

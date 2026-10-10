@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"            // CgsDev::DebugComponent base
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h"      // CgsDev::DebugUI::LogWindow
 #include "GameSource/Sound/Debug/BrnSoundDebugStatistics.h"                                   // BrnSound::Debug::Statistics
+#include "GameShared/GameClasses/Development/Log/CgsLogCombined.h"                            // CgsDev::Log::LogCombined (mLogCombined)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnSound::Debug::DebugComponent::DebugComponent @ 0x827E0720  (EXECUTED in the boot trace)
@@ -45,6 +46,10 @@ namespace BrnSound
             // type), zero the two embedded event-queue counts, and construct the LogWindow and the
             // Statistics block.
             DebugComponent();
+
+            // The sound code's shared log stream (one static object; sound code streams its debug
+            // output straight into it). InstallConsole picks which child streams it fans out to.
+            static CgsDev::Log::LogCombined mLogCombined;
 
         protected:
             // The debug-UI identity hooks (override the CgsDev::DebugComponent virtuals).

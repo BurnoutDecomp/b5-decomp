@@ -4,6 +4,11 @@
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"                  // ModeManager::GetGameStateModule
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"      // RaceCarState (mi8LastContactedRaceCar / mfTimeSinceLastRaceCarContact)
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                  // CgsDev::SimpleStrStream (RenderHUD)
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+
+int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The takedown debug menu registers three display
 // toggles + a "force takedown" action with the real CgsDev::DebugComponent debug-menu API. The
@@ -16,6 +21,37 @@ namespace BrnGameState
     const char* TakedownManagerDebugComponent::GetName() const
     {
         return "TakedownManager";
+    }
+
+    // A contact time of -1 means RecordTakedown found no race-car contact on the victim, i.e. the
+    // takedown came from a slam or shunt rather than a car-to-car hit.
+    void TakedownManagerDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
+    {
+        if (mbShowLastTakedownInfo)
+        {
+            CgsDev::SimpleStrStream lStream;
+
+            if (meLastAggressorIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+            {
+                lStream << "Invalid";
+            }
+            else
+            {
+                lStream << "Car " << static_cast<s32>(meLastAggressorIndex)
+                        << " takes down car " << static_cast<s32>(meLastVictimIndex);
+
+                if (mfLastTakedownContactTime != -1.0f)
+                {
+                    lStream << ", last contacted: " << mfLastTakedownContactTime << "s";
+                }
+                else
+                {
+                    lStream << ", slam/shunt takedown";
+                }
+            }
+
+            MaybeDrawText(lpRender, lStream.GetBuffer(), 100.0f, 50.0f, 20.0f, 0xFFFFFFFFu, false);
+        }
     }
 
     void TakedownManagerDebugComponent::OnActivate()

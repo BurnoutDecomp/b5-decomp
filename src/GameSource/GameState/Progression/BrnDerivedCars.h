@@ -82,20 +82,6 @@ namespace BrnProgression
 
     struct DerivedCarArray : public Array<CgsID, KU_MAX_AMOUNT_OF_DERIVED_CARS>
     {
-        // [progression wave: completion 2026-09-06] THE DEFAULT CONSTRUCTOR, which the console
-        // inlines at every stack-local site as exactly two `stw -1` -- e.g.
-        // CarSelectManager::StartCarModificationState @0x8238742C/0x82387438 and
-        // ProgressionManager::OnEventFinishUpdateProfile @0x823A0244/0x823A0248, each writing the
-        // KI_UNCONSTRUCTED sentinel into BOTH count words (base+0x40 and base+0x68) before the
-        // Construct*LiveryList call. Array<T,N> declares no constructor of its own, so without
-        // this a stack-local DerivedCarArray would carry INDETERMINATE counts on the host --
-        // and the whole point of that sentinel is that "used before Construct/Clear" is loud.
-        DerivedCarArray()
-        {
-            MarkUnconstructed();                 // X360 `stw -1, +0x40` -- the CgsID array
-            maLiveryTypes.MarkUnconstructed();   // X360 `stw -1, +0x68` -- the livery-kind array
-        }
-
         // DWARF h:56, body h:~90-140 IN THIS HEADER, emitted out-of-line @0x82374F60.
         // [map arm 2026-08-27] BODIED (the BrnMainMapLinkGates stand-in died with it).
         // Builds the colour-livery family of lParentOrSiblingCarId: resolve the seed

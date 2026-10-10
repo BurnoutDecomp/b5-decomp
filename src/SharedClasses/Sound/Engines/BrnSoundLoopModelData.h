@@ -121,6 +121,9 @@ struct LoopModelData
     // @ 0x82680160 — FixDown every owned Partial, then
     // subtract the load base from mpaPartials.
     int FixDown(int liBase);
+
+    // Print every graph point as "[partial][graph][point] \t( x, \t y )" on the sound log stream.
+    void DebugDumpContentsToTty();
 };
 
 } // namespace Engines

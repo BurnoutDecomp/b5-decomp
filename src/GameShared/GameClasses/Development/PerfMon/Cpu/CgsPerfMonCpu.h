@@ -106,8 +106,11 @@ namespace CgsDev
         f32         mfMinMaxTraceValue;
     };
 
+    typedef void FPerfMonCpuReportCallback(const PerfMonCpuMonitorData& lrData, void* lpUserData);
+
     namespace PerfMonCpu
     {
+        void ReportMonitors(FPerfMonCpuReportCallback* lpfReportCallback, void* lpUserData, PerfMonCpuPage lePage);
         // Allocate the monitor array (X360 Construct(maxCount, allocator)). The allocator is threaded
         // through but unused - the backing comes from the global heap, the same shortcut the debug
         // pools take (CgsDebugCollections.cpp); the faithful rw-allocator path is the allocator follow-on.

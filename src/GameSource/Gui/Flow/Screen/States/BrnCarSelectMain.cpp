@@ -25,6 +25,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface out-queue
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"             // BrnGui::GuiFlow (E_GUIFLOW_SCREEN)
 #include "GameSource/Gui/BrnGuiCache.h"                     // BrnGui::GuiCache
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData (launch overlay player name)
 #include "GameSource/Gui/BrnGuiWorldDataController.h"       // BrnGui::WorldDataController
 #include "SharedClasses/DataLists/VehicleList.h"            // BrnResource::VehicleList
 #include "SharedClasses/DataLists/VehicleListEntry.h"       // BrnResource::VehicleListEntry
@@ -451,7 +452,7 @@ namespace BrnGui
     // @0x82F26CB0 -- EGameModeType-indexed mode string ids (17 entries, matching
     // GsmIO::E_MODE_COUNT). Only the online modes 10..14 are populated in the image; the
     // offline slots 0..9 and the online free-burn-lobby / showtime slots 15..16 are null.
-    // Consumed by HandleLaunchingEvent (out of this partfile's scope).
+    // Consumed by HandleLaunchingEvent.
     // The table is EIGHTEEN slots, not seventeen. Re-dumped big-endian from the image:
     // [17] @0x82F26CF4 = 0x8205CBEC -> "ONLINE_GAME_OPTION_MODE_STUNT_COOP" is a LIVE
     // entry, and the table ends at [18] @0x82F26CF8 = 0x00000095, which is not a pointer.
@@ -1128,39 +1129,59 @@ namespace BrnGui
 
 namespace BrnGui
 {
-    // ---- HandleLaunchingEvent @ 0x824C9008 ----------------------------------------
-    // In-queue event 57 (ProcesssIncomingEvents case 57, above). ONLINE-ONLY: it raises the
-    // "CNOnlLchGmH" (this client is the lobby host) or "CNOnlLchGame" (a peer is launching,
-    // + that player's name as message param 1) overlay, then adds the mode string
-    // KPAC_MODE_STRINGS[event.mode] as message param 2 and queues the 288-byte
-    // GuiOverlayRequest as event 184 on channel 40.
-    //
-    // ⭐ HOME-FILE CORRECTION. BrnCarSelectMain.h:145-149 said this body "is NOT part of this
-    // TU's ledger scope (identity attributes it to another TU)". That attribution is wrong and
-    // the function says so itself: its four asserts bake
-    // "..\..\..\GameSource\Gui/Flow/Screen/States/BrnCarSelectMain.cpp" at lines 712/716/719/731,
-    // and the DecFIGS DWARF places it at BrnCarSelectMain.cpp:690. This IS its home file, so the
-    // body belongs in a CarSelectMain partfile -- next to its only caller.
-    //
-    // ⛔ NOT RECONSTRUCTED, and deliberately NOT a silent {}. The X360 body needs two things
-    // this wave cannot attest: the unnamed GuiCache lookup sub_82482738(cache, event.miPlayerId)
-    // and the +0x100 name field of whatever it returns (the committed GuiCache models
-    // maLobbyPlayerInfo[8] at a 56-byte stride, which +0x100 does not fit, so the return type is
-    // NOT LobbyPlayerStatusData and guessing it would be fabrication). Every reachable path here
-    // is an online lobby launch; the offline junkyard car-select flow this TU was mounted for
-    // never posts event 57. The assert is the tripwire: if this is ever reached, it says so
-    // loudly instead of dropping the overlay on the floor.
-    void CarSelectMain::HandleLaunchingEvent(const CgsModule::Event* lpLaunchingEvent)
+    namespace
     {
-        // cpp:712 -- the X360's streamed text, verbatim (it is the ORIGINAL copy-paste from
-        // OnlineGameRoomPlayerInfo, exactly like the sibling HandleLaunchedEvent/HandleLeftGameEvent).
-        CGS_ASSERT(lpLaunchingEvent != 0,
-                   "Invalid event sent to OnlineGameRoomPlayerInfo::HandleLaunchingEvent");
-        CGS_ASSERT(lpLaunchingEvent != 0, "lpLaunchingEvent");   // cpp:716
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");               // cpp:719
+        // Event 57 ("launching") payload: the mode being launched, then the launching player.
+        struct GuiEventNetworkLaunchingPayload : public CgsModule::Event
+        {
+            s32 meGameMode;   // +0x00 (indexes KPAC_MODE_STRINGS)
+            s32 mPlayerID;    // +0x04 (looked up as a network player id)
+        };
 
-        CGS_ASSERT(false,
-                   "CarSelectMain::HandleLaunchingEvent (0x824C9008) is not reconstructed -- "
-                   "the online launch overlay is missing. Recover sub_82482738's return type first.");
+        // The launch overlay's two message parameters.
+        const u32 KU_LAUNCH_PARAM_PLAYER_NAME = 1;
+        const u32 KU_LAUNCH_PARAM_GAME_MODE   = 2;
+    }
+
+    // ---- HandleLaunchingEvent ------------------------------------------------------
+    // In-queue event 57 (ProcesssIncomingEvents, above). Raises "CNOnlLchGmH" when this
+    // client hosts the lobby, else "CNOnlLchGame" naming the launching player (message
+    // param 1); the mode string KPAC_MODE_STRINGS[event.mode] is message param 2. The
+    // request goes out as the 304-byte GuiOverlayRequest record (id 184, channel 40).
+    // Unlike OnlineGameRoomPlayerInfo's twin, it posts no wait-finish requests first.
+    void CarSelectMain::HandleLaunchingEvent(const CgsModule::Event* lpEvent)
+    {
+        //  /  -- the streamed text is the original copy-paste from
+        // OnlineGameRoomPlayerInfo, as in the sibling HandleLaunchedEvent/HandleLeftGameEvent.
+        CGS_ASSERT(lpEvent != 0,
+                   "Invalid event sent to OnlineGameRoomPlayerInfo::HandleLaunchingEvent");
+        CGS_ASSERT(lpEvent != 0, "lpLaunchingEvent");
+        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+
+        const GuiEventNetworkLaunchingPayload* lpLaunchingEvent =
+            reinterpret_cast<const GuiEventNetworkLaunchingPayload*>(lpEvent);
+
+        GuiOverlayRequestWire lWire;
+        if (mpGuiCache->IsLocalPlayerHost())
+        {
+            lWire.mRequest.Construct("CNOnlLchGmH");
+        }
+        else
+        {
+            const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerStatusData =
+                mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpLaunchingEvent->mPlayerID);
+            CGS_ASSERT(lpPlayerStatusData != 0, "lpPlayerStatusData");
+
+            lWire.mRequest.Construct("CNOnlLchGame");
+            lWire.mRequest.AddMessageParam(KU_LAUNCH_PARAM_PLAYER_NAME,
+                                           lpPlayerStatusData->mPlayerName.GetPlayerName());
+        }
+
+        lWire.mRequest.AddMessageParam(KU_LAUNCH_PARAM_GAME_MODE,
+                                       KPAC_MODE_STRINGS[lpLaunchingEvent->meGameMode]);
+
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
+            static_cast<s32>(sizeof(GuiOverlayRequestWire)));
     }
 }

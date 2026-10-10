@@ -632,8 +632,8 @@ namespace
             // TranslateGameActionsToGuiEvents @0x823E9CE0 cases 108 and 171..176.
             //
             // These are the second missing link of the boost hint strip. The first
-            // (world event -> game action) is GameStateModule::ProcessGameEventsBoostTickerBringUp,
-            // landed by the same wave; the far end (GUI event -> the hint strip) has been
+            // (world event -> game action) is the boost-ticker arms of
+            // GameStateModule::ProcessGameEvents; the far end (GUI event -> the hint strip) has been
             // committed and routed for weeks. Every arm below is the console's own body,
             // which in six of the seven cases is literally "copy the words, post the event":
             //

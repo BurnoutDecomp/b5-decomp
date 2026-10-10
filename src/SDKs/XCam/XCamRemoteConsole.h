@@ -11,20 +11,18 @@
 // This header is the canonical OWNING home for the reconstructed console bodies
 // in XCamRemoteConsole.cpp:
 //
-//     XCAM::CRemoteConsole::Initialize           @ 0x82982AC8
-//     XCAM::CRemoteConsole::DoWork               @ 0x82982980
-//     XCAM::CRemoteConsole::GetNextDataChunk     @ 0x82982A50
-//     XCAM::CRemoteConsole::ReleaseLastFrameData @ 0x82981B68
+//     XCAM::CRemoteConsole::Initialize
+//     XCAM::CRemoteConsole::ReInitialize
+//     XCAM::CRemoteConsole::DoWork
+//     XCAM::CRemoteConsole::GetNextDataChunk
+//     XCAM::CRemoteConsole::ReleaseLastFrameData
+//     XCAM::CRemoteConsole::GetEncodedPacket
+//     XCAM::CRemoteConsole::SubmitEncodedPacket
 //
-// The three send/QOS methods (GetEncodedPacket @ 0x82982B90,
-// SubmitEncodedPacket @ 0x82982E30, ReInitialize @ 0x829832C8) are declared here
-// but NOT defined: their bodies reach through the still-un-homed owning
-// XCAM::CStreamEngine (mpConfig, +0x468) to its embedded CQOSController (+0x200),
-// CPacketizer (+0x1BC), CRemoteConsoleList (+0x268) and rate-control fields, and
-// call un-homed collaborators (CStreamEngine::UpdatePrivilegeBits,
-// CEncoder::GetSequenceHeader, several blocked CQOSController bodies). They land
-// when CStreamEngine is homed. They are declared so the committed
-// CRemoteConsoleList / CStreamEngine callers compile against them.
+// The send/QOS methods (ReInitialize, GetEncodedPacket, SubmitEncodedPacket)
+// reach through mpEngine (+0x468) into the owning CStreamEngine's embedded
+// CEncoder / CPacketizer / CQOSController / CRemoteConsoleList
+// (SDKs/XCam/XCamStreamEngine.h).
 //
 // There is no reference source and no DWARF for this TU; the SHAPE below is
 // reconstructed store-for-store from the X360 asm. The X360 byte offsets are
@@ -40,6 +38,11 @@
 
 namespace XCAM
 {
+
+// The owning stream engine (SDKs/XCam/XCamStreamEngine.h). Held by pointer only;
+// forward-declared because the engine embeds the console list, which embeds
+// these consoles by value (include cycle).
+class CStreamEngine;
 
 // --- Xbox-360 kernel critical section (platform boundary) ------------------
 // The RTL_CRITICAL_SECTION each console guards its DoWork / (re)init against.
@@ -67,10 +70,10 @@ struct ListLink
 // on to each CRemoteConsole::Initialize. It is the leading (config-bearing)
 // portion of the owning CStreamEngine: CRemoteConsole::Initialize reads the video
 // parameters below to bring up the embedded CDecoder / CDepacketizer, and the
-// list reads miConsoleCount. The deeper CStreamEngine members (its embedded
-// packetizer / QOS controller / console list) are only reached by the blocked
-// console methods, so they stay opaque here. Field offsets attested by the
-// CRemoteConsole::Initialize asm (a2[4]/a2[5]/a2[8]/a2[10]/a2[16]).
+// list reads miConsoleCount. CStreamEngine derives from it and declares the
+// deeper members (its embedded encoder / packetizer / QOS controller / console
+// list). Field offsets attested by the CRemoteConsole::Initialize asm
+// (a2[4]/a2[5]/a2[8]/a2[10]/a2[16]).
 struct RemoteConsoleConfig
 {
     u8    mReserved0[0x10]; // +0x00 stream identity / handles
@@ -87,45 +90,52 @@ struct RemoteConsoleConfig
 class CRemoteConsole
 {
 public:
-    // @ 0x82981CE8 (list ctor inlines each console's) -- sets the vtable + builds
+    // (the list ctor inlines each console's) -- sets the vtable + builds
     // the embedded subobjects. Its own construction is folded into the list ctor;
     // declared so the by-value pool default-constructs.
     CRemoteConsole();                                      // sets the vtable + builds subobjects
-    virtual ~CRemoteConsole();                             // vtable @ off_8210BCC8
+    virtual ~CRemoteConsole();
 
-    // @ 0x82982AC8 -- capture the stream config, zero the per-console state, arm
+    // Capture the stream config (the owning engine), zero the per-console state, arm
     // the critical section and bring up the embedded decoder and depacketizer from
     // the config's video parameters (the console itself is the decoder's data
     // source). Returns 0, or the decoder / depacketizer Initialize failure code.
     int Initialize(RemoteConsoleConfig* pConfig);
 
-    // @ 0x829832C8 -- tear the session down / re-arm (privilege set + send/receive
-    // enables). BLOCKED: reaches through the un-homed CStreamEngine.
-    int ReInitialize(int a1, int a2, int a3, int a4);
+    // Under the lock: replace the privilege set (uPrivilegeCount 64-bit entries),
+    // then apply the new send / receive enables. Starting to send arms a sequence
+    // header + key frame, resyncs the outbound sequence and counts the console
+    // into the engine's sending set (throttling the bit rate); stopping to send
+    // counts it out (restoring the target bit rate when the last one stops).
+    // Stopping to receive resets the decoder and depacketizer. Returns the
+    // engine's UpdatePrivilegeBits result.
+    int ReInitialize(const u64* pPrivileges, u32 uPrivilegeCount, int bSending, int bReceiving);
 
-    // @ 0x82982980 -- pump one receive step under the lock: when receiving and the
+    // Pump one receive step under the lock: when receiving and the
     // depacketizer has a frame ready, decode it and fold the decode result into
     // the outbound QOS feedback flags (resetting the depacketizer on a hard error).
     int DoWork();
 
-    // @ 0x82982A50 -- fetch the next chunk of the frame being decoded: either the
+    // Fetch the next chunk of the frame being decoded: either the
     // single directly-submitted chunk (mbHasDirectChunk) or the next depacketizer
     // chunk. *ppData = payload, *piLength = length, *pbLast = last-chunk flag.
     // Returns 10 while chunks remain, else 0.
     int GetNextDataChunk(void** ppData, int* piLength, int* pbLast);
 
-    // @ 0x82981B68 -- release the packets of the frame just decoded (forwards to
+    // Release the packets of the frame just decoded (forwards to
     // the depacketizer).
     int ReleaseLastFrameData();
 
-    // @ 0x82982B90 -- assemble the next outbound encoded packet (or a bare QOS
-    // feedback packet). BLOCKED: reaches through the un-homed CStreamEngine to its
-    // packetizer / QOS controller and calls CEncoder::GetSequenceHeader.
+    // Assemble the next outbound packet into pPacket: a sequence header, the
+    // next packetizer packet, or (receive side) a bare 8-byte QOS feedback packet,
+    // then stamp the feedback flags. *piOutLen = its length. Returns 0, or 997
+    // (nothing to send) with *piOutLen = 0.
     int GetEncodedPacket(u8* pPacket, int* piOutLen);
 
-    // @ 0x82982E30 -- accept an inbound encoded packet: feed QOS feedback, then
-    // route the packet to the depacketizer / decoder. BLOCKED: reaches through the
-    // un-homed CStreamEngine to its QOS controller.
+    // Accept an inbound packet: feed its QOS feedback to the engine's controller,
+    // then route it to the depacketizer (data / sync kinds once a sequence header
+    // has decoded) or decode it as a direct sequence-header chunk. Returns the
+    // depacketizer result, or 0 after completing pOverlapped synchronously.
     int SubmitEncodedPacket(const u8* pPacket, int iLength, XOVERLAPPED* pOverlapped);
 
     // --- shape (member ORDER store-for-store with the X360 asm; X360 offsets
@@ -135,8 +145,7 @@ public:
     s32                    miPrivilegeCount;     // +0x48 entries in maPrivileges
     s32                    mbSending;            // +0x4C encode/send side active
     s32                    mbReceiving;          // +0x50 decode/receive side active
-    bool                   mbDisabled;           // +0x54 skip decoded output (set by list)
-    u8                     mPad55[3];            // +0x55 align next word
+    s32                    mbDisabled;           // +0x54 skip decoded output / sending (set by list)
     s32                    mbSendSequenceHeader; // +0x58 emit a sequence header next
     u32                    muSequenceNumber;     // +0x5C outbound packet sequence
     CDecoder               mDecoder;             // +0x60 receive-side video decoder
@@ -148,7 +157,7 @@ public:
     bool                   mbSignalRecovery;     // +0x465 QOS: recovery/data-loss flag
     bool                   mbSignalNewSequence;  // +0x466 QOS: sequence-change flag
     bool                   mbSignalDecodeError;  // +0x467 QOS: key-frame-request flag
-    RemoteConsoleConfig*   mpConfig;             // +0x468 owning stream config/engine
+    CStreamEngine*         mpEngine;             // +0x468 owning stream engine
     ListLink               mLink;                // +0x46C intrusive active/free list node
 };
 

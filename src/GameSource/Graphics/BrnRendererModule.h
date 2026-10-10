@@ -466,6 +466,7 @@ private:
 
     void ClearDispatchCounters();
     void ClearScreenshotState();
+    void MemoryUsage();
     void ConstructRenderSwitches();
 
     // The three per-thread monitor squares (bottom-centre): each is green when its
@@ -588,6 +589,8 @@ public:
                       renderengine::Texture* lpCloudLighting,
                       renderengine::Texture* lpCoronaAtlas,
                       renderengine::Texture* lpGlassFracture);
+
+    void DEBUGTriggerScreenShot(const char* lpcScreenShotText);
 
 private:
     // Reset the render frame, point the interpreter at it, build

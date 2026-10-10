@@ -25,6 +25,7 @@
 //   DebugReport                     0x828F3CD0   (pure sweep -- fully reconstructed)
 //   DoAllocateResourceListRequest   0x828EC590   (forwarder -- fully reconstructed)
 //   DoDeletePoolRequest             0x828D81D0   (assert-on-failure -- fully reconstructed)
+//   DoInvalidatePoolRequest / DoValidatePoolRequest / SendDeletePoolMemoryRequest
 //   UpdateAllocating                0x82904860   (defrag-state driver -- fully reconstructed)
 //   UpdateDeAllocating              0x828F38E8   (defrag-state driver -- fully reconstructed)
 //   UpdateIntelliFrag               0x829013F8   (defrag-state driver -- fully reconstructed)
@@ -159,6 +160,79 @@ namespace CgsResource
         lResponse.mListId = lpRequest->mListId;
         lpOutput->GetPoolOutputQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lResponse), 21, sizeof(lResponse));
+    }
+
+    // ----------------------------------------------------------------------------------------------
+    // DoInvalidatePoolRequest (asserts). Invalidate the addressed pool into a zeroed resource
+    // and an identity descriptor ({0, 1} per lane) and reply (pool output, event 13) with what the
+    // pool handed back: SUCCESS when it was free to invalidate, IN_USE when a slot was still live.
+    // As on the console the index is used even when the assert fires.
+    // ----------------------------------------------------------------------------------------------
+    void PoolModule::DoInvalidatePoolRequest(const Events::InvalidatePoolRequest* lpRequest, PoolIO::OutputBuffer* lpOutput)
+    {
+        SmallResource lResource;
+        for (s32 liLane = 0; liLane < static_cast<s32>(E_MEMTYPE_NUMTYPES); ++liLane)
+            lResource.m_baseResources[liLane] = 0;
+        SmallResourceDescriptor lDescriptor;
+
+        const s32 liPoolIndex = GetPoolIndex(lpRequest->miPoolId);
+        CGS_ASSERT(liPoolIndex != -1, "liPoolIndex != -1");
+
+        const bool lbInvalidated = maPools[liPoolIndex].Invalidate(&lResource, &lDescriptor);
+
+        Events::InvalidatePoolResponse lResponse;
+        lResponse.Construct(lpRequest->mpUser, lpRequest->miEventId, lpRequest->miPoolId,
+                            lbInvalidated ? Events::InvalidatePoolResponse::E_RESULT_SUCCESS
+                                          : Events::InvalidatePoolResponse::E_RESULT_IN_USE,
+                            lResource, lDescriptor);
+        lpOutput->GetPoolOutputQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResponse), 13,
+                                                 static_cast<s32>(sizeof(lResponse)));
+    }
+
+    // ----------------------------------------------------------------------------------------------
+    // DoValidatePoolRequest (asserts). Only legal while no allocate/defrag
+    // pass is running; re-validates the addressed pool and echoes the request back (pool output,
+    // event 14).
+    // ----------------------------------------------------------------------------------------------
+    void PoolModule::DoValidatePoolRequest(const Events::ValidatePoolRequest* lpRequest, PoolIO::OutputBuffer* lpOutput)
+    {
+        CGS_ASSERT(mProcessState == E_UPDATESTATE_IDLE, "Can only validate when idle\n");
+
+        const s32 liPoolIndex = GetPoolIndex(lpRequest->miPoolId);
+        CGS_ASSERT(liPoolIndex != -1, "liPoolIndex != -1");
+
+        const bool lbValidated = maPools[liPoolIndex].Validate();
+        CGS_ASSERT(lbValidated, "Failed to invalidate pool\n");
+
+        Events::ValidatePoolResponse lResponse;
+        lResponse.mpUser    = lpRequest->mpUser;
+        lResponse.miEventId = lpRequest->miEventId;
+        lResponse.miPoolId  = lpRequest->miPoolId;
+        lpOutput->GetPoolOutputQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResponse), 14,
+                                                 static_cast<s32>(sizeof(lResponse)));
+    }
+
+    // ----------------------------------------------------------------------------------------------
+    // SendDeletePoolMemoryRequest (asserts). Reset the addressed pool, then post a
+    // DestroyBank memory request for its bank onto the pool resource-request queue (tag 13), with
+    // this module's receiver queue as the reply target and the pool id as the event id.
+    // ----------------------------------------------------------------------------------------------
+    void PoolModule::SendDeletePoolMemoryRequest(const Events::DeletePoolRequest* lpRequest, PoolIO::OutputBuffer* lpOutput)
+    {
+        CGS_ASSERT(lpOutput != 0, "lpOutputBuffer");
+
+        CgsMemory::MemoryIO::DestroyBankRequest lRequest;
+        lRequest.Construct(&mReceiverQueue, lpRequest->miPoolId);
+
+        const s32 liPoolIndex = GetPoolIndex(lpRequest->miPoolId);
+        CGS_ASSERT(liPoolIndex >= 0, "Attempt to delete pool that doesn't exist!\n");
+
+        Pool& lrPool = maPools[liPoolIndex];
+        lrPool.ResetPool();
+        lRequest.SetBankId(lrPool.GetBankId());
+
+        lpOutput->GetPoolResourceRequestQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRequest), 13,
+                                                          static_cast<s32>(sizeof(lRequest)));
     }
 
     // ----------------------------------------------------------------------------------------------

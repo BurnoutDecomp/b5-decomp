@@ -8,6 +8,7 @@
 #include "GameSource/Director/Arbitrator/States/BrnArbStateCrashNav.h"      // BrnDirector::ArbStateCrashNav (real layout, by value)
 #include "GameSource/Director/Arbitrator/States/BrnArbStateAttractMode.h"   // BrnDirector::ArbStateAttractMode (real layout, by value)
 #include "GameSource/Director/Arbitrator/States/BrnArbStateTestbed.h"       // BrnDirector::ArbStateTestbed (real layout, by value)
+#include "GameSource/Director/Arbitrator/States/BrnArbStateRenderMetrics.h" // BrnDirector::ArbStateRenderMetrics (real layout, by value)
 #include "GameSource/Director/Camera/BrnSharedCameraContainer.h"            // BrnDirector::SharedCameraContainer (by value)
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"                    // BrnDirector::Camera::BehaviourHandle<> / BehaviourManager / BehaviourHelperIndex
 
@@ -41,14 +42,10 @@
 //   header used to declare. That placeholder is why the DJ-flyby path could not run even in
 //   principle: the arbitrator embedded a state with no members and no overrides, so
 //   `mArbStateAttractMode.Update(...)` bound the ArbitratorState base and the road-runner
-//   fly-by camera did not exist. The two placeholders that remain (below) are NOT on that path.
+//   fly-by camera did not exist.
 //
-// ArbStateTestbed is its real class (States/BrnArbStateTestbed.h, #included above).
-// FLAG: ArbStateRenderMetrics still has no reconstructed home TU --
-//   declared here as a minimal ArbitratorState subclass (same convention the container uses
-//   for its not-yet-homed states) purely so the Arbitrator can embed them by value and
-//   dispatch their virtual Construct() / Update() / Release(). GROW each into its real layout
-//   (additively) when its own TU lands; this TU never touches their per-state members by name.
+// ArbStateTestbed and ArbStateRenderMetrics are their real classes (States/BrnArbStateTestbed.h,
+// States/BrnArbStateRenderMetrics.h, #included above).
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
@@ -70,13 +67,6 @@ namespace BrnDirector
     }
 
     struct DirectorOutputInterface;
-
-    // ---- not-yet-homed embedded arbitrator states (minimal placeholder homes) -------------
-    // Each is a distinct ArbitratorState subtype embedded by value in the Arbitrator; the
-    // arbitrator constructs each (vtable slot 0) and the special-state Update paths dispatch
-    // their virtuals. The real layouts / overrides land with each state's own TU.
-    // FLAG: minimal placeholder home (by-name parity; this TU touches no per-state member).
-    class ArbStateRenderMetrics: public ArbitratorState {};
 
     class Arbitrator
     {

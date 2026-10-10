@@ -164,6 +164,7 @@ struct RaceCarNeedsHidingEventRecord
 class RaceCarEntityModule
 {
     friend class WorldDebugComponent;
+    friend struct RaceCarEntityModuleDebugComponent;   // reads the module's debug switches/members directly
 
 public:
         // ---- ADDITIVE (attested by WorldModule::Construct @0x827CF540, which
@@ -1664,6 +1665,7 @@ private:
     bool mbIsInOnlineGameMode;          // +0x18345 (99141)
     bool mbOnlineModeJustFinished;      // +0x18346 (99142)
     bool mbCarSelectAllowedInGameMode;  // +0x18347 (99143)
+    bool mbDisplayPlayerCarPosition = false; // +0x18349 (99145), the "Show Player Car Position" switch
     bool mbSixaxisSteeringEnabled;      // +0x1834D (99149)
     bool mbPaybackSixaxisSteering;      // +0x1834E (99150)
 

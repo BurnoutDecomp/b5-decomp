@@ -254,6 +254,8 @@ static_assert(sizeof(CheckpointData) == 40, "BrnProgression::CheckpointData is a
 // ----------------------------------------------------------------------------
 struct RaceEventData
 {
+    enum EFlags { E_FLAG_CRASHBREAKER = 1 };                                                         // muFlags bits
+    bool GetFlag(EFlags leFlag) const { return (muFlags & static_cast<u32>(leFlag)) != 0; }
     // The per-checkpoint record this event's table is made of is BrnProgression::CheckpointData,
     // defined above at namespace scope (DWARF :246) -- it is NOT a nested type. It is now a
     // COMPLETE type, so GetCheckpointData's result can be dereferenced.

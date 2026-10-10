@@ -108,11 +108,15 @@ public:
         DWORD    muContentFlags;       // +0x0A8  dwContentFlags for XShowDeviceSelectorUI
         DWORD    muNextContentFlags;   // +0x0AC  pending flags (promoted into +0x0A8 on success)
         u8       mbDeviceMounted;      // +0x0B0  device-present flag
-        u8       maPad0B1[3];          // +0x0B1
+        u8       mbFieldB1;            // +0x0B1  set to 1 by SelectDevice once the selector
+                                       //         returns a device (FLAG: role unrecovered)
+        u8       maPad0B2[2];          // +0x0B2
         HANDLE   mhNotification;       // +0x0B4  XNotify listener / open file handle (-1 == none)
         XOVERLAPPED mOverlapped;       // +0x0B8  device-selector async op (X360 28 bytes)
         u8       maPad0D4[5];          // +0x0D4  .. +0x0D8 (X360 reserved; untouched here)
         u8       mbContainerOpen;      // +0x0D9  a content container is currently open
+        u8       mbFieldDA;            // +0x0DA  cleared by SelectDevice when the selector
+                                       //         yields a card (FLAG: role unrecovered)
     };
 
     // @ 0x82B53A18 -- 0 if the device *lpuDeviceId names is present (XContentGetDeviceState
@@ -139,7 +143,9 @@ public:
     //                       per-function contracts recovered from the asm).
     static int UpdateDeviceInfo(State* lpState);
     static int DeviceSelectorUpdate(State* lpState);
-    static int DeviceSelectorShow(State* lpState, const void* lpBytesRequested, int liMode);
+    // luBytesRequested is the selector's ULARGE_INTEGER bytes-requested argument,
+    // passed by value (SelectDevice sign-extends its int request into it).
+    static int DeviceSelectorShow(State* lpState, u64 luBytesRequested, int liMode);
 
     static int OpenContainer(State* lpState, const void* lpName, s16 lsFlags, int liOpenMode,
                              XCONTENT_DATA* lpContentData, bool* lpbCreatedNew);

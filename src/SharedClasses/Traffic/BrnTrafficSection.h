@@ -56,6 +56,19 @@ namespace BrnTraffic
         f32 ConvertOurParameterToTheirs(f32 lfParameter) const;
     };
 
+    // A run of sections sharing one vehicle budget (Section::
+    // muSpanIndex selects it). 8-byte record: Hull::GetSectionSpan indexes the hull's span
+    // table at an 8-byte stride and reads the u16 budget at +0.
+    struct SectionSpan
+    {
+        u16 GetMaxVehicleCount() const           { return muMaxVehicles; }
+        f32 GetMaxVehicleCountReciprocal() const { return mfMaxVehicleRecip; }
+
+    private:
+        u16 muMaxVehicles;       // +0x00
+        f32 mfMaxVehicleRecip;   // +0x04
+    };
+
     // BrnTrafficSection.h:50 -- a lane "rung": the two cross-lane endpoints that span
     // one lane at one point along a section. maPoints[0]/[1] are the left/right (or
     // start/end) endpoints; their difference is the lateral "right" direction.

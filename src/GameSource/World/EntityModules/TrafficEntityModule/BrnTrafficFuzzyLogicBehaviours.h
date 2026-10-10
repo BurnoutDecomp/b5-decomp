@@ -42,8 +42,8 @@ namespace Fuzzy
                                Vector4 lf_TLDistance_NPDistance_NPClosingSpeed_RCSpeedInOurLane,
                                Vector4 lf_TimeQueueing_Obstructedness_DriveAroundStickiness_W) const;
 
-        // Re-read the tunable behaviour file at runtime (debug tool). In the X360 ledger
-        // but lives in a sibling TU; declared here for completeness, not defined here.
+        // Re-read the tunable behaviour file at runtime (debug tool). Bodied in the
+        // BrnTrafficFuzzyLogicBehaviours_wBT_01.cpp partfile.
         void ReloadBehaviours();
 
         // Debug accessors (const; cache camera / param-eval positions for on-screen render).

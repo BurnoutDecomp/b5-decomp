@@ -143,6 +143,7 @@ class ActiveRaceCar
     // none, so the stores are reproduced by name under a friend grant rather than by inventing an
     // accessor -- the same reasoning VehicleManager uses for PhysicsModule.
     friend class RaceCarEntityModule;
+    friend struct RaceCarEntityModuleDebugComponent;   // reads mPrevTransforms / mvfLowestPointWorldSpace
 
 public:
     // X360: returns meActiveRaceCarIndex (this+0x748). DWARF BrnActiveRaceCar.h:736.
@@ -609,6 +610,10 @@ public:
         // --- lifecycle ------------------------------------------------------
         // X360 0x822E6818: reset to the just-spawned visual state.
         void            Reset();
+
+        // Member-wise copy of every field; the detached-part queue keeps its own buffer and
+        // takes a copy of the source's live events (see the .cpp).
+        RenderParams&   operator=(const RenderParams& lrOther);
 
         // X360 0x822A21B0: DEBUG override -- broadcast lfScratchAmount into the W lane
         // of all 128 verlet offsets (whole-register round-trip per element, see the .cpp).

@@ -279,6 +279,55 @@ namespace CgsResource
     const char* Pool::GetName() const             { return macName; }
     s32  Pool::GetId() const                       { return miId; }
     s32  Pool::GetBankId()                         { return miBankId; }
+
+    // Return the pool to its unbuilt state: no entries, no id or name, not valid, and every heap
+    // released.
+    void Pool::ResetPool()
+    {
+        miRefCountThreshold = 0;
+        miId                = -1;
+        macName[0]          = '\0';
+        mpnBatchIndices     = 0;
+        mpResourceEntries   = 0;
+        muMaxResources      = 0;
+        muNumFreeResources  = 0;
+        mbIsValid           = false;
+        for (s32 liHeap = 0; liHeap < 3; ++liHeap)
+            maHeaps[liHeap].Release();
+    }
+
+    // Asserts. Invalidate only when no resource slot is live: hand back the pool's backing
+    // memory and descriptor, mark the pool invalid and return true; otherwise leave it as it is
+    // and return false.
+    bool Pool::Invalidate(SmallResource* lpResource, Entry::ResourceDescriptor* lpDescriptor)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is already invalid\n");
+
+        for (u16 luIndex = 0; luIndex < muMaxResources; ++luIndex)
+        {
+            if (mpx8ResourceStatuses[luIndex] != 0)
+                return false;
+        }
+
+        *lpResource   = mResource;
+        *lpDescriptor = mDescriptor;
+        mbIsValid     = false;
+        return true;
+    }
+
+    // Asserts. Rebuild the management data and every heap over the pool's existing memory,
+    // then mark the pool valid.
+    bool Pool::Validate()
+    {
+        CGS_ASSERT(!mbIsValid, "Pool is not invalid\n");
+
+        InitManagementData();
+        for (s32 liHeap = 0; liHeap < 3; ++liHeap)
+            maHeaps[liHeap].Reprepare();
+
+        mbIsValid = true;
+        return true;
+    }
     bool Pool::IsValid() const                     { return mbIsValid; }
     s32  Pool::GetNumDependencies() const          { return miNumDependencies; }
     Pool* Pool::GetDependency(s32 liIndex) const   { return mapDependencies[liIndex]; }

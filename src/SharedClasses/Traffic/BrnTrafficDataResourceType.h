@@ -95,6 +95,15 @@ struct TrafficData
     //   GetVehicleTraitsForVehicleType @ 0x82705DF0  (DWARF :116)
     //   GetNumPaintColours             @ 0x82705F58  (DWARF :126)
     const KillZoneRegion* GetKillZoneRegions(u32 luRegion) const;
+
+    //  -- the nearest-lane search (bodied in BrnTrafficData_wBT_01.cpp).
+    bool FindNearestLaneForPoint(Vector3 lPosition, VecFloat lfMaxDistance, Vector3 lDirection,
+                                 VecFloat lfMinCosAngleToDir, u32* lpuOutHull, u32* lpuOutSection,
+                                 f32* lpfOutParam, u32* lpuOutSegment) const;
+    bool FindNearestLaneForPointInHull(u32 luHull, Vector3 lPosition, VecFloat lfMaxDistance,
+                                       Vector3 lDirection, VecFloat lfMinCosAngleToDir,
+                                       u32* lpuOutSection, f32* lpfOutParam, u32* lpuOutSegment,
+                                       VecFloat& lfOutDistance) const;
     const VehicleTraits*  GetVehicleTraitsForVehicleType(u32 luVehicleType) const;
     s32                   GetNumPaintColours() const;
 

@@ -40,10 +40,10 @@ u64 ClusteredMeshCluster::GetGroupAndSurfaceId(int liUnitOffset,
     int liGroupId   = 0;   // v5 (r30)
     int liSurfaceId = 0;   // v6 (r31)
 
-    // v7 = this + a2 + 0x10 * (muUnitCount + 1)
+    // the unit record = this + liUnitOffset + 0x10 * (muUnitDataStart + 1)
     const u8* lpBytes = reinterpret_cast<const u8*>(this);
     const u8* lpUnit  = lpBytes
-                      + (16 * (static_cast<int>(muUnitCount) + 1))
+                      + (16 * (static_cast<int>(muUnitDataStart) + 1))
                       + liUnitOffset;
 
     const u8 luFlags = lpUnit[0];          // v8

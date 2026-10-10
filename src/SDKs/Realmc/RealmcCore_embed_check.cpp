@@ -9,11 +9,11 @@ void RealmcCoreEmbedCheck()
     using namespace RealmcCore;
 
     void* p = allocator::allocate(8, 0);
-    (void)p;
-    allocator::deallocate();
+    allocator::deallocate(p, 8);
 
     Message msg;
-    IRealmcMessageTarget* pTarget = nullptr;
-    (void)Message::Apply(&msg, pTarget);
+    IMessageProcessor* pProcessor = nullptr;
+    if (pProcessor)
+        msg.Apply(pProcessor);
 }
 } // namespace

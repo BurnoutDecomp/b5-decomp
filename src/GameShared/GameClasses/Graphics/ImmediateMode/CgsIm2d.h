@@ -3,6 +3,8 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"   // renderengine::ProgramVariableHandle
+#include "rw/math/vpu/types.h"                                                 // rw::math::vpu::Vector3 / Vector4
 
 // CgsGraphics::Im2d - the concrete screen-space immediate-mode renderer. Im2dBase<V>
 // adds the transform stack on top of ImRenderer<V>; Im2d specialises it for the
@@ -84,7 +86,55 @@ namespace CgsGraphics
         Im2dTransform mCurrentTransform;
     };
 
+    // The console Im2d adds the shader-driven pixel MASK (up to V_IM2D_MAX_MASK_COUNT nested
+    // layers, applied by the masked program variants) and the boost-bar colour constants. The PC
+    // GUI path masks with the scissor rect of the Im2dBase / render-buffer PushMask instead, so
+    // nothing on the PC draw path drives these members yet; they are the console's own API.
     struct Im2d : public Im2dBase<Basic2dColouredTexturedVertex>
     {
+        // The console's V_IM2D_MAX_MASK_COUNT (the PushMask / SaveMaskShaderConstants bound).
+        static const u32 KU_IM2D_MAX_MASK_COUNT = 2;
+        // One Im2dMask per program pair: the masked program of pair k reads maMask[k].
+        static const u32 KU_IM2D_NUM_MASK_PROGRAMS = 4;
+
+        struct Im2dMask
+        {
+            struct Im2dMaskLayer
+            {
+                renderengine::ProgramVariableHandle mPixelMaskPositionMinMax;
+                renderengine::ProgramVariableHandle mPixelMaskUVStartEnd;
+                renderengine::ProgramVariableHandle mPixelMaskUVDifference;
+                rw::math::vpu::Vector4                             mvPixelMaskPositionMinMax;
+                rw::math::vpu::Vector4                             mvPixelMaskUVStartEnd;
+                rw::math::vpu::Vector4                             mvPixelMaskUVDifference;
+                renderengine::TextureState*         mpMaskTextureState;
+                renderengine::Texture*              mpMaskTexture;
+            };
+
+            Im2dMaskLayer                       maPixelMaskHandles[KU_IM2D_MAX_MASK_COUNT];
+            rw::math::vpu::Vector4                             mvPixelMask;
+            renderengine::ProgramVariableHandle mPixelMaskUseHandle;
+        };
+
+        // Push a mask layer: switch to the masked program variant on the first layer, record
+        // the layer's rectangle / UVs / texture into every mask block, then upload the top layer.
+        void PushMask(renderengine::TextureState* lpMaskTextureState,
+                      renderengine::Texture* lpMaskTexture,
+                      const Basic2dColouredTexturedVertex* lpaMaskVertices);
+        // Pop the top mask layer; the last pop returns to the unmasked program variant.
+        void PopMask();
+        // Upload the boost bar's outer / inner colours to both program slots' constants.
+        void PushBoostBarColours(rw::math::vpu::Vector3 lvOuterColour, rw::math::vpu::Vector3 lvInnerColour);
+
+    protected:
+        void SaveMaskShaderConstants(const Basic2dColouredTexturedVertex* lpaMaskVertices,
+                                     renderengine::TextureState* lpMaskTextureState,
+                                     renderengine::Texture* lpMaskTexture);
+        void SetMaskPixelShaderState();
+
+        Im2dMask                            maMask[KU_IM2D_NUM_MASK_PROGRAMS];
+        u32                                 mu32NumMasks;
+        renderengine::ProgramVariableHandle maBoostBarOuterColours[2];
+        renderengine::ProgramVariableHandle maBoostBarInnerColours[2];
     };
 }

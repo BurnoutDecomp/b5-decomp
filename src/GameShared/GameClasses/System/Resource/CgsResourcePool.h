@@ -73,6 +73,7 @@ namespace CgsResource
     class Pool : public BasePool
     {
         friend class BundleLoader;   // PC loader orchestrates the per-entry fixup/import passes
+        friend class DebugComponent; // the stats dump reads the main/video heap totals inline
 
     public:
         // :179

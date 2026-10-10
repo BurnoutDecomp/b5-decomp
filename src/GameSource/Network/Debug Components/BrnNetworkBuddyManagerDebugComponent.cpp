@@ -144,6 +144,48 @@ namespace BrnNetwork
         return "Buddies";
     }
 
+    // -------- OnActivate --------
+    // The registration order (and the indented menu labels) are the console's. The queue is the
+    // one ProcessOutgoingEvents drains and Release hands back to the debug allocator.
+    void BuddyManagerDebugComponent::OnActivate()
+    {
+        RegisterFunction(&BuddyManagerDebugComponent::ForceServerFriendsOverwrite, this, "Force buddy overwrite");
+        RegisterFunction(&BuddyManagerDebugComponent::GetBuddyCount, this, "FUNCTION: Print Buddy Count");
+        RegisterVariable(&miBuddyIndex, "   Buddy Index");
+        RegisterFunction(&BuddyManagerDebugComponent::PrintBuddyInfo, this, "       FUNCTION: Print Buddy Info");
+        RegisterFunction(&BuddyManagerDebugComponent::PrintNextUnreadMessage, this,
+                         "       FUNCTION: Print Next Unread Message");
+        RegisterFunction(&BuddyManagerDebugComponent::SendTestMessage, this, "       FUNCTION: Send Test Message");
+        RegisterFunction(&BuddyManagerDebugComponent::SendInvite, this, "       FUNCTION: Send Invite");
+        RegisterFunction(&BuddyManagerDebugComponent::JoinBuddy, this, "       FUNCTION: Join Buddy");
+        RegisterFunction(&BuddyManagerDebugComponent::LeaveFeedback, this, "       FUNCTION: Send Feedback");
+        RegisterVariable(&miMessageIndex, "       Message Index");
+        RegisterVariable(&miFeedbackIndex, "       Feedback Index");
+        RegisterFunction(&BuddyManagerDebugComponent::PrintMessage, this, "           FUNCTION: Print Message");
+
+        if (mpEventQueue == NULL)
+        {
+            rw::ResourceDescriptor lDescriptor;
+            lDescriptor.m_baseResourceDescriptors[0].m_size =
+                static_cast<u32>(sizeof(BrnNetworkModuleIO::NetworkEventQueue));
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+            for (u32 luIndex = 1; luIndex < rw::KU_RESOURCE_LANE_COUNT; ++luIndex)
+            {
+                lDescriptor.m_baseResourceDescriptors[luIndex].m_size      = 0;
+                lDescriptor.m_baseResourceDescriptors[luIndex].m_alignment = 1;
+            }
+
+            const rw::Resource lResource = BrnResource::GetDebugAllocator()->Allocate(lDescriptor, 0);
+            mpEventQueue = static_cast<BrnNetworkModuleIO::NetworkEventQueue*>(lResource.m_baseResources[0]);
+
+            if (mpEventQueue != NULL)
+            {
+                mpEventQueue->Construct();
+                mpEventQueue->Prepare();
+            }
+        }
+    }
+
     // -------- GetBuddyCount  @ 0x82594780 --------
     // Post a command-only "count buddies" event (no payload bytes are read; the X360 sends an
     // uninitialised 1-byte stack scratch). Event tag 1, size 1.

@@ -226,7 +226,7 @@ namespace CgsSceneManager
 
         // 0x828BED8C: one producer per frame, sized for the whole slot pool.
         mpUpdateTriangleCacheStream =
-            lpCollisionGenerator->CreateStreamProducer(static_cast<s32>(KU_MAX_CACHED_OBJECTS));
+            lpCollisionGenerator->CreateFillTriangleCacheStream(static_cast<s32>(KU_MAX_CACHED_OBJECTS));
 
         // Walk every USED slot. The console open-codes BitArray<298>'s first/next-set-bit scan
         // (five 64-bit fields, `w & (w-1)` lowest-bit isolate, `cntlzd`); it is called by name

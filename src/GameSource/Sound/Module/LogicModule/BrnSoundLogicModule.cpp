@@ -271,6 +271,10 @@ void SoundLogicModule::Construct()
     // "used before Construct/Clear" assert is satisfied).
     maTriggerActions.Clear();
 
+    // The freed-stream-buffer id list starts empty too (console `stw 0` into its count word
+    // +0x51EC; the constructor left the -1 sentinel there).
+    mFreedStreamBufferIds.Clear();
+
     // The dispatch state block (X360 this+0x13570) starts zeroed.
     std::memset(&mDispatchState, 0, sizeof(mDispatchState));
 

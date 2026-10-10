@@ -1,6 +1,7 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnArticulatedJointPool.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                      // CgsDev::StrStream (RemoveBrokenJointsFromSimulation's streamed assert)
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManagerIO.h"        // ArticulatedJointCreateBuffer
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // VehicleOutputRequestInterface
 
@@ -234,6 +235,40 @@ void ArticulatedJointPool::RemoveJoint(ArticulatedJointCreateBuffer* lpJointWork
 
     CGS_ASSERT(static_cast<u32>(liJointIndex) < KU_NUM_JOINTS, "luIndex < NUMBITS");      // CgsBitArray.h:241
     mUsedJoints.UnSetBit(static_cast<u32>(liJointIndex));
+}
+
+// ---------------------------------------------------------------------------------------
+// ArticulatedJointPool::RemoveBrokenJointsFromSimulation
+//
+// Every joint flagged in mJointsBrokenThisFrame (+808) is removed through RemoveJoint, in
+// ascending index order (the console walks the set bits with the inlined lowest-set-bit /
+// next-set-bit search, whose per-bit IsBitSet carries the "invalid index : " bound), then the
+// whole broken set is cleared (`std 0` at +808). A broken joint that is no longer in use only
+// trips the streamed assert ; it is still handed to RemoveJoint. Sole caller:
+// PhysicalTrafficManager::ProcessCreateEvents.
+// ---------------------------------------------------------------------------------------
+void ArticulatedJointPool::RemoveBrokenJointsFromSimulation(ArticulatedJointCreateBuffer* lpJointWorkingBuffer)
+{
+    CGS_ASSERT(lpJointWorkingBuffer != nullptr, "lpJointWorkingBuffer != NULL");
+
+    for (s32 liJointIndex = mJointsBrokenThisFrame.GetFirstNonZeroBit();
+         liJointIndex >= 0;
+         liJointIndex = mJointsBrokenThisFrame.GetNextNonZeroBit(liJointIndex))
+    {
+        if (!IsJointInUse(liJointIndex))
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Trying to remove a broken joint that isn't in use, index: " << liJointIndex;
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessage,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/VehiclePhysics/BrnArticulatedJointPool.cpp", 402);
+            CgsDev::Assert::EndAssert();
+        }
+        RemoveJoint(lpJointWorkingBuffer, liJointIndex);
+    }
+
+    mJointsBrokenThisFrame.UnSetAll();
 }
 
 }

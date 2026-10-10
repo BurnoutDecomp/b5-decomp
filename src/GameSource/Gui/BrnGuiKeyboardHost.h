@@ -14,13 +14,13 @@
 //   Prepare @ 0x824ED010 -- assert(lpGuiKeyboard != NULL); *(this+4) = lpGuiKeyboard; return 1
 //   Release @ 0x824ED078 -- assert(*(this+4) != NULL);     *(this+4) = NULL;          return 1
 //
-// The only field the reconstructed methods touch is the keyboard pointer at object
-// +0x04 (the X360 stw/lwz @4(this)). The leading +0x00 word is a separate construction-
-// time slot the host carries but neither method touches; it is named so the keyboard
-// pointer lands at its binary offset without raw-offset casting. All access is by name.
+// The keyboard pointer sits at object +0x04, behind the
+// vptr of the CgsGui::GuiKeyboardListener base: the host is the listener the keyboard
+// reports its result to (KeyboardClosed). All access is by name.
 // ===================================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Gui/CgsGuiKeyboard.h"   // CgsGui::GuiKeyboardListener (base), CgsUtf16
 
 namespace BrnGui
 {
@@ -28,7 +28,7 @@ namespace BrnGui
     // referenced by this TU; the keyboard type itself is not modelled here.
     class GuiKeyboard;
 
-    class KeyboardHost
+    class KeyboardHost : public CgsGui::GuiKeyboardListener
     {
     public:
         // @ 0x824ED010 -- latch the (non-NULL) keyboard pointer. Returns 1 (X360 li r3,1).
@@ -38,9 +38,8 @@ namespace BrnGui
         s32 Release();
 
     private:
-        // +0x00: a construction-time slot the host carries but neither Prepare nor Release
-        // touches. Named so mpGuiKeyboard lands at object +0x04.
-        u32          muReservedHead;     // +0x00
+        // The keyboard finished: log the entered text (or the cancel) to the debug channel.
+        virtual void KeyboardClosed(const CgsGui::CgsUtf16* lpResultText);
 
         GuiKeyboard* mpGuiKeyboard;      // +0x04 -- set by Prepare, cleared by Release
     };

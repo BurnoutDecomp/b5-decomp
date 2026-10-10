@@ -115,4 +115,44 @@ namespace CgsGeometric
         Vector3Plus& lSphereContactPoint2, Vector3Plus& lTriangleContactPoint2,
         Vector3& lContactNormal3, Vector3& lTriangleNormal3,
         Vector3Plus& lSphereContactPoint3, Vector3Plus& lTriangleContactPoint3);
+
+    // =========================================================================
+    // The SINGLE-triangle swept kernel and its 2D circle test (bodies in
+    // CgsTriangleSphere.cpp, beside the four-wide kernel above). Signatures are the
+    // declaration's, with the 16-byte vectors by const reference.
+    // =========================================================================
+    struct Triangle;
+
+    // Does a circle (centre, squared radius) reach a triangle given in 2D, and where?
+    // Candidates in order: the three vertices (each only when the centre lies behind
+    // that vertex's outgoing edge), then the three edges (only when the foot of the
+    // perpendicular lies on the segment); a candidate is taken when it is not farther
+    // than the best so far, the first best being the squared radius. A centre inside
+    // the triangle reports itself. Returns all-ones when anything was taken or the
+    // centre is inside.
+    rw::math::vpu::MaskScalar Intersect2DCircleWithTriangle(const Vector2&  lCentre,
+                                                            const VecFloat& lRadiusSquared,
+                                                            const Vector2&  lVert0,
+                                                            const Vector2&  lVert1,
+                                                            const Vector2&  lVert2,
+                                                            const Vector2&  lEdge01Dir,
+                                                            const Vector2&  lEdge12Dir,
+                                                            const Vector2&  lEdge20Dir,
+                                                            const VecFloat& lfEdge01Magnitude,
+                                                            const VecFloat& lfEdge12Magnitude,
+                                                            const VecFloat& lfEdge20Magnitude,
+                                                            Vector2&        lIntersectPoint);
+
+    // Swept sphere against one triangle: the face test at the entry time of the sweep into
+    // the plane slab, else the earliest vertex/edge sweep. Writes all four outputs on every
+    // call: the triangle's unit normal, the contact point on the triangle and the matching
+    // sphere point (the contact time in both w lanes), and the contact normal from the sphere
+    // centre. Returns all-ones when the sweep is not rejected by the slab clip and something
+    // was hit. No facing test.
+    const rw::math::vpu::MaskScalar IntersectTriangleSweptSphere(const SweptSphere& lSphere,
+                                                                 const Triangle&    lTriangle,
+                                                                 Vector3&           lOutContactNormal,
+                                                                 Vector3&           lOutTriangleNormal,
+                                                                 Vector3Plus&       lOutSphereContactPoint,
+                                                                 Vector3Plus&       lOutTriangleContactPoint);
 }

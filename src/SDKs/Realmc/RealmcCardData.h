@@ -76,10 +76,10 @@ public:
     // @ 0x82B53330 -- inequality (leading state words differ).
     bool operator!=(const CardData& rOther) const;
 
-    // @ 0x82B532C8 -- copy rSource into *this, then overwrite our current block
-    //                 with rSource's previous block (i.e. roll *this back to the
-    //                 source's previous state).
-    CardData& PreviousState(const CardData& rSource);
+    // A copy of *this rolled back to its previous state: copy both blocks into
+    // the result (returned by value through the hidden result slot), then
+    // overwrite the result's current block with this object's previous block.
+    CardData PreviousState() const;
 
     // @ 0x82B53250 -- the shared lazily-zeroed empty/sentinel CardData.
     static CardData& Empty();

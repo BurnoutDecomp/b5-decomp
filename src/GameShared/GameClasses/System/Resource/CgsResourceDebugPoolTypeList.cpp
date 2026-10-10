@@ -3,6 +3,14 @@
 namespace CgsResource
 {
 
+// Read from the image's data section (three pointers, in EPoolTypeListMode order).
+const char* KAPC_POOLTYPELISTMODENAMES[E_POOLTYPELISTMODE_COUNT] =
+{
+    "Raw",
+    "Detailed",
+    "Summary",
+};
+
 // CgsResource::DebugPoolTypeList::DebugPoolTypeList @ 0x827DF8E8
 //
 // Seed the debug pool-type accounting table. The X360 ctor installs the type's vtable, then runs

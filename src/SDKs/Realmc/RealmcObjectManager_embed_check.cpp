@@ -8,13 +8,7 @@ void RealmcObjectManagerEmbedCheck()
 {
     using namespace RealmcCore;
 
-    sizeof(ObjectManager);
-    sizeof(IRealmcObjectAllocatorBackend);
-    sizeof(IRealmcManagedObject);
-
-    void* p = ObjectManager::Initialize();
-    (void)p;
-    void* q = ObjectManager::Finalize();
-    (void)q;
+    ObjectManager::Initialize();
+    ObjectManager::Finalize();
 }
 } // namespace

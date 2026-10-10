@@ -157,5 +157,8 @@ namespace CgsGeometric
                         u16**                                                      lppaOutResults,
                         s32*                                                       lpiOutNumResults,
                         CgsContainers::ReadOnlyObjectCache<PolygonSoupSpacialNode>* lpNodeCache) const;
+
+        // RunJobQuery(const Line&) -- the job-side SEGMENT query (PolygonSoupTesterJob::RunLineQuery); body in CgsPolygonSoupListSpatialMap_wBT_01.cpp.
+        void RunJobQuery(const Line& lrLine, PolygonSoupJobQueryParams* lpParams, u16** lppuOutResultBuffer, s32* lpiOutNumResults, CgsContainers::ReadOnlyObjectCache<PolygonSoupSpacialNode>* lpSpacialNodeCache) const;
     };
 }

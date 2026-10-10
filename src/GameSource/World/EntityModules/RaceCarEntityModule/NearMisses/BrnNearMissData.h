@@ -61,6 +61,22 @@ namespace BrnWorld
         static constexpr f32 KF_NEAR_MISS_REMEMBER_TIME  = 0.5f;
         static constexpr f32 KF_TAKEN_DOWN_REMEMBER_TIME = 10.0f;
 
+        // Prepare -- declared at. Empties all seven lists: one `stw 0` into each count word
+        // (+0x10, +0x24, +0x48, +0x6C and the three B-sized lists), emitted inline in
+        // RaceCarEntityModule::Prepare through NearMissManager::Prepare. That call site
+        // does not test the result.
+        bool Prepare()
+        {
+            maNearSections.Clear();
+            maNearSectionsBackup.Clear();
+            maNearMiss.Clear();
+            maContacted.Clear();
+            maCrashed.Clear();
+            maTakenDown.Clear();
+            maChecked.Clear();
+            return true;
+        }
+
         // ---- logging / ageing (mutating) ----
 
         // RememberNearMiss -- <4,7> @0x822E4608 / <4,8> @0x822E3CC8. Log luEntityId into the

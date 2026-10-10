@@ -95,6 +95,10 @@ namespace BrnGameState
         void UpdateSurfaceRumble(BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
                                  EActiveRaceCarIndex                                                    lePlayerCarIndex);
 
+        // Debug-info BrnRumbleManager.h. The player just checked a traffic car: latch it for the
+        // next Update. Header inline: ProcessGameEvents' traffic-checking arm carries the store.
+        void OnTrafficCheck() { mbPlayerHasJustCheckedTraffic = true; }
+
         // @ 0x823795C8 -- DWARF BrnRumbleManager.h:87. The player slammed / shunted / traded paint
         // with a race car: one KN_RUMBLE_VEHICLE_IMPACT_PRIORITY jolt scaled by the impact type.
         // Caller ProcessGameEvents case 31 (0x823A27C8).

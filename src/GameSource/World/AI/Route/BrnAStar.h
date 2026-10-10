@@ -93,6 +93,7 @@ class AStarNodePool
     // AStar::Prepare clears mauNodeCount[]/muOpenNodeCount inline (X360 @0x82774BD8..)
     // and Compute reads the four bucket counts directly; befriend it for by-name access.
     friend class AStar;
+    friend class RouteMapDebugComponent;   // DrawAStarInMap reads the bucket / open counts directly
 public:
     static const u16 KU_HASH_MASK          = 3;     // :139
     static const u16 KU_PARTITION_COUNT    = 4;     // :140
@@ -156,6 +157,7 @@ struct AStarEmbedProbe;
 class AStar
 {
     friend struct AStarEmbedProbe;
+    friend class RouteMapDebugComponent;   // DrawAStarInMap reads the search state directly
 public:
     static const s32 KI_MAX_BLOCK_SECTION_COUNT = 16; // :195
     static const s32 KI_MAX_ITERATIONS          = 12; // :196

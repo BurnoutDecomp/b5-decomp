@@ -17,6 +17,8 @@ namespace BrnSound
 {
 namespace Debug
 {
+CgsDev::Log::LogCombined DebugComponent::mLogCombined;
+
 DebugComponent::DebugComponent()
     : CgsDev::DebugComponent()   // installs the base, then this type's vtable (the +0x00 store)
 {

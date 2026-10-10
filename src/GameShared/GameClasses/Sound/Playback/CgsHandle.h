@@ -4,6 +4,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsObject.h"  // Object::Acquire / Release
 
 // =============================================================================
 // CgsHandle.h  (OWNING HEADER for CgsSound::Playback::Handle<T>)
@@ -30,25 +31,18 @@
 //   CgsHandle.h:321      void AcquireObject() const;   // private
 //   CgsHandle.h:332      void ReleaseObject() const;   // private
 //
-// The only attested function in this dossier is the dereference for the Factory
-// instantiation:
-//   CgsSound::Playback::Handle<CgsSound::Playback::Factory>::operator*  @ 0x8268E178
-// whose X360 body is:
-//
-//   if (!*this->mpObject-cell)  // i.e. mpObject == 0
-//       CGS_ASSERT(mpObject, "mpObject")  // fires CgsHandle.h:287
-//   return *mpObject;
-//
-// (Hex-Rays renders mpObject as `*a1` and the load returns it.) The FireAssert
-// line is 0x11F == 287 -- the assert macro site that the inlined dereference guard
-// expands at; operator* itself is declared at line 303. The assert message string
-// is exactly "mpObject".
-//
-// operator* is template-inline (no separate out-of-line address per instantiation
-// beyond the one the linker keeps), so it is bodied here in the header. The
-// remaining API is declared-only -- those are other-TU surface (ctors/dtor do the
-// Acquire/Release ref-counting, not attested here). FLAG: MINIMAL FLAGGED HOME;
-// grow additively as the ctor/assign/acquire TUs land.
+// Attested bodies (each instantiation is emitted out of line per T):
+//   operator=   -- take the other handle's reference, drop our own through
+//                  Object::Release, then copy the pointer (Environment /
+//                  GenericRwacFactory / SplicerFactory instantiations are called
+//                  from the playback Module's Prepare and Release).
+//   operator->  -- assert "mpObject" (CgsHandle.h) and return the pointer
+//                  (Factory / Environment / AemsFactory instantiations).
+//   operator*   -- assert "mpObject" (CgsHandle.h) and return the pointee
+//                  (the AemsRWSampleFactory player-voice instantiation).
+// The copy constructor and destructor still follow the interim ref model
+// described beside them: the committed call sites pair Acquire/Release
+// explicitly around adopt-constructed and destroyed handles.
 // =============================================================================
 
 namespace CgsSound
@@ -78,24 +72,23 @@ public:
     // consistent with the empty inline dtor below. Revisit with the handle slice.
     explicit Handle(T* lpObject) : mpObject(lpObject) {}
 
-    // CgsHandle.h:209 / 217 / 226 -- copy/assign do the Acquire/Release
-    // ref-counting. Declared-only (other-TU surface).
+    // CgsHandle.h -- copy (acquires the copied object). Declared-only: the
+    // build never odr-uses it (handle returns are elided).
     Handle(const Handle& lkrOther);
-    // dtor: the real body drops the owned ref (ReleaseObject -> Release). That
-    // ref-count surface is not reconstructed yet and no out-of-line body exists for
-    // any instantiation, so the inline empty body is what the current interim
-    // ref-model implies (the committed call sites pair Acquire/Release explicitly
-    // beside their stores) -- otherwise every Handle<T>::~Handle use (e.g.
-    // Logic::Voice's mVoiceHandle) is an unresolved external. Replace with the
-    // out-of-line Release body when the handle slice lands.
+    // CgsHandle.h -- the console destructor drops the owned reference
+    // (ReleaseObject). Here it is empty because the committed call sites pair
+    // Acquire/Release explicitly around adopt-constructed and destroyed handles
+    // (e.g. Logic::Voice's mVoiceHandle, the playback Module's create temps);
+    // moving it onto ReleaseObject means moving those sites with it.
     ~Handle() {}
 
-    // CgsHandle.h:226 -- assign. Inline plain store (phase B5, same interim
-    // ref-model caveat as the adopt ctor above: the committed call sites manage
-    // the Acquire/Release pair explicitly; the only in-build assign is
-    // Factory::CreateContent's null-handle clear). Revisit with the handle slice.
+    // CgsHandle.h -- assign. The other handle's object gains a reference
+    // first (Object +4 count), then our current object is released, then the
+    // pointer is copied; acquiring before releasing keeps self-assignment safe.
     Handle& operator=(const Handle& lkrOther)
     {
+        lkrOther.AcquireObject();
+        ReleaseObject();
         mpObject = lkrOther.mpObject;
         return *this;
     }
@@ -109,9 +102,8 @@ public:
     bool operator==(const Handle& lkrOther) const;
     bool operator!=(const Handle& lkrOther) const;
 
-    // CgsHandle.h:285 / 294. Member-access -- the same guarded deref as
-    // operator* (the CgsHandle.h:305 "mpObject" assert). Made header-inline
-    // phase B5.
+    // CgsHandle.h / 294. Member-access: assert "mpObject" (the non-const
+    // form fires at CgsHandle.h) and return the pointer.
     T* operator->()
     {
         CGS_ASSERT(mpObject, "mpObject");
@@ -123,8 +115,8 @@ public:
         return mpObject;
     }
 
-    // CgsHandle.h:303. Dereference. @ 0x8268E178 for T = Factory. Asserts that
-    // mpObject is non-null (fires CgsHandle.h:287) then returns *mpObject.
+    // CgsHandle.h. Dereference: assert "mpObject" (fires CgsHandle.h)
+    // and return *mpObject.
     T& operator*()
     {
         CGS_ASSERT(mpObject, "mpObject");
@@ -159,9 +151,18 @@ public:
     void SetObject(T* lpObject) { mpObject = lpObject; }
 
 private:
-    // CgsHandle.h:321 / 332. Ref-counting helpers. Declared-only.
-    void AcquireObject() const;
-    void ReleaseObject() const;
+    // CgsHandle.h / 332. Ref-counting helpers: a null handle owns nothing;
+    // otherwise bump the object's count / drop it through Object::Release.
+    void AcquireObject() const
+    {
+        if (mpObject)
+            mpObject->Acquire();
+    }
+    void ReleaseObject() const
+    {
+        if (mpObject)
+            mpObject->Release();
+    }
 
     // CgsHandle.h:187. The owned object (+0). The dereference guard reads it as
     // `*a1` in the X360 asm (lwz r11, 0(r31)).

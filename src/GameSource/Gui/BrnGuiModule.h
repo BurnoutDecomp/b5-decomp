@@ -242,6 +242,10 @@ namespace BrnGui
         }
 
     private:
+        // The GUI debug components read the cache inline off their module pointer.
+        friend struct SatNavDebugComponent;
+        friend struct GuiDebugComponent;
+
         // Dispatch this sub-step's inbound GUI events (the real GuiModule::Update event
         // switch @0x82527A58: 144 -> RunFsm, 481 -> HandleHudStateLoadComplete + forward,
         // 14/16 -> the model-out notification queue, 504/508/513 -> MovieManager), and fan

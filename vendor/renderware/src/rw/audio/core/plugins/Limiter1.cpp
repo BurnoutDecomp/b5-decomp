@@ -39,12 +39,12 @@ namespace core
 {
 
 // off_820AA810 -- the base PlugIn v-table the deleting destructor reinstalls before any
-// free (shared with Gain / ReverbModel1). The concrete Limiter1 v-table symbol installed at
-// construction is NOT exposed in CreateInstance's asm -- PlugIn::Initialize<T> installs it
-// inside its own (separate-TU) body -- so it is modelled as honest placeholder storage here
-// rather than fabricating an address.
+// free (shared with Gain / ReverbModel1), and the Limiter1 v-table that
+// PlugIn::Initialize<Limiter1> installs. The host never dispatches through mBase.mpVTable
+// (every call goes through the descriptor's function pointers), so both words are null on
+// the host, the convention every composition-view plug-in in this directory follows.
 static void *const KLM_BasePlugInVTable = nullptr;   // off_820AA810
-static void *const KLM_Limiter1VTable = nullptr;     // the Limiter1 v-table (installed by Initialize)
+static void *const KLM_Limiter1VTable = nullptr;     // the Limiter1 v-table (Initialize<Limiter1>)
 
 // CreateInstance immediates. The first two are the vendor's INIT_THRESHOLD (120 dB) and
 // INIT_RELEASETIME; the third is CHANNELMODE_GROUPED as a float.
@@ -144,26 +144,31 @@ void *Limiter1::ScalarDeletingDestructor(Limiter1 *self, char flags)
 // -------------------------------------------------------------------------------------
 // CreateInstance @0x82BA2F28 -- placement-init a Limiter1 over `self`.
 //
-// PlugIn::Initialize<Limiter1>(self, 0x28) constructs the plug-in base and bases its
-// 8-byte-stride attribute table at self+0x28 (mfAttribute0). The templated PlugIn::Initialize
-// helper lives in another (separate) TU; its locally-observable effect (v-table install +
-// attribute-base wiring) is reproduced inline here, exactly as the Gain / ReverbModel1 /
-// Iir2* shapes do. FLAGGED: the real Initialize<T> also performs the base mpSystem/mpVoice
-// wiring from the owning voice/factory.
+// First PlugIn::Initialize<Limiter1>(self, 0x28), the out-of-line template instance the
+// console calls. Its whole body: when self is non-null, install the Limiter1 v-table and
+// construct the embedded CompressorLimiter1, whose construction is the XMemSet of its
+// 48-byte per-channel history at +0x40 (the same clear CompressorLimiter1::ClearBuffer
+// performs); then, when the attribute offset is non-zero, base mpAttributes at
+// self + offset. It writes nothing else: the base mpSystem / mpVoice words are the
+// factory's, set before CreateInstance runs.
 //
 // Then the limiter latches its three graph-attribute defaults (120.0 / 0.1 / 1.0), mirrors
-// them into the default snapshot block at +0x90, and clears the +0x9C/+0xA0 words. The store
-// order below matches the asm. Returns 1.
+// them into the change-detect block at +0x90, and clears +0x9C / +0xA0. The store order
+// below matches the asm. Returns 1.
 // -------------------------------------------------------------------------------------
 int Limiter1::CreateInstance(Limiter1 *self)
 {
-    // PlugIn::Initialize<Limiter1>(self, 0x28) -- observable effect reproduced inline.
-    self->mBase.mpVTable = KLM_Limiter1VTable;              // installed by Initialize (symbol hidden)
-    self->mBase.mpAttributes = &self->mAttribute[0];        // attribute table base @ self+0x28
+    // PlugIn::Initialize<Limiter1>(self, 0x28).
+    if (self)
+    {
+        self->mBase.mpVTable = KLM_Limiter1VTable;                    // the Limiter1 v-table
+        CompressorLimiter1::ClearBuffer(&self->mCompressorLimiter1);  // XMemSet(+0x40, 0, 0x30)
+    }
+    self->mBase.mpAttributes = &self->mAttribute[0];                  // attribute table @ +0x28
 
-    // The store order below matches the asm. Each attribute's initial value is ALSO written
-    // to its Process-side cache (+0x90..) so the first Process sees "unchanged" only if the
-    // sample rate matches too -- the caches are the change-detect snapshot, not defaults.
+    // Each attribute's initial value is ALSO written to its Process-side cache (+0x90..) so
+    // the first Process sees "unchanged" only if the sample rate matches too -- the caches
+    // are the change-detect snapshot, not defaults.
     self->mAttribute[ATTRIBUTE_SETTHRESHOLD].mfValue   = KF_INIT_THRESHOLD;   // stfs @ +0x28 (120.0)
     self->mLastThreshold                                = KF_INIT_THRESHOLD;   // stfs @ +0x90
     self->mState                                        = STATE_OFF;           // stw  @ +0xA0

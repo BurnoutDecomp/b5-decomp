@@ -145,7 +145,19 @@ namespace BrnNetwork
 
             // ---- declared-only API (bodies are separate TUs) ----
             const InGamePlayerStatusData* GetPlayerStatusDataByActiveRaceCarIndex(EActiveRaceCarIndex leIndex) const;
-            const InGamePlayerStatusData* GetPlayerStatusDataByPlayerID(NetworkPlayerID lPlayerID) const;
+            // Header-inline on the console (reference): the OnlineFlybyManager readers inline the
+            // linear search over the first miNumPlayers records with no assert; a miss returns NULL.
+            const InGamePlayerStatusData* GetPlayerStatusDataByPlayerID(NetworkPlayerID lPlayerID) const
+            {
+                for (s32 liIndex = 0; liIndex < miNumPlayers; ++liIndex)
+                {
+                    if (maInGamePlayerData[liIndex].mNetworkPlayerID == lPlayerID)
+                    {
+                        return &maInGamePlayerData[liIndex];
+                    }
+                }
+                return nullptr;
+            }
             // Header-inline on the console (the output buffer's Construct carries it): clear every
             // record, empty the game name, zero the player count. +0x9E8 / +0x9EC are left alone.
             void Clear()

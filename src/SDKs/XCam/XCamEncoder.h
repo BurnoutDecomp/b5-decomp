@@ -172,6 +172,8 @@ public:
     // (network-reset) frame.
     void RecoveryFrameRequired() { mbRecoveryFrameRequired = 1; }
 
+    int GetSequenceHeader(u8* pOut, int* piInOutSize);  // copy mExtendedFormat out; 122 if *piInOutSize is too small
+    friend class CRemoteConsole;  // the owning console reads muLastEncodeTick
 private:
     s32                  muFrameCounter;          // +0x000 encoded-frame counter
     EMBEncSession*       mpEncSession;            // +0x004 EMB encoder session

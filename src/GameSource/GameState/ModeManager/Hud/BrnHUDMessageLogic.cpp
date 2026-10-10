@@ -6,6 +6,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface::IsPlayerCarCrashing (inline)
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h" // InputBuffer::TakedownEventQueue, VehicleManagerOutputInterface::RaceCarCrashEventQueue (complete)
 #include "GameSource/GameState/BrnGameActions.h"               // HUDMessageXCrashesAction (250), HUDMessagePlayerReachesCheckpointAction (249)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // CrashingRaceCarInterface (GenerateOnlineTeamChangeMessages)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // gpDebugPrint ([hud-xcrash] witness)
 #include <cstdlib>                                             // getenv (BRN_MODEMGR_DIAG)
 #include <cmath>                                               // truncf (GenerateDistanceToFinishMessage's Modulo)
@@ -1107,6 +1108,37 @@ void HUDMessageLogic::GenerateOnlineStuntRunScoreMessages(ScoringSystem* lpScori
     }
 
     miScoreMessageRaceCarIndex = static_cast<EActiveRaceCarIndex>(-1);
+}
+
+// Announce the team changes OnlineTeamChange recorded: for each car whose flag is set, while
+// the local player's car is not crashing, drop the flag and queue the team-change record
+// carrying that car's index. PostWorldUpdate's online tail calls it; this reduced PostWorldUpdate
+// does not carry the vehicle output interface, so that call is not made yet.
+void HUDMessageLogic::GenerateOnlineTeamChangeMessages(
+    const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
+    EActiveRaceCarIndex lePlayerActiveRaceCarIndex)
+{
+    CGS_ASSERT(lpVehicleOutputInterface, "lpVehicleOutputInterface");
+    CGS_ASSERT((lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+               (lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+               "( lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
+
+    BrnPhysics::Vehicle::CrashingRaceCarInterface lCrashingRaceCars;
+    lCrashingRaceCars.SetFromVehicleOutputInterface(lpVehicleOutputInterface);
+
+    for (EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leActiveRaceCarIndex++)
+    {
+        if (mTeamChangedBits.IsBitSet(static_cast<u32>(leActiveRaceCarIndex)) &&
+            !lCrashingRaceCars.IsCrashing(lePlayerActiveRaceCarIndex))
+        {
+            mTeamChangedBits.UnSetBit(static_cast<u32>(leActiveRaceCarIndex));
+
+            const s32 liTeamChangeRaceCarIndex = leActiveRaceCarIndex;
+            mActionQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&liTeamChangeRaceCarIndex),
+                                  E_HUD_MESSAGE_ONLINE_TEAM_CHANGE, sizeof(liTeamChangeRaceCarIndex));
+        }
+    }
 }
 
 // X360 0x8231E498. Flag that the given active-race-car has changed team this round. The

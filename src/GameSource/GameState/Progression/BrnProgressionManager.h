@@ -106,6 +106,7 @@ enum EUnlockSequenceType : s32
 class ProgressionManager
 {
 public:
+    friend struct ProgressionDebugComponent;   // the progression debug HUD reads the manager directly
     // X360 0x82359AE0 (identity.json-attested; has_pseudocode). DecFIGS DWARF
     // BrnProgressionManager.h:385 / mangled _ZNK14BrnProgression18ProgressionManager26
     // FindLandmarkAISectionIndexEy -> const member, single param `y` (u64 == CgsID),
@@ -605,6 +606,13 @@ public:
     // rivals-update request flag. FLAG: de-inlined byte poke, not a named member in the exports.
     void RequestUpdateRivals();
 
+    // Debug info BrnProgressionManager.h, all three inlined into ProcessGameEvents
+    // (cases 26, 149 and 147): one byte store of 1 at +0x20975 / +0x20981, and the mugshot count
+    // bump + achievement hook (body in BrnProgressionManager_wBT_05.cpp).
+    void SetCheckForAllEventTypeComplete() { mbCheckAllWinTypesPending = true; }
+    void ShowShutDownAllIfNeeded()         { mbShowShutDownAllIfNeeded = true; }
+    void OnMugshotSent();
+
     // X360 UpdateExitState de-inlined byte poke at ProgressionManager+133512 (`stbx 1`) -- a
     // drive-thrus/rivals dirty flag. FLAG: de-inlined byte poke, not a named member in the exports.
     void SetDriveThrusDirtyFlag();
@@ -736,7 +744,7 @@ public:
 
     // X360 0x82359850. Map an offline game-mode index (0..5) to its E_RACE_EVENT_TYPE event id. Asserts
     // (and returns -1) for an unknown mode. Pure index->constant map, no member access.
-    s32 GetEvent(s32 liGameType) const;
+    static s32 GetEvent(s32 liGameType);
 
     // X360 0x82359960. Map an online game-mode index (0..2) to its event id. Asserts (returns -1) for an
     // unknown mode. Pure index->constant map, no member access.

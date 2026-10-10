@@ -29,6 +29,9 @@ namespace BrnGameState
         // Body in the .cpp. [takedown wave 2026-09-02, agent T2]
         void RecordTakedown(EActiveRaceCarIndex leAggressorIndex, EActiveRaceCarIndex leVictimIndex);
 
+        // "Show last takedown info": one line naming the last recorded aggressor/victim pair.
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+
     protected:
         const char* GetName() const override;   // @ 0x823596C8
         void        OnActivate() override;       // @ 0x82366378

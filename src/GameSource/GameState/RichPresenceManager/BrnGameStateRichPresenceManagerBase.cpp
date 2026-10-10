@@ -1,10 +1,9 @@
 // ============================================================================
 // b5-decomp/src/GameSource/GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp
 // ============================================================================
-// Bodies for the six RichPresenceManagerBase functions this TU owns:
-//   Construct / Prepare / SetGameTypeParameters / SetPositionParameter /
-//   SetRankedParameter / SetRoundParameter.
-// (All other declared methods are bodied by their own TUs in later waves.)
+// Bodies for RichPresenceManagerBase: Construct / Prepare / Update / SetGameTypeParameters /
+// SetPositionParameter / SetRankedParameter / SetRoundParameter / ChangeDistrict /
+// EGameModeTypeToERichPresenceState, and the KE_GAME_MODES_TO_RICH_PRESENCE_STATES table.
 //
 // X360 asm is the offset authority (see the per-function provenance comments). The
 // per-field Set*Parameter helpers each cache the field's last-pushed value and, when it
@@ -18,6 +17,8 @@
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"          // ModeManager::GetScoringSystem
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h" // ScoringSystem::GetNumberOfActiveCars / GetCarRacePosition
 #include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h" // NetworkRoundManager round counters
+#include "GameSource/GameState/BrnGameStateModuleIO.h"                 // PreWorldInputBuffer (timer / controller / player-status interfaces)
+#include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"       // RoadRulesManager::IsTimeRuleActive
 
 namespace BrnGameState
 {
@@ -30,6 +31,11 @@ namespace
     // X360 sentinel stored into meSetLobbyType / meLobbyType to mark "no lobby type set yet". It sits
     // one past the last EGameModeType enumerator (E_MODE_COUNT == 17), i.e. an out-of-band invalid mode.
     const s32    KI_INVALID_LOBBY_TYPE          = 18;
+
+    // BrnGameStateRichPresenceManagerBase.cpp: no active controller / signed-in user.
+    const s32    KI_INVALID_USER_ID             = -1;
+    // Update's upper bound on the user id.
+    const s32    KI_MAX_USER_ID                 = 4;
 }
 
 // X360 0x8235A350. Construct the rich-presence manager: cache the three collaborators, derive the
@@ -212,6 +218,109 @@ bool RichPresenceManagerBase::SetRankedParameter()
     return false;
 }
 
+// The per-frame presence update (GameStateModule::PreWorldUpdate). The user is the
+// active controller's port; with no active controller nothing is pushed. Otherwise, timed under
+// the update monitor: push the player count; map the current mode to a presence state, which a
+// running time road rule overrides (online free burn -> online road rules, else offline road
+// rules); in online free burn without a road rule, a free-burn lobby shows free burn (or the
+// free-burn challenge while one is running) and any other lobby shows "event pending" plus the
+// lobby type, and the ranked flag and lobby type are refreshed; push the state if it changed;
+// then the per-mode parameters and a pending district change.
+void RichPresenceManagerBase::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                                     GameStateModuleIO::OutputBuffer* lpOutput)
+{
+    CGS_ASSERT(lpInput, "lpInput");
+    CGS_ASSERT(lpOutput, "lpOutput");
+    // GetGameTimerStatus is the interface's first sub-status (the same address).
+    CGS_ASSERT(lpInput->GetTimerStatusInterface(), "lpInput->GetTimerStatusInterface()->GetGameTimerStatus()");
+    CGS_ASSERT(lpInput->GetControllerToGameStateInterface(), "lpInput->GetControllerToGameStateInterface()");
+
+    miUserID = lpInput->GetControllerToGameStateInterface()->GetActiveControllerPort();
+    if (miUserID == KI_INVALID_USER_ID)
+    {
+        return;
+    }
+
+    CgsDev::PerfMonCpu::StartMonitor(miUpdatePM);
+
+    // The console streams the user id after the text.
+    CGS_ASSERT(miUserID >= 0, "UserID is: ");
+    CGS_ASSERT(miUserID <= KI_MAX_USER_ID, "UserID is: ");
+
+    SetNumberPlayers(lpInput->GetPlayerStatusInterface()->GetNumPlayers());
+
+    ERichPresenceStates leState = EGameModeTypeToERichPresenceState(mpModeManager->GetCurrentGameModeType());
+    if (mpGameStateModule->GetRoadRulesManager()->IsTimeRuleActive())
+    {
+        leState = (leState == E_PRESENCE_STATE_ONLINE_FREE_BURN) ? E_PRESENCE_STATE_ONLINE_ROAD_RULES
+                                                                : E_PRESENCE_STATE_OFFLINE_ROAD_RULES;
+    }
+    else if (leState == E_PRESENCE_STATE_ONLINE_FREE_BURN)
+    {
+        if (meLobbyType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
+        {
+            leState = (mpModeManager->GetCurrentFreeburnChallengeID() != 0) ? E_PRESENCE_STATE_ONLINE_FREE_BURN_CHALLENGE
+                                                                           : E_PRESENCE_STATE_ONLINE_FREE_BURN;
+        }
+        else
+        {
+            leState = E_PRESENCE_STATE_ONLINE_EVENT_PENDING;
+            SetLobbyType(EGameModeTypeToERichPresenceState(meLobbyType));
+        }
+        SetRankedParameter();
+        meSetLobbyType = meLobbyType;
+    }
+
+    if (leState != meOldRichPresenceStatus)
+    {
+        meOldRichPresenceStatus = leState;
+        SetRichPresenceState(leState);
+    }
+
+    SetGameTypeParameters();
+    ChangeDistrict();
+
+    CgsDev::PerfMonCpu::StopMonitor(miUpdatePM);
+}
+
+// Push the pending district once (it is pushed only when it differs from the
+// last one pushed), timed under the district-change monitor.
+bool RichPresenceManagerBase::ChangeDistrict()
+{
+    if (mePendingDistrict == meOldDistrict)
+    {
+        return false;
+    }
+
+    meOldDistrict = mePendingDistrict;
+    CgsDev::PerfMonCpu::StartMonitor(miDistrictChangePM);
+    SetDistrict(meOldDistrict);
+    CgsDev::PerfMonCpu::StopMonitor(miDistrictChangePM);
+    return true;
+}
+
+// The lobby's game parameters changed (GameStateModule::ProcessGameEvents, the lobby-parameters
+// event, which the console inlines this into): the player is in a lobby of this mode, ranked or not.
+void RichPresenceManagerBase::GameParametersChanged(GameStateModuleIO::EGameModeType leGameMode, bool lbIsRanked)
+{
+    mbPlayerIsInLobby = true;
+    meLobbyType       = leGameMode;
+    meIsRanked        = lbIsRanked ? E_GAME_RANKED : E_GAME_UNRANKED;
+}
+
+// The local player left the lobby (inlined into the same dispatcher's left-lobby arm).
+void RichPresenceManagerBase::LocalPlayerLeftLobby()
+{
+    mbPlayerIsInLobby = false;
+}
+
+// The player entered another district (inlined into the dispatcher's world-region arm). Update
+// pushes it through ChangeDistrict.
+void RichPresenceManagerBase::OnDistrictChange(BrnWorld::EDistrict leDistrict)
+{
+    mePendingDistrict = leDistrict;
+}
+
 // ----------------------------------------------------------------------------
 // X360 0x8235A820 (class:BrnGameState catch-all TU, ledger "BrnGameState::RichPresenceManagerBase:").
 // EGameModeTypeToERichPresenceState -- map an EGameModeType to the rich-presence state the platform
@@ -221,13 +330,33 @@ bool RichPresenceManagerBase::SetRankedParameter()
 // for the two endpoint sentinels (E_MODE_NONE == -1 and the +18 invalid-lobby sentinel -- both mean
 // "no real mode -> default presence"), and otherwise indexes the table by the mode ordinal.
 //
-// FLAG (data dependency, NOT fabricated): the 18 table entries live in this source's .rodata at X360
-// 0x8202AF20 and are NOT recoverable from the function export. The table is declared extern here and
-// DEFINED BY ITS OWNING DATA TU (the header note pins it to this source but defers its definition to
-// avoid a duplicate); the control flow + bounds + sentinel handling above are byte-faithful to the asm.
-// Compiles under the /c gate; a linker build needs the table TU to land. Do NOT invent the 18 values.
+// The table, read from the image: one presence state per mode ordinal 0..17 (the console's mode
+// count is one larger than this tree's E_MODE_COUNT, so the last ordinal below the invalid-lobby
+// sentinel is live).
 extern const RichPresenceManagerBase::ERichPresenceStates
     KE_GAME_MODES_TO_RICH_PRESENCE_STATES[GameStateModuleIO::E_MODE_COUNT + 1];
+const RichPresenceManagerBase::ERichPresenceStates
+    KE_GAME_MODES_TO_RICH_PRESENCE_STATES[GameStateModuleIO::E_MODE_COUNT + 1] =
+{
+    RichPresenceManagerBase::E_PRESENCE_STATE_OFFLINE_RACE,               //  0
+    RichPresenceManagerBase::E_PRESENCE_STATE_OFFLINE_RACE,               //  1
+    RichPresenceManagerBase::E_PRESENCE_STATE_OFFLINE_SHOWTIME,           //  2
+    RichPresenceManagerBase::E_PRESENCE_STATE_OFFLINE_ROAD_RAGE,          //  3
+    RichPresenceManagerBase::E_PRESENCE_STATE_OFFLINE_RACE,               //  4
+    RichPresenceManagerBase::E_PRESENCE_STATE_OFFLINE_BURNING_ROUTE,      //  5
+    RichPresenceManagerBase::E_PRESENCE_STATE_OFFLINE_RACE,               //  6
+    RichPresenceManagerBase::E_PRESENCE_STATE_OFFLINE_STUNT_ATTACK,       //  7
+    RichPresenceManagerBase::E_PRESENCE_STATE_OFFLINE_MARKED_MAN,         //  8
+    RichPresenceManagerBase::E_PRESENCE_STATE_OFFLINE_RACE,               //  9
+    RichPresenceManagerBase::E_PRESENCE_STATE_ONLINE_RACE,                // 10
+    RichPresenceManagerBase::E_PRESENCE_STATE_ONLINE_FREE_BURN,           // 11
+    RichPresenceManagerBase::E_PRESENCE_STATE_ONLINE_FREE_BURN,           // 12
+    RichPresenceManagerBase::E_PRESENCE_STATE_ONLINE_BURNING_HOME_RUN,    // 13
+    RichPresenceManagerBase::E_PRESENCE_STATE_ONLINE_FREE_BURN,           // 14
+    RichPresenceManagerBase::E_PRESENCE_STATE_ONLINE_FREE_BURN,           // 15
+    RichPresenceManagerBase::E_PRESENCE_STATE_OFFLINE_SHOWTIME,           // 16
+    RichPresenceManagerBase::E_PRESENCE_STATE_ONLINE_FREE_BURN,           // 17
+};
 
 RichPresenceManagerBase::ERichPresenceStates
 RichPresenceManagerBase::EGameModeTypeToERichPresenceState(GameStateModuleIO::EGameModeType leGameMode)

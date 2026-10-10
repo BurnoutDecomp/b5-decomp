@@ -95,7 +95,7 @@ f32 OnlineStuntRunMode::GetOutroTimeout() const
 // [!] STILL PARKED -- the countdown decrement. The X360 body gates on a per-frame
 // PreWorldInputBuffer flag (>= 0) and then does
 //     mfTimeRemaining -= lpInput->GetTimerStatusInterface()
-//                            ->maEntries[1].mfValue04 * ...->maEntries[1].mfValue08;
+//                            ->GetSimTimerStatus()->GetCurrentTimeStep();
 // The ARGUMENT is now present, but GameStateModuleIO::PreWorldInputBuffer is forward-declared only
 // in this header's include set (BrnGameMode.h keeps BrnGameStateModuleIO.h out on purpose -- see
 // the dual-enum ban there), so the accessor chain cannot be walked from this TU as it stands.

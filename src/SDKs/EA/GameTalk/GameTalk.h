@@ -222,6 +222,8 @@ namespace GameTalk
         static s32 RegisterMessageHandler(GameTalkManager* lpManager,
                                           MessageHandler lpHandler,
                                           const char* lpcChannel);
+        // The context-handler form (GameTalk_wBT_01.cpp): the entry keeps lpContext and hands the handler its slot's address.
+        static s32 RegisterMessageHandler(GameTalkManager* lpManager, void (*lpfnHandler)(GameTalkMessage* lpMessage, void* lpContext), const char* lpcChannel, void* lpContext);
 
         // X360 @0x828390B8. Static receive entry: route a decoded incoming message
         // to the server config handler (when it matches "Server Message") and to

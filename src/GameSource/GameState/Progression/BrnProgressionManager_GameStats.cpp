@@ -16,7 +16,7 @@
 // THE CHAIN THIS COMPLETES (the middle hop of three; the outer two were already live):
 //   GUI 435 (GuiEventStatsRequest, posted by CrashNavDriverDetails::UpdateInitSetup)
 //     -> game event 79   [BridgeGuiToGameState case 435, already live]
-//     -> game action 180 [GameStateModule::ProcessGameEventsGameStatsRequestBringUp, this wave]
+//     -> game action 180 [GameStateModule::ProcessGameEvents case 79]
 //     -> GUI 436 (GuiEventStatsResponse) [TranslateGameActionsToGuiEvents case 180, this wave]
 // Without it CrashNavDriverDetails::HandleStatData never runs and the Driver Details stat panel
 // draws its labels with no numbers.

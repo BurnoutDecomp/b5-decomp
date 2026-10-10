@@ -100,6 +100,11 @@ namespace CgsInput
         // broadcasts to all KU_NUMBER_OF_PADS pads).
         void ProcessMappingQueue(const InputIO::PostWorldInputBuffer* lpPostWorldBuffer);
 
+        // CgsInputModule.h. Drain the post-world bind / unbind request queues into
+        // the pads and publish one BindResult / UnBindResult per request.
+        void ProcessBindRequestQueue(const InputIO::PostWorldInputBuffer* lpPostWorldBuffer);
+        void ProcessUnbindRequestQueue(const InputIO::PostWorldInputBuffer* lpPostWorldBuffer);
+
         // X360 0x828FFE50 (DWARF CgsInputModule.cpp:426, export hole -> ppcdis). Play every jolt, stop,
         // rumble and volume change the game posted into the pre-world buffer on the pads, then run the
         // pads' rumble envelopes one game-timer step with the buffer's pause (or'ed with !lbUpdatePads),

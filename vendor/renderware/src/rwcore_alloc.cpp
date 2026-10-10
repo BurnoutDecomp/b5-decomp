@@ -257,6 +257,24 @@ namespace rw
         // the bump cursors; individual Resources have no release operation.
     }
 
+    // The adopted heap: the base of each of the five pools.
+    const Resource& LinearResourceAllocator::GetLinearHeapBase() const
+    {
+        return m_heapResource;
+    }
+
+    // The per-pool sizes the allocator was initialised over (returned by value).
+    ResourceDescriptor LinearResourceAllocator::GetCapacity() const
+    {
+        return m_heapCapacity;
+    }
+
+    // The per-pool bump cursors: bytes carved so far, padding included.
+    ResourceDescriptor LinearResourceAllocator::GetCurrentUsage() const
+    {
+        return m_currentUsage;
+    }
+
 namespace core
 {
     // EA::Allocator::GeneralAllocator's own in-heap bookkeeping overhead (X360 ctor/GetResourceDescriptor

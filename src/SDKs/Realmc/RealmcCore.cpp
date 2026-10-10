@@ -1,6 +1,8 @@
 #include "SDKs/Realmc/RealmcCore.h"
 #include "SDKs/Realmc/RealmcMemcardState.h"  // RealmcCore::MemcardState -- IRunnableTask's
                                              // Start/Stop dispatch target (minimal home)
+#include "SDKs/Realmc/RealmcMessageQueue.h"   // RealmcCore::MessageQueue -- IRunnableTask::SendMessage's queue
+#include <eathread/eathread.h>                // EA::Thread::GetThreadTime (SendMessage's send time)
 
 #include <cstring>   // std::memcpy -- the string assign body is a sized copy.
 #include <intrin.h>  // _Interlocked* (MSVC) -- portable stand-in for the X360
@@ -42,14 +44,13 @@ void* allocator::allocate(std::size_t nSize, int nExtra)
 //   lis r11, off_832BE204@ha ; lwz r3, off_832BE204@l(r11)   -> r3 = backend
 //   lwz r11, 0(r3) ; lwz r11, 0xC(r11) ; mtctr r11 ; bctr    -> vtable slot +12
 //
-// Tail-call: backend->[+12](backend). The pseudocode passes only the backend;
-// the sized-free signature (ptr, size) is reached with the X360-untouched
-// argument registers, so the X360 caller leaves r4/r5 holding the block+size.
-// Modelled faithfully as the no-argument forwarder the pseudocode shows.
+// Tail-call: backend->[+12](backend, block, size). Only the allocator object is
+// replaced by the backend; the block and its byte size arrive as the second and
+// third arguments and pass through untouched to the sized Free.
 // ---------------------------------------------------------------------------
-void allocator::deallocate()
+void allocator::deallocate(void* pBlock, std::size_t nSize)
 {
-    g_pRealmcAllocator->Free(nullptr, 0);
+    g_pRealmcAllocator->Free(pBlock, nSize);
 }
 
 // ---------------------------------------------------------------------------
@@ -115,74 +116,57 @@ IRealmcAllocatorBackend* GetMemAllocator(IRealmcAllocatorBackend* pAllocator)
     return pAllocator;
 }
 
+// ===========================================================================
+// Message -- the Realmc message base (a RefCount with Apply at vtable +8).
+// ===========================================================================
+
 // ---------------------------------------------------------------------------
-// Message::Message @ 0x82C456D8
+// Message::Message
 //
-//   stw off_821BA2CC, 0(r3)              -> install base vtable
-//   addi r7, r3, 4                       -> &muLock
-//   <mfmsr/mtmsree/lwarx/stwcx./mtmsree> -> atomically store 0 to muLock,
-//                                           retry while stwcx. fails (bne)
-//   stw off_821BA2E8, 0(r3)              -> install final vtable
-//
-// The two vtable stores are MSVC's base-then-final ctor sequence (Message has a
-// vtable-bearing base); the compiler reproduces both stores from the class
-// definition. The interrupt-masked lwarx/stwcx. is the X360 reservation-init
-// idiom; modelled portably as an atomic store of 0 to muLock.
+// Store the RefCount vtable, atomically zero the count at +4 (the interrupt-
+// masked reservation store, retried until it sticks), then store the Message
+// vtable. The two vtable stores are MSVC's base-then-final ctor sequence; the
+// reservation store is modelled portably as an atomic exchange with 0.
 // ---------------------------------------------------------------------------
 Message::Message()
 {
-    _InterlockedExchange(reinterpret_cast<volatile long*>(&muLock), 0);
+    _InterlockedExchange(reinterpret_cast<volatile long*>(&miRefCount), 0);
 }
 
 // ---------------------------------------------------------------------------
 // Message::~Message
 //
-// Backs the X360 `vector deleting destructor' @ 0x82C45718, whose body is:
-//   *a1 = off_821BA2CC                          -> restore base vtable
-//   if (a2 & 1) backend->[+12](backend, a1, 8)  -> free 8 bytes (sizeof Message)
-//   return a1
-//
-// MSVC synthesises the vector/scalar deleting destructor wrapper from this
-// non-virtual-looking dtor + the class's operator delete path; the `8` is
-// sizeof(Message) (vtable ptr + muLock). Nothing to do in the dtor body itself.
+// The vector deleting destructor restores the RefCount vtable and, when the
+// delete flag bit0 is set, frees 8 bytes through backend slot +0xC (Message's
+// class operator delete). Nothing to do in the body itself.
 // ---------------------------------------------------------------------------
 Message::~Message()
 {
 }
 
 // ---------------------------------------------------------------------------
-// Message::Apply @ 0x82C44C08
+// Message::Apply (vtable +8)
 //
-//   mr r11, r4 ; mr r4, r3 ; mr r3, r11   -> swap: r3 = pTarget, r4 = pThis
-//   lwz r10, 0(r11) ; lwz r11, 0x54(r10)  -> pTarget vtable slot +0x54 (84)
-//   mtctr r11 ; bctr                       -> tail-call (pTarget, pThis)
-//
-// i.e. pTarget->ApplyMessage(pThis). Note IDA's signature lists (a1=pThis,
-// a2=pTarget); the asm swaps them so the *target* is `this` for the dispatch.
+// Swap the two arguments so the processor becomes `this`, load the processor's
+// vtable slot +0x54 and tail-call it with the message: the plain-Message
+// handler.
 // ---------------------------------------------------------------------------
-int Message::Apply(Message* pThis, IRealmcMessageTarget* pTarget)
+void Message::Apply(IMessageProcessor* pProcessor)
 {
-    return pTarget->ApplyMessage(pThis);
+    pProcessor->ProcessMessage(this);
 }
 
 // ===========================================================================
-// RefCount -- shared atomically-refcounted base (X360 base vtable off_821BA2CC).
+// RefCount -- shared atomically-refcounted base.
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// RefCount::Release @ 0x82C45108
+// RefCount::Release
 //
-//   addi r11, r3, 4                            -> &miRefCount
-//   <mfmsr/mtmsree/lwarx/addi -1/stwcx./mtmsree/bne>
-//                                              -> atomically miRefCount -= 1
-//   mr   r31, r10 ; cmpwi cr6, r31, 0          -> v6 = post-decrement count
-//   bne  cr6, ret                              -> if count != 0, just return it
-//     lwz r11, 0(r3) ; lwz r11, 4(r11) ; bctrl -> else call vtable slot +4 (this)
-//   return v6
-//
-// The interrupt-masked lwarx/stwcx. atomic decrement is modelled portably with
-// _InterlockedDecrement; the +4 vtable dispatch is the virtual OnUnreferenced()
-// hook fired exactly when the count reaches zero.
+// Atomically decrement the count at +4 (interrupt-masked reservation loop);
+// when the post-decrement count is zero, call vtable slot +4 (Unreferenced) on
+// the object. Returns the post-decrement count. The reservation loop is
+// modelled portably with _InterlockedDecrement.
 // ---------------------------------------------------------------------------
 int RefCount::Release(RefCount* pThis)
 {
@@ -190,41 +174,29 @@ int RefCount::Release(RefCount* pThis)
         _InterlockedDecrement(reinterpret_cast<volatile long*>(&pThis->miRefCount)));
     if (iCount == 0)
     {
-        pThis->OnUnreferenced();  // vtable slot +4
+        pThis->Unreferenced();  // vtable slot +4
     }
     return iCount;
 }
 
 // ---------------------------------------------------------------------------
-// RefCount::Unreferenced @ 0x82C44D18
+// RefCount::Unreferenced (vtable slot +4)
 //
-//   cmplwi cr6, r3, 0 ; beqlr cr6              -> if (pThis == 0) return pThis
-//   lwz r11, 0(r3) ; li r4, 1 ; lwz r11, 0(r11) ; bctr
-//                                              -> tail-call vtable slot +0 (this, 1)
-//
-// Slot +0 with flag bit0 set is the scalar/vector deleting destructor: it runs
-// the dtor and frees the object ("delete this"). Modelled by invoking the
-// virtual destructor + operator delete, which is what slot +0 (flag 1) does.
+// Return at once for a null object; otherwise tail-call vtable slot +0 with the
+// delete flag set: the deleting destructor runs the destructor and frees the
+// object -- "delete this", whose own null guard is the leading test.
 // ---------------------------------------------------------------------------
-RefCount* RefCount::Unreferenced(RefCount* pThis)
+void RefCount::Unreferenced()
 {
-    if (pThis)
-    {
-        delete pThis;  // vtable[+0](this, 1): deleting destructor
-    }
-    return pThis;
+    delete this;  // vtable[+0](this, 1): deleting destructor
 }
 
 // ---------------------------------------------------------------------------
 // RefCount::AddRef  (the inlined Realmc reference-bump idiom)
 //
-// Every Realmc smart-pointer over a RefCount object raises the count with the
-// X360 interrupt-masked reservation increment inlined at its bind site:
-//   addi r10, msg, 4                          -> &miRefCount
-//   <mfmsr/mtmsree/lwarx r9/addi r9,+1/stwcx./mtmsree/bne>
-//                                             -> atomically miRefCount += 1
-// (see MessagePtr::MessagePtr @ 0x82C45778 and operator= @ 0x82C45838). The
-// interrupt-masked lwarx/stwcx. atomic increment is modelled portably with
+// Every Realmc smart pointer over a RefCount object raises the count at +4 with
+// the interrupt-masked reservation increment inlined at its bind site (the
+// MessagePtr constructors and operator=). Modelled portably with
 // _InterlockedIncrement, the mirror of Release's _InterlockedDecrement.
 // ---------------------------------------------------------------------------
 void RefCount::AddRef()
@@ -235,64 +207,47 @@ void RefCount::AddRef()
 // ---------------------------------------------------------------------------
 // RefCount::~RefCount
 //
-// Backs the X360 `vector deleting destructor' @ 0x82C450C0:
-//   *a1 = off_821BA2CC                 -> restore base vtable
-//   if (a2 & 1) operator delete(a1)    -> free if the delete flag is set
-//   return a1
-//
-// MSVC synthesises that deleting-destructor wrapper from this dtor; the body
-// itself does nothing beyond the (compiler-emitted) vtable restore.
+// The vector deleting destructor restores the RefCount vtable and calls the
+// global operator delete when the delete flag is set. MSVC synthesises that
+// wrapper from this dtor; the body itself does nothing.
 // ---------------------------------------------------------------------------
 RefCount::~RefCount()
 {
 }
 
 // ===========================================================================
-// Response -- derives RefCount; final vtable off_821BA2FC.
+// Response -- a Message carrying one result word.
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// Response::Response @ 0x82C458B0
+// Response::Response
 //
-//   stw off_821BA2CC, 0(r3)                    -> base RefCount vtable
-//   addi r7, r3, 4 ; <atomic store 0>          -> miRefCount = 0
-//   stw r4, 8(r3)                              -> mpPayload = pPayload
-//   stw off_821BA2FC, 0(r3)                    -> final Response vtable
-//
-// The base-then-final vtable stores are MSVC's derived-ctor sequence (emitted
-// from the class definition). The atomic zero of the inherited refcount is the
-// RefCount base subobject ctor.
+// Store the RefCount vtable, atomically zero the count, store the result word
+// at +8, store the Response vtable. The Message base ctor is folded inline (its
+// own vtable store is dropped as dead); the atomic zero is that base ctor.
 // ---------------------------------------------------------------------------
-Response::Response(void* pPayload)
-    : RefCount(), mpPayload(pPayload)
+Response::Response(int iValue)
+    : Message(), miValue(iValue)
 {
-    _InterlockedExchange(reinterpret_cast<volatile long*>(&miRefCount), 0);
 }
 
 // ---------------------------------------------------------------------------
-// Response::Apply @ 0x82C44D38
+// Response::Apply (vtable +8)
 //
-//   mr r11,r4 ; mr r4,r3 ; mr r3,r11           -> swap: r3 = pTarget, r4 = pThis
-//   lwz r10, 0(r11) ; lwz r11, 0x50(r10)       -> pTarget vtable slot +0x50 (80)
-//   bctr                                       -> tail-call (pTarget, pThis)
-//
-// i.e. pTarget->ApplyResponse(pThis).
+// The same swap-and-tail-call thunk as Message::Apply, into the processor's
+// slot +0x50: the Response handler.
 // ---------------------------------------------------------------------------
-int Response::Apply(Response* pThis, IRealmcResponseTarget* pTarget)
+void Response::Apply(IMessageProcessor* pProcessor)
 {
-    return pTarget->ApplyResponse(pThis);
+    pProcessor->ProcessMessage(this);
 }
 
 // ---------------------------------------------------------------------------
 // Response::~Response
 //
-// Backs the X360 `vector deleting destructor' @ 0x82C458F0:
-//   *a1 = off_821BA2CC                         -> restore base vtable
-//   if (a2 & 1) backend->[+12](backend, a1, 12)-> free 12 bytes (sizeof Response)
-//   return a1
-//
-// The 12-byte free size is sizeof(Response) (vtable + refcount + payload). The
-// dtor body is empty; MSVC emits the deleting-destructor wrapper.
+// The vector deleting destructor restores the RefCount vtable and, when the
+// delete flag is set, frees 12 bytes (the console sizeof) through backend slot
+// +0xC. The dtor body is empty; MSVC emits the deleting-destructor wrapper.
 // ---------------------------------------------------------------------------
 Response::~Response()
 {
@@ -344,120 +299,143 @@ void RealmcString::Assign(const char* pSrcBegin, const char* pSrcEnd)
 }
 
 // ---------------------------------------------------------------------------
+// RealmcString::RealmcString(const char*, const allocator&)
+//
+//   zero begin / end / capEnd
+//   copy the allocator             (an empty body shared by many symbols)
+//   n = strlen(pString)            (byte scan to the NUL)
+//   Assign(pString, pString + n)   (the RangeInitialize helper)
+//
+// The eastl::basic_string<char, RealmcCore::allocator> C-string constructor.
+// ---------------------------------------------------------------------------
+RealmcString::RealmcString(const char* pString, const allocator& /*rAllocator*/)
+    : mpBegin(nullptr), mpEnd(nullptr), mpCapEnd(nullptr), mpAllocatorName(nullptr)
+{
+    const char* pEnd = pString;
+    while (*pEnd != '\0')
+    {
+        ++pEnd;
+    }
+    Assign(pString, pEnd);
+}
+
+// ---------------------------------------------------------------------------
 // RealmcString::Free  (the guard inlined into MessageString::~MessageString)
 //
-//   v2 = mpBegin ; if (mpCapEnd - mpBegin > 1 && mpBegin) backend->Free(...)
+//   n = mpCapEnd - mpBegin ; if (n > 1 && mpBegin) backend->Free(mpBegin, n)
 //
 // Free the buffer only when it is genuinely heap-owned (capacity > 1 and the
-// begin pointer is non-null); the shared empty singleton is never freed.
+// begin pointer is non-null); the shared empty singleton is never freed. The
+// byte capacity is the size handed to the sized Free.
 // ---------------------------------------------------------------------------
 void RealmcString::Free()
 {
-    if ((mpCapEnd - mpBegin) > 1 && mpBegin != nullptr)
+    const std::ptrdiff_t nCapacity = mpCapEnd - mpBegin;
+    if (nCapacity > 1 && mpBegin != nullptr)
     {
-        g_pRealmcAllocator->Free(mpBegin, 0);
+        allocator::deallocate(mpBegin, static_cast<std::size_t>(nCapacity));
     }
 }
 
 // ===========================================================================
-// MessageString -- derives RefCount; final vtable off_821BA370.
+// MessageString -- a Message with an id word and an owned string.
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// MessageString::MessageString @ 0x82C46338
+// MessageString::MessageString
 //
-//   stw off_821BA2CC, 0(r3)                    -> base RefCount vtable
-//   addi r6, r3, 4 ; <atomic store 0>          -> miRefCount = 0
-//   stw r4, 8(r3)                              -> muId = uId
-//   stw off_821BA370, 0(r3)                    -> final MessageString vtable
-//   stw 0, 0xC(r3) ; stw 0, 0x10(r3) ; stw 0, 0x14(r3)
-//                                              -> zero the RealmcString triple
-//   r4 = ppSourceRange[0] ; r5 = ppSourceRange[1]
-//   bl sub_82B562A0 (this+0xC, begin, end)     -> maText.Assign(begin, end)
-//
-// The source range is a {begin, end} character-pointer pair (the head of
-// another RealmcString); Assign reserves, copies and NUL-terminates it.
+// Store the RefCount vtable, atomically zero the count, store muId at +8, store
+// the MessageString vtable, zero the RealmcString triple at +0xC, then Assign
+// the source string's [begin, end) range into it -- the inlined basic_string
+// copy constructor.
 // ---------------------------------------------------------------------------
-MessageString::MessageString(std::uint32_t uId, const char* const* ppSourceRange)
-    : RefCount(), muId(uId), maText()
+MessageString::MessageString(std::uint32_t uId, const RealmcString& rText)
+    : Message(), muId(uId), maText()
 {
-    _InterlockedExchange(reinterpret_cast<volatile long*>(&miRefCount), 0);
-    maText.Assign(ppSourceRange[0], ppSourceRange[1]);
+    maText.Assign(rText.Begin(), rText.End());
 }
 
 // ---------------------------------------------------------------------------
-// MessageString::~MessageString @ 0x82C46028
+// MessageString::~MessageString
 //
-//   *r3 = off_821BA370                         -> (re)install MessageString vtable
-//   v2 = mpBegin (0xC) ; if (mpCapEnd(0x14) - v2 > 1 && v2) backend->Free(...)
-//   *r3 = off_821BA2CC                         -> restore base RefCount vtable
-//
-// Free the owned string buffer (the RealmcString ownership guard), then the
-// compiler's vtable restores frame the base-class teardown. Backs the X360
-// `scalar deleting destructor' @ 0x82C463C0, which frees 28 bytes (sizeof).
+// Reinstall the MessageString vtable, free the owned string buffer when it is
+// heap-owned (capacity > 1 and begin non-null), restore the RefCount vtable.
+// The scalar deleting destructor frees 28 bytes (the console sizeof).
 // ---------------------------------------------------------------------------
 MessageString::~MessageString()
 {
-    maText.Free();
+    // maText's destructor (RealmcString::Free) releases the owned buffer as the
+    // member is destroyed.
+}
+
+// ---------------------------------------------------------------------------
+// MessageString::Apply (vtable +8)
+//
+// The swap-and-tail-call thunk into the processor's slot +0x4C: the
+// MessageString handler.
+// ---------------------------------------------------------------------------
+void MessageString::Apply(IMessageProcessor* pProcessor)
+{
+    pProcessor->ProcessMessage(this);
 }
 
 // ===========================================================================
-// MessagePtr -- intrusive refcount wrapper over an IRealmcMessage (own vtable
-// off_821BA2F4). Reconstructed from the X360 asm; see RealmcCore.h for layout.
+// MessagePtr / ResponsePtr -- the intrusive smart pointers.
 // ===========================================================================
 
-// The shared empty-message singleton (X360 off_832BE1F0). Defined here as a
-// null-initialised pointer; another Realmc TU installs the real empty-message
-// object at boot. (Owning definition for the `extern` in the header.)
-IRealmcMessage* g_pRealmcEmptyMessage = nullptr;
+// The three shared holders (owning definitions for the externs in the header).
+// They start null; ObjectManager::Initialize creates the objects at boot and
+// ObjectManager::Finalize deletes them.
+MessagePtr*  g_pRealmcEmptyMessage       = nullptr;
+ResponsePtr* g_pRealmcEmptyResponse      = nullptr;
+ResponsePtr* g_pRealmcUnfilteredResponse = nullptr;
 
 // ---------------------------------------------------------------------------
-// MessagePtr::MessagePtr @ 0x82C45778
+// MessagePtr::MessagePtr(Message*)
 //
-//   stw off_821BA2F4, 0(r3)                   -> install MessagePtr vtable
-//   addi r10, r4, 4                           -> &mpMessage->miRefCount
-//   <mfmsr/mtmsree/lwarx/addi +1/stwcx./mtmsree/bne>  -> AddRef the message
-//   stw r4, 4(r3)                             -> mpMessage = pMessage
-//
-// The vtable store is MSVC's ctor prologue (emitted from the class definition);
-// the inlined atomic increment is RefCount::AddRef on the held message.
+// Store the MessagePtr vtable, atomically increment the message's count (the
+// inlined RefCount::AddRef), store the message at +4.
 // ---------------------------------------------------------------------------
-MessagePtr::MessagePtr(IRealmcMessage* pMessage)
+MessagePtr::MessagePtr(Message* pMessage)
     : mpMessage(pMessage)
 {
     mpMessage->AddRef();
 }
 
 // ---------------------------------------------------------------------------
-// MessagePtr::~MessagePtr @ 0x82C457B0
+// MessagePtr::MessagePtr(const MessagePtr&)
 //
-//   stw off_821BA2F4, 0(r3)                   -> (re)install MessagePtr vtable
-//   lwz r3, 4(r31) ; bl RefCount::Release     -> Release(mpMessage)
-//   li r11, 0 ; stw r11, 4(r31)               -> mpMessage = 0
+// Store the MessagePtr vtable, atomically increment rOther's message count,
+// store rOther's message at +4. The console keeps one out-of-line copy (used by
+// GameCallbackProcessor's ctor); every other copy site inlines the same steps.
+// ---------------------------------------------------------------------------
+MessagePtr::MessagePtr(const MessagePtr& rOther)
+    : mpMessage(rOther.mpMessage)
+{
+    mpMessage->AddRef();
+}
+
+// ---------------------------------------------------------------------------
+// MessagePtr::~MessagePtr
 //
-// Backs the X360 `scalar deleting destructor' @ 0x82C45FC0, which (when its
-// delete flag bit0 is set) frees 8 bytes through the Realmc backend afterwards.
+// Reinstall the MessagePtr vtable, Release the held message, null the pointer.
+// The scalar deleting destructor additionally frees 8 bytes through the backend
+// when its delete flag is set.
 // ---------------------------------------------------------------------------
 MessagePtr::~MessagePtr()
 {
-    // RefCount::Release takes the target object explicitly (the X360 thunk reads
-    // r3 == the object, ignoring any implicit this), so it is invoked through the
-    // message itself; the committed Release signature is left untouched.
+    // RefCount::Release takes the target object explicitly (the console thunk
+    // reads its first argument as the object), so it is invoked through the
+    // message itself.
     mpMessage->Release(mpMessage);
     mpMessage = nullptr;
 }
 
 // ---------------------------------------------------------------------------
-// MessagePtr::operator= @ 0x82C45838
+// MessagePtr::operator=
 //
-//   v4 = this->mpMessage ; if (v4 == rOther.mpMessage) return this  (no-op)
-//   bl RefCount::Release(v4)                   -> drop the old message
-//   v5 = rOther.mpMessage ; stw v5, 4(this)    -> mpMessage = new
-//   addi r8, v5, 4 ; <atomic increment>        -> AddRef the new message
-//   return this
-//
-// The rebind only churns the refcounts when the target actually changes, exactly
-// as the X360 cr6 compare guards.
+// When the held message differs from rOther's: Release the old message, store
+// rOther's, atomically increment its count. Returns *this either way.
 // ---------------------------------------------------------------------------
 MessagePtr& MessagePtr::operator=(const MessagePtr& rOther)
 {
@@ -471,246 +449,149 @@ MessagePtr& MessagePtr::operator=(const MessagePtr& rOther)
 }
 
 // ---------------------------------------------------------------------------
-// MessagePtr::Apply @ 0x82C44C38
+// MessagePtr::Apply (vtable +4)
 //
-//   lwz r3, 4(r3)                             -> r3 = mpMessage
-//   lwz r11, 0(r3) ; lwz r11, 8(r11)          -> mpMessage vtable slot +8
-//   mtctr r11 ; bctr                          -> tail-call (mpMessage)
-//
-// i.e. return mpMessage->Process(). The X360 dispatches into the held message's
-// own vtable (+8), not MessagePtr's vtable.
+// Load the held message, load its vtable slot +8 (Message::Apply and its
+// overrides) and tail-call it with the processor passed through.
 // ---------------------------------------------------------------------------
-int MessagePtr::Apply(MessagePtr* pThis)
+void MessagePtr::Apply(IMessageProcessor* pProcessor) const
 {
-    return pThis->mpMessage->Process();
+    mpMessage->Apply(pProcessor);
 }
 
 // ---------------------------------------------------------------------------
-// MessagePtr::EMPTY_MESSAGE @ 0x82C44C28
+// MessagePtr::EMPTY_MESSAGE
 //
-//   lis r11, off_832BE1F0@ha ; lwz r3, off_832BE1F0@l(r11) ; blr
-//
-// Returns the shared empty-message singleton pointer.
+// Return the shared empty-message holder (a single global load).
 // ---------------------------------------------------------------------------
-IRealmcMessage* MessagePtr::EMPTY_MESSAGE()
+const MessagePtr& MessagePtr::EMPTY_MESSAGE()
 {
-    return g_pRealmcEmptyMessage;
-}
-
-// ===========================================================================
-// MessageFilter -- a Realmc message-filter object (derives the abstract filter base
-// IRealmcMessageFilter, base vtable off_82148660; final vtable off_821BA310). It holds
-// a handler/owner pointer (+4) and an embedded MessagePtr (+8). Reconstructed from the
-// X360 asm; see RealmcCore.h for the layout.
-// ===========================================================================
-
-// ---------------------------------------------------------------------------
-// MessageFilter::MessageFilter @ 0x82C45F08
-//
-//   stw  r4, 4(r3)                              -> mpHandler = pHandler
-//   stw  off_821BA310, 0(r3)                    -> final MessageFilter vtable
-//   r11 = *(off_832BE1F4) ; r11 = *(r11 + 4)    -> the default/empty message
-//   stw  off_821BA2F4, 8(r3)                    -> embedded MessagePtr base vtable @ +8
-//   <atomic increment of *(r11 + 4)>            -> AddRef the message
-//   stw  r11, 0xC(r3)                           -> maMessage.mpMessage = message
-//   stw  off_821BA308, 8(r3)                    -> embedded MessagePtr final vtable @ +8
-//
-// The two vtable stores at +0 are MSVC's base-then-final derived-ctor sequence; the
-// MessagePtr subobject at +8 is constructed bound to the default message (modelled via
-// the shared empty-message singleton), AddRefing it -- exactly MessagePtr's own ctor.
-// ---------------------------------------------------------------------------
-MessageFilter::MessageFilter(void* pHandler)
-    : mpHandler(pHandler),
-      maMessage(MessagePtr::EMPTY_MESSAGE())   // binds + AddRefs the default message
-{
+    return *g_pRealmcEmptyMessage;
 }
 
 // ---------------------------------------------------------------------------
-// MessageFilter::~MessageFilter @ 0x82C45F68
+// ResponsePtr::ResponsePtr
 //
-//   *r3 = off_821BA310                          -> (re)install MessageFilter vtable
-//   *(r3 + 8) = off_821BA308                    -> the embedded MessagePtr vtable
-//   bl RealmcCore::MessagePtr::~MessagePtr(r3+8)-> tear down maMessage (Release + null)
-//   *r3 = off_82148660                          -> restore the abstract-base vtable
-//
-// The MessagePtr subobject destructor (Release the held message) is the only real work;
-// the vtable stores frame the base-class teardown the compiler emits. Backs the X360
-// `vector deleting destructor' @ 0x82C46240, which frees 0x10 bytes (sizeof).
-// ---------------------------------------------------------------------------
-MessageFilter::~MessageFilter()
-{
-    // maMessage's destructor (Release + null) runs automatically as the member is
-    // destroyed -- the X360's inlined MessagePtr::~MessagePtr on this+8.
-}
-
-// ---------------------------------------------------------------------------
-// MessageFilter::FilterMessage @ 0x82C462A8
-//
-//   RealmcCore::MessagePtr::operator=(this + 8, off_832BE1F8)
-//                                              -> rebind maMessage to the default message
-//   r11 = *(pIncoming) ; r11 = *(r11 + 4)      -> incoming message vtable slot +4
-//   (r11)(pIncoming, this)                     -> incoming->ApplyToFilter(this)
-//   r11 = *(this + 0xC)                        -> the message the filter now holds
-//   *out = off_821BA2F4 ; <AddRef *(r11+4)> ; out[1] = r11 ; *out = off_821BA308
-//                                              -> copy-build the returned MessagePtr
-//
-// i.e. reset the held message, let the incoming message apply itself to this filter,
-// then return (by value) a MessagePtr over the filter's now-held message. The returned
-// MessagePtr's copy-build AddRefs the message (the two-vtable store is MSVC's base-then-
-// final MessagePtr ctor); reproduced by constructing it from the held message.
-// ---------------------------------------------------------------------------
-MessagePtr MessageFilter::FilterMessage(IRealmcFilterableMessage* pIncoming)
-{
-    // Rebind the held MessagePtr to the default/empty message (the X360 assigns it from
-    // the global default-MessagePtr at off_832BE1F8; modelled via the empty singleton).
-    MessagePtr lDefault(MessagePtr::EMPTY_MESSAGE());
-    maMessage = lDefault;
-
-    // Let the incoming message apply itself to this filter (vtable slot +4 dispatch),
-    // which sets the message the filter should carry.
-    pIncoming->ApplyToFilter(this);
-
-    // Return a MessagePtr over the filter's now-held message (copy-build AddRefs it).
-    return MessagePtr(maMessage.Get());
-}
-
-// ===========================================================================
-// ResponsePtr -- the response-side intrusive refcount wrapper (the X360 sibling of
-// MessagePtr; same vtables off_821BA2F4 / off_821BA308). Reconstructed from the
-// X360 asm; see RealmcCore.h for the layout. Note the X360 ~ResponsePtr literally
-// tail-branches into MessagePtr::~MessagePtr, so the teardown body is shared with
-// MessagePtr -- reproduced here as the same Release-then-null sequence.
-// ===========================================================================
-
-// The shared empty-response singleton (X360 off_832BE1F4) -- the SAME global
-// default-message holder MessageFilter binds its MessagePtr to. Defined here as a
-// null-initialised pointer; another Realmc TU installs the real empty-response
-// object at boot. (Owning definition for the EMPTY_RESPONSE() accessor.)
-static void* g_pRealmcEmptyResponse = nullptr;
-
-// ---------------------------------------------------------------------------
-// ResponsePtr::ResponsePtr @ 0x82C45950
-//
-//   stw off_821BA2F4, 0(r3)                   -> install ResponsePtr vtable (base)
-//   addi r10, r4, 4                           -> &mpResponse->miRefCount
-//   <mfmsr/mtmsree/lwarx/addi +1/stwcx./mtmsree/bne>  -> AddRef the response
-//   stw r4, 4(r3)                             -> mpResponse = pResponse
-//   stw off_821BA308, 0(r3)                   -> install ResponsePtr vtable (final)
-//
-// Structurally identical to MessagePtr::MessagePtr (@0x82C45778): the two vtable
-// stores are MSVC's ctor prologue (emitted from the class definition); the inlined
-// atomic increment is RefCount::AddRef on the held response (Response derives
-// RefCount, so the count at +4 is reached by name).
+// Store the MessagePtr vtable, atomically increment the response's count, store
+// it at +4, store the ResponsePtr vtable.
 // ---------------------------------------------------------------------------
 ResponsePtr::ResponsePtr(Response* pResponse)
-    : mpResponse(pResponse)
+    : MessagePtr(pResponse)
 {
-    mpResponse->AddRef();
 }
 
 // ---------------------------------------------------------------------------
-// ResponsePtr::~ResponsePtr @ 0x82C45990
+// ResponsePtr::~ResponsePtr
 //
-//   stw off_821BA308, 0(r3)                   -> (re)install ResponsePtr vtable
-//   b   RealmcCore::MessagePtr::~MessagePtr   -> tail-call the SHARED teardown:
-//                                                Release(mpResponse); mpResponse = 0
-//
-// Backs the X360 `scalar deleting destructor' @ 0x82C460A0, which (when its delete
-// flag bit0 is set) frees 8 bytes through the Realmc backend afterwards. The held
-// member sits at the same +0x04 slot MessagePtr's mpMessage occupies, so the shared
-// MessagePtr dtor body Releases it through the RefCount machinery; Response derives
-// RefCount, so Release reaches the count at +4 by name.
+// Reinstall the ResponsePtr vtable and branch into ~MessagePtr (Release the
+// held response, null the pointer) -- the base destructor runs after this empty
+// body. The scalar deleting destructor frees 8 bytes through the backend.
 // ---------------------------------------------------------------------------
 ResponsePtr::~ResponsePtr()
 {
-    // RefCount::Release takes the target object explicitly (the X360 thunk reads
-    // r3 == the object), so it is invoked through the held response itself; the
-    // committed Release signature is left untouched -- exactly MessagePtr's dtor.
-    mpResponse->Release(mpResponse);
-    mpResponse = nullptr;
 }
 
 // ---------------------------------------------------------------------------
-// ResponsePtr::GetValue @ 0x82C44D68
+// ResponsePtr::GetValue
 //
-//   lwz r11, 4(r3)                            -> r11 = mpResponse
-//   lwz r3,  8(r11)                           -> r3  = mpResponse->mpPayload (+8)
-//   blr
-//
-// Return the held response's payload word as an int (the X360 leaves the 32-bit
-// value in r3); reached through Response::GetPayload() by name.
+// Load the held object at +4 and return its word at +8: the Response result.
 // ---------------------------------------------------------------------------
 int ResponsePtr::GetValue() const
 {
-    return static_cast<int>(reinterpret_cast<std::intptr_t>(mpResponse->GetPayload()));
+    return static_cast<const Response*>(mpMessage)->GetValue();
 }
 
 // ---------------------------------------------------------------------------
-// ResponsePtr::EMPTY_RESPONSE @ 0x82C44D58
+// ResponsePtr::EMPTY_RESPONSE
 //
-//   lis r11, off_832BE1F4@ha ; lwz r3, off_832BE1F4@l(r11) ; blr
-//
-// Returns the shared empty-response singleton pointer (the same global the message-
-// filter default binds to).
+// Return the shared empty-response holder (a single global load).
 // ---------------------------------------------------------------------------
-void* ResponsePtr::EMPTY_RESPONSE()
+const ResponsePtr& ResponsePtr::EMPTY_RESPONSE()
 {
-    return g_pRealmcEmptyResponse;
+    return *g_pRealmcEmptyResponse;
 }
 
 // ===========================================================================
-// IRunnableTask -- the abstract, refcounted memory-card task base (derives
-// RefCount; base vtable off_821BA2CC, final vtable off_821BA2D4). Reconstructed
-// from the X360 asm; see RealmcCore.h for the layout, the vtable slots, and the
-// BLOCKED operator() gap.
+// MessageFilter -- the IMessageProcessor a task's message is offered to before
+// it is queued.
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// IRunnableTask::IRunnableTask @ 0x82C45170
+// MessageFilter::MessageFilter
 //
-//   stw off_821BA2CC, 0(r3)                    -> base RefCount vtable
-//   addi r11, r3, 4 ; <atomic store 0>         -> miRefCount = 0 (retry on stwcx. fail)
-//   stw r4, 8(r3)                              -> mpContext = pContext
-//   stw r5, 0xC(r3)                            -> mpMemcardState = pMemcardState
-//   stw off_821BA2D4, 0(r3)                    -> final IRunnableTask vtable
-//   <atomic increment of *(r3 + 4)>            -> miRefCount = 1 (self-reference)
-//
-// The base-then-final vtable stores are MSVC's derived-ctor sequence (emitted from
-// the class definition). The atomic zero is the RefCount base subobject ctor; the
-// trailing atomic increment is RefCount::AddRef -- the task starts life holding one
-// reference of its own (Release drops it to 0 -> OnUnreferenced deletes it).
+// Store mpHandler at +4 and the MessageFilter vtable, then build the embedded
+// ResponsePtr at +8 over the empty-response holder's response (the inlined
+// copy: MessagePtr vtable, AddRef, store, ResponsePtr vtable).
 // ---------------------------------------------------------------------------
-IRunnableTask::IRunnableTask(void* pContext, MemcardState* pMemcardState)
-    : RefCount(), mpContext(pContext), mpMemcardState(pMemcardState)
+MessageFilter::MessageFilter(void* pHandler)
+    : mpHandler(pHandler),
+      maResponse(ResponsePtr::EMPTY_RESPONSE())
+{
+}
+
+// ---------------------------------------------------------------------------
+// MessageFilter::~MessageFilter
+//
+// Reinstall the MessageFilter vtable, tear down the embedded ResponsePtr
+// (Release + null), restore the IMessageProcessor vtable. The vector deleting
+// destructor frees 0x10 bytes through backend slot +0xC.
+// ---------------------------------------------------------------------------
+MessageFilter::~MessageFilter()
+{
+    // maResponse's destructor (Release + null) runs as the member is destroyed.
+}
+
+// ---------------------------------------------------------------------------
+// MessageFilter::FilterMessage (vtable +0x58)
+//
+//   maResponse = *g_pRealmcUnfilteredResponse     (MessagePtr::operator=)
+//   rMessage.Apply(this)                           (MessagePtr vtable +4)
+//   return a ResponsePtr copy of maResponse        (the inlined copy, by value)
+//
+// The message reaches this filter's handler for its own type; a handler that
+// answers stores its Response in maResponse. A filter that leaves the
+// unfiltered holder in place did not answer.
+// ---------------------------------------------------------------------------
+ResponsePtr MessageFilter::FilterMessage(const MessagePtr& rMessage)
+{
+    maResponse = *g_pRealmcUnfilteredResponse;
+    rMessage.Apply(this);
+    return maResponse;
+}
+
+// ===========================================================================
+// IRunnableTask -- the abstract, refcounted memory-card task base.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// IRunnableTask::IRunnableTask
+//
+// Store the RefCount vtable, atomically zero the count, store the message queue
+// at +8 and the MemcardState at +0xC, store the IRunnableTask vtable, then
+// atomically increment the count: the task starts life holding one reference
+// of its own (Release drops it to 0 -> Unreferenced deletes it).
+// ---------------------------------------------------------------------------
+IRunnableTask::IRunnableTask(MessageQueue* pMessageQueue, MemcardState* pMemcardState)
+    : RefCount(), mpMessageQueue(pMessageQueue), mpMemcardState(pMemcardState)
 {
     _InterlockedExchange(reinterpret_cast<volatile long*>(&miRefCount), 0);
     AddRef();  // the ctor's trailing atomic increment -> miRefCount = 1
 }
 
 // ---------------------------------------------------------------------------
-// IRunnableTask::~IRunnableTask @ 0x82C44D78
+// IRunnableTask::~IRunnableTask
 //
-//   stw off_821BA2CC, 0(r3) ; blr              -> restore the RefCount base vtable
-//
-// The trivial base destructor: it only (re)installs the RefCount base vtable, which
-// the compiler emits as part of the base-subobject teardown. Nothing to do in the
-// body. Backs the X360 `scalar deleting destructor' @ 0x82C451D0 (which additionally
-// runs operator delete when its delete flag bit0 is set) -- MSVC synthesises that
-// deleting-destructor wrapper from this dtor.
+// Restore the RefCount vtable; nothing else. The scalar deleting destructor
+// additionally runs operator delete when its delete flag bit0 is set.
 // ---------------------------------------------------------------------------
 IRunnableTask::~IRunnableTask()
 {
 }
 
 // ---------------------------------------------------------------------------
-// IRunnableTask::Starting @ 0x82C47590
+// IRunnableTask::Starting
 //
-//   lwz r11, 0(r31) ; lwz r11, 0x10(r11) ; bctrl  -> v = this->GetTaskType() (vtable +0x10)
-//   mr  r4, r3 ; lwz r3, 0xC(r31) ; bl StartTask  -> mpMemcardState->StartTask(v)
-//   blr                                           -> return StartTask's result
-//
-// Register this task as the running one on its MemcardState, keyed by the task-type
-// id the +0x10 virtual yields.
+// Call vtable +0x10 (the task type) and return mpMemcardState->StartTask(type).
 // ---------------------------------------------------------------------------
 int IRunnableTask::Starting()
 {
@@ -718,18 +599,11 @@ int IRunnableTask::Starting()
 }
 
 // ---------------------------------------------------------------------------
-// IRunnableTask::InvokeSynchronously @ 0x82C476F0
+// IRunnableTask::InvokeSynchronously
 //
-//   bl Starting                                   -> Starting()
-//   lwz r11, 0(r31) ; lwz r11, 0xC(r11) ; bctrl   -> this->OnTaskRun()      (vtable +0x0C)
-//   lwz r11, 0(r31) ; lwz r11, 8(r11)  ; bctrl    -> this->OnTaskComplete() (vtable +0x08)
-//   lwz r11, 0(r31) ; lwz r11, 0x10(r11); bctrl   -> v = this->GetTaskType()(vtable +0x10)
-//   mr  r4, r3 ; lwz r3, 0xC(r31) ; bl StopTask   -> mpMemcardState->StopTask(v)
-//   li  r3, 0 ; ... ; blr                         -> return 0
-//
-// Run the task once, synchronously: start it, run the two task-body virtuals (the
-// +0x0C one first, then the +0x08 one -- the runtime call order, independent of the
-// vtable slot order), then stop it. Always returns 0.
+// Starting(); vtable +0x0C; vtable +0x08; StopTask(vtable +0x10); return 0.
+// The +0x0C body runs first, then the +0x08 one (the runtime call order,
+// independent of the slot order).
 // ---------------------------------------------------------------------------
 int IRunnableTask::InvokeSynchronously()
 {
@@ -741,16 +615,74 @@ int IRunnableTask::InvokeSynchronously()
 }
 
 // ---------------------------------------------------------------------------
-// IRunnableTask::operator() @ 0x82C475D8 -- BLOCKED (honest gap).
+// IRunnableTask::operator()
 //
-// The async task-run loop (the ThrFunction<T> thread body) is left un-homed: it
-// dispatches into mpMemcardState's +0x50 servicer object via that object's vtable
-// slot +0x5C (23) before running each task, and drives MemcardState's
-// GetWaitingToStartTask / StopAndStartTask. The servicer object's TYPE and its
-// 23-slot vtable are un-homed and cannot be grounded beyond the raw offset, so
-// reproducing that dispatch faithfully -- without a forbidden raw-offset pointer
-// hack and without speculatively forking MemcardState's +0x50 layout -- is not
-// possible yet. Homed additively when the MemcardState TU + its servicer land.
+//   filter = mpMemcardState->GetMessageFilter() ; filter->Reset()   (+0x5C)
+//   this->OnTaskRun() (+0x0C) ; this->OnTaskComplete() (+0x08)
+//   type = this->GetTaskType() (+0x10)
+//   while (next = mpMemcardState->GetWaitingToStartTask()) {
+//     mpMemcardState->StopAndStartTask(type, next->GetTaskType())
+//     type = next->GetTaskType()
+//     mpMemcardState->GetMessageFilter()->Reset()
+//     next->OnTaskRun() ; next->OnTaskComplete()
+//     RefCount::Release(next)
+//   }
+//   mpMemcardState->StopTask(type) ; return 0
+//
+// The filter is re-read from the MemcardState before every Reset, as the
+// console does.
 // ---------------------------------------------------------------------------
+int IRunnableTask::operator()()
+{
+    mpMemcardState->GetMessageFilter()->Reset();  // vtable slot +0x5C
+    OnTaskRun();                                   // vtable slot +0x0C
+    OnTaskComplete();                              // vtable slot +0x08
+    int liTaskType = GetTaskType();                // vtable slot +0x10
+
+    for (IRunnableTask* lpNext = mpMemcardState->GetWaitingToStartTask();
+         lpNext != nullptr;
+         lpNext = mpMemcardState->GetWaitingToStartTask())
+    {
+        mpMemcardState->StopAndStartTask(liTaskType, lpNext->GetTaskType());
+        liTaskType = lpNext->GetTaskType();
+        mpMemcardState->GetMessageFilter()->Reset();
+        lpNext->OnTaskRun();
+        lpNext->OnTaskComplete();
+        lpNext->Release(lpNext);
+    }
+
+    mpMemcardState->StopTask(liTaskType);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// IRunnableTask::SendMessage
+//
+//   if (lpuSentTime) *lpuSentTime = -1
+//   response = mpMemcardState->GetMessageFilter()->FilterMessage(rMessage)  (+0x58)
+//   if (response holds g_pRealmcUnfilteredResponse's response) {
+//     response = mpMessageQueue->SendMessage(rMessage)   (temporary, then assigned)
+//     if (lpuSentTime) *lpuSentTime = EA::Thread::GetThreadTime()
+//   }
+//   return a ResponsePtr copy of response
+//
+// A filter answer short-circuits the queue; otherwise the message goes to the
+// game thread and the call blocks until its response arrives (or the queue
+// shuts down or times out, which yields the empty response).
+// ---------------------------------------------------------------------------
+ResponsePtr IRunnableTask::SendMessage(const MessagePtr& rMessage, u32* lpuSentTime)
+{
+    if (lpuSentTime)
+        *lpuSentTime = 0xFFFFFFFFu;
+
+    ResponsePtr lResponse(mpMemcardState->GetMessageFilter()->FilterMessage(rMessage));
+    if (lResponse.Get() == g_pRealmcUnfilteredResponse->Get())
+    {
+        lResponse = mpMessageQueue->SendMessage(rMessage);
+        if (lpuSentTime)
+            *lpuSentTime = static_cast<u32>(EA::Thread::GetThreadTime());
+    }
+    return lResponse;
+}
 
 } // namespace RealmcCore

@@ -69,6 +69,7 @@ struct EventRacerPersonality;
 
 struct ProgressionData
 {
+    friend struct ProgressionDebugComponent;   // the progression debug HUD walks the car opponent sets
     // ---- Accessors reconstructed by this TU (X360 standalone symbols) ----------------------
 
     // X360 0x82311790. Returns &mpaProgressionRanks[luIndex] (asserts the bound).

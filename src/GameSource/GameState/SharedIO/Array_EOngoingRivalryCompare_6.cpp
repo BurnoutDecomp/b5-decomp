@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
-#include "GameSource/GameState/SharedIO/BrnGameStateLeafContainers.h"
+#include "GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.h"   // BrnGameState::OnlineFlybyManager (the element enum)
 
 // Explicit instantiation(s) of the generic Array<T,N> container methods (inline in CgsArray.h)
 // for the EOngoingRivalryCompare leaf instantiation -- the committed Array_/EventQueue_ explicit-instantiation pattern.

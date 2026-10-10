@@ -2,14 +2,12 @@
 // GameSource/Director/Camera/BrnBehaviourManager_AllocateBehaviour_RenderMetrics.cpp
 //
 // BehaviourManager::AllocateBehaviour<BrnDirector::Camera::BehaviourRenderMetrics> @0x8224B770.
-// Isolated explicit-instantiation TU: BrnBehaviourRenderMetrics.h derives (and re-declares) the
-// minimal-slice Camera::Behaviour base, which collides with the sibling base-deriving behaviour
-// headers (IceAnim / Rig) -- so this instantiation lives on its own.
+// Explicit-instantiation TU for the render-metrics probe behaviour.
 //
 // The shared AllocateBehaviour<TBehaviour> body is out-of-line in BrnBehaviourManager.h.
 // The X360 asm at 0x8224B770 reads the SMALL pool ("small behaviour"), so
-// ConsoleBehaviourPool<BehaviourRenderMetrics> is SMALL -> mSmallBehaviourPool (host sizeof
-// 240, console 224 -- `li r7` @0x82230B48; AllocateBehaviour<> static_asserts the fit).
+// ConsoleBehaviourPool<BehaviourRenderMetrics> is SMALL -> mSmallBehaviourPool (console size 224;
+// AllocateBehaviour<> static_asserts the host fit).
 // ============================================================================
 
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"

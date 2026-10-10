@@ -828,6 +828,11 @@ void EnvironmentManager::Construct()
 
     // ARTIST @0x827CA7DC..0x827CA94C; register the actual engine values.
     CgsDev::DebugInterface lDebugInterface;
+    lDebugInterface.RegisterVariable(&mbOverrideSeason, "Environment", "Override season");
+    lDebugInterface.RegisterVariable(&miOverrideNextSeason, "Environment", "Season to use");
+    lDebugInterface.RegisterVariable(&miOverrideKeyframe, "Environment", "Keyframe to use");
+    lDebugInterface.SetRange(&miOverrideNextSeason, 1, 99);
+    lDebugInterface.SetRange(&miOverrideKeyframe, 1, 99);
     lDebugInterface.RegisterVariable(&mfWhiteLevel, "Environment", "HDR white level");
     lDebugInterface.SetRange(&mfWhiteLevel, 0.025f, 1.0f);
     lDebugInterface.SetStep(&mfWhiteLevel, 0.025f);
@@ -1342,21 +1347,20 @@ bool EnvironmentManager::SetupBlend( BlendFrame& lrBlendFrame, f32 lfTimeStep,
         case E_BLENDMODE_TIMEOFDAY:
             if ( mbOverrideSeason )
             {
-                // [FLAG] DEBUG-ONLY ARM, and NOT REACHED in the shipped flow: Construct
-                // @0x827CA408 clears mbOverrideSeason and only the EnvironmentSettings
-                // DebugComponent sets it.
-                // [FLAG BLOCKED: the CgsDev::DebugInterface registration surface is not
-                // reconstructed] -- the console builds a stack DebugInterface here and calls
-                // sub_8282F910(&iface, &miOverrideKeyframe, 1, muKeyframeCnt), the same
-                // "register an int debug variable with min 1 / max = keyframe count" call
-                // Construct's own registration block makes (that block is already omitted in
-                // this TU with the same FLAG). The registration is ALSO where the [1, cnt]
-                // clamp on miOverrideKeyframe lives, so the index below is unclamped exactly
-                // as it would be here with the registration dropped. Restore both together.
+                // DEBUG-ONLY ARM: Construct clears mbOverrideSeason and only the debug menu's
+                // "Override season" toggle sets it.
                 const TimeLine* const lpTimeLine =
                     ResourcePointerAssertThingy( maSeasonPtrs[ miCurrSeason ] );
                 const TimeLine::LocationData& lrLocation =
                     lpTimeLine->mpLocationDatii[ maiLocations[ miCurrLocation ] ];
+
+                // The "Keyframe to use" debug variable's menu range is re-set to
+                // [1, keyframe count of the current location] every frame the override is on.
+                // The stack handle holds the debug section until the end of this arm, across
+                // the SetupTimeOfDayBlend call below.
+                CgsDev::DebugInterface lDebugInterface;
+                lDebugInterface.SetRange( &miOverrideKeyframe, 1,
+                                          static_cast<s32>( lrLocation.muKeyframeCnt ) );
 
                 mfTimeOfDay = lrLocation.mpfKeyframeTimes[ miOverrideKeyframe - 1 ];
 

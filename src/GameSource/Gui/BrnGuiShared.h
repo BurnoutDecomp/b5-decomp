@@ -2,6 +2,7 @@
 #define BRN_GUI_SHARED_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (EGuiImageCategories increment)
 
 // ============================================================================
 // GameSource/Gui/BrnGuiShared.h
@@ -99,6 +100,27 @@ namespace BrnGui
         E_COMPASS_POINTS_COUNT = 8,
         E_COMPASS_POINTS_START = 0,
     };
+
+    // The image-gallery picture categories (the gallery's four tabs). The underlying
+    // type matches the opaque declaration BrnImageGalleryCarouselItem.h carries.
+    enum EGuiImageCategories : s32
+    {
+        E_GUI_IMAGE_CATEGORIES_TAKEDOWNS    = 0,
+        E_CUI_IMAGE_CATEGORIES_MUGSHOTS     = 1,
+        E_GUI_IMAGE_CATEGORIES_RULEBREAKER  = 2,
+        E_GUI_IMAGE_CATEGORIES_PHOTO_FINISH = 3,
+        E_GUI_IMAGE_CATEGORIES_COUNT        = 4,
+        E_GUI_IMAGE_CATEGORIES_FIRST        = 0,
+    };
+
+    // The category cursor increment (inlined in ImageGalleryState::UpdateSetup's tab loop).
+    inline EGuiImageCategories operator++(EGuiImageCategories& leEnumIndex, int)
+    {
+        const EGuiImageCategories leOld = leEnumIndex;
+        leEnumIndex = static_cast<EGuiImageCategories>(leEnumIndex + 1);
+        CGS_ASSERT(leEnumIndex <= E_GUI_IMAGE_CATEGORIES_COUNT, "leEnumIndex <= E_GUI_IMAGE_CATEGORIES_COUNT");
+        return leOld;
+    }
 
     // BrnGuiShared.h:327 (DWARF) -- a sat-nav road icon. Each value's numeric suffix
     // is the apt timeline-label code for that road's sign artwork; the parallel name

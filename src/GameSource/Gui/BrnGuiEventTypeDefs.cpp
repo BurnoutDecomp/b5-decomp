@@ -16,6 +16,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf / SnPrintf
 #include "GameShared/GameClasses/Core/CgsID.h"           // CgsID / CgsIDCompress
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"     // CgsUnicode::SafelyTerminate (GuiHudMessage::GetParam)
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h" // CgsNetwork::K_INVALID_PLAYER_ID
 
 #include <cstring>  // std::memcpy -- the DoWorstCase compaction is a 0x30-byte block move.
 
@@ -520,6 +521,24 @@ s32 GuiHudMessage::GetParamCount(s32 liStringIndex) const
     CGS_ASSERT( liStringIndex >= 0 && liStringIndex <= KI_NUMBER_OF_STRINGS - 1,
                 "Invalid string index." );
     return maiNoOfParams[liStringIndex];
+}
+
+// The remote-player-disconnect GUI event's two setters. BrnGameModule::TranslateGameActionsToGuiEvents
+// fills the record from the game action before posting it (GUI event 267). Each asserts its
+// argument, then stores it.
+void GuiNetworkRemotePlayerDisconnectEvent::SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex)
+{
+    CGS_ASSERT( (leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                "(leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)" );
+    meActiveRaceCarIndex = leActiveRaceCarIndex;
+}
+
+void GuiNetworkRemotePlayerDisconnectEvent::SetNetworkPlayerID(s32 lPlayerID)
+{
+    CGS_ASSERT( lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+                "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID" );
+    mPlayerID = lPlayerID;
 }
 
 } // namespace BrnGui

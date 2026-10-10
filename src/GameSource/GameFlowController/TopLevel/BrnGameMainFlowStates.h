@@ -182,6 +182,13 @@ protected:
     bool LoadNetworkModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                            const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
 
+    // The controller stage: carve the input module's general allocator once (8 KB main memory,
+    // 16-aligned, from GameData heap 0x26) and prepare the input module with it. Body in
+    // BrnGameMainFlowStates_wBT_01.cpp.
+    bool LoadControllerModule(BrnResource::GameDataIO::InputBuffer* lpGDMInput,
+                              const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput,
+                              rw::core::GeneralResourceAllocator** lppInputModuleAllocator);
+
     // The update set the loading spine drives the world with: ConstructUpdateSetFromFsm
     // @0x823BD420's base value 128 (frustum testing on; no in-game / boot-video / paused
     // bits while the scripted load runs).

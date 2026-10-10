@@ -72,6 +72,7 @@ namespace BrnPhysics { namespace Vehicle { enum EImpactType : s32; } }
 // this header only carries the two pointers, so a forward declaration is enough (and keeps
 // the 118 KB progression profile out of every AddGuiEvent<T> translation unit).
 namespace BrnProgression { class Profile; struct ProgressionData; }
+namespace CgsModule { template <s32, s32> class EventReceiverQueue; }   // GuiEventNetworkVehicleListRequest / GuiCarSelectWheelRequest (pointer only)
 
 namespace BrnGui
 {
@@ -2047,8 +2048,8 @@ struct GuiEventNetworkPlayerLeftLobby
 static_assert(sizeof(GuiEventNetworkPlayerLeftLobby) == 24, "X360 AddGuiEvent size 24 (id 277)");
 
 // DWARF :5422 (PS3 GuiEvent<265>; X360 id 267, record 8 bytes). DWARF declares the two
-// fields private behind get/setters; the accessor bodies are their own ledger rows
-// (declaration-only) and the analyzer reads via GetNetworkPlayerID.
+// fields private behind get/setters; the two setters are bodied in BrnGuiEventTypeDefs.cpp
+// and the analyzer reads via GetNetworkPlayerID.
 struct GuiNetworkRemotePlayerDisconnectEvent
 {
 public:
@@ -2161,6 +2162,16 @@ struct GuiShowtimeModeSwitch
     s32 GetEventType() const { return 397; }
 };
 static_assert(sizeof(GuiShowtimeModeSwitch) == 16, "X360 AddGuiEvent size 16 (id 397)");
+
+// Debug info  (reference GuiEvent<393>; console id 398, record 1 byte). ProcessGameEvents' case-51 arm
+// copies the bounce-prompt byte into it; RaceMainHudState keeps it as mbBounceBoostPromptNeeded.
+struct GuiShowtimeBouncePrompt
+{
+    bool mbPromptNeeded;   // +0x00 (debug info)
+
+    s32 GetEventType() const { return 398; }
+};
+static_assert(sizeof(GuiShowtimeBouncePrompt) == 1, "AddGuiEvent size 1 (id 398)");
 
 // DWARF :6659 (PS3 GuiEvent<563>; X360 id 578, record 24 bytes). HandleChallengeEnded
 // @0x824F33E0 switches on meChallengeStatus (1/2/3/6 park a copy in mChallengedEndedData;
@@ -2918,6 +2929,25 @@ struct GuiEventPostEventNewRivalSequenceStart : public CgsGui::GuiEvent<298>
 };
 static_assert(sizeof(GuiEventPostEventNewRivalSequenceStart) == 32, "rival sequence event size");
 
+// The other platform numbers it GuiEvent<315>; console id 317. The online finishing order: the active
+// race-car index in each finish position. GuiCache::RecEvent copies the record word for
+// word into GuiCache::mOnlineFinishingOrder (8 words, no event header).
+struct GuiEventOnlineEventFinishingOrder
+{
+    EActiveRaceCarIndex maeActiveRaceCarIndexForFinishPosition[E_ACTIVE_RACE_CAR_INDEX_COUNT];
+
+    s32 GetEventType() const { return 317; }
+};
+static_assert(sizeof(GuiEventOnlineEventFinishingOrder) == 32, "finishing-order record (8 words)");
+
+// The other platform numbers it GuiEvent<322>; console id 324. Empty request the online "you win" screen
+// sends once its photo screen is up; it travels boxed in GuiEventWrapper<T,40> as the
+// 16-byte {1, 324, 12, pad} record.
+struct GuiRequestOnlinePhotoFinishEvent : public CgsModule::Event
+{
+    s32 GetEventType() const { return 324; }
+};
+
 struct GuiEventOfflinePostEvent
 {
     struct OfflinePostEventData
@@ -3072,6 +3102,26 @@ struct GuiEventRoadSignIconStatus
     f32           mfScaleFactor;     // :2874  payload +0x04
 
     s32 GetEventType() const { return 562; }
+};
+
+//  -- a GUI out-event asking the GameData module for the vehicle list AND the
+// wheel list; both replies go to the requesting screen's receiver queue. id 263 (the
+// original header's GuiEvent<261> is the other platform's numbering). Its one consumer is
+// BrnGameModule::BridgeGuiToResource, which reads the receiver pointer at payload +0x00.
+struct GuiEventNetworkVehicleListRequest
+{
+    CgsModule::EventReceiverQueue<256, 16>* mpReceiverQueue;   //   payload +0x00
+
+    s32 GetEventType() const { return 263; }
+};
+
+//  -- the car-select screen's wheel-list request (wheel list only). id 417
+// (GuiEvent<412> on the other platform). Consumer: BrnGameModule::BridgeGuiToResource (payload +0x00).
+struct GuiCarSelectWheelRequest
+{
+    CgsModule::EventReceiverQueue<256, 16>* mpReceiverQueue;   //   payload +0x00
+
+    s32 GetEventType() const { return 417; }
 };
 
 } // namespace BrnGui

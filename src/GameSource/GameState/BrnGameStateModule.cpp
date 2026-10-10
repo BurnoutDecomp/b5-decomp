@@ -39,6 +39,11 @@
 #include "GameShared/GameClasses/Core/CgsID.h"                            // [boost-wave2] CgsIDCompress (the two impact message-id tables)
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"        // [boost-wave2] BrnPhysics::Vehicle::EImpactType (E_IMPACT_COUNT)
 #include "GameSource/GameState/PaybackManager/BrnPaybackManager.h"        // [FX-GS] PaybackManager::Destruct (the Destruct leg)
+#include "GameSource/GameState/InviteManager/BrnGameStateInviteManager.h"          // [PGEP] mpGameStateInviteManager (new / Construct / Prepare / Destruct)
+#include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h"        // [PGEP] mpImageManager
+#include "GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.h"      // [PGEP] mpOnlineFlybyManager
+#include "GameSource/GameState/RichPresenceManager/X360/BrnGameStateRichPresenceManagerX360.h" // [PGEP] mpRichPresenceManager
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // [PGEP] PerfMonCpu::AddMonitor ("XUserSetContext")
 
 namespace BrnGameState
 {
@@ -166,6 +171,15 @@ void GameStateModule::Construct()
     // gsm+249936 / +250272 / +250800. Both halves in GameStateModule_gTD_00.cpp.
     ConstructTakedownBringUp();
 
+    // [PGEP] The invite manager (console gsm+0x7F0), constructed right after PaybackManager::Construct
+    // (its five queue Constructs and three seed stores are inlined there). Held by pointer here; see
+    // the member block in the header.
+    if (mpGameStateInviteManager == 0)
+    {
+        mpGameStateInviteManager = new GameStateInviteManager();
+    }
+    mpGameStateInviteManager->Construct();
+
     mModeManager.ConstructInterModeStateBringUp(this);
 
     // ⭐⭐ [progression wave: lifecycle, 2026-09-06] THE PROGRESSION MANAGER'S CONSTRUCT, at the
@@ -242,6 +256,15 @@ void GameStateModule::Construct()
     mStuntManager.Construct(&mProgressionManager, &mTriggerQueryManager, &mModeManager,
                             mpTrainingManager, this);
 
+    // [PGEP] The console's next calls: FlybyManager::Construct on the offline manager, then the
+    // online manager's inlined Construct (gsm+0x2D8E0) -- both with (this, the ScoringSystem).
+    // This build carries no offline flyby manager member; the online one is held by pointer.
+    if (mpOnlineFlybyManager == 0)
+    {
+        mpOnlineFlybyManager = new OnlineFlybyManager();
+    }
+    mpOnlineFlybyManager->Construct(this, mModeManager.GetScoringSystem());
+
     // ⭐ [FX-RUMBLE] ContactSpyInterface::Construct(gsm+250800) -- call #25 of the same function
     // (0x8238065C), the first of the per-frame input caches' Constructs that precede the
     // carry-queue Construct below (#30). Clears the handle RumbleManager::Update reads (mpData = 0),
@@ -282,12 +305,33 @@ void GameStateModule::Construct()
     // bat named are bodied (BrnScoringSystem_Accessors2.cpp / _Queries.cpp, BrnProgressionManager_Rivals.cpp),
     // so the console's call goes back on its line (Construct @0x82380388: r4 = mProgressionManager,
     // r5 = mStreetManager, r6 = mModeManager's ScoringSystem, r7 = this).
+    // [PGEP] The rich-presence manager (console gsm+0x2C4D0), at its seat just before the
+    // achievement manager's Construct: the console leaf's inlined construct half registers the
+    // "XUserSetContext" monitor (page 5, budget 1.0, scaled) and starts the presence thread, then
+    // RichPresenceManagerBase::Construct(this, &mNetworkRoundManager, &mModeManager).
+    if (mpRichPresenceManager == 0)
+    {
+        mpRichPresenceManager = new RichPresenceManagerX360();
+        mpRichPresenceManager->miSetContextPM =
+            CgsDev::PerfMonCpu::AddMonitor("XUserSetContext", CgsDev::E_PMP_5, false, 1.0f, true);
+        mpRichPresenceManager->CreatePresenceThread();
+    }
+    mpRichPresenceManager->Construct(this, &mNetworkRoundManager, &mModeManager);
+
     mAchievementManager.Construct(&mProgressionManager, &mStreetManager,
                                   mModeManager.GetScoringSystem(), this);
 
     // StreetManager::Construct, the console's call after the achievement manager's (its
     // road-rules manager argument is the one RoadRulesManager::Construct initialised above).
     mStreetManager.Construct(this, &mProgressionManager, &mRoadRulesManager);
+
+    // [PGEP] GameStateImageManagerBase::Construct (console gsm+0x2D4B0, r4 = &mProgressionManager),
+    // the call between StreetManager::Construct and DeveloperChallengeManager::Construct.
+    if (mpImageManager == 0)
+    {
+        mpImageManager = new GameStateImageManagerBase();
+    }
+    mpImageManager->Construct(&mProgressionManager);
 
     // ⭐ 2026-09-03 (aiwave, lanes P1+P3): DeveloperChallengeManager::Construct @0x82380794 sits right after
     // GameStateImageManagerBase::Construct @0x82380778 and before ClearData @0x823807A8 (r4 = r28
@@ -311,6 +355,10 @@ void GameStateModule::Construct()
     // ClearData at the console's seat: `mr r3, r31 ; bl ClearData` @0x823807A8, the call right after
     // DeveloperChallengeManager::Construct (0x82380794). [FX-TAILS-A 2026-09-24]
     ClearData();
+
+    // The "Process events" monitor (page 5, no minimum, budget 1.0, scaled) from the console's
+    // monitor block after ClearData; ProcessGameEvents brackets its walk with it.
+    miProcessEventsPM = CgsDev::PerfMonCpu::AddMonitor("Process events", CgsDev::E_PMP_5, false, 1.0f, true);
 }
 
 // ----------------------------------------------------------------------------
@@ -414,6 +462,28 @@ void GameStateModule::Destruct()
     {
         delete mpTrainingManager;
         mpTrainingManager = 0;
+    }
+
+    // [PGEP] The console's GameStateModule::Destruct runs GameStateImageManagerBase::Destruct early
+    // (before StreetManager::Destruct) and the invite manager's inlined Destruct right after
+    // ModeManager::Destruct, immediately before PaybackManager::Destruct below. The deletes are the
+    // partners of Construct()'s allocations (the console embeds all three managers by value).
+    if (mpImageManager != 0)
+    {
+        mpImageManager->Destruct();
+        delete mpImageManager;
+        mpImageManager = 0;
+    }
+    if (mpOnlineFlybyManager != 0)
+    {
+        delete mpOnlineFlybyManager;
+        mpOnlineFlybyManager = 0;
+    }
+    if (mpGameStateInviteManager != 0)
+    {
+        mpGameStateInviteManager->Destruct();
+        delete mpGameStateInviteManager;
+        mpGameStateInviteManager = 0;
     }
 
     // [FX-GS 2026-09-23, crash-parity G12-D12] PaybackManager::Destruct -- the console's own leg:
@@ -826,13 +896,20 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     case E_PREPARESTAGE_INVITEMANAGER:
     case E_PREPARESTAGE_FLYBYMANAGER:
     case E_PREPARESTAGE_NETWORKROUNDMANAGER:
-        LogPrepareStageOnce(14, "the manager prepares Mugshot..NetworkRound [deferred]");
+        LogPrepareStageOnce(14, "the manager prepares Mugshot/Payback/NetworkRound [deferred]");
         // [takedown wave 2026-09-02] stage 14 of the console ladder, `if (TakedownManager::Prepare(gsm+568))`
-        // -- REAL now (the others in this group stay deferred as the line above says).
+        // -- REAL now (Mugshot, Payback and NetworkRound stay deferred as the line above says).
         if (!PrepareTakedownBringUp())
         {
             break;
         }
+        // [PGEP] Stage 17: the invite manager's inlined Prepare (its game-event queue Prepared and
+        // Cleared around the prepared-bits clear); stage 18: the flyby managers' (this build's online
+        // one only). Neither can fail, so the console's ladder falls straight through both.
+        mePrepareStage = E_PREPARESTAGE_INVITEMANAGER;
+        mpGameStateInviteManager->Prepare();
+        mePrepareStage = E_PREPARESTAGE_FLYBYMANAGER;
+        mpOnlineFlybyManager->Prepare();
         mePrepareStage = E_PREPARESTAGE_PROGRESSION;
         // fall through
 
@@ -878,7 +955,11 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // fall through
 
     case E_PREPARESTAGE_IMAGE_MANAGER:
-        LogPrepareStageOnce(24, "GameStateImageManagerBase::Prepare [deferred]");
+        // [PGEP] Console stage 24: `stage = 24; if (!GameStateImageManagerBase::Prepare(gsm+0x2D4B0,
+        // lpAllocatorList->GetHeapAllocator(0x1B))) break;` -- the three gallery mugshot textures.
+        mePrepareStage = E_PREPARESTAGE_IMAGE_MANAGER;
+        if (!mpImageManager->Prepare(lpAllocatorList->GetHeapAllocator(KI_MODE_MANAGER_HEAP_BANK)))
+            break;
         // fall through
 
     case E_PREPARESTAGE_RUMBLE_MANAGER:
@@ -1765,40 +1846,6 @@ void GameStateModule::PreWorldUpdateTrainingBringUp(f32 lfGameTimestep)
 }
 
 // --------------------------------------------------------------------------------------------
-// ⭐⭐ [tut-ticker] ProcessGameEventsTrainingRequestBringUp -- the extracted CASE-113 arm of
-// ProcessGameEvents @0x823A0A18 (same extraction precedent as the case-111 PropHit arm):
-//     case 113: BrnGameState::TrainingManager::RequestTraining(this + 46640, *payload);
-// The payload's leading s32 is the BrnProgression::ETrainingType the world queued.
-// --------------------------------------------------------------------------------------------
-void GameStateModule::ProcessGameEventsTrainingRequestBringUp(
-        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue)
-{
-    if (lpGameEventQueue == 0 || mpTrainingManager == 0)
-    {
-        return;
-    }
-
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    s32 liType = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
-    while (lpEvent != 0)
-    {
-        if (liType == 113)   // E_EVENT_REQUEST_GAME_TRAINING
-        {
-            // (the caller -- PreWorldUpdateStuntBringUp's dispatcher walk -- already holds the
-            //  module's mbIsUpdating bracket, exactly as the console's ProcessGameEvents does.)
-            const s32 liTrainingType = *reinterpret_cast<const s32*>(lpEvent);
-            mpTrainingManager->RequestTraining(
-                static_cast<BrnProgression::ETrainingType>(liTrainingType));
-        }
-
-        const CgsModule::Event* lpNext = 0;
-        liType = lpGameEventQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
-        lpEvent = lpNext;
-    }
-}
-
-// --------------------------------------------------------------------------------------------
 // ApplyCarStats (X360 0x82381188).
 // Publish the newly-selected car's gameplay stats out of its VehicleListEntry as the 24-byte
 // action 198. The six payload words and their sources are read straight off the asm:
@@ -2006,24 +2053,27 @@ void GameStateModule::OnPlayerCarChange(CgsID lCarId, CgsID lWheelId,
 }
 
 // ============================================================================
-// FindPlayerScoringIndexForActiveRaceCar  @ 0x82363450
+// FindPlayerScoringIndexForActiveRaceCar
 //
-// Linear scan of the scoring module's eight per-player records (the console walks
-// `scoring + 20548 + 344*i`, comparing the leading word against the requested
-// active-race-car index) for the player scoring slot that owns leActiveRaceCarIndex.
-// ⚠️ The MISS arm returns E_PLAYER_SCORING_INDEX_0, not an invalid sentinel -- `result = 0`
-// at the console's LABEL_7 -- and that is exactly what start-of-game relies on: nothing is
-// mapped yet, so the player's car takes scoring slot 0.
-//
-// [FLAG PC bring-up] the scoring module's per-player record array is not homed on this slice
-// (the console reaches it as `this + 7632`, deep inside the un-modelled mid-object span), so
-// the scan itself has nothing to walk and the function returns the console's own miss value.
-// It is written as the miss arm, NOT as a fabricated scan. DELETE-WHEN BrnScoringSystem's
-// per-player record array is homed here.
+// Linear scan of the mode manager's scoring system's eight per-player records for the player
+// scoring slot whose active-race-car index is leActiveRaceCarIndex. The miss arm returns
+// E_PLAYER_SCORING_INDEX_0, not an invalid sentinel, and without the not-found assert
+// ScoringSystem::GetPlayerScoringIndex fires: start-of-game relies on it, nothing is mapped yet
+// and the player's car takes scoring slot 0.
 GameStateModuleIO::EPlayerScoringIndex
 GameStateModule::FindPlayerScoringIndexForActiveRaceCar(::EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    (void)leActiveRaceCarIndex;
+    const ScoringSystem* lpScoringSystem = mModeManager.GetScoringSystem();
+    for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)
+    {
+        const GameStateModuleIO::EPlayerScoringIndex leSlot =
+            static_cast<GameStateModuleIO::EPlayerScoringIndex>(liSlot);
+        if (lpScoringSystem->GetCarDataFromPlayerScoringIndex(leSlot)->GetActiveRaceCarIndex()
+            == leActiveRaceCarIndex)
+        {
+            return leSlot;
+        }
+    }
     return GameStateModuleIO::E_PLAYER_SCORING_INDEX_0;
 }
 
@@ -2047,7 +2097,7 @@ GameStateModule::FindPlayerScoringIndexForActiveRaceCar(::EActiveRaceCarIndex le
 //
 // ⭐ STEP 8 IS NOW REAL (2026-08-01). It is the console's own member -- DWARF
 // BrnGameStateModule.h:811 mbWaitingToPutPlayerInJunkyard -- and its reader, the extracted
-// case-78 arm, is ProcessGameEventsReallyEnterJunkyardBringUp() below. Without this store the
+// case-78 arm, lives in GameStateModule_ProcessGameEvents_wBT_01.cpp. Without this store the
 // junkyard entry stops half-done: the player's car is placed at maSpawnLocations[1] and NOTHING
 // ever posts the transition-in action, so the director's meJunkyardState stays E_JY_INACTIVE and
 // ArbStateCarSelect is never reached. That was the whole gap.
@@ -2168,11 +2218,10 @@ void GameStateModule::SendSetupPlayerCarEvent(GameStateModuleIO::GameActionQueue
 // profile every frame, so without this call a PC session wiped them and the next save wrote the wipe),
 // the max-car count and the rank cache (OnLoadProfile), the junkyard car (the saved one, at the junkyard
 // nearest where the player left it), and the smashed props (action 194 -> the prop world asks for the
-// profile's hit-prop bits -> ProcessGameEventsPropProgressionBringUp's tail answers).
+// profile's hit-prop bits -> the ProcessGameEvents tail answers).
 //
-// [PC seam] the console reaches this from ProcessGameEvents cases 8 and 109; this tree extracts those two
-// arms (ProcessGameEventsGameStartBringUp / ProcessGameEventsPropProgressionBringUp), and both run it
-// inside the output buffer's write lock with mbIsUpdating raised, as PreWorldUpdate does.
+// Callers: ProcessGameEvents cases 8 and 109, and ProcessGameEventsGameStartBringUp (the boot's event-8
+// seat); all run it inside the output buffer's write lock with mbIsUpdating raised, as PreWorldUpdate does.
 // ============================================================================
 void GameStateModule::OnProfileLoaded(GameStateModuleIO::OutputBuffer* lpOutput,
                                       GameStateModuleIO::GameActionQueue* lpOutputActionQueue)
@@ -2350,97 +2399,20 @@ void GameStateModule::ProcessGameEventsGameStartBringUp()
 }
 
 // ============================================================================
-// ProcessGameEventsReallyEnterJunkyardBringUp
-//   -- the extracted case-78 arm of ProcessGameEvents @0x823A0A18 (0x823A4590..0x823A45F8).
-// See the header for the full FLAG (why the GUI-event trigger is not used on this build).
-//
-// The console arm, instruction for instruction:
-//   0x823A4590  r29 = this + 0x38B72 (232306)
-//   0x823A4598  lbz  r11, 0(r29);  if (!r11) break                  -- mbWaitingToPutPlayerInJunkyard
-//   0x823A45A4  r3 = this + 0x2CDA0 (183712) == &mCarSelectManager
-//   0x823A45A8  r4 = the game ACTION queue
-//   0x823A45B0  bl  CarSelectManager::ReallyEnterJunkyardAtStartOfGame
-//   0x823A45B4  r30 = this + 0x38B80 (232320) == &mCachedCarSelectChangedAction
-//   0x823A45BC  ld   r11, 0(r30);  if (!r11) FireAssert(.., BrnGameStateModule.cpp, 0x1003=4099)
-//   0x823A45E0  AddEvent(queue, r30, 0x40, 0x40)                    -- action 64, 64 bytes
-//   0x823A45F4  stb  r18(==0), 0(r29)                               -- clear the latch
-//
-// ⚠️ THE ASSERT IS A 64-BIT TEST. Hex-Rays renders it `if (!*(v23 + 232324))` -- the classic
-// big-endian misrender of a `ld` at +232320 as a word read of its low half. The asm computes
-// r30 == this+232320 and does `ld r11, 0(r30)`, i.e. it tests the whole CgsID mJunkyardId. The
-// same r30 is then handed to AddEvent as the record base, which only makes sense at +232320.
-// ============================================================================
-void GameStateModule::ProcessGameEventsReallyEnterJunkyardBringUp(
-        GameStateModuleIO::GameActionQueue* lpActionQueue)
-{
-    if (!mbWaitingToPutPlayerInJunkyard)
-    {
-        return;
-    }
-
-    mCarSelectManager.ReallyEnterJunkyardAtStartOfGame(lpActionQueue);
-
-    // X360 assert literal, as IDA renders it: "mCachedCarSelectChangedAction.mJunkyard"... --
-    // the string is truncated in the export at 39 characters; the tail below is this repo's
-    // completion of it, in the file's own house style. The TEST is the console's.
-    CGS_ASSERT(mCachedCarSelectChangedAction.mJunkyardId != 0,
-               "mCachedCarSelectChangedAction.mJunkyardId != kCGSID_NULL");
-
-    // The 64-byte CarSelectionChangedAction the entry filled in. MainDirector::ProcessInputQueue
-    // case 64 is its consumer: it is the ONLY writer of the director GameState's mJunkyardId and
-    // mbJunkyardPosIsLeft.
-    lpActionQueue->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&mCachedCarSelectChangedAction),
-        KI_ACTION_CAR_SELECTION_CHANGED,
-        static_cast<s32>(sizeof(mCachedCarSelectChangedAction)));
-
-    mbWaitingToPutPlayerInJunkyard = false;
-
-    if (CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[GameStateModule::ProcessGameEvents case 78] ReallyEnterJunkyardAtStartOfGame done;"
-            << " junkyard=" << static_cast<u64>(mCachedCarSelectChangedAction.mJunkyardId)
-            << " posIsLeft=" << (mCachedCarSelectChangedAction.mbJunkyardPosIsLeft ? 1 : 0) << "\n";
-    }
-}
-
-// ============================================================================
 // PreWorldUpdateSetupPlayerCarBringUp -- the extracted one-shot leg of
 // PreWorldUpdate @0x823A5328 (0x823A5510..0x823A5540). See the header for the FLAG.
 // ============================================================================
 void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp()
 {
-    // Two legs of PreWorldUpdate live here now, each behind its own console latch, in the
-    // console's own body order: the one-shot setup leg @0x823A5510, then the case-78 arm of
-    // ProcessGameEvents @0x823A58B8.
-    //
-    // ⭐⭐⭐ [returning-player wave 2026-08-28] THE ORDERING STAND-IN IS RETIRED.
-    // This function used to take `bool lbMayCompleteJunkyardEntry` and the caller passed
-    // MainDirector::IsNewProfileIntroActive(). That is a NEW-PROFILE-ONLY signal, so on any boot
-    // that finds a Profile.sav the case-78 arm below never fired, the junkyard entry stayed HALF
-    // DONE for the whole run, RaceCarEntityModule::mbInCarSelectScreen was never cleared (only
-    // CarSelectManager::UpdateExitState posts the reset that clears it), and
-    // ActiveRaceCar::UpdateEngineState's case-OFF arm -- `demand && !inCarSelect` -- refused to
-    // crank the engine however long the throttle was held. A RETURNING PLAYER COULD NOT DRIVE.
-    // The gate is now the console's own game event 78 (see the header banner for why the
-    // "the event arrives before the latch" measurement that justified the stand-in was reading
-    // the WRONG OnEnter).
-    //
-    // ⚠️ THE ARM-SELECTION HAZARD THE OLD NOTE RECORDED IS REAL AND IS *NOT* WHAT THE STAND-IN
-    // WAS FOR. ArbStateCarSelect::Prepare picks its opening arm from mbNewProfileIntroActive, so
-    // an entry that completes before the GUI has raised that flag puts the state in the junkyard
-    // E_STATE_INTRO instead of E_STATE_GAME_INTRO_PART_ONE, and the intro's own fly-by request
-    // then trips that state's `!mbGameIntroFlybyActive` tripwire (:381) once per frame (measured:
-    // 163 asserts in a 98 s run). What protects against that is ORDER, not the new-profile flag:
-    // the real event 78 is posted by BrnGui::InGame::OnEnter, i.e. only once the GUI screen flow
-    // has reached the in-game screen -- which is the same screen state that raises the intro
-    // flag, and ~200 log lines later than the point the arm used to be able to fire from.
+    // The console's one-shot setup leg, behind its own latch. The case-78 arm that
+    // completes the entry it starts runs from ProcessGameEvents in PreWorldUpdateStuntBringUp,
+    // driven by the GUI's game event 78 (BrnGui::InGame::OnEnter's command 145 through
+    // BridgeGuiToGameState), as on the console.
     if (mpOutputBuffer == 0)
     {
         return;
     }
-    if (!mbSendSetupPlayerCarPending && !mbWaitingToPutPlayerInJunkyard)
+    if (!mbSendSetupPlayerCarPending)
     {
         return;
     }
@@ -2474,65 +2446,8 @@ void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp()
         SendSetUpAllEventStartsMessage(mpOutputBuffer);
     }
 
-    // The console's ProcessGameEvents pass, restricted to the one arm this tree has extracted.
-    // Runs in the SAME sub-step as the arming leg above and BEFORE the CarSelectManager tick --
-    // the console's own body order inside PreWorldUpdate (0x823A5510 / 0x823A58B8 / 0x823A5904).
-    ProcessGameEventsGuiStartedGameBringUp(&mGameEventCarryQueue, lpActionQueue);
-
     mbIsUpdating = false;
     mpOutputBuffer->UnlockForWrite();
-}
-
-// ============================================================================
-// ⭐⭐ ProcessGameEventsGuiStartedGameBringUp -- the QUEUE WALK that feeds the extracted
-// case-78 arm below. Same shape as the case-111 / 113 / 115 / pause arms in
-// GameStateModule_gUI_00.cpp: the console's dispatcher makes ONE pass over the merged event
-// queue and switches; this tree extracts one arm per function and each does its own walk.
-//
-// ⚠️ IT DOES NOT Clear() THE QUEUE. PreWorldUpdateStuntBringUp owns the console's Clear (the
-// one-frame-buffer invariant), later in the same sub-step, and the other arms must still see
-// this frame's events. This walk is read-only over the same content they will read.
-//
-// Event 78 is a bare 1-byte SIGNAL -- BridgeGuiToGameState @0x823DDB78 case 145 emits
-// `liType = 78; liSize = 1` with an uninitialised payload byte -- so there is nothing to
-// decode; the arrival IS the message.
-// ============================================================================
-void GameStateModule::ProcessGameEventsGuiStartedGameBringUp(
-        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
-        GameStateModuleIO::GameActionQueue* lpActionQueue)
-{
-    if (lpGameEventQueue == 0 || lpActionQueue == 0)
-    {
-        return;
-    }
-
-    const CgsModule::Event* lpEvent = 0;
-    s32                     liSize  = 0;
-    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
-
-    while (lpEvent != 0)
-    {
-        if (liType == GameStateModuleIO::E_GUI_HAS_STARTED_GAME)
-        {
-            // [DIAG] NOT IN THE X360 BINARY. The one rung that separates "the GUI never told us"
-            // from "it told us and the latch was down" -- the exact ambiguity that hid this
-            // defect behind a stand-in for a week [[diagnostics-that-lie]]. One line per event.
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[jyentry] game event 78 (GUI has started game) received; waiting="
-                    << (mbWaitingToPutPlayerInJunkyard ? 1 : 0) << "\n";
-            }
-
-            // The console's case-78 arm. Its own gate (mbWaitingToPutPlayerInJunkyard) is inside.
-            ProcessGameEventsReallyEnterJunkyardBringUp(lpActionQueue);
-        }
-
-        // GetNextEvent takes the CURRENT event and writes the next one through its second
-        // parameter; sequenced through a local so the two uses of lpEvent do not alias.
-        const CgsModule::Event* lpCurrent = lpEvent;
-        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
-    }
 }
 
 // ============================================================================
@@ -2563,119 +2478,6 @@ void GameStateModule::PreWorldUpdatePublishControllerActiveBringUp()
     // own extraction), so the store is made under the same lock here.
     mpOutputBuffer->LockForWrite();
     mpOutputBuffer->SetControllerActive(IsControllerActive());
-    mpOutputBuffer->UnlockForWrite();
-}
-
-// ============================================================================
-// PreWorldUpdateCarSelectBringUp -- the extracted CAR-SELECT leg of PreWorldUpdate
-// @0x823A5328 (0x823A5904..0x823A5958). See the header for the FLAG and the asm.
-// ============================================================================
-void GameStateModule::PreWorldUpdateCarSelectBringUp(f32 lfGameTimestep)
-{
-    if (mpOutputBuffer == 0)
-    {
-        return;
-    }
-
-    // The console's gate: a 64-bit load of CarSelectManager::mJunkyardId (this + 0x2CDC0 ==
-    // mCarSelectManager + 0x20), non-zero == "the player is in a junkyard".
-    if (!mCarSelectManager.IsInJunkyard())
-    {
-        return;
-    }
-
-    mpOutputBuffer->LockForWrite();
-    GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();
-    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");   // BrnGameStateModule.cpp:1149
-    mbIsUpdating = true;
-    // [FLAG PC bring-up] stand-in for the world's StreamingCompleteEvent -- see
-    // CarSelectManager::UpdateExitStreamingBringUp. Runs immediately before Update so the
-    // console's own case-9 arm (UpdateExitState) sees the cleared latch in the SAME sub-step,
-    // which is what happens on the console when the exit needs no new streaming.
-    mCarSelectManager.UpdateExitStreamingBringUp(lpActionQueue);
-    mCarSelectManager.Update(lpActionQueue, 0, lfGameTimestep);
-    mbIsUpdating = false;
-    mpOutputBuffer->UnlockForWrite();
-}
-
-// ============================================================================
-// ProcessGameEventsActivateCarSelectBringUp -- the extracted case-94 JUNKYARD arm of
-// ProcessGameEvents @0x823A0A18. See the header for the FLAG and the (action, type) proof.
-// ============================================================================
-void GameStateModule::ProcessGameEventsActivateCarSelectBringUp(s32 liAction, s32 liCarSelectType)
-{
-    // The three ACTION values the console's inner switch recognises. Left as TU-local constants
-    // rather than promoted into an enum: the X360 switch is over bare integers and no DWARF
-    // enum for them has been found, so naming them publicly would be a fabricated type.
-    const s32 KI_CAR_SELECT_ACTION_START  = 0;   // -> StartCarSelectState
-    const s32 KI_CAR_SELECT_ACTION_MODIFY = 1;   // -> EnterModification
-    const s32 KI_CAR_SELECT_ACTION_EXIT   = 4;   // -> ExitJunkyard
-
-    // The console's outer pivot: word1 selects the manager. 1 == the junkyard
-    // (CarSelectManager), 2 == the online event (OnlineCarSelectManager, not wired here), and
-    // anything else is the console's own "Unknown car select type" assert @cpp:3302.
-    if (liCarSelectType != GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD)
-    {
-        if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[GameStateModule::ProcessGameEvents case 94] car-select type " << liCarSelectType
-                << " is not the junkyard -- the OnlineCarSelectManager arm is not plumbed on this"
-                   " build (FLAG).\n";
-        }
-        return;
-    }
-
-    if (mpOutputBuffer == 0)
-    {
-        return;
-    }
-
-    // The console's own gate for this arm (BrnGameStateModule.cpp:3222).
-    CGS_ASSERT(mCarSelectManager.IsInJunkyard(), "mCarSelectManager.IsInJunkyard()");
-    if (!mCarSelectManager.IsInJunkyard())
-    {
-        return;
-    }
-
-    mpOutputBuffer->LockForWrite();
-    GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();
-    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");
-    mbIsUpdating = true;
-
-    switch (liAction)
-    {
-    case KI_CAR_SELECT_ACTION_START:          // 0
-        if (CgsDev::Log::gpDebugPrint != 0)
-            *CgsDev::Log::gpDebugPrint
-                << "[GameStateModule::ProcessGameEvents case 94] action 0 -> StartCarSelectState\n";
-        mCarSelectManager.StartCarSelectState(lpActionQueue);
-        break;
-
-    case KI_CAR_SELECT_ACTION_MODIFY:         // 1
-        if (CgsDev::Log::gpDebugPrint != 0)
-            *CgsDev::Log::gpDebugPrint
-                << "[GameStateModule::ProcessGameEvents case 94] action 1 -> EnterModification\n";
-        mCarSelectManager.EnterModification(lpActionQueue);
-        break;
-
-    case KI_CAR_SELECT_ACTION_EXIT:           // 4
-        if (CgsDev::Log::gpDebugPrint != 0)
-            *CgsDev::Log::gpDebugPrint
-                << "[GameStateModule::ProcessGameEvents case 94] action 4 -> ExitJunkyard\n";
-        mCarSelectManager.ExitJunkyard(lpActionQueue);
-        break;
-
-    default:
-        // The console's formatted default assert (BrnGameStateModule.cpp:3245).
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Unknown car select action",
-                                   "GameSource/GameState/BrnGameStateModule.cpp", 3245);
-        CgsDev::Assert::EndAssert();
-        break;
-    }
-
-    mbIsUpdating = false;
     mpOutputBuffer->UnlockForWrite();
 }
 

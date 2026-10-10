@@ -1139,6 +1139,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         void AddPredictedHullChange(const HullChangeInfo& lrInfo);
         // DWARF .cpp:7392. @0x827211B0 (export hole). The divergence dump.
         void DEBUGDumpHullPredictions();
+        void DEBUGValidateSoaData();   // body in BrnTrafficEntityModule_wBT_01.cpp
         // DWARF .cpp:3905. @0x82741AF8, PreSceneUpdate's RUNNING arm (0x8274ABBC).
         void HandleIncomingNetworkData(const BrnTrafficIO::InputBuffer_PreScene* lpInput);
         void SpawnNewTraffic(const ActiveHullSet& lrNewActiveHulls);      // @ 0x82748A40
@@ -1613,6 +1614,8 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // Logger::HashState snapshots the module's pools, free lists and active hulls by
         // direct member read (every read in its body is an inlined member load).
         friend struct Logger;
+        // The traffic debug overlay reads the module's hull lists directly (DrawPressure).
+        friend class DebugComponent;
 
     private:
         // MEMBERS in DWARF/ship order. Every `:NNN` is the DWARF's source line.

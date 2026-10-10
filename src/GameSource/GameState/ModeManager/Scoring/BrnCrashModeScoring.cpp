@@ -89,6 +89,7 @@
 // [showtime score wave 2026-08-29] DealWithShowtimeStunt dereferences its WorldStuntAction to
 // reach mId. A .cpp include, NOT a header include -- the keystone's by-value embed is unaffected.
 #include "GameSource/GameState/BrnGameActions.h"       // GameStateModuleIO::WorldStuntAction
+#include "GameSource/GameState/BrnGameEvents.h"        // TriggerCrashBreakerEvent / VehicleLeaptEvent (the two payloads read)
 #include "rw/math/vpu/vector3_operation.h"            // rw::math::vpu::Magnitude / Dot / operator-
 
 namespace BrnGameState
@@ -158,7 +159,6 @@ namespace BrnGameState
     // attested by the dossier are reproduced; the few the dwarfdump left blank are not
     // referenced by any of the bodies below (the X360 inlines the literals it uses).
     // ========================================================================
-    static const s32 KI_SCORE_BONUS_PER_OVERHEAD_SIGN = 10000;   // BrnCrashModeScoring.h:46
     static const s32 KI_SCORE_BONUS_FOR_COMBO_CRASH   = 1000;    // BrnCrashModeScoring.h:47 (per extra chain link)
     static const s32 KI_SCORE_BONUS_PER_PROP_HIT      = 100;     // BrnCrashModeScoring.cpp:34
     static const s32 KI_SCORE_BONUS_PER_BILLBOARD_HIT = 10000;   // BrnCrashModeScoring.cpp:35 (prop flag bit 1)
@@ -427,7 +427,7 @@ namespace BrnGameState
     // member miStuntsPerformed and does nothing else). The event payload pointer is not
     // dereferenced by the X360 body, so no field of CrashComboItemEvent is read here.
     // ------------------------------------------------------------------------
-    void CrashModeScoring::DealWithComboItem(const CrashComboItemEvent* /*lpComboItemEvent*/)
+    void CrashModeScoring::DealWithComboItem(const GameStateModuleIO::CrashComboItemEvent* /*lpComboItemEvent*/)
     {
         ++miStuntsPerformed;
     }
@@ -437,7 +437,7 @@ namespace BrnGameState
     // A pickup counts as activity: the only effect in the X360 body is resetting the
     // event-idle timer. The PickupEvent payload is not dereferenced.
     // ------------------------------------------------------------------------
-    void CrashModeScoring::DealWithPickup(const PickupEvent* /*lpPickupEvent*/)
+    void CrashModeScoring::DealWithPickup(const GameStateModuleIO::PickupEvent* /*lpPickupEvent*/)
     {
         mfTimeSinceLastEvent = 0.0f;
     }
@@ -454,18 +454,12 @@ namespace BrnGameState
     // &rw::math::fpu::EPSILON for the identical |value| compare (vcmpgefp EPSILON >= |value|
     // == the X360's !(|value| > EPSILON)). The compared field is the event's mfTimeUntilStart
     // (PS3 reads &lpCrashbreakerEvent->mfTimeUntilStart at the same +0x18 the X360 uses).
-    //
-    // FLAG: TriggerCrashBreakerEvent is forward-declared (pointer-only) here -- its float
-    // field mfTimeUntilStart @+0x18 cannot be named until that event type is homed; read via
-    // a flagged reinterpret (mirrors DealWithVehicleLeaping). Replace with the named accessor
-    // once TriggerCrashBreakerEvent lands.
     // ------------------------------------------------------------------------
-    void CrashModeScoring::DealWithCrashbreakerRequest(const TriggerCrashBreakerEvent* lpEvent)
+    void CrashModeScoring::DealWithCrashbreakerRequest(const GameStateModuleIO::TriggerCrashBreakerEvent* lpEvent)
     {
         mfTimeSinceLastEvent = 0.0f;
         const f32 KF_CRASHBREAKER_REQUEST_EPSILON = 1.1920929e-7f; // rw::math::fpu::EPSILON (PS3 0x1CFF24)
-        const f32 lfRequestValue =
-            *reinterpret_cast<const f32*>(reinterpret_cast<const u8*>(lpEvent) + 0x18); // FLAG: un-homed mfTimeUntilStart
+        const f32 lfRequestValue = lpEvent->mfTimeUntilStart;
         const f32 lfRequestMagnitude = (lfRequestValue < 0.0f) ? -lfRequestValue : lfRequestValue; // vandc sign-mask
         if (!(lfRequestMagnitude > KF_CRASHBREAKER_REQUEST_EPSILON))
         {
@@ -478,16 +472,10 @@ namespace BrnGameState
     // Add the number of cars leapt this event to the running total and reset the
     // event-idle timer. The X360 reads the first int of the VehicleLeaptEvent payload
     // (*a2) as the per-event leap count.
-    //
-    // FLAG: VehicleLeaptEvent is forward-declared (pointer-only) in this scope -- its
-    // first-int field that the X360 reads (the per-event leap count) cannot be named until
-    // that event type is homed. The store-for-store effect is `miNumCarsLeaped += *(int*)a2`;
-    // bodied here against the raw first word with a clearly-flagged reinterpret so the count
-    // arithmetic is preserved. Replace with the named accessor once VehicleLeaptEvent lands.
     // ------------------------------------------------------------------------
     void CrashModeScoring::DealWithVehicleLeaping(const GameStateModuleIO::VehicleLeaptEvent* lpLeapEvent)
     {
-        const s32 liNumLeaptThisEvent = *reinterpret_cast<const s32*>(lpLeapEvent); // FLAG: un-homed field
+        const s32 liNumLeaptThisEvent = lpLeapEvent->miVehicleLeaptCount;
         miNumCarsLeaped += liNumLeaptThisEvent;
         mfTimeSinceLastEvent = 0.0f;
     }

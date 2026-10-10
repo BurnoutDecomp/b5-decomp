@@ -15,6 +15,14 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"       // RaceCarPhysics (GetTransform / GetDeformableAABB / GetLinearVelocity)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"         // CgsGeometric::AxisAlignedBox
 #include "GameSource/World/BrnEntityTypes.h"                                        // BrnWorld::E_ENTITYTYPE_*
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                             // CgsCore::SPrintf
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                         // CgsDev::SimpleStrStream
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"       // DebugUI::GetMetrics
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+
+int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
 namespace BrnPhysics
 {
@@ -149,6 +157,166 @@ namespace Vehicle
     const char* VehicleManagerDebugComponent::GetName() const
     {
         return "Vehicle Manager";
+    }
+
+    namespace
+    {
+        // The impact-situation names and the slam-duration situation scales the HUD prints. The
+        // scale table holds the same image values VehicleManager's slam path multiplies the
+        // duration by (0.75 / 0.25 / 1.0 / 2.0).
+        const char* const KAPC_IMPACT_SITUATION_NAMES[E_IMPACT_SITUATION_COUNT] =
+        {
+            "Player on AI", "AI on Player", "AI on AI", "Network",
+        };
+
+        const f32 KAF_SLAM_SITUATION_SCALE[E_IMPACT_SITUATION_COUNT] = { 0.75f, 0.25f, 1.0f, 2.0f };
+
+        const f32 KF_RADIANS_TO_DEGREES = 57.2957763671875f;
+
+        rw::math::vpu::Vector2 MakeVector2(f32 lfX, f32 lfY)
+        {
+            rw::math::vpu::Vector2 lv2Result;
+            lv2Result.x = lfX;
+            lv2Result.y = lfY;
+            lv2Result.z = 0.0f;
+            lv2Result.w = 0.0f;
+            return lv2Result;
+        }
+    }
+
+    void VehicleManagerDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
+    {
+        static const f32 KF_X          = 100.0f;
+        static const f32 KF_TEXT_SCALE = 20.0f;
+        static const u32 KU_COLOUR     = 0xFFFFFFFFu;
+
+        if (mbSlamDebugRenderEnabled)
+        {
+            RenderContact(lpRender);
+        }
+
+        if (mbDrawLastSlamInfo)
+        {
+            CgsDev::SimpleStrStream lStream;
+
+            if (meLastSlamImpactSituation == E_IMPACT_SITUATION_INVALID)
+            {
+                lStream << "Invalid";
+            }
+            else
+            {
+                lStream << "Slam " << KAPC_IMPACT_SITUATION_NAMES[meLastSlamImpactSituation] << ", ";
+                lStream << "Duration: " << mfLastSlamDuration << "s, ";
+                lStream << "(Base duration: " << mfLastSlamBaseDuration << ", ";
+                lStream << "Mass factor " << mfLastSlamMassFactor << ", ";
+                lStream << "Situation scale: " << KAF_SLAM_SITUATION_SCALE[meLastSlamImpactSituation] << ") ";
+            }
+
+            MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 50.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+        }
+
+        if (mbDrawLastShuntInfo)
+        {
+            CgsDev::SimpleStrStream lStream;
+
+            if (meLastShuntImpactSituation == E_IMPACT_SITUATION_INVALID)
+            {
+                lStream << "Invalid";
+            }
+            else
+            {
+                lStream << "Shunt " << KAPC_IMPACT_SITUATION_NAMES[meLastShuntImpactSituation] << ", ";
+                lStream << "Magnitude: " << mfLastShuntMagnitude;
+                lStream << "(Closing speed: " << mfLastShuntClosingSpeed << ")";
+            }
+
+            MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 80.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+        }
+    }
+
+    void VehicleManagerDebugComponent::RenderContact(CgsDev::Debug2DImmediateRender* lpRender) const
+    {
+        CgsDev::DebugInterface lDebugInterface;
+        const CgsDev::DebugUI::Metrics lMetrics = lDebugInterface.GetUI().GetMetrics();
+        const f32 lfScreenWidth = lMetrics.mfScreenWidth;
+
+        rw::math::vpu::Vector2 lv2Position = MakeVector2(lfScreenWidth - 80.0f, 60.0f);
+        RenderCarDiagram(lpRender, lv2Position, 0xFFFF0000u,
+                         mbDisplayContact ? &mPlayerCarContactPosition : nullptr,
+                         mbDisplayContact ? &mClosingVelocityPlayerCarSpace : nullptr,
+                         mbDisplayContact ? &mPlayerCarVelocity : nullptr);
+
+        lv2Position.y += 120.0f;
+        RenderCarDiagram(lpRender, lv2Position, 0xFF00FF00u,
+                         mbDisplayContact ? &mOtherCarContactPosition : nullptr,
+                         mbDisplayContact ? &mClosingVelocityOtherCarSpace : nullptr,
+                         mbDisplayContact ? &mOtherCarVelocity : nullptr);
+
+        if (mbDisplayContact)
+        {
+            char lacAngleText[64];
+            CgsCore::SPrintf(lacAngleText, sizeof(lacAngleText), "%d deg",
+                             static_cast<s32>(mfOtherCarContactAngleRad * KF_RADIANS_TO_DEGREES));
+            lpRender->DrawText(lacAngleText, MakeVector2(lfScreenWidth - 100.0f, 330.0f), 16.0f,
+                               0xFF0080FFu, false);
+        }
+    }
+
+    // DrawBox takes (position, size): the body is a 40x80 box at lrPosition and the wheels are
+    // 5x20 boxes just outside its corners. The contact point maps the car-space x / -z in
+    // [-0.5, 0.5] across the wheel-to-wheel span (45 x 40); each velocity line runs from
+    // centre - (v.x, v.z) to the centre.
+    void VehicleManagerDebugComponent::RenderCarDiagram(CgsDev::Debug2DImmediateRender* lpRender,
+                                                        const rw::math::vpu::Vector2& lrPosition,
+                                                        CgsDev::RGBA lColour,
+                                                        const rw::math::vpu::Vector3* lpContactPosition,
+                                                        const rw::math::vpu::Vector3* lpClosingVelocity,
+                                                        const rw::math::vpu::Vector3* lpCarVelocity) const
+    {
+        static const f32 KF_CAR_WIDTH      = 40.0f;
+        static const f32 KF_CAR_LENGTH     = 80.0f;
+        static const f32 KF_WHEEL_WIDTH    = 5.0f;
+        static const f32 KF_WHEEL_LENGTH   = 20.0f;
+        static const f32 KF_WHEEL_FRONT    = 10.0f;
+        static const f32 KF_WHEEL_REAR     = 30.0f;
+        static const f32 KF_VELOCITY_SCALE = 1.0f;
+        static const u32 KU_WHEEL_COLOUR   = 0xFF000000u;
+
+        const rw::math::vpu::Vector2 lv2WheelSize = MakeVector2(KF_WHEEL_WIDTH, KF_WHEEL_LENGTH);
+
+        const f32 lfLeftWheelX  = lrPosition.x - KF_WHEEL_WIDTH;
+        const f32 lfFrontWheelY = lrPosition.y + KF_WHEEL_FRONT;
+        const f32 lfRightWheelX = lfLeftWheelX + KF_CAR_WIDTH + KF_WHEEL_WIDTH;
+        const f32 lfRearWheelY  = lrPosition.y + KF_CAR_LENGTH - KF_WHEEL_REAR;
+
+        lpRender->DrawBox(lrPosition, MakeVector2(KF_CAR_WIDTH, KF_CAR_LENGTH), lColour);
+        lpRender->DrawBox(MakeVector2(lfLeftWheelX, lfFrontWheelY), lv2WheelSize, KU_WHEEL_COLOUR);
+        lpRender->DrawBox(MakeVector2(lfRightWheelX, lfFrontWheelY), lv2WheelSize, KU_WHEEL_COLOUR);
+        lpRender->DrawBox(MakeVector2(lfLeftWheelX, lfRearWheelY), lv2WheelSize, KU_WHEEL_COLOUR);
+        lpRender->DrawBox(MakeVector2(lfRightWheelX, lfRearWheelY), lv2WheelSize, KU_WHEEL_COLOUR);
+
+        if (lpContactPosition != nullptr)
+        {
+            const f32 lfContactX = (lpContactPosition->x + 0.5f) * (lfRightWheelX - lfLeftWheelX) + lfLeftWheelX;
+            const f32 lfContactY = (-lpContactPosition->z + 0.5f) * (lfRearWheelY - lfFrontWheelY) + lfFrontWheelY;
+
+            lpRender->DrawBox(MakeVector2(lfContactX, lfContactY), lv2WheelSize, 0xFF0000FFu);
+        }
+
+        if (lpClosingVelocity != nullptr)
+        {
+            CGS_ASSERT(lpCarVelocity != NULL, "lpCarVelocity != NULL");
+
+            const rw::math::vpu::Vector2 lv2Centre =
+                MakeVector2(lrPosition.x + KF_CAR_WIDTH * 0.5f, lrPosition.y + KF_CAR_LENGTH * 0.5f);
+
+            lpRender->DrawLine(MakeVector2(lv2Centre.x - lpClosingVelocity->x * KF_VELOCITY_SCALE,
+                                           lv2Centre.y - lpClosingVelocity->z * KF_VELOCITY_SCALE),
+                               lv2Centre, 0xFFFFFF00u);
+            lpRender->DrawLine(MakeVector2(lv2Centre.x - lpCarVelocity->x * KF_VELOCITY_SCALE,
+                                           lv2Centre.y - lpCarVelocity->z * KF_VELOCITY_SCALE),
+                               lv2Centre, 0xFF00FFFFu);
+        }
     }
 
     // ========================================================================================

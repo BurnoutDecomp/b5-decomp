@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/Geometric/Intersection/CgsTriangleBox.h"
 
 #include <cmath>
+#include <cstring>   // std::memcpy (ClipBoxEdgeAgainstTriangle's mask bit pattern)
+#include <limits>    // std::numeric_limits (ClipBoxEdgeAgainstTriangle's refined reciprocal)
 
 // ============================================================================
 // CgsGeometric::BT::TriangleData::Construct -- reconstructed from
@@ -133,5 +135,86 @@ namespace CgsGeometric
             mOuter12 = EdgeNormalize(EdgeCross(mEdge12, mNormal));
             mOuter20 = EdgeNormalize(EdgeCross(mEdge20, mNormal));
         }
+    }
+}
+
+// ============================================================================
+// CgsGeometric::ClipBoxEdgeAgainstTriangle (56 instructions, straight-line VMX).
+//
+//   Arguments: the TriangleData, the edge's two BoxVertexData, lPoint.
+//   lPlaneLength = end.mPlaneOffset - start.mPlaneOffset;
+//   lParam       = start.mPlaneOffsetFromTriangle * (1 / lPlaneLength)
+//                  (`vrefp` + two Newton-Raphson steps, then vmulfp128);
+//   lPosition    = (end.mPosition - start.mPosition) * lParam + start.mPosition, stored
+//                  to lPoint before any test;
+//   lrU/lrV/lrW  = (lPosition - mVertexN) . mOuterNN for the three walls (vmsum3fp128),
+//                  each tested as (0 >= x);
+//   result       = (all three | none of the three) & (lPlaneLength != 0)
+//                  & (lParam >= 0) & !(lParam > 1).
+// Local names are the declaration's own.
+// PC LOWERING: the refined reciprocal is a divide, except that a zero or infinite
+// lPlaneLength gives the console's NaN (its first Newton-Raphson step multiplies 0 by
+// infinity), which reaches lPoint; the fused multiply-add is a multiply then an add.
+// Compared with an interpreter of the instruction stream on 1,000 random edges (a sixth of
+// them parallel to the plane): identical masks and points.
+// ============================================================================
+
+namespace CgsGeometric
+{
+    rw::math::vpu::MaskScalar ClipBoxEdgeAgainstTriangle(const BT::TriangleData&  lTriangleData,
+                                                         const BT::BoxVertexData& lLineStartVertex,
+                                                         const BT::BoxVertexData& lLineEndVertex,
+                                                         Vector3&                 lPoint)
+    {
+        const Vector3& lLineStart = lLineStartVertex.mPosition;
+        const Vector3& lLineEnd   = lLineEndVertex.mPosition;
+
+        const f32 lfStartPlaneOffset = lLineStartVertex.mPlaneOffset.x;
+        const f32 lfEndPlaneOffset   = lLineEndVertex.mPlaneOffset.x;
+        const f32 lfStartTriOffset   = lLineStartVertex.mPlaneOffsetFromTriangle.x;
+
+        const f32 lfPlaneLength = lfEndPlaneOffset - lfStartPlaneOffset;
+        const f32 lfReciprocal  = 1.0f / lfPlaneLength;
+        const f32 lfParam       = lfStartTriOffset
+                                * ((std::isfinite(lfReciprocal) && lfReciprocal != 0.0f)
+                                       ? lfReciprocal : std::numeric_limits<f32>::quiet_NaN());
+
+        Vector3 lPosition;
+        lPosition.x = (lLineEnd.x - lLineStart.x) * lfParam + lLineStart.x;
+        lPosition.y = (lLineEnd.y - lLineStart.y) * lfParam + lLineStart.y;
+        lPosition.z = (lLineEnd.z - lLineStart.z) * lfParam + lLineStart.z;
+        lPosition.w = (lLineEnd.w - lLineStart.w) * lfParam + lLineStart.w;
+        lPoint = lPosition;
+
+        const Vector3& lVert0 = lTriangleData.mVertex0;
+        const Vector3& lVert1 = lTriangleData.mVertex1;
+        const Vector3& lVert2 = lTriangleData.mVertex2;
+        const Vector3& lOut0  = lTriangleData.mOuter01;
+        const Vector3& lOut1  = lTriangleData.mOuter12;
+        const Vector3& lOut2  = lTriangleData.mOuter20;
+
+        const f32 lfU = (lPosition.x - lVert0.x) * lOut0.x + (lPosition.y - lVert0.y) * lOut0.y + (lPosition.z - lVert0.z) * lOut0.z;
+        const f32 lfV = (lPosition.x - lVert1.x) * lOut1.x + (lPosition.y - lVert1.y) * lOut1.y + (lPosition.z - lVert1.z) * lOut1.z;
+        const f32 lfW = (lPosition.x - lVert2.x) * lOut2.x + (lPosition.y - lVert2.y) * lOut2.y + (lPosition.z - lVert2.z) * lOut2.z;
+
+        const bool lbU = (0.0f >= lfU);
+        const bool lbV = (0.0f >= lfV);
+        const bool lbW = (0.0f >= lfW);
+
+        const bool lbAllPositive        = lbU && lbV && lbW;
+        const bool lbAllNegative        = !lbU && !lbV && !lbW;
+        const bool lbRayIntersects      = lbAllPositive || lbAllNegative;
+        const bool lbNoneParallel       = !(lfPlaneLength == 0.0f);
+        const bool lbLinePlaneIntersects = (lfParam >= 0.0f) && !(lfParam > 1.0f);
+
+        const bool lbResult = lbRayIntersects && lbNoneParallel && lbLinePlaneIntersects;
+
+        rw::math::vpu::MaskScalar lResult;
+        const u32 luLane = lbResult ? 0xFFFFFFFFu : 0u;
+        std::memcpy(&lResult.x, &luLane, sizeof(u32));
+        std::memcpy(&lResult.y, &luLane, sizeof(u32));
+        std::memcpy(&lResult.z, &luLane, sizeof(u32));
+        std::memcpy(&lResult.w, &luLane, sizeof(u32));
+        return lResult;
     }
 }

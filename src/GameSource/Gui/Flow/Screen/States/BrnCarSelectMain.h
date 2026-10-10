@@ -143,13 +143,7 @@ namespace BrnGui
         // "DISCONNECT" (+ expected-component drop while still loading).
         void HandleLeftGameEvent(const CgsModule::Event* lpLeftGameEvent);
         // @ 0x824C9008 -- event 57 (launching): host/join overlay + the mode-string message
-        // params. ⭐ CORRECTED 2026-08-02: the previous note here said the body belonged to
-        // another TU (per the ledger identity) and must NOT be defined in a CarSelectMain
-        // partfile. The function disproves that itself -- its four asserts bake
-        // ".../States/BrnCarSelectMain.cpp" at lines 712/716/719/731 and the DecFIGS DWARF
-        // places it at BrnCarSelectMain.cpp:690. The ledger identity is misattributed. The body
-        // (an ONLINE-ONLY overlay raise, still unreconstructed, guarded by a loud assert rather
-        // than a silent {}) now lives beside its caller in BrnCarSelectMain_wG_03.cpp.
+        // params. Its asserts bake BrnCarSelectMain.cpp, so the body lives there beside its caller.
         void HandleLaunchingEvent(const CgsModule::Event* lpLaunchingEvent);
         // @ 0x824C8EF0 -- event 58 (launched): on failure, "CNOnlLchFail" overlay carrying
         // KPC_LAUNCH_FAILED_STRINGIDS[result] as message param 2.
@@ -172,7 +166,7 @@ namespace BrnGui
         // ids). HandleLaunchedEvent indexes it with the non-zero result word.
         static const char* const KPC_LAUNCH_FAILED_STRINGIDS[7];
         // @ 0x82F26CB0 (17 string pointers, EGameModeType-indexed; only the online modes
-        // 10..14 are populated). Consumed by HandleLaunchingEvent (out of this TU's scope).
+        // 10..14 are populated). Consumed by HandleLaunchingEvent.
         static const char* const KPAC_MODE_STRINGS[18];
 
     protected:

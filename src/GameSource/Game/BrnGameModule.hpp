@@ -188,6 +188,7 @@ namespace BrnGame
         // The game module owns the GameDataModule; the loading flow (case 8) prepares it through here
         // (and via BrnGame::GetMainGameDataModule()) so there's ONE instance, not a parallel copy.
         BrnResource::GameDataModule& GetGameDataModule() { return mGameDataModule; }
+        bool GuiAcceptsControllerInput() const { return mbGuiAcceptsControllerInput; }
         // The world module (the loading flow's LoadWorldModule drives its Prepare with
         // the update IO stacks -- X360 vtable +68 dispatch @0x823E72F0).
         WorldModule& GetWorldModule() { return mWorldModule; }
@@ -209,6 +210,7 @@ namespace BrnGame
         // E_LOADINGSTAGE_NETWORK; the per-frame spine drives ProcessBeforeSimulation /
         // ProcessAfterSimulation through DoUpdate_NetworkPreSim / DoUpdate_NetworkPostSim).
         BrnNetwork::BrnNetworkModule& GetNetworkModule() { return mNetworkModule; }
+        CgsInput::InputModule& GetInputModule() { return mInputModule; }   // LoadingScriptedState::LoadControllerModule
 
         // Per-frame spines the in-game flow state drives directly (non-virtual; each returns
         // an int status the void flow-state Update/Render slots discard):
@@ -677,6 +679,17 @@ namespace BrnGame
         // module OUTPUT buffer's out-event queue; the PC module publishes the same queue
         // via BrnGui::GuiModule::GetGuiOutQueue().
         void BridgeGuiToGame(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue);
+
+        // GUI/world -> GameData and GUI -> world staging bridges (source homes
+        // GameBridgeGUIToX.cpp and GameBridgeWorldToX.cpp); bodied in the
+        // _wBT_01 partfiles beside those homes.
+        void BridgeGuiToResource(BrnResource::GameDataIO::InputBuffer* lpGDMInput,
+                                 const CgsGui::ModelIO::OutputBuffer* lpModelOutput,
+                                 const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput);
+        void BridgeGuiToWorld(BrnWorldIO::UpdateInputBuffer* lpWorldInput,
+                              const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer);
+        void BridgeWorldToResource(BrnResource::GameDataIO::InputBuffer* lpGDMInput,
+                                   const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput);
 
         // ⭐ X360 0x823CBF70 -- the GUI->DIRECTOR out-event consumer. Walks the same GUI
         // out-event queue BridgeGuiToGame walks and raises the matching published flag on the
@@ -1223,16 +1236,6 @@ namespace BrnGame
         // car-select screen currently on the flow. Cleared when that screen unsubscribes, so a
         // re-entry republishes. See PublishCarSelectionToGui.
         bool mbCarSelectionPublished;
-
-        // [FLAG PC bring-up] (no console member): one GUI out-event 192
-        // (GuiEventActivateCarSelect) seen by BridgeGuiToGame's channel-40 walk, held until the
-        // sim spine's car-select leg can hand it to the extracted ProcessGameEvents case-94 arm
-        // under the game-state module's own output-buffer lock. [0] = the action word,
-        // [1] = the car-select type word -- in the console's own payload order.
-        // DELETE-WHEN BridgeGuiToGameState has a caller and ProcessGameEvents drains a real
-        // post-world input buffer.
-        bool mbCarSelectActivatePending;
-        s32  maiPendingCarSelectActivate[2];
 
         // The two per-frame flags BridgeGameStateToSound @0x823CDE50 ORs into the
         // sound UpdateInfo byte (X360 +10094119 / +10094120; writers un-decoded --

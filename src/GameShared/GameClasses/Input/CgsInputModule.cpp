@@ -214,6 +214,64 @@ void InputModule::Destruct()
     CgsModule::ModuleSingleBuffered::Destruct();
 }
 
+// Bind every queued {player, port} request. A request naming port -1 takes the first free
+// port, scanning from where the previous auto-bind in this pass left off (a failed scan leaves
+// port -1 with the last bind result). Each request publishes a BindResult {player, port, code}.
+void InputModule::ProcessBindRequestQueue(const InputIO::PostWorldInputBuffer* lpPostWorldBuffer)
+{
+    s32 liNextAutoPort = 0;
+    const s32 liNumRequests = lpPostWorldBuffer->GetBindRequestQueue()->GetLength();
+
+    for (s32 liRequest = 0; liRequest < liNumRequests; ++liRequest)
+    {
+        const InputIO::BaseInputEvent& lrRequest = lpPostWorldBuffer->GetBindRequestQueue()->GetEvent(liRequest);
+        EBindResult leResult = E_BINDRESULTOK;
+        s32 liPort = lrRequest.miPort;
+
+        if (liPort != -1)
+        {
+            leResult = mControllers.BindPlayerToPort(lrRequest.miPlayer, liPort);
+        }
+        else
+        {
+            while (liNextAutoPort < static_cast<s32>(CgsInput::KU_NUMBER_OF_PADS))
+            {
+                leResult = mControllers.BindPlayerToPort(lrRequest.miPlayer, liNextAutoPort);
+                if (leResult == E_BINDRESULTOK)
+                {
+                    liPort = liNextAutoPort;
+                    ++liNextAutoPort;
+                    break;
+                }
+                ++liNextAutoPort;
+            }
+        }
+
+        InputIO::BindResult lResult;
+        lResult.miPlayer     = lrRequest.miPlayer;
+        lResult.miPort       = liPort;
+        lResult.meResultCode = leResult;
+        mOutputBindResultQueue.AddEvent(lResult);
+    }
+}
+
+// Unbind every queued player and publish an UnBindResult {player, port, code} per request.
+void InputModule::ProcessUnbindRequestQueue(const InputIO::PostWorldInputBuffer* lpPostWorldBuffer)
+{
+    const s32 liNumRequests = lpPostWorldBuffer->GetUnBindRequestQueue()->GetLength();
+
+    for (s32 liRequest = 0; liRequest < liNumRequests; ++liRequest)
+    {
+        const InputIO::BaseInputEvent& lrRequest = lpPostWorldBuffer->GetUnBindRequestQueue()->GetEvent(liRequest);
+
+        InputIO::UnBindResult lResult;
+        lResult.miPlayer     = lrRequest.miPlayer;
+        lResult.miPort       = lrRequest.miPort;
+        lResult.meResultCode = mControllers.UnBindPlayer(lrRequest.miPlayer);
+        mOutputUnbindResultQueue.AddEvent(lResult);
+    }
+}
+
 // X360 0x828E7098. Drain the post-world pad-mapping request queue: copy each event's 112-byte
 // action-mapping payload into the addressed pad (port == -1 broadcasts to all pads).
 void InputModule::ProcessMappingQueue(const InputIO::PostWorldInputBuffer* lpPostWorldBuffer)

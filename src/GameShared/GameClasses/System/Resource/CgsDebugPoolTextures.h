@@ -68,6 +68,10 @@ namespace CgsResource
         E_DEBUGTEXTURERENDERMODE_COUNT           = 5,
     };
 
+    // Display names of the sort and render modes, in enum order (defined in CgsDebugPoolTextures_wBT_01.cpp).
+    extern const char* KAPC_DEBUGSORTMODENAMES[E_DEBUGSORTMODE_COUNT];
+    extern const char* KAPC_DEBUGTEXTURERENDERMODE[E_DEBUGTEXTURERENDERMODE_COUNT];
+
     class DebugPoolTextures : public CgsDev::DebugUI::Window
     {
     public:

@@ -11238,6 +11238,21 @@ namespace CgsGraphics
     {
         gpXboxD3DDevice = renderengine::gDevice;
     }
+
+    // FLAG PC-platform leaf: D3DDevice_Begin/EndConditionalSurvey bracket a Xenon GPU survey
+    // (an occlusion count keyed on the occludee's id) whose one reader is the conditional
+    // rendering above. Direct3D 9 has no predication, so nothing reads a survey result on this
+    // host and the bracket records nothing; the box draw between the two calls still reaches
+    // the device. OcclusionCullManager::RenderOccludeeBoundingBox is the caller.
+    void D3DDevice_BeginConditionalSurvey(void* /*lpDevice*/, u32 /*luIdentifier*/, u32 /*luFlags*/)
+    {
+        gpXboxD3DDevice = renderengine::gDevice;
+    }
+
+    void D3DDevice_EndConditionalSurvey(void* /*lpDevice*/, u32 /*luFlags*/)
+    {
+        gpXboxD3DDevice = renderengine::gDevice;
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -151,7 +151,7 @@ public:
                                     GameStateModuleIO::CarSelectionChangedAction* lpCarSelectChangedAction); // X360 0x82393080
     void ReallyEnterJunkyardAtStartOfGame(GameStateModuleIO::GameActionQueue* lpActionQueue); // X360 0x823931F8
     void OnCarUnlockTickerComplete();
-    void SetCarUnlockEnabled(bool lbEnabled);
+    void SetCarUnlockEnabled(bool lbEnabled) { mbCarUnlockEnabled = lbEnabled; }   // inlined by ProcessGameEvents case 151
 
     // MOVED OUT OF THE PRIVATE BLOCK 2026-08-02 (car-select handover wave). The DWARF groups it
     // with the private helpers, but GameStateModule::ProcessGameEvents @0x823A0A18 calls it
@@ -159,19 +159,6 @@ public:
     // EnterModification and ExitJunkyard which the DWARF already has public). Its three other
     // callers (StartUnlockState / EndTransitionInState / EndUnlockState) are internal.
     void StartCarSelectState(GameStateModuleIO::GameActionQueue* lpActionQueue);         // X360 0x823872D0
-
-    // [FLAG PC bring-up] NOT A CONSOLE FUNCTION -- the stand-in for the streaming-complete
-    // signal that closes a junkyard exit. ExitJunkyard sets mbWaitingForStreaming and the ONLY
-    // thing that clears it is StreamingFinished, whose one console caller is
-    // GameStateModule::ProcessStreamingCompleteEvent @0x82390200 -- reached from a world
-    // StreamingCompleteEvent through ProcessGameEvents, none of which exists on this build. With
-    // no clear, Update's case-9 arm (UpdateExitState) returns early for ever and the junkyard
-    // exit never finishes. This calls the console's own StreamingFinished with mDesiredCarId (so
-    // its `lActiveCarZeroId == mDesiredCarId` arm is the one that runs), and ONLY while the
-    // manager is actually EXITING and actually waiting -- it can therefore never disturb the
-    // car-change states, which are the other users of that latch.
-    // DELETE-WHEN ProcessStreamingCompleteEvent + the world StreamingCompleteEvent are real.
-    void UpdateExitStreamingBringUp(GameStateModuleIO::GameActionQueue* lpActionQueue);
 
 private:
     // ---- private helpers (DWARF :166-285) ----------------------------------

@@ -40,27 +40,11 @@ namespace GameStateModuleIO
 //         game name emptied                                      // InGamePlayerStatusInterface::Clear
 //     PlayerResultsInterface::Clear(this + 0x36B8)
 //     this + 0x3798 = 0                                          // mbInvitesOpen
-//
-// NOT MADE: the ControllerToGameStateInterface leg. That interface is still untyped storage
-// inside maPadToPlayerStatus (its two queue heads widen on the host, so typing it means giving
-// up the absolute +0x2CC8 pin in the header's _AssertLayout), and nothing on this build reads it yet.
 void PreWorldInputBuffer::Construct()
 {
     CgsModule::IOBuffer::Construct();
 
-    // TimerStatusInterface::Clear on both timer blocks (game, then sim): frame 0, zero base
-    // step, unit multiplier, stopped, zero time. The member is this header's mirror of
-    // CgsSystem::TimerStatusInterface, so the Clear is spelled over its field names.
-    for (s32 liEntry = 0; liEntry < 2; ++liEntry)
-    {
-        TimerStatusInterface::Entry& lrEntry = mTimerStatusInterface.maEntries[liEntry];
-        lrEntry.miWord00  = 0;       // miFrameCount
-        lrEntry.mfValue04 = 0.0f;    // mfBaseTimeStep
-        lrEntry.mfValue08 = 1.0f;    // mfTimeStepMultiplier
-        lrEntry.mbFlag0C  = 0;       // mbRunning
-        lrEntry.mfValue14 = 0.0f;    // mTime fraction
-        lrEntry.miWord10  = 0;       // mTime seconds
-    }
+    mTimerStatusInterface.Clear();
 
     mControllerInput.mbAcceptPressed               = false;
     mControllerInput.mbStartPressed                = false;
@@ -87,10 +71,22 @@ void PreWorldInputBuffer::Construct()
     mGameEventQueue.Construct();
     mTakedownEventInputQueue.Construct();
     mNetworkToGameStateInterface.Construct();
+    mControllerToGameStateInterface.Construct();
 
     mPlayerStatusInterface.Clear();
     mNetworkPlayerResultsInterface.Clear();
     mbInvitesOpen = false;
+}
+
+// DestroyIOBuffer<PreWorldInputBuffer> runs this before it frees the buffer. In console order:
+// the game-event queue's Destruct, the takedown input queue's inlined Destruct (its length store
+// at +0x668), and the base's Destruct.
+void PreWorldInputBuffer::Destruct()
+{
+    mGameEventQueue.Destruct();
+    mTakedownEventInputQueue.Destruct();
+
+    CgsModule::IOBuffer::Destruct();
 }
 
 // X360 0x823632F8 - read-lock accessor for the controller input (this+0x34).
@@ -107,21 +103,12 @@ const TimerStatusInterface* PreWorldInputBuffer::GetTimerStatusInterface() const
     return &mTimerStatusInterface;
 }
 
-// X360 0x823B8D08 - write-lock setter copying both 0x18-byte timer-status entries (this+0x04).
+// Write-lock setter copying the timer-status interface (this+0x04); the console inlines
+// TimerStatusInterface::operator= as the field-by-field copy of both blocks.
 void PreWorldInputBuffer::SetTimerStatusInterface(const TimerStatusInterface* lpSource)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    for (s32 liEntry = 0; liEntry < 2; ++liEntry)
-    {
-        TimerStatusInterface::Entry&       lDest = mTimerStatusInterface.maEntries[liEntry];
-        const TimerStatusInterface::Entry& lSrc  = lpSource->maEntries[liEntry];
-        lDest.miWord00  = lSrc.miWord00;
-        lDest.mfValue04 = lSrc.mfValue04;
-        lDest.mfValue08 = lSrc.mfValue08;
-        lDest.mbFlag0C  = lSrc.mbFlag0C;
-        lDest.miWord10  = lSrc.miWord10;
-        lDest.mfValue14 = lSrc.mfValue14;
-    }
+    mTimerStatusInterface = *lpSource;
 }
 
 // X360 0x823BA240 - write-lock setter deriving the controller button-state block (this+0x34) from
@@ -237,8 +224,7 @@ const NetworkToGameStateInterface* PreWorldInputBuffer::GetNetworkToGameStateInt
 //         ... FireAssert("Not locked for reading\n",
 //                        "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 146);
 //     return a1 + 11464;                                 // 11464 == 0x2CC8
-// 0x2CC8 is exactly where this header seats mPlayerStatusInterface, and that offset is pinned
-// independently by the _AssertLayout() static_assert below it -- so the return is &member, not a
+// 0x2CC8 is the console seat of mPlayerStatusInterface, so the return is &member, not a
 // reinterpret_cast over a byte seat. Assert line 146 matches the declaration's recorded line.
 // Consumers: BrnMugshotManager.cpp:218 and BrnModeManager_WorldTick.cpp:165.
 const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface*
@@ -246,6 +232,16 @@ PreWorldInputBuffer::GetPlayerStatusInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
     return &mPlayerStatusInterface;
+}
+
+// Read-lock accessor for the controller-to-game-state interface (console this+0x2BE8, assert
+// line 143 of the header). The export names it GameStateModule::GetControllerToGameStateInterface;
+// every call site passes the PreWorldInputBuffer and its asserts read
+// "lpPreWorldInputBuffer->GetControllerToGameStateInterface()".
+const ControllerToGameStateInterface* PreWorldInputBuffer::GetControllerToGameStateInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mControllerToGameStateInterface;
 }
 
 // =====================  PostWorldInputBuffer  =====================
@@ -519,6 +515,11 @@ void OutputBuffer::Construct()
     // free-burn flags, so the queue has to point at its own storage before either runs.
     mGameStateToNetworkInterface.Construct();
 
+    //     BaseInputEvent<..,8>::Construct(this + 17324); BaseInputEvent<..,8>::Construct(this + 17400)
+    //     this+17332 = 0; this+17408 = 0
+    // == GameStateToControllerInterface::Construct (both request queues, then Clear).
+    mGameStateToControllerInterface.Construct();
+
     // ⭐⭐ 2026-08-01 (BridgeGameStateToWorld wave): the console's construct list for the members
     // that bridge READS. Until now every one of these was inside an opaque blob, so none of them
     // could be built -- and BridgeGameStateToWorld hands five of them straight to the world's
@@ -612,11 +613,31 @@ void OutputBuffer::Construct()
     //     ConstructTakedownEventOutputQueue call above; no longer on this list.
     //   * DirtyTrickEvent<..,28>::Construct + GameStateToNetworkInterface::Clear (this + 16784)
     //     -- MADE, see the mGameStateToNetworkInterface.Construct() call above.
-    //   * the two input bind/unbind request queues (this + 17324 / 17400),
-    //     -- the bind/unbind request queues remain opaque. The following
-    //     18432-byte GUI event queue is now typed and constructed above.
+    //   * the two input bind/unbind request queues (this + 17324 / 17400) -- MADE, see the
+    //     mGameStateToControllerInterface.Construct() call above.
     //   * GameStateToGuiInterface::Construct (this + 17488) -- ⭐ MADE 2026-08-27 (defect D2),
     //     see the call above; it is no longer on this list.
+}
+
+// DestroyIOBuffer<OutputBuffer> runs this before it frees the buffer. In console order:
+//     VariableEventQueue<13312,16>::Destruct(this + 4)           // the game-action queue
+//     this+16456 = 0                                             // takedown output queue length
+//     8 x s32 = -1 from this+176008                              // maOnlineAwards
+//     IOBuffer::Destruct(this)
+// The takedown queue's Destruct is the inlined one-store BaseEventQueue::Destruct, and the -1
+// block is the same online-award reset Construct stamps.
+void OutputBuffer::Destruct()
+{
+    reinterpret_cast<GameActionQueue*>(&mGameActionQueueStorage)->Destruct();
+    reinterpret_cast<CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>*>(
+        &mTakedownEventOutputQueueStorage)->Destruct();
+
+    OnlineScoringOutputInterface* lpOnline =
+        reinterpret_cast<OnlineScoringOutputInterface*>(&mOnlineScoringOutputInterfaceStorage);
+    for (s32 liCar = 0; liCar < 8; ++liCar)
+        lpOnline->maOnlineAwards[liCar] = static_cast<EOnlineAwardID>(-1);
+
+    CgsModule::IOBuffer::Destruct();
 }
 
 // X360 0x8231D4B8 - write-lock accessor for the game-action queue (this+0x04).

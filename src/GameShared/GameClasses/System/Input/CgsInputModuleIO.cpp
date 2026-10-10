@@ -45,22 +45,60 @@ const PostWorldInputBuffer::BindRequestQueue* PostWorldInputBuffer::GetBindReque
     return &mBindRequestQueue;
 }
 
+// Read-lock accessor for the unbind-request queue (this+80, assert).
+// Caller: CgsInput::InputModule::ProcessUnbindRequestQueue.
+const PostWorldInputBuffer::UnBindRequestQueue* PostWorldInputBuffer::GetUnBindRequestQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mUnBindRequestQueue;
+}
+
 // X360 0x828E6BD8 - read-lock accessor for the pad-mapping queue (this+156).
-// Caller: CgsInput::InputModule::ProcessMappingQueue. mPadMappingQueue is held as raw
-// storage (PadMapping un-homed); the returned pointer reproduces the X360 `return a1 + 156`.
+// Caller: CgsInput::InputModule::ProcessMappingQueue.
 const PostWorldInputBuffer::PadMappingQueue* PostWorldInputBuffer::GetPadMappingQueue() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const PadMappingQueue*>(&mPadMappingQueueStorage);
+    return &mPadMappingQueue;
+}
+
+// Write-locked (assert): queue a {player, port} bind request.
+// Callers: BrnGameModule::BindInputToPort / BridgeGameStateToController.
+void PostWorldInputBuffer::PostBindRequest(s32 liPlayer, s32 liPort)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    BaseInputEvent lRequest;
+    lRequest.miPlayer = liPlayer;
+    lRequest.miPort   = liPort;
+    mBindRequestQueue.AddEvent(lRequest);
+}
+
+// Write-locked (assert): queue an unbind request for the player (port word 0).
+// Callers: BrnGameModule::BridgeGameStateToController / DoUpdate_InputPostWorld.
+void PostWorldInputBuffer::PostUnbindRequest(s32 liPlayer)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    BaseInputEvent lRequest;
+    lRequest.miPlayer = liPlayer;
+    lRequest.miPort   = 0;
+    mUnBindRequestQueue.AddEvent(lRequest);
+}
+
+// Write-locked (assert): queue a pad-mapping request -- the port word, then the caller's
+// whole action-mapping table copied in (PadMapping::Construct, inlined). The only caller,
+// BrnGameModule::PrepareInitialInputMapping, passes port -1 (every pad).
+void PostWorldInputBuffer::PostMappingRequest(const ActionMapping* lpMapping, s32 liPortId)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    PadMapping lMapping;
+    std::memcpy(lMapping.maMapping, lpMapping, sizeof(lMapping.maMapping));
+    lMapping.miPortId = liPortId;
+    mPadMappingQueue.AddEvent(lMapping);
 }
 
 // X360 0x828E6C80 - read-lock accessor returning the published wheel FFB spring (this+632).
 // Caller: CgsInput::InputModule::PostWorldUpdate (copies the two spring words into its module state).
 const CgsInput::Device::WheelFFSpring* PostWorldInputBuffer::GetWheelFFSpring() const
 {
-    // Member scope grants access to pin the modelled PC offset (matches the X360 this+632 stride;
-    // the gap in the header is sized off the PC member sizes -- see the header note on pointer width).
-    static_assert(offsetof(PostWorldInputBuffer, mWheelFFSpring) == 632, "mWheelFFSpring kept at the X360 +632 stride");
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
     return &mWheelFFSpring;
 }

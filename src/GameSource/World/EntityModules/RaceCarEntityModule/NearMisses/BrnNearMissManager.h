@@ -18,7 +18,7 @@
 // NearMissData<4,7>::HasThereBeenARecentNearMiss on this+0x148 (0x0C + 0x13C == 0x148).
 //
 // Only HasThereBeenARecentNearMiss() is reconstructed in this batch; the remaining methods
-// (Prepare/SetSpeed/Update/the Add* loggers/NearMissEvent) are DWARF-attested but are left out of
+// (SetSpeed/Update/the Add* loggers/NearMissEvent) are attested by the debug info but are left out of
 // this minimal home because their signatures name types (OutputBuffer_PrePhysics::GameEventQueue,
 // ENearMissType, BoostManager) whose homes are not yet reconstructed. They are added additively
 // when those payload TUs land.
@@ -62,6 +62,10 @@ namespace BrnWorld
         // Chain-timeout seconds a fresh near miss re-primes mfNearMissTimeout to (X360 rodata
         // flt_820149B4 == 5.0). DWARF attests it as a class static (BrnNearMissManager.h:65).
         static const f32 KF_NEAR_MISS_CHAIN_TIME;
+
+        // Reset for a new session: both NearMissData sub-objects emptied, the scalars and the
+        // two flags zeroed. Declared at ; inlined into RaceCarEntityModule::Prepare.
+        bool Prepare();
 
         // True iff either remembered near-miss list is currently non-empty. @0x822CD2E8.
         bool HasThereBeenARecentNearMiss() const;

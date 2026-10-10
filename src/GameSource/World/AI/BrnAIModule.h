@@ -87,6 +87,7 @@ struct AISectionsData;
 class AIModule : public CgsModule::ModuleSingleBuffered
 {
     friend class ::BrnWorld::WorldDebugComponent;
+    friend class AIDebugComponent;   // the AI debug overlay reads the car array / buzz-by directly
 
 public:
     // DWARF SetAIDrivesPlayer; inlined store in ARTIST WorldModule::Update @0x827D753C.

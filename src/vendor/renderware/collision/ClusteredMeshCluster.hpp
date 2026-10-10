@@ -12,17 +12,16 @@
 // OWNING HOME for the single function the X360 binary defines:
 //     rw::collision::ClusteredMeshCluster::GetGroupAndSurfaceId  @ 0x828A9C70
 //
-// No DWARF hints exist for this TU, so the cluster header
-// shape and the unit-record decode are reconstructed from the X360 PPC asm
-// (pure integer bit-twiddling; no SIMD).
+// The header member names are the declaration's (clusteredmeshcluster.h); the
+// unit-record decode is reconstructed from the console asm (pure integer
+// bit-twiddling; no SIMD).
 //
-// Cluster header (only the fields the function touches):
-//     +0x00  ... (cluster flags, not read here)
-//     +0x04  muUnitCount : u16   -- number of vertices; the unit data starts at
-//                                   this+0x10*(muUnitCount+1) (header row + the
-//                                   16-byte-strided vertex array).
+// Cluster header (the field the function touches):
+//     +0x04  muUnitDataStart : u16 -- the unit data starts at
+//                                     this+0x10*(muUnitDataStart+1) (header row + the
+//                                     16-byte-strided vertex array).
 //
-// Unit record (at this + a2 + 0x10*(muUnitCount+1)):
+// Unit record (at this + a2 + 0x10*(muUnitDataStart+1)):
 //     [0]  byte mFlags  -- low nibble selects the type (vertex count code); bit
 //                          0x20 = an extra vertex index byte present; bit 0x40 =
 //                          a group id follows; bit 0x80 = a surface id follows.
@@ -61,12 +60,20 @@ public:
                              u32* lpGroupId,
                              u32* lpSurfaceId) const;
 
-    u16 muReserved0;    // +0x00  (cluster flags; not read here)
-    u16 muReserved2;    // +0x02  (not read here)
-    u16 muUnitCount;    // +0x04  vertex count (lhz 4(r3))
-    u16 muReserved6;    // +0x06  pads the header to 0x08
-    // The variable-length unit/vertex data follows; it is addressed by byte
-    // offset from `this` (see GetGroupAndSurfaceId), not by a named member.
+    // The header, by its declaration's names (clusteredmeshcluster.h).
+    u16 muUnitCount;       // +0x00  unitCount
+    u16 muUnitDataSize;    // +0x02  unitDataSize (bytes of unit records)
+    u16 muUnitDataStart;   // +0x04  unitDataStart: the unit records start at
+                           //        this + 0x10 * (muUnitDataStart + 1), i.e. that many
+                           //        16-byte vertex rows past the header row
+    u16 muNormalStart;     // +0x06  normalStart
+    u16 muTotalSize;       // +0x08  totalSize
+    u8  muVertexCount;     // +0x0A  vertexCount
+    u8  muNormalCount;     // +0x0B  normalCount
+    u8  muCompressionMode; // +0x0C  compressionMode (1 = 16-bit, 2 = 32-bit, else float rows)
+    u8  mauPadding[3];     // +0x0D  padding
+    // The vertex array (vertexArray, +0x10) and the unit records follow; they are
+    // addressed by byte offset from `this`, not by a named member.
 };
 
 } // namespace collision

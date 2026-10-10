@@ -76,11 +76,36 @@ struct OnlineCarSelectManager
     // and lift the car-select pause. Body in BrnOnlineCarSelectManager_wN3_01.cpp.
     void ExitOnlineCarSelect(GameStateModuleIO::GameActionQueue* lpActionQueue);
 
-    // Called by EnterModification; reconstructed by its own slice (declared-only here). DWARF spells
-    // it StartCarModificationState(GameStateModuleIO::GameActionQueue*); the X360 forwards the queue arg.
+    // Called by EnterModification, which forwards its action queue.
     void StartCarModificationState(GameStateModuleIO::GameActionQueue* lpActionQueue);
 
+    // Online car-select entry, car change and final submission. Bodies in the .cpp.
+    void EnterOnlineCarSelect(GameStateModuleIO::GameActionQueue* lpActionQueue,
+                              const Vector3 lPlayerPosition, const Vector3 lPlayerDirection,
+                              s32 liVehicleClassLimit, bool lbHostChoiceAndNotHost);
+    void StartWaitForOnline(GameStateModuleIO::GameActionQueue* lpActionQueue);
+    void RequestChangeCar(GameStateModuleIO::GameActionQueue* lpActionQueue, const CgsID& lCardId);
+    void SubmitFinalCarSelection(GameStateModuleIO::GameActionQueue* lpActionQueue);
+
+    // Reference inline accessor; ProcessStreamingCompleteEvent and ProcessGameEvents' case 94
+    // read the byte.
+    bool IsWaitingForStreaming() const { return mbWaitingForStreaming; }
+
+    // Public here although the reference groups it with the private helpers: ProcessGameEvents'
+    // case-94 MODEL step calls it directly, as it calls CarSelectManager::StartCarSelectState.
+    // Body in BrnOnlineCarSelectManager_wBT_01.cpp.
+    void StartCarSelectState(GameStateModuleIO::GameActionQueue* lpActionQueue);
+
 private:
+    void SaveChosenLiveryForCar(CgsID lCarId);
+    void SpawnInStartCar(GameStateModuleIO::GameActionQueue* lpActionQueue);           // BrnOnlineCarSelectManager_wBT_01.cpp
+    const BrnProgression::CarData* GetProfileCarData(CgsID& lrCarID) const;           // BrnOnlineCarSelectManager_wBT_01.cpp
+    void UpdateRequestCarChangeState(GameStateModuleIO::GameActionQueue* lpActionQueue);
+    void UpdateChangeCarState(GameStateModuleIO::GameActionQueue* lpActionQueue);
+    void TeleportCurrentVehicle(GameStateModuleIO::GameActionQueue* lpActionQueue);
+    void GetCurrentPlayerVehicle(CgsID& lrCarID) const;
+    void SendOnlineChangeCarAction(GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbFinalSelection);
+
     EInternalState                                meInternalState;          // X360 this+0
     HostPointer<GameStateModule>                    mpGameStateModule;        // console +0x04
     HostPointer<BrnProgression::ProgressionManager> mpProgressionManager;     // console +0x08
