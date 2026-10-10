@@ -17,7 +17,9 @@ or console-only platform services.
 - Restored the network player-manager identity (`PlayerManager`, `Network`) from
   vtable `820CE35C`, removing the blank root row. Its option table is terminated.
 - Restored `Menu::IsUseful() == false` from vtable `820DC354`: hierarchy rows are
-  not actions when deciding whether to retain a parent window or reuse a window slot.
+  not actions when deciding whether to reuse a window slot. Native submenu
+  selection retains the parent window, including parents containing only submenus;
+  Back closes the child and returns focus to its parent.
 - Unavailable sections retain their entry, stay inactive, and show a dismissible
   modal explanation. An empty activation no longer silently deletes its row.
 - Added native pool headroom for the additional reflection/shadow controls.

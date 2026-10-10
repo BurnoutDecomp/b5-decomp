@@ -51,8 +51,8 @@ namespace CgsDev
             if (leEvent != E_INPUTEVENT_SELECT)
                 return;
 
-            if (mpParent && !mpParent->IsMenuUseful())
-                GetUI().GetMenuManager().Close(mpParent);
+            // FLAG PC-platform leaf: keep the navigation context visible when
+            // opening a child. Back closes the child and focuses this parent.
             OpenAsWindow();
         }
 

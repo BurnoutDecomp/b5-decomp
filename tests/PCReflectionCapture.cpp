@@ -8,6 +8,7 @@
 #include "pc/gcm/renderengine/reflections/GlassCapture.h"
 #include "pc/gcm/renderengine/reflections/LightSubmission.h"
 #include "pc/gcm/renderengine/StateBlockRestore.h"
+#include "pc/gcm/renderengine/reflections/ClipDistance.h"
 static u32 suChecks = 0, suFailures = 0;
 static void Check(bool lbPass, const char* lpcName)
 { ++suChecks; if (!lbPass) { ++suFailures; std::printf("FAIL %s\n", lpcName); } }
@@ -23,6 +24,17 @@ namespace CgsGraphics { void DispatchBin::HandleMemoryOverflow(u32) { std::exit(
 int main()
 {
     using namespace CgsPC::Reflections;
+    Check(AcceptParticleWorld(0) && !AcceptParticleWorld(1),"normal view preserves hidden-player particle policy");
+    {
+        ExtrasScope lScope;
+        IncludePlayerParticles()=true;
+        Check(AcceptParticleWorld(0) && AcceptParticleWorld(1) && !AcceptParticleWorld(2),
+            "reflection includes player boost/exhaust without importing other effect worlds");
+        IncludePlayerParticles()=false;
+        Check(AcceptParticleWorld(0) && !AcceptParticleWorld(1),"player particle inclusion is independently optional");
+    }
+    IncludePlayerParticles()=true;
+    Check(!AcceptParticleWorld(1),"reflection inclusion cannot leak into the main view");
     int lCaptureInterface=0,lMainInterface=0;
     Lights().mbEnabled=true;Lights().miDistanceMode=E_DISTANCE_FIXED;Lights().mfDrawDistance=500;
     {
@@ -54,6 +66,35 @@ int main()
     IDirect3DDevice9* lpDevice = nullptr;
     Require(lpApi->CreateDevice(0,D3DDEVTYPE_HAL,lWindow,D3DCREATE_SOFTWARE_VERTEXPROCESSING|D3DCREATE_FPU_PRESERVE,
         &lPresent,&lpDevice), "device");
+    CgsGraphics::Camera lClipCamera = {};
+    lClipCamera.maProjectionScalars[7]=0.1f;
+    lClipCamera.mProjection.zAxis={0,0,100.0f/99.9f,1};
+    lClipCamera.mProjection.wAxis={0,0,-10.0f/99.9f,0};
+    const f32 lafOldPlane[4]={1,2,3,4};
+    lpDevice->SetClipPlane(0,lafOldPlane);
+    lpDevice->SetRenderState(D3DRS_CLIPPLANEENABLE,2);
+    suExtrasClipMask=4;
+    u32 luClippedCalls=0;
+    u32 luClippedResult=0;
+    {
+    ExtrasScope lScope;
+    luClippedResult=RenderWithinDistance(lpDevice,lClipCamera,20,[&] {
+        ++luClippedCalls;float lafPlane[4]={};DWORD luMask=0;
+        lpDevice->SetRenderState(D3DRS_CLIPPLANEENABLE,ResolveExtrasClipMask(0));
+        lpDevice->GetClipPlane(0,lafPlane);lpDevice->GetRenderState(D3DRS_CLIPPLANEENABLE,&luMask);
+        Check(luMask==7 && lafPlane[2]==-1 && lafPlane[3]>0 && lafPlane[3]<1,
+            "independent decal/effect cutoff keeps existing clip planes and a valid far plane");
+        return 17u;
+    });
+    }
+    DWORD luRestoredMask=0;float lafRestoredPlane[4]={};
+    lpDevice->GetRenderState(D3DRS_CLIPPLANEENABLE,&luRestoredMask);lpDevice->GetClipPlane(0,lafRestoredPlane);
+    Check(luClippedResult==17 && luClippedCalls==1,"distance-limited rendering preserves its draw result");
+    Check(luRestoredMask==2 && suExtrasClipMask==4 && !std::memcmp(lafOldPlane,lafRestoredPlane,sizeof(lafOldPlane)),
+        "per-category cutoff restores native and CPU clip state");
+    Check(RenderWithinDistance(lpDevice,lClipCamera,0.1f,[&] {++luClippedCalls;return 1u;})==0
+        && luClippedCalls==1,"cutoffs inside the near plane issue no draw");
+    lpDevice->SetRenderState(D3DRS_CLIPPLANEENABLE,0);suExtrasClipMask=0;
     IDirect3DCubeTexture9* lpCube = nullptr;
     Require(lpDevice->CreateCubeTexture(32,1,D3DUSAGE_RENDERTARGET,D3DFMT_A8R8G8B8,D3DPOOL_DEFAULT,&lpCube,nullptr),"cube");
     for (u32 luFace=0;luFace<6;++luFace) {

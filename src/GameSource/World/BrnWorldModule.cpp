@@ -35,6 +35,7 @@
 #include "pc/gcm/renderengine/reflections/SceneCapture.h"
 #include "pc/gcm/renderengine/reflections/SceneSettings.h"
 #include "pc/gcm/renderengine/reflections/SceneRender.h"
+#include "pc/scene/FrustumResults.h"
 #include <chrono>  // [DIAG shadow-perf wave] steady_clock for the per-phase producer timers
 #include <cstdlib>                                                // getenv/atof (the BRN_WORLD_CAMDIST bring-up diagnostic)
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"   // CgsGraphics::ShaderConstantTable
@@ -4069,7 +4070,7 @@ WorldModule::GenerateDispatchLists(
 
     const CgsModule::Event* lpFrustumTestResult = 0;
     s32 liResultSize = 0;
-    s32 liResultType = lpResultsQueue->GetFirstEvent( &lpFrustumTestResult, &liResultSize );
+    s32 liResultType = CgsPC::Scene::FirstFrustumResult(lpResultsQueue, &lpFrustumTestResult, &liResultSize);
     PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_FrustumTesting );
 
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RenderMainScreen );
@@ -4086,29 +4087,34 @@ WorldModule::GenerateDispatchLists(
                               &lpFilteredEntityData->maPropEntityIds );
     PerfMonCpu::StopMonitor( miFrustumTestFilterPM );
 
-    // Seed each module's dispatch input with the raw result event (world,
-    // race car, traffic, prop -- clear then add, exactly as the X360 does).
+    // FLAG PC-platform leaf: ordinary results retain the console record. Large
+    // combined results forward only the relevant owner's already-filtered ids
+    // so the unchanged 32 KB module input queues cannot overflow.
     lpWorldDispatchInput->LockForWrite();
     lpWorldDispatchInput->GetSceneResultQueue()->Clear();
-    lpWorldDispatchInput->GetSceneResultQueue()->AddEvent( lpFrustumTestResult, liResultType, liResultSize );
+    CgsPC::Scene::ForwardFrustumResult(lpWorldDispatchInput->GetSceneResultQueue(),
+        lpFrustumTestResult, liResultType, liResultSize, lpFilteredEntityData->maWorldEntityIds);
     lpWorldDispatchInput->UnlockForWrite();
 
     lpRaceCarDispatchInput->LockForWrite();
     lpRaceCarDispatchInput->GetSceneResultQueue()->Clear();
-    lpRaceCarDispatchInput->GetSceneResultQueue()->AddEvent( lpFrustumTestResult, liResultType, liResultSize );
+    CgsPC::Scene::ForwardFrustumResult(lpRaceCarDispatchInput->GetSceneResultQueue(),
+        lpFrustumTestResult, liResultType, liResultSize, lpFilteredEntityData->maRaceCarEntityIds);
     lpRaceCarDispatchInput->UnlockForWrite();
 
     lpTrafficDispatchInput->LockForWrite();
     lpTrafficDispatchInput->GetSceneResultQueue()->Clear();
-    lpTrafficDispatchInput->GetSceneResultQueue()->AddEvent( lpFrustumTestResult, liResultType, liResultSize );
+    CgsPC::Scene::ForwardFrustumResult(lpTrafficDispatchInput->GetSceneResultQueue(),
+        lpFrustumTestResult, liResultType, liResultSize, lpFilteredEntityData->maTrafficEntityIds);
     lpTrafficDispatchInput->UnlockForWrite();
 
     lpPropDispatchInput->LockForWrite();
     lpPropDispatchInput->GetSceneResultQueue()->Clear();
-    lpPropDispatchInput->GetSceneResultQueue()->AddEvent( lpFrustumTestResult, liResultType, liResultSize );
+    CgsPC::Scene::ForwardFrustumResult(lpPropDispatchInput->GetSceneResultQueue(),
+        lpFrustumTestResult, liResultType, liResultSize, lpFilteredEntityData->maPropEntityIds);
     lpPropDispatchInput->UnlockForWrite();
 
-    liResultType = lpResultsQueue->GetNextEvent( lpFrustumTestResult, &lpFrustumTestResult, &liResultSize );
+    liResultType = CgsPC::Scene::NextFrustumResult(lpResultsQueue, lpFrustumTestResult, &lpFrustumTestResult, &liResultSize);
 
     // ---- traffic pre-dispatch + the vehicle LOD policy ---------------------
     lpTrafficPreDispatchInput->Construct();
@@ -4278,8 +4284,8 @@ WorldModule::GenerateDispatchLists(
 
             lpWorldDispatchInput->LockForWrite();
             lpWorldDispatchInput->GetSceneResultQueue()->Clear();
-            lpWorldDispatchInput->GetSceneResultQueue()->AddEvent(
-                lpFrustumTestResult, liResultType, liResultSize );
+            CgsPC::Scene::ForwardFrustumResult(lpWorldDispatchInput->GetSceneResultQueue(),
+                lpFrustumTestResult, liResultType, liResultSize, lpFilteredEntityData->maWorldEntityIds);
             lpWorldDispatchInput->UnlockForWrite();
 
             lpWorldDispatchInput->LockForWrite();
@@ -4313,7 +4319,8 @@ WorldModule::GenerateDispatchLists(
 
             // FLAG PC-platform leaf: optional vehicle feeds use this face's view
             // and query results; they never mutate the main-camera LOD/history.
-            if (CgsPC::Reflections::Rivals().mbEnabled && lpDispatchInputBuffer->GetRenderSwitches()->mbRenderRaceCars)
+            if ((CgsPC::Reflections::Rivals().mbEnabled || CgsPC::Reflections::PlayerWheels().mbEnabled)
+                && lpDispatchInputBuffer->GetRenderSwitches()->mbRenderRaceCars)
             {
                 CgsPC::Reflections::VehicleScope lScope(CgsPC::Reflections::E_CAPTURE_RIVALS, 5 + liFace);
                 mRaceCarEntityModule.GenerateDispatchLists(lpRaceCarDispatchInput,
@@ -4340,8 +4347,8 @@ WorldModule::GenerateDispatchLists(
                 static_cast<BrnGraphics::EEnvironmentMapFace>( liFace ),
                 lFaceCamera.GetViewProjectionMatrix() );
 
-            liResultType = lpResultsQueue->GetNextEvent(
-                lpFrustumTestResult, &lpFrustumTestResult, &liResultSize );
+            liResultType = CgsPC::Scene::NextFrustumResult(lpResultsQueue,
+                lpFrustumTestResult, &lpFrustumTestResult, &liResultSize);
         }
 
         PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_RenderEnvMap );
@@ -4428,7 +4435,6 @@ WorldModule::GenerateShadowMapDispatchLists(
         lpFilteredEntityData->Clear();
 
         const CgsGraphics::Camera* lpCascadeCamera = mShadowMap.GetCascadeCamera( luCascade );
-        CgsPC::Reflections::SetShadowCamera(luCascade, *lpCascadeCamera);
 
         // Per-module gates for this cascade (the near-only policies restrict
         // race cars / traffic / props to cascade 0).
@@ -4447,6 +4453,16 @@ WorldModule::GenerateShadowMapDispatchLists(
         const bool lbWorld    = mShadowMap.GetRenderWorldIntoShadowMap() &&
                                 lpSwitches->mbRenderWorld;
 
+        // FLAG PC-platform leaf: a missing result must never become a null
+        // dereference, including when a frame's render switches change live.
+        if (!lpFrustumTestResult)
+        {
+            static u32 suMissingQueryLogs = 0;
+            if (suMissingQueryLogs++ < 8 && CgsDev::Log::gpDebugPrint)
+                *CgsDev::Log::gpDebugPrint << "[frustum-results] missing shadow cascade " << luCascade << "\n";
+            break;
+        }
+        CgsPC::Reflections::SetShadowCamera(luCascade, *lpCascadeCamera);
         CGS_ASSERT( lpFrustumTestResult, "lpEvent" );
         CGS_ASSERT( reinterpret_cast<const CgsSceneManager::SceneQueryId*>( lpFrustumTestResult )->mId
                         == KA_FRUSTUM_QUERY_IDS[ 8 + luCascade ].mId,
@@ -4473,23 +4489,23 @@ WorldModule::GenerateShadowMapDispatchLists(
 
         if ( lbWorld )
         {
-            lpWorldDispatchInput->GetSceneResultQueue()->AddEvent(
-                lpFrustumTestResult, liEventType, liResultSize );
+            CgsPC::Scene::ForwardFrustumResult(lpWorldDispatchInput->GetSceneResultQueue(),
+                lpFrustumTestResult, liEventType, liResultSize, lpFilteredEntityData->maWorldEntityIds);
         }
         if ( lbRaceCars )
         {
-            lpRaceCarDispatchInput->GetSceneResultQueue()->AddEvent(
-                lpFrustumTestResult, liEventType, liResultSize );
+            CgsPC::Scene::ForwardFrustumResult(lpRaceCarDispatchInput->GetSceneResultQueue(),
+                lpFrustumTestResult, liEventType, liResultSize, lpFilteredEntityData->maRaceCarEntityIds);
         }
         if ( lbTraffic )
         {
-            lpTrafficDispatchInput->GetSceneResultQueue()->AddEvent(
-                lpFrustumTestResult, liEventType, liResultSize );
+            CgsPC::Scene::ForwardFrustumResult(lpTrafficDispatchInput->GetSceneResultQueue(),
+                lpFrustumTestResult, liEventType, liResultSize, lpFilteredEntityData->maTrafficEntityIds);
         }
         if ( lbProps )
         {
-            lpPropDispatchInput->GetSceneResultQueue()->AddEvent(
-                lpFrustumTestResult, liEventType, liResultSize );
+            CgsPC::Scene::ForwardFrustumResult(lpPropDispatchInput->GetSceneResultQueue(),
+                lpFrustumTestResult, liEventType, liResultSize, lpFilteredEntityData->maPropEntityIds);
         }
 
         lpPropDispatchInput->UnlockForWrite();
@@ -4497,8 +4513,8 @@ WorldModule::GenerateShadowMapDispatchLists(
         lpRaceCarDispatchInput->UnlockForWrite();
         lpWorldDispatchInput->UnlockForWrite();
 
-        liEventType = lpResultsQueue->GetNextEvent(
-            lpFrustumTestResult, &lpFrustumTestResult, &liResultSize );
+        liEventType = CgsPC::Scene::NextFrustumResult(lpResultsQueue,
+            lpFrustumTestResult, &lpFrustumTestResult, &liResultSize);
 
         // The render bridge for this cascade.
         lpWorldDispatchInput->LockForWrite();

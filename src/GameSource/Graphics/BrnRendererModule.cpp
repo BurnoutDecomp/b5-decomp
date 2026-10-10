@@ -5548,7 +5548,8 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         const bool lbCubeCoronas = mbRenderCoronas && CgsPC::Reflections::Lights().mbEnabled
             && EnsureCoronaManagerBringUp(mCoronaManager);
 
-        if ((CgsPC::Reflections::Traffic().mbEnabled || CgsPC::Reflections::Rivals().mbEnabled)
+        if ((CgsPC::Reflections::Traffic().mbEnabled || CgsPC::Reflections::Rivals().mbEnabled
+                || CgsPC::Reflections::PlayerWheels().mbEnabled)
             && mpEnvMapTextureState && mpEnvMapTextureState->mpRaster)
             CgsPC::Reflections::GetCubeHistory().Begin(renderengine::gDevice,
                 mpEnvMapTextureState->mpRaster->mpD3DTexture, sxEnvMapEverRendered == 0x3Fu

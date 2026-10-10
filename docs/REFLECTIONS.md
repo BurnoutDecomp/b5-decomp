@@ -19,9 +19,11 @@ The following paths are under `World/Reflections/`:
 | Traffic | Nearest resident traffic, within the normal vehicle budget | The traffic module's live render-cull distance |
 | Rivals | Active non-player race cars | The live vehicle LOD3 transition, including quality/aggressive blending and zoom |
 | Wheels | Original wheel meshes and transforms | The parent vehicle category's normal cutoff |
+| Player wheels | The player's own wheel meshes, without its body or glass | The live vehicle LOD3 transition |
 | Glass | Intact transparent vehicle surfaces, including window and lamp lenses, and original damaged-pane geometry | The parent vehicle category's normal cutoff |
 | Lights | Original race-car and traffic-signal corona submissions | The original 250 m corona cutoff |
-| Particles | Published simple particles, Lion effects, sparks, trails and solid debris | The main particle camera's far clip |
+| Particles | Published simple particles, Lion effects including boost/exhaust, sparks and solid debris | The main particle camera's far clip |
+| Decals | Published dynamic tyre/skid marks, with their authored textures and lifetime | The main particle camera's far clip |
 
 Every category has `Enabled`, `Draw distance mode` (`Relative` or `Fixed`),
 `Draw distance`, and `Draw distance scale`. Relative multiplies its baseline by
@@ -39,6 +41,13 @@ Wheels and glass are children of an enabled, visible traffic/rival vehicle;
 their own controls can shorten their range or change detail. They do not create
 a vehicle outside its body category's range. Glass uses an independent transparent
 pass with authored materials and damage masks. Fully destroyed panes remain absent.
+
+Player wheels have their own enable, distance and LOD settings and do not require
+Rivals or the other Wheels category. The player's shell stays excluded from its
+own capture. `Particles/Include player effects` also admits boost/exhaust hidden
+from the main bumper camera; ordinary main-view effect visibility is unchanged.
+Decals can render with Particles disabled. Authored road markings already in world
+meshes remain part of the world capture.
 
 The old `World/LODs/Environment Map Draw Distance` and World/Props reflection LOD
 controls remain available. The backdrop shell starts after the detailed reflection
@@ -94,6 +103,9 @@ glass debris is also excluded from solid-debris casters.
   category includes transparent lamp lenses as well as windows.
 - No new streaming, dynamic light projection or volumetric particle-shadow system
   is introduced. Existing effect/renderer switches and suspension are respected.
+- LION `CELL_RENDER` camera-anchored volume emitters remain unreconstructed in
+  the main renderer and in captures. Available boost/exhaust particle paths are
+  reused; the reflection extension does not replace that missing emitter system.
 
 `BRN_REFLECTION_SCENE_TRACE=1` reports bounded per-face glass-mesh, corona and
 particle-byte witnesses. `BRN_SMALL_SHADOW_TRACE=1` reports solid-debris caster
@@ -124,3 +136,7 @@ The native regression reproduced six failures before the repair and passes all
 37 checks afterward; the 2,947-TU shipping build and link pass. The reporter also
 confirmed the Annihilator is stable in the rebuilt game. Driving-specific
 verification remains separate from that junkyard check.
+
+Extended native frustum results retain all batches from the coarse-query buffer;
+the console's 32 KB event queue and IO layouts remain intact. This avoids losing
+late shadow-cascade results when the larger reflection views fill the old queue.

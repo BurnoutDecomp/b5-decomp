@@ -733,7 +733,7 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // two-point offset fit). dword_82CDB49C is a debug "draw only this part index"
     // filter (-1 == every part); it has no writer in the XEX, so the -1 path is the
     // only reachable one and the filter is not modelled.
-    if ( mbRenderCarsDuringCrash )
+    if ( mbRenderCarsDuringCrash && !CgsPC::Reflections::IsPlayerWheelCapture() )
     {
         const ActiveRaceCar::RenderParams::DetachedPartRenderQueue& lrDetachedParts =
             lpRenderParams->GetDetachedPartQueue();
@@ -1139,7 +1139,7 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // `addi r24, r24, 0x10` per ITERATION (not per drawn pane), so it is indexed by the
     // loop counter.
     // ========================================================================
-    if ( lbRenderAttachedGeometry && (!CgsPC::Reflections::IsVehicleCapture()
+    if ( lbRenderAttachedGeometry && !CgsPC::Reflections::IsPlayerWheelCapture() && (!CgsPC::Reflections::IsVehicleCapture()
         || CgsPC::Reflections::Glass().IsVisible(lfCameraDistance * lfCameraDistance, CgsPC::Reflections::sfVehicleDrawDistance)) )
     {
         const ActiveRaceCar::RenderParams::DetachedPartRenderQueue& lrGlassDetachedParts =
@@ -1393,7 +1393,7 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
 
     if ( mbRenderWheels && lbRenderAttachedGeometry && lpWheelGraphics->HasMemoryResource()
          && (!CgsPC::Reflections::IsVehicleCapture()
-             || CgsPC::Reflections::Wheels().IsVisible(lfCameraDistance * lfCameraDistance, CgsPC::Reflections::sfVehicleDrawDistance)) )
+             || CgsPC::Reflections::WheelSettings().IsVisible(lfCameraDistance * lfCameraDistance, CgsPC::Reflections::sfVehicleDrawDistance)) )
     {
         // [FLAG PC boot gate] `HasMemoryResource()` is NOT console. The console reaches
         // this block only for a car whose whole resource set is in (its own
@@ -1414,7 +1414,7 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
         // The wheels never draw at LOD 0: `if (v231 <= 1) v231 = 1`.
         CgsGraphics::Model::State leWheelLOD = lpRenderParams->GetLOD();
         if (CgsPC::Reflections::IsVehicleCapture() && lpWheelModel)
-            leWheelLOD = static_cast<CgsGraphics::Model::State>(CgsPC::Reflections::SelectVehicleLod(CgsPC::Reflections::Wheels(),
+            leWheelLOD = static_cast<CgsGraphics::Model::State>(CgsPC::Reflections::SelectVehicleLod(CgsPC::Reflections::WheelSettings(),
                 lpWheelModel, lfCameraDistance * lfCameraDistance));
         if ( leWheelLOD <= CgsGraphics::Model::E_STATE_LOD_1 )
         {
@@ -2041,9 +2041,15 @@ RaceCarEntityModule::GenerateDispatchLists(
         {
             ActiveRaceCar& lrActiveRaceCar = maActiveRaceCars[ liCar ];
 
-            // FLAG PC-platform leaf: the cube belongs to the player; do not capture its shell.
-            if (lbEnvironmentMapPass && mePlayerActiveRaceCarIndex == static_cast<EActiveRaceCarIndex>(liCar))
+            const bool lbCapturePlayerWheels = lbEnvironmentMapPass
+                && mePlayerActiveRaceCarIndex == static_cast<EActiveRaceCarIndex>(liCar);
+            if (lbCapturePlayerWheels && !CgsPC::Reflections::PlayerWheels().mbEnabled)
                 continue;
+            // FLAG PC-platform leaf: capture the player's wheels independently
+            // of its shell, including when the main camera hides the player.
+            CgsPC::Reflections::VehicleScope lCaptureScope(lbCapturePlayerWheels
+                ? CgsPC::Reflections::E_CAPTURE_PLAYER_WHEELS : CgsPC::Reflections::seCaptureCategory,
+                CgsPC::Reflections::siVehicleFaceList, CgsPC::Reflections::sfVehicleDrawDistance);
 
             if ( !lrActiveRaceCar.IsActive() )
             {
@@ -2090,7 +2096,8 @@ RaceCarEntityModule::GenerateDispatchLists(
             const f32 lfDeltaZ   = lvCameraPosition.z - lCarTransform.wAxis.z;
             const f32 lfLengthSq = lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
             const f32 lfDistance = ( lfLengthSq != 0.0f ) ? sqrtf( lfLengthSq ) : 0.0f;
-            if (lbEnvironmentMapPass && !CgsPC::Reflections::Rivals().IsVisible(lfLengthSq, CgsPC::Reflections::sfVehicleDrawDistance))
+            if (lbEnvironmentMapPass && !(lbCapturePlayerWheels ? CgsPC::Reflections::PlayerWheels()
+                : CgsPC::Reflections::Rivals()).IsVisible(lfLengthSq, CgsPC::Reflections::sfVehicleDrawDistance))
                 continue;
 
             // The console COPIES both ResourcePtrs into stack locals here
@@ -2126,7 +2133,7 @@ RaceCarEntityModule::GenerateDispatchLists(
                            liOpaqueMeshList,
                            liTransparentMeshList,
                            lpShadowMap,
-                           !lbPlayerHidden,      // console v24: 0 only for the hidden player
+                           lbEnvironmentMapPass || !lbPlayerHidden,
                            lfDistance,
                            lvFogScattering,
                            lvFogColourPlusWhiteLevel );
