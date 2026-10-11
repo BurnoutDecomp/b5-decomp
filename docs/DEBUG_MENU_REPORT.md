@@ -39,7 +39,8 @@ or console-only platform services.
   final density, budget statistics and avoidance. The original complete
   traffic diagnostic component is still incomplete.
 - Registered the recovered Race Car Entity component at the original Prepare
-  registration point, using native PC ownership for its complete existing vtable.
+  registration point. The behavior campaign subsequently restored its original
+  embedded owner and producer connections; see [DEBUG_MENU_PARITY.md](DEBUG_MENU_PARITY.md).
   Its supported controls and HUD are available; the concrete gaps below remain
   unavailable. Early INI and component vehicle-LOD registrations share one set of
   rows and metadata. Buddy activation is also available
@@ -64,7 +65,6 @@ reference images alone do not establish a different screen-coordinate origin.
 | Replays | The debug component lifecycle and controls are incomplete alongside partial replay support. |
 | Vehicle Manager | Its data layout, construction and selected contact-record helpers exist, but the original `OnActivate` menu registration and complete diagnostic render overrides are absent. |
 | Physical traffic | Its debug fields, construction and identity exist; the original `OnActivate` registration and diagnostic drawing overrides are absent. |
-| Race-car air ram / forced online spawn / last reset trace | Apply Ram has no runtime consumer, so its action and Magnitude input are omitted. Mode arming still uses constant `false` for the forced-spawn switch. Place-on-track line/intersection producers are not connected to the native component owner. Forced spawn and last-reset trace controls are read-only until these dependencies are reconstructed. |
 | Traffic pressure system | Its debug field is initialized but has no reconstructed runtime reader. The no-op checkbox is omitted. |
 | Traffic drawing / air rams / kill-zone actions | Several diagnostic draw helpers, action paths and the fuzzy-logic diagnostic allocation remain missing. The native scalar adapter does not expose those unsupported actions. |
 | Online service diagnostics | Buddy menu activation and its queue are available. Several service consumers still depend on unavailable platform services; activating a page does not establish working online messaging or invites. |

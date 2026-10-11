@@ -7,6 +7,7 @@
 
 #include <cmath>    // fabsf
 #include <cstdlib>  // getenv ([FLAG PC witness] BRN_FONT_DIAG gate)
+#include <cstring>
 
 // CgsGraphics::TextObject + TextRenderer bodies (faithful X360 ARTIST ports):
 //   TextObject::Construct       0x827EEE70
@@ -281,6 +282,27 @@ namespace CgsGraphics
         void lWitnessTextSubmission(const CgsGraphics::TextObject& lrTextObject, u32 luGlyphVerts,
                                     u32 luPath)
         {
+            // FLAG PC-platform leaf: one passive submission witness per race-car
+            // HUD kind; the normal FPS/build text cannot spend this budget.
+            static const bool sbHudTrace = std::getenv("BRN_RACECAR_HUD_TRACE") != nullptr;
+            static u32 suSeenHudKinds = 0;
+            if (sbHudTrace && CgsDev::Log::gpDebugPrint && lrTextObject.mpUtf8String)
+            {
+                const char* lpcText = reinterpret_cast<const char*>(lrTextObject.mpUtf8String);
+                const u32 luKind = std::strncmp(lpcText, "Average speed:", 14) == 0 ? 1u
+                    : std::strncmp(lpcText, "ENGINE ", 7) == 0 ? 2u
+                    : std::strstr(lpcText, "Damaged:") ? 4u
+                    : std::strncmp(lpcText, "0: ", 3) == 0 ? 8u
+                    : std::strncmp(lpcText, "Player Direction:", 17) == 0 ? 16u
+                    : std::strncmp(lpcText, "Traffic Direction:", 18) == 0 ? 32u : 0u;
+                if (luKind && !(suSeenHudKinds & luKind))
+                {
+                    suSeenHudKinds |= luKind;
+                    CgsDev::Log::gpDebugPrint->AppendFormat("[racecar-hud-text] kind=%u vertices=%u pos=(%g,%g) height=%g text=%s\n",
+                        luKind, luGlyphVerts, lrTextObject.mv2TopLeft.mX, lrTextObject.mv2TopLeft.mY,
+                        *lrTextObject.mpfCurrentFontHeight, lpcText);
+                }
+            }
             if (!lFontDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
                 return;
 
