@@ -74,7 +74,6 @@ namespace
 
     // The world arm's two dead thresholds (see the banner).
     const f32 KF_TRAFFIC_WORLD_UPRIGHT_COSINE    = 0.800000012f;   // flt_8208F9C8
-    const f32 KF_TRAFFIC_WORLD_CONTACT_HEIGHT    = 0.400000006f;   // flt_82F2A148
 
     inline u32 EntityWordOf(const CgsSceneManager::VolumeInstanceId& lrId)
     {
@@ -331,7 +330,7 @@ void VehicleManager::HandleTrafficCarWorldPotentialContact(
         if (rw::math::vpu::Dot(lvUp, lpGround->mIntersectionNormal) > KF_TRAFFIC_WORLD_UPRIGHT_COSINE)   // vcmpgtfp. vs 0.8
         {
             lbLowContactOnUprightCar =
-                KF_TRAFFIC_WORLD_CONTACT_HEIGHT >
+                gfGroundContactCullHeight >
                 rw::math::vpu::Dot(lvPointOnTraffic - lpGround->mIntersectionPosition, lpGround->mIntersectionNormal);   // vcmpgtfp. 0.4 vs
         }
         (void)lbLowContactOnUprightCar;
