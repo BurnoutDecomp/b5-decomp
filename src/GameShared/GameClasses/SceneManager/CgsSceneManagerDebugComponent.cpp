@@ -29,6 +29,30 @@ namespace CgsSceneManager
         {
             return (&lrValues.x)[liLane];
         }
+
+        void DrawContactAxes(CgsDev::Debug3DImmediateRender* lpRender, const Vector3& lrPosition)
+        {
+            const Vector3 laAxes[3] = {
+                { 1.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f },
+            };
+            const rw::RGBA lWhite(0xFFu, 0xFFu, 0xFFu, 0xFFu);
+            const f32 lfHalfLength = 0.1f;
+
+            for (s32 liAxis = 0; liAxis < 3; ++liAxis)
+            {
+                Vector3 lvStart = lrPosition;
+                Vector3 lvEnd = lrPosition;
+                lvStart.x -= laAxes[liAxis].x * lfHalfLength;
+                lvStart.y -= laAxes[liAxis].y * lfHalfLength;
+                lvStart.z -= laAxes[liAxis].z * lfHalfLength;
+                lvEnd.x += laAxes[liAxis].x * lfHalfLength;
+                lvEnd.y += laAxes[liAxis].y * lfHalfLength;
+                lvEnd.z += laAxes[liAxis].z * lfHalfLength;
+                lpRender->DrawLine(lvStart, lvEnd, lWhite);
+            }
+        }
     }
 
     const char* SceneManagerDebugComponent::GetName() const
@@ -196,6 +220,52 @@ namespace CgsSceneManager
         lpRender->DrawHollowTriangle(lVertex0, lVertex1, lVertex2,
             rw::RGBA(0xFFu, 0xFFu, 0xFFu, 0xFFu));
         lpRender->DrawSolidTriangle(lVertex0, lVertex1, lVertex2, lColour);
+    }
+
+    // @ X360 0x828ABF48. Translate the three triangle corners by lTranslation. A hit draws a
+    // red filled outline; a miss draws white and marks both contact points with the target's
+    // three 0.1-unit axis ticks.
+    void SceneManagerDebugComponent::DrawTriangle(CgsDev::Debug3DImmediateRender* lpRender,
+                                                    Vector3 lTranslation, Vector3 lVertex0,
+                                                    Vector3 lVertex1, Vector3 lVertex2,
+                                                    rw::math::vpu::MaskScalar lHitMask,
+                                                    Vector3 lSphereContactPoint,
+                                                    Vector3 lTriangleContactPoint)
+    {
+        lVertex0.x += lTranslation.x;
+        lVertex0.y += lTranslation.y;
+        lVertex0.z += lTranslation.z;
+        lVertex0.w += lTranslation.w;
+        lVertex1.x += lTranslation.x;
+        lVertex1.y += lTranslation.y;
+        lVertex1.z += lTranslation.z;
+        lVertex1.w += lTranslation.w;
+        lVertex2.x += lTranslation.x;
+        lVertex2.y += lTranslation.y;
+        lVertex2.z += lTranslation.z;
+        lVertex2.w += lTranslation.w;
+
+        if (lHitMask.GetBool())
+        {
+            // The ARTIST immediate is 0xFFFF0000; RGBA packs (a<<24)|(b<<16)|(g<<8)|r.
+            lpRender->DrawQuad(lVertex0, lVertex0, lVertex1, lVertex2,
+                rw::RGBA(0x00u, 0x00u, 0xFFu, 0xFFu));
+            return;
+        }
+
+        const rw::RGBA lWhite(0xFFu, 0xFFu, 0xFFu, 0xFFu);
+        lpRender->DrawQuad(lVertex0, lVertex0, lVertex1, lVertex2, lWhite);
+
+        lSphereContactPoint.x += lTranslation.x;
+        lSphereContactPoint.y += lTranslation.y;
+        lSphereContactPoint.z += lTranslation.z;
+        lSphereContactPoint.w += lTranslation.w;
+        lTriangleContactPoint.x += lTranslation.x;
+        lTriangleContactPoint.y += lTranslation.y;
+        lTriangleContactPoint.z += lTranslation.z;
+        lTriangleContactPoint.w += lTranslation.w;
+        DrawContactAxes(lpRender, lSphereContactPoint);
+        DrawContactAxes(lpRender, lTriangleContactPoint);
     }
 
     // @ X360 0x828AB568. Captions, registration order, ranges, increments and read-only state
