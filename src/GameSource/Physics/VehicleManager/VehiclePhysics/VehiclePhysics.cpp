@@ -16,11 +16,12 @@
 #include "rw/math/fpu/scalar_operation.h"            // rw::math::fpu::IsZero (SetWheelVelocities' per-axle power gates)
 #include "SDKs/XboxMath/XMVectorACos.h"              // XboxMath::XMVectorACos (X360 0x821F0980), the drift angles
 #include "SDKs/XboxMath/XMVectorSinCos.h"            // XboxMath::XMVectorSinCos (the steering angle's inlined SinCos)
+#include "SDKs/XboxMath/XMVectorSin.h"               // ARTIST's editable wheelie-angle threshold
 
 #include <cstdlib>    // getenv ([tyre] bring-up probe only)
 #include <algorithm>  // std::min / std::max (the driving spine's vmaxfp/vminfp lowerings)
 #include <cstring>    // std::memcpy (controls/engine state copies)
-#include <cmath>      // std::sqrt / std::sin (boost-kick wheelie-angle limit: XMVectorSin gives the same bits at 11 deg) + speed magnitudes
+#include <cmath>      // speed magnitudes and scalar arithmetic
 
 // [DIAG] the host-side present counter ([air] rows only; FX-WITNESS).
 namespace renderengine { extern u32 guPresentCount; }
@@ -2758,7 +2759,7 @@ namespace Vehicle
             // 0x825D3360 `bl XMVectorSin` @0x821F05E0 (out of line; NOT the SinCos inline: the two differ on
             // about 7% of angles). kfMaxWheelieAngle is a code static (0x41300000 = 11.0; only the dev debug
             // slider writes it), and at 11 deg XMVectorSin and std::sin give the same bits, 0x3E43636F.
-            const f32 lfWheelieSin = std::sin(gfMaxWheelieAngle * KF_DEG_TO_RAD);      // XMVectorSin
+            const f32 lfWheelieSin = XboxMath::XMVectorSin(gfMaxWheelieAngle * KF_DEG_TO_RAD);
 
             // Pitch = dot(forward axis, the copied contact normal).
             const f32 lfPitch =
