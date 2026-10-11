@@ -1446,7 +1446,7 @@ bool BrnRendererModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lp
 {
     const auto AdvancePrepareStage = [this]()
     {
-        ++mePrepareStage;
+        mePrepareStage = static_cast<ERendererPrepareStage>(mePrepareStage + 1);
         CGS_ASSERT(mePrepareStage <= eRendererPrepareDone,
                    "leEnumIndex <= BrnRendererModule::eRendererPrepareDone");
     };
