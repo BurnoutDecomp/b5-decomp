@@ -57,7 +57,7 @@ namespace BrnAI
         const RouteNode* current = route->GetNode(index);
         const AISection* section = mpAISectionData->GetAISection(current->muSectionIndex);
         if (section->mu8NumPortals < 2 || (section->mx8Flags & 6)) return false;
-        const u8 end = static_cast<u8>(current->muPad0x0E);
+        const u8 end = current->muPortalIndex;
         u8 start = 255;
         for (u8 p = 0; p < section->mu8NumPortals; ++p)
             if (section->GetPortal(p)->GetLinkSectionIndex() == previous->muSectionIndex) { start = p; break; }

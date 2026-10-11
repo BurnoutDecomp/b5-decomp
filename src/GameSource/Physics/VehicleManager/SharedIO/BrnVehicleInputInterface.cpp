@@ -1,6 +1,5 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the CreateArticulatedTraffic gate log
 #include "rw/math/vpu/vector3_operation.h"          // rw::math::vpu::IsValid(Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"   // rw::math::vpu::IsValid(Matrix44Affine)
 // this TU's own `static const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;`
@@ -134,28 +133,66 @@ namespace Vehicle
         mCreateTrafficEventQueue.AddEvent(lEvent);
     }
 
-    // @0x8271C9C0 (478)  VehicleInputInterface::CreateArticulatedTraffic
-    // GATE: trailers are parked for wave-T3 round 1; the 31-argument fill is not reconstructed.
-    // BLOCKER: the whole articulated sub-tree (ProcessCreateArticulatedTrafficEvents @0x826487C8,
-    // ResolveArticulatedJoints @0x825F0A90) is parked with it, so a posted event has no consumer.
-    // DELETE-WHEN the trailer wave lands. Unreachable today: wave-T2 generation only builds
-    // InitialiseAsStandard cars, so AddVehicleToPhysics never takes its articulated arm.
+    // @0x8271C9C0 (478) VehicleInputInterface::CreateArticulatedTraffic.
+    // Validate and enqueue the cab/trailer spawn payload in the original field order.
     void VehicleInputInterface::CreateArticulatedTraffic(
-            VolumeInstanceId, Matrix44Affine, Vector3, Vector3, u64, ResourceHandle, CgsID,
-            VolumeInstanceId, Matrix44Affine, Vector3, Vector3, u64, ResourceHandle, CgsID,
-            ETrafficType)
+            VolumeInstanceId lVolumeInstanceId_Cab,
+            Matrix44Affine lInitialTransform_Cab,
+            Vector3 lInitialVelocity_Cab,
+            Vector3 lAngularVelocity_Cab,
+            u64 lAssetAttribKey_Cab,
+            ResourceHandle lModelHandle_Cab,
+            CgsID lCgsId_Cab,
+            VolumeInstanceId lVolumeInstanceId_Trailer,
+            Matrix44Affine lInitialTransform_Trailer,
+            Vector3 lInitialVelocity_Trailer,
+            Vector3 lAngularVelocity_Trailer,
+            u64 lAssetAttribKey_Trailer,
+            ResourceHandle lModelHandle_Trailer,
+            CgsID lCgsId_Trailer,
+            ETrafficType leTrafficType)
     {
-        static bool sbLogged = false;
-        if (!sbLogged)
-        {
-            sbLogged = true;
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[T3-gate] VehicleInputInterface::CreateArticulatedTraffic @0x8271C9C0:"
-                       " inert (trailers parked) [FLAG PC partial gate]\n";
-            }
-        }
+        CGS_ASSERT(lVolumeInstanceId_Cab.muId != VolumeInstanceId::KU_INVALID_ID,
+                   "lVolumeInstanceID_Cab != CgsSceneManager::K_INVALID_VOLUME_INSTANCE_ID"); // :525
+        CGS_ASSERT(rw::math::vpu::IsValid(lInitialTransform_Cab),
+                   "RwMathVPU::IsValid( lInitialTransform_Cab )"); // :526
+        CGS_ASSERT(rw::math::vpu::IsValid(lInitialVelocity_Cab),
+                   "RwMathVPU::IsValid( lInitialVelocity_Cab )"); // :527
+        CGS_ASSERT(rw::math::vpu::IsValid(lAngularVelocity_Cab),
+                   "RwMathVPU::IsValid( lAngularVelocity_Cab )"); // :528
+        CGS_ASSERT(lCgsId_Cab != 0, "lCgsId_Cab != kCGSID_NULL"); // :529
+
+        CGS_ASSERT(lVolumeInstanceId_Trailer.muId != VolumeInstanceId::KU_INVALID_ID,
+                   "lVolumeInstanceID_Trailer != CgsSceneManager::K_INVALID_VOLUME_INSTANCE_ID"); // :530
+        CGS_ASSERT(rw::math::vpu::IsValid(lInitialTransform_Trailer),
+                   "RwMathVPU::IsValid( lInitialTransform_Trailer )"); // :531
+        CGS_ASSERT(rw::math::vpu::IsValid(lInitialVelocity_Trailer),
+                   "RwMathVPU::IsValid( lInitialVelocity_Trailer )"); // :532
+        CGS_ASSERT(rw::math::vpu::IsValid(lAngularVelocity_Trailer),
+                   "RwMathVPU::IsValid( lAngularVelocity_Trailer )"); // :533
+        CGS_ASSERT(lCgsId_Trailer != 0, "lCgsId_Trailer != kCGSID_NULL"); // :534
+        CGS_ASSERT(leTrafficType >= E_TRAFFIC_TYPE_POTENTIAL
+                       && leTrafficType < E_TRAFFIC_TYPE_COUNT,
+                   "leTrafficType >= E_TRAFFIC_TYPE_POTENTIAL && leTrafficType < E_TRAFFIC_TYPE_COUNT"); // :535
+
+        CreateArticulatedTrafficEvent lEvent;
+        lEvent.mInitialTransform_Cab = lInitialTransform_Cab;
+        lEvent.mInitialTransform_Trailer = lInitialTransform_Trailer;
+        lEvent.mInitialVelocity_Cab = lInitialVelocity_Cab;
+        lEvent.mInitialVelocity_Trailer = lInitialVelocity_Trailer;
+        lEvent.mAngularVelocity_Cab = lAngularVelocity_Cab;
+        lEvent.mAngularVelocity_Trailer = lAngularVelocity_Trailer;
+        lEvent.mVolumeInstanceID_Cab = lVolumeInstanceId_Cab;
+        lEvent.mVolumeInstanceID_Trailer = lVolumeInstanceId_Trailer;
+        lEvent.mAssetAttribKey_Cab = lAssetAttribKey_Cab;
+        lEvent.mAssetAttribKey_Trailer = lAssetAttribKey_Trailer;
+        lEvent.mModelHandle_Cab = lModelHandle_Cab;
+        lEvent.mModelHandle_Trailer = lModelHandle_Trailer;
+        lEvent.mCgsId_Cab = lCgsId_Cab;
+        lEvent.mCgsId_Trailer = lCgsId_Trailer;
+        lEvent.meTrafficType = leTrafficType;
+
+        mCreateArticulatedTrafficEventQueue.AddEvent(lEvent);
     }
 
     // @0x822CC2A0  VehicleInputInterface::ResetRaceCar

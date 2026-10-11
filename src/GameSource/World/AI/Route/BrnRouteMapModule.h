@@ -6,13 +6,14 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"     // ResourcePtr<AISectionsData>
 #include "GameSource/World/AI/Route/BrnAStar.h"                        // BrnAI::AStar (embedded)
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"             // the "Route" IO buffer pair
-#include <eathread/eathread_rwmutex.h>
+#include "GameSource/World/AI/Route/BrnRouteMapDebugComponent.h"       // original embedded owner
 
 namespace CgsModule { struct IOBufferStack; }
 
 namespace BrnAI
 {
 struct AISectionsData;
+class AIModule;
 
 // Reconstructed from DWARF (BrnRouteMapModule.h:48-52). An 8-byte (section,portal) index pair;
 // the element type of the RacingLineGenerator's ExtrapolatedIndexArray
@@ -26,11 +27,10 @@ struct SectionAndPortalIndices
     u32 muPortal;  // DWARF BrnRouteMapModule.h:51
 };
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x827E23F0.
-// The X360 layout places a large embedded working set between the two
-// read/write mutexes and the trailing intrusive-list anchor; the unknown
-// span is preserved with an explicit padding buffer so every recovered
-// member is accessed by name (no raw offset casts).
+// Reconstructed from BURNOUT_X360_ARTIST.XEX @0x827E23F0 and DecFIGS .h:68.
+// The two mutexes belong to ModuleSingleBuffered's DataBuffers. The original
+// trailing list anchor belongs to ResourcePtr, and 0x820CDFC4 is the embedded
+// debug component's vtable. Each is owned by its actual C++ type here.
 //
 // ⭐ 2026-08-25 (aimodule wave): this IS a CgsModule module. AIModule::Construct
 // @0x82794D08 calls `ModuleSingleBuffered::Construct(this + 295896)` on it, AIModule::Release
@@ -50,6 +50,9 @@ class RouteMapModule : public CgsModule::ModuleSingleBuffered
 public:
     RouteMapModule();
 
+    // DecFIGS .cpp:46; inlined in ARTIST AIModule::Construct @0x82794D08.
+    void Construct(AIModule* lpAIModule);
+
     // X360 0x8277FDE8 (its own virtual, slot 16 -- see the banner). FIVE lines:
     //   ResourcePtr<AISectionsData>::CreateFromHandle(this + 26016, &lHandle)
     //   CgsDev::DebugComponent::Register(this + 26052)
@@ -58,6 +61,10 @@ public:
     // The console takes the handle BY VALUE in one 64-bit GPR (`ld r4, 0(...)` at the call
     // site) -- two 32-bit pointers packed; kept by value here for the same reason.
     bool Prepare(CgsResource::ResourceHandle lHandle);
+
+    // ARTIST @0x82767E20 / @0x827750D0, DecFIGS .cpp:140 / :152.
+    bool Release() override;
+    void Destruct() override;
 
     // The base's no-arg Update() stays reachable by name (the console hides it the same way).
     using CgsModule::ModuleSingleBuffered::Update;
@@ -81,14 +88,6 @@ public:
     // load-and-branch idiom the X360 uses wherever an unloaded resource is legal.)
     bool HasAISectionsData() const { return mAISectionsData.HasMemoryResource(); }
 
-    // X360 AIModule::Construct's `*(this + 295900) = 1` -- 295900 == this module's base + 4 ==
-    // Module::mbIsNewModule, stored right after the ModuleSingleBuffered::Construct(this+295896)
-    // that cleared it. mbIsNewModule is `protected` on CgsModule::Module, so the owner needs this
-    // one-line hatch to set it from outside. (Measured cost of omitting it: the base Prepare takes
-    // its CreateInputDataStructure arm and asserts "This is a new module type" every frame,
-    // for ever.)
-    void MarkAsNewModule() { mbIsNewModule = true; }
-
     friend class RouteMapDebugComponent;   // DrawAStarInMap reads mAStar directly
 
 private:
@@ -105,38 +104,20 @@ private:
     void ProcessExtrapolatedRoute(const RouteMapModuleIO::ExtrapolatedRouteRequest* lpRouteRequest,
                                   RouteMapModuleIO::RouteResponseQueue* lpRouteResponseQueue);
 
-    EA::Thread::RWMutex mReadWriteMutexA;   // guest index 4
-    EA::Thread::RWMutex mReadWriteMutexB;   // guest index 70
-
     // X360 +552 (0x228). The route pathfinder AStar::Construct binds the section graph into.
     AStar               mAStar;
 
     // X360 +26016 (0x65A0). The loaded AI road network.
     CgsResource::ResourcePtr<AISectionsData> mAISectionsData;
 
-    u8                  mWorkingSetPad[25472]; // unknown embedded span up to the anchor
-
-    // Trailing intrusive-list anchor (circular list head: the three node
-    // pointers are initialised to the anchor itself when empty).
-    u32   mAnchorState;     // guest index 6504
-    u32   mUnk6505;
-    u32   mUnk6506;
-    void* mpListHead;       // guest index 6507
-    void* mpListTail;       // guest index 6508
-    void* mpListCursor;     // guest index 6509
-    u32   mUnk6510;
-    u32   mUnk6511;
-    u32   mUnk6512;
-    void* mpAllocatorIface; // guest index 6513 -> static dispatch table
-
-    // ---- ADDITIVE (aiwave A5, 2026-09-03; DWARF BrnRouteMapModule.h:111/:112) ------------
     // The ids of the race route currently being searched, latched by ProcessRaceRoute on the
     // frame the request arrives (`sth 0x6A(req), 0x65C0(this)` / `sth 0x68(req), 0x65C2(this)`)
     // and copied into the RouteResponse on the frame the search completes -- the request itself
     // is gone by then (the transient "Route" input buffer is rebuilt every frame). X360 +26048 /
-    // +26050; on this host they live here, past the pad spine, and are reached by name only.
+    // +26050. They precede the original embedded debug component.
     u16   muEventId;        // X360 +0x65C0 (26048)
     u16   muOwnerId;        // X360 +0x65C2 (26050)
+    RouteMapDebugComponent mRoupeMapDebugComponent; // DecFIGS .h:115 (original spelling)
 };
 }
 

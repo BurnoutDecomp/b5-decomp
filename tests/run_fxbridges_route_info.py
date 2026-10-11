@@ -31,6 +31,8 @@ from fxgs_common import Tree, code_only, definition, compile_and_run, report, ST
 GSM_CPP = "src/GameSource/GameState/BrnGameStateModule.cpp"
 MODE_CPP = "src/GameSource/GameState/ModeManager/BrnModeManager_UpdateMode.cpp"
 DRAIN_CPP = "src/GameSource/GameState/GameStateModule_gUI_00.cpp"
+DISPATCH_CPP = "src/GameSource/GameState/GameStateModule_ProcessGameEvents.cpp"
+GROUP5_CPP = "src/GameSource/GameState/GameStateModule_ProcessGameEvents_wBT_05.cpp"
 BRIDGE_CPP = "src/GameSource/Game/GameBridgeWorldToX.cpp"
 MODULE_CPP = "src/GameSource/Game/BrnGameModule.cpp"
 EVENTS_H = "src/GameSource/GameState/BrnGameEvents.h"
@@ -64,17 +66,35 @@ def wiring(tree):
            "mpGameStateModule->SendRouteRequestAction(&lRouteRequest,lpGameActionQueue,BrnAI::RouteMapModuleIO::E_OWNER_MODE_MANAGER);" in mode)
     bridge = squash(body(tree.read(BRIDGE_CPP), "void BrnGameModule::BridgeWorldToGameState(") or "")
     yield ("BridgeWorldToGameState runs leg 10 onto the post-world game-event queue (0x823E5494..0x823E554C)",
-           "BridgeWorldToGameState_RouteInfo(lpGameStateInput->GetGameEventQueue(),lpWorldOutput);" in bridge)
+           "BridgeWorldToGameState_RouteInfo(lpGameStateInput->GetGameEventQueue(),lpWorldOutput);" in bridge or
+           all(token in bridge for token in ("lpWorldOutput->GetRouteResponseQueue()",
+               "lRouteResponse.GetOwnerId()==BrnAI::RouteMapModuleIO::E_OWNER_MODE_MANAGER",
+               "lRouteResponse.GetEventId()", "lRouteResponse.GetRoute()->GetDistance()",
+               "lpGameStateInput->GetGameEventQueue()->AddEvent(", "E_EVENT_MODE_MANAGER_ROUTE_INFO")))
     module = squash(tree.read(MODULE_CPP))
     seam = module.find("lPostWorldGameEventQueue.Append(*lpcWorldOutput->GetGameEventQueue());")
     leg10 = module.find("BrnGame::BridgeWorldToGameState_RouteInfo(&lPostWorldGameEventQueue,lpcWorldOutput);")
     feed = module.find("&lPostWorldGameEventQueue,", max(leg10, 0))
-    yield ("the one-feed post-world seam builds its game-event queue from legs 2 then 10 and feeds it",
-           0 <= seam < leg10 < feed)
+    scheduler = squash(body(tree.read(MODULE_CPP), "void BrnGameModule::DoUpdate_GameStatePostWorld(") or "")
+    bridge_call = scheduler.find("BridgeWorldToGameState(lpPostWorldInput,lpWorldUpdateOutputBuffer);")
+    post_call = scheduler.find("mGameStateModule.PostWorldUpdate(")
+    append = bridge.find("lpGameStateInput->GetGameEventQueue()->Append(*lpWorldOutput->GetGameEventQueue());")
+    reply = bridge.find("lpGameStateInput->GetGameEventQueue()->AddEvent(")
+    yield ("the post-world bridge transfers world events before route replies and feeds that input buffer",
+           0 <= seam < leg10 < feed or
+           (0 <= append < reply and 0 <= bridge_call < post_call and
+            "lpPostWorldInput,lUpdateSet);" in scheduler[post_call:]))
     drain = squash(tree.read(DRAIN_CPP))
     arm = drain.find("ProcessGameEventsModeManagerRouteInfoBringUp(&lGameEventQueue);")
     tick = drain.find("mModeManager.PreWorldUpdate(")
-    yield ("the case-174 arm is drained before the ModeManager tick (ProcessGameEvents precedes it)", 0 <= arm < tick)
+    dispatcher = squash(tree.read(DISPATCH_CPP))
+    group5 = squash(tree.read(GROUP5_CPP))
+    process = drain.find("ProcessGameEvents(&lGameEventQueue,")
+    yield ("the case-174 arm is drained before the ModeManager tick (ProcessGameEvents precedes it)",
+           0 <= arm < tick or (0 <= process < tick and
+            "caseGameStateModuleIO::E_EVENT_MODE_MANAGER_ROUTE_INFO:ProcessGameEvents_Group5(" in dispatcher and
+            "caseGameStateModuleIO::E_EVENT_MODE_MANAGER_ROUTE_INFO:{" in group5 and
+            "mModeManager.HandleCheckpointDistanceResponse(lpRouteInfoEvent);" in group5))
 
 
 def numeric_gamestate(tree):
@@ -97,10 +117,22 @@ def numeric_gamestate(tree):
 
 
 def numeric_bridge(tree):
-    leg10 = body(tree.read(BRIDGE_CPP), "    void BridgeWorldToGameState_RouteInfo(")
+    source = tree.read(BRIDGE_CPP)
+    leg10 = body(source, "    void BridgeWorldToGameState_RouteInfo(")
     if leg10 is None:
-        print("NUMERIC (bridge): missing body: BridgeWorldToGameState_RouteInfo")
-        return None
+        # The legacy free helper was folded back into the actual bridge. Extract
+        # that unchanged production leg, retaining its real queue accessor.
+        bridge = whole(source, "void BrnGameModule::BridgeWorldToGameState(")
+        if bridge is None:
+            print("NUMERIC (bridge): missing BridgeWorldToGameState")
+            return None
+        start = bridge.index("const BrnAI::RouteMapModuleIO::RouteResponseQueue* lpRouteResponseOutput")
+        loop_start = bridge.index("for (s32 liResponse = 0;", start)
+        loop = definition(bridge, "for (s32 liResponse = 0;")
+        leg10 = ("{\nstruct InputView { CgsModule::VariableEventQueue<1536,16>* queue; "
+                 "CgsModule::VariableEventQueue<1536,16>* GetGameEventQueue() const { return queue; } };\n"
+                 "InputView input{lpGameEventQueue}; auto* lpGameStateInput = &input;\n" +
+                 bridge[start:loop_start] + loop + "\n}")
     shadow = {EVENTS_H: tree.read(EVENTS_H)} if tree.rev else None
     return compile_and_run(Path(__file__).with_name("FxBridgesRouteInfoBridge.cpp"),
                            "fxbridges_route_info_leg10.inc", leg10, "FxBridgesRouteInfoBridge",

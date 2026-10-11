@@ -122,6 +122,13 @@ namespace Vehicle
         mJointId = lJointId;                                 // std r26, 0x40(r28) -- full u64
     }
 
+    // DWARF BrnArticulatedJoint.h:108; inlined in DrawPhysicalTraffic at
+    // 0x825ED804/810/818/82C: read the four rows at joint +0/+16/+32/+48.
+    rw::math::vpu::Matrix44Affine ArticulatedJoint::GetParentToJointTransform() const
+    {
+        return mParentToJointTransform;
+    }
+
     // @0x825B4690  BrnPhysics::Vehicle::ArticulatedJointId::Set
     //   Packs the cab EntityId (high dword), the trailer's 14-bit entity index (bits[29:16]) and
     //   the vehicle (joint-pool) index (low 16 bits) into mu64RawId. Asserts both halves are

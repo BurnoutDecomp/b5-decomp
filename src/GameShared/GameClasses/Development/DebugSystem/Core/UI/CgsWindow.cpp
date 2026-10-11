@@ -332,7 +332,8 @@ namespace CgsDev
 
             const f32 lfCaptionHeight = CalcCaptionHeight();
             if ((mxFlags & KX_FLAGNOBACKGROUND) == 0)
-                lpRender->DrawBox(mfX, mfY, mfWidth, mfHeight, ScaleColour(lBackgroundColour));
+                lpRender->DrawBox(Vector2{mfX, mfY, 0, 0}, Vector2{mfWidth, mfHeight, 0, 0},
+                                  ScaleColour(lBackgroundColour));
 
             if ((mxFlags & KX_FLAGNOBORDER) == 0)
                 lpRender->DrawFrame(mfX, mfY - lfCaptionHeight, mfX + mfWidth, mfY + mfHeight,
@@ -340,7 +341,8 @@ namespace CgsDev
 
             if ((mxFlags & KX_FLAGNOCAPTION) == 0)
             {
-                lpRender->DrawBox(mfX, mfY - lfCaptionHeight, mfWidth, lfCaptionHeight,
+                lpRender->DrawBox(Vector2{mfX, mfY - lfCaptionHeight, 0, 0},
+                                  Vector2{mfWidth, lfCaptionHeight, 0, 0},
                                   ScaleColour(lCaptionColour));
                 lpRender->DrawText(mpcCaption,
                                    mfX + lrMetrics.mfWindowBorderSize,

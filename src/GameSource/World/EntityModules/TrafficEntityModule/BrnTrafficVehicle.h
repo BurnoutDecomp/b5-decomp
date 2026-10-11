@@ -397,6 +397,8 @@ public:
     static void _AssertLayout();
 
 private:
+    friend class DebugComponent;
+
     u8 muVehicleType;
     u8 muCrashTrafficType;
     u16 muOtherHalfIndex;

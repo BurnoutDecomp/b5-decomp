@@ -13,6 +13,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"                   // VehicleManager (RecordCrashContact's two bare reads; friend)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"       // RaceCarPhysics (GetTransform / GetDeformableAABB / GetLinearVelocity)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"        // shared debug-menu tunables
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"         // CgsGeometric::AxisAlignedBox
 #include "GameSource/World/BrnEntityTypes.h"                                        // BrnWorld::E_ENTITYTYPE_*
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                             // CgsCore::SPrintf
@@ -28,6 +29,11 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    // X360 data variables exposed by VehicleManagerDebugComponent::OnActivate.
+    f32 gfGroundContactCullHeight = 0.4f;          // 0x82F2A148; read by both VehicleManager world-contact arms
+    f32 gfLastShuntClosingSpeed = 0.0f;             // 0x82FB7E18; no other ARTIST data reference found
+    f32 gfLastShuntAggressorSpeed = 0.0f;           // 0x82FB7E1C; no other ARTIST data reference found
+
     // ----------------------------------------------------------------------------------------
     // The "invalid volume instance" sentinel the two embedded PotentialContacts are seeded with.
     //
@@ -157,6 +163,209 @@ namespace Vehicle
     const char* VehicleManagerDebugComponent::GetName() const
     {
         return "Vehicle Manager";
+    }
+
+    // ========================================================================================
+    // VehicleManagerDebugComponent::OnActivate @ 0x825B5D90
+    // Register the X360 menu entries in their original order. The duplicate vulnerability and
+    // slam-speed registrations deliberately retain the same underlying manager fields.
+    // ========================================================================================
+    void VehicleManagerDebugComponent::OnActivate()
+    {
+        RegisterVariable(&mbDrawPlayerStuckInCollisionTests, "Collision", "Draw player stuck tests");
+        RegisterVariable(&mpVehicleManager->maRaceCarVehicles[0].mfTimeUntilStuckInCollisionTest,
+                         "Collision", "Time until stuck test");
+        RegisterVariable(&mbDrawCatchupTargets, "Catchup", "Draw catchup targets");
+
+        RegisterVariable(&gfFullDampThreshold, "Jumps", "Full damp threshold");
+        RegisterVariable(&gfNoDampThreshold, "Jumps", "No damp threshold");
+        RegisterVariable(&gfMinRollFactor, "Jumps", "Min. roll factor");
+        SetRange(&gfFullDampThreshold, 0.0f, 1.0f);
+        SetRange(&gfNoDampThreshold, 0.0f, 1.0f);
+        SetRange(&gfMinRollFactor, 0.0f, 1.0f);
+        SetStep(&gfFullDampThreshold, 0.0099999998f);
+        SetStep(&gfNoDampThreshold, 0.0099999998f);
+        SetStep(&gfMinRollFactor, 0.0099999998f);
+        RegisterVariable(&gfRollDampingUsed, "Jumps", "Roll damping used");
+        SetReadOnly(&gfRollDampingUsed, true);
+
+        RegisterVariable(&mpVehicleManager->miNumSPUTractionLineTests, "Performance", "Num traction tests");
+        SetReadOnly(&mpVehicleManager->miNumSPUTractionLineTests, true);
+
+        RegisterVariable(&mpVehicleManager->mbStopPlayerCrashing, "Crashes", "Stop player crashing");
+        RegisterVariable(&mpVehicleManager->mbStopAICrashing, "Crashes", "Stop AI crashing");
+        RegisterVariable(&mpVehicleManager->mbCrashOnHandbrakeTurn, "Crashes", "Handbrake turns cause crashes");
+        RegisterVariable(&mpVehicleManager->DEBUG_mbAlwaysCrashRaceCarToRaceCar,
+                         "Crashes", "Always crash race car on race car");
+        RegisterVariable(&gfGroundContactCullHeight, "Crashes", "Ground Contact Cull Height");
+        SetRange(&gfGroundContactCullHeight, 0.0f, 1.0f);
+        SetStep(&gfGroundContactCullHeight, 0.0099999998f);
+        RegisterVariable(&mpVehicleManager->mfTrafficCollisionCheckThresholdMPH,
+                         "Crashes", "Traffic check min speed");
+        SetRange(&mpVehicleManager->mfTrafficCollisionCheckThresholdMPH, 0.0f, 100.0f);
+        SetStep(&mpVehicleManager->mfTrafficCollisionCheckThresholdMPH, 2.5f);
+        RegisterVariable(&mpVehicleManager->mfMinRCTrafficTranslateSpeedMPH,
+                         "Crashes", "'Translating bollox' min speed");
+        RegisterVariable(&mpVehicleManager->mfHeadOnWorldCrashThreshold,
+                         "Crashes", "Head-on world crash factor");
+        SetStep(&mpVehicleManager->mfHeadOnWorldCrashThreshold, 0.5f);
+        SetRange(&mpVehicleManager->mfHeadOnWorldCrashThreshold, 0.0f, 100.0f);
+        RegisterVariable(&mpVehicleManager->mfSideOnWorldCrashThreshold,
+                         "Crashes", "Side-on world crash factor");
+        SetStep(&mpVehicleManager->mfSideOnWorldCrashThreshold, 0.5f);
+        SetRange(&mpVehicleManager->mfSideOnWorldCrashThreshold, 0.0f, 100.0f);
+        RegisterVariable(&mpVehicleManager->mbDebugModifyTrafficContacts,
+                         "Crashes", "Modify traffic contacts");
+        RegisterVariable(&mbDrawLastRaceCarTrafficContact,
+                         "Crashes", "Draw last RC-traffic contact");
+        RegisterVariable(&mbDrawLastCrashContact, "Crashes", "Draw last crash contact");
+        RegisterVariable(&mbRenderWallContacts, "Crashes", "Draw wall contacts");
+        RegisterVariable(&mbRenderGroundContacts, "Crashes", "Draw ground contacts");
+
+        RegisterVariable(&gvMaxCrashAngularVelocity.x, "Crashes", "Max X Angular Velocity");
+        SetStep(&gvMaxCrashAngularVelocity.x, 0.1f);
+        SetRange(&gvMaxCrashAngularVelocity.x, 0.0f, 100.0f);
+        RegisterVariable(&gvMaxCrashAngularVelocity.y, "Crashes", "Max Y Angular Velocity");
+        SetStep(&gvMaxCrashAngularVelocity.y, 0.1f);
+        SetRange(&gvMaxCrashAngularVelocity.y, 0.0f, 100.0f);
+        RegisterVariable(&gvMaxCrashAngularVelocity.z, "Crashes", "Max Z Angular Velocity");
+        SetStep(&gvMaxCrashAngularVelocity.z, 0.1f);
+        SetRange(&gvMaxCrashAngularVelocity.z, 0.0f, 100.0f);
+
+        RegisterVariable(&mpVehicleManager->mfVerticalTakedownAngleDeg,
+                         "Takedowns", "Max vertical TD angle degrees");
+        SetRange(&mpVehicleManager->mfVerticalTakedownAngleDeg, 0.0f, 90.0f);
+        RegisterVariable(&mpVehicleManager->DEBUG_mbHornTakedownEnabled, "Takedowns", "Killer Horn");
+
+        RegisterVariable(&mpVehicleManager->mbSlamsAndShuntsOn, "Slams", "Slams And Shunts On");
+        RegisterVariable(&gfLastShuntClosingSpeed, "Slams", "Last Shunt Closing Speed");
+        SetStep(&gfLastShuntClosingSpeed, 1.0f);
+        RegisterVariable(&gfLastShuntAggressorSpeed, "Slams", "Last Shunt Aggressor Speed");
+        SetStep(&gfLastShuntAggressorSpeed, 1.0f);
+        RegisterVariable(&gfForcedAcceleration, "Slams", "Forced Acceleration");
+        SetStep(&gfForcedAcceleration, 0.1f);
+        RegisterVariable(&mpVehicleManager->mfMinNudgeSpeed, "Slams", "Min Nudge Speed");
+        SetStep(&mpVehicleManager->mfMinNudgeSpeed, 1.0f);
+        RegisterVariable(&mpVehicleManager->mfMinShuntSpeed, "Slams", "Min Shunt Speed");
+        SetStep(&mpVehicleManager->mfMinShuntSpeed, 1.0f);
+        RegisterVariable(&mpVehicleManager->mfFatalShuntSpeed, "Slams", "Fatal Shunt Speed");
+        SetStep(&mpVehicleManager->mfFatalShuntSpeed, 1.0f);
+        RegisterVariable(&mpVehicleManager->mfMaxShuntAngle, "Slams", "Max Shunt Angle");
+        SetStep(&mpVehicleManager->mfMaxShuntAngle, 1.0f);
+        RegisterVariable(&mpVehicleManager->mfMinShuntMagnitude, "Slams", "Min Shunt Magnitude");
+        SetStep(&mpVehicleManager->mfMinShuntMagnitude, 0.050000001f);
+        RegisterVariable(&mpVehicleManager->mfMaxShuntMagnitude, "Slams", "Max Shunt Magnitude");
+        SetStep(&mpVehicleManager->mfMaxShuntMagnitude, 0.050000001f);
+        RegisterVariable(&mpVehicleManager->mfMinTradingPaintSpeed, "Slams", "Min Trading Paint Speed");
+        SetStep(&mpVehicleManager->mfMinTradingPaintSpeed, 1.0f);
+        RegisterVariable(&mpVehicleManager->mfMaxSlamClosingXSpeed, "Slams", "Max Slam Speed");
+        SetStep(&mpVehicleManager->mfMaxSlamClosingXSpeed, 1.0f);
+        RegisterVariable(&mpVehicleManager->mfFatalSlamSpeed, "Slams", "Fatal Slam Speed");
+        SetStep(&mpVehicleManager->mfFatalSlamSpeed, 1.0f);
+        RegisterVariable(&mpVehicleManager->mfSlamEffectMinMagnitude, "Slams", "Slam Effect Min");
+        SetStep(&mpVehicleManager->mfSlamEffectMinMagnitude, 0.050000001f);
+        RegisterVariable(&mpVehicleManager->mfSlamEffectMaxMagnitude, "Slams", "Slam Effect Max");
+        SetStep(&mpVehicleManager->mfSlamEffectMaxMagnitude, 0.050000001f);
+        RegisterVariable(&mpVehicleManager->mfFatalHitCrashingCarSpeed,
+                         "Slams", "Fatal Hit Crashing Car Speed");
+        SetStep(&mpVehicleManager->mfFatalHitCrashingCarSpeed, 1.0f);
+        RegisterVariable(&mpVehicleManager->mfMaxHeadToHeadAngle, "Slams", "Head To Head Max Angle");
+        SetStep(&mpVehicleManager->mfMaxHeadToHeadAngle, 1.0f);
+        RegisterVariable(&mpVehicleManager->mfMinHeadToHeadSpeed, "Slams", "Head To Head Min Closing Speed");
+        SetStep(&mpVehicleManager->mfMinHeadToHeadSpeed, 1.0f);
+        RegisterVariable(&mpVehicleManager->mfMinHeadToHeadIndividualSpeed,
+                         "Slams", "Head To Head Min Fatal Speed");
+        SetStep(&mpVehicleManager->mfMinHeadToHeadIndividualSpeed, 1.0f);
+        RegisterVariable(&mpVehicleManager->mfTBoneTakedownMaxAngle, "Slams", "T-Bone Takedown Max Angle");
+        SetStep(&mpVehicleManager->mfTBoneTakedownMaxAngle, 1.0f);
+        RegisterVariable(&mpVehicleManager->mfTBoneTakedownSpeed, "Slams", "T-Bone Takedown Min Speed");
+        SetStep(&mpVehicleManager->mfTBoneTakedownSpeed, 1.0f);
+
+        RegisterVariable(&mbDrawLastSlamInfo, "Slam Details", "Draw last slam info");
+        RegisterVariable(&mbDrawLastShuntInfo, "Slam Details", "Draw last shunt info");
+        RegisterVariable(&mbSlamDebugRenderEnabled, "Slam Details", "Slam Debug");
+        RegisterVariable(&mbGrindDebugRenderEnabled, "Slam Details", "Grinding Debug");
+        RegisterVariable(&mpVehicleManager->mfVulnerabilityFactorMax,
+                         "Slam Details", "Slam vulnerability max");
+        RegisterVariable(&mpVehicleManager->mfAIVulnerabilityDurationSeconds,
+                         "Slam Details", "Slam vulnerability seconds on Player");
+        SetStep(&mpVehicleManager->mfAIVulnerabilityDurationSeconds, 0.1f);
+        RegisterVariable(&mpVehicleManager->mfAIVulnerabilityDurationSeconds,
+                         "Slam Details", "Slam vulnerability seconds on AI");
+        SetStep(&mpVehicleManager->mfAIVulnerabilityDurationSeconds, 0.1f);
+        RegisterVariable(&mpVehicleManager->mfMinSteeringOverrideTimeShunt,
+                         "Slam Details", "Min shunt steering override time");
+        SetStep(&mpVehicleManager->mfMinSteeringOverrideTimeShunt, 0.050000001f);
+        RegisterVariable(&mpVehicleManager->mfMinSteeringOverrideTimeSlam,
+                         "Slam Details", "Min slam steering override time");
+        SetStep(&mpVehicleManager->mfMinSteeringOverrideTimeSlam, 0.050000001f);
+        RegisterVariable(&mpVehicleManager->mfPlayerMaxSteeringOverrideTimeSlam,
+                         "Slam Details", "Player Slam Steering override max time");
+        SetStep(&mpVehicleManager->mfPlayerMaxSteeringOverrideTimeSlam, 0.050000001f);
+        RegisterVariable(&mpVehicleManager->mfPlayerMaxSteeringOverrideTimeShunt,
+                         "Slam Details", "Player Shunt Steering override max time");
+        SetStep(&mpVehicleManager->mfPlayerMaxSteeringOverrideTimeShunt, 0.050000001f);
+        RegisterVariable(&mpVehicleManager->mfMinAmountOfSlamForce,
+                         "Slam Details", "Min Amount of player Slam force");
+        SetStep(&mpVehicleManager->mfMinAmountOfSlamForce, 0.050000001f);
+        RegisterVariable(&mpVehicleManager->mfMinAmountOfShuntForce,
+                         "Slam Details", "Min Amount of player Shunt force");
+        SetStep(&mpVehicleManager->mfMinAmountOfShuntForce, 0.050000001f);
+        RegisterVariable(&mpVehicleManager->mfAIMaxSteeringOverrideTimeSlam,
+                         "Slam Details", "AI Slam Steering override max time");
+        SetStep(&mpVehicleManager->mfAIMaxSteeringOverrideTimeSlam, 0.050000001f);
+        RegisterVariable(&mpVehicleManager->mfAIMaxSteeringOverrideTimeShunt,
+                         "Slam Details", "AI Shunt Steering override max time");
+        SetStep(&mpVehicleManager->mfAIMaxSteeringOverrideTimeShunt, 0.050000001f);
+        RegisterVariable(&mpVehicleManager->mfPlayerSlamForceScale,
+                         "Slam Details", "Player Slam force scale");
+        SetStep(&mpVehicleManager->mfPlayerSlamForceScale, 0.0099999998f);
+        RegisterVariable(&mpVehicleManager->mfAISlamForceScale,
+                         "Slam Details", "AI Slam force scale");
+        SetStep(&mpVehicleManager->mfAISlamForceScale, 0.0099999998f);
+        RegisterVariable(&mpVehicleManager->mfMaxSlamClosingXSpeed,
+                         "Slam Details", "Max slam closing X speed");
+        SetStep(&mpVehicleManager->mfMaxSlamClosingXSpeed, 0.1f);
+        RegisterVariable(&mpVehicleManager->mfMinSecondsBetweenImpacts,
+                         "Slam Details", "Min seconds between impacts");
+        SetStep(&mpVehicleManager->mfMinSecondsBetweenImpacts, 0.050000001f);
+        SetRange(&mpVehicleManager->mfMinSecondsBetweenImpacts, 0.0f, 3.0f);
+        RegisterVariable(&mpVehicleManager->mfBaseSlamMagnitude, "Slam Details", "SLAM MAGNITUDE");
+        SetStep(&mpVehicleManager->mfBaseSlamMagnitude, 0.2f);
+        RegisterVariable(&mpVehicleManager->mfSlamDecayRate, "Slam Details", "SLAM DECAY RATE");
+        SetStep(&mpVehicleManager->mfSlamDecayRate, 0.0099999998f);
+        RegisterVariable(&mpVehicleManager->mfBaseShuntMagnitude, "Slam Details", "SHUNT MAGNITUDE");
+        SetStep(&mpVehicleManager->mfBaseShuntMagnitude, 0.2f);
+        RegisterVariable(&mpVehicleManager->mfShuntDecay, "Slam Details", "SHUNT DECAY RATE");
+        SetStep(&mpVehicleManager->mfShuntDecay, 0.0099999998f);
+
+        RegisterVariable(&mbRenderResetLines, "Reset Rays...", "Render reset rays");
+        RegisterVariable(&mpVehicleManager->mfFrontRayLength, "Reset Rays...", "Front Ray Length");
+        SetStep(&mpVehicleManager->mfFrontRayLength, 0.0099999998f);
+        RegisterVariable(&mpVehicleManager->mfRearRayLength, "Reset Rays...", "Rear Ray Length");
+        SetStep(&mpVehicleManager->mfRearRayLength, 0.0099999998f);
+        RegisterVariable(&mbDisplayWorldContactSpies, "", "Draw World Contact Spies");
+        RegisterVariable(&mpVehicleManager->mbCrashRaceCarWhenFatal, "", "Crash race cars on fatal");
+
+        RegisterVariable(&gbEnableInAirRotation, "In-air", "Enable in-air rotation");
+        RegisterVariable(&gfRollCorrectionFactor, "In-air", "Roll correction factor");
+        SetStep(&gfRollCorrectionFactor, 0.0099999998f);
+        SetRange(&gfRollCorrectionFactor, 0.0f, 10.0f);
+        RegisterVariable(&gfLandingAssistDamping, "In-air", "Landing assist damping");
+        SetStep(&gfLandingAssistDamping, 0.0099999998f);
+        SetRange(&gfLandingAssistDamping, 0.0f, 1.0f);
+        RegisterVariable(&gfIncreaseRollFactor, "In-air", "Increase roll factor");
+        SetStep(&gfIncreaseRollFactor, 0.0099999998f);
+        SetRange(&gfIncreaseRollFactor, 0.0f, 10.0f);
+        RegisterVariable(&gfMinRollToAllowCorrection, "In-air", "Min roll to allow correction");
+        SetStep(&gfMinRollToAllowCorrection, 0.0099999998f);
+        SetRange(&gfMinRollToAllowCorrection, 0.0f, 1.0f);
+        RegisterVariable(&gfMaxWheelieAngle, "Wheelies", "Max wheelie angle");
+        SetStep(&gfMaxWheelieAngle, 0.5f);
+        SetRange(&gfMaxWheelieAngle, 0.0f, 90.0f);
+        RegisterVariable(&gfWheelieLimitDamping, "Wheelies", "Wheelie limit damping");
+        SetStep(&gfWheelieLimitDamping, 0.0099999998f);
+        SetRange(&gfWheelieLimitDamping, 0.0f, 1.0f);
     }
 
     namespace
