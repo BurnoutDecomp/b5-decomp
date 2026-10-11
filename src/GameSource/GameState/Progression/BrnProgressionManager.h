@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h" // CgsID (typedef u64)
 #include "GameSource/GameState/BrnGameStateTypes.h" // BrnGameState::StuntElementType
+#include "GameSource/GameState/Progression/BrnProgressionDebugComponent.h" // actual by-value Prepare2 debug component
 #include "SharedClasses/Trigger/BrnGenericRegion.h"  // BrnTrigger::GenericRegion::Type (OnDriveThru param)
 #include "BrnProfile.h"                              // BrnProgression::Profile (embedded sub-object, mProfile)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h" // CgsResource::ResourcePtr (mpProgressionData / mpAISectionData)
@@ -1058,15 +1059,9 @@ private:
     static const s32 KI_LANDMARK_AI_SECTION_INDEX_COUNT = 512;   // DWARF :826 array bound
     LandmarkAISectionIndexPair maLandmarkAISectionIndices[KI_LANDMARK_AI_SECTION_INDEX_COUNT];
 
-    // The progression debug component the ctor installs (vtable off_820CDE4C) and Prepare2 constructs +
-    // registers (X360 +133000 region, this+0x788 in the +0x20000 page). FLAG: full DebugComponent
-    // sub-layout owned by ProgressionDebugComponent's TU; reserved here, only the installed vtable named.
-    struct DebugComponentSlot
-    {
-        const void* mpVTable;   // ctor: = &off_820CDE4C
-        u8          mPad[60];   // remaining ProgressionDebugComponent bytes (not modelled here)
-    };
-    DebugComponentSlot mDebugComponent;
+    // X360 +133000 (0x208A8). The manager owns the full ProgressionDebugComponent by value; its
+    // constructor and DebugComponent::Register run in Prepare2's original tail order.
+    ProgressionDebugComponent mDebugComponent;
 
     // *** FLAG -- COMMITTED-TYPE CORRECTION (StreetManager keystone, wave B) ***
     // Previously committed as two "IntrusiveListHead mEventListA/mEventListB" whose

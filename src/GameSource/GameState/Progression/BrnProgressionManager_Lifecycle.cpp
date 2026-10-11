@@ -169,7 +169,6 @@ namespace
             *CgsDev::Log::gpDebugPrint << lpcMessage;
         }
     }
-    bool gbSaidDebugComponent = false;
 
     // [FLAG PC witness] -- NOT IN THE X360 BINARY. Opt-in (BRN_PROGRESSION_LIFECYCLE=1), three
     // lines per boot at most (Construct / Prepare / the Prepare2 tail each print once).
@@ -792,14 +791,8 @@ bool ProgressionManager::LandmarkHasAvailableRaces(BrnGameState::LandmarkIndex l
 // It is NOT a console function of its own -- it is this file's name for that sequence, which is
 // why it carries no address.
 //
-// PARK -- ProgressionDebugComponent::Construct @0x82371A30 and its Register. The class has NO
-// home in this tree (there is no BrnProgressionDebugComponent.{h,cpp}, and this header models the
-// component as a reserved slot with only the vtable pointer named). Its body is a
-// BaseCollisionGenerator::Destruct, twenty-odd debug-UI field seeds and a 6-entry game-mode name
-// table built from ProgressionManager::GetEvent -- pure dev UI, and the lane brief scopes the 38
-// render/callback functions out. Landing Construct alone would need the whole class layout, so it
-// is PARKED BY NAME rather than half-built.
-// DELETE-WHEN BrnProgressionDebugComponent.{h,cpp} exist.
+// ProgressionDebugComponent::Construct and DebugComponent::Register are recovered in the component source.
+// This tail preserves ARTIST's call order.
 // --------------------------------------------------------------------------------------------
 void ProgressionManager::RunPrepare2Tail()
 {
@@ -827,10 +820,8 @@ void ProgressionManager::RunPrepare2Tail()
     ComputeLandmarkAISectionIndices();
     ProcessLoadedPresetRaces();
 
-    ParkOnce(gbSaidDebugComponent,
-             "[FLAG PC bring-up] ProgressionManager::Prepare2: ProgressionDebugComponent::Construct "
-             "@0x82371A30 + CgsDev::DebugComponent::Register are NOT reconstructed (the class has no "
-             "home in the tree); the debug component stays the reserved slot the ctor seeds.\n");
+    mDebugComponent.Construct(this, mpModeManager);
+    mDebugComponent.Register();
 
     SetupRoamingSections();
 
