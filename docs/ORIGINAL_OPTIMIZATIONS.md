@@ -1,5 +1,7 @@
 # Original game optimization reconstruction
 
+Tracking issue: [#41 - Reconstruct and verify all original game optimizations](https://github.com/BurnoutDecomp/b5-decomp/issues/41).
+
 This is the canonical backlog for reconstructing and verifying the original
 game's optimization mechanisms on PC. The tracking issue stays open until the
 known gaps **and the remaining coverage audit** are complete. Finishing this
