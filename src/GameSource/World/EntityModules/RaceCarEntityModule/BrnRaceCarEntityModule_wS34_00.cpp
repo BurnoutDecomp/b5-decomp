@@ -85,12 +85,9 @@ namespace BrnWorld
         // lives inside maPrecedingState in this header and is not reachable (Construct and
         // Prepare carry the same seam).
 
-        // [FLAG PC bring-up] the console then destructs the module's two embedded debug
-        // components, mBoostDebugComponent (+0x17E50) and mRCEntityModuleDebugComponent
-        // (+0x17CF0): each asserts "mpRaceCarEntityModule != NULL", clears that back pointer
-        // and runs the empty base DebugComponent::Destruct. Neither component is a member of
-        // this header (both sit in the opaque span after mBoostManager) and Construct never
-        // builds them, so their asserts would fire on objects that were never constructed.
+        // [FLAG PC bring-up] mBoostDebugComponent (+0x17E50) remains unhomed.
+        // The race-car diagnostic owner is real; teardown is inlined at 822F3E1C..822F3E54.
+        mRCEntityModuleDebugComponent.Destruct();
 
         mRaceCarStreamer.Destruct();
 

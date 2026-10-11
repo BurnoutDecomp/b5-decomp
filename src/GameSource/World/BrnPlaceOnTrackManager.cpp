@@ -265,8 +265,7 @@ static const u8  KU8_ALL_VOLUME_TYPE_FLAGS = 0xFFu;
 //                 "Not locked for writing" tripwire (BrnRaceCarEntityModuleIO.h:386) -- ->AddEvent
 //                 (BaseEventQueue<InEventLineTestFine>::AddEvent 0x822105C0)
 //   0x822D33E0    stvx128 start/end -> module + 0x17CF0 + 0x70/+0x80: RaceCarEntityModuleDebugComponent::
-//                 PushLineTest(start, end) inlined (PS3 calls it @0x123E2C). [FLAG] the debug component
-//                 is not in this tree -- a debug-render history only, nothing reads it back.
+//                 PushLineTest(start, end) inlined (PS3 calls it @0x123E2C).
 //   0x822D33FC    (gxMessageFilterFlags & 1) "[PLACEONTRACK] Line test requested\n"
 // The flag is NOT cleared here: PlaceCarOnTrack clears it when the answer is consumed, later in the
 // same frame (WorldModule::EntityModulePostSceneUpdate runs the race-car scene queries straight after
@@ -320,8 +319,9 @@ void PlaceOnTrackManager::PostSceneUpdate( RaceCarEntityModuleIO::OutputBuffer_P
 
         lpOutput->GetSceneFineLineTestQueue()->AddEvent( lEvent );
 
-        // [FLAG] RaceCarEntityModuleDebugComponent::PushLineTest( lEvent.mLineStart, lEvent.mLineEnd )
-        // -- inlined on the console (module + 0x17CF0, +0x70 / +0x80); the component is absent here.
+        // ARTIST 822D33E0..822D33F8: inlined PushLineTest, after queueing the request.
+        mpRaceCarEntityModule->mRCEntityModuleDebugComponent.mLastResetLineTestStart = lEvent.mLineStart;
+        mpRaceCarEntityModule->mRCEntityModuleDebugComponent.mLastResetLineTestEnd = lEvent.mLineEnd;
 
         if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
         {
@@ -423,10 +423,15 @@ void PlaceOnTrackManager::PrePhysicsUpdate(
                                            << lpLineTestResult->muNumCandidates << "\n";
             }
 
-            // [FLAG] 0x822F7058..0x822F70A4: the console clears the RaceCarEntityModuleDebugComponent's
-            // intersection history (`stw 0 -> module + 97824`) and Appends every intersection position
-            // to its Vector3<10> list (module + 0x17CF0 + 144) -- debug render only; the component is
-            // not in this tree.
+            // ARTIST 822F70BC..822F7100: inlined PushLineTestIntersection.
+            // Clear even an empty accepted result; retain each complete position vector.
+            auto& lrHistory = mpRaceCarEntityModule->mRCEntityModuleDebugComponent.mLastResetLineTestIntersections;
+            lrHistory.Clear();
+            for (s32 liIntersection = 0; liIntersection < lpLineTestResult->muNumCandidates; ++liIntersection)
+            {
+                const Vector4& lrPosition = lpLineTestResult->maCandidates[liIntersection].mPosition;
+                lrHistory.Append(Vector3{lrPosition.x, lrPosition.y, lrPosition.z, lrPosition.w});
+            }
 
             // The console passes the request position in v1 (`lvx128 v1, car, 1952`).
             const Vector3& lrQueryPosition = lpActiveRaceCar->GetPlaceOnTrackPosition();

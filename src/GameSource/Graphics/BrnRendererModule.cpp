@@ -5968,7 +5968,31 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         // independently of its switch, before the scene resolve.
         if (mbIm3dRendererConstructedPC
             && (!mbDispatchThreadTakeScreenshot || mbCaptureOverlaysInScreenshot))
+        {
+            // FLAG PC-platform leaf: bounded passive witness for debug-menu validation.
+            static const bool sbDebugBankTrace = std::getenv("BRN_RESET_HISTORY_TRACE") != nullptr;
+            static u32 suDebugBankTraces = 0;
+            if (sbDebugBankTrace && suDebugBankTraces < 12)
+            {
+                u32 luDraws = 0, luVertices = 0;
+                for (const auto* lpCommand = mIm3dDebugRenderBuffer.GetFirstCommand(); lpCommand;
+                     lpCommand = mIm3dDebugRenderBuffer.GetNextCommand(lpCommand))
+                {
+                    if (lpCommand->muType == 2)
+                    {
+                        ++luDraws;
+                        luVertices += static_cast<const CgsGraphics::ImCommandRenderPrimitives<CgsGraphics::BasicColouredTexturedVertex>*>(lpCommand)->muNumVertices;
+                    }
+                }
+                if (luDraws)
+                {
+                    ++suDebugBankTraces;
+                    if (CgsDev::Log::gpDebugPrint)
+                        CgsDev::Log::gpDebugPrint->AppendFormat("[debug3d-bank] dispatch draws=%u vertices=%u\n", luDraws, luVertices);
+                }
+            }
             mIm3dDebugRenderBuffer.Dispatch(&mIm3dRenderer);
+        }
         ResolveMSAA(lfFrameWhiteLevel, luSceneStencilClearValue);
 
         // ==========================================================================================

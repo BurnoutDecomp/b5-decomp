@@ -45,7 +45,6 @@
 // the remaining 79 methods.
 // ============================================================================
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
-#include "pc/debug/RaceCarControls.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "SharedClasses/Progression/BrnTrainingTypes.h"   // BrnProgression::ETrainingType
 
@@ -280,6 +279,8 @@ void RaceCarEntityModule::Construct()
     // interior (the receiver queue and the streamer are adjacent members, +0x100E8 and
     // +0x11100). Without this the five component streamers have no request/receiver
     // queues, so no AddEntry can ever reach a request ring.
+    // ARTIST 822FD924: Construct the embedded diagnostic owner before the streamer.
+    mRCEntityModuleDebugComponent.Construct(this);
     mRaceCarStreamer.Construct();
     mfTimeStep = 0.0f;
     mfLastPlayerCarSpeed = 0.0f;
@@ -693,9 +694,9 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
         // [FLAG PC bring-up] the other inlined scalar resets the console runs between the two
         // calls (on +0x180D8 / +0x180E8: the air-time and traffic-check seats) and the three
         // diagnostic storage at +0x180F0/+0x17E50 remains incomplete. The recovered
-        // Race Car Entity component (+0x17CF0) is registered below with PC ownership.
+        // Race Car Entity component (+0x17CF0) is registered below.
         mPowerParkingManager.Prepare();
-        CgsPC::Debug::AttachRaceCarControls(*this);
+        mRCEntityModuleDebugComponent.Register(); // ARTIST 823040C4..823040CC
         mePrepareStage = 0;
     // fall through
     case 1:
@@ -1556,9 +1557,8 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         const Vector3& lrVelocity,
         BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInputInterface )
 {
-    // asm 0x822F489C..0x822F48C8: the four 16-byte lanes of the transform are copied into
-    // the module's own scratch at +97568 BEFORE anything else. [FLAG] that member is inside
-    // maTailPadA0 and unnamed; nothing reconstructed reads it back.
+    // ARTIST 822F48A8..822F48E0: inlined PushResetTransform, before either car-state arm.
+    mRCEntityModuleDebugComponent.mLastResetTransform = lrTransform;
 
     ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leActiveRaceCarIndex );
 

@@ -11,6 +11,8 @@ template<class V> struct Im3dBase;
 // used by buffered3D; the GUI's existing2D identity checks share these pointers.
 void PrepareIm3dStateLibraryPC();
 const renderengine::DepthStencilState* GetIm3dDepthStencilZBufferOnPC();
+const renderengine::DepthStencilState* GetIm3dDepthStencilZBufferOffPC();
+const renderengine::TextureState* GetIm3dTextureStateUntexturedPC();
 renderengine::Texture* GetImWhiteTexturePC();
 
 // ARTIST8244FC48/827E1878: one view-projection matrix (command16), or

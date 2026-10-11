@@ -56,6 +56,8 @@
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                       // BrnNetwork::EPaybackType (meActivePaybackType)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                             // CgsNumeric::Random (mNonDeterministicRandom, +0x18490)
 
+#include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleDebugComponent.h"
+
 #include <cstddef>                                   // offsetof
 
 namespace CgsGraphics { class DispatchFrame; }
@@ -178,6 +180,7 @@ class RaceCarEntityModule
     friend class WorldDebugComponent;
     friend struct CgsPC::Reflections::LightCapture;
     friend struct RaceCarEntityModuleDebugComponent;   // reads the module's debug switches/members directly
+    friend class PlaceOnTrackManager; // writes the embedded diagnostic history
 
 public:
         // ---- ADDITIVE (attested by WorldModule::Construct @0x827CF540, which
@@ -1386,6 +1389,10 @@ private:
     // DWARF BrnRaceCarEntityModule.h names it mPlaceOnTrackManager; it owns the
     // request -> line test -> ResetActiveRaceCar walk.
     PlaceOnTrackManager mPlaceOnTrackManager;
+
+    // ARTIST +0x17CF0, DecFIGS BrnRaceCarEntityModule.h:349. The menu renderer
+    // and the reset producers share the original embedded diagnostic owner.
+    RaceCarEntityModuleDebugComponent mRCEntityModuleDebugComponent;
 
     // ========================================================================
     // MODELLED members (render wave 2026-07-31): the three render debug switches the

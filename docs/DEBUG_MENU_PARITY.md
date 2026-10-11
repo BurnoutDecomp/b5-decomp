@@ -19,6 +19,7 @@ these counts are not a completed menu audit.
 | Min Tailgate Speed | Changes the other car's minimum speed, in mph. |
 | Max Relative Speed | Changes the allowed velocity difference, in m/s. |
 | Min Duration | Changes when continuous tailgating earns boost credit. |
+| Race Car Entity / Show place on track info | Shows the latest reset transform, line test and intersection spheres; can be hidden and restored. |
 
 Previously the menu and cone renderer used writable globals while detection and
 boost used independent constants. Both consumers now read the same original data.
@@ -33,7 +34,16 @@ It uses a copied profile and deliberate extreme slider values; it proves those
 debug controls, not organic tailgating balance. The optional
 `BRN_TAILGATE_DEBUG_TRACE` witness is observational and capped at 160 lines.
 
-All other inventory entries remain pending in this campaign, including entries
-previously tested for navigation. Next: connect the race-car reset diagnostic
-history to its original producers, then continue through the unavailable pages in
+The reset overlay now shares the module's original embedded debug component with
+its producers. It records every accepted result, including empty results and resets
+of other cars. Its geometry uses the renderer's queued debug pass and the original
+34-vertex/192-index sphere mesh. Native shader/pixel checks pass 84/84; the isolated
+live case verifies show/hide/restore, actual render dispatch and visible geometry.
+Run `tools/tests/run_case.ps1 -Case debug_menu_reset_history -Slot 15` from the
+workflow. `BRN_RESET_HISTORY_TRACE` is a bounded, passive witness.
+
+Six registration sites are verified in this campaign. All other entries remain
+pending, including those previously tested for navigation. Other debug primitives
+and text still need individual parity audits. Next: the race-car page's forced
+online spawn control and Apply Ram, then the unavailable pages in
 [DEBUG_MENU_REPORT.md](DEBUG_MENU_REPORT.md).

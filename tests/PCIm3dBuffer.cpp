@@ -13,6 +13,8 @@
 #include "pc/gcm/renderengine/device.h"
 #include "pc/gcm/renderengine/texture.h"
 #include "pc/gcm/renderengine/ImWhiteTexture.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 
 namespace renderengine {
 IDirect3DDevice9* gDevice = nullptr;
@@ -36,7 +38,7 @@ static IDirect3DPixelShader9* spPixelShader;
 static IDirect3DVertexDeclaration9* spDeclaration;
 static float saMatrix[16];
 static unsigned suChecks, suFailures, suDraws, suAssertions;
-static unsigned suCount, suStride;
+static unsigned suCount, suStride, suPrimitive;
 static std::vector<unsigned char> saPacked;
 static std::vector<std::vector<unsigned char>> saRuns;
 static void Check(bool good, const char* label) {
@@ -86,14 +88,16 @@ void ImDeviceSetRasterizerState(void*) {}
 extern "C" void D3DDevice_SetRenderState_StencilRef(IDirect3DDevice9* device,u32 value) { device->SetRenderState(D3DRS_STENCILREF,value); }
 extern "C" void D3DDevice_InsertFence(void*) {}
 extern "C" void* D3DDevice_BeginVertices(void*,u32 primitive,u32 count,u32 stride) {
-    Check(primitive==6,"original Xenos triangle-strip opcode reaches the device");
+    Check(primitive==2 || primitive==3 || primitive==4 || primitive==6,"original Xenos line/list/strip opcode reaches the device");
+    suPrimitive=primitive;
     suCount=count; suStride=stride; saPacked.assign(size_t(count)*stride,0xCD); return saPacked.data();
 }
 extern "C" void D3DDevice_EndVertices(void*) {
     saRuns.push_back(saPacked);
     Check(suStride==24,"CPU32 is packed into GPU24");
-    Check(SUCCEEDED(renderengine::gDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP,
-        suCount>2 ? suCount-2 : 0,saPacked.data(),suStride)),"real native3D draw accepted"); ++suDraws;
+    const D3DPRIMITIVETYPE type=suPrimitive==2 ? D3DPT_LINELIST : suPrimitive==3 ? D3DPT_LINESTRIP : suPrimitive==4 ? D3DPT_TRIANGLELIST : D3DPT_TRIANGLESTRIP;
+    const unsigned count=suPrimitive==2 ? suCount/2 : suPrimitive==3 ? suCount-1 : suPrimitive==4 ? suCount/3 : suCount>2 ? suCount-2 : 0;
+    Check(SUCCEEDED(renderengine::gDevice->DrawPrimitiveUP(type,count,saPacked.data(),suStride)),"real native3D draw accepted"); ++suDraws;
 }
 #include "im3d_buffer.inc"
 using namespace CgsGraphics;
@@ -111,6 +115,92 @@ static std::vector<DWORD> Pixels(IDirect3DSurface9* target) {
         copy->UnlockRect();
     }
     copy->Release(); return pixels;
+}
+static void DebugGeometry(Im3dRenderBuffer& buffer, Im3d& renderer, IDirect3DSurface9* target) {
+    auto* device=renderengine::gDevice;
+    const unsigned drawsBefore=suDraws;
+    CgsDev::Debug3DImmediateRender debug={};
+    debug.CreateDebugRenderStates(nullptr);
+    debug.SetRenderBuffer(&buffer);
+    Matrix44 vp=Identity(); vp.xAxis.x=.5f;
+    const Vector3 camera={7,8,9,1};
+    device->Clear(0,nullptr,D3DCLEAR_TARGET,0xff000000,1,0);
+    debug.Begin(vp,camera);
+    Check(buffer.IsInARenderingBlock(),"debug producer opens the real rendering block");
+    Check(debug.meProjectionMode==CgsDev::Debug3DImmediateRender::E_PROJECTION_COUNT &&
+          debug.GetCameraPosition().z==9,"Begin forces first projection and retains the camera");
+    debug.DrawLine({-.5f,0,0,0},{.5f,0,0,0},rw::RGBA(255,255,255,255));
+    debug.SetZTestEnable(CgsDev::Debug3DImmediateRender::E_ZTEST_OFF);
+    Check(debug.miIm3dVertsHead==0,"depth transition flushes the pending line");
+    debug.DrawSolidTriangle({-.75f,-.5f,0,0},{-.25f,-.5f,0,0},{-.5f,-.25f,0,0},rw::RGBA(255,0,0,255));
+    debug.SetProjectionMode(CgsDev::Debug3DImmediateRender::E_PROJECTION_2D);
+    debug.SetProjectionMode(CgsDev::Debug3DImmediateRender::E_PROJECTION_3D);
+    debug.End();
+    Check(!buffer.IsInARenderingBlock() && suDraws==drawsBefore,"debug End queues draws without touching the GPU");
+    const std::vector<u32> expected={0,3,6,4,16,9,4,4,2,4,9,4,4,2,4,16,4,16,1};
+    std::vector<u32> actual;
+    std::vector<const ImCommand*> commands;
+    for(u32 pos=0;pos<buffer.mpWriteBuffer->muCommandBufferWritePos;) {
+        const auto* command=reinterpret_cast<const ImCommand*>(buffer.mpWriteBuffer->mpu8CommandBuffer+pos);
+        actual.push_back(command->muType); commands.push_back(command); pos+=command->muSize;
+    }
+    Check(actual==expected,"ARTIST projection/depth/texture/draw ordering reaches the real bank");
+    if(actual==expected) {
+        const auto* blend=reinterpret_cast<const renderengine::BlendMaterialState*>(
+            static_cast<const ImCommandSetStateBlend*>(commands[1])->mpBlendState);
+        Check(blend->maState[0]==0x07060706 && blend->maState[4]==15 && blend->maState[18]==1,
+              "debug blend state has the original factors and colour-write mask");
+        const auto* depth3d=static_cast<const ImCommandSetStateDepthStencil*>(commands[3])->mpDepthStencilState;
+        const auto* depth2d=static_cast<const ImCommandSetStateDepthStencil*>(commands[14])->mpDepthStencilState;
+        Check(depth3d->muZEnable==1 && depth3d->muZWriteEnable==0 && depth3d->muZFunc==3 &&
+              depth2d->muZEnable==0 && depth2d->muZWriteEnable==0,"original debug projection depth states");
+        Check(static_cast<const ImCommandSetStateDepthStencil*>(commands[6])->mpDepthStencilState==GetIm3dDepthStencilZBufferOffPC() &&
+              static_cast<const ImCommandSetStateDepthStencil*>(commands[7])->mpDepthStencilState==GetIm3dDepthStencilZBufferOnPC(),
+              "DispatchVertices preserves both original global depth-state writes");
+        const auto& screen=static_cast<const ImCommandSetTransform3dVp*>(commands[15])->mViewProjectionMatrix;
+        Check(screen.xAxis.x==1 && screen.yAxis.y==-1 && screen.wAxis.w==1,"2D projection flips Y in the queued matrix");
+        const auto* line=static_cast<const ImCommandRenderPrimitives<Im3dVertex>*>(commands[8]);
+        const auto* triangle=static_cast<const ImCommandRenderPrimitives<Im3dVertex>*>(commands[13]);
+        Check(line->mePrimitiveType==2 && line->muNumVertices==2 && triangle->mePrimitiveType==4 && triangle->muNumVertices==3,
+              "line and triangle transitions retain distinct primitive batches");
+        Check(line->mpVertices[0].mv3Pos.x==-.5f && triangle->mpVertices[0].mv3Pos.x==-.75f,
+              "the second batch cannot overwrite the first copied vertices");
+    }
+    auto before=Pixels(target);
+    Check((before[48*160+80]&0xffffff)==0,"scene remains clear until debug dispatch");
+    buffer.Swap(); buffer.Clear();
+    debug.maIm3dVertsArray[0].mv3Pos.x=10000;
+    device->BeginScene(); buffer.Dispatch(&renderer); device->EndScene();
+    auto after=Pixels(target);
+    unsigned white=0,red=0;
+    for(auto colour:after) { white+=(colour&0xffffff)==0xffffff; red+=(colour&0xffffff)==0xff0000; }
+    Check(suDraws==drawsBefore+2 && ImRendererBase::mgpActiveRenderer==nullptr,"debug bank dispatch executes both copied batches");
+    Check(white>=30 && red>=30,"real debug line and triangle produce white and red pixels after dispatch");
+    debug.BuildSphereIndices();
+    Vector3 sphere[34];
+    debug.GetSphereVertices(sphere,{7,-2,3,4},2);
+    Check(sphere[0].y==0 && sphere[1].y==-4 && sphere[0].w==4,"original sphere poles retain the input W lane");
+    bool radius=true,indices=true;
+    for(const auto& p:sphere) radius &= std::fabs((p.x-7)*(p.x-7)+(p.y+2)*(p.y+2)+(p.z-3)*(p.z-3)-4)<.00001f && p.w==4;
+    for(auto i:debug.maSphereIndices) indices &= i<34;
+    Check(radius && indices,"all34 original mesh points lie on the sphere and all192 indices are in range");
+    Check(std::fabs(sphere[2].x-7)<.00001f && std::fabs(sphere[2].y+.381966f)<.00001f &&
+          std::fabs(sphere[2].z-4.1755705f)<.00001f,"console latitude-step landmark differs from three great circles");
+    const u8 top[]={0,9,2},band[]={9,17,2,17,10,2},bottom[]={1,26,33};
+    Check(std::memcmp(debug.maSphereIndices+21,top,3)==0 && std::memcmp(debug.maSphereIndices+66,band,6)==0 &&
+          std::memcmp(debug.maSphereIndices+189,bottom,3)==0,"pole and band seams wrap in the console's original winding order");
+    debug.Begin(Identity(),camera);
+    debug.DrawSphere({0,0,.5f,1},.3f,rw::RGBA(0,255,0,255));
+    Check(debug.miIm3dVertsHead==0 && buffer.mpWriteBuffer->muVertexBufferWritePos==192*32,
+          "DrawSphere immediately records all192 line-strip vertices");
+    const auto* copied=reinterpret_cast<const Im3dVertex*>(buffer.mpWriteBuffer->mpu8VertexBuffer);
+    Check(copied[0].mv3Pos.y==.3f && copied[0].mv3Pos.w==1,"mesh copy preserves the polar position and W lane");
+    debug.End(); buffer.Swap(); buffer.Clear();
+    device->Clear(0,nullptr,D3DCLEAR_TARGET,0xff000000,1,0);
+    device->BeginScene(); buffer.Dispatch(&renderer); device->EndScene();
+    after=Pixels(target);
+    unsigned green=0; for(auto colour:after) green+=(colour&0xffffff)==0x00ff00;
+    Check(green>=80 && suPrimitive==3 && suCount==192,"the original indexed sphere produces green line-strip pixels");
 }
 static void AllocationBudget() {
     Check(EnsureWorldDispatchAllocator(),"production joined allocator prepares");
@@ -236,6 +326,7 @@ int main() {
     Check((pixels[43*160+90]&0xffffff)==0x0000ff,"projected glyph left samples actual atlas blue");
     Check((pixels[43*160+101]&0xffffff)==0x00ff00,"projected glyph right samples actual atlas green");
     Check((pixels[48*160+80]&0xffffff)==0,"world projection moves glyph away from old screen centre");
+    DebugGeometry(buffer,renderer,target);
     Check(suAssertions==0,"no silent2D fallback or original assertion");
     target->Release(); atlas->Release(); spDeclaration->Release(); spVertexShader->Release(); spPixelShader->Release(); device->Release(); api->Release(); DestroyWindow(window);
     std::printf("PCIm3dBuffer: %u checks, %u failures\n",suChecks,suFailures); return suFailures ? 1 : 0;

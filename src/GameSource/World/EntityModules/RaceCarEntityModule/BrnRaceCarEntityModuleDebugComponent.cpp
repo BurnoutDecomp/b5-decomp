@@ -29,9 +29,11 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsVariableManager.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "rw/math/vpu/vector3_operation.h"                                                // Magnitude, operator+/-/*
 
 #include <cmath>                                                                          // atan2, sinf, cosf, tanf
+#include <cstdlib>
 
 // "Graphics/Vehicles.../Wheels to Render" -- the shared wheel-count switch RenderRaceCar and
 // TrafficEntityModule::RenderTrafficCar read (defined beside RenderRaceCar). The console keeps it
@@ -155,6 +157,14 @@ void RaceCarEntityModuleDebugComponent::Construct(RaceCarEntityModule* lpRaceCar
     mbTrafficRelatedData     = false;
 }
 
+// ARTIST RaceCarEntityModule::Destruct 822F3E1C..822F3E54 inlines this teardown.
+void RaceCarEntityModuleDebugComponent::Destruct()
+{
+    CGS_ASSERT(mpRaceCarEntityModule != nullptr, "mpRaceCarEntityModule != NULL");
+    mpRaceCarEntityModule = nullptr;
+    DebugComponent::Destruct();
+}
+
 const char* RaceCarEntityModuleDebugComponent::GetName() const
 {
     return "Race Car Entity";
@@ -185,9 +195,6 @@ void RaceCarEntityModuleDebugComponent::OnActivate()
     RegisterVariable(&mbRenderCarDamageState,       "Render car damage state");
     RegisterVariable(&mbRenderCarSreamingState,     "Render car streaming state");
     RegisterVariable(&mbRenderLastResetInfo,        "Show place on track info");
-    // FLAG PC-platform leaf: the place-on-track diagnostic producers are not
-    // connected to this native owner yet. Do not display stale trace data.
-    SetReadOnly(&mbRenderLastResetInfo, true);
     RegisterVariable(&mbRenderPlayerResetPositions, "Show player reset positions");
     RegisterVariable(&mbShowAverageSpeed,           "Show average speed");
     RegisterFunction(ResetAverageSpeedCallback, this, "Reset average speed");
@@ -369,6 +376,42 @@ void RaceCarEntityModuleDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRend
         {
             lpRender->DrawSphere(mLastResetLineTestIntersections.GetItem(luIntersection), KF_RESET_SPHERE_RADIUS, lWhite);
         }
+    }
+
+    // FLAG PC-platform leaf: bounded, opt-in observation after the real draw calls.
+    // Only a shown history reads the Array; inactive/unconstructed history is untouched.
+    static const bool sbTrace = (std::getenv("BRN_RESET_HISTORY_TRACE") != nullptr);
+    static bool sbWasShown = false;
+    static u32 suTraceLines = 0, suShownFrames = 0;
+    if (sbTrace && suTraceLines < 24)
+    {
+        const bool lbChanged = sbWasShown != mbRenderLastResetInfo;
+        if (CgsDev::Log::gpDebugPrint && (lbChanged || (mbRenderLastResetInfo && suShownFrames++ % 120 == 0)))
+        {
+            ++suTraceLines;
+            if (mbRenderLastResetInfo)
+            {
+                const auto lViewProjection = lpRender->GetViewProjectionMatrix();
+                const auto lPosition = mLastResetTransform.wAxis;
+                const auto lCamera = lpRender->GetCameraPosition();
+                const f32 lfClipX = lPosition.x*lViewProjection.xAxis.x + lPosition.y*lViewProjection.yAxis.x + lPosition.z*lViewProjection.zAxis.x + lViewProjection.wAxis.x;
+                const f32 lfClipY = lPosition.x*lViewProjection.xAxis.y + lPosition.y*lViewProjection.yAxis.y + lPosition.z*lViewProjection.zAxis.y + lViewProjection.wAxis.y;
+                const f32 lfClipZ = lPosition.x*lViewProjection.xAxis.z + lPosition.y*lViewProjection.yAxis.z + lPosition.z*lViewProjection.zAxis.z + lViewProjection.wAxis.z;
+                const f32 lfClipW = lPosition.x*lViewProjection.xAxis.w + lPosition.y*lViewProjection.yAxis.w + lPosition.z*lViewProjection.zAxis.w + lViewProjection.wAxis.w;
+                CgsDev::Log::gpDebugPrint->AppendFormat(
+                    "[reset-history] shown count=%u transform=(%g,%g,%g) lineStart=(%g,%g,%g) lineEnd=(%g,%g,%g) clip=(%g,%g,%g,%g) camera=(%g,%g,%g)\n",
+                    mLastResetLineTestIntersections.GetLength(),
+                    mLastResetTransform.wAxis.x, mLastResetTransform.wAxis.y, mLastResetTransform.wAxis.z,
+                    mLastResetLineTestStart.x, mLastResetLineTestStart.y, mLastResetLineTestStart.z,
+                    mLastResetLineTestEnd.x, mLastResetLineTestEnd.y, mLastResetLineTestEnd.z,
+                    lfClipX, lfClipY, lfClipZ, lfClipW, lCamera.x, lCamera.y, lCamera.z);
+            }
+            else
+            {
+                *CgsDev::Log::gpDebugPrint << "[reset-history] hidden\n";
+            }
+        }
+        sbWasShown = mbRenderLastResetInfo;
     }
 
     // The player's reset ring: one sphere at the position row of every recorded transform.
