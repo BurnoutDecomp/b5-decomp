@@ -66,3 +66,20 @@ was attempted; evidence is in `scratch/PARTICLE_RANGE_1011/`.
 The corrected caller passes 796/796 checks (original caller: 562/796), and the
 particle-shadow regression remains 31/31. The 2,947-TU shipping build links with
 zero warnings/errors. Independent review and the faithfulness gate pass.
+
+## Boost length and exhaust motion
+
+Lion's render kernels advance live particle positions, velocities, rotation,
+size and locator drift. Rendering six reflection cameras at the same absolute
+time repeated those integrations. Native capture now shares each bucket's
+simulated particles and transforms within one published frame. Every camera still
+builds its own oriented vertices, including player boost/exhaust; emitters first
+visible in a reflection are evaluated once when needed. The original kernel stays
+active outside capture scopes.
+
+The production integration regression passes 236/236 checks (previous code:
+102/236), covering all three transform kinds, sparse/full buckets, new frames,
+birth/death, and reflection-only visibility. Dispatch and inherited-velocity
+regressions remain 796/796 and 37/37. The 2,948-TU shipping build links with zero
+warnings/errors; independent review and faithfulness gate pass. No gameplay
+reproduction was attempted. Evidence: `scratch/LION_MULTIVIEW_1011/`.

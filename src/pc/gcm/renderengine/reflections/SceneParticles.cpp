@@ -1,6 +1,7 @@
 #include "pc/gcm/renderengine/reflections/SceneRender.h"
 #include "pc/gcm/renderengine/reflections/SceneSettings.h"
 #include "pc/gcm/renderengine/reflections/EnvironmentMap.h"
+#include "pc/gcm/renderengine/reflections/LionSimulation.h"
 #include "pc/gcm/renderengine/shadows/SceneSettings.h"
 #include "pc/gcm/renderengine/VertexBuffer.h"
 #include "GameSource/Effects/Particles/EffectsVertexBuffer.h"
@@ -121,8 +122,9 @@ namespace CgsPC::Reflections
     bool ParticleCapture::Prepare(const BrnParticle::ParticleModule::ParticleRenderData* lpData)
     {
         if (!Particles().mbEnabled || !lpData || !lpData->mpParticleModule) return false;
-        // This is the sole Lion lifecycle update for the presentation. Per-face
-        // Render below evaluates existing particles at this same absolute time.
+        // Lion's render kernels also integrate live particles. Cache this first
+        // evaluation so subsequent cameras only rebuild their own draw vertices.
+        LionSimulation::Scope lSimulation(lpData->mpParticleModule, lpData->muCurrentFrame, lpData->mfCurrentTime);
         lpData->mpParticleModule->BuildLionVertexBuffers(lpData);
         return true;
     }
@@ -233,6 +235,7 @@ namespace CgsPC::Reflections
                 lrLion.SetCameraData(rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(lFaceView),
                     lFaceView, lCamera.GetViewProjectionMatrix(), PackedFrustum(lCamera));
                 LionBatchArray lBatches; lBatches.Construct(); lBatches.Clear();
+                LionSimulation::Scope lSimulation(&lrParticles, lrData.muCurrentFrame, lrData.mfCurrentTime);
                 cLionFX::Render(*lpWriter, lBatches, LionTimeFromSeconds(lrData.mfCurrentTime));
                 luBytes += lpWriter->GetBytesUsed();
                 lrBuffers.mLion.End();

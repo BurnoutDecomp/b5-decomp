@@ -71,6 +71,8 @@ struct cLionBindings;   // LionBindings.h (sibling home) -- Bind() attaches one 
 struct RenderedParticle;
 class  cParticleRender;   // ParticleRender.h -- the only caller of the private kernel below
 
+namespace CgsPC::Reflections { class LionSimulation; }
+
 // =================================================================================================
 // THE THREE SIMULATION HELPERS (DWARF ParticleEmitter.cpp:782 / :914 / :1048 name the template
 // parameter `T lHelper` on cParticleEmitter::SimulateParticlesInBucketGeneral<T>).
@@ -100,6 +102,7 @@ class  cParticleRender;   // ParticleRender.h -- the only caller of the private 
 // =================================================================================================
 class MatrixSimulationHelper
 {
+    friend class CgsPC::Reflections::LionSimulation;
 public:
     explicit MatrixSimulationHelper(cMatrix* apMatrices) : mpMatrices(apMatrices) {}
 
@@ -118,6 +121,7 @@ private:
 
 class VectorSimulationHelper
 {
+    friend class CgsPC::Reflections::LionSimulation;
 public:
     explicit VectorSimulationHelper(cVector* apVectors) : mpVectors(apVectors) {}
 
@@ -138,6 +142,7 @@ private:
 
 class LocalSimulationHelper
 {
+    friend class CgsPC::Reflections::LionSimulation;
 public:
     explicit LocalSimulationHelper(cMatrix* apMatrices) : mpMatrices(apMatrices) {}
 
