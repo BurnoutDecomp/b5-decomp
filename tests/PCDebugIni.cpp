@@ -51,7 +51,13 @@ static void RegistryChecks()
     Set("Test/Read Only", "9");
     Set("Test/Option", "uLtRa");
     Set("Test/Unknown Future", "1");
+    Set("Graphics/Vehicles...Extra/LODs.../Vehicle LOD", "3");
     LoadDebugIniPC(gacIni);
+    Check(!DebugIniNeedsComponentPC("Race Car Entity"), "absolute vehicle prefix requires a path separator");
+    Set("Graphics/Vehicles.../LODs.../Vehicle LOD", "3");
+    LoadDebugIniPC(gacIni);
+    Check(DebugIniNeedsComponentPC("/Race Car Entity"), "absolute vehicle INI control activates its real owner");
+    Check(!DebugIniNeedsComponentPC("Race Car Entity Else"), "vehicle alias belongs only to the original owner");
     Check(DebugIniNeedsComponentPC("/Lazy Component"), "lazy component with configured children is detected");
     Check(!DebugIniNeedsComponentPC("Lazy Component Else"), "component prefix must end at a path separator");
     Check(!DebugIniNeedsComponentPC("Unconfigured"), "unconfigured components remain lazy");
