@@ -4,10 +4,14 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"  // the 3D draws
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                     // triangle-test monitor
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModule.h"                       // entity + volume managers
+#include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager.h"         // cached slots and triangle batches
+#include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"                        // four-lane cached triangle batches
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstance.h"                           // VolumeInstance
 #include "SDKs/EATech/rwcollision/volume_debug_access.h"                                     // rw::collision::Volume
 #include "rw/rwcore_structs.h"                                                               // rw::RGBA
 #include "rw/math/vpu/matrix44affine_operation.h"                                            // TransformPoint / operator*
+
+#include <cmath>
 
 // CgsSceneManager::SceneManagerDebugComponent -- GetName, DrawPrimitives and the collision-volume
 // draw it drives.
@@ -18,6 +22,13 @@ namespace CgsSceneManager
     {
         // ARTIST dword_82F33F60: Construct stores the Triangle-Sphere test monitor handle here.
         s32 siTriangleTestPerfMon = -1;
+
+        // The SoA vectors in Triangle4 hold one scalar per lane, matching the target's four
+        // explicit lane extracts in DrawCachedObjectTriangles.
+        f32 GetTriangleLane(const rw::math::vpu::Vector4& lrValues, s32 liLane)
+        {
+            return (&lrValues.x)[liLane];
+        }
     }
 
     const char* SceneManagerDebugComponent::GetName() const
@@ -77,6 +88,114 @@ namespace CgsSceneManager
             DrawTriangleTest(lpRender);
 
         mInitialCameraPosition = lpRender->GetCameraPosition();
+    }
+
+    // @ X360 0x828C2560. Walk each used cache slot and its cached Triangle4 batches, drawing
+    // only lanes whose validity mask is nonzero. GetTrianglesForCachedObject retains the target
+    // cache-allocation assert, including for a used slot with no cached batches.
+    void SceneManagerDebugComponent::DrawCachedObjectTriangles(CgsDev::Debug3DImmediateRender* lpRender)
+    {
+        const TriangleCacheManager& lrCache = mpSceneManagerModule->mTriangleCacheManager;
+        const rw::RGBA lColour(0x00u, 0x00u, 0xFFu, 0x80u); // ARTIST dword_82F33FC0 = 0x80FF0000
+
+        for (s32 liSlot = 0; liSlot < static_cast<s32>(KU_MAX_CACHED_OBJECTS); ++liSlot)
+        {
+            if (!lrCache.mUsedCacheSlots.IsBitSet(static_cast<u32>(liSlot)))
+                continue;
+
+            const CacheSlot& lrSlot = lrCache.mpaCachedObjectSlots[liSlot];
+            const CgsGeometric::Triangle4* lpaBatches = lrCache.GetTrianglesForCachedObject(liSlot);
+            for (s32 liBatch = 0; liBatch < lrSlot.miNumCachedTriangleBatches; ++liBatch)
+            {
+                const CgsGeometric::Triangle4& lrBatch = lpaBatches[liBatch];
+                for (s32 liLane = 0; liLane < 4; ++liLane)
+                {
+                    if (GetTriangleLane(lrBatch.mValidMasks, liLane) == 0.0f)
+                        continue;
+
+                    // ARTIST builds each world-space point as {x, y, z, 1}; retain that
+                    // homogeneous lane when gathering the three SoA coordinates.
+                    const Vector3 lvVertex0 = {
+                        GetTriangleLane(lrBatch.mVertex0X, liLane),
+                        GetTriangleLane(lrBatch.mVertex0Y, liLane),
+                        GetTriangleLane(lrBatch.mVertex0Z, liLane), 1.0f };
+                    const Vector3 lvVertex1 = {
+                        GetTriangleLane(lrBatch.mVertex1X, liLane),
+                        GetTriangleLane(lrBatch.mVertex1Y, liLane),
+                        GetTriangleLane(lrBatch.mVertex1Z, liLane), 1.0f };
+                    const Vector3 lvVertex2 = {
+                        GetTriangleLane(lrBatch.mVertex2X, liLane),
+                        GetTriangleLane(lrBatch.mVertex2Y, liLane),
+                        GetTriangleLane(lrBatch.mVertex2Z, liLane), 1.0f };
+                    DrawCachedTriangle(lpRender, lvVertex0, lvVertex1, lvVertex2, lColour);
+                }
+            }
+        }
+    }
+
+    // @ X360 0x828C2B80. Both radii come from the packed 16-byte sphere lanes in each used slot.
+    // The target explicitly passes 0xFFFF0000 and 0xFF00FF00; the RGBA constructor's packed
+    // representation preserves those exact words.
+    void SceneManagerDebugComponent::DrawCachedObjectSpheres(CgsDev::Debug3DImmediateRender* lpRender)
+    {
+        const TriangleCacheManager& lrCache = mpSceneManagerModule->mTriangleCacheManager;
+        const rw::RGBA lCachedSphereColour(0x00u, 0x00u, 0xFFu, 0xFFu); // r5 = 0xFFFF0000
+        const rw::RGBA lInnerSphereColour(0x00u, 0xFFu, 0x00u, 0xFFu); // r5 = 0xFF00FF00
+
+        for (s32 liSlot = 0; liSlot < static_cast<s32>(KU_MAX_CACHED_OBJECTS); ++liSlot)
+        {
+            if (!lrCache.mUsedCacheSlots.IsBitSet(static_cast<u32>(liSlot)))
+                continue;
+
+            const CacheSlot& lrSlot = lrCache.mpaCachedObjectSlots[liSlot];
+            const CacheSphere& lrCachedSphere = lrSlot.mLastCachedSphere;
+            const Vector3 lvCachedCentre = {
+                lrCachedSphere.x, lrCachedSphere.y, lrCachedSphere.z, lrCachedSphere.w };
+            lpRender->DrawHollowSphere(lvCachedCentre, lrCachedSphere.w, lCachedSphereColour);
+
+            const CacheSphere& lrInnerSphere = lrSlot.mInnerSpherePositionAndRadius;
+            const Vector3 lvInnerCentre = {
+                lrInnerSphere.x, lrInnerSphere.y, lrInnerSphere.z, lrInnerSphere.w };
+            lpRender->DrawHollowSphere(lvInnerCentre, lrInnerSphere.w, lInnerSphereColour);
+        }
+    }
+
+    // @ X360 0x828AB9D0. Offset the triangle's three vertices 0.04 units along its normalized
+    // face normal, then draw the expanded triangle as a white outline and a coloured solid.
+    void SceneManagerDebugComponent::DrawCachedTriangle(CgsDev::Debug3DImmediateRender* lpRender,
+                                                          Vector3 lVertex0, Vector3 lVertex1,
+                                                          Vector3 lVertex2, rw::RGBA lColour)
+    {
+        const f32 lfEdge0X = lVertex0.x - lVertex1.x;
+        const f32 lfEdge0Y = lVertex0.y - lVertex1.y;
+        const f32 lfEdge0Z = lVertex0.z - lVertex1.z;
+        const f32 lfEdge1X = lVertex0.x - lVertex2.x;
+        const f32 lfEdge1Y = lVertex0.y - lVertex2.y;
+        const f32 lfEdge1Z = lVertex0.z - lVertex2.z;
+
+        f32 lfNormalX = lfEdge0Y * lfEdge1Z - lfEdge0Z * lfEdge1Y;
+        f32 lfNormalY = lfEdge0Z * lfEdge1X - lfEdge0X * lfEdge1Z;
+        f32 lfNormalZ = lfEdge0X * lfEdge1Y - lfEdge0Y * lfEdge1X;
+        const f32 lfInverseLength = 1.0f / std::sqrt(
+            lfNormalX * lfNormalX + lfNormalY * lfNormalY + lfNormalZ * lfNormalZ);
+        lfNormalX *= lfInverseLength;
+        lfNormalY *= lfInverseLength;
+        lfNormalZ *= lfInverseLength;
+
+        const f32 lfOffset = 0.04f;
+        lVertex0.x += lfNormalX * lfOffset;
+        lVertex0.y += lfNormalY * lfOffset;
+        lVertex0.z += lfNormalZ * lfOffset;
+        lVertex1.x += lfNormalX * lfOffset;
+        lVertex1.y += lfNormalY * lfOffset;
+        lVertex1.z += lfNormalZ * lfOffset;
+        lVertex2.x += lfNormalX * lfOffset;
+        lVertex2.y += lfNormalY * lfOffset;
+        lVertex2.z += lfNormalZ * lfOffset;
+
+        lpRender->DrawHollowTriangle(lVertex0, lVertex1, lVertex2,
+            rw::RGBA(0xFFu, 0xFFu, 0xFFu, 0xFFu));
+        lpRender->DrawSolidTriangle(lVertex0, lVertex1, lVertex2, lColour);
     }
 
     // @ X360 0x828AB568. Captions, registration order, ranges, increments and read-only state
