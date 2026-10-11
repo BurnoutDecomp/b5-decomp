@@ -1,6 +1,8 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"   // RaceCarPhysics / Wheel::RoadContact
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
+#include "rw/math/vpu/vector3_operation.h"
 
 #include <cstddef>   // offsetof
 
@@ -17,6 +19,90 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    namespace
+    {
+        rw::RGBA HandlingColour(u32 luPackedColour)
+        {
+            rw::RGBA lColour;
+            lColour.m_rgba = luPackedColour;
+            return lColour;
+        }
+    }
+
+    // ARTIST unnamed 825DA4A8, attested by the handling vtable at 820CF988.
+    // These mirrors are refreshed while the component is active; the inertia
+    // menu values are not applied back to the car by this update.
+    void DebugComponent::Update()
+    {
+        mafInertia[0] = mpRaceCarPhysics->mLocalInverseInertia.xAxis.x * 100.0f;
+        mafInertia[1] = mpRaceCarPhysics->mLocalInverseInertia.yAxis.y * 100.0f;
+        mafInertia[2] = mpRaceCarPhysics->mLocalInverseInertia.zAxis.z * 100.0f;
+        // ARTIST loads the same COM-offset X lane three times at 825DA59C,
+        // 825DA5A8 and 825DA5B4; retain that original aliasing.
+        for (s32 liAxis = 0; liAxis < 3; ++liAxis)
+            mafHackComOffset[liAxis] = mpRaceCarPhysics->mpAttribs->mBaseAttribs.mCOMOffset.x;
+        const Engine& lrEngine = mpRaceCarPhysics->mEngine;
+        const Vector4& lrDrive = lrEngine.mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay;
+        const Vector4& lrClutch = lrEngine.mvClutchFactor_RPM_CurrentGearChangeTime;
+        mfRPM = lrClutch.y;
+        mfEngineDrive = lrDrive.x;
+        mfReactionTorque = lrDrive.y;
+        mfFlyWheelAngularVelocity = lrDrive.z;
+        mfClutchDelay = lrDrive.w;
+        mfClutchFactor = lrClutch.x;
+        if (mbRenderFrontWheelsGripCurves)
+            mFrontWheelsGripCurveWindow.Show();
+        else
+            mFrontWheelsGripCurveWindow.Hide();
+        if (mbRenderRearWheelsGripCurves)
+            mRearWheelsGripCurveWindow.Show();
+        else
+            mRearWheelsGripCurveWindow.Hide();
+    }
+
+    // ARTIST 825D9B38: all four suspension lines are drawn, then ground
+    // contacts are marked only for wheels whose copied on-ground byte is set.
+    void DebugComponent::DrawTractionLines(CgsDev::Debug3DImmediateRender* lpDisplay)
+    {
+        for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+        {
+            Vector3 lStart{};
+            Vector3 lEnd{};
+            mpRaceCarPhysics->GetTractionLine(static_cast<EVehicleDrivenWheel>(liWheel), lStart, lEnd);
+            lpDisplay->DrawArrow(lStart, lEnd, HandlingColour(0xFFFFFFFFu));
+            if (maRoadContacts[liWheel].mbIsOnGround)
+                lpDisplay->DrawPoint(maRoadContacts[liWheel].mPosition, HandlingColour(0xFF0000FFu));
+        }
+    }
+
+    // ARTIST 825B9110: the cached road normal is drawn with unit length.
+    void DebugComponent::DrawTractionLineNormals(CgsDev::Debug3DImmediateRender* lpDisplay)
+    {
+        for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+        {
+            const Wheel::RoadContact& lrContact = maRoadContacts[liWheel];
+            if (lrContact.mbIsOnGround)
+                lpDisplay->DrawArrow(lrContact.mPosition, lrContact.mPosition + lrContact.mNormal,
+                                      HandlingColour(0xFF0000FFu));
+        }
+    }
+
+    // ARTIST 826031A0: the ten-unit test ray only changes the Y lane.
+    void DebugComponent::DrawAboveGroundLineTest(CgsDev::Debug3DImmediateRender* lpDisplay)
+    {
+        const Vector3 lStart = mpRaceCarPhysics->GetPosition();
+        Vector3 lEnd = lStart;
+        lEnd.y -= 10.0f;
+        lpDisplay->DrawArrow(lStart, lEnd, HandlingColour(0xFFFFFFFFu));
+        const AboveGroundTestResult& lrResult = *mpRaceCarPhysics->GetAboveGroundTestResult();
+        if (lrResult.mbValid)
+        {
+            lpDisplay->DrawPoint(lrResult.mIntersectionPosition, HandlingColour(0xFF0000FFu));
+            lpDisplay->DrawArrow(lrResult.mIntersectionPosition,
+                lrResult.mIntersectionPosition + lrResult.mIntersectionNormal, HandlingColour(0xFF0000FFu));
+        }
+    }
+
     // ---- layout gate ---------------------------------------------------------------------------
     //
     // The recovered class accounts for all 1024 bytes of the console object with nothing left over.

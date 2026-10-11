@@ -74,6 +74,9 @@ namespace Vehicle
         // the sim timestep. Samples only: gear-stats time accumulate, the four wheels'
         // road-contact mirror, and the speed mirror. Bodied in this TU.
         void Update(f32 lfTimeStep);
+        // ARTIST vtable slot 820CF988 -> unnamed 825DA4A8. The active debug
+        // component tick mirrors engine/inertia state and drives its windows.
+        void Update() override;
 
         // Mirror the magnitude of the down force VehiclePhysics::UpdateDownForce just applied, for
         // the suspension page of the debug menu. Inlined by the console at its one call site.
@@ -98,6 +101,9 @@ namespace Vehicle
         // Register the two component-path toggles and bind the front/rear windows to the exact
         // wheel pairs used by the X360 body. Called at the tail of OnActivate.
         void InitWindows();
+        void DrawTractionLines(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void DrawTractionLineNormals(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void DrawAboveGroundLineTest(CgsDev::Debug3DImmediateRender* lpDisplay);
 
         // ---- the sampled mirror of the car, refreshed every tick by Update ---------------------
         Wheel::RoadContact   maRoadContacts[4];                  // +0x010 (console stride 0x30)
