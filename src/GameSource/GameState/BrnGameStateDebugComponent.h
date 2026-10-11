@@ -1,27 +1,57 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"   // CgsDev::DebugComponent (real base)
+#include "BrnCommonTypes.h"                                                        // CgsID
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // real debug component base
 
-// BrnGameState::GameStateDebugComponent - the in-game game-state debug menu. Derives from the real
-// CgsDev::DebugComponent and registers the game-state debug toggles + action callbacks (toggle
-// showtime, clear training flags, play training message, ...) with the debug UI. Recovered from the
-// DecFIGS DWARF (GameState/BrnGameStateDebugComponent.h). Incremental: only the slice this pass
-// implements (the ToggleShowtime action + its back-pointer) is declared; the render / landmark /
-// stunt-breakdown methods and the remaining members are reconstructed by their own passes.
+namespace CgsDev
+{
+    struct Debug2DImmediateRender;
+}
+
 namespace BrnGameState
 {
-    class GameStateModule;   // pointer member; full definition in BrnGameStateModule.h (the .cpp includes it)
+    class GameStateModule;
+    struct DebugRender;
+    struct Metrics;
 
+    // GameStateModule's X360-owned debug page. The declaration shape is from DecFIGS;
+    // ARTIST registration, consumer and lifecycle accesses gate the X360-attested members.
     class GameStateDebugComponent : public CgsDev::DebugComponent
     {
-    private:
-        // The "Toggle showtime" action callback registered with the debug menu; the void* context the
-        // menu passes back is this component (registered via RegisterFunction(..., this, ...)).
-        static void ToggleShowtimeCallback(void* lpData);   // @ 0x823578F8
+    public:
+        void Construct(GameStateModule* lpGameStateModule);
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        void RenderLandmarkDebug() const;
+        void DrawRankNumber(s32 liRank);
 
-        // First derived member -> lands at offset 12 (vtable ptr + CgsDev::DebugComponent base
-        // subobject = 12 bytes), matching the X360 `*(this + 12)` access.
-        GameStateModule* mpGameStateModule;
+    protected:
+        const char* GetName() const override;
+        void OnActivate() override;
+
+    private:
+        void RenderCurrentLandmarkInfo(DebugRender& lrRender, const Metrics& lrMetrics) const;
+        void RenderNextLandmarkInfo(DebugRender& lrRender, const Metrics& lrMetrics) const;
+        void DrawUpcomingRoads(CgsDev::Debug2DImmediateRender* lpRender);
+        void DrawStuntBreakdown(CgsDev::Debug2DImmediateRender* lpRender);
+        s32 FindRoadNameIndexFromId(CgsID lRoadId);
+
+        static void ClearTrainingFlagsCallback(void* lpData);
+        static void ToggleShowtimeCallback(void* lpData);
+        static void PlayTrainingMessageCallback(void* lpData);
+
+        static const s32 KI_SCORE_TEXT_LENGTH = 128;
+        static const s32 KI_LANDMARK_TEXT_LENGTH = 128;
+
+        GameStateModule* mpGameStateModule;        // +0x0C
+        bool mbShowUpComingRoadRules;             // +0x10
+        bool mbDebugThisLandmark;                 // +0x11
+        bool mbDebugNextLandmark;                 // +0x12
+        bool mbDebugRenderFinishLines;            // +0x13
+        bool mbDebugCheckpointTimes;              // +0x14
+        bool mbDrawStuntBreakdown;                // +0x15
+        bool mbDrawMiscInfo;                      // +0x16
+        s32 meTrainingMessage;                    // +0x18
+        char macScoreText[KI_SCORE_TEXT_LENGTH];   // +0x1C
     };
 }
