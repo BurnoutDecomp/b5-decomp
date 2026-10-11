@@ -850,10 +850,9 @@ namespace
         // Construct also runs VariableEventQueue<32768,16>::Construct on it).
         s_GameDataInput.GetAttribSysRequestInterface()->mRequestQueue.Construct();
         s_GameDataInput.UnlockForWrite();
-        s_GameDataOutput.CgsModule::IOBuffer::Construct();
-        s_GameDataOutput.LockForWrite();
-        s_GameDataOutput.Construct();   // the member-clearing OutputBuffer::Construct
-        s_GameDataOutput.UnlockForWrite();
+        // The original OutputBuffer::Construct initializes its IO base too;
+        // calling it while write-locked would clear that lock before Unlock.
+        s_GameDataOutput.Construct();
     }
 }
 

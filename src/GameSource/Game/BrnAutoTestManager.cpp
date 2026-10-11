@@ -134,7 +134,13 @@ namespace BrnGame
             {
                 std::fgets(lacLine, sizeof(lacLine), lpFile);
                 if (!std::feof(lpFile))
-                    CgsCore::StrCat(macScript, sizeof(macScript), lacLine);
+                {
+                    // ARTIST inlines the original asserted append. The current
+                    // shared StrCat truncates, so retain the binary's behavior.
+                    CGS_ASSERT(std::strlen(lacLine) + std::strlen(macScript) < sizeof(macScript) - 1,
+                        "(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1");
+                    std::strcat(macScript, lacLine);
+                }
             }
             std::fclose(lpFile);
             ++miNumScriptsLoaded;

@@ -30,6 +30,7 @@
 #include <cstdio>                                                               // fopen/fread (PC schema-file leaf)
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"  // GetAttribSysAllocator (schema blob carve)
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h" // AttribSysPackageAllocator::Malloc
+#include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
 
 // BrnResource::GameDataModule - see the header. This pass reconstructs the rw-INDEPENDENT
 // lifecycle spine (Prepare's base -> ResourceModule::Prepare core). The rw-allocator-gated
@@ -39,6 +40,26 @@
 
 namespace BrnResource
 {
+    // ARTIST 0x826663B0; DecFIGS BrnGameDataModule.h:410 supplies the enum
+    // return type and the const resource-input declaration. IOHelper restores
+    // the original scoped CreateIOBuffer/DestroyIOBuffer pair and both asserts.
+    CgsResource::ResourceModule::EUpdateResult GameDataModule::UpdateResourceModule(
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        const CgsResource::ResourceIO::InputBuffer* lpInputBuffer)
+    {
+        CgsModule::IOHelper<CgsResource::ResourceIO::OutputBuffer> lOutput(
+            lpOutputBufferStack, "ResourceOutput");
+        const CgsResource::ResourceModule::EUpdateResult leResult =
+            mResourceModule.Update(lpInputBufferStack, lpOutputBufferStack,
+                                    lpInputBuffer, lOutput);
+        const CgsResource::ResourceIO::OutputBuffer* lpOutput = lOutput;
+        lpOutput->LockForRead();
+        mFileSystemStatusInterface = *lpOutput->GetFileSystemStatusInterface();
+        lpOutput->UnlockForRead();
+        return leResult;
+    }
+
     // "New module": mark before any Prepare. NO logging here -- BrnGameModule embeds GameDataModule by
     // value, so this ctor runs at STATIC INIT (before gpDebugPrint is initialized); logging here would
     // deref an uninitialized gpDebugPrint and crash before the window opens.
@@ -1913,12 +1934,13 @@ namespace BrnResource
             // SetAllocatorList(out, &mAllocatorList), then the LiveUpdateIO status copy
             // (SetLiveUpdateStatus from the LiveUpdate output).
             //
-            // [FLAG] we Construct the WHOLE output buffer where the console constructs only
-            // that one member -- wider than the console, and it stays that way until the
-            // OutputBuffer's filesystem-status member is homed. The LiveUpdate module is
-            // deferred (F-P7-4); the allocator-list publish is the live part.
+            // Construct the file-status member independently of the IO base:
+            // reconstructing the whole buffer here would clear its write lock.
+            // LiveUpdate remains a separate deferred producer.
+            CgsResource::ResourceIO::FileSystemStatusInterface lFileSystemStatus;
+            lFileSystemStatus.Construct();
             lpOutput->LockForWrite();
-            lpOutput->Construct();
+            lpOutput->SetFileSystemStatusInterface(&lFileSystemStatus);
             lpOutput->SetAllocatorList(&mAllocatorList);
             lpOutput->UnlockForWrite();
         }

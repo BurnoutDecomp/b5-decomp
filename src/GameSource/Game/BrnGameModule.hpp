@@ -437,7 +437,7 @@ namespace BrnGame
 
         void Construct() override;   // @ BrnGameModule.cpp:155 - construct the owned modules
 
-        // h:656; ARTIST 0x823DB848. main owns all five stacks; the game module
+        // BrnGameModule.cpp:656; ARTIST 0x823DB848. main owns all five stacks; the game module
         // retains the update/resource stacks and its persistent GameData IO pair.
         virtual bool Prepare(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
                              CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
@@ -1023,7 +1023,7 @@ namespace BrnGame
         // ---- X360 hardware / boot-legal query helpers (BrnGameModule.cpp) ----------------
         // X360 0x823A8B38 -- disk-error worker thread body: raise the system dirty-disc
         // error UI for dwUserIndex; never returns. Static (a thread proc; no `this`).
-        static void DiskErrorThreadProc(unsigned long dwUserIndex);
+        static intptr_t DiskErrorThreadProc(void* lpContext);
 
         // X360 0x823C0268 -- return the embedded hardware object (the launch/soft-reboot
         // data block). The X360 forms this + 0x9A11C0 == &mHardware.
@@ -1049,8 +1049,9 @@ namespace BrnGame
         // context module is delivered by pointer-to-pointer). Same receiver shape as
         // BrnDirector::Camera::BehaviourRenderMetrics::GameTalkMessageReceiver.
         static void RenderMetricsMessageHandler(EA::GameTalk::GameTalkMessage* lpMessage,
-                                                BrnGameModule** lppModule);
+                                                void* lpContext);
     private:
+        void CheckDiskError(const BrnResource::GameDataIO::OutputBuffer* lpOutputBuffer);
 
         // ---- members (real order; off-path ranges omitted; see LAYOUT NOTE) -------------
         // ---- the 11 engine modules (real names/types/order; all derive from the module base) --
@@ -1186,6 +1187,7 @@ namespace BrnGame
         // reads it (BrnRendererModule::Render's per-frame AddCommand forward).
         CgsSystem::ThreadLayout mThreadLayout;                        // h:530
         BrnGame::DispatchThreadInputBufferManager mDispatchThreadInputBufferManager; // h:531
+        EA::Thread::Thread mErrorThread;                              // h:532; ARTIST +0x9A11BC
         // FLAG PC-platform leaf: native initialization and reply pacing while
         // simulation is decoupled from the render rate.
         bool mbFrameLayoutInitializedPC = false;
