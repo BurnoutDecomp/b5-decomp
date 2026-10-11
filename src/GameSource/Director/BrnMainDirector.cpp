@@ -117,7 +117,7 @@ namespace BrnDirector
                 return;
             siLastCount = liCount;
             --siLinesLeft;
-            CgsDev::Log::DebugPrint& lrOut = *CgsDev::Log::gpDebugPrint;
+            CgsDev::StrStreamBase& lrOut = *CgsDev::Log::gpDebugPrint;
             lrOut << "[director-traffic] frame " << static_cast<s32>(suFrame) << " AllVehicleData traffic "
                   << liCount;
             if (liCount > 0)

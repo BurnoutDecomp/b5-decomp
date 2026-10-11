@@ -174,9 +174,9 @@ namespace Module
 
         // [5]+[6] BrnSound::Debug::DebugComponent::Construct(&mDebugComponent, this+0x4B8,
         //     this+0x280) + CgsDev::DebugComponent::Register(&mDebugComponent) -- wire the sound
-        //     debug pages to the playback + logic modules and register the component. [gated]
-        //     the @0x826A1230 Construct dossier is NOT in the export set (re-export needed --
-        //     the playback arg EXISTS since phase B5); lands with the sound debug-page slice.
+        //     debug pages to the playback + logic modules and register the component.
+        mDebugComponent.Construct(&mLogicModule.GetPlaybackModule(), &mLogicModule);
+        mDebugComponent.Register();
 
         // [7] the event-receiver queue @ this+0x13900: capacity 5120, align 16, bind + Clear.
         mReceiverQueue.Construct();

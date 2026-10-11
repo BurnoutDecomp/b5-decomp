@@ -68,6 +68,26 @@ visible show/hide/restore captures. Run
 `tools/tests/run_case.ps1 -Case debug_menu_racecar_hud -Slot 15` from the workflow.
 `BRN_RACECAR_HUD_TRACE` provides bounded passive observations.
 
+## Recovered source awaiting game checks
+
+Sound now has its original owner construction/registration, real log sinks and
+console routing, nine Global mixer controls and two existing diagnostic flags.
+The mixer controls share the actual consumer storage. Production checks pass
+43/43, and the integrated shipping build links all 2,950 TUs. Eleven of its 136
+activation registrations plus Console are recovered; 125 activation sites,
+statistics and audition chains remain pending. Game and audible output are not
+yet verified. The `gpDebugPrint` interface now accepts the original StrStreamBase
+sinks; native file logging retains its existing implementation.
+
+Challenge's Start Challenge action now sets the original pending latch instead
+of trapping. The five controls and complete-all chain have an 18-check production
+regression and original source/assembly review. The inspected original build has
+no consumer for the latch or Challenge Index; no start behavior is invented.
+Its actual game invocation and completion effects remain pending.
+
+These source recoveries were reviewed together and do not change the verified
+counts below. Runtime scenarios will share page setup and test related consumers.
+
 Thirteen registration sites are verified and two are classified as original no-ops.
 All other entries remain pending, including those previously tested for navigation.
 Other debug primitives still need individual parity audits. Sound and gameplay

@@ -67,7 +67,7 @@ void RaceMode::Start(const StartGameModeParams* lpStartGameModeParams,
     // sub_821F0F40 (the rival count through the s32 formatter sub_821F0EC8), then "\n".
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
     {
-        CgsDev::Log::DebugPrint& lrPrint = *CgsDev::Log::gpDebugPrint;
+        CgsDev::StrStreamBase& lrPrint = *CgsDev::Log::gpDebugPrint;
         lrPrint << "lpProgressionRankData->GetTrafficDensityRace() : "
                 << lpProgressionRankData->GetTrafficDensityRace() << "\n";
         lrPrint << "lpProgressionRankData->GetLargeVehicleProbability() : "

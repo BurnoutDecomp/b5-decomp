@@ -149,7 +149,7 @@ namespace
 
     // [FLAG PC witness] (crash parity FX-NETCRASH; NOT console code). BRN_TRAFFIC_LIGHT_DIAG,
     // capped, reads only: every countdown value the manager receives, and the end of the countdown.
-    CgsDev::Log::DebugPrint* TrafficLightDiagStream()
+    CgsDev::StrStreamBase* TrafficLightDiagStream()
     {
         static const bool sbEnabled = std::getenv("BRN_TRAFFIC_LIGHT_DIAG") != nullptr;
         return sbEnabled ? CgsDev::Log::gpDebugPrint : nullptr;
@@ -216,7 +216,7 @@ void TrafficLightManager::SetCountdownValue(s32 liCountdownDisplay)
         meCountdownState         = E_TRAFFICLIGHTSTATE_GREEN;
     }
 
-    CgsDev::Log::DebugPrint* const lpDiag = TrafficLightDiagStream();
+    CgsDev::StrStreamBase* const lpDiag = TrafficLightDiagStream();
     if (lpDiag != nullptr && giTrafficLightDiagLinesLeft > 0)
     {
         --giTrafficLightDiagLinesLeft;
@@ -293,7 +293,7 @@ void TrafficLightManager::Update(f32 lfTimeDelta)
     mbCountdownLights        = false;
     meCountdownState         = E_TRAFFICLIGHTSTATE_COUNT;
 
-    CgsDev::Log::DebugPrint* const lpDiag = TrafficLightDiagStream();
+    CgsDev::StrStreamBase* const lpDiag = TrafficLightDiagStream();
     if (lpDiag != nullptr && giTrafficLightDiagLinesLeft > 0)
     {
         --giTrafficLightDiagLinesLeft;

@@ -1,15 +1,22 @@
 #ifndef CGS_LOG_OUTPUT_H
 #define CGS_LOG_OUTPUT_H
 
-#include "types.hpp"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 namespace CgsDev
 {
 namespace Log
 {
-class LogOutput
+class LogOutput : public StrStreamBase
 {
 public:
+    using StrStreamBase::operator<<;
+    StrStreamBase& operator<<(const char* lpcText) override
+    {
+        Append(lpcText);
+        return *this;
+    }
+
     int Append(const char* lpcText);
 };
 }

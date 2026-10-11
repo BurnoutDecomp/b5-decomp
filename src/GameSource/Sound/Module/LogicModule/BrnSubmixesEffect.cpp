@@ -112,26 +112,27 @@ void SubmixesEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
 
 
 // =============================================================================
-// The file-scope tuning constants.  The DWARF (BrnSubmixesEffect.cpp:34..54) names all
-// thirteen and the X360 lays them out in .rdata in DECLARATION ORDER at
-// 0x82F2CE94..0x82F2CEC0, with ONE gap: KF_GLOBAL_LIMITER_THRESHOLD, whose value is 0.0f
-// and which therefore lives in .data at 0x82FFB8D4 beside the debug tweakables.
+// The tuning variables. DecFIGS Sound/Global/BrnSubmixesEffect.cpp:34..54
+// declares all thirteen as mutable float32_t. ARTIST places the nonzero defaults
+// in declaration order at 0x82F2CE94..0x82F2CEC0; the zero limiter threshold is
+// at 0x82FFB8D4. Both ranges are in the writable data segment. The nine slots
+// registered by the debug menu remain shared and mutable on the host.
 // Corroborated a third time by the debug registrar @0x826D7118, which registers each slot
 // under its own label ("Master Gain", "LF Shelf Gain", "LF Shelf Freq", "Limiter Thresh",
 // "Limiter Release", "GainArray Centre", "GainArray Front", "Array Rear").
 // =============================================================================
-static const f32 KF_GLOBAL_GAIN                       =     4.0f;  // .rdata 0x82F2CE94
-static const f32 KF_GLOBAL_LOW_SHELF_GAIN             =     0.5f;  // .rdata 0x82F2CE98
-static const f32 KF_GLOBAL_LOW_SHELF_FREQ             =    50.0f;  // .rdata 0x82F2CE9C
+f32 KF_GLOBAL_GAIN                                  =     4.0f;  // 0x82F2CE94
+f32 KF_GLOBAL_LOW_SHELF_GAIN                         =     0.5f;  // 0x82F2CE98
+f32 KF_GLOBAL_LOW_SHELF_FREQ                         =    50.0f;  // 0x82F2CE9C
 static const f32 KF_GLOBAL_LOW_SHELF_GAIN_SURROUND    =     0.3f;  // .rdata 0x82F2CEA0
 static const f32 KF_GLOBAL_LOW_SHELF_FREQ_SURROUND    =    56.0f;  // .rdata 0x82F2CEA4
-static const f32 KF_GLOBAL_LIMITER_THRESHOLD          =     0.0f;  // .data  0x82FFB8D4
-static const f32 KF_GLOBAL_LIMITER_RELEASE            =     5.0f;  // .rdata 0x82F2CEA8
+f32 KF_GLOBAL_LIMITER_THRESHOLD                     =     0.0f;  // 0x82FFB8D4
+f32 KF_GLOBAL_LIMITER_RELEASE                       =     5.0f;  // 0x82F2CEA8
 static const f32 KF_GLOBAL_LIMITER_GROUPTYPE          =     2.0f;  // .rdata 0x82F2CEAC
-static const f32 KF_GLOBAL_GAIN_ARRAY_CENTRE          =     1.0f;  // .rdata 0x82F2CEB0
-static const f32 KF_GLOBAL_GAIN_ARRAY_FRONT           =     1.0f;  // .rdata 0x82F2CEB4
-static const f32 KF_GLOBAL_GAIN_ARRAY_REAR            =     1.0f;  // .rdata 0x82F2CEB8
-static const f32 KF_GLOBAL_GAIN_ARRAY_SUB             =     1.0f;  // .rdata 0x82F2CEBC
+f32 KF_GLOBAL_GAIN_ARRAY_CENTRE                     =     1.0f;  // 0x82F2CEB0
+f32 KF_GLOBAL_GAIN_ARRAY_FRONT                      =     1.0f;  // 0x82F2CEB4
+f32 KF_GLOBAL_GAIN_ARRAY_REAR                       =     1.0f;  // 0x82F2CEB8
+f32 KF_GLOBAL_GAIN_ARRAY_SUB                        =     1.0f;  // 0x82F2CEBC
 static const f32 KF_GLOBAL_GAIN_ARRAY_CENTRE_SURROUND =     1.3f;  // .rdata 0x82F2CEC0
 
 // SubmixesEffect's OWN cutoff clamp, applied on TOP of the one inside the inlined

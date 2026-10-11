@@ -65,6 +65,18 @@ namespace BrnSound
 {
 namespace Logic
 {
+// ARTIST 0x826D5CB0 registers these very slots; ProcessUpdate and
+// UpdateStaticPluginParameters load them each update. Preserve shared mutable
+// storage so menu writes reach the mixer instead of a private constant copy.
+extern f32 KF_GLOBAL_GAIN;
+extern f32 KF_GLOBAL_LOW_SHELF_GAIN;
+extern f32 KF_GLOBAL_LOW_SHELF_FREQ;
+extern f32 KF_GLOBAL_LIMITER_THRESHOLD;
+extern f32 KF_GLOBAL_LIMITER_RELEASE;
+extern f32 KF_GLOBAL_GAIN_ARRAY_CENTRE;
+extern f32 KF_GLOBAL_GAIN_ARRAY_FRONT;
+extern f32 KF_GLOBAL_GAIN_ARRAY_REAR;
+extern f32 KF_GLOBAL_GAIN_ARRAY_SUB;
 
 // SubmixesEffect leaf. Reuses the committed BrnEffectObject dual base by name; the
 // virtual `scalar deleting destructor' @ 0x826BC608 runs the inherited
