@@ -10,6 +10,8 @@
 #include "rw/rwcore_structs.h"                                       // rw::IResourceAllocator
 #include "GameShared/GameClasses/System/Resource/CgsResourceDebugComponent.h"  // embedded mDebugComponent + DebugComponentParams
 
+namespace CgsModule { struct IOBufferStack; }
+
 // CgsResource::ResourceModule - the resource-streaming engine: the container module that owns
 // and orchestrates the four resource sub-modules (BundleLoaderModule, PoolModule, MemoryModule,
 // FileSystem) plus a debug component. It is embedded by value inside BrnResource::GameDataModule,
@@ -32,7 +34,7 @@ namespace CgsResource
 {
     struct DiskLayout;   // forward (ResourceModule::InitOptions holds a pointer only)
     namespace PoolIO { struct OutputBuffer; struct InputBuffer; }   // shuttle buffers
-    namespace ResourceIO { struct InputBuffer; }                    // the module's request input
+    namespace ResourceIO { struct InputBuffer; struct OutputBuffer; } // stack-based module IO
     // The write-stream request event types (deprecated adders take these by pointer only).
     namespace Events
     {
@@ -45,6 +47,13 @@ namespace CgsResource
     class ResourceModule : public CgsModule::ModuleSingleBuffered
     {
     public:
+        // DecFIGS CgsResourceModule.h:134; ARTIST Update @0x82907948.
+        enum EUpdateResult
+        {
+            E_RESULT_OK = 0,
+            E_RESULT_REQUIRE_STALL = 1,
+        };
+
         static const s32 KI_MAX_PENDING_FILE_SYSTEM_RESPONSES = 16;
 
         // DecFIGS CgsResourceModule.h:209-213. A pending asynchronous file
@@ -99,6 +108,10 @@ namespace CgsResource
         bool Release();    // 0x82906570
         void Destruct();   // deferred
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);        // deferred
+        EUpdateResult Update(CgsModule::IOBufferStack* lpInputBufferStack,
+                             CgsModule::IOBufferStack* lpOutputBufferStack,
+                             const ResourceIO::InputBuffer* lpInputBuffer,
+                             ResourceIO::OutputBuffer* lpOutputBuffer);
 
         // ---- request/response shuttle steps (the pool-create slice of ResourceModule::Update) ---------
         // @ 0x829019F0 - forward the pool module's resource-memory requests (its PoolIO::OutputBuffer

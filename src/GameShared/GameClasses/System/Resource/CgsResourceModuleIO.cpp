@@ -49,6 +49,13 @@ namespace CgsResource
             mbDiskErrorOccured = false;
         }
 
+        // Inlined in ARTIST CheckDiskError @0x823BC7BC; the DecFIGS
+        // CgsResourceModuleIO.h declaration names the one-byte status field.
+        bool FileSystemStatusInterface::GetDiskErrorOccured() const
+        {
+            return mbDiskErrorOccured;
+        }
+
         // -------- OutputBuffer::Construct @ 0x828EC978 --------
         // Construct the IOBuffer base (sets the eStatusConstructed status bit @ +0), then
         // construct the embedded FileSystemStatusInterface @ +1 (clears its disk-error flag).

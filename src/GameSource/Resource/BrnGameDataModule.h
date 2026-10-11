@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"          // base
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"        // mReceiverQueue
 #include "GameShared/GameClasses/System/Resource/CgsResourceModule.h"        // mResourceModule (the streaming engine)
+#include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"      // file-system status (by value)
 #include "GameShared/GameClasses/Containers/CgsIndexedPool.h"                // mGameDataEventSlotPool
 #include "GameSource/Resource/BrnGameDataEventSlot.h"                        // GameDataEventSlot (pool element)
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"           // GameDataIO::AllocatorList (mAllocatorList)
@@ -22,7 +23,8 @@ namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralRe
 namespace CgsResource { namespace ResourceIO { struct InputBuffer; } }       // handler param (by pointer)
 namespace CgsResource { namespace Events { struct LoadBundleResponse; struct UnloadBundleResponse;
                                            struct AcquireResourceResponse; } } // response params (by pointer)
-namespace CgsModule { struct Event; }                                        // pump param (by pointer)
+namespace CgsModule { struct Event; struct IOBufferStack; }                   // pump params (by pointer)
+namespace BrnResource { namespace GameDataIO { struct InputBuffer; struct OutputBuffer; } }
 
 // BrnResource::GameDataModule - Burnout's game-data streaming module: the ~480KB module that is
 // the heart of resource loading. It embeds the CgsResource::ResourceModule (memory + pools +
@@ -94,7 +96,13 @@ namespace BrnResource
 
         void Construct();   // 0x82671B90 (slot 0; the X360 takes NO arguments -- the old
                             // `const void* lpInitOptions` param here was fabricated)
-        bool Prepare(void* lpInputBuffer, void* lpOutputBuffer);   // 0x82673F38
+        // ARTIST 0x82673F38 / DecFIGS BrnGameDataModule.h:370. The original
+        // stack-based lifecycle is distinct from the existing shortened PC path.
+        virtual bool Prepare(CgsModule::IOBufferStack* lpInputBufferStack,
+                             CgsModule::IOBufferStack* lpOutputBufferStack,
+                             const GameDataIO::InputBuffer* lpInputBuffer,
+                             GameDataIO::OutputBuffer* lpOutputBuffer);
+        bool Prepare(void* lpInputBuffer, void* lpOutputBuffer);
         bool Release();                               // deferred
         void Destruct();                              // deferred
 
@@ -106,6 +114,13 @@ namespace BrnResource
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);
 
     private:
+        // ARTIST 0x826663B0: pump the resource module, retaining its published
+        // file-system status before the scoped ResourceOutput buffer is popped.
+        CgsResource::ResourceModule::EUpdateResult UpdateResourceModule(
+            CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsModule::IOBufferStack* lpOutputBufferStack,
+            const CgsResource::ResourceIO::InputBuffer* lpInputBuffer);
+
         // rw-allocator-gated bring-up steps (deferred stubs report success).
         bool CreateBanks(void* lpInputBuffer, void* lpOutputBuffer);       // 0x8266DA28
         bool CreatePools(void* lpInputBuffer, void* lpOutputBuffer);       // 0x8266DB88
@@ -531,6 +546,9 @@ namespace BrnResource
         BrnResource::PopupController   mPopupController;
         // Console +0x65998 -- PreparePopups' own six-state stage word (Construct zeroes it).
         s32                            miPopupsPrepareStage;
+        // ARTIST +0x74330, written by UpdateResourceModule and published by
+        // the original Prepare/Update to GameDataIO::OutputBuffer.
+        CgsResource::ResourceIO::FileSystemStatusInterface mFileSystemStatusInterface;
         // (the 9 GeneralAllocators, DLCManager, per-type IndexedLinkLists, HUD
         //  message / popup controllers and the game-data tables are added with their own passes.)
     };
