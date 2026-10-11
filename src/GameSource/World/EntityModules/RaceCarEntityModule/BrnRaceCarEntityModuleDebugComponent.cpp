@@ -14,7 +14,6 @@
 // forwards with screen culling disabled), so the bodies call that overload directly.
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleDebugComponent.h"
-#include "pc/debug/RaceCarControls.h"
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"   // module, ActiveRaceCar, RaceCarStreamer
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
@@ -306,8 +305,6 @@ void RaceCarEntityModuleDebugComponent::OnActivate()
 
     // ---- vehicle LODs ----
     const char* lpcLods = "Graphics/Vehicles.../LODs...";
-    if (CgsPC::Debug::BeginVehicleLodRegistration())
-    {
     RegisterVariable(&sbUseDynamicLods,    lpcLods, "Use Dynamic LODs");
     RegisterVariable(&sbUseFixedLods,      lpcLods, "Use Fixed LODs");
     RegisterVariable(&sbUseAggressiveLods, lpcLods, "Use Aggressive LODs");
@@ -322,7 +319,6 @@ void RaceCarEntityModuleDebugComponent::OnActivate()
     RegisterVariable(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[2], lpcLods, "Aggressive LOD 2");
     RegisterVariable(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[3], lpcLods, "Aggressive LOD 3");
     RegisterVariable(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[4], lpcLods, "Aggressive LOD 4");
-    }
     SetRange(&siFixedVehicleLod, 0, KI_MAX_FIXED_VEHICLE_LOD);
     for (s32 liLod = 0; liLod < 5; ++liLod)
     {
