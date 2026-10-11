@@ -36,6 +36,10 @@
 
 // BrnRendererModule::Render publishes the threshold read by InterpretOcclusionQuery.
 extern u32 suOcclusionCullIndexCountThreshold;
+// PC immediate-mode equivalents of X360 dword_83010F20 and dword_83010F3C.
+extern void* gpImStandardAlphaBlendState;
+extern void* gpSkyDomeRasterizerState;
+void ImDeviceSetRasterizerState(void* lpState);
 
 // ---------------------------------------------------------------------------------------------
 // BRN_SHADOW_MAP_TARGET_AVAILABLE -- the shadow-map RENDER TARGET gate (PC bring-up, 2026-08-12).
@@ -413,6 +417,50 @@ void BrnRendererModule::RenderThreeThreadMonitors(bool lbThread0, bool lbThread1
                          laLeftX[liThread] * KF_W,           0.91f * KF_H,
                          (laLeftX[liThread] + 0.015f) * KF_W, 0.94f * KF_H, lColour);
     }
+    mIm2dRenderer.EndRendering();
+}
+
+// @0x82406208. ARTIST calls this with a normalized upper-right position (0.7, 0.0),
+// a normalized size (0.3, 0.3), and opaque white to show a render-target texture.
+void BrnRendererModule::DebugDisplayRenderTarget(renderengine::Texture* lpTexture,
+                                                  Vector2 lrPosition, Vector2 lrSize,
+                                                  CgsDev::RGBA luColour)
+{
+    const f32 KF_LOGICAL_WIDTH = 1280.0f;
+    const f32 KF_LOGICAL_HEIGHT = 720.0f;
+    const f32 lfLeft = lrPosition.x * KF_LOGICAL_WIDTH;
+    const f32 lfTop = lrPosition.y * KF_LOGICAL_HEIGHT;
+    const f32 lfRight = (lrPosition.x + lrSize.x) * KF_LOGICAL_WIDTH;
+    const f32 lfBottom = (lrPosition.y + lrSize.y) * KF_LOGICAL_HEIGHT;
+
+    const CgsGraphics::RGBA8 lColour = {
+        static_cast<u8>((luColour >> 24) & 0xFFu),
+        static_cast<u8>((luColour >> 16) & 0xFFu),
+        static_cast<u8>((luColour >> 8) & 0xFFu),
+        static_cast<u8>(luColour & 0xFFu)
+    };
+    CgsGraphics::Basic2dColouredTexturedVertex laVertices[4];
+    laVertices[0].mv2Pos = { lfLeft, lfTop };
+    laVertices[1].mv2Pos = { lfLeft, lfBottom };
+    laVertices[2].mv2Pos = { lfRight, lfTop };
+    laVertices[3].mv2Pos = { lfRight, lfBottom };
+    laVertices[0].mv2Tex0UV = { 0.0f, 0.0f };
+    laVertices[1].mv2Tex0UV = { 0.0f, 1.0f };
+    laVertices[2].mv2Tex0UV = { 1.0f, 0.0f };
+    laVertices[3].mv2Tex0UV = { 1.0f, 1.0f };
+    for (u32 luVertex = 0; luVertex < 4; ++luVertex)
+        laVertices[luVertex].mv4Colour = lColour;
+
+    // Im2d::BeginRendering publishes the canonical 1280x720 screen transform; this
+    // is the PC-side state carried by ARTIST's SetTransform(flt_830112D0).
+    mIm2dRenderer.BeginRendering();
+    mIm2dRenderer.SetTexture(lpTexture);
+    mIm2dRenderer.SetState(
+        reinterpret_cast<const CgsGraphics::BlendState*>(gpImStandardAlphaBlendState));
+    // The original bind is sub_82276E48(dword_83010F3C). On this PC path the
+    // immediate-mode state is the D3D9 cull-none equivalent owned by ImmediateMode.cpp.
+    ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);
+    mIm2dRenderer.Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
     mIm2dRenderer.EndRendering();
 }
 
@@ -4652,6 +4700,25 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     mu32NumWorldTransparentObjectTotals += luWorldTransparent;
     mu32NumCarTransparentObjectTotals   += luCarTransparent;
 
+    // X360 Render @0x8240C5FC..0x8240C688 publishes five 60-frame averages.
+    // RenderShadowMapPasses has already added this frame's shadow total before this pass.
+    ++mu32DispatchFrameCounter;
+    if (mu32DispatchFrameCounter == 60u)
+    {
+        mu32NumWorldOpaqueObjects      = mu32NumWorldOpaqueObjectTotals / 60u;
+        mu32NumCarOpaqueObjects        = mu32NumCarOpaqueObjectTotals / 60u;
+        mu32NumWorldTransparentObjects = mu32NumWorldTransparentObjectTotals / 60u;
+        mu32NumCarTransparentObjects   = mu32NumCarTransparentObjectTotals / 60u;
+        mu32NumShadowObjects           = mu32NumShadowObjectTotals / 60u;
+
+        mu32NumWorldOpaqueObjectTotals      = 0u;
+        mu32NumCarOpaqueObjectTotals        = 0u;
+        mu32NumWorldTransparentObjectTotals = 0u;
+        mu32NumCarTransparentObjectTotals   = 0u;
+        mu32NumShadowObjectTotals           = 0u;
+        mu32DispatchFrameCounter            = 0u;
+    }
+
     // [FLAG PC bring-up] One-shot map of where the world producer's records actually
     // landed. The world feed's AddToBin list bytes were flagged provisional by the
     // renderer wave (BrnWorldEntityModule's camera call site), so name every non-empty
@@ -6519,6 +6586,25 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         lRenderStage.Next(RENDER_PRESENT);
         renderengine::Device::ShowPixelBuffer();
         return;
+    }
+
+    // ARTIST Render @0x8240DEB4..DFF0 displays the selected shadow depth texture
+    // at the upper right: position (0.7, 0.0), size (0.3, 0.3), opaque white.
+    if (mbShowShadowMap)
+    {
+        miShowShadowMapIndex %= 4;
+        CGS_ASSERT(miShowShadowMapIndex >= 0 && miShowShadowMapIndex < 4,
+                   "liIndex >=0 && liIndex<4");
+
+        Vector2 lPosition = {};
+        lPosition.x = 0.7f;
+        lPosition.y = 0.0f;
+        Vector2 lSize = {};
+        lSize.x = 0.3f;
+        lSize.y = 0.3f;
+        DebugDisplayRenderTarget(
+            mAllocatedRenderTargets.GetShadowMapBuffer(miShowShadowMapIndex)->GetDepthTexture(),
+            lPosition, lSize, 0xFFFFFFFFu);
     }
 
     // ARTIST 8240E000..E054: one HUD gate and the original command order.
