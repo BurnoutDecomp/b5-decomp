@@ -85,12 +85,19 @@ namespace Vehicle
         // onto the debug manager's list.
         const char* GetName() const override;
         const char* GetPath() const override;
+        // The X360 page registers the per-car handling/suspension state and then prepares its two
+        // grip-curve windows. The body is recovered from ARTIST @0x82620730.
+        void OnActivate() override;
 
     private:
         // Compile-time seat gate. Every member below is pinned to its console offset through the
         // cumulative host-widening chain; defined in this class's .cpp so it compiles with the
         // class. Never called.
         static void _AssertLayout();
+
+        // Register the two component-path toggles and bind the front/rear windows to the exact
+        // wheel pairs used by the X360 body. Called at the tail of OnActivate.
+        void InitWindows();
 
         // ---- the sampled mirror of the car, refreshed every tick by Update ---------------------
         Wheel::RoadContact   maRoadContacts[4];                  // +0x010 (console stride 0x30)

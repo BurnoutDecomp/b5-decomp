@@ -34,6 +34,10 @@ namespace Vehicle
         // Window base is deliberately NOT touched -- Prepare is what fills that in.
         void Construct();
 
+        // @0x825DAF20: attach the axle wheels, bind both tire curves, set their graph ranges,
+        // and prepare the base window with the supplied caption.
+        void Prepare(Wheel* lpLeftWheel, Wheel* lpRightWheel, const char* lpacWindowCaption);
+
         // @0x825B4B00 / @0x825B4B60: add/remove this window to/from the debug-UI stack + toggle mbVisible.
         void Show();
         void Hide();
