@@ -2,6 +2,7 @@
 #include "GameSource/Effects/EffectsDebugPostFxSettingsPC.h"
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
 // Original ARTIST debug-tunable bloom scale, defined by BrnRendererModule.cpp.
 extern f32 gfBloomLuminanceScale;
 extern f32 gfBloomThresholdScale;
@@ -35,6 +36,7 @@ namespace BrnEffects { class EffectsModule; }
 // world render pass drives them, so the former local placeholders are gone.
 #include "GameShared/GameClasses/Graphics/CgsBufferedDispatchFrame.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/CgsOcclusionCullManager.h"
 
 namespace CgsGraphics
 {
@@ -59,9 +61,6 @@ class Im3dZOnly
 {
 };
 
-class OcclusionCullManager
-{
-};
 }
 
 // EffectsArbitrator is the real type (BrnEffectsArbitrator.h); Im3dSkyDome is the real
@@ -186,15 +185,37 @@ struct Resource
 // indices and mbForceFrontFaceCull) did not exist at all.
 #include "GameSource/Graphics/BrnShadowMapRenderManager.h"
 
-struct DebugComponent
+class BrnRendererModule;
+
+namespace BrnGraphics
 {
-};
+    // Recovered from the ARTIST Construct, GetName, GetPath, and OnActivate exports.
+    class DebugComponent : public CgsDev::DebugComponent
+    {
+    public:
+        void Construct(::BrnRendererModule* lpRendererModule);
+        const bool GetOverrideSunBrightness();
+        const f32 GetOverriddenSunBrightness();
+
+    protected:
+        const char* GetName() const override;
+        const char* GetPath() const override;
+        void OnActivate() override;
+
+    private:
+        ::BrnRendererModule* mpRendererModule = nullptr;
+        f32 mfSunFlareOverrideBrightness = 0.3f;
+        bool mbSunFlareOverrideBrightness = false;
+    };
+}
 
 // Vector3 / Vector4 are the real rw::math types (BrnCommonTypes.h, pulled in above).
 
 class BrnRendererModule : public CgsModule::ModuleSingleBuffered
 {
 public:
+    friend class BrnGraphics::DebugComponent;
+
     enum ERendererPrepareStage
     {
         eRendererPrepareStart,
@@ -788,7 +809,7 @@ private:
     BrnGraphics::ShadowMapRenderManager mShadowMapRenderManager;
     bool                                mbDiskErrorLastFrame;
     s32                                 miFramesSinceDiskErrorReported;
-    DebugComponent                      mDebugComponent;
+    BrnGraphics::DebugComponent         mDebugComponent;
 
     // FLAG PC-platform leaf: physical bins never move; swapping their owners
     // keeps DispatchList/DispatchBin back-pointers and GDL constant lifetimes
