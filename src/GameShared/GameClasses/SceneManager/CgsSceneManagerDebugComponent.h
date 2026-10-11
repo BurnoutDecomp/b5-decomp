@@ -10,6 +10,7 @@
 namespace CgsDev { struct Debug3DImmediateRender; }
 namespace rw { namespace collision { class Volume; } }
 namespace rw { struct RGBA; }
+namespace rw { namespace math { namespace vpu { struct MaskScalar; } } }
 
 namespace CgsSceneManager
 {
@@ -49,6 +50,10 @@ namespace CgsSceneManager
         void DrawCachedTriangle(CgsDev::Debug3DImmediateRender* lpRender,
                                 Vector3 lVertex0, Vector3 lVertex1, Vector3 lVertex2,
                                 rw::RGBA lColour);
+        void DrawTriangle(CgsDev::Debug3DImmediateRender* lpRender,
+                          Vector3 lTranslation, Vector3 lVertex0, Vector3 lVertex1, Vector3 lVertex2,
+                          rw::math::vpu::MaskScalar lHitMask,
+                          Vector3 lSphereContactPoint, Vector3 lTriangleContactPoint);
         void DrawTriangleTest(CgsDev::Debug3DImmediateRender* lpRender);
 
         const SceneManagerModule* mpSceneManagerModule;
