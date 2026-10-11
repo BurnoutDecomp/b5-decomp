@@ -2,9 +2,12 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"   // RaceCarPhysics / Wheel::RoadContact
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "rw/math/vpu/vector3_operation.h"
 
 #include <cstddef>   // offsetof
+#include <cmath>
 
 // BrnPhysics::Vehicle::DebugComponent -- the component's data side: the per-car two-phase
 // Construct, the gear-stat reset, the two debug-menu name getters, the last-wall-triangle setter
@@ -26,6 +29,14 @@ namespace Vehicle
             rw::RGBA lColour;
             lColour.m_rgba = luPackedColour;
             return lColour;
+        }
+
+        // Scalar fsel lowering used by the original label/current-value clamps.
+        // An unordered range subtraction chooses the range, as ARTIST does.
+        f32 ClampGripLabel(f32 lfValue, f32 lfRange)
+        {
+            const f32 lfNonnegative = -lfValue >= 0.0f ? 0.0f : lfValue;
+            return lfRange - lfNonnegative >= 0.0f ? lfNonnegative : lfRange;
         }
     }
 
@@ -101,6 +112,74 @@ namespace Vehicle
             lpDisplay->DrawArrow(lrResult.mIntersectionPosition,
                 lrResult.mIntersectionPosition + lrResult.mIntersectionNormal, HandlingColour(0xFF0000FFu));
         }
+    }
+
+    // ARTIST 82621208: a piecewise-linear curve through zero, peak and floor,
+    // followed by the floor plateau. The axes and every tick remain separate.
+    void GripCurveDebugGraph::Render(CgsDev::Debug2DImmediateRender* lpDisplay)
+    {
+        const CgsDev::RGBA lAxisColour = 0xFF000000u;
+        const CgsDev::RGBA lCurveColour = 0xFFFF0000u; // dword_82FBA2A4
+        const auto lOrigin = GetPointOnGraph(0.0f, 0.0f);
+        lpDisplay->DrawLine(GetPointOnGraph(0.0f, mAxisRanges.y), lOrigin, lAxisColour);
+        lpDisplay->DrawLine(lOrigin, GetPointOnGraph(mAxisRanges.x, 0.0f), lAxisColour);
+        const Vector4& lrCurve = mpGripCurve->maGripVariables;
+        const auto lPeak = GetPointOnGraph(lrCurve.x, lrCurve.z);
+        const auto lFloor = GetPointOnGraph(lrCurve.y, lrCurve.w);
+        lpDisplay->DrawLine(lOrigin, lPeak, lCurveColour);
+        lpDisplay->DrawLine(lPeak, lFloor, lCurveColour);
+        lpDisplay->DrawLine(lFloor, GetPointOnGraph(mAxisRanges.x, lrCurve.w), lCurveColour);
+        PlotSlipRatioLabel(lpDisplay, mAxisRanges.x, lAxisColour);
+        PlotCoefficientLabel(lpDisplay, mAxisRanges.y, lAxisColour);
+        PlotSlipRatioLabel(lpDisplay, lrCurve.x, lAxisColour);
+        PlotSlipRatioLabel(lpDisplay, lrCurve.y, lAxisColour);
+        PlotCoefficientLabel(lpDisplay, lrCurve.z, lAxisColour);
+        PlotCoefficientLabel(lpDisplay, lrCurve.w, lAxisColour);
+    }
+
+    // ARTIST 82603B28 (raw-image asm; export hole), DWARF h:185.
+    void GripCurveDebugGraph::PlotCoefficientLabel(CgsDev::Debug2DImmediateRender* lpDisplay,
+                                                   f32 lfCoefficient, CgsDev::RGBA lColour)
+    {
+        lfCoefficient = ClampGripLabel(lfCoefficient, mAxisRanges.y);
+        char lacText[32];
+        CgsCore::SPrintf(lacText, 16, "%4.1f", static_cast<double>(lfCoefficient));
+        const auto lPoint = GetPointOnGraph(0.0f, lfCoefficient);
+        auto lStart = lPoint;
+        auto lEnd = lPoint;
+        lStart.x -= 3.0f;
+        lEnd.x += 3.0f;
+        lpDisplay->DrawLine(lStart, lEnd, 0xFF000000u);
+        lpDisplay->DrawText(lacText, lPoint.x - 36.0f, lPoint.y - 9.0f, 18.0f, lColour);
+    }
+
+    // ARTIST 82603CA8, DWARF h:192. Tick colour is always the axis colour;
+    // only the text receives the caller's wheel/curve colour.
+    void GripCurveDebugGraph::PlotSlipRatioLabel(CgsDev::Debug2DImmediateRender* lpDisplay,
+                                                 f32 lfSlipRatio, CgsDev::RGBA lColour)
+    {
+        lfSlipRatio = ClampGripLabel(lfSlipRatio, mAxisRanges.x);
+        char lacText[32];
+        CgsCore::SPrintf(lacText, 16, "%4.1f", static_cast<double>(lfSlipRatio));
+        const auto lPoint = GetPointOnGraph(lfSlipRatio, 0.0f);
+        auto lStart = lPoint;
+        auto lEnd = lPoint;
+        lStart.y -= 3.0f;
+        lEnd.y += 3.0f;
+        lpDisplay->DrawLine(lStart, lEnd, 0xFF000000u);
+        lpDisplay->DrawText(lacText, lPoint.x - 18.0f, lPoint.y + 9.0f, 18.0f, lColour);
+    }
+
+    // ARTIST 82603E20: evaluate the actual curve at the clamped absolute
+    // slip, then draw its sample circle and both coordinate labels.
+    void GripCurveDebugGraph::PlotCurrentValue(CgsDev::Debug2DImmediateRender* lpDisplay,
+                                              f32 lfSlipRatio, CgsDev::RGBA lColour)
+    {
+        lfSlipRatio = ClampGripLabel(std::fabs(lfSlipRatio), mAxisRanges.x);
+        const f32 lfCoefficient = mpGripCurve->GetCoefficient(rw::math::vpu::Splat(lfSlipRatio)).x;
+        lpDisplay->DrawCircle(GetPointOnGraph(lfSlipRatio, lfCoefficient), 5.0f, 8, lColour);
+        PlotCoefficientLabel(lpDisplay, lfCoefficient, lColour);
+        PlotSlipRatioLabel(lpDisplay, lfSlipRatio, lColour);
     }
 
     // ---- layout gate ---------------------------------------------------------------------------

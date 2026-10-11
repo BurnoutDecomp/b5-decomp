@@ -1,4 +1,6 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnGripCurveDebugGraph.h"
+#include <cmath>
+#include <cstring>
 
 // BrnPhysics::Vehicle::GripCurveDebugGraph -- the two pure-geometry accessors owned by the
 // Vehicle-events group. Reconstructed from BURNOUT_X360_ARTIST.XEX. The console bodies are
@@ -14,6 +16,25 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    namespace
+    {
+        f32 GraphFlush(f32 lfValue)
+        {
+            return std::fpclassify(lfValue) == FP_SUBNORMAL
+                ? std::copysign(0.0f, lfValue) : lfValue;
+        }
+        f32 GraphAdd(f32 lfA, f32 lfB) { return GraphFlush(GraphFlush(lfA) + GraphFlush(lfB)); }
+        f32 GraphSubtract(f32 lfA, f32 lfB) { return GraphFlush(GraphFlush(lfA) - GraphFlush(lfB)); }
+        f32 GraphMultiply(f32 lfA, f32 lfB) { return GraphFlush(GraphFlush(lfA) * GraphFlush(lfB)); }
+        f32 GraphFlipSign(f32 lfValue)
+        {
+            u32 luBits;
+            std::memcpy(&luBits, &lfValue, sizeof(luBits));
+            luBits ^= 0x80000000u; // ARTIST vxor with the sign mask, including NaN.
+            std::memcpy(&lfValue, &luBits, sizeof(lfValue));
+            return lfValue;
+        }
+    }
     // Two-phase init, inlined by the console into GripCurveDebugWindow::Construct (once per
     // graph). Four stores: the curve pointer word at +0x00, a zero quadword over mAxisTopLeft
     // (+0x10), a zero quadword over mAxisRanges (+0x20), and a two-lane insert into
@@ -32,29 +53,35 @@ namespace Vehicle
         mAxisDimensions.y = 225.0f;   // box height, pixels
     }
 
-    // GetOrigin @0x825E8D00: {topLeft.x, topLeft.y + boxHeight}.
+    // GetOrigin @0x825E8D00: the two 36-unit insets leave room for labels.
+    // vrlimi replaces X/Y only; the location's remaining lanes survive.
     rw::math::vpu::Vector2 GripCurveDebugGraph::GetOrigin() const
     {
-        rw::math::vpu::Vector2 lOrigin;
-        lOrigin.SetZero();
-        lOrigin.x = mAxisTopLeft.x;                       // +0x10.x
-        lOrigin.y = mAxisTopLeft.y + mAxisDimensions.y;   // +0x10.y + (+0x30).y (box height)
+        rw::math::vpu::Vector2 lOrigin = mAxisTopLeft;
+        lOrigin.x = GraphAdd(mAxisTopLeft.x, 36.0f);
+        lOrigin.y = GraphAdd(mAxisTopLeft.y, GraphSubtract(mAxisDimensions.y, 36.0f));
         return lOrigin;
     }
 
-    // GetPointOnGraph @0x825E8DB8: origin + (normSlip*width, -normGrip*height).
+    // ARTIST 825E8E24/8E64 are scalar fdivs, followed by separate VMX
+    // products and addition. There is no reciprocal refinement or fused offset.
     rw::math::vpu::Vector2 GripCurveDebugGraph::GetPointOnGraph(f32 lfSlipRatio,
                                                                 f32 lfGripCoefficient) const
     {
         const f32 lfNormX = lfSlipRatio       / mAxisRanges.x;   // a3 / (+0x20)
         const f32 lfNormY = lfGripCoefficient / mAxisRanges.y;   // a4 / (+0x24)
 
-        rw::math::vpu::Vector2 lOrigin = GetOrigin();
-
+        const f32 lfHeight = GraphSubtract(mAxisDimensions.y, 36.0f);
+        const f32 lfWidth = GraphSubtract(mAxisDimensions.x, 36.0f);
+        const f32 lfOffsetY = GraphMultiply(GraphFlipSign(lfNormY), lfHeight);
+        const f32 lfOffsetX = GraphMultiply(lfNormX, lfWidth);
+        const rw::math::vpu::Vector2 lOrigin = GetOrigin();
         rw::math::vpu::Vector2 lPoint;
-        lPoint.SetZero();
-        lPoint.x = lOrigin.x + lfNormX * mAxisDimensions.x;      // grow right
-        lPoint.y = lOrigin.y - lfNormY * mAxisDimensions.y;      // grow up (screen-Y points down)
+        lPoint.x = GraphAdd(lOrigin.x, lfOffsetX);
+        lPoint.y = GraphAdd(lOrigin.y, lfOffsetY);
+        // The original vperm mask 82CDA350 supplies {X, Y, X, X}.
+        lPoint.z = GraphAdd(lOrigin.z, lfOffsetX);
+        lPoint.w = GraphAdd(lOrigin.w, lfOffsetX);
         return lPoint;
     }
 }
