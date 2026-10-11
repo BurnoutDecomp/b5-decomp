@@ -4,10 +4,13 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "rw/math/vpu/vector3_operation.h"
+#include "rw/math/vpu/matrix44_operation.h"
 
 #include <cstddef>   // offsetof
 #include <cmath>
+#include <cstring>
 
 // BrnPhysics::Vehicle::DebugComponent -- the component's data side: the per-car two-phase
 // Construct, the gear-stat reset, the two debug-menu name getters, the last-wall-triangle setter
@@ -88,6 +91,33 @@ namespace Vehicle
         {
             return Vector3{HandlingMultiplyAdd(lA.x, lfC, lB.x), HandlingMultiplyAdd(lA.y, lfC, lB.y),
                            HandlingMultiplyAdd(lA.z, lfC, lB.z), HandlingMultiplyAdd(lA.w, lfC, lB.w)};
+        }
+
+        Vector3 HandlingNegate(Vector3 lValue)
+        {
+            u32 laBits[4];
+            std::memcpy(laBits, &lValue, sizeof(laBits));
+            for (u32& lrBits : laBits)
+                lrBits ^= 0x80000000u;
+            std::memcpy(&lValue, laBits, sizeof(laBits));
+            return lValue;
+        }
+
+        void AssertHandlingWheelPosition(Vector3 lPosition)
+        {
+            if (!(lPosition.x == lPosition.x && lPosition.y == lPosition.y && lPosition.z == lPosition.z))
+            {
+                CgsDev::Assert::BeginAssert();
+                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+                lMessage << "Invalid wheel position: ";
+                lMessage.AppendFormat("(%f, %f, %f)", static_cast<double>(lPosition.x),
+                                      static_cast<double>(lPosition.y), static_cast<double>(lPosition.z));
+                lMessage << ", please tell Graham D.";
+                CgsDev::Assert::FireAssert(lacMessage,
+                    "..\\..\\..\\GameSource\\Physics/VehicleManager/VehiclePhysics/Wheel.h", 412);
+                CgsDev::Assert::EndAssert();
+            }
         }
 
         // Scalar fsel lowering used by the original label/current-value clamps.
@@ -220,6 +250,95 @@ namespace Vehicle
                                             HandlingColour(0xFFFFFFFFu));
             }
         }
+    }
+
+    // ARTIST 825DA7E8: three camera-facing rate bars at the vehicle, with
+    // world-space titles. ARTIST directly calls Debug3D primitives here.
+    void DebugComponent::DrawAngularVelocity(CgsDev::Debug3DImmediateRender* lpDisplay)
+    {
+        CGS_ASSERT(lpDisplay != nullptr, "lpDisplay != NULL");
+        const Vector3 lPosition = mpRaceCarPhysics->GetGraphicsVehicleTransform().wAxis;
+        Vector4 lDeterminant;
+        const rw::math::vpu::Matrix44 lInverse = rw::math::vpu::Inverse(
+            lpDisplay->GetViewProjectionMatrix(), lDeterminant);
+        const auto lScreenSize = lpDisplay->GetVirtualScreenSize();
+        const f32 lfAspectScale = HandlingMultiply(HandlingReciprocal(lScreenSize.x), lScreenSize.y);
+        const Vector3 lCameraRight = HandlingScale(
+            Vector3{lInverse.xAxis.x, lInverse.xAxis.y, lInverse.xAxis.z, lInverse.xAxis.w}, lfAspectScale);
+        const Vector3 lCameraUp{lInverse.yAxis.x, lInverse.yAxis.y, lInverse.yAxis.z, lInverse.yAxis.w};
+        const Matrix44Affine lBodyTransform = mpRaceCarPhysics->GetTransform();
+        const Vector3 lAngularVelocity = mpRaceCarPhysics->GetAngularVelocity();
+        const f32 lafRates[3] = {
+            HandlingFlush(rw::math::vpu::Dot(lAngularVelocity, lBodyTransform.xAxis)) * 2.0f,
+            HandlingFlush(rw::math::vpu::Dot(lAngularVelocity, lBodyTransform.yAxis)) * 2.0f,
+            HandlingFlush(rw::math::vpu::Dot(lAngularVelocity, lBodyTransform.zAxis)) * 2.0f};
+        const f32 lafHeights[3] = {2.1f, 1.6f, 1.1f};
+        const u32 lauColours[3] = {0xFF0000FFu, 0xFF00FF00u, 0xFFFF0000u};
+        const char* const lapcTitles[3] = {"Pitch", "Yaw", "Roll"};
+        for (s32 liAxis = 0; liAxis < 3; ++liAxis)
+        {
+            const Vector3 lCentre = HandlingMultiplyAdd(Vector3{0.0f, 1.0f, 0.0f, 0.0f},
+                                                         lafHeights[liAxis], lPosition);
+            const Vector3 lUpper = HandlingScale(lCameraUp, 0.15f);
+            const Vector3 lLower = HandlingScale(lCameraUp, -0.15f);
+            // Original scalar fsel on -rate; an unordered rate keeps NaN in
+            // the positive endpoint and chooses zero for the negative one.
+            const f32 lfRate = lafRates[liAxis];
+            const f32 lfNegative = -lfRate >= 0.0f ? lfRate : 0.0f;
+            const f32 lfPositive = -lfRate >= 0.0f ? 0.0f : lfRate;
+            const Vector3 lNegative = HandlingAdd(lCentre, HandlingScale(lCameraRight, lfNegative));
+            const Vector3 lPositive = HandlingAdd(lCentre, HandlingScale(lCameraRight, lfPositive));
+            const rw::RGBA lColour = HandlingColour(lauColours[liAxis]);
+            lpDisplay->DrawSolidQuad(HandlingAdd(lNegative, lLower), HandlingAdd(lPositive, lLower),
+                                      HandlingAdd(lPositive, lUpper), HandlingAdd(lNegative, lUpper), lColour);
+            lpDisplay->DrawLine(HandlingAdd(lCentre, lUpper), HandlingAdd(lCentre, lLower),
+                                  HandlingColour(0xFFFFFFFFu));
+            const Vector3 lTitle = HandlingMultiplyAdd(lCameraRight, -0.1f,
+                HandlingMultiplyAdd(lUpper, 2.0f, lCentre));
+            lpDisplay->DrawText(lTitle, lapcTitles[liAxis], 13.0f, lColour);
+        }
+    }
+
+    // ARTIST unnamed 82620A60, vtable slot 820CF98C. The COM group includes
+    // two axis draws, all four wheel spheres, and the original Z-test restore.
+    void DebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay)
+    {
+        if (mbRenderCOMPosition)
+        {
+            lpDisplay->DrawAxis(mpRaceCarPhysics->GetTransform());
+            lpDisplay->SetZTestEnable(CgsDev::Debug3DImmediateRender::E_ZTEST_OFF);
+            lpDisplay->DrawAxis(mpRaceCarPhysics->GetTransform());
+            for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+            {
+                const Matrix44Affine lTransform = mpRaceCarPhysics->GetTransform();
+                AssertHandlingWheelPosition(mpRaceCarPhysics->maWheels[liWheel].mPosition);
+                const Vector3 lLocalPosition = mpRaceCarPhysics->maWheels[liWheel].mPosition;
+                Vector3 lWorldPosition = HandlingMultiplyAdd(lTransform.xAxis, lLocalPosition.x, lTransform.wAxis);
+                lWorldPosition = HandlingMultiplyAdd(lTransform.yAxis, lLocalPosition.y, lWorldPosition);
+                lWorldPosition = HandlingMultiplyAdd(lTransform.zAxis, lLocalPosition.z, lWorldPosition);
+                lpDisplay->DrawSphere(lWorldPosition, mpRaceCarPhysics->maWheels[liWheel].mSlipVariables.w,
+                                        HandlingColour(0xFFFFFFFFu));
+            }
+            lpDisplay->SetZTestEnable(CgsDev::Debug3DImmediateRender::E_ZTEST_ON);
+        }
+        if (mbRenderHandlingBody)
+        {
+            const Vector3 lHalfExtent = mpRaceCarPhysics->GetHalfExtent();
+            lpDisplay->DrawBox(HandlingNegate(lHalfExtent), lHalfExtent,
+                                 mpRaceCarPhysics->GetGraphicsVehicleTransform(), HandlingColour(0xFFFFFFFFu));
+        }
+        if (mbDrawTractionLines)
+            DrawTractionLines(lpDisplay);
+        if (mbDrawTractionLineNormals)
+            DrawTractionLineNormals(lpDisplay);
+        if (mbDrawAboveGroundLineTest)
+            DrawAboveGroundLineTest(lpDisplay);
+        if (mbDrawLastWallTriangle)
+            DrawLastWallTriangle(lpDisplay);
+        if (mbDrawAngularVelocity)
+            DrawAngularVelocity(lpDisplay);
+        if (mbDrawSuspensionForces)
+            DrawSuspensionForces(lpDisplay);
     }
 
     // ARTIST 82621208: a piecewise-linear curve through zero, peak and floor,

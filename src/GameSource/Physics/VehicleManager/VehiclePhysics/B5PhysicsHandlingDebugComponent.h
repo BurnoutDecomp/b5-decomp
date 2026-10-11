@@ -78,6 +78,7 @@ namespace Vehicle
         // ARTIST vtable slot 820CF988 -> unnamed 825DA4A8. The active debug
         // component tick mirrors engine/inertia state and drives its windows.
         void Update() override;
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) override;
 
         // Mirror the magnitude of the down force VehiclePhysics::UpdateDownForce just applied, for
         // the suspension page of the debug menu. Inlined by the console at its one call site.
@@ -109,6 +110,7 @@ namespace Vehicle
         void DrawTractionLineNormals(CgsDev::Debug3DImmediateRender* lpDisplay);
         void DrawAboveGroundLineTest(CgsDev::Debug3DImmediateRender* lpDisplay);
         void DrawLastWallTriangle(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void DrawAngularVelocity(CgsDev::Debug3DImmediateRender* lpDisplay);
         void DrawSuspensionForces(CgsDev::Debug3DImmediateRender* lpDisplay);
         void RenderDeformationStats(CgsDev::Debug2DImmediateRender* lpDisplay);
 
