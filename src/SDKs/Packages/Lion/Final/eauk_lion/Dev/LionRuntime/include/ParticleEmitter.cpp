@@ -36,6 +36,7 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleWaveForm.h"    // ParticleBuild samples the three position wave forms
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "pc/gcm/renderengine/reflections/LionSimulation.h"
 
 #include <cmath>   // floorf / fabsf -- Blend's de-optimised magic-number floor
 
@@ -3394,6 +3395,13 @@ u32 cParticleEmitter::SimulateParticlesInBucketGeneral(T lHelper,
                                                        const cTime& lCurrentLocatorTime,
                                                        const cMatrix& lBindingsLocatorMat)
 {
+    // FLAG PC-platform leaf: extra cameras reuse the first simulation's particles
+    // and transforms. The original kernel below still owns every live-state write.
+    u32 luCachedCount;
+    if (CgsPC::Reflections::LionSimulation::Read(this, lpBucket, lHelper,
+                                               laSimulatedParticles, luCachedCount))
+        return luCachedCount;
+
     if (lpBucket->IsEmpty())
     {
         return 0;
@@ -3477,6 +3485,8 @@ u32 cParticleEmitter::SimulateParticlesInBucketGeneral(T lHelper,
         cParticleBucketManager::Instance().Free(lpBucket);
     }
 
+    CgsPC::Reflections::LionSimulation::Write(this, lpBucket, lHelper,
+                                            laSimulatedParticles, luOutCount);
     return luOutCount;
 }
 

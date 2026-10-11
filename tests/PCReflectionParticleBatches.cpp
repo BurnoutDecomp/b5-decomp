@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstdio>
 #include "types.hpp"
+#include "pc/gcm/renderengine/reflections/LionSimulation.h"
 struct Vector {f32 x=0,y=0,z=0,w=0;};
 struct Matrix44 {};
 using Matrix44Affine=Matrix44;
@@ -67,6 +68,7 @@ struct ParticleModule {
         enum {eRenderDataFlagRenderDebris=1,eRenderDataFlagRenderSimple=2,eRenderDataFlagRenderLion=4,
               eRenderDataFlagRenderSparks=8,eRenderDataFlagReducedFrameRate=16};
         bool mbPlayingEffectsSuspendedPC=false;u32 muFlags=2|8;
+        u32 muCurrentFrame=0;
         f32 mfCurrentTime=0,mfWhiteLevel=1,mfTimeStepMultiplier=1;
         Vector mvSunDirection,mvSunColour,mvAmbientColour;
     };
