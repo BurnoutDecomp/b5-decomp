@@ -518,19 +518,20 @@ namespace Deformation
             return;
         }
 
-        const s32 liPreset = lpThis->miCompressPreset;
+        // ARTIST 826073CC/3D8 use cmplwi: negative stored bits are invalid.
+        const u32 luPreset = static_cast<u32>(lpThis->miCompressPreset);
         f32 lfScale;
-        if ( liPreset == E_COMPRESS_NONE )
+        if ( luPreset == E_COMPRESS_NONE )
         {
             lfScale = 0.0f;
         }
-        else if ( liPreset == E_COMPRESS_MAX_DRIVETIME )
+        else if ( luPreset == E_COMPRESS_MAX_DRIVETIME )
         {
             lpThis->CompressSelectedRig( 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f );
             lpThis->CompressSelectedRig_MaxDrivetime();
             return;
         }
-        else if ( liPreset >= 3 )
+        else if ( luPreset >= 3u )
         {
             CGS_ASSERT( false, "Invalid compression preset" );   // BrnDeformationDebugComponent.cpp:2009
             return;
