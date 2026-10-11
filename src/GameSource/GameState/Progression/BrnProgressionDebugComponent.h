@@ -39,15 +39,51 @@ namespace BrnProgression
     struct ProgressionDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        void Construct(ProgressionManager* lpProgressionManager,
+                       BrnGameState::ModeManager* lpModeManager);
+        void SetProfileReadyForDisplay() { mbProfileReadyForDisplay = true; }
         void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) override;
+
+    protected:
+        const char* GetName() const override;
+        void OnActivate() override;
 
     private:
         void DrawRankAsBar(CgsDev::Debug2DImmediateRender* lpDisplay, BrnGameState::GameStateModuleIO::EGameModeType leGameModeType,
                            CgsDev::RGBA lColour, Vector2 lv2Position, const char* lpcName);
         void DrawTextWithOffsets(CgsDev::Debug2DImmediateRender* lpDisplay, CgsDev::StrStream* lpStream,
                                  f32 lfX, f32 lfY);
+        void AddRaceWins();
+        void AddRoadRageWins();
+        void AddMarkedManWins();
+        void AddStuntWins();
+        void AddEventWinsForProfileEvents(s32 liWinsToAdd, RaceEventData::EModeType leModeType);
         void AddSpecialEventWins();
         void DefeatAllRivals();
+        void FindAllDriveThrus();
+        void SkipToProgressionRank();
+        void UnlockAllCars();
+        void UnlockGiftCarsUpToRank(s32 liRank);
+        void GetToOneWinBelowBurnoutLicense();
+        void GetToOneWinBelowEliteLicense();
+        void GetToOneWinBelowEliteLicenseBR();
+
+        static void DiscoverAllEventsCallback(void* lpUserData);
+        static void FindAllDriveThrusCallback(void* lpUserData);
+        static void DefeatAllRivalsCallback(void* lpUserData);
+        static void DefeatRivalCallback(void* lpValue, void* lpUserData);
+        static void AddWinsRaceCallback(void* lpValue, void* lpUserData);
+        static void AddWinsRoadRageCallback(void* lpValue, void* lpUserData);
+        static void AddWinsStuntCallback(void* lpValue, void* lpUserData);
+        static void AddWinsMarkedManCallback(void* lpValue, void* lpUserData);
+        static void AddSpecialEventWinsCallback(void* lpValue, void* lpUserData);
+        static void ClearMedalsCallback(void* lpUserData);
+        static void SkipToProgressionRankCallback(void* lpValue, void* lpUserData);
+        static void UnlockAllCarsCallBack(void* lpUserData);
+        static void GetToOneWinBelowBurnoutLicenseCallBack(void* lpUserData);
+        static void GetToOneWinBelowEliteLicenseCallBack(void* lpUserData);
+        static void GetToOneWinBelowEliteBRLicenseCallBack(void* lpUserData);
+
         void RenderRaceEvents(CgsDev::Debug2DImmediateRender* lpDisplay);
         void RenderRaceEventData(CgsDev::Debug2DImmediateRender* lpDisplay, const RaceEventData* lpRaceEventData,
                                  CgsDev::StrStream& lrStream);
