@@ -21,6 +21,9 @@ these counts are not a completed menu audit.
 | Min Duration | Changes when continuous tailgating earns boost credit. |
 | Race Car Entity / Show place on track info | Shows the latest reset transform, line test and intersection spheres; can be hidden and restored. |
 | Force Online Freeburn Spawn Position | Respawns the local lobby car at its original grid-row debug position. |
+| Render car damage state / Render car streaming state | Shows the original eight-slot damage and streaming tables. |
+| Show average speed / Reset average speed | Displays the sampled velocity mean in mph; reset clears the mean and sample count. |
+| Show player engine state / Traffic Related | Shows the original engine-state and surface-heading readouts. |
 
 Previously the menu and cone renderer used writable globals while detection and
 boost used independent constants. Both consumers now read the same original data.
@@ -54,8 +57,20 @@ Apply Ram and Magnitude are available with their original behavior: Apply Ram
 latches an unused diagnostic flag, and Magnitude stores a value in range 0..100.
 ARTIST has no gameplay consumer for either. No new ram effect is added.
 
-Seven registration sites are verified and two are classified as original no-ops.
+The six race-car HUD/statistics controls share the repaired original text path.
+The final DrawText bool checks screen visibility; it does not centre text. Resource
+text uses the original single-line object, exact bounds and unscaled cached width.
+Vector text and diagnostic lines use line-list batches; solid shapes retain their
+own topology and the shared untextured state. Production text checks pass 17/17
+(baseline 2/17); native 2D pixel checks pass 125/125. A single isolated drive exercises
+all six controls, actual glyph submissions,40 saved field checks, speed reset and
+visible show/hide/restore captures. Run
+`tools/tests/run_case.ps1 -Case debug_menu_racecar_hud -Slot 15` from the workflow.
+`BRN_RACECAR_HUD_TRACE` provides bounded passive observations.
+
+Thirteen registration sites are verified and two are classified as original no-ops.
 All other entries remain pending, including those previously tested for navigation.
-Other debug primitives and text still need individual parity audits. Next: the
-race-car visual/statistics controls, then the unavailable pages in
+Other debug primitives still need individual parity audits. Sound and gameplay
+page reconstruction/audits now run in separate workers; the campaign evidence
+distinguishes those in-flight changes from verified delivery. Remaining gaps are in
 [DEBUG_MENU_REPORT.md](DEBUG_MENU_REPORT.md).

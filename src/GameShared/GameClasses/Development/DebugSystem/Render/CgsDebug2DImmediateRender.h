@@ -82,7 +82,7 @@ namespace CgsDev
         void DrawCircle(Vector2 lv2Centre, f32 lfRadius, s32 liSegments, RGBA lColour);
 
         // Text + bar/value helpers: declared for the full API; bodies are the text/font follow-on.
-        void DrawText(const char* lpcText, Vector2 lv2Position, f32 lfScale, RGBA lColour, bool lbCentred);
+        void DrawText(const char* lpcText, Vector2 lv2Position, f32 lfScale, RGBA lColour, bool lbCheckScreen);
         void DrawText(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
         void DrawHorizontalBar(Vector2 lv2Min, Vector2 lv2Max, f32 lfValue, f32 lfMax, RGBA lBackColour, RGBA lBarColour);
         void DrawTextWithBackground(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale,

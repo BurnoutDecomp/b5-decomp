@@ -11,7 +11,7 @@
 //
 // The console's "draw text at x, y" helper used by these HUDs is the scalar
 // Debug2DImmediateRender::DrawText(text, x, y, scale, colour) overload (it builds the Vector2 and
-// forwards with lbCentred false), so the bodies call that overload directly.
+// forwards with screen culling disabled), so the bodies call that overload directly.
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleDebugComponent.h"
 #include "pc/debug/RaceCarControls.h"
@@ -189,8 +189,18 @@ void RaceCarEntityModuleDebugComponent::AirRamAddNew(void* lpData)
 void RaceCarEntityModuleDebugComponent::ResetAverageSpeedCallback(void* lpData)
 {
     RaceCarEntityModuleDebugComponent* lpComponent = static_cast<RaceCarEntityModuleDebugComponent*>(lpData);
+    // FLAG PC-platform leaf: passive observation of the original two reset stores.
+    static const bool sbTrace = std::getenv("BRN_RACECAR_HUD_TRACE") != nullptr;
+    const s32 liPreviousFrames = sbTrace ? lpComponent->miAverageSpeedFrameCount : 0;
     lpComponent->mfAverageSpeed           = 0.0f;
     lpComponent->miAverageSpeedFrameCount = 0;
+    static u32 suTraceLines = 0;
+    if (sbTrace && suTraceLines < 4 && CgsDev::Log::gpDebugPrint)
+    {
+        ++suTraceLines;
+        CgsDev::Log::gpDebugPrint->AppendFormat("[racecar-hud-reset] samples_before=%d samples_after=%d average_after=%g\n",
+            liPreviousFrames, lpComponent->miAverageSpeedFrameCount, lpComponent->mfAverageSpeed);
+    }
 }
 
 // ================================================================================================
@@ -625,6 +635,23 @@ void RaceCarEntityModuleDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender
     {
         RenderTrafficRelated(lpRender);
     }
+
+    // FLAG PC-platform leaf: bounded passive visibility/statistics observer.
+    static const bool sbTrace = std::getenv("BRN_RACECAR_HUD_TRACE") != nullptr;
+    static u32 suPreviousMask = 0xffffffffu, suFrames = 0, suTransitionLines = 0, suSampleLines = 0;
+    const u32 luMask = (mbRenderCarDamageState ? 1u : 0u) | (mbRenderCarSreamingState ? 2u : 0u)
+        | (mbShowAverageSpeed ? 4u : 0u) | (mbShowEngineState ? 8u : 0u) | (mbTrafficRelatedData ? 16u : 0u);
+    const bool lbTransition = luMask != suPreviousMask;
+    const bool lbSample = mbShowAverageSpeed && suFrames++ % 120 == 0;
+    if (sbTrace && CgsDev::Log::gpDebugPrint
+        && ((lbTransition && suTransitionLines < 16) || (!lbTransition && lbSample && suSampleLines < 12)))
+    {
+        if (lbTransition) ++suTransitionLines;
+        else ++suSampleLines;
+        CgsDev::Log::gpDebugPrint->AppendFormat("[racecar-hud] mask=%u samples=%d average_mps=%g\n",
+            luMask, miAverageSpeedFrameCount, mfAverageSpeed);
+    }
+    suPreviousMask = luMask;
 }
 
 void RaceCarEntityModuleDebugComponent::RenderEngineState(CgsDev::Debug2DImmediateRender* lpRender)

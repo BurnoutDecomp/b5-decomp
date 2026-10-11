@@ -11,6 +11,9 @@
 #include "pc/gcm/renderengine/device.h"
 #include "pc/gcm/renderengine/texture.h"
 #include "pc/gcm/renderengine/AssertFrame.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+#include "GameShared/GameClasses/Development/VectorFont/CgsVectorFontData.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
 
 namespace renderengine {
 IDirect3DDevice9* gDevice = nullptr;
@@ -34,6 +37,13 @@ void* EndAssert() { return nullptr; }
 }
 }
 using namespace CgsGraphics;
+static renderengine::TextureState sDebugWhiteState;
+namespace CgsGraphics {
+// The shared state library is verified separately by PCIm3dBuffer. This seam
+// supplies a real white texture so this fixture exercises the native2D applier.
+const renderengine::TextureState* GetIm3dTextureStateUntexturedPC() { return &sDebugWhiteState; }
+}
+#include "debug_2d_primitives.inc"
 static int checks, failures;
 static void Check(bool good, const char* label) {
     ++checks;
@@ -82,6 +92,41 @@ static bool Close(DWORD a, DWORD b, int tolerance = 1) {
         if (std::abs(int((a >> (lane * 8)) & 255) - int((b >> (lane * 8)) & 255)) > tolerance)
             return false;
     return true;
+}
+static void DebugPrimitives(Im2dRenderBuffer& buffer) {
+    auto* device=renderengine::gDevice;
+    renderengine::gDisplayWidth=320; renderengine::gDisplayHeight=180;
+    IDirect3DSurface9* target=nullptr;
+    Check(SUCCEEDED(device->CreateRenderTarget(320,180,D3DFMT_X8R8G8B8,D3DMULTISAMPLE_NONE,0,FALSE,&target,nullptr)),"debug native target");
+    if(!target) return;
+    device->SetRenderTarget(0,target);
+    D3DVIEWPORT9 viewport={0,0,320,180,0,1}; device->SetViewport(&viewport);
+    IDirect3DTexture9* white=nullptr;
+    Check(SUCCEEDED(device->CreateTexture(1,1,1,0,D3DFMT_A8R8G8B8,D3DPOOL_MANAGED,&white,nullptr)),"debug white raster");
+    if(!white) { target->Release(); return; }
+    D3DLOCKED_RECT lock={}; white->LockRect(0,&lock,nullptr,0); *static_cast<DWORD*>(lock.pBits)=0xffffffff; white->UnlockRect(0);
+    renderengine::Texture raster={}; raster.mpD3DTexture=white; sDebugWhiteState.mpRaster=&raster;
+    buffer.Clear();
+    CgsDev::Debug2DImmediateRender debug={}; debug.Construct(nullptr,1280,720); debug.SetRenderBuffer(&buffer);
+    renderengine::gDevice=nullptr;
+    debug.Begin();
+    debug.DrawLine({200,100,0,0},{1080,100,0,0},0xffffffff);
+    Check(debug.miIm2dVertsHead==2 && debug.mePrimitiveType==2,"debug line records two original endpoints in line-list mode");
+    debug.DrawBox(400,200,200,200,0xff0000ff);
+    debug.DrawLine({200,500,0,0},{1080,500,0,0},0xff00ff00);
+    const rw::math::vpu::Vector2 points[]={{800,200,0,0},{950,400,0,0},{650,400,0,0}};
+    debug.DrawSolidConvexPolygon(points,3,0xffff0000);
+    debug.End(); buffer.Swap(); buffer.Clear();
+    renderengine::gDevice=device;
+    device->Clear(0,nullptr,D3DCLEAR_TARGET,0xff000000,1,0);
+    device->BeginScene(); buffer.Dispatch(); device->EndScene();
+    const auto pixels=Pixels(target);
+    unsigned whitePixels=0,redPixels=0,greenPixels=0,bluePixels=0;
+    for(auto p:pixels) { p&=0xffffff; whitePixels+=p==0xffffff; redPixels+=p==0xff0000; greenPixels+=p==0x00ff00; bluePixels+=p==0x0000ff; }
+    Check(whitePixels>=180 && greenPixels>=180,"native debug line batches survive intervening box/fan mode changes");
+    Check(redPixels>=2000 && bluePixels>=1000,"native debug box and convex polygon retain filled triangle topology");
+    Check(At(pixels,500,300)==0xff0000 && At(pixels,800,300)==0x0000ff,"debug fill coordinates and colours reach actual pixels");
+    sDebugWhiteState.mpRaster=nullptr; white->Release(); target->Release();
 }
 struct FailingAllocator : rw::LinearResourceAllocator {
     unsigned calls = 0, frees = 0, failAt = 0;
@@ -346,6 +391,7 @@ int main() {
         CheckAssertFrame(device,target,widths[resolution],heights[resolution]);
         raster->Release(); target->Release();
     }
+    DebugPrimitives(buffer);
     Check(CgsDev::Assert::gAssertions == 0, "production command writers raised no assertions");
     buffer.Release();
     Check(!buffer.IsPreparedPC(), "released buffer cannot be consumed");
