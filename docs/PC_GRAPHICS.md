@@ -39,6 +39,23 @@ never registers. Do not put trailing comments on value lines.
 
 ## Reflections
 
+`World/Reflections/Resolution (restart)` selects pixels per cube face: **128**
+(original), **256**, **512**, **1024**, or **2048**. The example INI selects 512;
+an absent setting preserves 128. Restart after changing it in the menu or INI.
+The device's supported texture extent limits the requested size automatically.
+
+```ini
+[Debug]
+World/Reflections/Resolution (restart)=512
+```
+
+All vehicles share this cube. Paint and chrome sample the same texture with
+linear filtering; vehicle definitions do not select its resolution. Flat panels
+can spread a small part of the cube over many screen pixels, making its texels
+more obvious than on the chrome sphere. Materials also change reflection
+intensity and direction. Increasing resolution improves the shared source;
+512 has sixteen times as many pixels per face as 128.
+
 `World/LODs/Environment Map LOD` selects **world geometry** detail in reflections:
 0 highest, 1 intermediate, 2 original. `World/LODs/Prop Environment Map LOD` separately
 selects **prop and detached prop-part** detail using the same 0/1/2 values. Missing

@@ -1,4 +1,5 @@
 #include "pc/gcm/renderengine/WindowPresentation.h"
+#include "pc/gcm/renderengine/reflections/Resolution.h"
 #include "GameSource/Graphics/BrnRendererMemory.h"
 
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"  // CgsRenderTarget (+ serialise-side setters)
@@ -984,8 +985,10 @@ void BrnRendererMemory::CreateEnvmapBuffer(rw::IResourceAllocator* lpAllocator)
 
     lpEnvMap->ClearColourTargetInUse();
 
-    // 128x128 is the CUBE FACE size; the section count stays at the constructor's 1.
-    lpEnvMap->SetDimensions(KU_ENV_MAP_FACE_SIZE, KU_ENV_MAP_FACE_SIZE);
+    // FLAG PC-platform leaf: describe cube, scratch colour and depth at the same
+    // optional native extent. The unconfigured default remains the original 128.
+    const u32 luFaceSize = CgsPC::Reflections::CreationResolution();
+    lpEnvMap->SetDimensions(luFaceSize, luFaceSize);
     lpEnvMap->SetNumMipMaps(1);
     lpEnvMap->SetMultisampleFormat(KI_ENV_MAP_MULTISAMPLE_FORMAT);
     lpEnvMap->SetUseDepthStencilAsTexture(true);
